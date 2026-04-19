@@ -12,13 +12,15 @@ validation pass before writing.
 
 | Module          | What it does                                                                 |
 |-----------------|------------------------------------------------------------------------------|
-| `builders`      | CNT (armchair / zigzag / chiral), graphene, nanoribbons, 3D carbon foam      |
+| `builders`      | CNT (armchair / zigzag / chiral), graphene, nanoribbons, **nanocoils**, 3D carbon foam |
 | `dopants`       | Substitutional N, B, S, P and co-doping, random / edges / bulk / cluster     |
 | `defects`       | Mono- and divacancies, Stone-Wales, local random distortion                  |
 | `topology`      | networkx-based bond graph, coordination, connectivity, ring statistics       |
 | `validation`    | Minimum distances, coordination sanity, density, vacuum, cell consistency   |
 | `exports`       | Quantum ESPRESSO `pw.x` input, LAMMPS data + script (AIREBO default)         |
-| `workflows`     | Batch sweeps over chirality / length / doping / defects with JSON metadata   |
+| `relax`         | ASE optimizer wrapper + calculator-free harmonic pre-relaxation              |
+| `viz`           | Matplotlib 3D viewer / PNG exporter                                          |
+| `workflows`     | Batch sweeps + ML-ready dataset exporter (XYZ + features CSV + manifest)     |
 | `cli`           | `nanocarbon` command-line entry point                                        |
 
 ## Installation
@@ -60,12 +62,77 @@ nanocarbon graphene --nx 4 --ny 4 --dopant N --dopant-conc 0.03 --out out/gr --f
 # Zigzag nanoribbon, 6 wide, 3 long, passivated
 nanocarbon ribbon --width 6 --length 3 --edge zigzag --passivate --out out/ribbon --format qe
 
+# Carbon nanocoil: (6,6) SWCNT wound into a helix, R=25 Å, pitch=12 Å, 1.5 turns
+nanocarbon nanocoil --n 6 --m 6 --coil-radius 25 --pitch 12 --turns 1.5 --out out/coil --format both --force
+
 # 3D carbon foam, LAMMPS only (relaxation recommended before DFT)
 nanocarbon foam --box 30 --flakes 25 --radius 4 --seed 0 --out out/foam --format lammps
 
 # Validate any ASE-readable structure file
 nanocarbon validate out/cnt/qe/pw.in
 ```
+
+## Nanocoils
+
+`build_nanocoil` generates a helical CNT by mapping a straight `(n, m)`
+segment onto a helix with configurable **coil radius** `R`, **pitch** `P`
+and **number of turns**. The arc length is set exactly to
+`n_turns · √((2πR)² + P²)` so the underlying CNT is neither stretched nor
+compressed on average; bond-length distortion stays below ~`r_tube/R` (a
+few percent for `R ≥ 25 Å`).
+
+Parameters:
+
+| Argument              | Meaning                                                        |
+|-----------------------|----------------------------------------------------------------|
+| `n, m`                | Chirality of the underlying CNT                                |
+| `coil_radius`         | Helix radius (Å), must be ≥ 2× the tube radius                 |
+| `pitch`               | Vertical advance per turn (Å)                                  |
+| `n_turns`             | Number of helical turns (float — 1.5 gives 1½ loops)           |
+| `stone_wales_density` | Fraction of bonds to SW-rotate, biased to the outer wall (≤0.02) |
+
+Post-construction, apply `relax.harmonic_pre_relax` or an ASE calculator to
+relieve the bending strain before DFT / MD.
+
+```python
+from nanocarbon_lab.builders import build_nanocoil
+from nanocarbon_lab.relax    import harmonic_pre_relax
+
+coil = build_nanocoil(n=6, m=6, coil_radius=25.0, pitch=12.0, n_turns=1.5,
+                      stone_wales_density=0.005, seed=0)
+harmonic_pre_relax(coil, steps=300)
+```
+
+## Pre-relaxation
+
+`relax.relax_with_calculator(atoms, calc, algorithm='lbfgs', fmax=0.05)`
+runs BFGS / L-BFGS / FIRE against any ASE calculator (LAMMPS via
+`LAMMPSlib`, DFT, M3GNet / MACE / GAP…).
+
+`relax.harmonic_pre_relax(atoms)` is calculator-free: it fixes the
+topology once (bond graph via covalent radii), then minimises a
+Hooke-spring potential toward `bond = 1.42 Å`. Handy for foams and
+coils before handing the structure to a proper force field.
+
+## ML dataset export
+
+`workflows.write_ml_dataset(jobs, root)` runs a batch of jobs and writes:
+
+* `structures/<name>.xyz` (extended XYZ per structure),
+* `features.csv` with one row per structure — composition, density,
+  dimensionality, mean coordination, ring statistics (3 through 8) and
+  per-element counts — ready for scikit-learn / pandas ingestion,
+* `manifest.json` with validation outcomes and `atoms.info` payloads.
+
+## Visualisation
+
+```python
+from nanocarbon_lab.viz import save_structure_png
+save_structure_png(atoms, "coil.png", view=(20, 45))
+```
+
+Matplotlib-based 3D scatter with bond lines. Intended for quick QA —
+for publication rendering export to `.xyz`/`.cif` and use OVITO / VESTA.
 
 ## Typical workflow
 
@@ -121,20 +188,23 @@ Default pair style for pure-carbon systems: `airebo 3.0 1 1` with the
 pytest -q
 ```
 
-51 tests covering builders, dopants, defects, topology, validation,
-exporters and workflows.
+67 tests covering builders (including nanocoils), dopants, defects,
+topology, validation, exporters, workflows and the bonus modules
+(relax / viz / ML dataset).
 
 ## Repository layout
 
 ```
 nanocarbon_lab/
-├── builders/      # structure generators
+├── builders/      # structure generators (CNT, graphene, ribbon, nanocoil, foam)
 ├── dopants/       # substitutional chemistry
 ├── defects/       # vacancies, Stone-Wales, distortion
 ├── topology/      # networkx connectivity / rings
 ├── validation/    # structural checks
 ├── exports/       # QE + LAMMPS writers
-├── workflows/     # batch generation + metadata
+├── relax/         # ASE optimizers + harmonic pre-relaxation
+├── viz/           # matplotlib 3D viewer / PNG exporter
+├── workflows/     # batch generation + metadata + ML dataset
 ├── utils/         # constants, geometry, RNG
 ├── cli/           # command line
 ├── tests/         # pytest suite

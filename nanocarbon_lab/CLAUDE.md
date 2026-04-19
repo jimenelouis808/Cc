@@ -10,13 +10,15 @@ The framework must remain **scientifically valid**: physical bond lengths, corre
 ## Repository layout
 ```
 nanocarbon_lab/
-├── builders/      # 1D/2D/3D structure generators (ASE-compatible Atoms)
+├── builders/      # 1D/2D/3D structure generators incl. nanocoils (ASE-compatible Atoms)
 ├── dopants/       # substitutional dopants (N, B, S, P, co-doping)
 ├── defects/       # vacancies, Stone-Wales, topological defects
 ├── topology/      # networkx-based connectivity / coordination analysis
 ├── validation/    # bond lengths, coordination, density, vacuum checks
 ├── exports/       # Quantum ESPRESSO + LAMMPS writers
-├── workflows/     # batch generation with JSON metadata
+├── relax/         # ASE optimizer wrapper + calculator-free harmonic pre-relax
+├── viz/           # matplotlib 3D viewer
+├── workflows/     # batch generation + ML dataset exporter
 ├── utils/         # constants, geometry helpers
 ├── cli/           # command line interface
 ├── tests/         # pytest unit tests

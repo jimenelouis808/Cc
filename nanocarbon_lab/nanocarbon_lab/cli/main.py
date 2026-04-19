@@ -21,6 +21,7 @@ from ..builders import (
     build_cnt,
     build_graphene_supercell,
     build_nanoribbon,
+    build_nanocoil,
     build_carbon_foam,
 )
 from ..dopants import dope_random
@@ -66,6 +67,18 @@ def _cmd_ribbon(args):
     atoms = build_nanoribbon(width=args.width, length=args.length,
                              edge=args.edge, bond=args.bond,
                              vacuum=args.vacuum, passivate=args.passivate)
+    atoms = _apply_post(atoms, args)
+    _export(atoms, Path(args.out), args.format, args.calculation, args.force)
+    return 0
+
+
+def _cmd_nanocoil(args):
+    atoms = build_nanocoil(
+        n=args.n, m=args.m,
+        coil_radius=args.coil_radius, pitch=args.pitch,
+        n_turns=args.turns, bond=args.bond, vacuum=args.vacuum,
+        stone_wales_density=args.sw_density, seed=args.seed,
+    )
     atoms = _apply_post(atoms, args)
     _export(atoms, Path(args.out), args.format, args.calculation, args.force)
     return 0
@@ -125,6 +138,20 @@ def build_parser() -> argparse.ArgumentParser:
     rb.add_argument("--passivate", action="store_true")
     _add_common(rb)
     rb.set_defaults(func=_cmd_ribbon)
+
+    nc = sub.add_parser("nanocoil", help="Build a helical carbon nanocoil.")
+    nc.add_argument("--n", type=int, default=6)
+    nc.add_argument("--m", type=int, default=6)
+    nc.add_argument("--coil-radius", type=float, default=25.0,
+                    help="Helix radius in Å (default 25).")
+    nc.add_argument("--pitch", type=float, default=12.0,
+                    help="Vertical advance per turn in Å (default 12).")
+    nc.add_argument("--turns", type=float, default=1.0,
+                    help="Number of helical turns (default 1).")
+    nc.add_argument("--sw-density", type=float, default=0.0,
+                    help="Stone-Wales defect density on outer wall (0-0.02).")
+    _add_common(nc)
+    nc.set_defaults(func=_cmd_nanocoil)
 
     fm = sub.add_parser("foam", help="Build a 3D carbon foam.")
     fm.add_argument("--box", type=float, default=30.0)
