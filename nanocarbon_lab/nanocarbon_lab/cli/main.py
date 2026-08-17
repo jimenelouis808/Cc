@@ -6,6 +6,8 @@ Sub-commands:
 * ``graphene``   — build a graphene supercell.
 * ``ribbon``     — build a graphene nanoribbon.
 * ``foam``       — build a 3D carbon foam.
+* ``cnt-cap``    — build a fully capped/defected CNT and export XYZ + a
+  Blender-ready render bundle (see ``nanocarbon_lab/blender/``).
 * ``validate``   — run validation on an existing structure file.
 """
 
@@ -18,16 +20,18 @@ from pathlib import Path
 from ase import io as ase_io
 
 from ..builders import (
+    build_capped_cnt,
+    build_carbon_foam,
     build_cnt,
     build_graphene_supercell,
-    build_nanoribbon,
     build_nanocoil,
-    build_carbon_foam,
+    build_nanoribbon,
 )
-from ..dopants import dope_random
 from ..defects import introduce_vacancies
-from ..exports.qe import write_qe_input, QESettings
+from ..dopants import dope_random
 from ..exports.lammps import write_lammps
+from ..exports.qe import QESettings, write_qe_input
+from ..exports.xyz import write_render_bundle
 from ..validation.checks import run_basic_checks
 
 
@@ -88,6 +92,43 @@ def _cmd_foam(args):
     atoms = build_carbon_foam(box_size=args.box, n_flakes=args.flakes,
                               flake_radius=args.radius, seed=args.seed)
     _export(atoms, Path(args.out), args.format, args.calculation, args.force)
+    return 0
+
+
+def _parse_defect_specs(raw: list[str] | None) -> list[dict]:
+    """Parse repeated ``--defect TYPE[:COUNT]`` flags into DefectSpec dicts."""
+    specs = []
+    for item in raw or []:
+        if ":" in item:
+            kind, count_s = item.split(":", 1)
+            count = int(count_s)
+        else:
+            kind, count = item, 1
+        kind = kind.strip()
+        if kind not in ("stone_wales", "divacancy"):
+            raise ValueError(
+                f"Unknown --defect type {kind!r}; expected 'stone_wales' or 'divacancy'."
+            )
+        specs.append({"type": kind, "count": count})
+    return specs
+
+
+def _cmd_cnt_cap(args):
+    atoms = build_capped_cnt(
+        n_body_rings=args.rings,
+        freq=args.freq,
+        radius=args.radius,
+        bond=args.bond,
+        bend_angle=args.bend_angle,
+        defects=_parse_defect_specs(args.defect),
+        relax_steps=args.relax_steps,
+        seed=args.seed,
+    )
+    xyz_path, json_path = write_render_bundle(atoms, Path(args.out))
+    print(f"Wrote {xyz_path} and {json_path}")
+    print(f"  n_atoms     = {len(atoms)}")
+    print(f"  ring_counts = {atoms.info['ring_counts']}")
+    print(f"  bond_length = {atoms.info['bond_length']}")
     return 0
 
 
@@ -164,6 +205,30 @@ def build_parser() -> argparse.ArgumentParser:
                     choices=["scf", "relax", "vc-relax"])
     fm.add_argument("--force", action="store_true")
     fm.set_defaults(func=_cmd_foam)
+
+    cc = sub.add_parser(
+        "cnt-cap",
+        help="Build a fully capped/defected CNT; export XYZ + Blender render bundle.",
+    )
+    cc.add_argument("--rings", type=int, default=8,
+                    help="Body lattice rings (controls length, default 8).")
+    cc.add_argument("--freq", type=int, default=3,
+                    help="Geodesic subdivision frequency (controls diameter/detail, default 3).")
+    cc.add_argument("--radius", type=float, default=6.5, help="Target tube radius (Å).")
+    cc.add_argument("--bond", type=float, default=1.42, help="C-C bond length (Å).")
+    cc.add_argument("--bend-angle", type=float, default=0.0,
+                    help="Total elastic bend of the body, in radians (default 0, straight).")
+    cc.add_argument(
+        "--defect", action="append", default=[],
+        help="Repeatable. 'stone_wales[:N]' (5-7-7-5 pairs) or "
+             "'divacancy[:N]' (5-8-5 octagon), e.g. --defect stone_wales:2.",
+    )
+    cc.add_argument("--relax-steps", type=int, default=2500,
+                    help="Shell relaxation iterations (raise for larger/defected/bent builds).")
+    cc.add_argument("--seed", type=int, default=0, help="RNG seed for defect placement.")
+    cc.add_argument("--out", required=True,
+                    help="Output path without extension (.xyz and .json are appended).")
+    cc.set_defaults(func=_cmd_cnt_cap)
 
     vl = sub.add_parser("validate",
                         help="Validate an existing structure file (CIF, XYZ, POSCAR…).")

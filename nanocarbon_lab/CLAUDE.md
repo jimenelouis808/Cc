@@ -11,11 +11,13 @@ The framework must remain **scientifically valid**: physical bond lengths, corre
 ```
 nanocarbon_lab/
 ├── builders/      # 1D/2D/3D structure generators incl. nanocoils (ASE-compatible Atoms)
+│                  #   capped_cnt.py + fullerene_mesh.py: finite capped/defected
+│                  #   "elongated fullerene" CNTs for rendering (see below)
 ├── dopants/       # substitutional dopants (N, B, S, P, co-doping)
 ├── defects/       # vacancies, Stone-Wales, topological defects
 ├── topology/      # networkx-based connectivity / coordination analysis
 ├── validation/    # bond lengths, coordination, density, vacuum checks
-├── exports/       # Quantum ESPRESSO + LAMMPS writers
+├── exports/       # Quantum ESPRESSO + LAMMPS writers, plain XYZ + Blender render bundle
 ├── relax/         # ASE optimizer wrapper + calculator-free harmonic pre-relax
 ├── viz/           # matplotlib 3D viewer
 ├── workflows/     # batch generation + ML dataset exporter
@@ -23,7 +25,26 @@ nanocarbon_lab/
 ├── cli/           # command line interface
 ├── tests/         # pytest unit tests
 └── examples/      # runnable example scripts
+
+blender/           # sibling to nanocarbon_lab/: bpy-based rendering pipeline,
+                   #   run via `blender -b -P blender/render_cnt.py -- ...`
 ```
+
+## Capped/defected CNT topology (fullerene_mesh)
+
+`builders/fullerene_mesh.py` is the engine behind `build_capped_cnt`. It
+works on the honeycomb's **triangulated dual** (each ring = one mesh
+vertex; vertex degree 5/6/7/8 = pentagon/hexagon/heptagon/octagon), so
+every ring edit (`edge_flip` = Stone-Wales 5-7-7-5, `contract_edge` =
+divacancy 5-8-5, the seed polyhedron's poles = 6-pentagon caps) is a
+provably Euler-consistent combinatorial operation, never a geometric
+heuristic. **Do not** try to detect or edit rings by re-deriving them
+from atom distances/`networkx.cycle_basis` on a curved/periodic shell --
+that path was tried during development and produced silently wrong ring
+counts (see the module docstring). If you add a new defect type here, add
+it as a mesh-level operation with an Euler-invariant unit test (see
+`tests/test_capped_cnt.py::TestFullereneMeshPrimitives`), not as a
+post-hoc geometric edit.
 
 ## Golden rules for contributors / assistants
 1. **Python >= 3.10**, type hints on all public functions.
@@ -47,6 +68,7 @@ nanocarbon_lab/
 pip install -e .[dev]
 pytest nanocarbon_lab/tests -q
 python -m nanocarbon_lab.cli.main cnt --n 6 --m 6 --length 10 --out out/cnt --format qe
+python -m nanocarbon_lab.cli.main cnt-cap --rings 8 --freq 3 --defect stone_wales:1 --out out/cnt_cap/demo
 ```
 
 ## Where to add things

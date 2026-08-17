@@ -188,20 +188,155 @@ Default pair style for pure-carbon systems: `airebo 3.0 1 1` with the
 pytest -q
 ```
 
-67 tests covering builders (including nanocoils), dopants, defects,
-topology, validation, exporters, workflows and the bonus modules
-(relax / viz / ML dataset).
+89 tests covering builders (including nanocoils and capped/defected
+fullerene-CNTs), dopants, defects, topology, validation, exporters,
+workflows and the bonus modules (relax / viz / ML dataset).
+
+## Capped & defected CNTs for rendering (Blender / journal-cover art)
+
+Everything above builds **open, infinitely-periodic** tubes -- correct for
+DFT/MD, but with no ends and no way to host a genuinely closed-shell
+defect. `builders.build_capped_cnt` instead builds a **finite, fully
+closed shell**: a straight or gently bent cylindrical body terminated at
+both ends by hemispherical fullerene domes, with pentagon/heptagon/octagon
+defects composed in on request -- meant for exporting to `.xyz` and
+rendering in Blender (or another external tool) for illustration/cover
+art, not for DFT input decks.
+
+### Why the ring topology is guaranteed correct
+
+A capped nanotube is topologically an **elongated fullerene**: a closed,
+3-coordinate carbon shell. Euler's polyhedron theorem forces
+`sum(6 - ring_size)` over every ring to equal exactly `+12`, always. In
+this framework:
+
+* **pentagons** carry positive curvature → **convex** points (the two end
+  caps, 6 pentagons each, 12 total for a plain capped tube);
+* **heptagons** carry negative curvature → **concave/saddle** points
+  (paired with pentagons at a Stone-Wales 5-7-7-5 defect, or at a bend);
+* **octagons** appear at a reconstructed divacancy (5-8-5: one octagon
+  flanked by two pentagons).
+
+Rather than editing the honeycomb lattice directly (easy to silently
+build an invalid ring pattern), `builders.fullerene_mesh` works one level
+down on the honeycomb's **triangulated dual** (each ring = one mesh
+vertex; a degree-5/6/7/8 vertex *is* a pentagon/hexagon/heptagon/octagon).
+Local defects become simple, providably-correct combinatorial edits
+(`edge_flip` = Stone-Wales, `contract_edge` = divacancy) that can never
+produce a topologically inconsistent structure -- see the module
+docstring for the full construction and `tests/test_capped_cnt.py` for
+the Euler-invariant assertions.
+
+```python
+from nanocarbon_lab.builders import build_capped_cnt
+from nanocarbon_lab.exports import write_render_bundle
+
+cnt = build_capped_cnt(
+    n_body_rings=12,       # body length
+    freq=4,                 # diameter / lattice detail
+    radius=7.0,              # Å
+    bend_angle=0.4,           # radians, 0 = straight
+    defects=[
+        {"type": "stone_wales", "count": 2},  # 5-7-7-5 pairs
+        {"type": "divacancy", "count": 1},     # 5-8-5 (octagon)
+    ],
+    seed=7,
+)
+print(cnt.info["ring_counts"])   # e.g. {5: 20, 6: 938, 7: 4, 8: 1}
+write_render_bundle(cnt, "out/cnt_cap/demo")  # writes demo.xyz + demo.json
+```
+
+Or from the CLI:
+
+```bash
+nanocarbon cnt-cap --rings 12 --freq 4 --radius 7.0 --bend-angle 0.4 \
+  --defect stone_wales:2 --defect divacancy:1 --seed 7 \
+  --out out/cnt_cap/demo
+```
+
+This writes `demo.xyz` (plain XYZ, readable by any molecular viewer) and
+`demo.json` (a sidecar with explicit bonds and per-atom ring membership,
+consumed by the Blender pipeline below to colour pentagons/heptagons/
+octagons differently).
+
+### Rendering in Blender
+
+`blender/` (repo root, sibling to `nanocarbon_lab/`) is a small,
+self-contained Blender Python pipeline -- run **through Blender itself**,
+not a normal `python` interpreter, since `bpy`/`bmesh` only exist there:
+
+```bash
+blender -b -P blender/render_cnt.py -- \
+  --xyz out/cnt_cap/demo.xyz --json out/cnt_cap/demo.json \
+  --style nature_dark --mode ballstick \
+  --out out/cnt_cap/cover.png --resolution 2000 2400 --samples 256
+```
+
+* `--mode ballstick` builds coloured spheres + cylinders (good for
+  close-ups where the lattice/defects should read clearly);
+  `--mode surface` instead skins the bond graph into one continuous
+  glossy tube (Blender's Skin + Subdivision modifiers -- good for wide
+  macro shots where the tube's silhouette is the hero); `--mode both`
+  does both.
+* `--style` selects a full look (materials + world background + lighting
+  rig + camera lens/DOF) from `blender/styles.py`. Five presets ship out
+  of the box -- run `blender -b -P blender/render_cnt.py -- --list-styles`
+  to print their descriptions:
+
+  | style | mood |
+  |---|---|
+  | `nature_dark` | matte-black void, single dramatic key + cool rim light, near-black graphite body, glowing defect accents |
+  | `acs_nano_vivid` | saturated blue-magenta gradient backdrop, glossy clear-coated colour, punchy 3-point lighting |
+  | `small_minimal` | clean white seamless backdrop, large soft studio lights, matte pastel body |
+  | `blueprint_technical` | deep navy void, thin glowing emissive bonds/defects, circuit-diagram mood |
+  | `gold_nanotech` | warm near-black backdrop, polished gold/bronze metal, 3-point studio rig |
+
+  All five colour pentagons/heptagons/octagons with a style-appropriate
+  accent so curvature and defects are visually legible against the
+  hexagonal body -- edit `blender/styles.py` (plain dataclasses, no
+  Blender dependency, so it's editable/testable outside Blender) to add
+  your own or tweak an existing one.
+* Pass `--transparent-background` for a PNG you can composite over other
+  art; drop `--samples` to use the style's own default (Cycles path
+  tracing, GPU device selected automatically when available).
+
+### Other free/open tools for this pipeline
+
+Blender is the right choice specifically because the request was for
+*artistic* control (arbitrary shaders, compositing, non-photorealistic
+looks) -- but depending on what you need, these are worth knowing about
+too, all free and open source:
+
+* **[OVITO](https://www.ovito.org/)** (Basic edition is free) reads
+  `.xyz` directly with zero setup and has a built-in ambient-occlusion +
+  Tachyon ray-traced renderer that already produces publication-quality
+  stills -- the fastest path from `.xyz` to a clean figure if you don't
+  need Blender-level artistic control.
+* **[Molecular Nodes](https://bradyajohnston.github.io/MolecularNodes/)**
+  is a free, actively-maintained Blender add-on (geometry-nodes based)
+  purpose-built for importing molecular/crystal structures with
+  ball-and-stick or surface representations and node-based styling. This
+  repo ships its own minimal `bpy`/`bmesh` pipeline instead (no add-on
+  dependency, full control over the ring-type colouring described above),
+  but Molecular Nodes is a strong alternative or complement if you want a
+  GUI-driven workflow inside Blender.
+* **VMD** + its Tachyon renderer is the traditional computational-chemistry
+  choice, scriptable in Tcl, and widely used for MD trajectory rendering.
+* **POV-Ray** is a free ray tracer some structure tools (incl. OVITO) can
+  export directly to, useful for scripted/batch rendering without a full
+  3D DCC tool.
 
 ## Repository layout
 
 ```
 nanocarbon_lab/
-├── builders/      # structure generators (CNT, graphene, ribbon, nanocoil, foam)
+├── builders/      # structure generators (CNT, graphene, ribbon, nanocoil, foam,
+│                  #   capped/defected fullerene-CNTs: capped_cnt.py + fullerene_mesh.py)
 ├── dopants/       # substitutional chemistry
 ├── defects/       # vacancies, Stone-Wales, distortion
 ├── topology/      # networkx connectivity / rings
 ├── validation/    # structural checks
-├── exports/       # QE + LAMMPS writers
+├── exports/       # QE + LAMMPS writers, plain XYZ + Blender render bundle
 ├── relax/         # ASE optimizers + harmonic pre-relaxation
 ├── viz/           # matplotlib 3D viewer / PNG exporter
 ├── workflows/     # batch generation + metadata + ML dataset
@@ -209,6 +344,11 @@ nanocarbon_lab/
 ├── cli/           # command line
 ├── tests/         # pytest suite
 └── examples/      # runnable example scripts
+
+blender/           # Blender-side rendering pipeline (run via `blender -b -P ...`)
+├── styles.py       # journal-cover style presets (pure Python, no bpy)
+├── mesh_builder.py # bpy/bmesh: XYZ+JSON -> coloured ball-and-stick / smooth-surface mesh
+└── render_cnt.py   # CLI driver: world/lighting/camera + render to PNG
 ```
 
 ## License
