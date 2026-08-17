@@ -1,0 +1,16 @@
+schema_version = "1.0.0"
+
+id = "atomviz_studio"
+version = "1.0.0"
+name = "AtomViz Studio"
+tagline = "Journal-cover shading and VFX for Atomic Blender structures"
+maintainer = "nanocarbon_lab contributors"
+type = "add-on"
+
+tags = ["Material", "Render", "Lighting"]
+
+blender_version_min = "4.2.0"
+license = ["SPDX:MIT"]
+
+[permissions]
+files = "Import XYZ structures and write rendered images"

@@ -1,0 +1,13 @@
+# Tooling config only: AtomViz Studio is a Blender add-on, not a pip package.
+# Install it with tools/make_addon_zip.py + Blender's add-on installer.
+
+[tool.pytest.ini_options]
+testpaths = ["atomviz_studio/tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]

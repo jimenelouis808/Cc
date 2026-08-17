@@ -211,6 +211,19 @@ nanocarbon_lab/
 └── examples/      # runnable example scripts
 ```
 
+## Cover graphics (Blender)
+
+The sibling project [`blender_atomviz`](../blender_atomviz/) is a Blender
+add-on that turns the XYZ files written here into journal-cover renders:
+per-element shading styles and palettes, procedural backgrounds, and
+electricity / volumetric light / laser effects. It works on structures
+imported with Atomic Blender and never modifies the coordinates.
+
+```bash
+blender -b -P ../blender_atomviz/atomviz_studio/cli/render_cover.py -- \
+    --xyz out/cnt/cnt.xyz --look neon_lab --format cover_a4_300 --out covers/cnt.png
+```
+
 ## License
 
 MIT.
