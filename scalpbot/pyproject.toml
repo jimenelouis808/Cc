@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scalpbot"
+version = "1.0.0"
+description = "Bot de micro-scalping para Binance con ML, walk-forward purgado y backtest realista"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scikit-learn>=1.3",
+    "lightgbm>=4.0",
+    "requests>=2.28",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+extras = ["pyarrow>=14.0", "matplotlib>=3.7"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+scalpbot = "scalpbot.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["scalpbot*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

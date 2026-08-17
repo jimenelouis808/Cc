@@ -1,0 +1,66 @@
+# Configuracion de scalpbot. Todo lo que no aparezca usa el valor por defecto
+# definido en scalpbot/config.py.
+
+data:
+  symbol: BTCUSDT
+  interval: 1m
+  market: futures        # futures tiene comisiones mas bajas que spot
+  days: 60
+  data_dir: data
+  use_context: true      # funding, open interest, long/short, fear & greed
+
+costs:
+  # Binance USDT-M futures VIP0: taker 0.050%, maker 0.020%.
+  # Spot VIP0: taker/maker 0.100% -> practicamente inviable para scalping.
+  # Ajusta a TU nivel VIP real y no seas optimista con el slippage.
+  taker_fee_bps: 5.0
+  maker_fee_bps: 2.0
+  slippage_bps: 1.0
+  entry_is_maker: false
+  exit_is_maker: false
+
+labels:
+  horizon: 20            # barras hasta la barrera temporal (20 min en 1m)
+  tp_sigma: 1.0          # TP = 1.0 * sigma_barra * sqrt(horizon)
+  sl_sigma: 0.9          # SL algo mas ajustado que el TP
+  vol_window: 60
+  scale_by_horizon: true # sin esto las barreras son mas pequenas que los costes
+  min_barrier_bps: 20.0  # suelo: debe superar con holgura los ~12 bps de coste
+
+model:
+  n_splits: 6
+  embargo: 30
+  min_train_bars: 5000
+  learning_rate: 0.03
+  num_leaves: 31
+  max_depth: 6
+  n_estimators: 400
+  min_child_samples: 80
+  subsample: 0.8
+  colsample_bytree: 0.7
+  reg_lambda: 5.0
+  seed: 42
+  max_features: 60
+
+strategy:
+  min_edge_bps: 2.0      # EV neto minimo para abrir; subelo si operas de mas
+  min_prob: 0.40
+  kelly_fraction: 0.25   # Kelly completo arruina; usa un cuarto o menos
+  max_position_pct: 0.20
+  allow_short: true
+  cooldown_bars: 2
+  exit_on_flip: true
+
+risk:
+  initial_equity: 10000.0
+  max_daily_loss_pct: 2.0
+  max_trades_per_day: 120
+  max_consecutive_losses: 6
+  leverage: 1.0          # sube esto solo cuando tengas meses de paper trading
+
+live:
+  testnet: true
+  poll_seconds: 5
+  dry_run: true          # true = no envia ninguna orden
+  api_key_env: BINANCE_API_KEY
+  api_secret_env: BINANCE_API_SECRET
