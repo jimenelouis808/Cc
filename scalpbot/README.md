@@ -29,13 +29,13 @@ efectos de sobreajuste.
 
 Para calibrar la dificultad: en el pipeline de este repositorio, con datos de
 prueba que contienen una señal predecible **plantada a propósito**, el modelo
-alcanza 52.9% de acierto y **+9.12 bps brutos** por operación. Es una habilidad
-predictiva real y aun así **pierde dinero**, porque 9.12 < 12.
+alcanza 53.4% de acierto y **+10.95 bps brutos** por operación. Es una
+habilidad predictiva real y aun así **pierde dinero**, porque 10.95 < 12.
 
 ```
-  Tasa de acierto          52.9%
-  Media por trade          -2.88 bps      <- resultado neto
-  Edge bruto               +9.12 bps      <- lo que predice el modelo
+  Tasa de acierto          53.4%
+  Media por trade          -1.05 bps      <- resultado neto
+  Edge bruto              +10.95 bps      <- lo que predice el modelo
   Coste ida y vuelta       12.00 bps      <- lo que cuesta operar
 ```
 
@@ -46,9 +46,12 @@ honestidad, no para esquivarla. Las tres palancas que de verdad la mueven son:
    El comando `sweep` mide exactamente esto.
 2. **Ser maker en vez de taker.** Con órdenes límite pasas de 12 a 6 bps de
    ida y vuelta. Es la mejora individual más grande disponible, y a cambio
-   asumes riesgo de no ejecución. En el pipeline, sobre exactamente las mismas
-   predicciones, `--maker` mueve el resultado de **−3.31% a +5.53%**
-   (`t = 3.47`): no cambia el modelo, cambia la estructura de costes.
+   asumes riesgo de no ejecución. En el pipeline, partiendo de las mismas
+   probabilidades OOS, `--maker` mueve el resultado de **−3.31% a +5.53%**
+   (`t = 3.47`): no cambia el modelo ni una sola predicción, cambia la
+   estructura de costes. Al abaratarse operar, el filtro de EV además admite
+   más señales (1.475 → 2.399 operaciones), así que el conjunto de trades no
+   es idéntico: es el mismo modelo enfrentado a otra economía.
 3. **Bajar de nivel VIP / usar rebates.** Estructural, no algorítmico.
 
 ```bash
@@ -289,19 +292,26 @@ Ejecuta `sweep` y mira la forma de la curva, no el mejor número:
 
 ```
  min_edge_bps  n_trades  avg_trade_bps  win_rate_pct   sharpe   t_stat
-         0.00       942          -4.53         51.06   -22.79    -4.29
-         2.00       916          -2.88         52.95   -14.85    -2.46
-        10.00       472          -2.69         51.69    -6.58    -1.29
-        20.00       236          +0.14         54.66    -1.52     0.04
-        25.00       186          -2.46         52.69    -4.37    -0.54
-        30.00       150          -1.84         52.00    -2.51    -0.33
+         0.00      1485          -1.46         51.31    -8.14    -1.74
+         2.00      1475          -1.05         53.36    -5.86    -1.12
+         5.00      1267          -1.97         52.33    -8.38    -1.72
+        10.00       886          +0.89         54.63     1.03     0.56
+        15.00       562          +2.83         52.67     2.26     1.27
+        20.00       407          +5.05         54.05     4.36     1.76
+        25.00       322          +6.55         54.97     4.95     1.88
+        30.00       248          +5.93         53.63     4.05     1.40
 ```
 
 Un edge real está **concentrado en las señales más fuertes** y mejora de forma
-monótona al ser más selectivo. En la tabla de arriba mejora hasta 20 bps y
-luego empeora: ese pico no es un óptimo, es ruido. Y aunque fuera monótono, el
-valor concreto está sesgado al alza por haber probado muchos umbrales sobre los
-mismos datos.
+monótona al ser más selectivo. Esta curva se comporta bien: sube de −1.46 a
++6.55 bps al pasar de operar todo a operar solo el 0.7% de las barras. Pero
+fíjate en la última columna: el `t_stat` máximo es **1.88, por debajo de 2**.
+La forma es la correcta y aun así no hay evidencia suficiente. Además el óptimo
+concreto está sesgado al alza por haber probado ocho umbrales sobre los mismos
+datos: el valor que elijas hay que confirmarlo en datos que no hayas mirado.
+
+Ese es el modo de fallo más común del scalping algorítmico: una curva que
+parece convincente y un tamaño de muestra que no aguanta el peso.
 
 Qué mirar, por orden de importancia:
 
