@@ -27,18 +27,37 @@ _ELEMENT_COLORS = {
 _ELEMENT_SIZES = {"C": 40, "N": 40, "B": 45, "S": 55, "P": 55, "H": 20, "O": 40}
 
 
-def _setup_figure(atoms: Atoms, figsize: tuple[float, float]):
-    # Lazy import so the module stays usable even when matplotlib is missing.
-    import matplotlib.pyplot as plt  # noqa: WPS433
-    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+def draw_structure_on_axes(
+    atoms: Atoms,
+    ax,
+    show_bonds: bool = True,
+    title: Optional[str] = None,
+) -> None:
+    """Draw ``atoms`` onto an existing 3D matplotlib axes.
 
-    fig = plt.figure(figsize=figsize)
-    ax = fig.add_subplot(111, projection="3d")
+    Shared by :func:`plot_structure` and by the Tkinter GUI, which embeds its
+    own canvas. Bonds are drawn as a single ``Line3DCollection`` rather than
+    one ``plot`` call per bond — for a few thousand bonds that is the
+    difference between an instant redraw and several seconds.
+
+    Parameters
+    ----------
+    atoms
+        Structure to render.
+    ax
+        A matplotlib axes created with ``projection="3d"``.
+    show_bonds
+        Draw covalent bonds inferred from covalent radii.
+    title
+        Overrides the default auto-generated title.
+    """
+    from mpl_toolkits.mplot3d.art3d import Line3DCollection  # noqa: WPS433
 
     symbols = atoms.get_chemical_symbols()
     positions = atoms.get_positions()
     colors = [_ELEMENT_COLORS.get(s, "#888888") for s in symbols]
     sizes = [_ELEMENT_SIZES.get(s, 30) for s in symbols]
+
     ax.scatter(
         positions[:, 0],
         positions[:, 1],
@@ -50,15 +69,19 @@ def _setup_figure(atoms: Atoms, figsize: tuple[float, float]):
         depthshade=True,
     )
 
-    g = build_bond_graph(atoms)
-    for i, j in g.edges:
-        ax.plot(
-            [positions[i, 0], positions[j, 0]],
-            [positions[i, 1], positions[j, 1]],
-            [positions[i, 2], positions[j, 2]],
-            color="#555555",
-            linewidth=0.6,
-        )
+    if show_bonds and len(atoms) > 1:
+        g = build_bond_graph(atoms)
+        segments = [
+            (positions[i], positions[j])
+            for i, j in g.edges
+            # Skip bonds wrapped across the periodic boundary: drawing them
+            # straight would produce long lines slicing through the cell.
+            if np.linalg.norm(positions[i] - positions[j]) < 2.0
+        ]
+        if segments:
+            ax.add_collection3d(
+                Line3DCollection(segments, colors="#555555", linewidths=0.6)
+            )
 
     ax.set_xlabel("x (Å)")
     ax.set_ylabel("y (Å)")
@@ -71,9 +94,23 @@ def _setup_figure(atoms: Atoms, figsize: tuple[float, float]):
         )
     )
     ax.set_title(
-        f"{atoms.info.get('structure_type', 'structure')} "
-        f"({len(atoms)} atoms, {atoms.get_chemical_formula()})"
+        title
+        if title is not None
+        else (
+            f"{atoms.info.get('structure_type', 'structure')} "
+            f"({len(atoms)} atoms, {atoms.get_chemical_formula()})"
+        )
     )
+
+
+def _setup_figure(atoms: Atoms, figsize: tuple[float, float]):
+    # Lazy import so the module stays usable even when matplotlib is missing.
+    import matplotlib.pyplot as plt  # noqa: WPS433
+    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111, projection="3d")
+    draw_structure_on_axes(atoms, ax)
     return fig, ax
 
 

@@ -21,7 +21,12 @@ validation pass before writing.
 | `relax`         | ASE optimizer wrapper + calculator-free harmonic pre-relaxation              |
 | `viz`           | Matplotlib 3D viewer / PNG exporter                                          |
 | `workflows`     | Batch sweeps + ML-ready dataset exporter (XYZ + features CSV + manifest)     |
+| `gui`           | Tkinter desktop app with live 3D preview (`nanocarbon-gui`)                  |
 | `cli`           | `nanocarbon` command-line entry point                                        |
+
+> **¿Primera vez?** La [**Guía rápida en español**](GUIA_RAPIDA.md) explica
+> paso a paso cómo instalarlo y usarlo en tu portátil, incluida la interfaz
+> gráfica.
 
 ## Installation
 
@@ -31,7 +36,23 @@ cd nanocarbon_lab
 pip install -e .[dev]
 ```
 
-Python 3.10+ required. Dependencies: `numpy`, `scipy`, `ase`, `networkx`.
+Python 3.10+ required. Dependencies: `numpy`, `scipy`, `ase`, `networkx`,
+`matplotlib`.
+
+## Graphical interface
+
+```bash
+nanocarbon-gui
+```
+
+A desktop app to build, preview and export structures without writing code:
+pick a structure type, tune its parameters, see a live 3D preview and the
+validation report, then export to QE / LAMMPS / XYZ / CIF.
+
+Structures are built on a worker thread, so the window stays responsive on
+large models. Tkinter is required — it ships with Python on Windows and
+macOS; on Linux install `python3-tk` (it cannot be installed with pip). The
+app prints platform-specific instructions if it is missing.
 
 ## Quick start — Python API
 
@@ -188,9 +209,10 @@ Default pair style for pure-carbon systems: `airebo 3.0 1 1` with the
 pytest -q
 ```
 
-67 tests covering builders (including nanocoils), dopants, defects,
-topology, validation, exporters, workflows and the bonus modules
-(relax / viz / ML dataset).
+113 tests covering builders (including nanocoils), dopants, defects,
+topology, validation, exporters, workflows, the bonus modules
+(relax / viz / ML dataset) and the GUI logic. The Tk layer is smoke-tested
+against a stubbed Tk with a real matplotlib figure, so it runs headless.
 
 ## Repository layout
 
@@ -205,6 +227,7 @@ nanocarbon_lab/
 ├── relax/         # ASE optimizers + harmonic pre-relaxation
 ├── viz/           # matplotlib 3D viewer / PNG exporter
 ├── workflows/     # batch generation + metadata + ML dataset
+├── gui/           # Tkinter desktop app (params logic + widgets)
 ├── utils/         # constants, geometry, RNG
 ├── cli/           # command line
 ├── tests/         # pytest suite

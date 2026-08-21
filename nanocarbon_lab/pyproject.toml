@@ -27,6 +27,9 @@ dependencies = [
     "scipy>=1.10",
     "ase>=3.22",
     "networkx>=3.0",
+    # Required by the 3D preview in the GUI and by nanocarbon_lab.viz.
+    # Tkinter itself ships with Python and cannot be installed via pip.
+    "matplotlib>=3.7",
 ]
 
 [project.optional-dependencies]
@@ -35,12 +38,13 @@ dev = [
     "pytest-cov>=4.1",
     "ruff>=0.4",
 ]
-viz = [
-    "matplotlib>=3.7",
-]
 
 [project.scripts]
 nanocarbon = "nanocarbon_lab.cli.main:main"
+# Deliberately a console script rather than a gui-script: on Windows a
+# gui-script hides stdout, so a missing-Tkinter message would vanish. The
+# console window is a small price for seeing errors.
+nanocarbon-gui = "nanocarbon_lab.gui:main"
 
 [tool.setuptools.packages.find]
 include = ["nanocarbon_lab*"]
