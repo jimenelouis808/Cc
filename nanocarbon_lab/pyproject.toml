@@ -38,9 +38,17 @@ dev = [
 viz = [
     "matplotlib>=3.7",
 ]
+# The GUI needs matplotlib for its 3D preview. tkinter is part of the
+# standard library but is packaged separately on some Linux distributions
+# (apt install python3-tk / dnf install python3-tkinter), so it cannot be
+# declared as a pip dependency here.
+gui = [
+    "matplotlib>=3.7",
+]
 
 [project.scripts]
 nanocarbon = "nanocarbon_lab.cli.main:main"
+nanocarbon-gui = "nanocarbon_lab.gui.app:main"
 
 [tool.setuptools.packages.find]
 include = ["nanocarbon_lab*"]

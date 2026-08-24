@@ -104,55 +104,126 @@ class TestFullereneMeshPrimitives:
         assert np.allclose(rho[body], 5.0, atol=1e-6)
         assert np.all(rho[~body] <= 5.0 + 1e-6)
 
-    def test_relax_shell_preserves_topology_and_converges(self):
-        mesh = fm.subdivide_mesh(fm.seed_capsule_mesh(6), 3)
+    def test_relax_shell_reaches_sp2_geometry(self):
+        mesh = fm.smooth_mesh_on_capsule(
+            fm.subdivide_mesh(fm.seed_capsule_mesh(6), 3),
+            radius=1.0, half_length=2.5,
+        )
         positions, bonds, _ = fm.dual_honeycomb(mesh)
-        proj = fm.capsule_project(positions, radius=5.0, half_length=2.0)
-        bl0 = np.array([np.linalg.norm(proj[a] - proj[b]) for a, b in bonds])
-        proj *= 1.42 / bl0.mean()
-        relaxed = fm.relax_shell(proj, bonds, steps=500)
+        bl0 = np.array([np.linalg.norm(positions[a] - positions[b]) for a, b in bonds])
+        positions = positions * (1.42 / bl0.mean())
+        relaxed = fm.relax_shell(positions, bonds)
         bl = np.array([np.linalg.norm(relaxed[a] - relaxed[b]) for a, b in bonds])
-        assert bl.mean() == pytest.approx(1.42, abs=0.05)
-        assert bl.min() > 1.0
-        assert bl.max() < 1.9
+        # A real valence force field converges tightly, not just "roughly".
+        assert bl.mean() == pytest.approx(1.42, abs=0.01)
+        assert bl.std() < 0.02
+        assert bl.min() > 1.30 and bl.max() < 1.55
+
+    def test_smoothing_preserves_topology(self):
+        mesh = fm.subdivide_mesh(fm.seed_capsule_mesh(6), 3)
+        before = fm.ring_size_histogram(fm.dual_honeycomb(mesh)[2])
+        smoothed = fm.smooth_mesh_on_capsule(mesh, radius=1.0, half_length=2.5)
+        after = fm.ring_size_histogram(fm.dual_honeycomb(smoothed)[2])
+        assert before == after
+        assert np.array_equal(mesh[1], smoothed[1])
+
+    def test_radius_freq_round_trip(self):
+        for freq in (2, 3, 4, 5, 6):
+            radius = fm.radius_for_freq(freq)
+            assert fm.freq_for_radius(radius) == freq
+        # radius grows linearly with freq: ~1.96 A per unit at bond=1.42
+        assert fm.radius_for_freq(4) == pytest.approx(4 * 1.9563, abs=0.04)
+
+    def test_freq_for_radius_rejects_nonpositive(self):
+        with pytest.raises(ValueError):
+            fm.freq_for_radius(0.0)
 
 
 class TestBuildCappedCNT:
     def test_plain_cap_is_topologically_perfect_fullerene(self):
-        atoms = build_capped_cnt(n_body_rings=6, freq=2, radius=5.0, seed=0)
+        atoms = build_capped_cnt(n_body_rings=6, freq=2, seed=0)
         counts = atoms.info["ring_counts"]
         assert set(counts) == {5, 6}  # only pentagons (caps) and hexagons
         assert counts[5] == 12
         assert _ring_deficit(counts) == 12
 
     def test_all_carbon_and_finite(self):
-        atoms = build_capped_cnt(n_body_rings=6, freq=2, radius=5.0, seed=0)
+        atoms = build_capped_cnt(n_body_rings=6, freq=2, seed=0)
         assert set(atoms.get_chemical_symbols()) == {"C"}
         assert not any(atoms.get_pbc())
 
-    def test_bond_lengths_are_physical(self):
-        atoms = build_capped_cnt(n_body_rings=6, freq=2, radius=5.0, seed=0)
-        bl = atoms.info["bond_length"]
-        assert 1.2 < bl["min"] <= bl["mean"] <= bl["max"] < 1.8
-        # No atom pair anywhere in the structure should be closer than the
-        # hard overlap threshold (real bonded pairs are ~1.4, so this also
-        # implicitly checks there is no self-intersection of the shell).
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            dict(n_body_rings=6, freq=2),
+            dict(n_body_rings=10, freq=3),
+            dict(n_body_rings=8, freq=4),
+            dict(n_body_rings=10, freq=3, bend_angle=0.5),
+            dict(
+                n_body_rings=12, freq=3,
+                defects=[
+                    {"type": "stone_wales", "count": 2},
+                    {"type": "divacancy", "count": 1},
+                ],
+            ),
+        ],
+    )
+    def test_geometry_is_realistic_sp2(self, kwargs):
+        """Structures must be physically realistic, not merely valid topology.
+
+        Real graphitic carbon: 1.42 A bonds, 120 deg angles (108 deg inside
+        a pentagon), and no non-bonded pair closer than the ~2.46 A 1-3
+        distance. An earlier fixed-step relaxer satisfied the topology
+        assertions above while producing 66-164 deg angles and dozens of
+        sub-2 A contacts, so quality is asserted explicitly here.
+        """
+        atoms = build_capped_cnt(seed=0, **kwargs)
+        g = atoms.info["geometry"]
+        assert 1.30 < g["bond_min"] <= g["bond_max"] < 1.55
+        assert g["bond_mean"] == pytest.approx(1.42, abs=0.02)
+        assert g["bond_std"] < 0.03
+        # 100 deg is comfortably below a pentagon's 108 deg interior angle.
+        assert 100.0 < g["angle_min"] <= g["angle_max"] < 135.0
+        assert g["angle_std"] < 4.0
+        assert g["n_close_contacts"] == 0
+
         positions = atoms.get_positions()
         from scipy.spatial import cKDTree
 
-        tree = cKDTree(positions)
-        d, _ = tree.query(positions, k=2)
+        d, _ = cKDTree(positions).query(positions, k=2)
         assert d[:, 1].min() > HARD_MIN_DISTANCE
 
+    def test_radius_matches_lattice_prediction(self):
+        for freq in (2, 3, 4):
+            atoms = build_capped_cnt(n_body_rings=8, freq=freq, seed=0)
+            assert atoms.info["radius"] == pytest.approx(
+                fm.radius_for_freq(freq), abs=0.15
+            )
+
+    def test_target_radius_selects_freq(self):
+        atoms = build_capped_cnt(n_body_rings=8, target_radius=7.8, seed=0)
+        assert atoms.info["freq"] == 4
+        assert atoms.info["radius"] == pytest.approx(7.8, abs=0.5)
+
+    def test_bend_is_retained(self):
+        straight = build_capped_cnt(n_body_rings=10, freq=3, seed=0)
+        bent = build_capped_cnt(n_body_rings=10, freq=3, bend_angle=0.6, seed=0)
+        # A bent tube is more compact along its longest axis than a straight
+        # one of the same atom count.
+        assert len(bent) == len(straight)
+        span = lambda a: (a.get_positions().max(axis=0)
+                          - a.get_positions().min(axis=0)).max()
+        assert span(bent) < span(straight)
+
     def test_larger_freq_gives_more_atoms(self):
-        small = build_capped_cnt(n_body_rings=6, freq=2, radius=5.0, seed=0)
-        big = build_capped_cnt(n_body_rings=6, freq=4, radius=5.0, seed=0)
+        small = build_capped_cnt(n_body_rings=6, freq=2, seed=0)
+        big = build_capped_cnt(n_body_rings=6, freq=4, seed=0)
         assert len(big) > len(small)
 
     def test_stone_wales_defect_ring_delta(self):
-        base = build_capped_cnt(n_body_rings=10, freq=3, radius=6.0, seed=0)
+        base = build_capped_cnt(n_body_rings=10, freq=3, seed=0)
         defected = build_capped_cnt(
-            n_body_rings=10, freq=3, radius=6.0,
+            n_body_rings=10, freq=3,
             defects=[{"type": "stone_wales", "count": 2}], seed=0,
         )
         base_counts, def_counts = base.info["ring_counts"], defected.info["ring_counts"]
@@ -161,9 +232,9 @@ class TestBuildCappedCNT:
         assert _ring_deficit(def_counts) == 12
 
     def test_divacancy_defect_ring_delta(self):
-        base = build_capped_cnt(n_body_rings=10, freq=3, radius=6.0, seed=0)
+        base = build_capped_cnt(n_body_rings=10, freq=3, seed=0)
         defected = build_capped_cnt(
-            n_body_rings=10, freq=3, radius=6.0,
+            n_body_rings=10, freq=3,
             defects=[{"type": "divacancy", "count": 2}], seed=0,
         )
         base_counts, def_counts = base.info["ring_counts"], defected.info["ring_counts"]
@@ -173,7 +244,7 @@ class TestBuildCappedCNT:
 
     def test_mixed_defects_compose(self):
         atoms = build_capped_cnt(
-            n_body_rings=12, freq=3, radius=6.5,
+            n_body_rings=12, freq=3,
             defects=[
                 {"type": "stone_wales", "count": 1},
                 {"type": "divacancy", "count": 1},
@@ -189,7 +260,7 @@ class TestBuildCappedCNT:
 
     def test_bend_angle_produces_finite_non_nan_structure(self):
         atoms = build_capped_cnt(
-            n_body_rings=10, freq=3, radius=6.0, bend_angle=0.6, seed=0
+            n_body_rings=10, freq=3, bend_angle=0.6, seed=0
         )
         positions = atoms.get_positions()
         assert np.isfinite(positions).all()
@@ -197,11 +268,11 @@ class TestBuildCappedCNT:
 
     def test_reproducible_with_seed(self):
         a = build_capped_cnt(
-            n_body_rings=10, freq=3, radius=6.0,
+            n_body_rings=10, freq=3,
             defects=[{"type": "stone_wales", "count": 2}], seed=11,
         )
         b = build_capped_cnt(
-            n_body_rings=10, freq=3, radius=6.0,
+            n_body_rings=10, freq=3,
             defects=[{"type": "stone_wales", "count": 2}], seed=11,
         )
         assert a.info["defect_log"] == b.info["defect_log"]
@@ -213,7 +284,9 @@ class TestBuildCappedCNT:
         with pytest.raises(ValueError):
             build_capped_cnt(freq=0)
         with pytest.raises(ValueError):
-            build_capped_cnt(radius=0)
+            build_capped_cnt(bond=0)
+        with pytest.raises(ValueError):
+            build_capped_cnt(bend_angle=2.0)  # beyond the elastic-bend model
 
     def test_unknown_defect_type_raises(self):
         with pytest.raises(ValueError):
@@ -221,7 +294,7 @@ class TestBuildCappedCNT:
 
     def test_render_bundle_round_trip(self, tmp_path):
         atoms = build_capped_cnt(
-            n_body_rings=8, freq=2, radius=5.0,
+            n_body_rings=8, freq=2,
             defects=[{"type": "divacancy", "count": 1}], seed=1,
         )
         xyz_path, json_path = write_render_bundle(atoms, tmp_path / "demo")

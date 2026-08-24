@@ -12,16 +12,17 @@ validation pass before writing.
 
 | Module          | What it does                                                                 |
 |-----------------|------------------------------------------------------------------------------|
-| `builders`      | CNT (armchair / zigzag / chiral), graphene, nanoribbons, **nanocoils**, 3D carbon foam |
+| `builders`      | CNT (armchair / zigzag / chiral), graphene, nanoribbons, **nanocoils**, 3D carbon foam, **capped/defected fullerene-CNTs** |
 | `dopants`       | Substitutional N, B, S, P and co-doping, random / edges / bulk / cluster     |
 | `defects`       | Mono- and divacancies, Stone-Wales, local random distortion                  |
 | `topology`      | networkx-based bond graph, coordination, connectivity, ring statistics       |
 | `validation`    | Minimum distances, coordination sanity, density, vacuum, cell consistency   |
-| `exports`       | Quantum ESPRESSO `pw.x` input, LAMMPS data + script (AIREBO default)         |
+| `exports`       | Quantum ESPRESSO `pw.x` input, LAMMPS data + script (AIREBO default), XYZ + Blender render bundle |
 | `relax`         | ASE optimizer wrapper + calculator-free harmonic pre-relaxation              |
 | `viz`           | Matplotlib 3D viewer / PNG exporter                                          |
 | `workflows`     | Batch sweeps + ML-ready dataset exporter (XYZ + features CSV + manifest)     |
 | `cli`           | `nanocarbon` command-line entry point                                        |
+| `gui`           | `nanocarbon-gui` desktop app: sliders, live 3D preview, export, Blender render |
 
 ## Installation
 
@@ -32,6 +33,8 @@ pip install -e .[dev]
 ```
 
 Python 3.10+ required. Dependencies: `numpy`, `scipy`, `ase`, `networkx`.
+For the desktop app add `pip install -e ".[gui]"` (matplotlib) — plus
+`python3-tk` on Linux, see [Graphical interface](#graphical-interface).
 
 ## Quick start — Python API
 
@@ -188,9 +191,15 @@ Default pair style for pure-carbon systems: `airebo 3.0 1 1` with the
 pytest -q
 ```
 
-89 tests covering builders (including nanocoils and capped/defected
+105 tests covering builders (including nanocoils and capped/defected
 fullerene-CNTs), dopants, defects, topology, validation, exporters,
-workflows and the bonus modules (relax / viz / ML dataset).
+workflows, the GUI, and the bonus modules (relax / viz / ML dataset).
+
+The capped-CNT tests assert **physical** quality, not only topology:
+bond lengths in 1.30-1.55 Å, bond angles in 100-135 deg, and zero
+non-bonded contacts below 2 Å, across straight, bent and defected cases.
+GUI tests run headlessly under `xvfb-run` and skip cleanly when tkinter
+or a display is unavailable.
 
 ## Capped & defected CNTs for rendering (Blender / journal-cover art)
 
@@ -202,6 +211,27 @@ both ends by hemispherical fullerene domes, with pentagon/heptagon/octagon
 defects composed in on request -- meant for exporting to `.xyz` and
 rendering in Blender (or another external tool) for illustration/cover
 art, not for DFT input decks.
+
+### Graphical interface
+
+```bash
+pip install -e ".[gui]"
+nanocarbon-gui            # or: python -m nanocarbon_lab.gui
+```
+
+Sliders for length, diameter, bend and bond length; spinboxes for how many
+Stone-Wales and divacancy defects to scatter in; a live 3D preview coloured
+by ring type; a panel reporting ring counts, the Euler check and the
+measured bond/angle/contact statistics; and buttons to save the
+`.xyz` + `.json` bundle or drive Blender directly. Builds run on a worker
+thread, so the window stays responsive while a few-thousand-atom shell
+relaxes.
+
+`tkinter` is part of the standard library but ships separately on some
+Linux distributions -- `sudo apt install python3-tk` (Debian/Ubuntu) or
+`sudo dnf install python3-tkinter` (Fedora). The python.org installers for
+Windows and macOS already include it. Everything the GUI does is also
+available from `nanocarbon cnt-cap`.
 
 ### Why the ring topology is guaranteed correct
 
@@ -227,32 +257,78 @@ produce a topologically inconsistent structure -- see the module
 docstring for the full construction and `tests/test_capped_cnt.py` for
 the Euler-invariant assertions.
 
+### Why the geometry is physically realistic
+
+Correct topology is not enough: a structure can have perfect ring counts
+and still be geometrically absurd. The shell is therefore relaxed against
+a **valence force field** -- bond stretching toward 1.42 Å, *true* angle
+bending toward 120 deg, and short-range non-bonded repulsion -- minimised
+with L-BFGS using exact analytic gradients (verified against finite
+differences to ~1e-9).
+
+Two details matter, and both were found by measuring rather than
+assuming:
+
+* **A real angle term is essential.** Bond springs alone, or a 1-3
+  *distance* proxy for angles, leave the sheet free to pyramidalise and
+  fold: an earlier fixed-step relaxer produced near-perfect bond lengths
+  alongside 66-164 deg bond angles and dozens of sub-2 Å contacts.
+* **The mesh is smoothed before the dual is taken.** Barycentric
+  subdivision yields quite unequal triangles; taking the dual first and
+  moving atoms afterwards leaves hexagons so uneven that beyond ~1000
+  atoms the optimiser cannot recover and the shell folds through itself.
+  Projecting and Laplacian-smoothing the *mesh* onto the capsule first
+  fixes this.
+
+A clean capped tube now relaxes to **1.415-1.423 Å** bonds and
+**107.8-120.0 deg** angles -- the 107.8 deg floor being exactly the
+interior angle of the cap pentagons, which is the correct physical answer.
+Every structure carries its own measured statistics in
+`atoms.info["geometry"]`, so you can assert on quality instead of
+trusting the builder.
+
+### Diameter is quantised, not free
+
+The body circumference must fit a whole number of hexagons, so the radius
+follows from `freq`: `R = 5 * freq * sqrt(3) * bond / (2*pi)`, about
+`1.96 * freq` Å. This is the same constraint that fixes a real `(n, m)`
+nanotube's diameter from its chiral indices. Pass `target_radius` to have
+the nearest realisable `freq` chosen for you, then read back
+`atoms.info["radius"]`.
+
 ```python
 from nanocarbon_lab.builders import build_capped_cnt
 from nanocarbon_lab.exports import write_render_bundle
 
 cnt = build_capped_cnt(
-    n_body_rings=12,       # body length
-    freq=4,                 # diameter / lattice detail
-    radius=7.0,              # Å
-    bend_angle=0.4,           # radians, 0 = straight
+    n_body_rings=12,          # body length
+    target_radius=7.8,         # Å -- picks freq=4; exact value reported back
+    bend_angle=0.4,             # radians, 0 = straight (max 1.0)
     defects=[
         {"type": "stone_wales", "count": 2},  # 5-7-7-5 pairs
         {"type": "divacancy", "count": 1},     # 5-8-5 (octagon)
     ],
     seed=7,
 )
-print(cnt.info["ring_counts"])   # e.g. {5: 20, 6: 938, 7: 4, 8: 1}
+print(cnt.info["ring_counts"])  # e.g. {5: 18, 6: 938, 7: 4, 8: 1}
+print(cnt.info["geometry"])     # bond/angle/contact statistics
 write_render_bundle(cnt, "out/cnt_cap/demo")  # writes demo.xyz + demo.json
 ```
 
 Or from the CLI:
 
 ```bash
-nanocarbon cnt-cap --rings 12 --freq 4 --radius 7.0 --bend-angle 0.4 \
+nanocarbon cnt-cap --rings 12 --target-radius 7.8 --bend-angle 0.4 \
   --defect stone_wales:2 --defect divacancy:1 --seed 7 \
   --out out/cnt_cap/demo
 ```
+
+Bending is imposed as an arc-length-preserving sweep after the straight
+relaxation, then re-relaxed with both caps restrained. Past roughly
+0.6 rad the outer wall is visibly stretched -- which is real elastic
+strain -- and beyond 1.0 rad the request is rejected outright, because a
+real nanotube buckles into a localised kink rather than straining
+uniformly, and this smooth-arc model does not represent that.
 
 This writes `demo.xyz` (plain XYZ, readable by any molecular viewer) and
 `demo.json` (a sidecar with explicit bonds and per-atom ring membership,
@@ -342,6 +418,7 @@ nanocarbon_lab/
 ├── workflows/     # batch generation + metadata + ML dataset
 ├── utils/         # constants, geometry, RNG
 ├── cli/           # command line
+├── gui/           # tkinter desktop app (build, preview, export, render)
 ├── tests/         # pytest suite
 └── examples/      # runnable example scripts
 

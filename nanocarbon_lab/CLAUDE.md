@@ -23,6 +23,7 @@ nanocarbon_lab/
 ├── workflows/     # batch generation + ML dataset exporter
 ├── utils/         # constants, geometry helpers
 ├── cli/           # command line interface
+├── gui/           # tkinter desktop app (build / preview / export / render)
 ├── tests/         # pytest unit tests
 └── examples/      # runnable example scripts
 
@@ -56,6 +57,32 @@ post-hoc geometric edit.
 7. **No monolithic scripts**: keep modules small and composable.
 8. New features ship with a matching pytest test in `tests/`.
 
+## Geometry quality (not just topology)
+
+Correct ring counts are necessary but **not sufficient**: a shell can have
+a perfect Euler budget and still be geometrically absurd. `build_capped_cnt`
+relaxes against a valence force field (bond + true angle + non-bonded
+repulsion, L-BFGS, exact analytic gradients) and records measured
+statistics in `atoms.info["geometry"]`.
+
+Two failure modes are already fixed here; do not reintroduce them:
+1. **No real angle term.** Bond springs alone (or a 1-3 *distance* proxy)
+   let the sheet pyramidalise and fold — this produced 66-164 deg angles
+   with perfect-looking bond lengths.
+2. **Taking the dual before smoothing.** Barycentric subdivision gives
+   unequal triangles; atoms must be placed from a mesh already projected
+   and Laplacian-smoothed onto the capsule, or structures beyond ~1000
+   atoms fold through themselves.
+
+Any change to the builder or relaxer must keep
+`tests/test_capped_cnt.py::TestBuildCappedCNT::test_geometry_is_realistic_sp2`
+passing: bonds 1.30-1.55 Å, angles 100-135 deg, zero sub-2 Å non-bonded
+contacts, across straight, bent and defected cases.
+
+Tube **radius is quantised** by the lattice (`R = 5*freq*sqrt(3)*bond/2pi`),
+exactly as a real (n,m) tube's diameter is fixed by its indices. It is an
+output, not a free input; `target_radius` picks the nearest realisable freq.
+
 ## Scientific guardrails
 - Carbon bond length: default 1.42 Å (sp2). Accept anything in `[1.20, 1.80]` Å as bonded; anything in `(0, 0.9]` Å is a hard error.
 - Expected C coordination: **2 (edge)**, **3 (sp2 bulk)**. Coordination >= 5 or == 1 in the bulk is rejected by validation.
@@ -69,6 +96,8 @@ pip install -e .[dev]
 pytest nanocarbon_lab/tests -q
 python -m nanocarbon_lab.cli.main cnt --n 6 --m 6 --length 10 --out out/cnt --format qe
 python -m nanocarbon_lab.cli.main cnt-cap --rings 8 --freq 3 --defect stone_wales:1 --out out/cnt_cap/demo
+# GUI (needs tkinter + matplotlib); headless GUI tests:
+xvfb-run -a pytest nanocarbon_lab/tests/test_gui.py -q
 ```
 
 ## Where to add things

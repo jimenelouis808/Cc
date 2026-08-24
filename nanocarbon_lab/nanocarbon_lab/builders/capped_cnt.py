@@ -6,18 +6,40 @@ convex dome and no way to place a genuinely closed-shell defect like a
 divacancy. :func:`build_capped_cnt` instead builds a **finite, fully
 closed** shell: a straight or gently bent cylindrical body terminated at
 both ends by hemispherical fullerene domes, with pentagon/heptagon/octagon
-defects composed in on request. Every ring in the returned structure is
-guaranteed topologically consistent with Euler's polyhedron theorem (see
-:mod:`nanocarbon_lab.builders.fullerene_mesh` for the construction and
-why this is provably true, not just usually true) -- this is the entry
-point for "picture-realistic" capped nanotubes intended for rendering
-(Blender export, journal-cover style images) rather than for exact-(n, m)
-periodic DFT/MD cells.
+defects composed in on request.
+
+Two invariants are enforced, and both are checked by the test suite:
+
+* **Topology.** Every ring size is consistent with Euler's polyhedron
+  theorem by construction -- see
+  :mod:`nanocarbon_lab.builders.fullerene_mesh` for why this is provable
+  rather than merely likely.
+* **Geometry.** The relaxed structure has genuine sp2 geometry: bond
+  lengths within a few thousandths of 1.42 Å, bond angles clustered on
+  120 deg (dipping to ~108 deg inside cap pentagons, which is correct),
+  and no non-bonded contact closer than a bond length.
+
+The construction order matters and is deliberate:
+
+1. seed polyhedron -> subdivide (sets diameter and hexagon density),
+2. apply defect edits **on the mesh** (see ``fullerene_mesh``),
+3. project + Laplacian-smooth the *mesh* onto the target capsule, so the
+   triangulation -- and therefore the honeycomb dual -- is near-uniform
+   before any atom exists,
+4. take the dual to get atoms/bonds/rings, scale to ``bond``,
+5. relax with the valence force field,
+6. optionally bend, then re-relax with the ends restrained.
+
+Step 3 is the one that is easy to get wrong: taking the dual first and
+projecting the *atoms* afterwards leaves the hexagons badly unequal, and
+on structures beyond ~1000 atoms the optimiser cannot recover -- the
+shell folds through itself. Smoothing the mesh first is what makes the
+large, defected and bent cases converge.
 """
 
 from __future__ import annotations
 
-from typing import Literal, Optional, TypedDict
+from typing import Literal, TypedDict
 
 import numpy as np
 from ase import Atoms
@@ -28,6 +50,10 @@ from ..utils.rng import make_rng
 from . import fullerene_mesh as fm
 
 DefectKind = Literal["stone_wales", "divacancy"]
+
+# Beyond this the uniform elastic bend model stops being physical: a real
+# nanotube buckles into a localised kink rather than straining smoothly.
+MAX_PHYSICAL_BEND = 1.0
 
 
 class DefectSpec(TypedDict, total=False):
@@ -69,8 +95,8 @@ def _apply_defects(
     Each defect is placed on a random interior edge whose local
     neighbourhood (out to ``separation`` mesh hops) is still pristine
     (untouched hexagons only), so defects never merge into an unintended
-    larger/compound ring and stay far enough apart for
-    :func:`fullerene_mesh.relax_shell` to settle cleanly.
+    larger ring and stay far enough apart for the relaxation to settle
+    cleanly.
     """
     log: list[dict] = []
     exclude: set[int] = set()
@@ -105,112 +131,195 @@ def _apply_defects(
     return mesh, log
 
 
+def _bend_positions(positions: np.ndarray, angle: float) -> np.ndarray:
+    """Sweep a straight, z-aligned structure onto a circular arc.
+
+    Arc length is set equal to the original axial span, so the bend is
+    (to first order) isometric along the tube axis and bond lengths on
+    the neutral surface are preserved; the inner wall is compressed and
+    the outer wall stretched by ``+-r_tube / arc_radius``, exactly as in
+    an elastically bent tube.
+    """
+    z = positions[:, 2]
+    half = (z.max() - z.min()) / 2.0
+    if half <= 0:
+        return positions
+    arc_radius = (2.0 * half) / angle
+    theta = z / arc_radius
+    ct, st = np.cos(theta), np.sin(theta)
+    bent = np.empty_like(positions)
+    bent[:, 0] = (arc_radius + positions[:, 0]) * st
+    bent[:, 1] = positions[:, 1]
+    bent[:, 2] = (arc_radius + positions[:, 0]) * ct - arc_radius
+    return bent
+
+
+def geometry_report(
+    positions: np.ndarray, bonds: list[tuple[int, int]]
+) -> dict[str, float | int]:
+    """Measure how close a structure is to ideal sp2 geometry.
+
+    Returns bond-length and bond-angle statistics plus the number of
+    non-bonded contacts below 2.0 Å (there should be none: the shortest
+    genuinely non-bonded distance in graphitic carbon is the ~2.46 Å 1-3
+    separation). Attached to every built structure as
+    ``atoms.info["geometry"]`` so callers can assert on quality rather
+    than trusting the builder.
+    """
+    from collections import defaultdict
+
+    from scipy.spatial import cKDTree
+
+    pos = np.asarray(positions, dtype=float)
+    lengths = np.array([np.linalg.norm(pos[a] - pos[b]) for a, b in bonds])
+
+    nbrs: dict[int, list[int]] = defaultdict(list)
+    for a, b in bonds:
+        nbrs[a].append(b)
+        nbrs[b].append(a)
+    angles = []
+    for centre, ns in nbrs.items():
+        for i in range(len(ns)):
+            for j in range(i + 1, len(ns)):
+                v1 = pos[ns[i]] - pos[centre]
+                v2 = pos[ns[j]] - pos[centre]
+                cos = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+                angles.append(np.degrees(np.arccos(np.clip(cos, -1.0, 1.0))))
+    angles = np.array(angles)
+
+    bonded = set()
+    for a, b in bonds:
+        bonded.add((a, b))
+        bonded.add((b, a))
+    close = cKDTree(pos).query_pairs(r=2.0, output_type="ndarray")
+    n_clashes = sum(
+        1 for a, b in close if (int(a), int(b)) not in bonded
+    ) if len(close) else 0
+
+    return {
+        "bond_min": float(lengths.min()),
+        "bond_mean": float(lengths.mean()),
+        "bond_max": float(lengths.max()),
+        "bond_std": float(lengths.std()),
+        "angle_min": float(angles.min()),
+        "angle_mean": float(angles.mean()),
+        "angle_max": float(angles.max()),
+        "angle_std": float(angles.std()),
+        "n_close_contacts": int(n_clashes),
+    }
+
+
 def build_capped_cnt(
     n_body_rings: int = 8,
     freq: int = 3,
-    radius: float = 6.5,
+    target_radius: float | None = None,
     bond: float = CC_BOND,
     bend_angle: float = 0.0,
-    defects: Optional[list[DefectSpec]] = None,
+    defects: list[DefectSpec] | None = None,
     defect_separation: int = 3,
     vacuum: float = DEFAULT_VACUUM_1D,
-    relax_steps: int = 2500,
-    seed: Optional[int] = None,
+    smoothing_iterations: int = 60,
+    relax_iterations: int = 3000,
+    seed: int | None = None,
 ) -> Atoms:
     """Build a finite, fully-capped carbon nanotube (an elongated fullerene).
 
-    Two hemispherical fullerene domes (6 pentagons each, the rest
-    hexagons -- see :mod:`nanocarbon_lab.builders.fullerene_mesh`) cap a
-    straight or gently bent cylindrical hexagonal body. Every atom ends up
-    3-coordinate and every ring size is exactly known and Euler-consistent
-    by construction (``sum(6 - ring_size) == 12`` over the whole shell,
-    always -- assert on ``atoms.info["ring_counts"]`` in a test if you
-    want to double-check a specific build).
+    Two hemispherical fullerene domes (6 pentagons each) cap a straight or
+    gently bent cylindrical hexagonal body, with optional Stone-Wales and
+    divacancy defects. The result has both correct ring topology and
+    genuine sp2 geometry (see the module docstring).
 
     Parameters
     ----------
     n_body_rings
-        Number of lattice rings in the cylindrical body seed (>= 2).
-        Controls tube length: roughly proportional to ``n_body_rings``
-        for fixed ``freq``.
+        Lattice rings along the body (>= 2). Controls tube length.
     freq
-        Geodesic subdivision frequency (>= 1). Controls tube diameter and
-        hexagon density: higher ``freq`` gives a wider tube with finer
-        (smaller, more numerous) hexagons for the same physical radius.
-    radius
-        Target body radius in Å (the caps are hemispheres of the same
-        radius). Actual radius after relaxation may drift by a few
-        percent as bond lengths settle to ``bond``.
+        Geodesic subdivision frequency (>= 1). **Controls the diameter**,
+        which is quantised by the lattice: the body circumference must fit
+        a whole number of hexagons, so the radius is
+        ``5 * freq * sqrt(3) * bond / (2*pi)`` -- about ``1.96 * freq`` Å
+        for graphitic carbon. Ignored when ``target_radius`` is given.
+    target_radius
+        Convenience alternative to ``freq``: the nearest realisable
+        ``freq`` is chosen for this radius (Å). The radius you actually
+        get is reported as ``atoms.info["radius"]``; it can differ by up
+        to ~1 Å because the lattice is quantised, exactly as a real
+        ``(n, m)`` nanotube's diameter is fixed by its chiral indices.
     bond
-        Equilibrium C-C bond length (Å) used both to set the initial
-        scale and as the relaxation target.
+        Equilibrium C-C bond length (Å), the relaxation target.
     bend_angle
-        Total bend of the cylindrical body, in radians, swept as a
-        circular arc (0 = straight). Purely a smooth elastic bend (no
-        extra defects); combine with a ``"stone_wales"`` or
-        ``"divacancy"`` entry in ``defects`` for a topologically-marked
-        kink, as seen in TEM images of real nanotube elbows.
+        Total bend of the body in radians (0 = straight). The bend is
+        imposed geometrically after the straight relaxation and then
+        re-relaxed with both caps restrained, so bond lengths recover
+        while the bend is retained. Values above
+        :data:`MAX_PHYSICAL_BEND` are rejected: a real nanotube buckles
+        into a localised kink rather than straining uniformly, which this
+        smooth-arc model does not represent.
     defects
-        List of :class:`DefectSpec` (``{"type": ..., "count": ...}``)
-        requests, applied in order. ``"stone_wales"`` adds a 5-7-7-5
-        pair (2 pentagons + 2 heptagons); ``"divacancy"`` adds a
-        reconstructed 5-8-5 (1 octagon + 2 pentagons). Sites are chosen
-        at random (seeded) pristine-hexagon locations in the cylindrical
-        body, kept apart by ``defect_separation``.
+        List of :class:`DefectSpec` (``{"type": ..., "count": ...}``).
+        ``"stone_wales"`` adds a 5-7-7-5 pair (2 pentagons + 2 heptagons);
+        ``"divacancy"`` adds a reconstructed 5-8-5 (1 octagon + 2
+        pentagons). Sites are chosen at random (seeded) pristine-hexagon
+        locations, kept apart by ``defect_separation``.
     defect_separation
-        Minimum mesh-hop distance enforced between defects (and between
-        defects and the poles), so rings from different defects never
-        overlap or merge.
+        Minimum mesh-hop distance enforced between defects.
     vacuum
-        Vacuum padding (Å) added around the finite structure's bounding
-        box on all three axes.
-    relax_steps
-        Steepest-descent steps for :func:`fullerene_mesh.relax_shell`.
-        Increase for larger/more defected/more bent structures if the
-        reported bond-length spread in ``atoms.info["bond_length"]`` is
-        wider than desired.
+        Vacuum padding (Å) around the structure's bounding box.
+    smoothing_iterations
+        Laplacian-on-capsule sweeps applied to the mesh before taking the
+        dual (see module docstring, step 3).
+    relax_iterations
+        L-BFGS iterations per relaxation cycle.
     seed
-        RNG seed controlling defect site selection. Required for
-        reproducible builds when ``defects`` is non-empty.
+        RNG seed controlling defect site selection.
 
     Returns
     -------
     ase.Atoms
-        Finite (non-periodic) structure. ``atoms.info`` carries:
-
-        - ``structure_type``: ``"capped_cnt"``
-        - ``ring_counts``: ``{ring_size: count}`` over the whole shell
-        - ``rings``: list of atom-index lists, one per ring
-        - ``bonds``: sorted list of ``[i, j]`` bonded atom-index pairs
-        - ``bond_length``: ``{min, mean, max, std}`` after relaxation
-        - ``defect_log``: list of ``{type, site}`` records in placement order
-        - ``radius``, ``bend_angle``, ``n_body_rings``, ``freq``, ``bond``, ``seed``
+        Finite (non-periodic) structure. ``atoms.info`` carries
+        ``ring_counts``, ``rings``, ``bonds``, ``geometry`` (see
+        :func:`geometry_report`), ``defect_log``, ``radius``,
+        ``length``, ``bend_angle``, and the build parameters.
 
     Raises
     ------
     ValueError
-        For non-physical parameters (``n_body_rings < 2``, ``freq < 1``,
-        ``radius <= 0``).
+        For non-physical parameters.
     RuntimeError
-        If a requested defect cannot find a sufficiently separated,
-        pristine site.
+        If a requested defect cannot find a sufficiently separated site,
+        or if the internal Euler check fails.
     """
     if n_body_rings < 2:
         raise ValueError("n_body_rings must be >= 2.")
+    if target_radius is not None:
+        freq = fm.freq_for_radius(target_radius, bond=bond)
     if freq < 1:
         raise ValueError("freq must be >= 1.")
-    if radius <= 0:
-        raise ValueError("radius must be positive.")
+    if bond <= 0:
+        raise ValueError("bond must be positive.")
+    if not 0.0 <= bend_angle <= MAX_PHYSICAL_BEND:
+        raise ValueError(
+            f"bend_angle must be in [0, {MAX_PHYSICAL_BEND}] rad; got {bend_angle}. "
+            "Beyond that a real nanotube buckles into a kink rather than "
+            "bending smoothly, which this model does not represent."
+        )
 
     rng = make_rng(seed)
-    mesh = fm.seed_capsule_mesh(n_body_rings)
-    mesh = fm.subdivide_mesh(mesh, freq)
+    mesh = fm.subdivide_mesh(fm.seed_capsule_mesh(n_body_rings), freq)
 
     defect_log: list[dict] = []
     if defects:
         mesh, defect_log = _apply_defects(mesh, defects, rng, defect_separation)
 
-    raw_pos, bonds, rings = fm.dual_honeycomb(mesh)
+    # Work in units where the capsule radius is 1; the true scale is set
+    # afterwards by normalising the mean bond length to `bond`.
+    half_length = (n_body_rings - 1) / 2.0
+    mesh = fm.smooth_mesh_on_capsule(
+        mesh, radius=1.0, half_length=half_length, iterations=smoothing_iterations
+    )
+
+    positions, bond_set, rings = fm.dual_honeycomb(mesh)
+    bonds = sorted(bond_set)
     ring_counts = fm.ring_size_histogram(rings)
     deficit = sum((6 - size) * count for size, count in ring_counts.items())
     if deficit != 12:
@@ -219,23 +328,42 @@ def build_capped_cnt(
             "(broken mesh topology)."
         )
 
-    # Seed-mesh body half-length in the same raw units as raw_pos: the
-    # z-extent of the antiprism ring stack, pulled in slightly so cap
-    # atoms (from the pole triangle fans) are unambiguously classified.
-    seed_half_length = (n_body_rings - 1) / 2.0 * 0.92
-    positions = fm.capsule_project(
-        raw_pos, radius=radius, half_length=seed_half_length, bend_angle=bend_angle
+    lengths = np.array([np.linalg.norm(positions[a] - positions[b]) for a, b in bonds])
+    positions = positions * (bond / lengths.mean())
+    positions = fm.relax_shell(
+        positions, bond_set, equilibrium=bond, max_iterations=relax_iterations
     )
 
-    bond_lengths = np.array(
-        [np.linalg.norm(positions[a] - positions[b]) for a, b in bonds]
+    # Measure radius/length on the straight tube: once bent, the structure
+    # is no longer z-aligned and an axial slice would report the bend's arc
+    # radius rather than the tube's own.
+    straight = positions - positions.mean(axis=0)
+    tube_length = float(straight[:, 2].max() - straight[:, 2].min())
+    mid_slice = np.abs(straight[:, 2]) < 0.15 * max(tube_length, 1e-9)
+    tube_radius = (
+        float(np.linalg.norm(straight[mid_slice][:, :2], axis=1).mean())
+        if mid_slice.any()
+        else float(fm.radius_for_freq(freq, bond))
     )
-    positions *= bond / bond_lengths.mean()
-    positions = fm.relax_shell(positions, bonds, equilibrium=bond, steps=relax_steps)
 
-    bond_lengths = np.array(
-        [np.linalg.norm(positions[a] - positions[b]) for a, b in bonds]
-    )
+    if bend_angle > 0:
+        axial = positions[:, 2]
+        lo, hi = axial.min(), axial.max()
+        span = hi - lo
+        # Restrain the outer 12% at each end so the imposed bend survives
+        # relaxation instead of springing straight again.
+        anchors = np.where(
+            (axial < lo + 0.12 * span) | (axial > hi - 0.12 * span)
+        )[0]
+        positions = _bend_positions(positions, bend_angle)
+        positions = fm.relax_shell(
+            positions,
+            bond_set,
+            equilibrium=bond,
+            anchors=anchors,
+            anchor_targets=positions[anchors],
+            max_iterations=relax_iterations,
+        )
 
     atoms = Atoms(symbols=["C"] * len(positions), positions=positions, pbc=False)
     extents = positions.max(axis=0) - positions.min(axis=0)
@@ -247,19 +375,16 @@ def build_capped_cnt(
             "structure_type": "capped_cnt",
             "n_body_rings": n_body_rings,
             "freq": freq,
-            "radius": radius,
             "bond": bond,
             "bend_angle": bend_angle,
             "seed": seed,
+            "radius": tube_radius,
+            "radius_ideal": float(fm.radius_for_freq(freq, bond)),
+            "length": tube_length,
             "ring_counts": {int(k): int(v) for k, v in ring_counts.items()},
             "rings": [[int(a) for a in r] for r in rings],
-            "bonds": sorted([int(a), int(b)] for a, b in bonds),
-            "bond_length": {
-                "min": float(bond_lengths.min()),
-                "mean": float(bond_lengths.mean()),
-                "max": float(bond_lengths.max()),
-                "std": float(bond_lengths.std()),
-            },
+            "bonds": [[int(a), int(b)] for a, b in bonds],
+            "geometry": geometry_report(positions, bonds),
             "defect_log": defect_log,
         }
     )

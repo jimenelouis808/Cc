@@ -117,18 +117,24 @@ def _cmd_cnt_cap(args):
     atoms = build_capped_cnt(
         n_body_rings=args.rings,
         freq=args.freq,
-        radius=args.radius,
+        target_radius=args.target_radius,
         bond=args.bond,
         bend_angle=args.bend_angle,
         defects=_parse_defect_specs(args.defect),
-        relax_steps=args.relax_steps,
+        relax_iterations=args.relax_iterations,
         seed=args.seed,
     )
     xyz_path, json_path = write_render_bundle(atoms, Path(args.out))
+    g = atoms.info["geometry"]
     print(f"Wrote {xyz_path} and {json_path}")
     print(f"  n_atoms     = {len(atoms)}")
+    print(f"  radius      = {atoms.info['radius']:.2f} A   length = {atoms.info['length']:.1f} A")
     print(f"  ring_counts = {atoms.info['ring_counts']}")
-    print(f"  bond_length = {atoms.info['bond_length']}")
+    print(f"  bond length = {g['bond_min']:.3f} / {g['bond_mean']:.3f} / {g['bond_max']:.3f} A"
+          f"  (std {g['bond_std']:.4f})")
+    print(f"  bond angle  = {g['angle_min']:.1f} / {g['angle_mean']:.1f} / {g['angle_max']:.1f} deg"
+          f"  (std {g['angle_std']:.2f})")
+    print(f"  close contacts (<2 A, non-bonded) = {g['n_close_contacts']}")
     return 0
 
 
@@ -213,18 +219,21 @@ def build_parser() -> argparse.ArgumentParser:
     cc.add_argument("--rings", type=int, default=8,
                     help="Body lattice rings (controls length, default 8).")
     cc.add_argument("--freq", type=int, default=3,
-                    help="Geodesic subdivision frequency (controls diameter/detail, default 3).")
-    cc.add_argument("--radius", type=float, default=6.5, help="Target tube radius (Å).")
+                    help="Geodesic subdivision frequency; sets the diameter "
+                         "(radius ~= 1.96 x freq A). Default 3.")
+    cc.add_argument("--target-radius", type=float, default=None,
+                    help="Pick --freq automatically for this radius (Å). The lattice "
+                         "quantises the radius, so the value obtained may differ by ~1 Å.")
     cc.add_argument("--bond", type=float, default=1.42, help="C-C bond length (Å).")
     cc.add_argument("--bend-angle", type=float, default=0.0,
-                    help="Total elastic bend of the body, in radians (default 0, straight).")
+                    help="Total elastic bend of the body, in radians (0 = straight, max 1.0).")
     cc.add_argument(
         "--defect", action="append", default=[],
         help="Repeatable. 'stone_wales[:N]' (5-7-7-5 pairs) or "
              "'divacancy[:N]' (5-8-5 octagon), e.g. --defect stone_wales:2.",
     )
-    cc.add_argument("--relax-steps", type=int, default=2500,
-                    help="Shell relaxation iterations (raise for larger/defected/bent builds).")
+    cc.add_argument("--relax-iterations", type=int, default=3000,
+                    help="L-BFGS iterations per relaxation cycle.")
     cc.add_argument("--seed", type=int, default=0, help="RNG seed for defect placement.")
     cc.add_argument("--out", required=True,
                     help="Output path without extension (.xyz and .json are appended).")

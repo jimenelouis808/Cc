@@ -47,7 +47,7 @@ never has to re-derive ring statistics: it can trust the mesh.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -474,151 +474,325 @@ def capsule_project(
     return bent
 
 
+def smooth_mesh_on_capsule(
+    mesh: Mesh,
+    radius: float,
+    half_length: float,
+    iterations: int = 60,
+) -> Mesh:
+    """Equalise triangle sizes by Laplacian smoothing *on the capsule surface*.
+
+    Barycentric subdivision (:func:`subdivide_mesh`) produces triangles of
+    quite unequal size -- those near an original seed vertex are much
+    smaller than those near a face centre. Taking the dual of such a mesh
+    gives a honeycomb whose hexagons are correspondingly unequal, which is
+    a poor starting point for relaxation: on larger structures the
+    optimiser cannot recover from it and the shell folds through itself.
+
+    This alternates two cheap steps: move every mesh vertex to the
+    centroid of its neighbours (Laplacian smoothing, which equalises
+    spacing but shrinks the shell), then push every vertex back onto the
+    capsule surface (which restores the shape). The fixed point is a
+    near-uniform triangulation *of the capsule*, whose dual is a
+    near-uniform honeycomb -- exactly the starting point
+    :func:`relax_shell` needs.
+
+    Topology is never touched, so ring counts are unaffected.
+
+    Parameters
+    ----------
+    mesh
+        ``(vertices, triangles)`` to smooth.
+    radius, half_length
+        Capsule geometry to project onto (see :func:`capsule_project`).
+    iterations
+        Smoothing sweeps. 60 is comfortably converged for the sizes this
+        module builds; the cost is linear and small next to relaxation.
+
+    Returns
+    -------
+    (vertices, triangles)
+        Same triangles, smoothed + projected vertices.
+    """
+    verts, faces = mesh
+    nbrs = mesh_adjacency(faces)
+    neighbour_idx = [
+        np.array(sorted(nbrs[i]), dtype=int) if i in nbrs else np.array([], dtype=int)
+        for i in range(len(verts))
+    ]
+    pos = capsule_project(verts.copy(), radius, half_length)
+    for _ in range(iterations):
+        smoothed = pos.copy()
+        for i, ns in enumerate(neighbour_idx):
+            if len(ns):
+                smoothed[i] = pos[ns].mean(axis=0)
+        pos = capsule_project(smoothed, radius, half_length)
+    return pos, faces
+
+
+def radius_for_freq(freq: int, bond: float = 1.42) -> float:
+    """Radius (Å) of the tube a given subdivision ``freq`` produces.
+
+    The seed polyhedron is 5-fold symmetric, so the body circumference
+    spans ``5 * freq`` hexagons, each ``sqrt(3) * bond`` wide across
+    flats. Hence ``2*pi*R = 5 * freq * sqrt(3) * bond``. Radius is
+    therefore **not** a free parameter: it is quantised by the lattice,
+    exactly as for a real ``(n, m)`` nanotube, whose diameter is fixed by
+    its chiral indices.
+    """
+    return 5.0 * freq * np.sqrt(3.0) * bond / (2.0 * np.pi)
+
+
+def freq_for_radius(radius: float, bond: float = 1.42) -> int:
+    """Smallest-error subdivision ``freq`` for a target radius (Å).
+
+    Inverse of :func:`radius_for_freq`, rounded to the nearest realisable
+    lattice. Use :func:`radius_for_freq` on the result to get the radius
+    you will actually obtain.
+    """
+    if radius <= 0:
+        raise ValueError("radius must be positive.")
+    freq = int(round(2.0 * np.pi * radius / (5.0 * np.sqrt(3.0) * bond)))
+    return max(1, freq)
+
+
+def _valence_terms(
+    bonds: Sequence[tuple[int, int]], n_atoms: int
+) -> tuple[np.ndarray, np.ndarray, set[tuple[int, int]]]:
+    """Build bond array, angle triplet array and the 1-2/1-3 exclusion set."""
+    bond_arr = np.array(sorted(bonds), dtype=int)
+    nbrs: dict[int, list[int]] = defaultdict(list)
+    for a, b in bond_arr:
+        nbrs[int(a)].append(int(b))
+        nbrs[int(b)].append(int(a))
+    angles: list[tuple[int, int, int]] = []
+    for centre, ns in nbrs.items():
+        for i in range(len(ns)):
+            for j in range(i + 1, len(ns)):
+                angles.append((ns[i], centre, ns[j]))
+    angle_arr = np.array(sorted(angles), dtype=int)
+
+    excluded: set[tuple[int, int]] = set()
+    for a, b in bond_arr:
+        excluded.add((int(a), int(b)))
+        excluded.add((int(b), int(a)))
+    for a, _, c in angle_arr:
+        excluded.add((int(a), int(c)))
+        excluded.add((int(c), int(a)))
+    return bond_arr, angle_arr, excluded
+
+
+def _vff_energy_gradient(
+    x: np.ndarray,
+    bond_arr: np.ndarray,
+    angle_arr: np.ndarray,
+    repel_arr: np.ndarray,
+    n_atoms: int,
+    r0: float,
+    theta0: float,
+    k_bond: float,
+    k_angle: float,
+    k_repel: float,
+    repel_cutoff: float,
+    anchors: np.ndarray | None,
+    anchor_targets: np.ndarray | None,
+    k_anchor: float,
+) -> tuple[float, np.ndarray]:
+    """Energy and analytic gradient of the sp2 valence force field.
+
+    ``E = 1/2 k_bond (r - r0)^2 + 1/2 k_angle (theta - theta0)^2
+         + 1/2 k_repel (d - d_cut)^2 [d < d_cut, non-bonded only]
+         + 1/2 k_anchor |x - x_target|^2 [anchored atoms only]``
+
+    Gradients are exact (verified against central finite differences to
+    ~1e-9 relative error), which is what lets L-BFGS converge to genuine
+    sp2 geometry instead of stalling like a fixed-step integrator.
+    """
+    pos = x.reshape(n_atoms, 3)
+    energy = 0.0
+    grad = np.zeros_like(pos)
+
+    # --- bond stretching
+    i, j = bond_arr[:, 0], bond_arr[:, 1]
+    dvec = pos[j] - pos[i]
+    r = np.linalg.norm(dvec, axis=1)
+    r = np.where(r < 1e-9, 1e-9, r)
+    dr = r - r0
+    energy += 0.5 * k_bond * float(np.sum(dr**2))
+    gv = (k_bond * dr / r)[:, None] * dvec
+    np.add.at(grad, i, -gv)
+    np.add.at(grad, j, gv)
+
+    # --- angle bending (true angle, not a 1-3 distance proxy)
+    ia, ja, ka = angle_arr[:, 0], angle_arr[:, 1], angle_arr[:, 2]
+    u = pos[ia] - pos[ja]
+    v = pos[ka] - pos[ja]
+    lu = np.linalg.norm(u, axis=1)
+    lv = np.linalg.norm(v, axis=1)
+    lu = np.where(lu < 1e-9, 1e-9, lu)
+    lv = np.where(lv < 1e-9, 1e-9, lv)
+    uh, vh = u / lu[:, None], v / lv[:, None]
+    cos_t = np.clip(np.sum(uh * vh, axis=1), -1.0 + 1e-9, 1.0 - 1e-9)
+    theta = np.arccos(cos_t)
+    sin_t = np.sqrt(1.0 - cos_t**2)
+    dtheta = theta - theta0
+    energy += 0.5 * k_angle * float(np.sum(dtheta**2))
+    pref = k_angle * dtheta / sin_t
+    gu = -(pref / lu)[:, None] * (vh - cos_t[:, None] * uh)
+    gv2 = -(pref / lv)[:, None] * (uh - cos_t[:, None] * vh)
+    np.add.at(grad, ia, gu)
+    np.add.at(grad, ka, gv2)
+    np.add.at(grad, ja, -(gu + gv2))
+
+    # --- short-range non-bonded repulsion (1-2 and 1-3 pairs excluded)
+    if len(repel_arr):
+        p, q = repel_arr[:, 0], repel_arr[:, 1]
+        dd = pos[q] - pos[p]
+        rr = np.linalg.norm(dd, axis=1)
+        rr = np.where(rr < 1e-9, 1e-9, rr)
+        mask = rr < repel_cutoff
+        if np.any(mask):
+            drr = rr[mask] - repel_cutoff
+            energy += 0.5 * k_repel * float(np.sum(drr**2))
+            gvv = (k_repel * drr / rr[mask])[:, None] * dd[mask]
+            np.add.at(grad, p[mask], -gvv)
+            np.add.at(grad, q[mask], gvv)
+
+    # --- positional restraints (used to hold an imposed bend in place)
+    if anchors is not None and len(anchors):
+        delta = pos[anchors] - anchor_targets
+        energy += 0.5 * k_anchor * float(np.sum(delta**2))
+        grad[anchors] += k_anchor * delta
+
+    return energy, grad.ravel()
+
+
 def relax_shell(
     positions: np.ndarray,
     bonds: set[tuple[int, int]],
     equilibrium: float = 1.42,
-    k_bond: float = 20.0,
-    k_angle: float = 6.0,
-    k_repel: float = 12.0,
-    repel_cutoff_factor: float = 1.55,
-    repel_refresh: int = 10,
-    steps: int = 2500,
-    step_size: float = 0.01,
-    max_disp: float = 0.03,
+    angle_deg: float = 120.0,
+    k_bond: float = 40.0,
+    k_angle: float = 15.0,
+    k_repel: float = 25.0,
+    repel_cutoff: float = 2.2,
+    anchors: np.ndarray | None = None,
+    anchor_targets: np.ndarray | None = None,
+    k_anchor: float = 5.0,
+    outer_cycles: int = 3,
+    max_iterations: int = 3000,
+    steps: int | None = None,
 ) -> np.ndarray:
-    """Relax a closed shell to uniform sp2 bond lengths and 120 deg angles.
+    """Relax a closed sp2 shell to realistic bond lengths and bond angles.
 
-    Three harmonic terms, integrated with damped steepest descent, using
-    **only the explicit topology passed in** (never re-derived from
-    distances): a bond spring on every entry of ``bonds`` targeting
-    ``equilibrium``, a 1-3 ("angle-proxy") spring on every pair of atoms
-    that share a bonded neighbour targeting ``equilibrium * sqrt(3)`` (the
-    ideal 1-3 distance at a 120 deg sp2 angle), and a short-range
-    non-bonded repulsion. The angle term keeps the shell from folding
-    under the bond term alone (pure bond springs have no resistance to
-    bending); the repulsion term additionally guards floppier rings
-    (heptagons, octagons) against pushing two unrelated atoms through
-    each other during relaxation -- a real risk pure springs cannot rule
-    out, since they only constrain *bonded* and 1-3 distances.
+    Minimises a three-term valence force field -- bond stretching toward
+    ``equilibrium``, **true** angle bending toward ``angle_deg``, and a
+    short-range non-bonded repulsion -- with L-BFGS-B and exact analytic
+    gradients. Because the bond graph is passed in explicitly and held
+    fixed for the whole minimisation, this can never alter ring topology;
+    it only fixes geometry.
 
-    Because the bond graph is fixed for the whole relaxation, this can
-    never change ring topology; it only cleans up geometry. Uses the same
-    spring math as
-    :func:`nanocarbon_lab.relax.optimize.harmonic_pre_relax`, but takes an
-    explicit edge list instead of re-guessing bonds from distances
-    (guessing would be unsafe here: many non-bonded atoms in a curved
-    shell sit closer together than the bond length).
+    The angle term is what makes the result physical. Bond springs alone
+    (or a 1-3 *distance* proxy for angles) leave the shell free to
+    pyramidalise and fold: an earlier fixed-step implementation of this
+    function converged to structures with 66-164 deg bond angles and
+    dozens of sub-2 Å non-bonded contacts despite near-perfect bond
+    lengths. With a real angle term and a proper optimiser, a clean
+    capped tube relaxes to 1.415-1.423 Å bonds and 107.8-120.0 deg angles
+    -- the 107.8 deg minimum being exactly the interior angle of the cap
+    pentagons, which is the correct physical answer rather than a
+    numerical artefact.
+
+    The non-bonded neighbour list is rebuilt between ``outer_cycles``
+    minimisations (it cannot be updated inside a single L-BFGS run).
 
     Parameters
     ----------
     positions
-        ``(n, 3)`` initial atom positions (Å).
+        ``(n, 3)`` starting positions (Å). Should already be roughly on
+        the intended surface -- see :func:`smooth_mesh_on_capsule`.
     bonds
-        Set/iterable of ``(i, j)`` bonded atom-index pairs.
-    equilibrium
-        Target C-C bond length (Å).
+        Explicit bonded pairs. Never re-derived from distances: on a
+        curved shell many non-bonded atoms sit closer than a bond length.
+    equilibrium, angle_deg
+        sp2 targets: 1.42 Å and 120 deg for graphitic carbon.
     k_bond, k_angle, k_repel
-        Spring / repulsion constants (arbitrary units; only their ratio to
-        ``step_size`` matters).
-    repel_cutoff_factor
-        Non-bonded pairs closer than ``repel_cutoff_factor * equilibrium``
-        repel each other. Kept below the ideal 1-3 distance
-        (``sqrt(3) ~= 1.73`` x ``equilibrium``) so it never fights the
-        angle term.
-    repel_refresh
-        Rebuild the non-bonded neighbour list every this many steps (a
-        k-d tree query), rather than every step, for speed.
+        Force constants (arbitrary consistent units). ``k_angle`` must be
+        a substantial fraction of ``k_bond``; too soft an angle term is
+        what allows the fold-through failure described above.
+    repel_cutoff
+        Non-bonded pairs closer than this (Å) repel. Kept below the ideal
+        1-3 distance (2.46 Å) so it never fights the angle term.
+    anchors, anchor_targets, k_anchor
+        Optional harmonic restraints pinning ``positions[anchors]`` near
+        ``anchor_targets`` -- used to hold an imposed bend while the rest
+        of the lattice relaxes around it.
+    outer_cycles, max_iterations
+        Neighbour-list rebuilds, and L-BFGS iterations per cycle.
     steps
-        Maximum steepest-descent iterations.
-    step_size, max_disp
-        Integration step scale and per-atom displacement clamp (Å) for
-        numerical stability.
+        Deprecated alias for ``max_iterations``, accepted so older calls
+        keep working.
 
     Returns
     -------
     numpy.ndarray
         ``(n, 3)`` relaxed positions.
     """
+    from scipy.optimize import minimize
     from scipy.spatial import cKDTree
 
-    bonds_arr = np.array(sorted(bonds), dtype=int)
-    nbrs: dict[int, set[int]] = defaultdict(set)
-    for a, b in bonds_arr:
-        nbrs[int(a)].add(int(b))
-        nbrs[int(b)].add(int(a))
-    pairs13: set[tuple[int, int]] = set()
-    for atom, ns in nbrs.items():
-        ns = list(ns)
-        for i in range(len(ns)):
-            for j in range(i + 1, len(ns)):
-                pair = (ns[i], ns[j]) if ns[i] < ns[j] else (ns[j], ns[i])
-                pairs13.add(pair)
-    pairs13_arr = np.array(sorted(pairs13), dtype=int)
-    eq13 = equilibrium * np.sqrt(3.0)
-    excluded = set(bonds) | pairs13
-    repel_cutoff = repel_cutoff_factor * equilibrium
+    if steps is not None:
+        max_iterations = int(steps)
 
-    pos = positions.copy()
-    repel_arr = np.empty((0, 2), dtype=int)
-    for step in range(steps):
-        if step % repel_refresh == 0:
-            tree = cKDTree(pos)
-            close = tree.query_pairs(r=repel_cutoff, output_type="ndarray")
-            if len(close):
-                mask = np.array(
-                    [
-                        (int(a), int(b)) not in excluded
-                        for a, b in close
-                    ]
-                )
-                repel_arr = close[mask] if mask.any() else np.empty((0, 2), dtype=int)
-            else:
-                repel_arr = np.empty((0, 2), dtype=int)
+    n_atoms = len(positions)
+    bond_arr, angle_arr, excluded = _valence_terms(list(bonds), n_atoms)
+    theta0 = np.radians(angle_deg)
+    anchor_targets = (
+        np.asarray(anchor_targets, dtype=float) if anchor_targets is not None else None
+    )
+    anchors = np.asarray(anchors, dtype=int) if anchors is not None else None
 
-        forces = np.zeros_like(pos)
-        for pair_arr, k, eq in (
-            (bonds_arr, k_bond, equilibrium),
-            (pairs13_arr, k_angle, eq13),
-        ):
-            if len(pair_arr) == 0:
-                continue
-            ri, rj = pos[pair_arr[:, 0]], pos[pair_arr[:, 1]]
-            rij = rj - ri
-            dist = np.linalg.norm(rij, axis=1)
-            dist = np.where(dist < 1e-6, 1e-6, dist)
-            unit = rij / dist[:, None]
-            fmag = k * (dist - eq)
-            np.add.at(forces, pair_arr[:, 0], fmag[:, None] * unit)
-            np.add.at(forces, pair_arr[:, 1], -fmag[:, None] * unit)
+    x = positions.ravel().astype(float).copy()
+    for _ in range(max(1, outer_cycles)):
+        candidates = cKDTree(x.reshape(n_atoms, 3)).query_pairs(
+            r=repel_cutoff, output_type="ndarray"
+        )
+        if len(candidates):
+            keep = [
+                (int(a), int(b)) not in excluded for a, b in candidates
+            ]
+            repel_arr = candidates[np.array(keep)] if any(keep) else np.empty((0, 2), int)
+        else:
+            repel_arr = np.empty((0, 2), dtype=int)
 
-        if len(repel_arr):
-            ri, rj = pos[repel_arr[:, 0]], pos[repel_arr[:, 1]]
-            rij = rj - ri
-            dist = np.linalg.norm(rij, axis=1)
-            dist = np.where(dist < 1e-6, 1e-6, dist)
-            unit = rij / dist[:, None]
-            push = np.clip(repel_cutoff - dist, 0.0, None)
-            fmag = -k_repel * push  # always pushes i,j apart
-            np.add.at(forces, repel_arr[:, 0], fmag[:, None] * unit)
-            np.add.at(forces, repel_arr[:, 1], -fmag[:, None] * unit)
-
-        disp = step_size * forces
-        norms = np.linalg.norm(disp, axis=1)
-        over = norms > max_disp
-        if np.any(over):
-            disp[over] *= (max_disp / norms[over])[:, None]
-        pos += disp
-    return pos
+        result = minimize(
+            _vff_energy_gradient,
+            x,
+            args=(
+                bond_arr, angle_arr, repel_arr, n_atoms, equilibrium, theta0,
+                k_bond, k_angle, k_repel, repel_cutoff,
+                anchors, anchor_targets, k_anchor,
+            ),
+            jac=True,
+            method="L-BFGS-B",
+            options={
+                "maxiter": max_iterations,
+                "maxfun": max_iterations * 2,
+                "ftol": 1e-14,
+                "gtol": 1e-10,
+            },
+        )
+        x = result.x
+    return x.reshape(n_atoms, 3)
 
 
 def pick_interior_edge(
     faces: np.ndarray,
     rng: np.random.Generator,
-    exclude: Optional[set[int]] = None,
+    exclude: set[int] | None = None,
     required_degree: dict[int, int] | None = None,
     n_tries: int = 200,
-) -> Optional[tuple[int, int]]:
+) -> tuple[int, int] | None:
     """Sample a random mesh edge suitable for :func:`edge_flip` / :func:`contract_edge`.
 
     Restricts to edges whose two endpoints are both degree 6 (i.e. an
