@@ -113,3 +113,55 @@ def test_export_writes_bundle(app, tmp_path):
     xyz_path, json_path = write_render_bundle(app.atoms, tmp_path / "gui")
     assert xyz_path.exists() and json_path.exists()
     assert int(xyz_path.read_text().splitlines()[0]) == len(app.atoms)
+
+
+class TestBlenderDiscovery:
+    """`find_blender` must work where `shutil.which` alone does not.
+
+    The Windows installer does not put Blender on PATH and the macOS build
+    hides inside an .app bundle, so PATH-only lookup reports "not found"
+    on a perfectly normal install. These run on any host: the platform
+    branches are exercised by patching `os.name` / `sys.platform`.
+    """
+
+    def _fake_windows_install(self, tmp_path, versions=("Blender 3.6", "Blender 4.2")):
+        program_files = tmp_path / "Program Files"
+        for version in versions:
+            d = program_files / "Blender Foundation" / version
+            d.mkdir(parents=True)
+            (d / "blender.exe").write_text("")
+        return program_files
+
+    def test_finds_windows_install_and_prefers_newest(self, tmp_path, monkeypatch):
+        from nanocarbon_lab.gui.app import find_blender
+
+        program_files = self._fake_windows_install(tmp_path)
+        monkeypatch.delenv("BLENDER", raising=False)
+        monkeypatch.setattr("os.name", "nt")
+        monkeypatch.setenv("ProgramFiles", str(program_files))
+        monkeypatch.setenv("ProgramFiles(x86)", str(tmp_path / "absent"))
+        monkeypatch.setattr("shutil.which", lambda _name: None)
+
+        found = find_blender()
+        assert found is not None
+        assert found.endswith("blender.exe")
+        assert "4.2" in found  # newest install wins over 3.6
+
+    def test_env_override_wins(self, tmp_path, monkeypatch):
+        from nanocarbon_lab.gui.app import find_blender
+
+        portable = tmp_path / "portable" / "blender.exe"
+        portable.parent.mkdir(parents=True)
+        portable.write_text("")
+        monkeypatch.setenv("BLENDER", str(portable))
+        assert find_blender() == str(portable)
+
+    def test_returns_none_when_absent(self, tmp_path, monkeypatch):
+        from nanocarbon_lab.gui.app import find_blender
+
+        monkeypatch.delenv("BLENDER", raising=False)
+        monkeypatch.setattr("os.name", "nt")
+        monkeypatch.setenv("ProgramFiles", str(tmp_path / "empty"))
+        monkeypatch.setenv("ProgramFiles(x86)", str(tmp_path / "empty2"))
+        monkeypatch.setattr("shutil.which", lambda _name: None)
+        assert find_blender() is None

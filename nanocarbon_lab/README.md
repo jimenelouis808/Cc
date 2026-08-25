@@ -233,6 +233,39 @@ Linux distributions -- `sudo apt install python3-tk` (Debian/Ubuntu) or
 Windows and macOS already include it. Everything the GUI does is also
 available from `nanocarbon cnt-cap`.
 
+#### Windows, step by step
+
+1. Install **Python 3.10+** from [python.org](https://www.python.org/downloads/)
+   (not the Microsoft Store build). Tick **“Add python.exe to PATH”** on the
+   first screen of the installer. tkinter is included.
+2. Unzip the project, then in PowerShell:
+
+   ```powershell
+   cd path\to\nanocarbon_lab
+   py -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   pip install -e ".[dev,gui]"
+   nanocarbon-gui
+   ```
+
+   If PowerShell blocks the activation script, either run
+   `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first, or use
+   `cmd.exe` with `.venv\Scripts\activate.bat` instead.
+3. Optional, for rendering: install **Blender** from
+   [blender.org](https://www.blender.org/download/). The Windows installer
+   does **not** add Blender to `PATH`, so the GUI also searches
+   `C:\Program Files\Blender Foundation\Blender *\blender.exe`
+   automatically. If you installed it somewhere else (portable build, Steam),
+   use the **“Locate Blender…”** button, or set a `BLENDER` environment
+   variable pointing at `blender.exe`.
+
+Command line on Windows is the same, with backslashes in paths:
+
+```powershell
+nanocarbon cnt-cap --rings 10 --target-radius 7.8 --defect stone_wales:2 --out out\demo
+blender -b -P blender\render_cnt.py -- --xyz out\demo.xyz --json out\demo.json --style nature_dark --out out\cover.png
+```
+
 ### Why the ring topology is guaranteed correct
 
 A capped nanotube is topologically an **elongated fullerene**: a closed,

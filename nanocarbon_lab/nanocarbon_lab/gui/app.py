@@ -18,9 +18,12 @@ and macOS; on Linux distributions it is usually a separate package
 
 from __future__ import annotations
 
+import glob
+import os
 import queue
 import shutil
 import subprocess
+import sys
 import threading
 import traceback
 from pathlib import Path
@@ -71,6 +74,69 @@ BLENDER_STYLES = [
     "blueprint_technical",
     "gold_nanotech",
 ]
+
+
+def find_blender() -> str | None:
+    """Locate a Blender executable across platforms.
+
+    ``PATH`` alone is not enough: the Windows installer does not add
+    Blender to ``PATH``, and the macOS build lives inside an ``.app``
+    bundle, so on both platforms ``shutil.which`` finds nothing even
+    though Blender is installed. Standard install locations are therefore
+    searched too, newest version first.
+
+    Set the ``BLENDER`` environment variable to override the search
+    entirely (useful for portable, Steam or Flatpak installations).
+
+    Returns
+    -------
+    str or None
+        Path to the executable, or ``None`` if nothing was found -- in
+        which case the GUI offers a file picker instead.
+    """
+    override = os.environ.get("BLENDER")
+    if override and os.path.exists(override):
+        return override
+
+    for name in ("blender", "blender.exe"):
+        found = shutil.which(name)
+        if found:
+            return found
+
+    # Built with os.path.join, not pathlib: these are glob patterns (plain
+    # strings), and pathlib would refuse to model a Windows path on POSIX,
+    # which would also make this function untestable off-Windows.
+    patterns: list[str] = []
+    if os.name == "nt":
+        for root in (
+            os.environ.get("ProgramFiles", r"C:\Program Files"),
+            os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+        ):
+            patterns.append(os.path.join(root, "Blender Foundation", "Blender*", "blender.exe"))
+            patterns.append(os.path.join(root, "Blender*", "blender.exe"))
+    elif sys.platform == "darwin":
+        patterns += [
+            "/Applications/Blender.app/Contents/MacOS/Blender",
+            "/Applications/Blender/Blender.app/Contents/MacOS/Blender",
+            os.path.expanduser("~/Applications/Blender.app/Contents/MacOS/Blender"),
+        ]
+    else:
+        patterns += [
+            "/usr/bin/blender",
+            "/usr/local/bin/blender",
+            "/snap/bin/blender",
+            "/var/lib/flatpak/exports/bin/org.blender.Blender",
+            os.path.expanduser("~/.local/share/flatpak/exports/bin/org.blender.Blender"),
+        ]
+
+    candidates: list[str] = []
+    for pattern in patterns:
+        candidates.extend(glob.glob(pattern))
+    if not candidates:
+        return None
+    # Newest-looking install first ("Blender 4.2" sorts above "Blender 3.6").
+    candidates.sort(reverse=True)
+    return candidates[0]
 
 
 class NanocarbonGUI:
@@ -231,6 +297,8 @@ class NanocarbonGUI:
                      state="readonly").pack(fill="x", pady=(0, 6))
         ttk.Button(ren, text="Render with Blender…",
                    command=self.on_render).pack(fill="x", ipady=3)
+        ttk.Button(ren, text="Locate Blender…",
+                   command=self.on_locate_blender).pack(fill="x", pady=(4, 0))
         self.lbl_blender = ttk.Label(ren, text="", foreground="#777",
                                      font=("TkDefaultFont", 8), wraplength=250,
                                      justify="left")
@@ -405,14 +473,34 @@ class NanocarbonGUI:
         return stem
 
     def _check_blender(self) -> None:
-        self.blender_exe = shutil.which("blender")
+        if getattr(self, "blender_exe", None) and Path(self.blender_exe).exists():
+            return  # a path the user picked by hand wins over auto-detection
+        self.blender_exe = find_blender()
         if self.blender_exe:
             self.lbl_blender.config(text=f"Found: {self.blender_exe}")
         else:
             self.lbl_blender.config(
-                text="Blender not found on PATH. Install it (blender.org) or "
-                     "export the bundle and run blender/render_cnt.py yourself."
+                text="Blender not found automatically — use “Locate Blender…” "
+                     "or export the bundle and run blender/render_cnt.py yourself."
             )
+
+    def on_locate_blender(self) -> None:
+        """Let the user point at blender.exe / the Blender binary directly.
+
+        Needed mainly on Windows, where the installer does not add Blender
+        to ``PATH``, and for portable/Steam installations anywhere.
+        """
+        if os.name == "nt":
+            types = [("Blender executable", "blender.exe"), ("All files", "*.*")]
+        else:
+            types = [("All files", "*.*")]
+        path = filedialog.askopenfilename(title="Locate the Blender executable",
+                                          filetypes=types)
+        if not path:
+            return
+        self.blender_exe = path
+        self.lbl_blender.config(text=f"Using: {path}")
+        self._set_status("Blender location set for this session.")
 
     def on_render(self) -> None:
         if self.atoms is None:
@@ -422,7 +510,11 @@ class NanocarbonGUI:
         if not self.blender_exe:
             messagebox.showwarning(
                 "Blender not found",
-                "Blender is not on your PATH.\n\nExport the bundle and run:\n"
+                "Could not find Blender automatically.\n\n"
+                "Click “Locate Blender…” and point at the executable "
+                "(on Windows, usually\n"
+                r"C:\Program Files\Blender Foundation\Blender 4.x\blender.exe)"
+                ",\n\nor export the bundle and run it yourself:\n"
                 "  blender -b -P blender/render_cnt.py -- --xyz <file>.xyz "
                 "--json <file>.json --style <style> --out <image>.png",
             )
