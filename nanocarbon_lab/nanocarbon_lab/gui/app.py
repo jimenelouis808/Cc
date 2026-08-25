@@ -67,6 +67,8 @@ RING_LABELS = {
     8: "octagon (divacancy)",
 }
 
+SHAPES = ["straight", "arc", "s_curve", "helix", "random"]
+
 BLENDER_STYLES = [
     "nature_dark",
     "acs_nano_vivid",
@@ -183,9 +185,11 @@ class NanocarbonGUI:
         self.var_bond = tk.DoubleVar(value=1.42)
         self.var_bend = tk.DoubleVar(value=0.0)
         self.var_seed = tk.IntVar(value=0)
+        self.var_shape = tk.StringVar(value="straight")
+        self.var_waviness = tk.DoubleVar(value=0.7)
+        self.var_max_strain = tk.DoubleVar(value=0.08)
+        self.var_shape_points = tk.IntVar(value=9)
 
-        # Created before the freq slider: building a slider fires its callback
-        # immediately, and that callback writes into this label.
         self.lbl_radius = ttk.Label(box, text="", foreground="#2e86ab")
 
         self._slider(box, "Body rings (length)", self.var_rings, 2, 30, 0, integer=True)
@@ -201,6 +205,31 @@ class NanocarbonGUI:
         ttk.Spinbox(row, from_=0, to=9999, textvariable=self.var_seed, width=8).pack(
             side="right"
         )
+
+        # --- centreline shape
+        sbox = ttk.LabelFrame(parent, text="Centreline", padding=8)
+        sbox.pack(fill="x", pady=(8, 0))
+        # This frame is laid out with grid throughout: _slider grids, and
+        # tkinter forbids mixing grid and pack in the same container.
+        sbox.columnconfigure(0, weight=1)
+        ttk.Label(sbox, text="Shape").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(sbox, textvariable=self.var_shape, values=SHAPES,
+                     state="readonly", width=11).grid(row=0, column=1, sticky="e",
+                                                      pady=(0, 6))
+        self._slider(sbox, "Waviness", self.var_waviness, 0.0, 1.0, 1, resolution=0.05)
+        self._slider(sbox, "Control points", self.var_shape_points, 4, 20, 3,
+                     integer=True)
+        self._slider(sbox, "Strain budget", self.var_max_strain, 0.02, 0.25, 5,
+                     resolution=0.01, command=self._update_strain_hint)
+        self.lbl_strain = ttk.Label(sbox, text="", foreground="#777",
+                                    font=("TkDefaultFont", 8), wraplength=230,
+                                    justify="left")
+        self.lbl_strain.grid(row=7, column=0, columnspan=2, sticky="w")
+        ttk.Label(sbox, text="Thinner + longer tubes curve more at the same "
+                             "strain — lower the frequency and raise the rings.",
+                  foreground="#777", font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=8, column=0, columnspan=2, sticky="w",
+                                       pady=(4, 0))
 
         # --- defects
         dbox = ttk.LabelFrame(parent, text="Defects", padding=8)
@@ -235,6 +264,7 @@ class NanocarbonGUI:
         self.progress = ttk.Progressbar(parent, mode="indeterminate")
         self.progress.pack(fill="x", pady=(6, 0))
         self._update_radius_hint()
+        self._update_strain_hint()
 
     def _slider(self, parent, label, var, lo, hi, row, *, integer=False,
                 resolution=None, command=None):
@@ -242,7 +272,7 @@ class NanocarbonGUI:
         value_lbl = ttk.Label(parent, width=6, anchor="e")
         value_lbl.grid(row=row, column=1, sticky="e")
 
-        def on_move(_evt=None):
+        def on_move(_evt=None, notify: bool = True):
             if integer:
                 var.set(int(round(var.get())))
                 value_lbl.config(text=str(var.get()))
@@ -250,14 +280,26 @@ class NanocarbonGUI:
                 step = resolution or 0.01
                 var.set(round(round(var.get() / step) * step, 4))
                 value_lbl.config(text=f"{var.get():.2f}")
-            if command:
+            if command and notify:
                 command()
 
         scale = ttk.Scale(parent, from_=lo, to=hi, variable=var,
                           orient="horizontal", command=lambda _v: on_move())
         scale.grid(row=row + 1, column=0, columnspan=2, sticky="ew", pady=(0, 6))
         parent.columnconfigure(0, weight=1)
-        on_move()
+        # Seed the value label without firing `command`: callbacks touch
+        # widgets that may not exist yet while the panel is still being built.
+        on_move(notify=False)
+
+    def _update_strain_hint(self) -> None:
+        value = float(self.var_max_strain.get())
+        if value <= 0.10:
+            text, colour = "physical sp2 regime", "#2e7d32"
+        elif value <= 0.15:
+            text, colour = "strained but intact — fine for artwork", "#b26a00"
+        else:
+            text, colour = "bonds stretch out of the sp2 range", "#b3261e"
+        self.lbl_strain.config(text=f"{value:.0%}: {text}", foreground=colour)
 
     def _build_preview(self, parent: ttk.Frame) -> None:
         self.figure = Figure(figsize=(6, 5), dpi=100)
@@ -337,6 +379,10 @@ class NanocarbonGUI:
             freq=int(self.var_freq.get()),
             bond=float(self.var_bond.get()),
             bend_angle=float(self.var_bend.get()),
+            shape=self.var_shape.get(),
+            waviness=float(self.var_waviness.get()),
+            max_strain=float(self.var_max_strain.get()),
+            shape_points=int(self.var_shape_points.get()),
             defects=self._current_defects(),
             seed=int(self.var_seed.get()),
         )
@@ -435,6 +481,8 @@ class NanocarbonGUI:
             f"atoms        {len(a):>6d}",
             f"radius       {a.info['radius']:>6.2f} Å",
             f"length       {a.info['length']:>6.1f} Å",
+            f"shape        {a.info['shape']:>6s}",
+            f"path strain  {a.info['path_strain']:>5.1%}",
             "",
             "rings",
             rings_txt,

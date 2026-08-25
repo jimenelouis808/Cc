@@ -120,6 +120,11 @@ def _cmd_cnt_cap(args):
         target_radius=args.target_radius,
         bond=args.bond,
         bend_angle=args.bend_angle,
+        shape=args.shape,
+        waviness=args.waviness,
+        max_strain=args.max_strain,
+        shape_points=args.shape_points,
+        helix_turns=args.helix_turns,
         defects=_parse_defect_specs(args.defect),
         relax_iterations=args.relax_iterations,
         seed=args.seed,
@@ -129,6 +134,8 @@ def _cmd_cnt_cap(args):
     print(f"Wrote {xyz_path} and {json_path}")
     print(f"  n_atoms     = {len(atoms)}")
     print(f"  radius      = {atoms.info['radius']:.2f} A   length = {atoms.info['length']:.1f} A")
+    print(f"  shape       = {atoms.info['shape']}  "
+          f"(path strain {atoms.info['path_strain']:.1%})")
     print(f"  ring_counts = {atoms.info['ring_counts']}")
     print(f"  bond length = {g['bond_min']:.3f} / {g['bond_mean']:.3f} / {g['bond_max']:.3f} A"
           f"  (std {g['bond_std']:.4f})")
@@ -227,6 +234,20 @@ def build_parser() -> argparse.ArgumentParser:
     cc.add_argument("--bond", type=float, default=1.42, help="C-C bond length (Å).")
     cc.add_argument("--bend-angle", type=float, default=0.0,
                     help="Total elastic bend of the body, in radians (0 = straight, max 1.0).")
+    cc.add_argument("--shape", default="straight",
+                    choices=["straight", "arc", "s_curve", "helix", "random"],
+                    help="Centreline the tube is swept along (default straight).")
+    cc.add_argument("--waviness", type=float, default=0.7,
+                    help="0-1: how far the centreline wanders before the strain "
+                         "budget trims it (default 0.7).")
+    cc.add_argument("--max-strain", type=float, default=0.08,
+                    help="Outer-wall strain budget (default 0.08 = physical). "
+                         "Up to ~0.15 stays intact for artwork; beyond that bonds "
+                         "stretch out of the sp2 range.")
+    cc.add_argument("--shape-points", type=int, default=9,
+                    help="Centreline control points: more = more wiggles (default 9).")
+    cc.add_argument("--helix-turns", type=float, default=1.5,
+                    help="Turns, for --shape helix (default 1.5).")
     cc.add_argument(
         "--defect", action="append", default=[],
         help="Repeatable. 'stone_wales[:N]' (5-7-7-5 pairs) or "

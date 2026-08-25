@@ -356,8 +356,47 @@ nanocarbon cnt-cap --rings 12 --target-radius 7.8 --bend-angle 0.4 \
   --out out/cnt_cap/demo
 ```
 
-Bending is imposed as an arc-length-preserving sweep after the straight
-relaxation, then re-relaxed with both caps restrained. Past roughly
+### Curved, coiled and randomly meandering tubes
+
+`shape=` sweeps the whole tube along a 3D centreline — `"arc"`,
+`"s_curve"`, `"helix"` or a seeded `"random"` meander (`"straight"` is the
+default). `waviness` (0–1) sets how far the path wanders and
+`shape_points` how many wiggles it has.
+
+```bash
+nanocarbon cnt-cap --rings 40 --freq 2 --shape random \
+  --waviness 1.0 --shape-points 10 --seed 11 --out out/wavy
+```
+
+**How curved a tube can be is set by physics, not by taste.** The outer
+wall of a bent tube is stretched by roughly `r_tube × κ`, so the builder
+computes that strain and trims the path's amplitude until it fits a
+budget, rather than letting you request something the lattice cannot
+survive. Measured on a 3200-atom tube:
+
+| strain | outcome |
+|---|---|
+| ~8% (default) | clean sp2: 1.33–1.51 Å bonds, no close contacts |
+| 12–16% | bonds stretched but structure intact — fine for artwork |
+| ≥20% | bonds past 1.6 Å; no longer physically meaningful |
+| ~100% | 2.2 Å "bonds" and overlapping atoms |
+
+Raise `max_strain` past 0.15 and the builder warns you that you have left
+the physical regime. Since strain is `r_tube × κ`, **a thinner, longer
+tube curves far more dramatically at the same strain** — for a strongly
+meandering cover image use a low `freq` and a high `rings` (e.g.
+`--freq 2 --rings 40`) rather than turning `waviness` up on a fat tube.
+
+Two implementation details matter and are unit-tested: the path is
+parameterised by **arc length** (otherwise the tube stretches where the
+spline runs fast), and the cross-section is carried by a
+**rotation-minimizing frame** rather than a Frenet frame — the Frenet
+normal flips 180° at every inflection point, and a random meander is full
+of them, which would shear the tube apart.
+
+Bending via `bend_angle` (a single planar arc, kept for compatibility) is
+imposed as an arc-length-preserving sweep after the straight relaxation,
+then re-relaxed with both caps restrained. Past roughly
 0.6 rad the outer wall is visibly stretched -- which is real elastic
 strain -- and beyond 1.0 rad the request is rejected outright, because a
 real nanotube buckles into a localised kink rather than straining

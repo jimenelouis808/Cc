@@ -312,3 +312,85 @@ class TestBuildCappedCNT:
         assert len(bundle["ring_sizes_per_atom"]) == len(atoms)
         # Every atom on a closed 3-coordinate honeycomb sits on exactly 3 rings.
         assert all(len(sizes) == 3 for sizes in bundle["ring_sizes_per_atom"])
+
+
+class TestCentrelineShapes:
+    """Sweeping the tube along a 3D path must not wreck its geometry."""
+
+    def test_rotation_minimizing_frame_is_orthonormal_and_continuous(self):
+        from nanocarbon_lab.builders import centerline as cl
+
+        rng = np.random.default_rng(0)
+        control = cl.random_control_points(12, 1.0, rng)
+        sample, total = cl.arclength_sampler(control)
+        positions, tangents = sample(np.linspace(0.0, total, 500))
+        normals = cl.rotation_minimizing_frames(positions, tangents)
+
+        assert np.abs(np.sum(tangents * normals, axis=1)).max() < 1e-10
+        assert np.abs(np.linalg.norm(normals, axis=1) - 1.0).max() < 1e-10
+        # A Frenet frame flips ~180 deg at each inflection point, which would
+        # show up as a step of ~2 between consecutive unit normals.
+        assert np.linalg.norm(np.diff(normals, axis=0), axis=1).max() < 0.5
+
+    def test_strain_budget_flattens_an_over_curved_path(self):
+        from nanocarbon_lab.builders import centerline as cl
+
+        rng = np.random.default_rng(3)
+        control = cl.random_control_points(16, 1.4, rng)
+        fitted, strain = cl.fit_to_strain_budget(
+            control, total_length=170.0, tube_radius=7.85, max_strain=0.08
+        )
+        assert strain <= 0.08 + 1e-6
+        assert len(fitted) == len(control)
+
+    def test_gentle_path_is_left_alone(self):
+        from nanocarbon_lab.builders import centerline as cl
+
+        control = cl.shape_control_points("arc", np.random.default_rng(0), amplitude=0.1)
+        _, strain = cl.fit_to_strain_budget(
+            control, total_length=200.0, tube_radius=4.0, max_strain=0.20
+        )
+        assert strain < 0.20
+
+    def test_unknown_shape_raises(self):
+        from nanocarbon_lab.builders import centerline as cl
+
+        with pytest.raises(ValueError):
+            cl.shape_control_points("pretzel", np.random.default_rng(0))
+
+    @pytest.mark.parametrize("shape", ["arc", "s_curve", "helix", "random"])
+    def test_swept_shapes_keep_sp2_geometry(self, shape):
+        atoms = build_capped_cnt(
+            n_body_rings=14, freq=3, shape=shape, waviness=1.0, seed=5,
+        )
+        g = atoms.info["geometry"]
+        assert atoms.info["shape"] == shape
+        assert atoms.info["path_strain"] <= 0.08 + 1e-6
+        assert g["n_close_contacts"] == 0
+        assert 1.30 < g["bond_min"] <= g["bond_max"] < 1.55
+        assert 100.0 < g["angle_min"] <= g["angle_max"] < 135.0
+        # Topology is untouched by bending.
+        assert atoms.info["ring_counts"][5] == 12
+
+    def test_shape_actually_bends_the_tube(self):
+        straight = build_capped_cnt(n_body_rings=16, freq=2, shape="straight", seed=5)
+        wavy = build_capped_cnt(
+            n_body_rings=16, freq=2, shape="random", waviness=1.0, seed=5,
+        )
+        assert len(wavy) == len(straight)
+        span = lambda a: (a.get_positions().max(axis=0)
+                          - a.get_positions().min(axis=0)).max()
+        # A meandering tube of the same atom count is more compact end to end.
+        assert span(wavy) < span(straight)
+        assert wavy.info["path_strain"] > 0.0
+
+    def test_waviness_out_of_range_raises(self):
+        with pytest.raises(ValueError):
+            build_capped_cnt(n_body_rings=8, freq=2, shape="random", waviness=1.5)
+
+    def test_excessive_strain_budget_warns(self):
+        with pytest.warns(UserWarning, match="no longer physically"):
+            build_capped_cnt(
+                n_body_rings=10, freq=2, shape="random",
+                waviness=1.0, max_strain=0.30, seed=1,
+            )

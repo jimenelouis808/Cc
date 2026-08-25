@@ -11,6 +11,7 @@ The framework must remain **scientifically valid**: physical bond lengths, corre
 ```
 nanocarbon_lab/
 ├── builders/      # 1D/2D/3D structure generators incl. nanocoils (ASE-compatible Atoms)
+│                  #   centerline.py: 3D path sweep (arc/S/helix/random) + strain budget
 │                  #   capped_cnt.py + fullerene_mesh.py: finite capped/defected
 │                  #   "elongated fullerene" CNTs for rendering (see below)
 ├── dopants/       # substitutional dopants (N, B, S, P, co-doping)
@@ -78,6 +79,13 @@ Any change to the builder or relaxer must keep
 `tests/test_capped_cnt.py::TestBuildCappedCNT::test_geometry_is_realistic_sp2`
 passing: bonds 1.30-1.55 Å, angles 100-135 deg, zero sub-2 Å non-bonded
 contacts, across straight, bent and defected cases.
+
+**Curvature is limited by a strain budget**, not by taste: outer-wall
+strain is `r_tube * kappa`, and `builders/centerline.py` trims a path's
+amplitude until it fits (default 8%; >15% warns). Sweeping uses arc-length
+parameterisation and a **rotation-minimizing frame** — never a Frenet
+frame, whose normal flips 180 deg at every inflection point and would
+shear a meandering tube apart.
 
 Tube **radius is quantised** by the lattice (`R = 5*freq*sqrt(3)*bond/2pi`),
 exactly as a real (n,m) tube's diameter is fixed by its indices. It is an

@@ -39,6 +39,7 @@ large, defected and bent cases converge.
 
 from __future__ import annotations
 
+import warnings
 from typing import Literal, TypedDict
 
 import numpy as np
@@ -47,6 +48,7 @@ from ase import Atoms
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D
 from ..utils.geometry import center_in_cell
 from ..utils.rng import make_rng
+from . import centerline as cl
 from . import fullerene_mesh as fm
 
 DefectKind = Literal["stone_wales", "divacancy"]
@@ -215,6 +217,11 @@ def build_capped_cnt(
     target_radius: float | None = None,
     bond: float = CC_BOND,
     bend_angle: float = 0.0,
+    shape: cl.Shape = "straight",
+    waviness: float = 0.7,
+    max_strain: float = cl.DEFAULT_MAX_STRAIN,
+    shape_points: int = 9,
+    helix_turns: float = 1.5,
     defects: list[DefectSpec] | None = None,
     defect_separation: int = 3,
     vacuum: float = DEFAULT_VACUUM_1D,
@@ -346,6 +353,35 @@ def build_capped_cnt(
         else float(fm.radius_for_freq(freq, bond))
     )
 
+    swept_strain = 0.0
+    if shape != "straight":
+        if not 0.0 <= waviness <= 1.0:
+            raise ValueError(f"waviness must be in [0, 1]; got {waviness}.")
+        control = cl.shape_control_points(
+            shape, rng, n_points=shape_points,
+            amplitude=waviness, turns=helix_turns,
+        )
+        # Trim the path to what the lattice can physically survive, then
+        # let the caller see what was actually achieved.
+        if max_strain > cl.ARTISTIC_STRAIN_LIMIT:
+            warnings.warn(
+                f"max_strain={max_strain:.0%} exceeds "
+                f"{cl.ARTISTIC_STRAIN_LIMIT:.0%}; bonds will stretch past the "
+                "sp2 range and the structure is no longer physically "
+                "meaningful (still fine for illustration).",
+                UserWarning, stacklevel=2,
+            )
+        control, swept_strain = cl.fit_to_strain_budget(
+            control, tube_length, tube_radius, max_strain=max_strain
+        )
+        anchors = np.arange(len(positions))
+        positions = cl.sweep_along_path(positions, control)
+        positions = fm.relax_shell(
+            positions, bond_set, equilibrium=bond,
+            anchors=anchors, anchor_targets=positions, k_anchor=3.0,
+            max_iterations=relax_iterations,
+        )
+
     if bend_angle > 0:
         axial = positions[:, 2]
         lo, hi = axial.min(), axial.max()
@@ -377,6 +413,9 @@ def build_capped_cnt(
             "freq": freq,
             "bond": bond,
             "bend_angle": bend_angle,
+            "shape": shape,
+            "waviness": waviness,
+            "path_strain": swept_strain,
             "seed": seed,
             "radius": tube_radius,
             "radius_ideal": float(fm.radius_for_freq(freq, bond)),
