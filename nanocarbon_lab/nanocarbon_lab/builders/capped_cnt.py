@@ -304,6 +304,13 @@ def build_capped_cnt(
         raise ValueError("freq must be >= 1.")
     if bond <= 0:
         raise ValueError("bond must be positive.")
+    if bend_angle > 0 and shape != "straight":
+        raise ValueError(
+            f"bend_angle and shape={shape!r} cannot be combined. bend_angle "
+            "sweeps a z-aligned tube onto a planar arc, but after a shape "
+            "sweep the tube's axis no longer follows z, so applying both "
+            "flattens the structure. Use shape='arc' for a simple bend."
+        )
     if not 0.0 <= bend_angle <= MAX_PHYSICAL_BEND:
         raise ValueError(
             f"bend_angle must be in [0, {MAX_PHYSICAL_BEND}] rad; got {bend_angle}. "

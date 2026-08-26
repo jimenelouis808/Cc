@@ -23,6 +23,7 @@ validation pass before writing.
 | `workflows`     | Batch sweeps + ML-ready dataset exporter (XYZ + features CSV + manifest)     |
 | `cli`           | `nanocarbon` command-line entry point                                        |
 | `gui`           | `nanocarbon-gui` desktop app: sliders, live 3D preview, export, Blender render |
+| `implicit`/`remesh`/`junction` | L/T/Y/X nanotube junctions and schwarzite fragments from implicit surfaces |
 
 ## Installation
 
@@ -32,7 +33,8 @@ cd nanocarbon_lab
 pip install -e .[dev]
 ```
 
-Python 3.10+ required. Dependencies: `numpy`, `scipy`, `ase`, `networkx`.
+Python 3.10+ required. Dependencies: `numpy`, `scipy`, `ase`, `networkx`,
+`scikit-image` (marching cubes, for junctions and schwarzites).
 For the desktop app add `pip install -e ".[gui]"` (matplotlib) — plus
 `python3-tk` on Linux, see [Graphical interface](#graphical-interface).
 
@@ -447,6 +449,65 @@ blender -b -P blender/render_cnt.py -- \
 * Pass `--transparent-background` for a PNG you can composite over other
   art; drop `--samples` to use the style's own default (Cycles path
   tracing, GPU device selected automatically when available).
+
+## Junctions (L, T, Y, X) and schwarzites
+
+Branched and sponge-like carbon comes from a different route than the
+tube builder: an **implicit surface**, meshed and remeshed, with the
+topology left to follow from the geometry.
+
+```bash
+nanocarbon junction --kind Y --tube-radius 6 --arm-length 22 --out out/yj
+nanocarbon schwarzite --kind gyroid --cell 26 --out out/gyroid
+```
+
+```python
+from nanocarbon_lab.builders import build_junction, build_schwarzite
+
+y = build_junction("Y", tube_radius=6.0, arm_length=22.0, blend=4.0)
+print(y.info["ring_counts"])   # e.g. {5: 50, 6: 443, 7: 38}
+print(y.info["genus"])          # 0 — capped, so sphere-like
+
+g = build_schwarzite("gyroid", cell=26.0)
+print(g.info["genus"])          # 5 — five handles
+```
+
+The pipeline is: signed-distance field → marching cubes → **isotropic
+remeshing** → dual → valence-force-field relaxation. The remeshing step is
+the one that matters. In the dual, **a mesh vertex of degree d becomes a
+carbon ring of size d**, and raw marching cubes produces degrees from 3 to
+9 — three-membered rings and nine-membered holes. Repeated
+split/collapse/flip/smooth passes pull the degrees onto 6, leaving 5s and
+7s only where curvature demands them.
+
+Nothing tells the code that a Y junction needs heptagons. The branch is a
+saddle, saddles carry negative Gaussian curvature, and that emerges from
+the remesher as degree-7 vertices. Euler's theorem then holds on its own:
+
+| structure | genus | `sum(6 - ring_size)` | character |
+|---|---|---|---|
+| capped tube | 0 | +12 | 12 pentagons close the two caps |
+| L / T / Y / X junction | 0 | +12 | pentagons at arm tips, heptagons at the neck |
+| Schwarz P / gyroid fragment | 5 | −48 | saddles everywhere; heptagons outnumber pentagons |
+| Schwarz D fragment | 9 | −96 | more handles, more heptagons |
+
+Because a schwarzite is *supposed* to break the "+12" rule, the builder
+reads the expected budget from the mesh's own Euler characteristic
+instead of assuming it, and refuses to emit a structure that disagrees.
+
+**One honest limitation.** The remesher settles into a local minimum
+containing scattered pentagon–heptagon pairs along the arms, beyond the
+ones curvature requires — roughly 35 spurious pairs on a Y junction.
+These are dislocations: topologically neutral, geometrically sound (bond
+and angle statistics stay in range), and genuinely present in
+CVD-grown junctions, so the structures are realistic rather than
+idealised. Raising `remesh_iterations` barely helps (38 → 35 pairs for 5×
+the work); removing them properly would need curvature-aware remeshing.
+
+Schwarzite fragments are **finite** — clipped to a ball and closed, so
+they are real molecules rather than periodic cells. A genuinely periodic
+schwarzite would need matching boundaries on a torus, which this does not
+attempt.
 
 ### Other free/open tools for this pipeline
 

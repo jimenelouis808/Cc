@@ -27,6 +27,8 @@ dependencies = [
     "scipy>=1.10",
     "ase>=3.22",
     "networkx>=3.0",
+    # marching cubes, for the implicit-surface junction / schwarzite builders
+    "scikit-image>=0.22",
 ]
 
 [project.optional-dependencies]

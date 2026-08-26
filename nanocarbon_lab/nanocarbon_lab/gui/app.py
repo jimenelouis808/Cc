@@ -53,7 +53,7 @@ from matplotlib.backends.backend_tkagg import (
 )
 from matplotlib.figure import Figure
 
-from ..builders import build_capped_cnt
+from ..builders import build_capped_cnt, build_junction, build_schwarzite
 from ..builders import fullerene_mesh as fm
 from ..exports.xyz import write_render_bundle
 
@@ -68,6 +68,9 @@ RING_LABELS = {
 }
 
 SHAPES = ["straight", "arc", "s_curve", "helix", "random"]
+MODES = ["capped tube", "junction", "schwarzite"]
+JUNCTION_KINDS = ["L", "T", "Y", "X", "cross3d"]
+SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
 
 BLENDER_STYLES = [
     "nature_dark",
@@ -177,8 +180,16 @@ class NanocarbonGUI:
         self._build_actions(right)
 
     def _build_params(self, parent: ttk.Frame) -> None:
+        self.var_mode_kind = tk.StringVar(value=MODES[0])
+        mode_box = ttk.LabelFrame(parent, text="Structure type", padding=8)
+        mode_box.pack(fill="x", pady=(0, 8))
+        ttk.Combobox(mode_box, textvariable=self.var_mode_kind, values=MODES,
+                     state="readonly").pack(fill="x")
+        self.var_mode_kind.trace_add("write", lambda *_: self._on_mode_change())
+
         box = ttk.LabelFrame(parent, text="Geometry", padding=8)
         box.pack(fill="x")
+        self.frame_tube = box
 
         self.var_rings = tk.IntVar(value=8)
         self.var_freq = tk.IntVar(value=3)
@@ -209,6 +220,7 @@ class NanocarbonGUI:
         # --- centreline shape
         sbox = ttk.LabelFrame(parent, text="Centreline", padding=8)
         sbox.pack(fill="x", pady=(8, 0))
+        self.frame_centreline = sbox
         # This frame is laid out with grid throughout: _slider grids, and
         # tkinter forbids mixing grid and pack in the same container.
         sbox.columnconfigure(0, weight=1)
@@ -234,6 +246,7 @@ class NanocarbonGUI:
         # --- defects
         dbox = ttk.LabelFrame(parent, text="Defects", padding=8)
         dbox.pack(fill="x", pady=(8, 0))
+        self.frame_defects = dbox
 
         self.var_n_sw = tk.IntVar(value=0)
         self.var_n_dv = tk.IntVar(value=0)
@@ -259,12 +272,71 @@ class NanocarbonGUI:
         ttk.Checkbutton(vbox, text="Colour by ring type", variable=self.var_colour_rings,
                         command=self._redraw).pack(anchor="w")
 
+        # --- junction panel (shown only in junction mode)
+        self.frame_junction = ttk.LabelFrame(parent, text="Junction", padding=8)
+        self.var_j_kind = tk.StringVar(value="Y")
+        self.var_j_radius = tk.DoubleVar(value=6.0)
+        self.var_j_arm = tk.DoubleVar(value=22.0)
+        self.var_j_blend = tk.DoubleVar(value=4.0)
+        self.frame_junction.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_junction, text="Kind").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_junction, textvariable=self.var_j_kind,
+                     values=JUNCTION_KINDS, state="readonly", width=9).grid(
+            row=0, column=1, sticky="e", pady=(0, 6))
+        self._slider(self.frame_junction, "Arm radius (Å)", self.var_j_radius,
+                     3.0, 10.0, 1, resolution=0.5)
+        self._slider(self.frame_junction, "Arm length (Å)", self.var_j_arm,
+                     12.0, 40.0, 3, resolution=1.0)
+        self._slider(self.frame_junction, "Neck blend (Å)", self.var_j_blend,
+                     1.0, 8.0, 5, resolution=0.5)
+        ttk.Label(self.frame_junction,
+                  text="Heptagons appear at the neck on their own: the branch is "
+                       "a saddle, and saddles carry negative curvature.",
+                  foreground="#777", font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=7, column=0, columnspan=2, sticky="w")
+
+        # --- schwarzite panel
+        self.frame_schwarzite = ttk.LabelFrame(parent, text="Schwarzite", padding=8)
+        self.var_s_kind = tk.StringVar(value="primitive")
+        self.var_s_cell = tk.DoubleVar(value=26.0)
+        self.var_s_clip = tk.DoubleVar(value=19.5)
+        self.frame_schwarzite.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_schwarzite, text="Surface").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_schwarzite, textvariable=self.var_s_kind,
+                     values=SCHWARZITE_KINDS, state="readonly", width=10).grid(
+            row=0, column=1, sticky="e", pady=(0, 6))
+        self._slider(self.frame_schwarzite, "Cell period (Å)", self.var_s_cell,
+                     16.0, 40.0, 1, resolution=1.0)
+        self._slider(self.frame_schwarzite, "Clip radius (Å)", self.var_s_clip,
+                     10.0, 35.0, 3, resolution=0.5)
+        ttk.Label(self.frame_schwarzite,
+                  text="Negative curvature everywhere: heptagons outnumber "
+                       "pentagons and the fragment has handles (genus > 0).",
+                  foreground="#777", font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=5, column=0, columnspan=2, sticky="w")
+
         self.btn_build = ttk.Button(parent, text="Build structure", command=self.on_build)
         self.btn_build.pack(fill="x", pady=(12, 0), ipady=4)
         self.progress = ttk.Progressbar(parent, mode="indeterminate")
         self.progress.pack(fill="x", pady=(6, 0))
         self._update_radius_hint()
         self._update_strain_hint()
+        self._on_mode_change()
+
+    def _on_mode_change(self) -> None:
+        """Show only the panels that apply to the selected structure type."""
+        mode = self.var_mode_kind.get()
+        for frame in (self.frame_tube, self.frame_centreline, self.frame_defects,
+                      self.frame_junction, self.frame_schwarzite):
+            frame.pack_forget()
+        if mode == "junction":
+            self.frame_junction.pack(fill="x")
+        elif mode == "schwarzite":
+            self.frame_schwarzite.pack(fill="x")
+        else:
+            self.frame_tube.pack(fill="x")
+            self.frame_centreline.pack(fill="x", pady=(8, 0))
+            self.frame_defects.pack(fill="x", pady=(8, 0))
 
     def _slider(self, parent, label, var, lo, hi, row, *, integer=False,
                 resolution=None, command=None):
@@ -374,7 +446,23 @@ class NanocarbonGUI:
         self.progress.start(12)
         self._set_status("Building and relaxing…")
 
-        kwargs = dict(
+        mode = self.var_mode_kind.get()
+        if mode == "junction":
+            builder, kwargs = build_junction, dict(
+                kind=self.var_j_kind.get(),
+                tube_radius=float(self.var_j_radius.get()),
+                arm_length=float(self.var_j_arm.get()),
+                blend=float(self.var_j_blend.get()),
+            )
+        elif mode == "schwarzite":
+            builder, kwargs = build_schwarzite, dict(
+                kind=self.var_s_kind.get(),
+                cell=float(self.var_s_cell.get()),
+                clip_radius=float(self.var_s_clip.get()),
+            )
+        else:
+            builder = build_capped_cnt
+            kwargs = dict(
             n_body_rings=int(self.var_rings.get()),
             freq=int(self.var_freq.get()),
             bond=float(self.var_bond.get()),
@@ -385,11 +473,11 @@ class NanocarbonGUI:
             shape_points=int(self.var_shape_points.get()),
             defects=self._current_defects(),
             seed=int(self.var_seed.get()),
-        )
+            )
 
         def worker():
             try:
-                self._queue.put(("done", build_capped_cnt(**kwargs)))
+                self._queue.put(("done", builder(**kwargs)))
             except Exception as exc:  # surfaced in the UI, not the console
                 self._queue.put(("error", (exc, traceback.format_exc())))
 
@@ -476,17 +564,30 @@ class NanocarbonGUI:
             for s in (5, 6, 7, 8) if counts.get(s)
         )
         deficit = sum((6 - s) * c for s, c in counts.items())
+        # Euler's budget is 12 only for sphere-like shells; a schwarzite
+        # fragment with handles is legitimately negative.
+        expected = 12 - 12 * int(a.info.get("genus", 0))
         clash = g["n_close_contacts"]
-        lines = [
-            f"atoms        {len(a):>6d}",
-            f"radius       {a.info['radius']:>6.2f} Å",
-            f"length       {a.info['length']:>6.1f} Å",
-            f"shape        {a.info['shape']:>6s}",
-            f"path strain  {a.info['path_strain']:>5.1%}",
+        lines = [f"atoms        {len(a):>6d}"]
+        if "radius" in a.info:
+            lines += [
+                f"radius       {a.info['radius']:>6.2f} Å",
+                f"length       {a.info['length']:>6.1f} Å",
+                f"shape        {a.info['shape']:>6s}",
+                f"path strain  {a.info['path_strain']:>5.1%}",
+            ]
+        if "junction_kind" in a.info:
+            lines.append(f"junction     {a.info['junction_kind']:>6s}")
+        if "schwarzite_kind" in a.info:
+            lines.append(f"surface      {a.info['schwarzite_kind']:>9s}")
+        if "genus" in a.info:
+            lines.append(f"genus        {a.info['genus']:>6d}")
+        lines += [
             "",
             "rings",
             rings_txt,
-            f"  Euler sum  {deficit:>5d}  {'OK' if deficit == 12 else 'BROKEN'}",
+            f"  Euler sum  {deficit:>5d}  "
+            f"{'OK' if deficit == expected else 'BROKEN'}",
             "",
             "geometry",
             f"  bond   {g['bond_min']:.3f}–{g['bond_max']:.3f} Å",

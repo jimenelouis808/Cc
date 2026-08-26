@@ -373,15 +373,40 @@ class TestCentrelineShapes:
         assert atoms.info["ring_counts"][5] == 12
 
     def test_shape_actually_bends_the_tube(self):
-        straight = build_capped_cnt(n_body_rings=16, freq=2, shape="straight", seed=5)
+        """The centreline must actually leave the axis.
+
+        Measured as lateral spread, not overall span: the meander is
+        anchored at both ends, so it wanders sideways while keeping
+        roughly the same end-to-end length -- a span comparison would see
+        almost no difference and pass or fail for the wrong reason.
+        """
+        straight = build_capped_cnt(n_body_rings=26, freq=2, shape="straight", seed=5)
         wavy = build_capped_cnt(
-            n_body_rings=16, freq=2, shape="random", waviness=1.0, seed=5,
+            n_body_rings=26, freq=2, shape="random", waviness=1.0, seed=5,
         )
         assert len(wavy) == len(straight)
-        span = lambda a: (a.get_positions().max(axis=0)
-                          - a.get_positions().min(axis=0)).max()
-        # A meandering tube of the same atom count is more compact end to end.
-        assert span(wavy) < span(straight)
+
+        def centreline_deviation(atoms):
+            """How far the tube's *axis* strays from a straight line.
+
+            Measured on slice centroids, not on the atoms: every atom sits
+            ~one tube radius off the axis whatever the tube does, and that
+            offset swamps the bending signal entirely.
+            """
+            pos = atoms.get_positions() - atoms.get_positions().mean(axis=0)
+            axis = np.linalg.svd(pos)[2][0]
+            along = pos @ axis
+            edges = np.quantile(along, np.linspace(0.0, 1.0, 13))
+            centroids = [
+                pos[(along >= lo) & (along <= hi)].mean(axis=0)
+                for lo, hi in zip(edges[:-1], edges[1:])
+                if ((along >= lo) & (along <= hi)).sum() > 10
+            ]
+            centroids = np.array(centroids)
+            radial = centroids - np.outer(centroids @ axis, axis)
+            return np.linalg.norm(radial, axis=1).max()
+
+        assert centreline_deviation(wavy) > 3.0 * centreline_deviation(straight)
         assert wavy.info["path_strain"] > 0.0
 
     def test_waviness_out_of_range_raises(self):

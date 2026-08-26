@@ -6,6 +6,7 @@ from .nanoribbon import build_nanoribbon
 from .nanocoil import build_nanocoil
 from .foam3d import build_carbon_foam
 from .capped_cnt import build_capped_cnt
+from .junction import build_junction, build_schwarzite
 
 __all__ = [
     "build_cnt",
@@ -15,4 +16,6 @@ __all__ = [
     "build_nanocoil",
     "build_carbon_foam",
     "build_capped_cnt",
+    "build_junction",
+    "build_schwarzite",
 ]

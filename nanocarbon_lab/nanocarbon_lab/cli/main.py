@@ -8,6 +8,8 @@ Sub-commands:
 * ``foam``       — build a 3D carbon foam.
 * ``cnt-cap``    — build a fully capped/defected CNT and export XYZ + a
   Blender-ready render bundle (see ``nanocarbon_lab/blender/``).
+* ``junction``   — build a capped L/T/Y/X nanotube junction.
+* ``schwarzite`` — build a finite negative-curvature schwarzite fragment.
 * ``validate``   — run validation on an existing structure file.
 """
 
@@ -24,8 +26,10 @@ from ..builders import (
     build_carbon_foam,
     build_cnt,
     build_graphene_supercell,
+    build_junction,
     build_nanocoil,
     build_nanoribbon,
+    build_schwarzite,
 )
 from ..defects import introduce_vacancies
 from ..dopants import dope_random
@@ -145,6 +149,40 @@ def _cmd_cnt_cap(args):
     return 0
 
 
+def _report_structure(atoms, xyz_path, json_path):
+    """Shared summary printer for the structure-building sub-commands."""
+    g = atoms.info["geometry"]
+    print(f"Wrote {xyz_path} and {json_path}")
+    print(f"  n_atoms     = {len(atoms)}")
+    if "genus" in atoms.info:
+        print(f"  euler       = {atoms.info['euler']}   genus = {atoms.info['genus']}")
+    print(f"  ring_counts = {atoms.info['ring_counts']}")
+    print(f"  bond length = {g['bond_min']:.3f} / {g['bond_mean']:.3f} / {g['bond_max']:.3f} A"
+          f"  (std {g['bond_std']:.4f})")
+    print(f"  bond angle  = {g['angle_min']:.1f} / {g['angle_mean']:.1f} / {g['angle_max']:.1f} deg")
+    print(f"  close contacts (<2 A, non-bonded) = {g['n_close_contacts']}")
+
+
+def _cmd_junction(args):
+    atoms = build_junction(
+        kind=args.kind, tube_radius=args.tube_radius, arm_length=args.arm_length,
+        blend=args.blend, bond=args.bond, grid_resolution=args.grid,
+        remesh_iterations=args.remesh_iterations,
+    )
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    return 0
+
+
+def _cmd_schwarzite(args):
+    atoms = build_schwarzite(
+        kind=args.kind, cell=args.cell, clip_radius=args.clip_radius,
+        thickness=args.thickness, bond=args.bond, grid_resolution=args.grid,
+        remesh_iterations=args.remesh_iterations,
+    )
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    return 0
+
+
 def _cmd_validate(args):
     atoms = ase_io.read(args.path)
     report = run_basic_checks(atoms)
@@ -259,6 +297,40 @@ def build_parser() -> argparse.ArgumentParser:
     cc.add_argument("--out", required=True,
                     help="Output path without extension (.xyz and .json are appended).")
     cc.set_defaults(func=_cmd_cnt_cap)
+
+    jn = sub.add_parser(
+        "junction",
+        help="Build a capped L/T/Y/X nanotube junction (XYZ + render bundle).",
+    )
+    jn.add_argument("--kind", default="Y", choices=["L", "T", "Y", "X", "cross3d"])
+    jn.add_argument("--tube-radius", type=float, default=6.0, help="Arm radius (Å).")
+    jn.add_argument("--arm-length", type=float, default=22.0,
+                    help="Centre-to-tip length of each arm (Å).")
+    jn.add_argument("--blend", type=float, default=4.0,
+                    help="Smooth-union radius at the branch (Å); sets how flared "
+                         "the neck is and how many heptagons it takes.")
+    jn.add_argument("--bond", type=float, default=1.42)
+    jn.add_argument("--grid", type=int, default=70, help="Marching-cubes resolution.")
+    jn.add_argument("--remesh-iterations", type=int, default=25)
+    jn.add_argument("--out", required=True, help="Output path without extension.")
+    jn.set_defaults(func=_cmd_junction)
+
+    sz = sub.add_parser(
+        "schwarzite",
+        help="Build a finite negative-curvature schwarzite fragment.",
+    )
+    sz.add_argument("--kind", default="primitive",
+                    choices=["primitive", "diamond", "gyroid"])
+    sz.add_argument("--cell", type=float, default=26.0, help="Surface period (Å).")
+    sz.add_argument("--clip-radius", type=float, default=None,
+                    help="Clipping ball radius (Å); default 0.75 x cell.")
+    sz.add_argument("--thickness", type=float, default=0.0,
+                    help="Level-set offset; thins or thickens the channels.")
+    sz.add_argument("--bond", type=float, default=1.42)
+    sz.add_argument("--grid", type=int, default=80)
+    sz.add_argument("--remesh-iterations", type=int, default=25)
+    sz.add_argument("--out", required=True, help="Output path without extension.")
+    sz.set_defaults(func=_cmd_schwarzite)
 
     vl = sub.add_parser("validate",
                         help="Validate an existing structure file (CIF, XYZ, POSCAR…).")

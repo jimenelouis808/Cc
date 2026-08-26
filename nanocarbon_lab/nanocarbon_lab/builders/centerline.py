@@ -51,30 +51,56 @@ def random_control_points(
     n_points: int,
     amplitude: float,
     rng: np.random.Generator,
-    max_turn_deg: float = 35.0,
+    n_modes: int = 3,
 ) -> np.ndarray:
-    """Random walk with bounded turning, for an organic meandering path.
+    """Smooth random meander built from a few low-frequency modes.
 
-    Each step rotates the previous direction by a random angle drawn from
-    a normal distribution scaled by ``amplitude`` and capped in spirit by
-    ``max_turn_deg``, so the walk wanders without doubling back on
-    itself. Points are unit-spaced; the caller rescales the whole path to
-    the tube's length.
+    The obvious construction -- a random walk that turns by a random angle
+    at each step -- does **not** work here. Its turns point in uncorrelated
+    directions and cancel, so the path wiggles at high frequency while
+    going essentially straight. Because the strain budget is spent on peak
+    *curvature*, those cancelling wiggles consume the whole budget and
+    :func:`fit_to_strain_budget` then flattens the path almost to a line:
+    the tube comes out straight no matter how high ``amplitude`` is set.
+
+    Instead the lateral offset is a sum of ``n_modes`` sine modes with
+    random phases and amplitudes falling as ``1/k``, evaluated
+    independently for x and y. Few modes means low curvature per unit of
+    lateral travel, so the budget buys visible, coherent bending rather
+    than noise.
+
+    Parameters
+    ----------
+    n_points
+        Control points to return (also sets the path's nominal length).
+    amplitude
+        0-1 scale on the lateral excursion.
+    rng
+        Seeded generator.
+    n_modes
+        Sine modes summed per axis. 1-2 gives a single sweeping bend,
+        3-4 an organic meander; higher starts to cancel again.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(n_points, 3)`` control points running along +z.
     """
-    points = [np.zeros(3)]
-    direction = np.array([0.0, 0.0, 1.0])
-    for _ in range(max(1, n_points - 1)):
-        perpendicular = rng.normal(size=3)
-        perpendicular -= perpendicular.dot(direction) * direction
-        norm = np.linalg.norm(perpendicular)
-        if norm < 1e-9:
-            perpendicular, norm = np.array([1.0, 0.0, 0.0]), 1.0
-        perpendicular /= norm
-        angle = np.radians(max_turn_deg) * amplitude * rng.normal()
-        direction = direction * np.cos(angle) + perpendicular * np.sin(angle)
-        direction /= np.linalg.norm(direction)
-        points.append(points[-1] + direction)
-    return np.array(points)
+    n_points = max(4, n_points)
+    t = np.linspace(0.0, 1.0, n_points)
+    offsets = np.zeros((n_points, 2))
+    for axis in range(2):
+        for k in range(1, max(1, n_modes) + 1):
+            phase = rng.uniform(0.0, 2.0 * np.pi)
+            weight = rng.normal() / k
+            offsets[:, axis] += weight * np.sin(np.pi * k * t + phase)
+    # Zero the ends so the path starts and finishes on the axis, keeping
+    # the meander in the middle where it reads clearly.
+    offsets -= np.outer(1.0 - t, offsets[0]) + np.outer(t, offsets[-1])
+    lateral = amplitude * n_points * 0.30
+    return np.stack(
+        [offsets[:, 0] * lateral, offsets[:, 1] * lateral, t * n_points], axis=1
+    )
 
 
 def shape_control_points(

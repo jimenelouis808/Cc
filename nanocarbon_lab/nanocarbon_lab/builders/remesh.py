@@ -1,0 +1,455 @@
+"""Turn an implicit surface into a triangulation whose dual is a honeycomb.
+
+Marching cubes gives a watertight triangulation of a level set, but a
+useless one for this purpose: its triangles follow the sampling grid, so
+vertex degrees scatter from 3 to 9. That matters more here than in
+ordinary graphics, because in
+:func:`nanocarbon_lab.builders.fullerene_mesh.dual_honeycomb` **a mesh
+vertex of degree d becomes a carbon ring of size d**. A degree-3 vertex
+is a three-membered ring; a degree-9 vertex is a nine-membered hole.
+Neither exists in real sp2 carbon.
+
+So the raw mesh is isotropically remeshed (Botsch & Kobbelt): repeatedly
+split long edges, collapse short ones, flip edges toward degree 6, then
+smooth tangentially and project back onto the surface. The result has
+degrees concentrated on 6, with 5s where the surface is convex and 7s
+where it saddles -- which is exactly the pentagon/hexagon/heptagon
+distribution real curved carbon adopts, arrived at from the geometry
+rather than imposed by hand.
+
+Every operation preserves manifoldness, and :func:`mesh_statistics`
+re-derives the Euler characteristic so callers can assert it rather than
+trust it. The edge-collapse link condition is the subtle part: collapsing
+an edge whose endpoints share more than the two opposite vertices tears
+the surface, so those collapses are rejected.
+"""
+
+from __future__ import annotations
+
+from collections import Counter, defaultdict
+
+import numpy as np
+
+from .fullerene_mesh import Mesh
+from .implicit import Field, project_to_surface
+
+
+def marching_cubes_mesh(field: Field, extent: float, resolution: int = 80) -> Mesh:
+    """Sample ``field`` on a cubic grid and extract its zero level set.
+
+    Parameters
+    ----------
+    field
+        Scalar field; the surface is where it crosses zero.
+    extent
+        Half-width of the sampling box. **Must clear the whole surface**
+        -- if the surface reaches the box wall, marching cubes returns an
+        open mesh with boundary edges, whose dual is not a closed carbon
+        network. The field factories in
+        :mod:`nanocarbon_lab.builders.implicit` return a safe value.
+    resolution
+        Grid points per axis. Higher resolves fine features but costs
+        ``resolution**3`` samples; the remesher sets the final triangle
+        size, so this only needs to capture the shape.
+
+    Returns
+    -------
+    (vertices, triangles)
+    """
+    from skimage.measure import marching_cubes
+
+    axis = np.linspace(-extent, extent, resolution)
+    grid = np.stack(np.meshgrid(axis, axis, axis, indexing="ij"), axis=-1)
+    values = field(grid)
+    spacing = float(axis[1] - axis[0])
+    verts, faces, _, _ = marching_cubes(values, level=0.0, spacing=(spacing,) * 3)
+    return verts - extent, faces.astype(int)
+
+
+def mesh_statistics(mesh: Mesh) -> dict[str, int]:
+    """Euler characteristic, genus and boundary-edge count of a mesh.
+
+    ``boundary_edges`` must be 0 for a closed surface; anything else means
+    the mesh has holes (usually a sampling box that clipped the surface)
+    and its dual will not be a valid carbon network. ``genus`` follows
+    from ``V - E + F = 2 - 2g`` and sets the ring budget downstream:
+    ``sum(6 - ring_size) = 6 * euler``.
+    """
+    verts, faces = mesh
+    counts: Counter = Counter()
+    for tri in faces:
+        a, b, c = (int(x) for x in tri)
+        for u, v in ((a, b), (b, c), (c, a)):
+            counts[(u, v) if u < v else (v, u)] += 1
+    boundary = sum(1 for n in counts.values() if n != 2)
+    euler = len(verts) - len(counts) + len(faces)
+    return {
+        "vertices": len(verts),
+        "edges": len(counts),
+        "faces": len(faces),
+        "euler": euler,
+        "genus": (2 - euler) // 2,
+        "boundary_edges": boundary,
+    }
+
+
+def _edge_faces(faces: np.ndarray) -> dict[tuple[int, int], list[int]]:
+    """Map each undirected edge to the faces containing it."""
+    mapping: dict[tuple[int, int], list[int]] = defaultdict(list)
+    for index, tri in enumerate(faces):
+        a, b, c = (int(x) for x in tri)
+        for u, v in ((a, b), (b, c), (c, a)):
+            mapping[(u, v) if u < v else (v, u)].append(index)
+    return mapping
+
+
+def _adjacency(faces: np.ndarray) -> dict[int, set[int]]:
+    nbrs: dict[int, set[int]] = defaultdict(set)
+    for tri in faces:
+        a, b, c = (int(x) for x in tri)
+        nbrs[a].update((b, c))
+        nbrs[b].update((a, c))
+        nbrs[c].update((a, b))
+    return nbrs
+
+
+def _split_long_edges(mesh: Mesh, threshold: float) -> Mesh:
+    """Subdivide every edge longer than ``threshold`` (red-green style).
+
+    Each face is rebuilt from whichever of its three edges were marked,
+    so 1, 2 or 3 marked edges give 2, 3 or 4 sub-triangles. Rebuilding
+    per face (rather than splicing edge by edge) keeps orientation
+    consistent and cannot leave T-junctions.
+    """
+    verts, faces = mesh
+    lengths = {}
+    for tri in faces:
+        a, b, c = (int(x) for x in tri)
+        for u, v in ((a, b), (b, c), (c, a)):
+            key = (u, v) if u < v else (v, u)
+            if key not in lengths:
+                lengths[key] = np.linalg.norm(verts[u] - verts[v])
+    marked = {e for e, length in lengths.items() if length > threshold}
+    if not marked:
+        return mesh
+
+    new_verts = list(verts)
+    midpoint: dict[tuple[int, int], int] = {}
+    for edge in marked:
+        u, v = edge
+        midpoint[edge] = len(new_verts)
+        new_verts.append(0.5 * (verts[u] + verts[v]))
+
+    def mid(u: int, v: int) -> int | None:
+        return midpoint.get((u, v) if u < v else (v, u))
+
+    new_faces: list[tuple[int, int, int]] = []
+    for tri in faces:
+        a, b, c = (int(x) for x in tri)
+        mab, mbc, mca = mid(a, b), mid(b, c), mid(c, a)
+        present = [m for m in (mab, mbc, mca) if m is not None]
+        if not present:
+            new_faces.append((a, b, c))
+        elif len(present) == 3:
+            new_faces += [
+                (a, mab, mca), (mab, b, mbc), (mca, mbc, c), (mab, mbc, mca)
+            ]
+        elif len(present) == 2:
+            # Rotate the triangle so the *un-split* edge is always c->a
+            # (i.e. mca is the None one), then the split is one fixed
+            # pattern instead of three. Rotating (a,b,c)->(b,c,a) carries
+            # the midpoints (mab,mbc,mca)->(mbc,mca,mab).
+            if mab is None:
+                a, b, c, mab, mbc, mca = b, c, a, mbc, mca, mab
+            elif mbc is None:
+                a, b, c, mab, mbc, mca = c, a, b, mca, mab, mbc
+            new_faces += [(a, mab, mbc), (mab, b, mbc), (a, mbc, c)]
+        else:
+            if mab is not None:
+                new_faces += [(a, mab, c), (mab, b, c)]
+            elif mbc is not None:
+                new_faces += [(b, mbc, a), (mbc, c, a)]
+            else:
+                new_faces += [(c, mca, b), (mca, a, b)]
+    return np.array(new_verts, dtype=float), np.array(new_faces, dtype=int)
+
+
+def _collapse_short_edges(mesh: Mesh, threshold: float, max_length: float) -> Mesh:
+    """Collapse edges shorter than ``threshold`` where it is safe to do so.
+
+    Three guards keep the mesh manifold. The **link condition**: ``u`` and
+    ``v`` may share exactly the two vertices opposite their common edge --
+    collapsing across any other shared neighbour pinches the surface into
+    a non-manifold point. A **length guard**: the collapse must not create
+    an edge longer than ``max_length``, which would immediately be split
+    again next pass, so the remesher would never converge. And a
+    **locking** rule: once an edge is collapsed, its merged vertex and
+    that vertex's whole one-ring are locked for the rest of the pass.
+
+    Locking is what makes the link condition trustworthy. Adjacency is
+    computed once per pass for speed, so after a collapse it is stale for
+    every vertex near the merge; testing a later collapse against stale
+    adjacency silently admits ones that tear the surface. (Without this,
+    intermediate meshes here came out with tens of boundary edges and a
+    nonsensical genus, which then happened to heal over later
+    iterations -- correct by luck rather than construction.)
+    """
+    verts, faces = mesh
+    nbrs = _adjacency(faces)
+    edge_faces = _edge_faces(faces)
+
+    dead: set[int] = set()
+    locked: set[int] = set()
+    remap: dict[int, int] = {}
+    positions = verts.copy()
+
+    def resolve(index: int) -> int:
+        while index in remap:
+            index = remap[index]
+        return index
+
+    for edge, incident in edge_faces.items():
+        u, v = edge
+        if u in locked or v in locked or u in dead or v in dead:
+            continue
+        if len(incident) != 2:
+            continue
+        if np.linalg.norm(positions[u] - positions[v]) >= threshold:
+            continue
+        opposite = set()
+        for face_index in incident:
+            opposite |= {int(x) for x in faces[face_index]} - {u, v}
+        if len(opposite) != 2 or nbrs[u] & nbrs[v] != opposite:
+            continue  # link condition violated: collapse would pinch
+        target = 0.5 * (positions[u] + positions[v])
+        merged = (nbrs[u] | nbrs[v]) - {u, v}
+        if any(np.linalg.norm(target - positions[w]) > max_length for w in merged):
+            continue
+        positions[u] = target
+        remap[v] = u
+        dead.add(v)
+        nbrs[u] = merged
+        for w in merged:
+            nbrs[w].discard(v)
+            nbrs[w].add(u)
+        # Freeze this neighbourhood: the cached adjacency is now stale here.
+        locked.add(u)
+        locked.update(merged)
+
+    if not dead:
+        return mesh
+
+    new_faces = []
+    for tri in faces:
+        a, b, c = (resolve(int(x)) for x in tri)
+        if len({a, b, c}) == 3:
+            new_faces.append((a, b, c))
+    keep = np.array(sorted(set(range(len(positions))) - dead), dtype=int)
+    reindex = -np.ones(len(positions), dtype=int)
+    reindex[keep] = np.arange(len(keep))
+    remapped = np.array(
+        [[reindex[a], reindex[b], reindex[c]] for a, b, c in new_faces], dtype=int
+    )
+    return positions[keep], remapped
+
+
+def _flip_edges_toward_degree_six(mesh: Mesh) -> Mesh:
+    """Flip edges when doing so brings the four touched degrees nearer 6.
+
+    Degree is ring size in the dual, so this is what drives the carbon
+    network toward hexagons, leaving 5s and 7s only where curvature
+    genuinely demands them.
+    """
+    verts, faces = mesh
+    face_list = [tuple(int(x) for x in tri) for tri in faces]
+    nbrs = _adjacency(faces)
+    degree = {v: len(ns) for v, ns in nbrs.items()}
+    edge_faces = _edge_faces(faces)
+
+    def deviation(*values: int) -> int:
+        return sum(abs(v - 6) for v in values)
+
+    touched: set[int] = set()
+    for edge, incident in edge_faces.items():
+        if len(incident) != 2:
+            continue
+        if incident[0] in touched or incident[1] in touched:
+            continue
+        u, v = edge
+        opposite = set()
+        for face_index in incident:
+            opposite |= set(face_list[face_index]) - {u, v}
+        if len(opposite) != 2:
+            continue
+        w1, w2 = sorted(opposite)
+        if w2 in nbrs[w1]:
+            continue  # would duplicate an existing edge
+        before = deviation(degree[u], degree[v], degree[w1], degree[w2])
+        after = deviation(
+            degree[u] - 1, degree[v] - 1, degree[w1] + 1, degree[w2] + 1
+        )
+        if after >= before:
+            continue
+        face_list[incident[0]] = (u, w1, w2)
+        face_list[incident[1]] = (v, w2, w1)
+        degree[u] -= 1
+        degree[v] -= 1
+        degree[w1] += 1
+        degree[w2] += 1
+        nbrs[u].discard(v)
+        nbrs[v].discard(u)
+        nbrs[w1].add(w2)
+        nbrs[w2].add(w1)
+        touched.update(incident)
+    return verts, np.array(face_list, dtype=int)
+
+
+def _tangential_smooth(mesh: Mesh, field: Field, strength: float = 0.5) -> Mesh:
+    """Laplacian-smooth vertices, then project them back onto the surface.
+
+    Smoothing equalises triangle sizes but pulls vertices off the
+    surface (and shrinks a closed shape toward its centre); the
+    projection step in :func:`implicit.project_to_surface` puts them
+    back, so only the tangential component of the motion survives.
+    """
+    verts, faces = mesh
+    nbrs = _adjacency(faces)
+    target = verts.copy()
+    for index, neighbours in nbrs.items():
+        if neighbours:
+            target[index] = verts[list(neighbours)].mean(axis=0)
+    moved = verts + strength * (target - verts)
+    return project_to_surface(field, moved), faces
+
+
+def _remove_low_degree_vertices(mesh: Mesh, min_degree: int = 5) -> Mesh:
+    """Collapse away vertices below ``min_degree``.
+
+    Degree is ring size in the dual, so a degree-3 or degree-4 vertex is a
+    three- or four-membered carbon ring. Those are not merely rare, they
+    are chemically absurd in an sp2 sheet, and the length-based collapse
+    will not touch them when their edges happen to be of normal length.
+    Collapsing one of the vertex's edges deletes it outright; Euler's
+    budget then redistributes into pentagons, which are perfectly
+    physical.
+
+    Same link condition and locking as :func:`_collapse_short_edges`.
+    """
+    verts, faces = mesh
+    nbrs = _adjacency(faces)
+    low = {v for v, ns in nbrs.items() if len(ns) < min_degree}
+    if not low:
+        return mesh
+    edge_faces = _edge_faces(faces)
+
+    dead: set[int] = set()
+    locked: set[int] = set()
+    remap: dict[int, int] = {}
+    positions = verts.copy()
+
+    for edge, incident in edge_faces.items():
+        u, v = edge
+        if not (u in low or v in low):
+            continue
+        if u in locked or v in locked or u in dead or v in dead:
+            continue
+        if len(incident) != 2:
+            continue
+        opposite = set()
+        for face_index in incident:
+            opposite |= {int(x) for x in faces[face_index]} - {u, v}
+        if len(opposite) != 2 or nbrs[u] & nbrs[v] != opposite:
+            continue
+        # Keep the higher-degree endpoint; it is the healthier vertex.
+        keep, drop = (u, v) if len(nbrs[u]) >= len(nbrs[v]) else (v, u)
+        merged = (nbrs[u] | nbrs[v]) - {u, v}
+        positions[keep] = 0.5 * (positions[u] + positions[v])
+        remap[drop] = keep
+        dead.add(drop)
+        nbrs[keep] = merged
+        for w in merged:
+            nbrs[w].discard(drop)
+            nbrs[w].add(keep)
+        locked.add(keep)
+        locked.update(merged)
+
+    if not dead:
+        return mesh
+
+    def resolve(index: int) -> int:
+        while index in remap:
+            index = remap[index]
+        return index
+
+    new_faces = []
+    for tri in faces:
+        a, b, c = (resolve(int(x)) for x in tri)
+        if len({a, b, c}) == 3:
+            new_faces.append((a, b, c))
+    keep_idx = np.array(sorted(set(range(len(positions))) - dead), dtype=int)
+    reindex = -np.ones(len(positions), dtype=int)
+    reindex[keep_idx] = np.arange(len(keep_idx))
+    remapped = np.array(
+        [[reindex[a], reindex[b], reindex[c]] for a, b, c in new_faces], dtype=int
+    )
+    return positions[keep_idx], remapped
+
+
+def isotropic_remesh(
+    mesh: Mesh,
+    field: Field,
+    target_edge: float,
+    iterations: int = 25,
+) -> Mesh:
+    """Remesh to near-uniform triangles of side ``target_edge``.
+
+    Runs the standard split / collapse / flip / smooth cycle. The 4/3 and
+    4/5 thresholds are Botsch & Kobbelt's: they bracket the target
+    length so an edge cannot be split and collapsed on alternate passes.
+
+    Parameters
+    ----------
+    mesh
+        Starting triangulation, typically from :func:`marching_cubes_mesh`.
+    field
+        The implicit surface, used to re-project smoothed vertices.
+    target_edge
+        Desired triangle side. In the dual this sets the carbon ring
+        size, so it should be roughly the ring-centre spacing you want --
+        about ``sqrt(3) * bond`` (2.46 Å) for graphitic carbon.
+    iterations
+        Full cycles. The mesh shrinks toward equilibrium from whatever
+        marching cubes produced, so this needs to be generous: on a Y
+        junction the vertex count settles around pass 20 and the degree
+        histogram stops moving by pass 25.
+
+    Returns
+    -------
+    (vertices, triangles)
+        A closed manifold whose vertex degrees cluster on 6.
+    """
+    if target_edge <= 0:
+        raise ValueError("target_edge must be positive.")
+    for _ in range(max(1, iterations)):
+        mesh = _split_long_edges(mesh, (4.0 / 3.0) * target_edge)
+        mesh = _collapse_short_edges(
+            mesh, (4.0 / 5.0) * target_edge, (4.0 / 3.0) * target_edge
+        )
+        mesh = _flip_edges_toward_degree_six(mesh)
+        mesh = _tangential_smooth(mesh, field)
+    # Final cleanup: three- and four-membered rings cannot exist in sp2
+    # carbon, and length-based collapse leaves them when their edges are of
+    # ordinary length. Flip afterwards to re-settle the degrees disturbed.
+    for _ in range(3):
+        cleaned = _remove_low_degree_vertices(mesh)
+        if cleaned[0].shape == mesh[0].shape:
+            break
+        mesh = _flip_edges_toward_degree_six(cleaned)
+        mesh = _tangential_smooth(mesh, field)
+    return mesh
+
+
+def degree_histogram(mesh: Mesh) -> dict[int, int]:
+    """``{vertex degree: count}`` -- the dual's ring-size distribution."""
+    nbrs = _adjacency(mesh[1])
+    return dict(sorted(Counter(len(ns) for ns in nbrs.values()).items()))

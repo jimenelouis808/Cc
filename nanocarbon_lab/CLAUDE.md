@@ -12,6 +12,8 @@ The framework must remain **scientifically valid**: physical bond lengths, corre
 nanocarbon_lab/
 ├── builders/      # 1D/2D/3D structure generators incl. nanocoils (ASE-compatible Atoms)
 │                  #   centerline.py: 3D path sweep (arc/S/helix/random) + strain budget
+│                  #   implicit.py + remesh.py + junction.py: L/T/Y/X junctions and
+│                  #   schwarzites, via SDF -> marching cubes -> isotropic remesh -> dual
 │                  #   capped_cnt.py + fullerene_mesh.py: finite capped/defected
 │                  #   "elongated fullerene" CNTs for rendering (see below)
 ├── dopants/       # substitutional dopants (N, B, S, P, co-doping)
@@ -90,6 +92,28 @@ shear a meandering tube apart.
 Tube **radius is quantised** by the lattice (`R = 5*freq*sqrt(3)*bond/2pi`),
 exactly as a real (n,m) tube's diameter is fixed by its indices. It is an
 output, not a free input; `target_radius` picks the nearest realisable freq.
+
+## Junctions and schwarzites (implicit route)
+
+`junction.py` starts from a signed-distance field rather than a seed
+polyhedron. The invariant to protect: **mesh vertex degree == carbon ring
+size**, so the isotropic remesher in `remesh.py` is not cosmetic — without
+it, marching cubes' degree-3 and degree-9 vertices become three-membered
+rings and nine-membered holes. `_remove_low_degree_vertices` exists
+specifically to kill degrees < 5.
+
+Two subtleties already fixed; do not reintroduce:
+1. **Edge collapse needs locking.** Adjacency is cached per pass, so after
+   a collapse it is stale nearby; validating later collapses against it
+   silently admits ones that tear the surface (this produced meshes with
+   tens of boundary edges that happened to heal later).
+2. **Fields must share units before combining.** The trigonometric
+   schwarzite field is unitless; intersecting it with a ball's Å-valued
+   SDF did nothing until `normalize_to_distance` was applied.
+
+The Euler check is **genus-derived** (`deficit == 6 * chi`), never the
+tube builder's hardcoded 12 — a schwarzite legitimately has a strongly
+negative deficit.
 
 ## Scientific guardrails
 - Carbon bond length: default 1.42 Å (sp2). Accept anything in `[1.20, 1.80]` Å as bonded; anything in `(0, 0.9]` Å is a hard error.
