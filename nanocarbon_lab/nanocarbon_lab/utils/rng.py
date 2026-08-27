@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 
-def make_rng(seed: Optional[int] = None) -> np.random.Generator:
+def make_rng(seed: int | None = None) -> np.random.Generator:
     """Build a NumPy random generator with an explicit, reproducible seed.
 
     Parameters

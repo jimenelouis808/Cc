@@ -15,12 +15,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
 from ase import Atoms
 
 
-def write_xyz(atoms: Atoms, path: str | Path, comment: Optional[str] = None) -> Path:
+def write_xyz(atoms: Atoms, path: str | Path, comment: str | None = None) -> Path:
     """Write a plain (non-extended) XYZ file.
 
     Parameters

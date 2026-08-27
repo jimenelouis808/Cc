@@ -148,25 +148,53 @@ class TestJunctions:
 
 
 class TestSchwarzites:
+    # Genus of one period of each triply periodic minimal surface. These are
+    # the textbook values, and getting them out of the mesh is the check that
+    # the periodic weld really closed the cell on the 3-torus rather than
+    # leaving a torn slab.
+    EXPECTED_GENUS = {"primitive": 3, "gyroid": 5, "diamond": 9}
+
     @pytest.mark.parametrize("kind", ["primitive", "gyroid"])
-    def test_schwarzite_has_handles_and_matching_ring_budget(self, kind):
-        atoms = build_schwarzite(kind, cell=24.0, grid_resolution=64)
+    def test_unit_cell_has_the_textbook_genus_and_ring_budget(self, kind):
+        atoms = build_schwarzite(kind, cell=26.0)
         info = atoms.info
-        # A sponge has handles; that is the whole point of a schwarzite.
-        assert info["genus"] >= 1
+        assert info["genus"] == self.EXPECTED_GENUS[kind]
         assert info["euler"] == 2 - 2 * info["genus"]
         assert _deficit(info["ring_counts"]) == 6 * info["euler"]
 
+    @pytest.mark.parametrize("kind", ["primitive", "gyroid"])
+    def test_cell_is_periodic(self, kind):
+        atoms = build_schwarzite(kind, cell=26.0)
+        assert all(atoms.get_pbc())
+        length = float(atoms.cell[0][0])
+        assert length > 0
+        assert np.allclose(np.array(atoms.cell), np.eye(3) * length)
+        # Atoms live inside the cell, so the network tiles by translation.
+        positions = atoms.get_positions()
+        assert positions.min() >= -1e-6
+        assert positions.max() <= length + 1e-6
+
     def test_negative_curvature_favours_heptagons(self):
-        atoms = build_schwarzite("primitive", cell=24.0, grid_resolution=64)
-        counts = atoms.info["ring_counts"]
+        counts = build_schwarzite("primitive", cell=26.0).info["ring_counts"]
         # Opposite of a fullerene: saddles everywhere, so rings larger than
         # six must outnumber the pentagons.
-        large = counts.get(7, 0) + counts.get(8, 0)
-        assert large > counts.get(5, 0)
+        assert counts.get(7, 0) + counts.get(8, 0) > counts.get(5, 0)
 
-    def test_geometry_is_physical(self):
-        atoms = build_schwarzite("primitive", cell=24.0, grid_resolution=64)
+    def test_geometry_is_physical_across_the_seam(self):
+        atoms = build_schwarzite("primitive", cell=26.0)
         g = atoms.info["geometry"]
+        # Measured minimum-image: without that a bond wrapping the cell would
+        # read as a ~26 Å "bond" and this would fail loudly.
         assert g["n_close_contacts"] == 0
-        assert 1.20 < g["bond_min"] <= g["bond_max"] < 1.65
+        assert 1.20 < g["bond_min"] <= g["bond_max"] < 1.70
+        assert g["bond_mean"] == pytest.approx(1.42, abs=0.02)
+
+    def test_cell_too_small_for_the_surface_is_rejected(self):
+        # Schwarz D packs nine handles into the cell, so its necks pinch
+        # first; the builder should say so rather than emit a torn network.
+        with pytest.raises(ValueError, match="too small"):
+            build_schwarzite("diamond", cell=24.0)
+
+    def test_nonpositive_cell_rejected(self):
+        with pytest.raises(ValueError):
+            build_schwarzite("primitive", cell=0.0)

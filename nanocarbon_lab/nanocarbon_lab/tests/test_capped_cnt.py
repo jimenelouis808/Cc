@@ -419,3 +419,66 @@ class TestCentrelineShapes:
                 n_body_rings=10, freq=2, shape="random",
                 waviness=1.0, max_strain=0.30, seed=1,
             )
+
+
+class TestHelixDimensions:
+    """A helix given real dimensions must actually have them.
+
+    The other shapes are qualitative and get trimmed to fit the strain
+    budget, but a coil radius and pitch in Å are a specification: honouring
+    them means sizing the *tube* to the coil's arc length rather than
+    rescaling the coil onto whatever tube was asked for.
+    """
+
+    def test_arc_length_and_curvature_match_the_closed_forms(self):
+        from nanocarbon_lab.builders import centerline as cl
+
+        # One turn of radius R with zero pitch is just a circle.
+        assert cl.helix_arc_length(10.0, 1e-9, 1.0) == pytest.approx(
+            2 * np.pi * 10.0, rel=1e-6
+        )
+        # ...whose curvature is 1/R.
+        assert cl.helix_curvature(10.0, 1e-9) == pytest.approx(0.1, rel=1e-6)
+        # Pitch stretches the helix, so it curves less.
+        assert cl.helix_curvature(10.0, 40.0) < cl.helix_curvature(10.0, 5.0)
+
+    def test_tube_is_sized_to_the_coil(self):
+        wide = build_capped_cnt(
+            shape="helix", helix_radius=80.0, helix_pitch=30.0,
+            helix_turns=1.0, freq=2,
+        )
+        # Two turns of the same coil need twice the tube.
+        longer = build_capped_cnt(
+            shape="helix", helix_radius=80.0, helix_pitch=30.0,
+            helix_turns=2.0, freq=2,
+        )
+        assert len(longer) > 1.8 * len(wide)
+        assert wide.info["helix_radius"] == 80.0
+        assert wide.info["helix_pitch"] == 30.0
+
+    def test_wide_coil_is_physical(self):
+        atoms = build_capped_cnt(
+            shape="helix", helix_radius=80.0, helix_pitch=30.0,
+            helix_turns=1.0, freq=2,
+        )
+        g = atoms.info["geometry"]
+        assert g["n_close_contacts"] == 0
+        assert 1.30 < g["bond_min"] <= g["bond_max"] < 1.55
+        assert atoms.info["path_strain"] < 0.08
+
+    def test_tight_coil_warns_instead_of_pretending(self):
+        # r_tube/R here is far past the sp2 limit; real carbon nanocoils have
+        # coil radii of hundreds of Å for exactly this reason.
+        with pytest.warns(UserWarning, match="strains the outer wall"):
+            build_capped_cnt(
+                shape="helix", helix_radius=18.0, helix_pitch=10.0,
+                helix_turns=1.0, freq=3,
+            )
+
+    def test_helix_parameters_are_validated(self):
+        from nanocarbon_lab.builders import centerline as cl
+
+        with pytest.raises(ValueError):
+            cl.helix_control_points(-5.0, 10.0, 1.0)
+        with pytest.raises(ValueError):
+            cl.helix_control_points(10.0, 10.0, 0.0)

@@ -9,13 +9,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-import numpy as np
 from ase import Atoms
 from ase.build import graphene_nanoribbon
 
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_2D
 from ..utils.geometry import center_in_cell
-
 
 EdgeType = Literal["armchair", "zigzag"]
 

@@ -1,10 +1,10 @@
 """Substitutional dopants for nanocarbons (N, B, S, P, co-doping)."""
 
 from .substitutional import (
-    substitute_atoms,
-    dope_random,
-    dope_directed,
     codope,
+    dope_directed,
+    dope_random,
+    substitute_atoms,
 )
 
-__all__ = ["substitute_atoms", "dope_random", "dope_directed", "codope"]
+__all__ = ["codope", "dope_directed", "dope_random", "substitute_atoms"]

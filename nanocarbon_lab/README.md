@@ -458,7 +458,7 @@ topology left to follow from the geometry.
 
 ```bash
 nanocarbon junction --kind Y --tube-radius 6 --arm-length 22 --out out/yj
-nanocarbon schwarzite --kind gyroid --cell 26 --out out/gyroid
+nanocarbon schwarzite --kind gyroid --cell 32 --out out/gyroid
 ```
 
 ```python
@@ -468,8 +468,9 @@ y = build_junction("Y", tube_radius=6.0, arm_length=22.0, blend=4.0)
 print(y.info["ring_counts"])   # e.g. {5: 50, 6: 443, 7: 38}
 print(y.info["genus"])          # 0 — capped, so sphere-like
 
-g = build_schwarzite("gyroid", cell=26.0)
+g = build_schwarzite("gyroid", cell=32.0)
 print(g.info["genus"])          # 5 — five handles
+print(all(g.get_pbc()))          # True — a real periodic cell
 ```
 
 The pipeline is: signed-distance field → marching cubes → **isotropic
@@ -488,12 +489,72 @@ the remesher as degree-7 vertices. Euler's theorem then holds on its own:
 |---|---|---|---|
 | capped tube | 0 | +12 | 12 pentagons close the two caps |
 | L / T / Y / X junction | 0 | +12 | pentagons at arm tips, heptagons at the neck |
-| Schwarz P / gyroid fragment | 5 | −48 | saddles everywhere; heptagons outnumber pentagons |
-| Schwarz D fragment | 9 | −96 | more handles, more heptagons |
+| gyroid unit cell | 5 | −48 | saddles everywhere; heptagons outnumber pentagons |
+| Schwarz D unit cell | 9 | −96 | more handles, more heptagons |
 
 Because a schwarzite is *supposed* to break the "+12" rule, the builder
 reads the expected budget from the mesh's own Euler characteristic
 instead of assuming it, and refuses to emit a structure that disagrees.
+
+### Periodic schwarzite unit cells
+
+`build_schwarzite` returns a **genuinely periodic** `ase.Atoms`
+(`pbc=True`, cubic cell), not a clipped fragment: one period of the
+surface is meshed and then welded onto itself across the cell faces, so
+the tubes run out of one face and back in the opposite one exactly as in
+the published structures. Tile it 2x2x2 to see the network continue.
+
+Getting the textbook genus out of the mesh is the check that the weld
+really closed:
+
+| surface | genus | `sum(6 - ring_size)` | minimum cell |
+|---|---|---|---|
+| Schwarz P (`primitive`) | 3 | −24 | 20 Å |
+| gyroid | 5 | −48 | 22 Å |
+| Schwarz D (`diamond`) | 9 | −96 | 30 Å |
+
+The minimum cell scales with genus: a higher-genus surface packs more
+channels into the same volume, so its necks get finer, and below the
+listed size they are narrower than a carbon ring — the remesher pinches
+through them and the network tears. The builder rejects those outright
+rather than returning wreckage.
+
+Two things make the periodic path work, and both were found by measuring
+rather than assuming. **Everything downstream is minimum-image**: the
+remesher, the dual, the relaxation and the geometry report all measure
+across the cell seam, or a bond wrapping the boundary reads as a
+cell-length stretch. And the **cell is relaxed along with the atoms** —
+holding it fixed leaves the network unable to reach 1.42 Å bonds, which
+on the denser Schwarz D surface showed up as 6 Å "bonds" and 28 atomic
+overlaps.
+
+Whether a given neck is resolved also depends on how the surface falls
+between marching-cubes sample points, so an isolated `(cell, resolution)`
+pair can fail where both its neighbours are fine — the gyroid at 26 Å did
+exactly that. That is discretisation, not physics, so the builder retries
+with a shifted grid before giving up.
+
+### Coils with real dimensions
+
+`shape="helix"` takes `helix_radius` and `helix_pitch` in **Å**, and sizes
+the tube to the coil's arc length rather than squeezing the coil onto
+whatever tube you asked for — so the dimensions you request are the ones
+you get, and `n_body_rings` is derived.
+
+```python
+coil = build_capped_cnt(
+    shape="helix", helix_radius=60.0, helix_pitch=25.0,
+    helix_turns=1.5, freq=2,
+)   # 570 Å of tube, 6.6% wall strain
+```
+
+Because the other shapes are qualitative, they get trimmed to the strain
+budget; a coil given explicit dimensions is a specification, so it is
+honoured and the resulting strain is **reported and warned about**
+instead. That matters here: outer-wall strain is `r_tube / R_coil`, so a
+25 Å coil around a 4 Å tube is already at 16% and visibly degrades. Real
+carbon nanocoils have coil radii of hundreds of Å for exactly this
+reason.
 
 **One honest limitation.** The remesher settles into a local minimum
 containing scattered pentagon–heptagon pairs along the arms, beyond the
@@ -503,11 +564,6 @@ and angle statistics stay in range), and genuinely present in
 CVD-grown junctions, so the structures are realistic rather than
 idealised. Raising `remesh_iterations` barely helps (38 → 35 pairs for 5×
 the work); removing them properly would need curvature-aware remeshing.
-
-Schwarzite fragments are **finite** — clipped to a ball and closed, so
-they are real molecules rather than periodic cells. A genuinely periodic
-schwarzite would need matching boundaries on a torus, which this does not
-attempt.
 
 ### Other free/open tools for this pipeline
 

@@ -20,13 +20,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 from ase import Atoms
 
 from ..validation.checks import run_basic_checks
-
 
 Calculation = Literal["scf", "relax", "vc-relax", "nscf", "bands"]
 
@@ -48,8 +47,8 @@ class QESettings:
     conv_thr: float = 1.0e-8
     mixing_beta: float = 0.4
     pseudopotentials: dict[str, str] | None = None
-    assume_isolated: Optional[str] = None
-    dimensionality: Optional[int] = None
+    assume_isolated: str | None = None
+    dimensionality: int | None = None
 
 
 _DEFAULT_PSEUDOS: dict[str, str] = {
@@ -88,7 +87,7 @@ def _kpoint_mesh(atoms: Atoms, density: float) -> tuple[int, int, int]:
     return tuple(mesh)  # type: ignore[return-value]
 
 
-def infer_qe_settings(atoms: Atoms, base: Optional[QESettings] = None) -> QESettings:
+def infer_qe_settings(atoms: Atoms, base: QESettings | None = None) -> QESettings:
     """Build a :class:`QESettings` by introspecting the structure.
 
     Parameters
@@ -142,7 +141,7 @@ def _fmt_namelist(name: str, fields: dict[str, object]) -> str:
 def write_qe_input(
     atoms: Atoms,
     outdir: str | Path,
-    settings: Optional[QESettings] = None,
+    settings: QESettings | None = None,
     filename: str = "pw.in",
     force: bool = False,
 ) -> Path:

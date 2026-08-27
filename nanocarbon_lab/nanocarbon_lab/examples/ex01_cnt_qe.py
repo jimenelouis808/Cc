@@ -6,7 +6,7 @@ Run: ``python -m nanocarbon_lab.examples.ex01_cnt_qe``
 from pathlib import Path
 
 from nanocarbon_lab.builders import build_cnt
-from nanocarbon_lab.exports.qe import write_qe_input, QESettings
+from nanocarbon_lab.exports.qe import QESettings, write_qe_input
 from nanocarbon_lab.validation import run_basic_checks
 
 

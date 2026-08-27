@@ -21,7 +21,6 @@ from ase.build import nanotube
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D
 from ..utils.geometry import center_in_cell
 
-
 Chirality = Literal["armchair", "zigzag", "chiral"]
 
 

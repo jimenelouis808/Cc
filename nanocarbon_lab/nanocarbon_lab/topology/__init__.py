@@ -2,14 +2,14 @@
 
 from .graph import (
     build_bond_graph,
-    coordination_numbers,
     connected_components,
+    coordination_numbers,
     ring_statistics,
 )
 
 __all__ = [
     "build_bond_graph",
-    "coordination_numbers",
     "connected_components",
+    "coordination_numbers",
     "ring_statistics",
 ]

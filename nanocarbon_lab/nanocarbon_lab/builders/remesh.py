@@ -30,7 +30,7 @@ from collections import Counter, defaultdict
 
 import numpy as np
 
-from .fullerene_mesh import Mesh
+from .fullerene_mesh import Mesh, minimum_image
 from .implicit import Field, project_to_surface
 
 
@@ -64,6 +64,63 @@ def marching_cubes_mesh(field: Field, extent: float, resolution: int = 80) -> Me
     spacing = float(axis[1] - axis[0])
     verts, faces, _, _ = marching_cubes(values, level=0.0, spacing=(spacing,) * 3)
     return verts - extent, faces.astype(int)
+
+
+def periodic_marching_cubes_mesh(
+    field: Field, cell: float, resolution: int = 64
+) -> Mesh:
+    """Mesh one period of a triply periodic surface, closed on the 3-torus.
+
+    Sampling spans ``[0, cell]`` inclusive; because the field has period
+    ``cell``, the two end planes carry identical values and marching cubes
+    emits the same surface pattern on each. Wrapping every vertex into
+    ``[0, cell)`` and welding coincident ones therefore stitches the
+    ``x = cell`` face onto ``x = 0`` (and likewise in y, z), turning the
+    open slab into a closed manifold on the torus -- no caps, no clipping,
+    tubes simply continuing into the neighbouring cell.
+
+    That closure is what makes the result a *schwarzite unit cell* rather
+    than the sphere-clipped blob a naive extraction gives: the Euler
+    characteristics come out at the textbook values (Schwarz P genus 3,
+    gyroid genus 5, Schwarz D genus 9).
+
+    Parameters
+    ----------
+    field
+        Periodic scalar field with period ``cell``.
+    cell
+        Cubic cell length (Å).
+    resolution
+        Grid points per axis across one period. Too coarse and the weld
+        fails, leaving boundary edges -- the caller must check
+        :func:`mesh_statistics`.
+
+    Returns
+    -------
+    (vertices, triangles)
+        Vertices lie in ``[0, cell)``. Triangles may span the seam, so all
+        downstream geometry must use the minimum-image convention.
+    """
+    from skimage.measure import marching_cubes
+
+    axis = np.linspace(0.0, cell, resolution)
+    grid = np.stack(np.meshgrid(axis, axis, axis, indexing="ij"), axis=-1)
+    values = field(grid)
+    spacing = float(axis[1] - axis[0])
+    verts, faces, _, _ = marching_cubes(values, level=0.0, spacing=(spacing,) * 3)
+
+    wrapped = np.mod(verts, cell)
+    # Weld on a quantised key: matching vertices on opposite faces come
+    # from identical interpolations, so they agree to many digits.
+    keys = np.round(wrapped / spacing * 1e3).astype(np.int64)
+    _, first, inverse = np.unique(keys, axis=0, return_index=True, return_inverse=True)
+    new_faces = inverse[faces.astype(int)]
+    keep = (
+        (new_faces[:, 0] != new_faces[:, 1])
+        & (new_faces[:, 1] != new_faces[:, 2])
+        & (new_faces[:, 0] != new_faces[:, 2])
+    )
+    return wrapped[first], new_faces[keep]
 
 
 def mesh_statistics(mesh: Mesh) -> dict[str, int]:
@@ -113,7 +170,7 @@ def _adjacency(faces: np.ndarray) -> dict[int, set[int]]:
     return nbrs
 
 
-def _split_long_edges(mesh: Mesh, threshold: float) -> Mesh:
+def _split_long_edges(mesh: Mesh, threshold: float, box: float | None = None) -> Mesh:
     """Subdivide every edge longer than ``threshold`` (red-green style).
 
     Each face is rebuilt from whichever of its three edges were marked,
@@ -128,7 +185,9 @@ def _split_long_edges(mesh: Mesh, threshold: float) -> Mesh:
         for u, v in ((a, b), (b, c), (c, a)):
             key = (u, v) if u < v else (v, u)
             if key not in lengths:
-                lengths[key] = np.linalg.norm(verts[u] - verts[v])
+                lengths[key] = np.linalg.norm(
+                    minimum_image(verts[v] - verts[u], box)
+                )
     marked = {e for e, length in lengths.items() if length > threshold}
     if not marked:
         return mesh
@@ -138,7 +197,11 @@ def _split_long_edges(mesh: Mesh, threshold: float) -> Mesh:
     for edge in marked:
         u, v = edge
         midpoint[edge] = len(new_verts)
-        new_verts.append(0.5 * (verts[u] + verts[v]))
+        # Step from u along the *shortest* image of the edge, so a bond that
+        # wraps the cell splits at its true midpoint rather than halfway
+        # across the box.
+        mid = verts[u] + 0.5 * minimum_image(verts[v] - verts[u], box)
+        new_verts.append(mid if box is None else np.mod(mid, box))
 
     def mid(u: int, v: int) -> int | None:
         return midpoint.get((u, v) if u < v else (v, u))
@@ -174,7 +237,9 @@ def _split_long_edges(mesh: Mesh, threshold: float) -> Mesh:
     return np.array(new_verts, dtype=float), np.array(new_faces, dtype=int)
 
 
-def _collapse_short_edges(mesh: Mesh, threshold: float, max_length: float) -> Mesh:
+def _collapse_short_edges(
+    mesh: Mesh, threshold: float, max_length: float, box: float | None = None
+) -> Mesh:
     """Collapse edges shorter than ``threshold`` where it is safe to do so.
 
     Three guards keep the mesh manifold. The **link condition**: ``u`` and
@@ -214,16 +279,23 @@ def _collapse_short_edges(mesh: Mesh, threshold: float, max_length: float) -> Me
             continue
         if len(incident) != 2:
             continue
-        if np.linalg.norm(positions[u] - positions[v]) >= threshold:
+        if np.linalg.norm(
+            minimum_image(positions[v] - positions[u], box)
+        ) >= threshold:
             continue
         opposite = set()
         for face_index in incident:
             opposite |= {int(x) for x in faces[face_index]} - {u, v}
         if len(opposite) != 2 or nbrs[u] & nbrs[v] != opposite:
             continue  # link condition violated: collapse would pinch
-        target = 0.5 * (positions[u] + positions[v])
+        target = positions[u] + 0.5 * minimum_image(positions[v] - positions[u], box)
+        if box is not None:
+            target = np.mod(target, box)
         merged = (nbrs[u] | nbrs[v]) - {u, v}
-        if any(np.linalg.norm(target - positions[w]) > max_length for w in merged):
+        if any(
+            np.linalg.norm(minimum_image(positions[w] - target, box)) > max_length
+            for w in merged
+        ):
             continue
         positions[u] = target
         remap[v] = u
@@ -304,7 +376,9 @@ def _flip_edges_toward_degree_six(mesh: Mesh) -> Mesh:
     return verts, np.array(face_list, dtype=int)
 
 
-def _tangential_smooth(mesh: Mesh, field: Field, strength: float = 0.5) -> Mesh:
+def _tangential_smooth(
+    mesh: Mesh, field: Field, strength: float = 0.5, box: float | None = None
+) -> Mesh:
     """Laplacian-smooth vertices, then project them back onto the surface.
 
     Smoothing equalises triangle sizes but pulls vertices off the
@@ -317,9 +391,14 @@ def _tangential_smooth(mesh: Mesh, field: Field, strength: float = 0.5) -> Mesh:
     target = verts.copy()
     for index, neighbours in nbrs.items():
         if neighbours:
-            target[index] = verts[list(neighbours)].mean(axis=0)
+            # Average the neighbours' *offsets* under the minimum image, not
+            # their raw coordinates: across a periodic seam the raw mean lands
+            # in the middle of the cell instead of next door.
+            offsets = minimum_image(verts[list(neighbours)] - verts[index], box)
+            target[index] = verts[index] + offsets.mean(axis=0)
     moved = verts + strength * (target - verts)
-    return project_to_surface(field, moved), faces
+    projected = project_to_surface(field, moved)
+    return (projected if box is None else np.mod(projected, box)), faces
 
 
 def _remove_low_degree_vertices(mesh: Mesh, min_degree: int = 5) -> Mesh:
@@ -400,6 +479,7 @@ def isotropic_remesh(
     field: Field,
     target_edge: float,
     iterations: int = 25,
+    box: float | None = None,
 ) -> Mesh:
     """Remesh to near-uniform triangles of side ``target_edge``.
 
@@ -417,6 +497,11 @@ def isotropic_remesh(
         Desired triangle side. In the dual this sets the carbon ring
         size, so it should be roughly the ring-centre spacing you want --
         about ``sqrt(3) * bond`` (2.46 Å) for graphitic carbon.
+    box
+        Cubic cell length when remeshing a periodic surface; every distance
+        and midpoint is then taken under the minimum-image convention, so
+        the seam across the cell boundary is treated like any other part of
+        the mesh. ``None`` for a finite surface.
     iterations
         Full cycles. The mesh shrinks toward equilibrium from whatever
         marching cubes produced, so this needs to be generous: on a Y
@@ -431,12 +516,12 @@ def isotropic_remesh(
     if target_edge <= 0:
         raise ValueError("target_edge must be positive.")
     for _ in range(max(1, iterations)):
-        mesh = _split_long_edges(mesh, (4.0 / 3.0) * target_edge)
+        mesh = _split_long_edges(mesh, (4.0 / 3.0) * target_edge, box)
         mesh = _collapse_short_edges(
-            mesh, (4.0 / 5.0) * target_edge, (4.0 / 3.0) * target_edge
+            mesh, (4.0 / 5.0) * target_edge, (4.0 / 3.0) * target_edge, box
         )
         mesh = _flip_edges_toward_degree_six(mesh)
-        mesh = _tangential_smooth(mesh, field)
+        mesh = _tangential_smooth(mesh, field, box=box)
     # Final cleanup: three- and four-membered rings cannot exist in sp2
     # carbon, and length-based collapse leaves them when their edges are of
     # ordinary length. Flip afterwards to re-settle the degrees disturbed.
@@ -445,7 +530,7 @@ def isotropic_remesh(
         if cleaned[0].shape == mesh[0].shape:
             break
         mesh = _flip_edges_toward_degree_six(cleaned)
-        mesh = _tangential_smooth(mesh, field)
+        mesh = _tangential_smooth(mesh, field, box=box)
     return mesh
 
 

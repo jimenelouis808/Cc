@@ -8,8 +8,6 @@ carbons (graphene, large-diameter CNT walls).
 
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 from ase import Atoms
 
@@ -44,8 +42,8 @@ def _pick_random_bond(
 
 def stone_wales_defect(
     atoms: Atoms,
-    bond: Optional[tuple[int, int]] = None,
-    seed: Optional[int] = None,
+    bond: tuple[int, int] | None = None,
+    seed: int | None = None,
 ) -> Atoms:
     """Apply a single Stone-Wales rotation to a C-C bond.
 

@@ -13,7 +13,8 @@ Chemistry guardrails (warnings only, not errors):
 from __future__ import annotations
 
 import warnings
-from typing import Iterable, Literal, Optional, Sequence
+from collections.abc import Iterable, Sequence
+from typing import Literal
 
 import numpy as np
 from ase import Atoms
@@ -21,7 +22,6 @@ from ase import Atoms
 from ..utils.constants import DOPANT_ELEMENTS
 from ..utils.geometry import minimum_image_distances
 from ..utils.rng import make_rng
-
 
 Placement = Literal["random", "edges", "bulk", "cluster"]
 
@@ -99,7 +99,7 @@ def dope_random(
     atoms: Atoms,
     element: str,
     concentration: float,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> Atoms:
     """Randomly substitute a fraction of carbons with ``element``.
 
@@ -140,7 +140,7 @@ def dope_directed(
     element: str,
     where: Placement = "edges",
     count: int = 1,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     cluster_radius: float = 3.0,
 ) -> Atoms:
     """Place ``count`` dopants according to a structural criterion.
@@ -217,7 +217,7 @@ def dope_directed(
 def codope(
     atoms: Atoms,
     spec: Sequence[tuple[str, float]],
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> Atoms:
     """Multi-element doping with independent random placement per species.
 

@@ -6,7 +6,7 @@ The helpers here are deliberately backend-agnostic: they operate on
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 from ase import Atoms

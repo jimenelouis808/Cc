@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 from ase import Atoms
 
 from ..utils.geometry import minimum_image_distances
 from ..utils.rng import make_rng
-
 
 VacancyKind = Literal["mono", "di"]
 
@@ -18,7 +17,7 @@ def introduce_vacancies(
     atoms: Atoms,
     n_defects: int = 1,
     kind: VacancyKind = "mono",
-    seed: Optional[int] = None,
+    seed: int | None = None,
     min_separation: float = 4.0,
 ) -> Atoms:
     """Remove atoms to introduce ``n_defects`` vacancies.

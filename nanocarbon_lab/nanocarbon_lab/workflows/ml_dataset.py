@@ -18,16 +18,16 @@ from __future__ import annotations
 import csv
 import json
 from collections import Counter
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Iterable
 
 import numpy as np
 from ase import Atoms
 from ase.io import write as ase_write
 
 from ..topology.graph import (
-    coordination_numbers,
     connected_components,
+    coordination_numbers,
     ring_statistics,
 )
 from ..validation.checks import run_basic_checks

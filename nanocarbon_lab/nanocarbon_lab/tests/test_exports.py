@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from nanocarbon_lab.builders import build_cnt, build_graphene_supercell
-from nanocarbon_lab.exports.qe import write_qe_input, QESettings, infer_qe_settings
 from nanocarbon_lab.exports.lammps import write_lammps
+from nanocarbon_lab.exports.qe import QESettings, infer_qe_settings, write_qe_input
 
 
 class TestQEExport:

@@ -54,6 +54,19 @@ import numpy as np
 Mesh = tuple[np.ndarray, np.ndarray]  # (vertices [V,3], triangles [F,3] int)
 
 
+def minimum_image(delta: np.ndarray, box: float | None) -> np.ndarray:
+    """Wrap displacement vectors into the shortest periodic image.
+
+    With ``box=None`` this is the identity, so every caller can be written
+    once and used for both finite and periodic structures. For a periodic
+    cell it maps each component into ``[-box/2, box/2)``, which is what
+    makes a bond across the cell seam measure ~1.42 Å instead of ~box.
+    """
+    if box is None:
+        return delta
+    return delta - box * np.round(delta / box)
+
+
 # --------------------------------------------------------------------------
 # Seed polyhedron: two pentagonal poles + a stack of pentagonal-antiprism
 # rings. Subdividing and taking the dual of this seed always yields exactly
@@ -324,6 +337,7 @@ def contract_edge(mesh: Mesh, u: int, v: int) -> tuple[Mesh, dict[int, int]]:
 
 def dual_honeycomb(
     mesh: Mesh,
+    box: float | None = None,
 ) -> tuple[np.ndarray, set[tuple[int, int]], list[list[int]]]:
     """Take the planar/spherical dual of a triangulated mesh: the honeycomb.
 
@@ -337,6 +351,9 @@ def dual_honeycomb(
 
     Parameters
     ----------
+    box
+        Cubic cell length for a periodic mesh, else ``None``. Face
+        centroids are then computed under the minimum-image convention.
     mesh
         ``(vertices, triangles)`` -- must be a closed, manifold,
         triangulated mesh (e.g. from :func:`seed_capsule_mesh` +
@@ -357,7 +374,16 @@ def dual_honeycomb(
         for v in f:
             vert_faces[int(v)].append(fi)
 
-    face_centers = verts[faces].mean(axis=1)
+    if box is None:
+        face_centers = verts[faces].mean(axis=1)
+    else:
+        # Average the two other corners as offsets from the first, or a
+        # triangle straddling the cell seam would place its atom in the
+        # middle of the box rather than on the surface.
+        anchor = verts[faces[:, 0]]
+        off_b = minimum_image(verts[faces[:, 1]] - anchor, box)
+        off_c = minimum_image(verts[faces[:, 2]] - anchor, box)
+        face_centers = np.mod(anchor + (off_b + off_c) / 3.0, box)
 
     def order_ring(incident: list[int]) -> list[int]:
         face_verts = {fi: set(int(x) for x in faces[fi]) for fi in incident}
@@ -597,6 +623,7 @@ def _vff_energy_gradient(
     anchors: np.ndarray | None,
     anchor_targets: np.ndarray | None,
     k_anchor: float,
+    box: float | None = None,
 ) -> tuple[float, np.ndarray]:
     """Energy and analytic gradient of the sp2 valence force field.
 
@@ -614,7 +641,7 @@ def _vff_energy_gradient(
 
     # --- bond stretching
     i, j = bond_arr[:, 0], bond_arr[:, 1]
-    dvec = pos[j] - pos[i]
+    dvec = minimum_image(pos[j] - pos[i], box)
     r = np.linalg.norm(dvec, axis=1)
     r = np.where(r < 1e-9, 1e-9, r)
     dr = r - r0
@@ -625,8 +652,8 @@ def _vff_energy_gradient(
 
     # --- angle bending (true angle, not a 1-3 distance proxy)
     ia, ja, ka = angle_arr[:, 0], angle_arr[:, 1], angle_arr[:, 2]
-    u = pos[ia] - pos[ja]
-    v = pos[ka] - pos[ja]
+    u = minimum_image(pos[ia] - pos[ja], box)
+    v = minimum_image(pos[ka] - pos[ja], box)
     lu = np.linalg.norm(u, axis=1)
     lv = np.linalg.norm(v, axis=1)
     lu = np.where(lu < 1e-9, 1e-9, lu)
@@ -647,7 +674,7 @@ def _vff_energy_gradient(
     # --- short-range non-bonded repulsion (1-2 and 1-3 pairs excluded)
     if len(repel_arr):
         p, q = repel_arr[:, 0], repel_arr[:, 1]
-        dd = pos[q] - pos[p]
+        dd = minimum_image(pos[q] - pos[p], box)
         rr = np.linalg.norm(dd, axis=1)
         rr = np.where(rr < 1e-9, 1e-9, rr)
         mask = rr < repel_cutoff
@@ -660,7 +687,7 @@ def _vff_energy_gradient(
 
     # --- positional restraints (used to hold an imposed bend in place)
     if anchors is not None and len(anchors):
-        delta = pos[anchors] - anchor_targets
+        delta = minimum_image(pos[anchors] - anchor_targets, box)
         energy += 0.5 * k_anchor * float(np.sum(delta**2))
         grad[anchors] += k_anchor * delta
 
@@ -679,6 +706,7 @@ def relax_shell(
     anchors: np.ndarray | None = None,
     anchor_targets: np.ndarray | None = None,
     k_anchor: float = 5.0,
+    box: float | None = None,
     outer_cycles: int = 3,
     max_iterations: int = 3000,
     steps: int | None = None,
@@ -723,6 +751,12 @@ def relax_shell(
     repel_cutoff
         Non-bonded pairs closer than this (Å) repel. Kept below the ideal
         1-3 distance (2.46 Å) so it never fights the angle term.
+    box
+        Cubic cell length for a periodic structure. Every bond, angle and
+        non-bonded vector is then taken under the minimum-image
+        convention, and the neighbour search wraps too -- without this a
+        bond across the cell seam reads as a box-length stretch and the
+        optimiser tears the network apart trying to shorten it.
     anchors, anchor_targets, k_anchor
         Optional harmonic restraints pinning ``positions[anchors]`` near
         ``anchor_targets`` -- used to hold an imposed bend while the rest
@@ -754,9 +788,13 @@ def relax_shell(
 
     x = positions.ravel().astype(float).copy()
     for _ in range(max(1, outer_cycles)):
-        candidates = cKDTree(x.reshape(n_atoms, 3)).query_pairs(
-            r=repel_cutoff, output_type="ndarray"
-        )
+        search_pos = x.reshape(n_atoms, 3)
+        if box is None:
+            tree = cKDTree(search_pos)
+        else:
+            # cKDTree's boxsize needs coordinates inside [0, box).
+            tree = cKDTree(np.mod(search_pos, box), boxsize=box)
+        candidates = tree.query_pairs(r=repel_cutoff, output_type="ndarray")
         if len(candidates):
             keep = [
                 (int(a), int(b)) not in excluded for a, b in candidates
@@ -771,7 +809,7 @@ def relax_shell(
             args=(
                 bond_arr, angle_arr, repel_arr, n_atoms, equilibrium, theta0,
                 k_bond, k_angle, k_repel, repel_cutoff,
-                anchors, anchor_targets, k_anchor,
+                anchors, anchor_targets, k_anchor, box,
             ),
             jac=True,
             method="L-BFGS-B",

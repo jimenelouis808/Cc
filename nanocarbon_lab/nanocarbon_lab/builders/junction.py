@@ -39,6 +39,20 @@ from . import implicit as im
 from . import remesh as rm
 from .capped_cnt import geometry_report
 
+# Marching-cubes grids cost resolution**3 samples; beyond this the memory
+# and time stop being worth the extra detail for these shapes.
+MAX_GRID_RESOLUTION = 170
+
+# Alternations of (relax atoms, rescale cell) for periodic structures.
+CELL_RELAX_CYCLES = 6
+
+# Smallest cell each surface can be tiled with at graphitic ring size.
+# The limit scales with genus, because a higher-genus surface packs more
+# channels into the same volume and its necks get correspondingly finer:
+# Schwarz D (genus 9) tears at 24 Å where Schwarz P (genus 3) is fine.
+# Measured by sweeping the cell and checking bond/contact statistics.
+MIN_SCHWARZITE_CELL = {"primitive": 20.0, "gyroid": 22.0, "diamond": 30.0}
+
 
 def build_junction(
     kind: im.JunctionKind = "Y",
@@ -71,8 +85,11 @@ def build_junction(
     bond
         Target C-C bond length (Å).
     grid_resolution
-        Marching-cubes grid points per axis. Only needs to capture the
-        shape -- the remesher sets the final ring size.
+        *Minimum* marching-cubes grid points per axis. The actual
+        resolution scales with the bounding box so voxels stay near a
+        quarter of the tube radius, then is capped at
+        :data:`MAX_GRID_RESOLUTION`; the remesher sets the final ring size
+        regardless.
     remesh_iterations
         Isotropic remeshing cycles; see
         :func:`nanocarbon_lab.builders.remesh.isotropic_remesh`.
@@ -98,7 +115,15 @@ def build_junction(
     field, extent = im.junction_field(
         kind, tube_radius=tube_radius, arm_length=arm_length, blend=blend
     )
-    mesh = rm.marching_cubes_mesh(field, extent, resolution=grid_resolution)
+    # Grid resolution has to track the box, not stay fixed: `grid_resolution`
+    # points spread over a longer-armed junction give fatter voxels, and once
+    # a voxel approaches the tube radius marching cubes starts faceting the
+    # arms into prisms. Keep the voxel near a target size instead, capped so
+    # memory stays bounded (cost is resolution**3).
+    voxel_target = min(1.4, 0.25 * tube_radius)
+    needed = int(np.ceil(2.0 * extent / voxel_target))
+    resolution = int(np.clip(needed, grid_resolution, MAX_GRID_RESOLUTION))
+    mesh = rm.marching_cubes_mesh(field, extent, resolution=resolution)
     # Ring centres in a honeycomb sit sqrt(3)*bond apart, so that is the
     # triangle side that makes the dual come out at the right scale.
     mesh = rm.isotropic_remesh(
@@ -122,24 +147,33 @@ def build_junction(
 
 def build_schwarzite(
     kind: im.SchwarziteKind = "primitive",
-    cell: float = 30.0,
-    clip_radius: float | None = None,
+    cell: float = 32.0,
     thickness: float = 0.0,
     bond: float = CC_BOND,
-    grid_resolution: int = 80,
+    grid_resolution: int = 64,
     remesh_iterations: int = 25,
     relax_iterations: int = 3000,
-    vacuum: float = DEFAULT_VACUUM_1D,
 ) -> Atoms:
-    """Build a finite fragment of a schwarzite (negative-curvature carbon).
+    """Build a **periodic** schwarzite unit cell (negative-curvature carbon).
 
-    A triply periodic minimal surface -- Schwarz P, Schwarz D or the
-    gyroid -- is clipped to a ball so the result is a closed molecule
-    rather than an infinite sheet. The surface is saddle-shaped
-    everywhere, so the network is dominated by **heptagons and octagons**
-    instead of the pentagons that close a fullerene, and its Euler
-    characteristic is strongly negative: a fragment with ``g`` handles
-    obeys ``sum(6 - ring_size) = 12 * (1 - g)``.
+    One period of a triply periodic minimal surface -- Schwarz P, Schwarz D
+    or the gyroid -- meshed and closed on the 3-torus, so the tubes run out
+    of one face and back in the opposite one exactly as they do in the
+    published structures. The returned :class:`ase.Atoms` is genuinely
+    periodic (``pbc=True`` with a cubic cell), not a finite fragment.
+
+    The surface saddles everywhere, so the network is dominated by
+    **heptagons and octagons** rather than the pentagons that close a
+    fullerene, and the Euler characteristic is strongly negative. The
+    genus is fixed by the surface family, and the ring budget follows:
+
+    ========== ====== ==================
+    surface    genus  sum(6 - ring_size)
+    ========== ====== ==================
+    Schwarz P  3      -24
+    gyroid     5      -48
+    Schwarz D  9      -96
+    ========== ====== ==================
 
     Parameters
     ----------
@@ -147,55 +181,90 @@ def build_schwarzite(
         ``"primitive"`` (Schwarz P), ``"diamond"`` (Schwarz D) or
         ``"gyroid"``.
     cell
-        Period of the surface in Å. Smaller cells curve harder and need
-        more heptagons.
-    clip_radius
-        Radius of the clipping ball (Å). Defaults to ``0.75 * cell``,
-        which captures roughly one period. Larger fragments have more
-        handles and take longer to relax.
+        Cubic cell length in Å. Smaller cells curve harder, so they need
+        proportionally more heptagons and strain the bonds more; below
+        :data:`MIN_SCHWARZITE_CELL` for the chosen surface the channels get
+        narrower than a carbon ring and the build is rejected.
     thickness
         Level-set offset; nonzero thins or thickens the channels.
-    bond, grid_resolution, remesh_iterations, relax_iterations, vacuum
+    bond, remesh_iterations, relax_iterations
         As for :func:`build_junction`.
+    grid_resolution
+        Grid points across one period. Below roughly 64 the periodic weld
+        can fail; the builder checks and says so rather than emitting a
+        torn surface.
 
     Returns
     -------
     ase.Atoms
-        Finite schwarzite fragment, with ``genus`` and ``euler`` recorded
-        in ``atoms.info``.
+        Periodic unit cell, ``pbc=(True, True, True)``, with ``genus``,
+        ``euler`` and the usual ring/geometry metadata in ``atoms.info``.
 
-    Notes
-    -----
-    This is a **fragment**, not a periodic cell: it is clipped and closed
-    so it can be rendered and handed to a finite-molecule workflow. A
-    genuinely periodic schwarzite would need the mesh built on a torus
-    with matching boundaries, which this does not attempt.
+    Raises
+    ------
+    RuntimeError
+        If the periodic weld leaves boundary edges, i.e. the mesh is not
+        closed on the torus.
     """
-    base, _ = im.schwarzite_field(kind, cell=cell, thickness=thickness)
-    # The trigonometric field is unitless; the clip is in Å. Normalise
-    # before intersecting or the ball does not actually cut anything.
-    base = im.normalize_to_distance(base)
-    radius = clip_radius if clip_radius is not None else 0.75 * cell
-    field = im.intersect_with_ball(base, radius, softness=0.10 * radius)
-    extent = radius + 0.30 * cell
+    if cell <= 0:
+        raise ValueError("cell must be positive.")
+    minimum = MIN_SCHWARZITE_CELL.get(kind, 22.0)
+    if cell < minimum:
+        raise ValueError(
+            f"cell={cell:.1f} Å is too small for the {kind!r} surface, which "
+            f"needs at least {minimum:.0f} Å. Its channels would be narrower "
+            "than a carbon ring, so the remesher pinches through the necks "
+            "and the network comes out torn."
+        )
+    field, _ = im.schwarzite_field(kind, cell=cell, thickness=thickness)
 
-    mesh = rm.marching_cubes_mesh(field, extent, resolution=grid_resolution)
-    mesh = rm.isotropic_remesh(
-        mesh, field, target_edge=np.sqrt(3.0) * bond, iterations=remesh_iterations
-    )
-    return _finish(
-        mesh,
-        bond=bond,
-        relax_iterations=relax_iterations,
-        vacuum=vacuum,
-        info={
-            "structure_type": "schwarzite",
-            "schwarzite_kind": kind,
-            "cell": cell,
-            "clip_radius": radius,
-            "thickness": thickness,
-            "bond": bond,
-        },
+    # Whether the marching-cubes grid resolves a given neck depends on how
+    # the surface happens to fall between sample points, so a specific
+    # (cell, resolution) pair can tear where both its neighbours are fine --
+    # the gyroid at 26 Å did exactly that while 24 and 28 were clean. That
+    # is a discretisation artefact rather than a physical limit, so retry
+    # with a shifted grid before giving up.
+    failures: list[str] = []
+    for attempt, resolution in enumerate(
+        (grid_resolution, grid_resolution + 8, grid_resolution + 16)
+    ):
+        mesh = rm.periodic_marching_cubes_mesh(field, cell, resolution=resolution)
+        stats = rm.mesh_statistics(mesh)
+        if stats["boundary_edges"]:
+            failures.append(
+                f"resolution {resolution}: periodic weld left "
+                f"{stats['boundary_edges']} boundary edges"
+            )
+            continue
+        try:
+            return _finish(
+                rm.isotropic_remesh(
+                    mesh, field, target_edge=np.sqrt(3.0) * bond,
+                    iterations=remesh_iterations, box=cell,
+                ),
+                bond=bond,
+                relax_iterations=relax_iterations,
+                vacuum=0.0,
+                box=cell,
+                info={
+                    "structure_type": "schwarzite",
+                    "schwarzite_kind": kind,
+                    "cell": cell,
+                    "thickness": thickness,
+                    "bond": bond,
+                    "grid_resolution": resolution,
+                    "grid_retries": attempt,
+                },
+            )
+        except RuntimeError as exc:
+            failures.append(f"resolution {resolution}: {exc}")
+
+    raise RuntimeError(
+        f"Could not build a valid {kind!r} cell at cell={cell:.1f} Å after "
+        f"{len(failures)} grid resolutions:\n  "
+        + "\n  ".join(failures)
+        + "\nTry a larger cell, where the channels are wider relative to a "
+        "carbon ring."
     )
 
 
@@ -205,8 +274,13 @@ def _finish(
     relax_iterations: int,
     vacuum: float,
     info: dict,
+    box: float | None = None,
 ) -> Atoms:
-    """Shared tail: validate the mesh, take its dual, relax, package."""
+    """Shared tail: validate the mesh, take its dual, relax, package.
+
+    ``box`` set means the structure is a periodic cell: the dual, the
+    relaxation and the returned cell/pbc all switch to minimum-image.
+    """
     stats = rm.mesh_statistics(mesh)
     if stats["boundary_edges"]:
         raise RuntimeError(
@@ -215,7 +289,7 @@ def _finish(
             "the extent, or reduce arm_length / clip_radius."
         )
 
-    positions, bond_set, rings = fm.dual_honeycomb(mesh)
+    positions, bond_set, rings = fm.dual_honeycomb(mesh, box=box)
     bonds = sorted(bond_set)
     ring_counts = fm.ring_size_histogram(rings)
 
@@ -231,16 +305,67 @@ def _finish(
             "The dual is not a valid closed carbon network."
         )
 
-    lengths = np.array([np.linalg.norm(positions[a] - positions[b]) for a, b in bonds])
-    positions = positions * (bond / lengths.mean())
-    positions = fm.relax_shell(
-        positions, bond_set, equilibrium=bond, max_iterations=relax_iterations
-    )
+    lengths = np.array([
+        np.linalg.norm(fm.minimum_image(positions[b] - positions[a], box))
+        for a, b in bonds
+    ])
+    scale = bond / lengths.mean()
+    # Scaling a periodic cell must scale the cell with it, or the bonds
+    # come out right while the lattice no longer matches them.
+    positions = positions * scale
+    scaled_box = None if box is None else box * scale
 
-    atoms = Atoms(symbols=["C"] * len(positions), positions=positions, pbc=False)
-    extents = positions.max(axis=0) - positions.min(axis=0)
-    atoms.set_cell(np.diag(extents + vacuum))
-    center_in_cell(atoms, axes=(0, 1, 2))
+    if scaled_box is None:
+        positions = fm.relax_shell(
+            positions, bond_set, equilibrium=bond, max_iterations=relax_iterations
+        )
+    else:
+        # Variable-cell relaxation. With the cell held fixed the network
+        # cannot reach its natural bond length -- it is stretched or
+        # compressed by whatever the initial guess was off by, and on the
+        # denser surfaces that showed up as 6 Å "bonds" and torn geometry.
+        # So alternate: relax the atoms at the current cell, measure how far
+        # the mean bond is from equilibrium, and rescale cell and atoms
+        # together by that ratio.
+        for _ in range(CELL_RELAX_CYCLES):
+            positions = fm.relax_shell(
+                positions, bond_set, equilibrium=bond,
+                box=scaled_box, max_iterations=relax_iterations,
+            )
+            mean_bond = float(np.mean([
+                np.linalg.norm(fm.minimum_image(positions[b] - positions[a], scaled_box))
+                for a, b in bonds
+            ]))
+            if abs(mean_bond - bond) < 1e-3:
+                break
+            adjust = bond / mean_bond
+            positions = np.mod(positions * adjust, scaled_box * adjust)
+            scaled_box *= adjust
+
+    if scaled_box is None:
+        atoms = Atoms(symbols=["C"] * len(positions), positions=positions, pbc=False)
+        extents = positions.max(axis=0) - positions.min(axis=0)
+        atoms.set_cell(np.diag(extents + vacuum))
+        center_in_cell(atoms, axes=(0, 1, 2))
+    else:
+        positions = np.mod(positions, scaled_box)
+        atoms = Atoms(symbols=["C"] * len(positions), positions=positions, pbc=True)
+        atoms.set_cell(np.eye(3) * scaled_box)
+        info = {**info, "cell": float(scaled_box)}
+
+    quality = geometry_report(positions, bonds, box=scaled_box)
+    # Fail loudly rather than hand back a torn network. These thresholds are
+    # far outside anything strain can explain: a 1.8 Å "bond" or a sub-2 Å
+    # non-bonded contact means the surface pinched through itself during
+    # remeshing, not that the structure is merely strained.
+    if quality["bond_max"] > 1.80 or quality["n_close_contacts"] > 0:
+        raise RuntimeError(
+            "Relaxed network is not physically valid: bonds span "
+            f"{quality['bond_min']:.2f}-{quality['bond_max']:.2f} Å with "
+            f"{quality['n_close_contacts']} non-bonded contacts under 2 Å. "
+            "The surface most likely has features finer than a carbon ring -- "
+            "use a larger cell / arm_length, or a bigger tube_radius."
+        )
 
     atoms.info.update(info)
     atoms.info.update(
@@ -250,7 +375,7 @@ def _finish(
             "ring_counts": {int(k): int(v) for k, v in ring_counts.items()},
             "rings": [[int(a) for a in r] for r in rings],
             "bonds": [[int(a), int(b)] for a, b in bonds],
-            "geometry": geometry_report(positions, bonds),
+            "geometry": quality,
         }
     )
     return atoms

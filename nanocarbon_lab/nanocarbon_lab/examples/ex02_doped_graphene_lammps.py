@@ -7,7 +7,7 @@ from pathlib import Path
 from nanocarbon_lab.builders import build_graphene_supercell
 from nanocarbon_lab.defects import stone_wales_defect
 from nanocarbon_lab.dopants import dope_random
-from nanocarbon_lab.exports.lammps import write_lammps, LAMMPSSettings
+from nanocarbon_lab.exports.lammps import LAMMPSSettings, write_lammps
 
 
 def main() -> None:

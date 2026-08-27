@@ -9,19 +9,19 @@ file describing the whole dataset.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, asdict
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, Literal, Optional
+from typing import Literal
 
 from ase import Atoms
 
 from ..builders import build_cnt
-from ..dopants import dope_random
 from ..defects import introduce_vacancies
-from ..exports.qe import write_qe_input
+from ..dopants import dope_random
 from ..exports.lammps import write_lammps
+from ..exports.qe import write_qe_input
 from ..validation.checks import run_basic_checks
-
 
 ExportFormat = Literal["qe", "lammps", "both"]
 
@@ -127,7 +127,7 @@ def _serialise_info(info: dict) -> dict:
 def batch_cnt_sweep(
     chiralities: Iterable[tuple[int, int]],
     lengths: Iterable[float],
-    dopant: Optional[str] = None,
+    dopant: str | None = None,
     dopant_concentrations: Iterable[float] = (0.0,),
     vacancies: Iterable[int] = (0,),
     seed: int = 0,

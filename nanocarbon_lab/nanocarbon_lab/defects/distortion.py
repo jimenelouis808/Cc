@@ -6,9 +6,6 @@ unstable saddle points.
 
 from __future__ import annotations
 
-from typing import Optional
-
-import numpy as np
 from ase import Atoms
 
 from ..utils.rng import make_rng
@@ -17,7 +14,7 @@ from ..utils.rng import make_rng
 def apply_random_distortion(
     atoms: Atoms,
     amplitude: float = 0.05,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> Atoms:
     """Add isotropic Gaussian displacements to every atom.
 

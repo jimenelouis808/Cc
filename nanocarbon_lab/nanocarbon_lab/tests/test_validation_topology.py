@@ -7,15 +7,15 @@ import numpy as np
 from nanocarbon_lab.builders import build_cnt, build_graphene_supercell
 from nanocarbon_lab.topology import (
     build_bond_graph,
-    coordination_numbers,
     connected_components,
+    coordination_numbers,
     ring_statistics,
 )
 from nanocarbon_lab.validation import (
-    run_basic_checks,
+    check_cell_consistency,
     check_minimum_distances,
     check_vacuum,
-    check_cell_consistency,
+    run_basic_checks,
 )
 
 

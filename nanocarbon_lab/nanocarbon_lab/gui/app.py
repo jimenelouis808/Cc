@@ -200,6 +200,9 @@ class NanocarbonGUI:
         self.var_waviness = tk.DoubleVar(value=0.7)
         self.var_max_strain = tk.DoubleVar(value=0.08)
         self.var_shape_points = tk.IntVar(value=9)
+        self.var_coil_radius = tk.DoubleVar(value=60.0)
+        self.var_coil_pitch = tk.DoubleVar(value=25.0)
+        self.var_coil_turns = tk.DoubleVar(value=1.5)
 
         self.lbl_radius = ttk.Label(box, text="", foreground="#2e86ab")
 
@@ -237,6 +240,23 @@ class NanocarbonGUI:
                                     font=("TkDefaultFont", 8), wraplength=230,
                                     justify="left")
         self.lbl_strain.grid(row=7, column=0, columnspan=2, sticky="w")
+
+        # Coil dimensions, shown only for shape="helix": these are real Å,
+        # and they size the tube rather than being trimmed to fit it.
+        self.frame_coil = ttk.Frame(sbox)
+        self.frame_coil.grid(row=9, column=0, columnspan=2, sticky="ew")
+        self.frame_coil.columnconfigure(0, weight=1)
+        self._slider(self.frame_coil, "Coil radius (Å)", self.var_coil_radius,
+                     15.0, 200.0, 0, resolution=5.0, command=self._update_coil_hint)
+        self._slider(self.frame_coil, "Coil pitch (Å)", self.var_coil_pitch,
+                     5.0, 100.0, 2, resolution=5.0, command=self._update_coil_hint)
+        self._slider(self.frame_coil, "Turns", self.var_coil_turns,
+                     0.5, 5.0, 4, resolution=0.5, command=self._update_coil_hint)
+        self.lbl_coil = ttk.Label(self.frame_coil, text="", foreground="#777",
+                                  font=("TkDefaultFont", 8), wraplength=225,
+                                  justify="left")
+        self.lbl_coil.grid(row=6, column=0, columnspan=2, sticky="w")
+        self.var_shape.trace_add("write", lambda *_: self._on_shape_change())
         ttk.Label(sbox, text="Thinner + longer tubes curve more at the same "
                              "strain — lower the frequency and raise the rings.",
                   foreground="#777", font=("TkDefaultFont", 8), wraplength=230,
@@ -286,7 +306,7 @@ class NanocarbonGUI:
         self._slider(self.frame_junction, "Arm radius (Å)", self.var_j_radius,
                      3.0, 10.0, 1, resolution=0.5)
         self._slider(self.frame_junction, "Arm length (Å)", self.var_j_arm,
-                     12.0, 40.0, 3, resolution=1.0)
+                     12.0, 120.0, 3, resolution=2.0)
         self._slider(self.frame_junction, "Neck blend (Å)", self.var_j_blend,
                      1.0, 8.0, 5, resolution=0.5)
         ttk.Label(self.frame_junction,
@@ -298,22 +318,21 @@ class NanocarbonGUI:
         # --- schwarzite panel
         self.frame_schwarzite = ttk.LabelFrame(parent, text="Schwarzite", padding=8)
         self.var_s_kind = tk.StringVar(value="primitive")
-        self.var_s_cell = tk.DoubleVar(value=26.0)
-        self.var_s_clip = tk.DoubleVar(value=19.5)
+        self.var_s_cell = tk.DoubleVar(value=32.0)
         self.frame_schwarzite.columnconfigure(0, weight=1)
         ttk.Label(self.frame_schwarzite, text="Surface").grid(row=0, column=0, sticky="w")
         ttk.Combobox(self.frame_schwarzite, textvariable=self.var_s_kind,
                      values=SCHWARZITE_KINDS, state="readonly", width=10).grid(
             row=0, column=1, sticky="e", pady=(0, 6))
-        self._slider(self.frame_schwarzite, "Cell period (Å)", self.var_s_cell,
-                     16.0, 40.0, 1, resolution=1.0)
-        self._slider(self.frame_schwarzite, "Clip radius (Å)", self.var_s_clip,
-                     10.0, 35.0, 3, resolution=0.5)
+        self._slider(self.frame_schwarzite, "Cell length (Å)", self.var_s_cell,
+                     20.0, 50.0, 1, resolution=2.0)
         ttk.Label(self.frame_schwarzite,
-                  text="Negative curvature everywhere: heptagons outnumber "
-                       "pentagons and the fragment has handles (genus > 0).",
+                  text="A periodic unit cell: tubes run out of one face and "
+                       "back in the opposite one. Saddles everywhere, so "
+                       "heptagons outnumber pentagons. Minimum cell: 20 Å "
+                       "primitive, 22 gyroid, 30 diamond.",
                   foreground="#777", font=("TkDefaultFont", 8), wraplength=230,
-                  justify="left").grid(row=5, column=0, columnspan=2, sticky="w")
+                  justify="left").grid(row=3, column=0, columnspan=2, sticky="w")
 
         self.btn_build = ttk.Button(parent, text="Build structure", command=self.on_build)
         self.btn_build.pack(fill="x", pady=(12, 0), ipady=4)
@@ -321,6 +340,8 @@ class NanocarbonGUI:
         self.progress.pack(fill="x", pady=(6, 0))
         self._update_radius_hint()
         self._update_strain_hint()
+        self._update_coil_hint()
+        self._on_shape_change()
         self._on_mode_change()
 
     def _on_mode_change(self) -> None:
@@ -362,6 +383,32 @@ class NanocarbonGUI:
         # Seed the value label without firing `command`: callbacks touch
         # widgets that may not exist yet while the panel is still being built.
         on_move(notify=False)
+
+    def _on_shape_change(self) -> None:
+        """Coil dimensions only make sense for a helix."""
+        if self.var_shape.get() == "helix":
+            self.frame_coil.grid()
+        else:
+            self.frame_coil.grid_remove()
+
+    def _update_coil_hint(self) -> None:
+        from ..builders import centerline as cl
+
+        radius = float(self.var_coil_radius.get())
+        pitch = float(self.var_coil_pitch.get())
+        turns = float(self.var_coil_turns.get())
+        arc = cl.helix_arc_length(radius, pitch, turns)
+        tube_radius = fm.radius_for_freq(int(self.var_freq.get()),
+                                         float(self.var_bond.get()))
+        strain = tube_radius * cl.helix_curvature(radius, pitch)
+        colour = "#2e7d32" if strain <= 0.10 else (
+            "#b26a00" if strain <= cl.ARTISTIC_STRAIN_LIMIT else "#b3261e")
+        self.lbl_coil.config(
+            text=f"{arc:.0f} Å of tube, wall strain {strain:.0%}"
+                 + ("" if strain <= cl.ARTISTIC_STRAIN_LIMIT
+                    else " — real nanocoils use much wider coils"),
+            foreground=colour,
+        )
 
     def _update_strain_hint(self) -> None:
         value = float(self.var_max_strain.get())
@@ -458,7 +505,6 @@ class NanocarbonGUI:
             builder, kwargs = build_schwarzite, dict(
                 kind=self.var_s_kind.get(),
                 cell=float(self.var_s_cell.get()),
-                clip_radius=float(self.var_s_clip.get()),
             )
         else:
             builder = build_capped_cnt
@@ -468,6 +514,10 @@ class NanocarbonGUI:
             bond=float(self.var_bond.get()),
             bend_angle=float(self.var_bend.get()),
             shape=self.var_shape.get(),
+            helix_radius=(float(self.var_coil_radius.get())
+                          if self.var_shape.get() == "helix" else None),
+            helix_pitch=float(self.var_coil_pitch.get()),
+            helix_turns=float(self.var_coil_turns.get()),
             waviness=float(self.var_waviness.get()),
             max_strain=float(self.var_max_strain.get()),
             shape_points=int(self.var_shape_points.get()),
@@ -582,6 +632,8 @@ class NanocarbonGUI:
             lines.append(f"surface      {a.info['schwarzite_kind']:>9s}")
         if "genus" in a.info:
             lines.append(f"genus        {a.info['genus']:>6d}")
+        if all(a.get_pbc()):
+            lines.append(f"periodic     {a.cell[0][0]:>6.1f} Å cell")
         lines += [
             "",
             "rings",

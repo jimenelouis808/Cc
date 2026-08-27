@@ -6,11 +6,11 @@ import numpy as np
 import pytest
 
 from nanocarbon_lab.builders import (
+    build_carbon_foam,
     build_cnt,
     build_graphene,
     build_graphene_supercell,
     build_nanoribbon,
-    build_carbon_foam,
 )
 from nanocarbon_lab.utils.constants import CC_BOND, HARD_MIN_DISTANCE
 

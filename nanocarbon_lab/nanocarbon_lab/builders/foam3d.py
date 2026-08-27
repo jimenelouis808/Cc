@@ -14,8 +14,6 @@ dangling bonds. Downstream relaxation is assumed.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 from ase import Atoms
 
@@ -83,7 +81,7 @@ def build_carbon_foam(
     flake_radius: float = 4.0,
     min_distance: float = HARD_MIN_DISTANCE + 0.3,
     bond: float = CC_BOND,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     max_placement_tries: int = 2000,
 ) -> Atoms:
     """Build a 3D disordered carbon foam by random placement of graphene flakes.

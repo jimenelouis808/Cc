@@ -2,22 +2,22 @@
 
 from .checks import (
     ValidationReport,
-    check_minimum_distances,
+    check_cell_consistency,
     check_coordination,
     check_density,
     check_dimensionality,
+    check_minimum_distances,
     check_vacuum,
-    check_cell_consistency,
     run_basic_checks,
 )
 
 __all__ = [
     "ValidationReport",
-    "check_minimum_distances",
+    "check_cell_consistency",
     "check_coordination",
     "check_density",
     "check_dimensionality",
+    "check_minimum_distances",
     "check_vacuum",
-    "check_cell_consistency",
     "run_basic_checks",
 ]

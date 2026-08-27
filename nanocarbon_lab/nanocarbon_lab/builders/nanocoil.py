@@ -28,7 +28,6 @@ Parameters follow the experimental literature:
 from __future__ import annotations
 
 import math
-from typing import Optional
 
 import numpy as np
 from ase import Atoms
@@ -88,7 +87,7 @@ def _apply_stone_wales_to_outer_bonds(
     atoms: Atoms,
     density: float,
     coil_axis: int,
-    seed: Optional[int],
+    seed: int | None,
 ) -> Atoms:
     """Insert Stone-Wales 5-7-7-5 defects preferentially on the outer wall.
 
@@ -163,7 +162,7 @@ def build_nanocoil(
     bond: float = CC_BOND,
     vacuum: float = DEFAULT_VACUUM_1D,
     stone_wales_density: float = 0.0,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> Atoms:
     """Build a carbon nanocoil by winding a straight ``(n, m)`` CNT on a helix.
 

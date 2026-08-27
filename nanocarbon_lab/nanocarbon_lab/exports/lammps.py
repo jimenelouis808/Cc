@@ -13,13 +13,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from ase import Atoms
 
 from ..validation.checks import run_basic_checks
-
 
 _ATOMIC_MASSES: dict[str, float] = {
     "C": 12.011,
@@ -45,7 +43,7 @@ class LAMMPSSettings:
     npt_pressure_bar: float = 1.0
     npt_steps: int = 10000
     pair_style: str = "airebo 3.0 1 1"
-    pair_coeff: Optional[str] = None  # if None, auto-generated for C-only
+    pair_coeff: str | None = None  # if None, auto-generated for C-only
 
 
 def _cell_to_lammps_box(cell: np.ndarray) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
@@ -78,7 +76,7 @@ def _rotate_positions(positions: np.ndarray, basis: tuple[np.ndarray, np.ndarray
 def write_lammps(
     atoms: Atoms,
     outdir: str | Path,
-    settings: Optional[LAMMPSSettings] = None,
+    settings: LAMMPSSettings | None = None,
     data_filename: str = "data.lammps",
     input_filename: str = "in.lammps",
     force: bool = False,

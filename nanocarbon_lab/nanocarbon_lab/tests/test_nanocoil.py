@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 
 from nanocarbon_lab.builders import build_nanocoil
-from nanocarbon_lab.validation import run_basic_checks
 from nanocarbon_lab.topology import coordination_numbers
+from nanocarbon_lab.validation import run_basic_checks
 
 
 class TestNanocoilGeometry:

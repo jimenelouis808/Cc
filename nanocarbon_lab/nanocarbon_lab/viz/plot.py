@@ -7,13 +7,11 @@ For that, export to XYZ / CIF and use VESTA, OVITO or ASE's ``ase gui``.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from ase import Atoms
 
 from ..topology.graph import build_bond_graph
-
 
 _ELEMENT_COLORS = {
     "C": "#2b2b2b",
@@ -96,7 +94,7 @@ def save_structure_png(
     path: str | Path,
     figsize: tuple[float, float] = (6.0, 6.0),
     dpi: int = 150,
-    view: Optional[tuple[float, float]] = None,
+    view: tuple[float, float] | None = None,
 ) -> Path:
     """Save a PNG rendering of the structure.
 

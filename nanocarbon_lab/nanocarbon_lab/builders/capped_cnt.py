@@ -57,6 +57,11 @@ DefectKind = Literal["stone_wales", "divacancy"]
 # nanotube buckles into a localised kink rather than straining smoothly.
 MAX_PHYSICAL_BEND = 1.0
 
+# Axial length contributed by one body ring, as a multiple of the tube
+# radius. Measured across freq 2-4 and 10-20 rings, where the ratio is
+# 1.067-1.088; the small excess over 1 is the two end caps.
+RING_RISE = 1.07
+
 
 class DefectSpec(TypedDict, total=False):
     """One defect request for :func:`build_capped_cnt`.
@@ -157,9 +162,14 @@ def _bend_positions(positions: np.ndarray, angle: float) -> np.ndarray:
 
 
 def geometry_report(
-    positions: np.ndarray, bonds: list[tuple[int, int]]
+    positions: np.ndarray,
+    bonds: list[tuple[int, int]],
+    box: float | None = None,
 ) -> dict[str, float | int]:
     """Measure how close a structure is to ideal sp2 geometry.
+
+    ``box`` set makes every distance minimum-image, so a periodic cell is
+    measured across its seams rather than reporting box-length "bonds".
 
     Returns bond-length and bond-angle statistics plus the number of
     non-bonded contacts below 2.0 Å (there should be none: the shortest
@@ -173,7 +183,9 @@ def geometry_report(
     from scipy.spatial import cKDTree
 
     pos = np.asarray(positions, dtype=float)
-    lengths = np.array([np.linalg.norm(pos[a] - pos[b]) for a, b in bonds])
+    lengths = np.array([
+        np.linalg.norm(fm.minimum_image(pos[b] - pos[a], box)) for a, b in bonds
+    ])
 
     nbrs: dict[int, list[int]] = defaultdict(list)
     for a, b in bonds:
@@ -183,8 +195,8 @@ def geometry_report(
     for centre, ns in nbrs.items():
         for i in range(len(ns)):
             for j in range(i + 1, len(ns)):
-                v1 = pos[ns[i]] - pos[centre]
-                v2 = pos[ns[j]] - pos[centre]
+                v1 = fm.minimum_image(pos[ns[i]] - pos[centre], box)
+                v2 = fm.minimum_image(pos[ns[j]] - pos[centre], box)
                 cos = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
                 angles.append(np.degrees(np.arccos(np.clip(cos, -1.0, 1.0))))
     angles = np.array(angles)
@@ -193,7 +205,8 @@ def geometry_report(
     for a, b in bonds:
         bonded.add((a, b))
         bonded.add((b, a))
-    close = cKDTree(pos).query_pairs(r=2.0, output_type="ndarray")
+    tree = cKDTree(pos) if box is None else cKDTree(np.mod(pos, box), boxsize=box)
+    close = tree.query_pairs(r=2.0, output_type="ndarray")
     n_clashes = sum(
         1 for a, b in close if (int(a), int(b)) not in bonded
     ) if len(close) else 0
@@ -222,6 +235,8 @@ def build_capped_cnt(
     max_strain: float = cl.DEFAULT_MAX_STRAIN,
     shape_points: int = 9,
     helix_turns: float = 1.5,
+    helix_radius: float | None = None,
+    helix_pitch: float | None = None,
     defects: list[DefectSpec] | None = None,
     defect_separation: int = 3,
     vacuum: float = DEFAULT_VACUUM_1D,
@@ -318,6 +333,17 @@ def build_capped_cnt(
             "bending smoothly, which this model does not represent."
         )
 
+    # A helix given real dimensions sizes the *tube* rather than the other
+    # way round: the coil's arc length says how much tube is needed, so
+    # n_body_rings is derived instead of trusted. Without this the path
+    # would be rescaled to whatever tube the caller happened to ask for,
+    # and the requested coil radius and pitch would silently not hold.
+    explicit_helix = shape == "helix" and helix_radius is not None
+    if explicit_helix:
+        pitch = helix_pitch if helix_pitch is not None else 2.0 * helix_radius
+        arc = cl.helix_arc_length(helix_radius, pitch, helix_turns)
+        n_body_rings = max(4, int(round(arc / (RING_RISE * fm.radius_for_freq(freq, bond)))))
+
     rng = make_rng(seed)
     mesh = fm.subdivide_mesh(fm.seed_capsule_mesh(n_body_rings), freq)
 
@@ -364,23 +390,41 @@ def build_capped_cnt(
     if shape != "straight":
         if not 0.0 <= waviness <= 1.0:
             raise ValueError(f"waviness must be in [0, 1]; got {waviness}.")
-        control = cl.shape_control_points(
-            shape, rng, n_points=shape_points,
-            amplitude=waviness, turns=helix_turns,
-        )
-        # Trim the path to what the lattice can physically survive, then
-        # let the caller see what was actually achieved.
-        if max_strain > cl.ARTISTIC_STRAIN_LIMIT:
-            warnings.warn(
-                f"max_strain={max_strain:.0%} exceeds "
-                f"{cl.ARTISTIC_STRAIN_LIMIT:.0%}; bonds will stretch past the "
-                "sp2 range and the structure is no longer physically "
-                "meaningful (still fine for illustration).",
-                UserWarning, stacklevel=2,
+        if explicit_helix:
+            # Dimensions were asked for explicitly, so they are honoured and
+            # the resulting strain is reported rather than silently trimmed
+            # away -- shrinking the coil would give the caller a different
+            # structure than the one they specified.
+            control = cl.helix_control_points(helix_radius, pitch, helix_turns)
+            swept_strain = tube_radius * cl.helix_curvature(helix_radius, pitch)
+            if swept_strain > cl.ARTISTIC_STRAIN_LIMIT:
+                warnings.warn(
+                    f"A coil of radius {helix_radius:.0f} Å around a "
+                    f"{tube_radius:.1f} Å tube strains the outer wall by "
+                    f"{swept_strain:.0%}, past the {cl.ARTISTIC_STRAIN_LIMIT:.0%} "
+                    "sp2 limit. Real carbon nanocoils have coil radii of "
+                    "hundreds of Å for this reason; widen helix_radius or "
+                    "use a thinner tube (lower freq) for a physical result.",
+                    UserWarning, stacklevel=2,
+                )
+        else:
+            control = cl.shape_control_points(
+                shape, rng, n_points=shape_points,
+                amplitude=waviness, turns=helix_turns,
             )
-        control, swept_strain = cl.fit_to_strain_budget(
-            control, tube_length, tube_radius, max_strain=max_strain
-        )
+            # Trim the path to what the lattice can physically survive, then
+            # let the caller see what was actually achieved.
+            if max_strain > cl.ARTISTIC_STRAIN_LIMIT:
+                warnings.warn(
+                    f"max_strain={max_strain:.0%} exceeds "
+                    f"{cl.ARTISTIC_STRAIN_LIMIT:.0%}; bonds will stretch past the "
+                    "sp2 range and the structure is no longer physically "
+                    "meaningful (still fine for illustration).",
+                    UserWarning, stacklevel=2,
+                )
+            control, swept_strain = cl.fit_to_strain_budget(
+                control, tube_length, tube_radius, max_strain=max_strain
+            )
         anchors = np.arange(len(positions))
         positions = cl.sweep_along_path(positions, control)
         positions = fm.relax_shell(
@@ -423,6 +467,9 @@ def build_capped_cnt(
             "shape": shape,
             "waviness": waviness,
             "path_strain": swept_strain,
+            "helix_radius": helix_radius if explicit_helix else None,
+            "helix_pitch": pitch if explicit_helix else None,
+            "helix_turns": helix_turns if explicit_helix else None,
             "seed": seed,
             "radius": tube_radius,
             "radius_ideal": float(fm.radius_for_freq(freq, bond)),

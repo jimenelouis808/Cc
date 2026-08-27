@@ -8,9 +8,8 @@ import numpy as np
 import pytest
 
 from nanocarbon_lab.builders import (
-    build_graphene_supercell,
     build_cnt,
-    build_carbon_foam,
+    build_graphene_supercell,
 )
 from nanocarbon_lab.relax import harmonic_pre_relax, relax_with_calculator
 from nanocarbon_lab.workflows import (

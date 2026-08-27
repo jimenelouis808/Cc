@@ -18,15 +18,12 @@ Two entry points:
 
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 from ase import Atoms
-from ase.optimize import BFGS, LBFGS, FIRE
+from ase.optimize import BFGS, FIRE, LBFGS
 
 from ..topology.graph import build_bond_graph
 from ..utils.constants import CC_BOND
-
 
 _OPTIMIZERS = {"bfgs": BFGS, "lbfgs": LBFGS, "fire": FIRE}
 
@@ -37,7 +34,7 @@ def relax_with_calculator(
     algorithm: str = "lbfgs",
     fmax: float = 0.05,
     max_steps: int = 200,
-    logfile: Optional[str] = None,
+    logfile: str | None = None,
 ) -> Atoms:
     """Run an ASE optimizer until ``max(|F|) < fmax`` or ``max_steps`` hit.
 

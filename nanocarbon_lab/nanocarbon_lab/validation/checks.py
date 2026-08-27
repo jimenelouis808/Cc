@@ -16,18 +16,17 @@ unless explicitly forced.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 from ase import Atoms
 
+from ..topology.graph import coordination_numbers
 from ..utils.constants import (
     HARD_MIN_DISTANCE,
     MAX_CC_DISTANCE,
     MIN_CC_DISTANCE,
 )
 from ..utils.geometry import minimum_image_distances
-from ..topology.graph import coordination_numbers
 
 
 @dataclass
@@ -43,7 +42,7 @@ class ValidationReport:
         """True iff no error-level issue was recorded."""
         return len(self.errors) == 0
 
-    def merge(self, other: "ValidationReport") -> None:
+    def merge(self, other: ValidationReport) -> None:
         self.errors.extend(other.errors)
         self.warnings.extend(other.warnings)
         self.info.update(other.info)
@@ -208,7 +207,7 @@ def check_cell_consistency(atoms: Atoms) -> ValidationReport:
 def run_basic_checks(
     atoms: Atoms,
     allow_edge: bool = True,
-    min_vacuum: Optional[float] = None,
+    min_vacuum: float | None = None,
 ) -> ValidationReport:
     """Aggregate all basic checks.
 

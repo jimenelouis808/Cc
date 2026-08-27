@@ -9,7 +9,7 @@ Sub-commands:
 * ``cnt-cap``    — build a fully capped/defected CNT and export XYZ + a
   Blender-ready render bundle (see ``nanocarbon_lab/blender/``).
 * ``junction``   — build a capped L/T/Y/X nanotube junction.
-* ``schwarzite`` — build a finite negative-curvature schwarzite fragment.
+* ``schwarzite`` — build a periodic negative-curvature schwarzite unit cell.
 * ``validate``   — run validation on an existing structure file.
 """
 
@@ -156,6 +156,8 @@ def _report_structure(atoms, xyz_path, json_path):
     print(f"  n_atoms     = {len(atoms)}")
     if "genus" in atoms.info:
         print(f"  euler       = {atoms.info['euler']}   genus = {atoms.info['genus']}")
+    if all(atoms.get_pbc()):
+        print(f"  periodic    = yes, cubic cell {atoms.cell[0][0]:.2f} A")
     print(f"  ring_counts = {atoms.info['ring_counts']}")
     print(f"  bond length = {g['bond_min']:.3f} / {g['bond_mean']:.3f} / {g['bond_max']:.3f} A"
           f"  (std {g['bond_std']:.4f})")
@@ -175,7 +177,7 @@ def _cmd_junction(args):
 
 def _cmd_schwarzite(args):
     atoms = build_schwarzite(
-        kind=args.kind, cell=args.cell, clip_radius=args.clip_radius,
+        kind=args.kind, cell=args.cell,
         thickness=args.thickness, bond=args.bond, grid_resolution=args.grid,
         remesh_iterations=args.remesh_iterations,
     )
@@ -317,17 +319,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     sz = sub.add_parser(
         "schwarzite",
-        help="Build a finite negative-curvature schwarzite fragment.",
+        help="Build a periodic negative-curvature schwarzite unit cell.",
     )
     sz.add_argument("--kind", default="primitive",
                     choices=["primitive", "diamond", "gyroid"])
-    sz.add_argument("--cell", type=float, default=26.0, help="Surface period (Å).")
-    sz.add_argument("--clip-radius", type=float, default=None,
-                    help="Clipping ball radius (Å); default 0.75 x cell.")
+    sz.add_argument("--cell", type=float, default=32.0,
+                    help="Cubic unit-cell length (Å). Minimum depends on the "
+                         "surface: 20 (primitive), 22 (gyroid), 30 (diamond).")
     sz.add_argument("--thickness", type=float, default=0.0,
                     help="Level-set offset; thins or thickens the channels.")
     sz.add_argument("--bond", type=float, default=1.42)
-    sz.add_argument("--grid", type=int, default=80)
+    sz.add_argument("--grid", type=int, default=64,
+                    help="Grid points across one period; 64+ for a clean weld.")
     sz.add_argument("--remesh-iterations", type=int, default=25)
     sz.add_argument("--out", required=True, help="Output path without extension.")
     sz.set_defaults(func=_cmd_schwarzite)

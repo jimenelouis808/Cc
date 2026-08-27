@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from nanocarbon_lab.builders import build_graphene_supercell, build_cnt
-from nanocarbon_lab.dopants import dope_random, dope_directed, codope, substitute_atoms
+from nanocarbon_lab.builders import build_cnt, build_graphene_supercell
 from nanocarbon_lab.defects import (
+    apply_random_distortion,
     introduce_vacancies,
     stone_wales_defect,
-    apply_random_distortion,
 )
+from nanocarbon_lab.dopants import codope, dope_directed, dope_random, substitute_atoms
 
 
 class TestDopants:

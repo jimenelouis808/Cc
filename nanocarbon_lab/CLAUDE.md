@@ -111,6 +111,14 @@ Two subtleties already fixed; do not reintroduce:
    schwarzite field is unitless; intersecting it with a ball's Å-valued
    SDF did nothing until `normalize_to_distance` was applied.
 
+Periodic schwarzites add two requirements. Every geometric step —
+remesh, dual, relaxation, geometry report — must use `minimum_image`, or a
+bond across the cell seam reads as a cell-length stretch. And the **cell
+must be relaxed with the atoms** (`CELL_RELAX_CYCLES`): holding it fixed
+left Schwarz D with 6 Å bonds and 28 overlaps. `_finish` ends with a hard
+quality gate that raises rather than returning a torn network — thresholds
+are set far outside anything strain explains.
+
 The Euler check is **genus-derived** (`deficit == 6 * chi`), never the
 tube builder's hardcoded 12 — a schwarzite legitimately has a strongly
 negative deficit.

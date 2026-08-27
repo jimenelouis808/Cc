@@ -7,7 +7,7 @@ from functools import partial
 
 from nanocarbon_lab.builders import build_cnt, build_graphene_supercell
 from nanocarbon_lab.dopants import dope_random
-from nanocarbon_lab.workflows import BatchJob, write_dataset, batch_cnt_sweep
+from nanocarbon_lab.workflows import BatchJob, batch_cnt_sweep, write_dataset
 
 
 def test_single_job(tmp_path):

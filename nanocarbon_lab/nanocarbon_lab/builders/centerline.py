@@ -103,6 +103,57 @@ def random_control_points(
     )
 
 
+def helix_arc_length(coil_radius: float, pitch: float, turns: float) -> float:
+    """Length of tube consumed by a helix of this geometry, in Å.
+
+    One turn of a helix of radius ``R`` and pitch ``P`` has arc length
+    ``sqrt((2*pi*R)^2 + P^2)``. Knowing this is what lets the builder size
+    the tube to the coil the caller asked for, instead of stretching an
+    arbitrary tube onto it.
+    """
+    return float(turns * np.hypot(2.0 * np.pi * coil_radius, pitch))
+
+
+def helix_curvature(coil_radius: float, pitch: float) -> float:
+    """Curvature (1/Å) of a helix -- constant along its whole length.
+
+    ``kappa = R / (R^2 + c^2)`` with ``c = P / (2*pi)``. Multiplying by the
+    tube radius gives the outer-wall strain, which is what decides whether
+    a requested coil is physically survivable: a coil radius only a few
+    times the tube radius is severely strained however gently it is drawn.
+    """
+    c = pitch / (2.0 * np.pi)
+    return float(coil_radius / (coil_radius**2 + c**2))
+
+
+def helix_control_points(
+    coil_radius: float,
+    pitch: float,
+    turns: float,
+    n_points: int = 60,
+) -> np.ndarray:
+    """Control points for a helix in **absolute Å**.
+
+    Unlike the qualitative shapes, these are not unit-scaled: the caller
+    asked for a specific coil diameter and pitch, so the path is built at
+    that size and the *tube* is sized to match, rather than the path being
+    trimmed to fit the tube.
+    """
+    if coil_radius <= 0 or pitch <= 0 or turns <= 0:
+        raise ValueError("coil_radius, pitch and turns must all be positive.")
+    # Enough samples that the spline through them reproduces the helix.
+    n_points = max(12, int(n_points), int(round(turns * 16)))
+    angle = np.linspace(0.0, 2.0 * np.pi * turns, n_points)
+    return np.stack(
+        [
+            coil_radius * np.cos(angle),
+            coil_radius * np.sin(angle),
+            pitch * angle / (2.0 * np.pi),
+        ],
+        axis=1,
+    )
+
+
 def shape_control_points(
     shape: Shape,
     rng: np.random.Generator,
