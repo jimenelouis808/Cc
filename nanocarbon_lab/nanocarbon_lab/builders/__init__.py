@@ -4,17 +4,23 @@ from .capped_cnt import build_capped_cnt
 from .cnt import build_cnt
 from .foam3d import build_carbon_foam
 from .graphene import build_graphene, build_graphene_supercell
+from .assemblies import build_bundle, build_multiwall_cnt
 from .junction import build_junction, build_schwarzite
 from .nanocoil import build_nanocoil
 from .nanoribbon import build_nanoribbon
+from .swept import build_coil, build_swept_tube
 
 __all__ = [
     "build_capped_cnt",
     "build_carbon_foam",
     "build_cnt",
+    "build_coil",
+    "build_swept_tube",
     "build_graphene",
     "build_graphene_supercell",
+    "build_bundle",
     "build_junction",
+    "build_multiwall_cnt",
     "build_nanocoil",
     "build_nanoribbon",
     "build_schwarzite",

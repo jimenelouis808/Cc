@@ -237,6 +237,9 @@ def build_capped_cnt(
     helix_turns: float = 1.5,
     helix_radius: float | None = None,
     helix_pitch: float | None = None,
+    helix_handedness: int = 1,
+    helix_taper: float = 1.0,
+    roughness: float = 0.0,
     defects: list[DefectSpec] | None = None,
     defect_separation: int = 3,
     vacuum: float = DEFAULT_VACUUM_1D,
@@ -292,8 +295,17 @@ def build_capped_cnt(
         dual (see module docstring, step 3).
     relax_iterations
         L-BFGS iterations per relaxation cycle.
+    helix_handedness, helix_taper
+        Coil chirality (+1/-1) and the ratio of final to initial coil
+        radius (1.0 = cylindrical, otherwise a conical spring).
+    roughness
+        RMS out-of-plane corrugation in Å applied after relaxation, for a
+        CVD-grown rather than ideal wall. ``0`` (default) leaves the shell
+        perfectly relaxed; 0.1-0.3 Å reads as realistically grown. Ring
+        topology is unaffected -- see
+        :func:`nanocarbon_lab.builders.fullerene_mesh.apply_surface_roughness`.
     seed
-        RNG seed controlling defect site selection.
+        RNG seed controlling defect site selection and roughness.
 
     Returns
     -------
@@ -341,7 +353,7 @@ def build_capped_cnt(
     explicit_helix = shape == "helix" and helix_radius is not None
     if explicit_helix:
         pitch = helix_pitch if helix_pitch is not None else 2.0 * helix_radius
-        arc = cl.helix_arc_length(helix_radius, pitch, helix_turns)
+        arc = cl.helix_arc_length(helix_radius, pitch, helix_turns, taper=helix_taper)
         n_body_rings = max(4, int(round(arc / (RING_RISE * fm.radius_for_freq(freq, bond)))))
 
     rng = make_rng(seed)
@@ -395,11 +407,17 @@ def build_capped_cnt(
             # the resulting strain is reported rather than silently trimmed
             # away -- shrinking the coil would give the caller a different
             # structure than the one they specified.
-            control = cl.helix_control_points(helix_radius, pitch, helix_turns)
-            swept_strain = tube_radius * cl.helix_curvature(helix_radius, pitch)
+            control = cl.helix_control_points(
+                helix_radius, pitch, helix_turns,
+                handedness=helix_handedness, taper=helix_taper,
+            )
+            swept_strain = tube_radius * cl.helix_curvature(
+                helix_radius, pitch, taper=helix_taper
+            )
             if swept_strain > cl.ARTISTIC_STRAIN_LIMIT:
+                tight = helix_radius * min(1.0, helix_taper)
                 warnings.warn(
-                    f"A coil of radius {helix_radius:.0f} Å around a "
+                    f"A coil of radius {tight:.0f} Å around a "
                     f"{tube_radius:.1f} Å tube strains the outer wall by "
                     f"{swept_strain:.0%}, past the {cl.ARTISTIC_STRAIN_LIMIT:.0%} "
                     "sp2 limit. Real carbon nanocoils have coil radii of "
@@ -452,6 +470,11 @@ def build_capped_cnt(
             max_iterations=relax_iterations,
         )
 
+    if roughness > 0:
+        positions = fm.apply_surface_roughness(
+            positions, bond_set, roughness, rng, equilibrium=bond
+        )
+
     atoms = Atoms(symbols=["C"] * len(positions), positions=positions, pbc=False)
     extents = positions.max(axis=0) - positions.min(axis=0)
     atoms.set_cell(np.diag(extents + vacuum))
@@ -470,6 +493,9 @@ def build_capped_cnt(
             "helix_radius": helix_radius if explicit_helix else None,
             "helix_pitch": pitch if explicit_helix else None,
             "helix_turns": helix_turns if explicit_helix else None,
+            "helix_handedness": helix_handedness if explicit_helix else None,
+            "helix_taper": helix_taper if explicit_helix else None,
+            "roughness": roughness,
             "seed": seed,
             "radius": tube_radius,
             "radius_ideal": float(fm.radius_for_freq(freq, bond)),

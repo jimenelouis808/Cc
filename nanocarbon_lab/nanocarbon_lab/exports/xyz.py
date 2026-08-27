@@ -16,6 +16,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
+
 from ase import Atoms
 
 
@@ -50,7 +52,42 @@ def write_xyz(atoms: Atoms, path: str | Path, comment: str | None = None) -> Pat
     return path
 
 
-def write_render_bundle(atoms: Atoms, path: str | Path) -> tuple[Path, Path]:
+def write_cif(atoms: Atoms, path: str | Path) -> Path:
+    """Write a CIF, the lingua franca for periodic structures.
+
+    XYZ carries no cell, so a periodic schwarzite exported that way loses
+    exactly the thing that makes it periodic. CIF keeps the lattice, which
+    is what crystallography and most solid-state tools expect.
+
+    Non-periodic structures are still written (in a box large enough to
+    isolate them), but for those XYZ is usually the more convenient
+    format.
+
+    Parameters
+    ----------
+    atoms
+        Structure to write.
+    path
+        Output path; ``.cif`` is appended if missing.
+
+    Returns
+    -------
+    pathlib.Path
+        The path written to.
+    """
+    from ase.io import write as ase_write
+
+    path = Path(path)
+    if path.suffix.lower() != ".cif":
+        path = path.with_suffix(".cif")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ase_write(str(path), atoms, format="cif")
+    return path
+
+
+def write_render_bundle(
+    atoms: Atoms, path: str | Path, cif: bool | None = None
+) -> tuple[Path, Path]:
     """Write ``<path>.xyz`` plus a ``<path>.json`` sidecar for rendering.
 
     The JSON sidecar carries everything a renderer needs beyond raw
@@ -71,6 +108,10 @@ def write_render_bundle(atoms: Atoms, path: str | Path) -> tuple[Path, Path]:
     path
         Output path **without** extension; ``.xyz`` and ``.json`` are
         appended.
+    cif
+        Also write a ``.cif``. Defaults to ``True`` for periodic
+        structures, where XYZ alone would silently drop the lattice, and
+        ``False`` otherwise.
 
     Returns
     -------
@@ -78,6 +119,10 @@ def write_render_bundle(atoms: Atoms, path: str | Path) -> tuple[Path, Path]:
     """
     path = Path(path)
     xyz_path = write_xyz(atoms, path.with_suffix(".xyz"))
+    if cif is None:
+        cif = bool(all(atoms.get_pbc()))
+    if cif:
+        write_cif(atoms, path.with_suffix(".cif"))
 
     rings = atoms.info.get("rings", [])
     bonds = atoms.info.get("bonds", [])
@@ -89,6 +134,8 @@ def write_render_bundle(atoms: Atoms, path: str | Path) -> tuple[Path, Path]:
 
     bundle = {
         "n_atoms": n,
+        "periodic": bool(all(atoms.get_pbc())),
+        "cell": np.array(atoms.cell).tolist(),
         "bonds": bonds,
         "rings": rings,
         "ring_sizes_per_atom": ring_sizes_per_atom,

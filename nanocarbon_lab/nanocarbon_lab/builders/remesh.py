@@ -66,6 +66,75 @@ def marching_cubes_mesh(field: Field, extent: float, resolution: int = 80) -> Me
     return verts - extent, faces.astype(int)
 
 
+def marching_cubes_box(
+    field: Field,
+    lower: np.ndarray,
+    upper: np.ndarray,
+    spacing: float,
+    max_samples: int = 40_000_000,
+) -> Mesh:
+    """Extract a zero level set inside an arbitrary axis-aligned box.
+
+    :func:`marching_cubes_mesh` samples a *cube* centred on the origin,
+    which is right for a junction radiating from a centre but wasteful for
+    a long, flat object: a two-turn coil of 40 Å radius and 25 Å pitch fits
+    in a 92 x 92 x 60 Å box, and padding that to a cube spends over a third
+    of the grid on empty space. Since cost is the product of the three axis
+    counts, sampling the real box is a direct saving, and it is what makes
+    meshing a coil affordable at a voxel fine enough to resolve its wall.
+
+    Parameters
+    ----------
+    field
+        Scalar field; the surface is where it crosses zero.
+    lower, upper
+        Opposite corners of the sampling box (Å). Must clear the surface
+        entirely -- a surface touching a wall gives an open mesh, whose
+        dual is not a closed carbon network.
+    spacing
+        Target voxel edge (Å), applied to all three axes. The realised
+        spacing per axis differs slightly because each axis takes a whole
+        number of samples.
+    max_samples
+        Guard on total grid points. Exceeding it raises rather than
+        exhausting memory.
+
+    Returns
+    -------
+    (vertices, triangles)
+        Vertices in the same absolute coordinates as ``lower``/``upper``.
+
+    Raises
+    ------
+    ValueError
+        For a degenerate box, a non-positive spacing, or a grid that would
+        exceed ``max_samples``.
+    """
+    from skimage.measure import marching_cubes
+
+    lower = np.asarray(lower, dtype=float)
+    upper = np.asarray(upper, dtype=float)
+    if lower.shape != (3,) or upper.shape != (3,) or np.any(upper <= lower):
+        raise ValueError("lower/upper must be 3-vectors with upper > lower.")
+    if spacing <= 0:
+        raise ValueError("spacing must be positive.")
+
+    counts = np.maximum(4, np.ceil((upper - lower) / spacing).astype(int) + 1)
+    total = int(np.prod(counts, dtype=np.int64))
+    if total > max_samples:
+        raise ValueError(
+            f"Sampling {counts.tolist()} = {total:,} grid points exceeds the "
+            f"{max_samples:,} limit. Use a coarser spacing or a smaller shape."
+        )
+
+    axes = [np.linspace(lower[i], upper[i], counts[i]) for i in range(3)]
+    grid = np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1)
+    values = field(grid)
+    steps = tuple(float(a[1] - a[0]) for a in axes)
+    verts, faces, _, _ = marching_cubes(values, level=0.0, spacing=steps)
+    return verts + lower, faces.astype(int)
+
+
 def periodic_marching_cubes_mesh(
     field: Field, cell: float, resolution: int = 64
 ) -> Mesh:
@@ -377,7 +446,8 @@ def _flip_edges_toward_degree_six(mesh: Mesh) -> Mesh:
 
 
 def _tangential_smooth(
-    mesh: Mesh, field: Field, strength: float = 0.5, box: float | None = None
+    mesh: Mesh, field: Field, strength: float = 0.5, box: float | None = None,
+    max_step: float | None = None,
 ) -> Mesh:
     """Laplacian-smooth vertices, then project them back onto the surface.
 
@@ -397,7 +467,7 @@ def _tangential_smooth(
             offsets = minimum_image(verts[list(neighbours)] - verts[index], box)
             target[index] = verts[index] + offsets.mean(axis=0)
     moved = verts + strength * (target - verts)
-    projected = project_to_surface(field, moved)
+    projected = project_to_surface(field, moved, max_step=max_step)
     return (projected if box is None else np.mod(projected, box)), faces
 
 
@@ -480,6 +550,9 @@ def isotropic_remesh(
     target_edge: float,
     iterations: int = 25,
     box: float | None = None,
+    anneal_sweeps: int = 80,
+    anneal_temperature: float = 0.3,
+    rng: np.random.Generator | None = None,
 ) -> Mesh:
     """Remesh to near-uniform triangles of side ``target_edge``.
 
@@ -497,6 +570,10 @@ def isotropic_remesh(
         Desired triangle side. In the dual this sets the carbon ring
         size, so it should be roughly the ring-centre spacing you want --
         about ``sqrt(3) * bond`` (2.46 Å) for graphitic carbon.
+    anneal_sweeps, anneal_temperature, rng
+        Passed to :func:`anneal_edge_flips` after the main loop. Set
+        ``anneal_sweeps=0`` to keep the as-remeshed defect population,
+        which reads as a rougher, more CVD-like wall.
     box
         Cubic cell length when remeshing a periodic surface; every distance
         and midpoint is then taken under the minimum-image convention, so
@@ -515,13 +592,32 @@ def isotropic_remesh(
     """
     if target_edge <= 0:
         raise ValueError("target_edge must be positive.")
+    # A smoothing pass moves a vertex by at most half an edge, so a
+    # projection step of one edge length is already generous. Capping it
+    # there stops a vertex that drifted past the midline of a narrow gap
+    # from being projected onto the *facing* sheet of the surface -- see
+    # `project_to_surface`. That failure is silent (the mesh stays closed
+    # and keeps its genus) and only surfaces much later, as a patch of
+    # carbon fused to a wall one coil turn away.
+    smooth_step = target_edge
     for _ in range(max(1, iterations)):
         mesh = _split_long_edges(mesh, (4.0 / 3.0) * target_edge, box)
         mesh = _collapse_short_edges(
             mesh, (4.0 / 5.0) * target_edge, (4.0 / 3.0) * target_edge, box
         )
         mesh = _flip_edges_toward_degree_six(mesh)
-        mesh = _tangential_smooth(mesh, field, box=box)
+        mesh = _tangential_smooth(mesh, field, box=box, max_step=smooth_step)
+    # Anneal out the dislocation pairs the greedy loop cannot escape, then
+    # let the geometry follow the new connectivity.
+    if anneal_sweeps > 0:
+        mesh = anneal_edge_flips(
+            mesh,
+            rng if rng is not None else np.random.default_rng(0),
+            sweeps=anneal_sweeps,
+            temperature=anneal_temperature,
+        )
+        mesh = _tangential_smooth(mesh, field, box=box, max_step=smooth_step)
+
     # Final cleanup: three- and four-membered rings cannot exist in sp2
     # carbon, and length-based collapse leaves them when their edges are of
     # ordinary length. Flip afterwards to re-settle the degrees disturbed.
@@ -530,8 +626,128 @@ def isotropic_remesh(
         if cleaned[0].shape == mesh[0].shape:
             break
         mesh = _flip_edges_toward_degree_six(cleaned)
-        mesh = _tangential_smooth(mesh, field, box=box)
+        mesh = _tangential_smooth(mesh, field, box=box, max_step=smooth_step)
     return mesh
+
+
+def anneal_edge_flips(
+    mesh: Mesh,
+    rng: np.random.Generator,
+    sweeps: int = 80,
+    temperature: float = 0.3,
+    min_degree: int = 5,
+    max_degree: int = 8,
+) -> Mesh:
+    """Metropolis-anneal edge flips to remove spurious dislocation pairs.
+
+    :func:`isotropic_remesh` only ever accepts a flip that lowers the total
+    degree deviation, so it stalls in a local minimum littered with
+    pentagon-heptagon pairs beyond those curvature actually requires --
+    measured at 39 pairs on a Y junction whose ideal is 6, and barely
+    improved by running more iterations (39 -> 35 for five times the work).
+    Those pairs are dislocations: topologically neutral, and real in
+    CVD-grown material, but not something the caller should be stuck with.
+
+    Accepting an occasional worsening flip with probability
+    ``exp(-delta / T)`` lets the mesh climb out. Cooling linearly to zero
+    leaves it in a much better minimum: on the same junction this reaches
+    14 pairs, a 64% reduction, in about a second.
+
+    Degrees are hard-clamped to ``[min_degree, max_degree]`` regardless of
+    temperature. Without that clamp a hot run trades dislocations for
+    three- and four-membered rings, which is a strictly worse structure --
+    those cannot exist in sp2 carbon at all.
+
+    Parameters
+    ----------
+    mesh
+        Remeshed triangulation. Only connectivity changes; vertex
+        positions are untouched, so callers usually smooth afterwards.
+    rng
+        Seeded generator -- annealing is stochastic, so results are
+        reproducible only through this.
+    sweeps
+        Passes over the edge list. Temperature falls linearly to zero
+        across them. 80 is comfortably converged; 0 disables annealing and
+        leaves the as-remeshed defect population intact.
+    temperature
+        Starting temperature. Measured optimum is ~0.3: colder barely
+        escapes the minimum, hotter (>=0.6) wanders and ends up worse.
+
+    Returns
+    -------
+    (vertices, triangles)
+        Same vertices, re-flipped triangles.
+    """
+    if sweeps <= 0:
+        return mesh
+
+    verts, faces = mesh
+    face_list = [tuple(int(x) for x in tri) for tri in faces]
+    nbrs = _adjacency(faces)
+    degree = {v: len(ns) for v, ns in nbrs.items()}
+
+    def deviation(*values: int) -> int:
+        return sum(abs(v - 6) for v in values)
+
+    for sweep in range(sweeps):
+        temp = temperature * (1.0 - sweep / max(1, sweeps - 1))
+        edge_faces = _edge_faces(np.array(face_list, dtype=int))
+        items = list(edge_faces.items())
+        rng.shuffle(items)
+        touched: set[int] = set()
+        for edge, incident in items:
+            if len(incident) != 2:
+                continue
+            if incident[0] in touched or incident[1] in touched:
+                continue
+            u, v = edge
+            opposite = set()
+            for face_index in incident:
+                opposite |= set(face_list[face_index]) - {u, v}
+            if len(opposite) != 2:
+                continue
+            w1, w2 = sorted(opposite)
+            if w2 in nbrs[w1]:
+                continue
+            if (
+                degree[u] - 1 < min_degree
+                or degree[v] - 1 < min_degree
+                or degree[w1] + 1 > max_degree
+                or degree[w2] + 1 > max_degree
+            ):
+                continue
+            delta = deviation(
+                degree[u] - 1, degree[v] - 1, degree[w1] + 1, degree[w2] + 1
+            ) - deviation(degree[u], degree[v], degree[w1], degree[w2])
+            if delta > 0 and (
+                temp <= 0.0 or rng.random() >= np.exp(-delta / temp)
+            ):
+                continue
+            face_list[incident[0]] = (u, w1, w2)
+            face_list[incident[1]] = (v, w2, w1)
+            degree[u] -= 1
+            degree[v] -= 1
+            degree[w1] += 1
+            degree[w2] += 1
+            nbrs[u].discard(v)
+            nbrs[v].discard(u)
+            nbrs[w1].add(w2)
+            nbrs[w2].add(w1)
+            touched.update(incident)
+
+    return verts, np.array(face_list, dtype=int)
+
+
+def dislocation_pairs(mesh: Mesh) -> int:
+    """Count pentagon-heptagon pairs beyond what curvature requires.
+
+    A 5-7 pair contributes nothing to the Euler budget, so the number of
+    such pairs is a direct measure of how "as-grown" (rough) versus
+    "annealed" (smooth) the network is.
+    """
+    histogram = degree_histogram(mesh)
+    return min(histogram.get(5, 0), histogram.get(7, 0))
 
 
 def degree_histogram(mesh: Mesh) -> dict[int, int]:

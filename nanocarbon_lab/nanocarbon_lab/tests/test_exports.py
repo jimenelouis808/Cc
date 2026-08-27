@@ -92,3 +92,36 @@ class TestLAMMPSExport:
         text = inp.read_text()
         assert "pair_style" in text
         assert "airebo" in text
+
+
+class TestCIFExport:
+    """XYZ carries no cell, so a periodic structure exported that way
+    loses the one thing that makes it periodic."""
+
+    def test_cif_round_trips_the_lattice(self, tmp_path):
+        from ase.io import read as ase_read
+
+        from nanocarbon_lab.exports.xyz import write_cif
+
+        cnt = build_cnt(n=5, m=5, length=8)
+        path = write_cif(cnt, tmp_path / "cell")
+        assert path.suffix == ".cif"
+        back = ase_read(str(path))
+        assert len(back) == len(cnt)
+        assert back.cell.lengths() == pytest.approx(cnt.cell.lengths(), rel=1e-3)
+
+    def test_suffix_is_added_when_missing(self, tmp_path):
+        from nanocarbon_lab.exports.xyz import write_cif
+
+        path = write_cif(build_cnt(n=5, m=5, length=6), tmp_path / "noext")
+        assert path.name == "noext.cif"
+
+    def test_render_bundle_writes_a_cif_for_periodic_structures(self, tmp_path):
+        from nanocarbon_lab.exports.xyz import write_render_bundle
+
+        gr = build_graphene_supercell(2, 2)
+        gr.info.setdefault("rings", [])
+        gr.info.setdefault("bonds", [])
+        xyz_path, json_path = write_render_bundle(gr, tmp_path / "sheet", cif=True)
+        assert xyz_path.with_suffix(".cif").exists()
+        assert json_path.exists()

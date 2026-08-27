@@ -23,7 +23,9 @@ validation pass before writing.
 | `workflows`     | Batch sweeps + ML-ready dataset exporter (XYZ + features CSV + manifest)     |
 | `cli`           | `nanocarbon` command-line entry point                                        |
 | `gui`           | `nanocarbon-gui` desktop app: sliders, live 3D preview, export, Blender render |
-| `implicit`/`remesh`/`junction` | L/T/Y/X nanotube junctions and schwarzite fragments from implicit surfaces |
+| `implicit`/`remesh`/`junction` | L/T/Y/X nanotube junctions and periodic schwarzite unit cells from implicit surfaces |
+| `swept`         | Coils and arbitrary curved tubes whose ring topology is **derived from the curvature** |
+| `assemblies`    | Multi-wall nanotubes and hexagonally packed bundles, at the van der Waals gap |
 
 ## Installation
 
@@ -76,6 +78,36 @@ nanocarbon foam --box 30 --flakes 25 --radius 4 --seed 0 --out out/foam --format
 # Validate any ASE-readable structure file
 nanocarbon validate out/cnt/qe/pw.in
 ```
+
+Structures for rendering (XYZ + Blender render bundle, plus CIF for the
+periodic ones). All of these share `--anneal-sweeps`, `--roughness`,
+`--dopant`, `--dopant-conc` and `--seed`:
+
+```bash
+# Capped tube swept onto a left-handed conical coil, CVD-rough, 2% N-doped
+nanocarbon cnt-cap --rings 6 --freq 3 --shape helix \
+  --helix-radius 90 --helix-pitch 30 --helix-handedness left --helix-taper 0.7 \
+  --roughness 0.2 --dopant N --dopant-conc 0.02 --out out/coil_swept
+
+# Nanocoil whose rings follow the curvature (slower, no elastic strain)
+nanocarbon coil --coil-radius 30 --pitch 20 --turns 1.5 --tube-radius 6 --out out/coil
+
+# Y junction, annealed smooth
+nanocarbon junction --kind Y --tube-radius 6 --arm-length 22 --out out/junction
+
+# Periodic gyroid schwarzite unit cell (writes .cif too)
+nanocarbon schwarzite --kind gyroid --cell 26 --out out/gyroid
+
+# Two-wall nanotube and a 7-tube rope
+nanocarbon mwcnt --shells 2 --inner-freq 3 --rings 10 --out out/mwcnt
+nanocarbon bundle --shells 1 --freq 3 --rings 10 --out out/rope
+```
+
+Every one of these prints an **sp2 verdict** alongside the measured bond
+and angle statistics — `CLEAN`, `STRAINED` or `BROKEN`, with the reason.
+It exists because "0 close contacts" is not the same as "physical": an
+over-tight coil keeps its atoms apart while stretching its bonds to
+1.69 Å, which is longer than even an sp3 C–C bond.
 
 ## Nanocoils
 
@@ -221,13 +253,25 @@ pip install -e ".[gui]"
 nanocarbon-gui            # or: python -m nanocarbon_lab.gui
 ```
 
-Sliders for length, diameter, bend and bond length; spinboxes for how many
-Stone-Wales and divacancy defects to scatter in; a live 3D preview coloured
-by ring type; a panel reporting ring counts, the Euler check and the
-measured bond/angle/contact statistics; and buttons to save the
-`.xyz` + `.json` bundle or drive Blender directly. Builds run on a worker
-thread, so the window stays responsive while a few-thousand-atom shell
-relaxes.
+Six structure types from one dropdown — **capped tube**, **coil
+(relaxed)**, **junction**, **schwarzite**, **multi-wall** and **bundle**
+— with only the panels that apply to the current one shown. Sliders for
+length, diameter, bend and bond length; coil radius, pitch, turns, taper
+and handedness; spinboxes for how many Stone-Wales and divacancy defects
+to scatter in; a *Surface finish* panel (annealing and CVD roughness) and
+a *Chemistry* panel (N/B/S/P doping) that apply to every mode. A live 3D
+preview coloured by ring type, and a panel reporting ring counts, the
+Euler check, wall spacing where it applies, the measured
+bond/angle/contact statistics and the **sp2 verdict**. Buttons save the
+`.xyz` + `.json` bundle (plus `.cif` for periodic cells) or drive Blender
+directly. Builds run on a worker thread, so the window stays responsive
+while a few-thousand-atom shell relaxes.
+
+Live hints do the arithmetic for you before you build: the coil panel
+reports how much tube a given radius/pitch/turns consumes and what
+outer-wall strain that implies (green / amber / red), taper included —
+a conical spring is judged at its **tightest** end, since that is where
+the wall gives way.
 
 `tkinter` is part of the standard library but ships separately on some
 Linux distributions -- `sudo apt install python3-tk` (Debian/Ubuntu) or
@@ -556,14 +600,115 @@ instead. That matters here: outer-wall strain is `r_tube / R_coil`, so a
 carbon nanocoils have coil radii of hundreds of Å for exactly this
 reason.
 
+### Two ways to bend a tube, and when to use each
+
+`build_capped_cnt(shape=...)` **sweeps** a finished all-hexagon tube onto
+a curved centreline. The lattice is unchanged, so the bend is carried
+entirely as elastic strain — and that is a hard geometric fact, not a
+relaxation failure: a pure-hexagon tube bent onto an arc *must* have a
+longer outer wall than inner. On a 90 Å coil around a 5.9 Å tube, 6.5%
+path strain leaves bonds spanning 1.33–1.51 Å, and weakening the
+positional restraints only lets atoms wander (1 Å drift) without
+recovering a hundredth of an Ångström of bond length.
+
+`build_coil` / `build_swept_tube` take the **implicit** route instead —
+the same one junctions and schwarzites use. The curved tube is built as a
+signed-distance surface, meshed, and remeshed; ring sizes then follow the
+curvature, with pentagons on the compressed inner wall and heptagons on
+the stretched outer wall, exactly as real coiled nanotubes relieve the
+strain. Bonds come back to graphitic length.
+
+```python
+from nanocarbon_lab.builders import build_coil
+
+coil = build_coil(coil_radius=30.0, pitch=20.0, turns=1.5, tube_radius=6.0)
+coil.info["ring_counts"]            # e.g. {5: 85, 6: 1854, 7: 71, 8: 1}
+coil.info["achieved_coil_radius"]   # measured off the relaxed atoms
+```
+
+| | swept (`shape="helix"`) | implicit (`build_coil`) |
+|---|---|---|
+| speed | seconds | minutes |
+| caps | exact 6-pentagon domes | derived from the surface |
+| tight curvature | bonds stretch out of range | absorbed by 5–7 pairs |
+| dimensions | honoured exactly | radius honoured, pitch relaxes |
+
+Use the swept route for gentle curves and when you need exact dimensions
+fast; use the implicit route when the curvature is tight enough that the
+`sp2 verdict` (printed by the CLI and shown in the GUI) reports
+`BROKEN`.
+
+Two things about the implicit coil are worth knowing. Its pitch must
+clear two tube walls plus a graphitic gap or the turns merge into one
+solid, and the builder refuses rather than emitting that.
+
+And ring topology encodes a tube's **curvature** but not its **torsion**.
+So the coil radius comes back as asked — 29.4 Å measured against a
+requested 30.0 — while the pitch is a soft mode that springs open (20 Å
+requested, 26.7 Å relaxed). `pin_ends=True` holds the axial length by
+restraining the end caps, but it fights the relaxation where the network
+is most distorted: the same coil then came out with 1.18–1.71 Å bonds and
+three overlapping atom pairs, failing the quality gate the free
+relaxation passes cleanly. The default is therefore to let the coil find
+its own pitch and report it in `atoms.info["achieved_pitch"]`, rather
+than hold a requested number at the cost of the chemistry.
+
 **One honest limitation.** The remesher settles into a local minimum
 containing scattered pentagon–heptagon pairs along the arms, beyond the
-ones curvature requires — roughly 35 spurious pairs on a Y junction.
+ones curvature requires — roughly 39 spurious pairs on a Y junction.
 These are dislocations: topologically neutral, geometrically sound (bond
 and angle statistics stay in range), and genuinely present in
 CVD-grown junctions, so the structures are realistic rather than
 idealised. Raising `remesh_iterations` barely helps (38 → 35 pairs for 5×
-the work); removing them properly would need curvature-aware remeshing.
+the work), but **flip annealing** does: `anneal_sweeps=80` takes a Y
+junction from 39 pairs to 14–15 in about a second. Set `anneal_sweeps=0`
+to keep the as-grown wall.
+
+### Surface finish: smooth or CVD-rough, on purpose
+
+Two independent knobs, on every builder and in the GUI's *Surface finish*
+panel:
+
+* `anneal_sweeps` — Metropolis flip annealing of the mesh. `0` keeps the
+  as-remeshed defect population (rougher, as-grown); `80` removes the
+  strays curvature does not require.
+* `roughness` — RMS out-of-plane corrugation in Å, applied *after*
+  relaxation by displacing each atom along its local surface normal and
+  re-settling. Normal-direction displacement is the soft one; isotropic
+  jitter merely strains bonds and gets undone. Topology is untouched.
+
+Measured on a capped tube: σ = 0 → 0.001 Å radial RMS; σ = 0.3 → 0.133 Å
+with bonds still at 1.387–1.469 Å; σ = 0.5 → 0.193 Å at 1.365–1.496 Å.
+The wall looks CVD-grown and stays chemically valid throughout.
+
+### Multi-wall tubes and bundles
+
+```python
+from nanocarbon_lab.builders import build_bundle, build_multiwall_cnt
+
+mwcnt = build_multiwall_cnt(n_shells=3, inner_freq=3, n_body_rings=10)
+rope = build_bundle(n_rings_across=1, freq=3, n_body_rings=10)   # 7 tubes
+```
+
+Neither is a new topology — each shell or tube is an ordinary capped
+tube, so each pays its own 12-pentagon Euler budget and the assembly's
+counts are simply their sum. What makes them their own objects is the
+**van der Waals spacing**, which the covalent relaxation knows nothing
+about, so the builders place independently-relaxed shells and *measure*
+the separation rather than assuming it.
+
+Measuring it correctly took two attempts worth recording. Excluding only
+bonded pairs reported 2.29 Å (that is a pentagon's 1–3 diagonal);
+excluding 1–2 and 1–3 pairs reported 2.79 Å (a hexagon's 1–4 diagonal).
+Both are intra-wall distances that have nothing to do with the gap. The
+separation is now measured **between known shell index ranges**, giving
+3.41 Å for a MWCNT and 3.43 Å in a rope, and `nan` for a lone tube —
+which is the honest answer when there is no second wall.
+
+The lattice quantises tube radius in ~1.96 Å steps, so a MWCNT's wall
+spacing cannot land on graphite's 3.35 Å exactly; `freq_step=2` gives
+3.9 Å, the closest realisable value, and the achieved spacing is reported
+in `atoms.info["wall_spacing"]`.
 
 ### Other free/open tools for this pipeline
 

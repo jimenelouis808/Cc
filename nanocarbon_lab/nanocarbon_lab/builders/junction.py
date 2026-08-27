@@ -34,6 +34,7 @@ from ase import Atoms
 
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D
 from ..utils.geometry import center_in_cell
+from ..utils.rng import make_rng
 from . import fullerene_mesh as fm
 from . import implicit as im
 from . import remesh as rm
@@ -62,8 +63,11 @@ def build_junction(
     bond: float = CC_BOND,
     grid_resolution: int = 70,
     remesh_iterations: int = 25,
+    anneal_sweeps: int = 80,
+    roughness: float = 0.0,
     relax_iterations: int = 3000,
     vacuum: float = DEFAULT_VACUUM_1D,
+    seed: int | None = 0,
 ) -> Atoms:
     """Build a capped multi-arm carbon nanotube junction.
 
@@ -93,6 +97,14 @@ def build_junction(
     remesh_iterations
         Isotropic remeshing cycles; see
         :func:`nanocarbon_lab.builders.remesh.isotropic_remesh`.
+    anneal_sweeps
+        Metropolis flip-annealing passes, which remove pentagon-heptagon
+        pairs beyond those curvature requires (measured 39 -> 14 on a Y
+        junction). Set to ``0`` to keep the as-remeshed defect population,
+        which reads as a rougher, more as-grown wall.
+    roughness
+        RMS out-of-plane corrugation in Å applied after relaxation. ``0``
+        leaves an ideally smooth shell; 0.1-0.3 Å looks CVD-grown.
     relax_iterations
         L-BFGS iterations for the valence force field.
     vacuum
@@ -126,16 +138,22 @@ def build_junction(
     mesh = rm.marching_cubes_mesh(field, extent, resolution=resolution)
     # Ring centres in a honeycomb sit sqrt(3)*bond apart, so that is the
     # triangle side that makes the dual come out at the right scale.
+    rng = make_rng(seed)
     mesh = rm.isotropic_remesh(
-        mesh, field, target_edge=np.sqrt(3.0) * bond, iterations=remesh_iterations
+        mesh, field, target_edge=np.sqrt(3.0) * bond,
+        iterations=remesh_iterations, anneal_sweeps=anneal_sweeps, rng=rng,
     )
     return _finish(
         mesh,
         bond=bond,
         relax_iterations=relax_iterations,
         vacuum=vacuum,
+        roughness=roughness,
+        rng=rng,
         info={
             "structure_type": "junction",
+            "anneal_sweeps": anneal_sweeps,
+            "roughness": roughness,
             "junction_kind": kind,
             "tube_radius": tube_radius,
             "arm_length": arm_length,
@@ -152,7 +170,10 @@ def build_schwarzite(
     bond: float = CC_BOND,
     grid_resolution: int = 64,
     remesh_iterations: int = 25,
+    anneal_sweeps: int = 80,
+    roughness: float = 0.0,
     relax_iterations: int = 3000,
+    seed: int | None = 0,
 ) -> Atoms:
     """Build a **periodic** schwarzite unit cell (negative-curvature carbon).
 
@@ -241,13 +262,18 @@ def build_schwarzite(
                 rm.isotropic_remesh(
                     mesh, field, target_edge=np.sqrt(3.0) * bond,
                     iterations=remesh_iterations, box=cell,
+                    anneal_sweeps=anneal_sweeps, rng=make_rng(seed),
                 ),
                 bond=bond,
                 relax_iterations=relax_iterations,
                 vacuum=0.0,
                 box=cell,
+                roughness=roughness,
+                rng=make_rng(seed),
                 info={
                     "structure_type": "schwarzite",
+                    "anneal_sweeps": anneal_sweeps,
+                    "roughness": roughness,
                     "schwarzite_kind": kind,
                     "cell": cell,
                     "thickness": thickness,
@@ -275,11 +301,33 @@ def _finish(
     vacuum: float,
     info: dict,
     box: float | None = None,
+    roughness: float = 0.0,
+    rng=None,
+    pin_near: np.ndarray | None = None,
+    pin_radius: float = 0.0,
+    k_pin: float = 5.0,
 ) -> Atoms:
     """Shared tail: validate the mesh, take its dual, relax, package.
 
     ``box`` set means the structure is a periodic cell: the dual, the
     relaxation and the returned cell/pbc all switch to minimum-image.
+
+    ``pin_near`` gives points (in mesh coordinates) whose surrounding
+    atoms are harmonically restrained during relaxation, with ``pin_radius``
+    setting how far that reaches and ``k_pin`` how stiffly.
+
+    That option exists for one specific asymmetry. A closed shell's ring
+    topology encodes its **curvature**, so a coiled tube relaxes back to
+    the coil radius it was built at -- measured 29.4 Å against a requested
+    30.0. It does not encode **torsion**: nothing in a hexagonal net fixes
+    how fast the coil advances along its axis, so the pitch is a free soft
+    mode and an unrestrained coil springs open, 20 Å requested to 26.7 Å
+    relaxed. Pinning the caps is the boundary condition of a tube held
+    between contacts and holds the axial length -- but it also fights the
+    relaxation where the network is most distorted, so it is off by
+    default: at ``k_pin=5`` that coil came out with 1.18-1.71 Å bonds and
+    three overlapping pairs, failing the quality gate below that the free
+    relaxation passes.
     """
     stats = rm.mesh_statistics(mesh)
     if stats["boundary_edges"]:
@@ -316,8 +364,21 @@ def _finish(
     scaled_box = None if box is None else box * scale
 
     if scaled_box is None:
+        anchors = anchor_targets = None
+        if pin_near is not None and pin_radius > 0:
+            from scipy.spatial import cKDTree
+
+            near = cKDTree(np.asarray(pin_near, dtype=float) * scale).query_ball_point(
+                positions, r=pin_radius
+            )
+            anchors = np.array([i for i, hits in enumerate(near) if hits], dtype=int)
+            if len(anchors):
+                anchor_targets = positions[anchors]
+            else:
+                anchors = None
         positions = fm.relax_shell(
-            positions, bond_set, equilibrium=bond, max_iterations=relax_iterations
+            positions, bond_set, equilibrium=bond, max_iterations=relax_iterations,
+            anchors=anchors, anchor_targets=anchor_targets, k_anchor=k_pin,
         )
     else:
         # Variable-cell relaxation. With the cell held fixed the network
@@ -352,6 +413,13 @@ def _finish(
         atoms = Atoms(symbols=["C"] * len(positions), positions=positions, pbc=True)
         atoms.set_cell(np.eye(3) * scaled_box)
         info = {**info, "cell": float(scaled_box)}
+
+    if roughness > 0:
+        positions = fm.apply_surface_roughness(
+            positions, bond_set, roughness,
+            rng if rng is not None else make_rng(0),
+            equilibrium=bond, box=scaled_box,
+        )
 
     quality = geometry_report(positions, bonds, box=scaled_box)
     # Fail loudly rather than hand back a torn network. These thresholds are

@@ -482,3 +482,60 @@ class TestHelixDimensions:
             cl.helix_control_points(-5.0, 10.0, 1.0)
         with pytest.raises(ValueError):
             cl.helix_control_points(10.0, 10.0, 0.0)
+
+    def test_taper_is_judged_at_the_tightest_end(self):
+        """A conical spring gives way where it is narrowest.
+
+        Reporting the nominal radius would understate a tapered coil's
+        strain exactly where the wall is worst off, so the curvature must
+        be read from ``coil_radius * taper`` when that is the smaller.
+        """
+        from nanocarbon_lab.builders import centerline as cl
+
+        cylindrical = cl.helix_curvature(60.0, 25.0)
+        conical = cl.helix_curvature(60.0, 25.0, taper=0.5)
+        assert conical > cylindrical
+        assert conical == pytest.approx(cl.helix_curvature(30.0, 25.0))
+        # Widening at the far end does not make the near end any tighter.
+        assert cl.helix_curvature(60.0, 25.0, taper=1.6) == pytest.approx(cylindrical)
+
+    def test_taper_shortens_the_tube_a_conical_coil_needs(self):
+        """The radius sweeps linearly, so the mean radius sets the length.
+
+        Ignoring the taper would size the tube for a cylindrical coil and
+        overshoot the requested number of turns.
+        """
+        from nanocarbon_lab.builders import centerline as cl
+
+        full = cl.helix_arc_length(60.0, 25.0, 2.0)
+        tapered = cl.helix_arc_length(60.0, 25.0, 2.0, taper=0.5)
+        assert tapered < full
+        # Mean radius of a 60 -> 30 sweep is 45.
+        assert tapered == pytest.approx(cl.helix_arc_length(45.0, 25.0, 2.0))
+
+    def test_handedness_mirrors_the_coil(self):
+        """Both chiralities occur in real nanocoils; a mirrored pair reads
+        well in a figure, so the sign has to actually flip."""
+        from nanocarbon_lab.builders import centerline as cl
+
+        right = cl.helix_control_points(40.0, 20.0, 1.0, handedness=1)
+        left = cl.helix_control_points(40.0, 20.0, 1.0, handedness=-1)
+        assert right[:, 1] == pytest.approx(-left[:, 1])
+        assert right[:, 0] == pytest.approx(left[:, 0])
+        assert right[:, 2] == pytest.approx(left[:, 2])
+
+    def test_taper_actually_narrows_the_coil(self):
+        from nanocarbon_lab.builders import centerline as cl
+
+        points = cl.helix_control_points(60.0, 25.0, 2.0, taper=0.4)
+        radii = np.linalg.norm(points[:, :2], axis=1)
+        assert radii[0] == pytest.approx(60.0, rel=1e-6)
+        assert radii[-1] == pytest.approx(24.0, rel=1e-6)
+
+    def test_invalid_handedness_and_taper_are_rejected(self):
+        from nanocarbon_lab.builders import centerline as cl
+
+        with pytest.raises(ValueError):
+            cl.helix_control_points(40.0, 20.0, 1.0, handedness=0)
+        with pytest.raises(ValueError):
+            cl.helix_control_points(40.0, 20.0, 1.0, taper=0.0)

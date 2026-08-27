@@ -54,6 +54,99 @@ def capsule(start, end, radius: float) -> Field:
     return field
 
 
+def tube_along_path(
+    path: np.ndarray,
+    radius: float,
+    sample_spacing: float = 0.4,
+    margin: float | None = None,
+) -> tuple[Field, np.ndarray, np.ndarray]:
+    """Signed distance to a tube of constant ``radius`` following ``path``.
+
+    This is what lets an arbitrarily curved tube -- a coil, an S-bend, a
+    random meander -- go through the *implicit* route instead of being
+    swept geometrically. The difference is not cosmetic. Sweeping bends a
+    finished all-hexagon lattice, so the outer wall is simply stretched:
+    at 6.5% path strain that means 1.51 Å bonds, and no amount of
+    relaxation removes it, because a pure-hexagon tube bent onto an arc
+    *must* have a longer outer wall. Meshing the bent surface instead lets
+    the remesher pick the ring sizes the curvature actually calls for --
+    pentagons on the compressed inner wall, heptagons on the stretched
+    outer wall -- which is how real bent and coiled nanotubes relieve the
+    strain, and the bonds come back to graphitic length.
+
+    Distance is evaluated against a dense point sampling of the path
+    rather than against its segments. Resampling at ``sample_spacing``
+    bounds the error: a query point at distance ``d`` from the true tube
+    axis sees at worst ``sqrt(d^2 + (spacing/2)^2) - d``, which for a 6 Å
+    tube at 0.4 Å spacing is under 0.004 Å -- three orders of magnitude
+    below a bond, and far cheaper than an exact segment query over a
+    hundred-segment path at every one of half a million grid points.
+
+    Parameters
+    ----------
+    path
+        ``(n, 3)`` polyline of centreline points in Å, in order. It is
+        resampled internally, so the input spacing does not matter as long
+        as it already resolves the shape.
+    radius
+        Tube radius in Å.
+    sample_spacing
+        Resampling step along the path (Å). Must be well under ``radius``.
+    margin
+        Extra padding on the returned bounding box beyond
+        ``radius``. Defaults to ``max(4, radius)``; the box **must** clear
+        the surface or marching cubes returns an open mesh.
+
+    Returns
+    -------
+    (field, lower, upper)
+        The field, and the corner points of an axis-aligned box that
+        safely contains the whole tube. The box is deliberately not a
+        cube: a coil is a wide, flat object, and sampling it inside a cube
+        would spend most of the grid on empty space.
+
+    Raises
+    ------
+    ValueError
+        For fewer than two path points, a non-positive radius, or a
+        sampling step that does not resolve the tube.
+    """
+    from scipy.spatial import cKDTree
+
+    path = np.asarray(path, dtype=float)
+    if path.ndim != 2 or path.shape[1] != 3 or len(path) < 2:
+        raise ValueError("path must be an (n, 3) array with n >= 2.")
+    if radius <= 0:
+        raise ValueError("radius must be positive.")
+    if sample_spacing <= 0 or sample_spacing > 0.5 * radius:
+        raise ValueError(
+            f"sample_spacing={sample_spacing} must be positive and well below "
+            f"radius={radius}; use at most {0.5 * radius:.2f}."
+        )
+
+    # Resample to uniform arc length so the KD-tree covers the path evenly
+    # however unevenly the caller spaced their control points.
+    steps = np.linalg.norm(np.diff(path, axis=0), axis=1)
+    arc = np.concatenate([[0.0], np.cumsum(steps)])
+    total = float(arc[-1])
+    if total <= 0:
+        raise ValueError("path has zero length.")
+    n_samples = max(2, int(np.ceil(total / sample_spacing)) + 1)
+    targets = np.linspace(0.0, total, n_samples)
+    samples = np.stack(
+        [np.interp(targets, arc, path[:, axis]) for axis in range(3)], axis=-1
+    )
+    tree = cKDTree(samples)
+
+    def field(points: np.ndarray) -> np.ndarray:
+        flat = points.reshape(-1, 3)
+        distance, _ = tree.query(flat, k=1)
+        return (distance - radius).reshape(points.shape[:-1])
+
+    pad = radius + (max(4.0, radius) if margin is None else margin)
+    return field, samples.min(axis=0) - pad, samples.max(axis=0) + pad
+
+
 def smooth_union(first: Field, second: Field, blend: float) -> Field:
     """Polynomial smooth minimum of two fields.
 
@@ -275,7 +368,8 @@ def gradient(field: Field, points: np.ndarray, eps: float = 1e-4) -> np.ndarray:
 
 
 def project_to_surface(
-    field: Field, points: np.ndarray, iterations: int = 3
+    field: Field, points: np.ndarray, iterations: int = 3,
+    max_step: float | None = None,
 ) -> np.ndarray:
     """Newton-project points onto the zero level set of ``field``.
 
@@ -283,6 +377,27 @@ def project_to_surface(
     after every smoothing pass in the remesher so vertices stay on the
     surface instead of drifting off it (unconstrained Laplacian
     smoothing shrinks a closed surface toward a point).
+
+    Parameters
+    ----------
+    field, points, iterations
+        The field, the points to project, and how many Newton steps.
+    max_step
+        Cap on how far a single step may move a point (Å). Leave ``None``
+        for an unlimited step.
+
+        The cap matters wherever a surface has two sheets facing each
+        other across a gap -- neighbouring turns of a coil, arms of a
+        junction folded back, the necks of a small schwarzite cell.
+        "Nearest point on the surface" is not the same as "nearest point
+        on *this* sheet", so once smoothing nudges a vertex past the
+        midline of the gap, an unlimited Newton step lands it on the
+        facing sheet. The mesh stays closed and keeps its genus, so
+        nothing downstream notices; the damage only shows up hundreds of
+        steps later as a patch of carbon fused to the wall one full turn
+        away. Capping the step below half the gap makes that jump
+        impossible while leaving ordinary projection (which moves a
+        fraction of an edge length) untouched.
     """
     result = points.copy()
     for _ in range(max(1, iterations)):
@@ -290,5 +405,10 @@ def project_to_surface(
         grad = gradient(field, result)
         norm_sq = np.sum(grad * grad, axis=1)
         norm_sq = np.where(norm_sq < 1e-12, 1e-12, norm_sq)
-        result -= (value / norm_sq)[:, None] * grad
+        step = -(value / norm_sq)[:, None] * grad
+        if max_step is not None:
+            length = np.linalg.norm(step, axis=1)
+            scale = np.where(length > max_step, max_step / np.maximum(length, 1e-12), 1.0)
+            step *= scale[:, None]
+        result += step
     return result

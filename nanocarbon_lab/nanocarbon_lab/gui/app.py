@@ -53,9 +53,18 @@ from matplotlib.backends.backend_tkagg import (
 )
 from matplotlib.figure import Figure
 
-from ..builders import build_capped_cnt, build_junction, build_schwarzite
+from ..builders import (
+    build_bundle,
+    build_capped_cnt,
+    build_coil,
+    build_junction,
+    build_multiwall_cnt,
+    build_schwarzite,
+)
+from ..dopants import dope_random
 from ..builders import fullerene_mesh as fm
 from ..exports.xyz import write_render_bundle
+from ..validation.quality import sp2_quality
 
 # Ring-type colours, shared with the Blender presets' intent: hexagons are
 # the neutral body, everything else marks curvature or a defect.
@@ -68,7 +77,9 @@ RING_LABELS = {
 }
 
 SHAPES = ["straight", "arc", "s_curve", "helix", "random"]
-MODES = ["capped tube", "junction", "schwarzite"]
+MODES = ["capped tube", "coil (relaxed)", "junction", "schwarzite",
+         "multi-wall", "bundle"]
+DOPANTS = ["none", "N", "B", "S", "P"]
 JUNCTION_KINDS = ["L", "T", "Y", "X", "cross3d"]
 SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
 
@@ -203,6 +214,17 @@ class NanocarbonGUI:
         self.var_coil_radius = tk.DoubleVar(value=60.0)
         self.var_coil_pitch = tk.DoubleVar(value=25.0)
         self.var_coil_turns = tk.DoubleVar(value=1.5)
+        self.var_coil_hand = tk.StringVar(value="right")
+        self.var_coil_taper = tk.DoubleVar(value=1.0)
+        self.var_coil_tube_radius = tk.DoubleVar(value=6.0)
+        self.var_pin_ends = tk.BooleanVar(value=False)
+        self.var_anneal = tk.IntVar(value=80)
+        self.var_roughness = tk.DoubleVar(value=0.0)
+        self.var_dopant = tk.StringVar(value="none")
+        self.var_dopant_conc = tk.DoubleVar(value=0.03)
+        self.var_mw_shells = tk.IntVar(value=2)
+        self.var_mw_inner = tk.IntVar(value=3)
+        self.var_bundle_shells = tk.IntVar(value=1)
 
         self.lbl_radius = ttk.Label(box, text="", foreground="#2e86ab")
 
@@ -241,10 +263,19 @@ class NanocarbonGUI:
                                     justify="left")
         self.lbl_strain.grid(row=7, column=0, columnspan=2, sticky="w")
 
-        # Coil dimensions, shown only for shape="helix": these are real Å,
-        # and they size the tube rather than being trimmed to fit it.
-        self.frame_coil = ttk.Frame(sbox)
-        self.frame_coil.grid(row=9, column=0, columnspan=2, sticky="ew")
+        self.var_shape.trace_add("write", lambda *_: self._on_shape_change())
+        ttk.Label(sbox, text="Thinner + longer tubes curve more at the same "
+                             "strain — lower the frequency and raise the rings.",
+                  foreground="#777", font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=8, column=0, columnspan=2, sticky="w",
+                                       pady=(4, 0))
+
+        # Coil dimensions, in real Å. Shared by the swept helix (shape=
+        # "helix", where they size the tube) and the relaxed-coil mode
+        # (where they size the implicit surface), so this lives at the top
+        # level rather than inside the centreline frame.
+        self.frame_coil = ttk.LabelFrame(parent, text="Coil", padding=8)
+        self.frame_coil.pack(fill="x", pady=(8, 0))
         self.frame_coil.columnconfigure(0, weight=1)
         self._slider(self.frame_coil, "Coil radius (Å)", self.var_coil_radius,
                      15.0, 200.0, 0, resolution=5.0, command=self._update_coil_hint)
@@ -252,16 +283,41 @@ class NanocarbonGUI:
                      5.0, 100.0, 2, resolution=5.0, command=self._update_coil_hint)
         self._slider(self.frame_coil, "Turns", self.var_coil_turns,
                      0.5, 5.0, 4, resolution=0.5, command=self._update_coil_hint)
+        self._slider(self.frame_coil, "Taper (end/start R)", self.var_coil_taper,
+                     0.3, 2.0, 6, resolution=0.1)
+        hand = ttk.Frame(self.frame_coil)
+        hand.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(2, 2))
+        ttk.Label(hand, text="Handedness").pack(side="left")
+        ttk.Combobox(hand, textvariable=self.var_coil_hand,
+                     values=["right", "left"], state="readonly",
+                     width=7).pack(side="right")
         self.lbl_coil = ttk.Label(self.frame_coil, text="", foreground="#777",
                                   font=("TkDefaultFont", 8), wraplength=225,
                                   justify="left")
-        self.lbl_coil.grid(row=6, column=0, columnspan=2, sticky="w")
-        self.var_shape.trace_add("write", lambda *_: self._on_shape_change())
-        ttk.Label(sbox, text="Thinner + longer tubes curve more at the same "
-                             "strain — lower the frequency and raise the rings.",
-                  foreground="#777", font=("TkDefaultFont", 8), wraplength=230,
-                  justify="left").grid(row=8, column=0, columnspan=2, sticky="w",
-                                       pady=(4, 0))
+        self.lbl_coil.grid(row=9, column=0, columnspan=2, sticky="w")
+        # Only the relaxed-coil mode sets the tube radius freely; the swept
+        # helix takes its radius from the lattice-quantised frequency.
+        self.frame_coil_tube = ttk.Frame(self.frame_coil)
+        self.frame_coil_tube.grid(row=10, column=0, columnspan=2, sticky="ew")
+        self.frame_coil_tube.columnconfigure(0, weight=1)
+        self._slider(self.frame_coil_tube, "Tube radius (Å)",
+                     self.var_coil_tube_radius, 4.0, 12.0, 0, resolution=0.5)
+        ttk.Checkbutton(
+            self.frame_coil_tube, text="Pin ends (hold the pitch)",
+            variable=self.var_pin_ends,
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 2))
+        ttk.Label(self.frame_coil_tube,
+                  text="Rings fix curvature but not torsion, so a free coil "
+                       "keeps its radius and springs open in pitch. Pinning "
+                       "holds the pitch at the cost of a strained network.",
+                  foreground="#777", font=("TkDefaultFont", 8), wraplength=225,
+                  justify="left").grid(row=3, column=0, columnspan=2, sticky="w")
+        ttk.Label(self.frame_coil_tube,
+                  text="Rings follow the curvature here: pentagons on the inner "
+                       "wall, heptagons on the outer, so the bonds stay "
+                       "graphitic instead of stretching. Slower to build.",
+                  foreground="#777", font=("TkDefaultFont", 8), wraplength=225,
+                  justify="left").grid(row=4, column=0, columnspan=2, sticky="w")
 
         # --- defects
         dbox = ttk.LabelFrame(parent, text="Defects", padding=8)
@@ -334,6 +390,49 @@ class NanocarbonGUI:
                   foreground="#777", font=("TkDefaultFont", 8), wraplength=230,
                   justify="left").grid(row=3, column=0, columnspan=2, sticky="w")
 
+        # --- surface finish: applies to every structure type
+        self.frame_surface = ttk.LabelFrame(parent, text="Surface finish", padding=8)
+        self.frame_surface.columnconfigure(0, weight=1)
+        self._slider(self.frame_surface, "Smoothing (anneal)", self.var_anneal,
+                     0, 200, 0, integer=True, command=self._update_surface_hint)
+        self._slider(self.frame_surface, "Roughness (Å)", self.var_roughness,
+                     0.0, 0.6, 2, resolution=0.05, command=self._update_surface_hint)
+        self.lbl_surface = ttk.Label(self.frame_surface, text="", foreground="#777",
+                                     font=("TkDefaultFont", 8), wraplength=230,
+                                     justify="left")
+        self.lbl_surface.grid(row=4, column=0, columnspan=2, sticky="w")
+
+        # --- chemistry
+        self.frame_chem = ttk.LabelFrame(parent, text="Chemistry", padding=8)
+        self.frame_chem.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_chem, text="Dopant").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_chem, textvariable=self.var_dopant, values=DOPANTS,
+                     state="readonly", width=7).grid(row=0, column=1, sticky="e")
+        self._slider(self.frame_chem, "Concentration", self.var_dopant_conc,
+                     0.0, 0.15, 1, resolution=0.01)
+
+        # --- multi-wall
+        self.frame_mw = ttk.LabelFrame(parent, text="Multi-wall", padding=8)
+        self.frame_mw.columnconfigure(0, weight=1)
+        self._slider(self.frame_mw, "Shells", self.var_mw_shells, 1, 6, 0, integer=True)
+        self._slider(self.frame_mw, "Inner freq", self.var_mw_inner, 1, 6, 2, integer=True)
+        ttk.Label(self.frame_mw,
+                  text="Walls land ~3.9 Å apart: the lattice quantises radius in "
+                       "~1.96 Å steps, so it cannot hit graphite's 3.4 Å exactly.",
+                  foreground="#777", font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=4, column=0, columnspan=2, sticky="w")
+
+        # --- bundle
+        self.frame_bundle = ttk.LabelFrame(parent, text="Bundle", padding=8)
+        self.frame_bundle.columnconfigure(0, weight=1)
+        self._slider(self.frame_bundle, "Hex shells", self.var_bundle_shells,
+                     0, 3, 0, integer=True)
+        ttk.Label(self.frame_bundle,
+                  text="0 / 1 / 2 / 3 shells give 1 / 7 / 19 / 37 tubes, packed "
+                       "on a triangular lattice at the 3.4 Å van der Waals gap.",
+                  foreground="#777", font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=2, column=0, columnspan=2, sticky="w")
+
         self.btn_build = ttk.Button(parent, text="Build structure", command=self.on_build)
         self.btn_build.pack(fill="x", pady=(12, 0), ipady=4)
         self.progress = ttk.Progressbar(parent, mode="indeterminate")
@@ -341,6 +440,7 @@ class NanocarbonGUI:
         self._update_radius_hint()
         self._update_strain_hint()
         self._update_coil_hint()
+        self._update_surface_hint()
         self._on_shape_change()
         self._on_mode_change()
 
@@ -348,16 +448,43 @@ class NanocarbonGUI:
         """Show only the panels that apply to the selected structure type."""
         mode = self.var_mode_kind.get()
         for frame in (self.frame_tube, self.frame_centreline, self.frame_defects,
-                      self.frame_junction, self.frame_schwarzite):
+                      self.frame_coil, self.frame_junction, self.frame_schwarzite,
+                      self.frame_mw, self.frame_bundle,
+                      self.frame_surface, self.frame_chem):
             frame.pack_forget()
         if mode == "junction":
             self.frame_junction.pack(fill="x")
         elif mode == "schwarzite":
             self.frame_schwarzite.pack(fill="x")
+        elif mode == "coil (relaxed)":
+            self.frame_coil.pack(fill="x")
+        elif mode == "multi-wall":
+            self.frame_tube.pack(fill="x")
+            self.frame_mw.pack(fill="x", pady=(8, 0))
+        elif mode == "bundle":
+            self.frame_tube.pack(fill="x")
+            self.frame_bundle.pack(fill="x", pady=(8, 0))
         else:
             self.frame_tube.pack(fill="x")
             self.frame_centreline.pack(fill="x", pady=(8, 0))
             self.frame_defects.pack(fill="x", pady=(8, 0))
+        self.frame_surface.pack(fill="x", pady=(8, 0))
+        self.frame_chem.pack(fill="x", pady=(8, 0))
+        self._on_shape_change()
+
+    def _update_surface_hint(self) -> None:
+        anneal = int(self.var_anneal.get())
+        rough = float(self.var_roughness.get())
+        if anneal == 0:
+            topo = "as-grown: keeps the stray 5-7 pairs the remesh leaves"
+        elif anneal < 40:
+            topo = "partly annealed"
+        else:
+            topo = "annealed: strays removed, only curvature-required rings"
+        geom = "ideally smooth" if rough <= 0 else (
+            f"{rough:.2f} Å corrugation — CVD-like"
+        )
+        self.lbl_surface.config(text=f"{topo}; {geom}.")
 
     def _slider(self, parent, label, var, lo, hi, row, *, integer=False,
                 resolution=None, command=None):
@@ -385,11 +512,21 @@ class NanocarbonGUI:
         on_move(notify=False)
 
     def _on_shape_change(self) -> None:
-        """Coil dimensions only make sense for a helix."""
-        if self.var_shape.get() == "helix":
-            self.frame_coil.grid()
+        """Show the coil panel where coil dimensions actually apply.
+
+        That is the swept helix and the relaxed-coil mode; the tube-radius
+        slider inside it is for the relaxed coil alone, because the swept
+        tube's radius is fixed by the lattice-quantised frequency.
+        """
+        relaxed = self.var_mode_kind.get() == "coil (relaxed)"
+        if relaxed:
+            self.frame_coil_tube.grid()
+            return
+        self.frame_coil_tube.grid_remove()
+        if self.var_shape.get() == "helix" and self.var_mode_kind.get() == "capped tube":
+            self.frame_coil.pack(fill="x", pady=(8, 0))
         else:
-            self.frame_coil.grid_remove()
+            self.frame_coil.pack_forget()
 
     def _update_coil_hint(self) -> None:
         from ..builders import centerline as cl
@@ -397,10 +534,28 @@ class NanocarbonGUI:
         radius = float(self.var_coil_radius.get())
         pitch = float(self.var_coil_pitch.get())
         turns = float(self.var_coil_turns.get())
-        arc = cl.helix_arc_length(radius, pitch, turns)
+        taper = float(self.var_coil_taper.get())
+        arc = cl.helix_arc_length(radius, pitch, turns, taper=taper)
+
+        if self.var_mode_kind.get() == "coil (relaxed)":
+            # No strain budget applies: the curvature is paid for in ring
+            # topology, not bond stretch. What can fail instead is the coil
+            # closing on itself, so that is what the hint reports.
+            tube_radius = float(self.var_coil_tube_radius.get())
+            clearance = 2.0 * tube_radius + 3.4
+            ok = pitch >= clearance
+            self.lbl_coil.config(
+                text=f"{arc:.0f} Å of tube; turns {pitch - 2 * tube_radius:.0f} Å apart"
+                     + ("" if ok else
+                        f" — needs at least {clearance:.0f} Å pitch or the walls merge"),
+                foreground="#2e7d32" if ok else "#b3261e",
+            )
+            return
+
         tube_radius = fm.radius_for_freq(int(self.var_freq.get()),
                                          float(self.var_bond.get()))
-        strain = tube_radius * cl.helix_curvature(radius, pitch)
+        # Taper-aware: a conical spring is judged at its tightest end.
+        strain = tube_radius * cl.helix_curvature(radius, pitch, taper=taper)
         colour = "#2e7d32" if strain <= 0.10 else (
             "#b26a00" if strain <= cl.ARTISTIC_STRAIN_LIMIT else "#b3261e")
         self.lbl_coil.config(
@@ -500,11 +655,49 @@ class NanocarbonGUI:
                 tube_radius=float(self.var_j_radius.get()),
                 arm_length=float(self.var_j_arm.get()),
                 blend=float(self.var_j_blend.get()),
+                anneal_sweeps=int(self.var_anneal.get()),
+                roughness=float(self.var_roughness.get()),
+                seed=int(self.var_seed.get()),
             )
         elif mode == "schwarzite":
             builder, kwargs = build_schwarzite, dict(
                 kind=self.var_s_kind.get(),
                 cell=float(self.var_s_cell.get()),
+                anneal_sweeps=int(self.var_anneal.get()),
+                roughness=float(self.var_roughness.get()),
+                seed=int(self.var_seed.get()),
+            )
+        elif mode == "coil (relaxed)":
+            builder, kwargs = build_coil, dict(
+                coil_radius=float(self.var_coil_radius.get()),
+                pitch=float(self.var_coil_pitch.get()),
+                turns=float(self.var_coil_turns.get()),
+                tube_radius=float(self.var_coil_tube_radius.get()),
+                handedness=1 if self.var_coil_hand.get() == "right" else -1,
+                taper=float(self.var_coil_taper.get()),
+                bond=float(self.var_bond.get()),
+                pin_ends=bool(self.var_pin_ends.get()),
+                anneal_sweeps=int(self.var_anneal.get()),
+                roughness=float(self.var_roughness.get()),
+                seed=int(self.var_seed.get()),
+            )
+        elif mode == "multi-wall":
+            builder, kwargs = build_multiwall_cnt, dict(
+                n_shells=int(self.var_mw_shells.get()),
+                inner_freq=int(self.var_mw_inner.get()),
+                n_body_rings=int(self.var_rings.get()),
+                bond=float(self.var_bond.get()),
+                roughness=float(self.var_roughness.get()),
+                seed=int(self.var_seed.get()),
+            )
+        elif mode == "bundle":
+            builder, kwargs = build_bundle, dict(
+                n_rings_across=int(self.var_bundle_shells.get()),
+                freq=int(self.var_freq.get()),
+                n_body_rings=int(self.var_rings.get()),
+                bond=float(self.var_bond.get()),
+                roughness=float(self.var_roughness.get()),
+                seed=int(self.var_seed.get()),
             )
         else:
             builder = build_capped_cnt
@@ -518,6 +711,9 @@ class NanocarbonGUI:
                           if self.var_shape.get() == "helix" else None),
             helix_pitch=float(self.var_coil_pitch.get()),
             helix_turns=float(self.var_coil_turns.get()),
+            helix_handedness=1 if self.var_coil_hand.get() == "right" else -1,
+            helix_taper=float(self.var_coil_taper.get()),
+            roughness=float(self.var_roughness.get()),
             waviness=float(self.var_waviness.get()),
             max_strain=float(self.var_max_strain.get()),
             shape_points=int(self.var_shape_points.get()),
@@ -525,9 +721,18 @@ class NanocarbonGUI:
             seed=int(self.var_seed.get()),
             )
 
+        # Read every Tk variable here, on the main thread. Tkinter variables
+        # are not safe to touch from the worker.
+        dopant = self.var_dopant.get()
+        dopant_conc = float(self.var_dopant_conc.get())
+        seed = int(self.var_seed.get())
+
         def worker():
             try:
-                self._queue.put(("done", builder(**kwargs)))
+                built = builder(**kwargs)
+                if dopant != "none" and dopant_conc > 0:
+                    built = dope_random(built, dopant, dopant_conc, seed=seed)
+                self._queue.put(("done", built))
             except Exception as exc:  # surfaced in the UI, not the console
                 self._queue.put(("error", (exc, traceback.format_exc())))
 
@@ -614,9 +819,11 @@ class NanocarbonGUI:
             for s in (5, 6, 7, 8) if counts.get(s)
         )
         deficit = sum((6 - s) * c for s, c in counts.items())
-        # Euler's budget is 12 only for sphere-like shells; a schwarzite
-        # fragment with handles is legitimately negative.
-        expected = 12 - 12 * int(a.info.get("genus", 0))
+        # Euler's budget is 12 per closed sphere-like shell. A schwarzite
+        # with handles is legitimately negative (genus g gives 12(1-g)),
+        # and an assembly of n disjoint shells owes 12 per shell.
+        components = int(a.info.get("n_shells", a.info.get("n_tubes", 1)))
+        expected = components * (12 - 12 * int(a.info.get("genus", 0)))
         clash = g["n_close_contacts"]
         lines = [f"atoms        {len(a):>6d}"]
         if "radius" in a.info:
@@ -634,6 +841,20 @@ class NanocarbonGUI:
             lines.append(f"genus        {a.info['genus']:>6d}")
         if all(a.get_pbc()):
             lines.append(f"periodic     {a.cell[0][0]:>6.1f} Å cell")
+        if "n_shells" in a.info:
+            lines.append(f"shells       {a.info['n_shells']:>6d}")
+            lines.append(f"wall spacing {a.info['wall_spacing']:>6.2f} Å")
+        if "n_tubes" in a.info:
+            lines.append(f"tubes        {a.info['n_tubes']:>6d}")
+        sep = a.info.get("geometry", {}).get("min_wall_separation")
+        if sep is not None and sep == sep:  # not NaN
+            lines.append(f"wall gap     {sep:>6.2f} Å")
+        symbols = a.get_chemical_symbols()
+        if set(symbols) != {"C"}:
+            from collections import Counter
+            by_element = Counter(symbols)
+            lines.append("composition  " + " ".join(
+                f"{el}{by_element[el]}" for el in sorted(by_element)))
         lines += [
             "",
             "rings",
@@ -646,6 +867,11 @@ class NanocarbonGUI:
             f"  angle  {g['angle_min']:.1f}–{g['angle_max']:.1f}°",
             f"  contacts <2Å  {clash}  {'OK' if clash == 0 else 'CHECK'}",
         ]
+        # Zero clashes is not the same as a physical structure: an
+        # over-tight coil keeps its atoms apart while stretching its bonds
+        # past any real C-C. Say so in words, next to the numbers.
+        verdict, why = sp2_quality(g)
+        lines += ["", f"sp2 verdict  {verdict.upper()}", f"  {why}"]
         self.txt_info.configure(state="normal")
         self.txt_info.delete("1.0", "end")
         self.txt_info.insert("1.0", "\n".join(lines))

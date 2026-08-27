@@ -16,6 +16,9 @@ nanocarbon_lab/
 │                  #   schwarzites, via SDF -> marching cubes -> isotropic remesh -> dual
 │                  #   capped_cnt.py + fullerene_mesh.py: finite capped/defected
 │                  #   "elongated fullerene" CNTs for rendering (see below)
+│                  #   swept.py: coils/curved tubes via the implicit route, so
+│                  #   ring sizes follow the curvature instead of straining
+│                  #   assemblies.py: multi-wall tubes and bundles at the vdW gap
 ├── dopants/       # substitutional dopants (N, B, S, P, co-doping)
 ├── defects/       # vacancies, Stone-Wales, topological defects
 ├── topology/      # networkx-based connectivity / coordination analysis
@@ -121,7 +124,54 @@ are set far outside anything strain explains.
 
 The Euler check is **genus-derived** (`deficit == 6 * chi`), never the
 tube builder's hardcoded 12 — a schwarzite legitimately has a strongly
-negative deficit.
+negative deficit. For an *assembly* (MWCNT, bundle) the budget is 12 per
+disjoint shell, not 12 overall.
+
+## Curved tubes: swept vs implicit
+
+There are two routes and they are not interchangeable. `build_capped_cnt(
+shape=...)` sweeps a finished all-hexagon tube onto a centreline, so the
+bend is carried as **elastic strain** — a geometric necessity, not a
+relaxation failure, and no anchor tuning recovers it (measured: 6.5% path
+strain gives 1.33–1.51 Å bonds at every anchor stiffness tried).
+`builders/swept.py` meshes the curved surface implicitly instead, so ring
+sizes follow the curvature (85 pentagons / 71 heptagons on a 1.5-turn
+coil) and bonds return to graphitic length.
+
+Two properties of that route must not be re-broken:
+1. **Ring topology encodes curvature, not torsion.** A free coil keeps
+   its radius (29.4 Å for a requested 30.0) but springs open along its
+   axis (20 → 26.7 Å pitch). `_finish`'s `pin_near` can hold the ends, but
+   it is **off by default and should stay that way**: at `k_pin=5` the
+   same coil came out with 1.18–1.71 Å bonds and 3 overlapping pairs,
+   failing the quality gate the free relaxation passes. Report the
+   achieved pitch; do not hold a requested number at the cost of the
+   chemistry.
+2. **`build_coil` refuses a pitch below `2*tube_radius + 3.4`.** Below
+   that the surface merges adjacent turns into one solid and the result
+   is not a tube at all.
+
+## Relaxation: the neighbour list needs a skin
+
+`relax_shell`'s non-bonded list is frozen for a whole L-BFGS run. Built at
+exactly `repel_cutoff`, two atoms further apart than that are invisible to
+each other for thousands of iterations and pass straight through. Compact
+shells never noticed; a 284 Å coiled tube drifted 6.5 Å per atom and fused
+neighbouring turns, 370 sub-2 Å contacts between atoms 135 bonds apart.
+`repel_skin` (default 5 Å) fixes it, with a **conservative Verlet
+rebuild**: restart when the two largest displacements sum past the skin.
+Do not tighten that to "any atom moved half the skin" — ordinary local
+rearrangement is ~1 Å and would restart L-BFGS (discarding its history)
+continuously, tripling the runtime.
+
+## Say whether the geometry is physical, not just what it measures
+
+`validation/quality.sp2_quality` turns `atoms.info["geometry"]` into
+`CLEAN` / `STRAINED` / `BROKEN` with a reason, and both the CLI and the
+GUI print it. It exists because "0 close contacts" was being read as "the
+structure is fine": an over-tight coil keeps its atoms apart while
+stretching bonds to 1.69 Å, longer than any real C–C bond. Keep new
+builders reporting it.
 
 ## Scientific guardrails
 - Carbon bond length: default 1.42 Å (sp2). Accept anything in `[1.20, 1.80]` Å as bonded; anything in `(0, 0.9]` Å is a hard error.

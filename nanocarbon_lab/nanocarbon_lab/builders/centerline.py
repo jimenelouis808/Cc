@@ -103,27 +103,45 @@ def random_control_points(
     )
 
 
-def helix_arc_length(coil_radius: float, pitch: float, turns: float) -> float:
+def helix_arc_length(
+    coil_radius: float, pitch: float, turns: float, taper: float = 1.0
+) -> float:
     """Length of tube consumed by a helix of this geometry, in Å.
 
     One turn of a helix of radius ``R`` and pitch ``P`` has arc length
     ``sqrt((2*pi*R)^2 + P^2)``. Knowing this is what lets the builder size
     the tube to the coil the caller asked for, instead of stretching an
     arbitrary tube onto it.
+
+    ``taper`` (ratio of final to initial coil radius, see
+    :func:`helix_control_points`) shrinks a conical spring's length: the
+    radius sweeps linearly, so the mean radius ``R(1+taper)/2`` is used.
+    The neglected ``dr/dtheta`` term is ``R(taper-1)/(2*pi*turns)``, two
+    orders of magnitude below ``R`` for any coil worth building. Ignoring
+    the taper here would size the tube for a cylindrical coil and overshoot
+    the requested number of turns.
     """
-    return float(turns * np.hypot(2.0 * np.pi * coil_radius, pitch))
+    mean_radius = coil_radius * (1.0 + taper) / 2.0
+    return float(turns * np.hypot(2.0 * np.pi * mean_radius, pitch))
 
 
-def helix_curvature(coil_radius: float, pitch: float) -> float:
-    """Curvature (1/Å) of a helix -- constant along its whole length.
+def helix_curvature(coil_radius: float, pitch: float, taper: float = 1.0) -> float:
+    """Peak curvature (1/Å) of a helix. Multiply by tube radius for strain.
 
     ``kappa = R / (R^2 + c^2)`` with ``c = P / (2*pi)``. Multiplying by the
     tube radius gives the outer-wall strain, which is what decides whether
     a requested coil is physically survivable: a coil radius only a few
     times the tube radius is severely strained however gently it is drawn.
+
+    A cylindrical helix has this curvature everywhere. A tapered one does
+    not, and it is the **tightest** end that governs whether the wall
+    survives, so the smaller of ``R`` and ``R*taper`` is used -- reporting
+    the nominal radius would understate the strain of a conical spring
+    exactly where it is worst.
     """
+    tight_radius = coil_radius * min(1.0, taper)
     c = pitch / (2.0 * np.pi)
-    return float(coil_radius / (coil_radius**2 + c**2))
+    return float(tight_radius / (tight_radius**2 + c**2))
 
 
 def helix_control_points(
@@ -131,6 +149,8 @@ def helix_control_points(
     pitch: float,
     turns: float,
     n_points: int = 60,
+    handedness: int = 1,
+    taper: float = 1.0,
 ) -> np.ndarray:
     """Control points for a helix in **absolute Å**.
 
@@ -138,16 +158,37 @@ def helix_control_points(
     asked for a specific coil diameter and pitch, so the path is built at
     that size and the *tube* is sized to match, rather than the path being
     trimmed to fit the tube.
+
+    Parameters
+    ----------
+    coil_radius, pitch, turns
+        Coil radius and rise-per-turn in Å, and how many turns.
+    n_points
+        Spline control points; raised automatically with ``turns`` so a
+        long coil stays smooth.
+    handedness
+        ``+1`` right-handed, ``-1`` left-handed. Real nanocoils occur in
+        both, and a mirrored pair reads well in a figure.
+    taper
+        Ratio of final to initial coil radius. ``1.0`` is a cylindrical
+        coil; other values give a conical spring.
     """
     if coil_radius <= 0 or pitch <= 0 or turns <= 0:
         raise ValueError("coil_radius, pitch and turns must all be positive.")
+    if handedness not in (1, -1):
+        raise ValueError("handedness must be +1 (right-handed) or -1 (left).")
+    if taper <= 0:
+        raise ValueError("taper must be positive (1.0 = cylindrical coil).")
     # Enough samples that the spline through them reproduces the helix.
     n_points = max(12, int(n_points), int(round(turns * 16)))
     angle = np.linspace(0.0, 2.0 * np.pi * turns, n_points)
+    # Taper sweeps the radius from `coil_radius` to `coil_radius * taper`,
+    # giving a conical spring rather than a cylindrical one.
+    radius = coil_radius * np.linspace(1.0, taper, n_points)
     return np.stack(
         [
-            coil_radius * np.cos(angle),
-            coil_radius * np.sin(angle),
+            radius * np.cos(angle),
+            handedness * radius * np.sin(angle),
             pitch * angle / (2.0 * np.pi),
         ],
         axis=1,
