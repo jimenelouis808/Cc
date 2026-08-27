@@ -636,7 +636,10 @@ coil.info["achieved_coil_radius"]   # measured off the relaxed atoms
 Use the swept route for gentle curves and when you need exact dimensions
 fast; use the implicit route when the curvature is tight enough that the
 `sp2 verdict` (printed by the CLI and shown in the GUI) reports
-`BROKEN`.
+`BROKEN`. Budget minutes, not seconds: a 2800-atom coil takes about
+6 minutes to mesh, remesh and relax. The GUI runs it on a worker thread
+so the window stays responsive, and the tests that build one are marked
+`slow` (`pytest -m "not slow"` skips them).
 
 Two things about the implicit coil are worth knowing. Its pitch must
 clear two tube walls plus a graphitic gap or the turns merge into one
@@ -644,8 +647,10 @@ solid, and the builder refuses rather than emitting that.
 
 And ring topology encodes a tube's **curvature** but not its **torsion**.
 So the coil radius comes back as asked — 29.4 Å measured against a
-requested 30.0 — while the pitch is a soft mode that springs open (20 Å
-requested, 26.7 Å relaxed). `pin_ends=True` holds the axial length by
+requested 30.0 — while the pitch is a soft mode free to move. How far it
+moves depends on how hard the coil is working: a tight one (30 Å coil,
+6 Å tube) opens from 20 Å to 26.7, while a gentler one (34 Å coil, 4.5 Å
+tube) barely shifts, 20 Å to 22. `pin_ends=True` holds the axial length by
 restraining the end caps, but it fights the relaxation where the network
 is most distorted: the same coil then came out with 1.18–1.71 Å bonds and
 three overlapping atom pairs, failing the quality gate the free

@@ -59,6 +59,12 @@ exclude = ["tests*", "examples*"]
 [tool.pytest.ini_options]
 testpaths = ["nanocarbon_lab/tests"]
 addopts = "-ra --strict-markers"
+markers = [
+    # Builds that take minutes, not seconds: the implicit route meshes and
+    # remeshes a real surface before relaxing thousands of atoms. Skip them
+    # with `-m 'not slow'` during quick iteration.
+    "slow: takes minutes to run",
+]
 
 [tool.ruff]
 line-length = 100

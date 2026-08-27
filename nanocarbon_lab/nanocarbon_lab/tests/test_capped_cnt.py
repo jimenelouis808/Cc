@@ -442,6 +442,7 @@ class TestHelixDimensions:
         # Pitch stretches the helix, so it curves less.
         assert cl.helix_curvature(10.0, 40.0) < cl.helix_curvature(10.0, 5.0)
 
+    @pytest.mark.slow
     def test_tube_is_sized_to_the_coil(self):
         wide = build_capped_cnt(
             shape="helix", helix_radius=80.0, helix_pitch=30.0,
@@ -456,6 +457,7 @@ class TestHelixDimensions:
         assert wide.info["helix_radius"] == 80.0
         assert wide.info["helix_pitch"] == 30.0
 
+    @pytest.mark.slow
     def test_wide_coil_is_physical(self):
         atoms = build_capped_cnt(
             shape="helix", helix_radius=80.0, helix_pitch=30.0,

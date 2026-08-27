@@ -261,6 +261,12 @@ def _measure_coil(positions: np.ndarray, n_sectors: int = 24) -> tuple[float, fl
     Instead, atoms in one narrow sector of azimuth belong to one turn per
     visit, so their z values fall into clusters exactly one pitch apart,
     and the median gap between consecutive clusters is the pitch.
+
+    That needs a sector to be visited **twice**, so pitch is only
+    measurable above one full turn. Below that there is no second cluster
+    to measure a gap to, and the returned pitch is ``nan`` rather than a
+    number that looks plausible and is not: a one-turn coil of pitch 20 Å
+    reported 63.9 Å from the axial-span fallback this replaces.
     """
     centred = positions - positions.mean(axis=0)
     radius = float(np.linalg.norm(centred[:, :2], axis=1).mean())
@@ -283,9 +289,7 @@ def _measure_coil(positions: np.ndarray, n_sectors: int = 24) -> tuple[float, fl
         centres = [z[edges[k]:edges[k + 1]].mean() for k in range(len(edges) - 1)]
         gaps += list(np.diff(centres))
 
-    pitch = float(np.median(gaps)) if gaps else float(
-        centred[:, 2].max() - centred[:, 2].min()
-    )
+    pitch = float(np.median(gaps)) if gaps else float("nan")
     return radius, pitch
 
 

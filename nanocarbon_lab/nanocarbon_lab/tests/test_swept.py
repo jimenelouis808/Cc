@@ -84,11 +84,20 @@ class TestMarchingCubesBox:
 
 @pytest.fixture(scope="module")
 def coil():
-    """One relaxed coil, shared by the tests below (it takes minutes)."""
-    return build_coil(coil_radius=26.0, pitch=20.0, turns=1.0, tube_radius=5.0,
+    """One relaxed coil, shared by the tests below (it takes minutes).
+
+    The dimensions are chosen to be physically comfortable rather than
+    merely small. A 26 Å coil around a 5 Å tube builds faster but is tight
+    enough to leave a 1.58 Å bond -- a real result, and one the sp2
+    verdict correctly calls broken, but not the behaviour these tests are
+    about. Turns are above 1.0 because pitch cannot be measured below that
+    (see :func:`_measure_coil`).
+    """
+    return build_coil(coil_radius=34.0, pitch=20.0, turns=1.25, tube_radius=4.5,
                       remesh_iterations=20, anneal_sweeps=40)
 
 
+@pytest.mark.slow
 class TestRelaxedCoil:
     def test_euler_budget_holds(self, coil):
         assert _deficit(coil.info["ring_counts"]) == 12
@@ -115,7 +124,29 @@ class TestRelaxedCoil:
         assert coil.info["geometry"]["n_close_contacts"] == 0
 
     def test_requested_coil_radius_is_honoured(self, coil):
-        assert coil.info["achieved_coil_radius"] == pytest.approx(26.0, rel=0.15)
+        """Curvature *is* encoded in the ring sizes, so the radius holds."""
+        assert coil.info["achieved_coil_radius"] == pytest.approx(34.0, rel=0.15)
+
+    def test_pitch_is_reported_rather_than_assumed(self, coil):
+        """Torsion is *not* encoded, so the pitch is free to move.
+
+        A gentle coil like this one barely does (20 Å requested, 22 Å
+        relaxed), but a tighter one springs open much further, which is
+        why the achieved value is measured and reported instead of the
+        requested one being echoed back.
+        """
+        assert coil.info["achieved_pitch"] == pytest.approx(20.0, rel=0.35)
+
+    def test_pitch_is_nan_below_one_full_turn(self):
+        """One turn visits each azimuthal sector once, so there is no
+        second cluster to measure a gap to. Saying so beats the plausible
+        wrong number the axial-span fallback used to give (63.9 Å for a
+        20 Å pitch)."""
+        angle = np.linspace(0.0, 2 * np.pi * 0.8, 500)
+        arc = np.stack([30 * np.cos(angle), 30 * np.sin(angle),
+                        20.0 * angle / (2 * np.pi)], axis=-1)
+        _, pitch = _measure_coil(arc)
+        assert np.isnan(pitch)
 
     def test_all_atoms_are_three_coordinate(self, coil):
         degree = np.zeros(len(coil), dtype=int)
@@ -154,6 +185,7 @@ class TestCoilMeasurement:
         assert pitch == pytest.approx(20.0, rel=0.15)
 
 
+@pytest.mark.slow
 class TestSweptTube:
     def test_a_straight_path_gives_a_plain_capped_tube(self):
         """With no curvature to pay for, only the 12 cap pentagons appear."""

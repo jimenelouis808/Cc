@@ -184,6 +184,7 @@ builders reporting it.
 ```bash
 pip install -e .[dev]
 pytest nanocarbon_lab/tests -q
+pytest nanocarbon_lab/tests -q -m "not slow"   # skips the minutes-long coil builds
 python -m nanocarbon_lab.cli.main cnt --n 6 --m 6 --length 10 --out out/cnt --format qe
 python -m nanocarbon_lab.cli.main cnt-cap --rings 8 --freq 3 --defect stone_wales:1 --out out/cnt_cap/demo
 # GUI (needs tkinter + matplotlib); headless GUI tests:

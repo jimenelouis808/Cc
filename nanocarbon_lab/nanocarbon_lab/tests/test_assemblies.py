@@ -89,13 +89,13 @@ class TestSurfaceRoughness:
     """
 
     def test_zero_roughness_leaves_an_ideally_smooth_wall(self):
-        atoms = build_capped_cnt(n_body_rings=5, freq=3, roughness=0.0, seed=1)
-        assert _radial_spread(atoms) < 0.02
+        atoms = build_capped_cnt(n_body_rings=8, freq=3, roughness=0.0, seed=1)
+        assert _radial_spread(atoms) < 0.01
 
     def test_corrugation_grows_with_sigma_and_bonds_survive(self):
         spreads = []
         for sigma in (0.1, 0.3):
-            atoms = build_capped_cnt(n_body_rings=5, freq=3, roughness=sigma, seed=1)
+            atoms = build_capped_cnt(n_body_rings=8, freq=3, roughness=sigma, seed=1)
             spreads.append(_radial_spread(atoms))
             geometry = atoms.info["geometry"]
             low, high = SP2_BOND_RANGE
@@ -104,17 +104,25 @@ class TestSurfaceRoughness:
         assert spreads[1] > spreads[0] > 0.02
 
     def test_roughness_never_changes_the_topology(self):
-        smooth = build_capped_cnt(n_body_rings=5, freq=3, roughness=0.0, seed=1)
-        rough = build_capped_cnt(n_body_rings=5, freq=3, roughness=0.4, seed=1)
+        smooth = build_capped_cnt(n_body_rings=8, freq=3, roughness=0.0, seed=1)
+        rough = build_capped_cnt(n_body_rings=8, freq=3, roughness=0.4, seed=1)
         assert smooth.info["ring_counts"] == rough.info["ring_counts"]
         assert smooth.info["bonds"] == rough.info["bonds"]
 
 
 def _radial_spread(atoms) -> float:
-    """RMS deviation of the body wall from a perfect cylinder, in Å."""
+    """RMS deviation of the body wall from a perfect cylinder, in Å.
+
+    The window is the middle 15% of the length, matching what
+    ``build_capped_cnt`` itself uses to measure tube radius. A wider one
+    reaches into the hemispherical caps, where the radius tapers for
+    entirely legitimate reasons, and reports that taper as corrugation: at
+    30% of the length a perfectly smooth 5-ring tube measures 0.025 Å of
+    "roughness" against 0.003 Å here.
+    """
     positions = atoms.get_positions()
     centred = positions - positions.mean(axis=0)
-    body = np.abs(centred[:, 2]) < 0.3 * (centred[:, 2].max() - centred[:, 2].min())
+    body = np.abs(centred[:, 2]) < 0.15 * (centred[:, 2].max() - centred[:, 2].min())
     return float(np.linalg.norm(centred[body][:, :2], axis=1).std())
 
 
@@ -123,13 +131,15 @@ class TestNeighbourListSkin:
 
     Without a skin, two atoms further apart than the cutoff when the list
     was built are invisible to each other for thousands of iterations and
-    pass straight through. This reproduces that in miniature: two rigid
-    sheets driven together by anchors, with and without a skin.
+    pass straight through. This reproduces that in miniature: two sheets
+    5 Å apart -- outside the 2.2 Å cutoff, inside a 4 Å skin -- driven
+    together by anchors, in a **single** cycle so the list is never
+    rebuilt. That single frozen cycle is the real failure mode; with the
+    default three cycles the rebuild between them papers over it, which
+    is exactly why the bug survived so long in compact structures.
     """
 
     def test_skin_catches_walls_that_approach_mid_run(self):
-        # Two parallel 4x4 grids of "atoms", 5 A apart -- outside the 2.2 A
-        # cutoff, inside a 3.0 A skin.
         grid = np.stack(np.meshgrid(np.arange(4) * 1.42, np.arange(4) * 1.42,
                                     indexing="ij"), axis=-1).reshape(-1, 2)
         lower = np.column_stack([grid, np.zeros(len(grid))])
@@ -156,11 +166,15 @@ class TestNeighbourListSkin:
 
         without = fm.relax_shell(positions, bonds, anchors=anchors,
                                  anchor_targets=targets, k_anchor=30.0,
-                                 repel_skin=0.0, max_iterations=2000)
+                                 repel_skin=0.0, outer_cycles=1,
+                                 max_iterations=4000)
         with_skin = fm.relax_shell(positions, bonds, anchors=anchors,
                                    anchor_targets=targets, k_anchor=30.0,
-                                   repel_skin=4.0, max_iterations=2000)
-        assert closest_approach(with_skin) > closest_approach(without)
+                                   repel_skin=4.0, outer_cycles=1,
+                                   max_iterations=4000)
+        # With no skin the sheets do not merely touch, they interpenetrate
+        # completely: measured closest approach 0.000 Å.
+        assert closest_approach(without) < 0.1
         assert closest_approach(with_skin) > 1.0
 
 

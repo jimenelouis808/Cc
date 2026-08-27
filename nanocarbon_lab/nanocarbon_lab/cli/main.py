@@ -19,18 +19,19 @@ Sub-commands:
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
 from ase import io as ase_io
 
 from ..builders import (
+    build_bundle,
     build_capped_cnt,
     build_carbon_foam,
     build_cnt,
-    build_graphene_supercell,
-    build_bundle,
     build_coil,
+    build_graphene_supercell,
     build_junction,
     build_multiwall_cnt,
     build_nanocoil,
@@ -266,9 +267,14 @@ def _cmd_coil(args):
     )
     atoms = _maybe_dope(atoms, args)
     _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    achieved_pitch = atoms.info["achieved_pitch"]
+    # Pitch is only measurable above one full turn (see swept._measure_coil).
+    pitch_text = (
+        "n/a (needs more than one turn to measure)" if math.isnan(achieved_pitch)
+        else f"{achieved_pitch:.1f} A"
+    )
     print(f"  coil        = R {atoms.info['achieved_coil_radius']:.1f} A, pitch "
-          f"{atoms.info['achieved_pitch']:.1f} A (asked R {args.coil_radius:.0f}, "
-          f"pitch {args.pitch:.0f})")
+          f"{pitch_text} (asked R {args.coil_radius:.0f}, pitch {args.pitch:.0f})")
     return 0
 
 
