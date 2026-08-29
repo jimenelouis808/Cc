@@ -35,7 +35,9 @@ Two properties hold throughout:
 
 > **¿Primera vez?** La [**Guía rápida en español**](GUIA_RAPIDA.md) explica
 > paso a paso cómo instalarlo y usarlo en tu portátil, incluida la interfaz
-> gráfica.
+> gráfica. Para modificar el código, la
+> [**Guía de desarrollo**](DESARROLLO.md) cubre tests, dónde tocar cada cosa
+> y qué falta validar contra datos reales.
 
 ## Installation
 
