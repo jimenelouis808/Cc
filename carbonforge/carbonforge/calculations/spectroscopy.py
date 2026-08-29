@@ -173,7 +173,10 @@ def format_dynmat_input(
     lines = ["&INPUT"]
     lines.append(f"    fildyn = '{fildyn}'")
     lines.append(f"    asr = '{spec.asr}'")
-    lines.append("    filout = 'dynmat.out'")
+    # filout holds the eigenvectors (axsf, viewable in XCrySDen). It must NOT
+    # be dynmat.out: the runner script redirects stdout there, and the two
+    # would overwrite each other. The frequency/intensity table is on stdout.
+    lines.append("    filout = 'dynmat.axsf'")
     lines.append("    fileig = 'dynmat.eig'")
     if spec.needs_epsil:
         # Only meaningful once ph.x has produced the dielectric data.

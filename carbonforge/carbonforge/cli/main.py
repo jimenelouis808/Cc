@@ -170,6 +170,123 @@ def _cmd_validate(args):
     return 0 if report.ok else 1
 
 
+def _cmd_bands(args):
+    """Plot a finished band-structure calculation."""
+    from ..results.bands import (
+        attach_path_labels,
+        plot_bands,
+        read_qe_bands,
+        read_qe_bands_gnu,
+        read_siesta_bands,
+    )
+
+    path = Path(args.path)
+    try:
+        if path.suffix == ".bands":
+            bands = read_siesta_bands(path)
+        elif path.name.endswith(".gnu"):
+            bands = read_qe_bands_gnu(path)
+        else:
+            bands = read_qe_bands(path)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.labels:
+        attach_path_labels(bands, args.labels.split(","))
+
+    print(f"{bands.n_kpoints} puntos k x {bands.n_bands} bandas")
+    reference = args.fermi if args.fermi is not None else bands.fermi_energy
+    if reference is not None:
+        print(f"Referencia de energía: {reference:.4f} eV")
+        gap = bands.band_gap(fermi=reference)
+        if gap is None:
+            print("Gap: ninguno — las bandas cruzan la referencia (metálico).")
+        else:
+            print(f"Gap muestreado: {gap:.4f} eV")
+            print("  (solo ve los puntos k del camino; un extremo fuera de él "
+                  "no aparece)")
+    else:
+        print("Sin nivel de Fermi en el archivo; pásalo con --fermi para el gap.")
+
+    window = tuple(args.window) if args.window else None
+    figure = plot_bands(bands, reference=reference, energy_window=window)
+    figure.savefig(args.out, dpi=args.dpi, bbox_inches="tight")
+    print(f"Figura guardada en {args.out}")
+    return 0
+
+
+def _cmd_spectrum(args):
+    """Plot a finished phonon / IR / Raman calculation."""
+    from ..results.spectra import plot_spectrum, read_dynmat
+
+    try:
+        spectrum = read_dynmat(args.path)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print(spectrum.summary())
+
+    if args.kind == "raman" and not spectrum.has_raman:
+        print("\nEste cálculo no trae actividades Raman.", file=sys.stderr)
+        return 1
+    if args.kind == "ir" and not spectrum.has_ir:
+        print("\nEste cálculo no trae actividades IR.", file=sys.stderr)
+        return 1
+
+    figure = plot_spectrum(
+        spectrum,
+        kind=args.kind,
+        width_cm1=args.width,
+        laser_wavelength_nm=args.laser,
+        temperature_k=args.temperature,
+    )
+    figure.savefig(args.out, dpi=args.dpi, bbox_inches="tight")
+    print(f"\nFigura guardada en {args.out}")
+    return 0
+
+
+def _cmd_converge(args):
+    """Generate a convergence sweep."""
+    from ..workflows.convergence import cutoff_sweep, kpoint_sweep
+
+    atoms = ase_io.read(args.structure)
+    outdir = Path(args.out)
+    if args.parameter == "cutoff":
+        values = args.values or [40, 50, 60, 70, 80, 90, 100]
+        written = cutoff_sweep(atoms, outdir, cutoffs=values, force=args.force)
+    else:
+        values = args.values or [0.40, 0.30, 0.25, 0.20, 0.15, 0.10]
+        written = kpoint_sweep(atoms, outdir, densities=values, force=args.force)
+
+    print(f"{len(written) - 1} entradas escritas en {outdir}")
+    print(f"Ejecuta:  cd {outdir} && ./run_sweep.sh")
+    print(f"Y luego:  carbonforge converge-report {outdir}")
+    return 0
+
+
+def _cmd_converge_report(args):
+    """Analyse a finished convergence sweep."""
+    from ..workflows.convergence import (
+        convergence_table,
+        plot_convergence,
+        read_total_energies,
+    )
+
+    points = read_total_energies(args.directory)
+    name = "ecutwfc (Ry)" if args.parameter == "cutoff" else "densidad k (1/Å)"
+    print(convergence_table(points, tolerance_mev_per_atom=args.tolerance,
+                            parameter_name=name))
+
+    if args.out and len(points) >= 2:
+        figure = plot_convergence(points, parameter_name=name,
+                                  tolerance_mev_per_atom=args.tolerance)
+        figure.savefig(args.out, dpi=args.dpi, bbox_inches="tight")
+        print(f"\nFigura guardada en {args.out}")
+    return 0
+
+
 def _add_common(p):
     p.add_argument("--out", required=True, help="Output directory.")
     p.add_argument("--format",
@@ -241,6 +358,58 @@ def build_parser() -> argparse.ArgumentParser:
     # Foams come out of a stochastic packing, so LAMMPS relaxation is the
     # realistic first step rather than a DFT run.
     fm.set_defaults(func=_cmd_foam, format="lammps")
+
+    # --- analysis of finished calculations ------------------------------
+    bd = sub.add_parser("plot-bands",
+                        help="Plot a finished band structure (QE or SIESTA).")
+    bd.add_argument("path", help="bands.dat, bands.dat.gnu or SystemLabel.bands")
+    bd.add_argument("--out", default="bands.png")
+    bd.add_argument("--fermi", type=float, default=None,
+                    help="Nivel de Fermi en eV, si el archivo no lo trae.")
+    bd.add_argument("--labels", default=None,
+                    help="Etiquetas separadas por comas, p.ej. 'G,M,K,G'.")
+    bd.add_argument("--window", type=float, nargs=2, default=None,
+                    metavar=("BAJO", "ALTO"),
+                    help="Rango de energía en eV respecto a la referencia.")
+    bd.add_argument("--dpi", type=int, default=150)
+    bd.set_defaults(func=_cmd_bands)
+
+    sp = sub.add_parser("plot-spectrum",
+                        help="Plot an IR or Raman spectrum from dynmat.x output.")
+    sp.add_argument("path", help="Salida de dynmat.x (dynmat.out).")
+    sp.add_argument("--kind", choices=["raman", "ir"], default="raman")
+    sp.add_argument("--out", default="spectrum.png")
+    sp.add_argument("--width", type=float, default=8.0,
+                    help="Anchura lorentziana a media altura, en cm-1.")
+    sp.add_argument("--laser", type=float, default=None,
+                    help="Longitud de onda del láser en nm; aplica el factor "
+                         "(v_laser - v)^4.")
+    sp.add_argument("--temperature", type=float, default=None,
+                    help="Temperatura en K; aplica el factor de Bose.")
+    sp.add_argument("--dpi", type=int, default=150)
+    sp.set_defaults(func=_cmd_spectrum)
+
+    cv = sub.add_parser("converge",
+                        help="Generate a cutoff or k-point convergence sweep.")
+    cv.add_argument("structure", help="Estructura de entrada legible por ASE.")
+    cv.add_argument("--parameter", choices=["cutoff", "kpoints"],
+                    default="cutoff")
+    cv.add_argument("--values", type=float, nargs="+", default=None,
+                    help="Valores a barrer. Por defecto, una serie razonable.")
+    cv.add_argument("--out", required=True)
+    cv.add_argument("--force", action="store_true")
+    cv.set_defaults(func=_cmd_converge)
+
+    cr = sub.add_parser("converge-report",
+                        help="Analyse a finished convergence sweep.")
+    cr.add_argument("directory", help="Carpeta con las salidas de pw.x.")
+    cr.add_argument("--parameter", choices=["cutoff", "kpoints"],
+                    default="cutoff")
+    cr.add_argument("--tolerance", type=float, default=1.0,
+                    help="Tolerancia en meV/átomo (por defecto 1).")
+    cr.add_argument("--out", default=None, help="Guardar figura en este archivo.")
+    cr.add_argument("--dpi", type=int, default=150)
+    cr.set_defaults(func=_cmd_converge_report)
 
     vl = sub.add_parser("validate",
                         help="Validate an existing structure file (CIF, XYZ, POSCAR…).")

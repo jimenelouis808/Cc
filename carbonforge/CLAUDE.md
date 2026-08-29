@@ -18,11 +18,12 @@ carbonforge/
 ├── topology/      # networkx-based connectivity / coordination analysis
 ├── validation/    # geometry checks + calculation-level physics checks
 ├── calculations/  # band paths, phonon/IR/Raman, spin-orbit setups
+├── results/       # parse + plot finished runs (bands, spectra)
 ├── exports/       # Quantum ESPRESSO, SIESTA and LAMMPS writers
 ├── relax/         # ASE optimizer wrapper + calculator-free harmonic pre-relax
 ├── viz/           # matplotlib 3D viewer
 ├── gui/           # Tkinter desktop app (params logic + widgets)
-├── workflows/     # batch generation + ML dataset exporter
+├── workflows/     # batch generation, convergence sweeps, ML dataset
 ├── utils/         # constants, geometry helpers
 ├── cli/           # command line interface
 ├── tests/         # pytest unit tests
@@ -45,6 +46,10 @@ carbonforge/
 - Spin-orbit requires `rel-` pseudopotentials; scalar ones give silent zero splitting.
 - `vc-relax` on 1D/2D must set `cell_dofree`, or the vacuum collapses.
 - Metals must not use `occupations='fixed'`.
+- `dynmat.x`: `filout` must never be `dynmat.out` — the runner script
+  redirects stdout there and the two would clobber each other.
+- Result parsers are validated against synthetic fixtures only; say so in
+  user-facing docs rather than implying they are battle-tested.
 
 ## Scientific guardrails
 - Carbon bond length: default 1.42 Å (sp2). Accept anything in `[1.20, 1.80]` Å as bonded; anything in `(0, 0.9]` Å is a hard error.

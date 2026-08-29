@@ -233,7 +233,81 @@ carbonforge cnt --help
 
 ---
 
-## 7. Desde Python
+## 7. Ver los resultados
+
+carbonforge **no ejecuta nada**: escribe las entradas y lee las salidas.
+Cuando tu cálculo haya terminado:
+
+```bash
+# Estructura de bandas (QE o SIESTA)
+carbonforge plot-bands bands.dat --labels G,M,K,G --out bandas.png
+
+# Espectro Raman, con corrección de láser y temperatura
+carbonforge plot-spectrum dynmat.out --kind raman --laser 532 \
+                          --temperature 300 --out raman.png
+```
+
+`plot-bands` te dice además el gap muestreado, o si el sistema es metálico.
+Ojo: solo ve los puntos k del camino, así que un extremo de banda fuera de él
+no aparece.
+
+`plot-spectrum` te avisa de dos cosas que conviene pillar pronto:
+
+- **Modos imaginarios** (frecuencias negativas): tu estructura no está en un
+  mínimo sino en un punto de silla. El espectro no vale; relaja mejor.
+- **Un número de modos acústicos distinto de tres**: suele significar que no
+  se aplicó la regla de suma acústica.
+
+Sobre las intensidades: lo que da el cálculo son **actividades**. Para
+compararlas con un espectro experimental hacen falta el factor de Bose y el
+prefactor `(ν_láser − ν)⁴`. Se aplican solo si los pides (`--laser`,
+`--temperature`), y la etiqueta del eje cambia para que siempre sepas qué
+estás mirando.
+
+---
+
+## 8. Convergencia: los valores por defecto NO están convergidos
+
+Esto importa: un gap o una frecuencia sacados de un cálculo sin convergir
+están mal, por muy cuidado que esté todo lo demás. Los 60 Ry por defecto son
+un punto de partida razonable, nada más.
+
+```bash
+# 1. Genera el barrido
+carbonforge converge estructura.xyz --parameter cutoff --out conv
+
+# 2. Ejecútalo
+cd conv && ./run_sweep.sh
+
+# 3. Analiza
+carbonforge converge-report conv --tolerance 1.0 --out conv.png
+```
+
+Te da una tabla como esta:
+
+```
+     valor      E/átomo (eV)     ΔE vs siguiente
+--------------------------------------------------
+        40        -72.212216          527.221 meV
+        60        -72.739437            0.680 meV ✓
+        80        -72.740117                   —
+
+Convergido en ecutwfc (Ry) = 60
+```
+
+Compara cada punto con el **siguiente**, que es la pregunta real: «¿puedo
+parar aquí?». Las energías van por átomo, así que la tolerancia significa lo
+mismo en sistemas de cualquier tamaño.
+
+Un matiz: converger la energía total no garantiza que estén convergidas otras
+propiedades. Las frecuencias de fonones suelen necesitar más cutoff que la
+energía. Si te importa una propiedad concreta, converge esa.
+
+Con `--parameter kpoints` haces lo mismo para la malla de puntos k.
+
+---
+
+## 9. Desde Python
 
 Para barridos o integrarlo en tus propios scripts:
 
@@ -268,7 +342,7 @@ write_dataset(jobs, "salida/dataset")   # 16 estructuras + dataset.json
 
 ---
 
-## 8. Qué hacer con los archivos generados
+## 10. Qué hacer con los archivos generados
 
 ### Quantum ESPRESSO
 
@@ -304,7 +378,7 @@ Para visualizar: **OVITO** y **VMD** leen XYZ; **VESTA** lee CIF.
 
 ---
 
-## 9. Problemas frecuentes
+## 11. Problemas frecuentes
 
 **`command not found: carbonforge-gui`**
 El entorno virtual no está activo. Ejecuta `source .venv/bin/activate`
@@ -336,7 +410,7 @@ ejecuta `pip install -e .`.
 
 ---
 
-## 10. Límites que conviene conocer
+## 12. Límites que conviene conocer
 
 Estas no son pegas menores, son cosas que afectan a cómo interpretas los
 resultados:
@@ -364,3 +438,10 @@ resultados:
 - **carbonforge no ejecuta nada.** Genera los archivos de entrada y los
   scripts; ejecutar `pw.x`, `siesta` o `lmp` es cosa tuya. Tampoco incluye
   pseudopotenciales.
+- **Los lectores de resultados están probados con archivos sintéticos** que
+  reproducen los formatos documentados, no con salidas de una instalación
+  real de QE o SIESTA (no había ninguna disponible al desarrollarlos). La
+  primera vez que los uses con tus datos, trátalo también como una prueba
+  del lector: si algo no cuadra, dímelo.
+- **El gap que reporta `plot-bands` es un gap muestreado**: solo ve los
+  puntos k del camino. Un extremo de banda fuera de él no aparece.

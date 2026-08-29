@@ -27,7 +27,8 @@ Two properties hold throughout:
 | `calculations`  | Band paths (dimensionality-aware), phonon/IR/Raman, spin-orbit setups        |
 | `relax`         | ASE optimizer wrapper + calculator-free harmonic pre-relaxation              |
 | `viz`           | Matplotlib 3D viewer / PNG exporter                                          |
-| `workflows`     | Batch sweeps + ML-ready dataset exporter (XYZ + features CSV + manifest)     |
+| `results`       | Parse and plot finished runs: band diagrams, IR/Raman spectra                |
+| `workflows`     | Batch sweeps, convergence sweeps, ML-ready dataset exporter                  |
 | `gui`           | Tkinter desktop app with live 3D preview (`carbonforge-gui`)                  |
 | `cli`           | `carbonforge` command-line entry point                                        |
 
@@ -172,6 +173,58 @@ axes), basis, functional, band lines. Note SIESTA has **no DFPT**: phonons
 come from frozen force constants (`MD.TypeOfRun FC` + the `vibra` utility),
 and there is no Raman implementation — for that, use Quantum ESPRESSO.
 
+## Analysing results
+
+carbonforge does not run anything — it writes inputs and reads outputs. Once
+your job has finished:
+
+```bash
+carbonforge plot-bands    bands.dat    --labels G,M,K,G --out bands.png
+carbonforge plot-spectrum dynmat.out   --kind raman --laser 532 --out raman.png
+```
+
+Or from Python:
+
+```python
+from carbonforge.results import read_qe_bands, read_dynmat
+from carbonforge.results.bands   import plot_bands
+from carbonforge.results.spectra import plot_spectrum
+
+bands = read_qe_bands("bands.dat")
+print(bands.band_gap(fermi=-4.2))       # None when metallic
+
+spectrum = read_dynmat("dynmat.out")
+print(spectrum.summary())               # warns about imaginary modes
+plot_spectrum(spectrum, "raman", laser_wavelength_nm=532.0, temperature_k=300.0)
+```
+
+`spectrum.summary()` flags two things worth catching early: **imaginary
+modes**, which mean the structure sits at a saddle point rather than a
+minimum and invalidate the spectrum; and an **acoustic-mode count other than
+three**, which usually means the acoustic sum rule was not applied.
+
+Raman and IR columns are *activities*. Converting them to something
+comparable with an experiment needs the Bose factor and the
+`(ν_laser − ν)⁴` prefactor — both opt-in via `plot_spectrum`, so the axis
+label always says which is shown.
+
+Formats read: QE `bands.dat` and `bands.dat.gnu`, SIESTA `SystemLabel.bands`,
+and the `dynmat.x` mode table.
+
+## Convergence
+
+The shipped cutoffs are starting points, not converged values. To settle it:
+
+```bash
+carbonforge converge structure.xyz --parameter cutoff --out conv
+cd conv && ./run_sweep.sh
+carbonforge converge-report conv --tolerance 1.0 --out conv.png
+```
+
+The report compares each point with the **next** one — answering "can I stop
+here?" — in meV per atom, so the tolerance means the same thing at any
+system size.
+
 ## Nanocoils
 
 `build_nanocoil` generates a helical CNT by mapping a straight `(n, m)`
@@ -289,9 +342,15 @@ pytest -q
 ```
 
 113 tests covering builders (including nanocoils), dopants, defects,
-topology, validation, exporters, workflows, the bonus modules
-(relax / viz / ML dataset) and the GUI logic. The Tk layer is smoke-tested
-against a stubbed Tk with a real matplotlib figure, so it runs headless.
+topology, validation, exporters, workflows, result parsers, convergence,
+the bonus modules (relax / viz / ML dataset) and the GUI logic. The Tk layer
+is smoke-tested against a stubbed Tk with a real matplotlib figure, so it
+runs headless.
+
+The output parsers are tested against **synthetic fixtures** matching the
+documented QE and SIESTA formats, not against files from a real run — no DFT
+installation was available during development. Treat your first real file as
+a test of the parser too.
 
 ## Repository layout
 
@@ -305,7 +364,8 @@ carbonforge/
 ├── exports/       # QE + LAMMPS writers
 ├── relax/         # ASE optimizers + harmonic pre-relaxation
 ├── viz/           # matplotlib 3D viewer / PNG exporter
-├── workflows/     # batch generation + metadata + ML dataset
+├── results/       # parse + plot band structures and vibrational spectra
+├── workflows/     # batch generation, convergence sweeps, ML dataset
 ├── gui/           # Tkinter desktop app (params logic + widgets)
 ├── utils/         # constants, geometry, RNG
 ├── cli/           # command line
