@@ -74,7 +74,7 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-Deberías ver `194 passed`.
+Deberías ver `278 passed`.
 
 Sabrás que el entorno está activo porque el prompt de la terminal empieza
 por `(.venv)`. **Tendrás que activarlo cada vez que abras una terminal
@@ -88,7 +88,8 @@ nueva** — es el paso que más se olvida.
 carbonforge-gui
 ```
 
-Se abre una ventana con esta disposición:
+La ventana tiene **dos pestañas**: «Construir estructura» y «Analizar
+resultados». La primera tiene esta disposición:
 
 ```
 ┌────────────────────────┬──────────────────────────────┐
@@ -120,6 +121,11 @@ Se abre una ventana con esta disposición:
 
 Puedes rotar, hacer zoom y desplazar la vista 3D con la barra de
 herramientas bajo la figura.
+
+En la pestaña **«Analizar resultados»** abres el archivo de salida de un
+cálculo ya terminado —bandas o `dynmat.out`— y lo ves graficado ahí mismo,
+con los mismos avisos que da la terminal (modos imaginarios, gap muestreado,
+número de modos acústicos).
 
 ### Qué significa el panel de validación
 
@@ -266,7 +272,37 @@ estás mirando.
 
 ---
 
-## 8. Convergencia: los valores por defecto NO están convergidos
+## 8. Pseudopotenciales: los archivos que tienes que descargar
+
+carbonforge escribe los **nombres** de los pseudopotenciales en las entradas,
+pero no puede incluir los archivos. Sin ellos, QE no arranca. Para saber
+cuáles necesitas exactamente:
+
+```bash
+carbonforge pseudos estructura.xyz --dir ./pseudo
+```
+
+Te dice qué familia hace falta y por qué, los nombres de archivo, de dónde
+bajarlos, y comprueba si ya los tienes.
+
+La familia depende de lo que vayas a calcular:
+
+| Cálculo | Familia | Por qué |
+|---|---|---|
+| Normal | PAW | Eficiente y preciso |
+| Raman | Norm-conserving | `ph.x` no admite PAW ni ultrasoft para Raman |
+| Espín-órbita | Relativista (`rel-`) | Con escalares el desdoblamiento sale cero |
+| Raman + SOC | NC **y** relativista | La combinación más restrictiva |
+
+Añade `--raman` o `--spinorbit` para que lo tenga en cuenta.
+
+Si te falta un archivo pero hay otro de ese mismo elemento en la carpeta, te
+lo señala como posible sustituto. **No lo usa por su cuenta**: puede ser
+perfectamente válido, pero esa decisión es tuya.
+
+---
+
+## 9. Convergencia: los valores por defecto NO están convergidos
 
 Esto importa: un gap o una frecuencia sacados de un cálculo sin convergir
 están mal, por muy cuidado que esté todo lo demás. Los 60 Ry por defecto son
@@ -307,7 +343,7 @@ Con `--parameter kpoints` haces lo mismo para la malla de puntos k.
 
 ---
 
-## 9. Desde Python
+## 10. Desde Python
 
 Para barridos o integrarlo en tus propios scripts:
 
@@ -342,7 +378,7 @@ write_dataset(jobs, "salida/dataset")   # 16 estructuras + dataset.json
 
 ---
 
-## 10. Qué hacer con los archivos generados
+## 11. Qué hacer con los archivos generados
 
 ### Quantum ESPRESSO
 
@@ -378,7 +414,7 @@ Para visualizar: **OVITO** y **VMD** leen XYZ; **VESTA** lee CIF.
 
 ---
 
-## 11. Problemas frecuentes
+## 12. Problemas frecuentes
 
 **`command not found: carbonforge-gui`**
 El entorno virtual no está activo. Ejecuta `source .venv/bin/activate`
@@ -410,7 +446,7 @@ ejecuta `pip install -e .`.
 
 ---
 
-## 12. Límites que conviene conocer
+## 13. Límites que conviene conocer
 
 Estas no son pegas menores, son cosas que afectan a cómo interpretas los
 resultados:

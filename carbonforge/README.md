@@ -28,6 +28,7 @@ Two properties hold throughout:
 | `relax`         | ASE optimizer wrapper + calculator-free harmonic pre-relaxation              |
 | `viz`           | Matplotlib 3D viewer / PNG exporter                                          |
 | `results`       | Parse and plot finished runs: band diagrams, IR/Raman spectra                |
+| `exports.pseudos` | Which pseudopotentials a run needs, and whether you have them              |
 | `workflows`     | Batch sweeps, convergence sweeps, ML-ready dataset exporter                  |
 | `gui`           | Tkinter desktop app with live 3D preview (`carbonforge-gui`)                  |
 | `cli`           | `carbonforge` command-line entry point                                        |
@@ -62,9 +63,11 @@ Python 3.10+ required. Dependencies: `numpy`, `scipy`, `ase`, `networkx`,
 carbonforge-gui
 ```
 
-A desktop app to build, preview and export structures without writing code:
-pick a structure type, tune its parameters, see a live 3D preview and the
-validation report, then export to QE / LAMMPS / XYZ / CIF.
+A desktop app with two tabs. **Construir estructura** picks a structure type,
+tunes its parameters, shows a live 3D preview plus the geometry and physics
+reports, and exports to QE / SIESTA / LAMMPS / XYZ / CIF. **Analizar
+resultados** opens a finished calculation — a band file or `dynmat.out` — and
+plots it inline, with the same warnings the CLI gives.
 
 Structures are built on a worker thread, so the window stays responsive on
 large models. Tkinter is required — it ships with Python on Windows and
@@ -172,6 +175,22 @@ A complete `.fdf`: species, lattice, coordinates, k-grid (1 along vacuum
 axes), basis, functional, band lines. Note SIESTA has **no DFPT**: phonons
 come from frozen force constants (`MD.TypeOfRun FC` + the `vibra` utility),
 and there is no Raman implementation — for that, use Quantum ESPRESSO.
+
+## Pseudopotentials
+
+carbonforge writes pseudopotential *names* but cannot ship the files. This
+tells you exactly which ones you need, why, and where to get them — then
+checks your directory:
+
+```bash
+carbonforge pseudos structure.xyz --raman --spinorbit --dir ./pseudo
+```
+
+The family follows from what you are computing: Raman forces
+norm-conserving, spin-orbit forces fully-relativistic, and asking for both
+lands you in PseudoDojo's `nc-fr` tables. When an exact filename is missing
+but another file for that element is present, it is offered as a possible
+substitute — never silently used, since that is your call.
 
 ## Analysing results
 

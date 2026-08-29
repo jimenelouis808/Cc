@@ -326,20 +326,27 @@ def broaden(
     return grid, intensity
 
 
-def plot_spectrum(
+def draw_spectrum_on_axes(
     spectrum: VibrationalSpectrum,
+    ax,
     kind: str = "raman",
     width_cm1: float = 8.0,
     laser_wavelength_nm: Optional[float] = None,
     temperature_k: Optional[float] = None,
     title: Optional[str] = None,
-):
-    """Return a matplotlib ``Figure`` with the broadened spectrum and its lines.
+) -> None:
+    """Draw a broadened spectrum onto an existing matplotlib axes.
+
+    Shared by :func:`plot_spectrum` and by the GUI. Keeping drawing separate
+    from figure creation matters: pyplot inside a running Tk application
+    creates figures it then manages itself, which leak.
 
     Parameters
     ----------
     spectrum
         Parsed modes.
+    ax
+        Target axes.
     kind
         ``"raman"`` or ``"ir"``.
     width_cm1
@@ -348,10 +355,8 @@ def plot_spectrum(
         Passed to :func:`broaden`. The axis label states whether corrections
         were applied.
     title
-        Figure title.
+        Axes title.
     """
-    import matplotlib.pyplot as plt  # noqa: WPS433
-
     activities = spectrum.activities(kind)
     freqs = spectrum.frequencies
     grid, intensity = broaden(
@@ -360,7 +365,6 @@ def plot_spectrum(
         temperature_k=temperature_k,
     )
 
-    fig, ax = plt.subplots(figsize=(6.5, 4.0))
     ax.plot(grid, intensity, color="#1f4e9c", linewidth=1.2)
 
     # Stick plot underneath, scaled to the broadened curve for readability.
@@ -379,6 +383,29 @@ def plot_spectrum(
     ax.set_ylim(bottom=0)
     ax.set_title(
         title or f"Espectro {'Raman' if kind == 'raman' else 'infrarrojo'}"
+    )
+
+
+def plot_spectrum(
+    spectrum: VibrationalSpectrum,
+    kind: str = "raman",
+    width_cm1: float = 8.0,
+    laser_wavelength_nm: Optional[float] = None,
+    temperature_k: Optional[float] = None,
+    title: Optional[str] = None,
+):
+    """Return a standalone matplotlib ``Figure`` with the spectrum.
+
+    Convenience wrapper around :func:`draw_spectrum_on_axes` for scripting.
+    In a GUI, call that function directly against an embedded axes.
+    """
+    import matplotlib.pyplot as plt  # noqa: WPS433
+
+    fig, ax = plt.subplots(figsize=(6.5, 4.0))
+    draw_spectrum_on_axes(
+        spectrum, ax, kind=kind, width_cm1=width_cm1,
+        laser_wavelength_nm=laser_wavelength_nm,
+        temperature_k=temperature_k, title=title,
     )
     fig.tight_layout()
     return fig

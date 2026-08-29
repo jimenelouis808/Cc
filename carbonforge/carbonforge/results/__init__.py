@@ -19,12 +19,14 @@ not only of the physics — and report anything that looks off.
 
 from .bands import (
     BandStructure,
+    draw_bands_on_axes,
     read_qe_bands,
     read_qe_bands_gnu,
     read_siesta_bands,
 )
 from .spectra import (
     VibrationalSpectrum,
+    draw_spectrum_on_axes,
     VibrationalMode,
     broaden,
     read_dynmat,
@@ -32,6 +34,8 @@ from .spectra import (
 
 __all__ = [
     "BandStructure",
+    "draw_bands_on_axes",
+    "draw_spectrum_on_axes",
     "read_qe_bands",
     "read_qe_bands_gnu",
     "read_siesta_bands",

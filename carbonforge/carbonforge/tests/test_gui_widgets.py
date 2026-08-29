@@ -20,22 +20,41 @@ import pytest
 
 
 class _Widget:
-    """Accept-anything stand-in for a Tk widget."""
+    """Accept-anything stand-in for a Tk widget.
+
+    Two behaviours are modelled rather than stubbed, because the app's own
+    logic depends on them: ``configure`` updates the recorded options (so a
+    test can assert a button really was enabled), and Text insert/delete
+    track their content (so a test can read back the report shown to a user).
+    """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._children: list["_Widget"] = []
-        self.kwargs = kwargs
+        self.kwargs = dict(kwargs)
+        self.text_content = ""
         parent = args[0] if args else kwargs.get("master")
         if isinstance(parent, _Widget):
             parent._children.append(self)
 
     def __getattr__(self, name: str):
         # Any unknown method is a no-op returning a fresh widget, which covers
-        # pack/grid/bind/configure/update/... without enumerating them.
+        # pack/grid/bind/update/... without enumerating them.
         def _noop(*args: Any, **kwargs: Any):
             return _Widget()
 
         return _noop
+
+    def configure(self, **kwargs: Any):
+        self.kwargs.update(kwargs)
+        return None
+
+    config = configure
+
+    def insert(self, _index: Any, text: str = "", *_a, **_k):
+        self.text_content += text
+
+    def delete(self, *_a, **_k):
+        self.text_content = ""
 
     def winfo_children(self):
         return list(self._children)
@@ -96,6 +115,7 @@ def _install_fake_tk(monkeypatch) -> None:
     filedialog = types.ModuleType("tkinter.filedialog")
     filedialog.askdirectory = lambda *a, **k: ""
     filedialog.asksaveasfilename = lambda *a, **k: ""
+    filedialog.askopenfilename = lambda *a, **k: ""
 
     # Fake only the Tk-specific matplotlib backend; the Figure stays real.
     backend = types.ModuleType("matplotlib.backends.backend_tkagg")
@@ -198,3 +218,68 @@ class TestBuildAndRender:
         app._queue.put(("error", (ValueError("mal"), "tb")))
         app._poll_queue()
         assert app._busy is False
+
+
+class TestAnalysisTab:
+    """The analysis tab, exercised with real matplotlib and real parsers."""
+
+    def _bands(self, tmp_path):
+        from carbonforge.results.bands import read_siesta_bands
+        from carbonforge.tests.test_results import SIESTA_BANDS
+
+        path = tmp_path / "c.bands"
+        path.write_text(SIESTA_BANDS)
+        return read_siesta_bands(path)
+
+    def _spectrum(self, tmp_path):
+        from carbonforge.results.spectra import read_dynmat
+        from carbonforge.tests.test_results import DYNMAT_FULL
+
+        path = tmp_path / "dynmat.out"
+        path.write_text(DYNMAT_FULL)
+        return read_dynmat(path)
+
+    def test_tab_widgets_exist(self, app):
+        assert app.analysis_figure is not None
+        assert app.save_plot_button is not None
+
+    def test_save_button_starts_disabled(self, app):
+        assert app.save_plot_button.kwargs.get("state") == "disabled"
+
+    def test_render_bands_draws(self, app, tmp_path):
+        app._render_bands(self._bands(tmp_path), reference=-4.23)
+        assert app.analysis_axes.get_lines()
+
+    def test_render_bands_reports_gap(self, app, tmp_path):
+        app._render_bands(self._bands(tmp_path), reference=-4.23)
+        assert "Gap muestreado" in app.analysis_text.text_content
+
+    def test_render_bands_without_fermi_says_so(self, app, tmp_path):
+        app._render_bands(self._bands(tmp_path), reference=None)
+        assert "nivel de Fermi" in app.analysis_text.text_content
+
+    def test_render_bands_keeps_tick_labels(self, app, tmp_path):
+        """_copy_axes must carry the high-symmetry labels across."""
+        app._render_bands(self._bands(tmp_path), reference=-4.23)
+        labels = [t.get_text() for t in app.analysis_axes.get_xticklabels()]
+        assert "Γ" in labels
+
+    def test_render_spectrum_draws(self, app, tmp_path):
+        app._render_spectrum(
+            self._spectrum(tmp_path), "raman", 8.0, 532.0, 300.0
+        )
+        assert app.analysis_axes.get_lines()
+
+    def test_render_spectrum_reports_summary(self, app, tmp_path):
+        app._render_spectrum(self._spectrum(tmp_path), "raman", 8.0, None, None)
+        assert "modos normales" in app.analysis_text.text_content
+
+    def test_render_spectrum_enables_saving(self, app, tmp_path):
+        app._render_spectrum(self._spectrum(tmp_path), "ir", 8.0, None, None)
+        assert app.save_plot_button.kwargs.get("state") == "normal"
+
+    def test_optional_float_parsing(self, app):
+        assert app._parse_optional_float("", "x") is None
+        assert app._parse_optional_float(" -4,23 ", "x") == pytest.approx(-4.23)
+        with pytest.raises(ValueError, match="número"):
+            app._parse_optional_float("abc", "Nivel de Fermi")

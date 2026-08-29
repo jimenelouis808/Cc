@@ -293,18 +293,26 @@ def attach_path_labels(
     return bands
 
 
-def plot_bands(
+def draw_bands_on_axes(
     bands: BandStructure,
+    ax,
     reference: Optional[float] = None,
     energy_window: Optional[tuple[float, float]] = None,
     title: str = "Estructura de bandas",
-):
-    """Return a matplotlib ``Figure`` with the band diagram.
+) -> None:
+    """Draw a band diagram onto an existing matplotlib axes.
+
+    Shared by :func:`plot_bands` and by the GUI, which embeds its own canvas.
+    Keeping the drawing separate from figure creation matters here: pyplot
+    inside a running Tk application creates figures it then manages itself,
+    which leak and can spawn stray windows.
 
     Parameters
     ----------
     bands
         Parsed band structure.
+    ax
+        Target axes.
     reference
         Energy to place at zero. Defaults to the Fermi level when the file
         provided one; otherwise the raw eigenvalues are plotted and the axis
@@ -312,14 +320,11 @@ def plot_bands(
     energy_window
         ``(low, high)`` limits in eV relative to the reference.
     title
-        Figure title.
+        Axes title.
     """
-    import matplotlib.pyplot as plt  # noqa: WPS433
-
     zero = reference if reference is not None else bands.fermi_energy
     energies = bands.energies - zero if zero is not None else bands.energies
 
-    fig, ax = plt.subplots(figsize=(6.0, 4.5))
     for index in range(bands.n_bands):
         ax.plot(bands.distances, energies[:, index], color="#1f4e9c", linewidth=1.0)
 
@@ -346,5 +351,23 @@ def plot_bands(
     if energy_window is not None:
         ax.set_ylim(*energy_window)
     ax.set_title(title)
+
+
+def plot_bands(
+    bands: BandStructure,
+    reference: Optional[float] = None,
+    energy_window: Optional[tuple[float, float]] = None,
+    title: str = "Estructura de bandas",
+):
+    """Return a standalone matplotlib ``Figure`` with the band diagram.
+
+    Convenience wrapper around :func:`draw_bands_on_axes` for scripting. In a
+    GUI, call that function directly against an embedded axes instead.
+    """
+    import matplotlib.pyplot as plt  # noqa: WPS433
+
+    fig, ax = plt.subplots(figsize=(6.0, 4.5))
+    draw_bands_on_axes(bands, ax, reference=reference,
+                       energy_window=energy_window, title=title)
     fig.tight_layout()
     return fig

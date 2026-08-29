@@ -170,6 +170,24 @@ def _cmd_validate(args):
     return 0 if report.ok else 1
 
 
+def _cmd_pseudos(args):
+    """Report which pseudopotentials a calculation needs, and check for them."""
+    from ..exports.pseudos import check_directory, describe, requirements_for
+
+    atoms = ase_io.read(args.structure)
+    requirements = requirements_for(
+        atoms, needs_raman=args.raman, needs_soc=args.spinorbit
+    )
+    print(describe(requirements))
+
+    if args.dir:
+        print()
+        check = check_directory(args.dir, requirements)
+        print(check.summary())
+        return 0 if check.ok else 1
+    return 0
+
+
 def _cmd_bands(args):
     """Plot a finished band-structure calculation."""
     from ..results.bands import (
@@ -410,6 +428,19 @@ def build_parser() -> argparse.ArgumentParser:
     cr.add_argument("--out", default=None, help="Guardar figura en este archivo.")
     cr.add_argument("--dpi", type=int, default=150)
     cr.set_defaults(func=_cmd_converge_report)
+
+    ps = sub.add_parser(
+        "pseudos",
+        help="Say which pseudopotentials are needed, and check a directory.",
+    )
+    ps.add_argument("structure", help="Estructura legible por ASE.")
+    ps.add_argument("--raman", action="store_true",
+                    help="El cálculo incluye Raman: fuerza norm-conserving.")
+    ps.add_argument("--spinorbit", action="store_true",
+                    help="El cálculo incluye SOC: fuerza pseudos relativistas.")
+    ps.add_argument("--dir", default=None,
+                    help="Carpeta a comprobar (tu pseudo_dir).")
+    ps.set_defaults(func=_cmd_pseudos)
 
     vl = sub.add_parser("validate",
                         help="Validate an existing structure file (CIF, XYZ, POSCAR…).")
