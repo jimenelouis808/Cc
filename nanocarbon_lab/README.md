@@ -258,25 +258,51 @@ pip install -e ".[gui]"
 nanocarbon-gui            # or: python -m nanocarbon_lab.gui
 ```
 
-Six structure types from one dropdown — **capped tube**, **coil
-(relaxed)**, **junction**, **schwarzite**, **multi-wall** and **bundle**
-— with only the panels that apply to the current one shown. Sliders for
-length, diameter, bend and bond length; coil radius, pitch, turns, taper
-and handedness; spinboxes for how many Stone-Wales and divacancy defects
-to scatter in; a *Surface finish* panel (annealing and CVD roughness) and
-a *Chemistry* panel (N/B/S/P doping) that apply to every mode. A live 3D
-preview coloured by ring type, and a panel reporting ring counts, the
-Euler check, wall spacing where it applies, the measured
-bond/angle/contact statistics and the **sp2 verdict**. Buttons save the
-`.xyz` + `.json` bundle (plus `.cif` for periodic cells) or drive Blender
-directly. Builds run on a worker thread, so the window stays responsive
-while a few-thousand-atom shell relaxes.
+Eight structure types from one dropdown — **capped tube**, **coil
+(relaxed)**, **fullerene**, **nano-onion**, **junction**, **schwarzite**,
+**multi-wall** and **bundle** — with only the panels that apply to the
+current one shown, in a scrolling column so nothing falls off a laptop
+screen.
 
-Live hints do the arithmetic for you before you build: the coil panel
-reports how much tube a given radius/pitch/turns consumes and what
-outer-wall strain that implies (green / amber / red), taper included —
-a conical spring is judged at its **tightest** end, since that is where
-the wall gives way.
+**Every number is typeable.** Each parameter is a slider *and* an entry
+box, and the box accepts values outside the slider's comfortable range,
+up to the builder's real limit. A coil radius of 37.5 Å is a perfectly
+good request that no slider detent will land on; so is 640 Å.
+
+**Builds can be cancelled.** They run in a separate process, not a
+thread, precisely so that Cancel can terminate one — a coil spends
+minutes inside numpy with nothing checking a flag, and Python cannot
+safely interrupt a thread. If the environment cannot start a process
+(a frozen executable, a restricted sandbox), the GUI falls back to a
+thread automatically and says that Cancel is then only advisory.
+
+**You are told the cost before you commit.** The estimate line predicts
+the atom count — exactly for the seed-polyhedron modes, within a few per
+cent for the meshed ones — and flags whether you are asking for a
+tenth of a second or six minutes.
+
+Twelve **presets** (C60, nano-onion, gyroid, Y junction, seven-tube rope,
+CVD-rough tube, …) are one click away, and any parameter set can be saved
+to and loaded from JSON. **Copy equivalent CLI command** puts the exact
+`nanocarbon …` invocation on the clipboard, so anything found by dragging
+sliders can be scripted, reproduced, or pasted into a methods section.
+
+The preview colours atoms by ring type and can **hide ring sizes** —
+switching the hexagons off is the fastest way to see where the curvature
+actually went, since on a junction or a coil the 5s and 7s are a handful
+of atoms buried in thousands. A **session history** keeps every build so
+a promising result is not lost the moment you nudge the next parameter.
+
+The readout reports ring counts, the Euler check, wall or shell spacing
+where it applies, achieved coil dimensions, the measured
+bond/angle/contact statistics and the **sp2 verdict**. Errors appear in a
+panel that can be read and copied, never a modal dialog — a modal blocks
+the event loop and throws away the parameters you were about to fix.
+
+Live hints do the arithmetic before you build: the coil panel reports how
+much tube a given radius/pitch/turns consumes and what outer-wall strain
+that implies (green / amber / red), taper included — a conical spring is
+judged at its **tightest** end, since that is where the wall gives way.
 
 `tkinter` is part of the standard library but ships separately on some
 Linux distributions -- `sudo apt install python3-tk` (Debian/Ubuntu) or

@@ -228,34 +228,101 @@ def test_cage_panel_omits_tube_only_rows(app):
     assert "length" not in text
 
 
-def test_a_display_error_does_not_stop_the_queue_poll(app, monkeypatch):
+def test_a_display_error_does_not_stop_the_poll(app, monkeypatch):
     """The poll callback is the only thing keeping the window alive.
 
-    If an exception escapes it, `root.after` is never re-armed and the app
-    is stuck "building" forever with no way back. It must survive a broken
-    redraw and keep polling.
+    If an exception escapes it, ``root.after`` is never re-armed and the
+    app is stuck "building" forever with no way back. It must survive a
+    broken redraw and keep polling.
     """
-    import queue as queue_mod
-
     def boom():
         raise KeyError("length")
 
+    built = app.atoms
     monkeypatch.setattr(app, "_update_info", boom)
     monkeypatch.setattr(app, "_redraw", lambda: None)
-    monkeypatch.setattr(
-        "nanocarbon_lab.gui.app.messagebox.showerror", lambda *a, **k: None
-    )
+    monkeypatch.setattr(app.worker, "poll", lambda: (1, "done", built))
 
     app._busy = True
-    app._queue.put(("done", app.atoms))
-    app._poll_queue()
+    app._poll_worker()
 
     assert not app._busy, "the build must still be marked finished"
     assert "display failed" in app.status.cget("text").lower()
 
-    # And the poll must still be running: a second item is drained too.
+    # The poll survived, so a subsequent good result is still processed.
     monkeypatch.setattr(app, "_update_info", lambda: None)
-    app._queue.put(("done", app.atoms))
-    app._poll_queue()
-    with pytest.raises(queue_mod.Empty):
-        app._queue.get_nowait()
+    app._busy = True
+    app._poll_worker()
+    assert not app._busy
+    assert "complete" in app.status.cget("text").lower()
+
+
+def test_a_build_failure_is_shown_in_the_panel_not_a_dialog(app, monkeypatch):
+    """A modal dialog blocks the event loop and throws away the
+    parameters the user was about to fix, so errors go to a panel."""
+    monkeypatch.setattr(
+        app.worker, "poll",
+        lambda: (1, "error", ("ValueError('cell too small')", "traceback here")),
+    )
+    app._busy = True
+    app._poll_worker()
+
+    assert not app._busy
+    assert "failed" in app.status.cget("text").lower()
+    assert "traceback here" in app.txt_error.get("1.0", "end")
+
+
+def test_cancelling_releases_the_controls(app, monkeypatch):
+    stopped = []
+    monkeypatch.setattr(app.worker, "cancel", lambda: stopped.append(True))
+    app._busy = True
+    app.btn_build.config(state="disabled")
+    app.on_cancel()
+    assert stopped == [True]
+    assert not app._busy
+    assert str(app.btn_build.cget("state")) == "normal"
+
+
+def test_typed_values_beat_the_slider_range(app):
+    """"Control total": the slider is a convenience, the entry is the
+    truth, and it accepts figures outside the slider's comfortable span.
+    """
+    app.var_coil_radius.set(37.5)
+    assert float(app.var_coil_radius.get()) == pytest.approx(37.5)
+    # Well beyond the slider's 200 Å top end, but a legitimate coil.
+    app.var_coil_radius.set(640.0)
+    assert float(app.var_coil_radius.get()) == pytest.approx(640.0)
+
+
+def test_the_estimate_reacts_to_the_parameters(app):
+    app.var_mode_kind.set("fullerene")
+    app.var_cage_freq.set(1)
+    app._update_estimate()
+    small = app.lbl_estimate.cget("text")
+    app.var_cage_freq.set(5)
+    app._update_estimate()
+    assert app.lbl_estimate.cget("text") != small
+    assert "1500" in app.lbl_estimate.cget("text")  # 60 * 25
+
+
+def test_current_job_round_trips_through_the_cli(app):
+    """The GUI and the command line must describe the same structure."""
+    import shlex
+
+    from nanocarbon_lab.cli.main import build_parser
+    from nanocarbon_lab.jobs import to_cli
+
+    for mode in ("fullerene", "junction", "schwarzite", "bundle"):
+        app.var_mode_kind.set(mode)
+        command = to_cli(app.current_job(), out="out/x")
+        build_parser().parse_args(shlex.split(command)[1:])
+
+
+def test_every_preset_names_only_real_parameters(app):
+    """A preset naming a parameter that no longer exists would silently
+    do nothing, which is worse than failing."""
+    from nanocarbon_lab.gui.app import PRESETS
+
+    for name, values in PRESETS.items():
+        unknown = set(values) - set(app._params)
+        assert not unknown, f"preset {name!r} sets unknown parameters {unknown}"

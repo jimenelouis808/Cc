@@ -194,6 +194,32 @@ Do not tighten that to "any atom moved half the skin" — ordinary local
 rearrangement is ~1 Å and would restart L-BFGS (discarding its history)
 continuously, tripling the runtime.
 
+## GUI: one job description, one killable process
+
+`jobs.py` is the single mapping from "what to build" to builder
+arguments, shared by the GUI and the CLI. The GUI used to carry its own
+ninety-line `if mode == ...` chain duplicating it. Three features depend
+on that mapping being written down once — the estimate, the
+copy-as-command-line button, and handing work to a subprocess — so add
+new modes there, not in `gui/app.py`.
+
+`gui/worker.py` runs builds in a **process**, not a thread, because a
+coil spends minutes inside numpy with nothing checking a cancel flag and
+Python cannot safely interrupt a thread. Consequences to respect:
+
+* Anything constructing `NanocarbonGUI` needs an
+  `if __name__ == "__main__"` guard — `spawn` re-imports the parent's
+  `__main__`. `gui/__main__.py` has one for exactly this reason.
+* Errors cross the process boundary as `(repr, traceback)` **strings**;
+  do not try to send exception objects, which may not round-trip.
+* If spawning fails at all, the worker degrades to a thread rather than
+  refusing to build; cancel is then advisory and `worker.degraded` says
+  so. Keep that fallback.
+
+The GUI never opens a modal dialog. `messagebox` is deliberately not
+imported: a modal blocks the Tk event loop, which wedges a headless run
+entirely, and it discards whatever the user was about to fix.
+
 ## Say whether the geometry is physical, not just what it measures
 
 `validation/quality.sp2_quality` turns `atoms.info["geometry"]` into
