@@ -39,13 +39,20 @@ BLENDER_MODULES = [
 @pytest.fixture()
 def stubbed_bpy():
     """Install the fake bpy for the duration of one test, then clean up."""
-    keys = bpy_stub.install()
-    imported_before = {name for name in sys.modules if name.startswith("atomviz_studio")}
+    saved_bpy = bpy_stub.install()
+    # Reload every add-on module against the stub, then restore what was there.
+    saved_addon = {
+        name: module for name, module in sys.modules.items() if name.startswith("atomviz_studio")
+    }
+    for name in list(saved_addon):
+        if name != "atomviz_studio.tests.bpy_stub" and not name.startswith("atomviz_studio.tests"):
+            del sys.modules[name]
     yield
     for name in [n for n in sys.modules if n.startswith("atomviz_studio")]:
-        if name not in imported_before:
+        if name not in saved_addon:
             del sys.modules[name]
-    bpy_stub.uninstall(keys)
+    sys.modules.update(saved_addon)
+    bpy_stub.uninstall(saved_bpy)
 
 
 @pytest.mark.parametrize("module_name", BLENDER_MODULES)
@@ -98,3 +105,24 @@ def test_cli_parses_arguments(stubbed_bpy):
     assert args.seed == 3
     assert str(args.xyz) == "a.xyz"
     assert parse_args(["--list"]).list is True
+
+
+def test_engine_candidates_cover_every_eevee_rename(stubbed_bpy):
+    """The EEVEE identifier moved in 4.2 and moved back in 5.0."""
+    from atomviz_studio.core.compat import engine_candidates
+
+    eevee = engine_candidates("EEVEE")
+    assert "BLENDER_EEVEE" in eevee and "BLENDER_EEVEE_NEXT" in eevee
+    assert engine_candidates("CYCLES")[0] == "CYCLES"
+    # Whatever the build offers, some engine is always reachable.
+    assert set(engine_candidates("EEVEE")) == set(engine_candidates("CYCLES"))
+
+
+def test_postfx_picks_a_compositor_api(stubbed_bpy):
+    """Blender 5.0 replaced scene.node_tree with a compositing node group."""
+    from atomviz_studio.effects import postfx
+
+    assert isinstance(postfx.USES_NODE_GROUP, bool)
+    assert set(postfx.GLARE_TYPES) >= {"NONE", "FOG_GLOW", "STREAKS"}
+    for name in ("FOG_GLOW", "STREAKS", "GHOSTS", "SIMPLE_STAR"):
+        assert name in postfx._GLARE_SOCKET_LABELS

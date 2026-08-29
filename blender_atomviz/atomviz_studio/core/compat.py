@@ -168,19 +168,48 @@ def set_principled(node: bpy.types.Node, **params: object) -> list[str]:
 # --------------------------------------------------------------------------
 # Render engine / colour management
 # --------------------------------------------------------------------------
-def engine_id(engine: str) -> str:
-    """Map ``"EEVEE"``/``"CYCLES"`` to the identifier of this Blender build."""
+def engine_candidates(engine: str) -> tuple[str, ...]:
+    """Engine identifiers to try, best first.
+
+    The EEVEE identifier moved twice: ``BLENDER_EEVEE`` up to 4.1,
+    ``BLENDER_EEVEE_NEXT`` in 4.2-4.5, and back to ``BLENDER_EEVEE`` in 5.0.
+    Rather than mapping versions, every plausible name is tried in turn.
+    """
     if engine.upper().startswith("CYCLES"):
-        return "CYCLES"
-    return "BLENDER_EEVEE_NEXT" if IS_EEVEE_NEXT else "BLENDER_EEVEE"
+        return ("CYCLES", "BLENDER_EEVEE_NEXT", "BLENDER_EEVEE")
+    if IS_EEVEE_NEXT:
+        return ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE", "CYCLES")
+    return ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT", "CYCLES")
+
+
+def engine_id(engine: str) -> str:
+    """Return the first engine identifier this build actually accepts."""
+    try:
+        available = {
+            item.identifier
+            for item in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items
+        }
+    except (KeyError, AttributeError):  # pragma: no cover - defensive
+        available = set()
+    for candidate in engine_candidates(engine):
+        if not available or candidate in available:
+            return candidate
+    return next(iter(available)) if available else "BLENDER_EEVEE"
 
 
 def set_engine(scene: bpy.types.Scene, engine: str, samples: int) -> None:
-    """Select the render engine and its sample count."""
-    try:
-        scene.render.engine = engine_id(engine)
-    except TypeError:  # Cycles add-on disabled in this build
-        scene.render.engine = engine_id("EEVEE")
+    """Select the render engine and its sample count.
+
+    The engine enum is populated by registered engines, so the identifier is
+    assigned by trial: an unavailable one raises ``TypeError`` and the next
+    candidate is tried.
+    """
+    for candidate in engine_candidates(engine):
+        try:
+            scene.render.engine = candidate
+            break
+        except TypeError:
+            continue
     if scene.render.engine == "CYCLES" and hasattr(scene, "cycles"):
         scene.cycles.samples = samples
         scene.cycles.use_denoising = True
@@ -201,6 +230,41 @@ def set_engine(scene: bpy.types.Scene, engine: str, samples: int) -> None:
                     setattr(eevee, attr, value)
                 except (AttributeError, TypeError):
                     pass
+
+
+def iter_fcurves(target: object):
+    """Yield the F-curves animating *target* (an object, light, material, ...).
+
+    Blender 4.4 introduced slotted actions and 5.0 removed the flat
+    ``action.fcurves`` accessor, so the curves now live in
+    ``action.layers[].strips[].channelbags[]``. Both shapes are handled.
+    """
+    anim = getattr(target, "animation_data", None)
+    action = getattr(anim, "action", None)
+    if action is None:
+        return
+    legacy = getattr(action, "fcurves", None)
+    if legacy is not None:
+        yield from legacy
+        return
+    for layer in getattr(action, "layers", []):
+        for strip in getattr(layer, "strips", []):
+            for channelbag in getattr(strip, "channelbags", []):
+                yield from channelbag.fcurves
+
+
+def set_keyframe_interpolation(target: object, interpolation: str = "CONSTANT") -> int:
+    """Set the interpolation of every keyframe animating *target*.
+
+    Returns:
+        How many keyframes were changed.
+    """
+    changed = 0
+    for fcurve in iter_fcurves(target):
+        for keyframe in fcurve.keyframe_points:
+            keyframe.interpolation = interpolation
+            changed += 1
+    return changed
 
 
 def set_view_transform(scene: bpy.types.Scene, transform: str, look: str = "None") -> None:

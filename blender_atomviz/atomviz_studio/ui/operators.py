@@ -18,6 +18,14 @@ from ..scene import camera as camera_module
 from ..scene import render as render_module
 from .props import hex_of
 
+#: Message shown when the XYZ importer cannot be found.
+ATOMIC_BLENDER_HINT = (
+    "Atomic Blender (XYZ importer) not found. Blender 4.1 and older ship it: "
+    "enable 'Import-Export: Atomic Blender PDB/XYZ' in Preferences > Add-ons. "
+    "Blender 4.2+ moved it to the extensions platform: Preferences > Get "
+    "Extensions, search 'Atomic Blender', install, then try again."
+)
+
 
 def _structure(operator, context):
     """Return the active structure, reporting an error when there is none."""
@@ -376,11 +384,8 @@ class ATOMVIZ_OT_import_xyz(Operator):
 
     def execute(self, context):
         if not enable_atomic_blender():
-            self.report(
-                {"ERROR"},
-                "Atomic Blender (io_mesh_atomic) not available. "
-                "Enable it in Preferences > Add-ons > 'Import-Export: Atomic Blender PDB/XYZ'.",
-            )
+            self.report({"ERROR"}, ATOMIC_BLENDER_HINT)
+            print(f"[AtomViz] {ATOMIC_BLENDER_HINT}")
             return {"CANCELLED"}
         bpy.ops.import_mesh.xyz("INVOKE_DEFAULT")
         return {"FINISHED"}
@@ -403,22 +408,49 @@ class ATOMVIZ_OT_render(Operator):
         return {"FINISHED"}
 
 
+def atomic_blender_ready():
+    """Return ``True`` when the XYZ import operator is actually registered.
+
+    ``hasattr(bpy.ops.import_mesh, "xyz")`` is **not** a valid check: ``bpy.ops``
+    resolves attributes lazily and answers ``True`` for operators that do not
+    exist. The registered operator class is the reliable probe.
+    """
+    return hasattr(bpy.types, "IMPORT_MESH_OT_xyz")
+
+
 def enable_atomic_blender():
-    """Enable the bundled Atomic Blender add-on.
+    """Enable Atomic Blender, whether it is a bundled add-on or an extension.
 
     Returns:
-        ``True`` when ``bpy.ops.import_mesh.xyz`` is available afterwards.
+        ``True`` when the XYZ import operator is available afterwards.
     """
-    if hasattr(bpy.ops.import_mesh, "xyz"):
+    if atomic_blender_ready():
         return True
-    for module in ("io_mesh_atomic", "bl_ext.blender_org.atomic_blender_pdb_xyz"):
+
+    candidates = [
+        "io_mesh_atomic",
+        "bl_ext.blender_org.atomic_blender_pdb_xyz",
+        "bl_ext.user_default.atomic_blender_pdb_xyz",
+    ]
+    try:  # Discover it wherever the user installed it.
+        import addon_utils
+
+        for module in addon_utils.modules():
+            info = getattr(module, "bl_info", None) or {}
+            label = str(info.get("name", "")).lower()
+            if "atomic" in module.__name__.lower() or "atomic blender" in label:
+                candidates.append(module.__name__)
+    except Exception:  # noqa: BLE001 - discovery is best effort
+        pass
+
+    for module in dict.fromkeys(candidates):
         try:
             bpy.ops.preferences.addon_enable(module=module)
         except (RuntimeError, TypeError):
             continue
-        if hasattr(bpy.ops.import_mesh, "xyz"):
+        if atomic_blender_ready():
             return True
-    return hasattr(bpy.ops.import_mesh, "xyz")
+    return atomic_blender_ready()
 
 
 CLASSES = (

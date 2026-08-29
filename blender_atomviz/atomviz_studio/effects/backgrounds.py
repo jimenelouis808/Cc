@@ -94,11 +94,11 @@ def build_starfield(scene: bpy.types.Scene, top: str, bottom: str, accent: str, 
     N.ramp(stars, [(0.0, "#ffffff"), (0.035, "#000000")])
     twinkle = N.new(tree, "ShaderNodeTexNoise", (-900, -460), Scale=8.0, Detail=2.0)
     tint = N.new(tree, "ShaderNodeValToRGB", (-700, -460))
-    N.ramp(tint, [(0.35, "#000000"), (0.75, accent)])
+    N.ramp(tint, [(0.55, "#000000"), (0.95, accent)])
 
     gradient = N.gradient_world(tree, top=top, bottom=bottom, strength=strength)
-    star_mix, _, star_a, star_b, star_out = N.mix_rgb(tree, (-460, -300), "ADD", 0.9)
-    sky_mix, _, sky_a, sky_b, sky_out = N.mix_rgb(tree, (-260, -300), "ADD", 0.35)
+    star_mix, _, star_a, star_b, star_out = N.mix_rgb(tree, (-460, -300), "ADD", 0.35)
+    sky_mix, _, sky_a, sky_b, sky_out = N.mix_rgb(tree, (-260, -300), "ADD", 0.10)
 
     N.link(tree, coord, voronoi, "Generated", "Vector")
     N.link(tree, coord, twinkle, "Generated", "Vector")

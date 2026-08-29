@@ -38,9 +38,15 @@ blender_atomviz/
 que también se puede instalar con `Install from Disk…` desde la pestaña de
 extensiones.
 
-Además hay que tener activo el importador de estructuras:
-`Preferences ▸ Add-ons ▸ “Import-Export: Atomic Blender PDB/XYZ”`
-(el botón *Import XYZ* del panel lo activa automáticamente si puede).
+Además hace falta el importador de estructuras **Atomic Blender**:
+
+* **Blender ≤ 4.1** — viene incluido: `Preferences ▸ Add-ons`, busca
+  “Atomic Blender PDB/XYZ” y actívalo.
+* **Blender 4.2+ y 5.0** — ya **no viene incluido**: instálalo desde
+  `Preferences ▸ Get Extensions`, buscando “Atomic Blender”.
+
+El botón *Import XYZ* del panel intenta activarlo solo y, si no lo encuentra,
+te dice exactamente cuál de los dos casos es el tuyo.
 
 El panel aparece en la vista 3D, barra lateral (tecla **N**), pestaña
 **AtomViz**.
@@ -129,7 +135,11 @@ Extras útiles:
   espuma de 5000.
 - **Haze**: medio participativo en una caja alrededor de la estructura. Es lo
   que hace visibles los haces y los rayos de luz. Se usa una caja y no un
-  volumen de mundo porque renderiza mucho más rápido.
+  volumen de mundo porque renderiza mucho más rápido. El parámetro es
+  **invariante de escala** (0.02 ≈ bruma ligera, 0.09 ≈ haces bien visibles,
+  0.3 ≈ niebla densa): el mismo número funciona igual en una molécula de 20
+  átomos y en una espuma de 5000, porque la densidad real se divide por el
+  tamaño del dominio.
 
 ---
 
@@ -234,14 +244,41 @@ done
 
 ---
 
-## 11. Desarrollo y pruebas
+## 11. Verificación en Blender real
+
+El add-on se ejecutó de principio a fin dentro de **Blender 5.0.1** (módulo
+`bpy` de PyPI, sin interfaz):
+
+```bash
+pip install bpy                                   # Blender como módulo Python
+python tools/integration_check.py                 # ejercita TODOS los registros
+python tools/render_look_sheet.py -- --out /tmp/looks   # una imagen por look
+```
+
+`integration_check.py` aplica los 12 estilos, las 8 paletas, los 3 modos de
+radio, los 7 fondos, los 5 rigs de luz, la niebla, los 3 modos de arcos, los
+láseres, la cámara, los 5 tipos de glare y los 9 looks, y luego limpia la
+escena. Cualquier cosa que solo Blender puede validar (nombres de nodos y
+sockets, propiedades disponibles en esa versión) falla ahí de forma ruidosa.
+
+Esa pasada encontró y corrigió cuatro cosas reales que las pruebas sin Blender
+no podían ver:
+
+| Problema | Corrección |
+|---|---|
+| `BLENDER_EEVEE_NEXT` no existe en 5.0 (el identificador volvió a `BLENDER_EEVEE`) | el motor se asigna probando candidatos, no adivinando por versión |
+| `action.fcurves` desapareció con las *slotted actions* (4.4+) | `compat.iter_fcurves()` recorre `layers ▸ strips ▸ channelbags` |
+| 5.0 sustituyó `scene.node_tree` por un grupo de nodos, quitó `MixRGB`/`Composite` y pasó los ajustes de *Glare* a sockets | `postfx` implementa las dos APIs y elige en tiempo de ejecución |
+| Arcos, láseres y niebla saturaban la imagen | emisión y *glare* recalibrados; la densidad de niebla ahora es invariante de escala |
+
+## 12. Desarrollo y pruebas
 
 La mitad `core` (elementos, colores, paletas, geometría, presets) no importa
 `bpy` y se prueba fuera de Blender:
 
 ```bash
 cd blender_atomviz
-pytest atomviz_studio/tests -q        # 85 pruebas
+pytest atomviz_studio/tests -q        # 87 pruebas
 ruff check atomviz_studio
 ```
 
@@ -250,6 +287,6 @@ ruff check atomviz_studio
 declaración de propiedades o referencias cruzadas se detectan sin abrir
 Blender.
 
-Compatibilidad: Blender 3.3 LTS – 4.5. Todo lo que cambió entre versiones
+Compatibilidad: Blender 3.3 LTS – 5.0 (probado en 5.0.1). Todo lo que cambió entre versiones
 (nombres de sockets del Principled BSDF, EEVEE vs EEVEE Next, AgX vs Filmic,
 modos de mezcla de materiales) pasa por `core/compat.py`.

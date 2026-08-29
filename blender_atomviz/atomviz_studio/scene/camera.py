@@ -5,7 +5,7 @@ from __future__ import annotations
 import bpy
 from mathutils import Euler, Vector
 
-from ..core.compat import ensure_group, link_object
+from ..core.compat import ensure_group, link_object, set_keyframe_interpolation
 from ..core.detect import Structure
 from ..core.mathutil import Vec3, frame_camera
 
@@ -133,8 +133,5 @@ def orbit_keyframes(
     for frame, angle in ((frame_start, 0.0), (frame_end, math.tau * turns)):
         pivot.rotation_euler.z = angle
         pivot.keyframe_insert("rotation_euler", frame=frame)
-    if pivot.animation_data and pivot.animation_data.action:
-        for fcurve in pivot.animation_data.action.fcurves:
-            for keyframe in fcurve.keyframe_points:
-                keyframe.interpolation = "LINEAR"
+    set_keyframe_interpolation(pivot, "LINEAR")
     return pivot

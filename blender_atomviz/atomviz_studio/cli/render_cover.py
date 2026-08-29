@@ -78,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     from atomviz_studio.core.detect import active_structure
     from atomviz_studio.looks.apply import apply_look
     from atomviz_studio.scene import render as render_module
-    from atomviz_studio.ui.operators import enable_atomic_blender
+    from atomviz_studio.ui.operators import ATOMIC_BLENDER_HINT, enable_atomic_blender
 
     scene = bpy.context.scene
 
@@ -91,10 +91,7 @@ def main(argv: list[str] | None = None) -> int:
         bpy.ops.wm.read_factory_settings(use_empty=True)
         scene = bpy.context.scene
         if not enable_atomic_blender():
-            print(
-                "error: Atomic Blender (io_mesh_atomic) is not available in this Blender build",
-                file=sys.stderr,
-            )
+            print(f"error: {ATOMIC_BLENDER_HINT}", file=sys.stderr)
             return 3
         bpy.ops.import_mesh.xyz(filepath=str(path))
 

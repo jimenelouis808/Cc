@@ -218,10 +218,17 @@ def add_haze(
     domain is deliberately a box around the subject rather than a world volume:
     it renders far faster and keeps the background clean.
 
+    *density* is **scale invariant**: it is the approximate optical depth
+    across the whole domain, not a raw shader value. Without this, the same
+    number that gives a light mist around a 20-atom molecule turns a 5000-atom
+    foam into an opaque cloud, because the light path through the box grows
+    with the structure.
+
     Args:
         center: Structure centre.
         radius: Structure bounding radius.
-        density: Scatter density; ``0`` removes the haze.
+        density: Optical depth across the domain (``0.01`` = light mist,
+            ``0.05`` = visible beams, ``0.2`` = thick fog); ``0`` removes it.
         color: Scatter tint.
         anisotropy: Forward-scattering factor (``0`` isotropic, ``0.7`` beamy).
         name: Object name (reused across calls).
@@ -237,7 +244,11 @@ def add_haze(
     if density <= 0.0:
         return None
 
-    size = radius * 9.0
+    size = radius * 6.0
+    # Calibrated against a lit three-point rig: the in-scattered veil is what
+    # the eye reads, not the raw optical depth, so the parameter is divided by
+    # the domain size *and* a constant that keeps 0.02 a barely-there mist.
+    shader_density = density / max(1e-3, size * 5.0)
     mesh = bpy.data.meshes.new(f"{name}_mesh")
     h = size / 2.0
     verts = [
@@ -257,7 +268,7 @@ def add_haze(
     material, tree = N.new_material(f"{name}_mat")
     volume = N.new(tree, "ShaderNodeVolumePrincipled", (0, 0))
     volume.inputs["Color"].default_value = hex_to_linear(color)
-    volume.inputs["Density"].default_value = density
+    volume.inputs["Density"].default_value = shader_density
     if "Anisotropy" in volume.inputs:
         volume.inputs["Anisotropy"].default_value = anisotropy
     N.link(tree, volume, N.material_output(tree), 0, "Volume")

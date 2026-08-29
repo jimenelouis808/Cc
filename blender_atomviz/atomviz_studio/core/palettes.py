@@ -129,7 +129,7 @@ _PALETTE_LIST: tuple[Palette, ...] = (
         description="Warm metallic scheme for catalysis and plasmonics.",
         mode="table",
         colors={
-            "C": "#3a332b",
+            "C": "#7a6a4e",
             "H": "#f5efe3",
             "N": "#7dd3fc",
             "O": "#e11d48",

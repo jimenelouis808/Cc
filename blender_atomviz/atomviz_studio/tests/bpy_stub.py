@@ -131,13 +131,28 @@ def _make_bpy() -> tuple[types.ModuleType, list[str]]:
     return bpy, list(modules)
 
 
-def install() -> list[str]:
-    """Install the stub into :data:`sys.modules` and return the keys added."""
-    _, keys = _make_bpy()
-    return keys
+def install() -> dict[str, object]:
+    """Install the stub into :data:`sys.modules`.
+
+    A real ``bpy`` may already be importable (the ``bpy`` pip module, or a test
+    run from inside Blender). It is shadowed, not destroyed: whatever was in
+    ``sys.modules`` is handed back so :func:`uninstall` can put it back
+    untouched — re-importing the real ``bpy`` would try to register Blender's
+    UI classes a second time and fail.
+
+    Returns:
+        The previous ``sys.modules`` entries, to pass to :func:`uninstall`.
+    """
+    keys = ("bpy", "bpy.props", "bpy.types", "bpy.utils", "bpy.app", "bpy.path", "mathutils")
+    saved = {key: sys.modules.get(key) for key in keys}
+    _make_bpy()
+    return saved
 
 
-def uninstall(keys: list[str]) -> None:
-    """Remove the stub modules again."""
-    for key in keys:
-        sys.modules.pop(key, None)
+def uninstall(saved: dict[str, object]) -> None:
+    """Restore whatever was in :data:`sys.modules` before :func:`install`."""
+    for key, module in saved.items():
+        if module is None:
+            sys.modules.pop(key, None)
+        else:
+            sys.modules[key] = module  # type: ignore[assignment]

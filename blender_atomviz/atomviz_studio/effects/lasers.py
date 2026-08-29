@@ -110,7 +110,7 @@ def _impact(name: str, position: Vec3, color: str, radius: float, strength: floa
     link_object(bead, ensure_group(LASER_COLLECTION))
 
     light_data = bpy.data.lights.new(f"{name}_light", type="POINT")
-    light_data.energy = max(10.0, strength * radius * 400.0)
+    light_data.energy = max(10.0, strength * radius * 25.0)
     light_data.color = hex_to_linear(color)[:3]
     light_data.shadow_soft_size = radius * 2.0
     light = bpy.data.objects.new(f"{name}_light", light_data)

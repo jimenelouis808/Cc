@@ -17,7 +17,13 @@ import bpy
 
 from ..core import nodes as N
 from ..core.colors import hex_to_linear, lighten
-from ..core.compat import delete_objects, ensure_group, link_object, set_material_blend
+from ..core.compat import (
+    delete_objects,
+    ensure_group,
+    link_object,
+    set_keyframe_interpolation,
+    set_material_blend,
+)
 from ..core.mathutil import (
     Vec3,
     add,
@@ -372,11 +378,7 @@ def add_flicker(
             obj.keyframe_insert("hide_render", frame=frame)
         obj.hide_viewport = False
         obj.hide_render = False
-        action = getattr(getattr(obj, "animation_data", None), "action", None)
-        if action is not None:
-            for fcurve in action.fcurves:
-                for keyframe in fcurve.keyframe_points:
-                    keyframe.interpolation = "CONSTANT"
+        set_keyframe_interpolation(obj, "CONSTANT")
     return len(objects)
 
 

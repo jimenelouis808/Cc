@@ -33,9 +33,13 @@ atomviz_studio/
 3. `ui/props.py`, `ui/operators.py` and `ui/panels.py` must **not** use
    `from __future__ import annotations`: Blender registers properties by
    evaluating class annotations.
-4. Every Blender API that changed between 3.3 and 4.5 goes through
+4. Every Blender API that changed between 3.3 and 5.0 goes through
    `core/compat.py`. Never call a version-specific socket name directly; use
-   `set_principled(node, logical_name=value)`.
+   `set_principled(node, logical_name=value)`, `engine_candidates()` for the
+   render engine and `iter_fcurves()` for animation data (slotted actions
+   removed `action.fcurves` in 5.0). The compositor has two incompatible APIs
+   (`scene.node_tree` up to 4.5, a node group in 5.0+): `effects/postfx.py`
+   implements both and picks at runtime.
 5. Only use node types available in **every** supported release
    (no `ShaderNodeTexMusgrave`, removed in 4.1; use `nodes.mix_rgb()` instead
    of `ShaderNodeMixRGB`).
@@ -50,11 +54,23 @@ atomviz_studio/
 ## Test commands
 ```bash
 cd blender_atomviz
-pytest -q                    # 85 tests, no Blender needed
+pytest -q                    # 87 tests, no Blender needed
 ruff check .
 python tools/make_addon_zip.py           # installable zip
 blender -b -P atomviz_studio/cli/render_cover.py -- --list
 ```
+
+Anything that touches the Blender API must also survive a real Blender run —
+`pytest` cannot see wrong node names, missing sockets or renamed properties:
+
+```bash
+pip install bpy                          # Blender as a Python module
+python tools/integration_check.py        # every style/palette/effect/look, then cleanup
+python tools/render_look_sheet.py -- --out /tmp/looks   # one image per look
+python tools/make_contact_sheet.py --in /tmp/looks --out /tmp/looks/sheet.png
+```
+
+Verified end to end on Blender 5.0.1.
 
 ## What not to do
 - Do **not** move atoms, edit meshes or change the importer's coordinates.
@@ -64,3 +80,6 @@ blender -b -P atomviz_studio/cli/render_cover.py -- --list
   so in the style description.
 - Do **not** run structure detection in a panel `draw()` for heavy scenes; the
   panel already guards at 2000 objects.
+- Do **not** raise emission strengths or haze density without re-rendering the
+  look sheet: those numbers were calibrated against real renders, and small
+  increases blow the whole frame out to white.
