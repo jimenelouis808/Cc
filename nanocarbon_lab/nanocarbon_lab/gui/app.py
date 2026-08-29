@@ -57,8 +57,10 @@ from ..builders import (
     build_bundle,
     build_capped_cnt,
     build_coil,
+    build_fullerene,
     build_junction,
     build_multiwall_cnt,
+    build_nano_onion,
     build_schwarzite,
 )
 from ..dopants import dope_random
@@ -77,11 +79,12 @@ RING_LABELS = {
 }
 
 SHAPES = ["straight", "arc", "s_curve", "helix", "random"]
-MODES = ["capped tube", "coil (relaxed)", "junction", "schwarzite",
-         "multi-wall", "bundle"]
+MODES = ["capped tube", "coil (relaxed)", "fullerene", "nano-onion",
+         "junction", "schwarzite", "multi-wall", "bundle"]
 DOPANTS = ["none", "N", "B", "S", "P"]
 JUNCTION_KINDS = ["L", "T", "Y", "X", "cross3d"]
 SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
+CAGE_FAMILIES = ["C60", "C20"]
 
 BLENDER_STYLES = [
     "nature_dark",
@@ -225,6 +228,9 @@ class NanocarbonGUI:
         self.var_mw_shells = tk.IntVar(value=2)
         self.var_mw_inner = tk.IntVar(value=3)
         self.var_bundle_shells = tk.IntVar(value=1)
+        self.var_cage_family = tk.StringVar(value="C60")
+        self.var_cage_freq = tk.IntVar(value=1)
+        self.var_onion_shells = tk.IntVar(value=3)
 
         self.lbl_radius = ttk.Label(box, text="", foreground="#2e86ab")
 
@@ -374,19 +380,20 @@ class NanocarbonGUI:
         # --- schwarzite panel
         self.frame_schwarzite = ttk.LabelFrame(parent, text="Schwarzite", padding=8)
         self.var_s_kind = tk.StringVar(value="primitive")
-        self.var_s_cell = tk.DoubleVar(value=32.0)
+        self.var_s_cell = tk.DoubleVar(value=36.0)
         self.frame_schwarzite.columnconfigure(0, weight=1)
         ttk.Label(self.frame_schwarzite, text="Surface").grid(row=0, column=0, sticky="w")
         ttk.Combobox(self.frame_schwarzite, textvariable=self.var_s_kind,
                      values=SCHWARZITE_KINDS, state="readonly", width=10).grid(
             row=0, column=1, sticky="e", pady=(0, 6))
         self._slider(self.frame_schwarzite, "Cell length (Å)", self.var_s_cell,
-                     20.0, 50.0, 1, resolution=2.0)
+                     30.0, 56.0, 1, resolution=2.0)
         ttk.Label(self.frame_schwarzite,
                   text="A periodic unit cell: tubes run out of one face and "
                        "back in the opposite one. Saddles everywhere, so "
-                       "heptagons outnumber pentagons. Minimum cell: 20 Å "
-                       "primitive, 22 gyroid, 30 diamond.",
+                       "heptagons outnumber pentagons. Bigger cells curve more "
+                       "gently and relax cleaner — minimum 30 Å primitive, "
+                       "36 gyroid and diamond.",
                   foreground="#777", font=("TkDefaultFont", 8), wraplength=230,
                   justify="left").grid(row=3, column=0, columnspan=2, sticky="w")
 
@@ -433,6 +440,26 @@ class NanocarbonGUI:
                   foreground="#777", font=("TkDefaultFont", 8), wraplength=230,
                   justify="left").grid(row=2, column=0, columnspan=2, sticky="w")
 
+        # --- fullerene cage / nano-onion
+        self.frame_cage = ttk.LabelFrame(parent, text="Cage", padding=8)
+        self.frame_cage.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_cage, text="Family").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_cage, textvariable=self.var_cage_family,
+                     values=CAGE_FAMILIES, state="readonly", width=7).grid(
+            row=0, column=1, sticky="e", pady=(0, 6))
+        self.var_cage_family.trace_add("write", lambda *_: self._update_cage_hint())
+        self._slider(self.frame_cage, "Frequency (size)", self.var_cage_freq,
+                     1, 6, 1, integer=True, command=self._update_cage_hint)
+        self.frame_onion = ttk.Frame(self.frame_cage)
+        self.frame_onion.grid(row=3, column=0, columnspan=2, sticky="ew")
+        self.frame_onion.columnconfigure(0, weight=1)
+        self._slider(self.frame_onion, "Shells", self.var_onion_shells,
+                     1, 5, 0, integer=True, command=self._update_cage_hint)
+        self.lbl_cage = ttk.Label(self.frame_cage, text="", foreground="#777",
+                                  font=("TkDefaultFont", 8), wraplength=230,
+                                  justify="left")
+        self.lbl_cage.grid(row=5, column=0, columnspan=2, sticky="w")
+
         self.btn_build = ttk.Button(parent, text="Build structure", command=self.on_build)
         self.btn_build.pack(fill="x", pady=(12, 0), ipady=4)
         self.progress = ttk.Progressbar(parent, mode="indeterminate")
@@ -449,15 +476,27 @@ class NanocarbonGUI:
         mode = self.var_mode_kind.get()
         for frame in (self.frame_tube, self.frame_centreline, self.frame_defects,
                       self.frame_coil, self.frame_junction, self.frame_schwarzite,
-                      self.frame_mw, self.frame_bundle,
+                      self.frame_cage, self.frame_mw, self.frame_bundle,
                       self.frame_surface, self.frame_chem):
             frame.pack_forget()
         if mode == "junction":
             self.frame_junction.pack(fill="x")
         elif mode == "schwarzite":
             self.frame_schwarzite.pack(fill="x")
+            # Annealing is counterproductive on a minimal surface (it
+            # stretches the bonds that the 5-7 pairs were relieving), so
+            # entering this mode turns the shared slider off rather than
+            # letting its 80-sweep default quietly degrade the cell.
+            self.var_anneal.set(0)
         elif mode == "coil (relaxed)":
             self.frame_coil.pack(fill="x")
+        elif mode in ("fullerene", "nano-onion"):
+            self.frame_cage.pack(fill="x")
+            if mode == "nano-onion":
+                self.frame_onion.grid()
+            else:
+                self.frame_onion.grid_remove()
+            self._update_cage_hint()
         elif mode == "multi-wall":
             self.frame_tube.pack(fill="x")
             self.frame_mw.pack(fill="x", pady=(8, 0))
@@ -472,6 +511,33 @@ class NanocarbonGUI:
         self.frame_chem.pack(fill="x", pady=(8, 0))
         self._on_shape_change()
 
+    def _update_cage_hint(self) -> None:
+        """Say which cage the current family/frequency actually gives.
+
+        The size is not a free number: subdividing the seed by ``f``
+        multiplies the atom count by ``f**2``, so the reachable cages are
+        a discrete series. Naming them beats leaving the user to guess
+        what "frequency 3" means.
+        """
+        from ..builders.fullerene import FAMILY_BASE_ATOMS
+
+        family = self.var_cage_family.get()
+        freq = int(self.var_cage_freq.get())
+        base = FAMILY_BASE_ATOMS.get(family, 60)
+        atoms = base * freq**2
+        # Radius scales with the frequency: ~3.52 Å per step for the C60
+        # family, ~2.0 Å for C20 (measured on the relaxed cages).
+        step = 3.52 if family == "C60" else 2.02
+        text = f"C{atoms}, radius ≈ {step * freq:.1f} Å."
+        if self.var_mode_kind.get() == "nano-onion":
+            shells = int(self.var_onion_shells.get())
+            names = [f"C{base * (freq + k) ** 2}" for k in range(shells)]
+            spacing = "≈3.5 Å apart — graphitic" if family == "C60" else (
+                "≈2.0 Å apart — too close to be physical; use C60"
+            )
+            text = "@".join(names) + f", shells {spacing}."
+        self.lbl_cage.config(text=text)
+
     def _update_surface_hint(self) -> None:
         anneal = int(self.var_anneal.get())
         rough = float(self.var_roughness.get())
@@ -484,7 +550,16 @@ class NanocarbonGUI:
         geom = "ideally smooth" if rough <= 0 else (
             f"{rough:.2f} Å corrugation — CVD-like"
         )
-        self.lbl_surface.config(text=f"{topo}; {geom}.")
+        colour = "#777"
+        # On a minimal surface the 5-7 pairs are not disorder; they are how
+        # the net covers the saddle. Annealing them away measurably
+        # stretches the remaining bonds, so warn rather than let the shared
+        # slider quietly degrade the structure.
+        if self.var_mode_kind.get() == "schwarzite" and anneal > 0:
+            topo = (f"annealing hurts here — {anneal} sweeps stretches bonds; "
+                    "the 5-7 pairs are how the net covers the saddle")
+            colour = "#b3261e"
+        self.lbl_surface.config(text=f"{topo}; {geom}.", foreground=colour)
 
     def _slider(self, parent, label, var, lo, hi, row, *, integer=False,
                 resolution=None, command=None):
@@ -678,6 +753,23 @@ class NanocarbonGUI:
                 bond=float(self.var_bond.get()),
                 pin_ends=bool(self.var_pin_ends.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
+                roughness=float(self.var_roughness.get()),
+                seed=int(self.var_seed.get()),
+            )
+        elif mode == "fullerene":
+            builder, kwargs = build_fullerene, dict(
+                freq=int(self.var_cage_freq.get()),
+                family=self.var_cage_family.get(),
+                bond=float(self.var_bond.get()),
+                roughness=float(self.var_roughness.get()),
+                seed=int(self.var_seed.get()),
+            )
+        elif mode == "nano-onion":
+            builder, kwargs = build_nano_onion, dict(
+                n_shells=int(self.var_onion_shells.get()),
+                inner_freq=int(self.var_cage_freq.get()),
+                family=self.var_cage_family.get(),
+                bond=float(self.var_bond.get()),
                 roughness=float(self.var_roughness.get()),
                 seed=int(self.var_seed.get()),
             )

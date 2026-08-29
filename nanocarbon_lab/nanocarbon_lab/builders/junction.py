@@ -50,9 +50,22 @@ CELL_RELAX_CYCLES = 6
 # Smallest cell each surface can be tiled with at graphitic ring size.
 # The limit scales with genus, because a higher-genus surface packs more
 # channels into the same volume and its necks get correspondingly finer:
-# Schwarz D (genus 9) tears at 24 Å where Schwarz P (genus 3) is fine.
-# Measured by sweeping the cell and checking bond/contact statistics.
-MIN_SCHWARZITE_CELL = {"primitive": 20.0, "gyroid": 22.0, "diamond": 30.0}
+# Schwarz D (genus 9) needs more room than Schwarz P (genus 3).
+#
+# These were raised after measuring rather than merely checking the cell
+# produced *something*. The old limits (20 / 22 / 30 Å) let a cell through
+# that met the tear gate below and still had bonds well outside the sp2
+# range -- Schwarz P at 24 Å relaxes to 1.328-1.560 Å, Schwarz D at 30 Å
+# to 1.343-1.586 Å, both "broken" by `validation.sp2_quality`. Sweeping
+# cell size at `anneal_sweeps=0`:
+#
+#   surface     24 Å      30 Å      36 Å      44 Å
+#   primitive   broken    strained  clean     strained
+#   gyroid      broken    broken    strained  strained
+#   diamond     --        broken    strained  strained
+#
+# so the minimum for each is the smallest cell that is not "broken".
+MIN_SCHWARZITE_CELL = {"primitive": 30.0, "gyroid": 36.0, "diamond": 36.0}
 
 
 def build_junction(
@@ -169,8 +182,8 @@ def build_schwarzite(
     thickness: float = 0.0,
     bond: float = CC_BOND,
     grid_resolution: int = 64,
+    anneal_sweeps: int = 0,
     remesh_iterations: int = 25,
-    anneal_sweeps: int = 80,
     roughness: float = 0.0,
     relax_iterations: int = 3000,
     seed: int | None = 0,
@@ -208,6 +221,23 @@ def build_schwarzite(
         narrower than a carbon ring and the build is rejected.
     thickness
         Level-set offset; nonzero thins or thickens the channels.
+    anneal_sweeps
+        Metropolis flip-annealing passes. **Defaults to 0 here, unlike
+        :func:`build_junction`, and raising it makes the structure
+        worse.**
+
+        On a junction, a stray pentagon-heptagon pair is genuine
+        disorder and annealing them away helps (39 -> 14 on a Y). On a
+        triply periodic *minimal* surface it is not disorder at all: the
+        surface saddles everywhere, and 5-7 pairs are the mechanism by
+        which a hexagonal net covers that Gaussian curvature. Annealing
+        removes them and the remaining lattice has to stretch to cover
+        the same curvature instead. Measured on Schwarz P at 24 Å, going
+        from 0 to 80 sweeps cuts stray pairs from 28 to 3 and pushes the
+        longest bond from 1.560 Å to 1.655 Å; the pattern held for every
+        surface and cell size tried. A high stray count on these
+        structures is a sign the surface is being tiled correctly, not a
+        defect to be polished out.
     bond, remesh_iterations, relax_iterations
         As for :func:`build_junction`.
     grid_resolution
@@ -233,9 +263,11 @@ def build_schwarzite(
     if cell < minimum:
         raise ValueError(
             f"cell={cell:.1f} Å is too small for the {kind!r} surface, which "
-            f"needs at least {minimum:.0f} Å. Its channels would be narrower "
-            "than a carbon ring, so the remesher pinches through the necks "
-            "and the network comes out torn."
+            f"needs at least {minimum:.0f} Å. Below that the channels curve "
+            "harder than a graphitic net can follow: the cell still builds, "
+            "but relaxes to bonds outside the sp2 range (Schwarz P at 24 Å "
+            "gives 1.33-1.56 Å). Larger cells curve more gently and come out "
+            "cleaner."
         )
     field, _ = im.schwarzite_field(kind, cell=cell, thickness=thickness)
 

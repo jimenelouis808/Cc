@@ -19,6 +19,7 @@ nanocarbon_lab/
 │                  #   swept.py: coils/curved tubes via the implicit route, so
 │                  #   ring sizes follow the curvature instead of straining
 │                  #   assemblies.py: multi-wall tubes and bundles at the vdW gap
+│                  #   fullerene.py: closed cages (C60, C240...) and nano-onions
 ├── dopants/       # substitutional dopants (N, B, S, P, co-doping)
 ├── defects/       # vacancies, Stone-Wales, topological defects
 ├── topology/      # networkx-based connectivity / coordination analysis
@@ -127,6 +128,16 @@ tube builder's hardcoded 12 — a schwarzite legitimately has a strongly
 negative deficit. For an *assembly* (MWCNT, bundle) the budget is 12 per
 disjoint shell, not 12 overall.
 
+**Do not raise `anneal_sweeps` for schwarzites.** It defaults to 0 there
+and to 80 for junctions, and that asymmetry is measured, not an
+oversight. On a minimal surface the 5-7 pairs are how a hexagonal net
+covers the saddle curvature; annealing them away forces the remaining
+bonds to stretch. Schwarz P at 36 Å goes clean → strained → broken as
+sweeps go 0 → 20 → 80, and the pattern held for every surface and cell
+size tried. A high stray-pair count here means the surface is being
+tiled correctly. `MIN_SCHWARZITE_CELL` was likewise raised to where the
+*geometry* stops being broken, not merely where the mesh stops tearing.
+
 ## Curved tubes: swept vs implicit
 
 There are two routes and they are not interchangeable. `build_capped_cnt(
@@ -150,6 +161,25 @@ Two properties of that route must not be re-broken:
 2. **`build_coil` refuses a pitch below `2*tube_radius + 3.4`.** Below
    that the surface merges adjacent turns into one solid and the result
    is not a tube at all.
+
+## Fullerene cages: the seed decides the cage
+
+`builders/fullerene.py` is the `half_length = 0` limit of the capped tube
+— a sphere, reusing the same dual/Euler/VFF machinery. Two seeds, and the
+second is not optional: the icosahedron gives only the class-I series
+GP(f,0) (C20, C80, C180), which **does not contain C60 at any
+frequency**. C60 needs the pentakis dodecahedron (12 degree-5 + 20
+degree-6 vertices), whose dual is the truncated icosahedron.
+
+Both seeds are convex hulls of points on the unit sphere — the hull of
+points on a sphere is their Delaunay triangulation, so connectivity
+cannot be miswritten by hand. `_hull_mesh` re-orients every triangle
+outward; mixed winding would make the dual order a ring's atoms into a
+self-crossing polygon.
+
+The class-II radius step (~3.5 Å per frequency) is what makes a graphitic
+nano-onion possible; class-I's ~2.0 Å step reaches 3.4 Å at no
+`freq_step`. Do not "simplify" the onion onto the class-I seed.
 
 ## Relaxation: the neighbour list needs a skin
 

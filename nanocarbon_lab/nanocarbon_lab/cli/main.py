@@ -9,6 +9,8 @@ Sub-commands:
 * ``cnt-cap``    — build a fully capped/defected CNT and export XYZ + a
   Blender-ready render bundle (see ``nanocarbon_lab/blender/``).
 * ``coil``       — build a nanocoil whose rings follow the curvature.
+* ``fullerene``  — build a closed cage (C60, C240, C540, ...).
+* ``onion``      — build a carbon nano-onion (C60@C240@C540).
 * ``junction``   — build a capped L/T/Y/X nanotube junction.
 * ``schwarzite`` — build a periodic negative-curvature schwarzite unit cell.
 * ``mwcnt``      — build a multi-wall nanotube from concentric shells.
@@ -31,9 +33,11 @@ from ..builders import (
     build_carbon_foam,
     build_cnt,
     build_coil,
+    build_fullerene,
     build_graphene_supercell,
     build_junction,
     build_multiwall_cnt,
+    build_nano_onion,
     build_nanocoil,
     build_nanoribbon,
     build_schwarzite,
@@ -165,12 +169,26 @@ def _cmd_cnt_cap(args):
     return 0
 
 
-def _add_surface_flags(p):
-    """Surface finish and doping, shared by the structure sub-commands."""
-    p.add_argument("--anneal-sweeps", type=int, default=80,
-                   help="Flip-annealing passes that remove pentagon-heptagon "
-                        "pairs beyond those curvature needs (39->14 on a Y "
-                        "junction). 0 keeps the as-grown, rougher wall.")
+def _add_surface_flags(p, anneal: bool | int = True):
+    """Surface finish and doping, shared by the structure sub-commands.
+
+    ``anneal=False`` for the seed-polyhedron builders (fullerenes,
+    onions), whose topology comes from an exact seed rather than a
+    remeshed surface -- there is nothing for flip annealing to clean up,
+    so offering the flag would only imply a control that does nothing.
+    An int sets a different default, which the schwarzites need: there
+    annealing actively hurts (see ``build_schwarzite``), so it defaults
+    to 0 rather than to the junction's 80.
+    """
+    if anneal is not False:
+        default = 80 if anneal is True else int(anneal)
+        p.add_argument("--anneal-sweeps", type=int, default=default,
+                       help="Flip-annealing passes that remove pentagon-heptagon "
+                            "pairs beyond those curvature needs (39->14 on a Y "
+                            "junction). 0 keeps the as-grown, rougher wall. On a "
+                            "schwarzite the 5-7 pairs are how the net covers the "
+                            "saddle, so annealing stretches bonds and the default "
+                            "there is 0.")
     p.add_argument("--roughness", type=float, default=0.0,
                    help="RMS out-of-plane corrugation (Å) for a CVD-grown "
                         "rather than ideal wall; 0.1-0.3 is realistic.")
@@ -275,6 +293,35 @@ def _cmd_coil(args):
     )
     print(f"  coil        = R {atoms.info['achieved_coil_radius']:.1f} A, pitch "
           f"{pitch_text} (asked R {args.coil_radius:.0f}, pitch {args.pitch:.0f})")
+    return 0
+
+
+def _cmd_fullerene(args):
+    atoms = build_fullerene(
+        freq=args.freq, family=args.family, bond=args.bond,
+        roughness=args.roughness, seed=args.seed,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    print(f"  cage        = {atoms.info['formula']}, radius "
+          f"{atoms.info['radius']:.2f} A")
+    return 0
+
+
+def _cmd_onion(args):
+    atoms = build_nano_onion(
+        n_shells=args.shells, inner_freq=args.inner_freq,
+        freq_step=args.freq_step, family=args.family, bond=args.bond,
+        roughness=args.roughness, seed=args.seed,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    g = atoms.info["geometry"]
+    print(f"  onion       = {atoms.info['formula']}")
+    print(f"  shells      = {atoms.info['n_shells']}, radii "
+          f"{[round(r, 2) for r in atoms.info['shell_radii']]} A")
+    print(f"  spacing     = {atoms.info['shell_spacing']:.2f} A "
+          f"(closest approach {g['min_wall_separation']:.2f} A; graphite is 3.4)")
     return 0
 
 
@@ -430,6 +477,40 @@ def build_parser() -> argparse.ArgumentParser:
     _add_surface_flags(jn)
     jn.set_defaults(func=_cmd_junction)
 
+    fu = sub.add_parser(
+        "fullerene",
+        help="Build a closed icosahedral fullerene cage (C60, C240, C540...).",
+    )
+    fu.add_argument("--family", default="C60", choices=["C60", "C20"],
+                    help="'C60' is the class-II series GP(f,f) — C60, C240, "
+                         "C540, radii stepping ~3.55 A. 'C20' is class-I "
+                         "GP(f,0) — C20, C80, C180. C60 itself is not "
+                         "reachable from the class-I seed at any frequency.")
+    fu.add_argument("--freq", type=int, default=1,
+                    help="Subdivision frequency; the cage has base*freq^2 "
+                         "atoms (60, 240, 540... for --family C60).")
+    fu.add_argument("--bond", type=float, default=1.42)
+    fu.add_argument("--out", required=True, help="Output path without extension.")
+    _add_surface_flags(fu, anneal=False)
+    fu.set_defaults(func=_cmd_fullerene)
+
+    on = sub.add_parser(
+        "onion",
+        help="Build a carbon nano-onion: concentric fullerene cages "
+             "(C60@C240@C540).",
+    )
+    on.add_argument("--shells", type=int, default=3, help="Concentric cages.")
+    on.add_argument("--inner-freq", type=int, default=1,
+                    help="Frequency of the innermost cage (1 = C60).")
+    on.add_argument("--freq-step", type=int, default=1,
+                    help="Frequency step between shells; 1 gives ~3.5 A "
+                         "spacing for the C60 family, the physical value.")
+    on.add_argument("--family", default="C60", choices=["C60", "C20"])
+    on.add_argument("--bond", type=float, default=1.42)
+    on.add_argument("--out", required=True, help="Output path without extension.")
+    _add_surface_flags(on, anneal=False)
+    on.set_defaults(func=_cmd_onion)
+
     co = sub.add_parser(
         "coil",
         help="Build a nanocoil whose ring topology follows the curvature "
@@ -465,9 +546,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sz.add_argument("--kind", default="primitive",
                     choices=["primitive", "diamond", "gyroid"])
-    sz.add_argument("--cell", type=float, default=32.0,
-                    help="Cubic unit-cell length (Å). Minimum depends on the "
-                         "surface: 20 (primitive), 22 (gyroid), 30 (diamond).")
+    sz.add_argument("--cell", type=float, default=36.0,
+                    help="Cubic unit-cell length (Å). Bigger cells curve more "
+                         "gently and relax cleaner; minimum 30 (primitive), "
+                         "36 (gyroid, diamond).")
     sz.add_argument("--thickness", type=float, default=0.0,
                     help="Level-set offset; thins or thickens the channels.")
     sz.add_argument("--bond", type=float, default=1.42)
@@ -475,7 +557,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Grid points across one period; 64+ for a clean weld.")
     sz.add_argument("--remesh-iterations", type=int, default=25)
     sz.add_argument("--out", required=True, help="Output path without extension.")
-    _add_surface_flags(sz)
+    _add_surface_flags(sz, anneal=0)
     sz.set_defaults(func=_cmd_schwarzite)
 
     mw = sub.add_parser("mwcnt", help="Build a multi-wall carbon nanotube.")

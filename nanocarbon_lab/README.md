@@ -25,6 +25,7 @@ validation pass before writing.
 | `gui`           | `nanocarbon-gui` desktop app: sliders, live 3D preview, export, Blender render |
 | `implicit`/`remesh`/`junction` | L/T/Y/X nanotube junctions and periodic schwarzite unit cells from implicit surfaces |
 | `swept`         | Coils and arbitrary curved tubes whose ring topology is **derived from the curvature** |
+| `fullerene`     | Closed cages (C60, C240, C540, C20, C80, …) and carbon nano-onions |
 | `assemblies`    | Multi-wall nanotubes and hexagonally packed bundles, at the van der Waals gap |
 
 ## Installation
@@ -97,6 +98,10 @@ nanocarbon junction --kind Y --tube-radius 6 --arm-length 22 --out out/junction
 
 # Periodic gyroid schwarzite unit cell (writes .cif too)
 nanocarbon schwarzite --kind gyroid --cell 26 --out out/gyroid
+
+# C60, and a C60@C240@C540 nano-onion
+nanocarbon fullerene --family C60 --freq 1 --out out/c60
+nanocarbon onion --shells 3 --out out/onion
 
 # Two-wall nanotube and a 7-tube rope
 nanocarbon mwcnt --shells 2 --inner-freq 3 --rings 10 --out out/mwcnt
@@ -553,15 +558,40 @@ really closed:
 
 | surface | genus | `sum(6 - ring_size)` | minimum cell |
 |---|---|---|---|
-| Schwarz P (`primitive`) | 3 | −24 | 20 Å |
-| gyroid | 5 | −48 | 22 Å |
-| Schwarz D (`diamond`) | 9 | −96 | 30 Å |
+| Schwarz P (`primitive`) | 3 | −24 | 30 Å |
+| gyroid | 5 | −48 | 36 Å |
+| Schwarz D (`diamond`) | 9 | −96 | 36 Å |
 
-The minimum cell scales with genus: a higher-genus surface packs more
-channels into the same volume, so its necks get finer, and below the
-listed size they are narrower than a carbon ring — the remesher pinches
-through them and the network tears. The builder rejects those outright
-rather than returning wreckage.
+**Two corrections here, both from measuring rather than assuming**, and
+together they are what fixed schwarzites coming out visibly defective.
+
+*Annealing makes them worse, not better.* On a junction, a stray
+pentagon–heptagon pair is genuine disorder and flip annealing helps
+(39 → 14 on a Y). On a triply periodic **minimal** surface it is not
+disorder at all: the surface saddles everywhere, and 5–7 pairs are the
+mechanism by which a hexagonal net covers that Gaussian curvature.
+Anneal them away and the remaining lattice has to stretch to cover the
+same curvature instead. Sweeping every surface and cell size, the
+`sp2 verdict` got monotonically worse with annealing:
+
+| Schwarz P, 36 Å | 0 sweeps | 20 | 80 |
+|---|---|---|---|
+| stray 5–7 pairs | 41 | 12 | 9 |
+| longest bond | 1.519 Å | 1.534 Å | 1.575 Å |
+| verdict | **clean** | strained | broken |
+
+So `build_schwarzite` defaults to `anneal_sweeps=0`, and the GUI turns
+the shared annealing slider off when you switch to schwarzite mode. A
+high stray count on these structures is a sign the surface is being
+tiled correctly, not something to polish out.
+
+*The minimum cells were too low.* They had been set at the point where
+the mesh stopped tearing, which let through cells that passed the tear
+gate and still relaxed to bonds well outside the sp2 range — Schwarz P
+at 24 Å gives 1.328–1.560 Å, Schwarz D at 30 Å gives 1.343–1.586 Å. The
+limits above are now the smallest cell whose *geometry* is not broken.
+Bigger is better throughout: larger cells curve more gently, so if a
+result still looks strained, widen the cell before anything else.
 
 Two things make the periodic path work, and both were found by measuring
 rather than assuming. **Everything downstream is minimum-image**: the
@@ -685,6 +715,52 @@ panel:
 Measured on a capped tube: σ = 0 → 0.001 Å radial RMS; σ = 0.3 → 0.133 Å
 with bonds still at 1.387–1.469 Å; σ = 0.5 → 0.193 Å at 1.365–1.496 Å.
 The wall looks CVD-grown and stays chemically valid throughout.
+
+### Fullerene cages and nano-onions
+
+A fullerene is the `half_length = 0` limit of the capped tube — a sphere
+instead of a capsule — so it reuses the same dual/Euler/force-field
+machinery. What is specific is the **seed**, because on a sphere the seed
+decides which cage you get:
+
+```python
+from nanocarbon_lab.builders import build_fullerene, build_nano_onion
+
+c60 = build_fullerene(freq=1, family="C60")     # 12 pentagons, 20 hexagons
+onion = build_nano_onion(n_shells=3)            # C60@C240@C540, 840 atoms
+```
+
+| family | seed | series | atoms | radius step |
+|---|---|---|---|---|
+| `"C60"` | pentakis dodecahedron | GP(f,f), class II | 60, 240, 540, 960 | ~3.5 Å |
+| `"C20"` | icosahedron | GP(f,0), class I | 20, 80, 180, 320 | ~2.0 Å |
+
+Two seeds rather than one, because **C60 is not in the class-I series at
+any frequency** — an icosahedron seed cannot produce the one fullerene
+everybody actually wants. Both seeds are built as the convex hull of
+points on the unit sphere, which is the honest way to triangulate a point
+set on a sphere: the hull *is* the spherical Delaunay triangulation, so
+the connectivity cannot be got wrong by hand-listing faces.
+
+Measured, relaxed: C60 comes out at radius 3.52 Å (literature 3.55) with
+every bond at 1.420 Å and angles spanning exactly 108.0°–120.0° — 108°
+being the pentagon's interior angle, which is the right answer rather
+than a coincidence.
+
+The radius step is why `"C60"` is the default for onions. At ~3.5 Å per
+frequency it lands within a tenth of an Ångström of graphite's 3.4 Å, so
+C60@C240@C540 nests at the physical spacing with no fudge: **shell
+spacing 3.48 Å, closest approach 3.37 Å**. The class-I series steps by
+only ~2.0 Å and no `freq_step` combination reaches 3.4. (Contrast the
+multi-wall *tube* below, where the lattice quantises radius in 1.96 Å
+steps and 3.9 Å is the closest realisable wall spacing — the spherical
+family is the luckier geometry.)
+
+As with multi-wall tubes, shells are relaxed independently and then
+nested: the covalent force field has no dispersion term, so what holds an
+onion together is precisely the term the model lacks, and relaxing the
+assembly as a whole would collapse the cages into one another. The
+achieved spacing is measured and reported.
 
 ### Multi-wall tubes and bundles
 

@@ -156,7 +156,7 @@ class TestSchwarzites:
 
     @pytest.mark.parametrize("kind", ["primitive", "gyroid"])
     def test_unit_cell_has_the_textbook_genus_and_ring_budget(self, kind):
-        atoms = build_schwarzite(kind, cell=26.0)
+        atoms = build_schwarzite(kind, cell=36.0)
         info = atoms.info
         assert info["genus"] == self.EXPECTED_GENUS[kind]
         assert info["euler"] == 2 - 2 * info["genus"]
@@ -164,7 +164,7 @@ class TestSchwarzites:
 
     @pytest.mark.parametrize("kind", ["primitive", "gyroid"])
     def test_cell_is_periodic(self, kind):
-        atoms = build_schwarzite(kind, cell=26.0)
+        atoms = build_schwarzite(kind, cell=36.0)
         assert all(atoms.get_pbc())
         length = float(atoms.cell[0][0])
         assert length > 0
@@ -175,13 +175,13 @@ class TestSchwarzites:
         assert positions.max() <= length + 1e-6
 
     def test_negative_curvature_favours_heptagons(self):
-        counts = build_schwarzite("primitive", cell=26.0).info["ring_counts"]
+        counts = build_schwarzite("primitive", cell=36.0).info["ring_counts"]
         # Opposite of a fullerene: saddles everywhere, so rings larger than
         # six must outnumber the pentagons.
         assert counts.get(7, 0) + counts.get(8, 0) > counts.get(5, 0)
 
     def test_geometry_is_physical_across_the_seam(self):
-        atoms = build_schwarzite("primitive", cell=26.0)
+        atoms = build_schwarzite("primitive", cell=36.0)
         g = atoms.info["geometry"]
         # Measured minimum-image: without that a bond wrapping the cell would
         # read as a ~26 Å "bond" and this would fail loudly.
@@ -193,8 +193,53 @@ class TestSchwarzites:
         # Schwarz D packs nine handles into the cell, so its necks pinch
         # first; the builder should say so rather than emit a torn network.
         with pytest.raises(ValueError, match="too small"):
-            build_schwarzite("diamond", cell=24.0)
+            build_schwarzite("diamond", cell=30.0)
 
     def test_nonpositive_cell_rejected(self):
         with pytest.raises(ValueError):
             build_schwarzite("primitive", cell=0.0)
+
+    def test_annealing_is_off_by_default_because_it_hurts_here(self):
+        """The 5-7 pairs are the mechanism, not the defect.
+
+        On a junction, annealing away stray pentagon-heptagon pairs is an
+        improvement. On a triply periodic *minimal* surface it is not: the
+        surface saddles everywhere and those pairs are how a hexagonal net
+        covers that Gaussian curvature. Remove them and the remaining
+        lattice has to stretch instead. Measured across every surface and
+        cell size tried, so the default must stay 0.
+        """
+        import inspect
+
+        assert (
+            inspect.signature(build_schwarzite).parameters["anneal_sweeps"].default
+            == 0
+        )
+
+        as_grown = build_schwarzite("primitive", cell=30.0, anneal_sweeps=0)
+        annealed = build_schwarzite("primitive", cell=30.0, anneal_sweeps=80)
+
+        def strays(atoms):
+            counts = atoms.info["ring_counts"]
+            return min(counts.get(5, 0), counts.get(7, 0))
+
+        # Annealing does what it says to the topology...
+        assert strays(annealed) < strays(as_grown)
+        # ...and the geometry pays for it.
+        assert (annealed.info["geometry"]["bond_max"]
+                > as_grown.info["geometry"]["bond_max"])
+
+    def test_the_minimum_cell_is_where_geometry_stops_being_broken(self):
+        """The floor is set by bond quality, not merely by "it built".
+
+        Below it the cell still meets the tear gate and still relaxes to
+        bonds outside the sp2 range, which is the failure the earlier,
+        lower limits let through.
+        """
+        from nanocarbon_lab.builders.junction import MIN_SCHWARZITE_CELL
+        from nanocarbon_lab.validation.quality import sp2_quality
+
+        for kind in ("primitive", "gyroid"):
+            atoms = build_schwarzite(kind, cell=MIN_SCHWARZITE_CELL[kind])
+            verdict, why = sp2_quality(atoms.info["geometry"])
+            assert verdict != "broken", f"{kind} at its minimum cell: {why}"
