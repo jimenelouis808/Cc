@@ -831,6 +831,15 @@ class NanocarbonGUI:
         threading.Thread(target=worker, daemon=True).start()
 
     def _poll_queue(self) -> None:
+        """Drain finished builds, then always re-arm the timer.
+
+        The re-arm is in a ``finally``, and drawing is wrapped separately,
+        because this callback is the only thing keeping the window alive:
+        an exception escaping it skips ``root.after`` and polling stops
+        for good, leaving the app permanently "building" with no way back.
+        A single missing ``info`` key did exactly that -- one unhandled
+        display error should never cost the user the whole session.
+        """
         try:
             while True:
                 kind, payload = self._queue.get_nowait()
@@ -840,16 +849,25 @@ class NanocarbonGUI:
                 if kind == "done":
                     self.atoms = payload
                     self.last_saved_stem = None
-                    self._redraw()
-                    self._update_info()
-                    self._set_status("Build complete.")
+                    try:
+                        self._redraw()
+                        self._update_info()
+                        self._set_status("Build complete.")
+                    except Exception as exc:  # surfaced, never fatal
+                        self._set_status(f"Built, but display failed: {exc}")
+                        messagebox.showerror(
+                            "Display failed",
+                            "The structure was built successfully but could "
+                            f"not be displayed:\n\n{traceback.format_exc()}",
+                        )
                 else:
                     exc, tb = payload
                     self._set_status(f"Build failed: {exc}")
                     messagebox.showerror("Build failed", f"{exc}\n\n{tb}")
         except queue.Empty:
             pass
-        self.root.after(100, self._poll_queue)
+        finally:
+            self.root.after(100, self._poll_queue)
 
     # ------------------------------------------------------------------ draw
     def _atom_colours(self) -> list[str]:
@@ -918,13 +936,19 @@ class NanocarbonGUI:
         expected = components * (12 - 12 * int(a.info.get("genus", 0)))
         clash = g["n_close_contacts"]
         lines = [f"atoms        {len(a):>6d}"]
+        if "formula" in a.info:
+            lines.append(f"formula      {a.info['formula']:>9s}")
+        # Each field is reported on its own presence. Keying the whole
+        # block off "radius" assumed a radius meant a tube, and a
+        # fullerene has a radius but no length, shape or path strain.
         if "radius" in a.info:
-            lines += [
-                f"radius       {a.info['radius']:>6.2f} Å",
-                f"length       {a.info['length']:>6.1f} Å",
-                f"shape        {a.info['shape']:>6s}",
-                f"path strain  {a.info['path_strain']:>5.1%}",
-            ]
+            lines.append(f"radius       {a.info['radius']:>6.2f} Å")
+        if "length" in a.info:
+            lines.append(f"length       {a.info['length']:>6.1f} Å")
+        if "shape" in a.info:
+            lines.append(f"shape        {a.info['shape']:>6s}")
+        if "path_strain" in a.info:
+            lines.append(f"path strain  {a.info['path_strain']:>5.1%}")
         if "junction_kind" in a.info:
             lines.append(f"junction     {a.info['junction_kind']:>6s}")
         if "schwarzite_kind" in a.info:

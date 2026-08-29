@@ -165,3 +165,55 @@ class TestBlenderDiscovery:
         monkeypatch.setenv("ProgramFiles(x86)", str(tmp_path / "empty2"))
         monkeypatch.setattr("shutil.which", lambda _name: None)
         assert find_blender() is None
+
+
+def test_info_panel_survives_a_structure_without_tube_fields(app):
+    """A fullerene has a radius but no length, shape or path strain.
+
+    The panel used to key that whole block off "radius" alone, so a cage
+    raised KeyError. Because the failure happened inside the queue poll,
+    it also stopped the poll re-arming -- see the next test.
+    """
+    from nanocarbon_lab.builders import build_fullerene
+
+    app.atoms = build_fullerene(freq=1, family="C60")
+    app._update_info()
+    text = app.txt_info.get("1.0", "end")
+    assert "C60" in text
+    assert "radius" in text
+    # Tube-only rows must simply be absent, not blank or zero.
+    assert "path strain" not in text
+    assert "length" not in text
+
+
+def test_a_display_error_does_not_stop_the_queue_poll(app, monkeypatch):
+    """The poll callback is the only thing keeping the window alive.
+
+    If an exception escapes it, `root.after` is never re-armed and the app
+    is stuck "building" forever with no way back. It must survive a broken
+    redraw and keep polling.
+    """
+    import queue as queue_mod
+
+    def boom():
+        raise KeyError("length")
+
+    monkeypatch.setattr(app, "_update_info", boom)
+    monkeypatch.setattr(app, "_redraw", lambda: None)
+    monkeypatch.setattr(
+        "nanocarbon_lab.gui.app.messagebox.showerror", lambda *a, **k: None
+    )
+
+    app._busy = True
+    app._queue.put(("done", app.atoms))
+    app._poll_queue()
+
+    assert not app._busy, "the build must still be marked finished"
+    assert "display failed" in app.status.cget("text").lower()
+
+    # And the poll must still be running: a second item is drained too.
+    monkeypatch.setattr(app, "_update_info", lambda: None)
+    app._queue.put(("done", app.atoms))
+    app._poll_queue()
+    with pytest.raises(queue_mod.Empty):
+        app._queue.get_nowait()
