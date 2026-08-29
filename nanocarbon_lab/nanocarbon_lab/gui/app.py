@@ -959,7 +959,13 @@ class NanocarbonGUI:
             lines.append(f"periodic     {a.cell[0][0]:>6.1f} Å cell")
         if "n_shells" in a.info:
             lines.append(f"shells       {a.info['n_shells']:>6d}")
-            lines.append(f"wall spacing {a.info['wall_spacing']:>6.2f} Å")
+        # A multi-wall tube calls it wall spacing, an onion shell spacing --
+        # a cage has no walls. Report whichever the builder recorded rather
+        # than assuming a shell count implies the tube's key.
+        for key, label in (("wall_spacing", "wall spacing"),
+                           ("shell_spacing", "shell spacing")):
+            if key in a.info:
+                lines.append(f"{label:<12s} {a.info[key]:>6.2f} Å")
         if "n_tubes" in a.info:
             lines.append(f"tubes        {a.info['n_tubes']:>6d}")
         sep = a.info.get("geometry", {}).get("min_wall_separation")

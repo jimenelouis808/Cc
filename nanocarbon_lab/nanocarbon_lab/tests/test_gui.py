@@ -167,20 +167,62 @@ class TestBlenderDiscovery:
         assert find_blender() is None
 
 
-def test_info_panel_survives_a_structure_without_tube_fields(app):
-    """A fullerene has a radius but no length, shape or path strain.
+def _one_of_each_structure():
+    """Smallest instance of every structure type the GUI can build.
 
-    The panel used to key that whole block off "radius" alone, so a cage
-    raised KeyError. Because the failure happened inside the queue poll,
-    it also stopped the poll re-arming -- see the next test.
+    Kept in one place because the info panel is the thing most likely to
+    break when a builder grows a new `info` key: each row is emitted from
+    the presence of a field, and it is easy to key a row off one field
+    while reading a sibling that only some builders record.
     """
+    from nanocarbon_lab.builders import (
+        build_bundle,
+        build_capped_cnt,
+        build_fullerene,
+        build_junction,
+        build_multiwall_cnt,
+        build_nano_onion,
+        build_schwarzite,
+    )
+
+    return {
+        "capped tube": lambda: build_capped_cnt(n_body_rings=4, freq=2),
+        "fullerene": lambda: build_fullerene(freq=1, family="C60"),
+        "nano-onion": lambda: build_nano_onion(n_shells=2),
+        "multi-wall": lambda: build_multiwall_cnt(
+            n_shells=2, inner_freq=2, n_body_rings=4),
+        "bundle": lambda: build_bundle(
+            n_rings_across=1, freq=2, n_body_rings=4),
+        "junction": lambda: build_junction(
+            kind="L", tube_radius=5.0, arm_length=10.0),
+        "schwarzite": lambda: build_schwarzite("primitive", cell=30.0),
+    }
+
+
+@pytest.mark.parametrize("kind", sorted(_one_of_each_structure()))
+def test_info_panel_renders_every_structure_type(app, kind):
+    """Two real bugs came from this: a fullerene has a radius but no
+    length, and a nano-onion has a shell count but records its spacing as
+    `shell_spacing`, not the multi-wall tube's `wall_spacing`. Both raised
+    KeyError inside the queue poll and froze the window.
+    """
+    app.atoms = _one_of_each_structure()[kind]()
+    app._update_info()
+    text = app.txt_info.get("1.0", "end")
+    assert "atoms" in text
+    assert "Euler sum" in text
+    assert "BROKEN" not in text.split("sp2 verdict")[0], (
+        f"{kind}: Euler budget wrong in the panel"
+    )
+
+
+def test_cage_panel_omits_tube_only_rows(app):
     from nanocarbon_lab.builders import build_fullerene
 
     app.atoms = build_fullerene(freq=1, family="C60")
     app._update_info()
     text = app.txt_info.get("1.0", "end")
-    assert "C60" in text
-    assert "radius" in text
+    assert "C60" in text and "radius" in text
     # Tube-only rows must simply be absent, not blank or zero.
     assert "path strain" not in text
     assert "length" not in text
