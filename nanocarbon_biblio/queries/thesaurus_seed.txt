@@ -1,0 +1,29 @@
+nitrogen-doped carbon nanotube;n-doped carbon nanotube;n-doped cnt;nitrogen doped carbon nanotubes;ncnt;n-cnt;n-doped mwcnt;nitrogen-doped cnts;n-doped carbon nanotubes
+boron-doped carbon nanotube;b-doped carbon nanotube;b-doped cnt;boron doped carbon nanotubes;b-cnt
+carbon nanotube;carbon nanotubes;cnt;cnts;nanotube;nanotubes
+multi-walled carbon nanotube;multiwalled carbon nanotube;mwcnt;mwcnts;mwnt;multi walled carbon nanotubes;multi-wall carbon nanotube
+single-walled carbon nanotube;singlewalled carbon nanotube;swcnt;swcnts;swnt;single wall carbon nanotube
+carbon nanofiber;carbon nanofibre;carbon nanofibers;carbon nanofibres;carbon nano-fiber;cnf;cnfs
+density functional theory;dft;dft calculations;first-principles;first principles;ab initio;ab-initio calculations
+molecular dynamics;md simulation;molecular dynamics simulation;molecular-dynamics;md simulations
+stone-wales defect;stone wales defect;sw defect;stone-wales defects;5-7-7-5 defect;pentagon-heptagon defect
+vacancy;vacancies;vacancy defect;monovacancy;single vacancy;mono-vacancy;atomic vacancy
+divacancy;divacancies;double vacancy;di-vacancy
+oxygen reduction reaction;orr;oxygen reduction;oxygen-reduction reaction
+hydrogen evolution reaction;her;hydrogen evolution
+oxygen evolution reaction;oer;oxygen evolution
+x-ray photoelectron spectroscopy;xps;x ray photoelectron spectroscopy;photoelectron spectroscopy
+raman spectroscopy;raman;raman spectra;raman scattering;raman analysis
+chemical vapor deposition;chemical vapour deposition;cvd;cvd growth;catalytic chemical vapor deposition;ccvd
+transmission electron microscopy;tem;hrtem;high-resolution transmission electron microscopy
+supercapacitor;supercapacitors;electrochemical capacitor;super capacitor
+lithium-ion battery;lithium ion battery;li-ion battery;lithium-ion batteries
+graphene oxide;go;graphite oxide
+reduced graphene oxide;rgo;reduced graphite oxide
+vertically aligned carbon nanotube;vacnt;aligned carbon nanotube;vertically-aligned carbon nanotubes;carbon nanotube forest
+carbon nanotube sponge;cnt sponge;carbon nanotube aerogel;cnt aerogel
+buckypaper;bucky paper;carbon nanotube paper;cnt film
+co-doping;codoping;co-doped;codoped;dual doping;dual-doped
+heteroatom doping;heteroatom-doped;heteroatom doped;heteroatoms
+defect engineering;defect-engineering;defect engineered
+single-atom catalyst;single atom catalyst;sac;single-atom catalysts

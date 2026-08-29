@@ -1,0 +1,17 @@
+# Metadatos de Scopus/WoS: licencia no redistribuible. Nunca al repositorio.
+data/raw/**
+data/interim/**
+data/processed/**
+!data/**/.gitkeep
+results/
+.upload_cache/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.Rhistory
+.RData
+.Rproj.user/
+renv/library/
