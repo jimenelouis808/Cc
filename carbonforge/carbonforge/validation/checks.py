@@ -192,6 +192,74 @@ def check_vacuum(
     return rep
 
 
+def check_periodicity_coherence(
+    atoms: Atoms,
+    min_span_fraction: float = 0.05,
+) -> ValidationReport:
+    """Check that each periodic axis is one the structure actually extends along.
+
+    Declaring an axis periodic when the atoms have no extent along it is a
+    silent, total invalidation: the band path runs through vacuum, the k-mesh
+    samples the empty direction while treating the real one as isolated, and
+    the vacuum check inspects the wrong axes. Nothing crashes, and the input
+    file looks perfectly well-formed.
+
+    This is not hypothetical — the nanoribbon builder shipped with exactly
+    that mistake, declaring the ribbon periodic along its vacuum direction,
+    and every ribbon exported was wrong until it was caught.
+
+    Choosing the criterion took some care, because the obvious ones fire on
+    legitimate structures. A gap-based rule ("the atoms must nearly fill the
+    cell") flags a disordered foam, whose random packing leaves real gaps of
+    ~10 Å. An absolute span rule flags a two-atom primitive cell, whose atoms
+    span only 0.7 Å along one lattice vector. What actually distinguishes the
+    bug is that the atoms were **exactly coplanar** along the axis in
+    question — zero extent, not merely small.
+
+    So the test is a scale-free ratio: the atomic extent along a periodic
+    axis must exceed ``min_span_fraction`` of that cell vector. Graphene's
+    primitive cell sits at 0.33, the foam far higher, and the ribbon bug at
+    0.00.
+
+    Parameters
+    ----------
+    atoms
+        Structure to check.
+    min_span_fraction
+        Minimum atomic extent along a periodic axis, as a fraction of the
+        cell length along it.
+    """
+    report = ValidationReport()
+    if len(atoms) < 2:
+        return report
+
+    positions = atoms.get_positions()
+    cell = np.array(atoms.cell)
+    for axis, periodic in enumerate(atoms.get_pbc()):
+        if not periodic:
+            continue
+        span = float(positions[:, axis].max() - positions[:, axis].min())
+        length = float(abs(cell[axis, axis]))
+        report.info[f"span_axis_{axis}"] = span
+        if length < 1e-6:
+            report.errors.append(
+                f"El eje {'xyz'[axis]} es periódico pero su vector de celda "
+                "es nulo."
+            )
+            continue
+        if span / length < min_span_fraction:
+            name = "xyz"[axis]
+            report.errors.append(
+                f"El eje {name} está declarado periódico pero los átomos solo "
+                f"se extienden {span:.2f} Å de los {length:.2f} Å de celda "
+                f"({100 * span / length:.1f} %). Casi seguro que el eje "
+                "periódico real es otro: revisa pbc. Con esto, el camino de "
+                "bandas recorrería vacío y la malla k muestrearía la "
+                "dirección equivocada, sin que nada dé error."
+            )
+    return report
+
+
 def check_cell_consistency(atoms: Atoms) -> ValidationReport:
     """Check that the cell matrix is well defined and right-handed."""
     rep = ValidationReport()
@@ -228,6 +296,7 @@ def run_basic_checks(
     rep = ValidationReport()
     rep.merge(check_cell_consistency(atoms))
     rep.merge(check_dimensionality(atoms))
+    rep.merge(check_periodicity_coherence(atoms))
     rep.merge(check_minimum_distances(atoms))
     rep.merge(check_coordination(atoms, allow_edge=allow_edge))
     rep.merge(check_density(atoms))

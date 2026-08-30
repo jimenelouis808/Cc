@@ -9,7 +9,9 @@ from __future__ import annotations
 import pytest
 
 from carbonforge.gui.params import (
+    FUNCTIONALIZATION_PARAMS,
     MODIFIER_PARAMS,
+    apply_functionalization,
     STRUCTURES,
     apply_modifiers,
     build_structure,
@@ -202,3 +204,77 @@ class TestSpecsAreCoherent:
             assert param.key in sig.parameters, (
                 f"{kind}: '{param.key}' no existe en {spec.builder.__name__}"
             )
+
+
+class TestFunctionalizationPanel:
+    """The GUI must expose groups and lattice nitrogen, and keep them apart."""
+
+    def _defaults(self):
+        values = {s.key: s.default for s in FUNCTIONALIZATION_PARAMS}
+        values["seed"] = 0
+        return values
+
+    def test_defaults_are_a_noop(self):
+        ribbon = build_structure(
+            "nanoribbon", _defaults(STRUCTURES["nanoribbon"].params)
+        )
+        out = apply_functionalization(ribbon, self._defaults())
+        assert out.get_chemical_formula() == ribbon.get_chemical_formula()
+
+    def test_attaches_a_group(self):
+        ribbon = build_structure(
+            "nanoribbon", _defaults(STRUCTURES["nanoribbon"].params)
+        )
+        raw = self._defaults()
+        raw.update(group="NH2", group_count=2)
+        out = apply_functionalization(ribbon, raw)
+        assert "N" in out.get_chemical_symbols()
+        assert len(out) > len(ribbon)
+
+    def test_lattice_nitrogen_is_not_an_attached_group(self):
+        """Graphitic N substitutes a carbon: the atom count must not grow."""
+        sheet = build_structure(
+            "graphene", {**_defaults(STRUCTURES["graphene"].params),
+                         "nx": 5, "ny": 5}
+        )
+        raw = self._defaults()
+        raw.update(nitrogen="graphitic", nitrogen_count=2)
+        out = apply_functionalization(sheet, raw)
+        assert len(out) == len(sheet)
+        assert out.get_chemical_symbols().count("N") == 2
+
+    def test_pyridinic_removes_a_carbon(self):
+        sheet = build_structure(
+            "graphene", {**_defaults(STRUCTURES["graphene"].params),
+                         "nx": 5, "ny": 5}
+        )
+        raw = self._defaults()
+        raw.update(nitrogen="pyridinic", nitrogen_count=1)
+        out = apply_functionalization(sheet, raw)
+        assert len(out) == len(sheet) - 1
+
+    def test_epoxide_uses_the_bridge_path(self):
+        sheet = build_structure(
+            "graphene", {**_defaults(STRUCTURES["graphene"].params),
+                         "nx": 5, "ny": 5}
+        )
+        raw = self._defaults()
+        raw.update(group="epoxy", group_count=2)
+        out = apply_functionalization(sheet, raw)
+        assert out.get_chemical_symbols().count("O") == 2
+
+    def test_reproducible_given_seed(self):
+        ribbon = build_structure(
+            "nanoribbon", _defaults(STRUCTURES["nanoribbon"].params)
+        )
+        raw = self._defaults()
+        raw.update(group="COOH", group_count=2, seed=11)
+        a = apply_functionalization(ribbon, raw)
+        b = apply_functionalization(ribbon, raw)
+        assert a.get_chemical_symbols() == b.get_chemical_symbols()
+
+    def test_every_param_is_bounded_correctly(self):
+        from carbonforge.gui.params import coerce_value
+
+        for spec in FUNCTIONALIZATION_PARAMS:
+            coerce_value(spec, spec.default)

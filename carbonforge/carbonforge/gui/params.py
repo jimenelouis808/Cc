@@ -127,7 +127,7 @@ STRUCTURES: dict[str, StructureSpec] = {
         key="nanoribbon",
         label="Nanocinta (nanoribbon)",
         description=(
-            "Cinta de grafeno con bordes definidos, periódica a lo largo de y."
+            "Cinta de grafeno con bordes definidos, periódica a lo largo de z."
         ),
         builder=build_nanoribbon,
         params=(
@@ -226,6 +226,31 @@ _TASK_MAP: dict[str, tuple[str, Optional[str]]] = {
     "infrarrojo": ("scf", "ir"),
     "raman": ("scf", "ir+raman"),
 }
+
+
+#: Functional groups and nitrogen configurations. Kept separate from
+#: MODIFIER_PARAMS because they are different chemistry: a group is attached
+#: to a carbon, a nitrogen configuration sits inside the lattice.
+FUNCTIONALIZATION_PARAMS: tuple[ParamSpec, ...] = (
+    ParamSpec("group", "Grupo funcional", "choice", "ninguno",
+              choices=("ninguno", "H", "OH", "NH2", "NO2", "CN", "COOH",
+                       "CHO", "CONH2", "O", "SH", "CH3", "epoxy"),
+              help="Se ANCLA al carbono. Los nitrogenados son NH2, NO2, CN y CONH2."),
+    ParamSpec("group_count", "Cuántos grupos", "int", 1, minimum=1, maximum=50),
+    ParamSpec("group_site", "Dónde anclarlos", "choice", "edge",
+              choices=("edge", "basal"),
+              help="'edge' es lo habitual. 'basal' fuerza sp3 y arruga la "
+                   "lámina: así es el óxido de grafeno."),
+    ParamSpec("nitrogen", "Nitrógeno en la red", "choice", "ninguno",
+              choices=("ninguno", "graphitic", "pyridinic", "pyrrolic", "n-oxide"),
+              help="Esto NO es un grupo anclado: el N va DENTRO de los anillos. "
+                   "El XPS del N 1s las separa."),
+    ParamSpec("nitrogen_count", "Cuántos sitios de N", "int", 1,
+              minimum=1, maximum=20),
+    ParamSpec("passivate", "Pasivar bordes con H antes", "bool", False,
+              help="Satura los bordes sueltos, que si no dan estados espurios "
+                   "en el gap."),
+)
 
 
 MODIFIER_PARAMS: tuple[ParamSpec, ...] = (
@@ -427,6 +452,55 @@ def validate_calculation(atoms: Atoms, raw_values: dict[str, Any]) -> str:
     if report.ok and not report.warnings:
         return "✅ El cálculo solicitado no presenta problemas conocidos."
     return report.summary()
+
+
+def apply_functionalization(atoms: Atoms, raw_values: dict[str, Any]) -> Atoms:
+    """Apply nitrogen configurations, edge passivation and functional groups.
+
+    Order matters and mirrors the CLI: lattice changes first (nitrogen
+    configurations create vacancies), then passivation, then attached groups.
+    Attaching first would decorate carbons that a later vacancy removes.
+    """
+    from ..functionalization import (
+        functionalize_bridges,
+        functionalize_random,
+        make_graphitic_n,
+        make_pyridinic_n,
+        make_pyridinic_n_oxide,
+        make_pyrrolic_like,
+        passivate_edges,
+    )
+
+    values = collect_values(FUNCTIONALIZATION_PARAMS, raw_values)
+    seed = int(collect_values(MODIFIER_PARAMS, raw_values)["seed"])
+    out = atoms
+
+    nitrogen = values["nitrogen"]
+    if nitrogen != "ninguno":
+        count = int(values["nitrogen_count"])
+        if nitrogen == "graphitic":
+            out = make_graphitic_n(out, n_sites=count, seed=seed)
+        elif nitrogen == "pyridinic":
+            out = make_pyridinic_n(out, n_defects=count, seed=seed)
+        elif nitrogen == "pyrrolic":
+            out = make_pyrrolic_like(out, n_defects=count, seed=seed)
+        else:
+            out = make_pyridinic_n_oxide(out, n_defects=count, seed=seed)
+
+    if values["passivate"]:
+        out = passivate_edges(out)
+
+    group = values["group"]
+    if group != "ninguno":
+        count = int(values["group_count"])
+        if group == "epoxy":
+            out = functionalize_bridges(out, n_groups=count, seed=seed)
+        else:
+            out = functionalize_random(
+                out, group, n_groups=count,
+                site_kind=values["group_site"], seed=seed,
+            )
+    return out
 
 
 def export_structure(

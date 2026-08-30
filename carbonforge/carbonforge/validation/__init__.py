@@ -8,6 +8,7 @@ from .checks import (
     check_dimensionality,
     check_vacuum,
     check_cell_consistency,
+    check_periodicity_coherence,
     run_basic_checks,
 )
 
@@ -19,5 +20,6 @@ __all__ = [
     "check_dimensionality",
     "check_vacuum",
     "check_cell_consistency",
+    "check_periodicity_coherence",
     "run_basic_checks",
 ]

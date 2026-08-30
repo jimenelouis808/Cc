@@ -74,7 +74,7 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-Deberías ver `278 passed`.
+Deberías ver `424 passed`.
 
 Sabrás que el entorno está activo porque el prompt de la terminal empieza
 por `(.venv)`. **Tendrás que activarlo cada vez que abras una terminal
@@ -137,7 +137,49 @@ número de modos acústicos).
 
 ---
 
-## 5. Calcular espectros, bandas y espín-órbita
+## 5. Grupos funcionales y nitrógeno
+
+Hay dos químicas distintas y conviene no mezclarlas:
+
+Un **grupo anclado** cuelga del carbono: `-NH2`, `-NO2`, `-OH`, `-COOH`,
+`-C≡N`, `-CONH2`, `-CHO`, `=O`, `-SH`, `-CH3`, y el epóxido puente.
+
+Un **nitrógeno de red** va dentro de los anillos: grafítico, piridínico,
+pirrólico, N-óxido. Se separan en el XPS del N 1s y dopan distinto, así que
+decir «5 % de N» sin especificar cuál dice muy poco.
+
+En la GUI tienen su propio panel. Desde la terminal:
+
+```bash
+carbonforge groups        # ver todos los grupos disponibles
+
+# Amina en el borde de una nanocinta, y calcular sus bandas
+carbonforge ribbon --width 6 --length 3 --group NH2 --group-count 2 \
+                   --task bands --out salida/amino --format all
+
+# Nitrógeno piridínico en grafeno (crea vacante y pone N en el borde)
+carbonforge graphene --nx 6 --ny 6 --nitrogen pyridinic --nitrogen-count 2 \
+                     --out salida/piridinico
+
+# Óxido de grafeno: hidroxilos en el plano basal (fuerza sp3)
+carbonforge graphene --nx 5 --ny 5 --group OH --group-count 3 \
+                     --group-site basal --out salida/go
+
+carbonforge nitrogen-report estructura.xyz
+```
+
+**El caso pirrólico, con honestidad.** Un sitio pirrólico real necesita un
+anillo de **cinco** miembros, y esa reconstrucción la decide la energía, no
+la geometría. Lo que genera el programa es un *precursor*: composición y
+entorno correctos, pero anillos todavía de seis. Está etiquetado como tal.
+Relájalo y comprueba con `ring_statistics` que apareció el pentágono.
+
+**Todas las geometrías salen sin relajar.** Los grupos rotan en torno a sus
+enlaces simples e interaccionan con lo que tengan cerca.
+
+---
+
+## 6. Calcular espectros, bandas y espín-órbita
 
 En el panel «Cálculo» de la interfaz (o con `--task` en la terminal) eliges
 qué quieres calcular, no solo qué estructura construir:
@@ -201,7 +243,7 @@ Dos diferencias importantes:
 
 ---
 
-## 6. Si prefieres la línea de comandos
+## 7. Si prefieres la línea de comandos
 
 La GUI no es obligatoria: todo está disponible desde la terminal, y esto es
 lo práctico para generar muchas estructuras de golpe.
@@ -239,7 +281,7 @@ carbonforge cnt --help
 
 ---
 
-## 7. Ver los resultados
+## 8. Ver los resultados
 
 carbonforge **no ejecuta nada**: escribe las entradas y lee las salidas.
 Cuando tu cálculo haya terminado:
@@ -272,7 +314,7 @@ estás mirando.
 
 ---
 
-## 8. Pseudopotenciales: los archivos que tienes que descargar
+## 9. Pseudopotenciales: los archivos que tienes que descargar
 
 carbonforge escribe los **nombres** de los pseudopotenciales en las entradas,
 pero no puede incluir los archivos. Sin ellos, QE no arranca. Para saber
@@ -302,7 +344,7 @@ perfectamente válido, pero esa decisión es tuya.
 
 ---
 
-## 9. Convergencia: los valores por defecto NO están convergidos
+## 10. Convergencia: los valores por defecto NO están convergidos
 
 Esto importa: un gap o una frecuencia sacados de un cálculo sin convergir
 están mal, por muy cuidado que esté todo lo demás. Los 60 Ry por defecto son
@@ -343,7 +385,7 @@ Con `--parameter kpoints` haces lo mismo para la malla de puntos k.
 
 ---
 
-## 10. Desde Python
+## 11. Desde Python
 
 Para barridos o integrarlo en tus propios scripts:
 
@@ -378,7 +420,7 @@ write_dataset(jobs, "salida/dataset")   # 16 estructuras + dataset.json
 
 ---
 
-## 11. Qué hacer con los archivos generados
+## 12. Qué hacer con los archivos generados
 
 ### Quantum ESPRESSO
 
@@ -414,7 +456,7 @@ Para visualizar: **OVITO** y **VMD** leen XYZ; **VESTA** lee CIF.
 
 ---
 
-## 12. Problemas frecuentes
+## 13. Problemas frecuentes
 
 **`command not found: carbonforge-gui`**
 El entorno virtual no está activo. Ejecuta `source .venv/bin/activate`
@@ -446,7 +488,7 @@ ejecuta `pip install -e .`.
 
 ---
 
-## 13. Límites que conviene conocer
+## 14. Límites que conviene conocer
 
 Estas no son pegas menores, son cosas que afectan a cómo interpretas los
 resultados:
@@ -479,5 +521,7 @@ resultados:
   real de QE o SIESTA (no había ninguna disponible al desarrollarlos). La
   primera vez que los uses con tus datos, trátalo también como una prueba
   del lector: si algo no cuadra, dímelo.
+- **Los grupos funcionales y el nitrógeno de red salen sin relajar**, y las
+  configuraciones pirrólicas son precursores, no sitios terminados.
 - **El gap que reporta `plot-bands` es un gap muestreado**: solo ve los
   puntos k del camino. Un extremo de banda fuera de él no aparece.

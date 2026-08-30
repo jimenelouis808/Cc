@@ -20,6 +20,8 @@ from ase import Atoms
 
 from .params import (
     CALCULATION_PARAMS,
+    FUNCTIONALIZATION_PARAMS,
+    apply_functionalization,
     MODIFIER_PARAMS,
     STRUCTURES,
     ParamSpec,
@@ -72,6 +74,7 @@ class CarbonForgeApp:
         self._param_vars: dict[str, Any] = {}
         self._modifier_vars: dict[str, Any] = {}
         self._calculation_vars: dict[str, Any] = {}
+        self._functionalization_vars: dict[str, Any] = {}
         self._format_vars: dict[str, Any] = {}
         self._queue: queue.Queue = queue.Queue()
         self._busy = False
@@ -572,6 +575,7 @@ class CarbonForgeApp:
         self._param_vars.clear()
         self._modifier_vars.clear()
         self._calculation_vars.clear()
+        self._functionalization_vars.clear()
         self._format_vars.clear()
 
         # Switching structure type invalidates whatever was built before;
@@ -591,6 +595,15 @@ class CarbonForgeApp:
             mods.pack(fill="x", pady=(10, 0))
             for param in MODIFIER_PARAMS:
                 self._add_field(mods, param, self._modifier_vars)
+
+            groups = ttk.LabelFrame(
+                self.params_frame,
+                text="Grupos funcionales y nitrógeno",
+                padding=4,
+            )
+            groups.pack(fill="x", pady=(10, 0))
+            for param in FUNCTIONALIZATION_PARAMS:
+                self._add_field(groups, param, self._functionalization_vars)
 
         calc = ttk.LabelFrame(self.params_frame, text="Cálculo", padding=4)
         calc.pack(fill="x", pady=(10, 0))
@@ -641,6 +654,7 @@ class CarbonForgeApp:
         kind = self._current_structure_key()
         raw_params = self._read_raw(self._param_vars)
         raw_mods = self._read_raw(self._modifier_vars)
+        raw_groups = self._read_raw(self._functionalization_vars)
         supports_mods = STRUCTURES[kind].supports_modifiers
 
         self._set_busy(True, "Construyendo… (puede tardar en estructuras grandes)")
@@ -650,6 +664,11 @@ class CarbonForgeApp:
                 atoms = build_structure(kind, raw_params)
                 if supports_mods:
                     atoms = apply_modifiers(atoms, raw_mods)
+                    # Groups go on after doping and defects: attaching first
+                    # would decorate carbons a later vacancy removes.
+                    atoms = apply_functionalization(
+                        atoms, {**raw_mods, **raw_groups}
+                    )
                 self._queue.put(("built", atoms))
             except Exception as exc:  # surfaced to the user in a dialog
                 self._queue.put(("error", (exc, traceback.format_exc())))

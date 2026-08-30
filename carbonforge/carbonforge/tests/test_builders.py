@@ -9,6 +9,7 @@ from carbonforge.builders import (
     build_cnt,
     build_graphene,
     build_graphene_supercell,
+    build_nanocoil,
     build_nanoribbon,
     build_carbon_foam,
 )
@@ -147,3 +148,78 @@ class TestCarbonFoam:
     def test_too_small_box_raises(self):
         with pytest.raises(ValueError):
             build_carbon_foam(box_size=5, n_flakes=3, flake_radius=3.0)
+
+
+# Builders are listed here with a small, fast set of arguments so the
+# invariants below run over every structure type the package can produce.
+ALL_BUILDERS = [
+    ("cnt_armchair", lambda: build_cnt(6, 6, length=8)),
+    ("cnt_zigzag", lambda: build_cnt(10, 0, length=8)),
+    ("cnt_chiral", lambda: build_cnt(6, 3, length=8)),
+    ("graphene_primitive", build_graphene),
+    ("graphene_supercell", lambda: build_graphene_supercell(3, 3)),
+    ("ribbon_zigzag", lambda: build_nanoribbon(6, 3, edge="zigzag")),
+    ("ribbon_armchair", lambda: build_nanoribbon(6, 3, edge="armchair")),
+    ("ribbon_passivated",
+     lambda: build_nanoribbon(6, 3, edge="zigzag", passivate=True)),
+    ("nanocoil", lambda: build_nanocoil(n=6, m=6, coil_radius=25.0,
+                                        pitch=12.0, n_turns=0.5)),
+    ("foam", lambda: build_carbon_foam(box_size=20, n_flakes=4,
+                                       flake_radius=3.0, seed=0)),
+]
+
+
+class TestBuilderInvariants:
+    """Properties every builder must satisfy, whatever it produces.
+
+    These exist because a nanoribbon shipped for weeks declaring the wrong
+    periodic axis. Per-builder tests did not catch it; an invariant applied
+    to all of them would have.
+    """
+
+    @pytest.mark.parametrize("name,builder", ALL_BUILDERS,
+                             ids=[n for n, _ in ALL_BUILDERS])
+    def test_passes_validation(self, name, builder):
+        from carbonforge.validation import run_basic_checks
+
+        report = run_basic_checks(builder())
+        assert report.ok, f"{name}:\n{report.summary()}"
+
+    @pytest.mark.parametrize("name,builder", ALL_BUILDERS,
+                             ids=[n for n, _ in ALL_BUILDERS])
+    def test_periodic_axes_are_real(self, name, builder):
+        """No axis may be declared periodic if the atoms are flat along it."""
+        from carbonforge.validation import check_periodicity_coherence
+
+        report = check_periodicity_coherence(builder())
+        assert report.ok, f"{name}:\n{report.summary()}"
+
+    @pytest.mark.parametrize("name,builder", ALL_BUILDERS,
+                             ids=[n for n, _ in ALL_BUILDERS])
+    def test_no_atomic_overlap(self, name, builder):
+        atoms = builder()
+        distances = atoms.get_all_distances(mic=True)
+        np.fill_diagonal(distances, np.inf)
+        assert distances.min() > HARD_MIN_DISTANCE, name
+
+    @pytest.mark.parametrize("name,builder", ALL_BUILDERS,
+                             ids=[n for n, _ in ALL_BUILDERS])
+    def test_records_its_type(self, name, builder):
+        assert "structure_type" in builder().info, name
+
+    @pytest.mark.parametrize("name,builder", ALL_BUILDERS,
+                             ids=[n for n, _ in ALL_BUILDERS])
+    def test_band_path_avoids_vacuum(self, name, builder):
+        """Every high-symmetry point must lie in a periodic direction."""
+        from carbonforge.calculations import suggest_band_path
+
+        atoms = builder()
+        spec = suggest_band_path(atoms)
+        pbc = atoms.get_pbc()
+        for point in spec.points:
+            for axis in range(3):
+                if not pbc[axis]:
+                    assert abs(point[axis]) < 1e-8, (
+                        f"{name}: el camino de bandas se mete por el eje "
+                        f"{'xyz'[axis]}, que no es periódico"
+                    )

@@ -72,6 +72,9 @@ reports, and exports to QE / SIESTA / LAMMPS / XYZ / CIF. **Analizar
 resultados** opens a finished calculation — a band file or `dynmat.out` — and
 plots it inline, with the same warnings the CLI gives.
 
+The build tab exposes functional groups and lattice nitrogen in their own
+panel, kept visually separate because they are different chemistry.
+
 Structures are built on a worker thread, so the window stays responsive on
 large models. Tkinter is required — it ships with Python on Windows and
 macOS; on Linux install `python3-tk` (it cannot be installed with pip). The
