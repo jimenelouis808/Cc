@@ -20,6 +20,7 @@ from .classify import classify_all, crosstab, to_dataframe
 from .demo import DemoConfig, generate_demo_corpus
 from .dedupe import DedupeResult, deduplicate, overlap_table
 from .exporters import export_bundle
+from .indicators import combined_share_trend, dopant_lag_table, gap_matrix, annotate_records
 from .loaders import load_directory
 from .thesaurus import suggest_synonyms, write_thesaurus
 
@@ -54,6 +55,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     print("Classifying …")
     classify_all(result.unique)
+    annotate_records(result.unique)
     frame = to_dataframe(result.unique)
 
     if args.require_topic:
@@ -71,10 +73,26 @@ def _cmd_run(args: argparse.Namespace) -> int:
     print(json.dumps(manifest["prisma"], indent=2))
     print(f"Wrote bundle to {args.out}")
 
+    final = to_dataframe(result.unique)
+    outdir = Path(args.out)
     if args.crosstab:
-        table = crosstab(to_dataframe(result.unique))
-        table.to_csv(Path(args.out) / "crosstab_dopant_application.csv")
-        print(f"Wrote crosstab to {Path(args.out) / 'crosstab_dopant_application.csv'}")
+        crosstab(final).to_csv(outdir / "crosstab_dopant_application.csv")
+        print(f"Wrote crosstab to {outdir / 'crosstab_dopant_application.csv'}")
+
+    if args.indicators:
+        trend = combined_share_trend(final)
+        trend["table"].to_csv(outdir / "rq2_study_type_share.csv")
+        dopant_lag_table(final).to_csv(outdir / "rq2_dopant_lag.csv", index=False)
+        gaps = gap_matrix(final)
+        gaps.to_csv(outdir / "rq3_gap_matrix.csv", index=False)
+        print(
+            f"RQ2: Spearman rho = {trend['spearman_rho']} for the combined share "
+            f"across {trend['n_years']} years"
+        )
+        if not gaps.empty:
+            n_gap = int((gaps.status == "theory_only").sum())
+            print(f"RQ3: {n_gap} theory-only cells (predicted, not yet realised)")
+        print(f"Wrote RQ2/RQ3 tables to {outdir}")
     return 0
 
 
@@ -123,6 +141,8 @@ def build_parser() -> argparse.ArgumentParser:
                      help="drop records where no dopant and no defect rule fired")
     run.add_argument("--crosstab", action="store_true",
                      help="also write the dopant x application matrix")
+    run.add_argument("--indicators", action="store_true",
+                     help="also write the RQ2 (theory/experiment lag) and RQ3 (gap matrix) tables")
     run.add_argument("--note", default="", help="free-text note stored in manifest.json")
     run.set_defaults(func=_cmd_run)
 

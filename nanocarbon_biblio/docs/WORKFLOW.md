@@ -64,9 +64,17 @@ Definitivo, reproducible (**el que va al paper**):
 python -m nanocarbon_biblio.cli run \
   --raw data/raw --out data/processed \
   --title-threshold 92 --year-window 1 \
-  --require-topic --crosstab \
+  --require-topic --crosstab --indicators \
   --note "Scopus 2026-XX-XX + WoS 2026-XX-XX, consulta CORE v3"
 ```
+
+`--indicators` añade las tablas de RQ2 (`rq2_dopant_lag.csv`,
+`rq2_study_type_share.csv`) y RQ3 (`rq3_gap_matrix.csv`). Son las que sostienen
+las dos aportaciones originales del review; sin ellas tienes un mapeo temático
+más, que es justo lo que un editor rechaza.
+
+> **`--out` nunca dentro de `--raw`.** La corrida siguiente re-ingeriría su
+> propia salida y duplicaría el corpus. La CLI lo rechaza.
 
 Guarda ese comando en el repo. Un corpus montado a clics no es reproducible.
 

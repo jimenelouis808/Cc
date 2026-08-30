@@ -66,6 +66,31 @@ step("Lotka", {
   save_csv(as.data.frame(lotka_res$AuthorProd), "lotka_author_productivity")
 })
 
+# ------------------------------ 1b. impacto normalizado, no citas brutas
+# La cita bruta mide antigüedad: un artículo de 2005 ha tenido veinte años para
+# acumular citas y uno de 2024 no. Cualquier ranking sin normalizar es un
+# ranking por fecha de publicación. La columna cnorm_year la calcula el pipeline
+# de Python (normalizada POR CORPUS, no por campo: ver docs/PROTOCOL.md §5).
+if ("cnorm_year" %in% names(M)) {
+  step("Impacto normalizado", {
+    M$cnorm_year <- suppressWarnings(as.numeric(M$cnorm_year))
+    fiables <- M[!is.na(M$cnorm_year) & M$citations_reliable %in% c("TRUE", TRUE), ]
+    top <- fiables[order(-fiables$cnorm_year), ][1:min(50, nrow(fiables)), ]
+    save_csv(
+      data.frame(
+        PY = top$PY, TI = top$TI, SO = top$SO,
+        TC = top$TC, cnorm = round(top$cnorm_year, 3),
+        study_type = if ("study_type" %in% names(top)) top$study_type else NA
+      ),
+      "top_papers_normalised"
+    )
+    message("     Usa esta tabla, no la de TC bruto, para 'los más influyentes'.")
+  })
+} else {
+  warning("Sin columna cnorm_year: correrás rankings por antigüedad disfrazados ",
+          "de impacto. Corre el pipeline de Python con --indicators.")
+}
+
 # -------------------------------------- 2. RQ2: acoplamiento teoría/experimento
 # Esta es la sección original del review. Requiere las etiquetas de Python.
 if ("study_type" %in% names(M)) {
@@ -205,4 +230,15 @@ writeLines(
     sprintf("Generado: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"))),
   file.path(RESULTS, "session_info.txt")
 )
+# Las tablas de RQ2 (desfase teoría->experimento) y RQ3 (matriz de huecos) las
+# produce el lado de Python, que es donde viven las etiquetas por faceta:
+#   python -m nanocarbon_biblio.cli run ... --indicators
+# Se copian aquí para que results/ tenga todo junto.
+step("Copiar tablas RQ2/RQ3 de Python", {
+  for (nm in c("rq2_dopant_lag.csv", "rq2_study_type_share.csv", "rq3_gap_matrix.csv")) {
+    src <- file.path(PROCESSED, nm)
+    if (file.exists(src)) file.copy(src, file.path(RESULTS, nm), overwrite = TRUE)
+  }
+})
+
 message("\nHecho. Salidas en results/")

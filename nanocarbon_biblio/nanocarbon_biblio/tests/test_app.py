@@ -24,6 +24,6 @@ def test_app_runs_clean_from_empty_state() -> None:
     app.run()
     assert not app.exception
     assert app.title[0].value.endswith("nanocarbon_biblio")
-    assert len(app.tabs) == 7
+    assert len(app.tabs) == 8
     # Every downstream tab must tell the user what to do first.
     assert any("pestaña 1" in info.value for info in app.info)

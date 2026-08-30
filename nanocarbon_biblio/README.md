@@ -54,6 +54,7 @@ que puedes ir y volver sin recargar un corpus de 30 000 registros.
 | **5 · Tesauro** | Sugiere grupos de sinónimos del propio corpus, editables en la página, y los guarda en formato biblioshiny |
 | **6 · Exportar a R** | Escribe el bundle, muestra el **flujo PRISMA** descargable y **lanza los scripts de R** (`00_build_M.R`, `01_core_analyses.R`) mostrando su salida |
 | **7 · Validación** | Muestra estratificada y reproducible, con hoja de codificación en blanco para calcular kappa |
+| **8 · RQ2 · RQ3** | Las dos preguntas originales: desfase teoría→experimento por dopante, matriz de huecos, y citas normalizadas |
 
 La GUI es una fachada sobre la librería: **todo lo que se puede hacer clicando se
 puede hacer desde la CLI**. Un corpus montado a clics no es reproducible.
@@ -84,7 +85,7 @@ python -m nanocarbon_biblio.cli demo --out data/raw/demo
 
 # 2. La corrida definitiva, reproducible
 python -m nanocarbon_biblio.cli run --raw data/raw --out data/processed \
-    --require-topic --crosstab --note "Scopus + WoS, consulta CORE v3"
+    --require-topic --crosstab --indicators --note "Scopus + WoS, consulta CORE v3"
 
 # 3. Tesauro (revísalo a mano antes de usarlo)
 python -m nanocarbon_biblio.cli thesaurus --raw data/raw --out queries/thesaurus.txt
@@ -107,6 +108,35 @@ tabla aparte que R une por DOI y, en su defecto, por título normalizado.
 
 Reconstruir `CR` desde Python rompe co-citación, acoplamiento bibliográfico y
 RPYS — y lo rompe en silencio, que es peor.
+
+## Las dos preguntas originales (pestaña 8)
+
+Lo que separa este review de "el enésimo N-doped carbon for ORR". Ambas se
+calculan sin red, desde el propio corpus (`indicators.py`).
+
+**RQ2 — ¿predice la teoría, o documenta?** Por cada dopante, el año del primer
+estudio computacional frente al del primero experimental, y el desfase entre
+ambos. Positivo = la teoría llegó antes (predicción → realización); negativo =
+el experimento llegó antes y la teoría vino a explicarlo. El desfase se ancla en
+el **k-ésimo** documento, no en el primero: colgar una afirmación de una década
+de un único registro que podría estar mal clasificado es indefendible. Se
+acompaña de la correlación de Spearman de la cuota de estudios *combined* contra
+el año, que es la forma cuantitativa de "teoría y experimento se han acoplado".
+
+**RQ3 — ¿qué está predicho pero sin hacer?** Cada celda (dopante × aplicación)
+se clasifica como `covered`, `experiment_only` o `theory_only`. Las
+`theory_only` —con trabajo computacional y **cero** experimental— son la sección
+de perspectivas con evidencia detrás. Se ordenan por `n_theory × cnorm medio`,
+así que una celda predicha por teoría bien citada pesa más que una mencionada de
+pasada. Una celda vacía no es un hueco por sí sola: puede ser físicamente poco
+interesante o estar fuera del vocabulario de las reglas, y la interfaz lo avisa.
+
+**Citas normalizadas.** La cita bruta mide antigüedad, no impacto. Se calcula
+`cnorm_year` (citas / media del año) y el percentil dentro del año. Es
+**normalización por corpus, no por campo**: sirve para ordenar documentos dentro
+de este corpus, que es lo que el review necesita, pero no se puede reportar como
+CNCI ni MNCS —eso exige una línea base de toda la ciencia, de SciVal o InCites—.
+El código lo dice en el docstring y la interfaz lo repite en pantalla.
 
 ## Lo que el pipeline etiqueta
 
@@ -136,14 +166,14 @@ clasificador opaco:
 pytest nanocarbon_biblio/tests -q
 ```
 
-41 tests. Cubren el parseo de ambos formatos, la conservación literal de `CR` en
+50 tests. Cubren el parseo de ambos formatos, la conservación literal de `CR` en
 el viaje de ida y vuelta, la deduplicación entre bases puntuada **contra la
 verdad conocida** del corpus sintético, los guardas de desambiguación, la
 protección contra re-ingerir la propia salida, y el arranque de la GUI.
 
 ## Estado de verificación
 
-- **Python**: probado y ejecutado en este entorno; los 41 tests pasan.
+- **Python**: probado y ejecutado en este entorno; los 50 tests pasan.
 - **GUI**: recorrida de principio a fin (cargar → deduplicar → clasificar →
   cribar → exportar) contra el corpus de demostración, y capturada en imágenes.
   Los botones de R se activan solos cuando `Rscript` está en el PATH.
@@ -154,6 +184,16 @@ protección contra re-ingerir la propia salida, y el arranque de la GUI.
   lugar de tumbar el script, pero **la primera corrida de `R/00_build_M.R` con
   datos reales hay que mirarla con atención**, en particular la cobertura de
   `CR` y el porcentaje de etiquetas unidas que reporta `join_report.txt`.
+
+## Lo que deliberadamente no está
+
+**Enriquecimiento por API** (OpenAlex para cobertura y ROR, Crossref y Retraction
+Watch para retractaciones). Está recomendado en `docs/WORKFLOW.md` y sigue siendo
+buena idea, pero no lo implementé porque el entorno donde se escribió este código
+tiene bloqueado el acceso a esas APIs por política de red, y no quiero entregar
+código de red que no he podido ejecutar ni una vez. Cuando lo añadas, ponlo en
+`enrich.py` con caché en disco y respetando el `mailto` de la *polite pool* de
+ambas APIs.
 
 ## Licencia y datos
 

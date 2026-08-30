@@ -33,6 +33,15 @@ manuscrito. **Un cambio silencioso en una regla cambia una figura publicada.**
    revalida el conjunto.
 
 ## Guardas científicas
+- **Nunca reportar `cnorm_year` como CNCI o MNCS.** Es normalización por corpus,
+  no por campo. Sirve para ordenar dentro de este corpus; una cifra
+  field-normalised de verdad sale de SciVal o InCites. El docstring de
+  `annotate_records` lo dice y la GUI lo repite en pantalla: no quites ninguno.
+- **El desfase de RQ2 se reporta con `lag_at_k`, no con `lag_first`.** Un solo
+  documento temprano puede ser una mala clasificación.
+- **Una celda vacía de la matriz de RQ3 no es un hueco de investigación.** Puede
+  ser físicamente poco interesante o estar fuera del léxico. El umbral
+  `min_theory` existe para que un artículo suelto no fabrique un hueco.
 - `dop*` como comodín recupera `dopamine`: en las consultas se enumeran las
   formas (`doped OR doping OR dopant*`). No "simplificar" esto.
 - `CNF` significa *cellulose nanofibril* con más frecuencia que *carbon

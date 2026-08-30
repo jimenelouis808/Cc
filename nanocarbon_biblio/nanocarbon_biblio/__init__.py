@@ -16,6 +16,7 @@ __all__ = [
     "dedupe",
     "demo",
     "exporters",
+    "indicators",
     "lexicons",
     "loaders",
     "records",

@@ -36,6 +36,9 @@ from nanocarbon_biblio.classify import (  # noqa: E402
 from nanocarbon_biblio.dedupe import DedupeResult, deduplicate, overlap_table  # noqa: E402
 from nanocarbon_biblio.demo import DemoConfig, generate_demo_corpus  # noqa: E402
 from nanocarbon_biblio.exporters import export_bundle  # noqa: E402
+from nanocarbon_biblio.indicators import (  # noqa: E402
+    annotate_records, combined_share_trend, dopant_lag_table, gap_matrix,
+)
 from nanocarbon_biblio.loaders import load_any, load_directory  # noqa: E402
 from nanocarbon_biblio.thesaurus import (  # noqa: E402
     SEED_GROUPS, suggest_synonyms, write_thesaurus,
@@ -110,7 +113,7 @@ st.caption(
 
 tabs = st.tabs([
     "1 · Cargar", "2 · Deduplicar", "3 · Clasificar", "4 · Cribado",
-    "5 · Tesauro", "6 · Exportar a R", "7 · Validación",
+    "5 · Tesauro", "6 · Exportar a R", "7 · Validación", "8 · RQ2 · RQ3",
 ])
 
 # ---------------------------------------------------------------- 1 · Cargar
@@ -271,6 +274,7 @@ with tabs[2]:
         if st.button("Clasificar", type="primary"):
             with st.spinner("Aplicando reglas…"):
                 classify_all(result.unique)
+                annotate_records(result.unique)
                 st.session_state.labels = to_dataframe(result.unique)
 
         labels = st.session_state.labels
@@ -583,3 +587,94 @@ with tabs[6]:
             "repórtalo en Métodos. Un review que dice *«clasificación validada sobre 100 "
             "registros estratificados, κ = 0.87»* está en otra categoría de credibilidad."
         )
+
+
+# ----------------------------------------------------------- 8 · RQ2 y RQ3
+with tabs[7]:
+    st.subheader("Las dos preguntas originales del review")
+    labels = st.session_state.labels
+    if labels is None:
+        st.info("Clasifica primero (pestaña 3).")
+    else:
+        st.markdown("### RQ2 — ¿Predice la teoría, o documenta?")
+        trend = combined_share_trend(labels)
+        col_a, col_b = st.columns(2)
+        col_a.metric("Spearman ρ (cuota *combined* vs año)", trend["spearman_rho"])
+        col_b.metric("Años con datos suficientes", trend["n_years"])
+        st.caption(trend["note"])
+
+        k = st.slider(
+            "Anclaje: año del k-ésimo documento", 1, 10, 3,
+            help="Un solo documento temprano puede ser una mala clasificación. "
+                 "Anclar una afirmación de una década de desfase en un único registro "
+                 "es indefendible: reporta `lag_at_k`, no `lag_first`.",
+        )
+        facet = st.selectbox("Faceta", ["dopant", "defect", "morphology"], 0)
+        lag = dopant_lag_table(labels, facet=facet, k=int(k))
+        st.dataframe(lag, width="stretch", hide_index=True)
+        st.caption(
+            "Desfase **positivo** = la teoría llegó antes (predicción → realización). "
+            "**Negativo** = el experimento llegó antes y la teoría vino a explicarlo. "
+            "Los dos patrones son reales; la mezcla entre dopantes es el resultado "
+            "interesante. Lee `n_theory` junto al desfase: un desfase calculado sobre "
+            "tres documentos es una curiosidad, no un hallazgo."
+        )
+        st.download_button(
+            "Descargar tabla de desfases (CSV)",
+            lag.to_csv(index=False).encode("utf-8"),
+            f"rq2_lag_{facet}.csv", "text/csv",
+        )
+
+        st.divider()
+        st.markdown("### RQ3 — ¿Qué está predicho pero sin hacer?")
+        min_theory = st.slider(
+            "Mínimo de estudios teóricos para considerar una celda", 1, 10, 2,
+            help="Con 1 basta un artículo suelto para inventar un hueco.",
+        )
+        gaps = gap_matrix(labels, min_theory=int(min_theory))
+        if gaps.empty:
+            st.warning("No hay celdas con dopante y aplicación simultáneos.")
+        else:
+            counts = gaps.status.value_counts()
+            col_a, col_b, col_c = st.columns(3)
+            col_a.metric("Celdas cubiertas", int(counts.get("covered", 0)))
+            col_b.metric("Solo teoría (huecos)", int(counts.get("theory_only", 0)))
+            col_c.metric("Solo experimento", int(counts.get("experiment_only", 0)))
+
+            only_gaps = gaps[gaps.status == "theory_only"]
+            st.markdown("#### Celdas predichas y no realizadas, por puntuación")
+            if only_gaps.empty:
+                st.info(
+                    "Ninguna celda es solo-teoría con este umbral. Bájalo, o el campo "
+                    "está más maduro de lo que esperabas — que también es un resultado."
+                )
+            else:
+                st.dataframe(only_gaps, width="stretch", hide_index=True)
+            with st.expander("Matriz completa de celdas"):
+                st.dataframe(gaps, width="stretch", hide_index=True)
+            st.download_button(
+                "Descargar matriz de huecos (CSV)",
+                gaps.to_csv(index=False).encode("utf-8"),
+                "rq3_gap_matrix.csv", "text/csv",
+            )
+            st.warning(
+                "**Una celda vacía no es un hueco de investigación por sí sola.** Puede ser "
+                "físicamente poco interesante, o simplemente estar fuera del vocabulario que "
+                "reconocen las reglas. Lee las mejor puntuadas una a una y comprueba que la "
+                "ausencia no es un artefacto del léxico antes de afirmar nada."
+            )
+
+        st.divider()
+        st.markdown("### Citas normalizadas")
+        if "cnorm_year" in labels.columns:
+            reliable = labels[labels.citations_reliable.astype(bool)]
+            top = reliable.nlargest(15, "cnorm_year")[
+                ["year", "title", "cited_by", "cnorm_year", "citation_percentile_year"]
+            ]
+            st.dataframe(top, width="stretch", hide_index=True)
+            st.info(
+                "**Normalizado por corpus, no por campo.** Compara documentos *dentro* de "
+                "este corpus, que es lo que el review necesita, pero no lo reportes como "
+                "CNCI ni MNCS: eso exige una línea base de toda la ciencia que hay que "
+                "sacar de SciVal o InCites. Lo que no vale es la cita bruta: mide antigüedad."
+            )
