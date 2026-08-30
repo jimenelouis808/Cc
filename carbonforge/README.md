@@ -20,6 +20,7 @@ Two properties hold throughout:
 |-----------------|------------------------------------------------------------------------------|
 | `builders`      | CNT (armchair / zigzag / chiral), graphene, nanoribbons, **nanocoils**, 3D carbon foam |
 | `dopants`       | Substitutional N, B, S, P and co-doping, random / edges / bulk / cluster     |
+| `functionalization` | Functional groups (-NH2, -NO2, -OH, -COOH, epoxide…) and the four nitrogen lattice configurations |
 | `defects`       | Mono- and divacancies, Stone-Wales, local random distortion                  |
 | `topology`      | networkx-based bond graph, coordination, connectivity, ring statistics       |
 | `validation`    | Geometry checks **plus** calculation-level physics checks                    |
@@ -177,6 +178,70 @@ A complete `.fdf`: species, lattice, coordinates, k-grid (1 along vacuum
 axes), basis, functional, band lines. Note SIESTA has **no DFPT**: phonons
 come from frozen force constants (`MD.TypeOfRun FC` + the `vibra` utility),
 and there is no Raman implementation — for that, use Quantum ESPRESSO.
+
+## Functional groups and nitrogen
+
+Two different chemistries, deliberately kept apart:
+
+**Attached groups** hang off a carbon, at an edge or on the basal plane:
+
+```bash
+carbonforge groups                       # list what is available
+carbonforge ribbon --width 6 --length 3 --group NH2 --group-count 2 \
+                   --task bands --out out/amino --format all
+```
+
+Available: `-H`, `-OH`, `-NH2`, `-NO2`, `-C≡N`, `-COOH`, `-CHO`, `-CONH2`,
+`=O`, `-SH`, `-CH3` and the bridging epoxide. Edge attachment is the ordinary
+case; `--group-site basal` forces the anchor carbon to sp3, which is what
+graphene oxide is.
+
+**Lattice nitrogen** sits inside the ring system, and is *not* the same thing:
+
+```bash
+carbonforge graphene --nx 6 --ny 6 --nitrogen pyridinic --nitrogen-count 2 \
+                     --out out/pyridinic
+carbonforge nitrogen-report structure.xyz
+```
+
+| Configuration | N coordination | How it is built |
+|---|---|---|
+| Graphitic (quaternary) | 3 | Substitutes a basal carbon |
+| Pyridinic | 2 | Vacancy first, then N on the rim |
+| Pyrrolic | 2 (+H) | Five-membered ring — see caveat below |
+| Pyridinic N-oxide | 2 (+O) | Pyridinic plus O on the nitrogen |
+
+They separate in N 1s XPS (≈398, 400, 401 and 402 eV respectively) and dope
+the material differently, so "5 % N" without saying which says very little.
+
+**The pyrrolic caveat:** a true pyrrolic site needs a *five-membered ring*,
+and that reconstruction is driven by energy minimisation, not geometry.
+`make_pyrrolic_like` builds the composition and neighbourhood but leaves
+six-membered rings, labels the result `pyrrolic_precursor`, and says so in
+the metadata. Relax it, then check with `ring_statistics` that a pentagon
+actually formed.
+
+Everything here produces **idealised, unrelaxed** geometries. Groups rotate
+about their single bonds and interact with neighbours; relax before drawing
+conclusions.
+
+## Batch sweeps over any structure
+
+```python
+from carbonforge.workflows import batch_structure_sweep, write_dataset
+from carbonforge.builders import build_nanoribbon
+from carbonforge.functionalization import functionalize_random
+from functools import partial
+
+jobs = batch_structure_sweep(
+    build_nanoribbon,
+    {"width": [4, 6, 8], "edge": ["zigzag", "armchair"], "length": [3]},
+    post_factory=lambda params, seed: [
+        partial(functionalize_random, group_key="NH2", n_groups=2, seed=seed)
+    ],
+)
+write_dataset(jobs, "out/sweep")
+```
 
 ## Pseudopotentials
 

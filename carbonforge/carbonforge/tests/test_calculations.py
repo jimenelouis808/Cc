@@ -46,11 +46,23 @@ class TestBandPaths:
         assert boundary[1] == pytest.approx(0.0)
 
     def test_ribbon_zone_boundary_follows_its_own_axis(self):
-        """The ribbon is periodic along y, so the path must be along y."""
-        spec = suggest_band_path(build_nanoribbon(4, 3))
+        """The ribbon is periodic along z, so the path must run along z.
+
+        This test previously asserted the y axis, matching a builder that
+        wrongly declared the ribbon periodic along its vacuum direction. The
+        test passed and hid the bug: written against the implementation
+        rather than the physics, it could only ever confirm what the code
+        already did. It now derives the expected axis from ``pbc``.
+        """
+        ribbon = build_nanoribbon(4, 3)
+        spec = suggest_band_path(ribbon)
+        axis = int(np.argmax(ribbon.get_pbc()))
+        assert axis == 2, "la cinta debe ser periódica en z"
         boundary = spec.points[-1]
-        assert abs(boundary[1]) == pytest.approx(0.5)
-        assert boundary[0] == pytest.approx(0.0)
+        assert abs(boundary[axis]) == pytest.approx(0.5)
+        # The two vacuum directions must carry no dispersion.
+        for other in (0, 1):
+            assert boundary[other] == pytest.approx(0.0)
 
     def test_hexagonal_graphene_gives_textbook_path(self):
         spec = suggest_band_path(build_graphene())

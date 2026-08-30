@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Callable, Iterable, Literal, Optional
+from typing import Callable, Iterable, Literal, Optional, Sequence
 
 from ase import Atoms
 
@@ -185,4 +185,84 @@ def batch_cnt_sweep(
                         )
                     )
                     job_idx += 1
+    return jobs
+
+
+def batch_structure_sweep(
+    builder: Callable[..., Atoms],
+    parameter_grid: dict[str, Sequence],
+    name_prefix: str = "structure",
+    post_factory: Optional[Callable[[dict, int], list]] = None,
+    seed: int = 0,
+    export: ExportFormat = "qe",
+) -> list[BatchJob]:
+    """Cartesian-product sweep over any builder's parameters.
+
+    :func:`batch_cnt_sweep` predates this and is CNT-specific. This one takes
+    any builder and any grid, so graphene sheets and nanoribbons are as easy
+    to sweep as nanotubes.
+
+    Parameters
+    ----------
+    builder
+        Any structure builder, e.g. :func:`~carbonforge.builders.build_nanoribbon`.
+    parameter_grid
+        Maps each keyword of ``builder`` to the values it should take. The
+        Cartesian product of these is swept.
+    name_prefix
+        Prefix for the generated job names; parameter values are appended.
+    post_factory
+        ``(params, seed) -> [callables]`` producing the post-processing steps
+        for one job — doping, defects, functional groups. Receives the
+        parameter dict so the decoration can depend on the geometry, and a
+        per-job seed so the whole sweep stays reproducible.
+    seed
+        Base seed; job *k* uses ``seed + k``.
+    export
+        Export format for every job.
+
+    Returns
+    -------
+    list[BatchJob]
+
+    Examples
+    --------
+    Sweep ribbon widths and edges, aminating each::
+
+        from functools import partial
+        from carbonforge.builders import build_nanoribbon
+        from carbonforge.functionalization import functionalize_random
+
+        jobs = batch_structure_sweep(
+            build_nanoribbon,
+            {"width": [4, 6, 8], "edge": ["zigzag", "armchair"], "length": [3]},
+            name_prefix="gnr",
+            post_factory=lambda params, s: [
+                partial(functionalize_random, group_key="NH2",
+                        n_groups=2, seed=s)
+            ],
+        )
+    """
+    from functools import partial
+    from itertools import product
+
+    if not parameter_grid:
+        raise ValueError("parameter_grid no puede estar vacío.")
+
+    keys = list(parameter_grid)
+    jobs: list[BatchJob] = []
+    for index, values in enumerate(product(*(parameter_grid[k] for k in keys))):
+        params = dict(zip(keys, values))
+        job_seed = seed + index
+        label = "_".join(
+            f"{key}{value}".replace(" ", "") for key, value in params.items()
+        )
+        jobs.append(
+            BatchJob(
+                name=f"{name_prefix}_{label}",
+                builder=partial(builder, **params),
+                post=post_factory(params, job_seed) if post_factory else [],
+                export=export,
+            )
+        )
     return jobs

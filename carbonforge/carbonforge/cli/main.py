@@ -27,6 +27,17 @@ from ..builders import (
 from ..calculations.spectroscopy import SpectroscopySpec
 from ..calculations.spinorbit import SpinOrbitSpec
 from ..dopants import dope_random
+from ..functionalization import (
+    describe_groups,
+    functionalize_bridges,
+    functionalize_random,
+    make_graphitic_n,
+    make_pyridinic_n,
+    make_pyridinic_n_oxide,
+    make_pyrrolic_like,
+    nitrogen_report,
+    passivate_edges,
+)
 from ..defects import introduce_vacancies
 from ..exports.qe import (
     QESettings,
@@ -51,11 +62,53 @@ _TASKS: dict[str, tuple[str, str | None]] = {
 }
 
 
+_NITROGEN_BUILDERS = {
+    "graphitic": make_graphitic_n,
+    "pyridinic": make_pyridinic_n,
+    "pyrrolic": make_pyrrolic_like,
+    "n-oxide": make_pyridinic_n_oxide,
+}
+
+
 def _apply_post(atoms, args):
+    """Apply doping, nitrogen configurations, defects and functional groups.
+
+    Order matters: lattice modifications (doping, N configurations, vacancies)
+    come first, then groups are attached to whatever edges result. Doing it
+    the other way round would attach groups to carbons that are later
+    removed.
+    """
     if getattr(args, "dopant", None):
         atoms = dope_random(atoms, args.dopant, args.dopant_conc, seed=args.seed)
+
+    nitrogen = getattr(args, "nitrogen", None)
+    if nitrogen:
+        builder = _NITROGEN_BUILDERS[nitrogen]
+        count = getattr(args, "nitrogen_count", 1)
+        if nitrogen == "graphitic":
+            atoms = builder(atoms, n_sites=count, seed=args.seed)
+        elif nitrogen == "n-oxide":
+            atoms = builder(atoms, n_defects=count, seed=args.seed)
+        else:
+            atoms = builder(atoms, n_defects=count, seed=args.seed)
+
     if getattr(args, "vacancies", 0):
         atoms = introduce_vacancies(atoms, n_defects=args.vacancies, seed=args.seed)
+
+    if getattr(args, "passivate_edges", False):
+        atoms = passivate_edges(atoms)
+
+    group = getattr(args, "group", None)
+    if group:
+        if group == "epoxy":
+            atoms = functionalize_bridges(
+                atoms, n_groups=args.group_count, seed=args.seed
+            )
+        else:
+            atoms = functionalize_random(
+                atoms, group, n_groups=args.group_count,
+                site_kind=args.group_site, seed=args.seed,
+            )
     return atoms
 
 
@@ -168,6 +221,25 @@ def _cmd_validate(args):
     report = run_basic_checks(atoms)
     print(report.summary())
     return 0 if report.ok else 1
+
+
+def _cmd_groups(args):
+    """List the functional groups available."""
+    print(describe_groups())
+    print(
+        "\nOjo con la distinción: un grupo nitrogenado (-NH2, -NO2) se ANCLA "
+        "al carbono,\nmientras que --nitrogen crea configuraciones DENTRO de "
+        "la red (grafítico,\npiridínico, pirrólico). No son intercambiables: "
+        "el XPS del N 1s las separa."
+    )
+    return 0
+
+
+def _cmd_nitrogen_report(args):
+    """Report the nitrogen content of an existing structure."""
+    atoms = ase_io.read(args.path)
+    print(nitrogen_report(atoms))
+    return 0
 
 
 def _cmd_pseudos(args):
@@ -323,6 +395,19 @@ def _add_common(p):
     p.add_argument("--dopant", choices=["N", "B", "S", "P"], default=None)
     p.add_argument("--dopant-conc", type=float, default=0.0)
     p.add_argument("--vacancies", type=int, default=0)
+    p.add_argument("--nitrogen", default=None,
+                   choices=["graphitic", "pyridinic", "pyrrolic", "n-oxide"],
+                   help="Configuración de nitrógeno en la red (no es lo mismo "
+                        "que un grupo funcional nitrogenado).")
+    p.add_argument("--nitrogen-count", type=int, default=1,
+                   help="Cuántos sitios de nitrógeno crear.")
+    p.add_argument("--group", default=None,
+                   help="Grupo funcional a anclar. Lista: carbonforge groups")
+    p.add_argument("--group-count", type=int, default=1)
+    p.add_argument("--group-site", default="edge", choices=["edge", "basal"],
+                   help="Anclar en borde (habitual) o en plano basal (sp3).")
+    p.add_argument("--passivate-edges", action="store_true",
+                   help="Saturar los bordes con H antes de funcionalizar.")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--force", action="store_true",
                    help="Export even if validation reports errors.")
@@ -441,6 +526,18 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--dir", default=None,
                     help="Carpeta a comprobar (tu pseudo_dir).")
     ps.set_defaults(func=_cmd_pseudos)
+
+    gr_list = sub.add_parser(
+        "groups", help="List the available functional groups."
+    )
+    gr_list.set_defaults(func=_cmd_groups)
+
+    nr = sub.add_parser(
+        "nitrogen-report",
+        help="Report nitrogen content and configurations of a structure.",
+    )
+    nr.add_argument("path", help="Estructura legible por ASE.")
+    nr.set_defaults(func=_cmd_nitrogen_report)
 
     vl = sub.add_parser("validate",
                         help="Validate an existing structure file (CIF, XYZ, POSCAR…).")

@@ -13,6 +13,7 @@ from .constants import (
 from .geometry import (
     center_in_cell,
     add_vacuum,
+    ensure_vacuum,
     minimum_image_distances,
     guess_bonds,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "COVALENT_RADII",
     "center_in_cell",
     "add_vacuum",
+    "ensure_vacuum",
     "minimum_image_distances",
     "guess_bonds",
     "make_rng",

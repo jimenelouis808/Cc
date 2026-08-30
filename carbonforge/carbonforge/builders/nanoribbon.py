@@ -53,9 +53,16 @@ def build_nanoribbon(
 
     Notes
     -----
-    In ASE's convention the ribbon is periodic along the **y** axis. We
-    preserve that and attach metadata so downstream code does not need to
-    guess the axis.
+    ASE lays the ribbon in the **x-z plane**: width along x, ribbon axis along
+    **z**, and vacuum along y (out of plane). So the periodic direction is z,
+    and ASE sets ``pbc = (False, False, True)`` itself — which this builder
+    keeps rather than overriding.
+
+    Getting this wrong is not cosmetic. Declaring the wrong periodic axis
+    makes the band path run through vacuum, has the k-mesh sample the empty
+    direction while treating the real one as isolated, and points the vacuum
+    check at the wrong axes. Every ribbon export would be physically wrong
+    while looking perfectly well-formed.
     """
     if width < 1 or length < 1:
         raise ValueError("width and length must be >= 1.")
@@ -71,9 +78,9 @@ def build_nanoribbon(
         sheet=False,
     )
 
-    # ASE already pads vacuum; make sure pbc is consistent.
-    atoms.set_pbc([False, True, False])
-    center_in_cell(atoms, axes=(0, 2))
+    # ASE already sets pbc = (False, False, True) and pads x and y. Trust it;
+    # only re-centre the atoms within the two non-periodic directions.
+    center_in_cell(atoms, axes=(0, 1))
 
     atoms.info.update(
         {
@@ -83,7 +90,7 @@ def build_nanoribbon(
             "length": length,
             "passivated": bool(passivate),
             "bond": bond,
-            "periodic_axis": 1,
+            "periodic_axis": 2,
         }
     )
     return atoms

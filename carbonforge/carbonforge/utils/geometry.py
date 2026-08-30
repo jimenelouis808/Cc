@@ -6,7 +6,7 @@ The helpers here are deliberately backend-agnostic: they operate on
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 from ase import Atoms
@@ -64,6 +64,55 @@ def add_vacuum(atoms: Atoms, vacuum: float, axes: Sequence[int]) -> Atoms:
         cell[ax, ax] += vacuum
     atoms.set_cell(cell, scale_atoms=False)
     center_in_cell(atoms, axes=axes)
+    return atoms
+
+
+def ensure_vacuum(
+    atoms: Atoms,
+    min_vacuum: float = 12.0,
+    axes: Optional[Sequence[int]] = None,
+) -> Atoms:
+    """Grow the cell so every non-periodic axis has at least ``min_vacuum``.
+
+    Anything that adds atoms outside the original footprint — attaching
+    functional groups to an edge, most obviously — eats into the padding that
+    was put there for the DFT calculation. A group sticking 3 Å out of a
+    ribbon edge can turn 12 Å of vacuum into 9, and the structure then
+    interacts with its own periodic image.
+
+    Parameters
+    ----------
+    atoms
+        Structure to pad (modified in place and returned).
+    min_vacuum
+        Required padding in Å along each non-periodic axis.
+    axes
+        Which axes to consider. Defaults to every axis with ``pbc`` false.
+
+    Returns
+    -------
+    ase.Atoms
+        The same object, with an enlarged cell and atoms re-centred on the
+        axes that were grown. Axes that already had enough vacuum are left
+        untouched, so calling this repeatedly is stable.
+    """
+    if axes is None:
+        axes = [i for i, periodic in enumerate(atoms.get_pbc()) if not periodic]
+    if not axes:
+        return atoms
+
+    positions = atoms.get_positions()
+    cell = np.array(atoms.cell)
+    grown: list[int] = []
+    for axis in axes:
+        span = float(positions[:, axis].max() - positions[:, axis].min())
+        needed = span + min_vacuum
+        if cell[axis, axis] < needed:
+            cell[axis, axis] = needed
+            grown.append(axis)
+    if grown:
+        atoms.set_cell(cell, scale_atoms=False)
+        center_in_cell(atoms, axes=grown)
     return atoms
 
 

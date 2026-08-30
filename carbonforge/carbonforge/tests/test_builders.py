@@ -83,7 +83,45 @@ class TestNanoribbon:
     def test_zigzag_ribbon(self):
         atoms = build_nanoribbon(4, 3, edge="zigzag")
         assert len(atoms) > 0
-        assert list(atoms.get_pbc()) == [False, True, False]
+        # ASE lays the ribbon in x-z with the axis along z.
+        assert list(atoms.get_pbc()) == [False, False, True]
+
+    @pytest.mark.parametrize("edge", ["zigzag", "armchair"])
+    def test_periodic_axis_is_the_one_atoms_fill(self, edge):
+        """The declared periodic axis must be the one the atoms tile.
+
+        Regression test. The builder used to declare the ribbon periodic
+        along y, which is pure vacuum: the band path then ran through empty
+        space, the k-mesh sampled the vacuum direction while treating the
+        real one as isolated, and the vacuum check looked at the wrong axes.
+        Every ribbon export was wrong while looking perfectly well-formed.
+        """
+        atoms = build_nanoribbon(6, 3, edge=edge)
+        positions = atoms.get_positions()
+        cell = np.diag(np.array(atoms.cell))
+        axis = int(np.argmax(atoms.get_pbc()))
+        span = float(np.ptp(positions[:, axis]))
+        # Along a periodic axis the atoms nearly fill the cell; along a
+        # padded one they occupy far less than half of it.
+        assert span > 0.5 * cell[axis], (
+            f"eje {axis} declarado periódico pero los átomos solo ocupan "
+            f"{span:.2f} de {cell[axis]:.2f} Å"
+        )
+
+    def test_ribbon_passes_validation(self):
+        """Would have caught the wrong-axis bug: vacuum was checked on z."""
+        from carbonforge.validation import run_basic_checks
+
+        report = run_basic_checks(build_nanoribbon(6, 3, edge="zigzag"))
+        assert report.ok, report.summary()
+
+    def test_band_path_follows_periodic_axis(self):
+        from carbonforge.calculations import suggest_band_path
+
+        atoms = build_nanoribbon(6, 3, edge="zigzag")
+        spec = suggest_band_path(atoms)
+        axis = int(np.argmax(atoms.get_pbc()))
+        assert abs(spec.points[-1][axis]) == pytest.approx(0.5)
 
     def test_passivation_adds_hydrogens(self):
         plain = build_nanoribbon(4, 3, edge="zigzag", passivate=False)

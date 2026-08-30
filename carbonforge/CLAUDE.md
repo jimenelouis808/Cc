@@ -14,6 +14,7 @@ The framework must remain **scientifically valid**: physical bond lengths, corre
 carbonforge/
 ├── builders/      # 1D/2D/3D structure generators incl. nanocoils (ASE-compatible Atoms)
 ├── dopants/       # substitutional dopants (N, B, S, P, co-doping)
+├── functionalization/  # attached groups + nitrogen lattice configurations
 ├── defects/       # vacancies, Stone-Wales, topological defects
 ├── topology/      # networkx-based connectivity / coordination analysis
 ├── validation/    # geometry checks + calculation-level physics checks
@@ -46,6 +47,15 @@ carbonforge/
 - Spin-orbit requires `rel-` pseudopotentials; scalar ones give silent zero splitting.
 - `vc-relax` on 1D/2D must set `cell_dofree`, or the vacuum collapses.
 - Metals must not use `occupations='fixed'`.
+- A builder's declared `pbc` must be the axis the atoms actually tile. The
+  nanoribbon builder once declared y (its vacuum direction) and every ribbon
+  export was silently wrong; `test_builders.py` now asserts this for ribbons.
+- Attached functional groups eat into the vacuum padding: re-pad with
+  `utils.geometry.ensure_vacuum` after functionalising.
+- Attached groups and lattice nitrogen are different chemistry. Do not let
+  `--group NH2` and `--nitrogen graphitic` blur together in docs or UI.
+- `make_pyrrolic_like` is a precursor, not a pyrrolic site. Keep the name and
+  the warning honest.
 - `dynmat.x`: `filout` must never be `dynmat.out` — the runner script
   redirects stdout there and the two would clobber each other.
 - Result parsers are validated against synthetic fixtures only; say so in
