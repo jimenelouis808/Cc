@@ -3,6 +3,7 @@
 from .qe import (
     infer_qe_settings,
     write_qe_bands,
+    write_qe_dos,
     write_qe_input,
     write_qe_spectroscopy,
 )
@@ -20,6 +21,7 @@ from .pseudos import (
 __all__ = [
     "write_qe_input",
     "write_qe_bands",
+    "write_qe_dos",
     "write_qe_spectroscopy",
     "infer_qe_settings",
     "write_lammps",

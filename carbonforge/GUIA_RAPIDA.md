@@ -74,7 +74,7 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-Deberías ver `424 passed`.
+Deberías ver `455 passed`.
 
 Sabrás que el entorno está activo porque el prompt de la terminal empieza
 por `(.venv)`. **Tendrás que activarlo cada vez que abras una terminal
@@ -344,7 +344,46 @@ perfectamente válido, pero esa decisión es tuya.
 
 ---
 
-## 10. Convergencia: los valores por defecto NO están convergidos
+## 10. Densidad de estados: ¿de dónde salen los estados?
+
+Las bandas te dicen si hay gap. Pero si estás dopando con nitrógeno, la
+pregunta que importa es **qué átomos** ponen estados en el nivel de Fermi. Eso
+es la densidad de estados proyectada (PDOS), y es lo que distingue un
+nitrógeno grafítico de uno piridínico.
+
+```bash
+# Generar el flujo (scf -> nscf -> dos.x -> projwfc.x)
+carbonforge graphene --nx 5 --ny 5 --nitrogen graphitic --task dos --out salida/dos
+
+cd salida/dos/qe && ./run_dos.sh
+
+# Analizar: apunta a la CARPETA para el desglose por elemento
+carbonforge plot-dos . --fermi <E_F que sale en pw.scf.out> --window -8 4
+```
+
+Te responde directamente:
+
+```
+En el nivel de Fermi (0.000 eV):
+  C: 52.3 %
+  N: 47.7 %
+```
+
+Dos detalles que el programa gestiona por ti en vez de dejártelos como
+trampa:
+
+- **El paso nscf usa una malla k más densa** (2× por defecto). Una malla que
+  converge la densidad de carga es demasiado gruesa para resolver una curva
+  de DOS: sale una fila de bultos de ensanchamiento en vez de una densidad.
+- **La proyección no suma exactamente el DOS total.** Se proyecta sobre
+  orbitales atómicos, que no cubren toda la base de ondas planas, así que
+  falta un pequeño porcentaje. El programa te dice cuánto: entre 90 y 95 %
+  es normal; bastante menos significa que las fracciones por elemento no son
+  de fiar.
+
+---
+
+## 11. Convergencia: los valores por defecto NO están convergidos
 
 Esto importa: un gap o una frecuencia sacados de un cálculo sin convergir
 están mal, por muy cuidado que esté todo lo demás. Los 60 Ry por defecto son
@@ -385,7 +424,7 @@ Con `--parameter kpoints` haces lo mismo para la malla de puntos k.
 
 ---
 
-## 11. Desde Python
+## 12. Desde Python
 
 Para barridos o integrarlo en tus propios scripts:
 
@@ -420,7 +459,7 @@ write_dataset(jobs, "salida/dataset")   # 16 estructuras + dataset.json
 
 ---
 
-## 12. Qué hacer con los archivos generados
+## 13. Qué hacer con los archivos generados
 
 ### Quantum ESPRESSO
 
@@ -456,7 +495,7 @@ Para visualizar: **OVITO** y **VMD** leen XYZ; **VESTA** lee CIF.
 
 ---
 
-## 13. Problemas frecuentes
+## 14. Problemas frecuentes
 
 **`command not found: carbonforge-gui`**
 El entorno virtual no está activo. Ejecuta `source .venv/bin/activate`
@@ -488,7 +527,7 @@ ejecuta `pip install -e .`.
 
 ---
 
-## 14. Límites que conviene conocer
+## 15. Límites que conviene conocer
 
 Estas no son pegas menores, son cosas que afectan a cómo interpretas los
 resultados:
@@ -523,5 +562,7 @@ resultados:
   del lector: si algo no cuadra, dímelo.
 - **Los grupos funcionales y el nitrógeno de red salen sin relajar**, y las
   configuraciones pirrólicas son precursores, no sitios terminados.
+- **El gap que estima `plot-dos` sale de una curva ensanchada**: el
+  `degauss` rellena un gap pequeño. El valor fiable sale de las bandas.
 - **El gap que reporta `plot-bands` es un gap muestreado**: solo ve los
   puntos k del camino. Un extremo de banda fuera de él no aparece.

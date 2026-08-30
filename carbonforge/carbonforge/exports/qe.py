@@ -25,6 +25,12 @@ from typing import Literal, Optional
 import numpy as np
 from ase import Atoms
 
+from ..calculations.dos import (
+    DOSSpec,
+    format_dos_input,
+    format_dos_runner,
+    format_projwfc_input,
+)
 from ..calculations.kpaths import BandPathSpec, format_qe_kpath, suggest_band_path
 from ..calculations.spectroscopy import (
     SpectroscopySpec,
@@ -476,3 +482,79 @@ def _suggest_nbnd(atoms: Atoms, settings: QESettings) -> int:
     if settings.spinorbit is not None and settings.spinorbit.noncolin:
         occupied = float(electrons)
     return max(4, int(occupied * 1.5) + 4)
+
+
+def write_qe_dos(
+    atoms: Atoms,
+    outdir: str | Path,
+    spec: Optional[DOSSpec] = None,
+    settings: Optional[QESettings] = None,
+    force: bool = False,
+) -> dict[str, Path]:
+    """Write a density-of-states workflow: scf → nscf → dos.x → projwfc.x.
+
+    The nscf step re-uses the converged charge density but samples a denser
+    k-mesh, because a mesh that converges the density is not fine enough to
+    resolve a DOS curve.
+
+    Parameters
+    ----------
+    atoms
+        Structure to compute.
+    outdir
+        Destination directory.
+    spec
+        DOS settings; defaults to :class:`~carbonforge.calculations.dos.DOSSpec`.
+    settings
+        Base pw.x settings.
+    force
+        Bypass structural validation.
+
+    Returns
+    -------
+    dict
+        Maps ``"scf"``, ``"nscf"``, ``"dos"``, optionally ``"projwfc"``, and
+        ``"script"`` to the files written.
+    """
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    dos_spec = spec or DOSSpec()
+    base = settings or QESettings()
+
+    written: dict[str, Path] = {}
+
+    scf = replace(base, calculation="scf")
+    written["scf"] = write_qe_input(
+        atoms, outdir, settings=scf, filename="pw.scf.in", force=force
+    )
+
+    # A denser mesh means a smaller density parameter, since the mesh count
+    # scales as 1/kpoint_density.
+    nscf = replace(
+        base,
+        calculation="nscf",
+        kpoint_density=base.kpoint_density / dos_spec.kmesh_factor,
+        nbnd=base.nbnd or _suggest_nbnd(atoms, base),
+    )
+    written["nscf"] = write_qe_input(
+        atoms, outdir, settings=nscf, filename="pw.nscf.in", force=True
+    )
+
+    dos_file = outdir / "dos.in"
+    dos_file.write_text(
+        format_dos_input(dos_spec, prefix=base.prefix, outdir=base.outdir)
+    )
+    written["dos"] = dos_file
+
+    if dos_spec.projected:
+        projwfc = outdir / "projwfc.in"
+        projwfc.write_text(
+            format_projwfc_input(dos_spec, prefix=base.prefix, outdir=base.outdir)
+        )
+        written["projwfc"] = projwfc
+
+    script = outdir / "run_dos.sh"
+    script.write_text(format_dos_runner(dos_spec))
+    script.chmod(0o755)
+    written["script"] = script
+    return written

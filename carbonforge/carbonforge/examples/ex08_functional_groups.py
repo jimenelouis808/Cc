@@ -32,6 +32,7 @@ from carbonforge.functionalization import (
 )
 from carbonforge.topology import ring_statistics
 from carbonforge.validation import run_basic_checks
+from carbonforge.exports.qe import write_qe_dos
 from carbonforge.workflows import batch_structure_sweep, write_dataset
 
 OUT = Path("out/functional")
@@ -101,6 +102,26 @@ def nitrogen_configurations() -> None:
     print(nitrogen_report(variants["piridínico"]))
 
 
+def where_does_nitrogen_contribute() -> None:
+    """Set up the projected DOS, which is the question N doping really asks.
+
+    A band structure says whether there is a gap. The PDOS says *which atoms*
+    put states at the Fermi level — and that is what distinguishes graphitic
+    from pyridinic nitrogen.
+    """
+    print("\n=== Densidad de estados proyectada ===")
+    sheet = build_graphene_supercell(5, 5)
+    doped = make_graphitic_n(sheet, n_sites=2, seed=0)
+
+    written = write_qe_dos(doped, OUT / "pdos", force=True)
+    print(f"  {len(written)} archivos en {OUT / 'pdos'}")
+    print("  Ejecuta ./run_dos.sh y después:")
+    print("    carbonforge plot-dos <carpeta> --fermi <E_F de pw.scf.out>")
+    print(
+        "  Te dirá qué porcentaje de los estados en E_F viene del nitrógeno."
+    )
+
+
 def sweep_and_export() -> None:
     """A sweep over ribbon widths and edges, each aminated, exported to QE."""
     print("\n=== Barrido de nanocintas aminadas ===")
@@ -124,6 +145,7 @@ def main() -> None:
     edge_groups()
     oxidised_graphene()
     nitrogen_configurations()
+    where_does_nitrogen_contribute()
     sweep_and_export()
 
 

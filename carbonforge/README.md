@@ -28,7 +28,7 @@ Two properties hold throughout:
 | `calculations`  | Band paths (dimensionality-aware), phonon/IR/Raman, spin-orbit setups        |
 | `relax`         | ASE optimizer wrapper + calculator-free harmonic pre-relaxation              |
 | `viz`           | Matplotlib 3D viewer / PNG exporter                                          |
-| `results`       | Parse and plot finished runs: band diagrams, IR/Raman spectra                |
+| `results`       | Parse and plot finished runs: bands, DOS/PDOS, IR/Raman spectra              |
 | `exports.pseudos` | Which pseudopotentials a run needs, and whether you have them              |
 | `workflows`     | Batch sweeps, convergence sweeps, ML-ready dataset exporter                  |
 | `gui`           | Tkinter desktop app with live 3D preview (`carbonforge-gui`)                  |
@@ -299,6 +299,34 @@ label always says which is shown.
 
 Formats read: QE `bands.dat` and `bands.dat.gnu`, SIESTA `SystemLabel.bands`,
 and the `dynmat.x` mode table.
+
+## Density of states
+
+A band structure says whether there is a gap. For a doped carbon the more
+useful question is *which atoms* put states at the Fermi level — that is the
+projected DOS, and it is what separates graphitic from pyridinic nitrogen.
+
+```bash
+carbonforge graphene --nx 5 --ny 5 --nitrogen graphitic --task dos --out out/dos
+cd out/dos/qe && ./run_dos.sh
+carbonforge plot-dos . --fermi <E_F from pw.scf.out> --window -8 4
+```
+
+which reports, per element:
+
+```
+En el nivel de Fermi (0.000 eV):
+  C: 52.3 %
+  N: 47.7 %
+```
+
+The workflow is scf → nscf → `dos.x` → `projwfc.x`. Two details are handled
+rather than left as traps: the **nscf step uses a denser k-mesh** (2× by
+default), because a mesh that converges the charge density is too coarse to
+resolve a DOS curve; and the summed projection is reported against the total
+so you can see how complete it is — projections onto atomic orbitals
+typically recover 90-95 %, and a much lower figure means the per-element
+fractions should not be trusted.
 
 ## Convergence
 

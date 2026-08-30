@@ -39,9 +39,12 @@ from ..functionalization import (
     passivate_edges,
 )
 from ..defects import introduce_vacancies
+from dataclasses import replace
+
 from ..exports.qe import (
     QESettings,
     write_qe_bands,
+    write_qe_dos,
     write_qe_input,
     write_qe_spectroscopy,
 )
@@ -56,6 +59,7 @@ _TASKS: dict[str, tuple[str, str | None]] = {
     "relax": ("relax", None),
     "vc-relax": ("vc-relax", None),
     "bands": ("bands", None),
+    "dos": ("dos", None),
     "phonon": ("scf", "phonon"),
     "ir": ("scf", "ir"),
     "raman": ("scf", "ir+raman"),
@@ -158,6 +162,10 @@ def _export(atoms, outdir: Path, args) -> int:
         qe_dir = outdir / "qe"
         if task == "bands":
             write_qe_bands(atoms, qe_dir, settings=settings, force=args.force)
+        elif task == "dos":
+            write_qe_dos(atoms, qe_dir,
+                         settings=replace(settings, calculation="scf"),
+                         force=args.force)
         elif spectroscopy is not None:
             write_qe_spectroscopy(
                 atoms, qe_dir, spectroscopy, settings=settings, force=args.force
@@ -303,6 +311,46 @@ def _cmd_bands(args):
     figure = plot_bands(bands, reference=reference, energy_window=window)
     figure.savefig(args.out, dpi=args.dpi, bbox_inches="tight")
     print(f"Figura guardada en {args.out}")
+    return 0
+
+
+def _cmd_dos(args):
+    """Plot a finished density-of-states calculation."""
+    from ..results.dos import plot_dos, read_dos, read_pdos
+
+    path = Path(args.path)
+    try:
+        if path.is_dir():
+            # A directory means projwfc.x output: the per-element breakdown.
+            dos = read_pdos(path, prefix=args.prefix)
+        else:
+            dos = read_dos(path)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    reference = args.fermi if args.fermi is not None else dos.fermi_energy
+
+    if hasattr(dos, "elements"):
+        print(dos.summary(fermi=reference))
+    else:
+        print(f"{dos.energies.size} puntos de energía")
+        if reference is not None:
+            print(f"DOS en E_F: {dos.at_fermi(reference):.4f} estados/eV")
+            gap = dos.gap_estimate(fermi=reference)
+            if gap is None:
+                print("Sin gap: hay estados en el nivel de Fermi (metálico).")
+            else:
+                print(f"Gap estimado: {gap:.3f} eV")
+                print("  (estimado sobre una curva ensanchada; el valor fiable "
+                      "sale de las bandas)")
+        else:
+            print("Sin nivel de Fermi; pásalo con --fermi.")
+
+    window = tuple(args.window) if args.window else None
+    figure = plot_dos(dos, reference=reference, energy_window=window)
+    figure.savefig(args.out, dpi=args.dpi, bbox_inches="tight")
+    print(f"\nFigura guardada en {args.out}")
     return 0
 
 
@@ -491,6 +539,26 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Temperatura en K; aplica el factor de Bose.")
     sp.add_argument("--dpi", type=int, default=150)
     sp.set_defaults(func=_cmd_spectrum)
+
+    ds = sub.add_parser(
+        "plot-dos",
+        help="Plot a total or projected density of states.",
+    )
+    ds.add_argument(
+        "path",
+        help="dos.dat para el DOS total, o la CARPETA de projwfc.x para el "
+             "desglose por elemento.",
+    )
+    ds.add_argument("--out", default="dos.png")
+    ds.add_argument("--fermi", type=float, default=None,
+                    help="Nivel de Fermi en eV (búscalo en la salida de pw.x).")
+    ds.add_argument("--prefix", default="pdos",
+                    help="El filpdos que usaste en projwfc.x.")
+    ds.add_argument("--window", type=float, nargs=2, default=None,
+                    metavar=("BAJO", "ALTO"),
+                    help="Rango de energía en eV respecto a la referencia.")
+    ds.add_argument("--dpi", type=int, default=150)
+    ds.set_defaults(func=_cmd_dos)
 
     cv = sub.add_parser("converge",
                         help="Generate a cutoff or k-point convergence sweep.")

@@ -24,6 +24,14 @@ from .bands import (
     read_qe_bands_gnu,
     read_siesta_bands,
 )
+from .dos import (
+    DensityOfStates,
+    ProjectedDOS,
+    draw_dos_on_axes,
+    plot_dos,
+    read_dos,
+    read_pdos,
+)
 from .spectra import (
     VibrationalSpectrum,
     draw_spectrum_on_axes,
@@ -33,6 +41,12 @@ from .spectra import (
 )
 
 __all__ = [
+    "DensityOfStates",
+    "ProjectedDOS",
+    "read_dos",
+    "read_pdos",
+    "draw_dos_on_axes",
+    "plot_dos",
     "BandStructure",
     "draw_bands_on_axes",
     "draw_spectrum_on_axes",

@@ -19,7 +19,7 @@ carbonforge/
 ├── topology/      # networkx-based connectivity / coordination analysis
 ├── validation/    # geometry checks + calculation-level physics checks
 ├── calculations/  # band paths, phonon/IR/Raman, spin-orbit setups
-├── results/       # parse + plot finished runs (bands, spectra)
+├── results/       # parse + plot finished runs (bands, DOS/PDOS, spectra)
 ├── exports/       # Quantum ESPRESSO, SIESTA and LAMMPS writers
 ├── relax/         # ASE optimizer wrapper + calculator-free harmonic pre-relax
 ├── viz/           # matplotlib 3D viewer
@@ -58,6 +58,9 @@ carbonforge/
   the warning honest.
 - `dynmat.x`: `filout` must never be `dynmat.out` — the runner script
   redirects stdout there and the two would clobber each other.
+- DOS needs a denser nscf mesh than the scf; keep `kmesh_factor >= 2`.
+- Summed PDOS never equals the total DOS (atomic-orbital projection is
+  incomplete). Report the completeness rather than implying it sums to 1.
 - Result parsers are validated against synthetic fixtures only; say so in
   user-facing docs rather than implying they are battle-tested.
 

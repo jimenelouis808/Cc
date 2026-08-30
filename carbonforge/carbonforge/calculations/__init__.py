@@ -19,6 +19,12 @@ response, fully-relativistic pseudopotentials for spin-orbit) that are far
 cheaper to catch here than after a job dies on a cluster.
 """
 
+from .dos import (
+    DOSSpec,
+    format_dos_input,
+    format_dos_runner,
+    format_projwfc_input,
+)
 from .kpaths import (
     BandPathSpec,
     format_qe_kpath,
@@ -44,6 +50,11 @@ from .spinorbit import (
 )
 
 __all__ = [
+    # DOS
+    "DOSSpec",
+    "format_dos_input",
+    "format_projwfc_input",
+    "format_dos_runner",
     # k-paths
     "BandPathSpec",
     "suggest_band_path",
