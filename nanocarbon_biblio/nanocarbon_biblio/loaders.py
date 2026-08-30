@@ -265,16 +265,30 @@ def load_any(path: str | Path) -> list[Record]:
     return load_scopus_csv(path)
 
 
+#: Files this pipeline writes itself. Re-ingesting them silently doubles the
+#: corpus, which is easy to do by pointing --out inside --raw.
+_OUTPUT_NAMES = frozenset({
+    "labels.csv", "manifest.json", "scopus_kept.csv", "wos_kept.txt",
+    "wos_kept.tsv", "crosstab_dopant_application.csv", "revision_manual.csv",
+})
+
+
 def load_directory(directory: str | Path, pattern: str = "*") -> list[Record]:
     """Load every export file under ``directory`` matching ``pattern``.
 
     Files that fail to parse are reported and skipped rather than aborting the
     run — a single malformed chunk out of twenty should not cost you the batch.
+    Files this pipeline wrote itself are skipped too: pointing the output
+    directory inside the input one is an easy mistake that would otherwise
+    double the corpus without any visible error.
     """
     directory = Path(directory)
     records: list[Record] = []
     for path in sorted(directory.rglob(pattern)):
         if not path.is_file() or path.name.startswith(".") or path.suffix.lower() not in {".csv", ".txt", ".tsv"}:
+            continue
+        if path.name in _OUTPUT_NAMES:
+            print(f"  skipping {path.name} (output of a previous run)")
             continue
         try:
             loaded = load_any(path)

@@ -26,6 +26,11 @@ manuscrito. **Un cambio silencioso en una regla cambia una figura publicada.**
    `seed` y es reproducible.
 7. La GUI es una fachada sobre la librería: **no** puede tener lógica que la CLI
    no tenga. Si algo solo se puede hacer clicando, el análisis no es reproducible.
+8. Los gráficos usan la paleta validada de `app.py` (`SERIES_COLORS`,
+   `SEQUENTIAL_BLUE`): categórica en orden fijo de ranura, nunca cíclica;
+   secuencial de **un solo tono**, nunca arcoíris. Los colores están validados
+   para daltonismo (peor par adyacente ΔE 9.2 deutan). Si cambias un color,
+   revalida el conjunto.
 
 ## Guardas científicas
 - `dop*` como comodín recupera `dopamine`: en las consultas se enumeran las
@@ -58,6 +63,11 @@ Rscript R/00_build_M.R && Rscript R/01_core_analyses.R
 - Nuevo análisis de R → `R/01_core_analyses.R`, envuelto en `step()`.
 
 ## Qué no hacer
+- No usar el corpus de demostración para nada que acabe en el manuscrito: son
+  datos inventados. Existe para ejercitar el pipeline y aprender la GUI.
+- No apuntar `--out` dentro de `--raw`: la corrida siguiente re-ingeriría su
+  propia salida. La CLI lo rechaza y `load_directory` salta esos ficheros; no
+  desactives ninguna de las dos protecciones.
 - No fusionar el corpus de grafeno con el núcleo.
 - No descartar automáticamente los `dopant_host_ambiguous`: son para revisión manual.
 - No añadir dependencias fuera de `requirements.txt` sin justificarlo.

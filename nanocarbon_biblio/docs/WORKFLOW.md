@@ -50,6 +50,14 @@ Exploratorio, con GUI:
 streamlit run nanocarbon_biblio/app.py
 ```
 
+Si aún no tienes exportaciones y quieres aprender la interfaz primero, la
+pestaña 1 tiene un botón de **corpus de demostración** que genera datos
+sintéticos realistas (1991-2025, con duplicados entre bases, registros sin DOI y
+los falsos positivos típicos). Son inventados: para practicar, no para analizar.
+
+Desde la pestaña 6 puedes además lanzar `00_build_M.R` y `01_core_analyses.R`
+sin salir de la interfaz, y ver su salida en la página.
+
 Definitivo, reproducible (**el que va al paper**):
 
 ```bash

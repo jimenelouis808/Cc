@@ -176,6 +176,16 @@ def deduplicate(
                 # trust the DOIs over the title similarity.
                 if left.doi_key and right.doi_key and left.doi_key != right.doi_key:
                     continue
+                # A title match alone is not enough when a DOI is missing on one
+                # side: near-identical titles are common in this literature
+                # (same group, same template, different dopant loading). The
+                # first author's surname is stable across both databases, so
+                # disagreement there vetoes the merge.
+                if (
+                    left.surname_key and right.surname_key
+                    and left.surname_key != right.surname_key
+                ):
+                    continue
                 uf.union(left.key, right.key)
 
     clusters = uf.groups()

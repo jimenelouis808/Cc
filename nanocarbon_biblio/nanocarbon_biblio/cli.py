@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from .classify import classify_all, crosstab, to_dataframe
+from .demo import DemoConfig, generate_demo_corpus
 from .dedupe import DedupeResult, deduplicate, overlap_table
 from .exporters import export_bundle
 from .loaders import load_directory
@@ -27,6 +28,16 @@ __all__ = ["main", "build_parser"]
 
 def _cmd_run(args: argparse.Namespace) -> int:
     """Load → deduplicate → classify → export. Returns a process exit code."""
+    raw = Path(args.raw).resolve()
+    out = Path(args.out).resolve()
+    if out == raw or raw in out.parents:
+        print(
+            f"ERROR: --out ({out}) is inside --raw ({raw}). The next run would "
+            "re-ingest this run's own output. Use a directory outside --raw.",
+            file=sys.stderr,
+        )
+        return 2
+
     print(f"Loading exports from {args.raw} …")
     records = load_directory(args.raw)
     if not records:
@@ -80,6 +91,19 @@ def _cmd_thesaurus(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_demo(args: argparse.Namespace) -> int:
+    """Write a synthetic corpus so the pipeline can be exercised without Scopus."""
+    summary = generate_demo_corpus(
+        args.out, DemoConfig(n_works=args.n_works, seed=args.seed)
+    )
+    print(json.dumps(summary, indent=2))
+    print(
+        "\nSynthetic data — for exercising the pipeline and learning the GUI only.\n"
+        f"Next: python -m nanocarbon_biblio.cli run --raw {args.out} --out data/processed"
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser (exposed so tests can invoke subcommands)."""
     parser = argparse.ArgumentParser(
@@ -108,6 +132,14 @@ def build_parser() -> argparse.ArgumentParser:
     thes.add_argument("--min-count", type=int, default=5)
     thes.add_argument("--threshold", type=float, default=88.0)
     thes.set_defaults(func=_cmd_thesaurus)
+
+    demo = sub.add_parser(
+        "demo", help="generate a synthetic corpus for testing and for learning the GUI"
+    )
+    demo.add_argument("--out", default="data/raw/demo")
+    demo.add_argument("--n-works", type=int, default=1200)
+    demo.add_argument("--seed", type=int, default=20260830)
+    demo.set_defaults(func=_cmd_demo)
     return parser
 
 

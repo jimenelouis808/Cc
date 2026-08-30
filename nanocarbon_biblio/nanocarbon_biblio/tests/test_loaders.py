@@ -68,3 +68,13 @@ def test_scopus_loader_rejects_wrong_format(tmp_path: Path) -> None:
     bogus.write_text("col_a,col_b\n1,2\n", encoding="utf-8")
     with pytest.raises(ValueError, match="no Scopus 'Title' column"):
         load_scopus_csv(bogus)
+
+
+def test_pipeline_outputs_are_not_re_ingested(raw_dir: Path, capsys) -> None:
+    """Pointing --out inside --raw must not silently double the corpus."""
+    before = len(load_directory(raw_dir))
+    (raw_dir / "labels.csv").write_text("key,title\nx,y\n", encoding="utf-8")
+    (raw_dir / "scopus_kept.csv").write_text("Authors,Title\na,b\n", encoding="utf-8")
+    after = len(load_directory(raw_dir))
+    assert after == before
+    assert "skipping labels.csv" in capsys.readouterr().out

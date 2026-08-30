@@ -36,11 +36,51 @@ Rscript R/install_deps.R
 
 Python ≥ 3.10, R ≥ 4.2.
 
-## Uso
+## La GUI
 
 ```bash
-# 1. GUI para explorar, deduplicar, clasificar y decidir el cribado
 streamlit run nanocarbon_biblio/app.py
+```
+
+Siete pestañas, de izquierda a derecha. El estado vive en `st.session_state`, así
+que puedes ir y volver sin recargar un corpus de 30 000 registros.
+
+| Pestaña | Qué hace |
+|---|---|
+| **1 · Cargar** | Carpeta del proyecto, subida de ficheros, o **corpus de demostración** generado al vuelo. Métricas de cobertura de DOI, resumen y referencias, con aviso en rojo si faltan referencias citadas |
+| **2 · Deduplicar** | Umbral de similitud y ventana de años ajustables; solapamiento Scopus/WoS. Con el corpus de demostración, compara lo recuperado contra la verdad conocida |
+| **3 · Clasificar** | Tipo de estudio, cuota anual (con umbral de documentos/año, porque una cuota sobre 2 documentos es ruido) y la matriz dopante × aplicación interactiva |
+| **4 · Cribado** | Filtros por año, tipo y señal temática; exporta los marcados como `dopant_host_ambiguous` para revisión manual |
+| **5 · Tesauro** | Sugiere grupos de sinónimos del propio corpus, editables en la página, y los guarda en formato biblioshiny |
+| **6 · Exportar a R** | Escribe el bundle, muestra el **flujo PRISMA** descargable y **lanza los scripts de R** (`00_build_M.R`, `01_core_analyses.R`) mostrando su salida |
+| **7 · Validación** | Muestra estratificada y reproducible, con hoja de codificación en blanco para calcular kappa |
+
+La GUI es una fachada sobre la librería: **todo lo que se puede hacer clicando se
+puede hacer desde la CLI**. Un corpus montado a clics no es reproducible.
+
+### Probarla sin tener nada exportado
+
+```bash
+python -m nanocarbon_biblio.cli demo --out data/raw/demo --n-works 1200
+streamlit run nanocarbon_biblio/app.py
+```
+
+O directamente el botón *Corpus de demostración* de la pestaña 1. Genera
+exportaciones sintéticas de Scopus y WoS de 1991 a 2025, con curva de
+crecimiento realista (incluido el bache del grafeno en 2010-2014), duplicados
+entre bases, registros sin DOI, señuelos `p-doped` que no son fósforo y casos de
+dopante en huésped no-carbono. **Son datos inventados**: sirven para aprender la
+interfaz y probar el pipeline, nunca para el manuscrito.
+
+Como el generador conoce su propio solapamiento real, la pestaña 2 lo usa para
+comprobarse a sí misma — y así es como se detectó y corrigió un fallo real de la
+deduplicación cuando falta el DOI.
+
+## Uso desde la línea de comandos
+
+```bash
+# 1. Corpus sintético para probar el pipeline sin exportar nada
+python -m nanocarbon_biblio.cli demo --out data/raw/demo
 
 # 2. La corrida definitiva, reproducible
 python -m nanocarbon_biblio.cli run --raw data/raw --out data/processed \
@@ -50,6 +90,7 @@ python -m nanocarbon_biblio.cli run --raw data/raw --out data/processed \
 python -m nanocarbon_biblio.cli thesaurus --raw data/raw --out queries/thesaurus.txt
 
 # 4. Construir el data frame de bibliometrix y lanzar biblioshiny
+#    (los dos primeros también se lanzan desde la pestaña 6 de la GUI)
 Rscript R/00_build_M.R
 Rscript R/01_core_analyses.R
 Rscript R/launch_biblioshiny.R      # Data -> Load bibliometrix file -> M.rds
@@ -95,13 +136,17 @@ clasificador opaco:
 pytest nanocarbon_biblio/tests -q
 ```
 
-34 tests. Cubren el parseo de ambos formatos, la conservación literal de `CR` en
-el viaje de ida y vuelta, la deduplicación entre bases, los guardas de
-desambiguación y el arranque de la GUI.
+41 tests. Cubren el parseo de ambos formatos, la conservación literal de `CR` en
+el viaje de ida y vuelta, la deduplicación entre bases puntuada **contra la
+verdad conocida** del corpus sintético, los guardas de desambiguación, la
+protección contra re-ingerir la propia salida, y el arranque de la GUI.
 
 ## Estado de verificación
 
-- **Python**: probado y ejecutado en este entorno; los 34 tests pasan.
+- **Python**: probado y ejecutado en este entorno; los 41 tests pasan.
+- **GUI**: recorrida de principio a fin (cargar → deduplicar → clasificar →
+  cribar → exportar) contra el corpus de demostración, y capturada en imágenes.
+  Los botones de R se activan solos cuando `Rscript` está en el PATH.
 - **R**: los cuatro scripts están **comprobados sintácticamente** con `parse()`,
   pero **no ejecutados**, porque CRAN no es alcanzable desde el entorno donde se
   escribieron y `bibliometrix` no se pudo instalar. Los pasos frágiles van

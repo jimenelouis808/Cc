@@ -36,3 +36,16 @@ def test_thesaurus_subcommand_writes_a_file(raw_dir: Path, tmp_path: Path) -> No
     assert all(";" in line for line in lines)
     # The curated seed must be present.
     assert any(line.startswith("carbon nanotube;") for line in lines)
+
+
+def test_run_refuses_an_output_directory_inside_the_input(raw_dir: Path, capsys) -> None:
+    """The mistake that would re-ingest this run's output on the next run."""
+    assert main(["run", "--raw", str(raw_dir), "--out", str(raw_dir / "out")]) == 2
+    assert "is inside" in capsys.readouterr().err
+
+
+def test_demo_subcommand_writes_both_exports(tmp_path: Path) -> None:
+    out = tmp_path / "demo"
+    assert main(["demo", "--out", str(out), "--n-works", "50"]) == 0
+    assert (out / "scopus_demo_1991-2025.csv").exists()
+    assert (out / "wos_demo_1991-2025.txt").exists()
