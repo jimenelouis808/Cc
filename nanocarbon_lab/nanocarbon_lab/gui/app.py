@@ -64,9 +64,12 @@ except ImportError as exc:  # pragma: no cover - environment dependent
         "command."
     ) from exc
 
-import matplotlib
-
-matplotlib.use("TkAgg")
+# Deliberately no matplotlib.use("TkAgg") here. The canvas below is built
+# by wrapping a bare Figure in FigureCanvasTkAgg, which is the embedding
+# pattern -- it needs the Tk canvas class, not the global backend. Calling
+# use() would reconfigure matplotlib for the whole process as a side effect
+# of importing this module, and any later headless savefig would then fail
+# with "cannot load backend 'TkAgg' ... 'headless' is currently running".
 from matplotlib.backends.backend_tkagg import (
     FigureCanvasTkAgg,
     NavigationToolbar2Tk,

@@ -16,6 +16,33 @@ tk = pytest.importorskip("tkinter", reason="tkinter is not installed")
 pytest.importorskip("matplotlib", reason="matplotlib is not installed")
 
 
+def test_importing_the_gui_leaves_the_matplotlib_backend_alone(tmp_path):
+    """Importing the GUI must not reconfigure matplotlib process-wide.
+
+    This one deliberately does *not* need a display -- it guards the case
+    where there is none. The GUI embeds a bare Figure in a Tk canvas, which
+    needs the Tk canvas class and not the global backend. An import-time
+    ``matplotlib.use("TkAgg")`` used to switch the whole process over, so
+    any later headless ``savefig`` died with "cannot load backend 'TkAgg'
+    ... 'headless' is currently running" -- which is how it showed up: as
+    an unrelated viz test failing only when run after the GUI tests.
+    """
+    import matplotlib
+
+    from nanocarbon_lab.builders.fullerene import build_fullerene
+    from nanocarbon_lab.viz import save_structure_png
+
+    before = matplotlib.get_backend()
+    import nanocarbon_lab.gui.app  # noqa: F401
+
+    assert matplotlib.get_backend() == before
+
+    # And the consequence that actually bit, not just the mechanism.
+    out = save_structure_png(build_fullerene(freq=1, family="C60"),
+                             tmp_path / "cage.png")
+    assert out.stat().st_size > 0
+
+
 def _make_root():
     """Return a hidden Tk root, or skip if no display is available."""
     if os.name != "nt" and not os.environ.get("DISPLAY"):
