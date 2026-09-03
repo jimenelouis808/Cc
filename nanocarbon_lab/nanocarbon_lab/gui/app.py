@@ -75,7 +75,10 @@ from matplotlib.figure import Figure
 
 from ..builders import fullerene_mesh as fm
 from ..exports.xyz import write_render_bundle
-from ..jobs import MODES, Job, estimate_cost, to_cli
+from ..jobs import FAMILIES, MODES, Job, estimate_cost, to_cli
+from ..tmd import MATERIALS as TMD_MATERIALS
+from ..tmd.quality import geometry_report as tmd_geometry_report
+from ..tmd.quality import tmd_quality
 from ..validation.quality import sp2_quality
 from .worker import WORKER_DIED, BuildWorker
 
@@ -94,6 +97,16 @@ DOPANTS = ["none", "N", "B", "S", "P"]
 JUNCTION_KINDS = ["L", "T", "Y", "X", "cross3d"]
 SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
 CAGE_FAMILIES = ["C60", "C20"]
+
+# Dichalcogenide choices. The phase list is short on purpose: 2H and 1T
+# are the two that matter, and 1T' is the distorted variant. There is no
+# tetragonal TMD -- all of them are hexagonal, and what differs is the
+# coordination polyhedron around the metal.
+TMD_MATERIAL_NAMES = sorted(TMD_MATERIALS)
+TMD_PHASES = ["2H", "1T", "1T'"]
+TMD_STACKINGS = ["2H", "3R", "AA"]
+TMD_EDGES = ["zigzag", "armchair"]
+TMD_TERMINATIONS = ["mixed", "metal", "chalcogen"]
 
 BLENDER_STYLES = [
     "nature_dark",
@@ -150,6 +163,27 @@ PRESETS: dict[str, dict[str, object]] = {
         "mode_kind": "multi-wall", "mw_shells": 2, "mw_inner": 3, "rings": 10},
     "Seven-tube rope": {
         "mode_kind": "bundle", "bundle_shells": 1, "freq": 3, "rings": 10},
+    # --- dichalcogenides
+    "MoS2 monolayer (2H)": {
+        "mode_kind": "TMD layers", "tmd_material": "MoS2", "tmd_phase": "2H",
+        "tmd_layers": 1, "tmd_nx": 1, "tmd_ny": 1},
+    "MoS2 bilayer (2H)": {
+        "mode_kind": "TMD layers", "tmd_material": "MoS2", "tmd_phase": "2H",
+        "tmd_layers": 2, "tmd_stacking": "2H"},
+    "MoS2 monolayer (1T)": {
+        "mode_kind": "TMD layers", "tmd_material": "MoS2", "tmd_phase": "1T",
+        "tmd_layers": 1},
+    "MoS2 bulk crystal": {
+        "mode_kind": "TMD bulk", "tmd_material": "MoS2", "tmd_stacking": "2H"},
+    "MoS2 zigzag ribbon": {
+        "mode_kind": "TMD ribbon", "tmd_material": "MoS2", "tmd_width": 8,
+        "tmd_length": 2, "tmd_edge": "zigzag", "tmd_termination": "mixed"},
+    "MoS2 nanotube (40,0)": {
+        "mode_kind": "TMD nanotube", "tmd_material": "MoS2", "tmd_n": 40,
+        "tmd_m": 0},
+    "WSe2 monolayer": {
+        "mode_kind": "TMD layers", "tmd_material": "WSe2", "tmd_phase": "2H",
+        "tmd_layers": 1},
 }
 
 
@@ -393,8 +427,24 @@ class NanocarbonGUI:
         self.var_mode_kind = self._var("mode_kind", tk.StringVar(value=MODES[0]))
         mode_box = ttk.LabelFrame(parent, text="Structure type", padding=8)
         mode_box.pack(fill="x", pady=(0, 8))
-        ttk.Combobox(mode_box, textvariable=self.var_mode_kind, values=list(MODES),
-                     state="readonly").pack(fill="x")
+
+        # Material family first, structure type second. Carbon and the
+        # dichalcogenides share no parameters at all -- there is no bond
+        # length, ring count or chirality that means the same thing in
+        # both -- so mixing them in one list would offer every user a
+        # dropdown that is mostly irrelevant to them.
+        ttk.Label(mode_box, text="Material").pack(anchor="w")
+        self.var_family = tk.StringVar(value="carbon")
+        ttk.Combobox(mode_box, textvariable=self.var_family,
+                     values=list(FAMILIES), state="readonly").pack(fill="x",
+                                                                   pady=(0, 6))
+        self.var_family.trace_add("write", lambda *_: self._on_family_change())
+
+        ttk.Label(mode_box, text="Structure").pack(anchor="w")
+        self.cmb_mode = ttk.Combobox(mode_box, textvariable=self.var_mode_kind,
+                                     values=list(FAMILIES["carbon"]),
+                                     state="readonly")
+        self.cmb_mode.pack(fill="x")
         self.var_mode_kind.trace_add("write", lambda *_: self._on_mode_change())
 
         preset_row = ttk.Frame(mode_box)
@@ -450,6 +500,20 @@ class NanocarbonGUI:
         self.var_s_kind = self._var("s_kind", tk.StringVar(value="primitive"))
         self.var_s_cell = self._var("s_cell", tk.DoubleVar(value=36.0))
         self.var_s_thickness = self._var("s_thickness", tk.DoubleVar(value=0.0))
+        self.var_tmd_material = self._var("tmd_material",
+                                          tk.StringVar(value="MoS2"))
+        self.var_tmd_phase = self._var("tmd_phase", tk.StringVar(value="2H"))
+        self.var_tmd_stacking = self._var("tmd_stacking", tk.StringVar(value="2H"))
+        self.var_tmd_layers = self._var("tmd_layers", tk.IntVar(value=1))
+        self.var_tmd_nx = self._var("tmd_nx", tk.IntVar(value=1))
+        self.var_tmd_ny = self._var("tmd_ny", tk.IntVar(value=1))
+        self.var_tmd_width = self._var("tmd_width", tk.IntVar(value=8))
+        self.var_tmd_length = self._var("tmd_length", tk.IntVar(value=2))
+        self.var_tmd_edge = self._var("tmd_edge", tk.StringVar(value="zigzag"))
+        self.var_tmd_termination = self._var("tmd_termination",
+                                             tk.StringVar(value="mixed"))
+        self.var_tmd_n = self._var("tmd_n", tk.IntVar(value=40))
+        self.var_tmd_m = self._var("tmd_m", tk.IntVar(value=0))
 
         self.lbl_radius = ttk.Label(box, text="", foreground="#2e86ab")
 
@@ -673,6 +737,88 @@ class NanocarbonGUI:
         self._param(self.frame_chem, "Concentration", self.var_dopant_conc,
                     0.0, 0.15, 1, resolution=0.005, hard_hi=0.5)
 
+        # --- dichalcogenide: material and phase, shared by all TMD modes
+        self.frame_tmd = ttk.LabelFrame(parent, text="Dichalcogenide", padding=8)
+        self.frame_tmd.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_tmd, text="Material").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_tmd, textvariable=self.var_tmd_material,
+                     values=TMD_MATERIAL_NAMES, state="readonly", width=8).grid(
+            row=0, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_material.trace_add("write", lambda *_: self._update_tmd_hint())
+        ttk.Label(self.frame_tmd, text="Phase").grid(row=1, column=0, sticky="w")
+        ttk.Combobox(self.frame_tmd, textvariable=self.var_tmd_phase,
+                     values=TMD_PHASES, state="readonly", width=8).grid(
+            row=1, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_phase.trace_add("write", lambda *_: self._update_tmd_hint())
+        self.lbl_tmd = ttk.Label(self.frame_tmd, text="", foreground=MUTED,
+                                 font=("TkDefaultFont", 8), wraplength=230,
+                                 justify="left")
+        self.lbl_tmd.grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+        # --- layers / bulk
+        self.frame_tmd_layers = ttk.LabelFrame(parent, text="Layers", padding=8)
+        self.frame_tmd_layers.columnconfigure(0, weight=1)
+        self._param(self.frame_tmd_layers, "Layers", self.var_tmd_layers,
+                    1, 8, 0, integer=True, hard_hi=60)
+        ttk.Label(self.frame_tmd_layers, text="Stacking").grid(row=2, column=0,
+                                                               sticky="w")
+        ttk.Combobox(self.frame_tmd_layers, textvariable=self.var_tmd_stacking,
+                     values=TMD_STACKINGS, state="readonly", width=8).grid(
+            row=2, column=1, sticky="e", pady=(0, 4))
+        self._param(self.frame_tmd_layers, "Supercell nx", self.var_tmd_nx,
+                    1, 8, 3, integer=True, hard_hi=40)
+        self._param(self.frame_tmd_layers, "Supercell ny", self.var_tmd_ny,
+                    1, 8, 5, integer=True, hard_hi=40)
+        ttk.Label(self.frame_tmd_layers,
+                  text="2H alternates a 180° rotation (bulk MoS2); 3R shifts "
+                       "each layer without rotating; AA is eclipsed. Both 2H "
+                       "and 3R put the metal over the chalcogen below — they "
+                       "differ at the third layer.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=7, column=0, columnspan=2, sticky="w")
+
+        # --- ribbon
+        self.frame_tmd_ribbon = ttk.LabelFrame(parent, text="Ribbon", padding=8)
+        self.frame_tmd_ribbon.columnconfigure(0, weight=1)
+        self._param(self.frame_tmd_ribbon, "Width (rows)", self.var_tmd_width,
+                    2, 20, 0, integer=True, hard_hi=200)
+        self._param(self.frame_tmd_ribbon, "Length (cells)", self.var_tmd_length,
+                    1, 10, 2, integer=True, hard_hi=100)
+        ttk.Label(self.frame_tmd_ribbon, text="Edge").grid(row=4, column=0,
+                                                           sticky="w")
+        ttk.Combobox(self.frame_tmd_ribbon, textvariable=self.var_tmd_edge,
+                     values=TMD_EDGES, state="readonly", width=9).grid(
+            row=4, column=1, sticky="e", pady=(0, 4))
+        ttk.Label(self.frame_tmd_ribbon, text="Termination").grid(row=5, column=0,
+                                                                  sticky="w")
+        ttk.Combobox(self.frame_tmd_ribbon, textvariable=self.var_tmd_termination,
+                     values=TMD_TERMINATIONS, state="readonly", width=9).grid(
+            row=5, column=1, sticky="e", pady=(0, 4))
+        ttk.Label(self.frame_tmd_ribbon,
+                  text="MX2's two zigzag edges are chemically different: the "
+                       "metal-terminated one is metallic and magnetic and "
+                       "shapes CVD-grown triangles. Terminating both alike "
+                       "leaves the ribbon deliberately off-stoichiometry.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=6, column=0, columnspan=2, sticky="w")
+
+        # --- nanotube
+        self.frame_tmd_tube = ttk.LabelFrame(parent, text="Nanotube", padding=8)
+        self.frame_tmd_tube.columnconfigure(0, weight=1)
+        self._param(self.frame_tmd_tube, "Chiral n", self.var_tmd_n,
+                    10, 80, 0, integer=True, hard_hi=400,
+                    command=self._update_tmd_hint)
+        self._param(self.frame_tmd_tube, "Chiral m", self.var_tmd_m,
+                    0, 80, 2, integer=True, hard_hi=400,
+                    command=self._update_tmd_hint)
+        self._param(self.frame_tmd_tube, "Length (cells)", self.var_tmd_length,
+                    1, 10, 4, integer=True, hard_hi=100)
+        self.lbl_tmd_tube = ttk.Label(self.frame_tmd_tube, text="",
+                                      foreground=MUTED,
+                                      font=("TkDefaultFont", 8), wraplength=230,
+                                      justify="left")
+        self.lbl_tmd_tube.grid(row=6, column=0, columnspan=2, sticky="w")
+
         # --- build / cancel and the cost estimate
         actions = ttk.Frame(parent)
         actions.pack(fill="x", pady=(12, 0))
@@ -708,8 +854,25 @@ class NanocarbonGUI:
         for frame in (self.frame_tube, self.frame_centreline, self.frame_defects,
                       self.frame_coil, self.frame_junction, self.frame_schwarzite,
                       self.frame_cage, self.frame_mw, self.frame_bundle,
+                      self.frame_tmd, self.frame_tmd_layers,
+                      self.frame_tmd_ribbon, self.frame_tmd_tube,
                       self.frame_surface, self.frame_chem):
             frame.pack_forget()
+
+        if mode.startswith("TMD"):
+            # Every dichalcogenide needs the material and phase; the rest
+            # depends on which structure. None of the carbon panels apply:
+            # annealing, roughness and doping are all sp2-specific.
+            self.frame_tmd.pack(fill="x")
+            if mode in ("TMD layers", "TMD bulk"):
+                self.frame_tmd_layers.pack(fill="x", pady=(8, 0))
+            elif mode == "TMD ribbon":
+                self.frame_tmd_ribbon.pack(fill="x", pady=(8, 0))
+            elif mode == "TMD nanotube":
+                self.frame_tmd_tube.pack(fill="x", pady=(8, 0))
+            self._update_tmd_hint()
+            self._schedule_estimate()
+            return
 
         if mode == "junction":
             self.frame_junction.pack(fill="x")
@@ -777,6 +940,62 @@ class NanocarbonGUI:
         else:
             text, colour = "bonds stretch out of the sp2 range", BAD_RED
         self.lbl_strain.config(text=f"{value:.0%}: {text}", foreground=colour)
+
+    def _on_family_change(self) -> None:
+        """Repopulate the structure list when the material family changes."""
+        family = self.var_family.get()
+        modes = list(FAMILIES.get(family, FAMILIES["carbon"]))
+        self.cmb_mode.configure(values=modes)
+        if self.var_mode_kind.get() not in modes:
+            self.var_mode_kind.set(modes[0])
+        else:
+            self._on_mode_change()
+
+    def _update_tmd_hint(self) -> None:
+        """Name the material's real geometry, and cost a tube's curvature.
+
+        The tube hint is the one that earns its place: rolling a sandwich
+        of thickness h onto radius R strains the outer plane by h/2R, so a
+        tube that would be unremarkable in carbon is badly strained in
+        MoS2. Saying so before the build saves a wasted one.
+        """
+        from .. import tmd as tmd_module
+
+        try:
+            material = tmd_module.get_material(self.var_tmd_material.get())
+        except KeyError:
+            return
+        phase = self.var_tmd_phase.get()
+        coordination = ("trigonal prismatic" if phase == "2H" else "octahedral")
+        note = ""
+        if phase != material.natural_phase:
+            note = f" — note {material.formula} is naturally {material.natural_phase}"
+        self.lbl_tmd.config(
+            text=f"a = {material.a:.3f} Å, M–X = {material.bond_length:.3f} Å, "
+                 f"layer thickness {material.h:.2f} Å, van der Waals gap "
+                 f"{material.vdw_gap:.2f} Å. {phase} is {coordination}{note}."
+        )
+
+        if not hasattr(self, "lbl_tmd_tube"):
+            return
+        n, m = int(self.var_tmd_n.get()), int(self.var_tmd_m.get())
+        if n < 1 or m < 0 or m > n:
+            self.lbl_tmd_tube.config(
+                text="Need n ≥ 1 and 0 ≤ m ≤ n.", foreground=BAD_RED)
+            return
+        radius = tmd_module.tube_radius(material, n, m)
+        strain = material.h / (2.0 * radius)
+        family = ("zigzag" if m == 0 else "armchair" if n == m else "chiral")
+        colour = (OK_GREEN if strain <= 0.05
+                  else WARN_AMBER if strain <= 0.10 else BAD_RED)
+        self.lbl_tmd_tube.config(
+            text=f"({n},{m}) {family}: R = {radius:.1f} Å, diameter "
+                 f"{2 * (radius + material.h / 2):.1f} Å, outer-plane strain "
+                 f"{strain:.1%}"
+                 + ("" if strain <= 0.10 else
+                    " — real MX2 tubes are tens of nm across; raise n"),
+            foreground=colour,
+        )
 
     def _update_cage_hint(self) -> None:
         """Say which named cage the current family/frequency gives."""
@@ -909,6 +1128,12 @@ class NanocarbonGUI:
             seed=int(self.var_seed.get()),
         )
 
+        if mode.startswith("TMD"):
+            # The dichalcogenide builders take no seed and no dopant: the
+            # placement is exact crystallography with nothing random in
+            # it, so `common` would only carry arguments they reject.
+            return Job(mode=mode, params=self._tmd_params(mode), seed=0)
+
         if mode == "junction":
             params = dict(
                 kind=self.var_j_kind.get(),
@@ -999,6 +1224,37 @@ class NanocarbonGUI:
                 params["bend_angle"] = 0.0
 
         return Job(mode=mode, params=params, **common)
+
+    def _tmd_params(self, mode: str) -> dict:
+        """Builder arguments for one dichalcogenide mode."""
+        material = self.var_tmd_material.get()
+        phase = self.var_tmd_phase.get()
+        if mode == "TMD layers":
+            return dict(
+                material=material, phase=phase,
+                n_layers=int(self.var_tmd_layers.get()),
+                stacking=self.var_tmd_stacking.get(),
+                nx=int(self.var_tmd_nx.get()), ny=int(self.var_tmd_ny.get()),
+            )
+        if mode == "TMD bulk":
+            return dict(
+                material=material, phase=phase,
+                stacking=self.var_tmd_stacking.get(),
+                nx=int(self.var_tmd_nx.get()), ny=int(self.var_tmd_ny.get()),
+            )
+        if mode == "TMD ribbon":
+            return dict(
+                material=material, phase=phase,
+                width=int(self.var_tmd_width.get()),
+                length=int(self.var_tmd_length.get()),
+                edge=self.var_tmd_edge.get(),
+                termination=self.var_tmd_termination.get(),
+            )
+        return dict(
+            material=material, phase=phase,
+            n=int(self.var_tmd_n.get()), m=int(self.var_tmd_m.get()),
+            length=int(self.var_tmd_length.get()),
+        )
 
     # ---------------------------------------------------------------- build
     def on_build(self) -> None:
@@ -1386,6 +1642,9 @@ class NanocarbonGUI:
 
     def _update_info(self) -> None:
         a = self.atoms
+        if str(a.info.get("structure_type", "")).startswith("tmd"):
+            self._update_tmd_info(a)
+            return
         g = a.info["geometry"]
         counts = a.info["ring_counts"]
         rings_txt = "\n".join(
@@ -1467,6 +1726,61 @@ class NanocarbonGUI:
         # past any real C-C. Say so in words, next to the numbers.
         verdict, why = sp2_quality(g)
         lines += ["", f"sp2 verdict  {verdict.upper()}", f"  {why}"]
+
+        self.txt_info.configure(state="normal")
+        self.txt_info.delete("1.0", "end")
+        self.txt_info.insert("1.0", "\n".join(lines))
+        self.txt_info.configure(state="disabled")
+
+    def _update_tmd_info(self, a) -> None:
+        """Readout for a dichalcogenide.
+
+        Shares no rows with the carbon one beyond the atom count: there
+        are no rings to count and no Euler budget to check, and what
+        matters instead is coordination, stoichiometry and -- for a tube
+        -- how hard the roll had to strain the sandwich.
+        """
+        report = tmd_geometry_report(a)
+        info = a.info
+        lines = [
+            f"atoms        {len(a):>6d}",
+            f"formula      {a.get_chemical_formula():>9s}",
+            f"material     {info['material']:>9s}",
+            f"phase        {info['phase']:>9s}",
+            f"coordination {info['coordination']:>18s}",
+        ]
+        if info.get("stacking", "n/a") != "n/a":
+            lines.append(f"stacking     {info['stacking']:>9s} "
+                         f"({info['n_layers']} layers)")
+        if all(a.get_pbc()):
+            lengths = a.cell.lengths()
+            lines.append(f"periodic     3D, a={lengths[0]:.3f} c={lengths[2]:.3f} Å")
+        if "edge" in info:
+            lines.append(f"edge         {info['edge']:>9s} / {info['termination']}")
+            lines.append(f"width        {info['width_angstrom']:>6.1f} Å")
+        if "chiral_indices" in info:
+            n, m = info["chiral_indices"]
+            lines.append(f"tube         ({n},{m}) {info['chirality']}")
+            lines.append(f"radius       {info['radius']:>6.2f} Å")
+            lines.append(f"diameter     {info['diameter']:>6.2f} Å")
+            lines.append(f"roll strain  {info['roll_strain']:>5.1%}")
+        lines += [
+            "",
+            "geometry",
+            (f"  M–X    {report['bond_min']:.3f}–{report['bond_max']:.3f} Å"
+             f"  (ideal {report['bond_ideal']:.3f})"),
+            (f"  metal coord   {report['metal_coordination_min']}–"
+             f"{report['metal_coordination_max']}"),
+            (f"  chalcogen     {report['chalcogen_coordination_min']}–"
+             f"{report['chalcogen_coordination_max']}"),
+            f"  X/M ratio     {report['stoichiometry']:.3f}",
+        ]
+        # A deliberately terminated ribbon is off-stoichiometry on purpose.
+        stoichiometric = info.get("termination", "mixed") == "mixed"
+        verdict, why = tmd_quality(report, expect_stoichiometric=stoichiometric)
+        lines += ["", f"verdict      {verdict.upper()}", f"  {why}"]
+        if "phase_note" in info:
+            lines += ["", f"  {info['phase_note']}"]
 
         self.txt_info.configure(state="normal")
         self.txt_info.delete("1.0", "end")

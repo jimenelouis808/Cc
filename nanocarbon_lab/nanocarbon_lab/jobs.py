@@ -26,8 +26,10 @@ import math
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-# Canonical mode names. The GUI shows these verbatim in its dropdown.
-MODES = (
+# Canonical mode names, grouped by material family. The GUI shows the
+# family in one dropdown and the modes of that family in the next, so a
+# carbon control never appears next to a dichalcogenide one.
+CARBON_MODES = (
     "capped tube",
     "coil (relaxed)",
     "fullerene",
@@ -37,6 +39,29 @@ MODES = (
     "multi-wall",
     "bundle",
 )
+
+#: MX2 dichalcogenides. Flat and rolled structures only for now -- the
+#: curved topologies (Y junction, schwarzite) need even-membered rings to
+#: keep the M/X alternation, which is a different remeshing problem; see
+#: the README.
+TMD_MODES = (
+    "TMD layers",
+    "TMD bulk",
+    "TMD ribbon",
+    "TMD nanotube",
+)
+
+FAMILIES = {"carbon": CARBON_MODES, "dichalcogenide": TMD_MODES}
+
+MODES = CARBON_MODES + TMD_MODES
+
+
+def family_of(mode: str) -> str:
+    """Which material family a mode belongs to."""
+    for family, modes in FAMILIES.items():
+        if mode in modes:
+            return family
+    raise ValueError(f"Unknown mode {mode!r}.")
 
 # Modes that go through marching cubes + isotropic remeshing rather than a
 # seed polyhedron. They cost orders of magnitude more time per atom, which
@@ -107,8 +132,18 @@ def build(job: Job):
         build_nano_onion,
         build_schwarzite,
     )
+    from .tmd import (
+        build_tmd_bulk,
+        build_tmd_layers,
+        build_tmd_nanotube,
+        build_tmd_ribbon,
+    )
 
     builders = {
+        "TMD layers": build_tmd_layers,
+        "TMD bulk": build_tmd_bulk,
+        "TMD ribbon": build_tmd_ribbon,
+        "TMD nanotube": build_tmd_nanotube,
         "capped tube": build_capped_cnt,
         "coil (relaxed)": build_coil,
         "fullerene": build_fullerene,
@@ -118,6 +153,12 @@ def build(job: Job):
         "multi-wall": build_multiwall_cnt,
         "bundle": build_bundle,
     }
+    if job.mode in TMD_MODES:
+        # The TMD builders are deterministic -- exact crystallography, no
+        # random defect placement -- so they take no seed, and passing one
+        # would be a TypeError rather than a no-op.
+        return builders[job.mode](**job.params)
+
     atoms = builders[job.mode](**job.params, seed=job.seed)
     if job.dopant and job.dopant_conc > 0:
         from .dopants import dope_random
@@ -181,6 +222,9 @@ def estimate_atoms(job: Job) -> int:
         area = n_arms * (2 * math.pi * radius * arm + 2 * math.pi * radius**2)
         return int(ATOMS_PER_RING * area / RING_AREA)
 
+    if mode in TMD_MODES:
+        return _estimate_tmd_atoms(mode, p)
+
     if mode == "coil (relaxed)":
         radius = float(p.get("tube_radius", 6.0))
         coil_radius = float(p.get("coil_radius", 40.0))
@@ -195,6 +239,31 @@ def estimate_atoms(job: Job) -> int:
     return 0
 
 
+def _estimate_tmd_atoms(mode: str, p: dict) -> int:
+    """Atom counts for the dichalcogenides -- exact, all of them.
+
+    Every TMD structure here is placed on ideal lattice sites, so the
+    count is combinatorics rather than a surface-area guess: three atoms
+    per formula unit, times the cells.
+    """
+    if mode == "TMD layers":
+        return 3 * int(p.get("n_layers", 1)) * int(p.get("nx", 1)) * int(
+            p.get("ny", 1)) * (2 if p.get("phase") == "1T'" else 1)
+    if mode == "TMD bulk":
+        repeat = {"2H": 2, "3R": 3, "AA": 1}.get(p.get("stacking", "2H"), 2)
+        return 3 * repeat * int(p.get("nx", 1)) * int(p.get("ny", 1))
+    if mode == "TMD ribbon":
+        # `width` rows of one formula unit each, times the length repeats.
+        return 3 * int(p.get("width", 6)) * int(p.get("length", 1))
+    if mode == "TMD nanotube":
+        n, m = int(p.get("n", 20)), int(p.get("m", 0))
+        divisor = math.gcd(2 * n + m, 2 * m + n)
+        # Lattice points in one translational cell of an (n, m) tube.
+        cells = 2 * (n * n + n * m + m * m) // divisor
+        return 3 * cells * int(p.get("length", 1))
+    return 0
+
+
 def estimate_cost(job: Job) -> tuple[str, str]:
     """``(severity, human text)`` for how long a job will take.
 
@@ -205,6 +274,11 @@ def estimate_cost(job: Job) -> tuple[str, str]:
     second.
     """
     n = estimate_atoms(job)
+    if job.mode in TMD_MODES:
+        # Exact lattice placement, no meshing and no relaxation, so these
+        # are instant regardless of size; only the drawing is a cost.
+        return ("slow" if n > 20000 else "fast",
+                f"~{n} atoms, placed directly on lattice sites")
     if job.mode in IMPLICIT_MODES:
         if n < 900:
             return "slow", f"~{n} atoms, tens of seconds"
@@ -258,6 +332,23 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "freq_step": "--freq-step", "n_body_rings": "--rings",
         "bond": "--bond", "roughness": "--roughness",
     }),
+    "TMD layers": ("tmd", {
+        "material": "--material", "n_layers": "--layers", "phase": "--phase",
+        "stacking": "--stacking", "nx": "--nx", "ny": "--ny",
+        "vacuum": "--vacuum",
+    }),
+    "TMD bulk": ("tmd-bulk", {
+        "material": "--material", "phase": "--phase", "stacking": "--stacking",
+        "nx": "--nx", "ny": "--ny",
+    }),
+    "TMD ribbon": ("tmd-ribbon", {
+        "material": "--material", "width": "--width", "length": "--length",
+        "edge": "--edge", "termination": "--termination", "phase": "--phase",
+    }),
+    "TMD nanotube": ("tmd-tube", {
+        "material": "--material", "n": "--n", "m": "--m",
+        "length": "--length", "phase": "--phase",
+    }),
     "bundle": ("bundle", {
         "n_rings_across": "--shells", "freq": "--freq",
         "n_body_rings": "--rings", "gap": "--gap", "bond": "--bond",
@@ -302,6 +393,12 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
             parts += [flag, f"{value:g}"]
         else:
             parts += [flag, str(value)]
+
+    if job.mode in TMD_MODES:
+        # No random placement to seed and no substitutional doping yet, so
+        # emitting either would be a flag the parser does not have.
+        parts += ["--out", out]
+        return " ".join(parts)
 
     if job.dopant and job.dopant_conc > 0:
         parts += ["--dopant", job.dopant, "--dopant-conc", f"{job.dopant_conc:g}"]

@@ -38,6 +38,12 @@ SAMPLES: dict[str, Job] = {
     "coil (relaxed)": Job("coil (relaxed)",
                           {"coil_radius": 34.0, "pitch": 20.0, "turns": 1.25,
                            "tube_radius": 4.5}),
+    "TMD layers": Job("TMD layers",
+                      {"material": "MoS2", "n_layers": 2, "nx": 2, "ny": 2}),
+    "TMD bulk": Job("TMD bulk", {"material": "MoS2", "stacking": "2H"}),
+    "TMD ribbon": Job("TMD ribbon",
+                      {"material": "MoS2", "width": 6, "length": 2}),
+    "TMD nanotube": Job("TMD nanotube", {"material": "MoS2", "n": 40, "m": 0}),
 }
 
 
@@ -73,10 +79,26 @@ class TestEstimates:
             ("nano-onion", 840),
             ("multi-wall", 800),
             ("bundle", 1120),
+            # And for every dichalcogenide, which is placed on ideal
+            # lattice sites: three atoms per formula unit, times the cells.
+            ("TMD layers", 24),
+            ("TMD bulk", 6),
+            ("TMD ribbon", 36),
+            ("TMD nanotube", 240),
         ],
     )
     def test_seed_modes_are_predicted_exactly(self, mode, expected):
         assert estimate_atoms(SAMPLES[mode]) == expected
+
+    @pytest.mark.parametrize("mode", ["TMD layers", "TMD bulk", "TMD ribbon",
+                                      "TMD nanotube"])
+    def test_dichalcogenide_estimates_match_the_real_build(self, mode):
+        """These are exact, not approximate, so assert equality against a
+        real build rather than a tolerance."""
+        from nanocarbon_lab.jobs import build
+
+        job = SAMPLES[mode]
+        assert estimate_atoms(job) == len(build(job))
 
     @pytest.mark.parametrize(
         ("mode", "measured"),
@@ -86,6 +108,12 @@ class TestEstimates:
         """Surface area over ring area. Not exact, but the point is to
         tell a 60-atom cage from a 3000-atom coil before committing."""
         assert estimate_atoms(SAMPLES[mode]) == pytest.approx(measured, rel=0.2)
+
+    def test_dichalcogenides_are_never_called_slow(self):
+        """No meshing and no relaxation -- exact lattice placement, so the
+        only cost is drawing them."""
+        for mode in ("TMD layers", "TMD bulk", "TMD ribbon", "TMD nanotube"):
+            assert estimate_cost(SAMPLES[mode])[0] == "fast"
 
     def test_a_cage_is_called_fast_and_a_coil_is_not(self):
         """Cost is not atom count alone: the implicit modes mesh and

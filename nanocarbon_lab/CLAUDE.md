@@ -20,6 +20,9 @@ nanocarbon_lab/
 │                  #   ring sizes follow the curvature instead of straining
 │                  #   assemblies.py: multi-wall tubes and bundles at the vdW gap
 │                  #   fullerene.py: closed cages (C60, C240...) and nano-onions
+├── tmd/           # MX2 dichalcogenides: materials.py (lattice constants),
+│                  #   slab.py (mono/multi/bulk), ribbon.py, nanotube.py,
+│                  #   quality.py. Deliberately NOT under builders/.
 ├── dopants/       # substitutional dopants (N, B, S, P, co-doping)
 ├── defects/       # vacancies, Stone-Wales, topological defects
 ├── topology/      # networkx-based connectivity / coordination analysis
@@ -193,6 +196,42 @@ rebuild**: restart when the two largest displacements sum past the skin.
 Do not tighten that to "any atom moved half the skin" — ordinary local
 rearrangement is ~1 Å and would restart L-BFGS (discarding its history)
 continuously, tripling the runtime.
+
+## Dichalcogenides are not decorated carbon
+
+`tmd/` is a separate package on purpose. An MX2 layer is a three-plane
+X-M-X sandwich, so the carbon machinery does not transfer: the metal is
+six-coordinate, the bond is 2.4 Å, there are no rings to count, and the
+sp2 verdict's thresholds are all wrong. It has its own `quality.py`.
+
+Rules that are easy to break here:
+
+* **Geometry is `a` and `h`; the bond is derived.** Storing `d` as well
+  invites the three to disagree. `d = sqrt(a^2/3 + h^2/4)` reproduces the
+  literature 2.41 Å for MoS2.
+* **The phase is only about where the bottom chalcogen plane sits** — 2H
+  eclipsed (trigonal prismatic), 1T staggered (octahedral). No TMD has a
+  tetragonal phase; do not add one.
+* **2H stacking is a 6_3 screw, not a rotation about the metal.** Negating
+  the fractional coordinates alone leaves the metal fixed and stacks metal
+  on metal, which is AA. The `+(1/3, 2/3)` translation is what puts the
+  metal over the chalcogen. 2H and 3R are identical as bilayers and
+  diverge at the third layer.
+* **1T' needs a doubled cell.** A cell with one metal has no partner to
+  dimerise with. Double, then distort, then repeat.
+* **Ribbon terminations are deliberately off-stoichiometry.** Pass
+  `expect_stoichiometric=False` to `tmd_quality` for them.
+* **Rolling strains the sandwich** by `h/2R`, unavoidably. That is why
+  real MX2 tubes are tens of nm across; the builder warns past 10%.
+
+Y junctions and schwarzites in MX2 are **not implemented**, and the
+reason is topological rather than a missing wiring job: M and X must
+alternate around every ring, so only even rings are allowed. Carbon
+closes a sphere with 12 pentagons; MX2 closes with 6 squares (the
+observed nano-octahedron). Doing it means retargeting `remesh.py` onto
+even vertex degrees, and a single edge flip changes a degree by one, so
+it cannot preserve parity. Do not bolt it on by decorating a carbon
+surface -- the odd rings force M-M and X-X bonds.
 
 ## GUI: one job description, one killable process
 

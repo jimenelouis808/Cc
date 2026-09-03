@@ -15,6 +15,10 @@ Sub-commands:
 * ``schwarzite`` — build a periodic negative-curvature schwarzite unit cell.
 * ``mwcnt``      — build a multi-wall nanotube from concentric shells.
 * ``bundle``     — build a hexagonally packed rope of tubes.
+* ``tmd``        — build an MX2 monolayer, bilayer or few-layer slab.
+* ``tmd-bulk``   — build the bulk MX2 crystal (2H, 3R or AA).
+* ``tmd-ribbon`` — build an MX2 nanoribbon with a chosen edge termination.
+* ``tmd-tube``   — roll an MX2 monolayer into an (n, m) nanotube.
 * ``validate``   — run validation on an existing structure file.
 """
 
@@ -47,6 +51,15 @@ from ..dopants import dope_random
 from ..exports.lammps import write_lammps
 from ..exports.qe import QESettings, write_qe_input
 from ..exports.xyz import write_render_bundle
+from ..tmd import (
+    MATERIALS,
+    build_tmd_bulk,
+    build_tmd_layers,
+    build_tmd_nanotube,
+    build_tmd_ribbon,
+)
+from ..tmd.quality import geometry_report as tmd_geometry_report
+from ..tmd.quality import tmd_quality
 from ..validation.checks import run_basic_checks
 from ..validation.quality import sp2_quality
 
@@ -219,6 +232,76 @@ def _report_structure(atoms, xyz_path, json_path):
     print(f"  close contacts (<2 A, non-bonded) = {g['n_close_contacts']}")
     verdict, why = sp2_quality(g)
     print(f"  sp2 verdict = {verdict.upper()}: {why}")
+
+
+def _report_tmd(atoms, xyz_path, json_path, stoichiometric=True):
+    """Summary printer for the dichalcogenides.
+
+    Separate from the carbon one because almost nothing carries over:
+    there are no rings to count, the metal is six-coordinate rather than
+    three, and the bond to check against is material-specific.
+    """
+    report = tmd_geometry_report(atoms)
+    info = atoms.info
+    print(f"Wrote {xyz_path} and {json_path}")
+    print(f"  n_atoms     = {len(atoms)}  ({atoms.get_chemical_formula()})")
+    print(f"  material    = {info['material']}  phase {info['phase']} "
+          f"({info['coordination']})")
+    if "stacking" in info and info["stacking"] != "n/a":
+        print(f"  stacking    = {info['stacking']}, {info['n_layers']} layers")
+    if all(atoms.get_pbc()):
+        lengths = atoms.cell.lengths()
+        print(f"  periodic    = 3D, a = {lengths[0]:.3f} A, c = {lengths[2]:.3f} A")
+    if "edge" in info:
+        print(f"  edge        = {info['edge']} / {info['termination']}, "
+              f"width {info['width_angstrom']:.1f} A")
+    if "chiral_indices" in info:
+        n, m = info["chiral_indices"]
+        print(f"  tube        = ({n},{m}) {info['chirality']}, "
+              f"R = {info['radius']:.2f} A, diameter {info['diameter']:.2f} A")
+        print(f"  roll strain = {info['roll_strain']:.1%} on the outer "
+              f"{info['chalcogen']} plane (goes as h/2R)")
+    print(f"  M-X bond    = {report['bond_min']:.3f} / {report['bond_mean']:.3f} "
+          f"/ {report['bond_max']:.3f} A  (ideal {report['bond_ideal']:.3f})")
+    print(f"  coordination= metal {report['metal_coordination_min']}-"
+          f"{report['metal_coordination_max']}, chalcogen "
+          f"{report['chalcogen_coordination_min']}-"
+          f"{report['chalcogen_coordination_max']}")
+    print(f"  X/M ratio   = {report['stoichiometry']:.3f}")
+    verdict, why = tmd_quality(report, expect_stoichiometric=stoichiometric)
+    print(f"  verdict     = {verdict.upper()}: {why}")
+    if "phase_note" in info:
+        print(f"  note        = {info['phase_note']}")
+    return 0
+
+
+def _cmd_tmd(args):
+    atoms = build_tmd_layers(
+        args.material, n_layers=args.layers, phase=args.phase,
+        stacking=args.stacking, nx=args.nx, ny=args.ny, vacuum=args.vacuum,
+    )
+    return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)))
+
+
+def _cmd_tmd_bulk(args):
+    atoms = build_tmd_bulk(args.material, phase=args.phase,
+                           stacking=args.stacking, nx=args.nx, ny=args.ny)
+    return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)))
+
+
+def _cmd_tmd_ribbon(args):
+    atoms = build_tmd_ribbon(
+        args.material, width=args.width, length=args.length, edge=args.edge,
+        termination=args.termination, phase=args.phase,
+    )
+    return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)),
+                       stoichiometric=(args.termination == "mixed"))
+
+
+def _cmd_tmd_tube(args):
+    atoms = build_tmd_nanotube(args.material, n=args.n, m=args.m,
+                               length=args.length, phase=args.phase)
+    return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)))
 
 
 def _cmd_junction(args):
@@ -476,6 +559,73 @@ def build_parser() -> argparse.ArgumentParser:
     jn.add_argument("--out", required=True, help="Output path without extension.")
     _add_surface_flags(jn)
     jn.set_defaults(func=_cmd_junction)
+
+    materials = sorted(MATERIALS)
+    phases = ["2H", "1T", "1T'"]
+    stackings = ["2H", "3R", "AA"]
+
+    td = sub.add_parser(
+        "tmd",
+        help="Build an MX2 monolayer, bilayer or few-layer slab (MoS2, WS2...).",
+    )
+    td.add_argument("--material", default="MoS2", choices=materials)
+    td.add_argument("--layers", type=int, default=1,
+                    help="X-M-X sandwiches: 1 = monolayer, 2 = bilayer.")
+    td.add_argument("--phase", default="2H", choices=phases,
+                    help="Metal coordination inside a layer: 2H is trigonal "
+                         "prismatic (semiconducting, the group-6 ground "
+                         "state), 1T octahedral (metallic). No TMD has a "
+                         "tetragonal phase — all three sit on a hexagonal "
+                         "lattice.")
+    td.add_argument("--stacking", default="2H", choices=stackings,
+                    help="How layers stack: 2H (AA', alternating 180 deg), "
+                         "3R (rhombohedral), AA (eclipsed). Ignored for one "
+                         "layer.")
+    td.add_argument("--nx", type=int, default=1)
+    td.add_argument("--ny", type=int, default=1)
+    td.add_argument("--vacuum", type=float, default=15.0)
+    td.add_argument("--out", required=True, help="Output path without extension.")
+    td.set_defaults(func=_cmd_tmd)
+
+    tb = sub.add_parser("tmd-bulk", help="Build the bulk MX2 crystal.")
+    tb.add_argument("--material", default="MoS2", choices=materials)
+    tb.add_argument("--phase", default="2H", choices=phases)
+    tb.add_argument("--stacking", default="2H", choices=stackings,
+                    help="Sets the repeat: 2H is two layers per cell, 3R "
+                         "three, AA one.")
+    tb.add_argument("--nx", type=int, default=1)
+    tb.add_argument("--ny", type=int, default=1)
+    tb.add_argument("--out", required=True, help="Output path without extension.")
+    tb.set_defaults(func=_cmd_tmd_bulk)
+
+    tr = sub.add_parser("tmd-ribbon", help="Build an MX2 nanoribbon.")
+    tr.add_argument("--material", default="MoS2", choices=materials)
+    tr.add_argument("--width", type=int, default=6, help="Lattice rows across.")
+    tr.add_argument("--length", type=int, default=1, help="Repeats along the axis.")
+    tr.add_argument("--edge", default="zigzag", choices=["zigzag", "armchair"])
+    tr.add_argument("--termination", default="mixed",
+                    choices=["mixed", "metal", "chalcogen"],
+                    help="Zigzag edges only. MX2's two zigzag edges are "
+                         "chemically different — the metal-terminated one is "
+                         "metallic and magnetic — so a plain cut ('mixed') "
+                         "gives one of each.")
+    tr.add_argument("--phase", default="2H", choices=phases)
+    tr.add_argument("--out", required=True, help="Output path without extension.")
+    tr.set_defaults(func=_cmd_tmd_ribbon)
+
+    tt = sub.add_parser(
+        "tmd-tube",
+        help="Roll an MX2 monolayer into an (n, m) nanotube.",
+    )
+    tt.add_argument("--material", default="MoS2", choices=materials)
+    tt.add_argument("--n", type=int, default=30)
+    tt.add_argument("--m", type=int, default=0,
+                    help="(n,0) zigzag, (n,n) armchair, else chiral.")
+    tt.add_argument("--length", type=int, default=1,
+                    help="Translational periods along the axis.")
+    tt.add_argument("--phase", default="2H", choices=phases)
+    tt.add_argument("--out", required=True, help="Output path without extension.")
+    tt.set_defaults(func=_cmd_tmd_tube)
 
     fu = sub.add_parser(
         "fullerene",

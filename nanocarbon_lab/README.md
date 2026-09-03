@@ -27,6 +27,7 @@ validation pass before writing.
 | `swept`         | Coils and arbitrary curved tubes whose ring topology is **derived from the curvature** |
 | `fullerene`     | Closed cages (C60, C240, C540, C20, C80, …) and carbon nano-onions |
 | `assemblies`    | Multi-wall nanotubes and hexagonally packed bundles, at the van der Waals gap |
+| `tmd`           | **Transition-metal dichalcogenides** (MoS2, WS2, …): monolayers, stacks, bulk crystals, ribbons and rolled nanotubes |
 
 ## Installation
 
@@ -106,6 +107,24 @@ nanocarbon onion --shells 3 --out out/onion
 # Two-wall nanotube and a 7-tube rope
 nanocarbon mwcnt --shells 2 --inner-freq 3 --rings 10 --out out/mwcnt
 nanocarbon bundle --shells 1 --freq 3 --rings 10 --out out/rope
+```
+
+Dichalcogenides (MoS2, WS2, …) have their own sub-commands, since none of
+the sp2 flags above mean anything for them:
+
+```bash
+# MoS2 monolayer and bilayer, 2H (trigonal prismatic) or 1T (octahedral)
+nanocarbon tmd --material MoS2 --layers 1 --phase 2H --out out/mos2_mono
+nanocarbon tmd --material MoS2 --layers 2 --stacking 2H --out out/mos2_bi
+
+# Bulk crystal, 2H or 3R
+nanocarbon tmd-bulk --material MoS2 --stacking 2H --out out/mos2_bulk
+
+# Nanoribbon with a chosen zigzag edge chemistry
+nanocarbon tmd-ribbon --material MoS2 --width 8 --termination metal --out out/mos2_rib
+
+# Rolled (40,0) nanotube
+nanocarbon tmd-tube --material MoS2 --n 40 --m 0 --out out/mos2_nt
 ```
 
 Every one of these prints an **sp2 verdict** alongside the measured bond
@@ -842,6 +861,103 @@ too, all free and open source:
 * **POV-Ray** is a free ray tracer some structure tools (incl. OVITO) can
   export directly to, useful for scripted/batch rendering without a full
   3D DCC tool.
+
+## Transition-metal dichalcogenides (MoS2, WS2, …)
+
+A TMD is **not** a decorated graphene. It is a three-plane X–M–X sandwich:
+a metal layer between two chalcogen layers, held to its neighbours by van
+der Waals forces alone. Almost nothing from the carbon side transfers —
+the metal is six-coordinate rather than three, the bond is 2.4 Å rather
+than 1.42, and there are no rings to count — so this lives in its own
+`nanocarbon_lab.tmd` package with its own quality verdict.
+
+```python
+from nanocarbon_lab.tmd import (
+    build_tmd_monolayer, build_tmd_layers, build_tmd_bulk,
+    build_tmd_ribbon, build_tmd_nanotube,
+)
+
+mono   = build_tmd_monolayer("MoS2", phase="2H")        # 2D
+bilayer= build_tmd_layers("MoS2", n_layers=2, stacking="2H")
+bulk   = build_tmd_bulk("MoS2", stacking="2H")          # 3D
+ribbon = build_tmd_ribbon("MoS2", width=8, termination="metal")   # 1D
+tube   = build_tmd_nanotube("MoS2", n=40, m=0)          # 1D
+```
+
+Thirteen materials ship with measured lattice constants: MoS2, MoSe2,
+MoTe2, WS2, WSe2, WTe2, NbSe2, TaS2, TiS2, ZrS2, HfS2, PtS2, SnS2.
+
+### Geometry is two numbers, and the third is derived
+
+Each material stores the in-plane lattice constant `a` and the
+chalcogen–chalcogen separation `h`. The M–X bond follows,
+`d = sqrt(a²/3 + h²/4)`, rather than being stored alongside them — three
+stored numbers is an invitation for them to disagree. For MoS2 that gives
+**2.404 Å against the 2.41 Å usually quoted**, and the built bulk cell
+comes out at a = 3.160 Å, c = 12.294 Å against the measured 12.29.
+
+### Phases: what actually differs
+
+| phase | metal coordination | chalcogen planes | typical |
+|---|---|---|---|
+| `2H` | trigonal prismatic | eclipsed, both over the same column | MoS2, WS2 (semiconducting) |
+| `1T` | octahedral | staggered by 60° | TiS2, PtS2 (metallic) |
+| `1T'` | distorted octahedral | staggered, metals dimerised | metastable MoS2 |
+
+That is the whole difference: **where the bottom chalcogen plane sits**.
+1T' adds a metal–metal pairing on top, and the builder reproduces the
+2.80 Å Mo–Mo dimer against the undistorted 3.16 Å.
+
+**On "tetragonal": no TMD has one.** 2H, 1T and 1T' all sit on a
+hexagonal (or, for 1T', a slightly distorted hexagonal) lattice. What
+varies between them is the coordination polyhedron around the metal, not
+the crystal system — and the 2H/1T distinction is almost certainly what
+is meant when a paper contrasts "the hexagonal phase" with another one.
+
+### Stacking
+
+`2H` (AA′) alternates a 180° rotation, `3R` shifts each layer by (1/3,
+2/3) without rotating, `AA` is eclipsed. 2H and 3R both put the metal of
+one layer over the chalcogen of the next and are **indistinguishable as
+bilayers** — they diverge at the third layer, ABAB against ABCABC, which
+is what makes them different crystals rather than different slabs.
+
+### Ribbons: the edge is a chemical choice
+
+Graphene's zigzag edge is just a zigzag edge. MX2's comes in two forms,
+metal-terminated or chalcogen-terminated, and they differ in nearly
+everything that matters — the metal edge is metallic and magnetic, and it
+is what gives CVD-grown MoS2 its triangles. So `termination` is an
+explicit argument, and a terminated ribbon is **deliberately
+off-stoichiometry** (Mo₁₂S₂₀, not Mo₁₂S₂₄); the quality check is told to
+expect that rather than calling it broken.
+
+### Nanotubes: why MX2 tubes are big
+
+Rolling graphene costs only bond bending. Rolling a TMD puts the outer
+chalcogen plane on a larger circle than the inner one, and the strain is
+geometric and unavoidable:
+
+    outer plane strain = h / 2R
+
+For MoS2 (h = 3.13 Å) that is **15.6% at R = 10 Å and 5.2% at R = 30 Å**.
+This is the reason real MoS2 nanotubes are tens of nanometres across
+where carbon ones are one — the same curvature costs far more. The
+builder warns past 10% and the verdict reports the resulting bond spread.
+
+### Not yet: Y junctions and schwarzites in MX2
+
+Both were asked for and neither is here, for a reason worth stating.
+Those need the curved-surface machinery, and a binary compound cannot use
+it unchanged: **M and X must alternate around every ring, so only
+even-membered rings are allowed**. Carbon closes a sphere with 12
+pentagons (`sum(6 - n) = 12`); MX2 cannot use a pentagon at all without
+forcing an M–M or X–X bond, and closes instead with **six squares** —
+which is exactly the MoS2 nano-octahedron seen experimentally. Getting
+there means retargeting the remesher onto even degrees, since a single
+edge flip changes a vertex degree by one and cannot preserve parity. It
+is a real piece of work rather than a wiring job, so it is the next step
+rather than a half-done one here.
 
 ## Repository layout
 
