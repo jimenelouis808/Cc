@@ -7,6 +7,7 @@ six-coordinate, the bond is 2.4 Å rather than 1.42, and rolling a layer
 strains it in a way rolling graphene does not.
 """
 
+from .coil import build_tmd_coil
 from .materials import MATERIALS, TMDMaterial, get_material
 from .nanotube import build_tmd_nanotube, tube_radius
 from .quality import geometry_report, tmd_quality
@@ -17,6 +18,7 @@ __all__ = [
     "MATERIALS",
     "TMDMaterial",
     "build_tmd_bulk",
+    "build_tmd_coil",
     "build_tmd_layers",
     "build_tmd_monolayer",
     "build_tmd_nanotube",

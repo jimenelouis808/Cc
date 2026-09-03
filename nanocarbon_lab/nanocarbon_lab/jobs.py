@@ -49,6 +49,7 @@ TMD_MODES = (
     "TMD bulk",
     "TMD ribbon",
     "TMD nanotube",
+    "TMD coil",
 )
 
 FAMILIES = {"carbon": CARBON_MODES, "dichalcogenide": TMD_MODES}
@@ -134,6 +135,7 @@ def build(job: Job):
     )
     from .tmd import (
         build_tmd_bulk,
+        build_tmd_coil,
         build_tmd_layers,
         build_tmd_nanotube,
         build_tmd_ribbon,
@@ -144,6 +146,7 @@ def build(job: Job):
         "TMD bulk": build_tmd_bulk,
         "TMD ribbon": build_tmd_ribbon,
         "TMD nanotube": build_tmd_nanotube,
+        "TMD coil": build_tmd_coil,
         "capped tube": build_capped_cnt,
         "coil (relaxed)": build_coil,
         "fullerene": build_fullerene,
@@ -255,13 +258,39 @@ def _estimate_tmd_atoms(mode: str, p: dict) -> int:
     if mode == "TMD ribbon":
         # `width` rows of one formula unit each, times the length repeats.
         return 3 * int(p.get("width", 6)) * int(p.get("length", 1))
-    if mode == "TMD nanotube":
+    if mode in ("TMD nanotube", "TMD coil"):
         n, m = int(p.get("n", 20)), int(p.get("m", 0))
         divisor = math.gcd(2 * n + m, 2 * m + n)
         # Lattice points in one translational cell of an (n, m) tube.
         cells = 2 * (n * n + n * m + m * m) // divisor
-        return 3 * cells * int(p.get("length", 1))
+        per_period = 3 * cells
+        if mode == "TMD nanotube":
+            return per_period * int(p.get("length", 1))
+        return per_period * _coil_periods(p)
     return 0
+
+
+def _coil_periods(p: dict) -> int:
+    """How many tube periods a coil's helix arc length calls for.
+
+    Mirrors the builder, which tiles one period along the axis: the
+    count is what makes a coil expensive, and it grows with the coil
+    radius rather than with anything the user thinks of as "size".
+    """
+    from .tmd.materials import get_material
+
+    material = get_material(p.get("material", "MoS2"))
+    n, m = int(p.get("n", 30)), int(p.get("m", 0))
+    divisor = math.gcd(2 * n + m, 2 * m + n)
+    # |axial vector| for the (n, m) cell, in the 60-degree basis.
+    ca = ((2 * m + n) // divisor)
+    cb = ((2 * n + m) // divisor)
+    period = material.a * math.sqrt(ca * ca - ca * cb + cb * cb)
+    radius = float(p.get("coil_radius", 220.0))
+    pitch = float(p.get("pitch", 90.0))
+    turns = float(p.get("turns", 0.5))
+    arc = math.hypot(2.0 * math.pi * radius * turns, pitch * turns)
+    return max(1, int(round(arc / period))) if period > 0 else 1
 
 
 def estimate_cost(job: Job) -> tuple[str, str]:
@@ -274,6 +303,14 @@ def estimate_cost(job: Job) -> tuple[str, str]:
     second.
     """
     n = estimate_atoms(job)
+    if job.mode == "TMD coil":
+        # Still no meshing or relaxation, but a coil is not "one cell":
+        # its length is the helix arc, so the atom count follows the coil
+        # radius rather than anything that reads as a size, and it is the
+        # one TMD mode that can reach six figures by accident.
+        return ("very slow" if n > 60000 else "slow" if n > 20000 else "fast",
+                f"~{n} atoms — a swept tube, so the count grows with the "
+                "coil radius")
     if job.mode in TMD_MODES:
         # Exact lattice placement, no meshing and no relaxation, so these
         # are instant regardless of size; only the drawing is a cost.
@@ -348,6 +385,12 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     "TMD nanotube": ("tmd-tube", {
         "material": "--material", "n": "--n", "m": "--m",
         "length": "--length", "phase": "--phase",
+    }),
+    "TMD coil": ("tmd-coil", {
+        "material": "--material", "n": "--n", "m": "--m",
+        "coil_radius": "--coil-radius", "pitch": "--pitch",
+        "turns": "--turns", "phase": "--phase",
+        "handedness": "--handedness",
     }),
     "bundle": ("bundle", {
         "n_rings_across": "--shells", "freq": "--freq",

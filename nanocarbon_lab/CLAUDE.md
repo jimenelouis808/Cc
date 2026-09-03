@@ -22,7 +22,8 @@ nanocarbon_lab/
 │                  #   fullerene.py: closed cages (C60, C240...) and nano-onions
 ├── tmd/           # MX2 dichalcogenides: materials.py (lattice constants),
 │                  #   slab.py (mono/multi/bulk), ribbon.py, nanotube.py,
-│                  #   quality.py. Deliberately NOT under builders/.
+│                  #   coil.py (swept helical tubes), quality.py.
+│                  #   Deliberately NOT under builders/.
 ├── dopants/       # substitutional dopants (N, B, S, P, co-doping)
 ├── defects/       # vacancies, Stone-Wales, topological defects
 ├── topology/      # networkx-based connectivity / coordination analysis
@@ -224,14 +225,45 @@ Rules that are easy to break here:
 * **Rolling strains the sandwich** by `h/2R`, unavoidably. That is why
   real MX2 tubes are tens of nm across; the builder warns past 10%.
 
-Y junctions and schwarzites in MX2 are **not implemented**, and the
-reason is topological rather than a missing wiring job: M and X must
-alternate around every ring, so only even rings are allowed. Carbon
-closes a sphere with 12 pentagons; MX2 closes with 6 squares (the
-observed nano-octahedron). Doing it means retargeting `remesh.py` onto
-even vertex degrees, and a single edge flip changes a degree by one, so
-it cannot preserve parity. Do not bolt it on by decorating a carbon
-surface -- the odd rings force M-M and X-X bonds.
+**Coils sweep; they do not remesh.** `tmd/coil.py` bends a finished tube
+onto a helix, so every ring stays a hexagon. The implicit route is not an
+option for MX2: it absorbs curvature by introducing odd rings, and an odd
+ring here forces an M-M or X-X bond. Report the roll and bend strains
+*separately* -- they have opposite cures (widening the tube cuts `h/2R`
+and raises `R_outer*kappa`), so their sum alone tells the user nothing
+actionable. `sweep_along_path` rescales the path to the structure, so
+pick the period count to match the arc and report the **achieved**
+radius and pitch, never the requested ones.
+
+Schwarzites and Y junctions in MX2 are **not implemented**. An earlier
+version of this file said they were impossible because pentagons are
+forbidden. That reasoning was wrong and must not be repeated: pentagons
+are indeed forbidden, but negative curvature wants **octagons**, which
+are even. `sum(6 - n) = 6*chi`, each octagon pays -2, so Schwarz P wants
+twelve. h-BN schwarzites are built exactly this way.
+
+What is actually blocking it, all measured (see the README for numbers):
+
+1. **Parity is solved.** An edge *split* toggles exactly the two opposite
+   vertices; an edge *flip* toggles four and therefore stalls with odd
+   vertices sparse. Splitting to a co-apex partner drives every degree
+   even, giving exact topology: rings 4/6/8/10, `sum(6-n)` = 6*chi,
+   X/M = 2.000.
+2. **Even degrees are not sufficient above genus 0.** Face 2-colourability
+   needs even degrees *plus* 2g vanishing Z/2 classes. They do not vanish:
+   ~2% of bonds stay homoelemental whatever colouring is chosen. That is a
+   real inversion-domain boundary, not an artefact.
+3. **The geometry is the blocker.** Atoms are triangle centroids, so the
+   splits insert more sites than the area holds at spacing `a/sqrt(3)`.
+   Relaxation, projection, smoothing and remesh/repair alternation were
+   each tried and none works -- an optimiser cannot relax away a density
+   mismatch, and the alternation oscillates rather than converging.
+
+The fix is a **parity-preserving isotropic remesher** (splits and
+collapses paired so site count tracks area while degrees stay even). Do
+not ship a version without it: the current one has 200+ sub-Angstrom
+overlaps. And do not bolt it on by decorating a carbon surface -- odd
+rings force M-M and X-X bonds.
 
 ## GUI: one job description, one killable process
 

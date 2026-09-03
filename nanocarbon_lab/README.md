@@ -125,6 +125,10 @@ nanocarbon tmd-ribbon --material MoS2 --width 8 --termination metal --out out/mo
 
 # Rolled (40,0) nanotube
 nanocarbon tmd-tube --material MoS2 --n 40 --m 0 --out out/mos2_nt
+
+# Helical coil — a swept tube, so the atom count follows the coil radius
+nanocarbon tmd-coil --material MoS2 --n 30 --coil-radius 220 --pitch 90 \
+    --turns 0.25 --out out/mos2_coil
 ```
 
 Every one of these prints an **sp2 verdict** alongside the measured bond
@@ -945,19 +949,70 @@ This is the reason real MoS2 nanotubes are tens of nanometres across
 where carbon ones are one — the same curvature costs far more. The
 builder warns past 10% and the verdict reports the resulting bond spread.
 
-### Not yet: Y junctions and schwarzites in MX2
+### MX2 coils
 
-Both were asked for and neither is here, for a reason worth stating.
-Those need the curved-surface machinery, and a binary compound cannot use
-it unchanged: **M and X must alternate around every ring, so only
-even-membered rings are allowed**. Carbon closes a sphere with 12
-pentagons (`sum(6 - n) = 12`); MX2 cannot use a pentagon at all without
-forcing an M–M or X–X bond, and closes instead with **six squares** —
-which is exactly the MoS2 nano-octahedron seen experimentally. Getting
-there means retargeting the remesher onto even degrees, since a single
-edge flip changes a vertex degree by one and cannot preserve parity. It
-is a real piece of work rather than a wiring job, so it is the next step
-rather than a half-done one here.
+A coil is a nanotube swept onto a helical centreline with a
+rotation-minimizing frame. Carbon has two routes to a coil — sweep a
+finished tube and carry the bend as elastic strain, or mesh the curved
+surface so ring sizes follow the curvature. For a dichalcogenide only the
+first is available, and that is chemistry rather than a missing feature:
+the implicit route absorbs curvature by introducing odd rings, and an odd
+ring in MX2 forces an M–M or X–X bond. Sweeping keeps every ring a
+hexagon and every bond M–X, and pays in strain.
+
+Two strains stack, and they have opposite cures:
+
+| strain | formula | set by |
+|---|---|---|
+| roll | `h / 2R_tube` | the tube's own radius |
+| bend | `R_outer × κ` | how tightly it is coiled, `κ = R/(R² + (p/2π)²)` |
+
+Widening the tube cuts the first and **raises** the second, so they cannot
+be minimised together — the coil radius is the free parameter. A (30,0)
+MoS2 coil at R = 220 Å spends 10.4% on the roll and 7.6% on the bend; a
+coil under 6% total is genuinely enormous, which is why the builder
+reports both numbers separately rather than their sum. The atom count
+follows the helix arc length, so it grows with the coil radius rather than
+with anything that reads as a size: that same coil is 11 340 atoms at a
+quarter turn.
+
+### Not yet: schwarzites and Y junctions in MX2
+
+Still not here, but the earlier explanation in this file was wrong and is
+worth correcting. It said MX2 cannot make a schwarzite because pentagons
+are forbidden. Pentagons *are* forbidden — M and X must alternate, so only
+even rings are allowed — but that argument only rules out the *sphere*.
+Negative curvature does not need heptagons; it needs **octagons**, which
+are even. `sum(6 - n) = 6χ`, each octagon pays −2, so Schwarz P (χ = −4)
+wants twelve of them. Nothing in the chemistry forbids that, and h-BN
+schwarzites in the literature are built exactly this way.
+
+What was actually established here, by measurement:
+
+* **The parity problem is solved.** Edge splits drive every vertex degree
+  even (a split toggles exactly the two opposite vertices, unlike a flip,
+  which toggles four and therefore stalls). The result has the exact
+  topology: rings 4/6/8/10 only, `sum(6 - n)` = −24 for Schwarz P and −48
+  for the gyroid, X/M = 2.000.
+* **Even rings are necessary but not sufficient.** A triangulation's faces
+  are 2-colourable iff every vertex degree is even *on a sphere*. At genus
+  g there are 2g further Z/2 classes, and they do not vanish: about **2% of
+  bonds stay homoelemental** however the colouring is chosen. That is not a
+  defect of the method — it is an inversion-domain boundary, the same one
+  seen in real MoS2 and h-BN.
+* **The blocker is geometric, not topological.** Atoms sit at triangle
+  centroids, so the parity splits insert more sites than the surface area
+  holds at spacing `a/√3`. Relaxation, projection, Laplacian smoothing and
+  alternating remesh-and-repair were each measured and none fixes it — a
+  density mismatch is not something an optimiser can relax away, and the
+  alternation oscillates (65 → 57 → 96 → 47 → 84 splits) rather than
+  converging.
+
+Closing it needs a **parity-preserving isotropic remesher**: splits *and*
+collapses paired so the site count tracks the area while the degrees stay
+even. That is the next piece of work, and shipping the current version
+would mean exporting a cell with 200-plus sub-Ångström atomic overlaps,
+which the project's own validation exists to prevent.
 
 ## Repository layout
 

@@ -96,8 +96,8 @@ def geometry_report(atoms: Atoms) -> dict[str, float | int]:
     }
 
 
-def tmd_quality(report: dict, expect_stoichiometric: bool = True
-                ) -> tuple[Verdict, str]:
+def tmd_quality(report: dict, expect_stoichiometric: bool = True,
+                structure_type: str | None = None) -> tuple[Verdict, str]:
     """Turn a :func:`geometry_report` into a verdict and a reason.
 
     Judges the bond-length spread against the material's own ideal rather
@@ -108,6 +108,11 @@ def tmd_quality(report: dict, expect_stoichiometric: bool = True
     terminated nanoribbon. A metal-terminated MoS2 edge really is
     sulphur-poor -- Mo12S20 rather than Mo12S24 -- and that is the point
     of asking for it, not a broken cut.
+
+    ``structure_type`` only changes the advice. Telling the owner of an
+    over-strained coil to "raise the chiral index" is half an answer:
+    widening the tube cuts the roll strain and *raises* the bend strain,
+    so the two have to be moved together.
     """
     ideal = report["bond_ideal"]
     contacts = int(report["n_close_contacts"])
@@ -127,11 +132,21 @@ def tmd_quality(report: dict, expect_stoichiometric: bool = True
     worst = max(abs(report["bond_max"] - ideal), abs(ideal - report["bond_min"]))
     strain = worst / ideal
     if strain > STRAIN_INTACT:
+        if structure_type == "tmd_coil":
+            advice = (
+                "A coil pays twice — h/2R for the roll and R_outer*kappa for "
+                "the bend — and widening the tube trades one for the other, "
+                "so both the tube and the coil have to grow together. An "
+                "MX2 coil under 6% is genuinely enormous."
+            )
+        else:
+            advice = (
+                "For a rolled tube this means the radius is too small: the "
+                "strain goes as h/2R, so raise the chiral index."
+            )
         return "broken", (
             f"M–X bonds deviate up to {strain:.1%} from {ideal:.2f} Å "
-            f"({report['bond_min']:.2f}–{report['bond_max']:.2f} Å). For a "
-            "rolled tube this means the radius is too small: the strain goes "
-            "as h/2R, so raise the chiral index."
+            f"({report['bond_min']:.2f}–{report['bond_max']:.2f} Å). {advice}"
         )
     if strain > STRAIN_CLEAN:
         return "strained", (

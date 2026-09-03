@@ -19,6 +19,7 @@ Sub-commands:
 * ``tmd-bulk``   — build the bulk MX2 crystal (2H, 3R or AA).
 * ``tmd-ribbon`` — build an MX2 nanoribbon with a chosen edge termination.
 * ``tmd-tube``   — roll an MX2 monolayer into an (n, m) nanotube.
+* ``tmd-coil``   — coil an MX2 nanotube onto a helix.
 * ``validate``   — run validation on an existing structure file.
 """
 
@@ -54,6 +55,7 @@ from ..exports.xyz import write_render_bundle
 from ..tmd import (
     MATERIALS,
     build_tmd_bulk,
+    build_tmd_coil,
     build_tmd_layers,
     build_tmd_nanotube,
     build_tmd_ribbon,
@@ -255,12 +257,28 @@ def _report_tmd(atoms, xyz_path, json_path, stoichiometric=True):
     if "edge" in info:
         print(f"  edge        = {info['edge']} / {info['termination']}, "
               f"width {info['width_angstrom']:.1f} A")
-    if "chiral_indices" in info:
+    if "chiral_indices" in info and "radius" in info:
         n, m = info["chiral_indices"]
         print(f"  tube        = ({n},{m}) {info['chirality']}, "
               f"R = {info['radius']:.2f} A, diameter {info['diameter']:.2f} A")
         print(f"  roll strain = {info['roll_strain']:.1%} on the outer "
               f"{info['chalcogen']} plane (goes as h/2R)")
+    if info.get("structure_type") == "tmd_coil":
+        n, m = info["chiral_indices"]
+        print(f"  tube        = ({n},{m}) {info['chirality']}, "
+              f"R = {info['tube_radius']:.2f} A")
+        print(f"  coil        = R {info['coil_radius']:.1f} A, pitch "
+              f"{info['pitch']:.1f} A, {info['turns']:g} turns, "
+              f"{info['periods']} periods")
+        if abs(info["coil_radius"] - info["requested_coil_radius"]) > 0.05:
+            print(f"                (asked {info['requested_coil_radius']:.1f} A "
+                  f"/ {info['requested_pitch']:.1f} A — the path is scaled to a "
+                  "whole number of tube periods)")
+        print(f"  roll strain = {info['roll_strain']:.1%}  (h/2R, from rolling)")
+        print(f"  bend strain = {info['bend_strain']:.1%}  (R_outer * kappa, "
+              "from coiling)")
+        print(f"  total       = {info['total_strain']:.1%} on the outer "
+              f"{info['chalcogen']} plane")
     print(f"  M-X bond    = {report['bond_min']:.3f} / {report['bond_mean']:.3f} "
           f"/ {report['bond_max']:.3f} A  (ideal {report['bond_ideal']:.3f})")
     print(f"  coordination= metal {report['metal_coordination_min']}-"
@@ -268,7 +286,8 @@ def _report_tmd(atoms, xyz_path, json_path, stoichiometric=True):
           f"{report['chalcogen_coordination_min']}-"
           f"{report['chalcogen_coordination_max']}")
     print(f"  X/M ratio   = {report['stoichiometry']:.3f}")
-    verdict, why = tmd_quality(report, expect_stoichiometric=stoichiometric)
+    verdict, why = tmd_quality(report, expect_stoichiometric=stoichiometric,
+                               structure_type=info.get("structure_type"))
     print(f"  verdict     = {verdict.upper()}: {why}")
     if "phase_note" in info:
         print(f"  note        = {info['phase_note']}")
@@ -301,6 +320,15 @@ def _cmd_tmd_ribbon(args):
 def _cmd_tmd_tube(args):
     atoms = build_tmd_nanotube(args.material, n=args.n, m=args.m,
                                length=args.length, phase=args.phase)
+    return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)))
+
+
+def _cmd_tmd_coil(args):
+    atoms = build_tmd_coil(
+        args.material, n=args.n, m=args.m, coil_radius=args.coil_radius,
+        pitch=args.pitch, turns=args.turns, phase=args.phase,
+        handedness=1 if args.handedness == "right" else -1,
+    )
     return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)))
 
 
@@ -626,6 +654,27 @@ def build_parser() -> argparse.ArgumentParser:
     tt.add_argument("--phase", default="2H", choices=phases)
     tt.add_argument("--out", required=True, help="Output path without extension.")
     tt.set_defaults(func=_cmd_tmd_tube)
+
+    tc = sub.add_parser(
+        "tmd-coil",
+        help="Coil an MX2 nanotube onto a helix (elastic bend, no defects).",
+    )
+    tc.add_argument("--material", default="MoS2", choices=materials)
+    tc.add_argument("--n", type=int, default=30)
+    tc.add_argument("--m", type=int, default=0,
+                    help="(n,0) zigzag, (n,n) armchair, else chiral.")
+    tc.add_argument("--coil-radius", type=float, default=220.0,
+                    help="Helix radius in A. Bend strain is R_outer/this, so "
+                         "a tight coil is a strained one.")
+    tc.add_argument("--pitch", type=float, default=90.0,
+                    help="Rise per turn in A.")
+    tc.add_argument("--turns", type=float, default=0.5,
+                    help="Turns of helix. The atom count scales with this "
+                         "times the coil radius.")
+    tc.add_argument("--phase", default="2H", choices=phases)
+    tc.add_argument("--handedness", default="right", choices=["right", "left"])
+    tc.add_argument("--out", required=True, help="Output path without extension.")
+    tc.set_defaults(func=_cmd_tmd_coil)
 
     fu = sub.add_parser(
         "fullerene",

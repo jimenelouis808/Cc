@@ -44,6 +44,9 @@ SAMPLES: dict[str, Job] = {
     "TMD ribbon": Job("TMD ribbon",
                       {"material": "MoS2", "width": 6, "length": 2}),
     "TMD nanotube": Job("TMD nanotube", {"material": "MoS2", "n": 40, "m": 0}),
+    "TMD coil": Job("TMD coil",
+                    {"material": "MoS2", "n": 20, "m": 0,
+                     "coil_radius": 140.0, "pitch": 60.0, "turns": 0.15}),
 }
 
 
@@ -85,13 +88,17 @@ class TestEstimates:
             ("TMD bulk", 6),
             ("TMD ribbon", 36),
             ("TMD nanotube", 240),
+            # A coil is periods x one tube cell, and the period count is
+            # set by the helix arc length, not by anything the caller
+            # types as a size -- so it is worth pinning exactly.
+            ("TMD coil", 2880),
         ],
     )
     def test_seed_modes_are_predicted_exactly(self, mode, expected):
         assert estimate_atoms(SAMPLES[mode]) == expected
 
     @pytest.mark.parametrize("mode", ["TMD layers", "TMD bulk", "TMD ribbon",
-                                      "TMD nanotube"])
+                                      "TMD nanotube", "TMD coil"])
     def test_dichalcogenide_estimates_match_the_real_build(self, mode):
         """These are exact, not approximate, so assert equality against a
         real build rather than a tolerance."""
@@ -114,6 +121,13 @@ class TestEstimates:
         only cost is drawing them."""
         for mode in ("TMD layers", "TMD bulk", "TMD ribbon", "TMD nanotube"):
             assert estimate_cost(SAMPLES[mode])[0] == "fast"
+
+    def test_a_coil_is_costed_by_its_atom_count_not_by_its_mode(self):
+        """Still no meshing, but a coil's length is the helix arc, so it
+        is the one TMD mode that can reach six figures by accident."""
+        assert estimate_cost(SAMPLES["TMD coil"])[0] == "fast"
+        huge = SAMPLES["TMD coil"].with_params(coil_radius=4000.0, turns=3.0)
+        assert estimate_cost(huge)[0] == "very slow"
 
     def test_a_cage_is_called_fast_and_a_coil_is_not(self):
         """Cost is not atom count alone: the implicit modes mesh and

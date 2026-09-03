@@ -187,6 +187,13 @@ PRESETS: dict[str, dict[str, object]] = {
     "WSe2 monolayer": {
         "mode_kind": "TMD layers", "tmd_material": "WSe2", "tmd_phase": "2H",
         "tmd_layers": 1},
+    # A quarter turn keeps this near 11k atoms. A full turn at a radius
+    # loose enough to be unstrained runs to six figures, which is the
+    # physics rather than a timid default.
+    "MoS2 coil (quarter turn)": {
+        "mode_kind": "TMD coil", "tmd_material": "MoS2", "tmd_n": 30,
+        "tmd_m": 0, "tmd_coil_radius": 220.0, "tmd_coil_pitch": 90.0,
+        "tmd_coil_turns": 0.25, "tmd_coil_hand": "right"},
 }
 
 
@@ -517,6 +524,14 @@ class NanocarbonGUI:
                                              tk.StringVar(value="mixed"))
         self.var_tmd_n = self._var("tmd_n", tk.IntVar(value=40))
         self.var_tmd_m = self._var("tmd_m", tk.IntVar(value=0))
+        self.var_tmd_coil_radius = self._var("tmd_coil_radius",
+                                             tk.DoubleVar(value=220.0))
+        self.var_tmd_coil_pitch = self._var("tmd_coil_pitch",
+                                            tk.DoubleVar(value=90.0))
+        self.var_tmd_coil_turns = self._var("tmd_coil_turns",
+                                            tk.DoubleVar(value=0.25))
+        self.var_tmd_coil_hand = self._var("tmd_coil_hand",
+                                           tk.StringVar(value="right"))
 
         self.lbl_radius = ttk.Label(box, text="", foreground="#2e86ab")
 
@@ -822,6 +837,30 @@ class NanocarbonGUI:
                                       justify="left")
         self.lbl_tmd_tube.grid(row=6, column=0, columnspan=2, sticky="w")
 
+        # --- coil (a swept nanotube, so it reuses the chiral indices above)
+        self.frame_tmd_coil = ttk.LabelFrame(parent, text="Coil", padding=8)
+        self.frame_tmd_coil.columnconfigure(0, weight=1)
+        self._param(self.frame_tmd_coil, "Coil radius (Å)",
+                    self.var_tmd_coil_radius, 60.0, 1200.0, 0,
+                    resolution=5.0, hard_hi=20000.0,
+                    command=self._update_tmd_hint)
+        self._param(self.frame_tmd_coil, "Pitch (Å)", self.var_tmd_coil_pitch,
+                    20.0, 400.0, 2, resolution=5.0, hard_hi=5000.0,
+                    command=self._update_tmd_hint)
+        self._param(self.frame_tmd_coil, "Turns", self.var_tmd_coil_turns,
+                    0.1, 3.0, 4, resolution=0.05, hard_hi=20.0,
+                    command=self._update_tmd_hint)
+        ttk.Label(self.frame_tmd_coil, text="Handedness").grid(
+            row=6, column=0, sticky="w")
+        ttk.Combobox(self.frame_tmd_coil, textvariable=self.var_tmd_coil_hand,
+                     values=["right", "left"], state="readonly",
+                     width=12).grid(row=6, column=1, sticky="ew")
+        self.lbl_tmd_coil = ttk.Label(self.frame_tmd_coil, text="",
+                                      foreground=MUTED,
+                                      font=("TkDefaultFont", 8), wraplength=230,
+                                      justify="left")
+        self.lbl_tmd_coil.grid(row=7, column=0, columnspan=2, sticky="w")
+
         # --- build / cancel and the cost estimate
         actions = ttk.Frame(parent)
         actions.pack(fill="x", pady=(12, 0))
@@ -859,6 +898,7 @@ class NanocarbonGUI:
                       self.frame_cage, self.frame_mw, self.frame_bundle,
                       self.frame_tmd, self.frame_tmd_layers,
                       self.frame_tmd_ribbon, self.frame_tmd_tube,
+                      self.frame_tmd_coil,
                       self.frame_surface, self.frame_chem):
             frame.pack_forget()
 
@@ -873,6 +913,11 @@ class NanocarbonGUI:
                 self.frame_tmd_ribbon.pack(fill="x", pady=(8, 0))
             elif mode == "TMD nanotube":
                 self.frame_tmd_tube.pack(fill="x", pady=(8, 0))
+            elif mode == "TMD coil":
+                # The coil is a swept nanotube, so it needs the chiral
+                # indices as well as the helix panel.
+                self.frame_tmd_tube.pack(fill="x", pady=(8, 0))
+                self.frame_tmd_coil.pack(fill="x", pady=(8, 0))
             self._update_tmd_hint()
             self._schedule_estimate()
             return
@@ -997,6 +1042,37 @@ class NanocarbonGUI:
                  f"{strain:.1%}"
                  + ("" if strain <= 0.10 else
                     " — real MX2 tubes are tens of nm across; raise n"),
+            foreground=colour,
+        )
+
+        if not hasattr(self, "lbl_tmd_coil"):
+            return
+        # The coil pays a second strain on top of the roll, and the two
+        # pull opposite ways: widening the tube cuts h/2R and raises
+        # R_outer*kappa. Showing the sum is the only way to see that.
+        from ..tmd.coil import helix_curvature
+
+        try:
+            coil_radius = float(self.var_tmd_coil_radius.get())
+            pitch = float(self.var_tmd_coil_pitch.get())
+        except (tk.TclError, ValueError):
+            return
+        if coil_radius <= 0 or pitch <= 0:
+            self.lbl_tmd_coil.config(text="Coil radius and pitch must be "
+                                          "positive.", foreground=BAD_RED)
+            return
+        outer = radius + material.h / 2.0
+        bend = outer * helix_curvature(coil_radius, pitch)
+        total = strain + bend
+        colour = (OK_GREEN if total <= 0.06
+                  else WARN_AMBER if total <= 0.15 else BAD_RED)
+        self.lbl_tmd_coil.config(
+            text=f"bend strain {bend:.1%} (R_outer × κ) on top of the "
+                 f"{strain:.1%} roll — {total:.1%} total on the outer "
+                 f"{material.chalcogen} plane."
+                 + ("" if total <= 0.15 else
+                    " Widening the tube cuts the roll and raises the bend, so "
+                    "both have to grow together."),
             foreground=colour,
         )
 
@@ -1252,6 +1328,15 @@ class NanocarbonGUI:
                 length=int(self.var_tmd_length.get()),
                 edge=self.var_tmd_edge.get(),
                 termination=self.var_tmd_termination.get(),
+            )
+        if mode == "TMD coil":
+            return dict(
+                material=material, phase=phase,
+                n=int(self.var_tmd_n.get()), m=int(self.var_tmd_m.get()),
+                coil_radius=float(self.var_tmd_coil_radius.get()),
+                pitch=float(self.var_tmd_coil_pitch.get()),
+                turns=float(self.var_tmd_coil_turns.get()),
+                handedness=1 if self.var_tmd_coil_hand.get() == "right" else -1,
             )
         return dict(
             material=material, phase=phase,
@@ -1761,12 +1846,28 @@ class NanocarbonGUI:
         if "edge" in info:
             lines.append(f"edge         {info['edge']:>9s} / {info['termination']}")
             lines.append(f"width        {info['width_angstrom']:>6.1f} Å")
+        # Per field, not per block: a coil has chiral indices and a roll
+        # strain but no single radius or diameter, and keying the whole
+        # group off one field is what produced the KeyError last time.
         if "chiral_indices" in info:
             n, m = info["chiral_indices"]
             lines.append(f"tube         ({n},{m}) {info['chirality']}")
+        if "radius" in info:
             lines.append(f"radius       {info['radius']:>6.2f} Å")
+        if "diameter" in info:
             lines.append(f"diameter     {info['diameter']:>6.2f} Å")
+        if "tube_radius" in info:
+            lines.append(f"tube radius  {info['tube_radius']:>6.2f} Å")
+        if "coil_radius" in info:
+            lines.append(f"coil radius  {info['coil_radius']:>6.1f} Å")
+            lines.append(f"pitch        {info['pitch']:>6.1f} Å")
+            lines.append(f"turns        {info['turns']:>6.2f} "
+                         f"({info['periods']} periods)")
+        if "roll_strain" in info:
             lines.append(f"roll strain  {info['roll_strain']:>5.1%}")
+        if "bend_strain" in info:
+            lines.append(f"bend strain  {info['bend_strain']:>5.1%}")
+            lines.append(f"total strain {info['total_strain']:>5.1%}")
         lines += [
             "",
             "geometry",
@@ -1780,7 +1881,8 @@ class NanocarbonGUI:
         ]
         # A deliberately terminated ribbon is off-stoichiometry on purpose.
         stoichiometric = info.get("termination", "mixed") == "mixed"
-        verdict, why = tmd_quality(report, expect_stoichiometric=stoichiometric)
+        verdict, why = tmd_quality(report, expect_stoichiometric=stoichiometric,
+                                   structure_type=info.get("structure_type"))
         lines += ["", f"verdict      {verdict.upper()}", f"  {why}"]
         if "phase_note" in info:
             lines += ["", f"  {info['phase_note']}"]

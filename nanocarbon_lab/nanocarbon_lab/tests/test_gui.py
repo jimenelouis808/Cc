@@ -243,6 +243,65 @@ def test_info_panel_renders_every_structure_type(app, kind):
     )
 
 
+def _one_of_each_dichalcogenide():
+    """One built structure per TMD mode, for the other info panel.
+
+    The carbon panel above cannot cover these: a dichalcogenide has no
+    rings to count and no Euler budget, so it renders through
+    `_update_tmd_info` instead — a second place with the same failure
+    mode, where a row keyed off one `info` field reads a sibling that
+    only some builders record. A coil, for instance, has chiral indices
+    and a roll strain but no single radius or diameter.
+    """
+    import warnings
+
+    from nanocarbon_lab.tmd import (
+        build_tmd_bulk,
+        build_tmd_coil,
+        build_tmd_layers,
+        build_tmd_nanotube,
+        build_tmd_ribbon,
+    )
+
+    def quiet(fn, **kwargs):
+        def run():
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                return fn(**kwargs)
+        return run
+
+    return {
+        "TMD layers": quiet(build_tmd_layers, n_layers=2, nx=2, ny=2),
+        "TMD bulk": quiet(build_tmd_bulk, stacking="2H"),
+        "TMD ribbon": quiet(build_tmd_ribbon, width=6, length=2),
+        "TMD nanotube": quiet(build_tmd_nanotube, n=30, m=0),
+        "TMD coil": quiet(build_tmd_coil, n=20, m=0, coil_radius=140.0,
+                          pitch=60.0, turns=0.1),
+    }
+
+
+@pytest.mark.parametrize("kind", sorted(_one_of_each_dichalcogenide()))
+def test_tmd_info_panel_renders_every_mode(app, kind):
+    app.atoms = _one_of_each_dichalcogenide()[kind]()
+    app._update_info()
+    text = app.txt_info.get("1.0", "end")
+    assert "material" in text
+    assert "X/M ratio" in text
+    assert "verdict" in text
+
+
+def test_the_coil_panel_reports_both_strains(app):
+    """Roll and bend are separate numbers with separate cures, and a
+    panel showing only their sum would hide which one to fix."""
+    app.atoms = _one_of_each_dichalcogenide()["TMD coil"]()
+    app._update_info()
+    text = app.txt_info.get("1.0", "end")
+    assert "roll strain" in text
+    assert "bend strain" in text
+    assert "total strain" in text
+    assert "coil radius" in text
+
+
 def test_cage_panel_omits_tube_only_rows(app):
     from nanocarbon_lab.builders import build_fullerene
 
