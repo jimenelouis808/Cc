@@ -33,6 +33,20 @@ manuscrito. **Un cambio silencioso en una regla cambia una figura publicada.**
    revalida el conjunto.
 
 ## Guardas científicas
+- **La deduplicación usa `title_sort_key` + `fuzz.ratio`, no `token_set_ratio`.**
+  Esto NO es una micro-optimización: `token_set_ratio` puntúa 100 cuando un
+  título es subconjunto de otro, y fusiona artículos distintos. Si alguien lo
+  «simplifica» de vuelta, `test_subset_titles_do_not_merge` falla. Que siga así.
+- **La plantilla del conjunto de oro no lleva DOIs inventados.** Rellenarla con
+  datos bibliográficos sin verificar convierte la calibración en una medida de
+  la memoria del asistente, no de la consulta del usuario. Si añades entradas,
+  van con `verified=FALSE` hasta que un humano las compruebe.
+- **El diagrama PRISMA comprueba su propia aritmética.** Identificados −
+  duplicados = cribados. Si no cuadra, el aviso va impreso sobre la figura y la
+  CLI devuelve código 1. No silencies ninguno de los dos.
+- **Los identificados de PRISMA son los de ANTES de deduplicar**, por base
+  (`records_identified_by_source`). El reparto posterior es otro número y
+  subestima la identificación exactamente en el solapamiento entre bases.
 - **Nunca reportar `cnorm_year` como CNCI o MNCS.** Es normalización por corpus,
   no por campo. Sirve para ordenar dentro de este corpus; una cifra
   field-normalised de verdad sale de SciVal o InCites. El docstring de

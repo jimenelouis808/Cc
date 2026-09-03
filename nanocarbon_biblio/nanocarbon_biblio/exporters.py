@@ -23,7 +23,7 @@ from typing import Any
 import pandas as pd
 
 from .classify import to_dataframe
-from .dedupe import DedupeResult, overlap_table
+from .dedupe import DedupeResult, identified_by_source, overlap_table
 from .loaders import WOS_FOOTER, WOS_HEADER
 from .records import Record
 
@@ -159,6 +159,10 @@ def export_bundle(
         "query_note": query_note,
         "prisma": {
             "records_identified": result.n_input,
+            # Per-database retrieval counts BEFORE deduplication: what PRISMA's
+            # identification row asks for. The post-deduplication split lives in
+            # counts_by_source and is a different number.
+            "records_identified_by_source": identified_by_source(result),
             "duplicates_removed": result.n_removed,
             "records_screened": len(unique),
             "records_without_abstract": _count_true(frame, "no_abstract"),

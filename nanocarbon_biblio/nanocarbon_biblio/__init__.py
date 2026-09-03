@@ -19,6 +19,8 @@ __all__ = [
     "indicators",
     "lexicons",
     "loaders",
+    "prisma",
     "records",
     "thesaurus",
+    "validation",
 ]

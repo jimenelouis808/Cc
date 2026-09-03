@@ -49,3 +49,34 @@ def test_demo_subcommand_writes_both_exports(tmp_path: Path) -> None:
     assert main(["demo", "--out", str(out), "--n-works", "50"]) == 0
     assert (out / "scopus_demo_1991-2025.csv").exists()
     assert (out / "wos_demo_1991-2025.txt").exists()
+
+
+def test_recall_subcommand_reports_the_known_item_test(raw_dir: Path, tmp_path: Path, capsys) -> None:
+    gold = tmp_path / "gold.csv"
+    gold.write_text(
+        "doi,title,year,why,verified\n"
+        "10.1016/j.carbon.2005.01.001,Nitrogen-doped carbon nanotubes,2005,seminal,TRUE\n"
+        "10.9/missing,A paper the search never retrieves,2011,control,TRUE\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "recall.csv"
+    assert main(["recall", "--raw", str(raw_dir), "--gold", str(gold), "--out", str(out)]) == 0
+    printed = capsys.readouterr().out
+    assert "Recall relativo: 0.500" in printed
+    assert "NO recuperados" in printed
+    assert out.exists()
+
+
+def test_prisma_subcommand_fails_loudly_on_bad_arithmetic(tmp_path: Path, capsys) -> None:
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({
+        "prisma": {
+            "records_identified": 200, "records_identified_by_source": {"scopus": 100, "wos": 100},
+            "duplicates_removed": 10, "records_screened": 150,
+            "records_without_abstract": 0, "flagged_host_ambiguous": 0,
+        },
+        "overlap": {},
+    }), encoding="utf-8")
+    code = main(["prisma", "--manifest", str(manifest), "--out", str(tmp_path / "f.svg")])
+    assert code == 1
+    assert "INCONSISTENTE" in capsys.readouterr().err

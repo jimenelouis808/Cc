@@ -20,16 +20,22 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 
+import numpy as np
 from rapidfuzz import fuzz, process
 
 from .records import Record
 
-__all__ = ["DedupeResult", "deduplicate", "overlap_table"]
+__all__ = ["DedupeResult", "deduplicate", "overlap_table", "identified_by_source"]
 
 # Preference order when choosing the survivor of a duplicate cluster. Scopus
 # first because its abstracts are more consistently complete; change freely,
 # but change it *before* the final run and record the choice in the protocol.
 _SOURCE_PRIORITY = {"scopus": 0, "wos": 1}
+
+#: Query rows scored per rapidfuzz call. Bounds peak matrix memory to roughly
+#: _CHUNK_ROWS x block size bytes (uint8), which stays small even for a year
+#: holding tens of thousands of records.
+_CHUNK_ROWS = 2048
 
 
 @dataclass(slots=True)
@@ -152,26 +158,44 @@ def deduplicate(
         if len(rec.title_key) >= min_title_len:
             by_year[rec.year].append(rec)
 
+    undated = by_year.get(None, [])
     years = sorted(y for y in by_year if y is not None)
+    # Each year's records are the queries; the candidates are that year, the
+    # following `year_window` years, and every undated record. Comparing
+    # queries against candidates rather than a merged block against itself
+    # halves the work and stops each pair being scored twice.
+    blocks: list[tuple[list[Record], list[Record]]] = []
     for year in years:
-        block: list[Record] = []
-        for offset in range(0, year_window + 1):
-            block.extend(by_year.get(year + offset, []))
-        # Records with no year are compared against every block: cheap insurance,
-        # since undated records are rare in these exports.
-        block.extend(by_year.get(None, []))
-        if len(block) < 2:
-            continue
-        titles = [r.title_key for r in block]
-        matches = process.cdist(
-            titles, titles, scorer=fuzz.token_set_ratio,
-            score_cutoff=title_threshold, workers=-1,
-        )
-        for i in range(len(block)):
-            for j in range(i + 1, len(block)):
-                if matches[i][j] < title_threshold:
+        queries = by_year[year]
+        candidates = list(queries)
+        for offset in range(1, year_window + 1):
+            candidates.extend(by_year.get(year + offset, []))
+        candidates.extend(undated)
+        if len(candidates) > 1:
+            blocks.append((queries, candidates))
+    # Undated records are compared against each other in their own block; they
+    # ride along in every dated block but are never queries there.
+    if len(undated) > 1:
+        blocks.append((undated, undated))
+
+    for queries, candidates in blocks:
+        candidate_titles = [r.title_sort_key for r in candidates]
+        # Score in row chunks: a single year can hold thousands of records, and
+        # a full queries x candidates matrix would be needlessly large.
+        for start in range(0, len(queries), _CHUNK_ROWS):
+            chunk = queries[start:start + _CHUNK_ROWS]
+            scores = process.cdist(
+                [r.title_sort_key for r in chunk], candidate_titles,
+                scorer=fuzz.ratio, score_cutoff=title_threshold,
+                workers=-1, dtype=np.uint8,
+            )
+            # Pull the surviving pairs out in C. Walking the whole matrix in
+            # Python costs O(n^2) interpreter steps per block and dominated the
+            # runtime; the matches themselves are a tiny fraction of the cells.
+            for i, j in np.argwhere(scores >= title_threshold):
+                left, right = chunk[i], candidates[j]
+                if left.key == right.key:
                     continue
-                left, right = block[i], block[j]
                 # Two different DOIs is strong evidence of two different works;
                 # trust the DOIs over the title similarity.
                 if left.doi_key and right.doi_key and left.doi_key != right.doi_key:
@@ -202,6 +226,21 @@ def deduplicate(
 
     unique.sort(key=lambda r: (r.year or 0, r.title_key))
     return DedupeResult(unique=unique, clusters=out_clusters, n_input=len(records))
+
+
+def identified_by_source(result: DedupeResult) -> dict[str, int]:
+    """Records retrieved per database **before** deduplication.
+
+    PRISMA's identification row wants the raw retrieval count from each
+    database, not the post-deduplication split — those differ by exactly the
+    number of works both databases held. Derived from the cluster membership,
+    since every record key is prefixed with its source.
+    """
+    counts: dict[str, int] = defaultdict(int)
+    for members in result.clusters.values():
+        for key in members:
+            counts[key.split(":", 1)[0]] += 1
+    return dict(counts)
 
 
 def overlap_table(result: DedupeResult) -> dict[str, int]:

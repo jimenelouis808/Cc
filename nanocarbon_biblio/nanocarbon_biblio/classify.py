@@ -114,9 +114,29 @@ def codoping_dopants(text: str) -> set[str]:
     return found
 
 
+#: Rules regrouped by label, so a label that has already fired can skip its
+#: remaining alternatives. "nitrogen" alone carries eight patterns, and once one
+#: matches the other seven cannot change the outcome — evaluating them anyway
+#: was most of the classification cost on a large corpus.
+_RULES_BY_LABEL: dict[str, dict[str, list]] = {
+    facet: {
+        label: [rule for rule in rules if rule.label == label]
+        for label in dict.fromkeys(rule.label for rule in rules)
+    }
+    for facet, rules in _RULES.items()
+}
+
+
 def _match_facet(facet: str, text: str) -> list[str]:
-    """Return the sorted distinct labels of ``facet`` that fire on ``text``."""
-    return sorted({rule.label for rule in _RULES[facet] if rule.matches(text)})
+    """Return the sorted distinct labels of ``facet`` that fire on ``text``.
+
+    Short-circuits per label: the first matching pattern settles that label.
+    """
+    hits: list[str] = []
+    for label, rules in _RULES_BY_LABEL[facet].items():
+        if any(rule.matches(text) for rule in rules):
+            hits.append(label)
+    return sorted(hits)
 
 
 def _study_type(theory: list[str], experiment: list[str]) -> str:

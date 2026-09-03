@@ -176,7 +176,8 @@ artículos que **tienen que** salir: los seminales (Iijima 1991; Stone & Wales
 Gong/Dai 2009 sobre VA-NCNT y ORR), más 2–3 por cada dopante, por cada tipo de
 defecto y por cada morfología, más los de tu propio grupo.
 
-Luego mide, para cada variante de consulta:
+Luego mide, para cada variante de consulta (el brazo de precisión y el de alta
+sensibilidad — la diferencia entre ambos es lo que justifica quedarse con uno):
 
 - **Recall relativo** = (nº del gold set recuperado) / (tamaño del gold set).
   Objetivo ≥ 0.95. Si un seminal no sale, la consulta tiene un agujero
@@ -185,6 +186,17 @@ Luego mide, para cada variante de consulta:
 
 Reporta esta tabla en Métodos. Es de las cosas que más suben la credibilidad de
 un review bibliométrico y casi nadie la hace.
+
+**Hay herramienta para esto**, no hay que hacerlo a mano:
+
+```bash
+cp queries/gold_standard_template.csv queries/gold_standard.csv    # y complétala
+python -m nanocarbon_biblio.cli recall --raw data/raw --gold queries/gold_standard.csv
+```
+
+Devuelve el recall relativo, qué base encontró cada entrada, y la lista de los
+no recuperados. Ver `queries/GOLD_STANDARD.md` para cómo construir el conjunto.
+También está en la pestaña 7 de la GUI.
 
 ---
 
@@ -255,7 +267,12 @@ con cortes con significado físico se lee muchísimo mejor que con cortes arbitr
 
 - **PRISMA 2020** (diagrama de flujo) + **PRISMA-S** (checklist específico de
   reporte de búsquedas). Sí, aplican a reviews bibliométricos, y los editores lo
-  agradecen.
+  agradecen. El diagrama lo genera el pipeline en SVG desde `manifest.json`:
+  `python -m nanocarbon_biblio.cli prisma --excluded N`. Comprueba su propia
+  aritmética, así que no puede llegar a un revisor con las cuentas mal.
+- **Acuerdo entre codificadores.** `python -m nanocarbon_biblio.cli agreement
+  --sheet <hoja codificada>` da la kappa de Cohen y precisión/recall por clase.
+  Reporta el valor, el n y quién codificó.
 - Registrar el protocolo en **OSF** antes de las búsquedas definitivas.
 - Publicar en **Zenodo** (DOI): cadenas de búsqueda, tesauro, código Python y R,
   y — si la licencia lo permite — los identificadores (DOI/EID/UT) del corpus.

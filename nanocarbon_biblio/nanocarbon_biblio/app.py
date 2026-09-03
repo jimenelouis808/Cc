@@ -40,6 +40,10 @@ from nanocarbon_biblio.indicators import (  # noqa: E402
     annotate_records, combined_share_trend, dopant_lag_table, gap_matrix,
 )
 from nanocarbon_biblio.loaders import load_any, load_directory  # noqa: E402
+from nanocarbon_biblio.prisma import counts_from_manifest, render_svg  # noqa: E402
+from nanocarbon_biblio.validation import (  # noqa: E402
+    load_gold_standard, score_agreement, score_recall,
+)
 from nanocarbon_biblio.thesaurus import (  # noqa: E402
     SEED_GROUPS, suggest_synonyms, write_thesaurus,
 )
@@ -505,14 +509,37 @@ with tabs[5]:
                 ("Marcados para revisión manual", prisma["flagged_host_ambiguous"]),
             ], columns=["Etapa", "n"])
             st.dataframe(flow, width="stretch", hide_index=True)
-            st.download_button(
+            col_a, col_b = st.columns(2)
+            excluded = col_a.number_input(
+                "Excluidos en el cribado manual", 0, int(prisma["records_screened"]), 0,
+                help="Lo decides tú al revisar los marcados en la pestaña 4. "
+                     "Hasta que lo rellenes, la figura dice 'pendiente' en vez de "
+                     "inventarse un número.",
+            )
+            col_b.download_button(
                 "Descargar el flujo PRISMA (CSV)",
                 flow.to_csv(index=False).encode("utf-8"),
                 "prisma_flow.csv", "text/csv",
             )
+            counts = counts_from_manifest(
+                manifest, excluded_screening=int(excluded) or None
+            )
+            problems = counts.check_consistency()
+            if problems:
+                st.error("El diagrama no cuadra: " + " ".join(problems))
+            svg = render_svg(
+                counts,
+                title="Defectos y dopaje en nanocarbonos 1D — flujo PRISMA 2020",
+            )
+            st.image(svg, width="stretch")
+            st.download_button(
+                "Descargar la figura PRISMA (SVG)",
+                svg.encode("utf-8"), "prisma_flow.svg", "image/svg+xml",
+                type="primary",
+            )
             st.caption(
-                "Estas cifras van al diagrama PRISMA 2020 tal cual. El número de "
-                "excluidos en el cribado manual lo añades tú tras revisar los marcados."
+                "SVG vectorial, listo para la figura del manuscrito. Se regenera con "
+                "cada corrida, así que no puede desincronizarse del corpus."
             )
 
         st.divider()
@@ -583,10 +610,97 @@ with tabs[6]:
             f"validacion_{stratify}_{size}.csv", "text/csv", type="primary",
         )
         st.markdown(
-            "Codifica a mano, calcula **kappa de Cohen** contra la salida de las reglas y "
-            "repórtalo en Métodos. Un review que dice *«clasificación validada sobre 100 "
+            "Codifica a mano y súbela abajo para calcular **kappa de Cohen** contra la "
+            "salida de las reglas. Un review que dice *«clasificación validada sobre 100 "
             "registros estratificados, κ = 0.87»* está en otra categoría de credibilidad."
         )
+
+        st.divider()
+        st.markdown("#### Puntuar una hoja ya codificada")
+        coded = st.file_uploader(
+            "Hoja con las columnas manual_* rellenadas", type=["csv"], key="coded_sheet"
+        )
+        if coded is not None:
+            results = score_agreement(pd.read_csv(coded, dtype=str, keep_default_na=False))
+            if not results.get("n_coded"):
+                st.error("Ninguna columna manual_* trae datos.")
+            else:
+                for facet, payload in results.items():
+                    if not isinstance(payload, dict):
+                        continue
+                    st.markdown(f"**{facet}** — n = {payload.get('n_coded', 0)}")
+                    metrics = {k: payload[k] for k in
+                               ("kappa", "accuracy", "mean_jaccard", "exact_set_match")
+                               if k in payload}
+                    if metrics:
+                        cols = st.columns(len(metrics))
+                        for col, (name, value) in zip(cols, metrics.items()):
+                            col.metric(name, value)
+                    if "per_class" in payload:
+                        st.dataframe(payload["per_class"], width="stretch", hide_index=True)
+                        st.caption(
+                            "La fila con precisión o recall bajos te dice **qué regla "
+                            "arreglar**, no solo que hay que arreglar algo."
+                        )
+                    if "confusion" in payload:
+                        with st.expander(f"Matriz de confusión — {facet}"):
+                            st.dataframe(payload["confusion"], width="stretch")
+                st.info(results["interpretation"])
+
+# ------------------------------------------------- 7b · recall de la consulta
+        st.divider()
+        st.markdown("#### Test de elemento conocido (recall de la consulta)")
+        st.markdown(
+            "Una consulta no se valida leyéndola: se valida comprobando que recupera los "
+            "artículos que **sabes** que tiene que recuperar. Parte de "
+            "`queries/gold_standard_template.csv` y complétala — ver `queries/GOLD_STANDARD.md`."
+        )
+        gold_path = st.text_input(
+            "Fichero del conjunto de oro",
+            str(_project_root() / "queries" / "gold_standard.csv"),
+        )
+        if st.button("Medir recall"):
+            if not Path(gold_path).exists():
+                st.error(
+                    f"No existe {gold_path}. Copia "
+                    "`queries/gold_standard_template.csv` y complétalo."
+                )
+            elif not st.session_state.records:
+                st.error("Carga registros en la pestaña 1 primero.")
+            else:
+                gold = load_gold_standard(gold_path)
+                if not gold:
+                    st.error("El fichero no tiene entradas con DOI ni título.")
+                else:
+                    report = score_recall(st.session_state.records, gold)
+                    col_a, col_b, col_c = st.columns(3)
+                    col_a.metric("Recall relativo", f"{report.relative_recall:.3f}")
+                    col_b.metric("Encontrados", f"{report.n_found} / {report.n_gold}")
+                    col_c.metric("Sin verificar", report.unverified)
+                    if report.relative_recall < 0.95:
+                        st.error(
+                            "Por debajo del objetivo de 0.95. **Arregla la consulta, no "
+                            "añadas a mano los que faltan**: el mismo agujero de "
+                            "vocabulario esconde trabajos de los que no has oído hablar."
+                        )
+                    else:
+                        st.success("Por encima del objetivo. Este número va en Métodos.")
+                    if report.unverified:
+                        st.warning(
+                            f"{report.unverified} entradas sin verificar. Un conjunto de "
+                            "oro sin verificar mide tu memoria, no tu consulta."
+                        )
+                    missing = report.missing()
+                    if not missing.empty:
+                        st.markdown("##### No recuperados — cada uno es un agujero")
+                        st.dataframe(
+                            missing[["title", "year", "why"]], width="stretch", hide_index=True
+                        )
+                    st.download_button(
+                        "Descargar la tabla de recall (CSV)",
+                        report.rows.to_csv(index=False).encode("utf-8"),
+                        "recall_report.csv", "text/csv",
+                    )
 
 
 # ----------------------------------------------------------- 8 · RQ2 y RQ3

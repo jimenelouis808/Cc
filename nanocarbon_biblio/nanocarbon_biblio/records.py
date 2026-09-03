@@ -139,6 +139,17 @@ class Record:
         return normalise_title(self.title)
 
     @property
+    def title_sort_key(self) -> str:
+        """Normalised title with its tokens sorted alphabetically.
+
+        Comparing two of these with a plain edit-distance ratio is exactly
+        ``token_sort_ratio`` of the originals, but the sort happens once per
+        record instead of once per comparison — which matters when the matcher
+        scores millions of pairs.
+        """
+        return " ".join(sorted(normalise_title(self.title).split()))
+
+    @property
     def surname_key(self) -> str:
         """Normalised first-author surname."""
         return normalise_surname(self.authors)

@@ -56,6 +56,10 @@ que puedes ir y volver sin recargar un corpus de 30 000 registros.
 | **7 · Validación** | Muestra estratificada y reproducible, con hoja de codificación en blanco para calcular kappa |
 | **8 · RQ2 · RQ3** | Las dos preguntas originales: desfase teoría→experimento por dopante, matriz de huecos, y citas normalizadas |
 
+La pestaña 6 genera además el **diagrama PRISMA 2020 como SVG vectorial**, listo
+para el manuscrito, y la 7 mide el **recall de la consulta** y la **kappa de
+Cohen** de la clasificación.
+
 La GUI es una fachada sobre la librería: **todo lo que se puede hacer clicando se
 puede hacer desde la CLI**. Un corpus montado a clics no es reproducible.
 
@@ -138,6 +142,52 @@ de este corpus, que es lo que el review necesita, pero no se puede reportar como
 CNCI ni MNCS —eso exige una línea base de toda la ciencia, de SciVal o InCites—.
 El código lo dice en el docstring y la interfaz lo repite en pantalla.
 
+## Evidencia para la sección de Métodos
+
+Dos cosas que a un review bibliométrico se le piden y casi nunca aporta.
+
+### ¿La búsqueda encontró de verdad la literatura?
+
+Una consulta no se valida leyéndola. Se valida comprobando que recupera los
+artículos que **sabes** que tiene que recuperar — un *test de elemento conocido*.
+
+```bash
+cp queries/gold_standard_template.csv queries/gold_standard.csv   # y complétala
+python -m nanocarbon_biblio.cli recall --raw data/raw --gold queries/gold_standard.csv
+```
+
+Da el **recall relativo** (objetivo ≥ 0.95) y la lista de los que no salieron.
+Cada uno señala un agujero de vocabulario: **arréglalo en la consulta, no añadas
+el artículo a mano** — el mismo agujero esconde trabajos que no conoces.
+
+La plantilla no trae DOIs. Rellenarlos con datos bibliográficos sin verificar
+convertiría la calibración en una medida de la memoria de quien la escribió, no
+de tu consulta. Ver `queries/GOLD_STANDARD.md`.
+
+### ¿Las reglas de clasificación son buenas?
+
+```bash
+python -m nanocarbon_biblio.cli agreement --sheet validacion_codificada.csv
+```
+
+Kappa de Cohen, exactitud y precisión/recall **por clase** contra la hoja de
+codificación que descarga la pestaña 7. La kappa va en Métodos; la tabla por
+clase te dice *qué regla* arreglar, no solo que hay algo que arreglar. Kappa, y
+no exactitud, porque dos codificadores que etiqueten todo como «experimental» en
+un corpus 80 % experimental aciertan el 80 % y no han aprendido nada.
+
+### El diagrama PRISMA
+
+```bash
+python -m nanocarbon_biblio.cli prisma --excluded 41 --out results/prisma_flow.svg
+```
+
+SVG vectorial generado desde `manifest.json`, así que no puede desincronizarse
+del corpus. Comprueba su propia aritmética —identificados − duplicados =
+cribados— y si no cuadra lo escribe **sobre la figura** en vez de dejar que
+llegue así a un revisor. Las casillas que dependen de decisiones tuyas dicen
+«pendiente» en lugar de inventarse un número.
+
 ## Lo que el pipeline etiqueta
 
 Reglas transparentes y auditables (`nanocarbon_biblio/lexicons.py`), no un
@@ -166,14 +216,14 @@ clasificador opaco:
 pytest nanocarbon_biblio/tests -q
 ```
 
-50 tests. Cubren el parseo de ambos formatos, la conservación literal de `CR` en
+68 tests. Cubren el parseo de ambos formatos, la conservación literal de `CR` en
 el viaje de ida y vuelta, la deduplicación entre bases puntuada **contra la
 verdad conocida** del corpus sintético, los guardas de desambiguación, la
 protección contra re-ingerir la propia salida, y el arranque de la GUI.
 
 ## Estado de verificación
 
-- **Python**: probado y ejecutado en este entorno; los 50 tests pasan.
+- **Python**: probado y ejecutado en este entorno; los 68 tests pasan.
 - **GUI**: recorrida de principio a fin (cargar → deduplicar → clasificar →
   cribar → exportar) contra el corpus de demostración, y capturada en imágenes.
   Los botones de R se activan solos cuando `Rscript` está en el PATH.
@@ -184,6 +234,28 @@ protección contra re-ingerir la propia salida, y el arranque de la GUI.
   lugar de tumbar el script, pero **la primera corrida de `R/00_build_M.R` con
   datos reales hay que mirarla con atención**, en particular la cobertura de
   `CR` y el porcentaje de etiquetas unidas que reporta `join_report.txt`.
+
+## Rendimiento
+
+Medido sobre un corpus sintético de 25 000 obras (38 856 registros crudos):
+
+| Etapa | Antes | Ahora |
+|---|---:|---:|
+| Cargar | 1,8 s | 1,4 s |
+| **Deduplicar** | **92,2 s** | **8,2 s** |
+| Clasificar | 26,1 s | 25,3 s |
+| Indicadores | 0,4 s | 0,3 s |
+
+La deduplicación pasó de `token_set_ratio` a distancia de edición sobre tokens
+preordenados —semánticamente `token_sort_ratio`, calculado una vez por registro
+en lugar de una vez por par—. Es 11× más rápido **y más correcto**:
+`token_set_ratio` puntúa 100 cuando un título es subconjunto de otro, así que
+fusionaba *«Nitrogen doped carbon nanotubes»* con *«Nitrogen doped carbon
+nanotubes for the oxygen reduction reaction»*.
+
+Los 25 s de clasificación son coste inherente de las expresiones regulares.
+Probé a fusionar los patrones de cada faceta en una sola alternancia con grupos
+nombrados: resultó **2,6× más lenta**, así que se descartó.
 
 ## Lo que deliberadamente no está
 

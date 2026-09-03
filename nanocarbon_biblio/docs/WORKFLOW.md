@@ -27,10 +27,19 @@ Rscript R/install_deps.R
 
 ## Paso 1 — Calibrar la consulta (no te lo saltes)
 
-1. Arma el *gold standard* de 40–60 artículos (`docs/PROTOCOL.md` §4).
-2. Corre las variantes de `queries/scopus.md` §1 y §2 solo para contar N.
-3. Mide recall relativo contra el gold set y precisión sobre 100 aleatorios.
-4. Fija la consulta. Anota fecha, N y versión en `docs/PROTOCOL.md` §5.
+1. Arma el *gold standard* de 40–60 artículos:
+   ```bash
+   cp queries/gold_standard_template.csv queries/gold_standard.csv
+   ```
+   Complétala — instrucciones en `queries/GOLD_STANDARD.md`.
+2. Corre las variantes de `queries/scopus.md` §1 y §2 solo para contar N, y
+   exporta una muestra de cada una.
+3. Mide el recall relativo de cada variante:
+   ```bash
+   python -m nanocarbon_biblio.cli recall --raw data/raw --gold queries/gold_standard.csv
+   ```
+   Objetivo ≥ 0.95. Revisa además 100 registros aleatorios para la precisión.
+4. Fija la consulta. Anota fecha, N, recall y versión en `docs/PROTOCOL.md` §5.
 
 ## Paso 2 — Exportar
 
@@ -144,6 +153,21 @@ saveRDS(Mt, "data/processed/M_theory.rds")
 Luego cárgalo como otro fichero. Haz lo mismo para `M_experimental.rds`,
 `M_3d.rds`, `M_nitrogen.rds`. **Comparar los mapas temáticos de teoría vs
 experimento lado a lado es la figura que responde RQ2.**
+
+## Paso 7b — Validar las reglas y cerrar el PRISMA
+
+Descarga la hoja de codificación de la pestaña 7, codifica a mano (dos
+codificadores si puedes) y puntúala:
+
+```bash
+python -m nanocarbon_biblio.cli agreement --sheet validacion_codificada.csv
+```
+
+Con el número de excluidos del cribado manual ya decidido, cierra la figura:
+
+```bash
+python -m nanocarbon_biblio.cli prisma --excluded <N> --out results/prisma_flow.svg
+```
 
 ## Paso 8 — Análisis guionizados
 
