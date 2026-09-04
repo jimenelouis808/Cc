@@ -469,7 +469,7 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "gap": "--gap",
     }),
     "vdW stack": ("stack", {
-        "gap": "--gap", "nx": "--nx", "ny": "--ny",
+        "layers": "--layers", "gap": "--gap", "nx": "--nx", "ny": "--ny",
     }),
     "TMD schwarzite": ("tmd-schwarzite", {
         "material": "--material", "kind": "--kind", "cell": "--cell",
@@ -523,12 +523,16 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
                 parts.append(flag)
         elif isinstance(value, float):
             parts += [flag, f"{value:g}"]
+        elif isinstance(value, (list, tuple)):
+            # An nargs="+" flag such as `--layers graphene hBN graphene`.
+            parts += [flag, *(str(item) for item in value)]
         else:
             parts += [flag, str(value)]
 
-    if job.mode in TMD_MODES:
-        # No random placement to seed and no substitutional doping yet, so
-        # emitting either would be a flag the parser does not have.
+    if job.mode in TMD_MODES or job.mode in HETERO_MODES:
+        # Exact crystallography in both families: no random placement to
+        # seed and no substitutional doping, so emitting either would be
+        # a flag the parser does not have.
         parts += ["--out", out]
         return " ".join(parts)
 

@@ -49,6 +49,10 @@ SAMPLES: dict[str, Job] = {
     "TMD schwarzite": Job("TMD schwarzite",
                           {"material": "MoS2", "kind": "primitive",
                            "cell": 30.0, "parity": "none"}),
+    "twisted bilayer": Job("twisted bilayer",
+                           {"layer": "graphene", "target_angle": 21.8}),
+    "vdW stack": Job("vdW stack",
+                     {"layers": ["graphene", "hBN"], "nx": 2, "ny": 2}),
     "TMD coil": Job("TMD coil",
                     {"material": "MoS2", "n": 20, "m": 0,
                      "coil_radius": 140.0, "pitch": 60.0, "turns": 0.15}),
@@ -97,6 +101,10 @@ class TestEstimates:
             # set by the helix arc length, not by anything the caller
             # types as a size -- so it is worth pinning exactly.
             ("TMD coil", 2880),
+            # A stack is exact too: cells per layer times the sites in
+            # each, and the cell count is fixed by the commensurate pair.
+            ("twisted bilayer", 28),
+            ("vdW stack", 16),
         ],
     )
     def test_seed_modes_are_predicted_exactly(self, mode, expected):
@@ -120,6 +128,22 @@ class TestEstimates:
         """Surface area over ring area. Not exact, but the point is to
         tell a 60-atom cage from a 3000-atom coil before committing."""
         assert estimate_atoms(SAMPLES[mode]) == pytest.approx(measured, rel=0.2)
+
+    @pytest.mark.parametrize("mode", ["twisted bilayer", "vdW stack"])
+    def test_stack_estimates_match_the_real_build(self, mode):
+        from nanocarbon_lab.jobs import build
+
+        job = SAMPLES[mode]
+        assert estimate_atoms(job) == len(build(job))
+
+    def test_a_small_twist_angle_is_flagged_as_expensive(self):
+        """The surprise worth warning about: the atom count is set by the
+        angle, not by anything that reads as a size. 21.8 deg is 28 atoms
+        and 1.1 deg is 11 164."""
+        wide = SAMPLES["twisted bilayer"]
+        tight = wide.with_params(target_angle=1.1, max_index=40)
+        assert estimate_cost(wide)[0] == "fast"
+        assert estimate_cost(tight)[0] in ("slow", "very slow")
 
     def test_the_schwarzite_is_estimated_from_the_surface_area(self):
         """Not enumerated like the others: it is meshed, so the count is
