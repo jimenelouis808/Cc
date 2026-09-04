@@ -40,16 +40,17 @@ CARBON_MODES = (
     "bundle",
 )
 
-#: MX2 dichalcogenides. Flat and rolled structures only for now -- the
-#: curved topologies (Y junction, schwarzite) need even-membered rings to
-#: keep the M/X alternation, which is a different remeshing problem; see
-#: the README.
+#: MX2 dichalcogenides, flat through curved. The schwarzite needs even
+#: rings to keep the M/X alternation, which is why it carries a `parity`
+#: choice the carbon one does not; see `tmd/curved.py`. Y junctions are
+#: still missing.
 TMD_MODES = (
     "TMD layers",
     "TMD bulk",
     "TMD ribbon",
     "TMD nanotube",
     "TMD coil",
+    "TMD schwarzite",
 )
 
 FAMILIES = {"carbon": CARBON_MODES, "dichalcogenide": TMD_MODES}
@@ -67,7 +68,8 @@ def family_of(mode: str) -> str:
 # Modes that go through marching cubes + isotropic remeshing rather than a
 # seed polyhedron. They cost orders of magnitude more time per atom, which
 # is the single most useful thing to know before pressing Build.
-IMPLICIT_MODES = frozenset({"coil (relaxed)", "junction", "schwarzite"})
+IMPLICIT_MODES = frozenset({"coil (relaxed)", "junction", "schwarzite",
+                            "TMD schwarzite"})
 
 # Area of one period of each triply periodic minimal surface, in units of
 # the cell length squared. Standard values for the trigonometric
@@ -139,6 +141,7 @@ def build(job: Job):
         build_tmd_layers,
         build_tmd_nanotube,
         build_tmd_ribbon,
+        build_tmd_schwarzite,
     )
 
     builders = {
@@ -147,6 +150,7 @@ def build(job: Job):
         "TMD ribbon": build_tmd_ribbon,
         "TMD nanotube": build_tmd_nanotube,
         "TMD coil": build_tmd_coil,
+        "TMD schwarzite": build_tmd_schwarzite,
         "capped tube": build_capped_cnt,
         "coil (relaxed)": build_coil,
         "fullerene": build_fullerene,
@@ -258,6 +262,22 @@ def _estimate_tmd_atoms(mode: str, p: dict) -> int:
     if mode == "TMD ribbon":
         # `width` rows of one formula unit each, times the length repeats.
         return 3 * int(p.get("width", 6)) * int(p.get("length", 1))
+    if mode == "TMD schwarzite":
+        # Meshed, not enumerated: surface area over the area one
+        # equilateral triangle of side `a` covers, then 1.5 atoms per
+        # triangle (one metal or two chalcogens, half the sites each).
+        from .tmd.materials import get_material
+
+        a = get_material(p.get("material", "MoS2")).a
+        cell = float(p.get("cell", 36.0))
+        area = TPMS_AREA.get(p.get("kind", "primitive"), 2.345) * cell**2
+        triangles = area / (math.sqrt(3.0) / 4.0 * a * a)
+        # Splitting adds a vertex per repair step. How many depends on how
+        # many odd vertices the remesh happened to leave, so this is the
+        # one genuinely approximate factor here: measured 1.22 on Schwarz P.
+        crowding = 1.22 if p.get("parity") == "split" else 1.0
+        return int(round(1.5 * triangles * crowding))
+
     if mode in ("TMD nanotube", "TMD coil"):
         n, m = int(p.get("n", 20)), int(p.get("m", 0))
         divisor = math.gcd(2 * n + m, 2 * m + n)
@@ -303,6 +323,12 @@ def estimate_cost(job: Job) -> tuple[str, str]:
     second.
     """
     n = estimate_atoms(job)
+    if job.mode == "TMD schwarzite":
+        # The one TMD mode that meshes and relaxes -- twice, in fact (the
+        # site net, then the atoms) -- so it is costed like the carbon
+        # implicit modes rather than like its own family.
+        return ("very slow" if n > 2500 else "slow",
+                f"~{n} atoms, meshed and relaxed — a minute or more")
     if job.mode == "TMD coil":
         # Still no meshing or relaxation, but a coil is not "one cell":
         # its length is the helix arc, so the atom count follows the coil
@@ -385,6 +411,10 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     "TMD nanotube": ("tmd-tube", {
         "material": "--material", "n": "--n", "m": "--m",
         "length": "--length", "phase": "--phase",
+    }),
+    "TMD schwarzite": ("tmd-schwarzite", {
+        "material": "--material", "kind": "--kind", "cell": "--cell",
+        "parity": "--parity", "phase": "--phase",
     }),
     "TMD coil": ("tmd-coil", {
         "material": "--material", "n": "--n", "m": "--m",

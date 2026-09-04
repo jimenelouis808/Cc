@@ -22,7 +22,8 @@ nanocarbon_lab/
 │                  #   fullerene.py: closed cages (C60, C240...) and nano-onions
 ├── tmd/           # MX2 dichalcogenides: materials.py (lattice constants),
 │                  #   slab.py (mono/multi/bulk), ribbon.py, nanotube.py,
-│                  #   coil.py (swept helical tubes), quality.py.
+│                  #   coil.py (swept helical tubes), curved.py (schwarzites
+│                  #   on a TPMS, with the M/X parity repair), quality.py.
 │                  #   Deliberately NOT under builders/.
 ├── dopants/       # substitutional dopants (N, B, S, P, co-doping)
 ├── defects/       # vacancies, Stone-Wales, topological defects
@@ -235,35 +236,64 @@ actionable. `sweep_along_path` rescales the path to the structure, so
 pick the period count to match the arc and report the **achieved**
 radius and pitch, never the requested ones.
 
-Schwarzites and Y junctions in MX2 are **not implemented**. An earlier
-version of this file said they were impossible because pentagons are
-forbidden. That reasoning was wrong and must not be repeated: pentagons
-are indeed forbidden, but negative curvature wants **octagons**, which
-are even. `sum(6 - n) = 6*chi`, each octagon pays -2, so Schwarz P wants
-twelve. h-BN schwarzites are built exactly this way.
+**Schwarzites live in `tmd/curved.py`** and their reasoning is the part
+most easily got wrong, in both directions.
 
-What is actually blocking it, all measured (see the README for numbers):
+An earlier version of this file said MX2 schwarzites were impossible
+because pentagons are forbidden. Pentagons are forbidden, but that only
+rules out the *sphere*: negative curvature wants **octagons**, which are
+even. `sum(6-n) = 6*chi`, each octagon pays -2, Schwarz P wants twelve.
+Do not reinstate the old claim.
 
-1. **Parity is solved.** An edge *split* toggles exactly the two opposite
-   vertices; an edge *flip* toggles four and therefore stalls with odd
-   vertices sparse. Splitting to a co-apex partner drives every degree
-   even, giving exact topology: rings 4/6/8/10, `sum(6-n)` = 6*chi,
-   X/M = 2.000.
-2. **Even degrees are not sufficient above genus 0.** Face 2-colourability
-   needs even degrees *plus* 2g vanishing Z/2 classes. They do not vanish:
-   ~2% of bonds stay homoelemental whatever colouring is chosen. That is a
-   real inversion-domain boundary, not an artefact.
-3. **The geometry is the blocker.** Atoms are triangle centroids, so the
-   splits insert more sites than the area holds at spacing `a/sqrt(3)`.
-   Relaxation, projection, smoothing and remesh/repair alternation were
-   each tried and none works -- an optimiser cannot relax away a density
-   mismatch, and the alternation oscillates rather than converging.
+Atoms are triangle centroids bonded across shared edges, so ring size ==
+mesh vertex degree and M/X alternation == every degree even. Two repairs,
+and the difference is not stylistic:
 
-The fix is a **parity-preserving isotropic remesher** (splits and
-collapses paired so site count tracks area while degrees stay even). Do
-not ship a version without it: the current one has 200+ sub-Angstrom
-overlaps. And do not bolt it on by decorating a carbon surface -- odd
-rings force M-M and X-X bonds.
+* **flip** toggles four degrees at once, so it can only shuffle sparse
+  odd vertices and never reaches zero -- but it adds no vertices, so the
+  geometry survives.
+* **split** toggles exactly the two vertices opposite the edge. That
+  weight-two move *does* reach zero, at one new vertex each; enough of
+  them put more sites on the surface than its area holds at `a/sqrt(3)`.
+
+Both are exposed as `parity` because the trade is real and monotone
+(30 A Schwarz P: none 12.4% homoelemental / 6.2% p95 strain, split 0.0%
+/ 13.4%). Do not quietly pick one.
+
+Things already measured; do not re-derive them the hard way:
+
+* **Even degrees are a sphere result.** At genus g there are 2g more Z/2
+  classes, and even-degree meshes exist on both sides. So a perfectly
+  bipartite cell is *reachable but not guaranteed* -- 30 A split gives
+  zero homoelemental bonds and X/M = 2.0000; 36 A split gives 2.2%. What
+  is left over is an inversion-domain boundary, so report the count.
+* **Relax the site net, not the atoms.** The sites form a trivalent net
+  identical to graphene's, so `relax_shell` at 120 deg and `a/sqrt(3)`
+  applies directly and its angle term is what stops the sheet folding.
+  Relaxing the finished MX2 atoms needs an angle target that fits both a
+  3-coordinate chalcogen (~82 deg) and a 6-coordinate metal (several
+  values at once); there is none.
+* **`exclude_13=False` for the atom relaxation.** With `k_angle=0` and
+  1-3 pairs excluded from the repulsion, two chalcogens on the same metal
+  have *nothing* holding them apart -- that was 70 sub-2 A pairs, and
+  keeping them in the repulsion made it zero. Carbon keeps the default
+  True: its angle term owns those pairs.
+* **Per-bond `equilibrium`.** Homoelemental defect bonds are not the M-X
+  length; forcing them to it moved the worst bond from 13.6% to 24.2%.
+* **Normals come from the relaxed net, sign-propagated across it.** The
+  field gradient is wrong after relaxation (the sites have left the level
+  set), and deciding each sign against the original triangle gives
+  normals turning 178 deg. Do not smooth the normal field -- it averages
+  normals that genuinely differ and made things worse.
+* **Retry the grid.** Schwarz P at 42 A tears at resolution 64 (sites
+  21 A apart) and is clean at 72. Validate the site spacing and retry on
+  a shifted grid, as `build_schwarzite` does.
+* **Judge with `schwarzite_quality`, not `tmd_quality`.** The latter
+  finds bonds by distance; on a saddle a 2.4 A bond's cutoff reaches
+  3.0 A and reads a sound cell as 4-8 coordinate metal.
+
+Y junctions in MX2 are still missing. That is now a wiring job on the
+same machinery, not a research one.
 
 ## GUI: one job description, one killable process
 

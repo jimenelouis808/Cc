@@ -27,7 +27,7 @@ validation pass before writing.
 | `swept`         | Coils and arbitrary curved tubes whose ring topology is **derived from the curvature** |
 | `fullerene`     | Closed cages (C60, C240, C540, C20, C80, …) and carbon nano-onions |
 | `assemblies`    | Multi-wall nanotubes and hexagonally packed bundles, at the van der Waals gap |
-| `tmd`           | **Transition-metal dichalcogenides** (MoS2, WS2, …): monolayers, stacks, bulk crystals, ribbons and rolled nanotubes |
+| `tmd`           | **Transition-metal dichalcogenides** (MoS2, WS2, …): monolayers, stacks, bulk crystals, ribbons, rolled nanotubes, helical coils and **schwarzites** |
 
 ## Installation
 
@@ -129,6 +129,11 @@ nanocarbon tmd-tube --material MoS2 --n 40 --m 0 --out out/mos2_nt
 # Helical coil — a swept tube, so the atom count follows the coil radius
 nanocarbon tmd-coil --material MoS2 --n 30 --coil-radius 220 --pitch 90 \
     --turns 0.25 --out out/mos2_coil
+
+# Schwarzite on a minimal surface. --parity trades M/X alternation
+# against bond strain; 'split' makes every ring even.
+nanocarbon tmd-schwarzite --material MoS2 --kind primitive --cell 36 \
+    --parity flip --out out/mos2_sw
 ```
 
 Every one of these prints an **sp2 verdict** alongside the measured bond
@@ -976,43 +981,70 @@ follows the helix arc length, so it grows with the coil radius rather than
 with anything that reads as a size: that same coil is 11 340 atoms at a
 quarter turn.
 
-### Not yet: schwarzites and Y junctions in MX2
+### MX2 schwarzites
 
-Still not here, but the earlier explanation in this file was wrong and is
-worth correcting. It said MX2 cannot make a schwarzite because pentagons
-are forbidden. Pentagons *are* forbidden — M and X must alternate, so only
-even rings are allowed — but that argument only rules out the *sphere*.
-Negative curvature does not need heptagons; it needs **octagons**, which
-are even. `sum(6 - n) = 6χ`, each octagon pays −2, so Schwarz P (χ = −4)
-wants twelve of them. Nothing in the chemistry forbids that, and h-BN
-schwarzites in the literature are built exactly this way.
+MX2 on a triply periodic minimal surface, periodic in all three
+directions. `nanocarbon tmd-schwarzite --material MoS2 --kind primitive
+--cell 36 --parity flip --out out/mos2_sw`.
 
-What was actually established here, by measurement:
+An earlier version of this file said this was impossible because
+pentagons are forbidden. Pentagons *are* forbidden — M and X alternate,
+so only even rings are allowed — but that argument only rules out the
+*sphere*. Negative curvature never needed pentagons: it needs
+**octagons**, which are even. `sum(6 - n) = 6χ`, each octagon pays −2, so
+Schwarz P (χ = −4) wants twelve. h-BN schwarzites in the literature are
+built exactly this way.
 
-* **The parity problem is solved.** Edge splits drive every vertex degree
-  even (a split toggles exactly the two opposite vertices, unlike a flip,
-  which toggles four and therefore stalls). The result has the exact
-  topology: rings 4/6/8/10 only, `sum(6 - n)` = −24 for Schwarz P and −48
-  for the gyroid, X/M = 2.000.
-* **Even rings are necessary but not sufficient.** A triangulation's faces
-  are 2-colourable iff every vertex degree is even *on a sphere*. At genus
-  g there are 2g further Z/2 classes, and they do not vanish: about **2% of
-  bonds stay homoelemental** however the colouring is chosen. That is not a
-  defect of the method — it is an inversion-domain boundary, the same one
-  seen in real MoS2 and h-BN.
-* **The blocker is geometric, not topological.** Atoms sit at triangle
-  centroids, so the parity splits insert more sites than the surface area
-  holds at spacing `a/√3`. Relaxation, projection, Laplacian smoothing and
-  alternating remesh-and-repair were each measured and none fixes it — a
-  density mismatch is not something an optimiser can relax away, and the
-  alternation oscillates (65 → 57 → 96 → 47 → 84 splits) rather than
-  converging.
+Atoms sit at triangle centroids and bond across shared mesh edges, so
+ring size equals mesh-vertex degree and the M/X question becomes "is
+every degree even". Two moves get there, and they trade against each
+other:
 
-Closing it needs a **parity-preserving isotropic remesher**: splits *and*
-collapses paired so the site count tracks the area while the degrees stay
-even. That is the next piece of work, and shipping the current version
-would mean exporting a cell with 200-plus sub-Ångström atomic overlaps,
-which the project's own validation exists to prevent.
+* an **edge flip** toggles four degrees at once, so with odd vertices
+  sparse it can only shuffle them — it never reaches zero, but it adds no
+  vertices and the geometry survives;
+* an **edge split** toggles exactly the two vertices opposite the edge.
+  That is the weight-two move that *does* reach zero, at one new vertex
+  each, and enough of them crowd the surface with more sites than its
+  area holds at spacing `a/√3`.
+
+Measured on Schwarz P, MoS2 (all with zero atomic overlaps and
+coordination 6/3 throughout):
+
+| cell | `--parity` | atoms | homoelemental | X/M | M–X p95 | worst |
+|---|---|---|---|---|---|---|
+| 30 Å | `none` | 758 | 12.4% | 1.893 | 6.2% | 12.2% |
+| 30 Å | `split` | 921 | **0.0%** | **2.0000** | 13.4% | 30.6% |
+| 36 Å | `none` | 1066 | 11.1% | 1.978 | 3.9% | 8.4% |
+| 36 Å | `split` | 1298 | 2.2% | 1.991 | 11.5% | 25.0% |
+| 48 Å | `none` | 1856 | 10.4% | 1.994 | 2.4% | 4.6% |
+| 48 Å | `split` | 2264 | 3.1% | 1.995 | 7.9% | 24.8% |
+
+Two things worth reading off that table. **A perfectly alternating,
+exactly stoichiometric MoS2 schwarzite exists** — the 30 Å split cell has
+zero homoelemental bonds and X/M = 2.0000. And it is not guaranteed: even
+degrees are a sphere result, and at genus 3 there are six more Z/2
+classes that even-degree meshes sit on both sides of. When the repair
+lands on the wrong side, the leftover bonds are a real **inversion-domain
+boundary** — the line defect seen in grown MoS2 and h-BN — so the count
+is reported rather than assumed away.
+
+Larger cells curve more gently and cut the bond strain (p95 6.2% → 2.4%
+from 30 to 48 Å) without much helping the parity, so the two knobs are
+worth turning independently.
+
+The verdict here does **not** go through the usual `tmd_quality`. That
+finds bonds by distance, which is right for a slab and wrong on a saddle:
+a 2.4 Å bond's cutoff reaches 3.0 Å and sweeps up non-bonded neighbours,
+reading a sound cell as 4–8 coordinate metal. The builder keeps the real
+bond graph and judges from that.
+
+### Not yet: Y junctions in MX2
+
+The remaining gap. Same machinery as the schwarzite — an implicit surface
+meshed and decorated — so it is now a wiring job rather than a research
+one, but the junction field needs its caps handled and it is untested
+here.
 
 ## Repository layout
 

@@ -47,6 +47,7 @@ never has to re-derive ring statistics: it can trust the mesh.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 from collections.abc import Sequence
 
 import numpy as np
@@ -583,9 +584,20 @@ def freq_for_radius(radius: float, bond: float = 1.42) -> int:
 
 
 def _valence_terms(
-    bonds: Sequence[tuple[int, int]], n_atoms: int
+    bonds: Sequence[tuple[int, int]], n_atoms: int, exclude_13: bool = True
 ) -> tuple[np.ndarray, np.ndarray, set[tuple[int, int]]]:
-    """Build bond array, angle triplet array and the 1-2/1-3 exclusion set."""
+    """Build bond array, angle triplet array and the 1-2/1-3 exclusion set.
+
+    ``exclude_13`` keeps 1-3 pairs out of the non-bonded repulsion, which
+    is right whenever the angle term is doing that job -- for sp2 carbon
+    it always is. Set it ``False`` when there is no usable angle target,
+    and the repulsion holds the ligands apart instead (a VSEPR argument
+    rather than a valence one). A six-coordinate metal is the case that
+    needs it: its ligand-metal-ligand angles take several values at once,
+    so no single ``angle_deg`` fits, and excluding 1-3 pairs while
+    ``k_angle`` is zero leaves them with nothing keeping them apart at
+    all.
+    """
     bond_arr = np.array(sorted(bonds), dtype=int)
     nbrs: dict[int, list[int]] = defaultdict(list)
     for a, b in bond_arr:
@@ -602,9 +614,10 @@ def _valence_terms(
     for a, b in bond_arr:
         excluded.add((int(a), int(b)))
         excluded.add((int(b), int(a)))
-    for a, _, c in angle_arr:
-        excluded.add((int(a), int(c)))
-        excluded.add((int(c), int(a)))
+    if exclude_13:
+        for a, _, c in angle_arr:
+            excluded.add((int(a), int(c)))
+            excluded.add((int(c), int(a)))
     return bond_arr, angle_arr, excluded
 
 
@@ -697,7 +710,7 @@ def _vff_energy_gradient(
 def relax_shell(
     positions: np.ndarray,
     bonds: set[tuple[int, int]],
-    equilibrium: float = 1.42,
+    equilibrium: float | Mapping[tuple[int, int], float] = 1.42,
     angle_deg: float = 120.0,
     k_bond: float = 40.0,
     k_angle: float = 15.0,
@@ -711,6 +724,7 @@ def relax_shell(
     outer_cycles: int = 3,
     max_iterations: int = 3000,
     steps: int | None = None,
+    exclude_13: bool = True,
 ) -> np.ndarray:
     """Relax a closed sp2 shell to realistic bond lengths and bond angles.
 
@@ -745,6 +759,11 @@ def relax_shell(
         curved shell many non-bonded atoms sit closer than a bond length.
     equilibrium, angle_deg
         sp2 targets: 1.42 Å and 120 deg for graphitic carbon.
+        ``equilibrium`` also accepts a mapping from ``(i, j)`` (with
+        ``i < j``, matching the keys in ``bonds``) to that bond's own rest
+        length, for a structure whose bonds are not all alike -- a binary
+        compound with a few homoelemental defect bonds, say, where forcing
+        an M-M contact to the M-X length distorts everything around it.
     k_bond, k_angle, k_repel
         Force constants (arbitrary consistent units). ``k_angle`` must be
         a substantial fraction of ``k_bond``; too soft an angle term is
@@ -783,6 +802,14 @@ def relax_shell(
         Optional harmonic restraints pinning ``positions[anchors]`` near
         ``anchor_targets`` -- used to hold an imposed bend while the rest
         of the lattice relaxes around it.
+    exclude_13
+        Whether 1-3 pairs are kept out of the non-bonded repulsion. True
+        (the default, and correct for sp2 carbon) leaves them to the
+        angle term. Pass False together with ``k_angle=0`` when no single
+        angle target fits the centre -- a six-coordinate metal -- so the
+        repulsion holds its ligands apart instead. Choose
+        ``repel_cutoff`` below the real 1-3 distance so the term is inert
+        at equilibrium and only resists a collapse.
     outer_cycles, max_iterations
         Neighbour-list rebuilds, and L-BFGS iterations per cycle.
     steps
@@ -801,7 +828,20 @@ def relax_shell(
         max_iterations = int(steps)
 
     n_atoms = len(positions)
-    bond_arr, angle_arr, excluded = _valence_terms(list(bonds), n_atoms)
+    bond_arr, angle_arr, excluded = _valence_terms(
+        list(bonds), n_atoms, exclude_13=exclude_13)
+    if isinstance(equilibrium, Mapping):
+        # Keyed by the bond pair rather than positional, so a per-bond
+        # target cannot silently misalign with `bond_arr`'s sorted order.
+        try:
+            equilibrium = np.array(
+                [equilibrium[(int(a), int(b))] for a, b in bond_arr],
+                dtype=float)
+        except KeyError as exc:
+            raise ValueError(
+                f"equilibrium is missing a length for bond {exc.args[0]}; "
+                "a mapping must cover every bond passed in."
+            ) from exc
     theta0 = np.radians(angle_deg)
     anchor_targets = (
         np.asarray(anchor_targets, dtype=float) if anchor_targets is not None else None

@@ -20,6 +20,7 @@ Sub-commands:
 * ``tmd-ribbon`` — build an MX2 nanoribbon with a chosen edge termination.
 * ``tmd-tube``   — roll an MX2 monolayer into an (n, m) nanotube.
 * ``tmd-coil``   — coil an MX2 nanotube onto a helix.
+* ``tmd-schwarzite`` — MX2 on a triply periodic minimal surface.
 * ``validate``   — run validation on an existing structure file.
 """
 
@@ -59,7 +60,9 @@ from ..tmd import (
     build_tmd_layers,
     build_tmd_nanotube,
     build_tmd_ribbon,
+    build_tmd_schwarzite,
 )
+from ..tmd.curved import schwarzite_quality
 from ..tmd.quality import geometry_report as tmd_geometry_report
 from ..tmd.quality import tmd_quality
 from ..validation.checks import run_basic_checks
@@ -321,6 +324,39 @@ def _cmd_tmd_tube(args):
     atoms = build_tmd_nanotube(args.material, n=args.n, m=args.m,
                                length=args.length, phase=args.phase)
     return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)))
+
+
+def _cmd_tmd_schwarzite(args):
+    atoms = build_tmd_schwarzite(
+        args.material, kind=args.kind, cell=args.cell, parity=args.parity,
+        phase=args.phase, seed=args.seed,
+    )
+    xyz_path, json_path = write_render_bundle(atoms, Path(args.out))
+    info = atoms.info
+    verdict, why = schwarzite_quality(atoms)
+    print(f"Wrote {xyz_path} and {json_path}")
+    print(f"  n_atoms     = {len(atoms)}  ({atoms.get_chemical_formula()})")
+    print(f"  material    = {info['material']}  on the "
+          f"{info['schwarzite_kind']} surface, {info['cell']:.0f} A cell")
+    print(f"  genus       = {info['genus']}  (Euler {info['euler']})")
+    rings = ", ".join(f"{k}:{v}" for k, v in sorted(info["ring_counts"].items()))
+    print(f"  rings       = {rings}")
+    print(f"  sum(6-n)    = {info['ring_deficit']}  (6*chi = "
+          f"{6 * info['euler']})"
+          f"  {'ok' if info['ring_deficit'] == 6 * info['euler'] else 'MISMATCH'}")
+    print(f"  parity      = {info['parity']}  ->  {info['odd_rings']} odd rings"
+          + (f", {info['parity_splits']} splits" if info["parity_splits"] else ""))
+    print(f"  antiphase   = {info['antiphase_bonds']}/{info['n_net_bonds']} bonds "
+          f"({info['antiphase_fraction']:.1%}) are M-M or X-X")
+    print(f"  M-X spread  = {info['bond_deviation_p95']:.1%} at p95, "
+          f"{info['bond_deviation_max']:.1%} worst")
+    print(f"  coordination= metal {info['graph_metal_coordination'][0]}-"
+          f"{info['graph_metal_coordination'][1]}, chalcogen "
+          f"{info['graph_chalcogen_coordination'][0]}-"
+          f"{info['graph_chalcogen_coordination'][1]}  (from the bond graph)")
+    print(f"  X/M ratio   = {info['stoichiometry']:.3f}")
+    print(f"  verdict     = {verdict.upper()}: {why}")
+    return 0
 
 
 def _cmd_tmd_coil(args):
@@ -654,6 +690,26 @@ def build_parser() -> argparse.ArgumentParser:
     tt.add_argument("--phase", default="2H", choices=phases)
     tt.add_argument("--out", required=True, help="Output path without extension.")
     tt.set_defaults(func=_cmd_tmd_tube)
+
+    ts = sub.add_parser(
+        "tmd-schwarzite",
+        help="Build a periodic MX2 schwarzite (negative-curvature MX2).",
+    )
+    ts.add_argument("--material", default="MoS2", choices=materials)
+    ts.add_argument("--kind", default="primitive",
+                    choices=["primitive", "diamond", "gyroid"])
+    ts.add_argument("--cell", type=float, default=36.0,
+                    help="Cubic cell length in A.")
+    ts.add_argument("--parity", default="flip",
+                    choices=["none", "flip", "split"],
+                    help="How hard to push the net toward alternating M/X. "
+                         "'none' keeps the best geometry, 'split' the best "
+                         "chemistry (fewest M-M and X-X bonds), 'flip' is "
+                         "between. The trade is real and monotone.")
+    ts.add_argument("--phase", default="2H", choices=phases)
+    ts.add_argument("--seed", type=int, default=0)
+    ts.add_argument("--out", required=True, help="Output path without extension.")
+    ts.set_defaults(func=_cmd_tmd_schwarzite)
 
     tc = sub.add_parser(
         "tmd-coil",

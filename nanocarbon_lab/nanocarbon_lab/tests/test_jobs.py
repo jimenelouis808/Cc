@@ -44,6 +44,11 @@ SAMPLES: dict[str, Job] = {
     "TMD ribbon": Job("TMD ribbon",
                       {"material": "MoS2", "width": 6, "length": 2}),
     "TMD nanotube": Job("TMD nanotube", {"material": "MoS2", "n": 40, "m": 0}),
+    # The smallest cell the builder accepts, to keep this buildable in a
+    # test: it still meshes and relaxes, so it is the slow one here.
+    "TMD schwarzite": Job("TMD schwarzite",
+                          {"material": "MoS2", "kind": "primitive",
+                           "cell": 30.0, "parity": "none"}),
     "TMD coil": Job("TMD coil",
                     {"material": "MoS2", "n": 20, "m": 0,
                      "coil_radius": 140.0, "pitch": 60.0, "turns": 0.15}),
@@ -115,6 +120,13 @@ class TestEstimates:
         """Surface area over ring area. Not exact, but the point is to
         tell a 60-atom cage from a 3000-atom coil before committing."""
         assert estimate_atoms(SAMPLES[mode]) == pytest.approx(measured, rel=0.2)
+
+    def test_the_schwarzite_is_estimated_from_the_surface_area(self):
+        """Not enumerated like the others: it is meshed, so the count is
+        area over the area one triangle of side `a` covers. Measured 1066
+        atoms at 36 A against 1054 predicted."""
+        job = SAMPLES["TMD schwarzite"].with_params(cell=36.0)
+        assert estimate_atoms(job) == pytest.approx(1066, rel=0.05)
 
     def test_dichalcogenides_are_never_called_slow(self):
         """No meshing and no relaxation -- exact lattice placement, so the

@@ -190,6 +190,10 @@ PRESETS: dict[str, dict[str, object]] = {
     # A quarter turn keeps this near 11k atoms. A full turn at a radius
     # loose enough to be unstrained runs to six figures, which is the
     # physics rather than a timid default.
+    "MoS2 schwarzite (Schwarz P)": {
+        "mode_kind": "TMD schwarzite", "tmd_material": "MoS2",
+        "tmd_sw_kind": "primitive", "tmd_sw_cell": 36.0,
+        "tmd_sw_parity": "flip"},
     "MoS2 coil (quarter turn)": {
         "mode_kind": "TMD coil", "tmd_material": "MoS2", "tmd_n": 30,
         "tmd_m": 0, "tmd_coil_radius": 220.0, "tmd_coil_pitch": 90.0,
@@ -413,11 +417,21 @@ class NanocarbonGUI:
 
         entry.bind("<Return>", commit)
         entry.bind("<FocusOut>", commit)
-        # Keep the box in step with the variable however it changed --
-        # slider, preset, loaded file, or a mode switch forcing a value.
-        # Without this the entry silently shows a stale number, which is
-        # worse than showing none: it is the field you would trust.
-        var.trace_add("write", lambda *_: render())
+
+        def follow(*_args) -> None:
+            # Keep the box in step with the variable however it changed --
+            # slider, preset, loaded file, or a mode switch forcing a
+            # value. Without this the entry silently shows a stale number,
+            # which is worse than showing none: it is the field you would
+            # trust. `command` runs here too, not only on the two
+            # interactive paths: it is what refreshes the derived hints,
+            # and a preset that set the value without firing it left them
+            # describing the previous structure.
+            render()
+            if command:
+                command()
+
+        var.trace_add("write", follow)
 
         def on_slide(_value=None) -> None:
             wanted = quantise(var.get())
@@ -532,6 +546,12 @@ class NanocarbonGUI:
                                             tk.DoubleVar(value=0.25))
         self.var_tmd_coil_hand = self._var("tmd_coil_hand",
                                            tk.StringVar(value="right"))
+        self.var_tmd_sw_kind = self._var("tmd_sw_kind",
+                                         tk.StringVar(value="primitive"))
+        self.var_tmd_sw_cell = self._var("tmd_sw_cell",
+                                         tk.DoubleVar(value=36.0))
+        self.var_tmd_sw_parity = self._var("tmd_sw_parity",
+                                           tk.StringVar(value="flip"))
 
         self.lbl_radius = ttk.Label(box, text="", foreground="#2e86ab")
 
@@ -861,6 +881,32 @@ class NanocarbonGUI:
                                       justify="left")
         self.lbl_tmd_coil.grid(row=7, column=0, columnspan=2, sticky="w")
 
+        # --- schwarzite
+        self.frame_tmd_sw = ttk.LabelFrame(parent, text="Schwarzite", padding=8)
+        self.frame_tmd_sw.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_tmd_sw, text="Surface").grid(row=0, column=0,
+                                                          sticky="w")
+        ttk.Combobox(self.frame_tmd_sw, textvariable=self.var_tmd_sw_kind,
+                     values=["primitive", "diamond", "gyroid"],
+                     state="readonly", width=10).grid(row=0, column=1,
+                                                      sticky="e", pady=(0, 4))
+        self._param(self.frame_tmd_sw, "Cell (Å)", self.var_tmd_sw_cell,
+                    30.0, 80.0, 1, resolution=1.0, hard_hi=200.0,
+                    command=self._update_tmd_hint)
+        ttk.Label(self.frame_tmd_sw, text="M/X parity").grid(row=3, column=0,
+                                                             sticky="w")
+        ttk.Combobox(self.frame_tmd_sw, textvariable=self.var_tmd_sw_parity,
+                     values=["none", "flip", "split"], state="readonly",
+                     width=10).grid(row=3, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_sw_parity.trace_add(
+            "write", lambda *_: (self._update_tmd_hint(),
+                                 self._schedule_estimate()))
+        self.lbl_tmd_sw = ttk.Label(self.frame_tmd_sw, text="",
+                                    foreground=MUTED,
+                                    font=("TkDefaultFont", 8), wraplength=230,
+                                    justify="left")
+        self.lbl_tmd_sw.grid(row=4, column=0, columnspan=2, sticky="w")
+
         # --- build / cancel and the cost estimate
         actions = ttk.Frame(parent)
         actions.pack(fill="x", pady=(12, 0))
@@ -898,7 +944,7 @@ class NanocarbonGUI:
                       self.frame_cage, self.frame_mw, self.frame_bundle,
                       self.frame_tmd, self.frame_tmd_layers,
                       self.frame_tmd_ribbon, self.frame_tmd_tube,
-                      self.frame_tmd_coil,
+                      self.frame_tmd_coil, self.frame_tmd_sw,
                       self.frame_surface, self.frame_chem):
             frame.pack_forget()
 
@@ -913,6 +959,8 @@ class NanocarbonGUI:
                 self.frame_tmd_ribbon.pack(fill="x", pady=(8, 0))
             elif mode == "TMD nanotube":
                 self.frame_tmd_tube.pack(fill="x", pady=(8, 0))
+            elif mode == "TMD schwarzite":
+                self.frame_tmd_sw.pack(fill="x", pady=(8, 0))
             elif mode == "TMD coil":
                 # The coil is a swept nanotube, so it needs the chiral
                 # indices as well as the helix panel.
@@ -1044,6 +1092,39 @@ class NanocarbonGUI:
                     " — real MX2 tubes are tens of nm across; raise n"),
             foreground=colour,
         )
+
+        if hasattr(self, "lbl_tmd_sw"):
+            from ..tmd.curved import MIN_SCHWARZITE_CELL
+
+            kind = self.var_tmd_sw_kind.get()
+            try:
+                sw_cell = float(self.var_tmd_sw_cell.get())
+            except (tk.TclError, ValueError):
+                sw_cell = 0.0
+            floor = MIN_SCHWARZITE_CELL.get(kind, 30.0)
+            if sw_cell < floor:
+                self.lbl_tmd_sw.config(
+                    text=f"{kind} needs at least {floor:.0f} Å: the sandwich is "
+                         f"{material.h:.1f} Å thick, so below that the channels "
+                         "are narrower than the layer.",
+                    foreground=BAD_RED)
+            else:
+                # Measured on Schwarz P at 36 Å; the ordering holds
+                # everywhere, the exact numbers move with the surface.
+                trade = {
+                    "none": ("~11% of bonds M–M or X–X", "best geometry",
+                             OK_GREEN),
+                    "flip": ("~8% of bonds M–M or X–X",
+                             "adds no vertices", WARN_AMBER),
+                    "split": ("~2% of bonds M–M or X–X",
+                              ("every ring even, but ~25% worst-case bond "
+                               "strain"), WARN_AMBER),
+                }[self.var_tmd_sw_parity.get()]
+                self.lbl_tmd_sw.config(
+                    text=f"{trade[0]} — {trade[1]}. Even rings alone cannot "
+                         "remove them: genus > 0 leaves 2g more parity classes, "
+                         "so what is left is a real inversion-domain boundary.",
+                    foreground=MUTED)
 
         if not hasattr(self, "lbl_tmd_coil"):
             return
@@ -1328,6 +1409,13 @@ class NanocarbonGUI:
                 length=int(self.var_tmd_length.get()),
                 edge=self.var_tmd_edge.get(),
                 termination=self.var_tmd_termination.get(),
+            )
+        if mode == "TMD schwarzite":
+            return dict(
+                material=material, phase=phase,
+                kind=self.var_tmd_sw_kind.get(),
+                cell=float(self.var_tmd_sw_cell.get()),
+                parity=self.var_tmd_sw_parity.get(),
             )
         if mode == "TMD coil":
             return dict(
@@ -1863,6 +1951,22 @@ class NanocarbonGUI:
             lines.append(f"pitch        {info['pitch']:>6.1f} Å")
             lines.append(f"turns        {info['turns']:>6.2f} "
                          f"({info['periods']} periods)")
+        if "schwarzite_kind" in info:
+            lines.append(f"surface      {info['schwarzite_kind']:>9s}")
+            lines.append(f"genus        {info['genus']:>6d}")
+            counts = info["ring_counts"]
+            lines.append("rings        " + ", ".join(
+                f"{k}:{v}" for k, v in sorted(counts.items())))
+            expected = 6 * info["euler"]
+            flag = "ok" if info["ring_deficit"] == expected else "MISMATCH"
+            lines.append(f"sum(6-n)     {info['ring_deficit']:>6d}  "
+                         f"(6·χ = {expected}) {flag}")
+            lines.append(f"parity       {info['parity']:>9s} "
+                         f"({info['odd_rings']} odd rings)")
+            lines.append(f"antiphase    {info['antiphase_fraction']:>5.1%} "
+                         f"({info['antiphase_bonds']} bonds M–M or X–X)")
+            lines.append(f"M–X spread   {info['bond_deviation_p95']:>5.1%} p95, "
+                         f"{info['bond_deviation_max']:.1%} worst")
         if "roll_strain" in info:
             lines.append(f"roll strain  {info['roll_strain']:>5.1%}")
         if "bend_strain" in info:
@@ -1879,6 +1983,27 @@ class NanocarbonGUI:
              f"{report['chalcogen_coordination_max']}"),
             f"  X/M ratio     {report['stoichiometry']:.3f}",
         ]
+        if info.get("structure_type") == "tmd_schwarzite":
+            # Distance-based coordination is wrong on a saddle: the 2.4 Å
+            # bond's cutoff reaches 3.0 Å and sweeps up non-bonded
+            # neighbours. The builder kept the real bond graph, so use it.
+            lines += [
+                "",
+                (f"  metal coord   {info['graph_metal_coordination'][0]}–"
+                 f"{info['graph_metal_coordination'][1]} (bond graph)"),
+                (f"  chalcogen     {info['graph_chalcogen_coordination'][0]}–"
+                 f"{info['graph_chalcogen_coordination'][1]} (bond graph)"),
+            ]
+            from ..tmd.curved import schwarzite_quality
+
+            verdict, why = schwarzite_quality(a)
+            lines += ["", f"verdict      {verdict.upper()}", f"  {why}"]
+            self.txt_info.configure(state="normal")
+            self.txt_info.delete("1.0", "end")
+            self.txt_info.insert("1.0", "\n".join(lines))
+            self.txt_info.configure(state="disabled")
+            return
+
         # A deliberately terminated ribbon is off-stoichiometry on purpose.
         stoichiometric = info.get("termination", "mixed") == "mixed"
         verdict, why = tmd_quality(report, expect_stoichiometric=stoichiometric,
