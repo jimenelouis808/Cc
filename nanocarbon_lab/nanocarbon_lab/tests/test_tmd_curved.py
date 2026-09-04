@@ -20,6 +20,7 @@ from nanocarbon_lab.builders import implicit as im
 from nanocarbon_lab.builders import remesh as rm
 from nanocarbon_lab.tmd.curved import (
     MIN_SCHWARZITE_CELL,
+    build_tmd_junction,
     build_tmd_schwarzite,
     odd_vertices,
     repair_parity_by_flipping,
@@ -28,6 +29,7 @@ from nanocarbon_lab.tmd.curved import (
     two_colour,
 )
 from nanocarbon_lab.tmd.quality import geometry_report
+from nanocarbon_lab.validation import run_basic_checks
 
 
 @pytest.fixture(scope="module")
@@ -310,3 +312,84 @@ class TestBuild:
         assert atoms.info["genus"] == 5
         assert atoms.info["ring_deficit"] == 6 * atoms.info["euler"]
         assert set(atoms.get_chemical_symbols()) == {"W", "S"}
+
+
+@pytest.mark.slow
+class TestJunction:
+    """A capped junction is sphere-like whatever its arm count, so its
+    Euler budget is **positive** where a schwarzite's is negative -- and
+    with no pentagons available, MX2 pays it in squares.
+
+    That difference is not cosmetic. Genus 0 means there is no homology
+    left once the degrees are even, so the 2-colouring theorem applies in
+    full: splitting reaches exactly zero homoelemental bonds every time,
+    where on a schwarzite it only sometimes does.
+    """
+
+    @pytest.mark.parametrize("kind", ["L", "Y"])
+    def test_the_budget_is_positive_twelve(self, kind):
+        atoms = build_tmd_junction("MoS2", kind=kind, tube_radius=10.0,
+                                   arm_length=20.0, parity="split")
+        assert atoms.info["euler"] == 2
+        assert atoms.info["genus"] == 0
+        assert atoms.info["ring_deficit"] == 12
+
+    def test_it_is_paid_in_squares_not_pentagons(self):
+        """+12 with only even rings means squares at +2 each, net of the
+        octagons the branch's saddle needs."""
+        atoms = build_tmd_junction("MoS2", kind="Y", tube_radius=10.0,
+                                   arm_length=20.0, parity="split")
+        rings = atoms.info["ring_counts"]
+        assert all(size % 2 == 0 for size in rings)
+        assert rings.get(4, 0) > 0
+        assert sum((6 - size) * count for size, count in rings.items()) == 12
+
+    def test_genus_zero_guarantees_perfect_alternation(self):
+        """The payoff of being a sphere: no homology classes survive, so
+        even degrees are sufficient and not merely necessary."""
+        atoms = build_tmd_junction("MoS2", kind="Y", tube_radius=10.0,
+                                   arm_length=20.0, parity="split")
+        assert atoms.info["odd_rings"] == 0
+        assert atoms.info["antiphase_bonds"] == 0
+        assert atoms.info["stoichiometry"] == pytest.approx(2.0, abs=1e-9)
+
+    def test_coordination_is_exactly_six_and_three(self):
+        atoms = build_tmd_junction("MoS2", kind="Y", tube_radius=10.0,
+                                   arm_length=20.0, parity="split")
+        assert atoms.info["graph_metal_coordination"] == (6, 6)
+        assert atoms.info["graph_chalcogen_coordination"] == (3, 3)
+
+    def test_it_is_finite_and_validates(self):
+        atoms = build_tmd_junction("MoS2", kind="L", tube_radius=10.0,
+                                   arm_length=20.0, parity="split")
+        assert not any(atoms.get_pbc())
+        assert not run_basic_checks(atoms).errors
+
+    def test_leaving_the_rings_odd_costs_wrong_bonds(self):
+        """The trade the parity option exposes, and why the default here
+        differs from the schwarzite's."""
+        ragged = build_tmd_junction("MoS2", kind="L", tube_radius=10.0,
+                                    arm_length=20.0, parity="none")
+        even = build_tmd_junction("MoS2", kind="L", tube_radius=10.0,
+                                  arm_length=20.0, parity="split")
+        assert ragged.info["antiphase_fraction"] > 0.05
+        assert even.info["antiphase_fraction"] == 0.0
+
+    def test_a_tube_too_narrow_for_the_sandwich_is_refused(self):
+        """Below twice the layer thickness the inner chalcogen wall would
+        have to pass through the axis."""
+        with pytest.raises(ValueError, match="too narrow"):
+            build_tmd_junction("MoS2", kind="Y", tube_radius=3.0)
+
+    def test_an_unknown_parity_is_rejected(self):
+        with pytest.raises(ValueError, match="parity must be"):
+            build_tmd_junction("MoS2", parity="anneal")
+
+    def test_the_verdict_knows_genus_zero_is_sufficient(self):
+        """On a sphere even degrees *guarantee* alternation, so the
+        schwarzite's "possible but not guaranteed" wording would be wrong
+        here."""
+        atoms = build_tmd_junction("MoS2", kind="L", tube_radius=10.0,
+                                   arm_length=20.0, parity="split")
+        _, why = schwarzite_quality(atoms)
+        assert "guarantee on a sphere-like surface" in why

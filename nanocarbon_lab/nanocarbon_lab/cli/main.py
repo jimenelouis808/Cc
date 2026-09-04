@@ -21,6 +21,7 @@ Sub-commands:
 * ``tmd-tube``   — roll an MX2 monolayer into an (n, m) nanotube.
 * ``tmd-coil``   — coil an MX2 nanotube onto a helix.
 * ``tmd-schwarzite`` — MX2 on a triply periodic minimal surface.
+* ``tmd-junction`` — a finite, closed MX2 L/T/Y/X tube junction.
 * ``twist``      — two layers with a commensurate twist (moire).
 * ``stack``      — aligned van der Waals stack of 2D layers.
 * ``validate``   — run validation on an existing structure file.
@@ -65,7 +66,7 @@ from ..tmd import (
     build_tmd_ribbon,
     build_tmd_schwarzite,
 )
-from ..tmd.curved import schwarzite_quality
+from ..tmd.curved import build_tmd_junction, schwarzite_quality
 from ..tmd.quality import geometry_report as tmd_geometry_report
 from ..tmd.quality import tmd_quality
 from ..validation.checks import run_basic_checks
@@ -369,6 +370,42 @@ def _cmd_twist(args):
 def _cmd_stack(args):
     atoms = build_vdw_stack(args.layers, gap=args.gap, nx=args.nx, ny=args.ny)
     return _report_stack(atoms, *write_render_bundle(atoms, Path(args.out)))
+
+
+def _cmd_tmd_junction(args):
+    atoms = build_tmd_junction(
+        args.material, kind=args.kind, tube_radius=args.tube_radius,
+        arm_length=args.arm_length, blend=args.blend, parity=args.parity,
+        phase=args.phase, seed=args.seed,
+    )
+    xyz_path, json_path = write_render_bundle(atoms, Path(args.out))
+    info = atoms.info
+    verdict, why = schwarzite_quality(atoms)
+    print(f"Wrote {xyz_path} and {json_path}")
+    print(f"  n_atoms     = {len(atoms)}  ({atoms.get_chemical_formula()})")
+    print(f"  material    = {info['material']}  {info['junction_kind']} junction, "
+          f"R = {info['tube_radius']:.1f} A arms {info['arm_length']:.1f} A")
+    print(f"  genus       = {info['genus']}  (Euler {info['euler']})")
+    rings = ", ".join(f"{k}:{v}" for k, v in sorted(info["ring_counts"].items()))
+    print(f"  rings       = {rings}")
+    expected = 6 * info["euler"]
+    print(f"  sum(6-n)    = {info['ring_deficit']}  (6*chi = {expected})"
+          f"  {'ok' if info['ring_deficit'] == expected else 'MISMATCH'}")
+    print("                a capped junction is sphere-like, so this is "
+          "POSITIVE — paid in squares, since MX2 has no pentagons")
+    print(f"  parity      = {info['parity']}  ->  {info['odd_rings']} odd rings"
+          + (f", {info['parity_splits']} splits" if info["parity_splits"] else ""))
+    print(f"  antiphase   = {info['antiphase_bonds']}/{info['n_net_bonds']} bonds "
+          f"({info['antiphase_fraction']:.1%}) are M-M or X-X")
+    print(f"  M-X spread  = {info['bond_deviation_p95']:.1%} at p95, "
+          f"{info['bond_deviation_max']:.1%} worst")
+    print(f"  coordination= metal {info['graph_metal_coordination'][0]}-"
+          f"{info['graph_metal_coordination'][1]}, chalcogen "
+          f"{info['graph_chalcogen_coordination'][0]}-"
+          f"{info['graph_chalcogen_coordination'][1]}  (from the bond graph)")
+    print(f"  X/M ratio   = {info['stoichiometry']:.3f}")
+    print(f"  verdict     = {verdict.upper()}: {why}")
+    return 0
 
 
 def _cmd_tmd_schwarzite(args):
@@ -770,6 +807,28 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("--ny", type=int, default=1)
     st.add_argument("--out", required=True, help="Output path without extension.")
     st.set_defaults(func=_cmd_stack)
+
+    tj = sub.add_parser(
+        "tmd-junction",
+        help="Build a finite, closed MX2 tube junction (L, T, Y or X).",
+    )
+    tj.add_argument("--material", default="MoS2", choices=materials)
+    tj.add_argument("--kind", default="Y", choices=["L", "T", "Y", "X"])
+    tj.add_argument("--tube-radius", type=float, default=12.0,
+                    help="Arm radius in A. MX2 needs a wide tube: the "
+                         "sandwich is ~3 A thick.")
+    tj.add_argument("--arm-length", type=float, default=26.0)
+    tj.add_argument("--blend", type=float, default=5.0,
+                    help="Smoothing radius where the arms meet.")
+    tj.add_argument("--parity", default="split",
+                    choices=["none", "flip", "split"],
+                    help="A junction is genus 0, so 'split' reaches exactly "
+                         "zero M-M and X-X bonds -- unlike a schwarzite, "
+                         "where homology sometimes prevents it.")
+    tj.add_argument("--phase", default="2H", choices=phases)
+    tj.add_argument("--seed", type=int, default=0)
+    tj.add_argument("--out", required=True, help="Output path without extension.")
+    tj.set_defaults(func=_cmd_tmd_junction)
 
     ts = sub.add_parser(
         "tmd-schwarzite",

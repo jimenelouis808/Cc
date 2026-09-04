@@ -8,7 +8,7 @@ and spawn re-imports the parent's ``__main__`` module in the child. With
 this file harmlessly.
 """
 
-from .app import main
+from . import main
 
 if __name__ == "__main__":
     raise SystemExit(main())

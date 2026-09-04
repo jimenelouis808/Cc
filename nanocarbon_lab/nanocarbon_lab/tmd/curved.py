@@ -64,6 +64,7 @@ from ..builders import implicit as im
 from ..builders import remesh as rm
 from ..builders.fullerene_mesh import minimum_image
 from ..builders.remesh import _adjacency, _edge_faces
+from ..utils.constants import DEFAULT_VACUUM_1D
 from ..utils.geometry import center_in_cell
 from .materials import Phase, TMDMaterial, coordination_geometry, get_material
 
@@ -506,9 +507,45 @@ def build_tmd_schwarzite(
             f"{len(failures)} grid resolutions:\n  " + "\n  ".join(failures)
         )
     mesh, positions, net_bonds, splits, _ = built
-    rings = rm.degree_histogram(mesh)
+    atoms, shared = _decorate_as_tmd(mesh, positions, net_bonds, material,
+                                     cell, relax_iterations, seed)
     stats = rm.mesh_statistics(mesh)
-    reference = _face_normals(mesh, cell)
+    atoms.set_cell(np.diag([cell] * 3))
+    atoms.set_pbc(True)
+    center_in_cell(atoms, axes=(0, 1, 2))
+
+    atoms.info.update(shared)
+    atoms.info.update(
+        {
+            "structure_type": "tmd_schwarzite",
+            "phase": phase,
+            "coordination": coordination_geometry(phase),
+            "schwarzite_kind": kind,
+            "cell": cell,
+            "genus": stats["genus"],
+            "euler": stats["euler"],
+            "parity": parity,
+            "parity_splits": splits,
+        }
+    )
+    return atoms
+
+
+def _decorate_as_tmd(mesh, positions, net_bonds, material, box,
+                     relax_iterations, seed):
+    """Turn a parity-repaired mesh and its dual net into MX2 atoms.
+
+    Shared by every curved builder here, because none of this depends on
+    what shape the surface is: relax the site net, orient the normals,
+    two-colour into sublattices, hang the sandwich off each site, and
+    relax the atoms. Only the meshing and the cell differ between a
+    periodic schwarzite and a finite junction.
+
+    ``box`` is the cubic cell length, or ``None`` for a finite structure.
+    """
+    site_bond = material.a / np.sqrt(3.0)
+    rings = rm.degree_histogram(mesh)
+    reference = _face_normals(mesh, box)
 
     # The sites form a trivalent net -- graphene's topology with a
     # different bond length -- so the carbon relaxer applies directly,
@@ -517,9 +554,9 @@ def build_tmd_schwarzite(
         positions.copy(), set(net_bonds), equilibrium=site_bond,
         angle_deg=120.0, k_bond=40.0, k_angle=15.0, k_repel=25.0,
         repel_cutoff=site_bond * 1.55, repel_skin=2.0,
-        box=cell, outer_cycles=3, max_iterations=relax_iterations,
+        box=box, outer_cycles=3, max_iterations=relax_iterations,
     )
-    normals = _site_normals(sites, net_bonds, reference, cell)
+    normals = _site_normals(sites, net_bonds, reference, box)
 
     colour, frustrated = two_colour(len(sites), net_bonds, seed=seed)
     n_zero = sum(1 for v in colour.values() if v == 0)
@@ -576,17 +613,15 @@ def build_tmd_schwarzite(
         coords.copy(), set(targets), equilibrium=targets,
         k_bond=40.0, k_angle=0.0, k_repel=60.0,
         repel_cutoff=3.0, repel_skin=2.0,
-        box=cell, outer_cycles=4, max_iterations=relax_iterations,
+        box=box, outer_cycles=4, max_iterations=relax_iterations,
         exclude_13=False,
     )
 
-    atoms = Atoms(symbols=symbols, positions=relaxed,
-                  cell=np.diag([cell] * 3), pbc=True)
-    center_in_cell(atoms, axes=(0, 1, 2))
+    atoms = Atoms(symbols=symbols, positions=relaxed)
 
     pairs = np.array(sorted(mx_bonds), dtype=int)
     lengths = np.linalg.norm(
-        minimum_image(relaxed[pairs[:, 1]] - relaxed[pairs[:, 0]], cell), axis=1)
+        minimum_image(relaxed[pairs[:, 1]] - relaxed[pairs[:, 0]], box), axis=1)
     deviation = np.abs(lengths - material.bond_length) / material.bond_length
 
     # Coordination from the bond graph the builder constructed, never
@@ -604,45 +639,194 @@ def build_tmd_schwarzite(
 
     n_metal = symbols.count(material.metal)
     n_chalcogen = symbols.count(material.chalcogen)
+    shared = {
+        # The real bond graph, recorded rather than left to be guessed
+        # from distances later: validation and the render bundle both
+        # read this, and on a saddle a distance cutoff gets it wrong.
+        "bonds": [[int(a), int(b)] for a, b in every],
+        "graph_metal_coordination": (int(metal_coordination.min()),
+                                     int(metal_coordination.max())),
+        "graph_chalcogen_coordination": (int(chalcogen_coordination.min()),
+                                         int(chalcogen_coordination.max())),
+        "stoichiometry": n_chalcogen / n_metal,
+        "material": material.formula,
+        "metal": material.metal,
+        "chalcogen": material.chalcogen,
+        "ring_counts": {int(k): int(v) for k, v in rings.items()},
+        "ring_deficit": int(sum((6 - k) * v for k, v in rings.items())),
+        "odd_rings": int(sum(v for k, v in rings.items() if k % 2)),
+        "antiphase_bonds": int(frustrated),
+        "n_net_bonds": len(net_bonds),
+        "antiphase_fraction": frustrated / len(net_bonds),
+        "bond_deviation_max": float(deviation.max()),
+        "bond_deviation_p95": float(np.percentile(deviation, 95)),
+        "sublattices": (n_metal, n_chalcogen),
+        "a": material.a,
+        "h": material.h,
+        "bond_length": material.bond_length,
+    }
+    return atoms, shared
+
+
+def build_tmd_junction(
+    material: str | TMDMaterial = "MoS2",
+    kind: str = "Y",
+    tube_radius: float = 12.0,
+    arm_length: float = 26.0,
+    blend: float = 5.0,
+    parity: ParityRepair = "split",
+    phase: Phase = "2H",
+    grid_resolution: int = 64,
+    remesh_iterations: int = 25,
+    relax_iterations: int = 4000,
+    vacuum: float = DEFAULT_VACUUM_1D,
+    seed: int = 0,
+) -> Atoms:
+    """Build a finite, closed MX2 tube junction (L, T, Y or X).
+
+    The same surface-to-sandwich route as
+    :func:`build_tmd_schwarzite`, on a junction's implicit field instead
+    of a minimal surface's. The topology is the interesting difference: a
+    capped junction is sphere-like whatever its number of arms, so
+    ``sum(6 - n) = 6*chi = +12`` -- *positive*, where a schwarzite's is
+    negative.
+
+    With only even rings allowed, +12 cannot be paid in pentagons. It is
+    paid in **squares**, at +2 each, so a closed MX2 junction wants six of
+    them net of any octagons -- which is the same budget that closes an
+    MX2 sphere as the observed MoS2 nano-octahedron. The branch itself is
+    a saddle and still needs octagons; the caps are what carry the
+    squares.
+
+    Parameters
+    ----------
+    material
+        Formula or :class:`~nanocarbon_lab.tmd.materials.TMDMaterial`.
+    kind
+        ``"L"``, ``"T"``, ``"Y"`` or ``"X"``.
+    tube_radius, arm_length, blend
+        Arm radius, arm length from the centre, and the smoothing radius
+        of the union where the arms meet, all in Å.
+    parity
+        As in :func:`build_tmd_schwarzite`, but the default is
+        ``"split"`` here rather than ``"flip"``, and for a reason the
+        schwarzite does not share. A junction is genus 0, so there are no
+        homology classes left over once the degrees are even -- the
+        2-colouring theorem is a sphere result and this *is* a sphere.
+        Splitting therefore reaches **exactly zero** homoelemental bonds
+        and X/M = 2.000, every time, where on a schwarzite it only
+        sometimes does. Leaving the rings odd instead costs 14% wrong
+        bonds against 7% bond strain, which is not a trade worth
+        defaulting to.
+    phase
+        Recorded for provenance; a curved sheet has no single stacking.
+    grid_resolution, remesh_iterations, relax_iterations
+        Marching-cubes grid, remesh passes, L-BFGS iterations.
+    vacuum
+        Padding (Å) around the finished structure.
+    seed
+        Seeds the flip annealing and the colouring search.
+
+    Returns
+    -------
+    ase.Atoms
+        Finite and non-periodic, with the ring census, the Euler budget
+        and the homoelemental-bond count in ``info``.
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``parity`` or a non-positive radius.
+    RuntimeError
+        If the meshed surface comes out open or torn.
+    """
+    if isinstance(material, str):
+        material = get_material(material)
+    if parity not in ("none", "flip", "split"):
+        raise ValueError(
+            f"parity must be 'none', 'flip' or 'split'; got {parity!r}.")
+    if tube_radius <= 0 or arm_length <= 0:
+        raise ValueError("tube_radius and arm_length must be positive.")
+    if tube_radius < 2.0 * material.h:
+        raise ValueError(
+            f"tube_radius={tube_radius:.1f} Å is too narrow for "
+            f"{material.formula}: the sandwich is {material.h:.1f} Å thick, so "
+            "the inner chalcogen wall would collapse through the axis. Real "
+            "MX2 tubes are tens of nm across."
+        )
+
+    site_bond = material.a / np.sqrt(3.0)
+    field, extent = im.junction_field(
+        kind, tube_radius=tube_radius, arm_length=arm_length, blend=blend)
+
+    failures: list[str] = []
+    built = None
+    for resolution in (grid_resolution, grid_resolution + 16,
+                       grid_resolution + 32):
+        try:
+            mesh = rm.marching_cubes_mesh(field, extent, resolution=resolution)
+            stats = rm.mesh_statistics(mesh)
+            if stats["boundary_edges"]:
+                failures.append(f"resolution {resolution}: surface came out "
+                                f"open ({stats['boundary_edges']} edges)")
+                continue
+            mesh = rm.isotropic_remesh(
+                mesh, field, target_edge=material.a,
+                iterations=remesh_iterations, anneal_sweeps=0,
+                rng=np.random.default_rng(seed),
+            )
+            splits = 0
+            if parity == "split":
+                mesh, splits = repair_parity_by_splitting(
+                    mesh, field, None, material.a)
+            elif parity == "flip":
+                mesh, _ = repair_parity_by_flipping(mesh, seed=seed)
+            positions, net_bonds, _ = fm.dual_honeycomb(mesh, box=None)
+            net_bonds = sorted(net_bonds)
+        except (StopIteration, RuntimeError, ValueError) as exc:
+            failures.append(f"resolution {resolution}: {exc!r}")
+            continue
+
+        pairs = np.array(net_bonds, dtype=int)
+        spacing = np.linalg.norm(
+            positions[pairs[:, 1]] - positions[pairs[:, 0]], axis=1)
+        if spacing.max() > 2.0 * site_bond:
+            failures.append(f"resolution {resolution}: sites up to "
+                            f"{spacing.max():.1f} Å apart, so the mesh is torn")
+            continue
+        built = (mesh, positions, net_bonds, splits)
+        break
+
+    if built is None:
+        raise RuntimeError(
+            f"Could not mesh a {kind!r} junction at tube_radius="
+            f"{tube_radius:.1f} Å after {len(failures)} grid resolutions:\n  "
+            + "\n  ".join(failures)
+        )
+
+    mesh, positions, net_bonds, splits = built
+    atoms, shared = _decorate_as_tmd(mesh, positions, net_bonds, material,
+                                     None, relax_iterations, seed)
+    stats = rm.mesh_statistics(mesh)
+    span = atoms.get_positions().max(axis=0) - atoms.get_positions().min(axis=0)
+    atoms.set_cell(np.diag(span + 2.0 * vacuum))
+    atoms.set_pbc(False)
+    center_in_cell(atoms, axes=(0, 1, 2))
+
+    atoms.info.update(shared)
     atoms.info.update(
         {
-            # The real bond graph, recorded rather than left to be guessed
-            # from distances later: validation and the render bundle both
-            # read this, and on a saddle a distance cutoff gets it wrong.
-            "bonds": [[int(a), int(b)] for a, b in every],
-            "graph_metal_coordination": (int(metal_coordination.min()),
-                                         int(metal_coordination.max())),
-            "graph_chalcogen_coordination": (int(chalcogen_coordination.min()),
-                                             int(chalcogen_coordination.max())),
-            "stoichiometry": n_chalcogen / n_metal,
-        }
-    )
-    atoms.info.update(
-        {
-            "structure_type": "tmd_schwarzite",
-            "material": material.formula,
-            "metal": material.metal,
-            "chalcogen": material.chalcogen,
+            "structure_type": "tmd_junction",
             "phase": phase,
             "coordination": coordination_geometry(phase),
-            "schwarzite_kind": kind,
-            "cell": cell,
+            "junction_kind": kind,
+            "tube_radius": tube_radius,
+            "arm_length": arm_length,
+            "blend": blend,
             "genus": stats["genus"],
             "euler": stats["euler"],
-            "ring_counts": {int(k): int(v) for k, v in rings.items()},
-            "ring_deficit": int(sum((6 - k) * v for k, v in rings.items())),
             "parity": parity,
             "parity_splits": splits,
-            "odd_rings": int(sum(v for k, v in rings.items() if k % 2)),
-            "antiphase_bonds": int(frustrated),
-            "n_net_bonds": len(net_bonds),
-            "antiphase_fraction": frustrated / len(net_bonds),
-            "bond_deviation_max": float(deviation.max()),
-            "bond_deviation_p95": float(np.percentile(deviation, 95)),
-            "sublattices": (n_metal, n_chalcogen),
-            "a": material.a,
-            "h": material.h,
-            "bond_length": material.bond_length,
         }
     )
     return atoms
@@ -678,6 +862,12 @@ def schwarzite_quality(atoms: Atoms) -> tuple[str, str]:
         boundary = (f"{antiphase:.1%} of bonds are homoelemental — an "
                     "inversion-domain boundary, which even degrees alone "
                     "cannot rule out above genus 0")
+    elif int(info.get("genus", 0)) == 0:
+        # On a sphere the 2-colouring theorem is exactly sufficient: even
+        # degrees and nothing else. There is no homology left to obstruct
+        # it, so this is guaranteed rather than lucky.
+        boundary = ("every bond is M–X — the net alternates perfectly, which "
+                    "even degrees guarantee on a sphere-like surface")
     else:
         # Reachable but not guaranteed: even degrees settle the local
         # parity, and the 2g homology classes settle the rest. Saying
@@ -707,6 +897,7 @@ __all__ = [
     "METAL_METAL_BOND",
     "MIN_SCHWARZITE_CELL",
     "ParityRepair",
+    "build_tmd_junction",
     "build_tmd_schwarzite",
     "odd_vertices",
     "repair_parity_by_flipping",

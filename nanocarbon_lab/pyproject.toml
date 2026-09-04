@@ -50,7 +50,7 @@ gui = [
 
 [project.scripts]
 nanocarbon = "nanocarbon_lab.cli.main:main"
-nanocarbon-gui = "nanocarbon_lab.gui.app:main"
+nanocarbon-gui = "nanocarbon_lab.gui:main"
 
 [tool.setuptools.packages.find]
 include = ["nanocarbon_lab*"]

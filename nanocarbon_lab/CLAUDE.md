@@ -295,8 +295,20 @@ Things already measured; do not re-derive them the hard way:
   finds bonds by distance; on a saddle a 2.4 A bond's cutoff reaches
   3.0 A and reads a sound cell as 4-8 coordinate metal.
 
-Y junctions in MX2 are still missing. That is now a wiring job on the
-same machinery, not a research one.
+**MX2 junctions** (`build_tmd_junction`) reuse the same machinery over
+the junction field. The topology is *easier* than a schwarzite's and the
+reason must not be forgotten: a capped junction is sphere-like at any arm
+count, so `chi = 2`, the budget is `+12`, and it is paid in **squares**
+(+2) against **octagons/decagons** (-2/-4) at the crotch. Genus 0 leaves
+no homology classes for the parity repair to fight, so `split` reaches
+exactly zero odd rings and the colouring is then exact -- which is why
+the default parity here is `split`, not the schwarzite's `flip`. Measured
+Y at r=12, arm 26: 3153 atoms, rings 4:205/6:664/8:169/10:15,
+`sum(6-n)=12`, **0%** homoelemental, X/M = 2.000, M 6-6 / X 3-3,
+p95 strain 7.3%. `schwarzite_quality` reads `info["genus"]` and phrases
+the zero-antiphase case as guaranteed rather than lucky; keep that
+branch. `tube_radius < 2*h` is refused -- the chalcogen planes would meet
+on the axis.
 
 ## Bond detection is element-aware, and must not be quadratic
 

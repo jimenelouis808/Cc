@@ -1,11 +1,11 @@
 """Structure builders grouped by dimensionality."""
 
+from .assemblies import build_bundle, build_multiwall_cnt
 from .capped_cnt import build_capped_cnt
 from .cnt import build_cnt
 from .foam3d import build_carbon_foam
 from .fullerene import build_fullerene, build_nano_onion
 from .graphene import build_graphene, build_graphene_supercell
-from .assemblies import build_bundle, build_multiwall_cnt
 from .junction import build_junction, build_schwarzite
 from .nanocoil import build_nanocoil
 from .nanoribbon import build_nanoribbon

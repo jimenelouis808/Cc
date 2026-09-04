@@ -17,7 +17,6 @@ import json
 from pathlib import Path
 
 import numpy as np
-
 from ase import Atoms
 
 

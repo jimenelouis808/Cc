@@ -27,7 +27,7 @@ validation pass before writing.
 | `swept`         | Coils and arbitrary curved tubes whose ring topology is **derived from the curvature** |
 | `fullerene`     | Closed cages (C60, C240, C540, C20, C80, …) and carbon nano-onions |
 | `assemblies`    | Multi-wall nanotubes and hexagonally packed bundles, at the van der Waals gap |
-| `tmd`           | **Transition-metal dichalcogenides** (MoS2, WS2, …): monolayers, stacks, bulk crystals, ribbons, rolled nanotubes, helical coils and **schwarzites**; Janus layers, alloys, vacancies and antisites |
+| `tmd`           | **Transition-metal dichalcogenides** (MoS2, WS2, …): monolayers, stacks, bulk crystals, ribbons, rolled nanotubes, helical coils, **schwarzites** and **L/T/Y/X junctions**; Janus layers, alloys, vacancies and antisites |
 | `hetero`        | **Twisted bilayers and van der Waals stacks**: commensurate moiré cells (including the 1.08° magic angle), graphene/hBN/MX2 in any combination |
 
 ## Installation
@@ -135,6 +135,11 @@ nanocarbon tmd-coil --material MoS2 --n 30 --coil-radius 220 --pitch 90 \
 # against bond strain; 'split' makes every ring even.
 nanocarbon tmd-schwarzite --material MoS2 --kind primitive --cell 36 \
     --parity flip --out out/mos2_sw
+
+# Branched tube: L, T, Y or X. Sphere-like, so 'split' reaches a
+# perfectly alternating net — hence the default.
+nanocarbon tmd-junction --material MoS2 --kind Y --tube-radius 12 \
+    --arm-length 26 --out out/mos2_y
 ```
 
 Stacks of 2D layers — twisted or aligned, and mixing families freely:
@@ -1055,6 +1060,52 @@ a 2.4 Å bond's cutoff reaches 3.0 Å and sweeps up non-bonded neighbours,
 reading a sound cell as 4–8 coordinate metal. The builder keeps the real
 bond graph and judges from that.
 
+### Branched MX2 tubes: L, T, Y and X junctions
+
+`build_tmd_junction` runs the schwarzite machinery over the *junction*
+field instead of a minimal surface: capped arms fused at a blend radius,
+marching cubes, isotropic remesh, then the same parity repair and
+two-colouring before the X–M–X sandwich is hung off the net.
+
+The topology is easier here than on a schwarzite, and for a reason worth
+stating. A capped junction is sphere-like whatever its arm count — the
+arms are handles-free tubes with caps — so `chi = 2` and the ring budget
+is `sum(6-n) = +12`, exactly as for a fullerene. Positive curvature in a
+binary compound is paid in **squares** (+2 each), the way MoS2's
+nano-octahedron pays it, and the negative curvature at the crotch between
+arms is paid in **octagons** (−2) and **decagons** (−4). No pentagon
+appears anywhere, so no bond is ever forced to be homoelemental by ring
+parity alone.
+
+Genus 0 also means the parity repair has nothing left to fight: the
+homology classes that keep a torus or a Schwarz P cell from being
+perfectly bipartite do not exist on a sphere, so `parity="split"` reaches
+exactly zero odd rings and the colouring is then exact. That is why the
+default here is `split` and not the schwarzite's `flip`.
+
+Measured, `tmd-junction --kind Y --tube-radius 12 --arm-length 26`:
+
+| quantity | value |
+| --- | --- |
+| atoms | 3153 (Mo 1051, S 2102), X/M = 2.000 |
+| genus / Euler | 0 / 2 |
+| rings | 4:205, 6:664, 8:169, 10:15 |
+| Euler budget | `sum(6-n) = 12 = 6*chi` ✓ |
+| parity | split → 0 odd rings, 217 splits |
+| homoelemental bonds | 0 / 3153 (0.0%) |
+| coordination | metal 6–6, chalcogen 3–3 |
+| verdict | STRAINED (p95 bond strain 7.3%) |
+
+The residual strain is the sandwich bending over the crotch, not a
+network fault — the bond graph is chemically perfect. `tube_radius` is
+refused below `2*h` (6.3 Å for MoS2): thinner than that and the two
+chalcogen planes of the sandwich meet on the axis.
+
+```bash
+python -m nanocarbon_lab.cli.main tmd-junction --material MoS2 --kind Y \
+    --tube-radius 12 --arm-length 26 --out out/mos2_y
+```
+
 ### Twisted bilayers and moiré superlattices
 
 Two hexagonal sheets share a periodic cell only at special angles. For
@@ -1110,13 +1161,6 @@ alloy it, knock sulphur out of it:
   split in half.
 * **Antisites** (`antisites`) — a metal on a chalcogen site, as in
   sulphur-poor growth.
-
-### Not yet: Y junctions in MX2
-
-The remaining gap. Same machinery as the schwarzite — an implicit surface
-meshed and decorated — so it is now a wiring job rather than a research
-one, but the junction field needs its caps handled and it is untested
-here.
 
 ## Repository layout
 

@@ -8,7 +8,11 @@ strains it in a way rolling graphene does not.
 """
 
 from .coil import build_tmd_coil
-from .curved import build_tmd_schwarzite, schwarzite_quality
+from .curved import (
+    build_tmd_junction,
+    build_tmd_schwarzite,
+    schwarzite_quality,
+)
 from .materials import MATERIALS, TMDMaterial, get_material
 from .modify import alloy, antisites, chalcogen_vacancies, make_janus
 from .nanotube import build_tmd_nanotube, tube_radius
@@ -23,6 +27,7 @@ __all__ = [
     "antisites",
     "build_tmd_bulk",
     "build_tmd_coil",
+    "build_tmd_junction",
     "build_tmd_layers",
     "build_tmd_monolayer",
     "build_tmd_nanotube",

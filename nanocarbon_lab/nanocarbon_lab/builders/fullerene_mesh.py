@@ -47,8 +47,7 @@ never has to re-derive ring statistics: it can trust the mesh.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from collections.abc import Mapping
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 

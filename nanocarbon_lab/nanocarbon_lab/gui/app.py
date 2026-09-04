@@ -50,19 +50,17 @@ from pathlib import Path
 
 import numpy as np
 
+from . import TKINTER_HELP
+
 try:
     import tkinter as tk
     from tkinter import filedialog, ttk
 except ImportError as exc:  # pragma: no cover - environment dependent
-    raise SystemExit(
-        "The nanocarbon_lab GUI needs tkinter, which is not available in this "
-        "Python installation.\n"
-        "  Debian/Ubuntu : sudo apt install python3-tk\n"
-        "  Fedora/RHEL   : sudo dnf install python3-tkinter\n"
-        "  macOS/Windows : use the python.org installer (tkinter is included)\n"
-        "You can still build structures without a GUI via the 'nanocarbon' "
-        "command."
-    ) from exc
+    # ImportError and not SystemExit: this is a module import, and pytest
+    # cannot catch SystemExit while collecting, so raising one here took
+    # the whole suite down on a machine without python3-tk. The friendly
+    # advice reaches the user from ``nanocarbon_lab.gui.main`` instead.
+    raise ImportError(TKINTER_HELP) from exc
 
 # Deliberately no matplotlib.use("TkAgg") here. The canvas below is built
 # by wrapping a bare Figure in FigureCanvasTkAgg, which is the embedding
@@ -202,6 +200,10 @@ PRESETS: dict[str, dict[str, object]] = {
     "MoS2/WS2 stack": {
         "mode_kind": "vdW stack", "het_bottom": "MoS2", "het_top": "WS2",
         "het_third": "none", "het_nx": 2, "het_ny": 2},
+    "MoS2 Y junction": {
+        "mode_kind": "TMD junction", "tmd_material": "MoS2",
+        "tmd_j_kind": "Y", "tmd_j_radius": 12.0, "tmd_j_arm": 26.0,
+        "tmd_j_parity": "split"},
     "MoS2 schwarzite (Schwarz P)": {
         "mode_kind": "TMD schwarzite", "tmd_material": "MoS2",
         "tmd_sw_kind": "primitive", "tmd_sw_cell": 36.0,
@@ -564,6 +566,13 @@ class NanocarbonGUI:
                                          tk.DoubleVar(value=36.0))
         self.var_tmd_sw_parity = self._var("tmd_sw_parity",
                                            tk.StringVar(value="flip"))
+        self.var_tmd_j_kind = self._var("tmd_j_kind", tk.StringVar(value="Y"))
+        self.var_tmd_j_radius = self._var("tmd_j_radius",
+                                          tk.DoubleVar(value=12.0))
+        self.var_tmd_j_arm = self._var("tmd_j_arm", tk.DoubleVar(value=26.0))
+        self.var_tmd_j_blend = self._var("tmd_j_blend", tk.DoubleVar(value=5.0))
+        self.var_tmd_j_parity = self._var("tmd_j_parity",
+                                          tk.StringVar(value="split"))
         self.var_het_bottom = self._var("het_bottom",
                                         tk.StringVar(value="graphene"))
         self.var_het_top = self._var("het_top", tk.StringVar(value="same"))
@@ -928,6 +937,35 @@ class NanocarbonGUI:
                                     justify="left")
         self.lbl_tmd_sw.grid(row=4, column=0, columnspan=2, sticky="w")
 
+        # --- junction
+        self.frame_tmd_j = ttk.LabelFrame(parent, text="Junction", padding=8)
+        self.frame_tmd_j.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_tmd_j, text="Kind").grid(row=0, column=0,
+                                                      sticky="w")
+        ttk.Combobox(self.frame_tmd_j, textvariable=self.var_tmd_j_kind,
+                     values=["L", "T", "Y", "X"], state="readonly",
+                     width=6).grid(row=0, column=1, sticky="e", pady=(0, 4))
+        self._param(self.frame_tmd_j, "Tube radius (Å)", self.var_tmd_j_radius,
+                    8.0, 30.0, 1, resolution=0.5, hard_hi=200.0,
+                    command=self._update_tmd_hint)
+        self._param(self.frame_tmd_j, "Arm length (Å)", self.var_tmd_j_arm,
+                    15.0, 60.0, 3, resolution=1.0, hard_hi=400.0,
+                    command=self._update_tmd_hint)
+        self._param(self.frame_tmd_j, "Blend (Å)", self.var_tmd_j_blend,
+                    1.0, 12.0, 5, resolution=0.5, hard_hi=50.0)
+        ttk.Label(self.frame_tmd_j, text="M/X parity").grid(row=7, column=0,
+                                                            sticky="w")
+        ttk.Combobox(self.frame_tmd_j, textvariable=self.var_tmd_j_parity,
+                     values=["none", "flip", "split"], state="readonly",
+                     width=8).grid(row=7, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_j_parity.trace_add(
+            "write", lambda *_: (self._update_tmd_hint(),
+                                 self._schedule_estimate()))
+        self.lbl_tmd_j = ttk.Label(self.frame_tmd_j, text="", foreground=MUTED,
+                                   font=("TkDefaultFont", 8), wraplength=230,
+                                   justify="left")
+        self.lbl_tmd_j.grid(row=8, column=0, columnspan=2, sticky="w")
+
         # --- heterostructures
         from ..hetero import available_layers
 
@@ -1016,6 +1054,7 @@ class NanocarbonGUI:
                       self.frame_tmd_ribbon, self.frame_tmd_tube,
                       self.frame_tmd_coil, self.frame_tmd_sw,
                       self.frame_het, self.frame_twist, self.frame_stack,
+                      self.frame_tmd_j,
                       self.frame_surface, self.frame_chem):
             frame.pack_forget()
 
@@ -1045,6 +1084,8 @@ class NanocarbonGUI:
                 self.frame_tmd_tube.pack(fill="x", pady=(8, 0))
             elif mode == "TMD schwarzite":
                 self.frame_tmd_sw.pack(fill="x", pady=(8, 0))
+            elif mode == "TMD junction":
+                self.frame_tmd_j.pack(fill="x", pady=(8, 0))
             elif mode == "TMD coil":
                 # The coil is a swept nanotube, so it needs the chiral
                 # indices as well as the helix panel.
@@ -1176,6 +1217,32 @@ class NanocarbonGUI:
                     " — real MX2 tubes are tens of nm across; raise n"),
             foreground=colour,
         )
+
+        if hasattr(self, "lbl_tmd_j"):
+            try:
+                radius = float(self.var_tmd_j_radius.get())
+            except (tk.TclError, ValueError):
+                radius = 0.0
+            floor = 2.0 * material.h
+            if radius < floor:
+                self.lbl_tmd_j.config(
+                    text=f"Needs at least {floor:.1f} Å: the sandwich is "
+                         f"{material.h:.1f} Å thick, so a narrower tube would "
+                         "collapse its inner wall through the axis.",
+                    foreground=BAD_RED)
+            else:
+                parity = self.var_tmd_j_parity.get()
+                note = ("A capped junction is sphere-like, so sum(6−n) = +12 — "
+                        "positive, unlike a schwarzite. With no pentagons "
+                        "allowed it is paid in squares.")
+                if parity == "split":
+                    note += (" Genus 0 leaves no homology, so every ring even "
+                             "means exactly zero M–M and X–X bonds.")
+                else:
+                    note += " Leaving rings odd costs ~14% homoelemental bonds."
+                self.lbl_tmd_j.config(
+                    text=note,
+                    foreground=OK_GREEN if parity == "split" else WARN_AMBER)
 
         if hasattr(self, "lbl_tmd_sw"):
             from ..tmd.curved import MIN_SCHWARZITE_CELL
@@ -1563,6 +1630,15 @@ class NanocarbonGUI:
                 length=int(self.var_tmd_length.get()),
                 edge=self.var_tmd_edge.get(),
                 termination=self.var_tmd_termination.get(),
+            )
+        if mode == "TMD junction":
+            return dict(
+                material=material, phase=phase,
+                kind=self.var_tmd_j_kind.get(),
+                tube_radius=float(self.var_tmd_j_radius.get()),
+                arm_length=float(self.var_tmd_j_arm.get()),
+                blend=float(self.var_tmd_j_blend.get()),
+                parity=self.var_tmd_j_parity.get(),
             )
         if mode == "TMD schwarzite":
             return dict(
@@ -2151,8 +2227,13 @@ class NanocarbonGUI:
             lines.append(f"pitch        {info['pitch']:>6.1f} Å")
             lines.append(f"turns        {info['turns']:>6.2f} "
                          f"({info['periods']} periods)")
-        if "schwarzite_kind" in info:
-            lines.append(f"surface      {info['schwarzite_kind']:>9s}")
+        if "junction_kind" in info:
+            lines.append(f"junction     {info['junction_kind']:>9s}")
+            lines.append(f"tube radius  {info['tube_radius']:>6.1f} Å")
+            lines.append(f"arm length   {info['arm_length']:>6.1f} Å")
+        if "junction_kind" in info or "schwarzite_kind" in info:
+            if "schwarzite_kind" in info:
+                lines.append(f"surface      {info['schwarzite_kind']:>9s}")
             lines.append(f"genus        {info['genus']:>6d}")
             counts = info["ring_counts"]
             lines.append("rings        " + ", ".join(
@@ -2183,7 +2264,7 @@ class NanocarbonGUI:
              f"{report['chalcogen_coordination_max']}"),
             f"  X/M ratio     {report['stoichiometry']:.3f}",
         ]
-        if info.get("structure_type") == "tmd_schwarzite":
+        if info.get("structure_type") in ("tmd_schwarzite", "tmd_junction"):
             # Distance-based coordination is wrong on a saddle: the 2.4 Å
             # bond's cutoff reaches 3.0 Å and sweeps up non-bonded
             # neighbours. The builder kept the real bond graph, so use it.

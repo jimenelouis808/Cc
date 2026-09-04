@@ -40,10 +40,12 @@ CARBON_MODES = (
     "bundle",
 )
 
-#: MX2 dichalcogenides, flat through curved. The schwarzite needs even
-#: rings to keep the M/X alternation, which is why it carries a `parity`
-#: choice the carbon one does not; see `tmd/curved.py`. Y junctions are
-#: still missing.
+#: MX2 dichalcogenides, flat through curved. The curved two need even
+#: rings to keep the M/X alternation, which is why they carry a `parity`
+#: choice the carbon ones do not; see `tmd/curved.py`. Their defaults
+#: differ on purpose: a junction is genus 0, where even rings are
+#: sufficient and `split` always reaches a perfectly alternating net; a
+#: schwarzite is not, so `flip` trades alternation for geometry.
 TMD_MODES = (
     "TMD layers",
     "TMD bulk",
@@ -51,6 +53,7 @@ TMD_MODES = (
     "TMD nanotube",
     "TMD coil",
     "TMD schwarzite",
+    "TMD junction",
 )
 
 #: Stacks of two or more 2D layers, twisted or aligned. A third family
@@ -82,7 +85,7 @@ def family_of(mode: str) -> str:
 # seed polyhedron. They cost orders of magnitude more time per atom, which
 # is the single most useful thing to know before pressing Build.
 IMPLICIT_MODES = frozenset({"coil (relaxed)", "junction", "schwarzite",
-                            "TMD schwarzite"})
+                            "TMD schwarzite", "TMD junction"})
 
 # Area of one period of each triply periodic minimal surface, in units of
 # the cell length squared. Standard values for the trigonometric
@@ -148,16 +151,16 @@ def build(job: Job):
         build_nano_onion,
         build_schwarzite,
     )
+    from .hetero import build_twisted_bilayer, build_vdw_stack
     from .tmd import (
         build_tmd_bulk,
         build_tmd_coil,
+        build_tmd_junction,
         build_tmd_layers,
         build_tmd_nanotube,
         build_tmd_ribbon,
         build_tmd_schwarzite,
     )
-
-    from .hetero import build_twisted_bilayer, build_vdw_stack
 
     builders = {
         "twisted bilayer": build_twisted_bilayer,
@@ -168,6 +171,7 @@ def build(job: Job):
         "TMD nanotube": build_tmd_nanotube,
         "TMD coil": build_tmd_coil,
         "TMD schwarzite": build_tmd_schwarzite,
+        "TMD junction": build_tmd_junction,
         "capped tube": build_capped_cnt,
         "coil (relaxed)": build_coil,
         "fullerene": build_fullerene,
@@ -307,6 +311,26 @@ def _estimate_tmd_atoms(mode: str, p: dict) -> int:
     if mode == "TMD ribbon":
         # `width` rows of one formula unit each, times the length repeats.
         return 3 * int(p.get("width", 6)) * int(p.get("length", 1))
+    if mode == "TMD junction":
+        # Same surface-area argument as the schwarzite, on a junction's
+        # arms and central sphere instead of a periodic minimal surface.
+        from .tmd.materials import get_material
+
+        a = get_material(p.get("material", "MoS2")).a
+        radius = float(p.get("tube_radius", 12.0))
+        arm = float(p.get("arm_length", 26.0))
+        n_arms = {"L": 2, "T": 3, "Y": 3, "X": 4}.get(p.get("kind", "Y"), 3)
+        area = n_arms * (2 * math.pi * radius * arm
+                         + 2 * math.pi * radius**2)
+        # Arms bury each other where they meet, and summing them counts
+        # the junction body once per arm. The shortfall grows with the
+        # arm count -- measured 0.96 for an L, 0.85 for a Y, 0.73 for an
+        # X -- so correct for it linearly rather than pretending the
+        # arms are disjoint.
+        overlap = min(1.0, max(0.5, 1.19 - 0.115 * n_arms))
+        triangles = area * overlap / (math.sqrt(3.0) / 4.0 * a * a)
+        crowding = 1.22 if p.get("parity", "split") == "split" else 1.0
+        return int(round(1.5 * triangles * crowding))
     if mode == "TMD schwarzite":
         # Meshed, not enumerated: surface area over the area one
         # equilateral triangle of side `a` covers, then 1.5 atoms per
@@ -374,7 +398,7 @@ def estimate_cost(job: Job) -> tuple[str, str]:
         # the surprise worth warning about.
         return ("very slow" if n > 30000 else "slow" if n > 8000 else "fast",
                 f"~{n} atoms — a smaller twist angle means a bigger cell")
-    if job.mode == "TMD schwarzite":
+    if job.mode in ("TMD schwarzite", "TMD junction"):
         # The one TMD mode that meshes and relaxes -- twice, in fact (the
         # site net, then the atoms) -- so it is costed like the carbon
         # implicit modes rather than like its own family.
@@ -470,6 +494,11 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     }),
     "vdW stack": ("stack", {
         "layers": "--layers", "gap": "--gap", "nx": "--nx", "ny": "--ny",
+    }),
+    "TMD junction": ("tmd-junction", {
+        "material": "--material", "kind": "--kind",
+        "tube_radius": "--tube-radius", "arm_length": "--arm-length",
+        "blend": "--blend", "parity": "--parity", "phase": "--phase",
     }),
     "TMD schwarzite": ("tmd-schwarzite", {
         "material": "--material", "kind": "--kind", "cell": "--cell",

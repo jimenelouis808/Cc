@@ -31,6 +31,36 @@ def collect(worker: BuildWorker, timeout: float = 300.0):
     return None
 
 
+def test_the_worker_imports_without_a_toolkit():
+    """The headless worker must not drag tkinter in behind it.
+
+    ``gui/__init__`` used to import ``app`` eagerly, and ``app`` raised
+    ``SystemExit`` when tkinter was missing. pytest cannot catch a
+    ``SystemExit`` during collection, so on a machine without
+    ``python3-tk`` the *entire* suite died with an INTERNALERROR at this
+    module's import line -- not a skip, and not only the GUI tests. The
+    import at the top of this file is the real guard; this asserts the
+    two properties that keep it working.
+    """
+    import subprocess
+    import sys
+
+    probe = (
+        "import sys;"
+        "sys.modules['tkinter'] = None;"  # force the ImportError path
+        "import nanocarbon_lab.gui as g;"
+        "from nanocarbon_lab.gui.worker import BuildWorker;"
+        "assert 'nanocarbon_lab.gui.app' not in sys.modules;"
+        "assert 'tkinter' in g.TKINTER_HELP;"
+        "print('ok')"
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True
+    )
+    assert done.returncode == 0, done.stderr
+    assert "ok" in done.stdout
+
+
 @pytest.fixture
 def worker():
     instance = BuildWorker()

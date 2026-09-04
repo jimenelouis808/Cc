@@ -32,8 +32,6 @@ from __future__ import annotations
 import numpy as np
 from ase import Atoms
 
-from .materials import get_material
-
 #: Chalcogen species a Janus layer may be given, in order of radius.
 JANUS_CHALCOGENS = ("S", "Se", "Te")
 
