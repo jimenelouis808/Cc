@@ -283,6 +283,17 @@ class TestBuild:
         assert verdict in ("clean", "strained", "broken")
         assert "homoelemental" in why
 
+    def test_the_verdict_does_not_invent_a_boundary_when_there_is_none(self):
+        """With zero homoelemental bonds there is no inversion domain, and
+        saying '0.0% of bonds are an inversion-domain boundary' is
+        nonsense — the cell alternates perfectly."""
+        atoms = build_tmd_schwarzite("MoS2", "primitive", cell=30.0,
+                                     parity="split")
+        assert atoms.info["antiphase_bonds"] == 0
+        _, why = schwarzite_quality(atoms)
+        assert "0.0% of bonds are homoelemental" not in why
+        assert "alternates perfectly" in why
+
     def test_a_torn_grid_is_retried_not_returned(self):
         """Schwarz P at 42 Å tears at resolution 64 -- neighbouring sites
         21 Å apart -- and is clean at 72. Whether a given neck falls

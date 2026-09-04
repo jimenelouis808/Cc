@@ -670,9 +670,17 @@ def schwarzite_quality(atoms: Atoms) -> tuple[str, str]:
             f"metal coordination reaches {metal[1]} and chalcogen "
             f"{chalcogen[1]}; the net is miswired, not merely strained."
         )
-    boundary = (f"{antiphase:.1%} of bonds are homoelemental — an "
-                "inversion-domain boundary, which even degrees cannot remove "
-                "on a surface of genus > 0")
+    if info["antiphase_bonds"]:
+        boundary = (f"{antiphase:.1%} of bonds are homoelemental — an "
+                    "inversion-domain boundary, which even degrees alone "
+                    "cannot rule out above genus 0")
+    else:
+        # Reachable but not guaranteed: even degrees settle the local
+        # parity, and the 2g homology classes settle the rest. Saying
+        # "0.0% are an inversion-domain boundary" would be nonsense.
+        boundary = ("every bond is M–X — the net alternates perfectly, which "
+                    "even degrees make possible but do not guarantee above "
+                    "genus 0")
     if p95 > 0.10:
         return "broken", (
             f"M–X bonds deviate {p95:.1%} at the 95th percentile "
