@@ -380,6 +380,17 @@ on that mapping being written down once — the estimate, the
 copy-as-command-line button, and handing work to a subprocess — so add
 new modes there, not in `gui/app.py`.
 
+**Adding a mode is five edits, not one**, and forgetting the last two is
+the single most repeated mistake in this repo's history --
+`test_every_mode_has_a_sample` has now caught it four times. The list:
+the family tuple in `MODES`, the `builders` dict in `build`, the atom
+estimate, `_CLI_MAP`, and `SAMPLES` in `tests/test_jobs.py`. The sample
+is not decoration: it is what drives the estimate, cost and
+command-line-parses tests for that mode, so a mode without one is a mode
+with no coverage at all. Run `pytest tests/test_jobs.py` before
+committing a new mode -- it takes under a second and is exactly the
+check that keeps being skipped.
+
 `gui/worker.py` runs builds in a **process**, not a thread, because a
 coil spends minutes inside numpy with nothing checking a cancel flag and
 Python cannot safely interrupt a thread. Consequences to respect:

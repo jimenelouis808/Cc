@@ -56,6 +56,12 @@ SAMPLES: dict[str, Job] = {
     "TMD coil": Job("TMD coil",
                     {"material": "MoS2", "n": 20, "m": 0,
                      "coil_radius": 140.0, "pitch": 60.0, "turns": 0.15}),
+    # An L is the cheapest junction: two arms rather than three or four,
+    # and a radius just above the 2*h floor below which the sandwich's
+    # inner wall would meet on the axis.
+    "TMD junction": Job("TMD junction",
+                        {"material": "MoS2", "kind": "L", "tube_radius": 10.0,
+                         "arm_length": 20.0, "parity": "split"}),
 }
 
 
@@ -122,7 +128,13 @@ class TestEstimates:
 
     @pytest.mark.parametrize(
         ("mode", "measured"),
-        [("schwarzite", 1502), ("coil (relaxed)", 2782), ("junction", 1100)],
+        [("schwarzite", 1502), ("coil (relaxed)", 2782), ("junction", 1100),
+         # The MX2 junction is estimated the same way but has to correct
+         # for arms burying each other: summing them counts the junction
+         # body once per arm, and the shortfall grows with the arm count.
+         # Measured 1530 for this L; a Y at r=12/arm 26 is 3153 against
+         # 3074 predicted.
+         ("TMD junction", 1530)],
     )
     def test_implicit_modes_are_predicted_within_a_tenth(self, mode, measured):
         """Surface area over ring area. Not exact, but the point is to
