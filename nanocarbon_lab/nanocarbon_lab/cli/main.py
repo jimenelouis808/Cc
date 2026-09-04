@@ -21,6 +21,8 @@ Sub-commands:
 * ``tmd-tube``   — roll an MX2 monolayer into an (n, m) nanotube.
 * ``tmd-coil``   — coil an MX2 nanotube onto a helix.
 * ``tmd-schwarzite`` — MX2 on a triply periodic minimal surface.
+* ``twist``      — two layers with a commensurate twist (moire).
+* ``stack``      — aligned van der Waals stack of 2D layers.
 * ``validate``   — run validation on an existing structure file.
 """
 
@@ -53,6 +55,7 @@ from ..dopants import dope_random
 from ..exports.lammps import write_lammps
 from ..exports.qe import QESettings, write_qe_input
 from ..exports.xyz import write_render_bundle
+from ..hetero import available_layers, build_twisted_bilayer, build_vdw_stack
 from ..tmd import (
     MATERIALS,
     build_tmd_bulk,
@@ -324,6 +327,48 @@ def _cmd_tmd_tube(args):
     atoms = build_tmd_nanotube(args.material, n=args.n, m=args.m,
                                length=args.length, phase=args.phase)
     return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)))
+
+
+def _report_stack(atoms, xyz_path, json_path):
+    info = atoms.info
+    report = run_basic_checks(atoms)
+    print(f"Wrote {xyz_path} and {json_path}")
+    print(f"  n_atoms     = {len(atoms)}  ({atoms.get_chemical_formula()})")
+    if info["structure_type"] == "twisted_bilayer":
+        m, n = info["commensurate_index"]
+        print(f"  stack       = {info['bottom_layer']} / {info['top_layer']}")
+        print(f"  twist       = {info['twist_angle']:.4f} deg  (m,n) = ({m},{n})"
+              f"   asked {info['requested_angle']:.3f}")
+        print(f"  moire       = {info['moire_period']:.1f} A period, "
+              f"{info['cells_per_layer']} cells per layer")
+    else:
+        print(f"  stack       = {' / '.join(info['layers'])}")
+    print(f"  gap         = {info['interlayer_gap']:.2f} A between facing planes")
+    strain = info.get("imposed_strain", 0.0)
+    if isinstance(strain, list):
+        print(f"  strain      = {max(abs(v) for v in strain):.2%} worst, "
+              "imposed to share one cell")
+    elif strain:
+        print(f"  strain      = {strain:+.2%} on the top layer, imposed to "
+              "share one cell")
+    print(f"  cell        = {atoms.cell.lengths()[0]:.2f} x "
+          f"{atoms.cell.lengths()[1]:.2f} A in plane")
+    print(f"  validation  = {'OK' if report.ok else 'FAILED'}"
+          + ("" if report.ok else f": {report.errors}"))
+    return 0
+
+
+def _cmd_twist(args):
+    atoms = build_twisted_bilayer(
+        layer=args.layer, target_angle=args.angle, max_index=args.max_index,
+        gap=args.gap, top_layer=args.top_layer,
+    )
+    return _report_stack(atoms, *write_render_bundle(atoms, Path(args.out)))
+
+
+def _cmd_stack(args):
+    atoms = build_vdw_stack(args.layers, gap=args.gap, nx=args.nx, ny=args.ny)
+    return _report_stack(atoms, *write_render_bundle(atoms, Path(args.out)))
 
 
 def _cmd_tmd_schwarzite(args):
@@ -690,6 +735,41 @@ def build_parser() -> argparse.ArgumentParser:
     tt.add_argument("--phase", default="2H", choices=phases)
     tt.add_argument("--out", required=True, help="Output path without extension.")
     tt.set_defaults(func=_cmd_tmd_tube)
+
+    layers = list(available_layers())
+    tw = sub.add_parser(
+        "twist",
+        help="Stack two hexagonal layers with a commensurate twist (moire).",
+    )
+    tw.add_argument("--layer", default="graphene", choices=layers,
+                    help="Bottom layer.")
+    tw.add_argument("--top-layer", default=None, choices=layers,
+                    help="Different top layer, making it a heterostructure. "
+                         "Its lattice is strained onto the bottom one's.")
+    tw.add_argument("--angle", type=float, default=5.0,
+                    help="Wanted twist in degrees. Snapped to the nearest "
+                         "commensurate angle -- nothing periodic exists in "
+                         "between -- and the achieved value is reported.")
+    tw.add_argument("--max-index", type=int, default=40,
+                    help="Largest m searched. Small angles need large "
+                         "indices (the 1.08 deg magic angle is (31,30)) and "
+                         "the cell grows as m^2+mn+n^2.")
+    tw.add_argument("--gap", type=float, default=3.35,
+                    help="Separation between the facing atomic planes (A).")
+    tw.add_argument("--out", required=True, help="Output path without extension.")
+    tw.set_defaults(func=_cmd_twist)
+
+    st = sub.add_parser(
+        "stack",
+        help="Stack aligned 2D layers with a van der Waals gap (no twist).",
+    )
+    st.add_argument("--layers", nargs="+", required=True, choices=layers,
+                    help="Layers bottom to top, e.g. graphene hBN graphene.")
+    st.add_argument("--gap", type=float, default=3.35)
+    st.add_argument("--nx", type=int, default=1)
+    st.add_argument("--ny", type=int, default=1)
+    st.add_argument("--out", required=True, help="Output path without extension.")
+    st.set_defaults(func=_cmd_stack)
 
     ts = sub.add_parser(
         "tmd-schwarzite",

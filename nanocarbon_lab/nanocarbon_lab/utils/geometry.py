@@ -11,7 +11,7 @@ from collections.abc import Sequence
 import numpy as np
 from ase import Atoms
 
-from .constants import COVALENT_RADII, MAX_CC_DISTANCE
+from .constants import BOND_CUTOFF_OVERRIDE, COVALENT_RADII, MAX_CC_DISTANCE
 
 
 def center_in_cell(atoms: Atoms, axes: Sequence[int] = (0, 1, 2)) -> Atoms:
@@ -107,19 +107,38 @@ def guess_bonds(
     -------
     list of (i, j, distance) tuples, with ``i < j``.
     """
-    symbols = atoms.get_chemical_symbols()
-    dmat = minimum_image_distances(atoms)
-    n = len(atoms)
-    bonds: list[tuple[int, int, float]] = []
-    for i in range(n):
-        ri = COVALENT_RADII.get(symbols[i])
-        for j in range(i + 1, n):
-            rj = COVALENT_RADII.get(symbols[j])
-            if ri is not None and rj is not None:
-                cutoff = ri + rj + tolerance
+    from ase.neighborlist import neighbor_list
+
+    if not len(atoms):
+        return []
+
+    # Cell list, not a full distance matrix. The pairwise matrix is O(N^2)
+    # in both time and memory -- 24 s and 79 MB at 3136 atoms, and by
+    # 28000 atoms (an ordinary MX2 coil) it wants 6 GB and never finishes.
+    # Every export runs validation, so that quadratic was on the path of
+    # every structure the framework produced.
+    present = sorted(set(atoms.get_chemical_symbols()))
+    cutoffs: dict[tuple[str, str], float] = {}
+    for first in present:
+        for second in present:
+            override = BOND_CUTOFF_OVERRIDE.get((first, second))
+            if override is not None:
+                cutoffs[(first, second)] = override
+                continue
+            radius_a = COVALENT_RADII.get(first)
+            radius_b = COVALENT_RADII.get(second)
+            if radius_a is not None and radius_b is not None:
+                cutoffs[(first, second)] = radius_a + radius_b + tolerance
             else:
-                cutoff = default_cutoff
-            d = dmat[i, j]
-            if 0.1 < d < cutoff:
-                bonds.append((i, j, float(d)))
-    return bonds
+                cutoffs[(first, second)] = default_cutoff
+
+    first_index, second_index, distance = neighbor_list("ijd", atoms,
+                                                        cutoff=cutoffs)
+    # neighbor_list reports each pair twice, and a periodic self-image as
+    # i == j; the 0.1 Å floor keeps a coincident pair from reading as a bond.
+    keep = (first_index < second_index) & (distance > 0.1)
+    return [
+        (int(i), int(j), float(d))
+        for i, j, d in zip(first_index[keep], second_index[keep],
+                           distance[keep], strict=True)
+    ]

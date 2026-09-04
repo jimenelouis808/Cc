@@ -27,7 +27,8 @@ validation pass before writing.
 | `swept`         | Coils and arbitrary curved tubes whose ring topology is **derived from the curvature** |
 | `fullerene`     | Closed cages (C60, C240, C540, C20, C80, …) and carbon nano-onions |
 | `assemblies`    | Multi-wall nanotubes and hexagonally packed bundles, at the van der Waals gap |
-| `tmd`           | **Transition-metal dichalcogenides** (MoS2, WS2, …): monolayers, stacks, bulk crystals, ribbons, rolled nanotubes, helical coils and **schwarzites** |
+| `tmd`           | **Transition-metal dichalcogenides** (MoS2, WS2, …): monolayers, stacks, bulk crystals, ribbons, rolled nanotubes, helical coils and **schwarzites**; Janus layers, alloys, vacancies and antisites |
+| `hetero`        | **Twisted bilayers and van der Waals stacks**: commensurate moiré cells (including the 1.08° magic angle), graphene/hBN/MX2 in any combination |
 
 ## Installation
 
@@ -134,6 +135,21 @@ nanocarbon tmd-coil --material MoS2 --n 30 --coil-radius 220 --pitch 90 \
 # against bond strain; 'split' makes every ring even.
 nanocarbon tmd-schwarzite --material MoS2 --kind primitive --cell 36 \
     --parity flip --out out/mos2_sw
+```
+
+Stacks of 2D layers — twisted or aligned, and mixing families freely:
+
+```bash
+# Twisted bilayer graphene. The angle is snapped to the commensurate
+# series and the achieved value reported; 1.1 gives the 1.0845° magic angle.
+nanocarbon twist --layer graphene --angle 21.8 --out out/tbg
+nanocarbon twist --layer graphene --angle 1.1 --max-index 40 --out out/magic
+
+# Graphene on hBN, twisted. The 1.8% mismatch is strained onto the top layer.
+nanocarbon twist --layer graphene --top-layer hBN --angle 7.3 --out out/g_hbn
+
+# Aligned stack, no moiré, so the cell stays primitive
+nanocarbon stack --layers graphene hBN graphene --nx 2 --ny 2 --out out/sandwich
 ```
 
 Every one of these prints an **sp2 verdict** alongside the measured bond
@@ -1038,6 +1054,62 @@ finds bonds by distance, which is right for a slab and wrong on a saddle:
 a 2.4 Å bond's cutoff reaches 3.0 Å and sweeps up non-bonded neighbours,
 reading a sound cell as 4–8 coordinate metal. The builder keeps the real
 bond graph and judges from that.
+
+### Twisted bilayers and moiré superlattices
+
+Two hexagonal sheets share a periodic cell only at special angles. For
+integers `m > n ≥ 0`, `m·a1 + n·a2` in one layer is exactly as long as
+`n·a1 + m·a2` in the other, so
+
+```
+cos θ = (m² + n² + 4mn) / (2(m² + mn + n²))
+```
+
+and the cell holds `m² + mn + n²` primitive cells **per layer**. That is
+not a curiosity: `(2,1)` is 21.79°, and `(31,30)` is **1.0845° — the
+magic angle** of twisted bilayer graphene, where the moiré bands flatten
+and the system superconducts.
+
+So a twist is not a free parameter. Ask for 1.1° and you get 1.0845°,
+with 11 164 atoms and a 129.9 Å moiré period, because nothing periodic
+exists in between. The builder snaps and reports both.
+
+| request | achieved | (m,n) | cells/layer | atoms |
+|---|---|---|---|---|
+| 21.8° | 21.7868° | (2,1) | 7 | 28 |
+| 13.2° | 13.1736° | (3,2) | 19 | 76 |
+| 7.3° | 7.3410° | (5,4) | 61 | 244 |
+| 1.1° | **1.0845°** | (31,30) | 2791 | **11 164** |
+
+Layers are described uniformly, so any pair stacks: graphene, hBN, and
+every dichalcogenide. Unlike layers have different lattice constants, so
+a common cell needs one of them strained — graphene on hBN is 1.8%, which
+is routinely modelled; graphene on MoS2 would be 28%, and that is refused
+rather than silently returned.
+
+`stack` is the untwisted counterpart: with every layer aligned there is
+no moiré, the cell stays primitive, and an arbitrary number of layers
+costs nothing.
+
+### MX2 chemistry after the build
+
+`tmd.modify` edits a finished structure's chemistry without touching its
+geometry, so they compose in any order — build a tube, make it Janus,
+alloy it, knock sulphur out of it:
+
+* **Janus** (`make_janus`) — one chalcogen species on top, another
+  underneath, as in MoSSe. Breaks the mirror symmetry, which switches on
+  an out-of-plane dipole and piezoelectricity neither parent has. Which
+  face a chalcogen belongs to is decided from its own outward direction,
+  not from a global z, so this works on a **rolled tube** too: `side=+1`
+  is the outer wall and `-1` the inner one.
+* **Chalcogen vacancies** (`chalcogen_vacancies`) — the dominant point
+  defect in grown MoS2. `paired=True` removes both sides of a site.
+* **Alloys** (`alloy`) — Mo(1−x)W(x)S2 and friends, on either sublattice.
+  The **achieved** fraction is reported, since nine metal sites cannot be
+  split in half.
+* **Antisites** (`antisites`) — a metal on a chalcogen site, as in
+  sulphur-poor growth.
 
 ### Not yet: Y junctions in MX2
 

@@ -606,6 +606,10 @@ def build_tmd_schwarzite(
     n_chalcogen = symbols.count(material.chalcogen)
     atoms.info.update(
         {
+            # The real bond graph, recorded rather than left to be guessed
+            # from distances later: validation and the render bundle both
+            # read this, and on a saddle a distance cutoff gets it wrong.
+            "bonds": [[int(a), int(b)] for a, b in every],
             "graph_metal_coordination": (int(metal_coordination.min()),
                                          int(metal_coordination.max())),
             "graph_chalcogen_coordination": (int(chalcogen_coordination.min()),

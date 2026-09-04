@@ -10,6 +10,7 @@ strains it in a way rolling graphene does not.
 from .coil import build_tmd_coil
 from .curved import build_tmd_schwarzite, schwarzite_quality
 from .materials import MATERIALS, TMDMaterial, get_material
+from .modify import alloy, antisites, chalcogen_vacancies, make_janus
 from .nanotube import build_tmd_nanotube, tube_radius
 from .quality import geometry_report, tmd_quality
 from .ribbon import build_tmd_ribbon
@@ -18,6 +19,8 @@ from .slab import build_tmd_bulk, build_tmd_layers, build_tmd_monolayer
 __all__ = [
     "MATERIALS",
     "TMDMaterial",
+    "alloy",
+    "antisites",
     "build_tmd_bulk",
     "build_tmd_coil",
     "build_tmd_layers",
@@ -26,7 +29,9 @@ __all__ = [
     "build_tmd_ribbon",
     "build_tmd_schwarzite",
     "geometry_report",
+    "chalcogen_vacancies",
     "get_material",
+    "make_janus",
     "schwarzite_quality",
     "tmd_quality",
     "tube_radius",

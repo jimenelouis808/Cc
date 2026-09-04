@@ -41,9 +41,27 @@ def build_bond_graph(atoms: Atoms, tolerance: float = 0.30) -> nx.Graph:
 
 
 def coordination_numbers(atoms: Atoms, tolerance: float = 0.30) -> np.ndarray:
-    """Return the per-atom coordination number as a NumPy integer array."""
-    g = build_bond_graph(atoms, tolerance=tolerance)
+    """Return the per-atom coordination number as a NumPy integer array.
+
+    Uses ``atoms.info["bonds"]`` when the builder recorded one, and falls
+    back to distances otherwise. That preference matters on a curved
+    structure: a 2.4 Å M-X bond's distance cutoff reaches ~2.9 Å, and on
+    a minimal surface plenty of *non*-bonded atoms sit inside that, so a
+    schwarzite whose every metal has exactly six bonds reads as
+    ten-coordinate and fails validation. The same reasoning already
+    forbids re-deriving rings from distances on a curved shell.
+    """
     n = len(atoms)
+    recorded = atoms.info.get("bonds")
+    if recorded is not None and len(recorded):
+        pairs = np.asarray(recorded, dtype=int)
+        if pairs.ndim == 2 and pairs.shape[1] == 2 and pairs.max() < n:
+            coord = np.zeros(n, dtype=int)
+            np.add.at(coord, pairs[:, 0], 1)
+            np.add.at(coord, pairs[:, 1], 1)
+            return coord
+
+    g = build_bond_graph(atoms, tolerance=tolerance)
     coord = np.zeros(n, dtype=int)
     for i in range(n):
         coord[i] = g.degree[i] if i in g else 0

@@ -190,6 +190,18 @@ PRESETS: dict[str, dict[str, object]] = {
     # A quarter turn keeps this near 11k atoms. A full turn at a radius
     # loose enough to be unstrained runs to six figures, which is the
     # physics rather than a timid default.
+    "Twisted bilayer graphene 21.8°": {
+        "mode_kind": "twisted bilayer", "het_bottom": "graphene",
+        "het_top": "same", "het_angle": 21.79, "het_max_index": 40},
+    "Magic-angle bilayer 1.08°": {
+        "mode_kind": "twisted bilayer", "het_bottom": "graphene",
+        "het_top": "same", "het_angle": 1.08, "het_max_index": 40},
+    "Graphene on hBN": {
+        "mode_kind": "twisted bilayer", "het_bottom": "graphene",
+        "het_top": "hBN", "het_angle": 7.34, "het_max_index": 40},
+    "MoS2/WS2 stack": {
+        "mode_kind": "vdW stack", "het_bottom": "MoS2", "het_top": "WS2",
+        "het_third": "none", "het_nx": 2, "het_ny": 2},
     "MoS2 schwarzite (Schwarz P)": {
         "mode_kind": "TMD schwarzite", "tmd_material": "MoS2",
         "tmd_sw_kind": "primitive", "tmd_sw_cell": 36.0,
@@ -552,6 +564,15 @@ class NanocarbonGUI:
                                          tk.DoubleVar(value=36.0))
         self.var_tmd_sw_parity = self._var("tmd_sw_parity",
                                            tk.StringVar(value="flip"))
+        self.var_het_bottom = self._var("het_bottom",
+                                        tk.StringVar(value="graphene"))
+        self.var_het_top = self._var("het_top", tk.StringVar(value="same"))
+        self.var_het_angle = self._var("het_angle", tk.DoubleVar(value=7.34))
+        self.var_het_max_index = self._var("het_max_index", tk.IntVar(value=40))
+        self.var_het_gap = self._var("het_gap", tk.DoubleVar(value=3.35))
+        self.var_het_third = self._var("het_third", tk.StringVar(value="none"))
+        self.var_het_nx = self._var("het_nx", tk.IntVar(value=1))
+        self.var_het_ny = self._var("het_ny", tk.IntVar(value=1))
 
         self.lbl_radius = ttk.Label(box, text="", foreground="#2e86ab")
 
@@ -907,6 +928,55 @@ class NanocarbonGUI:
                                     justify="left")
         self.lbl_tmd_sw.grid(row=4, column=0, columnspan=2, sticky="w")
 
+        # --- heterostructures
+        from ..hetero import available_layers
+
+        layer_names = list(available_layers())
+        self.frame_het = ttk.LabelFrame(parent, text="Layers", padding=8)
+        self.frame_het.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_het, text="Bottom").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_het, textvariable=self.var_het_bottom,
+                     values=layer_names, state="readonly", width=10).grid(
+            row=0, column=1, sticky="e", pady=(0, 4))
+        ttk.Label(self.frame_het, text="Top").grid(row=1, column=0, sticky="w")
+        ttk.Combobox(self.frame_het, textvariable=self.var_het_top,
+                     values=["same", *layer_names], state="readonly",
+                     width=10).grid(row=1, column=1, sticky="e", pady=(0, 4))
+        ttk.Label(self.frame_het, text="Third layer").grid(row=2, column=0,
+                                                           sticky="w")
+        ttk.Combobox(self.frame_het, textvariable=self.var_het_third,
+                     values=["none", *layer_names], state="readonly",
+                     width=10).grid(row=2, column=1, sticky="e", pady=(0, 4))
+        self._param(self.frame_het, "Gap (Å)", self.var_het_gap,
+                    2.5, 6.0, 3, resolution=0.05, hard_hi=20.0)
+        self.lbl_het = ttk.Label(self.frame_het, text="", foreground=MUTED,
+                                 font=("TkDefaultFont", 8), wraplength=230,
+                                 justify="left")
+        self.lbl_het.grid(row=5, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        for var in (self.var_het_bottom, self.var_het_top, self.var_het_third):
+            var.trace_add("write", lambda *_: (self._update_het_hint(),
+                                               self._schedule_estimate()))
+
+        self.frame_twist = ttk.LabelFrame(parent, text="Twist", padding=8)
+        self.frame_twist.columnconfigure(0, weight=1)
+        self._param(self.frame_twist, "Angle (deg)", self.var_het_angle,
+                    0.5, 30.0, 0, resolution=0.01, hard_hi=60.0,
+                    command=self._update_het_hint)
+        self._param(self.frame_twist, "Max index m", self.var_het_max_index,
+                    5, 60, 2, integer=True, hard_hi=200,
+                    command=self._update_het_hint)
+        self.lbl_twist = ttk.Label(self.frame_twist, text="", foreground=MUTED,
+                                   font=("TkDefaultFont", 8), wraplength=230,
+                                   justify="left")
+        self.lbl_twist.grid(row=4, column=0, columnspan=2, sticky="w")
+
+        self.frame_stack = ttk.LabelFrame(parent, text="Supercell", padding=8)
+        self.frame_stack.columnconfigure(0, weight=1)
+        self._param(self.frame_stack, "nx", self.var_het_nx, 1, 8, 0,
+                    integer=True, hard_hi=40)
+        self._param(self.frame_stack, "ny", self.var_het_ny, 1, 8, 2,
+                    integer=True, hard_hi=40)
+
         # --- build / cancel and the cost estimate
         actions = ttk.Frame(parent)
         actions.pack(fill="x", pady=(12, 0))
@@ -945,8 +1015,22 @@ class NanocarbonGUI:
                       self.frame_tmd, self.frame_tmd_layers,
                       self.frame_tmd_ribbon, self.frame_tmd_tube,
                       self.frame_tmd_coil, self.frame_tmd_sw,
+                      self.frame_het, self.frame_twist, self.frame_stack,
                       self.frame_surface, self.frame_chem):
             frame.pack_forget()
+
+        if mode in ("twisted bilayer", "vdW stack"):
+            # A stack is neither carbon nor dichalcogenide: none of the
+            # sp2 controls (annealing, roughness, doping) nor the TMD
+            # phase apply, so only the layer panels show.
+            self.frame_het.pack(fill="x")
+            if mode == "twisted bilayer":
+                self.frame_twist.pack(fill="x", pady=(8, 0))
+            else:
+                self.frame_stack.pack(fill="x", pady=(8, 0))
+            self._update_het_hint()
+            self._schedule_estimate()
+            return
 
         if mode.startswith("TMD"):
             # Every dichalcogenide needs the material and phase; the rest
@@ -1294,6 +1378,10 @@ class NanocarbonGUI:
             # it, so `common` would only carry arguments they reject.
             return Job(mode=mode, params=self._tmd_params(mode), seed=0)
 
+        if mode in ("twisted bilayer", "vdW stack"):
+            # Commensurate stacking is exact too, for the same reason.
+            return Job(mode=mode, params=self._hetero_params(mode), seed=0)
+
         if mode == "junction":
             params = dict(
                 kind=self.var_j_kind.get(),
@@ -1384,6 +1472,72 @@ class NanocarbonGUI:
                 params["bend_angle"] = 0.0
 
         return Job(mode=mode, params=params, **common)
+
+    def _hetero_params(self, mode: str) -> dict:
+        """Builder arguments for one stacking mode."""
+        bottom = self.var_het_bottom.get()
+        top = self.var_het_top.get()
+        third = self.var_het_third.get()
+        if mode == "twisted bilayer":
+            return dict(
+                layer=bottom,
+                top_layer=None if top == "same" else top,
+                target_angle=float(self.var_het_angle.get()),
+                max_index=int(self.var_het_max_index.get()),
+                gap=float(self.var_het_gap.get()),
+            )
+        layers = [bottom, bottom if top == "same" else top]
+        if third != "none":
+            layers.append(third)
+        return dict(
+            layers=layers,
+            gap=float(self.var_het_gap.get()),
+            nx=int(self.var_het_nx.get()),
+            ny=int(self.var_het_ny.get()),
+        )
+
+    def _update_het_hint(self) -> None:
+        """Show the achieved twist and the mismatch before building.
+
+        Both are things the user cannot choose freely and would otherwise
+        discover only from the finished structure: the angle is snapped
+        to the commensurate series, and stacking unlike layers strains
+        one of them.
+        """
+        from ..hetero.moire import MAX_MISMATCH, get_layer, nearest_commensurate
+
+        try:
+            bottom = get_layer(self.var_het_bottom.get())
+            chosen = self.var_het_top.get()
+            top = bottom if chosen == "same" else get_layer(chosen)
+        except KeyError:
+            return
+        mismatch = (top.a - bottom.a) / bottom.a
+        colour = BAD_RED if abs(mismatch) > MAX_MISMATCH else (
+            OK_GREEN if abs(mismatch) < 0.005 else WARN_AMBER)
+        note = (f"{bottom.name} a = {bottom.a:.3f} Å, {top.name} "
+                f"a = {top.a:.3f} Å → {mismatch:+.2%} mismatch")
+        if abs(mismatch) > MAX_MISMATCH:
+            note += f". Over the {MAX_MISMATCH:.0%} limit; this will be refused."
+        elif mismatch:
+            note += ", imposed on the top layer as strain."
+        self.lbl_het.config(text=note, foreground=colour)
+
+        if not hasattr(self, "lbl_twist"):
+            return
+        try:
+            wanted = float(self.var_het_angle.get())
+            max_index = int(self.var_het_max_index.get())
+        except (tk.TclError, ValueError):
+            return
+        m, n, angle, cells = nearest_commensurate(wanted, max_index)
+        atoms = cells * (bottom.n_sites + top.n_sites)
+        self.lbl_twist.config(
+            text=f"nearest commensurate: {angle:.4f}° at (m,n) = ({m},{n}), "
+                 f"{cells} cells per layer → {atoms} atoms. No periodic cell "
+                 "exists between these, so the angle is snapped.",
+            foreground=WARN_AMBER if atoms > 8000 else MUTED,
+        )
 
     def _tmd_params(self, mode: str) -> dict:
         """Builder arguments for one dichalcogenide mode."""
@@ -1821,6 +1975,9 @@ class NanocarbonGUI:
         if str(a.info.get("structure_type", "")).startswith("tmd"):
             self._update_tmd_info(a)
             return
+        if a.info.get("structure_type") in ("twisted_bilayer", "vdw_stack"):
+            self._update_stack_info(a)
+            return
         g = a.info["geometry"]
         counts = a.info["ring_counts"]
         rings_txt = "\n".join(
@@ -1902,6 +2059,49 @@ class NanocarbonGUI:
         # past any real C-C. Say so in words, next to the numbers.
         verdict, why = sp2_quality(g)
         lines += ["", f"sp2 verdict  {verdict.upper()}", f"  {why}"]
+
+        self.txt_info.configure(state="normal")
+        self.txt_info.delete("1.0", "end")
+        self.txt_info.insert("1.0", "\n".join(lines))
+        self.txt_info.configure(state="disabled")
+
+    def _update_stack_info(self, a) -> None:
+        """Readout for a stack. No rings and no Euler budget -- what
+        matters is which layers, how far apart, at what twist, and how
+        much strain the common cell cost."""
+        from ..validation.checks import run_basic_checks
+
+        info = a.info
+        report = run_basic_checks(a)
+        lines = [
+            f"atoms        {len(a):>6d}",
+            f"formula      {a.get_chemical_formula():>9s}",
+        ]
+        if info["structure_type"] == "twisted_bilayer":
+            m, n = info["commensurate_index"]
+            lines += [
+                f"stack        {info['bottom_layer']} / {info['top_layer']}",
+                f"twist        {info['twist_angle']:>7.4f}°  (asked "
+                f"{info['requested_angle']:.2f}°)",
+                f"index        (m,n) = ({m},{n})",
+                f"moire        {info['moire_period']:>6.1f} Å period",
+                f"cells/layer  {info['cells_per_layer']:>6d}",
+            ]
+        else:
+            lines += [
+                "stack        " + " / ".join(info["layers"]),
+                f"supercell    {info['supercell'][0]} x {info['supercell'][1]}",
+            ]
+        lines.append(f"gap          {info['interlayer_gap']:>6.2f} Å")
+        strain = info.get("imposed_strain", 0.0)
+        worst = (max(abs(v) for v in strain) if isinstance(strain, list)
+                 else abs(strain))
+        lines.append(f"strain       {worst:>6.2%} imposed to share one cell")
+        lengths = a.cell.lengths()
+        lines.append(f"cell         {lengths[0]:.2f} x {lengths[1]:.2f} Å")
+        lines += ["", f"validation   {'OK' if report.ok else 'FAILED'}"]
+        for message in report.errors[:3]:
+            lines.append(f"  {message}")
 
         self.txt_info.configure(state="normal")
         self.txt_info.delete("1.0", "end")

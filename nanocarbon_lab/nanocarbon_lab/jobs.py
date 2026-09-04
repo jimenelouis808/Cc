@@ -53,9 +53,22 @@ TMD_MODES = (
     "TMD schwarzite",
 )
 
-FAMILIES = {"carbon": CARBON_MODES, "dichalcogenide": TMD_MODES}
+#: Stacks of two or more 2D layers, twisted or aligned. A third family
+#: because a stack is neither carbon nor dichalcogenide -- it may be
+#: either, or one of each, and its controls (twist angle, layer order)
+#: belong to none of the other panels.
+HETERO_MODES = (
+    "twisted bilayer",
+    "vdW stack",
+)
 
-MODES = CARBON_MODES + TMD_MODES
+FAMILIES = {
+    "carbon": CARBON_MODES,
+    "dichalcogenide": TMD_MODES,
+    "heterostructure": HETERO_MODES,
+}
+
+MODES = CARBON_MODES + TMD_MODES + HETERO_MODES
 
 
 def family_of(mode: str) -> str:
@@ -144,7 +157,11 @@ def build(job: Job):
         build_tmd_schwarzite,
     )
 
+    from .hetero import build_twisted_bilayer, build_vdw_stack
+
     builders = {
+        "twisted bilayer": build_twisted_bilayer,
+        "vdW stack": build_vdw_stack,
         "TMD layers": build_tmd_layers,
         "TMD bulk": build_tmd_bulk,
         "TMD ribbon": build_tmd_ribbon,
@@ -160,6 +177,10 @@ def build(job: Job):
         "multi-wall": build_multiwall_cnt,
         "bundle": build_bundle,
     }
+    if job.mode in HETERO_MODES:
+        # Commensurate stacking is exact crystallography, no randomness.
+        return builders[job.mode](**job.params)
+
     if job.mode in TMD_MODES:
         # The TMD builders are deterministic -- exact crystallography, no
         # random defect placement -- so they take no seed, and passing one
@@ -232,6 +253,9 @@ def estimate_atoms(job: Job) -> int:
     if mode in TMD_MODES:
         return _estimate_tmd_atoms(mode, p)
 
+    if mode in HETERO_MODES:
+        return _estimate_hetero_atoms(mode, p)
+
     if mode == "coil (relaxed)":
         radius = float(p.get("tube_radius", 6.0))
         coil_radius = float(p.get("coil_radius", 40.0))
@@ -244,6 +268,27 @@ def estimate_atoms(job: Job) -> int:
         return int(ATOMS_PER_RING * area / RING_AREA)
 
     return 0
+
+
+def _estimate_hetero_atoms(mode: str, p: dict) -> int:
+    """Atom counts for a stack -- exact, from the commensurate cell.
+
+    A twist is not a free parameter: the cell holds ``m^2 + mn + n^2``
+    primitive cells per layer, and that jumps from 7 at 21.8 deg to 2791
+    at the magic angle, so the count is worth knowing before building.
+    """
+    from .hetero.moire import get_layer, nearest_commensurate
+
+    if mode == "twisted bilayer":
+        bottom = get_layer(p.get("layer", "graphene"))
+        top = get_layer(p.get("top_layer") or p.get("layer", "graphene"))
+        *_, cells = nearest_commensurate(float(p.get("target_angle", 5.0)),
+                                         int(p.get("max_index", 40)))
+        return cells * (bottom.n_sites + top.n_sites)
+
+    names = p.get("layers", ["graphene", "graphene"])
+    sites = sum(get_layer(name).n_sites for name in names)
+    return sites * int(p.get("nx", 1)) * int(p.get("ny", 1))
 
 
 def _estimate_tmd_atoms(mode: str, p: dict) -> int:
@@ -323,6 +368,12 @@ def estimate_cost(job: Job) -> tuple[str, str]:
     second.
     """
     n = estimate_atoms(job)
+    if job.mode in HETERO_MODES:
+        # Exact lattice placement, so only the drawing costs anything --
+        # but a small twist angle makes a very large cell, and that is
+        # the surprise worth warning about.
+        return ("very slow" if n > 30000 else "slow" if n > 8000 else "fast",
+                f"~{n} atoms — a smaller twist angle means a bigger cell")
     if job.mode == "TMD schwarzite":
         # The one TMD mode that meshes and relaxes -- twice, in fact (the
         # site net, then the atoms) -- so it is costed like the carbon
@@ -411,6 +462,14 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     "TMD nanotube": ("tmd-tube", {
         "material": "--material", "n": "--n", "m": "--m",
         "length": "--length", "phase": "--phase",
+    }),
+    "twisted bilayer": ("twist", {
+        "layer": "--layer", "top_layer": "--top-layer",
+        "target_angle": "--angle", "max_index": "--max-index",
+        "gap": "--gap",
+    }),
+    "vdW stack": ("stack", {
+        "gap": "--gap", "nx": "--nx", "ny": "--ny",
     }),
     "TMD schwarzite": ("tmd-schwarzite", {
         "material": "--material", "kind": "--kind", "cell": "--cell",

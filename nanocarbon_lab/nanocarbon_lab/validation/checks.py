@@ -22,11 +22,12 @@ from ase import Atoms
 
 from ..topology.graph import coordination_numbers
 from ..utils.constants import (
+    DEFAULT_MAX_COORDINATION,
     HARD_MIN_DISTANCE,
     MAX_CC_DISTANCE,
+    MAX_COORDINATION,
     MIN_CC_DISTANCE,
 )
-from ..utils.geometry import minimum_image_distances
 
 
 @dataclass
@@ -61,18 +62,44 @@ class ValidationReport:
         return "\n".join(lines)
 
 
+#: Radius searched for the closest pair. Well past any bond in this
+#: framework (the longest is a 2.76 Å Te-Te), so anything shorter is
+#: found; a structure with nothing at all inside it is reported as such
+#: rather than being searched exhaustively.
+CLOSE_PAIR_CUTOFF: float = 4.0
+
+
 def check_minimum_distances(atoms: Atoms) -> ValidationReport:
-    """Flag any pair of atoms closer than :data:`HARD_MIN_DISTANCE`."""
+    """Flag any pair of atoms closer than :data:`HARD_MIN_DISTANCE`.
+
+    Uses a neighbour list rather than the full pairwise matrix. The
+    matrix is O(N^2) in memory as well as time -- a twisted bilayer at
+    the magic angle has 11 164 atoms and would want a gigabyte for it,
+    and validation runs on the path of every export.
+    """
+    from ase.neighborlist import neighbor_list
+
     rep = ValidationReport()
-    dmat = minimum_image_distances(atoms)
-    np.fill_diagonal(dmat, np.inf)
-    min_d = float(dmat.min())
+    if len(atoms) < 2:
+        rep.info["min_interatomic_distance"] = float("inf")
+        return rep
+
+    first, second, distance = neighbor_list(
+        "ijd", atoms, cutoff=CLOSE_PAIR_CUTOFF)
+    real = distance > 1e-9  # a periodic self-image sits at exactly zero
+    if not real.any():
+        # Nothing within the search radius: too sparse to have a close
+        # contact, which is all this check is looking for.
+        rep.info["min_interatomic_distance"] = float(CLOSE_PAIR_CUTOFF)
+        return rep
+
+    closest = int(np.argmin(np.where(real, distance, np.inf)))
+    min_d = float(distance[closest])
     rep.info["min_interatomic_distance"] = min_d
     if min_d < HARD_MIN_DISTANCE:
-        i, j = np.unravel_index(np.argmin(dmat), dmat.shape)
         rep.errors.append(
-            f"Atoms {int(i)} and {int(j)} are only {min_d:.3f} Å apart "
-            f"(< {HARD_MIN_DISTANCE} Å)."
+            f"Atoms {int(first[closest])} and {int(second[closest])} are only "
+            f"{min_d:.3f} Å apart (< {HARD_MIN_DISTANCE} Å)."
         )
     elif min_d < MIN_CC_DISTANCE:
         rep.warnings.append(
@@ -87,28 +114,43 @@ def check_coordination(
     tolerance: float = 0.30,
     allow_edge: bool = True,
 ) -> ValidationReport:
-    """Check coordination numbers against sp2 carbon expectations.
+    """Check coordination numbers against each element's own expectation.
 
     * coordination == 0 → isolated atom (error).
-    * coordination >= 5 → unphysical for C/N/B/P/S in nanocarbons (error).
+    * coordination above the element's maximum → unphysical (error).
     * coordination == 1 → dangling atom (warning, error if ``not allow_edge``).
     * coordination == 2 → edge site (ok for ribbons/flakes, warning otherwise).
-    * coordination == 3 or 4 → ok.
+
+    The ceiling is per element (:data:`MAX_COORDINATION`), not a flat 4.
+    sp2 carbon never exceeds 4, but a dichalcogenide metal is
+    six-coordinate by construction, and judging MoS2 against carbon's
+    rule rejected every correct structure the ``tmd`` package builds.
     """
     rep = ValidationReport()
     coord = coordination_numbers(atoms, tolerance=tolerance)
     n = len(atoms)
     rep.info["mean_coordination"] = float(coord.mean()) if n else 0.0
 
+    symbols = np.array(atoms.get_chemical_symbols())
+    ceiling = np.array([
+        MAX_COORDINATION.get(s, DEFAULT_MAX_COORDINATION) for s in symbols
+    ])
+
     n_iso = int(np.sum(coord == 0))
     n_one = int(np.sum(coord == 1))
     n_two = int(np.sum(coord == 2))
-    n_high = int(np.sum(coord >= 5))
+    over = coord > ceiling
+    n_high = int(np.sum(over))
 
     if n_iso:
         rep.errors.append(f"{n_iso} isolated atom(s) (coordination 0).")
     if n_high:
-        rep.errors.append(f"{n_high} atom(s) with coordination >= 5 (unphysical).")
+        worst = symbols[over][0]
+        rep.errors.append(
+            f"{n_high} atom(s) over their element's coordination limit "
+            f"(e.g. {worst} with {int(coord[over].max())}, max "
+            f"{MAX_COORDINATION.get(worst, DEFAULT_MAX_COORDINATION)})."
+        )
     if n_one:
         msg = f"{n_one} atom(s) with coordination 1 (dangling)."
         if allow_edge:

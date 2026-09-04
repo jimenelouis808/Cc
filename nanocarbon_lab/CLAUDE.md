@@ -23,8 +23,11 @@ nanocarbon_lab/
 ├── tmd/           # MX2 dichalcogenides: materials.py (lattice constants),
 │                  #   slab.py (mono/multi/bulk), ribbon.py, nanotube.py,
 │                  #   coil.py (swept helical tubes), curved.py (schwarzites
-│                  #   on a TPMS, with the M/X parity repair), quality.py.
+│                  #   on a TPMS, with the M/X parity repair), modify.py
+│                  #   (Janus, alloys, vacancies, antisites), quality.py.
 │                  #   Deliberately NOT under builders/.
+├── hetero/        # twisted bilayers and vdW stacks (moire.py). Above both
+│                  #   builders/ and tmd/ because it composes them.
 ├── dopants/       # substitutional dopants (N, B, S, P, co-doping)
 ├── defects/       # vacancies, Stone-Wales, topological defects
 ├── topology/      # networkx-based connectivity / coordination analysis
@@ -294,6 +297,67 @@ Things already measured; do not re-derive them the hard way:
 
 Y junctions in MX2 are still missing. That is now a wiring job on the
 same machinery, not a research one.
+
+## Bond detection is element-aware, and must not be quadratic
+
+Two faults here were load-bearing and are pinned by
+`tests/test_validation_scaling.py`:
+
+1. **`COVALENT_RADII` needs every element it will meet.** It held only C,
+   N, B, S, P, H, O; everything else fell back to `MAX_CC_DISTANCE`
+   (1.80 Å), so a 2.404 Å Mo-S bond was not a bond, every dichalcogenide
+   validated as "isolated atoms", and **both exporters refused the entire
+   tmd package**. Add radii when adding elements.
+2. **Metal-metal pairs need `BOND_CUTOFF_OVERRIDE`.** Two metallic radii
+   overshoot a layered compound's lattice constant -- Mo+Mo+0.30 is
+   3.38 Å against MoS2's 3.16 -- so every metal picked up its six
+   in-plane neighbours and read as 12-coordinate. The override cuts
+   between the lattice repeat and a real 2.8 Å M-M bond, and it covers
+   **pairs**, not just same-element ones, because an alloy puts Mo next
+   to W.
+
+`MAX_COORDINATION` is per element for the same reason: carbon's "5 or
+more is unphysical" rejects a correct six-coordinate metal. Metals are
+allowed 7 -- six ligands plus the 1T' dimer partner.
+
+Neither `guess_bonds` nor `check_minimum_distances` may build the full
+pairwise matrix. Both did, and it is O(N^2) in memory as well as time:
+24 s and 79 MB at 3136 atoms, a gigabyte and unusable by the 11 164 atoms
+of a magic-angle bilayer -- and validation runs on the path of every
+export. Both now use `ase.neighborlist.neighbor_list`; the change was
+107x faster at 3136 atoms with identical output.
+
+`coordination_numbers` prefers `atoms.info["bonds"]` when the builder
+recorded one. On a curved structure a distance cutoff is simply wrong: a
+2.4 Å bond's cutoff reaches ~2.9 Å and sweeps up non-bonded neighbours,
+so a schwarzite whose every metal has exactly six bonds reads as
+ten-coordinate. Builders that know their bond graph should record it.
+
+## Heterostructures: the twist is not a free parameter
+
+`hetero/moire.py` stacks two hexagonal layers. Commensurate cells exist
+only at `cos(theta) = (m^2+n^2+4mn) / (2(m^2+mn+n^2))`, holding
+`m^2+mn+n^2` cells per layer -- (2,1) is 21.79 deg and (31,30) is the
+1.0845 deg magic angle with 11 164 atoms. Snap the request and report
+what was achieved; there is no periodic cell in between.
+
+Three things already got this wrong; do not repeat them:
+
+* **The two layers are 0 and theta, not +-theta/2.** A symmetric twist
+  looks nicer and leaves the supercell commensurate with *neither* layer
+  -- the fill then produced 242 atoms where 14 were required.
+* **The sign matters.** `V = m*a1 + n*a2` is a lattice vector of a layer
+  turned by `phi` exactly when `R(-phi)V` is one of the unrotated
+  lattice, and it is `R(+theta)V` that lands on `n*a1 + m*a2`. Backwards
+  gives 98 atoms instead of 14.
+* **The honeycomb basis is (1/3, 1/3).** With `a2 = a(1/2, sqrt3/2)` --
+  the 60-degree convention -- `(1/3, 2/3)` is the 120-degree form and
+  puts sites `a/3` = 0.82 Å apart instead of 1.42.
+
+`_fill_supercell` therefore asserts the atom count against
+`cells * n_sites` rather than trusting the fill. All three bugs above
+were caught by that assertion and would otherwise have produced
+plausible-looking cells with the wrong number of atoms in them.
 
 ## GUI: one job description, one killable process
 

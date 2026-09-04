@@ -24,9 +24,16 @@ DEFAULT_VACUUM_1D: float = 12.0  # Å around 1D tubes/wires
 # Supported substitutional dopants (sp2 compatible on top of the list).
 DOPANT_ELEMENTS: tuple[str, ...] = ("N", "B", "S", "P")
 
-# Covalent radii (Pyykkö, single-bond values, Å) for soft bond inference when
+# Covalent radii (Cordero et al. 2008, Å) for soft bond inference when
 # non-carbon species are present.
+#
+# The transition metals and heavy chalcogens are not optional garnish: an
+# element missing here falls back to MAX_CC_DISTANCE, which is 1.80 Å, and
+# a 2.404 Å Mo-S bond then reads as *no bond at all*. Every MoS2 structure
+# validated as "isolated atoms" and was refused by both exporters until
+# these were added.
 COVALENT_RADII: dict[str, float] = {
+    # sp2 carbon and its substitutional dopants
     "C": 0.76,
     "N": 0.71,
     "B": 0.84,
@@ -34,4 +41,69 @@ COVALENT_RADII: dict[str, float] = {
     "P": 1.07,
     "H": 0.31,
     "O": 0.66,
+    # dichalcogenide metals
+    "Mo": 1.54,
+    "W": 1.62,
+    "Nb": 1.64,
+    "Ta": 1.70,
+    "Ti": 1.60,
+    "Zr": 1.75,
+    "Hf": 1.75,
+    "Pt": 1.36,
+    "Sn": 1.39,
+    # heavier chalcogens
+    "Se": 1.20,
+    "Te": 1.38,
+    # common terminations and substituents
+    "F": 0.57,
+    "Cl": 1.02,
+    "Si": 1.11,
+}
+
+# Coordination a fully bonded atom of each element is expected to reach.
+# sp2 carbon is 3; a dichalcogenide metal is 6 and its chalcogen 3. Judging
+# a MoS2 metal against carbon's "5 or more is unphysical" would reject
+# every correct structure in the tmd package.
+MAX_COORDINATION: dict[str, int] = {
+    "C": 4, "N": 4, "B": 4, "P": 4, "H": 1, "O": 3, "F": 1, "Cl": 1,
+    "Si": 4,
+    "S": 6, "Se": 6, "Te": 6,          # 2 in a thiol, 6 in a MX2 sandwich
+    # Six chalcogen ligands, plus at most one metal-metal partner: that
+    # seventh bond is the 2.8 Å dimer that defines the 1T' phase, so a
+    # ceiling of 6 rejects a correct 1T' cell.
+    "Mo": 7, "W": 7, "Nb": 7, "Ta": 7, "Ti": 7, "Zr": 7, "Hf": 7,
+    "Pt": 7, "Sn": 7,
+}
+
+# Fallback when an element is not in MAX_COORDINATION.
+DEFAULT_MAX_COORDINATION: int = 6
+
+# Homoelemental bond lengths (Å): twice the metallic radius for a metal,
+# a covalent single bond for a chalcogen. Used both to detect these bonds
+# and to relax them when they occur as defects.
+HOMOELEMENTAL_BOND: dict[str, float] = {
+    "Mo": 2.78, "W": 2.78, "Nb": 2.92, "Ta": 2.92, "Ti": 2.94,
+    "Zr": 3.20, "Hf": 3.18, "Pt": 2.78, "Sn": 3.16,
+    "S": 2.10, "Se": 2.40, "Te": 2.76,
+}
+
+# Element pairs whose covalent-radii sum is a misleading bond cutoff.
+#
+# Two metallic radii overshoot the in-plane metal-metal spacing of a
+# layered dichalcogenide: Mo + Mo + 0.30 is 3.38 Å while MoS2's lattice
+# constant is 3.16, so every metal read as bonded to its six in-plane
+# neighbours and came out 12-coordinate. A real M-M bond is the 2.8 Å
+# 1T' dimer, and cutting between the two is what separates a genuine
+# defect bond from the lattice repeat.
+#
+# Every metal *pair*, not just same-element ones: an alloy such as
+# Mo(1-x)W(x)S2 has Mo next to W at the lattice spacing, and leaving that
+# pair to the radii sum (3.46 Å against a 3.16 Å lattice) put the metals
+# back at coordination 10.
+_METALS = {symbol: length for symbol, length in HOMOELEMENTAL_BOND.items()
+           if symbol not in ("S", "Se", "Te")}
+BOND_CUTOFF_OVERRIDE: dict[tuple[str, str], float] = {
+    (first, second): 0.5 * (first_length + second_length) + 0.20
+    for first, first_length in _METALS.items()
+    for second, second_length in _METALS.items()
 }
