@@ -546,3 +546,74 @@ def test_hint_labels_rewrap_when_the_column_widens(app):
     # An ordinary label has wraplength 0, which is the flag that says it
     # is not an explanatory hint; it must be left alone.
     assert int(plain.cget("wraplength")) == 0
+
+
+def test_the_network_panel_reaches_the_job(app):
+    app.var_mode_kind.set("network")
+    app.var_net_kind.set("cubic")
+    app.var_net_cell.set(44.0)
+    app.var_net_radius.set(6.5)
+
+    job = app.current_job()
+    assert job.mode == "network"
+    assert job.params["kind"] == "cubic"
+    assert job.params["cell"] == pytest.approx(44.0)
+    assert job.params["tube_radius"] == pytest.approx(6.5)
+
+
+def test_the_network_hint_warns_before_the_build_fails(app):
+    """The failure is not visible in the numbers: shrink the cell and the
+    nodes grow into each other until no tube is left. Saying so up front
+    is the difference between a build that fails after two minutes and
+    one that never started."""
+    from nanocarbon_lab.gui.app import BAD_RED
+
+    app.var_mode_kind.set("network")
+    app.var_net_kind.set("cubic")
+    app.var_net_cell.set(40.0)
+    assert "free tube" in app.lbl_network.cget("text")
+
+    app.var_net_cell.set(24.0)
+    assert "Too small" in app.lbl_network.cget("text")
+    assert str(app.lbl_network.cget("foreground")) == BAD_RED
+
+
+def test_a_diamond_net_needs_a_bigger_cell_than_cubic(app):
+    """Its struts are the quarter-diagonal, so the same edge buys 0.43
+    of the tube length."""
+    app.var_mode_kind.set("network")
+    app.var_net_cell.set(40.0)
+    app.var_net_kind.set("cubic")
+    assert "Too small" not in app.lbl_network.cget("text")
+    app.var_net_kind.set("diamond")
+    assert "Too small" in app.lbl_network.cget("text")
+
+
+def test_the_network_turns_annealing_off_on_entry(app):
+    """Same reason as the schwarzite: at a node the 5-7 pairs are how a
+    hexagonal net covers the curvature."""
+    app.var_mode_kind.set("junction")
+    app.var_anneal.set(80)
+    app.var_mode_kind.set("network")
+    assert app.var_anneal.get() == 0
+
+
+def test_the_unit_cell_export_describes_what_it_wrote(app, tmp_path, monkeypatch):
+    """A separate button from the render bundle because it answers a
+    different question: the bundle is for looking at, this is for
+    computing with."""
+    from nanocarbon_lab.gui import app as app_module
+
+    app.var_mode_kind.set("fullerene")
+    app.var_cage_family.set("C60")
+    app.var_cage_freq.set(1)
+    app.on_build()
+    _pump_until_idle(app.root, app)
+
+    target = tmp_path / "cell.cif"
+    monkeypatch.setattr(app_module.filedialog, "asksaveasfilename",
+                        lambda **_: str(target))
+    written = app.on_export_cell()
+    assert written is not None and written.exists()
+    assert "3D cell" in app.lbl_cell.cget("text")
+    assert "across vacuum" in app.lbl_cell.cget("text")

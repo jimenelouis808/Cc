@@ -20,6 +20,8 @@ nanocarbon_lab/
 │                  #   ring sizes follow the curvature instead of straining
 │                  #   assemblies.py: multi-wall tubes and bundles at the vdW gap
 │                  #   fullerene.py: closed cages (C60, C240...) and nano-onions
+│                  #   network.py: periodic 3D nets of interconnected tubes
+│                  #     (cubic, diamond), same implicit route as the schwarzite
 ├── tmd/           # MX2 dichalcogenides: materials.py (lattice constants),
 │                  #   slab.py (mono/multi/bulk), ribbon.py, nanotube.py,
 │                  #   coil.py (swept helical tubes), curved.py (schwarzites
@@ -28,7 +30,9 @@ nanocarbon_lab/
 │                  #   Deliberately NOT under builders/.
 ├── hetero/        # twisted bilayers and vdW stacks (moire.py). Above both
 │                  #   builders/ and tmd/ because it composes them.
-├── dopants/       # substitutional dopants (N, B, S, P, co-doping)
+├── dopants/       # substitutional heteroatoms in carbon: chemistry.py
+│                  #   (which elements, what site, how much), rings.py
+│                  #   (pentagon-selected placement), substitutional.py
 ├── defects/       # vacancies, Stone-Wales, topological defects
 ├── topology/      # networkx-based connectivity / coordination analysis
 ├── validation/    # bond lengths, coordination, density, vacuum checks
@@ -36,6 +40,7 @@ nanocarbon_lab/
 ├── relax/         # ASE optimizer wrapper + calculator-free harmonic pre-relax
 ├── viz/           # matplotlib 3D viewer
 ├── workflows/     # batch generation + ML dataset exporter
+├── cell.py        # any structure -> a DFT-ready periodic unit cell
 ├── utils/         # constants, geometry helpers
 ├── cli/           # command line interface
 ├── gui/           # tkinter desktop app (build / preview / export / render)
@@ -309,6 +314,65 @@ p95 strain 7.3%. `schwarzite_quality` reads `info["genus"]` and phrases
 the zero-antiphase case as guaranteed rather than lucky; keep that
 branch. `tube_radius < 2*h` is refused -- the chalcogen planes would meet
 on the axis.
+
+## Nanotube networks: periodic, and the field must be too
+
+`builders/network.py` builds 3D networks of interconnected tubes on a
+crystallographic net (cubic, diamond) through the same implicit route as
+the schwarzite, so the ring statistics stay **derived**: straight walls
+come out all-hexagon, nodes come out with heptagons because a node is a
+saddle, and `sum(6-n) = 6*chi` is checked against the net's own genus
+(cubic 3 / -24, diamond 9 / -96). Do not "help" by placing rings.
+
+Three things in `implicit.network_field` are load-bearing:
+
+* **Struts are replicated into the 26 neighbouring images.** Not an
+  optimisation: without it a strut leaving one face has no counterpart
+  entering the opposite one, the periodic marching-cubes weld finds
+  nothing to join, and the cell comes out torn. The test asserts the
+  faces match to 1e-9, not approximately.
+* **Only the nearest few struts may blend.** An exponential soft-min
+  over all 27 images subtracts `blend*log(n)` wherever n struts are
+  comparably close, and at 432 images that inflated the solid until it
+  filled the entire cell. The blend is over the `n_blend` nearest, with
+  the same polynomial smooth-min `smooth_union` uses.
+* **Evaluation is chunked.** The point-by-strut array is 3.9 GB for a
+  diamond cell on a 72^3 grid; unchunked, the process was *killed* --
+  no traceback, no failure message, just a missing result. Same class of
+  fault as the old quadratic `guess_bonds`.
+
+`minimum_cell` is the honest floor: each node eats about
+`tube_radius + blend` of either end of a strut, and below the cell where
+one tube radius is left between them there is no tube -- only two nodes
+touching. Refuse rather than return a sponge under a network's name.
+
+The atom estimate uses a **measured constant per net** (`NETWORK_OVERLAP`,
+cubic 0.71 / diamond 0.74), not the junction's linear law in the node
+count: that law predicts diamond to 1% and cubic 27% low, because
+coordination 6 hits its own floor.
+
+## Unit cells: pad only what does not repeat, measure only what is vacuum
+
+`cell.to_unit_cell` turns any structure into `pbc=(True, True, True)`
+with a real cell, because every plane-wave code and periodic viewer is
+3D-periodic and none of them has a "molecule" setting.
+
+Three rules, each of which was a bug first:
+
+* **A periodic axis is never padded.** Its lattice vector is the
+  physics; changing it changes the crystal rather than the box.
+* **A non-periodic axis is rebuilt from the atom span, not padded.** A
+  finite builder's cell is already a bounding box with padding in it, so
+  padding that compounds on every call. `to_unit_cell` twice must equal
+  `to_unit_cell` once, and a test pins it.
+* **`image_separation` counts only images displaced along a vacuum
+  axis.** In a real crystal an atom bonds to its image -- a nanotube is
+  1.42 A from itself along its own axis, a schwarzite 1.37 A -- so
+  measuring every image reported every correct periodic cell as
+  unconverged. That is backwards: the contact *is* the structure. A cell
+  with no vacuum direction returns `inf` and reports `None`, because a
+  bulk crystal has nothing to converge and a number there would invite a
+  meaningless comparison.
 
 ## Doping: the host is carbon, and the elements are not interchangeable
 

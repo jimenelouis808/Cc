@@ -35,6 +35,11 @@ SAMPLES: dict[str, Job] = {
     "junction": Job("junction", {"kind": "Y", "tube_radius": 6.0,
                                  "arm_length": 22.0, "blend": 4.0}),
     "schwarzite": Job("schwarzite", {"kind": "gyroid", "cell": 36.0}),
+    # The cheapest network: a cubic net is one node per cell against
+    # diamond's eight, and 40 Å is just above the floor that leaves a
+    # real tube between them.
+    "network": Job("network", {"kind": "cubic", "cell": 40.0,
+                               "tube_radius": 6.0, "blend": 5.0}),
     "coil (relaxed)": Job("coil (relaxed)",
                           {"coil_radius": 34.0, "pitch": 20.0, "turns": 1.25,
                            "tube_radius": 4.5}),
@@ -134,7 +139,10 @@ class TestEstimates:
          # body once per arm, and the shortfall grows with the arm count.
          # Measured 1530 for this L; a Y at r=12/arm 26 is 3153 against
          # 3074 predicted.
-         ("TMD junction", 1530)],
+         ("TMD junction", 1530),
+         # Measured cubic builds: 1184 at 40 Å/r6, 1564 at 50 Å/r6,
+         # 1030 at 40 Å/r5, and 5156 for diamond at 70 Å/r6.
+         ("network", 1184)],
     )
     def test_implicit_modes_are_predicted_within_a_tenth(self, mode, measured):
         """Surface area over ring area. Not exact, but the point is to

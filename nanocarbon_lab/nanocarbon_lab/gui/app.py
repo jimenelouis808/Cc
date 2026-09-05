@@ -75,8 +75,9 @@ from matplotlib.backends.backend_tkagg import (
 from matplotlib.figure import Figure
 
 from ..builders import fullerene_mesh as fm
+from ..cell import MIN_IMAGE_SEPARATION, cell_report, to_unit_cell
 from ..dopants import DOPANT_ELEMENTS, get_chemistry
-from ..exports.xyz import write_render_bundle
+from ..exports.xyz import write_cif, write_render_bundle
 from ..jobs import (
     DOPANT_SITES,
     FAMILIES,
@@ -115,6 +116,7 @@ SHAPES = ["straight", "arc", "s_curve", "helix", "random"]
 DOPANTS = ["none", *DOPANT_ELEMENTS]
 JUNCTION_KINDS = ["L", "T", "Y", "X", "cross3d"]
 SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
+NETWORK_KINDS = ["cubic", "diamond"]
 CAGE_FAMILIES = ["C60", "C20"]
 
 # Dichalcogenide choices. The phase list is short on purpose: 2H and 1T
@@ -613,6 +615,10 @@ class NanocarbonGUI:
         self.var_s_kind = self._var("s_kind", tk.StringVar(value="primitive"))
         self.var_s_cell = self._var("s_cell", tk.DoubleVar(value=36.0))
         self.var_s_thickness = self._var("s_thickness", tk.DoubleVar(value=0.0))
+        self.var_net_kind = self._var("net_kind", tk.StringVar(value="cubic"))
+        self.var_net_cell = self._var("net_cell", tk.DoubleVar(value=40.0))
+        self.var_net_radius = self._var("net_radius", tk.DoubleVar(value=6.0))
+        self.var_net_blend = self._var("net_blend", tk.DoubleVar(value=5.0))
         # The formula stays the single value the job is built from; the
         # metal and chalcogen pickers below drive it. Keeping the formula
         # authoritative means the presets, which name a compound, need no
@@ -817,6 +823,31 @@ class NanocarbonGUI:
                        "36 gyroid and diamond.",
                   foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
                   justify="left").grid(row=5, column=0, columnspan=2, sticky="w")
+
+        # --- 3D interconnected nanotube network
+        self.frame_network = ttk.LabelFrame(parent, text="Nanotube network",
+                                            padding=8)
+        self.frame_network.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_network, text="Net").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_network, textvariable=self.var_net_kind,
+                     values=NETWORK_KINDS, state="readonly", width=10).grid(
+            row=0, column=1, sticky="e", pady=(0, 6))
+        self.var_net_kind.trace_add("write", lambda *_: self._update_network_hint())
+        self._param(self.frame_network, "Cell length (Å)", self.var_net_cell,
+                    28.0, 90.0, 1, resolution=1.0, hard_lo=20.0, hard_hi=160.0,
+                    command=self._update_network_hint)
+        self._param(self.frame_network, "Tube radius (Å)", self.var_net_radius,
+                    3.0, 12.0, 3, resolution=0.25, hard_lo=2.0, hard_hi=25.0,
+                    command=self._update_network_hint)
+        self._param(self.frame_network, "Node blend (Å)", self.var_net_blend,
+                    2.0, 10.0, 5, resolution=0.5, hard_lo=1.0, hard_hi=20.0,
+                    command=self._update_network_hint)
+        self.lbl_network = ttk.Label(self.frame_network, text="",
+                                     foreground=MUTED,
+                                     font=("TkDefaultFont", 8), wraplength=230,
+                                     justify="left")
+        self.lbl_network.grid(row=7, column=0, columnspan=2, sticky="w",
+                              pady=(4, 0))
 
         # --- fullerene cage / nano-onion
         self.frame_cage = ttk.LabelFrame(parent, text="Cage", padding=8)
@@ -1196,6 +1227,7 @@ class NanocarbonGUI:
         for frame in (self.frame_tube, self.frame_centreline, self.frame_defects,
                       self.frame_coil, self.frame_junction, self.frame_schwarzite,
                       self.frame_cage, self.frame_mw, self.frame_bundle,
+                      self.frame_network,
                       self.frame_tmd, self.frame_tmd_layers,
                       self.frame_tmd_ribbon, self.frame_tmd_tube,
                       self.frame_tmd_coil, self.frame_tmd_sw,
@@ -1245,6 +1277,13 @@ class NanocarbonGUI:
 
         if mode == "junction":
             self.frame_junction.pack(fill="x")
+        elif mode == "network":
+            self.frame_network.pack(fill="x")
+            # Same reason as the schwarzite: at a node the 5-7 pairs are
+            # how a hexagonal net covers the curvature, so annealing them
+            # away only makes the remaining bonds stretch.
+            self.var_anneal.set(0)
+            self._update_network_hint()
         elif mode == "schwarzite":
             self.frame_schwarzite.pack(fill="x")
             # Annealing is counterproductive on a minimal surface (it
@@ -1439,6 +1478,48 @@ class NanocarbonGUI:
                     "chalcogen sites, as in sulphur-poor growth. The "
                     "element box is unused.")
         self.lbl_tmd_chem.config(text=text)
+
+    def _update_network_hint(self) -> None:
+        """Say whether the cell actually leaves a tube between the nodes.
+
+        The failure mode here is not obvious from the numbers: shrink the
+        cell and the nodes grow into each other until there is no tube
+        left, and what comes out is a sponge rather than a network of
+        nanotubes. The builder refuses below the floor, so showing that
+        floor -- and the free tube length above it -- is the difference
+        between a build that fails after two minutes and one that never
+        started.
+        """
+        from ..builders.network import STRUT_FRACTION, minimum_cell
+
+        kind = self.var_net_kind.get()
+        cell = float(self.var_net_cell.get())
+        radius = float(self.var_net_radius.get())
+        blend = float(self.var_net_blend.get())
+        try:
+            floor = minimum_cell(kind, radius, blend)
+        except ValueError:
+            return
+        strut = STRUT_FRACTION[kind] * cell
+        free = strut - 2.0 * (radius + blend)
+        coordination = 6 if kind == "cubic" else 4
+        angle = "90°" if kind == "cubic" else "109.47°"
+
+        if cell < floor:
+            self.lbl_network.config(
+                text=(f"Too small: {strut:.0f} Å struts, and each node eats "
+                      f"about {radius + blend:.0f} Å of either end, so no tube "
+                      f"is left. Needs at least {floor:.0f} Å."),
+                foreground=BAD_RED)
+            return
+        nodes = 1 if kind == "cubic" else 8
+        self.lbl_network.config(
+            text=(f"{nodes} node(s) per cell, {coordination}-coordinate at "
+                  f"{angle}. Struts {strut:.0f} Å, of which {free:.0f} Å is "
+                  f"free tube between the nodes. A periodic cell — the tubes "
+                  f"leave one face and return through the opposite one, so "
+                  f"this is ready for a DFT code as it stands."),
+            foreground=MUTED)
 
     def _update_dopant_hint(self) -> None:
         """Say what the chosen dopant is and whether this much is real.
@@ -1767,6 +1848,15 @@ class NanocarbonGUI:
                 tube_radius=float(self.var_j_radius.get()),
                 arm_length=float(self.var_j_arm.get()),
                 blend=float(self.var_j_blend.get()),
+                anneal_sweeps=int(self.var_anneal.get()),
+                roughness=float(self.var_roughness.get()),
+            )
+        elif mode == "network":
+            params = dict(
+                kind=self.var_net_kind.get(),
+                cell=float(self.var_net_cell.get()),
+                tube_radius=float(self.var_net_radius.get()),
+                blend=float(self.var_net_blend.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
                 roughness=float(self.var_roughness.get()),
             )
@@ -2289,6 +2379,9 @@ class NanocarbonGUI:
         exp.pack(fill="x", pady=(8, 0))
         ttk.Button(exp, text="Save .xyz + .json bundle…",
                    command=self.on_export).pack(fill="x", ipady=3)
+        ttk.Button(exp, text="Save unit cell (.cif) for DFT…",
+                   command=self.on_export_cell).pack(fill="x", pady=(4, 0),
+                                                     ipady=3)
         ttk.Button(exp, text="Copy equivalent CLI command",
                    command=self.on_copy_cli).pack(fill="x", pady=(4, 0))
         row = ttk.Frame(exp)
@@ -2299,6 +2392,10 @@ class NanocarbonGUI:
         ttk.Button(row, text="Load params…",
                    command=self.on_load_settings).pack(side="left", expand=True,
                                                        fill="x", padx=(4, 0))
+        self.lbl_cell = ttk.Label(exp, text="", foreground=MUTED,
+                                  font=("TkDefaultFont", 8), wraplength=260,
+                                  justify="left")
+        self.lbl_cell.pack(anchor="w", pady=(4, 0))
         ttk.Label(exp, text="XYZ for any viewer; JSON carries bonds and ring "
                             "types for the Blender pipeline, plus a CIF for "
                             "periodic cells.",
@@ -2632,6 +2729,55 @@ class NanocarbonGUI:
         extra = " (+ .cif)" if all(self.atoms.get_pbc()) else ""
         self._set_status(f"Saved {xyz_path.name} and {json_path.name}{extra}")
         return stem
+
+    def on_export_cell(self) -> Path | None:
+        """Save the structure as a periodic unit cell for a DFT code.
+
+        A separate button from the render bundle because it answers a
+        different question. The bundle is for looking at; this is for
+        computing with, and the conversion it applies -- vacuum on every
+        direction the structure does not repeat in, ``pbc`` true on all
+        three -- is what a plane-wave code and a periodic viewer both
+        require and what neither can infer.
+        """
+        if self.atoms is None:
+            self._show_error("Nothing to export", "Build a structure first.")
+            return None
+        path = filedialog.asksaveasfilename(
+            title="Save unit cell",
+            defaultextension=".cif",
+            filetypes=[("Crystallographic Information File", "*.cif"),
+                       ("All files", "*.*")],
+            initialfile=f"{self.var_mode_kind.get().replace(' ', '_')}.cif",
+        )
+        if not path:
+            return None
+        converted = to_unit_cell(self.atoms)
+        written = write_cif(converted, Path(path))
+        report = cell_report(converted)
+        self._describe_cell(report)
+        self._set_status(f"Saved {written.name}")
+        return written
+
+    def _describe_cell(self, report: dict) -> None:
+        """Show the cell and whether its vacuum is enough to trust."""
+        a, b, c = report["lengths"]
+        separation = report["image_separation"]
+        if separation is None:
+            note = "bulk crystal — no vacuum direction to converge"
+            colour = OK_GREEN
+        elif report["converged"]:
+            shown = ">= 20" if separation >= 20.0 else f"{separation:.1f}"
+            note = f"images {shown} Å apart across vacuum"
+            colour = OK_GREEN
+        else:
+            note = (f"images only {separation:.1f} Å apart — below "
+                    f"{MIN_IMAGE_SEPARATION:.0f} Å they interact")
+            colour = WARN_AMBER
+        self.lbl_cell.config(
+            text=(f"{report['periodicity']} cell {a:.2f} × {b:.2f} × {c:.2f} Å; "
+                  f"{note}."),
+            foreground=colour)
 
     # --------------------------------------------------------------- blender
     def _check_blender(self) -> None:

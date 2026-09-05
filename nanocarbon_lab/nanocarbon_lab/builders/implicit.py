@@ -235,6 +235,173 @@ def junction_field(
     return field, extent
 
 
+#: Periodic strut networks. Each entry is (node positions, bonds), both
+#: in fractional coordinates of a cubic cell, with a bond given as
+#: (node index, node index, image offset) so a strut leaving the cell is
+#: written down explicitly rather than inferred.
+NetworkKind = Literal["cubic", "diamond"]
+
+_NETWORKS: dict[str, tuple[list[tuple[float, float, float]],
+                           list[tuple[int, int, tuple[int, int, int]]]]] = {
+    # One 6-coordinate node per cell, struts along the three axes. The
+    # simple-cubic net: the classic "3D nanotube scaffold", and the one
+    # whose junctions are hardest on the lattice -- three tubes crossing
+    # at 90 deg is the sharpest node a graphitic net is asked to cover.
+    "cubic": (
+        [(0.0, 0.0, 0.0)],
+        [(0, 0, (1, 0, 0)), (0, 0, (0, 1, 0)), (0, 0, (0, 0, 1))],
+    ),
+    # Eight 4-coordinate nodes, struts along the tetrahedral directions.
+    # The nodes are 109.47 deg rather than 90, which is the angle sp2
+    # carbon actually wants at a branch, so the necks come out far less
+    # strained than the cubic net's -- at the cost of four times as many
+    # of them per cell.
+    "diamond": (
+        [(0.0, 0.0, 0.0), (0.0, 0.5, 0.5), (0.5, 0.0, 0.5), (0.5, 0.5, 0.0),
+         (0.25, 0.25, 0.25), (0.25, 0.75, 0.75),
+         (0.75, 0.25, 0.75), (0.75, 0.75, 0.25)],
+        [
+            # Each fcc A-site (0-3) to its four tetrahedral B-sites (4-7).
+            (0, 4, (0, 0, 0)), (0, 5, (0, -1, -1)),
+            (0, 6, (-1, 0, -1)), (0, 7, (-1, -1, 0)),
+            (1, 4, (0, 0, 0)), (1, 5, (0, 0, 0)),
+            (1, 6, (-1, 0, 0)), (1, 7, (-1, 0, 0)),
+            (2, 4, (0, 0, 0)), (2, 5, (0, -1, 0)),
+            (2, 6, (0, 0, 0)), (2, 7, (0, -1, 0)),
+            (3, 4, (0, 0, 0)), (3, 5, (0, 0, -1)),
+            (3, 6, (0, 0, -1)), (3, 7, (0, 0, 0)),
+        ],
+    ),
+}
+
+
+def network_segments(kind: NetworkKind, cell: float) -> np.ndarray:
+    """The strut endpoints of one periodic network cell, in Å.
+
+    Returns
+    -------
+    numpy.ndarray
+        Shape ``(n_struts, 2, 3)``: the two endpoints of each strut.
+        Endpoints may lie outside ``[0, cell)``; that is the point, since
+        a strut crossing a face has to be written with its true endpoint
+        for the field to be continuous there.
+    """
+    try:
+        nodes, bonds = _NETWORKS[kind]
+    except KeyError:
+        raise ValueError(
+            f"Unknown network {kind!r}; expected one of {list(_NETWORKS)}."
+        ) from None
+    positions = np.asarray(nodes, dtype=float)
+    segments = np.empty((len(bonds), 2, 3), dtype=float)
+    for index, (start, end, offset) in enumerate(bonds):
+        segments[index, 0] = positions[start]
+        segments[index, 1] = positions[end] + np.asarray(offset, dtype=float)
+    return segments * cell
+
+
+def network_field(
+    kind: NetworkKind = "cubic",
+    cell: float = 40.0,
+    tube_radius: float = 6.0,
+    blend: float = 5.0,
+) -> tuple[Field, float]:
+    """Field for a **periodic** 3D network of interconnected nanotubes.
+
+    Struts are capsules on a crystallographic net, and the field is made
+    periodic by replicating every strut into the 26 neighbouring images
+    before taking the union. That replication is not an optimisation
+    detail: without it a strut that leaves through one face has no
+    counterpart entering the opposite one, the periodic marching cubes
+    weld finds nothing to join, and the cell comes out torn.
+
+    The union is a **smooth** one, and only over the struts that are
+    actually close. A plain ``min`` leaves a crease at every node with
+    concentrated negative curvature that a hexagonal net cannot tile; a
+    naive soft-min over all several hundred images instead drags the
+    field down everywhere at once, inflating the tubes. Restricting the
+    soft blend to struts within a few blend radii of the nearest one
+    gives an exact distance far from the nodes and a smooth neck at them.
+
+    Parameters
+    ----------
+    kind
+        ``"cubic"`` (6-coordinate nodes, struts along the axes) or
+        ``"diamond"`` (4-coordinate nodes at the tetrahedral angle).
+    cell
+        Cubic cell length in Å.
+    tube_radius
+        Radius of each strut.
+    blend
+        Smooth-union radius at the nodes.
+
+    Returns
+    -------
+    (field, cell)
+        The cell length is returned alongside for symmetry with
+        :func:`schwarzite_field` and :func:`junction_field`.
+    """
+    if cell <= 0 or tube_radius <= 0 or blend <= 0:
+        raise ValueError("cell, tube_radius and blend must be positive.")
+
+    base = network_segments(kind, cell)
+    shifts = np.array([(i, j, k)
+                       for i in (-1, 0, 1)
+                       for j in (-1, 0, 1)
+                       for k in (-1, 0, 1)], dtype=float) * cell
+    # (n_struts * 27, 2, 3)
+    segments = (base[None, :, :, :] + shifts[:, None, None, :]).reshape(-1, 2, 3)
+
+    starts = segments[:, 0, :]
+    directions = segments[:, 1, :] - starts
+    lengths_squared = np.einsum("ij,ij->i", directions, directions)
+    # At most this many struts meet at a node (6 for cubic, 4 for
+    # diamond); blending a couple more costs nothing and covers a point
+    # sitting between two nodes.
+    n_blend = min(8, segments.shape[0])
+
+    # The point-by-strut array is the memory hazard here, and it is not a
+    # small one: a diamond cell is 16 struts times 27 images, and a 72^3
+    # marching-cubes grid against those 432 struts wants 3.9 GB for the
+    # offsets alone -- enough to have the process killed outright, which
+    # is exactly what happened. Chunking bounds it to a fixed budget
+    # whatever the net and the grid.
+    n_segments = max(1, segments.shape[0])
+    chunk = max(1024, int(256e6 / (n_segments * 64)))
+
+    def field(points: np.ndarray) -> np.ndarray:
+        flat = points.reshape(-1, 3)
+        out = np.empty(flat.shape[0], dtype=float)
+        for begin in range(0, flat.shape[0], chunk):
+            block = flat[begin:begin + chunk]
+            offset = block[:, None, :] - starts[None, :, :]
+            t = np.einsum("psi,si->ps", offset, directions) / lengths_squared
+            np.clip(t, 0.0, 1.0, out=t)
+            closest = offset - t[:, :, None] * directions[None, :, :]
+            distance = np.linalg.norm(closest, axis=-1) - tube_radius
+
+            # Blend only the nearest few. An exponential soft-min over
+            # all 27 images at once looked tidier and was wrong: it
+            # subtracts blend*log(n) wherever n struts are comparably
+            # close, which at 432 images inflated the solid until it
+            # filled the whole cell. A smooth minimum is a statement
+            # about the handful of surfaces that actually meet, so only
+            # those may enter it.
+            nearest = np.partition(distance, n_blend - 1, axis=1)[:, :n_blend]
+            nearest.sort(axis=1)
+            result = nearest[:, 0]
+            for column in range(1, n_blend):
+                other = nearest[:, column]
+                # The same polynomial smooth minimum as `smooth_union`,
+                # so a node here and a junction there blend identically.
+                h = np.clip(0.5 + 0.5 * (other - result) / blend, 0.0, 1.0)
+                result = other * (1.0 - h) + result * h - blend * h * (1.0 - h)
+            out[begin:begin + chunk] = result
+        return out.reshape(points.shape[:-1])
+
+    return field, cell
+
+
 def schwarzite_field(
     kind: SchwarziteKind = "primitive",
     cell: float = 30.0,

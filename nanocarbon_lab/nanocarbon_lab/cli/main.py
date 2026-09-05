@@ -13,6 +13,7 @@ Sub-commands:
 * ``onion``      — build a carbon nano-onion (C60@C240@C540).
 * ``junction``   — build a capped L/T/Y/X nanotube junction.
 * ``schwarzite`` — build a periodic negative-curvature schwarzite unit cell.
+* ``network``    — build a periodic 3D network of interconnected nanotubes.
 * ``mwcnt``      — build a multi-wall nanotube from concentric shells.
 * ``bundle``     — build a hexagonally packed rope of tubes.
 * ``tmd``        — build an MX2 monolayer, bilayer or few-layer slab.
@@ -26,6 +27,7 @@ Sub-commands:
 * ``stack``      — aligned van der Waals stack of 2D layers.
 * ``validate``   — run validation on an existing structure file.
 * ``dopants``    — list the heteroatoms available for carbon and what each does.
+* ``unitcell``   — convert any structure file into a periodic unit cell.
 
 Every carbon sub-command builds **pure carbon** unless ``--dopant`` is
 given; doping is an edit applied afterwards, never a different material.
@@ -53,13 +55,20 @@ from ..builders import (
     build_nano_onion,
     build_nanocoil,
     build_nanoribbon,
+    build_nanotube_network,
     build_schwarzite,
+)
+from ..cell import (
+    MIN_IMAGE_SEPARATION,
+    cell_report,
+    describe_periodicity,
+    to_unit_cell,
 )
 from ..defects import introduce_vacancies
 from ..dopants import DOPANT_CHEMISTRY, DOPANT_ELEMENTS
 from ..exports.lammps import write_lammps
 from ..exports.qe import QESettings, write_qe_input
-from ..exports.xyz import write_render_bundle
+from ..exports.xyz import write_cif, write_render_bundle
 from ..hetero import available_layers, build_twisted_bilayer, build_vdw_stack
 from ..jobs import DOPANT_SITES, Job, apply_doping, apply_tmd_chemistry
 from ..tmd import (
@@ -145,6 +154,7 @@ def _add_tmd_chemistry_arguments(p) -> None:
                    help="Fraction of the sublattice --alloy replaces. The "
                         "achieved fraction is reported, since nine sites "
                         "cannot be split in half.")
+    _add_unit_cell_flags(p)
 
 
 
@@ -355,6 +365,26 @@ def _cmd_cnt_cap(args):
     return 0
 
 
+def _add_unit_cell_flags(p) -> None:
+    """Attach the "give me a unit cell" flags.
+
+    Every plane-wave code and periodic viewer is three-dimensionally
+    periodic, so a finite structure needs a box and a slab needs its
+    vacuum declared. This turns any sub-command's output into something
+    those programs accept directly, rather than leaving the user to set
+    a cell by hand in the file afterwards.
+    """
+    p.add_argument("--unit-cell", action="store_true",
+                   help="Also write a periodic unit cell (.cif): the "
+                        "structure with pbc on all three axes and vacuum "
+                        "where it does not repeat. This is the file to feed "
+                        "a DFT code or a periodic viewer.")
+    p.add_argument("--cell-vacuum", type=float, default=None,
+                   help="Padding (Å) per side of each non-periodic axis for "
+                        "--unit-cell. Defaults to 15 for a slab, 12 "
+                        "otherwise.")
+
+
 def _add_surface_flags(p, anneal: bool | int = True):
     """Surface finish and doping, shared by the structure sub-commands.
 
@@ -379,10 +409,36 @@ def _add_surface_flags(p, anneal: bool | int = True):
                    help="RMS out-of-plane corrugation (Å) for a CVD-grown "
                         "rather than ideal wall; 0.1-0.3 is realistic.")
     _add_doping_arguments(p, seed_help="RNG seed for defects, roughness and doping.")
+    _add_unit_cell_flags(p)
 
 
 def _maybe_dope(atoms, args):
     return _dope(atoms, args)
+
+
+#: The structure the sub-command just built, so `main` can convert it to
+#: a unit cell without every report function growing an `args` parameter
+#: it does not otherwise need. Set by `_remember`, read once, in one
+#: place -- a narrow hand-off rather than shared state.
+_LAST_BUILT: list = []
+
+
+def _remember(atoms):
+    """Record the built structure for the --unit-cell step in `main`."""
+    _LAST_BUILT.clear()
+    _LAST_BUILT.append(atoms)
+    return atoms
+
+
+def _maybe_unit_cell(args) -> None:
+    """Write the periodic unit cell too, if it was asked for."""
+    if not getattr(args, "unit_cell", False) or not _LAST_BUILT:
+        return
+    converted = to_unit_cell(_LAST_BUILT[0],
+                             vacuum=getattr(args, "cell_vacuum", None))
+    path = write_cif(converted, Path(args.out).with_suffix(".cif"))
+    print(f"Wrote {path}")
+    _report_cell(converted)
 
 
 def _report_doping(atoms) -> None:
@@ -414,6 +470,7 @@ def _report_doping(atoms) -> None:
 
 def _report_structure(atoms, xyz_path, json_path):
     """Shared summary printer for the structure-building sub-commands."""
+    _remember(atoms)
     g = atoms.info["geometry"]
     print(f"Wrote {xyz_path} and {json_path}")
     print(f"  n_atoms     = {len(atoms)}")
@@ -465,6 +522,7 @@ def _report_tmd(atoms, xyz_path, json_path, stoichiometric=True):
     there are no rings to count, the metal is six-coordinate rather than
     three, and the bond to check against is material-specific.
     """
+    _remember(atoms)
     report = tmd_geometry_report(atoms)
     info = atoms.info
     print(f"Wrote {xyz_path} and {json_path}")
@@ -556,6 +614,7 @@ def _cmd_tmd_tube(args):
 
 
 def _report_stack(atoms, xyz_path, json_path):
+    _remember(atoms)
     info = atoms.info
     report = run_basic_checks(atoms)
     print(f"Wrote {xyz_path} and {json_path}")
@@ -691,6 +750,25 @@ def _cmd_junction(args):
     return 0
 
 
+def _cmd_network(args):
+    atoms = build_nanotube_network(
+        kind=args.kind, cell=args.cell, tube_radius=args.tube_radius,
+        blend=args.blend, bond=args.bond, grid_resolution=args.grid,
+        remesh_iterations=args.remesh_iterations,
+        anneal_sweeps=args.anneal_sweeps, roughness=args.roughness,
+        seed=args.seed,
+    )
+    atoms = _maybe_dope(atoms, args)
+    xyz_path, json_path = write_render_bundle(atoms, Path(args.out))
+    info = atoms.info
+    _report_structure(atoms, xyz_path, json_path)
+    print(f"  network     = {info['network_kind']}, {info['n_nodes']} node(s) "
+          f"per cell, {info['node_coordination']}-coordinate")
+    print(f"  tubes       = R {info['tube_radius']:.1f} A, struts "
+          f"{info['strut_length']:.1f} A long")
+    return 0
+
+
 def _cmd_schwarzite(args):
     atoms = build_schwarzite(
         kind=args.kind, cell=args.cell,
@@ -779,6 +857,59 @@ def _cmd_onion(args):
           f"{[round(r, 2) for r in atoms.info['shell_radii']]} A")
     print(f"  spacing     = {atoms.info['shell_spacing']:.2f} A "
           f"(closest approach {g['min_wall_separation']:.2f} A; graphite is 3.4)")
+    return 0
+
+
+def _report_cell(atoms) -> None:
+    """Print the cell, and whether it is big enough to be trusted.
+
+    The lattice alone does not answer the question a person is asking,
+    which is "can I run this?". The nearest approach across vacuum does,
+    so both are printed together.
+    """
+    report = cell_report(atoms)
+    a, b, c = report["lengths"]
+    alpha, beta, gamma = report["angles"]
+    print(f"  cell        = {a:.3f} x {b:.3f} x {c:.3f} A, "
+          f"angles {alpha:.1f}/{beta:.1f}/{gamma:.1f} deg")
+    print(f"  periodicity = {report['periodicity']}, pbc {report['pbc']}, "
+          f"volume {report['volume']:.0f} A^3")
+    if report["density"] is not None:
+        print(f"  density     = {report['density']:.3f} g/cm3")
+    separation = report["image_separation"]
+    if separation is None:
+        print("  images      = no vacuum direction — a bulk crystal, so there "
+              "is nothing to converge")
+    else:
+        limit = "" if report["converged"] else \
+            f"  — below {MIN_IMAGE_SEPARATION:.0f} A, images will interact"
+        shown = f">= {separation:.1f}" if separation >= 20.0 else f"{separation:.2f}"
+        print(f"  images      = {shown} A apart across vacuum{limit}")
+    if report["atoms_outside"]:
+        print(f"  WARNING     : {report['atoms_outside']} atoms lie outside "
+              "the cell")
+
+
+def _cmd_unitcell(args):
+    """Convert an existing structure file into a periodic unit cell."""
+    atoms = ase_io.read(args.path)
+    before = describe_periodicity(atoms)
+    converted = to_unit_cell(atoms, vacuum=args.vacuum)
+    out = Path(args.out)
+    written = [write_cif(converted, out.with_suffix(".cif"))]
+    if args.format in ("qe", "both"):
+        write_qe_input(converted, out.parent / f"{out.name}_qe",
+                       settings=QESettings(calculation=args.calculation),
+                       force=args.force)
+        written.append(out.parent / f"{out.name}_qe")
+    if args.format in ("lammps", "both"):
+        write_lammps(converted, out.parent / f"{out.name}_lammps",
+                     force=args.force)
+        written.append(out.parent / f"{out.name}_lammps")
+    print(f"Read {args.path} ({before}) -> unit cell")
+    for path in written:
+        print(f"Wrote {path}")
+    _report_cell(converted)
     return 0
 
 
@@ -1065,6 +1196,7 @@ def build_parser() -> argparse.ArgumentParser:
     tw.add_argument("--gap", type=float, default=3.35,
                     help="Separation between the facing atomic planes (A).")
     tw.add_argument("--out", required=True, help="Output path without extension.")
+    _add_unit_cell_flags(tw)
     tw.set_defaults(func=_cmd_twist)
 
     st = sub.add_parser(
@@ -1077,6 +1209,7 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("--nx", type=int, default=1)
     st.add_argument("--ny", type=int, default=1)
     st.add_argument("--out", required=True, help="Output path without extension.")
+    _add_unit_cell_flags(st)
     st.set_defaults(func=_cmd_stack)
 
     tj = sub.add_parser(
@@ -1231,6 +1364,34 @@ def build_parser() -> argparse.ArgumentParser:
     _add_surface_flags(sz, anneal=0)
     sz.set_defaults(func=_cmd_schwarzite)
 
+    nw = sub.add_parser(
+        "network",
+        help="Build a periodic 3D network of interconnected nanotubes.",
+    )
+    nw.add_argument("--kind", default="cubic", choices=["cubic", "diamond"],
+                    help="'cubic' joins three tubes at 90 deg (6-coordinate "
+                         "nodes, one per cell); 'diamond' joins four at "
+                         "109.47 deg, the angle sp2 carbon wants at a branch "
+                         "— gentler nodes, but eight per cell, so it needs a "
+                         "much larger cell.")
+    nw.add_argument("--cell", type=float, default=40.0,
+                    help="Cubic unit-cell edge (Å). Must leave a real tube "
+                         "between nodes; the builder says the floor.")
+    nw.add_argument("--tube-radius", type=float, default=6.0,
+                    help="Tube radius (Å). Free, not quantised: the wall is "
+                         "meshed rather than wrapped from an (n,m) sheet.")
+    nw.add_argument("--blend", type=float, default=5.0,
+                    help="Smooth-union radius at the nodes.")
+    nw.add_argument("--bond", type=float, default=1.42)
+    nw.add_argument("--grid", type=int, default=72,
+                    help="Grid points across the cell; higher than the "
+                         "schwarzite default because thin necks between wide "
+                         "tubes weld shut on a coarse grid.")
+    nw.add_argument("--remesh-iterations", type=int, default=25)
+    nw.add_argument("--out", required=True, help="Output path without extension.")
+    _add_surface_flags(nw, anneal=0)
+    nw.set_defaults(func=_cmd_network)
+
     mw = sub.add_parser("mwcnt", help="Build a multi-wall carbon nanotube.")
     mw.add_argument("--shells", type=int, default=2, help="Concentric walls.")
     mw.add_argument("--inner-freq", type=int, default=3,
@@ -1262,6 +1423,27 @@ def build_parser() -> argparse.ArgumentParser:
     vl.add_argument("path", help="Path to a structure file readable by ASE.")
     vl.set_defaults(func=_cmd_validate)
 
+    uc = sub.add_parser(
+        "unitcell",
+        help="Convert any structure file into a periodic unit cell (CIF + "
+             "optionally QE/LAMMPS).",
+    )
+    uc.add_argument("path", help="Structure file readable by ASE.")
+    uc.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    uc.add_argument("--vacuum", type=float, default=None,
+                    help="Padding (Å) per side of each non-periodic axis. "
+                         "Defaults to 15 for a slab, 12 otherwise.")
+    uc.add_argument("--format", choices=["cif", "qe", "lammps", "both"],
+                    default="cif",
+                    help="A CIF is always written; this adds simulation "
+                         "inputs alongside it.")
+    uc.add_argument("--calculation", default="scf",
+                    choices=["scf", "relax", "vc-relax", "nscf", "bands"])
+    uc.add_argument("--force", action="store_true",
+                    help="Export even if validation reports errors.")
+    uc.set_defaults(func=_cmd_unitcell)
+
     dp = sub.add_parser(
         "dopants",
         help="List the heteroatoms available for carbon, and what each does.")
@@ -1274,7 +1456,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     _resolve_material(args)
-    return int(args.func(args))
+    status = int(args.func(args))
+    _maybe_unit_cell(args)
+    return status
 
 
 if __name__ == "__main__":

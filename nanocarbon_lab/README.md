@@ -24,6 +24,8 @@ validation pass before writing.
 | `cli`           | `nanocarbon` command-line entry point                                        |
 | `gui`           | `nanocarbon-gui` desktop app: sliders, live 3D preview, export, Blender render |
 | `implicit`/`remesh`/`junction` | L/T/Y/X nanotube junctions and periodic schwarzite unit cells from implicit surfaces |
+| `network`       | **Periodic 3D networks of interconnected nanotubes** — cubic and diamond nets, topology derived not prescribed |
+| `cell`          | **Any structure → a DFT-ready periodic unit cell**, with the vacuum measured rather than assumed |
 | `swept`         | Coils and arbitrary curved tubes whose ring topology is **derived from the curvature** |
 | `fullerene`     | Closed cages (C60, C240, C540, C20, C80, …) and carbon nano-onions |
 | `assemblies`    | Multi-wall nanotubes and hexagonally packed bundles, at the van der Waals gap |
@@ -162,6 +164,59 @@ and angle statistics — `CLEAN`, `STRAINED` or `BROKEN`, with the reason.
 It exists because "0 close contacts" is not the same as "physical": an
 over-tight coil keeps its atoms apart while stretching its bonds to
 1.69 Å, which is longer than even an sp3 C–C bond.
+
+## Every structure as a unit cell, for DFT and periodic viewers
+
+Every plane-wave code — Quantum ESPRESSO, VASP, CASTEP — and every
+periodic viewer — VESTA, OVITO, XCrySDen — is **three-dimensionally
+periodic**. There is no "molecule" setting: a molecule is a molecule in
+a box big enough not to see its own images. So every structure here has
+a unit cell, and what it becomes depends on how many directions it
+genuinely repeats in:
+
+| starts | examples | becomes |
+| --- | --- | --- |
+| 0D | fullerene, capped tube, junction | molecule in a box |
+| 1D | (n,m) nanotube | tube period + vacuum |
+| 2D | graphene, MX2 layer, twisted cell | slab + vacuum along z |
+| 3D | schwarzite, nanotube network, bulk | already a unit cell |
+
+Add `--unit-cell` to any build, or convert a file you already have:
+
+```bash
+nanocarbon fullerene --family C60 --freq 1 --unit-cell --out out/c60
+nanocarbon tmd --material MoS2 --unit-cell --out out/mos2
+nanocarbon unitcell some_structure.xyz --out out/converted --format qe
+```
+```
+  cell        = 30.893 x 30.893 x 30.893 A, angles 90.0/90.0/90.0 deg
+  periodicity = 3D, pbc (True, True, True), volume 29483 A^3
+  density     = 0.041 g/cm3
+  images      = >= 20.0 A apart across vacuum
+```
+
+In the GUI it is a button of its own — **Save unit cell (.cif) for
+DFT…** — separate from the render bundle because it answers a different
+question: the bundle is for looking at, this is for computing with.
+
+Three things make it more than a `set_cell` call:
+
+**A periodic axis is never touched.** Its lattice vector *is* the
+physics; padding it would change the crystal rather than the box around
+it. Only directions that do not repeat get vacuum.
+
+**A non-periodic axis is rebuilt from the atoms, not padded.** A finite
+builder's cell is already a bounding box with padding in it, so padding
+that would compound the error every time the conversion ran. Converting
+twice now gives the same cell as converting once.
+
+**Convergence is measured across vacuum only.** The number that matters
+is the nearest approach to a neighbouring image — but only across a
+direction the structure does not repeat in. Counting every image is
+exactly backwards: in a real crystal an atom *bonds* to its image, so a
+nanotube's 1.42 Å contact along its own axis is the structure, not a
+failure. Measuring all of them reported every correct periodic cell as
+unconverged.
 
 ## Doping carbon: which heteroatom, how much, and where
 
@@ -754,6 +809,63 @@ between marching-cubes sample points, so an isolated `(cell, resolution)`
 pair can fail where both its neighbours are fine — the gyroid at 26 Å did
 exactly that. That is discretisation, not physics, so the builder retries
 with a shifted grid before giving up.
+
+### 3D interconnected nanotube networks
+
+A schwarzite gets its negative curvature from a minimal surface — a
+smooth sponge, straight nowhere. A **nanotube network** is the other
+shape a 3D carbon architecture takes: straight tubes joined at discrete
+nodes, which is what a template-grown or junction-assembled solid
+actually looks like. Same implicit route, so the topology is still
+derived rather than prescribed.
+
+```bash
+nanocarbon network --kind cubic --cell 40 --tube-radius 6 --out out/net
+nanocarbon network --kind diamond --cell 70 --tube-radius 6 --out out/net_d
+```
+
+| net | nodes/cell | coordination | angle | genus | budget |
+| --- | --- | --- | --- | --- | --- |
+| `cubic` | 1 | 6 | 90° | 3 | −24 |
+| `diamond` | 8 | 4 | 109.47° | 9 | −96 |
+
+What the derivation buys, and the reason for building these implicitly
+instead of gluing junctions together by hand:
+
+* The straight sections come out **all-hexagon**, as a real tube wall is.
+* The nodes come out with **heptagons**, because a node is a saddle and a
+  saddle carries negative Gaussian curvature. Nobody puts them there.
+* `sum(6 − n) = 6·χ` holds, and χ is fixed by the net's own topology, so
+  the two are checked against each other rather than either being
+  assumed.
+
+Measured:
+
+| build | atoms | rings | budget | bonds | contacts |
+| --- | --- | --- | --- | --- | --- |
+| cubic, 40 Å, r=6 | 1184 | 5:52, 6:462, 7:72, 8:2 | −24 = 6·χ ✓ | 1.346–1.518 Å | 0 |
+| diamond, 70 Å, r=6 | 5156 | 5:184, 6:2100, 7:276, 8:2 | −96 = 6·χ ✓ | 1.342–1.550 Å | 0 |
+
+The two nets are not interchangeable. Cubic joins three tubes at 90°,
+the sharpest branch a graphitic sheet is ever asked to cover; diamond
+joins four at 109.47°, the angle sp2 carbon wants anyway, so its nodes
+are far gentler — at the cost of eight per cell, needing a much larger
+cell and many more atoms.
+
+`tube_radius` is **free here, not quantised**. A rolled (n,m) tube has
+its diameter fixed by its indices; this wall is meshed, so the lattice
+adapts to the radius instead.
+
+The builder refuses a cell too small to leave a tube between the nodes,
+and says which cell would work — below that the nodes grow into each
+other and what comes out is a sponge, not a network of nanotubes:
+
+```
+cell=20.0 Å is too small for a 'cubic' network of 6.0 Å tubes: the struts
+are 20.0 Å long and each node eats about 11.0 Å of either end, so nothing
+recognisable as a tube is left between them. Use cell >= 28 Å, or a
+narrower tube.
+```
 
 ### Coils with real dimensions
 

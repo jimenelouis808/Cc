@@ -36,6 +36,7 @@ CARBON_MODES = (
     "nano-onion",
     "junction",
     "schwarzite",
+    "network",
     "multi-wall",
     "bundle",
 )
@@ -85,7 +86,7 @@ def family_of(mode: str) -> str:
 # seed polyhedron. They cost orders of magnitude more time per atom, which
 # is the single most useful thing to know before pressing Build.
 IMPLICIT_MODES = frozenset({"coil (relaxed)", "junction", "schwarzite",
-                            "TMD schwarzite", "TMD junction"})
+                            "network", "TMD schwarzite", "TMD junction"})
 
 # Area of one period of each triply periodic minimal surface, in units of
 # the cell length squared. Standard values for the trigonometric
@@ -97,6 +98,11 @@ RING_AREA = 1.5 * math.sqrt(3.0) * 1.42**2
 
 # Atoms per ring in a closed honeycomb (Euler: F = 2V - 4).
 ATOMS_PER_RING = 2.0
+
+# Fraction of a nanotube network's summed strut area that survives the
+# nodes. Summing the struts counts the node region once per strut meeting
+# there, and these are what four real builds imply (see `_estimate_atoms`).
+NETWORK_OVERLAP = {"cubic": 0.71, "diamond": 0.74}
 
 
 @dataclass(frozen=True)
@@ -176,6 +182,7 @@ def build(job: Job):
         build_junction,
         build_multiwall_cnt,
         build_nano_onion,
+        build_nanotube_network,
         build_schwarzite,
     )
     from .hetero import build_twisted_bilayer, build_vdw_stack
@@ -205,6 +212,7 @@ def build(job: Job):
         "nano-onion": build_nano_onion,
         "junction": build_junction,
         "schwarzite": build_schwarzite,
+        "network": build_nanotube_network,
         "multi-wall": build_multiwall_cnt,
         "bundle": build_bundle,
     }
@@ -356,6 +364,29 @@ def estimate_atoms(job: Job) -> int:
         cell = float(p.get("cell", 36.0))
         area = TPMS_AREA.get(p.get("kind", "primitive"), 2.345) * cell**2
         return int(ATOMS_PER_RING * area / RING_AREA)
+
+    if mode == "network":
+        # Struts as cylinders. The nodes are where the estimate loses
+        # accuracy -- tubes bury each other there, so summing the struts
+        # counts the node region once per strut meeting at it -- and the
+        # correction is the same linear one the MX2 junction uses, keyed
+        # on the node coordination rather than an arm count.
+        from .builders.network import STRUT_FRACTION
+
+        kind = p.get("kind", "cubic")
+        radius = float(p.get("tube_radius", 6.0))
+        cell = float(p.get("cell", 40.0))
+        n_struts = 3 if kind == "cubic" else 16
+        strut = STRUT_FRACTION.get(kind, 1.0) * cell
+        area = n_struts * 2 * math.pi * radius * strut
+        # A measured constant per net, not the junction's linear law in
+        # the node count: that law predicted the diamond net to 1% and
+        # the cubic one 27% low, because at coordination 6 it hits its
+        # own floor. Implied overlap from four real builds -- cubic 0.686
+        # / 0.724 / 0.716 and diamond 0.739 -- so the honest summary is
+        # one number each, near 0.7, not a fitted trend through two points.
+        overlap = NETWORK_OVERLAP.get(kind, 0.72)
+        return int(ATOMS_PER_RING * area * overlap / RING_AREA)
 
     if mode == "junction":
         radius = float(p.get("tube_radius", 6.0))
@@ -571,6 +602,10 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "kind": "--kind", "tube_radius": "--tube-radius",
         "arm_length": "--arm-length", "blend": "--blend", "bond": "--bond",
         "anneal_sweeps": "--anneal-sweeps", "roughness": "--roughness",
+    }),
+    "network": ("network", {
+        "kind": "--kind", "cell": "--cell", "tube_radius": "--tube-radius",
+        "blend": "--blend",
     }),
     "schwarzite": ("schwarzite", {
         "kind": "--kind", "cell": "--cell", "thickness": "--thickness",

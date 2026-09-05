@@ -9,6 +9,7 @@ from .graphene import build_graphene, build_graphene_supercell
 from .junction import build_junction, build_schwarzite
 from .nanocoil import build_nanocoil
 from .nanoribbon import build_nanoribbon
+from .network import build_nanotube_network
 from .swept import build_coil, build_swept_tube
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "build_graphene_supercell",
     "build_bundle",
     "build_junction",
+    "build_nanotube_network",
     "build_multiwall_cnt",
     "build_nanocoil",
     "build_nanoribbon",
