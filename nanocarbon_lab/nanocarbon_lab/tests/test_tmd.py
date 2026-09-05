@@ -48,11 +48,22 @@ class TestMaterials:
         assert get_material("TiS2").bond_length == pytest.approx(2.43, abs=0.03)
 
     def test_every_material_is_physically_sensible(self):
+        """Bounds on the whole MX2 family, not on the rows we happen to have.
+
+        The upper bound on `a` was 3.8 Å when the table held thirteen
+        compounds, none heavier than ZrS2. That was the range of the data
+        rather than of the chemistry: the heavy tellurides genuinely go
+        past it -- ZrTe2 and HfTe2 sit at 3.95 Å and PtTe2 at 4.03 -- so
+        the bound was describing an accident of the table's contents.
+        4.2 Å is where a hexagonal MX2 lattice constant really stops.
+        """
         for name, material in MATERIALS.items():
-            assert 3.0 < material.a < 3.8, name
+            assert 3.0 < material.a < 4.2, name
             assert 2.5 < material.h < 3.8, name
             # The van der Waals gap is what holds layers apart; graphite's
-            # is 3.35 Å and TMDs are in the same family of contact.
+            # is 3.35 Å and TMDs are in the same family of contact. The
+            # platinum dichalcogenides are the tight end at ~2.4 Å, which
+            # is real and is why their gap is so layer-dependent.
             assert 2.0 < material.vdw_gap < 3.8, f"{name}: {material.vdw_gap}"
 
     def test_unknown_material_lists_the_known_ones(self):
