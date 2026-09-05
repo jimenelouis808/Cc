@@ -13,20 +13,20 @@ from .network import build_nanotube_network
 from .swept import build_coil, build_swept_tube
 
 __all__ = [
+    "build_bundle",
     "build_capped_cnt",
     "build_carbon_foam",
     "build_cnt",
     "build_coil",
     "build_fullerene",
-    "build_nano_onion",
-    "build_swept_tube",
     "build_graphene",
     "build_graphene_supercell",
-    "build_bundle",
     "build_junction",
-    "build_nanotube_network",
     "build_multiwall_cnt",
+    "build_nano_onion",
     "build_nanocoil",
     "build_nanoribbon",
+    "build_nanotube_network",
     "build_schwarzite",
+    "build_swept_tube",
 ]

@@ -46,7 +46,13 @@ class LAMMPSSettings:
     pair_coeff: str | None = None  # if None, auto-generated for C-only
 
 
-def _cell_to_lammps_box(cell: np.ndarray) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+#: (xlo, xhi), (ylo, yhi), (zlo, zhi) plus the three tilt factors.
+LammpsBox = tuple[tuple[float, float, float],
+                  tuple[float, float, float],
+                  tuple[float, float, float]]
+
+
+def _cell_to_lammps_box(cell: np.ndarray) -> LammpsBox:
     """Convert an ASE (3,3) cell to LAMMPS box parameters.
 
     LAMMPS requires a lower-triangular cell (a along x, b in xy plane, c
@@ -67,7 +73,10 @@ def _cell_to_lammps_box(cell: np.ndarray) -> tuple[tuple[float, float, float], t
     return (xhi, yhi, zhi), (xy, xz, yz), (x_hat, y_hat, z_hat)  # type: ignore[return-value]
 
 
-def _rotate_positions(positions: np.ndarray, basis: tuple[np.ndarray, np.ndarray, np.ndarray]) -> np.ndarray:
+def _rotate_positions(
+    positions: np.ndarray,
+    basis: tuple[np.ndarray, np.ndarray, np.ndarray],
+) -> np.ndarray:
     """Rotate positions into LAMMPS basis."""
     R = np.vstack(basis)  # rows: x_hat, y_hat, z_hat
     return positions @ R.T
@@ -135,7 +144,7 @@ def write_lammps(
     for sym in unique:
         data_lines.append(f"{type_of[sym]} {_ATOMIC_MASSES.get(sym, 1.0):.4f}  # {sym}")
     data_lines.extend(["", "Atoms  # atomic", ""])
-    for idx, (sym, p) in enumerate(zip(symbols, positions), start=1):
+    for idx, (sym, p) in enumerate(zip(symbols, positions, strict=True), start=1):
         data_lines.append(
             f"{idx} {type_of[sym]} {p[0]:.8f} {p[1]:.8f} {p[2]:.8f}"
         )
@@ -177,7 +186,8 @@ def write_lammps(
         "# NVT equilibration",
         f"timestep        {s.timestep_fs / 1000.0}",
         f"velocity        all create {s.nvt_temperature_k} 12345 mom yes rot yes dist gaussian",
-        f"fix             nvt_fix all nvt temp {s.nvt_temperature_k} {s.nvt_temperature_k} $(100.0*dt)",
+        f"fix             nvt_fix all nvt temp {s.nvt_temperature_k} "
+        f"{s.nvt_temperature_k} $(100.0*dt)",
         f"run             {s.nvt_steps}",
         "unfix           nvt_fix",
     ]

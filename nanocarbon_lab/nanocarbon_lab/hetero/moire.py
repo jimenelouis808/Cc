@@ -159,7 +159,7 @@ def commensurate_series(max_index: int = 40) -> list[tuple[int, int, float, int]
     """
     seen: list[tuple[int, int, float, int]] = []
     for m in range(1, max_index + 1):
-        for n in range(0, m + 1):
+        for n in range(m + 1):
             if math.gcd(m, n) != 1:
                 continue
             angle = twist_angle(m, n)

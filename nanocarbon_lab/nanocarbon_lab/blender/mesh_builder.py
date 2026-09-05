@@ -103,7 +103,7 @@ def _dominant_material_index(ring_sizes: list[int]) -> int:
     return 0
 
 
-def _make_materials(style) -> list["bpy.types.Material"]:
+def _make_materials(style) -> list[bpy.types.Material]:
     """Build the shared 4-slot [hexagon, pentagon, heptagon, octagon] list."""
     from render_cnt import material_from_spec  # local import: avoid cycle at module load
 
@@ -124,7 +124,7 @@ def build_ball_and_stick(
     bond_radius: float = 0.12,
     sphere_subdiv: int = 2,
     bond_segments: int = 8,
-) -> list["bpy.types.Object"]:
+) -> list[bpy.types.Object]:
     """Build merged sphere + cylinder meshes, coloured by ring type.
 
     Returns the created ``[atoms_object, bonds_object]``.
@@ -146,7 +146,9 @@ def build_ball_and_stick(
             calc_uvs=False,
         )
         bm.faces.ensure_lookup_table()
-        idx = _dominant_material_index(ring_sizes_per_atom[i] if i < len(ring_sizes_per_atom) else [])
+        sizes = (ring_sizes_per_atom[i]
+                 if i < len(ring_sizes_per_atom) else [])
+        idx = _dominant_material_index(sizes)
         for f in list(bm.faces)[before:]:
             f.material_index = idx
     atoms_mesh = bpy.data.meshes.new("AtomsMesh")
@@ -199,7 +201,7 @@ def build_smooth_surface(
     style,
     skin_radius: float = 1.6,
     subsurf_levels: int = 2,
-) -> "bpy.types.Object":
+) -> bpy.types.Object:
     """Build a single continuous glossy tube (Skin + Subdivision modifiers).
 
     Uses the honeycomb graph itself as the modifier's control cage: one

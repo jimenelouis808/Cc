@@ -38,7 +38,7 @@ __all__ = [
     "dope_random",
     "dope_rings",
     "get_chemistry",
-    "ring_size_census",
     "ring_sites",
+    "ring_size_census",
     "substitute_atoms",
 ]

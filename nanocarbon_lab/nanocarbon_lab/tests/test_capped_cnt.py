@@ -211,8 +211,10 @@ class TestBuildCappedCNT:
         # A bent tube is more compact along its longest axis than a straight
         # one of the same atom count.
         assert len(bent) == len(straight)
-        span = lambda a: (a.get_positions().max(axis=0)
-                          - a.get_positions().min(axis=0)).max()
+        def span(a):
+            positions = a.get_positions()
+            return (positions.max(axis=0) - positions.min(axis=0)).max()
+
         assert span(bent) < span(straight)
 
     def test_larger_freq_gives_more_atoms(self):
@@ -399,7 +401,7 @@ class TestCentrelineShapes:
             edges = np.quantile(along, np.linspace(0.0, 1.0, 13))
             centroids = [
                 pos[(along >= lo) & (along <= hi)].mean(axis=0)
-                for lo, hi in zip(edges[:-1], edges[1:])
+                for lo, hi in zip(edges[:-1], edges[1:], strict=True)
                 if ((along >= lo) & (along <= hi)).sum() > 10
             ]
             centroids = np.array(centroids)

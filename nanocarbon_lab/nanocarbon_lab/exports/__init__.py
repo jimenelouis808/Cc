@@ -6,9 +6,9 @@ from .xyz import write_cif, write_render_bundle, write_xyz
 
 __all__ = [
     "infer_qe_settings",
+    "write_cif",
     "write_lammps",
     "write_qe_input",
     "write_render_bundle",
-    "write_cif",
     "write_xyz",
 ]

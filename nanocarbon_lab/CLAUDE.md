@@ -39,7 +39,9 @@ nanocarbon_lab/
 ├── exports/       # Quantum ESPRESSO + LAMMPS writers, plain XYZ + Blender render bundle
 ├── relax/         # ASE optimizer wrapper + calculator-free harmonic pre-relax
 ├── viz/           # matplotlib 3D viewer
-├── workflows/     # batch generation + ML dataset exporter
+├── workflows/     # sweep.py: Cartesian product over jobs.Job, so every
+│                  #   mode is sweepable; batch.py + ml_dataset.py write
+│                  #   the QE/LAMMPS inputs, features CSV and manifest
 ├── cell.py        # any structure -> a DFT-ready periodic unit cell
 ├── utils/         # constants, geometry helpers
 ├── cli/           # command line interface
@@ -589,6 +591,24 @@ Three things already got this wrong; do not repeat them:
 `cells * n_sites` rather than trusting the fill. All three bugs above
 were caught by that assertion and would otherwise have produced
 plausible-looking cells with the wrong number of atoms in them.
+
+## Sweeps are built on jobs.py, not per mode
+
+`workflows/sweep.py` takes a Cartesian product over `jobs.Job`, so every
+mode is sweepable and a new mode in `jobs.py` gets a sweep for free.
+Do not add a `batch_<mode>_sweep`; `batch_cnt_sweep` predates this and
+stays only for compatibility.
+
+`jobs.builder_for` is now the single builder table -- `build` uses it too,
+so a mode cannot be buildable and un-sweepable at once -- and
+`jobs.parameter_names` reads the real signature. The sweep checks names
+against it **before building anything**: a typo used to be accepted in
+silence, with the estimate falling back to the default and the mistake
+surfacing as a TypeError on the first build, hours into a long run.
+
+Each job gets `seed + index`, never a shared seed. The same seed across a
+sweep puts the identical defect pattern in every structure, which is the
+one property a training set must not have.
 
 ## GUI: one job description, one killable process
 

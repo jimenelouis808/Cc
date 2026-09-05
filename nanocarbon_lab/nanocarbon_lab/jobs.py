@@ -168,11 +168,12 @@ class Job:
         return replace(self, params={**self.params, **changes})
 
 
-def build(job: Job):
-    """Run a job and return the resulting :class:`ase.Atoms`.
+def builder_for(mode: str):
+    """The builder callable behind a mode.
 
-    Imports the builders lazily so that merely describing or estimating a
-    job -- which the GUI does on every keystroke -- costs nothing.
+    Exposed so that a sweep can check parameter names against the real
+    signature before building anything. Imports lazily, like
+    :func:`build`, so merely describing a job stays cheap.
     """
     from .builders import (
         build_bundle,
@@ -216,21 +217,51 @@ def build(job: Job):
         "multi-wall": build_multiwall_cnt,
         "bundle": build_bundle,
     }
+    try:
+        return builders[mode]
+    except KeyError:
+        raise ValueError(f"Unknown mode {mode!r}.") from None
+
+
+def parameter_names(mode: str) -> tuple[str, ...]:
+    """Parameter names a mode's builder accepts, in signature order.
+
+    A sweep checks against this. Without it a mistyped name is accepted
+    silently -- the estimate quietly uses the default and the mistake
+    surfaces as a TypeError on the first real build, which on a long
+    sweep is hours in.
+    """
+    import inspect
+
+    signature = inspect.signature(builder_for(mode))
+    return tuple(name for name, parameter in signature.parameters.items()
+                 if parameter.kind is not inspect.Parameter.VAR_KEYWORD)
+
+
+def build(job: Job):
+    """Run a job and return the resulting :class:`ase.Atoms`.
+
+    The builder table lives in :func:`builder_for`, which is also what
+    the sweep checks parameter names against -- one table, so a mode
+    cannot be buildable and un-sweepable at the same time.
+    """
+    builder = builder_for(job.mode)
+
     if job.mode in HETERO_MODES:
         # Commensurate stacking is exact crystallography, no randomness.
-        return builders[job.mode](**job.params)
+        return builder(**job.params)
 
     if job.mode in TMD_MODES:
         # The TMD builders are deterministic -- exact crystallography, no
         # random defect placement -- so they take no seed, and passing one
         # would be a TypeError rather than a no-op. The chemistry that
         # *is* random is applied afterwards, like carbon's doping.
-        atoms = builders[job.mode](**job.params)
+        atoms = builder(**job.params)
         if job.tmd_edit:
             atoms = apply_tmd_chemistry(atoms, job)
         return atoms
 
-    atoms = builders[job.mode](**job.params, seed=job.seed)
+    atoms = builder(**job.params, seed=job.seed)
     if job.dopant and job.dopant_conc > 0:
         atoms = apply_doping(atoms, job)
     return atoms
@@ -750,14 +781,16 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
 
 __all__ = [
     "DOPANT_SITES",
-    "TMD_EDITS",
     "IMPLICIT_MODES",
     "MODES",
+    "TMD_EDITS",
     "Job",
     "apply_doping",
     "apply_tmd_chemistry",
     "build",
+    "builder_for",
     "estimate_atoms",
     "estimate_cost",
+    "parameter_names",
     "to_cli",
 ]

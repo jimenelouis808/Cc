@@ -86,3 +86,19 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+# An explicit contract rather than ruff's shifting defaults. These are the
+# families the code actually holds itself to, so `ruff check` passing is a
+# signal instead of a wall of preferences the project never adopted:
+#
+#   E, W  pycodestyle      F   pyflakes (real errors)
+#   I     import order     UP  modern syntax for the declared floor
+#   B     bugbear -- the one that catches semantics, e.g. B905 requires
+#         zip(strict=) so a length mismatch raises instead of truncating
+#
+# Deliberately not selected: C4, RUF, SIM, PL and friends are style
+# preferences whose "fixes" ruff itself marks unsafe, and applying 60 of
+# them across numerically sensitive code would risk a real bug for no
+# behavioural gain.
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]

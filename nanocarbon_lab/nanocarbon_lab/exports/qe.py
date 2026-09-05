@@ -236,7 +236,7 @@ def write_qe_input(
     parts.append("\n".join(cell_lines))
 
     pos_lines = ["ATOMIC_POSITIONS angstrom"]
-    for sym, p in zip(symbols, atoms.get_positions()):
+    for sym, p in zip(symbols, atoms.get_positions(), strict=True):
         pos_lines.append(f"  {sym}  {p[0]:20.12f} {p[1]:20.12f} {p[2]:20.12f}")
     parts.append("\n".join(pos_lines))
 

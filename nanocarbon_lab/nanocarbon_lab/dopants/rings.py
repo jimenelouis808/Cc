@@ -183,7 +183,7 @@ def dope_rings(
     result.info["doping_mode"] = f"ring{ring_size}"
     result.info["doping_seed"] = seed
     result.info["doping_ring_size"] = ring_size
-    result.info["doping_sites_available"] = int(len(sites))
+    result.info["doping_sites_available"] = len(sites)
     # Two fractions, because they differ by a large factor and quoting
     # either one alone reads as the other.
     result.info["doping_concentration"] = n_sub / len(sites)

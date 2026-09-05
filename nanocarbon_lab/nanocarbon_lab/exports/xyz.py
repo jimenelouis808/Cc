@@ -45,7 +45,7 @@ def write_xyz(atoms: Atoms, path: str | Path, comment: str | None = None) -> Pat
     if comment is None:
         comment = str(atoms.info.get("structure_type", ""))
     lines = [str(len(atoms)), comment]
-    for sym, (x, y, z) in zip(symbols, positions):
+    for sym, (x, y, z) in zip(symbols, positions, strict=True):
         lines.append(f"{sym:<2} {x:20.10f} {y:20.10f} {z:20.10f}")
     path.write_text("\n".join(lines) + "\n")
     return path

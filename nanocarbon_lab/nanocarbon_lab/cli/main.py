@@ -28,6 +28,7 @@ Sub-commands:
 * ``validate``   — run validation on an existing structure file.
 * ``dopants``    — list the heteroatoms available for carbon and what each does.
 * ``unitcell``   — convert any structure file into a periodic unit cell.
+* ``sweep``      — build a parameter sweep of any mode and write a dataset.
 
 Every carbon sub-command builds **pure carbon** unless ``--dopant`` is
 given; doping is an edit applied afterwards, never a different material.
@@ -70,7 +71,13 @@ from ..exports.lammps import write_lammps
 from ..exports.qe import QESettings, write_qe_input
 from ..exports.xyz import write_cif, write_render_bundle
 from ..hetero import available_layers, build_twisted_bilayer, build_vdw_stack
-from ..jobs import DOPANT_SITES, Job, apply_doping, apply_tmd_chemistry
+from ..jobs import (
+    DOPANT_SITES,
+    MODES,
+    Job,
+    apply_doping,
+    apply_tmd_chemistry,
+)
 from ..tmd import (
     MATERIALS,
     build_tmd_bulk,
@@ -481,7 +488,8 @@ def _report_structure(atoms, xyz_path, json_path):
     print(f"  ring_counts = {atoms.info['ring_counts']}")
     print(f"  bond length = {g['bond_min']:.3f} / {g['bond_mean']:.3f} / {g['bond_max']:.3f} A"
           f"  (std {g['bond_std']:.4f})")
-    print(f"  bond angle  = {g['angle_min']:.1f} / {g['angle_mean']:.1f} / {g['angle_max']:.1f} deg")
+    print(f"  bond angle  = {g['angle_min']:.1f} / {g['angle_mean']:.1f}"
+          f" / {g['angle_max']:.1f} deg")
     print(f"  close contacts (<2 A, non-bonded) = {g['n_close_contacts']}")
     _report_doping(atoms)
     verdict, why = sp2_quality(g)
@@ -910,6 +918,87 @@ def _cmd_unitcell(args):
     for path in written:
         print(f"Wrote {path}")
     _report_cell(converted)
+    return 0
+
+
+def _parse_vary(raw: list[str] | None) -> dict:
+    """Parse repeated ``--vary name=v1,v2,v3`` flags.
+
+    Values are typed by trying int, then float, then leaving them as
+    text -- so ``--vary freq=2,3`` sweeps integers and
+    ``--vary kind=Y,X`` sweeps strings, without the user having to
+    declare which is which.
+    """
+    out: dict[str, list] = {}
+    for item in raw or []:
+        if "=" not in item:
+            raise SystemExit(
+                f"--vary expects name=v1,v2,...; got {item!r}."
+            )
+        name, _, values = item.partition("=")
+        parsed = []
+        for piece in values.split(","):
+            piece = piece.strip()
+            if not piece:
+                continue
+            for cast in (int, float):
+                try:
+                    parsed.append(cast(piece))
+                    break
+                except ValueError:
+                    continue
+            else:
+                parsed.append(piece)
+        if not parsed:
+            raise SystemExit(f"--vary {name} has no values.")
+        out[name.strip()] = parsed
+    return out
+
+
+def _parse_fixed(raw: list[str] | None) -> dict:
+    """Parse repeated ``--set name=value`` flags, typed the same way."""
+    single = {}
+    for item in raw or []:
+        name, _, value = item.partition("=")
+        parsed = _parse_vary([f"{name}={value}"])
+        single[name.strip()] = parsed[name.strip()][0]
+    return single
+
+
+def _cmd_sweep(args):
+    """Build a parameter sweep of any mode and write a dataset."""
+    from ..workflows import describe_sweep, sweep_jobs, write_dataset
+    from ..workflows.ml_dataset import write_ml_dataset
+
+    vary = _parse_vary(args.vary)
+    base = _parse_fixed(args.set)
+    try:
+        summary = describe_sweep(args.mode, base, vary)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
+
+    print(f"{summary['n_structures']} structures of mode {args.mode!r} "
+          f"({summary['family']})")
+    print(f"  atoms       = {summary['atoms_min']}–{summary['atoms_max']} each, "
+          f"{summary['atoms_total']} in total")
+    if args.dry_run:
+        for name in summary["names"]:
+            print(f"  {name}")
+        print("Dry run: nothing built.")
+        return 0
+
+    jobs = sweep_jobs(
+        args.mode, base, vary,
+        dopant=args.dopant, dopant_conc=args.dopant_conc,
+        dopant_site=args.dopant_site, seed=args.seed, export=args.format,
+    )
+    root = Path(args.out)
+    if args.dataset:
+        manifest = write_ml_dataset(jobs, root)
+        print(f"Wrote {manifest} and {root / 'features.csv'}")
+    else:
+        metadata = write_dataset(jobs, root)
+        print(f"Wrote {metadata}")
     return 0
 
 
@@ -1443,6 +1532,33 @@ def build_parser() -> argparse.ArgumentParser:
     uc.add_argument("--force", action="store_true",
                     help="Export even if validation reports errors.")
     uc.set_defaults(func=_cmd_unitcell)
+
+    sw = sub.add_parser(
+        "sweep",
+        help="Build a parameter sweep of any mode and write a dataset.",
+    )
+    sw.add_argument("--mode", required=True, choices=list(MODES),
+                    help="Which structure type to sweep.")
+    sw.add_argument("--vary", action="append", metavar="NAME=V1,V2,...",
+                    help="A parameter to sweep. Repeatable; the product of "
+                         "all of them is built, first flag varying slowest.")
+    sw.add_argument("--set", action="append", metavar="NAME=VALUE",
+                    help="A parameter held fixed across the sweep. "
+                         "Repeatable.")
+    sw.add_argument("--out", required=True, help="Output directory.")
+    sw.add_argument("--format", choices=["qe", "lammps", "both"], default="qe",
+                    help="Simulation inputs written per structure.")
+    sw.add_argument("--dataset", action="store_true",
+                    help="Also write an ML-ready features.csv and a manifest "
+                         "alongside per-structure XYZ files.")
+    sw.add_argument("--dry-run", action="store_true",
+                    help="Print the count, the predicted size and the names, "
+                         "then stop. A sweep is where a small mistake becomes "
+                         "an expensive one; this is the cheap check.")
+    _add_doping_arguments(sw, seed_help="Base RNG seed; each structure gets "
+                                        "its own derived seed, so a dataset "
+                                        "does not repeat one defect pattern.")
+    sw.set_defaults(func=_cmd_sweep)
 
     dp = sub.add_parser(
         "dopants",

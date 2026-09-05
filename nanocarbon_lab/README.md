@@ -20,7 +20,7 @@ validation pass before writing.
 | `exports`       | Quantum ESPRESSO `pw.x` input, LAMMPS data + script (AIREBO default), XYZ + Blender render bundle |
 | `relax`         | ASE optimizer wrapper + calculator-free harmonic pre-relaxation              |
 | `viz`           | Matplotlib 3D viewer / PNG exporter                                          |
-| `workflows`     | Batch sweeps + ML-ready dataset exporter (XYZ + features CSV + manifest)     |
+| `workflows`     | **Parameter sweeps of any mode** + ML-ready dataset exporter (XYZ + features CSV + manifest) |
 | `cli`           | `nanocarbon` command-line entry point                                        |
 | `gui`           | `nanocarbon-gui` desktop app: sliders, live 3D preview, export, Blender render |
 | `implicit`/`remesh`/`junction` | L/T/Y/X nanotube junctions and periodic schwarzite unit cells from implicit surfaces |
@@ -82,6 +82,12 @@ nanocarbon foam --box 30 --flakes 25 --radius 4 --seed 0 --out out/foam --format
 
 # Validate any ASE-readable structure file
 nanocarbon validate out/cnt/qe/pw.in
+
+# Turn anything into a periodic unit cell for DFT
+nanocarbon unitcell out/cnt/qe/pw.in --out out/cell
+
+# Sweep a parameter and write an ML-ready dataset (--dry-run costs it first)
+nanocarbon sweep --mode fullerene --vary freq=1,2,3 --dataset --out out/cages
 ```
 
 Structures for rendering (XYZ + Blender render bundle, plus CIF for the
@@ -332,7 +338,59 @@ topology once (bond graph via covalent radii), then minimises a
 Hooke-spring potential toward `bond = 1.42 Å`. Handy for foams and
 coils before handing the structure to a proper force field.
 
-## ML dataset export
+## Parameter sweeps and ML datasets
+
+Any of the nineteen modes can be swept, not just nanotubes. Say what to
+vary and the Cartesian product is built, exported and catalogued:
+
+```bash
+# Cost it first — a sweep is where a small mistake becomes an expensive one
+nanocarbon sweep --mode "capped tube" --set freq=3 \
+    --vary n_body_rings=4,6,8 --vary shape=straight,arc \
+    --out out/study --dry-run
+
+# Then run it, with an ML-ready features table
+nanocarbon sweep --mode "capped tube" --set freq=3 \
+    --vary n_body_rings=4,6,8 --dopant N --dopant-conc 0.03 \
+    --dataset --out out/study
+```
+```
+6 structures of mode 'capped tube' (carbon)
+  atoms       = 160–540 each, 2100 in total
+  capped_tube__n_body_rings4__shapestraight
+  capped_tube__n_body_rings4__shapearc
+  ...
+```
+
+`--vary` is repeatable and takes `name=v1,v2,...`; `--set` holds a
+parameter fixed. Values are typed automatically, so
+`--vary freq=2,3` sweeps integers and `--vary kind=Y,X` sweeps strings.
+
+Four things this does that a hand-rolled loop usually does not:
+
+**It costs the sweep before running it.** Three parameters at four values
+each is 64 structures, and if each is a two-minute schwarzite that is two
+hours. `--dry-run` prints the count, the predicted atom range and every
+name, then stops.
+
+**It rejects a mistyped parameter up front**, checked against the
+builder's real signature — otherwise the estimate quietly falls back to
+the default and the mistake surfaces as a `TypeError` on the first build,
+hours in:
+
+```
+'capped tube' has no parameter(s) 'rings'. It accepts: bend_angle, bond,
+defect_separation, defects, freq, ..., n_body_rings, ...
+```
+
+**Every structure gets its own derived seed.** A shared seed would put
+the identical defect pattern in every structure of the dataset — the one
+thing a training set must not have, since the model would learn the
+pattern rather than the physics.
+
+**It works for every mode because it is built on `jobs.py`**, the same
+mapping the GUI and the CLI use. Adding a mode there gets it a sweep for
+free; there is no `batch_schwarzite_sweep` to write.
 
 `workflows.write_ml_dataset(jobs, root)` runs a batch of jobs and writes:
 

@@ -32,8 +32,8 @@ from mathutils import Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import mesh_builder  # noqa: E402  (must follow sys.path fix-up)
-import styles as style_defs  # noqa: E402
+import mesh_builder
+import styles as style_defs
 
 
 def _parse_args() -> argparse.Namespace:
@@ -51,7 +51,7 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args(argv)
 
 
-def material_from_spec(name: str, spec) -> "bpy.types.Material":
+def material_from_spec(name: str, spec) -> bpy.types.Material:
     """Build a Principled-BSDF material from a :class:`styles.MaterialSpec`.
 
     Input socket names on the Principled BSDF node changed between
@@ -251,7 +251,7 @@ def main() -> int:
 
     positions, bonds, ring_sizes_per_atom = mesh_builder.load_bundle(args.xyz, args.json)
 
-    objects: list["bpy.types.Object"] = []
+    objects: list[bpy.types.Object] = []
     if args.mode in ("ballstick", "both"):
         objects += mesh_builder.build_ball_and_stick(
             positions, bonds, ring_sizes_per_atom, style
