@@ -47,6 +47,14 @@ viz = [
 gui = [
     "matplotlib>=3.7",
 ]
+# Blender as an importable module, so the journal-cover renderer works
+# without installing the Blender application. Optional because the wheel
+# is large and exists only for the Python version each Blender release
+# was built against; the pipeline also runs under a normal Blender
+# install via `blender -b -P`.
+render = [
+    "bpy>=4.0",
+]
 
 [project.scripts]
 nanocarbon = "nanocarbon_lab.cli.main:main"
@@ -55,6 +63,15 @@ nanocarbon-gui = "nanocarbon_lab.gui:main"
 [tool.setuptools.packages.find]
 include = ["nanocarbon_lab*"]
 exclude = ["tests*", "examples*"]
+
+# The Blender scripts are data, not an importable subpackage: they import
+# `bpy`, which only exists inside Blender, so making them a subpackage
+# would put a module in the tree that cannot be imported. Without this
+# they were left out of an install entirely, and the GUI's render button
+# could never find them -- it reported "run the GUI from a full checkout"
+# to anyone who had installed the package normally.
+[tool.setuptools.package-data]
+nanocarbon_lab = ["blender/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["nanocarbon_lab/tests"]

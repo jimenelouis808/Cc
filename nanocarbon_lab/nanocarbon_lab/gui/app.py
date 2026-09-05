@@ -38,6 +38,7 @@ python3-tk``, ``dnf install python3-tkinter``).
 from __future__ import annotations
 
 import glob
+import importlib.util
 import json
 import multiprocessing
 import os
@@ -239,6 +240,25 @@ PRESETS: dict[str, dict[str, object]] = {
         "tmd_m": 0, "tmd_coil_radius": 220.0, "tmd_coil_pitch": 90.0,
         "tmd_coil_turns": 0.25, "tmd_coil_hand": "right"},
 }
+
+
+def has_bpy() -> bool:
+    """Is Blender available as a Python module in this interpreter?
+
+    ``bpy`` on PyPI is a full Blender build importable from an ordinary
+    interpreter, so `pip install bpy` makes the render pipeline work with
+    no Blender application installed at all. That removes the pipeline's
+    single most common failure -- "Blender not found" on a machine where
+    the user has no intention of installing a 3D suite by hand.
+
+    Checked with ``find_spec`` rather than an import: importing Blender
+    costs hundreds of megabytes of process memory, and this runs while
+    merely drawing a label.
+    """
+    try:
+        return importlib.util.find_spec("bpy") is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def find_blender() -> str | None:
@@ -2786,10 +2806,16 @@ class NanocarbonGUI:
         self.blender_exe = find_blender()
         if self.blender_exe:
             self.lbl_blender.config(text=f"Found: {self.blender_exe}")
+        elif has_bpy():
+            self.lbl_blender.config(
+                text="Using the installed bpy module — no separate Blender "
+                     "application needed."
+            )
         else:
             self.lbl_blender.config(
-                text="Blender not found automatically — use “Locate Blender…” "
-                     "or export the bundle and run blender/render_cnt.py yourself."
+                text="Blender not found automatically — use “Locate Blender…”, "
+                     "or `pip install bpy` to render without installing "
+                     "Blender at all."
             )
 
     def on_locate_blender(self) -> None:
@@ -2815,15 +2841,18 @@ class NanocarbonGUI:
             self._show_error("Nothing to render", "Build a structure first.")
             return
         self._check_blender()
-        if not self.blender_exe:
+        if not self.blender_exe and not has_bpy():
             self._show_error(
                 "Blender not found",
                 "Could not find Blender automatically.\n\n"
+                "Easiest fix: `pip install bpy`, which installs Blender as "
+                "a Python module and needs no separate application.\n\n"
                 "Click “Locate Blender…” and point at the executable (on "
                 "Windows, usually\n"
                 r"C:\Program Files\Blender Foundation\Blender 4.x\blender.exe)"
                 ",\n\nor export the bundle and run it yourself:\n"
-                "  blender -b -P blender/render_cnt.py -- --xyz <file>.xyz "
+                "  blender -b -P nanocarbon_lab/blender/render_cnt.py -- "
+                "--xyz <file>.xyz "
                 "--json <file>.json --style <style> --out <image>.png",
             )
             return
@@ -2840,7 +2869,11 @@ class NanocarbonGUI:
         if not out_png:
             return
 
-        script = Path(__file__).resolve().parents[2] / "blender" / "render_cnt.py"
+        # Inside the package, so it is found whether the GUI is running
+        # from a checkout or from a pip install. It used to be resolved
+        # against the repository root, which does not exist once
+        # installed -- the button was dead for every installed copy.
+        script = Path(__file__).resolve().parent.parent / "blender" / "render_cnt.py"
         if not script.exists():
             self._show_error(
                 "Render script missing",
@@ -2849,8 +2882,15 @@ class NanocarbonGUI:
             )
             return
 
+        # Two ways to reach the same script. A Blender application takes
+        # it with -b -P; the `bpy` PyPI module *is* Blender inside this
+        # interpreter, so the script runs directly. Preferring the
+        # application when both exist keeps the GUI honest about which
+        # Blender produced the image.
+        launcher = ([self.blender_exe, "-b", "-P", str(script)]
+                    if self.blender_exe else [sys.executable, str(script)])
         cmd = [
-            self.blender_exe, "-b", "-P", str(script), "--",
+            *launcher, "--",
             "--xyz", str(stem.with_suffix(".xyz")),
             "--json", str(stem.with_suffix(".json")),
             "--style", self.var_style.get(),

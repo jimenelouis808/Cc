@@ -47,8 +47,10 @@ nanocarbon_lab/
 ├── tests/         # pytest unit tests
 └── examples/      # runnable example scripts
 
-blender/           # sibling to nanocarbon_lab/: bpy-based rendering pipeline,
-                   #   run via `blender -b -P blender/render_cnt.py -- ...`
+nanocarbon_lab/blender/   # bpy-based rendering pipeline, shipped as package
+                   #   *data* (it imports bpy, so it must not be a subpackage).
+                   #   Run through a Blender app (`blender -b -P ...`) or
+                   #   directly, when the `bpy` wheel is installed.
 ```
 
 ## Capped/defected CNT topology (fullerene_mesh)
@@ -373,6 +375,39 @@ Three rules, each of which was a bug first:
   with no vacuum direction returns `inf` and reports `None`, because a
   bulk crystal has nothing to converge and a number there would invite a
   meaningless comparison.
+
+## Blender: the render must not depend on the subject's size
+
+Three faults, and the first is the one that made the other two hard to
+notice.
+
+**The scripts must ship inside the package.** They lived beside it, so
+pip left them out and the GUI's render button was dead for every
+installed copy -- it reported "run the GUI from a full checkout". They
+are declared as `[tool.setuptools.package-data]`, **not** a subpackage:
+they import `bpy`, so an importable `nanocarbon_lab.blender.render_cnt`
+would be a module that cannot be imported.
+
+**Camera distance follows from the lens.** It was a hardcoded
+`3.2 * radius`, which only fits a 50 mm lens; the styles use 50-90 mm
+and four of five cropped the subject. The correct distance is
+`radius / sin(atan(sensor / 2f))`, narrowed further by the aspect ratio,
+because Blender maps the sensor onto the *longer* image axis and the
+shorter one clips first. Do not put a constant back.
+
+**Light positions and energies scale with the subject.** The `LightSpec`
+coordinates are written against `NOMINAL_RADIUS` (10 Å); positions are
+multiplied by `radius / NOMINAL_RADIUS` and energies by the square of
+it, which holds irradiance constant. Without this a 90 Å structure
+engulfed its own lighting and rendered at 0.04 luminance against a black
+background. **A SUN is exempt** -- it is directional and infinitely
+distant, so its irradiance does not fall off and scaling it over-lights.
+
+`gui.has_bpy()` lets the GUI render through the `bpy` module when no
+Blender application is installed, which removes the pipeline's single
+most common failure. Check it with `find_spec`, never by importing:
+importing Blender costs hundreds of megabytes, and it runs while drawing
+a label.
 
 ## Doping: the host is carbon, and the elements are not interchangeable
 

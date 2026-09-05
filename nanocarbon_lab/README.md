@@ -662,12 +662,22 @@ octagons differently).
 
 ### Rendering in Blender
 
-`blender/` (repo root, sibling to `nanocarbon_lab/`) is a small,
-self-contained Blender Python pipeline -- run **through Blender itself**,
-not a normal `python` interpreter, since `bpy`/`bmesh` only exist there:
+`nanocarbon_lab/blender/` is a small, self-contained Blender Python
+pipeline. It needs `bpy`/`bmesh`, which come either from a Blender
+application or from the `bpy` wheel on PyPI -- so there are two ways to
+run it, and the second needs no Blender installed at all:
 
 ```bash
-blender -b -P blender/render_cnt.py -- \
+pip install "nanocarbon_lab[render]"        # Blender as a Python module
+python nanocarbon_lab/blender/render_cnt.py -- --xyz ... --out cover.png
+```
+
+The GUI uses whichever is available and says which, so its render button
+works on a machine with no 3D software on it. Through a Blender
+application instead:
+
+```bash
+blender -b -P nanocarbon_lab/blender/render_cnt.py -- \
   --xyz out/cnt_cap/demo.xyz --json out/cnt_cap/demo.json \
   --style nature_dark --mode ballstick \
   --out out/cnt_cap/cover.png --resolution 2000 2400 --samples 256
@@ -680,8 +690,8 @@ blender -b -P blender/render_cnt.py -- \
   macro shots where the tube's silhouette is the hero); `--mode both`
   does both.
 * `--style` selects a full look (materials + world background + lighting
-  rig + camera lens/DOF) from `blender/styles.py`. Five presets ship out
-  of the box -- run `blender -b -P blender/render_cnt.py -- --list-styles`
+  rig + camera lens/DOF) from `nanocarbon_lab/blender/styles.py`. Five presets ship out
+  of the box -- run `blender -b -P nanocarbon_lab/blender/render_cnt.py -- --list-styles`
   to print their descriptions:
 
   | style | mood |
@@ -700,6 +710,32 @@ blender -b -P blender/render_cnt.py -- \
 * Pass `--transparent-background` for a PNG you can composite over other
   art; drop `--samples` to use the style's own default (Cycles path
   tracing, GPU device selected automatically when available).
+
+#### The framing and the lighting follow the subject
+
+Two things in here were wrong in a way that only showed up at some
+sizes, which is the worst way for a renderer to be wrong.
+
+**The camera cropped.** The distance was a hardcoded `3.2 × radius`.
+A camera's half-angle is `atan(sensor / 2f)`, so fitting a sphere needs
+`radius / sin(that)` — 2.95 R at 50 mm, but 4.83 R at 85 mm and 5.10 R
+at 90 mm. Four of the five styles use a longer lens than 50 mm, so four
+of five cut the structure off at the frame edge. The distance is now
+computed from the lens and the aspect ratio (Blender maps the sensor
+onto the longer image axis, so a 2000×2400 cover clips vertically first).
+
+**The lights did not scale.** They sat at the literal coordinates in the
+style — about 10 units out — but those coordinates are Ångström. So the
+rig stood outside a fullerene, level with a nanotube, and *inside* a
+90 Å one, whose far side then got nothing. Measured subject luminance on
+`nature_dark`: 0.50 on C60, 0.32 on a 25 Å tube, **0.04** on a 90 Å one —
+a black subject on a black background.
+
+Positions now scale with the subject and energies with the square of
+that scale, which holds the irradiance at the surface constant. That is
+the property a preset needs: the same style name should mean the same
+look at every size. After the fix the same three structures measure
+0.46 / 0.22 / 0.11, and none of the six style-size combinations crops.
 
 ## Junctions (L, T, Y, X) and schwarzites
 
