@@ -75,11 +75,21 @@ from matplotlib.backends.backend_tkagg import (
 from matplotlib.figure import Figure
 
 from ..builders import fullerene_mesh as fm
+from ..dopants import DOPANT_ELEMENTS, get_chemistry
 from ..exports.xyz import write_render_bundle
-from ..jobs import FAMILIES, MODES, Job, estimate_cost, to_cli
+from ..jobs import (
+    DOPANT_SITES,
+    FAMILIES,
+    MODES,
+    Job,
+    estimate_cost,
+    to_cli,
+)
 from ..tmd import MATERIALS as TMD_MATERIALS
+from ..tmd.materials import available_metals, chalcogens_for, material_for
 from ..tmd.quality import geometry_report as tmd_geometry_report
 from ..tmd.quality import tmd_quality
+from ..utils.constants import MAX_DOPING_FRACTION, MIN_DOPING_FRACTION
 from ..validation.quality import sp2_quality
 from .worker import WORKER_DIED, BuildWorker
 
@@ -94,7 +104,9 @@ RING_LABELS = {
 }
 
 SHAPES = ["straight", "arc", "s_curve", "helix", "random"]
-DOPANTS = ["none", "N", "B", "S", "P"]
+#: "none" first and selected by default: the host is carbon, and a
+#: structure is pure carbon unless the user says otherwise.
+DOPANTS = ["none", *DOPANT_ELEMENTS]
 JUNCTION_KINDS = ["L", "T", "Y", "X", "cross3d"]
 SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
 CAGE_FAMILIES = ["C60", "C20"]
@@ -103,7 +115,6 @@ CAGE_FAMILIES = ["C60", "C20"]
 # are the two that matter, and 1T' is the distorted variant. There is no
 # tetragonal TMD -- all of them are hexagonal, and what differs is the
 # coordination polyhedron around the metal.
-TMD_MATERIAL_NAMES = sorted(TMD_MATERIALS)
 TMD_PHASES = ["2H", "1T", "1T'"]
 TMD_STACKINGS = ["2H", "3R", "AA"]
 TMD_EDGES = ["zigzag", "armchair"]
@@ -521,6 +532,7 @@ class NanocarbonGUI:
         self.var_roughness = self._var("roughness", tk.DoubleVar(value=0.0))
         self.var_dopant = self._var("dopant", tk.StringVar(value="none"))
         self.var_dopant_conc = self._var("dopant_conc", tk.DoubleVar(value=0.03))
+        self.var_dopant_site = self._var("dopant_site", tk.StringVar(value="random"))
         self.var_n_sw = self._var("n_sw", tk.IntVar(value=0))
         self.var_n_dv = self._var("n_dv", tk.IntVar(value=0))
         self.var_mw_shells = self._var("mw_shells", tk.IntVar(value=2))
@@ -538,8 +550,15 @@ class NanocarbonGUI:
         self.var_s_kind = self._var("s_kind", tk.StringVar(value="primitive"))
         self.var_s_cell = self._var("s_cell", tk.DoubleVar(value=36.0))
         self.var_s_thickness = self._var("s_thickness", tk.DoubleVar(value=0.0))
+        # The formula stays the single value the job is built from; the
+        # metal and chalcogen pickers below drive it. Keeping the formula
+        # authoritative means the presets, which name a compound, need no
+        # special case.
         self.var_tmd_material = self._var("tmd_material",
                                           tk.StringVar(value="MoS2"))
+        self.var_tmd_metal = tk.StringVar(value="Mo")
+        self.var_tmd_chalcogen = tk.StringVar(value="S")
+        self._syncing_material = False
         self.var_tmd_phase = self._var("tmd_phase", tk.StringVar(value="2H"))
         self.var_tmd_stacking = self._var("tmd_stacking", tk.StringVar(value="2H"))
         self.var_tmd_layers = self._var("tmd_layers", tk.IntVar(value=1))
@@ -801,27 +820,58 @@ class NanocarbonGUI:
         ttk.Label(self.frame_chem, text="Dopant").grid(row=0, column=0, sticky="w")
         ttk.Combobox(self.frame_chem, textvariable=self.var_dopant, values=DOPANTS,
                      state="readonly", width=7).grid(row=0, column=1, sticky="e",
-                                                     pady=(0, 6))
+                                                     pady=(0, 4))
+        self.var_dopant.trace_add("write", lambda *_: self._update_dopant_hint())
+        ttk.Label(self.frame_chem, text="Site").grid(row=1, column=0, sticky="w")
+        ttk.Combobox(self.frame_chem, textvariable=self.var_dopant_site,
+                     values=list(DOPANT_SITES), state="readonly", width=9).grid(
+            row=1, column=1, sticky="e", pady=(0, 6))
+        self.var_dopant_site.trace_add("write", lambda *_: self._update_dopant_hint())
         self._param(self.frame_chem, "Concentration", self.var_dopant_conc,
-                    0.0, 0.15, 1, resolution=0.005, hard_hi=0.5)
+                    MIN_DOPING_FRACTION, MAX_DOPING_FRACTION, 2,
+                    resolution=0.005, hard_hi=0.5,
+                    command=self._update_dopant_hint)
+        # The dopant table's own words, not a paraphrase: what an element
+        # does and how much of it is real are exactly what a user picking
+        # from a fifteen-item dropdown cannot be expected to know.
+        self.lbl_dopant = ttk.Label(self.frame_chem, text="", foreground=MUTED,
+                                    font=("TkDefaultFont", 8), wraplength=230,
+                                    justify="left")
+        self.lbl_dopant.grid(row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         # --- dichalcogenide: material and phase, shared by all TMD modes
         self.frame_tmd = ttk.LabelFrame(parent, text="Dichalcogenide", padding=8)
         self.frame_tmd.columnconfigure(0, weight=1)
-        ttk.Label(self.frame_tmd, text="Material").grid(row=0, column=0, sticky="w")
-        ttk.Combobox(self.frame_tmd, textvariable=self.var_tmd_material,
-                     values=TMD_MATERIAL_NAMES, state="readonly", width=8).grid(
-            row=0, column=1, sticky="e", pady=(0, 4))
-        self.var_tmd_material.trace_add("write", lambda *_: self._update_tmd_hint())
-        ttk.Label(self.frame_tmd, text="Phase").grid(row=1, column=0, sticky="w")
+        # Metal and chalcogen rather than one formula list: that is how the
+        # choice is actually made, and it keeps a 27-entry dropdown from
+        # being the only way to find WSe2. The chalcogen list is narrowed
+        # to what the chosen metal actually forms a layered MX2 with, so
+        # an impossible pair cannot be selected at all.
+        ttk.Label(self.frame_tmd, text="Metal").grid(row=0, column=0, sticky="w")
+        self.cmb_tmd_metal = ttk.Combobox(
+            self.frame_tmd, textvariable=self.var_tmd_metal,
+            values=list(available_metals()), state="readonly", width=8)
+        self.cmb_tmd_metal.grid(row=0, column=1, sticky="e", pady=(0, 4))
+        ttk.Label(self.frame_tmd, text="Chalcogen").grid(row=1, column=0,
+                                                         sticky="w")
+        self.cmb_tmd_chalcogen = ttk.Combobox(
+            self.frame_tmd, textvariable=self.var_tmd_chalcogen,
+            values=list(chalcogens_for("Mo")), state="readonly", width=8)
+        self.cmb_tmd_chalcogen.grid(row=1, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_metal.trace_add("write", lambda *_: self._on_metal_change())
+        self.var_tmd_chalcogen.trace_add(
+            "write", lambda *_: self._sync_material_from_elements())
+        self.var_tmd_material.trace_add(
+            "write", lambda *_: self._sync_elements_from_material())
+        ttk.Label(self.frame_tmd, text="Phase").grid(row=2, column=0, sticky="w")
         ttk.Combobox(self.frame_tmd, textvariable=self.var_tmd_phase,
                      values=TMD_PHASES, state="readonly", width=8).grid(
-            row=1, column=1, sticky="e", pady=(0, 4))
+            row=2, column=1, sticky="e", pady=(0, 4))
         self.var_tmd_phase.trace_add("write", lambda *_: self._update_tmd_hint())
         self.lbl_tmd = ttk.Label(self.frame_tmd, text="", foreground=MUTED,
                                  font=("TkDefaultFont", 8), wraplength=230,
                                  justify="left")
-        self.lbl_tmd.grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        self.lbl_tmd.grid(row=3, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
         # --- layers / bulk
         self.frame_tmd_layers = ttk.LabelFrame(parent, text="Layers", padding=8)
@@ -1130,6 +1180,7 @@ class NanocarbonGUI:
         if mode not in ("fullerene", "nano-onion"):
             self.frame_surface.pack(fill="x", pady=(8, 0))
         self.frame_chem.pack(fill="x", pady=(8, 0))
+        self._update_dopant_hint()
         self._on_shape_change()
         self._schedule_estimate()
 
@@ -1171,6 +1222,106 @@ class NanocarbonGUI:
             self.var_mode_kind.set(modes[0])
         else:
             self._on_mode_change()
+
+    # The metal/chalcogen pickers and the formula are two views of one
+    # choice, so each has to update the other -- and a naive pair of
+    # traces would then feed each other forever. `_syncing_material` is
+    # the reentrancy guard: whichever side the user touched wins, and the
+    # write it makes to the other side does not bounce back.
+    def _on_metal_change(self) -> None:
+        """Renarrow the chalcogen list, then rebuild the formula.
+
+        Not every metal forms a layered MX2 with every chalcogen -- Sn
+        has no telluride, Nb no tabulated one -- so the second dropdown
+        is repopulated rather than left offering a pair that would raise
+        at build time. If the current chalcogen is not available for the
+        new metal, the lightest one that is takes its place.
+        """
+        if self._syncing_material:
+            return
+        options = chalcogens_for(self.var_tmd_metal.get())
+        if not options:
+            return
+        self.cmb_tmd_chalcogen.config(values=list(options))
+        if self.var_tmd_chalcogen.get() not in options:
+            # Writing this fires the chalcogen trace, which rebuilds the
+            # formula -- so there is nothing more to do here.
+            self.var_tmd_chalcogen.set(options[0])
+            return
+        self._sync_material_from_elements()
+
+    def _sync_material_from_elements(self) -> None:
+        """Formula follows the two pickers."""
+        if self._syncing_material:
+            return
+        try:
+            material = material_for(self.var_tmd_metal.get(),
+                                    self.var_tmd_chalcogen.get())
+        except KeyError:
+            return
+        self._syncing_material = True
+        try:
+            self.var_tmd_material.set(material.formula)
+        finally:
+            self._syncing_material = False
+        self._update_tmd_hint()
+        self._schedule_estimate()
+
+    def _sync_elements_from_material(self) -> None:
+        """Pickers follow the formula, so a preset naming a compound works.
+
+        Presets set ``tmd_material`` because a preset names a compound,
+        not a pair of elements. Without this the two dropdowns would go
+        on showing the previous material after loading one.
+        """
+        if self._syncing_material:
+            return
+        material = TMD_MATERIALS.get(self.var_tmd_material.get())
+        if material is None:
+            return
+        self._syncing_material = True
+        try:
+            self.cmb_tmd_chalcogen.config(
+                values=list(chalcogens_for(material.metal)))
+            self.var_tmd_metal.set(material.metal)
+            self.var_tmd_chalcogen.set(material.chalcogen)
+        finally:
+            self._syncing_material = False
+        self._update_tmd_hint()
+
+    def _update_dopant_hint(self) -> None:
+        """Say what the chosen dopant is and whether this much is real.
+
+        Fifteen elements in a dropdown is fifteen different chemistries,
+        and the difference between 10% N and 10% Fe is the difference
+        between a common material and one that does not exist. The
+        warning fires at build time either way; showing it here means the
+        user does not have to build to find out.
+        """
+        element = self.var_dopant.get()
+        if element == "none":
+            self.lbl_dopant.config(
+                text="Pure carbon. Pick an element to substitute into the "
+                     "lattice.", foreground=MUTED)
+            return
+        chem = get_chemistry(element)
+        fraction = float(self.var_dopant_conc.get())
+        site = self.var_dopant_site.get()
+
+        text = (f"{chem.site}, r = {chem.radius:.2f} Å "
+                f"({chem.size_mismatch:+.0%} vs C). {chem.note}")
+        colour = MUTED
+        if fraction > chem.max_fraction:
+            colour = WARN_AMBER
+            text = (f"{fraction:.1%} is past the ~{chem.max_fraction:.0%} that "
+                    f"is physically meaningful for {element}. " + text)
+        if site == "pentagon":
+            # The fraction means something different here, and silently
+            # is exactly how it would be misread.
+            text += (" Pentagon placement counts the fraction against the "
+                     "pentagon sites, not the whole structure, and needs a "
+                     "builder that records rings.")
+        self.lbl_dopant.config(text=text, foreground=colour)
 
     def _update_tmd_hint(self) -> None:
         """Name the material's real geometry, and cost a tube's curvature.
@@ -1436,6 +1587,7 @@ class NanocarbonGUI:
         common = dict(
             dopant=None if dopant == "none" else dopant,
             dopant_conc=float(self.var_dopant_conc.get()),
+            dopant_site=self.var_dopant_site.get(),
             seed=int(self.var_seed.get()),
         )
 

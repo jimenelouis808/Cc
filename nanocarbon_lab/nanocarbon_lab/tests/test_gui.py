@@ -412,3 +412,74 @@ def test_every_preset_names_only_real_parameters(app):
     for name, values in PRESETS.items():
         unknown = set(values) - set(app._params)
         assert not unknown, f"preset {name!r} sets unknown parameters {unknown}"
+
+
+def test_the_dopant_hint_tracks_the_element_and_the_amount(app):
+    """Fifteen elements in one dropdown is fifteen chemistries, and the
+    difference between 10% N and 10% Fe is the difference between a
+    common material and one that does not exist. The hint has to say so
+    before the build, not only in a warning after it."""
+    from nanocarbon_lab.gui.app import MUTED, WARN_AMBER
+
+    app.var_dopant.set("none")
+    assert "Pure carbon" in app.lbl_dopant.cget("text")
+
+    app.var_dopant.set("N")
+    app.var_dopant_conc.set(0.10)
+    # cget returns a Tk colour object, not a str.
+    assert str(app.lbl_dopant.cget("foreground")) == MUTED
+
+    app.var_dopant.set("Fe")
+    assert str(app.lbl_dopant.cget("foreground")) == WARN_AMBER
+    assert "physically meaningful" in app.lbl_dopant.cget("text")
+
+
+def test_pentagon_placement_says_what_the_fraction_means(app):
+    """The fraction counts against the pentagon sites there, which is a
+    factor of four different on a capped tube."""
+    app.var_dopant.set("N")
+    app.var_dopant_site.set("pentagon")
+    assert "pentagon sites" in app.lbl_dopant.cget("text")
+    assert app.current_job().dopant_site == "pentagon"
+
+
+def test_carbon_is_the_default_and_carries_no_dopant(app):
+    """The host is always carbon; a structure is pure unless asked."""
+    assert app.var_dopant.get() == "none"
+    assert app.current_job().dopant is None
+
+
+def test_the_metal_and_chalcogen_pickers_drive_the_formula(app):
+    app.var_family.set("dichalcogenide")
+    app.var_mode_kind.set("TMD layers")
+    app.var_tmd_metal.set("W")
+    app.var_tmd_chalcogen.set("Se")
+    assert app.var_tmd_material.get() == "WSe2"
+    assert app.current_job().params["material"] == "WSe2"
+
+
+def test_an_impossible_pair_cannot_be_selected(app):
+    """Sn has no tabulated telluride. Rather than let the pair be chosen
+    and fail at build time, the chalcogen list renarrows and the
+    selection falls back to one that exists."""
+    app.var_family.set("dichalcogenide")
+    app.var_mode_kind.set("TMD layers")
+    app.var_tmd_metal.set("W")
+    app.var_tmd_chalcogen.set("Te")
+    assert app.var_tmd_material.get() == "WTe2"
+
+    app.var_tmd_metal.set("Sn")
+    assert "Te" not in app.cmb_tmd_chalcogen.cget("values")
+    assert app.var_tmd_material.get() == "SnS2"
+
+
+def test_a_preset_naming_a_compound_updates_both_pickers(app):
+    """Presets name a compound, not a pair of elements, so the formula
+    has to drive the pickers as well as follow them -- without the two
+    traces feeding each other."""
+    app.var_family.set("dichalcogenide")
+    app.var_mode_kind.set("TMD layers")
+    app.var_tmd_material.set("PtTe2")
+    assert app.var_tmd_metal.get() == "Pt"
+    assert app.var_tmd_chalcogen.get() == "Te"
+    assert app.var_tmd_material.get() == "PtTe2"

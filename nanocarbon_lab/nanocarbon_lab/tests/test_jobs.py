@@ -226,3 +226,46 @@ class TestCommandLine:
 
     def test_no_dopant_means_no_dopant_flag(self):
         assert "--dopant" not in to_cli(SAMPLES["fullerene"])
+
+
+class TestDoping:
+    """The one policy the GUI and the CLI both go through."""
+
+    def test_carbon_is_the_default(self):
+        """A job with no dopant builds pure carbon, and the command line
+        it generates says nothing about doping."""
+        job = SAMPLES["fullerene"]
+        assert job.dopant is None
+        assert "--dopant" not in to_cli(job, out="out/x")
+
+    def test_the_placement_reaches_the_command_line(self):
+        job = Job("capped tube", SAMPLES["capped tube"].params,
+                  dopant="N", dopant_conc=0.1, dopant_site="pentagon")
+        command = to_cli(job, out="out/x")
+        assert "--dopant N" in command
+        assert "--dopant-site pentagon" in command
+
+    def test_random_placement_is_left_implicit(self):
+        """It is the default on both sides, so emitting it would be
+        noise in every generated command."""
+        job = Job("capped tube", SAMPLES["capped tube"].params,
+                  dopant="N", dopant_conc=0.1)
+        assert "--dopant-site" not in to_cli(job, out="out/x")
+
+    def test_an_unknown_placement_is_rejected(self):
+        from nanocarbon_lab.builders import build_fullerene
+        from nanocarbon_lab.jobs import apply_doping
+
+        job = Job("fullerene", dopant="N", dopant_conc=0.1, dopant_site="face")
+        with pytest.raises(ValueError, match="Unknown dopant_site"):
+            apply_doping(build_fullerene(family="C60", freq=1), job)
+
+    def test_pentagon_placement_goes_through_build(self):
+        """End to end: the placement the Job names is the one applied."""
+        from nanocarbon_lab.jobs import build
+
+        job = Job("fullerene", SAMPLES["fullerene"].params, dopant="N",
+                  dopant_conc=0.1, dopant_site="pentagon", seed=0)
+        atoms = build(job)
+        assert atoms.info["doping_mode"] == "ring5"
+        assert atoms.get_chemical_symbols().count("N") == 6

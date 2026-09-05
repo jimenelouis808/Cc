@@ -111,9 +111,18 @@ class Job:
         Keyword arguments for that mode's builder, already in the
         builder's own units and spelling.
     dopant
-        ``None`` or an element symbol substituted after the build.
+        ``None`` or an element symbol substituted after the build. The
+        host is always carbon; ``None`` is the default and means a pure
+        carbon structure.
     dopant_conc
         Substitution fraction, ignored when ``dopant`` is ``None``.
+    dopant_site
+        Where the substitutions go: ``"random"`` anywhere, ``"pentagon"``
+        on the five-membered rings that carry a curved structure's
+        curvature and its reactivity, ``"edge"`` on under-coordinated
+        atoms, ``"bulk"`` on fully sp2 ones. For ``"pentagon"`` the
+        fraction is of the pentagon sites, not of the whole structure --
+        those differ by a large factor on a long tube.
     seed
         RNG seed, threaded into both the builder and the doping.
     """
@@ -122,6 +131,7 @@ class Job:
     params: dict[str, Any] = field(default_factory=dict)
     dopant: str | None = None
     dopant_conc: float = 0.0
+    dopant_site: str = "random"
     seed: int = 0
 
     def __post_init__(self) -> None:
@@ -193,10 +203,48 @@ def build(job: Job):
 
     atoms = builders[job.mode](**job.params, seed=job.seed)
     if job.dopant and job.dopant_conc > 0:
-        from .dopants import dope_random
-
-        atoms = dope_random(atoms, job.dopant, job.dopant_conc, seed=job.seed)
+        atoms = apply_doping(atoms, job)
     return atoms
+
+
+#: Where a substitution may be placed. "pentagon" is the one that needs
+#: ring metadata, which every mesh-based builder records and a plain
+#: sheet does not.
+DOPANT_SITES = ("random", "pentagon", "edge", "bulk")
+
+
+def apply_doping(atoms, job: Job):
+    """Substitute ``job.dopant`` into a freshly built structure.
+
+    Split out of :func:`build` so the CLI and the GUI go through one
+    placement policy rather than three. ``"pentagon"`` counts its
+    fraction against the pentagon sites; the others against all carbons,
+    or against the eligible pool for edge and bulk.
+    """
+    from .dopants import dope_directed, dope_random, dope_rings
+
+    site = job.dopant_site
+    if site not in DOPANT_SITES:
+        raise ValueError(
+            f"Unknown dopant_site {site!r}; expected one of {list(DOPANT_SITES)}."
+        )
+    if site == "random":
+        return dope_random(atoms, job.dopant, job.dopant_conc, seed=job.seed)
+    if site == "pentagon":
+        return dope_rings(atoms, job.dopant, ring_size=5,
+                          concentration=job.dopant_conc, seed=job.seed)
+    # Edge and bulk take a count rather than a fraction, so turn the
+    # fraction into one against that pool -- against the whole structure
+    # it would mean something different for each mode.
+    from .dopants.substitutional import _bulk_indices, _edge_indices
+
+    pool = _edge_indices(atoms) if site == "edge" else _bulk_indices(atoms)
+    count = max(1, int(round(job.dopant_conc * len(pool))))
+    # dope_directed spells them "edges" and "bulk", which do not pluralise
+    # the same way -- hence a map rather than an f-string.
+    where = {"edge": "edges", "bulk": "bulk"}[site]
+    return dope_directed(atoms, job.dopant, where=where,
+                         count=count, seed=job.seed)
 
 
 def estimate_atoms(job: Job) -> int:
@@ -567,14 +615,18 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
 
     if job.dopant and job.dopant_conc > 0:
         parts += ["--dopant", job.dopant, "--dopant-conc", f"{job.dopant_conc:g}"]
+        if job.dopant_site != "random":
+            parts += ["--dopant-site", job.dopant_site]
     parts += ["--seed", str(job.seed), "--out", out]
     return " ".join(parts)
 
 
 __all__ = [
+    "DOPANT_SITES",
     "IMPLICIT_MODES",
     "MODES",
     "Job",
+    "apply_doping",
     "build",
     "estimate_atoms",
     "estimate_cost",

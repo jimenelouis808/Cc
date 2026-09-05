@@ -118,17 +118,47 @@ MATERIALS: dict[str, TMDMaterial] = {
     # --- group 5: metallic, 2H, charge-density-wave superconductors
     "NbSe2": TMDMaterial("Nb", "Se", a=3.442, h=3.350, interlayer=6.276),
     "TaS2": TMDMaterial("Ta", "S", a=3.316, h=3.140, interlayer=6.050),
+    "NbS2": TMDMaterial("Nb", "S", a=3.310, h=3.130, interlayer=5.945),
+    "TaSe2": TMDMaterial("Ta", "Se", a=3.436, h=3.330, interlayer=6.350),
+    # --- group 5, 1T: itinerant magnetism and CDW order
+    "VS2": TMDMaterial("V", "S", a=3.174, h=2.974, interlayer=5.755,
+                       natural_phase="1T"),
+    "VSe2": TMDMaterial("V", "Se", a=3.358, h=3.125, interlayer=6.107,
+                        natural_phase="1T"),
+    "VTe2": TMDMaterial("V", "Te", a=3.640, h=3.454, interlayer=6.582,
+                        natural_phase="1T"),
     # --- group 4 and 10: 1T ground state
     "TiS2": TMDMaterial("Ti", "S", a=3.407, h=2.925, interlayer=5.695,
                         natural_phase="1T"),
+    "TiSe2": TMDMaterial("Ti", "Se", a=3.540, h=3.050, interlayer=6.008,
+                         natural_phase="1T"),
+    "TiTe2": TMDMaterial("Ti", "Te", a=3.777, h=3.285, interlayer=6.498,
+                         natural_phase="1T"),
     "ZrS2": TMDMaterial("Zr", "S", a=3.662, h=2.930, interlayer=5.813,
                         natural_phase="1T"),
+    "ZrSe2": TMDMaterial("Zr", "Se", a=3.770, h=3.195, interlayer=6.128,
+                         natural_phase="1T"),
+    "ZrTe2": TMDMaterial("Zr", "Te", a=3.950, h=3.485, interlayer=6.630,
+                         natural_phase="1T"),
     "HfS2": TMDMaterial("Hf", "S", a=3.635, h=2.920, interlayer=5.837,
                         natural_phase="1T"),
+    "HfSe2": TMDMaterial("Hf", "Se", a=3.748, h=3.162, interlayer=6.159,
+                         natural_phase="1T"),
+    "HfTe2": TMDMaterial("Hf", "Te", a=3.949, h=3.420, interlayer=6.651,
+                         natural_phase="1T"),
+    # Pt: note the unusually tight van der Waals gap (~2.4 Å against
+    # MoS2's 3.0). That is real and is why the PtX2 band gap depends so
+    # strongly on layer count -- do not "correct" it to look like the rest.
     "PtS2": TMDMaterial("Pt", "S", a=3.542, h=2.700, interlayer=5.043,
                         natural_phase="1T"),
+    "PtSe2": TMDMaterial("Pt", "Se", a=3.728, h=2.660, interlayer=5.081,
+                         natural_phase="1T"),
+    "PtTe2": TMDMaterial("Pt", "Te", a=4.026, h=2.747, interlayer=5.221,
+                         natural_phase="1T"),
     "SnS2": TMDMaterial("Sn", "S", a=3.648, h=2.980, interlayer=5.899,
                         natural_phase="1T"),
+    "SnSe2": TMDMaterial("Sn", "Se", a=3.811, h=3.266, interlayer=6.141,
+                         natural_phase="1T"),
 }
 
 
@@ -147,6 +177,95 @@ def get_material(name: str) -> TMDMaterial:
         raise KeyError(
             f"Unknown material {name!r}. Known: {', '.join(sorted(MATERIALS))}."
         ) from None
+
+
+def available_metals() -> tuple[str, ...]:
+    """Transition metals (and Sn) the table covers, in periodic order.
+
+    Ordered by group rather than alphabetically, because the group is
+    what decides the phase: group 6 is 2H and semiconducting, groups 4
+    and 10 are 1T and metallic or semiconducting.
+    """
+    order = ("Ti", "Zr", "Hf", "V", "Nb", "Ta", "Mo", "W", "Pt", "Sn")
+    present = {m.metal for m in MATERIALS.values()}
+    listed = tuple(symbol for symbol in order if symbol in present)
+    # Anything added to MATERIALS without being placed in `order` still
+    # shows up, rather than silently vanishing from every dropdown.
+    return listed + tuple(sorted(present - set(listed)))
+
+
+def available_chalcogens() -> tuple[str, ...]:
+    """Chalcogens the table covers, lightest first."""
+    order = ("S", "Se", "Te")
+    present = {m.chalcogen for m in MATERIALS.values()}
+    listed = tuple(symbol for symbol in order if symbol in present)
+    return listed + tuple(sorted(present - set(listed)))
+
+
+def chalcogens_for(metal: str) -> tuple[str, ...]:
+    """Which chalcogens this metal has a tabulated compound with."""
+    found = {m.chalcogen for m in MATERIALS.values() if m.metal == metal}
+    return tuple(x for x in available_chalcogens() if x in found)
+
+
+def metals_for(chalcogen: str) -> tuple[str, ...]:
+    """Which metals this chalcogen has a tabulated compound with."""
+    found = {m.metal for m in MATERIALS.values() if m.chalcogen == chalcogen}
+    return tuple(m for m in available_metals() if m in found)
+
+
+def material_for(metal: str, chalcogen: str) -> TMDMaterial:
+    """Look a compound up by its two elements rather than by formula.
+
+    The formula is a presentation detail; what a user actually chooses is
+    a metal and a chalcogen, and this is the lookup that matches. It is
+    deliberately **not** a constructor: an MX2 that is not in the table
+    is one whose lattice constants this package does not know, and
+    inventing them from covalent radii would produce a structure that
+    looks authoritative and is not.
+
+    Parameters
+    ----------
+    metal, chalcogen
+        Element symbols, e.g. ``"Mo"`` and ``"S"``.
+
+    Returns
+    -------
+    TMDMaterial
+        The tabulated compound.
+
+    Raises
+    ------
+    KeyError
+        Naming what *is* available for that metal, or for that chalcogen,
+        so the next guess is an informed one. A missing pair is usually
+        either a compound that does not form a layered MX2 at all (SnTe2)
+        or one whose real structure is too distorted for the ideal
+        1T/2H cells here (ReS2 and ReSe2 form diamond chains, NbTe2 and
+        TaTe2 a different distortion).
+    """
+    for name, material in MATERIALS.items():
+        if material.metal == metal and material.chalcogen == chalcogen:
+            del name
+            return material
+
+    if metal not in available_metals():
+        raise KeyError(
+            f"Unknown metal {metal!r}. Available: "
+            f"{', '.join(available_metals())}."
+        )
+    if chalcogen not in available_chalcogens():
+        raise KeyError(
+            f"Unknown chalcogen {chalcogen!r}. Available: "
+            f"{', '.join(available_chalcogens())}."
+        )
+    raise KeyError(
+        f"No tabulated {metal}{chalcogen}2. {metal} is available with "
+        f"{', '.join(chalcogens_for(metal))}; {chalcogen} is available with "
+        f"{', '.join(metals_for(chalcogen))}. A missing pair either does not "
+        f"form a layered MX2 or is too distorted for the ideal 1T/2H cells "
+        f"used here."
+    )
 
 
 def sublattice_offsets(phase: Phase) -> tuple[tuple[float, float],
@@ -186,7 +305,12 @@ __all__ = [
     "Phase",
     "Stacking",
     "TMDMaterial",
+    "available_chalcogens",
+    "available_metals",
+    "chalcogens_for",
     "coordination_geometry",
     "get_material",
+    "material_for",
+    "metals_for",
     "sublattice_offsets",
 ]

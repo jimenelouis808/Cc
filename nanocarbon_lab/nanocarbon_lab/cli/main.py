@@ -25,6 +25,10 @@ Sub-commands:
 * ``twist``      — two layers with a commensurate twist (moire).
 * ``stack``      — aligned van der Waals stack of 2D layers.
 * ``validate``   — run validation on an existing structure file.
+* ``dopants``    — list the heteroatoms available for carbon and what each does.
+
+Every carbon sub-command builds **pure carbon** unless ``--dopant`` is
+given; doping is an edit applied afterwards, never a different material.
 """
 
 from __future__ import annotations
@@ -52,11 +56,12 @@ from ..builders import (
     build_schwarzite,
 )
 from ..defects import introduce_vacancies
-from ..dopants import dope_random
+from ..dopants import DOPANT_CHEMISTRY, DOPANT_ELEMENTS
 from ..exports.lammps import write_lammps
 from ..exports.qe import QESettings, write_qe_input
 from ..exports.xyz import write_render_bundle
 from ..hetero import available_layers, build_twisted_bilayer, build_vdw_stack
+from ..jobs import DOPANT_SITES, Job, apply_doping
 from ..tmd import (
     MATERIALS,
     build_tmd_bulk,
@@ -67,15 +72,110 @@ from ..tmd import (
     build_tmd_schwarzite,
 )
 from ..tmd.curved import build_tmd_junction, schwarzite_quality
+from ..tmd.materials import (
+    available_chalcogens,
+    available_metals,
+    material_for,
+)
 from ..tmd.quality import geometry_report as tmd_geometry_report
 from ..tmd.quality import tmd_quality
+from ..utils.constants import MAX_DOPING_FRACTION, MIN_DOPING_FRACTION
 from ..validation.checks import run_basic_checks
 from ..validation.quality import sp2_quality
 
 
+def _add_doping_arguments(p, seed_help: str | None = None) -> None:
+    """Attach the doping flags every carbon sub-command shares.
+
+    One helper rather than three copies: the choices used to be spelled
+    out at each call site, so adding a dopant meant editing all of them
+    and the lists had already drifted apart.
+    """
+    p.add_argument("--dopant", choices=list(DOPANT_ELEMENTS), default=None,
+                   help="Heteroatom substituted into the carbon lattice after "
+                        "the build. Omit for pure carbon, which is the "
+                        "default. Run `nanocarbon dopants` for what each one "
+                        "does and how much of it is realistic.")
+    p.add_argument("--dopant-conc", type=float, default=0.0,
+                   help=f"Substitution fraction, "
+                        f"{MIN_DOPING_FRACTION:g}-{MAX_DOPING_FRACTION:g} for "
+                        "the range that describes a real doped carbon. Higher "
+                        "is allowed but warns.")
+    p.add_argument("--dopant-site", choices=list(DOPANT_SITES), default="random",
+                   help="Where the substitutions go. 'pentagon' puts them on "
+                        "the five-membered rings, which is where a cap or cage "
+                        "carries its curvature and its reactivity; the "
+                        "fraction is then of the pentagon sites. Needs a "
+                        "builder that records rings.")
+    if seed_help:
+        p.add_argument("--seed", type=int, default=0, help=seed_help)
+
+
+def _add_material_argument(p) -> None:
+    """Attach the three ways to name a dichalcogenide.
+
+    ``--material`` takes the formula; ``--metal`` and ``--chalcogen``
+    take the two elements separately, which is how the choice is usually
+    actually made -- "a tungsten selenide" rather than "WSe2". They are
+    alternatives, not a combination, and giving both is an error rather
+    than a silent precedence rule.
+    """
+    p.add_argument("--material", default=None, choices=sorted(MATERIALS),
+                   help="Compound by formula. Default MoS2. Alternatively "
+                        "give --metal and --chalcogen.")
+    p.add_argument("--metal", default=None, choices=list(available_metals()),
+                   help="Transition metal (or Sn), used with --chalcogen "
+                        "instead of --material.")
+    p.add_argument("--chalcogen", default=None,
+                   choices=list(available_chalcogens()),
+                   help="Chalcogen, used with --metal instead of --material.")
+
+
+def _resolve_material(args) -> None:
+    """Turn --metal/--chalcogen into the formula the builders take.
+
+    Done once here rather than in each of the seven dichalcogenide
+    sub-commands, so a new one cannot forget it. A pair with no tabulated
+    compound raises from `material_for`, whose message names what *is*
+    available for each of the two elements.
+    """
+    if not hasattr(args, "metal"):
+        return
+    metal, chalcogen, formula = args.metal, args.chalcogen, args.material
+    if (metal is None) != (chalcogen is None):
+        raise SystemExit(
+            "--metal and --chalcogen go together: give both, or give "
+            "--material instead."
+        )
+    if metal is not None:
+        if formula is not None:
+            raise SystemExit(
+                f"Give either --material {formula} or --metal {metal} "
+                f"--chalcogen {chalcogen}, not both."
+            )
+        try:
+            args.material = material_for(metal, chalcogen).formula
+        except KeyError as exc:
+            # material_for's message already names what is available for
+            # each element; a traceback on top of it helps nobody.
+            raise SystemExit(str(exc).strip("'")) from None
+    elif formula is None:
+        args.material = "MoS2"
+
+
+def _dope(atoms, args):
+    """Apply the doping flags, honouring the placement choice."""
+    if not getattr(args, "dopant", None) or getattr(args, "dopant_conc", 0) <= 0:
+        return atoms
+    job = Job(mode="capped tube", dopant=args.dopant,
+              dopant_conc=args.dopant_conc,
+              dopant_site=getattr(args, "dopant_site", "random"),
+              seed=args.seed)
+    return apply_doping(atoms, job)
+
+
 def _apply_post(atoms, args):
-    if getattr(args, "dopant", None):
-        atoms = dope_random(atoms, args.dopant, args.dopant_conc, seed=args.seed)
+    atoms = _dope(atoms, args)
     if getattr(args, "vacancies", 0):
         atoms = introduce_vacancies(atoms, n_defects=args.vacancies, seed=args.seed)
     return atoms
@@ -186,6 +286,7 @@ def _cmd_cnt_cap(args):
     print(f"  bond angle  = {g['angle_min']:.1f} / {g['angle_mean']:.1f} / {g['angle_max']:.1f} deg"
           f"  (std {g['angle_std']:.2f})")
     print(f"  close contacts (<2 A, non-bonded) = {g['n_close_contacts']}")
+    _report_doping(atoms)
     verdict, why = sp2_quality(g)
     print(f"  sp2 verdict = {verdict.upper()}: {why}")
     return 0
@@ -214,15 +315,38 @@ def _add_surface_flags(p, anneal: bool | int = True):
     p.add_argument("--roughness", type=float, default=0.0,
                    help="RMS out-of-plane corrugation (Å) for a CVD-grown "
                         "rather than ideal wall; 0.1-0.3 is realistic.")
-    p.add_argument("--dopant", choices=["N", "B", "S", "P"], default=None)
-    p.add_argument("--dopant-conc", type=float, default=0.0)
-    p.add_argument("--seed", type=int, default=0)
+    _add_doping_arguments(p, seed_help="RNG seed for defects, roughness and doping.")
 
 
 def _maybe_dope(atoms, args):
-    if getattr(args, "dopant", None) and args.dopant_conc > 0:
-        atoms = dope_random(atoms, args.dopant, args.dopant_conc, seed=args.seed)
-    return atoms
+    return _dope(atoms, args)
+
+
+def _report_doping(atoms) -> None:
+    """Print what was substituted, if anything.
+
+    Silent on a pure carbon structure, which is the default and the
+    common case. When there *is* doping the placement matters as much as
+    the amount, so both are printed -- and for ring placement both
+    fractions, since "10% of the pentagon sites" and "2.5% of the
+    structure" are the same edit described two ways, and quoting either
+    one alone reads as the other.
+    """
+    entries = atoms.info.get("dopants")
+    if not entries:
+        return
+    counts: dict[str, int] = {}
+    for entry in entries:
+        counts[entry["element"]] = (counts.get(entry["element"], 0)
+                                    + len(entry["indices"]))
+    formula = ", ".join(f"{n} {sym}" for sym, n in sorted(counts.items()))
+    mode = atoms.info.get("doping_mode", "random")
+    overall = sum(counts.values()) / max(1, len(atoms))
+    print(f"  doping      = {formula}  ({overall:.1%} of all atoms, {mode})")
+    if "doping_sites_available" in atoms.info:
+        size = atoms.info.get("doping_ring_size", 5)
+        print(f"                {atoms.info['doping_concentration']:.1%} of the "
+              f"{atoms.info['doping_sites_available']} {size}-ring sites")
 
 
 def _report_structure(atoms, xyz_path, json_path):
@@ -239,6 +363,7 @@ def _report_structure(atoms, xyz_path, json_path):
           f"  (std {g['bond_std']:.4f})")
     print(f"  bond angle  = {g['angle_min']:.1f} / {g['angle_mean']:.1f} / {g['angle_max']:.1f} deg")
     print(f"  close contacts (<2 A, non-bonded) = {g['n_close_contacts']}")
+    _report_doping(atoms)
     verdict, why = sp2_quality(g)
     print(f"  sp2 verdict = {verdict.upper()}: {why}")
 
@@ -561,6 +686,37 @@ def _cmd_validate(args):
     return 0 if report.ok else 1
 
 
+def _cmd_dopants(args):
+    """Print the dopant table, grouped by how the lattice takes them."""
+    del args
+    print("Host is always carbon; these substitute into it.\n")
+    print(f"Interface range: {MIN_DOPING_FRACTION:.0%}-{MAX_DOPING_FRACTION:.0%}. "
+          "Per-element ceilings below are where the placement stops\n"
+          "describing a real material — past them you get a warning, "
+          "not a refusal.\n")
+    headings = {
+        "planar": "PLANAR — fits the sp2 lattice, sheet stays flat",
+        "puckered": "PUCKERED — substitutes but pulls its site out of plane; "
+                    "relax before use",
+        "vacancy": "VACANCY — single-atom sites; belong in a vacancy, usually "
+                   "with N around them",
+    }
+    for site, heading in headings.items():
+        members = [c for c in DOPANT_CHEMISTRY.values() if c.site == site]
+        if not members:
+            continue
+        print(heading)
+        for chem in members:
+            print(f"  {chem.symbol:<3s} up to {chem.max_fraction:>4.0%}  "
+                  f"r={chem.radius:.2f} Å ({chem.size_mismatch:+.0%} vs C)")
+            print(f"      {chem.note}")
+        print()
+    print("Placement: " + ", ".join(DOPANT_SITES) +
+          ".  'pentagon' needs a builder that records rings (capped tube,\n"
+          "fullerene, nano-onion, junction, schwarzite, multi-wall, bundle).")
+    return 0
+
+
 def _add_common(p):
     p.add_argument("--out", required=True, help="Output directory.")
     p.add_argument("--format", choices=["qe", "lammps", "both"], default="qe")
@@ -568,8 +724,7 @@ def _add_common(p):
                    choices=["scf", "relax", "vc-relax", "nscf", "bands"])
     p.add_argument("--bond", type=float, default=1.42, help="C-C bond length (Å).")
     p.add_argument("--vacuum", type=float, default=15.0, help="Vacuum padding (Å).")
-    p.add_argument("--dopant", choices=["N", "B", "S", "P"], default=None)
-    p.add_argument("--dopant-conc", type=float, default=0.0)
+    _add_doping_arguments(p)
     p.add_argument("--vacancies", type=int, default=0)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--force", action="store_true",
@@ -680,10 +835,8 @@ def build_parser() -> argparse.ArgumentParser:
     cc.add_argument("--roughness", type=float, default=0.0,
                     help="RMS out-of-plane corrugation (Å) for a CVD-grown "
                          "rather than ideal wall; 0.1-0.3 is realistic.")
-    cc.add_argument("--dopant", choices=["N", "B", "S", "P"], default=None)
-    cc.add_argument("--dopant-conc", type=float, default=0.0)
-    cc.add_argument("--seed", type=int, default=0,
-                    help="RNG seed for defect placement, roughness and doping.")
+    _add_doping_arguments(
+        cc, seed_help="RNG seed for defect placement, roughness and doping.")
     cc.add_argument("--out", required=True,
                     help="Output path without extension (.xyz and .json are appended).")
     cc.set_defaults(func=_cmd_cnt_cap)
@@ -706,7 +859,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_surface_flags(jn)
     jn.set_defaults(func=_cmd_junction)
 
-    materials = sorted(MATERIALS)
     phases = ["2H", "1T", "1T'"]
     stackings = ["2H", "3R", "AA"]
 
@@ -714,7 +866,7 @@ def build_parser() -> argparse.ArgumentParser:
         "tmd",
         help="Build an MX2 monolayer, bilayer or few-layer slab (MoS2, WS2...).",
     )
-    td.add_argument("--material", default="MoS2", choices=materials)
+    _add_material_argument(td)
     td.add_argument("--layers", type=int, default=1,
                     help="X-M-X sandwiches: 1 = monolayer, 2 = bilayer.")
     td.add_argument("--phase", default="2H", choices=phases,
@@ -734,7 +886,7 @@ def build_parser() -> argparse.ArgumentParser:
     td.set_defaults(func=_cmd_tmd)
 
     tb = sub.add_parser("tmd-bulk", help="Build the bulk MX2 crystal.")
-    tb.add_argument("--material", default="MoS2", choices=materials)
+    _add_material_argument(tb)
     tb.add_argument("--phase", default="2H", choices=phases)
     tb.add_argument("--stacking", default="2H", choices=stackings,
                     help="Sets the repeat: 2H is two layers per cell, 3R "
@@ -745,7 +897,7 @@ def build_parser() -> argparse.ArgumentParser:
     tb.set_defaults(func=_cmd_tmd_bulk)
 
     tr = sub.add_parser("tmd-ribbon", help="Build an MX2 nanoribbon.")
-    tr.add_argument("--material", default="MoS2", choices=materials)
+    _add_material_argument(tr)
     tr.add_argument("--width", type=int, default=6, help="Lattice rows across.")
     tr.add_argument("--length", type=int, default=1, help="Repeats along the axis.")
     tr.add_argument("--edge", default="zigzag", choices=["zigzag", "armchair"])
@@ -763,7 +915,7 @@ def build_parser() -> argparse.ArgumentParser:
         "tmd-tube",
         help="Roll an MX2 monolayer into an (n, m) nanotube.",
     )
-    tt.add_argument("--material", default="MoS2", choices=materials)
+    _add_material_argument(tt)
     tt.add_argument("--n", type=int, default=30)
     tt.add_argument("--m", type=int, default=0,
                     help="(n,0) zigzag, (n,n) armchair, else chiral.")
@@ -812,7 +964,7 @@ def build_parser() -> argparse.ArgumentParser:
         "tmd-junction",
         help="Build a finite, closed MX2 tube junction (L, T, Y or X).",
     )
-    tj.add_argument("--material", default="MoS2", choices=materials)
+    _add_material_argument(tj)
     tj.add_argument("--kind", default="Y", choices=["L", "T", "Y", "X"])
     tj.add_argument("--tube-radius", type=float, default=12.0,
                     help="Arm radius in A. MX2 needs a wide tube: the "
@@ -834,7 +986,7 @@ def build_parser() -> argparse.ArgumentParser:
         "tmd-schwarzite",
         help="Build a periodic MX2 schwarzite (negative-curvature MX2).",
     )
-    ts.add_argument("--material", default="MoS2", choices=materials)
+    _add_material_argument(ts)
     ts.add_argument("--kind", default="primitive",
                     choices=["primitive", "diamond", "gyroid"])
     ts.add_argument("--cell", type=float, default=36.0,
@@ -854,7 +1006,7 @@ def build_parser() -> argparse.ArgumentParser:
         "tmd-coil",
         help="Coil an MX2 nanotube onto a helix (elastic bend, no defects).",
     )
-    tc.add_argument("--material", default="MoS2", choices=materials)
+    _add_material_argument(tc)
     tc.add_argument("--n", type=int, default=30)
     tc.add_argument("--m", type=int, default=0,
                     help="(n,0) zigzag, (n,n) armchair, else chiral.")
@@ -985,12 +1137,18 @@ def build_parser() -> argparse.ArgumentParser:
     vl.add_argument("path", help="Path to a structure file readable by ASE.")
     vl.set_defaults(func=_cmd_validate)
 
+    dp = sub.add_parser(
+        "dopants",
+        help="List the heteroatoms available for carbon, and what each does.")
+    dp.set_defaults(func=_cmd_dopants)
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    _resolve_material(args)
     return int(args.func(args))
 
 

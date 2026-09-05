@@ -21,8 +21,14 @@ HARD_MIN_DISTANCE: float = 0.90
 DEFAULT_VACUUM_2D: float = 15.0  # Å around 2D sheets
 DEFAULT_VACUUM_1D: float = 12.0  # Å around 1D tubes/wires
 
-# Supported substitutional dopants (sp2 compatible on top of the list).
-DOPANT_ELEMENTS: tuple[str, ...] = ("N", "B", "S", "P")
+# Substitution fraction the interfaces offer, as the user-facing range.
+# The lower bound is where one dopant in a hundred carbons starts to be a
+# concentration rather than a single defect; the upper is where ordered
+# stoichiometric phases (BC3, C3N4) take over from doping and a random
+# placement stops describing anything real. Per-element ceilings live in
+# `dopants/chemistry.py` and are tighter for most species.
+MIN_DOPING_FRACTION: float = 0.01
+MAX_DOPING_FRACTION: float = 0.15
 
 # Covalent radii (Cordero et al. 2008, Å) for soft bond inference when
 # non-carbon species are present.
@@ -46,6 +52,7 @@ COVALENT_RADII: dict[str, float] = {
     "W": 1.62,
     "Nb": 1.64,
     "Ta": 1.70,
+    "V": 1.53,
     "Ti": 1.60,
     "Zr": 1.75,
     "Hf": 1.75,
@@ -58,6 +65,18 @@ COVALENT_RADII: dict[str, float] = {
     "F": 0.57,
     "Cl": 1.02,
     "Si": 1.11,
+    # heavier main-group substitutional dopants for sp2 carbon
+    "Al": 1.21,
+    "Ge": 1.20,
+    # 3d metals, as single atoms anchored in a vacancy. Cordero quotes two
+    # values for the open-shell ones; the low-spin figure is used, since a
+    # metal held in a carbon or M-N4 pocket is the constrained case.
+    "Mn": 1.39,
+    "Fe": 1.32,
+    "Co": 1.26,
+    "Ni": 1.24,
+    "Cu": 1.32,
+    "Zn": 1.22,
 }
 
 # Coordination a fully bonded atom of each element is expected to reach.
@@ -66,13 +85,17 @@ COVALENT_RADII: dict[str, float] = {
 # every correct structure in the tmd package.
 MAX_COORDINATION: dict[str, int] = {
     "C": 4, "N": 4, "B": 4, "P": 4, "H": 1, "O": 3, "F": 1, "Cl": 1,
-    "Si": 4,
+    "Si": 4, "Al": 4, "Ge": 4,
+    # A 3d metal substituted into carbon sits in a vacancy pocket, so it
+    # reaches the 3 or 4 neighbours the pocket offers rather than a bulk
+    # metal's twelve.
+    "Mn": 6, "Fe": 6, "Co": 6, "Ni": 6, "Cu": 6, "Zn": 6,
     "S": 6, "Se": 6, "Te": 6,          # 2 in a thiol, 6 in a MX2 sandwich
     # Six chalcogen ligands, plus at most one metal-metal partner: that
     # seventh bond is the 2.8 Å dimer that defines the 1T' phase, so a
     # ceiling of 6 rejects a correct 1T' cell.
     "Mo": 7, "W": 7, "Nb": 7, "Ta": 7, "Ti": 7, "Zr": 7, "Hf": 7,
-    "Pt": 7, "Sn": 7,
+    "Pt": 7, "Sn": 7, "V": 7,
 }
 
 # Fallback when an element is not in MAX_COORDINATION.
@@ -83,7 +106,7 @@ DEFAULT_MAX_COORDINATION: int = 6
 # and to relax them when they occur as defects.
 HOMOELEMENTAL_BOND: dict[str, float] = {
     "Mo": 2.78, "W": 2.78, "Nb": 2.92, "Ta": 2.92, "Ti": 2.94,
-    "Zr": 3.20, "Hf": 3.18, "Pt": 2.78, "Sn": 3.16,
+    "Zr": 3.20, "Hf": 3.18, "Pt": 2.78, "Sn": 3.16, "V": 2.62,
     "S": 2.10, "Se": 2.40, "Te": 2.76,
 }
 

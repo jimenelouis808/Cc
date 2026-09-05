@@ -310,6 +310,79 @@ the zero-antiphase case as guaranteed rather than lucky; keep that
 branch. `tube_radius < 2*h` is refused -- the chalcogen planes would meet
 on the axis.
 
+## Doping: the host is carbon, and the elements are not interchangeable
+
+`dopants/chemistry.py` is the authority on which heteroatoms may replace
+a carbon. It replaced a four-element tuple in `utils.constants`, and the
+reason is not that the tuple was short: a bare list made 10% Fe as easy
+to ask for as 10% N, and only one of those is a material. Each entry
+carries a **site type** and a **max_fraction**, and the warning fires
+against the element's own ceiling.
+
+* **planar** is N and B only. They are the only dopants within 0.15 Å of
+  carbon and isoelectronic with it to within one electron, and the only
+  ones that reach tens of per cent in real samples. Do not move anything
+  else into this class on the grounds that it "should fit".
+* **puckered** (P, S, Se, O, Si, Ge, Al) substitutes but leaves the site
+  sp3 and out of plane. The builder places these on the **ideal lattice
+  site** and cannot know how far they move; say so rather than implying
+  the geometry is finished.
+* **vacancy** (Mn, Fe, Co, Ni, Cu, Zn) is not a lattice substitution at
+  all in reality -- these are M-N4 single-atom sites in a vacancy. One
+  substituted onto a perfect lattice is a starting geometry, not the
+  motif.
+
+The halogens are absent on purpose: F and Cl bond *to* a carbon sheet
+rather than replacing a carbon in it, so fluorographene is an adsorption
+problem. Do not add them here.
+
+Warnings, not errors, everywhere except an unknown element -- metastable
+and computational structures are legitimate, and an element with no
+entry has no radius and no coordination ceiling, so validation and
+export would both misjudge it. **Adding a dopant means adding it to
+`COVALENT_RADII` and `MAX_COORDINATION` too**; a test pins that.
+
+**Ring-selected placement reads `info["rings"]`; it does not perceive
+rings.** `dopants/rings.py` puts dopants on pentagons because those carry
+a curved structure's curvature and its reactivity -- a fullerene's
+chemistry is at its pentagons. Every mesh-based builder already records
+the real atom indices per ring, so no geometry is needed. A structure
+without that metadata **raises**; do not add a distance-based fallback,
+which is the exact failure `builders/fullerene_mesh.py` exists to
+prevent. Its concentration counts against the **sites of that ring
+size**, and both that and the overall fraction are recorded, because on
+a capped tube they differ by a factor of four and either alone reads as
+the other.
+
+`jobs.apply_doping` is the single placement policy; the GUI and the CLI
+both go through it, as they do for everything else in `jobs.py`.
+
+## Dichalcogenides are chosen by two elements, not by a formula
+
+`material_for(metal, chalcogen)` is the lookup the GUI and CLI use, and
+`available_metals` / `chalcogens_for` drive their dropdowns. It is
+deliberately a **lookup, not a constructor**: an MX2 not in `MATERIALS`
+is one whose lattice constants this package does not know, and deriving
+them from covalent radii would produce a structure that looks
+authoritative and is not. A missing pair raises with what *is* available
+for each of the two elements.
+
+Absences that are chemistry, not oversight: ReS2/ReSe2 distort into
+diamond chains and NbTe2/TaTe2 into another pattern, so none is an ideal
+1T or 2H cell; SnTe2 is not a layered MX2 at all. Do not "complete the
+grid".
+
+The platinum dichalcogenides have a van der Waals gap of ~2.4 Å against
+MoS2's 3.0. That is real -- it is why PtSe2's gap depends so strongly on
+layer count -- so the table's consistency test allows down to 2.3 Å.
+Do not tighten it to make Pt look like the rest.
+
+Adding a material means adding its metal to `COVALENT_RADII`,
+`MAX_COORDINATION` and `HOMOELEMENTAL_BOND`. The last one feeds
+`BOND_CUTOFF_OVERRIDE`, and a test asserts the resulting M-M cutoff
+falls **below** that material's lattice constant -- above it, every metal
+bonds to its six in-plane neighbours and reads as 12-coordinate.
+
 ## Bond detection is element-aware, and must not be quadratic
 
 Two faults here were load-bearing and are pinned by
@@ -420,7 +493,7 @@ builders reporting it.
 ## Scientific guardrails
 - Carbon bond length: default 1.42 Å (sp2). Accept anything in `[1.20, 1.80]` Å as bonded; anything in `(0, 0.9]` Å is a hard error.
 - Expected C coordination: **2 (edge)**, **3 (sp2 bulk)**. Coordination >= 5 or == 1 in the bulk is rejected by validation.
-- Dopants replace carbon atoms: N, B (sp2 compatible, coord 3), S, P (larger, often require local relaxation). The module flags clustered dopants as warnings, not errors.
+- Dopants replace carbon atoms; which ones and how many is `dopants/chemistry.py`, not a bare list (see below). Guardrails are warnings, not errors.
 - 2D structures: vacuum along the non-periodic direction must be `>= 12 Å` by default.
 - 1D structures (CNT): vacuum in the two transverse directions must be `>= 10 Å` beyond the tube radius.
 

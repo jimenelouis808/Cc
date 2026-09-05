@@ -13,7 +13,7 @@ validation pass before writing.
 | Module          | What it does                                                                 |
 |-----------------|------------------------------------------------------------------------------|
 | `builders`      | CNT (armchair / zigzag / chiral), graphene, nanoribbons, **nanocoils**, 3D carbon foam, **capped/defected fullerene-CNTs** |
-| `dopants`       | Substitutional N, B, S, P and co-doping, random / edges / bulk / cluster     |
+| `dopants`       | Substitutional heteroatoms in carbon (N, B, P, S, Se, O, Si, Ge, Al and the 3d single-atom metals), placed at random, on **pentagons**, on edges or in the bulk |
 | `defects`       | Mono- and divacancies, Stone-Wales, local random distortion                  |
 | `topology`      | networkx-based bond graph, coordination, connectivity, ring statistics       |
 | `validation`    | Minimum distances, coordination sanity, density, vacuum, cell consistency   |
@@ -84,7 +84,7 @@ nanocarbon validate out/cnt/qe/pw.in
 
 Structures for rendering (XYZ + Blender render bundle, plus CIF for the
 periodic ones). All of these share `--anneal-sweeps`, `--roughness`,
-`--dopant`, `--dopant-conc` and `--seed`:
+`--dopant`, `--dopant-conc`, `--dopant-site` and `--seed`:
 
 ```bash
 # Capped tube swept onto a left-handed conical coil, CVD-rough, 2% N-doped
@@ -162,6 +162,78 @@ and angle statistics — `CLEAN`, `STRAINED` or `BROKEN`, with the reason.
 It exists because "0 close contacts" is not the same as "physical": an
 over-tight coil keeps its atoms apart while stretching its bonds to
 1.69 Å, which is longer than even an sp3 C–C bond.
+
+## Doping carbon: which heteroatom, how much, and where
+
+**The host is always carbon.** Every builder returns pure carbon; doping
+is an edit applied afterwards, and nothing is substituted unless you ask.
+
+Fifteen heteroatoms are available, and the table is not just a longer
+element list — each entry carries the site it occupies and the fraction
+above which the placement stops describing a real material:
+
+| site | elements | up to | what it means |
+| --- | --- | --- | --- |
+| **planar** | N, B | 20% | Within 0.15 Å of carbon and isoelectronic to within one electron. The only two that stay in the plane, and the only two that reach tens of per cent in real samples — past ~25% they order into BC3 and C3N4 rather than doping anything. |
+| **puckered** | P, S | 5% | ~40% larger than carbon, so the site pulls out of the plane and turns sp3. |
+| | Se, O, Si | 3% | Si is characterised atom-by-atom in STEM; substitutional O is uncommon, since oxygen on carbon usually means epoxide or carbonyl at a defect. |
+| | Ge, Al | 2% | Isolated substitution only. |
+| **vacancy** | Mn, Fe, Co, Ni, Cu, Zn | 1% | Single-atom catalysis. These belong in a vacancy with nitrogen around them — the M–N4 motif — not on a pristine lattice site. Substituting one for a carbon is a *starting geometry* for that, not the motif. |
+
+The interfaces offer **1–15%**. Past an element's own ceiling you get a
+warning, never a refusal — metastable and purely computational
+structures are a legitimate subject, and refusing them would make the
+package useless for the studies that need them. But going ahead silently
+is how such a structure ends up in a figure:
+
+```
+10.0% Fe exceeds the ~1% that is physically meaningful — Fe is a
+single-atom site: it belongs in a vacancy, usually with N around it, and
+two adjacent ones are not a stable motif. Building it anyway; relax the
+result before drawing conclusions from the geometry.
+```
+
+`nanocarbon dopants` prints the whole table with the reasoning.
+
+### Placement: on the pentagons, or anywhere
+
+Where a heteroatom sits matters as much as how many there are. On a
+curved nanocarbon the pentagons are not decoration — they carry the
+positive curvature, they are pyramidalised, and that pyramidalisation
+makes them the most reactive carbons in the structure. A fullerene's
+chemistry happens at its pentagons and a capped tube's happens at its
+cap, so a nitrogen on a pentagon is a different object from one 40 Å away
+on the cylinder.
+
+```bash
+nanocarbon cnt-cap --rings 6 --freq 2     --dopant N --dopant-conc 0.10 --dopant-site pentagon --out out/capN
+```
+```
+  doping      = 6 N  (2.5% of all atoms, ring5)
+                10.0% of the 60 5-ring sites
+```
+
+Both fractions are reported because they differ by a factor of four here
+and quoting either alone reads as the other: `--dopant-conc` counts
+against the **pentagon sites** under this placement, not the structure.
+
+This needs no ring perception at all. Every mesh-based builder — capped
+tubes, fullerenes, nano-onions, junctions, schwarzites, multi-wall tubes,
+bundles — already records `info["rings"]` as the real atom indices per
+ring, so the placement reads them directly. A plain `build_cnt` sheet has
+no such metadata and says so rather than guessing; re-deriving rings from
+coordinates on a curved shell is exactly the mistake the mesh machinery
+exists to prevent.
+
+`--dopant-site` also takes `random` (the default), `edge` and `bulk`.
+
+```python
+from nanocarbon_lab.dopants import dope_rings, ring_size_census
+
+ring_size_census(cage)                      # {5: 60, 6: 60} for C60
+dope_rings(cage, "N", ring_size=5, count=6, seed=0)
+dope_rings(junction, "N", ring_size=7, concentration=0.1)   # the saddle
+```
 
 ## Nanocoils
 
@@ -914,8 +986,60 @@ ribbon = build_tmd_ribbon("MoS2", width=8, termination="metal")   # 1D
 tube   = build_tmd_nanotube("MoS2", n=40, m=0)          # 1D
 ```
 
-Thirteen materials ship with measured lattice constants: MoS2, MoSe2,
-MoTe2, WS2, WSe2, WTe2, NbSe2, TaS2, TiS2, ZrS2, HfS2, PtS2, SnS2.
+### Pick the metal and the chalcogen, not a formula
+
+Twenty-seven compounds ship with measured lattice constants, and you
+choose them the way the choice is actually made — a metal and a
+chalcogen, rather than hunting a formula in a long list:
+
+```python
+from nanocarbon_lab.tmd.materials import (
+    material_for, available_metals, chalcogens_for,
+)
+
+material_for("W", "Se")        # WSe2
+available_metals()             # Ti Zr Hf V Nb Ta Mo W Pt Sn
+chalcogens_for("Sn")           # ('S', 'Se') — no tabulated telluride
+```
+
+| group | metals | with |
+| --- | --- | --- |
+| 4 | Ti, Zr, Hf | S, Se, Te |
+| 5 | V | S, Se, Te |
+| 5 | Nb, Ta | S, Se |
+| 6 | Mo, W | S, Se, Te |
+| 10 | Pt | S, Se, Te |
+| 14 | Sn | S, Se |
+
+The CLI takes either form, and the GUI's two dropdowns narrow the second
+to what the first actually forms a compound with, so an impossible pair
+cannot be selected at all:
+
+```bash
+nanocarbon tmd --metal W --chalcogen Se --out out/wse2
+nanocarbon tmd --material WSe2 --out out/wse2     # same thing
+```
+
+`material_for` is deliberately a **lookup, not a constructor**. An MX2
+that is not in the table is one whose lattice constants this package does
+not know, and deriving them from covalent radii would produce a structure
+that looks authoritative and is not. A missing pair says which way to
+move:
+
+```
+No tabulated SnTe2. Sn is available with S, Se; Te is available with
+Ti, Zr, Hf, V, Mo, W, Pt.
+```
+
+Some absences are chemistry rather than laziness. ReS2 and ReSe2 are
+real and well studied but distort into diamond chains, and NbTe2 and
+TaTe2 into a different pattern again; none of them is an ideal 1T or 2H
+cell, so building them here would misrepresent them.
+
+One number in the table looks wrong and is not: the platinum
+dichalcogenides have a van der Waals gap of ~2.4 Å against MoS2's 3.0.
+That unusually strong interlayer coupling is exactly why PtSe2's band gap
+depends so sharply on layer count — do not "correct" it.
 
 ### Geometry is two numbers, and the third is derived
 

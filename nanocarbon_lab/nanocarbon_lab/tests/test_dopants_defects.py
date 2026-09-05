@@ -32,9 +32,15 @@ class TestDopants:
         assert out.get_chemical_symbols() == gr.get_chemical_symbols()
 
     def test_invalid_element_raises(self):
+        """Argon: a noble gas, so it substitutes for nothing.
+
+        This used to use Si, which is now a supported dopant -- it is
+        well characterised atom by atom in STEM. The element chosen here
+        has to be one that will never be added.
+        """
         gr = build_graphene_supercell(2, 2)
-        with pytest.raises(ValueError):
-            dope_random(gr, "Si", 0.1)
+        with pytest.raises(ValueError, match="Unsupported dopant"):
+            dope_random(gr, "Ar", 0.1)
 
     def test_substitute_out_of_range(self):
         gr = build_graphene_supercell(2, 2)

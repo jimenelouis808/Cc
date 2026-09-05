@@ -1,13 +1,19 @@
 """Substitutional doping of nanocarbon structures.
 
-All public functions return a **new** :class:`ase.Atoms` (the input is not
-mutated) and record the list of substituted indices in ``atoms.info["dopants"]``.
-Random placement is fully reproducible via the ``seed`` argument.
+The host is always carbon; this module edits a finished structure and
+never builds a different material. All public functions return a **new**
+:class:`ase.Atoms` (the input is not mutated) and record the list of
+substituted indices in ``atoms.info["dopants"]``. Random placement is
+fully reproducible via the ``seed`` argument.
 
-Chemistry guardrails (warnings only, not errors):
-  * N, B → sp2 compatible, single substitution is well behaved.
-  * S, P → larger covalent radii, prefer defect/edge sites; the module flags
-    clustered S/P placements since they almost always need local relaxation.
+Which elements are allowed, how far each one strains the lattice and
+what fraction of it is physically meaningful all live in
+:mod:`.chemistry`, so that a caller asking for 12% Fe is warned and a
+caller asking for 12% N is not. Guardrails are warnings; only an unknown
+element is an error.
+
+Placement by ring size -- pentagons above all, since those are the
+curvature sites and the reactive ones -- lives in :mod:`.rings`.
 """
 
 from __future__ import annotations
@@ -19,18 +25,44 @@ from typing import Literal
 import numpy as np
 from ase import Atoms
 
-from ..utils.constants import DOPANT_ELEMENTS
 from ..utils.geometry import minimum_image_distances
 from ..utils.rng import make_rng
+from .chemistry import get_chemistry
 
 Placement = Literal["random", "edges", "bulk", "cluster"]
 
 
 def _validate_element(element: str) -> None:
-    if element not in DOPANT_ELEMENTS:
-        raise ValueError(
-            f"Unsupported dopant '{element}'. Allowed: {DOPANT_ELEMENTS}."
-        )
+    get_chemistry(element)
+
+
+def _warn_if_unrealistic(element: str, fraction: float) -> None:
+    """Warn when a fraction is past what the element really reaches.
+
+    Not an error: metastable and purely computational structures are a
+    legitimate subject, and refusing them would make the package useless
+    for exactly the studies that need it. But 10% Fe on a lattice site is
+    not a doped nanocarbon by any reading, and going ahead without saying
+    so is how such a structure ends up in a figure.
+    """
+    chem = get_chemistry(element)
+    if fraction <= chem.max_fraction:
+        return
+    if chem.site == "vacancy":
+        why = (f"{element} is a single-atom site: it belongs in a vacancy, "
+               f"usually with N around it, and two adjacent ones are not a "
+               f"stable motif")
+    else:
+        why = (f"{element} is {chem.size_mismatch:+.0%} the size of carbon, "
+               f"so it puckers out of the plane and the lattice cannot "
+               f"absorb many of them")
+    warnings.warn(
+        f"{fraction:.1%} {element} exceeds the ~{chem.max_fraction:.0%} that "
+        f"is physically meaningful — {why}. Building it anyway; relax the "
+        f"result before drawing conclusions from the geometry.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
 
 
 def substitute_atoms(atoms: Atoms, indices: Iterable[int], element: str) -> Atoms:
@@ -108,9 +140,11 @@ def dope_random(
     atoms
         Host nanocarbon.
     element
-        Dopant symbol (N, B, S, P).
+        Dopant symbol, from
+        :data:`~nanocarbon_lab.dopants.chemistry.DOPANT_ELEMENTS`.
     concentration
-        Fraction in ``[0, 1]`` of carbon atoms to replace.
+        Fraction in ``[0, 1]`` of carbon atoms to replace. Warns above
+        the element's own ceiling rather than refusing.
     seed
         RNG seed.
 
@@ -122,6 +156,8 @@ def dope_random(
     _validate_element(element)
     if not 0.0 <= concentration <= 1.0:
         raise ValueError("concentration must be in [0, 1].")
+    if concentration > 0:
+        _warn_if_unrealistic(element, concentration)
     rng = make_rng(seed)
     carbons = _carbon_indices(atoms)
     n_sub = int(round(concentration * len(carbons)))
