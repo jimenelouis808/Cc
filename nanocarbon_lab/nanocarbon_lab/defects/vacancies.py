@@ -8,6 +8,7 @@ import numpy as np
 from ase import Atoms
 
 from ..utils.geometry import minimum_image_distances
+from ..utils.metadata import keep_indices, remap_after_removal
 from ..utils.rng import make_rng
 
 VacancyKind = Literal["mono", "di"]
@@ -88,9 +89,12 @@ def introduce_vacancies(
 
         defect_centres.append(centre)
 
-    keep = [i for i in range(n) if i not in set(removed)]
+    keep = keep_indices(n, removed)
     out = atoms[keep]
-    out.info = {**atoms.info}
+    # Renumbered, not copied: the recorded bond graph and ring list are
+    # indices into the *old* numbering, and carrying them across a
+    # deletion leaves metadata that is present, plausible and wrong.
+    out.info = remap_after_removal(atoms.info, keep)
     out.info.setdefault("defects", []).append(
         {
             "type": f"{kind}vacancy",

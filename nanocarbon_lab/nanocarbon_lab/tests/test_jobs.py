@@ -269,3 +269,72 @@ class TestDoping:
         atoms = build(job)
         assert atoms.info["doping_mode"] == "ring5"
         assert atoms.get_chemical_symbols().count("N") == 6
+
+
+class TestDichalcogenideChemistry:
+    """The MX2 counterpart of doping, and the same single-policy rule."""
+
+    @pytest.mark.parametrize(
+        ("edit", "element", "amount"),
+        [("janus", "Se", 1.0), ("alloy", "W", 0.4),
+         ("vacancies", "Se", 3), ("antisites", "Se", 2)],
+    )
+    def test_each_edit_changes_the_structure(self, edit, element, amount):
+        from nanocarbon_lab.jobs import build
+
+        params = {"material": "MoS2", "n_layers": 1, "nx": 3, "ny": 3}
+        pristine = build(Job("TMD layers", params))
+        edited = build(Job("TMD layers", params, tmd_edit=edit,
+                           tmd_edit_element=element, tmd_edit_amount=amount,
+                           seed=0))
+        assert (edited.get_chemical_formula()
+                != pristine.get_chemical_formula())
+
+    def test_no_edit_leaves_the_structure_pristine(self):
+        from nanocarbon_lab.jobs import build
+
+        params = {"material": "MoS2", "n_layers": 1, "nx": 2, "ny": 2}
+        assert (build(Job("TMD layers", params)).get_chemical_formula()
+                == build(Job("TMD layers", params,
+                             tmd_edit=None)).get_chemical_formula())
+
+    def test_an_unknown_edit_is_rejected(self):
+        from nanocarbon_lab.jobs import apply_tmd_chemistry, build
+
+        atoms = build(Job("TMD layers", {"material": "MoS2"}))
+        with pytest.raises(ValueError, match="Unknown tmd_edit"):
+            apply_tmd_chemistry(atoms, Job("TMD layers", tmd_edit="doping"))
+
+    def test_the_alloy_sublattice_follows_the_element(self):
+        """A chalcogen alloys the chalcogens and a metal the metals.
+        Asking the user to state it as well would only let the two
+        disagree."""
+        from nanocarbon_lab.jobs import build
+
+        params = {"material": "MoS2", "n_layers": 1, "nx": 3, "ny": 3}
+        metal = build(Job("TMD layers", params, tmd_edit="alloy",
+                          tmd_edit_element="W", tmd_edit_amount=0.5, seed=0))
+        chalcogen = build(Job("TMD layers", params, tmd_edit="alloy",
+                              tmd_edit_element="Se", tmd_edit_amount=0.5,
+                              seed=0))
+        assert "W" in metal.get_chemical_symbols()
+        assert "Se" in chalcogen.get_chemical_symbols()
+        assert metal.get_chemical_symbols().count("Mo") < 9
+        assert chalcogen.get_chemical_symbols().count("Mo") == 9
+
+    @pytest.mark.parametrize("edit", ["janus", "alloy", "vacancies", "antisites"])
+    def test_the_generated_command_parses(self, edit):
+        """The GUI's copy-as-command-line button has to produce something
+        that runs, for every edit and not only the one that was tried."""
+        import shlex
+
+        from nanocarbon_lab.cli.main import build_parser
+
+        job = Job("TMD layers", {"material": "MoS2"}, tmd_edit=edit,
+                  tmd_edit_element="W" if edit == "alloy" else "Se",
+                  tmd_edit_amount=2)
+        command = to_cli(job, out="out/x")
+        build_parser().parse_args(shlex.split(command)[1:])
+
+    def test_a_pristine_job_emits_no_chemistry_flags(self):
+        assert "--janus" not in to_cli(SAMPLES["TMD layers"], out="out/x")

@@ -483,3 +483,66 @@ def test_a_preset_naming_a_compound_updates_both_pickers(app):
     assert app.var_tmd_metal.get() == "Pt"
     assert app.var_tmd_chalcogen.get() == "Te"
     assert app.var_tmd_material.get() == "PtTe2"
+
+
+def test_the_mx2_chemistry_panel_reaches_the_job(app):
+    """Janus faces, alloys, vacancies and antisites existed in tmd/modify
+    from the start and were reachable only from Python — no CLI flag, no
+    GUI control, no mention in jobs.py."""
+    app.var_family.set("dichalcogenide")
+    app.var_mode_kind.set("TMD layers")
+    app.var_tmd_edit.set("alloy")
+    app.var_tmd_edit_element.set("W")
+    app.var_tmd_edit_amount.set(0.4)
+
+    job = app.current_job()
+    assert job.tmd_edit == "alloy"
+    assert job.tmd_edit_element == "W"
+    assert job.tmd_edit_amount == pytest.approx(0.4)
+
+
+def test_the_amount_hint_says_which_of_three_things_it_means(app):
+    """One Amount field serves all four edits, so the hint below it is
+    what keeps the number on screen unambiguous."""
+    app.var_family.set("dichalcogenide")
+    app.var_mode_kind.set("TMD layers")
+
+    app.var_tmd_edit.set("alloy")
+    assert "fraction" in app.lbl_tmd_chem.cget("text")
+
+    app.var_tmd_edit.set("vacancies")
+    assert "count" in app.lbl_tmd_chem.cget("text")
+
+    app.var_tmd_edit.set("janus")
+    assert "face" in app.lbl_tmd_chem.cget("text")
+
+
+def test_the_chemistry_panel_is_dichalcogenide_only(app):
+    """There is no Janus graphene; the panel must not follow the carbon
+    modes the way the dopant panel does."""
+    app.var_family.set("dichalcogenide")
+    app.var_mode_kind.set("TMD layers")
+    assert app.frame_tmd_chem.winfo_manager()
+
+    app.var_family.set("carbon")
+    app.var_mode_kind.set("capped tube")
+    assert not app.frame_tmd_chem.winfo_manager()
+
+
+def test_hint_labels_rewrap_when_the_column_widens(app):
+    """The wraps were pixel values tuned to a 268 px column. After the
+    dividers became draggable a fixed wrap is wrong twice: it clips a
+    larger font, and it keeps the old width after the divider moves."""
+    from nanocarbon_lab.gui.app import ScrollableColumn
+
+    column = ScrollableColumn(app.root, width=200)
+    label = tk.Label(column.interior, text="x" * 400, wraplength=230)
+    label.pack()
+    plain = tk.Label(column.interior, text="short")
+    plain.pack()
+
+    column._rewrap(500)
+    assert int(label.cget("wraplength")) > 230
+    # An ordinary label has wraplength 0, which is the flag that says it
+    # is not an explanatory hint; it must be left alone.
+    assert int(plain.cget("wraplength")) == 0

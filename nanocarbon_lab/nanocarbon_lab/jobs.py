@@ -123,8 +123,22 @@ class Job:
         atoms, ``"bulk"`` on fully sp2 ones. For ``"pentagon"`` the
         fraction is of the pentagon sites, not of the whole structure --
         those differ by a large factor on a long tube.
+    tmd_edit
+        Post-build chemistry for a dichalcogenide: ``None``, ``"janus"``,
+        ``"alloy"``, ``"vacancies"`` or ``"antisites"``. The carbon
+        `dopant` fields do not apply to an MX2 -- substituting a
+        heteroatom for a carbon means nothing there -- so the two
+        families get separate fields rather than one overloaded pair.
+    tmd_edit_element
+        Which species the edit introduces: the new chalcogen for a Janus
+        layer, or the substituent for an alloy. Ignored by the two defect
+        edits.
+    tmd_edit_amount
+        Fraction for an alloy, count for the two defect edits, side
+        (+1 outer / -1 inner) for a Janus layer.
     seed
-        RNG seed, threaded into both the builder and the doping.
+        RNG seed, threaded into the builder, the doping and the MX2
+        chemistry.
     """
 
     mode: str
@@ -132,6 +146,9 @@ class Job:
     dopant: str | None = None
     dopant_conc: float = 0.0
     dopant_site: str = "random"
+    tmd_edit: str | None = None
+    tmd_edit_element: str = "Se"
+    tmd_edit_amount: float = 1.0
     seed: int = 0
 
     def __post_init__(self) -> None:
@@ -198,8 +215,12 @@ def build(job: Job):
     if job.mode in TMD_MODES:
         # The TMD builders are deterministic -- exact crystallography, no
         # random defect placement -- so they take no seed, and passing one
-        # would be a TypeError rather than a no-op.
-        return builders[job.mode](**job.params)
+        # would be a TypeError rather than a no-op. The chemistry that
+        # *is* random is applied afterwards, like carbon's doping.
+        atoms = builders[job.mode](**job.params)
+        if job.tmd_edit:
+            atoms = apply_tmd_chemistry(atoms, job)
+        return atoms
 
     atoms = builders[job.mode](**job.params, seed=job.seed)
     if job.dopant and job.dopant_conc > 0:
@@ -245,6 +266,49 @@ def apply_doping(atoms, job: Job):
     where = {"edge": "edges", "bulk": "bulk"}[site]
     return dope_directed(atoms, job.dopant, where=where,
                          count=count, seed=job.seed)
+
+
+#: Post-build edits for a dichalcogenide. These are the chemistry an MX2
+#: actually undergoes -- there is no such thing as substituting a
+#: heteroatom for a "carbon" here -- so they are a separate axis from the
+#: carbon dopants rather than more entries in the same list.
+TMD_EDITS = ("janus", "alloy", "vacancies", "antisites")
+
+
+def apply_tmd_chemistry(atoms, job: Job):
+    """Apply one post-build edit to a dichalcogenide.
+
+    The counterpart of :func:`apply_doping`, and split out for the same
+    reason: the GUI and the CLI must not each carry their own version of
+    what "40% alloy" means.
+
+    ``tmd_edit_amount`` is deliberately one field doing three jobs -- a
+    fraction for an alloy, a count for the two defect edits, a side for
+    a Janus layer. The alternative is four fields of which three are
+    always ignored, and the GUI would then have to show or hide them per
+    edit anyway.
+    """
+    from .tmd.modify import alloy, antisites, chalcogen_vacancies, make_janus
+
+    edit = job.tmd_edit
+    if edit not in TMD_EDITS:
+        raise ValueError(
+            f"Unknown tmd_edit {edit!r}; expected one of {list(TMD_EDITS)}."
+        )
+    if edit == "janus":
+        side = 1 if job.tmd_edit_amount >= 0 else -1
+        return make_janus(atoms, chalcogen=job.tmd_edit_element, side=side)
+    if edit == "alloy":
+        # Which sublattice follows from the element: a chalcogen replaces
+        # chalcogens and anything else replaces the metal. Asking the user
+        # to say so as well would only let the two disagree.
+        site = "chalcogen" if job.tmd_edit_element in ("S", "Se", "Te") else "metal"
+        return alloy(atoms, job.tmd_edit_element,
+                     fraction=job.tmd_edit_amount, seed=job.seed, site=site)
+    if edit == "vacancies":
+        return chalcogen_vacancies(atoms, n_defects=int(job.tmd_edit_amount),
+                                   seed=job.seed)
+    return antisites(atoms, n_defects=int(job.tmd_edit_amount), seed=job.seed)
 
 
 def estimate_atoms(job: Job) -> int:
@@ -566,6 +630,31 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
 }
 
 
+def _tmd_edit_flags(job: Job) -> list[str]:
+    """The command-line form of one dichalcogenide edit.
+
+    Each edit gets its own flag rather than a generic
+    ``--tmd-edit NAME --amount N`` pair, because the amount means a
+    different thing for each and a shared flag would have to be
+    documented four ways.
+    """
+    edit = job.tmd_edit
+    if edit == "janus":
+        flags = ["--janus", job.tmd_edit_element]
+        if job.tmd_edit_amount < 0:
+            flags += ["--janus-side", "inner"]
+        return flags
+    if edit == "alloy":
+        return ["--alloy", job.tmd_edit_element,
+                "--alloy-fraction", f"{job.tmd_edit_amount:g}",
+                "--seed", str(job.seed)]
+    if edit == "vacancies":
+        return ["--chalcogen-vacancies", str(int(job.tmd_edit_amount)),
+                "--seed", str(job.seed)]
+    return ["--antisites", str(int(job.tmd_edit_amount)),
+            "--seed", str(job.seed)]
+
+
 def to_cli(job: Job, out: str = "out/structure") -> str:
     """The ``nanocarbon`` command line equivalent to this job.
 
@@ -607,9 +696,12 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
             parts += [flag, str(value)]
 
     if job.mode in TMD_MODES or job.mode in HETERO_MODES:
-        # Exact crystallography in both families: no random placement to
-        # seed and no substitutional doping, so emitting either would be
-        # a flag the parser does not have.
+        # Exact crystallography in both families, so no carbon dopant and
+        # nothing to seed -- emitting either would be a flag the parser
+        # does not have. The MX2 chemistry *is* random, though, so it
+        # carries its seed with it.
+        if job.mode in TMD_MODES and job.tmd_edit:
+            parts += _tmd_edit_flags(job)
         parts += ["--out", out]
         return " ".join(parts)
 
@@ -623,10 +715,12 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
 
 __all__ = [
     "DOPANT_SITES",
+    "TMD_EDITS",
     "IMPLICIT_MODES",
     "MODES",
     "Job",
     "apply_doping",
+    "apply_tmd_chemistry",
     "build",
     "estimate_atoms",
     "estimate_cost",

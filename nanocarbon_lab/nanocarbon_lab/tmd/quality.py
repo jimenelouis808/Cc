@@ -31,6 +31,11 @@ STRAIN_INTACT = 0.06
 #: Any two atoms closer than this are overlapping, whatever the species.
 HARD_MIN_DISTANCE = 1.6
 
+#: The X of MX2. Everything else in one of these structures is the M --
+#: which is what makes an alloy's second metal and a Janus layer's second
+#: chalcogen count correctly without being enumerated anywhere.
+CHALCOGENS = ("S", "Se", "Te")
+
 
 def geometry_report(atoms: Atoms) -> dict[str, float | int]:
     """Measured bond lengths, coordination and contacts for an MX2 model.
@@ -55,17 +60,23 @@ def geometry_report(atoms: Atoms) -> dict[str, float | int]:
     first, second, distance = neighbor_list("ijd", atoms, cutoff=cutoff)
     symbols = np.array(atoms.get_chemical_symbols())
 
+    # By role, not by the two symbols in `info`. Those name the parent
+    # compound, and the post-build chemistry deliberately introduces a
+    # third and fourth species: a Janus MoSSe has two chalcogens and a
+    # Mo(1-x)W(x)S2 alloy two metals. Matching only the parent pair
+    # ignored every W-S bond in that alloy, so its metals read as
+    # under-coordinated and its X/M ratio as 3.6 rather than 2.0 -- a
+    # correct structure judged BROKEN.
+    chalcogen_mask = np.isin(symbols, list(CHALCOGENS))
+    metal_mask = ~chalcogen_mask
     is_bond = (
-        ((symbols[first] == metal) & (symbols[second] == chalcogen))
-        | ((symbols[first] == chalcogen) & (symbols[second] == metal))
+        (metal_mask[first] & chalcogen_mask[second])
+        | (chalcogen_mask[first] & metal_mask[second])
     )
     bonds = distance[is_bond]
 
     coordination = np.zeros(len(atoms), dtype=int)
     np.add.at(coordination, first[is_bond], 1)
-
-    metal_mask = symbols == metal
-    chalcogen_mask = symbols == chalcogen
     n_metal = int(metal_mask.sum())
     n_chalcogen = int(chalcogen_mask.sum())
 

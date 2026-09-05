@@ -190,3 +190,62 @@ class TestComposability:
         out = chalcogen_vacancies(out, n_defects=2, seed=0)
         assert set(out.get_chemical_symbols()) == {"Mo", "W", "S", "Se"}
         assert not run_basic_checks(out).errors
+
+
+class TestQualityJudgesEditedStructures:
+    """The verdict must survive the chemistry that is meant to change it.
+
+    `geometry_report` matched bonds and counted sublattices against the
+    two symbols in `info`, which name the *parent* compound. Every edit
+    here introduces a third species, so a Janus MoSSe had its Mo-Se bonds
+    ignored and a Mo(1-x)W(x)S2 alloy its W-S bonds -- the metals came
+    out under-coordinated and X/M read 1.00 and 3.60 against a true 2.00.
+    All four correct structures were reported BROKEN.
+    """
+
+    @staticmethod
+    def _report(atoms):
+        from nanocarbon_lab.tmd.quality import geometry_report
+
+        return geometry_report(atoms)
+
+    def test_a_janus_layer_is_still_mx2(self):
+        from nanocarbon_lab.tmd import build_tmd_monolayer
+        from nanocarbon_lab.tmd.modify import make_janus
+
+        atoms = make_janus(build_tmd_monolayer("MoS2", nx=3, ny=3), "Se")
+        report = self._report(atoms)
+        assert report["stoichiometry"] == pytest.approx(2.0)
+        assert report["metal_coordination_min"] == 6
+        assert report["chalcogen_coordination_min"] == 3
+
+    def test_an_alloy_is_still_mx2(self):
+        from nanocarbon_lab.tmd import build_tmd_monolayer
+        from nanocarbon_lab.tmd.modify import alloy
+
+        atoms = alloy(build_tmd_monolayer("MoS2", nx=3, ny=3), "W",
+                      fraction=0.4, seed=0)
+        report = self._report(atoms)
+        assert report["stoichiometry"] == pytest.approx(2.0)
+        # The second metal's bonds must be counted, not dropped.
+        assert report["metal_coordination_min"] == 6
+
+    def test_both_edits_are_judged_clean(self):
+        from nanocarbon_lab.tmd import build_tmd_monolayer
+        from nanocarbon_lab.tmd.modify import alloy, make_janus
+        from nanocarbon_lab.tmd.quality import tmd_quality
+
+        pristine = build_tmd_monolayer("MoS2", nx=3, ny=3)
+        for atoms in (make_janus(pristine, "Se"),
+                      alloy(pristine, "W", fraction=0.4, seed=0)):
+            verdict, why = tmd_quality(self._report(atoms))
+            assert verdict == "clean", why
+
+    def test_a_chalcogen_alloy_counts_on_the_right_sublattice(self):
+        """MoS(2-2x)Se(2x): two chalcogens, one metal, still X/M = 2."""
+        from nanocarbon_lab.tmd import build_tmd_monolayer
+        from nanocarbon_lab.tmd.modify import alloy
+
+        atoms = alloy(build_tmd_monolayer("MoS2", nx=3, ny=3), "Se",
+                      fraction=0.5, seed=0, site="chalcogen")
+        assert self._report(atoms)["stoichiometry"] == pytest.approx(2.0)

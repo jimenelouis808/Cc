@@ -61,7 +61,7 @@ from ..exports.lammps import write_lammps
 from ..exports.qe import QESettings, write_qe_input
 from ..exports.xyz import write_render_bundle
 from ..hetero import available_layers, build_twisted_bilayer, build_vdw_stack
-from ..jobs import DOPANT_SITES, Job, apply_doping
+from ..jobs import DOPANT_SITES, Job, apply_doping, apply_tmd_chemistry
 from ..tmd import (
     MATERIALS,
     build_tmd_bulk,
@@ -109,6 +109,69 @@ def _add_doping_arguments(p, seed_help: str | None = None) -> None:
                         "builder that records rings.")
     if seed_help:
         p.add_argument("--seed", type=int, default=0, help=seed_help)
+
+
+def _add_tmd_chemistry_arguments(p) -> None:
+    """Attach the post-build chemistry an MX2 actually undergoes.
+
+    Not the carbon `--dopant` flags: substituting a heteroatom for a
+    "carbon" means nothing in a dichalcogenide. What an MX2 gets instead
+    is a Janus face, an alloyed sublattice, chalcogen vacancies or
+    antisites -- all four already in `tmd/modify.py`, and until now
+    reachable only from Python.
+    """
+    group = p.add_mutually_exclusive_group()
+    group.add_argument("--janus", metavar="X", choices=["S", "Se", "Te"],
+                       help="Replace the chalcogens on one face, giving a "
+                            "Janus MXY layer (MoSSe and friends). Breaks the "
+                            "mirror symmetry, switching on an out-of-plane "
+                            "dipole neither parent has.")
+    group.add_argument("--alloy", metavar="ELEMENT",
+                       help="Substitute this element into one sublattice: a "
+                            "chalcogen alloys the chalcogens, anything else "
+                            "the metal. Mo(1-x)W(x)S2 and MoS(2-2x)Se(2x) "
+                            "move their band gap continuously with x.")
+    group.add_argument("--chalcogen-vacancies", type=int, metavar="N",
+                       help="Remove N chalcogen atoms — the commonest point "
+                            "defect in grown MoS2.")
+    group.add_argument("--antisites", type=int, metavar="N",
+                       help="Put a metal on N chalcogen sites, as in "
+                            "sulphur-poor growth.")
+    p.add_argument("--janus-side", choices=["outer", "inner"], default="outer",
+                   help="Which face --janus replaces. On a tube these are the "
+                        "outer and inner walls; on a flat layer, top and "
+                        "bottom.")
+    p.add_argument("--alloy-fraction", type=float, default=0.5, metavar="X",
+                   help="Fraction of the sublattice --alloy replaces. The "
+                        "achieved fraction is reported, since nine sites "
+                        "cannot be split in half.")
+
+
+
+def _apply_tmd_chemistry(atoms, args):
+    """Run whichever chemistry flag was given, if any."""
+    if getattr(args, "janus", None):
+        edit, element = "janus", args.janus
+        amount = 1.0 if args.janus_side == "outer" else -1.0
+    elif getattr(args, "alloy", None):
+        edit, element, amount = "alloy", args.alloy, args.alloy_fraction
+    elif getattr(args, "chalcogen_vacancies", None):
+        edit, element = "vacancies", "Se"
+        amount = float(args.chalcogen_vacancies)
+    elif getattr(args, "antisites", None):
+        edit, element, amount = "antisites", "Se", float(args.antisites)
+    else:
+        return atoms
+
+    job = Job(mode="TMD layers", tmd_edit=edit, tmd_edit_element=element,
+              tmd_edit_amount=amount, seed=getattr(args, "seed", 0))
+    try:
+        return apply_tmd_chemistry(atoms, job)
+    except ValueError as exc:
+        # Asking for more vacancies than there are chalcogens, or a Janus
+        # face of the species already there: a mistake in the request, not
+        # a crash worth a traceback.
+        raise SystemExit(str(exc)) from None
 
 
 def _add_material_argument(p) -> None:
@@ -368,6 +431,33 @@ def _report_structure(atoms, xyz_path, json_path):
     print(f"  sp2 verdict = {verdict.upper()}: {why}")
 
 
+def _report_tmd_chemistry(atoms) -> None:
+    """Print any post-build MX2 edit, and stay silent when there was none.
+
+    The achieved amount, not the requested one: nine metal sites cannot
+    be split in half, so an alloy asked for at 50% lands somewhere near
+    it and reporting the request would be reporting a number that is not
+    in the structure.
+    """
+    info = atoms.info
+    if info.get("janus"):
+        print(f"  janus       = {info['chalcogen_top']} outward / "
+              f"{info['chalcogen_bottom']} inward, "
+              f"{info['janus_replaced']} atoms replaced")
+    if info.get("alloy"):
+        alloy_info = info["alloy"]
+        print(f"  alloy       = {alloy_info['replacement']} on the "
+              f"{alloy_info['site']} sublattice, "
+              f"{alloy_info['achieved_fraction']:.1%} achieved "
+              f"(asked {alloy_info['requested_fraction']:.0%})")
+    for entry in info.get("defect_log", []):
+        if entry.get("type") == "chalcogen_vacancy":
+            print(f"  vacancies   = {entry['count']} chalcogen removed"
+                  f"{' (paired)' if entry.get('paired') else ''}")
+        elif entry.get("type") == "antisite":
+            print(f"  antisites   = {entry['count']} metal on chalcogen sites")
+
+
 def _report_tmd(atoms, xyz_path, json_path, stoichiometric=True):
     """Summary printer for the dichalcogenides.
 
@@ -411,6 +501,7 @@ def _report_tmd(atoms, xyz_path, json_path, stoichiometric=True):
               "from coiling)")
         print(f"  total       = {info['total_strain']:.1%} on the outer "
               f"{info['chalcogen']} plane")
+    _report_tmd_chemistry(atoms)
     print(f"  M-X bond    = {report['bond_min']:.3f} / {report['bond_mean']:.3f} "
           f"/ {report['bond_max']:.3f} A  (ideal {report['bond_ideal']:.3f})")
     print(f"  coordination= metal {report['metal_coordination_min']}-"
@@ -418,6 +509,11 @@ def _report_tmd(atoms, xyz_path, json_path, stoichiometric=True):
           f"{report['chalcogen_coordination_min']}-"
           f"{report['chalcogen_coordination_max']}")
     print(f"  X/M ratio   = {report['stoichiometry']:.3f}")
+    # A point defect is off-composition by construction -- that is what
+    # a vacancy or an antisite *is* -- so it must not be judged against
+    # perfect MX2 any more than a deliberately terminated ribbon is.
+    if atoms.info.get("defect_log"):
+        stoichiometric = False
     verdict, why = tmd_quality(report, expect_stoichiometric=stoichiometric,
                                structure_type=info.get("structure_type"))
     print(f"  verdict     = {verdict.upper()}: {why}")
@@ -431,12 +527,14 @@ def _cmd_tmd(args):
         args.material, n_layers=args.layers, phase=args.phase,
         stacking=args.stacking, nx=args.nx, ny=args.ny, vacuum=args.vacuum,
     )
+    atoms = _apply_tmd_chemistry(atoms, args)
     return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)))
 
 
 def _cmd_tmd_bulk(args):
     atoms = build_tmd_bulk(args.material, phase=args.phase,
                            stacking=args.stacking, nx=args.nx, ny=args.ny)
+    atoms = _apply_tmd_chemistry(atoms, args)
     return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)))
 
 
@@ -445,6 +543,7 @@ def _cmd_tmd_ribbon(args):
         args.material, width=args.width, length=args.length, edge=args.edge,
         termination=args.termination, phase=args.phase,
     )
+    atoms = _apply_tmd_chemistry(atoms, args)
     return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)),
                        stoichiometric=(args.termination == "mixed"))
 
@@ -452,6 +551,7 @@ def _cmd_tmd_ribbon(args):
 def _cmd_tmd_tube(args):
     atoms = build_tmd_nanotube(args.material, n=args.n, m=args.m,
                                length=args.length, phase=args.phase)
+    atoms = _apply_tmd_chemistry(atoms, args)
     return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)))
 
 
@@ -503,6 +603,7 @@ def _cmd_tmd_junction(args):
         arm_length=args.arm_length, blend=args.blend, parity=args.parity,
         phase=args.phase, seed=args.seed,
     )
+    atoms = _apply_tmd_chemistry(atoms, args)
     xyz_path, json_path = write_render_bundle(atoms, Path(args.out))
     info = atoms.info
     verdict, why = schwarzite_quality(atoms)
@@ -538,6 +639,7 @@ def _cmd_tmd_schwarzite(args):
         args.material, kind=args.kind, cell=args.cell, parity=args.parity,
         phase=args.phase, seed=args.seed,
     )
+    atoms = _apply_tmd_chemistry(atoms, args)
     xyz_path, json_path = write_render_bundle(atoms, Path(args.out))
     info = atoms.info
     verdict, why = schwarzite_quality(atoms)
@@ -572,6 +674,7 @@ def _cmd_tmd_coil(args):
         pitch=args.pitch, turns=args.turns, phase=args.phase,
         handedness=1 if args.handedness == "right" else -1,
     )
+    atoms = _apply_tmd_chemistry(atoms, args)
     return _report_tmd(atoms, *write_render_bundle(atoms, Path(args.out)))
 
 
@@ -867,6 +970,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Build an MX2 monolayer, bilayer or few-layer slab (MoS2, WS2...).",
     )
     _add_material_argument(td)
+    _add_tmd_chemistry_arguments(td)
+    td.add_argument("--seed", type=int, default=0,
+                    help="RNG seed for the MX2 chemistry flags; the same "
+                         "seed always picks the same sites.")
     td.add_argument("--layers", type=int, default=1,
                     help="X-M-X sandwiches: 1 = monolayer, 2 = bilayer.")
     td.add_argument("--phase", default="2H", choices=phases,
@@ -887,6 +994,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     tb = sub.add_parser("tmd-bulk", help="Build the bulk MX2 crystal.")
     _add_material_argument(tb)
+    _add_tmd_chemistry_arguments(tb)
+    tb.add_argument("--seed", type=int, default=0,
+                    help="RNG seed for the MX2 chemistry flags; the same "
+                         "seed always picks the same sites.")
     tb.add_argument("--phase", default="2H", choices=phases)
     tb.add_argument("--stacking", default="2H", choices=stackings,
                     help="Sets the repeat: 2H is two layers per cell, 3R "
@@ -898,6 +1009,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     tr = sub.add_parser("tmd-ribbon", help="Build an MX2 nanoribbon.")
     _add_material_argument(tr)
+    _add_tmd_chemistry_arguments(tr)
+    tr.add_argument("--seed", type=int, default=0,
+                    help="RNG seed for the MX2 chemistry flags; the same "
+                         "seed always picks the same sites.")
     tr.add_argument("--width", type=int, default=6, help="Lattice rows across.")
     tr.add_argument("--length", type=int, default=1, help="Repeats along the axis.")
     tr.add_argument("--edge", default="zigzag", choices=["zigzag", "armchair"])
@@ -916,6 +1031,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Roll an MX2 monolayer into an (n, m) nanotube.",
     )
     _add_material_argument(tt)
+    _add_tmd_chemistry_arguments(tt)
+    tt.add_argument("--seed", type=int, default=0,
+                    help="RNG seed for the MX2 chemistry flags; the same "
+                         "seed always picks the same sites.")
     tt.add_argument("--n", type=int, default=30)
     tt.add_argument("--m", type=int, default=0,
                     help="(n,0) zigzag, (n,n) armchair, else chiral.")
@@ -965,6 +1084,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Build a finite, closed MX2 tube junction (L, T, Y or X).",
     )
     _add_material_argument(tj)
+    _add_tmd_chemistry_arguments(tj)
     tj.add_argument("--kind", default="Y", choices=["L", "T", "Y", "X"])
     tj.add_argument("--tube-radius", type=float, default=12.0,
                     help="Arm radius in A. MX2 needs a wide tube: the "
@@ -987,6 +1107,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Build a periodic MX2 schwarzite (negative-curvature MX2).",
     )
     _add_material_argument(ts)
+    _add_tmd_chemistry_arguments(ts)
     ts.add_argument("--kind", default="primitive",
                     choices=["primitive", "diamond", "gyroid"])
     ts.add_argument("--cell", type=float, default=36.0,
@@ -1007,6 +1128,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Coil an MX2 nanotube onto a helix (elastic bend, no defects).",
     )
     _add_material_argument(tc)
+    _add_tmd_chemistry_arguments(tc)
+    tc.add_argument("--seed", type=int, default=0,
+                    help="RNG seed for the MX2 chemistry flags; the same "
+                         "seed always picks the same sites.")
     tc.add_argument("--n", type=int, default=30)
     tc.add_argument("--m", type=int, default=0,
                     help="(n,0) zigzag, (n,n) armchair, else chiral.")

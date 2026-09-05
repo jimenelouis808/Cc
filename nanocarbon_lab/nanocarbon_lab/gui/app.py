@@ -81,12 +81,18 @@ from ..jobs import (
     DOPANT_SITES,
     FAMILIES,
     MODES,
+    TMD_EDITS,
     Job,
     estimate_cost,
     to_cli,
 )
 from ..tmd import MATERIALS as TMD_MATERIALS
-from ..tmd.materials import available_metals, chalcogens_for, material_for
+from ..tmd.materials import (
+    available_chalcogens,
+    available_metals,
+    chalcogens_for,
+    material_for,
+)
 from ..tmd.quality import geometry_report as tmd_geometry_report
 from ..tmd.quality import tmd_quality
 from ..utils.constants import MAX_DOPING_FRACTION, MIN_DOPING_FRACTION
@@ -138,6 +144,13 @@ MUTED = "#777777"
 # segments still costs seconds per redraw, and no one can see individual
 # bonds at that density anyway.
 PREVIEW_BOND_LIMIT = 20000
+
+# Starting widths of the two side columns, in pixels. Wide enough for the
+# longest label at the default font -- the old 268 clipped "Subdivision
+# freq (diameter)" and the radius hint beneath it. They are a starting
+# point, not a constraint: the dividers drag.
+PARAM_COLUMN_WIDTH = 310
+ACTION_COLUMN_WIDTH = 330
 
 # Structures worth having one click away. Keys are parameter names as
 # registered with `_var`, so applying a preset is a plain loop and the
@@ -298,7 +311,8 @@ class ScrollableColumn(ttk.Frame):
     nothing clips it or tells you it is there.
     """
 
-    def __init__(self, parent: tk.Widget, width: int = 268) -> None:
+    def __init__(self, parent: tk.Widget,
+                 width: int = PARAM_COLUMN_WIDTH) -> None:
         super().__init__(parent)
         self._canvas = tk.Canvas(self, width=width, highlightthickness=0,
                                  background=parent.winfo_toplevel().cget("background"))
@@ -325,6 +339,32 @@ class ScrollableColumn(ttk.Frame):
 
     def _on_canvas_resize(self, event: tk.Event) -> None:
         self._canvas.itemconfigure(self._window, width=event.width)
+        self._rewrap(event.width)
+
+    def _rewrap(self, width: int) -> None:
+        """Re-wrap the explanatory labels to the column's current width.
+
+        Every hint in this app was written with a ``wraplength`` in
+        pixels, and two dozen of them were tuned to a column that no
+        longer has a fixed width. A hardcoded wrap is wrong twice over:
+        it clips when the font is larger than the author's, and it keeps
+        wrapping at the old width after the divider is dragged wider,
+        leaving a ragged column beside empty space.
+
+        A label that wraps has a non-zero ``wraplength`` and an ordinary
+        one has zero, so that flag is the selector -- no registry to keep
+        in step, and hints added later are picked up for free.
+        """
+        target = max(120, width - 22)
+        stack = [self.interior]
+        while stack:
+            widget = stack.pop()
+            stack.extend(widget.winfo_children())
+            try:
+                if int(widget.cget("wraplength")) > 0:
+                    widget.configure(wraplength=target)
+            except (tk.TclError, ValueError):
+                continue  # not a label, or no such option
 
     def _bind_wheel(self) -> None:
         self._canvas.bind_all("<MouseWheel>", self._on_wheel)
@@ -376,20 +416,35 @@ class NanocarbonGUI:
 
     # ---------------------------------------------------------------- layout
     def _build_widgets(self) -> None:
-        outer = ttk.Frame(self.root, padding=8)
-        outer.pack(fill="both", expand=True)
+        """Three columns with draggable dividers.
+
+        Packed at fixed widths this clipped its own labels: "Subdivision
+        freq (diameter)" and the derived-radius hint under it both ran off
+        the end of a 268 px column, and there was no way to widen it. A
+        fixed pixel width cannot be right anyway -- it depends on the
+        font, the theme and the platform, none of which this knows.
+
+        A PanedWindow costs nothing and fixes the class of bug rather
+        than the instance: the columns start wide enough for the longest
+        label at the default font, and anyone whose font is bigger, or
+        who wants the preview larger, drags the divider.
+        """
+        outer = ttk.PanedWindow(self.root, orient="horizontal")
+        outer.pack(fill="both", expand=True, padx=8, pady=8)
 
         left = ScrollableColumn(outer)
-        left.pack(side="left", fill="y", padx=(0, 8))
         centre = ttk.Frame(outer)
-        centre.pack(side="left", fill="both", expand=True)
-        right = ttk.Frame(outer, width=300)
-        right.pack(side="left", fill="y", padx=(8, 0))
-        right.pack_propagate(False)
+        right = ScrollableColumn(outer, width=ACTION_COLUMN_WIDTH)
+        # weight=0 on the two side columns: growing the window makes the
+        # 3D preview bigger, which is what the extra space is for, rather
+        # than stretching two columns of labels.
+        outer.add(left, weight=0)
+        outer.add(centre, weight=1)
+        outer.add(right, weight=0)
 
         self._build_params(left.interior)
         self._build_preview(centre)
-        self._build_actions(right)
+        self._build_actions(right.interior)
 
     # ------------------------------------------------------------ parameters
     def _var(self, name: str, var: tk.Variable) -> tk.Variable:
@@ -533,6 +588,14 @@ class NanocarbonGUI:
         self.var_dopant = self._var("dopant", tk.StringVar(value="none"))
         self.var_dopant_conc = self._var("dopant_conc", tk.DoubleVar(value=0.03))
         self.var_dopant_site = self._var("dopant_site", tk.StringVar(value="random"))
+        # The MX2 counterpart of the carbon dopant vars. Separate because
+        # the chemistry is: there is no "substitute a heteroatom for a
+        # carbon" in a dichalcogenide, and no Janus face in graphene.
+        self.var_tmd_edit = self._var("tmd_edit", tk.StringVar(value="none"))
+        self.var_tmd_edit_element = self._var("tmd_edit_element",
+                                              tk.StringVar(value="Se"))
+        self.var_tmd_edit_amount = self._var("tmd_edit_amount",
+                                             tk.DoubleVar(value=0.5))
         self.var_n_sw = self._var("n_sw", tk.IntVar(value=0))
         self.var_n_dv = self._var("n_dv", tk.IntVar(value=0))
         self.var_mw_shells = self._var("mw_shells", tk.IntVar(value=2))
@@ -602,7 +665,12 @@ class NanocarbonGUI:
         self.var_het_nx = self._var("het_nx", tk.IntVar(value=1))
         self.var_het_ny = self._var("het_ny", tk.IntVar(value=1))
 
-        self.lbl_radius = ttk.Label(box, text="", foreground="#2e86ab")
+        # A wraplength even though this is one short line: it is what marks
+        # a label as an explanatory hint for ScrollableColumn._rewrap, and
+        # without it this one alone kept clipping while the rest reflowed.
+        self.lbl_radius = ttk.Label(box, text="", foreground="#2e86ab",
+                                    wraplength=PARAM_COLUMN_WIDTH - 22,
+                                    justify="left")
 
         self._param(box, "Body rings (length)", self.var_rings, 2, 30, 0,
                     integer=True, hard_hi=200)
@@ -873,6 +941,34 @@ class NanocarbonGUI:
                                  justify="left")
         self.lbl_tmd.grid(row=3, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
+        # --- dichalcogenide chemistry: the MX2 counterpart of doping
+        self.frame_tmd_chem = ttk.LabelFrame(parent, text="MX2 chemistry",
+                                             padding=8)
+        self.frame_tmd_chem.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_tmd_chem, text="Edit").grid(row=0, column=0,
+                                                         sticky="w")
+        ttk.Combobox(self.frame_tmd_chem, textvariable=self.var_tmd_edit,
+                     values=["none", *TMD_EDITS], state="readonly",
+                     width=10).grid(row=0, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_edit.trace_add("write", lambda *_: self._on_tmd_edit_change())
+        ttk.Label(self.frame_tmd_chem, text="Element").grid(row=1, column=0,
+                                                            sticky="w")
+        self.cmb_tmd_edit_element = ttk.Combobox(
+            self.frame_tmd_chem, textvariable=self.var_tmd_edit_element,
+            values=list(available_chalcogens()), state="readonly", width=10)
+        self.cmb_tmd_edit_element.grid(row=1, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_edit_element.trace_add(
+            "write", lambda *_: self._update_tmd_edit_hint())
+        self._param(self.frame_tmd_chem, "Amount", self.var_tmd_edit_amount,
+                    0.0, 1.0, 2, resolution=0.05, hard_hi=200.0,
+                    command=self._update_tmd_edit_hint)
+        self.lbl_tmd_chem = ttk.Label(self.frame_tmd_chem, text="",
+                                      foreground=MUTED,
+                                      font=("TkDefaultFont", 8), wraplength=230,
+                                      justify="left")
+        self.lbl_tmd_chem.grid(row=4, column=0, columnspan=2, sticky="w",
+                               pady=(4, 0))
+
         # --- layers / bulk
         self.frame_tmd_layers = ttk.LabelFrame(parent, text="Layers", padding=8)
         self.frame_tmd_layers.columnconfigure(0, weight=1)
@@ -1104,7 +1200,7 @@ class NanocarbonGUI:
                       self.frame_tmd_ribbon, self.frame_tmd_tube,
                       self.frame_tmd_coil, self.frame_tmd_sw,
                       self.frame_het, self.frame_twist, self.frame_stack,
-                      self.frame_tmd_j,
+                      self.frame_tmd_j, self.frame_tmd_chem,
                       self.frame_surface, self.frame_chem):
             frame.pack_forget()
 
@@ -1141,7 +1237,9 @@ class NanocarbonGUI:
                 # indices as well as the helix panel.
                 self.frame_tmd_tube.pack(fill="x", pady=(8, 0))
                 self.frame_tmd_coil.pack(fill="x", pady=(8, 0))
+            self.frame_tmd_chem.pack(fill="x", pady=(8, 0))
             self._update_tmd_hint()
+            self._update_tmd_edit_hint()
             self._schedule_estimate()
             return
 
@@ -1288,6 +1386,59 @@ class NanocarbonGUI:
         finally:
             self._syncing_material = False
         self._update_tmd_hint()
+
+    def _on_tmd_edit_change(self) -> None:
+        """Repoint the element list and the amount at the chosen edit.
+
+        One "Amount" field serves all four edits because it means a
+        different thing in each -- a fraction, a count, a face -- and four
+        fields of which three are always irrelevant would be worse. What
+        makes that workable is the hint below saying which it is right
+        now, so the number on screen is never ambiguous.
+        """
+        edit = self.var_tmd_edit.get()
+        if edit == "janus":
+            self.cmb_tmd_edit_element.config(values=list(available_chalcogens()))
+        elif edit == "alloy":
+            # Either sublattice: a chalcogen alloys the chalcogens, a
+            # metal the metals, and which one follows from the element.
+            self.cmb_tmd_edit_element.config(
+                values=list(available_metals()) + list(available_chalcogens()))
+        # Defect edits introduce no species, so the element box is left
+        # showing whatever it had; the hint says it is unused.
+        self._update_tmd_edit_hint()
+        self._schedule_estimate()
+
+    def _update_tmd_edit_hint(self) -> None:
+        """Say what the Amount field means for the current edit."""
+        edit = self.var_tmd_edit.get()
+        amount = float(self.var_tmd_edit_amount.get())
+        element = self.var_tmd_edit_element.get()
+        if edit == "none":
+            text = ("Pristine MX2. The edits here are the chemistry a "
+                    "dichalcogenide actually undergoes — there is no "
+                    "substituting a heteroatom for a carbon in one.")
+        elif edit == "janus":
+            face = "outward" if amount >= 0 else "inward"
+            text = (f"Amount is the face: ≥0 puts {element} on the {face} "
+                    "one (the outer wall of a tube, the top of a layer), "
+                    "negative on the other. Breaks the mirror symmetry, "
+                    "switching on an out-of-plane dipole neither parent has.")
+        elif edit == "alloy":
+            site = ("chalcogen" if element in available_chalcogens() else "metal")
+            text = (f"Amount is the fraction of the {site} sublattice "
+                    f"replaced by {element} ({amount:.0%}). The achieved "
+                    "fraction is reported, since nine sites cannot be split "
+                    "in half.")
+        elif edit == "vacancies":
+            text = (f"Amount is a count: {int(amount)} chalcogen atoms "
+                    "removed. The element box is unused. This is the "
+                    "commonest point defect in grown MoS2.")
+        else:
+            text = (f"Amount is a count: {int(amount)} metal atoms put on "
+                    "chalcogen sites, as in sulphur-poor growth. The "
+                    "element box is unused.")
+        self.lbl_tmd_chem.config(text=text)
 
     def _update_dopant_hint(self) -> None:
         """Say what the chosen dopant is and whether this much is real.
@@ -1590,12 +1741,21 @@ class NanocarbonGUI:
             dopant_site=self.var_dopant_site.get(),
             seed=int(self.var_seed.get()),
         )
+        edit = self.var_tmd_edit.get()
+        tmd_chemistry = dict(
+            tmd_edit=None if edit == "none" else edit,
+            tmd_edit_element=self.var_tmd_edit_element.get(),
+            tmd_edit_amount=float(self.var_tmd_edit_amount.get()),
+        )
 
         if mode.startswith("TMD"):
             # The dichalcogenide builders take no seed and no dopant: the
             # placement is exact crystallography with nothing random in
             # it, so `common` would only carry arguments they reject.
-            return Job(mode=mode, params=self._tmd_params(mode), seed=0)
+            # ...but the MX2 chemistry that follows the build *is*
+            # random, so it brings the seed with it.
+            return Job(mode=mode, params=self._tmd_params(mode),
+                       seed=int(self.var_seed.get()), **tmd_chemistry)
 
         if mode in ("twisted bilayer", "vdW stack"):
             # Commensurate stacking is exact too, for the same reason.

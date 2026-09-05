@@ -1286,6 +1286,30 @@ alloy it, knock sulphur out of it:
 * **Antisites** (`antisites`) — a metal on a chalcogen site, as in
   sulphur-poor growth.
 
+All four are on every `tmd-*` sub-command and in the GUI's **MX2
+chemistry** panel — they are what a dichalcogenide actually undergoes,
+where `--dopant` is meaningless (there is no carbon to replace):
+
+```bash
+nanocarbon tmd --metal Mo --chalcogen S --nx 3 --ny 3 --janus Se --out out/mosse
+nanocarbon tmd --material MoS2 --alloy W --alloy-fraction 0.4 --out out/mowS2
+nanocarbon tmd-tube --material MoS2 --n 40 --chalcogen-vacancies 6 --out out/nt
+nanocarbon tmd-junction --kind Y --antisites 4 --out out/y_defect
+```
+
+Judging these needed a fix. `geometry_report` matched bonds and counted
+sublattices against the two symbols naming the **parent** compound, and
+every one of these edits introduces a third species — so a Janus MoSSe
+had its Mo–Se bonds ignored and an Mo(1−x)W(x)S₂ alloy its W–S bonds.
+Both came out under-coordinated, with X/M reading 1.00 and 3.60 against
+a true 2.00, and all four correct structures were reported **BROKEN**.
+Species are now classified by **role** — S/Se/Te are the X and
+everything else the M — so a second metal or a second chalcogen counts
+without being enumerated anywhere. A point defect is off-composition by
+construction, so vacancies and antisites are exempted from the
+stoichiometry check the way a deliberately terminated ribbon already
+was.
+
 ## Repository layout
 
 ```

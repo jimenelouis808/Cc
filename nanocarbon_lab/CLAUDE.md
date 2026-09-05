@@ -383,6 +383,53 @@ Adding a material means adding its metal to `COVALENT_RADII`,
 falls **below** that material's lattice constant -- above it, every metal
 bonds to its six in-plane neighbours and reads as 12-coordinate.
 
+## Removing an atom renumbers every atom after it
+
+`utils/metadata.py` exists because two deletion paths -- carbon
+`introduce_vacancies` and `chalcogen_vacancies` -- copied `atoms.info`
+wholesale. The builders record `info["bonds"]` and `info["rings"]` as
+**atom indices**, so after removing three atoms from a 240-atom capped
+tube the bond indices still ran to 239 against 237 atoms, and every
+index above a removed atom pointed at the wrong atom.
+
+Nothing complained, which is what made it dangerous.
+`coordination_numbers` prefers the recorded graph when it exists, so
+validation read the corrupted one and passed; the render bundle writes
+those same indices to JSON, so a defected tube drew bonds between atoms
+that were never bonded.
+
+Any function that deletes atoms must build its survivor list with
+`keep_indices` and pass `atoms.info` through `remap_after_removal`.
+Groups that lost a member are **dropped**, not repaired -- a bond with
+one end missing is not a bond and a pentagon missing an atom is not a
+pentagon -- and `ring_counts` is recomputed from the survivors rather
+than carried, since a census contradicting the rings beside it is only
+noticed after it has been plotted. **A new index-carrying `info` key
+must be added to `INDEX_LIST_KEYS`**, not only to the builder writing it.
+
+## MX2 quality is judged by role, not by the parent formula
+
+`geometry_report` used to match bonds and count sublattices against
+`info["metal"]` and `info["chalcogen"]`, which name the compound the
+structure was *built* from. Every edit in `tmd/modify.py` introduces a
+third species, so a Janus MoSSe had its Mo-Se bonds ignored and an
+Mo(1-x)W(x)S2 alloy its W-S bonds: both read as under-coordinated, X/M
+came out 1.00 and 3.60 against a true 2.00, and four correct structures
+were reported BROKEN.
+
+Classification is now by role -- `CHALCOGENS` is S/Se/Te and everything
+else is the metal -- so a second metal or chalcogen counts without being
+enumerated. Do not reintroduce a symbol comparison here.
+
+Vacancies and antisites *are* off-composition; that is what they are.
+The CLI drops `expect_stoichiometric` when `info["defect_log"]` is
+present, exactly as it already did for a deliberately terminated ribbon.
+
+`jobs.apply_tmd_chemistry` is the single policy, and `tmd_edit_amount`
+is deliberately one field meaning a fraction, a count or a face
+depending on the edit -- four fields of which three are always ignored
+would be worse, and the GUI hint says which it is.
+
 ## Bond detection is element-aware, and must not be quadratic
 
 Two faults here were load-bearing and are pinned by
@@ -476,6 +523,16 @@ Python cannot safely interrupt a thread. Consequences to respect:
 * If spawning fails at all, the worker degrades to a thread rather than
   refusing to build; cancel is then advisory and `worker.degraded` says
   so. Keep that fallback.
+
+The three columns are a **PanedWindow**, not fixed-width packs. Packed
+at 268 px the parameter column clipped its own labels ("Subdivision freq
+(diameter)") with no way to widen it, and a pixel width cannot be right
+anyway -- it depends on the font, the theme and the platform. For the
+same reason `ScrollableColumn._rewrap` re-wraps the explanatory labels
+to the column's live width; a non-zero `wraplength` is what marks a
+label as a hint, so new hints are picked up for free and ordinary labels
+are left alone. Do not put a fixed `wraplength` back in as the final
+word.
 
 The GUI never opens a modal dialog. `messagebox` is deliberately not
 imported: a modal blocks the Tk event loop, which wedges a headless run

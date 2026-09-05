@@ -32,6 +32,8 @@ from __future__ import annotations
 import numpy as np
 from ase import Atoms
 
+from ..utils.metadata import keep_indices, remap_after_removal
+
 #: Chalcogen species a Janus layer may be given, in order of radius.
 JANUS_CHALCOGENS = ("S", "Se", "Te")
 
@@ -251,9 +253,11 @@ def chalcogen_vacancies(atoms: Atoms, n_defects: int = 1, seed: int = 0,
             distances[candidates == index] = np.inf
             remove.add(int(candidates[int(np.argmin(distances))]))
 
-    keep = [i for i in range(len(atoms)) if i not in remove]
+    keep = keep_indices(len(atoms), remove)
     out = atoms[keep]
-    out.info = dict(atoms.info)
+    # See utils/metadata: a curved MX2 records its own bond graph, and
+    # copying those indices past a deletion corrupts it silently.
+    out.info = remap_after_removal(atoms.info, keep)
     out.info.setdefault("defect_log", [])
     out.info["defect_log"] = list(out.info["defect_log"]) + [
         {"type": "chalcogen_vacancy", "count": len(remove),
