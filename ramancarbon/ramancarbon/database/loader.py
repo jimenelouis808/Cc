@@ -8,10 +8,10 @@ the ``source``/``confidence`` metadata all the way through to the report.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Optional, Sequence
 
 #: Directory holding the JSON files. Overridable via :func:`load_database`.
 DATA_DIR = Path(__file__).resolve().parent / "data"

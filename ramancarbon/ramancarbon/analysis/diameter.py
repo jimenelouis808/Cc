@@ -26,11 +26,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, Sequence
+from typing import Optional, Sequence
 
-import numpy as np
 
-from ..database import Database, RBMParameterisation, load_database
+from ..database import Database, load_database
 
 
 @dataclass

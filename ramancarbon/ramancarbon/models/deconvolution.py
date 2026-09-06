@@ -20,9 +20,18 @@ literature, each with the material class it was designed for:
     most complete and the most easily abused: five overlapping components
     over an 800 cm⁻¹ window are strongly correlated, and the fitter reports
     that correlation rather than hiding it.
+``swcnt_full``
+    D + G⁻ + G⁺ + D′ over the whole D–G window. The right model whenever
+    the sample has an RBM: the four-band model above has no G⁻, so on a
+    nanotube spectrum the D band stretches to its width limit trying to
+    absorb the G⁻ intensity, and the resulting I_D/I_G is far too large.
+    That failure is not hypothetical — it is what the four-band model does
+    to a metallic tube, whose broad Breit–Wigner–Fano G⁻ reaches well below
+    1500 cm⁻¹.
 ``swcnt_g``
-    G⁻ + G⁺ (+ D′), with G⁻ optionally Breit–Wigner–Fano for metallic
-    tubes. The model for the G region of single- and double-walled tubes.
+    G⁻ + G⁺ (+ D′) over the G region alone, with G⁻ optionally
+    Breit–Wigner–Fano for metallic tubes. Use when only the G region
+    matters.
 ``rbm``
     A variable number of narrow Lorentzians over the RBM window, seeded
     from the peak finder.
@@ -54,6 +63,7 @@ PRESETS = (
     "three_band",
     "four_band",
     "five_band",
+    "swcnt_full",
     "swcnt_g",
     "rbm",
     "two_d",
@@ -65,6 +75,7 @@ PRESET_LABELS = {
     "three_band": "3 bandas: D + G + D'",
     "four_band": "4 bandas: D + D3 + G + D'",
     "five_band": "5 bandas (Sadezky): D4 + D + D3 + G + D'",
+    "swcnt_full": "Nanotubo: D + G⁻ + G⁺ + D'",
     "swcnt_g": "Región G de SWCNT: G⁻ + G⁺ + D'",
     "rbm": "Región RBM: lorentzianas estrechas",
     "two_d": "Banda 2D",
@@ -76,6 +87,7 @@ PRESET_BANDS = {
     "three_band": ("D", "G", "D'"),
     "four_band": ("D", "D3", "G", "D'"),
     "five_band": ("D4", "D", "D3", "G", "D'"),
+    "swcnt_full": ("D", "G-", "G+", "D'"),
 }
 
 #: Default fit windows in cm⁻¹, at the database's reference excitation.
@@ -84,6 +96,7 @@ PRESET_WINDOWS = {
     "three_band": (1100.0, 1750.0),
     "four_band": (1050.0, 1750.0),
     "five_band": (900.0, 1800.0),
+    "swcnt_full": (1100.0, 1750.0),
     "swcnt_g": (1450.0, 1700.0),
     "two_d": (2500.0, 2850.0),
 }
@@ -158,7 +171,14 @@ def build_model(
 
     peaks: list[PeakSpec] = []
     for key in PRESET_BANDS[preset]:
-        peaks.append(_spec_for_band(spectrum, key, database, laser_ev))
+        profile = "bwf" if (key == "G-" and metallic) else None
+        spec = _spec_for_band(spectrum, key, database, laser_ev, profile=profile)
+        if key == "G-" and metallic:
+            spec.fwhm = 60.0
+            spec.fwhm_bounds = (20.0, 160.0)
+            spec.extra = (-0.12,)
+            spec.extra_bounds = ((-0.45, 0.0),)
+        peaks.append(spec)
     return FitModel(peaks=peaks, window=(lo, hi), background=background, name=preset)
 
 
@@ -351,6 +371,7 @@ def compare_models(
     presets: Iterable[str] = ("two_band", "three_band", "four_band", "five_band"),
     criterion: str = "bic",
     db: Optional[Database] = None,
+    metallic: bool = False,
     **fit_kwargs,
 ) -> ModelComparison:
     """Fit several deconvolution models and rank them.
@@ -374,6 +395,9 @@ def compare_models(
         ``"bic"`` or ``"aic"``.
     db:
         Loaded database.
+    metallic:
+        Forwarded to :func:`build_model`, so a ``swcnt_full`` candidate gets
+        a Breit–Wigner–Fano G⁻ when the tubes are metallic.
     **fit_kwargs:
         Passed to :func:`~ramancarbon.models.fitting.fit_model`.
 
@@ -406,7 +430,9 @@ def compare_models(
     failures: dict[str, str] = {}
     for name in names:
         try:
-            model = build_model(spectrum, preset=name, db=database, window=common)
+            model = build_model(
+                spectrum, preset=name, metallic=metallic, db=database, window=common
+            )
             results[name] = fit_model(spectrum, model, **fit_kwargs)
         except ValueError as exc:
             failures[name] = str(exc)

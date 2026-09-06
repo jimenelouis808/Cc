@@ -43,9 +43,8 @@ published nonsense:
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
-from typing import Optional, Sequence
+from typing import Optional
 
 from ..database import Database, DopantSignature, load_database
 from .assignment import Assignment
@@ -229,7 +228,6 @@ def analyse_shifts(
     shifts: dict[str, BandShift] = {}
     reference_kind = "control" if control is not None else "literature"
 
-    g_entry = assignment.g_like()
     reference_name = REFERENCE_FOR_MATERIAL.get(material_key, "graphene_G")
 
     material = database.materials.get(material_key)

@@ -35,14 +35,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional, Sequence
 
-import numpy as np
 
 from ..core.peaks import PeakMeasurement, find_peaks
 from ..core.preprocess import preprocess
 from ..core.spectrum import Spectrum
 from ..database import Database, load_database
 from ..models.deconvolution import ModelComparison, build_model, compare_models
-from ..models.fitting import FitModel, FitResult, fit_model
+from ..models.fitting import FitResult, fit_model
 from .assignment import Assignment, GRegionInterpretation, assign_bands, resolve_g_region
 from .classify import Classification, classify
 from .diameter import (
@@ -228,19 +227,15 @@ def analyse(
     # -- RBM region, with its own tighter search -----------------------
     rbm = _analyse_rbm(processed, rbm_parameterisation, database)
 
-    # -- deconvolution of the D-G region -------------------------------
-    comparison: Optional[ModelComparison] = None
-    fit: Optional[FitResult] = None
-    try:
-        comparison = compare_models(processed, presets=presets, db=database)
-        fit = comparison.results[comparison.best]
-    except ValueError as exc:
-        warnings.append(f"no se ha podido deconvolucionar la región D–G: {exc}")
-
     # -- the G region, and a dedicated SWCNT G fit when it makes sense --
+    # This runs BEFORE the D-G deconvolution because it settles two things
+    # the deconvolution needs: whether the sample is tubular (so the model
+    # must contain a G-) and whether it is metallic (so that G- must be
+    # Breit-Wigner-Fano).
     g_region: Optional[GRegionInterpretation] = None
     g_split_diameter: Optional[DiameterEstimate] = None
     swcnt_fit: Optional[FitResult] = None
+    is_metallic = bool(metallic)
     metallicity_note = ""
     if rbm.peaks:
         try:
@@ -272,7 +267,24 @@ def analyse(
                 )
         except ValueError as exc:
             warnings.append(f"no se ha podido ajustar la región G como SWCNT: {exc}")
-    elif fit is not None:
+
+    # -- deconvolution of the D-G region -------------------------------
+    candidates = list(presets)
+    if g_region is not None and g_region.interpretation == "swcnt_split":
+        # Without a G- component the D band stretches to absorb that
+        # intensity and I_D/I_G comes out several times too large.
+        candidates.append("swcnt_full")
+    comparison: Optional[ModelComparison] = None
+    fit: Optional[FitResult] = None
+    try:
+        comparison = compare_models(
+            processed, presets=candidates, metallic=is_metallic, db=database
+        )
+        fit = comparison.results[comparison.best]
+    except ValueError as exc:
+        warnings.append(f"no se ha podido deconvolucionar la región D–G: {exc}")
+
+    if g_region is None and fit is not None:
         g_region = resolve_g_region(fit, rbm_present=False, db=database)
 
     # -- the 2D band, fitted in its own window -------------------------
@@ -526,14 +538,20 @@ def _fit_two_d(
     lo, hi = band.window_at(spectrum.laser_ev, pad=60.0)
     if not spectrum.covers(lo, hi, fraction=0.7):
         return None, None
-    peak = spectrum.max_in(*band.window_at(spectrum.laser_ev))
-    if peak is None or peak[1] <= 5 * spectrum.noise_estimate():
+    # Require a genuinely DETECTED peak inside the band's own window before
+    # fitting anything. Without this, a spectrum with no 2D band at all — an
+    # oxide, where the conjugated network is broken — still gets a "2D"
+    # because the fitter happily pins a broad component to the window edge
+    # and calls the rising D+G tail a band.
+    inner_lo, inner_hi = band.window_at(spectrum.laser_ev)
+    seeds = [p for p in find_peaks(spectrum, window=(lo, hi))
+             if inner_lo <= p.position <= inner_hi]
+    if not seeds:
         return None, None
     try:
         one = fit_model(spectrum, build_model(spectrum, preset="two_d", db=db))
     except ValueError:
         return None, None
-    seeds = find_peaks(spectrum, window=(lo, hi))
     if len(seeds) < 2:
         return True, one
     try:

@@ -44,11 +44,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
-import numpy as np
 
 from ..core.peaks import PeakMeasurement
 from ..core.spectrum import Spectrum
-from ..database import Database, Material, load_database
+from ..database import Database, load_database
 from .assignment import Assignment
 from .diameter import WallPair, find_wall_pairs, rbm_to_diameter
 
@@ -185,7 +184,6 @@ def classify(
     warnings: list[str] = []
     scores: dict[str, float] = {k: 0.0 for k in database.materials}
 
-    rbm_window = (80.0, 400.0)
     covers_rbm = spectrum.covers(120.0, 350.0, fraction=0.7)
     genuine_rbm = _genuine_rbm_peaks(rbm_peaks, database)
     wall_pairs: list[WallPair] = []
@@ -262,10 +260,38 @@ def classify(
                     )
                 )
         else:
-            blocked.append(
-                "emparejamiento de paredes: hace falta más de un RBM para "
-                "distinguir pared doble de pared simple"
-            )
+            # A single RBM cannot be paired, but the absence of a partner is
+            # still weak evidence — provided the partner would have been
+            # inside the measured window. A concentric wall differs in
+            # diameter by twice the wall spacing, so its RBM sits at a
+            # frequency this can compute and check for.
+            partners = _partner_windows(freqs[0], database)
+            reachable = [
+                omega for omega in partners
+                if spectrum.covers(omega - 15.0, omega + 15.0, fraction=0.9)
+            ]
+            if reachable:
+                scores["SWCNT"] += WEIGHTS["rbm_unpaired"] * 0.5
+                scores["DWCNT"] -= WEIGHTS["rbm_unpaired"] * 0.5
+                evidence.append(
+                    Evidence(
+                        "rbm_unpaired",
+                        "SWCNT",
+                        WEIGHTS["rbm_unpaired"] * 0.5,
+                        f"solo hay un RBM ({freqs[0]:.0f} cm⁻¹). Una pared "
+                        f"concéntrica daría un RBM en "
+                        f"{' o '.join(f'{o:.0f}' for o in reachable)} cm⁻¹, "
+                        "dentro del rango medido, y no aparece. Evidencia débil "
+                        "de pared simple: la resonancia con el láser puede "
+                        "ocultar una de las dos paredes, así que mide con otra "
+                        "longitud de onda antes de concluir",
+                    )
+                )
+            else:
+                blocked.append(
+                    "emparejamiento de paredes: solo hay un RBM y el espectro "
+                    "no cubre la zona donde estaría el de la pared compañera"
+                )
     else:
         # Absence of an RBM rules out thin tubes. It says nothing about which
         # of the remaining materials this is, so every non-thin-tube material
@@ -408,6 +434,33 @@ def classify(
         wall_pairs=wall_pairs,
         warnings=warnings,
     )
+
+
+def _partner_windows(omega: float, db: Database) -> list[float]:
+    """RBM frequencies a concentric wall of the given tube would produce.
+
+    Two concentric walls differ in diameter by twice the wall-to-wall
+    spacing, so from one measured RBM both the inner and the outer partner
+    can be predicted. Returns whichever partners correspond to a diameter
+    that could show an RBM at all (0.5–2.5 nm).
+    """
+    from .diameter import diameter_to_rbm, rbm_to_diameter
+
+    try:
+        diameter = rbm_to_diameter(omega, db=db).diameter_nm
+    except ValueError:
+        return []
+    low, high = db.wall_spacing_nm
+    mid = 0.5 * (low + high)
+    out: list[float] = []
+    for candidate in (diameter - 2.0 * mid, diameter + 2.0 * mid):
+        if not 0.5 <= candidate <= 2.5:
+            continue
+        try:
+            out.append(diameter_to_rbm(candidate, db=db))
+        except ValueError:
+            continue
+    return sorted(out)
 
 
 def _genuine_rbm_peaks(

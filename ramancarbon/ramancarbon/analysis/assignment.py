@@ -28,7 +28,7 @@ from typing import Iterable, Optional, Sequence
 from ..core.peaks import PeakMeasurement
 from ..core.spectrum import Spectrum
 from ..database import Band, Database, load_database
-from ..models.fitting import FitResult, FittedPeak
+from ..models.fitting import FitResult
 
 
 @dataclass
@@ -462,13 +462,13 @@ def resolve_g_region(
         spectrum actually covered the RBM window; otherwise the third rule
         fires on a spectrum that simply started too high.
     db:
-        Loaded database.
+        Accepted for symmetry with the other analysis entry points; the
+        rules below are structural and use no database values.
 
     Returns
     -------
     GRegionInterpretation
     """
-    database = db or load_database()
     components = sorted(
         (p for p in fit.peaks if 1450.0 <= p.peak_position <= 1700.0),
         key=lambda p: p.peak_height,

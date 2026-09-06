@@ -19,8 +19,8 @@ relative quantity; this package never pretends otherwise.
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass, field, replace
-from typing import Any, Iterable, Optional, Sequence
+from dataclasses import dataclass, field
+from typing import Iterable, Optional, Sequence
 
 import numpy as np
 

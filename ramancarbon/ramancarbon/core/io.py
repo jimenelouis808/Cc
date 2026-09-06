@@ -29,8 +29,6 @@ export them as text from the vendor software.
 
 from __future__ import annotations
 
-import csv
-import io
 import re
 from pathlib import Path
 from typing import Iterable, Optional, Sequence

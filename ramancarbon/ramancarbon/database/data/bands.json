@@ -112,8 +112,8 @@
       ],
       "dispersion_cm1_per_ev": 50.0,
       "typical_fwhm": [
-        20.0,
-        100.0
+        15.0,
+        200.0
       ],
       "order": "first",
       "symmetry": "A1g breathing",
@@ -195,8 +195,8 @@
       ],
       "dispersion_cm1_per_ev": 0.0,
       "typical_fwhm": [
-        12.0,
-        90.0
+        8.0,
+        180.0
       ],
       "order": "first",
       "symmetry": "E2g",
@@ -248,8 +248,8 @@
       ],
       "dispersion_cm1_per_ev": 10.0,
       "typical_fwhm": [
-        10.0,
-        40.0
+        8.0,
+        60.0
       ],
       "order": "first",
       "symmetry": null,
@@ -355,8 +355,8 @@
       ],
       "dispersion_cm1_per_ev": 100.0,
       "typical_fwhm": [
-        20.0,
-        120.0
+        15.0,
+        200.0
       ],
       "order": "second",
       "symmetry": null,

@@ -28,6 +28,17 @@ from scipy.signal import medfilt, savgol_filter
 
 from .spectrum import Spectrum
 
+#: Below this ratio of noise σ to full intensity range, a spectrum is treated
+#: as noise-free and despiking is skipped.
+#:
+#: Real spectra sit far above it: an intensity range of 1000 counts with a
+#: noise σ of 3 gives 3e-3, and even a very high signal-to-noise measurement
+#: stays near 1e-4. A *noiseless* curve gives ~1e-6, because there the
+#: second-difference estimator is measuring band curvature rather than noise.
+#: The two regimes are two orders of magnitude apart, so the boundary is not
+#: delicate.
+NOISE_FLOOR_FRACTION = 1e-5
+
 
 def despike(
     spectrum: Spectrum,
@@ -82,6 +93,10 @@ def despike(
     from a spike. If the instrument sampled at 4 cm⁻¹ or coarser, or the
     sample shows very sharp RBMs, drop ``kernel`` to 3 or turn despiking
     off; otherwise the apex of the narrowest band can be clipped.
+
+    Run this **before** smoothing. Smoothing spreads a cosmic ray over the
+    whole smoothing window, turning a removable one-pixel artefact into a
+    plausible-looking narrow band that no later step can identify.
     """
     k = int(kernel)
     if k % 2 == 0:
@@ -92,26 +107,34 @@ def despike(
     if n < 2 * k + 1:
         return spectrum.copy(), np.zeros(n, dtype=bool)
 
+    # Scale against the second-difference noise estimate, not against the
+    # spread of the median residual itself. That residual carries the
+    # curvature of every band top, so normalising by its own MAD makes the
+    # threshold depend on how peaky the spectrum is and clips sharp apices.
+    sigma = spectrum.noise_estimate()
+    scale = float(np.ptp(y))
+    if sigma <= NOISE_FLOOR_FRACTION * max(scale, 1e-30):
+        # No measurable noise means no cosmic rays to find, and no scale
+        # against which to call a point an outlier. On such data the
+        # estimator is reporting band curvature rather than noise, and
+        # thresholding on it clips the apex of the sharpest band. Do
+        # nothing, and record that nothing was done.
+        return (
+            spectrum.with_intensity(y, "despike(sin ruido medible, sin cambios)"),
+            np.zeros(n, dtype=bool),
+        )
+
     smoothed = medfilt(y, kernel_size=k)
     residual = y - smoothed
-    # Scale against the second-difference noise estimate, not against the
-    # spread of the residual itself. The residual carries the curvature of
-    # every band top, so normalising by its own MAD makes the threshold
-    # depend on how peaky the spectrum is and clips sharp apices.
-    sigma = spectrum.noise_estimate()
-    if sigma <= 0:
-        sigma = float(np.median(np.abs(residual - np.median(residual)))) / 0.6745
-    if sigma <= 0:
-        return spectrum.copy(), np.zeros(n, dtype=bool)
     flagged = residual > threshold * sigma
     if not positive_only:
         flagged |= residual < -threshold * sigma
 
-    if not flagged.any():
-        return spectrum.copy(), flagged
-
     cleaned = y.copy()
     cleaned[flagged] = smoothed[flagged]
+    # The history entry is written even when nothing was removed, so that a
+    # provenance record distinguishes "despiking found nothing" from
+    # "despiking was switched off".
     label = f"despike(threshold={threshold:g}, kernel={k}, n={int(flagged.sum())})"
     return spectrum.with_intensity(cleaned, label), flagged
 
