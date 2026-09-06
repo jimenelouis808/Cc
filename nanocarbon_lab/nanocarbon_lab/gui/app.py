@@ -2517,6 +2517,61 @@ class NanocarbonGUI:
         self.canvas.draw_idle()
 
     # ------------------------------------------------------------- readouts
+    def on_analyse_file(self):
+        """Read a structure someone else made, and say what it is.
+
+        The report goes where a build's readout goes, because it answers
+        the same question -- and the structure is loaded as the current
+        one, so every other button (export, unit cell, render, grafting)
+        applies to it as it would to something built here. A file from
+        another code is a first-class structure, not a read-only guest.
+        """
+        from ..analyse import analyse, format_report, read_structure
+
+        path = filedialog.askopenfilename(
+            title="Open a structure file",
+            filetypes=[("Structures", "*.xyz *.extxyz *.cif *.pdb *.vasp "
+                                      "*.traj *.cube *.gen *.json"),
+                       ("All files", "*.*")])
+        if not path:
+            return None
+
+        try:
+            atoms = read_structure(path)
+            result = analyse(atoms)
+        except ValueError as exc:
+            self._show_error("Could not read that file", str(exc))
+            self.lbl_analyse.config(text=str(exc), foreground=BAD_RED)
+            return None
+
+        self.atoms = atoms
+        self.last_saved_stem = None
+        self._history.append((f"{len(self._history) + 1}. {Path(path).name} "
+                              f"({len(atoms)} atoms)", atoms))
+        del self._history[:-12]
+        self.cmb_history["values"] = [name for name, _ in self._history]
+        self.var_history.set(self.cmb_history["values"][-1])
+        self._redraw()
+
+        self.txt_info.configure(state="normal")
+        self.txt_info.delete("1.0", "end")
+        self.txt_info.insert("1.0", format_report(result, Path(path).name))
+        self.txt_info.configure(state="disabled")
+
+        shape = result["inferred"]["shape"]
+        verdict = result["verdict"]
+        colour = OK_GREEN if result["validation"]["ok"] else BAD_RED
+        self.lbl_analyse.config(
+            text=f"{shape['dimensionality']}D {shape['shape']}, "
+                 f"{len(atoms)} atoms — {str(verdict['verdict']).upper()}. "
+                 + ("Rings read from the file."
+                    if result["inferred"]["rings_are_recorded"]
+                    else f"Rings inferred by "
+                         f"{result['inferred']['rings']['method']}."),
+            foreground=colour)
+        self._set_status(f"Analysed {Path(path).name}.")
+        return result
+
     def _build_actions(self, parent: ttk.Frame) -> None:
         info = ttk.LabelFrame(parent, text="Structure", padding=8)
         info.pack(fill="x")
@@ -2565,6 +2620,22 @@ class NanocarbonGUI:
                             "periodic cells.",
                   foreground=MUTED, font=("TkDefaultFont", 8), wraplength=260,
                   justify="left").pack(anchor="w", pady=(4, 0))
+
+        anl = ttk.LabelFrame(parent, text="Analyse a file", padding=8)
+        anl.pack(fill="x", pady=(8, 0))
+        ttk.Button(anl, text="Open structure file…",
+                   command=self.on_analyse_file).pack(fill="x", ipady=3)
+        ttk.Label(anl, text="Any file ASE reads — xyz, cif, POSCAR, pdb, a "
+                            "relaxation output. Describes what it is and "
+                            "loads it into the preview, so it can then be "
+                            "exported, converted to a unit cell or "
+                            "functionalised like anything else.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=260,
+                  justify="left").pack(anchor="w", pady=(4, 0))
+        self.lbl_analyse = ttk.Label(anl, text="", foreground=MUTED,
+                                     font=("TkDefaultFont", 8), wraplength=260,
+                                     justify="left")
+        self.lbl_analyse.pack(anchor="w", pady=(4, 0))
 
         ren = ttk.LabelFrame(parent, text="Blender render", padding=8)
         ren.pack(fill="x", pady=(8, 0))

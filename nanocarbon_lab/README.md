@@ -528,6 +528,11 @@ nanocarbon analyse POSCAR --tolerance 0.25      # tighter bond cutoff
 nanocarbon analyse structure.cif --json out/analysis.json
 ```
 
+In the GUI, **Analyse a file → Open structure file…** does the same and
+loads the structure as the current one, so every other button — export,
+unit cell, Blender render, grafting a group onto it — then applies to it
+exactly as to something built in the app.
+
 ```
 schwarzite.xyz: C1134, 1134 atoms
 

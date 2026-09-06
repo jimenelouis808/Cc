@@ -724,3 +724,58 @@ def test_a_grafted_build_runs_end_to_end(app):
     assert atoms is not None
     assert "O" in atoms.get_chemical_symbols()
     assert atoms.info["functionalization"][-1]["group"] == "hydroxyl"
+
+
+def test_analysing_a_file_loads_it_as_the_current_structure(app, tmp_path,
+                                                            monkeypatch):
+    """A file from another code is a first-class structure, not a guest.
+
+    Loading it as the current one is what lets every other button --
+    export, unit cell, render, grafting -- apply to it exactly as it
+    would to something built here.
+    """
+    from ase import io
+
+    from nanocarbon_lab.builders import build_fullerene
+    from nanocarbon_lab.gui import app as app_module
+
+    cage = build_fullerene(freq=1, family="C60")
+    bare = cage.copy()
+    bare.info = {}
+    target = tmp_path / "foreign.xyz"
+    io.write(str(target), bare)
+
+    monkeypatch.setattr(app_module.filedialog, "askopenfilename",
+                        lambda **_: str(target))
+    result = app.on_analyse_file()
+
+    assert result is not None
+    assert app.atoms is not None and len(app.atoms) == 60
+    assert result["inferred"]["shape"]["shape"] == "cage"
+    assert result["inferred"]["rings"]["counts"] == {5: 12, 6: 20}
+    readout = app.txt_info.get("1.0", "end")
+    assert "MEASURED" in readout and "INFERRED" in readout
+    assert "cage" in app.lbl_analyse.cget("text")
+
+
+def test_a_cancelled_file_dialog_changes_nothing(app, monkeypatch):
+    from nanocarbon_lab.gui import app as app_module
+
+    before = app.atoms
+    monkeypatch.setattr(app_module.filedialog, "askopenfilename",
+                        lambda **_: "")
+    assert app.on_analyse_file() is None
+    assert app.atoms is before
+
+
+def test_an_unreadable_file_reports_instead_of_raising(app, tmp_path,
+                                                       monkeypatch):
+    """The GUI never opens a modal, so the message goes to a label."""
+    from nanocarbon_lab.gui import app as app_module
+
+    target = tmp_path / "junk.xyz"
+    target.write_text("not a structure at all\n")
+    monkeypatch.setattr(app_module.filedialog, "askopenfilename",
+                        lambda **_: str(target))
+    assert app.on_analyse_file() is None
+    assert "Could not read" in app.lbl_analyse.cget("text")
