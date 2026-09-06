@@ -50,6 +50,14 @@ FLAT_SPAN: float = 4.0
 #: suggest a thickness it does not have.
 LAYER_THICKNESS: float = 5.0
 
+#: A finite piece this small, and no bigger than :data:`MOLECULE_SPAN`
+#: across, is a molecule rather than a piece of a material. Both
+#: conditions are needed: water is 3 atoms and 1.5 Å across and read as a
+#: "chain" on its longest span alone, while C20 -- a real cage -- is only
+#: 4.2 Å across and must not be swallowed by a size test.
+MOLECULE_ATOMS: int = 12
+MOLECULE_SPAN: float = 5.0
+
 #: Relative spread of the radial distances below which the atoms lie on a
 #: shell rather than filling a volume. Measured: a (6,6) nanotube 0.000,
 #: a C60 0.000, a capped tube 0.09 (its caps are at a smaller radius than
@@ -255,23 +263,11 @@ def _classify(atoms: Atoms, indices: list[int] | None = None) -> dict:
         return report
 
     # Nothing repeats, so the shape is whatever the atom cloud looks like.
-    if len(subset) < 3:
+    if len(subset) < 3 or (len(subset) <= MOLECULE_ATOMS
+                           and spans[0] < MOLECULE_SPAN):
         report.update(dimensionality=0, shape="molecule", basis="atoms",
-                      reason="too few atoms to have a shape.")
-        return report
-
-    if spans[1] < FLAT_SPAN:
-        report.update(dimensionality=1, shape="chain", basis="atoms",
-                      reason=f"extended along one direction only "
-                             f"({spans[0]:.1f} Å), under {FLAT_SPAN} Å across "
-                             "the other two.")
-        return report
-
-    if spans[2] < FLAT_SPAN:
-        report.update(dimensionality=2, shape="flake", basis="atoms",
-                      reason=f"a single layer {spans[0]:.1f} x {spans[1]:.1f} Å, "
-                             f"{spans[2]:.2f} Å thick, with no direction "
-                             "repeating.")
+                      reason=f"{len(subset)} atoms spanning {spans[0]:.1f} Å: "
+                             "a molecule, not an extended structure.")
         return report
 
     if axis_spread <= SHELL_SPREAD:
@@ -287,6 +283,20 @@ def _classify(atoms: Atoms, indices: list[int] | None = None) -> dict:
                              f"{np.linalg.norm(centred, axis=1).mean():.1f} Å "
                              f"from the centre, {100 * point_spread:.0f}% "
                              "spread.")
+        return report
+
+    if spans[1] < FLAT_SPAN:
+        report.update(dimensionality=1, shape="chain", basis="atoms",
+                      reason=f"extended along one direction only "
+                             f"({spans[0]:.1f} Å), under {FLAT_SPAN} Å across "
+                             "the other two.")
+        return report
+
+    if spans[2] < FLAT_SPAN:
+        report.update(dimensionality=2, shape="flake", basis="atoms",
+                      reason=f"a single layer {spans[0]:.1f} x {spans[1]:.1f} Å, "
+                             f"{spans[2]:.2f} Å thick, with no direction "
+                             "repeating.")
         return report
 
     from ..functionalize.attach import bond_pairs
@@ -336,6 +346,26 @@ def describe_shape(atoms: Atoms) -> dict:
         whole["n_components"] = len(atoms)
         return whole
 
+    # A decorated structure is not a different shape. A tube with 72
+    # carboxyls on it has 288 atoms at assorted radii, so its radial
+    # spread rises and it reads as a solid cluster -- while every atom
+    # of its wall is exactly where it was. Classify the backbone when
+    # the whole has come out as the uninformative fallback.
+    if whole["shape"] == "cluster":
+        from .rings import backbone_indices
+
+        core = backbone_indices(atoms, bond_pairs(atoms))
+        if 4 <= len(core) < len(atoms):
+            inner = _classify(atoms, core)
+            if inner["shape"] != "cluster":
+                whole.update(
+                    dimensionality=inner["dimensionality"],
+                    shape=inner["shape"], basis=inner["basis"] + "/backbone",
+                    reason=f"{len(atoms) - len(core)} atom(s) hang off it in "
+                           f"pendant groups; the backbone they sit on is a "
+                           f"{inner['shape']}: " + inner["reason"])
+                whole["n_backbone_atoms"] = len(core)
+
     components = connected_components(atoms)
     whole["n_components"] = len(components)
     if len(components) < 2:
@@ -371,6 +401,8 @@ def describe_shape(atoms: Atoms) -> dict:
 
 __all__ = [
     "FLAT_SPAN",
+    "MOLECULE_ATOMS",
+    "MOLECULE_SPAN",
     "LAYER_THICKNESS",
     "SHELL_SPREAD",
     "VACUUM_GAP",

@@ -344,8 +344,13 @@ def format_report(result: dict[str, Any], name: str = "structure") -> str:
     elif rings["method"] == "none":
         lines.append(f"  rings         not attempted. {rings['caveat']}")
     else:
-        method = ("faces of the embedded surface" if rings["method"] == "faces"
-                  else "shortest-path rings")
+        # Three methods, not two. "faces (backbone)" fell into the
+        # shortest-path branch and the line then contradicted the caveat
+        # printed directly under it.
+        method = {
+            "faces": "faces of the embedded surface",
+            "faces (backbone)": "faces of the backbone surface",
+        }.get(rings["method"], "shortest-path rings")
         lines.append(f"  rings         {rings['counts']}  "
                      f"sum(6-n) = {rings['euler_deficit']:+d}   [{method}]")
         if rings["caveat"]:

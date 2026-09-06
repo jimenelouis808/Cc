@@ -610,6 +610,14 @@ A tube and a cage both have three large spans, so what tells them from a
 solid is that they are **hollow** — the relative spread of the radial
 distances, which needs no length scale to compare against.
 
+A **decorated** structure is not a different structure. A nanotube
+carrying 72 carboxyls has 288 extra atoms at assorted radii, enough for
+the whole to read as a solid cluster — while every atom of its wall is
+exactly where it was. Shape and rings both fall back to the backbone
+(the graph 2-core, which strips each pendant group one atom at a time),
+so a carboxylated tube is still reported as a tube, with the exact ring
+census of its wall.
+
 ## Visualisation
 
 ```python

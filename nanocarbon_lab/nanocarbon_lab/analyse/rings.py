@@ -75,6 +75,40 @@ def _adjacency(atoms: Atoms, pairs: np.ndarray) -> list[list[int]]:
     return neighbours
 
 
+def backbone_indices(atoms: Atoms, pairs: np.ndarray) -> list[int]:
+    """The structure with its pendant groups stripped: the graph 2-core.
+
+    Repeatedly drop every atom left with fewer than two neighbours. On a
+    carboxylated nanotube that removes each -COOH in order -- the
+    hydrogen first, then the hydroxyl oxygen, then the carbonyl oxygen,
+    then the acid carbon -- and leaves the tube, which is what carries
+    the structure's shape and its rings.
+
+    It matters because a decorated structure is not a *different* shape.
+    A tube with 72 carboxyls on it has 288 atoms at assorted radii, so
+    the radial spread rises and the whole reads as a solid cluster;
+    every atom of its wall is still exactly where it was. The same
+    applies to rings: the decorated net is not trivalent, so faces
+    cannot be traced on it, while the backbone's can be exactly.
+
+    A structure with nothing pendant returns unchanged, and one that is
+    *all* pendant -- a molecule, a chain -- returns empty, which the
+    callers treat as "no backbone to fall back on".
+    """
+    degree = np.bincount(pairs.ravel(), minlength=len(atoms)) if len(pairs) \
+        else np.zeros(len(atoms), dtype=int)
+    neighbours = _adjacency(atoms, pairs)
+    alive = degree >= 2
+    changed = True
+    while changed:
+        changed = False
+        for index in np.flatnonzero(alive):
+            if sum(alive[other] for other in neighbours[index]) < 2:
+                alive[index] = False
+                changed = True
+    return [int(index) for index in np.flatnonzero(alive)]
+
+
 def _shortest_rings_through(neighbours: list[list[int]],
                             start: int, goal: int,
                             max_size: int) -> list[tuple[int, ...]]:
@@ -318,6 +352,23 @@ def _cutoffs(atoms: Atoms, tolerance: float) -> dict:
     return cutoffs
 
 
+def _reindexed(pairs: np.ndarray, keep: list[int]) -> np.ndarray:
+    """Bond list renumbered for a structure cut down to ``keep``."""
+    position = {old: new for new, old in enumerate(keep)}
+    kept = [(position[int(a)], position[int(b)]) for a, b in pairs
+            if int(a) in position and int(b) in position]
+    return np.asarray(kept, dtype=int) if kept else np.zeros((0, 2), dtype=int)
+
+
+def _backbone_is_a_surface(atoms: Atoms, pairs: np.ndarray) -> bool:
+    """Whether stripping the pendant groups leaves a trivalent net."""
+    keep = backbone_indices(atoms, pairs)
+    if len(keep) < 4 or len(keep) == len(atoms):
+        return False
+    core = atoms[keep]
+    return is_surface_net(core, _reindexed(pairs, keep))
+
+
 def ring_report(atoms: Atoms,
                 pairs: np.ndarray,
                 max_size: int = MAX_RING_SIZE) -> dict:
@@ -359,6 +410,22 @@ def ring_report(atoms: Atoms,
         method = "faces"
         rings, boundary = trace_faces(atoms, pairs, max_size)
         caveat = ""
+    elif _backbone_is_a_surface(atoms, pairs):
+        # Strip the pendant groups and trace the faces of what is left.
+        # A carboxylated nanotube is not a trivalent net, but its wall
+        # is, and the wall is what has rings at all -- a -COOH has none.
+        keep = backbone_indices(atoms, pairs)
+        core = atoms[keep]
+        core_pairs = _reindexed(pairs, keep)
+        method = "faces (backbone)"
+        traced, boundary = trace_faces(core, core_pairs, max_size)
+        rings = [[keep[index] for index in face] for face in traced]
+        caveat = (
+            f"Traced on the backbone: {len(atoms) - len(keep)} atom(s) hang "
+            "off it in groups with no rings of their own, and a decorated "
+            "net is not trivalent so its faces cannot be traced directly. "
+            "The ring indices are the original ones."
+        )
     else:
         method = "shortest-path"
         rings = perceive_rings(atoms, pairs, max_size)
@@ -404,6 +471,7 @@ def ring_report(atoms: Atoms,
 __all__ = [
     "MAX_RING_SIZE",
     "collapsed_images",
+    "backbone_indices",
     "is_surface_net",
     "perceive_rings",
     "ring_report",

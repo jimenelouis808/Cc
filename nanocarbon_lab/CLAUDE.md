@@ -646,6 +646,23 @@ tubes are 1D each while their union reads as a 0D branched shell, and
 there the union is simply wrong -- the annulus between the walls is empty
 space, not material.
 
+**A decorated structure is not a different structure.** A tube with 72
+carboxyls has 288 atoms at assorted radii, so its radial spread rises and
+the whole reads as a solid cluster -- while every atom of its wall is
+exactly where it was. Both the shape and the rings therefore fall back to
+the **backbone**, the graph 2-core, which strips each pendant group one
+atom at a time (the hydrogen, then the hydroxyl oxygen, then the carbonyl
+oxygen, then the acid carbon) and leaves the wall. Faces traced on it
+recover the tube's exact ring census, and the ring indices stay in the
+original numbering.
+
+**Hollowness is tested before flatness.** C20 is 3.9 Å across its second
+principal axis -- narrower than `FLAT_SPAN` -- so the flatness test
+claimed it as a chain before the shell test ever ran. A cage is hollow
+whatever its size. A small-molecule test (at most 12 atoms *and* under
+5 Å across, both conditions needed) runs before either, so water is a
+molecule rather than a chain without C20 being swallowed with it.
+
 Writing this package found three bugs elsewhere, which is what it is for:
 
 * **`surface_normals` had `PYRAMIDAL_SUM` at 0.30**, so half of a

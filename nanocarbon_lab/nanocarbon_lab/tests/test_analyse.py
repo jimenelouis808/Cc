@@ -401,3 +401,92 @@ class TestCoordinationAcrossImages:
         large = coordination_numbers(
             foreign(build_tmd_monolayer("MoS2").repeat((3, 3, 1))))
         assert sorted(set(small)) == sorted(set(large))
+
+
+class TestDecoratedStructures:
+    """A structure with groups on it is not a different structure."""
+
+    def test_a_carboxylated_tube_is_still_a_tube(self):
+        """288 pendant atoms at assorted radii raise the radial spread.
+
+        The whole then reads as a solid cluster while every atom of the
+        wall is exactly where it was, so the backbone -- the graph 2-core,
+        which strips each -COOH one atom at a time -- is what carries the
+        shape.
+        """
+        tube = build_capped_cnt(n_body_rings=8, freq=3)
+        grafted = functionalize(tube, "carboxyl", coverage=0.1, seed=1)
+        result = describe_shape(foreign(grafted))
+        assert result["shape"] == "tube"
+        assert result["n_backbone_atoms"] == len(tube)
+
+    @pytest.mark.parametrize("group", ["carboxyl", "hydroxyl", "methyl"])
+    def test_the_rings_are_recovered_exactly_from_the_backbone(self, group):
+        """A -COOH has no rings of its own, and the decorated net is not
+        trivalent, so faces are traced on the wall instead."""
+        tube = build_capped_cnt(n_body_rings=8, freq=3)
+        truth = dict(sorted(tube.info["ring_counts"].items()))
+        grafted = foreign(functionalize(tube, group, coverage=0.1, seed=1))
+        report = ring_report(grafted, inferred_pairs(grafted))
+        assert report["method"] == "faces (backbone)"
+        assert report["counts"] == truth
+        assert "backbone" in report["caveat"]
+
+    def test_the_ring_indices_stay_in_the_original_numbering(self):
+        """Otherwise they name atoms of the stripped structure."""
+        tube = build_capped_cnt(n_body_rings=6, freq=3)
+        grafted = foreign(functionalize(tube, "hydroxyl", coverage=0.1, seed=1))
+        report = ring_report(grafted, inferred_pairs(grafted))
+        symbols = grafted.get_chemical_symbols()
+        for ring in report["rings"]:
+            for index in ring:
+                assert 0 <= index < len(grafted)
+                assert symbols[index] == "C"
+
+    def test_backbone_of_a_pristine_structure_is_itself(self):
+        from nanocarbon_lab.analyse.rings import backbone_indices
+
+        tube = foreign(build_cnt(6, 6, length=12.0))
+        assert len(backbone_indices(tube, inferred_pairs(tube))) == len(tube)
+
+    def test_a_molecule_has_no_backbone_to_fall_back_on(self):
+        from nanocarbon_lab.analyse.rings import backbone_indices
+
+        water = Atoms("H2O", positions=[[0.0, 0.76, -0.48],
+                                        [0.0, -0.76, -0.48],
+                                        [0.0, 0.0, 0.12]])
+        assert backbone_indices(water, inferred_pairs(water)) == []
+
+
+class TestSmallMolecules:
+    """A few atoms in a corner of a box are not a material."""
+
+    def test_water_is_a_molecule_not_a_chain(self):
+        water = Atoms("H2O", positions=[[0.0, 0.76, -0.48],
+                                        [0.0, -0.76, -0.48],
+                                        [0.0, 0.0, 0.12]])
+        assert describe_shape(water)["shape"] == "molecule"
+
+    def test_the_size_test_does_not_swallow_a_small_cage(self):
+        """C20 is 4.2 Å across -- narrower than a nanotube is wide.
+
+        Its second span is under the flatness threshold too, so it read
+        as a chain until the hollowness tests were moved ahead of the
+        flatness ones. A cage is hollow whatever its size.
+        """
+        for family in ("C20", "C60"):
+            cage = foreign(build_fullerene(freq=1, family=family))
+            assert describe_shape(cage)["shape"] == "cage", family
+
+    def test_the_printed_method_matches_the_caveat(self):
+        """There are three methods, and the label had only two branches.
+
+        "faces (backbone)" fell into the shortest-path branch, so the
+        line said "shortest-path rings" directly above a caveat saying
+        it had traced the backbone's faces.
+        """
+        tube = build_capped_cnt(n_body_rings=6, freq=3)
+        grafted = foreign(functionalize(tube, "carboxyl", coverage=0.1, seed=1))
+        text = format_report(analyse(grafted))
+        assert "faces of the backbone surface" in text
+        assert "shortest-path rings]" not in text
