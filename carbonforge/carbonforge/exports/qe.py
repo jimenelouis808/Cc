@@ -25,6 +25,12 @@ from typing import Literal, Optional
 import numpy as np
 from ase import Atoms
 
+from ..calculations.electronic import (
+    ElectronicSpec,
+    exx_grid,
+    tagged_species,
+)
+from ..calculations.electronic import qe_system_fields as electronic_fields
 from ..calculations.dos import (
     DOSSpec,
     format_dos_input,
@@ -76,6 +82,8 @@ class QESettings:
     #: Constrains which cell degrees of freedom ``vc-relax`` may change.
     #: Essential for slabs and wires, whose vacuum would otherwise collapse.
     cell_dofree: Optional[str] = None
+    #: Spin, van der Waals, functional and Hubbard settings.
+    electronic: Optional[ElectronicSpec] = None
 
 
 _DEFAULT_PSEUDOS: dict[str, str] = {
@@ -218,7 +226,10 @@ def write_qe_input(
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    symbols = atoms.get_chemical_symbols()
+    # Tagged atoms become distinct species (C1, C2) sharing one
+    # pseudopotential, which is how two sublattices get independent initial
+    # magnetisations for an antiferromagnetic guess.
+    symbols, pseudo_elements = tagged_species(atoms)
     unique = sorted(set(symbols))
     mesh = _kpoint_mesh(atoms, s.kpoint_density)
 
@@ -244,6 +255,11 @@ def write_qe_input(
     }
     if s.nbnd is not None:
         system["nbnd"] = s.nbnd
+    if s.electronic is not None:
+        system.update(electronic_fields(s.electronic, unique))
+        if s.electronic.is_hybrid:
+            qx, qy, qz = exx_grid(mesh, s.electronic.exx_grid_factor)
+            system["nqx1"], system["nqx2"], system["nqx3"] = qx, qy, qz
     # Spin-orbit / non-collinear switches, when requested.
     if s.spinorbit is not None:
         system.update(qe_system_fields(s.spinorbit))
@@ -275,8 +291,9 @@ def write_qe_input(
     species_lines = ["ATOMIC_SPECIES"]
     pseudos = s.pseudopotentials or {}
     for sym in unique:
-        mass = _ATOMIC_MASSES.get(sym, 1.0)
-        pp = pseudos.get(sym, f"{sym}.UPF")
+        element = pseudo_elements.get(sym, sym)
+        mass = _ATOMIC_MASSES.get(element, 1.0)
+        pp = pseudos.get(sym) or pseudos.get(element) or f"{element}.UPF"
         species_lines.append(f"  {sym}  {mass:.4f}  {pp}")
     parts.append("\n".join(species_lines))
 

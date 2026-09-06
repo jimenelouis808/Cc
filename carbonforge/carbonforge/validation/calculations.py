@@ -29,6 +29,7 @@ from typing import Optional, Sequence
 from ase import Atoms
 
 from ..calculations.kpaths import BandPathSpec
+from ..calculations.electronic import ElectronicSpec
 from ..calculations.spectroscopy import SpectroscopySpec
 from ..calculations.spinorbit import (
     SpinOrbitSpec,
@@ -261,6 +262,92 @@ def check_spinorbit(
     return report
 
 
+def check_electronic_setup(
+    atoms: Atoms,
+    spec: Optional[ElectronicSpec] = None,
+) -> ValidationReport:
+    """Check the electronic-structure physics against the structure.
+
+    The one that matters most: a **zigzag graphene nanoribbon has magnetic
+    edge states**, antiferromagnetically coupled across the ribbon. Run it
+    without spin polarisation and the SCF converges to a non-magnetic,
+    metallic state that is not the ground state — no error, no warning from
+    the code, just a wrong band structure and a gap of zero where the real
+    answer is a few tenths of an eV.
+
+    Also checks that dispersion is present when it is likely to matter, and
+    warns about the cost of a hybrid before it is queued rather than after.
+    """
+    report = ValidationReport()
+    kind = str(atoms.info.get("structure_type", ""))
+    edge = str(atoms.info.get("edge", ""))
+    spin_on = spec is not None and spec.is_spin_polarized
+
+    if kind == "nanoribbon" and edge == "zigzag" and not spin_on:
+        report.errors.append(
+            "Nanocinta ZIGZAG sin polarización de espín. Sus bordes tienen "
+            "estados magnéticos acoplados antiferromagnéticamente, y ese es "
+            "el estado fundamental. Sin nspin=2 el SCF converge a un estado "
+            "no magnético que NO es el fundamental: obtendrás bandas y gap "
+            "equivocados, sin ningún aviso del código. Usa "
+            "setup_antiferromagnetic_edges(), o --spin afm en la terminal."
+        )
+
+    if spec is None:
+        return report
+
+    report.info["electronic_cost_multiplier"] = spec.cost_multiplier()
+
+    if spec.spin == "collinear" and not spec.starting_magnetization:
+        report.warnings.append(
+            "nspin=2 sin magnetizaciones iniciales: el SCF arranca desde un "
+            "estado no magnético y probablemente se quede ahí. Da un patrón "
+            "de signos con starting_magnetization."
+        )
+
+    # Dispersion matters wherever pieces are held together by nothing else.
+    if spec.vdw_correction == "none":
+        if kind == "carbon_foam":
+            report.warnings.append(
+                "Espuma sin corrección de van der Waals. Los fragmentos "
+                "grafíticos se mantienen unidos por dispersión, que PBE no "
+                "tiene: la estructura se desmoronará al relajar. Usa "
+                "vdw_correction='grimme-d3'."
+            )
+        elif kind == "nanocoil":
+            report.warnings.append(
+                "Nanoespiral sin corrección de van der Waals. Las vueltas "
+                "vecinas interaccionan por dispersión; sin ella el paso de "
+                "hélice relajado saldrá demasiado grande."
+            )
+
+    if spec.is_hybrid:
+        n_atoms = len(atoms)
+        report.warnings.append(
+            f"Funcional híbrido con {n_atoms} átomos: del orden de "
+            f"{spec.cost_multiplier():.0f}x el coste de PBE. Con una celda de "
+            "este tamaño puede pasar de días. Converge primero con PBE y usa "
+            "el híbrido solo para el gap final."
+        )
+        if int(sum(atoms.get_pbc())) == 2:
+            report.warnings.append(
+                "Además, en sistemas 2D con vacío el intercambio exacto "
+                "converge despacio con el vacío: comprueba que el gap sea "
+                "estable al aumentarlo."
+            )
+
+    if spec.hubbard_u:
+        light = {"C", "N", "B", "O", "H"}
+        applied = set(spec.hubbard_u) & light
+        if applied:
+            report.warnings.append(
+                f"Hubbard U sobre {', '.join(sorted(applied))}: son elementos "
+                "ligeros sin electrones d o f localizados. DFT+U está pensado "
+                "para metales de transición; aquí es difícil de justificar."
+            )
+    return report
+
+
 def check_calculation_type(
     atoms: Atoms,
     calculation: str,
@@ -349,12 +436,14 @@ def check_full_setup(
     spinorbit: Optional[SpinOrbitSpec] = None,
     band_path: Optional[BandPathSpec] = None,
     pseudopotentials: Optional[dict[str, str]] = None,
+    electronic: Optional[ElectronicSpec] = None,
 ) -> ValidationReport:
     """Run every applicable calculation check and merge the results."""
     report = ValidationReport()
     report.merge(
         check_calculation_type(atoms, calculation, occupations, cell_dofree)
     )
+    report.merge(check_electronic_setup(atoms, electronic))
     if spectroscopy is not None:
         report.merge(check_spectroscopy(atoms, spectroscopy, pseudopotentials))
     if spinorbit is not None:

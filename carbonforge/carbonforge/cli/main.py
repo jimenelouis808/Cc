@@ -116,6 +116,38 @@ def _apply_post(atoms, args):
     return atoms
 
 
+def _export_preset(atoms, outdir: Path, args) -> int:
+    """Export via a preset, which decides the physics and explains itself."""
+    from ..workflows.pipeline import write_preset_project
+    from ..workflows.presets import PRESETS
+
+    if args.preset not in PRESETS:
+        print(
+            f"Preset desconocido: '{args.preset}'. "
+            f"Opciones: {', '.join(sorted(PRESETS))}.",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        result, plan, written = write_preset_project(
+            atoms, outdir, args.preset,
+            accurate=getattr(args, "accurate", False),
+            n_cores=getattr(args, "cores", 8),
+            force=args.force,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print(result.explain())
+    print()
+    print(plan.explain())
+    print(f"\n{len(written)} archivos en {outdir}")
+    print(f"Ejecuta:  cd {outdir} && ./run_all.sh")
+    print("El razonamiento completo queda en DECISIONES.txt")
+    return 0
+
+
 def _export(atoms, outdir: Path, args) -> int:
     """Export the structure in the requested formats for the requested task.
 
@@ -123,6 +155,9 @@ def _export(atoms, outdir: Path, args) -> int:
     abort unless ``--force`` was given, because writing an input that cannot
     possibly run is worse than refusing.
     """
+    if getattr(args, "preset", None):
+        return _export_preset(atoms, outdir, args)
+
     task = getattr(args, "task", "scf")
     calculation, spectro_mode = _TASKS[task]
     spectroscopy = (
@@ -229,6 +264,38 @@ def _cmd_validate(args):
     report = run_basic_checks(atoms)
     print(report.summary())
     return 0 if report.ok else 1
+
+
+def _cmd_presets(args):
+    """List the available calculation recipes."""
+    from ..workflows.presets import describe_presets
+
+    print(describe_presets())
+    print(
+        "\nUn preset decide funcional, dispersión, espín, malla y si hay que "
+        "relajar antes,\nadaptándose a la estructura. Por ejemplo, en una "
+        "cinta zigzag activa solo el\nestado antiferromagnético de los "
+        "bordes, que es el fundamental."
+    )
+    return 0
+
+
+def _cmd_update_geometry(args):
+    """Rewrite downstream inputs with a relaxed geometry."""
+    from ..workflows.pipeline import update_geometry_in_inputs
+
+    try:
+        updated = update_geometry_in_inputs(args.output, args.apply_to)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    if not updated:
+        print("No se encontró ninguna entrada que actualizar.")
+        return 0
+    print(f"Geometría relajada aplicada a {len(updated)} archivo(s):")
+    for path in updated:
+        print(f"  {path.name}")
+    return 0
 
 
 def _cmd_groups(args):
@@ -457,6 +524,14 @@ def _add_common(p):
     p.add_argument("--passivate-edges", action="store_true",
                    help="Saturar los bordes con H antes de funcionalizar.")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--preset", default=None,
+                   help="Receta completa: quick, geometry, bands, bands-hse, "
+                        "dos, raman, phonon, adsorption. Ver 'carbonforge "
+                        "presets'. Decide física y ajustes por ti.")
+    p.add_argument("--accurate", action="store_true",
+                   help="Con --preset: ajustes más finos (~3-5x el coste).")
+    p.add_argument("--cores", type=int, default=8,
+                   help="Núcleos previstos, para dimensionar los pools de QE.")
     p.add_argument("--force", action="store_true",
                    help="Export even if validation reports errors.")
 
@@ -594,6 +669,20 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--dir", default=None,
                     help="Carpeta a comprobar (tu pseudo_dir).")
     ps.set_defaults(func=_cmd_pseudos)
+
+    pr = sub.add_parser(
+        "presets", help="List the ready-made calculation recipes."
+    )
+    pr.set_defaults(func=_cmd_presets)
+
+    ug = sub.add_parser(
+        "update-geometry",
+        help="Apply a relaxed geometry to the downstream inputs.",
+    )
+    ug.add_argument("output", help="Salida de pw.x de una relajación.")
+    ug.add_argument("--apply-to", default=".",
+                    help="Carpeta con las entradas a actualizar.")
+    ug.set_defaults(func=_cmd_update_geometry)
 
     gr_list = sub.add_parser(
         "groups", help="List the available functional groups."

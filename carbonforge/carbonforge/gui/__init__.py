@@ -13,6 +13,8 @@ Launch with ``carbonforge-gui`` (installed entry point) or
 
 from .params import (
     CALCULATION_PARAMS,
+    PRESET_PARAMS,
+    preview_preset,
     FUNCTIONALIZATION_PARAMS,
     apply_functionalization,
     STRUCTURES,
@@ -31,6 +33,8 @@ __all__ = [
     "STRUCTURES",
     "MODIFIER_PARAMS",
     "CALCULATION_PARAMS",
+    "PRESET_PARAMS",
+    "preview_preset",
     "FUNCTIONALIZATION_PARAMS",
     "apply_functionalization",
     "build_calculation_specs",

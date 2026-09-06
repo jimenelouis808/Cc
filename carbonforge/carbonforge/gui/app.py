@@ -20,6 +20,8 @@ from ase import Atoms
 
 from .params import (
     CALCULATION_PARAMS,
+    PRESET_PARAMS,
+    preview_preset,
     FUNCTIONALIZATION_PARAMS,
     apply_functionalization,
     MODIFIER_PARAMS,
@@ -74,6 +76,7 @@ class CarbonForgeApp:
         self._param_vars: dict[str, Any] = {}
         self._modifier_vars: dict[str, Any] = {}
         self._calculation_vars: dict[str, Any] = {}
+        self._preset_vars: dict[str, Any] = {}
         self._functionalization_vars: dict[str, Any] = {}
         self._format_vars: dict[str, Any] = {}
         self._queue: queue.Queue = queue.Queue()
@@ -575,6 +578,7 @@ class CarbonForgeApp:
         self._param_vars.clear()
         self._modifier_vars.clear()
         self._calculation_vars.clear()
+        self._preset_vars.clear()
         self._functionalization_vars.clear()
         self._format_vars.clear()
 
@@ -585,12 +589,28 @@ class CarbonForgeApp:
         spec = STRUCTURES[self._current_structure_key()]
         self.description_label.configure(text=spec.description)
 
+        # The recipe comes first: most people want a goal, not twenty knobs.
+        recipe = ttk.LabelFrame(
+            self.params_frame, text="1. ¿Qué quieres calcular?", padding=4
+        )
+        recipe.pack(fill="x")
+        for param in PRESET_PARAMS:
+            self._add_field(recipe, param, self._preset_vars)
+        ttk.Button(
+            recipe, text="Ver qué decidiría la receta",
+            command=self._on_preview_preset,
+        ).pack(fill="x", pady=(6, 0))
+
+        geometry = ttk.LabelFrame(
+            self.params_frame, text="2. Geometría", padding=4
+        )
+        geometry.pack(fill="x", pady=(10, 0))
         for param in spec.params:
-            self._add_field(self.params_frame, param, self._param_vars)
+            self._add_field(geometry, param, self._param_vars)
 
         if spec.supports_modifiers:
             mods = ttk.LabelFrame(
-                self.params_frame, text="Dopaje y defectos", padding=4
+                self.params_frame, text="3. Dopaje y defectos", padding=4
             )
             mods.pack(fill="x", pady=(10, 0))
             for param in MODIFIER_PARAMS:
@@ -598,19 +618,25 @@ class CarbonForgeApp:
 
             groups = ttk.LabelFrame(
                 self.params_frame,
-                text="Grupos funcionales y nitrógeno",
+                text="4. Grupos funcionales y nitrógeno",
                 padding=4,
             )
             groups.pack(fill="x", pady=(10, 0))
             for param in FUNCTIONALIZATION_PARAMS:
                 self._add_field(groups, param, self._functionalization_vars)
 
-        calc = ttk.LabelFrame(self.params_frame, text="Cálculo", padding=4)
+        calc = ttk.LabelFrame(
+            self.params_frame,
+            text="5. Ajustes manuales (se ignoran si usas una receta)",
+            padding=4,
+        )
         calc.pack(fill="x", pady=(10, 0))
         for param in CALCULATION_PARAMS:
             self._add_field(calc, param, self._calculation_vars)
 
-        fmts = ttk.LabelFrame(self.params_frame, text="Formatos de salida", padding=4)
+        fmts = ttk.LabelFrame(
+            self.params_frame, text="6. Formatos de salida", padding=4
+        )
         fmts.pack(fill="x", pady=(10, 0))
         for key, label in _EXPORT_FORMATS:
             var = self.tk.BooleanVar(value=key in ("qe", "lammps"))
@@ -623,6 +649,22 @@ class CarbonForgeApp:
             text="Exportar aunque falle la validación",
             variable=self.force_var,
         ).pack(anchor="w", pady=(4, 0))
+
+    def _on_preview_preset(self) -> None:
+        """Show what the chosen recipe would decide, before building anything.
+
+        Building the structure first is the point: a recipe adapts to it, so
+        the answer for a zigzag ribbon differs from an armchair one.
+        """
+        kind = self._current_structure_key()
+        try:
+            atoms = build_structure(kind, self._read_raw(self._param_vars))
+            text = preview_preset(atoms, self._read_raw(self._preset_vars))
+        except Exception as exc:
+            self._show_error(exc, traceback.format_exc())
+            return
+        self._set_info(text)
+        self.status_var.set("Vista previa de la receta (nada construido aún).")
 
     def _read_raw(self, store: dict[str, Any]) -> dict[str, Any]:
         return {key: var.get() for key, var in store.items()}
@@ -746,7 +788,10 @@ class CarbonForgeApp:
                 Path(outdir),
                 formats,
                 force=bool(self.force_var.get()),
-                calculation_values=self._read_raw(self._calculation_vars),
+                calculation_values={
+                    **self._read_raw(self._calculation_vars),
+                    **self._read_raw(self._preset_vars),
+                },
             )
         except Exception as exc:
             self._show_error(exc, traceback.format_exc())

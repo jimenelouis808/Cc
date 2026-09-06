@@ -58,6 +58,14 @@ carbonforge/
   the warning honest.
 - `dynmat.x`: `filout` must never be `dynmat.out` — the runner script
   redirects stdout there and the two would clobber each other.
+- A zigzag nanoribbon MUST be spin-polarised. Its edges are magnetic and
+  antiferromagnetically coupled; without nspin=2 the SCF converges to a state
+  that is not the ground state, with no error. Presets enable it
+  automatically and validation raises an error otherwise.
+- ASE rejects invented symbols like "C_up"; sublattices ride on ASE tags,
+  which the QE writer expands into C1/C2 sharing one pseudopotential.
+- MD scripts must separate equilibration from production. Averaging over the
+  transient biases every measured quantity.
 - DOS needs a denser nscf mesh than the scf; keep `kmesh_factor >= 2`.
 - Summed PDOS never equals the total DOS (atomic-orbital projection is
   incomplete). Report the completeness rather than implying it sums to 1.

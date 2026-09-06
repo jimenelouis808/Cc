@@ -194,6 +194,21 @@ STRUCTURES: dict[str, StructureSpec] = {
 }
 
 
+#: The friendly path: pick a goal, let the preset choose the physics.
+PRESET_PARAMS: tuple[ParamSpec, ...] = (
+    ParamSpec("preset", "Receta", "choice", "ninguna",
+              choices=("ninguna", "quick", "geometry", "bands", "bands-hse",
+                       "dos", "phonon", "raman", "adsorption"),
+              help="Elige un objetivo y la receta decide funcional, "
+                   "dispersión, espín y malla, adaptándose a tu estructura. "
+                   "Con 'ninguna' controlas todo a mano abajo."),
+    ParamSpec("accurate", "Ajustes precisos", "bool", False,
+              help="Malla más densa y cutoff más alto. Unas 3-5 veces más caro."),
+    ParamSpec("cores", "Núcleos previstos", "int", 8, minimum=1, maximum=4096,
+              help="Para dimensionar los pools de puntos k de Quantum ESPRESSO."),
+)
+
+
 #: What to compute, on top of the structure itself.
 CALCULATION_PARAMS: tuple[ParamSpec, ...] = (
     ParamSpec("task", "Tipo de cálculo", "choice", "scf",
@@ -383,6 +398,41 @@ def apply_modifiers(atoms: Atoms, raw_values: dict[str, Any]) -> Atoms:
     return out
 
 
+def preview_preset(atoms: Atoms, raw_values: dict[str, Any]) -> str:
+    """Explain what a preset would do to this structure, before running it.
+
+    Shown live in the GUI so the physics choices are visible at the moment
+    they are made, rather than buried in a generated input file.
+    """
+    from ..workflows.presets import PRESETS, apply_preset
+
+    values = collect_values(PRESET_PARAMS, raw_values)
+    key = values["preset"]
+    if key == "ninguna":
+        return (
+            "Sin receta: controlas los ajustes a mano en el panel de cálculo.\n"
+            "Si no tienes claro qué elegir, prueba con una receta: se adaptan "
+            "a la estructura.\n\nPor ejemplo, en una cinta zigzag activan "
+            "solo el estado antiferromagnético de los bordes, que es el "
+            "fundamental."
+        )
+    try:
+        result = apply_preset(
+            atoms, key, accurate=bool(values["accurate"])
+        )
+    except ValueError as exc:
+        return f"No se pudo aplicar la receta: {exc}"
+
+    lines = [result.explain(), "", "--- Física incluida ---",
+             result.electronic.describe()]
+
+    from ..workflows.pipeline import plan_run
+
+    plan = plan_run(result.atoms, result.settings, n_cores=int(values["cores"]))
+    lines += ["", "--- Paralelización ---", plan.explain()]
+    return "\n".join(lines)
+
+
 def build_calculation_specs(raw_values: dict[str, Any]) -> dict[str, Any]:
     """Turn raw calculation widgets into the objects the exporters consume.
 
@@ -546,6 +596,19 @@ def export_structure(
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
+
+    if calculation_values is not None:
+        preset_key = str(calculation_values.get("preset", "ninguna"))
+        if preset_key != "ninguna":
+            from ..workflows.pipeline import write_preset_project
+
+            _, _, files = write_preset_project(
+                atoms, outdir, preset_key,
+                accurate=bool(calculation_values.get("accurate", False)),
+                n_cores=int(calculation_values.get("cores", 8)),
+                force=force,
+            )
+            return list(files.values())
 
     specs = (
         build_calculation_specs(calculation_values)

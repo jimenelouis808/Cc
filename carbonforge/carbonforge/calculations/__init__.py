@@ -19,6 +19,12 @@ response, fully-relativistic pseudopotentials for spin-orbit) that are far
 cheaper to catch here than after a job dies on a cluster.
 """
 
+from .electronic import (
+    ElectronicSpec,
+    exx_grid,
+    setup_antiferromagnetic_edges,
+    tagged_species,
+)
 from .dos import (
     DOSSpec,
     format_dos_input,
@@ -50,6 +56,11 @@ from .spinorbit import (
 )
 
 __all__ = [
+    # electronic structure
+    "ElectronicSpec",
+    "setup_antiferromagnetic_edges",
+    "tagged_species",
+    "exx_grid",
     # DOS
     "DOSSpec",
     "format_dos_input",

@@ -14,6 +14,21 @@ Two properties hold throughout:
   work — Raman on a metallic nanotube, spin-orbit with scalar-relativistic
   pseudopotentials, `vc-relax` on a slab whose vacuum would collapse.
 
+## Start here
+
+```bash
+carbonforge presets
+carbonforge ribbon --width 6 --length 3 --edge zigzag --preset bands --out run
+```
+
+That builds a nanoribbon, **notices its edges are magnetic**, switches on
+spin polarisation with an antiferromagnetic guess, relaxes the geometry,
+computes the bands on the *relaxed* structure, sizes the k-point pools for
+your core count, and writes down every decision in `DECISIONES.txt`.
+
+A preset adapts to the structure it is given. On an armchair ribbon it leaves
+spin off, because that one does not need it.
+
 ## Features
 
 | Module          | What it does                                                                 |
@@ -25,12 +40,12 @@ Two properties hold throughout:
 | `topology`      | networkx-based bond graph, coordination, connectivity, ring statistics       |
 | `validation`    | Geometry checks **plus** calculation-level physics checks                    |
 | `exports`       | Quantum ESPRESSO (`pw.x`/`ph.x`/`bands.x`), SIESTA `.fdf`, LAMMPS           |
-| `calculations`  | Band paths (dimensionality-aware), phonon/IR/Raman, spin-orbit setups        |
+| `calculations`  | Band paths, phonon/IR/Raman, DOS, spin/vdW/hybrids, spin-orbit               |
 | `relax`         | ASE optimizer wrapper + calculator-free harmonic pre-relaxation              |
 | `viz`           | Matplotlib 3D viewer / PNG exporter                                          |
 | `results`       | Parse and plot finished runs: bands, DOS/PDOS, IR/Raman spectra              |
 | `exports.pseudos` | Which pseudopotentials a run needs, and whether you have them              |
-| `workflows`     | Batch sweeps, convergence sweeps, ML-ready dataset exporter                  |
+| `workflows`     | Presets, chained relax→property pipelines, sweeps, ML datasets               |
 | `gui`           | Tkinter desktop app with live 3D preview (`carbonforge-gui`)                  |
 | `cli`           | `carbonforge` command-line entry point                                        |
 

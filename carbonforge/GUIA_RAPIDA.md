@@ -1,11 +1,58 @@
-# Guía rápida — instalar y usar en tu laptop
-
-Guía para dejar `carbonforge` funcionando desde cero, sin asumir
-conocimientos de Python más allá de abrir una terminal.
+# Manual de carbonforge
 
 ---
 
-## 1. Instalar Python
+## Empieza aquí: tres comandos
+
+Si ya tienes el programa instalado (si no, ve a la [sección 2](#2-instalación)):
+
+```bash
+carbonforge-gui                    # interfaz gráfica
+carbonforge presets                # ver las recetas disponibles
+carbonforge ribbon --width 6 --length 3 --edge zigzag \
+                   --preset bands --out mi_calculo
+```
+
+Ese último comando construye una nanocinta, **detecta que sus bordes son
+magnéticos**, activa la polarización de espín, relaja la geometría, calcula
+las bandas sobre la estructura relajada, elige cómo paralelizar, y te explica
+cada decisión. Sin que tengas que saber nada de eso.
+
+---
+
+## ¿Qué quieres hacer?
+
+| Quiero… | Ve a |
+|---|---|
+| Instalarlo | [§2](#2-instalación) |
+| Usar la ventana en vez de la terminal | [§3](#3-la-interfaz-gráfica) |
+| Que el programa elija la física por mí | [§4](#4-recetas-la-forma-fácil) |
+| Poner grupos -NH₂, -OH, -COOH… | [§5](#5-grupos-funcionales-y-nitrógeno) |
+| Estudiar nitrógeno dopante | [§5](#5-grupos-funcionales-y-nitrógeno) y [§10](#10-densidad-de-estados-de-dónde-salen-los-estados) |
+| Calcular bandas, Raman, IR, espín-órbita | [§6](#6-calcular-espectros-bandas-y-espín-órbita) |
+| Ver los resultados que me dio el clúster | [§8](#8-ver-los-resultados) |
+| Saber qué pseudopotenciales bajar | [§9](#9-pseudopotenciales-los-archivos-que-tienes-que-descargar) |
+| Asegurarme de que mis números están convergidos | [§11](#11-convergencia-los-valores-por-defecto-no-están-convergidos) |
+| Hacer dinámica molecular | [§13](#13-qué-hacer-con-los-archivos-generados) |
+| Resolver un error | [§14](#14-problemas-frecuentes) |
+| Saber de qué NO fiarme | [§15](#15-límites-que-conviene-conocer) |
+
+---
+
+## Lo que este programa hace y lo que no
+
+**Sí:** construye estructuras, decide los parámetros de la simulación, escribe
+los archivos de entrada de Quantum ESPRESSO, SIESTA y LAMMPS, y lee y grafica
+los resultados cuando terminan.
+
+**No:** ejecutar los cálculos. Eso lo haces tú, en tu máquina o en un clúster.
+Tampoco incluye pseudopotenciales.
+
+---
+
+## 1. Requisitos
+
+### Python
 
 Necesitas **Python 3.10 o superior**. Para comprobar si ya lo tienes, abre
 una terminal y escribe:
@@ -33,7 +80,9 @@ Si no lo tienes:
 
 ---
 
-## 2. Descargar el proyecto
+## 2. Instalación
+
+### Descargar
 
 ```bash
 git clone https://github.com/jimenelouis808/Cc.git
@@ -46,7 +95,7 @@ Si no tienes `git`, puedes descargar el ZIP desde GitHub (botón verde
 
 ---
 
-## 3. Instalar el programa
+### Instalar
 
 Hay un instalador para cada sistema. Hace todo: crea el entorno aislado,
 instala las dependencias, comprueba que Tkinter está disponible y lanza los
@@ -74,7 +123,7 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-Deberías ver `455 passed`.
+Deberías ver `515 passed`.
 
 Sabrás que el entorno está activo porque el prompt de la terminal empieza
 por `(.venv)`. **Tendrás que activarlo cada vez que abras una terminal
@@ -82,7 +131,7 @@ nueva** — es el paso que más se olvida.
 
 ---
 
-## 4. Abrir la interfaz gráfica
+## 3. La interfaz gráfica
 
 ```bash
 carbonforge-gui
@@ -134,6 +183,78 @@ número de modos acústicos).
 | ✅ Validación superada | La estructura es físicamente razonable: sin átomos solapados, coordinaciones correctas, vacío suficiente. |
 | ⚠️ Advertencias | Algo atípico pero no necesariamente erróneo (densidad inusual, átomos de borde sin saturar). |
 | ❌ Validación fallida | Hay un problema real. Por defecto **no se exporta**; puedes forzarlo con la casilla correspondiente, que es lo normal en espumas antes de relajarlas. |
+
+---
+
+## 4. Recetas: la forma fácil
+
+Montar bien un cálculo DFT significa acertar con una docena de decisiones a la
+vez —funcional, dispersión, espín, malla, cutoff, si relajar antes— y
+equivocarse en cualquiera puede pasar desapercibido. Una **receta** las toma
+todas juntas, **adaptándose a tu estructura**, y te explica qué eligió.
+
+```bash
+carbonforge presets    # ver todas
+```
+
+| Receta | Para qué |
+|---|---|
+| `quick` | Ver que arranca. No publiques esto. |
+| `geometry` | Relajar. Hazlo siempre antes de cualquier propiedad. |
+| `bands` | Relajar → scf → bandas, con espín si hace falta. |
+| `bands-hse` | Igual con HSE06: gaps mucho mejores, ~30× el coste. |
+| `dos` | Densidad de estados proyectada por elemento. |
+| `raman` | Espectro Raman e IR (solo sistemas con gap). |
+| `phonon` | Frecuencias sin intensidades; vale en metálicos. |
+| `adsorption` | Relajación con dispersión, para moléculas y apilamiento. |
+
+```bash
+carbonforge ribbon --width 6 --length 3 --edge zigzag \
+                   --preset bands --cores 16 --out salida
+```
+
+### Lo que decide por ti, y por qué
+
+Con una cinta **zigzag** te dirá esto:
+
+```
+  • Polarización de espín ACTIVADA con bordes antiferromagnéticos.
+    Una cinta zigzag tiene estados de borde magnéticos; sin esto el SCF
+    converge a un estado que no es el fundamental y las bandas salen mal.
+```
+
+Ese es el punto entero de las recetas. Los bordes zigzag son magnéticos y se
+acoplan antiferromagnéticamente; es de los resultados más establecidos del
+campo. Un cálculo sin `nspin=2` converge tranquilamente a un estado metálico
+no magnético, **no da ningún error**, y las bandas que reporta están mal. Con
+una cinta armchair, en cambio, no activa nada: no le hace falta.
+
+También activa dispersión de van der Waals donde importa (espumas,
+espirales, adsorción), aprieta la convergencia para fonones —que son
+segundas derivadas y amplifican el ruido—, y restringe la celda al relajar
+sistemas con vacío.
+
+### Paralelización
+
+Con `--cores` calcula cuántos *pools* de puntos k usar:
+
+```
+16 núcleos, ~8 puntos k
+Se usarán 8 pools de 2 núcleos.
+```
+
+Quantum ESPRESSO paraleliza mucho mejor sobre puntos k (`-nk`) que sobre
+ondas planas, y eso va en el script generado. Si puedes elegir el número de
+núcleos, que sea divisible por el de puntos k.
+
+### El encadenado
+
+Las recetas con `relax_first` generan un `run_all.sh` que relaja, **extrae la
+geometría relajada** y recalcula la propiedad sobre ella. Una banda calculada
+sobre la geometría de partida es una propiedad de otra estructura.
+
+Todas las decisiones quedan escritas en `DECISIONES.txt`, para que el
+razonamiento sobreviva a la sesión de terminal.
 
 ---
 
@@ -477,7 +598,27 @@ usas otros, cámbialos en la sección `ATOMIC_SPECIES`.
 
 ### LAMMPS
 
-Obtienes `data.lammps` (la estructura) e `in.lammps` (el script). Para
+Obtienes `data.lammps` (la estructura) e `in.lammps` (el script), con las
+etapas separadas como corresponde:
+
+```
+1. Minimización
+2. (opcional) Recocido: calentar y enfriar
+3. Equilibración  <- se descarta
+4. Producción     <- aquí se mide
+```
+
+Esa separación no es cosmética: promediar sobre el transitorio de
+equilibración sesga cualquier magnitud que saques. Solo la etapa de
+producción escribe trayectoria (`traj.lammpstrj`) y acumula promedios
+(`averages.dat`).
+
+Para espumas usa `mode="anneal"`: un empaquetado aleatorio no es una
+estructura física hasta que se ha fundido y enfriado. Un enfriamiento más
+lento da redes más ordenadas.
+
+El paso de tiempo se rechaza por encima de 2 fs: la vibración C-C ronda los
+1600 cm⁻¹ (~21 fs de periodo) y hacen falta ~20 pasos por periodo. Para
 carbono puro usa AIREBO, cuyo archivo `CH.airebo` viene en el directorio
 `potentials/` de tu instalación de LAMMPS.
 
@@ -560,6 +701,10 @@ resultados:
   real de QE o SIESTA (no había ninguna disponible al desarrollarlos). La
   primera vez que los uses con tus datos, trátalo también como una prueba
   del lector: si algo no cuadra, dímelo.
+- **Las recetas eligen ajustes razonables, no convergidos.** Cutoff y malla
+  siguen siendo puntos de partida: converge antes de publicar.
+- **El multiplicador de coste que reporta es orientativo** (2× por espín,
+  ~30× por híbrido), para decidir si algo cabe en una cola, no un benchmark.
 - **Los grupos funcionales y el nitrógeno de red salen sin relajar**, y las
   configuraciones pirrólicas son precursores, no sitios terminados.
 - **El gap que estima `plot-dos` sale de una curva ensanchada**: el

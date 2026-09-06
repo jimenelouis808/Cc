@@ -12,6 +12,7 @@ from carbonforge.exports.qe import (
     write_qe_input,
     write_qe_spectroscopy,
 )
+from carbonforge.exports.lammps import write_lammps
 from carbonforge.exports.siesta import SiestaSettings, write_siesta
 
 
@@ -166,3 +167,60 @@ class TestSiesta:
         with pytest.raises(ValueError):
             write_siesta(atoms, tmp_path)
         assert write_siesta(atoms, tmp_path, force=True).exists()
+
+
+class TestLAMMPSStaging:
+    """MD scripts must separate equilibration from production."""
+
+    def _script(self, tmp_path, **kwargs):
+        from carbonforge.exports.lammps import LAMMPSSettings
+
+        atoms = build_graphene_supercell(3, 3)
+        _, inp = write_lammps(
+            atoms, tmp_path, settings=LAMMPSSettings(**kwargs), force=True
+        )
+        return inp.read_text()
+
+    def test_production_comes_after_equilibration(self, tmp_path):
+        """Averaging over the transient biases every measured quantity."""
+        text = self._script(tmp_path)
+        assert text.index("Equilibration") < text.index("Production")
+
+    def test_only_production_is_measured(self, tmp_path):
+        text = self._script(tmp_path)
+        # The averaging fix and the dump belong to production only.
+        assert text.index("Production") < text.index("ave/time")
+        assert text.index("Production") < text.index("dump ")
+
+    def test_timestep_counter_is_reset_for_production(self, tmp_path):
+        assert "reset_timestep  0" in self._script(tmp_path)
+
+    def test_anneal_mode_heats_then_quenches(self, tmp_path):
+        text = self._script(tmp_path, mode="anneal")
+        assert text.index("Anneal") < text.index("Quench")
+        assert text.index("Quench") < text.index("Equilibration")
+
+    def test_minimize_mode_runs_no_dynamics(self, tmp_path):
+        text = self._script(tmp_path, mode="minimize")
+        assert "minimize" in text
+        assert "run  " not in text
+
+    def test_dump_can_be_disabled(self, tmp_path):
+        assert "dump " not in self._script(tmp_path, dump_every=0)
+
+    def test_npt_selected_for_production(self, tmp_path):
+        text = self._script(tmp_path, run_npt=True)
+        assert "fix             prod all npt" in text
+
+    def test_rejects_unstable_timestep(self, tmp_path):
+        """A 5 fs step cannot resolve a 21 fs C-C vibration."""
+        from carbonforge.exports.lammps import LAMMPSSettings
+
+        with pytest.raises(ValueError, match="demasiado grande"):
+            LAMMPSSettings(timestep_fs=5.0)
+
+    def test_rejects_unknown_mode(self):
+        from carbonforge.exports.lammps import LAMMPSSettings
+
+        with pytest.raises(ValueError, match="mode desconocido"):
+            LAMMPSSettings(mode="teleport")
