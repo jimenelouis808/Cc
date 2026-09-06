@@ -33,7 +33,6 @@ from collections.abc import Callable
 from typing import Literal
 
 import numpy as np
-from scipy.interpolate import CubicSpline
 
 Shape = Literal["straight", "arc", "random", "helix", "s_curve"]
 
@@ -237,6 +236,16 @@ def arclength_sampler(
     Returns ``(sample, total_length)`` where ``sample(s)`` gives
     ``(positions, unit_tangents)`` at arc-length coordinates ``s``.
     """
+    # Imported here, not at module scope, like every other scipy use in
+    # the package. A module-level import made `from .builders import ...`
+    # pull scipy in for *every* mode, including the pure-lattice ones --
+    # a TMD monolayer is exact crystallography on ideal sites and touches
+    # no spline, no KD-tree and no optimiser. That mattered twice over:
+    # scipy is slow to import, and it is the one dependency with 109
+    # compiled extension modules, so requiring it everywhere decided what
+    # the package could be ported to.
+    from scipy.interpolate import CubicSpline
+
     if len(control_points) < 4:
         raise ValueError("Need at least 4 control points for a cubic spline.")
     knots = np.arange(len(control_points), dtype=float)
