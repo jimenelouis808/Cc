@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+build/
+dist/
+.pytest_cache/
+.coverage
+.tox/
+.venv/
+venv/
+out/
+*.swp
+
+# Release archives. Regenerate with:
+#   git archive --format=zip --prefix=carbonforge/ -o carbonforge-<version>.zip HEAD
+carbonforge-*.zip
