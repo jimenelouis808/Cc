@@ -37,6 +37,7 @@ given; doping is an edit applied afterwards, never a different material.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import sys
 from pathlib import Path
@@ -1084,6 +1085,35 @@ def _cmd_sweep(args):
     return 0
 
 
+def _cmd_analyse(args):
+    """Report everything recoverable from a structure file.
+
+    Deliberately more than `validate`, which answers only "would this
+    export". This answers "what *is* this", which is the question a file
+    from somewhere else actually raises -- and it keeps what the file
+    recorded apart from what was measured and what was inferred, because
+    "pentagons: 12" reads the same whether a builder placed them or a
+    distance cutoff guessed them.
+    """
+    from ..analyse import analyse, format_report, read_structure
+
+    try:
+        atoms = read_structure(args.path, index=args.frame)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
+
+    result = analyse(atoms, tolerance=args.tolerance,
+                     max_ring_size=args.max_ring)
+    if args.json:
+        target = Path(args.json)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(result, indent=2, default=str))
+        print(f"Wrote {target}")
+    print(format_report(result, Path(args.path).name))
+    _remember(atoms)
+    return 0 if result["validation"]["ok"] else 1
+
+
 def _cmd_validate(args):
     atoms = ase_io.read(args.path)
     report = run_basic_checks(atoms)
@@ -1612,6 +1642,24 @@ def build_parser() -> argparse.ArgumentParser:
     bd.add_argument("--out", required=True, help="Output path without extension.")
     _add_surface_flags(bd)
     bd.set_defaults(func=_cmd_bundle)
+
+    an = sub.add_parser(
+        "analyse",
+        help="Describe a structure file: composition, shape, bonds, rings, "
+             "coordination, validation and a verdict.")
+    an.add_argument("path", help="Structure file readable by ASE.")
+    an.add_argument("--frame", type=int, default=-1,
+                    help="Which frame of a trajectory (default -1, the last, "
+                         "which for a relaxation is the relaxed one).")
+    an.add_argument("--tolerance", type=float, default=0.30,
+                    help="Slack (Å) on the covalent-radii sum when inferring "
+                         "bonds. This is the one assumption everything else "
+                         "rests on, so it is adjustable and is reported back.")
+    an.add_argument("--max-ring", type=int, default=None,
+                    help="Largest ring to look for (default 10).")
+    an.add_argument("--json", default=None,
+                    help="Also write the full report as JSON, for scripting.")
+    an.set_defaults(func=_cmd_analyse)
 
     vl = sub.add_parser("validate",
                         help="Validate an existing structure file (CIF, XYZ, POSCAR…).")

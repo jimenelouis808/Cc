@@ -40,7 +40,11 @@ from typing import Any
 import numpy as np
 from ase import Atoms
 
-from ..utils.constants import COVALENT_RADII
+from ..utils.constants import (
+    COVALENT_RADII,
+    DEFAULT_MAX_COORDINATION,
+    MAX_COORDINATION,
+)
 from ..utils.geometry import guess_bonds
 from .groups import (
     FunctionalGroup,
@@ -75,14 +79,25 @@ ROTAMERS: int = 12
 #: site counts as pyramidal and its outward direction is taken as the
 #: direction they lean away from.
 #:
-#: Graphene gives 0 (three coplanar bonds at 120 degrees cancel exactly);
-#: an MX2 chalcogen above its three metals gives about 1.6; the tightest
-#: nanotube, where the two circumferential bonds tilt inward, gives 0.26.
-#: The threshold sits above the tube and below the sandwich, and nothing
-#: delicate rides on where exactly: in the overlap region both branches
-#: return the same direction, verified against a (6,6) tube where the
-#: plane normal is 0.996 radial.
-PYRAMIDAL_SUM: float = 0.30
+#: The value separates a **sandwich** from a merely curved sheet, and it
+#: is measured, not chosen. Every carbon surface: graphene 0 (three
+#: coplanar bonds at 120 degrees cancel exactly), a (6,6) nanotube 0.26,
+#: C60 0.62, a Schwarz P saddle up to 0.97, and C20 -- the most
+#: pyramidalised sp2 carbon that exists -- 1.07. Every MX2 chalcogen,
+#: across MoS2/WSe2/PtTe2/TiS2 and a rolled tube: 1.79 to 2.53. The
+#: threshold sits in the gap.
+#:
+#: It was 0.30 at first, and that was wrong in a way worth recording. On
+#: a minimal surface the mean curvature is zero, so the bonds very nearly
+#: cancel and the leftover direction is noise -- yet half of a Schwarz P
+#: cell's atoms cleared 0.30 and were treated as pyramidal, which marks
+#: them unambiguous and exempts them from the sign propagation. The
+#: result was a normal field where 431 of 1701 bonds joined atoms whose
+#: normals pointed *opposite* ways, so a quarter of any groups grafted
+#: onto a schwarzite would have been placed through the wall. A saddle
+#: has no intrinsic outward side; only continuity across the surface
+#: decides, which is exactly what the propagation is for.
+PYRAMIDAL_SUM: float = 1.40
 
 
 def _mic_vectors(atoms: Atoms, pairs: np.ndarray) -> np.ndarray:
@@ -397,8 +412,26 @@ def candidate_sites(atoms: Atoms,
     metals = {s for s in symbols if s not in CHALCOGENS and s != "C"}
     is_mx2 = has_chalcogen and bool(metals)
 
+    # Atoms a previous graft added are not surface. Grafting onto them
+    # makes a chain, not a coating: a hydroxyl offered the oxygen of an
+    # epoxide already on the sheet took it, and the two oxygens came out
+    # 1.32 A apart -- a peroxide bridge nobody asked for, on a structure
+    # whose every other number looked right.
+    already_grafted = {int(index)
+                       for index in atoms.info.get("grafted_atoms", [])}
+
     def graftable(index: int) -> bool:
-        if degree[index] == 0:
+        if degree[index] == 0 or index in already_grafted:
+            return False
+        # An atom already at its element's coordination limit has no bond
+        # left to offer. Without this, grafting a hydroxyl onto a sheet
+        # that already carries epoxides put a second oxygen on a carbon
+        # that had one: five-coordinate carbon, and the two oxygens 1.32 A
+        # apart because the 1-3 exemption treated the epoxide's oxygen as
+        # part of the host lattice. Valence is the right gate -- it is
+        # also what makes a second graft compose correctly with a first.
+        ceiling = MAX_COORDINATION.get(symbols[index], DEFAULT_MAX_COORDINATION)
+        if degree[index] >= ceiling:
             return False
         if is_mx2:
             return symbols[index] in CHALCOGENS

@@ -14,6 +14,7 @@ validation pass before writing.
 |-----------------|------------------------------------------------------------------------------|
 | `builders`      | CNT (armchair / zigzag / chiral), graphene, nanoribbons, **nanocoils**, 3D carbon foam, **capped/defected fullerene-CNTs** |
 | `dopants`       | Substitutional heteroatoms in carbon (N, B, P, S, Se, O, Si, Ge, Al and the 3d single-atom metals), placed at random, on **pentagons**, on edges or in the bulk |
+| `analyse`       | **Describe a structure this package did not build**: composition, shape, bonds, rings (as faces of the surface), coordination, validation and a verdict — with recorded, measured and inferred kept apart |
 | `functionalize` | **Surface groups** (–OH, –COOH, =O, –CHO, –NH2, –SH, –CH3, –NO2, –F, epoxide) grafted onto carbon **or** MX2, with the elements swappable and the geometry rebuilt |
 | `defects`       | Mono- and divacancies, Stone-Wales, local random distortion                  |
 | `topology`      | networkx-based bond graph, coordination, connectivity, ring statistics       |
@@ -511,6 +512,98 @@ free; there is no `batch_schwarzite_sweep` to write.
   dimensionality, mean coordination, ring statistics (3 through 8) and
   per-element counts — ready for scikit-learn / pandas ingestion,
 * `manifest.json` with validation outcomes and `atoms.info` payloads.
+
+## Analysing a structure someone else made
+
+Everything this framework builds records what it did. A file from another
+code records nothing, so `nanocarbon analyse` recovers what it can from
+the coordinates — and keeps **what the file recorded**, **what was
+measured** and **what was inferred** in separate sections, because
+"pentagons: 12" reads the same whether a builder placed twelve pentagons
+or a distance cutoff guessed them.
+
+```bash
+nanocarbon analyse relaxed.xyz
+nanocarbon analyse POSCAR --tolerance 0.25      # tighter bond cutoff
+nanocarbon analyse structure.cif --json out/analysis.json
+```
+
+```
+schwarzite.xyz: C1134, 1134 atoms
+
+MEASURED  (true of the coordinates)
+  composition   C 100.0%
+  C-C            1701 bonds  1.340 / 1.420 / 1.519 Å  (std 0.0223)
+  C coordination  1134x3
+  density       0.5834 g/cm3
+
+INFERRED  (a rule, not a fact; bond cutoff = radii sum + 0.3 Å)
+  shape         3D bulk  — periodic in all three directions, with no
+                vacuum gap along any of them.
+  cell says     pbc [True, True, True], of which [0, 1, 2] really repeat
+  rings         {5: 41, 6: 457, 7: 65}  sum(6-n) = -24
+                [faces of the embedded surface]
+
+RECORDED  nothing: no builder metadata in this file, so everything above
+          is measured or inferred.
+
+VALIDATION  passed
+VERDICT  [sp2 carbon]  CLEAN: bonds, angles and spacings are all in the
+         sp2 range.
+```
+
+Those ring counts are the *exact* ones the schwarzite builder recorded
+before the metadata was stripped, and `sum(6-n) = -24` is the Euler
+budget for genus 3.
+
+### Rings are faces, not short cycles
+
+For a trivalent surface — graphene, any tube, any cage, any schwarzite,
+any junction — a ring is a **face of the embedded graph**, and the faces
+can be read off exactly rather than searched for. What is not used, and
+why:
+
+| method | C60 | Y junction heptagons | verdict |
+|--------|-----|----------------------|---------|
+| face tracing | 5:12, 6:20 | **16 of 16** | exact; `F = E − V + 2 − 2g` holds |
+| shortest-path rings | 5:12, 6:20 | 4 of 16 | misses large rings on a tiled surface |
+| `networkx.cycle_basis` | reports 9- and 10-rings | — | answers a different question |
+
+A heptagon every one of whose bonds also borders a hexagon is never the
+*smallest* ring through any bond, so a shortest-path search never emits
+it. Shortest-path rings are still the fallback for anything that is not a
+trivalent surface — an MX2 sandwich, a bulk crystal, a molecule — and the
+report always says which method ran.
+
+A cell so small that two atoms are bonded through **more than one
+periodic image** cannot be written as a simple graph at all. That is
+detected and refused, rather than answered with a number that describes
+nothing.
+
+### Shape is measured, not read off `pbc`
+
+Every plane-wave code writes a slab as `pbc=(True, True, True)`, because
+that is the only periodicity it has. Trusting the flag would call it bulk
+and then quote a density for the vacuum padding, so an axis counts as
+periodic only when it also has no vacuum gap:
+
+| structure | verdict |
+|-----------|---------|
+| graphene | 2D sheet |
+| MoS₂ monolayer | 2D sheet, 3.13 Å thick |
+| MoS₂ bilayer | 2D **slab**, 9.28 Å thick, 2 disjoint pieces |
+| (6,6) nanotube | 1D tube |
+| MoS₂ nanotube | 1D tube |
+| MoS₂ ribbon | 1D ribbon |
+| C60 | 0D cage |
+| Y junction | 0D branched shell |
+| multi-wall tube | 1D tube, 2 nested pieces |
+| bundle | 1D tube, 7 pieces |
+| schwarzite | 3D bulk |
+
+A tube and a cage both have three large spans, so what tells them from a
+solid is that they are **hollow** — the relative spread of the radial
+distances, which needs no length scale to compare against.
 
 ## Visualisation
 

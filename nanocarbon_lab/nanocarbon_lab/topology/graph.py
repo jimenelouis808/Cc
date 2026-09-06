@@ -61,10 +61,17 @@ def coordination_numbers(atoms: Atoms, tolerance: float = 0.30) -> np.ndarray:
             np.add.at(coord, pairs[:, 1], 1)
             return coord
 
-    g = build_bond_graph(atoms, tolerance=tolerance)
+    # Counted from the bond list, not from the graph's node degrees. A
+    # networkx Graph holds one edge per *pair*, and in a cell only one or
+    # two repeats wide an atom reaches the same neighbour through several
+    # images -- so the degree undercounts. A 1x1 MoS2 cell has 12 M-X
+    # bonds and its metals are six-coordinate, but the collapsed graph
+    # gives each of them 2, and validation then warned about "dangling"
+    # chalcogens in a perfect crystal.
     coord = np.zeros(n, dtype=int)
-    for i in range(n):
-        coord[i] = g.degree[i] if i in g else 0
+    for first, second, _ in guess_bonds(atoms, tolerance=tolerance):
+        coord[first] += 1
+        coord[second] += 1
     return coord
 
 

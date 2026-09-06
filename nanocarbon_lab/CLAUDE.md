@@ -46,6 +46,11 @@ nanocarbon_lab/
 ├── workflows/     # sweep.py: Cartesian product over jobs.Job, so every
 │                  #   mode is sweepable; batch.py + ml_dataset.py write
 │                  #   the QE/LAMMPS inputs, features CSV and manifest
+├── analyse/       # describe a structure this package did NOT build:
+│                  #   rings.py (faces of the embedded surface, with
+│                  #   shortest-path rings as the fallback), shape.py
+│                  #   (dimensionality measured, not read off pbc),
+│                  #   report.py (recorded vs measured vs inferred)
 ├── cell.py        # any structure -> a DFT-ready periodic unit cell
 ├── utils/         # constants, geometry helpers
 ├── cli/           # command line interface
@@ -584,6 +589,83 @@ Adding a material means adding its metal to `COVALENT_RADII`,
 `BOND_CUTOFF_OVERRIDE`, and a test asserts the resulting M-M cutoff
 falls **below** that material's lattice constant -- above it, every metal
 bonds to its six in-plane neighbours and reads as 12-coordinate.
+
+## Analysing a file: keep what was recorded apart from what was guessed
+
+`analyse/` describes a structure the framework did not build. Its whole
+discipline is the three-way split the report prints: **recorded** (read
+from `atoms.info`, so it is what a builder did), **measured** (true of
+the coordinates -- a bond length, a span, an element count) and
+**inferred** (a rule with thresholds behind it -- the bonds, the rings,
+the shape). Blurring them would be worse than no report, since
+"pentagons: 12" reads the same whether a builder placed twelve pentagons
+or a distance cutoff guessed them.
+
+**Rings are traced as faces, not searched as cycles.** For a trivalent
+surface -- graphene, any tube, any cage, any schwarzite, any junction --
+a ring is a *face of the embedded graph*, and ordering each atom's
+neighbours by angle about its surface normal gives a rotation system
+whose orbits are exactly those faces. Measured against the builders' own
+recorded rings it reproduces them exactly, and the face count satisfies
+`F = E - V + 2 - 2g` by construction.
+
+Shortest-path rings are the fallback for anything that is not a
+trivalent surface (an MX2 sandwich, a bulk crystal, a molecule), and the
+report says which method ran, because they answer different questions.
+SP rings **systematically miss large rings on a tiled surface**: a
+heptagon every one of whose bonds also borders a hexagon is never the
+smallest ring through any bond. Measured: a Y junction has 16 heptagons
+and SP rings find 4; Schwarz P has 65 and SP rings find 10. Neither is
+`networkx.cycle_basis`, which reports nine- and ten-membered rings on a
+C60 -- a cycle basis counts independent loops, which is a different
+question with a different right answer.
+
+A cell so small that a pair of atoms is bonded through **more than one
+image** cannot be written as a simple graph at all, so no census on it
+describes it. That is detected and refused rather than answered.
+
+**Shape is measured, never read off `pbc`.** Every plane-wave code writes
+a slab as `pbc=(True, True, True)`, so trusting the flag would call it
+bulk and quote a density for the padding. An axis counts as periodic only
+if it also has no vacuum gap. For the finite part, spans classify a sheet
+and a chain, but a tube and a cage both have three large spans -- what
+separates them from a solid is that they are **hollow**, which the
+relative spread of the radial distances measures without needing a length
+scale. Two refinements were bugs first: the tube axis must be tried
+against every principal axis *and* the periodic direction (a one-cell
+MoS2 tube is 33 Å across and 4.6 Å long, so its longest principal axis is
+a diameter and it read as a chain), and thickness must be measured along
+the cell's non-periodic direction (on a 1x1 MX2 bilayer the smallest
+principal span is *in plane*, so a 9.3 Å slab read as 0 Å thick).
+
+Disjoint pieces are classified separately, and they win **only when they
+disagree with the whole about dimensionality**. Two stacked MX2 layers
+are two sheets and also one slab, both 2D, and the slab is the more
+useful true statement because it accounts for every atom; two nested
+tubes are 1D each while their union reads as a 0D branched shell, and
+there the union is simply wrong -- the annulus between the walls is empty
+space, not material.
+
+Writing this package found three bugs elsewhere, which is what it is for:
+
+* **`surface_normals` had `PYRAMIDAL_SUM` at 0.30**, so half of a
+  Schwarz P cell's atoms were treated as pyramidal on the strength of a
+  near-cancelling bond sum and were exempted from the sign propagation.
+  431 of 1701 bonds joined atoms whose normals pointed opposite ways, and
+  a quarter of any groups grafted onto a schwarzite would have gone
+  through the wall. The threshold is now measured: every carbon surface
+  is at most 1.07 (C20, the most pyramidalised sp2 carbon there is) and
+  every MX2 chalcogen at least 1.79.
+* **`coordination_numbers` counted node degrees in a networkx Graph**,
+  which holds one edge per pair. In a 1x1 MoS2 cell an atom reaches the
+  same neighbour through several images, so its metals read as
+  two-coordinate and validation warned about dangling chalcogens in a
+  perfect crystal. It counts from the bond list now.
+* **`candidate_sites` offered atoms a previous graft had added.** A
+  hydroxyl took the oxygen of an epoxide already on the sheet, giving a
+  1.32 Å O-O peroxide bridge on a structure whose every other number
+  looked right. Grafted atoms are excluded, and so is any atom already at
+  its element's coordination limit.
 
 ## Removing an atom renumbers every atom after it
 
