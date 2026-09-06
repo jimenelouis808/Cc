@@ -1,0 +1,455 @@
+{
+  "_comment": [
+    "Raman bands of sp2/sp3 carbon nanomaterials.",
+    "",
+    "'position' is the band centre at the reference excitation given by",
+    "'reference_laser_ev' (2.33 eV = 532 nm, the most common carbon Raman",
+    "line). 'dispersion_cm1_per_ev' is d(omega)/d(E_laser); the analysis code",
+    "corrects every reference position to the user's actual laser with",
+    "    omega(E) = position + dispersion * (E - reference_laser_ev).",
+    "Ignoring this is the single most common way a band assignment goes wrong:",
+    "the D band moves ~22 cm-1 between 532 and 633 nm, and the 2D band ~44.",
+    "",
+    "'confidence' is about the NUMBER, not about the physics: 'high' means the",
+    "value is consistent across the standard reviews, 'medium' means reported",
+    "values scatter by more than 20 %, 'low' means it is a working estimate.",
+    "Edit this file to match your own calibration; nothing in the code",
+    "hardcodes these values."
+  ],
+  "reference_laser_ev": 2.33,
+  "bands": [
+    {
+      "key": "RBM",
+      "name": "Radial Breathing Mode",
+      "position": 200.0,
+      "window": [
+        80.0,
+        400.0
+      ],
+      "dispersion_cm1_per_ev": 0.0,
+      "typical_fwhm": [
+        3.0,
+        25.0
+      ],
+      "order": "first",
+      "symmetry": "A1g",
+      "default_profile": "lorentzian",
+      "origin": "Coherent radial vibration of all carbon atoms in a tube wall. Its frequency is set by the tube diameter alone, which is what makes it the diameter probe.",
+      "occurs_in": [
+        "SWCNT",
+        "DWCNT",
+        "thin MWCNT"
+      ],
+      "confidence": "high",
+      "source": "Dresselhaus et al., Phys. Rep. 409 (2005) 47; Jorio et al., Phys. Rev. Lett. 86 (2001) 1118",
+      "notes": "Not dispersive in position, but the laser selects WHICH tubes resonate, so different lasers show different RBM peaks in the same sample. Absent above ~2.5 nm diameter: the frequency falls below ~100 cm-1 and the intensity scales as 1/d. La posición de referencia es solo el centro de la ventana de búsqueda: la frecuencia real la fija el diámetro del tubo, no una posición nominal. Un 'desplazamiento' respecto a ella no significa nada.",
+      "position_is_reference": false,
+      "multi_valued": true
+    },
+    {
+      "key": "IFM",
+      "name": "Intermediate Frequency Modes",
+      "position": 850.0,
+      "window": [
+        600.0,
+        1100.0
+      ],
+      "dispersion_cm1_per_ev": -25.0,
+      "typical_fwhm": [
+        20.0,
+        80.0
+      ],
+      "order": "combination",
+      "symmetry": null,
+      "default_profile": "lorentzian",
+      "origin": "Combination and difference modes involving acoustic and optical branches.",
+      "occurs_in": [
+        "SWCNT"
+      ],
+      "confidence": "low",
+      "source": "Fantini et al., Phys. Rev. B 72 (2005) 085446",
+      "notes": "Weak, and easily confused with substrate lines (Si at 520 and 950-1000 cm-1). Reported only when the substrate is known. Igual que el RBM: la posición depende del tubo concreto, no hay una posición nominal contra la que comparar.",
+      "position_is_reference": false,
+      "multi_valued": true
+    },
+    {
+      "key": "D4",
+      "name": "D4 (D'')",
+      "position": 1200.0,
+      "window": [
+        1100.0,
+        1270.0
+      ],
+      "dispersion_cm1_per_ev": 0.0,
+      "typical_fwhm": [
+        80.0,
+        250.0
+      ],
+      "order": "first",
+      "symmetry": null,
+      "default_profile": "gaussian",
+      "origin": "sp3-rich and polyene-like fragments, C-C and C=C stretching in disordered/ionic impurity environments.",
+      "occurs_in": [
+        "soot",
+        "carbon black",
+        "GO",
+        "amorphous carbon",
+        "MWCNT"
+      ],
+      "confidence": "medium",
+      "source": "Sadezky et al., Carbon 43 (2005) 1731",
+      "notes": "Gaussian by convention: it is an envelope over many local environments, not a single phonon. Only include it in a fit when the spectrum visibly rises below 1250 cm-1.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "D",
+      "name": "D band (defect-induced)",
+      "position": 1350.0,
+      "window": [
+        1300.0,
+        1400.0
+      ],
+      "dispersion_cm1_per_ev": 50.0,
+      "typical_fwhm": [
+        20.0,
+        100.0
+      ],
+      "order": "first",
+      "symmetry": "A1g breathing",
+      "default_profile": "lorentzian",
+      "origin": "Breathing mode of six-atom rings, activated by an intervalley double-resonance process. Forbidden in perfect graphite: it requires a defect to supply the missing momentum, which is why its intensity measures disorder.",
+      "occurs_in": [
+        "all disordered sp2 carbon"
+      ],
+      "confidence": "high",
+      "source": "Tuinstra & Koenig, J. Chem. Phys. 53 (1970) 1126; Ferrari & Robertson, Phys. Rev. B 61 (2000) 14095; Pocsik et al., J. Non-Cryst. Solids 227 (1998) 1083 (dispersion)",
+      "notes": "Dispersion of ~50 cm-1/eV is the fingerprint of the double-resonance mechanism. Reported values span 44-53.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "D3",
+      "name": "D3 (A band, amorphous)",
+      "position": 1500.0,
+      "window": [
+        1450.0,
+        1560.0
+      ],
+      "dispersion_cm1_per_ev": 0.0,
+      "typical_fwhm": [
+        60.0,
+        250.0
+      ],
+      "order": "first",
+      "symmetry": null,
+      "default_profile": "gaussian",
+      "origin": "Amorphous sp2 carbon: interstitial defects, molecular fragments and functional groups outside the graphitic lattice.",
+      "occurs_in": [
+        "soot",
+        "GO",
+        "rGO",
+        "amorphous carbon",
+        "biochar"
+      ],
+      "confidence": "medium",
+      "source": "Sadezky et al., Carbon 43 (2005) 1731",
+      "notes": "A large fitted D3 area is the most abused number in this field. It sits in the valley between D and G, where it is strongly correlated with both; if the fit does not report that correlation, distrust it.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "G-",
+      "name": "G- (SWCNT, circumferential)",
+      "position": 1570.0,
+      "window": [
+        1500.0,
+        1585.0
+      ],
+      "dispersion_cm1_per_ev": 0.0,
+      "typical_fwhm": [
+        10.0,
+        120.0
+      ],
+      "order": "first",
+      "symmetry": "E2g / A (curvature-split)",
+      "default_profile": "lorentzian",
+      "origin": "The component of the G mode with atomic motion along the tube circumference. Curvature softens it, by an amount that scales as 1/d^2.",
+      "occurs_in": [
+        "SWCNT",
+        "DWCNT"
+      ],
+      "confidence": "high",
+      "source": "Jorio et al., Phys. Rev. B 65 (2002) 155412",
+      "notes": "Lorentzian for semiconducting tubes; Breit-Wigner-Fano for metallic ones, where the phonon couples to the free-electron continuum and the band becomes broad and asymmetric towards low frequency.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "G",
+      "name": "G band",
+      "position": 1582.0,
+      "window": [
+        1550.0,
+        1610.0
+      ],
+      "dispersion_cm1_per_ev": 0.0,
+      "typical_fwhm": [
+        12.0,
+        90.0
+      ],
+      "order": "first",
+      "symmetry": "E2g",
+      "default_profile": "lorentzian",
+      "origin": "In-plane stretching of sp2 carbon pairs. The only first-order Raman-allowed mode of perfect graphite, present in every sp2 carbon and not defect-activated, which is why it is the natural intensity reference.",
+      "occurs_in": [
+        "all sp2 carbon"
+      ],
+      "confidence": "high",
+      "source": "Tuinstra & Koenig, J. Chem. Phys. 53 (1970) 1126; Ferrari & Basko, Nature Nanotech. 8 (2013) 235",
+      "notes": "Non-dispersive. It DOES shift with doping (stiffening for both electrons and holes, via the removal of the Kohn anomaly) and with strain (softening under tension), and separating those two is what analysis.shifts is for.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "G+",
+      "name": "G+ (SWCNT, axial)",
+      "position": 1590.0,
+      "window": [
+        1580.0,
+        1605.0
+      ],
+      "dispersion_cm1_per_ev": 0.0,
+      "typical_fwhm": [
+        8.0,
+        30.0
+      ],
+      "order": "first",
+      "symmetry": "A / E1 / E2",
+      "default_profile": "lorentzian",
+      "origin": "The G component with atomic motion along the tube axis. Essentially insensitive to curvature, so its position is close to the graphite G band.",
+      "occurs_in": [
+        "SWCNT",
+        "DWCNT"
+      ],
+      "confidence": "high",
+      "source": "Jorio et al., Phys. Rev. B 65 (2002) 155412",
+      "notes": "A resolved G+/G- pair narrower than ~20 cm-1 in FWHM is one of the strongest single indicators of single-walled material.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "D'",
+      "name": "D' band",
+      "position": 1620.0,
+      "window": [
+        1595.0,
+        1640.0
+      ],
+      "dispersion_cm1_per_ev": 10.0,
+      "typical_fwhm": [
+        10.0,
+        40.0
+      ],
+      "order": "first",
+      "symmetry": null,
+      "default_profile": "lorentzian",
+      "origin": "Intravalley double resonance: like the D band but connecting points around the same K valley, so it needs a defect too but a different scattering geometry.",
+      "occurs_in": [
+        "defective sp2 carbon"
+      ],
+      "confidence": "high",
+      "source": "Ferrari & Basko, Nature Nanotech. 8 (2013) 235; Eckmann et al., Nano Lett. 12 (2012) 3925",
+      "notes": "Usually a shoulder on the G band rather than a resolved peak. Its ratio to D is what identifies the TYPE of defect, so it is worth fitting even when it cannot be seen by eye.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "M",
+      "name": "M band",
+      "position": 1750.0,
+      "window": [
+        1690.0,
+        1800.0
+      ],
+      "dispersion_cm1_per_ev": -25.0,
+      "typical_fwhm": [
+        20.0,
+        80.0
+      ],
+      "order": "second",
+      "symmetry": null,
+      "default_profile": "lorentzian",
+      "origin": "Overtone of the out-of-plane transverse optical (oTO) branch.",
+      "occurs_in": [
+        "SWCNT",
+        "graphite"
+      ],
+      "confidence": "low",
+      "source": "Brar et al., Phys. Rev. B 66 (2002) 155418",
+      "notes": "Weak. Reported for completeness; not used in classification.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "iTOLA",
+      "name": "iTOLA / G*",
+      "position": 1950.0,
+      "window": [
+        1850.0,
+        2050.0
+      ],
+      "dispersion_cm1_per_ev": 220.0,
+      "typical_fwhm": [
+        30.0,
+        120.0
+      ],
+      "order": "combination",
+      "symmetry": null,
+      "default_profile": "lorentzian",
+      "origin": "Combination of the in-plane transverse optical and longitudinal acoustic branches.",
+      "occurs_in": [
+        "SWCNT"
+      ],
+      "confidence": "low",
+      "source": "Brar et al., Phys. Rev. B 66 (2002) 155418",
+      "notes": "Strongly dispersive; the quoted value is a working estimate.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "D+D''",
+      "name": "D+D'' (also called G*)",
+      "position": 2450.0,
+      "window": [
+        2380.0,
+        2520.0
+      ],
+      "dispersion_cm1_per_ev": -20.0,
+      "typical_fwhm": [
+        40.0,
+        150.0
+      ],
+      "order": "combination",
+      "symmetry": null,
+      "default_profile": "lorentzian",
+      "origin": "Combination of the D phonon with a longitudinal-acoustic phonon; unusually, it disperses to LOWER frequency with increasing laser energy.",
+      "occurs_in": [
+        "graphene",
+        "graphite",
+        "CNT"
+      ],
+      "confidence": "medium",
+      "source": "Ferrari & Basko, Nature Nanotech. 8 (2013) 235",
+      "notes": "Not defect-activated in the same way as D: it survives in pristine graphene, which is a useful check that a weak feature near 2450 is not a stray D-related artefact.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "2D",
+      "name": "2D band (G')",
+      "position": 2690.0,
+      "window": [
+        2550.0,
+        2800.0
+      ],
+      "dispersion_cm1_per_ev": 100.0,
+      "typical_fwhm": [
+        20.0,
+        120.0
+      ],
+      "order": "second",
+      "symmetry": null,
+      "default_profile": "lorentzian",
+      "origin": "Overtone of the D phonon. Being an overtone, momentum conservation is satisfied by the two phonons alone: it needs NO defect, and it is present in pristine graphene.",
+      "occurs_in": [
+        "all sp2 carbon"
+      ],
+      "confidence": "high",
+      "source": "Ferrari et al., Phys. Rev. Lett. 97 (2006) 187401; Ferrari & Basko, Nature Nanotech. 8 (2013) 235",
+      "notes": "Its LINESHAPE, not its position, counts graphene layers: one symmetric Lorentzian of FWHM ~25-30 cm-1 for monolayer, four components for bilayer, an asymmetric two-component envelope for graphite. Dispersion is twice the D band's, as an overtone must be.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "D+D'",
+      "name": "D+D' (D+G)",
+      "position": 2940.0,
+      "window": [
+        2850.0,
+        3000.0
+      ],
+      "dispersion_cm1_per_ev": 60.0,
+      "typical_fwhm": [
+        40.0,
+        150.0
+      ],
+      "order": "combination",
+      "symmetry": null,
+      "default_profile": "lorentzian",
+      "origin": "Combination of the D and D' phonons; defect-activated, like both of its parents.",
+      "occurs_in": [
+        "defective sp2 carbon"
+      ],
+      "confidence": "medium",
+      "source": "Ferrari & Basko, Nature Nanotech. 8 (2013) 235",
+      "notes": "Its presence confirms that the D band is genuine disorder rather than a fitting artefact. Dispersion taken as the sum of its two components; reported values scatter.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "2D'",
+      "name": "2D' band",
+      "position": 3240.0,
+      "window": [
+        3150.0,
+        3320.0
+      ],
+      "dispersion_cm1_per_ev": 20.0,
+      "typical_fwhm": [
+        30.0,
+        120.0
+      ],
+      "order": "second",
+      "symmetry": null,
+      "default_profile": "lorentzian",
+      "origin": "Overtone of the D' phonon; like 2D, it needs no defect.",
+      "occurs_in": [
+        "sp2 carbon"
+      ],
+      "confidence": "medium",
+      "source": "Ferrari & Basko, Nature Nanotech. 8 (2013) 235",
+      "notes": "Weak and often outside the measured window.",
+      "position_is_reference": true,
+      "multi_valued": false
+    },
+    {
+      "key": "diamond",
+      "name": "Diamond T2g",
+      "position": 1332.0,
+      "window": [
+        1320.0,
+        1345.0
+      ],
+      "dispersion_cm1_per_ev": 0.0,
+      "typical_fwhm": [
+        2.0,
+        20.0
+      ],
+      "order": "first",
+      "symmetry": "T2g",
+      "default_profile": "lorentzian",
+      "origin": "The single first-order Raman mode of sp3 diamond.",
+      "occurs_in": [
+        "diamond",
+        "nanodiamond",
+        "detonation nanodiamond"
+      ],
+      "confidence": "high",
+      "source": "Solin & Ramdas, Phys. Rev. B 1 (1970) 1687",
+      "notes": "Dangerously close to the D band. A narrow (FWHM < 20 cm-1) NON-dispersive line near 1332 cm-1 is diamond; a broad line that moves with the laser is the D band. Measuring at two wavelengths settles it.",
+      "position_is_reference": true,
+      "multi_valued": false
+    }
+  ]
+}

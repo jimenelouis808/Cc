@@ -1,0 +1,99 @@
+{
+  "_comment": [
+    "Radial-breathing-mode <-> diameter relations, omega = A/d + B, with d in nm",
+    "and omega in cm-1.",
+    "",
+    "There is no single correct (A, B). The RBM frequency of a given tube depends",
+    "on its environment: a tube in a bundle is stiffened by van der Waals contact",
+    "with its neighbours, a surfactant-wrapped tube less so, a suspended tube not",
+    "at all. Published A values span 215-248 and B spans 0-27, and choosing the",
+    "wrong pair biases every diameter by up to 10 %.",
+    "",
+    "So this file offers the standard parameterisations side by side and the code",
+    "makes the user choose one, reports which was used, and can show the spread",
+    "across all of them as an honest uncertainty. 'environment' says what sample",
+    "each was calibrated on; use the one that matches yours."
+  ],
+  "default": "jorio_bundles",
+  "parameterisations": [
+    {
+      "key": "jorio_bundles",
+      "label": "Haces / polvo (A=234, B=10)",
+      "A": 234.0,
+      "B": 10.0,
+      "environment": "SWCNT bundles and as-produced powder",
+      "diameter_range_nm": [0.7, 3.0],
+      "confidence": "high",
+      "source": "Jorio et al., Phys. Rev. B 65 (2002) 155412; Kuzmany et al., Eur. Phys. J. B 22 (2001) 307",
+      "notes": "The workhorse for bundled material. The +10 cm-1 offset is the van der Waals stiffening from neighbouring tubes; it is NOT a fitting fudge, and dropping it on bundled samples overestimates diameters."
+    },
+    {
+      "key": "jorio_isolated",
+      "label": "Tubos aislados sobre SiO2 (A=248, B=0)",
+      "A": 248.0,
+      "B": 0.0,
+      "environment": "Individual SWCNTs on an oxidised silicon substrate",
+      "diameter_range_nm": [0.8, 2.0],
+      "confidence": "high",
+      "source": "Jorio et al., Phys. Rev. Lett. 86 (2001) 1118",
+      "notes": "Calibrated against resonant Raman on isolated tubes with (n,m) assigned from the Kataura plot. Use for CVD-grown isolated tubes, not for powder."
+    },
+    {
+      "key": "bandow",
+      "label": "Bandow (A=223.75, B=0)",
+      "A": 223.75,
+      "B": 0.0,
+      "environment": "Isolated / weakly interacting SWCNTs",
+      "diameter_range_nm": [0.7, 2.0],
+      "confidence": "medium",
+      "source": "Bandow et al., Phys. Rev. Lett. 80 (1998) 3779",
+      "notes": "One of the earliest calibrations, derived from a force-constant model."
+    },
+    {
+      "key": "araujo_sds",
+      "label": "Araujo, SWCNT en SDS (A=227, correccion de entorno)",
+      "A": 227.0,
+      "B": 0.0,
+      "environment_correction": 0.05789,
+      "environment": "SWCNTs dispersed in aqueous SDS",
+      "diameter_range_nm": [0.7, 2.5],
+      "confidence": "medium",
+      "source": "Araujo et al., Phys. Rev. B 77 (2008) 241403(R)",
+      "notes": "Uses omega = (A/d) * sqrt(1 + C_e d^2) rather than A/d + B, with C_e = 0.05789 nm^-2 for SDS. The multiplicative form keeps the pristine-tube frequency A/d and puts all the environment in one term."
+    },
+    {
+      "key": "milnera_dwcnt_inner",
+      "label": "Paredes internas de DWCNT (A=204, B=27)",
+      "A": 204.0,
+      "B": 27.0,
+      "environment": "Inner tubes of double-walled CNTs and peapod-derived tubes",
+      "diameter_range_nm": [0.5, 1.2],
+      "confidence": "medium",
+      "source": "Milnera et al., Phys. Rev. Lett. 84 (2000) 1324; Pfeiffer et al., Phys. Rev. Lett. 90 (2003) 225501",
+      "notes": "Inner tubes are shielded by the outer wall and sit in a different mechanical environment; using a bundle parameterisation on them underestimates their diameter."
+    }
+  ],
+  "graphite_interlayer_nm": 0.335,
+  "wall_spacing_nm": [0.335, 0.360],
+  "wall_spacing_note": "Measured wall-to-wall separations in DWCNTs run 0.33-0.36 nm, wider than graphite's 0.335 nm because of curvature. Two RBM peaks whose diameters differ by 2 x (0.33-0.36) = 0.66-0.72 nm are a candidate inner/outer pair.",
+  "wall_spacing_source": "Pfeiffer et al., Phys. Rev. B 72 (2005) 161404; Hirschmann et al., ACS Nano 7 (2013) 2205",
+  "g_band_splitting": {
+    "_comment": "omega(G-) = omega(G+) - C / d^2, an INDEPENDENT diameter estimate that needs no RBM. Useful for spectra whose low-frequency cutoff hides the RBM region entirely.",
+    "C_semiconducting": 47.7,
+    "C_metallic": 79.5,
+    "units": "cm-1 nm^2",
+    "omega_G_plus_reference": 1591.0,
+    "confidence": "high",
+    "source": "Jorio et al., Phys. Rev. B 65 (2002) 155412",
+    "notes": "The metallic constant is larger because the softening of the metallic G- has an extra electron-phonon contribution on top of curvature. Applying the semiconducting constant to a metallic tube overestimates the diameter by about 30 %."
+  },
+  "chirality": {
+    "_comment": "Geometry of a (n,m) tube. a = sqrt(3) * a_CC is the graphene lattice constant.",
+    "a_cc_nm": 0.142,
+    "lattice_constant_nm": 0.2459512146747803,
+    "diameter_formula": "d = (a/pi) * sqrt(n^2 + n*m + m^2)",
+    "chiral_angle_formula": "theta = atan(sqrt(3)*m / (2n + m))",
+    "metallicity_rule": "(n - m) mod 3 == 0 -> metallic (armchair n=m truly metallic; other (n-m)%3==0 tubes open a small curvature gap of a few tens of meV and are called quasi-metallic)",
+    "source": "Saito, Dresselhaus & Dresselhaus, Physical Properties of Carbon Nanotubes (1998)"
+  }
+}

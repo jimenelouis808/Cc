@@ -1,0 +1,327 @@
+{
+  "_comment": [
+    "Reference Raman fingerprints for carbon nanomaterials.",
+    "",
+    "All band positions are at 2.33 eV (532 nm) and are corrected to the user's",
+    "laser by the dispersion in bands.json before any comparison is made.",
+    "",
+    "Ranges are deliberately wide. They come from what the literature actually",
+    "reports across synthesis routes, not from one paper's best sample; a",
+    "narrower range would classify more decisively and be wrong more often.",
+    "",
+    "'intensity_basis' says whether a ratio range refers to peak HEIGHTS or to",
+    "integrated AREAS. This matters: for the same spectrum, an area-based",
+    "I_D/I_G is typically 1.5-2.5x the height-based one, because the D band is",
+    "broader than the G band. A great deal of published disagreement about",
+    "I_D/I_G is really disagreement about this."
+  ],
+  "reference_laser_ev": 2.33,
+  "materials": [
+    {
+      "key": "SWCNT",
+      "label": "Nanotubo de pared simple (SWCNT)",
+      "family": "CNT",
+      "walls": 1,
+      "rbm": {
+        "expected": "required",
+        "window": [120.0, 350.0],
+        "typical_count": [1, 8],
+        "fwhm": [3.0, 20.0],
+        "note": "Sharp, often several peaks from the diameter distribution that the laser happens to resonate with."
+      },
+      "bands": {
+        "G+": {"position": [1585.0, 1595.0], "fwhm": [8.0, 25.0]},
+        "G-": {"position": [1540.0, 1580.0], "fwhm": [10.0, 60.0]},
+        "D": {"position": [1330.0, 1360.0], "fwhm": [20.0, 50.0]},
+        "2D": {"position": [2640.0, 2700.0], "fwhm": [30.0, 70.0]}
+      },
+      "ratios": {
+        "ID_IG": [0.02, 0.30],
+        "I2D_IG": [0.3, 1.5]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "g_split": "resolved",
+        "g_fwhm_max": 30.0,
+        "bwf_possible": true
+      },
+      "confidence": "high",
+      "source": "Dresselhaus et al., Phys. Rep. 409 (2005) 47; Jorio et al., Phys. Rev. B 65 (2002) 155412",
+      "notes": "I_D/I_G above ~0.3 does not stop it being SWCNT material; it means the sample is damaged, functionalised or full of amorphous carbon. The RBM and the narrow split G band are the identity, not the disorder level."
+    },
+    {
+      "key": "DWCNT",
+      "label": "Nanotubo de pared doble (DWCNT)",
+      "family": "CNT",
+      "walls": 2,
+      "rbm": {
+        "expected": "required",
+        "window": [110.0, 400.0],
+        "typical_count": [2, 10],
+        "fwhm": [3.0, 25.0],
+        "clusters": 2,
+        "inner_window": [220.0, 400.0],
+        "outer_window": [110.0, 220.0],
+        "note": "The signature is TWO groups of RBM peaks: inner tubes of 0.6-1.0 nm above ~220 cm-1 and outer tubes of 1.2-2.0 nm below it, separated by twice the wall spacing."
+      },
+      "bands": {
+        "G+": {"position": [1585.0, 1595.0], "fwhm": [10.0, 30.0]},
+        "G-": {"position": [1550.0, 1580.0], "fwhm": [10.0, 60.0]},
+        "D": {"position": [1330.0, 1360.0], "fwhm": [25.0, 60.0]},
+        "2D": {"position": [2640.0, 2710.0], "fwhm": [40.0, 90.0]}
+      },
+      "ratios": {
+        "ID_IG": [0.03, 0.60],
+        "I2D_IG": [0.2, 1.0]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "g_split": "resolved",
+        "g_fwhm_max": 40.0,
+        "bwf_possible": true
+      },
+      "confidence": "medium",
+      "source": "Pfeiffer et al., Phys. Rev. B 72 (2005) 161404; Villalpando-Paez et al., Phys. Rev. B 82 (2010) 155416",
+      "notes": "A DWCNT sample cannot be told from an SWCNT+MWCNT mixture by the G band alone. The paired-RBM test is the discriminator, and it only works if the spectrum reaches below 150 cm-1. Inner tubes usually show a NARROWER RBM than outer ones because the outer wall shields them from environmental broadening."
+    },
+    {
+      "key": "MWCNT",
+      "label": "Nanotubo de pared multiple (MWCNT)",
+      "family": "CNT",
+      "walls": 3,
+      "rbm": {
+        "expected": "absent",
+        "window": [100.0, 400.0],
+        "note": "Outer diameters of 10-50 nm put the RBM below ~25 cm-1, inside the Rayleigh rejection of any ordinary spectrometer, and its intensity scales as 1/d. A genuine RBM in an MWCNT spectrum means thin-walled tubes or an SWCNT/DWCNT impurity."
+      },
+      "bands": {
+        "G": {"position": [1570.0, 1590.0], "fwhm": [30.0, 80.0]},
+        "D": {"position": [1330.0, 1360.0], "fwhm": [40.0, 110.0]},
+        "D'": {"position": [1605.0, 1625.0], "fwhm": [15.0, 50.0]},
+        "2D": {"position": [2640.0, 2720.0], "fwhm": [60.0, 160.0]}
+      },
+      "ratios": {
+        "ID_IG": [0.35, 1.80],
+        "I2D_IG": [0.10, 0.60]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "g_split": "unresolved",
+        "g_fwhm_min": 25.0,
+        "d_prime_shoulder": true
+      },
+      "confidence": "high",
+      "source": "Antunes et al., Carbon 44 (2006) 2202; DiLeo et al., J. Appl. Phys. 101 (2007) 064307",
+      "notes": "The G band is a single unresolved feature with a D' shoulder; what looks like a 'split G' in an MWCNT is almost always G + D'. Fitting it as G-/G+ produces a fictitious tube diameter, which is why this package refuses to run the G-splitting diameter estimate on a spectrum it classifies as multi-walled."
+    },
+    {
+      "key": "graphene_1L",
+      "label": "Grafeno monocapa",
+      "family": "graphene",
+      "walls": 0,
+      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "bands": {
+        "G": {"position": [1580.0, 1590.0], "fwhm": [12.0, 20.0]},
+        "2D": {"position": [2660.0, 2700.0], "fwhm": [24.0, 35.0]},
+        "D": {"position": [1330.0, 1360.0], "fwhm": [20.0, 45.0]}
+      },
+      "ratios": {
+        "ID_IG": [0.0, 0.30],
+        "I2D_IG": [1.5, 5.0]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "2d_single_lorentzian": true,
+        "2d_fwhm_max": 35.0
+      },
+      "confidence": "high",
+      "source": "Ferrari et al., Phys. Rev. Lett. 97 (2006) 187401",
+      "notes": "The identifying feature is a single symmetric Lorentzian 2D band of FWHM ~25-30 cm-1, not the I_2D/I_G ratio, which doping alone can push from 4 down to below 1 without adding a single layer."
+    },
+    {
+      "key": "graphene_2L",
+      "label": "Grafeno bicapa",
+      "family": "graphene",
+      "walls": 0,
+      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "bands": {
+        "G": {"position": [1580.0, 1590.0], "fwhm": [12.0, 22.0]},
+        "2D": {"position": [2680.0, 2710.0], "fwhm": [45.0, 60.0]},
+        "D": {"position": [1330.0, 1360.0], "fwhm": [20.0, 50.0]}
+      },
+      "ratios": {
+        "ID_IG": [0.0, 0.30],
+        "I2D_IG": [0.8, 1.5]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "2d_single_lorentzian": false,
+        "2d_components": 4
+      },
+      "confidence": "high",
+      "source": "Ferrari et al., Phys. Rev. Lett. 97 (2006) 187401",
+      "notes": "Bernal-stacked bilayer splits the 2D band into four components from the two split electronic branches. Turbostratic (rotationally disordered) bilayer does NOT: it looks like two decoupled monolayers with a single Lorentzian 2D, and is routinely misreported as monolayer."
+    },
+    {
+      "key": "FLG",
+      "label": "Grafeno de pocas capas (3-10)",
+      "family": "graphene",
+      "walls": 0,
+      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "bands": {
+        "G": {"position": [1578.0, 1588.0], "fwhm": [14.0, 25.0]},
+        "2D": {"position": [2690.0, 2725.0], "fwhm": [50.0, 90.0]},
+        "D": {"position": [1330.0, 1360.0], "fwhm": [25.0, 55.0]}
+      },
+      "ratios": {
+        "ID_IG": [0.0, 0.40],
+        "I2D_IG": [0.3, 0.9]
+      },
+      "intensity_basis": "height",
+      "features": {"2d_single_lorentzian": false, "2d_asymmetric": true},
+      "confidence": "medium",
+      "source": "Ferrari et al., Phys. Rev. Lett. 97 (2006) 187401; Malard et al., Phys. Rep. 473 (2009) 51",
+      "notes": "Layer counting by Raman becomes unreliable above ~5 layers: the 2D lineshape stops changing."
+    },
+    {
+      "key": "graphite",
+      "label": "Grafito",
+      "family": "graphene",
+      "walls": 0,
+      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "bands": {
+        "G": {"position": [1578.0, 1585.0], "fwhm": [13.0, 25.0]},
+        "2D": {"position": [2700.0, 2740.0], "fwhm": [50.0, 90.0]},
+        "D": {"position": [1330.0, 1360.0], "fwhm": [25.0, 60.0]}
+      },
+      "ratios": {
+        "ID_IG": [0.0, 0.30],
+        "I2D_IG": [0.2, 0.6]
+      },
+      "intensity_basis": "height",
+      "features": {"2d_single_lorentzian": false, "2d_components": 2},
+      "confidence": "high",
+      "source": "Ferrari et al., Phys. Rev. Lett. 97 (2006) 187401",
+      "notes": "Two 2D components (2D1, 2D2) with the higher one about twice as intense."
+    },
+    {
+      "key": "GO",
+      "label": "Oxido de grafeno (GO)",
+      "family": "oxide",
+      "walls": 0,
+      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "bands": {
+        "G": {"position": [1585.0, 1605.0], "fwhm": [60.0, 110.0]},
+        "D": {"position": [1330.0, 1365.0], "fwhm": [90.0, 180.0]},
+        "D3": {"position": [1480.0, 1540.0], "fwhm": [100.0, 250.0]},
+        "2D": {"position": [2650.0, 2750.0], "fwhm": [150.0, 350.0]}
+      },
+      "ratios": {
+        "ID_IG": [0.7, 1.2],
+        "I2D_IG": [0.0, 0.25]
+      },
+      "intensity_basis": "height",
+      "features": {"g_upshifted": true, "2d_nearly_absent": true, "broad": true},
+      "confidence": "high",
+      "source": "Stankovich et al., Carbon 45 (2007) 1558; Kudin et al., Nano Lett. 8 (2008) 36",
+      "notes": "The G band is upshifted to 1590-1600 cm-1 by the oxidised, isolated C=C double bonds, and the 2D band is essentially gone because the conjugated network is broken. A near-absent 2D with a strong D is the GO signature."
+    },
+    {
+      "key": "rGO",
+      "label": "Oxido de grafeno reducido (rGO)",
+      "family": "oxide",
+      "walls": 0,
+      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "bands": {
+        "G": {"position": [1580.0, 1600.0], "fwhm": [50.0, 100.0]},
+        "D": {"position": [1330.0, 1360.0], "fwhm": [70.0, 150.0]},
+        "2D": {"position": [2650.0, 2730.0], "fwhm": [100.0, 300.0]}
+      },
+      "ratios": {
+        "ID_IG": [0.9, 1.5],
+        "I2D_IG": [0.05, 0.4]
+      },
+      "intensity_basis": "height",
+      "features": {"broad": true},
+      "confidence": "medium",
+      "source": "Stankovich et al., Carbon 45 (2007) 1558",
+      "notes": "I_D/I_G usually RISES on reduction, which surprises people. Reduction removes oxygen and creates many small graphitic domains; in the nanocrystalline regime more domain boundaries means more D intensity, not less. The recovery of the 2D band, not I_D/I_G, is what shows the conjugation coming back."
+    },
+    {
+      "key": "amorphous_carbon",
+      "label": "Carbono amorfo (a-C)",
+      "family": "amorphous",
+      "walls": 0,
+      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "bands": {
+        "G": {"position": [1500.0, 1570.0], "fwhm": [100.0, 220.0]},
+        "D": {"position": [1330.0, 1400.0], "fwhm": [150.0, 350.0]}
+      },
+      "ratios": {
+        "ID_IG": [0.0, 0.9],
+        "I2D_IG": [0.0, 0.1]
+      },
+      "intensity_basis": "area",
+      "features": {"broad": true, "g_downshifted": true, "no_2d": true},
+      "confidence": "medium",
+      "source": "Ferrari & Robertson, Phys. Rev. B 61 (2000) 14095",
+      "notes": "In the amorphisation regime the Tuinstra-Koenig relation INVERTS: I_D/I_G becomes proportional to La^2, so a small I_D/I_G here means MORE disorder, not less. This package refuses to report a crystallite size when the G band is this broad, because the formula does not apply."
+    },
+    {
+      "key": "carbon_black",
+      "label": "Negro de carbono / hollin",
+      "family": "amorphous",
+      "walls": 0,
+      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "bands": {
+        "G": {"position": [1580.0, 1600.0], "fwhm": [60.0, 120.0]},
+        "D": {"position": [1330.0, 1370.0], "fwhm": [100.0, 220.0]},
+        "D3": {"position": [1480.0, 1540.0], "fwhm": [100.0, 250.0]},
+        "D4": {"position": [1150.0, 1250.0], "fwhm": [100.0, 250.0]}
+      },
+      "ratios": {
+        "ID_IG": [0.8, 1.5],
+        "I2D_IG": [0.0, 0.3]
+      },
+      "intensity_basis": "area",
+      "features": {"broad": true, "five_band_model": true},
+      "confidence": "medium",
+      "source": "Sadezky et al., Carbon 43 (2005) 1731",
+      "notes": "The material the five-band (D4, D1, D3, G, D2) deconvolution was designed for."
+    },
+    {
+      "key": "nanodiamond",
+      "label": "Nanodiamante",
+      "family": "sp3",
+      "walls": 0,
+      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "bands": {
+        "diamond": {"position": [1320.0, 1332.0], "fwhm": [5.0, 25.0]},
+        "G": {"position": [1550.0, 1600.0], "fwhm": [50.0, 150.0]}
+      },
+      "ratios": {"ID_IG": [0.0, 1.0], "I2D_IG": [0.0, 0.1]},
+      "intensity_basis": "height",
+      "features": {"sp3_line": true},
+      "confidence": "medium",
+      "source": "Ferrari & Robertson, Phys. Rev. B 63 (2001) 121405",
+      "notes": "The 1332 cm-1 line downshifts and broadens with decreasing particle size (phonon confinement). Do not confuse it with the D band: the diamond line does not disperse with laser energy."
+    },
+    {
+      "key": "C60",
+      "label": "Fullereno C60",
+      "family": "molecular",
+      "walls": 0,
+      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "bands": {
+        "Ag2": {"position": [1462.0, 1472.0], "fwhm": [3.0, 15.0]},
+        "Ag1": {"position": [490.0, 500.0], "fwhm": [3.0, 15.0]}
+      },
+      "ratios": {"ID_IG": [0.0, 0.2], "I2D_IG": [0.0, 0.1]},
+      "intensity_basis": "height",
+      "features": {"molecular": true},
+      "confidence": "high",
+      "source": "Dresselhaus, Dresselhaus & Eklund, Science of Fullerenes and Carbon Nanotubes (1996)",
+      "notes": "The Ag(2) pentagonal pinch mode near 1469 cm-1 is the fingerprint. Relevant here mostly as a peapod filling or a CVD by-product."
+    }
+  ]
+}

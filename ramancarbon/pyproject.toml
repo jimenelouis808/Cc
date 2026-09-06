@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ramancarbon"
+version = "0.1.0"
+description = "Analiza espectros Raman experimentales de nanomateriales de carbono: identifica SWCNT/DWCNT/MWCNT, deconvoluciona las bandas D y G, calcula I_D/I_G, I_2D/I_G, I_D/I_D', diámetros por RBM y desplazamientos frente a la literatura."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ramancarbon contributors" }]
+keywords = [
+    "Raman", "spectroscopy", "carbon nanotubes", "SWCNT", "DWCNT", "MWCNT",
+    "graphene", "graphene oxide", "RBM", "deconvolution", "D band", "G band",
+    "Tuinstra-Koenig", "Breit-Wigner-Fano", "nanomaterials",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: Spanish",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    # Required by the plots in the GUI and by ramancarbon.viz.
+    # Tkinter itself ships with Python and cannot be installed via pip.
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+ramancarbon = "ramancarbon.cli.main:main"
+# Deliberately a console script rather than a gui-script: on Windows a
+# gui-script hides stdout, so a missing-Tkinter message would vanish.
+ramancarbon-gui = "ramancarbon.gui:main"
+
+[tool.setuptools.packages.find]
+include = ["ramancarbon*"]
+exclude = ["tests*", "examples*"]
+
+[tool.setuptools.package-data]
+ramancarbon = ["database/data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["ramancarbon/tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
