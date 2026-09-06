@@ -64,7 +64,10 @@ COVALENT_RADII: dict[str, float] = {
     # common terminations and substituents
     "F": 0.57,
     "Cl": 1.02,
+    "Br": 1.20,
+    "I": 1.39,
     "Si": 1.11,
+    "As": 1.19,
     # heavier main-group substitutional dopants for sp2 carbon
     "Al": 1.21,
     "Ge": 1.20,
@@ -86,6 +89,13 @@ COVALENT_RADII: dict[str, float] = {
 MAX_COORDINATION: dict[str, int] = {
     "C": 4, "N": 4, "B": 4, "P": 4, "H": 1, "O": 3, "F": 1, "Cl": 1,
     "Si": 4, "Al": 4, "Ge": 4,
+    # The heavier halogens and arsenic reach the framework through
+    # `functionalize.groups.substitute`, which swaps an element for a
+    # same-valence one: H goes to Br and I, N to As. An element with a
+    # covalent radius but no coordination ceiling falls back to 6, and a
+    # monovalent iodine judged against 6 is never flagged when it is
+    # genuinely over-bonded.
+    "Br": 1, "I": 1, "As": 3,
     # A 3d metal substituted into carbon sits in a vacancy pocket, so it
     # reaches the 3 or 4 neighbours the pocket offers rather than a bulk
     # metal's twelve.

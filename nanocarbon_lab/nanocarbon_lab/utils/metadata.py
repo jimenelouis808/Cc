@@ -88,6 +88,38 @@ def remap_after_removal(info: dict[str, Any],
             counts[len(ring)] = counts.get(len(ring), 0) + 1
         out["ring_counts"] = dict(sorted(counts.items()))
 
+    # Grafted groups record which surface atoms they sit on, nested one
+    # level down rather than as a top-level list, so INDEX_LIST_KEYS
+    # cannot reach them. A vacancy punched into a functionalised sheet
+    # would otherwise leave "site 412" pointing at a different atom --
+    # the same silent corruption this module exists for.
+    terminal = info.get("terminal_atoms")
+    if terminal:
+        survivors = [new_index[int(i)] for i in terminal if int(i) in new_index]
+        if survivors:
+            out["terminal_atoms"] = survivors
+        else:
+            out.pop("terminal_atoms", None)
+
+    grafting = info.get("functionalization")
+    if isinstance(grafting, dict):
+        updated = dict(grafting)
+        updated["sites"] = [new_index[int(i)] for i in grafting.get("sites", [])
+                            if int(i) in new_index]
+        if "bridges" in grafting:
+            updated["bridges"] = [
+                [new_index[int(a)], new_index[int(b)]]
+                for a, b in grafting["bridges"]
+                if int(a) in new_index and int(b) in new_index
+            ]
+        # The counts describe the surviving structure, not the one the
+        # groups were placed on, so they are recomputed rather than
+        # carried. A "n_grafted" contradicting the sites beside it is
+        # exactly the kind of inconsistency only noticed after plotting.
+        updated["n_grafted"] = (len(updated["bridges"]) if "bridges" in updated
+                                else len(updated["sites"]))
+        out["functionalization"] = updated
+
     dopants = info.get("dopants")
     if dopants:
         remapped = []

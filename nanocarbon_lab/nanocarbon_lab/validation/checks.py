@@ -22,11 +22,11 @@ from ase import Atoms
 
 from ..topology.graph import coordination_numbers
 from ..utils.constants import (
+    COVALENT_RADII,
     DEFAULT_MAX_COORDINATION,
     HARD_MIN_DISTANCE,
     MAX_CC_DISTANCE,
     MAX_COORDINATION,
-    MIN_CC_DISTANCE,
 )
 
 
@@ -68,6 +68,14 @@ class ValidationReport:
 #: rather than being searched exhaustively.
 CLOSE_PAIR_CUTOFF: float = 4.0
 
+#: Fraction of the two covalent radii below which a contact is shorter
+#: than any real bond between those elements. A single bond sits at about
+#: 1.00 of the sum, an sp2 C-C at 0.93 and a C=O double bond at 0.86, so
+#: 0.80 leaves every genuine bond -- including the short ones a
+#: functional group brings -- comfortably clear while still catching an
+#: overlap that survived the hard minimum.
+SHORT_BOND_FRACTION: float = 0.80
+
 
 def check_minimum_distances(atoms: Atoms) -> ValidationReport:
     """Flag any pair of atoms closer than :data:`HARD_MIN_DISTANCE`.
@@ -101,10 +109,30 @@ def check_minimum_distances(atoms: Atoms) -> ValidationReport:
             f"Atoms {int(first[closest])} and {int(second[closest])} are only "
             f"{min_d:.3f} Å apart (< {HARD_MIN_DISTANCE} Å)."
         )
-    elif min_d < MIN_CC_DISTANCE:
+        return rep
+
+    # Short is only short *for the elements involved*. The sp2 window is
+    # carbon's, and against it a perfectly ordinary O-H bond at 0.970 Å
+    # -- the literature value exactly -- was reported as suspiciously
+    # short on every hydroxylated structure. So the pair is judged
+    # against its own covalent radii, the same element-aware principle
+    # `MAX_COORDINATION` and `BOND_CUTOFF_OVERRIDE` already follow.
+    symbols = atoms.get_chemical_symbols()
+    radii = np.array([
+        COVALENT_RADII.get(symbols[int(a)], 0.5 * MAX_CC_DISTANCE)
+        + COVALENT_RADII.get(symbols[int(b)], 0.5 * MAX_CC_DISTANCE)
+        for a, b in zip(first[real], second[real], strict=True)
+    ])
+    ratio = distance[real] / radii
+    tightest = int(np.argmin(ratio))
+    rep.info["shortest_bond_fraction"] = float(ratio[tightest])
+    if ratio[tightest] < SHORT_BOND_FRACTION:
+        left = symbols[int(first[real][tightest])]
+        right = symbols[int(second[real][tightest])]
         rep.warnings.append(
-            f"Shortest interatomic distance {min_d:.3f} Å is below the "
-            f"typical sp2 range ({MIN_CC_DISTANCE}-{MAX_CC_DISTANCE} Å)."
+            f"{left}-{right} pair at {float(distance[real][tightest]):.3f} Å is "
+            f"{100 * ratio[tightest]:.0f}% of the sum of their covalent radii "
+            f"({radii[tightest]:.2f} Å), shorter than any bond between them."
         )
     return rep
 
@@ -136,9 +164,27 @@ def check_coordination(
         MAX_COORDINATION.get(s, DEFAULT_MAX_COORDINATION) for s in symbols
     ])
 
+    # A monovalent element at coordination 1 is *finished*, not dangling.
+    # The ceiling here has always been per element; this test was not, so
+    # every hydrogen of a grafted -OH and every fluorine of a fully
+    # fluorinated sheet was reported as a defect -- 50 warnings on a
+    # correct CF monolayer, which is the same mistake as judging a
+    # six-coordinate metal by carbon's rule.
+    monovalent = ceiling == 1
+
+    # A builder may also declare atoms that are complete on one neighbour
+    # for a reason coordination cannot see -- a carboxyl's carbonyl
+    # oxygen is doubly bonded, so it has one neighbour and a full
+    # valence. Without this every grafted carboxyl, carbonyl, nitro and
+    # aldehyde read as a dangling defect.
+    complete = monovalent.copy()
+    for index in atoms.info.get("terminal_atoms", []):
+        if 0 <= int(index) < n:
+            complete[int(index)] = True
+
     n_iso = int(np.sum(coord == 0))
-    n_one = int(np.sum(coord == 1))
-    n_two = int(np.sum(coord == 2))
+    n_one = int(np.sum((coord == 1) & ~complete))
+    n_two = int(np.sum((coord == 2) & ~complete))
     over = coord > ceiling
     n_high = int(np.sum(over))
 
