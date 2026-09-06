@@ -70,12 +70,19 @@ from ..dopants import DOPANT_CHEMISTRY, DOPANT_ELEMENTS
 from ..exports.lammps import write_lammps
 from ..exports.qe import QESettings, write_qe_input
 from ..exports.xyz import write_cif, write_render_bundle
+from ..functionalize import (
+    GROUPS,
+    describe,
+    describe_functionalization,
+    viable_swaps,
+)
 from ..hetero import available_layers, build_twisted_bilayer, build_vdw_stack
 from ..jobs import (
     DOPANT_SITES,
     MODES,
     Job,
     apply_doping,
+    apply_grafting,
     apply_tmd_chemistry,
 )
 from ..tmd import (
@@ -98,6 +105,63 @@ from ..tmd.quality import tmd_quality
 from ..utils.constants import MAX_DOPING_FRACTION, MIN_DOPING_FRACTION
 from ..validation.checks import run_basic_checks
 from ..validation.quality import sp2_quality
+
+
+def _add_graft_arguments(p) -> None:
+    """Attach the surface-functionalisation flags.
+
+    Shared by both families on purpose. A dopant *replaces* an atom of
+    the host and so belongs to carbon alone; a group is *added on top of*
+    a surface, which a dichalcogenide has as much as a nanotube does --
+    on an MX2 it attaches to the chalcogen, since the metal is buried.
+    """
+    p.add_argument("--graft", choices=sorted(GROUPS), default=None,
+                   help="Functional group attached to the finished surface. "
+                        "Run `nanocarbon groups` for what each one is and "
+                        "which elements it can be rebuilt with.")
+    p.add_argument("--graft-coverage", type=float, default=0.1,
+                   help="Fraction of the candidate sites to graft (default "
+                        "0.1). What is achieved may be less and is reported: "
+                        "a carboxyl does not fit everywhere a fluorine does.")
+    p.add_argument("--graft-swap", metavar="FROM:TO", default="",
+                   help="Rebuild the group with different elements, e.g. "
+                        "'O:S' turns a hydroxyl into a thiol and a carboxyl "
+                        "into a thioacid. The bond lengths are recomputed, "
+                        "not carried over. Comma-separate several. Only "
+                        "same-valence swaps are allowed.")
+    p.add_argument("--graft-where", default="all", metavar="WHERE",
+                   help="Which sites are candidates: 'all', 'edge' "
+                        "(under-coordinated atoms, where oxidation actually "
+                        "happens), 'defect' (any non-hexagonal ring) or "
+                        "'ring:N'. The last two need a builder that records "
+                        "its rings.")
+    p.add_argument("--graft-face", choices=["outer", "inner", "both"],
+                   default="outer",
+                   help="Which side of the surface to graft on. 'both' "
+                        "alternates by sublattice, the chair conformation "
+                        "real fluorographene and graphene oxide adopt, and "
+                        "the only way full coverage is reachable on a sheet.")
+
+
+def _graft(atoms, args):
+    """Apply the grafting flags, if any were given."""
+    if not getattr(args, "graft", None):
+        return atoms
+    job = Job(mode="capped tube", graft=args.graft,
+              graft_swap=getattr(args, "graft_swap", ""),
+              graft_coverage=getattr(args, "graft_coverage", 0.1),
+              graft_where=getattr(args, "graft_where", "all"),
+              graft_face=getattr(args, "graft_face", "outer"),
+              seed=getattr(args, "seed", 0))
+    try:
+        atoms = apply_grafting(atoms, job)
+    except ValueError as exc:
+        # A group that cannot be rebuilt with the requested elements, a
+        # selection that matches nothing, a structure with no recorded
+        # rings: all mistakes in the request rather than crashes.
+        raise SystemExit(str(exc)) from None
+    print(describe_functionalization(atoms))
+    return atoms
 
 
 def _add_doping_arguments(p, seed_help: str | None = None) -> None:
@@ -123,6 +187,7 @@ def _add_doping_arguments(p, seed_help: str | None = None) -> None:
                         "carries its curvature and its reactivity; the "
                         "fraction is then of the pentagon sites. Needs a "
                         "builder that records rings.")
+    _add_graft_arguments(p)
     if seed_help:
         p.add_argument("--seed", type=int, default=0, help=seed_help)
 
@@ -136,6 +201,7 @@ def _add_tmd_chemistry_arguments(p) -> None:
     antisites -- all four already in `tmd/modify.py`, and until now
     reachable only from Python.
     """
+    _add_graft_arguments(p)
     group = p.add_mutually_exclusive_group()
     group.add_argument("--janus", metavar="X", choices=["S", "Se", "Te"],
                        help="Replace the chalcogens on one face, giving a "
@@ -178,17 +244,21 @@ def _apply_tmd_chemistry(atoms, args):
     elif getattr(args, "antisites", None):
         edit, element, amount = "antisites", "Se", float(args.antisites)
     else:
-        return atoms
+        edit = None
+
+    if edit is None:
+        return _graft(atoms, args)
 
     job = Job(mode="TMD layers", tmd_edit=edit, tmd_edit_element=element,
               tmd_edit_amount=amount, seed=getattr(args, "seed", 0))
     try:
-        return apply_tmd_chemistry(atoms, job)
+        atoms = apply_tmd_chemistry(atoms, job)
     except ValueError as exc:
         # Asking for more vacancies than there are chalcogens, or a Janus
         # face of the species already there: a mistake in the request, not
         # a crash worth a traceback.
         raise SystemExit(str(exc)) from None
+    return _graft(atoms, args)
 
 
 def _add_material_argument(p) -> None:
@@ -258,7 +328,10 @@ def _apply_post(atoms, args):
     atoms = _dope(atoms, args)
     if getattr(args, "vacancies", 0):
         atoms = introduce_vacancies(atoms, n_defects=args.vacancies, seed=args.seed)
-    return atoms
+    # Grafting last: it must see the finished surface, since a vacancy
+    # opens under-coordinated sites a group can reach and a dopant
+    # changes what the anchor element is.
+    return _graft(atoms, args)
 
 
 def _export(atoms, outdir: Path, fmt: str, calculation: str, force: bool):
@@ -420,7 +493,16 @@ def _add_surface_flags(p, anneal: bool | int = True):
 
 
 def _maybe_dope(atoms, args):
-    return _dope(atoms, args)
+    """Post-build chemistry for the mesh-based carbon builders.
+
+    Both this and :func:`_apply_post` must apply every post-build edit --
+    they are two entry points to the same stage, and a step added to only
+    one of them is silently skipped by half the sub-commands. Grafting was
+    added to `_apply_post` alone at first, so `--graft` on a capped tube,
+    fullerene, junction or schwarzite did nothing at all and did not even
+    report the swap it had been asked for as impossible.
+    """
+    return _graft(_dope(atoms, args), args)
 
 
 #: The structure the sub-command just built, so `main` can convert it to
@@ -1009,6 +1091,30 @@ def _cmd_validate(args):
     return 0 if report.ok else 1
 
 
+def _cmd_groups(args):
+    """Print the functional-group library and what each can become."""
+    del args
+    print("Groups are attached on top of a surface, not substituted into it,\n"
+          "so they apply to carbon and to a dichalcogenide alike. On an MX2\n"
+          "they go on the chalcogen: the metal is buried between the two\n"
+          "chalcogen planes and nothing can reach it.\n")
+    for name in sorted(GROUPS):
+        print(describe(GROUPS[name], "C"))
+        swaps = {element: viable_swaps(element)
+                 for element in GROUPS[name].elements()}
+        offered = ", ".join(f"{element} to {'/'.join(options)}"
+                            for element, options in swaps.items() if options)
+        if offered:
+            print(f"      --graft-swap: {offered}")
+        print()
+    print("A swap rebuilds the bond lengths rather than reusing the old ones,\n"
+          "which is why --graft hydroxyl --graft-swap O:S gives a real thiol\n"
+          "with a 1.81 Å C-S bond and not a sulphur sitting at oxygen's 1.42.\n"
+          "Only same-valence swaps are offered: an -OH whose oxygen became\n"
+          "nitrogen would be a group with a missing bond, not a variant.")
+    return 0
+
+
 def _cmd_dopants(args):
     """Print the dopant table, grouped by how the lattice takes them."""
     del args
@@ -1564,6 +1670,12 @@ def build_parser() -> argparse.ArgumentParser:
         "dopants",
         help="List the heteroatoms available for carbon, and what each does.")
     dp.set_defaults(func=_cmd_dopants)
+
+    gp = sub.add_parser(
+        "groups",
+        help="List the functional groups, and which elements each can be "
+             "rebuilt with.")
+    gp.set_defaults(func=_cmd_groups)
 
     return parser
 

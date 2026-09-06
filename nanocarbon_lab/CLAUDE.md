@@ -30,6 +30,10 @@ nanocarbon_lab/
 │                  #   Deliberately NOT under builders/.
 ├── hetero/        # twisted bilayers and vdW stacks (moire.py). Above both
 │                  #   builders/ and tmd/ because it composes them.
+├── functionalize/ # surface groups grafted onto a finished structure:
+│                  #   groups.py (a Z-matrix grammar, so an element swap
+│                  #   rebuilds the bond lengths), attach.py (surface
+│                  #   normals, site selection, steric placement)
 ├── dopants/       # substitutional heteroatoms in carbon: chemistry.py
 │                  #   (which elements, what site, how much), rings.py
 │                  #   (pentagon-selected placement), substitutional.py
@@ -457,6 +461,103 @@ the other.
 
 `jobs.apply_doping` is the single placement policy; the GUI and the CLI
 both go through it, as they do for everything else in `jobs.py`.
+
+## Functionalisation adds atoms; doping replaces them
+
+`functionalize/` is a third chemistry axis, not an alternative to the
+other two. A dopant substitutes for a host atom, so it belongs to carbon
+alone; a **group sits on top of a surface**, and carbon, MX2 and a vdW
+stack all have one. `jobs.apply_grafting` therefore runs for every
+family, after doping and after the MX2 edits, because it must see the
+finished surface: a vacancy opens sites a group can reach and a Janus
+face changes which element the anchor is.
+
+**Groups are internal coordinates, never Cartesians.** That is the whole
+design. `substitute(hydroxyl, {"O": "S"})` is a thiol with the *right*
+geometry because the C-S bond is rebuilt at 1.81 Å; stored as
+coordinates, the same swap leaves sulphur sitting at oxygen's 1.42 Å,
+which is a 0.4 Å error in the one bond the group is defined by. Only
+angles are stored, and every length comes from `COVALENT_RADII` times a
+bond-order factor — which reproduces eleven literature bonds to within
+0.03 Å, each pinned by a test. Swaps are restricted to the **same
+valence**: an -OH whose oxygen became nitrogen is not a variant, it is a
+group with a missing bond.
+
+Angles in the registry are the **bond angle as chemistry quotes it**
+(109.5 for tetrahedral). The Z-matrix works from the parent bond's
+continuation, where that is a 70.5 degree deflection; the conversion
+lives in `build_positions` so a new group is written with numbers a
+chemist recognises.
+
+Four things in `attach.py` are load-bearing:
+
+* **The normal is where the bonds lean away from**, with the plane
+  normal only as the fallback when they cancel. A pyramidal site has no
+  bond plane — an MX2 chalcogen sits above three metals whose bond
+  vectors are not coplanar — so the plane-normal branch returned
+  whichever direction they varied least along and *every* group on
+  *every* MoS2 surface was refused. The remaining sign ambiguity is
+  fixed by propagating across the bond graph and then flipping **once
+  per connected component** by the divergence theorem, so a multi-wall
+  tube gets each shell oriented on its own instead of the inner one
+  turned inside out.
+* **Atoms within two bonds of the anchor are exempt from the steric
+  test.** Their separation is a bond angle, not a contact: a hydroxyl's
+  oxygen is 2.09 Å from the three carbons around its anchor and its
+  hydrogen 1.96 Å from the anchor itself, no matter what. Scoring those
+  as clashes refused literally every placement on every structure. The
+  exemption holds **in every periodic image**, not just the home cell —
+  a site at a cell face has its bonded neighbour stored on the far side,
+  and restricting it to the home cell refused a third of the sites on a
+  6x6 graphene cell.
+* **Twelve rotamers are tried and the roomiest kept.** A group on one
+  single bond spins freely, so refusing a site because the frame's
+  arbitrary tangent aimed a hydrogen at the wall would measure the frame
+  rather than the chemistry.
+* **`face="both"` alternates by sublattice**, which is the chair
+  conformation. Fluorographene reaches 100% coverage that way and 42% by
+  shuffle order, because two fluorines on adjacent carbons on the same
+  face are 1.42 Å apart. A site whose inner face is *blocked* always
+  takes the outer one: an MX2 bond graph is bipartite between metal and
+  chalcogen, so every chalcogen shares a colour and alternating aimed
+  every group into the sandwich — zero coverage, blamed on sterics,
+  which was true and useless.
+
+Coverage is **measured, not assumed**, and the shortfall is reported
+with its reason. Fluorine reaches 100% on graphene, a carboxyl 28%, an
+epoxide about 30% of the bonds — the last being a maximum matching, since
+no two bridges may share a carbon, not a steric limit.
+
+`info["functionalization"]` is a **list**, appended to. Graphene oxide is
+an epoxide graft followed by a hydroxyl graft, and with a single dict the
+second call erased the first. `info["grafted_atoms"]` is the cumulative
+list of added atoms, and `tmd.quality` excludes them: it calls anything
+that is not a chalcogen a metal, so a grafted hydrogen counted as a metal
+and a sound MoS2 slab read BROKEN with X/M = 1.73. Both are index lists
+and both are remapped on deletion.
+
+Grafting also **re-pads the non-periodic axes** to the vacuum the
+structure was built with. Groups stick out, and a finite builder's cell
+is a bounding box: a hydroxylated (6,6) tube built with 12 Å came back
+with 8.55 and validation refused it. Periodic axes are never touched, and
+the atoms are never moved — re-centring would silently shift every
+pre-existing coordinate.
+
+**Validation had three carbon-shaped assumptions**, all now element-aware,
+and all the same mistake the coordination ceiling already fixed for
+metals: 0.970 Å is the literature O-H bond and was warned about for being
+below carbon's sp2 window (contacts are now judged against the pair's own
+covalent radii); coordination 1 is a full valence for H and the halogens
+(a correct CF monolayer produced fifty "dangling" warnings); and a
+carbonyl oxygen has one neighbour and a full valence too, which
+coordination counting cannot see, so builders declare
+`info["terminal_atoms"]`.
+
+**Two CLI post-processing helpers exist**, `_apply_post` and
+`_maybe_dope`, and every post-build step must be in both. Grafting went
+into the first alone, so `--graft` on a capped tube, fullerene, junction
+or schwarzite did nothing at all — and did not even report an impossible
+swap as impossible.
 
 ## Dichalcogenides are chosen by two elements, not by a formula
 

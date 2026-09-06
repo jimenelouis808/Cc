@@ -79,6 +79,13 @@ from ..builders import fullerene_mesh as fm
 from ..cell import MIN_IMAGE_SEPARATION, cell_report, to_unit_cell
 from ..dopants import DOPANT_ELEMENTS, get_chemistry
 from ..exports.xyz import write_cif, write_render_bundle
+from ..functionalize import (
+    GROUPS,
+    describe,
+    get_group,
+    substitute,
+    viable_swaps,
+)
 from ..jobs import (
     DOPANT_SITES,
     FAMILIES,
@@ -86,6 +93,7 @@ from ..jobs import (
     TMD_EDITS,
     Job,
     estimate_cost,
+    parse_swaps,
     to_cli,
 )
 from ..tmd import MATERIALS as TMD_MATERIALS
@@ -618,6 +626,18 @@ class NanocarbonGUI:
                                               tk.StringVar(value="Se"))
         self.var_tmd_edit_amount = self._var("tmd_edit_amount",
                                              tk.DoubleVar(value=0.5))
+        # Grafting is a third chemistry axis, not an alternative to the
+        # other two: a dopant *replaces* a host atom and so belongs to one
+        # family, while a group is *added on top of* a surface, which
+        # carbon, MX2 and a vdW stack all have.
+        self.var_graft = self._var("graft", tk.StringVar(value="none"))
+        self.var_graft_swap = self._var("graft_swap", tk.StringVar(value=""))
+        self.var_graft_coverage = self._var("graft_coverage",
+                                            tk.DoubleVar(value=0.10))
+        self.var_graft_where = self._var("graft_where",
+                                         tk.StringVar(value="all"))
+        self.var_graft_face = self._var("graft_face",
+                                        tk.StringVar(value="outer"))
         self.var_n_sw = self._var("n_sw", tk.IntVar(value=0))
         self.var_n_dv = self._var("n_dv", tk.IntVar(value=0))
         self.var_mw_shells = self._var("mw_shells", tk.IntVar(value=2))
@@ -958,6 +978,50 @@ class NanocarbonGUI:
                                     justify="left")
         self.lbl_dopant.grid(row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
+        # --- surface functionalisation, shown for every family
+        self.frame_graft = ttk.LabelFrame(parent, text="Surface groups",
+                                          padding=8)
+        self.frame_graft.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_graft, text="Group").grid(row=0, column=0,
+                                                       sticky="w")
+        ttk.Combobox(self.frame_graft, textvariable=self.var_graft,
+                     values=["none", *sorted(GROUPS)], state="readonly",
+                     width=10).grid(row=0, column=1, sticky="e", pady=(0, 4))
+        self.var_graft.trace_add("write", lambda *_: self._update_graft_hint())
+        ttk.Label(self.frame_graft, text="Sites").grid(row=1, column=0,
+                                                       sticky="w")
+        ttk.Combobox(self.frame_graft, textvariable=self.var_graft_where,
+                     values=["all", "edge", "defect", "ring:5", "ring:7"],
+                     state="readonly", width=10).grid(row=1, column=1,
+                                                      sticky="e", pady=(0, 4))
+        self.var_graft_where.trace_add("write",
+                                       lambda *_: self._update_graft_hint())
+        ttk.Label(self.frame_graft, text="Face").grid(row=2, column=0,
+                                                      sticky="w")
+        ttk.Combobox(self.frame_graft, textvariable=self.var_graft_face,
+                     values=["outer", "inner", "both"], state="readonly",
+                     width=10).grid(row=2, column=1, sticky="e", pady=(0, 6))
+        self.var_graft_face.trace_add("write",
+                                      lambda *_: self._update_graft_hint())
+        self._param(self.frame_graft, "Coverage", self.var_graft_coverage,
+                    0.01, 1.0, 2, resolution=0.01,
+                    command=self._update_graft_hint)
+        # Free text rather than a dropdown: the swap is a mapping, and
+        # which elements are offered depends on the group chosen -- an
+        # -OH reaches S/Se/Te, an -NH2 reaches P/As/B. The hint below
+        # lists what the current group actually accepts.
+        ttk.Label(self.frame_graft, text="Swap").grid(row=5, column=0,
+                                                      sticky="w")
+        ttk.Entry(self.frame_graft, textvariable=self.var_graft_swap,
+                  width=12).grid(row=5, column=1, sticky="e", pady=(4, 0))
+        self.var_graft_swap.trace_add("write",
+                                      lambda *_: self._update_graft_hint())
+        self.lbl_graft = ttk.Label(self.frame_graft, text="", foreground=MUTED,
+                                   font=("TkDefaultFont", 8), wraplength=230,
+                                   justify="left")
+        self.lbl_graft.grid(row=6, column=0, columnspan=2, sticky="w",
+                            pady=(4, 0))
+
         # --- dichalcogenide: material and phase, shared by all TMD modes
         self.frame_tmd = ttk.LabelFrame(parent, text="Dichalcogenide", padding=8)
         self.frame_tmd.columnconfigure(0, weight=1)
@@ -1253,7 +1317,7 @@ class NanocarbonGUI:
                       self.frame_tmd_coil, self.frame_tmd_sw,
                       self.frame_het, self.frame_twist, self.frame_stack,
                       self.frame_tmd_j, self.frame_tmd_chem,
-                      self.frame_surface, self.frame_chem):
+                      self.frame_surface, self.frame_chem, self.frame_graft):
             frame.pack_forget()
 
         if mode in ("twisted bilayer", "vdW stack"):
@@ -1266,6 +1330,8 @@ class NanocarbonGUI:
             else:
                 self.frame_stack.pack(fill="x", pady=(8, 0))
             self._update_het_hint()
+            self.frame_graft.pack(fill="x", pady=(8, 0))
+            self._update_graft_hint()
             self._schedule_estimate()
             return
 
@@ -1292,6 +1358,8 @@ class NanocarbonGUI:
             self.frame_tmd_chem.pack(fill="x", pady=(8, 0))
             self._update_tmd_hint()
             self._update_tmd_edit_hint()
+            self.frame_graft.pack(fill="x", pady=(8, 0))
+            self._update_graft_hint()
             self._schedule_estimate()
             return
 
@@ -1337,7 +1405,9 @@ class NanocarbonGUI:
         if mode not in ("fullerene", "nano-onion"):
             self.frame_surface.pack(fill="x", pady=(8, 0))
         self.frame_chem.pack(fill="x", pady=(8, 0))
+        self.frame_graft.pack(fill="x", pady=(8, 0))
         self._update_dopant_hint()
+        self._update_graft_hint()
         self._on_shape_change()
         self._schedule_estimate()
 
@@ -1540,6 +1610,73 @@ class NanocarbonGUI:
                   f"leave one face and return through the opposite one, so "
                   f"this is ready for a DFT code as it stands."),
             foreground=MUTED)
+
+    def _graft_fields(self) -> dict:
+        """The grafting half of a Job, shared by all three families.
+
+        Written once because a group applies to every mode: leaving it
+        out of one branch would make the panel visibly present and
+        silently ignored for that family.
+        """
+        name = self.var_graft.get()
+        return dict(
+            graft=None if name == "none" else name,
+            graft_swap=self.var_graft_swap.get().strip(),
+            graft_coverage=float(self.var_graft_coverage.get()),
+            graft_where=self.var_graft_where.get(),
+            graft_face=self.var_graft_face.get(),
+        )
+
+    def _update_graft_hint(self) -> None:
+        """Say what the chosen group is and what it can be rebuilt as.
+
+        The swap field is free text because which elements are offered
+        depends on the group, so the panel has to say which ones -- a
+        user picking from a ten-item dropdown cannot be expected to know
+        that an -OH reaches S/Se/Te and an -NH2 reaches P/As/B.
+        """
+        name = self.var_graft.get()
+        if name == "none":
+            self.lbl_graft.config(
+                text="No surface groups. A group is added on top of the "
+                     "surface rather than substituted into it, so it works "
+                     "on carbon and on a dichalcogenide alike.",
+                foreground=MUTED)
+            return
+
+        group = get_group(name)
+        lines = [describe(group, "C")]
+
+        swaps = self.var_graft_swap.get().strip()
+        if swaps:
+            try:
+                group = substitute(group, parse_swaps(swaps))
+            except ValueError as exc:
+                self.lbl_graft.config(text=str(exc), foreground=WARN_AMBER)
+                return
+            lines.append(f"Rebuilt as {group.formula}; every bond length "
+                         "recomputed for the new elements.")
+        else:
+            offers = ", ".join(
+                f"{element}:{'/'.join(options)}"
+                for element, options in
+                ((e, viable_swaps(e)) for e in group.elements()) if options)
+            if offers:
+                lines.append(f"Swap accepts {offers}.")
+
+        if self.var_graft_where.get() in ("defect", "ring:5", "ring:7"):
+            lines.append("Ring selection needs a builder that records its "
+                         "rings: capped tube, fullerene, nano-onion, "
+                         "junction, schwarzite, network, multi-wall, bundle.")
+        if self.var_graft_face.get() == "both":
+            lines.append("'both' alternates by sublattice — the chair "
+                         "conformation. On an MX2 each chalcogen has only "
+                         "one exposed face, so it is ignored there.")
+
+        coverage = float(self.var_graft_coverage.get())
+        lines.append(f"Asking for {coverage:.0%} of the selected sites; what "
+                     "fits is measured and reported after the build.")
+        self.lbl_graft.config(text=" ".join(lines), foreground=MUTED)
 
     def _update_dopant_hint(self) -> None:
         """Say what the chosen dopant is and whether this much is real.
@@ -1841,6 +1978,7 @@ class NanocarbonGUI:
             dopant_conc=float(self.var_dopant_conc.get()),
             dopant_site=self.var_dopant_site.get(),
             seed=int(self.var_seed.get()),
+            **self._graft_fields(),
         )
         edit = self.var_tmd_edit.get()
         tmd_chemistry = dict(
@@ -1856,11 +1994,17 @@ class NanocarbonGUI:
             # ...but the MX2 chemistry that follows the build *is*
             # random, so it brings the seed with it.
             return Job(mode=mode, params=self._tmd_params(mode),
-                       seed=int(self.var_seed.get()), **tmd_chemistry)
+                       seed=int(self.var_seed.get()), **tmd_chemistry,
+                       **self._graft_fields())
 
         if mode in ("twisted bilayer", "vdW stack"):
             # Commensurate stacking is exact too, for the same reason.
-            return Job(mode=mode, params=self._hetero_params(mode), seed=0)
+            # Commensurate stacking is exact, so the seed is 0 -- but a
+            # graft is random placement and needs the real one.
+            return Job(mode=mode, params=self._hetero_params(mode),
+                       seed=int(self.var_seed.get()) if self.var_graft.get()
+                       != "none" else 0,
+                       **self._graft_fields())
 
         if mode == "junction":
             params = dict(

@@ -56,6 +56,17 @@ def geometry_report(atoms: Atoms) -> dict[str, float | int]:
             "pass a structure built by nanocarbon_lab.tmd."
         )
 
+    # Adsorbates are not the lattice. Everything here classifies an atom
+    # as "metal" when it is not a chalcogen, so a grafted hydroxyl's
+    # hydrogen counted as a metal, its 1.51 A bond to the group's oxygen
+    # counted as an M-X bond, and a sound MoS2 slab came out BROKEN with
+    # an X/M ratio of 1.73. Judge the host and say so, rather than
+    # judging a slab plus its coating against a slab's expectations.
+    grafted = {int(i) for i in atoms.info.get("grafted_atoms", [])}
+    if grafted:
+        host = [i for i in range(len(atoms)) if i not in grafted]
+        atoms = atoms[host]
+
     cutoff = ideal * 1.25
     first, second, distance = neighbor_list("ijd", atoms, cutoff=cutoff)
     symbols = np.array(atoms.get_chemical_symbols())
@@ -104,6 +115,10 @@ def geometry_report(atoms: Atoms) -> dict[str, float | int]:
         "n_chalcogen": n_chalcogen,
         "stoichiometry": (n_chalcogen / n_metal) if n_metal else float("nan"),
         "n_close_contacts": int(close.size // 2),
+        # Says plainly that a coated slab was judged on its lattice
+        # alone, so a reader is never left wondering which atoms the
+        # numbers above describe.
+        "n_grafted_excluded": len(grafted),
     }
 
 

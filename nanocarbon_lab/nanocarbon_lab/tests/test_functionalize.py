@@ -389,7 +389,7 @@ class TestGrafting:
     def test_the_anchor_bond_has_the_right_length(self):
         cnt = build_cnt(6, 6, length=12.0)
         grafted = functionalize(cnt, "hydroxyl", coverage=0.1, seed=1)
-        record = grafted.info["functionalization"]
+        record = grafted.info["functionalization"][-1]
         expected = bond_length("C", "O")
         for offset, site in enumerate(record["sites"]):
             root = len(cnt) + 2 * offset
@@ -409,15 +409,15 @@ class TestGrafting:
         first = functionalize(cnt, "hydroxyl", coverage=0.2, seed=7)
         second = functionalize(cnt, "hydroxyl", coverage=0.2, seed=7)
         assert np.allclose(first.get_positions(), second.get_positions())
-        assert (first.info["functionalization"]["sites"]
-                == second.info["functionalization"]["sites"])
+        assert (first.info["functionalization"][-1]["sites"]
+                == second.info["functionalization"][-1]["sites"])
 
     def test_a_different_seed_gives_a_different_pattern(self):
         cnt = build_cnt(6, 6, length=12.0)
         first = functionalize(cnt, "hydroxyl", coverage=0.2, seed=1)
         second = functionalize(cnt, "hydroxyl", coverage=0.2, seed=2)
-        assert (first.info["functionalization"]["sites"]
-                != second.info["functionalization"]["sites"])
+        assert (first.info["functionalization"][-1]["sites"]
+                != second.info["functionalization"][-1]["sites"])
 
     def test_count_and_coverage_are_mutually_exclusive(self):
         cnt = build_cnt(6, 6, length=12.0)
@@ -429,7 +429,7 @@ class TestGrafting:
     def test_count_is_honoured_exactly_when_it_fits(self):
         cnt = build_cnt(6, 6, length=12.0)
         grafted = functionalize(cnt, "hydroxyl", count=5, seed=1)
-        assert grafted.info["functionalization"]["n_grafted"] == 5
+        assert grafted.info["functionalization"][-1]["n_grafted"] == 5
 
     def test_the_recorded_bond_graph_is_extended(self):
         """Otherwise the grafted atoms read as isolated.
@@ -461,7 +461,7 @@ class TestStericHonesty:
         sheet = build_graphene().repeat((5, 5, 1))
         grafted = functionalize(sheet, "fluorine", coverage=1.0,
                                 face="both", seed=1)
-        record = grafted.info["functionalization"]
+        record = grafted.info["functionalization"][-1]
         assert record["coverage"] == pytest.approx(1.0)
         assert record["refused_steric"] == 0
         assert grafted.get_chemical_formula() == "C50F50"
@@ -472,13 +472,13 @@ class TestStericHonesty:
         for name in ("fluorine", "hydroxyl", "methyl"):
             grafted = functionalize(sheet, name, coverage=1.0,
                                     face="both", seed=1)
-            reached[name] = grafted.info["functionalization"]["coverage"]
+            reached[name] = grafted.info["functionalization"][-1]["coverage"]
         assert reached["fluorine"] > reached["hydroxyl"] > reached["methyl"]
 
     def test_a_shortfall_is_reported_rather_than_hidden(self):
         sheet = build_graphene().repeat((5, 5, 1))
         grafted = functionalize(sheet, "methyl", coverage=1.0, seed=1)
-        record = grafted.info["functionalization"]
+        record = grafted.info["functionalization"][-1]
         assert record["n_grafted"] < record["n_requested"]
         assert record["refused_steric"] > 0
         assert "did not fit" in describe_functionalization(grafted)
@@ -501,7 +501,7 @@ class TestStericHonesty:
         cnt = build_cnt(6, 6, length=12.0)
         grafted = functionalize(cnt, "hydroxyl", coverage=0.5,
                                 min_separation=4.0, seed=1)
-        sites = grafted.info["functionalization"]["sites"]
+        sites = grafted.info["functionalization"][-1]["sites"]
         for first in sites:
             for second in sites:
                 if first != second:
@@ -559,9 +559,9 @@ class TestFaces:
                               face="outer", seed=4)
         both = functionalize(slab, "thiol", coverage=0.25,
                              face="both", seed=4)
-        assert outer.info["functionalization"]["n_grafted"] > 0
-        assert (both.info["functionalization"]["n_grafted"]
-                == outer.info["functionalization"]["n_grafted"])
+        assert outer.info["functionalization"][-1]["n_grafted"] > 0
+        assert (both.info["functionalization"][-1]["n_grafted"]
+                == outer.info["functionalization"][-1]["n_grafted"])
 
     def test_a_single_sheet_has_two_free_faces(self):
         sheet = build_graphene().repeat((4, 4, 1))
@@ -578,7 +578,7 @@ class TestBridging:
     def test_an_epoxide_sits_symmetrically_over_a_bond(self):
         sheet = build_graphene().repeat((5, 5, 1))
         grafted = functionalize(sheet, "epoxide", coverage=0.3, seed=2)
-        record = grafted.info["functionalization"]
+        record = grafted.info["functionalization"][-1]
         assert record["bridging"]
         expected = bond_length("C", "O")
         for offset, (first, second) in enumerate(record["bridges"]):
@@ -591,7 +591,7 @@ class TestBridging:
     def test_no_two_bridges_share_an_atom(self):
         sheet = build_graphene().repeat((5, 5, 1))
         grafted = functionalize(sheet, "epoxide", coverage=1.0, seed=2)
-        record = grafted.info["functionalization"]
+        record = grafted.info["functionalization"][-1]
         used = [index for pair in record["bridges"] for index in pair]
         assert len(used) == len(set(used))
 
@@ -599,7 +599,7 @@ class TestBridging:
         """Each epoxide consumes two carbons, so at most half can carry one."""
         sheet = build_graphene().repeat((5, 5, 1))
         grafted = functionalize(sheet, "epoxide", coverage=1.0, seed=2)
-        record = grafted.info["functionalization"]
+        record = grafted.info["functionalization"][-1]
         assert record["n_grafted"] <= len(sheet) // 2
         assert record["refused_occupied"] > 0
         assert "no two can do" in describe_functionalization(grafted)
@@ -707,7 +707,7 @@ class TestValidationAndMetadata:
         """
         cage = build_fullerene(freq=1, family="C60")
         grafted = functionalize(cage, "hydroxyl", coverage=0.2, seed=1)
-        record = grafted.info["functionalization"]
+        record = grafted.info["functionalization"][-1]
         original = [int(i) for i in record["sites"]]
 
         removed = [0, 1, 2]
@@ -715,9 +715,9 @@ class TestValidationAndMetadata:
         cut = grafted[keep]
         cut.info = remap_after_removal(grafted.info, keep)
 
-        sites = cut.info["functionalization"]["sites"]
+        sites = cut.info["functionalization"][-1]["sites"]
         assert all(0 <= i < len(cut) for i in sites)
-        assert cut.info["functionalization"]["n_grafted"] == len(sites)
+        assert cut.info["functionalization"][-1]["n_grafted"] == len(sites)
         # An untouched site must still name the same atom.
         survivor = next(i for i in original if i not in removed)
         assert keep.index(survivor) in sites
@@ -735,15 +735,15 @@ class TestValidationAndMetadata:
     def test_removing_a_bridge_end_drops_the_bridge(self):
         sheet = build_graphene().repeat((5, 5, 1))
         grafted = functionalize(sheet, "epoxide", coverage=0.3, seed=2)
-        first, second = grafted.info["functionalization"]["bridges"][0]
+        first, second = grafted.info["functionalization"][-1]["bridges"][0]
         keep = keep_indices(len(grafted), [first])
         info = remap_after_removal(grafted.info, keep)
-        remaining = info["functionalization"]["bridges"]
+        remaining = info["functionalization"][-1]["bridges"]
         assert len(remaining) == len(
-            grafted.info["functionalization"]["bridges"]) - 1
+            grafted.info["functionalization"][-1]["bridges"]) - 1
         assert all(0 <= a < len(keep) and 0 <= b < len(keep)
                    for a, b in remaining)
-        assert info["functionalization"]["n_grafted"] == len(remaining)
+        assert info["functionalization"][-1]["n_grafted"] == len(remaining)
 
 
 class TestRegistry:
@@ -782,3 +782,90 @@ class TestRegistry:
     def test_describe_mentions_the_anchor_bond(self):
         assert "1.42" in describe(get_group("hydroxyl"), "C")
         assert "bridging" in describe(get_group("epoxide"), "C")
+
+
+class TestRepeatedGrafting:
+    """Graphene oxide is two grafts, so the record must survive both."""
+
+    def test_a_second_graft_keeps_the_first_s_record(self):
+        """With a single dict the second call erased the first.
+
+        The structure then carried 43 oxygens it no longer claimed to
+        have put anywhere -- present, plausible and wrong, which is the
+        failure mode `utils/metadata` exists for.
+        """
+        sheet = build_graphene().repeat((5, 5, 1))
+        once = functionalize(sheet, "epoxide", coverage=0.25, seed=1)
+        twice = functionalize(once, "hydroxyl", coverage=0.2,
+                              face="both", seed=2)
+
+        records = twice.info["functionalization"]
+        assert [record["group"] for record in records] == ["epoxide", "hydroxyl"]
+        summary = describe_functionalization(twice)
+        assert "epoxide" in summary and "hydroxyl" in summary
+
+    def test_grafted_atoms_accumulates_across_calls(self):
+        sheet = build_graphene().repeat((5, 5, 1))
+        once = functionalize(sheet, "epoxide", coverage=0.25, seed=1)
+        twice = functionalize(once, "hydroxyl", coverage=0.2,
+                              face="both", seed=2)
+
+        assert (once.info["grafted_atoms"]
+                == list(range(len(sheet), len(once))))
+        assert (twice.info["grafted_atoms"]
+                == list(range(len(sheet), len(twice))))
+        # Every recorded index is an atom that was added, never a host one.
+        for index in twice.info["grafted_atoms"]:
+            assert index >= len(sheet)
+
+    def test_a_second_graft_does_not_land_on_the_first(self):
+        sheet = build_graphene().repeat((5, 5, 1))
+        once = functionalize(sheet, "epoxide", coverage=0.25, seed=1)
+        twice = functionalize(once, "hydroxyl", coverage=0.3,
+                              face="both", seed=2)
+        distances = twice.get_all_distances(mic=True)
+        np.fill_diagonal(distances, np.inf)
+        assert distances.min() > 0.9
+
+    def test_removing_atoms_remaps_every_record(self):
+        sheet = build_graphene().repeat((5, 5, 1))
+        once = functionalize(sheet, "epoxide", coverage=0.25, seed=1)
+        twice = functionalize(once, "hydroxyl", coverage=0.2,
+                              face="both", seed=2)
+
+        keep = keep_indices(len(twice), [0, 1, 2])
+        info = remap_after_removal(twice.info, keep)
+        assert len(info["functionalization"]) == 2
+        for record in info["functionalization"]:
+            for index in record["sites"]:
+                assert 0 <= index < len(keep)
+            for pair in record.get("bridges", []):
+                assert all(0 <= i < len(keep) for i in pair)
+        for index in info["grafted_atoms"]:
+            assert 0 <= index < len(keep)
+
+
+class TestHostIsJudgedWithoutItsCoating:
+    """An MX2 slab plus a coating is not an MX2 slab with odd bonds."""
+
+    def test_a_grafted_slab_still_reads_as_a_sound_lattice(self):
+        """`tmd.quality` calls anything that is not a chalcogen a metal.
+
+        So a grafted hydroxyl's hydrogen counted as a metal atom, its
+        bond to the group's own oxygen counted as an M-X bond, and a
+        correct MoS2 slab was reported BROKEN with an X/M ratio of 1.73
+        and a 1.51 A "M-X bond".
+        """
+        from nanocarbon_lab.tmd.quality import geometry_report, tmd_quality
+
+        slab = build_tmd_monolayer("MoS2").repeat((4, 4, 1))
+        clean = geometry_report(slab)
+        grafted = functionalize(slab, "thiol", coverage=0.2, seed=4)
+        coated = geometry_report(grafted)
+
+        assert coated["n_grafted_excluded"] == len(grafted) - len(slab)
+        assert clean["n_grafted_excluded"] == 0
+        for key in ("bond_min", "bond_max", "stoichiometry",
+                    "metal_coordination_min", "chalcogen_coordination_max"):
+            assert coated[key] == pytest.approx(clean[key])
+        assert tmd_quality(coated) == tmd_quality(clean)

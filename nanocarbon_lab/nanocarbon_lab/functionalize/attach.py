@@ -921,7 +921,7 @@ def functionalize(atoms: Atoms,
         out.info["bonds"] = [list(map(int, pair)) for pair in recorded] + \
             [[int(a), int(b)] for a, b in new_bonds]
 
-    out.info["functionalization"] = {
+    _record(out, atoms, existing, len(new_symbols), {
         "group": group.name,
         "formula": group.formula,
         "elements": list(group.elements()),
@@ -938,7 +938,7 @@ def functionalize(atoms: Atoms,
         "refused_separation": refused_separation,
         "site_hybridisation": group.site_hybridisation,
         "seed": seed,
-    }
+    })
     return out
 
 
@@ -1075,7 +1075,7 @@ def _graft_bridging(atoms: Atoms,
         out.info["bonds"] = [list(map(int, pair)) for pair in recorded] + \
             [[int(a), int(b)] for a, b in new_bonds]
 
-    out.info["functionalization"] = {
+    _record(out, atoms, existing, len(new_symbols), {
         "group": group.name,
         "formula": group.formula,
         "elements": list(group.elements()),
@@ -1095,21 +1095,49 @@ def _graft_bridging(atoms: Atoms,
         "site_hybridisation": group.site_hybridisation,
         "bridging": True,
         "seed": seed,
-    }
+    })
     return out
 
 
+def _record(out: Atoms, original: Atoms, first_new: int, n_new: int,
+            entry: dict[str, Any]) -> None:
+    """Append this graft's record, and the atoms it added.
+
+    ``info["functionalization"]`` is a **list**, appended to rather than
+    replaced. Graphene oxide is an epoxide graft followed by a hydroxyl
+    graft, and with a single dict the second call erased any trace of the
+    first -- the structure would carry 43 oxygens it no longer claimed to
+    have put anywhere.
+
+    ``info["grafted_atoms"]`` is the cumulative list of every atom added
+    by any graft. It exists so an analysis of the *host* can leave the
+    adsorbates out: `tmd.quality` classifies anything that is not a
+    chalcogen as the metal, so a grafted hydrogen counted as a metal
+    atom, its 1.51 Å bond to selenium counted as an M-X bond, and a
+    correct MoS2 slab was reported BROKEN with an X/M ratio of 1.73.
+    """
+    previous = list(original.info.get("functionalization", []))
+    out.info["functionalization"] = [*previous, entry]
+    out.info["grafted_atoms"] = [
+        *(int(i) for i in original.info.get("grafted_atoms", [])),
+        *range(first_new, first_new + n_new),
+    ]
+
+
 def describe_functionalization(atoms: Atoms) -> str:
-    """A human summary of what was grafted, or why nothing was.
+    """A human summary of every graft applied, or why nothing was.
 
     Says the achieved coverage next to the requested one whenever they
     differ, because a silent shortfall is the one outcome a user must not
     discover later from an atom count.
     """
-    record: dict[str, Any] | None = atoms.info.get("functionalization")
-    if not record:
+    records: list[dict[str, Any]] = atoms.info.get("functionalization") or []
+    if not records:
         return "No functionalization recorded on this structure."
+    return " ".join(_describe_one(record) for record in records)
 
+
+def _describe_one(record: dict[str, Any]) -> str:
     unit = "surface bonds" if record.get("bridging") else "candidate sites"
     lines = [
         f"{record['group']} ({record['formula']}) on {record['n_grafted']} of "

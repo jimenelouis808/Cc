@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pickle
 import shlex
+from dataclasses import replace
 
 import pytest
 
@@ -18,8 +19,10 @@ from nanocarbon_lab.jobs import (
     IMPLICIT_MODES,
     MODES,
     Job,
+    build,
     estimate_atoms,
     estimate_cost,
+    parse_swaps,
     to_cli,
 )
 
@@ -346,3 +349,107 @@ class TestDichalcogenideChemistry:
 
     def test_a_pristine_job_emits_no_chemistry_flags(self):
         assert "--janus" not in to_cli(SAMPLES["TMD layers"], out="out/x")
+
+
+class TestGrafting:
+    """The third chemistry axis: added on top rather than substituted in."""
+
+    def test_it_applies_to_every_family(self):
+        """A dopant belongs to carbon; a group belongs to any surface.
+
+        Each family builds on its own branch in `build`, so a step added
+        to one alone is silently skipped by the others -- which is
+        exactly what happened in the CLI, where `--graft` did nothing on
+        four sub-commands.
+        """
+        cases = {
+            "capped tube": {"n_body_rings": 4, "freq": 2},
+            "TMD layers": {"material": "MoS2", "n_layers": 1, "nx": 3, "ny": 3},
+            "twisted bilayer": {"layer": "graphene", "target_angle": 21.8},
+        }
+        for mode, params in cases.items():
+            job = Job(mode, params, graft="hydroxyl", graft_coverage=0.1,
+                      seed=1)
+            atoms = build(job)
+            assert atoms.info.get("functionalization"), mode
+            assert "O" in atoms.get_chemical_symbols(), mode
+
+    def test_no_graft_leaves_the_structure_alone(self):
+        plain = build(Job("capped tube", {"n_body_rings": 4, "freq": 2}))
+        assert "functionalization" not in plain.info
+
+    def test_the_swap_is_applied_before_placement(self):
+        job = Job("capped tube", {"n_body_rings": 4, "freq": 2},
+                  graft="hydroxyl", graft_swap="O:S", graft_coverage=0.1,
+                  seed=1)
+        atoms = build(job)
+        assert "S" in atoms.get_chemical_symbols()
+        assert "O" not in atoms.get_chemical_symbols()
+
+    def test_the_same_seed_gives_the_same_structure(self):
+        job = Job("capped tube", {"n_body_rings": 4, "freq": 2},
+                  graft="hydroxyl", graft_coverage=0.2, seed=5)
+        first, second = build(job), build(job)
+        assert (first.info["functionalization"][-1]["sites"]
+                == second.info["functionalization"][-1]["sites"])
+
+    def test_the_command_line_round_trips(self):
+        """Anything the GUI can express must be reproducible from a shell."""
+        job = Job("capped tube", {"n_body_rings": 4, "freq": 2},
+                  graft="carboxyl", graft_swap="O:S", graft_coverage=0.25,
+                  graft_where="edge", graft_face="both", seed=3)
+        line = to_cli(job)
+        assert "--graft carboxyl" in line
+        assert "--graft-swap O:S" in line
+        assert "--graft-coverage 0.25" in line
+        assert "--graft-where edge" in line
+        assert "--graft-face both" in line
+
+    def test_the_defaults_are_not_emitted_as_noise(self):
+        job = Job("capped tube", {"n_body_rings": 4, "freq": 2},
+                  graft="hydroxyl", seed=0)
+        line = to_cli(job)
+        assert "--graft-where" not in line
+        assert "--graft-face" not in line
+        assert "--graft-swap" not in line
+
+    def test_a_tmd_graft_carries_its_seed_to_the_command_line(self):
+        """The MX2 builders are deterministic and take no seed.
+
+        Grafting is not: its placement is random, so a command line that
+        omitted the seed would not reproduce the structure it came from.
+        """
+        job = Job("TMD layers", {"material": "MoS2", "n_layers": 1},
+                  graft="thiol", seed=7)
+        assert "--seed 7" in to_cli(job)
+
+    @pytest.mark.parametrize("text,expected", [
+        ("O:S", {"O": "S"}),
+        ("O:S,H:F", {"O": "S", "H": "F"}),
+        (" O : S , H : F ", {"O": "S", "H": "F"}),
+        ("", {}),
+    ])
+    def test_swaps_parse(self, text, expected):
+        assert parse_swaps(text) == expected
+
+    @pytest.mark.parametrize("text", ["O", "O:S:Se", ":S", "O:"])
+    def test_a_malformed_swap_is_refused(self, text):
+        """Silently ignoring it would return the unsubstituted group and
+        look like the substitution simply had no effect."""
+        with pytest.raises(ValueError, match="swap"):
+            parse_swaps(text)
+
+
+class TestGraftingSweeps:
+    """A sweep over coverage is the obvious study; it must work."""
+
+    def test_a_graft_survives_the_sweep(self):
+        from nanocarbon_lab.workflows.sweep import expand
+
+        jobs = expand("capped tube", {"n_body_rings": 4, "freq": 2},
+                      {"bond": [1.40, 1.42]})
+        grafted = [replace(job, graft="hydroxyl", graft_coverage=0.1)
+                   for job in jobs]
+        for job in grafted:
+            atoms = build(job)
+            assert atoms.info["functionalization"][-1]["group"] == "hydroxyl"

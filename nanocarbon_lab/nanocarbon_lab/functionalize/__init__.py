@@ -12,6 +12,15 @@ Two halves, deliberately separate:
 
 from __future__ import annotations
 
+from .attach import (
+    candidate_sites,
+    describe_functionalization,
+    functionalize,
+    inner_face_blocked,
+    is_enclosing,
+    sublattice_parity,
+    surface_normals,
+)
 from .groups import (
     GROUPS,
     VALENCE,
@@ -19,6 +28,7 @@ from .groups import (
     GroupAtom,
     as_dict,
     bond_length,
+    build_bridging_positions,
     build_positions,
     describe,
     get_group,
@@ -33,9 +43,17 @@ __all__ = [
     "GroupAtom",
     "as_dict",
     "bond_length",
+    "build_bridging_positions",
     "build_positions",
+    "candidate_sites",
     "describe",
+    "describe_functionalization",
+    "functionalize",
     "get_group",
+    "inner_face_blocked",
+    "is_enclosing",
+    "sublattice_parity",
     "substitute",
+    "surface_normals",
     "viable_swaps",
 ]

@@ -14,6 +14,7 @@ validation pass before writing.
 |-----------------|------------------------------------------------------------------------------|
 | `builders`      | CNT (armchair / zigzag / chiral), graphene, nanoribbons, **nanocoils**, 3D carbon foam, **capped/defected fullerene-CNTs** |
 | `dopants`       | Substitutional heteroatoms in carbon (N, B, P, S, Se, O, Si, Ge, Al and the 3d single-atom metals), placed at random, on **pentagons**, on edges or in the bulk |
+| `functionalize` | **Surface groups** (–OH, –COOH, =O, –CHO, –NH2, –SH, –CH3, –NO2, –F, epoxide) grafted onto carbon **or** MX2, with the elements swappable and the geometry rebuilt |
 | `defects`       | Mono- and divacancies, Stone-Wales, local random distortion                  |
 | `topology`      | networkx-based bond graph, coordination, connectivity, ring statistics       |
 | `validation`    | Minimum distances, coordination sanity, density, vacuum, cell consistency   |
@@ -294,6 +295,117 @@ from nanocarbon_lab.dopants import dope_rings, ring_size_census
 ring_size_census(cage)                      # {5: 60, 6: 60} for C60
 dope_rings(cage, "N", ring_size=5, count=6, seed=0)
 dope_rings(junction, "N", ring_size=7, concentration=0.1)   # the saddle
+```
+
+## Surface functionalisation: groups you can rebuild
+
+Doping *replaces* a host atom. A functional group is *added on top of* a
+surface — so unlike a dopant it applies to carbon, to a dichalcogenide
+and to a stack alike. On an MX2 it attaches to the **chalcogen**: the
+metal is buried between the two chalcogen planes and nothing can reach
+it, which the builder enforces rather than suggests.
+
+```bash
+nanocarbon groups                       # what each group is, and its swaps
+
+# an acid-treated tube: carboxyls on the open ends and defect sites
+nanocarbon cnt-cap --rings 10 --freq 3 \
+    --graft carboxyl --graft-where edge --graft-coverage 0.4 --out out/cooh
+
+# fluorographene, at full CF stoichiometry
+nanocarbon graphene --nx 5 --ny 5 \
+    --graft fluorine --graft-coverage 1.0 --graft-face both --out out/cf
+
+# thiols healing an MoS2 surface
+nanocarbon tmd --material MoS2 --nx 4 --ny 4 \
+    --graft thiol --graft-coverage 0.25 --out out/mos2-sh
+```
+
+### The library is composable, not a fixed menu
+
+A hydroxyl is not a set of coordinates. It is *an oxygen on the surface,
+a hydrogen on it at 108.5°* — and written that way, swapping the oxygen
+for sulphur gives a thiol **with the right geometry**, because both bond
+lengths are recomputed:
+
+```bash
+--graft hydroxyl --graft-swap O:S       # a thiol,   C-S 1.81 Å
+--graft hydroxyl --graft-swap O:Se      # a selenol, C-Se 1.96 Å
+--graft amine    --graft-swap N:P       # a phosphine
+--graft methyl   --graft-swap C:Si      # a silyl
+```
+
+Store the Cartesians instead and that same swap leaves a sulphur sitting
+at oxygen's 1.42 Å — a 0.4 Å error in the one bond the group is defined
+by. So only the **angles** are stored; every length comes from the
+covalent radii, which reproduce the literature across the whole library:
+
+| bond | built | literature |
+|------|-------|------------|
+| C–O (alcohol) | 1.420 | 1.43 |
+| O–H | 0.970 | 0.97 |
+| C–S | 1.810 | 1.82 |
+| C–N (aniline) | 1.470 | 1.47 |
+| C=O | 1.221 | 1.23 |
+| C–OH of an acid | 1.321 | 1.34 |
+| C–F | 1.330 | 1.35 |
+
+Swaps are restricted to the **same valence**. An -OH whose oxygen became
+nitrogen is not a group with a different element, it is a group with a
+missing bond — so oxygen reaches S/Se/Te, nitrogen P/As/B, carbon Si/Ge,
+and hydrogen the halogens. Anything else is refused with the reason.
+
+Ten groups ship: hydroxyl, carboxyl, carbonyl, aldehyde, amine, thiol,
+methyl, nitro, fluorine, and the bridging epoxide. With the swaps, that
+is most of the surface chemistry these materials actually undergo.
+
+### Coverage is measured, not assumed
+
+Ask for full coverage and you get what fits, with the shortfall and its
+reason reported:
+
+| group on graphene | achieved at 100% requested |
+|-------------------|----------------------------|
+| fluorine | **100%** — real CF stoichiometry |
+| hydroxyl | 46% |
+| epoxide | 31% of the *bonds* |
+| carboxyl | 28% |
+| methyl | 21% |
+
+Each placement is tested against the wall, against the groups already
+placed, and against their periodic images, trying twelve rotations about
+the surface bond and keeping the roomiest. Fluorine only reaches CF in
+the **chair** conformation, which is what `--graft-face both` builds: it
+alternates by sublattice, so no two neighbouring carbons take the same
+face. Alternating by any other rule stalls at 42%, because two fluorines
+on adjacent carbons on the same side are 1.42 Å apart.
+
+The epoxide ceiling is not steric at all — no two bridges may share a
+carbon, so it is a maximum matching on the surface, and the report says
+so rather than blaming a clash.
+
+### Where the groups go
+
+```bash
+--graft-where all        # every surface atom (default)
+--graft-where edge       # under-coordinated atoms: open ends, ribbon
+                         # edges, vacancy rims — where oxidation happens
+--graft-where defect     # any non-hexagonal ring
+--graft-where ring:5     # the pentagons a cage carries its reactivity on
+```
+
+The last two read the rings the builder recorded; they raise on a
+structure that has none rather than re-deriving rings from distances,
+which is the failure `builders/fullerene_mesh.py` exists to prevent.
+
+Graphene oxide is two grafts, and both are kept in the record:
+
+```python
+from nanocarbon_lab.functionalize import functionalize, describe_functionalization
+
+go = functionalize(sheet, "epoxide", coverage=0.25, seed=1)
+go = functionalize(go, "hydroxyl", coverage=0.2, face="both", seed=2)
+print(describe_functionalization(go))     # both grafts, both coverages
 ```
 
 ## Nanocoils

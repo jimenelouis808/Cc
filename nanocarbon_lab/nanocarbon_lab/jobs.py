@@ -142,9 +142,30 @@ class Job:
     tmd_edit_amount
         Fraction for an alloy, count for the two defect edits, side
         (+1 outer / -1 inner) for a Janus layer.
+    graft
+        ``None``, or the name of a functional group to attach to the
+        finished surface. Unlike `dopant`, which *replaces* a carbon,
+        this *adds* atoms on top of one -- so it applies to a
+        dichalcogenide as readily as to carbon, and is a third axis
+        rather than an alternative to either.
+    graft_swap
+        Element substitutions applied to the group before it is placed,
+        as ``"O:S"`` or ``"O:S,H:F"``. This is what makes the group
+        library composable: the same hydroxyl definition becomes a
+        thiol, a selenol or a tellurol, with the bond lengths rebuilt
+        each time.
+    graft_coverage
+        Fraction of the candidate sites to graft. What is *achieved* may
+        be less, and is recorded: a carboxyl does not fit everywhere a
+        fluorine does.
+    graft_where
+        Which sites are candidates: ``"all"``, ``"edge"``, ``"defect"``
+        or ``"ring:N"``.
+    graft_face
+        ``"outer"``, ``"inner"`` or ``"both"``.
     seed
-        RNG seed, threaded into the builder, the doping and the MX2
-        chemistry.
+        RNG seed, threaded into the builder, the doping, the MX2
+        chemistry and the grafting.
     """
 
     mode: str
@@ -155,6 +176,11 @@ class Job:
     tmd_edit: str | None = None
     tmd_edit_element: str = "Se"
     tmd_edit_amount: float = 1.0
+    graft: str | None = None
+    graft_swap: str = ""
+    graft_coverage: float = 0.1
+    graft_where: str = "all"
+    graft_face: str = "outer"
     seed: int = 0
 
     def __post_init__(self) -> None:
@@ -249,9 +275,8 @@ def build(job: Job):
 
     if job.mode in HETERO_MODES:
         # Commensurate stacking is exact crystallography, no randomness.
-        return builder(**job.params)
-
-    if job.mode in TMD_MODES:
+        atoms = builder(**job.params)
+    elif job.mode in TMD_MODES:
         # The TMD builders are deterministic -- exact crystallography, no
         # random defect placement -- so they take no seed, and passing one
         # would be a TypeError rather than a no-op. The chemistry that
@@ -259,11 +284,19 @@ def build(job: Job):
         atoms = builder(**job.params)
         if job.tmd_edit:
             atoms = apply_tmd_chemistry(atoms, job)
-        return atoms
+    else:
+        atoms = builder(**job.params, seed=job.seed)
+        if job.dopant and job.dopant_conc > 0:
+            atoms = apply_doping(atoms, job)
 
-    atoms = builder(**job.params, seed=job.seed)
-    if job.dopant and job.dopant_conc > 0:
-        atoms = apply_doping(atoms, job)
+    # Grafting comes last and applies to every family. A group is added
+    # *on top of* a surface rather than substituted into it, so unlike
+    # the carbon dopants it is as meaningful on a dichalcogenide or a
+    # twisted bilayer as on a nanotube -- and it must see the finished
+    # surface, since a vacancy or a Janus face changes where a group can
+    # go.
+    if job.graft:
+        atoms = apply_grafting(atoms, job)
     return atoms
 
 
@@ -721,6 +754,71 @@ def _tmd_edit_flags(job: Job) -> list[str]:
             "--seed", str(job.seed)]
 
 
+def parse_swaps(text: str) -> dict[str, str]:
+    """Parse ``"O:S"`` or ``"O:S,H:F"`` into a substitution mapping.
+
+    One spelling for the GUI, the CLI and a sweep, so a swap that works
+    in one works in all three.
+
+    Raises
+    ------
+    ValueError
+        On anything that is not ``from:to``, naming what was given --
+        a silently ignored swap would return the unsubstituted group and
+        look like the substitution simply had no effect.
+    """
+    swaps: dict[str, str] = {}
+    for piece in (part.strip() for part in text.split(",")):
+        if not piece:
+            continue
+        if piece.count(":") != 1:
+            raise ValueError(
+                f"Cannot read the element swap {piece!r}. Write it as "
+                "'from:to', for example 'O:S' to turn a hydroxyl into a "
+                "thiol, and separate several with commas."
+            )
+        source, target = (half.strip() for half in piece.split(":"))
+        if not source or not target:
+            raise ValueError(
+                f"Cannot read the element swap {piece!r}: both sides must "
+                "name an element, as in 'O:S'."
+            )
+        swaps[source] = target
+    return swaps
+
+
+def apply_grafting(atoms, job: Job):
+    """Attach ``job.graft`` to a finished structure.
+
+    The counterpart of :func:`apply_doping` and :func:`apply_tmd_chemistry`,
+    and split out for the same reason: one placement policy, shared by
+    the GUI and the CLI, rather than one each.
+    """
+    from .functionalize import functionalize, get_group, substitute
+
+    group = get_group(job.graft)
+    if job.graft_swap:
+        group = substitute(group, parse_swaps(job.graft_swap))
+    return functionalize(atoms, group,
+                         coverage=job.graft_coverage,
+                         where=job.graft_where,
+                         face=job.graft_face,
+                         seed=job.seed)
+
+
+def _graft_flags(job: Job) -> list[str]:
+    """CLI flags reproducing this job's grafting."""
+    parts = ["--graft", job.graft,
+             "--graft-coverage", f"{job.graft_coverage:g}"]
+    if job.graft_swap:
+        parts += ["--graft-swap", job.graft_swap]
+    if job.graft_where != "all":
+        parts += ["--graft-where", job.graft_where]
+    if job.graft_face != "outer":
+        parts += ["--graft-face", job.graft_face]
+    return parts
+
+
 def to_cli(job: Job, out: str = "out/structure") -> str:
     """The ``nanocarbon`` command line equivalent to this job.
 
@@ -768,6 +866,12 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
         # carries its seed with it.
         if job.mode in TMD_MODES and job.tmd_edit:
             parts += _tmd_edit_flags(job)
+        if job.graft:
+            # Grafting is random placement, so it carries a seed even in
+            # the two families whose builders have none.
+            parts += _graft_flags(job)
+            if not (job.mode in TMD_MODES and job.tmd_edit):
+                parts += ["--seed", str(job.seed)]
         parts += ["--out", out]
         return " ".join(parts)
 
@@ -775,6 +879,8 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
         parts += ["--dopant", job.dopant, "--dopant-conc", f"{job.dopant_conc:g}"]
         if job.dopant_site != "random":
             parts += ["--dopant-site", job.dopant_site]
+    if job.graft:
+        parts += _graft_flags(job)
     parts += ["--seed", str(job.seed), "--out", out]
     return " ".join(parts)
 
@@ -785,7 +891,9 @@ __all__ = [
     "MODES",
     "TMD_EDITS",
     "Job",
+    "parse_swaps",
     "apply_doping",
+    "apply_grafting",
     "apply_tmd_chemistry",
     "build",
     "builder_for",

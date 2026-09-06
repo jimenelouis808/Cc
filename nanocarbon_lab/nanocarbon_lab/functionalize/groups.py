@@ -558,7 +558,8 @@ def describe(group: FunctionalGroup, surface_symbol: str = "C") -> str:
     length = bond_length(surface_symbol, root.symbol, root.order)
     kind = "bridging two sites" if group.bridging else (
         f"{surface_symbol}-{root.symbol} {length:.2f} Å")
-    return (f"{group.name}: {group.formula}, {group.n_atoms} atoms, {kind}, "
+    plural = "atom" if group.n_atoms == 1 else "atoms"
+    return (f"{group.name}: {group.formula}, {group.n_atoms} {plural}, {kind}, "
             f"site becomes {group.site_hybridisation}. {group.note}")
 
 

@@ -617,3 +617,110 @@ def test_the_unit_cell_export_describes_what_it_wrote(app, tmp_path, monkeypatch
     assert written is not None and written.exists()
     assert "3D cell" in app.lbl_cell.cget("text")
     assert "across vacuum" in app.lbl_cell.cget("text")
+
+
+def test_the_graft_panel_shows_for_every_family(app):
+    """A group is added on top of a surface, not substituted into it.
+
+    Carbon, MX2 and a vdW stack all have a surface, so the panel belongs
+    to all three -- unlike the dopant panel, which is carbon's alone.
+    """
+    for mode in ("capped tube", "TMD layers", "twisted bilayer"):
+        app.var_mode_kind.set(mode)
+        assert app.frame_graft.winfo_manager(), mode
+
+
+def test_the_graft_hint_lists_the_swaps_the_group_accepts(app):
+    """The swap field is free text, so the panel has to say what fits.
+
+    Which elements are offered depends on the group -- an -OH reaches
+    S/Se/Te and an -NH2 reaches P/As/B -- so a fixed dropdown could not
+    be right and the hint carries the information instead.
+    """
+    app.var_mode_kind.set("capped tube")
+    app.var_graft.set("hydroxyl")
+    hint = app.lbl_graft.cget("text")
+    assert "S/Se/Te" in hint
+
+    app.var_graft.set("amine")
+    hint = app.lbl_graft.cget("text")
+    assert "As/B/P" in hint
+
+
+def test_an_impossible_swap_is_reported_before_building(app):
+    """Catching it in the hint beats a traceback after a long build."""
+    app.var_mode_kind.set("capped tube")
+    app.var_graft.set("hydroxyl")
+    app.var_graft_swap.set("O:N")
+    hint = app.lbl_graft.cget("text")
+    assert "bonds" in hint
+    assert str(app.lbl_graft.cget("foreground")) == app_module_warn_colour()
+
+
+def app_module_warn_colour():
+    from nanocarbon_lab.gui import app as app_module
+    return app_module.WARN_AMBER
+
+
+def test_a_valid_swap_reports_the_rebuilt_formula(app):
+    app.var_mode_kind.set("capped tube")
+    app.var_graft.set("hydroxyl")
+    app.var_graft_swap.set("O:S")
+    assert "HS" in app.lbl_graft.cget("text")
+
+
+def test_the_graft_reaches_the_job_for_every_family(app):
+    """The panel must not be visibly present and silently ignored.
+
+    Each family builds its Job on a different branch, so a field added
+    to one of them alone is the exact failure this pins.
+    """
+    app.var_graft.set("carboxyl")
+    app.var_graft_coverage.set(0.2)
+    app.var_graft_swap.set("O:S")
+    app.var_graft_where.set("edge")
+    app.var_graft_face.set("both")
+    for mode in ("capped tube", "TMD layers", "twisted bilayer"):
+        app.var_mode_kind.set(mode)
+        job = app.current_job()
+        assert job.graft == "carboxyl", mode
+        assert job.graft_coverage == 0.2, mode
+        assert job.graft_swap == "O:S", mode
+        assert job.graft_where == "edge", mode
+        assert job.graft_face == "both", mode
+
+
+def test_no_graft_means_no_graft_in_the_job(app):
+    app.var_mode_kind.set("capped tube")
+    app.var_graft.set("none")
+    assert app.current_job().graft is None
+
+
+def test_the_command_line_reproduces_the_graft(app):
+    """The copy-as-command-line button is only useful if it is complete."""
+    from nanocarbon_lab.jobs import to_cli
+
+    app.var_mode_kind.set("capped tube")
+    app.var_graft.set("hydroxyl")
+    app.var_graft_swap.set("O:S")
+    app.var_graft_coverage.set(0.25)
+    line = to_cli(app.current_job())
+    assert "--graft hydroxyl" in line
+    assert "--graft-swap O:S" in line
+    assert "--graft-coverage 0.25" in line
+
+
+def test_a_grafted_build_runs_end_to_end(app):
+    """The panel is wired to a build, not only to a Job."""
+    app.var_mode_kind.set("fullerene")
+    app.var_cage_family.set("C60")
+    app.var_cage_freq.set(1)
+    app.var_graft.set("hydroxyl")
+    app.var_graft_coverage.set(0.2)
+    app.on_build()
+    _pump_until_idle(app.root, app)
+
+    atoms = app.atoms
+    assert atoms is not None
+    assert "O" in atoms.get_chemical_symbols()
+    assert atoms.info["functionalization"][-1]["group"] == "hydroxyl"
