@@ -1,5 +1,22 @@
+# Runtime dependencies. `pyproject.toml` is the authority; this file
+# mirrors it for anyone who prefers `pip install -r requirements.txt`.
+#
+# scikit-image is NOT optional: marching cubes is how every implicit
+# builder works -- junctions, schwarzites, nanotube networks and the
+# relaxed coils. Leaving it out installs a package that raises ImportError
+# on a third of its modes.
 numpy>=1.24
 scipy>=1.10
 ase>=3.22
 networkx>=3.0
+scikit-image>=0.22
+
+# The GUI's 3D preview and the viz module. Not needed for the CLI or the
+# Python API, which is why pyproject keeps it as the `gui`/`viz` extra --
+# but almost everyone wants the GUI, so it is here.
+matplotlib>=3.7
+
+# Tests and linting: `pip install -e .[dev]` is the supported way, this is
+# the equivalent for a requirements-file workflow.
 pytest>=7.4
+ruff>=0.4
