@@ -36,6 +36,9 @@ validation pass before writing.
 
 ## Installation
 
+> Step-by-step instructions in Spanish, including the tkinter prerequisite
+> and the common failure modes, are in [`INSTALL.md`](INSTALL.md).
+
 ```bash
 git clone <this repo>
 cd nanocarbon_lab
