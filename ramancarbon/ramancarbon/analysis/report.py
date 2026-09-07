@@ -46,6 +46,7 @@ from .assignment import Assignment, GRegionInterpretation, assign_bands, resolve
 from .classify import Classification, classify
 from .indices import IndexSet, compute_indices
 from .interference import InterferenceReport, find_interferences
+from .phases import PhaseReport, find_phases
 from .quality import QualityReport, check_quality
 from .diameter import (
     DiameterEstimate,
@@ -105,6 +106,10 @@ class AnalysisResult:
     indices: Optional[IndexSet] = None
     quality: Optional[QualityReport] = None
     interference: Optional[InterferenceReport] = None
+    phases: Optional[PhaseReport] = None
+    """Non-carbon crystalline phases identified as part of the sample.
+    Unlike :attr:`interference` this runs by default; see
+    :mod:`ramancarbon.analysis.phases` for why the two differ."""
     profile: Optional[str] = None
     """Lineshape forced on the deconvolution, or ``None`` for the database
     defaults."""
@@ -167,6 +172,10 @@ class AnalysisResult:
                 row["offset_Si_cm-1"] = self.quality.silicon_offset
         if self.interference is not None and self.interference.found_anything:
             row["no_carbono"] = ";".join(sorted(self.interference.species_present))
+        if self.phases is not None and self.phases.found_anything:
+            row["fases"] = ";".join(
+                sorted(i.phase.key for i in self.phases.identifications if i.corroborated)
+            )
         if self.indices is not None:
             for key, value in self.indices.to_dict().items():
                 row[key] = value
@@ -197,6 +206,8 @@ def analyse(
     auto_preprocess: bool = False,
     check_interferences: bool = False,
     interference_groups: Optional[Sequence[str]] = None,
+    check_phases: bool = True,
+    phase_families: Optional[Sequence[str]] = None,
     db: Optional[Database] = None,
 ) -> AnalysisResult:
     """Run the complete analysis on one spectrum.
@@ -240,6 +251,15 @@ def analyse(
         its catalyst, for samples doped from a sulfur, selenium or
         phosphorus precursor, and for anything measured through a
         substrate. See :mod:`ramancarbon.analysis.interference`.
+    check_phases:
+        Identify non-carbon crystalline phases that belong to the sample
+        (FeSe polymorphs, elemental selenium, iron carbides) and keep their
+        lines out of the diameter analysis. **On by default**, unlike the
+        interference scan: those phases have modes inside the radial
+        breathing mode window, so without this step a decorated nanotube
+        sample produces confident, fabricated tube diameters.
+    phase_families:
+        Restrict the phase scan to these composition families.
     interference_groups:
         Which catalogue groups to consider; narrow it to what your
         synthesis could plausibly have left behind.
@@ -306,6 +326,25 @@ def analyse(
         warnings.extend(f"interferencia: {w}" for w in interference.warnings)
     else:
         interference = InterferenceReport(enabled=False)
+
+    # -- sample phases (FeSe, Se, carbides), on by default -------------
+    # These are constituents of the sample, not contamination, and their
+    # modes land inside the RBM window: without this step a decorated
+    # nanotube sample yields fabricated tube diameters. See
+    # :mod:`ramancarbon.analysis.phases`.
+    phases: Optional[PhaseReport] = None
+    if check_phases:
+        phases = find_phases(
+            peaks,
+            spectrum_range=(float(processed.shift[0]), float(processed.shift[-1])),
+            families=phase_families,
+        )
+        blocked_positions = tuple(
+            sorted(set(blocked_positions) | set(phases.excluded_from_rbm))
+        )
+        warnings.extend(f"fases: {w}" for w in phases.warnings)
+    else:
+        phases = PhaseReport(enabled=False)
 
     # -- RBM region, with its own tighter search -----------------------
     rbm = _analyse_rbm(
@@ -488,6 +527,7 @@ def analyse(
         indices=indices,
         quality=quality,
         interference=interference,
+        phases=phases,
         profile=profile,
         warnings=warnings,
     )
@@ -771,8 +811,17 @@ def build_report(result: AnalysisResult, verbose: bool = True) -> str:
         lines.append(section("CALIDAD DE LA MEDIDA"))
         lines.append(result.quality.summary())
 
+    if result.phases is not None and result.phases.enabled and (
+        result.phases.found_anything or verbose
+    ):
+        lines.append(section("FASES NO CARBONOSAS DE LA MUESTRA"))
+        lines.append(result.phases.summary(include_tentative=verbose))
+        if result.phases.found_anything:
+            lines.append("")
+            lines.append(result.phases.abundance_caveat())
+
     if result.interference is not None and result.interference.found_anything:
-        lines.append(section("BANDAS NO CARBONOSAS"))
+        lines.append(section("BANDAS NO CARBONOSAS (interferencias)"))
         lines.append(result.interference.summary())
 
     lines.append(section("IDENTIFICACIÓN"))

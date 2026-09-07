@@ -31,7 +31,16 @@ from ..models.lineshapes import bwf, gaussian, lorentzian
 REFERENCE_EV = 2.33
 
 #: The demo materials, in the order the GUI loads them.
-DEMO_KINDS = ("SWCNT", "SWCNT_metalico", "DWCNT", "MWCNT", "grafeno_1L", "GO")
+DEMO_KINDS = (
+    "SWCNT",
+    "SWCNT_metalico",
+    "DWCNT",
+    "MWCNT",
+    "grafeno_1L",
+    "GO",
+    "MWCNT_FeSe",
+    "MWCNT_Se",
+)
 
 
 def _dispersed(position: float, dispersion: float, laser_ev: float) -> float:
@@ -149,6 +158,35 @@ def make_demo(
         y += lorentzian(x, d + 5.0, 900.0 * defect_gain, 130.0)
         y += lorentzian(x, 1598.0, 950.0, 85.0)
         y += gaussian(x, 1510.0, 260.0, 220.0)
+    elif kind == "MWCNT_FeSe":
+        # Multi-walled tubes decorated with tetragonal beta-FeSe, plus a
+        # little residual trigonal selenium. This is the case the phase
+        # scan exists for: the FeSe A1g/B1g pair at 181/196 and the Se A1
+        # at 237 sit squarely inside the radial-breathing-mode window, and
+        # a diameter analysis that does not know what they are converts
+        # them into three confident, fictitious tube diameters.
+        y += lorentzian(x, 181.0, 210.0, 7.0)
+        y += lorentzian(x, 196.0, 130.0, 8.0)
+        y += lorentzian(x, 102.0, 45.0, 9.0)
+        y += lorentzian(x, 237.0, 120.0, 8.0)
+        y += lorentzian(x, 143.0, 40.0, 10.0)
+        y += lorentzian(x, d, 760.0 * defect_gain, 62.0)
+        y += lorentzian(x, 1580.0, 880.0, 50.0)
+        y += lorentzian(x, d_prime, 185.0 * defect_gain, 28.0)
+        y += gaussian(x, 1500.0, 85.0, 180.0)
+        y += lorentzian(x, two_d + 20.0, 170.0, 115.0)
+    elif kind == "MWCNT_Se":
+        # The same tubes with amorphous/ring selenium only: one broad band
+        # near 252 cm-1 and no iron phase. Included so the polymorph logic
+        # has a case where the family is present but the chain/ring call
+        # is what carries the information.
+        y += lorentzian(x, 252.0, 150.0, 22.0)
+        y += lorentzian(x, 235.0, 70.0, 20.0)
+        y += lorentzian(x, 112.0, 45.0, 12.0)
+        y += lorentzian(x, d, 700.0 * defect_gain, 60.0)
+        y += lorentzian(x, 1581.0, 860.0, 47.0)
+        y += lorentzian(x, d_prime, 175.0 * defect_gain, 27.0)
+        y += lorentzian(x, two_d + 20.0, 165.0, 110.0)
     else:
         raise ValueError(
             f"unknown demo material {kind!r}; available: {', '.join(DEMO_KINDS)}"

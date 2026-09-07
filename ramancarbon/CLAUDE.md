@@ -156,6 +156,32 @@ una tiene una prueba que la protege.
   se publican, usa `models.bootstrap`. Documenta siempre que el remuestreo
   mide reproducibilidad frente al ruido, no acierto.
 
+## Fases de la muestra (FeSe, Se, carburos)
+
+- **`analysis.phases` SÍ va encendido por defecto**, al contrario que
+  `analysis.interference`. No es una incoherencia: son dos cosas distintas.
+  Allí una banda ajena es suciedad; aquí es la muestra. Y el motivo concreto
+  es que el β-FeSe pone sus dos modos en 181 y 196 cm⁻¹, el selenio en 237 y
+  254, y la cementita en 212 y 280 — los seis dentro de la ventana RBM. Sin
+  este paso, un espectro de nanotubos decorados con FeSe devuelve cinco
+  diámetros de nanotubo creíbles y falsos. Hay una prueba que lo demuestra en
+  las dos direcciones.
+- **La corroboración también manda aquí**: una fase es un espectro, no una
+  línea. Las coincidencias sueltas se listan aparte y ocultas por defecto.
+- **Un límite SUPERIOR de anchura no corrobora nada.** «Más estrecha de
+  15 cm⁻¹» lo cumple cualquier RBM. Solo un límite INFERIOR es prueba
+  positiva, y por eso el selenio amorfo se identifica con una sola banda y el
+  monoclínico no. Convertir el 254 cm⁻¹ del SWCNT limpio en selenio
+  monoclínico fue exactamente ese error.
+- **Raman propone la fase, DRX la demuestra.** Cada fase lleva su `xrd_hint`
+  con la reflexión y el 2θ que zanja la duda, y el informe lo dice cuando la
+  familia queda sin resolver. No conviertas eso en una afirmación.
+- **La fase hexagonal del FeSe lleva confianza `low` a propósito**: su
+  literatura Raman no es consistente. No la subas sin medidas nuevas.
+- **Las intensidades relativas entre fases NO son fracciones másicas.** Las
+  secciones eficaces difieren en órdenes de magnitud y dependen de la
+  resonancia. Para cuantificar, Rietveld.
+
 ## Dicalcogenuros (TMD)
 
 - **La medida es una SEPARACIÓN, no una posición.** E₂g se ablanda y A₁g se
