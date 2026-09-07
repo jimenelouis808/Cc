@@ -99,6 +99,12 @@ class Material:
     confidence: str
     source: str
     notes: str
+    role: str = "structure"
+    """``"structure"`` if the classifier should offer this material as a
+    candidate, ``"reference"`` if it only serves as a comparison target.
+    A nitrogen-doped multi-walled tube is still a multi-walled tube;
+    listing it as a rival label would split the score between two names
+    for the same structure."""
 
     def band_window(self, key: str) -> Optional[tuple[float, float]]:
         """Expected position range for one band in this material, cm⁻¹."""
@@ -248,6 +254,29 @@ class Database:
         """All reference materials in one family (``"CNT"``, ``"graphene"``…)."""
         return [m for m in self.materials.values() if m.family == family]
 
+    def structural_materials(self) -> list[Material]:
+        """The materials the classifier is allowed to choose between."""
+        return [m for m in self.materials.values() if m.role == "structure"]
+
+    def dopants_for(self, host: str) -> list[DopantSignature]:
+        """Dopant signatures applicable to a host material class.
+
+        Parameters
+        ----------
+        host:
+            ``"CNT"``, ``"CNF"`` or ``"graphene"``. Signatures that list no
+            host at all are returned for every host.
+        """
+        return [
+            d for d in self.dopants.values()
+            if not d.host or host in d.host
+        ]
+
+    @property
+    def dopant_guidance(self) -> dict:
+        """Notes on reading shifts when the dopant is a large atom."""
+        return dict(self.perturbations_raw.get("dopant_guidance", {}))
+
     # -- RBM -----------------------------------------------------------
     def rbm_parameterisation(self, key: Optional[str] = None) -> RBMParameterisation:
         """Look up an RBM relation, defaulting to the database's own default."""
@@ -376,6 +405,7 @@ def _build(directory: Path) -> Database:
             confidence=entry.get("confidence", "unknown"),
             source=entry.get("source", ""),
             notes=entry.get("notes", ""),
+            role=entry.get("role", "structure"),
         )
 
     rbm: dict[str, RBMParameterisation] = {}

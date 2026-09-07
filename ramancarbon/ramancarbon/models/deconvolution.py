@@ -56,6 +56,7 @@ from ..core.peaks import PeakMeasurement, find_peaks
 from ..core.spectrum import Spectrum
 from ..database import Database, load_database
 from .fitting import FitModel, FitResult, PeakSpec, fit_model
+from .lineshapes import resolve_profile
 
 #: Preset identifiers, in the order the GUI offers them.
 PRESETS = (
@@ -110,6 +111,7 @@ def build_model(
     background: str = "linear",
     db: Optional[Database] = None,
     window: Optional[tuple[float, float]] = None,
+    profile: Optional[str] = None,
 ) -> FitModel:
     """Build a deconvolution model for one of the presets.
 
@@ -141,6 +143,27 @@ def build_model(
         Loaded database.
     window:
         Override the preset's fit window.
+    profile:
+        Force every component to one lineshape, overriding the per-band
+        defaults in the database. ``None`` keeps those defaults, which are
+        Lorentzian for the true phonon bands and Gaussian for the D3 and D4
+        envelopes.
+
+        ``"pseudo_voigt"`` is the pragmatic choice for real, noisy spectra
+        and it is worth understanding why. A pseudo-Voigt with a free
+        mixing fraction η contains both the Lorentzian (η = 1) and the
+        Gaussian (η = 0) as special cases, so instead of asserting the
+        lineshape you let the fit report it — and the fitted η is then a
+        result you can look at. A band that comes back with η near 1 is
+        behaving like a phonon with a finite lifetime; one that comes back
+        near 0 is an inhomogeneous envelope. The cost is one extra free
+        parameter per band, which on a five-component model over a noisy
+        spectrum is a real cost: watch the correlation warnings.
+
+        A metallic G⁻ is the one component this does **not** override,
+        because Breit–Wigner–Fano asymmetry is not a shape preference but
+        a different physical mechanism, and no symmetric profile can
+        represent it.
 
     Returns
     -------
@@ -149,18 +172,20 @@ def build_model(
     Raises
     ------
     ValueError
-        If the preset is unknown, or the spectrum does not cover the
-        preset's window.
+        If the preset is unknown, the profile name is not recognised, or
+        the spectrum does not cover the preset's window.
     """
+    if profile is not None:
+        profile = resolve_profile(profile)
     database = db or load_database()
     laser_ev = spectrum.laser_ev
 
     if preset == "rbm":
-        return _rbm_model(spectrum, seeds, background, database, window)
+        return _rbm_model(spectrum, seeds, background, database, window, profile)
     if preset == "two_d":
-        return _two_d_model(spectrum, seeds, background, database, window)
+        return _two_d_model(spectrum, seeds, background, database, window, profile)
     if preset == "swcnt_g":
-        return _swcnt_g_model(spectrum, metallic, background, database, window)
+        return _swcnt_g_model(spectrum, metallic, background, database, window, profile)
     if preset not in PRESET_BANDS:
         raise ValueError(
             f"unknown preset {preset!r}; available: {', '.join(PRESETS)}"
@@ -171,8 +196,10 @@ def build_model(
 
     peaks: list[PeakSpec] = []
     for key in PRESET_BANDS[preset]:
-        profile = "bwf" if (key == "G-" and metallic) else None
-        spec = _spec_for_band(spectrum, key, database, laser_ev, profile=profile)
+        # BWF for a metallic G- is mechanism, not preference: it survives an
+        # explicit profile override.
+        chosen = "bwf" if (key == "G-" and metallic) else profile
+        spec = _spec_for_band(spectrum, key, database, laser_ev, profile=chosen)
         if key == "G-" and metallic:
             spec.fwhm = 60.0
             spec.fwhm_bounds = (20.0, 160.0)
@@ -241,12 +268,14 @@ def _swcnt_g_model(
     background: str,
     db: Database,
     window: Optional[tuple[float, float]],
+    profile: Optional[str] = None,
 ) -> FitModel:
     laser_ev = spectrum.laser_ev
     lo, hi = window or _shifted_window(PRESET_WINDOWS["swcnt_g"], db, laser_ev)
     _require_coverage(spectrum, lo, hi, "swcnt_g")
     g_minus = _spec_for_band(
-        spectrum, "G-", db, laser_ev, profile="bwf" if metallic else "lorentzian"
+        spectrum, "G-", db, laser_ev,
+        profile="bwf" if metallic else (profile or "lorentzian"),
     )
     if metallic:
         # A metallic G- is broad; let it be, and let 1/q run negative only.
@@ -254,8 +283,8 @@ def _swcnt_g_model(
         g_minus.fwhm_bounds = (20.0, 160.0)
         g_minus.extra = (-0.12,)
         g_minus.extra_bounds = ((-0.45, 0.0),)
-    g_plus = _spec_for_band(spectrum, "G+", db, laser_ev)
-    d_prime = _spec_for_band(spectrum, "D'", db, laser_ev)
+    g_plus = _spec_for_band(spectrum, "G+", db, laser_ev, profile=profile)
+    d_prime = _spec_for_band(spectrum, "D'", db, laser_ev, profile=profile)
     return FitModel(
         peaks=[g_minus, g_plus, d_prime],
         window=(lo, hi),
@@ -270,6 +299,7 @@ def _rbm_model(
     background: str,
     db: Database,
     window: Optional[tuple[float, float]],
+    profile: Optional[str] = None,
 ) -> FitModel:
     band = db.band("RBM")
     lo, hi = window or band.window
@@ -295,7 +325,7 @@ def _rbm_model(
         peaks.append(
             PeakSpec(
                 name=f"RBM{i + 1}",
-                profile="lorentzian",
+                profile=profile or "lorentzian",
                 centre=peak.position,
                 height=peak.height,
                 fwhm=float(np.clip(fwhm, 3.0, 25.0)),
@@ -314,6 +344,7 @@ def _two_d_model(
     background: str,
     db: Database,
     window: Optional[tuple[float, float]],
+    profile: Optional[str] = None,
 ) -> FitModel:
     laser_ev = spectrum.laser_ev
     band = db.band("2D")
@@ -325,7 +356,7 @@ def _two_d_model(
             specs.append(
                 PeakSpec(
                     name=f"2D_{i + 1}",
-                    profile="lorentzian",
+                    profile=profile or "lorentzian",
                     centre=peak.position,
                     height=peak.height,
                     fwhm=float(np.clip(peak.fwhm or 35.0, 10.0, 120.0)),
@@ -336,7 +367,7 @@ def _two_d_model(
                 )
             )
     else:
-        specs = [_spec_for_band(spectrum, "2D", db, laser_ev)]
+        specs = [_spec_for_band(spectrum, "2D", db, laser_ev, profile=profile)]
     return FitModel(peaks=specs, window=(lo, hi), background=background, name="two_d")
 
 
@@ -372,6 +403,7 @@ def compare_models(
     criterion: str = "bic",
     db: Optional[Database] = None,
     metallic: bool = False,
+    profile: Optional[str] = None,
     **fit_kwargs,
 ) -> ModelComparison:
     """Fit several deconvolution models and rank them.
@@ -398,6 +430,10 @@ def compare_models(
     metallic:
         Forwarded to :func:`build_model`, so a ``swcnt_full`` candidate gets
         a Breit–Wigner–Fano G⁻ when the tubes are metallic.
+    profile:
+        Forwarded to :func:`build_model`. Every model in a comparison must
+        use the same lineshape, or the information criteria are comparing
+        two things at once.
     **fit_kwargs:
         Passed to :func:`~ramancarbon.models.fitting.fit_model`.
 
@@ -431,7 +467,12 @@ def compare_models(
     for name in names:
         try:
             model = build_model(
-                spectrum, preset=name, metallic=metallic, db=database, window=common
+                spectrum,
+                preset=name,
+                metallic=metallic,
+                db=database,
+                window=common,
+                profile=profile,
             )
             results[name] = fit_model(spectrum, model, **fit_kwargs)
         except ValueError as exc:

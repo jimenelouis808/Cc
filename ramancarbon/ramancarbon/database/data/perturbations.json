@@ -105,10 +105,19 @@
     {
       "key": "N_graphitic",
       "label": "Nitrogeno grafitico (sustitucional)",
-      "host": ["graphene", "CNT"],
+      "host": [
+        "graphene",
+        "CNT"
+      ],
       "carrier": "electron",
-      "G_shift_cm1": [3.0, 15.0],
-      "2D_shift_cm1": [-20.0, -3.0],
+      "G_shift_cm1": [
+        3.0,
+        15.0
+      ],
+      "2D_shift_cm1": [
+        -20.0,
+        -3.0
+      ],
       "ID_IG": "increases with N content",
       "confidence": "medium",
       "source": "Zhao et al., Nano Lett. 11 (2011) 5401; Ferrari & Basko, Nature Nanotech. 8 (2013) 235",
@@ -117,10 +126,19 @@
     {
       "key": "N_pyridinic",
       "label": "Nitrogeno piridinico (en vacante/borde)",
-      "host": ["graphene", "CNT"],
+      "host": [
+        "graphene",
+        "CNT"
+      ],
       "carrier": "hole-like (locally)",
-      "G_shift_cm1": [-5.0, 8.0],
-      "2D_shift_cm1": [-10.0, 5.0],
+      "G_shift_cm1": [
+        -5.0,
+        8.0
+      ],
+      "2D_shift_cm1": [
+        -10.0,
+        5.0
+      ],
       "ID_IG": "increases strongly",
       "confidence": "low",
       "source": "Zhao et al., Nano Lett. 11 (2011) 5401",
@@ -129,10 +147,19 @@
     {
       "key": "B_substitutional",
       "label": "Boro sustitucional",
-      "host": ["graphene", "CNT"],
+      "host": [
+        "graphene",
+        "CNT"
+      ],
       "carrier": "hole",
-      "G_shift_cm1": [2.0, 12.0],
-      "2D_shift_cm1": [3.0, 20.0],
+      "G_shift_cm1": [
+        2.0,
+        12.0
+      ],
+      "2D_shift_cm1": [
+        3.0,
+        20.0
+      ],
       "ID_IG": "increases",
       "confidence": "medium",
       "source": "Panchakarla et al., Adv. Mater. 21 (2009) 4726",
@@ -141,14 +168,220 @@
     {
       "key": "charge_transfer_acceptor",
       "label": "Transferencia de carga (aceptor, p. ej. FeCl3, HNO3)",
-      "host": ["graphene", "CNT"],
+      "host": [
+        "graphene",
+        "CNT"
+      ],
       "carrier": "hole",
-      "G_shift_cm1": [5.0, 25.0],
-      "2D_shift_cm1": [5.0, 25.0],
+      "G_shift_cm1": [
+        5.0,
+        25.0
+      ],
+      "2D_shift_cm1": [
+        5.0,
+        25.0
+      ],
       "ID_IG": "unchanged",
       "confidence": "medium",
       "source": "Zhao et al., ACS Nano 5 (2011) 5915",
       "notes": "The diagnostic difference from substitutional doping: charge transfer moves the bands WITHOUT creating defects, so I_D/I_G stays put. A large G shift with an unchanged D band is adsorbed/intercalated dopant, not lattice substitution."
+    },
+    {
+      "key": "N_pyrrolic",
+      "label": "Nitrógeno pirrólico (anillo de 5)",
+      "host": [
+        "graphene",
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "neutral-to-n",
+      "G_shift_cm1": [
+        -3.0,
+        6.0
+      ],
+      "2D_shift_cm1": [
+        -10.0,
+        5.0
+      ],
+      "ID_IG": "increases strongly",
+      "confidence": "low",
+      "source": "Zhao et al., Nano Lett. 11 (2011) 5401; Wang, Maiyalagan & Wang, ACS Catal. 2 (2012) 781",
+      "notes": "Vive en un anillo de cinco átomos, que es en sí mismo un defecto topológico. Su firma Raman es la del defecto, no la del nitrógeno. Un salto grande de I_D/I_G con G casi quieta apunta aquí o a piridínico; Raman no los separa."
+    },
+    {
+      "key": "N_oxide",
+      "label": "Óxido de nitrógeno piridínico (N⁺–O⁻)",
+      "host": [
+        "graphene",
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "hole",
+      "G_shift_cm1": [
+        2.0,
+        12.0
+      ],
+      "2D_shift_cm1": [
+        2.0,
+        15.0
+      ],
+      "ID_IG": "increases",
+      "confidence": "low",
+      "source": "Wang, Maiyalagan & Wang, ACS Catal. 2 (2012) 781",
+      "notes": "Aparece cuando la muestra dopada con N se oxida después. Raman no lo distingue del piridínico; el N1s de XPS a ~402–403 eV sí."
+    },
+    {
+      "key": "S_thiophenic",
+      "label": "Azufre tiofénico (–C–S–C– en borde)",
+      "host": [
+        "graphene",
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "neutral",
+      "G_shift_cm1": [
+        -10.0,
+        2.0
+      ],
+      "2D_shift_cm1": [
+        -12.0,
+        4.0
+      ],
+      "ID_IG": "increases",
+      "confidence": "low",
+      "source": "Denis, Faccio & Mombru, ChemPhysChem 10 (2009) 715; Yang et al., ACS Nano 6 (2012) 205",
+      "notes": "El azufre y el carbono tienen electronegatividades casi iguales (2.58 frente a 2.55), así que el azufre tiofénico transfiere muy poca carga: la G apenas se mueve por dopado. Lo que sí hace es DISTORSIONAR la red, porque el enlace C–S mide 1.78 Å frente a 1.42 Å del C–C, y eso ablanda la G. Un ablandamiento de la G con I_D/I_G en aumento es la firma; es la contraria a la del nitrógeno grafítico."
+    },
+    {
+      "key": "S_oxidised",
+      "label": "Azufre oxidado (sulfóxido / sulfona)",
+      "host": [
+        "graphene",
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "hole",
+      "G_shift_cm1": [
+        1.0,
+        10.0
+      ],
+      "2D_shift_cm1": [
+        1.0,
+        12.0
+      ],
+      "ID_IG": "increases",
+      "confidence": "low",
+      "source": "Yang et al., ACS Nano 6 (2012) 205",
+      "notes": "Los grupos –SOx sí retiran carga y endurecen la G. Distinguirlos del tiofénico por Raman se apoya en el SIGNO del desplazamiento de G, que es el dato más frágil de todos: calíbralo contra un control."
+    },
+    {
+      "key": "O_epoxy_hydroxyl",
+      "label": "Oxígeno epóxido / hidroxilo (en el plano basal)",
+      "host": [
+        "graphene",
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "hole",
+      "G_shift_cm1": [
+        3.0,
+        20.0
+      ],
+      "2D_shift_cm1": [
+        3.0,
+        20.0
+      ],
+      "ID_IG": "increases strongly",
+      "confidence": "medium",
+      "source": "Kudin et al., Nano Lett. 8 (2008) 36; Eckmann et al., Nano Lett. 12 (2012) 3925",
+      "notes": "Convierte carbono sp² en sp³ dentro del plano: es el defecto sp³ por excelencia, con I_D/I_D′ ≈ 13. Sube I_D/I_G muy deprisa y ensancha todo. Si además crece una banda D3 ancha hacia 1500 cm⁻¹, la oxidación ya está rompiendo la red conjugada."
+    },
+    {
+      "key": "O_carboxyl",
+      "label": "Oxígeno carboxilo / carbonilo (en bordes)",
+      "host": [
+        "graphene",
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "hole",
+      "G_shift_cm1": [
+        2.0,
+        15.0
+      ],
+      "2D_shift_cm1": [
+        2.0,
+        15.0
+      ],
+      "ID_IG": "increases",
+      "confidence": "medium",
+      "source": "Datsyuk et al., Carbon 46 (2008) 833; Rosca et al., Carbon 43 (2005) 3124",
+      "notes": "Se ancla en bordes y defectos previos, no en el plano basal, así que daña menos la red que el epóxido: I_D/I_D′ tira hacia el valor de borde (~3.5) en lugar del de sp³. Es lo que produce el tratamiento ácido de purificación."
+    },
+    {
+      "key": "P_substitutional",
+      "label": "Fósforo sustitucional",
+      "host": [
+        "graphene",
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "electron",
+      "G_shift_cm1": [
+        -8.0,
+        5.0
+      ],
+      "2D_shift_cm1": [
+        -15.0,
+        3.0
+      ],
+      "ID_IG": "increases strongly",
+      "confidence": "low",
+      "source": "Cruz-Silva et al., ACS Nano 3 (2009) 1913; Latorre et al., J. Phys. Chem. C 114 (2010) 4773",
+      "notes": "El fósforo es donante (n) pero sobresale del plano: el enlace C–P mide 1.77 Å y el átomo adopta geometría piramidal. La distorsión estructural domina sobre la transferencia de carga, así que la G puede bajar aunque el dopado sea de tipo n. Es el caso donde la lectura ingenua «G sube = dopado» falla más claramente."
+    },
+    {
+      "key": "Se_substitutional",
+      "label": "Selenio sustitucional",
+      "host": [
+        "graphene",
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "neutral-to-n",
+      "G_shift_cm1": [
+        -12.0,
+        3.0
+      ],
+      "2D_shift_cm1": [
+        -15.0,
+        5.0
+      ],
+      "ID_IG": "increases strongly",
+      "confidence": "low",
+      "source": "Jin et al., Chem. Commun. 49 (2013) 2451",
+      "notes": "Extrapolación razonada desde S y P, no una compilación de medidas Raman: hay muy poca literatura. El selenio es enorme (radio covalente 1.20 Å) y su incorporación sustitucional real está en discusión; buena parte de lo publicado como Se-dopado puede ser selenio en fase separada. Usa este rango como hipótesis a contrastar con XPS, no como referencia."
+    },
+    {
+      "key": "B_substitutional_cnt",
+      "label": "Boro sustitucional en nanotubo",
+      "host": [
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "hole",
+      "G_shift_cm1": [
+        2.0,
+        14.0
+      ],
+      "2D_shift_cm1": [
+        3.0,
+        20.0
+      ],
+      "ID_IG": "increases",
+      "confidence": "low",
+      "source": "Ayala et al., Rev. Mod. Phys. 82 (2010) 1843",
+      "notes": "Aceptor limpio, análogo del nitrógeno grafítico con el signo cambiado."
     }
   ],
   "defect_type_ID_IDprime": {
@@ -162,5 +395,13 @@
     "confidence": "medium",
     "source": "Eckmann, Felten, Mishchenko, Britnell, Krupke, Novoselov & Casiraghi, Nano Lett. 12 (2012) 3925",
     "notes": "Measured on graphene with deliberately introduced defects of each type. It needs a deconvolution to get I_D' at all, since D' is a shoulder on G. Values are for 2.41 eV; the ratio has some excitation dependence, so treat the boundaries as soft."
+  },
+  "dopant_guidance": {
+    "_comment": "Cómo leer los desplazamientos cuando el dopante es grande.",
+    "size_vs_charge": "El modelo «la G sube con cualquier dopado» viene del grafeno con dopado electrostático, donde el átomo de carbono no se mueve. Con dopantes SUSTITUCIONALES grandes (S, P, Se) hay una segunda contribución del mismo tamaño y de signo contrario: el enlace C–X más largo (1.78 Å para C–S, 1.77 para C–P, ~1.95 para C–Se, frente a 1.42 del C–C) estira la red localmente, y la deformación de tracción ABLANDA la G. Con nitrógeno (C–N ≈ 1.40 Å) esa contribución es despreciable y solo se ve la carga; con azufre, fósforo y selenio puede dominar. Por eso este archivo da rangos que cruzan el cero para esos tres.",
+    "practical_rule": "Con N y O, el par (ΔG, Δ2D) es interpretable como transferencia de carga. Con S, P y Se no lo es por sí solo: hace falta o bien un control de la misma muestra sin dopar, o bien XPS para saber cuánto dopante hay y en qué configuración.",
+    "what_raman_cannot_do": "Raman no cuantifica el contenido de dopante y no separa las configuraciones de un mismo elemento (grafítico frente a piridínico frente a pirrólico; tiofénico frente a sulfóxido). Esas son medidas de XPS. Lo que Raman aporta y XPS no es el TIPO de defecto en la red (I_D/I_D') y el signo de la transferencia de carga (par ΔG, Δ2D).",
+    "confidence": "medium",
+    "source": "Ayala et al., Rev. Mod. Phys. 82 (2010) 1843; Ferrari & Basko, Nature Nanotech. 8 (2013) 235"
   }
 }

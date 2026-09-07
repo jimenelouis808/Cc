@@ -44,6 +44,7 @@ from ..models.deconvolution import ModelComparison, build_model, compare_models
 from ..models.fitting import FitResult, fit_model
 from .assignment import Assignment, GRegionInterpretation, assign_bands, resolve_g_region
 from .classify import Classification, classify
+from .indices import IndexSet, compute_indices
 from .diameter import (
     DiameterEstimate,
     WallPair,
@@ -99,6 +100,10 @@ class AnalysisResult:
     shifts: Optional[ShiftAnalysis]
     layer_count: Optional[tuple[str, list[str]]]
     basis: str
+    indices: Optional[IndexSet] = None
+    profile: Optional[str] = None
+    """Lineshape forced on the deconvolution, or ``None`` for the database
+    defaults."""
     warnings: list[str] = field(default_factory=list)
 
     # -- convenience accessors ----------------------------------------
@@ -151,6 +156,9 @@ class AnalysisResult:
             row["LD_nm"] = self.crystallite.ld_low_defect_nm
             row["nD_cm2"] = self.crystallite.defect_density_cm2
             row["rama"] = self.crystallite.likely_branch
+        if self.indices is not None:
+            for key, value in self.indices.to_dict().items():
+                row[key] = value
         if self.defects:
             row["tipo_defecto"] = self.defects.best_match
         if self.rbm.diameters:
@@ -174,6 +182,8 @@ def analyse(
     material_hint: Optional[str] = None,
     control: Optional["AnalysisResult"] = None,
     preprocess_kwargs: Optional[dict] = None,
+    profile: Optional[str] = None,
+    auto_preprocess: bool = False,
     db: Optional[Database] = None,
 ) -> AnalysisResult:
     """Run the complete analysis on one spectrum.
@@ -203,6 +213,18 @@ def analyse(
         literature values; see :mod:`ramancarbon.analysis.shifts`.
     preprocess_kwargs:
         Passed to :func:`~ramancarbon.core.preprocess.preprocess`.
+    profile:
+        Force one lineshape on every deconvolution component;
+        ``"pseudo_voigt"`` is the usual choice for real spectra. ``None``
+        keeps the per-band defaults from the database. See
+        :func:`~ramancarbon.models.deconvolution.build_model`.
+    auto_preprocess:
+        Choose the despiking, smoothing and baseline parameters from the
+        spectrum itself with
+        :func:`~ramancarbon.core.preprocess.auto_settings`, instead of
+        using the defaults. Anything given explicitly in
+        ``preprocess_kwargs`` still wins, so this can be switched on and
+        then overridden one parameter at a time.
     db:
         Loaded database.
 
@@ -221,7 +243,18 @@ def analyse(
             "interpretables. Indícala antes de usar estos resultados"
         )
 
-    processed, diagnostics = preprocess(spectrum, **(preprocess_kwargs or {}))
+    settings = dict(preprocess_kwargs or {})
+    if auto_preprocess:
+        from ..core.preprocess import auto_settings
+
+        chosen = auto_settings(spectrum)
+        merged = chosen.to_kwargs()
+        merged.update(settings)  # an explicit choice always wins
+        settings = merged
+        warnings.extend(
+            f"preprocesado automático: {text}" for text in chosen.reasons.values()
+        )
+    processed, diagnostics = preprocess(spectrum, **settings)
     peaks = find_peaks(processed)
 
     # -- RBM region, with its own tighter search -----------------------
@@ -247,7 +280,8 @@ def analyse(
                 is_metallic = metallic
                 swcnt_fit = fit_model(
                     processed,
-                    build_model(processed, preset="swcnt_g", metallic=metallic, db=database),
+                    build_model(processed, preset="swcnt_g", metallic=metallic,
+                                profile=profile, db=database),
                 )
                 metallicity_note = (
                     "metalicidad impuesta por el usuario: "
@@ -278,7 +312,11 @@ def analyse(
     fit: Optional[FitResult] = None
     try:
         comparison = compare_models(
-            processed, presets=candidates, metallic=is_metallic, db=database
+            processed,
+            presets=candidates,
+            metallic=is_metallic,
+            profile=profile,
+            db=database,
         )
         fit = comparison.results[comparison.best]
     except ValueError as exc:
@@ -318,6 +356,8 @@ def analyse(
             "no se calcula L_a ni la densidad de defectos: ambas dependen de "
             "λ⁴ y hace falta la longitud de onda del láser"
         )
+
+    indices = compute_indices(assignment, fit)
 
     defects: Optional[DefectType] = None
     idp_entry = ratios.get("ID_IDp")
@@ -386,6 +426,8 @@ def analyse(
         shifts=shifts,
         layer_count=layer_count,
         basis=basis,
+        indices=indices,
+        profile=profile,
         warnings=warnings,
     )
 
@@ -652,7 +694,11 @@ def build_report(result: AnalysisResult, verbose: bool = True) -> str:
         lines.append("")
         lines.append(result.defects.summary())
 
-    lines.append(_rule("5. DIÁMETROS"))
+    if result.indices is not None:
+        lines.append(_rule("5. ÍNDICES ESTRUCTURALES"))
+        lines.append(result.indices.summary())
+
+    lines.append(_rule("6. DIÁMETROS"))
     if not result.rbm.covered:
         lines.append(result.rbm.note)
     elif not result.rbm.diameters:
@@ -687,13 +733,13 @@ def build_report(result: AnalysisResult, verbose: bool = True) -> str:
             lines.append("      " + _cross_check(result))
 
     if result.layer_count:
-        lines.append(_rule("6. NÚMERO DE CAPAS"))
+        lines.append(_rule("7. NÚMERO DE CAPAS"))
         verdict, reasons = result.layer_count
         lines.append(f"  {verdict}")
         lines.extend("    – " + r for r in reasons)
 
     if result.shifts:
-        lines.append(_rule("7. DESPLAZAMIENTOS RESPECTO A LA REFERENCIA"))
+        lines.append(_rule("8. DESPLAZAMIENTOS RESPECTO A LA REFERENCIA"))
         lines.append(result.shifts.summary())
 
     if result.warnings:

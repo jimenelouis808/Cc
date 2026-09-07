@@ -21,6 +21,7 @@ with the step appended to ``history``; nothing mutates in place.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
@@ -237,6 +238,18 @@ def normalise(
             Divide by the trapezoidal area (over ``window`` if given).
         ``"minmax"``
             Map to [0, 1].
+        ``"0-100"``
+            Map to [0, 100]. The convention for overlaying spectra on a
+            percentage axis; identical to ``minmax`` up to the factor of
+            100.
+
+            Unlike every other option here, min-max scaling subtracts an
+            **offset** as well as applying a factor, and an offset does not
+            cancel in a ratio. If the background has already been removed
+            the minimum is near zero and the effect is negligible; on a
+            spectrum that still carries a background it is not, and I_D/I_G
+            measured after normalising will differ from the same ratio
+            measured before. Baseline-correct first.
     window:
         Optional ``(low, high)`` in cm⁻¹ restricting the reference.
 
@@ -247,9 +260,12 @@ def normalise(
 
     Notes
     -----
-    Normalisation never changes an intensity *ratio*, so I_D/I_G is
-    unaffected by choice of method. It exists for plotting and for
-    comparing lineshapes.
+    Scaling never changes an intensity ratio, so ``"max"``, ``"g"`` and
+    ``"area"`` leave I_D/I_G untouched. ``"minmax"`` and ``"0-100"`` are
+    the exception: they subtract the minimum, and that offset does not
+    cancel in a ratio. On baseline-corrected data the minimum is ~0 and the
+    difference is fractions of a percent; on uncorrected data it can be
+    much larger, and the returned spectrum's history says so.
     """
     y = spectrum.intensity
     key = method.lower()
@@ -273,17 +289,177 @@ def normalise(
         lo, hi = window or spectrum.range
         scale = spectrum.area_in(lo, hi)
         label = f"normalise(area, {lo:g}-{hi:g})"
-    elif key == "minmax":
+    elif key in {"minmax", "0-100", "0100", "percent"}:
+        top = 100.0 if key != "minmax" else 1.0
         lo_v, hi_v = float(np.min(y)), float(np.max(y))
         if hi_v - lo_v <= 0:
             raise ValueError("cannot min-max normalise a flat spectrum")
-        return spectrum.with_intensity((y - lo_v) / (hi_v - lo_v), "normalise(minmax)")
+        label = "normalise(0-100)" if top == 100.0 else "normalise(minmax)"
+        offset_fraction = abs(lo_v) / (hi_v - lo_v)
+        if offset_fraction > 0.02:
+            label += (
+                f" [AVISO: resta un desplazamiento del {offset_fraction * 100:.0f} % "
+                "del rango; los cocientes cambian. Resta la línea base antes]"
+            )
+        return spectrum.with_intensity(top * (y - lo_v) / (hi_v - lo_v), label)
     else:
         raise ValueError(f"unknown normalisation {method!r}")
 
     if not np.isfinite(scale) or abs(scale) < 1e-30:
         raise ValueError(f"normalisation reference is zero or non-finite ({scale!r})")
     return spectrum.with_intensity(y / scale, label)
+
+
+@dataclass
+class AutoSettings:
+    """Preprocessing parameters chosen from the data, and why.
+
+    Every field is a suggestion the user can override; ``reasons`` carries
+    one sentence per decision so the GUI can show what it did and the user
+    can disagree with a specific choice rather than with the whole thing.
+    """
+
+    despike: bool
+    smooth_window: int
+    baseline_method: str
+    baseline_lam: float
+    reasons: dict[str, str] = field(default_factory=dict)
+
+    def to_kwargs(self) -> dict:
+        """The arguments :func:`preprocess` needs."""
+        return {
+            "do_despike": self.despike,
+            "smooth_window": self.smooth_window,
+            "baseline_method": self.baseline_method,
+            "baseline_kwargs": {"lam": self.baseline_lam},
+        }
+
+    def summary(self) -> str:
+        """Multi-line explanation of every choice."""
+        lines = [
+            f"despiking      : {'sí' if self.despike else 'no'}",
+            f"suavizado      : {self.smooth_window or 'ninguno'} puntos",
+            f"línea base     : {self.baseline_method}, λ = {self.baseline_lam:.0e}",
+            "",
+        ]
+        lines.extend(f"• {text}" for text in self.reasons.values())
+        return "\n".join(lines)
+
+
+def auto_settings(
+    spectrum: Spectrum,
+    target_snr: float = 40.0,
+    baseline_method: str = "asls",
+) -> AutoSettings:
+    """Pick preprocessing parameters from the spectrum itself.
+
+    Three decisions, each made from a measurement rather than a default:
+
+    **Smoothing.** Smoothing trades resolution for signal-to-noise, so it
+    is only worth doing when the noise is actually limiting. The strongest
+    band's signal-to-noise ratio is measured; if it already exceeds
+    ``target_snr`` nothing is smoothed. If it does not, the window is set
+    to one third of the *narrowest* real feature in the spectrum — because
+    a Savitzky–Golay window wider than that broadens the feature, and an
+    inflated FWHM propagates into every width-based conclusion. The window
+    is capped so it can never exceed a third of the narrowest band even if
+    the noise would justify more; below that cap, noisy data simply stays
+    noisy and the fit's error bars say so honestly.
+
+    **Baseline stiffness.** Delegated to
+    :func:`~ramancarbon.core.baseline.auto_lambda`, which returns the
+    stiffest baseline that still tracks the background within the noise.
+
+    **Despiking.** On unless the spectrum has no measurable noise, in
+    which case there are no cosmic rays to find.
+
+    Parameters
+    ----------
+    spectrum:
+        Raw spectrum.
+    target_snr:
+        Signal-to-noise above which smoothing is judged unnecessary. 40 is
+        comfortable for peak fitting; raising it makes the routine smooth
+        more eagerly.
+    baseline_method:
+        ``"asls"`` (default) or ``"arpls"``. See
+        :mod:`ramancarbon.core.baseline` for why asLS is the default
+        despite arPLS's reputation for fluorescence.
+
+    Returns
+    -------
+    AutoSettings
+    """
+    from .baseline import auto_lambda  # local import: avoids a cycle
+    from .peaks import find_peaks
+
+    reasons: dict[str, str] = {}
+    sigma = spectrum.noise_estimate()
+    scale = float(np.ptp(spectrum.intensity))
+
+    despike_on = sigma > NOISE_FLOOR_FRACTION * max(scale, 1e-30)
+    reasons["despike"] = (
+        "se eliminan rayos cósmicos"
+        if despike_on
+        else "no hay ruido medible, así que no hay rayos cósmicos que quitar"
+    )
+
+    # Work on a roughly background-free copy so the peak search and the SNR
+    # are not dominated by fluorescence.
+    probe = spectrum
+    try:
+        from .baseline import arpls_baseline
+
+        probe = spectrum.with_intensity(
+            spectrum.intensity - arpls_baseline(spectrum.intensity, lam=1e7), "probe"
+        )
+    except (ValueError, np.linalg.LinAlgError):  # pragma: no cover - degenerate input
+        pass
+
+    peaks = find_peaks(probe)
+    strongest = max((p.height for p in peaks), default=0.0)
+    snr = strongest / sigma if sigma > 0 else float("inf")
+
+    window = 0
+    if not peaks:
+        reasons["smooth"] = (
+            "no se detectan bandas; no se suaviza, porque suavizar ruido no "
+            "crea señal"
+        )
+    elif snr >= target_snr:
+        reasons["smooth"] = (
+            f"la banda más intensa tiene SNR ≈ {snr:.0f}, por encima de "
+            f"{target_snr:.0f}: suavizar solo ensancharía las bandas sin ganar nada"
+        )
+    else:
+        narrowest = min(p.fwhm for p in peaks if p.fwhm)
+        step = max(spectrum.step, 1e-9)
+        limit = max(5, int(narrowest / step / 3.0))
+        wanted = int(np.clip(round((target_snr / max(snr, 1e-9)) ** 2), 5, 31))
+        window = int(min(wanted, limit))
+        if window % 2 == 0:
+            window += 1
+        reasons["smooth"] = (
+            f"SNR ≈ {snr:.0f} por debajo de {target_snr:.0f}: se suaviza con "
+            f"{window} puntos, un tercio de la banda más estrecha "
+            f"({narrowest:.0f} cm⁻¹) para no ensancharla"
+        )
+        if wanted > limit:
+            reasons["smooth"] += (
+                f". El ruido justificaría {wanted} puntos, pero eso deformaría "
+                "esa banda, así que se deja más ruidoso a propósito"
+            )
+
+    lam, lam_reason = auto_lambda(spectrum, method=baseline_method)
+    reasons["baseline"] = lam_reason
+
+    return AutoSettings(
+        despike=despike_on,
+        smooth_window=window,
+        baseline_method=baseline_method,
+        baseline_lam=lam,
+        reasons=reasons,
+    )
 
 
 def preprocess(
@@ -357,4 +533,13 @@ def preprocess(
     return work, diagnostics
 
 
-__all__ = ["despike", "normalise", "preprocess", "resample", "smooth"]
+__all__ = [
+    "AutoSettings",
+    "NOISE_FLOOR_FRACTION",
+    "auto_settings",
+    "despike",
+    "normalise",
+    "preprocess",
+    "resample",
+    "smooth",
+]

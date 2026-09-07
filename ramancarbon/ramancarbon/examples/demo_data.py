@@ -8,7 +8,9 @@ else's data.
 
 What they are good for: checking that the pipeline runs, that the classifier
 separates the material classes, that the fitter recovers parameters it was
-given. What they are **not** good for: validating the package against
+given, and — because the laser wavelength drives both the band positions and
+the defect-band intensities — that the dispersion and λ⁴ corrections are
+applied correctly. What they are **not** good for: validating the package against
 reality. Real spectra have correlated noise, instrument response,
 substrate lines, sample inhomogeneity and non-Lorentzian wings, none of
 which are here. Every claim this package makes about accuracy has been
@@ -54,10 +56,12 @@ def make_demo(
     kind:
         One of :data:`DEMO_KINDS`.
     laser_nm:
-        Excitation wavelength. The dispersive bands (D, 2D, D+D') are moved
-        accordingly, so a 785 nm demo really does show its D band near
-        1312 cm⁻¹ — which makes it a genuine test of the dispersion
-        correction rather than a decorative parameter.
+        Excitation wavelength. Two things follow from it, so that changing
+        it is a genuine test rather than a decorative parameter: the
+        dispersive bands (D, 2D, D+D') move, so a 785 nm demo really does
+        show its D band near 1312 cm⁻¹; and the defect-activated bands
+        (D, D', D+D') scale in intensity as λ⁴ relative to G, so I_D/I_G
+        really is about twice as large at 633 nm as at 532 nm.
     seed:
         Seed for the noise, so a demo is reproducible.
     low, high, step:
@@ -84,6 +88,15 @@ def make_demo(
     y = np.zeros_like(x)
     ev = laser_energy_ev(laser_nm)
 
+    # The defect-activated bands get stronger, relative to G, as the fourth
+    # power of the excitation wavelength: I_D/I_G at 633 nm is about twice
+    # its value at 532 nm on the SAME sample. Without this the demo spectra
+    # would give a crystallite size that depends on which laser measured
+    # them, which is exactly the error the lambda^4 correction exists to
+    # remove — so leaving it out would make the two-wavelength consistency
+    # check pass for the wrong reason.
+    defect_gain = (laser_nm / 532.0) ** 4
+
     d = _dispersed(1350.0, 50.0, ev)
     two_d = _dispersed(2690.0, 100.0, ev)
     d_prime = _dispersed(1620.0, 10.0, ev)
@@ -94,16 +107,16 @@ def make_demo(
         y += lorentzian(x, 165.0, 90.0, 9.0)
         y += lorentzian(x, 187.0, 60.0, 8.0)
         y += lorentzian(x, 254.0, 40.0, 10.0)
-        y += lorentzian(x, d, 55.0, 32.0)
+        y += lorentzian(x, d, 55.0 * defect_gain, 32.0)
         y += lorentzian(x, 1570.0, 220.0, 22.0)
         y += lorentzian(x, 1591.0, 900.0, 16.0)
-        y += lorentzian(x, d_prime, 45.0, 18.0)
+        y += lorentzian(x, d_prime, 45.0 * defect_gain, 18.0)
         y += lorentzian(x, two_d, 260.0, 45.0)
     elif kind == "SWCNT_metalico":
         # One diameter, and a Breit-Wigner-Fano G- from the electronic
         # continuum: the metallic signature.
         y += lorentzian(x, 195.0, 70.0, 10.0)
-        y += lorentzian(x, d, 70.0, 35.0)
+        y += lorentzian(x, d, 70.0 * defect_gain, 35.0)
         y += bwf(x, 1545.0, 300.0, 85.0, -0.22)
         y += lorentzian(x, 1592.0, 800.0, 17.0)
         y += lorentzian(x, two_d, 200.0, 50.0)
@@ -113,27 +126,27 @@ def make_demo(
         y += lorentzian(x, 178.0, 55.0, 11.0)
         y += lorentzian(x, 265.0, 65.0, 8.0)
         y += lorentzian(x, 291.0, 45.0, 9.0)
-        y += lorentzian(x, d, 130.0, 40.0)
+        y += lorentzian(x, d, 130.0 * defect_gain, 40.0)
         y += lorentzian(x, 1572.0, 180.0, 26.0)
         y += lorentzian(x, 1590.0, 850.0, 20.0)
-        y += lorentzian(x, d_prime, 70.0, 20.0)
+        y += lorentzian(x, d_prime, 70.0 * defect_gain, 20.0)
         y += lorentzian(x, two_d, 220.0, 60.0)
     elif kind == "MWCNT":
         # No RBM, broad G with a D' shoulder, I_D/I_G near 1.
-        y += lorentzian(x, d, 780.0, 60.0)
+        y += lorentzian(x, d, 780.0 * defect_gain, 60.0)
         y += lorentzian(x, 1580.0, 900.0, 48.0)
-        y += lorentzian(x, d_prime, 190.0, 28.0)
+        y += lorentzian(x, d_prime, 190.0 * defect_gain, 28.0)
         y += gaussian(x, 1500.0, 90.0, 180.0)
         y += lorentzian(x, two_d + 20.0, 180.0, 110.0)
-        y += lorentzian(x, d_plus_dp, 90.0, 130.0)
+        y += lorentzian(x, d_plus_dp, 90.0 * defect_gain, 130.0)
     elif kind == "grafeno_1L":
         # A single narrow 2D band, three times the G, almost no D.
         y += lorentzian(x, 1583.0, 300.0, 15.0)
         y += lorentzian(x, two_d - 12.0, 950.0, 28.0)
-        y += lorentzian(x, d, 12.0, 30.0)
+        y += lorentzian(x, d, 12.0 * defect_gain, 30.0)
     elif kind == "GO":
         # Broad D and G of comparable size, G upshifted, 2D essentially gone.
-        y += lorentzian(x, d + 5.0, 900.0, 130.0)
+        y += lorentzian(x, d + 5.0, 900.0 * defect_gain, 130.0)
         y += lorentzian(x, 1598.0, 950.0, 85.0)
         y += gaussian(x, 1510.0, 260.0, 220.0)
     else:

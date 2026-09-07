@@ -13,7 +13,31 @@
     "integrated AREAS. This matters: for the same spectrum, an area-based",
     "I_D/I_G is typically 1.5-2.5x the height-based one, because the D band is",
     "broader than the G band. A great deal of published disagreement about",
-    "I_D/I_G is really disagreement about this."
+    "I_D/I_G is really disagreement about this.",
+    "",
+    "Los materiales dopados llevan rangos DELIBERADAMENTE anchos y confianza",
+    "baja para S, P y Se. La literatura Raman cuantitativa sobre esos dopantes",
+    "es escasa y los propios artículos discrepan sobre si el dopante está",
+    "realmente en la red o adsorbido. Un rango estrecho aquí clasificaría con",
+    "más decisión y se equivocaría más a menudo.",
+    "",
+    "Raman NO mide el contenido de dopante. Ve defectos y transferencia de",
+    "carga, y ambos tienen otras causas. La cuantificación es de XPS; lo que",
+    "aporta Raman es el TIPO de defecto (por I_D/I_D') y el signo de la",
+    "transferencia de carga (por el par de desplazamientos G y 2D).",
+    "",
+    "'role' separa dos cosas que no son lo mismo. Los materiales 'structure'",
+    "son tipos estructurales que el clasificador intenta distinguir. Los",
+    "'reference' NO compiten en la clasificación: un MWCNT dopado con N sigue",
+    "siendo un MWCNT, y ofrecerlos como alternativas solo repartiría la",
+    "puntuación entre etiquetas que describen la misma estructura. Sirven como",
+    "referencia contra la que comparar posiciones y cocientes una vez que ya se",
+    "sabe qué estructura es.",
+    "",
+    "Las morfologías concretas de nanofibra (plaqueta, espina de pescado) son",
+    "'reference' por otra razón: sus rangos de I_D/I_G se solapan casi por",
+    "completo y Raman no las separa con fiabilidad. Ofrecerlas como opciones de",
+    "clasificación daría una precisión aparente que no existe."
   ],
   "reference_laser_ev": 2.33,
   "materials": [
@@ -24,20 +48,71 @@
       "walls": 1,
       "rbm": {
         "expected": "required",
-        "window": [120.0, 350.0],
-        "typical_count": [1, 8],
-        "fwhm": [3.0, 20.0],
+        "window": [
+          120.0,
+          350.0
+        ],
+        "typical_count": [
+          1,
+          8
+        ],
+        "fwhm": [
+          3.0,
+          20.0
+        ],
         "note": "Sharp, often several peaks from the diameter distribution that the laser happens to resonate with."
       },
       "bands": {
-        "G+": {"position": [1585.0, 1595.0], "fwhm": [8.0, 25.0]},
-        "G-": {"position": [1540.0, 1580.0], "fwhm": [10.0, 60.0]},
-        "D": {"position": [1330.0, 1360.0], "fwhm": [20.0, 50.0]},
-        "2D": {"position": [2640.0, 2700.0], "fwhm": [30.0, 70.0]}
+        "G+": {
+          "position": [
+            1585.0,
+            1595.0
+          ],
+          "fwhm": [
+            8.0,
+            25.0
+          ]
+        },
+        "G-": {
+          "position": [
+            1540.0,
+            1580.0
+          ],
+          "fwhm": [
+            10.0,
+            60.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1360.0
+          ],
+          "fwhm": [
+            20.0,
+            50.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2640.0,
+            2700.0
+          ],
+          "fwhm": [
+            30.0,
+            70.0
+          ]
+        }
       },
       "ratios": {
-        "ID_IG": [0.02, 0.30],
-        "I2D_IG": [0.3, 1.5]
+        "ID_IG": [
+          0.02,
+          0.3
+        ],
+        "I2D_IG": [
+          0.3,
+          1.5
+        ]
       },
       "intensity_basis": "height",
       "features": {
@@ -47,7 +122,8 @@
       },
       "confidence": "high",
       "source": "Dresselhaus et al., Phys. Rep. 409 (2005) 47; Jorio et al., Phys. Rev. B 65 (2002) 155412",
-      "notes": "I_D/I_G above ~0.3 does not stop it being SWCNT material; it means the sample is damaged, functionalised or full of amorphous carbon. The RBM and the narrow split G band are the identity, not the disorder level."
+      "notes": "I_D/I_G above ~0.3 does not stop it being SWCNT material; it means the sample is damaged, functionalised or full of amorphous carbon. The RBM and the narrow split G band are the identity, not the disorder level.",
+      "role": "structure"
     },
     {
       "key": "DWCNT",
@@ -56,23 +132,80 @@
       "walls": 2,
       "rbm": {
         "expected": "required",
-        "window": [110.0, 400.0],
-        "typical_count": [2, 10],
-        "fwhm": [3.0, 25.0],
+        "window": [
+          110.0,
+          400.0
+        ],
+        "typical_count": [
+          2,
+          10
+        ],
+        "fwhm": [
+          3.0,
+          25.0
+        ],
         "clusters": 2,
-        "inner_window": [220.0, 400.0],
-        "outer_window": [110.0, 220.0],
+        "inner_window": [
+          220.0,
+          400.0
+        ],
+        "outer_window": [
+          110.0,
+          220.0
+        ],
         "note": "The signature is TWO groups of RBM peaks: inner tubes of 0.6-1.0 nm above ~220 cm-1 and outer tubes of 1.2-2.0 nm below it, separated by twice the wall spacing."
       },
       "bands": {
-        "G+": {"position": [1585.0, 1595.0], "fwhm": [10.0, 30.0]},
-        "G-": {"position": [1550.0, 1580.0], "fwhm": [10.0, 60.0]},
-        "D": {"position": [1330.0, 1360.0], "fwhm": [25.0, 60.0]},
-        "2D": {"position": [2640.0, 2710.0], "fwhm": [40.0, 90.0]}
+        "G+": {
+          "position": [
+            1585.0,
+            1595.0
+          ],
+          "fwhm": [
+            10.0,
+            30.0
+          ]
+        },
+        "G-": {
+          "position": [
+            1550.0,
+            1580.0
+          ],
+          "fwhm": [
+            10.0,
+            60.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1360.0
+          ],
+          "fwhm": [
+            25.0,
+            60.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2640.0,
+            2710.0
+          ],
+          "fwhm": [
+            40.0,
+            90.0
+          ]
+        }
       },
       "ratios": {
-        "ID_IG": [0.03, 0.60],
-        "I2D_IG": [0.2, 1.0]
+        "ID_IG": [
+          0.03,
+          0.6
+        ],
+        "I2D_IG": [
+          0.2,
+          1.0
+        ]
       },
       "intensity_basis": "height",
       "features": {
@@ -82,7 +215,8 @@
       },
       "confidence": "medium",
       "source": "Pfeiffer et al., Phys. Rev. B 72 (2005) 161404; Villalpando-Paez et al., Phys. Rev. B 82 (2010) 155416",
-      "notes": "A DWCNT sample cannot be told from an SWCNT+MWCNT mixture by the G band alone. The paired-RBM test is the discriminator, and it only works if the spectrum reaches below 150 cm-1. Inner tubes usually show a NARROWER RBM than outer ones because the outer wall shields them from environmental broadening."
+      "notes": "A DWCNT sample cannot be told from an SWCNT+MWCNT mixture by the G band alone. The paired-RBM test is the discriminator, and it only works if the spectrum reaches below 150 cm-1. Inner tubes usually show a NARROWER RBM than outer ones because the outer wall shields them from environmental broadening.",
+      "role": "structure"
     },
     {
       "key": "MWCNT",
@@ -91,18 +225,63 @@
       "walls": 3,
       "rbm": {
         "expected": "absent",
-        "window": [100.0, 400.0],
+        "window": [
+          100.0,
+          400.0
+        ],
         "note": "Outer diameters of 10-50 nm put the RBM below ~25 cm-1, inside the Rayleigh rejection of any ordinary spectrometer, and its intensity scales as 1/d. A genuine RBM in an MWCNT spectrum means thin-walled tubes or an SWCNT/DWCNT impurity."
       },
       "bands": {
-        "G": {"position": [1570.0, 1590.0], "fwhm": [30.0, 80.0]},
-        "D": {"position": [1330.0, 1360.0], "fwhm": [40.0, 110.0]},
-        "D'": {"position": [1605.0, 1625.0], "fwhm": [15.0, 50.0]},
-        "2D": {"position": [2640.0, 2720.0], "fwhm": [60.0, 160.0]}
+        "G": {
+          "position": [
+            1570.0,
+            1590.0
+          ],
+          "fwhm": [
+            30.0,
+            80.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1360.0
+          ],
+          "fwhm": [
+            40.0,
+            110.0
+          ]
+        },
+        "D'": {
+          "position": [
+            1605.0,
+            1625.0
+          ],
+          "fwhm": [
+            15.0,
+            50.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2640.0,
+            2720.0
+          ],
+          "fwhm": [
+            60.0,
+            160.0
+          ]
+        }
       },
       "ratios": {
-        "ID_IG": [0.35, 1.80],
-        "I2D_IG": [0.10, 0.60]
+        "ID_IG": [
+          0.35,
+          1.8
+        ],
+        "I2D_IG": [
+          0.1,
+          0.6
+        ]
       },
       "intensity_basis": "height",
       "features": {
@@ -112,22 +291,62 @@
       },
       "confidence": "high",
       "source": "Antunes et al., Carbon 44 (2006) 2202; DiLeo et al., J. Appl. Phys. 101 (2007) 064307",
-      "notes": "The G band is a single unresolved feature with a D' shoulder; what looks like a 'split G' in an MWCNT is almost always G + D'. Fitting it as G-/G+ produces a fictitious tube diameter, which is why this package refuses to run the G-splitting diameter estimate on a spectrum it classifies as multi-walled."
+      "notes": "The G band is a single unresolved feature with a D' shoulder; what looks like a 'split G' in an MWCNT is almost always G + D'. Fitting it as G-/G+ produces a fictitious tube diameter, which is why this package refuses to run the G-splitting diameter estimate on a spectrum it classifies as multi-walled.",
+      "role": "structure"
     },
     {
       "key": "graphene_1L",
       "label": "Grafeno monocapa",
       "family": "graphene",
       "walls": 0,
-      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
       "bands": {
-        "G": {"position": [1580.0, 1590.0], "fwhm": [12.0, 20.0]},
-        "2D": {"position": [2660.0, 2700.0], "fwhm": [24.0, 35.0]},
-        "D": {"position": [1330.0, 1360.0], "fwhm": [20.0, 45.0]}
+        "G": {
+          "position": [
+            1580.0,
+            1590.0
+          ],
+          "fwhm": [
+            12.0,
+            20.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2660.0,
+            2700.0
+          ],
+          "fwhm": [
+            24.0,
+            35.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1360.0
+          ],
+          "fwhm": [
+            20.0,
+            45.0
+          ]
+        }
       },
       "ratios": {
-        "ID_IG": [0.0, 0.30],
-        "I2D_IG": [1.5, 5.0]
+        "ID_IG": [
+          0.0,
+          0.3
+        ],
+        "I2D_IG": [
+          1.5,
+          5.0
+        ]
       },
       "intensity_basis": "height",
       "features": {
@@ -136,22 +355,62 @@
       },
       "confidence": "high",
       "source": "Ferrari et al., Phys. Rev. Lett. 97 (2006) 187401",
-      "notes": "The identifying feature is a single symmetric Lorentzian 2D band of FWHM ~25-30 cm-1, not the I_2D/I_G ratio, which doping alone can push from 4 down to below 1 without adding a single layer."
+      "notes": "The identifying feature is a single symmetric Lorentzian 2D band of FWHM ~25-30 cm-1, not the I_2D/I_G ratio, which doping alone can push from 4 down to below 1 without adding a single layer.",
+      "role": "structure"
     },
     {
       "key": "graphene_2L",
       "label": "Grafeno bicapa",
       "family": "graphene",
       "walls": 0,
-      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
       "bands": {
-        "G": {"position": [1580.0, 1590.0], "fwhm": [12.0, 22.0]},
-        "2D": {"position": [2680.0, 2710.0], "fwhm": [45.0, 60.0]},
-        "D": {"position": [1330.0, 1360.0], "fwhm": [20.0, 50.0]}
+        "G": {
+          "position": [
+            1580.0,
+            1590.0
+          ],
+          "fwhm": [
+            12.0,
+            22.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2680.0,
+            2710.0
+          ],
+          "fwhm": [
+            45.0,
+            60.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1360.0
+          ],
+          "fwhm": [
+            20.0,
+            50.0
+          ]
+        }
       },
       "ratios": {
-        "ID_IG": [0.0, 0.30],
-        "I2D_IG": [0.8, 1.5]
+        "ID_IG": [
+          0.0,
+          0.3
+        ],
+        "I2D_IG": [
+          0.8,
+          1.5
+        ]
       },
       "intensity_basis": "height",
       "features": {
@@ -160,168 +419,1126 @@
       },
       "confidence": "high",
       "source": "Ferrari et al., Phys. Rev. Lett. 97 (2006) 187401",
-      "notes": "Bernal-stacked bilayer splits the 2D band into four components from the two split electronic branches. Turbostratic (rotationally disordered) bilayer does NOT: it looks like two decoupled monolayers with a single Lorentzian 2D, and is routinely misreported as monolayer."
+      "notes": "Bernal-stacked bilayer splits the 2D band into four components from the two split electronic branches. Turbostratic (rotationally disordered) bilayer does NOT: it looks like two decoupled monolayers with a single Lorentzian 2D, and is routinely misreported as monolayer.",
+      "role": "structure"
     },
     {
       "key": "FLG",
       "label": "Grafeno de pocas capas (3-10)",
       "family": "graphene",
       "walls": 0,
-      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
       "bands": {
-        "G": {"position": [1578.0, 1588.0], "fwhm": [14.0, 25.0]},
-        "2D": {"position": [2690.0, 2725.0], "fwhm": [50.0, 90.0]},
-        "D": {"position": [1330.0, 1360.0], "fwhm": [25.0, 55.0]}
+        "G": {
+          "position": [
+            1578.0,
+            1588.0
+          ],
+          "fwhm": [
+            14.0,
+            25.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2690.0,
+            2725.0
+          ],
+          "fwhm": [
+            50.0,
+            90.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1360.0
+          ],
+          "fwhm": [
+            25.0,
+            55.0
+          ]
+        }
       },
       "ratios": {
-        "ID_IG": [0.0, 0.40],
-        "I2D_IG": [0.3, 0.9]
+        "ID_IG": [
+          0.0,
+          0.4
+        ],
+        "I2D_IG": [
+          0.3,
+          0.9
+        ]
       },
       "intensity_basis": "height",
-      "features": {"2d_single_lorentzian": false, "2d_asymmetric": true},
+      "features": {
+        "2d_single_lorentzian": false,
+        "2d_asymmetric": true
+      },
       "confidence": "medium",
       "source": "Ferrari et al., Phys. Rev. Lett. 97 (2006) 187401; Malard et al., Phys. Rep. 473 (2009) 51",
-      "notes": "Layer counting by Raman becomes unreliable above ~5 layers: the 2D lineshape stops changing."
+      "notes": "Layer counting by Raman becomes unreliable above ~5 layers: the 2D lineshape stops changing.",
+      "role": "structure"
     },
     {
       "key": "graphite",
       "label": "Grafito",
       "family": "graphene",
       "walls": 0,
-      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
       "bands": {
-        "G": {"position": [1578.0, 1585.0], "fwhm": [13.0, 25.0]},
-        "2D": {"position": [2700.0, 2740.0], "fwhm": [50.0, 90.0]},
-        "D": {"position": [1330.0, 1360.0], "fwhm": [25.0, 60.0]}
+        "G": {
+          "position": [
+            1578.0,
+            1585.0
+          ],
+          "fwhm": [
+            13.0,
+            25.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2700.0,
+            2740.0
+          ],
+          "fwhm": [
+            50.0,
+            90.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1360.0
+          ],
+          "fwhm": [
+            25.0,
+            60.0
+          ]
+        }
       },
       "ratios": {
-        "ID_IG": [0.0, 0.30],
-        "I2D_IG": [0.2, 0.6]
+        "ID_IG": [
+          0.0,
+          0.3
+        ],
+        "I2D_IG": [
+          0.2,
+          0.6
+        ]
       },
       "intensity_basis": "height",
-      "features": {"2d_single_lorentzian": false, "2d_components": 2},
+      "features": {
+        "2d_single_lorentzian": false,
+        "2d_components": 2
+      },
       "confidence": "high",
       "source": "Ferrari et al., Phys. Rev. Lett. 97 (2006) 187401",
-      "notes": "Two 2D components (2D1, 2D2) with the higher one about twice as intense."
+      "notes": "Two 2D components (2D1, 2D2) with the higher one about twice as intense.",
+      "role": "structure"
     },
     {
       "key": "GO",
       "label": "Oxido de grafeno (GO)",
       "family": "oxide",
       "walls": 0,
-      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
       "bands": {
-        "G": {"position": [1585.0, 1605.0], "fwhm": [60.0, 110.0]},
-        "D": {"position": [1330.0, 1365.0], "fwhm": [90.0, 180.0]},
-        "D3": {"position": [1480.0, 1540.0], "fwhm": [100.0, 250.0]},
-        "2D": {"position": [2650.0, 2750.0], "fwhm": [150.0, 350.0]}
+        "G": {
+          "position": [
+            1585.0,
+            1605.0
+          ],
+          "fwhm": [
+            60.0,
+            110.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1365.0
+          ],
+          "fwhm": [
+            90.0,
+            180.0
+          ]
+        },
+        "D3": {
+          "position": [
+            1480.0,
+            1540.0
+          ],
+          "fwhm": [
+            100.0,
+            250.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2650.0,
+            2750.0
+          ],
+          "fwhm": [
+            150.0,
+            350.0
+          ]
+        }
       },
       "ratios": {
-        "ID_IG": [0.7, 1.2],
-        "I2D_IG": [0.0, 0.25]
+        "ID_IG": [
+          0.7,
+          1.2
+        ],
+        "I2D_IG": [
+          0.0,
+          0.25
+        ]
       },
       "intensity_basis": "height",
-      "features": {"g_upshifted": true, "2d_nearly_absent": true, "broad": true},
+      "features": {
+        "g_upshifted": true,
+        "2d_nearly_absent": true,
+        "broad": true
+      },
       "confidence": "high",
       "source": "Stankovich et al., Carbon 45 (2007) 1558; Kudin et al., Nano Lett. 8 (2008) 36",
-      "notes": "The G band is upshifted to 1590-1600 cm-1 by the oxidised, isolated C=C double bonds, and the 2D band is essentially gone because the conjugated network is broken. A near-absent 2D with a strong D is the GO signature."
+      "notes": "The G band is upshifted to 1590-1600 cm-1 by the oxidised, isolated C=C double bonds, and the 2D band is essentially gone because the conjugated network is broken. A near-absent 2D with a strong D is the GO signature.",
+      "role": "structure"
     },
     {
       "key": "rGO",
       "label": "Oxido de grafeno reducido (rGO)",
       "family": "oxide",
       "walls": 0,
-      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
       "bands": {
-        "G": {"position": [1580.0, 1600.0], "fwhm": [50.0, 100.0]},
-        "D": {"position": [1330.0, 1360.0], "fwhm": [70.0, 150.0]},
-        "2D": {"position": [2650.0, 2730.0], "fwhm": [100.0, 300.0]}
+        "G": {
+          "position": [
+            1580.0,
+            1600.0
+          ],
+          "fwhm": [
+            50.0,
+            100.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1360.0
+          ],
+          "fwhm": [
+            70.0,
+            150.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2650.0,
+            2730.0
+          ],
+          "fwhm": [
+            100.0,
+            300.0
+          ]
+        }
       },
       "ratios": {
-        "ID_IG": [0.9, 1.5],
-        "I2D_IG": [0.05, 0.4]
+        "ID_IG": [
+          0.9,
+          1.5
+        ],
+        "I2D_IG": [
+          0.05,
+          0.4
+        ]
       },
       "intensity_basis": "height",
-      "features": {"broad": true},
+      "features": {
+        "broad": true
+      },
       "confidence": "medium",
       "source": "Stankovich et al., Carbon 45 (2007) 1558",
-      "notes": "I_D/I_G usually RISES on reduction, which surprises people. Reduction removes oxygen and creates many small graphitic domains; in the nanocrystalline regime more domain boundaries means more D intensity, not less. The recovery of the 2D band, not I_D/I_G, is what shows the conjugation coming back."
+      "notes": "I_D/I_G usually RISES on reduction, which surprises people. Reduction removes oxygen and creates many small graphitic domains; in the nanocrystalline regime more domain boundaries means more D intensity, not less. The recovery of the 2D band, not I_D/I_G, is what shows the conjugation coming back.",
+      "role": "structure"
     },
     {
       "key": "amorphous_carbon",
       "label": "Carbono amorfo (a-C)",
       "family": "amorphous",
       "walls": 0,
-      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
       "bands": {
-        "G": {"position": [1500.0, 1570.0], "fwhm": [100.0, 220.0]},
-        "D": {"position": [1330.0, 1400.0], "fwhm": [150.0, 350.0]}
+        "G": {
+          "position": [
+            1500.0,
+            1570.0
+          ],
+          "fwhm": [
+            100.0,
+            220.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1400.0
+          ],
+          "fwhm": [
+            150.0,
+            350.0
+          ]
+        }
       },
       "ratios": {
-        "ID_IG": [0.0, 0.9],
-        "I2D_IG": [0.0, 0.1]
+        "ID_IG": [
+          0.0,
+          0.9
+        ],
+        "I2D_IG": [
+          0.0,
+          0.1
+        ]
       },
       "intensity_basis": "area",
-      "features": {"broad": true, "g_downshifted": true, "no_2d": true},
+      "features": {
+        "broad": true,
+        "g_downshifted": true,
+        "no_2d": true
+      },
       "confidence": "medium",
       "source": "Ferrari & Robertson, Phys. Rev. B 61 (2000) 14095",
-      "notes": "In the amorphisation regime the Tuinstra-Koenig relation INVERTS: I_D/I_G becomes proportional to La^2, so a small I_D/I_G here means MORE disorder, not less. This package refuses to report a crystallite size when the G band is this broad, because the formula does not apply."
+      "notes": "In the amorphisation regime the Tuinstra-Koenig relation INVERTS: I_D/I_G becomes proportional to La^2, so a small I_D/I_G here means MORE disorder, not less. This package refuses to report a crystallite size when the G band is this broad, because the formula does not apply.",
+      "role": "structure"
     },
     {
       "key": "carbon_black",
       "label": "Negro de carbono / hollin",
       "family": "amorphous",
       "walls": 0,
-      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
       "bands": {
-        "G": {"position": [1580.0, 1600.0], "fwhm": [60.0, 120.0]},
-        "D": {"position": [1330.0, 1370.0], "fwhm": [100.0, 220.0]},
-        "D3": {"position": [1480.0, 1540.0], "fwhm": [100.0, 250.0]},
-        "D4": {"position": [1150.0, 1250.0], "fwhm": [100.0, 250.0]}
+        "G": {
+          "position": [
+            1580.0,
+            1600.0
+          ],
+          "fwhm": [
+            60.0,
+            120.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1370.0
+          ],
+          "fwhm": [
+            100.0,
+            220.0
+          ]
+        },
+        "D3": {
+          "position": [
+            1480.0,
+            1540.0
+          ],
+          "fwhm": [
+            100.0,
+            250.0
+          ]
+        },
+        "D4": {
+          "position": [
+            1150.0,
+            1250.0
+          ],
+          "fwhm": [
+            100.0,
+            250.0
+          ]
+        }
       },
       "ratios": {
-        "ID_IG": [0.8, 1.5],
-        "I2D_IG": [0.0, 0.3]
+        "ID_IG": [
+          0.8,
+          1.5
+        ],
+        "I2D_IG": [
+          0.0,
+          0.3
+        ]
       },
       "intensity_basis": "area",
-      "features": {"broad": true, "five_band_model": true},
+      "features": {
+        "broad": true,
+        "five_band_model": true
+      },
       "confidence": "medium",
       "source": "Sadezky et al., Carbon 43 (2005) 1731",
-      "notes": "The material the five-band (D4, D1, D3, G, D2) deconvolution was designed for."
+      "notes": "The material the five-band (D4, D1, D3, G, D2) deconvolution was designed for.",
+      "role": "structure"
     },
     {
       "key": "nanodiamond",
       "label": "Nanodiamante",
       "family": "sp3",
       "walls": 0,
-      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
-      "bands": {
-        "diamond": {"position": [1320.0, 1332.0], "fwhm": [5.0, 25.0]},
-        "G": {"position": [1550.0, 1600.0], "fwhm": [50.0, 150.0]}
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
       },
-      "ratios": {"ID_IG": [0.0, 1.0], "I2D_IG": [0.0, 0.1]},
+      "bands": {
+        "diamond": {
+          "position": [
+            1320.0,
+            1332.0
+          ],
+          "fwhm": [
+            5.0,
+            25.0
+          ]
+        },
+        "G": {
+          "position": [
+            1550.0,
+            1600.0
+          ],
+          "fwhm": [
+            50.0,
+            150.0
+          ]
+        }
+      },
+      "ratios": {
+        "ID_IG": [
+          0.0,
+          1.0
+        ],
+        "I2D_IG": [
+          0.0,
+          0.1
+        ]
+      },
       "intensity_basis": "height",
-      "features": {"sp3_line": true},
+      "features": {
+        "sp3_line": true
+      },
       "confidence": "medium",
       "source": "Ferrari & Robertson, Phys. Rev. B 63 (2001) 121405",
-      "notes": "The 1332 cm-1 line downshifts and broadens with decreasing particle size (phonon confinement). Do not confuse it with the D band: the diamond line does not disperse with laser energy."
+      "notes": "The 1332 cm-1 line downshifts and broadens with decreasing particle size (phonon confinement). Do not confuse it with the D band: the diamond line does not disperse with laser energy.",
+      "role": "structure"
     },
     {
       "key": "C60",
       "label": "Fullereno C60",
       "family": "molecular",
       "walls": 0,
-      "rbm": {"expected": "absent", "window": [100.0, 400.0]},
-      "bands": {
-        "Ag2": {"position": [1462.0, 1472.0], "fwhm": [3.0, 15.0]},
-        "Ag1": {"position": [490.0, 500.0], "fwhm": [3.0, 15.0]}
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
       },
-      "ratios": {"ID_IG": [0.0, 0.2], "I2D_IG": [0.0, 0.1]},
+      "bands": {
+        "Ag2": {
+          "position": [
+            1462.0,
+            1472.0
+          ],
+          "fwhm": [
+            3.0,
+            15.0
+          ]
+        },
+        "Ag1": {
+          "position": [
+            490.0,
+            500.0
+          ],
+          "fwhm": [
+            3.0,
+            15.0
+          ]
+        }
+      },
+      "ratios": {
+        "ID_IG": [
+          0.0,
+          0.2
+        ],
+        "I2D_IG": [
+          0.0,
+          0.1
+        ]
+      },
       "intensity_basis": "height",
-      "features": {"molecular": true},
+      "features": {
+        "molecular": true
+      },
       "confidence": "high",
       "source": "Dresselhaus, Dresselhaus & Eklund, Science of Fullerenes and Carbon Nanotubes (1996)",
-      "notes": "The Ag(2) pentagonal pinch mode near 1469 cm-1 is the fingerprint. Relevant here mostly as a peapod filling or a CVD by-product."
+      "notes": "The Ag(2) pentagonal pinch mode near 1469 cm-1 is the fingerprint. Relevant here mostly as a peapod filling or a CVD by-product.",
+      "role": "structure"
+    },
+    {
+      "key": "CNF",
+      "label": "Nanofibra de carbono (CNF, genérica)",
+      "family": "CNF",
+      "walls": 3,
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ],
+        "note": "Las CNF no tienen paredes cilíndricas continuas de diámetro pequeño, así que no hay modo de respiración radial en ningún caso."
+      },
+      "bands": {
+        "G": {
+          "position": [
+            1575.0,
+            1600.0
+          ],
+          "fwhm": [
+            40.0,
+            100.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1365.0
+          ],
+          "fwhm": [
+            50.0,
+            130.0
+          ]
+        },
+        "D'": {
+          "position": [
+            1605.0,
+            1625.0
+          ],
+          "fwhm": [
+            20.0,
+            60.0
+          ]
+        },
+        "D3": {
+          "position": [
+            1480.0,
+            1550.0
+          ],
+          "fwhm": [
+            80.0,
+            250.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2650.0,
+            2730.0
+          ],
+          "fwhm": [
+            80.0,
+            200.0
+          ]
+        }
+      },
+      "ratios": {
+        "ID_IG": [
+          0.75,
+          2.2
+        ],
+        "I2D_IG": [
+          0.05,
+          0.4
+        ]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "g_split": "unresolved",
+        "g_fwhm_min": 35.0,
+        "d_prime_shoulder": true,
+        "high_edge_density": true
+      },
+      "confidence": "medium",
+      "source": "Endo et al., Carbon 39 (2001) 1287; Klein et al., Carbon 46 (2008) 1149",
+      "notes": "Las nanofibras exponen bordes de plano grafénico a lo largo de toda su superficie, no solo en las puntas. Esa densidad de bordes es intrínseca a la estructura, no un defecto de calidad, y por eso I_D/I_G es alto (0.8–2) incluso en una CNF bien grafitizada. Distinguirlas de un MWCNT defectuoso por Raman es genuinamente difícil: la banda G suele ser algo más ancha y la 2D más débil, pero los rangos se solapan. TEM decide, Raman sugiere.",
+      "role": "structure"
+    },
+    {
+      "key": "CNF_platelet",
+      "label": "Nanofibra tipo plaqueta (planos ⊥ al eje)",
+      "family": "CNF",
+      "walls": 3,
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
+      "bands": {
+        "G": {
+          "position": [
+            1575.0,
+            1600.0
+          ],
+          "fwhm": [
+            50.0,
+            110.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1365.0
+          ],
+          "fwhm": [
+            60.0,
+            140.0
+          ]
+        },
+        "D'": {
+          "position": [
+            1605.0,
+            1625.0
+          ],
+          "fwhm": [
+            20.0,
+            60.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2650.0,
+            2730.0
+          ],
+          "fwhm": [
+            100.0,
+            220.0
+          ]
+        }
+      },
+      "ratios": {
+        "ID_IG": [
+          1.2,
+          2.5
+        ],
+        "I2D_IG": [
+          0.02,
+          0.25
+        ]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "g_split": "unresolved",
+        "high_edge_density": true
+      },
+      "confidence": "low",
+      "source": "Endo et al., Carbon 39 (2001) 1287",
+      "notes": "Máxima densidad de bordes de las tres morfologías: los planos grafénicos son perpendiculares al eje de la fibra, así que toda la superficie lateral es borde. Es la que da el I_D/I_G más alto.",
+      "role": "reference"
+    },
+    {
+      "key": "CNF_herringbone",
+      "label": "Nanofibra tipo espina de pescado (planos inclinados)",
+      "family": "CNF",
+      "walls": 3,
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
+      "bands": {
+        "G": {
+          "position": [
+            1575.0,
+            1598.0
+          ],
+          "fwhm": [
+            40.0,
+            95.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1362.0
+          ],
+          "fwhm": [
+            50.0,
+            125.0
+          ]
+        },
+        "D'": {
+          "position": [
+            1605.0,
+            1625.0
+          ],
+          "fwhm": [
+            20.0,
+            55.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2650.0,
+            2730.0
+          ],
+          "fwhm": [
+            80.0,
+            190.0
+          ]
+        }
+      },
+      "ratios": {
+        "ID_IG": [
+          0.8,
+          1.8
+        ],
+        "I2D_IG": [
+          0.05,
+          0.35
+        ]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "g_split": "unresolved",
+        "high_edge_density": true
+      },
+      "confidence": "low",
+      "source": "Endo et al., Carbon 39 (2001) 1287; Vieira et al., Carbon 44 (2006) 2590",
+      "notes": "Densidad de bordes intermedia entre plaqueta y tubo. Raman no separa con fiabilidad espina de pescado de plaqueta; el rango de I_D/I_G se solapa casi por completo.",
+      "role": "reference"
+    },
+    {
+      "key": "MWCNT_oxidised",
+      "label": "MWCNT oxidado / funcionalizado (–COOH, –OH)",
+      "family": "CNT",
+      "walls": 3,
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
+      "bands": {
+        "G": {
+          "position": [
+            1580.0,
+            1605.0
+          ],
+          "fwhm": [
+            40.0,
+            100.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1365.0
+          ],
+          "fwhm": [
+            50.0,
+            140.0
+          ]
+        },
+        "D'": {
+          "position": [
+            1605.0,
+            1628.0
+          ],
+          "fwhm": [
+            20.0,
+            60.0
+          ]
+        },
+        "D3": {
+          "position": [
+            1480.0,
+            1550.0
+          ],
+          "fwhm": [
+            80.0,
+            250.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2650.0,
+            2740.0
+          ],
+          "fwhm": [
+            80.0,
+            220.0
+          ]
+        }
+      },
+      "ratios": {
+        "ID_IG": [
+          0.9,
+          2.0
+        ],
+        "I2D_IG": [
+          0.03,
+          0.3
+        ]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "g_split": "unresolved",
+        "g_upshifted": true,
+        "d_prime_shoulder": true
+      },
+      "confidence": "medium",
+      "source": "Rosca et al., Carbon 43 (2005) 3124; Datsyuk et al., Carbon 46 (2008) 833",
+      "notes": "El tratamiento oxidante (HNO₃/H₂SO₄) sube I_D/I_G y desplaza la G hacia arriba porque los grupos oxigenados son a la vez defectos sp³ y aceptores de carga. Las dos contribuciones no se separan con Raman solo: mira I_D/I_D′, que distingue defecto sp³ (~13) de dopado sustitucional (~1.3).",
+      "role": "reference"
+    },
+    {
+      "key": "N_MWCNT",
+      "label": "MWCNT dopado con nitrógeno (N-MWCNT)",
+      "family": "CNT",
+      "walls": 3,
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
+      "bands": {
+        "G": {
+          "position": [
+            1578.0,
+            1600.0
+          ],
+          "fwhm": [
+            40.0,
+            100.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1365.0
+          ],
+          "fwhm": [
+            50.0,
+            140.0
+          ]
+        },
+        "D'": {
+          "position": [
+            1605.0,
+            1625.0
+          ],
+          "fwhm": [
+            20.0,
+            60.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2640.0,
+            2720.0
+          ],
+          "fwhm": [
+            80.0,
+            220.0
+          ]
+        }
+      },
+      "ratios": {
+        "ID_IG": [
+          0.8,
+          1.9
+        ],
+        "I2D_IG": [
+          0.05,
+          0.35
+        ]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "g_split": "unresolved",
+        "d_prime_shoulder": true,
+        "bamboo_likely": true
+      },
+      "confidence": "medium",
+      "source": "Terrones et al., Mater. Today 7 (2004) 30; Maldonado, Morin & Stevenson, Carbon 44 (2006) 1429",
+      "notes": "El dopado con N produce casi siempre morfología de bambú (tabiques internos), y esos tabiques son bordes: suben I_D/I_G por geometría, no por nitrógeno sustitucional. Por eso I_D/I_G NO mide el contenido de N. Lo que sí es informativo es el desplazamiento de G junto con el de 2D, y sobre todo I_D/I_D′.",
+      "role": "reference"
+    },
+    {
+      "key": "S_MWCNT",
+      "label": "MWCNT dopado con azufre (S-MWCNT)",
+      "family": "CNT",
+      "walls": 3,
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
+      "bands": {
+        "G": {
+          "position": [
+            1570.0,
+            1595.0
+          ],
+          "fwhm": [
+            40.0,
+            105.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1365.0
+          ],
+          "fwhm": [
+            50.0,
+            145.0
+          ]
+        },
+        "D'": {
+          "position": [
+            1605.0,
+            1625.0
+          ],
+          "fwhm": [
+            20.0,
+            60.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2650.0,
+            2730.0
+          ],
+          "fwhm": [
+            80.0,
+            220.0
+          ]
+        }
+      },
+      "ratios": {
+        "ID_IG": [
+          0.85,
+          2.0
+        ],
+        "I2D_IG": [
+          0.03,
+          0.3
+        ]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "g_split": "unresolved",
+        "d_prime_shoulder": true
+      },
+      "confidence": "low",
+      "source": "Denis, Faccio & Mombru, ChemPhysChem 10 (2009) 715; Yang et al., ACS Nano 6 (2012) 205",
+      "notes": "El azufre es mucho más grande que el carbono (radio covalente 1.05 frente a 0.77 Å), así que no entra limpiamente en la red: se incorpora sobre todo como tiofeno en bordes y produce distorsión local fuera del plano. Eso ablanda la G en lugar de endurecerla, al contrario que el nitrógeno. Los datos publicados son escasos y dispersos; trata este rango como orientativo.",
+      "role": "reference"
+    },
+    {
+      "key": "P_MWCNT",
+      "label": "MWCNT dopado con fósforo (P-MWCNT)",
+      "family": "CNT",
+      "walls": 3,
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
+      "bands": {
+        "G": {
+          "position": [
+            1570.0,
+            1595.0
+          ],
+          "fwhm": [
+            45.0,
+            110.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1365.0
+          ],
+          "fwhm": [
+            55.0,
+            150.0
+          ]
+        },
+        "D'": {
+          "position": [
+            1605.0,
+            1628.0
+          ],
+          "fwhm": [
+            20.0,
+            60.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2650.0,
+            2740.0
+          ],
+          "fwhm": [
+            90.0,
+            230.0
+          ]
+        }
+      },
+      "ratios": {
+        "ID_IG": [
+          1.0,
+          2.2
+        ],
+        "I2D_IG": [
+          0.02,
+          0.25
+        ]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "g_split": "unresolved",
+        "d_prime_shoulder": true
+      },
+      "confidence": "low",
+      "source": "Cruz-Silva et al., ACS Nano 3 (2009) 1913; Latorre et al., J. Phys. Chem. C 114 (2010) 4773",
+      "notes": "El fósforo es aún mayor que el azufre y sobresale del plano: da distorsión sp³ marcada y sube mucho I_D/I_G. La banda P–O cerca de 980 cm⁻¹, si aparece, indica fósforo oxidado superficial, no sustitucional.",
+      "role": "reference"
+    },
+    {
+      "key": "Se_MWCNT",
+      "label": "MWCNT dopado con selenio (Se-MWCNT)",
+      "family": "CNT",
+      "walls": 3,
+      "rbm": {
+        "expected": "absent",
+        "window": [
+          100.0,
+          400.0
+        ]
+      },
+      "bands": {
+        "G": {
+          "position": [
+            1565.0,
+            1595.0
+          ],
+          "fwhm": [
+            45.0,
+            115.0
+          ]
+        },
+        "D": {
+          "position": [
+            1330.0,
+            1365.0
+          ],
+          "fwhm": [
+            55.0,
+            150.0
+          ]
+        },
+        "D'": {
+          "position": [
+            1605.0,
+            1628.0
+          ],
+          "fwhm": [
+            20.0,
+            60.0
+          ]
+        },
+        "2D": {
+          "position": [
+            2650.0,
+            2740.0
+          ],
+          "fwhm": [
+            90.0,
+            230.0
+          ]
+        }
+      },
+      "ratios": {
+        "ID_IG": [
+          0.9,
+          2.2
+        ],
+        "I2D_IG": [
+          0.02,
+          0.25
+        ]
+      },
+      "intensity_basis": "height",
+      "features": {
+        "g_split": "unresolved",
+        "d_prime_shoulder": true
+      },
+      "confidence": "low",
+      "source": "Jin et al., Chem. Commun. 49 (2013) 2451",
+      "notes": "Muy poca literatura Raman específica. El selenio es todavía más grande que el fósforo y su incorporación sustitucional real es discutida; la mayoría de lo que se publica como «Se-dopado» puede ser selenio adsorbido o en fase separada. Este rango es una extrapolación razonada a partir de S y P, no una compilación de medidas: trátalo como hipótesis, no como referencia.",
+      "role": "reference"
     }
   ]
 }

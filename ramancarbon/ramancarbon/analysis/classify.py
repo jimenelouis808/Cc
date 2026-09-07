@@ -182,7 +182,8 @@ def classify(
     evidence: list[Evidence] = []
     blocked: list[str] = []
     warnings: list[str] = []
-    scores: dict[str, float] = {k: 0.0 for k in database.materials}
+    structural = {m.key for m in database.structural_materials()}
+    scores: dict[str, float] = {k: 0.0 for k in structural}
 
     covers_rbm = spectrum.covers(120.0, 350.0, fraction=0.7)
     genuine_rbm = _genuine_rbm_peaks(rbm_peaks, database)
@@ -211,7 +212,7 @@ def classify(
             scores[key] += WEIGHTS["rbm_present"]
         scores["MWCNT"] -= WEIGHTS["rbm_absent"]
         for key in ("graphene_1L", "graphene_2L", "FLG", "graphite", "GO", "rGO",
-                    "amorphous_carbon", "carbon_black"):
+                    "amorphous_carbon", "carbon_black", "CNF"):
             scores[key] -= WEIGHTS["rbm_present"]
         evidence.append(
             Evidence(
@@ -297,8 +298,8 @@ def classify(
         # of the remaining materials this is, so every non-thin-tube material
         # gets the same credit; weighting MWCNT above graphene here would be
         # inventing evidence.
-        for key in ("MWCNT", "graphene_1L", "graphene_2L", "FLG", "graphite",
-                    "GO", "rGO", "amorphous_carbon", "carbon_black"):
+        for key in ("MWCNT", "CNF", "graphene_1L", "graphene_2L", "FLG",
+                    "graphite", "GO", "rGO", "amorphous_carbon", "carbon_black"):
             scores[key] += WEIGHTS["rbm_absent"]
         scores["SWCNT"] -= WEIGHTS["rbm_absent"]
         scores["DWCNT"] -= WEIGHTS["rbm_absent"]
@@ -356,7 +357,7 @@ def classify(
                          "ordenado, no amorfo")
             )
         elif width >= 80.0:
-            for key in ("amorphous_carbon", "GO", "carbon_black", "rGO"):
+            for key in ("amorphous_carbon", "GO", "carbon_black", "rGO", "CNF"):
                 scores[key] += WEIGHTS["width"] * 2
             for key in ("SWCNT", "DWCNT", "graphene_1L", "graphite"):
                 scores[key] -= WEIGHTS["width"] * 2
@@ -408,6 +409,9 @@ def classify(
     if ratios:
         _score_ratios(ratios, database, scores, evidence)
     _score_positions(assignment, database, scores, evidence)
+
+    # -- rule 6: multi-walled tube versus nanofibre --------------------
+    _score_tube_vs_fibre(assignment, ratios, scores, evidence, blocked, warnings)
 
     candidates = [
         Candidate(key=k, label=database.material(k).label, score=v)
@@ -463,6 +467,75 @@ def _partner_windows(omega: float, db: Database) -> list[float]:
     return sorted(out)
 
 
+def _score_tube_vs_fibre(
+    assignment: Assignment,
+    ratios: Optional[dict],
+    scores: dict[str, float],
+    evidence: list[Evidence],
+    blocked: list[str],
+    warnings: list[str],
+) -> None:
+    """Weigh multi-walled tube against carbon nanofibre — carefully.
+
+    Both are RBM-free, both have a broad G with a D′ shoulder, and their
+    published I_D/I_G ranges overlap across most of their extent. The one
+    real physical difference Raman can see is edge density: a nanofibre
+    exposes graphene edges along its whole length rather than only at the
+    tips, so it sits systematically higher in I_D/I_G and broader in Γ_G.
+
+    "Systematically higher" is not "separable". This rule therefore uses a
+    deliberately small weight and, whenever the answer lands in the
+    overlap, adds a warning saying the distinction needs TEM. Producing a
+    confident MWCNT-versus-CNF call from a Raman spectrum alone would be
+    the kind of precision this package exists to avoid.
+    """
+    g_entry = assignment.g_like()
+    if g_entry is None or g_entry.fwhm is None:
+        return
+    entry = (ratios or {}).get("ID_IG")
+    id_ig = entry.on_basis("height") if entry and entry.available else None
+    if id_ig is None:
+        blocked.append(
+            "MWCNT frente a CNF: hace falta I_D/I_G para intentar separarlas"
+        )
+        return
+
+    width = g_entry.fwhm
+    fibre_like = id_ig >= 1.1 and width >= 45.0
+    tube_like = id_ig <= 0.7 and width <= 60.0
+
+    if fibre_like:
+        scores["CNF"] += WEIGHTS["ratio"]
+        evidence.append(
+            Evidence(
+                "edge_density",
+                "CNF",
+                WEIGHTS["ratio"],
+                f"I_D/I_G = {id_ig:.2f} con Γ_G = {width:.0f} cm⁻¹: densidad de "
+                "bordes alta, más propia de nanofibra que de nanotubo multipared",
+            )
+        )
+    elif tube_like:
+        scores["MWCNT"] += WEIGHTS["ratio"]
+        evidence.append(
+            Evidence(
+                "edge_density",
+                "MWCNT",
+                WEIGHTS["ratio"],
+                f"I_D/I_G = {id_ig:.2f} con Γ_G = {width:.0f} cm⁻¹: pocos bordes "
+                "expuestos, más propio de nanotubo multipared que de nanofibra",
+            )
+        )
+    else:
+        warnings.append(
+            f"I_D/I_G = {id_ig:.2f} y Γ_G = {width:.0f} cm⁻¹ caen en la zona donde "
+            "los rangos de MWCNT y CNF se solapan. Raman no separa nanotubo "
+            "multipared de nanofibra aquí — la diferencia está en si los planos "
+            "grafénicos son cilindros concéntricos o están inclinados, y eso lo "
+            "ve el TEM, no el espectro"
+        )
+
+
 def _genuine_rbm_peaks(
     peaks: Optional[Sequence[PeakMeasurement]], db: Database
 ) -> list[PeakMeasurement]:
@@ -503,6 +576,10 @@ def _score_ratios(
         matches: list[str] = []
         shown: Optional[float] = None
         for material in db.materials.values():
+            # Reference-only materials describe the same structures under a
+            # different treatment; they are not classification candidates.
+            if material.key not in scores:
+                continue
             span = material.ratio_range(db_key)
             if not span:
                 continue
@@ -537,6 +614,8 @@ def _score_positions(
         return
     matches: list[str] = []
     for material in db.materials.values():
+        if material.key not in scores:
+            continue
         for key in ("G", "G+"):
             span = material.band_window(key)
             if span and span[0] <= g_entry.position <= span[1]:
