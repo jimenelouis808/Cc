@@ -29,6 +29,7 @@ ramancarbon/
 ├── analysis/    # asignación, cocientes, índices, diámetros, desplazamientos,
 │                #   clasificador, multiláser, exportación
 ├── xrd/         # difracción: CIF, simetría, patrón calculado, Rietveld
+├── echem/       # CV, GCD, EIS, mecanismo de almacenamiento, HER/OER
 ├── gui/         # app Tkinter; la lógica vive en state.py y plots.py, sin Tk
 ├── cli/         # ramancarbon analizar / lote / deconvolucionar / bd / demo
 ├── examples/    # scripts ejecutables + demo_data.py (espectros sintéticos)
@@ -315,6 +316,71 @@ una tiene una prueba que la protege.
   D4 en la región D; G, D′, G⁻ en la G. Las extra salen sin `band`, y por eso
   no entran en cocientes ni clasificación. No les asignes una banda para que
   «cuadre».
+
+## Electroquímica
+
+- **Un material con picos redox tiene CAPACIDAD, no capacitancia.** Dividir
+  la carga por la ventana entera y dar F/g es la práctica más criticada de
+  toda la literatura de almacenamiento de energía y puede multiplicar la
+  cifra por varias veces. `echem.evaluate.classify_storage` decide el
+  mecanismo y, si es tipo batería, el informe se niega a presentarlo en
+  faradios. No lo suavices.
+- **La b≈1 NO distingue doble capa de pseudocapacitivo**, porque los dos la
+  dan. Solo separa capacitivo de batería. La primera versión trataba b≥0.9
+  como prueba de doble capa y clasificaba TODO pseudocondensador como EDLC.
+  Lo que separa esos dos es la presencia de picos redox en el CV.
+- **Un pico de batería es ESTRECHO y ALTO sobre su fondo**, no simplemente
+  muy separado de su pareja. Hay materiales de batería con ΔEp por debajo de
+  100 mV. El criterio son anchura frente a ventana y prominencia frente a
+  fondo.
+- **La b que importa es la del pico, no la mediana de la ventana.** Un
+  electrodo de batería está limitado por difusión solo donde ocurre su
+  proceso redox; en el resto la doble capa mantiene b en 1 y una mediana se
+  come el único valor informativo.
+- **Hay DOS convenios de capacitancia desde un CV y difieren en un factor
+  exacto de 2.** Se informan los dos, con su nombre. Publicar sin decir cuál
+  deja esa ambigüedad.
+- **Recortar los vértices y luego dividir por la ventana ENTERA** dejaba
+  toda capacitancia un 4 % baja. Se divide por el intervalo realmente
+  integrado.
+- **La caída IR se quita de la ventana de descarga**, y su tamaño se
+  informa: es el diagnóstico más útil que da una curva galvanostática.
+- **La energía se INTEGRA (∫V dq), no se supone (½CV²).** Ojo con la prueba:
+  ½CV² acierta también en una meseta CENTRADA, por casualidad. Por eso la
+  meseta del demo está descentrada, como las de verdad.
+- **El potencial de referencia va con su relleno.** Ag/AgCl 3 M y SCE están
+  a 31 mV. Sin pH, la conversión a RHE se RECHAZA en vez de suponerlo: son
+  59 mV por unidad de pH en todo lo que venga después.
+- **Sin corrección óhmica no hay pendiente de Tafel ni ΔEp cinético**, y el
+  sesgo crece con la corriente. Se avisa siempre que falte.
+- **Una pendiente de Tafel sobre menos de una década no es una pendiente de
+  Tafel.** La región lineal se BUSCA (residuo del ajuste frente al ruido de
+  los datos, con sumas acumuladas para que sea O(n)). El primer intento
+  exigía pendiente local constante y troceaba una década recta en tramos de
+  0.1: la pendiente salía bien y se rechazaba por corta.
+- **El ECSA arrastra un factor de tres** por la Cs que se adopte. Va con su
+  rango y con el aviso de que solo sirve para comparar TUS muestras.
+- **Kramers-Kronig ANTES del circuito.** Un circuito ajustado a datos que
+  han derivado da parámetros sin significado y el χ² no lo delata. La base
+  del test lleva capacidad en serie e inductancia: sin ellas, un
+  supercondensador perfectamente bueno falla el test por su cola capacitiva.
+  Y se juzga por la ESTRUCTURA del residuo (rachas de signo), no por un
+  umbral fijo: 0.5 % de ruido pone el residuo máximo en 1.5 % por azar.
+- **Los circuitos se ajustan en espacio logarítmico**, con varios reinicios.
+  Los parámetros abarcan diez órdenes de magnitud y un paso razonable para
+  40 Ω es absurdo para 2e-4 S·sⁿ. Ajustado en lineal, un Randles con cola
+  capacitiva llevaba su resistencia al límite y decía haber convergido.
+- **Las incertidumbres se convierten de vuelta del logaritmo** (σ_p/p =
+  ln10·σ_log). Informar la σ logarítmica como si fuera lineal convirtió un
+  3 % en 3 000 000 %.
+- **La Q de un CPE NO son faradios.** La conversión (Brug) necesita la
+  resistencia en paralelo y es una llamada aparte, a propósito.
+- **El apex del semicírculo es un máximo LOCAL de −Z″.** Tomar el global
+  falla en todo lo que tenga cola capacitiva y sembraba la resistencia de
+  transferencia con el valor de la cola.
+- **Z″ se guarda con su signo físico (negativo si es capacitivo).** El −Z″
+  del diagrama de Nyquist es convenio de dibujo; guardarlo negado es una
+  fuente permanente de errores de signo en los ajustes.
 
 ## Honestidad sobre la validación
 

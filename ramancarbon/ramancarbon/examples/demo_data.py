@@ -22,6 +22,9 @@ The parameters below come from the ranges in ``database/data/materials.json``.
 from __future__ import annotations
 
 
+import math
+from typing import Optional
+
 import numpy as np
 
 from ..core.spectrum import Spectrum, laser_energy_ev
@@ -272,11 +275,17 @@ __all__ = [
     "DEMO_KINDS",
     "TMD_DEMOS",
     "TMD_OXIDE_DEMOS",
+    "ECHEM_DEMOS",
     "XRD_DEMOS",
     "add_doping",
     "demo_spectra",
     "make_demo",
     "make_tmd_demo",
+    "cv_rate_series",
+    "make_cv_demo",
+    "make_eis_demo",
+    "make_gcd_demo",
+    "make_lsv_demo",
     "make_xrd_demo",
     "tmd_demo_spectra",
     "xrd_demo_spectra",
@@ -583,3 +592,305 @@ def xrd_demo_spectra(seed: int = 0):
         make_xrd_demo(name, seed=seed + i)
         for i, (name, _, _) in enumerate(XRD_DEMOS)
     ]
+
+
+# -- electrochemistry -------------------------------------------------
+
+#: Synthetic electrodes, as ``(name, mechanism)``. The three mechanisms
+#: are the ones the classifier has to tell apart, and they are generated
+#: from different physics rather than from the same curve with different
+#: parameters: the capacitor from a constant differential capacitance, the
+#: pseudocapacitor from broad surface redox, the battery from a narrow
+#: two-phase plateau.
+ECHEM_DEMOS = ("condensador", "pseudocondensador", "bateria")
+
+
+def _cv_current(
+    potential, scan_rate: float, kind: str, capacitance: float, rng
+):
+    """Current of one synthetic electrode over a potential sweep."""
+    direction = np.sign(np.gradient(potential))
+    direction[direction == 0] = 1.0
+    current = capacitance * scan_rate * direction
+
+    if kind == "pseudocondensador":
+        # Broad, strongly overlapping surface redox on top of the double
+        # layer: the peaks are there but they do not resolve.
+        for centre, height, width, sign in (
+            (0.35, 2.2, 0.11, 1.0),
+            (0.28, 2.2, 0.11, -1.0),
+        ):
+            peak = np.exp(-0.5 * ((potential - centre) / width) ** 2)
+            current += sign * height * capacitance * scan_rate * peak * (direction == sign)
+    elif kind == "bateria":
+        # A narrow pair of redox peaks, well separated: a phase transition.
+        # The current scales as sqrt(scan rate) because it is diffusion
+        # limited, which is what makes b come out near 0.5.
+        diffusive = math.sqrt(scan_rate / 0.005)
+        for centre, sign in ((0.42, 1.0), (0.30, -1.0)):
+            peak = np.exp(-0.5 * ((potential - centre) / 0.022) ** 2)
+            current += (
+                sign * 9.0 * capacitance * 0.005 * diffusive * peak * (direction == sign)
+            )
+    return current
+
+
+def make_cv_demo(
+    kind: str = "condensador",
+    scan_rate: float = 0.02,
+    window: tuple[float, float] = (0.0, 0.6),
+    capacitance: float = 0.05,
+    cycles: int = 3,
+    points: int = 600,
+    noise: float = 2e-6,
+    resistance: float = 2.0,
+    seed: int = 0,
+):
+    """Build a synthetic cyclic voltammogram.
+
+    ``capacitance`` is the differential capacitance in farads that the
+    double-layer part is generated from, so a round trip through
+    :func:`~ramancarbon.echem.cv.capacitance` must return it — which is
+    what makes the demo a test rather than a picture.
+
+    ``resistance`` is a series resistance in ohms, applied as a distortion
+    of the potential axis, so the iR correction has something real to
+    correct.
+    """
+    from ..echem.curve import Electrode, Voltammogram
+
+    if kind not in ECHEM_DEMOS:
+        raise ValueError(
+            f"unknown demo electrode {kind!r}; available: {', '.join(ECHEM_DEMOS)}"
+        )
+    rng = np.random.default_rng(seed)
+    low, high = window
+    ramp = np.linspace(low, high, points // 2)
+    one = np.concatenate([ramp, ramp[::-1]])
+    potential = np.tile(one, cycles)
+    cycle = np.repeat(np.arange(1, cycles + 1), one.size)
+
+    current = _cv_current(potential, scan_rate, kind, capacitance, rng)
+    current = current + rng.normal(0.0, noise, current.size)
+    measured = potential + resistance * current
+
+    return Voltammogram(
+        potential=measured,
+        current=current,
+        scan_rate=scan_rate,
+        electrode=Electrode(
+            mass_mg=2.0, area_cm2=1.0, reference="Ag/AgCl_3M", ph=14.0,
+            resistance_ohm=resistance, label=f"demo {kind}",
+        ),
+        cycle=cycle,
+        name=f"demo_cv_{kind}_{1e3 * scan_rate:g}mVs",
+        metadata={
+            "synthetic": True,
+            "mechanism": kind,
+            "true_capacitance_f": capacitance,
+            "true_resistance_ohm": resistance,
+        },
+    )
+
+
+def cv_rate_series(
+    kind: str = "condensador",
+    rates: tuple[float, ...] = (0.005, 0.01, 0.02, 0.05, 0.1, 0.2),
+    seed: int = 0,
+):
+    """One synthetic voltammogram per scan rate, for a rate study."""
+    return [
+        make_cv_demo(kind, scan_rate=rate, seed=seed + i)
+        for i, rate in enumerate(rates)
+    ]
+
+
+def make_gcd_demo(
+    kind: str = "condensador",
+    current: float = 1e-3,
+    capacitance: float = 0.05,
+    window: tuple[float, float] = (0.0, 0.6),
+    resistance: float = 2.0,
+    cycles: int = 3,
+    points_per_branch: int = 300,
+    efficiency: float = 0.98,
+    noise: float = 3e-5,
+    seed: int = 0,
+):
+    """Build a synthetic galvanostatic charge–discharge curve.
+
+    The IR jump is put in explicitly as ``I·R`` at every current reversal,
+    so removing it is a real correction and not a formality, and the
+    coulombic efficiency is imposed by shortening the discharge.
+    """
+    from ..echem.curve import ChargeDischarge, Electrode
+
+    if kind not in ECHEM_DEMOS:
+        raise ValueError(f"unknown demo electrode {kind!r}")
+    rng = np.random.default_rng(seed)
+    low, high = window
+    span = high - low
+    charge_time = capacitance * span / current
+
+    times, potentials, currents, labels = [], [], [], []
+    clock = 0.0
+    for cycle in range(1, cycles + 1):
+        for direction in (1.0, -1.0):
+            duration = charge_time * (1.0 if direction > 0 else efficiency)
+            t = np.linspace(0.0, duration, points_per_branch)
+            fraction = t / charge_time
+            if kind == "condensador":
+                shape = fraction * span
+            elif kind == "pseudocondensador":
+                # Slight curvature: the differential capacitance rises in
+                # the middle of the window.
+                shape = span * (fraction - 0.10 * np.sin(2 * np.pi * fraction) / (2 * np.pi))
+            else:
+                # A plateau: most of the charge enters at one potential, and
+                # NOT at the middle of the window. Real battery plateaus are
+                # off-centre (LiFePO4 sits at 3.4 V in a 2.5-4.0 V window),
+                # and that asymmetry is what makes 1/2 CV^2 wrong for them:
+                # for a symmetric plateau it happens to give the right
+                # answer, so a centred demo would hide the error.
+                centre = 0.32
+                shape = span * (
+                    0.18 * fraction
+                    + 0.82 / (1.0 + np.exp(-(fraction - centre) / 0.06))
+                    - 0.82 / (1.0 + np.exp(centre / 0.06))
+                )
+                shape = shape / shape[-1] * span
+            base = low + shape if direction > 0 else high - shape * (span / max(shape[-1], 1e-12)) * 0 - shape
+            if direction < 0:
+                base = high - shape
+            base = base - direction * current * resistance
+            times.append(clock + t)
+            potentials.append(base)
+            currents.append(np.full(t.size, direction * current))
+            labels.append(np.full(t.size, cycle))
+            clock += duration
+
+    time = np.concatenate(times)
+    potential = np.concatenate(potentials) + rng.normal(0.0, noise, time.size)
+    return ChargeDischarge(
+        time=time,
+        potential=potential,
+        current=np.concatenate(currents),
+        electrode=Electrode(
+            mass_mg=2.0, area_cm2=1.0, reference="Ag/AgCl_3M", ph=14.0,
+            label=f"demo {kind}",
+        ),
+        cycle=np.concatenate(labels),
+        name=f"demo_gcd_{kind}",
+        metadata={
+            "synthetic": True,
+            "mechanism": kind,
+            "true_capacitance_f": capacitance,
+            "true_resistance_ohm": resistance,
+            "true_efficiency": efficiency,
+        },
+    )
+
+
+def make_eis_demo(
+    circuit: str = "R0-(R1|Q1)-Q2",
+    values: Optional[dict] = None,
+    frequencies: tuple[float, float] = (0.01, 1e5),
+    points: int = 60,
+    noise_pct: float = 0.5,
+    seed: int = 0,
+):
+    """Build a synthetic impedance spectrum from a known circuit.
+
+    Generated from the same circuit code the fitter uses, so a round trip
+    recovers the parameters that went in — which makes the demo a test of
+    the fit rather than of two independent implementations agreeing.
+    """
+    from ..echem.curve import Electrode, Impedance
+    from ..echem.eis import LIBRARY, parse_circuit
+
+    text = LIBRARY.get(circuit, circuit)
+    tree = parse_circuit(text)
+    defaults = {
+        "R0.R": 5.0, "R1.R": 40.0, "Q1.Q": 2e-4, "Q1.n": 0.88,
+        "Q2.Q": 0.02, "Q2.n": 0.92, "C1.C": 1e-4, "W1.sigma": 25.0,
+        "Wo1.R": 60.0, "Wo1.tau": 12.0, "L0.L": 1e-6,
+    }
+    chosen = {**defaults, **(values or {})}
+    for element in tree.elements():
+        for index, label in enumerate(element.labels):
+            if label in chosen:
+                element.values[index] = float(chosen[label])
+
+    frequency = np.logspace(
+        math.log10(frequencies[1]), math.log10(frequencies[0]), points
+    )
+    z = tree.impedance(2.0 * math.pi * frequency)
+    rng = np.random.default_rng(seed)
+    scale = noise_pct / 100.0
+    z = z * (1.0 + rng.normal(0.0, scale, z.size)) + 1j * np.abs(z) * rng.normal(
+        0.0, scale, z.size
+    )
+    return Impedance(
+        frequency=frequency,
+        z=z,
+        electrode=Electrode(mass_mg=2.0, area_cm2=1.0),
+        name=f"demo_eis_{text}",
+        metadata={"synthetic": True, "circuit": text, "true_values": chosen},
+    )
+
+
+def make_lsv_demo(
+    reaction: str = "OER",
+    tafel_mv_per_decade: float = 60.0,
+    exchange_ma_cm2: float = 1e-5,
+    resistance: float = 3.0,
+    area_cm2: float = 1.0,
+    points: int = 600,
+    limit_ma_cm2: float = 200.0,
+    noise: float = 0.02,
+    seed: int = 0,
+):
+    """A synthetic linear-sweep polarisation curve with a known Tafel slope.
+
+    Built from the Tafel law itself, ``η = b·log₁₀(j/j₀)``, so a round trip
+    through :func:`~ramancarbon.echem.evaluate.tafel_analysis` has to give
+    back the slope that went in — which makes the demo a test of the
+    fitting, not an illustration of it.
+
+    A mass-transport limit and a series resistance are added on top,
+    because both are what make a real Tafel fit hard: the first curves the
+    line over at high current and the second tilts it.
+    """
+    from ..echem.curve import Electrode, Voltammogram
+
+    rng = np.random.default_rng(seed)
+    slope = tafel_mv_per_decade * 1e-3
+    eta = np.linspace(0.02, 0.42, points)
+    kinetic = exchange_ma_cm2 * 10.0 ** (eta / slope)
+    # Koutecky-Levich style saturation towards the transport limit.
+    density = 1.0 / (1.0 / kinetic + 1.0 / limit_ma_cm2)
+    density = density * (1.0 + rng.normal(0.0, noise, density.size))
+
+    equilibrium = 1.23 if reaction == "OER" else 0.0
+    sign = 1.0 if reaction == "OER" else -1.0
+    rhe = equilibrium + sign * eta
+    current = sign * density * 1e-3 * area_cm2
+    measured = rhe + resistance * current   # uncompensated ohmic drop
+
+    return Voltammogram(
+        potential=measured,
+        current=current,
+        scan_rate=0.005,
+        electrode=Electrode(
+            mass_mg=0.2, area_cm2=area_cm2, reference="RHE",
+            resistance_ohm=resistance, label=f"demo {reaction}",
+        ),
+        name=f"demo_lsv_{reaction}",
+        metadata={
+            "synthetic": True,
+            "reaction": reaction,
+            "true_tafel_mv_dec": tafel_mv_per_decade,
+            "true_j0_mA_cm2": exchange_ma_cm2,
+            "true_resistance_ohm": resistance,
+        },
+    )
