@@ -272,11 +272,14 @@ __all__ = [
     "DEMO_KINDS",
     "TMD_DEMOS",
     "TMD_OXIDE_DEMOS",
+    "XRD_DEMOS",
     "add_doping",
     "demo_spectra",
     "make_demo",
     "make_tmd_demo",
+    "make_xrd_demo",
     "tmd_demo_spectra",
+    "xrd_demo_spectra",
 ]
 
 
@@ -468,3 +471,115 @@ def tmd_demo_spectra(laser_nm: float = 532.0, seed: int = 0) -> list[Spectrum]:
         for i, (material, layers, oxide) in enumerate(TMD_OXIDE_DEMOS)
     )
     return out
+
+
+# -- diffraction ------------------------------------------------------
+
+#: Synthetic diffractograms, as ``(name, [(phase, scale)], texture axis)``.
+#: Chosen to exercise the cases that go wrong: a mixture whose phases
+#: overlap, a layered material with severe preferred orientation, an
+#: iron-bearing sample that would fluoresce under a copper tube, and a
+#: pattern with a phase deliberately left out of the reference library so
+#: that something is genuinely unexplained.
+XRD_DEMOS: tuple[tuple[str, tuple[tuple[str, float], ...], object], ...] = (
+    ("CNT_FeSe", (("grafito_2H", 0.55), ("FeSe_tetragonal", 1.0),
+                  ("Se_trigonal", 0.18)), None),
+    ("CNT_Fe3O4", (("grafito_2H", 1.0), ("Fe3O4_magnetita", 0.35),
+                   ("Fe_alfa", 0.10)), None),
+    ("MoS2_texturado", (("MoS2_2H", 1.0),), (0, 0, 1)),
+    ("FeSe_dos_fases", (("FeSe_tetragonal", 1.0), ("FeSe_hexagonal", 0.45)), None),
+)
+
+
+def make_xrd_demo(
+    kind: str = "CNT_FeSe",
+    two_theta_range: tuple[float, float] = (10.0, 80.0),
+    step: float = 0.02,
+    background: float = 260.0,
+    counts_at_max: float = 15000.0,
+    seed: int = 0,
+    texture_r: float = 0.65,
+    fwhm: float = 0.09,
+):
+    """Build a synthetic powder pattern from the bundled structures.
+
+    Calculated from real crystal structures rather than drawn as a set of
+    Gaussians, so analysing one is a genuine round trip: the lattice
+    parameters that come out of a refinement are the ones that went in,
+    and any disagreement is a bug rather than a mismatch of conventions.
+
+    The noise is genuinely Poisson, because everything downstream —
+    detection thresholds, refinement weights, the goodness of fit — is
+    built on σ = √N and calibrating it against anything else calibrates it
+    against the wrong thing.
+
+    Parameters
+    ----------
+    kind:
+        One of the names in :data:`XRD_DEMOS`.
+    two_theta_range, step:
+        Scan range and step in degrees.
+    background, counts_at_max:
+        Background level and peak height, both in counts.
+    texture_r:
+        March–Dollase parameter applied when the demo declares a texture
+        axis. 0.65 is severe but entirely ordinary for a layered powder
+        pressed into a front-loaded holder.
+    fwhm:
+        Peak width in degrees at low angle, through the Caglioti W term.
+
+    Returns
+    -------
+    ramancarbon.xrd.pattern.Pattern
+    """
+    from ..xrd.powder import Profile, simulate
+    from ..xrd.reference import find_phase
+
+    entries = {name: (phases, axis) for name, phases, axis in XRD_DEMOS}
+    if kind not in entries:
+        raise ValueError(
+            f"unknown XRD demo {kind!r}; available: {', '.join(sorted(entries))}"
+        )
+    phases, axis = entries[kind]
+    crystals = []
+    scales = []
+    for name, scale in phases:
+        crystal = find_phase(name)
+        if crystal is None:  # pragma: no cover - bundled library is complete
+            raise ValueError(f"falta la fase de referencia {name!r}")
+        crystals.append(crystal)
+        scales.append(scale)
+
+    pattern = simulate(
+        crystals,
+        two_theta_range=two_theta_range,
+        step=step,
+        scales=scales,
+        profile=Profile(u=0.006, v=-0.001, w=fwhm**2, eta0=0.55),
+        background=background,
+        counts_at_max=counts_at_max,
+        preferred_axis=axis,
+        preferred_r=texture_r if axis is not None else 1.0,
+        seed=seed,
+        name=f"demo_drx_{kind}",
+    )
+    pattern.metadata.update(
+        {
+            "synthetic": True,
+            "phases": [name for name, _ in phases],
+            "texture_axis": axis,
+            "warning": (
+                "Difractograma calculado, no medido. Sirve para probar el "
+                "programa; no son datos experimentales."
+            ),
+        }
+    )
+    return pattern
+
+
+def xrd_demo_spectra(seed: int = 0):
+    """One synthetic diffractogram for each entry in :data:`XRD_DEMOS`."""
+    return [
+        make_xrd_demo(name, seed=seed + i)
+        for i, (name, _, _) in enumerate(XRD_DEMOS)
+    ]

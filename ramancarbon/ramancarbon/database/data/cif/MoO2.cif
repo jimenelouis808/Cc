@@ -1,0 +1,36 @@
+data_MoO2
+_chemical_formula_sum          'MoO2'
+_symmetry_space_group_name_H-M 'P2_1/c'
+_cell_length_a                 5.610900
+_cell_length_b                 4.856200
+_cell_length_c                 5.628500
+_cell_angle_alpha              90.0000
+_cell_angle_beta               120.9500
+_cell_angle_gamma              90.0000
+_cell_volume                   131.5270
+
+loop_
+_symmetry_equiv_pos_as_xyz
+  'x, y, z'
+  '-x, y+1/2, -z+1/2'
+  '-x, -y, -z'
+  'x, -y+1/2, z+1/2'
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_U_iso_or_equiv
+  Mo1      Mo     0.231600   0.991700   0.016400   1.0000  0.00500
+  O1       O      0.112300   0.218300   0.233700   1.0000  0.00500
+  O2       O      0.389700   0.693400   0.297100   1.0000  0.00500
+
+_ramancarbon_confidence   'medium'
+_ramancarbon_source       'Tipo rutilo distorsionado (estructura del MoO2); Brandt & Skapski, Acta Chem. Scand. 21 (1967) 661'
+_ramancarbon_notes
+;
+Óxido conductor. Su reflexión más intensa (-111) está a 26.0°, cerca de la 002 del grafito a 26.5°: en un compuesto MoO2/carbono las dos se solapan y hay que ajustar, no leer.
+;

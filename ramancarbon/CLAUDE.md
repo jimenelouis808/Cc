@@ -28,6 +28,7 @@ ramancarbon/
 ├── database/    # JSON de literatura + API tipada; NO importa del resto
 ├── analysis/    # asignación, cocientes, índices, diámetros, desplazamientos,
 │                #   clasificador, multiláser, exportación
+├── xrd/         # difracción: CIF, simetría, patrón calculado, Rietveld
 ├── gui/         # app Tkinter; la lógica vive en state.py y plots.py, sin Tk
 ├── cli/         # ramancarbon analizar / lote / deconvolucionar / bd / demo
 ├── examples/    # scripts ejecutables + demo_data.py (espectros sintéticos)
@@ -230,6 +231,83 @@ una tiene una prueba que la protege.
 - **Un óxido tiene tres orígenes posibles y una sola medida no los separa**:
   precursor, aire, o el propio láser. El aviso propone la comprobación
   concreta (punto virgen, media potencia, ver si crece). No lo quites.
+
+## Difracción de rayos X
+
+- **Nada de tablas de posiciones de pico.** Una fase es una ESTRUCTURA
+  cristalina y cada posición e intensidad se calcula de ella. Por eso un
+  parámetro de red refinado mueve los picos como los movería la física, y por
+  eso la biblioteca de referencia son CIF: añadir una fase es soltar su
+  archivo en un directorio, no editar código.
+- **Nada de búsqueda en línea en la COD.** Es una limitación deliberada: un
+  resultado que depende de la red no se reproduce, y los ordenadores de los
+  equipos suelen estar sin conexión. Se descarga el CIF una vez y se guarda.
+- **Las operaciones de simetría se CIERRAN antes de usarse.** Para un CIF
+  completo eso no cambia nada; para uno truncado lo repara, y permite que las
+  estructuras incluidas listen solo generadores. El orden del grupo cerrado es
+  además una comprobación exacta: una operación mal escrita casi siempre lo
+  cambia. Hay una prueba por cada grupo espacial usado.
+- **`ClosedGroup` existe por rendimiento, no por elegancia.** Rietveld
+  construye un `Crystal` nuevo por cada celda de prueba; volver a cerrar las
+  192 operaciones de la magnetita cada vez se llevaba dos tercios del tiempo
+  total. Igual con la caché de `expanded()`. No las quites.
+- **Las imágenes de simetría que coinciden se FUNDEN.** Un átomo en el origen
+  de un grupo cúbico dispersaría 24 veces de más.
+- **La celda se refina con las ligaduras de la simetría**, leídas de las
+  operaciones y no del nombre del grupo ni de que los números salgan iguales.
+  Sin eso una celda hexagonal devuelve a=2.46359 y b=2.46451: dos números
+  separados por cuatro veces su propio error que la simetría dice que son uno.
+- **La longitud de onda de `Pattern` es la Kα₁, no la media Kα₁₂.** El doblete
+  se modela aparte. Una longitud de onda promediada no acierta en ningún
+  ángulo: reparte el error abajo y deja un pico visiblemente asimétrico arriba,
+  que el ajuste de perfil se traga como anchura y devuelve como un tamaño de
+  cristalito equivocado.
+- **El Kα₂ se pela (Rachinger) antes de buscar picos, y NO antes de refinar.**
+  Rietveld modela las dos líneas. Y el ruido se mide ANTES de pelar: la
+  recursión correlaciona puntos vecinos y encoge la estimación de σ.
+- **El umbral de detección está calibrado sobre ruido Poisson puro**, veinte
+  patrones de 3500 puntos: 44 picos falsos por patrón con umbral 8, 3.2 con 12,
+  0.2 con 16, 0 con 20. Está en 18. Bajarlo no encuentra más fases, encuentra
+  más rizos en el flanco del pico más intenso y los llama fases desconocidas.
+- **La incertidumbre es PUNTO A PUNTO**, no un número por patrón. Con
+  estadística de conteo, el ruido sobre un pico de 10 000 cuentas es 100 y
+  sobre un fondo de 100 es 10.
+- **Posiciones e intensidades se juzgan por separado.** Las posiciones solo
+  dependen de la red y son prueba fuerte; las intensidades las estropea la
+  orientación preferente en cualquier material laminar, que es justo el que
+  aquí interesa. Fundirlas en un solo número dejaría que un artefacto de
+  textura vetase una identificación correcta.
+- **Los picos sin explicar SON el resultado**, no un resto. Son la fase que no
+  esperabas. Y las colas de Kα₂ sobre picos ya explicados se apartan aparte:
+  llamar fase desconocida a la cola de una línea del cobre es peor que callar.
+- **Rietveld por etapas, siempre.** Soltar todos los parámetros a la vez
+  converge, da factores R plausibles y devuelve una estructura equivocada.
+- **El perfil es POR FASE.** Un carbono nanocristalino y un seleniuro bien
+  cristalizado en la misma muestra tienen anchuras distintas de verdad.
+- **Cero y desplazamiento de muestra son funciones distintas del ángulo**
+  (constante frente a cos θ). Refinar solo el cero contra una muestra mal
+  montada deja un residuo sistemático que ningún refinamiento posterior quita.
+- **Las intensidades para refinar NO se normalizan.** El factor de escala solo
+  es proporcional a la cantidad de fase si multiplica intensidades absolutas.
+- **Las fracciones en peso son de la parte CRISTALINA E IDENTIFICADA.** Una
+  fase sin modelar no baja el total de 100 %: su intensidad se reparte entre
+  las demás. El amorfo no aparece. Ese aviso va siempre.
+- **La curva diferencia antes que los factores R.** Un Rwp bonito con una
+  ondulación sistemática en el residuo es peor ajuste que un Rwp feo con
+  residuo sin estructura. El informe da además el estadístico de rachas.
+- **Scherrer se niega por encima de ~120 nm.** Ahí el ensanchamiento por
+  tamaño es menor que la resolución del equipo y el «resultado» es una
+  reformulación de lo que hayas supuesto para el instrumento.
+- **U_iso es el parámetro que se traga los errores de los demás.** Si sale
+  cero o enorme, el problema está en el fondo, la absorción o una fase que
+  falta. El aviso lo dice.
+- **Sin dispersión anómala (f′, f″), a propósito.** Lo que de verdad arruina
+  una muestra de hierro con tubo de cobre es la fluorescencia, que sube el
+  FONDO y no toca los picos; de eso sí avisa el programa.
+- **Las estructuras incluidas se validaron con dos comprobaciones
+  independientes**: densidad cristalográfica frente a la literatura (valida
+  celda y contenido a la vez) y posición de la reflexión más intensa frente a
+  su ficha. Las dos están en las pruebas. Si añades una fase, añade las dos.
 
 ## Modelos a medida
 

@@ -1,0 +1,55 @@
+data_FeSe_hexagonal
+_chemical_formula_sum          'FeSe'
+_symmetry_space_group_name_H-M 'P6_3/mmc'
+_cell_length_a                 3.637000
+_cell_length_b                 3.637000
+_cell_length_c                 5.957000
+_cell_angle_alpha              90.0000
+_cell_angle_beta               90.0000
+_cell_angle_gamma              120.0000
+_cell_volume                   68.2409
+
+loop_
+_symmetry_equiv_pos_as_xyz
+  'x, y, z'
+  'x-y, x, z+1/2'
+  '-x, -y, z+1/2'
+  'y, x, -z'
+  '-x, -y, -z'
+  '-y, x-y, z'
+  '-x+y, -x, z'
+  '-x+y, y, -z+1/2'
+  'x, x-y, -z+1/2'
+  '-x+y, -x, -z+1/2'
+  '-y, -x, -z+1/2'
+  'x, y, -z+1/2'
+  'y, -x+y, z+1/2'
+  'x-y, -y, -z'
+  '-x, -x+y, -z'
+  'x-y, x, -z'
+  '-y, -x, z'
+  '-x, -x+y, z+1/2'
+  'x-y, -y, z+1/2'
+  'y, x, z+1/2'
+  'x, x-y, z'
+  '-x+y, y, z'
+  'y, -x+y, -z'
+  '-y, x-y, -z+1/2'
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_U_iso_or_equiv
+  Fe1      Fe     0.000000   0.000000   0.000000   1.0000  0.00500
+  Se1      Se     0.333333   0.666667   0.250000   1.0000  0.00500
+
+_ramancarbon_confidence   'medium'
+_ramancarbon_source       'Estructura tipo NiAs (delta-FeSe); parámetros de celda de la literatura de FeSe hexagonal'
+_ramancarbon_notes
+;
+La fase NO superconductora. Es lo que zanja la duda que el Raman deja abierta: su 101 está a 32.4° y la del beta tetragonal a 28.6°, catorce veces la anchura de un pico. OJO: esta fase es deficiente en hierro (Fe(1-x)Se, y a composiciones concretas ordena como Fe7Se8 o Fe3Se4 con superestructura). Si el ajuste pide una ocupación de hierro por debajo de 1, no es un error del programa.
+;
