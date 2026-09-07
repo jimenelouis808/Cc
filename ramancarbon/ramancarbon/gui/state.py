@@ -25,7 +25,8 @@ from ..models.lineshapes import PROFILES
 
 #: Baseline methods offered in the preprocessing panel, with labels.
 BASELINE_METHODS = (
-    ("asls", "Mínimos cuadrados asimétricos (fluorescencia)"),
+    ("asls", "Mínimos cuadrados asimétricos (recomendado)"),
+    ("arpls", "arPLS (sin parámetro de asimetría)"),
     ("polynomial", "Polinómico iterativo"),
     ("rubberband", "Banda elástica (envolvente convexa)"),
     ("none", "Ninguna (los datos ya están corregidos)"),
@@ -34,10 +35,19 @@ BASELINE_METHODS = (
 #: Normalisation options.
 NORMALISATIONS = (
     ("none", "Sin normalizar"),
+    ("0-100", "A 0–100"),
     ("g", "A la banda G"),
     ("max", "Al máximo"),
     ("area", "Al área"),
     ("minmax", "A [0, 1]"),
+)
+
+#: Lineshape choices for the whole deconvolution.
+DECONVOLUTION_PROFILES = (
+    ("", "Según la base de datos"),
+    ("pseudo_voigt", "Pseudo-Voigt (deja que el ajuste elija la forma)"),
+    ("gaussian", "Gaussiana"),
+    ("lorentzian", "Lorentziana"),
 )
 
 #: Intensity bases for the ratios.
@@ -64,12 +74,39 @@ class PreprocessSettings:
     normalise: str = "none"
     crop_low: Optional[float] = None
     crop_high: Optional[float] = None
+    auto: bool = False
+    """Let :func:`~ramancarbon.core.preprocess.auto_settings` choose the
+    parameters. What the user has explicitly changed still wins."""
+    auto_reasons: dict = field(default_factory=dict)
+    """One sentence per automatic decision, filled in by :meth:`apply_auto`."""
+
+    def apply_auto(self, spectrum: Spectrum) -> dict:
+        """Overwrite the parameters with values chosen from the spectrum.
+
+        Returns the explanations, so the panel can show what changed and
+        why. This mutates the settings rather than bypassing them, so the
+        user sees the chosen numbers in the same fields they would edit and
+        can adjust any one of them afterwards — which is the whole point of
+        having the automatic mode write into the controls instead of
+        replacing them.
+        """
+        from ..core.preprocess import auto_settings
+
+        chosen = auto_settings(spectrum, baseline_method=self.baseline_method)
+        self.despike = chosen.despike
+        self.smooth_window = chosen.smooth_window
+        self.baseline_method = chosen.baseline_method
+        self.baseline_lam = chosen.baseline_lam
+        self.auto_reasons = dict(chosen.reasons)
+        return self.auto_reasons
 
     def to_kwargs(self) -> dict:
         """Translate the panel's settings into ``preprocess`` arguments."""
         baseline_kwargs: dict[str, Any] = {}
         if self.baseline_method == "asls":
             baseline_kwargs = {"lam": self.baseline_lam, "p": self.baseline_p}
+        elif self.baseline_method == "arpls":
+            baseline_kwargs = {"lam": self.baseline_lam}
         elif self.baseline_method == "polynomial":
             baseline_kwargs = {"order": self.baseline_order}
         crop = None
@@ -109,6 +146,9 @@ class AnalysisSettings:
     """``None`` lets the fit decide by comparing BWF against Lorentzian."""
     rbm_parameterisation: Optional[str] = None
     material_hint: Optional[str] = None
+    profile: Optional[str] = None
+    """Lineshape forced on every component; ``None`` uses the per-band
+    defaults from the database."""
 
     def to_kwargs(self) -> dict:
         return {
@@ -117,6 +157,7 @@ class AnalysisSettings:
             "metallic": self.metallic,
             "rbm_parameterisation": self.rbm_parameterisation,
             "material_hint": self.material_hint,
+            "profile": self.profile,
         }
 
 
@@ -366,6 +407,7 @@ class Session:
             target,
             preset=preset,
             metallic=bool(self.analysis_settings.metallic),
+            profile=self.analysis_settings.profile,
             db=self.db,
         )
         return list(model.peaks)
@@ -389,6 +431,89 @@ class Session:
         rows = [[_format_cell(row.get(column)) for column in columns] for row in rows_raw]
         return columns, rows
 
+    # -- multi-wavelength -----------------------------------------------
+    def excitation_groups(self) -> dict[str, list[LoadedSpectrum]]:
+        """Group analysed spectra that look like the same sample.
+
+        Two spectra belong together when their names match once the laser
+        wavelength is stripped out — ``muestra_532.txt`` and
+        ``muestra_633.txt``. The wavelength removed is the one the spectrum
+        actually carries, not a number guessed out of the filename, so a
+        name like ``CNT_900C_532nm`` loses only the 532 and keeps the
+        annealing temperature that would otherwise look just like a laser
+        line.
+
+        This is still a naming convention rather than a measurement, so the
+        grouping is a suggestion for the user to confirm, not something
+        applied silently.
+
+        Returns
+        -------
+        dict[str, list[LoadedSpectrum]]
+            Keyed by the common stem, only groups with two or more
+            distinct excitations.
+        """
+        groups: dict[str, list[LoadedSpectrum]] = {}
+        for item in self.spectra:
+            if item.result is None or item.raw.laser_nm is None:
+                continue
+            stem = strip_laser_from_name(item.name, item.raw.laser_nm)
+            groups.setdefault(stem, []).append(item)
+        return {
+            stem: items
+            for stem, items in groups.items()
+            if len({i.raw.laser_nm for i in items}) >= 2
+        }
+
+    def combine_excitations(self, items: Sequence[LoadedSpectrum]):
+        """Run the multi-wavelength comparison over a group.
+
+        Returns ``None`` and logs the reason when the group cannot be
+        combined, rather than raising into the widget layer.
+        """
+        from ..analysis.multiwavelength import compare_excitations
+
+        try:
+            return compare_excitations([i.result for i in items if i.result])
+        except ValueError as exc:
+            self.log("error", str(exc))
+            return None
+
+    # -- export -----------------------------------------------------------
+    def export_active(self, directory: str | Path, delimiter: str = ",") -> list[Path]:
+        """Write every export for the active spectrum.
+
+        Raises
+        ------
+        ValueError
+            If nothing has been analysed.
+        """
+        from ..analysis.export import export_analysis
+
+        item = self.active
+        if item is None or item.result is None:
+            raise ValueError("analiza el espectro antes de exportarlo")
+        return export_analysis(item.result, directory, delimiter=delimiter)
+
+    def export_fit(self, path: str | Path, delimiter: str = ",") -> list[Path]:
+        """Write the components and curves of whichever fit is on screen."""
+        from ..analysis.export import export_components, export_curves
+
+        item = self.active
+        if item is None:
+            raise ValueError("no hay ningún espectro seleccionado")
+        fit = item.manual_fit or (item.result.fit if item.result else None)
+        if fit is None:
+            raise ValueError("no hay ningún ajuste que exportar")
+        base = Path(path)
+        stem = base.with_suffix("")
+        return [
+            export_components(fit, stem.with_name(stem.name + "_componentes.csv"),
+                              item.result, delimiter),
+            export_curves(fit, stem.with_name(stem.name + "_curvas.csv"),
+                          item.result, delimiter),
+        ]
+
     def export_table(self, path: str | Path, delimiter: str = ",") -> Path:
         """Write the batch results table as CSV.
 
@@ -406,6 +531,38 @@ class Session:
         lines.extend(delimiter.join(str(cell) for cell in row) for row in rows)
         target.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return target
+
+
+def strip_laser_from_name(name: str, laser_nm: float) -> str:
+    """Remove a spectrum's own laser wavelength from its name.
+
+    Used to recognise the same sample measured at two excitations. Only the
+    wavelength the spectrum reports is removed — matching any three-digit
+    number would also eat annealing temperatures, sample numbers and dates.
+
+    Parameters
+    ----------
+    name:
+        The spectrum's name.
+    laser_nm:
+        Its excitation wavelength.
+
+    Returns
+    -------
+    str
+        The name with the wavelength and any adjoining separator removed,
+        or the original name if that would leave nothing.
+    """
+    import re
+
+    candidates = {f"{laser_nm:g}", f"{laser_nm:.0f}", f"{laser_nm:.1f}"}
+    stem = name
+    for text in sorted(candidates, key=len, reverse=True):
+        stem = re.sub(
+            rf"[_\-\s]*{re.escape(text)}\s*(?:nm)?", "", stem, flags=re.IGNORECASE
+        )
+    stem = stem.strip("_- .")
+    return stem or name
 
 
 def _format_cell(value: Any) -> str:
@@ -434,6 +591,7 @@ def preset_choices() -> list[tuple[str, str]]:
 __all__ = [
     "BASELINE_METHODS",
     "BASES",
+    "DECONVOLUTION_PROFILES",
     "NORMALISATIONS",
     "PROFILE_CHOICES",
     "AnalysisSettings",
@@ -441,5 +599,6 @@ __all__ = [
     "PreprocessSettings",
     "Session",
     "laser_choices",
+    "strip_laser_from_name",
     "preset_choices",
 ]

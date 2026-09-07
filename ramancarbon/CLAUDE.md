@@ -26,7 +26,8 @@ ramancarbon/
 ├── core/        # Spectrum, lectura de archivos, línea base, despiking, picos
 ├── models/      # perfiles (incl. Breit-Wigner-Fano) y motor de ajuste
 ├── database/    # JSON de literatura + API tipada; NO importa del resto
-├── analysis/    # asignación, cocientes, diámetros, desplazamientos, clasificador
+├── analysis/    # asignación, cocientes, índices, diámetros, desplazamientos,
+│                #   clasificador, multiláser, exportación
 ├── gui/         # app Tkinter; la lógica vive en state.py y plots.py, sin Tk
 ├── cli/         # ramancarbon analizar / lote / deconvolucionar / bd / demo
 ├── examples/    # scripts ejecutables + demo_data.py (espectros sintéticos)
@@ -100,6 +101,34 @@ una tiene una prueba que la protege.
   Aplicarla a nanotubos exige el aviso correspondiente.
 - **Raman no separa las configuraciones del nitrógeno.** Para eso hace falta
   XPS, y la base de datos lo dice explícitamente. No lo suavices.
+- **asLS es la línea base por defecto, medido, no por reputación.** arPLS se
+  recomienda mucho para fluorescencia; contrastado contra fondos sintéticos
+  conocidos a la rigidez que cada uno usaría de verdad, asLS ganó en todos
+  los casos y arPLS arrastraba un desplazamiento sistemático. Si alguien lo
+  revierte, que sea con medidas nuevas, no con la cita.
+- **La rigidez de la línea base sale de la función de transferencia del
+  suavizador de Whittaker**, fijando el corte en cinco anchuras de banda. El
+  primer intento puntuaba rigideces por cómo seguían al fondo: eso NO
+  funciona, y el módulo explica por qué (el residuo lo domina el ruido, y su
+  parte sistemática se minimiza con la línea base más blanda, la que se come
+  los picos). No vuelvas a la búsqueda en rejilla.
+- **λ depende del paso de muestreo** porque el corte es un periodo en
+  puntos. Copiar un λ de un artículo sin reescalarlo es un error de 256×
+  entre 1 y 4 cm⁻¹/punto.
+- **La normalización 0-100 resta un desplazamiento y eso cambia los
+  cocientes.** Es la única de las normalizaciones que lo hace. Avisa.
+- **Un modelo D–G de nanotubo con G⁻ hace falta también con perfil
+  forzado**: la BWF de un G⁻ metálico sobrevive al override, porque es
+  mecanismo, no preferencia de forma.
+- **Γ_G es monótona con el desorden e I_D/I_G no.** En material muy
+  desordenado, Γ_G manda. No lo entierres entre los demás índices.
+- **Raman no distingue MWCNT de CNF con fiabilidad.** Peso bajo y aviso
+  explícito cuando cae en el solape. No subas ese peso.
+- **Con S, P y Se la G puede BAJAR aunque el dopado sea de tipo n**, porque
+  el enlace C–X más largo ablanda la red más de lo que la carga la endurece.
+  Los rangos de esos dopantes cruzan el cero a propósito.
+- **Los materiales con `role: "reference"` no compiten en la clasificación.**
+  Un MWCNT dopado con N sigue siendo un MWCNT.
 
 ## Honestidad sobre la validación
 
@@ -115,5 +144,17 @@ medidas.
 pip install -e ".[dev]"
 pytest ramancarbon/tests -q
 ruff check ramancarbon
-ramancarbon demo datos/ && ramancarbon analizar datos/demo_DWCNT_532nm.txt --laser 532
+ramancarbon demo datos/
+ramancarbon analizar datos/demo_DWCNT_532nm.txt --laser 532 --auto --perfil pseudo_voigt
+ramancarbon laseres datos/m_532nm.txt datos/m_633nm.txt
 ```
+
+## La capa Tk no tiene pruebas de ejecución
+
+No hay pantalla en el entorno donde se construyó esto, así que
+`gui/app.py` nunca se ha ejecutado. Toda su lógica vive en `gui/state.py` y
+`gui/plots.py`, que sí se prueban. `tests/test_gui_wiring.py` comprueba por
+análisis del código que las piezas encajan — cada canvas tiene su pestaña y
+su función de dibujo, cada `command=self._x` existe, cada `self.attr` que se
+lee se asigna en algún sitio. Eso ya ha cazado dos errores reales que ni el
+linter ni las pruebas veían. No cubre si la ventana se ve bien.

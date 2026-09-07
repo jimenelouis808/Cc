@@ -60,12 +60,73 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
         "--suavizado", type=int, default=0, metavar="PTS",
         help="ventana de Savitzky-Golay en puntos; 0 (por defecto) no suaviza",
     )
+    parser.add_argument(
+        "--auto", action="store_true",
+        help="elegir despiking, suavizado y rigidez de la línea base a partir "
+             "del propio espectro, y explicar cada decisión. Lo que pongas a "
+             "mano tiene prioridad sobre lo automático",
+    )
+    parser.add_argument(
+        "--linea-base", dest="baseline", default="asls",
+        choices=("asls", "arpls", "polynomial", "rubberband", "none"),
+        help="método de línea base (por defecto asls; arpls no necesita "
+             "parámetro de asimetría)",
+    )
+    parser.add_argument(
+        "--lambda", dest="lam", type=float, default=None, metavar="VALOR",
+        help="rigidez de la línea base. Sin este argumento se calcula a partir "
+             "del espectro",
+    )
+    parser.add_argument(
+        "--normalizar", default=None,
+        choices=("0-100", "g", "max", "area", "minmax"),
+        help="normalización opcional. Ojo: 0-100 y minmax restan un "
+             "desplazamiento y eso SÍ cambia los cocientes; normaliza después "
+             "de restar la línea base",
+    )
+    parser.add_argument(
+        "--perfil", dest="profile", default=None,
+        choices=("pseudo_voigt", "gaussian", "lorentzian", "bwf"),
+        help="forzar un perfil en todas las componentes de la deconvolución. "
+             "Sin este argumento se usan los perfiles por defecto de cada "
+             "banda. pseudo_voigt deja que el ajuste decida la forma y "
+             "devuelve η como resultado",
+    )
 
 
 def _preprocess_kwargs(args) -> dict:
+    """Explicit preprocessing arguments, i.e. the ones the user actually set.
+
+    Deliberately omits anything left at its default, so that ``--auto`` can
+    fill those in and a flag given on the command line still wins.
+    """
+    kwargs: dict = {}
+    if args.no_baseline:
+        kwargs["baseline_method"] = None
+    elif getattr(args, "baseline", "asls") != "asls" or not getattr(args, "auto", False):
+        kwargs["baseline_method"] = (
+            None if getattr(args, "baseline", "asls") == "none"
+            else getattr(args, "baseline", "asls")
+        )
+    if getattr(args, "lam", None) is not None:
+        kwargs["baseline_kwargs"] = {"lam": args.lam}
+    if args.suavizado:
+        kwargs["smooth_window"] = args.suavizado
+    elif not getattr(args, "auto", False):
+        kwargs["smooth_window"] = 0
+    if getattr(args, "normalizar", None):
+        kwargs["normalise_method"] = args.normalizar
+    return kwargs
+
+
+def _analyse_kwargs(args) -> dict:
+    """Everything ``analyse`` needs from the shared options."""
     return {
-        "baseline_method": None if args.no_baseline else "asls",
-        "smooth_window": args.suavizado,
+        "basis": args.base,
+        "rbm_parameterisation": args.rbm,
+        "profile": getattr(args, "profile", None),
+        "auto_preprocess": getattr(args, "auto", False),
+        "preprocess_kwargs": _preprocess_kwargs(args),
     }
 
 
@@ -94,22 +155,13 @@ def cmd_analizar(args) -> int:
     control = None
     if args.control:
         try:
-            control = analyse(
-                _load(Path(args.control), args),
-                basis=args.base,
-                preprocess_kwargs=_preprocess_kwargs(args),
-            )
+            control = analyse(_load(Path(args.control), args), **_analyse_kwargs(args))
         except (OSError, SpectrumReadError, ValueError) as exc:
             print(f"error leyendo el control: {exc}", file=sys.stderr)
             return 1
 
     result = analyse(
-        spectrum,
-        basis=args.base,
-        rbm_parameterisation=args.rbm,
-        material_hint=args.material,
-        control=control,
-        preprocess_kwargs=_preprocess_kwargs(args),
+        spectrum, material_hint=args.material, control=control, **_analyse_kwargs(args)
     )
     report = result.report()
     print(report)
@@ -127,6 +179,14 @@ def cmd_analizar(args) -> int:
     if args.procesado:
         written = write_spectrum(result.processed, Path(args.procesado))
         print(f"Espectro procesado guardado en {written}", file=sys.stderr)
+
+    if args.exportar:
+        from ..analysis.export import export_analysis
+
+        files = export_analysis(result, Path(args.exportar), delimiter=args.separador)
+        print("\nExportado:", file=sys.stderr)
+        for path in files:
+            print(f"  {path}", file=sys.stderr)
     return 0
 
 
@@ -168,11 +228,7 @@ def cmd_lote(args) -> int:
         try:
             spectrum = read_spectrum(path, laser_nm=args.laser)
             result = analyse(
-                spectrum,
-                basis=args.base,
-                rbm_parameterisation=args.rbm,
-                material_hint=args.material,
-                preprocess_kwargs=_preprocess_kwargs(args),
+                spectrum, material_hint=args.material, **_analyse_kwargs(args)
             )
         except (OSError, ValueError) as exc:
             failures.append((path, str(exc)))
@@ -233,27 +289,89 @@ def cmd_deconvolucionar(args) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    from ..core.preprocess import preprocess
+    from ..core.preprocess import auto_settings, preprocess
 
-    processed, _ = preprocess(spectrum, **_preprocess_kwargs(args))
+    settings = _preprocess_kwargs(args)
+    if args.auto:
+        chosen = auto_settings(spectrum)
+        merged = chosen.to_kwargs()
+        merged.update(settings)
+        settings = merged
+        print(chosen.summary(), file=sys.stderr)
+        print(file=sys.stderr)
+    processed, _ = preprocess(spectrum, **settings)
 
     if args.comparar:
-        comparison = compare_models(processed)
+        comparison = compare_models(processed, profile=args.profile)
         print(comparison.summary())
         print()
-        print(comparison.results[comparison.best].summary())
+        best = comparison.results[comparison.best]
+        print(best.summary())
+        _maybe_export_fit(args, best)
         return 0
 
     try:
-        model = build_model(processed, preset=args.modelo, metallic=args.metalico)
+        model = build_model(
+            processed, preset=args.modelo, metallic=args.metalico, profile=args.profile
+        )
         result = fit_model(processed, model)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"Modelo: {PRESET_LABELS.get(args.modelo, args.modelo)}")
     print(f"Ventana: {model.window[0]:.0f}–{model.window[1]:.0f} cm⁻¹")
+    print(f"Perfil: {args.profile or 'según la base de datos'}")
     print()
     print(result.summary())
+    _maybe_export_fit(args, result)
+    return 0
+
+
+def _maybe_export_fit(args, fit) -> None:
+    """Write the components and curves of a fit, if asked for."""
+    if not args.exportar:
+        return
+    from ..analysis.export import export_components, export_curves
+
+    out = Path(args.exportar)
+    stem = Path(args.espectro).stem
+    written = [
+        export_components(fit, out / f"{stem}_componentes.csv", delimiter=args.separador),
+        export_curves(fit, out / f"{stem}_curvas.csv", delimiter=args.separador),
+    ]
+    print("\nExportado:", file=sys.stderr)
+    for path in written:
+        print(f"  {path}", file=sys.stderr)
+
+
+def cmd_laseres(args) -> int:
+    """Combine measurements of the same sample at different excitations."""
+    from ..analysis.multiwavelength import compare_excitations
+
+    results = []
+    for item in args.espectros:
+        path = Path(item)
+        try:
+            spectrum = read_spectrum(path)
+        except (OSError, SpectrumReadError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if spectrum.laser_nm is None:
+            print(
+                f"error: {path.name} no indica su longitud de onda y este "
+                "comando la necesita para cada espectro. Ponla en la cabecera "
+                "del archivo o renombra con el láser",
+                file=sys.stderr,
+            )
+            return 1
+        results.append(analyse(spectrum, **_analyse_kwargs(args)))
+
+    try:
+        combined = compare_excitations(results, tolerance=args.tolerancia)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(combined.summary())
     return 0
 
 
@@ -297,6 +415,28 @@ def cmd_bd(args) -> int:
             if material.notes:
                 print(f"  nota: {material.notes}")
             print()
+        return 0
+
+    if args.dopantes:
+        print("Firmas de dopado — desplazamientos esperados a 2.33 eV\n")
+        for signature in db.dopants.values():
+            print(f"{signature.key}  —  {signature.label}")
+            print(f"  portadores : {signature.carrier}")
+            print(f"  ΔG         : {signature.g_shift[0]:+g} a {signature.g_shift[1]:+g} cm⁻¹")
+            print(f"  Δ2D        : {signature.d2_shift[0]:+g} a {signature.d2_shift[1]:+g} cm⁻¹")
+            print(f"  I_D/I_G    : {signature.id_ig}")
+            print(f"  hospedador : {', '.join(signature.host) or 'cualquiera'}")
+            print(f"  confianza  : {signature.confidence}")
+            print(f"  fuente     : {signature.source}")
+            if signature.notes:
+                print(f"  nota       : {signature.notes}")
+            print()
+        guidance = db.dopant_guidance
+        if guidance:
+            print("CÓMO LEER ESTO\n")
+            for key in ("size_vs_charge", "practical_rule", "what_raman_cannot_do"):
+                if key in guidance:
+                    print(f"  {guidance[key]}\n")
         return 0
 
     if args.banda:
@@ -377,6 +517,9 @@ def build_parser() -> argparse.ArgumentParser:
             "  ramancarbon analizar dopado.txt --laser 532 --control prístino.txt\n"
             "  ramancarbon lote datos/ --laser 633 --csv resultados.csv\n"
             "  ramancarbon deconvolucionar muestra.txt --comparar\n"
+            "  ramancarbon analizar m.txt --laser 532 --auto --perfil pseudo_voigt\n"
+            "  ramancarbon analizar m.txt --laser 532 --exportar resultados/\n"
+            "  ramancarbon laseres m_532.txt m_633.txt\n"
             "  ramancarbon bd --banda 2D --laser 785\n"
             "  ramancarbon demo salida/\n"
         ),
@@ -398,6 +541,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="guardar la figura resumen (.png, .pdf, .svg)")
     p.add_argument("--procesado", default=None, metavar="ARCHIVO",
                    help="guardar el espectro ya preprocesado")
+    p.add_argument("--exportar", default=None, metavar="CARPETA",
+                   help="exportar todo a una carpeta: informe, tabla de "
+                        "componentes, curvas de la deconvolución, espectro "
+                        "procesado y JSON completo")
+    p.add_argument("--separador", default=",", metavar="CAR",
+                   help="separador de columnas en los CSV (usa ';' si tu hoja "
+                        "de cálculo está en configuración española)")
     _add_common(p)
     p.set_defaults(func=cmd_analizar)
 
@@ -409,6 +559,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="buscar también en subcarpetas")
     p.add_argument("--material", default=None, metavar="CLAVE",
                    help="forzar el material de referencia")
+    p.add_argument("--separador", default=",", metavar="CAR",
+                   help="separador de columnas del CSV")
     _add_common(p)
     p.set_defaults(func=cmd_lote)
 
@@ -422,8 +574,34 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--metalico", action="store_true",
                    help="para el modelo swcnt_g: ajustar G⁻ con perfil "
                         "Breit-Wigner-Fano (tubos metálicos)")
+    p.add_argument("--exportar", default=None, metavar="CARPETA",
+                   help="exportar la tabla de componentes y las curvas")
+    p.add_argument("--separador", default=",", metavar="CAR",
+                   help="separador de columnas de los CSV")
     _add_common(p)
     p.set_defaults(func=cmd_deconvolucionar)
+
+    p = sub.add_parser(
+        "laseres",
+        help="combinar el mismo material medido a varias excitaciones",
+        description=(
+            "Mide la dispersión de cada banda a partir de dos o más láseres. "
+            "Eso permite tres cosas imposibles con uno solo: distinguir una "
+            "banda de doble resonancia de una impostora que no se desplaza, "
+            "detectar carbono amorfo por la dispersión de la banda G (cero en "
+            "grafito, 6–10 cm⁻¹/eV en amorfo), y comprobar que las dos "
+            "excitaciones dan el mismo tamaño de cristalito."
+        ),
+    )
+    p.add_argument("espectros", nargs="+",
+                   help="dos o más archivos del MISMO material a láseres "
+                        "distintos; cada uno debe indicar el suyo en la cabecera")
+    p.add_argument("--tolerancia", type=float, default=15.0, metavar="CM1_EV",
+                   help="margen en cm⁻¹/eV para dar por buena una dispersión "
+                        "(por defecto 15, generoso a propósito: con dos láseres "
+                        "la pendiente es una estimación de dos puntos)")
+    _add_common(p)
+    p.set_defaults(func=cmd_laseres)
 
     p = sub.add_parser("bd", help="consultar la base de datos de literatura")
     p.add_argument("--banda", default=None, metavar="CLAVE",
@@ -432,6 +610,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="listar los materiales de referencia")
     p.add_argument("--rbm", action="store_true",
                    help="listar las parametrizaciones RBM↔diámetro")
+    p.add_argument("--dopantes", action="store_true",
+                   help="listar las firmas de dopado (N, S, O, P, Se, B) y "
+                        "cómo leerlas")
     p.add_argument("--laser", type=float, default=None, metavar="NM",
                    help="mostrar las posiciones corregidas a este láser")
     p.set_defaults(func=cmd_bd)

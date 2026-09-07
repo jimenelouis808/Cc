@@ -40,6 +40,8 @@ from .plots import (
 )
 from .state import (
     BASELINE_METHODS,
+    BASES,
+    DECONVOLUTION_PROFILES,
     NORMALISATIONS,
     Session,
     laser_choices,
@@ -88,6 +90,24 @@ class RamanCarbonApp:
         self._peak_rows: list[dict] = []
         self._canvases: dict[str, Any] = {}
         self._figures: dict[str, Any] = {}
+        # Redrawing every canvas on every selection change is the single
+        # slowest thing the interface does: five matplotlib figures over a
+        # 3000-point spectrum. Instead each canvas is marked dirty and only
+        # the one on screen is actually drawn; the rest are drawn when their
+        # tab is opened.
+        self._dirty: set[str] = set()
+        # Tab index -> the canvases that tab shows. Anything not listed has
+        # no matplotlib figure and costs nothing to refresh.
+        self._tab_canvases = {
+            0: ("spectrum",),   # Espectro
+            1: ("fit",),        # Deconvolución
+            2: (),              # Informe
+            3: (),              # Índices
+            4: ("diameters",),  # Diámetros
+            5: (),              # Multiláser
+            6: ("overlay",),    # Comparación
+            7: (),              # Base de datos
+        }
 
         self._build_header()
         self._build_body()
@@ -135,10 +155,13 @@ class RamanCarbonApp:
 
         self.notebook = ttk.Notebook(body)
         self.notebook.pack(side="left", fill="both", expand=True)
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
         self._build_tab_spectrum()
         self._build_tab_deconvolution()
         self._build_tab_report()
+        self._build_tab_indices()
         self._build_tab_diameters()
+        self._build_tab_lasers()
         self._build_tab_batch()
         self._build_tab_database()
 
@@ -251,6 +274,13 @@ class RamanCarbonApp:
                            "la línea base.")
         outer.pack(fill="both", expand=True)
 
+        ttk.Button(body, text="Elegir parámetros automáticamente",
+                   style="Accent.TButton",
+                   command=self._auto_preprocess).pack(fill="x", pady=(0, PAD["xs"]))
+        hint(body, "Rellena los campos de abajo con valores deducidos del "
+                   "propio espectro y explica cada decisión. Después puedes "
+                   "cambiar cualquiera a mano: lo que toques manda.", wrap=290)
+
         self.despike_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(body, text="Eliminar rayos cósmicos",
                         variable=self.despike_var).pack(anchor="w")
@@ -291,6 +321,13 @@ class RamanCarbonApp:
         separator(body)
         ttk.Button(body, text="Aplicar preprocesado", style="Accent.TButton",
                    command=self._apply_preprocess).pack(fill="x")
+
+        from .widgets import scrolled_text
+
+        explain, explain_body = card(controls, "Por qué estos valores")
+        explain.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        self.auto_text = scrolled_text(explain_body, self.palette,
+                                       self.fonts["small"], height=10, width=34)
 
         plot_area, plot_body = card(tab, None)
         plot_area.pack(side="left", fill="both", expand=True)
@@ -342,6 +379,25 @@ class RamanCarbonApp:
                                         state="readonly",
                                         values=["none", "constant", "linear", "quadratic"]))
 
+        self.profile_var = tk.StringVar(value=DECONVOLUTION_PROFILES[1][1])
+        labelled(body, "Perfil",
+                 lambda p: ttk.Combobox(p, textvariable=self.profile_var, width=30,
+                                        state="readonly",
+                                        values=[t for _, t in DECONVOLUTION_PROFILES]))
+        hint(body, "Pseudo-Voigt contiene la gaussiana y la lorentziana como "
+                   "casos particulares: en vez de imponer la forma, el ajuste "
+                   "la mide y devuelve η. Cuesta un parámetro más por banda.",
+             wrap=320)
+
+        self.basis_var = tk.StringVar(value=BASES[0][1])
+        labelled(body, "Base de cocientes",
+                 lambda p: ttk.Combobox(p, textvariable=self.basis_var, width=30,
+                                        state="readonly",
+                                        values=[t for _, t in BASES]))
+        hint(body, "Para el mismo espectro, un I_D/I_G de áreas es 2–3 veces "
+                   "el de alturas. El programa da los dos, pero esta elección "
+                   "es la que se usa para L_a y para clasificar.", wrap=320)
+
         separator(body)
         ttk.Label(body, text="Componentes", style="Heading.TLabel").pack(anchor="w")
         hint(body, "Doble clic sobre una celda para editarla. La posición, la "
@@ -360,6 +416,8 @@ class RamanCarbonApp:
 
         ttk.Button(body, text="Ajustar", style="Accent.TButton",
                    command=self._fit_manual).pack(fill="x", pady=PAD["sm"])
+        ttk.Button(body, text="Exportar componentes y curvas…",
+                   command=self._export_fit).pack(fill="x")
 
         right = ttk.Frame(tab)
         right.pack(side="left", fill="both", expand=True)
@@ -392,7 +450,9 @@ class RamanCarbonApp:
         ttk.Button(toolbar, text="Guardar informe…",
                    command=self._save_report).pack(side="left", padx=(0, PAD["xs"]))
         ttk.Button(toolbar, text="Guardar figura…",
-                   command=self._save_figure).pack(side="left")
+                   command=self._save_figure).pack(side="left", padx=(0, PAD["xs"]))
+        ttk.Button(toolbar, text="Exportar todo…", style="Accent.TButton",
+                   command=self._export_all).pack(side="left")
 
         outer, body = card(tab, None)
         outer.pack(fill="both", expand=True)
@@ -419,6 +479,59 @@ class RamanCarbonApp:
         bottom.pack(fill="x", pady=(PAD["sm"], 0))
         self.diameter_text = scrolled_text(bottom_body, self.palette,
                                            self.fonts["mono"], height=12)
+
+    def _build_tab_indices(self) -> None:
+        from .widgets import card, hint, scrolled_text
+
+        ttk = self.ttk
+        tab = ttk.Frame(self.notebook, padding=PAD["md"])
+        self.notebook.add(tab, text="  Índices  ")
+
+        outer, body = card(
+            tab, "Índices estructurales",
+            "I_D/I_G no crece de forma monótona con el desorden: sube, alcanza "
+            "un máximo y vuelve a bajar. Estos índices responden a lo que ese "
+            "cociente no puede.",
+        )
+        outer.pack(fill="both", expand=True)
+        hint(body, "Γ_G, la anchura de la banda G, sí es monótona en todo el "
+                   "rango de desorden. En una muestra muy desordenada — un "
+                   "MWCNT, una nanofibra, algo dopado con fuerza — es el número "
+                   "más útil y el que menos se publica.", wrap=900)
+        self.indices_text = scrolled_text(body, self.palette, self.fonts["mono"],
+                                          height=22)
+
+    def _build_tab_lasers(self) -> None:
+        from .widgets import card, hint, scrolled_text
+
+        ttk = self.ttk
+        tab = ttk.Frame(self.notebook, padding=PAD["md"])
+        self.notebook.add(tab, text="  Multiláser  ")
+
+        toolbar = ttk.Frame(tab)
+        toolbar.pack(fill="x", pady=(0, PAD["sm"]))
+        ttk.Button(toolbar, text="Combinar excitaciones", style="Accent.TButton",
+                   command=self._combine_lasers).pack(side="left")
+
+        outer, body = card(
+            tab, "El mismo material a 532 y 633 nm",
+            "Medir a dos láseres permite tres cosas imposibles con uno solo.",
+        )
+        outer.pack(fill="both", expand=True)
+        hint(body,
+             "1) Distinguir una banda real de una impostora: la D se desplaza "
+             "~50 cm⁻¹/eV, y casi nada más lo hace — una línea fija cerca de "
+             "1332 cm⁻¹ es diamante, no D.   "
+             "2) Detectar carbono amorfo: la banda G NO dispersa en grafito, y "
+             "sí lo hace (6–10 cm⁻¹/eV) cuando hay sp² amorfo.   "
+             "3) Comprobar que las dos medidas dan el mismo tamaño de "
+             "cristalito, ya que I_D/I_G escala como λ⁴.", wrap=900)
+        hint(body,
+             "Los espectros se agrupan por nombre quitando la longitud de onda: "
+             "«muestra_532nm» y «muestra_633nm» van juntos. Analízalos primero.",
+             wrap=900)
+        self.lasers_text = scrolled_text(body, self.palette, self.fonts["mono"],
+                                         height=20)
 
     def _build_tab_batch(self) -> None:
         from .widgets import card, hint, table
@@ -680,6 +793,47 @@ class RamanCarbonApp:
             settings.baseline_p = float(self.p_var.get())
         except ValueError:
             settings.baseline_p = 0.001
+        analysis = self.session.analysis_settings
+        analysis.basis = _key_for_label(BASES, self.basis_var.get())
+        analysis.profile = (
+            _key_for_label(DECONVOLUTION_PROFILES, self.profile_var.get()) or None
+        )
+
+    def _auto_preprocess(self) -> None:
+        """Fill the preprocessing controls with values chosen from the data."""
+        from .widgets import set_text
+
+        item = self.session.active
+        if item is None:
+            self._warn("Sin espectro", "Carga y selecciona un espectro primero.")
+            return
+        self._settings_from_widgets()
+        reasons = self.session.preprocess_settings.apply_auto(item.raw)
+        self._widgets_from_settings()
+        set_text(
+            self.auto_text,
+            "\n\n".join(f"• {text}" for text in reasons.values())
+            + "\n\nPuedes cambiar cualquiera de estos valores a mano; lo que "
+              "toques tiene prioridad.",
+        )
+        self._apply_preprocess()
+
+    def _widgets_from_settings(self) -> None:
+        """Push the settings object back into the controls.
+
+        The automatic mode writes into the same fields the user edits,
+        rather than bypassing them, so that what was chosen is visible and
+        adjustable instead of hidden.
+        """
+        settings = self.session.preprocess_settings
+        self.despike_var.set(settings.despike)
+        self.smooth_var.set(settings.smooth_window)
+        self.lam_var.set(f"{settings.baseline_lam:.3g}")
+        self.p_var.set(f"{settings.baseline_p:g}")
+        for key, label in BASELINE_METHODS:
+            if key == settings.baseline_method:
+                self.baseline_var.set(label)
+                break
 
     def _apply_preprocess(self) -> None:
         if self.session.active is None:
@@ -792,6 +946,7 @@ class RamanCarbonApp:
         if self.session.active is None:
             self._warn("Sin espectro", "Carga y selecciona un espectro primero.")
             return
+        self._settings_from_widgets()
         key = _key_for_label(preset_choices(), self.preset_var.get())
         try:
             specs = self.session.preset_specs(key)
@@ -939,12 +1094,44 @@ class RamanCarbonApp:
     # ==================================================================
     # drawing
     # ==================================================================
+    def _on_tab_changed(self, _event=None) -> None:
+        """Draw whatever the newly visible tab needs, and nothing else."""
+        self._flush_dirty()
+
+    def _visible_canvases(self) -> tuple[str, ...]:
+        try:
+            index = self.notebook.index(self.notebook.select())
+        except Exception:  # pragma: no cover - during construction
+            return ()
+        return self._tab_canvases.get(index, ())
+
+    def _flush_dirty(self) -> None:
+        """Redraw the dirty canvases that are actually on screen."""
+        drawers = {
+            "spectrum": self._draw_spectrum,
+            "fit": self._draw_fit,
+            "diameters": self._draw_diameters,
+            "overlay": self._draw_overlay,
+        }
+        for key in self._visible_canvases():
+            if key in self._dirty:
+                self._dirty.discard(key)
+                draw = drawers.get(key)
+                if draw is not None:
+                    draw()
+
     def _redraw_all(self) -> None:
-        self._draw_spectrum()
-        self._draw_fit()
+        """Mark everything stale; draw only what the user can see.
+
+        The text panels are cheap and are refreshed immediately; the
+        matplotlib canvases are deferred to :meth:`_flush_dirty`.
+        """
+        self._dirty.update(self._figures)
         self._draw_report()
-        self._draw_diameters()
+        self._draw_indices()
         self._draw_batch()
+        self._draw_diameter_text()
+        self._flush_dirty()
 
     def _with_style(self, key: str, draw: Callable) -> None:
         import matplotlib
@@ -1015,24 +1202,11 @@ class RamanCarbonApp:
             return
         set_text(self.report_text, item.result.report())
 
-    def _draw_diameters(self) -> None:
+    def _draw_diameter_text(self) -> None:
         from .widgets import set_text
 
         item = self.session.active
         result = item.result if item else None
-
-        def draw(figure):
-            left, right = figure.axes[0], figure.axes[1]
-            if result is None:
-                _placeholder(left, "Analiza un espectro", self.palette)
-                right.set_axis_off()
-                return
-            plot_rbm(left, result, self.palette)
-            plot_strain_doping(right, result, self.palette)
-            figure.subplots_adjust(left=0.09, right=0.98, top=0.90, bottom=0.14)
-
-        self._with_style("diameters", draw)
-
         if result is None:
             set_text(self.diameter_text, "")
             return
@@ -1053,6 +1227,32 @@ class RamanCarbonApp:
             lines.append(f"Desdoblamiento G  →  d = {result.g_split_diameter}")
             lines.extend("  ⚠ " + w for w in result.g_split_diameter.warnings)
         set_text(self.diameter_text, "\n".join(lines))
+
+    def _draw_indices(self) -> None:
+        from .widgets import set_text
+
+        item = self.session.active
+        if item is None or item.result is None or item.result.indices is None:
+            set_text(self.indices_text,
+                     "Pulsa «Analizar» para calcular los índices estructurales.")
+            return
+        set_text(self.indices_text, item.result.indices.summary())
+
+    def _draw_diameters(self) -> None:
+        item = self.session.active
+        result = item.result if item else None
+
+        def draw(figure):
+            left, right = figure.axes[0], figure.axes[1]
+            if result is None:
+                _placeholder(left, "Analiza un espectro", self.palette)
+                right.set_axis_off()
+                return
+            plot_rbm(left, result, self.palette)
+            plot_strain_doping(right, result, self.palette)
+            figure.subplots_adjust(left=0.09, right=0.98, top=0.90, bottom=0.14)
+
+        self._with_style("diameters", draw)
 
     def _draw_batch(self) -> None:
         from .widgets import fill_table
@@ -1116,6 +1316,72 @@ class RamanCarbonApp:
             figure = figure_for_report(item.result, self.palette)
             figure.savefig(path)
         self._set_status(f"Figura guardada en {path}")
+
+    def _export_fit(self) -> None:
+        """Write the components and curves of whichever fit is on screen."""
+        from tkinter import filedialog
+
+        item = self.session.active
+        if item is None:
+            self._warn("Sin espectro", "Carga y selecciona un espectro primero.")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Exportar deconvolución",
+            defaultextension=".csv",
+            initialfile=f"{item.name}",
+            filetypes=[("CSV", "*.csv"), ("Todos los archivos", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            written = self.session.export_fit(path)
+        except ValueError as exc:
+            self._warn("Nada que exportar", str(exc))
+            return
+        self._set_status("Exportado: " + ", ".join(p.name for p in written))
+
+    def _export_all(self) -> None:
+        """Write the report, tables, curves, spectrum and JSON to a folder."""
+        from tkinter import filedialog
+
+        item = self.session.active
+        if item is None or item.result is None:
+            self._warn("Nada que exportar", "Analiza un espectro primero.")
+            return
+        folder = filedialog.askdirectory(title="Carpeta de destino")
+        if not folder:
+            return
+        try:
+            written = self.session.export_active(folder)
+        except ValueError as exc:
+            self._warn("Nada que exportar", str(exc))
+            return
+        self._set_status(f"{len(written)} archivos escritos en {folder}")
+
+    def _combine_lasers(self) -> None:
+        """Combine analysed spectra of the same sample at different lasers."""
+        from .widgets import set_text
+
+        groups = self.session.excitation_groups()
+        if not groups:
+            set_text(
+                self.lasers_text,
+                "No hay ningún grupo que combinar.\n\n"
+                "Hacen falta al menos dos espectros ANALIZADOS del mismo "
+                "material, con longitudes de onda distintas y conocidas, y "
+                "cuyos nombres coincidan al quitarles la longitud de onda "
+                "(por ejemplo «muestra_532nm» y «muestra_633nm»).",
+            )
+            return
+        blocks: list[str] = []
+        for stem, items in groups.items():
+            lasers = ", ".join(f"{i.raw.laser_nm:g} nm" for i in items)
+            combined = self.session.combine_excitations(items)
+            blocks.append(f"═══ {stem}  ({lasers}) ═══")
+            blocks.append(combined.summary() if combined else "no se pudo combinar")
+            blocks.append("")
+        set_text(self.lasers_text, "\n".join(blocks))
+        self._set_status(f"{len(groups)} grupo(s) combinado(s).")
 
     def _export_csv(self) -> None:
         from tkinter import filedialog

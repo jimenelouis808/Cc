@@ -62,7 +62,7 @@ bands.
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 from scipy import sparse

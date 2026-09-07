@@ -656,25 +656,43 @@ def _merge_swcnt_g(
 # ----------------------------------------------------------------------
 # report rendering
 # ----------------------------------------------------------------------
-def _rule(title: str) -> str:
+class _Sections:
+    """Numbers the report's sections as they are actually emitted.
+
+    Hardcoded numbers went wrong the moment a section became conditional:
+    the layer count only appears for graphene-like material, so every other
+    report jumped from 6 straight to 8.
+    """
+
+    def __init__(self) -> None:
+        self.count = 0
+
+    def __call__(self, title: str) -> str:
+        self.count += 1
+        heading = f"{self.count}. {title}"
+        return f"\n{heading}\n{'─' * max(len(heading), 8)}"
+
+
+def _plain_rule(title: str) -> str:
     return f"\n{title}\n{'─' * max(len(title), 8)}"
 
 
 def build_report(result: AnalysisResult, verbose: bool = True) -> str:
     """Render an :class:`AnalysisResult` as plain text."""
+    section = _Sections()
     lines: list[str] = []
     lines.append("═" * 72)
     lines.append(f"  ANÁLISIS RAMAN — {result.raw.name}")
     lines.append("═" * 72)
     lines.append(result.processed.describe())
 
-    lines.append(_rule("1. IDENTIFICACIÓN"))
+    lines.append(section("IDENTIFICACIÓN"))
     lines.append(result.classification.summary())
 
-    lines.append(_rule("2. BANDAS IDENTIFICADAS"))
+    lines.append(section("BANDAS IDENTIFICADAS"))
     lines.append(result.assignment.summary())
 
-    lines.append(_rule("3. DECONVOLUCIÓN D–G"))
+    lines.append(section("DECONVOLUCIÓN D–G"))
     if result.comparison:
         lines.append(result.comparison.summary())
         lines.append("")
@@ -682,7 +700,7 @@ def build_report(result: AnalysisResult, verbose: bool = True) -> str:
     else:
         lines.append("no realizada")
 
-    lines.append(_rule("4. COCIENTES DE INTENSIDAD"))
+    lines.append(section("COCIENTES DE INTENSIDAD"))
     lines.append(f"base: {result.basis} (áreas integradas)" if result.basis == "area"
                  else f"base: {result.basis} (alturas de pico)")
     for entry in result.ratios.values():
@@ -695,10 +713,10 @@ def build_report(result: AnalysisResult, verbose: bool = True) -> str:
         lines.append(result.defects.summary())
 
     if result.indices is not None:
-        lines.append(_rule("5. ÍNDICES ESTRUCTURALES"))
+        lines.append(section("ÍNDICES ESTRUCTURALES"))
         lines.append(result.indices.summary())
 
-    lines.append(_rule("6. DIÁMETROS"))
+    lines.append(section("DIÁMETROS"))
     if not result.rbm.covered:
         lines.append(result.rbm.note)
     elif not result.rbm.diameters:
@@ -733,17 +751,17 @@ def build_report(result: AnalysisResult, verbose: bool = True) -> str:
             lines.append("      " + _cross_check(result))
 
     if result.layer_count:
-        lines.append(_rule("7. NÚMERO DE CAPAS"))
+        lines.append(section("NÚMERO DE CAPAS"))
         verdict, reasons = result.layer_count
         lines.append(f"  {verdict}")
         lines.extend("    – " + r for r in reasons)
 
     if result.shifts:
-        lines.append(_rule("8. DESPLAZAMIENTOS RESPECTO A LA REFERENCIA"))
+        lines.append(section("DESPLAZAMIENTOS RESPECTO A LA REFERENCIA"))
         lines.append(result.shifts.summary())
 
     if result.warnings:
-        lines.append(_rule("AVISOS"))
+        lines.append(_plain_rule("AVISOS"))
         lines.extend("  ⚠ " + w for w in result.warnings)
 
     lines.append("")

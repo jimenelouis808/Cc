@@ -64,9 +64,11 @@ La ventana tiene la lista de espectros a la izquierda y seis pestañas:
 | Pestaña | Para qué |
 |---------|----------|
 | **Espectro** | Cargar, preprocesar y ver qué ha hecho el preprocesado |
-| **Deconvolución** | Montar el modelo de bandas, ajustarlo y mirar el residuo |
+| **Deconvolución** | Montar el modelo de bandas, ajustarlo, mirar el residuo y exportarlo |
 | **Informe** | El análisis completo por escrito |
+| **Índices** | Γ_G, R1, R2, fracción amorfa, etapa de amorfización |
 | **Diámetros** | La región RBM y los diámetros que implica |
+| **Multiláser** | Combinar el mismo material medido a 532 y 633 nm |
 | **Comparación** | La tabla de todo el lote, y exportarla a CSV |
 | **Base de datos** | Qué cree el programa y de dónde lo ha sacado |
 
@@ -79,12 +81,41 @@ La ventana tiene la lista de espectros a la izquierda y seis pestañas:
    Esto no es un detalle: sin el láser no se corrigen las posiciones por
    dispersión, no se puede calcular el tamaño de cristalito, y los
    desplazamientos de D y 2D no significan nada.
-3. En **Espectro**, ajusta el preprocesado si hace falta y pulsa **Aplicar
-   preprocesado**. Verás el espectro original en gris detrás y la línea base
-   propuesta encima, para que puedas comprobar que no se está comiendo
-   ninguna banda.
-4. Pulsa **Analizar** (o **Analizar todos** para el lote). El programa salta
+3. En **Espectro**, pulsa **Elegir parámetros automáticamente**. Rellena los
+   campos con valores deducidos del espectro y explica cada decisión en el
+   recuadro de abajo. Puedes cambiar cualquiera a mano después: lo que
+   toques manda sobre lo automático. Luego **Aplicar preprocesado**.
+
+   Verás el espectro original en gris detrás y la línea base propuesta
+   encima, para comprobar que no se está comiendo ninguna banda.
+4. En **Deconvolución**, elige el **perfil**. Para espectros reales,
+   ruidosos, pseudo-Voigt es la opción sensata: contiene la gaussiana y la
+   lorentziana como casos particulares, así que el ajuste mide la forma en
+   vez de que tú la impongas, y te devuelve η.
+
+5. Pulsa **Analizar** (o **Analizar todos** para el lote). El programa salta
    solo a la pestaña **Informe**.
+
+6. Para sacar los datos: **Exportar todo…** en la pestaña *Informe* escribe
+   el informe, la tabla de componentes, las curvas de la deconvolución
+   (una columna por banda, para redibujar en Origin), el espectro procesado
+   y un JSON completo. En *Deconvolución* hay un botón que exporta solo el
+   ajuste.
+
+### Si mides a dos láseres
+
+Nombra los archivos con la longitud de onda: `muestra_532nm.txt` y
+`muestra_633nm.txt`. Analiza los dos, ve a **Multiláser** y pulsa
+**Combinar excitaciones**. Eso te da tres cosas que con un solo láser no
+puedes tener:
+
+* si una banda **no se desplaza**, no es de doble resonancia — una línea
+  fija cerca de 1332 cm⁻¹ es diamante, no la banda D;
+* la **dispersión de la banda G**, que es cero en material grafítico y
+  6–10 cm⁻¹/eV cuando hay carbono amorfo;
+* la comprobación de que las dos medidas dan el **mismo tamaño de
+  cristalito**, ya que I_D/I_G escala como λ⁴ (a 633 nm sale ~2 veces el de
+  532 nm en la misma muestra).
 
 ### Si tienes una muestra de control
 
@@ -165,6 +196,13 @@ hay que revisarlo.
 corregir. Y ojo con la **rama**: si la banda G es ancha, estás en la zona de
 amorfización, donde un I_D/I_G *menor* significa *más* desorden, no menos.
 
+**Índices.** Si tus muestras están muy desordenadas — MWCNT, nanofibras,
+dopado fuerte — mira **Γ_G** antes que I_D/I_G. Es la anchura de la banda G,
+y a diferencia del cociente crece de forma monótona con el desorden en todo
+el rango, así que no tiene la ambigüedad de las dos ramas. La sección
+también te dice en qué **etapa de amorfización** estás, que es lo que
+resuelve esa ambigüedad.
+
 **Diámetros.** Si el RBM y el desdoblamiento G no coinciden, el informe lo
 dice con un ✗ y explica qué revisar. No promedies: uno de los dos está mal.
 
@@ -188,7 +226,21 @@ arriba. Sin la zona de 100–350 cm⁻¹ no se puede distinguir pared simple o
 doble de multipared, ni sacar diámetros por RBM.
 
 **La línea base se come el valle entre D y G** — sube la *Rigidez (λ)* en la
-pestaña *Espectro*. De `1e7` a `1e8`, por ejemplo.
+pestaña *Espectro*, o pulsa *Elegir parámetros automáticamente*, que la
+calcula a partir de la anchura de tus bandas. Ojo: λ depende del **paso de
+muestreo**, así que un valor copiado de un artículo casi nunca sirve — entre
+1 y 4 cm⁻¹ por punto hay un factor 256.
+
+**Mucha fluorescencia** — el modo automático avisa si el fondo varía tan
+rápido como las bandas. En ese caso ninguna línea base los separa bien:
+recorta el extremo de bajo desplazamiento, cambia de láser (a 633 nm suele
+haber mucha menos fluorescencia que a 532), o fotoblanquea la muestra antes
+de medir.
+
+**Normalicé a 0–100 y los cocientes cambiaron** — es esperable y el programa
+lo avisa. A diferencia de las demás, esa normalización resta un
+desplazamiento además de escalar, y un desplazamiento no se cancela en un
+cociente. Resta la línea base primero.
 
 **El ajuste no converge o sale raro** — normalmente sobran componentes.
 Pulsa *Comparar modelos* y usa el que gane. Si el material es un nanotubo,

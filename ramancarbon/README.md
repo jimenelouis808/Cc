@@ -94,12 +94,12 @@ print(result.classification.label, result.classification.confidence)
 
 | Módulo | Qué contiene |
 |--------|--------------|
-| `core` | Contenedor `Spectrum`, lectores de archivo, línea base, eliminación de rayos cósmicos, detección de picos |
+| `core` | Contenedor `Spectrum`, lectores de archivo, líneas base (asLS, arPLS, polinómica, banda elástica) con **elección automática de parámetros**, eliminación de rayos cósmicos, detección de picos |
 | `models` | Lorentziana, gaussiana, pseudo-Voigt y **Breit-Wigner-Fano**; motor de ajuste con límites; preajustes de deconvolución (2 a 5 bandas, región G de nanotubo, RBM, 2D) |
 | `database` | Bandas y dispersiones, 13 materiales de referencia, 5 parametrizaciones RBM, firmas de dopado y deformación — todo en JSON con su fuente |
-| `analysis` | Asignación de bandas, cocientes, diámetros, desplazamientos, clasificador |
+| `analysis` | Asignación de bandas, cocientes, **índices estructurales**, diámetros, desplazamientos, clasificador, **combinación multiláser**, **exportación** |
 | `gui` | Aplicación de escritorio Tkinter |
-| `cli` | `ramancarbon analizar / lote / deconvolucionar / bd / demo` |
+| `cli` | `ramancarbon analizar / lote / deconvolucionar / laseres / bd / demo` |
 
 ### Bandas y cocientes
 
@@ -107,6 +107,10 @@ Identifica RBM, D4, D, D3, G⁻, G, G⁺, D', M, iTOLA, D+D'', 2D, D+D', 2D' y
 la línea del diamante a 1332 cm⁻¹ — cada una con su ventana, su dispersión,
 su anchura típica y su origen físico.
 
+* **Γ_G (anchura de G)** → el índice que **sí** es monótono con el desorden
+  en todo el rango, de ~15 cm⁻¹ en grafito a >150 en carbono amorfo. En
+  material muy desordenado — MWCNT, nanofibras, muestras muy dopadas — es
+  el número más útil y el que menos se publica.
 * **I_D/I_G** → tamaño de cristalito `L_a` y densidad de defectos `n_D`
   (Cançado). Se informan **las dos ramas** de la relación de
   Tuinstra–Koenig, porque I_D/I_G no crece de forma monótona con el
@@ -120,9 +124,57 @@ su anchura típica y su origen físico.
   (~3.5), sustitucional (~1.3). Requiere deconvolución, porque D' es un
   hombro sobre G.
 
+* **R1 y R2 (Beyssac)** → parámetros de orden basados en áreas, mucho menos
+  sensibles que I_D/I_G a cómo el ajuste repartió la intensidad. El
+  termómetro geológico asociado a R2 se declara explícitamente **no
+  aplicable** a nanotubos.
+* **A_D3/A_G y A_D4/A_G** → fracción amorfa y fracción sp³/poliénica.
+* **Etapa de amorfización** (Ferrari–Robertson) → lee ω_G junto a I_D/I_G
+  para decir si un I_D/I_G de 1.0 significa «grafito con defectos» o «casi
+  amorfo». Es lo que resuelve la ambigüedad de la rama.
+
 Cada cociente lleva su valor en **las dos bases** (áreas y alturas), porque
 la literatura cita unas veces una y otras veces la otra, y difieren en un
 factor 2–3.
+
+### Dos láseres: lo que 532 y 633 nm permiten y uno solo no
+
+```bash
+ramancarbon laseres muestra_532nm.txt muestra_633nm.txt
+```
+
+1. **Distinguir una banda real de una impostora.** La D se desplaza
+   ~50 cm⁻¹/eV; casi nada más lo hace. Una línea fija cerca de 1332 cm⁻¹ es
+   diamante, no la banda D.
+2. **Detectar carbono amorfo.** La banda G **no** dispersa en grafito ni en
+   grafito nanocristalino — es un modo del centro de zona. Solo dispersa
+   (6–10 cm⁻¹/eV) cuando hay sp² amorfo. Ninguna medida a un solo láser
+   puede ver esto, porque a una sola energía la G también se mueve por
+   dopado y por deformación.
+3. **Comprobar la corrección λ⁴.** I_D/I_G escala como λ⁴, así que el mismo
+   material da 0.98 a 532 nm y 1.99 a 633 nm — pero el `L_a` deducido debe
+   salir igual. Si no sale igual, o los puntos medidos no son el mismo, o
+   las bases de los cocientes no coinciden.
+
+### Preprocesado: automático, y editable
+
+```bash
+ramancarbon analizar muestra.txt --laser 532 --auto
+```
+
+El modo automático **escribe en los mismos campos que editarías a mano** y
+explica cada decisión, en vez de esconderlas:
+
+* **Suavizado**: no suaviza si la banda más intensa ya pasa de SNR 40, y
+  cuando suaviza limita la ventana a un tercio de la banda más estrecha
+  aunque el ruido justificara más — y lo dice.
+* **Línea base**: la rigidez sale de la función de transferencia del
+  suavizador de Whittaker, fijando el corte en cinco anchuras de banda. No
+  hay búsqueda ni ajuste empírico, y escala correctamente con el paso de
+  muestreo (el mismo material a 1 y a 4 cm⁻¹/punto necesita rigideces que
+  difieren en 256×).
+* Avisa cuando el fondo varía tan rápido como las bandas, caso en que
+  ninguna línea base puede separarlos.
 
 ### Diámetros
 
@@ -147,6 +199,21 @@ SWCNT de dos diámetros.
 
 Preajustes de 2, 3, 4 y 5 bandas (el modelo de Sadezky para hollín), un
 modelo específico de nanotubo con G⁻ y G⁺, y modelos para el RBM y la 2D.
+El perfil se elige para todas las componentes a la vez: **pseudo-Voigt**,
+gaussiana, lorentziana, o los valores por defecto de cada banda.
+
+Pseudo-Voigt con η libre contiene la gaussiana (η=0) y la lorentziana (η=1)
+como casos particulares, así que en vez de imponer la forma **el ajuste la
+mide** y devuelve η como resultado. Cuesta un parámetro más por banda.
+
+Todo se exporta: tabla de componentes con áreas, porcentajes e
+incertidumbres; las curvas punto a punto con una columna por componente para
+redibujarlas en Origin; y el JSON completo. Cada archivo lleva cabecera con
+el láser, el preprocesado y el modelo.
+
+```bash
+ramancarbon analizar muestra.txt --laser 532 --perfil pseudo_voigt --exportar resultados/
+```
 El número de componentes se elige por **criterio de información**, no por
 costumbre: añadir componentes siempre mejora el R², así que el R² no puede
 decidirlo.
@@ -178,9 +245,24 @@ la pareja (ω_G, ω_2D) en direcciones distintas del plano (pendientes 2.2 y
 * **La separación deformación/dopado está calibrada para grafeno
   monocapa.** En nanotubos y multipared da números que parecen precisos y no
   lo son; el programa lo avisa cada vez.
-* **Raman no separa las configuraciones del nitrógeno** (grafítico,
-  piridínico, pirrólico). Para eso hace falta XPS. La base de datos lo dice
-  en vez de fingir lo contrario.
+* **Raman no distingue MWCNT de nanofibra de carbono con fiabilidad.** Los
+  rangos de I_D/I_G y Γ_G se solapan casi por completo; la diferencia real
+  está en si los planos grafénicos son cilindros concéntricos o están
+  inclinados, y eso lo ve el TEM. El clasificador lo intenta con peso bajo y
+  avisa cuando cae en la zona de solape.
+* **Con dopantes grandes (S, P, Se) la lectura «la G sube = dopado»
+  falla.** El enlace C–X es mucho más largo que el C–C (1.78 Å para C–S
+  frente a 1.42), y la deformación local que eso introduce ablanda la G
+  contra la transferencia de carga que la endurece. Las dos contribuciones
+  son comparables y de signo contrario, así que los rangos de esos dopantes
+  cruzan el cero y llevan confianza baja.
+* **Las nanopartículas metálicas y el efecto SERS todavía no se tratan.**
+  El archivo de datos existe pero nada lo lee aún.
+* **Raman no separa las configuraciones de un mismo dopante** (nitrógeno
+  grafítico / piridínico / pirrólico; azufre tiofénico / sulfóxido) **y no
+  cuantifica el contenido de dopante.** Eso es XPS. Lo que Raman aporta y
+  XPS no es el **tipo** de defecto (por I_D/I_D′) y el **signo** de la
+  transferencia de carga (por el par ΔG, Δ2D).
 * **Calibra tu equipo** en la misma sesión (la línea de 520.7 cm⁻¹ del
   silicio) antes de interpretar desplazamientos de pocos cm⁻¹: la deriva
   típica de un espectrómetro es de ese mismo orden. Y comprueba la potencia

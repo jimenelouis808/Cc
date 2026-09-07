@@ -90,6 +90,14 @@ incorrecto durante el desarrollo. Están cubiertas por pruebas.
 * **La asignación se compone de todas las regiones ajustadas más el
   detector de picos.** Si solo se pasa el ajuste D–G, la banda 2D queda sin
   asignar y el clasificador concluye que no hay red conjugada.
+* **`background_mask` detrenda antes de ordenar.** Ordenar por intensidad
+  bruta en un espectro fluorescente marca solo el extremo lejano y excluye
+  justo la zona de pendiente fuerte, que es donde una línea base falla.
+* **La rigidez sale del corte del suavizador de Whittaker**, no de una
+  búsqueda. Ver `CLAUDE.md` para por qué la búsqueda no funciona.
+* **`_tab_canvases` indexa por el orden en que se AÑADEN las pestañas**, no
+  por el orden en que están definidos los métodos en el archivo. Hay una
+  prueba que lo comprueba.
 
 ## Dónde tocar cada cosa
 
@@ -105,6 +113,9 @@ incorrecto durante el desarrollo. Están cubiertas por pruebas.
 | Un formato de archivo | `core/io.py` |
 | Una pestaña de la interfaz | `gui/app.py` (widgets) + `gui/state.py` (lógica) |
 | Un subcomando | `cli/main.py` |
+| Un índice estructural | `analysis/indices.py` |
+| Una firma de dopante | `database/data/perturbations.json` → `dopants` |
+| Un formato de exportación | `analysis/export.py` |
 
 ## Pruebas
 
@@ -130,7 +141,11 @@ alas no lorentzianas.
 Lo que haría falta para cerrarlo:
 
 * Un conjunto de espectros medidos con composición conocida por otra
-  técnica (TEM para el número de paredes, XPS para el dopado).
+  técnica (TEM para el número de paredes y para separar MWCNT de nanofibra,
+  XPS para el dopado y su configuración).
+* Los rangos de S, P y Se en la base de datos son extrapolaciones razonadas
+  desde muy poca literatura, no compilaciones de medidas. El de selenio en
+  particular es una hipótesis.
 * Contrastar los diámetros por RBM con TEM sobre la misma muestra.
 * Comprobar la separación deformación/dopado sobre grafeno con dopado
   electroquímico controlado.

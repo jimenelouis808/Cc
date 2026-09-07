@@ -268,3 +268,128 @@ def test_gui_package_imports_without_tkinter():
     import ramancarbon.gui as gui
 
     assert callable(gui.main)
+
+
+# -- session: auto preprocessing, profiles, grouping, exports ----------
+def test_auto_settings_write_into_the_editable_fields():
+    """The automatic mode must fill the same controls the user edits, not
+    bypass them, so that its choices are visible and adjustable."""
+    from ramancarbon.gui.state import PreprocessSettings
+
+    settings = PreprocessSettings()
+    before = settings.baseline_lam
+    reasons = settings.apply_auto(make_demo("MWCNT", seed=30, noise=40.0))
+    assert set(reasons) == {"despike", "smooth", "baseline"}
+    assert settings.baseline_lam != before or settings.smooth_window > 0
+    assert settings.auto_reasons == reasons
+
+
+def test_session_profile_reaches_the_preset_specs():
+    session = Session()
+    session.add(make_demo("MWCNT", seed=31))
+    session.analysis_settings.profile = "gaussian"
+    assert all(s.profile == "gaussian" for s in session.preset_specs("three_band"))
+
+
+def test_session_profile_reaches_the_analysis():
+    session = Session()
+    session.add(make_demo("MWCNT", seed=32))
+    session.analysis_settings.profile = "pseudo_voigt"
+    session.analyse_all()
+    assert session.active.result.profile == "pseudo_voigt"
+
+
+@pytest.mark.parametrize(
+    "name, laser, expected",
+    [
+        ("muestra_532nm", 532.0, "muestra"),
+        ("demo_MWCNT_532nm", 532.0, "demo_MWCNT"),
+        ("CNT_900C_633nm", 633.0, "CNT_900C"),
+        ("x_514.5nm", 514.5, "x"),
+        ("sinlaser", 532.0, "sinlaser"),
+    ],
+)
+def test_only_the_spectrum_own_wavelength_is_stripped(name, laser, expected):
+    """An annealing temperature looks exactly like a laser line; removing
+    only the wavelength the spectrum reports keeps it."""
+    from ramancarbon.gui.state import strip_laser_from_name
+
+    assert strip_laser_from_name(name, laser) == expected
+
+
+def test_excitation_groups_pair_the_same_sample():
+    session = Session()
+    for laser in (532.0, 633.0):
+        spectrum = make_demo("MWCNT", laser_nm=laser, seed=33)
+        spectrum.name = f"muestra_{laser:.0f}nm"
+        session.add(spectrum)
+    session.analyse_all()
+    groups = session.excitation_groups()
+    assert list(groups) == ["muestra"]
+    combined = session.combine_excitations(groups["muestra"])
+    assert combined.dispersions["D"].slope == pytest.approx(50.0, abs=12.0)
+
+
+def test_excitation_groups_ignore_a_lone_wavelength():
+    session = Session()
+    session.add(make_demo("MWCNT", seed=34))
+    session.analyse_all()
+    assert session.excitation_groups() == {}
+
+
+def test_export_active_writes_the_whole_set(tmp_path):
+    session = Session()
+    session.add(make_demo("MWCNT", seed=35))
+    session.analyse_all()
+    written = session.export_active(tmp_path)
+    assert len(written) == 5
+    assert all(p.stat().st_size > 100 for p in written)
+
+
+def test_export_fit_needs_a_fit(tmp_path):
+    session = Session()
+    session.add(make_demo("MWCNT", seed=36))
+    with pytest.raises(ValueError, match="ajuste"):
+        session.export_fit(tmp_path / "x.csv")
+
+
+def test_export_active_needs_an_analysis(tmp_path):
+    session = Session()
+    session.add(make_demo("MWCNT", seed=37))
+    with pytest.raises(ValueError, match="analiza"):
+        session.export_active(tmp_path)
+
+
+# -- cli additions ------------------------------------------------------
+def test_cli_auto_and_profile_and_export(tmp_path, capsys):
+    assert main(["demo", str(tmp_path / "d"), "--material", "MWCNT"]) == 0
+    capsys.readouterr()
+    path = next((tmp_path / "d").glob("*.txt"))
+    out = tmp_path / "exp"
+    assert main(["analizar", str(path), "--laser", "532", "--auto",
+                 "--perfil", "pseudo_voigt", "--normalizar", "0-100",
+                 "--exportar", str(out)]) == 0
+    text = capsys.readouterr().out
+    assert "ÍNDICES ESTRUCTURALES" in text
+    assert len(list(out.glob("*"))) == 5
+
+
+def test_cli_multi_laser(tmp_path, capsys):
+    data = tmp_path / "d"
+    assert main(["demo", str(data), "--material", "MWCNT"]) == 0
+    assert main(["demo", str(data), "--material", "MWCNT", "--laser", "633"]) == 0
+    capsys.readouterr()
+    files = sorted(data.glob("*.txt"))
+    assert main(["laseres", *[str(f) for f in files]]) == 0
+    out = capsys.readouterr().out
+    assert "Dispersión de las bandas" in out
+    assert "L_a" in out
+
+
+def test_cli_dopant_listing(capsys):
+    assert main(["bd", "--dopantes"]) == 0
+    out = capsys.readouterr().out
+    for key in ("S_thiophenic", "P_substitutional", "Se_substitutional",
+                "O_epoxy_hydroxyl", "N_graphitic"):
+        assert key in out
+    assert "CÓMO LEER ESTO" in out

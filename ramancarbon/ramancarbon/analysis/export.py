@@ -26,10 +26,9 @@ record of which baseline produced them is not a result.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 import numpy as np
 
