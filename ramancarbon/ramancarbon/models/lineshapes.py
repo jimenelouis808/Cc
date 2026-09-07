@@ -40,6 +40,8 @@ from typing import Callable
 
 import numpy as np
 
+from ..core.compat import trapezoid
+
 #: 2*sqrt(2*ln 2) — converts a Gaussian standard deviation to its FWHM.
 GAUSS_FWHM_FACTOR = 2.3548200450309493
 
@@ -229,7 +231,7 @@ def window_area(
     if high <= low:
         raise ValueError("empty integration window")
     grid = np.linspace(float(low), float(high), int(points))
-    return float(np.trapezoid(profile(grid, *args, **kwargs), grid))
+    return float(trapezoid(profile(grid, *args, **kwargs), grid))
 
 
 #: Registry consumed by :mod:`ramancarbon.models.fitting`. Each entry maps a

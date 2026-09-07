@@ -149,6 +149,12 @@ class AnalysisSettings:
     profile: Optional[str] = None
     """Lineshape forced on every component; ``None`` uses the per-band
     defaults from the database."""
+    check_interferences: bool = False
+    """Look for non-carbon bands. Off by default; see
+    :mod:`ramancarbon.analysis.interference`."""
+    bootstrap_replicates: int = 0
+    """Resampled refits for realistic uncertainties. 0 disables it — each
+    replicate costs a full fit."""
 
     def to_kwargs(self) -> dict:
         return {
@@ -158,6 +164,7 @@ class AnalysisSettings:
             "rbm_parameterisation": self.rbm_parameterisation,
             "material_hint": self.material_hint,
             "profile": self.profile,
+            "check_interferences": self.check_interferences,
         }
 
 
@@ -341,6 +348,74 @@ class Session:
             item.error = str(exc)
             self.log("error", f"{item.name}: {exc}")
         return item
+
+    def bootstrap_active(self, replicates: Optional[int] = None):
+        """Resampled uncertainties for the active spectrum's deconvolution.
+
+        Returns ``None`` and logs why when there is no fit to resample.
+        """
+        from ..models.bootstrap import bootstrap_fit, position_of, ratio_of, width_of
+
+        item = self.active
+        if item is None or item.result is None or item.result.fit is None:
+            self.log("error", "analiza el espectro antes de estimar incertidumbres")
+            return None
+        target = item.processed or item.raw
+        model = self.build_manual_model(
+            [
+                PeakSpec(
+                    name=p.name, profile=p.profile, centre=p.centre,
+                    height=p.height, fwhm=p.fwhm, band=p.band,
+                )
+                for p in item.result.fit.peaks
+            ],
+            (float(item.result.fit.x[0]), float(item.result.fit.x[-1])),
+            "linear",
+        )
+        quantities = {
+            "I_D/I_G": ratio_of("D", "G"),
+            "pos_G": position_of("G"),
+            "Γ_G": width_of("G"),
+            "pos_D": position_of("D"),
+        }
+        try:
+            return bootstrap_fit(
+                target, model, quantities,
+                replicates=replicates or self.analysis_settings.bootstrap_replicates or 40,
+            )
+        except ValueError as exc:
+            self.log("error", str(exc))
+            return None
+
+    def calibrate_active(self):
+        """Correct the active spectrum's axis using the silicon line."""
+        from ..analysis.quality import calibrate, silicon_offset
+
+        item = self.active
+        if item is None:
+            self.log("error", "no hay ningún espectro seleccionado")
+            return None
+        offset = silicon_offset(item.raw)
+        if offset is None:
+            self.log(
+                "error",
+                "no se ha encontrado ninguna línea estrecha cerca de 520.7 cm⁻¹ "
+                "que sirva de referencia",
+            )
+            return None
+        item.raw = calibrate(item.raw, offset)
+        item.result = None
+        item.processed = None
+        item.manual_fit = None
+        self.log("info", f"eje corregido en {offset:+.2f} cm⁻¹")
+        return offset
+
+    def batch_summary(self):
+        """Robust statistics over everything analysed in the session."""
+        from ..analysis.batch import summarise
+
+        results = [s.result for s in self.spectra if s.result is not None]
+        return summarise(results) if results else None
 
     def analyse_all(self) -> tuple[int, int]:
         """Analyse every loaded spectrum.

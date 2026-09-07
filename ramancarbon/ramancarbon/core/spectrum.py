@@ -24,6 +24,8 @@ from typing import Iterable, Optional, Sequence
 
 import numpy as np
 
+from .compat import trapezoid
+
 #: Planck constant times the speed of light, in eV·nm. Converts a laser
 #: wavelength to a photon energy: E(eV) = 1239.841984 / λ(nm).
 HC_EV_NM = 1239.841984
@@ -104,6 +106,19 @@ class Spectrum:
             raise ValueError("a spectrum needs at least two points")
         if not np.all(np.isfinite(self.shift)):
             raise ValueError("the Raman shift axis contains NaN or inf")
+        bad = int(np.count_nonzero(~np.isfinite(self.intensity)))
+        if bad:
+            # Silently tolerating these is worse than failing: NaN propagates
+            # through the baseline into the fit, and what comes out the far
+            # end is a confident-looking classification built on nothing.
+            first = int(np.argmax(~np.isfinite(self.intensity)))
+            raise ValueError(
+                f"{bad} de {self.intensity.size} intensidades no son finitas "
+                f"(la primera en {self.shift[first]:.1f} cm⁻¹). Suelen venir de "
+                "una división por cero al restar un blanco, o de un detector "
+                "que marcó píxeles muertos. Arregla o recorta esos puntos "
+                "antes de analizar"
+            )
         self._normalise_axis()
         if self.laser_nm is not None:
             laser_energy_ev(self.laser_nm)  # validates positivity
@@ -262,7 +277,7 @@ class Spectrum:
         x, y = self.region(low, high)
         if x.size < 2:
             return 0.0
-        return float(np.trapezoid(y, x))
+        return float(trapezoid(y, x))
 
     def noise_estimate(self, low: Optional[float] = None, high: Optional[float] = None) -> float:
         """Robust estimate of the noise standard deviation.

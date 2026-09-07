@@ -129,6 +129,32 @@ una tiene una prueba que la protege.
   Los rangos de esos dopantes cruzan el cero a propósito.
 - **Los materiales con `role: "reference"` no compiten en la clasificación.**
   Un MWCNT dopado con N sigue siendo un MWCNT.
+- **Un ajuste por mínimos cuadrados SIEMPRE devuelve componentes.** Sobre un
+  espectro de ceros el modelo de cinco bandas devolvía D4, D, D3, G y D′ y el
+  informe anunciaba «MWCNT, confianza media, I_D/I_G = 1.43». Las componentes
+  ajustadas pasan por un umbral de significancia antes de asignarse
+  (`MIN_COMPONENT_SIGNIFICANCE`). No lo quites.
+- **Sin banda G no se clasifica nada.** Es el único modo permitido en primer
+  orden del carbono sp² y la referencia de todos los cocientes. Un espectro
+  que solo cubría la región 2D se clasificaba como grafito.
+- **`Spectrum` rechaza intensidades no finitas.** Un NaN atravesaba la línea
+  base y el ajuste y salía como una clasificación con aspecto de válida.
+- **Usa `core.compat.trapezoid`, nunca `np.trapezoid`.** El paquete declara
+  `numpy>=1.24` y `np.trapezoid` es de NumPy 2.0. Hay una prueba que audita
+  esto.
+- **La detección de fases no carbonosas exige corroboración**: varias líneas
+  fuertes de la especie, no una. Con una sola, en la ventana RBM la
+  coincidencia es más probable que la especie, y la primera versión tiró
+  cuatro de cinco RBM auténticos.
+- **El escaneo de interferencias va APAGADO por defecto**, en la API, en la
+  CLI y en la GUI. Es una decisión, no un descuido.
+- **`analyse_many` fija el BLAS a un hilo por proceso y usa `spawn`.** Sin lo
+  primero el paralelismo es 8× más lento que el serie; sin lo segundo la
+  variable de entorno no llega al hijo. Y si el script del usuario no tiene
+  guarda `__main__`, degrada a serie con un aviso: no lo conviertas en error.
+- **Las incertidumbres analíticas del ajuste son cortas.** Para números que
+  se publican, usa `models.bootstrap`. Documenta siempre que el remuestreo
+  mide reproducibilidad frente al ruido, no acierto.
 
 ## Honestidad sobre la validación
 

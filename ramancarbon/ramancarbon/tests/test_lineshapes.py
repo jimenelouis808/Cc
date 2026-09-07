@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from ramancarbon.core.compat import trapezoid
 from ramancarbon.models.lineshapes import (
     bwf,
     bwf_area,
@@ -41,15 +42,15 @@ def test_pseudo_voigt_fwhm_is_independent_of_eta(eta):
 
 
 def test_analytic_areas_match_numeric_integration():
-    assert np.trapezoid(gaussian(X, 1580.0, 3.0, 40.0), X) == pytest.approx(
+    assert trapezoid(gaussian(X, 1580.0, 3.0, 40.0), X) == pytest.approx(
         gaussian_area(3.0, 40.0), rel=1e-6
     )
     # The Lorentzian's tails make a finite window undercount; 1200 cm-1 of
     # window around a 20 cm-1 band still misses ~1 %.
-    assert np.trapezoid(lorentzian(X, 1580.0, 3.0, 20.0), X) == pytest.approx(
+    assert trapezoid(lorentzian(X, 1580.0, 3.0, 20.0), X) == pytest.approx(
         lorentzian_area(3.0, 20.0), rel=0.02
     )
-    assert np.trapezoid(pseudo_voigt(X, 1580.0, 3.0, 20.0, 0.6), X) == pytest.approx(
+    assert trapezoid(pseudo_voigt(X, 1580.0, 3.0, 20.0, 0.6), X) == pytest.approx(
         pseudo_voigt_area(3.0, 20.0, 0.6), rel=0.02
     )
 

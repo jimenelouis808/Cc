@@ -174,6 +174,14 @@ class FitResult:
     message: str
     warnings: list[str] = field(default_factory=list)
     correlations: dict[tuple[str, str], float] = field(default_factory=dict)
+    durbin_watson: Optional[float] = None
+    """Durbin–Watson statistic of the residual.
+
+    Near 2 when the residual is white noise, which is what a complete model
+    leaves behind. Well below 2 means neighbouring residuals are
+    correlated — the fit is missing something with structure, most often a
+    component. This catches what R² cannot: an R² of 0.999 sits happily on
+    top of a systematic S-shaped residual twenty times the noise."""
 
     def peak(self, name: str) -> Optional[FittedPeak]:
         """Look a component up by name, or by band key."""
@@ -191,7 +199,8 @@ class FitResult:
         lines = [
             f"Ajuste: {len(self.peaks)} componentes, {self.n_parameters} parámetros",
             f"R² = {self.r_squared:.5f}   χ²_red = {self.reduced_chi2:.4g}   "
-            f"AIC = {self.aic:.1f}   BIC = {self.bic:.1f}",
+            f"AIC = {self.aic:.1f}   BIC = {self.bic:.1f}"
+            + (f"   DW = {self.durbin_watson:.2f}" if self.durbin_watson else ""),
             "",
         ]
         lines.extend(p.summary() for p in self.peaks)
@@ -303,6 +312,66 @@ def _unpack(
     return values, np.asarray(background)
 
 
+class _Evaluator:
+    """Pre-resolved model evaluation, for the least-squares inner loop.
+
+    The residual is called several hundred times per fit and used to rebuild
+    a dictionary per component on every one of those calls, then look each
+    parameter up by string key. That dictionary churn was about 40 % of the
+    total analysis time and none of it varies between calls: which slot of
+    the parameter vector feeds which argument of which profile function is
+    fixed once the model is built.
+
+    So it is resolved once, into a list of ``(function, slot indices,
+    fixed values)`` per component, and the inner loop becomes array
+    indexing. Same arithmetic, same results — see
+    ``test_fitting.py::test_evaluator_matches_the_naive_evaluation``.
+    """
+
+    __slots__ = ("_peaks", "_bg_slots", "_x", "_x_scaled", "_n_background")
+
+    def __init__(
+        self,
+        model: FitModel,
+        layout: list[tuple[int, str]],
+        x: np.ndarray,
+        x_scaled: np.ndarray,
+    ) -> None:
+        self._x = x
+        self._x_scaled = x_scaled
+        slots: dict[tuple[int, str], int] = {
+            (index, key): slot for slot, (index, key) in enumerate(layout) if index >= 0
+        }
+        self._bg_slots = [
+            slot for slot, (index, _) in enumerate(layout) if index < 0
+        ]
+        self._n_background = len(self._bg_slots)
+
+        self._peaks = []
+        for i, spec in enumerate(model.peaks):
+            names = ("centre", "height", "fwhm") + spec.extra_names
+            defaults = (spec.centre, spec.height, spec.fwhm) + tuple(spec.extra)
+            # -1 marks a fixed parameter, whose value never leaves `defaults`.
+            indices = np.array(
+                [slots.get((i, name), -1) for name in names], dtype=np.intp
+            )
+            self._peaks.append(
+                (PROFILES[spec.profile]["function"], indices,
+                 np.asarray(defaults, dtype=float))
+            )
+
+    def __call__(self, params: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        total = np.zeros_like(self._x)
+        for function, indices, defaults in self._peaks:
+            values = np.where(indices >= 0, params[indices], defaults)
+            total += function(self._x, *values)
+        if self._n_background:
+            background = np.polyval(params[self._bg_slots][::-1], self._x_scaled)
+            return total + background, background
+        zeros = np.zeros_like(self._x)
+        return total, zeros
+
+
 def _evaluate(
     params: np.ndarray,
     x: np.ndarray,
@@ -310,7 +379,12 @@ def _evaluate(
     layout: list[tuple[int, str]],
     x_scaled: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Model curve and its background at the given parameters."""
+    """Model curve and its background at the given parameters.
+
+    The straightforward implementation, kept because it is the readable
+    definition of what :class:`_Evaluator` computes and the reference the
+    fast path is tested against.
+    """
     values, bg_coeffs = _unpack(params, model, layout)
     total = np.zeros_like(x)
     for spec, entry in zip(model.peaks, values):
@@ -381,8 +455,10 @@ def fit_model(
     x_half = max(0.5 * (x[-1] - x[0]), 1e-9)
     x_scaled = (x - x_mid) / x_half
 
+    evaluate = _Evaluator(model, layout, x, x_scaled)
+
     def residual(params: np.ndarray) -> np.ndarray:
-        curve, _ = _evaluate(params, x, model, layout, x_scaled)
+        curve, _ = evaluate(params)
         return curve - y
 
     result = least_squares(
@@ -395,7 +471,7 @@ def fit_model(
         x_scale="jac",
     )
 
-    fitted, background = _evaluate(result.x, x, model, layout, x_scaled)
+    fitted, background = evaluate(result.x)
     resid = y - fitted
     n, k = x.size, result.x.size
     ss_res = float(np.sum(resid**2))
@@ -408,6 +484,7 @@ def fit_model(
     bic = n * np.log(max(ss_res / n, 1e-300)) + k * np.log(n)
 
     errors, correlations = _uncertainties(result, resid, layout, model)
+    watson = _durbin_watson(resid)
     values, bg_coeffs = _unpack(result.x, model, layout)
 
     peaks: list[FittedPeak] = []
@@ -438,6 +515,13 @@ def fit_model(
         )
 
     warnings = _collect_warnings(spectrum, model, result, peaks, correlations, max_nfev)
+    if watson is not None and watson < 1.0:
+        warnings.append(
+            f"los residuos están correlacionados (Durbin-Watson = {watson:.2f}, "
+            "sería ~2 si fueran ruido). El modelo deja estructura sin ajustar: "
+            "casi siempre falta una componente. Mira el panel de residuos, y "
+            "prueba a comparar modelos antes de dar por bueno este"
+        )
 
     return FitResult(
         peaks=peaks,
@@ -456,7 +540,29 @@ def fit_model(
         message=str(result.message),
         warnings=warnings,
         correlations=correlations,
+        durbin_watson=watson,
     )
+
+
+def _durbin_watson(residual: np.ndarray) -> Optional[float]:
+    """Durbin–Watson statistic: ``Σ(rᵢ − rᵢ₋₁)² / Σrᵢ²``.
+
+    Two for uncorrelated residuals, towards zero for positively correlated
+    ones. It is the cheapest reliable test for "this model is missing a
+    component", and it looks at something R² is blind to: R² measures how
+    much variance is left, this measures whether what is left has shape.
+
+    A spectrum that was smoothed before fitting will score low for that
+    reason alone — smoothing correlates neighbouring points by
+    construction — which is why the warning that fires on a low value sits
+    alongside the one about smoothing rather than replacing it.
+    """
+    if residual.size < 3:
+        return None
+    denominator = float(np.sum(residual**2))
+    if denominator <= 0:
+        return None
+    return float(np.sum(np.diff(residual) ** 2) / denominator)
 
 
 def _uncertainties(

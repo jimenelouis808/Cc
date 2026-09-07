@@ -204,10 +204,22 @@ def compare_excitations(
 
     dispersions: dict[str, BandDispersion] = {}
     impostors: list[str] = []
-    for key in ("D", "G", "G+", "D'", "2D", "D+D'", "D+D''"):
+    for key in ("D", "G", "D'", "2D", "D+D'", "D+D''"):
         positions: dict[float, float] = {}
         for result in usable:
-            entry = result.assignment.get(key)
+            # The G band is called "G" in graphitic material and "G+" in
+            # single- and double-walled tubes, and one sample can be
+            # classified each way at the two lasers — a nanotube whose RBM
+            # only resonates at one of them. Asking for a literal "G" then
+            # found it at one excitation and not the other, so the G
+            # dispersion silently did not get computed, and with it the
+            # amorphous-carbon assay that is the whole reason for measuring
+            # at two wavelengths.
+            entry = (
+                result.assignment.g_like()
+                if key == "G"
+                else result.assignment.get(key)
+            )
             if entry is not None:
                 positions[float(result.raw.laser_nm)] = entry.position
         if len(positions) < 2:
@@ -272,7 +284,7 @@ def _verdict_for(entry: BandDispersion, tolerance: float) -> str:
 
 def _interpret_g_dispersion(dispersions: dict[str, BandDispersion]) -> str:
     """The G-band dispersion as an amorphous-carbon assay."""
-    entry = dispersions.get("G") or dispersions.get("G+")
+    entry = dispersions.get("G")
     if entry is None or entry.slope is None:
         return ""
     slope = entry.slope

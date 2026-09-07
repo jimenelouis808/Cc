@@ -201,6 +201,24 @@ class RamanCarbonApp:
         ttk.Button(row, text="Ejemplo", command=self._load_demo).pack(
             side="left", fill="x", expand=True)
 
+        self.interference_var = self.tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            body,
+            text="Buscar bandas no carbonosas",
+            variable=self.interference_var,
+        ).pack(anchor="w", pady=PAD["xs"])
+        hint(
+            body,
+            "Óxidos del catalizador, precursor de dopante sin reaccionar, "
+            "sustrato. Desactivado por defecto: decirle al buscador lo que "
+            "podría encontrar sesga lo que informa. Actívalo si tu muestra "
+            "lleva catalizador o viene de un precursor de S, Se o P.",
+            wrap=230,
+        )
+
+        ttk.Button(body, text="Calibrar con la línea de Si",
+                   command=self._calibrate).pack(fill="x", pady=(0, PAD["xs"]))
+
         self.control_var = self.tk.BooleanVar(value=False)
         ttk.Checkbutton(
             body,
@@ -418,6 +436,11 @@ class RamanCarbonApp:
                    command=self._fit_manual).pack(fill="x", pady=PAD["sm"])
         ttk.Button(body, text="Exportar componentes y curvas…",
                    command=self._export_fit).pack(fill="x")
+        ttk.Button(body, text="Incertidumbres por remuestreo",
+                   command=self._bootstrap).pack(fill="x", pady=(PAD["xs"], 0))
+        hint(body, "Vuelve a ajustar sobre datos remuestreados. Las barras de "
+                   "error analíticas del ajuste salen sistemáticamente cortas "
+                   "— aquí, 5 veces cortas para la posición de G.", wrap=320)
 
         right = ttk.Frame(tab)
         right.pack(side="left", fill="both", expand=True)
@@ -553,7 +576,17 @@ class RamanCarbonApp:
                    "otra si ambos se midieron con el mismo láser y con la misma "
                    "base (áreas o alturas). La columna «laser_nm» está ahí "
                    "precisamente para que se vea.", wrap=900)
-        self.batch_table = table(body, ["nombre"], height=14)
+        self.batch_table = table(body, ["nombre"], height=10)
+
+        from .widgets import scrolled_text
+
+        stats, stats_body = card(tab, "Estadística del lote",
+                                 "Mediana y dispersión robusta junto a la media: "
+                                 "un punto medido sobre un grumo de catalizador "
+                                 "mueve mucho la media y casi nada la mediana.")
+        stats.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        self.batch_text = scrolled_text(stats_body, self.palette,
+                                        self.fonts["mono"], height=12)
 
         plot_area, plot_body = card(tab, None)
         plot_area.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
@@ -794,6 +827,7 @@ class RamanCarbonApp:
         except ValueError:
             settings.baseline_p = 0.001
         analysis = self.session.analysis_settings
+        analysis.check_interferences = bool(self.interference_var.get())
         analysis.basis = _key_for_label(BASES, self.basis_var.get())
         analysis.profile = (
             _key_for_label(DECONVOLUTION_PROFILES, self.profile_var.get()) or None
@@ -1255,11 +1289,17 @@ class RamanCarbonApp:
         self._with_style("diameters", draw)
 
     def _draw_batch(self) -> None:
-        from .widgets import fill_table
+        from .widgets import fill_table, set_text
 
         columns, rows = self.session.results_table()
         if columns:
             fill_table(self.batch_table, columns, rows)
+        summary = self.session.batch_summary()
+        set_text(
+            self.batch_text,
+            summary.summary() if summary else
+            "Analiza varios espectros para ver la estadística del lote.",
+        )
 
     def _draw_overlay(self) -> None:
         spectra = [item.display for item in self.session.spectra]
@@ -1357,6 +1397,32 @@ class RamanCarbonApp:
             self._warn("Nada que exportar", str(exc))
             return
         self._set_status(f"{len(written)} archivos escritos en {folder}")
+
+    def _calibrate(self) -> None:
+        """Correct the axis with the silicon line, if there is one."""
+        offset = self.session.calibrate_active()
+        self._flush_messages()
+        if offset is None:
+            return
+        self._refresh_spectrum_list()
+        self._redraw_all()
+        self._set_status(
+            f"Eje corregido en {offset:+.2f} cm⁻¹. Vuelve a analizar."
+        )
+
+    def _bootstrap(self) -> None:
+        """Resampled uncertainties for the deconvolution on screen."""
+        from .widgets import set_text
+
+        def done(result) -> None:
+            self._flush_messages()
+            if result is None:
+                return
+            set_text(self.fit_text, result.summary())
+            self._set_status("Incertidumbres por remuestreo calculadas.")
+
+        self._run_async(self.session.bootstrap_active, done,
+                        "Remuestreando (esto tarda)…")
 
     def _combine_lasers(self) -> None:
         """Combine analysed spectra of the same sample at different lasers."""

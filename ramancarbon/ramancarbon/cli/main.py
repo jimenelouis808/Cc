@@ -85,6 +85,13 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
              "de restar la línea base",
     )
     parser.add_argument(
+        "--interferencias", action="store_true",
+        help="buscar bandas que no son carbono (óxidos de catalizador, "
+             "precursor de dopante sin reaccionar, sustrato) y excluir del "
+             "cálculo de diámetros las que caigan en la ventana RBM. "
+             "DESACTIVADO por defecto",
+    )
+    parser.add_argument(
         "--perfil", dest="profile", default=None,
         choices=("pseudo_voigt", "gaussian", "lorentzian", "bwf"),
         help="forzar un perfil en todas las componentes de la deconvolución. "
@@ -126,6 +133,7 @@ def _analyse_kwargs(args) -> dict:
         "rbm_parameterisation": args.rbm,
         "profile": getattr(args, "profile", None),
         "auto_preprocess": getattr(args, "auto", False),
+        "check_interferences": getattr(args, "interferencias", False),
         "preprocess_kwargs": _preprocess_kwargs(args),
     }
 
@@ -222,29 +230,38 @@ def cmd_lote(args) -> int:
         )
         return 1
 
-    rows: list[dict] = []
+    from ..analysis.batch import analyse_many, summarise
+
+    spectra = []
     failures: list[tuple[Path, str]] = []
     for path in files:
         try:
-            spectrum = read_spectrum(path, laser_nm=args.laser)
-            result = analyse(
-                spectrum, material_hint=args.material, **_analyse_kwargs(args)
-            )
+            spectra.append(read_spectrum(path, laser_nm=args.laser))
         except (OSError, ValueError) as exc:
             failures.append((path, str(exc)))
             print(f"  ✗ {path.name}: {exc}", file=sys.stderr)
-            continue
-        rows.append(result.to_dict())
-        print(
-            f"  ✓ {path.name}: {result.classification.label} "
-            f"(I_D/I_G = {result.id_ig:.3f})" if result.id_ig is not None
-            else f"  ✓ {path.name}: {result.classification.label}",
-            file=sys.stderr,
-        )
+
+    def tick(done: int, total: int) -> None:
+        print(f"\r  {done}/{total}", end="", file=sys.stderr, flush=True)
+
+    results, analysis_failures = analyse_many(
+        spectra,
+        workers=args.procesos,
+        progress=tick,
+        material_hint=args.material,
+        **_analyse_kwargs(args),
+    )
+    print(file=sys.stderr)
+    failures.extend((Path(name), message) for name, message in analysis_failures)
+    rows = [r.to_dict() for r in results]
 
     if not rows:
         print("error: no se ha podido analizar ningún espectro", file=sys.stderr)
         return 1
+
+    if not args.sin_estadistica:
+        print(summarise(results, failures=analysis_failures).summary(), file=sys.stderr)
+        print(file=sys.stderr)
 
     columns: list[str] = []
     for row in rows:
@@ -372,6 +389,47 @@ def cmd_laseres(args) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(combined.summary())
+    return 0
+
+
+def cmd_calibrar(args) -> int:
+    """Measure the axis offset from the silicon line, and optionally fix it."""
+    from ..analysis.quality import SILICON_LINE, calibrate, check_quality, silicon_offset
+
+    try:
+        spectrum = read_spectrum(Path(args.espectro))
+    except (OSError, SpectrumReadError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(check_quality(spectrum).summary())
+    print()
+
+    offset = args.offset if args.offset is not None else silicon_offset(spectrum)
+    if offset is None:
+        print(
+            f"No se ha encontrado ninguna línea estrecha cerca de "
+            f"{SILICON_LINE} cm⁻¹.\n"
+            "Mide un patrón de silicio en la misma sesión, o pasa el "
+            "desplazamiento con --offset si lo conoces por otra vía.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"Línea de referencia medida en {SILICON_LINE + offset:.2f} cm⁻¹")
+    print(f"Desplazamiento del eje       : {offset:+.2f} cm⁻¹")
+    if abs(offset) <= 1.0:
+        print("El eje está bien calibrado.")
+    else:
+        print(
+            f"\nRéstale {offset:+.2f} cm⁻¹ a todas las posiciones antes de "
+            "interpretar desplazamientos: los efectos de dopado son de este "
+            "mismo orden."
+        )
+
+    if args.corregir:
+        written = write_spectrum(calibrate(spectrum, offset), Path(args.corregir))
+        print(f"\nEspectro corregido guardado en {written}", file=sys.stderr)
     return 0
 
 
@@ -520,6 +578,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  ramancarbon analizar m.txt --laser 532 --auto --perfil pseudo_voigt\n"
             "  ramancarbon analizar m.txt --laser 532 --exportar resultados/\n"
             "  ramancarbon laseres m_532.txt m_633.txt\n"
+            "  ramancarbon lote datos/ --procesos 4 --csv r.csv\n"
+            "  ramancarbon calibrar patron_si.txt\n"
             "  ramancarbon bd --banda 2D --laser 785\n"
             "  ramancarbon demo salida/\n"
         ),
@@ -561,6 +621,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="forzar el material de referencia")
     p.add_argument("--separador", default=",", metavar="CAR",
                    help="separador de columnas del CSV")
+    p.add_argument("--procesos", type=int, default=None, metavar="N",
+                   help="procesos en paralelo. Por defecto, tantos como "
+                        "núcleos. Usa 1 para depurar: un error dentro de un "
+                        "proceso hijo es mucho más difícil de leer")
+    p.add_argument("--sin-estadistica", action="store_true",
+                   help="no imprimir el resumen estadístico del lote")
     _add_common(p)
     p.set_defaults(func=cmd_lote)
 
@@ -602,6 +668,24 @@ def build_parser() -> argparse.ArgumentParser:
                         "la pendiente es una estimación de dos puntos)")
     _add_common(p)
     p.set_defaults(func=cmd_laseres)
+
+    p = sub.add_parser(
+        "calibrar",
+        help="medir y corregir el desplazamiento del eje con la línea del silicio",
+        description=(
+            "El silicio tiene su fonón de primer orden en 520.7 cm⁻¹ exactos. "
+            "Si tu muestra está sobre un sustrato de silicio y el láser llega "
+            "a él, la desviación de esa línea es el error de calibración del "
+            "equipo ese día — del mismo tamaño que los desplazamientos por "
+            "dopado que luego quieres interpretar."
+        ),
+    )
+    p.add_argument("espectro", help="archivo del espectro")
+    p.add_argument("--corregir", default=None, metavar="ARCHIVO",
+                   help="escribir el espectro con el eje corregido")
+    p.add_argument("--offset", type=float, default=None, metavar="CM1",
+                   help="desplazamiento a restar, si lo sabes por otra vía")
+    p.set_defaults(func=cmd_calibrar)
 
     p = sub.add_parser("bd", help="consultar la base de datos de literatura")
     p.add_argument("--banda", default=None, metavar="CLAVE",

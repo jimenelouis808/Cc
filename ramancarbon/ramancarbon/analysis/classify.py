@@ -420,7 +420,9 @@ def classify(
     for candidate in candidates:
         candidate.evidence = [e for e in evidence if candidate.key in e.material]
 
-    best, confidence, label = _verdict(candidates, database, evidence)
+    best, confidence, label = _verdict(
+        candidates, database, evidence, has_g_band=assignment.g_like() is not None
+    )
     if best is None:
         warnings.append(
             "la evidencia disponible no permite identificar el material. "
@@ -635,11 +637,37 @@ def _score_positions(
 
 
 def _verdict(
-    candidates: list[Candidate], db: Database, evidence: list[Evidence]
+    candidates: list[Candidate],
+    db: Database,
+    evidence: list[Evidence],
+    has_g_band: bool = True,
 ) -> tuple[Optional[str], str, str]:
-    """Turn scores into a verdict, refusing to answer when the margin is thin."""
+    """Turn scores into a verdict, refusing to answer when the margin is thin.
+
+    Returns ``(material key, confidence, label)`` — in that order. The two
+    refusal branches used to return the confidence and the label the other
+    way round, so ``classification.confidence`` held a whole sentence and
+    ``classification.label`` held the word "insuficiente". It read correctly
+    in the printed report by luck, because that only prints the label.
+
+    The G band is a hard prerequisite. It is the only first-order allowed
+    mode of sp² carbon, it is present in every carbon material this
+    database describes, and every ratio is measured against it. A spectrum
+    without one is either not carbon, or does not cover the region where
+    carbon lives — and in both cases naming a material would be inventing
+    an answer. Without this gate a spectrum containing only the 2D region
+    came back as "graphite or few-layer graphene".
+    """
+    if not has_g_band:
+        return None, "insuficiente", (
+            "sin banda G no se puede identificar el material: es el único modo "
+            "permitido en primer orden del carbono sp², está en todos los "
+            "materiales de la base de datos, y es la referencia de todos los "
+            "cocientes. O la muestra no es carbono, o el espectro no cubre "
+            "1500–1650 cm⁻¹"
+        )
     if not candidates or candidates[0].score <= 0:
-        return None, "identificación no concluyente", "insuficiente"
+        return None, "insuficiente", "identificación no concluyente"
 
     best = candidates[0]
     runner_up = candidates[1] if len(candidates) > 1 else None

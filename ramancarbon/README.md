@@ -97,9 +97,9 @@ print(result.classification.label, result.classification.confidence)
 | `core` | Contenedor `Spectrum`, lectores de archivo, líneas base (asLS, arPLS, polinómica, banda elástica) con **elección automática de parámetros**, eliminación de rayos cósmicos, detección de picos |
 | `models` | Lorentziana, gaussiana, pseudo-Voigt y **Breit-Wigner-Fano**; motor de ajuste con límites; preajustes de deconvolución (2 a 5 bandas, región G de nanotubo, RBM, 2D) |
 | `database` | Bandas y dispersiones, 13 materiales de referencia, 5 parametrizaciones RBM, firmas de dopado y deformación — todo en JSON con su fuente |
-| `analysis` | Asignación de bandas, cocientes, **índices estructurales**, diámetros, desplazamientos, clasificador, **combinación multiláser**, **exportación** |
+| `analysis` | Asignación de bandas, cocientes, **índices estructurales**, diámetros, desplazamientos, clasificador, **combinación multiláser**, **calidad de la medida**, **lote en paralelo con estadística**, **bandas no carbonosas** (opcional), **exportación** |
 | `gui` | Aplicación de escritorio Tkinter |
-| `cli` | `ramancarbon analizar / lote / deconvolucionar / laseres / bd / demo` |
+| `cli` | `ramancarbon analizar / lote / deconvolucionar / laseres / calibrar / bd / demo` |
 
 ### Bandas y cocientes
 
@@ -229,6 +229,83 @@ anomalía de Kohn), así que ΔG sola no da el signo del dopado. La 2D sí: sube
 con huecos y baja con electrones. Y como la deformación y el dopado mueven
 la pareja (ω_G, ω_2D) en direcciones distintas del plano (pendientes 2.2 y
 0.7), un desplazamiento medido **se descompone** en sus dos contribuciones.
+
+### Calidad de la medida
+
+Dos formas de arruinar un espectro que **no se ven en el informe final**, y
+que ahora se detectan antes de analizar:
+
+* **Detector saturado.** Recortar el 3 % superior de un espectro llevó
+  I_D/I_G de 0.98 a 2.01. La saturación aplana primero la banda más intensa,
+  que es la G, así que infla todo lo que se mide contra ella.
+* **Muestreo demasiado grueso.** El mismo espectro a 16 cm⁻¹/punto dio
+  I_D/I_G = 3.91 en lugar de 0.98. Por debajo de ~6 puntos por FWHM el
+  ajuste no tiene con qué fijar la anchura.
+
+Además detecta truncamiento, señal/ruido baja, intensidades negativas y
+espectros sin variación. Y si hay una línea de silicio en el rango:
+
+```bash
+ramancarbon calibrar muestra.txt --corregir muestra_cal.txt
+```
+
+El fonón del silicio está en 520.7 cm⁻¹ exactos, así que su desviación es el
+error de calibración de tu equipo ese día — del mismo tamaño que los
+desplazamientos por dopado que luego quieres interpretar.
+
+### Lotes: en paralelo, y con estadística honesta
+
+```bash
+ramancarbon lote datos/ --laser 532 --csv resultados.csv --procesos 4
+```
+
+Da la **mediana con dispersión robusta** junto a la media, y marca los
+puntos atípicos por número. Un punto medido sobre un grumo de catalizador
+mueve mucho la media y casi nada la mediana.
+
+Sobre la paralelización hay un detalle que merece la pena saber, porque
+afecta a cualquier programa científico en Python: el primer intento salió
+**ocho veces más lento**. La causa es el BLAS de NumPy, que abre un hilo por
+núcleo en cada proceso — cuatro procesos × cuatro hilos en cuatro núcleos.
+Fijándolo a un hilo por proceso, 47 s pasaron a 1.1 s. El paquete lo hace
+solo para sus procesos hijos, pero no puede hacerlo para el tuyo, así que
+si procesas lotes grandes a menudo:
+
+```bash
+export OMP_NUM_THREADS=1
+```
+
+acelera todo, en paralelo o no.
+
+### Incertidumbres realistas
+
+Las barras de error que devuelve un ajuste vienen de la curvatura de χ² y
+son **sistemáticamente cortas**: no incluyen la correlación entre
+parámetros, ni la correlación de los residuos. Volver a ajustar sobre datos
+remuestreados sí las incluye. En una banda G típica, el ajuste dice
+±0.05 cm⁻¹ y el remuestreo dice ±0.24 — cinco veces más, y eso importa
+cuando interpretas desplazamientos de pocos cm⁻¹.
+
+### Bandas que no son carbono (opcional, desactivado por defecto)
+
+```bash
+ramancarbon analizar muestra.txt --laser 532 --interferencias
+```
+
+Óxidos de catalizador, precursor de dopante sin reaccionar, sustrato. Está
+apagado por defecto a propósito: decirle a un buscador lo que podría
+encontrar sesga lo que informa.
+
+Una especie solo se acepta cuando aparecen **varias de sus líneas fuertes**,
+no una. La primera versión emparejaba línea a línea con ±8 cm⁻¹ y, sobre una
+muestra limpia de pared simple, descartó cuatro de sus cinco RBM auténticos
+llamándolos óxido de cobalto y selenio — en la ventana 100–400 cm⁻¹ hay una
+docena de líneas catalogadas y una coincidencia es más probable que la
+especie. Un cristal tiene un espectro, no una línea.
+
+Para muestras dopadas con S, Se o P importa por otra razón: si aparece la
+línea de 219 cm⁻¹ del azufre elemental, el dopante **no** entró en la red,
+que es lo contrario de lo que su presencia suele darse por demostrar.
 
 ## Limitaciones — léelas
 

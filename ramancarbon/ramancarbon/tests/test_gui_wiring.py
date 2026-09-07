@@ -102,12 +102,22 @@ def test_callbacks_named_in_commands_exist():
         "profile_var",        # lineshape selector
         "basis_var",          # area/height selector
         "indices_text",       # structural indices panel
+        "interference_var",   # non-carbon scan, opt-in
+        "_calibrate",         # silicon-line calibration
+        "_bootstrap",         # resampled uncertainties
+        "batch_text",         # batch statistics panel
     ],
 )
 def test_requested_features_are_wired_into_the_window(feature):
     """Each of these corresponds to something the interface must expose;
     a refactor that drops the widget should fail here."""
     assert feature in SOURCE
+
+
+def test_interference_scan_defaults_to_off_in_the_interface():
+    """It is opt-in in the analysis, so the checkbox must start unticked or
+    the default would differ between the GUI and everything else."""
+    assert 'self.interference_var = self.tk.BooleanVar(value=False)' in SOURCE
 
 
 def test_normalisation_offers_0_100():

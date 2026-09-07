@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import numpy as np
+
+from .compat import trapezoid
 from scipy.signal import find_peaks as _scipy_find_peaks
 from scipy.signal import peak_prominences
 from scipy.signal import peak_widths as _peak_widths
@@ -185,7 +187,7 @@ def find_peaks(
             continue
         lo_i, hi_i = int(left_bases[k]), int(right_bases[k]) + 1
         seg_x, seg_y = x[lo_i:hi_i], y[lo_i:hi_i] - base
-        area = float(np.trapezoid(np.clip(seg_y, 0.0, None), seg_x)) if seg_x.size > 1 else 0.0
+        area = float(trapezoid(np.clip(seg_y, 0.0, None), seg_x)) if seg_x.size > 1 else 0.0
         peaks.append(
             PeakMeasurement(
                 position=position,
@@ -290,7 +292,7 @@ def measure_peak(
         return None
 
     fwhm = _fwhm_from_data(x, local, idx, height)
-    area = float(np.trapezoid(np.clip(local, 0.0, None), x))
+    area = float(trapezoid(np.clip(local, 0.0, None), x))
     sigma = spectrum.noise_estimate()
     snr = height / sigma if sigma > 0 else float("inf")
     prominence = height - float(np.min(local))

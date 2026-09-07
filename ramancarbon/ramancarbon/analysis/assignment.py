@@ -25,6 +25,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable, Optional, Sequence
 
+import numpy as np
+
 from ..core.peaks import PeakMeasurement
 from ..core.spectrum import Spectrum
 from ..database import Band, Database, load_database
@@ -154,6 +156,21 @@ class Assignment:
 #: because they are shoulders that only a deconvolution can locate.
 SHOULDER_BANDS = frozenset({"D3", "D4", "G-", "G+"})
 
+#: Matched-filter significance a fitted component must reach to be assigned.
+#:
+#: A least-squares fit always returns components: run the five-band model on
+#: a spectrum of literal zeros and it hands back D4, D, D3, G and D' at their
+#: seeded positions with negligible heights. Without this gate the assignment
+#: accepted them, the classifier scored them, and the report announced
+#: "MWCNT, confianza media, I_D/I_G = 1.43" for a spectrum containing no
+#: data at all.
+#:
+#: Lower than the threshold the peak finder uses, because a fitted component
+#: is not the result of searching hundreds of positions for a maximum — its
+#: position was fixed in advance, so there is no look-elsewhere penalty to
+#: pay. It only has to be distinguishable from zero.
+MIN_COMPONENT_SIGNIFICANCE = 5.0
+
 
 def assign_bands(
     spectrum: Spectrum,
@@ -213,6 +230,15 @@ def assign_bands(
 
     candidates = _candidate_bands(database, keys, include_shoulders)
     observed = _as_observations(sources)
+    observed, rejected = _reject_insignificant(observed, spectrum)
+    if rejected:
+        warnings.append(
+            f"{len(rejected)} componente(s) del ajuste no superan el umbral de "
+            f"detección y no se han asignado: "
+            + ", ".join(f"{name} en {pos:.0f} cm⁻¹" for name, pos in rejected[:5])
+            + ". Un ajuste por mínimos cuadrados siempre devuelve componentes; "
+            "que existan en el modelo no significa que estén en los datos"
+        )
 
     assigned: dict[str, BandAssignment] = {}
     used: set[int] = set()
@@ -349,6 +375,56 @@ def _as_observations(sources: Sequence[PeakMeasurement | FitResult]) -> list[dic
 
     observations.sort(key=lambda o: o["position"])
     return observations
+
+
+def _reject_insignificant(
+    observed: list[dict], spectrum: Spectrum
+) -> tuple[list[dict], list[tuple[str, float]]]:
+    """Drop fitted components that are not distinguishable from zero.
+
+    Uses the same matched-filter significance as the peak finder,
+    ``h·sqrt(FWHM/step)/σ``, at a lower threshold: a fitted component's
+    position was fixed in advance, so unlike a searched-for maximum it pays
+    no look-elsewhere penalty.
+
+    Peaks that came from the peak finder are passed through untouched —
+    they already cleared a stricter test on the way in.
+
+    Returns
+    -------
+    (list[dict], list[(str, float)])
+        The observations to keep, and ``(name, position)`` for each one
+        rejected, so the caller can say what was dropped.
+    """
+    sigma = spectrum.noise_estimate()
+    step = max(spectrum.step, 1e-9)
+    scale = float(np.ptp(spectrum.intensity))
+    keep: list[dict] = []
+    rejected: list[tuple[str, float]] = []
+    for obs in observed:
+        if obs["origin"] != "fit":
+            keep.append(obs)
+            continue
+        height, fwhm = obs["height"], obs["fwhm"]
+        if height is None or height <= 0:
+            rejected.append((obs.get("band") or "?", obs["position"]))
+            continue
+        if sigma > 0:
+            significance = height * np.sqrt(max(fwhm or step, step) / step) / sigma
+            passes = significance >= MIN_COMPONENT_SIGNIFICANCE
+        else:
+            # No measurable noise: fall back to asking whether the component
+            # is a visible fraction of the spectrum's own range. The
+            # threshold is a thousandth rather than something tinier because
+            # a nominally flat spectrum still has a non-zero range from
+            # floating-point residue after baseline subtraction, and a
+            # looser test let five components through on a constant signal.
+            passes = scale > 0 and height > 1e-3 * scale
+        if passes:
+            keep.append(obs)
+        else:
+            rejected.append((obs.get("band") or "?", obs["position"]))
+    return keep, rejected
 
 
 def _make(band: Band, obs: dict, laser_ev: Optional[float], db: Database) -> BandAssignment:
@@ -524,6 +600,7 @@ def resolve_g_region(
 
 __all__ = [
     "Assignment",
+    "MIN_COMPONENT_SIGNIFICANCE",
     "BandAssignment",
     "GRegionInterpretation",
     "SHOULDER_BANDS",

@@ -45,6 +45,8 @@ from ..models.fitting import FitResult, fit_model
 from .assignment import Assignment, GRegionInterpretation, assign_bands, resolve_g_region
 from .classify import Classification, classify
 from .indices import IndexSet, compute_indices
+from .interference import InterferenceReport, find_interferences
+from .quality import QualityReport, check_quality
 from .diameter import (
     DiameterEstimate,
     WallPair,
@@ -101,6 +103,8 @@ class AnalysisResult:
     layer_count: Optional[tuple[str, list[str]]]
     basis: str
     indices: Optional[IndexSet] = None
+    quality: Optional[QualityReport] = None
+    interference: Optional[InterferenceReport] = None
     profile: Optional[str] = None
     """Lineshape forced on the deconvolution, or ``None`` for the database
     defaults."""
@@ -156,6 +160,13 @@ class AnalysisResult:
             row["LD_nm"] = self.crystallite.ld_low_defect_nm
             row["nD_cm2"] = self.crystallite.defect_density_cm2
             row["rama"] = self.crystallite.likely_branch
+        if self.quality is not None:
+            row["calidad"] = self.quality.worst
+            row["saturacion_pct"] = 100.0 * self.quality.saturated_fraction
+            if self.quality.silicon_offset is not None:
+                row["offset_Si_cm-1"] = self.quality.silicon_offset
+        if self.interference is not None and self.interference.found_anything:
+            row["no_carbono"] = ";".join(sorted(self.interference.species_present))
         if self.indices is not None:
             for key, value in self.indices.to_dict().items():
                 row[key] = value
@@ -184,6 +195,8 @@ def analyse(
     preprocess_kwargs: Optional[dict] = None,
     profile: Optional[str] = None,
     auto_preprocess: bool = False,
+    check_interferences: bool = False,
+    interference_groups: Optional[Sequence[str]] = None,
     db: Optional[Database] = None,
 ) -> AnalysisResult:
     """Run the complete analysis on one spectrum.
@@ -218,6 +231,18 @@ def analyse(
         ``"pseudo_voigt"`` is the usual choice for real spectra. ``None``
         keeps the per-band defaults from the database. See
         :func:`~ramancarbon.models.deconvolution.build_model`.
+    check_interferences:
+        Look for bands that are not carbon — catalyst oxides, unreacted
+        dopant precursor, substrate lines — and exclude any that fall in
+        the RBM window from the diameter analysis. **Off by default**,
+        because telling a search in advance what it might find biases what
+        it reports. Switch it on for as-synthesised material still carrying
+        its catalyst, for samples doped from a sulfur, selenium or
+        phosphorus precursor, and for anything measured through a
+        substrate. See :mod:`ramancarbon.analysis.interference`.
+    interference_groups:
+        Which catalogue groups to consider; narrow it to what your
+        synthesis could plausibly have left behind.
     auto_preprocess:
         Choose the despiking, smoothing and baseline parameters from the
         spectrum itself with
@@ -243,6 +268,19 @@ def analyse(
             "interpretables. Indícala antes de usar estos resultados"
         )
 
+    quality = check_quality(
+        spectrum,
+        required_windows=(
+            ("RBM", 120.0, 350.0),
+            ("D-G", 1200.0, 1700.0),
+            ("2D", 2550.0, 2800.0),
+        ),
+    )
+    for issue in quality.issues:
+        if issue.severity != "info":
+            warnings.append(f"calidad: {issue.message}. {issue.action}")
+    no_signal = any(i.key == "sin_senal" for i in quality.issues)
+
     settings = dict(preprocess_kwargs or {})
     if auto_preprocess:
         from ..core.preprocess import auto_settings
@@ -257,8 +295,22 @@ def analyse(
     processed, diagnostics = preprocess(spectrum, **settings)
     peaks = find_peaks(processed)
 
+    # -- non-carbon bands, when asked for ------------------------------
+    interference: Optional[InterferenceReport] = None
+    blocked_positions: tuple[float, ...] = ()
+    if check_interferences:
+        interference = find_interferences(
+            peaks, groups=interference_groups or interference_defaults()
+        )
+        blocked_positions = tuple(interference.excluded_from_rbm)
+        warnings.extend(f"interferencia: {w}" for w in interference.warnings)
+    else:
+        interference = InterferenceReport(enabled=False)
+
     # -- RBM region, with its own tighter search -----------------------
-    rbm = _analyse_rbm(processed, rbm_parameterisation, database)
+    rbm = _analyse_rbm(
+        processed, rbm_parameterisation, database, blocked=blocked_positions
+    )
 
     # -- the G region, and a dedicated SWCNT G fit when it makes sense --
     # This runs BEFORE the D-G deconvolution because it settles two things
@@ -270,7 +322,7 @@ def analyse(
     swcnt_fit: Optional[FitResult] = None
     is_metallic = bool(metallic)
     metallicity_note = ""
-    if rbm.peaks:
+    if rbm.peaks and not no_signal:
         try:
             if metallic is None:
                 is_metallic, swcnt_fit, metallicity_note = _decide_metallicity(
@@ -303,7 +355,7 @@ def analyse(
             warnings.append(f"no se ha podido ajustar la región G como SWCNT: {exc}")
 
     # -- deconvolution of the D-G region -------------------------------
-    candidates = list(presets)
+    candidates = [] if no_signal else list(presets)
     if g_region is not None and g_region.interpretation == "swcnt_split":
         # Without a G- component the D band stretches to absorb that
         # intensity and I_D/I_G comes out several times too large.
@@ -311,6 +363,13 @@ def analyse(
     comparison: Optional[ModelComparison] = None
     fit: Optional[FitResult] = None
     try:
+        if not candidates:
+            # A spectrum with no dynamic range has no bands to separate, and
+            # fitting one only produces components at their seed positions
+            # with heights made of floating-point residue.
+            raise ValueError(
+                "el espectro no tiene variación de intensidad; no se ajusta nada"
+            )
         comparison = compare_models(
             processed,
             presets=candidates,
@@ -427,15 +486,32 @@ def analyse(
         layer_count=layer_count,
         basis=basis,
         indices=indices,
+        quality=quality,
+        interference=interference,
         profile=profile,
         warnings=warnings,
     )
 
 
+def interference_defaults() -> tuple[str, ...]:
+    """Catalogue groups searched when the caller does not choose."""
+    from .interference import DEFAULT_GROUPS
+
+    return tuple(DEFAULT_GROUPS)
+
+
 def _analyse_rbm(
-    spectrum: Spectrum, parameterisation: Optional[str], db: Database
+    spectrum: Spectrum,
+    parameterisation: Optional[str],
+    db: Database,
+    blocked: Sequence[float] = (),
 ) -> RBMResult:
-    """Search the RBM window, fit it, and turn the peaks into diameters."""
+    """Search the RBM window, fit it, and turn the peaks into diameters.
+
+    ``blocked`` lists positions identified as non-carbon; they are dropped
+    before anything is converted to a diameter, because ``ω = A/d + B``
+    will happily turn an iron-oxide line into a plausible nanotube.
+    """
     from .diameter import find_wall_pairs
 
     covered = spectrum.covers(120.0, 350.0, fraction=0.7)
@@ -461,6 +537,11 @@ def _analyse_rbm(
     )
     band = db.band("RBM")
     peaks = [p for p in raw_peaks if p.fwhm is None or p.fwhm <= band.typical_fwhm[1] * 2.0]
+    if blocked:
+        peaks = [
+            p for p in peaks
+            if not any(abs(p.position - b) < 3.0 for b in blocked)
+        ]
 
     if not peaks:
         return RBMResult(
@@ -685,6 +766,14 @@ def build_report(result: AnalysisResult, verbose: bool = True) -> str:
     lines.append(f"  ANÁLISIS RAMAN — {result.raw.name}")
     lines.append("═" * 72)
     lines.append(result.processed.describe())
+
+    if result.quality is not None and result.quality.issues:
+        lines.append(section("CALIDAD DE LA MEDIDA"))
+        lines.append(result.quality.summary())
+
+    if result.interference is not None and result.interference.found_anything:
+        lines.append(section("BANDAS NO CARBONOSAS"))
+        lines.append(result.interference.summary())
 
     lines.append(section("IDENTIFICACIÓN"))
     lines.append(result.classification.summary())

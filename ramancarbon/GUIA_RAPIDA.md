@@ -69,7 +69,7 @@ La ventana tiene la lista de espectros a la izquierda y seis pestañas:
 | **Índices** | Γ_G, R1, R2, fracción amorfa, etapa de amorfización |
 | **Diámetros** | La región RBM y los diámetros que implica |
 | **Multiláser** | Combinar el mismo material medido a 532 y 633 nm |
-| **Comparación** | La tabla de todo el lote, y exportarla a CSV |
+| **Comparación** | La tabla de todo el lote, su estadística, y exportarla a CSV |
 | **Base de datos** | Qué cree el programa y de dónde lo ha sacado |
 
 ### El flujo normal
@@ -216,7 +216,25 @@ dice con un ✗ y explica qué revisar. No promedies: uno de los dos está mal.
 
 ---
 
-## 7. Problemas frecuentes
+## 7. Antes de creerte un número
+
+El programa comprueba solo la calidad de la medida y te avisa. Dos fallos
+que **no se ven** en el informe:
+
+* **Detector saturado.** Si el 3 % de los puntos está pegado al máximo,
+  I_D/I_G puede salir el doble de lo que es. Baja el tiempo de integración.
+* **Muestreo grueso.** Con menos de 6 puntos por anchura de banda el ajuste
+  no puede fijar la anchura. A 16 cm⁻¹/punto, un I_D/I_G real de 1.0 salió 3.9.
+
+Si tu muestra está sobre silicio, usa el botón **Calibrar con la línea de
+Si**: el fonón del silicio está en 520.7 cm⁻¹ exactos y su desviación es el
+error de tu equipo ese día.
+
+Para un número que vas a publicar, pulsa **Incertidumbres por remuestreo**
+en la pestaña *Deconvolución*. Las barras de error del ajuste salen cortas
+—en la posición de G, cinco veces cortas—.
+
+## 8. Problemas frecuentes
 
 **«no se ha encontrado la longitud de onda del láser»** — el archivo no la
 lleva en la cabecera. Escríbela en la casilla de arriba y pulsa *Aplicar*.
@@ -246,6 +264,11 @@ cociente. Resta la línea base primero.
 Pulsa *Comparar modelos* y usa el que gane. Si el material es un nanotubo,
 comprueba que el modelo elegido incluye G⁻: sin ella, la banda D se estira
 para absorber esa intensidad y I_D/I_G sale varias veces demasiado grande.
+
+**Creo que hay óxido de catalizador o azufre sin reaccionar** — marca
+*Buscar bandas no carbonosas* en la barra lateral. Está apagado por defecto
+porque decirle al buscador lo que podría encontrar sesga lo que informa. Solo
+acepta una especie si aparecen varias de sus líneas fuertes.
 
 **Sale un pico donde no hay nada** — el detector exige una significancia
 alta precisamente para no inventar picos en el ruido, pero si tu espectro
