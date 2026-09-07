@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ramancarbon"
-version = "0.1.0"
-description = "Analiza espectros Raman experimentales de nanomateriales de carbono: identifica SWCNT/DWCNT/MWCNT, deconvoluciona las bandas D y G, calcula I_D/I_G, I_2D/I_G, I_D/I_D', diámetros por RBM y desplazamientos frente a la literatura."
+version = "0.3.0"
+description = "Analiza espectros Raman experimentales de nanomateriales de carbono y dicalcogenuros: identifica SWCNT/DWCNT/MWCNT/CNF, deconvoluciona las bandas D y G con el número de picos que elijas, calcula I_D/I_G, I_2D/I_G, I_D/I_D', índices estructurales, diámetros por RBM y desplazamientos frente a la literatura; cuenta capas en MoS2, WS2 y otros TMD."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -14,6 +14,8 @@ keywords = [
     "Raman", "spectroscopy", "carbon nanotubes", "SWCNT", "DWCNT", "MWCNT",
     "graphene", "graphene oxide", "RBM", "deconvolution", "D band", "G band",
     "Tuinstra-Koenig", "Breit-Wigner-Fano", "nanomaterials",
+    "carbon nanofibre", "CNF", "doping", "TMD", "MoS2", "WS2",
+    "transition metal dichalcogenide", "layer counting",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

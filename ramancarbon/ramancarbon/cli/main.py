@@ -328,16 +328,29 @@ def cmd_deconvolucionar(args) -> int:
         return 0
 
     try:
-        model = build_model(
-            processed, preset=args.modelo, metallic=args.metalico, profile=args.profile
-        )
+        if args.n_d or args.n_g:
+            from ..models.deconvolution import build_region_model
+
+            model = build_region_model(
+                processed,
+                n_d=args.n_d or 1,
+                n_g=args.n_g or 1,
+                profile=args.profile or "pseudo_voigt",
+                metallic=args.metalico,
+            )
+        else:
+            model = build_model(
+                processed, preset=args.modelo, metallic=args.metalico,
+                profile=args.profile,
+            )
         result = fit_model(processed, model)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    print(f"Modelo: {PRESET_LABELS.get(args.modelo, args.modelo)}")
+    print(f"Modelo: {model.name if (args.n_d or args.n_g) else PRESET_LABELS.get(args.modelo, args.modelo)}")
     print(f"Ventana: {model.window[0]:.0f}–{model.window[1]:.0f} cm⁻¹")
-    print(f"Perfil: {args.profile or 'según la base de datos'}")
+    effective = args.profile or ("pseudo_voigt" if (args.n_d or args.n_g) else None)
+    print(f"Perfil: {effective or 'según la base de datos'}")
     print()
     print(result.summary())
     _maybe_export_fit(args, result)
@@ -389,6 +402,53 @@ def cmd_laseres(args) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(combined.summary())
+    return 0
+
+
+def cmd_tmd(args) -> int:
+    """Analyse a dichalcogenide spectrum."""
+    from ..analysis.tmd import analyse_tmd, tmd_materials
+
+    if args.listar:
+        for material in tmd_materials():
+            print(f"{material.key}  —  {material.label}")
+            for mode in material.modes.values():
+                print(f"    {mode.key:<9s} {mode.position:7.1f} cm⁻¹   {mode.label}")
+            if material.separation_by_layers:
+                spans = ", ".join(
+                    f"{k}: {v[0]:g}–{v[1]:g}"
+                    for k, v in material.separation_by_layers.items()
+                )
+                print(f"    separación E₂g–A₁g por capas → {spans}")
+            else:
+                print("    los dos modos son casi degenerados: no cuenta capas")
+            print(f"    confianza: {material.confidence}")
+            print(f"    nota: {material.notes}")
+            print()
+        return 0
+
+    if not args.espectro:
+        print("error: indica un archivo de espectro, o usa --listar",
+              file=sys.stderr)
+        return 1
+    try:
+        spectrum = read_spectrum(Path(args.espectro), laser_nm=args.laser)
+    except (OSError, SpectrumReadError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    result = analyse_tmd(spectrum, material=args.material)
+    print(result.summary())
+    if result.fit is not None and args.exportar:
+        from ..analysis.export import export_components, export_curves
+
+        out = Path(args.exportar)
+        stem = Path(args.espectro).stem
+        for path in (
+            export_components(result.fit, out / f"{stem}_componentes.csv"),
+            export_curves(result.fit, out / f"{stem}_curvas.csv"),
+        ):
+            print(f"  {path}", file=sys.stderr)
     return 0
 
 
@@ -536,10 +596,24 @@ def cmd_bd(args) -> int:
 
 def cmd_demo(args) -> int:
     """Write synthetic spectra to a folder."""
-    from ..examples.demo_data import DEMO_KINDS, make_demo
+    from ..examples.demo_data import DEMO_KINDS, make_demo, make_tmd_demo, TMD_DEMOS
 
     out = Path(args.carpeta)
     out.mkdir(parents=True, exist_ok=True)
+
+    if args.tmd:
+        for index, (material, layers) in enumerate(TMD_DEMOS):
+            spectrum = make_tmd_demo(
+                material, layers, laser_nm=args.laser or 532.0, seed=index
+            )
+            print(f"  {write_spectrum(spectrum, out / f'{spectrum.name}.txt')}")
+        print(
+            "\nSon espectros SINTÉTICOS de dicalcogenuros. Pruébalos con "
+            "«ramancarbon tmd».",
+            file=sys.stderr,
+        )
+        return 0
+
     kinds = [args.material] if args.material else list(DEMO_KINDS)
     for index, kind in enumerate(kinds):
         try:
@@ -563,7 +637,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ramancarbon",
         description=(
-            "Análisis de espectros Raman de nanomateriales de carbono: "
+            "Análisis de espectros Raman de nanomateriales de carbono y de "
+            "dicalcogenuros: "
             "identificación SWCNT/DWCNT/MWCNT, deconvolución de las bandas D y "
             "G, cocientes I_D/I_G, I_2D/I_G e I_D/I_D', diámetros por RBM y "
             "desplazamientos frente a la literatura."
@@ -580,6 +655,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  ramancarbon laseres m_532.txt m_633.txt\n"
             "  ramancarbon lote datos/ --procesos 4 --csv r.csv\n"
             "  ramancarbon calibrar patron_si.txt\n"
+            "  ramancarbon deconvolucionar m.txt --picos-d 3 --picos-g 2\n"
+            "  ramancarbon tmd mos2.txt\n"
             "  ramancarbon bd --banda 2D --laser 785\n"
             "  ramancarbon demo salida/\n"
         ),
@@ -634,6 +711,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("espectro", help="archivo del espectro")
     p.add_argument("--modelo", default="three_band", choices=list(PRESETS),
                    help="preajuste a usar (por defecto three_band: D + G + D')")
+    p.add_argument("--picos-d", dest="n_d", type=int, default=None, metavar="N",
+                   help="número de componentes en la región D. Con --picos-g "
+                        "ignora --modelo y construye el modelo a medida. Las "
+                        "tres primeras son D, D3 y D4 (bandas con nombre); a "
+                        "partir de ahí salen sin nombre y sin interpretación")
+    p.add_argument("--picos-g", dest="n_g", type=int, default=None, metavar="N",
+                   help="número de componentes en la región G. Las tres "
+                        "primeras son G, D' y G⁻")
     p.add_argument("--comparar", action="store_true",
                    help="ajustar 2, 3, 4 y 5 bandas y elegir por criterio de "
                         "información en vez de por costumbre")
@@ -687,6 +772,27 @@ def build_parser() -> argparse.ArgumentParser:
                    help="desplazamiento a restar, si lo sabes por otra vía")
     p.set_defaults(func=cmd_calibrar)
 
+    p = sub.add_parser(
+        "tmd",
+        help="analizar dicalcogenuros (MoS₂, WS₂, MoSe₂, WSe₂, MoTe₂)",
+        description=(
+            "Cuenta capas por la SEPARACIÓN entre el modo E₂g (en el plano) y "
+            "el A₁g (fuera del plano), que crece de forma monótona al apilar. "
+            "Al ser una diferencia, cualquier error común de calibración se "
+            "cancela. Detecta también la fase 1T′ metálica por sus modos J."
+        ),
+    )
+    p.add_argument("espectro", nargs="?", help="archivo del espectro")
+    p.add_argument("--material", default=None, metavar="CLAVE",
+                   help="forzar el material en vez de identificarlo")
+    p.add_argument("--laser", type=float, default=None, metavar="NM",
+                   help="longitud de onda de excitación")
+    p.add_argument("--listar", action="store_true",
+                   help="listar los TMD de la base de datos y sus modos")
+    p.add_argument("--exportar", default=None, metavar="CARPETA",
+                   help="exportar componentes y curvas del ajuste")
+    p.set_defaults(func=cmd_tmd)
+
     p = sub.add_parser("bd", help="consultar la base de datos de literatura")
     p.add_argument("--banda", default=None, metavar="CLAVE",
                    help="detalle de una banda (D, G, 2D, RBM…)")
@@ -707,6 +813,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="generar solo este material")
     p.add_argument("--laser", type=float, default=None, metavar="NM",
                    help="longitud de onda de excitación (por defecto 532)")
+    p.add_argument("--tmd", action="store_true",
+                   help="generar espectros de dicalcogenuros en vez de carbono")
     p.set_defaults(func=cmd_demo)
 
     return parser

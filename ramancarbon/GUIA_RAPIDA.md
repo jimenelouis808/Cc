@@ -69,6 +69,7 @@ La ventana tiene la lista de espectros a la izquierda y seis pestañas:
 | **Índices** | Γ_G, R1, R2, fracción amorfa, etapa de amorfización |
 | **Diámetros** | La región RBM y los diámetros que implica |
 | **Multiláser** | Combinar el mismo material medido a 532 y 633 nm |
+| **TMD** | Dicalcogenuros: MoS₂, WS₂, MoSe₂, WSe₂, MoTe₂ |
 | **Comparación** | La tabla de todo el lote, su estadística, y exportarla a CSV |
 | **Base de datos** | Qué cree el programa y de dónde lo ha sacado |
 
@@ -88,7 +89,16 @@ La ventana tiene la lista de espectros a la izquierda y seis pestañas:
 
    Verás el espectro original en gris detrás y la línea base propuesta
    encima, para comprobar que no se está comiendo ninguna banda.
-4. En **Deconvolución**, elige el **perfil**. Para espectros reales,
+4. En **Deconvolución**, elige el **perfil** y **cuántos picos** quieres en
+   cada región. Si sueles ajustar con 3 en la D y 2 en la G, pon eso en los
+   dos contadores y pulsa *Construir*: te da D4 + D + D3 + G + D′.
+
+   Las tres primeras de cada región tienen nombre (D, D3, D4 / G, D′, G⁻).
+   Si pides más, las extra salen como `Dx1`, `Gx1`… y **no cuentan** para los
+   cocientes ni para la clasificación: una componente sin nombre no tiene
+   interpretación física.
+
+   Sobre el perfil: Para espectros reales,
    ruidosos, pseudo-Voigt es la opción sensata: contiene la gaussiana y la
    lorentziana como casos particulares, así que el ajuste mide la forma en
    vez de que tú la impongas, y te devuelve η.
@@ -216,7 +226,28 @@ dice con un ✗ y explica qué revisar. No promedies: uno de los dos está mal.
 
 ---
 
-## 7. Antes de creerte un número
+## 7. Si mides dicalcogenuros (MoS₂, WS₂…)
+
+Pestaña **TMD**. Carga el espectro (tiene que cubrir al menos 100–500 cm⁻¹) y
+pulsa *Analizar como TMD*.
+
+Cuenta capas por la **separación** entre el modo E₂g y el A₁g, que crece al
+apilar. Como es una diferencia, un error de calibración común se cancela.
+
+Dos avisos importantes:
+
+* **Resolución.** Estas bandas miden 2–6 cm⁻¹ y las fronteras entre números
+  de capa están a 2–3 cm⁻¹. Con un paso de muestreo grueso no se pueden
+  contar capas, por muy bien que se vea el ajuste. Usa el mejor
+  espectrómetro/rejilla que tengas para esto.
+* **WSe₂ no se puede contar por separación**: sus dos modos son casi
+  degenerados. El programa lo detecta y cuenta por la presencia del modo
+  B¹₂g a ~308 cm⁻¹, prohibido en monocapa.
+
+Si ves fotoluminiscencia enorme midiendo MoS₂ monocapa a 532 nm, no es
+suciedad: la monocapa emite a ~1.85 eV. Prueba con 633 nm.
+
+## 8. Antes de creerte un número
 
 El programa comprueba solo la calidad de la medida y te avisa. Dos fallos
 que **no se ven** en el informe:
@@ -234,7 +265,7 @@ Para un número que vas a publicar, pulsa **Incertidumbres por remuestreo**
 en la pestaña *Deconvolución*. Las barras de error del ajuste salen cortas
 —en la posición de G, cinco veces cortas—.
 
-## 8. Problemas frecuentes
+## 9. Problemas frecuentes
 
 **«no se ha encontrado la longitud de onda del láser»** — el archivo no la
 lleva en la cabecera. Escríbela en la casilla de arriba y pulsa *Aplicar*.

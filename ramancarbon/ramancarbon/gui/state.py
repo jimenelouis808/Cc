@@ -176,6 +176,8 @@ class LoadedSpectrum:
     processed: Optional[Spectrum] = None
     diagnostics: dict = field(default_factory=dict)
     result: Optional[AnalysisResult] = None
+    tmd_result: Optional[Any] = None
+    """Dichalcogenide analysis, when this spectrum was analysed as a TMD."""
     manual_fit: Optional[FitResult] = None
     is_control: bool = False
     error: str = ""
@@ -410,6 +412,54 @@ class Session:
         self.log("info", f"eje corregido en {offset:+.2f} cm⁻¹")
         return offset
 
+    # -- dichalcogenides ------------------------------------------------
+    def analyse_tmd_active(self, material: Optional[str] = None):
+        """Analyse the active spectrum as a transition-metal dichalcogenide.
+
+        Kept separate from :meth:`analyse_active` rather than folded into
+        it: a TMD spectrum and a carbon spectrum share almost no analysis,
+        and a classifier that had to choose between "multi-walled nanotube"
+        and "bilayer MoS₂" would be answering a question nobody asks — you
+        know which sample you put under the objective.
+        """
+        from ..analysis.tmd import analyse_tmd
+
+        item = self.active
+        if item is None:
+            self.log("error", "no hay ningún espectro seleccionado")
+            return None
+        try:
+            item.tmd_result = analyse_tmd(
+                item.raw,
+                material=material,
+                preprocess_kwargs=self.preprocess_settings.to_kwargs(),
+            )
+        except (ValueError, KeyError) as exc:
+            self.log("error", str(exc))
+            return None
+        for warning in item.tmd_result.warnings:
+            self.log("warning", f"{item.name}: {warning}")
+        return item.tmd_result
+
+    def tmd_table(self) -> tuple[list[str], list[list[str]]]:
+        """Columns and rows for every spectrum analysed as a TMD."""
+        rows_raw = []
+        for item in self.spectra:
+            if item.tmd_result is None:
+                continue
+            row = item.tmd_result.to_dict()
+            row["nombre"] = item.name
+            rows_raw.append(row)
+        if not rows_raw:
+            return [], []
+        columns: list[str] = []
+        for row in rows_raw:
+            for key in row:
+                if key not in columns:
+                    columns.append(key)
+        rows = [[_format_cell(row.get(c)) for c in columns] for row in rows_raw]
+        return columns, rows
+
     def batch_summary(self):
         """Robust statistics over everything analysed in the session."""
         from ..analysis.batch import summarise
@@ -464,6 +514,24 @@ class Session:
         for warning in item.manual_fit.warnings:
             self.log("warning", f"{item.name}: {warning}")
         return item.manual_fit
+
+    def region_specs(self, n_d: int, n_g: int) -> list[PeakSpec]:
+        """Starting components for a free-form ``n_d`` + ``n_g`` model."""
+        from ..models.deconvolution import build_region_model
+
+        item = self.active
+        if item is None:
+            raise ValueError("no hay ningún espectro seleccionado")
+        target = item.processed or item.raw
+        model = build_region_model(
+            target,
+            n_d=n_d,
+            n_g=n_g,
+            profile=self.analysis_settings.profile or "pseudo_voigt",
+            metallic=bool(self.analysis_settings.metallic),
+            db=self.db,
+        )
+        return list(model.peaks)
 
     def preset_specs(self, preset: str) -> list[PeakSpec]:
         """Starting components for a preset, for the editable table.

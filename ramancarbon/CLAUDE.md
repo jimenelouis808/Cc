@@ -156,6 +156,31 @@ una tiene una prueba que la protege.
   se publican, usa `models.bootstrap`. Documenta siempre que el remuestreo
   mide reproducibilidad frente al ruido, no acierto.
 
+## Dicalcogenuros (TMD)
+
+- **La medida es una SEPARACIÓN, no una posición.** E₂g se ablanda y A₁g se
+  endurece al apilar; la diferencia cancela los errores comunes de
+  calibración. No lo sustituyas por posiciones absolutas.
+- **En WSe₂ el método no vale** (modos casi degenerados) y en MoSe₂/MoTe₂
+  apenas discrimina. Allí se cuenta por el modo B¹₂g, prohibido en monocapa.
+  No inventes un número de capas donde el material no lo permite.
+- **Los modos J prueban fase 1T′; su ausencia no prueba nada.** Mantén esa
+  asimetría en el texto.
+- **La resolución manda**: bandas de 2–6 cm⁻¹ y fronteras a 2–3 cm⁻¹. Avisa
+  siempre que el paso de muestreo no llegue.
+- **MoS₂ es el único con confianza alta.** MoSe₂, WSe₂ y MoTe₂ llevan
+  confianza baja a propósito.
+- **El análisis TMD es un camino aparte del de carbono, no una rama del
+  clasificador.** Nadie necesita que el programa decida entre «MWCNT» y
+  «MoS₂ bicapa»: el usuario sabe qué puso bajo el objetivo.
+
+## Modelos a medida
+
+- **Las componentes llevan nombre solo mientras la física se lo dé**: D, D3,
+  D4 en la región D; G, D′, G⁻ en la G. Las extra salen sin `band`, y por eso
+  no entran en cocientes ni clasificación. No les asignes una banda para que
+  «cuadre».
+
 ## Honestidad sobre la validación
 
 Todo está validado contra espectros **sintéticos** generados por

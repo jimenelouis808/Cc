@@ -20,15 +20,18 @@ The package is organised so that each layer can be used on its own:
     Every literature constant, in editable JSON with its source and a
     confidence flag. Nothing is hardcoded in the analysis code.
 ``analysis``
-    Band assignment, intensity ratios, diameters, shifts against reference
-    materials, and the rule-based SWCNT/DWCNT/MWCNT classifier.
+    Band assignment, intensity ratios, structural indices, diameters,
+    shifts against reference materials, the rule-based
+    SWCNT/DWCNT/MWCNT/CNF classifier, measurement-quality checks,
+    multi-wavelength combination, parallel batch processing, and a separate
+    path for transition-metal dichalcogenides.
 ``gui`` / ``cli``
     A Tkinter desktop application and a command-line interface.
 """
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 
 from .analysis.report import AnalysisResult, analyse
 from .core.io import read_many, read_spectrum, write_spectrum

@@ -230,4 +230,124 @@ def add_doping(
     return out
 
 
-__all__ = ["DEMO_KINDS", "add_doping", "demo_spectra", "make_demo"]
+__all__ = [
+    "DEMO_KINDS",
+    "TMD_DEMOS",
+    "add_doping",
+    "demo_spectra",
+    "make_demo",
+    "make_tmd_demo",
+    "tmd_demo_spectra",
+]
+
+
+#: Synthetic TMD samples, as ``(material, layers)``.
+TMD_DEMOS = (
+    ("MoS2", "1"),
+    ("MoS2", "2"),
+    ("MoS2", "bulk"),
+    ("WS2", "1"),
+    ("MoSe2", "1"),
+    ("WSe2", "2"),
+)
+
+
+def make_tmd_demo(
+    material: str = "MoS2",
+    layers: str = "1",
+    laser_nm: float = 532.0,
+    seed: int = 0,
+    low: float = 100.0,
+    high: float = 800.0,
+    step: float = 0.5,
+    noise: float = 3.0,
+    phase_1t: bool = False,
+) -> Spectrum:
+    """Build a synthetic dichalcogenide spectrum.
+
+    Positions come from ``database/data/tmd.json``, and the layer count is
+    imposed by placing the two main modes at a separation drawn from that
+    material's own table — so a demo labelled "2 layers" really does have
+    the separation the database says two layers have, and analysing it is a
+    genuine round trip rather than a tautology.
+
+    Bands are narrow here (3 cm⁻¹) as real dichalcogenide modes are, which
+    is why the default sampling step is 0.5 cm⁻¹ rather than the 1 cm⁻¹
+    used for carbon: at 1 cm⁻¹ these bands are only three points wide.
+
+    Parameters
+    ----------
+    material:
+        ``"MoS2"``, ``"WS2"``, ``"MoSe2"``, ``"WSe2"`` or ``"MoTe2"``.
+    layers:
+        ``"1"``, ``"2"``, ``"3"``, ``"4"`` or ``"bulk"``, where the
+        material's table has an entry for it.
+    laser_nm, seed, low, high, step, noise:
+        As for :func:`make_demo`.
+    phase_1t:
+        Add the J1–J3 modes of the metallic 1T′ phase.
+
+    Returns
+    -------
+    Spectrum
+
+    Raises
+    ------
+    ValueError
+        If the material is unknown.
+    """
+    from ..analysis.tmd import load_tmd_database
+
+    payload, materials = load_tmd_database()
+    catalogue = {m.key: m for m in materials}
+    if material not in catalogue:
+        raise ValueError(
+            f"unknown TMD {material!r}; available: {', '.join(sorted(catalogue))}"
+        )
+    entry = catalogue[material]
+    rng = np.random.default_rng(seed)
+    x = np.arange(float(low), float(high), float(step))
+    y = np.zeros_like(x)
+
+    table = entry.separation_by_layers
+    if table and layers in table:
+        wanted = 0.5 * sum(table[layers])
+        e2g = entry.modes.get("E2g")
+        a1g = entry.modes.get("A1g")
+        if e2g and a1g:
+            # Split the required change symmetrically about the catalogue
+            # positions, which is what stacking actually does: E2g softens
+            # and A1g stiffens by comparable amounts.
+            nominal = abs(a1g.position - e2g.position)
+            delta = 0.5 * (wanted - nominal)
+            sign = 1.0 if a1g.position > e2g.position else -1.0
+            y += lorentzian(x, e2g.position - sign * delta, 620.0, 3.2)
+            y += lorentzian(x, a1g.position + sign * delta, 900.0, 3.0)
+    for key, mode in entry.modes.items():
+        if key in {"E2g", "A1g"} and table and layers in table:
+            continue
+        if key == "B12g" and layers == "1":
+            continue  # forbidden in a monolayer, which is the point
+        y += lorentzian(x, mode.position, 220.0 if key != "E2g_A1g" else 900.0, 3.5)
+
+    if phase_1t:
+        for line in payload["phases"]["1T_prime"]["marker_bands"].get(material, ()):
+            y += lorentzian(x, line, 260.0, 5.0)
+
+    y += 120.0 * np.exp(-(x - low) / 400.0) + 20.0
+    y += rng.normal(0.0, noise, x.size)
+    return Spectrum(
+        shift=x,
+        intensity=y,
+        laser_nm=laser_nm,
+        name=f"demo_{material}_{layers}capa_{laser_nm:g}nm",
+        metadata={"synthetic": True, "material": material, "layers": layers},
+    )
+
+
+def tmd_demo_spectra(laser_nm: float = 532.0, seed: int = 0) -> list[Spectrum]:
+    """One synthetic spectrum for each entry in :data:`TMD_DEMOS`."""
+    return [
+        make_tmd_demo(material, layers, laser_nm=laser_nm, seed=seed + i)
+        for i, (material, layers) in enumerate(TMD_DEMOS)
+    ]

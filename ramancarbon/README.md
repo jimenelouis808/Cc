@@ -1,6 +1,7 @@
 # ramancarbon
 
-Analiza **espectros Raman experimentales** de nanomateriales de carbono:
+Analiza **espectros Raman experimentales** de nanomateriales de carbono y de
+dicalcogenuros (TMD):
 distingue SWCNT / DWCNT / MWCNT, deconvoluciona las bandas D y G, calcula
 I_D/I_G, I_2D/I_G e I_D/I_D', deduce diámetros a partir del RBM y compara
 las posiciones medidas con la literatura para detectar dopado o deformación.
@@ -58,6 +59,9 @@ antes de ajustar. Todo eso sale escrito.
 install.bat           # Windows
 ```
 
+Guía completa paso a paso, incluida la resolución de problemas:
+[**INSTALACION.md**](INSTALACION.md).
+
 Manualmente:
 
 ```bash
@@ -99,7 +103,7 @@ print(result.classification.label, result.classification.confidence)
 | `database` | Bandas y dispersiones, 13 materiales de referencia, 5 parametrizaciones RBM, firmas de dopado y deformación — todo en JSON con su fuente |
 | `analysis` | Asignación de bandas, cocientes, **índices estructurales**, diámetros, desplazamientos, clasificador, **combinación multiláser**, **calidad de la medida**, **lote en paralelo con estadística**, **bandas no carbonosas** (opcional), **exportación** |
 | `gui` | Aplicación de escritorio Tkinter |
-| `cli` | `ramancarbon analizar / lote / deconvolucionar / laseres / calibrar / bd / demo` |
+| `cli` | `ramancarbon analizar / lote / deconvolucionar / laseres / tmd / calibrar / bd / demo` |
 
 ### Bandas y cocientes
 
@@ -197,8 +201,23 @@ SWCNT de dos diámetros.
 
 ### Deconvolución
 
-Preajustes de 2, 3, 4 y 5 bandas (el modelo de Sadezky para hollín), un
-modelo específico de nanotubo con G⁻ y G⁺, y modelos para el RBM y la 2D.
+**Tú eliges cuántos picos van en cada región.** Si trabajas con tres
+componentes en la D y dos en la G, que es una convención habitual:
+
+```bash
+ramancarbon deconvolucionar muestra.txt --picos-d 3 --picos-g 2
+```
+
+Eso da D4 + D + D3 + G + D′, es decir el modelo de Sadezky. Las componentes
+van **con nombre mientras la física se lo dé**: las tres primeras de la
+región D son D, D3 y D4, en el orden en que la literatura las añade; las
+tres primeras de la G son G, D′ y G⁻. Si pides más, las extra salen como
+`Dx1`, `Gx1`… repartidas en los huecos más anchos, y **no entran en los
+cocientes ni en la clasificación**, porque una componente sin nombre no
+tiene interpretación física.
+
+También hay preajustes de 2, 3, 4 y 5 bandas, un modelo específico de
+nanotubo con G⁻ y G⁺, y modelos para el RBM y la 2D.
 El perfil se elige para todas las componentes a la vez: **pseudo-Voigt**,
 gaussiana, lorentziana, o los valores por defecto de cada banda.
 
@@ -307,6 +326,43 @@ Para muestras dopadas con S, Se o P importa por otra razón: si aparece la
 línea de 219 cm⁻¹ del azufre elemental, el dopante **no** entró en la red,
 que es lo contrario de lo que su presencia suele darse por demostrar.
 
+## Dicalcogenuros (TMD)
+
+```bash
+ramancarbon tmd mos2.txt          # o la pestaña TMD de la interfaz
+ramancarbon tmd --listar          # los materiales y sus modos
+```
+
+MoS₂, WS₂, MoSe₂, WSe₂ y MoTe₂. Física distinta de la del carbono, con la
+misma maquinaria de ajuste y exportación.
+
+**Las capas se cuentan por una separación, no por una posición.** Al apilar,
+el modo E²g (en el plano) se ablanda y el A₁g (fuera del plano) se endurece,
+así que la distancia entre ellos crece de forma monótona — en MoS₂, de
+~19 cm⁻¹ en monocapa a ~25 en bulk. Al ser una **diferencia**, cualquier
+error común de calibración se cancela, y por eso es mucho más robusta que
+cualquier posición suelta.
+
+Los dos van en direcciones opuestas por razones distintas: el A₁g mueve los
+calcógenos perpendicularmente a la capa y la vecina se le opone; el E²g mueve
+átomos dentro del plano, donde lo que manda es el apantallamiento dieléctrico
+de la interacción de largo alcance, que lo ablanda.
+
+**Donde el método no funciona, lo dice.** En WSe₂ los dos modos son casi
+degenerados a ~250 cm⁻¹ y un espectrómetro normal ve una sola banda; allí se
+cuenta por la presencia del modo B¹₂g, prohibido por simetría en monocapa. En
+MoSe₂ y MoTe₂ la separación apenas cambia y se usa el mismo argumento.
+
+**Fase 1T′.** La distorsión metálica dobla la celda y produce los modos J1,
+J2 y J3, que no existen en la fase 2H. Verlos es prueba positiva de fase
+metálica; no verlos es evidencia mucho más débil, porque una fracción pequeña
+queda bajo el ruido — y el informe lo dice así.
+
+**La resolución importa más que en carbono.** Estas bandas miden 2–6 cm⁻¹ y
+las fronteras entre números de capa están a 2–3 cm⁻¹, así que un paso de
+muestreo grueso hace imposible contar capas por muy bien que se vea el
+ajuste. El programa avisa.
+
 ## Limitaciones — léelas
 
 * **Todo se ha validado contra datos sintéticos**, generados por el propio
@@ -333,8 +389,12 @@ que es lo contrario de lo que su presencia suele darse por demostrar.
   contra la transferencia de carga que la endurece. Las dos contribuciones
   son comparables y de signo contrario, así que los rangos de esos dopantes
   cruzan el cero y llevan confianza baja.
-* **Las nanopartículas metálicas y el efecto SERS todavía no se tratan.**
-  El archivo de datos existe pero nada lo lee aún.
+* **Las nanopartículas metálicas y el efecto SERS son opcionales y están
+  apagados por defecto** (`--interferencias`). Cuando se activan, una especie
+  solo se acepta si aparecen varias de sus líneas fuertes.
+* **Los datos de MoSe₂, WSe₂ y MoTe₂ tienen confianza baja.** Hay mucha menos
+  literatura cuantitativa que para MoS₂, y sus tablas de separación por capa
+  son orientativas. MoS₂ es el único con confianza alta.
 * **Raman no separa las configuraciones de un mismo dopante** (nitrógeno
   grafítico / piridínico / pirrólico; azufre tiofénico / sulfóxido) **y no
   cuantifica el contenido de dopante.** Eso es XPS. Lo que Raman aporta y
@@ -348,7 +408,8 @@ que es lo contrario de lo que su presencia suele darse por demostrar.
 
 ## Documentación
 
-* [**Guía rápida**](GUIA_RAPIDA.md) — instalación y uso paso a paso.
+* [**Instalación**](INSTALACION.md) — paso a paso, sin dar nada por sabido.
+* [**Guía rápida**](GUIA_RAPIDA.md) — cómo se usa.
 * [**Guía de desarrollo**](DESARROLLO.md) — arquitectura, pruebas, dónde
   tocar cada cosa.
 

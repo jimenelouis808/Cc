@@ -532,11 +532,207 @@ def _comparison_verdict(
 
 
 __all__ = [
+    "D_REGION_LADDER",
+    "G_REGION_LADDER",
+    "REGION_BOUNDS",
     "ModelComparison",
     "PRESETS",
     "PRESET_BANDS",
     "PRESET_LABELS",
     "PRESET_WINDOWS",
     "build_model",
+    "build_region_model",
     "compare_models",
 ]
+
+
+# ----------------------------------------------------------------------
+# free-form region models
+# ----------------------------------------------------------------------
+#: Order in which named components enter the D region as the count grows.
+#:
+#: This is the order the literature adds them in, not an arbitrary one.
+#: One component is the D band itself. The second is D3, the amorphous
+#: envelope that fills the D–G valley. The third is D4, the sp³/polyene
+#: shoulder below 1250 cm⁻¹. Together those three are the D-region half of
+#: the Sadezky five-band model for soot and disordered carbons — which is
+#: what "three peaks in the D band" usually means in practice.
+D_REGION_LADDER = ("D", "D3", "D4")
+
+#: Order in which named components enter the G region.
+#:
+#: G alone, then D′ — the defect-activated shoulder above it. A third
+#: component is the curvature-split G⁻ of a nanotube; beyond that there is
+#: no named band left and extra components are unnamed.
+G_REGION_LADDER = ("G", "D'", "G-")
+
+#: Where each region is taken to start and end, cm⁻¹ at 2.33 eV.
+REGION_BOUNDS = {"D": (1050.0, 1500.0), "G": (1500.0, 1700.0)}
+
+
+def build_region_model(
+    spectrum: Spectrum,
+    n_d: int = 3,
+    n_g: int = 2,
+    profile: Optional[str] = "pseudo_voigt",
+    background: str = "linear",
+    window: Optional[tuple[float, float]] = None,
+    db: Optional[Database] = None,
+    metallic: bool = False,
+) -> FitModel:
+    """Build a D–G model with a chosen number of components in each region.
+
+    Many groups fit a fixed convention rather than a named preset — three
+    components across the D region and two across the G region is a common
+    one — and the presets in this module cannot express an arbitrary
+    choice. This does.
+
+    Components are **named where the physics names them** and unnamed
+    beyond that. The first three in the D region are D, D3 and D4, in that
+    order, because that is the order the literature adds them in and each
+    one carries a meaning, a default lineshape and a position window from
+    the database. The first three in the G region are G, D′ and G⁻. Ask
+    for more than the ladder provides and the extras come back as ``Dx1``,
+    ``Gx1`` and so on, evenly spaced in the gaps, with wide bounds and no
+    band assignment — because a component with no name has no physical
+    interpretation and should not be given one by the software.
+
+    That distinction is carried through: unnamed components appear in the
+    fit and in the exports, but they do not feed the band assignment, the
+    ratios or the classifier.
+
+    Parameters
+    ----------
+    spectrum:
+        The spectrum to be fitted.
+    n_d, n_g:
+        How many components in the D and G regions. Both must be at least
+        one; the sum is capped at 12, beyond which no spectrum constrains
+        the model.
+    profile:
+        Lineshape for every component. ``"pseudo_voigt"`` by default here
+        — unlike the named presets, which keep each band's own default —
+        because a free-form model is usually being fitted to broad,
+        overlapping material where letting the fit choose the shape is the
+        safer option.
+    background:
+        Polynomial background inside the fit.
+    window:
+        Fit window. Defaults to the union of the two regions, padded.
+    db:
+        Loaded database.
+    metallic:
+        Give G⁻, if the G count reaches three, a Breit–Wigner–Fano profile.
+
+    Returns
+    -------
+    FitModel
+
+    Raises
+    ------
+    ValueError
+        If the counts are out of range or the spectrum does not cover the
+        window.
+    """
+    database = db or load_database()
+    if n_d < 1 or n_g < 1:
+        raise ValueError("hace falta al menos una componente en cada región")
+    if n_d + n_g > 12:
+        raise ValueError(
+            f"{n_d + n_g} componentes es más de lo que un espectro Raman puede "
+            "determinar; por encima de ~8 las áreas dejan de ser independientes"
+        )
+    if profile is not None:
+        profile = resolve_profile(profile)
+
+    laser_ev = spectrum.laser_ev
+    shift = 0.0
+    if laser_ev is not None:
+        shift = database.band("D").dispersion * (laser_ev - database.reference_laser_ev)
+
+    d_low, d_high = (v + shift for v in REGION_BOUNDS["D"])
+    g_low, g_high = (v + shift for v in REGION_BOUNDS["G"])
+    lo, hi = window or (d_low - 50.0, g_high + 50.0)
+    _require_coverage(spectrum, lo, hi, f"{n_d}D+{n_g}G")
+
+    peaks: list[PeakSpec] = []
+    peaks.extend(
+        _region_specs(
+            spectrum, n_d, D_REGION_LADDER, (d_low, d_high), "Dx",
+            database, laser_ev, profile, metallic,
+        )
+    )
+    peaks.extend(
+        _region_specs(
+            spectrum, n_g, G_REGION_LADDER, (g_low, g_high), "Gx",
+            database, laser_ev, profile, metallic,
+        )
+    )
+    peaks.sort(key=lambda spec: spec.centre)
+    return FitModel(
+        peaks=peaks, window=(lo, hi), background=background,
+        name=f"{n_d}D+{n_g}G",
+    )
+
+
+def _region_specs(
+    spectrum: Spectrum,
+    count: int,
+    ladder: Sequence[str],
+    bounds: tuple[float, float],
+    prefix: str,
+    db: Database,
+    laser_ev: Optional[float],
+    profile: Optional[str],
+    metallic: bool,
+) -> list[PeakSpec]:
+    """Named components from the ladder, then evenly spaced unnamed ones."""
+    specs: list[PeakSpec] = []
+    for key in ladder[: min(count, len(ladder))]:
+        chosen = "bwf" if (key == "G-" and metallic) else profile
+        specs.append(_spec_for_band(spectrum, key, db, laser_ev, profile=chosen))
+
+    extra = count - len(specs)
+    if extra <= 0:
+        return specs
+
+    low, high = bounds
+    taken = sorted(spec.centre for spec in specs)
+    for index, centre in enumerate(_fill_gaps(low, high, taken, extra), start=1):
+        observed = spectrum.max_in(centre - 40.0, centre + 40.0)
+        height = observed[1] if observed and observed[1] > 0 else 1.0
+        specs.append(
+            PeakSpec(
+                name=f"{prefix}{index}",
+                profile=profile or "pseudo_voigt",
+                centre=centre,
+                height=height,
+                fwhm=80.0,
+                centre_bounds=(max(low, centre - 60.0), min(high, centre + 60.0)),
+                height_bounds=(0.0, height * 20.0),
+                fwhm_bounds=(10.0, 300.0),
+                band=None,  # deliberately unnamed: no physical assignment
+            )
+        )
+    return specs
+
+
+def _fill_gaps(
+    low: float, high: float, taken: Sequence[float], count: int
+) -> list[float]:
+    """Positions for extra components, in the widest gaps between the named ones.
+
+    Spreading them evenly across the whole region would stack them on top
+    of the named bands. Putting each new one at the midpoint of whatever
+    gap is currently largest keeps them apart and away from components
+    that already exist.
+    """
+    edges = sorted([low, *taken, high])
+    positions: list[float] = []
+    for _ in range(count):
+        widths = [(edges[i + 1] - edges[i], i) for i in range(len(edges) - 1)]
+        width, index = max(widths)
+        centre = 0.5 * (edges[index] + edges[index + 1])
+        positions.append(centre)
+        edges.insert(index + 1, centre)
+    return sorted(positions)

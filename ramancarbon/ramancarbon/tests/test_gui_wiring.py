@@ -49,10 +49,27 @@ def test_tab_index_map_matches_the_order_tabs_are_built():
     build_order = re.findall(r"self\._build_tab_(\w+)\(\)", SOURCE)
     mapping = re.search(r"_tab_canvases = \{(.*?)\n        \}", SOURCE, re.S)
     assert mapping, "the tab map is missing"
-    indices = [int(n) for n in re.findall(r"^\s*(\d+):", mapping.group(1), re.M)]
+
+    entries = re.findall(r"^\s*(\d+):\s*\(([^)]*)\)", mapping.group(1), re.M)
+    indices = [int(n) for n, _ in entries]
     assert indices == list(range(len(build_order))), (
         f"the map covers {indices} but {len(build_order)} tabs are built"
     )
+
+    # And the mapping has to name the canvas that tab actually creates. The
+    # count alone passed while a rename left index 3 pointing at the wrong
+    # panel, so check each builder's body for its _make_canvas call.
+    for index, (_, canvases) in enumerate(entries):
+        names = re.findall(r'"(\w+)"', canvases)
+        builder = build_order[index]
+        body = re.search(
+            rf"def _build_tab_{builder}\(self\).*?(?=\n    def )", SOURCE, re.S
+        )
+        assert body, f"cannot find _build_tab_{builder}"
+        created = re.findall(r'_make_canvas\(\w+, "(\w+)"', body.group(0))
+        assert sorted(names) == sorted(created), (
+            f"tab {index} ({builder}) creates {created} but the map says {names}"
+        )
 
 
 def test_every_self_attribute_used_is_assigned_somewhere():
@@ -106,6 +123,11 @@ def test_callbacks_named_in_commands_exist():
         "_calibrate",         # silicon-line calibration
         "_bootstrap",         # resampled uncertainties
         "batch_text",         # batch statistics panel
+        "_analyse_tmd",       # dichalcogenide analysis
+        "tmd_text",           # TMD panel
+        "n_d_var",            # configurable peaks per region
+        "n_g_var",
+        "_load_region_model",
     ],
 )
 def test_requested_features_are_wired_into_the_window(feature):

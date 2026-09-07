@@ -1,0 +1,176 @@
+{
+  "_comment": [
+    "Dicalcogenuros de metales de transición (TMD): MoS2, WS2, MoSe2, WSe2,",
+    "MoTe2.",
+    "",
+    "La medida central aquí NO es una posición ni un cociente, sino una",
+    "SEPARACIÓN. Al apilar capas, el modo en el plano E2g se ablanda y el",
+    "modo fuera del plano A1g se endurece, así que la distancia entre los dos",
+    "crece de forma monótona con el número de capas. Esa separación es",
+    "insensible a la calibración absoluta del eje (un desplazamiento común se",
+    "cancela al restar), lo que la hace mucho más robusta que cualquier",
+    "posición individual.",
+    "",
+    "Por qué E2g baja y A1g sube al añadir capas: el A1g mueve los",
+    "calcógenos perpendicularmente a la capa, así que la capa vecina se le",
+    "opone y lo endurece. El E2g mueve los átomos dentro del plano, y ahí lo",
+    "que domina no es la fuerza de van der Waals sino el aumento de",
+    "apantallamiento dieléctrico de la interacción de largo alcance entre",
+    "cargas efectivas, que lo ablanda. Son mecanismos distintos, y por eso",
+    "van en direcciones opuestas.",
+    "",
+    "Las tablas de separación por capa son a 532 nm salvo donde se indique.",
+    "El WSe2 es el caso difícil: sus dos modos son casi degenerados a ~250",
+    "cm-1 y no se separan, así que allí se cuenta por otra vía (la presencia",
+    "del modo B12g de bulk).",
+    "",
+    "'confidence' se refiere al NÚMERO, no a la física."
+  ],
+  "reference_laser_nm": 532.0,
+  "materials": [
+    {
+      "key": "MoS2",
+      "label": "Disulfuro de molibdeno (MoS₂)",
+      "formula": "MoS2",
+      "modes": {
+        "E2g": {"position": 384.0, "window": [378.0, 390.0], "label": "E¹₂g (en el plano)"},
+        "A1g": {"position": 405.0, "window": [399.0, 412.0], "label": "A₁g (fuera del plano)"},
+        "2LA_M": {"position": 450.0, "window": [440.0, 465.0], "label": "2LA(M) (multifonón)"},
+        "E1g": {"position": 286.0, "window": [280.0, 292.0], "label": "E₁g (prohibido en retrodispersión)"},
+        "A1g_2LA": {"position": 465.0, "window": [455.0, 475.0], "label": "A₁g + LA(M)"}
+      },
+      "separation_by_layers": {
+        "1": [18.0, 19.6],
+        "2": [21.0, 22.5],
+        "3": [23.0, 24.0],
+        "4": [24.0, 25.0],
+        "bulk": [25.0, 26.5]
+      },
+      "separation_source": "Lee, Yan, Brus, Heinz, Hone & Ryu, ACS Nano 4 (2010) 2695",
+      "phase_2H": true,
+      "confidence": "high",
+      "notes": "El TMD mejor caracterizado con diferencia. La separación crece rápido de 1 a 3 capas y satura hacia el bulk, así que por encima de ~5 capas ya no distingue. La monocapa tiene además fotoluminiscencia intensa a ~1.85 eV que puede saturar el detector si mides con 532 nm — si el fondo se dispara, ese es el motivo, y no es fluorescencia de suciedad."
+    },
+    {
+      "key": "WS2",
+      "label": "Disulfuro de wolframio (WS₂)",
+      "formula": "WS2",
+      "modes": {
+        "E2g": {"position": 356.0, "window": [348.0, 362.0], "label": "E¹₂g (en el plano)"},
+        "A1g": {"position": 417.0, "window": [412.0, 424.0], "label": "A₁g (fuera del plano)"},
+        "2LA_M": {"position": 351.0, "window": [345.0, 358.0], "label": "2LA(M) (solapa con E2g)"},
+        "LA_M": {"position": 176.0, "window": [170.0, 182.0], "label": "LA(M)"}
+      },
+      "separation_by_layers": {
+        "1": [60.0, 62.5],
+        "2": [62.5, 64.0],
+        "3": [63.5, 65.0],
+        "bulk": [64.5, 66.5]
+      },
+      "separation_source": "Berkdemir et al., Sci. Rep. 3 (2013) 1755; Zhao et al., Nanoscale 5 (2013) 9677",
+      "phase_2H": true,
+      "confidence": "medium",
+      "notes": "Complicado: el modo 2LA(M) cae casi encima del E2g y a 514 nm está en resonancia, así que lo que parece una banda E2g intensa es en realidad la suma de los dos. La separación E2g-A1g cambia mucho menos con las capas que en MoS2 (unos 5 cm-1 en total frente a 8), de modo que contar capas por separación es aquí bastante menos fiable. El cociente I(2LA)/I(A1g) es la alternativa habitual, pero depende del láser."
+    },
+    {
+      "key": "MoSe2",
+      "label": "Diseleniuro de molibdeno (MoSe₂)",
+      "formula": "MoSe2",
+      "modes": {
+        "A1g": {"position": 240.0, "window": [235.0, 245.0], "label": "A₁g (fuera del plano)"},
+        "E2g": {"position": 287.0, "window": [282.0, 292.0], "label": "E¹₂g (en el plano)"},
+        "B12g": {"position": 353.0, "window": [348.0, 358.0], "label": "B¹₂g (solo multicapa)"}
+      },
+      "separation_by_layers": {
+        "1": [45.0, 47.5],
+        "2": [46.5, 48.5],
+        "bulk": [47.5, 50.0]
+      },
+      "separation_source": "Tonndorf et al., Opt. Express 21 (2013) 4908; Nam et al., ACS Nano 7 (2013) 4213",
+      "phase_2H": true,
+      "confidence": "low",
+      "notes": "Ojo con el orden: aquí el A1g está POR DEBAJO del E2g en frecuencia, al revés que en MoS2 y WS2, porque el selenio es mucho más pesado que el azufre. La separación apenas cambia con las capas, así que no sirve para contarlas; lo que sí funciona es la aparición del modo B¹₂g a ~353 cm-1, que está prohibido en monocapa y aparece en cuanto hay dos."
+    },
+    {
+      "key": "WSe2",
+      "label": "Diseleniuro de wolframio (WSe₂)",
+      "formula": "WSe2",
+      "modes": {
+        "E2g_A1g": {"position": 250.0, "window": [245.0, 256.0], "label": "E¹₂g y A₁g (casi degenerados)"},
+        "B12g": {"position": 308.0, "window": [303.0, 313.0], "label": "B¹₂g (solo multicapa)"},
+        "2LA_M": {"position": 260.0, "window": [255.0, 266.0], "label": "2LA(M)"}
+      },
+      "separation_by_layers": {},
+      "separation_source": "",
+      "phase_2H": true,
+      "confidence": "low",
+      "notes": "El caso donde el método de la separación NO se puede usar: E2g y A1g son casi degenerados en torno a 250 cm-1 y con un espectrómetro normal salen como una sola banda. Aquí se cuentan capas por la presencia del modo B¹₂g a ~308 cm-1, que está prohibido por simetría en monocapa y aparece a partir de dos capas. Su ausencia es evidencia de monocapa; su presencia, de multicapa."
+    },
+    {
+      "key": "MoTe2",
+      "label": "Diteluro de molibdeno (MoTe₂, fase 2H)",
+      "formula": "MoTe2",
+      "modes": {
+        "A1g": {"position": 171.0, "window": [166.0, 176.0], "label": "A₁g"},
+        "E2g": {"position": 234.0, "window": [229.0, 240.0], "label": "E¹₂g"},
+        "B12g": {"position": 290.0, "window": [285.0, 295.0], "label": "B¹₂g (solo multicapa)"}
+      },
+      "separation_by_layers": {
+        "1": [61.0, 64.0],
+        "2": [62.0, 65.0],
+        "bulk": [63.0, 66.0]
+      },
+      "separation_source": "Yamamoto et al., ACS Nano 8 (2014) 3895",
+      "phase_2H": true,
+      "confidence": "low",
+      "notes": "Como en MoSe2, la separación cambia poco. El B¹₂g a ~290 cm-1 es el indicador de multicapa. El MoTe2 se oxida al aire en horas: si ves bandas de TeO2 (~120, 140, 650 cm-1) la muestra ya está degradada."
+    }
+  ],
+  "phases": {
+    "_comment": "El 2H es semiconductor y es lo que sale de la exfoliación. El 1T/1T' es metálico, se induce con litio o con tensión, y tiene modos propios que el 2H no tiene: son la prueba directa de que hay fase metálica.",
+    "2H": {
+      "label": "2H (semiconductor, prismático trigonal)",
+      "signature": "solo E2g y A1g; sin modos J",
+      "confidence": "high"
+    },
+    "1T_prime": {
+      "label": "1T' (metálico, octaédrico distorsionado)",
+      "label_short": "1T'",
+      "marker_bands": {
+        "MoS2": [156.0, 226.0, 333.0],
+        "WS2": [150.0, 220.0, 325.0]
+      },
+      "marker_labels": ["J1", "J2", "J3"],
+      "signature": "aparecen los modos J1, J2 y J3, ausentes en el 2H",
+      "confidence": "medium",
+      "source": "Kappera et al., Nature Mater. 13 (2014) 1128; Calandra, Phys. Rev. B 88 (2013) 245428",
+      "notes": "Los modos J vienen de la distorsión que dobla la celda: existen solo en la fase 1T'. Verlos es prueba positiva de fase metálica. No verlos NO prueba que no la haya, porque una fracción pequeña puede quedar por debajo del ruido."
+    }
+  },
+  "perturbations": {
+    "_comment": "Cómo se mueven los modos con deformación y dopado. Igual que en carbono, los dos modos responden de forma distinta y esa diferencia es lo que permite separarlos.",
+    "strain_MoS2": {
+      "E2g_rate_cm1_per_percent": -4.5,
+      "A1g_rate_cm1_per_percent": -0.4,
+      "note": "La deformación uniaxial ablanda mucho el E2g (modo en el plano, que es el que se estira) y casi no toca el A1g (fuera del plano). Un desplazamiento que mueve solo el E2g es deformación.",
+      "confidence": "medium",
+      "source": "Rice et al., Phys. Rev. B 87 (2013) 081307; Conley et al., Nano Lett. 13 (2013) 3626"
+    },
+    "doping_MoS2": {
+      "A1g_rate_cm1_per_1e13cm2": -2.0,
+      "E2g_rate_cm1_per_1e13cm2": -0.3,
+      "A1g_fwhm": "broadens",
+      "note": "El dopado electrónico ablanda y ensancha el A1g, y apenas toca el E2g — justo al revés que la deformación. Por eso el par (ΔE2g, ΔA1g) separa las dos causas, igual que el par (ΔG, Δ2D) en carbono.",
+      "confidence": "medium",
+      "source": "Chakraborty et al., Phys. Rev. B 85 (2012) 161403"
+    }
+  },
+  "quality_indicators": {
+    "_comment": "Qué mirar para saber si la muestra está bien.",
+    "A1g_fwhm_good": [2.0, 6.0],
+    "E2g_fwhm_good": [2.0, 6.0],
+    "note": "En un cristal exfoliado limpio los dos modos tienen anchuras de 2 a 6 cm-1. Anchuras mucho mayores indican material policristalino, crecido por CVD con dominios pequeños, o dañado. Las bandas de un TMD son MUCHO más estrechas que las del carbono: si tu espectrómetro no resuelve 3 cm-1, no puedes medir la separación con la precisión que hace falta para contar capas.",
+    "confidence": "medium",
+    "source": "Li et al., Adv. Funct. Mater. 22 (2012) 1385"
+  }
+}

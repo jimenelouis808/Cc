@@ -105,8 +105,9 @@ class RamanCarbonApp:
             3: (),              # Índices
             4: ("diameters",),  # Diámetros
             5: (),              # Multiláser
-            6: ("overlay",),    # Comparación
-            7: (),              # Base de datos
+            6: ("tmd",),        # TMD
+            7: ("overlay",),    # Comparación
+            8: (),              # Base de datos
         }
 
         self._build_header()
@@ -162,6 +163,7 @@ class RamanCarbonApp:
         self._build_tab_indices()
         self._build_tab_diameters()
         self._build_tab_lasers()
+        self._build_tab_tmd()
         self._build_tab_batch()
         self._build_tab_database()
 
@@ -381,6 +383,29 @@ class RamanCarbonApp:
         ttk.Button(row, text="Comparar modelos", command=self._compare_models).pack(
             side="left", fill="x", expand=True)
 
+        separator(body)
+        ttk.Label(body, text="…o a medida", style="Heading.TLabel").pack(anchor="w")
+        counts = ttk.Frame(body, style="Card.TFrame")
+        counts.pack(fill="x", pady=PAD["xs"])
+        self.n_d_var = tk.IntVar(value=3)
+        self.n_g_var = tk.IntVar(value=2)
+        ttk.Label(counts, text="Picos en D", style="Card.TLabel",
+                  width=11).pack(side="left")
+        ttk.Spinbox(counts, from_=1, to=8, width=4,
+                    textvariable=self.n_d_var).pack(side="left")
+        ttk.Label(counts, text="  en G", style="Card.TLabel").pack(side="left")
+        ttk.Spinbox(counts, from_=1, to=6, width=4,
+                    textvariable=self.n_g_var).pack(side="left")
+        ttk.Button(counts, text="Construir",
+                   command=self._load_region_model).pack(
+                       side="left", fill="x", expand=True, padx=(PAD["sm"], 0))
+        hint(body, "Las tres primeras de la región D son D, D3 y D4; las tres "
+                   "primeras de la G son G, D' y G⁻. Más allá de eso salen sin "
+                   "nombre (Dx1, Gx1…): entran en el ajuste y en la "
+                   "exportación, pero no en los cocientes ni en la "
+                   "clasificación, porque una componente sin nombre no tiene "
+                   "interpretación física.", wrap=320)
+
         self.window_low_var = tk.StringVar(value="1100")
         self.window_high_var = tk.StringVar(value="1750")
         window_row = ttk.Frame(body, style="Card.TFrame")
@@ -555,6 +580,56 @@ class RamanCarbonApp:
              wrap=900)
         self.lasers_text = scrolled_text(body, self.palette, self.fonts["mono"],
                                          height=20)
+
+    def _build_tab_tmd(self) -> None:
+        from .widgets import card, hint, scrolled_text, table
+
+        ttk, tk = self.ttk, self.tk
+        tab = ttk.Frame(self.notebook, padding=PAD["md"])
+        self.notebook.add(tab, text="  TMD  ")
+
+        toolbar = ttk.Frame(tab)
+        toolbar.pack(fill="x", pady=(0, PAD["sm"]))
+        ttk.Label(toolbar, text="Material:").pack(side="left", padx=(0, PAD["xs"]))
+        self.tmd_material_var = tk.StringVar(value="(identificar)")
+        ttk.Combobox(
+            toolbar, textvariable=self.tmd_material_var, width=22, state="readonly",
+            values=["(identificar)", *_tmd_material_keys()],
+        ).pack(side="left", padx=(0, PAD["sm"]))
+        ttk.Button(toolbar, text="Analizar como TMD", style="Accent.TButton",
+                   command=self._analyse_tmd).pack(side="left", padx=(0, PAD["xs"]))
+        ttk.Button(toolbar, text="Analizar todos",
+                   command=self._analyse_tmd_all).pack(side="left")
+
+        outer, body = card(
+            tab, "Dicalcogenuros de metales de transición",
+            "MoS₂, WS₂, MoSe₂, WSe₂, MoTe₂. Física distinta de la del "
+            "carbono, con la misma maquinaria de ajuste.",
+        )
+        outer.pack(fill="both", expand=True)
+        hint(body,
+             "Las capas se cuentan por la SEPARACIÓN entre el modo E₂g (en el "
+             "plano, que se ablanda al apilar) y el A₁g (fuera del plano, que "
+             "se endurece). Al ser una diferencia, cualquier error común de "
+             "calibración se cancela: por eso es más robusta que cualquier "
+             "posición suelta.   "
+             "Ojo con la resolución: estas bandas miden 2–6 cm⁻¹ y las "
+             "fronteras entre números de capa están a 2–3 cm⁻¹, así que un "
+             "paso de muestreo grueso hace imposible contar capas por muy bien "
+             "que se vea el ajuste.   "
+             "En WSe₂ los dos modos son casi degenerados y el método no se "
+             "puede usar: allí se cuenta por la presencia del modo B¹₂g.",
+             wrap=900)
+        self.tmd_text = scrolled_text(body, self.palette, self.fonts["mono"],
+                                      height=16)
+
+        plot_area, plot_body = card(tab, None)
+        plot_area.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        self._make_canvas(plot_body, "tmd", lambda f: f.add_subplot(111))
+
+        results, results_body = card(tab, "Resultados TMD")
+        results.pack(fill="x", pady=(PAD["sm"], 0))
+        self.tmd_table = table(results_body, ["nombre"], height=6)
 
     def _build_tab_batch(self) -> None:
         from .widgets import card, hint, table
@@ -997,6 +1072,36 @@ class RamanCarbonApp:
                    [_row_values(row) for row in self._peak_rows])
         self._set_status(f"Preajuste cargado: {len(specs)} componentes.")
 
+    def _load_region_model(self) -> None:
+        """Build a model with the chosen number of components per region."""
+        from .widgets import fill_table
+
+        if self.session.active is None:
+            self._warn("Sin espectro", "Carga y selecciona un espectro primero.")
+            return
+        self._settings_from_widgets()
+        try:
+            specs = self.session.region_specs(
+                int(self.n_d_var.get()), int(self.n_g_var.get())
+            )
+        except ValueError as exc:
+            self._warn("No se puede construir el modelo", str(exc))
+            return
+        self._peak_rows = [_spec_to_row(spec) for spec in specs]
+        centres = [spec.centre for spec in specs]
+        self.window_low_var.set(f"{min(centres) - 150:.0f}")
+        self.window_high_var.set(f"{max(centres) + 120:.0f}")
+        fill_table(self.peak_table, ["Banda", "Perfil", "Centro", "Altura", "FWHM"],
+                   [_row_values(row) for row in self._peak_rows])
+        named = sum(1 for s in specs if s.band)
+        self._set_search_status(
+            f"Modelo a medida: {len(specs)} componentes ({named} con nombre, "
+            f"{len(specs) - named} sin nombre). Pulsa «Ajustar»."
+        )
+
+    def _set_search_status(self, text: str) -> None:
+        self._set_status(text)
+
     def _add_peak(self) -> None:
         from .widgets import fill_table
 
@@ -1146,6 +1251,7 @@ class RamanCarbonApp:
             "fit": self._draw_fit,
             "diameters": self._draw_diameters,
             "overlay": self._draw_overlay,
+            "tmd": self._draw_tmd,
         }
         for key in self._visible_canvases():
             if key in self._dirty:
@@ -1165,6 +1271,7 @@ class RamanCarbonApp:
         self._draw_indices()
         self._draw_batch()
         self._draw_diameter_text()
+        self._draw_tmd()
         self._flush_dirty()
 
     def _with_style(self, key: str, draw: Callable) -> None:
@@ -1424,6 +1531,83 @@ class RamanCarbonApp:
         self._run_async(self.session.bootstrap_active, done,
                         "Remuestreando (esto tarda)…")
 
+    def _analyse_tmd(self) -> None:
+        """Analyse the active spectrum as a dichalcogenide."""
+        if self.session.active is None:
+            self._warn("Sin espectro", "Carga y selecciona un espectro primero.")
+            return
+        choice = self.tmd_material_var.get()
+        material = None if choice.startswith("(") else choice
+
+        def done(result) -> None:
+            self._flush_messages()
+            self._draw_tmd()
+            self._dirty.add("tmd")
+            self._flush_dirty()
+            if result is not None:
+                self._set_status(
+                    f"{result.label} — {result.layers or 'capas indeterminadas'}, "
+                    f"fase {result.phase}"
+                )
+
+        self._run_async(
+            lambda: self.session.analyse_tmd_active(material), done,
+            "Analizando como TMD…",
+        )
+
+    def _analyse_tmd_all(self) -> None:
+        """Analyse every loaded spectrum as a dichalcogenide."""
+        choice = self.tmd_material_var.get()
+        material = None if choice.startswith("(") else choice
+
+        def work():
+            saved = self.session.current
+            count = 0
+            for index in range(len(self.session.spectra)):
+                self.session.current = index
+                if self.session.analyse_tmd_active(material) is not None:
+                    count += 1
+            self.session.current = saved
+            return count
+
+        def done(count) -> None:
+            self._flush_messages()
+            self._draw_tmd()
+            self._dirty.add("tmd")
+            self._flush_dirty()
+            self._set_status(f"{count} espectro(s) analizados como TMD.")
+
+        self._run_async(work, done, "Analizando el lote como TMD…")
+
+    def _draw_tmd(self) -> None:
+        from .widgets import fill_table, set_text
+
+        item = self.session.active
+        result = item.tmd_result if item else None
+        set_text(
+            self.tmd_text,
+            result.summary() if result else
+            "Carga un espectro de MoS₂, WS₂, MoSe₂, WSe₂ o MoTe₂ y pulsa "
+            "«Analizar como TMD».\n\n"
+            "El espectro debe cubrir al menos 100–500 cm⁻¹, que es donde están "
+            "los modos, y conviene un paso de muestreo fino: estas bandas son "
+            "mucho más estrechas que las del carbono.",
+        )
+        columns, rows = self.session.tmd_table()
+        if columns:
+            fill_table(self.tmd_table, columns, rows)
+
+        def draw(figure):
+            ax = figure.axes[0]
+            if result is None or result.fit is None:
+                _placeholder(ax, "Analiza un espectro como TMD", self.palette)
+                return
+            plot_fit(ax, result.fit, self.palette,
+                     title=f"{result.label} — {result.layers or '?'} capa(s)")
+            figure.subplots_adjust(left=0.10, right=0.98, top=0.92, bottom=0.14)
+
+        self._with_style("tmd", draw)
+
     def _combine_lasers(self) -> None:
         """Combine analysed spectra of the same sample at different lasers."""
         from .widgets import set_text
@@ -1510,6 +1694,13 @@ class RamanCarbonApp:
 # ----------------------------------------------------------------------
 # helpers
 # ----------------------------------------------------------------------
+def _tmd_material_keys() -> list[str]:
+    """Material keys offered in the TMD selector."""
+    from ..analysis.tmd import tmd_materials
+
+    return [m.key for m in tmd_materials()]
+
+
 def _placeholder(ax, text: str, palette) -> None:
     """Empty-state message on an otherwise blank axes."""
     ax.text(0.5, 0.5, text, ha="center", va="center", transform=ax.transAxes,

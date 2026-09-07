@@ -349,7 +349,13 @@ def rubberband_baseline(x: Sequence[float], y: Sequence[float]) -> np.ndarray:
 CUTOFF_BAND_WIDTHS = 5.0
 
 #: Bounds on the automatically chosen stiffness.
-LAMBDA_LIMITS = (1e4, 1e10)
+#:
+#: The upper end is where the banded solve starts to lose conditioning:
+#: measured on a broad synthetic band, results are stable to 1e12 and the
+#: baseline range jumps at 1e13. Very broad-band material (amorphous carbon,
+#: heavily disordered fibres with 300 cm⁻¹ bands) genuinely asks for
+#: stiffnesses above 1e10, so the ceiling is not merely decorative.
+LAMBDA_LIMITS = (1e4, 1e12)
 
 #: Floor on the "widest band" the cutoff is derived from, in cm⁻¹.
 #:
