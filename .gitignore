@@ -16,6 +16,8 @@ out/
 # Release archives. Regenerate with:
 #   git archive --format=zip --prefix=carbonforge/ -o carbonforge-<version>.zip HEAD
 carbonforge-*.zip
+#   git archive --format=zip --prefix=ramancarbon/ -o ramancarbon-<version>.zip HEAD:ramancarbon
+ramancarbon-*.zip
 
 # ramancarbon local output
 salida/
