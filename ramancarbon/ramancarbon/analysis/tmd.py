@@ -42,6 +42,7 @@ from typing import Optional, Sequence
 from ..core.peaks import find_peaks
 from ..core.preprocess import preprocess
 from ..core.spectrum import Spectrum
+from .heterostructure import HeterostructureResult, analyse_heterostructure
 from ..database.loader import DATA_DIR
 from ..models.fitting import FitModel, FitResult, PeakSpec, fit_model
 
@@ -97,6 +98,10 @@ class TMDResult:
     phase_reason: str = ""
     fit: Optional[FitResult] = None
     candidates: list[tuple[str, float]] = field(default_factory=list)
+    oxides: Optional[HeterostructureResult] = None
+    """Metal oxides accompanying the dichalcogenide, and what their presence
+    implies for the interface. See
+    :mod:`ramancarbon.analysis.heterostructure`."""
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -108,6 +113,10 @@ class TMDResult:
             "capas": self.layers,
             "separacion_cm-1": self.separation,
         }
+        if self.oxides is not None and self.oxides.found_anything:
+            row["composicion"] = self.oxides.composition()
+            row["oxidos"] = ";".join(o.key for o in self.oxides.oxides_present)
+            row["indice_oxidacion"] = self.oxides.oxidation_index
         for key, value in self.positions.items():
             row[f"pos_{key}"] = value
         for key, value in self.widths.items():
@@ -136,6 +145,11 @@ class TMDResult:
         if self.layers:
             lines.append(f"Número de capas   : {self.layers}")
             lines.append(f"  {self.layer_reason}")
+        if self.oxides is not None and self.oxides.enabled and (
+            self.oxides.found_anything or self.oxides.warnings
+        ):
+            lines.append("")
+            lines.append(self.oxides.summary())
         lines.append("")
         lines.append(f"Fase: {self.phase}")
         if self.phase_reason:
@@ -308,9 +322,10 @@ def analyse_tmd(
     spectrum: Spectrum,
     material: Optional[str] = None,
     preprocess_kwargs: Optional[dict] = None,
+    check_oxides: bool = True,
     directory: Optional[str | Path] = None,
 ) -> TMDResult:
-    """Analyse a TMD spectrum: material, layer count, phase.
+    """Analyse a TMD spectrum: material, layer count, phase, oxide content.
 
     Parameters
     ----------
@@ -319,6 +334,11 @@ def analyse_tmd(
         spectrum must reach down there.
     material:
         Force a material instead of identifying one.
+    check_oxides:
+        Look for the metal oxides this chalcogenide can produce, and read
+        the host's mode shifts as interface evidence. On by default: an
+        oxide is a fact about the sample, and one of its three possible
+        origins is the laser you are measuring with.
     preprocess_kwargs:
         Passed to :func:`~ramancarbon.core.preprocess.preprocess`.
     directory:
@@ -384,6 +404,20 @@ def analyse_tmd(
     phase, phase_reason = detect_phase(peaks, chosen_key, directory)
     warnings.extend(_quality_warnings(chosen, widths, directory))
 
+    oxides: Optional[HeterostructureResult] = None
+    if check_oxides:
+        oxides = analyse_heterostructure(
+            peaks,
+            chosen_key,
+            mode_positions=positions,
+            reference_positions={k: m.position for k, m in chosen.modes.items()},
+            spectrum_range=processed.range,
+            directory=directory,
+        )
+        warnings.extend(f"óxidos: {w}" for w in oxides.warnings)
+    else:
+        oxides = HeterostructureResult(chalcogenide=chosen_key, enabled=False)
+
     return TMDResult(
         material=chosen_key,
         label=chosen.label,
@@ -396,6 +430,7 @@ def analyse_tmd(
         phase_reason=phase_reason,
         fit=fit,
         candidates=scores,
+        oxides=oxides,
         warnings=warnings,
     )
 

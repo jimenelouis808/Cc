@@ -271,6 +271,7 @@ def add_doping(
 __all__ = [
     "DEMO_KINDS",
     "TMD_DEMOS",
+    "TMD_OXIDE_DEMOS",
     "add_doping",
     "demo_spectra",
     "make_demo",
@@ -289,6 +290,16 @@ TMD_DEMOS = (
     ("WSe2", "2"),
 )
 
+#: Synthetic oxide/chalcogenide composites, as ``(material, layers, oxide)``.
+#: These are the samples the heterostructure module exists for: the oxide
+#: bands land partly on top of the dichalcogenide's own modes, and only the
+#: signature lines above 400 cm⁻¹ tell them apart.
+TMD_OXIDE_DEMOS = (
+    ("MoSe2", "bulk", "MoO3_alpha"),
+    ("MoSe2", "bulk", "MoO2"),
+    ("MoS2", "bulk", "MoO3_alpha"),
+)
+
 
 def make_tmd_demo(
     material: str = "MoS2",
@@ -300,6 +311,9 @@ def make_tmd_demo(
     step: float = 0.5,
     noise: float = 3.0,
     phase_1t: bool = False,
+    oxide: str | None = None,
+    oxide_scale: float = 0.45,
+    interface_shift: float = 0.0,
 ) -> Spectrum:
     """Build a synthetic dichalcogenide spectrum.
 
@@ -324,6 +338,16 @@ def make_tmd_demo(
         As for :func:`make_demo`.
     phase_1t:
         Add the J1–J3 modes of the metallic 1T′ phase.
+    oxide:
+        Key of an oxide from ``tmd.json`` to superimpose, e.g.
+        ``"MoO3_alpha"``. Its lines are scaled by the catalogued relative
+        weights so the signature bands dominate, as they do in practice.
+    oxide_scale:
+        Height of the oxide's strongest line relative to the host's.
+    interface_shift:
+        Displacement in cm⁻¹ applied to the host's out-of-plane A₁g mode
+        only, simulating charge transfer across an interface. Used to
+        exercise the strain-versus-doping logic.
 
     Returns
     -------
@@ -372,20 +396,75 @@ def make_tmd_demo(
         for line in payload["phases"]["1T_prime"]["marker_bands"].get(material, ()):
             y += lorentzian(x, line, 260.0, 5.0)
 
+    if interface_shift:
+        a1g = entry.modes.get("A1g")
+        if a1g is not None:
+            # Move the out-of-plane mode alone. That asymmetry is the whole
+            # point: charge transfer moves A1g and leaves E2g where it was,
+            # while biaxial strain moves both.
+            centre = a1g.position
+            y -= lorentzian(x, centre, 900.0, 3.0)
+            y += lorentzian(x, centre + interface_shift, 900.0, 3.0)
+
+    if oxide is not None:
+        catalogue_oxides = {o["key"]: o for o in payload.get("oxides", [])}
+        if oxide not in catalogue_oxides:
+            raise ValueError(
+                f"unknown oxide {oxide!r}; available: "
+                + ", ".join(sorted(catalogue_oxides))
+            )
+        entry_oxide = catalogue_oxides[oxide]
+        strong = set(entry_oxide.get("strong", ()))
+        peak_height = 900.0 * float(oxide_scale)
+        broad = entry_oxide.get("min_fwhm")
+        for line in entry_oxide["bands"]:
+            weight = 1.0 if line in strong else 0.28
+            width = float(broad) if broad else 8.0
+            y += lorentzian(x, float(line), peak_height * weight, width)
+
     y += 120.0 * np.exp(-(x - low) / 400.0) + 20.0
     y += rng.normal(0.0, noise, x.size)
     return Spectrum(
         shift=x,
         intensity=y,
         laser_nm=laser_nm,
-        name=f"demo_{material}_{layers}capa_{laser_nm:g}nm",
-        metadata={"synthetic": True, "material": material, "layers": layers},
+        name=(
+            f"demo_{oxide.split('_')[0]}@{material}_{laser_nm:g}nm"
+            if oxide
+            else f"demo_{material}_{layers}capa_{laser_nm:g}nm"
+        ),
+        metadata={
+            "synthetic": True,
+            "material": material,
+            "layers": layers,
+            **({"oxide": oxide} if oxide else {}),
+        },
     )
 
 
 def tmd_demo_spectra(laser_nm: float = 532.0, seed: int = 0) -> list[Spectrum]:
-    """One synthetic spectrum for each entry in :data:`TMD_DEMOS`."""
-    return [
+    """One synthetic spectrum for each entry in :data:`TMD_DEMOS` and
+    :data:`TMD_OXIDE_DEMOS`.
+
+    The composites are generated over a wider range (up to 1100 cm⁻¹)
+    because the lines that identify an oxide unambiguously — 819 and 995 of
+    MoO₃, 744 of MoO₂ — lie above where a dichalcogenide measurement
+    usually stops.
+    """
+    out = [
         make_tmd_demo(material, layers, laser_nm=laser_nm, seed=seed + i)
         for i, (material, layers) in enumerate(TMD_DEMOS)
     ]
+    out.extend(
+        make_tmd_demo(
+            material,
+            layers,
+            laser_nm=laser_nm,
+            seed=seed + 100 + i,
+            high=1100.0,
+            oxide=oxide,
+            interface_shift=1.8 if oxide == "MoO2" else 0.0,
+        )
+        for i, (material, layers, oxide) in enumerate(TMD_OXIDE_DEMOS)
+    )
+    return out

@@ -200,6 +200,37 @@ una tiene una prueba que la protege.
   clasificador.** Nadie necesita que el programa decida entre «MWCNT» y
   «MoS₂ bicapa»: el usuario sabe qué puso bajo el objetivo.
 
+## Heteroestructuras óxido/calcogenuro
+
+- **Raman NO ve topología.** Un MoO₃@MoSe₂ y una mezcla física de polvos dan
+  el mismo espectro puntual. Lo que sí se mide es el desplazamiento de los
+  modos del calcogenuro, que una intercara íntima produce y una mezcla no.
+  Eso es indicio, no prueba, y el texto lo dice con esas palabras. La
+  notación `A@B` solo se emite si el llamante afirma la topología.
+- **Un óxido solo cuenta si aparece alguna de sus líneas exclusivas.** El
+  MoO₂ tiene bandas en 203 y 228 cm⁻¹ y los modos del MoSe₂ están en 240 y
+  287: sin esa puerta, todo espectro de MoSe₂ «contiene» MoO₂. Las
+  exclusivas del MoO₂ son 495 y 744, donde el calcogenuro no tiene nada.
+- **El denominador del índice de oxidación se comprueba.** El MoO₃ tiene
+  bandas en 246 y 291 justo donde están los modos del MoSe₂; medir ahí la
+  altura del «huésped» es medir el óxido, y el cociente sale 1 haya el óxido
+  que haya. Si ningún modo queda limpio, el índice se rechaza con su motivo.
+- **El índice de oxidación no es una fracción másica** y va acompañado del
+  modo con el que se calculó. Dos índices medidos contra modos distintos no
+  son comparables.
+- **A₁g fuera del plano = dopado; A₁g y E₂g juntos = deformación.** Con óxido
+  metálico encima (MoO₂, WO₂) lo esperable es lo primero; con aislante
+  (MoO₃, WO₃), lo segundo. El veredicto se juzga SOLO sobre esos dos modos:
+  el B¹₂g cae donde el óxido tiene bandas y un ajuste arrastrado no es física
+  de intercara.
+- **Un espectro que no llega a 1000 cm⁻¹ no puede descartar un óxido.** Las
+  líneas que lo identifican (819 y 995 del MoO₃, 744 del MoO₂, 807 del WO₃)
+  están ahí arriba. «No hay óxido» sin esa región no significa nada, y el
+  aviso lo dice.
+- **Un óxido tiene tres orígenes posibles y una sola medida no los separa**:
+  precursor, aire, o el propio láser. El aviso propone la comprobación
+  concreta (punto virgen, media potencia, ver si crece). No lo quites.
+
 ## Modelos a medida
 
 - **Las componentes llevan nombre solo mientras la física se lo dé**: D, D3,

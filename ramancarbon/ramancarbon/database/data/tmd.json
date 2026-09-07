@@ -24,7 +24,20 @@
     "cm-1 y no se separan, así que allí se cuenta por otra vía (la presencia",
     "del modo B12g de bulk).",
     "",
-    "'confidence' se refiere al NÚMERO, no a la física."
+    "'confidence' se refiere al NÚMERO, no a la física.",
+    "",
+    "Bloque 'oxides': los oxidos del metal de transicion que acompañan al",
+    "calcogenuro en muestras reales. Aparecen por tres vias distintas y",
+    "conviene no confundirlas: sintesis incompleta (el precursor era un",
+    "oxido), oxidacion al aire con el tiempo, y oxidacion INDUCIDA POR EL",
+    "PROPIO LASER durante la medida. La tercera es la peligrosa, porque el",
+    "espectro cambia mientras lo tomas.",
+    "",
+    "Un MoO3@MoSe2 y una mezcla fisica de MoO3 y MoSe2 dan el MISMO espectro",
+    "Raman puntual. Raman no ve topologia. Lo que si ve, y por eso el modulo",
+    "lo mira, es la DEFORMACION del calcogenuro: una intercara intima",
+    "desplaza sus modos, y una mezcla de polvos no. Eso es un indicio, no una",
+    "prueba; la prueba es microscopia."
   ],
   "reference_laser_nm": 532.0,
   "materials": [
@@ -33,18 +46,68 @@
       "label": "Disulfuro de molibdeno (MoS₂)",
       "formula": "MoS2",
       "modes": {
-        "E2g": {"position": 384.0, "window": [378.0, 390.0], "label": "E¹₂g (en el plano)"},
-        "A1g": {"position": 405.0, "window": [399.0, 412.0], "label": "A₁g (fuera del plano)"},
-        "2LA_M": {"position": 450.0, "window": [440.0, 465.0], "label": "2LA(M) (multifonón)"},
-        "E1g": {"position": 286.0, "window": [280.0, 292.0], "label": "E₁g (prohibido en retrodispersión)"},
-        "A1g_2LA": {"position": 465.0, "window": [455.0, 475.0], "label": "A₁g + LA(M)"}
+        "E2g": {
+          "position": 384.0,
+          "window": [
+            378.0,
+            390.0
+          ],
+          "label": "E¹₂g (en el plano)"
+        },
+        "A1g": {
+          "position": 405.0,
+          "window": [
+            399.0,
+            412.0
+          ],
+          "label": "A₁g (fuera del plano)"
+        },
+        "2LA_M": {
+          "position": 450.0,
+          "window": [
+            440.0,
+            465.0
+          ],
+          "label": "2LA(M) (multifonón)"
+        },
+        "E1g": {
+          "position": 286.0,
+          "window": [
+            280.0,
+            292.0
+          ],
+          "label": "E₁g (prohibido en retrodispersión)"
+        },
+        "A1g_2LA": {
+          "position": 465.0,
+          "window": [
+            455.0,
+            475.0
+          ],
+          "label": "A₁g + LA(M)"
+        }
       },
       "separation_by_layers": {
-        "1": [18.0, 19.6],
-        "2": [21.0, 22.5],
-        "3": [23.0, 24.0],
-        "4": [24.0, 25.0],
-        "bulk": [25.0, 26.5]
+        "1": [
+          18.0,
+          19.6
+        ],
+        "2": [
+          21.0,
+          22.5
+        ],
+        "3": [
+          23.0,
+          24.0
+        ],
+        "4": [
+          24.0,
+          25.0
+        ],
+        "bulk": [
+          25.0,
+          26.5
+        ]
       },
       "separation_source": "Lee, Yan, Brus, Heinz, Hone & Ryu, ACS Nano 4 (2010) 2695",
       "phase_2H": true,
@@ -56,16 +119,56 @@
       "label": "Disulfuro de wolframio (WS₂)",
       "formula": "WS2",
       "modes": {
-        "E2g": {"position": 356.0, "window": [348.0, 362.0], "label": "E¹₂g (en el plano)"},
-        "A1g": {"position": 417.0, "window": [412.0, 424.0], "label": "A₁g (fuera del plano)"},
-        "2LA_M": {"position": 351.0, "window": [345.0, 358.0], "label": "2LA(M) (solapa con E2g)"},
-        "LA_M": {"position": 176.0, "window": [170.0, 182.0], "label": "LA(M)"}
+        "E2g": {
+          "position": 356.0,
+          "window": [
+            348.0,
+            362.0
+          ],
+          "label": "E¹₂g (en el plano)"
+        },
+        "A1g": {
+          "position": 417.0,
+          "window": [
+            412.0,
+            424.0
+          ],
+          "label": "A₁g (fuera del plano)"
+        },
+        "2LA_M": {
+          "position": 351.0,
+          "window": [
+            345.0,
+            358.0
+          ],
+          "label": "2LA(M) (solapa con E2g)"
+        },
+        "LA_M": {
+          "position": 176.0,
+          "window": [
+            170.0,
+            182.0
+          ],
+          "label": "LA(M)"
+        }
       },
       "separation_by_layers": {
-        "1": [60.0, 62.5],
-        "2": [62.5, 64.0],
-        "3": [63.5, 65.0],
-        "bulk": [64.5, 66.5]
+        "1": [
+          60.0,
+          62.5
+        ],
+        "2": [
+          62.5,
+          64.0
+        ],
+        "3": [
+          63.5,
+          65.0
+        ],
+        "bulk": [
+          64.5,
+          66.5
+        ]
       },
       "separation_source": "Berkdemir et al., Sci. Rep. 3 (2013) 1755; Zhao et al., Nanoscale 5 (2013) 9677",
       "phase_2H": true,
@@ -77,14 +180,44 @@
       "label": "Diseleniuro de molibdeno (MoSe₂)",
       "formula": "MoSe2",
       "modes": {
-        "A1g": {"position": 240.0, "window": [235.0, 245.0], "label": "A₁g (fuera del plano)"},
-        "E2g": {"position": 287.0, "window": [282.0, 292.0], "label": "E¹₂g (en el plano)"},
-        "B12g": {"position": 353.0, "window": [348.0, 358.0], "label": "B¹₂g (solo multicapa)"}
+        "A1g": {
+          "position": 240.0,
+          "window": [
+            235.0,
+            245.0
+          ],
+          "label": "A₁g (fuera del plano)"
+        },
+        "E2g": {
+          "position": 287.0,
+          "window": [
+            282.0,
+            292.0
+          ],
+          "label": "E¹₂g (en el plano)"
+        },
+        "B12g": {
+          "position": 353.0,
+          "window": [
+            348.0,
+            358.0
+          ],
+          "label": "B¹₂g (solo multicapa)"
+        }
       },
       "separation_by_layers": {
-        "1": [45.0, 47.5],
-        "2": [46.5, 48.5],
-        "bulk": [47.5, 50.0]
+        "1": [
+          45.0,
+          47.5
+        ],
+        "2": [
+          46.5,
+          48.5
+        ],
+        "bulk": [
+          47.5,
+          50.0
+        ]
       },
       "separation_source": "Tonndorf et al., Opt. Express 21 (2013) 4908; Nam et al., ACS Nano 7 (2013) 4213",
       "phase_2H": true,
@@ -96,9 +229,30 @@
       "label": "Diseleniuro de wolframio (WSe₂)",
       "formula": "WSe2",
       "modes": {
-        "E2g_A1g": {"position": 250.0, "window": [245.0, 256.0], "label": "E¹₂g y A₁g (casi degenerados)"},
-        "B12g": {"position": 308.0, "window": [303.0, 313.0], "label": "B¹₂g (solo multicapa)"},
-        "2LA_M": {"position": 260.0, "window": [255.0, 266.0], "label": "2LA(M)"}
+        "E2g_A1g": {
+          "position": 250.0,
+          "window": [
+            245.0,
+            256.0
+          ],
+          "label": "E¹₂g y A₁g (casi degenerados)"
+        },
+        "B12g": {
+          "position": 308.0,
+          "window": [
+            303.0,
+            313.0
+          ],
+          "label": "B¹₂g (solo multicapa)"
+        },
+        "2LA_M": {
+          "position": 260.0,
+          "window": [
+            255.0,
+            266.0
+          ],
+          "label": "2LA(M)"
+        }
       },
       "separation_by_layers": {},
       "separation_source": "",
@@ -111,14 +265,44 @@
       "label": "Diteluro de molibdeno (MoTe₂, fase 2H)",
       "formula": "MoTe2",
       "modes": {
-        "A1g": {"position": 171.0, "window": [166.0, 176.0], "label": "A₁g"},
-        "E2g": {"position": 234.0, "window": [229.0, 240.0], "label": "E¹₂g"},
-        "B12g": {"position": 290.0, "window": [285.0, 295.0], "label": "B¹₂g (solo multicapa)"}
+        "A1g": {
+          "position": 171.0,
+          "window": [
+            166.0,
+            176.0
+          ],
+          "label": "A₁g"
+        },
+        "E2g": {
+          "position": 234.0,
+          "window": [
+            229.0,
+            240.0
+          ],
+          "label": "E¹₂g"
+        },
+        "B12g": {
+          "position": 290.0,
+          "window": [
+            285.0,
+            295.0
+          ],
+          "label": "B¹₂g (solo multicapa)"
+        }
       },
       "separation_by_layers": {
-        "1": [61.0, 64.0],
-        "2": [62.0, 65.0],
-        "bulk": [63.0, 66.0]
+        "1": [
+          61.0,
+          64.0
+        ],
+        "2": [
+          62.0,
+          65.0
+        ],
+        "bulk": [
+          63.0,
+          66.0
+        ]
       },
       "separation_source": "Yamamoto et al., ACS Nano 8 (2014) 3895",
       "phase_2H": true,
@@ -137,10 +321,22 @@
       "label": "1T' (metálico, octaédrico distorsionado)",
       "label_short": "1T'",
       "marker_bands": {
-        "MoS2": [156.0, 226.0, 333.0],
-        "WS2": [150.0, 220.0, 325.0]
+        "MoS2": [
+          156.0,
+          226.0,
+          333.0
+        ],
+        "WS2": [
+          150.0,
+          220.0,
+          325.0
+        ]
       },
-      "marker_labels": ["J1", "J2", "J3"],
+      "marker_labels": [
+        "J1",
+        "J2",
+        "J3"
+      ],
       "signature": "aparecen los modos J1, J2 y J3, ausentes en el 2H",
       "confidence": "medium",
       "source": "Kappera et al., Nature Mater. 13 (2014) 1128; Calandra, Phys. Rev. B 88 (2013) 245428",
@@ -167,10 +363,232 @@
   },
   "quality_indicators": {
     "_comment": "Qué mirar para saber si la muestra está bien.",
-    "A1g_fwhm_good": [2.0, 6.0],
-    "E2g_fwhm_good": [2.0, 6.0],
+    "A1g_fwhm_good": [
+      2.0,
+      6.0
+    ],
+    "E2g_fwhm_good": [
+      2.0,
+      6.0
+    ],
     "note": "En un cristal exfoliado limpio los dos modos tienen anchuras de 2 a 6 cm-1. Anchuras mucho mayores indican material policristalino, crecido por CVD con dominios pequeños, o dañado. Las bandas de un TMD son MUCHO más estrechas que las del carbono: si tu espectrómetro no resuelve 3 cm-1, no puedes medir la separación con la precisión que hace falta para contar capas.",
     "confidence": "medium",
     "source": "Li et al., Adv. Funct. Mater. 22 (2012) 1385"
+  },
+  "oxides": [
+    {
+      "key": "MoO3_alpha",
+      "label": "α-MoO₃ ortorrómbico",
+      "formula": "MoO3",
+      "metal": "Mo",
+      "crystal_system": "orthorhombic",
+      "space_group": "Pbnm",
+      "bands": [
+        128.0,
+        158.0,
+        197.0,
+        217.0,
+        246.0,
+        283.0,
+        291.0,
+        337.0,
+        378.0,
+        471.0,
+        666.0,
+        819.0,
+        995.0
+      ],
+      "strong": [
+        158.0,
+        291.0,
+        666.0,
+        819.0,
+        995.0
+      ],
+      "signature": [
+        819.0,
+        995.0
+      ],
+      "confidence": "high",
+      "source": "Py & Maschke, Physica B 105 (1981) 370; Camacho-López et al., Opt. Mater. 33 (2011) 480",
+      "colour": "blanco/amarillo pálido, aislante",
+      "notes": "El óxido de molibdeno mejor caracterizado y el más fácil de ver: la banda de 819 cm⁻¹ (Mo–O–Mo) es intensísima y la de 995 cm⁻¹ (Mo=O terminal) es exclusiva de la fase en capas. Ese par 819/995 es la firma; ningún otro óxido de Mo lo tiene. Si crece MIENTRAS mides, lo estás fabricando con el láser."
+    },
+    {
+      "key": "MoO2",
+      "label": "MoO₂ monoclínico",
+      "formula": "MoO2",
+      "metal": "Mo",
+      "crystal_system": "monoclinic",
+      "space_group": "P2₁/c",
+      "bands": [
+        128.0,
+        203.0,
+        228.0,
+        345.0,
+        363.0,
+        458.0,
+        495.0,
+        571.0,
+        589.0,
+        744.0
+      ],
+      "strong": [
+        203.0,
+        228.0,
+        495.0,
+        589.0,
+        744.0
+      ],
+      "signature": [
+        495.0,
+        744.0
+      ],
+      "confidence": "medium",
+      "source": "Spevack & McIntyre, J. Phys. Chem. 96 (1992) 9029; Camacho-López et al., Opt. Mater. 33 (2011) 480",
+      "colour": "violeta oscuro/marrón, METÁLICO (conductor)",
+      "notes": "OJO CON DOS COSAS. Primera: el MoO₂ es un conductor metálico, no un aislante como el MoO₃. En un MoO₂@MoSe₂ eso significa transferencia de carga real al calcogenuro, que se ve como un desplazamiento de sus modos — es física, no artefacto. Segunda: sus bandas de 203 y 228 cm⁻¹ caen justo donde están el A₁g del MoSe₂ (240) y los modos del MoTe₂ (234). Sin las líneas de 495 y 744 cm⁻¹ no lo des por identificado."
+    },
+    {
+      "key": "MoOx_amorphous",
+      "label": "Óxido de molibdeno amorfo (MoO₃₋ₓ)",
+      "formula": "MoOx",
+      "metal": "Mo",
+      "crystal_system": "amorphous",
+      "space_group": null,
+      "bands": [
+        820.0,
+        950.0
+      ],
+      "strong": [
+        950.0
+      ],
+      "signature": [],
+      "min_fwhm": 40.0,
+      "confidence": "low",
+      "source": "Asignación por analogía con óxidos de molibdeno amorfos e hidratados; los valores son orientativos",
+      "colour": "azul intenso si hay vacantes de oxígeno",
+      "notes": "Bandas MUY anchas (>40 cm⁻¹) hacia 820 y 950 cm⁻¹, sin la estructura fina del α-MoO₃. La anchura es el criterio: estrechas, es MoO₃ cristalino. El color azul de la muestra es la pista macroscópica de las vacantes de oxígeno."
+    },
+    {
+      "key": "WO3_gamma",
+      "label": "γ-WO₃ monoclínico",
+      "formula": "WO3",
+      "metal": "W",
+      "crystal_system": "monoclinic",
+      "space_group": "P2₁/n",
+      "bands": [
+        71.0,
+        134.0,
+        187.0,
+        273.0,
+        327.0,
+        715.0,
+        807.0
+      ],
+      "strong": [
+        273.0,
+        715.0,
+        807.0
+      ],
+      "signature": [
+        715.0,
+        807.0
+      ],
+      "confidence": "high",
+      "source": "Salje, Acta Cryst. A 31 (1975) 360; Daniel et al., J. Solid State Chem. 67 (1987) 235",
+      "colour": "amarillo verdoso, aislante",
+      "notes": "El par 715/807 cm⁻¹ (tensión W–O–W) es la firma. Es el producto normal de oxidación del WS₂ y del WSe₂ al aire."
+    },
+    {
+      "key": "WO2",
+      "label": "WO₂ monoclínico",
+      "formula": "WO2",
+      "metal": "W",
+      "crystal_system": "monoclinic",
+      "space_group": "P2₁/c",
+      "bands": [
+        190.0,
+        230.0,
+        330.0,
+        420.0,
+        640.0
+      ],
+      "strong": [
+        230.0,
+        330.0,
+        640.0
+      ],
+      "signature": [],
+      "confidence": "low",
+      "source": "Valores tentativos por analogía con el MoO₂ (misma estructura tipo rutilo distorsionado); la literatura Raman del WO₂ es escasa",
+      "colour": "marrón/bronce, metálico",
+      "notes": "ENTRADA TENTATIVA. Revisa estas posiciones con tu propia referencia antes de usarlas para publicar: están puestas por analogía estructural, no medidas. El archivo es editable a propósito."
+    },
+    {
+      "key": "TeO2_alpha",
+      "label": "α-TeO₂ (paratelurita)",
+      "formula": "TeO2",
+      "metal": "Te",
+      "crystal_system": "tetragonal",
+      "space_group": "P4₃2₁2",
+      "bands": [
+        121.0,
+        148.0,
+        174.0,
+        393.0,
+        648.0
+      ],
+      "strong": [
+        393.0,
+        648.0
+      ],
+      "signature": [
+        648.0
+      ],
+      "confidence": "medium",
+      "source": "Pine & Dresselhaus, Phys. Rev. B 5 (1972) 4087",
+      "colour": "blanco, aislante",
+      "notes": "Producto de oxidación del MoTe₂ y del WTe₂. El MoTe₂ se oxida al aire mucho más deprisa que los sulfuros: si mides MoTe₂ expuesto, esto es lo primero que buscar."
+    }
+  ],
+  "oxidation_products": {
+    "_comment": "Qué óxido esperar de cada calcogenuro. Restringir la búsqueda a lo químicamente posible evita coincidencias fortuitas.",
+    "MoS2": [
+      "MoO3_alpha",
+      "MoO2",
+      "MoOx_amorphous"
+    ],
+    "MoSe2": [
+      "MoO3_alpha",
+      "MoO2",
+      "MoOx_amorphous"
+    ],
+    "MoTe2": [
+      "MoO3_alpha",
+      "MoO2",
+      "TeO2_alpha"
+    ],
+    "WS2": [
+      "WO3_gamma",
+      "WO2"
+    ],
+    "WSe2": [
+      "WO3_gamma",
+      "WO2"
+    ]
+  },
+  "interface": {
+    "_comment": [
+      "Como leer el desplazamiento de los modos del calcogenuro en un",
+      "heteroestructura. Un desplazamiento significativo respecto al",
+      "material puro indica una intercara real; su ausencia es compatible",
+      "con una mezcla fisica de polvos. NO es una prueba de topologia."
+    ],
+    "significant_shift_cm1": 1.5,
+    "large_shift_cm1": 4.0,
+    "out_of_plane_mode": "A1g",
+    "in_plane_mode": "E2g",
+    "notes": "El A₁g (fuera del plano) responde sobre todo a la transferencia de carga y a la interacción con lo que tiene encima o debajo; el E₂g (en el plano) responde sobre todo a la deformación biaxial. Si SOLO se mueve el A₁g, sospecha dopado; si se mueven los dos en el mismo sentido, deformación. Con un óxido METÁLICO encima (MoO₂, WO₂) lo esperable es dopado; con uno aislante (MoO₃, WO₃), deformación."
   }
 }
