@@ -731,6 +731,56 @@ una tiene una prueba que la protege.
   Ponerla en un eje propio reescalado queda más limpio y destruye justo la
   comparación para la que sirve.
 
+## Controles de ajuste y de sesión
+
+- **Ligar no es fijar, y no es un atajo.** Un parámetro que los datos no
+  determinan lo mueve el ruido si va libre y sale mal si se fija a una
+  suposición; ligarlo a algo que los datos SÍ determinan es la única de
+  las tres opciones honrada y estable. Pero quita un parámetro libre y por
+  tanto baja las incertidumbres, así que solo vale si la ligadura es
+  física: por eso TODA ligadura va escrita en el informe.
+- **La sintaxis es minúscula a propósito**: `objetivo = factor × origen +
+  desplazamiento`. Un lenguaje de expresiones dentro de un modelo de
+  ajuste es una forma de escribir ligaduras que nadie puede comprobar.
+- **Los ciclos se detectan.** `a = b` con `b = a` no da error por sí solo:
+  da un valor que depende del orden en que se aplicaron las cosas.
+- **Las ligaduras se resuelven sobre una tabla PLANA de parámetros**, no
+  componente a componente. Resolverlas por componente exige que el origen
+  se haya evaluado antes, lo cual solo es cierto si están en el orden
+  adecuado por casualidad.
+- **Excluir un tramo no abre un agujero.** Las componentes se siguen
+  evaluando ahí; lo que se excluye es su contribución a lo que se
+  minimiza. Y el residuo se guarda sobre la ventana ENTERA, porque es lo
+  que permite ver si la exclusión estaba justificada.
+- **Pero las estadísticas se calculan solo sobre lo ajustado.** Un R² que
+  cuenta una región que el ajuste nunca tuvo que reproducir no mide nada.
+- **Y lo excluido va en el informe**: un ajuste que deja fuera justo donde
+  peor ajusta no es la misma medida que uno que no.
+- **El valor de un ancla es una estimación LOCAL, no el punto.** Una
+  mediana simple está sesgada sobre un fondo inclinado en media pendiente
+  por media ventana —más que el ruido que venía a quitar—, y una recta por
+  mínimos cuadrados la tuerce una sola púa. Lo que se usa es la mediana de
+  la ventana con su propia pendiente quitada: exacta sobre una recta e
+  inmune a la púa.
+- **La interpolación por defecto conserva la forma.** Un spline cúbico
+  puede oscilar entre anclas, y donde sube por encima de los datos, al
+  restarlo mete lóbulos negativos. PCHIP no puede, por construcción: sobre
+  un fondo suave los dos coinciden en un par de cuentas, y sobre un fondo
+  con un escalón el spline se pasa 207 cuentas por debajo donde PCHIP se
+  pasa 123.
+- **Interpolar linealmente extrapola.** `np.interp` recorta fuera de su
+  rango, y eso deja un escalón plano y un codo en cada extremo del
+  espectro corregido.
+- **Deshacer guarda ESTADOS, no operaciones.** Un deshacer basado en
+  operaciones tiene que ser correcto para cada par de operaciones; uno
+  basado en estados tiene que ser correcto una vez.
+- **Las preferencias nunca impiden arrancar.** Un archivo ilegible, un
+  directorio de solo lectura o un disco lleno son reales y ninguno es
+  motivo para perder el trabajo: se avisa y se sigue con las de fábrica.
+- **Y no se borran las claves que no se reconocen.** Dos versiones del
+  programa compartiendo el archivo de preferencias no pueden borrarse los
+  ajustes la una a la otra cada vez que guardan.
+
 ## Portabilidad
 
 - **Un ajuste de mínimos cuadrados no da el mismo mínimo en dos versiones de

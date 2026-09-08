@@ -31,12 +31,13 @@ quoted to three digits.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Sequence
 
 import numpy as np
 from scipy.optimize import least_squares
 
 from ..core.spectrum import Spectrum
+from .constraints import Link, order, parse_link, validate
 from .lineshapes import PROFILES, bwf_peak_height, bwf_peak_position, resolve_profile
 
 #: Background polynomial orders accepted by :class:`FitModel`.
@@ -174,6 +175,17 @@ class FitResult:
     message: str
     warnings: list[str] = field(default_factory=list)
     correlations: dict[tuple[str, str], float] = field(default_factory=dict)
+    links: tuple[str, ...] = ()
+    """The parameter links that were in force, as text.
+
+    In the result and in the summary because a linked fit has fewer free
+    parameters and therefore smaller uncertainties. That is only
+    legitimate when the link is physics, and a reader cannot tell without
+    being told which links there were."""
+    excluded: tuple[tuple[float, float], ...] = ()
+    """Ranges left out of the fit. Same reason: a fit that excludes the
+    region where it fits worst is not the same measurement as one that
+    does not, and the exclusion has to travel with the numbers."""
     durbin_watson: Optional[float] = None
     """Durbin–Watson statistic of the residual.
 
@@ -204,6 +216,12 @@ class FitResult:
             "",
         ]
         lines.extend(p.summary() for p in self.peaks)
+        if self.links:
+            lines.append("")
+            lines.append("Ligaduras: " + "; ".join(self.links))
+        if self.excluded:
+            lines.append("Excluido: " + ", ".join(
+                f"{low:g}–{high:g} cm⁻¹" for low, high in self.excluded))
         if self.warnings:
             lines.append("")
             lines.extend("⚠ " + w for w in self.warnings)
@@ -218,6 +236,11 @@ class FitModel:
     window: tuple[float, float]
     background: str = "linear"
     name: str = "modelo"
+    links: tuple[Link, ...] = ()
+    """Parameters tied to other parameters. See
+    :mod:`ramancarbon.models.constraints`. A linked parameter is not free,
+    so it does not appear in the fitted vector and its uncertainty is the
+    propagated one of its source."""
 
     def __post_init__(self) -> None:
         if not self.peaks:
@@ -236,6 +259,32 @@ class FitModel:
                 "these components start outside the fit window "
                 f"[{lo:g}, {hi:g}] cm⁻¹: {', '.join(outside)}"
             )
+        names = [p.name for p in self.peaks]
+        if len(set(names)) != len(names):
+            raise ValueError(
+                "dos componentes con el mismo nombre: las ligaduras y el "
+                "informe los identifican por nombre, así que tienen que ser "
+                f"distintos ({', '.join(names)})"
+            )
+        self.links = tuple(
+            parse_link(item) if isinstance(item, str) else item
+            for item in self.links
+        )
+        if self.links:
+            validate(self.links, self.parameter_names())
+            self.links = tuple(order(self.links))
+
+    def parameter_names(self) -> dict[str, tuple[str, ...]]:
+        """Every component's parameter names, for checking links."""
+        return {
+            spec.name: ("centre", "height", "fwhm") + spec.extra_names
+            for spec in self.peaks
+        }
+
+    @property
+    def linked(self) -> set[tuple[str, str]]:
+        """``(component, parameter)`` pairs that are not free."""
+        return {link.target for link in self.links}
 
     @property
     def background_order(self) -> int:
@@ -256,6 +305,7 @@ def _pack(model: FitModel) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tup
     upper: list[float] = []
     layout: list[tuple[int, str]] = []
 
+    linked = model.linked
     for i, spec in enumerate(model.peaks):
         defaults = {
             "centre": (spec.centre, spec.centre_bounds or (spec.centre - 25.0, spec.centre + 25.0)),
@@ -263,7 +313,7 @@ def _pack(model: FitModel) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tup
             "fwhm": (spec.fwhm, spec.fwhm_bounds or (2.0, 400.0)),
         }
         for key in ("centre", "height", "fwhm"):
-            if key in spec.fixed:
+            if key in spec.fixed or (spec.name, key) in linked:
                 continue
             value, (lo, hi) = defaults[key]
             x0.append(float(np.clip(value, lo, hi)))
@@ -271,7 +321,7 @@ def _pack(model: FitModel) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tup
             upper.append(float(hi))
             layout.append((i, key))
         for j, ename in enumerate(spec.extra_names):
-            if ename in spec.fixed:
+            if ename in spec.fixed or (spec.name, ename) in linked:
                 continue
             lo, hi = spec.extra_bounds[j]
             x0.append(float(np.clip(spec.extra[j], lo, hi)))
@@ -309,6 +359,12 @@ def _unpack(
             background.append(float(value))
         else:
             values[index][key] = float(value)
+    if model.links:
+        position = {spec.name: index for index, spec in enumerate(model.peaks)}
+        for link in model.links:
+            source = values[position[link.source_peak]][link.source_parameter]
+            values[position[link.target_peak]][link.target_parameter] = \
+                link.apply(source)
     return values, np.asarray(background)
 
 
@@ -328,7 +384,8 @@ class _Evaluator:
     ``test_fitting.py::test_evaluator_matches_the_naive_evaluation``.
     """
 
-    __slots__ = ("_peaks", "_bg_slots", "_x", "_x_scaled", "_n_background")
+    __slots__ = ("_peaks", "_bg_slots", "_x", "_x_scaled", "_n_background",
+                 "_flat_indices", "_flat_defaults", "_safe_indices", "_links")
 
     def __init__(
         self,
@@ -348,23 +405,43 @@ class _Evaluator:
         self._n_background = len(self._bg_slots)
 
         self._peaks = []
+        # One flat table of every component's parameters, so that a link
+        # can copy a value from one component into another before any of
+        # them is evaluated. Resolving links per component would need the
+        # source component to have been evaluated first, which is only
+        # true if they happen to be in the right order.
+        flat_indices: list[int] = []
+        flat_defaults: list[float] = []
+        flat_position: dict[tuple[str, str], int] = {}
         for i, spec in enumerate(model.peaks):
             names = ("centre", "height", "fwhm") + spec.extra_names
             defaults = (spec.centre, spec.height, spec.fwhm) + tuple(spec.extra)
-            # -1 marks a fixed parameter, whose value never leaves `defaults`.
-            indices = np.array(
-                [slots.get((i, name), -1) for name in names], dtype=np.intp
-            )
+            start = len(flat_indices)
+            for name, value in zip(names, defaults):
+                flat_position[(spec.name, name)] = len(flat_indices)
+                # -1 marks a parameter that is not free: fixed, or linked.
+                flat_indices.append(slots.get((i, name), -1))
+                flat_defaults.append(float(value))
             self._peaks.append(
-                (PROFILES[spec.profile]["function"], indices,
-                 np.asarray(defaults, dtype=float))
+                (PROFILES[spec.profile]["function"], start, len(flat_indices))
             )
+        self._flat_indices = np.asarray(flat_indices, dtype=np.intp)
+        self._flat_defaults = np.asarray(flat_defaults, dtype=float)
+        self._safe_indices = np.maximum(self._flat_indices, 0)
+        self._links = [
+            (flat_position[link.target], flat_position[link.source],
+             float(link.factor), float(link.offset))
+            for link in model.links
+        ]
 
     def __call__(self, params: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        flat = np.where(self._flat_indices >= 0,
+                        params[self._safe_indices], self._flat_defaults)
+        for target, source, factor, offset in self._links:
+            flat[target] = factor * flat[source] + offset
         total = np.zeros_like(self._x)
-        for function, indices, defaults in self._peaks:
-            values = np.where(indices >= 0, params[indices], defaults)
-            total += function(self._x, *values)
+        for function, start, stop in self._peaks:
+            total += function(self._x, *flat[start:stop])
         if self._n_background:
             background = np.polyval(params[self._bg_slots][::-1], self._x_scaled)
             return total + background, background
@@ -404,6 +481,7 @@ def fit_model(
     max_nfev: int = 6000,
     loss: str = "linear",
     f_scale: float = 1.0,
+    exclude: Optional[Sequence[tuple[float, float]]] = None,
 ) -> FitResult:
     """Fit a :class:`FitModel` to a spectrum over the model's window.
 
@@ -424,6 +502,14 @@ def fit_model(
         survived despiking.
     f_scale:
         Soft-threshold for the robust losses, in intensity units.
+    exclude:
+        Ranges inside the window to leave out of the residual — a surviving
+        cosmic ray, a detector gap, a plasma line. The **components are
+        still evaluated there**, so an excluded range does not become a
+        hole the fit can hide in; it simply stops contributing to what is
+        minimised. Every exclusion is recorded in the result, because a fit
+        that leaves out the region where it fits worst is not the same
+        measurement as one that does not.
 
     Returns
     -------
@@ -457,9 +543,24 @@ def fit_model(
 
     evaluate = _Evaluator(model, layout, x, x_scaled)
 
+    keep = np.ones(x.shape, dtype=bool)
+    excluded: list[tuple[float, float]] = []
+    for low, high in exclude or ():
+        low, high = float(min(low, high)), float(max(low, high))
+        inside = (x >= low) & (x <= high)
+        if inside.any():
+            keep &= ~inside
+            excluded.append((low, high))
+    if excluded and np.count_nonzero(keep) <= x0.size:
+        raise ValueError(
+            f"tras excluir {', '.join(f'{a:g}–{b:g}' for a, b in excluded)} "
+            f"quedan {int(np.count_nonzero(keep))} puntos para {x0.size} "
+            "parámetros libres"
+        )
+
     def residual(params: np.ndarray) -> np.ndarray:
         curve, _ = evaluate(params)
-        return curve - y
+        return (curve - y)[keep]
 
     result = least_squares(
         residual,
@@ -472,10 +573,16 @@ def fit_model(
     )
 
     fitted, background = evaluate(result.x)
+    # The residual is kept over the WHOLE window, because that is what gets
+    # plotted and what shows whether the excluded region was excluded for a
+    # good reason. Every statistic below is computed only over the points
+    # that were actually fitted: an R² that counts a region the fit was
+    # never asked to reproduce is not a measure of anything.
     resid = y - fitted
-    n, k = x.size, result.x.size
-    ss_res = float(np.sum(resid**2))
-    ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+    judged = resid[keep]
+    n, k = int(np.count_nonzero(keep)), result.x.size
+    ss_res = float(np.sum(judged**2))
+    ss_tot = float(np.sum((y[keep] - np.mean(y[keep])) ** 2))
     r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
     dof = max(n - k, 1)
     reduced_chi2 = ss_res / dof
@@ -483,8 +590,8 @@ def fit_model(
     aic = n * np.log(max(ss_res / n, 1e-300)) + 2 * k
     bic = n * np.log(max(ss_res / n, 1e-300)) + k * np.log(n)
 
-    errors, correlations = _uncertainties(result, resid, layout, model)
-    watson = _durbin_watson(resid)
+    errors, correlations = _uncertainties(result, judged, layout, model)
+    watson = _durbin_watson(judged)
     values, bg_coeffs = _unpack(result.x, model, layout)
 
     peaks: list[FittedPeak] = []
@@ -540,6 +647,8 @@ def fit_model(
         message=str(result.message),
         warnings=warnings,
         correlations=correlations,
+        links=tuple(str(link) for link in model.links),
+        excluded=tuple(excluded),
         durbin_watson=watson,
     )
 
