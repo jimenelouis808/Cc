@@ -31,6 +31,7 @@ ramancarbon/
 ├── xrd/         # difracción: CIF, simetría, patrón calculado, Rietveld
 ├── echem/       # CV, GCD, EIS, mecanismo de almacenamiento, HER/OER
 ├── plotting/    # motor de figuras: estilo, series, ejes secundarios, paneles
+├── dataio/      # detección de formato, lectura universal, exportación, .rcproj
 ├── gui/         # app Tkinter; la lógica vive en state.py y plots.py, sin Tk
 ├── cli/         # ramancarbon analizar / lote / deconvolucionar / bd / demo
 ├── examples/    # scripts ejecutables + demo_data.py (espectros sintéticos)
@@ -382,6 +383,60 @@ una tiene una prueba que la protege.
 - **Z″ se guarda con su signo físico (negativo si es capacitivo).** El −Z″
   del diagrama de Nyquist es convenio de dibujo; guardarlo negado es una
   fuente permanente de errores de signo en los ajustes.
+
+## Entrada y salida
+
+- **El tipo de archivo se decide por los NÚMEROS, no por la extensión.**
+  Los cuatro instrumentos escriben `.txt`, `.csv`, `.dat` y `.asc`, y el
+  usuario tiene los cuatro en la misma carpeta. Lo que separa las medidas
+  es su forma: un voltamperograma vuelve sobre sí mismo y nada más lo
+  hace; una impedancia trae tres columnas y siete décadas de frecuencia;
+  un difractograma cabe en 0–165° con cuentas enteras.
+- **Un reverso se cuenta con umbral, no por cambio de signo de la primera
+  diferencia.** Sin umbral, un difractograma limpio tiene «varios cientos
+  de reversos» y se confunde con una curva de carga-descarga. El umbral es
+  un 5 % del recorrido de la propia columna.
+- **Se lee el archivo entero, no las primeras líneas.** La decisión depende
+  de dónde TERMINA el eje x, y los primeros 400 puntos de un espectro
+  Raman van de 90 a 490 cm⁻¹, que está dentro del intervalo de 2θ.
+- **Una detección lleva sus motivos.** Un tipo adivinado mal tiene que
+  poder discutirse; por eso `Detection` guarda las razones y las lecturas
+  alternativas, y el informe las enseña.
+- **Un archivo desconocido es un resultado, no una excepción.** Una
+  importación de carpeta que aborta con el primer LÉEME pierde los otros
+  noventa y nueve archivos, y el LÉEME es el caso normal.
+- **Los formatos binarios se rechazan diciendo qué exportar.** Adivinar la
+  disposición de un `.wdf` o un `.raw` es cómo se leen mal unos datos sin
+  que nadie se entere. Y el binario se detecta por el contenido: los
+  fabricantes escriben binario dentro de `.txt`.
+- **JCAMP-DX se lee con sus tres codificaciones** (AFFN, SQZ, DIF/DUP). Un
+  lector que ignora DIF convierte una rampa en un espectro y no parece
+  roto. Un DUP después de un DIF repite la DIFERENCIA, no el valor.
+- **Las comprobaciones internas del JCAMP se verifican, no se creen.** Cada
+  línea repite su propia X y la última Y de la anterior; un archivo
+  truncado o concatenado solo se detecta ahí, y `##NPOINTS` lo confirma.
+- **Nada de adivinar un número que hace falta.** Una velocidad de barrido
+  supuesta da una capacitancia equivocada exactamente en esa proporción y
+  nada aguas abajo lo delata. Se pide el argumento.
+- **Una curva de carga-descarga se exporta CON su columna de corriente.**
+  El signo es lo que separa las ramas: sin él la curva se puede mirar,
+  pero ya no se puede analizar.
+- **Las unidades van en su propia fila.** `C (F/g)` en la cabecera no se
+  puede volver a leer; una fila de unidades sí, y la hoja de cálculo la
+  enseña igual.
+- **Se redondea a cifras SIGNIFICATIVAS, y a la incertidumbre cuando la
+  hay.** 50.1234 ± 0.4 afirma una precisión que nadie tiene.
+- **Un proyecto `.rcproj` lleva los datos DENTRO.** Un proyecto que apunta
+  a `C:\Users\...` no se abre en el ordenador de nadie más, y ese es
+  justo el momento en que se quiere un archivo de proyecto: mandárselo a
+  un coautor. La ruta original se guarda como procedencia.
+- **Y lleva los ajustes con los números**: láser, longitud de onda,
+  velocidad de barrido, electrodo. Sin ellos los datos se reabren y ya no
+  se pueden analizar.
+- **Un proyecto es ZIP + JSON + CSV, legible a mano.** Un formato que solo
+  este programa sabe leer es una forma de perder datos dentro de cinco
+  años. Y un proyecto escrito por una versión más nueva se abre con aviso,
+  no con error: las medidas son lo único irreemplazable del archivo.
 
 ## El motor de figuras
 
