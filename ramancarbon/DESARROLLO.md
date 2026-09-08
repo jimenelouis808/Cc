@@ -155,8 +155,13 @@ comprobaciones **estáticas** en `test_gui_wiring.py` — cada lienzo tiene su
 dibujante y su pestaña, cada `command=` nombra un método real, cada
 `self.x` que se lee se asigna en algún sitio — y una prueba que **abre la
 ventana de verdad**, recorre las cuatro secciones y ejecuta sus análisis,
-que se salta sola donde no hay Tkinter ni pantalla. Para ejecutarla donde
-tu Python no trae Tkinter:
+que se salta sola donde no hay Tkinter ni pantalla. Sin pantalla pero con Tkinter, un servidor X virtual basta:
+
+```bash
+xvfb-run -a .venv/bin/python -m pytest ramancarbon/tests/test_gui_wiring.py -q
+```
+
+Y si el Python del sistema no trae Tkinter, otro que sí:
 
 ```bash
 python3.12 -m venv --system-site-packages /tmp/guienv

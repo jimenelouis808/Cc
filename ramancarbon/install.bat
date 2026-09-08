@@ -58,7 +58,9 @@ REM La bateria completa son ~620 pruebas y unos seis minutos, casi todo
 REM refinamientos Rietveld. Para comprobar una instalacion basta con que
 REM los datos esten, la GUI este cableada y los cuatro instrumentos
 REM arranquen de verdad.
-python -m pytest ramancarbon\tests -q -k "packaging or gui_wiring or database or spectrum or io or echem"
+REM Archivos concretos, no -k: "-k io" encaja tambien con "identificacion"
+REM y "resolucion", y medio minuto se convierte en cinco.
+python -m pytest -q ramancarbon\tests\test_packaging.py ramancarbon\tests\test_gui_wiring.py ramancarbon\tests\test_database.py ramancarbon\tests\test_spectrum.py ramancarbon\tests\test_io.py ramancarbon\tests\test_lineshapes.py
 if errorlevel 1 (
     echo.
     echo === Las pruebas han fallado. Revisa la salida de arriba. ===
@@ -71,7 +73,7 @@ echo Probando los cuatro instrumentos...
 set "PRUEBA=%TEMP%\ramancarbon_check"
 if exist "%PRUEBA%" rmdir /s /q "%PRUEBA%"
 python -m ramancarbon.cli.main demo "%PRUEBA%\raman" >nul 2>&1 ^
- && python -m ramancarbon.cli.main analizar "%PRUEBA%\raman\demo_MWCNT_532nm.txt" --laser 532 --breve >nul 2>&1 ^
+ && python -m ramancarbon.cli.main analizar "%PRUEBA%\raman\demo_MWCNT_532nm.txt" --laser 532 >nul 2>&1 ^
  && python -m ramancarbon.cli.main demo "%PRUEBA%\tmd" --tmd >nul 2>&1 ^
  && python -m ramancarbon.cli.main tmd "%PRUEBA%\tmd\demo_MoS2_1capa_532nm.txt" >nul 2>&1 ^
  && python -m ramancarbon.cli.main demo-datos drx "%PRUEBA%\drx" >nul 2>&1 ^

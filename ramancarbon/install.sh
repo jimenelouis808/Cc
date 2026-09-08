@@ -55,8 +55,16 @@ echo
 # los cuatro instrumentos arranquen de verdad. La completa se lanza
 # aparte, y el mensaje del final dice cómo.
 echo "Comprobando la instalación…"
-if ! python -m pytest ramancarbon/tests -q \
-        -k "packaging or gui_wiring or database or spectrum or io or echem"; then
+# Archivos concretos, no -k: "-k io" encaja tambien con "identificacion",
+# "resolucion" y "orientacion", y lo que iba a ser medio minuto se
+# convierte en cinco.
+if ! python -m pytest -q \
+        ramancarbon/tests/test_packaging.py \
+        ramancarbon/tests/test_gui_wiring.py \
+        ramancarbon/tests/test_database.py \
+        ramancarbon/tests/test_spectrum.py \
+        ramancarbon/tests/test_io.py \
+        ramancarbon/tests/test_lineshapes.py; then
     echo
     echo "=== Las pruebas han fallado. Revisa la salida de arriba. ==="
     exit 1
@@ -69,7 +77,7 @@ trap 'rm -rf "$TMP"' EXIT
 {
     python -m ramancarbon.cli.main demo "$TMP/raman" \
         && python -m ramancarbon.cli.main analizar \
-               "$TMP/raman/demo_MWCNT_532nm.txt" --laser 532 --breve \
+               "$TMP/raman/demo_MWCNT_532nm.txt" --laser 532 \
         && python -m ramancarbon.cli.main demo "$TMP/tmd" --tmd \
         && python -m ramancarbon.cli.main tmd \
                "$TMP/tmd/demo_MoS2_1capa_532nm.txt" \
