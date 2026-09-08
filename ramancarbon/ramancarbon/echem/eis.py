@@ -81,8 +81,8 @@ def _z_c(omega: np.ndarray, c: float) -> np.ndarray:
     return 1.0 / (1j * omega * max(c, 1e-18))
 
 
-def _z_l(omega: np.ndarray, l: float) -> np.ndarray:
-    return 1j * omega * l
+def _z_l(omega: np.ndarray, inductance: float) -> np.ndarray:
+    return 1j * omega * inductance
 
 
 def _z_q(omega: np.ndarray, q: float, n: float) -> np.ndarray:

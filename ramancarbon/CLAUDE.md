@@ -30,6 +30,7 @@ ramancarbon/
 │                #   clasificador, multiláser, exportación
 ├── xrd/         # difracción: CIF, simetría, patrón calculado, Rietveld
 ├── echem/       # CV, GCD, EIS, mecanismo de almacenamiento, HER/OER
+├── plotting/    # motor de figuras: estilo, series, ejes secundarios, paneles
 ├── gui/         # app Tkinter; la lógica vive en state.py y plots.py, sin Tk
 ├── cli/         # ramancarbon analizar / lote / deconvolucionar / bd / demo
 ├── examples/    # scripts ejecutables + demo_data.py (espectros sintéticos)
@@ -381,6 +382,47 @@ una tiene una prueba que la protege.
 - **Z″ se guarda con su signo físico (negativo si es capacitivo).** El −Z″
   del diagrama de Nyquist es convenio de dibujo; guardarlo negado es una
   fuente permanente de errores de signo en los ajustes.
+
+## El motor de figuras
+
+- **Una figura es un VALOR, no una llamada.** `Plot` lleva sus series, su
+  estilo, sus marcas, sus bandas, sus notas y su recuadro, y se convierte a
+  diccionario y vuelve. Por eso una figura se guarda en un proyecto, se
+  reabre y se redibuja idéntica, y por eso el mismo objeto se exporta con
+  el ancho de columna de una revista y con los tamaños de una presentación
+  sin tocar los datos.
+- **JSON no tiene tuplas.** `restore_tuples` las reconstruye al leer. Sin
+  eso, un estilo guardado y releído no es igual al que se escribió —
+  `(10.0, 80.0)` vuelve como `[10.0, 80.0]` — y «¿ha cambiado algo desde que
+  guardé?» deja de tener respuesta.
+- **Los preajustes de revista llevan el ancho de columna REAL y el tamaño
+  de letra a la vez.** Una figura dibujada a 6 pulgadas y encogida a 3.25
+  llega con la letra a la mitad. Ese emparejamiento es el preajuste.
+- **La paleta por defecto es segura para daltónicos** (Okabe-Ito) y sigue
+  separándose en escala de grises. No la cambies por la de matplotlib.
+- **Lo que se exporta son los números DIBUJADOS**, con desplazamiento y
+  normalización aplicados. Exportar el origen obliga a quien lea el archivo
+  a adivinar qué se le hizo a la curva para que se pareciera a la figura.
+- **Una curva magnificada lo dice en la leyenda** (`(×5)`). Es la forma más
+  común de que una figura mienta sin que nadie lo pretenda.
+- **El paso de una cascada es una fracción del recorrido DESPUÉS de
+  normalizar.** Con espectros crudos, el más intenso fija el paso y los
+  demás se aplastan en una línea.
+- **Los ticks de un eje secundario son redondos en las unidades
+  SECUNDARIAS.** Un eje de d con marcas en 3.113, 2.668 y 2.403 Å porque
+  ahí cayeron los 2θ redondos no es un eje que nadie pueda leer. Y las
+  marcas que se pisarían se descartan: una transformación no lineal
+  amontona sus valores redondos en un extremo.
+- **La escala de raíz necesita sus propios ticks.** El localizador
+  automático elige valores redondos (0, 2000, 4000) que se apelotonan
+  arriba y deshacen la razón de usar la escala; los redondos son los de √y.
+  Y se aplican DESPUÉS de fijar los límites.
+- **Un recuadro no puede mover los ejes principales.** Los conectores de
+  `indicate_inset_zoom` cuentan como datos y estiraban los límites; se
+  congelan alrededor del dibujo del recuadro.
+- **Un estilo compartido en una figura de paneles no toca los ejes de cada
+  panel.** Etiquetas, límites y escalas son del panel; compartir estilo no
+  puede rotular un difractograma con los ejes de un voltamperograma.
 
 ## La suite: cuatro secciones
 

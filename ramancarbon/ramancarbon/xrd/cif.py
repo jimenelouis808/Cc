@@ -52,7 +52,7 @@ def _number(text: str, default: Optional[float] = None) -> float:
     cleaned = text.strip().strip("'\"")
     if cleaned in {".", "?", ""}:
         if default is None:
-            raise CIFError(f"valor numérico ausente y sin valor por defecto")
+            raise CIFError("valor numérico ausente y sin valor por defecto")
         return default
     match = _NUMBER.match(cleaned)
     if not match:
