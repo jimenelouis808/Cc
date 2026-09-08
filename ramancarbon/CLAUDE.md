@@ -28,7 +28,8 @@ ramancarbon/
 ├── database/    # JSON de literatura + API tipada; NO importa del resto
 ├── analysis/    # asignación, cocientes, índices, diámetros, desplazamientos,
 │                #   clasificador, multiláser, exportación
-├── xrd/         # difracción: CIF, simetría, patrón calculado, Rietveld
+├── xrd/         # difracción: CIF, simetría, patrón calculado, Rietveld,
+│                #   microestructura (Williamson-Hall…), Le Bail y Pawley
 ├── echem/       # CV, GCD, EIS, mecanismo de almacenamiento, HER/OER
 ├── plotting/    # motor de figuras: estilo, series, ejes secundarios, paneles
 ├── dataio/      # detección de formato, lectura universal, exportación, .rcproj
@@ -389,6 +390,70 @@ una tiene una prueba que la protege.
 - **Z″ se guarda con su signo físico (negativo si es capacitivo).** El −Z″
   del diagrama de Nyquist es convenio de dibujo; guardarlo negado es una
   fuente permanente de errores de signo en los ajustes.
+
+## Microestructura y ajuste de patrón completo
+
+- **Un solo pico NO separa tamaño de deformación.** Scherrer sobre una
+  reflexión asigna todo el ensanchamiento al tamaño en silencio, y en una
+  muestra tensionada eso está mal en lo que aporte la deformación. Hacen
+  falta varias reflexiones, y repartidas en ángulo: tres picos entre 20 y
+  30° determinan una pendiente tan mal como uno.
+- **Los tres métodos se informan siempre, porque discrepan.** Williamson-
+  Hall supone dos Lorentzianas que se suman, el gráfico tamaño-deformación
+  supone tamaño Lorentziano y deformación Gaussiana, y Halder-Wagner
+  supone Voigt en espacio recíproco. Tres tamaños que coinciden significan
+  que el modelo vale; tres que difieren en un factor de dos significan que
+  no, y entonces NO se cita un número.
+- **Un corte negativo no es un «tamaño de cristalito negativo».** Es el
+  modelo aditivo fallando, y se dice así en vez de devolver el número.
+- **Halder-Wagner no lleva constante de forma**, así que su tamaño difiere
+  de los otros dos exactamente en K aunque el ajuste sea perfecto. Está
+  documentado porque si no parece un error.
+- **Las fórmulas de deformación se derivan, no se copian.** Con ε definido
+  por β = 4ε tan θ, el corte del gráfico tamaño-deformación es 4ε²λ² y el
+  de Halder-Wagner 4ε². Copiar el «(ε/2)²» del libro sin comprobar qué ε
+  es y en qué unidades están d y λ es un factor de ocho.
+- **Con y a la vez plano, R² es 0/0.** Una muestra sin deformación da
+  exactamente eso en un Williamson-Hall, y la fórmula ingenua devolvía
+  −8.5, que se lee como un ajuste catastrófico en vez de uno perfecto.
+- **El carbono lleva K = 1.84 para L_a**, no 0.89. Es la constante
+  bidimensional, y usar 0.89 ahí da la mitad de lo que publica todo el
+  mundo.
+- **El grado de grafitización solo vale entre 3.354 y 3.44 Å.** Fuera de
+  ahí no es un porcentaje de nada: por encima, el apilamiento no tiene
+  registro; por debajo, hay un error de cero o de desplazamiento que va
+  entero a L_c también.
+- **El amorfo NO se mide con Rietveld.** Sus fracciones son de la parte
+  cristalina modelada y suman 100 % siempre. Hace falta patrón interno:
+  se añade una cantidad conocida y el exceso que el refinamiento le
+  atribuye es lo que falta.
+
+- **Le Bail y Pawley refinan la celda sin estructura**, y fallan de forma
+  distinta: Le Bail reparte a partes iguales lo que se solapa exactamente
+  (el reparto es la suposición inicial sobreviviendo), Pawley pone las
+  intensidades como parámetros y ahí la correlación se ve.
+- **El Kα₂ va en la MISMA columna que su reflexión madre**, con la razón
+  fija. Dejarlo fuera no es neutro: el ajuste tiene que tapar el satélite
+  con algo, y usa la anchura, que salía cuatro veces la verdadera.
+- **La partición de Le Bail se corre MUCHAS veces por ciclo.** Desde
+  intensidades uniformes mejora el Rwp una décima parte por pasada —24 %
+  a las diez, 7 % a las cuarenta— y un ciclo que reparte una vez y luego
+  refina está refinando celda y anchura contra intensidades equivocadas
+  por un factor de dos. Cada pasada son dos productos de matrices.
+- **El perfil de partida se mide del patrón, no se hereda.** Los
+  coeficientes de Caglioti por defecto describen el difractómetro de otro,
+  y con picos modelados a la mitad de anchos la partición no baja del 35 %.
+- **Las reflexiones se enumeran UNA vez.** Volver a enumerarlas cada ciclo
+  parece equivalente y no lo es: una reflexión que cruza el borde de la
+  ventana cambia la longitud del vector de intensidades a mitad del
+  refinamiento, y las intensidades pasan a ser de otras reflexiones.
+- **El solapamiento se calcula por reflexión y se informa.** Para una
+  reflexión aislada la intensidad extraída es una medida; para un par a
+  0.01° es un convenio, y esa diferencia tiene que verse antes de pasarle
+  los datos a un programa de resolución estructural.
+- **Un ajuste de patrón completo SIEMPRE gana a un Rietveld del mismo
+  patrón**, porque tiene un número libre por reflexión. Comparar sus
+  factores R no dice nada. Lo que da es un suelo.
 
 ## Mapas Raman y quimiometría
 

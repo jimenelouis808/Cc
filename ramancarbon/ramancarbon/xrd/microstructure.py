@@ -166,8 +166,33 @@ def _fit(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float]:
     predicted = slope * x + intercept
     total = float(np.sum((y - np.mean(y)) ** 2))
     residual = float(np.sum((y - predicted) ** 2))
-    r_squared = 1.0 - residual / total if total > 0 else 0.0
+    scale = max(float(np.mean(np.abs(y))) ** 2 * y.size, 1e-30)
+    if total <= 1e-12 * scale:
+        # A flat y: R² is 0/0. A pure-size sample gives exactly that on a
+        # Williamson-Hall plot, and the naive formula returned −8.5, which
+        # reads as a catastrophic fit rather than a perfect one.
+        r_squared = 1.0 if residual <= 1e-12 * scale else 0.0
+    else:
+        r_squared = 1.0 - residual / total
     return float(slope), float(intercept), float(r_squared)
+
+
+def _too_large(size_nm: Optional[float]) -> list[str]:
+    """The ceiling above which a size is the instrument's, not the sample's.
+
+    Same limit Scherrer is refused at, for the same reason: above roughly
+    120 nm the size broadening is smaller than a laboratory instrument's
+    resolution, and what comes out is a restatement of the instrument
+    width that was assumed.
+    """
+    if size_nm and size_nm > 120.0:
+        return [
+            f"D = {size_nm:.0f} nm está por encima de lo que un difractómetro "
+            "de laboratorio puede medir: ahí el ensanchamiento por tamaño es "
+            "menor que la resolución y el número lo fija lo que se haya "
+            "supuesto para el instrumento, no la muestra"
+        ]
+    return []
 
 
 def williamson_hall(
@@ -232,6 +257,7 @@ def williamson_hall(
             "el modelo isótropo de tamaño y deformación no describe esta "
             "muestra"
         )
+    warnings += _too_large(size)
     return SizeStrain(
         method="Williamson-Hall", size_nm=size, strain=strain,
         intercept=intercept, slope=slope, r_squared=r_squared,
@@ -274,12 +300,16 @@ def size_strain_plot(
     if size is None:
         warnings.append(
             "la pendiente no es positiva: no sale un tamaño de este gráfico")
-    strain = math.sqrt(intercept) / 2.0 if intercept > 0 else 0.0
+    # The intercept is 4ε²λ² with ε defined, as everywhere else here, by
+    # β = 4ε tan θ. Copying the textbook's "(ε/2)²" without checking which
+    # ε that is, and in what units d and λ are, is a factor of eight.
+    strain = (math.sqrt(intercept) / (2.0 * wavelength)) if intercept > 0 else 0.0
     if intercept < 0:
         warnings.append(
             "el corte es negativo, o sea deformación nula dentro del error; "
             "se informa cero, no un número imaginario"
         )
+    warnings += _too_large(size)
     return SizeStrain(
         method="Tamaño-deformación", size_nm=size, strain=strain,
         intercept=intercept, slope=slope, r_squared=r_squared,
@@ -297,8 +327,11 @@ def halder_wagner(
 ) -> SizeStrain:
     """Size and strain in reciprocal space, with a Voigt assumption.
 
-    ``(β*/d*)² = (1/D)(β*/d*²) + (ε/2)²``, with ``β* = β cos θ / λ`` and
-    ``d* = 2 sin θ / λ``. Weights the low-angle reflections most, which is
+    ``(β*/d*)² = (1/D)(β*/d*²) + 4ε²``, with ``β* = β cos θ / λ`` and
+    ``d* = 2 sin θ / λ``, and ε defined as everywhere else here by
+    ``β = 4ε tan θ``. The size that comes out is volume-weighted and
+    carries no shape constant, which is one of the reasons the three
+    methods do not agree even on data that fits perfectly. Weights the low-angle reflections most, which is
     where the peaks are strongest and best resolved — the opposite of
     Williamson–Hall, which lets a weak, badly-measured high-angle peak set
     the slope.
@@ -319,10 +352,14 @@ def halder_wagner(
     y = (beta_star / d_star) ** 2
     slope, intercept, r_squared = _fit(x, y)
 
+    # No shape constant: Halder-Wagner returns a volume-weighted domain
+    # size, which is part of why it does not agree with the other two even
+    # on data that fits perfectly.
     size = 0.1 / slope if slope > 0 else None
     if size is None:
         warnings.append("la pendiente no es positiva: no sale un tamaño")
-    strain = 2.0 * math.sqrt(intercept) if intercept > 0 else 0.0
+    strain = (math.sqrt(intercept) / 2.0) if intercept > 0 else 0.0
+    warnings += _too_large(size)
     return SizeStrain(
         method="Halder-Wagner", size_nm=size, strain=strain,
         intercept=intercept, slope=slope, r_squared=r_squared,
@@ -421,9 +458,14 @@ def carbon_microstructure(
     if result.d002:
         spacing = result.d002
         result.turbostratic = spacing >= TURBOSTRATIC_D002
-        if GRAPHITE_D002 <= spacing <= TURBOSTRATIC_D002:
-            result.graphitisation = ((TURBOSTRATIC_D002 - spacing)
-                                     / (TURBOSTRATIC_D002 - GRAPHITE_D002))
+        # The graphitic end gets a tolerance of two thousandths of an
+        # ångström — about what a well-aligned diffractometer measures a
+        # spacing to. Without it, perfect graphite lands a hair below
+        # 3.354 and is reported as an instrument error.
+        if GRAPHITE_D002 - 0.002 <= spacing <= TURBOSTRATIC_D002:
+            result.graphitisation = min(1.0, (
+                (TURBOSTRATIC_D002 - spacing)
+                / (TURBOSTRATIC_D002 - GRAPHITE_D002)))
         elif spacing > TURBOSTRATIC_D002:
             result.warnings.append(
                 f"d₀₀₂ = {spacing:.4f} Å está por encima del valor "
@@ -433,7 +475,7 @@ def carbon_microstructure(
             )
         else:
             result.warnings.append(
-                f"d₀₀₂ = {spacing:.4f} Å es MENOR que el del grafito "
+                f"d₀₀₂ = {spacing:.4f} Å es claramente MENOR que el del grafito "
                 f"({GRAPHITE_D002} Å): eso no pasa en un carbono, así que hay "
                 "un error de cero o de desplazamiento de muestra, y ese error "
                 "va entero a L_c también"
