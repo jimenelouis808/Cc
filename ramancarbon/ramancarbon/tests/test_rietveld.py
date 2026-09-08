@@ -11,6 +11,7 @@ from ramancarbon.xrd.reference import find_phase
 from ramancarbon.xrd.report import analyse_pattern, theoretical_pattern
 from ramancarbon.xrd.rietveld import (
     GOF_LIMIT,
+    STAGES,
     PhaseModel,
     RefinementError,
     auto_refine,
@@ -120,18 +121,47 @@ def test_parameters_can_be_freed_one_group_at_a_time(two_phase):
 
 
 def test_manual_and_automatic_reach_the_same_place(two_phase):
-    """The staged protocol is a route to the minimum, not a different one."""
+    """The staged protocol is a route to the minimum, not a different one.
+
+    The comparison only means anything when both sides free the SAME
+    parameters. An earlier version freed seven groups by hand and compared
+    against the nine the staged schedule ends with, then asserted they
+    agreed to 0.01 in Rwp — which they did on one version of SciPy and not
+    on the next, because a fit with fewer degrees of freedom simply cannot
+    reach as low an Rwp. That is arithmetic, not a bug in either path.
+    """
     crystals = [find_phase("FeSe_tetragonal"), find_phase("grafito_2H")]
     staged = auto_refine(two_phase, crystals)
+
+    # Every group the schedule ever frees, minus texture: auto_refine skips
+    # that one when no axis is given, and this comparison only means
+    # anything if both sides free the same parameters.
+    every_group = tuple(
+        kind for _, kinds in STAGES for kind in kinds if kind != "preferred"
+    )
     phases = [PhaseModel(crystal=c) for c in crystals]
     parameters = build_parameters(phases)
     for parameter in parameters:
         if parameter.name == "fondo_c0":
             parameter.value = float(np.percentile(two_phase.intensity, 5))
-    free_kinds(parameters, ("scale", "background", "zero", "lattice",
-                            "profile_w", "profile_uv", "eta"))
+    free_kinds(parameters, every_group)
     manual = refine(two_phase, phases, parameters=parameters)
-    assert manual.r_wp == pytest.approx(staged.r_wp, abs=0.01)
+
+    assert manual.free_parameters == staged.free_parameters
+    assert manual.r_wp == pytest.approx(staged.r_wp, abs=0.005)
+
+
+def test_a_partial_parameter_set_cannot_beat_the_full_one(two_phase):
+    """Sanity on the comparison above: fewer free parameters, higher Rwp."""
+    crystals = [find_phase("FeSe_tetragonal"), find_phase("grafito_2H")]
+    phases = [PhaseModel(crystal=c) for c in crystals]
+    parameters = build_parameters(phases)
+    for parameter in parameters:
+        if parameter.name == "fondo_c0":
+            parameter.value = float(np.percentile(two_phase.intensity, 5))
+    free_kinds(parameters, ("scale", "background"))
+    partial = refine(two_phase, phases, parameters=parameters)
+    assert partial.r_wp >= auto_refine(two_phase, crystals).r_wp
 
 
 def test_uncertainties_are_reported_for_free_parameters(refined):

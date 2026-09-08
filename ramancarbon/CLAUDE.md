@@ -409,6 +409,17 @@ una tiene una prueba que la protege.
   Ponerla en un eje propio reescalado queda más limpio y destruye justo la
   comparación para la que sirve.
 
+## Portabilidad
+
+- **Un ajuste de mínimos cuadrados no da el mismo mínimo en dos versiones de
+  SciPy.** Una prueba que compare dos rutas de refinamiento tiene que liberar
+  EXACTAMENTE los mismos parámetros; comparar un ajuste de 7 grupos con uno de
+  9 y exigir que coincidan pasó con SciPy 1.17 por suerte y falló con 1.18.
+  Un ajuste con menos grados de libertad no puede bajar tanto el Rwp, y eso es
+  aritmética, no un fallo.
+- **`auto_refine` se salta el grupo `preferred` si no hay eje de textura.**
+  Cualquier comparación contra él tiene que saltárselo también.
+
 ## Honestidad sobre la validación
 
 Todo está validado contra espectros **sintéticos** generados por
