@@ -21,7 +21,7 @@ from ramancarbon.xrd.powder import (
     simulate,
 )
 from ramancarbon.xrd.preprocess import kalpha2_offset, strip_kalpha2
-from ramancarbon.xrd.reference import find_phase, library_crystals, load_library
+from ramancarbon.xrd.reference import find_phase, load_library
 from ramancarbon.xrd.scattering import (
     ScatteringError,
     atomic_number,
@@ -30,7 +30,7 @@ from ramancarbon.xrd.scattering import (
     wavelength_for,
 )
 from ramancarbon.xrd.search import find_peaks, identify_phases
-from ramancarbon.xrd.structure import Crystal, Lattice, Site, StructureError
+from ramancarbon.xrd.structure import Lattice, StructureError
 from ramancarbon.xrd.symmetry import SymmetryError, close_group, orbit, parse_xyz
 
 CU = wavelength_for("Cu", "ka1")

@@ -25,11 +25,11 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Optional, Sequence
+from typing import Optional
 
 import numpy as np
 
-from .curve import ChargeDischarge, CurveError, Electrode, Voltammogram, load_echem_database
+from .curve import CurveError, Voltammogram, load_echem_database
 from .cv import CVResult, RateStudy
 from .gcd import GCDResult
 

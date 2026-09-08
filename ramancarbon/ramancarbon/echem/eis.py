@@ -34,12 +34,12 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 from scipy.optimize import least_squares
 
-from .curve import CurveError, Impedance, load_echem_database
+from .curve import Impedance
 
 #: Number of RC elements per decade in the linear Kramers–Kronig test.
 KK_PER_DECADE = 7
@@ -507,7 +507,7 @@ def _semicircle_apex(imaginary: np.ndarray, real: np.ndarray, series: float) -> 
     from scipy.signal import find_peaks as _find_peaks
 
     if imaginary.size > 4:
-        indices, properties = _find_peaks(
+        indices, _ = _find_peaks(
             imaginary, prominence=0.05 * max(float(imaginary.max()), 1e-12)
         )
         if indices.size:

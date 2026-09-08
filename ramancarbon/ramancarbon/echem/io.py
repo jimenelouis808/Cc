@@ -24,7 +24,7 @@ from typing import Any, Optional, Sequence
 
 import numpy as np
 
-from .curve import ChargeDischarge, CurveError, Electrode, Impedance, Voltammogram
+from .curve import ChargeDischarge, Electrode, Impedance, Voltammogram
 
 #: Multipliers to SI, by the unit strings these files use.
 UNIT_SCALE: dict[str, float] = {

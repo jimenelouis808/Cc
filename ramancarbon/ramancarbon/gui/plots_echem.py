@@ -10,13 +10,12 @@ invites the eye to read a depression angle that is not there.
 
 from __future__ import annotations
 
-import math
 from typing import Optional, Sequence
 
 import numpy as np
 
 from ..echem.curve import ChargeDischarge, Impedance, Voltammogram
-from ..echem.cv import CVResult, RateStudy
+from ..echem.cv import RateStudy
 from ..echem.eis import EISResult
 from ..echem.evaluate import CatalysisResult
 from ..echem.gcd import GCDResult

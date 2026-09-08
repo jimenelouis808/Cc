@@ -14,7 +14,7 @@ and event wiring.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from .base import SectionApp, placeholder
 from .theme import PAD

@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 from .structure import Crystal, Lattice, Site, StructureError
-from .symmetry import SymmetryError, parse_xyz
+from .symmetry import SymmetryError
 
 #: Tags that hold a symmetry operation list, oldest spelling last.
 SYMOP_TAGS = (

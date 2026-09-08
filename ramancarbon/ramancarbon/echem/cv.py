@@ -34,7 +34,7 @@ from scipy.signal import find_peaks as _scipy_find_peaks
 from scipy.signal import peak_widths as _peak_widths
 
 from ..core.compat import trapezoid
-from .curve import CurveError, Electrode, Voltammogram, load_echem_database
+from .curve import CurveError, Voltammogram, load_echem_database
 
 #: Minimum span in scan rate, as a ratio, for a b-value to mean anything.
 MIN_RATE_SPAN = 8.0
@@ -667,7 +667,7 @@ def _dunn_split(
         observed = np.array(currents, dtype=float)
         # i/sqrt(v) = k1*sqrt(v) + k2  -> a straight line in sqrt(v).
         root = np.sqrt(rates)
-        slope, intercept, _, _ = _fit_line(root, observed / root)
+        slope, _, _, _ = _fit_line(root, observed / root)
         capacitive[:, column] = slope * rates
         total[:, column] = observed
     fractions: dict[float, float] = {}
@@ -703,8 +703,8 @@ def _trasatti(study: RateStudy) -> None:
     values = np.array(study.capacitances, dtype=float)
     if np.any(values <= 0.0):
         return
-    outer_slope, outer_intercept, _, _ = _fit_line(1.0 / np.sqrt(rates), values)
-    total_slope, total_intercept, _, _ = _fit_line(np.sqrt(rates), 1.0 / values)
+    _, outer_intercept, _, _ = _fit_line(1.0 / np.sqrt(rates), values)
+    _, total_intercept, _, _ = _fit_line(np.sqrt(rates), 1.0 / values)
     study.trasatti_outer = float(outer_intercept)
     study.trasatti_total = float(1.0 / total_intercept) if total_intercept > 0 else None
     if study.trasatti_total is not None and study.trasatti_outer is not None:
@@ -727,7 +727,7 @@ def _double_layer(
     rates, currents = [], []
     for curve in curves:
         try:
-            anodic, cathodic = curve.sweeps()
+            _, cathodic = curve.sweeps()
         except CurveError:
             continue
         centre = 0.5 * (curve.window[0] + curve.window[1])

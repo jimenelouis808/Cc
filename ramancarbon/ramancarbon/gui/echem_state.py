@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 from ..echem.curve import ChargeDischarge, Electrode, Impedance, Voltammogram
 from ..echem.eis import LIBRARY

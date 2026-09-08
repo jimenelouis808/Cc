@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 
 from ramancarbon.echem.curve import (
-    ChargeDischarge,
     CurveError,
     Electrode,
     Impedance,
@@ -102,7 +101,7 @@ def test_capacitance_round_trips_the_value_it_was_generated_from():
 def test_the_vertex_trim_does_not_bias_the_result():
     """Trimming the vertices and then dividing by the FULL window made
     every capacitance 4 % too small."""
-    from ramancarbon.echem.cv import VERTEX_TRIM, integrate_charge
+    from ramancarbon.echem.cv import integrate_charge
 
     curve = make_cv_demo("condensador", capacitance=0.05, seed=1).cycles()[-1]
     _, _, span = integrate_charge(curve)

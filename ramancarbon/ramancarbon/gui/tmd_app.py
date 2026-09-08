@@ -15,8 +15,6 @@ whether the measurement is usable at all.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
-
 from .base import SectionApp, placeholder
 from .theme import PAD
 from .widgets import card, fill_table, hint, scrolled_text, set_text, table

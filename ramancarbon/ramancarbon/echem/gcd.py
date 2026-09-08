@@ -22,14 +22,13 @@ between them is itself a measure of how non-capacitive the electrode is.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
 import numpy as np
 
 from ..core.compat import trapezoid
-from .curve import ChargeDischarge, CurveError
+from .curve import ChargeDischarge
 
 #: Points at the start of a branch used to measure the IR jump.
 IR_POINTS = 3
@@ -177,7 +176,7 @@ def _ir_drop(branch: ChargeDischarge, previous_potential: Optional[float]) -> fl
     potential = branch.potential[window]
     if time.size < 2:
         return 0.0
-    slope, intercept = np.polyfit(time - branch.time[0], potential, 1)
+    _, intercept = np.polyfit(time - branch.time[0], potential, 1)
     return float(previous_potential - intercept)
 
 
