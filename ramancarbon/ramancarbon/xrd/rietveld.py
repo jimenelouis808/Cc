@@ -306,6 +306,16 @@ def chebyshev_background(
     return np.polynomial.chebyshev.chebval(scaled, list(coefficients))
 
 
+def _angle_shift(two_theta: float, zero: float, displacement: float) -> float:
+    """The same correction as :func:`_angle_correction`, for one angle.
+
+    Scalar because the refinement applies it to every reflection on every
+    residual evaluation, and a one-element array round trip there is pure
+    overhead.
+    """
+    return zero + displacement * math.cos(math.radians(two_theta) / 2.0)
+
+
 def _angle_correction(two_theta: np.ndarray, zero: float, displacement: float) -> np.ndarray:
     """Instrumental 2θ corrections, as functions of angle.
 
@@ -366,11 +376,10 @@ def calculate_pattern(
                 if reflection_cache is not None:
                     reflection_cache[key] = computed
             for reflection in computed:
-                centre = reflection.two_theta + float(
-                    _angle_correction(np.array([reflection.two_theta]), zero, displacement)[0]
-                )
-                width = float(phase.profile.fwhm(np.array([centre]))[0])
-                mixing = float(phase.profile.eta(np.array([centre]))[0])
+                centre = reflection.two_theta + _angle_shift(
+                    reflection.two_theta, zero, displacement)
+                width = phase.profile.fwhm_at(centre)
+                mixing = phase.profile.eta_at(centre)
                 window = (
                     (angles > centre - PROFILE_CUTOFF * width)
                     & (angles < centre + PROFILE_CUTOFF * width)

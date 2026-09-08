@@ -993,7 +993,15 @@ def drt(
     residual = float(np.linalg.norm(fitted - target)
                      / max(np.linalg.norm(target), 1e-30))
 
-    peaks, resistances = _drt_peaks(tau, gamma)
+    # Peaks are looked for only inside the MEASURED range of time
+    # constants. Outside it the distribution is not determined by data,
+    # and it does not sit quietly there either: the unmeasured slow end
+    # collects whatever the diffusion tail implies, which on the demo
+    # spectrum was a γ two hundred times the real features and hid every
+    # one of them under a threshold expressed as a fraction of the
+    # maximum. The pile-up is still reported, as a warning.
+    measured = (1.0 / omega.max(), 1.0 / omega.min())
+    peaks, resistances = _drt_peaks(tau, gamma, measured=measured)
     warnings = [
         "la inversión es mal condicionada: la regularización no es un "
         f"detalle de implementación sino una elección sobre cuánta "
@@ -1077,7 +1085,7 @@ def _l_curve(design, target, difference, count: int = 24):
     return float(candidates[int(np.argmax(curvature))]), list(zip(x, y))
 
 
-def _drt_peaks(tau, gamma, min_fraction: float = 0.05):
+def _drt_peaks(tau, gamma, min_fraction: float = 0.05, measured=None):
     """Peaks of γ(τ) and the resistance under each.
 
     The resistance is the integral of γ over the peak in ln τ, and it is
@@ -1090,25 +1098,38 @@ def _drt_peaks(tau, gamma, min_fraction: float = 0.05):
     from ..core.compat import trapezoid
 
     gamma = np.asarray(gamma, dtype=float)
+    tau = np.asarray(tau, dtype=float)
     if gamma.size < 3 or float(np.max(gamma)) <= 0:
         return [], []
-    threshold = min_fraction * float(np.max(gamma))
-    log_tau = np.log(np.asarray(tau, dtype=float))
+    inside = (np.ones(tau.shape, dtype=bool) if measured is None
+              else (tau >= measured[0]) & (tau <= measured[1]))
+    if not inside.any():
+        return [], []
+    threshold = min_fraction * float(np.max(gamma[inside]))
+    log_tau = np.log(tau)
 
     maxima = [
         index for index in range(1, gamma.size - 1)
-        if gamma[index] > threshold
+        if inside[index]
+        and gamma[index] > threshold
         and gamma[index] >= gamma[index - 1]
         and gamma[index] >= gamma[index + 1]
     ]
     if not maxima:
         return [], []
 
-    # Basin boundaries: the lowest point between neighbouring peaks.
-    bounds = [0]
+    # Basin boundaries: the lowest point between neighbouring peaks, and
+    # the edges of the MEASURED range at the two ends. Letting the outer
+    # basins run to the edge of the extended grid makes them swallow the
+    # pile-up that collects there: on the demo spectrum the slowest peak
+    # came back as 3980 ohms, which is the unmeasured diffusion tail, not
+    # a process.
+    first_inside = int(np.argmax(inside))
+    last_inside = int(inside.size - 1 - np.argmax(inside[::-1]))
+    bounds = [first_inside]
     for first, second in zip(maxima, maxima[1:]):
         bounds.append(first + int(np.argmin(gamma[first:second + 1])))
-    bounds.append(gamma.size - 1)
+    bounds.append(last_inside)
 
     peaks, resistances = [], []
     for index, position in enumerate(maxima):

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
@@ -251,3 +253,45 @@ def test_catalogue_loads_and_is_documented():
     assert all(s.source for s in species)
     assert 0.0 < CORROBORATION <= 1.0
     assert OUTLIER_Z > 0
+
+
+# -- benchmarks ---------------------------------------------------------
+
+def test_the_benchmark_runs_and_reports_something():
+    """It is in the package so that a change making something four times
+    slower is noticeable without anybody remembering to check."""
+    from ramancarbon.benchmarks import run
+
+    report = run(quick=True, repeats=1)
+    assert len(report.measurements) >= 10
+    assert all(m.seconds > 0 for m in report.measurements)
+    assert {"python", "numpy", "scipy"} <= set(report.machine)
+    text = report.text()
+    assert "Raman" in text and "Difracción" in text and "Electroquímica" in text
+
+
+def test_the_benchmark_reports_the_best_run_not_the_mean():
+    """On a shared machine the mean measures whatever else was running."""
+    from ramancarbon.benchmarks import measure
+
+    calls = {"n": 0}
+
+    def variable():
+        import time
+
+        calls["n"] += 1
+        time.sleep(0.02 if calls["n"] == 1 else 0.001)
+        return calls["n"]
+
+    seconds, value = measure(variable, repeats=3)
+    assert seconds < 0.015, "el mejor tiempo, no la media"
+    assert value == 3
+
+
+def test_the_benchmark_can_be_written_as_json(tmp_path):
+    from ramancarbon.benchmarks import main
+
+    destination = tmp_path / "tiempos.json"
+    assert main(["--rapido", "--repeticiones", "1", "--json", str(destination)]) == 0
+    payload = json.loads(destination.read_text(encoding="utf-8"))
+    assert payload["medidas"] and payload["maquina"]["python"]

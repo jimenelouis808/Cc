@@ -229,13 +229,17 @@ class Crystal:
         by four times their own standard error and that symmetry says are
         one number.
         """
+        cached = getattr(self, "_constraint_cache", None)
+        if cached is not None:
+            return cached
+
         cyclic = np.array([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
         four_fold = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
         three_fold = np.array([[0.0, -1.0, 0.0], [1.0, -1.0, 0.0], [0.0, 0.0, 1.0]])
         for operation in self.operations:
             rotation = operation.R
             if np.allclose(rotation, cyclic) or np.allclose(rotation, cyclic.T):
-                return ("a", "a", "a")
+                return self._remember_constraint(("a", "a", "a"))
         for operation in self.operations:
             rotation = operation.R
             if (
@@ -244,8 +248,22 @@ class Crystal:
                 or np.allclose(rotation, three_fold)
                 or np.allclose(rotation, three_fold.T)
             ):
-                return ("a", "a", "c")
-        return ("a", "b", "c")
+                return self._remember_constraint(("a", "a", "c"))
+        return self._remember_constraint(("a", "b", "c"))
+
+    def _remember_constraint(self, value: tuple[str, str, str]):
+        """Cache the constraint on the instance.
+
+        Same reason as the ``expanded()`` cache: a refinement builds a new
+        ``Crystal`` per trial cell and asks each one for its constraint
+        once per residual evaluation, and reading it means comparing every
+        symmetry operation against three matrices. On one single-phase
+        refinement that was 165 000 calls to ``allclose`` and half the
+        total time. The answer depends only on the operations, which never
+        change once the group is closed.
+        """
+        object.__setattr__(self, "_constraint_cache", value)
+        return value
 
     def expanded(self) -> tuple[np.ndarray, list[str], np.ndarray, np.ndarray]:
         """Every atom in the conventional cell.
@@ -339,6 +357,12 @@ class Crystal:
         cached = getattr(self, "_expanded_cache", None)
         if cached is not None:
             object.__setattr__(clone, "_expanded_cache", cached)
+        constraint = getattr(self, "_constraint_cache", None)
+        if constraint is not None:
+            # The symmetry does not change when only the cell does, so the
+            # constraint carries over. Without this the cache is empty on
+            # every trial cell, which is every residual evaluation.
+            object.__setattr__(clone, "_constraint_cache", constraint)
         return clone
 
     def describe(self) -> str:

@@ -178,6 +178,7 @@ def assign_bands(
     db: Optional[Database] = None,
     keys: Optional[Iterable[str]] = None,
     include_shoulders: Optional[bool] = None,
+    measured: Optional[Spectrum] = None,
 ) -> Assignment:
     """Identify observed features as named bands.
 
@@ -230,7 +231,7 @@ def assign_bands(
 
     candidates = _candidate_bands(database, keys, include_shoulders)
     observed = _as_observations(sources)
-    observed, rejected = _reject_insignificant(observed, spectrum)
+    observed, rejected = _reject_insignificant(observed, spectrum, measured)
     if rejected:
         warnings.append(
             f"{len(rejected)} componente(s) del ajuste no superan el umbral de "
@@ -378,7 +379,8 @@ def _as_observations(sources: Sequence[PeakMeasurement | FitResult]) -> list[dic
 
 
 def _reject_insignificant(
-    observed: list[dict], spectrum: Spectrum
+    observed: list[dict], spectrum: Spectrum,
+    measured: Optional[Spectrum] = None,
 ) -> tuple[list[dict], list[tuple[str, float]]]:
     """Drop fitted components that are not distinguishable from zero.
 
@@ -398,14 +400,40 @@ def _reject_insignificant(
     """
     sigma = spectrum.noise_estimate()
     step = max(spectrum.step, 1e-9)
-    scale = float(np.ptp(spectrum.intensity))
+    # The scale a component has to be visible against is the LARGER of the
+    # spectrum's range and its own magnitude. On a spectrum with no
+    # measurable noise the range is itself floating-point residue — a
+    # constant signal comes out of a baseline subtraction with a range of
+    # about 1e-6 — and comparing a component against a thousandth of that
+    # lets a component of 8e-7 through on a spectrum that is the number
+    # five from end to end. Which it did, and the fit called it iTOLA.
+    # Measured against the spectrum AS MEASURED, not against what is left
+    # after a background has been subtracted from it. On a constant
+    # spectrum the subtraction leaves floating-point residue — a range of
+    # 2e-6 with a noise estimate of 1e-12 — and inside that residue every
+    # ratio is of order one, so no threshold expressed as a ratio can tell
+    # a band from arithmetic. Against the five counts that were actually
+    # measured, a component of 8e-7 is nothing, which is the right answer.
+    reference = measured if measured is not None else spectrum
+    magnitude = (float(np.max(np.abs(reference.intensity)))
+                 if reference.intensity.size else 0.0)
+    scale = max(float(np.ptp(spectrum.intensity)), 1e-9 * magnitude)
     keep: list[dict] = []
     rejected: list[tuple[str, float]] = []
     for obs in observed:
+        height, fwhm = obs["height"], obs["fwhm"]
+        # The floor applies to everything, however it was found. A feature
+        # a millionth of the measured signal is not one: no detector
+        # resolves that, so it is arithmetic. The peak finder has its own
+        # significance test and it does not save it here — on a constant
+        # spectrum the residue left by a baseline subtraction has a noise
+        # estimate of 1e-12, and against that, dust is significant.
+        if height is not None and 0 < magnitude and height <= 1e-6 * magnitude:
+            rejected.append((obs.get("band") or "?", obs["position"]))
+            continue
         if obs["origin"] != "fit":
             keep.append(obs)
             continue
-        height, fwhm = obs["height"], obs["fwhm"]
         if height is None or height <= 0:
             rejected.append((obs.get("band") or "?", obs["position"]))
             continue

@@ -215,41 +215,49 @@ def reflections(
     hkl, spacing, two_theta = hkl[order], spacing[order], two_theta[order]
     intensity, f_squared = intensity[order], f_squared[order]
 
+    # Everything below is per-reflection bookkeeping on scalars, so the
+    # arrays are converted to Python lists once. Indexing a NumPy array
+    # for one element builds a NumPy scalar; doing that a few hundred
+    # thousand times inside a refinement — which rebuilds this list for
+    # every trial cell — was a quarter of the total time.
+    hkl_rows = [tuple(int(v) for v in row) for row in hkl]
+    spacing_list = spacing.tolist()
+    two_theta_list = two_theta.tolist()
+    intensity_list = intensity.tolist()
+    f_squared_list = f_squared.tolist()
+
     merged: list[Reflection] = []
     index = 0
-    while index < len(spacing):
+    count = len(spacing_list)
+    while index < count:
         stop = index + 1
-        while (
-            stop < len(spacing)
-            and abs(spacing[stop] - spacing[index]) <= D_MERGE_RELATIVE * spacing[index]
-        ):
+        reference = spacing_list[index]
+        tolerance = D_MERGE_RELATIVE * reference
+        while stop < count and abs(spacing_list[stop] - reference) <= tolerance:
             stop += 1
-        block = slice(index, stop)
-        total = float(intensity[block].sum())
+        total = math.fsum(intensity_list[index:stop])
         if total > 0.0:
             # Prefer the conventional representative of the family: the
             # one with no negative index, then the largest lexicographically.
             # Reporting (0 0 -1) where every table says (0 0 1) makes the
             # output harder to check against a reference, for no gain.
-            representative = max(
-                range(index, stop),
-                key=lambda i: (
-                    int(np.all(hkl[i] >= 0)),
-                    tuple(int(v) for v in hkl[i]),
-                ),
-            )
+            representative = index
+            best = None
+            for candidate in range(index, stop):
+                h, k, l = hkl_rows[candidate]
+                key = (h >= 0 and k >= 0 and l >= 0, h, k, l)
+                if best is None or key > best:
+                    best, representative = key, candidate
             merged.append(
                 Reflection(
-                    hkl=tuple(int(v) for v in hkl[representative]),
-                    d=float(spacing[index]),
-                    two_theta=float(two_theta[index]),
+                    hkl=hkl_rows[representative],
+                    d=reference,
+                    two_theta=two_theta_list[index],
                     intensity=total,
                     multiplicity=stop - index,
-                    f_squared=float(f_squared[representative]),
+                    f_squared=f_squared_list[representative],
                     phase=crystal.name,
-                    contributing=tuple(
-                        tuple(int(v) for v in row) for row in hkl[block]
-                    ),
+                    contributing=tuple(hkl_rows[index:stop]),
                 )
             )
         index = stop
@@ -292,6 +300,22 @@ class Profile:
 
     def eta(self, two_theta: np.ndarray) -> np.ndarray:
         return np.clip(self.eta0 + self.eta1 * np.asarray(two_theta, dtype=float), 0.0, 1.0)
+
+    def fwhm_at(self, two_theta: float) -> float:
+        """The same, for one angle, without building an array.
+
+        A refinement asks for the width of every reflection on every
+        residual evaluation — fifty thousand times for a single-phase fit.
+        Going through ``np.asarray`` and ``np.sqrt`` for one number each
+        time cost a fifth of the total refinement.
+        """
+        tan_theta = math.tan(math.radians(two_theta) / 2.0)
+        squared = self.u * tan_theta * tan_theta + self.v * tan_theta + self.w
+        return math.sqrt(max(squared, 1e-6))
+
+    def eta_at(self, two_theta: float) -> float:
+        """Mixing at one angle, clipped, without an array."""
+        return min(1.0, max(0.0, self.eta0 + self.eta1 * two_theta))
 
 
 def pseudo_voigt(

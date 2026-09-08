@@ -431,7 +431,8 @@ def analyse(
     # in the bands that no fit covered.
     sources: list[Any] = [f for f in (fit, two_d_fit, rbm.fit) if f is not None]
     sources.extend(peaks)
-    assignment = assign_bands(processed, sources, db=database)
+    assignment = assign_bands(processed, sources, db=database,
+                              measured=spectrum)
     if swcnt_fit is not None and g_region is not None and g_region.interpretation == "swcnt_split":
         _merge_swcnt_g(assignment, swcnt_fit, processed, database)
 

@@ -792,6 +792,48 @@ una tiene una prueba que la protege.
 - **`auto_refine` se salta el grupo `preferred` si no hay eje de textura.**
   Cualquier comparación contra él tiene que saltárselo también.
 
+## Rendimiento
+
+Medido, no supuesto: `python -m ramancarbon.benchmarks` cronometra cada
+operación y `--json` la guarda. Se informa el MEJOR de varias
+repeticiones, no la media: en una máquina compartida la media mide lo que
+estuviera haciendo la máquina, y solo el mejor es una propiedad del
+código. (Aprendido midiendo con la batería de pruebas corriendo al lado:
+todo salía siete veces más lento, uniformemente.)
+
+- **El sistema de la línea base es PENTADIAGONAL**, así que se resuelve
+  con una Cholesky en banda, no con un solucionador disperso general.
+  SuperLU hace una LU dispersa con pivoteo y ordenación de columnas, todo
+  ello desperdiciado sobre una banda de cinco. Seis veces más rápido, y
+  las líneas base coinciden con las de antes en una parte en diez
+  millones: redondeo entre dos factorizaciones de la misma matriz, no otra
+  respuesta. `analyse()` bajó de 490 a 190 ms.
+- **`lattice_constraint()` se memoriza en la instancia**, como
+  `expanded()`. Un refinamiento construye un `Crystal` por celda de prueba
+  y le pide la ligadura una vez por evaluación del residuo, y leerla es
+  comparar cada operación de simetría contra tres matrices: 165 000
+  llamadas a `allclose` y la mitad del tiempo total en un refinamiento de
+  una sola fase. Y se hereda al cambiar solo la celda, porque la simetría
+  no cambia.
+- **Anchura, mezcla y corrección de ángulo, en escalar.** El refinamiento
+  las pide para cada reflexión en cada evaluación —cincuenta mil veces— y
+  pasar por `np.asarray` para un solo número cuesta quince veces más.
+  Cuidado: `math.sqrt` y `np.sqrt` difieren en un ulp, y ese ulp cambia la
+  trayectoria del ajuste; el Rwp final se mueve en la cuarta cifra, que es
+  la reproducibilidad propia del refinamiento.
+- **El bloque de fusión de reflexiones trabaja sobre listas de Python.**
+  Indexar un array de NumPy elemento a elemento construye un escalar de
+  NumPy, y hacerlo cientos de miles de veces —que es lo que hace un
+  refinamiento, porque reconstruye la lista para cada celda de prueba— era
+  un cuarto del tiempo total. En conjunto, `auto_refine` de una fase pasó
+  de 10.5 a 3.0 segundos, y las pruebas de Rietveld de 180 a 76.
+- **La DRT busca picos solo dentro del intervalo MEDIDO de constantes de
+  tiempo.** Fuera de él la distribución no la determinan los datos, y
+  tampoco se queda quieta: el extremo lento sin medir recoge lo que
+  implique la cola de difusión, y en el espectro de demostración eso era
+  una γ doscientas veces las estructuras reales, que quedaban todas por
+  debajo del umbral. La acumulación se sigue avisando.
+
 ## Honestidad sobre la validación
 
 Todo está validado contra espectros **sintéticos** generados por
