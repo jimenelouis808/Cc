@@ -49,15 +49,45 @@ else
 fi
 
 echo
-echo "Ejecutando las pruebas…"
-if python -m pytest ramancarbon/tests -q; then
-    echo
-    echo "=== OK ==="
-else
+# La batería completa son ~620 pruebas y unos seis minutos, casi todo
+# refinamientos Rietveld. Para comprobar una instalación no hace falta:
+# lo que importa es que los datos estén, que la GUI esté cableada y que
+# los cuatro instrumentos arranquen de verdad. La completa se lanza
+# aparte, y el mensaje del final dice cómo.
+echo "Comprobando la instalación…"
+if ! python -m pytest ramancarbon/tests -q \
+        -k "packaging or gui_wiring or database or spectrum or io or echem"; then
     echo
     echo "=== Las pruebas han fallado. Revisa la salida de arriba. ==="
     exit 1
 fi
+
+echo
+echo "Probando los cuatro instrumentos…"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+{
+    python -m ramancarbon.cli.main demo "$TMP/raman" \
+        && python -m ramancarbon.cli.main analizar \
+               "$TMP/raman/demo_MWCNT_532nm.txt" --laser 532 --breve \
+        && python -m ramancarbon.cli.main demo "$TMP/tmd" --tmd \
+        && python -m ramancarbon.cli.main tmd \
+               "$TMP/tmd/demo_MoS2_1capa_532nm.txt" \
+        && python -m ramancarbon.cli.main demo-datos drx "$TMP/drx" \
+        && python -m ramancarbon.cli.main drx \
+               "$TMP/drx/demo_drx_CNT_FeSe.xye" --sin-refinar --breve \
+        && python -m ramancarbon.cli.main demo-datos echem "$TMP/ec" \
+        && python -m ramancarbon.cli.main echem \
+               --cv "$TMP/ec/demo_cv_condensador_20mVs.txt" \
+               --masa 2 --area 1 --breve
+} >/dev/null 2>&1 || {
+    echo "=== Algún instrumento no arranca. Revisa la salida de arriba. ==="
+    exit 1
+}
+echo "  Raman de carbono, Raman de TMD, difracción y electroquímica: OK"
+
+echo
+echo "=== OK ==="
 
 cat <<'MSG'
 
@@ -67,8 +97,20 @@ Para usarlo, activa el entorno en cada terminal nueva:
 
 Y luego:
 
+    ramancarbon-gui                          # la suite entera
+
+O por línea de comandos, un instrumento cada vez:
+
     ramancarbon demo datos_prueba/
     ramancarbon analizar datos_prueba/demo_DWCNT_532nm.txt --laser 532
-    ramancarbon-gui
+    ramancarbon demo-datos drx datos_drx/
+    ramancarbon drx datos_drx/demo_drx_CNT_FeSe.xye
+    ramancarbon demo-datos echem datos_ec/
+    ramancarbon echem --cv datos_ec/demo_cv_condensador_20mVs.txt --masa 2 --area 1
+
+La batería completa de pruebas (unos seis minutos, sobre todo
+refinamientos Rietveld):
+
+    pytest ramancarbon/tests -q
 
 MSG
