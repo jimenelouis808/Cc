@@ -878,15 +878,262 @@ def cmd_demo_datos(args) -> int:
     return 0
 
 
+def cmd_mapa(args) -> int:
+    """Read a Raman map and report what it contains."""
+    import numpy as np
+
+    from ..mapping import (
+        band_position,
+        band_ratio,
+        coverage,
+        despike_map,
+        kmeans,
+        mcr_als,
+        pca,
+        read_map,
+        suggested_components,
+    )
+
+    cube = read_map(args.archivo, laser_nm=args.laser, spot_um=args.punto)
+    print(cube.describe())
+    warning = cube.sampling_warning()
+    if warning:
+        print(f"  aviso: {warning}")
+
+    clean, replaced = despike_map(cube)
+    print(f"\nRayos cósmicos: {replaced} canales sustituidos de "
+          f"{cube.intensity.size}")
+
+    low, high = args.banda
+    mask, fraction = coverage(clean, low, high)
+    print(f"Cobertura (S/R ≥ 5) en {low:g}–{high:g} cm⁻¹: "
+          f"{100 * fraction:.0f} % del mapa")
+    for note in mask.warnings:
+        print(f"  aviso: {note}")
+
+    position = band_position(clean, low, high)
+    print(f"\n{position.describe()}")
+
+    if args.cociente:
+        (a, b), (c, d) = args.cociente[:2], args.cociente[2:]
+        ratio = band_ratio(clean, (a, b), (c, d))
+        print(f"{ratio.describe()}")
+        for note in ratio.warnings:
+            print(f"  aviso: {note}")
+
+    components = pca(clean, args.componentes)
+    print(f"\n{components.describe()}")
+    print("  varianza: " + ", ".join(
+        f"{100 * v:.1f} %" for v in components.explained[:args.componentes]))
+    suggested = suggested_components(components)
+    print(f"  componentes con más que ruido: {suggested}")
+
+    groups = kmeans(clean, max(2, min(suggested, args.grupos)))
+    print(f"\n{groups.describe()}")
+    for note in groups.warnings:
+        print(f"  aviso: {note}")
+
+    if args.mcr:
+        resolved = mcr_als(clean, max(2, suggested))
+        print(f"\n{resolved.describe()}")
+        for index in range(resolved.k):
+            spectrum = resolved.component_spectrum(index)
+            peak = spectrum.shift[int(np.argmax(spectrum.intensity))]
+            print(f"  componente {index + 1}: máximo en {peak:.0f} cm⁻¹")
+        for note in resolved.warnings[:2]:
+            print(f"  aviso: {note}")
+
+    if args.figura:
+        from ..plotting import AxisStyle, Plot, Series, preset
+
+        plot = Plot(name="mapa")
+        for index in range(groups.k):
+            centre = groups.centre_spectrum(index)
+            plot.add(Series(x=centre.shift, y=centre.intensity,
+                            label=f"grupo {index + 1}"))
+        plot.style = preset(args.preajuste).replace(
+            x=AxisStyle(label="Desplazamiento Raman (cm⁻¹)"),
+            y=AxisStyle(label="Intensidad (u.a.)"),
+            normalise="max", offset=0.15,
+        )
+        print(f"\nFigura: {plot.save(args.figura)}")
+    return 0
+
+
+def cmd_figura(args) -> int:
+    """Draw one figure from several measurements, with the plot engine."""
+    from ..dataio import load
+    from ..plotting import AxisStyle, Plot, Series, preset
+
+    plot = Plot(name=Path(args.salida).stem)
+    labels: list[str] = []
+    kinds: set[str] = set()
+    for path in args.archivos:
+        loaded = load(path, laser_nm=args.laser)
+        table_x, table_y, label = _series_of(loaded)
+        plot.add(Series(x=table_x, y=table_y, label=label))
+        labels.append(label)
+        kinds.add(loaded.kind)
+
+    if len(kinds) > 1:
+        print("error: no se puede dibujar en la misma figura "
+              + ", ".join(sorted(kinds)) + ": los ejes no son los mismos",
+              file=sys.stderr)
+        return 1
+
+    kind = kinds.pop()
+    axes = {
+        "raman": ("Desplazamiento Raman (cm⁻¹)", "Intensidad (u.a.)"),
+        "xrd": ("2θ (°)", "Intensidad (cuentas)"),
+        "cv": ("Potencial (V)", "Corriente (A)"),
+        "gcd": ("Tiempo (s)", "Potencial (V)"),
+        "eis": ("Z′ (Ω)", "−Z″ (Ω)"),
+    }[kind]
+    plot.style = preset(args.preajuste).replace(
+        x=AxisStyle(label=axes[0], limits=tuple(args.limites) if args.limites else None),
+        y=AxisStyle(label=axes[1], scale=args.escala),
+        normalise=args.normalizar, offset=args.desplazar,
+    )
+    for position in args.marcar or ():
+        plot.mark(position)
+
+    written = plot.save(args.salida)
+    print(f"{written}  ({len(labels)} series: {', '.join(labels)})")
+    if args.datos:
+        print(f"{plot.save_data(args.datos)}  (los números dibujados)")
+    return 0
+
+
+def _series_of(loaded):
+    """The two columns to draw for any measurement, and a label."""
+    import numpy as np
+
+    data = loaded.data
+    name = getattr(data, "name", loaded.path.stem)
+    if hasattr(data, "shift"):
+        return data.shift, data.intensity, name
+    if hasattr(data, "two_theta"):
+        return data.two_theta, data.intensity, name
+    if hasattr(data, "scan_rate"):
+        return data.potential, data.current, name
+    if hasattr(data, "frequency"):
+        return np.asarray(data.z.real), -np.asarray(data.z.imag), name
+    return data.time, data.potential, name
+
+
+def cmd_exportar(args) -> int:
+    """Convert a measurement into any of the offered formats."""
+    from ..dataio import load
+    from ..dataio.export import export
+
+    loaded = load(args.archivo, laser_nm=args.laser)
+    for note in loaded.warnings:
+        print(f"aviso: {note}")
+    written = export(loaded.data, args.salida)
+    print(f"{loaded.path.name} ({loaded.kind}) → {written}")
+    return 0
+
+
+def cmd_proyecto(args) -> int:
+    """Build a project file from a folder, or list what one contains."""
+    from ..dataio import Project, load_folder
+
+    if args.accion == "crear":
+        loaded, failures = load_folder(args.origen, laser_nm=args.laser)
+        project = Project(name=Path(args.origen).resolve().name,
+                          notes=args.notas or "")
+        for item in loaded:
+            project.add(item.data)
+        written = project.save(args.destino)
+        print(f"{written}  ({len(project.datasets)} medidas, "
+              f"{written.stat().st_size / 1024:.0f} kB)")
+        for path, message in failures:
+            print(f"  omitido {path.name}: {message.split(':', 1)[-1].strip()[:70]}")
+        return 0
+
+    project = Project.load(args.origen)
+    print(f"{project.name}  ({project.application_version or 'versión desconocida'}, "
+          f"{project.modified or 'sin fecha'})")
+    if project.notes:
+        print(project.notes)
+    for dataset in project.datasets:
+        points = 0 if dataset.values is None else len(dataset.values)
+        print(f"  {dataset.identifier:<28s} {dataset.kind:<6s} {points:6d} puntos"
+              f"   {', '.join(sorted(dataset.options))}")
+    if project.figures:
+        print(f"  {len(project.figures)} figura(s)")
+    for table in project.results:
+        print(f"  tabla «{table.get('titulo', '')}»: "
+              f"{len(table.get('filas', []))} filas")
+    return 0
+
+
+def cmd_micro(args) -> int:
+    """Size, strain and carbon microstructure from a diffractogram."""
+    from ..xrd.io import read_pattern
+    from ..xrd.microstructure import (
+        agreement,
+        carbon_microstructure,
+        compare_methods,
+    )
+    from ..xrd.search import find_peaks
+
+    pattern = read_pattern(args.patron, anode=args.anodo)
+    peaks = [p for p in find_peaks(pattern) if p.fwhm]
+    if len(peaks) < 3:
+        print(f"error: solo {len(peaks)} reflexiones con anchura medible; "
+              "hacen falta tres para separar tamaño de deformación",
+              file=sys.stderr)
+        return 1
+
+    print(f"{pattern.name}: {len(peaks)} reflexiones\n")
+    angles = [p.two_theta for p in peaks]
+    widths = [p.fwhm for p in peaks]
+    results = compare_methods(angles, widths, pattern.wavelength,
+                              instrument_fwhm=args.instrumento)
+    for result in results:
+        print(f"  {result.describe()}")
+        for note in result.warnings[:2]:
+            print(f"      · {note}")
+    print(f"\n  → {agreement(results)}")
+
+    if args.carbono:
+        d002 = min(peaks, key=lambda p: abs(p.two_theta - 26.5))
+        hundred = min(peaks, key=lambda p: abs(p.two_theta - 43.0))
+        carbon = carbon_microstructure(
+            d002.two_theta, d002.fwhm, hundred.two_theta, hundred.fwhm,
+            wavelength=pattern.wavelength, instrument_fwhm=args.instrumento)
+        print(f"\nCarbono: {carbon.describe()}")
+        for note in carbon.warnings:
+            print(f"  aviso: {note}")
+    return 0
+
+
+def cmd_tiempos(args) -> int:
+    """Time every operation of the suite."""
+    from ..benchmarks import main as benchmark_main
+
+    arguments = []
+    if args.rapido:
+        arguments.append("--rapido")
+    if args.json:
+        arguments += ["--json", args.json]
+    arguments += ["--repeticiones", str(args.repeticiones)]
+    return benchmark_main(arguments)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Construct the argument parser."""
     parser = argparse.ArgumentParser(
         prog="ramancarbon",
         description=(
             "Caracterización de nanomateriales: Raman de carbono y de "
-            "dicalcogenuros, difracción de rayos X con identificación de fases "
-            "y refinamiento Rietveld, y electroquímica (CV, carga-descarga, "
-            "impedancia, HER/OER)."
+            "dicalcogenuros, mapas Raman con quimiometría, difracción de rayos "
+            "X con identificación de fases, Rietveld, Le Bail y "
+            "microestructura, y electroquímica (CV, carga-descarga, "
+            "impedancia con circuitos y DRT, dQ/dV, HER/OER). Con motor de "
+            "figuras configurable, importación y exportación universales y "
+            "archivos de proyecto."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -915,6 +1162,14 @@ def build_parser() -> argparse.ArgumentParser:
             "  ramancarbon echem --polarizacion lsv.txt --reaccion OER \\\n"
             "                    --ph 14 --area 1 --resistencia 3\n"
             "  ramancarbon demo-datos drx prueba_drx/\n"
+            "\n"
+            "  ramancarbon mapa mapa.txt --punto 1 --cociente 1280 1420 1500 1660\n"
+            "  ramancarbon figura a.txt b.txt --salida fig.png --preajuste acs \\\n"
+            "                     --normalizar max --desplazar 0.2\n"
+            "  ramancarbon exportar espectro.txt espectro.jdx\n"
+            "  ramancarbon proyecto crear datos/ sesion.rcproj\n"
+            "  ramancarbon micro patron.xy --instrumento 0.08 --carbono\n"
+            "  ramancarbon tiempos --rapido\n"
         ),
     )
     sub = parser.add_subparsers(dest="comando", required=True)
@@ -1174,6 +1429,96 @@ def build_parser() -> argparse.ArgumentParser:
                    help="volcar las cifras principales como una fila CSV")
     p.add_argument("--breve", action="store_true", help="omitir los avisos")
     p.set_defaults(func=cmd_echem)
+
+    p = sub.add_parser(
+        "mapa", help="leer un mapa Raman y decir qué hay en él"
+    )
+    p.add_argument("archivo", help="archivo del mapa (texto, disposición larga o ancha)")
+    p.add_argument("--laser", type=float, default=None, metavar="NM")
+    p.add_argument("--punto", type=float, default=None, metavar="UM",
+                   help="diámetro del punto láser. Sin él no se puede decir si "
+                        "los píxeles vecinos son medidas independientes")
+    p.add_argument("--banda", nargs=2, type=float, default=[1500.0, 1660.0],
+                   metavar=("BAJO", "ALTO"),
+                   help="ventana de la banda de referencia (por defecto la G)")
+    p.add_argument("--cociente", nargs=4, type=float, default=None,
+                   metavar=("A1", "A2", "B1", "B2"),
+                   help="dos ventanas para un mapa de cocientes, p. ej. "
+                        "1280 1420 1500 1660 para I_D/I_G")
+    p.add_argument("--componentes", type=int, default=5,
+                   help="componentes principales a calcular")
+    p.add_argument("--grupos", type=int, default=3, help="grupos de k-medias")
+    p.add_argument("--mcr", action="store_true",
+                   help="resolver también las componentes con MCR-ALS")
+    p.add_argument("--figura", default=None, metavar="ARCHIVO",
+                   help="dibujar los espectros medios de cada grupo")
+    p.add_argument("--preajuste", default="predeterminado",
+                   help="preajuste de figura (ver «ramancarbon figura --ayuda-preajustes»)")
+    p.set_defaults(func=cmd_mapa)
+
+    p = sub.add_parser(
+        "figura", help="dibujar una o varias medidas con el motor de figuras"
+    )
+    p.add_argument("archivos", nargs="+", help="medidas del mismo tipo")
+    p.add_argument("--salida", required=True, metavar="ARCHIVO",
+                   help="destino (.png, .pdf, .svg, .eps)")
+    p.add_argument("--preajuste", default="predeterminado",
+                   help="acs, acs-doble, rsc, elsevier, nature, aps, wiley, "
+                        "tesis, presentacion, poster, grises, cascada")
+    p.add_argument("--normalizar", default=None,
+                   choices=["max", "minmax", "0-100", "area"])
+    p.add_argument("--desplazar", type=float, default=0.0, metavar="FRACCION",
+                   help="desplazamiento vertical entre curvas, como fracción "
+                        "del recorrido de la mayor")
+    p.add_argument("--escala", default="linear",
+                   choices=["linear", "log", "sqrt", "symlog"])
+    p.add_argument("--limites", nargs=2, type=float, default=None,
+                   metavar=("BAJO", "ALTO"))
+    p.add_argument("--marcar", nargs="*", type=float, default=None,
+                   metavar="X", help="líneas verticales de referencia")
+    p.add_argument("--laser", type=float, default=None, metavar="NM")
+    p.add_argument("--datos", default=None, metavar="ARCHIVO",
+                   help="guardar también los números dibujados")
+    p.set_defaults(func=cmd_figura)
+
+    p = sub.add_parser(
+        "exportar", help="convertir una medida a otro formato"
+    )
+    p.add_argument("archivo")
+    p.add_argument("salida", help=".csv, .tsv, .json, .md, .tex, .html, "
+                                 ".jdx (JCAMP-DX) o .xy")
+    p.add_argument("--laser", type=float, default=None, metavar="NM")
+    p.set_defaults(func=cmd_exportar)
+
+    p = sub.add_parser(
+        "proyecto", help="crear o inspeccionar un archivo de proyecto (.rcproj)"
+    )
+    p.add_argument("accion", choices=["crear", "ver"])
+    p.add_argument("origen", help="carpeta de medidas (crear) o .rcproj (ver)")
+    p.add_argument("destino", nargs="?", default=None,
+                   help="archivo .rcproj a escribir (solo con «crear»)")
+    p.add_argument("--laser", type=float, default=None, metavar="NM")
+    p.add_argument("--notas", default=None)
+    p.set_defaults(func=cmd_proyecto)
+
+    p = sub.add_parser(
+        "micro", help="tamaño de cristalito y microdeformación de un difractograma"
+    )
+    p.add_argument("patron")
+    p.add_argument("--anodo", default="Cu")
+    p.add_argument("--instrumento", type=float, default=0.0, metavar="GRADOS",
+                   help="anchura instrumental. Sin ella, el «tamaño» que salga "
+                        "incluye la resolución del equipo")
+    p.add_argument("--carbono", action="store_true",
+                   help="además, d₀₀₂, L_c, L_a y grado de grafitización")
+    p.set_defaults(func=cmd_micro)
+
+    p = sub.add_parser("tiempos", help="cronometrar la suite")
+    p.add_argument("--rapido", action="store_true",
+                   help="saltarse los refinamientos, que son los lentos")
+    p.add_argument("--repeticiones", type=int, default=3)
+    p.add_argument("--json", default=None, metavar="ARCHIVO")
+    p.set_defaults(func=cmd_tiempos)
 
     p = sub.add_parser(
         "demo-datos", help="generar difractogramas o medidas electroquímicas de prueba"

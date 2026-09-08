@@ -121,6 +121,16 @@ ramancarbon drx datos_drx/demo_drx_CNT_FeSe.xye
 ramancarbon echem --cv datos_ec/demo_cv_condensador_20mVs.txt --masa 2 --area 1
 ```
 
+Y lo que atraviesa las cuatro secciones — figuras, formatos y proyectos:
+
+```bash
+ramancarbon figura datos_prueba/demo_MWCNT_532nm.txt \
+            --salida figura.png --preajuste acs --normalizar max
+ramancarbon exportar datos_prueba/demo_MWCNT_532nm.txt salida.jdx
+ramancarbon proyecto crear datos_prueba/ sesion.rcproj
+ramancarbon tiempos --rapido            # cuánto tarda cada cosa en TU máquina
+```
+
 Son datos **sintéticos**, generados por el programa a partir de la física que
 se quiere probar. Sirven para ver cómo funciona todo antes de meter tus
 medidas.

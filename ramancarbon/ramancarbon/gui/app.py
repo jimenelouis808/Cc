@@ -1422,14 +1422,48 @@ class RamanCarbonApp:
             title="Guardar figura",
             defaultextension=".png",
             initialfile=f"{item.name}_figura.png",
-            filetypes=[("PNG", "*.png"), ("PDF", "*.pdf"), ("SVG", "*.svg")],
+            filetypes=[("PNG", "*.png"), ("PDF", "*.pdf"), ("SVG", "*.svg"),
+                       ("EPS", "*.eps")],
         )
         if not path:
             return
-        with matplotlib.rc_context(matplotlib_style(self.palette)):
-            figure = figure_for_report(item.result, self.palette)
-            figure.savefig(path)
-        self._set_status(f"Figura guardada en {path}")
+        preset_name = getattr(self.session, "plot_preset", "predeterminado")
+        if preset_name and preset_name != "predeterminado":
+            # Through the plot engine, so a figure saved from the window
+            # comes out at the journal's column width with the matching
+            # font sizes — which is the whole reason for the presets. The
+            # screen figure is drawn for the screen and is the wrong shape
+            # for a manuscript whatever resolution it is saved at.
+            self._save_figure_with_preset(item, path, preset_name)
+        else:
+            with matplotlib.rc_context(matplotlib_style(self.palette)):
+                figure = figure_for_report(item.result, self.palette)
+                figure.savefig(path)
+        self._set_status(f"Figura guardada en {path} ({preset_name})")
+
+    def _save_figure_with_preset(self, item, path: str, preset_name: str) -> None:
+        """Redraw the spectrum and its fit at a chosen preset and save it."""
+        from ..plotting import AxisStyle, Plot, Series, preset
+
+        processed = item.processed or item.raw
+        plot = Plot(name=item.name)
+        plot.add(Series(x=processed.shift, y=processed.intensity,
+                        label=item.name))
+        fit = getattr(item, "fit", None)
+        if fit is not None:
+            plot.add(Series(x=fit.x, y=fit.fitted, label="ajuste",
+                            line_style="--"))
+            for component in fit.peaks:
+                curve = component.evaluate(fit.x) if hasattr(component, "evaluate") else None
+                if curve is not None:
+                    plot.add(Series(x=fit.x, y=curve + fit.background,
+                                    label=component.name, line_width=0.8,
+                                    alpha=0.7))
+        plot.style = preset(preset_name).replace(
+            x=AxisStyle(label="Desplazamiento Raman (cm⁻¹)"),
+            y=AxisStyle(label="Intensidad (u.a.)"),
+        )
+        plot.save(path)
 
     def _export_fit(self) -> None:
         """Write the components and curves of whichever fit is on screen."""

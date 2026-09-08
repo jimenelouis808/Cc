@@ -16,6 +16,7 @@ from typing import Any, Iterable, Optional, Sequence
 
 from ..analysis.report import AnalysisResult, analyse
 from ..core.io import COMMON_LASERS, read_spectrum
+from ..core.history import Preferences
 from ..core.preprocess import preprocess
 from ..core.spectrum import Spectrum
 from ..database import Database, load_database
@@ -212,8 +213,44 @@ class Session:
         self.preprocess_settings = PreprocessSettings()
         self.analysis_settings = AnalysisSettings()
         self.palette_name: str = "claro"
+        self.preferences = Preferences.load()
+        self.palette_name = str(self.preferences.get("palette", "claro"))
+        self.plot_preset: str = str(self.preferences.get("plot_preset",
+                                                         "predeterminado"))
+        self.preprocess_settings.baseline_method = str(
+            self.preferences.get("baseline_method", "asls"))
+        self.analysis_settings.check_interferences = bool(
+            self.preferences.get("check_interferences", False))
         self.messages: list[tuple[str, str]] = []
+        if self.preferences.problem:
+            self.messages.append(("warning", self.preferences.problem))
         """``(level, text)``; level is ``"info"``, ``"warning"`` or ``"error"``."""
+
+    # -- preferences ---------------------------------------------------
+    def remember(self) -> None:
+        """Write the settings worth having back next time.
+
+        Called when the window closes and after a successful load. Failing
+        to write is not an error: a read-only home directory is real, and
+        losing a preference must never lose the user's work.
+        """
+        self.preferences.set("palette", self.palette_name)
+        self.preferences.set("plot_preset", self.plot_preset)
+        self.preferences.set("baseline_method",
+                             self.preprocess_settings.baseline_method)
+        self.preferences.set("check_interferences",
+                             self.analysis_settings.check_interferences)
+        for item in self.spectra[-1:]:
+            path = item.raw.metadata.get("path")
+            if path:
+                self.preferences.remember_file(path)
+                if item.raw.laser_nm:
+                    self.preferences.set("laser_nm", float(item.raw.laser_nm))
+        self.preferences.save()
+
+    def recent_files(self) -> list:
+        """Files from previous sessions that are still there."""
+        return self.preferences.existing_recent()
 
     # -- messages ------------------------------------------------------
     def log(self, level: str, text: str) -> None:

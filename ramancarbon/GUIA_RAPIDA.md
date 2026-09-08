@@ -375,6 +375,70 @@ Tres cosas que hay que saber:
   faradaica — y elige de verdad una que no la tenga, típicamente ±50 mV
   alrededor del potencial de circuito abierto.
 
+## 7d. Si mides mapas
+
+```bash
+ramancarbon mapa mapa.txt --punto 1 --cociente 1280 1420 1500 1660 \
+            --figura grupos.png --preajuste acs
+```
+
+Lee las dos disposiciones que exportan los equipos (larga: `x y
+desplazamiento intensidad`; ancha: una fila de eje y luego un espectro por
+píxel) y las distingue solo. Lo que informa, en este orden:
+
+1. **El tamaño del punto láser frente al paso.** Si el paso es menor que
+   medio punto, los píxeles vecinos miden en buena parte el mismo volumen y
+   cualquier estadística píxel a píxel está midiendo la óptica. Pásale
+   `--punto` con el diámetro; sin él no puede decirlo.
+2. **Rayos cósmicos.** Antes que nada: un pico de un canal en un píxel es
+   la mayor excursión del cubo entero, así que sin quitarlo sale como
+   primera componente principal y como grupo propio.
+3. **Cobertura.** Qué fracción del mapa tiene señal por encima del ruido.
+   Si es el 20 %, lo que midas en el resto es ruido.
+4. **Cocientes y posiciones por píxel**, con línea base local y con
+   interpolación parabólica. Sin la primera, el mapa es de la
+   fluorescencia; sin la segunda, sale en terrazas que parecen dominios.
+5. **Cuántas cosas distintas hay** (PCA), **qué píxeles se parecen**
+   (k-medias, con la silueta que dice si los grupos existen) y, con
+   `--mcr`, **qué espectros suman eso**.
+
+## 7e. Figuras para publicar
+
+```bash
+ramancarbon figura a.txt b.txt c.txt --salida fig.pdf --preajuste acs \
+            --normalizar max --desplazar 0.25 --marcar 1350 1580
+```
+
+Los preajustes llevan el **ancho de columna real** de cada revista *y* el
+tamaño de letra que le corresponde: una figura dibujada a 6 pulgadas y
+encogida a 3.25 llega con la letra a la mitad. Hay `acs`, `acs-doble`,
+`rsc`, `elsevier`, `nature`, `aps`, `wiley`, `tesis`, `presentacion`,
+`poster`, `grises` y `cascada`.
+
+`--datos fig.csv` guarda además **los números dibujados**, con el
+desplazamiento y la normalización ya aplicados: es lo que necesita quien
+quiera reproducir exactamente la curva que está viendo.
+
+En la ventana, el preajuste elegido se usa también al *Guardar figura*, así
+que la figura del artículo sale de la misma pantalla en la que trabajas.
+
+## 7f. Convertir, exportar y guardar la sesión
+
+```bash
+ramancarbon exportar espectro.txt espectro.jdx     # JCAMP-DX, CSV, TSV,
+ramancarbon exportar cv.txt tabla.tex              # JSON, Markdown, LaTeX, HTML
+ramancarbon proyecto crear datos/ sesion.rcproj
+ramancarbon proyecto ver sesion.rcproj
+```
+
+El tipo de cada archivo se decide **por los números, no por la extensión**,
+porque los cuatro instrumentos escriben `.txt`. Un archivo que no es una
+medida no aborta la importación de una carpeta: se informa y se sigue.
+
+Un `.rcproj` es un ZIP con un JSON y un CSV por medida — se abre con
+cualquier programa de compresión — y lleva **los datos dentro** junto con
+los ajustes necesarios para volver a analizarlos.
+
 ## 8. Antes de creerte un número
 
 El programa comprueba solo la calidad de la medida y te avisa. Dos fallos

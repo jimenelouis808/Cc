@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ramancarbon"
-version = "0.4.0"
-description = "Suite de caracterizacion de nanomateriales: Raman de carbono (SWCNT/DWCNT/MWCNT/CNF, bandas D y G con el numero de picos que elijas, I_D/I_G, diametros por RBM, dopado, y fases como FeSe o Se), Raman de dicalcogenuros con sus oxidos, difraccion de rayos X con identificacion de fases desde CIF y refinamiento Rietveld, y electroquimica (CV, carga-descarga, impedancia con circuitos equivalentes, HER y OER)."
+version = "0.5.0"
+description = "Suite de caracterizacion de nanomateriales: Raman de carbono (SWCNT/DWCNT/MWCNT/CNF, bandas D y G, I_D/I_G, diametros por RBM, dopado, fases como FeSe o Se), Raman de dicalcogenuros con sus oxidos, mapas Raman con quimiometria (PCA, k-medias, MCR-ALS), difraccion de rayos X con identificacion de fases desde CIF, Rietveld, Le Bail/Pawley y microestructura, y electroquimica (CV, carga-descarga, impedancia con circuitos equivalentes y DRT, dQ/dV, GITT, HER y OER); con motor de figuras configurable, importacion y exportacion universales y archivos de proyecto."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -21,6 +21,10 @@ keywords = [
     "electrochemistry", "cyclic voltammetry", "EIS", "impedance",
     "supercapacitor", "pseudocapacitance", "galvanostatic", "Tafel",
     "HER", "OER", "electrocatalysis", "equivalent circuit",
+    "Raman mapping", "chemometrics", "PCA", "MCR-ALS", "k-means",
+    "DRT", "distribution of relaxation times", "GITT", "dQ/dV",
+    "Williamson-Hall", "Le Bail", "Pawley", "crystallite size",
+    "microstrain", "JCAMP-DX", "scientific plotting", "SNIP baseline",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

@@ -79,7 +79,10 @@ python -m ramancarbon.cli.main demo "%PRUEBA%\raman" >nul 2>&1 ^
  && python -m ramancarbon.cli.main demo-datos drx "%PRUEBA%\drx" >nul 2>&1 ^
  && python -m ramancarbon.cli.main drx "%PRUEBA%\drx\demo_drx_CNT_FeSe.xye" --sin-refinar --breve >nul 2>&1 ^
  && python -m ramancarbon.cli.main demo-datos echem "%PRUEBA%\ec" >nul 2>&1 ^
- && python -m ramancarbon.cli.main echem --cv "%PRUEBA%\ec\demo_cv_condensador_20mVs.txt" --masa 2 --area 1 --breve >nul 2>&1
+ && python -m ramancarbon.cli.main echem --cv "%PRUEBA%\ec\demo_cv_condensador_20mVs.txt" --masa 2 --area 1 --breve >nul 2>&1 ^
+ && python -m ramancarbon.cli.main figura "%PRUEBA%\raman\demo_MWCNT_532nm.txt" --salida "%PRUEBA%\figura.png" --preajuste acs >nul 2>&1 ^
+ && python -m ramancarbon.cli.main exportar "%PRUEBA%\raman\demo_MWCNT_532nm.txt" "%PRUEBA%\salida.jdx" >nul 2>&1 ^
+ && python -m ramancarbon.cli.main proyecto crear "%PRUEBA%\raman" "%PRUEBA%\sesion.rcproj" >nul 2>&1
 if errorlevel 1 (
     echo.
     echo === Algun instrumento no arranca. ===
@@ -88,6 +91,7 @@ if errorlevel 1 (
 )
 rmdir /s /q "%PRUEBA%"
 echo   Raman de carbono, Raman de TMD, difraccion y electroquimica: OK
+echo   Figuras, exportacion y proyectos: OK
 
 echo.
 echo === OK ===

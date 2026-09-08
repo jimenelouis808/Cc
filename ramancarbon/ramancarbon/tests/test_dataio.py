@@ -552,3 +552,45 @@ def test_objects_can_be_filtered_by_kind(tmp_path, measurements):
         project.add(item)
     assert len(project.objects("raman")) == 1
     assert len(project.objects()) == 5
+
+
+def test_a_raman_map_is_not_read_as_a_voltammogram(tmp_path):
+    """A map in long layout repeats its axis for every pixel, so its first
+    column is full of reversals and read as a cyclic voltammogram."""
+    from ramancarbon.examples.demo_data import make_map_demo
+    from ramancarbon.mapping.io import write_map
+
+    cube = make_map_demo("dos_fases", rows=6, columns=6, seed=1)
+    for layout in ("largo", "ancho"):
+        path = write_map(cube, tmp_path / f"m_{layout}.txt", layout=layout)
+        assert detect(path).kind in ("mapa", "desconocido"), layout
+    assert detect(tmp_path / "m_largo.txt").kind == "mapa"
+
+
+def test_one_set_of_options_reads_a_folder_of_different_instruments(tmp_path):
+    """Passing --laser to every reader made every non-Raman file fail with
+    a TypeError about a keyword argument."""
+    write_spectrum(make_demo("MWCNT"), tmp_path / "a.txt")
+    write_pattern(make_xrd_demo("CNT_FeSe"), tmp_path / "p.xy")
+    write_cv(make_cv_demo("condensador"), tmp_path / "cv.txt")
+
+    loaded, failures = load_folder(tmp_path, laser_nm=532.0)
+    assert {item.kind for item in loaded} == {"raman", "xrd", "cv"}
+    assert not failures
+
+
+def test_an_option_a_reader_does_not_know_is_dropped_not_forwarded(tmp_path):
+    write_pattern(make_xrd_demo("CNT_FeSe"), tmp_path / "p.xy")
+    result = load(tmp_path / "p.xy", laser_nm=532.0, anode="Cu")
+    assert result.kind == "xrd"
+    assert result.data.wavelength > 1.0
+
+
+def test_loading_a_map_as_one_measurement_says_where_to_open_it(tmp_path):
+    from ramancarbon.examples.demo_data import make_map_demo
+    from ramancarbon.mapping.io import write_map
+
+    path = write_map(make_map_demo("dos_fases", rows=6, columns=6, seed=1),
+                     tmp_path / "m.txt", layout="largo")
+    with pytest.raises(LoadError, match="read_map"):
+        load(path)

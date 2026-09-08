@@ -304,6 +304,30 @@ def _detect_jcamp(path: Path, head: str) -> Detection:
     return Detection(kind=kind, fmt="jcamp", confidence=confidence, reasons=reasons)
 
 
+def _looks_like_a_map(table: np.ndarray) -> bool:
+    """Whether a four-column file is a Raman map written the long way.
+
+    A map in long layout is ``x  y  shift  intensity`` with the whole
+    spectral axis repeated for every pixel, so its first column is full of
+    reversals and reads as a voltammogram. What distinguishes it is that
+    the third column cycles: the same values, in the same order, over and
+    over.
+    """
+    if table.shape[0] < 40 or table.shape[1] < 3:
+        return False
+    axis = table[:, 2]
+    distinct = np.unique(axis)
+    if distinct.size < 8 or distinct.size > table.shape[0] // 2:
+        return False
+    period = distinct.size
+    blocks = table.shape[0] // period
+    if blocks < 2:
+        return False
+    first = axis[:period]
+    second = axis[period:2 * period]
+    return bool(np.allclose(first, second, rtol=0, atol=1e-6))
+
+
 def _from_shape(table: np.ndarray, header_text: str = "") -> Detection:
     """The decision itself, from the columns' own shape."""
     x = table[:, 0]
@@ -313,6 +337,24 @@ def _from_shape(table: np.ndarray, header_text: str = "") -> Detection:
     low, high = float(np.nanmin(x)), float(np.nanmax(x))
     reasons: list[str] = []
     alternatives: list[str] = []
+
+    if columns > 20:
+        # Nothing else in the suite has twenty columns. A map in the wide
+        # layout has one per spectral channel — hundreds — and its first
+        # two columns are coordinates that repeat, which without this test
+        # read as a voltammogram sweeping back and forth.
+        return Detection(
+            kind="mapa", confidence="alta", columns=columns,
+            reasons=[f"{columns} columnas: una por canal espectral, con las "
+                     "coordenadas delante. Es un mapa en disposición ancha"],
+        )
+
+    if columns >= 3 and _looks_like_a_map(table):
+        return Detection(
+            kind="mapa", confidence="alta",
+            reasons=["la tercera columna repite el mismo eje espectral para "
+                     "cada par de coordenadas: es un mapa en disposición larga"],
+        )
 
     turns = _turning_points(x)
     if turns >= 1 and span < 10.0:

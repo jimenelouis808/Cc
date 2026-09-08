@@ -35,7 +35,9 @@ def test_every_subcommand_is_reachable():
         a for a in parser._actions if getattr(a, "choices", None)
         and "analizar" in a.choices
     )
-    assert {"drx", "drx-lote", "echem", "demo-datos"} <= set(action.choices)
+    assert {"drx", "drx-lote", "echem", "demo-datos",
+            "mapa", "figura", "exportar", "proyecto", "micro",
+            "tiempos"} <= set(action.choices)
 
 
 def test_help_mentions_the_new_instruments(capsys):
@@ -242,3 +244,113 @@ def test_a_csv_row_can_be_written(demo_echem, tmp_path, capsys):
     header, row = csv.read_text(encoding="utf-8").splitlines()
     assert "C_gcd_F" in header
     assert len(row.split(",")) == len(header.split(","))
+
+
+# -- maps, figures, export, projects, microstructure ---------------------
+
+@pytest.fixture
+def sample_folder(tmp_path):
+    """One measurement of each kind, on disk."""
+    from ramancarbon.core.io import write_spectrum
+    from ramancarbon.examples.demo_data import (
+        make_demo,
+        make_map_demo,
+        make_xrd_demo,
+    )
+    from ramancarbon.mapping.io import write_map
+    from ramancarbon.xrd.io import write_pattern
+
+    write_spectrum(make_demo("MWCNT"), tmp_path / "a.txt")
+    write_spectrum(make_demo("SWCNT"), tmp_path / "b.txt")
+    write_pattern(make_xrd_demo("CNT_FeSe"), tmp_path / "p.xy")
+    write_map(make_map_demo("dos_fases", rows=8, columns=10, seed=1),
+              tmp_path / "mapa.txt")
+    return tmp_path
+
+
+def test_the_map_command_reports_what_is_in_the_map(sample_folder, capsys):
+    assert main(["mapa", str(sample_folder / "mapa.txt"), "--punto", "1",
+                 "--cociente", "1280", "1420", "1500", "1660"]) == 0
+    out = capsys.readouterr().out
+    assert "Rayos cósmicos" in out
+    assert "Cobertura" in out
+    assert "PCA" in out and "grupos" in out
+
+
+def test_the_map_command_can_draw_the_cluster_spectra(sample_folder, tmp_path):
+    figure = tmp_path / "grupos.png"
+    assert main(["mapa", str(sample_folder / "mapa.txt"), "--figura",
+                 str(figure), "--preajuste", "acs"]) == 0
+    assert figure.exists() and figure.stat().st_size > 0
+
+
+def test_the_figure_command_draws_several_spectra(sample_folder, tmp_path):
+    figure = tmp_path / "f.png"
+    data = tmp_path / "f.csv"
+    assert main(["figura", str(sample_folder / "a.txt"),
+                 str(sample_folder / "b.txt"), "--salida", str(figure),
+                 "--preajuste", "acs", "--normalizar", "max",
+                 "--desplazar", "0.2", "--datos", str(data)]) == 0
+    assert figure.exists()
+    assert "a_x" in data.read_text(encoding="utf-8")
+
+
+def test_mixing_instruments_in_one_figure_is_refused(sample_folder, tmp_path,
+                                                     capsys):
+    """A spectrum and a diffractogram do not share an x axis."""
+    code = main(["figura", str(sample_folder / "a.txt"),
+                 str(sample_folder / "p.xy"), "--salida",
+                 str(tmp_path / "f.png")])
+    assert code == 1
+    assert "los ejes no son los mismos" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".json", ".tex", ".jdx"])
+def test_the_export_command_writes_every_offered_format(sample_folder,
+                                                        tmp_path, suffix):
+    destination = tmp_path / f"salida{suffix}"
+    assert main(["exportar", str(sample_folder / "a.txt"),
+                 str(destination)]) == 0
+    assert destination.exists() and destination.stat().st_size > 0
+
+
+def test_a_project_is_built_from_a_folder_and_read_back(sample_folder,
+                                                        tmp_path, capsys):
+    project = tmp_path / "sesion.rcproj"
+    assert main(["proyecto", "crear", str(sample_folder), str(project),
+                 "--notas", "prueba"]) == 0
+    assert project.exists()
+    capsys.readouterr()
+
+    assert main(["proyecto", "ver", str(project)]) == 0
+    out = capsys.readouterr().out
+    assert "prueba" in out
+    assert "raman" in out and "xrd" in out
+
+
+def test_a_folder_of_mixed_measurements_does_not_break_on_one_reader(
+        sample_folder, tmp_path):
+    """Passing --laser to every reader made every non-Raman file fail with
+    a TypeError about a keyword argument."""
+    assert main(["proyecto", "crear", str(sample_folder),
+                 str(tmp_path / "s.rcproj"), "--laser", "532"]) == 0
+    from ramancarbon.dataio import Project
+
+    kinds = {d.kind for d in Project.load(tmp_path / "s.rcproj").datasets}
+    assert {"raman", "xrd"} <= kinds
+
+
+def test_the_microstructure_command_reports_all_three_methods(sample_folder,
+                                                              capsys):
+    assert main(["micro", str(sample_folder / "p.xy"),
+                 "--instrumento", "0.05"]) == 0
+    out = capsys.readouterr().out
+    assert "Williamson-Hall" in out
+    assert "Tamaño-deformación" in out
+    assert "Halder-Wagner" in out
+
+
+def test_the_benchmark_command_runs(capsys):
+    assert main(["tiempos", "--rapido", "--repeticiones", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "Raman" in out and "Suma de los mejores tiempos" in out

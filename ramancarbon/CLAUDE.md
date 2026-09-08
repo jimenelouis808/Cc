@@ -36,13 +36,18 @@ ramancarbon/
 ├── dataio/      # detección de formato, lectura universal, exportación, .rcproj
 ├── mapping/     # mapas Raman: cubo, imágenes por píxel, quimiometría
 ├── gui/         # app Tkinter; la lógica vive en state.py y plots.py, sin Tk
-├── cli/         # ramancarbon analizar / lote / deconvolucionar / bd / demo
+├── cli/         # analizar, lote, deconvolucionar, bd, demo, drx, echem,
+│                #   mapa, figura, exportar, proyecto, micro, tiempos
 ├── examples/    # scripts ejecutables + demo_data.py (espectros sintéticos)
+├── benchmarks.py # cronómetro de la suite
 └── tests/       # pytest
 ```
 
-Dependencias en un solo sentido: `core → models → analysis → gui/cli`, y
-`database` no importa de ninguno.
+Dependencias en un solo sentido: `core → models → {analysis, xrd, echem,
+mapping} → gui/cli`, y `database` no importa de ninguno. `plotting` y
+`dataio` son transversales: `plotting` no importa nada del paquete salvo en
+sus constructores de conveniencia, y `dataio` está *encima* de los lectores
+de cada instrumento, no en lugar de ellos.
 
 ## Reglas
 
@@ -849,6 +854,10 @@ pip install -e ".[dev]"
 pytest ramancarbon/tests -q
 ruff check ramancarbon
 ramancarbon demo datos/
+ramancarbon mapa mapa.txt --punto 1 --cociente 1280 1420 1500 1660
+ramancarbon figura a.txt b.txt --salida fig.png --preajuste acs
+ramancarbon proyecto crear datos/ sesion.rcproj
+python -m ramancarbon.benchmarks --rapido
 ramancarbon analizar datos/demo_DWCNT_532nm.txt --laser 532 --auto --perfil pseudo_voigt
 ramancarbon laseres datos/m_532nm.txt datos/m_633nm.txt
 ```

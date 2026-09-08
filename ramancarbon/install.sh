@@ -87,12 +87,20 @@ trap 'rm -rf "$TMP"' EXIT
         && python -m ramancarbon.cli.main demo-datos echem "$TMP/ec" \
         && python -m ramancarbon.cli.main echem \
                --cv "$TMP/ec/demo_cv_condensador_20mVs.txt" \
-               --masa 2 --area 1 --breve
+               --masa 2 --area 1 --breve \
+        && python -m ramancarbon.cli.main figura \
+               "$TMP/raman/demo_MWCNT_532nm.txt" \
+               --salida "$TMP/figura.png" --preajuste acs \
+        && python -m ramancarbon.cli.main exportar \
+               "$TMP/raman/demo_MWCNT_532nm.txt" "$TMP/salida.jdx" \
+        && python -m ramancarbon.cli.main proyecto crear \
+               "$TMP/raman" "$TMP/sesion.rcproj"
 } >/dev/null 2>&1 || {
     echo "=== Algún instrumento no arranca. Revisa la salida de arriba. ==="
     exit 1
 }
 echo "  Raman de carbono, Raman de TMD, difracción y electroquímica: OK"
+echo "  Figuras, exportación y proyectos: OK"
 
 echo
 echo "=== OK ==="
@@ -115,6 +123,9 @@ O por línea de comandos, un instrumento cada vez:
     ramancarbon drx datos_drx/demo_drx_CNT_FeSe.xye
     ramancarbon demo-datos echem datos_ec/
     ramancarbon echem --cv datos_ec/demo_cv_condensador_20mVs.txt --masa 2 --area 1
+    ramancarbon figura datos_prueba/*.txt --salida figura.png --preajuste acs
+    ramancarbon proyecto crear datos_prueba/ sesion.rcproj
+    ramancarbon tiempos --rapido
 
 La batería completa de pruebas (unos seis minutos, sobre todo
 refinamientos Rietveld):

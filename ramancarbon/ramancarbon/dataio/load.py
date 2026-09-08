@@ -79,6 +79,11 @@ def load(
 
     if chosen == "binario":
         raise LoadError(f"{p.name}: {found.advice}")
+    if chosen == "mapa":
+        raise LoadError(
+            f"{p.name}: es un mapa Raman, no una sola medida. Ábrelo con "
+            "ramancarbon.mapping.read_map, o con «ramancarbon mapa»"
+        )
     if chosen in ("desconocido", "cif", "proyecto"):
         raise LoadError(
             f"{p.name}: no es una medida que se pueda cargar como serie "
@@ -89,12 +94,36 @@ def load(
     if reader is None:
         raise LoadError(f"{p.name}: no hay lector para «{chosen}»")
     try:
-        data = reader(p, found, options)
+        data = reader(p, found, _accepted(reader, options))
     except LoadError:
         raise
     except Exception as error:                       # noqa: BLE001
         raise LoadError(f"{p.name}: {error}") from error
     return Loaded(data=data, kind=chosen, detection=found, path=p, warnings=warnings)
+
+
+#: Options each reader understands. A folder of mixed measurements is
+#: read with one set of options, and ``laser_nm`` is meaningless to a
+#: diffractogram: passing it through made every non-Raman file in a folder
+#: fail with a TypeError about a keyword argument, which is a programming
+#: error dressed up as a data problem.
+_ACCEPTED: dict[str, frozenset[str]] = {
+    "_load_raman": frozenset({"laser_nm", "intensity_column", "encoding"}),
+    "_load_xrd": frozenset({"anode", "wavelength", "line"}),
+    "_load_cv": frozenset({"scan_rate", "electrode", "potential_scale",
+                           "current_scale"}),
+    "_load_gcd": frozenset({"electrode", "current", "potential_scale",
+                            "current_scale"}),
+    "_load_eis": frozenset({"electrode", "impedance_scale"}),
+}
+
+
+def _accepted(reader, options: dict[str, Any]) -> dict[str, Any]:
+    """The options this reader understands, dropping the rest silently."""
+    allowed = _ACCEPTED.get(reader.__name__)
+    if allowed is None:
+        return options
+    return {key: value for key, value in options.items() if key in allowed}
 
 
 def _load_raman(path: Path, found: Detection, options: dict[str, Any]):

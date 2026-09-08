@@ -8,7 +8,16 @@ una sola aplicación:
 | **Raman · carbono** | SWCNT / DWCNT / MWCNT, deconvolución D–G configurable, I_D/I_G, I_2D/I_G, I_D/I_D′, diámetros por RBM, dopado y deformación, y las fases no carbonosas de la muestra (FeSe, Se, carburos de hierro) |
 | **Raman · TMD** | MoS₂, WS₂, MoSe₂, WSe₂, MoTe₂: número de capas, fase 2H/1T′, y las heteroestructuras óxido/calcogenuro (MoO₃@MoSe₂, MoO₂@MoSe₂…) |
 | **DRX** | Identificación de fases contra estructuras cristalinas reales (CIF de la COD), patrón teórico, residual y refinamiento **Rietveld** automático o a mano |
-| **Electroquímica** | CV, carga-descarga, impedancia con circuitos equivalentes, mecanismo de almacenamiento (condensador / pseudocondensador / batería), capacitancia y capacidad, energía y potencia, HER y OER |
+| **Electroquímica** | CV, carga-descarga, impedancia con circuitos equivalentes y DRT, mecanismo de almacenamiento (condensador / pseudocondensador / batería), capacitancia y capacidad, energía y potencia, dQ/dV, GITT, HER y OER |
+
+Y transversal a las cuatro:
+
+| | |
+|---|---|
+| **Mapas Raman** | cubos de miles de espectros, imágenes de intensidad, cociente, posición y anchura por píxel, y quimiometría (PCA, k-medias, MCR-ALS) |
+| **Motor de figuras** | escala, grosor, colores, símbolos, etiquetas, ejes secundarios (d, q, nm, meV, τ), recuadros, cascadas, paneles, y preajustes con el ancho de columna real de cada revista |
+| **Importar / exportar** | detección del formato por los NÚMEROS, JCAMP-DX, CSV, TSV, JSON, Markdown, LaTeX, HTML, y proyectos `.rcproj` con los datos dentro |
+| **Controles de ajuste** | parámetros ligados entre sí, tramos excluidos, líneas base a mano, deshacer/rehacer y preferencias que se recuerdan |
 
 > Este proyecto es hermano de [`carbonforge`](../carbonforge), pero hace lo
 > contrario: `carbonforge` **prepara cálculos** de primeros principios;
@@ -122,6 +131,15 @@ ramancarbon echem --cv ec/demo_cv_condensador_20mVs.txt --masa 2 --area 1
 ramancarbon echem --gcd ec/demo_gcd_bateria.txt --eis ec/demo_eis.txt --masa 2
 ramancarbon echem --polarizacion ec/demo_lsv_OER.txt --referencia RHE \
                   --area 1 --resistencia 3 --reaccion OER
+
+# Mapas, figuras, formatos y proyectos
+ramancarbon mapa mapa.txt --punto 1 --cociente 1280 1420 1500 1660
+ramancarbon figura a.txt b.txt --salida fig.png --preajuste acs \
+                   --normalizar max --desplazar 0.2
+ramancarbon exportar espectro.txt espectro.jdx
+ramancarbon proyecto crear datos/ sesion.rcproj
+ramancarbon micro drx/patron.xye --instrumento 0.08 --carbono
+ramancarbon tiempos --rapido            # cuánto tarda cada cosa, medido
 ```
 
 Desde Python:
@@ -552,6 +570,79 @@ Lo demás:
   actividad másica y normalización por ECSA. Se niega a dar una pendiente
   ajustada sobre menos de una década.
 
+## Mapas Raman
+
+Un mapa es un **cubo**: dos ejes espaciales y uno espectral. Tratarlo así
+es lo que hace baratas las operaciones útiles — sacar la intensidad de una
+banda en 40 000 píxeles es una operación de array sobre el cubo y 40 000
+llamadas sobre una lista de espectros.
+
+```python
+from ramancarbon.mapping import read_map, despike_map, band_ratio, pca, kmeans
+
+cubo = read_map("mapa.txt", laser_nm=532, spot_um=1.0)
+print(cubo.describe(), cubo.sampling_warning())
+
+limpio, canales = despike_map(cubo)      # los rayos cósmicos, antes que nada
+razon = band_ratio(limpio, (1280, 1420), (1500, 1660))
+print(razon.describe(), razon.warnings)
+
+componentes = pca(limpio, 5)             # ¿cuántas cosas distintas hay?
+grupos = kmeans(limpio, 2)               # ¿qué píxeles se parecen?
+```
+
+Cada una lleva su guarda: el área de una banda se integra con línea base
+local (si no, el mapa es de la fluorescencia), la posición se interpola
+(si no, sale en terrazas que se leen como dominios) y el cociente se
+enmascara donde el denominador es ruido (si no, los píxeles más brillantes
+del mapa están donde no hay muestra).
+
+## Figuras
+
+El motor de figuras hace de una figura un **valor**: series, estilo,
+marcas, bandas, notas y recuadro en un objeto que se guarda y se
+redibuja. La misma figura se exporta con el ancho de columna de una
+revista y con los tamaños de una presentación sin tocar los datos.
+
+```python
+from ramancarbon.plotting import Plot, AxisStyle, SecondaryAxis, preset, from_pattern
+
+figura = Plot(series=[from_pattern(patron)], name="drx")
+figura.style = preset("acs").replace(
+    x=AxisStyle(label="2θ (°)", limits=(10, 80), minor_ticks=5),
+    y=AxisStyle(label="Intensidad (cuentas)", scale="sqrt"),
+    secondary_x=SecondaryAxis(kind="d", parameter=patron.wavelength),
+)
+figura.save("figura.pdf")
+figura.save_data("figura.csv")     # los números DIBUJADOS, con sus modificadores
+```
+
+Preajustes: `acs`, `acs-doble`, `rsc`, `elsevier`, `nature`, `aps`,
+`wiley`, `tesis`, `presentacion`, `poster`, `grises`, `cascada`.
+
+## Importar, exportar y proyectos
+
+El tipo de archivo se decide por **los números, no por la extensión**: los
+cuatro instrumentos escriben `.txt`, y lo que separa las medidas es su
+forma. Un voltamperograma vuelve sobre sí mismo y nada más lo hace; una
+impedancia trae tres columnas y siete décadas de frecuencia.
+
+```python
+from ramancarbon.dataio import detect, load, load_folder, Project
+
+print(detect("medida.txt"))                  # qué es, y por qué
+cargados, fallos = load_folder("datos/")     # un LÉEME dentro no aborta nada
+
+proyecto = Project(name="M1")
+for item in cargados:
+    proyecto.add(item.data)
+proyecto.save("M1.rcproj")                   # ZIP + JSON + CSV, legible a mano
+```
+
+Un `.rcproj` lleva los datos **dentro** y los ajustes con ellos (láser,
+longitud de onda, velocidad de barrido, electrodo): sin eso, los datos se
+reabren y ya no se pueden analizar.
+
 ## Limitaciones — léelas
 
 * **Todo se ha validado contra datos sintéticos**, generados por el propio
@@ -631,6 +722,12 @@ python -m ramancarbon.examples.ex10_tmd             # contar capas
 python -m ramancarbon.examples.ex11_fases           # FeSe: cinco diámetros falsos
 python -m ramancarbon.examples.ex12_drx             # Rietveld de ida y vuelta
 python -m ramancarbon.examples.ex13_echem           # F/g cuando no toca
+python -m ramancarbon.examples.ex14_figuras         # la misma figura, tres destinos
+python -m ramancarbon.examples.ex15_datos           # una carpeta revuelta, ordenada sola
+python -m ramancarbon.examples.ex16_mapas           # 480 espectros → una imagen
+python -m ramancarbon.examples.ex17_microestructura # tamaño, deformación, celda sin átomos
+python -m ramancarbon.examples.ex18_cinetica        # cuatro caminos a un D, y sus trampas
+python -m ramancarbon.examples.ex19_controles       # ligaduras, exclusiones, anclas
 ```
 
 `ex11`, `ex12` y `ex13` son los que más rápido explican por qué el programa
@@ -643,11 +740,15 @@ hace lo que hace:
   vuelven con seis cifras.
 * **ex13** pone tres electrodos con ~25 F/g cada uno al lado y explica cuál
   de ellos no debe informarse así.
+* **ex16** hace todo lo que se le hace a un mapa y enseña, con números, por
+  qué un mapa de áreas crudas es un mapa de la fluorescencia.
+* **ex19** ajusta el mismo espectro con un rayo cósmico dentro y con él
+  excluido: el pico D pasa de 1375 a 1350 cm⁻¹ y el R² de 0.08 a 1.000.
 
 ## Pruebas
 
 ```bash
-pytest ramancarbon/tests -q            # ~620 pruebas
+pytest ramancarbon/tests -q            # ~1030 pruebas
 ```
 
 ## Licencia

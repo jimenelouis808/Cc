@@ -2,6 +2,7 @@
 
 Para quien vaya a tocar el código — persona o asistente.
 
+
 ## Arquitectura
 
 Cuatro instrumentos sobre una base común. Cada capa es usable por separado
@@ -11,9 +12,13 @@ y las dependencias van en un solo sentido:
                         ┌──▶  analysis  ──┐          (Raman)
 core   ──▶  models  ────┤                 ├──▶  gui / cli
   │           │         ├──▶  xrd  ───────┤          (difracción)
-  │           │         └──▶  echem  ─────┘          (electroquímica)
+  │           │         ├──▶  echem  ─────┤          (electroquímica)
+  │           │         └──▶  mapping  ───┤          (mapas Raman)
   └───────────┴─────────────────┬─────────┘
                             database
+
+              plotting  ·  dataio  ·  benchmarks
+              (transversales: no dependen de la instrumentación)
 ```
 
 `xrd` y `echem` son hermanos de `analysis`, no capas por encima: comparten
@@ -34,6 +39,16 @@ JSON), y no se importan entre sí.
 * **`echem`** — curvas, lectores de potenciostato, CV, carga-descarga,
   impedancia con circuitos equivalentes, mecanismo de almacenamiento y
   electrocatálisis.
+* **`mapping`** — el cubo de un mapa, las imágenes por píxel y la
+  quimiometría. Depende de `core` y de nada más de la instrumentación.
+* **`plotting`** — el motor de figuras. No importa nada del resto del
+  paquete salvo para los constructores de conveniencia
+  (`from_spectrum`, `from_pattern`), que son importaciones perezosas.
+* **`dataio`** — detección de formato, lector universal, exportación y
+  proyectos. Está *encima* de los lectores de cada instrumento, no en
+  lugar de ellos.
+* **`benchmarks`** — cronometra la suite. Sin él, «optimizado» es una
+  afirmación.
 * **`gui` / `cli`** — presentación. La ventana es una suite de cuatro
   secciones (`gui/suite.py`) sobre `gui/base.py`, y toda la lógica vive en
   `gui/state.py`, `gui/xrd_state.py`, `gui/echem_state.py` y los módulos de
@@ -131,7 +146,13 @@ incorrecto durante el desarrollo. Están cubiertas por pruebas.
 | Un subcomando | `cli/main.py` |
 | Un índice estructural | `analysis/indices.py` |
 | Una firma de dopante | `database/data/perturbations.json` → `dopants` |
-| Un formato de exportación | `analysis/export.py` |
+| Un formato de exportación | `analysis/export.py`, o `dataio/export.py` para las tablas |
+| Un formato de archivo que hay que reconocer solo | `dataio/detect.py` |
+| Un preajuste de figura | `plotting/style.py`: `PRESETS` y `COLUMN_WIDTHS` |
+| Un eje secundario nuevo | `plotting/transforms.py`: `TRANSFORMS` |
+| Una medida por píxel de un mapa | `mapping/images.py` |
+| Una ligadura entre parámetros | ya existe: `models/constraints.py` |
+| Un ajuste que hay que cronometrar | `benchmarks.py`: `run()` |
 | Una fase no carbonosa (Raman) | `database/data/phases.json` |
 | Un óxido que acompaña a un TMD | `database/data/tmd.json` → `oxides` |
 | **Una fase de referencia de DRX** | suelta su CIF en una carpeta y pásala con `--cif`; para incluirla, `database/data/cif/` y su generador |
@@ -141,7 +162,7 @@ incorrecto durante el desarrollo. Están cubiertas por pruebas.
 ## Pruebas
 
 ```bash
-pytest ramancarbon/tests -q            # ~620 pruebas, unos 6 min
+pytest ramancarbon/tests -q            # ~1030 pruebas, unos 3 min
 pytest ramancarbon/tests -q -k rbm     # solo lo del RBM
 pytest ramancarbon/tests -q -k "xrd or rietveld"
 pytest ramancarbon/tests -q -k echem
@@ -198,3 +219,28 @@ Lo que haría falta para cerrarlo:
   electroquímico controlado.
 * Medir la misma muestra con dos o tres láseres y verificar que las
   posiciones corregidas por dispersión coinciden.
+
+## Rendimiento
+
+```bash
+python -m ramancarbon.benchmarks --rapido       # sin los refinamientos
+python -m ramancarbon.benchmarks --json t.json  # para comparar entre ramas
+```
+
+Se informa el **mejor** de varias repeticiones, no la media: en una máquina
+compartida la media mide lo que estuviera haciendo la máquina. Si mides con
+la batería de pruebas corriendo al lado, todo sale unas siete veces más
+lento — uniformemente, lo cual es a la vez la trampa y la pista.
+
+Referencia en esta máquina (Python 3.11, NumPy 2.4, SciPy 1.17):
+
+| Operación | Tiempo |
+|---|---|
+| `analyse()` de un espectro de 3200 puntos | 190 ms |
+| línea base asLS / arPLS / SNIP | 5 / 28 / 6 ms |
+| despicado de un mapa de 480 píxeles | 270 ms |
+| PCA de ese mapa | 125 ms |
+| identificación de fases en un difractograma | 110 ms |
+| Rietveld automático de una fase | 3.0 s |
+| ajuste de circuito equivalente | 43 ms |
+| DRT (Tikhonov + curva L) | 34 ms |
