@@ -208,6 +208,8 @@ def analyse(
     interference_groups: Optional[Sequence[str]] = None,
     check_phases: bool = True,
     phase_families: Optional[Sequence[str]] = None,
+    n_d: Optional[int] = None,
+    n_g: Optional[int] = None,
     db: Optional[Database] = None,
 ) -> AnalysisResult:
     """Run the complete analysis on one spectrum.
@@ -223,6 +225,14 @@ def analyse(
         them and because they are insensitive to instrument resolution.
     presets:
         Deconvolution models to compare for the D–G region.
+    n_d, n_g:
+        Number of components in the D and in the G region, overriding
+        ``presets`` with an explicit convention. Many groups fit a fixed
+        number — three across D and two across G is a common one — and no
+        named preset expresses an arbitrary choice. When either is given
+        the models are not compared: you asked for a specific model, so
+        that is the model, and the report says so rather than pretending
+        it was selected.
     metallic:
         Force the metallic (Breit–Wigner–Fano) G⁻ model. ``None`` decides
         from the fitted G⁻ width.
@@ -402,21 +412,39 @@ def analyse(
     comparison: Optional[ModelComparison] = None
     fit: Optional[FitResult] = None
     try:
-        if not candidates:
+        if (n_d or n_g) and not no_signal:
+            # An explicit convention is not a candidate to be compared
+            # against others: it is the model. Comparing it against the
+            # presets and then picking by BIC would silently discard what
+            # was asked for.
+            from ..models.deconvolution import build_region_model
+
+            fit = fit_model(processed, build_region_model(
+                processed, n_d=n_d or 1, n_g=n_g or 1,
+                profile=profile or "pseudo_voigt", metallic=bool(is_metallic),
+                db=database,
+            ))
+            warnings.append(
+                f"modelo D–G impuesto: {n_d or 1} componente(s) en la región D "
+                f"y {n_g or 1} en la G. No se han comparado modelos, así que "
+                "los criterios de información no dicen si este es el mejor"
+            )
+        elif not candidates:
             # A spectrum with no dynamic range has no bands to separate, and
             # fitting one only produces components at their seed positions
             # with heights made of floating-point residue.
             raise ValueError(
                 "el espectro no tiene variación de intensidad; no se ajusta nada"
             )
-        comparison = compare_models(
-            processed,
-            presets=candidates,
-            metallic=is_metallic,
-            profile=profile,
-            db=database,
-        )
-        fit = comparison.results[comparison.best]
+        else:
+            comparison = compare_models(
+                processed,
+                presets=candidates,
+                metallic=is_metallic,
+                profile=profile,
+                db=database,
+            )
+            fit = comparison.results[comparison.best]
     except ValueError as exc:
         warnings.append(f"no se ha podido deconvolucionar la región D–G: {exc}")
 
@@ -834,6 +862,14 @@ def build_report(result: AnalysisResult, verbose: bool = True) -> str:
     lines.append(section("DECONVOLUCIÓN D–G"))
     if result.comparison:
         lines.append(result.comparison.summary())
+        lines.append("")
+        lines.append(result.fit.summary())
+    elif result.fit is not None:
+        # A fit with no comparison is an imposed model. The section keyed
+        # on the comparison alone, so asking for a specific number of
+        # components printed "no realizada" above the ratios that had just
+        # been computed from it.
+        lines.append("modelo impuesto (sin comparar con otros)")
         lines.append("")
         lines.append(result.fit.summary())
     else:

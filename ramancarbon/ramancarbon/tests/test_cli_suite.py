@@ -354,3 +354,22 @@ def test_the_benchmark_command_runs(capsys):
     assert main(["tiempos", "--rapido", "--repeticiones", "1"]) == 0
     out = capsys.readouterr().out
     assert "Raman" in out and "Suma de los mejores tiempos" in out
+
+
+def test_the_number_of_components_can_be_imposed_from_analizar(sample_folder,
+                                                               capsys):
+    """The README documented `analizar --picos-d 3 --picos-g 2` and only
+    `deconvolucionar` accepted it."""
+    assert main(["analizar", str(sample_folder / "a.txt"), "--laser", "532",
+                 "--picos-d", "3", "--picos-g", "2"]) == 0
+    out = capsys.readouterr().out
+    assert "modelo impuesto" in out
+    assert "5 componentes" in out
+
+
+def test_an_imposed_model_says_it_was_not_compared(sample_folder, capsys):
+    main(["analizar", str(sample_folder / "a.txt"), "--laser", "532",
+          "--picos-d", "2", "--picos-g", "1"])
+    out = capsys.readouterr().out
+    assert "impuesto" in out
+    assert "no dicen si este es el mejor" in out

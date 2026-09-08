@@ -135,6 +135,8 @@ def _analyse_kwargs(args) -> dict:
         "auto_preprocess": getattr(args, "auto", False),
         "check_interferences": getattr(args, "interferencias", False),
         "preprocess_kwargs": _preprocess_kwargs(args),
+        "n_d": getattr(args, "n_d", None),
+        "n_g": getattr(args, "n_g", None),
     }
 
 
@@ -1175,6 +1177,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="comando", required=True)
 
     p = sub.add_parser("analizar", help="analizar un espectro y escribir el informe")
+    p.add_argument("--picos-d", dest="n_d", type=int, default=None, metavar="N",
+                   help="número de componentes en la región D, imponiendo el "
+                        "modelo en vez de dejar que se elija entre preajustes")
+    p.add_argument("--picos-g", dest="n_g", type=int, default=None, metavar="N",
+                   help="número de componentes en la región G. Con cualquiera "
+                        "de los dos, no se comparan modelos: pediste uno "
+                        "concreto, así que ese es el que se usa")
     p.add_argument("espectro", help="archivo del espectro (.txt, .csv, .dat…)")
     p.add_argument("--control", default=None, metavar="ARCHIVO",
                    help="espectro de referencia sin tratar, medido el mismo día. "
