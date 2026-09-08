@@ -21,8 +21,17 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from ..plotting.style import PRESETS as PLOT_PRESET_LABELS
 from .state import Session
 from .theme import PAD, PALETTES, apply_theme
+
+#: The plot presets offered in the header, in the order they are shown.
+#: Screen first, then the journals, then the rest — which is the order
+#: somebody actually needs them in.
+PLOT_PRESETS: tuple[str, ...] = (
+    "predeterminado", "acs", "acs-doble", "rsc", "elsevier", "nature",
+    "aps", "wiley", "tesis", "presentacion", "poster", "grises", "cascada",
+)
 
 WINDOW_TITLE = "ramancarbon — caracterización de nanomateriales"
 
@@ -82,6 +91,32 @@ class Suite:
         ttk.Label(header, textvariable=self.subtitle_var,
                   style="Muted.TLabel").pack(side="left", padx=(PAD["md"], 0))
         ttk.Button(header, text="Tema", command=self._toggle_theme).pack(side="right")
+
+        # The plot preset lives in the header rather than inside one
+        # section because it applies to every figure the suite saves, and
+        # because the point of the presets is that the figure for the
+        # manuscript comes out of the same window the work is done in.
+        self.preset_var = self.tk.StringVar(value=self.session.plot_preset)
+        chooser = ttk.Combobox(
+            header, textvariable=self.preset_var, width=16, state="readonly",
+            values=list(PLOT_PRESETS),
+        )
+        chooser.pack(side="right", padx=(0, PAD["sm"]))
+        chooser.bind("<<ComboboxSelected>>", self._on_preset_changed)
+        ttk.Label(header, text="Figura:", style="Muted.TLabel").pack(
+            side="right", padx=(0, PAD["xs"]))
+
+    def _on_preset_changed(self, _event=None) -> None:
+        """Remember the chosen preset, and say what it means."""
+        chosen = self.preset_var.get()
+        self.session.plot_preset = chosen
+        self.session.remember()
+        description = PLOT_PRESET_LABELS.get(chosen, "")
+        for section in self.sections.values():
+            setter = getattr(section, "_set_status", None)
+            if callable(setter):
+                setter(f"Figuras: {chosen}"
+                       + (f" — {description}" if description else ""))
 
     def _current_key(self) -> Optional[str]:
         try:

@@ -297,3 +297,29 @@ def test_the_whole_suite_opens_and_every_section_works():
                     root.update()
     finally:
         root.destroy()
+
+
+def test_every_plot_preset_the_header_offers_exists():
+    """The chooser is a list of strings; a typo in it would only show up
+    when somebody saved a figure with that preset selected."""
+    from ramancarbon.gui.suite import PLOT_PRESETS
+    from ramancarbon.plotting.style import PRESETS, preset
+
+    assert set(PLOT_PRESETS) <= set(PRESETS)
+    for name in PLOT_PRESETS:
+        assert preset(name).width_in > 0
+
+
+def test_the_chosen_preset_is_remembered_and_used():
+    """It is stored on the session, saved with the preferences, and read
+    back by the figure-saving code."""
+    import inspect
+
+    from ramancarbon.gui import app as gui_app
+    from ramancarbon.gui import suite as gui_suite
+    from ramancarbon.gui.state import Session
+
+    assert "plot_preset" in inspect.getsource(Session.__init__)
+    assert "plot_preset" in inspect.getsource(Session.remember)
+    assert "plot_preset" in inspect.getsource(gui_suite.Suite._on_preset_changed)
+    assert "plot_preset" in inspect.getsource(gui_app.RamanCarbonApp._save_figure)

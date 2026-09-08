@@ -419,8 +419,10 @@ encogida a 3.25 llega con la letra a la mitad. Hay `acs`, `acs-doble`,
 desplazamiento y la normalización ya aplicados: es lo que necesita quien
 quiera reproducir exactamente la curva que está viendo.
 
-En la ventana, el preajuste elegido se usa también al *Guardar figura*, así
-que la figura del artículo sale de la misma pantalla en la que trabajas.
+En la ventana hay un selector **Figura:** en la cabecera, junto al botón de
+tema. Lo que elijas ahí se usa al *Guardar figura* en cualquiera de las
+cuatro secciones, así que la figura del artículo sale de la misma pantalla
+en la que trabajas — y se recuerda para la próxima vez.
 
 ## 7f. Convertir, exportar y guardar la sesión
 
