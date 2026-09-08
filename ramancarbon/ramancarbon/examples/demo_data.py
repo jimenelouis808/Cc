@@ -1025,3 +1025,58 @@ def _map_component(shift: np.ndarray, bands) -> np.ndarray:
         half = fwhm / 2.0
         out = out + height * half**2 / ((shift - centre) ** 2 + half**2)
     return out
+
+
+def make_plateau_gcd_demo(
+    plateaus: tuple[tuple[float, float, float], ...] = (
+        (3.62, 0.020, 0.9), (3.20, 0.035, 0.6)),
+    window: tuple[float, float] = (2.90, 4.10),
+    baseline: float = 0.25,
+    current: float = -1e-3,
+    points: int = 2000,
+    seed: int = 0,
+    noise_v: float = 2e-4,
+):
+    """A galvanostatic curve built FROM its differential capacity.
+
+    The honest way to test dQ/dV: rather than drawing a voltage curve that
+    looks as though it has plateaus, this specifies dQ/dV directly as a
+    baseline plus Gaussian peaks at named potentials, integrates it to get
+    Q(V), and inverts that at constant current to get V(t). Whatever comes
+    out of a dQ/dV analysis can then be compared with the peaks that went
+    in, which is a round trip rather than an impression.
+
+    ``plateaus`` are ``(potential, width in V, relative height)``.
+    """
+    from ..echem.curve import ChargeDischarge, Electrode
+
+    rng = np.random.default_rng(seed)
+    low, high = float(min(window)), float(max(window))
+    grid = np.linspace(high, low, 4000)
+
+    dq_dv = np.full_like(grid, float(baseline))
+    for centre, width, height in plateaus:
+        dq_dv = dq_dv + height * np.exp(-0.5 * ((grid - centre) / width) ** 2)
+
+    # Q(V) by integrating downwards from the top of the window.
+    charge = np.concatenate([[0.0], np.cumsum(
+        0.5 * (dq_dv[1:] + dq_dv[:-1]) * np.abs(np.diff(grid)))])
+    total = float(charge[-1])
+    time_total = total * 3600.0 / abs(current)
+
+    time = np.linspace(0.0, time_total, int(points))
+    wanted = time * abs(current) / 3600.0
+    potential = np.interp(wanted, charge, grid)
+    potential = potential + rng.normal(0.0, noise_v, potential.shape)
+
+    return ChargeDischarge(
+        time=time, potential=potential,
+        current=np.full_like(time, float(current)),
+        electrode=Electrode(mass_mg=5.0, area_cm2=1.0, label="demo mesetas"),
+        name="demo_gcd_mesetas",
+        metadata={
+            "synthetic": True,
+            "true_plateaus_v": tuple(p[0] for p in plateaus),
+            "true_capacity_ah": total,
+        },
+    )

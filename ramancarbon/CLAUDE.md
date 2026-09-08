@@ -30,7 +30,8 @@ ramancarbon/
 │                #   clasificador, multiláser, exportación
 ├── xrd/         # difracción: CIF, simetría, patrón calculado, Rietveld,
 │                #   microestructura (Williamson-Hall…), Le Bail y Pawley
-├── echem/       # CV, GCD, EIS, mecanismo de almacenamiento, HER/OER
+├── echem/       # CV, GCD, EIS, DRT, mecanismo de almacenamiento, HER/OER,
+│                #   cinética (Randles-Ševčík, GITT, dQ/dV, Koutecky-Levich)
 ├── plotting/    # motor de figuras: estilo, series, ejes secundarios, paneles
 ├── dataio/      # detección de formato, lectura universal, exportación, .rcproj
 ├── mapping/     # mapas Raman: cubo, imágenes por píxel, quimiometría
@@ -630,6 +631,78 @@ una tiene una prueba que la protege.
 - **Un estilo compartido en una figura de paneles no toca los ejes de cada
   panel.** Etiquetas, límites y escalas son del panel; compartir estilo no
   puede rotular un difractograma con los ejes de un voltamperograma.
+
+## Cinética electroquímica
+
+- **Todo esto acaba en un coeficiente de difusión, y un coeficiente de
+  difusión depende de un ÁREA que casi nadie mide.** La superficie
+  electroquímicamente activa de un electrodo poroso es de diez a mil veces
+  la geométrica, y Randles-Ševčík divide por el área al cuadrado: seis
+  órdenes de magnitud. Ninguna función calcula un D sin que se le diga qué
+  área usa, y todas lo dicen en el resultado.
+- **La linealidad de i_p frente a √v ES la comprobación del método**, no
+  un detalle. Si no se cumple, el proceso no está limitado por difusión y
+  lo que devuelve la fórmula es la pendiente de una recta por puntos que
+  no están en una recta.
+- **Si la recta no pasa por el origen hay corriente capacitiva
+  superpuesta**, y hay que restarla antes de que la pendiente signifique
+  algo.
+- **En la región de Warburg, las pendientes de Z′ y de −Z″ frente a
+  ω^(−1/2) tienen que COINCIDIR.** Ajustarlas por separado y compararlas
+  es lo que distingue la región de Warburg de la cola del semicírculo de
+  transferencia de carga.
+- **En GITT, la caída óhmica se excluye ajustando E frente a √t**, no
+  restando el salto inicial a ojo; y si se incluye, ΔE_τ sube y D baja con
+  su cuadrado.
+- **Que el reposo haya terminado se decide EXTRAPOLANDO**, no mirando
+  cuánto se movieron los últimos puntos. Un reposo cortado a un tercio de
+  su constante de tiempo tiene la cola casi plana y no está ni cerca del
+  equilibrio: parece quieto solo porque la exponencial es lenta.
+- **dQ/dV se calcula sobre UNA rama, no sobre todas las descargas del
+  archivo pegadas.** Cada unión mete un escalón en el potencial, y la
+  derivada ahí es enorme: salían setenta y ocho picos falsos.
+- **El suavizado de una dQ/dV es parte de la medida.** Poco, y sale un
+  peine de ruido; mucho, y dos transiciones próximas se funden. Va siempre
+  informado: una curva dQ/dV sin su suavizado no se puede comparar con la
+  de nadie.
+- **Los extremos no son picos.** Una curva de descarga se aplana al
+  agotarse, así que |dQ/dV| sube monótona hasta el último punto y el
+  último punto es «mayor que su vecino».
+- **Sin el ciclo de vuelta a la velocidad inicial, una limitación cinética
+  y una degradación dan la MISMA curva.** El 95 % recuperado dice que era
+  cinética; el 60 %, que la prueba de velocidad fue un experimento de
+  degradación.
+- **La forma del desvanecimiento es el mecanismo**: lineal es pérdida de
+  material activo, √ciclos es una capa que se frena a sí misma al crecer,
+  exponencial acaba en cero. Y si los tres ajustan igual de bien sobre los
+  ciclos medidos, la extrapolación no significa nada: se compara el mejor
+  con el SEGUNDO mejor, no con el peor.
+- **La n de Koutecky-Levich solo vale lo que valgan la D y la ν
+  tabuladas.** Un 10 % en D mueve n un 7 %, así que un 3.7 y un 4.0 no se
+  distinguen.
+- **Un Ragone sin decir su base no se compara con nada**: por gramo de
+  material activo y por kilogramo de celda empaquetada difieren en un
+  factor de tres a cinco.
+
+- **La DRT es una inversión mal condicionada, y la regularización es una
+  ELECCIÓN sobre cuánta estructura creerse.** Va informada siempre, y se
+  elige por la curva L cuando no se da. Una década a cada lado del codo da
+  una DRT defendible con otro número de picos.
+- **γ se penaliza en su RUGOSIDAD, no en su tamaño.** Penalizar el tamaño
+  encoge todos los procesos hacia cero y sesga las resistencias a la baja;
+  penalizar la rugosidad funde constantes de tiempo vecinas, que es el
+  fallo honrado: dice «estas dos no se resuelven» en vez de «las dos son
+  más pequeñas de lo que son».
+- **γ es una DENSIDAD, no un peso por casilla.** El modelo resuelve
+  g_k = γ(τ_k)·Δlnτ; olvidar dividir por el ancho de casilla es un factor
+  silencioso de 0.23 en la rejilla por defecto, que convirtió un proceso de
+  20 Ω en uno de 4.7 Ω.
+- **La resistencia de un pico se integra sobre su CUENCA entera**, de
+  mínimo a mínimo, no sobre la parte por encima de una fracción de su
+  altura: truncar a la décima parte tira casi toda el área.
+- **Dos picos a menos de un factor de tres en τ son uno.** A esa distancia
+  la separación depende de λ más que de los datos, y un circuito
+  equivalente los describiría igual de bien con un solo CPE.
 
 ## La suite: cuatro secciones
 

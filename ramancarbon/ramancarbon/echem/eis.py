@@ -853,6 +853,9 @@ def analyse_eis(
 
 
 __all__ = [
+    "DRT_PER_DECADE",
+    "DRTResult",
+    "drt",
     "ELEMENTS",
     "KK_LIMIT",
     "KK_PER_DECADE",
@@ -869,3 +872,250 @@ __all__ = [
     "kramers_kronig",
     "parse_circuit",
 ]
+
+
+# -- distribution of relaxation times ----------------------------------
+
+#: How many time constants per decade the DRT is solved on. More is not
+#: better: the problem is ill-posed, and a finer grid buys resolution the
+#: data does not contain while making the regularisation do more work.
+DRT_PER_DECADE = 10
+
+
+@dataclass
+class DRTResult:
+    """A distribution of relaxation times."""
+
+    tau_s: np.ndarray
+    gamma: np.ndarray
+    """γ(τ) in ohms: the area under a peak is that process's resistance."""
+    regularisation: float
+    fitted: np.ndarray
+    """The impedance the distribution reproduces."""
+    residual: float
+    peaks_s: list[float] = field(default_factory=list)
+    peak_resistances: list[float] = field(default_factory=list)
+    ohmic: float = 0.0
+    warnings: list[str] = field(default_factory=list)
+
+    def describe(self) -> str:
+        if not self.peaks_s:
+            return (f"DRT: sin picos separados (λ = {self.regularisation:.3g}, "
+                    f"residuo {100 * self.residual:.2f} %)")
+        parts = ", ".join(
+            f"τ = {tau:.3g} s ({resistance:.3g} Ω)"
+            for tau, resistance in zip(self.peaks_s, self.peak_resistances))
+        return (f"DRT: {len(self.peaks_s)} procesos — {parts}; R_s = "
+                f"{self.ohmic:.3g} Ω, residuo {100 * self.residual:.2f} %")
+
+
+def drt(
+    spectrum: Impedance,
+    regularisation: Optional[float] = None,
+    per_decade: int = DRT_PER_DECADE,
+    extend_decades: float = 1.0,
+) -> DRTResult:
+    """The distribution of relaxation times, by Tikhonov regularisation.
+
+    An impedance spectrum is a sum of RC processes:
+
+    .. math::
+
+        Z(\\omega) = R_s + \\int \\frac{\\gamma(\\tau)}
+        {1 + i\\omega\\tau}\\,\\mathrm{d}\\ln\\tau
+
+    and the DRT is that γ(τ). It is worth having because it separates
+    processes that a Nyquist plot merges: two semicircles a factor of
+    three apart in time constant look like one flattened arc, and a
+    circuit fit will happily describe that arc with a constant-phase
+    element and call the question answered.
+
+    **The inversion is ill-posed.** Without regularisation the solution
+    oscillates wildly between positive and negative values that fit the
+    data perfectly and mean nothing. The regularisation parameter is
+    therefore not a detail of the implementation, it is a choice about
+    how much structure to believe, and it is reported with the result.
+    When it is not given, it is chosen by the L-curve — the corner of the
+    trade-off between fitting the data and keeping the solution smooth —
+    which is the standard automatic choice and still only a choice.
+
+    γ is constrained to be **non-negative**, because a negative relaxation
+    strength is not a physical process. That constraint does most of the
+    work the regularisation would otherwise have to do.
+    """
+    frequency = np.asarray(spectrum.frequency, dtype=float)
+    z = np.asarray(spectrum.z, dtype=complex)
+    if frequency.size < 8:
+        raise CircuitError("hacen falta al menos ocho frecuencias para una DRT")
+
+    omega = 2.0 * np.pi * frequency
+    low = 1.0 / (omega.max() * 10.0 ** extend_decades)
+    high = 10.0 ** extend_decades / omega.min()
+    count = max(8, int(per_decade * math.log10(high / low)))
+    tau = np.logspace(math.log10(low), math.log10(high), count)
+
+    # The design matrix: one column per time constant, real and imaginary
+    # parts stacked, plus a column of ones for the ohmic resistance.
+    kernel = 1.0 / (1.0 + 1j * np.outer(omega, tau))
+    design = np.concatenate([kernel.real, kernel.imag], axis=0)
+    ohmic_column = np.concatenate([np.ones(omega.size), np.zeros(omega.size)])
+    design = np.concatenate([design, ohmic_column[:, None]], axis=1)
+    target = np.concatenate([z.real, z.imag])
+
+    # First differences: the penalty is on the ROUGHNESS of γ, not on its
+    # size. Penalising the size shrinks every process towards zero and
+    # biases the resistances low; penalising the roughness merges
+    # neighbouring time constants, which is the honest failure mode —
+    # it says "these two are not resolved" instead of "both are smaller
+    # than they are".
+    difference = np.zeros((count - 1, count + 1))
+    for index in range(count - 1):
+        difference[index, index] = -1.0
+        difference[index, index + 1] = 1.0
+
+    if regularisation is None:
+        regularisation, curve = _l_curve(design, target, difference)
+    else:
+        curve = []
+
+    solution = _nnls_tikhonov(design, target, difference, regularisation)
+    # The solved coefficients are per-bin WEIGHTS: the model is
+    # Z = R_s + Σ g_k/(1+iωτ_k), so g_k = γ(τ_k)·Δlnτ. Dividing by the bin
+    # width turns them into the density γ that the documentation promises,
+    # the one whose integral over a peak is that process's resistance.
+    # Skipping this step is a silent factor of Δlnτ — 0.23 on the default
+    # grid, which turned a 20 Ω process into 4.7 Ω.
+    log_step = float(math.log(tau[1] / tau[0])) if tau.size > 1 else 1.0
+    gamma = solution[:-1] / max(log_step, 1e-12)
+    ohmic = float(solution[-1])
+
+    fitted = design @ solution
+    residual = float(np.linalg.norm(fitted - target)
+                     / max(np.linalg.norm(target), 1e-30))
+
+    peaks, resistances = _drt_peaks(tau, gamma)
+    warnings = [
+        "la inversión es mal condicionada: la regularización no es un "
+        f"detalle de implementación sino una elección sobre cuánta "
+        f"estructura creerse. Aquí λ = {regularisation:.3g}"
+    ]
+    if regularisation is not None and not curve:
+        warnings.append("λ lo has fijado tú; con otro valor salen otros picos")
+    if len(peaks) >= 2:
+        ratios = [peaks[index + 1] / peaks[index] for index in range(len(peaks) - 1)]
+        if min(ratios) < 3.0:
+            warnings.append(
+                "hay picos separados por menos de un factor de tres en τ: a "
+                "esa distancia la separación depende de λ más que de los "
+                "datos, y un circuito equivalente los describiría igual de "
+                "bien con un solo elemento de fase constante"
+            )
+    if residual > 0.05:
+        warnings.append(
+            f"el residuo es del {100 * residual:.1f} %: la distribución no "
+            "reproduce el espectro, así que sobra regularización o los datos "
+            "no son los de un sistema lineal invariante"
+        )
+    if gamma.size and gamma[0] > 0.1 * float(np.max(gamma)):
+        warnings.append(
+            "hay peso apreciable en el extremo rápido de la rejilla: la "
+            "medida no llega a frecuencia bastante alta para ver ese proceso "
+            "entero y lo que se ve es su cola"
+        )
+    if gamma.size and gamma[-1] > 0.1 * float(np.max(gamma)):
+        warnings.append(
+            "hay peso apreciable en el extremo lento: falta frecuencia baja, "
+            "y la difusión suele estar ahí"
+        )
+    return DRTResult(
+        tau_s=tau, gamma=gamma, regularisation=float(regularisation),
+        fitted=fitted, residual=residual, peaks_s=peaks,
+        peak_resistances=resistances, ohmic=ohmic, warnings=warnings,
+    )
+
+
+def _nnls_tikhonov(design, target, difference, regularisation):
+    """Non-negative least squares with a roughness penalty.
+
+    Solved by stacking the penalty onto the design matrix, which turns the
+    regularised problem into an ordinary non-negative least squares — the
+    same trick that makes ridge regression an ordinary regression.
+    """
+    from scipy.optimize import nnls
+
+    penalty = math.sqrt(max(regularisation, 0.0)) * difference
+    stacked = np.concatenate([design, penalty], axis=0)
+    extended = np.concatenate([target, np.zeros(penalty.shape[0])])
+    solution, _ = nnls(stacked, extended, maxiter=50 * stacked.shape[1])
+    return solution
+
+
+def _l_curve(design, target, difference, count: int = 24):
+    """The corner of the fit-against-smoothness trade-off.
+
+    The corner is taken as the point of greatest curvature of the
+    log-log curve of residual against solution roughness. It is the
+    standard automatic choice, and it is still a choice: a decade either
+    side of it produces a defensible DRT with a different number of peaks.
+    """
+    candidates = np.logspace(-6, 2, count)
+    residuals, roughness = [], []
+    for value in candidates:
+        solution = _nnls_tikhonov(design, target, difference, value)
+        residuals.append(float(np.linalg.norm(design @ solution - target)))
+        roughness.append(float(np.linalg.norm(difference @ solution)))
+    x = np.log10(np.maximum(residuals, 1e-30))
+    y = np.log10(np.maximum(roughness, 1e-30))
+    if x.size < 5:
+        return float(candidates[len(candidates) // 2]), []
+    dx, dy = np.gradient(x), np.gradient(y)
+    ddx, ddy = np.gradient(dx), np.gradient(dy)
+    curvature = np.abs(dx * ddy - dy * ddx) / np.maximum(
+        (dx ** 2 + dy ** 2) ** 1.5, 1e-30)
+    curvature[:2] = 0.0
+    curvature[-2:] = 0.0
+    return float(candidates[int(np.argmax(curvature))]), list(zip(x, y))
+
+
+def _drt_peaks(tau, gamma, min_fraction: float = 0.05):
+    """Peaks of γ(τ) and the resistance under each.
+
+    The resistance is the integral of γ over the peak in ln τ, and it is
+    integrated over the whole **basin** — from the minimum on one side to
+    the minimum on the other — not over the part of the peak above some
+    fraction of its height. Truncating at a tenth of the peak looks
+    tidier and throws away most of the area: two RC processes of 10 and
+    25 Ω came back as 1.2 and 2.9.
+    """
+    from ..core.compat import trapezoid
+
+    gamma = np.asarray(gamma, dtype=float)
+    if gamma.size < 3 or float(np.max(gamma)) <= 0:
+        return [], []
+    threshold = min_fraction * float(np.max(gamma))
+    log_tau = np.log(np.asarray(tau, dtype=float))
+
+    maxima = [
+        index for index in range(1, gamma.size - 1)
+        if gamma[index] > threshold
+        and gamma[index] >= gamma[index - 1]
+        and gamma[index] >= gamma[index + 1]
+    ]
+    if not maxima:
+        return [], []
+
+    # Basin boundaries: the lowest point between neighbouring peaks.
+    bounds = [0]
+    for first, second in zip(maxima, maxima[1:]):
+        bounds.append(first + int(np.argmin(gamma[first:second + 1])))
+    bounds.append(gamma.size - 1)
+
+    peaks, resistances = [], []
+    for index, position in enumerate(maxima):
+        left, right = bounds[index], bounds[index + 1]
+        if right <= left:
+            continue
+        peaks.append(float(tau[position]))
+        resistances.append(float(trapezoid(gamma[left:right + 1],
+                                           log_tau[left:right + 1])))
+    return peaks, resistances
