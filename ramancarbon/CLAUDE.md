@@ -382,6 +382,33 @@ una tiene una prueba que la protege.
   del diagrama de Nyquist es convenio de dibujo; guardarlo negado es una
   fuente permanente de errores de signo en los ajustes.
 
+## La suite: cuatro secciones
+
+- **Cuatro instrumentos, cuatro secciones**: Raman carbono, Raman TMD, DRX,
+  Electroquímica. Son medidas distintas y no se mezclan. Lo único que se
+  comparte es la `Session` entre las dos secciones Raman, porque un archivo
+  es un archivo.
+- **Las secciones se construyen al visitarlas por primera vez.** Construir
+  las cuatro al arrancar importa matplotlib, monta una docena de figuras y
+  lee la biblioteca de referencia antes de que aparezca la ventana.
+- **La lógica sigue sin Tk**: `xrd_state.py` y `echem_state.py` son el
+  equivalente de `state.py`, y `plots_xrd.py`/`plots_echem.py` el de
+  `plots.py`. `base.py` tiene la fontanería común (lienzos, hilos, estado);
+  una sección es su distribución y su lógica, no una copia de esa fontanería.
+- **Un hilo de trabajo NUNCA toca un widget.** Devuelve por la cola y el hilo
+  principal la vacía. Hacerlo mal no revienta: corrompe la pantalla de vez en
+  cuando en unas plataformas y en otras no.
+- **`root.update()`, no `update_idletasks()`, para procesar el cambio de
+  pestaña.** Los eventos virtuales no son tareas de reposo, y con
+  `update_idletasks()` la sección no se construye nunca. La prueba real lo
+  documenta.
+- **El diagrama de Nyquist va con caja cuadrada y límites iguales**, no con
+  `aspect="equal"` y límites libres: eso último satisface el aspecto
+  ensanchando el eje X hacia Z′ negativa, que ninguna impedancia alcanza.
+- **El gráfico de Rietveld lleva la diferencia DEBAJO y en la misma escala.**
+  Ponerla en un eje propio reescalado queda más limpio y destruye justo la
+  comparación para la que sirve.
+
 ## Honestidad sobre la validación
 
 Todo está validado contra espectros **sintéticos** generados por

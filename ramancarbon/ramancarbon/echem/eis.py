@@ -438,6 +438,7 @@ def fit_circuit(
         message=str(outcome.message),
     )
     _errors(outcome, labels, is_log, fit, spectrum.n)
+    _check_bounds(fit, labels, lower, upper)
     _circuit_warnings(fit, spectrum)
     return fit
 
@@ -545,6 +546,38 @@ def _errors(
         else:
             converted[label] = float(error)
     fit.errors = converted
+
+
+def _check_bounds(
+    fit: CircuitFit, labels: Sequence[str], lower: Sequence[float],
+    upper: Sequence[float],
+) -> None:
+    """Flag any parameter that ended up sitting on its own limit.
+
+    A value at a bound is not a fitted value: the optimiser wanted to go
+    further and could not. It almost always means the circuit is wrong for
+    the data — fitting a plain Randles to a spectrum with a capacitive tail
+    sends the charge-transfer resistance to infinity, because that is the
+    only way the model can produce a rising low-frequency impedance — and
+    the number that comes out looks like a measurement.
+    """
+    values = fit.values()
+    for label, low, high in zip(labels, lower, upper):
+        value = values.get(label)
+        if value is None:
+            continue
+        for limit, side in ((low, "inferior"), (high, "superior")):
+            if limit and abs(value - limit) <= abs(limit) * 1e-6:
+                fit.warnings.append(
+                    f"{label} ha quedado pegado a su límite {side} "
+                    f"({limit:g}). Eso NO es un valor ajustado: el optimizador "
+                    "quería seguir y no podía. Casi siempre significa que el "
+                    "circuito no es el adecuado para estos datos — por ejemplo "
+                    "un Randles simple contra un espectro con cola capacitiva, "
+                    "donde la única forma que tiene el modelo de subir a baja "
+                    "frecuencia es mandar la resistencia a infinito"
+                )
+                break
 
 
 def _circuit_warnings(fit: CircuitFit, spectrum: Impedance) -> None:
