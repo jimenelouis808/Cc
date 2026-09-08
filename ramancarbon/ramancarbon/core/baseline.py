@@ -576,6 +576,96 @@ def _background_too_fast(
     )
 
 
+def snip_baseline(
+    y: Sequence[float],
+    iterations: Optional[int] = None,
+    decreasing: bool = True,
+    smooth_orders: int = 0,
+) -> np.ndarray:
+    """SNIP: statistics-sensitive non-linear iterative peak clipping.
+
+    Each point is repeatedly replaced by the smaller of itself and the
+    mean of the two points ``p`` channels away, with ``p`` running out to
+    ``iterations``. Anything narrower than that window is clipped away and
+    what is left is the background.
+
+    The one parameter is a **width in channels**, which is why this method
+    is worth having alongside asLS: it is stated in the same units the
+    user already thinks in — "nothing I care about is wider than 80
+    channels" — where a Whittaker λ has to be derived from the sampling
+    step. It is also fast enough to run on every pixel of a map, which
+    asLS is not: SNIP is a few array operations per iteration and no
+    linear system at all.
+
+    The clipping is done on the doubly-logarithmic (LLS) transform of the
+    data, which is what makes it work on Poisson counts: on that scale the
+    noise is roughly constant, so the same window is right at the top of a
+    peak and in the background beside it.
+
+    Parameters
+    ----------
+    y:
+        Intensities. Must be finite; negative values are lifted before the
+        transform and put back afterwards.
+    iterations:
+        Half-width in channels of the widest feature to remove. When
+        ``None``, a twentieth of the spectrum, which is the usual default
+        and is only ever a starting point.
+    decreasing:
+        Run the window from wide to narrow instead of narrow to wide. It
+        preserves peak shape better and costs nothing; on by default.
+    smooth_orders:
+        Average over ``2·smooth_orders+1`` channels inside each iteration.
+        Helps on very noisy data at the price of rounding sharp steps.
+
+    Returns
+    -------
+    numpy.ndarray
+        The baseline, on the input's own axis.
+    """
+    values = np.asarray(y, dtype=float)
+    if values.ndim != 1:
+        raise ValueError("SNIP works on one spectrum at a time")
+    if values.size < 5:
+        raise ValueError("hacen falta al menos cinco puntos")
+    if not np.all(np.isfinite(values)):
+        raise ValueError("hay valores no finitos en el espectro")
+
+    span = int(iterations if iterations is not None else max(2, values.size // 20))
+    span = max(1, min(span, (values.size - 1) // 2))
+
+    offset = min(0.0, float(values.min()))
+    # Odd-mirrored padding, not clamping. At the first channel of a
+    # decaying background, averaging a point with its own value and its
+    # neighbour gives something below the curve, so the clipping eats the
+    # edge — a third of the background at the first point, with the
+    # interior exact. An even reflection halves that and an odd one, which
+    # continues the slope instead of turning it around, removes it.
+    working = np.pad(_lls(values - offset), span, mode="reflect",
+                     reflect_type="odd")
+
+    windows = range(span, 0, -1) if decreasing else range(1, span + 1)
+    for width in windows:
+        average = 0.5 * (np.roll(working, width) + np.roll(working, -width))
+        if smooth_orders:
+            kernel = np.ones(2 * smooth_orders + 1) / (2 * smooth_orders + 1)
+            average = np.convolve(average, kernel, mode="same")
+        average[:width] = working[:width]
+        average[-width:] = working[-width:]
+        working = np.minimum(working, average)
+
+    return _inverse_lls(working[span:span + values.size]) + offset
+
+
+def _lls(values: np.ndarray) -> np.ndarray:
+    """Log-log-square-root transform. Makes Poisson noise near-constant."""
+    return np.log(np.log(np.sqrt(np.clip(values, 0.0, None) + 1.0) + 1.0) + 1.0)
+
+
+def _inverse_lls(values: np.ndarray) -> np.ndarray:
+    return (np.exp(np.exp(values) - 1.0) - 1.0) ** 2 - 1.0
+
+
 def estimate_baseline(
     spectrum: Spectrum,
     method: str = "asls",
@@ -606,9 +696,11 @@ def estimate_baseline(
         return polynomial_baseline(spectrum.shift, spectrum.intensity, **kwargs)
     if key in {"rubberband", "hull", "convexhull"}:
         return rubberband_baseline(spectrum.shift, spectrum.intensity)
+    if key == "snip":
+        return snip_baseline(spectrum.intensity, **kwargs)
     raise ValueError(
-        f"unknown baseline method {method!r}; expected arpls, asls, polynomial "
-        "or rubberband"
+        f"unknown baseline method {method!r}; expected arpls, asls, snip, "
+        "polynomial or rubberband"
     )
 
 
@@ -661,5 +753,6 @@ __all__ = [
     "estimate_baseline",
     "polynomial_baseline",
     "rubberband_baseline",
+    "snip_baseline",
     "subtract_baseline",
 ]

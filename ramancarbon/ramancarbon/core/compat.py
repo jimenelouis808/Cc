@@ -39,10 +39,14 @@ def trapezoid(y: Any, x: Any = None, **kwargs) -> float:
 
     Returns
     -------
-    float
-        The integral.
+    float or numpy.ndarray
+        The integral. A plain ``float`` for the usual case of integrating
+        one curve, and an array when ``axis`` is given and the result has
+        one — which is what integrating a band across every pixel of a map
+        does, forty thousand integrals in one call.
     """
-    return float(_impl(y, x, **kwargs)) if x is not None else float(_impl(y, **kwargs))
+    result = _impl(y, x, **kwargs) if x is not None else _impl(y, **kwargs)
+    return float(result) if np.ndim(result) == 0 else result
 
 
 __all__ = ["HAS_TRAPEZOID", "trapezoid"]

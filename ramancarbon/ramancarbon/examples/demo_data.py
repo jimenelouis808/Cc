@@ -894,3 +894,134 @@ def make_lsv_demo(
             "true_resistance_ohm": resistance,
         },
     )
+
+
+#: Named synthetic maps, each built to exercise one thing a map does.
+MAP_DEMOS = ("dos_fases", "escalon", "hojuela")
+
+
+def make_map_demo(
+    kind: str = "dos_fases",
+    rows: int = 20,
+    columns: int = 24,
+    step_um: float = 0.5,
+    laser_nm: float = 532.0,
+    seed: int = 0,
+    low: float = 1100.0,
+    high: float = 2900.0,
+    spectral_step: float = 2.0,
+    noise: float = 3.0,
+    fluorescence_gradient: float = 400.0,
+    cosmic_rays: int = 4,
+    missing: int = 3,
+):
+    """Build a synthetic Raman map.
+
+    Everything that makes a real map hard is in here on purpose, because
+    the analysis has to survive all of it and a clean cube proves nothing:
+
+    - a **fluorescence gradient across the sample**, which is what turns a
+      raw band area into a picture of the background rather than of the
+      material;
+    - **cosmic rays**, single-pixel single-channel spikes that dominate
+      the variance of the whole cube and therefore the first principal
+      component, if they are not removed;
+    - **missing pixels**, because scans get aborted;
+    - a **spatial structure that is not aligned to the grid**, so that a
+      cluster map has something to find that is not the raster.
+
+    ``kind`` chooses the structure: ``dos_fases`` is two materials meeting
+    along a diagonal, ``escalon`` is monolayer against bilayer graphene
+    (the 2D band changes shape, not just size), and ``hojuela`` is a flake
+    on a bare substrate, which is the case where most of the map is
+    nothing and every ratio there is noise.
+    """
+    from ..mapping.cube import RamanMap
+
+    if kind not in MAP_DEMOS:
+        raise ValueError(
+            f"mapa desconocido: {kind!r}; hay: {', '.join(MAP_DEMOS)}")
+
+    rng = np.random.default_rng(seed)
+    x_um = np.arange(columns, dtype=float) * step_um
+    y_um = np.arange(rows, dtype=float) * step_um
+    shift = np.arange(float(low), float(high), float(spectral_step))
+    cube = np.zeros((rows, columns, shift.size))
+
+    grid_x, grid_y = np.meshgrid(x_um, y_um)
+    span_x = max(x_um[-1], 1e-9)
+    span_y = max(y_um[-1], 1e-9)
+
+    if kind == "dos_fases":
+        # A diagonal boundary, deliberately not along a row or a column.
+        fraction = np.clip(
+            0.5 + 2.0 * ((grid_x / span_x) + (grid_y / span_y) - 1.0), 0.0, 1.0)
+        first = _map_component(shift, [(1350.0, 40.0, 55.0),
+                                       (1580.0, 480.0, 22.0),
+                                       (2700.0, 210.0, 45.0)])
+        second = _map_component(shift, [(1350.0, 300.0, 90.0),
+                                        (1590.0, 420.0, 60.0),
+                                        (2700.0, 60.0, 120.0)])
+        cube = (fraction[..., None] * second + (1 - fraction)[..., None] * first)
+        truth = {"componentes": 2, "frontera": "diagonal"}
+
+    elif kind == "escalon":
+        # Monolayer on the left, bilayer on the right: the 2D band goes
+        # from one narrow line to a wider, weaker one. Amplitude alone
+        # does not separate them; the shape does.
+        bilayer = (grid_x > span_x * 0.45).astype(float)
+        mono = _map_component(shift, [(1580.0, 300.0, 14.0),
+                                      (2680.0, 900.0, 26.0)])
+        bi = _map_component(shift, [(1582.0, 320.0, 15.0),
+                                    (2690.0, 420.0, 52.0)])
+        cube = bilayer[..., None] * bi + (1 - bilayer)[..., None] * mono
+        truth = {"componentes": 2, "frontera": "vertical"}
+
+    else:   # hojuela
+        centre_x, centre_y = span_x * 0.45, span_y * 0.55
+        radius = min(span_x, span_y) * 0.32
+        distance = np.hypot(grid_x - centre_x, grid_y - centre_y)
+        flake = 1.0 / (1.0 + np.exp((distance - radius) / (0.6 * step_um)))
+        material = _map_component(shift, [(1350.0, 120.0, 60.0),
+                                          (1580.0, 500.0, 30.0),
+                                          (2700.0, 240.0, 60.0)])
+        cube = flake[..., None] * material
+        truth = {"componentes": 1, "cobertura": float(np.mean(flake > 0.5))}
+
+    # A fluorescence background that varies across the sample. This is the
+    # thing that makes an uncorrected area map useless.
+    slope = (grid_x / span_x + 0.4 * grid_y / span_y) / 1.4
+    background = fluorescence_gradient * (0.3 + slope)[..., None] * np.exp(
+        -(shift - shift[0]) / 1800.0)
+    cube = cube + background + 120.0
+
+    cube = cube + rng.normal(0.0, noise, size=cube.shape)
+
+    for _ in range(int(cosmic_rays)):
+        row = int(rng.integers(rows))
+        column = int(rng.integers(columns))
+        channel = int(rng.integers(2, shift.size - 2))
+        cube[row, column, channel] += rng.uniform(3000.0, 9000.0)
+
+    dropped = []
+    for _ in range(int(missing)):
+        row = int(rng.integers(rows))
+        column = int(rng.integers(columns))
+        cube[row, column] = np.nan
+        dropped.append((row, column))
+
+    return RamanMap(
+        shift=shift, intensity=cube, x=x_um, y=y_um, laser_nm=laser_nm,
+        spot_um=1.0, name=f"demo_mapa_{kind}",
+        metadata={"synthetic": True, "kind": kind, "rayos_cosmicos": cosmic_rays,
+                  "pixeles_perdidos": dropped, **truth},
+    )
+
+
+def _map_component(shift: np.ndarray, bands) -> np.ndarray:
+    """A spectrum from ``(centre, height, fwhm)`` triples, as Lorentzians."""
+    out = np.zeros_like(shift)
+    for centre, height, fwhm in bands:
+        half = fwhm / 2.0
+        out = out + height * half**2 / ((shift - centre) ** 2 + half**2)
+    return out

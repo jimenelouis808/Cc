@@ -32,6 +32,7 @@ ramancarbon/
 ├── echem/       # CV, GCD, EIS, mecanismo de almacenamiento, HER/OER
 ├── plotting/    # motor de figuras: estilo, series, ejes secundarios, paneles
 ├── dataio/      # detección de formato, lectura universal, exportación, .rcproj
+├── mapping/     # mapas Raman: cubo, imágenes por píxel, quimiometría
 ├── gui/         # app Tkinter; la lógica vive en state.py y plots.py, sin Tk
 ├── cli/         # ramancarbon analizar / lote / deconvolucionar / bd / demo
 ├── examples/    # scripts ejecutables + demo_data.py (espectros sintéticos)
@@ -119,6 +120,11 @@ una tiene una prueba que la protege.
 - **λ depende del paso de muestreo** porque el corte es un periodo en
   puntos. Copiar un λ de un artículo sin reescalarlo es un error de 256×
   entre 1 y 4 cm⁻¹/punto.
+- **SNIP se pega con relleno reflejado IMPAR.** Con recorte en el borde,
+  la media de un punto consigo mismo y su vecino cae por debajo de la
+  curva, y el clipeo se come el extremo: un tercio del fondo en el primer
+  canal, con el interior exacto. La reflexión par lo reduce a la mitad; la
+  impar, que continúa la pendiente en vez de darle la vuelta, lo elimina.
 - **La normalización 0-100 resta un desplazamiento y eso cambia los
   cocientes.** Es la única de las normalizaciones que lo hace. Avisa.
 - **Un modelo D–G de nanotubo con G⁻ hace falta también con perfil
@@ -383,6 +389,87 @@ una tiene una prueba que la protege.
 - **Z″ se guarda con su signo físico (negativo si es capacitivo).** El −Z″
   del diagrama de Nyquist es convenio de dibujo; guardarlo negado es una
   fuente permanente de errores de signo en los ajustes.
+
+## Mapas Raman y quimiometría
+
+- **Un mapa es un CUBO, no una lista de espectros con coordenadas.**
+  Extraer la intensidad de una banda en 40 000 píxeles es una operación
+  de array sobre el cubo y 40 000 llamadas sobre la lista, y esa
+  diferencia es la que hay entre un mapa que se redibuja al mover un
+  deslizador y uno que tarda un minuto.
+- **El paso espacial frente al tamaño del punto láser decide si los
+  píxeles vecinos son medidas independientes.** Con paso menor que medio
+  punto, cualquier estadística píxel a píxel está midiendo la óptica. El
+  mapa lo dice, y no adivina el tamaño del punto cuando no está declarado.
+- **Un píxel perdido es NaN y se propaga.** Colarlo como cero baja todas
+  las medias sin que nada lo delate.
+- **Un área por píxel necesita SU PROPIA línea base local.** La
+  fluorescencia varía por la muestra mucho más que la señal Raman, así que
+  un «mapa de la banda D» hecho con áreas crudas suele ser un mapa de la
+  pendiente del fondo. En el mapa de demostración el gradiente mete un
+  68 % de izquierda a derecha.
+- **Una posición se INTERPOLA, no se elige.** `argmax` solo devuelve
+  valores de la rejilla espectral, así que con paso de 2 cm⁻¹ el mapa sale
+  en terrazas, y las terrazas se leen como dominios. Parábola por los tres
+  puntos del máximo.
+- **Un cociente se enmascara donde el denominador es ruido.** Dividir por
+  una banda que no está produce los píxeles más brillantes de la imagen, y
+  están todos donde no hay muestra. Se informa cuántos se han enmascarado:
+  medio mapa enmascarado significa que la banda no está.
+- **Los rayos cósmicos, antes que todo lo demás.** Un pico de un canal en
+  un píxel es la mayor excursión del cubo entero, así que sale como
+  primera componente principal y como grupo propio de k-medias.
+- **Y el despicado se juzga con el ruido DEL PÍXEL, no con el local.** La
+  desviación local es diminuta donde el espectro es suave, así que el
+  máximo de cada banda bien muestreada supera el umbral y se aplana: esa
+  versión tocaba medio por ciento de todos los canales de un mapa
+  sintético limpio, casi todos máximos de banda. El criterio son dos
+  cosas: excursión grande en unidades del ruido del píxel Y estrecha.
+- **PCA sobre datos SIN centrar da la media como primera componente.** Se
+  centra. Y una componente principal es una dirección de varianza, no una
+  sustancia: son ortogonales por construcción y nada obliga a que dos
+  componentes químicas reales lo sean.
+- **k-medias sin normalizar ordena por BRILLO**, que lo fijan el enfoque y
+  la topografía. Por eso la normalización por área va puesta por defecto.
+  Y k-medias devuelve exactamente k grupos haya o no k fases: la silueta
+  es lo que dice si están separados.
+- **MCR-ALS da espectros porque impone no negatividad**, y su solución NO
+  es única: cualquier rotación del par que mantenga las dos partes no
+  negativas ajusta igual de bien. Eso es del problema, no del programa, y
+  el aviso va siempre. Las concentraciones son relativas, nunca fracciones
+  másicas.
+- **El cierre solo si las componentes son todo lo que hay.** En un mapa con
+  sustrato desnudo, obligar a que sumen uno obliga a que el vacío esté
+  hecho de algo.
+
+## Temperatura y polarización
+
+- **El exponente del prefactor anti-Stokes/Stokes no está zanjado**: 4 para
+  potencia dispersada, 3 para un detector que cuenta fotones, que es lo
+  que es un CCD. Son decenas de kelvin. El parámetro existe para que el
+  convenio se declare, no se suponga.
+- **Sin calibración de la respuesta del equipo, la temperatura es
+  APARENTE.** La red, los filtros y el detector no transmiten igual las
+  dos ramas, y un filtro de borde corta la anti-Stokes a machete. El sesgo
+  es de cientos de kelvin y siempre hacia arriba.
+- **Las áreas van con su fondo local restado.** Un desplazamiento plano de
+  20 cuentas bajo una banda Stokes de 1000 y una anti-Stokes de 400 sube
+  el cociente un 8 %, y un 8 % son 25 K a temperatura ambiente, siempre
+  hacia arriba.
+- **Los modos duros no sirven a temperatura ambiente.** La rama
+  anti-Stokes de la G a 300 K es 8·10⁻⁴ de la Stokes. Se rechaza con su
+  motivo en vez de devolver la temperatura del fondo.
+- **Un cociente por encima del límite clásico se rechaza**: en dispersión
+  no resonante de orientaciones al azar, ρ > 0.75 no puede pasar, y una
+  temperatura por encima de 1200 K en un experimento corriente casi
+  siempre es fondo dentro de la ventana anti-Stokes.
+- **Una red de difracción es ella misma un polarizador.** Su eficiencia
+  difiere entre s y p en decenas por ciento, así que un ρ medido lleva
+  dentro el del espectrómetro, y el del espectrómetro suele ser el mayor.
+- **La dependencia angular de un dispersor unidimensional es cos⁴, no
+  cos².** El atajo de cos² da un parámetro de orden como el doble del que
+  toca. Y con tres ángulos cualquier modulación ajusta perfecto: hacen
+  falta cuatro, y 180° de recorrido.
 
 ## Entrada y salida
 
