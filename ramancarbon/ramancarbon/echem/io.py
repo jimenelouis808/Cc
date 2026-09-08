@@ -188,14 +188,31 @@ def read_cv(
             "no la declara. Pásala con scan_rate=, en V/s"
         )
 
+    used = electrode or Electrode()
+    declared = metadata.get("reference")
+    warning = None
+    if declared and declared != used.reference:
+        # Not overridden silently: a potential scale is the user's to
+        # declare, and quietly using the file's would be just as wrong when
+        # the file is the one that is stale. But a mismatch here is 1.04 V
+        # on every overpotential downstream, so it cannot pass unmentioned.
+        warning = (
+            f"el archivo declara la referencia {declared!r} y se ha pedido "
+            f"{used.reference!r}. Una de las dos está mal, y la diferencia va "
+            "entera a cualquier sobrepotencial que salga después"
+        )
     return Voltammogram(
         potential=potential,
         current=current,
         scan_rate=float(rate),
-        electrode=electrode or Electrode(),
+        electrode=used,
         cycle=cycle,
         name=location.stem,
-        metadata={"path": str(location), **metadata},
+        metadata={
+            "path": str(location),
+            **metadata,
+            **({"aviso_referencia": warning} if warning else {}),
+        },
     )
 
 
@@ -304,11 +321,19 @@ def read_eis(
 def write_cv(curve: Voltammogram, path: str | Path) -> Path:
     """Write a voltammogram as a labelled two-column text file."""
     destination = Path(path)
+    electrode = curve.electrode
     lines = [
         f"# {curve.name}",
         f"# scan rate: {1e3 * curve.scan_rate:g} mV/s",
-        "Ewe/V\tI/A",
+        f"# reference: {electrode.reference}",
     ]
+    if electrode.ph is not None:
+        lines.append(f"# pH: {electrode.ph:g}")
+    if electrode.mass_mg:
+        lines.append(f"# active mass: {electrode.mass_mg:g} mg")
+    if electrode.area_cm2:
+        lines.append(f"# area: {electrode.area_cm2:g} cm2")
+    lines.append("Ewe/V\tI/A")
     lines.extend(f"{v:.6f}\t{i:.9g}" for v, i in zip(curve.potential, curve.current))
     destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return destination

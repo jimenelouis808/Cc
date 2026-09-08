@@ -31,7 +31,7 @@ The package is organised so that each layer can be used on its own:
 
 from __future__ import annotations
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from .analysis.report import AnalysisResult, analyse
 from .core.io import read_many, read_spectrum, write_spectrum

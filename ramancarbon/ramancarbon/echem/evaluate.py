@@ -39,6 +39,12 @@ MIN_TAFEL_DECADES = 1.0
 #: Tafel slopes above this (mV/dec) usually mean transport, not kinetics.
 TAFEL_TRANSPORT_LIMIT = 200.0
 
+#: An exchange current density below this (mA/cm²) is not a measurement.
+#: It is what an extrapolation over many decades produces when the
+#: overpotential axis is offset — almost always a wrong reference electrode
+#: or a wrong pH, either of which shifts the whole axis by a volt or so.
+IMPLAUSIBLE_J0 = 1e-14
+
 
 @dataclass
 class StorageVerdict:
@@ -436,6 +442,15 @@ def tafel_analysis(
             "está en control por transporte de materia. Ninguna de las dos es "
             "una propiedad del catalizador"
         )
+    if 0.0 < result.exchange_current_density < IMPLAUSIBLE_J0:
+        result.warnings.append(
+            f"la densidad de corriente de intercambio sale "
+            f"{result.exchange_current_density:.2g} mA/cm², que no es una "
+            "medida de nada: es lo que produce extrapolar muchas décadas "
+            "cuando el eje de sobrepotencial está desplazado. Comprueba el "
+            "electrodo de referencia y el pH — equivocarse en cualquiera de "
+            "los dos mueve el eje entero alrededor de un voltio"
+        )
     if stop >= eta.size - 2:
         result.warnings.append(
             "el tramo ajustado llega al extremo de mayor corriente de los "
@@ -546,6 +561,9 @@ def analyse_catalysis(
     result = CatalysisResult(reaction=reaction, benchmark_ma_cm2=benchmark)
     electrode = curve.electrode
 
+    mismatch = curve.metadata.get("aviso_referencia")
+    if mismatch:
+        result.warnings.append(mismatch)
     rhe, note = electrode.to_rhe(curve.potential)
     result.conversion_note = note
     if rhe is None:
@@ -624,6 +642,7 @@ def analyse_catalysis(
 
 
 __all__ = [
+    "IMPLAUSIBLE_J0",
     "MIN_TAFEL_DECADES",
     "TAFEL_TRANSPORT_LIMIT",
     "CatalysisResult",

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ramancarbon"
-version = "0.3.0"
-description = "Analiza espectros Raman experimentales de nanomateriales de carbono y dicalcogenuros: identifica SWCNT/DWCNT/MWCNT/CNF, deconvoluciona las bandas D y G con el número de picos que elijas, calcula I_D/I_G, I_2D/I_G, I_D/I_D', índices estructurales, diámetros por RBM y desplazamientos frente a la literatura; cuenta capas en MoS2, WS2 y otros TMD."
+version = "0.4.0"
+description = "Suite de caracterizacion de nanomateriales: Raman de carbono (SWCNT/DWCNT/MWCNT/CNF, bandas D y G con el numero de picos que elijas, I_D/I_G, diametros por RBM, dopado, y fases como FeSe o Se), Raman de dicalcogenuros con sus oxidos, difraccion de rayos X con identificacion de fases desde CIF y refinamiento Rietveld, y electroquimica (CV, carga-descarga, impedancia con circuitos equivalentes, HER y OER)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -16,6 +16,11 @@ keywords = [
     "Tuinstra-Koenig", "Breit-Wigner-Fano", "nanomaterials",
     "carbon nanofibre", "CNF", "doping", "TMD", "MoS2", "WS2",
     "transition metal dichalcogenide", "layer counting",
+    "XRD", "X-ray diffraction", "Rietveld", "CIF", "phase identification",
+    "crystallography", "powder diffraction", "FeSe", "selenide",
+    "electrochemistry", "cyclic voltammetry", "EIS", "impedance",
+    "supercapacitor", "pseudocapacitance", "galvanostatic", "Tafel",
+    "HER", "OER", "electrocatalysis", "equivalent circuit",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -26,6 +31,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Physics",
 ]
@@ -55,7 +61,11 @@ include = ["ramancarbon*"]
 exclude = ["tests*", "examples*"]
 
 [tool.setuptools.package-data]
-ramancarbon = ["database/data/*.json"]
+# The reference CIFs are data, not code, and without this line a real
+# install has an empty phase library while the development checkout works
+# perfectly — the kind of difference that only shows up on someone else's
+# machine.
+ramancarbon = ["database/data/*.json", "database/data/cif/*.cif"]
 
 [tool.pytest.ini_options]
 testpaths = ["ramancarbon/tests"]

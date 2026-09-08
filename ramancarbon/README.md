@@ -1,14 +1,18 @@
 # ramancarbon
 
-Analiza **espectros Raman experimentales** de nanomateriales de carbono y de
-dicalcogenuros (TMD):
-distingue SWCNT / DWCNT / MWCNT, deconvoluciona las bandas D y G, calcula
-I_D/I_G, I_2D/I_G e I_D/I_D', deduce diámetros a partir del RBM y compara
-las posiciones medidas con la literatura para detectar dopado o deformación.
+Suite de caracterización de nanomateriales, con **cuatro instrumentos** en
+una sola aplicación:
+
+| Sección | Qué hace |
+|---|---|
+| **Raman · carbono** | SWCNT / DWCNT / MWCNT, deconvolución D–G configurable, I_D/I_G, I_2D/I_G, I_D/I_D′, diámetros por RBM, dopado y deformación, y las fases no carbonosas de la muestra (FeSe, Se, carburos de hierro) |
+| **Raman · TMD** | MoS₂, WS₂, MoSe₂, WSe₂, MoTe₂: número de capas, fase 2H/1T′, y las heteroestructuras óxido/calcogenuro (MoO₃@MoSe₂, MoO₂@MoSe₂…) |
+| **DRX** | Identificación de fases contra estructuras cristalinas reales (CIF de la COD), patrón teórico, residual y refinamiento **Rietveld** automático o a mano |
+| **Electroquímica** | CV, carga-descarga, impedancia con circuitos equivalentes, mecanismo de almacenamiento (condensador / pseudocondensador / batería), capacitancia y capacidad, energía y potencia, HER y OER |
 
 > Este proyecto es hermano de [`carbonforge`](../carbonforge), pero hace lo
 > contrario: `carbonforge` **prepara cálculos** de primeros principios;
-> `ramancarbon` **analiza lo que sale del espectrómetro**.
+> `ramancarbon` **analiza lo que sale del equipo**.
 
 ## Qué lo diferencia
 
@@ -47,6 +51,24 @@ Evidencia:
   [+2.5] la banda G aparece desdoblada en G⁻/G⁺ por la curvatura de la pared
 ```
 
+**Se niega a dar el número equivocado.** Un material con picos redox tiene
+*capacidad*, no capacitancia: dividir la carga por la ventana entera y dar
+F/g infla la cifra y describe algo que el material no hace. El programa
+clasifica el mecanismo y, si es de tipo batería, dice explícitamente que no
+se informe en faradios. Lo mismo con una pendiente de Tafel ajustada sobre
+menos de una década, con un tamaño de cristalito por encima de la
+resolución del equipo, o con un ECSA presentado sin el factor de tres que
+arrastra.
+
+**En difracción no hay tablas de posiciones de pico.** Una fase es una
+*estructura cristalina* y cada posición e intensidad se calcula de ella, así
+que un parámetro de red refinado mueve los picos como los movería la
+física. Añadir una fase de referencia es soltar su CIF en una carpeta.
+
+**Los picos sin explicar son el resultado, no el resto.** Son la fase que no
+esperabas. Aparecen en su propia lista, marcados, y con la advertencia de
+que un Rietveld sin ellos reparte su intensidad entre las fases que sí están.
+
 **Avisa de lo que puede salir mal.** Parámetros pegados a sus límites,
 componentes casi degeneradas, cocientes tomados de alturas cuando la
 fórmula se calibró con áreas, incertidumbres optimistas porque suavizaste
@@ -76,9 +98,30 @@ gráfica usa Tkinter, que viene con Python (en Debian/Ubuntu:
 ## Empezar
 
 ```bash
+ramancarbon-gui                               # la suite entera, con sus cuatro secciones
+```
+
+O por línea de comandos, una sección cada vez:
+
+```bash
+# Raman
 ramancarbon demo datos/                       # genera espectros de prueba
 ramancarbon analizar datos/demo_DWCNT_532nm.txt --laser 532
-ramancarbon-gui                               # la interfaz gráfica
+ramancarbon analizar datos/demo_MWCNT_FeSe_532nm.txt --laser 532 --picos-d 3 --picos-g 2
+ramancarbon tmd datos/demo_MoS2_2capa_532nm.txt
+
+# Difracción
+ramancarbon demo-datos drx drx/
+ramancarbon drx drx/demo_drx_CNT_FeSe.xye --textura 001
+ramancarbon drx --biblioteca                  # qué fases de referencia hay
+ramancarbon drx-lote drx/ --csv fases.csv
+
+# Electroquímica
+ramancarbon demo-datos echem ec/
+ramancarbon echem --cv ec/demo_cv_condensador_20mVs.txt --masa 2 --area 1
+ramancarbon echem --gcd ec/demo_gcd_bateria.txt --eis ec/demo_eis.txt --masa 2
+ramancarbon echem --polarizacion ec/demo_lsv_OER.txt --referencia RHE \
+                  --area 1 --resistencia 3 --reaccion OER
 ```
 
 Desde Python:
@@ -88,10 +131,35 @@ from ramancarbon import read_spectrum, analyse
 
 spectrum = read_spectrum("muestra.txt", laser_nm=532)
 result = analyse(spectrum)
-
 print(result.report())
 print(result.id_ig, result.i2d_ig, result.id_idprime)
 print(result.classification.label, result.classification.confidence)
+print(result.phases.summary())          # FeSe, Se, carburos…
+```
+
+```python
+from ramancarbon.xrd import read_pattern
+from ramancarbon.xrd.report import analyse_pattern
+
+pattern = read_pattern("muestra.xye", anode="Cu")
+xrd = analyse_pattern(pattern, preferred_axis=(0, 0, 1))
+print(xrd.report())
+print(xrd.refinement.weight_fractions())
+```
+
+```python
+from ramancarbon.echem.curve import Electrode
+from ramancarbon.echem.io import read_cv, read_gcd
+from ramancarbon.echem.report import analyse_sample
+
+electrode = Electrode(mass_mg=2.0, area_cm2=1.0, reference="Ag/AgCl_3M", ph=14.0)
+sample = analyse_sample(
+    "mi electrodo",
+    cv=read_cv("cv.txt", scan_rate=0.02, electrode=electrode),
+    gcd=read_gcd("gcd.txt", electrode=electrode),
+)
+print(sample.storage.summary())         # condensador, pseudo o batería
+print(sample.report())
 ```
 
 ## Qué hace
@@ -363,6 +431,127 @@ las fronteras entre números de capa están a 2–3 cm⁻¹, así que un paso de
 muestreo grueso hace imposible contar capas por muy bien que se vea el
 ajuste. El programa avisa.
 
+## Fases no carbonosas de la muestra
+
+```bash
+ramancarbon analizar nanotubos_FeSe.txt --laser 532
+```
+
+Un nanotubo decorado con FeSe pone modos que **no son carbono** en 181, 196,
+237 y 254 cm⁻¹ — los cuatro dentro de la ventana del RBM. Convertidos con
+`ω = A/d + B` dan cinco diámetros de nanotubo creíbles y falsos. Por eso este
+escaneo **sí va encendido por defecto**, al contrario que el de
+interferencias.
+
+La base de datos trae β-FeSe tetragonal, δ-FeSe hexagonal, FeSe₂ marcasita,
+selenio trigonal / monoclínico / amorfo, cementita Fe₃C y una entrada para el
+hierro metálico **deliberadamente sin bandas**, porque es Raman-inactivo en
+primer orden: lo que ves en una muestra con hierro nunca es el hierro.
+
+Se informa la **familia** siempre que se pueda, y el **polimorfo** solo cuando
+una línea discriminante o una prueba de anchura lo separa de sus hermanos. El
+selenio amorfo y el monoclínico están en el mismo sitio (≈250 cm⁻¹) y lo único
+que los distingue es el ancho de banda; el programa lo usa, y avisa de que un
+límite *superior* de anchura no prueba nada porque lo cumple cualquier RBM.
+
+Cada fase lleva la reflexión y el 2θ que zanjarían la duda en difracción:
+
+```
+Por composición:
+  Seleniuro de hierro FeSe → β-FeSe tetragonal (tipo PbO)
+    Resuelto: aparecen 2 línea(s) propias de este polimorfo.
+
+Lo que zanjaría la duda en DRX:
+  · δ-FeSe hexagonal: reflexión 101 a 2θ ≈ 32.4° (Cu Kα).
+```
+
+## Difracción de rayos X
+
+```bash
+ramancarbon drx patron.xye --cif mis_cifs/ --textura 001
+ramancarbon drx --biblioteca
+ramancarbon drx-lote datos/ --csv fases.csv
+```
+
+**Una fase es una estructura, no una lista de picos.** Cada posición e
+intensidad sale del cálculo del factor de estructura, así que refinar un
+parámetro de red mueve los picos como los movería la física. Las referencias
+son archivos CIF: para añadir una fase, descárgala de la Crystallography Open
+Database y suelta el archivo en una carpeta.
+
+No hay búsqueda en línea en la COD, y es deliberado: un resultado que depende
+de la red no se reproduce, y los ordenadores de los equipos suelen estar sin
+conexión.
+
+Vienen incluidas 14 estructuras de partida (grafito, las dos fases del FeSe,
+FeSe₂, Se, Fe, Fe₃C, magnetita, hematita, MoS₂, MoSe₂, WS₂, MoO₂ y silicio
+como patrón de calibración), **validadas de dos formas independientes**: la
+densidad cristalográfica frente a la literatura, que comprueba celda y
+contenido a la vez, y la posición de la reflexión más intensa frente a su
+ficha.
+
+Lo que hace además de identificar:
+
+* **Ajusta el cero antes de juzgar nada.** Una muestra 0.1 mm alta desplaza
+  todos los picos unas centésimas de grado, y un comparador con ventana
+  estrecha rechaza entonces la fase correcta.
+* **Pela el Kα₂** (Rachinger) antes de buscar picos. Sin eso, por encima de
+  40° cada reflexión se encuentra dos veces y las sobrantes parecen una fase
+  desconocida.
+* **Separa posiciones de intensidades.** Las posiciones solo dependen de la
+  red y son prueba fuerte; las intensidades las estropea la orientación
+  preferente en cualquier material laminar, así que un acuerdo bajo de
+  intensidades suele ser textura, no una fase equivocada.
+* **Refina por etapas.** Escala y fondo, cero, celda, anchura, perfil,
+  textura, y al final desplazamiento de muestra y U_iso. Soltarlo todo a la
+  vez converge, da factores R plausibles y devuelve una estructura
+  equivocada. También se puede refinar a mano, parámetro a parámetro.
+* **Pone la curva diferencia antes que los factores R**, con el estadístico
+  de rachas de signo. Un Rwp bonito con una ondulación sistemática en el
+  residuo es peor ajuste que un Rwp feo con residuo sin estructura.
+
+## Electroquímica
+
+```bash
+ramancarbon echem --cv cv.txt --velocidad 20 --masa 2 --area 1
+ramancarbon echem --gcd gcd.txt --eis eis.txt --masa 2 --circuito "R0-(R1|Q1)-Q2"
+ramancarbon echem --polarizacion lsv.txt --reaccion OER --ph 14 --resistencia 3
+```
+
+**Lo primero que dice es qué clase de material tienes**, porque eso decide si
+las magnitudes de abajo son las correctas:
+
+```
+Mecanismo de almacenamiento: Tipo batería (faradaico con difusión) (confianza alta)
+  Magnitud correcta para informar: capacidad (C/g o mAh/g), NUNCA F/g
+  A favor:
+    · picos redox estrechos (52 mV sobre una ventana de 604 mV) y 4.5 veces el fondo
+    · la descarga tiene meseta (R² lineal = 0.859)
+    · b = 0.52, cerca de 0.5: corriente controlada por difusión
+
+  ⚠ Este electrodo NO debe informarse en F/g.
+```
+
+Lo demás:
+
+* **Capacitancia en los dos convenios**, cada uno con su nombre. Integrar el
+  lazo cerrado y dividir por 2νΔV, o integrar la rama anódica y dividir por
+  νΔV: publicar sin decir cuál deja un factor 2 de ambigüedad.
+* **Estudio de velocidad**: b de `i = a·ν^b` a lo largo de la ventana, reparto
+  capacitivo/difusivo de Dunn, Trasatti, y C_dl → ECSA **con el factor de tres**
+  que arrastra la Cs que se adopte.
+* **Carga-descarga**: caída IR medida y quitada de la ventana, capacitancia y
+  capacidad, eficiencia culómbica y energética, energía **integrada** (∫V dq,
+  válida también para una meseta) y potencia.
+* **Impedancia**: circuitos escritos como `R0-(R1|Q1)-Wo1`, ajuste no lineal
+  complejo en espacio logarítmico con reinicios, y **Kramers-Kronig antes que
+  el circuito** — un ajuste a datos que derivaron durante la medida da
+  parámetros sin significado y el χ² no lo delata.
+* **HER y OER**: sobrepotencial al punto de comparación, pendiente de Tafel
+  con la región lineal **buscada** y no supuesta, corriente de intercambio,
+  actividad másica y normalización por ECSA. Se niega a dar una pendiente
+  ajustada sobre menos de una década.
+
 ## Limitaciones — léelas
 
 * **Todo se ha validado contra datos sintéticos**, generados por el propio
@@ -371,7 +560,21 @@ ajuste. El programa avisa.
   lorentzianas. Nada de eso está en las pruebas. Contrasta con patrones
   propios antes de fiarte de un número para publicar.
 * **No lee formatos binarios de fabricante** (Renishaw `.wxd`, Thermo
-  `.spa`, Bruker `.opus`). Expórtalos como texto.
+  `.spa`, Bruker `.opus`, Bruker `.raw`/`.brml` en difracción). Expórtalos
+  como texto; el programa dice qué formato es y qué exportar.
+* **En difracción no hay dispersión anómala (f′, f″).** El efecto en las
+  intensidades calculadas es de un pequeño porcentaje. Lo que de verdad
+  arruina una muestra de hierro con tubo de cobre es la fluorescencia, que
+  sube el fondo y no toca los picos, y de eso sí avisa.
+* **Las fracciones en peso de Rietveld son de la parte cristalina e
+  identificada.** Una fase que no hayas modelado no baja el total de 100 %:
+  su intensidad se reparte entre las que sí están. El amorfo no aparece.
+* **El ECSA arrastra un factor de tres** por la capacitancia específica que
+  se adopte. Sirve para comparar tus muestras entre sí, no contra la
+  literatura.
+* **Raman no ve topología.** Un MoO₃@MoSe₂ y una mezcla física de polvos dan
+  el mismo espectro puntual. Lo que sí se mide es la deformación del
+  calcogenuro, que es indicio y no prueba.
 * **La asignación de quiralidad devuelve un conjunto, no una respuesta.**
   Fijar `(n,m)` requiere la condición de resonancia (Kataura), y eso
   necesita medir con varios láseres.
@@ -413,10 +616,38 @@ ajuste. El programa avisa.
 * [**Guía de desarrollo**](DESARROLLO.md) — arquitectura, pruebas, dónde
   tocar cada cosa.
 
+## Ejemplos ejecutables
+
+Cada uno demuestra una cosa concreta, con números:
+
+```bash
+python -m ramancarbon.examples.ex01_analizar        # el análisis completo
+python -m ramancarbon.examples.ex02_deconvolucion   # modelos de 2 a 5 bandas
+python -m ramancarbon.examples.ex03_diametros       # RBM → diámetro
+python -m ramancarbon.examples.ex04_dopado          # deformación vs dopado
+python -m ramancarbon.examples.ex07_dos_laseres     # dispersión
+python -m ramancarbon.examples.ex08_ruido_y_fluorescencia
+python -m ramancarbon.examples.ex10_tmd             # contar capas
+python -m ramancarbon.examples.ex11_fases           # FeSe: cinco diámetros falsos
+python -m ramancarbon.examples.ex12_drx             # Rietveld de ida y vuelta
+python -m ramancarbon.examples.ex13_echem           # F/g cuando no toca
+```
+
+`ex11`, `ex12` y `ex13` son los que más rápido explican por qué el programa
+hace lo que hace:
+
+* **ex11** analiza el mismo espectro con y sin el escaneo de fases. Sin él
+  salen cinco diámetros de nanotubo creíbles en una muestra que no tiene ni
+  uno.
+* **ex12** calcula un difractograma de tres fases y lo refina: las celdas
+  vuelven con seis cifras.
+* **ex13** pone tres electrodos con ~25 F/g cada uno al lado y explica cuál
+  de ellos no debe informarse así.
+
 ## Pruebas
 
 ```bash
-pytest ramancarbon/tests -q
+pytest ramancarbon/tests -q            # ~620 pruebas
 ```
 
 ## Licencia

@@ -4,15 +4,21 @@ Para quien vaya a tocar el código — persona o asistente.
 
 ## Arquitectura
 
-Cuatro capas, cada una usable por separado, con dependencias en un solo
-sentido:
+Cuatro instrumentos sobre una base común. Cada capa es usable por separado
+y las dependencias van en un solo sentido:
 
 ```
-core      ──▶  models  ──▶  analysis  ──▶  gui / cli
-  │              │             ▲
-  └──────────────┴─────────────┘
-                database
+                        ┌──▶  analysis  ──┐          (Raman)
+core   ──▶  models  ────┤                 ├──▶  gui / cli
+  │           │         ├──▶  xrd  ───────┤          (difracción)
+  │           │         └──▶  echem  ─────┘          (electroquímica)
+  └───────────┴─────────────────┬─────────┘
+                            database
 ```
+
+`xrd` y `echem` son hermanos de `analysis`, no capas por encima: comparten
+`core` (la línea base asimétrica, el shim de `trapezoid`) y `database` (los
+JSON), y no se importan entre sí.
 
 * **`core`** — `Spectrum`, lectura de archivos, línea base, despiking,
   detección de picos. No sabe nada de carbono.
@@ -20,9 +26,18 @@ core      ──▶  models  ──▶  analysis  ──▶  gui / cli
   concretas salvo por lo que le pasa `deconvolution`.
 * **`database`** — los JSON y su API tipada. **No importa nada del resto.**
 * **`analysis`** — asignación, cocientes, diámetros, desplazamientos,
-  clasificador, y `report.analyse` que los encadena.
-* **`gui` / `cli`** — presentación. Toda la lógica de la interfaz vive en
-  `gui/state.py` y `gui/plots.py`, **sin Tkinter**, para que se pueda probar
+  clasificador, fases no carbonosas, dicalcogenuros y heteroestructuras, y
+  `report.analyse` que los encadena.
+* **`xrd`** — simetría, estructuras, CIF, factores de forma, patrón
+  calculado, búsqueda de fases y Rietveld. No hay tablas de posiciones de
+  pico: todo se calcula de la estructura.
+* **`echem`** — curvas, lectores de potenciostato, CV, carga-descarga,
+  impedancia con circuitos equivalentes, mecanismo de almacenamiento y
+  electrocatálisis.
+* **`gui` / `cli`** — presentación. La ventana es una suite de cuatro
+  secciones (`gui/suite.py`) sobre `gui/base.py`, y toda la lógica vive en
+  `gui/state.py`, `gui/xrd_state.py`, `gui/echem_state.py` y los módulos de
+  `plots*`, **sin Tkinter**, para que se pueda probar
   sin pantalla.
 
 ## Reglas
@@ -111,23 +126,50 @@ incorrecto durante el desarrollo. Están cubiertas por pruebas.
 | Un preajuste de deconvolución | `models/deconvolution.py`: `PRESETS`, `PRESET_BANDS`, `PRESET_WINDOWS`, `PRESET_LABELS` |
 | Una regla del clasificador | `analysis/classify.py`, con su `Evidence` y su peso en `WEIGHTS` |
 | Un formato de archivo | `core/io.py` |
-| Una pestaña de la interfaz | `gui/app.py` (widgets) + `gui/state.py` (lógica) |
+| Una pestaña de la interfaz | el `*_app.py` de su sección (widgets) + su `*_state.py` (lógica) |
+| Una sección nueva de la suite | `gui/suite.py`: `SECTIONS` y `_ensure` |
 | Un subcomando | `cli/main.py` |
 | Un índice estructural | `analysis/indices.py` |
 | Una firma de dopante | `database/data/perturbations.json` → `dopants` |
 | Un formato de exportación | `analysis/export.py` |
+| Una fase no carbonosa (Raman) | `database/data/phases.json` |
+| Un óxido que acompaña a un TMD | `database/data/tmd.json` → `oxides` |
+| **Una fase de referencia de DRX** | suelta su CIF en una carpeta y pásala con `--cif`; para incluirla, `database/data/cif/` y su generador |
+| Un elemento de circuito equivalente | `echem/eis.py`: `ELEMENTS` |
+| Un electrodo de referencia | `database/data/echem.json` |
 
 ## Pruebas
 
 ```bash
-pytest ramancarbon/tests -q            # ~200 pruebas, unos 15 s
+pytest ramancarbon/tests -q            # ~620 pruebas, unos 6 min
 pytest ramancarbon/tests -q -k rbm     # solo lo del RBM
+pytest ramancarbon/tests -q -k "xrd or rietveld"
+pytest ramancarbon/tests -q -k echem
 ruff check ramancarbon                 # estilo
 ```
 
 La interfaz gráfica no se puede probar sin pantalla, así que toda su lógica
-está en `gui/state.py` y su dibujo en `gui/plots.py`, y ambos sí se prueban
-(con el backend `Agg`). Lo único sin cubrir es el cableado de Tkinter.
+está en los `*_state.py` y su dibujo en los `plots*.py`, y ambos sí se
+prueban (con el backend `Agg`). Del cableado de Tkinter hay dos cosas:
+comprobaciones **estáticas** en `test_gui_wiring.py` — cada lienzo tiene su
+dibujante y su pestaña, cada `command=` nombra un método real, cada
+`self.x` que se lee se asigna en algún sitio — y una prueba que **abre la
+ventana de verdad**, recorre las cuatro secciones y ejecuta sus análisis,
+que se salta sola donde no hay Tkinter ni pantalla. Para ejecutarla donde
+tu Python no trae Tkinter:
+
+```bash
+python3.12 -m venv --system-site-packages /tmp/guienv
+/tmp/guienv/bin/pip install numpy scipy matplotlib pytest
+xvfb-run -a /tmp/guienv/bin/python -m pytest ramancarbon/tests/test_gui_wiring.py -q
+```
+
+Muchas pruebas son **viajes de ida y vuelta**: el generador de datos
+sintéticos construye la señal a partir de la física que se quiere medir, y
+el análisis tiene que devolver los mismos números. Una capacitancia de
+50 mF vuelve como 50 mF; una pendiente de Tafel de 60 mV/dec vuelve como
+60.4; los parámetros de red de un difractograma calculado vuelven con seis
+cifras. Cuando eso falla, falla por una razón concreta.
 
 ## Lo que falta por validar
 

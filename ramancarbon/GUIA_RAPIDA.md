@@ -44,12 +44,21 @@ source .venv/bin/activate        # Linux / macOS
 ## 2. Probarlo sin tener datos
 
 ```
-ramancarbon demo datos_prueba/
+ramancarbon demo datos_prueba/          # espectros Raman de carbono
+ramancarbon demo datos_tmd/ --tmd       # dicalcogenuros, con óxidos
+ramancarbon demo-datos drx datos_drx/   # difractogramas
+ramancarbon demo-datos echem datos_ec/  # CV, carga-descarga, impedancia
 ```
 
-Eso escribe seis espectros **sintéticos** (SWCNT, SWCNT metálico, DWCNT,
-MWCNT, grafeno y óxido de grafeno) en la carpeta `datos_prueba/`. No son
-medidas reales: sirven para ver cómo funciona todo antes de meter tus datos.
+Eso escribe datos **sintéticos** de cada instrumento. Los espectros de
+carbono son ocho (SWCNT, SWCNT metálico, DWCNT, MWCNT, grafeno, óxido de
+grafeno, y dos con FeSe y con selenio encima); los difractogramas están
+*calculados* a partir de estructuras cristalinas reales; y las curvas
+electroquímicas salen de la física que se quiere probar, no dibujadas.
+
+No son medidas reales: sirven para ver cómo funciona todo antes de meter tus
+datos. Cada sección de la ventana tiene además un botón **Demo** que los carga
+sin pasar por archivos.
 
 ---
 
@@ -59,7 +68,20 @@ medidas reales: sirven para ver cómo funciona todo antes de meter tus datos.
 ramancarbon-gui
 ```
 
-La ventana tiene la lista de espectros a la izquierda y seis pestañas:
+La ventana tiene **cuatro secciones** arriba, una por instrumento:
+
+| Sección | Para qué |
+|---------|----------|
+| **Raman · carbono** | Nanotubos, grafeno, carbones |
+| **Raman · TMD** | MoS₂, WS₂, MoSe₂… y sus óxidos |
+| **DRX** | Difracción: fases y Rietveld |
+| **Electroquímica** | CV, carga-descarga, impedancia, HER/OER |
+
+Las dos secciones Raman **comparten la lista de espectros**: un archivo que
+cargues en una aparece en la otra.
+
+La sección de carbono tiene la lista de espectros a la izquierda y estas
+pestañas:
 
 | Pestaña | Para qué |
 |---------|----------|
@@ -162,6 +184,25 @@ ramancarbon bd                          # todas las bandas
 ramancarbon bd --banda 2D --laser 785   # una banda, corregida a tu láser
 ramancarbon bd --rbm                    # relaciones RBM ↔ diámetro
 ramancarbon bd --materiales             # huellas de referencia
+
+# Dicalcogenuros
+ramancarbon tmd mos2.txt
+ramancarbon tmd --listar
+
+# Difracción
+ramancarbon drx patron.xye --textura 001
+ramancarbon drx patron.xye --sin-refinar --breve      # solo identificar
+ramancarbon drx patron.xye --cif mis_cifs/            # con tus CIF
+ramancarbon drx --biblioteca                          # qué fases hay
+ramancarbon drx-lote datos/ --csv fases.csv
+
+# Electroquímica
+ramancarbon echem --cv cv.txt --velocidad 20 --masa 2 --area 1
+ramancarbon echem --velocidades cv_*.txt --masa 2     # estudio de velocidad
+ramancarbon echem --gcd gcd.txt --masa 2 --csv fila.csv
+ramancarbon echem --eis eis.txt --circuito "R0-(R1|Q1)-Q2"
+ramancarbon echem --polarizacion lsv.txt --reaccion OER \
+                  --referencia RHE --area 1 --resistencia 3
 ```
 
 Con `--base height` los cocientes se calculan con alturas de pico en vez de
@@ -183,6 +224,18 @@ Cualquier archivo de texto con dos columnas numéricas: `.txt`, `.csv`,
 
 **No lee formatos binarios de fabricante** (Renishaw `.wxd`, Thermo `.spa`,
 Bruker `.opus`). Expórtalos como ASCII desde el programa del equipo.
+
+**Difracción**: `.xy`, `.xye` (con e.s.d.), `.dat`, `.txt`, `.asc`, `.csv`,
+`.xrdml` (PANalytical) y `.uxd` (Bruker). Los binarios (`.raw`, `.brml`) hay
+que exportarlos; el programa dice cuál es y qué hacer en vez de intentar
+adivinarlo.
+
+**Electroquímica**: cualquier exportación de texto del potenciostato, con o
+sin cabecera. Lee los nombres de columna habituales (`Ewe/V`, `<I>/mA`,
+`time/s`, `Zre/ohm`…) **con sus unidades**, que es donde está el problema: un
+potenciostato exporta amperios o miliamperios según cómo estuviera la
+pantalla, y una capacitancia calculada con miliamperios tomados por amperios
+sale mil veces mayor. Si el archivo no declara unidades, dilas tú.
 
 ---
 
@@ -228,7 +281,7 @@ dice con un ✗ y explica qué revisar. No promedies: uno de los dos está mal.
 
 ## 7. Si mides dicalcogenuros (MoS₂, WS₂…)
 
-Pestaña **TMD**. Carga el espectro (tiene que cubrir al menos 100–500 cm⁻¹) y
+Sección **Raman · TMD**. Carga el espectro (tiene que cubrir al menos 100–500 cm⁻¹) y
 pulsa *Analizar como TMD*.
 
 Cuenta capas por la **separación** entre el modo E₂g y el A₁g, que crece al
@@ -246,6 +299,81 @@ Dos avisos importantes:
 
 Si ves fotoluminiscencia enorme midiendo MoS₂ monocapa a 532 nm, no es
 suciedad: la monocapa emite a ~1.85 eV. Prueba con 633 nm.
+
+**Si tu muestra tiene óxido** (un MoO₃@MoSe₂, por ejemplo), el panel de la
+derecha lo identifica y dice qué implica. Para eso hay que **medir hasta al
+menos 1050 cm⁻¹**: las líneas que identifican un óxido sin ambigüedad (819 y
+995 del MoO₃, 744 del MoO₂, 807 del WO₃) están ahí arriba, y sin esa región
+«no hay óxido» no significa nada.
+
+Y ojo con una cosa: un óxido puede venir del precursor, del aire, o **del
+propio láser durante la medida**. Compruébalo repitiendo en un punto virgen a
+la mitad de potencia: si las bandas del óxido crecen con el tiempo de
+exposición, lo estás fabricando tú y los cocientes de esa medida no valen.
+
+---
+
+## 7b. Si mides difracción de rayos X
+
+Sección **DRX**.
+
+1. **Configura el equipo** en la barra lateral: ánodo (casi siempre Cu),
+   proporción Kα₂ (0.5 salvo que tengas monocromador, donde va a 0), y la
+   FWHM instrumental si vas a citar tamaños de cristalito.
+2. **Carga el difractograma**. Lee `.xy`, `.xye`, `.dat`, `.txt`, `.asc`,
+   `.csv`, `.xrdml` de PANalytical y `.uxd` de Bruker. Los binarios de
+   fabricante (`.raw`, `.brml`) hay que exportarlos como texto: el programa
+   te dice qué formato es y qué hacer.
+3. **Identificar fases**. Mira la pestaña *Difractograma* y en particular los
+   picos marcados **SIN EXPLICAR**: no son un resto, son la fase que no
+   esperabas.
+4. Si te falta una fase, ve a la pestaña *Biblioteca*, descarga su CIF de
+   [crystallography.net](https://www.crystallography.net/cod/) y añade la
+   carpeta con *Añadir carpeta de CIF*.
+5. **Refinamiento automático** hace el protocolo por etapas. Si quieres
+   controlarlo, *Preparar manual* y libera los grupos de parámetros en ese
+   orden, refinando entre uno y otro.
+
+Antes de creerte una fracción en peso:
+
+* Mira la **curva diferencia**, no los factores R. Un Rwp bonito con una
+  ondulación sistemática en el residuo es peor que un Rwp feo con residuo
+  plano.
+* Si tu material es laminar (grafito, MoS₂, arcillas), escribe el **eje de
+  textura** (`001`) o la orientación preferente acabará absorbida por el
+  U_iso y las fracciones saldrán mal.
+* Las fracciones son de la parte **cristalina e identificada**. Una fase que
+  no hayas modelado no baja el total de 100 %.
+
+---
+
+## 7c. Si mides electroquímica
+
+Sección **Electroquímica**. Una sesión es **un electrodo** con todas sus
+medidas.
+
+1. **Rellena el electrodo** primero: masa de material **activo** (no la del
+   electrodo: el aglomerante y el carbón conductor suelen ser el 20 %), área
+   geométrica, electrodo de referencia **con su relleno** (Ag/AgCl 3 M y
+   saturado están a 13 mV), pH y resistencia no compensada.
+2. **Carga las medidas** que tengas. Cuantas más, mejor: el mecanismo se
+   decide con más confianza y aparecen las comprobaciones cruzadas.
+3. **Analizar**.
+
+Lo primero que verás es el **mecanismo**, y no es decorativo: si tu material
+es de tipo batería, la magnitud correcta es la capacidad (C/g o mAh/g) y
+**no** la capacitancia en F/g. El programa lo dice explícitamente.
+
+Tres cosas que hay que saber:
+
+* Sin **pH** no hay conversión a RHE, y sin RHE no hay sobrepotencial. El
+  programa se niega a suponerlo: son 59 mV por unidad de pH.
+* Sin **resistencia no compensada** no hay corrección óhmica, y el sesgo
+  crece con la corriente: tu catalizador parece peor de lo que es justo donde
+  más importa.
+* Para el **ECSA**, marca la casilla de que la ventana no tiene corriente
+  faradaica — y elige de verdad una que no la tenga, típicamente ±50 mV
+  alrededor del potencial de circuito abierto.
 
 ## 8. Antes de creerte un número
 

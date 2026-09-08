@@ -101,18 +101,29 @@ Sabrás que está activo porque el prompt empieza por `(.venv)`.
 Y luego:
 
 ```bash
-ramancarbon-gui                  # la interfaz gráfica
+ramancarbon-gui                  # la suite entera
 ```
 
-Para probarlo sin tener datos tuyos todavía:
+Se abre una ventana con **cuatro secciones**: Raman de carbono, Raman de
+dicalcogenuros, difracción de rayos X y electroquímica. Cada una tiene un
+botón **Demo** que carga datos de prueba.
+
+Para probarlo desde la terminal, sin tener datos tuyos todavía:
 
 ```bash
-ramancarbon demo datos_prueba/          # 6 espectros de carbono
-ramancarbon demo datos_tmd/ --tmd       # 6 espectros de dicalcogenuros
+ramancarbon demo datos_prueba/          # 8 espectros Raman de carbono
+ramancarbon demo datos_tmd/ --tmd       # dicalcogenuros, con óxidos
+ramancarbon demo-datos drx datos_drx/   # difractogramas
+ramancarbon demo-datos echem datos_ec/  # CV, carga-descarga, impedancia
+
+ramancarbon analizar datos_prueba/demo_MWCNT_FeSe_532nm.txt --laser 532
+ramancarbon drx datos_drx/demo_drx_CNT_FeSe.xye
+ramancarbon echem --cv datos_ec/demo_cv_condensador_20mVs.txt --masa 2 --area 1
 ```
 
-Son espectros **sintéticos**, generados por el programa. Sirven para ver cómo
-funciona todo antes de meter tus medidas.
+Son datos **sintéticos**, generados por el programa a partir de la física que
+se quiere probar. Sirven para ver cómo funciona todo antes de meter tus
+medidas.
 
 ---
 
@@ -194,4 +205,5 @@ Borra la carpeta. No hay nada fuera de ella.
 | Dependencias | `numpy` ≥ 1.24, `scipy` ≥ 1.10, `matplotlib` ≥ 3.7 |
 | Interfaz gráfica | Tkinter (viene con Python; en Linux se instala aparte) |
 | Espacio en disco | ~200 MB con el entorno virtual |
+| Instrumentos | Raman (carbono y TMD), difracción de rayos X, electroquímica |
 | Sistemas | Windows, macOS, Linux |

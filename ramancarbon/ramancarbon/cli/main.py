@@ -632,16 +632,261 @@ def cmd_demo(args) -> int:
 
 
 # ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# diffraction
+# ----------------------------------------------------------------------
+def cmd_drx(args) -> int:
+    """Identify phases in a diffractogram and, optionally, refine them."""
+    from ..xrd.io import read_pattern
+    from ..xrd.reference import describe_library, library_crystals
+    from ..xrd.report import analyse_pattern
+
+    if args.biblioteca:
+        print(describe_library(args.cif or None))
+        return 0
+
+    pattern = read_pattern(
+        args.patron,
+        wavelength=args.longitud,
+        anode=args.anodo,
+        counts=not args.sin_cuentas,
+        kalpha2_ratio=args.kalfa2,
+    )
+    candidates = None
+    if args.fases:
+        candidates = library_crystals(args.cif or None, only=args.fases)
+        if not candidates:
+            print(f"error: ninguna de las fases {args.fases} está en la biblioteca",
+                  file=sys.stderr)
+            return 1
+
+    axis = None
+    if args.textura:
+        text = args.textura.replace(",", " ").split()
+        if len(text) == 1 and len(text[0]) == 3:
+            text = list(text[0])
+        try:
+            axis = tuple(int(v) for v in text)
+        except ValueError:
+            print(f"error: eje de textura ilegible: {args.textura!r}", file=sys.stderr)
+            return 1
+        if len(axis) != 3:
+            print("error: el eje de textura necesita tres índices", file=sys.stderr)
+            return 1
+
+    result = analyse_pattern(
+        pattern,
+        candidates=candidates,
+        extra_directories=args.cif or None,
+        refine=not args.sin_refinar,
+        max_phases=args.max_fases,
+        preferred_axis=axis,
+        instrument_fwhm=args.resolucion,
+    )
+    text = result.report(verbose=not args.breve)
+    print(text)
+
+    if args.salida:
+        destination = Path(args.salida)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(text, encoding="utf-8")
+        print(f"\nInforme escrito en {destination}")
+    if args.figura and result.refinement is not None:
+        from ..gui.plots_xrd import figure_for_report
+        from ..gui.theme import LIGHT
+
+        path = Path(args.figura)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        figure_for_report(result.refinement, LIGHT).savefig(path, dpi=200)
+        print(f"Figura escrita en {path}")
+    if args.calculado and result.refinement is not None:
+        path = Path(args.calculado)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines = ["# 2theta  observado  calculado  diferencia  fondo"]
+        refinement = result.refinement
+        for angle, observed, calculated, difference, background in zip(
+            pattern.two_theta, pattern.intensity, refinement.calculated,
+            refinement.difference, refinement.background,
+        ):
+            lines.append(
+                f"{angle:10.5f} {observed:14.4f} {calculated:14.4f} "
+                f"{difference:14.4f} {background:14.4f}"
+            )
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print(f"Patrón calculado escrito en {path}")
+    return 0
+
+
+def cmd_drx_lote(args) -> int:
+    """Analyse a folder of diffractograms and dump one CSV row each."""
+    from ..xrd.io import read_pattern
+    from ..xrd.report import analyse_pattern
+
+    folder = Path(args.carpeta)
+    if not folder.is_dir():
+        print(f"error: {folder} no es una carpeta", file=sys.stderr)
+        return 1
+    suffixes = {".xy", ".xye", ".dat", ".txt", ".asc", ".csv", ".xrdml", ".uxd"}
+    paths = sorted(p for p in folder.iterdir() if p.suffix.lower() in suffixes)
+    if not paths:
+        print(f"error: no hay difractogramas en {folder}", file=sys.stderr)
+        return 1
+
+    rows = []
+    for path in paths:
+        try:
+            pattern = read_pattern(path, wavelength=args.longitud, anode=args.anodo)
+            result = analyse_pattern(
+                pattern, extra_directories=args.cif or None,
+                refine=not args.sin_refinar,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"  ✗ {path.name}: {exc}", file=sys.stderr)
+            continue
+        rows.append(result.to_dict())
+        print(f"  ✓ {path.name}: {rows[-1].get('fases') or 'sin fases'}")
+
+    if not rows:
+        print("error: no se ha podido analizar ningún difractograma", file=sys.stderr)
+        return 1
+    columns: list[str] = []
+    for row in rows:
+        for key in row:
+            if key not in columns:
+                columns.append(key)
+    destination = Path(args.csv)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("w", encoding="utf-8") as handle:
+        handle.write(",".join(columns) + "\n")
+        for row in rows:
+            handle.write(",".join(_csv_cell(row.get(c)) for c in columns) + "\n")
+    print(f"\n{len(rows)} difractograma(s) → {destination}")
+    return 0
+
+
+# ----------------------------------------------------------------------
+# electrochemistry
+# ----------------------------------------------------------------------
+def cmd_echem(args) -> int:
+    """Analyse the electrochemistry of one electrode."""
+    from ..echem.curve import Electrode
+    from ..echem.io import read_cv, read_eis, read_gcd
+    from ..echem.report import analyse_sample
+
+    electrode = Electrode(
+        mass_mg=args.masa,
+        area_cm2=args.area,
+        reference=args.referencia,
+        ph=args.ph,
+        resistance_ohm=args.resistencia,
+        label=args.nombre,
+    )
+    rate = args.velocidad / 1000.0 if args.velocidad else None
+
+    cv = read_cv(args.cv, scan_rate=rate, electrode=electrode) if args.cv else None
+    series = [
+        read_cv(path, electrode=electrode)
+        for path in (args.velocidades or [])
+    ]
+    gcd = (
+        read_gcd(args.gcd, electrode=electrode,
+                 current=args.corriente / 1000.0 if args.corriente else None)
+        if args.gcd else None
+    )
+    eis = read_eis(args.eis, electrode=electrode) if args.eis else None
+    lsv = read_cv(args.polarizacion, scan_rate=0.005, electrode=electrode) \
+        if args.polarizacion else None
+
+    if not any((cv, series, gcd, eis, lsv)):
+        print(
+            "error: no se ha dado ninguna medida. Usa --cv, --gcd, --eis, "
+            "--velocidades o --polarizacion",
+            file=sys.stderr,
+        )
+        return 1
+
+    result = analyse_sample(
+        name=args.nombre,
+        cv=cv,
+        rate_series=series or None,
+        gcd=gcd,
+        eis=eis,
+        catalysis_curve=lsv,
+        reaction=args.reaccion,
+        circuit=args.circuito,
+        non_faradaic=args.sin_faradaica,
+    )
+    text = result.report(verbose=not args.breve)
+    print(text)
+
+    if args.salida:
+        destination = Path(args.salida)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(text, encoding="utf-8")
+        print(f"\nInforme escrito en {destination}")
+    if args.csv:
+        row = result.to_dict()
+        destination = Path(args.csv)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            ",".join(row) + "\n" + ",".join(_csv_cell(v) for v in row.values()) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Tabla escrita en {destination}")
+    return 0
+
+
+def cmd_demo_datos(args) -> int:
+    """Write synthetic diffractograms or electrochemistry files."""
+    folder = Path(args.carpeta)
+    folder.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+
+    if args.tipo == "drx":
+        from ..examples.demo_data import xrd_demo_spectra
+        from ..xrd.io import write_pattern
+
+        for pattern in xrd_demo_spectra(seed=3):
+            written.append(write_pattern(pattern, folder / f"{pattern.name}.xye"))
+    else:
+        from ..echem.io import write_cv, write_eis, write_gcd
+        from ..examples.demo_data import (
+            ECHEM_DEMOS,
+            cv_rate_series,
+            make_eis_demo,
+            make_gcd_demo,
+            make_lsv_demo,
+        )
+
+        for kind in ECHEM_DEMOS:
+            for curve in cv_rate_series(kind, seed=2):
+                written.append(write_cv(curve, folder / f"{curve.name}.txt"))
+            gcd = make_gcd_demo(kind, seed=1)
+            written.append(write_gcd(gcd, folder / f"{gcd.name}.txt"))
+        spectrum = make_eis_demo("R0-(R1|Q1)-Q2", seed=3)
+        written.append(write_eis(spectrum, folder / "demo_eis.txt"))
+        lsv = make_lsv_demo("OER", seed=1)
+        written.append(write_cv(lsv, folder / f"{lsv.name}.txt"))
+
+    for path in written:
+        print(f"  {path}")
+    print(f"\n{len(written)} archivo(s) escritos en {folder}")
+    print(
+        "\nSon datos SINTÉTICOS, calculados de la física que se quiere probar. "
+        "No son medidas."
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Construct the argument parser."""
     parser = argparse.ArgumentParser(
         prog="ramancarbon",
         description=(
-            "Análisis de espectros Raman de nanomateriales de carbono y de "
-            "dicalcogenuros: "
-            "identificación SWCNT/DWCNT/MWCNT, deconvolución de las bandas D y "
-            "G, cocientes I_D/I_G, I_2D/I_G e I_D/I_D', diámetros por RBM y "
-            "desplazamientos frente a la literatura."
+            "Caracterización de nanomateriales: Raman de carbono y de "
+            "dicalcogenuros, difracción de rayos X con identificación de fases "
+            "y refinamiento Rietveld, y electroquímica (CV, carga-descarga, "
+            "impedancia, HER/OER)."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -659,6 +904,17 @@ def build_parser() -> argparse.ArgumentParser:
             "  ramancarbon tmd mos2.txt\n"
             "  ramancarbon bd --banda 2D --laser 785\n"
             "  ramancarbon demo salida/\n"
+            "\n"
+            "  ramancarbon drx patron.xy --cif mis_cifs/ --textura 001\n"
+            "  ramancarbon drx patron.xy --sin-refinar --breve\n"
+            "  ramancarbon drx --biblioteca\n"
+            "  ramancarbon drx-lote datos/ --csv fases.csv\n"
+            "\n"
+            "  ramancarbon echem --cv cv.txt --velocidad 20 --masa 2 --area 1\n"
+            "  ramancarbon echem --gcd gcd.txt --masa 2 --eis eis.txt\n"
+            "  ramancarbon echem --polarizacion lsv.txt --reaccion OER \\\n"
+            "                    --ph 14 --area 1 --resistencia 3\n"
+            "  ramancarbon demo-datos drx prueba_drx/\n"
         ),
     )
     sub = parser.add_subparsers(dest="comando", required=True)
@@ -817,7 +1073,117 @@ def build_parser() -> argparse.ArgumentParser:
                    help="generar espectros de dicalcogenuros en vez de carbono")
     p.set_defaults(func=cmd_demo)
 
+    p = sub.add_parser(
+        "drx", help="identificar fases en un difractograma y refinar (Rietveld)"
+    )
+    p.add_argument("patron", nargs="?", default=None,
+                   help="difractograma (.xy, .xye, .dat, .txt, .xrdml, .uxd)")
+    p.add_argument("--anodo", default="Cu", metavar="ELEMENTO",
+                   help="ánodo del tubo: Cu, Co, Fe, Mo, Cr, Ag (por defecto Cu)")
+    p.add_argument("--longitud", type=float, default=None, metavar="A",
+                   help="longitud de onda Kα₁ en Å; anula la del archivo. Una λ "
+                        "equivocada escala TODA la celda por el mismo factor y "
+                        "nada en el ajuste protesta")
+    p.add_argument("--kalfa2", type=float, default=0.5, metavar="R",
+                   help="intensidad de Kα₂ respecto a Kα₁ (0.5 por defecto; "
+                        "pon 0 con monocromador o en sincrotrón)")
+    p.add_argument("--sin-cuentas", action="store_true",
+                   help="los datos NO son cuentas crudas (ya restados o "
+                        "escalados), así que √N no es su incertidumbre")
+    p.add_argument("--cif", action="append", default=None, metavar="CARPETA",
+                   help="carpeta con CIF de referencia; repetible. Descárgalos "
+                        "de la Crystallography Open Database")
+    p.add_argument("--fases", nargs="+", default=None, metavar="NOMBRE",
+                   help="probar solo estas fases de la biblioteca")
+    p.add_argument("--max-fases", type=int, default=4, metavar="N",
+                   help="número máximo de fases a aceptar (4 por defecto)")
+    p.add_argument("--textura", default=None, metavar="HKL",
+                   help="eje de orientación preferente, p. ej. 001. Sin él no "
+                        "se refina textura, y en un material laminar acaba "
+                        "absorbida por el U_iso")
+    p.add_argument("--resolucion", type=float, default=0.06, metavar="GRADOS",
+                   help="FWHM instrumental para Scherrer (0.06 por defecto). "
+                        "Mídela con un patrón; un tamaño citado contra una "
+                        "resolución supuesta es la suposición")
+    p.add_argument("--sin-refinar", action="store_true",
+                   help="solo identificar fases, sin Rietveld")
+    p.add_argument("--biblioteca", action="store_true",
+                   help="listar las fases de referencia disponibles y salir")
+    p.add_argument("--salida", default=None, metavar="ARCHIVO",
+                   help="escribir el informe en un archivo")
+    p.add_argument("--figura", default=None, metavar="PNG",
+                   help="guardar el gráfico de Rietveld con su diferencia")
+    p.add_argument("--calculado", default=None, metavar="ARCHIVO",
+                   help="volcar observado, calculado, diferencia y fondo")
+    p.add_argument("--breve", action="store_true", help="omitir los avisos")
+    p.set_defaults(func=cmd_drx)
+
+    p = sub.add_parser("drx-lote", help="analizar una carpeta de difractogramas")
+    p.add_argument("carpeta", help="carpeta con los difractogramas")
+    p.add_argument("--csv", required=True, metavar="ARCHIVO",
+                   help="archivo CSV de salida")
+    p.add_argument("--anodo", default="Cu", metavar="ELEMENTO")
+    p.add_argument("--longitud", type=float, default=None, metavar="A")
+    p.add_argument("--cif", action="append", default=None, metavar="CARPETA")
+    p.add_argument("--sin-refinar", action="store_true")
+    p.set_defaults(func=cmd_drx_lote)
+
+    p = sub.add_parser(
+        "echem", help="analizar electroquímica: CV, carga-descarga, impedancia"
+    )
+    p.add_argument("--nombre", default="muestra", metavar="TEXTO")
+    p.add_argument("--cv", default=None, metavar="ARCHIVO",
+                   help="voltamperograma cíclico")
+    p.add_argument("--velocidades", nargs="+", default=None, metavar="ARCHIVO",
+                   help="serie de voltamperogramas a distintas velocidades, "
+                        "para b, Trasatti y ECSA")
+    p.add_argument("--gcd", default=None, metavar="ARCHIVO",
+                   help="curva de carga-descarga galvanostática")
+    p.add_argument("--eis", default=None, metavar="ARCHIVO",
+                   help="espectro de impedancia")
+    p.add_argument("--polarizacion", default=None, metavar="ARCHIVO",
+                   help="curva de polarización para HER u OER")
+    p.add_argument("--masa", type=float, default=None, metavar="MG",
+                   help="masa de material ACTIVO en mg, no la del electrodo")
+    p.add_argument("--area", type=float, default=None, metavar="CM2",
+                   help="área geométrica en cm²")
+    p.add_argument("--referencia", default="Ag/AgCl_3M", metavar="CLAVE",
+                   help="electrodo de referencia (Ag/AgCl_3M, SCE, Hg/HgO_1M, "
+                        "RHE…). Di siempre el relleno: Ag/AgCl 3 M y saturado "
+                        "están a 13 mV")
+    p.add_argument("--ph", type=float, default=None, metavar="PH",
+                   help="pH del electrolito; hace falta para pasar a RHE")
+    p.add_argument("--resistencia", type=float, default=None, metavar="OHM",
+                   help="resistencia no compensada, para la corrección óhmica")
+    p.add_argument("--velocidad", type=float, default=None, metavar="MV_S",
+                   help="velocidad de barrido del CV en mV/s, si el archivo no "
+                        "la declara")
+    p.add_argument("--corriente", type=float, default=None, metavar="MA",
+                   help="corriente del GCD en mA, si el archivo no la trae")
+    p.add_argument("--reaccion", default="OER", choices=["OER", "HER"],
+                   help="reacción de la curva de polarización")
+    p.add_argument("--circuito", default="randles_cpe", metavar="CIRCUITO",
+                   help="circuito equivalente, por nombre (randles, randles_cpe, "
+                        "supercondensador, bateria…) o en notación R0-(R1|Q1)")
+    p.add_argument("--sin-faradaica", action="store_true",
+                   help="declarar que la ventana del CV está libre de corriente "
+                        "faradaica, que es lo que hace válidos el C_dl y el ECSA")
+    p.add_argument("--salida", default=None, metavar="ARCHIVO",
+                   help="escribir el informe en un archivo")
+    p.add_argument("--csv", default=None, metavar="ARCHIVO",
+                   help="volcar las cifras principales como una fila CSV")
+    p.add_argument("--breve", action="store_true", help="omitir los avisos")
+    p.set_defaults(func=cmd_echem)
+
+    p = sub.add_parser(
+        "demo-datos", help="generar difractogramas o medidas electroquímicas de prueba"
+    )
+    p.add_argument("tipo", choices=["drx", "echem"])
+    p.add_argument("carpeta", help="carpeta donde escribirlos")
+    p.set_defaults(func=cmd_demo_datos)
+
     return parser
+
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
