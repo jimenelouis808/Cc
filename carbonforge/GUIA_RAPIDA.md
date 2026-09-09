@@ -34,6 +34,7 @@ cada decisión. Sin que tengas que saber nada de eso.
 | Saber qué pseudopotenciales bajar | [§9](#9-pseudopotenciales-los-archivos-que-tienes-que-descargar) |
 | Asegurarme de que mis números están convergidos | [§11](#11-convergencia-los-valores-por-defecto-no-están-convergidos) |
 | Hacer dinámica molecular | [§13](#13-qué-hacer-con-los-archivos-generados) |
+| Traer una estructura de otro programa | [§9](#9-importar-estructuras-de-otros-programas) |
 | Resolver un error | [§14](#14-problemas-frecuentes) |
 | Saber de qué NO fiarme | [§15](#15-límites-que-conviene-conocer) |
 
@@ -123,7 +124,7 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-Deberías ver `515 passed`.
+Deberías ver `562 passed`.
 
 Sabrás que el entorno está activo porque el prompt de la terminal empieza
 por `(.venv)`. **Tendrás que activarlo cada vez que abras una terminal
@@ -435,7 +436,38 @@ estás mirando.
 
 ---
 
-## 9. Pseudopotenciales: los archivos que tienes que descargar
+## 9. Importar estructuras de otros programas
+
+```bash
+carbonforge import estructura.cif --fix --out limpia.xyz
+```
+
+Leer el archivo es lo fácil (ASE entiende más de 80 formatos). Lo difícil es
+que los archivos de otros programas llegan **incompletos de formas que rompen
+un DFT sin avisar**:
+
+| Qué llega mal | Por qué pasa | ¿Se repara? |
+|---|---|---|
+| Sin celda | XYZ no guarda la celda | Sí: se añade caja con vacío |
+| Átomos duplicados | Expansión por simetría de un CIF | Sí: se quedan los primeros |
+| Poco vacío | Venía de otro flujo con otros criterios | Sí: se amplía |
+| Coordenadas fuera de la celda | Legal, pero confunde al análisis | Sí: se repliegan |
+| Átomos superpuestos | Archivo corrupto o lío de unidades | **No** |
+
+Ese último caso **no se toca a propósito**. Dos carbonos a 0.6 Å pueden ser
+un archivo corrupto, un lío de unidades (¿bohr en vez de Å?) o una geometría
+real sin relajar. Separarlos a ciegas inventaría una estructura que tú no
+tenías, así que se te reporta y se deja como está.
+
+La celda que se añade queda **no periódica**: suponer periodicidad sería la
+hipótesis más arriesgada. Márcala tú si es una lámina o un cristal.
+
+En la interfaz gráfica todo esto está en la pestaña **«Importar y preparar»**,
+con un botón para adoptar la estructura importada y seguir trabajando con ella.
+
+---
+
+## 10. Pseudopotenciales: los archivos que tienes que descargar
 
 carbonforge escribe los **nombres** de los pseudopotenciales en las entradas,
 pero no puede incluir los archivos. Sin ellos, QE no arranca. Para saber
@@ -443,7 +475,25 @@ cuáles necesitas exactamente:
 
 ```bash
 carbonforge pseudos estructura.xyz --dir ./pseudo
+
+# Mejor aún: lee las cabeceras UPF reales en vez de fiarse del nombre
+carbonforge pseudos estructura.xyz --scan ./pseudo --raman
 ```
+
+Con `--scan` abre cada archivo y lee su cabecera, así que sabe de verdad si
+es NC, PAW o ultrasoft, y si es escalar o relativista. Un archivo llamado
+`C.pbe-n-kjpaw_psl.1.0.0.UPF` puede contener cualquier cosa.
+
+Eso permite distinguir dos situaciones que necesitan soluciones distintas:
+
+```
+Presentes pero NO válidos para este cálculo:
+  ❌ C: C.pbe-n-kjpaw_psl.1.0.0.UPF
+       es 'scalar'; el espín-órbita necesita un pseudopotencial totalmente
+       relativista, y con uno escalar el desdoblamiento sale cero sin error.
+```
+
+Si el archivo trae un cutoff recomendado, también te lo dice.
 
 Te dice qué familia hace falta y por qué, los nombres de archivo, de dónde
 bajarlos, y comprueba si ya los tienes.
@@ -465,7 +515,7 @@ perfectamente válido, pero esa decisión es tuya.
 
 ---
 
-## 10. Densidad de estados: ¿de dónde salen los estados?
+## 11. Densidad de estados: ¿de dónde salen los estados?
 
 Las bandas te dicen si hay gap. Pero si estás dopando con nitrógeno, la
 pregunta que importa es **qué átomos** ponen estados en el nivel de Fermi. Eso
@@ -504,7 +554,7 @@ trampa:
 
 ---
 
-## 11. Convergencia: los valores por defecto NO están convergidos
+## 12. Convergencia: los valores por defecto NO están convergidos
 
 Esto importa: un gap o una frecuencia sacados de un cálculo sin convergir
 están mal, por muy cuidado que esté todo lo demás. Los 60 Ry por defecto son
@@ -545,7 +595,7 @@ Con `--parameter kpoints` haces lo mismo para la malla de puntos k.
 
 ---
 
-## 12. Desde Python
+## 13. Desde Python
 
 Para barridos o integrarlo en tus propios scripts:
 
@@ -580,7 +630,7 @@ write_dataset(jobs, "salida/dataset")   # 16 estructuras + dataset.json
 
 ---
 
-## 13. Qué hacer con los archivos generados
+## 14. Qué hacer con los archivos generados
 
 ### Quantum ESPRESSO
 
@@ -636,7 +686,7 @@ Para visualizar: **OVITO** y **VMD** leen XYZ; **VESTA** lee CIF.
 
 ---
 
-## 14. Problemas frecuentes
+## 15. Problemas frecuentes
 
 **`command not found: carbonforge-gui`**
 El entorno virtual no está activo. Ejecuta `source .venv/bin/activate`
@@ -668,7 +718,7 @@ ejecuta `pip install -e .`.
 
 ---
 
-## 15. Límites que conviene conocer
+## 16. Límites que conviene conocer
 
 Estas no son pegas menores, son cosas que afectan a cómo interpretas los
 resultados:

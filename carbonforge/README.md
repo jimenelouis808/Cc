@@ -44,6 +44,7 @@ spin off, because that one does not need it.
 | `relax`         | ASE optimizer wrapper + calculator-free harmonic pre-relaxation              |
 | `viz`           | Matplotlib 3D viewer / PNG exporter                                          |
 | `results`       | Parse and plot finished runs: bands, DOS/PDOS, IR/Raman spectra              |
+| `io`            | Import structures from 80+ formats, repair them, catalogue pseudopotentials  |
 | `exports.pseudos` | Which pseudopotentials a run needs, and whether you have them              |
 | `workflows`     | Presets, chained relax→property pipelines, sweeps, ML datasets               |
 | `gui`           | Tkinter desktop app with live 3D preview (`carbonforge-gui`)                  |
@@ -88,7 +89,14 @@ resultados** opens a finished calculation — a band file or `dynmat.out` — an
 plots it inline, with the same warnings the CLI gives.
 
 The build tab exposes functional groups and lattice nitrogen in their own
-panel, kept visually separate because they are different chemistry.
+panel, kept visually separate because they are different chemistry, and a
+**Comprobar parámetros** button reports combinations that are individually
+valid but wrong together — a density cutoff under 4x the wavefunction one,
+Raman on a metal, more functional groups than there are sites.
+
+A third tab, **Importar y preparar**, brings in a structure from another
+program, repairs it, and scans a pseudopotential folder against what the
+calculation needs.
 
 Structures are built on a worker thread, so the window stays responsive on
 large models. Tkinter is required — it ships with Python on Windows and
@@ -261,6 +269,25 @@ jobs = batch_structure_sweep(
 write_dataset(jobs, "out/sweep")
 ```
 
+## Importing structures
+
+```bash
+carbonforge import structure.cif --fix --out clean.xyz
+```
+
+ASE reads the file; the work is diagnosing what arrived. Files from other
+tools routinely come in **incomplete in ways that silently break DFT**: an
+XYZ carries no cell at all, a database CIF may have atoms duplicated by a
+symmetry expansion, someone else's slab may have 4 Å of vacuum where it
+needs 15.
+
+`--fix` repairs the unambiguous cases — adds the missing cell, drops
+duplicated atoms, wraps coordinates, grows thin vacuum — and reports each
+one. It deliberately **does not** separate overlapping atoms: two carbons at
+0.6 Å could be a corrupt file, a units mix-up, or a real unrelaxed geometry,
+and nudging them apart would invent a structure you never had. That case is
+reported and left alone.
+
 ## Pseudopotentials
 
 carbonforge writes pseudopotential *names* but cannot ship the files. This
@@ -273,9 +300,19 @@ carbonforge pseudos structure.xyz --raman --spinorbit --dir ./pseudo
 
 The family follows from what you are computing: Raman forces
 norm-conserving, spin-orbit forces fully-relativistic, and asking for both
-lands you in PseudoDojo's `nc-fr` tables. When an exact filename is missing
-but another file for that element is present, it is offered as a possible
-substitute — never silently used, since that is your call.
+lands you in PseudoDojo's `nc-fr` tables.
+
+To check what you actually have, scan the folder:
+
+```bash
+carbonforge pseudos structure.xyz --scan ./pseudo --raman
+```
+
+This reads each file's **UPF header** rather than guessing from its name —
+a file called `C.pbe-n-kjpaw_psl.1.0.0.UPF` can contain anything. That makes
+it possible to distinguish *"you have no carbon file"* from *"your carbon
+file is PAW, and DFPT Raman cannot use it"*, which call for different fixes.
+Where a file records a suggested cutoff, that is reported too.
 
 ## Analysing results
 

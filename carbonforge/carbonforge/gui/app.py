@@ -22,6 +22,9 @@ from .params import (
     CALCULATION_PARAMS,
     PRESET_PARAMS,
     preview_preset,
+    check_parameter_constraints,
+    import_and_repair,
+    scan_pseudopotentials,
     FUNCTIONALIZATION_PARAMS,
     apply_functionalization,
     MODIFIER_PARAMS,
@@ -97,11 +100,14 @@ class CarbonForgeApp:
         notebook.pack(fill="both", expand=True, padx=6, pady=6)
 
         build_tab = ttk.Frame(notebook)
+        import_tab = ttk.Frame(notebook)
         analyse_tab = ttk.Frame(notebook)
         notebook.add(build_tab, text="  Construir estructura  ")
+        notebook.add(import_tab, text="  Importar y preparar  ")
         notebook.add(analyse_tab, text="  Analizar resultados  ")
 
         self._build_builder_tab(build_tab)
+        self._build_import_tab(import_tab)
         self._build_analysis_tab(analyse_tab)
 
     def _build_builder_tab(self, parent) -> None:
@@ -164,6 +170,11 @@ class CarbonForgeApp:
         )
         self.build_button.pack(fill="x")
 
+        ttk.Button(
+            actions, text="Comprobar parámetros",
+            command=self._on_check_constraints,
+        ).pack(fill="x", pady=(4, 0))
+
         self.export_button = ttk.Button(
             actions, text="Exportar…", command=self._on_export, state="disabled"
         )
@@ -217,6 +228,172 @@ class CarbonForgeApp:
         self.info_text.configure(yscrollcommand=info_scroll.set, state="disabled")
         self.info_text.pack(side="left", fill="both", expand=True)
         info_scroll.pack(side="right", fill="y")
+
+    # ------------------------------------------------------------------
+    # Import tab
+    # ------------------------------------------------------------------
+    def _build_import_tab(self, parent) -> None:
+        """Bring in a structure from elsewhere, and find the files it needs."""
+        tk, ttk = self.tk, self.ttk
+
+        outer = ttk.Frame(parent, padding=8)
+        outer.pack(fill="both", expand=True)
+
+        left = ttk.Frame(outer, width=360)
+        left.pack(side="left", fill="y", padx=(0, 8))
+        left.pack_propagate(False)
+        right = ttk.Frame(outer)
+        right.pack(side="right", fill="both", expand=True)
+
+        # --- structure import -------------------------------------------
+        box = ttk.LabelFrame(left, text="Importar estructura", padding=6)
+        box.pack(fill="x")
+        ttk.Label(
+            box,
+            text=("CIF, XYZ, POSCAR, salidas de QE, datos de LAMMPS, PDB… "
+                  "Se revisa lo que falta y se repara lo que se pueda."),
+            wraplength=330, justify="left", foreground="#777777",
+            font=("TkDefaultFont", 8),
+        ).pack(anchor="w")
+
+        self.autofix_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            box, text="Reparar automáticamente lo que sea seguro",
+            variable=self.autofix_var,
+        ).pack(anchor="w", pady=(4, 0))
+        ttk.Label(
+            box,
+            text=("Añade la celda que falte, quita átomos duplicados, "
+                  "repliega coordenadas y amplía el vacío. Nunca separa "
+                  "átomos superpuestos: eso inventaría una estructura."),
+            wraplength=330, justify="left", foreground="#777777",
+            font=("TkDefaultFont", 8),
+        ).pack(anchor="w")
+
+        ttk.Button(
+            box, text="Abrir archivo…", command=self._on_import_structure
+        ).pack(fill="x", pady=(6, 0))
+
+        self.use_imported_button = ttk.Button(
+            box, text="Usar esta estructura", state="disabled",
+            command=self._on_use_imported,
+        )
+        self.use_imported_button.pack(fill="x", pady=(4, 0))
+
+        # --- pseudopotentials -------------------------------------------
+        pseudo = ttk.LabelFrame(left, text="Pseudopotenciales", padding=6)
+        pseudo.pack(fill="x", pady=(10, 0))
+        ttk.Label(
+            pseudo,
+            text=("Lee la cabecera de cada UPF, no su nombre, así que "
+                  "distingue de verdad NC de PAW y escalar de relativista."),
+            wraplength=330, justify="left", foreground="#777777",
+            font=("TkDefaultFont", 8),
+        ).pack(anchor="w")
+
+        self.pseudo_raman_var = tk.BooleanVar(value=False)
+        self.pseudo_soc_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            pseudo, text="Para Raman (exige norm-conserving)",
+            variable=self.pseudo_raman_var,
+        ).pack(anchor="w", pady=(4, 0))
+        ttk.Checkbutton(
+            pseudo, text="Para espín-órbita (exige relativistas)",
+            variable=self.pseudo_soc_var,
+        ).pack(anchor="w")
+
+        ttk.Button(
+            pseudo, text="Escanear carpeta…", command=self._on_scan_pseudos
+        ).pack(fill="x", pady=(6, 0))
+
+        self.import_status_var = tk.StringVar(value="Nada importado aún.")
+        ttk.Label(
+            left, textvariable=self.import_status_var, wraplength=340,
+            justify="left", foreground="#0a6",
+        ).pack(fill="x", pady=(10, 0))
+
+        # --- report ------------------------------------------------------
+        report_box = ttk.LabelFrame(right, text="Informe", padding=4)
+        report_box.pack(fill="both", expand=True)
+        self.import_text = self.tk.Text(report_box, wrap="word")
+        report_scroll = ttk.Scrollbar(
+            report_box, orient="vertical", command=self.import_text.yview
+        )
+        self.import_text.configure(
+            yscrollcommand=report_scroll.set, state="disabled"
+        )
+        self.import_text.pack(side="left", fill="both", expand=True)
+        report_scroll.pack(side="right", fill="y")
+
+    def _set_import_report(self, text: str) -> None:
+        self.import_text.configure(state="normal")
+        self.import_text.delete("1.0", "end")
+        self.import_text.insert("1.0", text)
+        self.import_text.configure(state="disabled")
+
+    def _on_import_structure(self) -> None:
+        from tkinter import filedialog
+
+        from ..io import IMPORT_FORMATS
+
+        patterns = " ".join(f"*{ext}" for ext in sorted(IMPORT_FORMATS))
+        path = filedialog.askopenfilename(
+            title="Importar estructura",
+            filetypes=[
+                ("Estructuras reconocidas", patterns),
+                ("Cualquiera", "*"),
+            ],
+        )
+        if not path:
+            return
+        try:
+            atoms, report = import_and_repair(
+                path, autofix_it=bool(self.autofix_var.get())
+            )
+        except Exception as exc:
+            self._show_error(exc, traceback.format_exc())
+            return
+
+        self._imported_atoms = atoms
+        self._set_import_report(report)
+        self.use_imported_button.configure(state="normal")
+        self.import_status_var.set(
+            f"{len(atoms)} átomos importados. Pulsa «Usar esta estructura» "
+            "para trabajar con ella."
+        )
+
+    def _on_use_imported(self) -> None:
+        """Adopt the imported structure as the one being worked on."""
+        atoms = getattr(self, "_imported_atoms", None)
+        if atoms is None:
+            return
+        self._on_built(atoms)
+        self.import_status_var.set(
+            "Estructura adoptada: ya puedes exportarla o funcionalizarla "
+            "desde la primera pestaña."
+        )
+
+    def _on_scan_pseudos(self) -> None:
+        from tkinter import filedialog
+
+        directory = filedialog.askdirectory(
+            title="Carpeta de pseudopotenciales"
+        )
+        if not directory:
+            return
+        atoms = self.atoms or getattr(self, "_imported_atoms", None)
+        try:
+            report = scan_pseudopotentials(
+                directory,
+                atoms=atoms,
+                needs_raman=bool(self.pseudo_raman_var.get()),
+                needs_soc=bool(self.pseudo_soc_var.get()),
+            )
+        except Exception as exc:
+            self._show_error(exc, traceback.format_exc())
+            return
+        self._set_import_report(report)
+        self.import_status_var.set("Carpeta escaneada.")
 
     # ------------------------------------------------------------------
     # Analysis tab
@@ -649,6 +826,33 @@ class CarbonForgeApp:
             text="Exportar aunque falle la validación",
             variable=self.force_var,
         ).pack(anchor="w", pady=(4, 0))
+
+    def _on_check_constraints(self) -> None:
+        """Report incompatible parameter combinations before building.
+
+        Per-field bounds catch a bad number alone; this catches numbers that
+        are each fine but wrong together, which is the commoner mistake.
+        """
+        values = {
+            **self._read_raw(self._param_vars),
+            **self._read_raw(self._modifier_vars),
+            **self._read_raw(self._functionalization_vars),
+            **self._read_raw(self._calculation_vars),
+            **self._read_raw(self._preset_vars),
+        }
+        # Several rules need the structure; build it if we can, but never let
+        # a build failure hide the parameter feedback.
+        atoms = self.atoms
+        if atoms is None:
+            try:
+                atoms = build_structure(
+                    self._current_structure_key(),
+                    self._read_raw(self._param_vars),
+                )
+            except Exception:
+                atoms = None
+        self._set_info(check_parameter_constraints(atoms, values))
+        self.status_var.set("Parámetros comprobados.")
 
     def _on_preview_preset(self) -> None:
         """Show what the chosen recipe would decide, before building anything.

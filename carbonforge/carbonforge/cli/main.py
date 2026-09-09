@@ -266,6 +266,38 @@ def _cmd_validate(args):
     return 0 if report.ok else 1
 
 
+def _cmd_import(args):
+    """Import a structure, diagnose it and optionally repair it."""
+    from ..io import autofix as run_autofix
+    from ..io import import_structure
+
+    try:
+        result = import_structure(args.path)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print(result.summary())
+    atoms = result.atoms
+
+    if args.fix and result.fixable_issues:
+        fixed = run_autofix(atoms, result.issues, vacuum=args.vacuum)
+        print()
+        print(fixed.summary())
+        atoms = fixed.atoms
+
+    if args.out:
+        from ase.io import write as ase_write
+
+        ase_write(args.out, atoms)
+        print(f"\nGuardado en {args.out}")
+
+    from ..validation import run_basic_checks
+
+    report = run_basic_checks(atoms)
+    return 0 if report.ok else 1
+
+
 def _cmd_presets(args):
     """List the available calculation recipes."""
     from ..workflows.presets import describe_presets
@@ -322,6 +354,29 @@ def _cmd_pseudos(args):
     from ..exports.pseudos import check_directory, describe, requirements_for
 
     atoms = ase_io.read(args.structure)
+
+    if args.scan:
+        # Reading the UPF headers beats guessing from filenames: it can tell
+        # "you have carbon but it is PAW" from "you have no carbon".
+        from ..io import download_instructions, match_requirements, scan_directory
+
+        try:
+            catalog = scan_directory(args.scan)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(catalog.summary())
+        match = match_requirements(
+            catalog, atoms, needs_raman=args.raman, needs_soc=args.spinorbit
+        )
+        print()
+        print(match.summary())
+        if match.missing:
+            print()
+            print(download_instructions(
+                match.missing, needs_raman=args.raman, needs_soc=args.spinorbit
+            ))
+        return 0 if match.ok else 1
     requirements = requirements_for(
         atoms, needs_raman=args.raman, needs_soc=args.spinorbit
     )
@@ -657,6 +712,19 @@ def build_parser() -> argparse.ArgumentParser:
     cr.add_argument("--dpi", type=int, default=150)
     cr.set_defaults(func=_cmd_converge_report)
 
+    im = sub.add_parser(
+        "import",
+        help="Import a structure from another program and repair it.",
+    )
+    im.add_argument("path", help="CIF, XYZ, POSCAR, salida de QE, LAMMPS…")
+    im.add_argument("--fix", action="store_true",
+                    help="Reparar automáticamente lo que sea seguro.")
+    im.add_argument("--vacuum", type=float, default=15.0,
+                    help="Vacío a usar al añadir celda o ampliarla (Å).")
+    im.add_argument("--out", default=None,
+                    help="Guardar el resultado (p.ej. limpia.xyz).")
+    im.set_defaults(func=_cmd_import)
+
     ps = sub.add_parser(
         "pseudos",
         help="Say which pseudopotentials are needed, and check a directory.",
@@ -668,6 +736,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="El cálculo incluye SOC: fuerza pseudos relativistas.")
     ps.add_argument("--dir", default=None,
                     help="Carpeta a comprobar (tu pseudo_dir).")
+    ps.add_argument("--scan", default=None,
+                    help="Escanear una carpeta leyendo las cabeceras UPF "
+                         "reales, en vez de adivinar por el nombre.")
     ps.set_defaults(func=_cmd_pseudos)
 
     pr = sub.add_parser(

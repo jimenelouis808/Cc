@@ -398,6 +398,68 @@ def apply_modifiers(atoms: Atoms, raw_values: dict[str, Any]) -> Atoms:
     return out
 
 
+def import_and_repair(path: str, autofix_it: bool = True) -> tuple[Atoms, str]:
+    """Import a structure file, diagnose it and optionally repair it.
+
+    Returns the structure plus a report, so the GUI can show exactly what
+    arrived and what was changed before anything is calculated on it.
+    """
+    from ..io import autofix as run_autofix
+    from ..io import import_structure
+
+    result = import_structure(path)
+    report = [result.summary()]
+
+    atoms = result.atoms
+    if autofix_it and result.fixable_issues:
+        fixed = run_autofix(atoms, result.issues)
+        atoms = fixed.atoms
+        report += ["", "--- Reparación ---", fixed.summary()]
+    return atoms, "\n".join(report)
+
+
+def scan_pseudopotentials(
+    directory: str,
+    atoms: Optional[Atoms] = None,
+    needs_raman: bool = False,
+    needs_soc: bool = False,
+) -> str:
+    """Scan a pseudopotential folder and match it against a calculation.
+
+    Reads the UPF headers rather than trusting filenames, so "you have a
+    carbon file but it is PAW and Raman cannot use it" is distinguished from
+    "you have no carbon file".
+    """
+    from ..io import download_instructions, match_requirements, scan_directory
+
+    try:
+        catalog = scan_directory(directory)
+    except ValueError as exc:
+        return f"No se pudo leer la carpeta: {exc}"
+
+    lines = [catalog.summary()]
+    if atoms is not None:
+        match = match_requirements(
+            catalog, atoms, needs_raman=needs_raman, needs_soc=needs_soc
+        )
+        lines += ["", "--- Para tu cálculo ---", match.summary()]
+        if match.missing:
+            lines += ["", download_instructions(
+                match.missing, needs_raman=needs_raman, needs_soc=needs_soc
+            )]
+    return "\n".join(lines)
+
+
+def check_parameter_constraints(
+    atoms: Optional[Atoms],
+    raw_values: dict[str, Any],
+) -> str:
+    """Report incompatible parameter combinations, before building."""
+    from .constraints import check_constraints, format_violations
+
+    return format_violations(check_constraints(raw_values, atoms))
+
+
 def preview_preset(atoms: Atoms, raw_values: dict[str, Any]) -> str:
     """Explain what a preset would do to this structure, before running it.
 
