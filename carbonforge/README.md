@@ -45,6 +45,7 @@ spin off, because that one does not need it.
 | `viz`           | Matplotlib 3D viewer / PNG exporter                                          |
 | `results`       | Parse and plot finished runs: bands, DOS/PDOS, IR/Raman spectra              |
 | `io`            | Import structures from 80+ formats, repair them, catalogue pseudopotentials  |
+| `forcefields`   | Classical typing, LJ + charges, electrolytes, EDLC cells                     |
 | `exports.pseudos` | Which pseudopotentials a run needs, and whether you have them              |
 | `workflows`     | Presets, chained relax→property pipelines, sweeps, ML datasets               |
 | `gui`           | Tkinter desktop app with live 3D preview (`carbonforge-gui`)                  |
@@ -268,6 +269,61 @@ jobs = batch_structure_sweep(
 )
 write_dataset(jobs, "out/sweep")
 ```
+
+## Electric double layers (EDLC)
+
+Simulating a supercapacitor electrode needs a different force field from
+everything else here. AIREBO and Tersoff, which the neutral LAMMPS exporter
+uses, carry **no charges** — and without charges there is no double layer.
+
+```bash
+carbonforge edlc electrode.xyz --out run --separation 40 \
+                 --electrolyte aqueous --molarity 1.0 --potential 1.0
+```
+
+This types every atom from its local chemistry (a carbon next to a graphitic
+nitrogen is not the same atom as one in the basal plane), fills the gap with
+SPC/E water and ions or a coarse-grained ionic liquid, stacks
+electrode | electrolyte | electrode, and writes an `atom_style full` data
+file plus a constant-potential input script.
+
+Two methodological points are handled rather than left as traps:
+
+**Constant potential, not constant charge.** In a real capacitor the
+electrodes sit at fixed potential and their charge fluctuates in response to
+the electrolyte. Fixing the charge instead — what a plain MD run does —
+samples a different ensemble and gives a capacitance that can be wrong by
+tens of percent, worst at high potential. The generated script uses LAMMPS's
+ELECTRODE package, and says in its header that the package must be compiled
+in.
+
+**Slab correction.** The cell is periodic in the plane, finite along z, and
+develops a dipole once the layer forms. Without `kspace_modify slab` the
+Ewald sum includes spurious interactions with stacked images.
+
+### On the partial charges
+
+The Lennard-Jones parameters come from established transferable sets (Steele
+for graphite, OPLS-AA, Joung-Cheatham ions matched to SPC/E). **The charges
+on doped and functionalised carbon do not**: there is no consensus set, and
+published values disagree by up to a factor of two depending on whether they
+came from Bader, Mulliken, Löwdin or RESP. The defaults are representative
+of the reported ranges and fine for exploring trends.
+
+For anything quantitative, derive them from your own DFT on the same
+structure — `projwfc.x` prints Löwdin charges, and carbonforge already runs
+it for the projected DOS:
+
+```python
+from carbonforge.forcefields.charges import read_lowdin_charges, apply_derived_charges
+
+derived = read_lowdin_charges("projwfc.out", atoms)
+mapping, report = apply_derived_charges(atoms, derived)
+print(report)   # flags any type whose atoms disagree too much to be one number
+```
+
+Every generated project writes a `NOTAS_EDLC.txt` recording where each
+parameter came from and which ones to distrust.
 
 ## Importing structures
 

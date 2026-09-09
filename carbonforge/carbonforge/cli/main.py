@@ -298,6 +298,46 @@ def _cmd_import(args):
     return 0 if report.ok else 1
 
 
+def _cmd_edlc(args):
+    """Build a constant-potential EDLC cell from a carbon electrode."""
+    from ..exports.lammps_edlc import EDLCSettings, write_edlc
+    from ..forcefields import build_edlc_cell, check_edlc_setup
+
+    atoms = ase_io.read(args.electrode)
+    electrolyte_kwargs = {"seed": args.seed}
+    if args.electrolyte == "aqueous":
+        electrolyte_kwargs.update(salt=args.salt, molarity=args.molarity)
+
+    try:
+        cell = build_edlc_cell(
+            atoms,
+            separation=args.separation,
+            electrolyte=args.electrolyte,
+            potential_v=args.potential,
+            electrolyte_kwargs=electrolyte_kwargs,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print(cell.summary())
+    warnings = check_edlc_setup(cell)
+    if warnings:
+        print()
+        for warning in warnings:
+            print(f"  ⚠️  {warning}")
+
+    settings = EDLCSettings(
+        temperature_k=args.temperature,
+        production_steps=args.steps,
+    )
+    written = write_edlc(cell, args.out, settings=settings)
+    print(f"\n{len(written)} archivos en {args.out}")
+    print("Lee NOTAS_EDLC.txt: explica de dónde sale cada parámetro y qué "
+          "hace falta para ejecutarlo.")
+    return 0
+
+
 def _cmd_presets(args):
     """List the available calculation recipes."""
     from ..workflows.presets import describe_presets
@@ -711,6 +751,28 @@ def build_parser() -> argparse.ArgumentParser:
     cr.add_argument("--out", default=None, help="Guardar figura en este archivo.")
     cr.add_argument("--dpi", type=int, default=150)
     cr.set_defaults(func=_cmd_converge_report)
+
+    ed = sub.add_parser(
+        "edlc",
+        help="Build a constant-potential EDLC cell for LAMMPS.",
+    )
+    ed.add_argument("electrode",
+                    help="Electrodo de carbono (lámina periódica en x e y).")
+    ed.add_argument("--out", required=True)
+    ed.add_argument("--separation", type=float, default=40.0,
+                    help="Separación entre electrodos en Å (>=30 recomendado).")
+    ed.add_argument("--electrolyte", default="aqueous",
+                    choices=["aqueous", "ionic_liquid", "vacuum"])
+    ed.add_argument("--salt", default="NaCl", choices=["NaCl", "KCl", "LiCl"])
+    ed.add_argument("--molarity", type=float, default=1.0,
+                    help="Concentración de sal en mol/L.")
+    ed.add_argument("--potential", type=float, default=1.0,
+                    help="Diferencia de potencial en voltios (±V/2 por electrodo).")
+    ed.add_argument("--temperature", type=float, default=298.0)
+    ed.add_argument("--steps", type=int, default=2000000,
+                    help="Pasos de producción.")
+    ed.add_argument("--seed", type=int, default=0)
+    ed.set_defaults(func=_cmd_edlc)
 
     im = sub.add_parser(
         "import",

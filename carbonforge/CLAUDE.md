@@ -21,6 +21,7 @@ carbonforge/
 ├── calculations/  # band paths, phonon/IR/Raman, spin-orbit setups
 ├── results/       # parse + plot finished runs (bands, DOS/PDOS, spectra)
 ├── io/            # structure import + repair, UPF header reading, catalogue
+├── forcefields/   # classical typing, LJ+charges, electrolytes, EDLC cells
 ├── exports/       # Quantum ESPRESSO, SIESTA and LAMMPS writers
 ├── relax/         # ASE optimizer wrapper + calculator-free harmonic pre-relax
 ├── viz/           # matplotlib 3D viewer
@@ -70,6 +71,14 @@ carbonforge/
 - DOS needs a denser nscf mesh than the scf; keep `kmesh_factor >= 2`.
 - Summed PDOS never equals the total DOS (atomic-orbital projection is
   incomplete). Report the completeness rather than implying it sums to 1.
+- EDLC needs constant POTENTIAL (ELECTRODE package), not constant charge.
+  Fixed charge is the wrong ensemble and the capacitance comes out wrong.
+- A charged slab needs `kspace_modify slab`. Not optional.
+- AIREBO/Tersoff cannot be used for anything electrostatic: no charges.
+- Doped-carbon partial charges are representative, not settled. Say so, and
+  point at `forcefields.charges` for deriving them from the user's own DFT.
+- The electrolyte filler knows nothing about the electrodes: keep the
+  `wall_gap` inset, or molecules land on top of the surface.
 - Read UPF headers, never guess the family from the filename. A file can be
   named anything; `io.upf` parses both v1 and v2 layouts.
 - autofix must never move overlapping atoms apart. That would invent a
