@@ -123,6 +123,82 @@ Tube **radius is quantised** by the lattice (`R = 5*freq*sqrt(3)*bond/2pi`),
 exactly as a real (n,m) tube's diameter is fixed by its indices. It is an
 output, not a free input; `target_radius` picks the nearest realisable freq.
 
+## Haeckelites: topology from the mesh, geometry from the honeycomb
+
+`builders/haeckelite.py` designs 2D carbon allotropes by patterning
+Stone-Wales rotations into graphene. It is the flat analogue of
+`fullerene_mesh`, and the reason it needs its own module is that the flat
+case breaks the rule the curved one taught.
+
+**The Euler budget is the easy half.** A 2D periodic sheet is a torus, so
+`sum(6-n) == 0` exactly, and an edge flip drops two mesh-vertex degrees and
+raises two — paying zero. So **no pattern can break the budget**, however
+many flips and wherever they go. A lattice nobody has published is as sound
+topologically as R5,7, and the census is read off vertex degrees rather than
+perceived. Do not re-derive it from distances; that is the failure
+`fullerene_mesh` exists to prevent, and bare graph rewiring (swap one
+neighbour between two atoms, degrees all stay 3) produces a graph that no
+longer embeds in the torus at all — 2.3 Å bonds beside a perfect census.
+
+**The geometry must not come from the mesh.** This is the new rule and it
+contradicts `tmd/curved.py`'s "relax the site net, not the atoms", which is
+right for a closed shell and wrong here. Equilateral triangles meeting five
+at a vertex sum to 300°, seven to 420°, so a *flat* triangulation carrying
+pentagons and heptagons **can never have equal edges**. Asked for them, the
+mesh relaxation sat exactly still — the flipped lattice is a genuine
+minimum of the edge springs, the long diagonals' forces cancelling to
+2.6e-13 by symmetry — and the dual came out with 0.82 Å bonds no later
+relaxation could fix. Smoothing first changed nothing (bit-identical at 0,
+20 and 100 rounds), because the objective, not the optimiser, was wrong.
+
+So geometry comes from the honeycomb side: graphene's exact dual, with each
+rotated **dimer turned 90° in the plane** about its midpoint, which is how
+a Stone-Wales rotation is actually drawn. A single defect built this way
+relaxes to **1.322–1.481 Å and 103.5–136.7°** at graphene's own cell — the
+published 5-7-7-5 geometry, and the one case where the engine checks
+against the literature rather than itself. Three things are load-bearing:
+
+* **The turn's sense is measured, not derived.** Only one of the two
+  matches the rewiring the flip performed; the other puts each new partner
+  at 2.40 Å instead of 1.51 — silently, since the topology is impeccable
+  either way. `_turn_dimers` tries both per dimer.
+* **Triangle indices move, so the atom behind them must be tracked.**
+  `edge_flip` appends its two new triangles at the end rather than
+  replacing in place. `apply_flips` carries a `labels` list; without it the
+  rewired bonds and the rotated positions describe different atoms.
+* **Two rules cap the density, and they are what keeps the geometry sound.**
+  Dimers must be pairwise non-adjacent (two sharing a bond each turn an
+  atom the other needs, landing 3.4 Å apart), and a flip's four touched
+  mesh vertices must all still be degree 6 (otherwise degree changes stack
+  onto an existing defect — a run without this returned squares and
+  nonagons). Across 105 combinations of cell, pattern and seed, **every**
+  lattice the rules admit passes the sp2 gate; the ones they refuse are the
+  ones that came back at 1.225–1.663 Å without them. The gate in
+  `build_haeckelite` is a guard, not the mechanism.
+
+**The sheet is kept flat on purpose.** The force field has bond and angle
+terms but no flexural one — a sheet resists bending through its π system —
+so long-wavelength wrinkling is nearly free in it, and given out-of-plane
+freedom the cell search took it: a 4×4 R5,7 came back at **1.51 Å² per atom
+against graphene's 2.619**, having bought low bond strain by crumpling into
+a smaller footprint. Relaxing in-plane removes a degree of freedom the force
+field cannot price. Do not reintroduce a buckling nudge and do not report a
+buckling amplitude; it would be an artefact. Every pattern now lands at
+2.62–2.68 Å² per atom, and a test pins that band.
+
+**A pattern is a request, not a guarantee.** `r57` at nx=ny=6 applies 12 of
+the 36 edges it names — 67% non-hexagonal, a real dense lattice but not the
+100% the name suggests. Both `n_flips` and `n_flips_refused` go into `info`
+and the CLI prints the ratio. Read the census, not the pattern name.
+
+**`sp2_quality` takes a `family`.** A regular heptagon's interior angle is
+128.6° before any strain, so a haeckelite reaches 136–140° as geometry and
+the hexagonal window called every sound one BROKEN — the same mistake
+`tmd_quality` made counting a grafted hydrogen as a metal. Builders record
+`info["quality_family"]` and `_report_structure` reads it. A new family with
+its own legitimate angle range needs an entry in `QUALITY_WINDOWS`, not a
+loosened sp2 window.
+
 ## Junctions and schwarzites (implicit route)
 
 `junction.py` starts from a signed-distance field rather than a seed
@@ -219,6 +295,18 @@ rebuild**: restart when the two largest displacements sum past the skin.
 Do not tighten that to "any atom moved half the skin" — ordinary local
 rearrangement is ~1 Å and would restart L-BFGS (discarding its history)
 continuously, tripling the runtime.
+
+**Wrapping for `cKDTree(boxsize=...)` needs more than `np.mod`.** Two traps,
+both of which crashed a sound structure from three frames away with a
+message naming neither. A `0` edge means "not periodic along this axis"
+(what a 2D sheet's vacuum direction needs), and `np.mod(x, 0)` is nan, which
+arrives as "data must be finite". And for a tiny negative input `np.mod`
+returns the edge **exactly** — `np.mod(-1e-18, 10.0)` is `10.0` — which the
+tree rejects as outside the box, though an atom a hair below the cell origin
+is perfectly ordinary. Both live in `relax_shell` and in
+`capped_cnt.geometry_report`; the fix is a mask for the live axes plus a
+clip to `np.nextafter(edge, 0)`. Any new `cKDTree(boxsize=...)` call needs
+the same two.
 
 ## Dichalcogenides are not decorated carbon
 

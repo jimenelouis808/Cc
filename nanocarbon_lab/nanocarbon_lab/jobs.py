@@ -31,6 +31,7 @@ from typing import Any
 # carbon control never appears next to a dichalcogenide one.
 CARBON_MODES = (
     "capped tube",
+    "haeckelite",
     "coil (relaxed)",
     "fullerene",
     "nano-onion",
@@ -206,6 +207,7 @@ def builder_for(mode: str):
         build_capped_cnt,
         build_coil,
         build_fullerene,
+        build_haeckelite,
         build_junction,
         build_multiwall_cnt,
         build_nano_onion,
@@ -236,6 +238,7 @@ def builder_for(mode: str):
         "capped tube": build_capped_cnt,
         "coil (relaxed)": build_coil,
         "fullerene": build_fullerene,
+        "haeckelite": build_haeckelite,
         "nano-onion": build_nano_onion,
         "junction": build_junction,
         "schwarzite": build_schwarzite,
@@ -423,6 +426,11 @@ def estimate_atoms(job: Job) -> int:
         n_tubes = 3 * across * across + 3 * across + 1
         per_tube = 10 * int(p.get("n_body_rings", 10)) * int(p.get("freq", 3)) ** 2
         return int(n_tubes * per_tube)
+
+    if mode == "haeckelite":
+        # Exact, not an estimate: a Stone-Wales rotation moves bonds, never
+        # atoms, so every pattern gives graphene's own count.
+        return 4 * int(p.get("nx", 4)) * int(p.get("ny", 4))
 
     if mode == "schwarzite":
         cell = float(p.get("cell", 36.0))
@@ -670,6 +678,11 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     "network": ("network", {
         "kind": "--kind", "cell": "--cell", "tube_radius": "--tube-radius",
         "blend": "--blend",
+    }),
+    "haeckelite": ("haeckelite", {
+        "nx": "--nx", "ny": "--ny", "pattern": "--pattern",
+        "period": "--period", "density": "--density", "bond": "--bond",
+        "vacuum": "--vacuum",
     }),
     "schwarzite": ("schwarzite", {
         "kind": "--kind", "cell": "--cell", "thickness": "--thickness",

@@ -38,14 +38,38 @@ from typing import Literal
 SP2_BOND_RANGE = (1.30, 1.55)
 SP2_ANGLE_RANGE = (100.0, 135.0)
 
+#: The window for a lattice whose rings are *designed* to be pentagons and
+#: heptagons rather than hexagons with a few defects. A regular heptagon's
+#: interior angle is 128.6 deg before any strain, so a haeckelite reaches
+#: 136-140 deg as a matter of geometry, and the default window called every
+#: sound one BROKEN -- the same mistake `tmd_quality` made when it counted
+#: a grafted hydrogen as a metal. Pass ``family="haeckelite"`` for these.
+#: The bond floor is looser for the reason `builders/haeckelite.py`
+#: records: this force field has one rest length for every bond, so a dense
+#: pattern puts some under a compression it cannot price.
+HAECKELITE_BOND_RANGE = (1.25, 1.58)
+HAECKELITE_ANGLE_RANGE = (98.0, 142.0)
+
+#: Which window each structure family is judged against.
+QUALITY_WINDOWS = {
+    "sp2": (SP2_BOND_RANGE, SP2_ANGLE_RANGE),
+    "haeckelite": (HAECKELITE_BOND_RANGE, HAECKELITE_ANGLE_RANGE),
+}
+
 Verdict = Literal["clean", "strained", "broken"]
 
 
-def sp2_quality(geometry: Mapping[str, float]) -> tuple[Verdict, str]:
+def sp2_quality(geometry: Mapping[str, float],
+                family: str = "sp2") -> tuple[Verdict, str]:
     """Classify a ``geometry`` report as clean, strained or broken.
 
     Parameters
     ----------
+    family
+        Which window to judge against -- ``"sp2"`` for hexagonal carbon
+        with at most a few defects, ``"haeckelite"`` for a lattice whose
+        rings are pentagons and heptagons by design. See
+        :data:`QUALITY_WINDOWS`.
     geometry
         An ``atoms.info["geometry"]`` mapping, as produced by
         :func:`nanocarbon_lab.builders.capped_cnt.geometry_report`. Needs
@@ -69,8 +93,13 @@ def sp2_quality(geometry: Mapping[str, float]) -> tuple[Verdict, str]:
     the Euler budget, and a structure can be topologically perfect while
     geometrically broken -- that combination is exactly what this catches.
     """
-    bond_lo, bond_hi = SP2_BOND_RANGE
-    angle_lo, angle_hi = SP2_ANGLE_RANGE
+    try:
+        (bond_lo, bond_hi), (angle_lo, angle_hi) = QUALITY_WINDOWS[family]
+    except KeyError:
+        raise ValueError(
+            f"Unknown family {family!r}; expected one of "
+            f"{sorted(QUALITY_WINDOWS)}."
+        ) from None
     b_min = float(geometry["bond_min"])
     b_max = float(geometry["bond_max"])
     a_min = float(geometry["angle_min"])
@@ -103,4 +132,12 @@ def sp2_quality(geometry: Mapping[str, float]) -> tuple[Verdict, str]:
     return "clean", "bonds, angles and spacings are all in the sp2 range."
 
 
-__all__ = ["SP2_ANGLE_RANGE", "SP2_BOND_RANGE", "Verdict", "sp2_quality"]
+__all__ = [
+    "HAECKELITE_ANGLE_RANGE",
+    "HAECKELITE_BOND_RANGE",
+    "QUALITY_WINDOWS",
+    "SP2_ANGLE_RANGE",
+    "SP2_BOND_RANGE",
+    "Verdict",
+    "sp2_quality",
+]

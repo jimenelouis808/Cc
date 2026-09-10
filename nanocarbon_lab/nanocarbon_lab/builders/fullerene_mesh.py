@@ -54,17 +54,33 @@ import numpy as np
 Mesh = tuple[np.ndarray, np.ndarray]  # (vertices [V,3], triangles [F,3] int)
 
 
-def minimum_image(delta: np.ndarray, box: float | None) -> np.ndarray:
+def minimum_image(delta: np.ndarray,
+                  box: float | np.ndarray | None) -> np.ndarray:
     """Wrap displacement vectors into the shortest periodic image.
 
     With ``box=None`` this is the identity, so every caller can be written
     once and used for both finite and periodic structures. For a periodic
     cell it maps each component into ``[-box/2, box/2)``, which is what
     makes a bond across the cell seam measure ~1.42 Å instead of ~box.
+
+    ``box`` may be a scalar cube or a **three-vector** of edge lengths,
+    for an orthorhombic cell whose axes are not all equal -- a 2D sheet
+    whose two in-plane constants relax independently, say. A component of
+    ``0`` marks that axis non-periodic, which is the convention
+    ``scipy.spatial.cKDTree`` already uses for ``boxsize`` and is what a
+    sheet needs for the vacuum direction. Dividing by it would otherwise
+    give ``nan`` for every displacement in the structure.
     """
     if box is None:
         return delta
-    return delta - box * np.round(delta / box)
+    lengths = np.asarray(box, dtype=float)
+    if lengths.ndim == 0:
+        return delta - lengths * np.round(delta / lengths)
+    out = np.array(delta, dtype=float, copy=True)
+    live = lengths > 0.0
+    if live.any():
+        out[..., live] -= lengths[live] * np.round(out[..., live] / lengths[live])
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -383,7 +399,11 @@ def dual_honeycomb(
         anchor = verts[faces[:, 0]]
         off_b = minimum_image(verts[faces[:, 1]] - anchor, box)
         off_c = minimum_image(verts[faces[:, 2]] - anchor, box)
-        face_centers = np.mod(anchor + (off_b + off_c) / 3.0, box)
+        centres = anchor + (off_b + off_c) / 3.0
+        edges = np.broadcast_to(np.asarray(box, dtype=float), (3,)).copy()
+        live = edges > 0.0          # a 0 edge means "not periodic here"
+        face_centers = centres.copy()
+        face_centers[:, live] = np.mod(centres[:, live], edges[live])
 
     def order_ring(incident: list[int]) -> list[int]:
         face_verts = {fi: set(int(x) for x in faces[fi]) for fi in incident}
@@ -860,8 +880,24 @@ def relax_shell(
         if box is None:
             tree = cKDTree(reference)
         else:
-            # cKDTree's boxsize needs coordinates inside [0, box).
-            tree = cKDTree(np.mod(reference, box), boxsize=box)
+            # cKDTree's boxsize needs coordinates inside [0, box), and it
+            # reads a 0 edge as "this axis is not periodic". Wrapping must
+            # honour that too: `np.mod(x, 0)` is nan, which reaches the
+            # tree as "data must be finite" from three frames away.
+            edges = np.broadcast_to(np.asarray(box, dtype=float), (3,)).copy()
+            wrapped = reference.copy()
+            live = edges > 0.0
+            inside = np.mod(wrapped[:, live], edges[live])
+            # `np.mod` is not enough on its own: for a tiny negative input
+            # it returns the edge exactly (`np.mod(-1e-18, 10.0)` is
+            # 10.0), and cKDTree rejects a coordinate *at* boxsize. An
+            # atom a hair below the cell origin is ordinary -- the
+            # relaxation moves atoms freely and only the tree cares where
+            # the origin is -- so this crashed mid-search on a structure
+            # that was perfectly sound.
+            np.clip(inside, 0.0, np.nextafter(edges[live], 0.0), out=inside)
+            wrapped[:, live] = inside
+            tree = cKDTree(wrapped, boxsize=edges)
         candidates = tree.query_pairs(
             r=repel_cutoff + skin, output_type="ndarray"
         )

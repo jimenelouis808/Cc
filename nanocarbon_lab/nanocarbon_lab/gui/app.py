@@ -76,6 +76,7 @@ from matplotlib.backends.backend_tkagg import (
 from matplotlib.figure import Figure
 
 from ..builders import fullerene_mesh as fm
+from ..builders.haeckelite import PATTERNS as haeckelite_patterns
 from ..cell import MIN_IMAGE_SEPARATION, cell_report, to_unit_cell
 from ..dopants import DOPANT_ELEMENTS, get_chemistry
 from ..exports.xyz import write_cif, write_render_bundle
@@ -125,6 +126,9 @@ SHAPES = ["straight", "arc", "s_curve", "helix", "random"]
 DOPANTS = ["none", *DOPANT_ELEMENTS]
 JUNCTION_KINDS = ["L", "T", "Y", "X", "cross3d"]
 SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
+
+#: The haeckelite design patterns, from the builder rather than retyped.
+HAECKELITE_PATTERNS = haeckelite_patterns
 NETWORK_KINDS = ["cubic", "diamond"]
 CAGE_FAMILIES = ["C60", "C20"]
 
@@ -652,6 +656,12 @@ class NanocarbonGUI:
         self.var_j_radius = self._var("j_radius", tk.DoubleVar(value=6.0))
         self.var_j_arm = self._var("j_arm", tk.DoubleVar(value=22.0))
         self.var_j_blend = self._var("j_blend", tk.DoubleVar(value=4.0))
+        self.var_hk_pattern = self._var("hk_pattern",
+                                        tk.StringVar(value="sparse"))
+        self.var_hk_nx = self._var("hk_nx", tk.IntVar(value=4))
+        self.var_hk_ny = self._var("hk_ny", tk.IntVar(value=4))
+        self.var_hk_period = self._var("hk_period", tk.IntVar(value=2))
+        self.var_hk_density = self._var("hk_density", tk.DoubleVar(value=0.15))
         self.var_s_kind = self._var("s_kind", tk.StringVar(value="primitive"))
         self.var_s_cell = self._var("s_cell", tk.DoubleVar(value=36.0))
         self.var_s_thickness = self._var("s_thickness", tk.DoubleVar(value=0.0))
@@ -843,6 +853,39 @@ class NanocarbonGUI:
                        "heptagons — nothing prescribes them.",
                   foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
                   justify="left").grid(row=7, column=0, columnspan=2, sticky="w")
+
+        # --- haeckelite
+        self.frame_haeckelite = ttk.LabelFrame(
+            parent, text="Haeckelite (patterned Stone-Wales)", padding=8)
+        self.frame_haeckelite.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_haeckelite, text="Pattern").grid(
+            row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_haeckelite, textvariable=self.var_hk_pattern,
+                     values=list(HAECKELITE_PATTERNS), state="readonly",
+                     width=10).grid(row=0, column=1, sticky="e", pady=(0, 6))
+        # Each `_param` takes two grid rows -- its label and entry, then its
+        # slider -- so these run 1, 3, 5, 7 and the hint lands on 9.
+        self._param(self.frame_haeckelite, "Cells along x", self.var_hk_nx,
+                    3, 10, 1, integer=True, hard_lo=3, hard_hi=20,
+                    command=self._update_haeckelite_hint)
+        self._param(self.frame_haeckelite, "Cells along y", self.var_hk_ny,
+                    2, 10, 3, integer=True, hard_lo=2, hard_hi=20,
+                    command=self._update_haeckelite_hint)
+        self._param(self.frame_haeckelite, "Period (stripes, sparse)",
+                    self.var_hk_period, 1, 6, 5, integer=True,
+                    hard_lo=1, hard_hi=12)
+        self._param(self.frame_haeckelite, "Density (random)",
+                    self.var_hk_density, 0.05, 1.0, 7, resolution=0.05,
+                    hard_lo=0.01, hard_hi=1.0)
+        self.lbl_haeckelite = ttk.Label(
+            self.frame_haeckelite, text="", foreground=MUTED,
+            font=("TkDefaultFont", 8), wraplength=230, justify="left")
+        self.lbl_haeckelite.grid(row=9, column=0, columnspan=2, sticky="w")
+        # The combobox has no `_param` trace of its own, and the hint's text
+        # depends on the pattern ("none" returns graphene), so without this
+        # it would describe the previously selected one.
+        self.var_hk_pattern.trace_add(
+            "write", lambda *_: self._update_haeckelite_hint())
 
         # --- schwarzite
         self.frame_schwarzite = ttk.LabelFrame(parent, text="Schwarzite", padding=8)
@@ -1310,6 +1353,7 @@ class NanocarbonGUI:
         mode = self.var_mode_kind.get()
         for frame in (self.frame_tube, self.frame_centreline, self.frame_defects,
                       self.frame_coil, self.frame_junction, self.frame_schwarzite,
+                      self.frame_haeckelite,
                       self.frame_cage, self.frame_mw, self.frame_bundle,
                       self.frame_network,
                       self.frame_tmd, self.frame_tmd_layers,
@@ -1372,6 +1416,9 @@ class NanocarbonGUI:
             # away only makes the remaining bonds stretch.
             self.var_anneal.set(0)
             self._update_network_hint()
+        elif mode == "haeckelite":
+            self.frame_haeckelite.pack(fill="x")
+            self._update_haeckelite_hint()
         elif mode == "schwarzite":
             self.frame_schwarzite.pack(fill="x")
             # Annealing is counterproductive on a minimal surface (it
@@ -1568,6 +1615,32 @@ class NanocarbonGUI:
                     "chalcogen sites, as in sulphur-poor growth. The "
                     "element box is unused.")
         self.lbl_tmd_chem.config(text=text)
+
+    def _update_haeckelite_hint(self) -> None:
+        """Say what the pattern will actually reach, before the build runs.
+
+        A pattern is a request, and most candidates of a dense one are
+        turned down -- two rotations may not overlap, and a rotation must
+        land on four hexagons. So the name "r57" does not mean "no
+        hexagons", and the honest thing is to say so here rather than let
+        the census come as a surprise.
+        """
+        nx = int(self.var_hk_nx.get())
+        ny = int(self.var_hk_ny.get())
+        pattern = self.var_hk_pattern.get()
+        atoms = 4 * nx * ny
+        if pattern == "none":
+            detail = ("returns graphene exactly — the baseline every check "
+                      "here is calibrated against.")
+        else:
+            detail = ("a rotation moves bonds, never atoms, so the count is "
+                      "the same whatever the pattern. Most candidates of a "
+                      "dense pattern are refused (two rotations may not "
+                      "overlap, and each must land on four hexagons), so "
+                      "read the census rather than the pattern name — "
+                      "'r57' reaches about 67% non-hexagonal, not 100%.")
+        self.lbl_haeckelite.configure(
+            text=f"{atoms} atoms in a {nx}×{ny} supercell; {detail}")
 
     def _update_network_hint(self) -> None:
         """Say whether the cell actually leaves a tube between the nodes.
@@ -2023,6 +2096,14 @@ class NanocarbonGUI:
                 blend=float(self.var_net_blend.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
                 roughness=float(self.var_roughness.get()),
+            )
+        elif mode == "haeckelite":
+            params = dict(
+                nx=int(self.var_hk_nx.get()),
+                ny=int(self.var_hk_ny.get()),
+                pattern=self.var_hk_pattern.get(),
+                period=int(self.var_hk_period.get()),
+                density=float(self.var_hk_density.get()),
             )
         elif mode == "schwarzite":
             params = dict(

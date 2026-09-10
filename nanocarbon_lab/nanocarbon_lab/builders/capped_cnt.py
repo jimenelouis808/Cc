@@ -205,7 +205,23 @@ def geometry_report(
     for a, b in bonds:
         bonded.add((a, b))
         bonded.add((b, a))
-    tree = cKDTree(pos) if box is None else cKDTree(np.mod(pos, box), boxsize=box)
+    if box is None:
+        tree = cKDTree(pos)
+    else:
+        # A 0 edge means "not periodic along this axis", the convention
+        # cKDTree's boxsize uses and what a 2D sheet needs for vacuum.
+        # `np.mod(x, 0)` is nan, and the tree rejects it several frames
+        # later as "data must be finite". `np.mod` also returns the edge
+        # exactly for a tiny negative input (`np.mod(-1e-18, 10.0)` is
+        # 10.0), which the tree rejects as out of the box -- so the
+        # wrapped coordinate is clipped to the last float below the edge.
+        edges = np.broadcast_to(np.asarray(box, dtype=float), (3,)).copy()
+        wrapped = np.array(pos, dtype=float, copy=True)
+        live = edges > 0.0
+        inside = np.mod(wrapped[:, live], edges[live])
+        np.clip(inside, 0.0, np.nextafter(edges[live], 0.0), out=inside)
+        wrapped[:, live] = inside
+        tree = cKDTree(wrapped, boxsize=edges)
     close = tree.query_pairs(r=2.0, output_type="ndarray")
     n_clashes = sum(
         1 for a, b in close if (int(a), int(b)) not in bonded

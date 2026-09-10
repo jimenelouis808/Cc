@@ -6,6 +6,7 @@ from .cnt import build_cnt
 from .foam3d import build_carbon_foam
 from .fullerene import build_fullerene, build_nano_onion
 from .graphene import build_graphene, build_graphene_supercell
+from .haeckelite import build_haeckelite, describe_haeckelite
 from .junction import build_junction, build_schwarzite
 from .nanocoil import build_nanocoil
 from .nanoribbon import build_nanoribbon
@@ -27,6 +28,8 @@ __all__ = [
     "build_nanocoil",
     "build_nanoribbon",
     "build_nanotube_network",
+    "build_haeckelite",
     "build_schwarzite",
+    "describe_haeckelite",
     "build_swept_tube",
 ]

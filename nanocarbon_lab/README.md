@@ -26,6 +26,7 @@ validation pass before writing.
 | `cli`           | `nanocarbon` command-line entry point                                        |
 | `gui`           | `nanocarbon-gui` desktop app: sliders, live 3D preview, export, Blender render |
 | `implicit`/`remesh`/`junction` | L/T/Y/X nanotube junctions and periodic schwarzite unit cells from implicit surfaces |
+| `haeckelite`    | **2D carbon allotropes you design**: Stone-Wales rotations patterned into graphene, giving pentagon-heptagon lattices up to 67% non-hexagonal with `sum(6-n) = 0` exact |
 | `network`       | **Periodic 3D networks of interconnected nanotubes** — cubic and diamond nets, topology derived not prescribed |
 | `cell`          | **Any structure → a DFT-ready periodic unit cell**, with the vacuum measured rather than assumed |
 | `swept`         | Coils and arbitrary curved tubes whose ring topology is **derived from the curvature** |
@@ -113,6 +114,13 @@ nanocarbon junction --kind Y --tube-radius 6 --arm-length 22 --out out/junction
 
 # Periodic gyroid schwarzite unit cell (writes .cif too)
 nanocarbon schwarzite --kind gyroid --cell 26 --out out/gyroid
+
+# Haeckelite: pentagons and heptagons patterned into graphene.
+# "none" returns graphene exactly, which is the baseline every check here
+# is calibrated against; "sparse" is an isolated 5-7-7-5 superlattice.
+nanocarbon haeckelite --nx 6 --ny 6 --pattern r57 --out out/haeckelite
+nanocarbon haeckelite --nx 6 --ny 6 --pattern sparse --period 6 \
+    --out out/one_sw_defect
 
 # C60, and a C60@C240@C540 nano-onion
 nanocarbon fullerene --family C60 --freq 1 --out out/c60

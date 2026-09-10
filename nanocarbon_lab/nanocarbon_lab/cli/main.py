@@ -52,6 +52,7 @@ from ..builders import (
     build_coil,
     build_fullerene,
     build_graphene_supercell,
+    build_haeckelite,
     build_junction,
     build_multiwall_cnt,
     build_nano_onion,
@@ -60,6 +61,7 @@ from ..builders import (
     build_nanotube_network,
     build_schwarzite,
 )
+from ..builders.haeckelite import PATTERNS as HAECKELITE_PATTERNS
 from ..cell import (
     MIN_IMAGE_SEPARATION,
     cell_report,
@@ -441,7 +443,10 @@ def _cmd_cnt_cap(args):
           f"  (std {g['angle_std']:.2f})")
     print(f"  close contacts (<2 A, non-bonded) = {g['n_close_contacts']}")
     _report_doping(atoms)
-    verdict, why = sp2_quality(g)
+    # The window follows the structure. A heptagon's interior angle is
+    # 128.6 deg before any strain, so judging a haeckelite against the
+    # hexagonal window calls every sound one BROKEN.
+    verdict, why = sp2_quality(g, atoms.info.get("quality_family", "sp2"))
     print(f"  sp2 verdict = {verdict.upper()}: {why}")
     return 0
 
@@ -575,7 +580,10 @@ def _report_structure(atoms, xyz_path, json_path):
           f" / {g['angle_max']:.1f} deg")
     print(f"  close contacts (<2 A, non-bonded) = {g['n_close_contacts']}")
     _report_doping(atoms)
-    verdict, why = sp2_quality(g)
+    # The window follows the structure. A heptagon's interior angle is
+    # 128.6 deg before any strain, so judging a haeckelite against the
+    # hexagonal window calls every sound one BROKEN.
+    verdict, why = sp2_quality(g, atoms.info.get("quality_family", "sp2"))
     print(f"  sp2 verdict = {verdict.upper()}: {why}")
 
 
@@ -857,6 +865,28 @@ def _cmd_network(args):
           f"per cell, {info['node_coordination']}-coordinate")
     print(f"  tubes       = R {info['tube_radius']:.1f} A, struts "
           f"{info['strut_length']:.1f} A long")
+    return 0
+
+
+def _cmd_haeckelite(args):
+    atoms = build_haeckelite(
+        nx=args.nx, ny=args.ny, pattern=args.pattern, period=args.period,
+        density=args.density, bond=args.bond, vacuum=args.vacuum,
+        seed=args.seed,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    # The applied/asked gap is usually large and is the only honest
+    # account of what was built: the rules in `apply_flips` turn most
+    # candidates of a dense pattern down.
+    asked = info["n_flips"] + info["n_flips_refused"]
+    print(f"  pattern     = {info['pattern']}, {info['n_flips']} of {asked} "
+          f"rotation(s) applied, "
+          f"{100 * info['non_hexagonal_fraction']:.0f}% non-hexagonal")
+    print(f"  cell        = {info['cell_a']:.2f} x {info['cell_b']:.2f} A, "
+          f"{info['cell_a'] * info['cell_b'] / len(atoms):.3f} A^2 per atom "
+          "(graphene 2.619)")
     return 0
 
 
@@ -1568,6 +1598,39 @@ def build_parser() -> argparse.ArgumentParser:
     co.add_argument("--out", required=True, help="Output path without extension.")
     _add_surface_flags(co)
     co.set_defaults(func=_cmd_coil)
+
+    hk = sub.add_parser(
+        "haeckelite",
+        help="Design a 2D carbon allotrope by patterning Stone-Wales "
+             "rotations into graphene (pentagons and heptagons).",
+    )
+    hk.add_argument("--nx", type=int, default=4,
+                    help="Repeats of graphene's 4-atom rectangular cell "
+                         "along x; at least 3. The sheet holds 4*nx*ny atoms "
+                         "whatever the pattern, since a rotation moves bonds "
+                         "and not atoms.")
+    hk.add_argument("--ny", type=int, default=4,
+                    help="Repeats along y; at least 2.")
+    hk.add_argument("--pattern", default="r57", choices=list(HAECKELITE_PATTERNS),
+                    help="Which bonds to rotate. 'none' returns graphene "
+                         "exactly, which is the baseline every check is "
+                         "calibrated against; 'sparse' is an isolated 5-7-7-5 "
+                         "repeated as a superlattice; 'r57' is the densest "
+                         "this construction reaches. A pattern is a request: "
+                         "most candidates of a dense one are refused, and the "
+                         "command reports how many.")
+    hk.add_argument("--period", type=int, default=2,
+                    help="Spacing, in cells, for 'stripes' and 'sparse'. "
+                         "Larger means fewer, more isolated defects.")
+    hk.add_argument("--density", type=float, default=0.15,
+                    help="Fraction of eligible bonds for 'random', in (0, 1].")
+    hk.add_argument("--bond", type=float, default=1.42)
+    hk.add_argument("--vacuum", type=float, default=15.0,
+                    help="Vacuum gap (Å) above and below the sheet.")
+    hk.add_argument("--out", required=True, help="Output path without extension.")
+    _add_doping_arguments(
+        hk, seed_help="Seed for the 'random' pattern and for dopant placement.")
+    hk.set_defaults(func=_cmd_haeckelite)
 
     sz = sub.add_parser(
         "schwarzite",
