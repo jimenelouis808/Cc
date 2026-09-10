@@ -297,11 +297,17 @@ def check_edlc_setup(cell: EDLCCell) -> list[str]:
             "sin sentido físico."
         )
 
-    n_electrolyte = len(cell.groups.get("electrolyte", []))
-    if n_electrolyte and n_electrolyte < 300:
+    # Count independent particles, not atoms. The ionic liquid is
+    # coarse-grained to one site per ion, so an atom count would judge it on
+    # a scale that does not apply: 94 beads is 47 ion pairs, while 94 atoms
+    # of water is only 31 molecules.
+    n_particles = sum(cell.electrolyte_composition.values())
+    if n_particles and n_particles < 200:
         warnings.append(
-            f"Solo {n_electrolyte} átomos de electrolito: muy poco para "
-            "muestrear una doble capa. Amplía la sección transversal del "
-            "electrodo o la separación."
+            f"Solo {n_particles} moléculas/iones de electrolito. La doble "
+            "capa es una media estadística sobre las especies que se ordenan "
+            "frente al electrodo, y con estos números el ruido domina. "
+            "Amplía la sección transversal del electrodo (es lo que más "
+            "ayuda) o la separación."
         )
     return warnings

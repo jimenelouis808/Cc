@@ -83,7 +83,7 @@ Python 3.10+ required. Dependencies: `numpy`, `scipy`, `ase`, `networkx`,
 carbonforge-gui
 ```
 
-A desktop app with two tabs. **Construir estructura** picks a structure type,
+A desktop app with four tabs. **Construir estructura** picks a structure type,
 tunes its parameters, shows a live 3D preview plus the geometry and physics
 reports, and exports to QE / SIESTA / LAMMPS / XYZ / CIF. **Analizar
 resultados** opens a finished calculation — a band file or `dynmat.out` — and
@@ -95,9 +95,16 @@ panel, kept visually separate because they are different chemistry, and a
 valid but wrong together — a density cutoff under 4x the wavefunction one,
 Raman on a metal, more functional groups than there are sites.
 
-A third tab, **Importar y preparar**, brings in a structure from another
-program, repairs it, and scans a pseudopotential folder against what the
-calculation needs.
+**Importar y preparar** brings in a structure from another program, repairs
+it, and scans a pseudopotential folder against what the calculation needs.
+
+**Celda EDLC (LAMMPS)** takes whatever structure is loaded and turns it into
+a constant-potential double-layer cell: electrode, electrolyte, mirrored
+electrode. **Comprobar parámetros** runs first and costs nothing — it
+estimates the final atom count and reports the setup mistakes that produce a
+capacitance rather than an error, judging each against the electrolyte
+actually chosen (2 V is unremarkable in an ionic liquid and destroys water;
+35 Å is a fine gap for water and too narrow for BMIM-PF6).
 
 Structures are built on a worker thread, so the window stays responsive on
 large models. Tkinter is required — it ships with Python on Windows and

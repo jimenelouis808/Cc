@@ -138,8 +138,16 @@ nueva** — es el paso que más se olvida.
 carbonforge-gui
 ```
 
-La ventana tiene **dos pestañas**: «Construir estructura» y «Analizar
-resultados». La primera tiene esta disposición:
+La ventana tiene **cuatro pestañas**, en el orden en que se trabaja:
+
+| Pestaña | Para qué |
+|---|---|
+| Construir estructura | Elegir el tipo, ajustarlo, verlo en 3D y exportarlo |
+| Importar y preparar | Traer una estructura de otro programa y repararla |
+| Celda EDLC (LAMMPS) | Montar un condensador de doble capa a partir de ella |
+| Analizar resultados | Abrir un cálculo terminado y graficarlo |
+
+La primera tiene esta disposición:
 
 ```
 ┌────────────────────────┬──────────────────────────────┐
@@ -172,10 +180,53 @@ resultados». La primera tiene esta disposición:
 Puedes rotar, hacer zoom y desplazar la vista 3D con la barra de
 herramientas bajo la figura.
 
-En la pestaña **«Analizar resultados»** abres el archivo de salida de un
-cálculo ya terminado —bandas o `dynmat.out`— y lo ves graficado ahí mismo,
-con los mismos avisos que da la terminal (modos imaginarios, gap muestreado,
-número de modos acústicos).
+### La pestaña «Celda EDLC (LAMMPS)»
+
+Toma la estructura que tengas cargada, la pone como electrodo, la duplica
+enfrente y rellena el hueco con electrolito. Los electrodos se mantienen a
+potencial fijo (±V/2) y su carga responde: eso es lo que hace que la
+capacitancia sea medible.
+
+**El flujo son tres botones, en orden:**
+
+1. **Comprobar parámetros** — no construye nada y no tarda. Te dice cuántos
+   átomos va a tener la celda y qué está mal en lo que has pedido. Úsalo
+   siempre primero: rellenar el electrolito son miles de moléculas y
+   descubrir el problema después es tirar el tiempo.
+2. **Construir celda EDLC** — monta la celda. Al terminar repite las
+   comprobaciones sobre la geometría real.
+3. **Exportar a LAMMPS…** — escribe `data.edlc`, `in.edlc` y
+   `NOTAS_EDLC.txt`. **Lee las notas antes de lanzar nada**: explican que
+   hace falta el paquete ELECTRODE, que no viene compilado en LAMMPS por
+   defecto, y cómo sacar la capacitancia del resultado.
+
+**Lo que comprueba, y por qué importa.** Un montaje EDLC mal hecho no falla:
+corre hasta el final y da un número. Estas son las trampas:
+
+| Aviso | Qué pasa si lo ignoras |
+|---|---|
+| Electrodo no periódico en x e y | Un nanotubo no tesela la sección; la celda no tiene sentido. Es error, no aviso |
+| Separación demasiado corta | Las dos dobles capas se solapan y ya no mides una interfaz aislada. El límite depende del electrolito: 30 Å en agua, 45 Å con líquido iónico |
+| Potencial fuera de la ventana | El agua se electroliza hacia 1,23 V, los líquidos iónicos hacia 4 V. La MD clásica no rompe enlaces, así que no verás nada raro: el número saldrá igual, y estará mal |
+| Sección transversal estrecha | La doble capa es una media estadística; con poca área domina el ruido |
+| Producción más corta que el equilibrado | Solo se promedia la producción. Estás gastando el tiempo en la etapa que se descarta |
+
+**Para sacar la capacitancia:** promedia la carga del electrodo que queda en
+`electrode_charge.dat`, usando **solo** la etapa de producción, y divide
+entre el potencial aplicado.
+
+Un aviso honesto sobre las cargas: las de carbono dopado o funcionalizado
+que trae el programa son **representativas, no definitivas** — no existe un
+conjunto consensuado, y los valores publicados discrepan según el esquema de
+partición. Sirven para explorar tendencias. Si necesitas números
+cuantitativos, derívalas de tu propio DFT sobre esa misma estructura con
+`carbonforge charges`.
+
+### La pestaña «Analizar resultados»
+
+Abres el archivo de salida de un cálculo ya terminado —bandas o
+`dynmat.out`— y lo ves graficado ahí mismo, con los mismos avisos que da la
+terminal (modos imaginarios, gap muestreado, número de modos acústicos).
 
 ### Qué significa el panel de validación
 

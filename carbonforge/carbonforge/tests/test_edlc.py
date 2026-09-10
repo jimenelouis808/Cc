@@ -245,6 +245,29 @@ class TestEDLCChecks:
                                electrolyte_kwargs={"seed": 0})
         assert any("electroliza" in w for w in check_edlc_setup(cell))
 
+    def test_sampling_warning_counts_particles_not_atoms(self):
+        """A coarse-grained ion is one bead; water is three atoms.
+
+        Counting atoms would judge the ionic liquid on the wrong scale and
+        report a number that means something different for each electrolyte.
+        """
+        il = build_edlc_cell(_electrode(6), separation=50.0,
+                             electrolyte="ionic_liquid",
+                             electrolyte_kwargs={"seed": 0})
+        n_atoms = len(il.groups["electrolyte"])
+        n_particles = sum(il.electrolyte_composition.values())
+        assert n_atoms == n_particles  # one bead per ion
+        message = next(w for w in check_edlc_setup(il) if "iones" in w)
+        assert f"{n_particles} moléculas/iones" in message
+
+        water = build_edlc_cell(_electrode(6), separation=40.0,
+                                electrolyte_kwargs={"seed": 0})
+        # Three atoms per molecule: the atom count is far above the particle
+        # count, so the two criteria are genuinely different.
+        assert len(water.groups["electrolyte"]) > 2 * sum(
+            water.electrolyte_composition.values()
+        )
+
     def test_reasonable_setup_is_clean(self):
         cell = build_edlc_cell(_electrode(6), separation=40.0,
                                potential_v=1.0,

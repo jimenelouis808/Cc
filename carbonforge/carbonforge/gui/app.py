@@ -18,6 +18,14 @@ from typing import Any, Optional
 
 from ase import Atoms
 
+from .edlc_params import (
+    EDLC_PARAMS,
+    build_edlc,
+    check_edlc_constraints,
+    describe_edlc,
+    estimate_size,
+    export_edlc,
+)
 from .params import (
     CALCULATION_PARAMS,
     PRESET_PARAMS,
@@ -82,6 +90,9 @@ class CarbonForgeApp:
         self._preset_vars: dict[str, Any] = {}
         self._functionalization_vars: dict[str, Any] = {}
         self._format_vars: dict[str, Any] = {}
+        self._edlc_vars: dict[str, Any] = {}
+        self.edlc_cell = None
+        self._edlc_source: Optional[Atoms] = None
         self._queue: queue.Queue = queue.Queue()
         self._busy = False
 
@@ -93,7 +104,11 @@ class CarbonForgeApp:
     # Layout
     # ------------------------------------------------------------------
     def _build_layout(self) -> None:
-        """Two tabs: building structures, and analysing finished runs."""
+        """Four tabs, in the order the work happens.
+
+        Build or import a structure, turn it into an EDLC cell if that is
+        what you are after, then read the finished run back.
+        """
         ttk = self.ttk
 
         notebook = ttk.Notebook(self.root)
@@ -101,13 +116,16 @@ class CarbonForgeApp:
 
         build_tab = ttk.Frame(notebook)
         import_tab = ttk.Frame(notebook)
+        edlc_tab = ttk.Frame(notebook)
         analyse_tab = ttk.Frame(notebook)
         notebook.add(build_tab, text="  Construir estructura  ")
         notebook.add(import_tab, text="  Importar y preparar  ")
+        notebook.add(edlc_tab, text="  Celda EDLC (LAMMPS)  ")
         notebook.add(analyse_tab, text="  Analizar resultados  ")
 
         self._build_builder_tab(build_tab)
         self._build_import_tab(import_tab)
+        self._build_edlc_tab(edlc_tab)
         self._build_analysis_tab(analyse_tab)
 
     def _build_builder_tab(self, parent) -> None:
@@ -394,6 +412,180 @@ class CarbonForgeApp:
             return
         self._set_import_report(report)
         self.import_status_var.set("Carpeta escaneada.")
+
+    # ------------------------------------------------------------------
+    # EDLC tab
+    # ------------------------------------------------------------------
+    def _build_edlc_tab(self, parent) -> None:
+        """Turn the current structure into a constant-potential EDLC cell."""
+        tk, ttk = self.tk, self.ttk
+
+        outer = ttk.Frame(parent, padding=8)
+        outer.pack(fill="both", expand=True)
+
+        left = ttk.Frame(outer, width=400)
+        left.pack(side="left", fill="y", padx=(0, 8))
+        left.pack_propagate(False)
+        right = ttk.Frame(outer)
+        right.pack(side="right", fill="both", expand=True)
+
+        intro = ttk.LabelFrame(left, text="Qué hace esta pestaña", padding=6)
+        intro.pack(fill="x")
+        ttk.Label(
+            intro,
+            text=(
+                "Coloca la estructura de la primera pestaña como electrodo, "
+                "la duplica enfrente y rellena el hueco con electrolito. Los "
+                "electrodos se mantienen a potencial fijo (±V/2) y su carga "
+                "responde: eso es lo que hace medible la capacitancia.\n\n"
+                "Necesita el paquete ELECTRODE de LAMMPS, que no viene "
+                "compilado por defecto."
+            ),
+            wraplength=370, justify="left", foreground="#777777",
+            font=("TkDefaultFont", 8),
+        ).pack(anchor="w")
+
+        # Scrollable parameter column: there are more knobs than fit.
+        params_box = ttk.LabelFrame(left, text="Parámetros", padding=4)
+        params_box.pack(fill="both", expand=True, pady=(10, 0))
+        canvas = tk.Canvas(params_box, highlightthickness=0, width=370)
+        scroll = ttk.Scrollbar(
+            params_box, orient="vertical", command=canvas.yview
+        )
+        frame = ttk.Frame(canvas)
+        frame.bind(
+            "<Configure>",
+            lambda _e: canvas.configure(scrollregion=canvas.bbox("all")),
+        )
+        canvas.create_window((0, 0), window=frame, anchor="nw")
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+
+        for spec in EDLC_PARAMS:
+            self._add_field(frame, spec, self._edlc_vars)
+
+        actions = ttk.Frame(left)
+        actions.pack(fill="x", pady=(8, 0))
+        ttk.Button(
+            actions, text="Comprobar parámetros",
+            command=self._on_edlc_check,
+        ).pack(fill="x", pady=2)
+        self.edlc_build_button = ttk.Button(
+            actions, text="Construir celda EDLC",
+            command=self._on_edlc_build,
+        )
+        self.edlc_build_button.pack(fill="x", pady=2)
+        self.edlc_export_button = ttk.Button(
+            actions, text="Exportar a LAMMPS…", state="disabled",
+            command=self._on_edlc_export,
+        )
+        self.edlc_export_button.pack(fill="x", pady=2)
+
+        self.edlc_status_var = tk.StringVar(
+            value="Construye una estructura en la primera pestaña."
+        )
+        ttk.Label(
+            left, textvariable=self.edlc_status_var, wraplength=380,
+            justify="left", foreground="#0a6",
+        ).pack(fill="x", pady=(8, 0))
+
+        report_box = ttk.LabelFrame(right, text="Informe", padding=4)
+        report_box.pack(fill="both", expand=True)
+        self.edlc_text = tk.Text(report_box, wrap="word")
+        report_scroll = ttk.Scrollbar(
+            report_box, orient="vertical", command=self.edlc_text.yview
+        )
+        self.edlc_text.configure(
+            yscrollcommand=report_scroll.set, state="disabled"
+        )
+        self.edlc_text.pack(side="left", fill="both", expand=True)
+        report_scroll.pack(side="right", fill="y")
+
+    def _set_edlc_report(self, text: str) -> None:
+        self.edlc_text.configure(state="normal")
+        self.edlc_text.delete("1.0", "end")
+        self.edlc_text.insert("1.0", text)
+        self.edlc_text.configure(state="disabled")
+
+    def _edlc_electrode(self):
+        """The structure to use as electrode, or ``None`` with a message set."""
+        atoms = self.atoms or getattr(self, "_imported_atoms", None)
+        if atoms is None:
+            self.edlc_status_var.set(
+                "No hay estructura. Constrúyela en la primera pestaña o "
+                "impórtala en la segunda."
+            )
+        return atoms
+
+    def _on_edlc_check(self) -> None:
+        """Report the problems before paying to pack thousands of molecules."""
+        atoms = self._edlc_electrode()
+        if atoms is None:
+            return
+        raw = self._read_raw(self._edlc_vars)
+        try:
+            report = check_edlc_constraints(atoms, raw)
+            size = estimate_size(atoms, raw)
+        except Exception as exc:
+            self._show_error(exc, traceback.format_exc())
+            return
+        self._set_edlc_report(f"{size}\n\n{report}")
+        self.edlc_status_var.set("Parámetros comprobados (nada construido).")
+
+    def _on_edlc_build(self) -> None:
+        """Assemble the cell on a worker thread — packing is slow."""
+        if self._busy:
+            return
+        atoms = self._edlc_electrode()
+        if atoms is None:
+            return
+        raw = self._read_raw(self._edlc_vars)
+
+        self.edlc_build_button.configure(state="disabled")
+        self.edlc_status_var.set("Rellenando el electrolito… puede tardar.")
+
+        def worker() -> None:
+            try:
+                self._queue.put(("edlc", build_edlc(atoms, raw)))
+            except Exception as exc:
+                self._queue.put(("edlc_error", (exc, traceback.format_exc())))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_edlc_built(self, cell) -> None:
+        self.edlc_cell = cell
+        self._edlc_source = self.atoms or getattr(self, "_imported_atoms", None)
+        self.edlc_build_button.configure(state="normal")
+        self.edlc_export_button.configure(state="normal")
+        self._set_edlc_report(describe_edlc(cell))
+        self.edlc_status_var.set(f"Celda lista: {len(cell.atoms)} átomos.")
+
+    def _on_edlc_export(self) -> None:
+        cell = getattr(self, "edlc_cell", None)
+        if cell is None:
+            return
+
+        from tkinter import filedialog, messagebox
+
+        outdir = filedialog.askdirectory(title="Carpeta de destino")
+        if not outdir:
+            return
+        try:
+            written = export_edlc(
+                cell, Path(outdir), self._read_raw(self._edlc_vars)
+            )
+        except Exception as exc:
+            self._show_error(exc, traceback.format_exc())
+            return
+        listado = "\n".join(f"  • {p}" for p in written)
+        self.edlc_status_var.set(f"Exportado: {len(written)} archivo(s).")
+        messagebox.showinfo(
+            "Exportación completada",
+            f"Archivos escritos:\n{listado}\n\n"
+            "Lee NOTAS_EDLC.txt antes de lanzar: explica qué paquete de "
+            "LAMMPS hace falta y cómo sacar la capacitancia.",
+        )
 
     # ------------------------------------------------------------------
     # Analysis tab
@@ -875,6 +1067,17 @@ class CarbonForgeApp:
 
     def _discard_current_structure(self) -> None:
         """Drop the built structure and disable the actions that consume it."""
+        # An EDLC cell built from this structure goes with it. Leaving it
+        # exportable would write a cell whose electrode is no longer the one
+        # on screen — the same trap the builder tab's export had.
+        if self.edlc_cell is not None and self._edlc_source is self.atoms:
+            self.edlc_cell = None
+            self._edlc_source = None
+            self.edlc_export_button.configure(state="disabled")
+            self._set_edlc_report("")
+            self.edlc_status_var.set(
+                "La celda EDLC se descartó al cambiar la estructura."
+            )
         self.atoms = None
         self.export_button.configure(state="disabled")
         self.png_button.configure(state="disabled")
@@ -928,6 +1131,13 @@ class CarbonForgeApp:
                 kind, payload = self._queue.get_nowait()
                 if kind == "built":
                     self._on_built(payload)
+                elif kind == "edlc":
+                    self._on_edlc_built(payload)
+                elif kind == "edlc_error":
+                    exc, tb = payload
+                    self.edlc_build_button.configure(state="normal")
+                    self.edlc_status_var.set("Error al construir la celda.")
+                    self._show_error(exc, tb)
                 elif kind == "error":
                     exc, tb = payload
                     self._set_busy(False, "Error.")

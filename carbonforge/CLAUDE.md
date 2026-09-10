@@ -25,7 +25,7 @@ carbonforge/
 ├── exports/       # Quantum ESPRESSO, SIESTA and LAMMPS writers
 ├── relax/         # ASE optimizer wrapper + calculator-free harmonic pre-relax
 ├── viz/           # matplotlib 3D viewer
-├── gui/           # Tkinter desktop app (params logic + widgets)
+├── gui/           # Tkinter desktop app (params + edlc_params logic, widgets)
 ├── workflows/     # batch generation, convergence sweeps, ML dataset
 ├── utils/         # constants, geometry helpers
 ├── cli/           # command line interface
@@ -79,6 +79,12 @@ carbonforge/
   point at `forcefields.charges` for deriving them from the user's own DFT.
 - The electrolyte filler knows nothing about the electrodes: keep the
   `wall_gap` inset, or molecules land on top of the surface.
+- The ionic liquid is coarse-grained to one bead per ion. Sampling and
+  density checks must count particles, not atoms, or they judge water and
+  ionic liquid on scales that differ by a factor of three.
+- EDLC limits are per-electrolyte, not global: 2 V destroys water and is
+  unremarkable in an ionic liquid; 35 Å separates aqueous double layers and
+  does not separate ionic-liquid ones. `gui/edlc_params` keeps both tables.
 - Read UPF headers, never guess the family from the filename. A file can be
   named anything; `io.upf` parses both v1 and v2 layouts.
 - autofix must never move overlapping atoms apart. That would invent a
