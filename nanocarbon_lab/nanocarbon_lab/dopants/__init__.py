@@ -19,6 +19,7 @@ from .chemistry import (
     describe,
     get_chemistry,
 )
+from .codoping import AFFINITIES, describe_codoping
 from .rings import dope_rings, ring_sites, ring_size_census
 from .substitutional import (
     codope,
@@ -28,6 +29,8 @@ from .substitutional import (
 )
 
 __all__ = [
+    "AFFINITIES",
+    "describe_codoping",
     "DOPANT_CHEMISTRY",
     "DOPANT_ELEMENTS",
     "PLANAR_DOPANTS",

@@ -70,6 +70,7 @@ from ..cell import (
 )
 from ..defects import introduce_vacancies
 from ..dopants import DOPANT_CHEMISTRY, DOPANT_ELEMENTS
+from ..dopants.codoping import AFFINITIES, describe_codoping
 from ..exports.lammps import write_lammps
 from ..exports.qe import QESettings, write_qe_input
 from ..exports.xyz import write_cif, write_render_bundle
@@ -84,6 +85,7 @@ from ..jobs import (
     DOPANT_SITES,
     MODES,
     Job,
+    apply_codoping,
     apply_doping,
     apply_grafting,
     apply_tmd_chemistry,
@@ -190,6 +192,21 @@ def _add_doping_arguments(p, seed_help: str | None = None) -> None:
                         "carries its curvature and its reactivity; the "
                         "fraction is then of the pentagon sites. Needs a "
                         "builder that records rings.")
+    p.add_argument("--codope", default="", metavar="SPEC",
+                   help="Several heteroatoms at once, as 'N:0.05,B:0.05'. "
+                        "Each fraction is of the ORIGINAL carbon count, so "
+                        "both mean what they say -- doping twice in sequence "
+                        "makes the second fraction a fraction of what the "
+                        "first left. Mutually exclusive with --dopant.")
+    p.add_argument("--codope-affinity", default="random",
+                   choices=list(AFFINITIES),
+                   help="Whether the co-dopants seek each other out or keep "
+                        "apart. 'seek' places them as bonded pairs of unlike "
+                        "species, which is the B-N domain case; 'avoid' "
+                        "leaves no two dopants bonded; 'random' ignores the "
+                        "correlation. The achieved dopant-dopant and unlike "
+                        "bond counts are reported, so the rule's effect is a "
+                        "number rather than a claim.")
     _add_graft_arguments(p)
     if seed_help:
         p.add_argument("--seed", type=int, default=0, help=seed_help)
@@ -317,7 +334,19 @@ def _resolve_material(args) -> None:
 
 
 def _dope(atoms, args):
-    """Apply the doping flags, honouring the placement choice."""
+    """Apply the doping flags, honouring the placement choice.
+
+    Co-doping and single-element doping are mutually exclusive, and `Job`
+    refuses both together rather than letting one silently redefine the
+    other's fraction. Both paths go through `jobs.py`, so the GUI, the CLI
+    and a sweep share one placement policy.
+    """
+    spec = getattr(args, "codope", "")
+    if spec:
+        job = Job(mode="capped tube", codope=spec,
+                  codope_affinity=getattr(args, "codope_affinity", "random"),
+                  seed=args.seed)
+        return apply_codoping(atoms, job)
     if not getattr(args, "dopant", None) or getattr(args, "dopant_conc", 0) <= 0:
         return atoms
     job = Job(mode="capped tube", dopant=args.dopant,
@@ -561,6 +590,12 @@ def _report_doping(atoms) -> None:
         size = atoms.info.get("doping_ring_size", 5)
         print(f"                {atoms.info['doping_concentration']:.1%} of the "
               f"{atoms.info['doping_sites_available']} {size}-ring sites")
+    record = atoms.info.get("codoping")
+    if record:
+        # The achieved fraction, and the bond counts the affinity is
+        # judged by -- `avoid` must show 0 and `seek` many. Reporting the
+        # requested fraction alone would be reporting an intention.
+        print(f"                {describe_codoping(atoms)}")
 
 
 def _report_structure(atoms, xyz_path, json_path):

@@ -80,6 +80,7 @@ from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
 from ..cell import MIN_IMAGE_SEPARATION, cell_report, to_unit_cell
 from ..dopants import DOPANT_ELEMENTS, get_chemistry
+from ..dopants.codoping import AFFINITIES
 from ..exports.xyz import write_cif, write_render_bundle
 from ..functionalize import (
     GROUPS,
@@ -95,6 +96,7 @@ from ..jobs import (
     TMD_EDITS,
     Job,
     estimate_cost,
+    parse_codope_spec,
     parse_swaps,
     to_cli,
 )
@@ -625,6 +627,9 @@ class NanocarbonGUI:
         self.var_dopant = self._var("dopant", tk.StringVar(value="none"))
         self.var_dopant_conc = self._var("dopant_conc", tk.DoubleVar(value=0.03))
         self.var_dopant_site = self._var("dopant_site", tk.StringVar(value="random"))
+        self.var_codope = self._var("codope", tk.StringVar(value=""))
+        self.var_codope_affinity = self._var("codope_affinity",
+                                             tk.StringVar(value="random"))
         # The MX2 counterpart of the carbon dopant vars. Separate because
         # the chemistry is: there is no "substitute a heteroatom for a
         # carbon" in a dichalcogenide, and no Janus face in graphene.
@@ -1019,10 +1024,25 @@ class NanocarbonGUI:
         # The dopant table's own words, not a paraphrase: what an element
         # does and how much of it is real are exactly what a user picking
         # from a fifteen-item dropdown cannot be expected to know.
+        ttk.Label(self.frame_chem, text="Co-dope").grid(row=4, column=0,
+                                                        sticky="w")
+        ttk.Entry(self.frame_chem, textvariable=self.var_codope,
+                  width=12, justify="right").grid(row=4, column=1, sticky="e")
+        self.var_codope.trace_add("write", lambda *_: self._update_dopant_hint())
+        ttk.Label(self.frame_chem, text="Affinity").grid(row=5, column=0,
+                                                        sticky="w")
+        ttk.Combobox(self.frame_chem, textvariable=self.var_codope_affinity,
+                     values=list(AFFINITIES), state="readonly", width=9).grid(
+            row=5, column=1, sticky="e", pady=(0, 6))
+        self.var_codope_affinity.trace_add(
+            "write", lambda *_: self._update_dopant_hint())
+        # The dopant table's own words, not a paraphrase: what an element
+        # does and how much of it is real are exactly what a user picking
+        # from a fifteen-item dropdown cannot be expected to know.
         self.lbl_dopant = ttk.Label(self.frame_chem, text="", foreground=MUTED,
                                     font=("TkDefaultFont", 8), wraplength=230,
                                     justify="left")
-        self.lbl_dopant.grid(row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self.lbl_dopant.grid(row=6, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         # --- surface functionalisation, shown for every family
         self.frame_graft = ttk.LabelFrame(parent, text="Surface groups",
@@ -1778,11 +1798,37 @@ class NanocarbonGUI:
         warning fires at build time either way; showing it here means the
         user does not have to build to find out.
         """
+        spec = self.var_codope.get().strip()
         element = self.var_dopant.get()
+        if spec:
+            # Co-doping replaces the single-element fields rather than
+            # adding to them -- both substitute carbons, and `Job` refuses
+            # the pair, so saying so here beats a build-time error.
+            affinity = self.var_codope_affinity.get()
+            meaning = {
+                "seek": "placed as bonded pairs of unlike species — the B-N "
+                        "domain case",
+                "avoid": "spread so no two dopants are bonded",
+                "random": "placed independently of one another",
+            }[affinity]
+            try:
+                parsed = parse_codope_spec(spec)
+            except ValueError as error:
+                self.lbl_dopant.config(text=str(error), foreground=WARN_AMBER)
+                return
+            total = sum(fraction for _, fraction in parsed)
+            names = ", ".join(f"{e} {f:.1%}" for e, f in parsed)
+            text = (f"Co-doping {names} — each of the original carbon count, "
+                    f"{total:.1%} in all, {meaning}. The single Dopant and "
+                    "Site boxes above are ignored while this is set.")
+            colour = WARN_AMBER if total > 0.3 else MUTED
+            self.lbl_dopant.config(text=text, foreground=colour)
+            return
         if element == "none":
             self.lbl_dopant.config(
                 text="Pure carbon. Pick an element to substitute into the "
-                     "lattice.", foreground=MUTED)
+                     "lattice, or type a co-doping spec such as "
+                     "'N:0.05,B:0.05'.", foreground=MUTED)
             return
         chem = get_chemistry(element)
         fraction = float(self.var_dopant_conc.get())
@@ -2064,10 +2110,16 @@ class NanocarbonGUI:
         """
         mode = self.var_mode_kind.get()
         dopant = self.var_dopant.get()
+        spec = self.var_codope.get().strip()
         common = dict(
-            dopant=None if dopant == "none" else dopant,
+            # `Job` refuses a dopant and a co-doping spec together, since
+            # both substitute carbons. The spec wins here, which matches
+            # what the hint tells the user while they type it.
+            dopant=None if (spec or dopant == "none") else dopant,
             dopant_conc=float(self.var_dopant_conc.get()),
             dopant_site=self.var_dopant_site.get(),
+            codope=spec,
+            codope_affinity=self.var_codope_affinity.get(),
             seed=int(self.var_seed.get()),
             **self._graft_fields(),
         )

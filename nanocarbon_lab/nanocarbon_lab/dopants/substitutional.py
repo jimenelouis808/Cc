@@ -253,34 +253,20 @@ def dope_directed(
 def codope(
     atoms: Atoms,
     spec: Sequence[tuple[str, float]],
+    affinity: str = "random",
     seed: int | None = None,
 ) -> Atoms:
-    """Multi-element doping with independent random placement per species.
+    """Multi-element doping. Delegates to :mod:`.codoping`.
 
-    Example
-    -------
-    >>> codope(sheet, [("N", 0.02), ("B", 0.02)], seed=42)
-
-    Parameters
-    ----------
-    atoms
-        Host structure.
-    spec
-        Sequence of ``(element, concentration)`` tuples, applied sequentially.
-        Each concentration is relative to the **remaining carbon atoms**.
-    seed
-        Base RNG seed. Each species is seeded as ``seed + k``.
-
-    Returns
-    -------
-    ase.Atoms
-        Co-doped structure.
+    Kept here so the older import path keeps working. The implementation
+    moved because the sequential version this name used to have was wrong
+    in a way no caller could see: each species' fraction was taken against
+    the carbons the previous one left, so 5% N and 5% B gave 5.00% and
+    4.75%, and `info` recorded the fractions asked for rather than placed.
+    The replacement places every species in one pass against the same
+    denominator, and adds the ``affinity`` control -- see
+    :func:`nanocarbon_lab.dopants.codoping.codope`.
     """
-    out = atoms
-    base = 0 if seed is None else int(seed)
-    for k, (element, conc) in enumerate(spec):
-        sub_seed = None if seed is None else base + k
-        out = dope_random(out, element, conc, seed=sub_seed)
-    out.info["doping_mode"] = "codope"
-    out.info["codoping_spec"] = list(spec)
-    return out
+    from .codoping import codope as _codope
+
+    return _codope(atoms, spec, affinity=affinity, seed=seed)

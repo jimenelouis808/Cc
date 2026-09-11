@@ -123,6 +123,16 @@ class Job:
         carbon structure.
     dopant_conc
         Substitution fraction, ignored when ``dopant`` is ``None``.
+    codope
+        Several heteroatoms at once, as ``"N:0.05,B:0.05"`` -- each
+        fraction of the **original** carbon count, so both mean what they
+        say. Mutually exclusive with `dopant`: they both substitute
+        carbons, and running one after the other would make the second
+        one's fraction mean something different again.
+    codope_affinity
+        Whether the species seek each other out (``"seek"``, the B-N
+        domain case), keep apart (``"avoid"``) or ignore each other
+        (``"random"``). See :mod:`~nanocarbon_lab.dopants.codoping`.
     dopant_site
         Where the substitutions go: ``"random"`` anywhere, ``"pentagon"``
         on the five-membered rings that carry a curved structure's
@@ -174,6 +184,8 @@ class Job:
     dopant: str | None = None
     dopant_conc: float = 0.0
     dopant_site: str = "random"
+    codope: str = ""
+    codope_affinity: str = "random"
     tmd_edit: str | None = None
     tmd_edit_element: str = "Se"
     tmd_edit_amount: float = 1.0
@@ -188,6 +200,14 @@ class Job:
         if self.mode not in MODES:
             raise ValueError(
                 f"Unknown mode {self.mode!r}; expected one of {list(MODES)}."
+            )
+        if self.codope and self.dopant:
+            raise ValueError(
+                "Pass either `dopant` or `codope`, not both: they both "
+                "substitute carbons, so running one after the other would "
+                "make the second one's fraction a fraction of what the first "
+                "left rather than of the structure. For several elements use "
+                f"codope alone, e.g. '{self.dopant}:{self.dopant_conc:g},...'."
             )
 
     def with_params(self, **changes: Any) -> Job:
@@ -289,7 +309,9 @@ def build(job: Job):
             atoms = apply_tmd_chemistry(atoms, job)
     else:
         atoms = builder(**job.params, seed=job.seed)
-        if job.dopant and job.dopant_conc > 0:
+        if job.codope:
+            atoms = apply_codoping(atoms, job)
+        elif job.dopant and job.dopant_conc > 0:
             atoms = apply_doping(atoms, job)
 
     # Grafting comes last and applies to every family. A group is added
@@ -767,6 +789,48 @@ def _tmd_edit_flags(job: Job) -> list[str]:
             "--seed", str(job.seed)]
 
 
+def parse_codope_spec(text: str) -> list[tuple[str, float]]:
+    """Parse ``"N:0.05,B:0.05"`` into ``[("N", 0.05), ("B", 0.05)]``.
+
+    One spelling for the GUI, the CLI and a sweep, as `parse_swaps` is for
+    the group substitutions. The fraction is of the original carbon count,
+    which is the whole point of co-doping in one pass rather than twice.
+    """
+    spec: list[tuple[str, float]] = []
+    for piece in (part.strip() for part in text.split(",")):
+        if not piece:
+            continue
+        if piece.count(":") != 1:
+            raise ValueError(
+                f"Cannot read the co-doping term {piece!r}. Write it as "
+                "'element:fraction', for example 'N:0.05', and separate "
+                "several with commas: 'N:0.05,B:0.05'."
+            )
+        element, _, value = piece.partition(":")
+        try:
+            fraction = float(value)
+        except ValueError:
+            raise ValueError(
+                f"The fraction in {piece!r} is not a number. Write it as a "
+                "decimal fraction of the carbon atoms, so 'N:0.05' for 5%."
+            ) from None
+        spec.append((element.strip(), fraction))
+    return spec
+
+
+def apply_codoping(atoms, job: Job):
+    """Place every species of ``job.codope`` in one pass.
+
+    Split out of :func:`build` for the same reason as
+    :func:`apply_doping`: the GUI, the CLI and a sweep share one placement
+    policy rather than growing three.
+    """
+    from .dopants.codoping import codope as _codope
+
+    return _codope(atoms, parse_codope_spec(job.codope),
+                   affinity=job.codope_affinity, seed=job.seed)
+
+
 def parse_swaps(text: str) -> dict[str, str]:
     """Parse ``"O:S"`` or ``"O:S,H:F"`` into a substitution mapping.
 
@@ -888,7 +952,11 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
         parts += ["--out", out]
         return " ".join(parts)
 
-    if job.dopant and job.dopant_conc > 0:
+    if job.codope:
+        parts += ["--codope", job.codope]
+        if job.codope_affinity != "random":
+            parts += ["--codope-affinity", job.codope_affinity]
+    elif job.dopant and job.dopant_conc > 0:
         parts += ["--dopant", job.dopant, "--dopant-conc", f"{job.dopant_conc:g}"]
         if job.dopant_site != "random":
             parts += ["--dopant-site", job.dopant_site]
@@ -900,6 +968,8 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
 
 __all__ = [
     "DOPANT_SITES",
+    "apply_codoping",
+    "parse_codope_spec",
     "IMPLICIT_MODES",
     "MODES",
     "TMD_EDITS",

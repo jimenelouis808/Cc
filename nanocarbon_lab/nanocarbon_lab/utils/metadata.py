@@ -146,7 +146,58 @@ def remap_after_removal(info: dict[str, Any],
         else:
             out.pop("dopants", None)
 
+    # A co-doping summary is a census, and the same rule applies to it as to
+    # `ring_counts`: recompute it, never carry it. Removing three atoms from
+    # a co-doped sheet can take a dopant with them, and a record still
+    # claiming 20 N against 19 in the structure is the kind of inconsistency
+    # that is only noticed after it has been plotted. Everything needed is
+    # already in the remapped `info` -- `dopants` gives element to indices
+    # and `bonds` the graph -- so no coordinates are required.
+    record = out.get("codoping")
+    if record:
+        out["codoping"] = _recount_codoping(record, out)
+
     return out
+
+
+def _recount_codoping(record: dict[str, Any],
+                      info: dict[str, Any]) -> dict[str, Any]:
+    """Rebuild a co-doping summary from the survivors.
+
+    The bond counts are what the ``affinity`` is judged by, so they have to
+    survive a deletion as measurements rather than as history: an `avoid`
+    structure whose record still says 0 dopant bonds after a vacancy opened
+    one would be asserting the property it no longer has.
+    """
+    element_of: dict[int, str] = {}
+    for entry in info.get("dopants", []):
+        for index in entry.get("indices", []):
+            element_of[int(index)] = entry["element"]
+
+    counts: dict[str, int] = {element: 0 for element in record.get("counts", {})}
+    for element in element_of.values():
+        counts[element] = counts.get(element, 0) + 1
+
+    dopant_bonds = 0
+    unlike_bonds = 0
+    for pair in info.get("bonds", []):
+        first, second = int(pair[0]), int(pair[1])
+        if first in element_of and second in element_of:
+            dopant_bonds += 1
+            if element_of[first] != element_of[second]:
+                unlike_bonds += 1
+
+    # The denominator is the host it was doped into, which the deletion does
+    # not change -- the fraction asked for was of that, not of what is left.
+    host = max(1, int(record.get("host_carbons", 1)))
+    return {
+        **record,
+        "counts": counts,
+        "achieved": {element: round(count / host, 6)
+                     for element, count in counts.items()},
+        "dopant_bonds": dopant_bonds,
+        "unlike_bonds": unlike_bonds,
+    }
 
 
 def keep_indices(n_atoms: int, removed: Iterable[int]) -> list[int]:

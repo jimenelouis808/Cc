@@ -14,6 +14,7 @@ validation pass before writing.
 |-----------------|------------------------------------------------------------------------------|
 | `builders`      | CNT (armchair / zigzag / chiral), graphene, nanoribbons, **nanocoils**, 3D carbon foam, **capped/defected fullerene-CNTs** |
 | `dopants`       | Substitutional heteroatoms in carbon (N, B, P, S, Se, O, Si, Ge, Al and the 3d single-atom metals), placed at random, on **pentagons**, on edges or in the bulk |
+| `dopants/codoping` | **Several heteroatoms at once**, each with its own fraction of the original carbon count, and a say in whether the species pair up (`seek`, the B–N domain case), keep apart (`avoid`) or ignore each other |
 | `analyse`       | **Describe a structure this package did not build**: composition, shape, bonds, rings (as faces of the surface), coordination, validation and a verdict — with recorded, measured and inferred kept apart |
 | `functionalize` | **Surface groups** (–OH, –COOH, =O, –CHO, –NH2, –SH, –CH3, –NO2, –F, epoxide) grafted onto carbon **or** MX2, with the elements swappable and the geometry rebuilt |
 | `defects`       | Mono- and divacancies, Stone-Wales, local random distortion                  |
@@ -272,6 +273,24 @@ result before drawing conclusions from the geometry.
 ```
 
 `nanocarbon dopants` prints the whole table with the reasoning.
+
+**Co-doping** places several elements in one pass, so each fraction is of
+the original carbon count rather than of what the previous species left:
+
+```bash
+# B and N as bonded pairs -- the BN-domain case
+nanocarbon cnt-cap --rings 8 --freq 3 \
+    --codope "N:0.04,B:0.04" --codope-affinity seek --out out/bn_pairs
+
+# the same amounts, spread so no two dopants are bonded
+nanocarbon cnt-cap --rings 8 --freq 3 \
+    --codope "N:0.04,B:0.04" --codope-affinity avoid --out out/bn_spread
+```
+
+Both report the achieved fraction and the measured heteroatom-heteroatom
+bond counts, which is how you check the affinity did what it says — `seek`
+gives 29 dopant-dopant bonds on that tube, 29 of them between unlike
+species; `avoid` gives 0.
 
 ### Placement: on the pentagons, or anywhere
 

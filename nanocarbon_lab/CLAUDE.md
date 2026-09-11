@@ -36,7 +36,9 @@ nanocarbon_lab/
 │                  #   normals, site selection, steric placement)
 ├── dopants/       # substitutional heteroatoms in carbon: chemistry.py
 │                  #   (which elements, what site, how much), rings.py
-│                  #   (pentagon-selected placement), substitutional.py
+│                  #   (pentagon-selected placement), substitutional.py,
+│                  #   codoping.py (several elements in one pass, each with
+│                  #   its own fraction, and a seek/avoid correlation)
 ├── defects/       # vacancies, Stone-Wales, topological defects
 ├── topology/      # networkx-based connectivity / coordination analysis
 ├── validation/    # bond lengths, coordination, density, vacuum checks
@@ -591,6 +593,48 @@ the other.
 
 `jobs.apply_doping` is the single placement policy; the GUI and the CLI
 both go through it, as they do for everything else in `jobs.py`.
+
+## Co-doping is one pass, not doping twice
+
+`dopants/codoping.py` places several heteroatoms at once. It is not a
+convenience wrapper around `dope_random`, and the two differences are the
+whole module.
+
+**Every fraction is of the same denominator.** Applied sequentially, each
+species' concentration is taken against the carbons the *previous* one
+left, so a 400-atom sheet asked for 5% N and 5% B came back with 5.00% and
+4.75%. The error compounds with concentration and species count, and it was
+silent: `info` recorded the fractions requested, not the ones placed. Counts
+are now worked out together against the original carbon count by **largest
+remainder** — independent rounding does not add up (four species at 0.1 on
+95 carbons round to 10 each, which is 40 sites for a requested 38).
+`jobs.Job` **refuses a `dopant` and a `codope` spec together** rather than
+letting one silently redefine the other's fraction.
+
+**Placement is correlated, because the chemistry is.** `affinity` takes
+`"random"`, `"seek"` or `"avoid"`. In B,N co-doped graphene the species
+prefer to sit next to each other — a B–N pair is isoelectronic with a C–C
+pair — which is why real samples grow BN domains rather than a solid
+solution; `"seek"` places dopants as bonded pairs of *unlike* species.
+`"avoid"` leaves no two dopants bonded, for the dispersed case.
+
+**The affinity's effect is measured, not asserted.** `info["codoping"]`
+records `dopant_bonds` and `unlike_bonds`, and that is what the tests check.
+Measured on a 400-carbon sheet at 5% N + 5% B: `seek` 22 dopant–dopant bonds
+of which 20 unlike, `random` 3, `avoid` **0**. Do not replace these with a
+claim in a docstring — the numbers are the only reason to believe the rule
+did anything.
+
+This is **not** an energy calculation: nothing here knows B–N is favourable.
+The affinity is a placement rule the caller picks to match the sample they
+mean, and the docstring says so. `"seek"` with a single species has nothing
+to alternate with and produces like–like pairs, which is the honest answer
+rather than a silent no-op.
+
+`"avoid"` can run out of room — an independent set of the requested size
+need not exist on a trivalent lattice — and then it **warns and records
+`unplaced`** rather than filling the remainder in adjacent, which would give
+up the one property that was asked for.
 
 ## Functionalisation adds atoms; doping replaces them
 
