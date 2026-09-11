@@ -23,9 +23,12 @@ from nanocarbon_lab.builders.haeckelite import (
     ANGLE_FLOOR,
     BOND_CEILING,
     BOND_FLOOR,
+    CATALOGUE,
+    CATALOGUE_PATTERNS,
     PATTERNS,
     apply_flips,
     build_haeckelite,
+    catalogue_flips,
     describe_haeckelite,
     flippable,
     mesh_edges,
@@ -149,7 +152,10 @@ class TestFlips:
 
 
 class TestPatterns:
-    @pytest.mark.parametrize("pattern", [p for p in PATTERNS if p != "none"])
+    GENERATIVE = [p for p in PATTERNS
+                  if p != "none" and p not in CATALOGUE_PATTERNS]
+
+    @pytest.mark.parametrize("pattern", GENERATIVE)
     def test_the_selection_is_vertex_disjoint(self, pattern):
         """Two flips sharing a vertex would each be chosen against a mesh
         the other had already changed."""
@@ -181,6 +187,115 @@ class TestPatterns:
             select_flips(vertices, triangles, box, 3, 3, pattern="spiral")
 
 
+class TestCatalogue:
+    """The catalogue is a solved tiling, so its claims are checkable."""
+
+    @pytest.mark.parametrize("name", CATALOGUE_PATTERNS)
+    def test_the_stored_pattern_is_an_exact_cover_of_its_block(self, name):
+        """The whole point of the entry. A zero-hexagon lattice needs every
+        mesh vertex touched exactly once -- a flip gives two -1 and two +1 --
+        so the flips must partition the vertex set into groups of four.
+        """
+        block_m, block_n = CATALOGUE[name]["block"]
+        vertices, triangles, _ = triangular_torus_mesh(block_m, block_n,
+                                                       SPACING)
+        flips = catalogue_flips(name, block_m, block_n)
+        assert len(flips) == len(vertices) // 4
+
+        faces = [tuple(int(x) for x in f) for f in triangles]
+        seen: dict[int, int] = {}
+        for first, second in flips:
+            incident = [f for f in faces if first in f and second in f]
+            assert len(incident) == 2, (first, second)
+            touched = set(incident[0]) | set(incident[1])
+            assert len(touched) == 4
+            for vertex in touched:
+                seen[vertex] = seen.get(vertex, 0) + 1
+        assert set(seen) == set(range(len(vertices))), "not a cover"
+        assert set(seen.values()) == {1}, "groups overlap"
+
+    @pytest.mark.parametrize("name", CATALOGUE_PATTERNS)
+    def test_every_stored_flip_is_a_real_mesh_edge(self, name):
+        """Writing an edge's far end as its *wrapped* index instead of
+        ``i + 1`` tiled correctly in j and silently stopped being an edge
+        at all in i, which is how this test came to exist.
+        """
+        block_m, block_n = CATALOGUE[name]["block"]
+        for times_m, times_n in ((1, 1), (2, 1), (1, 2), (2, 2), (3, 1)):
+            m, n = block_m * times_m, block_n * times_n
+            _, triangles, _ = triangular_torus_mesh(m, n, SPACING)
+            edges = set(mesh_edges(triangles))
+            for flip in catalogue_flips(name, m, n):
+                assert flip in edges, (name, m, n, flip)
+
+    @pytest.mark.parametrize("name", CATALOGUE_PATTERNS)
+    def test_it_tiles_as_a_cover_at_every_multiple(self, name):
+        block_m, block_n = CATALOGUE[name]["block"]
+        for times_m, times_n in ((2, 1), (1, 2), (2, 2)):
+            m, n = block_m * times_m, block_n * times_n
+            vertices, triangles, _ = triangular_torus_mesh(m, n, SPACING)
+            flips = catalogue_flips(name, m, n)
+            assert len(flips) == len(vertices) // 4
+            faces = [tuple(int(x) for x in f) for f in triangles]
+            seen: set[int] = set()
+            for first, second in flips:
+                incident = [f for f in faces if first in f and second in f]
+                touched = set(incident[0]) | set(incident[1])
+                assert not (touched & seen), (m, n, first, second)
+                seen |= touched
+            assert seen == set(range(len(vertices)))
+
+    @pytest.mark.parametrize("name", CATALOGUE_PATTERNS)
+    def test_a_partial_block_is_refused_rather_than_approximated(self, name):
+        """The hexagons a partial block leaves are exactly the ones the
+        lattice is defined by not having, so this is not a near miss."""
+        block_m, block_n = CATALOGUE[name]["block"]
+        with pytest.raises(ValueError, match="multiple"):
+            catalogue_flips(name, block_m + 1, block_n)
+        with pytest.raises(ValueError, match="multiple"):
+            catalogue_flips(name, block_m, block_n + 1)
+
+    def test_an_unknown_entry_lists_what_exists(self):
+        with pytest.raises(ValueError, match="not a catalogue entry"):
+            catalogue_flips("h567", 4, 4)
+
+    @pytest.mark.parametrize("name", CATALOGUE_PATTERNS)
+    def test_the_built_census_is_the_block_s_multiplied_up(self, name):
+        block_m, block_n = CATALOGUE[name]["block"]
+        expected = CATALOGUE[name]["census"]
+        atoms = build_haeckelite(nx=block_m, ny=block_n, pattern=name)
+        assert atoms.info["ring_counts"] == expected
+        doubled = build_haeckelite(nx=2 * block_m, ny=block_n, pattern=name)
+        assert doubled.info["ring_counts"] == {
+            size: 2 * count for size, count in expected.items()}
+
+    def test_r57_has_no_hexagons_at_all(self):
+        """What the generative route could not reach: the flips partition
+        the vertex set, so no ring is left at degree 6."""
+        atoms = build_haeckelite(nx=4, ny=4, pattern="r57")
+        assert set(atoms.info["ring_counts"]) == {5, 7}
+        assert atoms.info["non_hexagonal_fraction"] == 1.0
+        assert atoms.info["n_flips_refused"] == 0, (
+            "an exact cover has nothing to refuse")
+
+    def test_tiling_a_solved_block_reproduces_its_geometry(self):
+        """The sharpest check on the whole tiling idea: a supercell of a
+        solved block is the same lattice, so it must relax to the same
+        bonds and the same area per atom, not merely a similar census.
+        """
+        one = build_haeckelite(nx=4, ny=4, pattern="r57")
+        wide = build_haeckelite(nx=8, ny=4, pattern="r57")
+        tall = build_haeckelite(nx=4, ny=8, pattern="r57")
+        for other in (wide, tall):
+            for key in ("bond_min", "bond_max", "angle_min", "angle_max"):
+                assert other.info["geometry"][key] == pytest.approx(
+                    one.info["geometry"][key], abs=2e-3), key
+            area_one = one.info["cell_a"] * one.info["cell_b"] / len(one)
+            area_other = (other.info["cell_a"] * other.info["cell_b"]
+                          / len(other))
+            assert area_other == pytest.approx(area_one, abs=5e-3)
+
+
 class TestApplyFlips:
     """The two rules that decide which requested flips actually happen.
 
@@ -192,31 +307,61 @@ class TestApplyFlips:
     def _setup(self, m=5, n=5):
         vertices, triangles, mesh_box = triangular_torus_mesh(m, n, SPACING)
         positions, bonds, _ = fm.dual_honeycomb((vertices, triangles),
-                                               box=mesh_box)
-        return vertices, triangles, mesh_box, positions, bonds
+                                                box=mesh_box)
+        labels = list(range(len(triangles)))
+        return vertices, triangles, mesh_box, positions, bonds, labels
 
-    def test_every_flip_lands_on_four_degree_six_vertices(self):
-        """Otherwise the degree changes stack and the census grows squares
-        and nonagons, which is sound topology and not a haeckelite."""
-        vertices, triangles, mesh_box, positions, bonds = self._setup()
+    def test_rule_a_keeps_every_ring_between_five_and_seven(self):
+        """A vertex touched twice stacks its degree changes; a run without
+        this rule returned squares and nonagons."""
+        vertices, triangles, mesh_box, positions, bonds, labels = self._setup()
         flips = select_flips(vertices, triangles, mesh_box, 5, 5,
-                             pattern="r57")
-        final, labels, dimers, refused = apply_flips(
-            vertices, triangles, mesh_box, flips, bonds, len(positions))
+                             pattern="dense")
+        touched: set[int] = set()
+        final, labels, dimers, deferred = apply_flips(
+            vertices, triangles, flips, bonds, len(positions), labels, touched)
         _, _, rings = fm.dual_honeycomb((vertices, final), box=mesh_box)
         sizes = {len(ring) for ring in rings}
         assert sizes <= {5, 6, 7}, sizes
         assert dimers
-        assert refused > 0, "a dense pattern must have candidates refused"
+        # Rule A's own bookkeeping: four vertices per applied flip, once each.
+        assert len(touched) == 4 * len(dimers)
+
+    @pytest.mark.parametrize("pattern,cell", [
+        ("dense", (5, 5)), ("dense", (8, 8)), ("r57", (4, 4)),
+        ("r57", (8, 4)), ("r57", (8, 8)),
+    ])
+    def test_rule_a_implies_rule_b_so_nothing_is_deferred(self, pattern, cell):
+        """Not luck, a theorem, and worth pinning because the round loop
+        behind Rule B looks load-bearing and is not.
+
+        The two atoms a flip rotates are the triangles sharing its edge, so
+        their vertices lie inside that flip's four. Rule A makes two flips'
+        four-sets disjoint, so triangles from different flips share no
+        vertex -- and sharing an edge needs two. If this ever fails, the
+        round loop in `build_haeckelite` starts mattering and its comment
+        needs rewriting.
+        """
+        m, n = cell
+        vertices, triangles, mesh_box = triangular_torus_mesh(m, n, SPACING)
+        positions, bonds, _ = fm.dual_honeycomb((vertices, triangles),
+                                                box=mesh_box)
+        flips = select_flips(vertices, triangles, mesh_box, m, n,
+                             pattern=pattern)
+        _, _, dimers, deferred = apply_flips(
+            vertices, triangles, flips, bonds, len(positions),
+            list(range(len(triangles))), set())
+        assert dimers
+        assert deferred == [], (pattern, cell, len(deferred))
 
     def test_no_two_rotated_dimers_are_bonded(self):
         """Two rotations sharing a bond each turn an atom the other needs,
         and the pair lands 3.4 Å apart."""
-        vertices, triangles, mesh_box, positions, bonds = self._setup()
+        vertices, triangles, mesh_box, positions, bonds, labels = self._setup()
         flips = select_flips(vertices, triangles, mesh_box, 5, 5,
-                             pattern="r57")
-        _, _, dimers, _ = apply_flips(vertices, triangles, mesh_box, flips,
-                                      bonds, len(positions))
+                             pattern="dense")
+        _, _, dimers, _ = apply_flips(
+            vertices, triangles, flips, bonds, len(positions), labels, set())
         rotated = {atom for dimer in dimers for atom in dimer}
         assert len(rotated) == 2 * len(dimers), "a dimer shares an atom"
         own = {tuple(sorted(dimer)) for dimer in dimers}
@@ -227,11 +372,11 @@ class TestApplyFlips:
                 f"atoms {first} and {second} are bonded and both rotated")
 
     def test_the_budget_survives_every_applied_flip(self):
-        vertices, triangles, mesh_box, positions, bonds = self._setup()
+        vertices, triangles, mesh_box, positions, bonds, labels = self._setup()
         flips = select_flips(vertices, triangles, mesh_box, 5, 5,
                              pattern="random", density=0.5, seed=3)
-        final, _, _, _ = apply_flips(vertices, triangles, mesh_box, flips,
-                                     bonds, len(positions))
+        final, _, _, _ = apply_flips(
+            vertices, triangles, flips, bonds, len(positions), labels, set())
         _, _, rings = fm.dual_honeycomb((vertices, final), box=mesh_box)
         assert sum(6 - len(ring) for ring in rings) == 0
 
@@ -241,7 +386,7 @@ class TestBuild:
 
     CASES = [
         ("none", {}),
-        ("r57", {}),
+        ("dense", {}),
         ("stripes", {"period": 2}),
         ("sparse", {"period": 2}),
         ("random", {"density": 0.15}),
@@ -339,23 +484,26 @@ class TestBuild:
     def test_every_atom_is_three_coordinate(self):
         from nanocarbon_lab.topology import coordination_numbers
 
-        atoms = build_haeckelite(nx=4, ny=4, pattern="r57", seed=1)
+        atoms = build_haeckelite(nx=4, ny=4, pattern="dense", seed=1)
         assert set(coordination_numbers(atoms).tolist()) == {3}
 
     def test_the_vacuum_is_a_gap_not_the_cell_length(self):
         """Setting the cell length *to* the vacuum quietly failed the 10 Å
         guardrail as soon as the sheet had any thickness."""
-        atoms = build_haeckelite(nx=4, ny=4, pattern="r57", seed=1,
+        atoms = build_haeckelite(nx=4, ny=4, pattern="dense", seed=1,
                                  vacuum=14.0)
         span = float(atoms.positions[:, 2].max() - atoms.positions[:, 2].min())
         assert float(atoms.cell[2, 2]) - span == pytest.approx(14.0, abs=1e-6)
 
     def test_refused_flips_are_reported_not_hidden(self):
-        """A pattern is a request; most of a dense one is turned down, and
-        the census is the only honest account of what was built."""
-        atoms = build_haeckelite(nx=4, ny=4, pattern="r57", seed=1)
-        assert atoms.info["n_flips"] > 0
-        assert atoms.info["n_flips_refused"] > atoms.info["n_flips"]
+        """A generative pattern is a request, and the census is the only
+        honest account of what was built. A catalogue entry is different --
+        it is an exact cover, so nothing is refused."""
+        generative = build_haeckelite(nx=4, ny=4, pattern="dense", seed=1)
+        assert generative.info["n_flips"] > 0
+        assert generative.info["n_flips_refused"] > 0
+        exact = build_haeckelite(nx=4, ny=4, pattern="r57")
+        assert exact.info["n_flips_refused"] == 0
 
 
 class TestGrapheneIsTheBaseline:
@@ -414,8 +562,8 @@ class TestASingleDefect:
 class TestDensePatterns:
     """The dense limit, and the one that broke every shortcut."""
 
-    def test_r57_is_mostly_pentagons_and_heptagons(self):
-        atoms = build_haeckelite(nx=6, ny=6, pattern="r57", seed=1)
+    def test_dense_is_mostly_pentagons_and_heptagons(self):
+        atoms = build_haeckelite(nx=6, ny=6, pattern="dense", seed=1)
         counts = atoms.info["ring_counts"]
         assert set(counts) == {5, 6, 7}
         assert counts[5] == counts[7], "a flip makes them in pairs"
@@ -423,13 +571,13 @@ class TestDensePatterns:
 
     def test_a_bigger_cell_reaches_a_denser_lattice(self):
         """The rules are local, so a larger cell packs more of them in."""
-        small = build_haeckelite(nx=4, ny=4, pattern="r57", seed=1)
-        large = build_haeckelite(nx=6, ny=6, pattern="r57", seed=1)
+        small = build_haeckelite(nx=4, ny=4, pattern="dense", seed=1)
+        large = build_haeckelite(nx=6, ny=6, pattern="dense", seed=1)
         assert (large.info["non_hexagonal_fraction"]
                 > small.info["non_hexagonal_fraction"])
 
     def test_its_verdict_is_reported_against_its_own_window(self):
-        atoms = build_haeckelite(nx=6, ny=6, pattern="r57", seed=1)
+        atoms = build_haeckelite(nx=6, ny=6, pattern="dense", seed=1)
         verdict, reason = sp2_quality(atoms.info["geometry"],
                                       atoms.info["quality_family"])
         assert verdict in ("clean", "strained"), reason
@@ -439,7 +587,7 @@ class TestDensePatterns:
         """Pinning the bug this fixed: a heptagon's interior angle is
         128.6 deg before any strain, so the hexagonal window called every
         sound haeckelite BROKEN."""
-        atoms = build_haeckelite(nx=6, ny=6, pattern="r57", seed=1)
+        atoms = build_haeckelite(nx=6, ny=6, pattern="dense", seed=1)
         assert sp2_quality(atoms.info["geometry"])[0] == "broken"
         assert sp2_quality(atoms.info["geometry"], "haeckelite")[0] != "broken"
 
@@ -458,7 +606,7 @@ class TestTheGeometryGate:
         (nx, pattern, extra)
         for nx in (3, 5, 6)
         for pattern, extra in (
-            ("r57", {}),
+            ("dense", {}),
             ("stripes", {"period": 1}),
             ("sparse", {"period": 1}),
             ("random", {"density": 1.0}),

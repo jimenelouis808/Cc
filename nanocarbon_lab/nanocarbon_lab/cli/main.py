@@ -881,8 +881,9 @@ def _cmd_haeckelite(args):
     # account of what was built: the rules in `apply_flips` turn most
     # candidates of a dense pattern down.
     asked = info["n_flips"] + info["n_flips_refused"]
-    print(f"  pattern     = {info['pattern']}, {info['n_flips']} of {asked} "
-          f"rotation(s) applied, "
+    kind = "catalogue" if info.get("catalogue") else "generative"
+    print(f"  pattern     = {info['pattern']} ({kind}), {info['n_flips']} of "
+          f"{asked} rotation(s) applied, "
           f"{100 * info['non_hexagonal_fraction']:.0f}% non-hexagonal")
     print(f"  cell        = {info['cell_a']:.2f} x {info['cell_b']:.2f} A, "
           f"{info['cell_a'] * info['cell_b'] / len(atoms):.3f} A^2 per atom "
@@ -1611,14 +1612,19 @@ def build_parser() -> argparse.ArgumentParser:
                          "and not atoms.")
     hk.add_argument("--ny", type=int, default=4,
                     help="Repeats along y; at least 2.")
-    hk.add_argument("--pattern", default="r57", choices=list(HAECKELITE_PATTERNS),
-                    help="Which bonds to rotate. 'none' returns graphene "
-                         "exactly, which is the baseline every check is "
-                         "calibrated against; 'sparse' is an isolated 5-7-7-5 "
-                         "repeated as a superlattice; 'r57' is the densest "
-                         "this construction reaches. A pattern is a request: "
-                         "most candidates of a dense one are refused, and the "
-                         "command reports how many.")
+    hk.add_argument("--pattern", default="r57",
+                    choices=list(HAECKELITE_PATTERNS),
+                    help="Which bonds to rotate. 'r57' is the CATALOGUE "
+                         "lattice: pentagons and heptagons only, no hexagons, "
+                         "tiled from a solved block -- it needs --nx a "
+                         "multiple of 4 and --ny a multiple of 4, and refuses "
+                         "otherwise. 'none' returns graphene exactly, the "
+                         "baseline every check here is calibrated against. "
+                         "'sparse' is an isolated 5-7-7-5 superlattice and "
+                         "'dense' the densest the generative route reaches on "
+                         "its own, about 67%. A generative pattern is a "
+                         "request and most candidates of a dense one are "
+                         "turned down; the command reports how many.")
     hk.add_argument("--period", type=int, default=2,
                     help="Spacing, in cells, for 'stripes' and 'sparse'. "
                          "Larger means fewer, more isolated defects.")

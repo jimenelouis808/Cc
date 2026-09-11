@@ -76,6 +76,7 @@ from matplotlib.backends.backend_tkagg import (
 from matplotlib.figure import Figure
 
 from ..builders import fullerene_mesh as fm
+from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
 from ..cell import MIN_IMAGE_SEPARATION, cell_report, to_unit_cell
 from ..dopants import DOPANT_ELEMENTS, get_chemistry
@@ -127,8 +128,10 @@ DOPANTS = ["none", *DOPANT_ELEMENTS]
 JUNCTION_KINDS = ["L", "T", "Y", "X", "cross3d"]
 SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
 
-#: The haeckelite design patterns, from the builder rather than retyped.
+#: The haeckelite design patterns and catalogue, from the builder rather
+#: than retyped -- the hint quotes each entry's own block and note.
 HAECKELITE_PATTERNS = haeckelite_patterns
+HAECKELITE_CATALOGUE = haeckelite_catalogue
 NETWORK_KINDS = ["cubic", "diamond"]
 CAGE_FAMILIES = ["C60", "C20"]
 
@@ -1617,28 +1620,43 @@ class NanocarbonGUI:
         self.lbl_tmd_chem.config(text=text)
 
     def _update_haeckelite_hint(self) -> None:
-        """Say what the pattern will actually reach, before the build runs.
+        """Say what the pattern will reach, and whether this cell can hold it.
 
-        A pattern is a request, and most candidates of a dense one are
-        turned down -- two rotations may not overlap, and a rotation must
-        land on four hexagons. So the name "r57" does not mean "no
-        hexagons", and the honest thing is to say so here rather than let
-        the census come as a surprise.
+        A catalogue entry needs its block to divide the supercell and
+        refuses otherwise, so the hint has to say that *before* the build
+        runs -- a refusal after the fact is the worst way to learn a number
+        had to be a multiple of four. A generative pattern is a request and
+        the census is the honest account, so the hint says that too.
         """
         nx = int(self.var_hk_nx.get())
         ny = int(self.var_hk_ny.get())
         pattern = self.var_hk_pattern.get()
         atoms = 4 * nx * ny
-        if pattern == "none":
+        if pattern in HAECKELITE_CATALOGUE:
+            block_m, block_n = HAECKELITE_CATALOGUE[pattern]["block"]
+            note = HAECKELITE_CATALOGUE[pattern]["note"]
+            if nx % block_m or ny % block_n:
+                detail = (f"✗ the {pattern} lattice tiles a {block_m}×"
+                          f"{block_n} block, so x must be a multiple of "
+                          f"{block_m} and y of {block_n}. This cell would be "
+                          "refused: a partial block leaves part of the sheet "
+                          "hexagonal, which for this lattice is a different "
+                          "material rather than an approximation.")
+            else:
+                detail = (f"{note}. Every rotation is applied, so the census "
+                          "is exact. The cell it relaxes to is this "
+                          "program's own number, not a published lattice "
+                          "constant — re-relax before quoting it.")
+        elif pattern == "none":
             detail = ("returns graphene exactly — the baseline every check "
                       "here is calibrated against.")
         else:
             detail = ("a rotation moves bonds, never atoms, so the count is "
-                      "the same whatever the pattern. Most candidates of a "
-                      "dense pattern are refused (two rotations may not "
-                      "overlap, and each must land on four hexagons), so "
-                      "read the census rather than the pattern name — "
-                      "'r57' reaches about 67% non-hexagonal, not 100%.")
+                      "the same whatever the pattern. This is a generative "
+                      "rule, and most candidates of a dense one are turned "
+                      "down, so read the census rather than the name — "
+                      "'dense' reaches about 67% non-hexagonal. For a "
+                      "lattice with no hexagons at all, pick 'r57'.")
         self.lbl_haeckelite.configure(
             text=f"{atoms} atoms in a {nx}×{ny} supercell; {detail}")
 

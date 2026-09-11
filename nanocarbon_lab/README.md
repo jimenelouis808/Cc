@@ -26,7 +26,7 @@ validation pass before writing.
 | `cli`           | `nanocarbon` command-line entry point                                        |
 | `gui`           | `nanocarbon-gui` desktop app: sliders, live 3D preview, export, Blender render |
 | `implicit`/`remesh`/`junction` | L/T/Y/X nanotube junctions and periodic schwarzite unit cells from implicit surfaces |
-| `haeckelite`    | **2D carbon allotropes you design**: Stone-Wales rotations patterned into graphene, giving pentagon-heptagon lattices up to 67% non-hexagonal with `sum(6-n) = 0` exact |
+| `haeckelite`    | **2D carbon allotropes you design**: Stone-Wales rotations patterned into graphene. A catalogue entry (`r57`) is a solved tiling with **no hexagons at all**; the generative rules reach ~67%. `sum(6-n) = 0` exact either way |
 | `network`       | **Periodic 3D networks of interconnected nanotubes** — cubic and diamond nets, topology derived not prescribed |
 | `cell`          | **Any structure → a DFT-ready periodic unit cell**, with the vacuum measured rather than assumed |
 | `swept`         | Coils and arbitrary curved tubes whose ring topology is **derived from the curvature** |
@@ -118,7 +118,11 @@ nanocarbon schwarzite --kind gyroid --cell 26 --out out/gyroid
 # Haeckelite: pentagons and heptagons patterned into graphene.
 # "none" returns graphene exactly, which is the baseline every check here
 # is calibrated against; "sparse" is an isolated 5-7-7-5 superlattice.
-nanocarbon haeckelite --nx 6 --ny 6 --pattern r57 --out out/haeckelite
+# r57 is the catalogue lattice: pentagons and heptagons only, no hexagons.
+# It tiles a 4x4 block, so nx and ny must be multiples of 4.
+nanocarbon haeckelite --nx 4 --ny 4 --pattern r57 --out out/r57
+# ...and the generative end of the same engine:
+nanocarbon haeckelite --nx 6 --ny 6 --pattern dense --out out/dense
 nanocarbon haeckelite --nx 6 --ny 6 --pattern sparse --period 6 \
     --out out/one_sw_defect
 

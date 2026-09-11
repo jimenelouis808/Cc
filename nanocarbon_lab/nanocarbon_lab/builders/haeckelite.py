@@ -58,23 +58,51 @@ single defect built this way relaxes to 1.32-1.48 Å bonds and
 rewiring the flip performed; the other puts each new partner 2.40 Å away
 instead of 1.51, so the sense is chosen per dimer by measuring both.
 
-**Two rotations must not overlap, and a flip must land on clean hexagons.**
-Both limits were found by building lattices that violated them. Dimers
-sharing a bond each turn an atom the other one needs, and the pair ends up
-3.4 Å apart -- so rotations are required to be pairwise non-adjacent.
-Separately, a flip whose four touched mesh vertices are not all still
-degree 6 stacks its degree changes onto an existing defect, which is sound
-topology but not a haeckelite: a run without that rule returned squares
-and nonagons.
+**Two rules, and keeping them apart is what sets the density.** Both were
+found by building lattices that broke them, and conflating them is what
+held an earlier version at 67% non-hexagonal.
 
-Together they cap how dense a pattern this route can reach -- and that cap
-turns out to be exactly where the geometry stops working. Across 105
-combinations of cell size, pattern and seed, **every** lattice the rules
-admit passes the sp2 gate in ``build_haeckelite``, and the ones they turn
-down are the ones that came back at 1.225-1.663 Å when the rules were
-absent. So the gate has not fired through the public API; it stays as a
-guard, not as the mechanism. The reachable range is up to 67%
-non-hexagonal at 1.27-1.57 Å.
+*Rule A is permanent*: each mesh vertex may be touched by at most one flip
+over the whole build. A flip gives two vertices -1 and two +1, so stacking
+two onto one vertex is what made a run return squares and nonagons. It also
+says exactly what the ceiling is -- touching all V vertices takes V/4
+flips, and that is a lattice with **no hexagons left**.
+
+*Rule B is geometric*: two rotations may not share a bond, because each
+turns an atom the other needs and the pair ends up 3.4 Å apart. That
+failure was real and measured -- but under the **older** selection, which
+kept only the flipped edges' two endpoints disjoint and let two flips share
+an opposite vertex.
+
+Once Rule A covers all four touched vertices, **Rule A implies Rule B**,
+and the argument is short enough to check: the two atoms a flip rotates are
+the two triangles sharing its edge, so their vertices lie inside that flip's
+four. Rule A makes two flips' four-sets disjoint, so triangles from
+different flips share no vertex at all -- and two triangles need two shared
+vertices to share an edge, which is what being bonded means. Measured
+across every shipped pattern and cell size: Rule B defers nothing, ever.
+
+It is kept anyway, with the round loop behind it, because ``apply_flips``
+takes an arbitrary candidate list and the cost is a set lookup. The loop is
+a safety net that demonstrably runs once, not the mechanism -- do not
+describe it as what makes a dense lattice reachable, which an earlier
+draft of this docstring did.
+
+**The catalogue is solved, not asserted.** A zero-hexagon census needs the
+flips to partition the vertex set into groups of four -- an exact cover,
+and one exists (found in 14 search nodes at 4x4). But the census does not
+pin the *arrangement*: 24 covers enumerated there relaxed anywhere from
+1.195-1.685 Å to 1.321-1.520 Å. ``CATALOGUE`` therefore stores the
+lowest-strain one, in block coordinates, and the builder tiles it -- which
+reproduces identical geometry at 4x4, 8x4 and 4x8, as tiling a solved block
+must. Those cells are **this framework's own relaxed numbers**, not
+published lattice constants; do not quote them as such.
+
+Measured: ``r57`` gives 100% non-hexagonal at 1.324-1.524 Å and
+101.4-138.6 deg, 2.680 Å^2 per atom against graphene's 2.619; the
+generative ``dense`` reaches 66.7% at 1.296-1.559 Å. Every lattice either
+route produces passes the sp2 gate in ``build_haeckelite``, so that gate
+stays a guard rather than the mechanism.
 
 **The sheet is kept flat, deliberately.** The force field has bond and
 angle terms but no flexural one, because a sheet's resistance to bending
@@ -342,11 +370,103 @@ def _edge_direction(vertices: np.ndarray, box: np.ndarray,
     return "c"
 
 
-#: How a pattern chooses which mesh edges to flip. Each is a rule over
-#: the supercell, so the same name gives a consistent lattice at any
-#: size -- which is what makes a design reproducible and a sweep
-#: meaningful.
-PATTERNS = ("r57", "stripes", "sparse", "random", "none")
+#: The catalogue: named lattices stored as a solved flip pattern on a mesh
+#: **block**, which the builder tiles to whatever supercell is asked for.
+#:
+#: Why a stored pattern rather than a rule. A lattice with *no hexagons
+#: left* needs every mesh vertex touched exactly once -- a flip gives two
+#: vertices -1 and two +1 -- so the flips must **partition** the vertex set
+#: into groups of four. That is an exact cover, and one exists: the search
+#: finds a 4x4 solution in 14 nodes. But a zero-hexagon census does not pin
+#: the *arrangement*; many tilings share it and they are not equally
+#: strained. Enumerating 24 covers at 4x4 and relaxing each spread them
+#: over 1.195-1.685 Å at the worst and 1.321-1.520 Å at the best, so the
+#: entry below is the **lowest-strain** one, not the first one found.
+#:
+#: Every coordinate is ``(i, j, site)`` in the block's own frame, and the
+#: second end of an edge is written as ``i + 1`` rather than its wrapped
+#: value -- writing ``(3, j, 1)-(0, j, 1)`` instead tiled correctly in j
+#: and silently stopped being an edge at all in i.
+#:
+#: **Provenance.** These are this framework's own relaxed geometries for
+#: the named tiling, found by strain ranking under its valence force
+#: field. They are not published lattice constants, and the cell here
+#: should not be quoted as one: re-relax with a real calculator first.
+CATALOGUE: dict[str, dict[str, Any]] = {
+    "r57": {
+        "block": (4, 4),
+        "flips": (
+            ((0, 0, 0), (0, 0, 1)), ((1, 0, 1), (2, 0, 1)),
+            ((3, 1, 0), (3, 1, 1)), ((0, 1, 1), (1, 1, 1)),
+            ((2, 2, 0), (2, 2, 1)), ((3, 2, 1), (4, 2, 1)),
+            ((1, 3, 0), (1, 3, 1)), ((2, 3, 1), (3, 3, 1)),
+        ),
+        "census": {5: 16, 7: 16},
+        "note": ("pentagons and heptagons only, no hexagons -- the dense "
+                 "limit of the 5-7 family, tiled from a solved 4x4 block"),
+    },
+}
+
+#: Which names are catalogue entries rather than generative rules. Kept as
+#: a separate tuple so ``PATTERNS`` stays the single list a caller needs.
+CATALOGUE_PATTERNS = tuple(sorted(CATALOGUE))
+
+#: How a pattern chooses which mesh edges to flip.
+#:
+#: ``r57`` is a **catalogue** entry: an exact tiling, tiled from a solved
+#: block, reaching 100% non-hexagonal. It needs ``nx`` and ``ny`` to be
+#: multiples of its block and refuses otherwise, because a partial block is
+#: not the lattice.
+#:
+#: The rest are **generative** rules over the supercell, so the same name
+#: gives a consistent lattice at any size -- which is what makes a design
+#: reproducible and a sweep meaningful. ``dense`` is the densest the
+#: generative route reaches on its own (about 67%); it was called ``r57``
+#: before the catalogue existed, which overclaimed it.
+PATTERNS = ("r57", "dense", "stripes", "sparse", "random", "none")
+
+
+def catalogue_flips(name: str, m: int, n: int) -> list[tuple[int, int]]:
+    """Tile a catalogue entry's flip pattern over an ``m`` by ``n`` mesh.
+
+    Raises
+    ------
+    ValueError
+        If ``m`` or ``n`` is not a multiple of the entry's block. A partial
+        block would leave the cover incomplete, which is not a
+        near-miss -- the hexagons it leaves behind are exactly the ones the
+        lattice is defined by not having.
+    """
+    try:
+        entry = CATALOGUE[name]
+    except KeyError:
+        raise ValueError(
+            f"{name!r} is not a catalogue entry; have "
+            f"{list(CATALOGUE_PATTERNS)}."
+        ) from None
+    block_m, block_n = entry["block"]
+    if m % block_m or n % block_n:
+        raise ValueError(
+            f"The {name!r} lattice tiles a {block_m}x{block_n} mesh block, "
+            f"so nx must be a multiple of {block_m} and ny of {block_n}; got "
+            f"nx={m}, ny={n}. A partial block leaves part of the sheet "
+            "hexagonal, which for this lattice is not an approximation but a "
+            "different material."
+        )
+
+    def vertex(i: int, j: int, site: int) -> int:
+        return 2 * ((j % n) * m + (i % m)) + site
+
+    out: list[tuple[int, int]] = []
+    for block_j in range(n // block_n):
+        for block_i in range(m // block_m):
+            for (i1, j1, s1), (i2, j2, s2) in entry["flips"]:
+                first = vertex(i1 + block_i * block_m,
+                               j1 + block_j * block_n, s1)
+                second = vertex(i2 + block_i * block_m,
+                                j2 + block_j * block_n, s2)
+                out.append((min(first, second), max(first, second)))
+    return out
 
 
 def select_flips(vertices: np.ndarray, triangles: np.ndarray,
@@ -359,8 +479,14 @@ def select_flips(vertices: np.ndarray, triangles: np.ndarray,
     Parameters
     ----------
     pattern
-        ``"r57"``      every eligible edge of one lattice direction, the
-                       densest 5-7 tiling this construction reaches;
+        ``"r57"``      the **catalogue** lattice: pentagons and heptagons
+                       only, no hexagons, tiled from a solved block. Needs
+                       ``m`` and ``n`` to be multiples of that block;
+        ``"dense"``    every eligible edge of one lattice direction, the
+                       densest the generative route reaches on its own
+                       (about 67% non-hexagonal, not 100% -- it was called
+                       ``r57`` before the catalogue existed, which
+                       overclaimed it);
         ``"stripes"``  the same but only every ``period``-th row, so bands
                        of pentagons and heptagons alternate with graphene;
         ``"sparse"``   one flip every ``period`` cells in **both**
@@ -387,6 +513,12 @@ def select_flips(vertices: np.ndarray, triangles: np.ndarray,
         )
     if pattern == "none":
         return []
+    if pattern in CATALOGUE:
+        # A solved tiling, not a rule: there is nothing to select, only to
+        # lay down. Rule A is satisfied by construction (the stored pattern
+        # is an exact cover of the block's vertices), so `apply_flips` will
+        # accept every one of them.
+        return catalogue_flips(pattern, m, n)
     if period < 1:
         raise ValueError(f"period must be at least 1, got {period}.")
     if pattern == "random" and not 0.0 < density <= 1.0:
@@ -406,7 +538,7 @@ def select_flips(vertices: np.ndarray, triangles: np.ndarray,
             vertices[second] - vertices[first], box)
         row = int(math.floor(midpoint[1] / height + 1e-6)) % max(1, n)
         column = int(math.floor(midpoint[0] / width + 1e-6)) % max(1, m)
-        if pattern in ("r57", "random"):
+        if pattern in ("dense", "random"):
             chosen.append((first, second))
         elif pattern == "stripes" and row % period == 0:
             chosen.append((first, second))
@@ -431,56 +563,63 @@ def select_flips(vertices: np.ndarray, triangles: np.ndarray,
 
 
 def apply_flips(vertices: np.ndarray, triangles: np.ndarray,
-                mesh_box: np.ndarray, flips: list[tuple[int, int]],
-                bonds: set[tuple[int, int]], n_atoms: int
-                ) -> tuple[np.ndarray, list[int], list[tuple[int, int]], int]:
-    """Apply the flips a pattern asked for, keeping only the legal ones.
+                flips: list[tuple[int, int]],
+                bonds: set[tuple[int, int]], n_atoms: int,
+                labels: list[int], touched: set[int],
+                ) -> tuple[np.ndarray, list[int],
+                           list[tuple[int, int]], list[tuple[int, int]]]:
+    """Choose one **round** of flips from the candidates, and apply them.
 
-    Three rules, each of which a build violated first:
+    The two rules are separated, and keeping them separate is what raised
+    the reachable density from 67% to 100%:
 
-    * the edge must still be flippable against the mesh **as it stands**,
-      not as it stood when the pattern was drawn;
-    * all four mesh vertices the flip touches must still be degree 6, so
-      the result is a clean 5-7-7-5 rather than a degree change stacked
-      onto an existing defect -- without this the census came back with
-      squares and nonagons;
-    * the two atoms it rotates must not be, or be bonded to, an atom
-      another accepted flip already rotates. Two dimers sharing a bond
-      each turn an atom the other needs and the pair lands 3.4 Å apart.
+    * **Rule A, over the whole build.** Each mesh vertex may be touched by
+      at most one flip, so every ring ends at 5, 6 or 7. A flip gives two
+      vertices -1 and two +1, so stacking two onto one vertex is what
+      produced squares and nonagons in a run without this rule. The caller
+      carries ``touched`` across rounds, which is what makes it global.
+    * **Rule B, inside this round only.** The two atoms a flip rotates must
+      not be, or be bonded to, an atom another flip *in the same round*
+      rotates: two dimers sharing a bond each turn an atom the other needs
+      and the pair lands 3.4 Å apart. Rule A in fact already guarantees
+      this -- triangles from vertex-disjoint flips share no vertex, so they
+      cannot share an edge -- and it is measured to defer nothing for any
+      shipped pattern. It stays because this function accepts an arbitrary
+      candidate list and the check is a set lookup.
 
-    Returns ``(triangles, labels, dimers, refused)``, where ``labels[k]``
-    is the atom behind final triangle ``k`` and ``dimers`` are the pairs
-    to turn, in graphene's own atom indexing.
+    The edge must also still be flippable against the mesh **as it
+    stands**, not as it stood when the pattern was drawn.
+
+    Returns ``(triangles, labels, dimers, deferred)``. ``labels[k]`` is the
+    atom behind final triangle ``k``; ``dimers`` are the pairs to turn, in
+    graphene's own atom indexing; ``deferred`` are the candidates Rule B
+    turned down, for the caller to retry next round.
     """
-    labels = list(range(len(triangles)))
     dimers: list[tuple[int, int]] = []
+    deferred: list[tuple[int, int]] = []
     blocked: set[int] = set()
     table = _neighbours(bonds, n_atoms)
-    refused = 0
     for first, second in flips:
         if not flippable(triangles, first, second):
-            refused += 1
             continue
         found = _dimer_of(triangles, labels, first, second)
         if found is None:
-            refused += 1
             continue
-        atom_a, atom_b, slot_a, slot_b, incident, touched = found
+        atom_a, atom_b, slot_a, slot_b, incident, touches = found
+        if touched & set(touches):        # Rule A: permanent
+            continue
         if atom_a in blocked or atom_b in blocked:
-            refused += 1
-            continue
-        degrees = _vertex_degrees(triangles, len(vertices))
-        if any(degrees[k] != 6 for k in touched):
-            refused += 1
+            deferred.append((first, second))   # Rule B: this round only
             continue
         keep = [k for k in range(len(triangles)) if k not in incident]
         _, triangles = fm.edge_flip((vertices, triangles), first, second)
         labels = [labels[k] for k in keep] + [labels[slot_a], labels[slot_b]]
         dimers.append((atom_a, atom_b))
+        touched.update(touches)
         for atom in (atom_a, atom_b):
             blocked.add(atom)
             blocked.update(table[atom])
-    return triangles, labels, dimers, refused
+    return triangles, labels, dimers, deferred
 
 
 def strain_score(positions: np.ndarray, bonds: set[tuple[int, int]],
@@ -614,7 +753,13 @@ def _fit_cell(positions: np.ndarray, bonds: set[tuple[int, int]],
             best, best_box, best_positions = score, trial_box, relaxed
 
     current = np.array([1.0, 1.0])
-    for span in (0.36, 0.12, 0.04):
+    # Narrow and fine, not wide and coarse. The old +-36% first pass stepped
+    # in 9% jumps, which straddles the optimum: the dense catalogue lattice
+    # scored 1.217-1.558 Å under it and 1.284-1.479 Å once the steps came
+    # down to 3%, on identical topology. The granularity was the limiter,
+    # not the physics -- and the wide range was only ever needed because a
+    # crumpling sheet could pretend to want a far smaller cell.
+    for span in (0.12, 0.04, 0.015):
         for axis in (0, 1):
             for step in np.linspace(-span, span, 9):
                 if abs(step) < 1e-9:
@@ -703,18 +848,19 @@ def build_haeckelite(nx: int = 4, ny: int = 4,
     pentagons and heptagons are the ones actually present rather than the
     ones the pattern intended to make.
 
-    **A pattern is a request, not a guarantee.** ``n_flips`` and
-    ``n_flips_refused`` both go into ``info``, and the gap between them is
-    usually large: the rules in :func:`apply_flips` reject most candidates
-    on a small cell. ``r57`` at nx=ny=6 applies 12 of the 36 edges it
-    names, which is 67% non-hexagonal -- a real, dense lattice, but not the
-    100% the name suggests. Read the census, not the pattern name.
+    **A catalogue entry is exact; a generative pattern is a request.** For
+    ``r57`` every flip is applied, because the stored pattern is an exact
+    cover -- ``n_flips_refused`` is 0 and the census is the block's,
+    multiplied up. For the generative patterns the gap is usually large,
+    since Rule B turns most candidates of a dense one down in any one
+    round: ``dense`` at nx=ny=6 applies 12 of the 36 edges it names. Read
+    the census, not the pattern name.
 
-    The reachable range, measured across the patterns at nx=ny=4 and 6: up
-    to **67% non-hexagonal**, bonds 1.27-1.57 Å, angles 101-141 deg, zero
-    close contacts, 2.62-2.68 Å^2 per atom against graphene's 2.619, and
-    every census exact with ``sum(6-n) = 0``. Denser than that and the
-    geometry gate refuses.
+    The reachable range, measured: ``r57`` is **100% non-hexagonal** at
+    1.324-1.524 Å and 101.4-138.6 deg, identical at 4x4, 8x4 and 4x8;
+    ``dense`` reaches 66.7% at 1.296-1.559 Å; every pattern lands at
+    2.62-2.68 Å^2 per atom against graphene's 2.619, with zero close
+    contacts and ``sum(6-n) = 0`` exact.
     """
     spacing = bond * math.sqrt(3.0)
     vertices, triangles, mesh_box = triangular_torus_mesh(nx, ny, spacing)
@@ -729,17 +875,51 @@ def build_haeckelite(nx: int = 4, ny: int = 4,
         (vertices, triangles), box=mesh_box)
     box = np.array([mesh_box[0], mesh_box[1], 0.0])
 
-    triangles, labels, dimers, refused = apply_flips(
-        vertices, triangles, mesh_box, flips, flat_bonds,
-        len(flat_positions))
-    applied = len(dimers)
+    # Rotate in rounds, relaxing between them. In practice there is exactly
+    # one round: Rule A implies Rule B (see the module docstring), so
+    # nothing is ever deferred. The loop is the safety net for a candidate
+    # list that somehow needs a second pass, not the mechanism -- what
+    # raised the density from 67% to 100% was Rule A covering all four
+    # touched vertices, and the catalogue's exact cover on top of it.
+    positions = flat_positions
+    bonds = set(flat_bonds)
+    rings: list[list[int]] = []
+    labels = list(range(len(triangles)))
+    touched: set[int] = set()
+    pending = list(flips)
+    applied = 0
+    rounds = 0
+    while pending:
+        triangles, labels, dimers, deferred = apply_flips(
+            vertices, triangles, pending, bonds, len(positions),
+            labels, touched)
+        if not dimers:
+            break
+        _, bonds_round, rings_round = fm.dual_honeycomb(
+            (vertices, triangles), box=mesh_box)
+        # Relabelled into graphene's atom indexing, so the rotated
+        # positions and the rewired bonds describe the same atoms.
+        bonds = {tuple(sorted((labels[a], labels[b])))
+                 for a, b in bonds_round}
+        rings = [[labels[i] for i in ring] for ring in rings_round]
+        positions = _turn_dimers(positions, dimers, bonds, box, bond)
+        if deferred:
+            # Only worth the cost when another round follows: the final
+            # relaxation happens inside the cell search anyway.
+            positions = _relax_at(positions, bonds, box, bond,
+                                  relax_iterations)
+            positions[:, 2] = 0.0
+        applied += len(dimers)
+        rounds += 1
+        pending = deferred
+    refused = len(flips) - applied
 
-    # The final topology, relabelled into graphene's atom indexing so the
-    # rotated positions and the rewired bonds describe the same atoms.
-    _, bonds_final, rings_final = fm.dual_honeycomb(
-        (vertices, triangles), box=mesh_box)
-    bonds = {tuple(sorted((labels[a], labels[b]))) for a, b in bonds_final}
-    rings = [[labels[i] for i in ring] for ring in rings_final]
+    if not rings:
+        _, bonds_round, rings_round = fm.dual_honeycomb(
+            (vertices, triangles), box=mesh_box)
+        bonds = {tuple(sorted((labels[a], labels[b])))
+                 for a, b in bonds_round}
+        rings = [[labels[i] for i in ring] for ring in rings_round]
 
     # The ring census is known **exactly** from the mesh: a vertex of
     # degree d becomes a ring of d atoms, so nothing has to be perceived
@@ -756,7 +936,6 @@ def build_haeckelite(nx: int = 4, ny: int = 4,
             "mesh was not a valid triangulation to begin with."
         )
 
-    positions = _turn_dimers(flat_positions, dimers, bonds, box, bond)
     positions, box, score = _fit_cell(positions, bonds, box, bond,
                                       relax_iterations, counts_from_mesh)
 
@@ -802,6 +981,10 @@ def build_haeckelite(nx: int = 4, ny: int = 4,
         # window calls every sound haeckelite BROKEN.
         "quality_family": "haeckelite",
         "pattern": pattern,
+        # Whether this was a solved tiling laid down or a rule applied. The
+        # difference matters to a reader: a catalogue entry's census is
+        # exact, a generative one's is whatever the rules let through.
+        "catalogue": pattern in CATALOGUE,
         "n_flips": applied,
         "n_flips_refused": refused,
         "rings": [[int(i) for i in ring] for ring in rings],
@@ -889,12 +1072,15 @@ def describe_haeckelite(atoms: Atoms) -> str:
 __all__ = [
     "ANGLE_CEILING",
     "ANGLE_FLOOR",
+    "CATALOGUE",
+    "CATALOGUE_PATTERNS",
     "BOND_CEILING",
     "BOND_SOFT_FLOOR",
     "BOND_FLOOR",
     "DEFAULT_VACUUM",
     "PATTERNS",
     "apply_flips",
+    "catalogue_flips",
     "strain_score",
     "build_haeckelite",
     "describe_haeckelite",

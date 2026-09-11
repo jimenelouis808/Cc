@@ -41,8 +41,10 @@ SAMPLES: dict[str, Job] = {
     # A 4x4 sheet is 64 atoms and builds in a couple of seconds; "sparse"
     # with period 3 is one Stone-Wales defect, the case whose relaxed
     # geometry matches the published 5-7-7-5.
-    "haeckelite": Job("haeckelite", {"nx": 4, "ny": 4, "pattern": "sparse",
-                                     "period": 3}),
+    # The catalogue lattice at its own block size: 64 atoms, every rotation
+    # applied, no hexagons left. Also the case that would catch the block
+    # divisibility rule being dropped.
+    "haeckelite": Job("haeckelite", {"nx": 4, "ny": 4, "pattern": "r57"}),
     # The cheapest network: a cubic net is one node per cell against
     # diamond's eight, and 40 Å is just above the floor that leaves a
     # real tube between them.

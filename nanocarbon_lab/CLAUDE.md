@@ -166,15 +166,49 @@ against the literature rather than itself. Three things are load-bearing:
   `edge_flip` appends its two new triangles at the end rather than
   replacing in place. `apply_flips` carries a `labels` list; without it the
   rewired bonds and the rotated positions describe different atoms.
-* **Two rules cap the density, and they are what keeps the geometry sound.**
-  Dimers must be pairwise non-adjacent (two sharing a bond each turn an
-  atom the other needs, landing 3.4 Å apart), and a flip's four touched
-  mesh vertices must all still be degree 6 (otherwise degree changes stack
-  onto an existing defect — a run without this returned squares and
-  nonagons). Across 105 combinations of cell, pattern and seed, **every**
-  lattice the rules admit passes the sp2 gate; the ones they refuse are the
-  ones that came back at 1.225–1.663 Å without them. The gate in
-  `build_haeckelite` is a guard, not the mechanism.
+* **Rule A sets the density; Rule B is implied by it.** Rule A: each mesh
+  vertex may be touched by at most one flip over the whole build, so every
+  ring ends at 5, 6 or 7 (without it a run returned squares and nonagons).
+  It also states the ceiling — touching all V vertices takes V/4 flips,
+  which is a lattice with **no hexagons left**. Rule B: two rotations may
+  not share a bond, or each turns an atom the other needs and the pair
+  lands 3.4 Å apart. That failure was real, but under the *older* selection
+  which kept only the flipped edges' endpoints disjoint. Once Rule A covers
+  all four touched vertices it **implies** Rule B: triangles from
+  vertex-disjoint flips share no vertex, and sharing an edge needs two.
+  Measured across every pattern and cell size, Rule B defers nothing. The
+  round loop behind it is a safety net that demonstrably runs once — do not
+  describe it as what makes a dense lattice reachable.
+
+* **The catalogue is solved, not asserted.** A zero-hexagon census needs
+  the flips to *partition* the vertex set into groups of four — an exact
+  cover, and one exists (14 search nodes at 4×4). But the census does not
+  pin the arrangement: 24 covers enumerated there relaxed anywhere from
+  1.195–1.685 Å to 1.321–1.520 Å. `CATALOGUE` stores the **lowest-strain**
+  one in block coordinates and the builder tiles it, which reproduces
+  identical geometry at 4×4, 8×4 and 4×8 — the sharpest available check on
+  the tiling. Write an edge's far end as `i + 1`, never its wrapped index:
+  `(3, j, 1)-(0, j, 1)` tiled correctly in j and silently stopped being an
+  edge at all in i. **These cells are this framework's own relaxed
+  numbers, not published lattice constants**; the docstring, the CLI and
+  the GUI hint all say so, and they must keep saying so.
+
+* **A catalogue entry refuses a cell its block does not divide.** The
+  hexagons a partial block leaves behind are precisely the ones the lattice
+  is defined by not having, so that is a different material, not a near
+  miss. The GUI hint says this before the build rather than after.
+
+* Measured: `r57` is 100% non-hexagonal at 1.324–1.524 Å and 101.4–138.6°;
+  the generative `dense` reaches 66.7%. Every lattice either route produces
+  passes the sp2 gate, so the gate in `build_haeckelite` is a guard rather
+  than the mechanism.
+
+* **The cell search must be fine, not wide.** The old ±36% first pass
+  stepped in 9% jumps and straddled the optimum: the dense lattice scored
+  1.217–1.558 Å under it and 1.284–1.479 Å at 3% steps, on identical
+  topology. Granularity was the limiter, not physics — and the wide range
+  was only ever needed because a crumpling sheet could pretend to want a
+  far smaller cell.
 
 **The sheet is kept flat on purpose.** The force field has bond and angle
 terms but no flexural one — a sheet resists bending through its π system —
@@ -186,10 +220,13 @@ field cannot price. Do not reintroduce a buckling nudge and do not report a
 buckling amplitude; it would be an artefact. Every pattern now lands at
 2.62–2.68 Å² per atom, and a test pins that band.
 
-**A pattern is a request, not a guarantee.** `r57` at nx=ny=6 applies 12 of
-the 36 edges it names — 67% non-hexagonal, a real dense lattice but not the
-100% the name suggests. Both `n_flips` and `n_flips_refused` go into `info`
-and the CLI prints the ratio. Read the census, not the pattern name.
+**A catalogue entry is exact; a generative pattern is a request.** For
+`r57` every rotation is applied and `n_flips_refused` is 0. For the
+generative rules the gap is large — `dense` at nx=ny=6 applies 12 of the 36
+edges it names. Both numbers go into `info`, the CLI prints the ratio and
+labels which kind it was. Read the census, not the pattern name. (The
+generative dense pattern was itself called `r57` before the catalogue
+existed, which overclaimed it; it is `dense` now.)
 
 **`sp2_quality` takes a `family`.** A regular heptagon's interior angle is
 128.6° before any strain, so a haeckelite reaches 136–140° as geometry and
