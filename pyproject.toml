@@ -1,0 +1,24 @@
+# Workspace root. Deliberately has no [project] table: this is not a package
+# and nothing imports it. It exists so that the three packages under
+# packages/ resolve against one dependency set and one lockfile, which is the
+# whole point of putting them in the same repository.
+#
+# The packages keep their own pyproject.toml, their own version and their own
+# import name. Nothing here reaches into them.
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+# bpy is published as one wheel per Python version and pins numpy 1.26.4. In a
+# shared lockfile that pin reaches every member, and carbonforge's DOS reader
+# needs numpy 2. Declaring the renderer in conflict with the normal extras
+# keeps it resolvable on its own without dictating the numpy everyone else
+# gets. The Blender pipeline also runs under a real Blender install, which is
+# how it is used in practice.
+[tool.uv]
+conflicts = [
+    [
+        { package = "nanocarbon-lab", extra = "render" },
+        { package = "nanocarbon-lab", extra = "dev" },
+    ],
+]

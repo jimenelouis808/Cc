@@ -7,7 +7,7 @@ name = "carbonforge"
 version = "0.1.0"
 description = "Build realistic nanocarbon structures and prepare complete DFT/MD calculations — band structure, Raman/IR spectra and spin-orbit coupling — for Quantum ESPRESSO, SIESTA and LAMMPS."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "carbonforge contributors" }]
 keywords = [
@@ -20,14 +20,16 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-    "numpy>=1.24",
+    # 2.0, not 1.24: results/dos.py calls np.trapezoid, which is the 2.0
+    # name for np.trapz. Declaring 1.24 made the package installable in
+    # an environment where its own DOS reader raises AttributeError.
+    "numpy>=2.0",
     "scipy>=1.10",
     "ase>=3.22",
     "networkx>=3.0",
@@ -63,4 +65,4 @@ addopts = "-ra --strict-markers"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"

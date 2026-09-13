@@ -7,7 +7,7 @@ name = "nanocarbon_lab"
 version = "0.1.0"
 description = "Modular framework for generating, validating and exporting realistic nanocarbon structures for DFT (Quantum ESPRESSO) and classical MD (LAMMPS) simulations."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "nanocarbon_lab contributors" }]
 keywords = ["nanocarbon", "graphene", "CNT", "DFT", "LAMMPS", "Quantum ESPRESSO", "materials science"]
@@ -16,7 +16,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Chemistry",
@@ -59,7 +58,11 @@ gui = [
 # was built against; the pipeline also runs under a normal Blender
 # install via `blender -b -P`.
 render = [
-    "bpy>=4.0",
+    # Blender ships one wheel per Python version, not a range: bpy 4.x exists
+    # for 3.11 and nothing else. Without the marker the whole workspace would
+    # be pinned to 3.11 to satisfy an optional renderer, so it is gated here
+    # and the pipeline still runs under a normal Blender install elsewhere.
+    "bpy>=4.0; python_version < '3.12'",
 ]
 
 [project.scripts]
@@ -91,7 +94,7 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 # An explicit contract rather than ruff's shifting defaults. These are the
 # families the code actually holds itself to, so `ruff check` passing is a
