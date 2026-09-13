@@ -23,8 +23,7 @@ last category are:
 
 from __future__ import annotations
 
-import re
-from typing import Optional, Sequence
+from typing import Optional
 
 from ase import Atoms
 

@@ -26,12 +26,12 @@ boundary.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Optional
 
 import numpy as np
 from ase import Atoms
 
-from .electrolyte import ElectrolyteBox, ElectrolyteKind, build_electrolyte
+from .electrolyte import ElectrolyteKind, build_electrolyte
 from .parameters import get_params
 from .typing import assign_types, refine_carboxyl_oxygens
 

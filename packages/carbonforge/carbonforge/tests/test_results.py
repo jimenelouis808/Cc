@@ -20,8 +20,6 @@ from carbonforge.results.bands import (
     read_siesta_bands,
 )
 from carbonforge.results.spectra import (
-    VibrationalMode,
-    VibrationalSpectrum,
     broaden,
     read_dynmat,
 )

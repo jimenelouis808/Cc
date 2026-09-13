@@ -24,8 +24,8 @@ restrictions and work fine for metals with PAW.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Literal, Sequence
+from dataclasses import dataclass
+from typing import Literal
 
 SpectroscopyMode = Literal["phonon", "ir", "raman", "ir+raman"]
 
@@ -184,7 +184,7 @@ def format_dynmat_input(
         lines.append(f"    q(2) = {spec.qpoint[1]:.8f}")
         lines.append(f"    q(3) = {spec.qpoint[2]:.8f}")
     if spec.needs_raman:
-        lines.append(f"    lperm = .true.")
+        lines.append("    lperm = .true.")
         lines.append(f"    temperature = {spec.temperature_k:.2f}")
         # dynmat.x takes the laser line in nm.
         lines.append(f"    lambda = {spec.laser_wavelength_nm:.2f}")

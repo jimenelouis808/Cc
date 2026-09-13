@@ -23,7 +23,7 @@ run, and says plainly that Raman intensities need Quantum ESPRESSO instead.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Optional
 

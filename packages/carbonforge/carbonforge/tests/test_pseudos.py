@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from carbonforge.builders import build_cnt, build_graphene_supercell
 from carbonforge.dopants import dope_random

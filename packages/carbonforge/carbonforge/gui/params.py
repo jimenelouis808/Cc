@@ -466,7 +466,7 @@ def preview_preset(atoms: Atoms, raw_values: dict[str, Any]) -> str:
     Shown live in the GUI so the physics choices are visible at the moment
     they are made, rather than buried in a generated input file.
     """
-    from ..workflows.presets import PRESETS, apply_preset
+    from ..workflows.presets import apply_preset
 
     values = collect_values(PRESET_PARAMS, raw_values)
     key = values["preset"]

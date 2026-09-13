@@ -18,8 +18,7 @@ reports its cutoff and k-mesh as *unconverged defaults* and points at
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Callable, Literal, Optional
+from typing import Literal, Optional
 
 from ase import Atoms
 

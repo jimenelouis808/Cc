@@ -28,7 +28,7 @@ from carbonforge.functionalization import (
     nitrogen_report,
     passivate_edges,
 )
-from carbonforge.topology import build_bond_graph, coordination_numbers
+from carbonforge.topology import build_bond_graph
 from carbonforge.utils.constants import HARD_MIN_DISTANCE
 from carbonforge.validation import run_basic_checks
 

@@ -31,7 +31,7 @@ about it rather than letting it pass unremarked.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Sequence
+from typing import Sequence
 
 # Elements heavy enough for spin-orbit coupling to matter in practice.
 # Threshold is a judgement call: Z >= 30 is roughly where SOC splittings

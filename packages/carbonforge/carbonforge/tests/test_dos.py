@@ -20,8 +20,6 @@ from carbonforge.calculations.dos import (
 from carbonforge.exports.qe import write_qe_dos
 from carbonforge.functionalization import make_graphitic_n
 from carbonforge.results.dos import (
-    DensityOfStates,
-    ProjectedDOS,
     read_dos,
     read_pdos,
 )

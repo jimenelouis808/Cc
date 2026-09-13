@@ -11,7 +11,7 @@ the dataset metadata.
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 from ase import Atoms
@@ -19,7 +19,7 @@ from ase import Atoms
 from ..utils.constants import HARD_MIN_DISTANCE
 from ..utils.geometry import ensure_vacuum
 from ..utils.rng import make_rng
-from .groups import BRIDGING_GROUPS, EDGE_ONLY_GROUPS, FunctionalGroup, get_group
+from .groups import EDGE_ONLY_GROUPS, FunctionalGroup, get_group
 from .sites import (
     AttachmentSite,
     SiteKind,

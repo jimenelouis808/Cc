@@ -10,7 +10,6 @@ import pytest
 from carbonforge.builders import (
     build_graphene_supercell,
     build_cnt,
-    build_carbon_foam,
 )
 from carbonforge.relax import harmonic_pre_relax, relax_with_calculator
 from carbonforge.workflows import (

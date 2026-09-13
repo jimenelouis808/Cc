@@ -237,7 +237,6 @@ def estimate_size(electrode: Atoms, raw_values: dict[str, Any]) -> str:
     Packing is the slow step and the count is what decides whether the run is
     minutes or days, so it is worth showing up front.
     """
-    import numpy as np
 
     values = collect_values(EDLC_PARAMS, raw_values)
     kind = values["electrolyte"]

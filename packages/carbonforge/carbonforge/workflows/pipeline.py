@@ -19,7 +19,6 @@ the k-point count, which is the rule that matters.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional

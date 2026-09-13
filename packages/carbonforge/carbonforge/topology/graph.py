@@ -9,7 +9,6 @@ statistics, which are standard descriptors for nanocarbon topology.
 from __future__ import annotations
 
 from collections import Counter
-from typing import Optional
 
 import networkx as nx
 import numpy as np

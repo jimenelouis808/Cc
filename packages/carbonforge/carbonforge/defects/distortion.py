@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Optional
 
-import numpy as np
 from ase import Atoms
 
 from ..utils.rng import make_rng

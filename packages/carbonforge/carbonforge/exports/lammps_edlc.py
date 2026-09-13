@@ -111,7 +111,10 @@ class EDLCSettings:
 def _mass_for(type_name: str) -> float:
     if type_name in _CG_MASSES:
         return _CG_MASSES[type_name]
-    element = get_params(type_name)
+    # Not for the value: get_params raises for a type it has no parameters
+    # for, and a mass silently invented for an unparameterised type would
+    # reach LAMMPS as a plausible-looking number.
+    get_params(type_name)
     # Types are named <Element>_<environment>, except the electrolyte ones.
     for symbol in ("Na", "Cl", "Li", "K"):
         if type_name == symbol:
@@ -188,7 +191,6 @@ def write_edlc_input(
     unique = cell.unique_types
     type_index = {name: i + 1 for i, name in enumerate(unique)}
 
-    bottom_types = sorted({cell.types[i] for i in cell.groups.get("bottom", [])})
     water_types = [n for n in ("OW", "HW") if n in type_index]
     has_water = len(water_types) == 2
 
@@ -271,8 +273,8 @@ def write_edlc_input(
         lines += [
             "# SPC/E is a rigid model by construction; SHAKE enforces that and",
             "# is what makes a 1 fs timestep safe.",
-            f"fix             rigid_water water shake 1.0e-4 20 0 "
-            f"b 1 a 1",
+            "fix             rigid_water water shake 1.0e-4 20 0 "
+            "b 1 a 1",
             "# NOTE: adjust the 'b'/'a' indices to your bond and angle types.",
             "#       An alternative that needs no bond types is:",
             "#         fix rigid_water water rigid/small molecule",

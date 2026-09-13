@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Literal
 
-import numpy as np
 from ase import Atoms
 from ase.build import graphene_nanoribbon
 

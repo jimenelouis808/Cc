@@ -14,7 +14,7 @@ rather than after a job dies.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from ase import Atoms

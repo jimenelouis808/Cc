@@ -19,8 +19,7 @@ Bond lengths (Å) and angles (degrees) follow standard organic values; see
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Callable, Sequence
+from dataclasses import dataclass
 
 import numpy as np
 
