@@ -220,6 +220,41 @@ def plot_b_values(ax, study: RateStudy, palette: Palette) -> None:
     ax.set_ylim(0.2, 1.25)
 
 
+def plot_dunn(ax, analysis, curve, palette: Palette,
+              scan_rate: Optional[float] = None) -> None:
+    """The capacitive current drawn inside the measured voltammogram.
+
+    This is the figure the Dunn separation exists to produce. The shaded
+    area is the surface-controlled part and what is left between it and the
+    measured curve is the diffusion-controlled part — so the plot shows
+    *where* in the window the diffusive contribution actually sits, which a
+    single percentage cannot.
+    """
+    rate = scan_rate if scan_rate is not None else max(analysis.rates or (0.0,))
+    capacitive = analysis.capacitive_current(rate)
+    ax.fill_between(analysis.potentials, 0.0, 1e3 * capacitive,
+                    color=palette.component_colour(0), alpha=0.35,
+                    linewidth=0, label="capacitivo (k₁ν)")
+    if curve is not None and abs(curve.scan_rate - rate) < 1e-9:
+        try:
+            anodic, _ = curve.sweeps()
+            ax.plot(anodic.potential, 1e3 * anodic.current, color=palette.data,
+                    linewidth=1.0, label="medido")
+        except Exception:                        # noqa: BLE001 - no clean sweep
+            pass
+    ax.plot(analysis.potentials, 1e3 * (capacitive + analysis.diffusive_current(rate)),
+            color=palette.fitted, linewidth=1.0, label="k₁ν + k₂√ν")
+    fraction = analysis.fractions.get(rate)
+    ax.set_title(
+        f"{1e3 * rate:g} mV/s" + (f" — {100 * fraction:.0f} % capacitivo"
+                                  if fraction is not None else ""),
+        fontsize=8,
+    )
+    ax.set_xlabel("Potencial (V)")
+    ax.set_ylabel("Corriente (mA)")
+    ax.legend(loc="upper left", frameon=False, fontsize=6.5)
+
+
 def plot_tafel(ax, result: CatalysisResult, palette: Palette,
                overpotential=None, current_density=None) -> None:
     """Overpotential against log current density, with the fitted region.
@@ -299,6 +334,7 @@ __all__ = [
     "plot_bode",
     "plot_cv",
     "plot_cycling",
+    "plot_dunn",
     "plot_gcd",
     "plot_kk_residuals",
     "plot_nyquist",

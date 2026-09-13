@@ -68,7 +68,7 @@ sin pasar por archivos.
 ramancarbon-gui
 ```
 
-La ventana tiene **cuatro secciones** arriba, una por instrumento:
+La ventana tiene **cinco secciones** arriba, una por instrumento:
 
 | Sección | Para qué |
 |---------|----------|
@@ -76,6 +76,7 @@ La ventana tiene **cuatro secciones** arriba, una por instrumento:
 | **Raman · TMD** | MoS₂, WS₂, MoSe₂… y sus óxidos |
 | **DRX** | Difracción: fases y Rietveld |
 | **Electroquímica** | CV, carga-descarga, impedancia, HER/OER |
+| **XPS** | Estados químicos: qué hay y en qué está enlazado |
 
 Las dos secciones Raman **comparten la lista de espectros**: un archivo que
 cargues en una aparece en la otra.
@@ -421,7 +422,7 @@ quiera reproducir exactamente la curva que está viendo.
 
 En la ventana hay un selector **Figura:** en la cabecera, junto al botón de
 tema. Lo que elijas ahí se usa al *Guardar figura* en cualquiera de las
-cuatro secciones, así que la figura del artículo sale de la misma pantalla
+cinco secciones, así que la figura del artículo sale de la misma pantalla
 en la que trabajas — y se recuerda para la próxima vez.
 
 ## 7f. Convertir, exportar y guardar la sesión
@@ -434,7 +435,7 @@ ramancarbon proyecto ver sesion.rcproj
 ```
 
 El tipo de cada archivo se decide **por los números, no por la extensión**,
-porque los cuatro instrumentos escriben `.txt`. Un archivo que no es una
+porque los cinco instrumentos escriben `.txt`. Un archivo que no es una
 medida no aborta la importación de una carpeta: se informa y se sigue.
 
 Un `.rcproj` es un ZIP con un JSON y un CSV por medida — se abre con

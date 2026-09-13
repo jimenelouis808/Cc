@@ -104,9 +104,9 @@ Y luego:
 ramancarbon-gui                  # la suite entera
 ```
 
-Se abre una ventana con **cuatro secciones**: Raman de carbono, Raman de
-dicalcogenuros, difracción de rayos X y electroquímica. Cada una tiene un
-botón **Demo** que carga datos de prueba.
+Se abre una ventana con **cinco secciones**: Raman de carbono, Raman de
+dicalcogenuros, difracción de rayos X, electroquímica y XPS. Cada una tiene
+un botón **Demo** que carga datos de prueba.
 
 Para probarlo desde la terminal, sin tener datos tuyos todavía:
 
@@ -115,13 +115,15 @@ ramancarbon demo datos_prueba/          # 8 espectros Raman de carbono
 ramancarbon demo datos_tmd/ --tmd       # dicalcogenuros, con óxidos
 ramancarbon demo-datos drx datos_drx/   # difractogramas
 ramancarbon demo-datos echem datos_ec/  # CV, carga-descarga, impedancia
+ramancarbon demo-datos xps datos_xps/   # survey y regiones de alta resolución
 
 ramancarbon analizar datos_prueba/demo_MWCNT_FeSe_532nm.txt --laser 532
 ramancarbon drx datos_drx/demo_drx_CNT_FeSe.xye
 ramancarbon echem --cv datos_ec/demo_cv_condensador_20mVs.txt --masa 2 --area 1
+ramancarbon xps datos_xps/demo_xps_NCNT_FeSe.vms --referencia-estado "C 1s:C-C sp2"
 ```
 
-Y lo que atraviesa las cuatro secciones — figuras, formatos y proyectos:
+Y lo que atraviesa las cinco secciones — figuras, formatos y proyectos:
 
 ```bash
 ramancarbon figura datos_prueba/demo_MWCNT_532nm.txt \

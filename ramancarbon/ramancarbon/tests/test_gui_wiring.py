@@ -221,6 +221,12 @@ def test_the_two_raman_sections_share_one_session():
         ("echem_app", "reaction_var"),
         ("echem_app", "summary_table"),
         ("echem_app", "normalise_var"),
+        # The cell form: everything a specific capacitance depends on has to
+        # be enterable, and R_u can come straight off the impedance.
+        ("echem_app", "electrolyte_var"),
+        ("echem_app", "volume_var"),
+        ("echem_app", "compensated_var"),
+        ("echem_app", "_resistance_from_eis"),
         # The XPS section: the choices a high-resolution fit is made of have
         # to be visible and adjustable, not defaults nobody sees.
         ("xps_app", "region_var"),

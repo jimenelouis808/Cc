@@ -175,7 +175,7 @@ prueban (con el backend `Agg`). Del cableado de Tkinter hay dos cosas:
 comprobaciones **estáticas** en `test_gui_wiring.py` — cada lienzo tiene su
 dibujante y su pestaña, cada `command=` nombra un método real, cada
 `self.x` que se lee se asigna en algún sitio — y una prueba que **abre la
-ventana de verdad**, recorre las cuatro secciones y ejecuta sus análisis,
+ventana de verdad**, recorre las cinco secciones y ejecuta sus análisis,
 que se salta sola donde no hay Tkinter ni pantalla. Sin pantalla pero con Tkinter, un servidor X virtual basta:
 
 ```bash

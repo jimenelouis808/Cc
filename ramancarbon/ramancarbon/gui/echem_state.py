@@ -190,15 +190,40 @@ class EchemSession:
                  f"confianza {result.storage.confidence}")
             )
             rows.append(("Magnitud correcta", result.storage.report_as, ""))
-        if result.cv and result.cv.capacitance_loop:
+        # The side-by-side comparison supersedes the single-method rows when
+        # there is more than one method: the same number twice in one table
+        # reads as two measurements.
+        compared = bool(result.capacitance and len(result.capacitance.entries) > 1)
+        if result.cv and result.cv.capacitance_loop and not compared:
             entry = result.cv.capacitance_loop
             rows.append(
                 ("C (CV, lazo)", f"{1e3 * entry.farads:.4g} mF",
                  f"{entry.specific_f_per_g:.4g} F/g"
                  if entry.specific_f_per_g is not None else "sin masa")
             )
+        if compared:
+            for entry in result.capacitance.entries:
+                rows.append(
+                    (f"C ({entry.method})", f"{1e3 * entry.farads:.4g} mF",
+                     f"{entry.condition}"
+                     + (f" — {entry.per_gram:.4g} F/g"
+                        if entry.per_gram is not None else ""))
+                )
+            if result.capacitance.spread is not None:
+                rows.append(
+                    ("Dispersión entre métodos",
+                     f"{100 * result.capacitance.spread:.0f} %",
+                     "lo que entrega el dispositivo es la de GCD")
+                )
+        if result.dunn and result.dunn.fractions:
+            fastest = max(result.dunn.fractions)
+            rows.append(
+                ("Capacitivo (Dunn)",
+                 f"{100 * result.dunn.fractions[fastest]:.0f} %",
+                 f"a {1e3 * fastest:g} mV/s")
+            )
         if result.gcd:
-            if result.gcd.capacitance_f is not None:
+            if result.gcd.capacitance_f is not None and not compared:
                 rows.append(
                     ("C (GCD, descarga)", f"{1e3 * result.gcd.capacitance_f:.4g} mF",
                      f"{result.gcd.specific_f_per_g:.4g} F/g"

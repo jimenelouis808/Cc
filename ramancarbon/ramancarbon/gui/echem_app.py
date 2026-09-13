@@ -91,6 +91,12 @@ class EchemApp(SectionApp):
         self.area_var = tk.StringVar(value="1.0")
         labelled(ebody, "Área (cm²)", lambda p: ttk.Entry(
             p, textvariable=self.area_var, width=10))
+        self.volume_var = tk.StringVar(value="")
+        labelled(ebody, "Volumen (cm³)", lambda p: ttk.Entry(
+            p, textvariable=self.volume_var, width=10))
+        self.electrolyte_var = tk.StringVar(value="")
+        labelled(ebody, "Electrolito", lambda p: ttk.Entry(
+            p, textvariable=self.electrolyte_var, width=14))
         self.reference_var = tk.StringVar(value="Ag/AgCl_3M")
         labelled(ebody, "Referencia", lambda p: ttk.Combobox(
             p, textvariable=self.reference_var, width=14, state="readonly",
@@ -101,12 +107,20 @@ class EchemApp(SectionApp):
         self.resistance_var = tk.StringVar(value="")
         labelled(ebody, "R no compensada (Ω)", lambda p: ttk.Entry(
             p, textvariable=self.resistance_var, width=10))
+        self.compensated_var = tk.StringVar(value="0")
+        labelled(ebody, "Ya compensado (0-1)", lambda p: ttk.Entry(
+            p, textvariable=self.compensated_var, width=10))
+        ttk.Button(ebody, text="R de la impedancia cargada",
+                   command=self._resistance_from_eis).pack(
+            fill="x", pady=(PAD["xs"], 0))
         hint(ebody,
              "La masa es la de material ACTIVO, no la del electrodo: el "
              "aglomerante y el carbón conductor suelen ser el 20 %.   "
              "Sin pH no se puede pasar a RHE y no hay sobrepotencial. Sin "
              "resistencia no hay corrección óhmica, y la pendiente de Tafel "
-             "sale grande de más.",
+             "sale grande de más. El electrolito no es decoración: la misma "
+             "muestra da otra capacitancia en otro, y la ventana útil es del "
+             "electrolito, no del material.",
              wrap=260)
 
         loader, lbody = card(parent, "Medidas")
@@ -196,8 +210,9 @@ class EchemApp(SectionApp):
         rates_card, rates_body = card(tab, None)
         rates_card.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
         self.make_canvas(rates_body, "rates",
-                         lambda f: (f.add_subplot(121), f.add_subplot(122)),
-                         figsize=(7.6, 3.0))
+                         lambda f: (f.add_subplot(131), f.add_subplot(132),
+                                    f.add_subplot(133)),
+                         figsize=(7.6, 2.8))
 
     def _build_tab_gcd(self) -> None:
         ttk = self.ttk
@@ -267,11 +282,32 @@ class EchemApp(SectionApp):
         return Electrode(
             mass_mg=number(self.mass_var),
             area_cm2=number(self.area_var),
+            volume_cm3=number(self.volume_var),
             reference=self.reference_var.get(),
             ph=number(self.ph_var),
             resistance_ohm=number(self.resistance_var),
+            ir_compensated_fraction=number(self.compensated_var) or 0.0,
+            electrolyte=self.electrolyte_var.get().strip(),
             label=self.name_var.get(),
         )
+
+    def _resistance_from_eis(self) -> None:
+        """Take R_u off the impedance of THIS cell and use it everywhere.
+
+        The same cell is the point: a resistance from another day, another
+        electrolyte level or another contact is a number with the right
+        units and no meaning.
+        """
+        from ..echem.eis import uncompensated_resistance
+
+        if self.session.eis is None:
+            self.warn("Sin impedancia",
+                      "Carga un espectro de impedancia de esta misma celda.")
+            return
+        value, how = uncompensated_resistance(self.session.eis)
+        self.resistance_var.set(f"{value:.4g}")
+        self._settings_from_widgets()
+        self.set_status(f"R_u = {value:.4g} Ω — {how}")
 
     def _settings_from_widgets(self) -> None:
         self.session.name = self.name_var.get() or "muestra"
@@ -323,6 +359,7 @@ class EchemApp(SectionApp):
 
         self.mass_var.set("2.0")
         self.area_var.set("1.0")
+        self.electrolyte_var.set("KOH 6 M")
         self.ph_var.set("14")
         self.resistance_var.set("2.0")
         self.name_var.set("demo pseudocondensador")
@@ -451,17 +488,23 @@ class EchemApp(SectionApp):
         )
 
     def _draw_rates(self, figure) -> None:
-        from .plots_echem import plot_b_values, plot_rate_capacitance
+        from .plots_echem import plot_b_values, plot_dunn, plot_rate_capacitance
 
-        left = figure.add_subplot(121)
-        right = figure.add_subplot(122)
+        left = figure.add_subplot(131)
+        middle = figure.add_subplot(132)
+        right = figure.add_subplot(133)
         result = self.session.result
         if result is None or result.rates is None:
             placeholder(left, "Carga una serie de velocidades", self.palette)
+            placeholder(middle, "", self.palette)
             placeholder(right, "", self.palette)
             return
         plot_rate_capacitance(left, result.rates, self.palette)
-        plot_b_values(right, result.rates, self.palette)
+        plot_b_values(middle, result.rates, self.palette)
+        if result.dunn is None:
+            placeholder(right, "Dunn necesita tres velocidades", self.palette)
+        else:
+            plot_dunn(right, result.dunn, self.session.cv, self.palette)
 
     def _draw_gcd(self, figure) -> None:
         from .plots_echem import plot_gcd
