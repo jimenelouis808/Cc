@@ -80,19 +80,47 @@ Conflictos medidos y su resolución:
 | Scripts de consola | `ramancarbon`, `carbonforge`, `nanocarbon`, `nanocarbon-gui` | no colisionan, se quedan |
 | ruff en `carbonforge` | 40 avisos (casi todos `--fix`) | arreglar en un commit aparte |
 
-## A4. Marcado de tests lentos
+## A4. Acelerar la suite de `nanocarbon_lab`
 
-**Hallazgo:** `nanocarbon_lab` ya define el marcador `slow` en su `pyproject.toml`
-y marca 11 tests (`test_blender`, `test_capped_cnt` ×2, `test_hetero`,
-`test_network`, `test_sweep`, `test_swept` ×2, `test_tmd_curved` ×2,
-`test_worker`). Pero `-m "not slow"` sigue tardando más de 10 minutos: el marcado
-está **incompleto**, no ausente.
+**Medido, no supuesto.** La suite completa tarda 28:04. El marcador `slow` ya
+existe en el `pyproject.toml` y marca 11 tests, pero excluirlos deja la suite
+todavía por encima de 15 minutos: el marcado cubre una fracción pequeña del
+tiempo real.
 
-Acción: `pytest --durations=30`, marcar todo lo que supere ~20 s, objetivo suite
-rápida **< 3 min**. Replicar el marcador en `ramancarbon` y `carbonforge`.
+`pytest --durations=30` reparte así el tiempo (corrida de 47:16 que compitió con
+otro proceso; el ranking es válido, los absolutos están inflados ~1,7×):
 
-Coste ~30 k tokens; ahorro estimado ~9 h de reloj en el resto del proyecto.
-**Es la tarea con mejor retorno de todo el plan y va antes que ninguna otra.**
+| Fichero | Suma | Tests en el top-30 |
+|---|---:|---:|
+| `test_capped_cnt.py` | 651,9 s | 3 |
+| `test_swept.py` | 364,1 s | 1 (en **setup**: fixture de clase) |
+| `test_analyse.py` | 331,3 s | 7 |
+| `test_tmd_curved.py` | 329,2 s | 10 |
+| `test_junction.py` | 227,4 s | 8 |
+| `test_network.py` | 32,5 s | 1 |
+
+Los dos más caros solos —`TestHelixDimensions::test_tube_is_sized_to_the_coil`
+(519 s) y `TestRelaxedCoil::test_euler_budget_holds` (364 s en *setup*)— son el
+31 % del total. El top-30 completo es el 68 %.
+
+**Consecuencia: el objetivo de "suite rápida < 3 min" no se alcanza solo
+marcando.** Corregido con los números reales: marcar el top-30 deja la suite
+rápida en **~9 minutos**, no en 3. Llegar a 3 exigiría marcar del orden de 100
+tests, y a partir de ahí se estaría escondiendo cobertura en vez de aislar
+outliers.
+
+Plan revisado, en dos movimientos que se suman:
+
+1. **Marcar `slow` el top-30** (los seis ficheros de arriba). Suite rápida: ~9 min.
+2. **Añadir `pytest-xdist`** y correr `-n 4 --dist loadscope`. `loadscope` es
+   obligatorio, no opcional: el coste de `test_swept.py` está en un fixture de
+   clase, y repartir por test lo recalcularía en cada worker.
+
+Resultado esperado: **suite rápida ~2,5 min, suite completa ~7 min.** Es lo que
+hace viable verificar en cada paso del tramo B.
+
+Coste ~35 k tokens. Sigue siendo la tarea con mejor retorno del plan y sigue
+yendo antes que ninguna otra.
 
 **Entregable A:** rama `nanocarbon` con 2 914 tests verdes, un `uv sync`, CI en
 verde, MIT. Útil por sí solo aunque el plan se detenga aquí.
@@ -202,7 +230,7 @@ detiene en cualquier punto, lo anterior queda funcionando.
 |---|---|---|---|
 | 1 | Subir a Python 3.11 rompe algo | baja | los 2 914 tests lo detectan |
 | 2 | El lock único no resuelve `scikit-image` + `ase` + `matplotlib` | media-baja | fijar versiones; en el peor caso, dejar `scikit-image` como extra |
-| 3 | La suite de 28 min hace lenta cada verificación | **alta** | A4 primero, sin excepción |
+| 3 | La suite de 28 min hace lenta cada verificación | **confirmado** | A4 primero: marcado del top-30 + `pytest-xdist -n 4 --dist loadscope` |
 | 4 | 40 avisos de ruff en `carbonforge` | baja | commit aparte, `--fix` |
 | 5 | Pérdida de código | **nula** | nada se borra de las ramas originales |
 
