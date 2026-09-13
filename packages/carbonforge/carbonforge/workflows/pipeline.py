@@ -1,0 +1,388 @@
+"""Running a preset as a chained, parallelised job.
+
+Two things separate a workflow that merely produces input files from one that
+is efficient to run:
+
+**Relax first, then measure.** A band structure or a phonon spectrum computed
+on an unrelaxed geometry is a property of the wrong structure. The chain
+written here relaxes, then feeds the *relaxed* coordinates into the property
+step — which means the property input cannot be written until the relaxation
+has run, so the script extracts the final geometry itself.
+
+**k-point pools.** Quantum ESPRESSO parallelises far better over k-points
+(``-nk``) than over plane waves. A calculation with 16 k-points on 32 cores
+runs close to 16x faster with ``-nk 16`` than with the default single pool,
+because plane-wave parallelisation saturates after a handful of cores per
+pool. :func:`suggest_pools` picks a divisor that fits both the core count and
+the k-point count, which is the rule that matters.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+from ase import Atoms
+
+from ..exports.qe import (
+    QESettings,
+    _kpoint_mesh,
+    write_qe_bands,
+    write_qe_dos,
+    write_qe_input,
+    write_qe_spectroscopy,
+)
+from .presets import PresetResult, apply_preset
+
+
+def count_kpoints(atoms: Atoms, density: float) -> int:
+    """Number of k-points in the Monkhorst-Pack mesh, before symmetry.
+
+    Symmetry reduction shrinks this, often a lot, so treat it as an upper
+    bound when sizing pools.
+    """
+    mesh = _kpoint_mesh(atoms, density)
+    return int(mesh[0] * mesh[1] * mesh[2])
+
+
+def suggest_pools(n_cores: int, n_kpoints: int, min_cores_per_pool: int = 2) -> int:
+    """Choose a ``-nk`` value for Quantum ESPRESSO.
+
+    The constraints are that the pool count must divide the core count, must
+    not exceed the number of k-points (idle pools do nothing), and must leave
+    at least ``min_cores_per_pool`` cores in each pool so the plane-wave
+    parallelisation inside a pool still has something to do.
+
+    Parameters
+    ----------
+    n_cores
+        Cores the job will run on.
+    n_kpoints
+        Number of k-points, from :func:`count_kpoints`.
+    min_cores_per_pool
+        Floor on cores per pool.
+
+    Returns
+    -------
+    int
+        The largest valid pool count, or 1 when none applies (a Gamma-only
+        calculation, or too few cores to split).
+    """
+    if n_cores < 1 or n_kpoints < 1:
+        raise ValueError("n_cores y n_kpoints deben ser >= 1.")
+
+    best = 1
+    limit = min(n_kpoints, n_cores // min_cores_per_pool)
+    for pools in range(1, limit + 1):
+        if n_cores % pools == 0:
+            best = pools
+    return best
+
+
+@dataclass
+class RunPlan:
+    """A parallelisation plan for one job."""
+
+    n_cores: int
+    n_kpoints: int
+    pools: int
+
+    @property
+    def cores_per_pool(self) -> int:
+        return self.n_cores // self.pools
+
+    @property
+    def mpi_command(self) -> str:
+        return f"mpirun -np {self.n_cores} pw.x -nk {self.pools}"
+
+    def explain(self) -> str:
+        lines = [
+            f"{self.n_cores} núcleos, ~{self.n_kpoints} puntos k "
+            f"(antes de simetría)",
+            f"Se usarán {self.pools} pools de {self.cores_per_pool} núcleos.",
+        ]
+        if self.pools == 1:
+            lines.append(
+                "  Un solo pool: o hay muy pocos puntos k, o el número de "
+                "núcleos no admite una división útil. Quantum ESPRESSO "
+                "paraleliza mucho mejor sobre puntos k que sobre ondas "
+                "planas, así que si puedes, elige un número de núcleos "
+                "divisible por el de puntos k."
+            )
+        else:
+            lines.append(
+                f"  Paralelizar sobre puntos k escala casi linealmente, muy "
+                f"por encima de repartir ondas planas entre {self.n_cores} "
+                "núcleos en un único pool."
+            )
+        return "\n".join(lines)
+
+
+def plan_run(
+    atoms: Atoms,
+    settings: QESettings,
+    n_cores: int = 8,
+) -> RunPlan:
+    """Work out the pool layout for a structure and core count."""
+    n_kpoints = count_kpoints(atoms, settings.kpoint_density)
+    return RunPlan(
+        n_cores=n_cores,
+        n_kpoints=n_kpoints,
+        pools=suggest_pools(n_cores, n_kpoints),
+    )
+
+
+def _chained_script(
+    result: PresetResult,
+    plan: RunPlan,
+    property_step: Optional[str],
+) -> str:
+    """Write a script that relaxes, extracts the geometry, then measures.
+
+    The property input cannot be written ahead of time, because it needs
+    coordinates that do not exist until the relaxation finishes. The script
+    therefore uses ASE to read the relaxed geometry out of the relax output
+    and rewrite the downstream inputs — which keeps the chain honest instead
+    of quietly computing the property on the starting structure.
+    """
+    lines = [
+        "#!/usr/bin/env bash",
+        "# Generated by carbonforge.",
+        "set -euo pipefail",
+        "",
+        f'NCORES="${{NCORES:-{plan.n_cores}}}"',
+        f'POOLS="${{POOLS:-{plan.pools}}}"',
+        'PW="mpirun -np $NCORES pw.x -nk $POOLS"',
+        "",
+        f"# {plan.n_kpoints} puntos k antes de simetría; "
+        f"{plan.cores_per_pool} núcleos por pool.",
+        "",
+    ]
+
+    if result.relax_first:
+        lines += [
+            "echo '[1] Relajación de la geometría'",
+            "$PW -in pw.relax.in > pw.relax.out",
+            "",
+            "echo '[2] Extrayendo la geometría relajada'",
+            "# La propiedad debe calcularse sobre la estructura relajada, no",
+            "# sobre la de partida: por eso se reescriben las entradas aquí.",
+            "carbonforge update-geometry pw.relax.out --apply-to .",
+            "",
+        ]
+        step_number = 3
+    else:
+        step_number = 1
+
+    if property_step:
+        lines += [
+            f"echo '[{step_number}] {property_step}'",
+            f"bash ./run_{property_step}.sh",
+        ]
+    else:
+        lines += [
+            f"echo '[{step_number}] SCF'",
+            "$PW -in pw.scf.in > pw.scf.out",
+        ]
+
+    lines += ["", "echo 'Terminado.'"]
+    return "\n".join(lines) + "\n"
+
+
+def write_preset_project(
+    atoms: Atoms,
+    outdir: str | Path,
+    preset_key: str,
+    accurate: bool = False,
+    n_cores: int = 8,
+    force: bool = False,
+) -> tuple[PresetResult, RunPlan, dict[str, Path]]:
+    """Write a complete, parallelised project for a preset.
+
+    Parameters
+    ----------
+    atoms
+        Structure to compute.
+    outdir
+        Destination directory.
+    preset_key
+        Key into :data:`~carbonforge.workflows.presets.PRESETS`.
+    accurate
+        Tighten the numerical defaults.
+    n_cores
+        Cores the job will run on, used to size the k-point pools.
+    force
+        Bypass structural validation.
+
+    Returns
+    -------
+    (PresetResult, RunPlan, dict)
+        The decisions made, the parallelisation plan, and the files written.
+    """
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    result = apply_preset(atoms, preset_key, accurate=accurate)
+    plan = plan_run(result.atoms, result.settings, n_cores=n_cores)
+    written: dict[str, Path] = {}
+
+    from dataclasses import replace as _replace
+
+    if result.relax_first or result.task == "relax":
+        relax_settings = _replace(result.settings, calculation="relax")
+        written["relax"] = write_qe_input(
+            result.atoms, outdir, settings=relax_settings,
+            filename="pw.relax.in", force=force,
+        )
+
+    property_step: Optional[str] = None
+    if result.task == "bands":
+        written.update(
+            write_qe_bands(result.atoms, outdir, settings=result.settings,
+                           force=True)
+        )
+        property_step = "bands"
+    elif result.task == "dos":
+        written.update(
+            write_qe_dos(result.atoms, outdir, spec=result.dos,
+                         settings=result.settings, force=True)
+        )
+        property_step = "dos"
+    elif result.spectroscopy is not None:
+        written.update(
+            write_qe_spectroscopy(result.atoms, outdir, result.spectroscopy,
+                                  settings=result.settings, force=True)
+        )
+        property_step = "spectroscopy"
+    elif result.task == "scf":
+        written["scf"] = write_qe_input(
+            result.atoms, outdir, settings=result.settings,
+            filename="pw.scf.in", force=force,
+        )
+
+    script = outdir / "run_all.sh"
+    script.write_text(_chained_script(result, plan, property_step))
+    script.chmod(0o755)
+    written["script"] = script
+
+    # A plain-text record of why the calculation looks the way it does, so
+    # the reasoning survives past this terminal session.
+    notes = outdir / "DECISIONES.txt"
+    notes.write_text(
+        f"{result.explain()}\n\n"
+        f"--- Paralelización ---\n{plan.explain()}\n\n"
+        f"--- Física incluida ---\n{result.electronic.describe()}\n"
+    )
+    written["notes"] = notes
+
+    return result, plan, written
+
+
+def read_relaxed_geometry(output_path: str | Path) -> Atoms:
+    """Read the final geometry from a Quantum ESPRESSO relaxation output.
+
+    Parameters
+    ----------
+    output_path
+        A ``pw.x`` output from a ``relax`` or ``vc-relax`` run.
+
+    Returns
+    -------
+    ase.Atoms
+        The last configuration in the file.
+
+    Raises
+    ------
+    ValueError
+        If the file cannot be read as a QE output, or contains no geometry —
+        which normally means the run crashed or is still going.
+    """
+    from ase.io import read as ase_read
+
+    path = Path(output_path)
+    if not path.exists():
+        raise ValueError(f"{path}: no existe.")
+    try:
+        # index=-1 takes the last ionic step, i.e. the relaxed geometry.
+        atoms = ase_read(str(path), format="espresso-out", index=-1)
+    except Exception as exc:
+        raise ValueError(
+            f"{path}: no se pudo leer como salida de pw.x ({exc}). "
+            "¿Terminó la relajación?"
+        ) from exc
+    if len(atoms) == 0:
+        raise ValueError(f"{path}: no contiene ninguna geometría.")
+    return atoms
+
+
+def _replace_card(text: str, card: str, new_body: str) -> str:
+    """Replace the body of one card in a pw.x input, keeping the rest.
+
+    Cards run from their header to the next blank line, which is exactly how
+    this package writes them.
+    """
+    lines = text.splitlines()
+    start = next(
+        (i for i, line in enumerate(lines) if line.strip().startswith(card)),
+        None,
+    )
+    if start is None:
+        return text
+    end = start + 1
+    while end < len(lines) and lines[end].strip():
+        end += 1
+    return "\n".join(lines[:start + 1] + new_body.splitlines() + lines[end:])
+
+
+def update_geometry_in_inputs(
+    relax_output: str | Path,
+    target_dir: str | Path,
+    pattern: str = "pw.*.in",
+) -> list[Path]:
+    """Rewrite downstream inputs to use a relaxed geometry.
+
+    A band structure or phonon spectrum computed on the starting geometry is
+    a property of the wrong structure. The chained runner calls this between
+    the relaxation and the property step so the downstream inputs pick up the
+    coordinates the relaxation actually produced.
+
+    Parameters
+    ----------
+    relax_output
+        The ``pw.x`` relaxation output to read the geometry from.
+    target_dir
+        Directory holding the inputs to update.
+    pattern
+        Which files to update. The relaxation input itself is skipped — it
+        is the record of where the run started.
+
+    Returns
+    -------
+    list[pathlib.Path]
+        The files that were rewritten.
+    """
+    atoms = read_relaxed_geometry(relax_output)
+    target_dir = Path(target_dir)
+
+    positions_body = "\n".join(
+        f"  {symbol}  {p[0]:20.12f} {p[1]:20.12f} {p[2]:20.12f}"
+        for symbol, p in zip(atoms.get_chemical_symbols(), atoms.get_positions())
+    )
+    cell_body = "\n".join(
+        f"  {row[0]:20.12f} {row[1]:20.12f} {row[2]:20.12f}"
+        for row in np.array(atoms.cell)
+    )
+
+    updated: list[Path] = []
+    for path in sorted(target_dir.glob(pattern)):
+        if "relax" in path.name:
+            continue
+        text = path.read_text()
+        text = _replace_card(text, "ATOMIC_POSITIONS", positions_body)
+        text = _replace_card(text, "CELL_PARAMETERS", cell_body)
+        path.write_text(text)
+        updated.append(path)
+    return updated

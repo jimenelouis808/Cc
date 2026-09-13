@@ -1,0 +1,460 @@
+{
+  "_comment": [
+    "Fases cristalinas NO carbonosas que forman parte de la muestra, no de la",
+    "suciedad. Es la diferencia con interferences.json: allí una banda ajena",
+    "es un estorbo que hay que descartar; aquí es el objeto de la medida.",
+    "",
+    "El caso que motivó el archivo: nanotubos de carbono decorados con FeSe.",
+    "El FeSe tetragonal tiene sus dos modos Raman a 180 y 195 cm-1 y el",
+    "selenio elemental a 237 y 250 cm-1. Los cuatro caen DENTRO de la ventana",
+    "del modo de respiración radial (RBM). Convertidos con omega = A/d + B",
+    "dan diametros de nanotubo de 1.4, 1.3, 1.0 y 0.97 nm: cuatro numeros",
+    "creibles y los cuatro falsos. Por eso la identificacion de fases y el",
+    "analisis de diametros estan acoplados, y por eso esta busqueda SI se",
+    "ejecuta por defecto, al reves que la de interferencias.",
+    "",
+    "Sobre el polimorfismo. Raman distingue polimorfos cuando su simetria",
+    "cambia el numero o la posicion de los modos, y no los distingue cuando",
+    "no. El beta-FeSe tetragonal y el delta-FeSe hexagonal son un caso",
+    "intermedio y honesto: el tetragonal esta bien caracterizado, el",
+    "hexagonal no. Cada entrada lleva 'xrd_hint' con el 2-theta (Cu Kalfa)",
+    "que zanja la cuestion en la pestaña de DRX. Un espectro Raman propone",
+    "una fase; un difractograma la demuestra.",
+    "",
+    "'discriminating' son las lineas que separan una fase de sus hermanas de",
+    "la misma familia. Si solo aparecen lineas no discriminantes, el programa",
+    "informa la FAMILIA y se niega a elegir polimorfo.",
+    "",
+    "Ninguna posicion aqui es dispersiva: son modos de primer orden de",
+    "cristales ordinarios. Medir a dos laseres es la prueba definitiva frente",
+    "al carbono, que si se desplaza.",
+    "Algunas fases llevan 'width_rule'. Es el caso del selenio: la posicion de la banda de ~250 cm-1 apenas distingue el monoclinico del amorfo, y la ANCHURA si. Una regla de anchura no descarta la composicion, descarta el polimorfo, y si el pico no tiene FWHM medible el programa lo dice en vez de decidir."
+  ],
+  "match_tolerance_cm1": 5.0,
+  "families": [
+    {
+      "key": "FeSe",
+      "label": "Seleniuro de hierro FeSe",
+      "note": "El beta tetragonal (PbO) es el superconductor (Tc ~ 8 K); el delta hexagonal (NiAs) no lo es. Suelen coexistir, y la proporcion depende del recocido.",
+      "resolved_by": "El desdoblamiento A1g/B1g a 180/195 cm-1 es la firma del tetragonal. El hexagonal carece de literatura Raman fiable: confirma con DRX."
+    },
+    {
+      "key": "Se",
+      "label": "Selenio elemental",
+      "note": "Precursor sin reaccionar o segregado. Su presencia significa que ese selenio NO esta en la red del hospedador.",
+      "resolved_by": "Cadenas frente a anillos: 237 cm-1 (cadenas, trigonal) frente a 250-256 cm-1 (anillos Se8, monoclinico y amorfo). Alfa y beta monoclinico NO se separan por Raman."
+    },
+    {
+      "key": "FeSe2",
+      "label": "Diseleniuro de hierro FeSe₂",
+      "note": "Producto de exceso de selenio. Marcasita (Pnnm) es la forma estable; la pirita (Pa-3) aparece a alta presion.",
+      "resolved_by": "Poco resuelto por Raman. DRX."
+    },
+    {
+      "key": "FeC",
+      "label": "Carburos de hierro",
+      "note": "Lo que queda cuando el catalizador de hierro reacciona con el carbono durante el CVD. Es la fase que suele estar dentro de las nanoparticulas encapsuladas en las puntas de los nanotubos.",
+      "resolved_by": "Raman apenas los ve. DRX y Mössbauer son el metodo real."
+    }
+  ],
+  "phases": [
+    {
+      "key": "FeSe_tetragonal",
+      "label": "β-FeSe tetragonal (tipo PbO)",
+      "formula": "FeSe",
+      "family": "FeSe",
+      "crystal_system": "tetragonal",
+      "space_group": "P4/nmm",
+      "bands": [
+        {
+          "position": 102.0,
+          "window": [
+            95.0,
+            112.0
+          ],
+          "assignment": "E_g",
+          "relative": 0.2
+        },
+        {
+          "position": 181.0,
+          "window": [
+            174.0,
+            188.0
+          ],
+          "assignment": "A₁g (Se, fuera del plano)",
+          "relative": 1.0
+        },
+        {
+          "position": 196.0,
+          "window": [
+            189.0,
+            204.0
+          ],
+          "assignment": "B₁g (Fe)",
+          "relative": 0.6
+        }
+      ],
+      "strong": [
+        181.0,
+        196.0
+      ],
+      "discriminating": [
+        181.0,
+        196.0
+      ],
+      "confidence": "medium",
+      "source": "Gnezdilov, Pashkevich, Lemmens et al., Phys. Rev. B 83 (2011) 245127; Kumar et al., Solid State Commun. 150 (2010) 557",
+      "xrd_hint": {
+        "reflection": "101",
+        "two_theta_cu": 28.4,
+        "note": "El pico mas intenso del beta-FeSe. Con 002 a ~16.1° y 110 a ~33.4° la asignacion es inequivoca."
+      },
+      "notes": "Los dos modos permitidos en retrodispersion sobre el plano ab. El A1g mueve solo el selenio y el B1g solo el hierro, asi que sus posiciones responden de forma distinta a la sustitucion (S por Se desplaza el A1g; Te por Se, tambien). Un desdoblamiento de 14-16 cm-1 entre ambos es la firma. Si solo ves UNA banda ancha ahi, o la resolucion no llega o la muestra esta desordenada: no lo llames tetragonal sin la segunda."
+    },
+    {
+      "key": "FeSe_hexagonal",
+      "label": "δ-FeSe hexagonal (tipo NiAs)",
+      "formula": "FeSe",
+      "family": "FeSe",
+      "crystal_system": "hexagonal",
+      "space_group": "P6₃/mmc",
+      "bands": [
+        {
+          "position": 122.0,
+          "window": [
+            112.0,
+            132.0
+          ],
+          "assignment": "E₂g (tentativa)",
+          "relative": 0.4
+        },
+        {
+          "position": 145.0,
+          "window": [
+            136.0,
+            156.0
+          ],
+          "assignment": "E₁g (tentativa)",
+          "relative": 0.6
+        },
+        {
+          "position": 220.0,
+          "window": [
+            208.0,
+            232.0
+          ],
+          "assignment": "sin asignar (tentativa)",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        145.0,
+        220.0
+      ],
+      "discriminating": [
+        145.0,
+        220.0
+      ],
+      "confidence": "low",
+      "source": "Asignacion tentativa; la literatura Raman de la fase hexagonal del FeSe es escasa e inconsistente entre trabajos",
+      "xrd_hint": {
+        "reflection": "101",
+        "two_theta_cu": 32.4,
+        "note": "Con 102 a ~42.0° y 110 a ~49.9°. Es lo que separa el hexagonal del tetragonal sin ambiguedad."
+      },
+      "notes": "AVISO EXPRESO: la confianza es baja porque las posiciones publicadas para esta fase no coinciden entre si. El programa la propone, no la afirma. La NiAs-FeSe es ademas no estequiometrica (Fe7Se8, Fe3Se4 y compañia) y esa deficiencia de hierro mueve las bandas. Si necesitas la fase con certeza, mide DRX: la reflexion 101 a ~32.4° no admite discusion."
+    },
+    {
+      "key": "Se_trigonal",
+      "label": "Selenio trigonal (gris, cadenas helicoidales)",
+      "formula": "Se",
+      "family": "Se",
+      "crystal_system": "trigonal",
+      "space_group": "P3₁21",
+      "bands": [
+        {
+          "position": 143.0,
+          "window": [
+            136.0,
+            150.0
+          ],
+          "assignment": "E (flexion)",
+          "relative": 0.35
+        },
+        {
+          "position": 237.0,
+          "window": [
+            231.0,
+            243.0
+          ],
+          "assignment": "A₁ (tension de la cadena)",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        237.0
+      ],
+      "discriminating": [
+        237.0
+      ],
+      "confidence": "high",
+      "source": "Lucovsky, Mooradian, Taylor, Wright & Keezer, Solid State Commun. 5 (1967) 113",
+      "xrd_hint": {
+        "reflection": "101",
+        "two_theta_cu": 29.7,
+        "note": "Con 100 a ~23.5°."
+      },
+      "notes": "La forma termodinamicamente estable. La banda de 237 cm-1 es muy intensa: unas pocas decimas de porcentaje en peso ya se ven. Cae de lleno en la ventana RBM (equivale al RBM de un tubo de ~1.0 nm).",
+      "width_rule": {
+        "line": 237.0,
+        "max_fwhm": 14.0,
+        "reason": "El A₁ del selenio trigonal es estrecho (5–10 cm⁻¹). Muy ensanchado, o es amorfo o el cristal está muy defectuoso."
+      }
+    },
+    {
+      "key": "Se_monoclinic",
+      "label": "Selenio monoclínico (anillos Se₈, α o β)",
+      "formula": "Se",
+      "family": "Se",
+      "crystal_system": "monoclinic",
+      "space_group": "P2₁/n (α) / P2₁/c (β)",
+      "bands": [
+        {
+          "position": 80.0,
+          "window": [
+            72.0,
+            88.0
+          ],
+          "assignment": "modo del anillo",
+          "relative": 0.3
+        },
+        {
+          "position": 112.0,
+          "window": [
+            104.0,
+            120.0
+          ],
+          "assignment": "modo del anillo",
+          "relative": 0.4
+        },
+        {
+          "position": 134.0,
+          "window": [
+            126.0,
+            142.0
+          ],
+          "assignment": "flexion",
+          "relative": 0.3
+        },
+        {
+          "position": 254.0,
+          "window": [
+            247.0,
+            261.0
+          ],
+          "assignment": "tension Se-Se del anillo",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        254.0
+      ],
+      "discriminating": [
+        254.0,
+        112.0
+      ],
+      "confidence": "medium",
+      "source": "Lucovsky et al., Solid State Commun. 5 (1967) 113; Nagata, Ishibashi & Miyamoto, Jpn. J. Appl. Phys. 20 (1981) 463",
+      "xrd_hint": {
+        "reflection": "varias",
+        "two_theta_cu": 23.6,
+        "note": "Patron rico y de baja simetria; usa el ajuste completo, no un pico."
+      },
+      "notes": "Alfa y beta monoclinico NO se distinguen por Raman: ambos son empaquetamientos distintos del mismo anillo Se8 y sus espectros intramoleculares coinciden. Esta entrada cubre las dos a proposito. La banda de 254 cm-1 frente a la de 237 del trigonal es el discriminante anillo/cadena.",
+      "width_rule": {
+        "line": 254.0,
+        "max_fwhm": 15.0,
+        "reason": "Una banda de ~250 cm⁻¹ más ancha de 15 cm⁻¹ no es un cristal de anillos Se₈: es selenio amorfo o una mezcla."
+      }
+    },
+    {
+      "key": "Se_amorphous",
+      "label": "Selenio amorfo (a-Se)",
+      "formula": "Se",
+      "family": "Se",
+      "crystal_system": "amorphous",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 235.0,
+          "window": [
+            226.0,
+            244.0
+          ],
+          "assignment": "cadenas",
+          "relative": 0.6
+        },
+        {
+          "position": 252.0,
+          "window": [
+            243.0,
+            262.0
+          ],
+          "assignment": "anillos Se₈",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        252.0
+      ],
+      "discriminating": [],
+      "confidence": "medium",
+      "source": "Lucovsky et al., Solid State Commun. 5 (1967) 113",
+      "xrd_hint": {
+        "reflection": "ninguna",
+        "two_theta_cu": null,
+        "note": "Halo amorfo ancho hacia 25-30°, sin picos de Bragg. Si el difractograma no tiene picos de Se pero el Raman ve 250 cm-1, es esta."
+      },
+      "notes": "PELIGRO EXPERIMENTAL: el selenio amorfo cristaliza bajo el propio laser con potencias de pocos mW, y lo hace a trigonal. Si la banda de 252 cm-1 se estrecha y migra hacia 237 cm-1 mientras mides, estas fabricando la fase que crees estar midiendo. Baja la potencia y repite en un punto virgen. Sin anchura de banda (>15 cm-1 de FWHM) no lo llames amorfo: es el ancho, no la posicion, lo que lo distingue del monoclinico.",
+      "width_rule": {
+        "line": 252.0,
+        "min_fwhm": 15.0,
+        "reason": "El selenio amorfo se distingue del cristal de anillos por la ANCHURA de la banda de ~250 cm⁻¹, no por su posición: por debajo de 15 cm⁻¹ de FWHM lo que tienes es monoclínico."
+      }
+    },
+    {
+      "key": "FeSe2_marcasite",
+      "label": "FeSe₂ marcasita (ortorrómbico)",
+      "formula": "FeSe2",
+      "family": "FeSe2",
+      "crystal_system": "orthorhombic",
+      "space_group": "Pnnm",
+      "bands": [
+        {
+          "position": 148.0,
+          "window": [
+            140.0,
+            156.0
+          ],
+          "assignment": "librational",
+          "relative": 0.4
+        },
+        {
+          "position": 175.0,
+          "window": [
+            167.0,
+            183.0
+          ],
+          "assignment": "A_g (Se-Se)",
+          "relative": 1.0
+        },
+        {
+          "position": 245.0,
+          "window": [
+            236.0,
+            254.0
+          ],
+          "assignment": "B_1g",
+          "relative": 0.5
+        }
+      ],
+      "strong": [
+        175.0,
+        245.0
+      ],
+      "discriminating": [
+        148.0,
+        245.0
+      ],
+      "confidence": "low",
+      "source": "Asignacion tentativa por analogia con la marcasita FeS2 y con los diseleniuros del grupo; la literatura Raman del FeSe2 es escasa",
+      "xrd_hint": {
+        "reflection": "101/111",
+        "two_theta_cu": 30.6,
+        "note": "Comprueba tambien 200 a ~37.0°."
+      },
+      "notes": "Producto habitual cuando sobra selenio en la sintesis. Su banda de 175 cm-1 esta a 6 cm-1 del A1g del beta-FeSe: con resolucion de 4 cm-1 o peor NO las separas. Si tu sintesis pudo dar los dos, este es exactamente el caso en que hay que ir a DRX."
+    },
+    {
+      "key": "Fe3C_cementite",
+      "label": "Cementita Fe₃C",
+      "formula": "Fe3C",
+      "family": "FeC",
+      "crystal_system": "orthorhombic",
+      "space_group": "Pnma",
+      "bands": [
+        {
+          "position": 212.0,
+          "window": [
+            202.0,
+            222.0
+          ],
+          "assignment": "sin asignar",
+          "relative": 0.7
+        },
+        {
+          "position": 280.0,
+          "window": [
+            270.0,
+            292.0
+          ],
+          "assignment": "sin asignar",
+          "relative": 1.0
+        },
+        {
+          "position": 306.0,
+          "window": [
+            296.0,
+            318.0
+          ],
+          "assignment": "sin asignar",
+          "relative": 0.6
+        },
+        {
+          "position": 685.0,
+          "window": [
+            668.0,
+            702.0
+          ],
+          "assignment": "sin asignar",
+          "relative": 0.4
+        }
+      ],
+      "strong": [
+        280.0,
+        212.0
+      ],
+      "discriminating": [
+        280.0,
+        685.0
+      ],
+      "confidence": "low",
+      "source": "Bandas recogidas en la literatura de aceros y de nanoparticulas encapsuladas; la seccion eficaz Raman de la cementita es muy baja y las asignaciones no estan consolidadas",
+      "xrd_hint": {
+        "reflection": "031/112",
+        "two_theta_cu": 45.0,
+        "note": "El grupo intenso de la cementita esta entre 42° y 46°, solapando con el 110 del hierro alfa a 44.7°. Necesitas el ajuste completo."
+      },
+      "notes": "La fase que de verdad hay dentro de las nanoparticulas de la punta de un nanotubo crecido por CVD con hierro, mas a menudo que hierro metalico. Raman casi no la ve: si el espectro no muestra estas bandas, eso NO significa que no haya cementita. Es una identificacion positiva util y una ausencia que no prueba nada. Ojo con las bandas de 212 y 280 cm-1: caen en la ventana RBM."
+    },
+    {
+      "key": "Fe_alpha",
+      "label": "Hierro α (ferrita) / hierro metálico",
+      "formula": "Fe",
+      "family": "FeC",
+      "crystal_system": "cubic",
+      "space_group": "Im-3m",
+      "bands": [],
+      "strong": [],
+      "discriminating": [],
+      "confidence": "high",
+      "source": "Regla de seleccion: un cristal cubico monoatomico con un atomo por celda primitiva no tiene modos Raman de primer orden",
+      "xrd_hint": {
+        "reflection": "110",
+        "two_theta_cu": 44.7,
+        "note": "Con 200 a 65.0° y 211 a 82.3°."
+      },
+      "notes": "ENTRADA SIN BANDAS, A PROPOSITO. El hierro metalico es Raman-inactivo en primer orden. Lo que ves en una muestra con hierro nunca es el hierro: es su oxido o su carburo. Esta aqui para que el informe pueda decirlo cuando el usuario pregunte por el hierro, y para que la pestaña de DRX tenga la referencia."
+    }
+  ]
+}

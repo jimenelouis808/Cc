@@ -1,0 +1,39 @@
+data_FeSe2_marcasita
+_chemical_formula_sum          'FeSe2'
+_symmetry_space_group_name_H-M 'Pnnm'
+_cell_length_a                 4.800000
+_cell_length_b                 5.783000
+_cell_length_c                 3.583000
+_cell_angle_alpha              90.0000
+_cell_angle_beta               90.0000
+_cell_angle_gamma              90.0000
+_cell_volume                   99.4583
+
+loop_
+_symmetry_equiv_pos_as_xyz
+  'x, y, z'
+  '-x, -y, z'
+  '-x+1/2, y+1/2, -z+1/2'
+  '-x, -y, -z'
+  'x+1/2, -y+1/2, -z+1/2'
+  'x, y, -z'
+  'x+1/2, -y+1/2, z+1/2'
+  '-x+1/2, y+1/2, z+1/2'
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_U_iso_or_equiv
+  Fe1      Fe     0.000000   0.000000   0.000000   1.0000  0.00500
+  Se1      Se     0.213600   0.373300   0.000000   1.0000  0.00500
+
+_ramancarbon_confidence   'medium'
+_ramancarbon_source       'Tipo marcasita (FeS2 marcasita) con los parámetros de celda del FeSe2'
+_ramancarbon_notes
+;
+Producto de exceso de selenio. Reflexiones calculadas más intensas: 111 a 34.9°, 101 a 31.1° y 120 a 37.6°. Caen encima de las del beta-FeSe (28.6 y 37.4°): si tu síntesis pudo dar los dos, hace falta el ajuste completo del patrón, no una comparación de picos.
+;

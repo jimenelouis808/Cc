@@ -1,0 +1,1064 @@
+# CLAUDE.md
+
+This file gives instructions to Claude Code (or any assistant) working on this repository.
+
+## Project scope
+`nanocarbon_lab` is a modular Python framework to **generate, validate and export** nanocarbon structures (1D/2D/3D) for first-principles (Quantum ESPRESSO) and classical molecular dynamics (LAMMPS) simulations.
+
+The framework must remain **scientifically valid**: physical bond lengths, correct coordination, no impossible geometries, reproducible dopant / defect placement.
+
+## Repository layout
+```
+nanocarbon_lab/
+├── builders/      # 1D/2D/3D structure generators incl. nanocoils (ASE-compatible Atoms)
+│                  #   centerline.py: 3D path sweep (arc/S/helix/random) + strain budget
+│                  #   implicit.py + remesh.py + junction.py: L/T/Y/X junctions and
+│                  #   schwarzites, via SDF -> marching cubes -> isotropic remesh -> dual
+│                  #   capped_cnt.py + fullerene_mesh.py: finite capped/defected
+│                  #   "elongated fullerene" CNTs for rendering (see below)
+│                  #   swept.py: coils/curved tubes via the implicit route, so
+│                  #   ring sizes follow the curvature instead of straining
+│                  #   assemblies.py: multi-wall tubes and bundles at the vdW gap
+│                  #   fullerene.py: closed cages (C60, C240...) and nano-onions
+│                  #   network.py: periodic 3D nets of interconnected tubes
+│                  #     (cubic, diamond), same implicit route as the schwarzite
+├── tmd/           # MX2 dichalcogenides: materials.py (lattice constants),
+│                  #   slab.py (mono/multi/bulk), ribbon.py, nanotube.py,
+│                  #   coil.py (swept helical tubes), curved.py (schwarzites
+│                  #   on a TPMS, with the M/X parity repair), modify.py
+│                  #   (Janus, alloys, vacancies, antisites), quality.py.
+│                  #   Deliberately NOT under builders/.
+├── hetero/        # twisted bilayers and vdW stacks (moire.py). Above both
+│                  #   builders/ and tmd/ because it composes them.
+├── functionalize/ # surface groups grafted onto a finished structure:
+│                  #   groups.py (a Z-matrix grammar, so an element swap
+│                  #   rebuilds the bond lengths), attach.py (surface
+│                  #   normals, site selection, steric placement)
+├── dopants/       # substitutional heteroatoms in carbon: chemistry.py
+│                  #   (which elements, what site, how much), rings.py
+│                  #   (pentagon-selected placement), substitutional.py,
+│                  #   codoping.py (several elements in one pass, each with
+│                  #   its own fraction, and a seek/avoid correlation)
+├── defects/       # vacancies, Stone-Wales, topological defects
+├── topology/      # networkx-based connectivity / coordination analysis
+├── validation/    # bond lengths, coordination, density, vacuum checks
+├── exports/       # Quantum ESPRESSO + LAMMPS writers, plain XYZ + Blender render bundle
+├── relax/         # ASE optimizer wrapper + calculator-free harmonic pre-relax
+├── viz/           # matplotlib 3D viewer
+├── workflows/     # sweep.py: Cartesian product over jobs.Job, so every
+│                  #   mode is sweepable; batch.py + ml_dataset.py write
+│                  #   the QE/LAMMPS inputs, features CSV and manifest
+├── analyse/       # describe a structure this package did NOT build:
+│                  #   rings.py (faces of the embedded surface, with
+│                  #   shortest-path rings as the fallback), shape.py
+│                  #   (dimensionality measured, not read off pbc),
+│                  #   report.py (recorded vs measured vs inferred)
+├── cell.py        # any structure -> a DFT-ready periodic unit cell
+├── utils/         # constants, geometry helpers
+├── cli/           # command line interface
+├── gui/           # tkinter desktop app (build / preview / export / render)
+├── tests/         # pytest unit tests
+└── examples/      # runnable example scripts
+
+nanocarbon_lab/blender/   # bpy-based rendering pipeline, shipped as package
+                   #   *data* (it imports bpy, so it must not be a subpackage).
+                   #   Run through a Blender app (`blender -b -P ...`) or
+                   #   directly, when the `bpy` wheel is installed.
+```
+
+## Capped/defected CNT topology (fullerene_mesh)
+
+`builders/fullerene_mesh.py` is the engine behind `build_capped_cnt`. It
+works on the honeycomb's **triangulated dual** (each ring = one mesh
+vertex; vertex degree 5/6/7/8 = pentagon/hexagon/heptagon/octagon), so
+every ring edit (`edge_flip` = Stone-Wales 5-7-7-5, `contract_edge` =
+divacancy 5-8-5, the seed polyhedron's poles = 6-pentagon caps) is a
+provably Euler-consistent combinatorial operation, never a geometric
+heuristic. **Do not** try to detect or edit rings by re-deriving them
+from atom distances/`networkx.cycle_basis` on a curved/periodic shell --
+that path was tried during development and produced silently wrong ring
+counts (see the module docstring). If you add a new defect type here, add
+it as a mesh-level operation with an Euler-invariant unit test (see
+`tests/test_capped_cnt.py::TestFullereneMeshPrimitives`), not as a
+post-hoc geometric edit.
+
+## Golden rules for contributors / assistants
+1. **Python >= 3.10**, type hints on all public functions.
+2. **Docstrings** are mandatory. Each public function must document inputs, outputs, and (when relevant) the physical assumption.
+3. Every builder must return an `ase.Atoms` with correct `pbc` and `cell`.
+4. Every structure exported to QE or LAMMPS **must pass `validation.run_basic_checks`** first.
+5. Random operations (dopants, defects, disordered foams) **must accept a `seed`** for reproducibility.
+6. **No hardcoded paths**. Use `pathlib.Path` and user-supplied output directories.
+7. **No monolithic scripts**: keep modules small and composable.
+8. New features ship with a matching pytest test in `tests/`.
+
+## Geometry quality (not just topology)
+
+Correct ring counts are necessary but **not sufficient**: a shell can have
+a perfect Euler budget and still be geometrically absurd. `build_capped_cnt`
+relaxes against a valence force field (bond + true angle + non-bonded
+repulsion, L-BFGS, exact analytic gradients) and records measured
+statistics in `atoms.info["geometry"]`.
+
+Two failure modes are already fixed here; do not reintroduce them:
+1. **No real angle term.** Bond springs alone (or a 1-3 *distance* proxy)
+   let the sheet pyramidalise and fold — this produced 66-164 deg angles
+   with perfect-looking bond lengths.
+2. **Taking the dual before smoothing.** Barycentric subdivision gives
+   unequal triangles; atoms must be placed from a mesh already projected
+   and Laplacian-smoothed onto the capsule, or structures beyond ~1000
+   atoms fold through themselves.
+
+Any change to the builder or relaxer must keep
+`tests/test_capped_cnt.py::TestBuildCappedCNT::test_geometry_is_realistic_sp2`
+passing: bonds 1.30-1.55 Å, angles 100-135 deg, zero sub-2 Å non-bonded
+contacts, across straight, bent and defected cases.
+
+**Curvature is limited by a strain budget**, not by taste: outer-wall
+strain is `r_tube * kappa`, and `builders/centerline.py` trims a path's
+amplitude until it fits (default 8%; >15% warns). Sweeping uses arc-length
+parameterisation and a **rotation-minimizing frame** — never a Frenet
+frame, whose normal flips 180 deg at every inflection point and would
+shear a meandering tube apart.
+
+Tube **radius is quantised** by the lattice (`R = 5*freq*sqrt(3)*bond/2pi`),
+exactly as a real (n,m) tube's diameter is fixed by its indices. It is an
+output, not a free input; `target_radius` picks the nearest realisable freq.
+
+## Haeckelites: topology from the mesh, geometry from the honeycomb
+
+`builders/haeckelite.py` designs 2D carbon allotropes by patterning
+Stone-Wales rotations into graphene. It is the flat analogue of
+`fullerene_mesh`, and the reason it needs its own module is that the flat
+case breaks the rule the curved one taught.
+
+**The Euler budget is the easy half.** A 2D periodic sheet is a torus, so
+`sum(6-n) == 0` exactly, and an edge flip drops two mesh-vertex degrees and
+raises two — paying zero. So **no pattern can break the budget**, however
+many flips and wherever they go. A lattice nobody has published is as sound
+topologically as R5,7, and the census is read off vertex degrees rather than
+perceived. Do not re-derive it from distances; that is the failure
+`fullerene_mesh` exists to prevent, and bare graph rewiring (swap one
+neighbour between two atoms, degrees all stay 3) produces a graph that no
+longer embeds in the torus at all — 2.3 Å bonds beside a perfect census.
+
+**The geometry must not come from the mesh.** This is the new rule and it
+contradicts `tmd/curved.py`'s "relax the site net, not the atoms", which is
+right for a closed shell and wrong here. Equilateral triangles meeting five
+at a vertex sum to 300°, seven to 420°, so a *flat* triangulation carrying
+pentagons and heptagons **can never have equal edges**. Asked for them, the
+mesh relaxation sat exactly still — the flipped lattice is a genuine
+minimum of the edge springs, the long diagonals' forces cancelling to
+2.6e-13 by symmetry — and the dual came out with 0.82 Å bonds no later
+relaxation could fix. Smoothing first changed nothing (bit-identical at 0,
+20 and 100 rounds), because the objective, not the optimiser, was wrong.
+
+So geometry comes from the honeycomb side: graphene's exact dual, with each
+rotated **dimer turned 90° in the plane** about its midpoint, which is how
+a Stone-Wales rotation is actually drawn. A single defect built this way
+relaxes to **1.322–1.481 Å and 103.5–136.7°** at graphene's own cell — the
+published 5-7-7-5 geometry, and the one case where the engine checks
+against the literature rather than itself. Three things are load-bearing:
+
+* **The turn's sense is measured, not derived.** Only one of the two
+  matches the rewiring the flip performed; the other puts each new partner
+  at 2.40 Å instead of 1.51 — silently, since the topology is impeccable
+  either way. `_turn_dimers` tries both per dimer.
+* **Triangle indices move, so the atom behind them must be tracked.**
+  `edge_flip` appends its two new triangles at the end rather than
+  replacing in place. `apply_flips` carries a `labels` list; without it the
+  rewired bonds and the rotated positions describe different atoms.
+* **Rule A sets the density; Rule B is implied by it.** Rule A: each mesh
+  vertex may be touched by at most one flip over the whole build, so every
+  ring ends at 5, 6 or 7 (without it a run returned squares and nonagons).
+  It also states the ceiling — touching all V vertices takes V/4 flips,
+  which is a lattice with **no hexagons left**. Rule B: two rotations may
+  not share a bond, or each turns an atom the other needs and the pair
+  lands 3.4 Å apart. That failure was real, but under the *older* selection
+  which kept only the flipped edges' endpoints disjoint. Once Rule A covers
+  all four touched vertices it **implies** Rule B: triangles from
+  vertex-disjoint flips share no vertex, and sharing an edge needs two.
+  Measured across every pattern and cell size, Rule B defers nothing. The
+  round loop behind it is a safety net that demonstrably runs once — do not
+  describe it as what makes a dense lattice reachable.
+
+* **The catalogue is solved, not asserted.** A zero-hexagon census needs
+  the flips to *partition* the vertex set into groups of four — an exact
+  cover, and one exists (14 search nodes at 4×4). But the census does not
+  pin the arrangement: 24 covers enumerated there relaxed anywhere from
+  1.195–1.685 Å to 1.321–1.520 Å. `CATALOGUE` stores the **lowest-strain**
+  one in block coordinates and the builder tiles it, which reproduces
+  identical geometry at 4×4, 8×4 and 4×8 — the sharpest available check on
+  the tiling. Write an edge's far end as `i + 1`, never its wrapped index:
+  `(3, j, 1)-(0, j, 1)` tiled correctly in j and silently stopped being an
+  edge at all in i. **These cells are this framework's own relaxed
+  numbers, not published lattice constants**; the docstring, the CLI and
+  the GUI hint all say so, and they must keep saying so.
+
+* **A catalogue entry refuses a cell its block does not divide.** The
+  hexagons a partial block leaves behind are precisely the ones the lattice
+  is defined by not having, so that is a different material, not a near
+  miss. The GUI hint says this before the build rather than after.
+
+* Measured: `r57` is 100% non-hexagonal at 1.324–1.524 Å and 101.4–138.6°;
+  the generative `dense` reaches 66.7%. Every lattice either route produces
+  passes the sp2 gate, so the gate in `build_haeckelite` is a guard rather
+  than the mechanism.
+
+* **The cell search must be fine, not wide.** The old ±36% first pass
+  stepped in 9% jumps and straddled the optimum: the dense lattice scored
+  1.217–1.558 Å under it and 1.284–1.479 Å at 3% steps, on identical
+  topology. Granularity was the limiter, not physics — and the wide range
+  was only ever needed because a crumpling sheet could pretend to want a
+  far smaller cell.
+
+**The sheet is kept flat on purpose.** The force field has bond and angle
+terms but no flexural one — a sheet resists bending through its π system —
+so long-wavelength wrinkling is nearly free in it, and given out-of-plane
+freedom the cell search took it: a 4×4 R5,7 came back at **1.51 Å² per atom
+against graphene's 2.619**, having bought low bond strain by crumpling into
+a smaller footprint. Relaxing in-plane removes a degree of freedom the force
+field cannot price. Do not reintroduce a buckling nudge and do not report a
+buckling amplitude; it would be an artefact. Every pattern now lands at
+2.62–2.68 Å² per atom, and a test pins that band.
+
+**A catalogue entry is exact; a generative pattern is a request.** For
+`r57` every rotation is applied and `n_flips_refused` is 0. For the
+generative rules the gap is large — `dense` at nx=ny=6 applies 12 of the 36
+edges it names. Both numbers go into `info`, the CLI prints the ratio and
+labels which kind it was. Read the census, not the pattern name. (The
+generative dense pattern was itself called `r57` before the catalogue
+existed, which overclaimed it; it is `dense` now.)
+
+**`sp2_quality` takes a `family`.** A regular heptagon's interior angle is
+128.6° before any strain, so a haeckelite reaches 136–140° as geometry and
+the hexagonal window called every sound one BROKEN — the same mistake
+`tmd_quality` made counting a grafted hydrogen as a metal. Builders record
+`info["quality_family"]` and `_report_structure` reads it. A new family with
+its own legitimate angle range needs an entry in `QUALITY_WINDOWS`, not a
+loosened sp2 window.
+
+## Junctions and schwarzites (implicit route)
+
+`junction.py` starts from a signed-distance field rather than a seed
+polyhedron. The invariant to protect: **mesh vertex degree == carbon ring
+size**, so the isotropic remesher in `remesh.py` is not cosmetic — without
+it, marching cubes' degree-3 and degree-9 vertices become three-membered
+rings and nine-membered holes. `_remove_low_degree_vertices` exists
+specifically to kill degrees < 5.
+
+Two subtleties already fixed; do not reintroduce:
+1. **Edge collapse needs locking.** Adjacency is cached per pass, so after
+   a collapse it is stale nearby; validating later collapses against it
+   silently admits ones that tear the surface (this produced meshes with
+   tens of boundary edges that happened to heal later).
+2. **Fields must share units before combining.** The trigonometric
+   schwarzite field is unitless; intersecting it with a ball's Å-valued
+   SDF did nothing until `normalize_to_distance` was applied.
+
+Periodic schwarzites add two requirements. Every geometric step —
+remesh, dual, relaxation, geometry report — must use `minimum_image`, or a
+bond across the cell seam reads as a cell-length stretch. And the **cell
+must be relaxed with the atoms** (`CELL_RELAX_CYCLES`): holding it fixed
+left Schwarz D with 6 Å bonds and 28 overlaps. `_finish` ends with a hard
+quality gate that raises rather than returning a torn network — thresholds
+are set far outside anything strain explains.
+
+The Euler check is **genus-derived** (`deficit == 6 * chi`), never the
+tube builder's hardcoded 12 — a schwarzite legitimately has a strongly
+negative deficit. For an *assembly* (MWCNT, bundle) the budget is 12 per
+disjoint shell, not 12 overall.
+
+**Do not raise `anneal_sweeps` for schwarzites.** It defaults to 0 there
+and to 80 for junctions, and that asymmetry is measured, not an
+oversight. On a minimal surface the 5-7 pairs are how a hexagonal net
+covers the saddle curvature; annealing them away forces the remaining
+bonds to stretch. Schwarz P at 36 Å goes clean → strained → broken as
+sweeps go 0 → 20 → 80, and the pattern held for every surface and cell
+size tried. A high stray-pair count here means the surface is being
+tiled correctly. `MIN_SCHWARZITE_CELL` was likewise raised to where the
+*geometry* stops being broken, not merely where the mesh stops tearing.
+
+## Curved tubes: swept vs implicit
+
+There are two routes and they are not interchangeable. `build_capped_cnt(
+shape=...)` sweeps a finished all-hexagon tube onto a centreline, so the
+bend is carried as **elastic strain** — a geometric necessity, not a
+relaxation failure, and no anchor tuning recovers it (measured: 6.5% path
+strain gives 1.33–1.51 Å bonds at every anchor stiffness tried).
+`builders/swept.py` meshes the curved surface implicitly instead, so ring
+sizes follow the curvature (85 pentagons / 71 heptagons on a 1.5-turn
+coil) and bonds return to graphitic length.
+
+Two properties of that route must not be re-broken:
+1. **Ring topology encodes curvature, not torsion.** A free coil keeps
+   its radius (29.4 Å for a requested 30.0) but springs open along its
+   axis (20 → 26.7 Å pitch). `_finish`'s `pin_near` can hold the ends, but
+   it is **off by default and should stay that way**: at `k_pin=5` the
+   same coil came out with 1.18–1.71 Å bonds and 3 overlapping pairs,
+   failing the quality gate the free relaxation passes. Report the
+   achieved pitch; do not hold a requested number at the cost of the
+   chemistry.
+2. **`build_coil` refuses a pitch below `2*tube_radius + 3.4`.** Below
+   that the surface merges adjacent turns into one solid and the result
+   is not a tube at all.
+
+## Fullerene cages: the seed decides the cage
+
+`builders/fullerene.py` is the `half_length = 0` limit of the capped tube
+— a sphere, reusing the same dual/Euler/VFF machinery. Two seeds, and the
+second is not optional: the icosahedron gives only the class-I series
+GP(f,0) (C20, C80, C180), which **does not contain C60 at any
+frequency**. C60 needs the pentakis dodecahedron (12 degree-5 + 20
+degree-6 vertices), whose dual is the truncated icosahedron.
+
+Both seeds are convex hulls of points on the unit sphere — the hull of
+points on a sphere is their Delaunay triangulation, so connectivity
+cannot be miswritten by hand. `_hull_mesh` re-orients every triangle
+outward; mixed winding would make the dual order a ring's atoms into a
+self-crossing polygon.
+
+The class-II radius step (~3.5 Å per frequency) is what makes a graphitic
+nano-onion possible; class-I's ~2.0 Å step reaches 3.4 Å at no
+`freq_step`. Do not "simplify" the onion onto the class-I seed.
+
+## Relaxation: the neighbour list needs a skin
+
+`relax_shell`'s non-bonded list is frozen for a whole L-BFGS run. Built at
+exactly `repel_cutoff`, two atoms further apart than that are invisible to
+each other for thousands of iterations and pass straight through. Compact
+shells never noticed; a 284 Å coiled tube drifted 6.5 Å per atom and fused
+neighbouring turns, 370 sub-2 Å contacts between atoms 135 bonds apart.
+`repel_skin` (default 5 Å) fixes it, with a **conservative Verlet
+rebuild**: restart when the two largest displacements sum past the skin.
+Do not tighten that to "any atom moved half the skin" — ordinary local
+rearrangement is ~1 Å and would restart L-BFGS (discarding its history)
+continuously, tripling the runtime.
+
+**Wrapping for `cKDTree(boxsize=...)` needs more than `np.mod`.** Two traps,
+both of which crashed a sound structure from three frames away with a
+message naming neither. A `0` edge means "not periodic along this axis"
+(what a 2D sheet's vacuum direction needs), and `np.mod(x, 0)` is nan, which
+arrives as "data must be finite". And for a tiny negative input `np.mod`
+returns the edge **exactly** — `np.mod(-1e-18, 10.0)` is `10.0` — which the
+tree rejects as outside the box, though an atom a hair below the cell origin
+is perfectly ordinary. Both live in `relax_shell` and in
+`capped_cnt.geometry_report`; the fix is a mask for the live axes plus a
+clip to `np.nextafter(edge, 0)`. Any new `cKDTree(boxsize=...)` call needs
+the same two.
+
+## Dichalcogenides are not decorated carbon
+
+`tmd/` is a separate package on purpose. An MX2 layer is a three-plane
+X-M-X sandwich, so the carbon machinery does not transfer: the metal is
+six-coordinate, the bond is 2.4 Å, there are no rings to count, and the
+sp2 verdict's thresholds are all wrong. It has its own `quality.py`.
+
+Rules that are easy to break here:
+
+* **Geometry is `a` and `h`; the bond is derived.** Storing `d` as well
+  invites the three to disagree. `d = sqrt(a^2/3 + h^2/4)` reproduces the
+  literature 2.41 Å for MoS2.
+* **The phase is only about where the bottom chalcogen plane sits** — 2H
+  eclipsed (trigonal prismatic), 1T staggered (octahedral). No TMD has a
+  tetragonal phase; do not add one.
+* **2H stacking is a 6_3 screw, not a rotation about the metal.** Negating
+  the fractional coordinates alone leaves the metal fixed and stacks metal
+  on metal, which is AA. The `+(1/3, 2/3)` translation is what puts the
+  metal over the chalcogen. 2H and 3R are identical as bilayers and
+  diverge at the third layer.
+* **1T' needs a doubled cell.** A cell with one metal has no partner to
+  dimerise with. Double, then distort, then repeat.
+* **Ribbon terminations are deliberately off-stoichiometry.** Pass
+  `expect_stoichiometric=False` to `tmd_quality` for them.
+* **Rolling strains the sandwich** by `h/2R`, unavoidably. That is why
+  real MX2 tubes are tens of nm across; the builder warns past 10%.
+
+**Coils sweep; they do not remesh.** `tmd/coil.py` bends a finished tube
+onto a helix, so every ring stays a hexagon. The implicit route is not an
+option for MX2: it absorbs curvature by introducing odd rings, and an odd
+ring here forces an M-M or X-X bond. Report the roll and bend strains
+*separately* -- they have opposite cures (widening the tube cuts `h/2R`
+and raises `R_outer*kappa`), so their sum alone tells the user nothing
+actionable. `sweep_along_path` rescales the path to the structure, so
+pick the period count to match the arc and report the **achieved**
+radius and pitch, never the requested ones.
+
+**Schwarzites live in `tmd/curved.py`** and their reasoning is the part
+most easily got wrong, in both directions.
+
+An earlier version of this file said MX2 schwarzites were impossible
+because pentagons are forbidden. Pentagons are forbidden, but that only
+rules out the *sphere*: negative curvature wants **octagons**, which are
+even. `sum(6-n) = 6*chi`, each octagon pays -2, Schwarz P wants twelve.
+Do not reinstate the old claim.
+
+Atoms are triangle centroids bonded across shared edges, so ring size ==
+mesh vertex degree and M/X alternation == every degree even. Two repairs,
+and the difference is not stylistic:
+
+* **flip** toggles four degrees at once, so it can only shuffle sparse
+  odd vertices and never reaches zero -- but it adds no vertices, so the
+  geometry survives.
+* **split** toggles exactly the two vertices opposite the edge. That
+  weight-two move *does* reach zero, at one new vertex each; enough of
+  them put more sites on the surface than its area holds at `a/sqrt(3)`.
+
+Both are exposed as `parity` because the trade is real and monotone
+(30 A Schwarz P: none 12.4% homoelemental / 6.2% p95 strain, split 0.0%
+/ 13.4%). Do not quietly pick one.
+
+Things already measured; do not re-derive them the hard way:
+
+* **Even degrees are a sphere result.** At genus g there are 2g more Z/2
+  classes, and even-degree meshes exist on both sides. So a perfectly
+  bipartite cell is *reachable but not guaranteed* -- 30 A split gives
+  zero homoelemental bonds and X/M = 2.0000; 36 A split gives 2.2%. What
+  is left over is an inversion-domain boundary, so report the count.
+* **Relax the site net, not the atoms.** The sites form a trivalent net
+  identical to graphene's, so `relax_shell` at 120 deg and `a/sqrt(3)`
+  applies directly and its angle term is what stops the sheet folding.
+  Relaxing the finished MX2 atoms needs an angle target that fits both a
+  3-coordinate chalcogen (~82 deg) and a 6-coordinate metal (several
+  values at once); there is none.
+* **`exclude_13=False` for the atom relaxation.** With `k_angle=0` and
+  1-3 pairs excluded from the repulsion, two chalcogens on the same metal
+  have *nothing* holding them apart -- that was 70 sub-2 A pairs, and
+  keeping them in the repulsion made it zero. Carbon keeps the default
+  True: its angle term owns those pairs.
+* **Per-bond `equilibrium`.** Homoelemental defect bonds are not the M-X
+  length; forcing them to it moved the worst bond from 13.6% to 24.2%.
+* **Normals come from the relaxed net, sign-propagated across it.** The
+  field gradient is wrong after relaxation (the sites have left the level
+  set), and deciding each sign against the original triangle gives
+  normals turning 178 deg. Do not smooth the normal field -- it averages
+  normals that genuinely differ and made things worse.
+* **Retry the grid.** Schwarz P at 42 A tears at resolution 64 (sites
+  21 A apart) and is clean at 72. Validate the site spacing and retry on
+  a shifted grid, as `build_schwarzite` does.
+* **Judge with `schwarzite_quality`, not `tmd_quality`.** The latter
+  finds bonds by distance; on a saddle a 2.4 A bond's cutoff reaches
+  3.0 A and reads a sound cell as 4-8 coordinate metal.
+
+**MX2 junctions** (`build_tmd_junction`) reuse the same machinery over
+the junction field. The topology is *easier* than a schwarzite's and the
+reason must not be forgotten: a capped junction is sphere-like at any arm
+count, so `chi = 2`, the budget is `+12`, and it is paid in **squares**
+(+2) against **octagons/decagons** (-2/-4) at the crotch. Genus 0 leaves
+no homology classes for the parity repair to fight, so `split` reaches
+exactly zero odd rings and the colouring is then exact -- which is why
+the default parity here is `split`, not the schwarzite's `flip`. Measured
+Y at r=12, arm 26: 3153 atoms, rings 4:205/6:664/8:169/10:15,
+`sum(6-n)=12`, **0%** homoelemental, X/M = 2.000, M 6-6 / X 3-3,
+p95 strain 7.3%. `schwarzite_quality` reads `info["genus"]` and phrases
+the zero-antiphase case as guaranteed rather than lucky; keep that
+branch. `tube_radius < 2*h` is refused -- the chalcogen planes would meet
+on the axis.
+
+## Nanotube networks: periodic, and the field must be too
+
+`builders/network.py` builds 3D networks of interconnected tubes on a
+crystallographic net (cubic, diamond) through the same implicit route as
+the schwarzite, so the ring statistics stay **derived**: straight walls
+come out all-hexagon, nodes come out with heptagons because a node is a
+saddle, and `sum(6-n) = 6*chi` is checked against the net's own genus
+(cubic 3 / -24, diamond 9 / -96). Do not "help" by placing rings.
+
+Three things in `implicit.network_field` are load-bearing:
+
+* **Struts are replicated into the 26 neighbouring images.** Not an
+  optimisation: without it a strut leaving one face has no counterpart
+  entering the opposite one, the periodic marching-cubes weld finds
+  nothing to join, and the cell comes out torn. The test asserts the
+  faces match to 1e-9, not approximately.
+* **Only the nearest few struts may blend.** An exponential soft-min
+  over all 27 images subtracts `blend*log(n)` wherever n struts are
+  comparably close, and at 432 images that inflated the solid until it
+  filled the entire cell. The blend is over the `n_blend` nearest, with
+  the same polynomial smooth-min `smooth_union` uses.
+* **Evaluation is chunked.** The point-by-strut array is 3.9 GB for a
+  diamond cell on a 72^3 grid; unchunked, the process was *killed* --
+  no traceback, no failure message, just a missing result. Same class of
+  fault as the old quadratic `guess_bonds`.
+
+`minimum_cell` is the honest floor: each node eats about
+`tube_radius + blend` of either end of a strut, and below the cell where
+one tube radius is left between them there is no tube -- only two nodes
+touching. Refuse rather than return a sponge under a network's name.
+
+The atom estimate uses a **measured constant per net** (`NETWORK_OVERLAP`,
+cubic 0.71 / diamond 0.74), not the junction's linear law in the node
+count: that law predicts diamond to 1% and cubic 27% low, because
+coordination 6 hits its own floor.
+
+## Unit cells: pad only what does not repeat, measure only what is vacuum
+
+`cell.to_unit_cell` turns any structure into `pbc=(True, True, True)`
+with a real cell, because every plane-wave code and periodic viewer is
+3D-periodic and none of them has a "molecule" setting.
+
+Three rules, each of which was a bug first:
+
+* **A periodic axis is never padded.** Its lattice vector is the
+  physics; changing it changes the crystal rather than the box.
+* **A non-periodic axis is rebuilt from the atom span, not padded.** A
+  finite builder's cell is already a bounding box with padding in it, so
+  padding that compounds on every call. `to_unit_cell` twice must equal
+  `to_unit_cell` once, and a test pins it.
+* **`image_separation` counts only images displaced along a vacuum
+  axis.** In a real crystal an atom bonds to its image -- a nanotube is
+  1.42 A from itself along its own axis, a schwarzite 1.37 A -- so
+  measuring every image reported every correct periodic cell as
+  unconverged. That is backwards: the contact *is* the structure. A cell
+  with no vacuum direction returns `inf` and reports `None`, because a
+  bulk crystal has nothing to converge and a number there would invite a
+  meaningless comparison.
+
+## Blender: the render must not depend on the subject's size
+
+Three faults, and the first is the one that made the other two hard to
+notice.
+
+**The scripts must ship inside the package.** They lived beside it, so
+pip left them out and the GUI's render button was dead for every
+installed copy -- it reported "run the GUI from a full checkout". They
+are declared as `[tool.setuptools.package-data]`, **not** a subpackage:
+they import `bpy`, so an importable `nanocarbon_lab.blender.render_cnt`
+would be a module that cannot be imported.
+
+**Camera distance follows from the lens.** It was a hardcoded
+`3.2 * radius`, which only fits a 50 mm lens; the styles use 50-90 mm
+and four of five cropped the subject. The correct distance is
+`radius / sin(atan(sensor / 2f))`, narrowed further by the aspect ratio,
+because Blender maps the sensor onto the *longer* image axis and the
+shorter one clips first. Do not put a constant back.
+
+**Light positions and energies scale with the subject.** The `LightSpec`
+coordinates are written against `NOMINAL_RADIUS` (10 Å); positions are
+multiplied by `radius / NOMINAL_RADIUS` and energies by the square of
+it, which holds irradiance constant. Without this a 90 Å structure
+engulfed its own lighting and rendered at 0.04 luminance against a black
+background. **A SUN is exempt** -- it is directional and infinitely
+distant, so its irradiance does not fall off and scaling it over-lights.
+
+`gui.has_bpy()` lets the GUI render through the `bpy` module when no
+Blender application is installed, which removes the pipeline's single
+most common failure. Check it with `find_spec`, never by importing:
+importing Blender costs hundreds of megabytes, and it runs while drawing
+a label.
+
+## Doping: the host is carbon, and the elements are not interchangeable
+
+`dopants/chemistry.py` is the authority on which heteroatoms may replace
+a carbon. It replaced a four-element tuple in `utils.constants`, and the
+reason is not that the tuple was short: a bare list made 10% Fe as easy
+to ask for as 10% N, and only one of those is a material. Each entry
+carries a **site type** and a **max_fraction**, and the warning fires
+against the element's own ceiling.
+
+* **planar** is N and B only. They are the only dopants within 0.15 Å of
+  carbon and isoelectronic with it to within one electron, and the only
+  ones that reach tens of per cent in real samples. Do not move anything
+  else into this class on the grounds that it "should fit".
+* **puckered** (P, S, Se, O, Si, Ge, Al) substitutes but leaves the site
+  sp3 and out of plane. The builder places these on the **ideal lattice
+  site** and cannot know how far they move; say so rather than implying
+  the geometry is finished.
+* **vacancy** (Mn, Fe, Co, Ni, Cu, Zn) is not a lattice substitution at
+  all in reality -- these are M-N4 single-atom sites in a vacancy. One
+  substituted onto a perfect lattice is a starting geometry, not the
+  motif.
+
+The halogens are absent on purpose: F and Cl bond *to* a carbon sheet
+rather than replacing a carbon in it, so fluorographene is an adsorption
+problem. Do not add them here.
+
+Warnings, not errors, everywhere except an unknown element -- metastable
+and computational structures are legitimate, and an element with no
+entry has no radius and no coordination ceiling, so validation and
+export would both misjudge it. **Adding a dopant means adding it to
+`COVALENT_RADII` and `MAX_COORDINATION` too**; a test pins that.
+
+**Ring-selected placement reads `info["rings"]`; it does not perceive
+rings.** `dopants/rings.py` puts dopants on pentagons because those carry
+a curved structure's curvature and its reactivity -- a fullerene's
+chemistry is at its pentagons. Every mesh-based builder already records
+the real atom indices per ring, so no geometry is needed. A structure
+without that metadata **raises**; do not add a distance-based fallback,
+which is the exact failure `builders/fullerene_mesh.py` exists to
+prevent. Its concentration counts against the **sites of that ring
+size**, and both that and the overall fraction are recorded, because on
+a capped tube they differ by a factor of four and either alone reads as
+the other.
+
+`jobs.apply_doping` is the single placement policy; the GUI and the CLI
+both go through it, as they do for everything else in `jobs.py`.
+
+## Co-doping is one pass, not doping twice
+
+`dopants/codoping.py` places several heteroatoms at once. It is not a
+convenience wrapper around `dope_random`, and the two differences are the
+whole module.
+
+**Every fraction is of the same denominator.** Applied sequentially, each
+species' concentration is taken against the carbons the *previous* one
+left, so a 400-atom sheet asked for 5% N and 5% B came back with 5.00% and
+4.75%. The error compounds with concentration and species count, and it was
+silent: `info` recorded the fractions requested, not the ones placed. Counts
+are now worked out together against the original carbon count by **largest
+remainder** — independent rounding does not add up (four species at 0.1 on
+95 carbons round to 10 each, which is 40 sites for a requested 38).
+`jobs.Job` **refuses a `dopant` and a `codope` spec together** rather than
+letting one silently redefine the other's fraction.
+
+**Placement is correlated, because the chemistry is.** `affinity` takes
+`"random"`, `"seek"` or `"avoid"`. In B,N co-doped graphene the species
+prefer to sit next to each other — a B–N pair is isoelectronic with a C–C
+pair — which is why real samples grow BN domains rather than a solid
+solution; `"seek"` places dopants as bonded pairs of *unlike* species.
+`"avoid"` leaves no two dopants bonded, for the dispersed case.
+
+**The affinity's effect is measured, not asserted.** `info["codoping"]`
+records `dopant_bonds` and `unlike_bonds`, and that is what the tests check.
+Measured on a 400-carbon sheet at 5% N + 5% B: `seek` 22 dopant–dopant bonds
+of which 20 unlike, `random` 3, `avoid` **0**. Do not replace these with a
+claim in a docstring — the numbers are the only reason to believe the rule
+did anything.
+
+This is **not** an energy calculation: nothing here knows B–N is favourable.
+The affinity is a placement rule the caller picks to match the sample they
+mean, and the docstring says so. `"seek"` with a single species has nothing
+to alternate with and produces like–like pairs, which is the honest answer
+rather than a silent no-op.
+
+`"avoid"` can run out of room — an independent set of the requested size
+need not exist on a trivalent lattice — and then it **warns and records
+`unplaced`** rather than filling the remainder in adjacent, which would give
+up the one property that was asked for.
+
+## Functionalisation adds atoms; doping replaces them
+
+`functionalize/` is a third chemistry axis, not an alternative to the
+other two. A dopant substitutes for a host atom, so it belongs to carbon
+alone; a **group sits on top of a surface**, and carbon, MX2 and a vdW
+stack all have one. `jobs.apply_grafting` therefore runs for every
+family, after doping and after the MX2 edits, because it must see the
+finished surface: a vacancy opens sites a group can reach and a Janus
+face changes which element the anchor is.
+
+**Groups are internal coordinates, never Cartesians.** That is the whole
+design. `substitute(hydroxyl, {"O": "S"})` is a thiol with the *right*
+geometry because the C-S bond is rebuilt at 1.81 Å; stored as
+coordinates, the same swap leaves sulphur sitting at oxygen's 1.42 Å,
+which is a 0.4 Å error in the one bond the group is defined by. Only
+angles are stored, and every length comes from `COVALENT_RADII` times a
+bond-order factor — which reproduces eleven literature bonds to within
+0.03 Å, each pinned by a test. Swaps are restricted to the **same
+valence**: an -OH whose oxygen became nitrogen is not a variant, it is a
+group with a missing bond.
+
+Angles in the registry are the **bond angle as chemistry quotes it**
+(109.5 for tetrahedral). The Z-matrix works from the parent bond's
+continuation, where that is a 70.5 degree deflection; the conversion
+lives in `build_positions` so a new group is written with numbers a
+chemist recognises.
+
+Four things in `attach.py` are load-bearing:
+
+* **The normal is where the bonds lean away from**, with the plane
+  normal only as the fallback when they cancel. A pyramidal site has no
+  bond plane — an MX2 chalcogen sits above three metals whose bond
+  vectors are not coplanar — so the plane-normal branch returned
+  whichever direction they varied least along and *every* group on
+  *every* MoS2 surface was refused. The remaining sign ambiguity is
+  fixed by propagating across the bond graph and then flipping **once
+  per connected component** by the divergence theorem, so a multi-wall
+  tube gets each shell oriented on its own instead of the inner one
+  turned inside out.
+* **Atoms within two bonds of the anchor are exempt from the steric
+  test.** Their separation is a bond angle, not a contact: a hydroxyl's
+  oxygen is 2.09 Å from the three carbons around its anchor and its
+  hydrogen 1.96 Å from the anchor itself, no matter what. Scoring those
+  as clashes refused literally every placement on every structure. The
+  exemption holds **in every periodic image**, not just the home cell —
+  a site at a cell face has its bonded neighbour stored on the far side,
+  and restricting it to the home cell refused a third of the sites on a
+  6x6 graphene cell.
+* **Twelve rotamers are tried and the roomiest kept.** A group on one
+  single bond spins freely, so refusing a site because the frame's
+  arbitrary tangent aimed a hydrogen at the wall would measure the frame
+  rather than the chemistry.
+* **`face="both"` alternates by sublattice**, which is the chair
+  conformation. Fluorographene reaches 100% coverage that way and 42% by
+  shuffle order, because two fluorines on adjacent carbons on the same
+  face are 1.42 Å apart. A site whose inner face is *blocked* always
+  takes the outer one: an MX2 bond graph is bipartite between metal and
+  chalcogen, so every chalcogen shares a colour and alternating aimed
+  every group into the sandwich — zero coverage, blamed on sterics,
+  which was true and useless.
+
+Coverage is **measured, not assumed**, and the shortfall is reported
+with its reason. Fluorine reaches 100% on graphene, a carboxyl 28%, an
+epoxide about 30% of the bonds — the last being a maximum matching, since
+no two bridges may share a carbon, not a steric limit.
+
+`info["functionalization"]` is a **list**, appended to. Graphene oxide is
+an epoxide graft followed by a hydroxyl graft, and with a single dict the
+second call erased the first. `info["grafted_atoms"]` is the cumulative
+list of added atoms, and `tmd.quality` excludes them: it calls anything
+that is not a chalcogen a metal, so a grafted hydrogen counted as a metal
+and a sound MoS2 slab read BROKEN with X/M = 1.73. Both are index lists
+and both are remapped on deletion.
+
+Grafting also **re-pads the non-periodic axes** to the vacuum the
+structure was built with. Groups stick out, and a finite builder's cell
+is a bounding box: a hydroxylated (6,6) tube built with 12 Å came back
+with 8.55 and validation refused it. Periodic axes are never touched, and
+the atoms are never moved — re-centring would silently shift every
+pre-existing coordinate.
+
+**Validation had three carbon-shaped assumptions**, all now element-aware,
+and all the same mistake the coordination ceiling already fixed for
+metals: 0.970 Å is the literature O-H bond and was warned about for being
+below carbon's sp2 window (contacts are now judged against the pair's own
+covalent radii); coordination 1 is a full valence for H and the halogens
+(a correct CF monolayer produced fifty "dangling" warnings); and a
+carbonyl oxygen has one neighbour and a full valence too, which
+coordination counting cannot see, so builders declare
+`info["terminal_atoms"]`.
+
+**Two CLI post-processing helpers exist**, `_apply_post` and
+`_maybe_dope`, and every post-build step must be in both. Grafting went
+into the first alone, so `--graft` on a capped tube, fullerene, junction
+or schwarzite did nothing at all — and did not even report an impossible
+swap as impossible.
+
+## Dichalcogenides are chosen by two elements, not by a formula
+
+`material_for(metal, chalcogen)` is the lookup the GUI and CLI use, and
+`available_metals` / `chalcogens_for` drive their dropdowns. It is
+deliberately a **lookup, not a constructor**: an MX2 not in `MATERIALS`
+is one whose lattice constants this package does not know, and deriving
+them from covalent radii would produce a structure that looks
+authoritative and is not. A missing pair raises with what *is* available
+for each of the two elements.
+
+Absences that are chemistry, not oversight: ReS2/ReSe2 distort into
+diamond chains and NbTe2/TaTe2 into another pattern, so none is an ideal
+1T or 2H cell; SnTe2 is not a layered MX2 at all. Do not "complete the
+grid".
+
+The platinum dichalcogenides have a van der Waals gap of ~2.4 Å against
+MoS2's 3.0. That is real -- it is why PtSe2's gap depends so strongly on
+layer count -- so the table's consistency test allows down to 2.3 Å.
+Do not tighten it to make Pt look like the rest.
+
+Adding a material means adding its metal to `COVALENT_RADII`,
+`MAX_COORDINATION` and `HOMOELEMENTAL_BOND`. The last one feeds
+`BOND_CUTOFF_OVERRIDE`, and a test asserts the resulting M-M cutoff
+falls **below** that material's lattice constant -- above it, every metal
+bonds to its six in-plane neighbours and reads as 12-coordinate.
+
+## Analysing a file: keep what was recorded apart from what was guessed
+
+`analyse/` describes a structure the framework did not build. Its whole
+discipline is the three-way split the report prints: **recorded** (read
+from `atoms.info`, so it is what a builder did), **measured** (true of
+the coordinates -- a bond length, a span, an element count) and
+**inferred** (a rule with thresholds behind it -- the bonds, the rings,
+the shape). Blurring them would be worse than no report, since
+"pentagons: 12" reads the same whether a builder placed twelve pentagons
+or a distance cutoff guessed them.
+
+**Rings are traced as faces, not searched as cycles.** For a trivalent
+surface -- graphene, any tube, any cage, any schwarzite, any junction --
+a ring is a *face of the embedded graph*, and ordering each atom's
+neighbours by angle about its surface normal gives a rotation system
+whose orbits are exactly those faces. Measured against the builders' own
+recorded rings it reproduces them exactly, and the face count satisfies
+`F = E - V + 2 - 2g` by construction.
+
+Shortest-path rings are the fallback for anything that is not a
+trivalent surface (an MX2 sandwich, a bulk crystal, a molecule), and the
+report says which method ran, because they answer different questions.
+SP rings **systematically miss large rings on a tiled surface**: a
+heptagon every one of whose bonds also borders a hexagon is never the
+smallest ring through any bond. Measured: a Y junction has 16 heptagons
+and SP rings find 4; Schwarz P has 65 and SP rings find 10. Neither is
+`networkx.cycle_basis`, which reports nine- and ten-membered rings on a
+C60 -- a cycle basis counts independent loops, which is a different
+question with a different right answer.
+
+A cell so small that a pair of atoms is bonded through **more than one
+image** cannot be written as a simple graph at all, so no census on it
+describes it. That is detected and refused rather than answered.
+
+**Shape is measured, never read off `pbc`.** Every plane-wave code writes
+a slab as `pbc=(True, True, True)`, so trusting the flag would call it
+bulk and quote a density for the padding. An axis counts as periodic only
+if it also has no vacuum gap. For the finite part, spans classify a sheet
+and a chain, but a tube and a cage both have three large spans -- what
+separates them from a solid is that they are **hollow**, which the
+relative spread of the radial distances measures without needing a length
+scale. Two refinements were bugs first: the tube axis must be tried
+against every principal axis *and* the periodic direction (a one-cell
+MoS2 tube is 33 Å across and 4.6 Å long, so its longest principal axis is
+a diameter and it read as a chain), and thickness must be measured along
+the cell's non-periodic direction (on a 1x1 MX2 bilayer the smallest
+principal span is *in plane*, so a 9.3 Å slab read as 0 Å thick).
+
+Disjoint pieces are classified separately, and they win **only when they
+disagree with the whole about dimensionality**. Two stacked MX2 layers
+are two sheets and also one slab, both 2D, and the slab is the more
+useful true statement because it accounts for every atom; two nested
+tubes are 1D each while their union reads as a 0D branched shell, and
+there the union is simply wrong -- the annulus between the walls is empty
+space, not material.
+
+**A decorated structure is not a different structure.** A tube with 72
+carboxyls has 288 atoms at assorted radii, so its radial spread rises and
+the whole reads as a solid cluster -- while every atom of its wall is
+exactly where it was. Both the shape and the rings therefore fall back to
+the **backbone**, the graph 2-core, which strips each pendant group one
+atom at a time (the hydrogen, then the hydroxyl oxygen, then the carbonyl
+oxygen, then the acid carbon) and leaves the wall. Faces traced on it
+recover the tube's exact ring census, and the ring indices stay in the
+original numbering.
+
+**Hollowness is tested before flatness.** C20 is 3.9 Å across its second
+principal axis -- narrower than `FLAT_SPAN` -- so the flatness test
+claimed it as a chain before the shell test ever ran. A cage is hollow
+whatever its size. A small-molecule test (at most 12 atoms *and* under
+5 Å across, both conditions needed) runs before either, so water is a
+molecule rather than a chain without C20 being swallowed with it.
+
+Writing this package found three bugs elsewhere, which is what it is for:
+
+* **`surface_normals` had `PYRAMIDAL_SUM` at 0.30**, so half of a
+  Schwarz P cell's atoms were treated as pyramidal on the strength of a
+  near-cancelling bond sum and were exempted from the sign propagation.
+  431 of 1701 bonds joined atoms whose normals pointed opposite ways, and
+  a quarter of any groups grafted onto a schwarzite would have gone
+  through the wall. The threshold is now measured: every carbon surface
+  is at most 1.07 (C20, the most pyramidalised sp2 carbon there is) and
+  every MX2 chalcogen at least 1.79.
+* **`coordination_numbers` counted node degrees in a networkx Graph**,
+  which holds one edge per pair. In a 1x1 MoS2 cell an atom reaches the
+  same neighbour through several images, so its metals read as
+  two-coordinate and validation warned about dangling chalcogens in a
+  perfect crystal. It counts from the bond list now.
+* **`candidate_sites` offered atoms a previous graft had added.** A
+  hydroxyl took the oxygen of an epoxide already on the sheet, giving a
+  1.32 Å O-O peroxide bridge on a structure whose every other number
+  looked right. Grafted atoms are excluded, and so is any atom already at
+  its element's coordination limit.
+
+## Removing an atom renumbers every atom after it
+
+`utils/metadata.py` exists because two deletion paths -- carbon
+`introduce_vacancies` and `chalcogen_vacancies` -- copied `atoms.info`
+wholesale. The builders record `info["bonds"]` and `info["rings"]` as
+**atom indices**, so after removing three atoms from a 240-atom capped
+tube the bond indices still ran to 239 against 237 atoms, and every
+index above a removed atom pointed at the wrong atom.
+
+Nothing complained, which is what made it dangerous.
+`coordination_numbers` prefers the recorded graph when it exists, so
+validation read the corrupted one and passed; the render bundle writes
+those same indices to JSON, so a defected tube drew bonds between atoms
+that were never bonded.
+
+Any function that deletes atoms must build its survivor list with
+`keep_indices` and pass `atoms.info` through `remap_after_removal`.
+Groups that lost a member are **dropped**, not repaired -- a bond with
+one end missing is not a bond and a pentagon missing an atom is not a
+pentagon -- and `ring_counts` is recomputed from the survivors rather
+than carried, since a census contradicting the rings beside it is only
+noticed after it has been plotted. **A new index-carrying `info` key
+must be added to `INDEX_LIST_KEYS`**, not only to the builder writing it.
+
+## MX2 quality is judged by role, not by the parent formula
+
+`geometry_report` used to match bonds and count sublattices against
+`info["metal"]` and `info["chalcogen"]`, which name the compound the
+structure was *built* from. Every edit in `tmd/modify.py` introduces a
+third species, so a Janus MoSSe had its Mo-Se bonds ignored and an
+Mo(1-x)W(x)S2 alloy its W-S bonds: both read as under-coordinated, X/M
+came out 1.00 and 3.60 against a true 2.00, and four correct structures
+were reported BROKEN.
+
+Classification is now by role -- `CHALCOGENS` is S/Se/Te and everything
+else is the metal -- so a second metal or chalcogen counts without being
+enumerated. Do not reintroduce a symbol comparison here.
+
+Vacancies and antisites *are* off-composition; that is what they are.
+The CLI drops `expect_stoichiometric` when `info["defect_log"]` is
+present, exactly as it already did for a deliberately terminated ribbon.
+
+`jobs.apply_tmd_chemistry` is the single policy, and `tmd_edit_amount`
+is deliberately one field meaning a fraction, a count or a face
+depending on the edit -- four fields of which three are always ignored
+would be worse, and the GUI hint says which it is.
+
+## Bond detection is element-aware, and must not be quadratic
+
+Two faults here were load-bearing and are pinned by
+`tests/test_validation_scaling.py`:
+
+1. **`COVALENT_RADII` needs every element it will meet.** It held only C,
+   N, B, S, P, H, O; everything else fell back to `MAX_CC_DISTANCE`
+   (1.80 Å), so a 2.404 Å Mo-S bond was not a bond, every dichalcogenide
+   validated as "isolated atoms", and **both exporters refused the entire
+   tmd package**. Add radii when adding elements.
+2. **Metal-metal pairs need `BOND_CUTOFF_OVERRIDE`.** Two metallic radii
+   overshoot a layered compound's lattice constant -- Mo+Mo+0.30 is
+   3.38 Å against MoS2's 3.16 -- so every metal picked up its six
+   in-plane neighbours and read as 12-coordinate. The override cuts
+   between the lattice repeat and a real 2.8 Å M-M bond, and it covers
+   **pairs**, not just same-element ones, because an alloy puts Mo next
+   to W.
+
+`MAX_COORDINATION` is per element for the same reason: carbon's "5 or
+more is unphysical" rejects a correct six-coordinate metal. Metals are
+allowed 7 -- six ligands plus the 1T' dimer partner.
+
+Neither `guess_bonds` nor `check_minimum_distances` may build the full
+pairwise matrix. Both did, and it is O(N^2) in memory as well as time:
+24 s and 79 MB at 3136 atoms, a gigabyte and unusable by the 11 164 atoms
+of a magic-angle bilayer -- and validation runs on the path of every
+export. Both now use `ase.neighborlist.neighbor_list`; the change was
+107x faster at 3136 atoms with identical output.
+
+`coordination_numbers` prefers `atoms.info["bonds"]` when the builder
+recorded one. On a curved structure a distance cutoff is simply wrong: a
+2.4 Å bond's cutoff reaches ~2.9 Å and sweeps up non-bonded neighbours,
+so a schwarzite whose every metal has exactly six bonds reads as
+ten-coordinate. Builders that know their bond graph should record it.
+
+## Heterostructures: the twist is not a free parameter
+
+`hetero/moire.py` stacks two hexagonal layers. Commensurate cells exist
+only at `cos(theta) = (m^2+n^2+4mn) / (2(m^2+mn+n^2))`, holding
+`m^2+mn+n^2` cells per layer -- (2,1) is 21.79 deg and (31,30) is the
+1.0845 deg magic angle with 11 164 atoms. Snap the request and report
+what was achieved; there is no periodic cell in between.
+
+Three things already got this wrong; do not repeat them:
+
+* **The two layers are 0 and theta, not +-theta/2.** A symmetric twist
+  looks nicer and leaves the supercell commensurate with *neither* layer
+  -- the fill then produced 242 atoms where 14 were required.
+* **The sign matters.** `V = m*a1 + n*a2` is a lattice vector of a layer
+  turned by `phi` exactly when `R(-phi)V` is one of the unrotated
+  lattice, and it is `R(+theta)V` that lands on `n*a1 + m*a2`. Backwards
+  gives 98 atoms instead of 14.
+* **The honeycomb basis is (1/3, 1/3).** With `a2 = a(1/2, sqrt3/2)` --
+  the 60-degree convention -- `(1/3, 2/3)` is the 120-degree form and
+  puts sites `a/3` = 0.82 Å apart instead of 1.42.
+
+`_fill_supercell` therefore asserts the atom count against
+`cells * n_sites` rather than trusting the fill. All three bugs above
+were caught by that assertion and would otherwise have produced
+plausible-looking cells with the wrong number of atoms in them.
+
+## Sweeps are built on jobs.py, not per mode
+
+`workflows/sweep.py` takes a Cartesian product over `jobs.Job`, so every
+mode is sweepable and a new mode in `jobs.py` gets a sweep for free.
+Do not add a `batch_<mode>_sweep`; `batch_cnt_sweep` predates this and
+stays only for compatibility.
+
+`jobs.builder_for` is now the single builder table -- `build` uses it too,
+so a mode cannot be buildable and un-sweepable at once -- and
+`jobs.parameter_names` reads the real signature. The sweep checks names
+against it **before building anything**: a typo used to be accepted in
+silence, with the estimate falling back to the default and the mistake
+surfacing as a TypeError on the first build, hours into a long run.
+
+Each job gets `seed + index`, never a shared seed. The same seed across a
+sweep puts the identical defect pattern in every structure, which is the
+one property a training set must not have.
+
+## GUI: one job description, one killable process
+
+`jobs.py` is the single mapping from "what to build" to builder
+arguments, shared by the GUI and the CLI. The GUI used to carry its own
+ninety-line `if mode == ...` chain duplicating it. Three features depend
+on that mapping being written down once — the estimate, the
+copy-as-command-line button, and handing work to a subprocess — so add
+new modes there, not in `gui/app.py`.
+
+**Adding a mode is five edits, not one**, and forgetting the last two is
+the single most repeated mistake in this repo's history --
+`test_every_mode_has_a_sample` has now caught it four times. The list:
+the family tuple in `MODES`, the `builders` dict in `build`, the atom
+estimate, `_CLI_MAP`, and `SAMPLES` in `tests/test_jobs.py`. The sample
+is not decoration: it is what drives the estimate, cost and
+command-line-parses tests for that mode, so a mode without one is a mode
+with no coverage at all. Run `pytest tests/test_jobs.py` before
+committing a new mode -- it takes under a second and is exactly the
+check that keeps being skipped.
+
+`gui/worker.py` runs builds in a **process**, not a thread, because a
+coil spends minutes inside numpy with nothing checking a cancel flag and
+Python cannot safely interrupt a thread. Consequences to respect:
+
+* Anything constructing `NanocarbonGUI` needs an
+  `if __name__ == "__main__"` guard — `spawn` re-imports the parent's
+  `__main__`. `gui/__main__.py` has one for exactly this reason.
+* Errors cross the process boundary as `(repr, traceback)` **strings**;
+  do not try to send exception objects, which may not round-trip.
+* If spawning fails at all, the worker degrades to a thread rather than
+  refusing to build; cancel is then advisory and `worker.degraded` says
+  so. Keep that fallback.
+
+The three columns are a **PanedWindow**, not fixed-width packs. Packed
+at 268 px the parameter column clipped its own labels ("Subdivision freq
+(diameter)") with no way to widen it, and a pixel width cannot be right
+anyway -- it depends on the font, the theme and the platform. For the
+same reason `ScrollableColumn._rewrap` re-wraps the explanatory labels
+to the column's live width; a non-zero `wraplength` is what marks a
+label as a hint, so new hints are picked up for free and ordinary labels
+are left alone. Do not put a fixed `wraplength` back in as the final
+word.
+
+The GUI never opens a modal dialog. `messagebox` is deliberately not
+imported: a modal blocks the Tk event loop, which wedges a headless run
+entirely, and it discards whatever the user was about to fix.
+
+## Say whether the geometry is physical, not just what it measures
+
+`validation/quality.sp2_quality` turns `atoms.info["geometry"]` into
+`CLEAN` / `STRAINED` / `BROKEN` with a reason, and both the CLI and the
+GUI print it. It exists because "0 close contacts" was being read as "the
+structure is fine": an over-tight coil keeps its atoms apart while
+stretching bonds to 1.69 Å, longer than any real C–C bond. Keep new
+builders reporting it.
+
+## Scientific guardrails
+- Carbon bond length: default 1.42 Å (sp2). Accept anything in `[1.20, 1.80]` Å as bonded; anything in `(0, 0.9]` Å is a hard error.
+- Expected C coordination: **2 (edge)**, **3 (sp2 bulk)**. Coordination >= 5 or == 1 in the bulk is rejected by validation.
+- Dopants replace carbon atoms; which ones and how many is `dopants/chemistry.py`, not a bare list (see below). Guardrails are warnings, not errors.
+- 2D structures: vacuum along the non-periodic direction must be `>= 12 Å` by default.
+- 1D structures (CNT): vacuum in the two transverse directions must be `>= 10 Å` beyond the tube radius.
+
+## Quick test commands
+```bash
+pip install -e .[dev]
+pytest nanocarbon_lab/tests -q
+pytest nanocarbon_lab/tests -q -m "not slow"   # skips the minutes-long coil builds
+python -m nanocarbon_lab.cli.main cnt --n 6 --m 6 --length 10 --out out/cnt --format qe
+python -m nanocarbon_lab.cli.main cnt-cap --rings 8 --freq 3 --defect stone_wales:1 --out out/cnt_cap/demo
+# GUI (needs tkinter + matplotlib); headless GUI tests:
+xvfb-run -a pytest nanocarbon_lab/tests/test_gui.py -q
+```
+
+## Where to add things
+- New builder type → `builders/<name>.py` + export in `builders/__init__.py` + test in `tests/test_<name>.py`.
+- New dopant chemistry → `dopants/<element>.py`, reuse `dopants.base.substitute_atoms`.
+- New exporter → `exports/<backend>.py` implementing `write(atoms, outdir, **kwargs)`.
+
+## What not to do
+- Do **not** export structures that fail validation without explicit `force=True`.
+- Do **not** introduce non-deterministic random state without a `seed` argument.
+- Do **not** add dependencies outside the ones declared in `pyproject.toml` without justification.

@@ -1,0 +1,272 @@
+"""Substitutional doping of nanocarbon structures.
+
+The host is always carbon; this module edits a finished structure and
+never builds a different material. All public functions return a **new**
+:class:`ase.Atoms` (the input is not mutated) and record the list of
+substituted indices in ``atoms.info["dopants"]``. Random placement is
+fully reproducible via the ``seed`` argument.
+
+Which elements are allowed, how far each one strains the lattice and
+what fraction of it is physically meaningful all live in
+:mod:`.chemistry`, so that a caller asking for 12% Fe is warned and a
+caller asking for 12% N is not. Guardrails are warnings; only an unknown
+element is an error.
+
+Placement by ring size -- pentagons above all, since those are the
+curvature sites and the reactive ones -- lives in :mod:`.rings`.
+"""
+
+from __future__ import annotations
+
+import warnings
+from collections.abc import Iterable, Sequence
+from typing import Literal
+
+import numpy as np
+from ase import Atoms
+
+from ..utils.geometry import minimum_image_distances
+from ..utils.rng import make_rng
+from .chemistry import get_chemistry
+
+Placement = Literal["random", "edges", "bulk", "cluster"]
+
+
+def _validate_element(element: str) -> None:
+    get_chemistry(element)
+
+
+def _warn_if_unrealistic(element: str, fraction: float) -> None:
+    """Warn when a fraction is past what the element really reaches.
+
+    Not an error: metastable and purely computational structures are a
+    legitimate subject, and refusing them would make the package useless
+    for exactly the studies that need it. But 10% Fe on a lattice site is
+    not a doped nanocarbon by any reading, and going ahead without saying
+    so is how such a structure ends up in a figure.
+    """
+    chem = get_chemistry(element)
+    if fraction <= chem.max_fraction:
+        return
+    if chem.site == "vacancy":
+        why = (f"{element} is a single-atom site: it belongs in a vacancy, "
+               f"usually with N around it, and two adjacent ones are not a "
+               f"stable motif")
+    else:
+        why = (f"{element} is {chem.size_mismatch:+.0%} the size of carbon, "
+               f"so it puckers out of the plane and the lattice cannot "
+               f"absorb many of them")
+    warnings.warn(
+        f"{fraction:.1%} {element} exceeds the ~{chem.max_fraction:.0%} that "
+        f"is physically meaningful — {why}. Building it anyway; relax the "
+        f"result before drawing conclusions from the geometry.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
+def substitute_atoms(atoms: Atoms, indices: Iterable[int], element: str) -> Atoms:
+    """Replace the chemical symbol of ``indices`` with ``element``.
+
+    Parameters
+    ----------
+    atoms
+        Structure to dope (not mutated).
+    indices
+        Iterable of atom indices to substitute.
+    element
+        Target chemical symbol. Must be in :data:`DOPANT_ELEMENTS`.
+
+    Returns
+    -------
+    ase.Atoms
+        New doped structure.
+    """
+    _validate_element(element)
+    out = atoms.copy()
+    out.info = {**atoms.info}
+    symbols = out.get_chemical_symbols()
+    idx_list = list(indices)
+    for i in idx_list:
+        if not (0 <= i < len(out)):
+            raise IndexError(f"Atom index {i} out of range (n={len(out)}).")
+        if symbols[i] != "C":
+            warnings.warn(
+                f"Atom {i} is {symbols[i]}, not C — overwriting anyway.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        symbols[i] = element
+    out.set_chemical_symbols(symbols)
+    existing = out.info.get("dopants", [])
+    out.info["dopants"] = existing + [{"element": element, "indices": idx_list}]
+    return out
+
+
+def _carbon_indices(atoms: Atoms) -> np.ndarray:
+    return np.array(
+        [i for i, s in enumerate(atoms.get_chemical_symbols()) if s == "C"], dtype=int
+    )
+
+
+def _edge_indices(atoms: Atoms, cutoff: float = 1.80) -> np.ndarray:
+    """Return C atoms with coordination < 3 (edge / under-coordinated)."""
+    dmat = minimum_image_distances(atoms)
+    np.fill_diagonal(dmat, np.inf)
+    coord = ((dmat < cutoff) & (dmat > 0.5)).sum(axis=1)
+    carbons = _carbon_indices(atoms)
+    return carbons[coord[carbons] < 3]
+
+
+def _bulk_indices(atoms: Atoms, cutoff: float = 1.80) -> np.ndarray:
+    """Return C atoms with coordination == 3 (fully sp2 bonded)."""
+    dmat = minimum_image_distances(atoms)
+    np.fill_diagonal(dmat, np.inf)
+    coord = ((dmat < cutoff) & (dmat > 0.5)).sum(axis=1)
+    carbons = _carbon_indices(atoms)
+    return carbons[coord[carbons] == 3]
+
+
+def dope_random(
+    atoms: Atoms,
+    element: str,
+    concentration: float,
+    seed: int | None = None,
+) -> Atoms:
+    """Randomly substitute a fraction of carbons with ``element``.
+
+    Parameters
+    ----------
+    atoms
+        Host nanocarbon.
+    element
+        Dopant symbol, from
+        :data:`~nanocarbon_lab.dopants.chemistry.DOPANT_ELEMENTS`.
+    concentration
+        Fraction in ``[0, 1]`` of carbon atoms to replace. Warns above
+        the element's own ceiling rather than refusing.
+    seed
+        RNG seed.
+
+    Returns
+    -------
+    ase.Atoms
+        Doped structure.
+    """
+    _validate_element(element)
+    if not 0.0 <= concentration <= 1.0:
+        raise ValueError("concentration must be in [0, 1].")
+    if concentration > 0:
+        _warn_if_unrealistic(element, concentration)
+    rng = make_rng(seed)
+    carbons = _carbon_indices(atoms)
+    n_sub = int(round(concentration * len(carbons)))
+    if n_sub == 0:
+        return atoms.copy()
+    chosen = rng.choice(carbons, size=n_sub, replace=False)
+    result = substitute_atoms(atoms, chosen.tolist(), element)
+    result.info["doping_mode"] = "random"
+    result.info["doping_seed"] = seed
+    result.info["doping_concentration"] = concentration
+    return result
+
+
+def dope_directed(
+    atoms: Atoms,
+    element: str,
+    where: Placement = "edges",
+    count: int = 1,
+    seed: int | None = None,
+    cluster_radius: float = 3.0,
+) -> Atoms:
+    """Place ``count`` dopants according to a structural criterion.
+
+    Modes
+    -----
+    ``"edges"``
+        Pick from atoms with coordination < 3 (ribbon edges, flake rims).
+    ``"bulk"``
+        Pick from fully sp2 atoms (coordination == 3).
+    ``"cluster"``
+        Pick one seed at random, then fill ``count - 1`` neighbours within
+        ``cluster_radius``.
+
+    Parameters
+    ----------
+    atoms
+        Host structure.
+    element
+        Dopant symbol.
+    where
+        Placement strategy (see above).
+    count
+        Number of atoms to substitute.
+    seed
+        RNG seed.
+    cluster_radius
+        Only used when ``where="cluster"``.
+
+    Returns
+    -------
+    ase.Atoms
+        Doped structure.
+    """
+    _validate_element(element)
+    if count <= 0:
+        raise ValueError("count must be > 0.")
+    rng = make_rng(seed)
+
+    if where == "edges":
+        pool = _edge_indices(atoms)
+        if len(pool) == 0:
+            raise ValueError("No edge atoms found (structure looks fully bonded).")
+        chosen = rng.choice(pool, size=min(count, len(pool)), replace=False)
+    elif where == "bulk":
+        pool = _bulk_indices(atoms)
+        if len(pool) == 0:
+            raise ValueError("No bulk atoms found (all atoms under-coordinated).")
+        chosen = rng.choice(pool, size=min(count, len(pool)), replace=False)
+    elif where == "cluster":
+        carbons = _carbon_indices(atoms)
+        seed_atom = int(rng.choice(carbons))
+        dmat = minimum_image_distances(atoms)
+        neighbours = np.argsort(dmat[seed_atom])
+        chosen = [int(i) for i in neighbours if i in carbons][:count]
+        # ensure they are within cluster_radius
+        chosen = [i for i in chosen if dmat[seed_atom, i] <= cluster_radius]
+        if len(chosen) < count:
+            warnings.warn(
+                f"Cluster placement: only {len(chosen)} atoms within "
+                f"{cluster_radius} Å of seed {seed_atom}.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+    else:
+        raise ValueError(f"Unknown placement mode: {where!r}")
+
+    result = substitute_atoms(atoms, list(map(int, chosen)), element)
+    result.info["doping_mode"] = where
+    result.info["doping_seed"] = seed
+    return result
+
+
+def codope(
+    atoms: Atoms,
+    spec: Sequence[tuple[str, float]],
+    affinity: str = "random",
+    seed: int | None = None,
+) -> Atoms:
+    """Multi-element doping. Delegates to :mod:`.codoping`.
+
+    Kept here so the older import path keeps working. The implementation
+    moved because the sequential version this name used to have was wrong
+    in a way no caller could see: each species' fraction was taken against
+    the carbons the previous one left, so 5% N and 5% B gave 5.00% and
+    4.75%, and `info` recorded the fractions asked for rather than placed.
+    The replacement places every species in one pass against the same
+    denominator, and adds the ``affinity`` control -- see
+    :func:`nanocarbon_lab.dopants.codoping.codope`.
+    """
+    from .codoping import codope as _codope
+
+    return _codope(atoms, spec, affinity=affinity, seed=seed)

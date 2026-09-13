@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ramancarbon"
+version = "0.6.0"
+description = "Suite de caracterizacion de nanomateriales: Raman de carbono (SWCNT/DWCNT/MWCNT/CNF, bandas D y G, I_D/I_G, diametros por RBM, dopado, fases como FeSe o Se), Raman de dicalcogenuros con sus oxidos, mapas Raman con quimiometria (PCA, k-medias, MCR-ALS), difraccion de rayos X con identificacion de fases desde CIF, Rietveld, Le Bail/Pawley y microestructura, y electroquimica (CV, carga-descarga, impedancia con circuitos equivalentes y DRT, dQ/dV, GITT, HER y OER); con motor de figuras configurable, importacion y exportacion universales y archivos de proyecto."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ramancarbon contributors" }]
+keywords = [
+    "Raman", "spectroscopy", "carbon nanotubes", "SWCNT", "DWCNT", "MWCNT",
+    "graphene", "graphene oxide", "RBM", "deconvolution", "D band", "G band",
+    "Tuinstra-Koenig", "Breit-Wigner-Fano", "nanomaterials",
+    "carbon nanofibre", "CNF", "doping", "TMD", "MoS2", "WS2",
+    "transition metal dichalcogenide", "layer counting",
+    "XRD", "X-ray diffraction", "Rietveld", "CIF", "phase identification",
+    "crystallography", "powder diffraction", "FeSe", "selenide",
+    "electrochemistry", "cyclic voltammetry", "EIS", "impedance",
+    "supercapacitor", "pseudocapacitance", "galvanostatic", "Tafel",
+    "HER", "OER", "electrocatalysis", "equivalent circuit",
+    "Raman mapping", "chemometrics", "PCA", "MCR-ALS", "k-means",
+    "DRT", "distribution of relaxation times", "GITT", "dQ/dV",
+    "Williamson-Hall", "Le Bail", "Pawley", "crystallite size",
+    "microstrain", "JCAMP-DX", "scientific plotting", "SNIP baseline",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: Spanish",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    # Required by the plots in the GUI and by ramancarbon.viz.
+    # Tkinter itself ships with Python and cannot be installed via pip.
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+ramancarbon = "ramancarbon.cli.main:main"
+# Deliberately a console script rather than a gui-script: on Windows a
+# gui-script hides stdout, so a missing-Tkinter message would vanish.
+ramancarbon-gui = "ramancarbon.gui:main"
+
+[tool.setuptools.packages.find]
+include = ["ramancarbon*"]
+exclude = ["tests*", "examples*"]
+
+[tool.setuptools.package-data]
+# The reference CIFs are data, not code, and without this line a real
+# install has an empty phase library while the development checkout works
+# perfectly — the kind of difference that only shows up on someone else's
+# machine.
+ramancarbon = ["database/data/*.json", "database/data/cif/*.cif"]
+
+[tool.pytest.ini_options]
+testpaths = ["ramancarbon/tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint.per-file-ignores]
+# «l» es el tercer índice de Miller. Renombrarlo por complacer al linter
+# haría el código cristalográfico más difícil de leer, no menos.
+"ramancarbon/xrd/*.py" = ["E741"]
+"ramancarbon/tests/test_xrd.py" = ["E741"]

@@ -1,0 +1,3318 @@
+"""Tkinter GUI for building, inspecting and exporting nanocarbon structures.
+
+Launch with ``nanocarbon-gui`` (installed entry point) or
+``python -m nanocarbon_lab.gui``.
+
+Three columns: parameters on the left, a live 3D preview in the middle,
+and structure readout, history and export/render actions on the right.
+
+Four things about the design are deliberate and worth knowing before
+changing them.
+
+**Every number is typeable.** A slider is convenient and imprecise; the
+entry box beside it takes an exact value and accepts figures outside the
+slider's comfortable range, up to the builder's real limit. A coil radius
+of 37.5 Å is a perfectly good request that no slider detent will land on.
+
+**Builds run in a killable subprocess**, not a thread -- see
+:mod:`nanocarbon_lab.gui.worker`. A coil spends minutes inside numpy with
+nothing checking a cancel flag, and Python cannot safely interrupt a
+thread, so Cancel means terminating a process.
+
+**What a build will cost is shown before you start it.** The same button
+produces either a 60-atom cage in a tenth of a second or a 3000-atom coil
+in six minutes, and :func:`nanocarbon_lab.jobs.estimate_cost` can tell
+the difference without building anything.
+
+**Failures never open a modal dialog.** Errors go to a panel that can be
+read, copied and ignored. A modal blocks the event loop, which on a
+headless run wedges the app entirely, and even for a human it throws away
+the parameters they were about to fix.
+
+Only the standard library's :mod:`tkinter` plus :mod:`matplotlib` are
+used. ``tkinter`` ships with the python.org installers on Windows and
+macOS; on Linux it is usually a separate package (``apt install
+python3-tk``, ``dnf install python3-tkinter``).
+"""
+
+from __future__ import annotations
+
+import glob
+import importlib.util
+import json
+import multiprocessing
+import os
+import shutil
+import subprocess
+import sys
+import threading
+import traceback
+from pathlib import Path
+
+import numpy as np
+
+from . import TKINTER_HELP
+
+try:
+    import tkinter as tk
+    from tkinter import filedialog, ttk
+except ImportError as exc:  # pragma: no cover - environment dependent
+    # ImportError and not SystemExit: this is a module import, and pytest
+    # cannot catch SystemExit while collecting, so raising one here took
+    # the whole suite down on a machine without python3-tk. The friendly
+    # advice reaches the user from ``nanocarbon_lab.gui.main`` instead.
+    raise ImportError(TKINTER_HELP) from exc
+
+# Deliberately no matplotlib.use("TkAgg") here. The canvas below is built
+# by wrapping a bare Figure in FigureCanvasTkAgg, which is the embedding
+# pattern -- it needs the Tk canvas class, not the global backend. Calling
+# use() would reconfigure matplotlib for the whole process as a side effect
+# of importing this module, and any later headless savefig would then fail
+# with "cannot load backend 'TkAgg' ... 'headless' is currently running".
+from matplotlib.backends.backend_tkagg import (
+    FigureCanvasTkAgg,
+    NavigationToolbar2Tk,
+)
+from matplotlib.figure import Figure
+
+from ..builders import fullerene_mesh as fm
+from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
+from ..builders.haeckelite import PATTERNS as haeckelite_patterns
+from ..cell import MIN_IMAGE_SEPARATION, cell_report, to_unit_cell
+from ..dopants import DOPANT_ELEMENTS, get_chemistry
+from ..dopants.codoping import AFFINITIES
+from ..exports.xyz import write_cif, write_render_bundle
+from ..functionalize import (
+    GROUPS,
+    describe,
+    get_group,
+    substitute,
+    viable_swaps,
+)
+from ..jobs import (
+    DOPANT_SITES,
+    FAMILIES,
+    MODES,
+    TMD_EDITS,
+    Job,
+    estimate_cost,
+    parse_codope_spec,
+    parse_swaps,
+    to_cli,
+)
+from ..tmd import MATERIALS as TMD_MATERIALS
+from ..tmd.materials import (
+    available_chalcogens,
+    available_metals,
+    chalcogens_for,
+    material_for,
+)
+from ..tmd.quality import geometry_report as tmd_geometry_report
+from ..tmd.quality import tmd_quality
+from ..utils.constants import MAX_DOPING_FRACTION, MIN_DOPING_FRACTION
+from ..validation.quality import sp2_quality
+from .worker import WORKER_DIED, BuildWorker
+
+# Ring-type colours, shared with the Blender presets' intent: hexagons are
+# the neutral body, everything else marks curvature or a defect.
+RING_COLOURS = {5: "#e4572e", 6: "#5b6472", 7: "#2e86ab", 8: "#f2c14e"}
+RING_LABELS = {
+    5: "pentagon (convex / cap)",
+    6: "hexagon (body)",
+    7: "heptagon (concave / saddle)",
+    8: "octagon (divacancy)",
+}
+
+SHAPES = ["straight", "arc", "s_curve", "helix", "random"]
+#: "none" first and selected by default: the host is carbon, and a
+#: structure is pure carbon unless the user says otherwise.
+DOPANTS = ["none", *DOPANT_ELEMENTS]
+JUNCTION_KINDS = ["L", "T", "Y", "X", "cross3d"]
+SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
+
+#: The haeckelite design patterns and catalogue, from the builder rather
+#: than retyped -- the hint quotes each entry's own block and note.
+HAECKELITE_PATTERNS = haeckelite_patterns
+HAECKELITE_CATALOGUE = haeckelite_catalogue
+NETWORK_KINDS = ["cubic", "diamond"]
+CAGE_FAMILIES = ["C60", "C20"]
+
+# Dichalcogenide choices. The phase list is short on purpose: 2H and 1T
+# are the two that matter, and 1T' is the distorted variant. There is no
+# tetragonal TMD -- all of them are hexagonal, and what differs is the
+# coordination polyhedron around the metal.
+TMD_PHASES = ["2H", "1T", "1T'"]
+TMD_STACKINGS = ["2H", "3R", "AA"]
+TMD_EDGES = ["zigzag", "armchair"]
+TMD_TERMINATIONS = ["mixed", "metal", "chalcogen"]
+
+BLENDER_STYLES = [
+    "nature_dark",
+    "acs_nano_vivid",
+    "small_minimal",
+    "blueprint_technical",
+    "gold_nanotech",
+]
+
+OK_GREEN = "#2e7d32"
+WARN_AMBER = "#b26a00"
+BAD_RED = "#b3261e"
+MUTED = "#777777"
+
+# Above this many atoms the preview subsamples bonds. Matplotlib draws a
+# Line3DCollection as one artist, but assembling a quarter of a million
+# segments still costs seconds per redraw, and no one can see individual
+# bonds at that density anyway.
+PREVIEW_BOND_LIMIT = 20000
+
+# Starting widths of the two side columns, in pixels. Wide enough for the
+# longest label at the default font -- the old 268 clipped "Subdivision
+# freq (diameter)" and the radius hint beneath it. They are a starting
+# point, not a constraint: the dividers drag.
+PARAM_COLUMN_WIDTH = 310
+ACTION_COLUMN_WIDTH = 330
+
+# Structures worth having one click away. Keys are parameter names as
+# registered with `_var`, so applying a preset is a plain loop and the
+# same format serves the save/load file.
+PRESETS: dict[str, dict[str, object]] = {
+    "C60 buckyball": {
+        "mode_kind": "fullerene", "cage_family": "C60", "cage_freq": 1},
+    "C540 giant cage": {
+        "mode_kind": "fullerene", "cage_family": "C60", "cage_freq": 3},
+    "Nano-onion C60@C240@C540": {
+        "mode_kind": "nano-onion", "cage_family": "C60", "cage_freq": 1,
+        "onion_shells": 3},
+    "Capped nanotube": {
+        "mode_kind": "capped tube", "rings": 10, "freq": 3, "shape": "straight",
+        "roughness": 0.0, "n_sw": 0, "n_dv": 0},
+    "CVD-rough nanotube": {
+        "mode_kind": "capped tube", "rings": 10, "freq": 3, "shape": "straight",
+        "roughness": 0.25, "anneal": 0, "n_sw": 2, "n_dv": 1},
+    "N-doped nanotube": {
+        "mode_kind": "capped tube", "rings": 10, "freq": 3,
+        "dopant": "N", "dopant_conc": 0.03},
+    "Nanocoil (swept, fast)": {
+        "mode_kind": "capped tube", "shape": "helix", "freq": 2,
+        "coil_radius": 90.0, "coil_pitch": 30.0, "coil_turns": 1.5},
+    "Nanocoil (relaxed topology)": {
+        "mode_kind": "coil (relaxed)", "coil_radius": 34.0, "coil_pitch": 20.0,
+        "coil_turns": 1.25, "coil_tube_radius": 4.5, "anneal": 40},
+    "Y junction": {
+        "mode_kind": "junction", "j_kind": "Y", "j_radius": 6.0,
+        "j_arm": 22.0, "j_blend": 4.0, "anneal": 80},
+    "Gyroid schwarzite": {
+        "mode_kind": "schwarzite", "s_kind": "gyroid", "s_cell": 36.0,
+        "anneal": 0},
+    "Double-wall nanotube": {
+        "mode_kind": "multi-wall", "mw_shells": 2, "mw_inner": 3, "rings": 10},
+    "Seven-tube rope": {
+        "mode_kind": "bundle", "bundle_shells": 1, "freq": 3, "rings": 10},
+    # --- dichalcogenides
+    "MoS2 monolayer (2H)": {
+        "mode_kind": "TMD layers", "tmd_material": "MoS2", "tmd_phase": "2H",
+        "tmd_layers": 1, "tmd_nx": 1, "tmd_ny": 1},
+    "MoS2 bilayer (2H)": {
+        "mode_kind": "TMD layers", "tmd_material": "MoS2", "tmd_phase": "2H",
+        "tmd_layers": 2, "tmd_stacking": "2H"},
+    "MoS2 monolayer (1T)": {
+        "mode_kind": "TMD layers", "tmd_material": "MoS2", "tmd_phase": "1T",
+        "tmd_layers": 1},
+    "MoS2 bulk crystal": {
+        "mode_kind": "TMD bulk", "tmd_material": "MoS2", "tmd_stacking": "2H"},
+    "MoS2 zigzag ribbon": {
+        "mode_kind": "TMD ribbon", "tmd_material": "MoS2", "tmd_width": 8,
+        "tmd_length": 2, "tmd_edge": "zigzag", "tmd_termination": "mixed"},
+    "MoS2 nanotube (40,0)": {
+        "mode_kind": "TMD nanotube", "tmd_material": "MoS2", "tmd_n": 40,
+        "tmd_m": 0},
+    "WSe2 monolayer": {
+        "mode_kind": "TMD layers", "tmd_material": "WSe2", "tmd_phase": "2H",
+        "tmd_layers": 1},
+    # A quarter turn keeps this near 11k atoms. A full turn at a radius
+    # loose enough to be unstrained runs to six figures, which is the
+    # physics rather than a timid default.
+    "Twisted bilayer graphene 21.8°": {
+        "mode_kind": "twisted bilayer", "het_bottom": "graphene",
+        "het_top": "same", "het_angle": 21.79, "het_max_index": 40},
+    "Magic-angle bilayer 1.08°": {
+        "mode_kind": "twisted bilayer", "het_bottom": "graphene",
+        "het_top": "same", "het_angle": 1.08, "het_max_index": 40},
+    "Graphene on hBN": {
+        "mode_kind": "twisted bilayer", "het_bottom": "graphene",
+        "het_top": "hBN", "het_angle": 7.34, "het_max_index": 40},
+    "MoS2/WS2 stack": {
+        "mode_kind": "vdW stack", "het_bottom": "MoS2", "het_top": "WS2",
+        "het_third": "none", "het_nx": 2, "het_ny": 2},
+    "MoS2 Y junction": {
+        "mode_kind": "TMD junction", "tmd_material": "MoS2",
+        "tmd_j_kind": "Y", "tmd_j_radius": 12.0, "tmd_j_arm": 26.0,
+        "tmd_j_parity": "split"},
+    "MoS2 schwarzite (Schwarz P)": {
+        "mode_kind": "TMD schwarzite", "tmd_material": "MoS2",
+        "tmd_sw_kind": "primitive", "tmd_sw_cell": 36.0,
+        "tmd_sw_parity": "flip"},
+    "MoS2 coil (quarter turn)": {
+        "mode_kind": "TMD coil", "tmd_material": "MoS2", "tmd_n": 30,
+        "tmd_m": 0, "tmd_coil_radius": 220.0, "tmd_coil_pitch": 90.0,
+        "tmd_coil_turns": 0.25, "tmd_coil_hand": "right"},
+}
+
+
+def has_bpy() -> bool:
+    """Is Blender available as a Python module in this interpreter?
+
+    ``bpy`` on PyPI is a full Blender build importable from an ordinary
+    interpreter, so `pip install bpy` makes the render pipeline work with
+    no Blender application installed at all. That removes the pipeline's
+    single most common failure -- "Blender not found" on a machine where
+    the user has no intention of installing a 3D suite by hand.
+
+    Checked with ``find_spec`` rather than an import: importing Blender
+    costs hundreds of megabytes of process memory, and this runs while
+    merely drawing a label.
+    """
+    try:
+        return importlib.util.find_spec("bpy") is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def find_blender() -> str | None:
+    """Locate a Blender executable across platforms.
+
+    ``PATH`` alone is not enough: the Windows installer does not add
+    Blender to ``PATH``, and the macOS build lives inside an ``.app``
+    bundle, so on both platforms ``shutil.which`` finds nothing even
+    though Blender is installed. Standard install locations are therefore
+    searched too, newest version first.
+
+    Set the ``BLENDER`` environment variable to override the search
+    entirely (useful for portable, Steam or Flatpak installations).
+
+    Returns
+    -------
+    str or None
+        Path to the executable, or ``None`` if nothing was found -- in
+        which case the GUI offers a file picker instead.
+    """
+    override = os.environ.get("BLENDER")
+    if override and os.path.exists(override):
+        return override
+
+    for name in ("blender", "blender.exe"):
+        found = shutil.which(name)
+        if found:
+            return found
+
+    # Built with os.path.join, not pathlib: these are glob patterns (plain
+    # strings), and pathlib would refuse to model a Windows path on POSIX,
+    # which would also make this function untestable off-Windows.
+    patterns: list[str] = []
+    if os.name == "nt":
+        for root in (
+            os.environ.get("ProgramFiles", r"C:\Program Files"),
+            os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+        ):
+            patterns.append(os.path.join(root, "Blender Foundation", "Blender*", "blender.exe"))
+            patterns.append(os.path.join(root, "Blender*", "blender.exe"))
+    elif sys.platform == "darwin":
+        patterns += [
+            "/Applications/Blender.app/Contents/MacOS/Blender",
+            "/Applications/Blender/Blender.app/Contents/MacOS/Blender",
+            os.path.expanduser("~/Applications/Blender.app/Contents/MacOS/Blender"),
+        ]
+    else:
+        patterns += [
+            "/usr/bin/blender",
+            "/usr/local/bin/blender",
+            "/snap/bin/blender",
+            "/var/lib/flatpak/exports/bin/org.blender.Blender",
+            os.path.expanduser("~/.local/share/flatpak/exports/bin/org.blender.Blender"),
+        ]
+
+    candidates: list[str] = []
+    for pattern in patterns:
+        candidates.extend(glob.glob(pattern))
+    if not candidates:
+        return None
+    # Newest-looking install first ("Blender 4.2" sorts above "Blender 3.6").
+    candidates.sort(reverse=True)
+    return candidates[0]
+
+
+class ScrollableColumn(ttk.Frame):
+    """A vertically scrollable container for the parameter panels.
+
+    With eight structure types the parameter column is taller than a
+    laptop screen, and without scrolling the Build button simply falls off
+    the bottom where it cannot be reached -- the panel is packed, so
+    nothing clips it or tells you it is there.
+    """
+
+    def __init__(self, parent: tk.Widget,
+                 width: int = PARAM_COLUMN_WIDTH) -> None:
+        super().__init__(parent)
+        self._canvas = tk.Canvas(self, width=width, highlightthickness=0,
+                                 background=parent.winfo_toplevel().cget("background"))
+        bar = ttk.Scrollbar(self, orient="vertical", command=self._canvas.yview)
+        self._canvas.configure(yscrollcommand=bar.set)
+        bar.pack(side="right", fill="y")
+        self._canvas.pack(side="left", fill="both", expand=True)
+
+        self.interior = ttk.Frame(self._canvas)
+        self._window = self._canvas.create_window(
+            (0, 0), window=self.interior, anchor="nw", width=width
+        )
+        self.interior.bind("<Configure>", self._on_interior_resize)
+        self._canvas.bind("<Configure>", self._on_canvas_resize)
+        # Wheel events go to the widget under the pointer, so bind on enter
+        # and release on leave rather than grabbing them globally -- a
+        # global binding would scroll this column while the pointer is over
+        # the 3D preview, where the wheel means zoom.
+        self.interior.bind("<Enter>", lambda _e: self._bind_wheel())
+        self.interior.bind("<Leave>", lambda _e: self._unbind_wheel())
+
+    def _on_interior_resize(self, _event: tk.Event) -> None:
+        self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+
+    def _on_canvas_resize(self, event: tk.Event) -> None:
+        self._canvas.itemconfigure(self._window, width=event.width)
+        self._rewrap(event.width)
+
+    def _rewrap(self, width: int) -> None:
+        """Re-wrap the explanatory labels to the column's current width.
+
+        Every hint in this app was written with a ``wraplength`` in
+        pixels, and two dozen of them were tuned to a column that no
+        longer has a fixed width. A hardcoded wrap is wrong twice over:
+        it clips when the font is larger than the author's, and it keeps
+        wrapping at the old width after the divider is dragged wider,
+        leaving a ragged column beside empty space.
+
+        A label that wraps has a non-zero ``wraplength`` and an ordinary
+        one has zero, so that flag is the selector -- no registry to keep
+        in step, and hints added later are picked up for free.
+        """
+        target = max(120, width - 22)
+        stack = [self.interior]
+        while stack:
+            widget = stack.pop()
+            stack.extend(widget.winfo_children())
+            try:
+                if int(widget.cget("wraplength")) > 0:
+                    widget.configure(wraplength=target)
+            except (tk.TclError, ValueError):
+                continue  # not a label, or no such option
+
+    def _bind_wheel(self) -> None:
+        self._canvas.bind_all("<MouseWheel>", self._on_wheel)
+        self._canvas.bind_all("<Button-4>", self._on_wheel)
+        self._canvas.bind_all("<Button-5>", self._on_wheel)
+
+    def _unbind_wheel(self) -> None:
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self._canvas.unbind_all(sequence)
+
+    def _on_wheel(self, event: tk.Event) -> None:
+        if getattr(event, "num", None) == 4:
+            delta = -1
+        elif getattr(event, "num", None) == 5:
+            delta = 1
+        else:  # Windows and macOS report a signed delta instead
+            delta = -1 if event.delta > 0 else 1
+        self._canvas.yview_scroll(delta, "units")
+
+
+class NanocarbonGUI:
+    """Main application window."""
+
+    def __init__(self, root: tk.Tk) -> None:
+        self.root = root
+        self.root.title("nanocarbon_lab — carbon nanostructure builder")
+        self.root.geometry("1400x860")
+        self.root.minsize(1120, 700)
+
+        self.atoms = None
+        self.last_saved_stem: Path | None = None
+        self.blender_exe: str | None = None
+        self._busy = False
+        self._estimate_job: str | None = None
+        # Registry of every parameter variable, keyed by a short name.
+        # Presets, the save/load file and the estimate traces all iterate
+        # this rather than naming each variable three times over.
+        self._params: dict[str, tk.Variable] = {}
+        # Built structures, most recent last, so a promising result is not
+        # lost the moment the next parameter is nudged.
+        self._history: list[tuple[str, object]] = []
+
+        self.worker = BuildWorker()
+
+        self._build_widgets()
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self._poll_worker()
+        self.on_build()  # start with something on screen
+
+    # ---------------------------------------------------------------- layout
+    def _build_widgets(self) -> None:
+        """Three columns with draggable dividers.
+
+        Packed at fixed widths this clipped its own labels: "Subdivision
+        freq (diameter)" and the derived-radius hint under it both ran off
+        the end of a 268 px column, and there was no way to widen it. A
+        fixed pixel width cannot be right anyway -- it depends on the
+        font, the theme and the platform, none of which this knows.
+
+        A PanedWindow costs nothing and fixes the class of bug rather
+        than the instance: the columns start wide enough for the longest
+        label at the default font, and anyone whose font is bigger, or
+        who wants the preview larger, drags the divider.
+        """
+        outer = ttk.PanedWindow(self.root, orient="horizontal")
+        outer.pack(fill="both", expand=True, padx=8, pady=8)
+
+        left = ScrollableColumn(outer)
+        centre = ttk.Frame(outer)
+        right = ScrollableColumn(outer, width=ACTION_COLUMN_WIDTH)
+        # weight=0 on the two side columns: growing the window makes the
+        # 3D preview bigger, which is what the extra space is for, rather
+        # than stretching two columns of labels.
+        outer.add(left, weight=0)
+        outer.add(centre, weight=1)
+        outer.add(right, weight=0)
+
+        self._build_params(left.interior)
+        self._build_preview(centre)
+        self._build_actions(right.interior)
+
+    # ------------------------------------------------------------ parameters
+    def _var(self, name: str, var: tk.Variable) -> tk.Variable:
+        """Register a parameter variable under a short, stable name."""
+        self._params[name] = var
+        return var
+
+    def _param(self, parent, label, var, lo, hi, row, *, integer=False,
+               resolution=None, command=None, hard_lo=None, hard_hi=None):
+        """A labelled parameter: exact entry box plus a slider.
+
+        The slider covers the range that is comfortable to explore; the
+        entry accepts anything between ``hard_lo`` and ``hard_hi``, which
+        default to a wider window. That split is the point -- a slider
+        cannot express 37.5 when its detent is 5, and clamping typed input
+        to the slider's range would make the box pointless.
+
+        Bad input is reverted rather than raising: a half-typed number is
+        a normal intermediate state, not an error worth a dialog.
+        """
+        step = resolution or (1 if integer else 0.01)
+        hard_lo = lo if hard_lo is None else hard_lo
+        hard_hi = hi if hard_hi is None else hard_hi
+
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w")
+        text = tk.StringVar()
+        entry = ttk.Entry(parent, textvariable=text, width=8, justify="right")
+        entry.grid(row=row, column=1, sticky="e")
+
+        def render() -> None:
+            text.set(str(var.get()) if integer else f"{float(var.get()):g}")
+
+        def quantise(value: float) -> float:
+            value = max(hard_lo, min(hard_hi, value))
+            if integer:
+                return round(value)
+            return round(round(value / step) * step, 6)
+
+        def commit(_event=None) -> None:
+            try:
+                wanted = quantise(float(text.get()))
+            except (TypeError, ValueError):
+                render()  # unparseable: put the live value back
+                return
+            if wanted != var.get():
+                var.set(wanted)
+            render()
+            if command:
+                command()
+
+        entry.bind("<Return>", commit)
+        entry.bind("<FocusOut>", commit)
+
+        def follow(*_args) -> None:
+            # Keep the box in step with the variable however it changed --
+            # slider, preset, loaded file, or a mode switch forcing a
+            # value. Without this the entry silently shows a stale number,
+            # which is worse than showing none: it is the field you would
+            # trust. `command` runs here too, not only on the two
+            # interactive paths: it is what refreshes the derived hints,
+            # and a preset that set the value without firing it left them
+            # describing the previous structure.
+            render()
+            if command:
+                command()
+
+        var.trace_add("write", follow)
+
+        def on_slide(_value=None) -> None:
+            wanted = quantise(var.get())
+            if wanted != var.get():
+                var.set(wanted)
+            render()
+            if command:
+                command()
+
+        scale = ttk.Scale(parent, from_=lo, to=hi, variable=var,
+                          orient="horizontal", command=lambda _v: on_slide())
+        scale.grid(row=row + 1, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        parent.columnconfigure(0, weight=1)
+        render()
+
+    def _build_params(self, parent: ttk.Frame) -> None:
+        self.var_mode_kind = self._var("mode_kind", tk.StringVar(value=MODES[0]))
+        mode_box = ttk.LabelFrame(parent, text="Structure type", padding=8)
+        mode_box.pack(fill="x", pady=(0, 8))
+
+        # Material family first, structure type second. Carbon and the
+        # dichalcogenides share no parameters at all -- there is no bond
+        # length, ring count or chirality that means the same thing in
+        # both -- so mixing them in one list would offer every user a
+        # dropdown that is mostly irrelevant to them.
+        ttk.Label(mode_box, text="Material").pack(anchor="w")
+        self.var_family = tk.StringVar(value="carbon")
+        ttk.Combobox(mode_box, textvariable=self.var_family,
+                     values=list(FAMILIES), state="readonly").pack(fill="x",
+                                                                   pady=(0, 6))
+        self.var_family.trace_add("write", lambda *_: self._on_family_change())
+
+        ttk.Label(mode_box, text="Structure").pack(anchor="w")
+        self.cmb_mode = ttk.Combobox(mode_box, textvariable=self.var_mode_kind,
+                                     values=list(FAMILIES["carbon"]),
+                                     state="readonly")
+        self.cmb_mode.pack(fill="x")
+        self.var_mode_kind.trace_add("write", lambda *_: self._on_mode_change())
+
+        preset_row = ttk.Frame(mode_box)
+        preset_row.pack(fill="x", pady=(6, 0))
+        ttk.Label(preset_row, text="Preset").pack(side="left")
+        self.var_preset = tk.StringVar(value="")
+        preset_box = ttk.Combobox(preset_row, textvariable=self.var_preset,
+                                  values=sorted(PRESETS), state="readonly", width=22)
+        preset_box.pack(side="right")
+        preset_box.bind("<<ComboboxSelected>>",
+                        lambda _e: self.apply_preset(self.var_preset.get()))
+
+        # --- tube geometry
+        box = ttk.LabelFrame(parent, text="Geometry", padding=8)
+        box.pack(fill="x")
+        self.frame_tube = box
+
+        self.var_rings = self._var("rings", tk.IntVar(value=8))
+        self.var_freq = self._var("freq", tk.IntVar(value=3))
+        self.var_bond = self._var("bond", tk.DoubleVar(value=1.42))
+        self.var_bend = self._var("bend", tk.DoubleVar(value=0.0))
+        self.var_seed = self._var("seed", tk.IntVar(value=0))
+        self.var_shape = self._var("shape", tk.StringVar(value="straight"))
+        self.var_waviness = self._var("waviness", tk.DoubleVar(value=0.7))
+        self.var_max_strain = self._var("max_strain", tk.DoubleVar(value=0.08))
+        self.var_shape_points = self._var("shape_points", tk.IntVar(value=9))
+        self.var_coil_radius = self._var("coil_radius", tk.DoubleVar(value=60.0))
+        self.var_coil_pitch = self._var("coil_pitch", tk.DoubleVar(value=25.0))
+        self.var_coil_turns = self._var("coil_turns", tk.DoubleVar(value=1.5))
+        self.var_coil_hand = self._var("coil_hand", tk.StringVar(value="right"))
+        self.var_coil_taper = self._var("coil_taper", tk.DoubleVar(value=1.0))
+        self.var_coil_tube_radius = self._var(
+            "coil_tube_radius", tk.DoubleVar(value=6.0))
+        self.var_pin_ends = self._var("pin_ends", tk.BooleanVar(value=False))
+        self.var_anneal = self._var("anneal", tk.IntVar(value=80))
+        self.var_roughness = self._var("roughness", tk.DoubleVar(value=0.0))
+        self.var_dopant = self._var("dopant", tk.StringVar(value="none"))
+        self.var_dopant_conc = self._var("dopant_conc", tk.DoubleVar(value=0.03))
+        self.var_dopant_site = self._var("dopant_site", tk.StringVar(value="random"))
+        self.var_codope = self._var("codope", tk.StringVar(value=""))
+        self.var_codope_affinity = self._var("codope_affinity",
+                                             tk.StringVar(value="random"))
+        # The MX2 counterpart of the carbon dopant vars. Separate because
+        # the chemistry is: there is no "substitute a heteroatom for a
+        # carbon" in a dichalcogenide, and no Janus face in graphene.
+        self.var_tmd_edit = self._var("tmd_edit", tk.StringVar(value="none"))
+        self.var_tmd_edit_element = self._var("tmd_edit_element",
+                                              tk.StringVar(value="Se"))
+        self.var_tmd_edit_amount = self._var("tmd_edit_amount",
+                                             tk.DoubleVar(value=0.5))
+        # Grafting is a third chemistry axis, not an alternative to the
+        # other two: a dopant *replaces* a host atom and so belongs to one
+        # family, while a group is *added on top of* a surface, which
+        # carbon, MX2 and a vdW stack all have.
+        self.var_graft = self._var("graft", tk.StringVar(value="none"))
+        self.var_graft_swap = self._var("graft_swap", tk.StringVar(value=""))
+        self.var_graft_coverage = self._var("graft_coverage",
+                                            tk.DoubleVar(value=0.10))
+        self.var_graft_where = self._var("graft_where",
+                                         tk.StringVar(value="all"))
+        self.var_graft_face = self._var("graft_face",
+                                        tk.StringVar(value="outer"))
+        self.var_n_sw = self._var("n_sw", tk.IntVar(value=0))
+        self.var_n_dv = self._var("n_dv", tk.IntVar(value=0))
+        self.var_mw_shells = self._var("mw_shells", tk.IntVar(value=2))
+        self.var_mw_inner = self._var("mw_inner", tk.IntVar(value=3))
+        self.var_mw_step = self._var("mw_step", tk.IntVar(value=2))
+        self.var_bundle_shells = self._var("bundle_shells", tk.IntVar(value=1))
+        self.var_bundle_gap = self._var("bundle_gap", tk.DoubleVar(value=3.4))
+        self.var_cage_family = self._var("cage_family", tk.StringVar(value="C60"))
+        self.var_cage_freq = self._var("cage_freq", tk.IntVar(value=1))
+        self.var_onion_shells = self._var("onion_shells", tk.IntVar(value=3))
+        self.var_j_kind = self._var("j_kind", tk.StringVar(value="Y"))
+        self.var_j_radius = self._var("j_radius", tk.DoubleVar(value=6.0))
+        self.var_j_arm = self._var("j_arm", tk.DoubleVar(value=22.0))
+        self.var_j_blend = self._var("j_blend", tk.DoubleVar(value=4.0))
+        self.var_hk_pattern = self._var("hk_pattern",
+                                        tk.StringVar(value="sparse"))
+        self.var_hk_nx = self._var("hk_nx", tk.IntVar(value=4))
+        self.var_hk_ny = self._var("hk_ny", tk.IntVar(value=4))
+        self.var_hk_period = self._var("hk_period", tk.IntVar(value=2))
+        self.var_hk_density = self._var("hk_density", tk.DoubleVar(value=0.15))
+        self.var_s_kind = self._var("s_kind", tk.StringVar(value="primitive"))
+        self.var_s_cell = self._var("s_cell", tk.DoubleVar(value=36.0))
+        self.var_s_thickness = self._var("s_thickness", tk.DoubleVar(value=0.0))
+        self.var_net_kind = self._var("net_kind", tk.StringVar(value="cubic"))
+        self.var_net_cell = self._var("net_cell", tk.DoubleVar(value=40.0))
+        self.var_net_radius = self._var("net_radius", tk.DoubleVar(value=6.0))
+        self.var_net_blend = self._var("net_blend", tk.DoubleVar(value=5.0))
+        # The formula stays the single value the job is built from; the
+        # metal and chalcogen pickers below drive it. Keeping the formula
+        # authoritative means the presets, which name a compound, need no
+        # special case.
+        self.var_tmd_material = self._var("tmd_material",
+                                          tk.StringVar(value="MoS2"))
+        self.var_tmd_metal = tk.StringVar(value="Mo")
+        self.var_tmd_chalcogen = tk.StringVar(value="S")
+        self._syncing_material = False
+        self.var_tmd_phase = self._var("tmd_phase", tk.StringVar(value="2H"))
+        self.var_tmd_stacking = self._var("tmd_stacking", tk.StringVar(value="2H"))
+        self.var_tmd_layers = self._var("tmd_layers", tk.IntVar(value=1))
+        self.var_tmd_nx = self._var("tmd_nx", tk.IntVar(value=1))
+        self.var_tmd_ny = self._var("tmd_ny", tk.IntVar(value=1))
+        self.var_tmd_width = self._var("tmd_width", tk.IntVar(value=8))
+        self.var_tmd_length = self._var("tmd_length", tk.IntVar(value=2))
+        self.var_tmd_edge = self._var("tmd_edge", tk.StringVar(value="zigzag"))
+        self.var_tmd_termination = self._var("tmd_termination",
+                                             tk.StringVar(value="mixed"))
+        self.var_tmd_n = self._var("tmd_n", tk.IntVar(value=40))
+        self.var_tmd_m = self._var("tmd_m", tk.IntVar(value=0))
+        self.var_tmd_coil_radius = self._var("tmd_coil_radius",
+                                             tk.DoubleVar(value=220.0))
+        self.var_tmd_coil_pitch = self._var("tmd_coil_pitch",
+                                            tk.DoubleVar(value=90.0))
+        self.var_tmd_coil_turns = self._var("tmd_coil_turns",
+                                            tk.DoubleVar(value=0.25))
+        self.var_tmd_coil_hand = self._var("tmd_coil_hand",
+                                           tk.StringVar(value="right"))
+        self.var_tmd_sw_kind = self._var("tmd_sw_kind",
+                                         tk.StringVar(value="primitive"))
+        self.var_tmd_sw_cell = self._var("tmd_sw_cell",
+                                         tk.DoubleVar(value=36.0))
+        self.var_tmd_sw_parity = self._var("tmd_sw_parity",
+                                           tk.StringVar(value="flip"))
+        self.var_tmd_j_kind = self._var("tmd_j_kind", tk.StringVar(value="Y"))
+        self.var_tmd_j_radius = self._var("tmd_j_radius",
+                                          tk.DoubleVar(value=12.0))
+        self.var_tmd_j_arm = self._var("tmd_j_arm", tk.DoubleVar(value=26.0))
+        self.var_tmd_j_blend = self._var("tmd_j_blend", tk.DoubleVar(value=5.0))
+        self.var_tmd_j_parity = self._var("tmd_j_parity",
+                                          tk.StringVar(value="split"))
+        self.var_het_bottom = self._var("het_bottom",
+                                        tk.StringVar(value="graphene"))
+        self.var_het_top = self._var("het_top", tk.StringVar(value="same"))
+        self.var_het_angle = self._var("het_angle", tk.DoubleVar(value=7.34))
+        self.var_het_max_index = self._var("het_max_index", tk.IntVar(value=40))
+        self.var_het_gap = self._var("het_gap", tk.DoubleVar(value=3.35))
+        self.var_het_third = self._var("het_third", tk.StringVar(value="none"))
+        self.var_het_nx = self._var("het_nx", tk.IntVar(value=1))
+        self.var_het_ny = self._var("het_ny", tk.IntVar(value=1))
+
+        # A wraplength even though this is one short line: it is what marks
+        # a label as an explanatory hint for ScrollableColumn._rewrap, and
+        # without it this one alone kept clipping while the rest reflowed.
+        self.lbl_radius = ttk.Label(box, text="", foreground="#2e86ab",
+                                    wraplength=PARAM_COLUMN_WIDTH - 22,
+                                    justify="left")
+
+        self._param(box, "Body rings (length)", self.var_rings, 2, 30, 0,
+                    integer=True, hard_hi=200)
+        self._param(box, "Subdivision freq (diameter)", self.var_freq, 1, 8, 2,
+                    integer=True, hard_hi=20, command=self._update_radius_hint)
+        self.lbl_radius.grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        self._param(box, "Bend angle (rad)", self.var_bend, 0.0, 1.0, 5,
+                    resolution=0.01)
+        self._param(box, "C–C bond (Å)", self.var_bond, 1.30, 1.55, 7,
+                    resolution=0.005, hard_lo=1.20, hard_hi=1.80,
+                    command=self._update_radius_hint)
+
+        seed_row = ttk.Frame(box)
+        seed_row.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        ttk.Label(seed_row, text="Random seed").pack(side="left")
+        ttk.Button(seed_row, text="🎲", width=3,
+                   command=self.on_roll_seed).pack(side="right", padx=(4, 0))
+        ttk.Spinbox(seed_row, from_=0, to=999999, textvariable=self.var_seed,
+                    width=8).pack(side="right")
+
+        # --- centreline shape
+        sbox = ttk.LabelFrame(parent, text="Centreline", padding=8)
+        sbox.pack(fill="x", pady=(8, 0))
+        self.frame_centreline = sbox
+        # Laid out with grid throughout: _param grids, and tkinter forbids
+        # mixing grid and pack in one container.
+        sbox.columnconfigure(0, weight=1)
+        ttk.Label(sbox, text="Shape").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(sbox, textvariable=self.var_shape, values=SHAPES,
+                     state="readonly", width=11).grid(row=0, column=1, sticky="e",
+                                                      pady=(0, 6))
+        self._param(sbox, "Waviness", self.var_waviness, 0.0, 1.0, 1,
+                    resolution=0.05)
+        self._param(sbox, "Control points", self.var_shape_points, 4, 20, 3,
+                    integer=True, hard_hi=60)
+        self._param(sbox, "Strain budget", self.var_max_strain, 0.02, 0.25, 5,
+                    resolution=0.01, hard_hi=0.5, command=self._update_strain_hint)
+        self.lbl_strain = ttk.Label(sbox, text="", foreground=MUTED,
+                                    font=("TkDefaultFont", 8), wraplength=230,
+                                    justify="left")
+        self.lbl_strain.grid(row=7, column=0, columnspan=2, sticky="w")
+        self.var_shape.trace_add("write", lambda *_: self._on_shape_change())
+        ttk.Label(sbox, text="Thinner + longer tubes curve more at the same "
+                             "strain — lower the frequency and raise the rings.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=8, column=0, columnspan=2, sticky="w",
+                                       pady=(4, 0))
+
+        # --- coil dimensions, in real Å. Shared by the swept helix (where
+        # they size the tube) and the relaxed coil (where they size the
+        # implicit surface), hence a top-level panel.
+        self.frame_coil = ttk.LabelFrame(parent, text="Coil", padding=8)
+        self.frame_coil.pack(fill="x", pady=(8, 0))
+        self.frame_coil.columnconfigure(0, weight=1)
+        self._param(self.frame_coil, "Coil radius (Å)", self.var_coil_radius,
+                    15.0, 200.0, 0, resolution=0.5, hard_hi=2000.0,
+                    command=self._update_coil_hint)
+        self._param(self.frame_coil, "Coil pitch (Å)", self.var_coil_pitch,
+                    5.0, 100.0, 2, resolution=0.5, hard_hi=1000.0,
+                    command=self._update_coil_hint)
+        self._param(self.frame_coil, "Turns", self.var_coil_turns,
+                    0.5, 5.0, 4, resolution=0.05, hard_hi=40.0,
+                    command=self._update_coil_hint)
+        self._param(self.frame_coil, "Taper (end/start R)", self.var_coil_taper,
+                    0.3, 2.0, 6, resolution=0.05, hard_lo=0.05, hard_hi=10.0,
+                    command=self._update_coil_hint)
+        hand = ttk.Frame(self.frame_coil)
+        hand.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(2, 2))
+        ttk.Label(hand, text="Handedness").pack(side="left")
+        ttk.Combobox(hand, textvariable=self.var_coil_hand,
+                     values=["right", "left"], state="readonly",
+                     width=7).pack(side="right")
+        self.lbl_coil = ttk.Label(self.frame_coil, text="", foreground=MUTED,
+                                  font=("TkDefaultFont", 8), wraplength=225,
+                                  justify="left")
+        self.lbl_coil.grid(row=9, column=0, columnspan=2, sticky="w")
+        # Only the relaxed coil sets its tube radius freely; the swept
+        # helix takes it from the lattice-quantised frequency.
+        self.frame_coil_tube = ttk.Frame(self.frame_coil)
+        self.frame_coil_tube.grid(row=10, column=0, columnspan=2, sticky="ew")
+        self.frame_coil_tube.columnconfigure(0, weight=1)
+        self._param(self.frame_coil_tube, "Tube radius (Å)",
+                    self.var_coil_tube_radius, 4.0, 12.0, 0, resolution=0.1,
+                    hard_lo=2.0, hard_hi=30.0, command=self._update_coil_hint)
+        ttk.Checkbutton(self.frame_coil_tube, text="Pin ends (hold the pitch)",
+                        variable=self.var_pin_ends).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(2, 2))
+        ttk.Label(self.frame_coil_tube,
+                  text="Rings follow the curvature here: pentagons inside, "
+                       "heptagons outside, so bonds stay graphitic instead of "
+                       "stretching. Slower to build.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=225,
+                  justify="left").grid(row=3, column=0, columnspan=2, sticky="w")
+
+        # --- defects
+        dbox = ttk.LabelFrame(parent, text="Defects", padding=8)
+        dbox.pack(fill="x", pady=(8, 0))
+        self.frame_defects = dbox
+        dbox.columnconfigure(0, weight=1)
+        self._param(dbox, "Stone–Wales (5-7-7-5)", self.var_n_sw, 0, 12, 0,
+                    integer=True, hard_hi=200)
+        self._param(dbox, "Divacancy (5-8-5)", self.var_n_dv, 0, 12, 2,
+                    integer=True, hard_hi=200)
+        ttk.Label(dbox, text="Both are Euler-neutral: they change ring types, "
+                             "never the pentagon budget.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=4, column=0, columnspan=2, sticky="w")
+
+        # --- junction
+        self.frame_junction = ttk.LabelFrame(parent, text="Junction", padding=8)
+        self.frame_junction.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_junction, text="Kind").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_junction, textvariable=self.var_j_kind,
+                     values=JUNCTION_KINDS, state="readonly", width=8).grid(
+            row=0, column=1, sticky="e", pady=(0, 6))
+        self._param(self.frame_junction, "Arm radius (Å)", self.var_j_radius,
+                    4.0, 14.0, 1, resolution=0.1, hard_lo=2.0, hard_hi=40.0)
+        self._param(self.frame_junction, "Arm length (Å)", self.var_j_arm,
+                    10.0, 60.0, 3, resolution=0.5, hard_hi=400.0)
+        self._param(self.frame_junction, "Neck blend (Å)", self.var_j_blend,
+                    1.0, 12.0, 5, resolution=0.1, hard_hi=40.0)
+        ttk.Label(self.frame_junction,
+                  text="The branch is a saddle, so the remesher tiles it with "
+                       "heptagons — nothing prescribes them.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=7, column=0, columnspan=2, sticky="w")
+
+        # --- haeckelite
+        self.frame_haeckelite = ttk.LabelFrame(
+            parent, text="Haeckelite (patterned Stone-Wales)", padding=8)
+        self.frame_haeckelite.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_haeckelite, text="Pattern").grid(
+            row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_haeckelite, textvariable=self.var_hk_pattern,
+                     values=list(HAECKELITE_PATTERNS), state="readonly",
+                     width=10).grid(row=0, column=1, sticky="e", pady=(0, 6))
+        # Each `_param` takes two grid rows -- its label and entry, then its
+        # slider -- so these run 1, 3, 5, 7 and the hint lands on 9.
+        self._param(self.frame_haeckelite, "Cells along x", self.var_hk_nx,
+                    3, 10, 1, integer=True, hard_lo=3, hard_hi=20,
+                    command=self._update_haeckelite_hint)
+        self._param(self.frame_haeckelite, "Cells along y", self.var_hk_ny,
+                    2, 10, 3, integer=True, hard_lo=2, hard_hi=20,
+                    command=self._update_haeckelite_hint)
+        self._param(self.frame_haeckelite, "Period (stripes, sparse)",
+                    self.var_hk_period, 1, 6, 5, integer=True,
+                    hard_lo=1, hard_hi=12)
+        self._param(self.frame_haeckelite, "Density (random)",
+                    self.var_hk_density, 0.05, 1.0, 7, resolution=0.05,
+                    hard_lo=0.01, hard_hi=1.0)
+        self.lbl_haeckelite = ttk.Label(
+            self.frame_haeckelite, text="", foreground=MUTED,
+            font=("TkDefaultFont", 8), wraplength=230, justify="left")
+        self.lbl_haeckelite.grid(row=9, column=0, columnspan=2, sticky="w")
+        # The combobox has no `_param` trace of its own, and the hint's text
+        # depends on the pattern ("none" returns graphene), so without this
+        # it would describe the previously selected one.
+        self.var_hk_pattern.trace_add(
+            "write", lambda *_: self._update_haeckelite_hint())
+
+        # --- schwarzite
+        self.frame_schwarzite = ttk.LabelFrame(parent, text="Schwarzite", padding=8)
+        self.frame_schwarzite.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_schwarzite, text="Surface").grid(row=0, column=0,
+                                                              sticky="w")
+        ttk.Combobox(self.frame_schwarzite, textvariable=self.var_s_kind,
+                     values=SCHWARZITE_KINDS, state="readonly", width=10).grid(
+            row=0, column=1, sticky="e", pady=(0, 6))
+        self._param(self.frame_schwarzite, "Cell length (Å)", self.var_s_cell,
+                    30.0, 56.0, 1, resolution=0.5, hard_lo=20.0, hard_hi=120.0)
+        self._param(self.frame_schwarzite, "Thickness offset", self.var_s_thickness,
+                    -0.4, 0.4, 3, resolution=0.02, hard_lo=-1.0, hard_hi=1.0)
+        ttk.Label(self.frame_schwarzite,
+                  text="A periodic unit cell: tubes leave one face and return "
+                       "through the opposite one. Bigger cells curve more "
+                       "gently and relax cleaner — minimum 30 Å primitive, "
+                       "36 gyroid and diamond.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=5, column=0, columnspan=2, sticky="w")
+
+        # --- 3D interconnected nanotube network
+        self.frame_network = ttk.LabelFrame(parent, text="Nanotube network",
+                                            padding=8)
+        self.frame_network.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_network, text="Net").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_network, textvariable=self.var_net_kind,
+                     values=NETWORK_KINDS, state="readonly", width=10).grid(
+            row=0, column=1, sticky="e", pady=(0, 6))
+        self.var_net_kind.trace_add("write", lambda *_: self._update_network_hint())
+        self._param(self.frame_network, "Cell length (Å)", self.var_net_cell,
+                    28.0, 90.0, 1, resolution=1.0, hard_lo=20.0, hard_hi=160.0,
+                    command=self._update_network_hint)
+        self._param(self.frame_network, "Tube radius (Å)", self.var_net_radius,
+                    3.0, 12.0, 3, resolution=0.25, hard_lo=2.0, hard_hi=25.0,
+                    command=self._update_network_hint)
+        self._param(self.frame_network, "Node blend (Å)", self.var_net_blend,
+                    2.0, 10.0, 5, resolution=0.5, hard_lo=1.0, hard_hi=20.0,
+                    command=self._update_network_hint)
+        self.lbl_network = ttk.Label(self.frame_network, text="",
+                                     foreground=MUTED,
+                                     font=("TkDefaultFont", 8), wraplength=230,
+                                     justify="left")
+        self.lbl_network.grid(row=7, column=0, columnspan=2, sticky="w",
+                              pady=(4, 0))
+
+        # --- fullerene cage / nano-onion
+        self.frame_cage = ttk.LabelFrame(parent, text="Cage", padding=8)
+        self.frame_cage.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_cage, text="Family").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_cage, textvariable=self.var_cage_family,
+                     values=CAGE_FAMILIES, state="readonly", width=7).grid(
+            row=0, column=1, sticky="e", pady=(0, 6))
+        self.var_cage_family.trace_add("write", lambda *_: self._update_cage_hint())
+        self._param(self.frame_cage, "Frequency (size)", self.var_cage_freq,
+                    1, 6, 1, integer=True, hard_hi=20,
+                    command=self._update_cage_hint)
+        self.frame_onion = ttk.Frame(self.frame_cage)
+        self.frame_onion.grid(row=3, column=0, columnspan=2, sticky="ew")
+        self.frame_onion.columnconfigure(0, weight=1)
+        self._param(self.frame_onion, "Shells", self.var_onion_shells, 1, 5, 0,
+                    integer=True, hard_hi=12, command=self._update_cage_hint)
+        self.lbl_cage = ttk.Label(self.frame_cage, text="", foreground=MUTED,
+                                  font=("TkDefaultFont", 8), wraplength=230,
+                                  justify="left")
+        self.lbl_cage.grid(row=5, column=0, columnspan=2, sticky="w")
+
+        # --- multi-wall
+        self.frame_mw = ttk.LabelFrame(parent, text="Multi-wall", padding=8)
+        self.frame_mw.columnconfigure(0, weight=1)
+        self._param(self.frame_mw, "Shells", self.var_mw_shells, 1, 6, 0,
+                    integer=True, hard_hi=20)
+        self._param(self.frame_mw, "Inner freq", self.var_mw_inner, 1, 6, 2,
+                    integer=True, hard_hi=20)
+        self._param(self.frame_mw, "Freq step", self.var_mw_step, 1, 4, 4,
+                    integer=True, hard_hi=10)
+        ttk.Label(self.frame_mw,
+                  text="Walls land ~3.9 Å apart at step 2: the lattice quantises "
+                       "radius in ~1.96 Å steps, so it cannot hit graphite's "
+                       "3.4 Å exactly. A nano-onion can.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=6, column=0, columnspan=2, sticky="w")
+
+        # --- bundle
+        self.frame_bundle = ttk.LabelFrame(parent, text="Bundle", padding=8)
+        self.frame_bundle.columnconfigure(0, weight=1)
+        self._param(self.frame_bundle, "Hex shells", self.var_bundle_shells,
+                    0, 3, 0, integer=True, hard_hi=8)
+        self._param(self.frame_bundle, "Wall gap (Å)", self.var_bundle_gap,
+                    2.8, 6.0, 2, resolution=0.1, hard_lo=1.0, hard_hi=20.0)
+        ttk.Label(self.frame_bundle,
+                  text="0 / 1 / 2 / 3 shells give 1 / 7 / 19 / 37 tubes on a "
+                       "triangular lattice at the van der Waals gap.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=4, column=0, columnspan=2, sticky="w")
+
+        # --- surface finish
+        self.frame_surface = ttk.LabelFrame(parent, text="Surface finish", padding=8)
+        self.frame_surface.columnconfigure(0, weight=1)
+        self._param(self.frame_surface, "Smoothing (anneal)", self.var_anneal,
+                    0, 200, 0, integer=True, hard_hi=2000,
+                    command=self._update_surface_hint)
+        self._param(self.frame_surface, "Roughness (Å)", self.var_roughness,
+                    0.0, 0.6, 2, resolution=0.01, hard_hi=2.0,
+                    command=self._update_surface_hint)
+        self.lbl_surface = ttk.Label(self.frame_surface, text="", foreground=MUTED,
+                                     font=("TkDefaultFont", 8), wraplength=230,
+                                     justify="left")
+        self.lbl_surface.grid(row=4, column=0, columnspan=2, sticky="w")
+
+        # --- chemistry
+        self.frame_chem = ttk.LabelFrame(parent, text="Chemistry", padding=8)
+        self.frame_chem.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_chem, text="Dopant").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_chem, textvariable=self.var_dopant, values=DOPANTS,
+                     state="readonly", width=7).grid(row=0, column=1, sticky="e",
+                                                     pady=(0, 4))
+        self.var_dopant.trace_add("write", lambda *_: self._update_dopant_hint())
+        ttk.Label(self.frame_chem, text="Site").grid(row=1, column=0, sticky="w")
+        ttk.Combobox(self.frame_chem, textvariable=self.var_dopant_site,
+                     values=list(DOPANT_SITES), state="readonly", width=9).grid(
+            row=1, column=1, sticky="e", pady=(0, 6))
+        self.var_dopant_site.trace_add("write", lambda *_: self._update_dopant_hint())
+        self._param(self.frame_chem, "Concentration", self.var_dopant_conc,
+                    MIN_DOPING_FRACTION, MAX_DOPING_FRACTION, 2,
+                    resolution=0.005, hard_hi=0.5,
+                    command=self._update_dopant_hint)
+        # The dopant table's own words, not a paraphrase: what an element
+        # does and how much of it is real are exactly what a user picking
+        # from a fifteen-item dropdown cannot be expected to know.
+        ttk.Label(self.frame_chem, text="Co-dope").grid(row=4, column=0,
+                                                        sticky="w")
+        ttk.Entry(self.frame_chem, textvariable=self.var_codope,
+                  width=12, justify="right").grid(row=4, column=1, sticky="e")
+        self.var_codope.trace_add("write", lambda *_: self._update_dopant_hint())
+        ttk.Label(self.frame_chem, text="Affinity").grid(row=5, column=0,
+                                                        sticky="w")
+        ttk.Combobox(self.frame_chem, textvariable=self.var_codope_affinity,
+                     values=list(AFFINITIES), state="readonly", width=9).grid(
+            row=5, column=1, sticky="e", pady=(0, 6))
+        self.var_codope_affinity.trace_add(
+            "write", lambda *_: self._update_dopant_hint())
+        # The dopant table's own words, not a paraphrase: what an element
+        # does and how much of it is real are exactly what a user picking
+        # from a fifteen-item dropdown cannot be expected to know.
+        self.lbl_dopant = ttk.Label(self.frame_chem, text="", foreground=MUTED,
+                                    font=("TkDefaultFont", 8), wraplength=230,
+                                    justify="left")
+        self.lbl_dopant.grid(row=6, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        # --- surface functionalisation, shown for every family
+        self.frame_graft = ttk.LabelFrame(parent, text="Surface groups",
+                                          padding=8)
+        self.frame_graft.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_graft, text="Group").grid(row=0, column=0,
+                                                       sticky="w")
+        ttk.Combobox(self.frame_graft, textvariable=self.var_graft,
+                     values=["none", *sorted(GROUPS)], state="readonly",
+                     width=10).grid(row=0, column=1, sticky="e", pady=(0, 4))
+        self.var_graft.trace_add("write", lambda *_: self._update_graft_hint())
+        ttk.Label(self.frame_graft, text="Sites").grid(row=1, column=0,
+                                                       sticky="w")
+        ttk.Combobox(self.frame_graft, textvariable=self.var_graft_where,
+                     values=["all", "edge", "defect", "ring:5", "ring:7"],
+                     state="readonly", width=10).grid(row=1, column=1,
+                                                      sticky="e", pady=(0, 4))
+        self.var_graft_where.trace_add("write",
+                                       lambda *_: self._update_graft_hint())
+        ttk.Label(self.frame_graft, text="Face").grid(row=2, column=0,
+                                                      sticky="w")
+        ttk.Combobox(self.frame_graft, textvariable=self.var_graft_face,
+                     values=["outer", "inner", "both"], state="readonly",
+                     width=10).grid(row=2, column=1, sticky="e", pady=(0, 6))
+        self.var_graft_face.trace_add("write",
+                                      lambda *_: self._update_graft_hint())
+        self._param(self.frame_graft, "Coverage", self.var_graft_coverage,
+                    0.01, 1.0, 2, resolution=0.01,
+                    command=self._update_graft_hint)
+        # Free text rather than a dropdown: the swap is a mapping, and
+        # which elements are offered depends on the group chosen -- an
+        # -OH reaches S/Se/Te, an -NH2 reaches P/As/B. The hint below
+        # lists what the current group actually accepts.
+        ttk.Label(self.frame_graft, text="Swap").grid(row=5, column=0,
+                                                      sticky="w")
+        ttk.Entry(self.frame_graft, textvariable=self.var_graft_swap,
+                  width=12).grid(row=5, column=1, sticky="e", pady=(4, 0))
+        self.var_graft_swap.trace_add("write",
+                                      lambda *_: self._update_graft_hint())
+        self.lbl_graft = ttk.Label(self.frame_graft, text="", foreground=MUTED,
+                                   font=("TkDefaultFont", 8), wraplength=230,
+                                   justify="left")
+        self.lbl_graft.grid(row=6, column=0, columnspan=2, sticky="w",
+                            pady=(4, 0))
+
+        # --- dichalcogenide: material and phase, shared by all TMD modes
+        self.frame_tmd = ttk.LabelFrame(parent, text="Dichalcogenide", padding=8)
+        self.frame_tmd.columnconfigure(0, weight=1)
+        # Metal and chalcogen rather than one formula list: that is how the
+        # choice is actually made, and it keeps a 27-entry dropdown from
+        # being the only way to find WSe2. The chalcogen list is narrowed
+        # to what the chosen metal actually forms a layered MX2 with, so
+        # an impossible pair cannot be selected at all.
+        ttk.Label(self.frame_tmd, text="Metal").grid(row=0, column=0, sticky="w")
+        self.cmb_tmd_metal = ttk.Combobox(
+            self.frame_tmd, textvariable=self.var_tmd_metal,
+            values=list(available_metals()), state="readonly", width=8)
+        self.cmb_tmd_metal.grid(row=0, column=1, sticky="e", pady=(0, 4))
+        ttk.Label(self.frame_tmd, text="Chalcogen").grid(row=1, column=0,
+                                                         sticky="w")
+        self.cmb_tmd_chalcogen = ttk.Combobox(
+            self.frame_tmd, textvariable=self.var_tmd_chalcogen,
+            values=list(chalcogens_for("Mo")), state="readonly", width=8)
+        self.cmb_tmd_chalcogen.grid(row=1, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_metal.trace_add("write", lambda *_: self._on_metal_change())
+        self.var_tmd_chalcogen.trace_add(
+            "write", lambda *_: self._sync_material_from_elements())
+        self.var_tmd_material.trace_add(
+            "write", lambda *_: self._sync_elements_from_material())
+        ttk.Label(self.frame_tmd, text="Phase").grid(row=2, column=0, sticky="w")
+        ttk.Combobox(self.frame_tmd, textvariable=self.var_tmd_phase,
+                     values=TMD_PHASES, state="readonly", width=8).grid(
+            row=2, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_phase.trace_add("write", lambda *_: self._update_tmd_hint())
+        self.lbl_tmd = ttk.Label(self.frame_tmd, text="", foreground=MUTED,
+                                 font=("TkDefaultFont", 8), wraplength=230,
+                                 justify="left")
+        self.lbl_tmd.grid(row=3, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+        # --- dichalcogenide chemistry: the MX2 counterpart of doping
+        self.frame_tmd_chem = ttk.LabelFrame(parent, text="MX2 chemistry",
+                                             padding=8)
+        self.frame_tmd_chem.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_tmd_chem, text="Edit").grid(row=0, column=0,
+                                                         sticky="w")
+        ttk.Combobox(self.frame_tmd_chem, textvariable=self.var_tmd_edit,
+                     values=["none", *TMD_EDITS], state="readonly",
+                     width=10).grid(row=0, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_edit.trace_add("write", lambda *_: self._on_tmd_edit_change())
+        ttk.Label(self.frame_tmd_chem, text="Element").grid(row=1, column=0,
+                                                            sticky="w")
+        self.cmb_tmd_edit_element = ttk.Combobox(
+            self.frame_tmd_chem, textvariable=self.var_tmd_edit_element,
+            values=list(available_chalcogens()), state="readonly", width=10)
+        self.cmb_tmd_edit_element.grid(row=1, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_edit_element.trace_add(
+            "write", lambda *_: self._update_tmd_edit_hint())
+        self._param(self.frame_tmd_chem, "Amount", self.var_tmd_edit_amount,
+                    0.0, 1.0, 2, resolution=0.05, hard_hi=200.0,
+                    command=self._update_tmd_edit_hint)
+        self.lbl_tmd_chem = ttk.Label(self.frame_tmd_chem, text="",
+                                      foreground=MUTED,
+                                      font=("TkDefaultFont", 8), wraplength=230,
+                                      justify="left")
+        self.lbl_tmd_chem.grid(row=4, column=0, columnspan=2, sticky="w",
+                               pady=(4, 0))
+
+        # --- layers / bulk
+        self.frame_tmd_layers = ttk.LabelFrame(parent, text="Layers", padding=8)
+        self.frame_tmd_layers.columnconfigure(0, weight=1)
+        self._param(self.frame_tmd_layers, "Layers", self.var_tmd_layers,
+                    1, 8, 0, integer=True, hard_hi=60)
+        ttk.Label(self.frame_tmd_layers, text="Stacking").grid(row=2, column=0,
+                                                               sticky="w")
+        ttk.Combobox(self.frame_tmd_layers, textvariable=self.var_tmd_stacking,
+                     values=TMD_STACKINGS, state="readonly", width=8).grid(
+            row=2, column=1, sticky="e", pady=(0, 4))
+        self._param(self.frame_tmd_layers, "Supercell nx", self.var_tmd_nx,
+                    1, 8, 3, integer=True, hard_hi=40)
+        self._param(self.frame_tmd_layers, "Supercell ny", self.var_tmd_ny,
+                    1, 8, 5, integer=True, hard_hi=40)
+        ttk.Label(self.frame_tmd_layers,
+                  text="2H alternates a 180° rotation (bulk MoS2); 3R shifts "
+                       "each layer without rotating; AA is eclipsed. Both 2H "
+                       "and 3R put the metal over the chalcogen below — they "
+                       "differ at the third layer.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=7, column=0, columnspan=2, sticky="w")
+
+        # --- ribbon
+        self.frame_tmd_ribbon = ttk.LabelFrame(parent, text="Ribbon", padding=8)
+        self.frame_tmd_ribbon.columnconfigure(0, weight=1)
+        self._param(self.frame_tmd_ribbon, "Width (rows)", self.var_tmd_width,
+                    2, 20, 0, integer=True, hard_hi=200)
+        self._param(self.frame_tmd_ribbon, "Length (cells)", self.var_tmd_length,
+                    1, 10, 2, integer=True, hard_hi=100)
+        ttk.Label(self.frame_tmd_ribbon, text="Edge").grid(row=4, column=0,
+                                                           sticky="w")
+        ttk.Combobox(self.frame_tmd_ribbon, textvariable=self.var_tmd_edge,
+                     values=TMD_EDGES, state="readonly", width=9).grid(
+            row=4, column=1, sticky="e", pady=(0, 4))
+        ttk.Label(self.frame_tmd_ribbon, text="Termination").grid(row=5, column=0,
+                                                                  sticky="w")
+        ttk.Combobox(self.frame_tmd_ribbon, textvariable=self.var_tmd_termination,
+                     values=TMD_TERMINATIONS, state="readonly", width=9).grid(
+            row=5, column=1, sticky="e", pady=(0, 4))
+        ttk.Label(self.frame_tmd_ribbon,
+                  text="MX2's two zigzag edges are chemically different: the "
+                       "metal-terminated one is metallic and magnetic and "
+                       "shapes CVD-grown triangles. Terminating both alike "
+                       "leaves the ribbon deliberately off-stoichiometry.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=6, column=0, columnspan=2, sticky="w")
+
+        # --- nanotube
+        self.frame_tmd_tube = ttk.LabelFrame(parent, text="Nanotube", padding=8)
+        self.frame_tmd_tube.columnconfigure(0, weight=1)
+        self._param(self.frame_tmd_tube, "Chiral n", self.var_tmd_n,
+                    10, 80, 0, integer=True, hard_hi=400,
+                    command=self._update_tmd_hint)
+        self._param(self.frame_tmd_tube, "Chiral m", self.var_tmd_m,
+                    0, 80, 2, integer=True, hard_hi=400,
+                    command=self._update_tmd_hint)
+        self._param(self.frame_tmd_tube, "Length (cells)", self.var_tmd_length,
+                    1, 10, 4, integer=True, hard_hi=100)
+        self.lbl_tmd_tube = ttk.Label(self.frame_tmd_tube, text="",
+                                      foreground=MUTED,
+                                      font=("TkDefaultFont", 8), wraplength=230,
+                                      justify="left")
+        self.lbl_tmd_tube.grid(row=6, column=0, columnspan=2, sticky="w")
+
+        # --- coil (a swept nanotube, so it reuses the chiral indices above)
+        self.frame_tmd_coil = ttk.LabelFrame(parent, text="Coil", padding=8)
+        self.frame_tmd_coil.columnconfigure(0, weight=1)
+        self._param(self.frame_tmd_coil, "Coil radius (Å)",
+                    self.var_tmd_coil_radius, 60.0, 1200.0, 0,
+                    resolution=5.0, hard_hi=20000.0,
+                    command=self._update_tmd_hint)
+        self._param(self.frame_tmd_coil, "Pitch (Å)", self.var_tmd_coil_pitch,
+                    20.0, 400.0, 2, resolution=5.0, hard_hi=5000.0,
+                    command=self._update_tmd_hint)
+        self._param(self.frame_tmd_coil, "Turns", self.var_tmd_coil_turns,
+                    0.1, 3.0, 4, resolution=0.05, hard_hi=20.0,
+                    command=self._update_tmd_hint)
+        ttk.Label(self.frame_tmd_coil, text="Handedness").grid(
+            row=6, column=0, sticky="w")
+        ttk.Combobox(self.frame_tmd_coil, textvariable=self.var_tmd_coil_hand,
+                     values=["right", "left"], state="readonly",
+                     width=12).grid(row=6, column=1, sticky="ew")
+        self.lbl_tmd_coil = ttk.Label(self.frame_tmd_coil, text="",
+                                      foreground=MUTED,
+                                      font=("TkDefaultFont", 8), wraplength=230,
+                                      justify="left")
+        self.lbl_tmd_coil.grid(row=7, column=0, columnspan=2, sticky="w")
+
+        # --- schwarzite
+        self.frame_tmd_sw = ttk.LabelFrame(parent, text="Schwarzite", padding=8)
+        self.frame_tmd_sw.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_tmd_sw, text="Surface").grid(row=0, column=0,
+                                                          sticky="w")
+        ttk.Combobox(self.frame_tmd_sw, textvariable=self.var_tmd_sw_kind,
+                     values=["primitive", "diamond", "gyroid"],
+                     state="readonly", width=10).grid(row=0, column=1,
+                                                      sticky="e", pady=(0, 4))
+        self._param(self.frame_tmd_sw, "Cell (Å)", self.var_tmd_sw_cell,
+                    30.0, 80.0, 1, resolution=1.0, hard_hi=200.0,
+                    command=self._update_tmd_hint)
+        ttk.Label(self.frame_tmd_sw, text="M/X parity").grid(row=3, column=0,
+                                                             sticky="w")
+        ttk.Combobox(self.frame_tmd_sw, textvariable=self.var_tmd_sw_parity,
+                     values=["none", "flip", "split"], state="readonly",
+                     width=10).grid(row=3, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_sw_parity.trace_add(
+            "write", lambda *_: (self._update_tmd_hint(),
+                                 self._schedule_estimate()))
+        self.lbl_tmd_sw = ttk.Label(self.frame_tmd_sw, text="",
+                                    foreground=MUTED,
+                                    font=("TkDefaultFont", 8), wraplength=230,
+                                    justify="left")
+        self.lbl_tmd_sw.grid(row=4, column=0, columnspan=2, sticky="w")
+
+        # --- junction
+        self.frame_tmd_j = ttk.LabelFrame(parent, text="Junction", padding=8)
+        self.frame_tmd_j.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_tmd_j, text="Kind").grid(row=0, column=0,
+                                                      sticky="w")
+        ttk.Combobox(self.frame_tmd_j, textvariable=self.var_tmd_j_kind,
+                     values=["L", "T", "Y", "X"], state="readonly",
+                     width=6).grid(row=0, column=1, sticky="e", pady=(0, 4))
+        self._param(self.frame_tmd_j, "Tube radius (Å)", self.var_tmd_j_radius,
+                    8.0, 30.0, 1, resolution=0.5, hard_hi=200.0,
+                    command=self._update_tmd_hint)
+        self._param(self.frame_tmd_j, "Arm length (Å)", self.var_tmd_j_arm,
+                    15.0, 60.0, 3, resolution=1.0, hard_hi=400.0,
+                    command=self._update_tmd_hint)
+        self._param(self.frame_tmd_j, "Blend (Å)", self.var_tmd_j_blend,
+                    1.0, 12.0, 5, resolution=0.5, hard_hi=50.0)
+        ttk.Label(self.frame_tmd_j, text="M/X parity").grid(row=7, column=0,
+                                                            sticky="w")
+        ttk.Combobox(self.frame_tmd_j, textvariable=self.var_tmd_j_parity,
+                     values=["none", "flip", "split"], state="readonly",
+                     width=8).grid(row=7, column=1, sticky="e", pady=(0, 4))
+        self.var_tmd_j_parity.trace_add(
+            "write", lambda *_: (self._update_tmd_hint(),
+                                 self._schedule_estimate()))
+        self.lbl_tmd_j = ttk.Label(self.frame_tmd_j, text="", foreground=MUTED,
+                                   font=("TkDefaultFont", 8), wraplength=230,
+                                   justify="left")
+        self.lbl_tmd_j.grid(row=8, column=0, columnspan=2, sticky="w")
+
+        # --- heterostructures
+        from ..hetero import available_layers
+
+        layer_names = list(available_layers())
+        self.frame_het = ttk.LabelFrame(parent, text="Layers", padding=8)
+        self.frame_het.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_het, text="Bottom").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_het, textvariable=self.var_het_bottom,
+                     values=layer_names, state="readonly", width=10).grid(
+            row=0, column=1, sticky="e", pady=(0, 4))
+        ttk.Label(self.frame_het, text="Top").grid(row=1, column=0, sticky="w")
+        ttk.Combobox(self.frame_het, textvariable=self.var_het_top,
+                     values=["same", *layer_names], state="readonly",
+                     width=10).grid(row=1, column=1, sticky="e", pady=(0, 4))
+        ttk.Label(self.frame_het, text="Third layer").grid(row=2, column=0,
+                                                           sticky="w")
+        ttk.Combobox(self.frame_het, textvariable=self.var_het_third,
+                     values=["none", *layer_names], state="readonly",
+                     width=10).grid(row=2, column=1, sticky="e", pady=(0, 4))
+        self._param(self.frame_het, "Gap (Å)", self.var_het_gap,
+                    2.5, 6.0, 3, resolution=0.05, hard_hi=20.0)
+        self.lbl_het = ttk.Label(self.frame_het, text="", foreground=MUTED,
+                                 font=("TkDefaultFont", 8), wraplength=230,
+                                 justify="left")
+        self.lbl_het.grid(row=5, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        for var in (self.var_het_bottom, self.var_het_top, self.var_het_third):
+            var.trace_add("write", lambda *_: (self._update_het_hint(),
+                                               self._schedule_estimate()))
+
+        self.frame_twist = ttk.LabelFrame(parent, text="Twist", padding=8)
+        self.frame_twist.columnconfigure(0, weight=1)
+        self._param(self.frame_twist, "Angle (deg)", self.var_het_angle,
+                    0.5, 30.0, 0, resolution=0.01, hard_hi=60.0,
+                    command=self._update_het_hint)
+        self._param(self.frame_twist, "Max index m", self.var_het_max_index,
+                    5, 60, 2, integer=True, hard_hi=200,
+                    command=self._update_het_hint)
+        self.lbl_twist = ttk.Label(self.frame_twist, text="", foreground=MUTED,
+                                   font=("TkDefaultFont", 8), wraplength=230,
+                                   justify="left")
+        self.lbl_twist.grid(row=4, column=0, columnspan=2, sticky="w")
+
+        self.frame_stack = ttk.LabelFrame(parent, text="Supercell", padding=8)
+        self.frame_stack.columnconfigure(0, weight=1)
+        self._param(self.frame_stack, "nx", self.var_het_nx, 1, 8, 0,
+                    integer=True, hard_hi=40)
+        self._param(self.frame_stack, "ny", self.var_het_ny, 1, 8, 2,
+                    integer=True, hard_hi=40)
+
+        # --- build / cancel and the cost estimate
+        actions = ttk.Frame(parent)
+        actions.pack(fill="x", pady=(12, 0))
+        self.btn_build = ttk.Button(actions, text="Build structure",
+                                    command=self.on_build)
+        self.btn_build.pack(fill="x", ipady=4)
+        self.btn_cancel = ttk.Button(actions, text="Cancel", state="disabled",
+                                     command=self.on_cancel)
+        self.btn_cancel.pack(fill="x", pady=(4, 0))
+        self.progress = ttk.Progressbar(actions, mode="indeterminate")
+        self.progress.pack(fill="x", pady=(6, 0))
+        self.lbl_estimate = ttk.Label(actions, text="", foreground=MUTED,
+                                      font=("TkDefaultFont", 8), wraplength=240,
+                                      justify="left")
+        self.lbl_estimate.pack(anchor="w", pady=(4, 0))
+
+        # Any parameter change re-costs the build. Debounced, because
+        # dragging a slider fires this on every pixel.
+        for var in self._params.values():
+            var.trace_add("write", lambda *_: self._schedule_estimate())
+
+        self._update_radius_hint()
+        self._update_strain_hint()
+        self._update_coil_hint()
+        self._update_surface_hint()
+        self._update_cage_hint()
+        self._on_mode_change()
+
+    # ------------------------------------------------------------ visibility
+    def _on_mode_change(self) -> None:
+        """Show only the panels that apply to the selected structure type."""
+        mode = self.var_mode_kind.get()
+        for frame in (self.frame_tube, self.frame_centreline, self.frame_defects,
+                      self.frame_coil, self.frame_junction, self.frame_schwarzite,
+                      self.frame_haeckelite,
+                      self.frame_cage, self.frame_mw, self.frame_bundle,
+                      self.frame_network,
+                      self.frame_tmd, self.frame_tmd_layers,
+                      self.frame_tmd_ribbon, self.frame_tmd_tube,
+                      self.frame_tmd_coil, self.frame_tmd_sw,
+                      self.frame_het, self.frame_twist, self.frame_stack,
+                      self.frame_tmd_j, self.frame_tmd_chem,
+                      self.frame_surface, self.frame_chem, self.frame_graft):
+            frame.pack_forget()
+
+        if mode in ("twisted bilayer", "vdW stack"):
+            # A stack is neither carbon nor dichalcogenide: none of the
+            # sp2 controls (annealing, roughness, doping) nor the TMD
+            # phase apply, so only the layer panels show.
+            self.frame_het.pack(fill="x")
+            if mode == "twisted bilayer":
+                self.frame_twist.pack(fill="x", pady=(8, 0))
+            else:
+                self.frame_stack.pack(fill="x", pady=(8, 0))
+            self._update_het_hint()
+            self.frame_graft.pack(fill="x", pady=(8, 0))
+            self._update_graft_hint()
+            self._schedule_estimate()
+            return
+
+        if mode.startswith("TMD"):
+            # Every dichalcogenide needs the material and phase; the rest
+            # depends on which structure. None of the carbon panels apply:
+            # annealing, roughness and doping are all sp2-specific.
+            self.frame_tmd.pack(fill="x")
+            if mode in ("TMD layers", "TMD bulk"):
+                self.frame_tmd_layers.pack(fill="x", pady=(8, 0))
+            elif mode == "TMD ribbon":
+                self.frame_tmd_ribbon.pack(fill="x", pady=(8, 0))
+            elif mode == "TMD nanotube":
+                self.frame_tmd_tube.pack(fill="x", pady=(8, 0))
+            elif mode == "TMD schwarzite":
+                self.frame_tmd_sw.pack(fill="x", pady=(8, 0))
+            elif mode == "TMD junction":
+                self.frame_tmd_j.pack(fill="x", pady=(8, 0))
+            elif mode == "TMD coil":
+                # The coil is a swept nanotube, so it needs the chiral
+                # indices as well as the helix panel.
+                self.frame_tmd_tube.pack(fill="x", pady=(8, 0))
+                self.frame_tmd_coil.pack(fill="x", pady=(8, 0))
+            self.frame_tmd_chem.pack(fill="x", pady=(8, 0))
+            self._update_tmd_hint()
+            self._update_tmd_edit_hint()
+            self.frame_graft.pack(fill="x", pady=(8, 0))
+            self._update_graft_hint()
+            self._schedule_estimate()
+            return
+
+        if mode == "junction":
+            self.frame_junction.pack(fill="x")
+        elif mode == "network":
+            self.frame_network.pack(fill="x")
+            # Same reason as the schwarzite: at a node the 5-7 pairs are
+            # how a hexagonal net covers the curvature, so annealing them
+            # away only makes the remaining bonds stretch.
+            self.var_anneal.set(0)
+            self._update_network_hint()
+        elif mode == "haeckelite":
+            self.frame_haeckelite.pack(fill="x")
+            self._update_haeckelite_hint()
+        elif mode == "schwarzite":
+            self.frame_schwarzite.pack(fill="x")
+            # Annealing is counterproductive on a minimal surface (it
+            # stretches the bonds the 5-7 pairs were relieving), so
+            # entering this mode turns the shared slider off rather than
+            # letting its 80-sweep default quietly degrade the cell.
+            self.var_anneal.set(0)
+        elif mode == "coil (relaxed)":
+            self.frame_coil.pack(fill="x")
+        elif mode in ("fullerene", "nano-onion"):
+            self.frame_cage.pack(fill="x")
+            if mode == "nano-onion":
+                self.frame_onion.grid()
+            else:
+                self.frame_onion.grid_remove()
+            self._update_cage_hint()
+        elif mode == "multi-wall":
+            self.frame_tube.pack(fill="x")
+            self.frame_mw.pack(fill="x", pady=(8, 0))
+        elif mode == "bundle":
+            self.frame_tube.pack(fill="x")
+            self.frame_bundle.pack(fill="x", pady=(8, 0))
+        else:
+            self.frame_tube.pack(fill="x")
+            self.frame_centreline.pack(fill="x", pady=(8, 0))
+            self.frame_defects.pack(fill="x", pady=(8, 0))
+
+        # The cages come from an exact seed polyhedron, so there is no
+        # remeshing for flip annealing to clean up; showing the control
+        # would imply an effect it cannot have.
+        if mode not in ("fullerene", "nano-onion"):
+            self.frame_surface.pack(fill="x", pady=(8, 0))
+        self.frame_chem.pack(fill="x", pady=(8, 0))
+        self.frame_graft.pack(fill="x", pady=(8, 0))
+        self._update_dopant_hint()
+        self._update_graft_hint()
+        self._on_shape_change()
+        self._schedule_estimate()
+
+    def _on_shape_change(self) -> None:
+        """Show the coil panel where coil dimensions actually apply."""
+        if self.var_mode_kind.get() == "coil (relaxed)":
+            self.frame_coil_tube.grid()
+            return
+        self.frame_coil_tube.grid_remove()
+        if (self.var_shape.get() == "helix"
+                and self.var_mode_kind.get() == "capped tube"):
+            self.frame_coil.pack(fill="x", pady=(8, 0))
+        else:
+            self.frame_coil.pack_forget()
+
+    # ----------------------------------------------------------------- hints
+    def _update_radius_hint(self) -> None:
+        radius = fm.radius_for_freq(int(self.var_freq.get()), self.var_bond.get())
+        self.lbl_radius.config(
+            text=f"→ tube radius ≈ {radius:.2f} Å  (lattice-quantised)"
+        )
+
+    def _update_strain_hint(self) -> None:
+        value = float(self.var_max_strain.get())
+        if value <= 0.10:
+            text, colour = "physical sp2 regime", OK_GREEN
+        elif value <= 0.15:
+            text, colour = "strained but intact — fine for artwork", WARN_AMBER
+        else:
+            text, colour = "bonds stretch out of the sp2 range", BAD_RED
+        self.lbl_strain.config(text=f"{value:.0%}: {text}", foreground=colour)
+
+    def _on_family_change(self) -> None:
+        """Repopulate the structure list when the material family changes."""
+        family = self.var_family.get()
+        modes = list(FAMILIES.get(family, FAMILIES["carbon"]))
+        self.cmb_mode.configure(values=modes)
+        if self.var_mode_kind.get() not in modes:
+            self.var_mode_kind.set(modes[0])
+        else:
+            self._on_mode_change()
+
+    # The metal/chalcogen pickers and the formula are two views of one
+    # choice, so each has to update the other -- and a naive pair of
+    # traces would then feed each other forever. `_syncing_material` is
+    # the reentrancy guard: whichever side the user touched wins, and the
+    # write it makes to the other side does not bounce back.
+    def _on_metal_change(self) -> None:
+        """Renarrow the chalcogen list, then rebuild the formula.
+
+        Not every metal forms a layered MX2 with every chalcogen -- Sn
+        has no telluride, Nb no tabulated one -- so the second dropdown
+        is repopulated rather than left offering a pair that would raise
+        at build time. If the current chalcogen is not available for the
+        new metal, the lightest one that is takes its place.
+        """
+        if self._syncing_material:
+            return
+        options = chalcogens_for(self.var_tmd_metal.get())
+        if not options:
+            return
+        self.cmb_tmd_chalcogen.config(values=list(options))
+        if self.var_tmd_chalcogen.get() not in options:
+            # Writing this fires the chalcogen trace, which rebuilds the
+            # formula -- so there is nothing more to do here.
+            self.var_tmd_chalcogen.set(options[0])
+            return
+        self._sync_material_from_elements()
+
+    def _sync_material_from_elements(self) -> None:
+        """Formula follows the two pickers."""
+        if self._syncing_material:
+            return
+        try:
+            material = material_for(self.var_tmd_metal.get(),
+                                    self.var_tmd_chalcogen.get())
+        except KeyError:
+            return
+        self._syncing_material = True
+        try:
+            self.var_tmd_material.set(material.formula)
+        finally:
+            self._syncing_material = False
+        self._update_tmd_hint()
+        self._schedule_estimate()
+
+    def _sync_elements_from_material(self) -> None:
+        """Pickers follow the formula, so a preset naming a compound works.
+
+        Presets set ``tmd_material`` because a preset names a compound,
+        not a pair of elements. Without this the two dropdowns would go
+        on showing the previous material after loading one.
+        """
+        if self._syncing_material:
+            return
+        material = TMD_MATERIALS.get(self.var_tmd_material.get())
+        if material is None:
+            return
+        self._syncing_material = True
+        try:
+            self.cmb_tmd_chalcogen.config(
+                values=list(chalcogens_for(material.metal)))
+            self.var_tmd_metal.set(material.metal)
+            self.var_tmd_chalcogen.set(material.chalcogen)
+        finally:
+            self._syncing_material = False
+        self._update_tmd_hint()
+
+    def _on_tmd_edit_change(self) -> None:
+        """Repoint the element list and the amount at the chosen edit.
+
+        One "Amount" field serves all four edits because it means a
+        different thing in each -- a fraction, a count, a face -- and four
+        fields of which three are always irrelevant would be worse. What
+        makes that workable is the hint below saying which it is right
+        now, so the number on screen is never ambiguous.
+        """
+        edit = self.var_tmd_edit.get()
+        if edit == "janus":
+            self.cmb_tmd_edit_element.config(values=list(available_chalcogens()))
+        elif edit == "alloy":
+            # Either sublattice: a chalcogen alloys the chalcogens, a
+            # metal the metals, and which one follows from the element.
+            self.cmb_tmd_edit_element.config(
+                values=list(available_metals()) + list(available_chalcogens()))
+        # Defect edits introduce no species, so the element box is left
+        # showing whatever it had; the hint says it is unused.
+        self._update_tmd_edit_hint()
+        self._schedule_estimate()
+
+    def _update_tmd_edit_hint(self) -> None:
+        """Say what the Amount field means for the current edit."""
+        edit = self.var_tmd_edit.get()
+        amount = float(self.var_tmd_edit_amount.get())
+        element = self.var_tmd_edit_element.get()
+        if edit == "none":
+            text = ("Pristine MX2. The edits here are the chemistry a "
+                    "dichalcogenide actually undergoes — there is no "
+                    "substituting a heteroatom for a carbon in one.")
+        elif edit == "janus":
+            face = "outward" if amount >= 0 else "inward"
+            text = (f"Amount is the face: ≥0 puts {element} on the {face} "
+                    "one (the outer wall of a tube, the top of a layer), "
+                    "negative on the other. Breaks the mirror symmetry, "
+                    "switching on an out-of-plane dipole neither parent has.")
+        elif edit == "alloy":
+            site = ("chalcogen" if element in available_chalcogens() else "metal")
+            text = (f"Amount is the fraction of the {site} sublattice "
+                    f"replaced by {element} ({amount:.0%}). The achieved "
+                    "fraction is reported, since nine sites cannot be split "
+                    "in half.")
+        elif edit == "vacancies":
+            text = (f"Amount is a count: {int(amount)} chalcogen atoms "
+                    "removed. The element box is unused. This is the "
+                    "commonest point defect in grown MoS2.")
+        else:
+            text = (f"Amount is a count: {int(amount)} metal atoms put on "
+                    "chalcogen sites, as in sulphur-poor growth. The "
+                    "element box is unused.")
+        self.lbl_tmd_chem.config(text=text)
+
+    def _update_haeckelite_hint(self) -> None:
+        """Say what the pattern will reach, and whether this cell can hold it.
+
+        A catalogue entry needs its block to divide the supercell and
+        refuses otherwise, so the hint has to say that *before* the build
+        runs -- a refusal after the fact is the worst way to learn a number
+        had to be a multiple of four. A generative pattern is a request and
+        the census is the honest account, so the hint says that too.
+        """
+        nx = int(self.var_hk_nx.get())
+        ny = int(self.var_hk_ny.get())
+        pattern = self.var_hk_pattern.get()
+        atoms = 4 * nx * ny
+        if pattern in HAECKELITE_CATALOGUE:
+            block_m, block_n = HAECKELITE_CATALOGUE[pattern]["block"]
+            note = HAECKELITE_CATALOGUE[pattern]["note"]
+            if nx % block_m or ny % block_n:
+                detail = (f"✗ the {pattern} lattice tiles a {block_m}×"
+                          f"{block_n} block, so x must be a multiple of "
+                          f"{block_m} and y of {block_n}. This cell would be "
+                          "refused: a partial block leaves part of the sheet "
+                          "hexagonal, which for this lattice is a different "
+                          "material rather than an approximation.")
+            else:
+                detail = (f"{note}. Every rotation is applied, so the census "
+                          "is exact. The cell it relaxes to is this "
+                          "program's own number, not a published lattice "
+                          "constant — re-relax before quoting it.")
+        elif pattern == "none":
+            detail = ("returns graphene exactly — the baseline every check "
+                      "here is calibrated against.")
+        else:
+            detail = ("a rotation moves bonds, never atoms, so the count is "
+                      "the same whatever the pattern. This is a generative "
+                      "rule, and most candidates of a dense one are turned "
+                      "down, so read the census rather than the name — "
+                      "'dense' reaches about 67% non-hexagonal. For a "
+                      "lattice with no hexagons at all, pick 'r57'.")
+        self.lbl_haeckelite.configure(
+            text=f"{atoms} atoms in a {nx}×{ny} supercell; {detail}")
+
+    def _update_network_hint(self) -> None:
+        """Say whether the cell actually leaves a tube between the nodes.
+
+        The failure mode here is not obvious from the numbers: shrink the
+        cell and the nodes grow into each other until there is no tube
+        left, and what comes out is a sponge rather than a network of
+        nanotubes. The builder refuses below the floor, so showing that
+        floor -- and the free tube length above it -- is the difference
+        between a build that fails after two minutes and one that never
+        started.
+        """
+        from ..builders.network import STRUT_FRACTION, minimum_cell
+
+        kind = self.var_net_kind.get()
+        cell = float(self.var_net_cell.get())
+        radius = float(self.var_net_radius.get())
+        blend = float(self.var_net_blend.get())
+        try:
+            floor = minimum_cell(kind, radius, blend)
+        except ValueError:
+            return
+        strut = STRUT_FRACTION[kind] * cell
+        free = strut - 2.0 * (radius + blend)
+        coordination = 6 if kind == "cubic" else 4
+        angle = "90°" if kind == "cubic" else "109.47°"
+
+        if cell < floor:
+            self.lbl_network.config(
+                text=(f"Too small: {strut:.0f} Å struts, and each node eats "
+                      f"about {radius + blend:.0f} Å of either end, so no tube "
+                      f"is left. Needs at least {floor:.0f} Å."),
+                foreground=BAD_RED)
+            return
+        nodes = 1 if kind == "cubic" else 8
+        self.lbl_network.config(
+            text=(f"{nodes} node(s) per cell, {coordination}-coordinate at "
+                  f"{angle}. Struts {strut:.0f} Å, of which {free:.0f} Å is "
+                  f"free tube between the nodes. A periodic cell — the tubes "
+                  f"leave one face and return through the opposite one, so "
+                  f"this is ready for a DFT code as it stands."),
+            foreground=MUTED)
+
+    def _graft_fields(self) -> dict:
+        """The grafting half of a Job, shared by all three families.
+
+        Written once because a group applies to every mode: leaving it
+        out of one branch would make the panel visibly present and
+        silently ignored for that family.
+        """
+        name = self.var_graft.get()
+        return dict(
+            graft=None if name == "none" else name,
+            graft_swap=self.var_graft_swap.get().strip(),
+            graft_coverage=float(self.var_graft_coverage.get()),
+            graft_where=self.var_graft_where.get(),
+            graft_face=self.var_graft_face.get(),
+        )
+
+    def _update_graft_hint(self) -> None:
+        """Say what the chosen group is and what it can be rebuilt as.
+
+        The swap field is free text because which elements are offered
+        depends on the group, so the panel has to say which ones -- a
+        user picking from a ten-item dropdown cannot be expected to know
+        that an -OH reaches S/Se/Te and an -NH2 reaches P/As/B.
+        """
+        name = self.var_graft.get()
+        if name == "none":
+            self.lbl_graft.config(
+                text="No surface groups. A group is added on top of the "
+                     "surface rather than substituted into it, so it works "
+                     "on carbon and on a dichalcogenide alike.",
+                foreground=MUTED)
+            return
+
+        group = get_group(name)
+        lines = [describe(group, "C")]
+
+        swaps = self.var_graft_swap.get().strip()
+        if swaps:
+            try:
+                group = substitute(group, parse_swaps(swaps))
+            except ValueError as exc:
+                self.lbl_graft.config(text=str(exc), foreground=WARN_AMBER)
+                return
+            lines.append(f"Rebuilt as {group.formula}; every bond length "
+                         "recomputed for the new elements.")
+        else:
+            offers = ", ".join(
+                f"{element}:{'/'.join(options)}"
+                for element, options in
+                ((e, viable_swaps(e)) for e in group.elements()) if options)
+            if offers:
+                lines.append(f"Swap accepts {offers}.")
+
+        if self.var_graft_where.get() in ("defect", "ring:5", "ring:7"):
+            lines.append("Ring selection needs a builder that records its "
+                         "rings: capped tube, fullerene, nano-onion, "
+                         "junction, schwarzite, network, multi-wall, bundle.")
+        if self.var_graft_face.get() == "both":
+            lines.append("'both' alternates by sublattice — the chair "
+                         "conformation. On an MX2 each chalcogen has only "
+                         "one exposed face, so it is ignored there.")
+
+        coverage = float(self.var_graft_coverage.get())
+        lines.append(f"Asking for {coverage:.0%} of the selected sites; what "
+                     "fits is measured and reported after the build.")
+        self.lbl_graft.config(text=" ".join(lines), foreground=MUTED)
+
+    def _update_dopant_hint(self) -> None:
+        """Say what the chosen dopant is and whether this much is real.
+
+        Fifteen elements in a dropdown is fifteen different chemistries,
+        and the difference between 10% N and 10% Fe is the difference
+        between a common material and one that does not exist. The
+        warning fires at build time either way; showing it here means the
+        user does not have to build to find out.
+        """
+        spec = self.var_codope.get().strip()
+        element = self.var_dopant.get()
+        if spec:
+            # Co-doping replaces the single-element fields rather than
+            # adding to them -- both substitute carbons, and `Job` refuses
+            # the pair, so saying so here beats a build-time error.
+            affinity = self.var_codope_affinity.get()
+            meaning = {
+                "seek": "placed as bonded pairs of unlike species — the B-N "
+                        "domain case",
+                "avoid": "spread so no two dopants are bonded",
+                "random": "placed independently of one another",
+            }[affinity]
+            try:
+                parsed = parse_codope_spec(spec)
+            except ValueError as error:
+                self.lbl_dopant.config(text=str(error), foreground=WARN_AMBER)
+                return
+            total = sum(fraction for _, fraction in parsed)
+            names = ", ".join(f"{e} {f:.1%}" for e, f in parsed)
+            text = (f"Co-doping {names} — each of the original carbon count, "
+                    f"{total:.1%} in all, {meaning}. The single Dopant and "
+                    "Site boxes above are ignored while this is set.")
+            colour = WARN_AMBER if total > 0.3 else MUTED
+            self.lbl_dopant.config(text=text, foreground=colour)
+            return
+        if element == "none":
+            self.lbl_dopant.config(
+                text="Pure carbon. Pick an element to substitute into the "
+                     "lattice, or type a co-doping spec such as "
+                     "'N:0.05,B:0.05'.", foreground=MUTED)
+            return
+        chem = get_chemistry(element)
+        fraction = float(self.var_dopant_conc.get())
+        site = self.var_dopant_site.get()
+
+        text = (f"{chem.site}, r = {chem.radius:.2f} Å "
+                f"({chem.size_mismatch:+.0%} vs C). {chem.note}")
+        colour = MUTED
+        if fraction > chem.max_fraction:
+            colour = WARN_AMBER
+            text = (f"{fraction:.1%} is past the ~{chem.max_fraction:.0%} that "
+                    f"is physically meaningful for {element}. " + text)
+        if site == "pentagon":
+            # The fraction means something different here, and silently
+            # is exactly how it would be misread.
+            text += (" Pentagon placement counts the fraction against the "
+                     "pentagon sites, not the whole structure, and needs a "
+                     "builder that records rings.")
+        self.lbl_dopant.config(text=text, foreground=colour)
+
+    def _update_tmd_hint(self) -> None:
+        """Name the material's real geometry, and cost a tube's curvature.
+
+        The tube hint is the one that earns its place: rolling a sandwich
+        of thickness h onto radius R strains the outer plane by h/2R, so a
+        tube that would be unremarkable in carbon is badly strained in
+        MoS2. Saying so before the build saves a wasted one.
+        """
+        from .. import tmd as tmd_module
+
+        try:
+            material = tmd_module.get_material(self.var_tmd_material.get())
+        except KeyError:
+            return
+        phase = self.var_tmd_phase.get()
+        coordination = ("trigonal prismatic" if phase == "2H" else "octahedral")
+        note = ""
+        if phase != material.natural_phase:
+            note = f" — note {material.formula} is naturally {material.natural_phase}"
+        self.lbl_tmd.config(
+            text=f"a = {material.a:.3f} Å, M–X = {material.bond_length:.3f} Å, "
+                 f"layer thickness {material.h:.2f} Å, van der Waals gap "
+                 f"{material.vdw_gap:.2f} Å. {phase} is {coordination}{note}."
+        )
+
+        if not hasattr(self, "lbl_tmd_tube"):
+            return
+        n, m = int(self.var_tmd_n.get()), int(self.var_tmd_m.get())
+        if n < 1 or m < 0 or m > n:
+            self.lbl_tmd_tube.config(
+                text="Need n ≥ 1 and 0 ≤ m ≤ n.", foreground=BAD_RED)
+            return
+        radius = tmd_module.tube_radius(material, n, m)
+        strain = material.h / (2.0 * radius)
+        family = ("zigzag" if m == 0 else "armchair" if n == m else "chiral")
+        colour = (OK_GREEN if strain <= 0.05
+                  else WARN_AMBER if strain <= 0.10 else BAD_RED)
+        self.lbl_tmd_tube.config(
+            text=f"({n},{m}) {family}: R = {radius:.1f} Å, diameter "
+                 f"{2 * (radius + material.h / 2):.1f} Å, outer-plane strain "
+                 f"{strain:.1%}"
+                 + ("" if strain <= 0.10 else
+                    " — real MX2 tubes are tens of nm across; raise n"),
+            foreground=colour,
+        )
+
+        if hasattr(self, "lbl_tmd_j"):
+            try:
+                radius = float(self.var_tmd_j_radius.get())
+            except (tk.TclError, ValueError):
+                radius = 0.0
+            floor = 2.0 * material.h
+            if radius < floor:
+                self.lbl_tmd_j.config(
+                    text=f"Needs at least {floor:.1f} Å: the sandwich is "
+                         f"{material.h:.1f} Å thick, so a narrower tube would "
+                         "collapse its inner wall through the axis.",
+                    foreground=BAD_RED)
+            else:
+                parity = self.var_tmd_j_parity.get()
+                note = ("A capped junction is sphere-like, so sum(6−n) = +12 — "
+                        "positive, unlike a schwarzite. With no pentagons "
+                        "allowed it is paid in squares.")
+                if parity == "split":
+                    note += (" Genus 0 leaves no homology, so every ring even "
+                             "means exactly zero M–M and X–X bonds.")
+                else:
+                    note += " Leaving rings odd costs ~14% homoelemental bonds."
+                self.lbl_tmd_j.config(
+                    text=note,
+                    foreground=OK_GREEN if parity == "split" else WARN_AMBER)
+
+        if hasattr(self, "lbl_tmd_sw"):
+            from ..tmd.curved import MIN_SCHWARZITE_CELL
+
+            kind = self.var_tmd_sw_kind.get()
+            try:
+                sw_cell = float(self.var_tmd_sw_cell.get())
+            except (tk.TclError, ValueError):
+                sw_cell = 0.0
+            floor = MIN_SCHWARZITE_CELL.get(kind, 30.0)
+            if sw_cell < floor:
+                self.lbl_tmd_sw.config(
+                    text=f"{kind} needs at least {floor:.0f} Å: the sandwich is "
+                         f"{material.h:.1f} Å thick, so below that the channels "
+                         "are narrower than the layer.",
+                    foreground=BAD_RED)
+            else:
+                # Measured on Schwarz P at 36 Å; the ordering holds
+                # everywhere, the exact numbers move with the surface.
+                trade = {
+                    "none": ("~11% of bonds M–M or X–X", "best geometry",
+                             OK_GREEN),
+                    "flip": ("~8% of bonds M–M or X–X",
+                             "adds no vertices", WARN_AMBER),
+                    "split": ("~2% of bonds M–M or X–X",
+                              ("every ring even, but ~25% worst-case bond "
+                               "strain"), WARN_AMBER),
+                }[self.var_tmd_sw_parity.get()]
+                self.lbl_tmd_sw.config(
+                    text=f"{trade[0]} — {trade[1]}. Even rings alone cannot "
+                         "remove them: genus > 0 leaves 2g more parity classes, "
+                         "so what is left is a real inversion-domain boundary.",
+                    foreground=MUTED)
+
+        if not hasattr(self, "lbl_tmd_coil"):
+            return
+        # The coil pays a second strain on top of the roll, and the two
+        # pull opposite ways: widening the tube cuts h/2R and raises
+        # R_outer*kappa. Showing the sum is the only way to see that.
+        from ..tmd.coil import helix_curvature
+
+        try:
+            coil_radius = float(self.var_tmd_coil_radius.get())
+            pitch = float(self.var_tmd_coil_pitch.get())
+        except (tk.TclError, ValueError):
+            return
+        if coil_radius <= 0 or pitch <= 0:
+            self.lbl_tmd_coil.config(text="Coil radius and pitch must be "
+                                          "positive.", foreground=BAD_RED)
+            return
+        outer = radius + material.h / 2.0
+        bend = outer * helix_curvature(coil_radius, pitch)
+        total = strain + bend
+        colour = (OK_GREEN if total <= 0.06
+                  else WARN_AMBER if total <= 0.15 else BAD_RED)
+        self.lbl_tmd_coil.config(
+            text=f"bend strain {bend:.1%} (R_outer × κ) on top of the "
+                 f"{strain:.1%} roll — {total:.1%} total on the outer "
+                 f"{material.chalcogen} plane."
+                 + ("" if total <= 0.15 else
+                    " Widening the tube cuts the roll and raises the bend, so "
+                    "both have to grow together."),
+            foreground=colour,
+        )
+
+    def _update_cage_hint(self) -> None:
+        """Say which named cage the current family/frequency gives."""
+        from ..builders.fullerene import FAMILY_BASE_ATOMS
+
+        family = self.var_cage_family.get()
+        freq = int(self.var_cage_freq.get())
+        base = FAMILY_BASE_ATOMS.get(family, 60)
+        # Radius scales with frequency: ~3.52 Å per step for the C60
+        # family, ~2.02 Å for C20 (measured on the relaxed cages).
+        step = 3.52 if family == "C60" else 2.02
+        text = f"C{base * freq**2}, radius ≈ {step * freq:.1f} Å."
+        if self.var_mode_kind.get() == "nano-onion":
+            shells = int(self.var_onion_shells.get())
+            names = [f"C{base * (freq + k) ** 2}" for k in range(shells)]
+            spacing = ("≈3.5 Å apart — graphitic" if family == "C60"
+                       else "≈2.0 Å apart — too close to be physical; use C60")
+            text = "@".join(names) + f", shells {spacing}."
+        self.lbl_cage.config(text=text)
+
+    def _update_surface_hint(self) -> None:
+        anneal = int(self.var_anneal.get())
+        rough = float(self.var_roughness.get())
+        if anneal == 0:
+            topo = "as-grown: keeps the stray 5-7 pairs the remesh leaves"
+        elif anneal < 40:
+            topo = "partly annealed"
+        else:
+            topo = "annealed: strays removed, only curvature-required rings"
+        geom = ("ideally smooth" if rough <= 0
+                else f"{rough:.2f} Å corrugation — CVD-like")
+        colour = MUTED
+        # On a minimal surface the 5-7 pairs are not disorder; they are how
+        # the net covers the saddle. Annealing them away measurably
+        # stretches the remaining bonds.
+        if self.var_mode_kind.get() == "schwarzite" and anneal > 0:
+            topo = (f"annealing hurts here — {anneal} sweeps stretches bonds; "
+                    "the 5-7 pairs are how the net covers the saddle")
+            colour = BAD_RED
+        self.lbl_surface.config(text=f"{topo}; {geom}.", foreground=colour)
+
+    def _update_coil_hint(self) -> None:
+        from ..builders import centerline as cl
+
+        radius = float(self.var_coil_radius.get())
+        pitch = float(self.var_coil_pitch.get())
+        turns = float(self.var_coil_turns.get())
+        taper = float(self.var_coil_taper.get())
+        arc = cl.helix_arc_length(radius, pitch, turns, taper=taper)
+
+        if self.var_mode_kind.get() == "coil (relaxed)":
+            # No strain budget applies: curvature is paid for in ring
+            # topology, not bond stretch. What fails instead is the coil
+            # closing on itself, so that is what the hint reports.
+            tube_radius = float(self.var_coil_tube_radius.get())
+            clearance = 2.0 * tube_radius + 3.4
+            ok = pitch >= clearance
+            self.lbl_coil.config(
+                text=f"{arc:.0f} Å of tube; turns "
+                     f"{pitch - 2 * tube_radius:.0f} Å apart"
+                     + ("" if ok else
+                        f" — needs ≥{clearance:.0f} Å pitch or the walls merge"),
+                foreground=OK_GREEN if ok else BAD_RED,
+            )
+            return
+
+        tube_radius = fm.radius_for_freq(int(self.var_freq.get()),
+                                         float(self.var_bond.get()))
+        # Taper-aware: a conical spring is judged at its tightest end.
+        strain = tube_radius * cl.helix_curvature(radius, pitch, taper=taper)
+        colour = (OK_GREEN if strain <= 0.10
+                  else WARN_AMBER if strain <= cl.ARTISTIC_STRAIN_LIMIT
+                  else BAD_RED)
+        self.lbl_coil.config(
+            text=f"{arc:.0f} Å of tube, wall strain {strain:.0%}"
+                 + ("" if strain <= cl.ARTISTIC_STRAIN_LIMIT
+                    else " — real nanocoils use much wider coils"),
+            foreground=colour,
+        )
+
+    def _schedule_estimate(self) -> None:
+        """Re-cost the build shortly, collapsing bursts of changes.
+
+        A slider drag writes its variable on every pixel of travel; each
+        write would otherwise rebuild a Job and re-run the estimate.
+        """
+        if self._estimate_job is not None:
+            try:
+                self.root.after_cancel(self._estimate_job)
+            except (tk.TclError, ValueError):
+                pass
+        self._estimate_job = self.root.after(120, self._update_estimate)
+
+    def _update_estimate(self) -> None:
+        self._estimate_job = None
+        try:
+            severity, text = estimate_cost(self.current_job())
+        except (tk.TclError, ValueError, KeyError) as exc:
+            # A half-typed entry can make a job momentarily invalid; that
+            # is not worth shouting about, only worth not crashing on.
+            self.lbl_estimate.config(text=f"estimate unavailable ({exc})",
+                                     foreground=MUTED)
+            return
+        colour = {"fast": OK_GREEN, "slow": WARN_AMBER,
+                  "very slow": BAD_RED}.get(severity, MUTED)
+        self.lbl_estimate.config(text=f"Estimate: {text}", foreground=colour)
+
+    # ------------------------------------------------------------------ job
+    def _current_defects(self) -> list[dict]:
+        specs = []
+        if self.var_n_sw.get():
+            specs.append({"type": "stone_wales", "count": int(self.var_n_sw.get())})
+        if self.var_n_dv.get():
+            specs.append({"type": "divacancy", "count": int(self.var_n_dv.get())})
+        return specs
+
+    def current_job(self) -> Job:
+        """The :class:`~nanocarbon_lab.jobs.Job` the controls describe.
+
+        One place turns widgets into builder arguments. Building, costing
+        and the copy-as-command-line button all go through here, so they
+        cannot drift apart -- and because a Job is plain data, it is what
+        gets handed to the worker process.
+        """
+        mode = self.var_mode_kind.get()
+        dopant = self.var_dopant.get()
+        spec = self.var_codope.get().strip()
+        common = dict(
+            # `Job` refuses a dopant and a co-doping spec together, since
+            # both substitute carbons. The spec wins here, which matches
+            # what the hint tells the user while they type it.
+            dopant=None if (spec or dopant == "none") else dopant,
+            dopant_conc=float(self.var_dopant_conc.get()),
+            dopant_site=self.var_dopant_site.get(),
+            codope=spec,
+            codope_affinity=self.var_codope_affinity.get(),
+            seed=int(self.var_seed.get()),
+            **self._graft_fields(),
+        )
+        edit = self.var_tmd_edit.get()
+        tmd_chemistry = dict(
+            tmd_edit=None if edit == "none" else edit,
+            tmd_edit_element=self.var_tmd_edit_element.get(),
+            tmd_edit_amount=float(self.var_tmd_edit_amount.get()),
+        )
+
+        if mode.startswith("TMD"):
+            # The dichalcogenide builders take no seed and no dopant: the
+            # placement is exact crystallography with nothing random in
+            # it, so `common` would only carry arguments they reject.
+            # ...but the MX2 chemistry that follows the build *is*
+            # random, so it brings the seed with it.
+            return Job(mode=mode, params=self._tmd_params(mode),
+                       seed=int(self.var_seed.get()), **tmd_chemistry,
+                       **self._graft_fields())
+
+        if mode in ("twisted bilayer", "vdW stack"):
+            # Commensurate stacking is exact too, for the same reason.
+            # Commensurate stacking is exact, so the seed is 0 -- but a
+            # graft is random placement and needs the real one.
+            return Job(mode=mode, params=self._hetero_params(mode),
+                       seed=int(self.var_seed.get()) if self.var_graft.get()
+                       != "none" else 0,
+                       **self._graft_fields())
+
+        if mode == "junction":
+            params = dict(
+                kind=self.var_j_kind.get(),
+                tube_radius=float(self.var_j_radius.get()),
+                arm_length=float(self.var_j_arm.get()),
+                blend=float(self.var_j_blend.get()),
+                anneal_sweeps=int(self.var_anneal.get()),
+                roughness=float(self.var_roughness.get()),
+            )
+        elif mode == "network":
+            params = dict(
+                kind=self.var_net_kind.get(),
+                cell=float(self.var_net_cell.get()),
+                tube_radius=float(self.var_net_radius.get()),
+                blend=float(self.var_net_blend.get()),
+                anneal_sweeps=int(self.var_anneal.get()),
+                roughness=float(self.var_roughness.get()),
+            )
+        elif mode == "haeckelite":
+            params = dict(
+                nx=int(self.var_hk_nx.get()),
+                ny=int(self.var_hk_ny.get()),
+                pattern=self.var_hk_pattern.get(),
+                period=int(self.var_hk_period.get()),
+                density=float(self.var_hk_density.get()),
+            )
+        elif mode == "schwarzite":
+            params = dict(
+                kind=self.var_s_kind.get(),
+                cell=float(self.var_s_cell.get()),
+                thickness=float(self.var_s_thickness.get()),
+                anneal_sweeps=int(self.var_anneal.get()),
+                roughness=float(self.var_roughness.get()),
+            )
+        elif mode == "coil (relaxed)":
+            params = dict(
+                coil_radius=float(self.var_coil_radius.get()),
+                pitch=float(self.var_coil_pitch.get()),
+                turns=float(self.var_coil_turns.get()),
+                tube_radius=float(self.var_coil_tube_radius.get()),
+                handedness=1 if self.var_coil_hand.get() == "right" else -1,
+                taper=float(self.var_coil_taper.get()),
+                bond=float(self.var_bond.get()),
+                pin_ends=bool(self.var_pin_ends.get()),
+                anneal_sweeps=int(self.var_anneal.get()),
+                roughness=float(self.var_roughness.get()),
+            )
+        elif mode == "fullerene":
+            params = dict(
+                freq=int(self.var_cage_freq.get()),
+                family=self.var_cage_family.get(),
+                bond=float(self.var_bond.get()),
+                roughness=float(self.var_roughness.get()),
+            )
+        elif mode == "nano-onion":
+            params = dict(
+                n_shells=int(self.var_onion_shells.get()),
+                inner_freq=int(self.var_cage_freq.get()),
+                family=self.var_cage_family.get(),
+                bond=float(self.var_bond.get()),
+                roughness=float(self.var_roughness.get()),
+            )
+        elif mode == "multi-wall":
+            params = dict(
+                n_shells=int(self.var_mw_shells.get()),
+                inner_freq=int(self.var_mw_inner.get()),
+                freq_step=int(self.var_mw_step.get()),
+                n_body_rings=int(self.var_rings.get()),
+                bond=float(self.var_bond.get()),
+                roughness=float(self.var_roughness.get()),
+            )
+        elif mode == "bundle":
+            params = dict(
+                n_rings_across=int(self.var_bundle_shells.get()),
+                freq=int(self.var_freq.get()),
+                n_body_rings=int(self.var_rings.get()),
+                gap=float(self.var_bundle_gap.get()),
+                bond=float(self.var_bond.get()),
+                roughness=float(self.var_roughness.get()),
+            )
+        else:
+            shape = self.var_shape.get()
+            params = dict(
+                n_body_rings=int(self.var_rings.get()),
+                freq=int(self.var_freq.get()),
+                bond=float(self.var_bond.get()),
+                bend_angle=float(self.var_bend.get()),
+                shape=shape,
+                helix_radius=(float(self.var_coil_radius.get())
+                              if shape == "helix" else None),
+                helix_pitch=float(self.var_coil_pitch.get()),
+                helix_turns=float(self.var_coil_turns.get()),
+                helix_handedness=1 if self.var_coil_hand.get() == "right" else -1,
+                helix_taper=float(self.var_coil_taper.get()),
+                roughness=float(self.var_roughness.get()),
+                waviness=float(self.var_waviness.get()),
+                max_strain=float(self.var_max_strain.get()),
+                shape_points=int(self.var_shape_points.get()),
+                defects=self._current_defects(),
+            )
+            # A bend and a swept shape are mutually exclusive in the
+            # builder; sending both would raise where the user expects a
+            # structure, so the shape wins and the bend is dropped.
+            if shape != "straight":
+                params["bend_angle"] = 0.0
+
+        return Job(mode=mode, params=params, **common)
+
+    def _hetero_params(self, mode: str) -> dict:
+        """Builder arguments for one stacking mode."""
+        bottom = self.var_het_bottom.get()
+        top = self.var_het_top.get()
+        third = self.var_het_third.get()
+        if mode == "twisted bilayer":
+            return dict(
+                layer=bottom,
+                top_layer=None if top == "same" else top,
+                target_angle=float(self.var_het_angle.get()),
+                max_index=int(self.var_het_max_index.get()),
+                gap=float(self.var_het_gap.get()),
+            )
+        layers = [bottom, bottom if top == "same" else top]
+        if third != "none":
+            layers.append(third)
+        return dict(
+            layers=layers,
+            gap=float(self.var_het_gap.get()),
+            nx=int(self.var_het_nx.get()),
+            ny=int(self.var_het_ny.get()),
+        )
+
+    def _update_het_hint(self) -> None:
+        """Show the achieved twist and the mismatch before building.
+
+        Both are things the user cannot choose freely and would otherwise
+        discover only from the finished structure: the angle is snapped
+        to the commensurate series, and stacking unlike layers strains
+        one of them.
+        """
+        from ..hetero.moire import MAX_MISMATCH, get_layer, nearest_commensurate
+
+        try:
+            bottom = get_layer(self.var_het_bottom.get())
+            chosen = self.var_het_top.get()
+            top = bottom if chosen == "same" else get_layer(chosen)
+        except KeyError:
+            return
+        mismatch = (top.a - bottom.a) / bottom.a
+        colour = BAD_RED if abs(mismatch) > MAX_MISMATCH else (
+            OK_GREEN if abs(mismatch) < 0.005 else WARN_AMBER)
+        note = (f"{bottom.name} a = {bottom.a:.3f} Å, {top.name} "
+                f"a = {top.a:.3f} Å → {mismatch:+.2%} mismatch")
+        if abs(mismatch) > MAX_MISMATCH:
+            note += f". Over the {MAX_MISMATCH:.0%} limit; this will be refused."
+        elif mismatch:
+            note += ", imposed on the top layer as strain."
+        self.lbl_het.config(text=note, foreground=colour)
+
+        if not hasattr(self, "lbl_twist"):
+            return
+        try:
+            wanted = float(self.var_het_angle.get())
+            max_index = int(self.var_het_max_index.get())
+        except (tk.TclError, ValueError):
+            return
+        m, n, angle, cells = nearest_commensurate(wanted, max_index)
+        atoms = cells * (bottom.n_sites + top.n_sites)
+        self.lbl_twist.config(
+            text=f"nearest commensurate: {angle:.4f}° at (m,n) = ({m},{n}), "
+                 f"{cells} cells per layer → {atoms} atoms. No periodic cell "
+                 "exists between these, so the angle is snapped.",
+            foreground=WARN_AMBER if atoms > 8000 else MUTED,
+        )
+
+    def _tmd_params(self, mode: str) -> dict:
+        """Builder arguments for one dichalcogenide mode."""
+        material = self.var_tmd_material.get()
+        phase = self.var_tmd_phase.get()
+        if mode == "TMD layers":
+            return dict(
+                material=material, phase=phase,
+                n_layers=int(self.var_tmd_layers.get()),
+                stacking=self.var_tmd_stacking.get(),
+                nx=int(self.var_tmd_nx.get()), ny=int(self.var_tmd_ny.get()),
+            )
+        if mode == "TMD bulk":
+            return dict(
+                material=material, phase=phase,
+                stacking=self.var_tmd_stacking.get(),
+                nx=int(self.var_tmd_nx.get()), ny=int(self.var_tmd_ny.get()),
+            )
+        if mode == "TMD ribbon":
+            return dict(
+                material=material, phase=phase,
+                width=int(self.var_tmd_width.get()),
+                length=int(self.var_tmd_length.get()),
+                edge=self.var_tmd_edge.get(),
+                termination=self.var_tmd_termination.get(),
+            )
+        if mode == "TMD junction":
+            return dict(
+                material=material, phase=phase,
+                kind=self.var_tmd_j_kind.get(),
+                tube_radius=float(self.var_tmd_j_radius.get()),
+                arm_length=float(self.var_tmd_j_arm.get()),
+                blend=float(self.var_tmd_j_blend.get()),
+                parity=self.var_tmd_j_parity.get(),
+            )
+        if mode == "TMD schwarzite":
+            return dict(
+                material=material, phase=phase,
+                kind=self.var_tmd_sw_kind.get(),
+                cell=float(self.var_tmd_sw_cell.get()),
+                parity=self.var_tmd_sw_parity.get(),
+            )
+        if mode == "TMD coil":
+            return dict(
+                material=material, phase=phase,
+                n=int(self.var_tmd_n.get()), m=int(self.var_tmd_m.get()),
+                coil_radius=float(self.var_tmd_coil_radius.get()),
+                pitch=float(self.var_tmd_coil_pitch.get()),
+                turns=float(self.var_tmd_coil_turns.get()),
+                handedness=1 if self.var_tmd_coil_hand.get() == "right" else -1,
+            )
+        return dict(
+            material=material, phase=phase,
+            n=int(self.var_tmd_n.get()), m=int(self.var_tmd_m.get()),
+            length=int(self.var_tmd_length.get()),
+        )
+
+    # ---------------------------------------------------------------- build
+    def on_build(self) -> None:
+        if self._busy:
+            return
+        try:
+            job = self.current_job()
+        except (tk.TclError, ValueError) as exc:
+            self._show_error("Invalid parameters", str(exc))
+            return
+
+        self._busy = True
+        self.btn_build.config(state="disabled")
+        self.btn_cancel.config(state="normal")
+        self.progress.start(12)
+        self._clear_error()
+        _severity, cost = estimate_cost(job)
+        self._set_status(f"Building {job.mode} ({cost})…")
+        try:
+            self.worker.submit(job)
+        except Exception as exc:  # noqa: BLE001 - reported to the user
+            self._finish_build()
+            self._show_error("Could not start the build process",
+                             f"{exc}\n\n{traceback.format_exc()}")
+
+    def on_cancel(self) -> None:
+        """Stop the running build by killing the worker process."""
+        if not self._busy:
+            return
+        degraded = self.worker.degraded
+        self.worker.cancel()
+        self._finish_build()
+        self._set_status(
+            "Build detached — the controls are usable again, but this "
+            "environment could not start a separate process, so the work "
+            "finishes in the background."
+            if degraded else "Build cancelled."
+        )
+
+    def _finish_build(self) -> None:
+        self._busy = False
+        self.progress.stop()
+        self.btn_build.config(state="normal")
+        self.btn_cancel.config(state="disabled")
+
+    def _poll_worker(self) -> None:
+        """Collect a finished build, then always re-arm the timer.
+
+        The re-arm is in a ``finally`` and the drawing is wrapped
+        separately, because this callback is the only thing keeping the
+        window responsive: an exception escaping it skips ``root.after``
+        and polling stops for good, leaving the app permanently
+        "building" with no way back. A single missing ``info`` key did
+        exactly that once.
+        """
+        try:
+            result = self.worker.poll()
+            if result is not None:
+                _job_id, kind, payload = result
+                self._finish_build()
+                if kind == "done":
+                    self.atoms = payload
+                    self.last_saved_stem = None
+                    self._remember(payload)
+                    try:
+                        self._redraw()
+                        self._update_info()
+                        self._set_status("Build complete.")
+                    except Exception:  # noqa: BLE001 - shown, never fatal
+                        self._set_status("Built, but the display failed.")
+                        self._show_error("Display failed",
+                                         traceback.format_exc())
+                else:
+                    text, tb = payload
+                    if text == WORKER_DIED:
+                        self._set_status("Build process died.")
+                        self._show_error(
+                            "Build process died",
+                            "The worker exited without returning a structure. "
+                            "If you did not cancel it, this usually means it "
+                            "ran out of memory — try fewer atoms.",
+                        )
+                    else:
+                        self._set_status("Build failed — see the message below.")
+                        self._show_error(text, tb)
+        except Exception:  # noqa: BLE001 - the poll must never die
+            self._set_status("Internal error while collecting the build.")
+            self._show_error("Internal error", traceback.format_exc())
+        finally:
+            self.root.after(100, self._poll_worker)
+
+    def on_roll_seed(self) -> None:
+        """Pick a fresh random seed and rebuild.
+
+        Defect placement, roughness and the random meander are all seeded,
+        so this is the way to see a different sample of the same
+        structure rather than a different structure.
+        """
+        import secrets
+
+        self.var_seed.set(secrets.randbelow(1_000_000))
+        self.on_build()
+
+    # -------------------------------------------------------------- history
+    def _remember(self, atoms) -> None:
+        """Keep the most recent builds so a good one is not lost."""
+        label = f"{len(self._history) + 1}. {self.var_mode_kind.get()} " \
+                f"({len(atoms)} atoms)"
+        self._history.append((label, atoms))
+        del self._history[:-12]
+        self.cmb_history["values"] = [name for name, _ in self._history]
+        self.var_history.set(label)
+
+    def on_restore_history(self) -> None:
+        wanted = self.var_history.get()
+        for label, atoms in self._history:
+            if label == wanted:
+                self.atoms = atoms
+                self.last_saved_stem = None
+                self._redraw()
+                self._update_info()
+                self._set_status(f"Restored {label}.")
+                return
+
+    # -------------------------------------------------------------- presets
+    def apply_preset(self, name: str) -> None:
+        """Set every parameter a preset names, then rebuild."""
+        preset = PRESETS.get(name)
+        if not preset:
+            return
+        self._apply_values(preset)
+        self._set_status(f"Applied preset “{name}”.")
+        self.on_build()
+
+    def _apply_values(self, values: dict) -> None:
+        for key, value in values.items():
+            var = self._params.get(key)
+            if var is None:
+                continue  # a setting from a newer/older version: ignore it
+            try:
+                var.set(value)
+            except tk.TclError:
+                pass
+        self._on_mode_change()
+
+    def on_save_settings(self) -> None:
+        path = filedialog.asksaveasfilename(
+            title="Save parameters", defaultextension=".json",
+            filetypes=[("JSON", "*.json"), ("All files", "*.*")],
+            initialfile="nanocarbon_params.json",
+        )
+        if not path:
+            return
+        data = {key: var.get() for key, var in self._params.items()}
+        Path(path).write_text(json.dumps(data, indent=2), encoding="utf-8")
+        self._set_status(f"Saved parameters to {Path(path).name}")
+
+    def on_load_settings(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Load parameters",
+            filetypes=[("JSON", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            self._show_error("Could not read that file", str(exc))
+            return
+        self._apply_values(data)
+        self._set_status(f"Loaded parameters from {Path(path).name}")
+
+    def on_copy_cli(self) -> None:
+        """Put the equivalent ``nanocarbon`` command on the clipboard.
+
+        The bridge from exploring by hand to a reproducible run: the same
+        structure, scriptable, and short enough to paste into a methods
+        section.
+        """
+        try:
+            command = to_cli(self.current_job())
+        except (tk.TclError, ValueError, KeyError) as exc:
+            self._show_error("Could not build the command", str(exc))
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(command)
+        self._set_status("Command copied to the clipboard.")
+        self._show_error("Equivalent command line", command, error=False)
+
+    # -------------------------------------------------------------- preview
+    def _build_preview(self, parent: ttk.Frame) -> None:
+        self.figure = Figure(figsize=(6, 5), dpi=100)
+        self.ax = self.figure.add_subplot(111, projection="3d")
+        self.canvas = FigureCanvasTkAgg(self.figure, master=parent)
+        self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        NavigationToolbar2Tk(self.canvas, parent).update()
+
+        bar = ttk.Frame(parent)
+        bar.pack(fill="x", pady=(6, 0))
+        self.var_show_bonds = tk.BooleanVar(value=True)
+        self.var_colour_rings = tk.BooleanVar(value=True)
+        ttk.Checkbutton(bar, text="Bonds", variable=self.var_show_bonds,
+                        command=self._redraw).pack(side="left")
+        ttk.Checkbutton(bar, text="Colour by ring", variable=self.var_colour_rings,
+                        command=self._redraw).pack(side="left", padx=(8, 0))
+
+        # Ring filters. Hiding the hexagons is the fastest way to see where
+        # the curvature actually went -- on a junction or a coil the 5s and
+        # 7s are a handful of atoms buried in thousands.
+        ttk.Label(bar, text="  show:").pack(side="left")
+        self.var_ring_filter = {}
+        for size in (5, 6, 7, 8):
+            var = tk.BooleanVar(value=True)
+            self.var_ring_filter[size] = var
+            ttk.Checkbutton(bar, text=str(size), variable=var,
+                            command=self._redraw).pack(side="left")
+        self.lbl_preview = ttk.Label(bar, text="", foreground=MUTED,
+                                     font=("TkDefaultFont", 8))
+        self.lbl_preview.pack(side="right")
+
+    def _ring_of_atom(self) -> list[int]:
+        """Most informative ring size each atom belongs to."""
+        n = len(self.atoms)
+        best = [6] * n
+        priority = {5: 3, 7: 2, 8: 1, 6: 0}
+        for ring in self.atoms.info.get("rings", []):
+            size = len(ring)
+            for a in ring:
+                if priority.get(size, 0) > priority.get(best[a], 0):
+                    best[a] = size
+        return best
+
+    def _atom_colours(self, ring_of: list[int]) -> list[str]:
+        if not self.var_colour_rings.get():
+            return [RING_COLOURS[6]] * len(ring_of)
+        return [RING_COLOURS.get(s, RING_COLOURS[6]) for s in ring_of]
+
+    def _redraw(self) -> None:
+        if self.atoms is None:
+            return
+        pos = self.atoms.get_positions()
+        ring_of = self._ring_of_atom()
+        keep = np.array([bool(self.var_ring_filter[s].get())
+                         if s in self.var_ring_filter else True
+                         for s in ring_of])
+        self.ax.clear()
+
+        note = ""
+        if self.var_show_bonds.get():
+            from mpl_toolkits.mplot3d.art3d import Line3DCollection
+
+            bonds = [(a, b) for a, b in self.atoms.info.get("bonds", [])
+                     if keep[a] and keep[b]]
+            if len(bonds) > PREVIEW_BOND_LIMIT:
+                stride = len(bonds) // PREVIEW_BOND_LIMIT + 1
+                bonds = bonds[::stride]
+                note = f"showing 1 bond in {stride}"
+            segs = [(pos[a], pos[b]) for a, b in bonds]
+            if segs:
+                self.ax.add_collection3d(
+                    Line3DCollection(segs, colors="#9aa3ad", linewidths=0.7)
+                )
+
+        shown = np.flatnonzero(keep)
+        if shown.size:
+            colours = self._atom_colours(ring_of)
+            self.ax.scatter(
+                pos[shown, 0], pos[shown, 1], pos[shown, 2],
+                c=[colours[i] for i in shown], s=16, depthshade=True,
+            )
+        hidden = len(pos) - shown.size
+        self.lbl_preview.config(
+            text=", ".join(filter(None, [
+                f"{shown.size} of {len(pos)} atoms" if hidden else f"{len(pos)} atoms",
+                note,
+            ]))
+        )
+
+        # Equal aspect: an unscaled 3D axis stretches a long tube into a
+        # blob and makes a coil look elliptical.
+        span = (pos.max(axis=0) - pos.min(axis=0)).max() / 2.0 or 1.0
+        mid = (pos.max(axis=0) + pos.min(axis=0)) / 2.0
+        self.ax.set_xlim(mid[0] - span, mid[0] + span)
+        self.ax.set_ylim(mid[1] - span, mid[1] + span)
+        self.ax.set_zlim(mid[2] - span, mid[2] + span)
+        self.ax.set_axis_off()
+        self.figure.tight_layout()
+        self.canvas.draw_idle()
+
+    # ------------------------------------------------------------- readouts
+    def on_analyse_file(self):
+        """Read a structure someone else made, and say what it is.
+
+        The report goes where a build's readout goes, because it answers
+        the same question -- and the structure is loaded as the current
+        one, so every other button (export, unit cell, render, grafting)
+        applies to it as it would to something built here. A file from
+        another code is a first-class structure, not a read-only guest.
+        """
+        from ..analyse import analyse, format_report, read_structure
+
+        path = filedialog.askopenfilename(
+            title="Open a structure file",
+            filetypes=[("Structures", "*.xyz *.extxyz *.cif *.pdb *.vasp "
+                                      "*.traj *.cube *.gen *.json"),
+                       ("All files", "*.*")])
+        if not path:
+            return None
+
+        try:
+            atoms = read_structure(path)
+            result = analyse(atoms)
+        except ValueError as exc:
+            self._show_error("Could not read that file", str(exc))
+            self.lbl_analyse.config(text=str(exc), foreground=BAD_RED)
+            return None
+
+        self.atoms = atoms
+        self.last_saved_stem = None
+        self._history.append((f"{len(self._history) + 1}. {Path(path).name} "
+                              f"({len(atoms)} atoms)", atoms))
+        del self._history[:-12]
+        self.cmb_history["values"] = [name for name, _ in self._history]
+        self.var_history.set(self.cmb_history["values"][-1])
+        self._redraw()
+
+        self.txt_info.configure(state="normal")
+        self.txt_info.delete("1.0", "end")
+        self.txt_info.insert("1.0", format_report(result, Path(path).name))
+        self.txt_info.configure(state="disabled")
+
+        shape = result["inferred"]["shape"]
+        verdict = result["verdict"]
+        colour = OK_GREEN if result["validation"]["ok"] else BAD_RED
+        self.lbl_analyse.config(
+            text=f"{shape['dimensionality']}D {shape['shape']}, "
+                 f"{len(atoms)} atoms — {str(verdict['verdict']).upper()}. "
+                 + ("Rings read from the file."
+                    if result["inferred"]["rings_are_recorded"]
+                    else f"Rings inferred by "
+                         f"{result['inferred']['rings']['method']}."),
+            foreground=colour)
+        self._set_status(f"Analysed {Path(path).name}.")
+        return result
+
+    def _build_actions(self, parent: ttk.Frame) -> None:
+        info = ttk.LabelFrame(parent, text="Structure", padding=8)
+        info.pack(fill="x")
+        self.txt_info = tk.Text(info, height=15, width=34, wrap="word",
+                                font=("TkFixedFont", 9), relief="flat",
+                                background=self.root.cget("background"))
+        self.txt_info.pack(fill="x")
+        self.txt_info.configure(state="disabled")
+
+        hist = ttk.LabelFrame(parent, text="Session history", padding=8)
+        hist.pack(fill="x", pady=(8, 0))
+        self.var_history = tk.StringVar()
+        self.cmb_history = ttk.Combobox(hist, textvariable=self.var_history,
+                                        values=[], state="readonly")
+        self.cmb_history.pack(fill="x")
+        self.cmb_history.bind("<<ComboboxSelected>>",
+                              lambda _e: self.on_restore_history())
+        ttk.Label(hist, text="Every build this session; pick one to bring it "
+                             "back into the preview.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=260,
+                  justify="left").pack(anchor="w", pady=(4, 0))
+
+        exp = ttk.LabelFrame(parent, text="Export", padding=8)
+        exp.pack(fill="x", pady=(8, 0))
+        ttk.Button(exp, text="Save .xyz + .json bundle…",
+                   command=self.on_export).pack(fill="x", ipady=3)
+        ttk.Button(exp, text="Save unit cell (.cif) for DFT…",
+                   command=self.on_export_cell).pack(fill="x", pady=(4, 0),
+                                                     ipady=3)
+        ttk.Button(exp, text="Copy equivalent CLI command",
+                   command=self.on_copy_cli).pack(fill="x", pady=(4, 0))
+        row = ttk.Frame(exp)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Button(row, text="Save params…",
+                   command=self.on_save_settings).pack(side="left", expand=True,
+                                                       fill="x")
+        ttk.Button(row, text="Load params…",
+                   command=self.on_load_settings).pack(side="left", expand=True,
+                                                       fill="x", padx=(4, 0))
+        self.lbl_cell = ttk.Label(exp, text="", foreground=MUTED,
+                                  font=("TkDefaultFont", 8), wraplength=260,
+                                  justify="left")
+        self.lbl_cell.pack(anchor="w", pady=(4, 0))
+        ttk.Label(exp, text="XYZ for any viewer; JSON carries bonds and ring "
+                            "types for the Blender pipeline, plus a CIF for "
+                            "periodic cells.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=260,
+                  justify="left").pack(anchor="w", pady=(4, 0))
+
+        anl = ttk.LabelFrame(parent, text="Analyse a file", padding=8)
+        anl.pack(fill="x", pady=(8, 0))
+        ttk.Button(anl, text="Open structure file…",
+                   command=self.on_analyse_file).pack(fill="x", ipady=3)
+        ttk.Label(anl, text="Any file ASE reads — xyz, cif, POSCAR, pdb, a "
+                            "relaxation output. Describes what it is and "
+                            "loads it into the preview, so it can then be "
+                            "exported, converted to a unit cell or "
+                            "functionalised like anything else.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=260,
+                  justify="left").pack(anchor="w", pady=(4, 0))
+        self.lbl_analyse = ttk.Label(anl, text="", foreground=MUTED,
+                                     font=("TkDefaultFont", 8), wraplength=260,
+                                     justify="left")
+        self.lbl_analyse.pack(anchor="w", pady=(4, 0))
+
+        ren = ttk.LabelFrame(parent, text="Blender render", padding=8)
+        ren.pack(fill="x", pady=(8, 0))
+        ttk.Label(ren, text="Style").pack(anchor="w")
+        self.var_style = tk.StringVar(value=BLENDER_STYLES[0])
+        ttk.Combobox(ren, textvariable=self.var_style, values=BLENDER_STYLES,
+                     state="readonly").pack(fill="x", pady=(0, 6))
+        ttk.Label(ren, text="Representation").pack(anchor="w")
+        self.var_mode = tk.StringVar(value="ballstick")
+        ttk.Combobox(ren, textvariable=self.var_mode,
+                     values=["ballstick", "surface", "both"],
+                     state="readonly").pack(fill="x", pady=(0, 6))
+        ttk.Button(ren, text="Render with Blender…",
+                   command=self.on_render).pack(fill="x", ipady=3)
+        ttk.Button(ren, text="Locate Blender…",
+                   command=self.on_locate_blender).pack(fill="x", pady=(4, 0))
+        self.lbl_blender = ttk.Label(ren, text="", foreground=MUTED,
+                                     font=("TkDefaultFont", 8), wraplength=260,
+                                     justify="left")
+        self.lbl_blender.pack(anchor="w", pady=(4, 0))
+        self._check_blender()
+
+        self.status = ttk.Label(parent, text="Ready", foreground="#555",
+                                wraplength=280, justify="left")
+        self.status.pack(anchor="w", pady=(10, 0))
+
+        # Errors land here rather than in a modal dialog: a modal blocks
+        # the event loop, and it throws away whatever the user was about
+        # to change to fix the problem.
+        self.frame_error = ttk.LabelFrame(parent, text="Message", padding=6)
+        self.txt_error = tk.Text(self.frame_error, height=7, width=34,
+                                 wrap="word", font=("TkFixedFont", 8),
+                                 relief="flat")
+        self.txt_error.pack(fill="both", expand=True)
+        ttk.Button(self.frame_error, text="Dismiss",
+                   command=self._clear_error).pack(fill="x", pady=(4, 0))
+
+    def _show_error(self, title: str, detail: str, error: bool = True) -> None:
+        """Put a message in the panel. Never opens a dialog.
+
+        The text is left editable so a traceback can be selected and
+        copied -- the whole point of showing one is that it can be pasted
+        into a bug report.
+        """
+        self.frame_error.configure(text=title[:60])
+        self.txt_error.delete("1.0", "end")
+        self.txt_error.insert("1.0", detail)
+        self.txt_error.configure(
+            foreground=BAD_RED if error else "#333333")
+        self.frame_error.pack(fill="both", expand=True, pady=(8, 0))
+
+    def _clear_error(self) -> None:
+        self.frame_error.pack_forget()
+
+    def _update_info(self) -> None:
+        a = self.atoms
+        if str(a.info.get("structure_type", "")).startswith("tmd"):
+            self._update_tmd_info(a)
+            return
+        if a.info.get("structure_type") in ("twisted_bilayer", "vdw_stack"):
+            self._update_stack_info(a)
+            return
+        g = a.info["geometry"]
+        counts = a.info["ring_counts"]
+        rings_txt = "\n".join(
+            f"  {RING_LABELS[s].split(' (')[0]:<10s} {counts.get(s, 0):>5d}"
+            for s in (5, 6, 7, 8) if counts.get(s)
+        )
+        deficit = sum((6 - s) * c for s, c in counts.items())
+        # Euler's budget is 12 per closed sphere-like shell. A schwarzite
+        # with handles is legitimately negative (genus g gives 12(1-g)),
+        # and an assembly of n disjoint shells owes 12 per shell.
+        components = int(a.info.get("n_shells", a.info.get("n_tubes", 1)))
+        expected = components * (12 - 12 * int(a.info.get("genus", 0)))
+        clash = g["n_close_contacts"]
+
+        lines = [f"atoms        {len(a):>6d}"]
+        if "formula" in a.info:
+            lines.append(f"formula      {a.info['formula']:>9s}")
+        # Each field is reported on its own presence. Keying a whole block
+        # off one field assumed a radius meant a tube, and a fullerene has
+        # a radius but no length, shape or path strain.
+        if "radius" in a.info:
+            lines.append(f"radius       {a.info['radius']:>6.2f} Å")
+        if "length" in a.info:
+            lines.append(f"length       {a.info['length']:>6.1f} Å")
+        if "shape" in a.info:
+            lines.append(f"shape        {a.info['shape']:>6s}")
+        if "path_strain" in a.info:
+            lines.append(f"path strain  {a.info['path_strain']:>5.1%}")
+        if "junction_kind" in a.info:
+            lines.append(f"junction     {a.info['junction_kind']:>6s}")
+        if "schwarzite_kind" in a.info:
+            lines.append(f"surface      {a.info['schwarzite_kind']:>9s}")
+        if "genus" in a.info:
+            lines.append(f"genus        {a.info['genus']:>6d}")
+        if all(a.get_pbc()):
+            lines.append(f"periodic     {a.cell[0][0]:>6.1f} Å cell")
+        if "n_shells" in a.info:
+            lines.append(f"shells       {a.info['n_shells']:>6d}")
+        # A multi-wall tube calls it wall spacing, an onion shell spacing --
+        # a cage has no walls. Report whichever the builder recorded.
+        for key, label in (("wall_spacing", "wall spacing"),
+                           ("shell_spacing", "shell spacing")):
+            if key in a.info:
+                lines.append(f"{label:<12s} {a.info[key]:>6.2f} Å")
+        if "n_tubes" in a.info:
+            lines.append(f"tubes        {a.info['n_tubes']:>6d}")
+        if "achieved_coil_radius" in a.info:
+            lines.append(f"coil radius  {a.info['achieved_coil_radius']:>6.1f} Å")
+            pitch = a.info.get("achieved_pitch", float("nan"))
+            lines.append(
+                "coil pitch      n/a (needs >1 turn)" if np.isnan(pitch)
+                else f"coil pitch   {pitch:>6.1f} Å"
+            )
+        sep = a.info.get("geometry", {}).get("min_wall_separation")
+        if sep is not None and not np.isnan(sep):
+            lines.append(f"wall gap     {sep:>6.2f} Å")
+        symbols = a.get_chemical_symbols()
+        if set(symbols) != {"C"}:
+            from collections import Counter
+
+            by_element = Counter(symbols)
+            lines.append("composition  " + " ".join(
+                f"{el}{by_element[el]}" for el in sorted(by_element)))
+
+        lines += [
+            "",
+            "rings",
+            rings_txt,
+            (f"  Euler sum  {deficit:>5d}  "
+             f"{'OK' if deficit == expected else 'BROKEN'}"),
+            "",
+            "geometry",
+            f"  bond   {g['bond_min']:.3f}–{g['bond_max']:.3f} Å",
+            f"  angle  {g['angle_min']:.1f}–{g['angle_max']:.1f}°",
+            f"  contacts <2Å  {clash}  {'OK' if clash == 0 else 'CHECK'}",
+        ]
+        # Zero clashes is not the same as a physical structure: an
+        # over-tight coil keeps its atoms apart while stretching its bonds
+        # past any real C-C. Say so in words, next to the numbers.
+        verdict, why = sp2_quality(g)
+        lines += ["", f"sp2 verdict  {verdict.upper()}", f"  {why}"]
+
+        self.txt_info.configure(state="normal")
+        self.txt_info.delete("1.0", "end")
+        self.txt_info.insert("1.0", "\n".join(lines))
+        self.txt_info.configure(state="disabled")
+
+    def _update_stack_info(self, a) -> None:
+        """Readout for a stack. No rings and no Euler budget -- what
+        matters is which layers, how far apart, at what twist, and how
+        much strain the common cell cost."""
+        from ..validation.checks import run_basic_checks
+
+        info = a.info
+        report = run_basic_checks(a)
+        lines = [
+            f"atoms        {len(a):>6d}",
+            f"formula      {a.get_chemical_formula():>9s}",
+        ]
+        if info["structure_type"] == "twisted_bilayer":
+            m, n = info["commensurate_index"]
+            lines += [
+                f"stack        {info['bottom_layer']} / {info['top_layer']}",
+                f"twist        {info['twist_angle']:>7.4f}°  (asked "
+                f"{info['requested_angle']:.2f}°)",
+                f"index        (m,n) = ({m},{n})",
+                f"moire        {info['moire_period']:>6.1f} Å period",
+                f"cells/layer  {info['cells_per_layer']:>6d}",
+            ]
+        else:
+            lines += [
+                "stack        " + " / ".join(info["layers"]),
+                f"supercell    {info['supercell'][0]} x {info['supercell'][1]}",
+            ]
+        lines.append(f"gap          {info['interlayer_gap']:>6.2f} Å")
+        strain = info.get("imposed_strain", 0.0)
+        worst = (max(abs(v) for v in strain) if isinstance(strain, list)
+                 else abs(strain))
+        lines.append(f"strain       {worst:>6.2%} imposed to share one cell")
+        lengths = a.cell.lengths()
+        lines.append(f"cell         {lengths[0]:.2f} x {lengths[1]:.2f} Å")
+        lines += ["", f"validation   {'OK' if report.ok else 'FAILED'}"]
+        for message in report.errors[:3]:
+            lines.append(f"  {message}")
+
+        self.txt_info.configure(state="normal")
+        self.txt_info.delete("1.0", "end")
+        self.txt_info.insert("1.0", "\n".join(lines))
+        self.txt_info.configure(state="disabled")
+
+    def _update_tmd_info(self, a) -> None:
+        """Readout for a dichalcogenide.
+
+        Shares no rows with the carbon one beyond the atom count: there
+        are no rings to count and no Euler budget to check, and what
+        matters instead is coordination, stoichiometry and -- for a tube
+        -- how hard the roll had to strain the sandwich.
+        """
+        report = tmd_geometry_report(a)
+        info = a.info
+        lines = [
+            f"atoms        {len(a):>6d}",
+            f"formula      {a.get_chemical_formula():>9s}",
+            f"material     {info['material']:>9s}",
+            f"phase        {info['phase']:>9s}",
+            f"coordination {info['coordination']:>18s}",
+        ]
+        if info.get("stacking", "n/a") != "n/a":
+            lines.append(f"stacking     {info['stacking']:>9s} "
+                         f"({info['n_layers']} layers)")
+        if all(a.get_pbc()):
+            lengths = a.cell.lengths()
+            lines.append(f"periodic     3D, a={lengths[0]:.3f} c={lengths[2]:.3f} Å")
+        if "edge" in info:
+            lines.append(f"edge         {info['edge']:>9s} / {info['termination']}")
+            lines.append(f"width        {info['width_angstrom']:>6.1f} Å")
+        # Per field, not per block: a coil has chiral indices and a roll
+        # strain but no single radius or diameter, and keying the whole
+        # group off one field is what produced the KeyError last time.
+        if "chiral_indices" in info:
+            n, m = info["chiral_indices"]
+            lines.append(f"tube         ({n},{m}) {info['chirality']}")
+        if "radius" in info:
+            lines.append(f"radius       {info['radius']:>6.2f} Å")
+        if "diameter" in info:
+            lines.append(f"diameter     {info['diameter']:>6.2f} Å")
+        if "tube_radius" in info:
+            lines.append(f"tube radius  {info['tube_radius']:>6.2f} Å")
+        if "coil_radius" in info:
+            lines.append(f"coil radius  {info['coil_radius']:>6.1f} Å")
+            lines.append(f"pitch        {info['pitch']:>6.1f} Å")
+            lines.append(f"turns        {info['turns']:>6.2f} "
+                         f"({info['periods']} periods)")
+        if "junction_kind" in info:
+            lines.append(f"junction     {info['junction_kind']:>9s}")
+            lines.append(f"tube radius  {info['tube_radius']:>6.1f} Å")
+            lines.append(f"arm length   {info['arm_length']:>6.1f} Å")
+        if "junction_kind" in info or "schwarzite_kind" in info:
+            if "schwarzite_kind" in info:
+                lines.append(f"surface      {info['schwarzite_kind']:>9s}")
+            lines.append(f"genus        {info['genus']:>6d}")
+            counts = info["ring_counts"]
+            lines.append("rings        " + ", ".join(
+                f"{k}:{v}" for k, v in sorted(counts.items())))
+            expected = 6 * info["euler"]
+            flag = "ok" if info["ring_deficit"] == expected else "MISMATCH"
+            lines.append(f"sum(6-n)     {info['ring_deficit']:>6d}  "
+                         f"(6·χ = {expected}) {flag}")
+            lines.append(f"parity       {info['parity']:>9s} "
+                         f"({info['odd_rings']} odd rings)")
+            lines.append(f"antiphase    {info['antiphase_fraction']:>5.1%} "
+                         f"({info['antiphase_bonds']} bonds M–M or X–X)")
+            lines.append(f"M–X spread   {info['bond_deviation_p95']:>5.1%} p95, "
+                         f"{info['bond_deviation_max']:.1%} worst")
+        if "roll_strain" in info:
+            lines.append(f"roll strain  {info['roll_strain']:>5.1%}")
+        if "bend_strain" in info:
+            lines.append(f"bend strain  {info['bend_strain']:>5.1%}")
+            lines.append(f"total strain {info['total_strain']:>5.1%}")
+        lines += [
+            "",
+            "geometry",
+            (f"  M–X    {report['bond_min']:.3f}–{report['bond_max']:.3f} Å"
+             f"  (ideal {report['bond_ideal']:.3f})"),
+            (f"  metal coord   {report['metal_coordination_min']}–"
+             f"{report['metal_coordination_max']}"),
+            (f"  chalcogen     {report['chalcogen_coordination_min']}–"
+             f"{report['chalcogen_coordination_max']}"),
+            f"  X/M ratio     {report['stoichiometry']:.3f}",
+        ]
+        if info.get("structure_type") in ("tmd_schwarzite", "tmd_junction"):
+            # Distance-based coordination is wrong on a saddle: the 2.4 Å
+            # bond's cutoff reaches 3.0 Å and sweeps up non-bonded
+            # neighbours. The builder kept the real bond graph, so use it.
+            lines += [
+                "",
+                (f"  metal coord   {info['graph_metal_coordination'][0]}–"
+                 f"{info['graph_metal_coordination'][1]} (bond graph)"),
+                (f"  chalcogen     {info['graph_chalcogen_coordination'][0]}–"
+                 f"{info['graph_chalcogen_coordination'][1]} (bond graph)"),
+            ]
+            from ..tmd.curved import schwarzite_quality
+
+            verdict, why = schwarzite_quality(a)
+            lines += ["", f"verdict      {verdict.upper()}", f"  {why}"]
+            self.txt_info.configure(state="normal")
+            self.txt_info.delete("1.0", "end")
+            self.txt_info.insert("1.0", "\n".join(lines))
+            self.txt_info.configure(state="disabled")
+            return
+
+        # A deliberately terminated ribbon is off-stoichiometry on purpose.
+        stoichiometric = info.get("termination", "mixed") == "mixed"
+        verdict, why = tmd_quality(report, expect_stoichiometric=stoichiometric,
+                                   structure_type=info.get("structure_type"))
+        lines += ["", f"verdict      {verdict.upper()}", f"  {why}"]
+        if "phase_note" in info:
+            lines += ["", f"  {info['phase_note']}"]
+
+        self.txt_info.configure(state="normal")
+        self.txt_info.delete("1.0", "end")
+        self.txt_info.insert("1.0", "\n".join(lines))
+        self.txt_info.configure(state="disabled")
+
+    def _set_status(self, text: str) -> None:
+        self.status.config(text=text)
+
+    # ---------------------------------------------------------------- export
+    def on_export(self) -> Path | None:
+        if self.atoms is None:
+            self._show_error("Nothing to export", "Build a structure first.")
+            return None
+        path = filedialog.asksaveasfilename(
+            title="Save render bundle",
+            defaultextension=".xyz",
+            filetypes=[("XYZ structure", "*.xyz"), ("All files", "*.*")],
+            initialfile=f"{self.var_mode_kind.get().replace(' ', '_')}.xyz",
+        )
+        if not path:
+            return None
+        stem = Path(path).with_suffix("")
+        xyz_path, json_path = write_render_bundle(self.atoms, stem)
+        self.last_saved_stem = stem
+        extra = " (+ .cif)" if all(self.atoms.get_pbc()) else ""
+        self._set_status(f"Saved {xyz_path.name} and {json_path.name}{extra}")
+        return stem
+
+    def on_export_cell(self) -> Path | None:
+        """Save the structure as a periodic unit cell for a DFT code.
+
+        A separate button from the render bundle because it answers a
+        different question. The bundle is for looking at; this is for
+        computing with, and the conversion it applies -- vacuum on every
+        direction the structure does not repeat in, ``pbc`` true on all
+        three -- is what a plane-wave code and a periodic viewer both
+        require and what neither can infer.
+        """
+        if self.atoms is None:
+            self._show_error("Nothing to export", "Build a structure first.")
+            return None
+        path = filedialog.asksaveasfilename(
+            title="Save unit cell",
+            defaultextension=".cif",
+            filetypes=[("Crystallographic Information File", "*.cif"),
+                       ("All files", "*.*")],
+            initialfile=f"{self.var_mode_kind.get().replace(' ', '_')}.cif",
+        )
+        if not path:
+            return None
+        converted = to_unit_cell(self.atoms)
+        written = write_cif(converted, Path(path))
+        report = cell_report(converted)
+        self._describe_cell(report)
+        self._set_status(f"Saved {written.name}")
+        return written
+
+    def _describe_cell(self, report: dict) -> None:
+        """Show the cell and whether its vacuum is enough to trust."""
+        a, b, c = report["lengths"]
+        separation = report["image_separation"]
+        if separation is None:
+            note = "bulk crystal — no vacuum direction to converge"
+            colour = OK_GREEN
+        elif report["converged"]:
+            shown = ">= 20" if separation >= 20.0 else f"{separation:.1f}"
+            note = f"images {shown} Å apart across vacuum"
+            colour = OK_GREEN
+        else:
+            note = (f"images only {separation:.1f} Å apart — below "
+                    f"{MIN_IMAGE_SEPARATION:.0f} Å they interact")
+            colour = WARN_AMBER
+        self.lbl_cell.config(
+            text=(f"{report['periodicity']} cell {a:.2f} × {b:.2f} × {c:.2f} Å; "
+                  f"{note}."),
+            foreground=colour)
+
+    # --------------------------------------------------------------- blender
+    def _check_blender(self) -> None:
+        if self.blender_exe and Path(self.blender_exe).exists():
+            return  # a path the user picked by hand wins over auto-detection
+        self.blender_exe = find_blender()
+        if self.blender_exe:
+            self.lbl_blender.config(text=f"Found: {self.blender_exe}")
+        elif has_bpy():
+            self.lbl_blender.config(
+                text="Using the installed bpy module — no separate Blender "
+                     "application needed."
+            )
+        else:
+            self.lbl_blender.config(
+                text="Blender not found automatically — use “Locate Blender…”, "
+                     "or `pip install bpy` to render without installing "
+                     "Blender at all."
+            )
+
+    def on_locate_blender(self) -> None:
+        """Let the user point at blender.exe / the Blender binary directly.
+
+        Needed mainly on Windows, where the installer does not add Blender
+        to ``PATH``, and for portable/Steam installations anywhere.
+        """
+        if os.name == "nt":
+            types = [("Blender executable", "blender.exe"), ("All files", "*.*")]
+        else:
+            types = [("All files", "*.*")]
+        path = filedialog.askopenfilename(title="Locate the Blender executable",
+                                          filetypes=types)
+        if not path:
+            return
+        self.blender_exe = path
+        self.lbl_blender.config(text=f"Using: {path}")
+        self._set_status("Blender location set for this session.")
+
+    def on_render(self) -> None:
+        if self.atoms is None:
+            self._show_error("Nothing to render", "Build a structure first.")
+            return
+        self._check_blender()
+        if not self.blender_exe and not has_bpy():
+            self._show_error(
+                "Blender not found",
+                "Could not find Blender automatically.\n\n"
+                "Easiest fix: `pip install bpy`, which installs Blender as "
+                "a Python module and needs no separate application.\n\n"
+                "Click “Locate Blender…” and point at the executable (on "
+                "Windows, usually\n"
+                r"C:\Program Files\Blender Foundation\Blender 4.x\blender.exe)"
+                ",\n\nor export the bundle and run it yourself:\n"
+                "  blender -b -P nanocarbon_lab/blender/render_cnt.py -- "
+                "--xyz <file>.xyz "
+                "--json <file>.json --style <style> --out <image>.png",
+            )
+            return
+
+        stem = self.last_saved_stem or self.on_export()
+        if stem is None:
+            return
+        out_png = filedialog.asksaveasfilename(
+            title="Save rendered image",
+            defaultextension=".png",
+            filetypes=[("PNG image", "*.png")],
+            initialfile=f"{stem.name}_{self.var_style.get()}.png",
+        )
+        if not out_png:
+            return
+
+        # Inside the package, so it is found whether the GUI is running
+        # from a checkout or from a pip install. It used to be resolved
+        # against the repository root, which does not exist once
+        # installed -- the button was dead for every installed copy.
+        script = Path(__file__).resolve().parent.parent / "blender" / "render_cnt.py"
+        if not script.exists():
+            self._show_error(
+                "Render script missing",
+                f"Could not find {script}. Run the GUI from a full checkout of "
+                "the project, or invoke Blender manually.",
+            )
+            return
+
+        # Two ways to reach the same script. A Blender application takes
+        # it with -b -P; the `bpy` PyPI module *is* Blender inside this
+        # interpreter, so the script runs directly. Preferring the
+        # application when both exist keeps the GUI honest about which
+        # Blender produced the image.
+        launcher = ([self.blender_exe, "-b", "-P", str(script)]
+                    if self.blender_exe else [sys.executable, str(script)])
+        cmd = [
+            *launcher, "--",
+            "--xyz", str(stem.with_suffix(".xyz")),
+            "--json", str(stem.with_suffix(".json")),
+            "--style", self.var_style.get(),
+            "--mode", self.var_mode.get(),
+            "--out", out_png,
+        ]
+        self._set_status("Rendering in Blender (this can take a while)…")
+        self.root.update_idletasks()
+
+        def render_worker():
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True,
+                                      timeout=3600, check=False)
+                ok = proc.returncode == 0 and Path(out_png).exists()
+                self._queue_render_result(ok, proc.stderr or proc.stdout, out_png)
+            except Exception as exc:  # noqa: BLE001 - reported to the user
+                self._queue_render_result(False, str(exc), out_png)
+
+        threading.Thread(target=render_worker, daemon=True).start()
+
+    def _queue_render_result(self, ok: bool, log: str, out_png: str) -> None:
+        def report():
+            if ok:
+                self._set_status(f"Rendered → {Path(out_png).name}")
+                self._show_error("Render complete", f"Wrote {out_png}", error=False)
+            else:
+                self._set_status("Render failed — see the message.")
+                self._show_error("Render failed", log[-3000:] or "Unknown error.")
+
+        self.root.after(0, report)
+
+    # ----------------------------------------------------------------- close
+    def on_close(self) -> None:
+        """Shut the worker down before the window goes away.
+
+        Without this the build subprocess outlives the GUI: it is a daemon
+        of the parent interpreter, but the parent does not exit until Tk's
+        main loop returns, and a half-finished coil would keep a core busy
+        with nothing to report to.
+        """
+        try:
+            self.worker.shutdown()
+        finally:
+            self.root.destroy()
+
+
+def main() -> int:
+    """Entry point for ``nanocarbon-gui``."""
+    # Required before any process is spawned when this is bundled into a
+    # frozen executable (PyInstaller and friends); a no-op otherwise.
+    multiprocessing.freeze_support()
+    root = tk.Tk()
+    NanocarbonGUI(root)
+    root.mainloop()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

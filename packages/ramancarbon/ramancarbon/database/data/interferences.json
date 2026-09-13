@@ -1,0 +1,308 @@
+{
+  "_comment": [
+    "Bands that are NOT carbon, and that appear in the spectra of real",
+    "as-synthesised nanocarbon samples.",
+    "",
+    "This file exists because of one specific failure mode. A CVD nanotube",
+    "sample carries catalyst residue: iron, cobalt, nickel, molybdenum, and",
+    "their oxides. Those oxides have strong Raman bands between 150 and",
+    "700 cm-1 — that is, INSIDE the radial-breathing-mode window. Hematite",
+    "at 225 and 292 cm-1 looks exactly like an RBM to a peak finder, and",
+    "converting it with omega = A/d + B yields a confident, wrong tube",
+    "diameter of about 1.1 or 0.85 nm.",
+    "",
+    "The same applies to leftover dopant precursor. Elemental sulfur (S8)",
+    "has its strongest line at 219 cm-1; trigonal selenium at 237 cm-1;",
+    "anatase TiO2 at 144 cm-1. All of them sit in the RBM window and none of",
+    "them is a nanotube.",
+    "",
+    "Every entry lists the positions the code checks against. A peak that",
+    "matches an interference is NOT silently deleted — it is reported, with",
+    "what it probably is, and excluded from the RBM analysis. Deleting it",
+    "would hide evidence about the sample; keeping it as an RBM would",
+    "fabricate a diameter.",
+    "",
+    "Positions are non-dispersive (these are first-order modes of ordinary",
+    "crystals), so measuring at two lasers is the definitive test: a real D",
+    "band moves ~50 cm-1/eV, an oxide line does not move at all.",
+    "",
+    "'strong' marks the lines you actually see at low concentration; the",
+    "matcher weights them more heavily."
+  ],
+  "match_tolerance_cm1": 8.0,
+  "groups": [
+    {
+      "key": "catalyst_oxides",
+      "label": "Óxidos del catalizador (residuo de síntesis CVD)",
+      "note": "Nanopartículas metálicas expuestas al aire se oxidan. Lo que ves en Raman casi nunca es el metal, es su óxido.",
+      "species": [
+        {
+          "key": "Fe2O3_hematite",
+          "label": "Hematita α-Fe₂O₃",
+          "formula": "Fe2O3",
+          "bands": [225.0, 247.0, 293.0, 299.0, 412.0, 498.0, 613.0, 1320.0],
+          "strong": [225.0, 293.0, 412.0],
+          "confidence": "high",
+          "source": "de Faria, Venâncio Silva & de Oliveira, J. Raman Spectrosc. 28 (1997) 873",
+          "notes": "El residuo de catalizador de hierro más común. Sus líneas de 225 y 293 cm⁻¹ caen de lleno en la ventana RBM. Además tiene una banda ancha de dos magnones cerca de 1320 cm⁻¹ que puede confundirse con la banda D — y que, a diferencia de ella, NO se desplaza con el láser."
+        },
+        {
+          "key": "Fe3O4_magnetite",
+          "label": "Magnetita Fe₃O₄",
+          "formula": "Fe3O4",
+          "bands": [310.0, 540.0, 670.0],
+          "strong": [670.0],
+          "confidence": "high",
+          "source": "Shebanova & Lazor, J. Solid State Chem. 174 (2003) 424",
+          "notes": "Ojo: la magnetita se transforma en hematita bajo el propio láser si subes la potencia. Si ves aparecer las líneas de hematita al aumentar la potencia, estabas quemando la muestra."
+        },
+        {
+          "key": "FeOOH_goethite",
+          "label": "Goethita α-FeOOH",
+          "formula": "FeOOH",
+          "bands": [244.0, 299.0, 385.0, 479.0, 550.0, 685.0],
+          "strong": [299.0, 385.0],
+          "confidence": "medium",
+          "source": "de Faria et al., J. Raman Spectrosc. 28 (1997) 873"
+        },
+        {
+          "key": "Co3O4",
+          "label": "Óxido de cobalto Co₃O₄",
+          "formula": "Co3O4",
+          "bands": [194.0, 482.0, 521.0, 618.0, 691.0],
+          "strong": [194.0, 482.0, 691.0],
+          "confidence": "high",
+          "source": "Hadjiev, Iliev & Vergilov, J. Phys. C 21 (1988) L199",
+          "notes": "La línea de 194 cm⁻¹ está justo donde se esperan los RBM de tubos de ~1.3 nm."
+        },
+        {
+          "key": "NiO",
+          "label": "Óxido de níquel NiO",
+          "formula": "NiO",
+          "bands": [500.0, 720.0, 1090.0],
+          "strong": [500.0, 1090.0],
+          "confidence": "medium",
+          "source": "Mironova-Ulmane et al., J. Phys. Conf. Ser. 93 (2007) 012039"
+        },
+        {
+          "key": "MoO3",
+          "label": "Óxido de molibdeno MoO₃",
+          "formula": "MoO3",
+          "bands": [158.0, 283.0, 337.0, 666.0, 819.0, 995.0],
+          "strong": [819.0, 995.0],
+          "confidence": "high",
+          "source": "Dieterle & Mestl, Phys. Chem. Chem. Phys. 4 (2002) 822",
+          "notes": "El Mo es un promotor habitual en catalizadores Fe-Mo y Co-Mo para nanotubos. La línea de 158 cm⁻¹ imita el RBM de un tubo de 1.6 nm."
+        },
+        {
+          "key": "MoS2",
+          "label": "Disulfuro de molibdeno MoS₂",
+          "formula": "MoS2",
+          "bands": [383.0, 408.0],
+          "strong": [383.0, 408.0],
+          "confidence": "high",
+          "source": "Lee et al., ACS Nano 4 (2010) 2695",
+          "notes": "Aparece si sulfuras un catalizador de Mo. La separación entre las dos líneas cuenta capas de MoS₂, no de carbono."
+        },
+        {
+          "key": "Al2O3",
+          "label": "Alúmina α-Al₂O₃ (soporte)",
+          "formula": "Al2O3",
+          "bands": [378.0, 418.0, 432.0, 451.0, 578.0, 645.0, 751.0],
+          "strong": [418.0],
+          "confidence": "medium",
+          "source": "Porto & Krishnan, J. Chem. Phys. 47 (1967) 1009"
+        },
+        {
+          "key": "MgO",
+          "label": "Óxido de magnesio MgO (soporte)",
+          "formula": "MgO",
+          "bands": [1096.0],
+          "strong": [1096.0],
+          "confidence": "low",
+          "source": "Ishikawa, Yoshioka & Sato, J. Phys. Soc. Jpn. 66 (1997) 1050",
+          "notes": "El MgO puro es Raman-inactivo en primer orden; lo que se ve son modos de segundo orden y defectos."
+        }
+      ]
+    },
+    {
+      "key": "dopant_residue",
+      "label": "Residuo de precursor de dopante sin reaccionar",
+      "note": "Lo que sobra del dopado. Confirma que hubo dopante en el horno, no que se haya incorporado a la red.",
+      "species": [
+        {
+          "key": "S8",
+          "label": "Azufre elemental S₈",
+          "formula": "S8",
+          "bands": [86.0, 152.0, 187.0, 219.0, 247.0, 437.0, 471.0],
+          "strong": [152.0, 219.0, 471.0],
+          "confidence": "high",
+          "source": "Ward, J. Phys. Chem. 72 (1968) 4133",
+          "notes": "El fallo más caro en muestras dopadas con azufre: la línea de 219 cm⁻¹ es intensísima y cae en plena ventana RBM. Si la ves, hay azufre SIN incorporar a la red — que es justo lo contrario de lo que quieres demostrar."
+        },
+        {
+          "key": "Se_trigonal",
+          "label": "Selenio trigonal t-Se",
+          "formula": "Se",
+          "bands": [143.0, 237.0],
+          "strong": [237.0],
+          "confidence": "high",
+          "source": "Lucovsky et al., Solid State Commun. 5 (1967) 113",
+          "notes": "Igual que el azufre: la línea de 237 cm⁻¹ imita el RBM de un tubo de ~1.03 nm."
+        },
+        {
+          "key": "Se_amorphous",
+          "label": "Selenio amorfo a-Se",
+          "formula": "Se",
+          "bands": [250.0],
+          "strong": [250.0],
+          "confidence": "medium",
+          "source": "Lucovsky et al., Solid State Commun. 5 (1967) 113"
+        },
+        {
+          "key": "P_red",
+          "label": "Fósforo rojo",
+          "formula": "P",
+          "bands": [351.0, 393.0, 460.0],
+          "strong": [351.0, 460.0],
+          "confidence": "medium",
+          "source": "Olego, Baumann & Kuck, Solid State Commun. 52 (1984) 311"
+        },
+        {
+          "key": "phosphate",
+          "label": "Fosfato / P–O",
+          "formula": "PO4",
+          "bands": [980.0, 1010.0],
+          "strong": [980.0],
+          "confidence": "medium",
+          "source": "Nakamoto, Infrared and Raman Spectra of Inorganic and Coordination Compounds (2009)",
+          "notes": "Tensión simétrica P–O. Evidencia de fósforo oxidado superficial, no de fósforo sustitucional en la red."
+        },
+        {
+          "key": "sulfate",
+          "label": "Sulfato SO₄²⁻",
+          "formula": "SO4",
+          "bands": [983.0, 1050.0],
+          "strong": [983.0],
+          "confidence": "medium",
+          "source": "Nakamoto (2009)",
+          "notes": "Residuo típico de la purificación con H₂SO₄."
+        }
+      ]
+    },
+    {
+      "key": "substrate",
+      "label": "Sustrato y portamuestras",
+      "note": "Si el láser atraviesa la muestra, ves lo que hay debajo.",
+      "species": [
+        {
+          "key": "Si",
+          "label": "Silicio",
+          "formula": "Si",
+          "bands": [303.0, 520.7, 620.0, 950.0, 970.0],
+          "strong": [520.7],
+          "confidence": "high",
+          "source": "Parker, Feldman & Ashkin, Phys. Rev. 155 (1967) 712",
+          "notes": "La línea de 520.7 cm⁻¹ es el patrón de calibración estándar. Si la ves, úsala: comprueba que cae exactamente en 520.7 y corrige el eje si no. La banda de segundo orden en 950–1000 cm⁻¹ es ancha y se confunde con modos IFM de nanotubo."
+        },
+        {
+          "key": "SiO2",
+          "label": "Sílice / vidrio",
+          "formula": "SiO2",
+          "bands": [430.0, 490.0, 605.0, 800.0, 1060.0],
+          "strong": [430.0],
+          "confidence": "medium",
+          "source": "Galeener, Phys. Rev. B 19 (1979) 4292",
+          "notes": "El vidrio además aporta la fluorescencia de fondo, que suele ser mayor que la señal Raman del carbono."
+        },
+        {
+          "key": "TiO2_anatase",
+          "label": "TiO₂ anatasa",
+          "formula": "TiO2",
+          "bands": [144.0, 197.0, 399.0, 513.0, 639.0],
+          "strong": [144.0, 639.0],
+          "confidence": "high",
+          "source": "Ohsaka, Izumi & Fujiki, J. Raman Spectrosc. 7 (1978) 321",
+          "notes": "La línea de 144 cm⁻¹ es extraordinariamente intensa y estrecha. Es el falso RBM más convincente que existe: implicaría un tubo de 1.75 nm."
+        },
+        {
+          "key": "TiO2_rutile",
+          "label": "TiO₂ rutilo",
+          "formula": "TiO2",
+          "bands": [143.0, 235.0, 447.0, 612.0],
+          "strong": [447.0, 612.0],
+          "confidence": "high",
+          "source": "Porto, Fleury & Damen, Phys. Rev. 154 (1967) 522"
+        },
+        {
+          "key": "CaF2",
+          "label": "Fluoruro de calcio CaF₂",
+          "formula": "CaF2",
+          "bands": [322.0],
+          "strong": [322.0],
+          "confidence": "high",
+          "source": "Russell, Proc. Phys. Soc. 85 (1965) 194"
+        },
+        {
+          "key": "sapphire",
+          "label": "Zafiro (portamuestras)",
+          "formula": "Al2O3",
+          "bands": [378.0, 418.0, 645.0, 751.0],
+          "strong": [418.0],
+          "confidence": "medium",
+          "source": "Porto & Krishnan, J. Chem. Phys. 47 (1967) 1009"
+        }
+      ]
+    },
+    {
+      "key": "carbon_impurity",
+      "label": "Fases de carbono que no son la muestra",
+      "note": "Carbono, sí, pero no el nanomaterial que quieres medir.",
+      "species": [
+        {
+          "key": "TPA",
+          "label": "trans-poliacetileno",
+          "formula": "(CH)n",
+          "bands": [1140.0, 1190.0, 1450.0, 1500.0],
+          "strong": [1140.0, 1450.0],
+          "confidence": "medium",
+          "source": "Ferrari & Robertson, Phys. Rev. B 63 (2001) 121405",
+          "notes": "Aparece en carbono depositado por CVD con hidrógeno. Sus dos bandas SÍ dispersan con el láser (a la inversa: la de 1140 sube y la de 1450 baja), lo que las distingue de las D4 y D3 del carbono desordenado. Medir a dos láseres lo resuelve."
+        },
+        {
+          "key": "diamond",
+          "label": "Diamante / carbono sp³ cristalino",
+          "formula": "C",
+          "bands": [1332.0],
+          "strong": [1332.0],
+          "confidence": "high",
+          "source": "Solin & Ramdas, Phys. Rev. B 1 (1970) 1687",
+          "notes": "Línea estrecha y NO dispersiva pegada a la banda D. Con un solo láser no se distinguen; con dos, sí: la D se mueve ~19 cm⁻¹ entre 532 y 633 nm y el diamante no se mueve nada."
+        },
+        {
+          "key": "C60",
+          "label": "Fullereno C₆₀",
+          "formula": "C60",
+          "bands": [272.0, 496.0, 710.0, 1099.0, 1250.0, 1428.0, 1469.0],
+          "strong": [272.0, 496.0, 1469.0],
+          "confidence": "high",
+          "source": "Dresselhaus, Dresselhaus & Eklund, Science of Fullerenes and Carbon Nanotubes (1996)",
+          "notes": "Subproducto habitual del arco eléctrico. La línea de 272 cm⁻¹ también cae en la ventana RBM."
+        }
+      ]
+    }
+  ],
+  "surface_enhancement": {
+    "_comment": "Las nanopartículas metálicas no solo añaden bandas: amplifican las del carbono que tienen encima, y no por igual.",
+    "note": "Las nanopartículas metálicas (Ag, Au, Cu, y en menor medida Fe/Co/Ni) producen amplificación SERS del carbono en contacto con ellas. El campo cae en pocos nanómetros, así que solo se amplifica una fracción de la muestra, y las reglas de selección SERS favorecen los modos con componente perpendicular a la superficie. El efecto sobre I_D/I_G puede ser de un factor 2 o más, en cualquier dirección.",
+    "indicators": [
+      "intensidad total anormalmente alta para el tiempo de integración",
+      "I_D/I_G que cambia mucho entre puntos de la misma muestra",
+      "aparición de bandas de óxido metálico intensas",
+      "fondo continuo elevado que no es fluorescencia (no decae con el tiempo de iluminación)"
+    ],
+    "recommendation": "Compara I_D/I_G en zonas con y sin bandas de óxido. Si difieren mucho, promedia sobre muchos puntos y da la dispersión, o purifica la muestra antes de cuantificar.",
+    "confidence": "medium",
+    "source": "Corio et al., Chem. Phys. Lett. 370 (2003) 675; Kneipp et al., Phys. Rev. B 63 (2001) 081401"
+  }
+}

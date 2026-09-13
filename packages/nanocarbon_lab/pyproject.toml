@@ -1,0 +1,104 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanocarbon_lab"
+version = "0.1.0"
+description = "Modular framework for generating, validating and exporting realistic nanocarbon structures for DFT (Quantum ESPRESSO) and classical MD (LAMMPS) simulations."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "nanocarbon_lab contributors" }]
+keywords = ["nanocarbon", "graphene", "CNT", "DFT", "LAMMPS", "Quantum ESPRESSO", "materials science"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "ase>=3.22",
+    "networkx>=3.0",
+    # marching cubes, for the implicit-surface junction / schwarzite builders
+    "scikit-image>=0.22",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+]
+viz = [
+    "matplotlib>=3.7",
+]
+# The GUI needs matplotlib for its 3D preview. tkinter is part of the
+# standard library but is packaged separately on some Linux distributions
+# (apt install python3-tk / dnf install python3-tkinter), so it cannot be
+# declared as a pip dependency here.
+gui = [
+    "matplotlib>=3.7",
+]
+# Blender as an importable module, so the journal-cover renderer works
+# without installing the Blender application. Optional because the wheel
+# is large and exists only for the Python version each Blender release
+# was built against; the pipeline also runs under a normal Blender
+# install via `blender -b -P`.
+render = [
+    "bpy>=4.0",
+]
+
+[project.scripts]
+nanocarbon = "nanocarbon_lab.cli.main:main"
+nanocarbon-gui = "nanocarbon_lab.gui:main"
+
+[tool.setuptools.packages.find]
+include = ["nanocarbon_lab*"]
+exclude = ["tests*", "examples*"]
+
+# The Blender scripts are data, not an importable subpackage: they import
+# `bpy`, which only exists inside Blender, so making them a subpackage
+# would put a module in the tree that cannot be imported. Without this
+# they were left out of an install entirely, and the GUI's render button
+# could never find them -- it reported "run the GUI from a full checkout"
+# to anyone who had installed the package normally.
+[tool.setuptools.package-data]
+nanocarbon_lab = ["blender/*.py"]
+
+[tool.pytest.ini_options]
+testpaths = ["nanocarbon_lab/tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    # Builds that take minutes, not seconds: the implicit route meshes and
+    # remeshes a real surface before relaxing thousands of atoms. Skip them
+    # with `-m 'not slow'` during quick iteration.
+    "slow: takes minutes to run",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+# An explicit contract rather than ruff's shifting defaults. These are the
+# families the code actually holds itself to, so `ruff check` passing is a
+# signal instead of a wall of preferences the project never adopted:
+#
+#   E, W  pycodestyle      F   pyflakes (real errors)
+#   I     import order     UP  modern syntax for the declared floor
+#   B     bugbear -- the one that catches semantics, e.g. B905 requires
+#         zip(strict=) so a length mismatch raises instead of truncating
+#
+# Deliberately not selected: C4, RUF, SIM, PL and friends are style
+# preferences whose "fixes" ruff itself marks unsafe, and applying 60 of
+# them across numerically sensitive code would risk a real bug for no
+# behavioural gain.
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]

@@ -1,0 +1,467 @@
+{
+  "_comment": [
+    "Líneas de fotoemisión y Auger, factores de sensibilidad y estados",
+    "químicos. Como todo en database/data/, cada entrada lleva su fuente y",
+    "su confianza, y se puede corregir sin tocar Python.",
+    "",
+    "TRES COSAS QUE HAY QUE ENTENDER ANTES DE EDITAR ESTE ARCHIVO:",
+    "",
+    "1. Las líneas de FOTOEMISIÓN están en energía de enlace (eV) y no se",
+    "   mueven al cambiar el ánodo. Las líneas AUGER están en energía",
+    "   CINÉTICA y su energía de enlace aparente depende del hv. Por eso",
+    "   van en campos distintos y nunca se mezclan.",
+    "",
+    "2. Los dobletes (todo nivel con l>0: p, d, f) tienen razón de áreas",
+    "   FIJA por la degeneración 2j+1 — p: 1:2, d: 2:3, f: 3:4 — y una",
+    "   separación característica del elemento. Ajustar sin atar esas dos",
+    "   cosas es la forma más rápida de inventarse una estequiometría.",
+    "",
+    "3. Los factores de sensibilidad (rsf) son de Scofield, referidos a",
+    "   C 1s = 1.00, y SUPONEN una geometría y una función de transmisión.",
+    "   Mezclarlos con áreas medidas en otro equipo sin corregir la",
+    "   transmisión es un error de decenas por ciento. El campo rsf_basis",
+    "   dice de dónde salen."
+  ],
+
+  "sources": {
+    "Al": {"energy_ev": 1486.6, "name": "Al Kα1,2", "confidence": "high",
+           "source": "valor estándar de tablas"},
+    "Mg": {"energy_ev": 1253.6, "name": "Mg Kα1,2", "confidence": "high",
+           "source": "valor estándar de tablas"}
+  },
+
+  "rsf_basis": {
+    "name": "Scofield 1976, normalizado a C 1s = 1.00",
+    "source": "J.H. Scofield, J. Electron Spectrosc. Relat. Phenom. 8 (1976) 129",
+    "confidence": "medium",
+    "note": "Las secciones eficaces de Scofield son de cálculo y son fiables. Lo que NO es transferible es la corrección de transmisión y el factor angular del equipo: los valores de abajo suponen ángulo mágico (54.7°) y transmisión plana. Si tu equipo da sus propios RSF, úsalos: la diferencia llega al 30 % entre extremos del eje."
+  },
+
+  "calibration": {
+    "_comment": "Referencias de carga. El C 1s adventicio es el estándar universal y el más discutido: la literatura lo pone entre 284.4 y 285.2 eV, y esa horquilla de 0.8 eV es mayor que muchas de las diferencias químicas que luego se interpretan.",
+    "references": [
+      {"key": "C1s_adventitious", "line": "C 1s", "energy_ev": 284.8,
+       "spread_ev": 0.4, "conductor_required": false, "confidence": "low",
+       "source": "convención; ver Greczynski & Hultman, Prog. Mater. Sci. 107 (2020) 100591 para la crítica",
+       "note": "Universal y criticado. Solo vale si hay carbono adventicio de verdad y la muestra no tiene carga diferencial. En una muestra CON carbono propio (grafeno, nanotubos, carburos) el pico a 284.8 puede ser la muestra, no el contaminante, y referenciar contra ella es circular."},
+      {"key": "Au4f", "line": "Au 4f7/2", "energy_ev": 83.96,
+       "spread_ev": 0.05, "conductor_required": true, "confidence": "high",
+       "source": "ISO 15472:2010",
+       "note": "El patrón primario. Exige contacto eléctrico con la muestra."},
+      {"key": "Ag3d", "line": "Ag 3d5/2", "energy_ev": 368.21,
+       "spread_ev": 0.05, "conductor_required": true, "confidence": "high",
+       "source": "ISO 15472:2010"},
+      {"key": "Cu2p", "line": "Cu 2p3/2", "energy_ev": 932.62,
+       "spread_ev": 0.05, "conductor_required": true, "confidence": "high",
+       "source": "ISO 15472:2010"},
+      {"key": "Fermi", "line": "borde de Fermi", "energy_ev": 0.0,
+       "spread_ev": 0.05, "conductor_required": true, "confidence": "high",
+       "source": "definición",
+       "note": "El único que no supone nada sobre la química. Solo sirve en conductores."}
+    ]
+  },
+
+  "elements": {
+    "C": {
+      "z": 6, "name": "carbono",
+      "lines": [
+        {"label": "C 1s", "orbital": "1s", "energy_ev": 284.8, "rsf": 1.00,
+         "doublet": null, "primary": true, "confidence": "high"},
+        {"label": "C 2s", "orbital": "2s", "energy_ev": 17.0, "rsf": 0.02,
+         "doublet": null, "primary": false, "confidence": "low"}
+      ],
+      "auger": [
+        {"label": "C KLL", "kinetic_ev": 263.0, "width_ev": 20.0,
+         "confidence": "medium",
+         "note": "Ancho y estructurado. Su forma (el parámetro D) separa sp2 de sp3 mejor que el propio C 1s."}
+      ]
+    },
+    "N": {
+      "z": 7, "name": "nitrógeno",
+      "lines": [
+        {"label": "N 1s", "orbital": "1s", "energy_ev": 399.5, "rsf": 1.80,
+         "doublet": null, "primary": true, "confidence": "high"}
+      ],
+      "auger": [
+        {"label": "N KLL", "kinetic_ev": 380.0, "width_ev": 20.0,
+         "confidence": "low"}
+      ]
+    },
+    "O": {
+      "z": 8, "name": "oxígeno",
+      "lines": [
+        {"label": "O 1s", "orbital": "1s", "energy_ev": 531.0, "rsf": 2.93,
+         "doublet": null, "primary": true, "confidence": "high"},
+        {"label": "O 2s", "orbital": "2s", "energy_ev": 23.0, "rsf": 0.07,
+         "doublet": null, "primary": false, "confidence": "low"}
+      ],
+      "auger": [
+        {"label": "O KLL", "kinetic_ev": 503.0, "width_ev": 25.0,
+         "confidence": "medium",
+         "note": "Con Al Kα cae cerca de 983 eV de energía de enlace aparente, entre el Ni 2p y el Cu 2p. Es la confusión más común de un survey."}
+      ]
+    },
+    "F": {
+      "z": 9, "name": "flúor",
+      "lines": [
+        {"label": "F 1s", "orbital": "1s", "energy_ev": 685.0, "rsf": 4.43,
+         "doublet": null, "primary": true, "confidence": "high"}
+      ],
+      "auger": [
+        {"label": "F KLL", "kinetic_ev": 656.0, "width_ev": 20.0,
+         "confidence": "low"}
+      ]
+    },
+    "Na": {
+      "z": 11, "name": "sodio",
+      "lines": [
+        {"label": "Na 1s", "orbital": "1s", "energy_ev": 1071.5, "rsf": 8.52,
+         "doublet": null, "primary": true, "confidence": "medium"}
+      ],
+      "auger": [
+        {"label": "Na KLL", "kinetic_ev": 990.0, "width_ev": 15.0,
+         "confidence": "low"}
+      ]
+    },
+    "Al": {
+      "z": 13, "name": "aluminio",
+      "lines": [
+        {"label": "Al 2p", "orbital": "2p", "energy_ev": 74.0, "rsf": 0.54,
+         "doublet": {"splitting_ev": 0.44, "ratio": 0.5, "labels": ["Al 2p3/2", "Al 2p1/2"]},
+         "primary": true, "confidence": "medium",
+         "note": "El desdoblamiento es menor que la resolución de casi cualquier equipo: se ajusta como un solo pico a propósito."},
+        {"label": "Al 2s", "orbital": "2s", "energy_ev": 118.0, "rsf": 0.75,
+         "doublet": null, "primary": false, "confidence": "medium"}
+      ],
+      "auger": []
+    },
+    "Si": {
+      "z": 14, "name": "silicio",
+      "lines": [
+        {"label": "Si 2p", "orbital": "2p", "energy_ev": 99.5, "rsf": 0.82,
+         "doublet": {"splitting_ev": 0.63, "ratio": 0.5, "labels": ["Si 2p3/2", "Si 2p1/2"]},
+         "primary": true, "confidence": "high"},
+        {"label": "Si 2s", "orbital": "2s", "energy_ev": 150.5, "rsf": 0.96,
+         "doublet": null, "primary": false, "confidence": "medium"}
+      ],
+      "auger": []
+    },
+    "P": {
+      "z": 15, "name": "fósforo",
+      "lines": [
+        {"label": "P 2p", "orbital": "2p", "energy_ev": 133.0, "rsf": 1.19,
+         "doublet": {"splitting_ev": 0.87, "ratio": 0.5, "labels": ["P 2p3/2", "P 2p1/2"]},
+         "primary": true, "confidence": "high"},
+        {"label": "P 2s", "orbital": "2s", "energy_ev": 191.0, "rsf": 1.19,
+         "doublet": null, "primary": false, "confidence": "medium",
+         "note": "Útil cuando el P 2p se solapa con el Se 3p o con un plasmón del sustrato."}
+      ],
+      "auger": []
+    },
+    "S": {
+      "z": 16, "name": "azufre",
+      "lines": [
+        {"label": "S 2p", "orbital": "2p", "energy_ev": 163.5, "rsf": 1.68,
+         "doublet": {"splitting_ev": 1.18, "ratio": 0.5, "labels": ["S 2p3/2", "S 2p1/2"]},
+         "primary": true, "confidence": "high",
+         "note": "1.18 eV es menor que la anchura típica: el doblete se ve como un pico con hombro, y hay que atarlo para no contar el hombro como un estado químico."},
+        {"label": "S 2s", "orbital": "2s", "energy_ev": 228.0, "rsf": 1.43,
+         "doublet": null, "primary": false, "confidence": "medium"}
+      ],
+      "auger": [
+        {"label": "S LMM", "kinetic_ev": 152.0, "width_ev": 12.0,
+         "confidence": "low"}
+      ]
+    },
+    "Cl": {
+      "z": 17, "name": "cloro",
+      "lines": [
+        {"label": "Cl 2p", "orbital": "2p", "energy_ev": 199.0, "rsf": 2.29,
+         "doublet": {"splitting_ev": 1.60, "ratio": 0.5, "labels": ["Cl 2p3/2", "Cl 2p1/2"]},
+         "primary": true, "confidence": "medium"}
+      ],
+      "auger": []
+    },
+    "K": {
+      "z": 19, "name": "potasio",
+      "lines": [
+        {"label": "K 2p", "orbital": "2p", "energy_ev": 293.0, "rsf": 3.62,
+         "doublet": {"splitting_ev": 2.77, "ratio": 0.5, "labels": ["K 2p3/2", "K 2p1/2"]},
+         "primary": true, "confidence": "medium",
+         "note": "Cae justo encima del C 1s. Un 'hombro' del C 1s a 293 eV suele ser potasio del electrolito, no un carbonato."}
+      ],
+      "auger": []
+    },
+    "Fe": {
+      "z": 26, "name": "hierro",
+      "lines": [
+        {"label": "Fe 2p", "orbital": "2p", "energy_ev": 711.0, "rsf": 10.82,
+         "doublet": {"splitting_ev": 13.1, "ratio": 0.5, "labels": ["Fe 2p3/2", "Fe 2p1/2"]},
+         "primary": true, "confidence": "high",
+         "note": "El Fe 2p NO se ajusta solo con dos picos: los estados de alto espín llevan multipletes y satélites shake-up, y un ajuste de dos componentes sobre Fe(III) deja residuo sistemático."},
+        {"label": "Fe 3p", "orbital": "3p", "energy_ev": 55.5, "rsf": 1.00,
+         "doublet": {"splitting_ev": 0.9, "ratio": 0.5, "labels": ["Fe 3p3/2", "Fe 3p1/2"]},
+         "primary": false, "confidence": "medium",
+         "note": "Cae encima del Se 3d. En un FeSe hay que separar los dos o medir el Fe 2p."},
+        {"label": "Fe 3s", "orbital": "3s", "energy_ev": 92.0, "rsf": 0.32,
+         "doublet": null, "primary": false, "confidence": "low",
+         "note": "Su desdoblamiento de intercambio mide el momento magnético local, que es otra vía al estado de oxidación."}
+      ],
+      "auger": [
+        {"label": "Fe LMM", "kinetic_ev": 598.0, "width_ev": 15.0,
+         "confidence": "low"},
+        {"label": "Fe LMM", "kinetic_ev": 651.0, "width_ev": 15.0,
+         "confidence": "low"},
+        {"label": "Fe LMM", "kinetic_ev": 703.0, "width_ev": 15.0,
+         "confidence": "low"}
+      ]
+    },
+    "Co": {
+      "z": 27, "name": "cobalto",
+      "lines": [
+        {"label": "Co 2p", "orbital": "2p", "energy_ev": 780.0, "rsf": 12.62,
+         "doublet": {"splitting_ev": 15.05, "ratio": 0.5, "labels": ["Co 2p3/2", "Co 2p1/2"]},
+         "primary": true, "confidence": "high",
+         "note": "La separación entre el pico principal y su satélite es lo que distingue Co(II) de Co(III): ~6 eV y fuerte en CoO, casi ausente en Co3O4."},
+        {"label": "Co 3p", "orbital": "3p", "energy_ev": 60.0, "rsf": 1.20,
+         "doublet": null, "primary": false, "confidence": "low"}
+      ],
+      "auger": [
+        {"label": "Co LMM", "kinetic_ev": 656.0, "width_ev": 15.0,
+         "confidence": "low"},
+        {"label": "Co LMM", "kinetic_ev": 716.0, "width_ev": 15.0,
+         "confidence": "low"},
+        {"label": "Co LMM", "kinetic_ev": 775.0, "width_ev": 15.0,
+         "confidence": "low"}
+      ]
+    },
+    "Ni": {
+      "z": 28, "name": "níquel",
+      "lines": [
+        {"label": "Ni 2p", "orbital": "2p", "energy_ev": 855.0, "rsf": 14.61,
+         "doublet": {"splitting_ev": 17.4, "ratio": 0.5, "labels": ["Ni 2p3/2", "Ni 2p1/2"]},
+         "primary": true, "confidence": "high",
+         "note": "El satélite a ~6 eV del principal es enorme en Ni(II) y es el diagnóstico. Meterlo en el ajuste NO es opcional: sin él, el área del 2p3/2 sale baja y la estequiometría con él."},
+        {"label": "Ni 3p", "orbital": "3p", "energy_ev": 67.0, "rsf": 1.30,
+         "doublet": null, "primary": false, "confidence": "low"}
+      ],
+      "auger": [
+        {"label": "Ni LMM", "kinetic_ev": 716.0, "width_ev": 15.0,
+         "confidence": "low",
+         "note": "Con Al Kα aparece cerca de 766 eV de energía de enlace: a 50 eV del Fe 2p3/2. En una muestra con los dos, el survey los confunde si no se tratan las Auger aparte."},
+        {"label": "Ni LMM", "kinetic_ev": 783.0, "width_ev": 15.0,
+         "confidence": "low"},
+        {"label": "Ni LMM", "kinetic_ev": 848.0, "width_ev": 15.0,
+         "confidence": "low"}
+      ]
+    },
+    "Cu": {
+      "z": 29, "name": "cobre",
+      "lines": [
+        {"label": "Cu 2p", "orbital": "2p", "energy_ev": 932.7, "rsf": 16.73,
+         "doublet": {"splitting_ev": 19.8, "ratio": 0.5, "labels": ["Cu 2p3/2", "Cu 2p1/2"]},
+         "primary": true, "confidence": "high",
+         "note": "Casi siempre viene del portamuestras o de la cinta, no de la muestra."}
+      ],
+      "auger": [
+        {"label": "Cu LMM", "kinetic_ev": 918.6, "width_ev": 10.0,
+         "confidence": "medium",
+         "note": "El parámetro Auger de Cu es la única vía fiable para separar Cu(0) de Cu(I): sus 2p son indistinguibles."}
+      ]
+    },
+    "Se": {
+      "z": 34, "name": "selenio",
+      "lines": [
+        {"label": "Se 3d", "orbital": "3d", "energy_ev": 55.0, "rsf": 2.25,
+         "doublet": {"splitting_ev": 0.86, "ratio": 0.667, "labels": ["Se 3d5/2", "Se 3d3/2"]},
+         "primary": true, "confidence": "high",
+         "note": "0.86 eV de separación y razón 3:2. Se solapa con el Fe 3p (55.5 eV): en un FeSe hay que medir también el Fe 2p para saber cuánto de ese pico es hierro."},
+        {"label": "Se 3p", "orbital": "3p", "energy_ev": 161.0, "rsf": 1.60,
+         "doublet": {"splitting_ev": 5.7, "ratio": 0.5, "labels": ["Se 3p3/2", "Se 3p1/2"]},
+         "primary": false, "confidence": "medium",
+         "note": "Cae encima del S 2p. En un sulfoseleniuro es el solape que arruina la cuantificación si no se modela."}
+      ],
+      "auger": [
+        {"label": "Se LMM", "kinetic_ev": 1306.0, "width_ev": 15.0,
+         "confidence": "low"}
+      ]
+    },
+    "Mo": {
+      "z": 42, "name": "molibdeno",
+      "lines": [
+        {"label": "Mo 3d", "orbital": "3d", "energy_ev": 229.0, "rsf": 6.12,
+         "doublet": {"splitting_ev": 3.13, "ratio": 0.667, "labels": ["Mo 3d5/2", "Mo 3d3/2"]},
+         "primary": true, "confidence": "high"}
+      ],
+      "auger": []
+    },
+    "Au": {
+      "z": 79, "name": "oro",
+      "lines": [
+        {"label": "Au 4f", "orbital": "4f", "energy_ev": 84.0, "rsf": 6.25,
+         "doublet": {"splitting_ev": 3.67, "ratio": 0.75, "labels": ["Au 4f7/2", "Au 4f5/2"]},
+         "primary": true, "confidence": "high",
+         "note": "Patrón primario de calibración: 4f7/2 a 83.96 eV."}
+      ],
+      "auger": []
+    },
+    "Ag": {
+      "z": 47, "name": "plata",
+      "lines": [
+        {"label": "Ag 3d", "orbital": "3d", "energy_ev": 368.2, "rsf": 10.66,
+         "doublet": {"splitting_ev": 6.0, "ratio": 0.667, "labels": ["Ag 3d5/2", "Ag 3d3/2"]},
+         "primary": true, "confidence": "high"}
+      ],
+      "auger": []
+    }
+  },
+
+  "chemical_states": {
+    "_comment": "Ventanas de energía de enlace por estado químico, en el eje referenciado a C 1s = 284.8 eV. Las ventanas son ANCHAS a propósito: la dispersión entre laboratorios es real y estrecharlas haría que el ajuste se pegara a los límites y devolviera la suposición en vez de la medida.",
+    "C 1s": [
+      {"key": "C-C sp2", "name": "C=C aromático (sp²)", "energy_ev": 284.4,
+       "window": [284.0, 284.8], "fwhm": [0.7, 1.6], "asymmetric": true,
+       "confidence": "high",
+       "note": "En grafito y grafeno la línea es ASIMÉTRICA por el apantallamiento de los electrones de conducción. Ajustarla con una forma simétrica obliga a meter una componente extra a ~285.5 que luego se lee como C sp3. Es el error más común en XPS de carbono."},
+      {"key": "C-C sp3", "name": "C–C / C–H (sp³)", "energy_ev": 285.0,
+       "window": [284.6, 285.4], "fwhm": [0.8, 2.0], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "C-N", "name": "C–N", "energy_ev": 285.9,
+       "window": [285.4, 286.4], "fwhm": [0.8, 2.0], "asymmetric": false,
+       "confidence": "medium"},
+      {"key": "C-O", "name": "C–O (epóxido, hidroxilo, éter)", "energy_ev": 286.4,
+       "window": [285.9, 287.0], "fwhm": [0.9, 2.2], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "C=O", "name": "C=O (carbonilo)", "energy_ev": 287.8,
+       "window": [287.2, 288.4], "fwhm": [0.9, 2.2], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "O-C=O", "name": "O–C=O (carboxilo, éster)", "energy_ev": 289.0,
+       "window": [288.4, 289.6], "fwhm": [0.9, 2.2], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "carbonate", "name": "carbonato", "energy_ev": 290.0,
+       "window": [289.6, 290.6], "fwhm": [0.9, 2.2], "asymmetric": false,
+       "confidence": "medium"},
+      {"key": "pi-pi*", "name": "satélite π→π*", "energy_ev": 291.3,
+       "window": [290.5, 292.5], "fwhm": [1.5, 4.0], "asymmetric": false,
+       "satellite_of": "C-C sp2", "confidence": "high",
+       "note": "NO es un estado químico: es un satélite shake-up del sp². Contarlo como carbono oxidado infla el contenido de oxígeno. Su presencia, en cambio, es la prueba de que hay sp²."}
+    ],
+    "N 1s": [
+      {"key": "pyridinic", "name": "N piridínico", "energy_ev": 398.5,
+       "window": [398.0, 399.0], "fwhm": [0.9, 2.0], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "N-metal", "name": "N–metal (nitruro, M–N₄)", "energy_ev": 399.3,
+       "window": [398.8, 399.8], "fwhm": [0.9, 2.2], "asymmetric": false,
+       "confidence": "medium",
+       "note": "Se solapa con el piridínico. Distinguirlos con XPS solo no se puede: hace falta el metal 2p o XAS."},
+      {"key": "pyrrolic", "name": "N pirrólico", "energy_ev": 400.2,
+       "window": [399.8, 400.8], "fwhm": [0.9, 2.2], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "graphitic", "name": "N grafítico (cuaternario)", "energy_ev": 401.2,
+       "window": [400.8, 401.8], "fwhm": [0.9, 2.2], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "N-oxide", "name": "N oxidado (N–O)", "energy_ev": 403.5,
+       "window": [402.0, 405.5], "fwhm": [1.0, 3.0], "asymmetric": false,
+       "confidence": "medium"}
+    ],
+    "O 1s": [
+      {"key": "lattice", "name": "O de red (óxido metálico)", "energy_ev": 529.9,
+       "window": [529.2, 530.6], "fwhm": [0.8, 1.8], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "defect-OH", "name": "O deficiente / hidroxilo", "energy_ev": 531.3,
+       "window": [530.6, 532.0], "fwhm": [0.9, 2.2], "asymmetric": false,
+       "confidence": "medium",
+       "note": "La atribución a 'vacantes de oxígeno' es muy común y muy discutida: hidroxilos superficiales, carbonatos y agua quimisorbida caen en la misma ventana. Sin una medida independiente, decir vacantes es una interpretación, no un resultado."},
+      {"key": "C-O", "name": "C–O orgánico", "energy_ev": 532.8,
+       "window": [532.0, 533.4], "fwhm": [0.9, 2.2], "asymmetric": false,
+       "confidence": "medium"},
+      {"key": "water", "name": "agua adsorbida", "energy_ev": 533.6,
+       "window": [533.0, 534.5], "fwhm": [1.0, 2.5], "asymmetric": false,
+       "confidence": "medium"}
+    ],
+    "Fe 2p3/2": [
+      {"key": "Fe0", "name": "Fe metálico", "energy_ev": 706.8,
+       "window": [706.3, 707.3], "fwhm": [0.8, 1.6], "asymmetric": true,
+       "confidence": "high",
+       "note": "Metálico y por tanto ASIMÉTRICO, y estrecho. Si sale ancho y simétrico, no es Fe(0)."},
+      {"key": "Fe2+", "name": "Fe(II)", "energy_ev": 709.6,
+       "window": [708.8, 710.4], "fwhm": [1.5, 4.0], "asymmetric": false,
+       "satellite_ev": 715.5, "confidence": "medium",
+       "note": "Su satélite shake-up a ~6 eV del principal es el diagnóstico que separa Fe(II) de Fe(III); el desdoblamiento multiplete lo ensancha de verdad."},
+      {"key": "Fe3+", "name": "Fe(III)", "energy_ev": 711.0,
+       "window": [710.4, 712.0], "fwhm": [1.5, 4.5], "asymmetric": false,
+       "satellite_ev": 719.0, "confidence": "medium"},
+      {"key": "Fe-Se", "name": "Fe–Se (seleniuro)", "energy_ev": 707.2,
+       "window": [706.8, 708.2], "fwhm": [0.9, 2.0], "asymmetric": false,
+       "confidence": "low",
+       "note": "Poca literatura y muy dispersa. Confirma con el Se 3d y con DRX."},
+      {"key": "Fe-C", "name": "Fe–C (carburo, cementita)", "energy_ev": 707.5,
+       "window": [707.0, 708.2], "fwhm": [0.9, 2.0], "asymmetric": false,
+       "confidence": "low"}
+    ],
+    "Se 3d5/2": [
+      {"key": "selenide", "name": "seleniuro (Se²⁻)", "energy_ev": 54.3,
+       "window": [53.6, 55.0], "fwhm": [0.7, 1.6], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "Se0", "name": "Se elemental", "energy_ev": 55.4,
+       "window": [55.0, 56.0], "fwhm": [0.7, 1.6], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "SeOx", "name": "Se oxidado (selenito/seleniato)", "energy_ev": 58.8,
+       "window": [57.5, 60.5], "fwhm": [1.0, 2.5], "asymmetric": false,
+       "confidence": "medium",
+       "note": "Casi siempre es oxidación superficial por el aire, no la muestra. Compara con un punto recién decapado."}
+    ],
+    "S 2p3/2": [
+      {"key": "sulfide", "name": "sulfuro (S²⁻)", "energy_ev": 161.5,
+       "window": [160.8, 162.3], "fwhm": [0.7, 1.6], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "S-S", "name": "S–S / polisulfuro / S elemental", "energy_ev": 163.6,
+       "window": [162.8, 164.5], "fwhm": [0.7, 1.8], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "sulfate", "name": "sulfato", "energy_ev": 168.5,
+       "window": [167.5, 169.5], "fwhm": [1.0, 2.5], "asymmetric": false,
+       "confidence": "high"}
+    ],
+    "P 2p3/2": [
+      {"key": "phosphide", "name": "fosfuro (P⁻ᵟ)", "energy_ev": 129.4,
+       "window": [128.6, 130.2], "fwhm": [0.7, 1.8], "asymmetric": false,
+       "confidence": "high"},
+      {"key": "P-C", "name": "P–C / P orgánico", "energy_ev": 131.5,
+       "window": [130.5, 132.5], "fwhm": [0.9, 2.2], "asymmetric": false,
+       "confidence": "medium"},
+      {"key": "phosphate", "name": "fosfato / P–O", "energy_ev": 133.4,
+       "window": [132.5, 134.5], "fwhm": [1.0, 2.5], "asymmetric": false,
+       "confidence": "high",
+       "note": "En un fosfuro recién hecho, el fosfato de la superficie suele dominar el área. Eso NO significa que la muestra sea fosfato."}
+    ],
+    "Ni 2p3/2": [
+      {"key": "Ni0", "name": "Ni metálico", "energy_ev": 852.6,
+       "window": [852.2, 853.2], "fwhm": [0.8, 1.6], "asymmetric": true,
+       "confidence": "high"},
+      {"key": "Ni2+_oxide", "name": "Ni(II) óxido", "energy_ev": 854.0,
+       "window": [853.4, 855.0], "fwhm": [1.2, 3.0], "asymmetric": false,
+       "satellite_ev": 861.0, "confidence": "medium"},
+      {"key": "Ni2+_hydroxide", "name": "Ni(II) hidróxido", "energy_ev": 855.6,
+       "window": [855.0, 856.5], "fwhm": [1.5, 3.5], "asymmetric": false,
+       "satellite_ev": 861.5, "confidence": "medium"},
+      {"key": "Ni-P", "name": "Ni–P (fosfuro)", "energy_ev": 853.0,
+       "window": [852.5, 853.8], "fwhm": [0.9, 2.0], "asymmetric": false,
+       "confidence": "low"}
+    ],
+    "Co 2p3/2": [
+      {"key": "Co0", "name": "Co metálico", "energy_ev": 778.2,
+       "window": [777.8, 778.8], "fwhm": [0.8, 1.6], "asymmetric": true,
+       "confidence": "high"},
+      {"key": "Co3O4", "name": "Co₃O₄ (Co²⁺/Co³⁺)", "energy_ev": 779.6,
+       "window": [779.0, 780.2], "fwhm": [1.0, 2.5], "asymmetric": false,
+       "satellite_ev": 789.5, "confidence": "medium",
+       "note": "Satélite débil y lejano. La diferencia con CoO está en el satélite, no en la posición del principal: 1 eV separa los principales y el satélite de CoO es cuatro veces mayor."},
+      {"key": "CoO", "name": "CoO (Co²⁺)", "energy_ev": 780.5,
+       "window": [780.0, 781.5], "fwhm": [1.5, 3.5], "asymmetric": false,
+       "satellite_ev": 786.0, "confidence": "medium"},
+      {"key": "Co-OH", "name": "Co(OH)₂", "energy_ev": 781.0,
+       "window": [780.5, 782.0], "fwhm": [1.5, 3.5], "asymmetric": false,
+       "satellite_ev": 786.5, "confidence": "low"}
+    ]
+  }
+}

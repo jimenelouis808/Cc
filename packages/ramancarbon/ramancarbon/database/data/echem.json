@@ -1,0 +1,77 @@
+{
+  "_comment": [
+    "Constantes de electroquimica que NO deben estar en el codigo.",
+    "",
+    "Los potenciales de electrodo de referencia son la fuente numero uno de",
+    "errores sistematicos en la literatura de HER y OER: un sobrepotencial",
+    "publicado frente a Ag/AgCl sin decir la concentracion del relleno tiene",
+    "13 mV de ambiguedad, y frente a 'SCE' sin mas, 30 mV frente a Ag/AgCl.",
+    "Aqui van con su relleno explicito.",
+    "",
+    "Los valores de Cs para el area electroquimica (ECSA) van con un rango",
+    "enorme a proposito: es una cantidad que la literatura da entre 20 y 60",
+    "microF/cm2 para el mismo material, y ese factor de tres se propaga",
+    "entero al area y de ahi a cualquier actividad normalizada por area. Es",
+    "la magnitud peor determinada de toda la electrocatalisis y el programa",
+    "no la va a presentar como si no lo fuera."
+  ],
+  "reference_electrodes": {
+    "SHE":            {"label": "Electrodo estándar de hidrógeno", "vs_she": 0.0,   "note": "La referencia termodinámica; en la práctica no se usa."},
+    "RHE":            {"label": "Electrodo reversible de hidrógeno", "vs_she": null, "ph_dependent": true, "note": "Depende del pH: E(RHE) = 0.0 V frente a SHE al pH de la disolución. Es la referencia correcta para HER/OER porque el potencial de equilibrio no se mueve con el pH."},
+    "Ag/AgCl_3M":     {"label": "Ag/AgCl (KCl 3 M)", "vs_she": 0.210, "note": "El más común. Comprueba SIEMPRE el relleno: con KCl saturado son 0.197 V, 13 mV menos."},
+    "Ag/AgCl_sat":    {"label": "Ag/AgCl (KCl saturado)", "vs_she": 0.197, "note": ""},
+    "Ag/AgCl_1M":     {"label": "Ag/AgCl (KCl 1 M)", "vs_she": 0.235, "note": ""},
+    "SCE":            {"label": "Calomelanos saturado (SCE)", "vs_she": 0.241, "note": "30 mV por encima del Ag/AgCl 3 M. Confundirlos desplaza todo un gráfico de Tafel."},
+    "Hg/HgO_1M":      {"label": "Hg/HgO (NaOH 1 M)", "vs_she": 0.098, "note": "El adecuado en medio alcalino: un Ag/AgCl en KOH 1 M se degrada y deriva."},
+    "Hg/Hg2SO4_sat":  {"label": "Hg/Hg₂SO₄ (K₂SO₄ saturado)", "vs_she": 0.640, "note": "Para medio ácido sulfúrico, donde el cloruro del Ag/AgCl envenena muchos catalizadores."}
+  },
+  "nernst_slope_v_per_ph": 0.05916,
+  "_nernst_note": "2.303 RT/F a 25 °C. A otra temperatura cambia: 0.0592 V/pH solo vale a 298 K.",
+  "ecsa_specific_capacitance_uF_cm2": {
+    "_comment": "Capacitancia de doble capa por cm2 real. El rango es el problema, no el valor.",
+    "carbono_medio_acido":   {"value": 20.0, "range": [10.0, 40.0], "source": "Valores recogidos para carbonos en medio ácido"},
+    "metal_medio_alcalino":  {"value": 40.0, "range": [22.0, 130.0], "source": "McCrory, Jung, Peters & Jaramillo, J. Am. Chem. Soc. 135 (2013) 16977"},
+    "oxido_medio_alcalino":  {"value": 40.0, "range": [20.0, 60.0], "source": "Idem; para óxidos el rango es aún peor porque parte de la corriente no es capacitiva"},
+    "por_defecto":           {"value": 40.0, "range": [20.0, 60.0], "source": "McCrory et al. (2013), valor de consenso"}
+  },
+  "equilibrium_potentials_vs_rhe": {
+    "HER": 0.0,
+    "OER": 1.23,
+    "_note": "Ambos frente a RHE y a 25 °C, 1 bar. Frente a RHE no dependen del pH, que es la razón de usar RHE."
+  },
+  "benchmark_current_density_mA_cm2": 10.0,
+  "_benchmark_note": "La densidad de corriente a la que se compara el sobrepotencial. Los 10 mA/cm2 vienen del rendimiento de una celda solar de union multiple al 10 % bajo 1 sol (McCrory et al. 2013): es un convenio util, no una constante fisica. Debe referirse al area GEOMETRICA salvo que se diga lo contrario.",
+  "circuit_elements": {
+    "R": {"label": "Resistencia", "parameters": ["R"], "units": ["Ω"], "impedance": "Z = R"},
+    "C": {"label": "Condensador ideal", "parameters": ["C"], "units": ["F"], "impedance": "Z = 1/(jωC)"},
+    "L": {"label": "Inductancia", "parameters": ["L"], "units": ["H"], "impedance": "Z = jωL", "note": "Casi siempre son los cables, no la muestra. Aparece a alta frecuencia como -Z'' negativo."},
+    "Q": {"label": "Elemento de fase constante (CPE)", "parameters": ["Q", "n"], "units": ["S·sⁿ", "—"], "impedance": "Z = 1/(Q(jω)^n)", "note": "n=1 es un condensador, n=0.5 un Warburg, n=0 una resistencia. Un n entre 0.8 y 1 describe una doble capa sobre superficie rugosa o heterogénea. La Q NO son faradios y no se puede citar como capacitancia sin convertirla."},
+    "W": {"label": "Warburg semiinfinito", "parameters": ["sigma"], "units": ["Ω·s^-1/2"], "impedance": "Z = σ(1-j)/√ω", "note": "Recta a 45° en Nyquist. Vale mientras la capa de difusión no toque un límite."},
+    "Ws": {"label": "Warburg de longitud finita (transmisiva)", "parameters": ["R", "tau"], "units": ["Ω", "s"], "impedance": "Z = R·tanh(√(jωτ))/√(jωτ)"},
+    "Wo": {"label": "Warburg de longitud finita (reflexiva)", "parameters": ["R", "tau"], "units": ["Ω", "s"], "impedance": "Z = R·coth(√(jωτ))/√(jωτ)", "note": "La adecuada para un electrodo de batería: la difusión termina en el centro de la partícula, que es una frontera reflexiva."}
+  },
+  "storage_mechanisms": {
+    "_comment": "Como se distingue un condensador de una bateria, y por que importa. Esta clasificacion es la de Gogotsi y Penner (ACS Nano 12 (2018) 2081) y de Simon, Gogotsi y Dunn (Science 343 (2014) 1210).",
+    "EDLC": {
+      "label": "Doble capa (capacitivo)",
+      "cv_shape": "rectangular, sin picos",
+      "gcd_shape": "triangular, V lineal con t",
+      "b_value": [0.9, 1.0],
+      "report_as": "capacitancia (F/g)"
+    },
+    "pseudocapacitive": {
+      "label": "Pseudocapacitivo",
+      "cv_shape": "cuasi-rectangular con picos anchos y muy solapados",
+      "gcd_shape": "casi triangular, con curvatura",
+      "b_value": [0.8, 1.0],
+      "report_as": "capacitancia (F/g), con reservas"
+    },
+    "battery": {
+      "label": "Tipo batería (faradaico con difusión)",
+      "cv_shape": "picos redox estrechos y bien separados",
+      "gcd_shape": "meseta de potencial",
+      "b_value": [0.5, 0.7],
+      "report_as": "capacidad (C/g o mAh/g), NUNCA F/g"
+    }
+  }
+}
