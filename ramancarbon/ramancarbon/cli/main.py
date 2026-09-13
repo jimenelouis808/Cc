@@ -1161,6 +1161,20 @@ def cmd_exportar(args) -> int:
     loaded = load(args.archivo, laser_nm=args.laser)
     for note in loaded.warnings:
         print(f"aviso: {note}")
+    if isinstance(loaded.data, list):
+        # A .spe or a VAMAS file holds every region of a session. One file
+        # in, one file per region out, named after the region: merging them
+        # into a single table would put axes of different ranges and steps
+        # in the same columns.
+        destination = Path(args.salida)
+        for spectrum in loaded.data:
+            label = (spectrum.region or spectrum.name).replace(" ", "").replace("/", "")
+            written = export(
+                spectrum,
+                destination.with_name(f"{destination.stem}_{label}{destination.suffix}"),
+            )
+            print(f"{loaded.path.name} [{spectrum.region or spectrum.name}] → {written}")
+        return 0
     written = export(loaded.data, args.salida)
     print(f"{loaded.path.name} ({loaded.kind}) → {written}")
     return 0
@@ -1175,7 +1189,11 @@ def cmd_proyecto(args) -> int:
         project = Project(name=Path(args.origen).resolve().name,
                           notes=args.notas or "")
         for item in loaded:
-            project.add(item.data)
+            # One file can hold several measurements — every region of an
+            # XPS session, for instance — and each goes in separately.
+            for measurement in (item.data if isinstance(item.data, list)
+                                else [item.data]):
+                project.add(measurement)
         written = project.save(args.destino)
         print(f"{written}  ({len(project.datasets)} medidas, "
               f"{written.stat().st_size / 1024:.0f} kB)")

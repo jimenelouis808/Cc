@@ -298,6 +298,8 @@ def _kind_of(obj: Any) -> str:
         return "eis"
     if hasattr(obj, "time"):
         return "gcd"
+    if hasattr(obj, "binding_energy"):
+        return "xps"
     raise TypeError(f"no sé guardar un {type(obj).__name__} en un proyecto")
 
 
@@ -310,10 +312,23 @@ def _options_of(obj: Any) -> dict[str, Any]:
     """
     options: dict[str, Any] = {}
     for attribute, key in (("laser_nm", "laser_nm"), ("wavelength", "wavelength"),
-                           ("scan_rate", "scan_rate"), ("current", "current")):
+                           ("scan_rate", "scan_rate"), ("current", "current"),
+                           ("photon_energy", "photon_energy"),
+                           ("pass_energy", "pass_energy"),
+                           ("dwell_s", "dwell_s"),
+                           ("work_function", "work_function")):
         value = getattr(obj, attribute, None)
         if isinstance(value, (int, float)) and value is not None:
             options[key] = float(value)
+    if hasattr(obj, "binding_energy"):
+        # Without these a photoelectron spectrum reopens and can no longer
+        # be analysed: no anode means no kinetic scale and no Auger lines,
+        # no pass energy means no resolution floor, and the region label is
+        # what ties it to a table of chemical states.
+        options["sweeps"] = getattr(obj, "sweeps", None)
+        options["monochromated"] = bool(getattr(obj, "monochromated", True))
+        options["intensity_unit"] = getattr(obj, "intensity_unit", "cuentas")
+        options["region"] = getattr(obj, "region", "")
     electrode = getattr(obj, "electrode", None)
     if electrode is not None:
         options["electrodo"] = {
@@ -372,6 +387,22 @@ def _rebuild(dataset: Dataset):
                                electrode=_electrode(options),
                                cycle=_column(dataset, "ciclo"),
                                name=dataset.name or dataset.identifier)
+    if dataset.kind == "xps":
+        from ..xps.spectrum import XPSSpectrum
+
+        return XPSSpectrum(
+            binding_energy=x, counts=y,
+            photon_energy=options.get("photon_energy"),
+            pass_energy=options.get("pass_energy"),
+            dwell_s=options.get("dwell_s"),
+            sweeps=(int(options["sweeps"]) if options.get("sweeps") else None),
+            work_function=float(options.get("work_function", 4.5)),
+            monochromated=bool(options.get("monochromated", True)),
+            intensity_unit=str(options.get("intensity_unit", "cuentas")),
+            region=str(options.get("region", "")),
+            name=dataset.name or dataset.identifier,
+            metadata={"origen": dataset.source},
+        )
     if dataset.kind == "eis":
         from ..echem.curve import Impedance
 

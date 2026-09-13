@@ -657,3 +657,99 @@ def test_the_section_warns_before_referencing_a_carbon_sample_circularly():
     session.shifted = list(session.spectra)
     session.apply_reference()
     assert any("circular" in text for _, text in session.messages)
+
+
+def test_an_asymmetric_component_and_its_background_are_not_independent():
+    """A Doniach–Šunjić does not decay to zero on EITHER side — it goes as
+    |u|^(α−1) — so over a finite window the Shirley absorbs part of the
+    tail, the fitted asymmetry comes out low, and the metallic component's
+    area comes out short. Always in that direction. The test locks the
+    direction and the fitter says so in its warnings."""
+    from ramancarbon.core.compat import trapezoid
+    from ramancarbon.xps.lineshapes import ds_gauss
+
+    rng = np.random.default_rng(4)
+    axis = np.linspace(846.0, 868.0, 221)
+    peak = 60000 * ds_gauss(axis, 852.6, 1.0, 0.6, 0.30, 0.7)
+    cumulative = np.concatenate([[0.0], np.cumsum(
+        0.5 * (peak[1:] + peak[:-1]) * np.diff(axis))])
+    counts = rng.poisson(peak + 3000 + 1200 * cumulative / cumulative[-1])
+    spectrum = XPSSpectrum(axis, counts.astype(float), photon_energy=1486.6,
+                           pass_energy=26.0, dwell_s=0.1, sweeps=10,
+                           region="Ni 2p3/2")
+    model = XPSModel(
+        [XPSComponent(name="m", label="metal", centre=852.6, height=50000.0,
+                      fwhm=0.6, profile="ds_gauss", centre_bounds=(851.5, 853.5),
+                      fwhm_bounds=(0.2, 2.0), extra=(0.15, 0.7))],
+        window=(846.0, 868.0), background="shirley", region_label="Ni 2p3/2",
+    )
+    result = fit_region(spectrum, model)
+    component = result.components[0]
+    asymmetry = component.extra[component.extra_names.index("asymmetry")]
+    assert asymmetry < 0.30                      # low, never high
+    assert component.area < float(trapezoid(peak, axis))
+    assert any("NO son independientes" in text for text in result.warnings)
+
+
+def test_a_symmetric_shape_on_a_metal_is_much_worse_than_an_asymmetric_one():
+    """This is why the asymmetric profiles are here at all."""
+    from ramancarbon.xps.lineshapes import ds_gauss
+
+    rng = np.random.default_rng(6)
+    axis = np.linspace(848.0, 866.0, 181)
+    peak = 60000 * ds_gauss(axis, 852.6, 1.0, 0.6, 0.30, 0.7)
+    cumulative = np.concatenate([[0.0], np.cumsum(
+        0.5 * (peak[1:] + peak[:-1]) * np.diff(axis))])
+    counts = rng.poisson(peak + 3000 + 1200 * cumulative / cumulative[-1])
+    spectrum = XPSSpectrum(axis, counts.astype(float), photon_energy=1486.6,
+                           pass_energy=26.0, dwell_s=0.1, sweeps=10,
+                           region="Ni 2p3/2")
+
+    def fit(component):
+        return fit_region(spectrum, XPSModel(
+            [component], window=(848.0, 866.0), background="shirley",
+            region_label="Ni 2p3/2"))
+
+    asymmetric = fit(XPSComponent(
+        name="m", label="metal", centre=852.6, height=50000.0, fwhm=0.6,
+        profile="ds_gauss", centre_bounds=(851.5, 853.5),
+        fwhm_bounds=(0.2, 2.0), extra=(0.2, 0.7)))
+    symmetric = fit(XPSComponent(
+        name="s", label="simétrica", centre=852.6, height=50000.0, fwhm=1.0,
+        profile="gl", centre_bounds=(851.5, 853.5), fwhm_bounds=(0.3, 3.0)))
+    assert symmetric.reduced_chi2 > 5 * asymmetric.reduced_chi2
+
+
+def test_a_photoelectron_spectrum_exports_with_what_cannot_be_recovered(tmp_path):
+    """The charge shift above all: a binding energy exported without saying
+    what put the axis there is not a measurement, and whoever opens the
+    file has no other way to find out."""
+    from ramancarbon.dataio.export import export
+
+    spectrum = next(item for item in make_xps_demo("NCNT_FeSe", seed=19)
+                    if item.region == "N 1s")
+    spectrum = spectrum.shifted(-1.2, "C 1s sp² a 284.4 eV")
+    text = export(spectrum, tmp_path / "n1s.csv").read_text(encoding="utf-8")
+    assert "energia_enlace" in text
+    assert "hν = 1486.6 eV" in text
+    assert "energía de paso 26 eV" in text
+    assert "-1.200 eV ya aplicado" in text
+
+
+def test_a_photoelectron_spectrum_survives_a_project_round_trip(tmp_path):
+    """Reopening a project has to give back something that can still be
+    analysed: without the anode there is no kinetic scale and no Auger
+    lines, and without the pass energy no resolution floor."""
+    from ramancarbon.dataio import Project
+
+    original = next(item for item in make_xps_demo("NCNT_FeSe", seed=20)
+                    if item.region == "Fe 2p3/2")
+    project = Project(name="prueba")
+    project.add(original)
+    back = Project.load(project.save(tmp_path / "s.rcproj")).datasets[0].to_object()
+    assert np.allclose(back.binding_energy, original.binding_energy)
+    assert np.allclose(back.counts, original.counts)
+    assert back.photon_energy == pytest.approx(original.photon_energy)
+    assert back.pass_energy == pytest.approx(original.pass_energy)
+    assert back.sweeps == original.sweeps
+    assert back.region == original.region

@@ -754,6 +754,14 @@ una tiene una prueba que la protege.
   en los datos la cuenta dos veces. Dejaba un residuo sistemático de 14σ en
   el primer eV de un C 1s, donde nadie mira, con un χ² veinte veces más alto
   y todos los picos con buen aspecto.
+- **La asimetría y el fondo NO son independientes.** Una Doniach-Šunjić no
+  decae a cero por NINGUNO de los dos lados —va como |u|^(α−1)—, así que
+  sobre una ventana finita el Shirley se come parte de la cola: la α
+  ajustada sale baja y el área de la componente metálica sale corta.
+  Medido sobre picos sintéticos con α conocida: −2 % con α = 0.05, −5 % con
+  0.15 y −12 % con 0.30, siempre en esa dirección. Es de la función, no del
+  programa, y va avisado. Es también la razón de que exista la LA de
+  CasaXPS, con cola finita.
 - **El Shirley sube en energía de enlace.** Los electrones dispersados han
   PERDIDO energía cinética, así que aparecen a energía de enlace MAYOR. Un
   Shirley que baja se ha calculado sobre un eje invertido.
@@ -819,6 +827,14 @@ una tiene una prueba que la protege.
   cuadran, los campos no estaban donde el lector creía. Del bloque binario
   solo se aceptan intensidades que encajen con lo que declara la cabecera, y
   si dos disposiciones encajan igual de bien se rechazan las dos.
+- **Una medida de XPS entra y sale por los mismos sitios que las demás.**
+  El detector de formato conoce `.spe`, `.vms` y `.npl`; la exportación
+  escribe el eje con lo que NO está en las columnas (ánodo, energía de
+  paso, y sobre todo el desplazamiento de carga ya aplicado); y un proyecto
+  `.rcproj` lo guarda y lo devuelve con esos ajustes, porque sin ellos se
+  reabre y ya no se puede analizar. Un archivo que trae varias regiones
+  sale como varios archivos: fundirlas en una tabla pondría ejes de
+  distinto intervalo y distinto paso en las mismas columnas.
 - **Lo que sale no es lo que entró.** Un espectro referenciado tiene otro
   eje, y mandar el original con una frase sobre el desplazamiento es como
   ese desplazamiento se aplica dos veces. Por eso se exporta VAMAS.

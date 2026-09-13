@@ -325,6 +325,34 @@ def series_table(obj: Any, digits: int = 6) -> Table:
             notes=["la corriente va con signo: positiva al cargar"],
             digits=digits,
         )
+    elif hasattr(obj, "binding_energy") and hasattr(obj, "counts"):
+        # The settings that cannot be recovered from the two columns go in
+        # the notes, and the charge shift above all: a binding energy
+        # exported without saying what put the axis there is not a
+        # measurement, and the person opening the file has no other way to
+        # find out.
+        columns = ["energia_enlace", "intensidad"]
+        units = ["eV", getattr(obj, "intensity_unit", "cuentas")]
+        x, y = obj.binding_energy, obj.counts
+        notes = []
+        if getattr(obj, "photon_energy", None):
+            notes.append(f"hν = {obj.photon_energy:.1f} eV"
+                         + ("" if obj.monochromated else ", fuente no monocromada"))
+        else:
+            notes.append("energía del fotón sin declarar: no hay escala cinética")
+        if getattr(obj, "pass_energy", None):
+            notes.append(f"energía de paso {obj.pass_energy:.0f} eV")
+        if getattr(obj, "dwell_s", None):
+            notes.append(f"{obj.dwell_s:g} s por canal"
+                         + (f" × {obj.sweeps} barridos" if obj.sweeps else ""))
+        shift = getattr(obj, "metadata", {}).get("charge_shift_ev")
+        if shift:
+            notes.append(f"el eje lleva un desplazamiento de carga de "
+                         f"{float(shift):+.3f} eV ya aplicado"
+                         + (f" ({obj.metadata.get('charge_reference', '')})"
+                            if obj.metadata.get("charge_reference") else ""))
+        else:
+            notes.append("sin referenciar: el eje es el del instrumento")
     elif hasattr(obj, "frequency"):
         table = Table(
             columns=["frecuencia", "Z_real", "Z_imag"],

@@ -670,9 +670,12 @@ Lo demás:
   carbonilo un varios por ciento, y eso no es un defecto del método, es lo
   que significa «área de un pico sobre un fondo».
 * **Formas de línea** GL (producto, el de CasaXPS), SGL y **Doniach-Šunjić**
-  para metales. Ajustar hierro metálico con formas simétricas obliga al
-  ajuste a tapar la cola con algo, y ese algo se informa como un óxido que
-  no está.
+  para metales. Ajustar un metal con formas simétricas multiplica el χ² por
+  cinco o más. Con la asimétrica hay que saber una cosa, y el programa la
+  dice: la cola de una Doniach-Šunjić y el fondo no son independientes
+  sobre una ventana finita, así que la α ajustada sale baja y el área del
+  metal sale corta —un 2 % con α = 0.05, un 5 % con 0.15, un 12 % con 0.30,
+  siempre en esa dirección.
 * **Pesos de estadística de conteo**, así que el χ² reducido significa algo:
   17 con dos componentes en un N 1s que tiene tres, 1.1 con tres.
 * **Composición atómica** con corrección de transmisión, y con lo que ese

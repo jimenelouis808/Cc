@@ -828,6 +828,25 @@ def _warnings(spectrum: XPSSpectrum, model: XPSModel,
                 "reparto de área entre ellas lo decide el modelo, no la medida"
             )
 
+    asymmetric = [item for item in components if item.extra_names
+                  and "asymmetry" in item.extra_names]
+    if asymmetric and background.kind.startswith(("Shirley", "Tougaard")):
+        worst = max(asymmetric,
+                    key=lambda item: item.extra[item.extra_names.index("asymmetry")])
+        alpha = worst.extra[worst.extra_names.index("asymmetry")]
+        out.append(
+            f"«{worst.label}» es asimétrica (α = {alpha:.2f}) y el fondo es "
+            f"{background.kind}: esas dos cosas NO son independientes sobre "
+            "una ventana finita. Una Doniach-Šunjić no decae a cero por "
+            "ninguno de los dos lados —va como |u|^(α−1)— así que el fondo se "
+            "come parte de la cola y la α ajustada sale BAJA. Medido sobre "
+            "picos sintéticos con α conocida, el área de la componente "
+            "metálica sale corta un 2 % con α = 0.05, un 5 % con 0.15 y un "
+            "12 % con 0.30, y siempre en esa dirección. No es de este "
+            "programa, es de la función: para acotarlo, repite con fondo "
+            "lineal sobre una ventana estrecha y compara"
+        )
+
     if not spectrum.monochromated:
         out.append(
             "la fuente no es monocromada: hay satélites de rayos X entre 8 y "
