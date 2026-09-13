@@ -15,7 +15,10 @@ angle to the parent's own bond direction, and a dihedral. Only the
 real single bonds to within 0.04 Å across the elements this deals with
 (C-O 1.420 against 1.43, C-S 1.810 against 1.82, O-H 0.970 against 0.97),
 with a factor for bond order -- 0.86 for a double bond puts C=O at
-1.221 against the literature 1.23.
+1.221 against the literature 1.23. Two bonds defeat it and are listed in
+:data:`BOND_OVERRIDES` instead: a peroxide O-O and a sulfonate S-OH,
+whose lengths are set by lone-pair repulsion and by charge delocalisation
+respectively, neither of which a sum of radii can see.
 
 That is what makes the library composable rather than a fixed menu.
 :func:`substitute` swaps elements and the geometry follows.
@@ -52,8 +55,28 @@ VALENCE: dict[str, int] = {
 }
 
 
+#: The two bonds the additive model gets wrong, with the measured length
+#: and the reason radii cannot see it. Everything else in this library is
+#: within 0.04 Å of the literature on radii alone; these two are out by
+#: 0.15, which is the difference between a starting geometry and a wrong
+#: one. They are listed rather than fitted because there are two of them.
+BOND_OVERRIDES: dict[tuple[str, str, float], float] = {
+    # A peroxide O-O is 1.47, not the 1.32 two oxygen radii predict. Each
+    # oxygen carries two lone pairs, and adjacent to one another they
+    # repel and push the bond open; the same effect puts H2O2 at 1.48.
+    ("O", "O", 1.0): 1.47,
+    # A sulfonate S-OH is 1.57, not 1.71. The three oxygens on a
+    # sulphonic sulphur share the charge, so even the formally single
+    # S-O has partial double-bond character and contracts.
+    ("O", "S", 1.0): 1.57,
+}
+
+
 def bond_length(first: str, second: str, order: float = 1.0) -> float:
     """Covalent bond length (Å) between two elements at a bond order.
+
+    Radii and bond order, except for the handful of pairs in
+    :data:`BOND_OVERRIDES` where that model is known to fail.
 
     Raises
     ------
@@ -61,6 +84,10 @@ def bond_length(first: str, second: str, order: float = 1.0) -> float:
         If either element has no covalent radius. Guessing one would put
         the whole group at the wrong distance from the surface.
     """
+    pair = tuple(sorted((first, second)))
+    override = BOND_OVERRIDES.get((pair[0], pair[1], float(order)))
+    if override is not None:
+        return override
     try:
         base = COVALENT_RADII[first] + COVALENT_RADII[second]
     except KeyError as exc:
@@ -531,6 +558,137 @@ GROUPS: dict[str, FunctionalGroup] = {
         note="A single oxygen bridging two adjacent surface atoms. With "
              "the hydroxyl it is what the basal plane of graphene oxide is "
              "actually made of.",
+    ),
+    "methoxy": FunctionalGroup(
+        "methoxy",
+        (_z("O"),
+         _z("C", parent=0, angle=111.7),
+         _z("H", parent=1, angle=109.5),
+         _z("H", parent=1, angle=109.5, dihedral=120.0),
+         _z("H", parent=1, angle=109.5, dihedral=240.0)),
+        note="-OCH3. The ether oxygen of graphene oxide that is not an "
+             "epoxide: a C-O-C with the second carbon outside the sheet. "
+             "In XPS it sits with the epoxide under the same C-O peak, "
+             "which is why the two are told apart by chemistry and not by "
+             "binding energy.",
+    ),
+    "ester": FunctionalGroup(
+        "ester",
+        (_z("C"),
+         _z("O", parent=0, order=2.0, angle=125.0),
+         # Same conjugation argument as the carboxyl: an ester C-O is
+         # 1.34, not an alcohol's 1.43.
+         _z("O", parent=0, order=1.5, angle=111.0, dihedral=180.0),
+         _z("C", parent=2, angle=116.0),
+         _z("H", parent=3, angle=109.5),
+         _z("H", parent=3, angle=109.5, dihedral=120.0),
+         _z("H", parent=3, angle=109.5, dihedral=240.0)),
+        note="-COOCH3. What a carboxyl becomes when an acid-treated "
+             "carbon is esterified, and the usual way of capping the "
+             "acid sites before a coupling that must not touch them.",
+    ),
+    "hydroperoxyl": FunctionalGroup(
+        "hydroperoxyl",
+        (_z("O"),
+         _z("O", parent=0, angle=105.0),
+         _z("H", parent=1, angle=100.0, dihedral=115.0)),
+        note="-OOH. The adsorbed intermediate of the oxygen reduction "
+             "reaction, and the species whose binding energy the whole "
+             "ORR volcano is plotted against. Built here so a site can "
+             "be handed to a calculation with the intermediate already "
+             "on it.",
+    ),
+    "acetyl": FunctionalGroup(
+        "acetyl",
+        (_z("C"),
+         _z("O", parent=0, order=2.0, angle=121.0),
+         _z("C", parent=0, angle=117.0, dihedral=180.0),
+         _z("H", parent=2, angle=109.5),
+         _z("H", parent=2, angle=109.5, dihedral=120.0),
+         _z("H", parent=2, angle=109.5, dihedral=240.0)),
+        note="-COCH3. A ketone rather than an aldehyde, so the carbonyl "
+             "carbon carries no hydrogen and cannot oxidise further to "
+             "an acid.",
+    ),
+    "amide": FunctionalGroup(
+        "amide",
+        (_z("C"),
+         _z("O", parent=0, order=2.0, angle=123.0),
+         # 1.5 rather than 1.0: the amide C-N is conjugated and planar at
+         # 1.33, which is why an amide bond does not rotate freely.
+         _z("N", parent=0, order=1.5, angle=116.0, dihedral=180.0),
+         _z("H", parent=2, angle=119.0),
+         _z("H", parent=2, angle=119.0, dihedral=180.0)),
+        note="-CONH2. The product of coupling a carboxylated carbon with "
+             "an amine, so it is the bond most functionalised nanotubes "
+             "are actually attached through.",
+    ),
+    "nitrile": FunctionalGroup(
+        "nitrile",
+        (_z("C"),
+         _z("N", parent=0, order=3.0, angle=180.0)),
+        note="-C#N. Linear and strongly withdrawing. In N 1s it is the "
+             "one nitrogen that sits well above the pyridinic and "
+             "pyrrolic pair rather than between them.",
+    ),
+    "imine": FunctionalGroup(
+        "imine",
+        (_z("N", order=2.0),
+         _z("H", parent=0, angle=120.0)),
+        site_hybridisation="sp2",
+        note="=NH. Double-bonded like the carbonyl, so the site stays "
+             "planar. The nitrogen analogue of a ketone, and what a "
+             "Schiff-base condensation leaves on the surface.",
+    ),
+    "azide": FunctionalGroup(
+        "azide",
+        (_z("N"),
+         _z("N", parent=0, order=2.0, angle=116.0),
+         _z("N", parent=1, order=2.0, angle=172.0)),
+        note="-N3. Nearly linear after the first nitrogen. The handle for "
+             "click chemistry, and the one group here that is a reagent "
+             "rather than a product.",
+    ),
+    "sulfonic": FunctionalGroup(
+        "sulfonic",
+        (_z("S"),
+         _z("O", parent=0, order=2.0, angle=106.0),
+         _z("O", parent=0, order=2.0, angle=106.0, dihedral=120.0),
+         _z("O", parent=0, angle=106.0, dihedral=240.0),
+         _z("H", parent=3, angle=108.0)),
+        note="-SO3H. What sulfonated carbons carry, and the reason they "
+             "are solid acids: it is the group that makes a carbon a "
+             "proton conductor. In S 2p it is the oxidised doublet near "
+             "168 eV, far from thiophenic sulphur at 164.",
+    ),
+    "thiocarbonyl": FunctionalGroup(
+        "thiocarbonyl",
+        (_z("S", order=2.0),),
+        site_hybridisation="sp2",
+        note="=S, a thioketone. The sulphur analogue of the carbonyl, "
+             "and like it the site stays planar rather than puckering.",
+    ),
+    "methylthio": FunctionalGroup(
+        "methylthio",
+        (_z("S"),
+         _z("C", parent=0, angle=99.0),
+         _z("H", parent=1, angle=109.5),
+         _z("H", parent=1, angle=109.5, dihedral=120.0),
+         _z("H", parent=1, angle=109.5, dihedral=240.0)),
+        note="-SCH3. A thioether. The C-S-C angle is 99 degrees, not the "
+             "ether's 112: sulphur uses more p character and closes the "
+             "angle, which is why a thioether is bulkier than it looks.",
+    ),
+    "sulfone": FunctionalGroup(
+        "sulfone",
+        (_z("S"),
+         _z("O", parent=0, order=2.0, angle=120.0),
+         _z("O", parent=0, order=2.0, angle=120.0, dihedral=180.0)),
+        bridging=True,
+        note="-SO2- spanning two adjacent surface atoms, the sulphur "
+             "bonded to both. The oxidised sulphur of a thermally "
+             "treated S-doped carbon, and the bridging counterpart of "
+             "the epoxide.",
     ),
 }
 

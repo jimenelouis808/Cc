@@ -27,6 +27,7 @@ from nanocarbon_lab.functionalize.attach import (
     surface_normals,
 )
 from nanocarbon_lab.functionalize.groups import (
+    BOND_OVERRIDES,
     GROUPS,
     VALENCE,
     bond_length,
@@ -869,3 +870,55 @@ class TestHostIsJudgedWithoutItsCoating:
                     "metal_coordination_min", "chalcogen_coordination_max"):
             assert coated[key] == pytest.approx(clean[key])
         assert tmd_quality(coated) == tmd_quality(clean)
+
+
+class TestBondOverrides:
+    """The two bonds radii cannot reach, and the rest that they can.
+
+    The override table is a liability if it grows quietly: every entry is
+    a place where the geometry stops following from the model and starts
+    being asserted. So this pins both what is in it and what is not.
+    """
+
+    #: Literature single- and multiple-bond lengths (CRC, Allen et al.).
+    LITERATURE = {
+        ("C", "C", 1.0): 1.54, ("C", "H", 1.0): 1.09, ("C", "N", 1.0): 1.47,
+        ("C", "N", 1.5): 1.33, ("C", "N", 2.0): 1.28, ("C", "N", 3.0): 1.16,
+        ("C", "O", 1.0): 1.43, ("C", "O", 1.5): 1.34, ("C", "O", 2.0): 1.23,
+        ("C", "S", 1.0): 1.82, ("C", "F", 1.0): 1.35, ("H", "N", 1.0): 1.01,
+        ("H", "O", 1.0): 0.97, ("H", "S", 1.0): 1.34, ("N", "N", 2.0): 1.24,
+        ("O", "O", 1.0): 1.47, ("O", "S", 1.0): 1.57, ("O", "S", 2.0): 1.44,
+    }
+
+    def test_every_bond_any_group_uses_is_close_to_the_literature(self):
+        """Whether it comes from radii or from the table, it must be right."""
+        used = {
+            (tuple(sorted((
+                "C" if atom.parent < 0 else group.atoms[atom.parent].symbol,
+                atom.symbol))), atom.order)
+            for group in GROUPS.values() for atom in group.atoms
+        }
+        for pair, order in sorted(used):
+            reference = self.LITERATURE.get((pair[0], pair[1], order))
+            if reference is None:
+                continue
+            measured = bond_length(pair[0], pair[1], order)
+            assert measured == pytest.approx(reference, abs=0.05), (
+                f"{pair[0]}-{pair[1]} at order {order}: "
+                f"{measured:.3f} against {reference:.2f}"
+            )
+
+    def test_the_overrides_are_the_ones_radii_actually_miss(self):
+        """An entry that radii already get right does not belong here."""
+        for (first, second, order), value in BOND_OVERRIDES.items():
+            additive = (COVALENT_RADII[first] + COVALENT_RADII[second]) * (
+                {1.0: 1.0, 1.5: 0.93, 2.0: 0.86, 3.0: 0.78}[order])
+            assert abs(additive - value) > 0.05, (
+                f"{first}-{second}: radii give {additive:.3f} against the "
+                f"tabulated {value:.2f}; the override earns nothing."
+            )
+
+    def test_an_override_does_not_leak_into_a_neighbouring_order(self):
+        """S-O is tabulated at order 1; S=O must still come from radii."""
+        assert ("O", "S", 2.0) not in BOND_OVERRIDES
+        assert bond_length("S", "O", 2.0) == pytest.approx(1.47, abs=0.05)
