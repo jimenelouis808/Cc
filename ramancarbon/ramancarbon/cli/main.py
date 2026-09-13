@@ -290,6 +290,22 @@ def cmd_lote(args) -> int:
     return 0 if not failures else 0
 
 
+def _write_rows(rows: list[dict], path: str) -> Path:
+    """Write dictionaries as one CSV, taking the columns from their keys."""
+    columns: list[str] = []
+    for row in rows:
+        for key in row:
+            if key not in columns:
+                columns.append(key)
+    lines = [",".join(_csv_cell(name) for name in columns)]
+    for row in rows:
+        lines.append(",".join(_csv_cell(row.get(column)) for column in columns))
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out
+
+
 def _csv_cell(value) -> str:
     if value is None:
         return ""
@@ -769,6 +785,84 @@ def cmd_drx_lote(args) -> int:
 # ----------------------------------------------------------------------
 # electrochemistry
 # ----------------------------------------------------------------------
+def _xps_regions(entries) -> dict:
+    """Parse ``--region "N 1s=4"`` and ``--region "N 1s=pyridinic,pyrrolic"``."""
+    out: dict = {}
+    for entry in entries or []:
+        if "=" not in entry:
+            raise ValueError(
+                f"--region {entry!r}: la forma es «REGIÓN=N» o "
+                "«REGIÓN=estado,estado», por ejemplo «N 1s=4» o "
+                "«N 1s=pyridinic,pyrrolic,graphitic»"
+            )
+        label, _, choice = entry.partition("=")
+        label, choice = label.strip(), choice.strip()
+        if choice.isdigit():
+            out[label] = int(choice)
+        else:
+            out[label] = [item.strip() for item in choice.split(",") if item.strip()]
+    return out
+
+
+def cmd_xps(args) -> int:
+    """Analyse a set of photoelectron spectra."""
+    from ..xps.io import read_xps, write_vamas
+    from ..xps.report import analyse_xps
+    from ..xps.spectrum import source_energy
+    from ..xps.tables import write_fit
+
+    photon = source_energy(args.fuente) if args.fuente else None
+    spectra = []
+    for path in args.archivos:
+        spectra.extend(read_xps(
+            path, photon_energy=photon, pass_energy=args.paso_energia,
+            axis=args.eje,
+        ))
+    if not spectra:
+        print("error: no se ha leído ningún espectro", file=sys.stderr)
+        return 1
+    if args.paso_energia:
+        for item in spectra:
+            if item.pass_energy is None:
+                item.pass_energy = args.paso_energia
+
+    reference = None if args.referencia == "ninguna" else args.referencia
+    state = None
+    if args.referencia_estado:
+        if ":" not in args.referencia_estado:
+            print("error: --referencia-estado se escribe «REGIÓN:estado», "
+                  "por ejemplo «C 1s:C-C sp2»", file=sys.stderr)
+            return 1
+        region, _, key = args.referencia_estado.partition(":")
+        state = (region.strip(), key.strip())
+
+    result = analyse_xps(
+        spectra, reference=reference, reference_state=state,
+        regions=_xps_regions(args.region), transmission=args.transmision,
+        exponent=args.exponente, name=args.nombre or Path(args.archivos[0]).stem,
+    )
+    text = result.report(verbose=not args.breve)
+    if args.salida:
+        Path(args.salida).write_text(text + "\n", encoding="utf-8")
+        print(f"informe escrito en {args.salida}")
+    else:
+        print(text)
+    if args.csv:
+        _write_rows([result.to_dict()], args.csv)
+        print(f"fila escrita en {args.csv}")
+    if args.tablas:
+        directory = Path(args.tablas)
+        directory.mkdir(parents=True, exist_ok=True)
+        for fit in result.regions:
+            stem = fit.region_label.replace(" ", "").replace("/", "")
+            curves, parameters = write_fit(fit, directory / f"{stem}.csv")
+            print(f"{fit.region_label}: {curves.name} y {parameters.name}")
+    if args.vamas:
+        write_vamas(args.vamas, spectra)
+        print(f"espectros (con el eje ya referenciado) escritos en {args.vamas}")
+    return 0
+
+
 def cmd_echem(args) -> int:
     """Analyse the electrochemistry of one electrode."""
     from ..echem.curve import Electrode
@@ -778,9 +872,12 @@ def cmd_echem(args) -> int:
     electrode = Electrode(
         mass_mg=args.masa,
         area_cm2=args.area,
+        volume_cm3=args.volumen,
         reference=args.referencia,
         ph=args.ph,
         resistance_ohm=args.resistencia,
+        ir_compensated_fraction=args.compensado,
+        electrolyte=args.electrolito,
         label=args.nombre,
     )
     rate = args.velocidad / 1000.0 if args.velocidad else None
@@ -798,6 +895,19 @@ def cmd_echem(args) -> int:
     eis = read_eis(args.eis, electrode=electrode) if args.eis else None
     lsv = read_cv(args.polarizacion, scan_rate=0.005, electrode=electrode) \
         if args.polarizacion else None
+
+    if args.resistencia_de_eis:
+        if eis is None:
+            print("error: --resistencia-de-eis necesita un --eis del que "
+                  "sacarla", file=sys.stderr)
+            return 1
+        from ..echem.eis import with_resistance_from
+
+        electrode, how = with_resistance_from(electrode, eis)
+        print(f"R_u = {electrode.resistance_ohm:.4g} Ω ({how})")
+        for curve in (cv, gcd, eis, lsv, *series):
+            if curve is not None:
+                curve.electrode = electrode
 
     if not any((cv, series, gcd, eis, lsv)):
         print(
@@ -1393,6 +1503,51 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_drx_lote)
 
     p = sub.add_parser(
+        "xps", help="analizar espectros XPS: survey, regiones y composición"
+    )
+    p.add_argument("archivos", nargs="+",
+                   help="archivos .spe, VAMAS (.vms) o texto; survey y regiones "
+                        "mezclados, se distinguen por su anchura")
+    p.add_argument("--nombre", default=None, metavar="TEXTO")
+    p.add_argument("--fuente", default=None, metavar="ANODO",
+                   help="ánodo (Al, Mg…) si el archivo no lo declara. Suponerlo "
+                        "mueve cada línea Auger 233 eV")
+    p.add_argument("--paso-energia", type=float, default=None, metavar="EV",
+                   dest="paso_energia",
+                   help="energía de paso del analizador; sin ella no hay suelo "
+                        "de resolución con el que juzgar las anchuras")
+    p.add_argument("--eje", default="auto", choices=["auto", "binding", "kinetic"],
+                   help="qué es la primera columna de un archivo de texto")
+    p.add_argument("--referencia", default="C1s_adventitious", metavar="CLAVE",
+                   help="referencia de carga (C1s_adventitious, Au4f, Ag3d, "
+                        "Cu2p, Fermi, ninguna)")
+    p.add_argument("--referencia-estado", default=None, metavar="REGION:ESTADO",
+                   dest="referencia_estado",
+                   help="referenciar sobre una COMPONENTE ajustada, p.ej. "
+                        "«C 1s:C-C sp2». Es lo correcto en una muestra hecha "
+                        "del elemento que lleva la referencia")
+    p.add_argument("--region", action="append", default=None, metavar="REGION=N",
+                   help="qué ajustar: «N 1s=4» para las cuatro componentes que "
+                        "pida la región, o «N 1s=pyridinic,pyrrolic» para "
+                        "elegirlas. Repetible")
+    p.add_argument("--transmision", default="potencia",
+                   choices=["potencia", "ninguna", "phi"],
+                   help="modelo de transmisión del analizador")
+    p.add_argument("--exponente", type=float, default=-0.65, metavar="N",
+                   help="exponente de la transmisión T ∝ KE^n; es una propiedad "
+                        "de TU equipo")
+    p.add_argument("--tablas", default=None, metavar="DIRECTORIO",
+                   help="escribir cada región ajustada como tabla (curvas y "
+                        "componentes)")
+    p.add_argument("--vamas", default=None, metavar="ARCHIVO",
+                   help="escribir los espectros con el eje ya referenciado en "
+                        "formato VAMAS (ISO 14976), que leen CasaXPS y KolXPD")
+    p.add_argument("--salida", default=None, metavar="ARCHIVO")
+    p.add_argument("--csv", default=None, metavar="ARCHIVO")
+    p.add_argument("--breve", action="store_true", help="omitir los avisos")
+    p.set_defaults(func=cmd_xps)
+
+    p = sub.add_parser(
         "echem", help="analizar electroquímica: CV, carga-descarga, impedancia"
     )
     p.add_argument("--nombre", default="muestra", metavar="TEXTO")
@@ -1411,6 +1566,19 @@ def build_parser() -> argparse.ArgumentParser:
                    help="masa de material ACTIVO en mg, no la del electrodo")
     p.add_argument("--area", type=float, default=None, metavar="CM2",
                    help="área geométrica en cm²")
+    p.add_argument("--volumen", type=float, default=None, metavar="CM3",
+                   help="volumen del electrodo en cm³, para F/cm³")
+    p.add_argument("--electrolito", default="", metavar="TEXTO",
+                   help="electrolito, p.ej. «KOH 6 M». La misma muestra da "
+                        "otra capacitancia en otro electrolito y la ventana "
+                        "útil es del electrolito, no del material")
+    p.add_argument("--compensado", type=float, default=0.0, metavar="FRACCION",
+                   help="fracción de la caída óhmica que ya compensó el "
+                        "potenciostato, 0–1")
+    p.add_argument("--resistencia-de-eis", action="store_true",
+                   dest="resistencia_de_eis",
+                   help="tomar la resistencia no compensada del corte a alta "
+                        "frecuencia del espectro de impedancia de --eis")
     p.add_argument("--referencia", default="Ag/AgCl_3M", metavar="CLAVE",
                    help="electrodo de referencia (Ag/AgCl_3M, SCE, Hg/HgO_1M, "
                         "RHE…). Di siempre el relleno: Ag/AgCl 3 M y saturado "

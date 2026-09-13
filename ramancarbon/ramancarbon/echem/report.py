@@ -14,10 +14,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional, Sequence
 
+from .capacitance import (
+    CapacitanceComparison,
+    capacitance_from_eis,
+    compare as compare_capacitance,
+    specific,
+)
 from .curve import ChargeDischarge, Impedance, Voltammogram
-from .cv import CVResult, RateStudy, analyse_cv, analyse_rate_study
+from .cv import CVResult, DunnAnalysis, RateStudy, analyse_cv, analyse_rate_study, dunn_analysis
 from .eis import EISResult, analyse_eis
 from .evaluate import CatalysisResult, StorageVerdict, analyse_catalysis, classify_storage
+from .curve import CurveError
 from .gcd import GCDResult, analyse_gcd
 
 
@@ -32,6 +39,10 @@ class EchemResult:
     eis: Optional[EISResult] = None
     catalysis: Optional[CatalysisResult] = None
     storage: Optional[StorageVerdict] = None
+    dunn: Optional[DunnAnalysis] = None
+    capacitance: Optional[CapacitanceComparison] = None
+    """The same capacitance by every method that was measured. It is the
+    disagreement between them that is informative, not any one of them."""
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -54,6 +65,17 @@ class EchemResult:
             row["E_Wh_kg"] = self.gcd.energy_wh_per_kg
             row["P_W_kg"] = self.gcd.power_w_per_kg
             row["R_IR_ohm"] = self.gcd.resistance_ohm
+        if self.dunn and self.dunn.fractions:
+            fastest = max(self.dunn.fractions)
+            slowest = min(self.dunn.fractions)
+            row["capacitivo_rapido"] = self.dunn.fractions[fastest]
+            row["capacitivo_lento"] = self.dunn.fractions[slowest]
+        if self.capacitance:
+            for entry in self.capacitance.entries:
+                row[f"C_{entry.method}_F"] = entry.farads
+                if entry.per_gram is not None:
+                    row[f"C_{entry.method}_F_g"] = entry.per_gram
+            row["dispersion_capacitancia"] = self.capacitance.spread
         if self.rates:
             row["ECSA_cm2"] = self.rates.ecsa_cm2
             row["Cdl_F"] = self.rates.cdl_farads
@@ -117,10 +139,57 @@ def analyse_sample(
         )
         result.warnings.extend(f"{reaction}: {w}" for w in result.catalysis.warnings)
 
+    if rate_series and len(rate_series) >= 3:
+        try:
+            result.dunn = dunn_analysis(rate_series)
+            result.warnings.extend(f"Dunn: {w}" for w in result.dunn.warnings)
+        except CurveError as error:
+            result.warnings.append(f"Dunn: {error}")
+
+    result.capacitance = _capacitance_comparison(result, cv, gcd, eis)
+    if result.capacitance:
+        result.warnings.extend(f"capacitancia: {w}"
+                               for w in result.capacitance.warnings)
+
     if result.cv or result.gcd or result.rates:
         result.storage = classify_storage(result.cv, result.gcd, result.rates)
         _cross_check(result)
     return result
+
+
+def _capacitance_comparison(
+    result: EchemResult,
+    cv: Optional[Voltammogram],
+    gcd: Optional[ChargeDischarge],
+    eis: Optional[Impedance],
+) -> Optional[CapacitanceComparison]:
+    """Collect whatever capacitances the measurements support.
+
+    Only measurements that were actually made contribute, and each carries
+    the condition it was measured at — a scan rate, a current, a frequency.
+    A capacitance without its condition cannot be compared with anybody
+    else's, including the same electrode measured twice.
+    """
+    entries = []
+    if cv is not None and result.cv and result.cv.capacitance_loop:
+        entries.append(specific(
+            result.cv.capacitance_loop.farads, cv.electrode, "CV",
+            f"{1e3 * cv.scan_rate:.0f} mV/s",
+        ))
+    if gcd is not None and result.gcd and result.gcd.capacitance_f:
+        current = getattr(result.gcd, "current_a", None)
+        condition = (f"{1e3 * abs(current):.2f} mA" if current
+                     else "descarga galvanostática")
+        entries.append(specific(result.gcd.capacitance_f, gcd.electrode, "GCD",
+                                condition))
+    if eis is not None:
+        try:
+            entries.append(capacitance_from_eis(eis))
+        except CurveError:
+            pass
+    if not entries:
+        return None
+    return compare_capacitance(entries)
 
 
 def _cross_check(result: EchemResult) -> None:
@@ -205,6 +274,9 @@ def build_report(result: EchemResult, verbose: bool = True) -> str:
     if result.rates:
         lines.append(section("ESTUDIO DE VELOCIDAD"))
         lines.append(result.rates.summary())
+    if result.dunn:
+        lines.append(section("SEPARACIÓN CAPACITIVO / DIFUSIVO (DUNN)"))
+        lines.append(result.dunn.summary())
     if result.gcd:
         lines.append(section("CARGA-DESCARGA GALVANOSTÁTICA"))
         lines.append(result.gcd.summary())
@@ -214,6 +286,9 @@ def build_report(result: EchemResult, verbose: bool = True) -> str:
     if result.catalysis:
         lines.append(section(f"ELECTROCATÁLISIS ({result.catalysis.reaction})"))
         lines.append(result.catalysis.summary())
+    if result.capacitance and len(result.capacitance.entries) > 1:
+        lines.append(section("LA MISMA CAPACITANCIA, POR CADA MÉTODO"))
+        lines.append(result.capacitance.summary())
 
     if result.warnings and verbose:
         lines.append(section("AVISOS"))

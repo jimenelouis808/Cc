@@ -289,10 +289,12 @@ def compare(entries: list[SpecificCapacitance]) -> CapacitanceComparison:
                 f"los métodos difieren un {100 * spread:.0f} %: "
                 f"{best.method} da {1e3 * best.farads:.4g} mF y "
                 f"{worst.method} da {1e3 * worst.farads:.4g} mF. No es ruido. "
-                "Lo normal es EIS > CV > GCD, porque cada uno exige más "
-                "corriente que el anterior; si el orden es otro, mira dónde "
-                "empieza la descarga y si la ventana de integración es la "
-                "misma en los tres"
+                "Lo habitual es que la de EIS sea la mayor: se mide con una "
+                "perturbación pequeña alrededor de un punto fijo y ahí no hay "
+                "nada limitado por velocidad. Entre CV y GCD el orden lo "
+                "deciden la velocidad y la corriente que se usaran, y "
+                "compararlas solo vale si son equivalentes; si no lo son, "
+                "esta diferencia es de las condiciones y no del electrodo"
             )
     methods = {entry.method for entry in entries}
     if "GCD" in methods and len(methods) > 1:
