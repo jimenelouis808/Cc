@@ -374,6 +374,7 @@ class TestCentrelineShapes:
         # Topology is untouched by bending.
         assert atoms.info["ring_counts"][5] == 12
 
+    @pytest.mark.slow
     def test_shape_actually_bends_the_tube(self):
         """The centreline must actually leave the axis.
 

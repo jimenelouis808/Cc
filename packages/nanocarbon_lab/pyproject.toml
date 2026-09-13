@@ -35,6 +35,12 @@ dependencies = [
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
+    # The full suite is dominated by a handful of mesh-and-relax builds. The
+    # slow ones are marked, but even the rest is minutes of mostly independent
+    # work, so it is run across processes: `pytest -n 4 --dist loadscope`.
+    # loadscope rather than the default: the expensive fixtures here are
+    # class-scoped, and distributing by test would rebuild them per worker.
+    "pytest-xdist>=3.5",
     "ruff>=0.4",
 ]
 viz = [

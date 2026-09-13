@@ -147,6 +147,7 @@ class TestJunctions:
             build_junction("Y", arm_length=-1.0)
 
 
+@pytest.mark.slow
 class TestSchwarzites:
     # Genus of one period of each triply periodic minimal surface. These are
     # the textbook values, and getting them out of the mesh is the check that

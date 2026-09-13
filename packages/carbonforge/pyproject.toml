@@ -40,6 +40,9 @@ dependencies = [
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
+    # Runs across processes in CI: `pytest -n 4 --dist loadscope`, with the
+    # BLAS thread count pinned to 1 so the workers do not contend for cores.
+    "pytest-xdist>=3.5",
     "ruff>=0.4",
 ]
 

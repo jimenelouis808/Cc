@@ -59,6 +59,22 @@ def inferred_pairs(atoms: Atoms) -> np.ndarray:
     return np.asarray([(i, j) for i, j, _ in guess_bonds(atoms)], dtype=int)
 
 
+def slow_cases(rows, expensive):
+    """Parametrised cases, with the expensive ones marked ``slow``.
+
+    The cost in this module is concentrated in two builders — the schwarzite
+    and the Y junction — not in the tests that consume them. Marking whole
+    test functions would take the cheap cases (a C60, a sheet, a plain tube)
+    out of the fast suite along with them, so the mark goes on the individual
+    parameters instead.
+    """
+    return [
+        pytest.param(*row, id=row[0],
+                     marks=pytest.mark.slow if row[0] in expensive else ())
+        for row in rows
+    ]
+
+
 class TestRingPerception:
     """Perception must reproduce the rings the builder recorded."""
 
@@ -71,7 +87,8 @@ class TestRingPerception:
         ("Schwarz P", lambda: build_schwarzite(kind="primitive", cell=36.0)),
     ]
 
-    @pytest.mark.parametrize("name,make", KNOWN, ids=[n for n, _ in KNOWN])
+    @pytest.mark.parametrize("name,make",
+                             slow_cases(KNOWN, {"Y junction", "Schwarz P"}))
     def test_it_reproduces_the_recorded_census(self, name, make):
         built = make()
         recorded = dict(sorted(built.info["ring_counts"].items()))
@@ -80,7 +97,8 @@ class TestRingPerception:
         assert report["method"] == "faces"
         assert report["counts"] == recorded, name
 
-    @pytest.mark.parametrize("name,make", KNOWN, ids=[n for n, _ in KNOWN])
+    @pytest.mark.parametrize("name,make",
+                             slow_cases(KNOWN, {"Y junction", "Schwarz P"}))
     def test_the_face_count_satisfies_euler(self, name, make):
         """``F = E - V + 2 - 2g``, exactly.
 
@@ -96,6 +114,7 @@ class TestRingPerception:
         assert boundary == 0, "a closed surface has no boundary walk"
         assert len(faces) == len(pairs) - len(bare) + 2 - 2 * genus
 
+    @pytest.mark.slow
     def test_shortest_path_rings_undercount_a_tiled_surface(self):
         """The reason face tracing exists, stated as a test.
 
@@ -183,8 +202,8 @@ class TestShape:
          1, "ribbon"),
     ]
 
-    @pytest.mark.parametrize("name,make,dimension,shape", CASES,
-                             ids=[case[0] for case in CASES])
+    @pytest.mark.parametrize("name,make,dimension,shape",
+                             slow_cases(CASES, {"junction", "bulk"}))
     def test_shape_is_recovered_from_geometry(self, name, make, dimension,
                                               shape):
         result = describe_shape(foreign(make()))
@@ -262,6 +281,7 @@ class TestProvenance:
         assert by_pair["C-C"]["mean"] == pytest.approx(1.42, abs=0.02)
         assert by_pair["H-O"]["mean"] == pytest.approx(0.97, abs=0.01)
 
+    @pytest.mark.slow
     def test_density_only_for_a_real_bulk(self):
         """A slab's cell is mostly vacuum, so its density is the padding's."""
         bulk = analyse(foreign(build_schwarzite(kind="primitive", cell=36.0)))
