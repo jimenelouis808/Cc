@@ -174,6 +174,10 @@ ramancarbon analizar muestra.txt --laser 532 \
 # Comparando contra un control
 ramancarbon analizar dopado.txt --laser 532 --control pristino.txt
 
+# XPS: una sesión entera, referenciando sobre una componente ajustada
+ramancarbon xps sesion.vms --referencia-estado "C 1s:C-C sp2" \
+    --region "N 1s=4" --region "Fe 2p3/2=Fe-Se,Fe3+" --tablas tablas/
+
 # Una carpeta entera a una tabla CSV
 ramancarbon lote datos/ --laser 633 --csv resultados.csv
 
@@ -230,6 +234,14 @@ Bruker `.opus`). Expórtalos como ASCII desde el programa del equipo.
 `.xrdml` (PANalytical) y `.uxd` (Bruker). Los binarios (`.raw`, `.brml`) hay
 que exportarlos; el programa dice cuál es y qué hacer en vez de intentar
 adivinarlo.
+
+**XPS**: `.spe` de PHI MultiPak, VAMAS/ISO 14976 (`.vms`, `.npl`) y texto de
+dos columnas. El `.spe` es un caso aparte: su cabecera es ASCII y se lee
+entera, y del bloque binario que va detrás solo se aceptan las intensidades
+cuando la lectura se puede **comprobar** contra lo que declara la cabecera.
+Si dos disposiciones encajan igual de bien, se rechazan las dos y el programa
+dice qué exportar. Un archivo puede traer todas las regiones de una sesión y
+entran todas.
 
 **Electroquímica**: cualquier exportación de texto del potenciostato, con o
 sin cabecera. Lee los nombres de columna habituales (`Ewe/V`, `<I>/mA`,
@@ -355,8 +367,12 @@ medidas.
 
 1. **Rellena el electrodo** primero: masa de material **activo** (no la del
    electrodo: el aglomerante y el carbón conductor suelen ser el 20 %), área
-   geométrica, electrodo de referencia **con su relleno** (Ag/AgCl 3 M y
-   saturado están a 13 mV), pH y resistencia no compensada.
+   geométrica, volumen si lo quieres en F/cm³, **electrolito**, electrodo de
+   referencia **con su relleno** (Ag/AgCl 3 M y saturado están a 13 mV), pH,
+   resistencia no compensada y qué fracción compensó ya el potenciostato. Si
+   has cargado una impedancia de esa misma celda, el botón «R de la
+   impedancia cargada» la saca del corte a alta frecuencia y la pone en todas
+   las curvas.
 2. **Carga las medidas** que tengas. Cuantas más, mejor: el mecanismo se
    decide con más confianza y aparecen las comprobaciones cruzadas.
 3. **Analizar**.
@@ -375,6 +391,50 @@ Tres cosas que hay que saber:
 * Para el **ECSA**, marca la casilla de que la ventana no tiene corriente
   faradaica — y elige de verdad una que no la tenga, típicamente ±50 mV
   alrededor del potencial de circuito abierto.
+
+## 7c-bis. Si mides XPS
+
+Sección **XPS**. El orden de las pestañas es el orden en que hay que hacer
+las cosas, y no es cuestión de gusto: **la referencia de carga va antes que
+cualquier energía de enlace**, porque todas dependen de ella.
+
+1. **Carga los espectros** (`.spe` de PHI, VAMAS `.vms`, o texto). El survey
+   y las regiones se distinguen por su anchura, no por cómo los llamara el
+   equipo. Declara el **ánodo** y la **energía de paso**: sin el primero no
+   se pueden situar las líneas Auger (suponer aluminio cuando era magnesio
+   las mueve 233 eV) y sin la segunda no hay suelo de resolución con el que
+   juzgar ninguna anchura ajustada.
+2. **Referencia la carga.** Si tu muestra está hecha de carbono —grafeno,
+   nanotubos, carburos— **no** uses el pico C 1s entero: es circular, porque
+   el pico contra el que referencias es la muestra. Escribe
+   `C 1s:C-C sp2` en «…o componente» y se referencia sobre una componente
+   ajustada. Sobre el espectro de demostración, la diferencia entre las dos
+   formas es 0.55 eV frente a 0.05 eV.
+3. **Identifica** en la pestaña Survey. Un elemento necesita su línea
+   principal, la componente fuerte de su doblete y **un pico que no explique
+   nadie más**. Mira los picos sin explicar: son el elemento que no
+   esperabas.
+4. **Ajusta cada región.** Elige el número de componentes, o los estados
+   químicos concretos de la lista; si no eliges nada, se ajustan los hombros
+   que la región enseñe de verdad. El botón **«¿Cuántas componentes?»** prueba
+   varias y te da con qué decidir: el χ² frente al ruido de conteo y si el
+   residuo todavía tiene estructura.
+5. **Cuantifica.** Es un porcentaje de **lo detectado**: el hidrógeno no se
+   ve, y un elemento que no hayas ajustado no baja el de los demás.
+
+Tres cosas que hay que saber:
+
+* El **doblete es una sola componente**. La separación y la razón de áreas
+  son del átomo, no parámetros. No intentes ajustar el 2p3/2 y el 2p1/2 por
+  separado.
+* Un **metal** necesita forma asimétrica, y eso tiene un precio que el
+  programa te dice: la cola de una Doniach-Šunjić y el fondo no son
+  independientes, así que el área del metal sale corta (un 12 % con α = 0.3).
+* **Exporta las tablas.** Cada región sale como curvas (una columna por
+  componente) y como parámetros. Y esa tabla de parámetros **se vuelve a
+  leer como modelo**: ajustas bien la primera muestra de una serie y las
+  demás llevan el mismo modelo, para que lo que cambie entre ellas sea la
+  muestra y no tus decisiones de ese día.
 
 ## 7d. Si mides mapas
 
@@ -490,6 +550,17 @@ cociente. Resta la línea base primero.
 Pulsa *Comparar modelos* y usa el que gane. Si el material es un nanotubo,
 comprueba que el modelo elegido incluye G⁻: sin ella, la banda D se estira
 para absorber esa intensidad y I_D/I_G sale varias veces demasiado grande.
+
+**En XPS, una región ajusta mal (χ² alto) y las componentes se han ido de
+su ventana** — casi siempre es la referencia de carga. Comprueba que no
+estás referenciando una muestra de carbono contra su propio C 1s; usa
+`C 1s:C-C sp2`. El segundo sospechoso son las anchuras ligadas: suéltalas y
+mira si baja.
+
+**En XPS sale un elemento que sé que no está** — míralo en la lista: si está
+en «sin corroborar», el programa ya te está diciendo que no se sostiene. Con
+ánodo de aluminio, el Auger LMM del hierro cae sobre el Co 2p, y el 2p1/2
+del azufre sobre el 3p1/2 del selenio.
 
 **Creo que hay óxido de catalizador o azufre sin reaccionar** — marca
 *Buscar bandas no carbonosas* en la barra lateral. Está apagado por defecto
