@@ -42,6 +42,7 @@ from ..models.constraints import Link
 from .background import estimate_background
 from .elements import ChemicalState, Doublet, XPSDatabase, load_xps_database
 from .fitting import XPSComponent, XPSFitResult, XPSModel, fit_region
+from .lineshapes import MAX_ASYMMETRY
 from .spectrum import XPSError, XPSSpectrum
 
 #: Padding in eV added around the states' windows to make the fit window.
@@ -111,14 +112,27 @@ def _component_from_state(
 ) -> XPSComponent:
     shape = profile or ("ds_gauss" if state.asymmetric else "gl")
     extra: tuple[float, ...]
+    extra_bounds: Optional[tuple[tuple[float, float], ...]] = None
     fixed: tuple[str, ...] = ()
+    width = float(np.mean(state.fwhm))
+    width_bounds = state.fwhm
     if shape in ("gl", "sgl"):
         extra = (DEFAULT_MIXING,)
         fixed = ("mixing",) if fix_mixing else ()
-    elif shape == "ds_gauss":
-        extra = (0.12, 0.6)
-    elif shape == "ds":
-        extra = (0.12,)
+    elif shape in ("ds", "ds_gauss"):
+        # The database's FWHM range is the TOTAL width of the component, as
+        # anybody measures it off a spectrum. For a Doniach–Šunjić the fwhm
+        # parameter is only the Lorentzian part, and the Gaussian part of
+        # the instrument sits beside it — so applying the published range to
+        # the Lorentzian alone puts a floor above the true value and the fit
+        # jams against it. The Lorentzian is allowed down to a third of the
+        # published minimum, and the Gaussian covers the rest.
+        width = 0.5 * width
+        width_bounds = (0.3 * state.fwhm[0], state.fwhm[1])
+        extra = ((0.12,) if shape == "ds"
+                 else (0.12, 0.6 * float(np.mean(state.fwhm))))
+        if shape == "ds_gauss":
+            extra_bounds = ((0.0, MAX_ASYMMETRY), (0.1, 1.5 * state.fwhm[1]))
     else:
         extra = ()
     return XPSComponent(
@@ -126,11 +140,12 @@ def _component_from_state(
         label=state.name,
         centre=state.energy_ev,
         height=_height_guess(spectrum, window, state.energy_ev, background),
-        fwhm=float(np.mean(state.fwhm)),
+        fwhm=width,
         profile=shape,
         centre_bounds=state.window,
-        fwhm_bounds=state.fwhm,
+        fwhm_bounds=width_bounds,
         extra=extra,
+        extra_bounds=extra_bounds,
         fixed=fixed,
         doublet=doublet,
         state=state.key,
@@ -325,11 +340,21 @@ def count_model(
 ) -> tuple[XPSModel, list[str]]:
     """A model with exactly ``n`` components, chosen from the region's states.
 
-    The states are ranked by how much intensity the spectrum actually has
-    at each one — background removed — and the top ``n`` are kept. This is
-    a starting point, not a decision: the states left out are returned so
-    the choice can be argued with, and a state with real intensity that
-    falls below the cut is exactly the thing to look at next.
+    The choice is made from **the data**, not from the table: the shoulders
+    of the region are found from its second derivative, and each one is
+    assigned to the published state whose window contains it. Only if that
+    yields fewer than ``n`` states are the rest filled in by intensity.
+
+    The obvious alternative — rank the states by how much intensity sits at
+    each tabulated position — does not work, and fails in a way that is
+    hard to see. A state that sits *between* two real peaks has plenty of
+    intensity at its position precisely because its neighbours are there:
+    in a nitrogen-doped carbon it picks N–metal at 399.3 eV, which is
+    between pyridinic at 398.5 and pyrrolic at 400.2, over the N-oxide at
+    403.5 that is actually in the spectrum as its own peak.
+
+    This is a starting point, not a decision. The states left out are
+    returned so the choice can be argued with.
 
     Returns
     -------
@@ -353,19 +378,64 @@ def count_model(
         )
     low = min(s.window[0] for s in available) - WINDOW_PAD
     high = max(s.window[1] for s in available) + WINDOW_PAD
+    low = max(low, float(spectrum.range[0]))
+    high = min(high, float(spectrum.range[1]))
     background = options.get("background", "shirley")
-    scores = [
-        (_height_guess(spectrum, (low, high), state.energy_ev, background), state)
-        for state in available
-    ]
-    ranked = sorted(scores, key=lambda item: item[0], reverse=True)
-    kept = sorted((state for _, state in ranked[:n]),
-                  key=lambda state: state.energy_ev)
-    dropped = [state for _, state in ranked[n:]]
+
+    estimate = estimate_background(spectrum, (low, high), background)
+    axis, counts = spectrum.region_of(low, high)
+    signal = counts - estimate.values
+    # More candidates than components are wanted, taken in order of how
+    # strong a shoulder each one is: a weak state well away from the others
+    # (an oxidised nitrogen at 403.5 eV) is a real shoulder but never one of
+    # the first few, and cutting the candidate list at n throws it away in
+    # favour of a ripple beside the main peak.
+    candidates = _seed_candidates(axis, signal)
+    # Two shoulders closer than about a linewidth are one feature. Without
+    # this, the ripple that the overlap of two strong components leaves
+    # between them is a stronger second-derivative minimum than a real but
+    # weak state several eV away, and the model fills up with components
+    # wedged between the main peaks while the oxidised state at the far end
+    # of the region — which is a peak of its own — is left out.
+    separation = 0.8 * float(np.median([state.fwhm[0] for state in available]))
+    kept: list[ChemicalState] = []
+    taken: list[float] = []
+    for _, seed in candidates:
+        if len(kept) >= n:
+            break
+        if any(abs(seed - other) < separation for other in taken):
+            continue
+        inside = [state for state in available
+                  if state.contains(seed, tolerance=0.3) and state not in kept]
+        if not inside:
+            continue
+        kept.append(min(inside, key=lambda state: abs(state.energy_ev - seed)))
+        taken.append(seed)
     notes = [
-        "componentes elegidas por la intensidad que hay en su ventana: "
+        "componentes elegidas por los hombros que hay en la propia región: "
         + ", ".join(f"{s.name} ({s.energy_ev:.1f} eV)" for s in kept)
+        if kept else
+        "la segunda derivada no ha encontrado ningún hombro dentro de una "
+        "ventana publicada"
     ]
+    if len(kept) < n:
+        rest = sorted(
+            (state for state in available if state not in kept),
+            key=lambda state: _height_guess(spectrum, (low, high),
+                                            state.energy_ev, background),
+            reverse=True,
+        )
+        filled = rest[: n - len(kept)]
+        kept.extend(filled)
+        if filled:
+            notes.append(
+                "no había hombros para todas, así que se han completado por "
+                "intensidad: "
+                + ", ".join(f"{s.name} ({s.energy_ev:.1f} eV)" for s in filled)
+                + ". Una componente puesta así no la pide la medida"
+            )
+    kept = sorted(kept[:n], key=lambda state: state.energy_ev)
+    dropped = [state for state in available if state not in kept]
     if dropped:
         notes.append(
             "fuera del modelo, y la base de datos las describe: "
@@ -440,26 +510,33 @@ def free_model(
                     region_label=region)
 
 
-def _second_derivative_seeds(energy: np.ndarray, signal: np.ndarray,
-                             n: int) -> list[float]:
-    """Up to ``n`` component positions, from minima of the second derivative.
+def _seed_candidates(energy: np.ndarray, signal: np.ndarray) -> list[tuple[float, float]]:
+    """Shoulders of a region, as ``(strength, binding energy)``, strongest first.
 
-    A peak is a minimum of the second derivative whether or not it is a
-    maximum of the spectrum, which is the whole point: in a C 1s the
-    carbonyl component is never a maximum.
+    A component is a minimum of the second derivative whether or not it is
+    a maximum of the spectrum, which is the whole point: in a C 1s the
+    carbonyl component is never a maximum, and in an N 1s neither is the
+    pyrrolic one.
     """
     if energy.size < 7:
-        return list(np.linspace(energy[0], energy[-1], n + 2)[1:-1])
+        return []
     window = max(5, int(round(0.4 / max(np.median(np.diff(energy)), 1e-6))) | 1)
     kernel = np.ones(window) / window
     smooth = np.convolve(np.pad(signal, window // 2, mode="edge"), kernel, "valid")
     second = np.gradient(np.gradient(smooth, energy), energy)
-    candidates = []
+    candidates: list[tuple[float, float]] = []
     for index in range(1, second.size - 1):
         if second[index] < second[index - 1] and second[index] <= second[index + 1] \
                 and second[index] < 0:
             candidates.append((float(-second[index]), float(energy[index])))
     candidates.sort(reverse=True)
+    return candidates
+
+
+def _second_derivative_seeds(energy: np.ndarray, signal: np.ndarray,
+                             n: int) -> list[float]:
+    """Up to ``n`` component positions, from the strongest shoulders."""
+    candidates = _seed_candidates(energy, signal)
     chosen = sorted(position for _, position in candidates[:n])
     if len(chosen) < n:
         extra = np.linspace(energy[0], energy[-1], n - len(chosen) + 2)[1:-1]

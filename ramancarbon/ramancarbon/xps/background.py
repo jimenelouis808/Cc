@@ -91,9 +91,29 @@ class Background:
         return text
 
 
-def _endpoints(counts: np.ndarray, points: int) -> tuple[float, float]:
+def _endpoints(counts: np.ndarray, points: int,
+               envelope: Optional[np.ndarray] = None) -> tuple[float, float]:
+    """The background's value at each end of the window.
+
+    Taken from ``counts − envelope`` when a fitted peak envelope is
+    available, and that subtraction is not a refinement. A background
+    anchored on the raw data is, by construction, equal to the data at the
+    endpoint; the model then adds the peaks' own intensity there on top,
+    and overshoots by exactly whatever the peaks contribute at the window
+    edge.
+
+    For symmetric components that contribution is nothing and the
+    distinction never shows. For a Doniach–Šunjić it is not nothing: the
+    profile decays as ``|u|^(α−1)`` on *both* sides, not as a Lorentzian,
+    so a metallic component 4 eV away still puts several per cent of its
+    height into the endpoint. Anchoring on the raw data there produced a
+    14σ systematic residual over the first eV of a C 1s region — at the
+    edge, where nobody looks, and it raised χ² by a factor of twenty while
+    every fitted peak looked fine.
+    """
     n = max(1, min(int(points), counts.size // 3))
-    return float(np.mean(counts[:n])), float(np.mean(counts[-n:]))
+    reference = counts if envelope is None else counts - np.asarray(envelope, float)
+    return float(np.mean(reference[:n])), float(np.mean(reference[-n:]))
 
 
 def linear_background(
@@ -156,7 +176,7 @@ def shirley_background(
     counts = np.asarray(counts, dtype=float)
     if energy.size < 5:
         raise XPSError("un fondo Shirley necesita al menos cinco puntos")
-    low, high = _endpoints(counts, points)
+    low, high = _endpoints(counts, points, envelope)
     warnings: list[str] = []
 
     if envelope is not None:

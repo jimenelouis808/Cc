@@ -52,6 +52,13 @@ DIFFERENTIAL_CHARGING_FWHM = 2.2
 #: more likely to be the sample's own sp² carbon than adventitious carbon.
 SP2_FWHM = 1.05
 
+#: Above this width, in eV, a single peak fitted to a reference line is not
+#: one chemical state: it is the envelope of several, and its centroid is
+#: not the position of any of them. A C 1s of an oxidised carbon fitted
+#: with one peak comes out 0.5–1.5 eV high, and that error goes straight
+#: into every binding energy referenced against it.
+ENVELOPE_FWHM = 1.9
+
 
 @dataclass
 class Calibration:
@@ -213,6 +220,16 @@ def _reference_warnings(spectrum: XPSSpectrum, entry: CalibrationReference,
                 f"la resolución del equipo ({floor:.2f} eV): revisa la energía "
                 "de paso declarada"
             )
+        if width > ENVELOPE_FWHM:
+            out.append(
+                f"el pico de referencia se ha ajustado con UNA componente de "
+                f"{width:.2f} eV, y por encima de {ENVELOPE_FWHM:.1f} eV eso "
+                "no es un estado químico sino la envolvente de varios. Su "
+                "centro no es la posición de ninguno, y en un C 1s oxidado "
+                "sale entre 0.5 y 1.5 eV alto. Referencia contra una "
+                "componente ajustada (calibrate_to_state) en vez de contra el "
+                "pico entero"
+            )
         if entry.key == "C1s_adventitious" and width < SP2_FWHM:
             out.append(
                 f"el pico usado como C 1s adventicio mide {width:.2f} eV de "
@@ -230,6 +247,104 @@ def _reference_warnings(spectrum: XPSSpectrum, entry: CalibrationReference,
             "misma se carga"
         )
     return out
+
+
+def calibrate_to_state(
+    spectrum: XPSSpectrum,
+    region: str,
+    state: str,
+    states: Optional[list[str]] = None,
+    database: Optional[XPSDatabase] = None,
+    **options,
+) -> tuple[XPSSpectrum, Calibration]:
+    """Reference the axis on one **fitted component**, not on a whole peak.
+
+    This is the right way to reference a sample that is itself made of the
+    element carrying the reference line — a graphene, a nanotube, a carbide,
+    which is to say most of what this package is for. Fitting a single peak
+    to such a C 1s and calling its centre 284.8 eV puts the axis wherever
+    the oxidised tail happens to drag the centroid, which is between 0.5 and
+    1.5 eV out; and 284.8 eV is the adventitious value anyway, while the
+    sp² carbon of the sample sits at 284.4.
+
+    The procedure is two passes, because the published windows a fit is
+    bounded by are on the *referenced* axis and the axis is not referenced
+    yet: the region is first shifted roughly, by putting its tallest feature
+    at the target state's energy, then fitted, then shifted again by
+    whatever the fitted component is still out by.
+
+    Parameters
+    ----------
+    region, state:
+        The database region and the state within it to put at its published
+        energy, e.g. ``"C 1s"`` and ``"C-C sp2"``.
+    states:
+        Which states to include in the fit. ``None`` fits the region's
+        whole state list, which is usually too many — pass the ones the
+        sample plausibly has.
+
+    Returns
+    -------
+    tuple
+        ``(shifted spectrum, Calibration)``.
+    """
+    from .presets import state_model
+
+    database = database or load_xps_database()
+    target = database.state(region, state)
+    if states is not None and state not in states:
+        states = list(states) + [state]
+
+    estimate = estimate_background(spectrum, spectrum.range, "shirley")
+    axis, counts = spectrum.region_of(*spectrum.range)
+    rough = float(axis[int(np.argmax(counts - estimate.values))])
+    rough_shift = float(target.energy_ev) - rough
+
+    work = spectrum.shifted(rough_shift, "preajuste para calibrar")
+    model = state_model(work, region, states, database=database, **options)
+    result = fit_region(work, model, database=database)
+    component = result.component(state)
+    if component is None:                       # pragma: no cover - state_model guarantees it
+        raise XPSError(f"el ajuste no ha devuelto la componente {state!r}")
+    refinement = float(target.energy_ev) - component.centre
+    total = rough_shift + refinement
+
+    warnings: list[str] = []
+    if abs(refinement) > 0.5:
+        warnings.append(
+            f"el preajuste suponía que el pico más alto de la región es "
+            f"{target.name}, y el ajuste lo ha corregido en "
+            f"{refinement:+.2f} eV. Si la suposición era falsa —una muestra "
+            "muy oxidada, por ejemplo— la referencia está sobre la "
+            "componente equivocada"
+        )
+    warnings.extend(
+        text for text in result.warnings
+        if "χ²" in text or "Durbin" in text
+    )
+    warnings.append(
+        f"referenciado sobre una componente ajustada ({target.name} a "
+        f"{target.energy_ev:.2f} eV, confianza {target.confidence}), no sobre "
+        "el pico entero. Eso quita el sesgo de la envolvente, pero el ajuste "
+        "que lo sitúa es parte de la calibración: si el modelo de la región "
+        "cambia, el eje cambia"
+    )
+    shifted = spectrum.shifted(total, f"{target.name} a {target.energy_ev:.2f} eV")
+    shifted.metadata["calibración"] = {
+        "referencia": f"{region}:{state}",
+        "medida_ev": float(target.energy_ev - total),
+        "esperada_ev": float(target.energy_ev),
+        "confianza": target.confidence,
+        "método": "componente ajustada",
+    }
+    return shifted, Calibration(
+        shift_ev=total, reference=f"{region}:{state}",
+        measured_ev=float(target.energy_ev - total),
+        expected_ev=float(target.energy_ev),
+        spread_ev=float(target.window[1] - target.window[0]) / 2.0,
+        confidence=target.confidence, source=target.source or region,
+        fwhm_ev=component.true_fwhm, warnings=warnings, note=target.note,
+    )
 
 
 # ----------------------------------------------------------------------
@@ -447,8 +562,10 @@ __all__ = [
     "DParameter",
     "D_PARAMETER_SCALE",
     "SP2_FWHM",
+    "ENVELOPE_FWHM",
     "auger_parameter",
     "calibrate",
+    "calibrate_to_state",
     "carbon_d_parameter",
     "measure_line",
 ]

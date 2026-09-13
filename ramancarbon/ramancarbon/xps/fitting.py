@@ -798,8 +798,10 @@ def _warnings(spectrum: XPSSpectrum, model: XPSModel,
         out.append(
             f"χ²_red = {reduced_chi2:.1f}. Con pesos de conteo eso significa "
             "que el modelo se aparta de los datos varias veces más de lo que "
-            "explica el ruido: falta una componente, el fondo no es el que "
-            "toca, o la forma de línea es simétrica donde no debería"
+            "explica el ruido. Por orden de probabilidad: falta una "
+            "componente; hay anchuras ligadas que los datos no comparten "
+            "(suelta la ligadura y mira si baja); el fondo no es el que toca; "
+            "o la forma de línea es simétrica donde no debería"
         )
     if watson is not None and watson < 1.0:
         out.append(

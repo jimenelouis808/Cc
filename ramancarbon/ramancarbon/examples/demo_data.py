@@ -1288,8 +1288,12 @@ def make_xps_demo(
         centres = [table[key].energy_ev for key in mixture]
         satellites = [table[key].satellite_ev for key in mixture
                       if table[key].satellite_ev is not None]
-        span = (min(centres) - 6.0,
-                max(centres + satellites) + 6.0
+        # The window follows the peaks, charge shift included: an operator
+        # setting up a region centres it on what the instrument shows, not
+        # on the tabulated position. Ignoring the shift here truncates the
+        # region and the fit then anchors its background inside a peak.
+        span = (min(centres) - 6.0 + charge_shift,
+                max(centres + satellites) + 6.0 + charge_shift
                 + (doublet.splitting_ev if doublet else 0.0))
         axis = np.arange(span[0], span[1] + region_step, region_step)
         curve = np.zeros_like(axis)
