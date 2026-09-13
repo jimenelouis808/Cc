@@ -46,6 +46,7 @@ KNOWN_SUFFIXES: dict[str, str] = {
     ".spc": "raman-binario", ".wdf": "raman-binario", ".sp": "raman-binario",
     ".spa": "raman-binario", ".ngs": "raman-binario",
     ".raw": "xrd-binario", ".brml": "xrd-binario",
+    ".vms": "xps", ".npl": "xps", ".spe": "xps",
     ".rcproj": "proyecto",
 }
 
@@ -64,8 +65,8 @@ class Detection:
     """What a file appears to hold, and how sure that is."""
 
     kind: str
-    """``raman``, ``xrd``, ``cv``, ``gcd``, ``eis``, ``cif``, ``proyecto``,
-    ``binario`` or ``desconocido``."""
+    """``raman``, ``xrd``, ``cv``, ``gcd``, ``eis``, ``xps``, ``cif``,
+    ``proyecto``, ``binario`` or ``desconocido``."""
     fmt: str = "texto"
     """The encoding: ``texto``, ``jcamp``, ``xrdml``, ``uxd``, ``cif``…"""
     confidence: str = "media"
@@ -226,6 +227,15 @@ def detect(path: str | Path) -> Detection:
 
     lines, sample = _read_text(p)
 
+    # A PHI .spe is binary AFTER an ASCII header, so it has to be
+    # recognised before the binary check rejects it. Its reader is the one
+    # that decides whether the binary part can be recovered and checked.
+    if sample.lstrip()[:4] == b"SOFH":
+        return Detection(
+            kind="xps", fmt="spe", confidence="alta",
+            reasons=["cabecera SOFH de PHI MultiPak"],
+        )
+
     if named.endswith("-binario") or (_looks_binary(sample) and named != "proyecto"):
         family = named if named.endswith("-binario") else "binario"
         return Detection(
@@ -243,6 +253,16 @@ def detect(path: str | Path) -> Detection:
                          reasons=["extensión de proyecto de la suite"])
 
     text_head = "\n".join(lines[:80])
+
+    if "VAMAS" in (lines[0].upper() if lines else "") or named == "xps":
+        return Detection(
+            kind="xps", fmt="vamas" if "VAMAS" in (lines[0].upper() if lines else "")
+            else "texto", confidence="alta" if lines and "VAMAS" in lines[0].upper()
+            else "media",
+            reasons=["identificador VAMAS en la primera línea"]
+            if lines and "VAMAS" in lines[0].upper()
+            else [f"la extensión {suffix} es de fotoemisión"],
+        )
 
     if named == "cif" or "_cell_length_a" in text_head:
         return Detection(kind="cif", fmt="cif", confidence="alta",

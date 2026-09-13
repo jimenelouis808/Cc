@@ -192,6 +192,33 @@ def run(quick: bool = False, repeats: int = 3) -> Report:
     gcd = make_plateau_gcd_demo()
     add("dQ/dV", "Electroquímica", lambda: differential_capacity(gcd), 3)
 
+    # -- XPS -----------------------------------------------------------
+    from .examples.demo_data import make_xps_demo
+    from .xps.fitting import fit_region
+    from .xps.presets import state_model
+    from .xps.quantify import areas_from_fits, quantify
+    from .xps.survey import identify
+
+    spectra = make_xps_demo("NCNT_FeSe", seed=1)
+    survey_scan = spectra[0]
+    nitrogen = next(item for item in spectra if item.region == "N 1s")
+    iron = next(item for item in spectra if item.region == "Fe 2p3/2")
+    states = ["pyridinic", "pyrrolic", "graphitic", "N-oxide"]
+
+    add("identificar elementos (survey)", "XPS",
+        lambda: identify(survey_scan), 3,
+        detail=lambda r: f"{len(r.elements)} elementos")
+    add("ajuste N 1s (4 componentes)", "XPS",
+        lambda: fit_region(nitrogen, state_model(nitrogen, "N 1s", states)), 3,
+        detail=lambda r: f"χ²_red = {r.reduced_chi2:.2f}")
+    add("ajuste Fe 2p (dobletes + satélite)", "XPS",
+        lambda: fit_region(iron, state_model(
+            iron, "Fe 2p3/2", ["Fe-Se", "Fe3+"], include_satellites=True)), 3,
+        detail=lambda r: f"χ²_red = {r.reduced_chi2:.2f}")
+    fits = [fit_region(nitrogen, state_model(nitrogen, "N 1s", states))]
+    add("cuantificar", "XPS",
+        lambda: quantify(areas_from_fits(fits), 1486.6), 3)
+
     return report
 
 

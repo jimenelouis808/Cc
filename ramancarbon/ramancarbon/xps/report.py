@@ -168,6 +168,19 @@ def analyse_xps(
         else:
             # Best resolved: smallest step, and a region before a survey.
             best = min(candidates, key=lambda item: (item.is_survey, item.step))
+            if reference == "C1s_adventitious" and any(
+                (database.region_for_line(item.region) or item.region) == "C 1s"
+                for item in scans
+            ):
+                analysis.warnings.append(
+                    "la muestra trae su propia región C 1s y se está "
+                    "referenciando contra el pico C 1s adventicio: en un "
+                    "material hecho de carbono eso es circular, porque el "
+                    "pico contra el que se referencia ES la muestra. Usa "
+                    "reference_state=(\"C 1s\", \"C-C sp2\") — en el demo "
+                    "sintético la diferencia entre las dos formas es 0.55 eV "
+                    "frente a 0.05 eV"
+                )
             _, calibration = calibrate(best, reference, database=database)
             analysis.calibration = calibration
             shifted = [

@@ -31,20 +31,23 @@ ramancarbon/
 ├── xrd/         # difracción: CIF, simetría, patrón calculado, Rietveld,
 │                #   microestructura (Williamson-Hall…), Le Bail y Pawley
 ├── echem/       # CV, GCD, EIS, DRT, mecanismo de almacenamiento, HER/OER,
-│                #   cinética (Randles-Ševčík, GITT, dQ/dV, Koutecky-Levich)
+│                #   cinética (Randles-Ševčík, GITT, dQ/dV, Koutecky-Levich),
+│                #   Dunn, Trasatti, capacitancia por CV/GCD/EIS
+├── xps/         # fotoemisión: .spe y VAMAS, fondos, formas de línea,
+│                #   ajuste con dobletes, survey, calibración, composición
 ├── plotting/    # motor de figuras: estilo, series, ejes secundarios, paneles
 ├── dataio/      # detección de formato, lectura universal, exportación, .rcproj
 ├── mapping/     # mapas Raman: cubo, imágenes por píxel, quimiometría
 ├── gui/         # app Tkinter; la lógica vive en state.py y plots.py, sin Tk
 ├── cli/         # analizar, lote, deconvolucionar, bd, demo, drx, echem,
-│                #   mapa, figura, exportar, proyecto, micro, tiempos
+│                #   xps, mapa, figura, exportar, proyecto, micro, tiempos
 ├── examples/    # scripts ejecutables + demo_data.py (espectros sintéticos)
 ├── benchmarks.py # cronómetro de la suite
 └── tests/       # pytest
 ```
 
 Dependencias en un solo sentido: `core → models → {analysis, xrd, echem,
-mapping} → gui/cli`, y `database` no importa de ninguno. `plotting` y
+mapping, xps} → gui/cli`, y `database` no importa de ninguno. `plotting` y
 `dataio` son transversales: `plotting` no importa nada del paquete salvo en
 sus constructores de conveniencia, y `dataio` está *encima* de los lectores
 de cada instrumento, no en lugar de ellos.
@@ -545,7 +548,7 @@ una tiene una prueba que la protege.
 ## Entrada y salida
 
 - **El tipo de archivo se decide por los NÚMEROS, no por la extensión.**
-  Los cuatro instrumentos escriben `.txt`, `.csv`, `.dat` y `.asc`, y el
+  Los cinco instrumentos escriben `.txt`, `.csv`, `.dat` y `.asc`, y el
   usuario tiene los cuatro en la misma carpeta. Lo que separa las medidas
   es su forma: un voltamperograma vuelve sobre sí mismo y nada más lo
   hace; una impedancia trae tres columnas y siete décadas de frecuencia;
@@ -705,18 +708,129 @@ una tiene una prueba que la protege.
 - **La resistencia de un pico se integra sobre su CUENCA entera**, de
   mínimo a mínimo, no sobre la parte por encima de una fracción de su
   altura: truncar a la décima parte tira casi toda el área.
+- **La misma capacitancia por CV, GCD y EIS no es la misma medida.** Lo que
+  entrega un dispositivo es la de GCD; la de EIS se mide con 10 mV alrededor
+  de un punto fijo, donde nada está limitado por velocidad, y es una cota
+  superior que el dispositivo nunca ve. Se informan las tres con su
+  condición —velocidad, corriente, frecuencia—, porque una capacitancia sin
+  su condición no se compara con la de nadie, ni con la de la misma muestra
+  medida dos veces. Una dispersión por encima del 30 % ES el resultado.
+- **C′ y C″ salen de Z sin ajustar nada.** Un circuito es una hipótesis;
+  C(ω) = 1/(jωZ) son los datos. Y el máximo de C″ da τ₀, que no necesita
+  saber la masa. Ojo al signo: aquí Z″ se guarda con su signo físico, así que
+  código escrito contra el −Z″ de un Nyquist devuelve capacitancias
+  negativas.
+- **La R_u sale del corte con el eje real interpolado**, no del punto medido
+  más cercano. Un espectro que no cruza —un electrodo puramente capacitivo no
+  cruza nunca— devuelve Z′ a la frecuencia más alta como COTA SUPERIOR
+  explícita, diciendo si es por eso o por inductancia de los cables.
+- **Un coeficiente de Dunn negativo por poco es un coeficiente cero.** En un
+  condensador ideal el término difusivo es exactamente cero y el ruido lo
+  pone por debajo en la mitad de los potenciales: el aviso exige que sea
+  negativo en más de un 5 % de su propia escala.
 - **Dos picos a menos de un factor de tres en τ son uno.** A esa distancia
   la separación depende de λ más que de los datos, y un circuito
   equivalente los describiría igual de bien con un solo CPE.
 
-## La suite: cuatro secciones
+## Fotoemisión (XPS)
 
-- **Cuatro instrumentos, cuatro secciones**: Raman carbono, Raman TMD, DRX,
-  Electroquímica. Son medidas distintas y no se mezclan. Lo único que se
+- **Las líneas Auger están en energía CINÉTICA.** El C KLL aparece en 1219 eV
+  de energía de enlace con aluminio y en 986 con magnesio: 233 eV de
+  diferencia. Por eso `AugerLine` no tiene `energy_ev`, solo
+  `binding_at(hv)`, y por eso sin ánodo declarado el programa se niega a
+  situarlas. Con aluminio, el LMM del hierro cae encima del Co 2p.
+- **Un doblete es UNA componente.** La separación y la razón de áreas
+  (1:2 en p, 2:3 en d, 3:4 en f) son propiedades del átomo, no parámetros.
+  Ajustar Fe 2p3/2 y 2p1/2 como picos libres es la vía rápida a una
+  estequiometría inventada. Hay una prueba que audita la razón de cada
+  doblete de la base contra su degeneración.
+- **Un metal necesita forma asimétrica.** Con formas simétricas el ajuste
+  tiene que tapar la cola con algo, y ese algo se informa como un óxido que
+  no está. Doniach-Šunjić, con su integral DIVERGENTE dicha en voz alta: su
+  área es siempre un área de ventana, igual que la BWF del lado Raman.
+- **El fondo se ancla en (datos − picos), no en los datos.** Con una forma
+  asimétrica la cola del pico está dentro del extremo de la ventana —la DS
+  decae como |u|^(α−1) por los DOS lados, no como una lorentziana— y anclar
+  en los datos la cuenta dos veces. Dejaba un residuo sistemático de 14σ en
+  el primer eV de un C 1s, donde nadie mira, con un χ² veinte veces más alto
+  y todos los picos con buen aspecto.
+- **El Shirley sube en energía de enlace.** Los electrones dispersados han
+  PERDIDO energía cinética, así que aparecen a energía de enlace MAYOR. Un
+  Shirley que baja se ha calculado sobre un eje invertido.
+- **Los extremos de la ventana son un parámetro.** Mover el límite de alta
+  energía de enlace de un C 1s un eV mueve el área del carbonilo varios por
+  ciento. No es un defecto del método: es lo que significa «área de un pico
+  sobre un fondo», y por eso los extremos van en el informe.
+- **Los pesos son estadística de conteo.** Con σ = √N el χ² reducido
+  significa algo: 17 con dos componentes en un N 1s que tiene tres, 1.1 con
+  tres. El R² no: se queda en 0.95 mientras el χ² se mueve un factor
+  cincuenta.
+- **Una anchura por debajo de la resolución no es una medida.** La energía
+  de paso y la anchura de la línea de rayos X ponen un suelo, y una
+  componente más estrecha es el ajuste aprovechando un grado de libertad.
+- **La anchura publicada es la TOTAL.** En una Doniach-Šunjić el parámetro
+  `fwhm` es solo la parte lorentziana, así que usar el rango publicado como
+  límite suyo pone un suelo por encima del valor verdadero y el ajuste se
+  pega a él.
+- **Las anchuras se ligan solo donde la literatura las iguala.** El Fe(III)
+  está ensanchado por multiplete a 1.5–4.5 eV y el Fe–Se está en 0.9–2.0.
+  Ligados, ajustan una anchura común, dejan residuo en los dos y el χ² sube
+  un factor cincuenta.
+- **Las componentes se eligen por los hombros de la propia región**, no por
+  la intensidad que hay en la posición tabulada. Ese criterio favorece a un
+  estado que cae ENTRE dos picos reales, precisamente porque sus vecinos
+  ponen intensidad ahí: elegía el N–metal a 399.3 antes que el N oxidado a
+  403.5, que está en el espectro como pico propio.
+- **El número de componentes por defecto es «los que enseñe la región».**
+  Un número fijo es una decisión tomada sobre la muestra de otro: dos
+  componentes en un N 1s con cuatro entornos da χ² de setenta.
+- **Un elemento es un espectro, no una línea.** Para darlo por presente:
+  su línea principal, la componente FUERTE de su doblete (el S 2p1/2 y el
+  Se 3p1/2 están a 0.1 eV), y un pico que no explique nadie más (el Auger
+  del hierro cae sobre el Co 2p). Los picos sin explicar son el resultado.
+- **El umbral del survey se juzga contra el ruido LOCAL.** √N vale 245 en la
+  cima de una línea de 60 000 cuentas y 32 sobre un fondo de 1 000: un solo
+  nivel de ruido para todo el barrido se equivoca en un factor de ocho, y en
+  la dirección que inventa picos sobre las líneas fuertes. Calibrado sobre
+  ruido Poisson: umbral 4 da 38 picos falsos por survey, 6 da 0.6, 8 ninguno.
+- **En una muestra hecha de carbono, referenciar contra «el pico C 1s» es
+  circular**, y además 284.8 eV es el valor del carbono adventicio mientras
+  el sp² de la muestra está en 284.4. Referenciar sobre una COMPONENTE
+  ajustada deja 0.05 eV de una carga de 1.8; contra el pico entero deja 0.55.
+- **El parámetro Auger y el parámetro D no necesitan referencia.** Son
+  diferencias dentro del mismo espectro y la carga se cancela. Donde estén
+  disponibles, zanjan lo que las energías referenciadas solo discuten.
+- **Los satélites shake-up son la misma especie.** Su área cuenta con la del
+  pico principal, no aparte; dejarlos fuera de un Fe 2p es un 10–20 % del
+  hierro y siempre en la misma dirección. Y su posición está tabulada en
+  ABSOLUTO, no como desplazamiento: la separación es distinta para Fe(II) y
+  Fe(III), y esa diferencia es el diagnóstico.
+- **La composición es un porcentaje de LO DETECTADO.** El hidrógeno no se ve,
+  un elemento sin ajustar no baja el de los demás, y que sume 100 % es la
+  normalización. El sistemático de los factores tabulados es un 15 %.
+- **La transmisión del analizador es de TU equipo.** Ignorarla entre un C 1s
+  y un Fe 2p con aluminio es un 30 %. Sobre el espectro sintético, corregirla
+  reduce el error total de la composición a menos de la mitad.
+- **Integrar una ventana del survey no es ajustar la región.** La ventana del
+  Se 3d lleva dentro el Fe 3p, así que el selenio sale de más; el programa
+  dice qué líneas se ha tragado cada integración.
+- **Un `.spe` se comprueba contra sí mismo.** La cabecera da los extremos, el
+  número de puntos Y el paso, que es un número más de los necesarios: si no
+  cuadran, los campos no estaban donde el lector creía. Del bloque binario
+  solo se aceptan intensidades que encajen con lo que declara la cabecera, y
+  si dos disposiciones encajan igual de bien se rechazan las dos.
+- **Lo que sale no es lo que entró.** Un espectro referenciado tiene otro
+  eje, y mandar el original con una frase sobre el desplazamiento es como
+  ese desplazamiento se aplica dos veces. Por eso se exporta VAMAS.
+
+## La suite: cinco secciones
+
+- **Cinco instrumentos, cinco secciones**: Raman carbono, Raman TMD, DRX,
+  Electroquímica, XPS. Son medidas distintas y no se mezclan. Lo único que se
   comparte es la `Session` entre las dos secciones Raman, porque un archivo
   es un archivo.
 - **Las secciones se construyen al visitarlas por primera vez.** Construir
-  las cuatro al arrancar importa matplotlib, monta una docena de figuras y
+  las cinco al arrancar importa matplotlib, monta una docena de figuras y
   lee la biblioteca de referencia antes de que aparezca la ventana.
 - **La lógica sigue sin Tk**: `xrd_state.py` y `echem_state.py` son el
   equivalente de `state.py`, y `plots_xrd.py`/`plots_echem.py` el de
@@ -859,15 +973,29 @@ ramancarbon figura a.txt b.txt --salida fig.png --preajuste acs
 ramancarbon proyecto crear datos/ sesion.rcproj
 python -m ramancarbon.benchmarks --rapido
 ramancarbon analizar datos/demo_DWCNT_532nm.txt --laser 532 --auto --perfil pseudo_voigt
+ramancarbon xps survey.vms C1s.vms --referencia-estado "C 1s:C-C sp2" --region "N 1s=4"
 ramancarbon laseres datos/m_532nm.txt datos/m_633nm.txt
 ```
 
-## La capa Tk no tiene pruebas de ejecución
+## La capa Tk
 
-No hay pantalla en el entorno donde se construyó esto, así que
-`gui/app.py` nunca se ha ejecutado. Toda su lógica vive en `gui/state.py` y
-`gui/plots.py`, que sí se prueban. `tests/test_gui_wiring.py` comprueba por
-análisis del código que las piezas encajan — cada canvas tiene su pestaña y
-su función de dibujo, cada `command=self._x` existe, cada `self.attr` que se
-lee se asigna en algún sitio. Eso ya ha cazado dos errores reales que ni el
-linter ni las pruebas veían. No cubre si la ventana se ve bien.
+Toda la lógica vive fuera de Tk — `gui/state.py`, `xrd_state.py`,
+`echem_state.py`, `xps_state.py` y los `plots_*.py` — y ésa es la que tienen
+las pruebas de verdad.
+
+`tests/test_gui_wiring.py` comprueba por ANÁLISIS del código que las piezas
+encajan: cada canvas tiene su pestaña y su función de dibujo, cada
+`command=self._x` existe, cada `self.attr` que se lee se asigna en algún
+sitio. Eso ha cazado errores reales que ni el linter ni las pruebas veían.
+
+Y hay una prueba que abre la ventana de verdad, visita las cinco secciones,
+carga la demo de cada una y recorre sus pestañas. Se **salta** si no hay
+Tkinter o no hay pantalla, que es el caso del intérprete por defecto de este
+repositorio. Para ejecutarla hace falta un Python con `tkinter` y un
+servidor X virtual:
+
+```bash
+xvfb-run -a python -m pytest ramancarbon/tests/test_gui_wiring.py -k whole_suite
+```
+
+Ninguna de las tres cubre si la ventana se ve bien.

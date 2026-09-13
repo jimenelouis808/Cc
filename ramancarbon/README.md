@@ -1,6 +1,6 @@
 # ramancarbon
 
-Suite de caracterización de nanomateriales, con **cuatro instrumentos** en
+Suite de caracterización de nanomateriales, con **cinco instrumentos** en
 una sola aplicación:
 
 | Sección | Qué hace |
@@ -8,9 +8,10 @@ una sola aplicación:
 | **Raman · carbono** | SWCNT / DWCNT / MWCNT, deconvolución D–G configurable, I_D/I_G, I_2D/I_G, I_D/I_D′, diámetros por RBM, dopado y deformación, y las fases no carbonosas de la muestra (FeSe, Se, carburos de hierro) |
 | **Raman · TMD** | MoS₂, WS₂, MoSe₂, WSe₂, MoTe₂: número de capas, fase 2H/1T′, y las heteroestructuras óxido/calcogenuro (MoO₃@MoSe₂, MoO₂@MoSe₂…) |
 | **DRX** | Identificación de fases contra estructuras cristalinas reales (CIF de la COD), patrón teórico, residual y refinamiento **Rietveld** automático o a mano |
-| **Electroquímica** | CV, carga-descarga, impedancia con circuitos equivalentes y DRT, mecanismo de almacenamiento (condensador / pseudocondensador / batería), capacitancia y capacidad, energía y potencia, dQ/dV, GITT, HER y OER |
+| **Electroquímica** | CV, carga-descarga, impedancia con circuitos equivalentes y DRT, mecanismo de almacenamiento (condensador / pseudocondensador / batería), capacitancia por CV, GCD **y EIS** lado a lado, separación de Dunn, Trasatti, energía y potencia, dQ/dV, GITT, HER y OER |
+| **XPS** | Survey con identificación de elementos, regiones de alta resolución con el número de componentes que tú elijas, dobletes de espín-órbita como una sola componente, fondos Shirley / Tougaard, referencia de carga, composición atómica, y tablas de ajuste que entran y salen |
 
-Y transversal a las cuatro:
+Y transversal a las cinco:
 
 | | |
 |---|---|
@@ -107,7 +108,7 @@ gráfica usa Tkinter, que viene con Python (en Debian/Ubuntu:
 ## Empezar
 
 ```bash
-ramancarbon-gui                               # la suite entera, con sus cuatro secciones
+ramancarbon-gui                               # la suite entera, con sus cinco secciones
 ```
 
 O por línea de comandos, una sección cada vez:
@@ -131,6 +132,11 @@ ramancarbon echem --cv ec/demo_cv_condensador_20mVs.txt --masa 2 --area 1
 ramancarbon echem --gcd ec/demo_gcd_bateria.txt --eis ec/demo_eis.txt --masa 2
 ramancarbon echem --polarizacion ec/demo_lsv_OER.txt --referencia RHE \
                   --area 1 --resistencia 3 --reaccion OER
+
+# XPS
+ramancarbon xps survey.vms C1s.vms N1s.vms --fuente Al --paso-energia 26 \
+            --referencia-estado "C 1s:C-C sp2" --region "N 1s=4" \
+            --tablas tablas/ --vamas referenciado.vms
 
 # Mapas, figuras, formatos y proyectos
 ramancarbon mapa mapa.txt --punto 1 --cociente 1280 1420 1500 1660
@@ -555,12 +561,24 @@ Lo demás:
 * **Capacitancia en los dos convenios**, cada uno con su nombre. Integrar el
   lazo cerrado y dividir por 2νΔV, o integrar la rama anódica y dividir por
   νΔV: publicar sin decir cuál deja un factor 2 de ambigüedad.
-* **Estudio de velocidad**: b de `i = a·ν^b` a lo largo de la ventana, reparto
-  capacitivo/difusivo de Dunn, Trasatti, y C_dl → ECSA **con el factor de tres**
-  que arrastra la Cs que se adopte.
+* **Estudio de velocidad**: b de `i = a·ν^b` a lo largo de la ventana,
+  **Dunn** con k₁(V) y k₂(V) y la curva capacitiva reconstruida —la que se
+  publica—, Trasatti, y C_dl → ECSA **con el factor de tres** que arrastra la
+  Cs que se adopte.
+* **La misma capacitancia por CV, GCD y EIS, lado a lado.** No son tres
+  estimaciones de lo mismo: lo que entrega un dispositivo es la de GCD, la de
+  EIS es una cota superior que nunca ve, y una dispersión por encima del 30 %
+  es el resultado, no ruido. De la impedancia sale además τ₀, la frontera
+  entre comportarse como condensador y como resistencia, que no necesita
+  saber la masa.
 * **Carga-descarga**: caída IR medida y quitada de la ventana, capacitancia y
   capacidad, eficiencia culómbica y energética, energía **integrada** (∫V dq,
   válida también para una meseta) y potencia.
+* **La celda entera en la ficha**: masa activa, área, volumen, electrolito,
+  electrodo de referencia (con las conversiones a RHE y SHE, que necesitan el
+  pH), fracción ya compensada por el potenciostato y R_u —que se puede sacar
+  del corte a alta frecuencia de la propia impedancia y aplicar a todas las
+  curvas de esa celda.
 * **Impedancia**: circuitos escritos como `R0-(R1|Q1)-Wo1`, ajuste no lineal
   complejo en espacio logarítmico con reinicios, y **Kramers-Kronig antes que
   el circuito** — un ajuste a datos que derivaron durante la medida da
@@ -569,6 +587,104 @@ Lo demás:
   con la región lineal **buscada** y no supuesta, corriente de intercambio,
   actividad másica y normalización por ECSA. Se niega a dar una pendiente
   ajustada sobre menos de una década.
+
+## XPS
+
+```bash
+ramancarbon xps survey.vms C1s.vms N1s.vms Fe2p.vms --fuente Al --paso-energia 26 \
+            --referencia-estado "C 1s:C-C sp2" \
+            --region "N 1s=4" --region "Fe 2p3/2=Fe-Se,Fe3+" --tablas tablas/
+```
+
+Lee `.spe` de PHI, VAMAS (ISO 14976) y texto. Y escribe VAMAS, que es lo que
+de verdad hace falta mandarle a un coautor: lo que sale de aquí **no es lo
+que entró** — el eje está referenciado — y mandar el original con una frase
+sobre el desplazamiento es como ese desplazamiento acaba aplicado dos veces.
+
+**La referencia de carga va antes que cualquier energía de enlace**, porque
+todas dependen de ella:
+
+```
+REFERENCIA DE CARGA
+  referencia C 1s:C-C sp2: medida en 286.11 eV, esperada en 284.40 ± 0.40 eV
+  → desplazamiento -1.71 eV (confianza high)
+```
+
+En una muestra **hecha de carbono** —grafeno, nanotubos, carburos— referenciar
+contra «el pico C 1s» es circular: el pico contra el que se referencia es la
+muestra. Y 284.8 eV es el valor del carbono *adventicio*; el sp² de la muestra
+está en 284.4. Sobre el espectro sintético, referenciar contra el pico entero
+deja 0.55 eV de la carga sin quitar y referenciar contra una componente
+ajustada deja 0.05 eV.
+
+Hay además dos caminos que **no necesitan referencia ninguna**, porque son
+diferencias dentro del mismo espectro y el desplazamiento de carga se cancela:
+el **parámetro Auger modificado** (α′ = E_enlace + E_cinética) y el
+**parámetro D del C KLL**, que separa sp² de sp³ y es la respuesta de XPS a la
+pregunta que Raman contesta con I_D/I_G.
+
+**Un elemento es un espectro, no una línea.** Para que el survey lo dé por
+presente hacen falta tres cosas, y quitar cualquiera de ellas mete elementos
+que no están:
+
+1. su línea principal;
+2. la componente **fuerte** del doblete — el 2p1/2 del azufre y el 3p1/2 del
+   selenio están a 0.1 eV, y sin esta regla todo seleniuro «contiene» azufre;
+3. **un pico que no explique nadie más** — el Auger LMM del hierro cae sobre
+   el Co 2p con ánodo de aluminio, así que toda muestra con hierro
+   «contendría» cobalto.
+
+Los picos **sin explicar** son parte del resultado, no un resto: son el
+elemento que no esperabas, y la biblioteca es pequeña a propósito.
+
+**El doblete es UNA componente.** La separación y la razón de áreas (1:2 en p,
+2:3 en d, 3:4 en f) son propiedades del átomo, no parámetros. Ajustar el
+Fe 2p3/2 y el 2p1/2 como picos libres es la forma más rápida de inventarse una
+estequiometría.
+
+**Las componentes llevan su ventana de literatura.** «400.2 eV» no dice nada;
+«pirrólico, 399.8–400.8 eV, confianza alta» sí, y si el ajuste se sale de esa
+ventana el informe dice que ya no es ese estado.
+
+**El número de componentes lo eliges tú, y el programa te da con qué
+discutirlo.** Un ajuste por mínimos cuadrados siempre devuelve tantos picos
+como se le den, y añadir uno siempre baja el residuo. Lo que decide es el χ²
+frente a la estadística de conteo y si el residuo aún tiene estructura:
+
+```
+  n    χ²_red     DW  parámetros
+  2     66.78   0.08          5
+  3     13.15   0.26          7
+  4      1.49   1.60          9
+  5      1.51   1.60         11
+
+con 4 componentes el residuo ya es ruido; la quinta baja el χ² un 1 % y eso
+no es prueba de otro estado químico
+```
+
+Lo demás:
+
+* **Fondos** Shirley (iterado contra la envolvente ajustada), Tougaard y
+  lineal, con los extremos tratados como el parámetro que son: mover el
+  límite de alta energía de enlace de un C 1s un eV mueve el área del
+  carbonilo un varios por ciento, y eso no es un defecto del método, es lo
+  que significa «área de un pico sobre un fondo».
+* **Formas de línea** GL (producto, el de CasaXPS), SGL y **Doniach-Šunjić**
+  para metales. Ajustar hierro metálico con formas simétricas obliga al
+  ajuste a tapar la cola con algo, y ese algo se informa como un óxido que
+  no está.
+* **Pesos de estadística de conteo**, así que el χ² reducido significa algo:
+  17 con dos componentes en un N 1s que tiene tres, 1.1 con tres.
+* **Composición atómica** con corrección de transmisión, y con lo que ese
+  número NO es: un porcentaje de lo *detectado* (el hidrógeno no se ve), con
+  un 15 % de incertidumbre sistemática de los factores de sensibilidad, y
+  medido a profundidades distintas para cada línea.
+* **Tablas que entran y salen**: cada región ajustada se exporta como curvas
+  (una columna por componente; sumarlas al fondo reproduce la envolvente) y
+  como parámetros. Y una tabla de componentes se puede volver a leer como
+  modelo, que es lo que hace falta en una serie: ajustas bien la primera
+  muestra y las otras once llevan el mismo modelo, para que lo que cambie
+  entre ellas sea la muestra.
 
 ## Mapas Raman
 
@@ -623,7 +739,7 @@ Preajustes: `acs`, `acs-doble`, `rsc`, `elsevier`, `nature`, `aps`,
 ## Importar, exportar y proyectos
 
 El tipo de archivo se decide por **los números, no por la extensión**: los
-cuatro instrumentos escriben `.txt`, y lo que separa las medidas es su
+cinco instrumentos escriben `.txt`, y lo que separa las medidas es su
 forma. Un voltamperograma vuelve sobre sí mismo y nada más lo hace; una
 impedancia trae tres columnas y siete décadas de frecuencia.
 
@@ -652,7 +768,21 @@ reabren y ya no se pueden analizar.
   propios antes de fiarte de un número para publicar.
 * **No lee formatos binarios de fabricante** (Renishaw `.wxd`, Thermo
   `.spa`, Bruker `.opus`, Bruker `.raw`/`.brml` en difracción). Expórtalos
-  como texto; el programa dice qué formato es y qué exportar.
+  como texto; el programa dice qué formato es y qué exportar. El `.spe` de
+  PHI es la excepción parcial: su cabecera ASCII se lee entera, y de su
+  bloque binario solo se aceptan las intensidades cuando la lectura se puede
+  COMPROBAR contra lo que declara la cabecera. Si dos disposiciones encajan
+  igual de bien, se rechazan las dos.
+* **Una cuantificación XPS es un porcentaje de lo detectado**, no de la
+  muestra: el hidrógeno no tiene nivel interno y la técnica no lo ve, y un
+  elemento que no hayas ajustado no baja el porcentaje de los demás. La
+  incertidumbre sistemática con factores de sensibilidad tabulados es de un
+  15 % relativo, y cada línea mira a una profundidad distinta —en una
+  muestra decorada o recubierta, lo que esté arriba sale sobrerrepresentado.
+* **Toda energía de enlace vale lo que valga su referencia de carga.** La
+  del C 1s adventicio, que es la universal, está publicada entre 284.4 y
+  285.2 eV: esa horquilla es más ancha que muchos de los desplazamientos
+  químicos que luego se interpretan.
 * **En difracción no hay dispersión anómala (f′, f″).** El efecto en las
   intensidades calculadas es de un pequeño porcentaje. Lo que de verdad
   arruina una muestra de hierro con tubo de cobre es la fluorescencia, que
@@ -728,6 +858,7 @@ python -m ramancarbon.examples.ex16_mapas           # 480 espectros → una imag
 python -m ramancarbon.examples.ex17_microestructura # tamaño, deformación, celda sin átomos
 python -m ramancarbon.examples.ex18_cinetica        # cuatro caminos a un D, y sus trampas
 python -m ramancarbon.examples.ex19_controles       # ligaduras, exclusiones, anclas
+python -m ramancarbon.examples.ex20_xps             # la referencia de carga lo decide todo
 ```
 
 `ex11`, `ex12` y `ex13` son los que más rápido explican por qué el programa
@@ -744,11 +875,15 @@ hace lo que hace:
   qué un mapa de áreas crudas es un mapa de la fluorescencia.
 * **ex19** ajusta el mismo espectro con un rayo cósmico dentro y con él
   excluido: el pico D pasa de 1375 a 1350 cm⁻¹ y el R² de 0.08 a 1.000.
+* **ex20** quita una carga de 1.8 eV de dos maneras —contra el pico C 1s
+  entero y contra su componente sp²— y enseña que la primera deja 0.55 eV
+  dentro; luego decide cuántas componentes tiene el N 1s con el χ² en la
+  mano, y saca la composición con la que se construyó la muestra.
 
 ## Pruebas
 
 ```bash
-pytest ramancarbon/tests -q            # ~1030 pruebas
+pytest ramancarbon/tests -q            # ~1120 pruebas
 ```
 
 ## Licencia

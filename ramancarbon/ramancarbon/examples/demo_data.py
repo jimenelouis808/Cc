@@ -27,6 +27,8 @@ from typing import Optional
 
 import numpy as np
 
+from ..core.compat import trapezoid
+
 from ..core.spectrum import Spectrum, laser_energy_ev
 from ..models.lineshapes import bwf, gaussian, lorentzian
 
@@ -1338,8 +1340,7 @@ def make_xps_demo(
         main_line = database.element(element).primary_line
         target = (fraction * main_line.rsf
                   * transmission(float(np.mean(centres))))
-        total_area = float(np.trapezoid(curve, axis)) if hasattr(np, "trapezoid") \
-            else float(np.trapz(curve, axis))
+        total_area = float(trapezoid(curve, axis))
         curve = curve / max(total_area, 1e-12) * target
         built.append((region, axis, curve))
 

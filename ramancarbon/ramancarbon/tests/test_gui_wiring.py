@@ -37,6 +37,7 @@ SECTION_MODULES = {
     "tmd_app": "TMDApp",
     "xrd_app": "XRDApp",
     "echem_app": "EchemApp",
+    "xps_app": "XPSApp",
 }
 
 
@@ -47,6 +48,8 @@ def source(stem: str) -> str:
 @pytest.mark.parametrize("stem", sorted(SECTION_MODULES) + ["suite", "base",
                                                             "xrd_state",
                                                             "echem_state",
+                                                            "xps_state",
+                                                            "plots_xps",
                                                             "plots_xrd",
                                                             "plots_echem"])
 def test_every_gui_module_parses(stem):
@@ -66,7 +69,7 @@ def test_carbon_section_canvases_are_mapped_and_drawn():
     assert created == drawers, f"canvas/drawer mismatch: {created ^ drawers}"
 
 
-@pytest.mark.parametrize("stem", ["xrd_app", "echem_app"])
+@pytest.mark.parametrize("stem", ["xrd_app", "echem_app", "xps_app"])
 def test_new_sections_map_every_canvas_to_a_drawer(stem):
     text = source(stem)
     created = set(re.findall(r'make_canvas\(\w+, "(\w+)"', text))
@@ -100,7 +103,7 @@ def test_carbon_tab_index_map_matches_the_build_order():
         )
 
 
-@pytest.mark.parametrize("stem", ["xrd_app", "echem_app"])
+@pytest.mark.parametrize("stem", ["xrd_app", "echem_app", "xps_app"])
 def test_new_section_tab_maps_cover_every_tab(stem):
     text = source(stem)
     added = len(re.findall(r"self\.notebook\.add\(", text))
@@ -157,19 +160,19 @@ def test_callbacks_named_in_commands_exist(stem, name):
 # -- the four sections exist and are wired ----------------------------
 
 
-def test_the_suite_declares_four_sections():
+def test_the_suite_declares_five_sections():
     from ramancarbon.gui.suite import SECTIONS
 
     keys = [key for key, _, _ in SECTIONS]
-    assert keys == ["carbono", "tmd", "drx", "echem"]
+    assert keys == ["carbono", "tmd", "drx", "echem", "xps"]
 
 
 def test_the_suite_builds_each_section_lazily():
-    """Constructing all four at start imports matplotlib, builds a dozen
+    """Constructing all five at start imports matplotlib, builds a dozen
     figures and reads the reference library before the window appears."""
     text = source("suite")
     assert "_ensure" in text
-    for key in ("carbono", "tmd", "drx", "echem"):
+    for key in ("carbono", "tmd", "drx", "echem", "xps"):
         assert f'key == "{key}"' in text or f'"{key}"' in text
 
 
@@ -218,6 +221,20 @@ def test_the_two_raman_sections_share_one_session():
         ("echem_app", "reaction_var"),
         ("echem_app", "summary_table"),
         ("echem_app", "normalise_var"),
+        # The XPS section: the choices a high-resolution fit is made of have
+        # to be visible and adjustable, not defaults nobody sees.
+        ("xps_app", "region_var"),
+        ("xps_app", "count_var"),
+        ("xps_app", "state_list"),
+        ("xps_app", "background_var"),
+        ("xps_app", "link_var"),
+        ("xps_app", "satellite_var"),
+        ("xps_app", "reference_var"),
+        ("xps_app", "reference_state_var"),
+        ("xps_app", "transmission_var"),
+        ("xps_app", "_compare_counts"),
+        ("xps_app", "_export_tables"),
+        ("xps_app", "_import_model"),
     ],
 )
 def test_requested_features_are_wired_into_the_window(stem, feature):
@@ -262,7 +279,7 @@ def test_axis_parsing_accepts_the_forms_people_type():
 
 
 def test_the_whole_suite_opens_and_every_section_works():
-    """Build the window, visit all four sections, run their analyses.
+    """Build the window, visit all five sections, run their analyses.
 
     Skipped without Tkinter or a display. This is the only test that
     exercises the widget code as code rather than as text.

@@ -45,11 +45,13 @@ SECTIONS: tuple[tuple[str, str, str], ...] = (
      "Identificación de fases contra estructuras cristalinas y Rietveld."),
     ("echem", "  Electroquímica  ",
      "CV, carga-descarga, impedancia, HER y OER."),
+    ("xps", "  XPS  ",
+     "Estados químicos: survey, regiones de alta resolución y composición."),
 )
 
 
 class Suite:
-    """The top-level window holding the four sections."""
+    """The top-level window holding the five sections."""
 
     def __init__(self, root) -> None:
         import tkinter as tk
@@ -165,6 +167,10 @@ class Suite:
             from .echem_app import EchemApp
 
             self.sections[key] = EchemApp(self.root, frame, self.palette, self.fonts)
+        elif key == "xps":
+            from .xps_app import XPSApp
+
+            self.sections[key] = XPSApp(self.root, frame, self.palette, self.fonts)
 
     def _toggle_theme(self) -> None:
         from tkinter import messagebox

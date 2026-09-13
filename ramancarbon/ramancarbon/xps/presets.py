@@ -334,7 +334,7 @@ def _width_compatible(first: ChemicalState, second: ChemicalState) -> bool:
 def count_model(
     spectrum: XPSSpectrum,
     region: str,
-    n: int,
+    n: Optional[int] = None,
     database: Optional[XPSDatabase] = None,
     **options,
 ) -> tuple[XPSModel, list[str]]:
@@ -353,6 +353,14 @@ def count_model(
     between pyridinic at 398.5 and pyrrolic at 400.2, over the N-oxide at
     403.5 that is actually in the spectrum as its own peak.
 
+    ``n`` may be ``None``, and that is the better default: then the number
+    of components is however many shoulders the region actually shows, and
+    nothing is added to reach a target. A fixed default — two, say — is a
+    decision made by whoever wrote the program about somebody else's
+    sample, and on a nitrogen-doped carbon with four nitrogen environments
+    it produces a two-component fit with χ² of seventy and a residual with
+    obvious structure.
+
     This is a starting point, not a decision. The states left out are
     returned so the choice can be argued with.
 
@@ -366,9 +374,9 @@ def count_model(
                  if not s.is_satellite]
     if not available:
         raise XPSError(f"la base de datos no tiene estados para {region!r}")
-    if n < 1:
+    if n is not None and n < 1:
         raise XPSError("hacen falta al menos una componente")
-    if n > len(available):
+    if n is not None and n > len(available):
         raise XPSError(
             f"se piden {n} componentes y la base de datos solo describe "
             f"{len(available)} estados de {region}: "
@@ -398,10 +406,11 @@ def count_model(
     # wedged between the main peaks while the oxidised state at the far end
     # of the region — which is a peak of its own — is left out.
     separation = 0.8 * float(np.median([state.fwhm[0] for state in available]))
+    limit = len(available) if n is None else n
     kept: list[ChemicalState] = []
     taken: list[float] = []
     for _, seed in candidates:
-        if len(kept) >= n:
+        if len(kept) >= limit:
             break
         if any(abs(seed - other) < separation for other in taken):
             continue
@@ -412,13 +421,24 @@ def count_model(
         kept.append(min(inside, key=lambda state: abs(state.energy_ev - seed)))
         taken.append(seed)
     notes = [
-        "componentes elegidas por los hombros que hay en la propia región: "
+        ("el número de componentes lo ha decidido la propia región"
+         if n is None else "componentes elegidas")
+        + f" — {len(kept)} hombro(s) dentro de una ventana publicada: "
         + ", ".join(f"{s.name} ({s.energy_ev:.1f} eV)" for s in kept)
         if kept else
         "la segunda derivada no ha encontrado ningún hombro dentro de una "
         "ventana publicada"
     ]
-    if len(kept) < n:
+    if not kept:
+        # Nothing found: fall back to the single strongest state rather than
+        # to nothing, so the region is still fitted and the note says why.
+        kept = [max(available, key=lambda state: _height_guess(
+            spectrum, (low, high), state.energy_ev, background))]
+        notes.append(
+            f"sin hombros claros, se ajusta solo {kept[0].name}: o la región "
+            "tiene una sola especie, o la estadística no da para separar más"
+        )
+    if n is not None and len(kept) < n:
         rest = sorted(
             (state for state in available if state not in kept),
             key=lambda state: _height_guess(spectrum, (low, high),
@@ -434,7 +454,7 @@ def count_model(
                 + ", ".join(f"{s.name} ({s.energy_ev:.1f} eV)" for s in filled)
                 + ". Una componente puesta así no la pide la medida"
             )
-    kept = sorted(kept[:n], key=lambda state: state.energy_ev)
+    kept = sorted(kept[:limit], key=lambda state: state.energy_ev)
     dropped = [state for state in available if state not in kept]
     if dropped:
         notes.append(

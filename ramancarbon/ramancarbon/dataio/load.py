@@ -110,6 +110,8 @@ def load(
 _ACCEPTED: dict[str, frozenset[str]] = {
     "_load_raman": frozenset({"laser_nm", "intensity_column", "encoding"}),
     "_load_xrd": frozenset({"anode", "wavelength", "line"}),
+    "_load_xps": frozenset({"photon_energy", "pass_energy", "axis",
+                            "work_function", "dwell_s", "sweeps", "region"}),
     "_load_cv": frozenset({"scan_rate", "electrode", "potential_scale",
                            "current_scale"}),
     "_load_gcd": frozenset({"electrode", "current", "potential_scale",
@@ -195,8 +197,22 @@ def _load_eis(path: Path, found: Detection, options: dict[str, Any]):
     return read_eis(path, **options)
 
 
+def _load_xps(path: Path, found: Detection, options: dict[str, Any]):
+    """Photoelectron spectra. Returns the list, because a file holds many.
+
+    A ``.spe`` carries every region of a session and a VAMAS file carries
+    every block, so this is the one reader whose natural result is a list;
+    unwrapping a single-element one would make the caller's code depend on
+    how many regions somebody happened to measure.
+    """
+    from ..xps.io import read_xps
+
+    return read_xps(path, **options)
+
+
 _READERS = {
     "raman": _load_raman,
+    "xps": _load_xps,
     "xrd": _load_xrd,
     "cv": _load_cv,
     "gcd": _load_gcd,

@@ -960,6 +960,19 @@ def cmd_demo_datos(args) -> int:
 
         for pattern in xrd_demo_spectra(seed=3):
             written.append(write_pattern(pattern, folder / f"{pattern.name}.xye"))
+    elif args.tipo == "xps":
+        from ..examples.demo_data import make_xps_demo
+        from ..xps.io import write_vamas
+
+        # One VAMAS file per region, which is how an instrument leaves them,
+        # plus the whole session in one file, which is how they travel.
+        for kind in ("NCNT_FeSe", "NCNT"):
+            spectra = make_xps_demo(kind, seed=1, charge_shift=1.5)
+            for spectrum in spectra:
+                stem = spectrum.region.replace(" ", "").replace("/", "")
+                written.append(write_vamas(
+                    folder / f"demo_xps_{kind}_{stem}.vms", spectrum))
+            written.append(write_vamas(folder / f"demo_xps_{kind}.vms", spectra))
     else:
         from ..echem.io import write_cv, write_eis, write_gcd
         from ..examples.demo_data import (
@@ -987,6 +1000,13 @@ def cmd_demo_datos(args) -> int:
         "\nSon datos SINTÉTICOS, calculados de la física que se quiere probar. "
         "No son medidas."
     )
+    if args.tipo == "xps":
+        print(
+            "La muestra sintética se carga 1.5 eV a propósito: la referencia "
+            "tiene que quitarlos. Pruébalo con\n"
+            f"  ramancarbon xps {folder}/demo_xps_NCNT_FeSe.vms "
+            '--referencia-estado "C 1s:C-C sp2"'
+        )
     return 0
 
 
@@ -1698,9 +1718,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_tiempos)
 
     p = sub.add_parser(
-        "demo-datos", help="generar difractogramas o medidas electroquímicas de prueba"
+        "demo-datos",
+        help="generar difractogramas, medidas electroquímicas o espectros XPS "
+             "de prueba",
     )
-    p.add_argument("tipo", choices=["drx", "echem"])
+    p.add_argument("tipo", choices=["drx", "echem", "xps"])
     p.add_argument("carpeta", help="carpeta donde escribirlos")
     p.set_defaults(func=cmd_demo_datos)
 
