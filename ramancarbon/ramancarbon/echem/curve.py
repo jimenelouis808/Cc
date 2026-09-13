@@ -142,6 +142,67 @@ class Electrode:
             f"{slope:.5f}·{self.ph:g} = E + {offset:.4f} V",
         )
 
+    def to_reference(
+        self, potential, target: str
+    ) -> tuple[Optional[np.ndarray], str]:
+        """Convert a measured potential to **any** other reference scale.
+
+        The general case of :meth:`to_rhe`, and worth having because the
+        conversion people get wrong is rarely to RHE: it is between two
+        aqueous references that differ by a few tens of mV. Ag/AgCl in 3 M
+        KCl and in saturated KCl are 13 mV apart, and SCE is 31 mV above
+        the 3 M one — differences the same size as the shifts being
+        compared between papers.
+
+        Both scales are referred to SHE and the difference is added:
+        ``E(destino) = E(origen) + E°(origen) − E°(destino)``. RHE is the
+        exception at both ends, because its own potential against SHE moves
+        with the pH; going to or from it needs the pH, and without it the
+        conversion is refused rather than guessed.
+
+        Returns
+        -------
+        tuple
+            ``(converted, explanation)``, or ``(None, reason)``.
+        """
+        data = load_echem_database()
+        table = data["reference_electrodes"]
+        slope = float(data["nernst_slope_v_per_ph"])
+        values = np.asarray(potential, dtype=float)
+
+        def offset(key: str) -> tuple[Optional[float], str]:
+            """That reference's potential against SHE, in volts."""
+            entry = table.get(key)
+            if entry is None:
+                return None, (
+                    f"referencia desconocida {key!r}; disponibles: "
+                    + ", ".join(sorted(table))
+                )
+            if entry.get("vs_she") is not None:
+                return float(entry["vs_she"]), entry["label"]
+            if not entry.get("ph_dependent"):
+                return None, f"{entry['label']} no tiene un potencial fijo frente a SHE"
+            if self.ph is None:
+                return None, (
+                    f"{entry['label']} depende del pH y no se ha dado ninguno. "
+                    "Suponerlo mete 59 mV por unidad de pH en todo lo que "
+                    "venga después"
+                )
+            return -slope * float(self.ph), f"{entry['label']} a pH {self.ph:g}"
+
+        if target == self.reference:
+            return values, f"ya estaba en {target}"
+        source_offset, source_label = offset(self.reference)
+        if source_offset is None:
+            return None, source_label
+        target_offset, target_label = offset(target)
+        if target_offset is None:
+            return None, target_label
+        shift = source_offset - target_offset
+        return values + shift, (
+            f"E({target_label}) = E({source_label}) {shift:+.4f} V"
+        )
+
     def ir_correct(
         self, potential: np.ndarray, current: np.ndarray
     ) -> tuple[np.ndarray, str]:

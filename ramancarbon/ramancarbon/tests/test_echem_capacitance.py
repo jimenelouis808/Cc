@@ -135,3 +135,43 @@ def test_the_reconstructed_capacitive_curve_is_part_of_the_total():
 def test_the_electrode_carries_its_electrolyte():
     electrode = Electrode(mass_mg=2.0, electrolyte="KOH 6 M")
     assert "KOH 6 M" in electrode.describe()
+
+
+def test_potentials_convert_between_any_two_references():
+    """The conversion people get wrong is rarely to RHE: it is between two
+    aqueous references a few tens of mV apart. Ag/AgCl saturated and 3 M
+    differ by 13 mV, and SCE is 31 mV above the 3 M one — the same size as
+    the shifts being compared between papers."""
+    electrode = Electrode(reference="Ag/AgCl_sat", ph=14.0)
+    for target, expected in (("SHE", 0.197), ("Ag/AgCl_3M", -0.013),
+                             ("SCE", -0.044)):
+        values, why = electrode.to_reference(np.array([0.0]), target)
+        assert values[0] == pytest.approx(expected, abs=1e-4), target
+        assert target.split("_")[0][:3].lower() in why.lower() or "V" in why
+
+
+def test_the_general_conversion_agrees_with_the_rhe_one():
+    electrode = Electrode(reference="Ag/AgCl_sat", ph=14.0)
+    general, _ = electrode.to_reference(np.array([0.0, 0.5]), "RHE")
+    direct, _ = electrode.to_rhe(np.array([0.0, 0.5]))
+    assert np.allclose(general, direct)
+
+
+def test_a_ph_dependent_reference_is_refused_without_a_ph():
+    """59 mV per pH unit into everything downstream is not worth guessing."""
+    electrode = Electrode(reference="Ag/AgCl_sat")
+    values, why = electrode.to_reference(np.array([0.0]), "RHE")
+    assert values is None and "pH" in why
+
+
+def test_the_report_states_the_reference_scale():
+    from ramancarbon.echem.report import analyse_sample
+    from ramancarbon.examples.demo_data import make_cv_demo
+
+    curve = make_cv_demo("condensador", seed=1)
+    curve.electrode = Electrode(mass_mg=2.0, reference="Ag/AgCl_sat", ph=14.0,
+                                electrolyte="KOH 6 M")
+    text = analyse_sample(name="demo", cv=curve).report()
+    assert "LA CELDA" in text
+    assert "KOH 6 M" in text
+    assert "→ RHE" in text

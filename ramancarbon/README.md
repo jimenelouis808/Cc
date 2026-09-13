@@ -575,10 +575,15 @@ Lo demás:
   capacidad, eficiencia culómbica y energética, energía **integrada** (∫V dq,
   válida también para una meseta) y potencia.
 * **La celda entera en la ficha**: masa activa, área, volumen, electrolito,
-  electrodo de referencia (con las conversiones a RHE y SHE, que necesitan el
-  pH), fracción ya compensada por el potenciostato y R_u —que se puede sacar
-  del corte a alta frecuencia de la propia impedancia y aplicar a todas las
-  curvas de esa celda.
+  electrodo de referencia, pH, fracción ya compensada por el potenciostato y
+  R_u —que se puede sacar del corte a alta frecuencia de la propia impedancia
+  y aplicar a todas las curvas de esa celda. El informe empieza diciendo en
+  qué escala están los potenciales y a cuánto está de SHE y de RHE, y se
+  convierte **entre cualesquiera dos referencias**: el error que de verdad se
+  comete no es al pasar a RHE, es entre dos referencias acuosas separadas por
+  decenas de mV. Ag/AgCl 3 M y saturado están a 13 mV, y el SCE a 31 mV del
+  de 3 M — del mismo tamaño que los desplazamientos que se comparan entre
+  artículos.
 * **Impedancia**: circuitos escritos como `R0-(R1|Q1)-Wo1`, ajuste no lineal
   complejo en espacio logarítmico con reinicios, y **Kramers-Kronig antes que
   el circuito** — un ajuste a datos que derivaron durante la medida da

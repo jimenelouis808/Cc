@@ -39,6 +39,11 @@ class EchemResult:
     eis: Optional[EISResult] = None
     catalysis: Optional[CatalysisResult] = None
     storage: Optional[StorageVerdict] = None
+    electrode: Optional[Any] = None
+    """The cell it was all measured on. Kept so the report can state the
+    reference scale and what it converts to: two papers on the same
+    material quoting potentials against Ag/AgCl saturated and Ag/AgCl 3 M
+    differ by 13 mV before anything physical happens."""
     dunn: Optional[DunnAnalysis] = None
     capacitance: Optional[CapacitanceComparison] = None
     """The same capacitance by every method that was measured. It is the
@@ -119,6 +124,11 @@ def analyse_sample(
     the criteria.
     """
     result = EchemResult(name=name)
+    for measurement in (cv, gcd, eis, catalysis_curve,
+                        *(rate_series or ())):
+        if measurement is not None and getattr(measurement, "electrode", None):
+            result.electrode = measurement.electrode
+            break
     if cv is not None:
         result.cv = analyse_cv(cv)
         result.warnings.extend(f"CV: {w}" for w in result.cv.warnings)
@@ -258,6 +268,20 @@ def build_report(result: EchemResult, verbose: bool = True) -> str:
         return "\n" + "─" * 72 + f"\n  {title}\n" + "─" * 72
 
     lines = ["═" * 72, f"  ELECTROQUÍMICA — {result.name}", "═" * 72]
+
+    if result.electrode is not None:
+        lines.append(section("LA CELDA"))
+        lines.append(result.electrode.describe())
+        conversions = []
+        for target in ("SHE", "RHE"):
+            values, why = result.electrode.to_reference([0.0], target)
+            conversions.append(f"  → {target}: {why}" if values is not None
+                               else f"  → {target}: no se puede — {why}")
+        lines.extend(conversions)
+        lines.append(
+            "  Di siempre el relleno de la referencia: Ag/AgCl 3 M y "
+            "saturado están a 13 mV, y el SCE a 31 mV del de 3 M."
+        )
 
     if result.storage:
         lines.append(section("MECANISMO DE ALMACENAMIENTO"))

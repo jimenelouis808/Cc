@@ -367,7 +367,9 @@ una tiene una prueba que la protege.
   ½CV² acierta también en una meseta CENTRADA, por casualidad. Por eso la
   meseta del demo está descentrada, como las de verdad.
 - **El potencial de referencia va con su relleno.** Ag/AgCl 3 M y SCE están
-  a 31 mV. Sin pH, la conversión a RHE se RECHAZA en vez de suponerlo: son
+  a 31 mV, y Ag/AgCl 3 M y saturado a 13 mV. La conversión entre dos
+  referencias cualesquiera pasa por SHE (`Electrode.to_reference`), y el
+  informe abre diciendo en qué escala están los potenciales. Sin pH, la conversión a RHE se RECHAZA en vez de suponerlo: son
   59 mV por unidad de pH en todo lo que venga después.
 - **Sin corrección óhmica no hay pendiente de Tafel ni ΔEp cinético**, y el
   sesgo crece con la corriente. Se avisa siempre que falte.
