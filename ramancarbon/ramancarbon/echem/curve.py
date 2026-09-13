@@ -83,6 +83,16 @@ class Electrode:
     high-frequency intercept of an impedance spectrum on the same cell."""
     ir_compensated_fraction: float = 0.0
     """How much the potentiostat already compensated, 0–1."""
+    electrolyte: str = ""
+    """What it was measured in, e.g. ``"KOH 6 M"``, ``"Na2SO4 1 M"``.
+
+    Metadata, and not decoration: the same electrode gives different
+    capacitances in different electrolytes, the usable potential window is
+    a property of the electrolyte rather than of the material, and a number
+    quoted without it cannot be compared with anybody else's. It also
+    carries the information that decides whether a window is physically
+    possible at all — 1.0 V in a neutral aqueous electrolyte is ordinary,
+    2.0 V is water splitting."""
     label: str = ""
 
     def specific(self, value: float, basis: str = "mass") -> Optional[float]:
@@ -165,6 +175,8 @@ class Electrode:
         if self.volume_cm3:
             parts.append(f"volumen {self.volume_cm3:g} cm³")
         parts.append(f"referencia {self.reference}")
+        if self.electrolyte:
+            parts.append(self.electrolyte)
         if self.ph is not None:
             parts.append(f"pH {self.ph:g}")
         if self.resistance_ohm:

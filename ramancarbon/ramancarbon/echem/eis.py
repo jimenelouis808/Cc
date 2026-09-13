@@ -307,6 +307,75 @@ def cpe_to_capacitance(q: float, n: float, resistance: float) -> float:
     return float((q * resistance ** (1.0 - n)) ** (1.0 / n) / resistance)
 
 
+def uncompensated_resistance(spectrum: Impedance) -> tuple[float, str]:
+    """The series resistance to use for iR correction, in Ω.
+
+    Taken as the real part of the impedance where it crosses the real axis
+    at high frequency — the point where the double layer is a short circuit
+    and everything that is left is electrolyte, contacts and current
+    collector. That is the resistance the potentiostat did not compensate,
+    and it is the number that belongs in
+    :attr:`~ramancarbon.echem.curve.Electrode.resistance_ohm`.
+
+    The crossing is found by interpolating Z″ to zero between the two
+    highest-frequency points that straddle it. When the spectrum never
+    crosses — which happens when the measurement stopped below the
+    crossing, or when stray inductance from the cables pushes Z″ positive
+    across the whole top end — the highest-frequency real part is returned
+    instead, with an explanation, because it is an upper bound and saying
+    so is better than refusing outright.
+
+    Returns
+    -------
+    tuple
+        ``(resistance in Ω, how it was obtained)``. The second element goes
+        in the report: an iR correction with an unexplained resistance is
+        a free parameter.
+    """
+    # Stored descending in frequency, so index 0 is the fastest point.
+    imaginary = spectrum.z.imag
+    real = spectrum.z.real
+    for index in range(spectrum.n - 1):
+        first, second = imaginary[index], imaginary[index + 1]
+        if first == 0.0:
+            return float(real[index]), (
+                f"Z″ = 0 exactamente a {spectrum.frequency[index]:.4g} Hz"
+            )
+        if first * second < 0.0:
+            weight = abs(first) / (abs(first) + abs(second))
+            value = float(real[index] + weight * (real[index + 1] - real[index]))
+            return value, (
+                "cruce con el eje real interpolado entre "
+                f"{spectrum.frequency[index]:.4g} y "
+                f"{spectrum.frequency[index + 1]:.4g} Hz"
+            )
+    return float(real[0]), (
+        f"el espectro no cruza el eje real; se usa Z′ a la frecuencia más "
+        f"alta medida ({spectrum.frequency[0]:.4g} Hz), que es una COTA "
+        "SUPERIOR de R_u. Un electrodo puramente capacitivo no cruza nunca "
+        "—ahí esta cota es buena— pero si Z″ es POSITIVO arriba, lo que hay "
+        "es inductancia de los cables y entonces sobra resistencia: mide más "
+        "alto o réstala"
+    )
+
+
+def with_resistance_from(electrode, spectrum: Impedance):
+    """A copy of an electrode carrying the R_u measured on this cell.
+
+    The intended use is the one people do by hand and get wrong: measure
+    the impedance, read the high-frequency intercept, and apply it to the
+    voltammogram and the charge–discharge curve of the **same cell**. It is
+    the same cell that matters — a resistance from another day, another
+    electrolyte level or another contact is a number with the right units
+    and no meaning.
+    """
+    from dataclasses import replace
+
+    value, how = uncompensated_resistance(spectrum)
+    updated = replace(electrode, resistance_ohm=value)
+    return updated, how
+
+
 def fit_circuit(
     spectrum: Impedance,
     circuit: str = "randles_cpe",
@@ -871,6 +940,8 @@ __all__ = [
     "fit_circuit",
     "kramers_kronig",
     "parse_circuit",
+    "uncompensated_resistance",
+    "with_resistance_from",
 ]
 
 

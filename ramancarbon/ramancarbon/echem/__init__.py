@@ -24,9 +24,10 @@ Modules
 -------
 ``curve``     the data objects and the electrode description
 ``io``        readers for the usual potentiostat exports
-``cv``        voltammetry: capacitance, peaks, b-value, Trasatti, ECSA
+``cv``        voltammetry: capacitance, peaks, b-value, Dunn, Trasatti, ECSA
 ``gcd``       galvanostatic cycling: capacity, IR drop, energy and power
 ``eis``       impedance: circuits, complex non-linear fitting, Kramers–Kronig
+``capacitance`` the same capacitance measured by CV, GCD and EIS, side by side
 ``evaluate``  what kind of electrode this is, and HER/OER figures of merit
 ``report``    orchestration and the written report
 """
@@ -41,6 +42,10 @@ __all__ = [
     "analyse_cv",
     "analyse_eis",
     "analyse_gcd",
+    "capacitance_from_eis",
+    "complex_capacitance",
+    "dunn_analysis",
+    "uncompensated_resistance",
 ]
 
 
@@ -61,4 +66,16 @@ def __getattr__(name: str):  # pragma: no cover - lazy re-export
         from .eis import analyse_eis
 
         return analyse_eis
+    if name == "dunn_analysis":
+        from .cv import dunn_analysis
+
+        return dunn_analysis
+    if name in ("complex_capacitance", "capacitance_from_eis"):
+        from . import capacitance
+
+        return getattr(capacitance, name)
+    if name == "uncompensated_resistance":
+        from .eis import uncompensated_resistance
+
+        return uncompensated_resistance
     raise AttributeError(name)

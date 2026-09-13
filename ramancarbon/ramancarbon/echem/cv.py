@@ -642,43 +642,196 @@ def _current_at(curve: Voltammogram, potential: float) -> Optional[float]:
     return float(np.interp(potential, x, y))
 
 
-def _dunn_split(
-    curves: Sequence[Voltammogram], low: float, high: float
-) -> dict[float, float]:
-    """Dunn's separation ``i(V,ν) = k₁ν + k₂√ν`` at each scan rate.
+@dataclass
+class DunnAnalysis:
+    """Dunn's capacitive/diffusive separation, potential by potential.
 
-    ``k₁ν`` is the surface-controlled (capacitive) part and ``k₂√ν`` the
-    diffusion-controlled one. The split is done independently at a grid of
-    potentials and integrated, which is the standard procedure — and it
-    assumes the two mechanisms are the only ones and that neither has a
-    scan-rate dependence of its own. Read the fractions as a comparison
-    between samples measured the same way, not as absolutes.
+    ``i(V, ν) = k₁(V)·ν + k₂(V)·√ν``. The first term is
+    surface-controlled — double layer plus anything fast enough not to care
+    about diffusion — and the second is diffusion-controlled. Both
+    coefficients are fitted independently at each potential, which is what
+    makes the **shape** of the capacitive current available and not just a
+    percentage: the plot everybody publishes is the capacitive curve drawn
+    inside the measured voltammogram, and what it shows is *where* in the
+    window the diffusive contribution actually sits.
+
+    What the method assumes, and what to do about it:
+
+    * That there are exactly two contributions and that they scale as ν and
+      √ν. A third process, or a diffusive one that is not
+      semi-infinite over the whole rate range, is absorbed into whichever
+      term fits it better.
+    * That the current at one potential belongs to the same process at
+      every scan rate. A peak that shifts with scan rate — and a
+      battery-like peak always does — breaks that, because at the fastest
+      rate the potential is no longer on the peak. This is why the
+      separation is reported with the peak shift beside it.
+
+    The fractions are a comparison between samples measured the same way,
+    not an absolute. Two laboratories quoting "72 % capacitive" for the
+    same powder is a coincidence, not agreement.
     """
-    potentials = np.linspace(low, high, 40)
-    rates = np.array([c.scan_rate for c in curves])
-    if rates.size < 3:
-        return {}
-    capacitive = np.zeros((len(curves), potentials.size))
+
+    potentials: np.ndarray
+    k1: np.ndarray
+    """Coefficient of ν, in A/(V/s) — a capacitance, potential by potential."""
+    k2: np.ndarray
+    """Coefficient of √ν, in A/(V/s)^½."""
+    r_squared: np.ndarray
+    """Quality of the two-term fit at each potential. Where this is poor
+    the separation at that potential means nothing."""
+    fractions: dict[float, float] = field(default_factory=dict)
+    """Capacitive fraction of the total charge, by scan rate."""
+    rates: tuple[float, ...] = ()
+    warnings: list[str] = field(default_factory=list)
+
+    def capacitive_current(self, scan_rate: float) -> np.ndarray:
+        """The capacitive part of the voltammogram at one scan rate, in A.
+
+        This is the curve to draw inside the measured one.
+        """
+        return self.k1 * float(scan_rate)
+
+    def diffusive_current(self, scan_rate: float) -> np.ndarray:
+        """The diffusion-controlled part at one scan rate, in A."""
+        return self.k2 * math.sqrt(float(scan_rate))
+
+    def summary(self) -> str:
+        lines = ["Separación de Dunn (i = k₁ν + k₂√ν):", ""]
+        for rate, fraction in sorted(self.fractions.items()):
+            lines.append(f"  {rate * 1e3:7.1f} mV/s   capacitivo "
+                         f"{100 * fraction:5.1f} %   difusivo "
+                         f"{100 * (1 - fraction):5.1f} %")
+        if self.r_squared.size:
+            poor = int(np.count_nonzero(self.r_squared < 0.95))
+            if poor:
+                lines.append("")
+                lines.append(
+                    f"  en {poor} de {self.r_squared.size} potenciales el "
+                    "ajuste de dos términos no describe los datos (R² < 0.95)"
+                )
+        if self.warnings:
+            lines.append("")
+            lines.extend("  ⚠ " + text for text in self.warnings)
+        return "\n".join(lines)
+
+
+def dunn_analysis(
+    curves: Sequence[Voltammogram],
+    window: Optional[tuple[float, float]] = None,
+    points: int = 60,
+) -> DunnAnalysis:
+    """Separate capacitive from diffusive current, Dunn's way.
+
+    Parameters
+    ----------
+    curves:
+        Three or more voltammograms of the same electrode at different scan
+        rates. Three is the minimum for a two-parameter fit to mean
+        anything at all; five over a decade is what the method needs.
+    window:
+        Potential range. Defaults to the range common to every curve —
+        which is the only honest default, since a potential one curve did
+        not reach cannot enter a fit across curves.
+    points:
+        How many potentials to separate at.
+
+    Returns
+    -------
+    DunnAnalysis
+    """
+    if len(curves) < 3:
+        raise CurveError(
+            f"la separación de Dunn ajusta dos coeficientes por potencial y "
+            f"se han dado {len(curves)} velocidades. Con dos, el ajuste pasa "
+            "exactamente por los dos puntos y el reparto es el que quieras"
+        )
+    ordered = sorted(curves, key=lambda item: item.scan_rate)
+    rates = np.array([curve.scan_rate for curve in ordered], dtype=float)
+    if np.any(rates <= 0):
+        raise CurveError("hay velocidades de barrido nulas o negativas")
+    if window is None:
+        low = max(curve.window[0] for curve in ordered)
+        high = min(curve.window[1] for curve in ordered)
+    else:
+        low, high = float(min(window)), float(max(window))
+    if high <= low:
+        raise CurveError(
+            "las curvas no comparten ninguna ventana de potencial"
+        )
+
+    potentials = np.linspace(low, high, int(points))
+    root = np.sqrt(rates)
+    k1 = np.zeros(potentials.size)
+    k2 = np.zeros(potentials.size)
+    quality = np.full(potentials.size, np.nan)
+    capacitive = np.zeros((len(ordered), potentials.size))
     total = np.zeros_like(capacitive)
+
     for column, potential in enumerate(potentials):
-        currents = [_current_at(c, potential) for c in curves]
+        currents = [_current_at(curve, potential) for curve in ordered]
         if any(value is None for value in currents):
             continue
         observed = np.array(currents, dtype=float)
-        # i/sqrt(v) = k1*sqrt(v) + k2  -> a straight line in sqrt(v).
-        root = np.sqrt(rates)
-        slope, _, _, _ = _fit_line(root, observed / root)
+        # i/√ν = k₁√ν + k₂ — a straight line in √ν, which is the form that
+        # keeps the fit linear and the two coefficients separable.
+        slope, intercept, _, r2 = _fit_line(root, observed / root)
+        k1[column], k2[column], quality[column] = slope, intercept, r2
         capacitive[:, column] = slope * rates
         total[:, column] = observed
+
     fractions: dict[float, float] = {}
-    for index, curve in enumerate(curves):
+    for index, curve in enumerate(ordered):
         denominator = float(np.abs(total[index]).sum())
         if denominator <= 0.0:
             continue
         fractions[curve.scan_rate] = float(
             min(1.0, np.abs(capacitive[index]).sum() / denominator)
         )
-    return fractions
+
+    warnings: list[str] = []
+    span = float(rates.max() / rates.min())
+    if span < MIN_RATE_SPAN:
+        warnings.append(
+            f"las velocidades abarcan un factor {span:.1f}. Separar ν de √ν "
+            "sobre menos de una década es pedirle a un ajuste que distinga "
+            "dos funciones que en ese tramo se parecen mucho"
+        )
+    # A coefficient that is negative by a hair is a coefficient that is
+    # zero: on an ideal capacitor the diffusive term is genuinely zero and
+    # the noise puts it below zero at half the potentials. Only a
+    # coefficient negative by an appreciable fraction of its own scale is
+    # evidence that the two-term model does not fit.
+    negative = 0
+    for coefficients in (k1, k2):
+        scale = float(np.max(np.abs(coefficients))) if coefficients.size else 0.0
+        if scale > 0:
+            negative += int(np.count_nonzero(coefficients < -0.05 * scale))
+    if negative:
+        warnings.append(
+            f"{negative} coeficientes salen negativos de verdad (más de un "
+            "5 % de su propia escala) y ninguna de las dos contribuciones "
+            "puede serlo: ahí el modelo de dos términos no describe la "
+            "corriente. Suele ser un pico que se desplaza con la velocidad, "
+            "y entonces a la velocidad más alta ese potencial ya no está "
+            "sobre el pico"
+        )
+    return DunnAnalysis(
+        potentials=potentials, k1=k1, k2=k2, r_squared=quality,
+        fractions=fractions, rates=tuple(rates), warnings=warnings,
+    )
+
+
+def _dunn_split(
+    curves: Sequence[Voltammogram], low: float, high: float
+) -> dict[float, float]:
+    """Capacitive fraction by scan rate — the summary of :func:`dunn_analysis`."""
+    if len(curves) < 3:
+        return {}
+    try:
+        return dunn_analysis(curves, window=(low, high), points=40).fractions
+    except CurveError:
+        return {}
 
 
 def _trasatti(study: RateStudy) -> None:
@@ -784,11 +937,13 @@ __all__ = [
     "BValue",
     "CVResult",
     "Capacitance",
+    "DunnAnalysis",
     "RateStudy",
     "RedoxPeak",
     "analyse_cv",
     "analyse_rate_study",
     "capacitance",
+    "dunn_analysis",
     "find_redox_peaks",
     "integrate_charge",
 ]
