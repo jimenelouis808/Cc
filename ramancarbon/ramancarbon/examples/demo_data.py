@@ -1080,3 +1080,295 @@ def make_plateau_gcd_demo(
             "true_capacity_ah": total,
         },
     )
+
+
+# -- XPS ---------------------------------------------------------------
+
+#: Synthetic surfaces, as ``(name, composition, states)``. The composition
+#: is in **atomic per cent** of the elements present, which is what a
+#: quantification is supposed to give back — so analysing one of these is a
+#: genuine round trip and not a shape comparison.
+#:
+#: The chemistry is the one this package is for: a nitrogen-doped carbon
+#: nanotube decorated with iron selenide, plus the oxygen and the surface
+#: oxide that any real sample of it carries.
+XPS_DEMOS: tuple[tuple[str, dict, dict], ...] = (
+    (
+        "NCNT_FeSe",
+        {"C": 78.0, "N": 6.0, "O": 11.0, "Fe": 2.5, "Se": 2.5},
+        {
+            # No C–N in the C 1s mixture, on purpose: it sits at 285.9 eV and
+            # C–O at 286.4, half an eV apart under 1.3 eV wide components,
+            # and no instrument separates them. That is exactly why the
+            # nitrogen chemistry of a doped carbon is read off the N 1s and
+            # not off the C 1s, and a demo that pretended otherwise would be
+            # demonstrating the fitter dividing two peaks arbitrarily.
+            "C 1s": {"C-C sp2": 0.72, "C-O": 0.18, "C=O": 0.06, "O-C=O": 0.04},
+            "N 1s": {"pyridinic": 0.34, "pyrrolic": 0.26, "graphitic": 0.28,
+                     "N-oxide": 0.12},
+            "O 1s": {"lattice": 0.30, "defect-OH": 0.30, "C-O": 0.40},
+            # No metallic Fe0 in the mixture on purpose: it sits at 706.8 eV
+            # and Fe-Se at 707.2, which no instrument resolves. Both are in
+            # the database; putting both in a demo would only be a
+            # demonstration that the fitter divides them arbitrarily.
+            "Fe 2p3/2": {"Fe-Se": 0.45, "Fe3+": 0.55},
+            "Se 3d5/2": {"selenide": 0.70, "Se0": 0.15, "SeOx": 0.15},
+        },
+    ),
+    (
+        "NCNT",
+        {"C": 88.0, "N": 5.0, "O": 7.0},
+        {
+            "C 1s": {"C-C sp2": 0.80, "C-O": 0.14, "C=O": 0.06},
+            "N 1s": {"pyridinic": 0.40, "pyrrolic": 0.25, "graphitic": 0.35},
+        },
+    ),
+)
+
+
+def _xps_transmission(kinetic: np.ndarray | float, exponent: float) -> np.ndarray:
+    """Analyser transmission as a power of the kinetic energy.
+
+    The single most common parameterisation, and the one the demo has to
+    contain if a quantification that corrects for transmission is to be
+    testable at all: without it, correcting for transmission would make the
+    answer worse.
+    """
+    return np.power(np.asarray(kinetic, dtype=float) / 1000.0, exponent)
+
+
+def make_xps_demo(
+    kind: str = "NCNT_FeSe",
+    photon_energy: float = 1486.6,
+    survey_range: tuple[float, float] = (0.0, 1200.0),
+    survey_step: float = 0.5,
+    region_step: float = 0.1,
+    pass_energy: float = 26.0,
+    survey_pass_energy: float = 112.0,
+    dwell_s: float = 0.05,
+    sweeps: int = 10,
+    charge_shift: float = 0.0,
+    transmission_exponent: float = -0.65,
+    counts_at_max: float = 60000.0,
+    seed: int = 0,
+):
+    """Build a synthetic survey plus high-resolution regions.
+
+    The intensities are built the way the quantification reads them back:
+    each line's area is the atomic fraction times the database's Scofield
+    sensitivity factor times an analyser transmission that depends on the
+    kinetic energy. So a quantification that ignores transmission gets the
+    composition wrong here in exactly the way it gets it wrong on a real
+    instrument, which is the point of having it in the demo at all.
+
+    Spin–orbit doublets are generated with the database's own splittings
+    and the degeneracy ratios, and the noise is Poisson, because every
+    threshold and every weight downstream is built on σ = √N.
+
+    Parameters
+    ----------
+    charge_shift:
+        eV to move the whole spectrum up by, simulating a charging sample.
+        The demo's charge referencing has to put it back.
+    transmission_exponent:
+        Power of the kinetic energy in the transmission function. Real
+        instruments run between about −1 and +0.5 depending on lens mode.
+
+    Returns
+    -------
+    list of ramancarbon.xps.spectrum.XPSSpectrum
+        The survey first, then one region per entry in the demo's state
+        table.
+    """
+    from ..xps.elements import load_xps_database
+    from ..xps.lineshapes import ds_gauss, gl, window_area
+    from ..xps.spectrum import XPSSpectrum
+
+    entries = {name: (composition, states) for name, composition, states in XPS_DEMOS}
+    if kind not in entries:
+        raise ValueError(
+            f"demo XPS desconocida {kind!r}; hay: {', '.join(sorted(entries))}"
+        )
+    composition, states = entries[kind]
+    database = load_xps_database()
+    rng = np.random.default_rng(seed)
+    work_function = 4.5
+
+    def transmission(binding: float) -> float:
+        kinetic = max(photon_energy - binding - work_function, 1.0)
+        return float(_xps_transmission(kinetic, transmission_exponent))
+
+    def unit_area(width: float, mixing: float = 0.3) -> float:
+        """Area of a unit-height profile of this width.
+
+        Dividing by it is what makes a line's **area** proportional to its
+        sensitivity factor, which is what a sensitivity factor is defined
+        against. Scaling the height instead builds a width dependence into
+        the demo's own composition, and then a quantification that is
+        working correctly appears to be 30 % wrong on iron — whose lines
+        are genuinely broader than carbon's.
+        """
+        return float(window_area("gl", 1.0, width, (mixing,)))
+
+    # -- the survey ---------------------------------------------------
+    low, high = survey_range
+    axis = np.arange(low, high + survey_step, survey_step)
+    peaks = np.zeros_like(axis)
+    for symbol, fraction in composition.items():
+        element = database.element(symbol)
+        for line in element.lines:
+            for _, energy, share in line.components():
+                if not low + 5 <= energy <= high - 5:
+                    continue
+                width = 1.2 + 0.0015 * energy
+                amplitude = (fraction * line.rsf * share * transmission(energy)
+                             / unit_area(width))
+                peaks = peaks + amplitude * gl(axis, energy + charge_shift,
+                                               1.0, width, 0.3)
+        for group in element.auger:
+            energy = photon_energy - group.kinetic_ev - work_function
+            if not low + 5 <= energy <= high - 5:
+                continue
+            # Auger groups are broad and do not move with the charge shift
+            # any differently from the photoelectron lines: the sample
+            # potential retards both.
+            peaks = peaks + 0.25 * fraction * gl(
+                axis, energy + charge_shift, 1.0, group.width_ev, 0.6
+            ) / unit_area(group.width_ev, 0.6) * unit_area(2.0)
+
+    scale = counts_at_max / max(float(peaks.max()), 1e-9)
+    peaks = peaks * scale
+    step_up = np.concatenate([[0.0], np.cumsum(
+        0.5 * (peaks[1:] + peaks[:-1]) * np.diff(axis))])
+    background = 0.02 * counts_at_max + 0.35 * step_up / max(step_up[-1], 1e-9) \
+        * counts_at_max * 0.25
+    survey = XPSSpectrum(
+        binding_energy=axis,
+        counts=rng.poisson(np.clip(peaks + background, 0.0, None)).astype(float),
+        photon_energy=photon_energy, pass_energy=survey_pass_energy,
+        dwell_s=dwell_s, sweeps=sweeps, region="Survey",
+        name=f"demo_xps_{kind}_survey",
+        metadata={
+            "synthetic": True,
+            "true_composition_at": dict(composition),
+            "true_charge_shift_ev": charge_shift,
+            "true_transmission_exponent": transmission_exponent,
+            "warning": (
+                "Espectro calculado, no medido. Sirve para probar el "
+                "programa; no son datos experimentales."
+            ),
+        },
+    )
+
+    # -- the high-resolution regions ----------------------------------
+    # Built unscaled first and scaled with ONE common factor at the end. A
+    # real instrument measures every region on the same intensity scale, and
+    # scaling each one to its own maximum would make the areas of different
+    # elements incomparable — which is exactly what a quantification across
+    # regions does with them.
+    out = [survey]
+    built: list[tuple[str, np.ndarray, np.ndarray]] = []
+    for region, mixture in states.items():
+        element = region.split()[0]
+        fraction = composition.get(element, 1.0)
+        table = {state.key: state for state in database.states_for(region)}
+        doublet = None
+        symbol, orbital = region.split()[0], region.split()[1]
+        if "/" in orbital:
+            base = orbital.split("/")[0][:-1]
+            for line in database.element(symbol).lines:
+                if line.label == f"{symbol} {base}":
+                    doublet = line.doublet
+        unknown = [key for key in mixture if key not in table]
+        if unknown:
+            raise ValueError(
+                f"la demo pide estados que la base de datos no tiene en "
+                f"{region}: {', '.join(unknown)}; hay: {', '.join(table)}"
+            )
+        centres = [table[key].energy_ev for key in mixture]
+        satellites = [table[key].satellite_ev for key in mixture
+                      if table[key].satellite_ev is not None]
+        span = (min(centres) - 6.0,
+                max(centres + satellites) + 6.0
+                + (doublet.splitting_ev if doublet else 0.0))
+        axis = np.arange(span[0], span[1] + region_step, region_step)
+        curve = np.zeros_like(axis)
+        for key, share in mixture.items():
+            state = table[key]
+            # Near the bottom of the published range and nearly the same
+            # for every state of a region, which is what a real region looks
+            # like: the states share a core hole, an analyser and a sample.
+            width = 1.4 * float(state.fwhm[0])
+            height = (fraction * share * transmission(state.energy_ev)
+                      / unit_area(width))
+            if state.asymmetric:
+                shape = ds_gauss(axis, state.energy_ev + charge_shift, height,
+                                 width * 0.6, 0.13, width * 0.8)
+            else:
+                shape = height * gl(axis, state.energy_ev + charge_shift,
+                                    1.0, width, 0.3)
+            curve = curve + shape
+            if doublet is not None:
+                partner = state.energy_ev + doublet.splitting_ev + charge_shift
+                if state.asymmetric:
+                    curve = curve + ds_gauss(axis, partner,
+                                             height * doublet.ratio,
+                                             width * 0.6, 0.13, width * 0.8)
+                else:
+                    curve = curve + height * doublet.ratio * gl(
+                        axis, partner, 1.0, width, 0.3)
+            if state.satellite_ev is not None:
+                # The satellite's binding energy is stored absolutely, not
+                # as an offset: the Fe(II) and Fe(III) satellites sit at
+                # different distances from their own main lines, and that
+                # distance is the diagnostic.
+                curve = curve + 0.18 * height * gl(
+                    axis, state.satellite_ev + charge_shift, 1.0,
+                    2.5 * width, 0.3) * unit_area(width) / unit_area(2.5 * width)
+        # Rescale the whole region — main lines, spin-orbit partners and
+        # shake-up satellites together — so its integrated area is the
+        # element's atomic fraction times the line's sensitivity factor
+        # times the transmission at that kinetic energy. That is the
+        # relation a quantification inverts, so building the demo any other
+        # way would make a correct quantification look wrong.
+        main_line = database.element(element).primary_line
+        target = (fraction * main_line.rsf
+                  * transmission(float(np.mean(centres))))
+        total_area = float(np.trapezoid(curve, axis)) if hasattr(np, "trapezoid") \
+            else float(np.trapz(curve, axis))
+        curve = curve / max(total_area, 1e-12) * target
+        built.append((region, axis, curve))
+
+    common = counts_at_max / max(
+        (float(curve.max()) for _, _, curve in built), default=1.0)
+    for region, axis, curve in built:
+        curve = curve * common
+        step_up = np.concatenate([[0.0], np.cumsum(
+            0.5 * (curve[1:] + curve[:-1]) * np.diff(axis))])
+        floor = 0.05 * counts_at_max
+        region_background = floor + 0.30 * floor * step_up / max(step_up[-1], 1e-9)
+        out.append(
+            XPSSpectrum(
+                binding_energy=axis,
+                counts=rng.poisson(np.clip(curve + region_background, 0.0, None)
+                                   ).astype(float),
+                photon_energy=photon_energy, pass_energy=pass_energy,
+                dwell_s=dwell_s, sweeps=sweeps, region=region,
+                name=f"demo_xps_{kind}_{region.replace(' ', '')}",
+                metadata={
+                    "synthetic": True,
+                    "true_states": dict(states[region]),
+                    "true_charge_shift_ev": charge_shift,
+                    "warning": (
+                        "Espectro calculado, no medido. Sirve para probar el "
+                        "programa; no son datos experimentales."
+                    ),
+                },
+            )
+        )
+    return out
+
+
+def xps_demo_spectra(kind: str = "NCNT_FeSe", seed: int = 0):
+    """The survey and regions of one synthetic surface."""
+    return make_xps_demo(kind, seed=seed)

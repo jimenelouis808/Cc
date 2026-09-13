@@ -47,6 +47,11 @@ from .spectrum import XPSError, XPSSpectrum
 #: Padding in eV added around the states' windows to make the fit window.
 WINDOW_PAD = 4.0
 
+#: How different two states' published widths may be and still be tied to
+#: each other. A ratio of midpoints, so 1.5 means one may be half again as
+#: broad as the other.
+WIDTH_LINK_RATIO = 1.5
+
 #: Default Gaussian–Lorentzian mixing, CasaXPS's GL(30). Held fixed unless
 #: asked otherwise: with overlapping components the mixing and the width
 #: trade against each other almost freely, and letting both go is how a
@@ -164,13 +169,22 @@ def state_model(
         state of the region, which is usually too many — the point of the
         argument is that the choice is yours and is recorded.
     link_widths:
-        Tie every component's width to the first one's. Chemically shifted
-        states of the same element in the same sample really do have
-        similar widths, the same core hole and the same analyser, so this
-        is a defensible constraint rather than a convenience — and it
-        removes the parameter that overlapping components fight over. It is
-        **not** applied to asymmetric (metallic) components, whose width
-        means something different.
+        Tie together the widths of components the literature gives the
+        same width to. Chemically shifted states of one element share a
+        core hole, an analyser and a sample, so their widths really are
+        similar, and tying them removes the parameter that overlapping
+        components fight over.
+
+        It is **not** applied blindly. Two states are tied only if their
+        published FWHM ranges overlap and their midpoints are within a
+        factor of :data:`WIDTH_LINK_RATIO` — because some states are
+        genuinely broader than others for a physical reason, and forcing
+        them equal is a worse error than leaving the width free. Fe(III) is
+        multiplet-broadened to 1.5–4.5 eV while Fe–Se sits at 0.9–2.0 eV;
+        tied together they fit a common 1.5 eV, leave a visible residual on
+        both, and raise χ² by a factor of fifty. Asymmetric (metallic)
+        components are never tied: their width parameter is the Lorentzian
+        part alone and means something different.
     fix_mixing:
         Hold the Gaussian–Lorentzian mixing at :data:`DEFAULT_MIXING`.
     include_satellites:
@@ -226,9 +240,10 @@ def state_model(
     ]
     links: list[Link] = []
     if link_widths:
-        symmetric = [c for c in components if not c.is_asymmetric]
-        for component in symmetric[1:]:
-            links.append(Link(component.name, "fwhm", symmetric[0].name, "fwhm"))
+        links.extend(_width_links(
+            [(component, state) for component, state in zip(components, chosen)
+             if not component.is_asymmetric]
+        ))
     if include_satellites:
         for state, component in zip(chosen, list(components)):
             if state.satellite_ev is None:
@@ -236,7 +251,7 @@ def state_model(
             satellite = XPSComponent(
                 name=f"{component.name}_sat",
                 label=f"{state.name} (satélite shake-up)",
-                centre=state.energy_ev + state.satellite_ev,
+                centre=state.satellite_ev,
                 height=0.15 * component.height,
                 fwhm=2.0 * component.fwhm,
                 profile="gl",
@@ -247,15 +262,17 @@ def state_model(
                 state=state.key,
                 element=component.element,
                 line=component.line,
+                satellite=True,
                 justification=(
-                    f"satélite shake-up de {state.name}, "
-                    f"{state.satellite_ev:+.1f} eV. Es la misma especie: su "
-                    "área cuenta con la del pico principal, no aparte"
+                    f"satélite shake-up de {state.name}, a "
+                    f"{state.satellite_ev:.1f} eV ({state.satellite_offset:+.1f} "
+                    "eV del principal). Es la misma especie: su área cuenta "
+                    "con la del pico principal, no aparte"
                 ),
             )
             components.append(satellite)
             links.append(Link(satellite.name, "centre", component.name, "centre",
-                              1.0, float(state.satellite_ev)))
+                              1.0, float(state.satellite_offset)))
     return XPSModel(
         components=components,
         window=window,
@@ -264,6 +281,39 @@ def state_model(
         links=tuple(links),
         region_label=region,
     )
+
+
+def _width_links(pairs: list[tuple[XPSComponent, ChemicalState]]) -> list[Link]:
+    """Tie together the widths of states the literature widens alike.
+
+    Greedy grouping: each component joins the first existing group whose
+    leader it is width-compatible with, and starts a new group otherwise.
+    A group of one produces no link, which is the point — a state nobody
+    else matches keeps its own free width.
+    """
+    groups: list[list[tuple[XPSComponent, ChemicalState]]] = []
+    for component, state in pairs:
+        for group in groups:
+            if _width_compatible(group[0][1], state):
+                group.append((component, state))
+                break
+        else:
+            groups.append([(component, state)])
+    links: list[Link] = []
+    for group in groups:
+        leader = group[0][0]
+        for component, _ in group[1:]:
+            links.append(Link(component.name, "fwhm", leader.name, "fwhm"))
+    return links
+
+
+def _width_compatible(first: ChemicalState, second: ChemicalState) -> bool:
+    """Whether two states' published widths are close enough to tie."""
+    if min(first.fwhm[1], second.fwhm[1]) <= max(first.fwhm[0], second.fwhm[0]):
+        return False
+    a = 0.5 * (first.fwhm[0] + first.fwhm[1])
+    b = 0.5 * (second.fwhm[0] + second.fwhm[1])
+    return max(a, b) / max(min(a, b), 1e-9) <= WIDTH_LINK_RATIO
 
 
 def count_model(
@@ -508,6 +558,7 @@ def compare_counts(
 __all__ = [
     "CountComparison",
     "DEFAULT_MIXING",
+    "WIDTH_LINK_RATIO",
     "WINDOW_PAD",
     "compare_counts",
     "count_model",

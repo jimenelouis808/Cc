@@ -125,6 +125,12 @@ class XPSComponent:
     state: Optional[str] = None
     element: Optional[str] = None
     line: Optional[str] = None
+    satellite: bool = False
+    """Whether this component is a shake-up satellite of another. Satellites
+    belong to the same species as their parent — their area counts with it,
+    not separately — and they are exempt from the check that a component
+    still sits inside its state's published window, because a satellite
+    sits several eV outside it by definition."""
     justification: str = ""
     """Why this component is in the model. Printed in the report."""
 
@@ -253,6 +259,7 @@ class XPSFittedComponent:
     state: Optional[str] = None
     element: Optional[str] = None
     line: Optional[str] = None
+    satellite: bool = False
     justification: str = ""
     errors: dict[str, float] = field(default_factory=dict)
     fixed: tuple[str, ...] = ()
@@ -307,6 +314,14 @@ class XPSFitResult:
     warnings: list[str] = field(default_factory=list)
     region_label: str = ""
     weighted: bool = True
+    acquisition: dict = field(default_factory=dict)
+    """Dwell time, sweeps and intensity unit of the spectrum that was fitted.
+
+    Carried because an area is only comparable with another area measured
+    the same way: a region collected with four times the sweeps has four
+    times the area at the same concentration, and a quantification that
+    mixes the two without dividing by the acquisition time is wrong by
+    exactly that factor."""
 
     @property
     def peaks(self) -> np.ndarray:
@@ -594,6 +609,12 @@ def fit_region(
         warnings=warnings,
         region_label=model.region_label or model.name,
         weighted=weighted,
+        acquisition={
+            "dwell_s": spectrum.dwell_s,
+            "sweeps": spectrum.sweeps,
+            "unidad": spectrum.intensity_unit,
+            "energía_paso_ev": spectrum.pass_energy,
+        },
     )
 
 
@@ -657,6 +678,7 @@ def _finish(model: XPSModel, evaluate: _Evaluator, flat: np.ndarray,
                 state=component.state,
                 element=component.element,
                 line=component.line,
+                satellite=component.satellite,
                 justification=component.justification,
                 fixed=component.fixed,
             )
@@ -818,7 +840,7 @@ def _warnings(spectrum: XPSSpectrum, model: XPSModel,
 
     # Components claiming a literature state that they no longer sit in.
     for component in components:
-        if not component.state or not model.region_label:
+        if not component.state or not model.region_label or component.satellite:
             continue
         try:
             state = database.state(model.region_label, component.state)

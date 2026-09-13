@@ -197,7 +197,11 @@ class ChemicalState:
     fwhm: tuple[float, float]
     asymmetric: bool
     satellite_ev: Optional[float]
-    """Offset in eV of a shake-up satellite that accompanies this state."""
+    """Binding energy in eV of the shake-up satellite that accompanies this
+    state — an **absolute** position, not an offset, because that is how
+    the tables publish it and because the separation is not constant: the
+    Fe(II) satellite sits ~6 eV above its main line and the Fe(III) one
+    ~8 eV above. Use :attr:`satellite_offset` for the difference."""
     satellite_of: Optional[str]
     """Set when this entry *is* the satellite of another state."""
     confidence: str
@@ -207,6 +211,13 @@ class ChemicalState:
     @property
     def is_satellite(self) -> bool:
         return self.satellite_of is not None
+
+    @property
+    def satellite_offset(self) -> Optional[float]:
+        """Separation of this state's satellite from its main line, in eV."""
+        if self.satellite_ev is None:
+            return None
+        return float(self.satellite_ev) - float(self.energy_ev)
 
     def contains(self, binding_energy: float, tolerance: float = 0.0) -> bool:
         """Whether a centre falls in this state's window, optionally padded."""
