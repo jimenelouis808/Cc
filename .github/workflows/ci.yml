@@ -1,0 +1,59 @@
+name: CI
+
+# Two levels, because the suites are not the same size. Every push runs the
+# fast tests; the tests marked `slow` — mesh-and-relax builds that take
+# minutes each — run nightly, where waiting is free.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *"
+
+env:
+  # The arrays here are small enough that the linear-algebra library's own
+  # threading contends with the test workers instead of helping. Pinned to one
+  # thread, the suite is more than three times faster.
+  OMP_NUM_THREADS: "1"
+  OPENBLAS_NUM_THREADS: "1"
+  MKL_NUM_THREADS: "1"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [ramancarbon, carbonforge, nanocarbon_lab]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install the workspace
+        run: uv sync --all-packages --extra dev
+      - name: Test
+        working-directory: packages/${{ matrix.package }}
+        # The scheduled run drops the marker filter and takes the slow tests
+        # too. loadscope keeps class-scoped fixtures on one worker.
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            MARKS=""
+          else
+            MARKS='-m "not slow"'
+          fi
+          eval uv run --no-sync python -m pytest ${{ matrix.package }}/tests \
+            -q -n 4 --dist loadscope $MARKS
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uvx ruff check .
+      # `ruff format --check` is deliberately absent. None of the three
+      # packages was ever formatted with it, and 301 of 395 files would be
+      # rewritten — a diff that would bury every real change and make merges
+      # with the original branches painful. Formatting is a decision to take
+      # once, on its own, not a side effect of setting up CI.

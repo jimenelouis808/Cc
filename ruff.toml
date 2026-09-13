@@ -1,0 +1,9 @@
+# Repository-level settings, for files outside the packages.
+#
+# Each package keeps its own [tool.ruff] with these same values, because each
+# one has to stay lintable on its own when checked out alone. Ruff uses the
+# nearest configuration, so the package settings win inside packages/ — they
+# are duplicated deliberately, not by oversight.
+
+line-length = 100
+target-version = "py311"
