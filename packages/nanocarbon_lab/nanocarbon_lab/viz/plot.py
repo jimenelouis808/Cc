@@ -13,15 +13,35 @@ from ase import Atoms
 
 from ..topology.graph import build_bond_graph
 
-_ELEMENT_COLORS = {
-    "C": "#2b2b2b",
-    "N": "#3050f8",
-    "B": "#ffb5b5",
-    "S": "#ffff30",
-    "P": "#ff8000",
-    "H": "#eeeeee",
-    "O": "#ff0d0d",
+#: Element colours, on the CPK convention every structure viewer uses --
+#: carbon dark, nitrogen blue, oxygen red, sulphur yellow. Public because
+#: the GUI viewer draws its own scene and must agree with this one: two
+#: pictures of the same structure in the same program that disagree about
+#: what colour nitrogen is are worse than either alone.
+#:
+#: Covers every element with a covalent radius, so a dichalcogenide or a
+#: transition-metal decoration is coloured rather than falling back to
+#: grey along with everything else.
+ELEMENT_COLOURS: dict[str, str] = {
+    # sp2 carbon and its substitutional dopants
+    "C": "#2b2b2b", "N": "#3050f8", "B": "#ffb5b5", "S": "#ffff30",
+    "P": "#ff8000", "H": "#eeeeee", "O": "#ff0d0d",
+    # halogens, for fluorinated and halogenated surfaces
+    "F": "#90e050", "Cl": "#1ff01f", "Br": "#a62929", "I": "#940094",
+    # group 14, reached by substitution from carbon
+    "Si": "#f0c8a0", "Ge": "#668f8f", "Sn": "#668080",
+    # chalcogens and pnictogens, reached from oxygen and nitrogen
+    "Se": "#ffa100", "Te": "#d47a00", "As": "#bd80e3",
+    # dichalcogenide metals
+    "Mo": "#54b5b5", "W": "#2194d6", "Nb": "#73c2c9", "Ta": "#4da6ff",
+    "V": "#a6a6ab", "Ti": "#bfc2c7", "Zr": "#94e0e0", "Hf": "#4dc2ff",
+    # decoration and catalysis metals
+    "Pt": "#d0d0e0", "Fe": "#e06633", "Co": "#f090a0", "Ni": "#50d050",
+    "Cu": "#c88033", "Zn": "#7d80b0", "Mn": "#9c7ac7", "Al": "#bfa6a6",
 }
+
+#: Backwards-compatible alias for the private name this table had.
+_ELEMENT_COLORS = ELEMENT_COLOURS
 _ELEMENT_SIZES = {"C": 40, "N": 40, "B": 45, "S": 55, "P": 55, "H": 20, "O": 40}
 
 
@@ -35,7 +55,7 @@ def _setup_figure(atoms: Atoms, figsize: tuple[float, float]):
 
     symbols = atoms.get_chemical_symbols()
     positions = atoms.get_positions()
-    colors = [_ELEMENT_COLORS.get(s, "#888888") for s in symbols]
+    colors = [ELEMENT_COLOURS.get(s, "#888888") for s in symbols]
     sizes = [_ELEMENT_SIZES.get(s, 30) for s in symbols]
     ax.scatter(
         positions[:, 0],

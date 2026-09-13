@@ -28,6 +28,10 @@ from nanocarbon_lab.jobs import (
 
 # One representative job per mode, kept small enough to build in a test.
 SAMPLES: dict[str, Job] = {
+    "nanotube (open)": Job(
+        mode="nanotube (open)",
+        params={"n": 6, "m": 6, "length": 20.0},
+    ),
     "capped tube": Job("capped tube", {"n_body_rings": 8, "freq": 3}),
     "fullerene": Job("fullerene", {"freq": 1, "family": "C60"}),
     "nano-onion": Job("nano-onion",

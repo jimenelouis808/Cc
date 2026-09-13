@@ -40,6 +40,7 @@ from __future__ import annotations
 import glob
 import importlib.util
 import json
+import math
 import multiprocessing
 import os
 import shutil
@@ -111,16 +112,36 @@ from ..tmd.quality import geometry_report as tmd_geometry_report
 from ..tmd.quality import tmd_quality
 from ..utils.constants import MAX_DOPING_FRACTION, MIN_DOPING_FRACTION
 from ..validation.quality import sp2_quality
+from ..viz import ELEMENT_COLOURS
 from .worker import WORKER_DIED, BuildWorker
 
 # Ring-type colours, shared with the Blender presets' intent: hexagons are
 # the neutral body, everything else marks curvature or a defect.
 RING_COLOURS = {5: "#e4572e", 6: "#5b6472", 7: "#2e86ab", 8: "#f2c14e"}
+#: For an element with no entry in the palette, and for the "plain" mode
+#: where the point is to see shape rather than composition.
+UNKNOWN_ELEMENT_COLOUR = "#888888"
+PLAIN_ATOM_COLOUR = "#5b6472"
 RING_LABELS = {
     5: "pentagon (convex / cap)",
     6: "hexagon (body)",
     7: "heptagon (concave / saddle)",
     8: "octagon (divacancy)",
+}
+
+#: What the chemistry controls go back to when the structure type
+#: changes. Dopants, dichalcogenide edits and grafted groups are all
+#: chosen *for a material*: 3% pyridinic nitrogen means nothing once the
+#: structure is a MoS2 ribbon, and a hydroxyl chosen for a nanotube would
+#: otherwise still be there, still applied, on a schwarzite three clicks
+#: later. The panels were already hidden on a change of mode; the values
+#: behind them were not, so they went on reaching the builder unseen.
+NEUTRAL_CHEMISTRY: dict[str, object] = {
+    "dopant": "none", "dopant_conc": 0.03, "dopant_site": "random",
+    "codope": "", "codope_affinity": "random",
+    "tmd_edit": "none", "tmd_edit_element": "Se", "tmd_edit_amount": 0.5,
+    "graft": "none", "graft_swap": "", "graft_coverage": 0.10,
+    "graft_where": "all", "graft_face": "outer",
 }
 
 SHAPES = ["straight", "arc", "s_curve", "helix", "random"]
@@ -442,6 +463,12 @@ class NanocarbonGUI:
         # Presets, the save/load file and the estimate traces all iterate
         # this rather than naming each variable three times over.
         self._params: dict[str, tk.Variable] = {}
+        #: True while a preset or a settings file is being applied. Those
+        #: write `mode_kind` like a user does, and must not have the
+        #: chemistry they just asked for reset out from under them.
+        self._applying_values = False
+        #: The mode the chemistry currently belongs to.
+        self._chemistry_mode: str | None = None
         # Built structures, most recent last, so a promising result is not
         # lost the moment the next parameter is nudged.
         self._history: list[tuple[str, object]] = []
@@ -588,7 +615,7 @@ class NanocarbonGUI:
                                      values=list(FAMILIES["carbon"]),
                                      state="readonly")
         self.cmb_mode.pack(fill="x")
-        self.var_mode_kind.trace_add("write", lambda *_: self._on_mode_change())
+        self.var_mode_kind.trace_add("write", lambda *_: self._on_mode_written())
 
         preset_row = ttk.Frame(mode_box)
         preset_row.pack(fill="x", pady=(6, 0))
@@ -605,6 +632,15 @@ class NanocarbonGUI:
         box.pack(fill="x")
         self.frame_tube = box
 
+        # The open tube is indexed rather than subdivided: a (n, m) and a
+        # length, which is how nanotubes are named in every paper. The
+        # capped tube cannot use them -- a cap is built by subdividing a
+        # capsule, so its size is rings and frequency -- which is why the
+        # two modes need separate controls rather than a shared panel.
+        self.var_cnt_n = self._var("cnt_n", tk.IntVar(value=6))
+        self.var_cnt_m = self._var("cnt_m", tk.IntVar(value=6))
+        self.var_cnt_length = self._var("cnt_length", tk.DoubleVar(value=20.0))
+        self.var_cnt_vacuum = self._var("cnt_vacuum", tk.DoubleVar(value=12.0))
         self.var_rings = self._var("rings", tk.IntVar(value=8))
         self.var_freq = self._var("freq", tk.IntVar(value=3))
         self.var_bond = self._var("bond", tk.DoubleVar(value=1.42))
@@ -756,6 +792,21 @@ class NanocarbonGUI:
                     width=8).pack(side="right")
 
         # --- centreline shape
+        obox = ttk.LabelFrame(parent, text="Chiral indices", padding=8)
+        self.frame_open_tube = obox
+        self._param(obox, "n", self.var_cnt_n, 1, 30, 0, integer=True,
+                    command=lambda *_: self._update_open_tube_hint())
+        self._param(obox, "m", self.var_cnt_m, 0, 30, 2, integer=True,
+                    command=lambda *_: self._update_open_tube_hint())
+        self._param(obox, "Length (Å)", self.var_cnt_length, 5.0, 200.0, 4,
+                    command=lambda *_: self._update_open_tube_hint())
+        self._param(obox, "Vacuum (Å)", self.var_cnt_vacuum, 8.0, 30.0, 6)
+        self.lbl_open_tube = ttk.Label(obox, text="", foreground=MUTED,
+                                       wraplength=330, justify="left")
+        self.lbl_open_tube.grid(row=8, column=0, columnspan=3, sticky="w",
+                                pady=(6, 0))
+        obox.pack_forget()
+
         sbox = ttk.LabelFrame(parent, text="Centreline", padding=8)
         sbox.pack(fill="x", pady=(8, 0))
         self.frame_centreline = sbox
@@ -1371,10 +1422,75 @@ class NanocarbonGUI:
         self._on_mode_change()
 
     # ------------------------------------------------------------ visibility
+    def _update_open_tube_hint(self) -> None:
+        """Diameter, chirality and the true length, from (n, m).
+
+        A tube is an integer number of translational periods, so the
+        length that comes out is almost never the length asked for. Saying
+        so here is cheaper than letting it surface as a surprise in the
+        exported cell.
+        """
+        n, m = int(self.var_cnt_n.get()), int(self.var_cnt_m.get())
+        if m > n:
+            self.lbl_open_tube.config(
+                text=f"({n},{m}) is the same tube as ({m},{n}); the "
+                     "convention is m <= n, so swap them.", foreground=BAD_RED)
+            return
+        if n < 1:
+            self.lbl_open_tube.config(text="n must be at least 1.",
+                                      foreground=BAD_RED)
+            return
+
+        bond = float(self.var_bond.get())
+        q = n * n + n * m + m * m
+        diameter = math.sqrt(3.0) * bond * math.sqrt(q) / math.pi
+        divisor = math.gcd(2 * m + n, 2 * n + m)
+        period = 3.0 * bond * math.sqrt(q) / divisor
+        cells = max(1, math.ceil(float(self.var_cnt_length.get()) / period))
+        family = ("armchair" if n == m else
+                  "zigzag" if m == 0 else "chiral")
+        # The classic (n-m) mod 3 rule: metallic when it divides, and for
+        # a chiral tube that is the only thing that decides it.
+        character = "metallic" if (n - m) % 3 == 0 else "semiconducting"
+        self.lbl_open_tube.config(
+            text=f"{family}, {character} by the (n−m) mod 3 rule. "
+                 f"Diameter {diameter:.2f} Å. {cells} period"
+                 f"{'s' if cells != 1 else ''} of {period:.2f} Å "
+                 f"= {cells * period:.1f} Å, {cells * 4 * q // divisor} atoms.",
+            foreground=MUTED)
+
+    def _on_mode_written(self) -> None:
+        """React to `mode_kind` changing, whoever changed it.
+
+        A preset writes the same variable a user does, so the reset is
+        gated on who is writing rather than on the write itself -- and on
+        the value actually differing, since Tk fires a trace on every set
+        including one that changes nothing.
+        """
+        mode = self.var_mode_kind.get()
+        if not self._applying_values and mode != self._chemistry_mode:
+            self._reset_chemistry(mode)
+        self._on_mode_change()
+
+    def _reset_chemistry(self, mode: str) -> None:
+        """Put the dopant, edit and grafting controls back to neutral."""
+        changed = [key for key, value in NEUTRAL_CHEMISTRY.items()
+                   if (var := self._params.get(key)) is not None
+                   and var.get() != value]
+        for key in changed:
+            self._params[key].set(NEUTRAL_CHEMISTRY[key])
+        self._chemistry_mode = mode
+        if changed:
+            self._set_status(
+                f"Chemistry reset for “{mode}”: "
+                + ", ".join(sorted(changed)) + " back to default."
+            )
+
     def _on_mode_change(self) -> None:
         """Show only the panels that apply to the selected structure type."""
         mode = self.var_mode_kind.get()
-        for frame in (self.frame_tube, self.frame_centreline, self.frame_defects,
+        for frame in (self.frame_tube, self.frame_open_tube,
+                      self.frame_centreline, self.frame_defects,
                       self.frame_coil, self.frame_junction, self.frame_schwarzite,
                       self.frame_haeckelite,
                       self.frame_cage, self.frame_mw, self.frame_bundle,
@@ -1458,6 +1574,13 @@ class NanocarbonGUI:
             else:
                 self.frame_onion.grid_remove()
             self._update_cage_hint()
+        elif mode == "nanotube (open)":
+            # Only the indices and the length: no cap, so no subdivision
+            # frequency, and no centreline, since a periodic tube is
+            # straight by definition -- bending it would break the
+            # periodicity that makes it usable in a plane-wave code.
+            self.frame_open_tube.pack(fill="x")
+            self._update_open_tube_hint()
         elif mode == "multi-wall":
             self.frame_tube.pack(fill="x")
             self.frame_mw.pack(fill="x", pady=(8, 0))
@@ -2220,6 +2343,14 @@ class NanocarbonGUI:
                 bond=float(self.var_bond.get()),
                 roughness=float(self.var_roughness.get()),
             )
+        elif mode == "nanotube (open)":
+            params = dict(
+                n=int(self.var_cnt_n.get()),
+                m=int(self.var_cnt_m.get()),
+                length=float(self.var_cnt_length.get()),
+                bond=float(self.var_bond.get()),
+                vacuum=float(self.var_cnt_vacuum.get()),
+            )
         elif mode == "bundle":
             params = dict(
                 n_rings_across=int(self.var_bundle_shells.get()),
@@ -2513,6 +2644,7 @@ class NanocarbonGUI:
         self.on_build()
 
     def _apply_values(self, values: dict) -> None:
+        self._applying_values = True
         for key, value in values.items():
             var = self._params.get(key)
             if var is None:
@@ -2521,6 +2653,11 @@ class NanocarbonGUI:
                 var.set(value)
             except tk.TclError:
                 pass
+        self._applying_values = False
+        # The values just applied *are* the chemistry for this mode, so
+        # record it as such rather than letting the next repaint treat
+        # them as leftovers from the mode before.
+        self._chemistry_mode = self.var_mode_kind.get()
         self._on_mode_change()
 
     def on_save_settings(self) -> None:
@@ -2578,11 +2715,19 @@ class NanocarbonGUI:
         bar = ttk.Frame(parent)
         bar.pack(fill="x", pady=(6, 0))
         self.var_show_bonds = tk.BooleanVar(value=True)
-        self.var_colour_rings = tk.BooleanVar(value=True)
+        # Element, not ring, by default. Ring colouring is the more
+        # informative view once there is curvature to look at, but a
+        # pristine tube is all hexagons, so it painted every atom the one
+        # hexagon colour and the viewer looked broken -- and a doped tube
+        # gave no hint that the dopant was there at all.
+        self.var_colour_by = tk.StringVar(value="element")
         ttk.Checkbutton(bar, text="Bonds", variable=self.var_show_bonds,
                         command=self._redraw).pack(side="left")
-        ttk.Checkbutton(bar, text="Colour by ring", variable=self.var_colour_rings,
-                        command=self._redraw).pack(side="left", padx=(8, 0))
+        ttk.Label(bar, text="  colour:").pack(side="left")
+        ttk.Combobox(bar, textvariable=self.var_colour_by, width=8,
+                     state="readonly", values=["element", "ring", "plain"]
+                     ).pack(side="left", padx=(2, 0))
+        self.var_colour_by.trace_add("write", lambda *_: self._redraw())
 
         # Ring filters. Hiding the hexagons is the fastest way to see where
         # the curvature actually went -- on a junction or a coil the 5s and
@@ -2611,9 +2756,21 @@ class NanocarbonGUI:
         return best
 
     def _atom_colours(self, ring_of: list[int]) -> list[str]:
-        if not self.var_colour_rings.get():
-            return [RING_COLOURS[6]] * len(ring_of)
-        return [RING_COLOURS.get(s, RING_COLOURS[6]) for s in ring_of]
+        """One colour per atom, by whichever scheme is selected.
+
+        ``element`` answers "what is this made of", which is the question
+        a doped or grafted structure raises; ``ring`` answers "where did
+        the curvature go", which is the question a coil or a junction
+        raises. Neither subsumes the other, so both are offered rather
+        than one being picked for the user.
+        """
+        mode = self.var_colour_by.get()
+        if mode == "ring":
+            return [RING_COLOURS.get(s, RING_COLOURS[6]) for s in ring_of]
+        if mode == "element" and self.atoms is not None:
+            return [ELEMENT_COLOURS.get(symbol, UNKNOWN_ELEMENT_COLOUR)
+                    for symbol in self.atoms.get_chemical_symbols()]
+        return [PLAIN_ATOM_COLOUR] * len(ring_of)
 
     def _redraw(self) -> None:
         if self.atoms is None:

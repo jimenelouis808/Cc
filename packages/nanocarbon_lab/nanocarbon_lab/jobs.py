@@ -30,6 +30,11 @@ from typing import Any
 # family in one dropdown and the modes of that family in the next, so a
 # carbon control never appears next to a dichalcogenide one.
 CARBON_MODES = (
+    # The plain tube first: it is the one most people want, it is what
+    # every other tube mode is a variation on, and it was the one the
+    # window did not offer. `build_cnt` has always been there and the CLI
+    # has always exposed it; only the GUI insisted on a cap.
+    "nanotube (open)",
     "capped tube",
     "haeckelite",
     "coil (relaxed)",
@@ -72,6 +77,10 @@ FAMILIES = {
     "dichalcogenide": TMD_MODES,
     "heterostructure": HETERO_MODES,
 }
+
+#: Carbon modes whose builder places atoms on an exact lattice and so
+#: takes no seed. The rest mesh, relax or scatter defects and do.
+SEEDLESS_CARBON_MODES = ("nanotube (open)",)
 
 MODES = CARBON_MODES + TMD_MODES + HETERO_MODES
 
@@ -225,6 +234,7 @@ def builder_for(mode: str):
     from .builders import (
         build_bundle,
         build_capped_cnt,
+        build_cnt,
         build_coil,
         build_fullerene,
         build_haeckelite,
@@ -255,6 +265,7 @@ def builder_for(mode: str):
         "TMD coil": build_tmd_coil,
         "TMD schwarzite": build_tmd_schwarzite,
         "TMD junction": build_tmd_junction,
+        "nanotube (open)": build_cnt,
         "capped tube": build_capped_cnt,
         "coil (relaxed)": build_coil,
         "fullerene": build_fullerene,
@@ -308,7 +319,13 @@ def build(job: Job):
         if job.tmd_edit:
             atoms = apply_tmd_chemistry(atoms, job)
     else:
-        atoms = builder(**job.params, seed=job.seed)
+        if job.mode in SEEDLESS_CARBON_MODES:
+            # A plain tube is exact crystallography like the TMD sheets:
+            # nothing about it is random, so its builder has no seed to
+            # take. The doping below still uses one.
+            atoms = builder(**job.params)
+        else:
+            atoms = builder(**job.params, seed=job.seed)
         if job.codope:
             atoms = apply_codoping(atoms, job)
         elif job.dopant and job.dopant_conc > 0:
@@ -420,6 +437,21 @@ def estimate_atoms(job: Job) -> int:
     """
     p = job.params
     mode = job.mode
+
+    if mode == "nanotube (open)":
+        # Exact, not an approximation: a tube is an integer number of
+        # translational periods, and both the period and the atoms per
+        # period are closed forms in (n, m). With
+        # d = gcd(2m+n, 2n+m) and q = n^2+nm+m^2, a cell holds 4q/d atoms
+        # and is 3*a_CC*sqrt(q)/d long, so the count is one ceiling away.
+        n, m = int(p.get("n", 6)), int(p.get("m", 6))
+        bond = float(p.get("bond", 1.42))
+        q = n * n + n * m + m * m
+        divisor = math.gcd(2 * m + n, 2 * n + m)
+        per_cell = 4 * q // divisor
+        period = 3.0 * bond * math.sqrt(q) / divisor
+        cells = max(1, math.ceil(float(p.get("length", 10.0)) / max(period, 1e-9)))
+        return int(per_cell * cells)
 
     if mode == "capped tube":
         # Seed capsule has 10*n_rings faces; subdivision multiplies by f^2.
@@ -670,6 +702,10 @@ def estimate_cost(job: Job) -> tuple[str, str]:
 # Mode -> (sub-command, {builder argument: command-line flag}). Arguments
 # not listed have no flag and are dropped from the generated command.
 _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
+    "nanotube (open)": ("cnt", {
+        "n": "--n", "m": "--m", "length": "--length", "bond": "--bond",
+        "vacuum": "--vacuum",
+    }),
     "capped tube": ("cnt-cap", {
         "n_body_rings": "--rings", "freq": "--freq", "bond": "--bond",
         "bend_angle": "--bend-angle", "shape": "--shape",
