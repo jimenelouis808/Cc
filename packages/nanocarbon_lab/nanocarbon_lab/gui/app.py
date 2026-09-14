@@ -96,6 +96,7 @@ from ..jobs import (
     MODES,
     TMD_EDITS,
     Job,
+    estimate_atoms,
     estimate_cost,
     parse_codope_spec,
     parse_swaps,
@@ -2250,9 +2251,36 @@ class NanocarbonGUI:
         # build may have been a very different size.
         measured = self._measured.get(self.var_mode_kind.get())
         if measured is not None:
-            atoms, seconds = measured
-            text += f" — last build here: {atoms} atoms in {_clock(seconds)}"
+            text += " — " + self._scaled_prediction(measured)
         self.lbl_estimate.config(text=f"Estimate: {text}", foreground=colour)
+
+    def _scaled_prediction(self, measured: tuple[int, float]) -> str:
+        """Turn one timing on this machine into a prediction for this job.
+
+        Profiling a coil puts 95% of the time in the shell relaxation and
+        essentially all of that in 40 000 energy-and-gradient evaluations,
+        whose cost is dominated by the non-bonded pair term -- so the work
+        goes as roughly the square of the atom count. Two builds three
+        times apart in size differed by a factor of eleven, which is that
+        square and not a linear cost.
+
+        Scaling the user's own measurement beats any constant baked in
+        here, because it is their processor that the number has to be
+        true of. Below a factor of two in size the scaling is not worth
+        claiming, so the measurement is simply reported.
+        """
+        was, seconds = measured
+        try:
+            now = estimate_atoms(self.current_job())
+        except (tk.TclError, ValueError, KeyError):
+            now = was
+        base = f"last here: {was} atoms in {_clock(seconds)}"
+        if was <= 0 or now <= 0:
+            return base
+        ratio = now / was
+        if 0.5 < ratio < 2.0:
+            return base
+        return f"{base}, so ≈{_clock(seconds * ratio ** 2)} for {now}"
 
     # ------------------------------------------------------------------ job
     def _current_defects(self) -> list[dict]:

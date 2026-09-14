@@ -949,7 +949,25 @@ class TestTheBuildClock:
         app.on_build()
         _pump_until_idle(app.root, app)
         app._update_estimate()
-        assert "last build here" in app.lbl_estimate.cget("text")
+        assert "last here" in app.lbl_estimate.cget("text")
+
+    def test_a_similar_size_is_not_dressed_up_as_a_prediction(self, app):
+        app.var_mode_kind.set("capped tube")
+        app.on_build()
+        _pump_until_idle(app.root, app)
+        atoms, _seconds = app._measured["capped tube"]
+        assert "so ≈" not in app._scaled_prediction((atoms, 10.0))
+
+    def test_a_much_bigger_job_is_scaled_by_the_square(self, app):
+        """The profile puts the cost in a pairwise term, not a linear one."""
+        app.var_mode_kind.set("capped tube")
+        app.on_build()
+        _pump_until_idle(app.root, app)
+        atoms, _seconds = app._measured["capped tube"]
+        text = app._scaled_prediction((atoms // 4, 10.0))
+        assert "so ≈" in text
+        # Four times the atoms, sixteen times the work: 160 s, not 40.
+        assert "2:40" in text
 
     def test_the_clock_says_so_when_the_worker_has_gone(self, app):
         app._build_started = 0.0
