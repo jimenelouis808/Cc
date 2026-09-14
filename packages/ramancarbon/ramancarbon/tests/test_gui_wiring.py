@@ -346,3 +346,66 @@ def test_the_chosen_preset_is_remembered_and_used():
     assert "plot_preset" in inspect.getsource(Session.remember)
     assert "plot_preset" in inspect.getsource(gui_suite.Suite._on_preset_changed)
     assert "plot_preset" in inspect.getsource(gui_app.RamanCarbonApp._save_figure)
+
+
+class TestTheElapsedClock:
+    """An indeterminate bar says "something is happening" and no more.
+
+    That is the whole doubt a Rietveld refinement or a batch of fifty
+    spectra creates: a slow calculation and a hung one look identical.
+    The clock lives on the shared base, so all five sections get it.
+    """
+
+    def test_the_clock_reads_as_a_stopwatch(self):
+        from ramancarbon.gui.base import _clock
+
+        assert _clock(3.2) == "3 s"
+        assert _clock(59.4) == "59 s"
+        assert _clock(143.0) == "2:23"
+        assert _clock(3725.0) == "62:05"
+
+    def test_a_background_run_starts_and_stops_it(self):
+        """Through run_async and drain_queue, the real path."""
+        import queue as _queue
+
+        from ramancarbon.gui.base import SectionApp
+
+        class _Root:
+            def after(self, _ms, _fn=None):
+                return "job"
+
+            def after_cancel(self, _job):
+                pass
+
+        app = SectionApp.__new__(SectionApp)
+        app.root = _Root()
+        app.busy = False
+        app.progress = None
+        app.queue = _queue.Queue()
+        app._started = None
+        app._clock_job = None
+        app.status_var = _Var()
+        app.elapsed_var = _Var()
+
+        app.run_async(lambda: 42, lambda _r: None, "trabajando…")
+        assert app._started is not None
+        assert app.elapsed_var.get() != ""
+
+        # drain_queue re-arms itself through root.after, which the stub
+        # answers without running anything, so this terminates.
+        app.drain_queue()
+        assert app._started is None
+        assert app.busy is False
+
+
+class _Var:
+    """The two lines of tk.StringVar this needs."""
+
+    def __init__(self):
+        self._value = ""
+
+    def set(self, value):
+        self._value = value
+
+    def get(self):
+        return self._value

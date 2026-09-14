@@ -17,10 +17,23 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 import traceback
 from typing import Any, Callable, Optional
 
 from .theme import PAD, Palette, matplotlib_style
+
+
+def _clock(seconds: float) -> str:
+    """Tiempo transcurrido como lo lee un cronómetro.
+
+    Segundos por debajo del minuto y m:ss por encima: «143 s» obliga a
+    dividir y «2:23» no.
+    """
+    if seconds < 60.0:
+        return f"{seconds:.0f} s"
+    minutes, rest = divmod(int(seconds), 60)
+    return f"{minutes}:{rest:02d}"
 
 
 class SectionApp:
@@ -42,6 +55,10 @@ class SectionApp:
         self._figures: dict[str, Any] = {}
         self._dirty: set[str] = set()
         self.status_var = tk.StringVar(value="")
+        #: Tiempo transcurrido del cálculo en curso, junto a la barra.
+        self.elapsed_var = tk.StringVar(value="")
+        self._started: float | None = None
+        self._clock_job: str | None = None
         self.progress = None
 
     # -- canvases ------------------------------------------------------
@@ -113,6 +130,8 @@ class SectionApp:
         if self.progress is not None:
             self.progress.start(12)
         self.set_status(message)
+        self._started = time.monotonic()
+        self._tick_clock()
 
         def target() -> None:
             try:
@@ -130,6 +149,7 @@ class SectionApp:
                 self.busy = False
                 if self.progress is not None:
                     self.progress.stop()
+                self._stop_clock()
                 if kind == "ok":
                     done(payload)
                 else:
@@ -149,6 +169,31 @@ class SectionApp:
                   style="Status.TLabel").pack(side="left")
         self.progress = ttk.Progressbar(bar, mode="indeterminate", length=140)
         self.progress.pack(side="right")
+        ttk.Label(bar, textvariable=self.elapsed_var,
+                  style="Status.TLabel").pack(side="right", padx=(0, PAD["sm"]))
+
+    def _tick_clock(self) -> None:
+        """Cuenta mientras el cálculo corre.
+
+        Una barra indeterminada dice «algo está pasando» y nada más, que
+        es justo la duda que crea un refinamiento Rietveld o un lote de
+        cincuenta espectros. El tiempo transcurrido dice cuánto lleva
+        pasando, y es lo que separa un cálculo lento de uno colgado.
+        """
+        if getattr(self, "_started", None) is None:
+            return
+        self.elapsed_var.set(_clock(time.monotonic() - self._started))
+        self._clock_job = self.root.after(250, self._tick_clock)
+
+    def _stop_clock(self) -> None:
+        job = getattr(self, "_clock_job", None)
+        if job is not None:
+            self.root.after_cancel(job)
+            self._clock_job = None
+        started = getattr(self, "_started", None)
+        self._started = None
+        if started is not None:
+            self.elapsed_var.set(_clock(time.monotonic() - started))
 
     def set_status(self, text: str) -> None:
         self.status_var.set(text)
