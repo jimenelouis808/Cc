@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 import traceback
 from pathlib import Path
 from typing import Any, Optional
@@ -69,6 +70,18 @@ _EXPORT_FORMATS = (
 )
 
 
+def _clock(seconds: float) -> str:
+    """Tiempo transcurrido como lo lee un cronómetro.
+
+    Segundos por debajo del minuto y m:ss por encima, porque «143 s»
+    obliga a dividir y «2:23» no.
+    """
+    if seconds < 60.0:
+        return f"{seconds:.0f} s"
+    minutes, rest = divmod(int(seconds), 60)
+    return f"{minutes}:{rest:02d}"
+
+
 class CarbonForgeApp:
     """Main application window."""
 
@@ -95,6 +108,10 @@ class CarbonForgeApp:
         self._edlc_source: Optional[Atoms] = None
         self._queue: queue.Queue = queue.Queue()
         self._busy = False
+        #: Cuándo empezó la construcción en curso, o None si no hay.
+        self._build_started: float | None = None
+        #: `after` pendiente del reloj, para poder cancelarlo.
+        self._clock_job: str | None = None
 
         self._build_layout()
         self._rebuild_param_fields()
@@ -209,6 +226,12 @@ class CarbonForgeApp:
             left, textvariable=self.status_var, wraplength=340,
             justify="left", foreground="#0a6",
         ).pack(fill="x", pady=(8, 0))
+        # Una construcción larga no daba señal alguna de estar viva.
+        self.elapsed_var = tk.StringVar(value="")
+        ttk.Label(
+            left, textvariable=self.elapsed_var, justify="left",
+            foreground="#667", font=("TkDefaultFont", 8),
+        ).pack(fill="x")
 
         # --- right: preview + info --------------------------------------
         self._build_preview(right)
@@ -217,7 +240,6 @@ class CarbonForgeApp:
         ttk = self.ttk
         from matplotlib.backends.backend_tkagg import (  # noqa: WPS433
             FigureCanvasTkAgg,
-            NavigationToolbar2Tk,
         )
         from matplotlib.figure import Figure  # noqa: WPS433
 
@@ -230,10 +252,14 @@ class CarbonForgeApp:
 
         self.canvas = FigureCanvasTkAgg(self.figure, master=preview)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
-        # Toolbar gives pan/zoom/rotate and its own save button for free.
-        toolbar = NavigationToolbar2Tk(self.canvas, preview, pack_toolbar=False)
-        toolbar.update()
-        toolbar.pack(fill="x")
+        # Matplotlib's toolbar is built for a 2D axes. On this one its
+        # magnifier and its pan cross do not do what their icons say, and
+        # it has no rotate button -- rotation is the drag gesture, which
+        # is what makes the toolbar look like it is missing one. So: the
+        # canonical viewpoints, a zoom that scales the axis ranges, and
+        # the gesture written down. Its save button did work here, so
+        # that is kept rather than lost with the rest.
+        self._build_view_bar(preview)
         self.canvas.draw()
 
         info = ttk.LabelFrame(parent, text="Resumen y validación", padding=4)
@@ -1089,6 +1115,88 @@ class CarbonForgeApp:
 
     # ------------------------------------------------------------------
     # Build (threaded)
+    #: Vistas con nombre, como (elevación, azimut).
+    VIEWPOINTS: tuple[tuple[str, float, float], ...] = (
+        ("+x", 0.0, 0.0), ("+y", 0.0, 90.0), ("+z", 90.0, -90.0),
+        ("iso", 22.0, -60.0),
+    )
+
+    def _build_view_bar(self, parent) -> None:
+        """Puntos de vista, zoom y guardado, bajo el lienzo."""
+        ttk = self.ttk
+        bar = ttk.Frame(parent)
+        bar.pack(fill="x", pady=(4, 0))
+
+        ttk.Label(bar, text="vista:").pack(side="left")
+        for label, elev, azim in self.VIEWPOINTS:
+            ttk.Button(bar, text=label, width=4,
+                       command=lambda e=elev, a=azim: self._set_view(e, a)
+                       ).pack(side="left", padx=1)
+
+        ttk.Label(bar, text="  zoom:").pack(side="left")
+        ttk.Button(bar, text="+", width=3,
+                   command=lambda: self._zoom(1 / 1.25)).pack(side="left", padx=1)
+        ttk.Button(bar, text="−", width=3,
+                   command=lambda: self._zoom(1.25)).pack(side="left", padx=1)
+        ttk.Button(bar, text="ajustar", width=8,
+                   command=self._zoom_fit).pack(side="left", padx=1)
+
+        ttk.Button(bar, text="guardar imagen…", width=15,
+                   command=self._save_image).pack(side="right")
+        ttk.Label(bar, text="arrastra para rotar",
+                  font=("TkDefaultFont", 8)).pack(side="right", padx=(0, 8))
+
+    def _set_view(self, elevation: float, azimuth: float) -> None:
+        self.axes.view_init(elev=elevation, azim=azimuth)
+        self.canvas.draw_idle()
+
+    def _zoom(self, factor: float) -> None:
+        """Escala los tres rangos a la vez, sobre su centro común.
+
+        Los tres juntos y por el mismo factor: escalarlos por separado
+        deformaría la estructura, y un eje 3D no tiene recuadro elástico
+        que arrastrar.
+        """
+        self._zoom_scale = max(0.05, min(20.0,
+                                         getattr(self, "_zoom_scale", 1.0) * factor))
+        self._apply_limits()
+
+    def _zoom_fit(self) -> None:
+        self._zoom_scale = 1.0
+        self._apply_limits()
+
+    def _apply_limits(self) -> None:
+        """Límites de aspecto igual, al zoom actual."""
+        atoms = getattr(self, "atoms", None)
+        if atoms is None or not len(atoms):
+            return
+        pos = atoms.get_positions()
+        scale = getattr(self, "_zoom_scale", 1.0)
+        span = (float((pos.max(axis=0) - pos.min(axis=0)).max()) / 2.0 or 1.0) * scale
+        mid = (pos.max(axis=0) + pos.min(axis=0)) / 2.0
+        self.axes.set_xlim(mid[0] - span, mid[0] + span)
+        self.axes.set_ylim(mid[1] - span, mid[1] + span)
+        self.axes.set_zlim(mid[2] - span, mid[2] + span)
+        self.canvas.draw_idle()
+
+    def _save_image(self) -> None:
+        """Guarda la vista previa tal como está, con su punto de vista."""
+        from tkinter import filedialog
+
+        path = filedialog.asksaveasfilename(
+            title="Guardar la vista previa", defaultextension=".png",
+            filetypes=[("PNG", "*.png"), ("PDF", "*.pdf"), ("SVG", "*.svg")],
+            initialfile="estructura.png",
+        )
+        if not path:
+            return
+        try:
+            self.figure.savefig(path, dpi=200, bbox_inches="tight")
+        except (OSError, ValueError) as exc:
+            self.status_var.set(f"No se pudo guardar: {exc}")
+            return
+        self.status_var.set(f"Guardado {Path(path).name}")
+
     # ------------------------------------------------------------------
     def _set_busy(self, busy: bool, message: str = "") -> None:
         self._busy = busy
@@ -1096,6 +1204,29 @@ class CarbonForgeApp:
         self.build_button.configure(state=state)
         if message:
             self.status_var.set(message)
+        if busy:
+            self._build_started = time.monotonic()
+            self._tick_clock()
+        else:
+            if self._clock_job is not None:
+                self.root.after_cancel(self._clock_job)
+                self._clock_job = None
+            if self._build_started is not None:
+                self.elapsed_var.set(f"tardó {_clock(time.monotonic() - self._build_started)}")
+            self._build_started = None
+
+    def _tick_clock(self) -> None:
+        """Cuenta mientras se construye.
+
+        Sin esto la ventana no dice nada durante una construcción: no hay
+        barra de progreso, y un barrido de convergencia o una celda EDLC
+        de varios miles de átomos se parecen mucho a un programa colgado.
+        """
+        if self._build_started is None:
+            return
+        self.elapsed_var.set(
+            f"construyendo… {_clock(time.monotonic() - self._build_started)}")
+        self._clock_job = self.root.after(250, self._tick_clock)
 
     def _on_build(self) -> None:
         if self._busy:

@@ -283,3 +283,81 @@ class TestAnalysisTab:
         assert app._parse_optional_float(" -4,23 ", "x") == pytest.approx(-4.23)
         with pytest.raises(ValueError, match="número"):
             app._parse_optional_float("abc", "Nivel de Fermi")
+
+
+class TestTheViewBar:
+    """What replaced matplotlib's 2D toolbar on the 3D preview.
+
+    The toolbar was there for pan, zoom, rotate and save, and on a 3D
+    axes only save actually worked: the magnifier and the pan cross do
+    not do what their icons say, and there is no rotate button because
+    rotation is the drag gesture.
+    """
+
+    def test_each_viewpoint_is_a_different_camera(self, app):
+        from carbonforge.gui.app import CarbonForgeApp
+
+        seen = {(elev, azim) for _label, elev, azim in CarbonForgeApp.VIEWPOINTS}
+        assert len(seen) == len(CarbonForgeApp.VIEWPOINTS)
+
+    def test_setting_a_view_does_not_raise(self, app):
+        for _label, elev, azim in app.VIEWPOINTS:
+            app._set_view(elev, azim)
+
+    def test_zoom_is_bounded_in_both_directions(self, app):
+        for _ in range(60):
+            app._zoom(1 / 1.25)
+        assert app._zoom_scale >= 0.05
+        for _ in range(120):
+            app._zoom(1.25)
+        assert app._zoom_scale <= 20.0
+
+    def test_limits_are_a_no_op_before_anything_is_built(self, app):
+        """The bar exists from the start; the structure does not."""
+        app.atoms = None
+        app._apply_limits()  # must not raise
+
+    def test_the_three_ranges_stay_equal_so_a_tube_is_not_a_blob(self, app):
+        from ase.build import molecule
+
+        # Deliberately lopsided: an unscaled 3D axes stretches this.
+        app.atoms = molecule("C2H6")
+        app.atoms.positions[:, 2] *= 8.0
+        app._zoom_fit()
+        spans = [hi - lo for lo, hi in (app.axes.get_xlim3d(),
+                                        app.axes.get_ylim3d(),
+                                        app.axes.get_zlim3d())]
+        assert max(spans) - min(spans) < 1e-6, spans
+
+
+class TestTheBuildClock:
+    """A long build used to give no sign of being alive at all.
+
+    There is no progress bar in this window and no way to cancel, so a
+    convergence sweep or a several-thousand-atom EDLC cell looked exactly
+    like a hung program.
+    """
+
+    def test_the_clock_reads_as_a_stopwatch(self):
+        from carbonforge.gui.app import _clock
+
+        assert _clock(3.2) == "3 s"
+        assert _clock(59.4) == "59 s"
+        assert _clock(143.0) == "2:23"
+
+    def test_going_busy_starts_it_and_going_idle_reports(self, app):
+        app._set_busy(True, "Construyendo…")
+        assert app._build_started is not None
+        assert "construyendo" in app.elapsed_var.get()
+
+        app._set_busy(False, "Listo.")
+        assert app._build_started is None
+        assert "tardó" in app.elapsed_var.get()
+
+    def test_a_second_finish_does_not_invent_a_time(self, app):
+        """_set_busy(False) is reached from several error paths."""
+        app._set_busy(True, "")
+        app._set_busy(False, "")
+        first = app.elapsed_var.get()
+        app._set_busy(False, "")
+        assert app.elapsed_var.get() == first
