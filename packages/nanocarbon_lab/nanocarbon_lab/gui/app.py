@@ -76,6 +76,7 @@ from matplotlib.backends.backend_tkagg import (
 )
 from matplotlib.figure import Figure
 
+from .. import __version__
 from ..builders import fullerene_mesh as fm
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
@@ -226,12 +227,16 @@ PRESETS: dict[str, dict[str, object]] = {
     "N-doped nanotube": {
         "mode_kind": "capped tube", "rings": 10, "freq": 3,
         "dopant": "N", "dopant_conc": 0.03},
+    # Three turns rather than one and a half, and a pitch just clear of
+    # the walls rather than four times it. The old values built a gently
+    # curving tube: at 90 Å of coil radius around a 4 Å tube, with 22 Å
+    # of air between turns, nothing about the picture said "helix".
     "Nanocoil (swept, fast)": {
         "mode_kind": "capped tube", "shape": "helix", "freq": 2,
-        "coil_radius": 90.0, "coil_pitch": 30.0, "coil_turns": 1.5},
+        "coil_radius": 45.0, "coil_pitch": 13.0, "coil_turns": 3.0},
     "Nanocoil (relaxed topology)": {
-        "mode_kind": "coil (relaxed)", "coil_radius": 34.0, "coil_pitch": 20.0,
-        "coil_turns": 1.25, "coil_tube_radius": 4.5, "anneal": 40},
+        "mode_kind": "coil (relaxed)", "coil_radius": 22.0, "coil_pitch": 13.0,
+        "coil_turns": 3.0, "coil_tube_radius": 4.5, "anneal": 80},
     "Y junction": {
         "mode_kind": "junction", "j_kind": "Y", "j_radius": 6.0,
         "j_arm": 22.0, "j_blend": 4.0, "anneal": 80},
@@ -463,7 +468,13 @@ class NanocarbonGUI:
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("nanocarbon_lab — carbon nanostructure builder")
+        # The version goes in the title deliberately. A report of "the
+        # bug is still there" is impossible to act on without knowing
+        # which build is running, and an editable install left pointing
+        # at an older extraction looks exactly like a fix that did not
+        # work.
+        self.root.title(
+            f"nanocarbon_lab {__version__} — carbon nanostructure builder")
         self.root.geometry("1400x860")
         self.root.minsize(1120, 700)
 
@@ -673,13 +684,13 @@ class NanocarbonGUI:
         self.var_waviness = self._var("waviness", tk.DoubleVar(value=0.7))
         self.var_max_strain = self._var("max_strain", tk.DoubleVar(value=0.08))
         self.var_shape_points = self._var("shape_points", tk.IntVar(value=9))
-        self.var_coil_radius = self._var("coil_radius", tk.DoubleVar(value=60.0))
-        self.var_coil_pitch = self._var("coil_pitch", tk.DoubleVar(value=25.0))
-        self.var_coil_turns = self._var("coil_turns", tk.DoubleVar(value=1.5))
+        self.var_coil_radius = self._var("coil_radius", tk.DoubleVar(value=22.0))
+        self.var_coil_pitch = self._var("coil_pitch", tk.DoubleVar(value=14.0))
+        self.var_coil_turns = self._var("coil_turns", tk.DoubleVar(value=3.0))
         self.var_coil_hand = self._var("coil_hand", tk.StringVar(value="right"))
         self.var_coil_taper = self._var("coil_taper", tk.DoubleVar(value=1.0))
         self.var_coil_tube_radius = self._var(
-            "coil_tube_radius", tk.DoubleVar(value=6.0))
+            "coil_tube_radius", tk.DoubleVar(value=5.0))
         self.var_pin_ends = self._var("pin_ends", tk.BooleanVar(value=False))
         self.var_anneal = self._var("anneal", tk.IntVar(value=80))
         self.var_roughness = self._var("roughness", tk.DoubleVar(value=0.0))
@@ -2194,13 +2205,37 @@ class NanocarbonGUI:
             # closing on itself, so that is what the hint reports.
             tube_radius = float(self.var_coil_tube_radius.get())
             clearance = 2.0 * tube_radius + 3.4
-            ok = pitch >= clearance
+            gap = pitch - 2.0 * tube_radius
+            # Two ways to get a coil that is not worth building, and only
+            # one of them used to be reported. Too tight and the walls
+            # merge, which is a hard failure. Too loose and it builds
+            # perfectly well and does not read as a coil at all -- a
+            # gently curving tube -- which is the one people actually hit,
+            # because the failure is visual rather than geometric.
+            atoms = int(arc * 1.57 * tube_radius)
+            if pitch < clearance:
+                verdict, colour = (
+                    f"walls merge — pitch needs ≥{clearance:.0f} Å", BAD_RED)
+            elif turns < 2.0:
+                verdict, colour = (
+                    "under two turns: this reads as a bent tube, not a coil",
+                    WARN_AMBER)
+            elif gap > 2.0 * tube_radius:
+                verdict, colour = (
+                    f"turns {gap:.0f} Å apart, wider than the {2 * tube_radius:.0f} Å "
+                    "tube: open, so the helix is hard to see", WARN_AMBER)
+            else:
+                verdict, colour = (f"turns {gap:.0f} Å apart — reads as a coil",
+                                   OK_GREEN)
             self.lbl_coil.config(
-                text=f"{arc:.0f} Å of tube; turns "
-                     f"{pitch - 2 * tube_radius:.0f} Å apart"
-                     + ("" if ok else
-                        f" — needs ≥{clearance:.0f} Å pitch or the walls merge"),
-                foreground=OK_GREEN if ok else BAD_RED,
+                text=f"coil ⌀{2 * radius:.0f} Å, tube ⌀{2 * tube_radius:.0f} Å, "
+                     f"{arc:.0f} Å of tube ≈ {atoms} atoms. {verdict}\n"
+                     "This mode meshes a surface, so the wall is an "
+                     "amorphous CVD-like network, not a rolled lattice — "
+                     "that is what it is for. For a clean graphitic coil "
+                     "use «capped tube» with shape «helix», which is also "
+                     "about ten times faster.",
+                foreground=colour,
             )
             return
 

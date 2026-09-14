@@ -980,3 +980,50 @@ class TestTheBuildClock:
                 app.root.after_cancel(app._clock_job)
                 app._clock_job = None
             app._build_started = None
+
+
+class TestTheCoilHintSaysWhyItLooksWrong:
+    """A coil can fail two ways and only one was ever reported.
+
+    Too tight and the walls merge, which the builder refuses outright.
+    Too loose and it builds perfectly and does not read as a coil at all
+    — a gently curving tube — and that is the one people hit, because
+    nothing about the numbers says so.
+    """
+
+    def _hint(self, app, radius, pitch, turns, tube):
+        app.var_mode_kind.set("coil (relaxed)")
+        app.var_coil_radius.set(radius)
+        app.var_coil_pitch.set(pitch)
+        app.var_coil_turns.set(turns)
+        app.var_coil_tube_radius.set(tube)
+        app._update_coil_hint()
+        return app.lbl_coil.cget("text")
+
+    def test_an_open_coil_is_called_open(self, app):
+        text = self._hint(app, 90.0, 30.0, 3.0, 4.0)
+        assert "open" in text
+
+    def test_under_two_turns_is_called_out(self, app):
+        text = self._hint(app, 22.0, 14.0, 1.5, 5.0)
+        assert "two turns" in text
+
+    def test_merging_walls_still_win_over_the_looks(self, app):
+        """A hard failure must not be reported as a matter of taste."""
+        text = self._hint(app, 22.0, 6.0, 3.0, 5.0)
+        assert "merge" in text
+
+    def test_a_good_coil_says_so(self, app):
+        text = self._hint(app, 22.0, 14.0, 3.0, 5.0)
+        assert "reads as a coil" in text
+
+    def test_the_hint_names_the_faster_cleaner_route(self, app):
+        """This mode meshes a surface; its wall cannot be a clean lattice."""
+        text = self._hint(app, 22.0, 14.0, 3.0, 5.0)
+        assert "helix" in text and "lattice" in text
+
+    def test_the_shipped_defaults_read_as_a_coil(self, app):
+        """The defaults were an open, 1.5-turn, 7800-atom quarter-hour."""
+        app.var_mode_kind.set("coil (relaxed)")
+        app._update_coil_hint()
+        assert "reads as a coil" in app.lbl_coil.cget("text")

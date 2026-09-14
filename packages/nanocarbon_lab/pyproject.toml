@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nanocarbon_lab"
-version = "0.1.0"
+version = "0.2.0"
 description = "Modular framework for generating, validating and exporting realistic nanocarbon structures for DFT (Quantum ESPRESSO) and classical MD (LAMMPS) simulations."
 readme = "README.md"
 requires-python = ">=3.11"
