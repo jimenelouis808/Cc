@@ -168,6 +168,19 @@ class BuildWorker:
 
         threading.Thread(target=run, daemon=True).start()
 
+    def is_alive(self) -> bool:
+        """Whether the thing doing the work is still there.
+
+        A build that has died and one that is merely slow look identical
+        from outside, and a coil makes that ambiguity last minutes. In
+        the degraded thread mode there is no process to interrogate and
+        no way to interrogate a thread mid-computation, so this reports
+        True: "cannot tell" must not be shown to the user as "dead".
+        """
+        if self.degraded:
+            return True
+        return self._proc is not None and self._proc.is_alive()
+
     def cancel(self) -> None:
         """Stop the running build and stand up a fresh worker.
 

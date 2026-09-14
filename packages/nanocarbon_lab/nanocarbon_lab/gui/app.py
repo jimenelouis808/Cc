@@ -47,6 +47,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import traceback
 from pathlib import Path
 
@@ -72,7 +73,6 @@ except ImportError as exc:  # pragma: no cover - environment dependent
 # with "cannot load backend 'TkAgg' ... 'headless' is currently running".
 from matplotlib.backends.backend_tkagg import (
     FigureCanvasTkAgg,
-    NavigationToolbar2Tk,
 )
 from matplotlib.figure import Figure
 
@@ -143,6 +143,18 @@ NEUTRAL_CHEMISTRY: dict[str, object] = {
     "graft": "none", "graft_swap": "", "graft_coverage": 0.10,
     "graft_where": "all", "graft_face": "outer",
 }
+
+def _clock(seconds: float) -> str:
+    """Elapsed time as a reader of a stopwatch expects it.
+
+    Seconds below a minute, m:ss above -- because "143 s" makes someone
+    divide and "2:23" does not.
+    """
+    if seconds < 60.0:
+        return f"{seconds:.0f} s"
+    minutes, rest = divmod(int(seconds), 60)
+    return f"{minutes}:{rest:02d}"
+
 
 SHAPES = ["straight", "arc", "s_curve", "helix", "random"]
 #: "none" first and selected by default: the host is carbon, and a
@@ -469,6 +481,16 @@ class NanocarbonGUI:
         self._applying_values = False
         #: The mode the chemistry currently belongs to.
         self._chemistry_mode: str | None = None
+        #: When the running build started, or None when idle.
+        self._build_started: float | None = None
+        #: Pending `after` id for the clock, so it can be cancelled.
+        self._clock_job: str | None = None
+        #: mode -> (atoms, seconds) for the last build of that mode in
+        #: this session. A measurement beats an estimate, and the
+        #: estimator here is a hand-written bucket ("a minute or two"),
+        #: so once a mode has actually been built its own timing is
+        #: shown alongside.
+        self._measured: dict[str, tuple[int, float]] = {}
         # Built structures, most recent last, so a promising result is not
         # lost the moment the next parameter is nudged.
         self._history: list[tuple[str, object]] = []
@@ -1404,6 +1426,14 @@ class NanocarbonGUI:
         self.btn_cancel.pack(fill="x", pady=(4, 0))
         self.progress = ttk.Progressbar(actions, mode="indeterminate")
         self.progress.pack(fill="x", pady=(6, 0))
+        # A bouncing bar says "something is happening" and nothing else,
+        # which is exactly the doubt a six-minute coil creates. The clock
+        # says how long it has been happening for, and confirms on every
+        # tick that the worker process is still alive -- so a build that
+        # has genuinely died stops looking like one that is merely slow.
+        self.lbl_elapsed = ttk.Label(actions, text="", foreground=MUTED,
+                                     font=("TkDefaultFont", 8))
+        self.lbl_elapsed.pack(anchor="w")
         self.lbl_estimate = ttk.Label(actions, text="", foreground=MUTED,
                                       font=("TkDefaultFont", 8), wraplength=240,
                                       justify="left")
@@ -2212,6 +2242,16 @@ class NanocarbonGUI:
             return
         colour = {"fast": OK_GREEN, "slow": WARN_AMBER,
                   "very slow": BAD_RED}.get(severity, MUTED)
+        # A measurement beats a guess. The estimator's wording is a
+        # hand-written bucket -- "a minute or two" -- so once this mode
+        # has actually been built in this session, say what it took and
+        # for how many atoms, and let the user scale it themselves. The
+        # estimate stays alongside rather than being replaced: the last
+        # build may have been a very different size.
+        measured = self._measured.get(self.var_mode_kind.get())
+        if measured is not None:
+            atoms, seconds = measured
+            text += f" — last build here: {atoms} atoms in {_clock(seconds)}"
         self.lbl_estimate.config(text=f"Estimate: {text}", foreground=colour)
 
     # ------------------------------------------------------------------ job
@@ -2527,6 +2567,8 @@ class NanocarbonGUI:
         self._clear_error()
         _severity, cost = estimate_cost(job)
         self._set_status(f"Building {job.mode} ({cost})…")
+        self._build_started = time.monotonic()
+        self._tick_clock()
         try:
             self.worker.submit(job)
         except Exception as exc:  # noqa: BLE001 - reported to the user
@@ -2548,11 +2590,42 @@ class NanocarbonGUI:
             if degraded else "Build cancelled."
         )
 
-    def _finish_build(self) -> None:
+    def _finish_build(self, atoms: int | None = None, mode: str = "") -> None:
         self._busy = False
         self.progress.stop()
         self.btn_build.config(state="normal")
         self.btn_cancel.config(state="disabled")
+        if self._clock_job is not None:
+            self.root.after_cancel(self._clock_job)
+            self._clock_job = None
+        elapsed = (time.monotonic() - self._build_started
+                   if self._build_started is not None else None)
+        self._build_started = None
+        if elapsed is None:
+            self.lbl_elapsed.config(text="")
+            return
+        if atoms is not None and mode:
+            self._measured[mode] = (atoms, elapsed)
+        self.lbl_elapsed.config(
+            text=f"took {_clock(elapsed)}"
+                 + (f" for {atoms} atoms" if atoms is not None else ""))
+
+    def _tick_clock(self) -> None:
+        """Count up while a build runs, and check it is still running.
+
+        Re-arms itself rather than riding the poll loop, so the reading
+        stays smooth even when a poll is busy drawing a finished
+        structure.
+        """
+        if self._build_started is None:
+            return
+        elapsed = time.monotonic() - self._build_started
+        alive = self.worker.is_alive()
+        self.lbl_elapsed.config(
+            text=f"building… {_clock(elapsed)}"
+                 + ("" if alive else "  — the worker process is gone"),
+            foreground=MUTED if alive else BAD_RED)
+        self._clock_job = self.root.after(250, self._tick_clock)
 
     def _poll_worker(self) -> None:
         """Collect a finished build, then always re-arm the timer.
@@ -2568,7 +2641,9 @@ class NanocarbonGUI:
             result = self.worker.poll()
             if result is not None:
                 _job_id, kind, payload = result
-                self._finish_build()
+                self._finish_build(
+                    atoms=len(payload) if kind == "done" else None,
+                    mode=self.var_mode_kind.get() if kind == "done" else "")
                 if kind == "done":
                     self.atoms = payload
                     self.last_saved_stem = None
@@ -2705,12 +2780,159 @@ class NanocarbonGUI:
         self._show_error("Equivalent command line", command, error=False)
 
     # -------------------------------------------------------------- preview
+    #: Named viewpoints as (elevation, azimuth). Down an axis is how a
+    #: tube's cross-section, a sheet's lattice and a coil's pitch are
+    #: each read; the isometric one is the default matplotlib opens on.
+    VIEWPOINTS: tuple[tuple[str, float, float], ...] = (
+        ("+x", 0.0, 0.0), ("+y", 0.0, 90.0), ("+z", 90.0, -90.0),
+        ("iso", 22.0, -60.0),
+    )
+
+    def _build_view_bar(self, parent: ttk.Frame) -> None:
+        """Viewpoints, zoom and the cell, in one row under the canvas."""
+        bar = ttk.Frame(parent)
+        bar.pack(fill="x", pady=(4, 0))
+
+        ttk.Label(bar, text="view:").pack(side="left")
+        for label, elev, azim in self.VIEWPOINTS:
+            ttk.Button(bar, text=label, width=4,
+                       command=lambda e=elev, a=azim: self._set_view(e, a)
+                       ).pack(side="left", padx=1)
+
+        ttk.Label(bar, text="  zoom:").pack(side="left")
+        ttk.Button(bar, text="+", width=3,
+                   command=lambda: self._zoom(1 / 1.25)).pack(side="left", padx=1)
+        ttk.Button(bar, text="−", width=3,
+                   command=lambda: self._zoom(1.25)).pack(side="left", padx=1)
+        ttk.Button(bar, text="fit", width=4,
+                   command=self._zoom_fit).pack(side="left", padx=1)
+
+        self.var_show_cell = tk.BooleanVar(value=False)
+        ttk.Checkbutton(bar, text="cell", variable=self.var_show_cell,
+                        command=self._redraw).pack(side="left", padx=(8, 0))
+        ttk.Button(bar, text="to unit cell", width=11,
+                   command=self.on_view_unit_cell).pack(side="left", padx=(2, 0))
+
+        ttk.Button(bar, text="save image…", width=11,
+                   command=self.on_save_image).pack(side="right")
+        ttk.Label(bar, text="drag to rotate", foreground=MUTED,
+                  font=("TkDefaultFont", 8)).pack(side="right", padx=(0, 8))
+
+    def _set_view(self, elevation: float, azimuth: float) -> None:
+        self.ax.view_init(elev=elevation, azim=azimuth)
+        self.canvas.draw_idle()
+
+    def _zoom(self, factor: float) -> None:
+        """Scale the three axis ranges about their common centre.
+
+        All three together, and by the same factor: scaling them apart
+        would shear the structure, and a 3D axes has no rubber-band box
+        to drag anyway.
+        """
+        self._zoom_scale = max(0.05, min(20.0,
+                                         getattr(self, "_zoom_scale", 1.0) * factor))
+        self._apply_limits()
+
+    def _zoom_fit(self) -> None:
+        self._zoom_scale = 1.0
+        self._apply_limits()
+
+    def _apply_limits(self) -> None:
+        """Equal-aspect limits about the structure, at the current zoom.
+
+        An unscaled 3D axes stretches a long tube into a blob and makes a
+        coil look elliptical, so the span is one number for all three.
+        """
+        if self.atoms is None:
+            return
+        pos = self.atoms.get_positions()
+        scale = getattr(self, "_zoom_scale", 1.0)
+        span = (float((pos.max(axis=0) - pos.min(axis=0)).max()) / 2.0 or 1.0) * scale
+        mid = (pos.max(axis=0) + pos.min(axis=0)) / 2.0
+        self.ax.set_xlim(mid[0] - span, mid[0] + span)
+        self.ax.set_ylim(mid[1] - span, mid[1] + span)
+        self.ax.set_zlim(mid[2] - span, mid[2] + span)
+        self.canvas.draw_idle()
+
+    def _draw_cell(self) -> None:
+        """The periodic box as twelve edges.
+
+        Only the periodic directions are drawn. A 2D sheet's vacuum
+        direction has a cell vector because a plane-wave code needs one,
+        but drawing it would put a lid on a structure that has none.
+        """
+        from mpl_toolkits.mplot3d.art3d import Line3DCollection
+
+        cell = np.asarray(self.atoms.cell)
+        if not np.any(cell):
+            return
+        corners = np.array([i * cell[0] + j * cell[1] + k * cell[2]
+                            for i in (0, 1) for j in (0, 1) for k in (0, 1)])
+        edges = [(a, b) for a in range(8) for b in range(a + 1, 8)
+                 if bin(a ^ b).count("1") == 1]
+        self.ax.add_collection3d(Line3DCollection(
+            [(corners[a], corners[b]) for a, b in edges],
+            colors="#b0b6bd", linewidths=0.8, linestyles=":"))
+
+    def on_view_unit_cell(self) -> None:
+        """Replace the structure with its periodic unit cell, in place.
+
+        The conversion already existed but only as a file export, so the
+        one way to see whether it produced something sensible was to
+        write a CIF and open it elsewhere.
+        """
+        if self.atoms is None:
+            return
+        try:
+            converted = to_unit_cell(self.atoms)
+        except (ValueError, RuntimeError) as exc:
+            self._show_error("Could not convert to a unit cell", str(exc))
+            return
+        self.atoms = converted
+        self.var_show_cell.set(True)
+        self._zoom_fit()
+        self._redraw()
+        self._update_info()
+        self._set_status(f"Showing the unit cell: {len(converted)} atoms.")
+
+    def on_save_image(self) -> None:
+        """Save the preview as it stands, viewpoint and all.
+
+        Replacing matplotlib's toolbar took its save button with it, and
+        that button was the one part of it that did work on a 3D axes.
+        At 200 dpi rather than the screen's 100: this is a working
+        snapshot for a notebook or a message, and a figure for a paper
+        comes from the export bundle instead.
+        """
+        if self.atoms is None:
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save the preview", defaultextension=".png",
+            filetypes=[("PNG", "*.png"), ("PDF", "*.pdf"), ("SVG", "*.svg")],
+            initialfile=f"{self.last_saved_stem or 'structure'}.png",
+        )
+        if not path:
+            return
+        try:
+            self.figure.savefig(path, dpi=200, bbox_inches="tight")
+        except (OSError, ValueError) as exc:
+            self._show_error("Could not save the image", str(exc))
+            return
+        self._set_status(f"Saved {Path(path).name}")
+
     def _build_preview(self, parent: ttk.Frame) -> None:
         self.figure = Figure(figsize=(6, 5), dpi=100)
         self.ax = self.figure.add_subplot(111, projection="3d")
         self.canvas = FigureCanvasTkAgg(self.figure, master=parent)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
-        NavigationToolbar2Tk(self.canvas, parent).update()
+        # Matplotlib's own toolbar is built for 2D. On a 3D axes its
+        # magnifier and its pan cross do not mean what their icons say,
+        # and it has no rotate button at all -- because rotation is the
+        # drag gesture, which is exactly what makes the toolbar look
+        # like it is missing one. So: the canonical viewpoints, a zoom
+        # that changes the limits rather than rubber-banding a box, and
+        # the drag gesture written down where it can be read.
+        self._build_view_bar(parent)
 
         bar = ttk.Frame(parent)
         bar.pack(fill="x", pady=(6, 0))
@@ -2813,13 +3035,10 @@ class NanocarbonGUI:
             ]))
         )
 
-        # Equal aspect: an unscaled 3D axis stretches a long tube into a
-        # blob and makes a coil look elliptical.
-        span = (pos.max(axis=0) - pos.min(axis=0)).max() / 2.0 or 1.0
-        mid = (pos.max(axis=0) + pos.min(axis=0)) / 2.0
-        self.ax.set_xlim(mid[0] - span, mid[0] + span)
-        self.ax.set_ylim(mid[1] - span, mid[1] + span)
-        self.ax.set_zlim(mid[2] - span, mid[2] + span)
+        if self.var_show_cell.get():
+            self._draw_cell()
+
+        self._apply_limits()
         self.ax.set_axis_off()
         self.figure.tight_layout()
         self.canvas.draw_idle()
@@ -3006,8 +3225,13 @@ class NanocarbonGUI:
         if a.info.get("structure_type") in ("twisted_bilayer", "vdw_stack"):
             self._update_stack_info(a)
             return
-        g = a.info["geometry"]
-        counts = a.info["ring_counts"]
+        # Not every structure carries these: a file read from another
+        # code has no ring census, and a builder that places atoms on an
+        # exact lattice has no measured geometry to report. Missing
+        # metadata must read as "not available" rather than as a
+        # traceback, because the window offers to open foreign files.
+        g = a.info.get("geometry")
+        counts = a.info.get("ring_counts", {})
         rings_txt = "\n".join(
             f"  {RING_LABELS[s].split(' (')[0]:<10s} {counts.get(s, 0):>5d}"
             for s in (5, 6, 7, 8) if counts.get(s)
@@ -3018,7 +3242,7 @@ class NanocarbonGUI:
         # and an assembly of n disjoint shells owes 12 per shell.
         components = int(a.info.get("n_shells", a.info.get("n_tubes", 1)))
         expected = components * (12 - 12 * int(a.info.get("genus", 0)))
-        clash = g["n_close_contacts"]
+        clash = g["n_close_contacts"] if g else 0
 
         lines = [f"atoms        {len(a):>6d}"]
         if "formula" in a.info:
@@ -3078,15 +3302,26 @@ class NanocarbonGUI:
              f"{'OK' if deficit == expected else 'BROKEN'}"),
             "",
             "geometry",
-            f"  bond   {g['bond_min']:.3f}–{g['bond_max']:.3f} Å",
-            f"  angle  {g['angle_min']:.1f}–{g['angle_max']:.1f}°",
-            f"  contacts <2Å  {clash}  {'OK' if clash == 0 else 'CHECK'}",
         ]
-        # Zero clashes is not the same as a physical structure: an
-        # over-tight coil keeps its atoms apart while stretching its bonds
-        # past any real C-C. Say so in words, next to the numbers.
-        verdict, why = sp2_quality(g)
-        lines += ["", f"sp2 verdict  {verdict.upper()}", f"  {why}"]
+        if g:
+            lines += [
+                f"  bond   {g['bond_min']:.3f}–{g['bond_max']:.3f} Å",
+                f"  angle  {g['angle_min']:.1f}–{g['angle_max']:.1f}°",
+                f"  contacts <2Å  {clash}  {'OK' if clash == 0 else 'CHECK'}",
+            ]
+            # Zero clashes is not the same as a physical structure: an
+            # over-tight coil keeps its atoms apart while stretching its
+            # bonds past any real C-C. Say so in words, next to the
+            # numbers.
+            verdict, why = sp2_quality(g)
+            lines += ["", f"sp2 verdict  {verdict.upper()}", f"  {why}"]
+        else:
+            # An exact-lattice builder has nothing to measure against: the
+            # geometry is ideal by construction, which is a different
+            # statement from "measured and found to be ideal" and is said
+            # differently here rather than being faked into the same shape.
+            lines.append("  ideal by construction — placed on the lattice, "
+                         "not relaxed, so there is nothing measured to report")
 
         self.txt_info.configure(state="normal")
         self.txt_info.delete("1.0", "end")

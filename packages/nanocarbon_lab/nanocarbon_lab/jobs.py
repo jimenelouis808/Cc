@@ -30,12 +30,13 @@ from typing import Any
 # family in one dropdown and the modes of that family in the next, so a
 # carbon control never appears next to a dichalcogenide one.
 CARBON_MODES = (
-    # The plain tube first: it is the one most people want, it is what
-    # every other tube mode is a variation on, and it was the one the
-    # window did not offer. `build_cnt` has always been there and the CLI
-    # has always exposed it; only the GUI insisted on a cap.
-    "nanotube (open)",
+    # The capped tube stays first because the first entry is what the
+    # window opens on, and changing that is a different decision from
+    # adding a mode. The open tube goes next to it: `build_cnt` has
+    # always existed and the command line has always exposed it, and only
+    # the GUI insisted on a cap.
     "capped tube",
+    "nanotube (open)",
     "haeckelite",
     "coil (relaxed)",
     "fullerene",

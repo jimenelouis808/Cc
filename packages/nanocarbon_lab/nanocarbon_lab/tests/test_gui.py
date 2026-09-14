@@ -127,11 +127,36 @@ def test_gui_rebuild_with_defects_and_bend(app):
 
 def test_preview_toggles_redraw_without_error(app):
     for bonds in (True, False):
-        for colour in (True, False):
+        for colour in ("element", "ring", "plain"):
             app.var_show_bonds.set(bonds)
-            app.var_colour_rings.set(colour)
+            app.var_colour_by.set(colour)
             app._redraw()
             app.root.update()
+
+
+def test_element_colouring_actually_separates_the_elements(app):
+    """The bug this replaced: every atom one colour, on every structure.
+
+    Ring colouring paints a pristine tube entirely in the hexagon colour,
+    which is correct and useless -- and it hid the dopant too.
+    """
+    app.var_mode_kind.set("capped tube")
+    app.var_dopant.set("N")
+    app.var_dopant_conc.set(0.08)
+    app.on_build()
+    _pump_until_idle(app.root, app)
+
+    app.var_colour_by.set("element")
+    element = set(app._atom_colours(app._ring_of_atom()))
+    app.var_colour_by.set("ring")
+    ring = set(app._atom_colours(app._ring_of_atom()))
+    app.var_colour_by.set("plain")
+    plain = set(app._atom_colours(app._ring_of_atom()))
+
+    assert "N" in app.atoms.get_chemical_symbols(), "the doping did not happen"
+    assert len(element) > 1, "a doped tube must not be one colour by element"
+    assert len(plain) == 1, "plain is meant to be one colour"
+    assert element != ring
 
 
 def test_export_writes_bundle(app, tmp_path):
@@ -675,13 +700,15 @@ def test_the_graft_reaches_the_job_for_every_family(app):
     Each family builds its Job on a different branch, so a field added
     to one of them alone is the exact failure this pins.
     """
-    app.var_graft.set("carboxyl")
-    app.var_graft_coverage.set(0.2)
-    app.var_graft_swap.set("O:S")
-    app.var_graft_where.set("edge")
-    app.var_graft_face.set("both")
     for mode in ("capped tube", "TMD layers", "twisted bilayer"):
+        # The mode first: chemistry is chosen *for* a structure type, and
+        # changing the type now clears it rather than carrying it over.
         app.var_mode_kind.set(mode)
+        app.var_graft.set("carboxyl")
+        app.var_graft_coverage.set(0.2)
+        app.var_graft_swap.set("O:S")
+        app.var_graft_where.set("edge")
+        app.var_graft_face.set("both")
         job = app.current_job()
         assert job.graft == "carboxyl", mode
         assert job.graft_coverage == 0.2, mode
@@ -779,3 +806,159 @@ def test_an_unreadable_file_reports_instead_of_raising(app, tmp_path,
                         lambda **_: str(target))
     assert app.on_analyse_file() is None
     assert "Could not read" in app.lbl_analyse.cget("text")
+
+
+class TestChemistryDoesNotOutliveItsStructure:
+    """Doping and grafting are chosen for a material, not for a session.
+
+    The panels were hidden on a change of mode and the values behind them
+    were not, so a tube's 3% nitrogen went on reaching the builder after
+    the structure became a dichalcogenide -- with nothing on screen to say
+    so. That is the failure these pin.
+    """
+
+    def test_switching_structure_clears_the_dopant(self, app):
+        app.var_mode_kind.set("capped tube")
+        app.var_dopant.set("N")
+        app.var_dopant_conc.set(0.05)
+
+        app.var_mode_kind.set("fullerene")
+
+        assert app.var_dopant.get() == "none"
+        assert app.current_job().dopant is None
+
+    def test_switching_structure_clears_the_graft(self, app):
+        app.var_mode_kind.set("capped tube")
+        app.var_graft.set("carboxyl")
+        app.var_graft_where.set("edge")
+
+        app.var_mode_kind.set("TMD layers")
+
+        assert app.var_graft.get() == "none"
+        assert app.var_graft_where.get() == "all"
+
+    def test_reselecting_the_same_mode_keeps_the_chemistry(self, app):
+        """Tk fires a trace on every set, including one that changes nothing."""
+        app.var_mode_kind.set("capped tube")
+        app.var_dopant.set("B")
+        app.var_mode_kind.set("capped tube")
+        assert app.var_dopant.get() == "B"
+
+    def test_a_preset_keeps_the_chemistry_it_just_asked_for(self, app):
+        """The regression the guard exists for.
+
+        A preset writes mode_kind exactly as a user does. Without the
+        guard the reset fires on that write and erases the doping the
+        preset set a microsecond earlier, which would make every doped
+        preset silently build a pristine structure.
+        """
+        app._apply_values({"mode_kind": "capped tube", "dopant": "N",
+                           "dopant_conc": 0.04})
+        assert app.var_dopant.get() == "N"
+        assert app.current_job().dopant == "N"
+
+
+class TestTheViewBar:
+    """What replaced matplotlib's 2D toolbar on a 3D axes."""
+
+    def test_each_viewpoint_actually_moves_the_camera(self, app):
+        from nanocarbon_lab.gui.app import NanocarbonGUI
+
+        seen = set()
+        for _label, elev, azim in NanocarbonGUI.VIEWPOINTS:
+            app._set_view(elev, azim)
+            seen.add((round(app.ax.elev, 3), round(app.ax.azim, 3)))
+        assert len(seen) == len(NanocarbonGUI.VIEWPOINTS), (
+            "two viewpoints put the camera in the same place"
+        )
+
+    def test_zoom_narrows_and_widens_about_the_same_centre(self, app):
+        def limits():
+            return (app.ax.get_xlim3d(), app.ax.get_ylim3d(), app.ax.get_zlim3d())
+
+        def centre(lim):
+            return tuple(round((lo + hi) / 2.0, 6) for lo, hi in lim)
+
+        app._zoom_fit()
+        start = limits()
+        app._zoom(1 / 1.25)
+        closer = limits()
+        assert closer[0][1] - closer[0][0] < start[0][1] - start[0][0]
+        assert centre(closer) == centre(start), "zoom must not drift"
+
+        app._zoom(1.25)
+        assert limits()[0][1] - limits()[0][0] == pytest.approx(
+            start[0][1] - start[0][0], rel=1e-9)
+
+    def test_the_zoom_cannot_be_driven_to_a_degenerate_axis(self, app):
+        for _ in range(40):
+            app._zoom(1 / 1.25)
+        low, high = app.ax.get_xlim3d()
+        assert high > low, "the axis collapsed"
+
+    def test_the_cell_is_drawn_only_when_asked(self, app):
+        app.var_mode_kind.set("capped tube")
+        app.on_build()
+        _pump_until_idle(app.root, app)
+
+        app.var_show_cell.set(False)
+        app._redraw()
+        without = len(app.ax.collections)
+        app.var_show_cell.set(True)
+        app._redraw()
+        assert len(app.ax.collections) > without
+
+    def test_viewing_the_unit_cell_replaces_the_structure(self, app):
+        app.var_mode_kind.set("capped tube")
+        app.on_build()
+        _pump_until_idle(app.root, app)
+        before = len(app.atoms)
+
+        app.on_view_unit_cell()
+
+        assert app.atoms is not None
+        assert app.var_show_cell.get(), "the box is the point of the view"
+        assert len(app.atoms) <= before
+
+
+class TestTheBuildClock:
+    """Whether a slow build is alive, which a bouncing bar cannot say."""
+
+    def test_the_clock_reads_as_a_stopwatch(self):
+        from nanocarbon_lab.gui.app import _clock
+
+        assert _clock(3.2) == "3 s"
+        assert _clock(59.4) == "59 s"
+        assert _clock(143.0) == "2:23"
+        assert _clock(3725.0) == "62:05"
+
+    def test_a_finished_build_reports_what_it_took(self, app):
+        app.var_mode_kind.set("capped tube")
+        app.on_build()
+        _pump_until_idle(app.root, app)
+
+        assert "took" in app.lbl_elapsed.cget("text")
+        assert "capped tube" in app._measured
+        atoms, seconds = app._measured["capped tube"]
+        assert atoms == len(app.atoms)
+        assert seconds > 0.0
+
+    def test_the_measurement_reaches_the_estimate(self, app):
+        """A measurement beats a hand-written bucket, so it is shown."""
+        app.var_mode_kind.set("capped tube")
+        app.on_build()
+        _pump_until_idle(app.root, app)
+        app._update_estimate()
+        assert "last build here" in app.lbl_estimate.cget("text")
+
+    def test_the_clock_says_so_when_the_worker_has_gone(self, app):
+        app._build_started = 0.0
+        app.worker.is_alive = lambda: False
+        try:
+            app._tick_clock()
+            assert "worker process is gone" in app.lbl_elapsed.cget("text")
+        finally:
+            if app._clock_job is not None:
+                app.root.after_cancel(app._clock_job)
+                app._clock_job = None
+            app._build_started = None

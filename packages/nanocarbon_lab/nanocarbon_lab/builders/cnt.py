@@ -19,7 +19,7 @@ from ase import Atoms
 from ase.build import nanotube
 
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D
-from ..utils.geometry import center_in_cell
+from ..utils.geometry import center_in_cell, guess_bonds
 
 Chirality = Literal["armchair", "zigzag", "chiral"]
 
@@ -126,6 +126,14 @@ def build_cnt(
             "radius": radius,
             "bond": bond,
             "axis": axis,
+            # The same keys every other builder records, so a tube is as
+            # inspectable as a cage or a junction. Both are exact rather
+            # than measured: a pristine tube is all hexagons, and on the
+            # torus a periodic tube topologically is, Euler gives
+            # F = E - V = 3N/2 - N = N/2 of them. The bonds are needed
+            # because a viewer that cannot find them draws a point cloud.
+            "ring_counts": {6: len(atoms) // 2},
+            "bonds": [[int(i), int(j)] for i, j, _ in guess_bonds(atoms)],
         }
     )
     return atoms
