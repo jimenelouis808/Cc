@@ -28,14 +28,24 @@ Parameters follow the experimental literature:
 from __future__ import annotations
 
 import math
+import warnings
 
 import numpy as np
 from ase import Atoms
 
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D
-from ..utils.geometry import center_in_cell, minimum_image_distances
+from ..utils.geometry import center_in_cell, guess_bonds, minimum_image_distances
 from ..utils.rng import make_rng
+from ..validation.quality import sp2_quality
+from .capped_cnt import geometry_report
+from .centerline import ARTISTIC_STRAIN_LIMIT, helix_curvature
 from .cnt import build_cnt
+from .lattice_edits import ring_census
+
+#: Gap a graphite interlayer needs, added to the tube's own diameter to
+#: get the smallest pitch at which successive turns do not interpenetrate.
+#: The same rule the periodic-coil builder already applies.
+TURN_CLEARANCE = 3.4
 
 
 def _helical_frame(
@@ -265,4 +275,91 @@ def build_nanocoil(
         atoms = _apply_stone_wales_to_outer_bonds(
             atoms, density=stone_wales_density, coil_axis=2, seed=seed
         )
+
+    # --- what the sweep actually produced, measured rather than assumed.
+    #
+    # This builder bends a finished all-hexagon lattice, so it can only
+    # stretch: nothing here relieves curvature the way a meshed wall does
+    # with 5-7 pairs. Two separate things can therefore ruin it, and
+    # before this they both did so silently.
+    #
+    # Wall strain, r_tube * kappa, is the obvious one -- a (6,6) tube on
+    # an 18 Å coil is strained 22% and comes back with 1.17 Å bonds.
+    #
+    # Turns colliding is the one that is easy to miss, because it has
+    # nothing to do with the coil radius: a (10,10) tube is 13.6 Å across,
+    # so on a 13 Å pitch successive turns interpenetrate at *every* radius.
+    # Measured at R = 120 Å, where the strain is a comfortable 5.6%: 5211
+    # overlapping pairs and 0.69 Å "bonds". Widening the coil cannot fix
+    # it; only widening the pitch can.
+    bonds = [(i, j) for i, j, _ in guess_bonds(atoms)]
+    quality = geometry_report(atoms.get_positions(), bonds)
+    strain = r_tube * helix_curvature(coil_radius, pitch)
+    clearance = 2.0 * r_tube + TURN_CLEARANCE
+    counts = ring_census(atoms.get_positions(), bonds)
+    atoms.info.update({
+        "bonds": [[int(i), int(j)] for i, j in bonds],
+        "ring_counts": counts,
+        "geometry": quality,
+        "wall_strain": float(strain),
+        "min_pitch": float(clearance),
+        # A rolled lattice, defects aside: its rings are hexagons, so the
+        # pristine sp2 window is the right one to judge it against.
+        "quality_family": "sp2" if set(counts) <= {6} else "haeckelite",
+    })
+
+    verdict, why = sp2_quality(quality, atoms.info["quality_family"])
+    if verdict == "broken":
+        cause = (
+            f"the pitch is {pitch:.1f} Å but this tube is {2 * r_tube:.1f} Å "
+            f"across, so successive turns pass through each other; raise the "
+            f"pitch above {clearance:.1f} Å"
+            if pitch < clearance else
+            f"the wall is strained {strain:.0%} by a coil radius of "
+            f"{coil_radius:.0f} Å; this route bends a finished hexagonal "
+            f"lattice, so widen the coil (clean from about "
+            f"{_clean_coil_radius(r_tube, pitch):.0f} Å here) or use a "
+            f"thinner tube"
+        )
+        raise ValueError(
+            f"This sweep tears the wall rather than winding it: {why} "
+            f"The cause is that {cause}."
+        )
+    if pitch < clearance:
+        warnings.warn(
+            f"Pitch {pitch:.1f} Å leaves less than a graphite interlayer gap "
+            f"between turns of a {2 * r_tube:.1f} Å tube (needs "
+            f"{clearance:.1f} Å). The geometry survived, but the turns are "
+            "closer than any real coil's.",
+            UserWarning, stacklevel=2,
+        )
+    elif strain > ARTISTIC_STRAIN_LIMIT:
+        warnings.warn(
+            f"A coil radius of {coil_radius:.0f} Å strains this tube's outer "
+            f"wall by {strain:.0%}, past the {ARTISTIC_STRAIN_LIMIT:.0%} sp2 "
+            "limit. Real carbon nanocoils have coil radii of hundreds of Å "
+            "for exactly this reason.",
+            UserWarning, stacklevel=2,
+        )
     return atoms
+
+
+def _clean_coil_radius(tube_radius: float, pitch: float,
+                       max_strain: float = 0.08) -> float:
+    """Smallest coil radius whose wall strain stays inside ``max_strain``.
+
+    Inverting ``strain = r * R / (R^2 + c^2)`` for R gives a quadratic
+    with two roots; the larger is the one that means "wide enough", the
+    smaller a coil tighter than the tube itself. Returns the larger.
+
+    This is the number that makes "I want a small, clean coil" an
+    impossible request rather than a matter of tuning: at a 13 Å pitch a
+    (6,6) tube needs about 50 Å of coil radius, which is 6000 atoms of
+    tube, and a fatter tube needs more.
+    """
+    c = pitch / (2.0 * math.pi)
+    ratio = tube_radius / max_strain
+    discriminant = ratio * ratio - 4.0 * c * c
+    if discriminant <= 0.0:
+        return float("inf")
+    return 0.5 * (ratio + math.sqrt(discriminant))

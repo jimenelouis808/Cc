@@ -171,6 +171,12 @@ JUNCTION_KINDS = ["L", "T", "Y", "X", "cross3d"]
 #: Zigzag first: it is the cheaper of the two at the same width and the
 #: one whose edge states people usually come to a ribbon for.
 RIBBON_EDGES = ["zigzag", "armchair"]
+#: What an open tube can be made into. Only two, because only two are
+#: real: a straight tube is exact crystallography and a wound one bends
+#: that same lattice along a helix. The arc, S-curve and meander of the
+#: capped tube need caps to anchor their relaxation and have no
+#: counterpart here.
+TUBE_SHAPES = ["straight", "helix"]
 #: Modes whose atoms go straight onto the graphene lattice rather than
 #: onto a meshed surface. They take defects and corrugation like the
 #: meshed ones, but there is no mesh for the annealing slider to act on.
@@ -239,20 +245,32 @@ PRESETS: dict[str, dict[str, object]] = {
     "N-doped nanotube": {
         "mode_kind": "capped tube", "rings": 10, "freq": 3,
         "dopant": "N", "dopant_conc": 0.03},
-    # Every one of these goes through the implicit route, and that is the
-    # correction rather than a preference. A swept tube keeps its
-    # hexagons, so following a helix can only stretch its outer wall: the
-    # three swept presets that shipped here came back with 0.00 Å
-    # "bonds" and four thousand overlapping pairs while their ring census
-    # read as perfect. Meshing the surface instead lets the remesher put
-    # pentagons on the compressed inner wall and heptagons on the
-    # stretched outer one, which is how a real nanocoil relieves
-    # curvature -- and those come back "clean" on the same measure.
-    "Nanocoil (small, clean)": {
+    # A coil can be built two ways and they are not interchangeable, so
+    # the names say which.
+    #
+    # The **rolled lattice** winds a real (n, m) nanotube: every ring is a
+    # hexagon and the wall is graphitic. Bending a finished lattice can
+    # only stretch it, so the coil has to be wide -- a (5,5) tube needs
+    # about 45 Å of coil radius before its wall strain drops under 8%.
+    # That is not a tuning problem, it is why real carbon nanocoils are
+    # tens to hundreds of Å across. It is also fast, because nothing is
+    # meshed or relaxed: 4600 atoms in a second.
+    "Nanocoil (graphitic, rolled lattice)": {
+        "mode_kind": "nanocoil", "cnt_shape": "helix", "cnt_n": 5, "cnt_m": 5,
+        "coil_radius": 45.0, "coil_pitch": 12.0, "coil_turns": 2.0,
+        "n_sw": 0, "n_dv": 0, "roughness": 0.0},
+    # The **meshed wall** route fits a surface to the helix and tiles it,
+    # so it can make a coil of any radius -- but what it tiles it with is
+    # an amorphous CVD-like network, not a rolled lattice. A two-turn one
+    # comes back with ~90 non-hexagonal rings where Euler needs 12. The
+    # geometry is sound (no bond outside the sp2 range, no overlap); the
+    # wall is disordered. These were called "clean" here, which was a
+    # verdict about bond lengths used as a claim about appearance.
+    "Nanocoil (meshed wall, compact)": {
         "mode_kind": "coil (relaxed)", "coil_radius": 18.0, "coil_pitch": 13.0,
         "coil_turns": 2.0, "coil_tube_radius": 4.5, "anneal": 80,
         "roughness": 0.0, "n_sw": 0, "n_dv": 0},
-    "Nanocoil (three turns)": {
+    "Nanocoil (meshed wall, three turns)": {
         "mode_kind": "coil (relaxed)", "coil_radius": 22.0, "coil_pitch": 13.0,
         "coil_turns": 3.0, "coil_tube_radius": 4.5, "anneal": 80,
         "roughness": 0.0, "n_sw": 0, "n_dv": 0},
@@ -262,7 +280,7 @@ PRESETS: dict[str, dict[str, object]] = {
         "mode_kind": "coil (periodic, DFT)", "coil_radius": 15.0,
         "coil_pitch": 9.6, "coil_tube_radius": 3.0,
         "roughness": 0.0, "n_sw": 0, "n_dv": 0},
-    "Nanocoil (wide, physical)": {
+    "Nanocoil (meshed wall, wide)": {
         "mode_kind": "coil (relaxed)", "coil_radius": 25.0, "coil_pitch": 14.0,
         "coil_turns": 3.0, "coil_tube_radius": 5.0, "anneal": 80,
         "roughness": 0.0, "n_sw": 0, "n_dv": 0},
@@ -582,7 +600,8 @@ class NanocarbonGUI:
         return var
 
     def _param(self, parent, label, var, lo, hi, row, *, integer=False,
-               resolution=None, command=None, hard_lo=None, hard_hi=None):
+               resolution=None, command=None, hard_lo=None, hard_hi=None
+               ) -> tuple[ttk.Label, ttk.Entry, ttk.Scale]:
         """A labelled parameter: exact entry box plus a slider.
 
         The slider covers the range that is comfortable to explore; the
@@ -598,7 +617,8 @@ class NanocarbonGUI:
         hard_lo = lo if hard_lo is None else hard_lo
         hard_hi = hi if hard_hi is None else hard_hi
 
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w")
+        caption = ttk.Label(parent, text=label)
+        caption.grid(row=row, column=0, sticky="w")
         text = tk.StringVar()
         entry = ttk.Entry(parent, textvariable=text, width=8, justify="right")
         entry.grid(row=row, column=1, sticky="e")
@@ -655,6 +675,10 @@ class NanocarbonGUI:
         scale.grid(row=row + 1, column=0, columnspan=2, sticky="ew", pady=(0, 6))
         parent.columnconfigure(0, weight=1)
         render()
+        # Returned so a mode that the parameter does not apply to can
+        # `grid_remove` the three of them together, rather than leaving a
+        # live-looking control that feeds nothing.
+        return caption, entry, scale
 
     def _build_params(self, parent: ttk.Frame) -> None:
         self.var_mode_kind = self._var("mode_kind", tk.StringVar(value=MODES[0]))
@@ -704,6 +728,11 @@ class NanocarbonGUI:
         self.var_cnt_m = self._var("cnt_m", tk.IntVar(value=6))
         self.var_cnt_length = self._var("cnt_length", tk.DoubleVar(value=20.0))
         self.var_cnt_vacuum = self._var("cnt_vacuum", tk.DoubleVar(value=12.0))
+        # Straight or wound. The two are different builders -- a straight
+        # tube is exact crystallography, a wound one bends that lattice
+        # along a helix -- so picking "helix" switches the mode rather
+        # than quietly changing what "nanotube (open)" means.
+        self.var_cnt_shape = self._var("cnt_shape", tk.StringVar(value="straight"))
         # The ribbon is indexed the same way ASE indexes it: a width in
         # rows and a length in repeat units, both counts rather than Å,
         # because the lattice quantises them and a length in Å would be
@@ -716,7 +745,10 @@ class NanocarbonGUI:
         self.var_rings = self._var("rings", tk.IntVar(value=8))
         self.var_freq = self._var("freq", tk.IntVar(value=3))
         self.var_bond = self._var("bond", tk.DoubleVar(value=1.42))
-        self.var_bend = self._var("bend", tk.DoubleVar(value=0.0))
+        # Degrees, not radians. The key changed with the unit so a
+        # parameter file written when this held radians is ignored rather
+        # than read as 0.5 degrees where it meant 0.5 rad.
+        self.var_bend = self._var("bend_deg", tk.DoubleVar(value=0.0))
         self.var_seed = self._var("seed", tk.IntVar(value=0))
         self.var_shape = self._var("shape", tk.StringVar(value="straight"))
         self.var_waviness = self._var("waviness", tk.DoubleVar(value=0.7))
@@ -845,18 +877,24 @@ class NanocarbonGUI:
                                     justify="left")
 
         self._param(box, "Body rings (length)", self.var_rings, 2, 30, 0,
-                    integer=True, hard_hi=200)
+                    integer=True, hard_hi=200, command=self._update_bend_hint)
         self._param(box, "Subdivision freq (diameter)", self.var_freq, 1, 8, 2,
                     integer=True, hard_hi=20, command=self._update_radius_hint)
         self.lbl_radius.grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 6))
-        self._param(box, "Bend angle (rad)", self.var_bend, 0.0, 1.0, 5,
-                    resolution=0.01)
-        self._param(box, "C–C bond (Å)", self.var_bond, 1.30, 1.55, 7,
+        self._param(box, "Bend angle (°)", self.var_bend, 0.0, 180.0, 5,
+                    resolution=1.0, hard_hi=359.0,
+                    command=self._update_bend_hint)
+        self.lbl_bend = ttk.Label(box, text="", foreground=MUTED,
+                                  font=("TkDefaultFont", 8),
+                                  wraplength=PARAM_COLUMN_WIDTH - 22,
+                                  justify="left")
+        self.lbl_bend.grid(row=7, column=0, columnspan=2, sticky="w")
+        self._param(box, "C–C bond (Å)", self.var_bond, 1.30, 1.55, 8,
                     resolution=0.005, hard_lo=1.20, hard_hi=1.80,
                     command=self._update_radius_hint)
 
         seed_row = ttk.Frame(box)
-        seed_row.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        seed_row.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         ttk.Label(seed_row, text="Random seed").pack(side="left")
         ttk.Button(seed_row, text="🎲", width=3,
                    command=self.on_roll_seed).pack(side="right", padx=(4, 0))
@@ -870,12 +908,20 @@ class NanocarbonGUI:
                     command=lambda *_: self._update_open_tube_hint())
         self._param(obox, "m", self.var_cnt_m, 0, 30, 2, integer=True,
                     command=lambda *_: self._update_open_tube_hint())
-        self._param(obox, "Length (Å)", self.var_cnt_length, 5.0, 200.0, 4,
-                    command=lambda *_: self._update_open_tube_hint())
+        self._cnt_length = self._param(
+            obox, "Length (Å)", self.var_cnt_length, 5.0, 200.0, 4,
+            command=lambda *_: self._update_open_tube_hint())
         self._param(obox, "Vacuum (Å)", self.var_cnt_vacuum, 8.0, 30.0, 6)
+        shape_row = ttk.Frame(obox)
+        shape_row.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        ttk.Label(shape_row, text="Shape").pack(side="left")
+        ttk.Combobox(shape_row, textvariable=self.var_cnt_shape,
+                     values=TUBE_SHAPES, state="readonly",
+                     width=9).pack(side="right")
+        self.var_cnt_shape.trace_add("write", lambda *_: self._on_tube_shape())
         self.lbl_open_tube = ttk.Label(obox, text="", foreground=MUTED,
                                        wraplength=330, justify="left")
-        self.lbl_open_tube.grid(row=8, column=0, columnspan=3, sticky="w",
+        self.lbl_open_tube.grid(row=10, column=0, columnspan=3, sticky="w",
                                 pady=(6, 0))
         obox.pack_forget()
 
@@ -950,16 +996,22 @@ class NanocarbonGUI:
         self._param(self.frame_coil, "Turns", self.var_coil_turns,
                     0.5, 5.0, 4, resolution=0.05, hard_hi=40.0,
                     command=self._update_coil_hint)
-        self._param(self.frame_coil, "Taper (end/start R)", self.var_coil_taper,
-                    0.3, 2.0, 6, resolution=0.05, hard_lo=0.05, hard_hi=10.0,
-                    command=self._update_coil_hint)
-        hand = ttk.Frame(self.frame_coil)
-        hand.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(2, 2))
-        ttk.Label(hand, text="Handedness").pack(side="left")
-        ttk.Combobox(hand, textvariable=self.var_coil_hand,
+        # Rows 6 and 7 -- the taper's own label/entry and its slider. The
+        # legend below used to be gridded at row 7 as well, on top of the
+        # slider, so the taper looked like a number box with no slider at
+        # all. It now has its own row.
+        self._coil_taper = self._param(
+            self.frame_coil, "Taper (end/start R)", self.var_coil_taper,
+            0.3, 2.0, 6, resolution=0.05, hard_lo=0.05, hard_hi=10.0,
+            command=self._update_coil_hint)
+        self.frame_coil_hand = ttk.Frame(self.frame_coil)
+        self.frame_coil_hand.grid(row=8, column=0, columnspan=2, sticky="ew",
+                                  pady=(2, 2))
+        ttk.Label(self.frame_coil_hand, text="Handedness").pack(side="left")
+        ttk.Combobox(self.frame_coil_hand, textvariable=self.var_coil_hand,
                      values=["right", "left"], state="readonly",
                      width=7).pack(side="right")
-        ttk.Label(
+        self.lbl_coil_legend = ttk.Label(
             self.frame_coil, foreground=MUTED, font=("TkDefaultFont", 8),
             wraplength=225, justify="left",
             text="Coil radius: how far the tube's centre sits from the helix "
@@ -971,15 +1023,17 @@ class NanocarbonGUI:
                  "coil.\n"
                  "Taper: end radius over start radius. 1 is a cylinder, "
                  "below 1 a cone.",
-        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(4, 2))
+        )
+        self.lbl_coil_legend.grid(row=9, column=0, columnspan=2, sticky="w",
+                                  pady=(4, 2))
         self.lbl_coil = ttk.Label(self.frame_coil, text="", foreground=MUTED,
                                   font=("TkDefaultFont", 8), wraplength=225,
                                   justify="left")
-        self.lbl_coil.grid(row=9, column=0, columnspan=2, sticky="w")
+        self.lbl_coil.grid(row=10, column=0, columnspan=2, sticky="w")
         # Only the relaxed coil sets its tube radius freely; the swept
         # helix takes it from the lattice-quantised frequency.
         self.frame_coil_tube = ttk.Frame(self.frame_coil)
-        self.frame_coil_tube.grid(row=10, column=0, columnspan=2, sticky="ew")
+        self.frame_coil_tube.grid(row=11, column=0, columnspan=2, sticky="ew")
         self.frame_coil_tube.columnconfigure(0, weight=1)
         self._param(self.frame_coil_tube, "Tube radius (Å)",
                     self.var_coil_tube_radius, 4.0, 12.0, 0, resolution=0.1,
@@ -1537,6 +1591,7 @@ class NanocarbonGUI:
             var.trace_add("write", lambda *_: self._schedule_estimate())
 
         self._update_radius_hint()
+        self._update_bend_hint()
         self._update_strain_hint()
         self._update_coil_hint()
         self._update_surface_hint()
@@ -1624,6 +1679,85 @@ class NanocarbonGUI:
                  f"length and ends in two edges across it. {physics}.",
             foreground=MUTED)
 
+    def _on_tube_shape(self) -> None:
+        """Switch between the straight tube and the wound one.
+
+        They are different builders, and the difference is visible in the
+        result: a straight tube is periodic along its axis and exact, a
+        wound one is a finite object whose lattice has been bent. Picking
+        the shape therefore moves the mode dropdown rather than leaving it
+        saying "nanotube (open)" while something else is built.
+        """
+        if self._applying_values:
+            return
+        wanted = ("nanocoil" if self.var_cnt_shape.get() == "helix"
+                  else "nanotube (open)")
+        if self.var_mode_kind.get() != wanted:
+            self.var_mode_kind.set(wanted)
+
+    def _update_nanocoil_hint(self) -> None:
+        """What this (n, m) tube needs before its wall survives winding.
+
+        This route bends a finished hexagonal lattice, so the wall can
+        only stretch -- nothing here relieves curvature the way a meshed
+        coil does with 5-7 pairs. Two separate things break it, and the
+        second is the one nobody expects: turns colliding does not depend
+        on the coil radius at all.
+        """
+        from ..builders.nanocoil import TURN_CLEARANCE, _clean_coil_radius
+
+        n, m = int(self.var_cnt_n.get()), int(self.var_cnt_m.get())
+        if m > n or n < 1:
+            self.lbl_open_tube.config(
+                text="Need n ≥ 1 and 0 ≤ m ≤ n.", foreground=BAD_RED)
+            return
+        bond = float(self.var_bond.get())
+        radius = math.sqrt(3.0) * bond * math.sqrt(n * n + n * m + m * m) / (2 * math.pi)
+        coil_radius = float(self.var_coil_radius.get())
+        pitch = float(self.var_coil_pitch.get())
+        clearance = 2.0 * radius + TURN_CLEARANCE
+        strain = radius * coil_radius / (coil_radius ** 2 + (pitch / (2 * math.pi)) ** 2)
+        clean_from = _clean_coil_radius(radius, pitch)
+
+        if pitch < clearance:
+            self.lbl_open_tube.config(
+                text=f"Pitch {pitch:.1f} Å is less than this tube's "
+                     f"{2 * radius:.1f} Å width plus a graphite gap, so the "
+                     f"turns would pass through each other whatever the coil "
+                     f"radius. Raise the pitch above {clearance:.1f} Å.",
+                foreground=BAD_RED)
+            return
+        atoms = self._scaled_estimate()
+        if strain <= 0.08:
+            self.lbl_open_tube.config(
+                text=f"wall strain {strain:.1%} — graphitic. Tube ⌀"
+                     f"{2 * radius:.1f} Å on a {coil_radius:.0f} Å coil, "
+                     f"{atoms}. Every ring a hexagon: this winds the real "
+                     f"(n,m) lattice instead of meshing a surface.",
+                foreground=OK_GREEN)
+        elif strain <= 0.15:
+            self.lbl_open_tube.config(
+                text=f"wall strain {strain:.1%} — intact but visibly "
+                     f"stretched. Clean from about {clean_from:.0f} Å of coil "
+                     f"radius at this pitch. {atoms}.",
+                foreground=WARN_AMBER)
+        else:
+            self.lbl_open_tube.config(
+                text=f"wall strain {strain:.1%} — this tears rather than "
+                     f"winds, and the builder will refuse it. A "
+                     f"{2 * radius:.1f} Å tube needs about {clean_from:.0f} Å "
+                     f"of coil radius at this pitch; small coils cannot be "
+                     f"graphitic, which is why real ones are hundreds of Å "
+                     f"across.",
+                foreground=BAD_RED)
+
+    def _scaled_estimate(self) -> str:
+        """The atom count for the current controls, as a phrase."""
+        try:
+            return f"{estimate_atoms(self.current_job())} atoms"
+        except (tk.TclError, ValueError, KeyError):
+            return "size unknown"
+
     def _on_mode_written(self) -> None:
         """React to `mode_kind` changing, whoever changed it.
 
@@ -1654,6 +1788,13 @@ class NanocarbonGUI:
     def _on_mode_change(self) -> None:
         """Show only the panels that apply to the selected structure type."""
         mode = self.var_mode_kind.get()
+        # Undo what the nanocoil branch hides, before any branch runs:
+        # leaving a row hidden after leaving that mode is the same fault
+        # as showing a dead one, in the other direction.
+        if mode != "nanocoil":
+            for widget in (*self._coil_taper, *self._cnt_length):
+                widget.grid()
+            self.frame_coil_hand.grid()
         for frame in (self.frame_tube, self.frame_open_tube,
                       self.frame_ribbon,
                       self.frame_centreline, self.frame_defects,
@@ -1760,7 +1901,33 @@ class NanocarbonGUI:
             # relaxed rather than meshed in.
             self.frame_open_tube.pack(fill="x")
             self.frame_defects.pack(fill="x", pady=(8, 0))
+            self._applying_values = True
+            self.var_cnt_shape.set("straight")
+            self._applying_values = False
+            self._cnt_length[0].grid()
+            self._cnt_length[1].grid()
+            self._cnt_length[2].grid()
             self._update_open_tube_hint()
+        elif mode == "nanocoil":
+            # The same (n, m) panel, because the tube is the same tube --
+            # but its length comes from the helix now, so the length
+            # control goes away rather than sitting there ignored.
+            self.frame_open_tube.pack(fill="x")
+            self.frame_coil.pack(fill="x", pady=(8, 0))
+            self.frame_defects.pack(fill="x", pady=(8, 0))
+            self._applying_values = True
+            self.var_cnt_shape.set("helix")
+            self._applying_values = False
+            for widget in self._cnt_length:
+                widget.grid_remove()
+            # Taper and handedness belong to the swept and meshed coils;
+            # this builder winds a right-handed cylindrical helix and has
+            # no argument for either.
+            for widget in self._coil_taper:
+                widget.grid_remove()
+            self.frame_coil_hand.grid_remove()
+            self.frame_coil_tube.grid_remove()
+            self._update_nanocoil_hint()
         elif mode == "nanoribbon":
             self.frame_ribbon.pack(fill="x")
             self.frame_defects.pack(fill="x", pady=(8, 0))
@@ -1807,6 +1974,45 @@ class NanocarbonGUI:
         self.lbl_radius.config(
             text=f"→ tube radius ≈ {radius:.2f} Å  (lattice-quantised)"
         )
+        # The bend's limit is r_tube * angle / length, so both ends of
+        # that ratio change here.
+        self._update_bend_hint()
+
+    def _update_bend_hint(self) -> None:
+        """How much wall this bend stretches, and where this tube's limit is.
+
+        The limit is not a property of the angle. The bend is imposed as
+        an arc whose length is the tube's own axial span, so the outer
+        wall stretches by ``r_tube * angle / span``: a 30-ring thin tube
+        takes 150° and stays intact, while the default 8-ring one tears
+        before 57°. Saying which is cheaper than finding out from a
+        refusal.
+        """
+        from ..builders.capped_cnt import RING_RISE
+        from ..builders.centerline import DEFAULT_MAX_STRAIN
+
+        degrees = float(self.var_bend.get())
+        radius = fm.radius_for_freq(int(self.var_freq.get()),
+                                    float(self.var_bond.get()))
+        span = RING_RISE * radius * int(self.var_rings.get())
+        limit = math.degrees(DEFAULT_MAX_STRAIN * span / radius)
+        if degrees <= 0.0:
+            self.lbl_bend.config(
+                text=f"straight. This tube bends to about {limit:.0f}° before "
+                     f"its wall stretches past {DEFAULT_MAX_STRAIN:.0%}; more "
+                     "body rings or a lower frequency raises that.",
+                foreground=MUTED)
+            return
+        strain = radius * math.radians(degrees) / span
+        colour = (OK_GREEN if strain <= DEFAULT_MAX_STRAIN
+                  else WARN_AMBER if strain <= 0.09 else BAD_RED)
+        tail = ("" if strain <= DEFAULT_MAX_STRAIN else
+                f" Clean to about {limit:.0f}° on this tube — lengthen it "
+                "(more rings) or thin it (lower frequency) to bend further.")
+        self.lbl_bend.config(
+            text=f"outer wall stretched {strain:.1%} over {span:.0f} Å of "
+                 f"tube.{tail}",
+            foreground=colour)
 
     def _update_strain_hint(self) -> None:
         value = float(self.var_max_strain.get())
@@ -2342,6 +2548,12 @@ class NanocarbonGUI:
         self.lbl_surface.config(text=f"{topo}; {geom}.", foreground=colour)
 
     def _update_coil_hint(self) -> None:
+        # The wound (n, m) tube shares the radius/pitch/turns controls but
+        # not the reasoning behind them: its limit is its own lattice, not
+        # a meshed surface, so it writes its own hint.
+        if self.var_mode_kind.get() == "nanocoil":
+            self._update_nanocoil_hint()
+            return
         from ..builders import centerline as cl
 
         radius = float(self.var_coil_radius.get())
@@ -2637,6 +2849,18 @@ class NanocarbonGUI:
                 roughness=float(self.var_roughness.get()),
                 defects=self._current_defects(),
             )
+        elif mode == "nanocoil":
+            # No length: the helix's arc length sets it, so asking for one
+            # as well would be two answers to the same question.
+            params = dict(
+                n=int(self.var_cnt_n.get()),
+                m=int(self.var_cnt_m.get()),
+                coil_radius=float(self.var_coil_radius.get()),
+                pitch=float(self.var_coil_pitch.get()),
+                n_turns=float(self.var_coil_turns.get()),
+                bond=float(self.var_bond.get()),
+                vacuum=float(self.var_cnt_vacuum.get()),
+            )
         elif mode == "nanoribbon":
             params = dict(
                 width=int(self.var_rib_width.get()),
@@ -2663,7 +2887,7 @@ class NanocarbonGUI:
                 n_body_rings=int(self.var_rings.get()),
                 freq=int(self.var_freq.get()),
                 bond=float(self.var_bond.get()),
-                bend_angle=float(self.var_bend.get()),
+                bend_angle=math.radians(float(self.var_bend.get())),
                 shape=shape,
                 helix_radius=(float(self.var_coil_radius.get())
                               if shape == "helix" else None),

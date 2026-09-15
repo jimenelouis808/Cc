@@ -54,9 +54,11 @@ from . import fullerene_mesh as fm
 
 DefectKind = Literal["stone_wales", "divacancy"]
 
-# Beyond this the uniform elastic bend model stops being physical: a real
-# nanotube buckles into a localised kink rather than straining smoothly.
-MAX_PHYSICAL_BEND = 1.0
+# A bend past a full turn closes the arc on itself, which is a different
+# object than a bent tube and not what anyone means by the parameter.
+# This is a sanity bound, not the physical limit -- that one is the wall
+# strain, and it depends on the tube, not on the angle alone.
+MAX_BEND_ANGLE = 2.0 * np.pi
 
 # Axial length contributed by one body ring, as a multiple of the tube
 # radius. Measured across freq 2-4 and 10-20 rings, where the ratio is
@@ -355,11 +357,14 @@ def build_capped_cnt(
             "sweep the tube's axis no longer follows z, so applying both "
             "flattens the structure. Use shape='arc' for a simple bend."
         )
-    if not 0.0 <= bend_angle <= MAX_PHYSICAL_BEND:
+    if not 0.0 <= bend_angle <= MAX_BEND_ANGLE:
         raise ValueError(
-            f"bend_angle must be in [0, {MAX_PHYSICAL_BEND}] rad; got {bend_angle}. "
-            "Beyond that a real nanotube buckles into a kink rather than "
-            "bending smoothly, which this model does not represent."
+            f"bend_angle must be in [0, {MAX_BEND_ANGLE:.2f}] rad "
+            f"(a full turn); got {bend_angle}. Past a full turn the arc "
+            "closes on itself. How far this particular tube can bend "
+            "before its wall tears is a smaller number and depends on the "
+            "tube: the strain is r_tube * angle / length, so a long thin "
+            "tube bends further than a short fat one."
         )
 
     # A helix given real dimensions sizes the *tube* rather than the other
@@ -468,10 +473,28 @@ def build_capped_cnt(
             max_iterations=relax_iterations,
         )
 
+    bend_strain = 0.0
     if bend_angle > 0:
         axial = positions[:, 2]
         lo, hi = axial.min(), axial.max()
         span = hi - lo
+        # The arc's length is the tube's own axial span, so the outer wall
+        # stretches by r_tube / arc_radius = r_tube * angle / span. That
+        # is the real limit, and it is why the flat 1.0 rad cap this used
+        # to carry was wrong twice over: on the default 8-ring tube 1 rad
+        # is already 12% strain and tears, while a 30-ring freq-2 tube
+        # takes 150 deg (8.3%) and stays intact. Measured across both.
+        bend_strain = tube_radius * bend_angle / span if span > 0 else 0.0
+        if bend_strain > cl.DEFAULT_MAX_STRAIN:
+            warnings.warn(
+                f"Bending {np.degrees(bend_angle):.0f}° over {span:.0f} Å "
+                f"strains a {tube_radius:.1f} Å wall by {bend_strain:.0%}, "
+                f"past the {cl.DEFAULT_MAX_STRAIN:.0%} that relaxes cleanly. "
+                f"About {np.degrees(cl.DEFAULT_MAX_STRAIN * span / tube_radius):.0f}° "
+                "is this tube's clean limit; a longer or thinner one bends "
+                "further.",
+                UserWarning, stacklevel=2,
+            )
         # Restrain the outer 12% at each end so the imposed bend survives
         # relaxation instead of springing straight again.
         anchors = np.where(
@@ -524,6 +547,7 @@ def build_capped_cnt(
             "freq": freq,
             "bond": bond,
             "bend_angle": bend_angle,
+            "bend_strain": bend_strain,
             "shape": shape,
             "waviness": waviness,
             "path_strain": swept_strain,

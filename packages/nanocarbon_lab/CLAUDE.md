@@ -303,6 +303,55 @@ Two properties of that route must not be re-broken:
    that the surface merges adjacent turns into one solid and the result
    is not a tube at all.
 
+## Nanocoils: two ways to break, with opposite cures
+
+`builders/nanocoil.py` winds a finished `(n, m)` lattice along a helix,
+so every ring stays a hexagon and the wall stays graphitic. That is the
+reason to prefer it over `swept.py`'s meshed coil, which relieves
+curvature with 5-7 pairs and comes back with ~90 non-hexagonal rings
+where Euler needs 12 -- sound geometry, disordered wall. It is also two
+orders of magnitude faster: a 4602-atom rolled coil takes 1.4 s against
+167 s for a 2386-atom meshed one, because nothing is meshed or relaxed.
+
+Bending a finished lattice can only **stretch** it, so two separate
+things ruin the result and they must be reported separately:
+
+* **Wall strain**, `r_tube * kappa`. Cured by widening the coil.
+  `_clean_coil_radius` inverts the relation: a (5,5) tube at a 12 Å pitch
+  needs about 42 Å before it fits the 8% budget. Small graphitic coils
+  are not a tuning problem -- they do not exist, which is why real carbon
+  nanocoils are tens to hundreds of Å across.
+* **Turns colliding**, and this one **does not depend on the coil radius
+  at all**. A (10,10) tube is 13.6 Å across, so at a 13 Å pitch it passes
+  through its own next turn at every radius: measured at R = 120 Å, where
+  the strain is a comfortable 5.6%, 5211 overlapping pairs and 0.69 Å
+  bonds. Only raising the pitch above `2*r_tube + 3.4` helps. Widening
+  the coil makes more of the collision, not less.
+
+Both guards were absent until the builder was exposed in the GUI, and its
+tests did not catch it: they asserted `1.2 < nearest_neighbour < 1.8`, a
+window that accepts two carbons on top of each other. **All six** cases
+that file built were torn. Judge with `sp2_quality` like everything else;
+do not widen a tolerance to make a case pass.
+
+Single-turn coils are a special case worth knowing about: with one turn
+there is no next turn, only the two free ends, and whether those overlap
+depends on the radius (R = 80 Å builds, 50 and 120 do not). Tests about
+turn collision ask for two turns.
+
+## The bend angle's limit is the tube's, not a constant
+
+`build_capped_cnt(bend_angle=...)` used to reject anything past a flat
+`MAX_PHYSICAL_BEND = 1.0` rad. The bend is imposed as an arc whose length
+is the tube's own axial span, so the outer wall stretches by
+`r_tube * angle / span` -- a number that depends on the tube as much as
+on the angle, and a fixed cap is therefore wrong in both directions.
+Measured: the default 8-ring freq-3 tube is already at 12% strain at 1
+rad and tears, while a 30-ring freq-2 tube takes **150 deg** (8.3%) and
+stays intact. The builder now warns past `DEFAULT_MAX_STRAIN` and lets
+the existing quality gate refuse what actually tears; the GUI shows the
+angle in degrees, because 1.0 rad reads as a mysteriously small number.
+
 ## Fullerene cages: the seed decides the cage
 
 `builders/fullerene.py` is the `half_length = 0` limit of the capped tube

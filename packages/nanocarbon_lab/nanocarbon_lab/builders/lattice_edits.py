@@ -128,7 +128,7 @@ def ring_census(
     positions: np.ndarray,
     bonds: list[tuple[int, int]],
     box: np.ndarray | None = None,
-    max_size: int = 12,
+    max_size: int = 9,
 ) -> dict[int, int]:
     """Ring-size histogram of an sp2 net, by tracing the faces of its graph.
 
@@ -154,7 +154,13 @@ def ring_census(
     box
         Cell edges, ``0`` on a free axis, as :func:`periodic_box` returns.
     max_size
-        Rings longer than this are boundary walks, not rings.
+        Rings longer than this are boundary walks, not rings. Nine, not
+        twelve: nothing in this framework builds a genuine ring past nine
+        atoms, while the rim of an open tube end is easily that long --
+        a finite (3,3) coil's two ends trace as twelve-membered cycles
+        and were being reported as rings the structure does not have.
+        Counting coordination instead does not separate them, because
+        that rim alternates two- and three-coordinated atoms.
     """
     n_atoms = int(max((max(pair) for pair in bonds), default=-1)) + 1
     table = _neighbours(bonds, n_atoms)

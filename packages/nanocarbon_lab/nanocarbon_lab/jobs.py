@@ -45,6 +45,11 @@ CARBON_MODES = (
     # graphene, and the builder has been here all along without the
     # window ever offering it.
     "nanoribbon",
+    # A real (n, m) lattice wound on a helix, as opposed to the two coil
+    # modes above, which mesh a surface. Its wall is graphitic and its
+    # rings are hexagons; the price is that it has to be wide, because
+    # bending a finished lattice can only stretch it.
+    "nanocoil",
     "haeckelite",
     "coil (relaxed)",
     "fullerene",
@@ -246,6 +251,7 @@ def builder_for(mode: str):
         build_junction,
         build_multiwall_cnt,
         build_nano_onion,
+        build_nanocoil,
         build_nanoribbon,
         build_nanotube_network,
         build_periodic_coil,
@@ -276,6 +282,7 @@ def builder_for(mode: str):
         "capped tube": build_capped_cnt,
         "coil (periodic, DFT)": build_periodic_coil,
         "nanoribbon": build_nanoribbon,
+        "nanocoil": build_nanocoil,
         "coil (relaxed)": build_coil,
         "fullerene": build_fullerene,
         "haeckelite": build_haeckelite,
@@ -492,6 +499,20 @@ def estimate_atoms(job: Job) -> int:
         period = 3.0 * bond * math.sqrt(q) / divisor
         cells = max(1, math.ceil(float(p.get("length", 10.0)) / max(period, 1e-9)))
         return int(per_cell * cells) - _divacancy_atoms(p)
+
+    if mode == "nanocoil":
+        # The tube's own closed form, run over the helix's arc length:
+        # a cell of 4q/d atoms every 3*a_CC*sqrt(q)/d Å, and the helix is
+        # turns * sqrt((2*pi*R)^2 + P^2) long.
+        n, m = int(p.get("n", 6)), int(p.get("m", 6))
+        bond = float(p.get("bond", 1.42))
+        q = n * n + n * m + m * m
+        divisor = math.gcd(2 * m + n, 2 * n + m)
+        arc = float(p.get("n_turns", 1.0)) * math.hypot(
+            2.0 * math.pi * float(p.get("coil_radius", 25.0)),
+            float(p.get("pitch", 12.0)))
+        period = 3.0 * bond * math.sqrt(q) / divisor
+        return int(4 * q // divisor * math.ceil(arc / period))
 
     if mode == "capped tube":
         # Seed capsule has 10*n_rings faces; subdivision multiplies by f^2.
@@ -789,6 +810,11 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "width": "--width", "length": "--length", "edge": "--edge",
         "bond": "--bond", "vacuum": "--vacuum", "passivate": "--passivate",
         "defects": "--defect", "roughness": "--roughness",
+    }),
+    "nanocoil": ("nanocoil", {
+        "n": "--n", "m": "--m", "coil_radius": "--coil-radius",
+        "pitch": "--pitch", "n_turns": "--turns", "bond": "--bond",
+        "vacuum": "--vacuum",
     }),
     "nanotube (open)": ("cnt", {
         "n": "--n", "m": "--m", "length": "--length", "bond": "--bond",

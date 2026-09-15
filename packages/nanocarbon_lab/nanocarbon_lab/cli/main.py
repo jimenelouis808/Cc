@@ -1364,7 +1364,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "quantises the radius, so the value obtained may differ by ~1 Å.")
     cc.add_argument("--bond", type=float, default=1.42, help="C-C bond length (Å).")
     cc.add_argument("--bend-angle", type=float, default=0.0,
-                    help="Total elastic bend of the body, in radians (0 = straight, max 1.0).")
+                    help="Total elastic bend of the body, in radians (0 = "
+                         "straight). How far this tube can bend is set by its "
+                         "wall strain, r_tube * angle / length, not by a fixed "
+                         "cap: a long thin tube takes 150 deg, a short fat one "
+                         "tears before 57.")
     cc.add_argument("--shape", default="straight",
                     choices=["straight", "arc", "s_curve", "helix", "random"],
                     help="Centreline the tube is swept along (default straight).")

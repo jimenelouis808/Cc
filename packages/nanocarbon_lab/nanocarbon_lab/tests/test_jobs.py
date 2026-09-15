@@ -40,6 +40,15 @@ SAMPLES: dict[str, Job] = {
         mode="nanoribbon",
         params={"width": 5, "length": 6, "edge": "zigzag"},
     ),
+    # A (4,4) tube on a 36 Å coil: 7.5% wall strain, which is inside the
+    # budget, and a 10 Å pitch against the 8.8 Å its own width needs.
+    # Both numbers matter -- a coil that clears one and not the other is
+    # refused, and the two have opposite cures.
+    "nanocoil": Job(
+        mode="nanocoil",
+        params={"n": 4, "m": 4, "coil_radius": 36.0, "pitch": 10.0,
+                "n_turns": 1.0},
+    ),
     "capped tube": Job("capped tube", {"n_body_rings": 8, "freq": 3}),
     "fullerene": Job("fullerene", {"freq": 1, "family": "C60"}),
     "nano-onion": Job("nano-onion",
