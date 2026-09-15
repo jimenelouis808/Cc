@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 from .base import SectionApp, placeholder
 from .theme import PAD
-from .widgets import card, fill_table, hint, scrolled_text, set_text, table
+from .widgets import card, fill_table, hint, scrolled_text, set_text, table, scrollable_column
 
 
 class TMDApp(SectionApp):
@@ -41,9 +41,10 @@ class TMDApp(SectionApp):
         body = ttk.Frame(self.container, padding=(PAD["md"], PAD["sm"]))
         body.pack(fill="both", expand=True)
 
-        sidebar = ttk.Frame(body, width=280)
-        sidebar.pack(side="left", fill="y", padx=(0, PAD["md"]))
-        sidebar.pack_propagate(False)
+        # Scrollable: this column's cards add up to more than any
+        # window is tall, and a fixed frame simply clips them.
+        sidebar_column, sidebar = scrollable_column(body, width=280)
+        sidebar_column.pack(side="left", fill="y", padx=(0, PAD["md"]))
         self._build_sidebar(sidebar)
 
         right = ttk.Frame(body)

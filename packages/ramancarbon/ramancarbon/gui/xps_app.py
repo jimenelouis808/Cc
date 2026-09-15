@@ -28,7 +28,7 @@ from typing import Optional
 
 from .base import SectionApp, placeholder
 from .theme import PAD
-from .widgets import card, fill_table, hint, labelled, scrolled_text, set_text, table
+from .widgets import card, fill_table, hint, labelled, scrolled_text, set_text, table, scrollable_column
 from .xps_state import BACKGROUNDS, REFERENCES, XPSSession
 
 FILE_TYPES = (
@@ -69,9 +69,10 @@ class XPSApp(SectionApp):
         body = ttk.Frame(self.container, padding=(PAD["md"], PAD["sm"]))
         body.pack(fill="both", expand=True)
 
-        sidebar = ttk.Frame(body, width=320)
-        sidebar.pack(side="left", fill="y", padx=(0, PAD["md"]))
-        sidebar.pack_propagate(False)
+        # Scrollable: this column's cards add up to more than any
+        # window is tall, and a fixed frame simply clips them.
+        sidebar_column, sidebar = scrollable_column(body, width=320)
+        sidebar_column.pack(side="left", fill="y", padx=(0, PAD["md"]))
         self._build_sidebar(sidebar)
 
         self.notebook = ttk.Notebook(body)

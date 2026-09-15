@@ -18,7 +18,7 @@ from typing import Optional
 
 from .base import SectionApp, placeholder
 from .theme import PAD
-from .widgets import card, fill_table, hint, labelled, scrolled_text, set_text, table
+from .widgets import card, fill_table, hint, labelled, scrolled_text, set_text, table, scrollable_column
 from .xrd_state import PARAMETER_GROUPS, XRDSession
 
 #: File types offered in the open dialog.
@@ -60,9 +60,10 @@ class XRDApp(SectionApp):
         body = ttk.Frame(self.container, padding=(PAD["md"], PAD["sm"]))
         body.pack(fill="both", expand=True)
 
-        sidebar = ttk.Frame(body, width=290)
-        sidebar.pack(side="left", fill="y", padx=(0, PAD["md"]))
-        sidebar.pack_propagate(False)
+        # Scrollable: this column's cards add up to more than any
+        # window is tall, and a fixed frame simply clips them.
+        sidebar_column, sidebar = scrollable_column(body, width=290)
+        sidebar_column.pack(side="left", fill="y", padx=(0, PAD["md"]))
         self._build_sidebar(sidebar)
 
         self.notebook = ttk.Notebook(body)
@@ -152,12 +153,20 @@ class XRDApp(SectionApp):
         ttk = self.ttk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Difractograma  ")
-        outer, body = card(tab, None)
-        outer.pack(fill="both", expand=True)
+        # A draggable split, not two packed cards. Packed, the plot and the
+        # peak table each claimed half and the table was given 155 px for
+        # the 329 it needs -- three rows of eight, with the note above them
+        # cut off. Which of the two you want bigger depends on what you are
+        # doing, and only you know that.
+        panes = ttk.Panedwindow(tab, orient="vertical")
+        panes.pack(fill="both", expand=True)
+
+        outer, body = card(panes, None)
+        panes.add(outer, weight=3)
         self.make_canvas(body, "pattern", lambda f: f.add_subplot(111))
 
-        info, infobody = card(tab, "Picos detectados")
-        info.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        info, infobody = card(panes, "Picos detectados")
+        panes.add(info, weight=2)
         hint(infobody,
              "Los picos SIN EXPLICAR no son un resto: son la fase que no "
              "esperabas. Si hay alguno intenso, descarga su CIF de la "
@@ -172,12 +181,15 @@ class XRDApp(SectionApp):
         ttk = self.ttk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Fases  ")
-        outer, body = card(tab, None)
-        outer.pack(fill="both", expand=True)
+        panes = ttk.Panedwindow(tab, orient="vertical")
+        panes.pack(fill="both", expand=True)
+
+        outer, body = card(panes, None)
+        panes.add(outer, weight=3)
         self.make_canvas(body, "sticks", lambda f: f.add_subplot(111))
 
-        results, resultsbody = card(tab, "Fases identificadas")
-        results.pack(fill="x", pady=(PAD["sm"], 0))
+        results, resultsbody = card(panes, "Fases identificadas")
+        panes.add(results, weight=2)
         self.phase_table = table(
             resultsbody,
             ["fase", "fórmula", "veredicto", "FOM", "% peso", "D (nm)"],

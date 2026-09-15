@@ -169,9 +169,12 @@ class RamanCarbonApp:
         body = ttk.Frame(self.host, padding=(PAD["lg"], 0, PAD["lg"], PAD["sm"]))
         body.pack(fill="both", expand=True)
 
-        sidebar = ttk.Frame(body, width=270)
-        sidebar.pack(side="left", fill="y", padx=(0, PAD["md"]))
-        sidebar.pack_propagate(False)
+        from .widgets import scrollable_column
+
+        # Scrollable: this column's cards add up to more than any
+        # window is tall, and a fixed frame simply clips them.
+        sidebar_column, sidebar = scrollable_column(body, width=270)
+        sidebar_column.pack(side="left", fill="y", padx=(0, PAD["md"]))
         self._build_sidebar(sidebar)
 
         self.notebook = ttk.Notebook(body)
@@ -303,9 +306,12 @@ class RamanCarbonApp:
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Espectro  ")
 
-        controls = ttk.Frame(tab, width=330)
-        controls.pack(side="left", fill="y", padx=(0, PAD["md"]))
-        controls.pack_propagate(False)
+        from .widgets import scrollable_column
+
+        # Scrollable: this column's cards add up to more than any
+        # window is tall, and a fixed frame simply clips them.
+        controls_column, controls = scrollable_column(tab, width=330)
+        controls_column.pack(side="left", fill="y", padx=(0, PAD["md"]))
 
         outer, body = card(controls, "Preprocesado",
                            "El orden importa: primero se quitan los rayos "
@@ -380,9 +386,12 @@ class RamanCarbonApp:
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Deconvolución  ")
 
-        controls = ttk.Frame(tab, width=360)
-        controls.pack(side="left", fill="y", padx=(0, PAD["md"]))
-        controls.pack_propagate(False)
+        from .widgets import scrollable_column
+
+        # Scrollable: this column's cards add up to more than any
+        # window is tall, and a fixed frame simply clips them.
+        controls_column, controls = scrollable_column(tab, width=360)
+        controls_column.pack(side="left", fill="y", padx=(0, PAD["md"]))
 
         outer, body = card(controls, "Modelo",
                            "Añadir componentes siempre mejora el R². Usa el "

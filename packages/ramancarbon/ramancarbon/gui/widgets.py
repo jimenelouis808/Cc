@@ -38,6 +38,76 @@ def card(parent, title: Optional[str] = None, subtitle: Optional[str] = None):
     return outer, body
 
 
+def scrollable_column(parent, width: int = 280):
+    """A fixed-width column that scrolls when its contents outgrow it.
+
+    Every sidebar in this package was a plain frame with
+    ``pack_propagate(False)``, which fixes the width and lets the height
+    overflow with nothing to reach it. Measured in a 1480x940 window: the
+    electrochemistry section's column asked for 1344 px and was given 835,
+    so ``Cargar GCD…``, ``Cargar EIS…``, ``Cargar polarización…``,
+    ``Analizar`` and ``Guardar informe…`` were below the fold and simply
+    not drawn -- which is why the section looked like it had one import
+    button. The XPS column had cards rendered at **one pixel**.
+
+    Returns the frame to put content in, not the outer container: callers
+    pack their cards into it exactly as before.
+
+    The wheel is bound on enter and unbound on leave rather than through
+    ``bind_all`` permanently, so scrolling over a plot or a table still
+    reaches that widget instead of this column.
+    """
+    import tkinter as tk
+    from tkinter import ttk
+
+    outer = ttk.Frame(parent)
+    canvas = tk.Canvas(outer, width=width, highlightthickness=0, bd=0)
+    scroll = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+    inner = ttk.Frame(canvas)
+
+    window = canvas.create_window((0, 0), window=inner, anchor="nw")
+    canvas.configure(yscrollcommand=scroll.set)
+    canvas.pack(side="left", fill="both", expand=True)
+    scroll.pack(side="right", fill="y")
+
+    def _resize_region(_event=None) -> None:
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        # Hide the scrollbar when everything fits: a bar that never moves
+        # reads as a broken one.
+        needed = inner.winfo_reqheight() > canvas.winfo_height()
+        if needed and not scroll.winfo_ismapped():
+            scroll.pack(side="right", fill="y")
+        elif not needed and scroll.winfo_ismapped():
+            scroll.pack_forget()
+
+    def _resize_inner(event) -> None:
+        canvas.itemconfigure(window, width=event.width)
+        _resize_region()
+
+    inner.bind("<Configure>", _resize_region)
+    canvas.bind("<Configure>", _resize_inner)
+
+    def _wheel(event) -> None:
+        if inner.winfo_reqheight() <= canvas.winfo_height():
+            return
+        step = -1 if getattr(event, "delta", 0) > 0 or event.num == 4 else 1
+        canvas.yview_scroll(step, "units")
+
+    def _bind(_event=None) -> None:
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            canvas.bind_all(sequence, _wheel)
+
+    def _unbind(_event=None) -> None:
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            canvas.unbind_all(sequence)
+
+    outer.bind("<Enter>", _bind)
+    outer.bind("<Leave>", _unbind)
+
+    inner._scroll_container = outer  # type: ignore[attr-defined]
+    return outer, inner
+
+
 def scrolled_text(parent, palette: Palette, font, height: int = 20, width: int = 80):
     """A read-only text area with a scrollbar and the app's monospace font.
 
@@ -186,6 +256,7 @@ def hint(parent, text: str, wrap: int = 380) -> None:
 
 
 __all__ = [
+    "scrollable_column",
     "card",
     "fill_table",
     "hint",
