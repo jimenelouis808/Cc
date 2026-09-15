@@ -377,7 +377,9 @@ def _export(atoms, outdir: Path, fmt: str, calculation: str, force: bool):
 
 def _cmd_cnt(args):
     atoms = build_cnt(n=args.n, m=args.m, length=args.length,
-                      bond=args.bond, vacuum=args.vacuum)
+                      bond=args.bond, vacuum=args.vacuum,
+                      defects=_parse_defect_specs(args.defect),
+                      roughness=args.roughness, seed=args.seed)
     atoms = _apply_post(atoms, args)
     _export(atoms, Path(args.out), args.format, args.calculation, args.force)
     return 0
@@ -394,7 +396,9 @@ def _cmd_graphene(args):
 def _cmd_ribbon(args):
     atoms = build_nanoribbon(width=args.width, length=args.length,
                              edge=args.edge, bond=args.bond,
-                             vacuum=args.vacuum, passivate=args.passivate)
+                             vacuum=args.vacuum, passivate=args.passivate,
+                             defects=_parse_defect_specs(args.defect),
+                             roughness=args.roughness, seed=args.seed)
     atoms = _apply_post(atoms, args)
     _export(atoms, Path(args.out), args.format, args.calculation, args.force)
     return 0
@@ -1261,6 +1265,23 @@ def _cmd_dopants(args):
     return 0
 
 
+def _add_lattice_edit_arguments(p):
+    """The defect and corrugation flags the two lattice builders share.
+
+    Same spelling as ``cnt-cap``'s, because they mean the same thing: the
+    only difference is that a meshed builder edits its mesh and these edit
+    the finished lattice.
+    """
+    p.add_argument(
+        "--defect", action="append", default=[],
+        help="Repeatable. 'stone_wales[:N]' (5-7-7-5 pairs) or "
+             "'divacancy[:N]' (5-8-5 octagon), e.g. --defect stone_wales:2.",
+    )
+    p.add_argument("--roughness", type=float, default=0.0,
+                   help="RMS out-of-plane corrugation (Å) for a CVD-grown "
+                        "rather than ideal wall; 0.1-0.3 is realistic.")
+
+
 def _add_common(p):
     p.add_argument("--out", required=True, help="Output directory.")
     p.add_argument("--format", choices=["qe", "lammps", "both"], default="qe")
@@ -1284,6 +1305,7 @@ def build_parser() -> argparse.ArgumentParser:
     cnt.add_argument("--n", type=int, required=True)
     cnt.add_argument("--m", type=int, required=True)
     cnt.add_argument("--length", type=float, default=10.0, help="Target length (Å).")
+    _add_lattice_edit_arguments(cnt)
     _add_common(cnt)
     cnt.set_defaults(func=_cmd_cnt)
 
@@ -1298,6 +1320,7 @@ def build_parser() -> argparse.ArgumentParser:
     rb.add_argument("--length", type=int, required=True)
     rb.add_argument("--edge", choices=["armchair", "zigzag"], default="zigzag")
     rb.add_argument("--passivate", action="store_true")
+    _add_lattice_edit_arguments(rb)
     _add_common(rb)
     rb.set_defaults(func=_cmd_ribbon)
 

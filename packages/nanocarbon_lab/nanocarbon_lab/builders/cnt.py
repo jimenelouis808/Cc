@@ -12,7 +12,7 @@ periodic tubes for any (n, m). On top of that we:
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 from ase import Atoms
@@ -20,6 +20,7 @@ from ase.build import nanotube
 
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D
 from ..utils.geometry import center_in_cell, guess_bonds
+from .lattice_edits import apply_lattice_edits
 
 Chirality = Literal["armchair", "zigzag", "chiral"]
 
@@ -40,6 +41,9 @@ def build_cnt(
     bond: float = CC_BOND,
     vacuum: float = DEFAULT_VACUUM_1D,
     axis: int = 2,
+    defects: list[dict[str, Any]] | None = None,
+    roughness: float = 0.0,
+    seed: int | None = None,
 ) -> Atoms:
     """Build a single-wall carbon nanotube ``(n, m)``.
 
@@ -61,6 +65,20 @@ def build_cnt(
     axis
         Cartesian axis along which the tube is periodic (0, 1 or 2). The
         two remaining axes receive the vacuum padding.
+    defects
+        Stone-Wales rotations and reconstructed divacancies to place on the
+        finished wall, as ``[{"type": "stone_wales", "count": 2}]``. See
+        :func:`~nanocarbon_lab.builders.lattice_edits.apply_lattice_edits`:
+        the wall is relaxed around them, so the tube comes back with real
+        5-7-7-5 and 5-8-5 rings rather than rotated atoms in a hexagonal
+        lattice.
+    roughness
+        RMS out-of-plane corrugation in Å, 0 for the ideal lattice. Around
+        0.1-0.3 Å reads as a CVD-grown wall.
+    seed
+        Chooses the defect sites and the corrugation. Irrelevant, and so
+        ignorable, for a pristine tube -- which is why this builder went
+        so long without one.
 
     Returns
     -------
@@ -133,7 +151,16 @@ def build_cnt(
             # F = E - V = 3N/2 - N = N/2 of them. The bonds are needed
             # because a viewer that cannot find them draws a point cloud.
             "ring_counts": {6: len(atoms) // 2},
+            # Closed on itself along the periodic axis, so the surface is
+            # a torus and its angular deficit is 0, not the 12 a closed
+            # cage owes. Without saying so, a perfect tube reads as a
+            # structure that has lost twelve pentagons.
+            "euler_expected": 0,
             "bonds": [[int(i), int(j)] for i, j, _ in guess_bonds(atoms)],
         }
     )
-    return atoms
+    # Pristine unless asked otherwise, and then the edits refresh the ring
+    # census, the bond list and the geometry report to describe what is
+    # really there rather than what was placed.
+    return apply_lattice_edits(atoms, defects=defects, roughness=roughness,
+                               bond=bond, seed=seed)

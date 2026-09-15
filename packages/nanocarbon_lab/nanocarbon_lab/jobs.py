@@ -23,6 +23,7 @@ should pay for numpy and the builders, not for a windowing toolkit.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -40,6 +41,10 @@ CARBON_MODES = (
     # One turn of a helix, closed on the z-torus: a real cell for a
     # plane-wave code rather than a fragment with two dangling ends.
     "coil (periodic, DFT)",
+    # Periodic along its length, finite across it: the 1D counterpart of
+    # graphene, and the builder has been here all along without the
+    # window ever offering it.
+    "nanoribbon",
     "haeckelite",
     "coil (relaxed)",
     "fullerene",
@@ -81,10 +86,6 @@ FAMILIES = {
     "dichalcogenide": TMD_MODES,
     "heterostructure": HETERO_MODES,
 }
-
-#: Carbon modes whose builder places atoms on an exact lattice and so
-#: takes no seed. The rest mesh, relax or scatter defects and do.
-SEEDLESS_CARBON_MODES = ("nanotube (open)",)
 
 MODES = CARBON_MODES + TMD_MODES + HETERO_MODES
 
@@ -245,6 +246,7 @@ def builder_for(mode: str):
         build_junction,
         build_multiwall_cnt,
         build_nano_onion,
+        build_nanoribbon,
         build_nanotube_network,
         build_periodic_coil,
         build_schwarzite,
@@ -273,6 +275,7 @@ def builder_for(mode: str):
         "nanotube (open)": build_cnt,
         "capped tube": build_capped_cnt,
         "coil (periodic, DFT)": build_periodic_coil,
+        "nanoribbon": build_nanoribbon,
         "coil (relaxed)": build_coil,
         "fullerene": build_fullerene,
         "haeckelite": build_haeckelite,
@@ -325,13 +328,7 @@ def build(job: Job):
         if job.tmd_edit:
             atoms = apply_tmd_chemistry(atoms, job)
     else:
-        if job.mode in SEEDLESS_CARBON_MODES:
-            # A plain tube is exact crystallography like the TMD sheets:
-            # nothing about it is random, so its builder has no seed to
-            # take. The doping below still uses one.
-            atoms = builder(**job.params)
-        else:
-            atoms = builder(**job.params, seed=job.seed)
+        atoms = builder(**job.params, seed=job.seed)
         if job.codope:
             atoms = apply_codoping(atoms, job)
         elif job.dopant and job.dopant_conc > 0:
@@ -431,6 +428,19 @@ def apply_tmd_chemistry(atoms, job: Job):
     return antisites(atoms, n_defects=int(job.tmd_edit_amount), seed=job.seed)
 
 
+def _divacancy_atoms(params: Mapping[str, object]) -> int:
+    """Atoms a job's divacancies remove -- two each, by definition.
+
+    Stone-Wales rotations move atoms without removing any, so only this
+    one edit changes the count.
+    """
+    return 2 * sum(
+        int(spec.get("count", 0))
+        for spec in (params.get("defects") or [])
+        if spec.get("type") == "divacancy"
+    )
+
+
 def estimate_atoms(job: Job) -> int:
     """Predict the atom count without building anything.
 
@@ -455,6 +465,19 @@ def estimate_atoms(job: Job) -> int:
         arc = math.hypot(2.0 * math.pi * coil_radius, pitch)
         return int(2.4 * tube_radius * arc)
 
+    if mode == "nanoribbon":
+        # ASE's two edge conventions differ by a factor of two in the
+        # repeat unit: a zigzag row is two atoms wide, an armchair row
+        # four. Passivation adds one hydrogen per edge site, which is one
+        # row's worth per unit of length.
+        width = int(p.get("width", 4))
+        length = int(p.get("length", 6))
+        per_row = 2 if str(p.get("edge", "zigzag")) == "zigzag" else 4
+        atoms = per_row * width * length
+        if p.get("passivate"):
+            atoms += per_row * length
+        return atoms - _divacancy_atoms(p)
+
     if mode == "nanotube (open)":
         # Exact, not an approximation: a tube is an integer number of
         # translational periods, and both the period and the atoms per
@@ -468,7 +491,7 @@ def estimate_atoms(job: Job) -> int:
         per_cell = 4 * q // divisor
         period = 3.0 * bond * math.sqrt(q) / divisor
         cells = max(1, math.ceil(float(p.get("length", 10.0)) / max(period, 1e-9)))
-        return int(per_cell * cells)
+        return int(per_cell * cells) - _divacancy_atoms(p)
 
     if mode == "capped tube":
         # Seed capsule has 10*n_rings faces; subdivision multiplies by f^2.
@@ -762,9 +785,15 @@ def estimate_cost(job: Job) -> tuple[str, str]:
 # Mode -> (sub-command, {builder argument: command-line flag}). Arguments
 # not listed have no flag and are dropped from the generated command.
 _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
+    "nanoribbon": ("ribbon", {
+        "width": "--width", "length": "--length", "edge": "--edge",
+        "bond": "--bond", "vacuum": "--vacuum", "passivate": "--passivate",
+        "defects": "--defect", "roughness": "--roughness",
+    }),
     "nanotube (open)": ("cnt", {
         "n": "--n", "m": "--m", "length": "--length", "bond": "--bond",
-        "vacuum": "--vacuum",
+        "vacuum": "--vacuum", "defects": "--defect",
+        "roughness": "--roughness",
     }),
     "coil (periodic, DFT)": ("coil-periodic", {
         "coil_radius": "--coil-radius", "pitch": "--pitch",
@@ -780,6 +809,7 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "shape_points": "--shape-points", "helix_turns": "--helix-turns",
         "helix_radius": "--helix-radius", "helix_pitch": "--helix-pitch",
         "helix_taper": "--helix-taper", "roughness": "--roughness",
+        "defects": "--defect",
     }),
     "coil (relaxed)": ("coil", {
         "coil_radius": "--coil-radius", "pitch": "--pitch", "turns": "--turns",
@@ -1027,6 +1057,13 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
             continue
         flag = flags.get(name)
         if flag is None:
+            continue
+        if name == "defects":
+            # A repeatable flag, one per spec, rather than one flag with
+            # several values: that is how the parser declares it, and a
+            # copied command line that the CLI rejects is worse than none.
+            for spec in value:
+                parts += [flag, f"{spec['type']}:{int(spec.get('count', 1))}"]
             continue
         if isinstance(value, bool):
             if value:

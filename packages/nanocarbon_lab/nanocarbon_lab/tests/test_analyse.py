@@ -184,7 +184,10 @@ class TestShape:
         ("capped tube", lambda: build_capped_cnt(n_body_rings=6, freq=3),
          1, "tube"),
         ("sheet", lambda: build_graphene().repeat((4, 4, 1)), 2, "sheet"),
-        ("flake", lambda: build_nanoribbon(width=4, length=6), 2, "flake"),
+        # 1D, like the MX2 ribbon below it. This read as a 2D "flake"
+        # for as long as the builder marked the ribbon periodic along its
+        # vacuum axis instead of along its own repeat.
+        ("ribbon", lambda: build_nanoribbon(width=4, length=6), 1, "ribbon"),
         ("junction", lambda: build_junction(kind="Y", tube_radius=6.0,
                                             arm_length=20.0),
          0, "branched shell"),

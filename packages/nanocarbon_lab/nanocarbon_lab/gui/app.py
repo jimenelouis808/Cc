@@ -168,6 +168,13 @@ SHAPES = ["straight", "arc", "s_curve", "helix", "random"]
 #: structure is pure carbon unless the user says otherwise.
 DOPANTS = ["none", *DOPANT_ELEMENTS]
 JUNCTION_KINDS = ["L", "T", "Y", "X", "cross3d"]
+#: Zigzag first: it is the cheaper of the two at the same width and the
+#: one whose edge states people usually come to a ribbon for.
+RIBBON_EDGES = ["zigzag", "armchair"]
+#: Modes whose atoms go straight onto the graphene lattice rather than
+#: onto a meshed surface. They take defects and corrugation like the
+#: meshed ones, but there is no mesh for the annealing slider to act on.
+LATTICE_MODES = ("nanotube (open)", "nanoribbon")
 SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
 
 #: The haeckelite design patterns and catalogue, from the builder rather
@@ -697,6 +704,15 @@ class NanocarbonGUI:
         self.var_cnt_m = self._var("cnt_m", tk.IntVar(value=6))
         self.var_cnt_length = self._var("cnt_length", tk.DoubleVar(value=20.0))
         self.var_cnt_vacuum = self._var("cnt_vacuum", tk.DoubleVar(value=12.0))
+        # The ribbon is indexed the same way ASE indexes it: a width in
+        # rows and a length in repeat units, both counts rather than Å,
+        # because the lattice quantises them and a length in Å would be
+        # rounded to one of these anyway.
+        self.var_rib_width = self._var("rib_width", tk.IntVar(value=6))
+        self.var_rib_length = self._var("rib_length", tk.IntVar(value=8))
+        self.var_rib_edge = self._var("rib_edge", tk.StringVar(value="zigzag"))
+        self.var_rib_passivate = self._var("rib_passivate", tk.BooleanVar(value=False))
+        self.var_rib_vacuum = self._var("rib_vacuum", tk.DoubleVar(value=15.0))
         self.var_rings = self._var("rings", tk.IntVar(value=8))
         self.var_freq = self._var("freq", tk.IntVar(value=3))
         self.var_bond = self._var("bond", tk.DoubleVar(value=1.42))
@@ -862,6 +878,35 @@ class NanocarbonGUI:
         self.lbl_open_tube.grid(row=8, column=0, columnspan=3, sticky="w",
                                 pady=(6, 0))
         obox.pack_forget()
+
+        # --- nanoribbon. The builder has been in the package all along;
+        #     the window simply never offered it.
+        rbox = ttk.LabelFrame(parent, text="Ribbon", padding=8)
+        self.frame_ribbon = rbox
+        rbox.columnconfigure(0, weight=1)
+        ttk.Label(rbox, text="Edge").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(rbox, textvariable=self.var_rib_edge,
+                     values=RIBBON_EDGES, state="readonly", width=9).grid(
+            row=0, column=1, sticky="e", pady=(0, 6))
+        self.var_rib_edge.trace_add("write",
+                                    lambda *_: self._update_ribbon_hint())
+        self._param(rbox, "Width (rows)", self.var_rib_width, 2, 20, 1,
+                    integer=True, hard_hi=120,
+                    command=lambda *_: self._update_ribbon_hint())
+        self._param(rbox, "Length (units)", self.var_rib_length, 2, 30, 3,
+                    integer=True, hard_hi=200,
+                    command=lambda *_: self._update_ribbon_hint())
+        self._param(rbox, "Vacuum (Å)", self.var_rib_vacuum, 8.0, 30.0, 5)
+        ttk.Checkbutton(rbox, text="Passivate edges with H",
+                        variable=self.var_rib_passivate,
+                        command=self._update_ribbon_hint).grid(
+            row=7, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self.lbl_ribbon = ttk.Label(rbox, text="", foreground=MUTED,
+                                    wraplength=PARAM_COLUMN_WIDTH - 22,
+                                    justify="left")
+        self.lbl_ribbon.grid(row=8, column=0, columnspan=2, sticky="w",
+                             pady=(6, 0))
+        rbox.pack_forget()
 
         sbox = ttk.LabelFrame(parent, text="Centreline", padding=8)
         sbox.pack(fill="x", pady=(8, 0))
@@ -1536,6 +1581,49 @@ class NanocarbonGUI:
                  f"= {cells * period:.1f} Å, {cells * 4 * q // divisor} atoms.",
             foreground=MUTED)
 
+    def _update_ribbon_hint(self) -> None:
+        """Width in Å, the periodic axis, and what the edge decides.
+
+        The two edges are not two looks of the same thing: at the same
+        width in rows an armchair ribbon has twice the atoms of a zigzag
+        one and a gap that closes and reopens in a period-three pattern,
+        while every zigzag ribbon carries the flat edge band. Saying which
+        is which here is cheaper than finding out from a band structure.
+        """
+        edge = self.var_rib_edge.get()
+        width = int(self.var_rib_width.get())
+        length = int(self.var_rib_length.get())
+        bond = float(self.var_bond.get())
+        per_row = 2 if edge == "zigzag" else 4
+        atoms = per_row * width * length
+        if self.var_rib_passivate.get():
+            atoms += per_row * length
+        # Measured off real builds rather than guessed from the lattice:
+        # a row adds 3/2 bonds across a zigzag ribbon and sqrt(3) across an
+        # armchair one, but both series start half a row short of the
+        # obvious multiple, and the obvious multiple was over by that much
+        # at every width.
+        across = (bond * (1.5 * width - 1.0) if edge == "zigzag"
+                  else math.sqrt(3.0) * bond * (width - 0.5))
+        along = (math.sqrt(3.0) * bond if edge == "zigzag"
+                 else 3.0 * bond) * length
+        if edge == "zigzag":
+            physics = ("flat edge band at the Fermi level — the magnetism "
+                       "people build these for")
+        else:
+            # Delta(3p+1) > Delta(3p) > Delta(3p+2): the width counts dimer
+            # lines here, which is what ASE's own convention means by it
+            # (an armchair cell holds 4 atoms per line).
+            gaps = {1: "widest gap", 0: "middling gap", 2: "narrowest gap"}
+            physics = (f"{gaps[width % 3]} of the three armchair families "
+                       f"(Δ is largest at 3p+1, smallest at 3p+2; this is "
+                       f"{width})")
+        self.lbl_ribbon.config(
+            text=f"{across:.1f} Å across × {along:.1f} Å along, {atoms} atoms. "
+                 f"Periodic along z only, so it runs on for ever along its "
+                 f"length and ends in two edges across it. {physics}.",
+            foreground=MUTED)
+
     def _on_mode_written(self) -> None:
         """React to `mode_kind` changing, whoever changed it.
 
@@ -1567,6 +1655,7 @@ class NanocarbonGUI:
         """Show only the panels that apply to the selected structure type."""
         mode = self.var_mode_kind.get()
         for frame in (self.frame_tube, self.frame_open_tube,
+                      self.frame_ribbon,
                       self.frame_centreline, self.frame_defects,
                       self.frame_coil, self.frame_junction, self.frame_schwarzite,
                       self.frame_haeckelite,
@@ -1666,8 +1755,16 @@ class NanocarbonGUI:
             # frequency, and no centreline, since a periodic tube is
             # straight by definition -- bending it would break the
             # periodicity that makes it usable in a plane-wave code.
+            # The defects panel does apply, though: the wall is an sp2
+            # sheet like any other, and the edits are made on it and
+            # relaxed rather than meshed in.
             self.frame_open_tube.pack(fill="x")
+            self.frame_defects.pack(fill="x", pady=(8, 0))
             self._update_open_tube_hint()
+        elif mode == "nanoribbon":
+            self.frame_ribbon.pack(fill="x")
+            self.frame_defects.pack(fill="x", pady=(8, 0))
+            self._update_ribbon_hint()
         elif mode == "multi-wall":
             self.frame_tube.pack(fill="x")
             self.frame_mw.pack(fill="x", pady=(8, 0))
@@ -2234,6 +2331,14 @@ class NanocarbonGUI:
             topo = (f"annealing hurts here — {anneal} sweeps stretches bonds; "
                     "the 5-7 pairs are how the net covers the saddle")
             colour = BAD_RED
+        # Annealing flips mesh edges, and a tube or ribbon has no mesh to
+        # flip: its atoms go straight onto the graphene lattice. Saying so
+        # is better than leaving a live-looking slider that does nothing.
+        elif self.var_mode_kind.get() in LATTICE_MODES:
+            topo = ("no annealing here — the atoms are placed on the lattice, "
+                    "not meshed, so there are no stray rings to flip away")
+            if anneal > 0:
+                colour = WARN_AMBER
         self.lbl_surface.config(text=f"{topo}; {geom}.", foreground=colour)
 
     def _update_coil_hint(self) -> None:
@@ -2529,6 +2634,19 @@ class NanocarbonGUI:
                 length=float(self.var_cnt_length.get()),
                 bond=float(self.var_bond.get()),
                 vacuum=float(self.var_cnt_vacuum.get()),
+                roughness=float(self.var_roughness.get()),
+                defects=self._current_defects(),
+            )
+        elif mode == "nanoribbon":
+            params = dict(
+                width=int(self.var_rib_width.get()),
+                length=int(self.var_rib_length.get()),
+                edge=self.var_rib_edge.get(),
+                bond=float(self.var_bond.get()),
+                vacuum=float(self.var_rib_vacuum.get()),
+                passivate=bool(self.var_rib_passivate.get()),
+                roughness=float(self.var_roughness.get()),
+                defects=self._current_defects(),
             )
         elif mode == "bundle":
             params = dict(
@@ -3515,7 +3633,15 @@ class NanocarbonGUI:
         # with handles is legitimately negative (genus g gives 12(1-g)),
         # and an assembly of n disjoint shells owes 12 per shell.
         components = int(a.info.get("n_shells", a.info.get("n_tubes", 1)))
-        expected = components * (12 - 12 * int(a.info.get("genus", 0)))
+        # A builder may state its own budget. The genus formula below
+        # assumes a closed shell, which a tube periodic along its axis and
+        # a ribbon with two free edges are not: both owe nothing, and
+        # judging them by the closed-shell rule reported every pristine
+        # one as BROKEN.
+        expected = int(a.info.get(
+            "euler_expected",
+            components * (12 - 12 * int(a.info.get("genus", 0))),
+        ))
         clash = g["n_close_contacts"] if g else 0
 
         lines = [f"atoms        {len(a):>6d}"]
@@ -3538,8 +3664,16 @@ class NanocarbonGUI:
             lines.append(f"surface      {a.info['schwarzite_kind']:>9s}")
         if "genus" in a.info:
             lines.append(f"genus        {a.info['genus']:>6d}")
-        if all(a.get_pbc()):
-            lines.append(f"periodic     {a.cell[0][0]:>6.1f} Å cell")
+        # Which axes repeat, not just whether all three do: a tube is
+        # periodic along one, a sheet along two, and saying "periodic" of
+        # neither -- which is what the all() test did -- hid exactly the
+        # fact a plane-wave calculation turns on.
+        pbc = list(a.get_pbc())
+        if any(pbc):
+            lengths = a.cell.lengths()
+            spans = ", ".join(f"{name} {lengths[index]:.1f} Å"
+                              for index, name in enumerate("xyz") if pbc[index])
+            lines.append(f"periodic     {sum(pbc)}D — {spans}")
         if "n_shells" in a.info:
             lines.append(f"shells       {a.info['n_shells']:>6d}")
         # A multi-wall tube calls it wall spacing, an onion shell spacing --
@@ -3587,7 +3721,11 @@ class NanocarbonGUI:
             # over-tight coil keeps its atoms apart while stretching its
             # bonds past any real C-C. Say so in words, next to the
             # numbers.
-            verdict, why = sp2_quality(g)
+            # Judged against the window the builder nominates: a lattice
+            # whose non-hexagons are deliberate (a haeckelite, or anything
+            # carrying a requested defect) has angles the pristine sp2
+            # window calls broken and a specialist would call correct.
+            verdict, why = sp2_quality(g, a.info.get("quality_family", "sp2"))
             lines += ["", f"sp2 verdict  {verdict.upper()}", f"  {why}"]
         else:
             # An exact-lattice builder has nothing to measure against: the
@@ -3636,7 +3774,17 @@ class NanocarbonGUI:
         lines.append(f"strain       {worst:>6.2%} imposed to share one cell")
         lengths = a.cell.lengths()
         lines.append(f"cell         {lengths[0]:.2f} x {lengths[1]:.2f} Å")
-        lines += ["", f"validation   {'OK' if report.ok else 'FAILED'}"]
+        pbc = list(a.get_pbc())
+        spans = ", ".join(f"{name} {lengths[index]:.1f} Å"
+                          for index, name in enumerate("xyz") if pbc[index])
+        lines.append(f"periodic     {sum(pbc)}D — {spans}")
+        if info["structure_type"] == "twisted_bilayer":
+            # The commensurate cell is the answer to "can I get a unit
+            # cell out of this": tiling it reproduces the moire exactly,
+            # with no strain imposed on either layer, so it goes straight
+            # into a plane-wave code at this size.
+            lines.append("             tiles exactly — the moiré is the cell, "
+                         "not an approximant")
         for message in report.errors[:3]:
             lines.append(f"  {message}")
 

@@ -83,7 +83,11 @@ class TestNanoribbon:
     def test_zigzag_ribbon(self):
         atoms = build_nanoribbon(4, 3, edge="zigzag")
         assert len(atoms) > 0
-        assert list(atoms.get_pbc()) == [False, True, False]
+        # z, the axis the repeat unit runs along -- 3 units of 2.46 Å,
+        # not the 15 Å of vacuum that y and x carry.
+        assert list(atoms.get_pbc()) == [False, False, True]
+        assert atoms.cell.lengths()[2] == pytest.approx(3 * 3**0.5 * 1.42,
+                                                        rel=1e-3)
 
     def test_passivation_adds_hydrogens(self):
         plain = build_nanoribbon(4, 3, edge="zigzag", passivate=False)

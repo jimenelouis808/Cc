@@ -36,6 +36,10 @@ SAMPLES: dict[str, Job] = {
         mode="nanotube (open)",
         params={"n": 6, "m": 6, "length": 20.0},
     ),
+    "nanoribbon": Job(
+        mode="nanoribbon",
+        params={"width": 5, "length": 6, "edge": "zigzag"},
+    ),
     "capped tube": Job("capped tube", {"n_body_rings": 8, "freq": 3}),
     "fullerene": Job("fullerene", {"freq": 1, "family": "C60"}),
     "nano-onion": Job("nano-onion",
@@ -122,6 +126,11 @@ class TestEstimates:
             ("bundle", 1120),
             # And for every dichalcogenide, which is placed on ideal
             # lattice sites: three atoms per formula unit, times the cells.
+            # And for the two lattice builders, which place atoms on the
+            # graphene net itself: a zigzag row is two atoms wide, an
+            # armchair row four, and a passivated edge adds one row of
+            # hydrogen per unit of length.
+            ("nanoribbon", 60),
             ("TMD layers", 24),
             ("TMD bulk", 6),
             ("TMD ribbon", 36),
@@ -139,11 +148,16 @@ class TestEstimates:
     def test_seed_modes_are_predicted_exactly(self, mode, expected):
         assert estimate_atoms(SAMPLES[mode]) == expected
 
-    @pytest.mark.parametrize("mode", ["TMD layers", "TMD bulk", "TMD ribbon",
-                                      "TMD nanotube", "TMD coil"])
-    def test_dichalcogenide_estimates_match_the_real_build(self, mode):
+    @pytest.mark.parametrize("mode", ["nanoribbon", "TMD layers", "TMD bulk",
+                                      "TMD ribbon", "TMD nanotube", "TMD coil"])
+    def test_lattice_estimates_match_the_real_build(self, mode):
         """These are exact, not approximate, so assert equality against a
-        real build rather than a tolerance."""
+        real build rather than a tolerance.
+
+        Every mode here places atoms on an exact lattice, so its count is
+        a closed form rather than a meshed surface's area divided by the
+        area of a ring.
+        """
         from nanocarbon_lab.jobs import build
 
         job = SAMPLES[mode]
