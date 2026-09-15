@@ -11,6 +11,7 @@ from .junction import build_junction, build_schwarzite
 from .nanocoil import build_nanocoil
 from .nanoribbon import build_nanoribbon
 from .network import build_nanotube_network
+from .periodic_coil import build_periodic_coil
 from .swept import build_coil, build_swept_tube
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "build_capped_cnt",
     "build_carbon_foam",
     "build_cnt",
+    "build_periodic_coil",
     "build_coil",
     "build_fullerene",
     "build_graphene",

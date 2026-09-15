@@ -1089,6 +1089,11 @@ class TestTheCleanCoilPresets:
         coils = {n: v for n, v in PRESETS.items() if "Nanocoil" in n}
         assert len(coils) >= 3
         for name, preset in coils.items():
+            if preset["mode_kind"] == "coil (periodic, DFT)":
+                # One period by construction: the turns are how many
+                # times the user repeats the cell, not a build parameter.
+                assert "coil_turns" not in preset, name
+                continue
             assert preset["coil_turns"] >= 3.0, f"{name}: too few turns"
 
     def test_the_swept_presets_ask_for_no_defects(self, app):
@@ -1099,3 +1104,44 @@ class TestTheCleanCoilPresets:
                 assert preset.get("roughness", 0.0) == 0.0, name
                 assert preset.get("n_sw", 0) == 0, name
                 assert preset.get("n_dv", 0) == 0, name
+
+
+class TestThePeriodicCoilInTheWindow:
+    """The DFT route: one turn, a real cell, not a fragment."""
+
+    def _select(self, app, pitch=9.6):
+        app.var_mode_kind.set("coil (periodic, DFT)")
+        app.var_coil_radius.set(15.0)
+        app.var_coil_pitch.set(pitch)
+        app.var_coil_tube_radius.set(3.0)
+        app._update_coil_hint()
+        return app.lbl_coil.cget("text")
+
+    def test_the_job_carries_what_the_builder_takes(self, app):
+        self._select(app)
+        job = app.current_job()
+        assert job.mode == "coil (periodic, DFT)"
+        assert set(job.params) == {"coil_radius", "pitch", "tube_radius",
+                                   "bond", "handedness"}
+
+    def test_the_hint_says_the_cell_is_one_period(self, app):
+        text = self._select(app)
+        assert "One turn" in text
+        assert "periodic along z only" in text
+
+    def test_it_says_turns_and_taper_do_not_apply(self, app):
+        """Both sliders are on the panel and neither reaches the builder."""
+        text = self._select(app)
+        assert "Turns and taper do not apply" in text
+
+    def test_a_merging_pitch_is_refused_before_building(self, app):
+        text = self._select(app, pitch=5.0)
+        assert "merge" in text
+
+    def test_the_preset_selects_the_periodic_mode(self, app):
+        from nanocarbon_lab.gui.app import PRESETS
+
+        preset = PRESETS["Nanocoil (periodic cell, DFT)"]
+        assert preset["mode_kind"] == "coil (periodic, DFT)"
+        app._apply_values(preset)
+        assert app.current_job().mode == "coil (periodic, DFT)"

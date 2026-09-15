@@ -37,6 +37,9 @@ CARBON_MODES = (
     # the GUI insisted on a cap.
     "capped tube",
     "nanotube (open)",
+    # One turn of a helix, closed on the z-torus: a real cell for a
+    # plane-wave code rather than a fragment with two dangling ends.
+    "coil (periodic, DFT)",
     "haeckelite",
     "coil (relaxed)",
     "fullerene",
@@ -243,6 +246,7 @@ def builder_for(mode: str):
         build_multiwall_cnt,
         build_nano_onion,
         build_nanotube_network,
+        build_periodic_coil,
         build_schwarzite,
     )
     from .hetero import build_twisted_bilayer, build_vdw_stack
@@ -268,6 +272,7 @@ def builder_for(mode: str):
         "TMD junction": build_tmd_junction,
         "nanotube (open)": build_cnt,
         "capped tube": build_capped_cnt,
+        "coil (periodic, DFT)": build_periodic_coil,
         "coil (relaxed)": build_coil,
         "fullerene": build_fullerene,
         "haeckelite": build_haeckelite,
@@ -438,6 +443,17 @@ def estimate_atoms(job: Job) -> int:
     """
     p = job.params
     mode = job.mode
+
+    if mode == "coil (periodic, DFT)":
+        # One turn of tube, and a tube of radius r and length L carries
+        # 2*pi*r*L / 2.62 atoms -- graphene's area per atom, the same
+        # relation the swept helix estimate uses and which lands within
+        # a few percent of every coil measured.
+        coil_radius = float(p.get("coil_radius", 15.0))
+        pitch = float(p.get("pitch", 8.0))
+        tube_radius = float(p.get("tube_radius", 3.0))
+        arc = math.hypot(2.0 * math.pi * coil_radius, pitch)
+        return int(2.4 * tube_radius * arc)
 
     if mode == "nanotube (open)":
         # Exact, not an approximation: a tube is an integer number of
@@ -712,6 +728,12 @@ def estimate_cost(job: Job) -> tuple[str, str]:
         # are instant regardless of size; only the drawing is a cost.
         return ("slow" if n > 20000 else "fast",
                 f"~{n} atoms, placed directly on lattice sites")
+    if job.mode == "coil (periodic, DFT)":
+        # Meshed and relaxed like the implicit modes, but only ever one
+        # turn, so it stays in seconds where a multi-turn coil is minutes.
+        return ("slow" if n > 1500 else "fast",
+                f"~{n} atoms, one periodic turn — meshed and relaxed")
+
     if job.mode in IMPLICIT_MODES:
         if n < 900:
             return "slow", f"~{n} atoms, tens of seconds"
@@ -743,6 +765,13 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     "nanotube (open)": ("cnt", {
         "n": "--n", "m": "--m", "length": "--length", "bond": "--bond",
         "vacuum": "--vacuum",
+    }),
+    "coil (periodic, DFT)": ("coil-periodic", {
+        "coil_radius": "--coil-radius", "pitch": "--pitch",
+        "tube_radius": "--tube-radius", "bond": "--bond",
+        "handedness": "--handedness", "vacuum": "--vacuum",
+        "resolution": "--resolution",
+        "remesh_iterations": "--remesh-iterations",
     }),
     "capped tube": ("cnt-cap", {
         "n_body_rings": "--rings", "freq": "--freq", "bond": "--bond",

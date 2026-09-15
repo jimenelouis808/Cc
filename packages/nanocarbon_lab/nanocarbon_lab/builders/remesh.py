@@ -136,7 +136,7 @@ def marching_cubes_box(
 
 
 def periodic_marching_cubes_mesh(
-    field: Field, cell: float, resolution: int = 64
+    field: Field, cell: float | np.ndarray, resolution: int = 64
 ) -> Mesh:
     """Mesh one period of a triply periodic surface, closed on the 3-torus.
 
@@ -158,11 +158,17 @@ def periodic_marching_cubes_mesh(
     field
         Periodic scalar field with period ``cell``.
     cell
-        Cubic cell length (Å).
+        Cell edge length (Å): a scalar cube, or a **three-vector** for an
+        orthorhombic cell. The anisotropic case is what a coil needs --
+        it is periodic along its axis with period equal to the pitch, and
+        merely wide in the other two. There the weld in x and y does
+        nothing, because vacuum means no surface reaches those walls, and
+        only the z seam does real work.
     resolution
-        Grid points per axis across one period. Too coarse and the weld
-        fails, leaving boundary edges -- the caller must check
-        :func:`mesh_statistics`.
+        Grid points across the **longest** axis; the others get as many
+        as they need to keep the voxels cube-shaped, so a scalar cell
+        behaves exactly as before. Too coarse and the weld fails, leaving
+        boundary edges -- the caller must check :func:`mesh_statistics`.
 
     Returns
     -------
@@ -172,16 +178,25 @@ def periodic_marching_cubes_mesh(
     """
     from skimage.measure import marching_cubes
 
-    axis = np.linspace(0.0, cell, resolution)
-    grid = np.stack(np.meshgrid(axis, axis, axis, indexing="ij"), axis=-1)
+    edges = np.broadcast_to(np.asarray(cell, dtype=float), (3,))
+    if np.any(edges <= 0.0):
+        raise ValueError(f"Cell edges must all be positive, got {edges}.")
+    # One voxel size for all three axes, so an elongated cell is not
+    # sampled finely across its short axis and coarsely across its long
+    # one -- which would resolve the wall in z and lose it in x.
+    voxel = float(edges.max()) / max(1, resolution - 1)
+    counts = [max(2, int(round(length / voxel)) + 1) for length in edges]
+    axes = [np.linspace(0.0, length, count)
+            for length, count in zip(edges, counts, strict=True)]
+    grid = np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1)
     values = field(grid)
-    spacing = float(axis[1] - axis[0])
-    verts, faces, _, _ = marching_cubes(values, level=0.0, spacing=(spacing,) * 3)
+    spacing = tuple(float(a[1] - a[0]) for a in axes)
+    verts, faces, _, _ = marching_cubes(values, level=0.0, spacing=spacing)
 
-    wrapped = np.mod(verts, cell)
+    wrapped = np.mod(verts, edges)
     # Weld on a quantised key: matching vertices on opposite faces come
     # from identical interpolations, so they agree to many digits.
-    keys = np.round(wrapped / spacing * 1e3).astype(np.int64)
+    keys = np.round(wrapped / np.asarray(spacing) * 1e3).astype(np.int64)
     _, first, inverse = np.unique(keys, axis=0, return_index=True, return_inverse=True)
     new_faces = inverse[faces.astype(int)]
     keep = (

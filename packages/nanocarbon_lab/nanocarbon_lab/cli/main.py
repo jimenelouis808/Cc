@@ -59,6 +59,7 @@ from ..builders import (
     build_nanocoil,
     build_nanoribbon,
     build_nanotube_network,
+    build_periodic_coil,
     build_schwarzite,
 )
 from ..builders.haeckelite import PATTERNS as HAECKELITE_PATTERNS
@@ -966,6 +967,24 @@ def _cmd_bundle(args):
     return 0
 
 
+def _cmd_coil_periodic(args):
+    atoms = build_periodic_coil(
+        coil_radius=args.coil_radius, pitch=args.pitch,
+        tube_radius=args.tube_radius, bond=args.bond,
+        handedness=-1 if args.handedness == "left" else 1,
+        vacuum=args.vacuum, resolution=args.resolution,
+        remesh_iterations=args.remesh_iterations,
+        anneal_sweeps=args.anneal_sweeps, seed=args.seed,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    cell = atoms.cell
+    print(f"periodic cell  {cell[0][0]:.1f} x {cell[1][1]:.1f} x "
+          f"{cell[2][2]:.1f} A, periodic along z only")
+    print(f"mesh genus     {atoms.info['mesh_genus']} (one turn is a torus)")
+    return 0
+
+
 def _cmd_coil(args):
     atoms = build_coil(
         coil_radius=args.coil_radius, pitch=args.pitch, turns=args.turns,
@@ -1634,6 +1653,35 @@ def build_parser() -> argparse.ArgumentParser:
     co.add_argument("--out", required=True, help="Output path without extension.")
     _add_surface_flags(co)
     co.set_defaults(func=_cmd_coil)
+
+    cp = sub.add_parser(
+        "coil-periodic",
+        help="Build ONE TURN of a coil as a periodic cell for DFT. A helix "
+             "maps onto itself under a translation of one pitch, so the turn "
+             "closed on the z-torus is a real unit cell rather than a "
+             "fragment with two dangling ends.",
+    )
+    cp.add_argument("--coil-radius", type=float, default=15.0,
+                    help="Helix radius (Å): axis to tube centre.")
+    cp.add_argument("--pitch", type=float, default=9.6,
+                    help="Axial rise per turn (Å). This is the cell length "
+                         "along z. Must clear two tube walls plus a graphitic "
+                         "gap or successive turns merge.")
+    cp.add_argument("--tube-radius", type=float, default=3.0,
+                    help="Radius of the tube itself (Å).")
+    cp.add_argument("--handedness", choices=["right", "left"], default="right")
+    cp.add_argument("--bond", type=float, default=1.42)
+    cp.add_argument("--vacuum", type=float, default=10.0,
+                    help="Padding (Å) to the cell walls in x and y, which are "
+                         "not periodic.")
+    cp.add_argument("--resolution", type=int, default=64,
+                    help="Grid points across the longest cell axis. Too coarse "
+                         "and the z seam does not weld, which is reported "
+                         "rather than returned.")
+    cp.add_argument("--remesh-iterations", type=int, default=25)
+    cp.add_argument("--out", required=True, help="Output path without extension.")
+    _add_surface_flags(cp)
+    cp.set_defaults(func=_cmd_coil_periodic)
 
     hk = sub.add_parser(
         "haeckelite",

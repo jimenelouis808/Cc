@@ -28,6 +28,10 @@ from nanocarbon_lab.jobs import (
 
 # One representative job per mode, kept small enough to build in a test.
 SAMPLES: dict[str, Job] = {
+    "coil (periodic, DFT)": Job(
+        mode="coil (periodic, DFT)",
+        params={"coil_radius": 15.0, "pitch": 9.6, "tube_radius": 3.0},
+    ),
     "nanotube (open)": Job(
         mode="nanotube (open)",
         params={"n": 6, "m": 6, "length": 20.0},

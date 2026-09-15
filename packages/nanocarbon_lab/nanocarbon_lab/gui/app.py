@@ -242,6 +242,15 @@ PRESETS: dict[str, dict[str, object]] = {
         "mode_kind": "capped tube", "shape": "helix", "freq": 1,
         "coil_radius": 20.0, "coil_pitch": 8.0, "coil_turns": 4.0,
         "roughness": 0.0, "n_sw": 0, "n_dv": 0},
+    # The one that goes into a plane-wave code: one turn, closed on the
+    # z-torus, 634 atoms. Its wall carries pentagons and heptagons, which
+    # is not a defect but how a coil relieves curvature -- the tidy
+    # all-hexagon coils above are stretched instead, and their bonds show
+    # it.
+    "Nanocoil (periodic cell, DFT)": {
+        "mode_kind": "coil (periodic, DFT)", "coil_radius": 15.0,
+        "coil_pitch": 9.6, "coil_tube_radius": 3.0,
+        "roughness": 0.0, "n_sw": 0, "n_dv": 0},
     "Nanocoil (wide, physical)": {
         "mode_kind": "capped tube", "shape": "helix", "freq": 2,
         "coil_radius": 40.0, "coil_pitch": 12.0, "coil_turns": 4.0,
@@ -1632,6 +1641,11 @@ class NanocarbonGUI:
             # entering this mode turns the shared slider off rather than
             # letting its 80-sweep default quietly degrade the cell.
             self.var_anneal.set(0)
+        elif mode == "coil (periodic, DFT)":
+            # One turn by definition, so the turns slider does not apply:
+            # the cell *is* one period. Radius, pitch and tube radius do.
+            self.frame_coil.pack(fill="x")
+            self._update_coil_hint()
         elif mode == "coil (relaxed)":
             self.frame_coil.pack(fill="x")
             # Without this the label keeps whatever the previous mode
@@ -1678,7 +1692,8 @@ class NanocarbonGUI:
 
     def _on_shape_change(self) -> None:
         """Show the coil panel where coil dimensions actually apply."""
-        if self.var_mode_kind.get() == "coil (relaxed)":
+        if self.var_mode_kind.get() in ("coil (relaxed)",
+                                        "coil (periodic, DFT)"):
             self.frame_coil_tube.grid()
             return
         self.frame_coil_tube.grid_remove()
@@ -2229,6 +2244,28 @@ class NanocarbonGUI:
         taper = float(self.var_coil_taper.get())
         arc = cl.helix_arc_length(radius, pitch, turns, taper=taper)
 
+        if self.var_mode_kind.get() == "coil (periodic, DFT)":
+            tube_radius = float(self.var_coil_tube_radius.get())
+            clearance = 2.0 * tube_radius + 3.4
+            one_turn = cl.helix_arc_length(radius, pitch, 1.0)
+            atoms = int(2.4 * tube_radius * one_turn)
+            if pitch < clearance:
+                self.lbl_coil.config(
+                    text=f"pitch must be ≥{clearance:.1f} Å or successive "
+                         "turns merge into one solid.", foreground=BAD_RED)
+                return
+            self.lbl_coil.config(
+                text=f"One turn, {atoms} atoms, cell {2 * (radius + tube_radius + 10):.0f}"
+                     f" × {2 * (radius + tube_radius + 10):.0f} × {pitch:.1f} Å, "
+                     "periodic along z only. Turns and taper do not apply: the "
+                     "cell is one period, and you extend it with the ×z box "
+                     "under the viewer or with nz in your DFT input.\n"
+                     "The wall carries pentagons and heptagons on purpose — "
+                     "that is how a real coil relieves curvature, and a "
+                     "pure-hexagon coil is stretched instead.",
+                foreground=OK_GREEN)
+            return
+
         if self.var_mode_kind.get() == "coil (relaxed)":
             # No strain budget applies: curvature is paid for in ring
             # topology, not bond stretch. What fails instead is the coil
@@ -2475,6 +2512,14 @@ class NanocarbonGUI:
                 n_body_rings=int(self.var_rings.get()),
                 bond=float(self.var_bond.get()),
                 roughness=float(self.var_roughness.get()),
+            )
+        elif mode == "coil (periodic, DFT)":
+            params = dict(
+                coil_radius=float(self.var_coil_radius.get()),
+                pitch=float(self.var_coil_pitch.get()),
+                tube_radius=float(self.var_coil_tube_radius.get()),
+                bond=float(self.var_bond.get()),
+                handedness=1 if self.var_coil_hand.get() == "right" else -1,
             )
         elif mode == "nanotube (open)":
             params = dict(
