@@ -302,6 +302,20 @@ TMD_DEMOS = (
     ("WS2", "1"),
     ("MoSe2", "1"),
     ("WSe2", "2"),
+    # One per metal and per structure type, so the identification gate is
+    # exercised where the windows actually overlap: 1T (Ti), Td (W–Te),
+    # CDW metals (Nb, Ta) and the two non-layered irons.
+    ("MoTe2", "bulk"),
+    ("WTe2", "bulk"),
+    ("TiS2", "bulk"),
+    ("TiSe2", "bulk"),
+    ("NbSe2", "bulk"),
+    ("TaS2_2H", "bulk"),
+    ("TaS2_1T", "bulk"),
+    ("TaSe2", "bulk"),
+    ("FeS2_pyrite", "bulk"),
+    ("FeSe_tetragonal", "bulk"),
+    ("FeSe2_marcasite", "bulk"),
 )
 
 #: Synthetic oxide/chalcogenide composites, as ``(material, layers, oxide)``.
@@ -312,6 +326,11 @@ TMD_OXIDE_DEMOS = (
     ("MoSe2", "bulk", "MoO3_alpha"),
     ("MoSe2", "bulk", "MoO2"),
     ("MoS2", "bulk", "MoO3_alpha"),
+    ("TiS2", "bulk", "TiO2_anatase"),
+    ("TaSe2", "bulk", "Ta2O5_amorphous"),
+    ("NbSe2", "bulk", "Nb2O5_H"),
+    ("FeSe_tetragonal", "bulk", "Fe2O3_hematite"),
+    ("FeS2_pyrite", "bulk", "Fe3O4_magnetite"),
 )
 
 
@@ -344,7 +363,10 @@ def make_tmd_demo(
     Parameters
     ----------
     material:
-        ``"MoS2"``, ``"WS2"``, ``"MoSe2"``, ``"WSe2"`` or ``"MoTe2"``.
+        Any key in ``tmd.json``: ``"MoS2"``, ``"WS2"``, ``"MoSe2"``,
+        ``"WSe2"``, ``"MoTe2"``, ``"WTe2"``, ``"TiS2"``, ``"TiSe2"``,
+        ``"NbSe2"``, ``"TaS2_2H"``, ``"TaS2_1T"``, ``"TaSe2"``,
+        ``"FeS2_pyrite"``, ``"FeSe_tetragonal"`` or ``"FeSe2_marcasite"``.
     layers:
         ``"1"``, ``"2"``, ``"3"``, ``"4"`` or ``"bulk"``, where the
         material's table has an entry for it.
@@ -433,7 +455,12 @@ def make_tmd_demo(
         broad = entry_oxide.get("min_fwhm")
         for line in entry_oxide["bands"]:
             weight = 1.0 if line in strong else 0.28
-            width = float(broad) if broad else 8.0
+            # An amorphous entry's ``min_fwhm`` is a conservative LOWER
+            # bound, not a typical width, and generating the band at exactly
+            # that value tests nothing: baseline removal clips the wings of a
+            # very broad band and the measured FWHM comes back ~10-20 % under
+            # the generated one, so the demo would fail its own width rule.
+            width = 1.6 * float(broad) if broad else 8.0
             y += lorentzian(x, float(line), peak_height * weight, width)
 
     y += 120.0 * np.exp(-(x - low) / 400.0) + 20.0

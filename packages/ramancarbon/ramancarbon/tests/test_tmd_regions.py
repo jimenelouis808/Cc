@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from ramancarbon.analysis.tmd import (
@@ -9,6 +11,7 @@ from ramancarbon.analysis.tmd import (
     analyse_tmd,
     count_layers,
     identify_material,
+    load_tmd_database,
     tmd_materials,
 )
 from ramancarbon.core.peaks import find_peaks
@@ -103,8 +106,110 @@ def test_identification_scores_are_ordered():
 def test_every_tmd_entry_is_sourced():
     for material in tmd_materials():
         assert material.notes
+        assert material.source, material.key
+        assert material.confidence in {"high", "medium", "low"}, material.key
         if material.counts_layers_by_separation:
             assert material.separation_source
+
+
+def test_the_library_covers_the_metals_and_the_chalcogens():
+    """Mo, W, Ti, Nb, Ta and Fe, across S, Se and Te.
+
+    A coverage test, not a correctness one: it exists so that dropping an
+    entry to fix something else is a visible act rather than a silent loss.
+    """
+    materials = tmd_materials()
+    assert {m.metal for m in materials} >= {"Mo", "W", "Ti", "Nb", "Ta", "Fe"}
+    assert {m.chalcogen for m in materials} >= {"S", "Se", "Te"}
+    for material in materials:
+        assert material.metal and material.chalcogen, material.key
+
+
+def test_what_is_absent_is_absent_on_purpose():
+    """``_missing`` is the record of what was left out, and why.
+
+    An entry needs a citable source to go in, because a made-up position
+    does not warn: it misidentifies, confidently.
+    """
+    payload, _ = load_tmd_database()
+    entries = payload["_missing"]["entries"]
+    assert entries
+    for entry in entries:
+        assert entry["formula"] and len(entry["reason"]) > 40
+
+
+def test_identification_needs_a_discriminating_band():
+    """A material is not identified by bands it shares with its neighbours.
+
+    The A₁g of MoSe₂ (240) sits 6 cm⁻¹ from that of TaSe₂ (234), and the
+    broad CDW band of NbSe₂ spans 170-200. NbSe₂ drops out entirely — its
+    own A₁g window does not reach 240 — while TaSe₂ survives as a weak
+    candidate, which is the honest outcome: those two bands really are six
+    wavenumbers apart and a single spectrum does not settle it. What the
+    gate guarantees is the MARGIN, not silence.
+    """
+    spectrum, _ = preprocess(make_tmd_demo("MoSe2", "bulk", seed=30))
+    peaks = find_peaks(spectrum, min_distance_cm=4.0, min_fwhm_cm=1.5)
+    scores = identify_material(peaks, spectrum_range=spectrum.range)
+    assert scores[0][0] == "MoSe2"
+    assert "NbSe2" not in dict(scores)
+    assert scores[0][1] > 2.0 * scores[1][1]
+
+
+def test_one_peak_cannot_satisfy_two_modes():
+    """2H-NbSe₂'s A₁g and E¹₂g are closer together than either window is
+    wide. Letting a single band answer for both scored one peak twice, and
+    that alone made a MoTe₂ spectrum read as NbSe₂."""
+    nbse2 = next(m for m in tmd_materials() if m.key == "NbSe2")
+    a1g, e2g = nbse2.mode("A1g"), nbse2.mode("E2g")
+    assert a1g.window[0] < e2g.window[1] and e2g.window[0] < a1g.window[1]
+
+    single = [SimpleNamespace(position=232.0, height=100.0, fwhm=4.0)]
+    score = dict(identify_material(single))["NbSe2"]
+    assert score <= 1.0
+
+    result = analyse_tmd(make_tmd_demo("MoTe2", "bulk", seed=31))
+    assert result.material == "MoTe2"
+
+
+def test_a_band_you_did_not_measure_is_not_evidence_against():
+    """The discriminating modes of 1T-TaS₂ are at 63 and 75 cm⁻¹. A
+    spectrum that starts at 100 — which most do — cannot see them, so the
+    gate lifts and the report says what it is resting on instead."""
+    result = analyse_tmd(make_tmd_demo("TaS2_1T", "bulk", low=100.0, seed=32))
+    assert result.material == "TaS2_1T"
+    assert any("entra en el rango medido" in w for w in result.warnings)
+
+    wide = analyse_tmd(make_tmd_demo("TaS2_1T", "bulk", low=40.0, seed=32))
+    assert wide.material == "TaS2_1T"
+    assert not any("entra en el rango medido" in w for w in wide.warnings)
+
+
+@pytest.mark.parametrize("key", ["FeS2_pyrite", "FeSe2_marcasite"])
+def test_a_material_without_layers_is_not_given_a_layer_count(key):
+    """Pyrite is cubic. Asking how many layers it has is not a question
+    with an answer, and the program says so rather than guessing."""
+    result = analyse_tmd(make_tmd_demo(key, "bulk", seed=33))
+    assert result.material == key
+    assert result.layers is None
+    assert "no es un material laminar" in result.layer_reason
+
+
+def test_every_oxidation_route_points_at_a_catalogued_oxide():
+    payload, materials = load_tmd_database()
+    oxides = {o["key"] for o in payload["oxides"]}
+    routes = {k: v for k, v in payload["oxidation_products"].items()
+              if not k.startswith("_")}
+    assert set(routes) == {m.key for m in materials}
+    for chalcogenide, products in routes.items():
+        assert products, chalcogenide
+        for key in products:
+            assert key in oxides, f"{chalcogenide} -> {key}"
+        metals = {o["metal"] for o in payload["oxides"] if o["key"] in products}
+        material = next(m for m in materials if m.key == chalcogenide)
+        # An oxide of a metal the chalcogenide does not contain is a
+        # chemical impossibility; the chalcogen's own oxide is not.
+        assert metals <= {material.metal, material.chalcogen}, chalcogenide
 
 
 def test_tmd_result_is_flat_for_a_table():

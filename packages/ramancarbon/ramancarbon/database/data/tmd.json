@@ -1,43 +1,26 @@
 {
   "_comment": [
-    "Dicalcogenuros de metales de transición (TMD): MoS2, WS2, MoSe2, WSe2,",
-    "MoTe2.",
+    "Dicalcogenuros de metales de transición y los óxidos que los acompañan.",
     "",
-    "La medida central aquí NO es una posición ni un cociente, sino una",
-    "SEPARACIÓN. Al apilar capas, el modo en el plano E2g se ablanda y el",
-    "modo fuera del plano A1g se endurece, así que la distancia entre los dos",
-    "crece de forma monótona con el número de capas. Esa separación es",
-    "insensible a la calibración absoluta del eje (un desplazamiento común se",
-    "cancela al restar), lo que la hace mucho más robusta que cualquier",
-    "posición individual.",
+    "La biblioteca cubre los calcogenuros de S, Se y Te de Mo, W, Ti, Nb, Ta y",
+    "Fe, más sus óxidos. No cubre TODO lo que existe, y la lista '_missing'",
+    "dice qué falta y por qué: el criterio para entrar es tener una fuente",
+    "citable, porque una posición inventada no avisa, identifica mal.",
     "",
-    "Por qué E2g baja y A1g sube al añadir capas: el A1g mueve los",
-    "calcógenos perpendicularmente a la capa, así que la capa vecina se le",
-    "opone y lo endurece. El E2g mueve los átomos dentro del plano, y ahí lo",
-    "que domina no es la fuerza de van der Waals sino el aumento de",
-    "apantallamiento dieléctrico de la interacción de largo alcance entre",
-    "cargas efectivas, que lo ablanda. Son mecanismos distintos, y por eso",
-    "van en direcciones opuestas.",
+    "Dos cosas que este archivo hace y conviene no deshacer.",
     "",
-    "Las tablas de separación por capa son a 532 nm salvo donde se indique.",
-    "El WSe2 es el caso difícil: sus dos modos son casi degenerados a ~250",
-    "cm-1 y no se separan, así que allí se cuenta por otra vía (la presencia",
-    "del modo B12g de bulk).",
+    "Primero, no todos estos materiales son 2H ni todos son laminares. El",
+    "TiS2 y el TiSe2 son 1T (octaédricos), el WTe2 es Td, el FeS2 es cubico y",
+    "el FeSe2 ortorrombico. El campo 'layered' lo dice, y el programa no",
+    "intenta contar capas donde no hay capas. El conteo por separacion",
+    "E2g-A1g solo vale para los 2H de Mo y W, y solo el MoS2 lo hace bien.",
     "",
-    "'confidence' se refiere al NÚMERO, no a la física.",
-    "",
-    "Bloque 'oxides': los oxidos del metal de transicion que acompañan al",
-    "calcogenuro en muestras reales. Aparecen por tres vias distintas y",
-    "conviene no confundirlas: sintesis incompleta (el precursor era un",
-    "oxido), oxidacion al aire con el tiempo, y oxidacion INDUCIDA POR EL",
-    "PROPIO LASER durante la medida. La tercera es la peligrosa, porque el",
-    "espectro cambia mientras lo tomas.",
-    "",
-    "Un MoO3@MoSe2 y una mezcla fisica de MoO3 y MoSe2 dan el MISMO espectro",
-    "Raman puntual. Raman no ve topologia. Lo que si ve, y por eso el modulo",
-    "lo mira, es la DEFORMACION del calcogenuro: una intercara intima",
-    "desplaza sus modos, y una mezcla de polvos no. Eso es un indicio, no una",
-    "prueba; la prueba es microscopia."
+    "Segundo, los modos marcados 'discriminating' son los que separan un",
+    "material de sus vecinos. Con quince materiales en la lista, muchos",
+    "comparten ventana: el A1g del MoSe2 (240) y el A1g del TaSe2 (234) casi",
+    "se tocan, y el A1g del TiSe2 (198) cae encima del B1g del beta-FeSe",
+    "(196). La identificacion exige al menos un modo discriminante, no una",
+    "suma de coincidencias, y el informe lista siempre los otros candidatos."
   ],
   "reference_laser_nm": 532.0,
   "materials": [
@@ -45,6 +28,10 @@
       "key": "MoS2",
       "label": "Disulfuro de molibdeno (MoS₂)",
       "formula": "MoS2",
+      "metal": "Mo",
+      "chalcogen": "S",
+      "polytype": "2H",
+      "layered": true,
       "modes": {
         "E2g": {
           "position": 384.0,
@@ -52,7 +39,8 @@
             378.0,
             390.0
           ],
-          "label": "E¹₂g (en el plano)"
+          "label": "E¹₂g (en el plano)",
+          "discriminating": true
         },
         "A1g": {
           "position": 405.0,
@@ -60,7 +48,8 @@
             399.0,
             412.0
           ],
-          "label": "A₁g (fuera del plano)"
+          "label": "A₁g (fuera del plano)",
+          "discriminating": true
         },
         "2LA_M": {
           "position": 450.0,
@@ -112,12 +101,17 @@
       "separation_source": "Lee, Yan, Brus, Heinz, Hone & Ryu, ACS Nano 4 (2010) 2695",
       "phase_2H": true,
       "confidence": "high",
-      "notes": "El TMD mejor caracterizado con diferencia. La separación crece rápido de 1 a 3 capas y satura hacia el bulk, así que por encima de ~5 capas ya no distingue. La monocapa tiene además fotoluminiscencia intensa a ~1.85 eV que puede saturar el detector si mides con 532 nm — si el fondo se dispara, ese es el motivo, y no es fluorescencia de suciedad."
+      "notes": "El TMD mejor caracterizado con diferencia. La separación crece rápido de 1 a 3 capas y satura hacia el bulk, así que por encima de ~5 capas ya no distingue. La monocapa tiene además fotoluminiscencia intensa a ~1.85 eV que puede saturar el detector si mides con 532 nm — si el fondo se dispara, ese es el motivo, y no es fluorescencia de suciedad.",
+      "source": "Lee, Yan, Brus, Heinz, Hone & Ryu, ACS Nano 4 (2010) 2695"
     },
     {
       "key": "WS2",
       "label": "Disulfuro de wolframio (WS₂)",
       "formula": "WS2",
+      "metal": "W",
+      "chalcogen": "S",
+      "polytype": "2H",
+      "layered": true,
       "modes": {
         "E2g": {
           "position": 356.0,
@@ -125,7 +119,8 @@
             348.0,
             362.0
           ],
-          "label": "E¹₂g (en el plano)"
+          "label": "E¹₂g (en el plano)",
+          "discriminating": true
         },
         "A1g": {
           "position": 417.0,
@@ -133,7 +128,8 @@
             412.0,
             424.0
           ],
-          "label": "A₁g (fuera del plano)"
+          "label": "A₁g (fuera del plano)",
+          "discriminating": true
         },
         "2LA_M": {
           "position": 351.0,
@@ -173,12 +169,17 @@
       "separation_source": "Berkdemir et al., Sci. Rep. 3 (2013) 1755; Zhao et al., Nanoscale 5 (2013) 9677",
       "phase_2H": true,
       "confidence": "medium",
-      "notes": "Complicado: el modo 2LA(M) cae casi encima del E2g y a 514 nm está en resonancia, así que lo que parece una banda E2g intensa es en realidad la suma de los dos. La separación E2g-A1g cambia mucho menos con las capas que en MoS2 (unos 5 cm-1 en total frente a 8), de modo que contar capas por separación es aquí bastante menos fiable. El cociente I(2LA)/I(A1g) es la alternativa habitual, pero depende del láser."
+      "notes": "Complicado: el modo 2LA(M) cae casi encima del E2g y a 514 nm está en resonancia, así que lo que parece una banda E2g intensa es en realidad la suma de los dos. La separación E2g-A1g cambia mucho menos con las capas que en MoS2 (unos 5 cm-1 en total frente a 8), de modo que contar capas por separación es aquí bastante menos fiable. El cociente I(2LA)/I(A1g) es la alternativa habitual, pero depende del láser.",
+      "source": "Berkdemir et al., Sci. Rep. 3 (2013) 1755"
     },
     {
       "key": "MoSe2",
       "label": "Diseleniuro de molibdeno (MoSe₂)",
       "formula": "MoSe2",
+      "metal": "Mo",
+      "chalcogen": "Se",
+      "polytype": "2H",
+      "layered": true,
       "modes": {
         "A1g": {
           "position": 240.0,
@@ -186,7 +187,8 @@
             235.0,
             245.0
           ],
-          "label": "A₁g (fuera del plano)"
+          "label": "A₁g (fuera del plano)",
+          "discriminating": true
         },
         "E2g": {
           "position": 287.0,
@@ -194,7 +196,8 @@
             282.0,
             292.0
           ],
-          "label": "E¹₂g (en el plano)"
+          "label": "E¹₂g (en el plano)",
+          "discriminating": true
         },
         "B12g": {
           "position": 353.0,
@@ -222,12 +225,17 @@
       "separation_source": "Tonndorf et al., Opt. Express 21 (2013) 4908; Nam et al., ACS Nano 7 (2013) 4213",
       "phase_2H": true,
       "confidence": "low",
-      "notes": "Ojo con el orden: aquí el A1g está POR DEBAJO del E2g en frecuencia, al revés que en MoS2 y WS2, porque el selenio es mucho más pesado que el azufre. La separación apenas cambia con las capas, así que no sirve para contarlas; lo que sí funciona es la aparición del modo B¹₂g a ~353 cm-1, que está prohibido en monocapa y aparece en cuanto hay dos."
+      "notes": "Ojo con el orden: aquí el A1g está POR DEBAJO del E2g en frecuencia, al revés que en MoS2 y WS2, porque el selenio es mucho más pesado que el azufre. La separación apenas cambia con las capas, así que no sirve para contarlas; lo que sí funciona es la aparición del modo B¹₂g a ~353 cm-1, que está prohibido en monocapa y aparece en cuanto hay dos.",
+      "source": "Tonndorf et al., Opt. Express 21 (2013) 4908"
     },
     {
       "key": "WSe2",
       "label": "Diseleniuro de wolframio (WSe₂)",
       "formula": "WSe2",
+      "metal": "W",
+      "chalcogen": "Se",
+      "polytype": "2H",
+      "layered": true,
       "modes": {
         "E2g_A1g": {
           "position": 250.0,
@@ -235,7 +243,8 @@
             245.0,
             256.0
           ],
-          "label": "E¹₂g y A₁g (casi degenerados)"
+          "label": "E¹₂g y A₁g (casi degenerados)",
+          "discriminating": true
         },
         "B12g": {
           "position": 308.0,
@@ -243,7 +252,8 @@
             303.0,
             313.0
           ],
-          "label": "B¹₂g (solo multicapa)"
+          "label": "B¹₂g (solo multicapa)",
+          "discriminating": true
         },
         "2LA_M": {
           "position": 260.0,
@@ -258,12 +268,17 @@
       "separation_source": "",
       "phase_2H": true,
       "confidence": "low",
-      "notes": "El caso donde el método de la separación NO se puede usar: E2g y A1g son casi degenerados en torno a 250 cm-1 y con un espectrómetro normal salen como una sola banda. Aquí se cuentan capas por la presencia del modo B¹₂g a ~308 cm-1, que está prohibido por simetría en monocapa y aparece a partir de dos capas. Su ausencia es evidencia de monocapa; su presencia, de multicapa."
+      "notes": "El caso donde el método de la separación NO se puede usar: E2g y A1g son casi degenerados en torno a 250 cm-1 y con un espectrómetro normal salen como una sola banda. Aquí se cuentan capas por la presencia del modo B¹₂g a ~308 cm-1, que está prohibido por simetría en monocapa y aparece a partir de dos capas. Su ausencia es evidencia de monocapa; su presencia, de multicapa.",
+      "source": "Zhao et al., Nanoscale 5 (2013) 9677"
     },
     {
       "key": "MoTe2",
       "label": "Diteluro de molibdeno (MoTe₂, fase 2H)",
       "formula": "MoTe2",
+      "metal": "Mo",
+      "chalcogen": "Te",
+      "polytype": "2H",
+      "layered": true,
       "modes": {
         "A1g": {
           "position": 171.0,
@@ -271,7 +286,8 @@
             166.0,
             176.0
           ],
-          "label": "A₁g"
+          "label": "A₁g",
+          "discriminating": true
         },
         "E2g": {
           "position": 234.0,
@@ -279,7 +295,8 @@
             229.0,
             240.0
           ],
-          "label": "E¹₂g"
+          "label": "E¹₂g",
+          "discriminating": true
         },
         "B12g": {
           "position": 290.0,
@@ -307,7 +324,445 @@
       "separation_source": "Yamamoto et al., ACS Nano 8 (2014) 3895",
       "phase_2H": true,
       "confidence": "low",
-      "notes": "Como en MoSe2, la separación cambia poco. El B¹₂g a ~290 cm-1 es el indicador de multicapa. El MoTe2 se oxida al aire en horas: si ves bandas de TeO2 (~120, 140, 650 cm-1) la muestra ya está degradada."
+      "notes": "Como en MoSe2, la separación cambia poco. El B¹₂g a ~290 cm-1 es el indicador de multicapa. El MoTe2 se oxida al aire en horas: si ves bandas de TeO2 (~120, 140, 650 cm-1) la muestra ya está degradada.",
+      "source": "Yamamoto et al., ACS Nano 8 (2014) 11154"
+    },
+    {
+      "key": "WTe2",
+      "label": "Telururo de wolframio (WTe₂, fase Td)",
+      "formula": "WTe2",
+      "metal": "W",
+      "chalcogen": "Te",
+      "polytype": "Td",
+      "layered": true,
+      "modes": {
+        "A1_7": {
+          "position": 110.5,
+          "window": [
+            105.5,
+            115.5
+          ],
+          "label": "A₁⁷ (fuera del plano)"
+        },
+        "A1_6": {
+          "position": 116.5,
+          "window": [
+            112.0,
+            121.0
+          ],
+          "label": "A₁⁶"
+        },
+        "A1_5": {
+          "position": 133.6,
+          "window": [
+            128.6,
+            138.6
+          ],
+          "label": "A₁⁵",
+          "discriminating": true
+        },
+        "A1_4": {
+          "position": 162.2,
+          "window": [
+            156.7,
+            167.7
+          ],
+          "label": "A₁⁴",
+          "discriminating": true
+        },
+        "A1_2": {
+          "position": 211.8,
+          "window": [
+            205.8,
+            217.8
+          ],
+          "label": "A₁²"
+        }
+      },
+      "separation_by_layers": {},
+      "separation_source": "",
+      "phase_2H": false,
+      "confidence": "medium",
+      "notes": "El WTe₂ NO tiene fase 2H: cristaliza en la Td ortorrómbica (Pmn2₁), que es semimetálica y la responsable de su magnetorresistencia gigante. Por eso aquí no hay separación E₂g–A₁g que contar: los cinco modos son A₁ y el conteo de capas se hace por la intensidad relativa del de 133.6, no por una separación. Dos avisos prácticos: se oxida al aire en días (aparece WO₃ a 807 cm⁻¹, y si tu muestra lleva semanas en un cajón eso es lo que vas a medir), y con 532 nm el fondo es alto porque es un semimetal.",
+      "source": "Kong et al., J. Phys. Chem. C 119 (2015) 28479; Jiang et al., Sci. Rep. 6 (2016) 19624"
+    },
+    {
+      "key": "TiS2",
+      "label": "Disulfuro de titanio (TiS₂, 1T)",
+      "formula": "TiS2",
+      "metal": "Ti",
+      "chalcogen": "S",
+      "polytype": "1T",
+      "layered": true,
+      "modes": {
+        "Eg": {
+          "position": 232.0,
+          "window": [
+            226.0,
+            238.0
+          ],
+          "label": "E_g (en el plano)",
+          "discriminating": true
+        },
+        "A1g": {
+          "position": 335.0,
+          "window": [
+            328.0,
+            342.0
+          ],
+          "label": "A₁g (fuera del plano)",
+          "discriminating": true
+        }
+      },
+      "separation_by_layers": {},
+      "separation_source": "",
+      "phase_2H": false,
+      "confidence": "high",
+      "notes": "Coordinación octaédrica (1T), no prismática: el TiS₂ no tiene fase 2H y sus dos modos permitidos están a 100 cm⁻¹ uno del otro, no a 20. La separación E–A NO cuenta capas aquí; lo que cambia con el espesor es la anchura. Es el material de intercalación de litio clásico, y el litio endurece los dos modos: si mides un cátodo ciclado, espera desplazamientos de varios cm⁻¹ que no son deformación sino estado de carga.",
+      "source": "Sandoval, Chen, Irwin & Frindt, Phys. Rev. B 45 (1992) 14347"
+    },
+    {
+      "key": "TiSe2",
+      "label": "Diseleniuro de titanio (TiSe₂, 1T)",
+      "formula": "TiSe2",
+      "metal": "Ti",
+      "chalcogen": "Se",
+      "polytype": "1T",
+      "layered": true,
+      "modes": {
+        "Eg": {
+          "position": 134.0,
+          "window": [
+            128.0,
+            140.0
+          ],
+          "label": "E_g (en el plano)",
+          "discriminating": true
+        },
+        "A1g": {
+          "position": 198.0,
+          "window": [
+            191.5,
+            204.5
+          ],
+          "label": "A₁g (fuera del plano)",
+          "discriminating": true
+        }
+      },
+      "separation_by_layers": {},
+      "separation_source": "",
+      "phase_2H": false,
+      "confidence": "high",
+      "notes": "1T como el TiS₂. A temperatura ambiente solo se ven los dos modos de primer orden; por debajo de ~200 K aparece la onda de densidad de carga conmensurada y con ella modos nuevos a ~75 y ~110 cm⁻¹. Si mides en frío y ves bandas ahí, eso es la CDW, no una impureza. OJO: el A₁g de 198 cm⁻¹ cae justo donde está el B₁g del β-FeSe (196) — si tu muestra puede tener los dos, la pestaña de DRX lo zanja.",
+      "source": "Holy, Woo, Klein & Brown, Phys. Rev. B 16 (1977) 3628"
+    },
+    {
+      "key": "NbSe2",
+      "label": "Diseleniuro de niobio (NbSe₂, 2H)",
+      "formula": "NbSe2",
+      "metal": "Nb",
+      "chalcogen": "Se",
+      "polytype": "2H",
+      "layered": true,
+      "modes": {
+        "A1g": {
+          "position": 229.0,
+          "window": [
+            223.5,
+            234.5
+          ],
+          "label": "A₁g (fuera del plano)",
+          "discriminating": true
+        },
+        "E2g": {
+          "position": 235.0,
+          "window": [
+            229.5,
+            240.5
+          ],
+          "label": "E¹₂g (en el plano)"
+        },
+        "CDW_2ph": {
+          "position": 185.0,
+          "window": [
+            170.0,
+            200.0
+          ],
+          "label": "banda ancha de dos fonones (CDW)"
+        }
+      },
+      "separation_by_layers": {},
+      "separation_source": "",
+      "phase_2H": true,
+      "confidence": "medium",
+      "notes": "Metálico y superconductor por debajo de 7 K. Sus dos modos de primer orden están a 6 cm⁻¹ uno de otro, así que con un espectrómetro normal se ven como una sola banda ancha: el conteo de capas por separación no funciona y no se intenta. Lo que SÍ es característico es la banda ancha de dos fonones centrada hacia 185 cm⁻¹, que se afila al enfriar por debajo de la transición CDW (33 K). Se oxida al aire con rapidez.",
+      "source": "Tsang, Smith, Shafer & Meyer, Phys. Rev. B 16 (1977) 4239; Sooryakumar & Klein, Phys. Rev. Lett. 45 (1980) 660"
+    },
+    {
+      "key": "TaS2_2H",
+      "label": "Disulfuro de tantalio (2H-TaS₂, metálico)",
+      "formula": "TaS2",
+      "metal": "Ta",
+      "chalcogen": "S",
+      "polytype": "2H",
+      "layered": true,
+      "modes": {
+        "E2g": {
+          "position": 286.0,
+          "window": [
+            278.0,
+            294.0
+          ],
+          "label": "E¹₂g (en el plano)",
+          "discriminating": true
+        },
+        "A1g": {
+          "position": 400.0,
+          "window": [
+            391.0,
+            409.0
+          ],
+          "label": "A₁g (fuera del plano)",
+          "discriminating": true
+        }
+      },
+      "separation_by_layers": {},
+      "separation_source": "",
+      "phase_2H": true,
+      "confidence": "medium",
+      "notes": "El politipo prismático trigonal. Los dos modos están a 114 cm⁻¹ uno del otro, como en el TiS₂ y al revés que en el MoS₂: la separación no cuenta capas. Lo que separa el 2H del 1T es la región de baja frecuencia — el 2H está limpio por debajo de 200 cm⁻¹ y el 1T no. Mide desde 40 cm⁻¹ si quieres distinguirlos.",
+      "source": "Sugai, Murase, Uchida & Tanaka, Physica B+C 105 (1981) 405"
+    },
+    {
+      "key": "TaS2_1T",
+      "label": "Disulfuro de tantalio (1T-TaS₂, con CDW)",
+      "formula": "TaS2",
+      "metal": "Ta",
+      "chalcogen": "S",
+      "polytype": "1T",
+      "layered": true,
+      "modes": {
+        "CDW_A": {
+          "position": 63.0,
+          "window": [
+            56.0,
+            70.0
+          ],
+          "label": "modo de amplitud CDW",
+          "discriminating": true
+        },
+        "CDW_B": {
+          "position": 75.0,
+          "window": [
+            68.0,
+            82.0
+          ],
+          "label": "modo de amplitud CDW",
+          "discriminating": true
+        },
+        "CDW_C": {
+          "position": 110.0,
+          "window": [
+            101.0,
+            119.0
+          ],
+          "label": "modo plegado por la superred"
+        },
+        "Eg": {
+          "position": 240.0,
+          "window": [
+            230.0,
+            250.0
+          ],
+          "label": "E_g"
+        },
+        "A1g": {
+          "position": 390.0,
+          "window": [
+            378.0,
+            402.0
+          ],
+          "label": "A₁g"
+        }
+      },
+      "separation_by_layers": {},
+      "separation_source": "",
+      "phase_2H": false,
+      "confidence": "medium",
+      "notes": "A temperatura ambiente está en la fase CDW casi conmensurada, y la superred pliega la zona de Brillouin: por eso aparecen modos por debajo de 130 cm⁻¹ que el 2H no tiene. Esos modos de baja frecuencia son la prueba del politipo 1T, y son la razón de que aquí la medida tenga que llegar a 40 cm⁻¹ (filtro notch estrecho o filtros volumétricos; con un edge filter normal no llegas). Al enfriar por debajo de 180 K la fase pasa a conmensurada y el espectro cambia otra vez.",
+      "source": "Sugai, Murase, Uchida & Tanaka, Physica B+C 105 (1981) 405; Hangyo, Nakashima & Mitsuishi, Ferroelectrics 52 (1983) 151"
+    },
+    {
+      "key": "TaSe2",
+      "label": "Diseleniuro de tantalio (2H-TaSe₂)",
+      "formula": "TaSe2",
+      "metal": "Ta",
+      "chalcogen": "Se",
+      "polytype": "2H",
+      "layered": true,
+      "modes": {
+        "E2g": {
+          "position": 210.0,
+          "window": [
+            203.0,
+            217.0
+          ],
+          "label": "E¹₂g (en el plano)",
+          "discriminating": true
+        },
+        "A1g": {
+          "position": 234.0,
+          "window": [
+            227.0,
+            241.0
+          ],
+          "label": "A₁g (fuera del plano)",
+          "discriminating": true
+        },
+        "CDW_2ph": {
+          "position": 140.0,
+          "window": [
+            126.0,
+            154.0
+          ],
+          "label": "banda ancha de dos fonones (CDW)"
+        }
+      },
+      "separation_by_layers": {},
+      "separation_source": "",
+      "phase_2H": true,
+      "confidence": "medium",
+      "notes": "Metálico, con CDW inconmensurada por debajo de 122 K. Sus dos modos caen en 210 y 234 cm⁻¹, es decir DENTRO de la ventana RBM de un nanotubo y muy cerca del A₁g del MoSe₂ (240): si tu muestra lleva los dos metales, mira los candidatos que el programa lista, no solo el primero.",
+      "source": "Sugai & Murase, Phys. Rev. B 25 (1982) 2418"
+    },
+    {
+      "key": "FeS2_pyrite",
+      "label": "Pirita (FeS₂, cúbica)",
+      "formula": "FeS2",
+      "metal": "Fe",
+      "chalcogen": "S",
+      "polytype": "pirita",
+      "layered": false,
+      "modes": {
+        "Eg": {
+          "position": 343.0,
+          "window": [
+            336.0,
+            350.0
+          ],
+          "label": "E_g (libración S–S)",
+          "discriminating": true
+        },
+        "Ag": {
+          "position": 379.0,
+          "window": [
+            372.0,
+            386.0
+          ],
+          "label": "A_g (tensión S–S)",
+          "discriminating": true
+        },
+        "Tg": {
+          "position": 430.0,
+          "window": [
+            422.0,
+            438.0
+          ],
+          "label": "T_g(3)"
+        }
+      },
+      "separation_by_layers": {},
+      "separation_source": "",
+      "phase_2H": false,
+      "confidence": "high",
+      "notes": "NO es laminar: es un disulfuro cúbico con pares S–S, así que no tiene capas que contar y el programa no lo intenta. Está aquí porque es lo que sale cuando un catalizador de hierro se encuentra con azufre, y porque su par 343/379 es inconfundible. Se quema con facilidad bajo el láser y pasa a hematita (292, 411): si ves esas dos creciendo mientras mides, baja la potencia y repite en un punto nuevo.",
+      "source": "Vogt, Chattopadhyay & Stolz, J. Phys. Chem. Solids 44 (1983) 869"
+    },
+    {
+      "key": "FeSe_tetragonal",
+      "label": "β-FeSe tetragonal (tipo PbO)",
+      "formula": "FeSe",
+      "metal": "Fe",
+      "chalcogen": "Se",
+      "polytype": "β (P4/nmm)",
+      "layered": true,
+      "modes": {
+        "A1g": {
+          "position": 181.0,
+          "window": [
+            174.0,
+            188.0
+          ],
+          "label": "A₁g (Se, fuera del plano)",
+          "discriminating": true
+        },
+        "B1g": {
+          "position": 196.0,
+          "window": [
+            188.5,
+            203.5
+          ],
+          "label": "B₁g (Fe)",
+          "discriminating": true
+        },
+        "Eg": {
+          "position": 102.0,
+          "window": [
+            94.0,
+            110.0
+          ],
+          "label": "E_g"
+        }
+      },
+      "separation_by_layers": {},
+      "separation_source": "",
+      "phase_2H": false,
+      "confidence": "medium",
+      "notes": "Laminar, pero NO un dicalcogenuro 2H: es el superconductor de capas de FeSe₄ con Tc ~ 8 K. La firma es el desdoblamiento de 14-16 cm⁻¹ entre el A₁g (mueve solo el Se) y el B₁g (mueve solo el Fe); una sola banda ancha ahí no basta para llamarlo tetragonal. Estos dos modos son, además, el motivo de que la pestaña de carbono compruebe fases antes de convertir un RBM en diámetro: 181 y 196 cm⁻¹ dan 'nanotubos' de 1.4 y 1.3 nm que no existen. El δ-FeSe hexagonal no está aquí porque su literatura Raman no es fiable; para separarlos, DRX.",
+      "source": "Gnezdilov, Pashkevich, Lemmens et al., Phys. Rev. B 83 (2011) 245127; Kumar et al., Solid State Commun. 150 (2010) 557"
+    },
+    {
+      "key": "FeSe2_marcasite",
+      "label": "FeSe₂ marcasita (ortorrómbico)",
+      "formula": "FeSe2",
+      "metal": "Fe",
+      "chalcogen": "Se",
+      "polytype": "marcasita",
+      "layered": false,
+      "modes": {
+        "Ag": {
+          "position": 175.0,
+          "window": [
+            167.0,
+            183.0
+          ],
+          "label": "A_g (Se–Se)",
+          "discriminating": true
+        },
+        "B1g": {
+          "position": 245.0,
+          "window": [
+            236.0,
+            254.0
+          ],
+          "label": "B₁g",
+          "discriminating": true
+        },
+        "lib": {
+          "position": 148.0,
+          "window": [
+            140.0,
+            156.0
+          ],
+          "label": "libracional"
+        }
+      },
+      "separation_by_layers": {},
+      "separation_source": "",
+      "phase_2H": false,
+      "confidence": "low",
+      "notes": "Lo que se forma cuando sobra selenio. No es laminar. Su banda de 175 cm⁻¹ está a 6 cm⁻¹ del A₁g del β-FeSe: con resolución de 4 cm⁻¹ o peor no las separas, y este es exactamente el caso en que hay que ir a DRX. La confianza es baja a propósito: las posiciones publicadas del FeSe₂ son escasas y no coinciden entre trabajos.",
+      "source": "Asignación tentativa por analogía con la marcasita FeS₂ y con los diseleniuros del grupo; la literatura Raman del FeSe₂ es escasa"
     }
   ],
   "phases": {
@@ -330,6 +785,11 @@
           150.0,
           220.0,
           325.0
+        ],
+        "MoTe2": [
+          128.0,
+          163.0,
+          260.0
         ]
       },
       "marker_labels": [
@@ -339,8 +799,8 @@
       ],
       "signature": "aparecen los modos J1, J2 y J3, ausentes en el 2H",
       "confidence": "medium",
-      "source": "Kappera et al., Nature Mater. 13 (2014) 1128; Calandra, Phys. Rev. B 88 (2013) 245428",
-      "notes": "Los modos J vienen de la distorsión que dobla la celda: existen solo en la fase 1T'. Verlos es prueba positiva de fase metálica. No verlos NO prueba que no la haya, porque una fracción pequeña puede quedar por debajo del ruido."
+      "source": "Kappera et al., Nature Mater. 13 (2014) 1128; Calandra, Phys. Rev. B 88 (2013) 245428; para el MoTe₂: Ma et al., ACS Nano 10 (2016) 9208; Chen et al., ACS Nano 9 (2015) 4611",
+      "notes": "Los modos J vienen de la distorsión que dobla la celda: existen solo en la fase 1T'. Verlos es prueba positiva de fase metálica. No verlos NO prueba que no la haya, porque una fracción pequeña puede quedar por debajo del ruido. En el MoTe₂ la fase distorsionada (1T′ monoclínica, y su gemela Td ortorrómbica por debajo de 250 K) es estable a temperatura ambiente, no inducida: sus bandas de 128 y 163 cm⁻¹ no existen en el 2H y son la manera directa de saber qué politipo has sintetizado."
     }
   },
   "perturbations": {
@@ -550,6 +1010,237 @@
       "source": "Pine & Dresselhaus, Phys. Rev. B 5 (1972) 4087",
       "colour": "blanco, aislante",
       "notes": "Producto de oxidación del MoTe₂ y del WTe₂. El MoTe₂ se oxida al aire mucho más deprisa que los sulfuros: si mides MoTe₂ expuesto, esto es lo primero que buscar."
+    },
+    {
+      "key": "TiO2_anatase",
+      "label": "TiO₂ anatasa",
+      "formula": "TiO2",
+      "metal": "Ti",
+      "crystal_system": "tetragonal",
+      "space_group": "I4₁/amd",
+      "bands": [
+        144.0,
+        197.0,
+        399.0,
+        515.0,
+        639.0
+      ],
+      "strong": [
+        144.0,
+        399.0,
+        639.0
+      ],
+      "signature": [
+        144.0,
+        399.0
+      ],
+      "confidence": "high",
+      "source": "Ohsaka, Izumi & Fujiki, J. Raman Spectrosc. 7 (1978) 321",
+      "colour": "blanco, aislante",
+      "notes": "La E_g de 144 cm⁻¹ es una de las bandas Raman más intensas que existen: una fracción del 1 % de anatasa da una banda mayor que el A₁g del dicalcogenuro. NO la leas como cantidad. El par 144 + 399 la separa del rutilo sin discusión. Bajo láser intenso la anatasa pasa a rutilo."
+    },
+    {
+      "key": "TiO2_rutile",
+      "label": "TiO₂ rutilo",
+      "formula": "TiO2",
+      "metal": "Ti",
+      "crystal_system": "tetragonal",
+      "space_group": "P4₂/mnm",
+      "bands": [
+        143.0,
+        235.0,
+        447.0,
+        612.0
+      ],
+      "strong": [
+        447.0,
+        612.0
+      ],
+      "signature": [
+        447.0,
+        612.0
+      ],
+      "confidence": "high",
+      "source": "Porto, Fleury & Damen, Phys. Rev. 154 (1967) 522",
+      "colour": "blanco, aislante",
+      "notes": "El par 447 + 612 es la firma; la banda ancha de 235 cm⁻¹ es de dos fonones y no cuenta como identificación. Es la fase de alta temperatura: verla en una muestra calcinada por debajo de 600 °C sugiere que el láser la hizo, no el horno."
+    },
+    {
+      "key": "Ta2O5_orthorhombic",
+      "label": "Ta₂O₅ ortorrómbico (fase L)",
+      "formula": "Ta2O5",
+      "metal": "Ta",
+      "crystal_system": "orthorhombic",
+      "space_group": "Pmm2",
+      "bands": [
+        105.0,
+        253.0,
+        500.0,
+        630.0,
+        710.0
+      ],
+      "strong": [
+        710.0,
+        253.0
+      ],
+      "signature": [
+        710.0
+      ],
+      "confidence": "medium",
+      "source": "Joseph, Tyagi, Mishra & Sharma, J. Appl. Phys. 111 (2012) 123505",
+      "colour": "blanco, aislante",
+      "notes": "La banda de 710 cm⁻¹ (tensión Ta–O) es la que identifica. Ojo: el Ta₂O₅ es casi siempre amorfo hasta que se calcina por encima de 700 °C, y el amorfo tiene la MISMA banda pero de 150 cm⁻¹ de anchura. Si la tuya es ancha, mira la entrada Ta2O5_amorphous: la anchura es el dato, no la posición."
+    },
+    {
+      "key": "Ta2O5_amorphous",
+      "label": "Ta₂O₅ amorfo",
+      "formula": "Ta2O5",
+      "metal": "Ta",
+      "crystal_system": "amorfo",
+      "space_group": null,
+      "bands": [
+        250.0,
+        660.0
+      ],
+      "strong": [
+        660.0
+      ],
+      "signature": [
+        660.0
+      ],
+      "min_fwhm": 60.0,
+      "confidence": "medium",
+      "source": "Joseph, Tyagi, Mishra & Sharma, J. Appl. Phys. 111 (2012) 123505",
+      "colour": "blanco, aislante",
+      "notes": "Dos bandas anchísimas y nada más. La regla de anchura es lo único que lo separa del cristalino, cuyas bandas miden 20-30 cm⁻¹; el umbral de 60 es un límite INFERIOR holgado a propósito, porque la corrección de línea de base con asls se come las alas de una banda muy ancha y la FWHM que mides sale entre un 10 y un 20 % menor que la real. Una banda ancha prueba desorden; una estrecha no prueba orden si el equipo no resuelve."
+    },
+    {
+      "key": "Nb2O5_H",
+      "label": "Nb₂O₅ monoclínico (fase H)",
+      "formula": "Nb2O5",
+      "metal": "Nb",
+      "crystal_system": "monoclinic",
+      "space_group": "P2",
+      "bands": [
+        125.0,
+        230.0,
+        310.0,
+        690.0,
+        990.0
+      ],
+      "strong": [
+        690.0
+      ],
+      "signature": [
+        690.0
+      ],
+      "confidence": "medium",
+      "source": "Jehng & Wachs, Chem. Mater. 3 (1991) 100",
+      "colour": "blanco, aislante",
+      "notes": "La banda de 690 cm⁻¹ es la tensión Nb–O de octaedros ligeramente distorsionados y domina el espectro; la débil de 990 cm⁻¹ corresponde a Nb=O terminal y solo aparece en fases muy distorsionadas o superficiales. Es el producto inevitable de dejar NbSe₂ al aire."
+    },
+    {
+      "key": "Fe2O3_hematite",
+      "label": "Hematita α-Fe₂O₃",
+      "formula": "Fe2O3",
+      "metal": "Fe",
+      "crystal_system": "romboédrico",
+      "space_group": "R-3c",
+      "bands": [
+        225.0,
+        245.0,
+        292.0,
+        411.0,
+        497.0,
+        612.0
+      ],
+      "strong": [
+        292.0,
+        411.0,
+        612.0
+      ],
+      "signature": [
+        411.0,
+        612.0
+      ],
+      "confidence": "high",
+      "source": "de Faria, Venâncio Silva & de Oliveira, J. Raman Spectrosc. 28 (1997) 873",
+      "colour": "rojo, aislante",
+      "notes": "Es en lo que acaban la pirita, la magnetita y casi cualquier hierro bajo un láser demasiado fuerte. Si crece mientras mides, la estás fabricando. Su A₁g de 225 cm⁻¹ cae en la ventana RBM."
+    },
+    {
+      "key": "Fe3O4_magnetite",
+      "label": "Magnetita Fe₃O₄",
+      "formula": "Fe3O4",
+      "metal": "Fe",
+      "crystal_system": "cúbico",
+      "space_group": "Fd-3m",
+      "bands": [
+        310.0,
+        540.0,
+        668.0
+      ],
+      "strong": [
+        668.0
+      ],
+      "signature": [
+        668.0
+      ],
+      "confidence": "medium",
+      "source": "Shebanova & Lazor, J. Solid State Chem. 174 (2003) 424",
+      "colour": "negro, METÁLICO (semimetal de valencia mixta)",
+      "notes": "Conduce, así que si está en contacto con el calcogenuro lo que espera es DOPADO, no deformación. Es la fase que más fácilmente se quema bajo el láser: por encima de ~1 mW en el punto pasa a hematita y lo que informes será la hematita que hiciste tú."
+    },
+    {
+      "key": "FeOOH_goethite",
+      "label": "Goethita α-FeOOH",
+      "formula": "FeOOH",
+      "metal": "Fe",
+      "crystal_system": "ortorrómbico",
+      "space_group": "Pnma",
+      "bands": [
+        299.0,
+        386.0,
+        479.0,
+        550.0
+      ],
+      "strong": [
+        299.0,
+        386.0,
+        550.0
+      ],
+      "signature": [
+        386.0,
+        550.0
+      ],
+      "confidence": "medium",
+      "source": "de Faria, Venâncio Silva & de Oliveira, J. Raman Spectrosc. 28 (1997) 873",
+      "colour": "pardo-amarillo, aislante",
+      "notes": "El oxihidróxido de la corrosión húmeda: aparece si la muestra ha estado al aire con humedad, no durante la síntesis. Su banda de 386 cm⁻¹ está a 7 cm⁻¹ del A_g de la pirita (379); mira si también está la de 299."
+    },
+    {
+      "key": "SeO2",
+      "label": "SeO₂ (óxido de selenio)",
+      "formula": "SeO2",
+      "metal": "Se",
+      "crystal_system": "tetragonal",
+      "space_group": "P4₂/mbc",
+      "bands": [
+        375.0,
+        465.0,
+        740.0,
+        905.0
+      ],
+      "strong": [
+        905.0
+      ],
+      "signature": [
+        905.0
+      ],
+      "confidence": "medium",
+      "source": "Bues & Gehrke, Z. Anorg. Allg. Chem. 288 (1956) 291; espectros de referencia RRUFF",
+      "colour": "blanco, aislante",
+      "notes": "La tensión Se=O de 905 cm⁻¹ es exclusiva y está muy lejos de cualquier modo de un dicalcogenuro, así que es una identificación limpia si mides hasta 1000 cm⁻¹. Es volátil y sublima hacia 315 °C: verlo suele querer decir que el selenio se oxidó al aire DESPUÉS de la síntesis, no durante."
     }
   ],
   "oxidation_products": {
@@ -562,7 +1253,8 @@
     "MoSe2": [
       "MoO3_alpha",
       "MoO2",
-      "MoOx_amorphous"
+      "MoOx_amorphous",
+      "SeO2"
     ],
     "MoTe2": [
       "MoO3_alpha",
@@ -575,7 +1267,56 @@
     ],
     "WSe2": [
       "WO3_gamma",
-      "WO2"
+      "WO2",
+      "SeO2"
+    ],
+    "WTe2": [
+      "WO3_gamma",
+      "WO2",
+      "TeO2_alpha"
+    ],
+    "TiS2": [
+      "TiO2_anatase",
+      "TiO2_rutile"
+    ],
+    "TiSe2": [
+      "TiO2_anatase",
+      "TiO2_rutile",
+      "SeO2"
+    ],
+    "NbSe2": [
+      "Nb2O5_H",
+      "SeO2"
+    ],
+    "TaS2_2H": [
+      "Ta2O5_amorphous",
+      "Ta2O5_orthorhombic"
+    ],
+    "TaS2_1T": [
+      "Ta2O5_amorphous",
+      "Ta2O5_orthorhombic"
+    ],
+    "TaSe2": [
+      "Ta2O5_amorphous",
+      "Ta2O5_orthorhombic",
+      "SeO2"
+    ],
+    "FeS2_pyrite": [
+      "Fe2O3_hematite",
+      "Fe3O4_magnetite",
+      "FeOOH_goethite"
+    ],
+    "FeSe_tetragonal": [
+      "Fe2O3_hematite",
+      "Fe3O4_magnetite",
+      "FeOOH_goethite",
+      "SeO2"
+    ],
+    "FeSe2_marcasite": [
+      "Fe2O3_hematite",
+      "Fe3O4_magnetite",
+      "FeOOH_goethite",
+      "SeO2"
     ]
   },
   "interface": {
@@ -590,5 +1331,43 @@
     "out_of_plane_mode": "A1g",
     "in_plane_mode": "E2g",
     "notes": "El A₁g (fuera del plano) responde sobre todo a la transferencia de carga y a la interacción con lo que tiene encima o debajo; el E₂g (en el plano) responde sobre todo a la deformación biaxial. Si SOLO se mueve el A₁g, sospecha dopado; si se mueven los dos en el mismo sentido, deformación. Con un óxido METÁLICO encima (MoO₂, WO₂) lo esperable es dopado; con uno aislante (MoO₃, WO₃), deformación."
+  },
+  "_missing": {
+    "_comment": [
+      "Calcogenuros que NO están en la biblioteca, y por qué. Esta lista",
+      "existe para que una ausencia sea una decisión y no un olvido: si tu",
+      "muestra es uno de estos, el programa dirá 'no identificado' y tendrá",
+      "razón en decirlo.",
+      "",
+      "El criterio para entrar es tener una fuente citable. Una posición",
+      "inventada no avisa: identifica mal y con seguridad aparente, que es",
+      "peor que no identificar."
+    ],
+    "entries": [
+      {
+        "formula": "NbS2",
+        "reason": "la literatura Raman del 2H-NbS₂ es escasa y las posiciones publicadas no coinciden entre trabajos. El niobio está cubierto por el NbSe₂ y por el Nb₂O₅."
+      },
+      {
+        "formula": "NbTe2 / TaTe2",
+        "reason": "sin datos Raman de referencia fiables a temperatura ambiente."
+      },
+      {
+        "formula": "TiTe2",
+        "reason": "se esperan dos modos (E_g y A₁g) por debajo de 150 cm⁻¹ por analogía con TiS₂ y TiSe₂, pero no con posiciones que pueda citar."
+      },
+      {
+        "formula": "MnS, MnSe, MnTe, MnS₂",
+        "reason": "el MnS de tipo NaCl tiene el primer orden PROHIBIDO por simetría —como el hierro alfa— y lo que se ve son bandas de dos fonones activadas por defectos, que no identifican nada. El manganeso está cubierto por sus óxidos en phases.json (Mn₃O₄, Mn₂O₃, MnO₂), que es donde de verdad acaba un catalizador de manganeso."
+      },
+      {
+        "formula": "FeTe, FeTe₂",
+        "reason": "la sección eficaz es baja y las asignaciones publicadas son contradictorias. Para el sistema Fe–Te, DRX."
+      },
+      {
+        "formula": "δ-FeSe hexagonal (NiAs)",
+        "reason": "está en phases.json con confianza BAJA y un aviso expreso, porque es una fase que aparece de verdad en las síntesis de FeSe. Aquí no se repite: la pestaña de TMD no debe proponer un politipo que solo la DRX puede decidir."
+      }
+    ]
   }
 }
