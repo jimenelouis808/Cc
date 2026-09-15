@@ -159,3 +159,48 @@ class TestReport:
         cell must land well below that rather than in atomic units."""
         report = cell_report(to_unit_cell(build_graphene_supercell(2, 2)))
         assert 0.01 < report["density"] < 2.5
+
+
+class TestWhatComesBackFlaggedPeriodic:
+    """``mark`` decides the flags, never the geometry.
+
+    Not cosmetic: the Quantum ESPRESSO writer reads ``pbc`` to pick the
+    k-mesh and ``assume_isolated``, so a cage marked 3D is sampled across
+    its own vacuum.
+    """
+
+    def test_true_keeps_a_tube_periodic_along_its_axis_only(self, tube):
+        converted = to_unit_cell(tube, mark="true")
+        assert list(converted.get_pbc()) == [False, False, True]
+
+    def test_true_keeps_a_sheet_periodic_in_its_plane_only(self, sheet):
+        converted = to_unit_cell(sheet, mark="true")
+        assert list(converted.get_pbc()) == [True, True, False]
+
+    def test_true_leaves_a_cage_aperiodic(self, cage):
+        converted = to_unit_cell(cage, mark="true")
+        assert not any(converted.get_pbc())
+
+    def test_the_geometry_is_identical_either_way(self, tube):
+        """Only the flags differ, so a mistake here cannot move an atom."""
+        loose = to_unit_cell(tube, mark="true")
+        strict = to_unit_cell(tube, mark="3D")
+        assert loose.get_positions() == pytest.approx(strict.get_positions())
+        assert np.asarray(loose.cell) == pytest.approx(np.asarray(strict.cell))
+
+    def test_an_unknown_mark_is_refused(self, tube):
+        with pytest.raises(ValueError, match="mark"):
+            to_unit_cell(tube, mark="periodic-ish")
+
+    def test_the_k_mesh_follows_the_mark(self, cage, tmp_path):
+        """The reason the flag matters, measured on the written input."""
+        from nanocarbon_lab.exports.qe import write_qe_input
+
+        def mesh(atoms, name):
+            text = write_qe_input(atoms, tmp_path, filename=name,
+                                  force=True).read_text()
+            line = text.split("K_POINTS automatic")[1].strip().splitlines()[0]
+            return tuple(int(v) for v in line.split()[:3])
+
+        assert mesh(to_unit_cell(cage, mark="true"), "t.in") == (1, 1, 1)
+        assert mesh(to_unit_cell(cage, mark="3D"), "s.in") != (1, 1, 1)

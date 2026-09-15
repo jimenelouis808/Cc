@@ -416,8 +416,17 @@ class TestCentrelineShapes:
         with pytest.raises(ValueError):
             build_capped_cnt(n_body_rings=8, freq=2, shape="random", waviness=1.5)
 
-    def test_excessive_strain_budget_warns(self):
-        with pytest.warns(UserWarning, match="no longer physically"):
+    def test_an_excessive_strain_budget_warns_and_then_refuses(self):
+        """The warning explains; the refusal is what stops the damage.
+
+        This used to warn and hand the structure back anyway, and that is
+        how three coil presets shipped with 0.00 Å "bonds" and four
+        thousand overlapping atoms while their ring census read as
+        perfect. Both halves are asserted: losing the warning would lose
+        the explanation, losing the raise would bring the bug back.
+        """
+        with pytest.warns(UserWarning, match="no longer physically"), \
+                pytest.raises(ValueError, match="tears the wall"):
             build_capped_cnt(
                 n_body_rings=10, freq=2, shape="random",
                 waviness=1.0, max_strain=0.30, seed=1,
@@ -471,10 +480,13 @@ class TestHelixDimensions:
         assert 1.30 < g["bond_min"] <= g["bond_max"] < 1.55
         assert atoms.info["path_strain"] < 0.08
 
-    def test_tight_coil_warns_instead_of_pretending(self):
+    def test_a_tight_coil_warns_and_then_refuses(self):
         # r_tube/R here is far past the sp2 limit; real carbon nanocoils have
-        # coil radii of hundreds of Å for exactly this reason.
-        with pytest.warns(UserWarning, match="strains the outer wall"):
+        # coil radii of hundreds of Å for exactly this reason. Measured, this
+        # one reaches 1.85 Å bonds and five overlapping pairs -- torn by the
+        # same threshold the schwarzites use, not merely strained.
+        with pytest.warns(UserWarning, match="strains the outer wall"), \
+                pytest.raises(ValueError, match="tears the wall"):
             build_capped_cnt(
                 shape="helix", helix_radius=18.0, helix_pitch=10.0,
                 helix_turns=1.0, freq=3,

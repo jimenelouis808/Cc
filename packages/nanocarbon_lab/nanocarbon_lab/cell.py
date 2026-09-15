@@ -122,6 +122,7 @@ def to_unit_cell(
     atoms: Atoms,
     vacuum: float | None = None,
     wrap: bool = True,
+    mark: str = "3D",
 ) -> Atoms:
     """Return a copy that is a fully periodic, DFT-ready unit cell.
 
@@ -147,11 +148,33 @@ def to_unit_cell(
         Fold atoms into the cell. On by default: atoms drawn outside the
         box are the commonest reason a correct periodic structure looks
         broken in a viewer.
+    mark
+        Which axes come back flagged periodic, once the vacuum is in
+        place. The geometry is identical either way; only ``pbc`` differs.
+
+        ``"3D"`` (default) flags all three, which is what a plane-wave
+        code is given and what formats like CIF can express at all. The
+        vacuum is what stops the images interacting, and every existing
+        caller of this function wants it.
+
+        ``"true"`` flags only the axes the structure genuinely
+        repeats in -- a nanotube comes back ``(False, False, True)`` and a
+        sheet ``(True, True, False)``. That is what the structure *is*,
+        it is what every viewer and ASE-based tool reads correctly, and
+        the Quantum ESPRESSO writer uses it to pick the k-mesh and
+        ``assume_isolated``: a tube gets ``1 1 N`` rather than a mesh
+        across its vacuum.
+
+        Which to ask for is not cosmetic: the Quantum ESPRESSO writer
+        reads ``pbc`` to choose the k-mesh and ``assume_isolated``, so a
+        cage marked 3D is sampled 2x2x2 across its own vacuum where
+        ``"true"`` gives it 1x1x1 and Makov-Payne, and a sheet 5x5x2
+        where ``"true"`` gives 5x5x1 and the 2D correction.
 
     Returns
     -------
     ase.Atoms
-        ``pbc=(True, True, True)``, with a ``unit_cell`` entry in
+        Periodic per ``mark``, with a ``unit_cell`` entry in
         ``info`` recording what it started from, the padding applied per
         axis and the achieved image separation.
 
@@ -198,8 +221,13 @@ def to_unit_cell(
         cell[axis, axis] = length
         padded[axis] = vacuum
 
+    if mark not in ("true", "3D"):
+        raise ValueError(f"mark must be 'true' or '3D', not {mark!r}.")
     out.set_cell(cell)
-    out.set_pbc(True)
+    # Either way every axis now has a real lattice vector and the open
+    # ones carry measured vacuum. The flag is about what the structure
+    # claims to be, not about the geometry, which is the same.
+    out.set_pbc(True if mark == "3D" else pbc)
 
     # Centre only along the axes that were rebuilt. Shifting a periodic
     # axis is harmless but pointless, and doing it would move atoms

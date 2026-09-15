@@ -232,37 +232,33 @@ PRESETS: dict[str, dict[str, object]] = {
     "N-doped nanotube": {
         "mode_kind": "capped tube", "rings": 10, "freq": 3,
         "dopant": "N", "dopant_conc": 0.03},
-    # Swept along a lattice centreline rather than meshed from a surface,
-    # so the wall comes out as twelve pentagons and nothing else but
-    # hexagons. The three differ only in how thick the tube is and how
-    # wide the helix: thinner and tighter is faster and reads as a spring
-    # sooner, thicker and wider is closer to a real nanocoil. Every one
-    # keeps the pitch just clear of the walls and at least three turns,
-    # because that is what makes a picture look like a helix.
+    # Every one of these goes through the implicit route, and that is the
+    # correction rather than a preference. A swept tube keeps its
+    # hexagons, so following a helix can only stretch its outer wall: the
+    # three swept presets that shipped here came back with 0.00 Å
+    # "bonds" and four thousand overlapping pairs while their ring census
+    # read as perfect. Meshing the surface instead lets the remesher put
+    # pentagons on the compressed inner wall and heptagons on the
+    # stretched outer one, which is how a real nanocoil relieves
+    # curvature -- and those come back "clean" on the same measure.
     "Nanocoil (small, clean)": {
-        "mode_kind": "capped tube", "shape": "helix", "freq": 1,
-        "coil_radius": 15.0, "coil_pitch": 8.0, "coil_turns": 3.0,
+        "mode_kind": "coil (relaxed)", "coil_radius": 18.0, "coil_pitch": 13.0,
+        "coil_turns": 2.0, "coil_tube_radius": 4.5, "anneal": 80,
         "roughness": 0.0, "n_sw": 0, "n_dv": 0},
-    "Nanocoil (swept, fast)": {
-        "mode_kind": "capped tube", "shape": "helix", "freq": 1,
-        "coil_radius": 20.0, "coil_pitch": 8.0, "coil_turns": 4.0,
+    "Nanocoil (three turns)": {
+        "mode_kind": "coil (relaxed)", "coil_radius": 22.0, "coil_pitch": 13.0,
+        "coil_turns": 3.0, "coil_tube_radius": 4.5, "anneal": 80,
         "roughness": 0.0, "n_sw": 0, "n_dv": 0},
     # The one that goes into a plane-wave code: one turn, closed on the
-    # z-torus, 634 atoms. Its wall carries pentagons and heptagons, which
-    # is not a defect but how a coil relieves curvature -- the tidy
-    # all-hexagon coils above are stretched instead, and their bonds show
-    # it.
+    # z-torus, so it is a cell and not a fragment with two dangling ends.
     "Nanocoil (periodic cell, DFT)": {
         "mode_kind": "coil (periodic, DFT)", "coil_radius": 15.0,
         "coil_pitch": 9.6, "coil_tube_radius": 3.0,
         "roughness": 0.0, "n_sw": 0, "n_dv": 0},
     "Nanocoil (wide, physical)": {
-        "mode_kind": "capped tube", "shape": "helix", "freq": 2,
-        "coil_radius": 40.0, "coil_pitch": 12.0, "coil_turns": 4.0,
+        "mode_kind": "coil (relaxed)", "coil_radius": 25.0, "coil_pitch": 14.0,
+        "coil_turns": 3.0, "coil_tube_radius": 5.0, "anneal": 80,
         "roughness": 0.0, "n_sw": 0, "n_dv": 0},
-    "Nanocoil (relaxed topology)": {
-        "mode_kind": "coil (relaxed)", "coil_radius": 22.0, "coil_pitch": 13.0,
-        "coil_turns": 3.0, "coil_tube_radius": 4.5, "anneal": 80},
     "Y junction": {
         "mode_kind": "junction", "j_kind": "Y", "j_radius": 6.0,
         "j_arm": 22.0, "j_blend": 4.0, "anneal": 80},
@@ -2977,6 +2973,14 @@ class NanocarbonGUI:
         ttk.Spinbox(bar, from_=4.0, to=30.0, increment=1.0, width=4,
                     textvariable=self.var_cell_vacuum).pack(side="left")
         ttk.Label(bar, text="Å vac").pack(side="left")
+        # What comes back flagged periodic. "true" keeps a tube periodic
+        # along its axis and a sheet in its plane, which is what they are
+        # and what the QE writer reads to pick the k-mesh. "3D" flags all
+        # three, for formats with no way to say anything else.
+        self.var_cell_mark = tk.StringVar(value="true")
+        ttk.Combobox(bar, textvariable=self.var_cell_mark, width=5,
+                     state="readonly", values=["true", "3D"]
+                     ).pack(side="left", padx=(2, 0))
 
         ttk.Button(bar, text="save image…", width=11,
                    command=self.on_save_image).pack(side="right")
@@ -3073,7 +3077,8 @@ class NanocarbonGUI:
             return
         try:
             converted = to_unit_cell(self.atoms,
-                                     vacuum=float(self.var_cell_vacuum.get()))
+                                     vacuum=float(self.var_cell_vacuum.get()),
+                                     mark=self.var_cell_mark.get())
         except (ValueError, RuntimeError, tk.TclError) as exc:
             self._show_error("Could not convert to a unit cell", str(exc))
             return
@@ -3094,9 +3099,23 @@ class NanocarbonGUI:
                f"under {MIN_IMAGE_SEPARATION:.0f} Å, so add vacuum before "
                "trusting an energy.")
         )
+        # Flagging vacuum as periodic is not a labelling choice: the QE
+        # writer picks the k-mesh from pbc, so a cage marked 3D is sampled
+        # 2x2x2 across its own vacuum instead of 1x1x1, and a sheet 5x5x2
+        # instead of 5x5x1 -- work spent on nothing, and assume_isolated
+        # dropped along with it.
+        after = describe_periodicity(converted)
+        axes = "".join(name for name, on
+                       in zip("xyz", converted.get_pbc(), strict=True) if on)
+        along = f" along {axes}" if axes and after != "3D" else ""
+        warning = ""
+        if self.var_cell_mark.get() == "3D" and before != "3D":
+            warning = (" Marked 3D although it is not: a k-mesh will be spent "
+                       "sampling the vacuum, and assume_isolated is dropped. "
+                       "Use «true» unless your format cannot express it.")
         self._set_status(
-            f"{before} → 3D periodic: {lengths[0]:.1f} × {lengths[1]:.1f} × "
-            f"{lengths[2]:.1f} Å, {len(converted)} atoms.{verdict}"
+            f"{before} → {after}{along}: {lengths[0]:.1f} × {lengths[1]:.1f} × "
+            f"{lengths[2]:.1f} Å, {len(converted)} atoms.{verdict}{warning}"
         )
 
     def on_save_image(self) -> None:
@@ -3785,7 +3804,11 @@ class NanocarbonGUI:
         )
         if not path:
             return None
-        converted = to_unit_cell(self.atoms)
+        # 3D for the file, whatever the viewer is showing: CIF has no way
+        # to say "periodic along z only", so a reader given a 0D or 1D
+        # flag either rejects it or invents its own answer. The vacuum in
+        # the open directions is what makes that honest, and it is there.
+        converted = to_unit_cell(self.atoms, mark="3D")
         written = write_cif(converted, Path(path))
         report = cell_report(converted)
         self._describe_cell(report)

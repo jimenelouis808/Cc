@@ -48,6 +48,7 @@ from ase import Atoms
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D
 from ..utils.geometry import center_in_cell
 from ..utils.rng import make_rng
+from ..validation.quality import sp2_quality
 from . import centerline as cl
 from . import fullerene_mesh as fm
 
@@ -496,6 +497,26 @@ def build_capped_cnt(
     atoms.set_cell(np.diag(extents + vacuum))
     center_in_cell(atoms, axes=(0, 1, 2))
 
+    # Sweeping bends a finished all-hexagon lattice, so curvature is paid
+    # in bond length and there is no ring the remesher can insert to
+    # relieve it. Past a certain tightness the wall does not stretch, it
+    # tears: measured at 0.00 Å "bonds" and four thousand sub-2 Å contacts
+    # on a coil whose ring census came back perfect. Topology is checked
+    # by the Euler budget and says nothing about this, which is the whole
+    # reason sp2_quality exists -- it just was not being called here.
+    quality = geometry_report(positions, bonds)
+    verdict, why = sp2_quality(quality)
+    if verdict == "broken":
+        raise ValueError(
+            f"This sweep tears the wall rather than bending it: {why} "
+            "A swept tube keeps its hexagons, so the only way it can follow "
+            "a curve is to stretch. Either widen the path (a larger helix "
+            "radius or a gentler bend), thin the tube (a lower subdivision "
+            "frequency), or use an implicit mode such as «coil (relaxed)», "
+            "which inserts the pentagons and heptagons the curvature calls "
+            "for instead of stretching."
+        )
+
     atoms.info.update(
         {
             "structure_type": "capped_cnt",
@@ -519,7 +540,7 @@ def build_capped_cnt(
             "ring_counts": {int(k): int(v) for k, v in ring_counts.items()},
             "rings": [[int(a) for a in r] for r in rings],
             "bonds": [[int(a), int(b)] for a, b in bonds],
-            "geometry": geometry_report(positions, bonds),
+            "geometry": quality,
             "defect_log": defect_log,
         }
     )
