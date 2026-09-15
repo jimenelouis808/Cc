@@ -567,6 +567,7 @@ def isotropic_remesh(
     box: float | None = None,
     anneal_sweeps: int = 80,
     anneal_temperature: float = 0.3,
+    anneal_restarts: int = 1,
     rng: np.random.Generator | None = None,
 ) -> Mesh:
     """Remesh to near-uniform triangles of side ``target_edge``.
@@ -585,7 +586,7 @@ def isotropic_remesh(
         Desired triangle side. In the dual this sets the carbon ring
         size, so it should be roughly the ring-centre spacing you want --
         about ``sqrt(3) * bond`` (2.46 Å) for graphitic carbon.
-    anneal_sweeps, anneal_temperature, rng
+    anneal_sweeps, anneal_temperature, anneal_restarts, rng
         Passed to :func:`anneal_edge_flips` after the main loop. Set
         ``anneal_sweeps=0`` to keep the as-remeshed defect population,
         which reads as a rougher, more CVD-like wall.
@@ -630,6 +631,7 @@ def isotropic_remesh(
             rng if rng is not None else np.random.default_rng(0),
             sweeps=anneal_sweeps,
             temperature=anneal_temperature,
+            restarts=anneal_restarts,
         )
         mesh = _tangential_smooth(mesh, field, box=box, max_step=smooth_step)
 
@@ -652,6 +654,7 @@ def anneal_edge_flips(
     temperature: float = 0.3,
     min_degree: int = 5,
     max_degree: int = 8,
+    restarts: int = 1,
 ) -> Mesh:
     """Metropolis-anneal edge flips to remove spurious dislocation pairs.
 
@@ -683,17 +686,49 @@ def anneal_edge_flips(
         reproducible only through this.
     sweeps
         Passes over the edge list. Temperature falls linearly to zero
-        across them. 80 is comfortably converged; 0 disables annealing and
-        leaves the as-remeshed defect population intact.
+        across them; 0 disables annealing and leaves the as-remeshed
+        defect population intact. More sweeps do not move the median much
+        -- 80 and 200 both sit at 13 pairs on a Y junction -- but they
+        lengthen the good tail, which is what ``restarts`` samples: the
+        best of twelve was 12 at 80 sweeps and 8 at 200.
     temperature
         Starting temperature. Measured optimum is ~0.3: colder barely
         escapes the minimum, hotter (>=0.6) wanders and ends up worse.
+    restarts
+        Independent anneals from the same mesh, keeping whichever ends
+        with the fewest dislocations. Annealing is stochastic and its
+        spread is wide enough to be worth sampling: twelve runs of 200
+        sweeps on one Y-junction mesh gave 8 to 15 pairs. One draw from
+        that is a coin toss; the best of a few is not, and each costs
+        under two seconds against a ten-second build.
 
     Returns
     -------
     (vertices, triangles)
         Same vertices, re-flipped triangles.
     """
+    if sweeps <= 0 or restarts < 1:
+        return mesh
+    best = None
+    best_pairs = None
+    for _ in range(max(1, restarts)):
+        candidate = _anneal_once(mesh, rng, sweeps, temperature,
+                                 min_degree, max_degree)
+        pairs = dislocation_pairs(candidate)
+        if best_pairs is None or pairs < best_pairs:
+            best, best_pairs = candidate, pairs
+    return best
+
+
+def _anneal_once(
+    mesh: Mesh,
+    rng: np.random.Generator,
+    sweeps: int,
+    temperature: float,
+    min_degree: int,
+    max_degree: int,
+) -> Mesh:
+    """One Metropolis run. See :func:`anneal_edge_flips` for the reasoning."""
     if sweeps <= 0:
         return mesh
 
