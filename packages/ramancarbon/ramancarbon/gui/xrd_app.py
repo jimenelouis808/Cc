@@ -262,6 +262,9 @@ class XRDApp(SectionApp):
         toolbar.pack(fill="x", pady=(0, PAD["sm"]))
         ttk.Button(toolbar, text="Añadir carpeta de CIF…",
                    command=self._add_cif_directory).pack(side="left", padx=(0, PAD["xs"]))
+        ttk.Button(toolbar, text="Abrir mi carpeta de CIF",
+                   command=self._open_drop_folder).pack(side="left",
+                                                        padx=(0, PAD["xs"]))
         ttk.Button(toolbar, text="Usar solo las marcadas",
                    command=self._pin_selected).pack(side="left", padx=(0, PAD["xs"]))
         ttk.Button(toolbar, text="Usar todas",
@@ -486,8 +489,36 @@ class XRDApp(SectionApp):
             return
         if folder not in self.session.cif_directories:
             self.session.cif_directories.append(folder)
+        self.session.remember_cif_directories()
         self._fill_library()
-        self.set_status(f"Añadida la carpeta {folder}")
+        self.set_status(f"Añadida la carpeta {folder} (se recordará)")
+
+    def _open_drop_folder(self) -> None:
+        """Create and reveal the always-scanned folder for COD downloads."""
+        import subprocess
+        import sys
+
+        from ..xrd.reference import user_cif_directory
+
+        folder = user_cif_directory()
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self.set_status(f"No se ha podido crear {folder}: {exc}")
+            return
+        opener = ("explorer" if sys.platform.startswith("win")
+                  else "open" if sys.platform == "darwin" else "xdg-open")
+        try:
+            subprocess.Popen([opener, str(folder)])
+        except OSError:
+            # No desktop to ask, which is normal over SSH. The path is the
+            # useful half of the answer anyway.
+            pass
+        self.set_status(
+            f"Deja aquí los CIF que descargues de la COD: {folder}. "
+            "Se leen al arrancar, sin añadir nada."
+        )
+        self._fill_library()
 
     def _pin_selected(self) -> None:
         chosen = [

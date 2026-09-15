@@ -1,0 +1,47 @@
+data_FeS_mackinawita
+_chemical_formula_sum          'FeS'
+_symmetry_space_group_name_H-M 'P4/nmm'
+_cell_length_a                 3.673500
+_cell_length_b                 3.673500
+_cell_length_c                 5.032800
+_cell_angle_alpha              90.0000
+_cell_angle_beta               90.0000
+_cell_angle_gamma              90.0000
+_cell_volume                   67.9156
+
+loop_
+_symmetry_equiv_pos_as_xyz
+  'x, y, z'
+  '-y+1/2, x, z'
+  '-x, y+1/2, -z'
+  '-x, -y, -z'
+  '-x+1/2, -y+1/2, z'
+  '-y, -x, -z'
+  'y+1/2, x+1/2, -z'
+  'y+1/2, -x, -z'
+  'x, -y+1/2, z'
+  'x+1/2, -y, -z'
+  'y, -x+1/2, z'
+  '-y+1/2, -x+1/2, z'
+  'y, x, z'
+  'x+1/2, y+1/2, -z'
+  '-x+1/2, y, z'
+  '-y, x+1/2, -z'
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_U_iso_or_equiv
+  Fe1      Fe     0.750000   0.250000   0.000000   1.0000  0.00500
+  S1       S      0.250000   0.250000   0.260400   1.0000  0.00500
+
+_ramancarbon_confidence   'medium'
+_ramancarbon_source       'Lennie et al., Am. Mineral. 80 (1995) 960'
+_ramancarbon_notes
+;
+El sulfuro de hierro que se forma primero a baja temperatura. Es ISOESTRUCTURAL con el beta-FeSe tetragonal (mismo grupo P4/nmm, misma disposición de capas), así que si trabajas con los dos calcogenuros sus patrones se parecen y se desplazan solo por el tamaño del anión: la 001 de la mackinawita a 17.6° contra la del FeSe a 16.0°. Es además muy propensa a oxidarse al aire hacia greigita y luego goethita.
+;

@@ -1,0 +1,45 @@
+data_Fe2P
+_chemical_formula_sum          'Fe2P'
+_symmetry_space_group_name_H-M 'P-62m'
+_cell_length_a                 5.867500
+_cell_length_b                 5.867500
+_cell_length_c                 3.458100
+_cell_angle_alpha              90.0000
+_cell_angle_beta               90.0000
+_cell_angle_gamma              120.0000
+_cell_volume                   103.1037
+
+loop_
+_symmetry_equiv_pos_as_xyz
+  'x, y, z'
+  '-y, x-y, z'
+  'y, x, -z'
+  'x, y, -z'
+  '-x+y, -x, z'
+  '-x, -x+y, -z'
+  'x-y, -y, -z'
+  '-y, x-y, -z'
+  'y, x, z'
+  'x-y, -y, z'
+  '-x, -x+y, z'
+  '-x+y, -x, -z'
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_U_iso_or_equiv
+  Fe1      Fe     0.256900   0.000000   0.000000   1.0000  0.00500
+  Fe2      Fe     0.594400   0.000000   0.500000   1.0000  0.00500
+  P1       P      0.333333   0.666667   0.000000   1.0000  0.00500
+  P2       P      0.000000   0.000000   0.500000   1.0000  0.00500
+
+_ramancarbon_confidence   'medium'
+_ramancarbon_source       'Tipo Fe2P; parámetros de celda y posiciones de la literatura del fosfuro'
+_ramancarbon_notes
+;
+El otro fosfuro habitual, y el que aparece cuando la fosfuración se queda corta de fósforo. Dos entornos de hierro distintos, uno tetraédrico y otro piramidal, que es lo que le da su magnetismo. Si tu difractograma tiene fosfuro pero el FeP no ajusta, prueba éste antes de dudar de los datos.
+;

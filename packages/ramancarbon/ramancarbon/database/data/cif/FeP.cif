@@ -1,0 +1,39 @@
+data_FeP
+_chemical_formula_sum          'FeP'
+_symmetry_space_group_name_H-M 'Pnma'
+_cell_length_a                 5.193000
+_cell_length_b                 3.099000
+_cell_length_c                 6.004000
+_cell_angle_alpha              90.0000
+_cell_angle_beta               90.0000
+_cell_angle_gamma              90.0000
+_cell_volume                   96.6230
+
+loop_
+_symmetry_equiv_pos_as_xyz
+  'x, y, z'
+  '-x+1/2, -y, z+1/2'
+  '-x, y+1/2, -z'
+  '-x, -y, -z'
+  'x+1/2, -y+1/2, -z+1/2'
+  'x+1/2, y, -z+1/2'
+  'x, -y+1/2, z'
+  '-x+1/2, y+1/2, z+1/2'
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_U_iso_or_equiv
+  Fe1      Fe     0.004300   0.250000   0.200500   1.0000  0.00500
+  P1       P      0.188900   0.250000   0.567700   1.0000  0.00500
+
+_ramancarbon_confidence   'medium'
+_ramancarbon_source       'Tipo MnP; Selte & Kjekshus, Acta Chem. Scand. 23 (1969) 2047'
+_ramancarbon_notes
+;
+El fosfuro de hierro de la electrocatálisis de HER. Sus reflexiones más intensas se agrupan entre 32 y 49°. Comparte grupo espacial y tipo estructural con la cementita en el sentido de que las dos son ortorrómbicas de muchas reflexiones juntas: en un material fosfurado que vino de un catalizador de hierro, el ajuste de patrón completo no es un lujo.
+;

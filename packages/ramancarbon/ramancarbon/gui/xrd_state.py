@@ -62,7 +62,17 @@ class XRDSession:
     def __init__(self) -> None:
         self.patterns: list[LoadedPattern] = []
         self.current: int = -1
-        self.cif_directories: list[str] = []
+        # Restored from the preferences file, not empty: a folder the user
+        # added once and lost on the next start is the same as no folder.
+        # Directories that have gone (an unmounted share, a deleted
+        # download) are dropped quietly rather than reported every start.
+        from ..core.history import Preferences
+
+        self._preferences = Preferences.load()
+        self.cif_directories: list[str] = [
+            folder for folder in self._preferences.get("cif_directories", [])
+            if Path(folder).is_dir()
+        ]
         self.selected_phases: list[str] = []
         """Names of reference phases the user pinned. Empty means "search
         the whole library"."""
@@ -123,6 +133,16 @@ class XRDSession:
         self.current = min(self.current, len(self.patterns) - 1)
 
     # -- library -------------------------------------------------------
+    def remember_cif_directories(self) -> None:
+        """Persist the added folders. Never raises: a preferences file that
+        cannot be written is a nuisance, not a reason to lose the session."""
+        try:
+            self._preferences.set("cif_directories",
+                                  list(self.cif_directories))
+            self._preferences.save()
+        except OSError:
+            pass
+
     def library(self) -> list[LibraryEntry]:
         return load_library(self.cif_directories)
 

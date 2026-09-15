@@ -182,6 +182,7 @@ class Preferences:
         "last_directory": "",
         "recent_files": [],
         "xrd_anode": "Cu",
+        "cif_directories": [],
         "echem_reference": "Ag/AgCl_3M",
     })
 

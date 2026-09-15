@@ -751,12 +751,22 @@ def _flag_rbm_conflicts(report: PhaseReport, rbm_window: tuple[float, float]) ->
             report.rbm_conflicts.append((position, ident.phase.label))
     report.rbm_conflicts.sort()
 
+    # A suspect has to be worth interrupting for, or it interrupts every
+    # real nanotube spectrum instead. With two dozen phases catalogued,
+    # nearly any genuine RBM lands within tolerance of *some* single
+    # line: a clean SWCNT at 220 cm-1 drew a delta-FeSe hexagonal flag,
+    # and that phase's own catalogue entry says it has no reliable Raman
+    # literature. So only a high-confidence phase's own discriminating
+    # line raises one. Everything weaker stays in the identifications
+    # list, where a curious reader can find it, and out of the warnings.
     for ident in report.identifications:
-        if ident.corroborated:
+        if ident.corroborated or ident.phase.confidence != "high":
             continue
         for hit in ident.hits:
             position = hit.peak.position
             if not (rbm_window[0] <= position <= rbm_window[1]):
+                continue
+            if not hit.is_discriminating:
                 continue
             if any(abs(position - p) < 1e-6 for p in seen):
                 continue

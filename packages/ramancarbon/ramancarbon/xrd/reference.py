@@ -38,6 +38,23 @@ from .structure import Crystal
 #: Directory of the CIFs shipped with the package.
 BUNDLED_DIR = DATA_DIR / "cif"
 
+
+def user_cif_directory() -> Path:
+    """The drop folder for CIFs downloaded from the COD.
+
+    One fixed, documented place next to the preferences file, scanned on
+    every start. Adding a folder by hand already worked, and it was not
+    enough: the choice was not remembered, so every restart lost it, and
+    the fix for "where do I put my COD downloads" should be an answer,
+    not a dialog to find again each session.
+
+    Created on demand rather than at import: a read-only home directory
+    is a real situation and is not a reason for the program not to start.
+    """
+    from ..core.history import config_directory
+
+    return config_directory() / "cif"
+
 _EXTRA = re.compile(
     r"_ramancarbon_(confidence|source)\s+'([^']*)'", re.IGNORECASE
 )
@@ -116,6 +133,14 @@ def load_library(
     if include_bundled:
         for entry in _load_directory(str(BUNDLED_DIR), True):
             entries[entry.key] = entry
+        # The user's own drop folder counts as bundled in the sense that
+        # it is always there, and it overrides the shipped set for the
+        # same reason an explicitly added folder does: their file is more
+        # specific than a starter structure.
+        drop = user_cif_directory()
+        if drop.is_dir():
+            for entry in _load_directory(str(drop), False):
+                entries[entry.key] = entry
     for directory in extra_directories or ():
         for entry in _load_directory(str(Path(directory).resolve()), False):
             entries[entry.key] = entry

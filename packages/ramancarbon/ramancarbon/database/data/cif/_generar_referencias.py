@@ -34,6 +34,11 @@ Fd3m   = ["-x+3/4,-y+1/4,z+1/2", "-x+1/4,y+1/2,-z+3/4", "z,x,y",
 R3c    = ["-y,x-y,z", "y,x,-z+1/2", "-x,-y,-z", "x+2/3,y+1/3,z+1/3"]
 Im3m   = ["z,x,y", "-y,x,z", "y,x,-z", "-x,-y,-z", "x+1/2,y+1/2,z+1/2"]
 P21c   = ["-x,y+1/2,-z+1/2", "-x,-y,-z"]
+Fm3m   = ["z,x,y", "-y,x,z", "y,x,-z", "-x,-y,-z",
+          "x,y+1/2,z+1/2", "x+1/2,y,z+1/2"]
+Pa3    = ["z,x,y", "-x+1/2,-y,z+1/2", "-x,-y,-z"]
+P62m   = ["-y,x-y,z", "y,x,-z", "x,y,-z"]
+R32    = ["-y,x-y,z", "y,x,-z", "x+2/3,y+1/3,z+1/3"]
 
 REFS = [
  dict(name="grafito_2H", sg="P6_3/mmc", ops=P63mmc, formula="C",
@@ -119,6 +124,55 @@ REFS = [
       conf="medium",
       src="Estructura 2H del WS2, isoestructural con el MoS2",
       note="El tungsteno domina la dispersión (Z=74 frente a 16 del azufre), así que las intensidades son casi insensibles a la posición del azufre. Eso hace la identificación muy robusta y el refinamiento de la z, casi imposible."),
+ dict(name="Fe_gamma", sg="Fm-3m", ops=Fm3m, formula="Fe",
+      lat=(3.5911, 3.5911, 3.5911, 90, 90, 90),
+      sites=[("Fe", (0.0, 0.0, 0.0), "Fe1")],
+      conf="high",
+      src="Austenita, parámetro de red extrapolado a temperatura ambiente",
+      note="Hierro gamma (austenita, cúbico centrado en caras). No es estable a temperatura ambiente en hierro puro, pero SÍ se retiene en nanopartículas y cuando el carbono la estabiliza, que es justo el caso de un catalizador de CVD. Su 111 está a 43.5° y su 200 a 50.6°; la 110 del hierro alfa cae a 44.7°, a poco más de un grado de la 111 de esta. Distinguirlas es la razón principal para tener las dos cargadas a la vez: alfa sola, gamma sola y la mezcla dan tres ajustes muy distintos en esa zona."),
+ dict(name="FeP", sg="Pnma", ops=Pnma, formula="FeP",
+      lat=(5.1930, 3.0990, 6.0040, 90, 90, 90),
+      sites=[("Fe", (0.0043, 0.25, 0.2005), "Fe1"),
+             ("P", (0.1889, 0.25, 0.5677), "P1")],
+      conf="medium",
+      src="Tipo MnP; Selte & Kjekshus, Acta Chem. Scand. 23 (1969) 2047",
+      note="El fosfuro de hierro de la electrocatálisis de HER. Sus reflexiones más intensas se agrupan entre 32 y 49°. Comparte grupo espacial y tipo estructural con la cementita en el sentido de que las dos son ortorrómbicas de muchas reflexiones juntas: en un material fosfurado que vino de un catalizador de hierro, el ajuste de patrón completo no es un lujo."),
+ dict(name="Fe2P", sg="P-62m", ops=P62m, formula="Fe2P",
+      lat=(5.8675, 5.8675, 3.4581, 90, 90, 120),
+      sites=[("Fe", (0.2569, 0.0, 0.0), "Fe1"),
+             ("Fe", (0.5944, 0.0, 0.5), "Fe2"),
+             ("P", (1/3, 2/3, 0.0), "P1"),
+             ("P", (0.0, 0.0, 0.5), "P2")],
+      conf="medium",
+      src="Tipo Fe2P; parámetros de celda y posiciones de la literatura del fosfuro",
+      note="El otro fosfuro habitual, y el que aparece cuando la fosfuración se queda corta de fósforo. Dos entornos de hierro distintos, uno tetraédrico y otro piramidal, que es lo que le da su magnetismo. Si tu difractograma tiene fosfuro pero el FeP no ajusta, prueba éste antes de dudar de los datos."),
+ dict(name="FeS_mackinawita", sg="P4/nmm", ops=P4nmm, formula="FeS",
+      lat=(3.6735, 3.6735, 5.0328, 90, 90, 90),
+      # The same Wyckoff pair as the tetragonal FeSe above -- this
+      # setting of P4/nmm puts the metal on 2a at (3/4, 1/4, 0) and the
+      # anion on 2c. Writing them at (0,0,0) and (0,1/2,z) instead lands
+      # on higher-multiplicity positions: twelve atoms in the cell and a
+      # density of 11.7 g/cm3 against the mineral's 4.30, which is what
+      # the generator's density check is printed for.
+      sites=[("Fe", (0.75, 0.25, 0.0), "Fe1"),
+             ("S", (0.25, 0.25, 0.2604), "S1")],
+      conf="medium",
+      src="Lennie et al., Am. Mineral. 80 (1995) 960",
+      note="El sulfuro de hierro que se forma primero a baja temperatura. Es ISOESTRUCTURAL con el beta-FeSe tetragonal (mismo grupo P4/nmm, misma disposición de capas), así que si trabajas con los dos calcogenuros sus patrones se parecen y se desplazan solo por el tamaño del anión: la 001 de la mackinawita a 17.6° contra la del FeSe a 16.0°. Es además muy propensa a oxidarse al aire hacia greigita y luego goethita."),
+ dict(name="FeS2_pirita", sg="Pa-3", ops=Pa3, formula="FeS2",
+      lat=(5.4179, 5.4179, 5.4179, 90, 90, 90),
+      sites=[("Fe", (0.0, 0.0, 0.0), "Fe1"),
+             ("S", (0.38484, 0.38484, 0.38484), "S1")],
+      conf="high",
+      src="Brostigen & Kjekshus, Acta Chem. Scand. 23 (1969) 2186",
+      note="Pirita. La 200 a 33.0° y la 311 a 56.3° son las de referencia, y calculadas salen al 4% una de otra: cuál de las dos es la más intensa depende de la muestra y de los factores térmicos, que este cálculo no lleva. No las uses para decidir orientación preferente. A diferencia de casi todo lo demás de esta lista, el Raman la identifica sin ambigüedad (343 y 379 cm-1), así que es un buen caso para contrastar las dos técnicas."),
+ dict(name="NiS_beta", sg="P6_3/mmc", ops=P63mmc, formula="NiS",
+      lat=(3.4395, 3.4395, 5.3514, 90, 90, 120),
+      sites=[("Ni", (0.0, 0.0, 0.0), "Ni1"),
+             ("S", (1/3, 2/3, 0.25), "S1")],
+      conf="medium",
+      src="Tipo NiAs (beta-NiS); parámetros de celda de la literatura",
+      note="Sulfuro de níquel de alta temperatura, tipo NiAs — la misma estructura que el delta-FeSe hexagonal, con el que comparte la forma del patrón. La más intensa es la 102 a 45.5°, y la primera del patrón la 100 a 30.0°; la 101 queda en 34.4° y es débil. El níquel tiene varios sulfuros estables (NiS, Ni3S2, NiS2) y se interconvierten con la estequiometría y el recocido: si el ajuste no cierra con éste, el problema suele ser cuál de ellos tienes, no el refinamiento."),
  dict(name="MoO2", sg="P2_1/c", ops=P21c, formula="MoO2",
       lat=(5.6109, 4.8562, 5.6285, 90, 120.95, 90),
       sites=[("Mo", (0.2316, 0.9917, 0.0164), "Mo1"),

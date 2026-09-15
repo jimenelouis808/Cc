@@ -118,6 +118,12 @@ DENSITIES = {
     "Se_trigonal": 4.81, "Fe_alfa": 7.874, "Fe3C_cementita": 7.67,
     "Fe3O4_magnetita": 5.20, "Fe2O3_hematita": 5.26, "Si": 2.329,
     "MoS2_2H": 5.02, "MoSe2_2H": 6.90, "MoO2": 6.47,
+    # Added for the iron/nickel catalyst residues a CVD synthesis leaves.
+    # Mackinawite is the one that shows what this check is for: written on
+    # the wrong Wyckoff pair it came out with twelve atoms in the cell and
+    # 11.7 g/cm3 against the mineral's 4.30.
+    "Fe_gamma": 8.01, "FeP": 6.07, "Fe2P": 6.86,
+    "FeS_mackinawita": 4.30, "FeS2_pirita": 5.01, "NiS_beta": 5.50,
 }
 
 #: Strongest reflection, degrees 2theta with Cu Ka1.
@@ -126,12 +132,23 @@ STRONGEST = {
     "Se_trigonal": 29.7, "Fe_alfa": 44.7, "Fe3C_cementita": 45.0,
     "Fe3O4_magnetita": 35.5, "Fe2O3_hematita": 33.2, "Si": 28.44,
     "MoS2_2H": 14.4, "WS2_2H": 14.4, "MoO2": 26.0,
+    # Gamma iron's 111 sits one degree from alpha iron's 110 at 44.7,
+    # which is the whole reason for carrying both.
+    "Fe_gamma": 43.6, "FeP": 48.1, "Fe2P": 40.3,
+    "FeS_mackinawita": 17.6, "NiS_beta": 45.5,
 }
+
+#: Pyrite is left out of STRONGEST on purpose. Its 311 at 56.3 deg and its
+#: 200 at 33.0 come out within 4% of each other, and which one wins depends
+#: on the thermal factors this calculation does not carry. Asserting an
+#: order there would be pinning an artefact, so what is pinned instead is
+#: that both are present and both are strong.
+PYRITE_PAIR = (33.0, 56.3)
 
 
 def test_the_library_loads():
     entries = load_library()
-    assert len(entries) >= 12
+    assert len(entries) >= 20
     assert all(entry.crystal.sites for entry in entries)
 
 
@@ -148,6 +165,30 @@ def test_bundled_strongest_reflections_match_their_powder_cards(name, angle):
     lines = reflections(crystal, wavelength=CU, two_theta_range=(5.0, 90.0))
     strongest = max(lines, key=lambda r: r.intensity)
     assert strongest.two_theta == pytest.approx(angle, abs=0.6)
+
+
+def test_pyrite_has_both_of_its_strong_reflections():
+    """Not which is strongest -- that is sample-dependent -- but that the
+    pair the powder card names is there and dominant."""
+    lines = reflections(find_phase("FeS2_pirita"), wavelength=CU,
+                        two_theta_range=(5.0, 90.0))
+    top = max(line.intensity for line in lines)
+    strong = [line.two_theta for line in lines if line.intensity > 0.9 * top]
+    for expected in PYRITE_PAIR:
+        assert any(abs(angle - expected) < 0.6 for angle in strong), strong
+
+
+def test_gamma_iron_is_resolvable_from_alpha_iron():
+    """The pair this library exists to separate: austenite's 111 and
+    ferrite's 110 are about one degree apart, so a fit that carries only
+    one of them puts the difference into the peak width instead."""
+    gamma = max(reflections(find_phase("Fe_gamma"), wavelength=CU,
+                            two_theta_range=(5.0, 90.0)),
+                key=lambda r: r.intensity)
+    alpha = max(reflections(find_phase("Fe_alfa"), wavelength=CU,
+                            two_theta_range=(5.0, 90.0)),
+                key=lambda r: r.intensity)
+    assert 0.8 < abs(alpha.two_theta - gamma.two_theta) < 1.6
 
 
 def test_reflection_indices_are_reported_conventionally():
