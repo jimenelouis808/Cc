@@ -250,3 +250,123 @@ class TestTheRBMImpostors:
         found = {i.phase.key for i in report.identifications if i.corroborated}
         assert "TiO2_anatase" in found
         assert 144.0 in report.excluded_from_rbm
+
+
+# -- precursor phases: N, P, B, Cl, S ----------------------------------
+
+
+def test_the_catalogue_covers_the_precursor_heteroatoms():
+    """Every heteroatom the synthesis puts in has a phase that carries it.
+
+    A coverage test. The point of these entries is not that the precursor
+    is interesting but that an unreacted one is indistinguishable, in the
+    carbon region, from the doped carbon you meant to make.
+    """
+    phases = load_phases()
+    formulas = " ".join(p.formula for p in phases)
+    for element in ("N", "P", "B", "Cl", "S", "Se"):
+        assert element in formulas, element
+    keys = {p.key for p in phases}
+    assert {"melamine", "urea", "g_C3N4", "P_red", "H3BO3", "B2O3_glassy",
+            "BN_hexagonal", "NH4Cl_salmiac", "S8_orthorhombic"} <= keys
+    for phase in phases:
+        assert phase.source, phase.key
+        assert phase.confidence in {"high", "medium", "low"}, phase.key
+
+
+def test_boron_nitride_is_separated_from_the_d_band_by_width_alone():
+    """h-BN has one Raman band, at 1366 cm-1, inside the D band's range.
+
+    Position cannot separate them and never will. What separates them is
+    that the E2g of a h-BN crystal is ~10 cm-1 wide and a disordered
+    carbon's D band is 50-150, so the catalogue puts the whole
+    identification on a width rule.
+    """
+    sharp = find_phases([pk(1366.0, 300, fwhm=11.0), pk(1580.0, 400, 40.0)])
+    assert "BN_hexagonal" in {
+        i.phase.key for i in sharp.identifications if i.corroborated
+    }
+
+    broad = find_phases([pk(1358.0, 300, fwhm=70.0), pk(1580.0, 400, 40.0)])
+    assert "BN_hexagonal" not in {
+        i.phase.key for i in broad.identifications if i.corroborated
+    }
+
+
+def test_carbon_nitride_is_caught_below_the_carbon_region():
+    """g-C3N4 has bands at 1233, 1310 and 1570 -- on top of the D and the
+    G. A sample made from melamine that is really carbon nitride gives a
+    carbon-looking spectrum and an I_D/I_G that means nothing. The bands
+    that give it away are at 707 and 750, where carbon has nothing."""
+    peaks = [pk(707.0, 300), pk(750.0, 200), pk(1233.0, 250),
+             pk(1310.0, 300), pk(1570.0, 350)]
+    report = find_phases(peaks, spectrum_range=(100.0, 3000.0))
+    best = report.identifications[0]
+    assert best.phase.key == "g_C3N4" and best.corroborated
+
+    # Without the low-frequency pair it is just a disordered carbon.
+    blind = find_phases([pk(1310.0, 300), pk(1570.0, 350)],
+                        spectrum_range=(1000.0, 3000.0))
+    assert "g_C3N4" not in {
+        i.phase.key for i in blind.identifications if i.corroborated
+    }
+
+
+def test_sulfur_needs_its_line_at_473():
+    """S8's other two lines, 153 and 219, sit inside the RBM window. Two
+    coincidences there are what a clean nanotube looks like, so they are
+    not allowed to identify sulfur on their own."""
+    rbm_only = find_phases([pk(153.0), pk(219.0), pk(1580.0, 400, 40.0)],
+                           spectrum_range=(100.0, 3000.0))
+    assert "S8_orthorhombic" not in {
+        i.phase.key for i in rbm_only.identifications if i.corroborated
+    }
+    complete = find_phases([pk(153.0), pk(219.0), pk(473.0, 400),
+                            pk(1580.0, 400, 40.0)],
+                           spectrum_range=(100.0, 3000.0))
+    assert "S8_orthorhombic" in {
+        i.phase.key for i in complete.identifications if i.corroborated
+    }
+
+
+def test_magnetite_is_not_reported_as_manganese_dioxide():
+    """Fe3O4 sits at 668/540/310 and beta-MnO2 at 665/535: every line of
+    the manganese oxide lands within tolerance of an iron one. Both match
+    and both corroborate, so the report has to prefer the phase that
+    explains more peaks and explains them closer."""
+    peaks = [pk(310.0, 120), pk(540.0, 150), pk(668.0, 400)]
+    report = find_phases(peaks, spectrum_range=(100.0, 1200.0))
+    called = {i.phase.key for i in report.identifications if i.corroborated}
+    assert called == {"Fe3O4_magnetite"}
+
+
+def test_manganese_oxides_are_still_told_apart_from_each_other():
+    """The rule above must not silence a real manganese oxide. All three
+    share a band between 640 and 670, and what separates them is the rest:
+    374 for the spinel, 535 for pyrolusite, 575 for birnessite."""
+    for key, extra in (("Mn3O4_hausmannite", 374.0),
+                       ("MnO2_beta", 535.0),
+                       ("MnO2_birnessite", 575.0)):
+        phase = next(p for p in load_phases() if p.key == key)
+        peaks = [pk(phase.strong[0], 400), pk(extra, 200)]
+        report = find_phases(peaks, spectrum_range=(100.0, 1200.0))
+        called = {i.phase.key for i in report.identifications if i.corroborated}
+        assert key in called, (key, called)
+
+
+def test_a_phase_whose_strong_lines_you_did_not_measure_is_not_confirmed():
+    """The mirror of the RBM rule, at the other end of the axis.
+
+    g-C3N4's bands at 1233, 1310 and 1570 are the ones it shares with a
+    disordered carbon; the ones that identify it are at 707 and 750. A
+    spectrum that starts at 1000 cm-1 matches two of the three shared
+    bands and none of the exclusive ones. That is not an identification --
+    but it is not an absence either, and the report says which.
+    """
+    report = find_phases([pk(1310.0, 300), pk(1570.0, 350)],
+                         spectrum_range=(1000.0, 3000.0))
+    assert not any(i.corroborated for i in report.identifications)
+    lead = next(i for i in report.identifications if i.phase.key == "g_C3N4")
+    assert lead.strong_out_of_range
+    assert any("ninguna de sus líneas fuertes" in w and "707" in w
+               for w in report.warnings)

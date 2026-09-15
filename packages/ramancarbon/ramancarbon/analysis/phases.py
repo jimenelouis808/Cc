@@ -176,6 +176,10 @@ class PhaseIdentification:
 
     strong_found: int = 0
     """Matched lines that belong to the phase's strong set."""
+    strong_out_of_range: bool = False
+    """True when none of the phase's strong lines lies inside the measured
+    range. Such a phase cannot be corroborated — only its minor lines were
+    ever measurable — and saying so is different from saying it is absent."""
     width_ok: bool = True
     """False when the phase's band-width test failed."""
     width_confirmed: bool = False
@@ -509,12 +513,21 @@ def find_phases(
         # matched too and count as support. Judging on the strong set alone
         # made trigonal selenium — one strong line at 237 and one weak at
         # 143 — permanently uncorroborable even with both of them present.
-        strong_in_range = [
+        strong_bands = [
             band for band in in_range
             if any(abs(band.position - s) < 1e-6 for s in phase.strong)
-        ] or in_range
+        ]
+        # When not one strong line was measurable, the minor ones are all
+        # there is, and they are judged against each other so the phase can
+        # still be reported as a lead. What it cannot do is corroborate: a
+        # carbon spectrum measured from 1000 cm⁻¹ matches two of the three
+        # g-C₃N₄ bands that sit on the D and the G, and calling that carbon
+        # nitride would be an identification made entirely out of the bands
+        # the two materials share.
+        strong_in_range = strong_bands or in_range
 
         ident = PhaseIdentification(phase=phase, lines_expected=len(strong_in_range))
+        ident.strong_out_of_range = not strong_bands
         ident.discriminating_expected = sum(
             1 for line in phase.discriminating
             if spectrum_range[0] <= line <= spectrum_range[1]
@@ -556,6 +569,10 @@ def find_phases(
             # discriminates between polymorphs, it does not establish that
             # the composition is there at all.
             continue
+        if ident.strong_out_of_range:
+            ident.corroborated = False
+            identifications.append(ident)
+            continue
         if len(in_range) == 1:
             # A single catalogued line inside the measured range. Nothing can
             # corroborate it, so it is a lead unless the phase has no other
@@ -576,6 +593,7 @@ def find_phases(
     report.families = _family_verdicts(identifications, family_map)
     _flag_rbm_conflicts(report, rbm_window)
     _collect_xrd_questions(report)
+    _blocked_by_range(report)
     _add_context(report)
 
     matched = {id(h.peak) for i in identifications if i.corroborated for h in i.hits}
@@ -642,20 +660,53 @@ def _apply_width_rule(ident: PhaseIdentification, tolerance: float) -> None:
 def _resolve_conflicts(
     identifications: list[PhaseIdentification],
 ) -> list[PhaseIdentification]:
-    """Drop an uncorroborated candidate whose every line is claimed better.
+    """Drop a candidate whose every line is claimed better by another phase.
 
     Two phases with a line in the same place (β-FeSe at 181 and FeSe₂ at
     175, six wavenumbers apart) both match a peak in between. Reporting
     both is right — that ambiguity is real and the report says so — but
     reporting a phase whose *only* support is a peak another phase explains
-    better, and which has none of its own discriminating lines, is noise.
+    better is noise.
+
+    There are two versions of that, and they need different strictness.
+
+    **An uncorroborated candidate** goes as soon as another *corroborated*
+    phase claims every peak it matched, unless it has a discriminating line
+    of its own.
+
+    **A corroborated one** takes more. Some phases of entirely different
+    chemistry sit a few wavenumbers apart on every band they have:
+    magnetite at 668/540/310 and β-MnO₂ at 665/535, or α-S₈ at 473/219/153
+    and α-MoO₃ at 471/217/158. Both really do match, both really do
+    corroborate, and a magnetite sample was being reported as manganese
+    dioxide. It is dropped only when another phase *of a different family*
+    explains the same peaks with strictly more lines and a smaller mean
+    offset — three conditions, all of them, because the alternative to a
+    strict rule here is losing a genuine minority phase.
+
+    Between polymorphs of one family the rule is deliberately not applied:
+    there, reporting both and letting the family verdict say whether the
+    polymorph can be named *is* the answer.
     """
     keep: list[PhaseIdentification] = []
     for ident in identifications:
-        if ident.corroborated or ident.discriminated:
+        peaks_here = {id(h.peak) for h in ident.hits}
+        if ident.corroborated:
+            eclipsed = any(
+                other is not ident
+                and other.corroborated
+                and other.phase.family != ident.phase.family
+                and peaks_here < {id(h.peak) for h in other.hits}
+                and len(other.hits) > len(ident.hits)
+                and abs(other.mean_offset) < abs(ident.mean_offset)
+                for other in identifications
+            )
+            if not eclipsed:
+                keep.append(ident)
+            continue
+        if ident.discriminated:
             keep.append(ident)
             continue
-        peaks_here = {id(h.peak) for h in ident.hits}
         dominated = any(
             other is not ident
             and other.corroborated
@@ -788,6 +839,24 @@ def _collect_xrd_questions(report: PhaseReport) -> None:
             advice = ident.phase.xrd_advice()
             if advice not in report.xrd_questions:
                 report.xrd_questions.append(advice)
+
+
+def _blocked_by_range(report: PhaseReport) -> None:
+    """Name the phases that only a wider scan could confirm or rule out."""
+    blocked = [
+        ident for ident in report.identifications
+        if ident.strong_out_of_range and ident.hits
+    ]
+    if not blocked:
+        return
+    for ident in blocked[:3]:
+        lines = ", ".join(f"{line:g}" for line in ident.phase.strong)
+        report.warnings.append(
+            f"{ident.phase.label} coincide en {len(ident.hits)} banda(s) "
+            "menor(es), pero ninguna de sus líneas fuertes "
+            f"({lines} cm⁻¹) entra en el rango medido. Ni se confirma ni se "
+            "descarta: para eso hay que medir esa región"
+        )
 
 
 def _add_context(report: PhaseReport) -> None:

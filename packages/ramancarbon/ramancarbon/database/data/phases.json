@@ -1,1364 +1,2243 @@
 {
- "_comment": [
-  "Fases cristalinas NO carbonosas que forman parte de la muestra, no de la",
-  "suciedad. Es la diferencia con interferences.json: allí una banda ajena",
-  "es un estorbo que hay que descartar; aquí es el objeto de la medida.",
-  "",
-  "El caso que motivó el archivo: nanotubos de carbono decorados con FeSe.",
-  "El FeSe tetragonal tiene sus dos modos Raman a 180 y 195 cm-1 y el",
-  "selenio elemental a 237 y 250 cm-1. Los cuatro caen DENTRO de la ventana",
-  "del modo de respiración radial (RBM). Convertidos con omega = A/d + B",
-  "dan diametros de nanotubo de 1.4, 1.3, 1.0 y 0.97 nm: cuatro numeros",
-  "creibles y los cuatro falsos. Por eso la identificacion de fases y el",
-  "analisis de diametros estan acoplados, y por eso esta busqueda SI se",
-  "ejecuta por defecto, al reves que la de interferencias.",
-  "",
-  "Sobre el polimorfismo. Raman distingue polimorfos cuando su simetria",
-  "cambia el numero o la posicion de los modos, y no los distingue cuando",
-  "no. El beta-FeSe tetragonal y el delta-FeSe hexagonal son un caso",
-  "intermedio y honesto: el tetragonal esta bien caracterizado, el",
-  "hexagonal no. Cada entrada lleva 'xrd_hint' con el 2-theta (Cu Kalfa)",
-  "que zanja la cuestion en la pestaña de DRX. Un espectro Raman propone",
-  "una fase; un difractograma la demuestra.",
-  "",
-  "'discriminating' son las lineas que separan una fase de sus hermanas de",
-  "la misma familia. Si solo aparecen lineas no discriminantes, el programa",
-  "informa la FAMILIA y se niega a elegir polimorfo.",
-  "",
-  "Ninguna posicion aqui es dispersiva: son modos de primer orden de",
-  "cristales ordinarios. Medir a dos laseres es la prueba definitiva frente",
-  "al carbono, que si se desplaza.",
-  "Algunas fases llevan 'width_rule'. Es el caso del selenio: la posicion de la banda de ~250 cm-1 apenas distingue el monoclinico del amorfo, y la ANCHURA si. Una regla de anchura no descarta la composicion, descarta el polimorfo, y si el pico no tiene FWHM medible el programa lo dice en vez de decidir."
- ],
- "match_tolerance_cm1": 5.0,
- "families": [
-  {
-   "key": "FeSe",
-   "label": "Seleniuro de hierro FeSe",
-   "note": "El beta tetragonal (PbO) es el superconductor (Tc ~ 8 K); el delta hexagonal (NiAs) no lo es. Suelen coexistir, y la proporcion depende del recocido.",
-   "resolved_by": "El desdoblamiento A1g/B1g a 180/195 cm-1 es la firma del tetragonal. El hexagonal carece de literatura Raman fiable: confirma con DRX."
-  },
-  {
-   "key": "Se",
-   "label": "Selenio elemental",
-   "note": "Precursor sin reaccionar o segregado. Su presencia significa que ese selenio NO esta en la red del hospedador.",
-   "resolved_by": "Cadenas frente a anillos: 237 cm-1 (cadenas, trigonal) frente a 250-256 cm-1 (anillos Se8, monoclinico y amorfo). Alfa y beta monoclinico NO se separan por Raman."
-  },
-  {
-   "key": "FeSe2",
-   "label": "Diseleniuro de hierro FeSe₂",
-   "note": "Producto de exceso de selenio. Marcasita (Pnnm) es la forma estable; la pirita (Pa-3) aparece a alta presion.",
-   "resolved_by": "Poco resuelto por Raman. DRX."
-  },
-  {
-   "key": "FeC",
-   "label": "Carburos de hierro",
-   "note": "Lo que queda cuando el catalizador de hierro reacciona con el carbono durante el CVD. Es la fase que suele estar dentro de las nanoparticulas encapsuladas en las puntas de los nanotubos.",
-   "resolved_by": "Raman apenas los ve. DRX y Mössbauer son el metodo real."
-  },
-  {
-   "key": "TiO2",
-   "label": "Óxido de titanio TiO₂",
-   "note": "Soporte, fotocatalizador y pigmento blanco. Anatasa y rutilo coexisten.",
-   "resolved_by": "144 + 639 (anatasa) frente a 447 + 612 (rutilo). Se separan sin ambiguedad."
-  },
-  {
-   "key": "substrate",
-   "label": "Sustrato o portamuestras",
-   "note": "No forma parte de la muestra: es lo que hay debajo. Aparece cuando el laser atraviesa una pelicula delgada.",
-   "resolved_by": "Posicion fija y anchura muy pequeña. El silicio a 520.7 cm-1 es ademas la referencia de calibracion."
-  },
-  {
-   "key": "FeOx",
-   "label": "Óxidos e hidróxidos de hierro",
-   "note": "En lo que acaba un catalizador de hierro al aire o con humedad.",
-   "resolved_by": "La magnetita se convierte en hematita bajo el laser. Repite bajando la potencia antes de decidir cual estaba."
-  },
-  {
-   "key": "FeS",
-   "label": "Sulfuros de hierro",
-   "note": "Analogo en azufre de los seleniuros; aparece si el precursor lo llevaba.",
-   "resolved_by": "El par 343 + 379 de la pirita es inconfundible."
-  },
-  {
-   "key": "CoOx",
-   "label": "Óxidos de cobalto",
-   "note": "Catalizador OER habitual.",
-   "resolved_by": "La A₁g de 691 cm-1 identifica la espinela Co₃O₄."
-  },
-  {
-   "key": "NiOx",
-   "label": "Óxidos e hidróxidos de níquel",
-   "note": "Fase activa de un electrodo de niquel en medio alcalino.",
-   "resolved_by": "Mide hasta 3700 cm-1: la tension O-H separa el oxihidroxido del oxido."
-  },
-  {
-   "key": "MoOx",
-   "label": "Óxidos de molibdeno",
-   "note": "Producto de oxidacion del MoS₂.",
-   "resolved_by": "El Mo=O terminal a 995 cm-1 es la firma."
-  },
-  {
-   "key": "ZnOx",
-   "label": "Óxido de zinc",
-   "note": "Plantilla, dopante o sustrato.",
-   "resolved_by": "E₂ alto a 438 cm-1."
-  },
-  {
-   "key": "carbonate",
-   "label": "Carbonatos",
-   "note": "Plantilla de CaCO₃ o contaminacion.",
-   "resolved_by": "ν₁ del CO₃ a 1086 cm-1, estrecha, entre la D y la G."
-  }
- ],
- "phases": [
-  {
-   "key": "FeSe_tetragonal",
-   "label": "β-FeSe tetragonal (tipo PbO)",
-   "formula": "FeSe",
-   "family": "FeSe",
-   "crystal_system": "tetragonal",
-   "space_group": "P4/nmm",
-   "bands": [
+  "_comment": [
+    "Fases cristalinas NO carbonosas que forman parte de la muestra, no de la",
+    "suciedad. Es la diferencia con interferences.json: allí una banda ajena",
+    "es un estorbo que hay que descartar; aquí es el objeto de la medida.",
+    "",
+    "El caso que motivó el archivo: nanotubos de carbono decorados con FeSe.",
+    "El FeSe tetragonal tiene sus dos modos Raman a 180 y 195 cm-1 y el",
+    "selenio elemental a 237 y 250 cm-1. Los cuatro caen DENTRO de la ventana",
+    "del modo de respiración radial (RBM). Convertidos con omega = A/d + B",
+    "dan diametros de nanotubo de 1.4, 1.3, 1.0 y 0.97 nm: cuatro numeros",
+    "creibles y los cuatro falsos. Por eso la identificacion de fases y el",
+    "analisis de diametros estan acoplados, y por eso esta busqueda SI se",
+    "ejecuta por defecto, al reves que la de interferencias.",
+    "",
+    "Sobre el polimorfismo. Raman distingue polimorfos cuando su simetria",
+    "cambia el numero o la posicion de los modos, y no los distingue cuando",
+    "no. El beta-FeSe tetragonal y el delta-FeSe hexagonal son un caso",
+    "intermedio y honesto: el tetragonal esta bien caracterizado, el",
+    "hexagonal no. Cada entrada lleva 'xrd_hint' con el 2-theta (Cu Kalfa)",
+    "que zanja la cuestion en la pestaña de DRX. Un espectro Raman propone",
+    "una fase; un difractograma la demuestra.",
+    "",
+    "'discriminating' son las lineas que separan una fase de sus hermanas de",
+    "la misma familia. Si solo aparecen lineas no discriminantes, el programa",
+    "informa la FAMILIA y se niega a elegir polimorfo.",
+    "",
+    "Ninguna posicion aqui es dispersiva: son modos de primer orden de",
+    "cristales ordinarios. Medir a dos laseres es la prueba definitiva frente",
+    "al carbono, que si se desplaza.",
+    "Algunas fases llevan 'width_rule'. Es el caso del selenio: la posicion de la banda de ~250 cm-1 apenas distingue el monoclinico del amorfo, y la ANCHURA si. Una regla de anchura no descarta la composicion, descarta el polimorfo, y si el pico no tiene FWHM medible el programa lo dice en vez de decidir."
+  ],
+  "match_tolerance_cm1": 5.0,
+  "families": [
     {
-     "position": 102.0,
-     "window": [
-      95.0,
-      112.0
-     ],
-     "assignment": "E_g",
-     "relative": 0.2
+      "key": "FeSe",
+      "label": "Seleniuro de hierro FeSe",
+      "note": "El beta tetragonal (PbO) es el superconductor (Tc ~ 8 K); el delta hexagonal (NiAs) no lo es. Suelen coexistir, y la proporcion depende del recocido.",
+      "resolved_by": "El desdoblamiento A1g/B1g a 180/195 cm-1 es la firma del tetragonal. El hexagonal carece de literatura Raman fiable: confirma con DRX."
     },
     {
-     "position": 181.0,
-     "window": [
-      174.0,
-      188.0
-     ],
-     "assignment": "A₁g (Se, fuera del plano)",
-     "relative": 1.0
+      "key": "Se",
+      "label": "Selenio elemental",
+      "note": "Precursor sin reaccionar o segregado. Su presencia significa que ese selenio NO esta en la red del hospedador.",
+      "resolved_by": "Cadenas frente a anillos: 237 cm-1 (cadenas, trigonal) frente a 250-256 cm-1 (anillos Se8, monoclinico y amorfo). Alfa y beta monoclinico NO se separan por Raman."
     },
     {
-     "position": 196.0,
-     "window": [
-      189.0,
-      204.0
-     ],
-     "assignment": "B₁g (Fe)",
-     "relative": 0.6
+      "key": "FeSe2",
+      "label": "Diseleniuro de hierro FeSe₂",
+      "note": "Producto de exceso de selenio. Marcasita (Pnnm) es la forma estable; la pirita (Pa-3) aparece a alta presion.",
+      "resolved_by": "Poco resuelto por Raman. DRX."
+    },
+    {
+      "key": "FeC",
+      "label": "Carburos de hierro",
+      "note": "Lo que queda cuando el catalizador de hierro reacciona con el carbono durante el CVD. Es la fase que suele estar dentro de las nanoparticulas encapsuladas en las puntas de los nanotubos.",
+      "resolved_by": "Raman apenas los ve. DRX y Mössbauer son el metodo real."
+    },
+    {
+      "key": "TiO2",
+      "label": "Óxido de titanio TiO₂",
+      "note": "Soporte, fotocatalizador y pigmento blanco. Anatasa y rutilo coexisten.",
+      "resolved_by": "144 + 639 (anatasa) frente a 447 + 612 (rutilo). Se separan sin ambiguedad."
+    },
+    {
+      "key": "substrate",
+      "label": "Sustrato o portamuestras",
+      "note": "No forma parte de la muestra: es lo que hay debajo. Aparece cuando el laser atraviesa una pelicula delgada.",
+      "resolved_by": "Posicion fija y anchura muy pequeña. El silicio a 520.7 cm-1 es ademas la referencia de calibracion."
+    },
+    {
+      "key": "FeOx",
+      "label": "Óxidos e hidróxidos de hierro",
+      "note": "En lo que acaba un catalizador de hierro al aire o con humedad.",
+      "resolved_by": "La magnetita se convierte en hematita bajo el laser. Repite bajando la potencia antes de decidir cual estaba."
+    },
+    {
+      "key": "FeS",
+      "label": "Sulfuros de hierro",
+      "note": "Analogo en azufre de los seleniuros; aparece si el precursor lo llevaba.",
+      "resolved_by": "El par 343 + 379 de la pirita es inconfundible."
+    },
+    {
+      "key": "CoOx",
+      "label": "Óxidos de cobalto",
+      "note": "Catalizador OER habitual.",
+      "resolved_by": "La A₁g de 691 cm-1 identifica la espinela Co₃O₄."
+    },
+    {
+      "key": "NiOx",
+      "label": "Óxidos e hidróxidos de níquel",
+      "note": "Fase activa de un electrodo de niquel en medio alcalino.",
+      "resolved_by": "Mide hasta 3700 cm-1: la tension O-H separa el oxihidroxido del oxido."
+    },
+    {
+      "key": "MoOx",
+      "label": "Óxidos de molibdeno",
+      "note": "Producto de oxidacion del MoS₂.",
+      "resolved_by": "El Mo=O terminal a 995 cm-1 es la firma."
+    },
+    {
+      "key": "ZnOx",
+      "label": "Óxido de zinc",
+      "note": "Plantilla, dopante o sustrato.",
+      "resolved_by": "E₂ alto a 438 cm-1."
+    },
+    {
+      "key": "carbonate",
+      "label": "Carbonatos",
+      "note": "Plantilla de CaCO₃ o contaminacion.",
+      "resolved_by": "ν₁ del CO₃ a 1086 cm-1, estrecha, entre la D y la G."
+    },
+    {
+      "key": "CN",
+      "label": "Precursores nitrogenados y nitruro de carbono",
+      "note": "Melamina, urea y el g-C3N4 que sale de calcinarlas. Es lo que queda sin reaccionar, o lo que se formó en vez del carbono dopado que buscabas.",
+      "resolved_by": "La melamina tiene el anillo de triazina a 676 cm-1, estrecho e intensisimo; el g-C3N4 lo conserva desplazado a 707 y ademas fluoresce. La urea es la unica con la banda de 1010 cm-1."
+    },
+    {
+      "key": "B",
+      "label": "Compuestos de boro",
+      "note": "Precursores de dopaje con boro y sus productos de hidrolisis. El B2O3 se convierte en H3BO3 con la humedad del aire, asi que cual de los dos veas depende de como guardes la muestra.",
+      "resolved_by": "808 cm-1 (anillo boroxol del B2O3 vitreo) frente a 500 cm-1 (H3BO3) frente a 1366 cm-1 (BN hexagonal). No se parecen en nada."
+    },
+    {
+      "key": "P",
+      "label": "Fósforo y fosfatos",
+      "note": "Fosforo rojo sin reaccionar, o el residuo del activado con acido fosforico. El fosforo rojo es amorfo.",
+      "resolved_by": "El fosforo elemental esta entre 340 y 470 cm-1; el anion fosfato tiene su tension simetrica cerca de 950 cm-1, donde no hay nada del carbono."
+    },
+    {
+      "key": "S",
+      "label": "Azufre elemental",
+      "note": "Anillos S8 sin reaccionar. El analogo en azufre del selenio segregado, y con el mismo significado: ese azufre NO esta en la red.",
+      "resolved_by": "El trio 153 + 219 + 473 cm-1 es inconfundible."
+    },
+    {
+      "key": "salt",
+      "label": "Sales residuales",
+      "note": "Lo que queda de un lavado incompleto. No forman parte de la muestra pero se miden igual, y dos de sus bandas caen encima de la D.",
+      "resolved_by": "La tension simetrica del anion: 993 cm-1 el sulfato, 1400 cm-1 la deformacion del amonio. Bandas muy estrechas, mucho mas que cualquier banda del carbono."
+    },
+    {
+      "key": "MnOx",
+      "label": "Óxidos de manganeso",
+      "note": "Catalizador y material de pseudocapacidad. El manganeso cambia de estado de oxidacion con facilidad y el laser lo reduce.",
+      "resolved_by": "Todos tienen una banda intensa entre 640 y 670 cm-1 y eso NO los separa. Lo que los separa es lo demas: 374 (Mn3O4), 535 (beta-MnO2), 575 (birnesita)."
     }
-   ],
-   "strong": [
-    181.0,
-    196.0
-   ],
-   "discriminating": [
-    181.0,
-    196.0
-   ],
-   "confidence": "medium",
-   "source": "Gnezdilov, Pashkevich, Lemmens et al., Phys. Rev. B 83 (2011) 245127; Kumar et al., Solid State Commun. 150 (2010) 557",
-   "xrd_hint": {
-    "reflection": "101",
-    "two_theta_cu": 28.4,
-    "note": "El pico mas intenso del beta-FeSe. Con 002 a ~16.1° y 110 a ~33.4° la asignacion es inequivoca."
-   },
-   "notes": "Los dos modos permitidos en retrodispersion sobre el plano ab. El A1g mueve solo el selenio y el B1g solo el hierro, asi que sus posiciones responden de forma distinta a la sustitucion (S por Se desplaza el A1g; Te por Se, tambien). Un desdoblamiento de 14-16 cm-1 entre ambos es la firma. Si solo ves UNA banda ancha ahi, o la resolucion no llega o la muestra esta desordenada: no lo llames tetragonal sin la segunda."
-  },
-  {
-   "key": "FeSe_hexagonal",
-   "label": "δ-FeSe hexagonal (tipo NiAs)",
-   "formula": "FeSe",
-   "family": "FeSe",
-   "crystal_system": "hexagonal",
-   "space_group": "P6₃/mmc",
-   "bands": [
+  ],
+  "phases": [
     {
-     "position": 122.0,
-     "window": [
-      112.0,
-      132.0
-     ],
-     "assignment": "E₂g (tentativa)",
-     "relative": 0.4
+      "key": "FeSe_tetragonal",
+      "label": "β-FeSe tetragonal (tipo PbO)",
+      "formula": "FeSe",
+      "family": "FeSe",
+      "crystal_system": "tetragonal",
+      "space_group": "P4/nmm",
+      "bands": [
+        {
+          "position": 102.0,
+          "window": [
+            95.0,
+            112.0
+          ],
+          "assignment": "E_g",
+          "relative": 0.2
+        },
+        {
+          "position": 181.0,
+          "window": [
+            174.0,
+            188.0
+          ],
+          "assignment": "A₁g (Se, fuera del plano)",
+          "relative": 1.0
+        },
+        {
+          "position": 196.0,
+          "window": [
+            189.0,
+            204.0
+          ],
+          "assignment": "B₁g (Fe)",
+          "relative": 0.6
+        }
+      ],
+      "strong": [
+        181.0,
+        196.0
+      ],
+      "discriminating": [
+        181.0,
+        196.0
+      ],
+      "confidence": "medium",
+      "source": "Gnezdilov, Pashkevich, Lemmens et al., Phys. Rev. B 83 (2011) 245127; Kumar et al., Solid State Commun. 150 (2010) 557",
+      "xrd_hint": {
+        "reflection": "101",
+        "two_theta_cu": 28.4,
+        "note": "El pico mas intenso del beta-FeSe. Con 002 a ~16.1° y 110 a ~33.4° la asignacion es inequivoca."
+      },
+      "notes": "Los dos modos permitidos en retrodispersion sobre el plano ab. El A1g mueve solo el selenio y el B1g solo el hierro, asi que sus posiciones responden de forma distinta a la sustitucion (S por Se desplaza el A1g; Te por Se, tambien). Un desdoblamiento de 14-16 cm-1 entre ambos es la firma. Si solo ves UNA banda ancha ahi, o la resolucion no llega o la muestra esta desordenada: no lo llames tetragonal sin la segunda."
     },
     {
-     "position": 145.0,
-     "window": [
-      136.0,
-      156.0
-     ],
-     "assignment": "E₁g (tentativa)",
-     "relative": 0.6
+      "key": "FeSe_hexagonal",
+      "label": "δ-FeSe hexagonal (tipo NiAs)",
+      "formula": "FeSe",
+      "family": "FeSe",
+      "crystal_system": "hexagonal",
+      "space_group": "P6₃/mmc",
+      "bands": [
+        {
+          "position": 122.0,
+          "window": [
+            112.0,
+            132.0
+          ],
+          "assignment": "E₂g (tentativa)",
+          "relative": 0.4
+        },
+        {
+          "position": 145.0,
+          "window": [
+            136.0,
+            156.0
+          ],
+          "assignment": "E₁g (tentativa)",
+          "relative": 0.6
+        },
+        {
+          "position": 220.0,
+          "window": [
+            208.0,
+            232.0
+          ],
+          "assignment": "sin asignar (tentativa)",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        145.0,
+        220.0
+      ],
+      "discriminating": [
+        145.0,
+        220.0
+      ],
+      "confidence": "low",
+      "source": "Asignacion tentativa; la literatura Raman de la fase hexagonal del FeSe es escasa e inconsistente entre trabajos",
+      "xrd_hint": {
+        "reflection": "101",
+        "two_theta_cu": 32.4,
+        "note": "Con 102 a ~42.0° y 110 a ~49.9°. Es lo que separa el hexagonal del tetragonal sin ambiguedad."
+      },
+      "notes": "AVISO EXPRESO: la confianza es baja porque las posiciones publicadas para esta fase no coinciden entre si. El programa la propone, no la afirma. La NiAs-FeSe es ademas no estequiometrica (Fe7Se8, Fe3Se4 y compañia) y esa deficiencia de hierro mueve las bandas. Si necesitas la fase con certeza, mide DRX: la reflexion 101 a ~32.4° no admite discusion."
     },
     {
-     "position": 220.0,
-     "window": [
-      208.0,
-      232.0
-     ],
-     "assignment": "sin asignar (tentativa)",
-     "relative": 1.0
+      "key": "Se_trigonal",
+      "label": "Selenio trigonal (gris, cadenas helicoidales)",
+      "formula": "Se",
+      "family": "Se",
+      "crystal_system": "trigonal",
+      "space_group": "P3₁21",
+      "bands": [
+        {
+          "position": 143.0,
+          "window": [
+            136.0,
+            150.0
+          ],
+          "assignment": "E (flexion)",
+          "relative": 0.35
+        },
+        {
+          "position": 237.0,
+          "window": [
+            231.0,
+            243.0
+          ],
+          "assignment": "A₁ (tension de la cadena)",
+          "relative": 1.0
+        },
+        {
+          "position": 250.0,
+          "window": [
+            243.0,
+            257.0
+          ],
+          "assignment": "E (LO, tension de la cadena)",
+          "relative": 0.3
+        }
+      ],
+      "strong": [
+        237.0
+      ],
+      "discriminating": [
+        237.0
+      ],
+      "confidence": "high",
+      "source": "Lucovsky, Mooradian, Taylor, Wright & Keezer, Solid State Commun. 5 (1967) 113",
+      "xrd_hint": {
+        "reflection": "101",
+        "two_theta_cu": 29.7,
+        "note": "Con 100 a ~23.5°."
+      },
+      "notes": "La forma termodinamicamente estable. La banda de 237 cm-1 es muy intensa: unas pocas decimas de porcentaje en peso ya se ven. Cae de lleno en la ventana RBM (equivale al RBM de un tubo de ~1.0 nm). El par 237 + 250 cm-1 es lo que permite corroborarlo: la de 143 cm-1 suele quedar por debajo del corte del filtro y entonces la de 237 se queda sola.",
+      "width_rule": {
+        "line": 237.0,
+        "max_fwhm": 14.0,
+        "reason": "El A₁ del selenio trigonal es estrecho (5–10 cm⁻¹). Muy ensanchado, o es amorfo o el cristal está muy defectuoso."
+      }
+    },
+    {
+      "key": "Se_monoclinic",
+      "label": "Selenio monoclínico (anillos Se₈, α o β)",
+      "formula": "Se",
+      "family": "Se",
+      "crystal_system": "monoclinic",
+      "space_group": "P2₁/n (α) / P2₁/c (β)",
+      "bands": [
+        {
+          "position": 80.0,
+          "window": [
+            72.0,
+            88.0
+          ],
+          "assignment": "modo del anillo",
+          "relative": 0.3
+        },
+        {
+          "position": 112.0,
+          "window": [
+            104.0,
+            120.0
+          ],
+          "assignment": "modo del anillo",
+          "relative": 0.4
+        },
+        {
+          "position": 134.0,
+          "window": [
+            126.0,
+            142.0
+          ],
+          "assignment": "flexion",
+          "relative": 0.3
+        },
+        {
+          "position": 254.0,
+          "window": [
+            247.0,
+            261.0
+          ],
+          "assignment": "tension Se-Se del anillo",
+          "relative": 1.0
+        },
+        {
+          "position": 80.0,
+          "window": [
+            74.0,
+            86.0
+          ],
+          "assignment": "red de anillos Se₈",
+          "relative": 0.25
+        },
+        {
+          "position": 264.0,
+          "window": [
+            258.0,
+            270.0
+          ],
+          "assignment": "hombro del modo de anillo",
+          "relative": 0.35
+        }
+      ],
+      "strong": [
+        254.0
+      ],
+      "discriminating": [
+        254.0,
+        112.0
+      ],
+      "confidence": "medium",
+      "source": "Lucovsky et al., Solid State Commun. 5 (1967) 113; Nagata, Ishibashi & Miyamoto, Jpn. J. Appl. Phys. 20 (1981) 463",
+      "xrd_hint": {
+        "reflection": "varias",
+        "two_theta_cu": 23.6,
+        "note": "Patron rico y de baja simetria; usa el ajuste completo, no un pico."
+      },
+      "notes": "Alfa y beta monoclinico NO se distinguen por Raman: ambos son empaquetamientos distintos del mismo anillo Se8 y sus espectros intramoleculares coinciden. Esta entrada cubre las dos a proposito. La banda de 254 cm-1 frente a la de 237 del trigonal es el discriminante anillo/cadena.",
+      "width_rule": {
+        "line": 254.0,
+        "max_fwhm": 15.0,
+        "reason": "Una banda de ~250 cm⁻¹ más ancha de 15 cm⁻¹ no es un cristal de anillos Se₈: es selenio amorfo o una mezcla."
+      }
+    },
+    {
+      "key": "Se_amorphous",
+      "label": "Selenio amorfo (a-Se)",
+      "formula": "Se",
+      "family": "Se",
+      "crystal_system": "amorphous",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 235.0,
+          "window": [
+            226.0,
+            244.0
+          ],
+          "assignment": "cadenas",
+          "relative": 0.6
+        },
+        {
+          "position": 252.0,
+          "window": [
+            243.0,
+            262.0
+          ],
+          "assignment": "anillos Se₈",
+          "relative": 1.0
+        },
+        {
+          "position": 80.0,
+          "window": [
+            70.0,
+            90.0
+          ],
+          "assignment": "red desordenada",
+          "relative": 0.2
+        }
+      ],
+      "strong": [
+        252.0
+      ],
+      "discriminating": [],
+      "confidence": "medium",
+      "source": "Lucovsky et al., Solid State Commun. 5 (1967) 113",
+      "xrd_hint": {
+        "reflection": "ninguna",
+        "two_theta_cu": null,
+        "note": "Halo amorfo ancho hacia 25-30°, sin picos de Bragg. Si el difractograma no tiene picos de Se pero el Raman ve 250 cm-1, es esta."
+      },
+      "notes": "PELIGRO EXPERIMENTAL: el selenio amorfo cristaliza bajo el propio laser con potencias de pocos mW, y lo hace a trigonal. Si la banda de 252 cm-1 se estrecha y migra hacia 237 cm-1 mientras mides, estas fabricando la fase que crees estar midiendo. Baja la potencia y repite en un punto virgen. Sin anchura de banda (>15 cm-1 de FWHM) no lo llames amorfo: es el ancho, no la posicion, lo que lo distingue del monoclinico.",
+      "width_rule": {
+        "line": 252.0,
+        "min_fwhm": 15.0,
+        "reason": "El selenio amorfo se distingue del cristal de anillos por la ANCHURA de la banda de ~250 cm⁻¹, no por su posición: por debajo de 15 cm⁻¹ de FWHM lo que tienes es monoclínico."
+      }
+    },
+    {
+      "key": "FeSe2_marcasite",
+      "label": "FeSe₂ marcasita (ortorrómbico)",
+      "formula": "FeSe2",
+      "family": "FeSe2",
+      "crystal_system": "orthorhombic",
+      "space_group": "Pnnm",
+      "bands": [
+        {
+          "position": 148.0,
+          "window": [
+            140.0,
+            156.0
+          ],
+          "assignment": "librational",
+          "relative": 0.4
+        },
+        {
+          "position": 175.0,
+          "window": [
+            167.0,
+            183.0
+          ],
+          "assignment": "A_g (Se-Se)",
+          "relative": 1.0
+        },
+        {
+          "position": 245.0,
+          "window": [
+            236.0,
+            254.0
+          ],
+          "assignment": "B_1g",
+          "relative": 0.5
+        }
+      ],
+      "strong": [
+        175.0,
+        245.0
+      ],
+      "discriminating": [
+        148.0,
+        245.0
+      ],
+      "confidence": "low",
+      "source": "Asignacion tentativa por analogia con la marcasita FeS2 y con los diseleniuros del grupo; la literatura Raman del FeSe2 es escasa",
+      "xrd_hint": {
+        "reflection": "101/111",
+        "two_theta_cu": 30.6,
+        "note": "Comprueba tambien 200 a ~37.0°."
+      },
+      "notes": "Producto habitual cuando sobra selenio en la sintesis. Su banda de 175 cm-1 esta a 6 cm-1 del A1g del beta-FeSe: con resolucion de 4 cm-1 o peor NO las separas. Si tu sintesis pudo dar los dos, este es exactamente el caso en que hay que ir a DRX."
+    },
+    {
+      "key": "Fe3C_cementite",
+      "label": "Cementita Fe₃C",
+      "formula": "Fe3C",
+      "family": "FeC",
+      "crystal_system": "orthorhombic",
+      "space_group": "Pnma",
+      "bands": [
+        {
+          "position": 212.0,
+          "window": [
+            202.0,
+            222.0
+          ],
+          "assignment": "sin asignar",
+          "relative": 0.7
+        },
+        {
+          "position": 280.0,
+          "window": [
+            270.0,
+            292.0
+          ],
+          "assignment": "sin asignar",
+          "relative": 1.0
+        },
+        {
+          "position": 306.0,
+          "window": [
+            296.0,
+            318.0
+          ],
+          "assignment": "sin asignar",
+          "relative": 0.6
+        },
+        {
+          "position": 685.0,
+          "window": [
+            668.0,
+            702.0
+          ],
+          "assignment": "sin asignar",
+          "relative": 0.4
+        }
+      ],
+      "strong": [
+        280.0,
+        212.0
+      ],
+      "discriminating": [
+        280.0,
+        685.0
+      ],
+      "confidence": "low",
+      "source": "Bandas recogidas en la literatura de aceros y de nanoparticulas encapsuladas; la seccion eficaz Raman de la cementita es muy baja y las asignaciones no estan consolidadas",
+      "xrd_hint": {
+        "reflection": "031/112",
+        "two_theta_cu": 45.0,
+        "note": "El grupo intenso de la cementita esta entre 42° y 46°, solapando con el 110 del hierro alfa a 44.7°. Necesitas el ajuste completo."
+      },
+      "notes": "La fase que de verdad hay dentro de las nanoparticulas de la punta de un nanotubo crecido por CVD con hierro, mas a menudo que hierro metalico. Raman casi no la ve: si el espectro no muestra estas bandas, eso NO significa que no haya cementita. Es una identificacion positiva util y una ausencia que no prueba nada. Ojo con las bandas de 212 y 280 cm-1: caen en la ventana RBM."
+    },
+    {
+      "key": "Fe_alpha",
+      "label": "Hierro α (ferrita) / hierro metálico",
+      "formula": "Fe",
+      "family": "FeC",
+      "crystal_system": "cubic",
+      "space_group": "Im-3m",
+      "bands": [],
+      "strong": [],
+      "discriminating": [],
+      "confidence": "high",
+      "source": "Regla de seleccion: un cristal cubico monoatomico con un atomo por celda primitiva no tiene modos Raman de primer orden",
+      "xrd_hint": {
+        "reflection": "110",
+        "two_theta_cu": 44.7,
+        "note": "Con 200 a 65.0° y 211 a 82.3°."
+      },
+      "notes": "ENTRADA SIN BANDAS, A PROPOSITO. El hierro metalico es Raman-inactivo en primer orden. Lo que ves en una muestra con hierro nunca es el hierro: es su oxido o su carburo. Esta aqui para que el informe pueda decirlo cuando el usuario pregunte por el hierro, y para que la pestaña de DRX tenga la referencia."
+    },
+    {
+      "key": "TiO2_anatase",
+      "label": "TiO₂ anatasa",
+      "formula": "TiO2",
+      "family": "TiO2",
+      "crystal_system": "tetragonal",
+      "space_group": "I4₁/amd",
+      "bands": [
+        {
+          "position": 144.0,
+          "window": [
+            139.0,
+            149.0
+          ],
+          "assignment": "E_g",
+          "relative": 1.0
+        },
+        {
+          "position": 197.0,
+          "window": [
+            191.0,
+            203.0
+          ],
+          "assignment": "E_g",
+          "relative": 0.1
+        },
+        {
+          "position": 399.0,
+          "window": [
+            391.0,
+            407.0
+          ],
+          "assignment": "B₁g",
+          "relative": 0.25
+        },
+        {
+          "position": 515.0,
+          "window": [
+            507.0,
+            523.0
+          ],
+          "assignment": "A₁g + B₁g",
+          "relative": 0.25
+        },
+        {
+          "position": 639.0,
+          "window": [
+            631.0,
+            647.0
+          ],
+          "assignment": "E_g",
+          "relative": 0.35
+        }
+      ],
+      "strong": [
+        144.0,
+        639.0
+      ],
+      "discriminating": [
+        144.0,
+        399.0
+      ],
+      "confidence": "high",
+      "source": "Ohsaka, Izumi & Fujiki, J. Raman Spectrosc. 7 (1978) 321",
+      "xrd_hint": {
+        "reflection": "101",
+        "two_theta_cu": 25.3,
+        "note": "La reflexion mas intensa de la anatasa."
+      },
+      "notes": "Soporte y fotocatalizador habitual. Su E_g de 144 cm-1 es intensisima y estrecha, y cae dentro de la ventana RBM: convertida daria un tubo de ~1.6 nm."
+    },
+    {
+      "key": "TiO2_rutile",
+      "label": "TiO₂ rutilo",
+      "formula": "TiO2",
+      "family": "TiO2",
+      "crystal_system": "tetragonal",
+      "space_group": "P4₂/mnm",
+      "bands": [
+        {
+          "position": 143.0,
+          "window": [
+            137.0,
+            149.0
+          ],
+          "assignment": "B₁g",
+          "relative": 0.3
+        },
+        {
+          "position": 447.0,
+          "window": [
+            437.0,
+            457.0
+          ],
+          "assignment": "E_g",
+          "relative": 0.85
+        },
+        {
+          "position": 612.0,
+          "window": [
+            602.0,
+            622.0
+          ],
+          "assignment": "A₁g",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        447.0,
+        612.0
+      ],
+      "discriminating": [
+        447.0,
+        612.0
+      ],
+      "confidence": "high",
+      "source": "Porto, Fleury & Damen, Phys. Rev. 154 (1967) 522",
+      "xrd_hint": {
+        "reflection": "110",
+        "two_theta_cu": 27.4,
+        "note": ""
+      },
+      "notes": "La forma de alta temperatura. Se separa de la anatasa por el par 447/612 frente a 144/639."
+    },
+    {
+      "key": "Si_crystalline",
+      "label": "Silicio cristalino (oblea)",
+      "formula": "Si",
+      "family": "substrate",
+      "crystal_system": "cubico",
+      "space_group": "Fd-3m",
+      "bands": [
+        {
+          "position": 520.7,
+          "window": [
+            517.7,
+            523.7
+          ],
+          "assignment": "modo optico de zona centro",
+          "relative": 1.0
+        },
+        {
+          "position": 300.0,
+          "window": [
+            288.0,
+            312.0
+          ],
+          "assignment": "segundo orden (2TA)",
+          "relative": 0.05
+        }
+      ],
+      "strong": [
+        520.7
+      ],
+      "discriminating": [
+        520.7
+      ],
+      "confidence": "high",
+      "source": "Parker, Feldman & Ashkin, Phys. Rev. 155 (1967) 712",
+      "xrd_hint": {
+        "reflection": "111",
+        "two_theta_cu": 28.4,
+        "note": ""
+      },
+      "notes": "El sustrato mas comun y la referencia de calibracion del equipo. Si aparece sin haberlo puesto tu, el laser esta atravesando la muestra hasta la oblea."
+    },
+    {
+      "key": "SiO2_quartz",
+      "label": "Cuarzo α (SiO₂)",
+      "formula": "SiO2",
+      "family": "substrate",
+      "crystal_system": "trigonal",
+      "space_group": "P3₂21",
+      "bands": [
+        {
+          "position": 128.0,
+          "window": [
+            122.0,
+            134.0
+          ],
+          "assignment": "E",
+          "relative": 0.3
+        },
+        {
+          "position": 206.0,
+          "window": [
+            200.0,
+            212.0
+          ],
+          "assignment": "A₁",
+          "relative": 0.4
+        },
+        {
+          "position": 464.0,
+          "window": [
+            458.0,
+            470.0
+          ],
+          "assignment": "A₁ (respiracion Si-O-Si)",
+          "relative": 1.0
+        },
+        {
+          "position": 696.0,
+          "window": [
+            688.0,
+            704.0
+          ],
+          "assignment": "E",
+          "relative": 0.08
+        }
+      ],
+      "strong": [
+        464.0,
+        206.0
+      ],
+      "discriminating": [
+        464.0,
+        206.0
+      ],
+      "confidence": "high",
+      "source": "Scott & Porto, Phys. Rev. 161 (1967) 903",
+      "xrd_hint": {
+        "reflection": "101",
+        "two_theta_cu": 26.6,
+        "note": ""
+      },
+      "notes": "Portaobjetos, crisoles y arena. Su banda de 206 cm-1 cae en la ventana RBM. La identificacion exige las lineas de 464 Y 206 cm-1. Con la de 464 sola bastaba una coincidencia para llamar cuarzo, y el alfa-MoO3 —que tiene bandas a 471 y 128— la disparaba siempre."
+    },
+    {
+      "key": "Fe2O3_hematite",
+      "label": "Hematita α-Fe₂O₃",
+      "formula": "Fe2O3",
+      "family": "FeOx",
+      "crystal_system": "romboedrico",
+      "space_group": "R-3c",
+      "bands": [
+        {
+          "position": 225.0,
+          "window": [
+            218.0,
+            232.0
+          ],
+          "assignment": "A₁g",
+          "relative": 0.55
+        },
+        {
+          "position": 245.0,
+          "window": [
+            238.0,
+            252.0
+          ],
+          "assignment": "E_g",
+          "relative": 0.25
+        },
+        {
+          "position": 292.0,
+          "window": [
+            284.0,
+            300.0
+          ],
+          "assignment": "E_g",
+          "relative": 1.0
+        },
+        {
+          "position": 411.0,
+          "window": [
+            403.0,
+            419.0
+          ],
+          "assignment": "E_g",
+          "relative": 0.6
+        },
+        {
+          "position": 497.0,
+          "window": [
+            487.0,
+            507.0
+          ],
+          "assignment": "A₁g",
+          "relative": 0.25
+        },
+        {
+          "position": 612.0,
+          "window": [
+            602.0,
+            622.0
+          ],
+          "assignment": "E_g",
+          "relative": 0.3
+        }
+      ],
+      "strong": [
+        292.0,
+        411.0
+      ],
+      "discriminating": [
+        225.0,
+        292.0,
+        411.0
+      ],
+      "confidence": "high",
+      "source": "de Faria, Venâncio Silva & de Oliveira, J. Raman Spectrosc. 28 (1997) 873",
+      "xrd_hint": {
+        "reflection": "104",
+        "two_theta_cu": 33.2,
+        "note": ""
+      },
+      "notes": "El oxido al que acaba un catalizador de hierro expuesto al aire. Sus modos de 225 y 245 cm-1 entran en la ventana RBM. Ojo: el laser la produce calentando magnetita, asi que baja la potencia antes de concluir que estaba ahi."
+    },
+    {
+      "key": "Fe3O4_magnetite",
+      "label": "Magnetita Fe₃O₄",
+      "formula": "Fe3O4",
+      "family": "FeOx",
+      "crystal_system": "cubico",
+      "space_group": "Fd-3m",
+      "bands": [
+        {
+          "position": 310.0,
+          "window": [
+            295.0,
+            325.0
+          ],
+          "assignment": "T₂g",
+          "relative": 0.25
+        },
+        {
+          "position": 540.0,
+          "window": [
+            525.0,
+            555.0
+          ],
+          "assignment": "T₂g",
+          "relative": 0.3
+        },
+        {
+          "position": 668.0,
+          "window": [
+            656.0,
+            680.0
+          ],
+          "assignment": "A₁g",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        668.0
+      ],
+      "discriminating": [
+        668.0
+      ],
+      "confidence": "medium",
+      "source": "Shebanova & Lazor, J. Solid State Chem. 174 (2003) 424",
+      "xrd_hint": {
+        "reflection": "311",
+        "two_theta_cu": 35.5,
+        "note": ""
+      },
+      "notes": "Es la fase que mas facilmente se quema bajo el laser: por encima de ~1 mW en el punto pasa a hematita mientras mides. Una A₁g ancha en 660-670 con hematita apareciendo al subir la potencia es la firma de que empezo siendo magnetita."
+    },
+    {
+      "key": "FeOOH_goethite",
+      "label": "Goethita α-FeOOH",
+      "formula": "FeOOH",
+      "family": "FeOx",
+      "crystal_system": "ortorrombico",
+      "space_group": "Pnma",
+      "bands": [
+        {
+          "position": 299.0,
+          "window": [
+            291.0,
+            307.0
+          ],
+          "assignment": "",
+          "relative": 0.7
+        },
+        {
+          "position": 386.0,
+          "window": [
+            378.0,
+            394.0
+          ],
+          "assignment": "",
+          "relative": 1.0
+        },
+        {
+          "position": 479.0,
+          "window": [
+            469.0,
+            489.0
+          ],
+          "assignment": "",
+          "relative": 0.25
+        },
+        {
+          "position": 550.0,
+          "window": [
+            538.0,
+            562.0
+          ],
+          "assignment": "",
+          "relative": 0.3
+        }
+      ],
+      "strong": [
+        386.0,
+        299.0
+      ],
+      "discriminating": [
+        386.0
+      ],
+      "confidence": "medium",
+      "source": "de Faria et al., J. Raman Spectrosc. 28 (1997) 873",
+      "xrd_hint": {
+        "reflection": "110",
+        "two_theta_cu": 21.2,
+        "note": ""
+      },
+      "notes": "Oxihidroxido de un catalizador que vio humedad."
+    },
+    {
+      "key": "FeS2_pyrite",
+      "label": "Pirita FeS₂",
+      "formula": "FeS2",
+      "family": "FeS",
+      "crystal_system": "cubico",
+      "space_group": "Pa-3",
+      "bands": [
+        {
+          "position": 343.0,
+          "window": [
+            336.0,
+            350.0
+          ],
+          "assignment": "E_g (libracion S-S)",
+          "relative": 1.0
+        },
+        {
+          "position": 379.0,
+          "window": [
+            372.0,
+            386.0
+          ],
+          "assignment": "A_g (tension S-S)",
+          "relative": 0.85
+        },
+        {
+          "position": 430.0,
+          "window": [
+            422.0,
+            438.0
+          ],
+          "assignment": "T_g",
+          "relative": 0.25
+        }
+      ],
+      "strong": [
+        343.0,
+        379.0
+      ],
+      "discriminating": [
+        343.0,
+        379.0
+      ],
+      "confidence": "high",
+      "source": "Vogt, Chattopadhyay & Stolz, J. Phys. Chem. Solids 44 (1983) 869",
+      "xrd_hint": {
+        "reflection": "200",
+        "two_theta_cu": 33.1,
+        "note": ""
+      },
+      "notes": "El analogo en azufre del FeSe₂, y la fase que aparece si el precursor llevaba azufre."
+    },
+    {
+      "key": "Co3O4_spinel",
+      "label": "Co₃O₄ espinela",
+      "formula": "Co3O4",
+      "family": "CoOx",
+      "crystal_system": "cubico",
+      "space_group": "Fd-3m",
+      "bands": [
+        {
+          "position": 194.0,
+          "window": [
+            187.0,
+            201.0
+          ],
+          "assignment": "F₂g",
+          "relative": 0.3
+        },
+        {
+          "position": 482.0,
+          "window": [
+            474.0,
+            490.0
+          ],
+          "assignment": "E_g",
+          "relative": 0.4
+        },
+        {
+          "position": 521.0,
+          "window": [
+            513.0,
+            529.0
+          ],
+          "assignment": "F₂g",
+          "relative": 0.35
+        },
+        {
+          "position": 618.0,
+          "window": [
+            608.0,
+            628.0
+          ],
+          "assignment": "F₂g",
+          "relative": 0.3
+        },
+        {
+          "position": 691.0,
+          "window": [
+            683.0,
+            699.0
+          ],
+          "assignment": "A₁g",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        691.0,
+        482.0
+      ],
+      "discriminating": [
+        691.0,
+        194.0
+      ],
+      "confidence": "high",
+      "source": "Hadjiev, Iliev & Vergilov, J. Phys. C 21 (1988) L199",
+      "xrd_hint": {
+        "reflection": "311",
+        "two_theta_cu": 36.8,
+        "note": ""
+      },
+      "notes": "Catalizador OER habitual. Su F₂g de 194 cm-1 cae en la ventana RBM."
+    },
+    {
+      "key": "NiO_bunsenite",
+      "label": "NiO",
+      "formula": "NiO",
+      "family": "NiOx",
+      "crystal_system": "cubico",
+      "space_group": "Fm-3m",
+      "bands": [
+        {
+          "position": 500.0,
+          "window": [
+            480.0,
+            520.0
+          ],
+          "assignment": "1P (activado por desorden)",
+          "relative": 1.0
+        },
+        {
+          "position": 1090.0,
+          "window": [
+            1060.0,
+            1120.0
+          ],
+          "assignment": "2P (dos fonones)",
+          "relative": 0.6
+        }
+      ],
+      "strong": [
+        500.0,
+        1090.0
+      ],
+      "discriminating": [
+        1090.0
+      ],
+      "confidence": "medium",
+      "source": "Mironova-Ulmane et al., J. Phys. Conf. Ser. 93 (2007) 012039",
+      "xrd_hint": {
+        "reflection": "200",
+        "two_theta_cu": 43.3,
+        "note": ""
+      },
+      "notes": "Primer orden prohibido por simetria: lo que se ve son bandas anchas activadas por defectos, y su intensidad dice mas del desorden que de la cantidad. La 2P de 1090 cm-1 se solapa con la region del carbono."
+    },
+    {
+      "key": "NiOOH_beta",
+      "label": "β-NiOOH / Ni(OH)₂",
+      "formula": "NiOOH",
+      "family": "NiOx",
+      "crystal_system": "hexagonal",
+      "space_group": "P-3m1",
+      "bands": [
+        {
+          "position": 312.0,
+          "window": [
+            302.0,
+            322.0
+          ],
+          "assignment": "E_g (red)",
+          "relative": 0.45
+        },
+        {
+          "position": 450.0,
+          "window": [
+            438.0,
+            462.0
+          ],
+          "assignment": "A₁g (Ni-O)",
+          "relative": 1.0
+        },
+        {
+          "position": 3580.0,
+          "window": [
+            3540.0,
+            3620.0
+          ],
+          "assignment": "tension O-H",
+          "relative": 0.3
+        }
+      ],
+      "strong": [
+        450.0
+      ],
+      "discriminating": [
+        450.0,
+        3580.0
+      ],
+      "confidence": "medium",
+      "source": "Hall, Lockwood, Bock & MacDougall, Proc. R. Soc. A 471 (2015) 20140792",
+      "xrd_hint": {
+        "reflection": "001",
+        "two_theta_cu": 19.2,
+        "note": ""
+      },
+      "notes": "Es la fase activa de un electrodo de niquel en alcalino. Si la buscas, mide hasta 3700 cm-1: la tension O-H es lo que la separa del oxido."
+    },
+    {
+      "key": "MoO3_alpha",
+      "label": "α-MoO₃",
+      "formula": "MoO3",
+      "family": "MoOx",
+      "crystal_system": "ortorrombico",
+      "space_group": "Pbnm",
+      "bands": [
+        {
+          "position": 116.0,
+          "window": [
+            110.0,
+            122.0
+          ],
+          "assignment": "red",
+          "relative": 0.2
+        },
+        {
+          "position": 128.0,
+          "window": [
+            122.0,
+            134.0
+          ],
+          "assignment": "red",
+          "relative": 0.3
+        },
+        {
+          "position": 158.0,
+          "window": [
+            152.0,
+            164.0
+          ],
+          "assignment": "red",
+          "relative": 0.45
+        },
+        {
+          "position": 197.0,
+          "window": [
+            190.0,
+            204.0
+          ],
+          "assignment": "red",
+          "relative": 0.2
+        },
+        {
+          "position": 217.0,
+          "window": [
+            210.0,
+            224.0
+          ],
+          "assignment": "red",
+          "relative": 0.2
+        },
+        {
+          "position": 246.0,
+          "window": [
+            239.0,
+            253.0
+          ],
+          "assignment": "red",
+          "relative": 0.2
+        },
+        {
+          "position": 283.0,
+          "window": [
+            276.0,
+            290.0
+          ],
+          "assignment": "flexion O-Mo-O",
+          "relative": 0.35
+        },
+        {
+          "position": 291.0,
+          "window": [
+            284.0,
+            298.0
+          ],
+          "assignment": "flexion Mo=O",
+          "relative": 0.35
+        },
+        {
+          "position": 337.0,
+          "window": [
+            329.0,
+            345.0
+          ],
+          "assignment": "flexion O-Mo-O",
+          "relative": 0.3
+        },
+        {
+          "position": 378.0,
+          "window": [
+            370.0,
+            386.0
+          ],
+          "assignment": "flexion",
+          "relative": 0.25
+        },
+        {
+          "position": 471.0,
+          "window": [
+            463.0,
+            479.0
+          ],
+          "assignment": "tension Mo-O-Mo",
+          "relative": 0.15
+        },
+        {
+          "position": 666.0,
+          "window": [
+            656.0,
+            676.0
+          ],
+          "assignment": "Mo-O-Mo",
+          "relative": 0.5
+        },
+        {
+          "position": 820.0,
+          "window": [
+            812.0,
+            828.0
+          ],
+          "assignment": "Mo-O-Mo simetrica",
+          "relative": 0.9
+        },
+        {
+          "position": 995.0,
+          "window": [
+            989.0,
+            1001.0
+          ],
+          "assignment": "Mo=O terminal",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        995.0,
+        820.0
+      ],
+      "discriminating": [
+        995.0,
+        820.0
+      ],
+      "confidence": "high",
+      "source": "Py & Maschke, Physica B 105 (1981) 370",
+      "xrd_hint": {
+        "reflection": "021",
+        "two_theta_cu": 25.7,
+        "note": ""
+      },
+      "notes": "Lo que queda cuando un MoS₂ se oxida. Su modo de red de 158 cm-1 cae en la ventana RBM. Sus bandas menores caen casi encima de las del azufre elemental (471/217/158 frente a 473/219/153): estan catalogadas justamente para que el programa sepa que el MoO3 ya explica esos picos y no proponga azufre donde solo hay oxido."
+    },
+    {
+      "key": "ZnO_wurtzite",
+      "label": "ZnO wurtzita",
+      "formula": "ZnO",
+      "family": "ZnOx",
+      "crystal_system": "hexagonal",
+      "space_group": "P6₃mc",
+      "bands": [
+        {
+          "position": 99.0,
+          "window": [
+            94.0,
+            104.0
+          ],
+          "assignment": "E₂ (bajo)",
+          "relative": 0.4
+        },
+        {
+          "position": 438.0,
+          "window": [
+            432.0,
+            444.0
+          ],
+          "assignment": "E₂ (alto)",
+          "relative": 1.0
+        },
+        {
+          "position": 574.0,
+          "window": [
+            562.0,
+            586.0
+          ],
+          "assignment": "A₁ (LO)",
+          "relative": 0.2
+        }
+      ],
+      "strong": [
+        438.0
+      ],
+      "discriminating": [
+        438.0,
+        99.0
+      ],
+      "confidence": "high",
+      "source": "Damen, Porto & Tell, Phys. Rev. 142 (1966) 570",
+      "xrd_hint": {
+        "reflection": "101",
+        "two_theta_cu": 36.3,
+        "note": ""
+      },
+      "notes": "Su E₂ alto de 438 cm-1 es estrecho e inconfundible."
+    },
+    {
+      "key": "CaCO3_calcite",
+      "label": "Calcita CaCO₃",
+      "formula": "CaCO3",
+      "family": "carbonate",
+      "crystal_system": "romboedrico",
+      "space_group": "R-3c",
+      "bands": [
+        {
+          "position": 155.0,
+          "window": [
+            150.0,
+            160.0
+          ],
+          "assignment": "red (T)",
+          "relative": 0.25
+        },
+        {
+          "position": 282.0,
+          "window": [
+            276.0,
+            288.0
+          ],
+          "assignment": "red (L)",
+          "relative": 0.3
+        },
+        {
+          "position": 712.0,
+          "window": [
+            707.0,
+            717.0
+          ],
+          "assignment": "ν₄ (flexion en el plano)",
+          "relative": 0.2
+        },
+        {
+          "position": 1086.0,
+          "window": [
+            1081.0,
+            1091.0
+          ],
+          "assignment": "ν₁ (tension simetrica CO₃)",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        1086.0
+      ],
+      "discriminating": [
+        1086.0,
+        712.0
+      ],
+      "confidence": "high",
+      "source": "Rutt & Nicola, J. Phys. C 7 (1974) 4522",
+      "xrd_hint": {
+        "reflection": "104",
+        "two_theta_cu": 29.4,
+        "note": ""
+      },
+      "notes": "Resto de plantilla de CaCO₃ o contaminacion de manipulacion. Su ν₁ de 1086 cm-1 esta justo entre la D y la G del carbono, donde es facil ajustarla como si fuera una componente del carbono. Sus modos de red de 155 y 282 cm-1 caen en la ventana RBM."
+    },
+    {
+      "key": "melamine",
+      "label": "Melamina (C₃H₆N₆)",
+      "formula": "C3H6N6",
+      "family": "CN",
+      "crystal_system": "monoclinico",
+      "space_group": "P2₁/a",
+      "bands": [
+        {
+          "position": 381.0,
+          "window": [
+            373.0,
+            389.0
+          ],
+          "assignment": "deformacion del anillo",
+          "relative": 0.35
+        },
+        {
+          "position": 584.0,
+          "window": [
+            575.0,
+            593.0
+          ],
+          "assignment": "deformacion del anillo",
+          "relative": 0.45
+        },
+        {
+          "position": 676.0,
+          "window": [
+            668.0,
+            684.0
+          ],
+          "assignment": "respiracion del anillo de triazina",
+          "relative": 1.0
+        },
+        {
+          "position": 984.0,
+          "window": [
+            975.0,
+            993.0
+          ],
+          "assignment": "respiracion del anillo (modo II)",
+          "relative": 0.5
+        }
+      ],
+      "strong": [
+        676.0,
+        984.0
+      ],
+      "discriminating": [
+        676.0
+      ],
+      "confidence": "high",
+      "source": "Larkin, Makowski & Colthup, Spectrochim. Acta A 55 (1999) 1011",
+      "xrd_hint": {
+        "reflection": "100",
+        "two_theta_cu": 26.0,
+        "note": "El pico mas intenso de la melamina, muy agudo."
+      },
+      "notes": "Precursor de nitrogeno por excelencia. Su banda de 676 cm-1 es estrecha e intensisima: si la ves, queda melamina SIN reaccionar y el nitrogeno que creias haber metido en la red esta ahi fuera. Calcinada por encima de 500 C se condensa en g-C3N4, que es otra entrada de esta misma familia y otro problema distinto."
+    },
+    {
+      "key": "g_C3N4",
+      "label": "Nitruro de carbono grafítico (g-C₃N₄)",
+      "formula": "C3N4",
+      "family": "CN",
+      "crystal_system": "hexagonal (laminar)",
+      "space_group": "P-6m2",
+      "bands": [
+        {
+          "position": 707.0,
+          "window": [
+            695.0,
+            719.0
+          ],
+          "assignment": "respiracion del anillo de triazina",
+          "relative": 1.0
+        },
+        {
+          "position": 750.0,
+          "window": [
+            738.0,
+            762.0
+          ],
+          "assignment": "respiracion del anillo",
+          "relative": 0.6
+        },
+        {
+          "position": 981.0,
+          "window": [
+            967.0,
+            995.0
+          ],
+          "assignment": "",
+          "relative": 0.4
+        },
+        {
+          "position": 1233.0,
+          "window": [
+            1213.0,
+            1253.0
+          ],
+          "assignment": "",
+          "relative": 0.5
+        },
+        {
+          "position": 1310.0,
+          "window": [
+            1290.0,
+            1330.0
+          ],
+          "assignment": "",
+          "relative": 0.5
+        },
+        {
+          "position": 1570.0,
+          "window": [
+            1545.0,
+            1595.0
+          ],
+          "assignment": "",
+          "relative": 0.6
+        }
+      ],
+      "strong": [
+        707.0,
+        750.0
+      ],
+      "discriminating": [
+        707.0,
+        750.0
+      ],
+      "confidence": "medium",
+      "source": "Zinin, Ming, Sharma et al., Chem. Phys. Lett. 472 (2009) 69",
+      "xrd_hint": {
+        "reflection": "002",
+        "two_theta_cu": 27.4,
+        "note": "Apilamiento interlaminar de 3.26 A, mas cerrado que el del grafito. Con el 100 a ~13.0 la asignacion es firme."
+      },
+      "notes": "AVISO IMPORTANTE. El g-C3N4 tiene bandas a 1233, 1310 y 1570 cm-1, es decir ENCIMA de la D y de la G. Un carbono 'dopado con nitrogeno' sintetizado desde melamina que en realidad es g-C3N4 da un espectro con aspecto de carbono desordenado y una relacion I_D/I_G que no significa nada, porque esas bandas no son de un carbono. Las que lo delatan son las de 707 y 750 cm-1, donde el carbono no tiene nada. Mide esa region antes de calcular indices. Segunda pista: el g-C3N4 fluoresce con fuerza a 532 nm y el fondo se dispara; con 785 nm baja."
+    },
+    {
+      "key": "BN_hexagonal",
+      "label": "Nitruro de boro hexagonal (h-BN)",
+      "formula": "BN",
+      "family": "B",
+      "crystal_system": "hexagonal",
+      "space_group": "P6₃/mmc",
+      "bands": [
+        {
+          "position": 1366.0,
+          "window": [
+            1356.0,
+            1376.0
+          ],
+          "assignment": "E₂g (en el plano)",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        1366.0
+      ],
+      "discriminating": [
+        1366.0
+      ],
+      "confidence": "high",
+      "source": "Nemanich, Solin & Martin, Phys. Rev. B 23 (1981) 6348",
+      "xrd_hint": {
+        "reflection": "002",
+        "two_theta_cu": 26.7,
+        "note": "Casi encima del 002 del grafito (26.5). Necesitas el 100 a ~41.6 y el 004 a ~55.0 para separarlos."
+      },
+      "notes": "UNA sola banda, a 1366 cm-1, y cae justo entre la D del carbono (1350) y la G (1580). Es el 'grafito blanco': misma estructura, mismo espaciado, y en DRX casi el mismo 002. Dos maneras de distinguirla de una D: es MUCHO mas estrecha (unos 10 cm-1 frente a 50-150), y no es dispersiva -- mide a dos laseres y la D se mueve unos 50 cm-1 por eV mientras esta se queda quieta. En una heteroestructura grafeno/h-BN estan las dos y hay que ajustarlas juntas.",
+      "width_rule": {
+        "line": 1366.0,
+        "max_fwhm": 25.0,
+        "reason": "El E₂g del h-BN cristalino mide unos 10 cm⁻¹. Una banda a 1366 cm⁻¹ más ancha que 25 es la D de un carbono desordenado, que es 50-150. Esta regla es lo único que separa las dos, porque la posición no lo hace."
+      }
+    },
+    {
+      "key": "B2O3_glassy",
+      "label": "B₂O₃ vítreo (anillos boroxol)",
+      "formula": "B2O3",
+      "family": "B",
+      "crystal_system": "amorfo",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 500.0,
+          "window": [
+            475.0,
+            525.0
+          ],
+          "assignment": "",
+          "relative": 0.3
+        },
+        {
+          "position": 808.0,
+          "window": [
+            796.0,
+            820.0
+          ],
+          "assignment": "respiracion del anillo boroxol",
+          "relative": 1.0
+        },
+        {
+          "position": 1260.0,
+          "window": [
+            1230.0,
+            1290.0
+          ],
+          "assignment": "tension B-O",
+          "relative": 0.25
+        }
+      ],
+      "strong": [
+        808.0
+      ],
+      "discriminating": [
+        808.0
+      ],
+      "confidence": "high",
+      "source": "Galeener, Lucovsky & Mikkelsen, Phys. Rev. B 22 (1980) 3983",
+      "xrd_hint": {
+        "reflection": "",
+        "two_theta_cu": null,
+        "note": "Es amorfo: no tiene reflexiones, solo un halo ancho hacia 25-28. Que la DRX no vea nada NO significa que no haya B2O3."
+      },
+      "notes": "Un caso raro y util: un solido amorfo con una banda Raman ESTRECHA (unos 12 cm-1) e intensisima a 808 cm-1. Viene de la respiracion del anillo boroxol B3O6, una unidad tan rigida que vibra igual la rodee lo que la rodee. Es el residuo tipico de dopar con boro a partir de acido borico o de B2O3, y con la humedad del aire vuelve a H3BO3, asi que cual de los dos midas depende de como guardes la muestra."
+    },
+    {
+      "key": "H3BO3",
+      "label": "Ácido bórico H₃BO₃",
+      "formula": "H3BO3",
+      "family": "B",
+      "crystal_system": "triclinico",
+      "space_group": "P-1",
+      "bands": [
+        {
+          "position": 500.0,
+          "window": [
+            490.0,
+            510.0
+          ],
+          "assignment": "respiracion simetrica del BO₃",
+          "relative": 1.0
+        },
+        {
+          "position": 880.0,
+          "window": [
+            868.0,
+            892.0
+          ],
+          "assignment": "tension B-O",
+          "relative": 0.3
+        },
+        {
+          "position": 1170.0,
+          "window": [
+            1150.0,
+            1190.0
+          ],
+          "assignment": "deformacion B-OH",
+          "relative": 0.2
+        }
+      ],
+      "strong": [
+        500.0
+      ],
+      "discriminating": [
+        500.0
+      ],
+      "confidence": "medium",
+      "source": "Krishnan, Proc. Indian Acad. Sci. A 57 (1963) 103; espectros de referencia RRUFF",
+      "xrd_hint": {
+        "reflection": "001",
+        "two_theta_cu": 14.7,
+        "note": "Reflexion laminar a angulo bajo, muy intensa y facil de ver."
+      },
+      "notes": "Precursor de boro y producto de hidratacion del B2O3. Su banda de 500 cm-1 es fuerte y estrecha; si tambien hay una a 808, tienes los dos. Sublima y se descompone hacia 170 C, asi que en un carbono calcinado no deberia quedar: si esta, es contaminacion posterior."
+    },
+    {
+      "key": "P_red",
+      "label": "Fósforo rojo (amorfo)",
+      "formula": "P",
+      "family": "P",
+      "crystal_system": "amorfo",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 351.0,
+          "window": [
+            336.0,
+            366.0
+          ],
+          "assignment": "",
+          "relative": 0.8
+        },
+        {
+          "position": 390.0,
+          "window": [
+            375.0,
+            405.0
+          ],
+          "assignment": "",
+          "relative": 1.0
+        },
+        {
+          "position": 460.0,
+          "window": [
+            440.0,
+            480.0
+          ],
+          "assignment": "",
+          "relative": 0.5
+        }
+      ],
+      "strong": [
+        390.0,
+        351.0
+      ],
+      "discriminating": [
+        351.0,
+        390.0
+      ],
+      "width_rule": {
+        "line": 390.0,
+        "min_fwhm": 20.0,
+        "reason": "El fósforo rojo es amorfo y sus bandas son anchas. Por debajo de 20 cm⁻¹ de FWHM lo que tienes es fósforo negro o violeta cristalino, no rojo."
+      },
+      "confidence": "medium",
+      "source": "Olego, Baumann & Schachter, Solid State Commun. 53 (1985) 905",
+      "xrd_hint": {
+        "reflection": "",
+        "two_theta_cu": null,
+        "note": "Amorfo: dos halos anchos hacia 15 y 33. Si aparecen picos estrechos, se ha cristalizado a fosforo negro."
+      },
+      "notes": "Precursor de dopaje con fosforo. Sus tres bandas caen entre 340 y 470 cm-1, region vacia en el carbono, asi que la identificacion es limpia si el espectro llega ahi. Se oxida al aire a fosfatos, que aparecen mucho mas arriba (950-1000 cm-1): si ves los dos, el precursor se ha degradado."
+    },
+    {
+      "key": "S8_orthorhombic",
+      "label": "Azufre elemental α-S₈ (ortorrómbico)",
+      "formula": "S8",
+      "family": "S",
+      "crystal_system": "ortorrombico",
+      "space_group": "Fddd",
+      "bands": [
+        {
+          "position": 153.0,
+          "window": [
+            145.0,
+            161.0
+          ],
+          "assignment": "deformacion del anillo",
+          "relative": 0.7
+        },
+        {
+          "position": 219.0,
+          "window": [
+            211.0,
+            227.0
+          ],
+          "assignment": "deformacion del anillo",
+          "relative": 0.85
+        },
+        {
+          "position": 473.0,
+          "window": [
+            464.0,
+            482.0
+          ],
+          "assignment": "tension S-S",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        473.0
+      ],
+      "discriminating": [
+        473.0
+      ],
+      "confidence": "high",
+      "source": "Ward, J. Phys. Chem. 72 (1968) 4133",
+      "xrd_hint": {
+        "reflection": "222",
+        "two_theta_cu": 23.1,
+        "note": "Con el 026 a ~25.9 y el 311 a ~27.8."
+      },
+      "notes": "Azufre sin reaccionar: el analogo del selenio segregado, y con el mismo significado -- ese azufre NO esta en la red del hospedador. Sus bandas de 153 y 219 cm-1 caen dentro de la ventana RBM, igual que las del selenio, y por eso la identificacion EXIGE la de 473 cm-1: dos coincidencias en la ventana RBM son lo que cabe esperar de un nanotubo limpio, no una prueba de azufre. Si tu medida no llega a 500 cm-1, no puedes descartarlo ni afirmarlo. Sublima hacia 120 C y el laser lo funde con facilidad: si la banda de 473 se debilita mientras mides, lo estas evaporando."
+    },
+    {
+      "key": "Na2SO4_thenardite",
+      "label": "Sulfato sódico Na₂SO₄ (tenardita)",
+      "formula": "Na2SO4",
+      "family": "salt",
+      "crystal_system": "ortorrombico",
+      "space_group": "Fddd",
+      "bands": [
+        {
+          "position": 451.0,
+          "window": [
+            442.0,
+            460.0
+          ],
+          "assignment": "ν₂ (SO₄)",
+          "relative": 0.3
+        },
+        {
+          "position": 621.0,
+          "window": [
+            611.0,
+            631.0
+          ],
+          "assignment": "ν₄ (SO₄)",
+          "relative": 0.25
+        },
+        {
+          "position": 993.0,
+          "window": [
+            986.0,
+            1000.0
+          ],
+          "assignment": "ν₁ (SO₄, tension simetrica)",
+          "relative": 1.0
+        },
+        {
+          "position": 1131.0,
+          "window": [
+            1119.0,
+            1143.0
+          ],
+          "assignment": "ν₃ (SO₄)",
+          "relative": 0.25
+        }
+      ],
+      "strong": [
+        993.0
+      ],
+      "discriminating": [
+        993.0
+      ],
+      "confidence": "medium",
+      "source": "Espectros de referencia RRUFF (tenardita R040177)",
+      "xrd_hint": {
+        "reflection": "131",
+        "two_theta_cu": 32.0,
+        "note": "Con el 040 a ~33.9."
+      },
+      "notes": "Residuo de un lavado incompleto despues de tratar con acido sulfurico o de neutralizar con sosa. Su ν₁ a 993 cm-1 es estrechisima (menos de 10 cm-1) y muy intensa, y esta sola en una region donde el carbono no tiene nada: es facil de ver y facil de confundir con una banda de la muestra si no sabes que puede estar. No es parte del material: vuelve a lavar."
+    },
+    {
+      "key": "NH4Cl_salmiac",
+      "label": "Cloruro de amonio NH₄Cl (salmiaco)",
+      "formula": "NH4Cl",
+      "family": "salt",
+      "crystal_system": "cubico",
+      "space_group": "Pm-3m",
+      "bands": [
+        {
+          "position": 1400.0,
+          "window": [
+            1385.0,
+            1415.0
+          ],
+          "assignment": "ν₄ (deformacion NH₄⁺)",
+          "relative": 0.6
+        },
+        {
+          "position": 1710.0,
+          "window": [
+            1690.0,
+            1730.0
+          ],
+          "assignment": "2ν₄",
+          "relative": 0.2
+        },
+        {
+          "position": 3050.0,
+          "window": [
+            3020.0,
+            3080.0
+          ],
+          "assignment": "ν₁ (tension N-H)",
+          "relative": 1.0
+        },
+        {
+          "position": 3140.0,
+          "window": [
+            3110.0,
+            3170.0
+          ],
+          "assignment": "ν₃ (tension N-H)",
+          "relative": 0.5
+        }
+      ],
+      "strong": [
+        3050.0,
+        1400.0
+      ],
+      "discriminating": [
+        3050.0
+      ],
+      "confidence": "medium",
+      "source": "Espectros de referencia RRUFF (salmiaco R050430)",
+      "xrd_hint": {
+        "reflection": "110",
+        "two_theta_cu": 32.7,
+        "note": "Con el 100 a ~22.9 y el 200 a ~46.8."
+      },
+      "notes": "El cloruro que de verdad se ve por Raman. La mayoria de los cloruros -- NaCl, KCl, FeCl2, FeCl3 -- no dan primer orden o lo dan tan debil que no sirve, asi que si tu precursor era un cloruro metalico y el Raman no encuentra cloro, eso no prueba nada: usa EDS o DRX. Aqui hay dos trampas: la ν₄ a 1400 cm-1 cae ENCIMA de la banda D, aunque es mucho mas estrecha, y la identificacion segura exige medir hasta 3200 cm-1, mas alla de donde suele pararse una medida de carbono."
+    },
+    {
+      "key": "urea",
+      "label": "Urea (CO(NH₂)₂)",
+      "formula": "CH4N2O",
+      "family": "CN",
+      "crystal_system": "tetragonal",
+      "space_group": "P-42₁m",
+      "bands": [
+        {
+          "position": 550.0,
+          "window": [
+            540.0,
+            560.0
+          ],
+          "assignment": "deformacion N-C-N",
+          "relative": 0.3
+        },
+        {
+          "position": 1010.0,
+          "window": [
+            1002.0,
+            1018.0
+          ],
+          "assignment": "tension simetrica C-N",
+          "relative": 1.0
+        },
+        {
+          "position": 1650.0,
+          "window": [
+            1630.0,
+            1670.0
+          ],
+          "assignment": "tension C=O",
+          "relative": 0.3
+        }
+      ],
+      "strong": [
+        1010.0
+      ],
+      "discriminating": [
+        1010.0
+      ],
+      "confidence": "high",
+      "source": "Keuleers, Desseyn, Rousseau & Van Alsenoy, J. Phys. Chem. A 103 (1999) 4621",
+      "xrd_hint": {
+        "reflection": "110",
+        "two_theta_cu": 22.3,
+        "note": "Con el 111 a ~24.7 y el 200 a ~29.4."
+      },
+      "notes": "El otro precursor de nitrogeno habitual. Su banda de 1010 cm-1 es estrecha e intensa y no la comparte con nada de la muestra. Se descompone hacia 150 C, asi que en un material calcinado no deberia quedar: verla significa que la impregnacion no reacciono o que la recogiste de un lote sin tratar."
+    },
+    {
+      "key": "Mn3O4_hausmannite",
+      "label": "Hausmannita Mn₃O₄",
+      "formula": "Mn3O4",
+      "family": "MnOx",
+      "crystal_system": "tetragonal",
+      "space_group": "I4₁/amd",
+      "bands": [
+        {
+          "position": 318.0,
+          "window": [
+            308.0,
+            328.0
+          ],
+          "assignment": "",
+          "relative": 0.25
+        },
+        {
+          "position": 374.0,
+          "window": [
+            364.0,
+            384.0
+          ],
+          "assignment": "",
+          "relative": 0.35
+        },
+        {
+          "position": 658.0,
+          "window": [
+            648.0,
+            668.0
+          ],
+          "assignment": "A₁g (tension Mn-O en sitio tetraedrico)",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        658.0,
+        374.0
+      ],
+      "discriminating": [
+        374.0
+      ],
+      "confidence": "high",
+      "source": "Bernard, Hugot-Le Goff, Thi & Torresi, J. Electrochem. Soc. 140 (1993) 3065; Julien, Massot & Poinsignon, Spectrochim. Acta A 60 (2004) 689",
+      "xrd_hint": {
+        "reflection": "211",
+        "two_theta_cu": 36.1,
+        "note": "El pico mas intenso; con el 103 a ~32.3."
+      },
+      "notes": "La espinela de manganeso, y el pozo al que caen todos los demas oxidos de manganeso bajo el laser: el haz los reduce a Mn3O4. Su A₁g de 658 cm-1 es intensa y estrecha, PERO los tres oxidos de esta familia tienen una banda entre 640 y 670, asi que esa sola no decide. La de 374 cm-1 es la que la separa. Si la banda de 658 crece mientras mides, estas fabricando hausmannita."
+    },
+    {
+      "key": "Mn2O3_bixbyite",
+      "label": "Bixbyíta α-Mn₂O₃",
+      "formula": "Mn2O3",
+      "family": "MnOx",
+      "crystal_system": "cubico",
+      "space_group": "Ia-3",
+      "bands": [
+        {
+          "position": 310.0,
+          "window": [
+            298.0,
+            322.0
+          ],
+          "assignment": "",
+          "relative": 0.4
+        },
+        {
+          "position": 640.0,
+          "window": [
+            625.0,
+            655.0
+          ],
+          "assignment": "tension Mn-O",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        640.0,
+        310.0
+      ],
+      "discriminating": [
+        310.0
+      ],
+      "confidence": "medium",
+      "source": "Julien, Massot & Poinsignon, Spectrochim. Acta A 60 (2004) 689",
+      "xrd_hint": {
+        "reflection": "222",
+        "two_theta_cu": 32.9,
+        "note": "Con el 440 a ~55.2."
+      },
+      "notes": "Mn(III) puro. Su espectro es pobre -- dos bandas anchas -- y la de 640 cm-1 la comparte con toda la familia, asi que sin la de 310 no hay identificacion. Se reduce a Mn3O4 bajo el laser con mucha facilidad: mide con menos de 1 mW en el punto y comprueba que el espectro no cambia entre la primera y la ultima acumulacion."
+    },
+    {
+      "key": "MnO2_beta",
+      "label": "β-MnO₂ (pirolusita)",
+      "formula": "MnO2",
+      "family": "MnOx",
+      "crystal_system": "tetragonal",
+      "space_group": "P4₂/mnm",
+      "bands": [
+        {
+          "position": 535.0,
+          "window": [
+            520.0,
+            550.0
+          ],
+          "assignment": "",
+          "relative": 0.4
+        },
+        {
+          "position": 665.0,
+          "window": [
+            653.0,
+            677.0
+          ],
+          "assignment": "A₁g (tension Mn-O)",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        665.0,
+        535.0
+      ],
+      "discriminating": [
+        535.0
+      ],
+      "confidence": "medium",
+      "source": "Julien, Massot & Poinsignon, Spectrochim. Acta A 60 (2004) 689",
+      "xrd_hint": {
+        "reflection": "110",
+        "two_theta_cu": 28.7,
+        "note": "Con el 101 a ~37.3 y el 211 a ~56.7."
+      },
+      "notes": "Mn(IV), estructura de rutilo. Es la fase termodinamicamente estable y la mas dificil de medir: el laser la reduce a Mn3O4 en segundos. Si tu muestra es negra, mide con densidad de potencia baja y punto nuevo en cada acumulacion, o informaras de una fase que hiciste tu."
+    },
+    {
+      "key": "MnO2_birnessite",
+      "label": "δ-MnO₂ (birnesita, laminar)",
+      "formula": "MnO2",
+      "family": "MnOx",
+      "crystal_system": "monoclinico (laminar)",
+      "space_group": "C2/m",
+      "bands": [
+        {
+          "position": 500.0,
+          "window": [
+            485.0,
+            515.0
+          ],
+          "assignment": "",
+          "relative": 0.4
+        },
+        {
+          "position": 575.0,
+          "window": [
+            560.0,
+            590.0
+          ],
+          "assignment": "",
+          "relative": 0.7
+        },
+        {
+          "position": 640.0,
+          "window": [
+            625.0,
+            655.0
+          ],
+          "assignment": "tension Mn-O en el plano",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        640.0,
+        575.0
+      ],
+      "discriminating": [
+        575.0
+      ],
+      "confidence": "medium",
+      "source": "Julien, Massot & Poinsignon, Spectrochim. Acta A 60 (2004) 689",
+      "xrd_hint": {
+        "reflection": "001",
+        "two_theta_cu": 12.3,
+        "note": "Reflexion laminar a angulo bajo, de 7.2 A. Es la que delata la estructura de capas con agua y cationes entre ellas; si mides desde 2-theta = 20 no la veras."
+      },
+      "notes": "La fase laminar, con agua y cationes entre capas, y la que de verdad se usa como material de pseudocapacidad: su capacidad viene de esa galeria, no de la superficie. La banda de 575 cm-1 es la que la separa de las otras dos. Ojo con la DRX: su reflexion caracteristica esta a 12.3, por debajo de donde empieza un barrido tipico."
     }
-   ],
-   "strong": [
-    145.0,
-    220.0
-   ],
-   "discriminating": [
-    145.0,
-    220.0
-   ],
-   "confidence": "low",
-   "source": "Asignacion tentativa; la literatura Raman de la fase hexagonal del FeSe es escasa e inconsistente entre trabajos",
-   "xrd_hint": {
-    "reflection": "101",
-    "two_theta_cu": 32.4,
-    "note": "Con 102 a ~42.0° y 110 a ~49.9°. Es lo que separa el hexagonal del tetragonal sin ambiguedad."
-   },
-   "notes": "AVISO EXPRESO: la confianza es baja porque las posiciones publicadas para esta fase no coinciden entre si. El programa la propone, no la afirma. La NiAs-FeSe es ademas no estequiometrica (Fe7Se8, Fe3Se4 y compañia) y esa deficiencia de hierro mueve las bandas. Si necesitas la fase con certeza, mide DRX: la reflexion 101 a ~32.4° no admite discusion."
-  },
-  {
-   "key": "Se_trigonal",
-   "label": "Selenio trigonal (gris, cadenas helicoidales)",
-   "formula": "Se",
-   "family": "Se",
-   "crystal_system": "trigonal",
-   "space_group": "P3₁21",
-   "bands": [
-    {
-     "position": 143.0,
-     "window": [
-      136.0,
-      150.0
-     ],
-     "assignment": "E (flexion)",
-     "relative": 0.35
-    },
-    {
-     "position": 237.0,
-     "window": [
-      231.0,
-      243.0
-     ],
-     "assignment": "A₁ (tension de la cadena)",
-     "relative": 1.0
-    },
-    {
-     "position": 250.0,
-     "window": [
-      243.0,
-      257.0
-     ],
-     "assignment": "E (LO, tension de la cadena)",
-     "relative": 0.3
-    }
-   ],
-   "strong": [
-    237.0
-   ],
-   "discriminating": [
-    237.0
-   ],
-   "confidence": "high",
-   "source": "Lucovsky, Mooradian, Taylor, Wright & Keezer, Solid State Commun. 5 (1967) 113",
-   "xrd_hint": {
-    "reflection": "101",
-    "two_theta_cu": 29.7,
-    "note": "Con 100 a ~23.5°."
-   },
-   "notes": "La forma termodinamicamente estable. La banda de 237 cm-1 es muy intensa: unas pocas decimas de porcentaje en peso ya se ven. Cae de lleno en la ventana RBM (equivale al RBM de un tubo de ~1.0 nm). El par 237 + 250 cm-1 es lo que permite corroborarlo: la de 143 cm-1 suele quedar por debajo del corte del filtro y entonces la de 237 se queda sola.",
-   "width_rule": {
-    "line": 237.0,
-    "max_fwhm": 14.0,
-    "reason": "El A₁ del selenio trigonal es estrecho (5–10 cm⁻¹). Muy ensanchado, o es amorfo o el cristal está muy defectuoso."
-   }
-  },
-  {
-   "key": "Se_monoclinic",
-   "label": "Selenio monoclínico (anillos Se₈, α o β)",
-   "formula": "Se",
-   "family": "Se",
-   "crystal_system": "monoclinic",
-   "space_group": "P2₁/n (α) / P2₁/c (β)",
-   "bands": [
-    {
-     "position": 80.0,
-     "window": [
-      72.0,
-      88.0
-     ],
-     "assignment": "modo del anillo",
-     "relative": 0.3
-    },
-    {
-     "position": 112.0,
-     "window": [
-      104.0,
-      120.0
-     ],
-     "assignment": "modo del anillo",
-     "relative": 0.4
-    },
-    {
-     "position": 134.0,
-     "window": [
-      126.0,
-      142.0
-     ],
-     "assignment": "flexion",
-     "relative": 0.3
-    },
-    {
-     "position": 254.0,
-     "window": [
-      247.0,
-      261.0
-     ],
-     "assignment": "tension Se-Se del anillo",
-     "relative": 1.0
-    },
-    {
-     "position": 80.0,
-     "window": [
-      74.0,
-      86.0
-     ],
-     "assignment": "red de anillos Se₈",
-     "relative": 0.25
-    },
-    {
-     "position": 264.0,
-     "window": [
-      258.0,
-      270.0
-     ],
-     "assignment": "hombro del modo de anillo",
-     "relative": 0.35
-    }
-   ],
-   "strong": [
-    254.0
-   ],
-   "discriminating": [
-    254.0,
-    112.0
-   ],
-   "confidence": "medium",
-   "source": "Lucovsky et al., Solid State Commun. 5 (1967) 113; Nagata, Ishibashi & Miyamoto, Jpn. J. Appl. Phys. 20 (1981) 463",
-   "xrd_hint": {
-    "reflection": "varias",
-    "two_theta_cu": 23.6,
-    "note": "Patron rico y de baja simetria; usa el ajuste completo, no un pico."
-   },
-   "notes": "Alfa y beta monoclinico NO se distinguen por Raman: ambos son empaquetamientos distintos del mismo anillo Se8 y sus espectros intramoleculares coinciden. Esta entrada cubre las dos a proposito. La banda de 254 cm-1 frente a la de 237 del trigonal es el discriminante anillo/cadena.",
-   "width_rule": {
-    "line": 254.0,
-    "max_fwhm": 15.0,
-    "reason": "Una banda de ~250 cm⁻¹ más ancha de 15 cm⁻¹ no es un cristal de anillos Se₈: es selenio amorfo o una mezcla."
-   }
-  },
-  {
-   "key": "Se_amorphous",
-   "label": "Selenio amorfo (a-Se)",
-   "formula": "Se",
-   "family": "Se",
-   "crystal_system": "amorphous",
-   "space_group": null,
-   "bands": [
-    {
-     "position": 235.0,
-     "window": [
-      226.0,
-      244.0
-     ],
-     "assignment": "cadenas",
-     "relative": 0.6
-    },
-    {
-     "position": 252.0,
-     "window": [
-      243.0,
-      262.0
-     ],
-     "assignment": "anillos Se₈",
-     "relative": 1.0
-    },
-    {
-     "position": 80.0,
-     "window": [
-      70.0,
-      90.0
-     ],
-     "assignment": "red desordenada",
-     "relative": 0.2
-    }
-   ],
-   "strong": [
-    252.0
-   ],
-   "discriminating": [],
-   "confidence": "medium",
-   "source": "Lucovsky et al., Solid State Commun. 5 (1967) 113",
-   "xrd_hint": {
-    "reflection": "ninguna",
-    "two_theta_cu": null,
-    "note": "Halo amorfo ancho hacia 25-30°, sin picos de Bragg. Si el difractograma no tiene picos de Se pero el Raman ve 250 cm-1, es esta."
-   },
-   "notes": "PELIGRO EXPERIMENTAL: el selenio amorfo cristaliza bajo el propio laser con potencias de pocos mW, y lo hace a trigonal. Si la banda de 252 cm-1 se estrecha y migra hacia 237 cm-1 mientras mides, estas fabricando la fase que crees estar midiendo. Baja la potencia y repite en un punto virgen. Sin anchura de banda (>15 cm-1 de FWHM) no lo llames amorfo: es el ancho, no la posicion, lo que lo distingue del monoclinico.",
-   "width_rule": {
-    "line": 252.0,
-    "min_fwhm": 15.0,
-    "reason": "El selenio amorfo se distingue del cristal de anillos por la ANCHURA de la banda de ~250 cm⁻¹, no por su posición: por debajo de 15 cm⁻¹ de FWHM lo que tienes es monoclínico."
-   }
-  },
-  {
-   "key": "FeSe2_marcasite",
-   "label": "FeSe₂ marcasita (ortorrómbico)",
-   "formula": "FeSe2",
-   "family": "FeSe2",
-   "crystal_system": "orthorhombic",
-   "space_group": "Pnnm",
-   "bands": [
-    {
-     "position": 148.0,
-     "window": [
-      140.0,
-      156.0
-     ],
-     "assignment": "librational",
-     "relative": 0.4
-    },
-    {
-     "position": 175.0,
-     "window": [
-      167.0,
-      183.0
-     ],
-     "assignment": "A_g (Se-Se)",
-     "relative": 1.0
-    },
-    {
-     "position": 245.0,
-     "window": [
-      236.0,
-      254.0
-     ],
-     "assignment": "B_1g",
-     "relative": 0.5
-    }
-   ],
-   "strong": [
-    175.0,
-    245.0
-   ],
-   "discriminating": [
-    148.0,
-    245.0
-   ],
-   "confidence": "low",
-   "source": "Asignacion tentativa por analogia con la marcasita FeS2 y con los diseleniuros del grupo; la literatura Raman del FeSe2 es escasa",
-   "xrd_hint": {
-    "reflection": "101/111",
-    "two_theta_cu": 30.6,
-    "note": "Comprueba tambien 200 a ~37.0°."
-   },
-   "notes": "Producto habitual cuando sobra selenio en la sintesis. Su banda de 175 cm-1 esta a 6 cm-1 del A1g del beta-FeSe: con resolucion de 4 cm-1 o peor NO las separas. Si tu sintesis pudo dar los dos, este es exactamente el caso en que hay que ir a DRX."
-  },
-  {
-   "key": "Fe3C_cementite",
-   "label": "Cementita Fe₃C",
-   "formula": "Fe3C",
-   "family": "FeC",
-   "crystal_system": "orthorhombic",
-   "space_group": "Pnma",
-   "bands": [
-    {
-     "position": 212.0,
-     "window": [
-      202.0,
-      222.0
-     ],
-     "assignment": "sin asignar",
-     "relative": 0.7
-    },
-    {
-     "position": 280.0,
-     "window": [
-      270.0,
-      292.0
-     ],
-     "assignment": "sin asignar",
-     "relative": 1.0
-    },
-    {
-     "position": 306.0,
-     "window": [
-      296.0,
-      318.0
-     ],
-     "assignment": "sin asignar",
-     "relative": 0.6
-    },
-    {
-     "position": 685.0,
-     "window": [
-      668.0,
-      702.0
-     ],
-     "assignment": "sin asignar",
-     "relative": 0.4
-    }
-   ],
-   "strong": [
-    280.0,
-    212.0
-   ],
-   "discriminating": [
-    280.0,
-    685.0
-   ],
-   "confidence": "low",
-   "source": "Bandas recogidas en la literatura de aceros y de nanoparticulas encapsuladas; la seccion eficaz Raman de la cementita es muy baja y las asignaciones no estan consolidadas",
-   "xrd_hint": {
-    "reflection": "031/112",
-    "two_theta_cu": 45.0,
-    "note": "El grupo intenso de la cementita esta entre 42° y 46°, solapando con el 110 del hierro alfa a 44.7°. Necesitas el ajuste completo."
-   },
-   "notes": "La fase que de verdad hay dentro de las nanoparticulas de la punta de un nanotubo crecido por CVD con hierro, mas a menudo que hierro metalico. Raman casi no la ve: si el espectro no muestra estas bandas, eso NO significa que no haya cementita. Es una identificacion positiva util y una ausencia que no prueba nada. Ojo con las bandas de 212 y 280 cm-1: caen en la ventana RBM."
-  },
-  {
-   "key": "Fe_alpha",
-   "label": "Hierro α (ferrita) / hierro metálico",
-   "formula": "Fe",
-   "family": "FeC",
-   "crystal_system": "cubic",
-   "space_group": "Im-3m",
-   "bands": [],
-   "strong": [],
-   "discriminating": [],
-   "confidence": "high",
-   "source": "Regla de seleccion: un cristal cubico monoatomico con un atomo por celda primitiva no tiene modos Raman de primer orden",
-   "xrd_hint": {
-    "reflection": "110",
-    "two_theta_cu": 44.7,
-    "note": "Con 200 a 65.0° y 211 a 82.3°."
-   },
-   "notes": "ENTRADA SIN BANDAS, A PROPOSITO. El hierro metalico es Raman-inactivo en primer orden. Lo que ves en una muestra con hierro nunca es el hierro: es su oxido o su carburo. Esta aqui para que el informe pueda decirlo cuando el usuario pregunte por el hierro, y para que la pestaña de DRX tenga la referencia."
-  },
-  {
-   "key": "TiO2_anatase",
-   "label": "TiO₂ anatasa",
-   "formula": "TiO2",
-   "family": "TiO2",
-   "crystal_system": "tetragonal",
-   "space_group": "I4₁/amd",
-   "bands": [
-    {
-     "position": 144.0,
-     "window": [
-      139.0,
-      149.0
-     ],
-     "assignment": "E_g",
-     "relative": 1.0
-    },
-    {
-     "position": 197.0,
-     "window": [
-      191.0,
-      203.0
-     ],
-     "assignment": "E_g",
-     "relative": 0.1
-    },
-    {
-     "position": 399.0,
-     "window": [
-      391.0,
-      407.0
-     ],
-     "assignment": "B₁g",
-     "relative": 0.25
-    },
-    {
-     "position": 515.0,
-     "window": [
-      507.0,
-      523.0
-     ],
-     "assignment": "A₁g + B₁g",
-     "relative": 0.25
-    },
-    {
-     "position": 639.0,
-     "window": [
-      631.0,
-      647.0
-     ],
-     "assignment": "E_g",
-     "relative": 0.35
-    }
-   ],
-   "strong": [
-    144.0,
-    639.0
-   ],
-   "discriminating": [
-    144.0,
-    399.0
-   ],
-   "confidence": "high",
-   "source": "Ohsaka, Izumi & Fujiki, J. Raman Spectrosc. 7 (1978) 321",
-   "xrd_hint": {
-    "reflection": "101",
-    "two_theta_cu": 25.3,
-    "note": "La reflexion mas intensa de la anatasa."
-   },
-   "notes": "Soporte y fotocatalizador habitual. Su E_g de 144 cm-1 es intensisima y estrecha, y cae dentro de la ventana RBM: convertida daria un tubo de ~1.6 nm."
-  },
-  {
-   "key": "TiO2_rutile",
-   "label": "TiO₂ rutilo",
-   "formula": "TiO2",
-   "family": "TiO2",
-   "crystal_system": "tetragonal",
-   "space_group": "P4₂/mnm",
-   "bands": [
-    {
-     "position": 143.0,
-     "window": [
-      137.0,
-      149.0
-     ],
-     "assignment": "B₁g",
-     "relative": 0.3
-    },
-    {
-     "position": 447.0,
-     "window": [
-      437.0,
-      457.0
-     ],
-     "assignment": "E_g",
-     "relative": 0.85
-    },
-    {
-     "position": 612.0,
-     "window": [
-      602.0,
-      622.0
-     ],
-     "assignment": "A₁g",
-     "relative": 1.0
-    }
-   ],
-   "strong": [
-    447.0,
-    612.0
-   ],
-   "discriminating": [
-    447.0,
-    612.0
-   ],
-   "confidence": "high",
-   "source": "Porto, Fleury & Damen, Phys. Rev. 154 (1967) 522",
-   "xrd_hint": {
-    "reflection": "110",
-    "two_theta_cu": 27.4,
-    "note": ""
-   },
-   "notes": "La forma de alta temperatura. Se separa de la anatasa por el par 447/612 frente a 144/639."
-  },
-  {
-   "key": "Si_crystalline",
-   "label": "Silicio cristalino (oblea)",
-   "formula": "Si",
-   "family": "substrate",
-   "crystal_system": "cubico",
-   "space_group": "Fd-3m",
-   "bands": [
-    {
-     "position": 520.7,
-     "window": [
-      517.7,
-      523.7
-     ],
-     "assignment": "modo optico de zona centro",
-     "relative": 1.0
-    },
-    {
-     "position": 300.0,
-     "window": [
-      288.0,
-      312.0
-     ],
-     "assignment": "segundo orden (2TA)",
-     "relative": 0.05
-    }
-   ],
-   "strong": [
-    520.7
-   ],
-   "discriminating": [
-    520.7
-   ],
-   "confidence": "high",
-   "source": "Parker, Feldman & Ashkin, Phys. Rev. 155 (1967) 712",
-   "xrd_hint": {
-    "reflection": "111",
-    "two_theta_cu": 28.4,
-    "note": ""
-   },
-   "notes": "El sustrato mas comun y la referencia de calibracion del equipo. Si aparece sin haberlo puesto tu, el laser esta atravesando la muestra hasta la oblea."
-  },
-  {
-   "key": "SiO2_quartz",
-   "label": "Cuarzo α (SiO₂)",
-   "formula": "SiO2",
-   "family": "substrate",
-   "crystal_system": "trigonal",
-   "space_group": "P3₂21",
-   "bands": [
-    {
-     "position": 128.0,
-     "window": [
-      122.0,
-      134.0
-     ],
-     "assignment": "E",
-     "relative": 0.3
-    },
-    {
-     "position": 206.0,
-     "window": [
-      200.0,
-      212.0
-     ],
-     "assignment": "A₁",
-     "relative": 0.4
-    },
-    {
-     "position": 464.0,
-     "window": [
-      458.0,
-      470.0
-     ],
-     "assignment": "A₁ (respiracion Si-O-Si)",
-     "relative": 1.0
-    },
-    {
-     "position": 696.0,
-     "window": [
-      688.0,
-      704.0
-     ],
-     "assignment": "E",
-     "relative": 0.08
-    }
-   ],
-   "strong": [
-    464.0
-   ],
-   "discriminating": [
-    464.0,
-    206.0
-   ],
-   "confidence": "high",
-   "source": "Scott & Porto, Phys. Rev. 161 (1967) 903",
-   "xrd_hint": {
-    "reflection": "101",
-    "two_theta_cu": 26.6,
-    "note": ""
-   },
-   "notes": "Portaobjetos, crisoles y arena. Su banda de 206 cm-1 cae en la ventana RBM."
-  },
-  {
-   "key": "Fe2O3_hematite",
-   "label": "Hematita α-Fe₂O₃",
-   "formula": "Fe2O3",
-   "family": "FeOx",
-   "crystal_system": "romboedrico",
-   "space_group": "R-3c",
-   "bands": [
-    {
-     "position": 225.0,
-     "window": [
-      218.0,
-      232.0
-     ],
-     "assignment": "A₁g",
-     "relative": 0.55
-    },
-    {
-     "position": 245.0,
-     "window": [
-      238.0,
-      252.0
-     ],
-     "assignment": "E_g",
-     "relative": 0.25
-    },
-    {
-     "position": 292.0,
-     "window": [
-      284.0,
-      300.0
-     ],
-     "assignment": "E_g",
-     "relative": 1.0
-    },
-    {
-     "position": 411.0,
-     "window": [
-      403.0,
-      419.0
-     ],
-     "assignment": "E_g",
-     "relative": 0.6
-    },
-    {
-     "position": 497.0,
-     "window": [
-      487.0,
-      507.0
-     ],
-     "assignment": "A₁g",
-     "relative": 0.25
-    },
-    {
-     "position": 612.0,
-     "window": [
-      602.0,
-      622.0
-     ],
-     "assignment": "E_g",
-     "relative": 0.3
-    }
-   ],
-   "strong": [
-    292.0,
-    411.0
-   ],
-   "discriminating": [
-    225.0,
-    292.0,
-    411.0
-   ],
-   "confidence": "high",
-   "source": "de Faria, Venâncio Silva & de Oliveira, J. Raman Spectrosc. 28 (1997) 873",
-   "xrd_hint": {
-    "reflection": "104",
-    "two_theta_cu": 33.2,
-    "note": ""
-   },
-   "notes": "El oxido al que acaba un catalizador de hierro expuesto al aire. Sus modos de 225 y 245 cm-1 entran en la ventana RBM. Ojo: el laser la produce calentando magnetita, asi que baja la potencia antes de concluir que estaba ahi."
-  },
-  {
-   "key": "Fe3O4_magnetite",
-   "label": "Magnetita Fe₃O₄",
-   "formula": "Fe3O4",
-   "family": "FeOx",
-   "crystal_system": "cubico",
-   "space_group": "Fd-3m",
-   "bands": [
-    {
-     "position": 310.0,
-     "window": [
-      295.0,
-      325.0
-     ],
-     "assignment": "T₂g",
-     "relative": 0.25
-    },
-    {
-     "position": 540.0,
-     "window": [
-      525.0,
-      555.0
-     ],
-     "assignment": "T₂g",
-     "relative": 0.3
-    },
-    {
-     "position": 668.0,
-     "window": [
-      656.0,
-      680.0
-     ],
-     "assignment": "A₁g",
-     "relative": 1.0
-    }
-   ],
-   "strong": [
-    668.0
-   ],
-   "discriminating": [
-    668.0
-   ],
-   "confidence": "medium",
-   "source": "Shebanova & Lazor, J. Solid State Chem. 174 (2003) 424",
-   "xrd_hint": {
-    "reflection": "311",
-    "two_theta_cu": 35.5,
-    "note": ""
-   },
-   "notes": "Es la fase que mas facilmente se quema bajo el laser: por encima de ~1 mW en el punto pasa a hematita mientras mides. Una A₁g ancha en 660-670 con hematita apareciendo al subir la potencia es la firma de que empezo siendo magnetita."
-  },
-  {
-   "key": "FeOOH_goethite",
-   "label": "Goethita α-FeOOH",
-   "formula": "FeOOH",
-   "family": "FeOx",
-   "crystal_system": "ortorrombico",
-   "space_group": "Pnma",
-   "bands": [
-    {
-     "position": 299.0,
-     "window": [
-      291.0,
-      307.0
-     ],
-     "assignment": "",
-     "relative": 0.7
-    },
-    {
-     "position": 386.0,
-     "window": [
-      378.0,
-      394.0
-     ],
-     "assignment": "",
-     "relative": 1.0
-    },
-    {
-     "position": 479.0,
-     "window": [
-      469.0,
-      489.0
-     ],
-     "assignment": "",
-     "relative": 0.25
-    },
-    {
-     "position": 550.0,
-     "window": [
-      538.0,
-      562.0
-     ],
-     "assignment": "",
-     "relative": 0.3
-    }
-   ],
-   "strong": [
-    386.0,
-    299.0
-   ],
-   "discriminating": [
-    386.0
-   ],
-   "confidence": "medium",
-   "source": "de Faria et al., J. Raman Spectrosc. 28 (1997) 873",
-   "xrd_hint": {
-    "reflection": "110",
-    "two_theta_cu": 21.2,
-    "note": ""
-   },
-   "notes": "Oxihidroxido de un catalizador que vio humedad."
-  },
-  {
-   "key": "FeS2_pyrite",
-   "label": "Pirita FeS₂",
-   "formula": "FeS2",
-   "family": "FeS",
-   "crystal_system": "cubico",
-   "space_group": "Pa-3",
-   "bands": [
-    {
-     "position": 343.0,
-     "window": [
-      336.0,
-      350.0
-     ],
-     "assignment": "E_g (libracion S-S)",
-     "relative": 1.0
-    },
-    {
-     "position": 379.0,
-     "window": [
-      372.0,
-      386.0
-     ],
-     "assignment": "A_g (tension S-S)",
-     "relative": 0.85
-    },
-    {
-     "position": 430.0,
-     "window": [
-      422.0,
-      438.0
-     ],
-     "assignment": "T_g",
-     "relative": 0.25
-    }
-   ],
-   "strong": [
-    343.0,
-    379.0
-   ],
-   "discriminating": [
-    343.0,
-    379.0
-   ],
-   "confidence": "high",
-   "source": "Vogt, Chattopadhyay & Stolz, J. Phys. Chem. Solids 44 (1983) 869",
-   "xrd_hint": {
-    "reflection": "200",
-    "two_theta_cu": 33.1,
-    "note": ""
-   },
-   "notes": "El analogo en azufre del FeSe₂, y la fase que aparece si el precursor llevaba azufre."
-  },
-  {
-   "key": "Co3O4_spinel",
-   "label": "Co₃O₄ espinela",
-   "formula": "Co3O4",
-   "family": "CoOx",
-   "crystal_system": "cubico",
-   "space_group": "Fd-3m",
-   "bands": [
-    {
-     "position": 194.0,
-     "window": [
-      187.0,
-      201.0
-     ],
-     "assignment": "F₂g",
-     "relative": 0.3
-    },
-    {
-     "position": 482.0,
-     "window": [
-      474.0,
-      490.0
-     ],
-     "assignment": "E_g",
-     "relative": 0.4
-    },
-    {
-     "position": 521.0,
-     "window": [
-      513.0,
-      529.0
-     ],
-     "assignment": "F₂g",
-     "relative": 0.35
-    },
-    {
-     "position": 618.0,
-     "window": [
-      608.0,
-      628.0
-     ],
-     "assignment": "F₂g",
-     "relative": 0.3
-    },
-    {
-     "position": 691.0,
-     "window": [
-      683.0,
-      699.0
-     ],
-     "assignment": "A₁g",
-     "relative": 1.0
-    }
-   ],
-   "strong": [
-    691.0,
-    482.0
-   ],
-   "discriminating": [
-    691.0,
-    194.0
-   ],
-   "confidence": "high",
-   "source": "Hadjiev, Iliev & Vergilov, J. Phys. C 21 (1988) L199",
-   "xrd_hint": {
-    "reflection": "311",
-    "two_theta_cu": 36.8,
-    "note": ""
-   },
-   "notes": "Catalizador OER habitual. Su F₂g de 194 cm-1 cae en la ventana RBM."
-  },
-  {
-   "key": "NiO_bunsenite",
-   "label": "NiO",
-   "formula": "NiO",
-   "family": "NiOx",
-   "crystal_system": "cubico",
-   "space_group": "Fm-3m",
-   "bands": [
-    {
-     "position": 500.0,
-     "window": [
-      480.0,
-      520.0
-     ],
-     "assignment": "1P (activado por desorden)",
-     "relative": 1.0
-    },
-    {
-     "position": 1090.0,
-     "window": [
-      1060.0,
-      1120.0
-     ],
-     "assignment": "2P (dos fonones)",
-     "relative": 0.6
-    }
-   ],
-   "strong": [
-    500.0,
-    1090.0
-   ],
-   "discriminating": [
-    1090.0
-   ],
-   "confidence": "medium",
-   "source": "Mironova-Ulmane et al., J. Phys. Conf. Ser. 93 (2007) 012039",
-   "xrd_hint": {
-    "reflection": "200",
-    "two_theta_cu": 43.3,
-    "note": ""
-   },
-   "notes": "Primer orden prohibido por simetria: lo que se ve son bandas anchas activadas por defectos, y su intensidad dice mas del desorden que de la cantidad. La 2P de 1090 cm-1 se solapa con la region del carbono."
-  },
-  {
-   "key": "NiOOH_beta",
-   "label": "β-NiOOH / Ni(OH)₂",
-   "formula": "NiOOH",
-   "family": "NiOx",
-   "crystal_system": "hexagonal",
-   "space_group": "P-3m1",
-   "bands": [
-    {
-     "position": 312.0,
-     "window": [
-      302.0,
-      322.0
-     ],
-     "assignment": "E_g (red)",
-     "relative": 0.45
-    },
-    {
-     "position": 450.0,
-     "window": [
-      438.0,
-      462.0
-     ],
-     "assignment": "A₁g (Ni-O)",
-     "relative": 1.0
-    },
-    {
-     "position": 3580.0,
-     "window": [
-      3540.0,
-      3620.0
-     ],
-     "assignment": "tension O-H",
-     "relative": 0.3
-    }
-   ],
-   "strong": [
-    450.0
-   ],
-   "discriminating": [
-    450.0,
-    3580.0
-   ],
-   "confidence": "medium",
-   "source": "Hall, Lockwood, Bock & MacDougall, Proc. R. Soc. A 471 (2015) 20140792",
-   "xrd_hint": {
-    "reflection": "001",
-    "two_theta_cu": 19.2,
-    "note": ""
-   },
-   "notes": "Es la fase activa de un electrodo de niquel en alcalino. Si la buscas, mide hasta 3700 cm-1: la tension O-H es lo que la separa del oxido."
-  },
-  {
-   "key": "MoO3_alpha",
-   "label": "α-MoO₃",
-   "formula": "MoO3",
-   "family": "MoOx",
-   "crystal_system": "ortorrombico",
-   "space_group": "Pbnm",
-   "bands": [
-    {
-     "position": 158.0,
-     "window": [
-      152.0,
-      164.0
-     ],
-     "assignment": "red",
-     "relative": 0.45
-    },
-    {
-     "position": 666.0,
-     "window": [
-      656.0,
-      676.0
-     ],
-     "assignment": "Mo-O-Mo",
-     "relative": 0.5
-    },
-    {
-     "position": 820.0,
-     "window": [
-      812.0,
-      828.0
-     ],
-     "assignment": "Mo-O-Mo simetrica",
-     "relative": 0.9
-    },
-    {
-     "position": 995.0,
-     "window": [
-      989.0,
-      1001.0
-     ],
-     "assignment": "Mo=O terminal",
-     "relative": 1.0
-    }
-   ],
-   "strong": [
-    995.0,
-    820.0
-   ],
-   "discriminating": [
-    995.0,
-    820.0
-   ],
-   "confidence": "high",
-   "source": "Py & Maschke, Physica B 105 (1981) 370",
-   "xrd_hint": {
-    "reflection": "021",
-    "two_theta_cu": 25.7,
-    "note": ""
-   },
-   "notes": "Lo que queda cuando un MoS₂ se oxida. Su modo de red de 158 cm-1 cae en la ventana RBM."
-  },
-  {
-   "key": "ZnO_wurtzite",
-   "label": "ZnO wurtzita",
-   "formula": "ZnO",
-   "family": "ZnOx",
-   "crystal_system": "hexagonal",
-   "space_group": "P6₃mc",
-   "bands": [
-    {
-     "position": 99.0,
-     "window": [
-      94.0,
-      104.0
-     ],
-     "assignment": "E₂ (bajo)",
-     "relative": 0.4
-    },
-    {
-     "position": 438.0,
-     "window": [
-      432.0,
-      444.0
-     ],
-     "assignment": "E₂ (alto)",
-     "relative": 1.0
-    },
-    {
-     "position": 574.0,
-     "window": [
-      562.0,
-      586.0
-     ],
-     "assignment": "A₁ (LO)",
-     "relative": 0.2
-    }
-   ],
-   "strong": [
-    438.0
-   ],
-   "discriminating": [
-    438.0,
-    99.0
-   ],
-   "confidence": "high",
-   "source": "Damen, Porto & Tell, Phys. Rev. 142 (1966) 570",
-   "xrd_hint": {
-    "reflection": "101",
-    "two_theta_cu": 36.3,
-    "note": ""
-   },
-   "notes": "Su E₂ alto de 438 cm-1 es estrecho e inconfundible."
-  },
-  {
-   "key": "CaCO3_calcite",
-   "label": "Calcita CaCO₃",
-   "formula": "CaCO3",
-   "family": "carbonate",
-   "crystal_system": "romboedrico",
-   "space_group": "R-3c",
-   "bands": [
-    {
-     "position": 155.0,
-     "window": [
-      150.0,
-      160.0
-     ],
-     "assignment": "red (T)",
-     "relative": 0.25
-    },
-    {
-     "position": 282.0,
-     "window": [
-      276.0,
-      288.0
-     ],
-     "assignment": "red (L)",
-     "relative": 0.3
-    },
-    {
-     "position": 712.0,
-     "window": [
-      707.0,
-      717.0
-     ],
-     "assignment": "ν₄ (flexion en el plano)",
-     "relative": 0.2
-    },
-    {
-     "position": 1086.0,
-     "window": [
-      1081.0,
-      1091.0
-     ],
-     "assignment": "ν₁ (tension simetrica CO₃)",
-     "relative": 1.0
-    }
-   ],
-   "strong": [
-    1086.0
-   ],
-   "discriminating": [
-    1086.0,
-    712.0
-   ],
-   "confidence": "high",
-   "source": "Rutt & Nicola, J. Phys. C 7 (1974) 4522",
-   "xrd_hint": {
-    "reflection": "104",
-    "two_theta_cu": 29.4,
-    "note": ""
-   },
-   "notes": "Resto de plantilla de CaCO₃ o contaminacion de manipulacion. Su ν₁ de 1086 cm-1 esta justo entre la D y la G del carbono, donde es facil ajustarla como si fuera una componente del carbono. Sus modos de red de 155 y 282 cm-1 caen en la ventana RBM."
-  }
- ]
+  ]
 }
