@@ -282,6 +282,16 @@ class PhaseReport:
     families: list[FamilyVerdict] = field(default_factory=list)
     rbm_conflicts: list[tuple[float, str]] = field(default_factory=list)
     """``(position, phase label)`` for matched lines inside the RBM window."""
+    rbm_suspects: list[tuple[float, str]] = field(default_factory=list)
+    """``(position, phase label)`` for *uncorroborated* leads in that window.
+
+    Not enough evidence to name the phase, and far too much to convert the
+    peak into a nanotube diameter without saying so. A single catalogued
+    line landing on a peak is exactly the case that put four invented
+    diameters in a spectrum of carbon decorated with FeSe: the two FeSe
+    lines were corroborated and caught, and the two selenium ones were a
+    lone line each and went through in silence.
+    """
     unmatched_peaks: list[PeakMeasurement] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     xrd_questions: list[str] = field(default_factory=list)
@@ -717,7 +727,16 @@ def _family_verdicts(
 
 
 def _flag_rbm_conflicts(report: PhaseReport, rbm_window: tuple[float, float]) -> None:
-    """Record matched lines that a diameter calculation must not convert."""
+    """Record matched lines that a diameter calculation must not convert.
+
+    Corroborated matches are excluded outright. Uncorroborated ones are
+    recorded separately as suspects rather than dropped: the evidence is
+    too thin to name the phase and far too strong to convert the peak into
+    a diameter without a word. Dropping them is what let elemental
+    selenium's 237 cm-1 -- a line the catalogue holds exactly, on a phase
+    with only one other line, usually below the filter cut -- come back as
+    a 1.0 nm nanotube.
+    """
     seen: set[float] = set()
     for ident in report.identifications:
         if not ident.corroborated:
@@ -731,6 +750,19 @@ def _flag_rbm_conflicts(report: PhaseReport, rbm_window: tuple[float, float]) ->
             seen.add(position)
             report.rbm_conflicts.append((position, ident.phase.label))
     report.rbm_conflicts.sort()
+
+    for ident in report.identifications:
+        if ident.corroborated:
+            continue
+        for hit in ident.hits:
+            position = hit.peak.position
+            if not (rbm_window[0] <= position <= rbm_window[1]):
+                continue
+            if any(abs(position - p) < 1e-6 for p in seen):
+                continue
+            seen.add(position)
+            report.rbm_suspects.append((position, ident.phase.label))
+    report.rbm_suspects.sort()
 
 
 def _collect_xrd_questions(report: PhaseReport) -> None:
@@ -751,6 +783,20 @@ def _collect_xrd_questions(report: PhaseReport) -> None:
 def _add_context(report: PhaseReport) -> None:
     """Say what the identification implies for the rest of the analysis."""
     present = {i.phase.key for i in report.identifications if i.corroborated}
+    if report.rbm_suspects:
+        listed = ", ".join(
+            f"{position:.0f} cm⁻¹ ({label})"
+            for position, label in report.rbm_suspects[:4]
+        )
+        report.warnings.append(
+            f"{len(report.rbm_suspects)} pico(s) de la ventana RBM coinciden "
+            f"con una línea catalogada sin que nada la corrobore: {listed}. "
+            "No basta para nombrar la fase y sobra para no convertirlos en "
+            "diámetros a ciegas. Míralos antes de citar esos tubos: si la "
+            "fase está, sus otras líneas suelen quedar por debajo del corte "
+            "del filtro, así que baja el corte o mide a dos láseres — un RBM "
+            "cambia de intensidad con la resonancia y una línea de fase no."
+        )
     if report.rbm_conflicts:
         report.warnings.append(
             f"{len(report.rbm_conflicts)} línea(s) de fase caen en la ventana "

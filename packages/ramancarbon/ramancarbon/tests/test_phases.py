@@ -205,3 +205,48 @@ def test_row_export_carries_the_phase_keys():
 @pytest.mark.parametrize("fraction", [0.0, 0.5, 1.0])
 def test_corroboration_threshold_is_a_fraction(fraction):
     assert 0.0 < CORROBORATION <= 1.0
+
+
+class TestTheRBMImpostors:
+    """The case the catalogue exists for, end to end.
+
+    A carbon spectrum from a sample decorated with FeSe: the two FeSe
+    lines at 180 and 195 cm-1 and elemental selenium's at 237 and 250 all
+    fall inside the radial-breathing-mode window, and converting them with
+    omega = A/d + B gives four believable nanotube diameters, all false.
+    """
+
+    def test_every_impostor_is_kept_out_of_the_diameter_calculation(self):
+        peaks = [
+            pk(180.2), pk(195.4), pk(237.0), pk(250.5),
+            pk(1350.0), pk(1580.0),
+        ]
+        report = find_phases(peaks)
+        assert report.excluded_from_rbm == [180.2, 195.4, 237.0, 250.5]
+        found = {i.phase.key for i in report.identifications if i.corroborated}
+        assert {"FeSe_tetragonal", "Se_trigonal"} <= found
+        # Only the carbon bands are left over.
+        assert [p.position for p in report.unmatched_peaks] == [1350.0, 1580.0]
+
+    def test_a_lone_catalogued_line_is_reported_rather_than_converted(self):
+        """One selenium line and nothing to corroborate it.
+
+        Too thin to name the phase -- the rule that needs corroboration is
+        right -- and far too strong to turn into a 1.0 nm nanotube without
+        a word, which is what happened before: the peak went through in
+        silence because it was not a confirmed identification.
+        """
+        report = find_phases([pk(237.0), pk(1350.0), pk(1580.0)])
+        assert report.excluded_from_rbm == []
+        assert [position for position, _ in report.rbm_suspects] == [237.0]
+        assert any("sin que nada la corrobore" in w for w in report.warnings)
+
+    def test_the_catalogue_covers_the_rbm_window_beyond_the_selenides(self):
+        """Anatase is the worst impostor of the lot: its 144 cm-1 E_g is
+        the strongest and narrowest line in the catalogue that lands in
+        the window, and it converts to a 1.6 nm tube."""
+        report = find_phases([pk(144.0), pk(399.0), pk(515.0),
+                              pk(639.0), pk(1350.0), pk(1580.0)])
+        found = {i.phase.key for i in report.identifications if i.corroborated}
+        assert "TiO2_anatase" in found
+        assert 144.0 in report.excluded_from_rbm
