@@ -655,13 +655,15 @@ def _vff_energy_gradient(
     anchors: np.ndarray | None,
     anchor_targets: np.ndarray | None,
     k_anchor: float,
+    anchor_normals: np.ndarray | None,
     box: float | None = None,
 ) -> tuple[float, np.ndarray]:
     """Energy and analytic gradient of the sp2 valence force field.
 
     ``E = 1/2 k_bond (r - r0)^2 + 1/2 k_angle (theta - theta0)^2
          + 1/2 k_repel (d - d_cut)^2 [d < d_cut, non-bonded only]
-         + 1/2 k_anchor |x - x_target|^2 [anchored atoms only]``
+         + 1/2 k_anchor |x - x_target|^2 [anchored atoms only,
+           or the normal component alone when `anchor_normals` is given]``
 
     Gradients are exact (verified against central finite differences to
     ~1e-9 relative error), which is what lets L-BFGS converge to genuine
@@ -717,11 +719,26 @@ def _vff_energy_gradient(
             np.add.at(grad, p[mask], -gvv)
             np.add.at(grad, q[mask], gvv)
 
-    # --- positional restraints (used to hold an imposed bend in place)
+    # --- positional restraints (used to hold an imposed bend in place,
+    #     and -- with normals -- to hold a wall on its own surface)
     if anchors is not None and len(anchors):
         delta = minimum_image(pos[anchors] - anchor_targets, box)
-        energy += 0.5 * k_anchor * float(np.sum(delta**2))
-        grad[anchors] += k_anchor * delta
+        if anchor_normals is None:
+            energy += 0.5 * k_anchor * float(np.sum(delta**2))
+            grad[anchors] += k_anchor * delta
+        else:
+            # Only the component along each atom's surface normal. An
+            # isotropic restraint fights bond relaxation too, which is
+            # tangential, and the two cannot both be satisfied: at
+            # k_anchor 3 a junction's barrel wobble fell from 1.44 to
+            # 0.42 Å and its longest bond went from 1.51 to 1.99 Å.
+            # Restraining the normal alone removes the wrinkling mode --
+            # which is the soft one, since the force field has no
+            # flexural term -- and leaves every atom free to slide within
+            # the surface, which is what bond relaxation needs.
+            out = np.einsum("ij,ij->i", delta, anchor_normals)
+            energy += 0.5 * k_anchor * float(np.sum(out**2))
+            grad[anchors] += (k_anchor * out)[:, None] * anchor_normals
 
     return energy, grad.ravel()
 
@@ -739,6 +756,7 @@ def relax_shell(
     anchors: np.ndarray | None = None,
     anchor_targets: np.ndarray | None = None,
     k_anchor: float = 5.0,
+    anchor_normals: np.ndarray | None = None,
     box: float | None = None,
     outer_cycles: int = 3,
     max_iterations: int = 3000,
@@ -817,6 +835,11 @@ def relax_shell(
         convention, and the neighbour search wraps too -- without this a
         bond across the cell seam reads as a box-length stretch and the
         optimiser tears the network apart trying to shorten it.
+    anchor_normals
+        Unit surface normals, one per anchored atom. Given, the restraint
+        acts **only along the normal**: the wall is held on its surface
+        while every atom stays free to move within it. Use this to stop a
+        shell wrinkling; use the isotropic form to hold a shape.
     anchors, anchor_targets, k_anchor
         Optional harmonic restraints pinning ``positions[anchors]`` near
         ``anchor_targets`` -- used to hold an imposed bend while the rest
@@ -866,6 +889,10 @@ def relax_shell(
         np.asarray(anchor_targets, dtype=float) if anchor_targets is not None else None
     )
     anchors = np.asarray(anchors, dtype=int) if anchors is not None else None
+    anchor_normals = (
+        np.asarray(anchor_normals, dtype=float)
+        if anchor_normals is not None else None
+    )
 
     x = positions.ravel().astype(float).copy()
     skin = max(0.0, repel_skin)
@@ -934,7 +961,7 @@ def relax_shell(
             args=(
                 bond_arr, angle_arr, repel_arr, n_atoms, equilibrium, theta0,
                 k_bond, k_angle, k_repel, repel_cutoff,
-                anchors, anchor_targets, k_anchor, box,
+                anchors, anchor_targets, k_anchor, anchor_normals, box,
             ),
             jac=True,
             method="L-BFGS-B",
