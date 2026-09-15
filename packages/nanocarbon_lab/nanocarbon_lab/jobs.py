@@ -456,7 +456,32 @@ def estimate_atoms(job: Job) -> int:
 
     if mode == "capped tube":
         # Seed capsule has 10*n_rings faces; subdivision multiplies by f^2.
-        return int(10 * int(p.get("n_body_rings", 8)) * int(p.get("freq", 3)) ** 2)
+        straight = int(10 * int(p.get("n_body_rings", 8))
+                       * int(p.get("freq", 3)) ** 2)
+        shape = str(p.get("shape", "straight"))
+        if shape == "straight":
+            return straight
+        # Swept along a centreline the tube is as long as the path, and
+        # the seed-capsule count knows nothing about that: it returned
+        # 320 atoms for a three-turn helix that builds 8120, so the
+        # window called a six-minute build "near-instant". A tube of
+        # radius r and length L carries 2*pi*r*L / 2.62 atoms, graphene's
+        # area per atom, which lands within 2% on the helices measured.
+        from .builders import centerline as cl
+        from .builders import fullerene_mesh as fm
+
+        radius = float(fm.radius_for_freq(int(p.get("freq", 3)),
+                                          float(p.get("bond", 1.42))))
+        if shape == "helix" and p.get("helix_radius"):
+            arc = cl.helix_arc_length(
+                float(p["helix_radius"]), float(p.get("helix_pitch", 25.0)),
+                float(p.get("helix_turns", 1.0)),
+                taper=float(p.get("helix_taper", 1.0)))
+        else:
+            # Arc/S-curve/random stay close to the straight length; the
+            # waviness only wrinkles a path it does not lengthen much.
+            return straight
+        return max(straight, int(2.4 * radius * arc))
 
     if mode == "fullerene":
         base = 60 if p.get("family", "C60") == "C60" else 20
@@ -693,6 +718,18 @@ def estimate_cost(job: Job) -> tuple[str, str]:
         if n < 2500:
             return "slow", f"~{n} atoms, a minute or two"
         return "very slow", f"~{n} atoms, several minutes — consider smaller"
+    # A capped tube swept along a curve is not the same job as a straight
+    # one of the same size: the sweep resamples the path and relaxes the
+    # wall against it. Eight thousand atoms straight is seconds; the same
+    # eight thousand wound into three turns measured five and a half
+    # minutes, and this said "near-instant" because it only looked at n.
+    if job.mode == "capped tube" and str(job.params.get("shape",
+                                                        "straight")) != "straight":
+        if n > 6000:
+            return "very slow", f"~{n} atoms swept along a path, several minutes"
+        if n > 2000:
+            return "slow", f"~{n} atoms swept along a path, a minute or two"
+        return "slow", f"~{n} atoms swept along a path, tens of seconds"
     if n > 20000:
         return "very slow", f"~{n} atoms, slow to relax and to draw"
     if n > 4000:

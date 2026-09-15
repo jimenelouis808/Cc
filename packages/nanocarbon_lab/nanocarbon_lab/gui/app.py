@@ -227,13 +227,25 @@ PRESETS: dict[str, dict[str, object]] = {
     "N-doped nanotube": {
         "mode_kind": "capped tube", "rings": 10, "freq": 3,
         "dopant": "N", "dopant_conc": 0.03},
-    # Three turns rather than one and a half, and a pitch just clear of
-    # the walls rather than four times it. The old values built a gently
-    # curving tube: at 90 Å of coil radius around a 4 Å tube, with 22 Å
-    # of air between turns, nothing about the picture said "helix".
+    # Swept along a lattice centreline rather than meshed from a surface,
+    # so the wall comes out as twelve pentagons and nothing else but
+    # hexagons. The three differ only in how thick the tube is and how
+    # wide the helix: thinner and tighter is faster and reads as a spring
+    # sooner, thicker and wider is closer to a real nanocoil. Every one
+    # keeps the pitch just clear of the walls and at least three turns,
+    # because that is what makes a picture look like a helix.
+    "Nanocoil (small, clean)": {
+        "mode_kind": "capped tube", "shape": "helix", "freq": 1,
+        "coil_radius": 15.0, "coil_pitch": 8.0, "coil_turns": 3.0,
+        "roughness": 0.0, "n_sw": 0, "n_dv": 0},
     "Nanocoil (swept, fast)": {
+        "mode_kind": "capped tube", "shape": "helix", "freq": 1,
+        "coil_radius": 20.0, "coil_pitch": 8.0, "coil_turns": 4.0,
+        "roughness": 0.0, "n_sw": 0, "n_dv": 0},
+    "Nanocoil (wide, physical)": {
         "mode_kind": "capped tube", "shape": "helix", "freq": 2,
-        "coil_radius": 45.0, "coil_pitch": 13.0, "coil_turns": 3.0},
+        "coil_radius": 40.0, "coil_pitch": 12.0, "coil_turns": 4.0,
+        "roughness": 0.0, "n_sw": 0, "n_dv": 0},
     "Nanocoil (relaxed topology)": {
         "mode_kind": "coil (relaxed)", "coil_radius": 22.0, "coil_pitch": 13.0,
         "coil_turns": 3.0, "coil_tube_radius": 4.5, "anneal": 80},
@@ -892,6 +904,19 @@ class NanocarbonGUI:
         ttk.Combobox(hand, textvariable=self.var_coil_hand,
                      values=["right", "left"], state="readonly",
                      width=7).pack(side="right")
+        ttk.Label(
+            self.frame_coil, foreground=MUTED, font=("TkDefaultFont", 8),
+            wraplength=225, justify="left",
+            text="Coil radius: how far the tube's centre sits from the helix "
+                 "axis — the spring's own radius, not the tube's.\n"
+                 "Coil pitch: how far one full turn rises. Close to the tube "
+                 "width gives a tight spring; several times it gives an open "
+                 "spiral.\n"
+                 "Turns: complete revolutions. Under two does not read as a "
+                 "coil.\n"
+                 "Taper: end radius over start radius. 1 is a cylinder, "
+                 "below 1 a cone.",
+        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(4, 2))
         self.lbl_coil = ttk.Label(self.frame_coil, text="", foreground=MUTED,
                                   font=("TkDefaultFont", 8), wraplength=225,
                                   justify="left")
@@ -1609,6 +1634,11 @@ class NanocarbonGUI:
             self.var_anneal.set(0)
         elif mode == "coil (relaxed)":
             self.frame_coil.pack(fill="x")
+            # Without this the label keeps whatever the previous mode
+            # computed, so entering the relaxed coil showed the swept
+            # tube's strain warning -- a number that does not apply here,
+            # under a panel where it looked like it did.
+            self._update_coil_hint()
         elif mode in ("fullerene", "nano-onion"):
             self.frame_cage.pack(fill="x")
             if mode == "nano-onion":
@@ -2870,6 +2900,20 @@ class NanocarbonGUI:
         ttk.Button(bar, text="fit", width=4,
                    command=self._zoom_fit).pack(side="left", padx=1)
 
+        # Repetition, GDIS-style: see the structure as the periodic thing
+        # it is rather than as one cell floating in space. Only the
+        # directions that are actually periodic are offered -- repeating
+        # a vacuum direction would stack copies through each other.
+        ttk.Label(bar, text="  ×").pack(side="left")
+        self.var_repeat = {}
+        for axis in "xyz":
+            var = tk.IntVar(value=1)
+            self.var_repeat[axis] = var
+            ttk.Spinbox(bar, from_=1, to=6, width=2, textvariable=var,
+                        command=self._redraw).pack(side="left")
+        ttk.Button(bar, text="apply ×", width=8,
+                   command=self.on_apply_repeat).pack(side="left", padx=(2, 0))
+
         self.var_show_cell = tk.BooleanVar(value=False)
         ttk.Checkbutton(bar, text="cell", variable=self.var_show_cell,
                         command=self._redraw).pack(side="left", padx=(8, 0))
@@ -2909,9 +2953,14 @@ class NanocarbonGUI:
         if self.atoms is None:
             return
         pos = self.atoms.get_positions()
+        # Frame every drawn copy, not just the first: repeating along z
+        # and then seeing only the original cell is the same bug as
+        # drawing them and calling it a picture of the structure.
+        corners = np.vstack([pos + shift for shift in self._offsets()])
         scale = getattr(self, "_zoom_scale", 1.0)
-        span = (float((pos.max(axis=0) - pos.min(axis=0)).max()) / 2.0 or 1.0) * scale
-        mid = (pos.max(axis=0) + pos.min(axis=0)) / 2.0
+        span = (float((corners.max(axis=0) - corners.min(axis=0)).max()) / 2.0
+                or 1.0) * scale
+        mid = (corners.max(axis=0) + corners.min(axis=0)) / 2.0
         self.ax.set_xlim(mid[0] - span, mid[0] + span)
         self.ax.set_ylim(mid[1] - span, mid[1] + span)
         self.ax.set_zlim(mid[2] - span, mid[2] + span)
@@ -2934,7 +2983,8 @@ class NanocarbonGUI:
         edges = [(a, b) for a in range(8) for b in range(a + 1, 8)
                  if bin(a ^ b).count("1") == 1]
         self.ax.add_collection3d(Line3DCollection(
-            [(corners[a], corners[b]) for a, b in edges],
+            [(corners[a] + shift, corners[b] + shift)
+             for shift in self._offsets() for a, b in edges],
             colors="#b0b6bd", linewidths=0.8, linestyles=":"))
 
     def on_view_unit_cell(self) -> None:
@@ -3057,10 +3107,57 @@ class NanocarbonGUI:
                     for symbol in self.atoms.get_chemical_symbols()]
         return [PLAIN_ATOM_COLOUR] * len(ring_of)
 
+    def _repeat_counts(self) -> tuple[int, int, int]:
+        """How many copies along each axis, ignoring aperiodic ones.
+
+        Repeating a direction that carries vacuum rather than a lattice
+        vector stacks copies straight through the structure, so the
+        request is silently clamped to 1 there rather than obeyed.
+        """
+        pbc = self.atoms.get_pbc() if self.atoms is not None else (False,) * 3
+        cell = np.asarray(self.atoms.cell) if self.atoms is not None else np.zeros((3, 3))
+        counts = []
+        for index, axis in enumerate("xyz"):
+            wanted = max(1, int(self.var_repeat[axis].get()))
+            usable = bool(pbc[index]) and float(np.linalg.norm(cell[index])) > 1e-6
+            counts.append(wanted if usable else 1)
+        return tuple(counts)
+
+    def _offsets(self) -> list[np.ndarray]:
+        """Translation of each drawn copy, the identity one first."""
+        cell = np.asarray(self.atoms.cell)
+        nx, ny, nz = self._repeat_counts()
+        return [i * cell[0] + j * cell[1] + k * cell[2]
+                for i in range(nx) for j in range(ny) for k in range(nz)]
+
+    def on_apply_repeat(self) -> None:
+        """Make the repetition real, so it can be exported and analysed.
+
+        Drawing copies is a picture; this replaces the structure with the
+        supercell, which is what a calculation would need.
+        """
+        if self.atoms is None:
+            return
+        counts = self._repeat_counts()
+        if counts == (1, 1, 1):
+            self._set_status("Nothing to repeat: no periodic direction is set "
+                             "above one.")
+            return
+        self.atoms = self.atoms.repeat(counts)
+        self.last_saved_stem = None
+        for axis in "xyz":
+            self.var_repeat[axis].set(1)
+        self._zoom_fit()
+        self._redraw()
+        self._update_info()
+        self._set_status(f"Repeated {counts[0]}×{counts[1]}×{counts[2]}: "
+                         f"{len(self.atoms)} atoms.")
+
     def _redraw(self) -> None:
         if self.atoms is None:
             return
         pos = self.atoms.get_positions()
+        offsets = self._offsets()
         ring_of = self._ring_of_atom()
         keep = np.array([bool(self.var_ring_filter[s].get())
                          if s in self.var_ring_filter else True
@@ -3077,7 +3174,8 @@ class NanocarbonGUI:
                 stride = len(bonds) // PREVIEW_BOND_LIMIT + 1
                 bonds = bonds[::stride]
                 note = f"showing 1 bond in {stride}"
-            segs = [(pos[a], pos[b]) for a, b in bonds]
+            segs = [(pos[a] + shift, pos[b] + shift)
+                    for shift in offsets for a, b in bonds]
             if segs:
                 self.ax.add_collection3d(
                     Line3DCollection(segs, colors="#9aa3ad", linewidths=0.7)
@@ -3086,10 +3184,13 @@ class NanocarbonGUI:
         shown = np.flatnonzero(keep)
         if shown.size:
             colours = self._atom_colours(ring_of)
-            self.ax.scatter(
-                pos[shown, 0], pos[shown, 1], pos[shown, 2],
-                c=[colours[i] for i in shown], s=16, depthshade=True,
-            )
+            drawn = [colours[i] for i in shown]
+            for shift in offsets:
+                self.ax.scatter(
+                    pos[shown, 0] + shift[0], pos[shown, 1] + shift[1],
+                    pos[shown, 2] + shift[2],
+                    c=drawn, s=16, depthshade=True,
+                )
         hidden = len(pos) - shown.size
         self.lbl_preview.config(
             text=", ".join(filter(None, [

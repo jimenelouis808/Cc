@@ -1027,3 +1027,75 @@ class TestTheCoilHintSaysWhyItLooksWrong:
         app.var_mode_kind.set("coil (relaxed)")
         app._update_coil_hint()
         assert "reads as a coil" in app.lbl_coil.cget("text")
+
+
+class TestRepetition:
+    """Seeing a periodic structure as periodic, GDIS-style."""
+
+    def _tube(self, app):
+        from nanocarbon_lab.builders import build_cnt
+
+        app.atoms = build_cnt(6, 6, length=12.0)
+        return app.atoms
+
+    def test_a_periodic_axis_repeats(self, app):
+        self._tube(app)
+        app.var_repeat["z"].set(3)
+        assert app._repeat_counts() == (1, 1, 3)
+        assert len(app._offsets()) == 3
+
+    def test_a_vacuum_axis_does_not(self, app):
+        """Repeating vacuum stacks copies straight through the structure."""
+        self._tube(app)
+        app.var_repeat["x"].set(4)
+        assert app._repeat_counts()[0] == 1
+
+    def test_drawing_the_copies_does_not_raise(self, app):
+        self._tube(app)
+        app.var_repeat["z"].set(2)
+        app.var_show_cell.set(True)
+        app._redraw()
+
+    def test_the_view_frames_every_copy(self, app):
+        """A repeat you cannot see is the same as no repeat."""
+        self._tube(app)
+        app._zoom_fit()
+        one = app.ax.get_zlim3d()
+        app.var_repeat["z"].set(3)
+        app._zoom_fit()
+        three = app.ax.get_zlim3d()
+        assert three[1] - three[0] > one[1] - one[0]
+
+    def test_applying_it_makes_a_real_supercell(self, app):
+        atoms = self._tube(app)
+        before = len(atoms)
+        app.var_repeat["z"].set(3)
+        app.on_apply_repeat()
+        assert len(app.atoms) == 3 * before
+        assert app.var_repeat["z"].get() == 1, "the request was consumed"
+
+    def test_applying_nothing_says_so_rather_than_copying_once(self, app):
+        self._tube(app)
+        app.on_apply_repeat()
+        assert "Nothing to repeat" in app.status.cget("text")
+
+
+class TestTheCleanCoilPresets:
+    """Theory-clean first: a lattice wall, not a meshed one."""
+
+    def test_every_nanocoil_preset_reads_as_a_coil(self, app):
+        from nanocarbon_lab.gui.app import PRESETS
+
+        coils = {n: v for n, v in PRESETS.items() if "Nanocoil" in n}
+        assert len(coils) >= 3
+        for name, preset in coils.items():
+            assert preset["coil_turns"] >= 3.0, f"{name}: too few turns"
+
+    def test_the_swept_presets_ask_for_no_defects(self, app):
+        from nanocarbon_lab.gui.app import PRESETS
+
+        for name, preset in PRESETS.items():
+            if "Nanocoil" in name and preset["mode_kind"] == "capped tube":
+                assert preset.get("roughness", 0.0) == 0.0, name
+                assert preset.get("n_sw", 0) == 0, name
+                assert preset.get("n_dv", 0) == 0, name
