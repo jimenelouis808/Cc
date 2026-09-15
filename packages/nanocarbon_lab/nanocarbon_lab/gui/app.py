@@ -80,7 +80,12 @@ from .. import __version__
 from ..builders import fullerene_mesh as fm
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
-from ..cell import MIN_IMAGE_SEPARATION, cell_report, to_unit_cell
+from ..cell import (
+    MIN_IMAGE_SEPARATION,
+    cell_report,
+    describe_periodicity,
+    to_unit_cell,
+)
 from ..dopants import DOPANT_ELEMENTS, get_chemistry
 from ..dopants.codoping import AFFINITIES
 from ..exports.xyz import write_cif, write_render_bundle
@@ -2964,6 +2969,14 @@ class NanocarbonGUI:
                         command=self._redraw).pack(side="left", padx=(8, 0))
         ttk.Button(bar, text="to unit cell", width=11,
                    command=self.on_view_unit_cell).pack(side="left", padx=(2, 0))
+        # Vacuum per non-periodic side. It has a default and people still
+        # need to change it: 10 Å is fine for a tube and thin for a
+        # charged or strongly polar slab, and the number is what decides
+        # whether the cell converges.
+        self.var_cell_vacuum = tk.DoubleVar(value=10.0)
+        ttk.Spinbox(bar, from_=4.0, to=30.0, increment=1.0, width=4,
+                    textvariable=self.var_cell_vacuum).pack(side="left")
+        ttk.Label(bar, text="Å vac").pack(side="left")
 
         ttk.Button(bar, text="save image…", width=11,
                    command=self.on_save_image).pack(side="right")
@@ -3033,25 +3046,58 @@ class NanocarbonGUI:
             colors="#b0b6bd", linewidths=0.8, linestyles=":"))
 
     def on_view_unit_cell(self) -> None:
-        """Replace the structure with its periodic unit cell, in place.
+        """Make the structure a periodic cell a DFT code will accept.
 
-        The conversion already existed but only as a file export, so the
-        one way to see whether it produced something sensible was to
-        write a CIF and open it elsewhere.
+        This works on whatever is on screen, not on one favoured mode. A
+        cage becomes a molecule in a box, a tube keeps its own period
+        along the axis and gets vacuum across it, a sheet gets vacuum
+        along z, and something already periodic in three directions is
+        left alone rather than padded into nonsense.
+
+        What the button adds over the conversion it calls is the verdict:
+        a cell whose images are too close is the commonest way a
+        first-principles run is quietly wrong, and it is one number.
         """
         if self.atoms is None:
             return
+        before = describe_periodicity(self.atoms)
+        if before == "3D":
+            report = cell_report(self.atoms)
+            self.var_show_cell.set(True)
+            self._redraw()
+            self._set_status(
+                f"Already a 3D periodic cell ({report['lengths'][0]:.1f} × "
+                f"{report['lengths'][1]:.1f} × {report['lengths'][2]:.1f} Å); "
+                "nothing to convert."
+            )
+            return
         try:
-            converted = to_unit_cell(self.atoms)
-        except (ValueError, RuntimeError) as exc:
+            converted = to_unit_cell(self.atoms,
+                                     vacuum=float(self.var_cell_vacuum.get()))
+        except (ValueError, RuntimeError, tk.TclError) as exc:
             self._show_error("Could not convert to a unit cell", str(exc))
             return
+
         self.atoms = converted
+        self.last_saved_stem = None
+        report = cell_report(converted)
         self.var_show_cell.set(True)
         self._zoom_fit()
         self._redraw()
         self._update_info()
-        self._set_status(f"Showing the unit cell: {len(converted)} atoms.")
+        lengths = report["lengths"]
+        separation = report["image_separation"]
+        verdict = (
+            "" if separation is None else
+            f" Nearest image {separation:.1f} Å — "
+            + ("converged." if report["converged"] else
+               f"under {MIN_IMAGE_SEPARATION:.0f} Å, so add vacuum before "
+               "trusting an energy.")
+        )
+        self._set_status(
+            f"{before} → 3D periodic: {lengths[0]:.1f} × {lengths[1]:.1f} × "
+            f"{lengths[2]:.1f} Å, {len(converted)} atoms.{verdict}"
+        )
 
     def on_save_image(self) -> None:
         """Save the preview as it stands, viewpoint and all.

@@ -1145,3 +1145,89 @@ class TestThePeriodicCoilInTheWindow:
         assert preset["mode_kind"] == "coil (periodic, DFT)"
         app._apply_values(preset)
         assert app.current_job().mode == "coil (periodic, DFT)"
+
+
+class TestTheUnitCellButtonWorksOnAnything:
+    """Not a coil feature: whatever is on screen, if it can be periodic.
+
+    A cage becomes a molecule in a box, a tube keeps its own period along
+    its axis and gets vacuum across it, a sheet gets vacuum along z, and
+    something already periodic in three directions is left alone.
+    """
+
+    def _convert(self, app, atoms):
+        app.atoms = atoms
+        app.on_view_unit_cell()
+        return app.status.cget("text")
+
+    def test_a_cage_becomes_a_molecule_in_a_box(self, app):
+        from nanocarbon_lab.builders import build_fullerene
+
+        text = self._convert(app, build_fullerene(freq=1, family="C60"))
+        assert "0D → 3D periodic" in text
+        assert all(app.atoms.get_pbc())
+
+    def test_a_tube_keeps_its_own_period_along_the_axis(self, app):
+        """The point of the whole thing: the axis is the physics.
+
+        Padding it would replace a 12 Å lattice vector with vacuum and
+        turn a nanotube into a very long molecule.
+        """
+        from nanocarbon_lab.builders import build_cnt
+
+        tube = build_cnt(6, 6, length=12.0)
+        period = float(tube.cell[2][2])
+        self._convert(app, tube)
+        assert float(app.atoms.cell[2][2]) == pytest.approx(period)
+        assert float(app.atoms.cell[0][0]) > period
+
+    def test_a_sheet_gets_vacuum_only_along_z(self, app):
+        from nanocarbon_lab.builders import build_graphene
+
+        sheet = build_graphene().repeat((3, 3, 1))
+        lattice = float(sheet.cell[0][0])
+        self._convert(app, sheet)
+        assert float(app.atoms.cell[0][0]) == pytest.approx(lattice)
+        assert float(app.atoms.cell[2][2]) > lattice
+
+    def test_something_already_periodic_is_left_alone(self, app):
+        from nanocarbon_lab.builders import build_cnt
+        from nanocarbon_lab.cell import to_unit_cell
+
+        already = to_unit_cell(build_cnt(6, 6, length=12.0))
+        before = already.get_positions().copy()
+        text = self._convert(app, already)
+        assert "nothing to convert" in text
+        assert app.atoms.get_positions() == pytest.approx(before)
+
+    def test_the_vacuum_box_actually_changes_the_cell(self, app):
+        from nanocarbon_lab.builders import build_cnt
+
+        app.var_cell_vacuum.set(5.0)
+        self._convert(app, build_cnt(6, 6, length=12.0))
+        narrow = float(app.atoms.cell[0][0])
+        app.var_cell_vacuum.set(12.0)
+        self._convert(app, build_cnt(6, 6, length=12.0))
+        assert float(app.atoms.cell[0][0]) > narrow
+
+    def test_it_reports_the_nearest_image(self, app):
+        """Images too close is the commonest way a DFT run is quietly wrong,
+        so the one number that settles it is in the status line."""
+        from nanocarbon_lab.builders import build_cnt
+
+        text = self._convert(app, build_cnt(6, 6, length=12.0))
+        assert "Nearest image" in text and "converged" in text
+
+    def test_the_spinbox_floor_cannot_ask_for_an_unconverged_cell(self, app):
+        """Vacuum is added on *each* side, so the floor is half the
+        threshold. Worth pinning: raising MIN_IMAGE_SEPARATION without
+        raising the floor would let the window offer a bad cell."""
+        from nanocarbon_lab.builders import build_cnt
+        from nanocarbon_lab.cell import MIN_IMAGE_SEPARATION, cell_report, to_unit_cell
+
+        floor = float(app.var_cell_vacuum.cget("from")) if hasattr(
+            app.var_cell_vacuum, "cget") else 4.0
+        report = cell_report(
+            to_unit_cell(build_cnt(6, 6, length=12.0), vacuum=floor))
+        assert report["image_separation"] >= MIN_IMAGE_SEPARATION
+        assert report["converged"]
