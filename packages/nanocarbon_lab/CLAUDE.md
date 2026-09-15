@@ -269,9 +269,21 @@ tube builder's hardcoded 12 — a schwarzite legitimately has a strongly
 negative deficit. For an *assembly* (MWCNT, bundle) the budget is 12 per
 disjoint shell, not 12 overall.
 
-**Do not raise `anneal_sweeps` for schwarzites.** It defaults to 0 there
-and to 80 for junctions, and that asymmetry is measured, not an
-oversight. On a minimal surface the 5-7 pairs are how a hexagonal net
+**Do not raise `anneal_sweeps` on any curved surface.** It defaults to 0
+for the schwarzite, the network, the junction and the swept coil alike.
+The junction and the coil defaulted to 80 for a long time on the strength
+of the ring census, which annealing does improve; what it costs was only
+measured later. On four junction kinds out of four the as-grown wall is
+smoother, on the Y by more than a factor of two, and on three coil
+geometries out of three the annealed tube comes out up to 55% too fat
+while its helix springs open (a 4.5 Å tube walled at 6.96 Å, a requested
+13 Å pitch achieved at 40.2). A spread-out population of 5-7 pairs lets
+the net take up curvature everywhere at once; annealing most of them away
+leaves the survivors carrying all of it, and each buckles the wall around
+it. Judge these by the wall, not by the census -- and note that the sp2
+verdict follows the census, so it moves the wrong way too: an L or a T
+junction reads "strained" at 0 sweeps purely because a regular heptagon's
+interior angle is 128.6 deg before any strain. On a minimal surface the 5-7 pairs are how a hexagonal net
 covers the saddle curvature; annealing them away forces the remaining
 bonds to stretch. Schwarz P at 36 Å goes clean → strained → broken as
 sweeps go 0 → 20 → 80, and the pattern held for every surface and cell

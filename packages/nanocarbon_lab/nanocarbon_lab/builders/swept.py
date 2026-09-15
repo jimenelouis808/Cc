@@ -62,7 +62,7 @@ def build_swept_tube(
     bond: float = CC_BOND,
     voxel: float | None = None,
     remesh_iterations: int = 25,
-    anneal_sweeps: int = 80,
+    anneal_sweeps: int = 0,
     roughness: float = 0.0,
     relax_iterations: int = 3000,
     vacuum: float = DEFAULT_VACUUM_1D,
@@ -88,6 +88,25 @@ def build_swept_tube(
         Marching-cubes voxel edge (Å). Defaults to
         ``max(MIN_VOXEL, VOXEL_FRACTION * tube_radius)``.
     remesh_iterations, anneal_sweeps, roughness, relax_iterations, vacuum
+        ``anneal_sweeps`` defaults to 0, as it does for the junction and
+        the schwarzite, and for the same measured reason: the 5-7 pairs
+        spread over a curved wall are how a hexagonal net takes up its
+        curvature, and annealing most of them away leaves the survivors
+        carrying all of it. On a coil that shows up as the tube fattening
+        and the helix springing open. Three geometries, requested against
+        achieved:
+
+            R  P   r     sweeps   pitch    wall radius   wobble
+            22 13  4.5      0     18.3     5.06          2.14 Å
+            22 13  4.5     80     40.2     11.49         5.16 Å
+            30 16  5.0      0     16.6     5.44          2.28 Å
+            30 16  5.0     80     30.7     11.59         4.80 Å
+            18 13  4.5      0     19.3     5.18          2.18 Å
+            18 13  4.5     80     14.3     6.96          3.24 Å
+
+        Three out of three on the wall radius and on the wobble. The
+        annealed 18/13 case is the one that reads as a blob rather than a
+        spiral: a 6.96 Å wall for a 4.5 Å tube.
         As for :func:`nanocarbon_lab.builders.junction.build_junction`.
     pin_ends
         Restrain the two end caps to their meshed positions during

@@ -186,7 +186,8 @@ LATTICE_MODES = ("nanotube (open)", "nanoribbon")
 #: them away leaves the survivors carrying all of it and buckles the
 #: wall, so all of these ask for zero sweeps -- measured on four junction
 #: kinds out of four, and long established for the schwarzite.
-CURVED_SURFACE_MODES = ("junction", "schwarzite", "network")
+CURVED_SURFACE_MODES = ("junction", "schwarzite", "network",
+                        "coil (relaxed)")
 SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
 
 #: The haeckelite design patterns and catalogue, from the builder rather
@@ -1891,6 +1892,11 @@ class NanocarbonGUI:
             self._update_coil_hint()
         elif mode == "coil (relaxed)":
             self.frame_coil.pack(fill="x")
+            # Same rule as the junction and the schwarzite, and the most
+            # visible of the three: annealed, this coil's wall comes out
+            # 6.96 Å across for a 4.5 Å tube and the helix springs open,
+            # which is what stops it reading as a spiral.
+            self.var_anneal.set(0)
             # Without this the label keeps whatever the previous mode
             # computed, so entering the relaxed coil showed the swept
             # tube's strain warning -- a number that does not apply here,

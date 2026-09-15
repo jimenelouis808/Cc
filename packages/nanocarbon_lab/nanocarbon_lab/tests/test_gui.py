@@ -615,12 +615,22 @@ def test_a_diamond_net_needs_a_bigger_cell_than_cubic(app):
     assert "Too small" in app.lbl_network.cget("text")
 
 
-def test_the_network_turns_annealing_off_on_entry(app):
-    """Same reason as the schwarzite: at a node the 5-7 pairs are how a
-    hexagonal net covers the curvature."""
-    app.var_mode_kind.set("junction")
+@pytest.mark.parametrize(
+    "mode", ["network", "schwarzite", "junction", "coil (relaxed)"])
+def test_every_curved_surface_turns_annealing_off_on_entry(app, mode):
+    """The 5-7 pairs are how a hexagonal net takes up Gaussian curvature.
+
+    All four of these mesh a curved surface, and on all four annealing
+    tidies the ring census while making the wall worse: four junction
+    kinds out of four come out with a wavier barrel, and three coil
+    geometries out of three with a fatter tube (6.96 Å of wall for a
+    4.5 Å tube) and a helix sprung open. The window therefore zeroes the
+    shared slider on entering any of them rather than letting an 80-sweep
+    default quietly do that.
+    """
+    app.var_mode_kind.set("capped tube")
     app.var_anneal.set(80)
-    app.var_mode_kind.set("network")
+    app.var_mode_kind.set(mode)
     assert app.var_anneal.get() == 0
 
 
