@@ -6,7 +6,7 @@ una sola aplicación:
 | Sección | Qué hace |
 |---|---|
 | **Raman · carbono** | SWCNT / DWCNT / MWCNT, deconvolución D–G configurable, I_D/I_G, I_2D/I_G, I_D/I_D′, diámetros por RBM, dopado y deformación, y las fases no carbonosas de la muestra (FeSe, Se, carburos de hierro) |
-| **Raman · TMD** | MoS₂, WS₂, MoSe₂, WSe₂, MoTe₂: número de capas, fase 2H/1T′, y las heteroestructuras óxido/calcogenuro (MoO₃@MoSe₂, MoO₂@MoSe₂…) |
+| **Raman · TMD** | Calcogenuros de S, Se y Te de Mo, W, Ti, Nb, Ta y Fe: número de capas, fase 2H/1T′/1T/Td, heteroestructuras óxido/calcogenuro (MoO₃@MoSe₂, MoO₂@MoS₂, TiO₂@TiS₂…) y las demás fases cristalinas de la muestra |
 | **DRX** | Identificación de fases contra estructuras cristalinas reales (CIF de la COD), patrón teórico, residual y refinamiento **Rietveld** automático o a mano |
 | **Electroquímica** | CV, carga-descarga, impedancia con circuitos equivalentes y DRT, mecanismo de almacenamiento (condensador / pseudocondensador / batería), capacitancia por CV, GCD **y EIS** lado a lado, separación de Dunn, Trasatti, energía y potencia, dQ/dV, GITT, HER y OER |
 | **XPS** | Survey con identificación de elementos, regiones de alta resolución con el número de componentes que tú elijas, dobletes de espín-órbita como una sola componente, fondos Shirley / Tougaard, referencia de carga, composición atómica, y tablas de ajuste que entran y salen |
@@ -425,8 +425,33 @@ ramancarbon tmd mos2.txt          # o la pestaña TMD de la interfaz
 ramancarbon tmd --listar          # los materiales y sus modos
 ```
 
-MoS₂, WS₂, MoSe₂, WSe₂ y MoTe₂. Física distinta de la del carbono, con la
-misma maquinaria de ajuste y exportación.
+Quince materiales: los calcogenuros de S, Se y Te de **Mo, W, Ti, Nb, Ta y
+Fe**, con sus óxidos. Física distinta de la del carbono, con la misma
+maquinaria de ajuste y exportación.
+
+**No todos son 2H ni todos son laminares.** MoS₂, WS₂, MoSe₂, WSe₂ y MoTe₂
+son los semiconductores prismáticos 2H para los que se inventó el conteo de
+capas. TiS₂ y TiSe₂ son 1T octaédricos, el WTe₂ es Td, el TaS₂ existe en 2H
+y en un 1T con modos de onda de densidad de carga por debajo de 130 cm⁻¹, el
+NbSe₂ y el TaSe₂ son metales con CDW cuyos dos modos están a 6 cm⁻¹ uno del
+otro, y la pirita FeS₂ y la marcasita FeSe₂ no tienen capas. Cada entrada
+dice lo que es, y donde la pregunta «cuántas capas» no tiene respuesta el
+programa lo dice en vez de dar un número.
+
+**Lo que no está, no está por descuido.** `ramancarbon tmd --listar` termina
+con la lista de lo que se dejó fuera y por qué: NbS₂, NbTe₂, TiTe₂, los
+calcogenuros de manganeso, el FeTe. El criterio para entrar es tener una
+fuente citable, porque una posición inventada no avisa — identifica mal, y
+con seguridad aparente.
+
+**Con quince materiales las ventanas se solapan** — el A₁g del MoSe₂ está a
+240 y el del TaSe₂ a 234; el A₁g del TiSe₂ (198) cae encima del B₁g del
+β-FeSe (196) — así que la identificación exige al menos un modo
+*discriminante*, no una suma de coincidencias, y el informe lista siempre
+los demás candidatos. Un modo que tu medida no alcanza no cuenta como
+evidencia en contra: los del 1T-TaS₂ están a 63 y 75 cm⁻¹, y si tu filtro no
+baja de 100 el programa lo identifica igual y te dice en qué se está
+apoyando.
 
 **Las capas se cuentan por una separación, no por una posición.** Al apilar,
 el modo E²g (en el plano) se ablanda y el A₁g (fuera del plano) se endurece,
@@ -467,10 +492,32 @@ Un nanotubo decorado con FeSe pone modos que **no son carbono** en 181, 196,
 escaneo **sí va encendido por defecto**, al contrario que el de
 interferencias.
 
-La base de datos trae β-FeSe tetragonal, δ-FeSe hexagonal, FeSe₂ marcasita,
-selenio trigonal / monoclínico / amorfo, cementita Fe₃C y una entrada para el
-hierro metálico **deliberadamente sin bandas**, porque es Raman-inactivo en
-primer orden: lo que ves en una muestra con hierro nunca es el hierro.
+La base de datos trae 36 fases. β-FeSe tetragonal, δ-FeSe hexagonal, FeSe₂
+marcasita, selenio trigonal / monoclínico / amorfo, cementita Fe₃C y una
+entrada para el hierro metálico **deliberadamente sin bandas**, porque es
+Raman-inactivo en primer orden: lo que ves en una muestra con hierro nunca es
+el hierro. Los óxidos del catalizador (hematita, magnetita, goethita, pirita,
+Co₃O₄, NiO, β-NiOOH, Mn₃O₄, Mn₂O₃, β-MnO₂, birnesita), los soportes (anatasa,
+rutilo, cuarzo, silicio, calcita, ZnO) y **lo que entró en la síntesis**:
+melamina, urea, g-C₃N₄, fósforo rojo, ácido bórico, B₂O₃ vítreo, BN
+hexagonal, azufre S₈, sulfato sódico y cloruro de amonio.
+
+Los precursores están ahí por una razón concreta, y es que tres de ellos caen
+encima de la región del carbono:
+
+- El **h-BN** tiene UNA banda, a 1366 cm⁻¹, dentro del rango de la D. La
+  posición no los separará nunca. Lo que los separa es la anchura: 10 cm⁻¹ el
+  cristal, 50–150 un carbono desordenado, y toda la identificación descansa en
+  esa regla.
+- El **g-C₃N₄** tiene bandas a 1233, 1310 y 1570. Un «carbono dopado con
+  nitrógeno» hecho desde melamina que en realidad es nitruro de carbono da un
+  espectro con aspecto de carbono y una I_D/I_G que no significa nada. Lo
+  delatan las bandas de 707 y 750 cm⁻¹, donde el carbono no tiene nada — y si
+  tu medida empieza en 1000 cm⁻¹, el programa lo dice en vez de confirmarlo
+  con las bandas que los dos comparten.
+- La ν₄ del **NH₄Cl** está a 1400 cm⁻¹. Y casi todos los demás cloruros son
+  mudos en Raman, así que no encontrar cloro no prueba nada: para eso, EDS o
+  XPS.
 
 Se informa la **familia** siempre que se pueda, y el **polimorfo** solo cuando
 una línea discriminante o una prueba de anchura lo separa de sus hermanos. El

@@ -1,8 +1,17 @@
-"""Transition-metal dichalcogenides: MoS₂, WS₂, MoSe₂, WSe₂, MoTe₂.
+"""Transition-metal chalcogenides: S, Se and Te of Mo, W, Ti, Nb, Ta and Fe.
 
 A separate physics from the carbon side of this package, sharing its
 machinery. The spectra look nothing alike — two sharp modes a few cm⁻¹ wide
 instead of broad overlapping envelopes — and so does the analysis.
+
+**Not all of them are 2H and not all of them are layered.** MoS₂, WS₂,
+MoSe₂, WSe₂ and MoTe₂ are the prismatic 2H semiconductors the layer-count
+method was built for. TiS₂ and TiSe₂ are octahedral 1T, WTe₂ is Td, TaS₂
+comes in both 2H and a 1T with charge-density-wave modes below 130 cm⁻¹,
+NbSe₂ and TaSe₂ are CDW metals whose two modes are 6 cm⁻¹ apart, and pyrite
+FeS₂ and marcasite FeSe₂ have no layers at all. Each entry carries what it
+is, and the analysis declines to count layers where the question has no
+answer rather than producing a number.
 
 **The measurement is a separation, not a position.** Stacking layers softens
 the in-plane E¹₂g mode and stiffens the out-of-plane A₁g mode, so the gap

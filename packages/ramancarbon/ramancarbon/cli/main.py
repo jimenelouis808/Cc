@@ -425,24 +425,45 @@ def cmd_laseres(args) -> int:
 
 def cmd_tmd(args) -> int:
     """Analyse a dichalcogenide spectrum."""
-    from ..analysis.tmd import analyse_tmd, tmd_materials
+    from ..analysis.tmd import analyse_tmd, load_tmd_database, tmd_materials
 
     if args.listar:
         for material in tmd_materials():
             print(f"{material.key}  —  {material.label}")
-            for mode in material.modes.values():
-                print(f"    {mode.key:<9s} {mode.position:7.1f} cm⁻¹   {mode.label}")
+            print(
+                f"    {material.metal}–{material.chalcogen}, politipo "
+                f"{material.polytype or '?'}"
+                + ("" if material.layered else ", NO laminar")
+            )
+            for mode in sorted(material.modes.values(), key=lambda m: m.position):
+                mark = "*" if mode.discriminating else " "
+                print(f"   {mark}{mode.key:<9s} {mode.position:7.1f} cm⁻¹   "
+                      f"{mode.label}")
             if material.separation_by_layers:
                 spans = ", ".join(
                     f"{k}: {v[0]:g}–{v[1]:g}"
                     for k, v in material.separation_by_layers.items()
                 )
                 print(f"    separación E₂g–A₁g por capas → {spans}")
+            elif not material.layered:
+                print("    sin capas: el conteo no tiene sentido aquí")
             else:
-                print("    los dos modos son casi degenerados: no cuenta capas")
+                print("    no cuenta capas por separación")
             print(f"    confianza: {material.confidence}")
+            print(f"    fuente: {material.source}")
             print(f"    nota: {material.notes}")
             print()
+        print("(*) modo discriminante: la identificación exige al menos uno.")
+        print()
+        payload, _ = load_tmd_database()
+        missing = payload.get("_missing", {}).get("entries", [])
+        if missing:
+            print("NO están en la biblioteca, a propósito:")
+            for entry in missing:
+                print(f"  {entry['formula']}: {entry['reason']}")
+            print()
+            print("Para entrar hace falta una fuente citable. Una posición")
+            print("inventada no avisa: identifica mal, y con seguridad aparente.")
         return 0
 
     if not args.espectro:
@@ -1442,12 +1463,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "tmd",
-        help="analizar dicalcogenuros (MoS₂, WS₂, MoSe₂, WSe₂, MoTe₂)",
+        help="analizar calcogenuros de metales de transición (Mo, W, Ti, Nb, Ta, Fe)",
         description=(
-            "Cuenta capas por la SEPARACIÓN entre el modo E₂g (en el plano) y "
-            "el A₁g (fuera del plano), que crece de forma monótona al apilar. "
-            "Al ser una diferencia, cualquier error común de calibración se "
-            "cancela. Detecta también la fase 1T′ metálica por sus modos J."
+            "Quince materiales: los calcogenuros de S, Se y Te de Mo, W, Ti, "
+            "Nb, Ta y Fe, con sus óxidos. En los 2H de Mo y W cuenta capas "
+            "por la SEPARACIÓN entre el modo E₂g (en el plano) y el A₁g "
+            "(fuera del plano), que crece de forma monótona al apilar; al ser "
+            "una diferencia, cualquier error común de calibración se cancela. "
+            "En los 1T, en el WTe₂ y en los no laminares esa separación no "
+            "cuenta capas y el programa no lo finge. Detecta también la fase "
+            "1T′ metálica por sus modos J."
         ),
     )
     p.add_argument("espectro", nargs="?", help="archivo del espectro")
