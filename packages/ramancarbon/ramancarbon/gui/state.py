@@ -61,6 +61,28 @@ BASES = (
 PROFILE_CHOICES = tuple((key, PROFILES[key]["label"]) for key in PROFILES)
 
 
+def key_for_label(pairs, label: str):
+    """Reverse-map a combo box label back to its key.
+
+    Lives beside the choice tuples rather than in the carbon window,
+    because two sections now share the same preprocessing controls and the
+    second one should not have to import the first one's whole module — and
+    its whole matplotlib import — to read a combo box.
+    """
+    for key, text in pairs:
+        if text == label:
+            return key
+    return pairs[0][0]
+
+
+def label_for_key(pairs, key) -> str:
+    """The forward map, for filling the controls from stored settings."""
+    for candidate, label in pairs:
+        if candidate == key:
+            return label
+    return pairs[0][1]
+
+
 @dataclass
 class PreprocessSettings:
     """What the preprocessing panel is asking for."""
@@ -179,6 +201,13 @@ class LoadedSpectrum:
     result: Optional[AnalysisResult] = None
     tmd_result: Optional[Any] = None
     """Dichalcogenide analysis, when this spectrum was analysed as a TMD."""
+    tmd_phases: Optional[Any] = None
+    """Crystalline phases found in a dichalcogenide spectrum, from the same
+    catalogue the carbon section uses. Separate from ``tmd_result`` because
+    the two answer different questions: the dichalcogenide analysis asks
+    which TMD and how oxidised, the phase search asks what ELSE is in the
+    sample — unreacted selenium or sulfur, an iron oxide from the catalyst,
+    a titania support."""
     manual_fit: Optional[FitResult] = None
     is_control: bool = False
     error: str = ""
@@ -478,6 +507,37 @@ class Session:
             self.log("warning", f"{item.name}: {warning}")
         return item.tmd_result
 
+    def find_tmd_phases_active(self):
+        """Search the active spectrum for crystalline phases.
+
+        The same catalogue and the same machinery as the carbon section,
+        pointed at a dichalcogenide spectrum. It is not redundant with the
+        oxide search in :func:`~ramancarbon.analysis.tmd.analyse_tmd`: that
+        one looks only at oxides of the metals the chalcogenide contains,
+        which is what makes it precise. This looks at everything — and the
+        things it adds are the ones that actually bite, above all elemental
+        selenium at 237 cm⁻¹ and sulfur at 473, the precursor that did not
+        react and therefore is not in the lattice you think it is.
+        """
+        from ..analysis.phases import find_phases
+        from ..core.peaks import find_peaks
+        from ..core.preprocess import preprocess
+
+        item = self.active
+        if item is None:
+            self.log("error", "no hay ningún espectro seleccionado")
+            return None
+        try:
+            processed, _ = preprocess(item.raw, **self.preprocess_settings.to_kwargs())
+            peaks = find_peaks(processed, min_distance_cm=4.0, min_fwhm_cm=1.5)
+            item.tmd_phases = find_phases(peaks, spectrum_range=processed.range)
+        except (ValueError, KeyError) as exc:
+            self.log("error", str(exc))
+            return None
+        for warning in item.tmd_phases.warnings:
+            self.log("warning", f"{item.name}: {warning}")
+        return item.tmd_phases
+
     def tmd_table(self) -> tuple[list[str], list[list[str]]]:
         """Columns and rows for every spectrum analysed as a TMD."""
         rows_raw = []
@@ -486,6 +546,12 @@ class Session:
                 continue
             row = item.tmd_result.to_dict()
             row["nombre"] = item.name
+            if item.tmd_phases is not None:
+                called = [
+                    i.phase.formula for i in item.tmd_phases.identifications
+                    if i.corroborated
+                ]
+                row["otras_fases"] = ";".join(called) if called else "—"
             rows_raw.append(row)
         if not rows_raw:
             return [], []

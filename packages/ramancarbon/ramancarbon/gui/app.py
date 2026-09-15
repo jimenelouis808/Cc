@@ -1638,11 +1638,12 @@ def _placeholder(ax, text: str, palette) -> None:
 
 
 def _key_for_label(pairs, label: str) -> str:
-    """Reverse-map a combo box label back to its key."""
-    for key, text in pairs:
-        if text == label:
-            return key
-    return pairs[0][0]
+    """Reverse-map a combo box label back to its key. See
+    :func:`ramancarbon.gui.state.key_for_label`, which is where it lives
+    now that the dichalcogenide section shares these controls."""
+    from .state import key_for_label
+
+    return key_for_label(pairs, label)
 
 
 def _spec_to_row(spec: PeakSpec) -> dict:

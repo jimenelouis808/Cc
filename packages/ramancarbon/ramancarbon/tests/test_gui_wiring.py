@@ -69,7 +69,7 @@ def test_carbon_section_canvases_are_mapped_and_drawn():
     assert created == drawers, f"canvas/drawer mismatch: {created ^ drawers}"
 
 
-@pytest.mark.parametrize("stem", ["xrd_app", "echem_app", "xps_app"])
+@pytest.mark.parametrize("stem", ["tmd_app", "xrd_app", "echem_app", "xps_app"])
 def test_new_sections_map_every_canvas_to_a_drawer(stem):
     text = source(stem)
     created = set(re.findall(r'make_canvas\(\w+, "(\w+)"', text))
@@ -103,7 +103,7 @@ def test_carbon_tab_index_map_matches_the_build_order():
         )
 
 
-@pytest.mark.parametrize("stem", ["xrd_app", "echem_app", "xps_app"])
+@pytest.mark.parametrize("stem", ["tmd_app", "xrd_app", "echem_app", "xps_app"])
 def test_new_section_tab_maps_cover_every_tab(stem):
     text = source(stem)
     added = len(re.findall(r"self\.notebook\.add\(", text))
@@ -204,6 +204,19 @@ def test_the_two_raman_sections_share_one_session():
         ("tmd_app", "tmd_text"),
         ("tmd_app", "oxide_text"),
         ("tmd_app", "material_var"),
+        # The dichalcogenide section had one column and no tabs: no
+        # preprocessing controls of its own, no way to see the fitted modes
+        # as numbers, no export, and no way to read the catalogue it was
+        # deciding with. Everything below is one of those.
+        ("tmd_app", "_auto_preprocess"),
+        ("tmd_app", "baseline_var"),
+        ("tmd_app", "smooth_var"),
+        ("tmd_app", "modes_table"),
+        ("tmd_app", "phases_text"),
+        ("tmd_app", "phases_var"),
+        ("tmd_app", "_export_table"),
+        ("tmd_app", "library_list"),
+        ("tmd_app", "_on_library_select"),
         ("xrd_app", "_identify"),
         ("xrd_app", "_auto_refine"),
         ("xrd_app", "_prepare_manual"),
@@ -409,3 +422,120 @@ class _Var:
 
     def get(self):
         return self._value
+
+
+def test_the_two_raman_sections_share_the_preprocessing_settings():
+    """Both sections edit ``session.preprocess_settings``, not a copy.
+
+    The alternative is one file processed two different ways depending on
+    which tab you were looking at, and a difference between the sections
+    that nobody can account for.
+    """
+    text = source("tmd_app")
+    assert "self.session.preprocess_settings" in text
+    assert "_settings_from_widgets" in text and "_widgets_from_settings" in text
+
+
+def test_the_dichalcogenide_section_reaches_the_general_phase_catalogue():
+    """The oxide search only looks at oxides of the chalcogenide's own
+    metals, which is what makes it precise and also what makes it blind to
+    unreacted selenium. The section has to be able to run the general
+    search too."""
+    assert "find_tmd_phases_active" in source("tmd_app")
+    assert "find_tmd_phases_active" in source("state")
+
+
+# -- the parts of the widget code that are not widgets ------------------
+
+
+def test_the_library_panel_writes_out_every_kind_of_entry():
+    """``_describe`` is the catalogue browser's whole content, and it is a
+    pure function of a catalogue entry, so it can be tested without a
+    display. It has three kinds to handle and they share no fields."""
+    from ramancarbon.analysis.heterostructure import load_oxides
+    from ramancarbon.analysis.tmd import load_tmd_database, tmd_materials
+    from ramancarbon.gui.tmd_app import _describe
+
+    for material in tmd_materials():
+        text = _describe("material", material)
+        assert material.source in text
+        assert material.confidence in text
+        # A layered 2H of Mo or W says how it counts layers; everything else
+        # says why it cannot.
+        assert ("Separación E₂g–A₁g" in text) == material.counts_layers_by_separation
+        assert ("Laminar      : NO" in text) != material.layered
+
+    for oxide in load_oxides():
+        text = _describe("oxide", oxide)
+        assert oxide.source in text
+        assert ("límite INFERIOR" in text) == (oxide.min_fwhm is not None)
+
+    payload, _ = load_tmd_database()
+    for entry in payload["_missing"]["entries"]:
+        text = _describe("missing", entry)
+        assert "NO está en la biblioteca" in text
+        assert entry["reason"] in text
+
+
+def test_the_modes_plot_and_table_survive_every_material():
+    """Both read ``result.positions`` against the catalogue, and a mode the
+    fit named but the catalogue does not have must not raise."""
+    import matplotlib
+
+    matplotlib.use("Agg", force=False)
+    from matplotlib.figure import Figure
+    from types import SimpleNamespace
+
+    from ramancarbon.analysis.tmd import analyse_tmd, tmd_materials
+    from ramancarbon.examples.demo_data import make_tmd_demo
+    from ramancarbon.gui.theme import PALETTES
+    from ramancarbon.gui.tmd_app import TMDApp, _reference_modes
+
+    palette = next(iter(PALETTES.values()))
+    for material in tmd_materials():
+        result = analyse_tmd(make_tmd_demo(material.key, "bulk", seed=4))
+        assert result.material == material.key
+        assert set(result.positions) <= set(_reference_modes(material.key)) | {"x"}
+        fake = SimpleNamespace(
+            palette=palette,
+            session=SimpleNamespace(active=SimpleNamespace(tmd_result=result)),
+        )
+        figure = Figure()
+        TMDApp._draw_modes(fake, figure)
+        assert figure.axes and figure.axes[0].get_yticklabels()
+
+
+def test_the_oxide_plot_draws_only_the_chemically_possible_oxides():
+    """Drawing every oxide in the library would put tungsten oxide lines on
+    a molybdenum spectrum, which is exactly what the analysis refuses to
+    do. The plot has to restrict itself the same way."""
+    import matplotlib
+
+    matplotlib.use("Agg", force=False)
+    from matplotlib.figure import Figure
+    from types import SimpleNamespace
+
+    from ramancarbon.analysis.tmd import analyse_tmd
+    from ramancarbon.examples.demo_data import make_tmd_demo
+    from ramancarbon.gui.theme import PALETTES
+    from ramancarbon.gui.tmd_app import TMDApp
+
+    palette = next(iter(PALETTES.values()))
+    spectrum = make_tmd_demo("MoSe2", "bulk", high=1100.0,
+                             oxide="MoO3_alpha", seed=5)
+    result = analyse_tmd(spectrum)
+    fake = SimpleNamespace(
+        palette=palette,
+        session=SimpleNamespace(active=SimpleNamespace(
+            tmd_result=result, display=spectrum, raw=spectrum)),
+    )
+    figure = Figure()
+    TMDApp._draw_oxides(fake, figure)
+    labels = [t.get_text() for t in figure.axes[0].get_legend().get_texts()]
+    assert labels and all("W" not in text for text in labels)
+    assert any("MoO3" in text and "✓" in text for text in labels)
+
+    # No spectrum at all: a placeholder, not a traceback.
+    empty = SimpleNamespace(palette=palette,
+                            session=SimpleNamespace(active=None))
+    TMDApp._draw_oxides(empty, Figure())

@@ -382,6 +382,94 @@
       "confidence": "low",
       "source": "Ayala et al., Rev. Mod. Phys. 82 (2010) 1843",
       "notes": "Aceptor limpio, análogo del nitrógeno grafítico con el signo cambiado."
+    },
+    {
+      "key": "Cl_covalent",
+      "label": "Cloro covalente (C–Cl en borde o defecto)",
+      "host": [
+        "graphene",
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "hole",
+      "G_shift_cm1": [
+        0.0,
+        12.0
+      ],
+      "2D_shift_cm1": [
+        0.0,
+        15.0
+      ],
+      "ID_IG": "increases strongly",
+      "confidence": "low",
+      "source": "Zhang et al., ACS Nano 5 (2011) 7517; Li et al., J. Am. Chem. Soc. 133 (2011) 10394",
+      "notes": "El cloro es muy electronegativo (3.16 frente a 2.55 del carbono) y retira carga: dopado tipo p, G y 2D hacia arriba. Pero el enlace C–Cl mide 1.77 Å y NO es sustitucional —el cloro no entra en la red, se engancha a un borde o a un defecto y convierte ese carbono en sp³—, así que lo que domina el espectro es el salto de I_D/I_G, no el desplazamiento. Si la relación I_D/I_D′ sube hacia 13, es exactamente eso: defectos sp³. Aviso: el cloro se pierde por encima de 300 °C y el Raman no lo ve directamente; para saber si sigue ahí, EDS o XPS Cl 2p."
+    },
+    {
+      "key": "N_S_codoped",
+      "label": "Codopado N + S",
+      "host": [
+        "graphene",
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "mixed",
+      "G_shift_cm1": [
+        -8.0,
+        14.0
+      ],
+      "2D_shift_cm1": [
+        -20.0,
+        8.0
+      ],
+      "ID_IG": "increases strongly",
+      "confidence": "low",
+      "source": "Liang, Du, Feng & Müllen, Angew. Chem. Int. Ed. 51 (2012) 11496; Ferrari & Basko, Nature Nanotech. 8 (2013) 235",
+      "notes": "AVISO EXPRESO: este rango es ancho porque NO es una firma, es la unión de dos. El nitrógeno grafítico endurece la G por transferencia de carga y el azufre tiofénico la ablanda por deformación local, y los dos efectos tienen el mismo tamaño y signos contrarios. El resultado puede ser un desplazamiento pequeño en cualquier sentido, o cero, con AMBOS dopantes presentes en cantidad. Un ΔG nulo aquí no significa que no haya dopado: significa que se cancelaron. Los desplazamientos no son aditivos y este programa no los descompone. Lo que sí es informativo es I_D/I_G, que sube con los dos, y XPS, que dice cuánto hay de cada uno."
+    },
+    {
+      "key": "N_P_codoped",
+      "label": "Codopado N + P",
+      "host": [
+        "graphene",
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "mixed",
+      "G_shift_cm1": [
+        -6.0,
+        14.0
+      ],
+      "2D_shift_cm1": [
+        -22.0,
+        6.0
+      ],
+      "ID_IG": "increases strongly",
+      "confidence": "low",
+      "source": "Choi, Park & Woo, J. Mater. Chem. 22 (2012) 12107",
+      "notes": "Mismo problema que el codopado N+S y peor: el fósforo es más grande todavía (C–P ≈ 1.77 Å) y además apenas cabe en el plano, así que sale de él y crea una distorsión fuera del plano que ninguna de las dos firmas por separado describe. El rango de aquí es un aviso, no una medida. Si necesitas el contenido, XPS P 2p y N 1s; si necesitas saber si el fósforo está en la red o como fosfato en la superficie, mira también si hay banda hacia 950-1000 cm⁻¹ (fosfato) en el propio espectro Raman."
+    },
+    {
+      "key": "metal_particle_contact",
+      "label": "Contacto con nanopartícula metálica (Fe, Co, Ni, FeSe)",
+      "host": [
+        "graphene",
+        "CNT",
+        "CNF"
+      ],
+      "carrier": "hole",
+      "G_shift_cm1": [
+        2.0,
+        18.0
+      ],
+      "2D_shift_cm1": [
+        2.0,
+        20.0
+      ],
+      "ID_IG": "unchanged or slightly higher",
+      "confidence": "low",
+      "source": "Rao, Ranjan, Gupta et al., J. Raman Spectrosc. 40 (2009) 1257; Ferrari & Basko, Nature Nanotech. 8 (2013) 235",
+      "notes": "Una partícula metálica encima de un carbono transfiere carga por diferencia de función de trabajo, sin sustituir ningún átomo. La firma es un dopado tipo p SIN aumento de I_D/I_G: el carbono no tiene defectos nuevos, solo tiene carga distinta. Eso lo separa de un dopante sustitucional, que siempre sube la D. Dos avisos. Primero, el efecto es LOCAL: si el haz coge partícula y carbono desnudo a la vez, mides una media y el desplazamiento sale diluido. Segundo, una partícula metálica cerca puede dar amplificación SERS y multiplicar las intensidades sin que ninguna posición cambie — si tus relaciones de intensidad se disparan y las posiciones no se mueven, sospecha de eso antes que de la química."
     }
   ],
   "defect_type_ID_IDprime": {
@@ -402,6 +490,8 @@
     "practical_rule": "Con N y O, el par (ΔG, Δ2D) es interpretable como transferencia de carga. Con S, P y Se no lo es por sí solo: hace falta o bien un control de la misma muestra sin dopar, o bien XPS para saber cuánto dopante hay y en qué configuración.",
     "what_raman_cannot_do": "Raman no cuantifica el contenido de dopante y no separa las configuraciones de un mismo elemento (grafítico frente a piridínico frente a pirrólico; tiofénico frente a sulfóxido). Esas son medidas de XPS. Lo que Raman aporta y XPS no es el TIPO de defecto en la red (I_D/I_D') y el signo de la transferencia de carga (par ΔG, Δ2D).",
     "confidence": "medium",
-    "source": "Ayala et al., Rev. Mod. Phys. 82 (2010) 1843; Ferrari & Basko, Nature Nanotech. 8 (2013) 235"
+    "source": "Ayala et al., Rev. Mod. Phys. 82 (2010) 1843; Ferrari & Basko, Nature Nanotech. 8 (2013) 235",
+    "codoping": "Los codopados NO son aditivos. El nitrógeno grafítico endurece la G por carga y el azufre, el fósforo o el selenio la ablandan por tamaño: juntos se cancelan en parte o del todo, y un ΔG pequeño en una muestra codopada es compatible con mucho dopante, no con poco. Este programa no intenta descomponer una firma de codopado en sus dos componentes, porque con un solo espectro no se puede. Las entradas N_S_codoped y N_P_codoped existen para decir eso, no para medirlo.",
+    "without_a_control": "Casi todo lo de este archivo compara contra una referencia SIN dopar de la misma síntesis. Sin ese control, un ΔG de 5 cm⁻¹ no se distingue de un error de calibración ni de una deformación por el sustrato. Mide la línea de 520.7 cm⁻¹ del silicio el mismo día y con la misma red, y guarda un espectro del material sin dopar: es la diferencia entre una firma y una anécdota."
   }
 }
