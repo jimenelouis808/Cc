@@ -76,7 +76,7 @@ def build_junction(
     bond: float = CC_BOND,
     grid_resolution: int = 70,
     remesh_iterations: int = 25,
-    anneal_sweeps: int = 80,
+    anneal_sweeps: int = 0,
     roughness: float = 0.0,
     relax_iterations: int = 3000,
     vacuum: float = DEFAULT_VACUUM_1D,
@@ -113,8 +113,39 @@ def build_junction(
     anneal_sweeps
         Metropolis flip-annealing passes, which remove pentagon-heptagon
         pairs beyond those curvature requires (measured 39 -> 14 on a Y
-        junction). Set to ``0`` to keep the as-remeshed defect population,
-        which reads as a rougher, more as-grown wall.
+        junction). **Defaults to 0, as the schwarzite already did**, and
+        for the same reason -- which was measured here only after the
+        default had been 80 for a long time on the strength of the ring
+        census alone.
+
+        The census is not the thing to judge it by. Annealing does remove
+        stray pairs, and the wall gets *wavier* for it. Measured as each
+        atom's distance from its own arm's axis over the straight barrel,
+        where a cylinder has no Gaussian curvature and nothing but
+        hexagons belongs (a pristine (8,8) tube reads 0.000 Å):
+
+            kind   sweeps   wobble     bonds          rings
+            L        0      1.576 Å    1.360-1.482    41/313/29
+            L       80      1.782 Å    1.374-1.497    23/351/9
+            T        0      1.594 Å    1.358-1.504    58/422/46
+            T       80      1.648 Å    1.378-1.497    29/482/15
+            Y        0      0.608 Å    1.366-1.484    50/443/38
+            Y       80      1.441 Å    1.319-1.506    29/486/15
+            X        0      1.313 Å    1.367-1.507    64/539/50
+            X       80      1.902 Å    1.371-1.506    33/604/17
+
+        Four kinds out of four: the as-grown wall is smoother, and on the
+        Y by more than a factor of two. A spread-out population of 5-7
+        pairs lets the net take up the surface's curvature everywhere at
+        once; annealing most of them away leaves the survivors carrying
+        all of it, and each one buckles the wall around it.
+
+        Two costs, both real. The census reads worse, which is the thing
+        that made 80 look right. And the sp2 verdict on an L or a T moves
+        from "clean" to "strained", because a regular heptagon's interior
+        angle is 128.6 deg before any strain at all, so more of them
+        pushes ``angle_max`` toward the window's edge. Neither is the wall
+        getting worse.
     roughness
         RMS out-of-plane corrugation in Å applied after relaxation. ``0``
         leaves an ideally smooth shell; 0.1-0.3 Å looks CVD-grown.

@@ -512,19 +512,21 @@ def _add_surface_flags(p, anneal: bool | int = True):
     onions), whose topology comes from an exact seed rather than a
     remeshed surface -- there is nothing for flip annealing to clean up,
     so offering the flag would only imply a control that does nothing.
-    An int sets a different default, which the schwarzites need: there
-    annealing actively hurts (see ``build_schwarzite``), so it defaults
-    to 0 rather than to the junction's 80.
+    An int sets a different default. Every remeshed builder now asks for
+    0: the schwarzite always did, and the junction joined it once its wall
+    was measured rather than its ring census (see ``build_junction``).
     """
     if anneal is not False:
-        default = 80 if anneal is True else int(anneal)
+        default = 0 if anneal is True else int(anneal)
         p.add_argument("--anneal-sweeps", type=int, default=default,
                        help="Flip-annealing passes that remove pentagon-heptagon "
                             "pairs beyond those curvature needs (39->14 on a Y "
-                            "junction). 0 keeps the as-grown, rougher wall. On a "
-                            "schwarzite the 5-7 pairs are how the net covers the "
-                            "saddle, so annealing stretches bonds and the default "
-                            "there is 0.")
+                            "junction). Defaults to 0 on every curved surface: "
+                            "the pairs are how a hexagonal net takes up Gaussian "
+                            "curvature, and annealing them away leaves the "
+                            "survivors to carry all of it, which buckles the "
+                            "wall. Measured on all four junction kinds, the "
+                            "as-grown wall is the smoother one.")
     p.add_argument("--roughness", type=float, default=0.0,
                    help="RMS out-of-plane corrugation (Å) for a CVD-grown "
                         "rather than ideal wall; 0.1-0.3 is realistic.")

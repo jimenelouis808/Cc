@@ -24,6 +24,35 @@ def _deficit(ring_counts: dict[int, int]) -> int:
     return sum((6 - size) * count for size, count in ring_counts.items())
 
 
+def _barrel_wobble(atoms, tube_radius: float = 6.0, arm_length: float = 22.0,
+                   blend: float = 4.0) -> float:
+    """Spread of the wall's distance from each arm's own axis, barrel only.
+
+    The arms' directions are read off the atoms rather than assumed: a Y
+    junction lies in the x-z plane, not x-y, and two earlier attempts at
+    this measurement mismeasured by assuming otherwise.
+    """
+    pos = atoms.get_positions() - atoms.get_positions().mean(axis=0)
+    far = pos[np.linalg.norm(pos, axis=1) > 15.0]
+    unit = far / np.linalg.norm(far, axis=1)[:, None]
+    directions, pool = [], unit.copy()
+    while len(pool) > 20 and len(directions) < 7:
+        close = pool @ pool[0] > np.cos(np.radians(40))
+        mean = pool[close].mean(axis=0)
+        directions.append(mean / np.linalg.norm(mean))
+        pool = pool[~close]
+    spreads = []
+    for direction in directions:
+        along = pos @ direction
+        off = np.linalg.norm(pos - np.outer(along, direction), axis=1)
+        keep = ((along > tube_radius + blend + 2.0)
+                & (along < arm_length - tube_radius - 1.0)
+                & (off < 1.6 * tube_radius))
+        if keep.sum() >= 30:
+            spreads.append(off[keep].std())
+    return float(np.mean(spreads))
+
+
 class TestImplicitFields:
     def test_capsule_distance_is_signed_and_correct(self):
         field = im.capsule((0, 0, -5), (0, 0, 5), radius=3.0)
@@ -199,6 +228,40 @@ class TestSchwarzites:
     def test_nonpositive_cell_rejected(self):
         with pytest.raises(ValueError):
             build_schwarzite("primitive", cell=0.0)
+
+    @pytest.mark.parametrize("kind", ["Y", "X"])
+    def test_annealing_makes_a_junction_wall_wavier(self, kind):
+        """The census improves and the wall gets worse.
+
+        This is the measurement the junction's 80-sweep default never had:
+        it was set on the ring census, which annealing does improve. What
+        it costs is the shape of the arms. Measured as each atom's
+        distance from its own arm's axis over the straight barrel -- a
+        cylinder, where there is no Gaussian curvature and nothing but
+        hexagons belongs, and where a pristine (8,8) tube reads 0.000 Å.
+
+        Four kinds out of four came out smoother as-grown; Y and X are
+        the two with the largest margin, so they are the ones pinned.
+        """
+        as_grown = build_junction(kind=kind, tube_radius=6.0, arm_length=22.0,
+                                  blend=4.0, anneal_sweeps=0)
+        annealed = build_junction(kind=kind, tube_radius=6.0, arm_length=22.0,
+                                  blend=4.0, anneal_sweeps=80)
+
+        def strays(atoms):
+            counts = atoms.info["ring_counts"]
+            return min(counts.get(5, 0), counts.get(7, 0))
+
+        # Annealing does what it claims to the topology...
+        assert strays(annealed) < strays(as_grown)
+        # ...and the arms pay for it.
+        assert _barrel_wobble(as_grown) < _barrel_wobble(annealed)
+
+    def test_the_default_is_as_grown(self):
+        import inspect
+
+        assert (inspect.signature(build_junction)
+                .parameters["anneal_sweeps"].default == 0)
 
     def test_annealing_is_off_by_default_because_it_hurts_here(self):
         """The 5-7 pairs are the mechanism, not the defect.

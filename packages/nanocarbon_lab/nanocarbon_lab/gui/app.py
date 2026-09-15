@@ -181,6 +181,12 @@ TUBE_SHAPES = ["straight", "helix"]
 #: onto a meshed surface. They take defects and corrugation like the
 #: meshed ones, but there is no mesh for the annealing slider to act on.
 LATTICE_MODES = ("nanotube (open)", "nanoribbon")
+#: Modes built by meshing a curved surface, where the pentagon-heptagon
+#: pairs are how a hexagonal net takes up Gaussian curvature. Annealing
+#: them away leaves the survivors carrying all of it and buckles the
+#: wall, so all of these ask for zero sweeps -- measured on four junction
+#: kinds out of four, and long established for the schwarzite.
+CURVED_SURFACE_MODES = ("junction", "schwarzite", "network")
 SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
 
 #: The haeckelite design patterns and catalogue, from the builder rather
@@ -1855,6 +1861,12 @@ class NanocarbonGUI:
 
         if mode == "junction":
             self.frame_junction.pack(fill="x")
+            # Same reason as the schwarzite and the network, and measured
+            # on all four kinds: the 5-7 pairs spread over the surface are
+            # how the net takes up its curvature, and annealing most of
+            # them away leaves the survivors to carry all of it -- which
+            # buckles the arms. The as-grown wall is the smoother one.
+            self.var_anneal.set(0)
         elif mode == "network":
             self.frame_network.pack(fill="x")
             # Same reason as the schwarzite: at a node the 5-7 pairs are
@@ -2533,9 +2545,9 @@ class NanocarbonGUI:
         # On a minimal surface the 5-7 pairs are not disorder; they are how
         # the net covers the saddle. Annealing them away measurably
         # stretches the remaining bonds.
-        if self.var_mode_kind.get() == "schwarzite" and anneal > 0:
-            topo = (f"annealing hurts here — {anneal} sweeps stretches bonds; "
-                    "the 5-7 pairs are how the net covers the saddle")
+        if self.var_mode_kind.get() in CURVED_SURFACE_MODES and anneal > 0:
+            topo = (f"annealing hurts here — {anneal} sweeps buckles the wall; "
+                    "the 5-7 pairs are how the net covers the curvature")
             colour = BAD_RED
         # Annealing flips mesh edges, and a tube or ribbon has no mesh to
         # flip: its atoms go straight onto the graphene lattice. Saying so
