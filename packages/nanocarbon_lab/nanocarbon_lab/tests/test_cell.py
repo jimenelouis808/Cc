@@ -21,6 +21,7 @@ from nanocarbon_lab.cell import (
     describe_periodicity,
     image_separation,
     periodicity,
+    supercell,
     to_unit_cell,
 )
 from nanocarbon_lab.tmd import build_tmd_monolayer
@@ -204,3 +205,104 @@ class TestWhatComesBackFlaggedPeriodic:
 
         assert mesh(to_unit_cell(cage, mark="true"), "t.in") == (1, 1, 1)
         assert mesh(to_unit_cell(cage, mark="3D"), "s.in") != (1, 1, 1)
+
+
+# -- bonds across a face, and the supercell that has to carry them -----
+
+
+def test_a_bond_through_a_face_is_short_once_its_shift_is_known(tube):
+    """The whole point of :func:`bond_shifts`, on the simplest case.
+
+    A periodic tube's bond list joins atoms at opposite ends of the cell.
+    In raw coordinates those pairs are as long as the cell; with the
+    lattice translation subtracted they are 1.42 Å like every other bond,
+    which is what they always were.
+    """
+    from nanocarbon_lab.utils.geometry import bond_shifts
+
+    bonds = np.asarray(tube.info["bonds"])
+    shifts = bond_shifts(tube, bonds)
+    positions, cell = tube.get_positions(), np.asarray(tube.cell)
+
+    raw = np.linalg.norm(positions[bonds[:, 1]] - positions[bonds[:, 0]], axis=1)
+    short = np.linalg.norm(
+        positions[bonds[:, 1]] - shifts @ cell - positions[bonds[:, 0]], axis=1)
+
+    assert (shifts != 0).any(axis=1).sum() > 0, "no bond crosses a face"
+    assert raw.max() > 3.0, "nothing to fix in this structure"
+    assert short.max() < 1.8 and short.min() > 1.2
+    # Only the periodic axis is ever crossed; x and y carry vacuum.
+    assert not shifts[:, :2].any()
+
+
+def test_a_structure_with_no_periodicity_has_no_shifts(cage):
+    """Callers should not have to special-case a molecule."""
+    from nanocarbon_lab.utils.geometry import bond_shifts
+
+    shifts = bond_shifts(cage, cage.info["bonds"])
+    assert shifts.shape == (len(cage.info["bonds"]), 3)
+    assert not shifts.any()
+
+
+def test_supercell_bonds_match_what_guessing_them_again_would_give(tube):
+    """Re-indexing has to agree with re-guessing, or it is not the same
+    structure. This is the check that says the copy bookkeeping -- which
+    copy the far end of a face-crossing bond lands in -- is right."""
+    from nanocarbon_lab.utils.geometry import guess_bonds
+
+    bigger = supercell(tube, (1, 1, 3))
+
+    assert len(bigger) == 3 * len(tube)
+    guessed = {tuple(sorted((i, j))) for i, j, _ in guess_bonds(bigger)}
+    carried = {tuple(sorted(map(int, pair))) for pair in bigger.info["bonds"]}
+    assert carried == guessed
+    assert len(bigger.info["bonds"]) == 3 * len(tube.info["bonds"])
+
+
+def test_supercell_scales_the_ring_census_and_the_euler_budget_together(tube):
+    """A ring census that does not scale with the atoms turns a sound
+    supercell into a BROKEN one: the readout compares sum(6 - n) against a
+    budget fixed by the genus, and three copies owe three times."""
+    before = tube.info.get("ring_counts", {})
+    if not before:
+        pytest.skip("this builder records no ring census")
+    bigger = supercell(tube, (1, 1, 3))
+    after = bigger.info["ring_counts"]
+    assert sum(after.values()) == 3 * sum(before.values())
+    deficit = sum((6 - size) * count for size, count in after.items())
+    assert deficit == bigger.info["euler_expected"]
+
+
+def test_supercell_refuses_to_repeat_vacuum(tube):
+    """Repeating a direction that carries vacuum rather than a lattice
+    vector stacks the copies straight through each other."""
+    with pytest.raises(ValueError, match="not"):
+        supercell(tube, (2, 1, 1))
+
+
+def test_supercell_of_one_is_the_structure_itself(tube):
+    same = supercell(tube, (1, 1, 1))
+    assert len(same) == len(tube)
+    assert np.allclose(same.get_positions(), tube.get_positions())
+
+
+def test_a_ring_list_that_cannot_be_walked_is_dropped_rather_than_halved(tube):
+    """Rings are carried by walking them bond by bond, so a structure with
+    rings recorded but no bonds has nothing to walk along.
+
+    The census still scales exactly -- every ring appears once per copy --
+    but the explicit ring list cannot be rebuilt, and half a ring list is
+    worse than none: the colour-by-ring view would then be confidently
+    wrong about which atoms are pentagons.
+    """
+    stripped = tube.copy()
+    stripped.info = {key: value for key, value in tube.info.items()
+                     if key != "bonds"}
+    bigger = supercell(stripped, (1, 1, 3))
+
+    assert "rings" not in bigger.info
+    assert bigger.info["ring_counts"] == {
+        size: count * 3 for size, count in tube.info["ring_counts"].items()}
+    deficit = sum((6 - size) * count
+                  for size, count in bigger.info["ring_counts"].items())
+    assert deficit == bigger.info["euler_expected"]

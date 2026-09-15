@@ -575,6 +575,50 @@ Three rules, each of which was a bug first:
   bulk crystal has nothing to converge and a number there would invite a
   meaningless comparison.
 
+## A minimum-image bond list names the pair, not the cell
+
+`info["bonds"]` is built from `guess_bonds`, which uses the minimum image
+convention. That records `(i, j)` and throws away *which cell* j was in.
+Anything that uses the pair without recovering the translation is wrong,
+and wrong in a way that does not raise:
+
+* **Drawing.** `pos[j] - pos[i]` for a bond crossing a face is as long as
+  the cell -- up to 46 A on a 1502-atom gyroid, 131 times over. It looks
+  like a rendering fault. It is a missing subtraction, and it was the
+  single biggest source of visual noise in the preview.
+* **Repeating.** `Atoms.repeat` copies `info` verbatim, so a supercell
+  keeps one cell's bond list, ring list and ring census while having
+  eight times the atoms. The preview then draws bonds on the first copy,
+  the Blender bundle exports an eighth of the connectivity, and the Euler
+  check calls a sound 2x2x2 gyroid BROKEN. Nothing about the atom count
+  shows any of it.
+
+`utils.geometry.bond_shifts` returns the integer translation per bond, and
+`cell.supercell` is what the GUI's repeat button goes through: it
+re-indexes the bonds copy by copy (verified equal to re-running
+`guess_bonds` on the supercell), walks each ring bond by bond so one
+straddling a face comes out whole, and scales the Euler budget by the
+number of copies because it is a sum over rings.
+
+Two things to keep: the shift search is a **candidate scan** around the
+least-squares projection, not a rounding, because rounding is right for an
+orthogonal cell and off by one for a sheared one. And repeating an
+**aperiodic** direction raises rather than obeying -- the copies would sit
+inside each other.
+
+## The GUI cannot be tested without a display, so test what is not widgets
+
+`tests/test_gui.py` skips itself entirely without tkinter, which is most
+checkouts. `tests/test_gui_static.py` reads `gui/app.py` as text instead
+and checks it against itself: every `command=self.x` names a method that
+exists, and every `self.x` read is assigned somewhere. Both are attribute
+lookups resolved at click time, so a linter sees neither.
+
+When logic has to live in the widget module, keep it a function of its
+arguments (`_describe`-style) or put it in a package module so it can be
+tested directly. The bond-shift maths is in `utils.geometry` and the
+supercell in `cell` for exactly that reason.
+
 ## Blender: the render must not depend on the subject's size
 
 Three faults, and the first is the one that made the other two hard to

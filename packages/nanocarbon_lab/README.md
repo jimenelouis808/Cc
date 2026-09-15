@@ -242,6 +242,34 @@ nanotube's 1.42 Å contact along its own axis is the structure, not a
 failure. Measuring all of them reported every correct periodic cell as
 unconverged.
 
+### Supercells
+
+```python
+from nanocarbon_lab.cell import supercell
+
+big = supercell(gyroid, (2, 2, 2))          # 1502 -> 12016 atoms
+```
+
+`Atoms.repeat` would give the same atoms and the wrong metadata: it
+copies `info` verbatim, so the supercell keeps the bond list, the ring
+list and the ring census of a single cell. Nothing about the atom count
+shows it, and three things downstream are quietly wrong — the preview
+draws bonds on the first copy only, the JSON bundle exports a
+connectivity covering an eighth of the atoms, and the Euler check calls a
+sound 2×2×2 gyroid broken because the census no longer matches.
+
+`supercell` re-indexes rather than re-guesses. Every bond appears once
+per copy, and a bond that crossed a face joins two copies — which copy is
+exactly what `bond_shifts` already computes. The result is what
+`guess_bonds` would return on the supercell, without a bond tolerance
+quietly changing the connectivity on the way. Rings are walked bond by
+bond so one straddling a face comes out whole, and the Euler budget is
+scaled by the number of copies, because it is a sum over rings.
+
+Repeating a direction that carries vacuum rather than a lattice vector is
+an error, not something to obey silently: the copies would sit inside
+each other.
+
 ## Doping carbon: which heteroatom, how much, and where
 
 **The host is always carbon.** Every builder returns pure carbon; doping
@@ -778,6 +806,29 @@ switching the hexagons off is the fastest way to see where the curvature
 actually went, since on a junction or a coil the 5s and 7s are a handful
 of atoms buried in thousands. A **session history** keeps every build so
 a promising result is not lost the moment you nudge the next parameter.
+
+**Bonds that leave through a face are drawn as the short bonds they
+are.** A bond list built under the minimum image convention records the
+pair and not the cell the far atom is in, so a naive drawing puts a line
+straight across the structure for every bond that crosses the boundary —
+on a 1502-atom gyroid cell that is 131 lines up to 46 Å long, and it
+looks like a rendering fault rather than what it is, a missing
+subtraction. The preview subtracts it, so each of those bonds appears as
+the 1.4 Å stub leaving the cell, and repeated copies join up seamlessly.
+The **edge** switch hides them outright for a completely clean picture.
+
+**Supercells.** Set the copies along x, y and z and the preview shows
+them immediately; **Make supercell** then makes them real, so every
+export button writes the supercell rather than the single cell. Only
+directions that genuinely repeat are used — repeating a vacuum direction
+would stack copies through each other, so a count there is ignored. The
+bond list, the ring list and the ring census are carried over rather than
+copied, which matters more than it sounds: `Atoms.repeat` copies metadata
+verbatim, so a supercell built the obvious way keeps one cell's
+connectivity while having eight times the atoms — the preview draws bonds
+on one copy, the Blender bundle exports an eighth of them, and the Euler
+check calls a sound structure broken. The atom count looks right
+throughout.
 
 The readout reports ring counts, the Euler check, wall or shell spacing
 where it applies, achieved coil dimensions, the measured

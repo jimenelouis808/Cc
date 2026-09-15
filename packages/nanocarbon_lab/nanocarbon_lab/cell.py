@@ -258,6 +258,171 @@ def to_unit_cell(
     return out
 
 
+def supercell(atoms: Atoms, counts: Sequence[int]) -> Atoms:
+    """Repeat a periodic cell, carrying its bonds and ring census with it.
+
+    ``Atoms.repeat`` copies the atoms and copies ``info`` verbatim, which
+    for this package means a supercell that still claims the bond list,
+    ring list and ring census of one cell. The preview then draws bonds on
+    the first copy only, the Blender bundle exports a connectivity that
+    covers an eighth of the structure, and the Euler check reports a sound
+    structure as broken because the census no longer matches the atoms.
+    None of that is visible in a bare atom count, which is what makes it
+    worth a function.
+
+    Bonds are re-indexed rather than re-guessed. Every bond of the original
+    cell appears once per copy, and a bond that crossed a face now joins
+    two copies — which copy is exactly what
+    :func:`~nanocarbon_lab.utils.geometry.bond_shifts` already computes.
+    The result is the same list ``guess_bonds`` would return on the
+    supercell, at a fraction of the cost and without the risk of a
+    different bond tolerance quietly changing the connectivity.
+
+    Rings are carried the same way, by walking each ring from atom to atom
+    and following the shift of each step, so a ring that straddles a face
+    comes out whole. A ring that cannot be walked — which would mean the
+    bond list and the ring list disagree — is dropped rather than guessed
+    at, and the census is rebuilt from what survived.
+
+    Parameters
+    ----------
+    atoms
+        The structure to repeat.
+    counts
+        Copies along a, b and c. A count on a direction that is not
+        periodic is an error, not something to silently obey: repeating
+        vacuum stacks copies through each other.
+
+    Returns
+    -------
+    ase.Atoms
+        The supercell, with consistent ``info``.
+
+    Raises
+    ------
+    ValueError
+        If a count is below one, or asks to repeat an aperiodic direction.
+    """
+    from .utils.geometry import bond_shifts
+
+    counts = tuple(int(n) for n in counts)
+    if len(counts) != 3 or any(n < 1 for n in counts):
+        raise ValueError(f"counts must be three integers >= 1, got {counts}")
+    pbc = atoms.get_pbc()
+    lengths = np.asarray(atoms.cell).astype(float)
+    for index, (n, axis) in enumerate(zip(counts, "abc", strict=True)):
+        if n == 1:
+            continue
+        if not pbc[index] or float(np.linalg.norm(lengths[index])) < 1e-6:
+            raise ValueError(
+                f"cannot repeat {n}x along {axis}: the structure is not "
+                f"periodic there, so the copies would sit inside each other"
+            )
+
+    out = atoms.repeat(counts)
+    total = counts[0] * counts[1] * counts[2]
+    if total == 1:
+        return out
+
+    n_atoms = len(atoms)
+    bonds = [list(map(int, pair)) for pair in atoms.info.get("bonds", [])]
+    out.info = dict(atoms.info)
+    out.info["supercell"] = list(counts)
+
+    def index_of(cell_index: Sequence[int], atom: int) -> int:
+        """ASE's own ordering: a slowest, c fastest, atoms within a copy."""
+        i, j, k = cell_index
+        copy = (i * counts[1] + j) * counts[2] + k
+        return copy * n_atoms + atom
+
+    images = [(i, j, k) for i in range(counts[0])
+              for j in range(counts[1]) for k in range(counts[2])]
+
+    if bonds:
+        shifts = bond_shifts(atoms, bonds)
+        # A bond drawn from atom i in copy M reaches atom j in copy M - s:
+        # the shift is what has to be SUBTRACTED from j to bring it next
+        # to i, so the partner lives one cell back along it.
+        step = {}
+        tiled = []
+        for (first, second), shift in zip(bonds, shifts, strict=True):
+            step[(first, second)] = tuple(int(v) for v in shift)
+            step[(second, first)] = tuple(-int(v) for v in shift)
+            for image in images:
+                far = tuple((image[axis] - int(shift[axis])) % counts[axis]
+                            for axis in range(3))
+                tiled.append([index_of(image, first), index_of(far, second)])
+        out.info["bonds"] = tiled
+    else:
+        step = {}
+
+    rings = [list(map(int, ring)) for ring in atoms.info.get("rings", [])]
+    carried = []
+    for ring in rings:
+        for image in images:
+            walked = _walk_ring(ring, image, counts, step, index_of)
+            if walked is None:
+                carried = []
+                break
+            carried.append(walked)
+        if rings and not carried:
+            break
+    if carried:
+        out.info["rings"] = carried
+        census: dict[int, int] = {}
+        for ring in carried:
+            census[len(ring)] = census.get(len(ring), 0) + 1
+        out.info["ring_counts"] = census
+    else:
+        # Either there were no rings to carry, or the bond list cannot
+        # account for one of them -- with no bonds recorded, for instance,
+        # there is nothing to walk along. An incomplete ring list is worse
+        # than none, because the colour-by-ring view would then be wrong
+        # about which atoms are pentagons, so it is dropped. The census is
+        # still exact: every ring appears once per copy.
+        if rings:
+            out.info.pop("rings", None)
+        if "ring_counts" in atoms.info:
+            out.info["ring_counts"] = {size: count * total for size, count
+                                       in atoms.info["ring_counts"].items()}
+
+    # The Euler budget is a sum over rings, so it scales with the number of
+    # copies. Left alone, a sound 2x2x2 gyroid reports as BROKEN.
+    components = int(atoms.info.get("n_shells", atoms.info.get("n_tubes", 1)))
+    expected = atoms.info.get(
+        "euler_expected",
+        components * (12 - 12 * int(atoms.info.get("genus", 0))),
+    )
+    out.info["euler_expected"] = int(expected) * total
+    for key in ("n_shells", "n_tubes"):
+        if key in atoms.info:
+            out.info[key] = int(atoms.info[key]) * total
+    # Recorded once for the whole cell and no longer true of the supercell.
+    for key in ("cell", "grid_resolution", "grid_retries"):
+        out.info.pop(key, None)
+    return out
+
+
+def _walk_ring(ring, image, counts, step, index_of):
+    """One ring of the original cell, placed in copy ``image``.
+
+    Walked bond by bond so that a ring straddling a face keeps its far
+    atoms in the neighbouring copy instead of folding back on itself.
+    Returns ``None`` when a step is not in the bond list, which means the
+    two records disagree and the ring should be dropped rather than
+    invented.
+    """
+    here = list(image)
+    walked = [index_of(here, ring[0])]
+    for first, second in zip(ring, ring[1:], strict=False):
+        shift = step.get((first, second))
+        if shift is None:
+            return None
+        here = [(here[axis] - shift[axis]) % counts[axis] for axis in range(3)]
+        walked.append(index_of(here, second))
+    return walked
+
+
 def cell_report(atoms: Atoms) -> dict:
     """Measured description of a structure's cell, for printing.
 
@@ -299,5 +464,6 @@ __all__ = [
     "describe_periodicity",
     "image_separation",
     "periodicity",
+    "supercell",
     "to_unit_cell",
 ]

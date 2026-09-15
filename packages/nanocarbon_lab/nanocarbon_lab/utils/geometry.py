@@ -6,6 +6,7 @@ The helpers here are deliberately backend-agnostic: they operate on
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Sequence
 
 import numpy as np
@@ -142,3 +143,88 @@ def guess_bonds(
         for i, j, d in zip(first_index[keep], second_index[keep],
                            distance[keep], strict=True)
     ]
+
+
+def bond_shifts(atoms: Atoms, bonds: Sequence[Sequence[int]]) -> np.ndarray:
+    """Which lattice translation each bond crosses, in whole cell units.
+
+    A bond list built under the minimum-image convention records the pair
+    ``(i, j)`` and nothing else, so a bond between an atom on one face of
+    the cell and its neighbour on the opposite face looks, in raw
+    coordinates, like a 30 Å bond straight across the structure. It is not:
+    the neighbour is one cell away, and the bond is 1.42 Å like every
+    other. This returns the integer translation **s** for each bond such
+    that
+
+        ``positions[j] - s @ cell - positions[i]``
+
+    is the short vector — zero for an ordinary interior bond, and a unit
+    vector along one axis for a bond that leaves through a face.
+
+    Two things need it. Drawing: without the shift a periodic structure is
+    covered in long straight lines from edge to edge, which is the single
+    biggest source of visual noise in a schwarzite or a coil. And
+    repetition: a supercell's bond list is the original one re-indexed
+    copy by copy, and knowing which cell each bond lands in is exactly
+    what says which copy the far end belongs to.
+
+    The search is a candidate scan rather than a rounding. Projecting the
+    bond vector onto the periodic sub-lattice and rounding is right for an
+    orthogonal cell and can be off by one for a strongly sheared one, so
+    the rounded value is used as a centre and the neighbouring integers
+    are tried too. The winner is the translation that makes the bond
+    shortest, which is the definition.
+
+    Parameters
+    ----------
+    atoms
+        The structure. Only its cell and ``pbc`` are read.
+    bonds
+        Pairs of atom indices.
+
+    Returns
+    -------
+    numpy.ndarray
+        Integer array of shape ``(len(bonds), 3)``. All zeros when the
+        structure is not periodic, so callers need no special case.
+    """
+    pairs = np.asarray(bonds, dtype=int).reshape(-1, 2)
+    shifts = np.zeros((len(pairs), 3), dtype=int)
+    if not len(pairs):
+        return shifts
+
+    cell = np.asarray(atoms.cell, dtype=float)
+    pbc = np.asarray(atoms.get_pbc(), dtype=bool)
+    axes = [i for i in range(3)
+            if pbc[i] and float(np.linalg.norm(cell[i])) > 1e-6]
+    if not axes:
+        return shifts
+
+    lattice = cell[axes]                                   # (k, 3)
+    gram = lattice @ lattice.T
+    try:
+        inverse = np.linalg.inv(gram)
+    except np.linalg.LinAlgError:                          # degenerate cell
+        return shifts
+
+    positions = atoms.get_positions()
+    delta = positions[pairs[:, 1]] - positions[pairs[:, 0]]
+    centre = np.rint(delta @ lattice.T @ inverse).astype(int)   # (n, k)
+
+    # One step either side of the projection, along each periodic axis.
+    steps = np.array(list(itertools.product((-1, 0, 1), repeat=len(axes))),
+                     dtype=int)
+    best = None
+    best_length = None
+    for step in steps:
+        trial = centre + step
+        length = np.linalg.norm(delta - trial @ lattice, axis=1)
+        if best is None:
+            best, best_length = trial, length
+            continue
+        better = length < best_length
+        best = np.where(better[:, None], trial, best)
+        best_length = np.where(better, length, best_length)
+
+    shifts[:, axes] = best
+    return shifts

@@ -84,6 +84,7 @@ from ..cell import (
     MIN_IMAGE_SEPARATION,
     cell_report,
     describe_periodicity,
+    supercell,
     to_unit_cell,
 )
 from ..dopants import DOPANT_ELEMENTS, get_chemistry
@@ -534,6 +535,10 @@ class NanocarbonGUI:
 
         self.atoms = None
         self.last_saved_stem: Path | None = None
+        #: Which cell each bond's far atom sits in, and the structure it
+        #: was computed for. See :meth:`_bond_shifts`.
+        self._shifts = np.zeros((0, 3), dtype=int)
+        self._shifts_for = None
         self.blender_exe: str | None = None
         self._busy = False
         self._estimate_job: str | None = None
@@ -3528,6 +3533,14 @@ class NanocarbonGUI:
         self.var_colour_by = tk.StringVar(value="element")
         ttk.Checkbutton(bar, text="Bonds", variable=self.var_show_bonds,
                         command=self._redraw).pack(side="left")
+        # A bond that leaves through one face and returns through the
+        # opposite one is 1.42 Å long and is DRAWN, unless this is off, as
+        # the short stub it is -- see _redraw. The switch is here because
+        # even a stub is clutter on a structure whose surface is mostly
+        # boundary: a gyroid cell has 131 of them.
+        self.var_show_wrapped = tk.BooleanVar(value=True)
+        ttk.Checkbutton(bar, text="edge bonds", variable=self.var_show_wrapped,
+                        command=self._redraw).pack(side="left")
         ttk.Label(bar, text="  colour:").pack(side="left")
         ttk.Combobox(bar, textvariable=self.var_colour_by, width=8,
                      state="readonly", values=["element", "ring", "plain"]
@@ -3577,6 +3590,21 @@ class NanocarbonGUI:
                     for symbol in self.atoms.get_chemical_symbols()]
         return [PLAIN_ATOM_COLOUR] * len(ring_of)
 
+    def _bond_shifts(self) -> np.ndarray:
+        """Which cell each bond's far atom is in, cached per structure.
+
+        Three milliseconds for the 2253 bonds of a gyroid cell, which is
+        cheap once and wasteful on every drag of the view, so it is kept
+        until the structure itself is replaced.
+        """
+        from ..utils.geometry import bond_shifts
+
+        bonds = self.atoms.info.get("bonds", [])
+        if self._shifts_for is not self.atoms or len(self._shifts) != len(bonds):
+            self._shifts = bond_shifts(self.atoms, bonds)
+            self._shifts_for = self.atoms
+        return self._shifts
+
     def _repeat_counts(self) -> tuple[int, int, int]:
         """How many copies along each axis, ignoring aperiodic ones.
 
@@ -3605,6 +3633,15 @@ class NanocarbonGUI:
 
         Drawing copies is a picture; this replaces the structure with the
         supercell, which is what a calculation would need.
+
+        Through :func:`~nanocarbon_lab.cell.supercell` rather than ASE's
+        ``repeat``, because ``repeat`` copies ``info`` verbatim: the
+        supercell kept the bond list, ring list and ring census of one
+        cell. The preview then drew bonds on the first copy only, the
+        JSON bundle exported a connectivity covering an eighth of the
+        atoms, and the Euler check called a sound 2×2×2 gyroid broken.
+        The atom count looked right throughout, which is what made it
+        worth doing properly.
         """
         if self.atoms is None:
             return
@@ -3613,15 +3650,27 @@ class NanocarbonGUI:
             self._set_status("Nothing to repeat: no periodic direction is set "
                              "above one.")
             return
-        self.atoms = self.atoms.repeat(counts)
+        try:
+            self.atoms = supercell(self.atoms, counts)
+        except ValueError as exc:
+            self._show_error("Could not build the supercell", str(exc))
+            return
         self.last_saved_stem = None
         for axis in "xyz":
             self.var_repeat[axis].set(1)
+        self._history.append(
+            (f"{len(self._history) + 1}. {counts[0]}×{counts[1]}×{counts[2]} "
+             f"supercell ({len(self.atoms)} atoms)", self.atoms))
+        del self._history[:-12]
+        self.cmb_history["values"] = [name for name, _ in self._history]
+        self.var_history.set(self.cmb_history["values"][-1])
         self._zoom_fit()
         self._redraw()
         self._update_info()
-        self._set_status(f"Repeated {counts[0]}×{counts[1]}×{counts[2]}: "
-                         f"{len(self.atoms)} atoms.")
+        self._set_status(
+            f"Supercell {counts[0]}×{counts[1]}×{counts[2]}: "
+            f"{len(self.atoms)} atoms. Every export button now writes this."
+        )
 
     def _redraw(self) -> None:
         if self.atoms is None:
@@ -3638,14 +3687,33 @@ class NanocarbonGUI:
         if self.var_show_bonds.get():
             from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
-            bonds = [(a, b) for a, b in self.atoms.info.get("bonds", [])
-                     if keep[a] and keep[b]]
+            # Every bond as the SHORT vector it is. A bond list built
+            # under the minimum image convention names the pair and not
+            # the cell the far atom is in, so drawing it from raw
+            # coordinates gives a line straight across the structure --
+            # 46 Å on the 1502-atom gyroid, 131 times over. Those lines
+            # were the noise; they were never the bonds.
+            cell = np.asarray(self.atoms.cell)
+            shifts = self._bond_shifts()
+            show_wrapped = self.var_show_wrapped.get()
+            bonds, hidden = [], 0
+            for index, (a, b) in enumerate(self.atoms.info.get("bonds", [])):
+                if not (keep[a] and keep[b]):
+                    continue
+                crosses = bool(shifts[index].any())
+                if crosses and not show_wrapped:
+                    hidden += 1
+                    continue
+                bonds.append((pos[a], pos[b] - shifts[index] @ cell
+                              if crosses else pos[b]))
             if len(bonds) > PREVIEW_BOND_LIMIT:
                 stride = len(bonds) // PREVIEW_BOND_LIMIT + 1
                 bonds = bonds[::stride]
                 note = f"showing 1 bond in {stride}"
-            segs = [(pos[a] + shift, pos[b] + shift)
-                    for shift in offsets for a, b in bonds]
+            if hidden:
+                note = ", ".join(filter(None, [note, f"{hidden} edge bonds hidden"]))
+            segs = [(start + shift, end + shift)
+                    for shift in offsets for start, end in bonds]
             if segs:
                 self.ax.add_collection3d(
                     Line3DCollection(segs, colors="#9aa3ad", linewidths=0.7)
@@ -3752,6 +3820,33 @@ class NanocarbonGUI:
                               lambda _e: self.on_restore_history())
         ttk.Label(hist, text="Every build this session; pick one to bring it "
                              "back into the preview.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=260,
+                  justify="left").pack(anchor="w", pady=(4, 0))
+
+        # The supercell control, duplicated from the bar under the canvas
+        # and sharing its variables -- two views of one setting, not two
+        # settings. It is here because this is the panel people are
+        # looking at when they want a supercell to export, and an eight
+        # character button in the view bar is not where they look.
+        sup = ttk.LabelFrame(parent, text="Supercell", padding=8)
+        sup.pack(fill="x", pady=(8, 0))
+        row = ttk.Frame(sup)
+        row.pack(fill="x")
+        ttk.Label(row, text="copies:").pack(side="left")
+        for axis in "xyz":
+            ttk.Label(row, text=f"  {axis}").pack(side="left")
+            ttk.Spinbox(row, from_=1, to=6, width=2,
+                        textvariable=self.var_repeat[axis],
+                        command=self._redraw).pack(side="left")
+        ttk.Button(sup, text="Make supercell",
+                   command=self.on_apply_repeat).pack(fill="x", pady=(6, 0),
+                                                      ipady=3)
+        ttk.Label(sup, text="Only directions that actually repeat are used; "
+                            "a count on a vacuum direction is ignored. The "
+                            "preview shows the copies as you change these; "
+                            "the button makes them real, with the bonds and "
+                            "the ring census carried over, so every export "
+                            "below then writes the supercell.",
                   foreground=MUTED, font=("TkDefaultFont", 8), wraplength=260,
                   justify="left").pack(anchor="w", pady=(4, 0))
 
