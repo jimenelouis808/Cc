@@ -16,13 +16,15 @@ from typing import Any, Optional, Sequence
 
 from .capacitance import (
     CapacitanceComparison,
+    ComplexCapacitance,
     capacitance_from_eis,
+    complex_capacitance,
     compare as compare_capacitance,
     specific,
 )
 from .curve import ChargeDischarge, Impedance, Voltammogram
 from .cv import CVResult, DunnAnalysis, RateStudy, analyse_cv, analyse_rate_study, dunn_analysis
-from .eis import EISResult, analyse_eis
+from .eis import DRTResult, EISResult, analyse_eis, drt
 from .evaluate import CatalysisResult, StorageVerdict, analyse_catalysis, classify_storage
 from .curve import CurveError
 from .gcd import GCDResult, analyse_gcd
@@ -48,6 +50,14 @@ class EchemResult:
     capacitance: Optional[CapacitanceComparison] = None
     """The same capacitance by every method that was measured. It is the
     disagreement between them that is informative, not any one of them."""
+    complex_capacitance: Optional[ComplexCapacitance] = None
+    """C(ω) = 1/(jωZ), straight from the data. A circuit is a
+    hypothesis; this is not one, and its C″ maximum gives τ₀ without
+    needing the mass."""
+    drt: Optional[DRTResult] = None
+    """The distribution of relaxation times. Model-free in the sense that
+    it assumes no circuit, but NOT assumption-free: the regularisation is
+    a choice about how much structure to believe, and it is reported."""
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -117,6 +127,7 @@ def analyse_sample(
     circuit_initial: Optional[dict[str, float]] = None,
     circuit_fixed: Optional[Sequence[str]] = None,
     non_faradaic: bool = False,
+    drt_regularisation: Optional[float] = None,
 ) -> EchemResult:
     """Analyse whatever measurements are available for one electrode.
 
@@ -144,6 +155,21 @@ def analyse_sample(
         result.eis = analyse_eis(eis, circuit=circuit, initial=circuit_initial,
                                  fixed=circuit_fixed)
         result.warnings.extend(f"EIS: {w}" for w in result.eis.warnings)
+        # Both of these are model-free, so they are computed whenever
+        # there is a spectrum rather than being a separate action: a
+        # circuit is a hypothesis, and the user should be able to see
+        # what the data say before choosing one.
+        try:
+            result.complex_capacitance = complex_capacitance(eis)
+            result.warnings.extend(f"C(ω): {w}"
+                                   for w in result.complex_capacitance.warnings)
+        except (CurveError, ValueError) as error:
+            result.warnings.append(f"C(ω): {error}")
+        try:
+            result.drt = drt(eis, regularisation=drt_regularisation)
+            result.warnings.extend(f"DRT: {w}" for w in result.drt.warnings)
+        except (CurveError, ValueError) as error:
+            result.warnings.append(f"DRT: {error}")
     if catalysis_curve is not None:
         result.catalysis = analyse_catalysis(
             catalysis_curve,

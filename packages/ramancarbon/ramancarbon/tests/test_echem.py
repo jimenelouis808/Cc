@@ -686,3 +686,155 @@ def test_the_fitted_table_says_which_parameters_were_held():
     assert rows["Q1.n"][2] == "fijado" and rows["Q1.n"][3] == "sí"
     assert rows["R1.R"][3] == ""
     assert float(rows["R1.R"][1]) == pytest.approx(40.0, rel=0.05)
+
+
+# -- the section's new tabs ---------------------------------------------
+
+def _demo_session():
+    from ramancarbon.echem.curve import Electrode
+    from ramancarbon.examples.demo_data import (
+        cv_rate_series,
+        make_cv_demo,
+        make_eis_demo,
+        make_gcd_demo,
+    )
+    from ramancarbon.gui.echem_state import EchemSession
+
+    session = EchemSession()
+    session.electrode = Electrode(mass_mg=2.0, area_cm2=1.0, ph=14.0,
+                                  resistance_ohm=2.0)
+    session.add_curves(
+        cv=make_cv_demo("pseudocondensador", seed=1),
+        rate_series=cv_rate_series("pseudocondensador", seed=2),
+        gcd=make_gcd_demo("pseudocondensador", seed=1),
+        gcd_series=[make_gcd_demo("pseudocondensador", current=c, seed=k)
+                    for k, c in enumerate((0.5e-3, 2e-3, 5e-3), start=10)],
+        eis=make_eis_demo("R0-(R1|Q1)-Q2", seed=3),
+    )
+    return session
+
+
+def test_a_ragone_point_per_discharge_curve_and_the_times_check_out():
+    """E and P both per KILOGRAM, and the consistency P = E·3600/t needs
+    no closed case: it just has to give back the discharge time. Reported
+    as W/g instead, the power axis of every Ragone plot moves three
+    decades."""
+    session = _demo_session()
+    points = session.ragone_points()
+    assert len(points) == 4, [p[2] for p in points]
+
+    times = sorted(3600.0 * energy / power for energy, power, _ in points)
+    assert all(1.0 < t < 600.0 for t in times), times
+    # 0.5 to 5 mA is a factor of ten in current, so a factor of ten in
+    # time.
+    assert times[-1] / times[0] == pytest.approx(10.0, rel=0.25)
+    # And the energy is nearly flat while the power spans the range: that
+    # is what a Ragone plot of a capacitor looks like.
+    energies = [e for e, _, _ in points]
+    powers = [p for _, p, _ in points]
+    assert max(powers) / min(powers) > 10.0
+    assert max(energies) / min(energies) < 1.5
+
+
+def test_the_drt_table_gives_a_capacitance_per_process():
+    """Two processes with the same resistance and time constants a decade
+    apart are different things, and tau/R is the column that says which."""
+    session = _demo_session()
+    assert session.analyse() is not None
+    rows = session.drt_rows()
+    assert rows, "the DRT found nothing on the demo spectrum"
+    for tau, resistance, capacitance, share in rows:
+        assert float(tau) > 0 and float(resistance) > 0
+        assert float(capacitance) == pytest.approx(
+            1e3 * float(tau) / float(resistance), rel=1e-3)
+        assert share.endswith("%")
+    assert sum(float(r[3].rstrip(" %")) for r in rows) == pytest.approx(
+        100.0, abs=1.0)
+
+
+def test_the_drt_knows_where_the_data_stop():
+    """Outside the measured range of time constants gamma is not
+    determined by the data and does not sit quietly at zero: the
+    unmeasured slow end collects whatever the diffusion tail implies. On
+    the demo spectrum that is a spike seven hundred times the real peaks,
+    and a plot autoscaled to it is a flat line with a wall at one end."""
+    from ramancarbon.echem.eis import drt
+    from ramancarbon.examples.demo_data import make_eis_demo
+
+    spectrum = make_eis_demo("R0-(R1|Q1)-Q2", seed=3)
+    result = drt(spectrum)
+    low, high = result.measured_s
+    assert low == pytest.approx(1.0 / (2 * np.pi * spectrum.frequency.max()),
+                                rel=1e-6)
+    assert high == pytest.approx(1.0 / (2 * np.pi * spectrum.frequency.min()),
+                                 rel=1e-6)
+    assert all(low <= peak <= high for peak in result.peaks_s), (
+        "a peak was reported outside the measured range")
+
+    tau = np.asarray(result.tau_s)
+    inside = (tau >= low) & (tau <= high)
+    assert result.gamma.max() > 5.0 * result.gamma[inside].max(), (
+        "this spectrum no longer has the pile-up the plot limits guard "
+        "against; pick another one for this test")
+
+
+def test_the_three_capacitances_are_reported_with_their_conditions():
+    """The same electrode measured three ways is not the same
+    measurement. What a device delivers is the GCD value; the EIS one is
+    measured with 10 mV about a fixed point where nothing is
+    rate-limited, and is an upper bound the device never sees."""
+    session = _demo_session()
+    assert session.analyse() is not None
+    rows = session.capacitance_rows()
+    methods = [row[0] for row in rows]
+    assert {"CV", "GCD", "EIS"} <= set(methods), methods
+    for _, condition, farads, _ in rows:
+        assert condition.strip(), "a capacitance without its condition"
+        assert float(farads) > 0
+
+    spread = session.result.capacitance.spread
+    assert spread is not None and spread > 0.3
+    assert any("difieren" in w for w in session.result.capacitance.warnings), (
+        "a spread above 30 % has to be said out loud")
+    assert any("GCD" in w for w in session.result.capacitance.warnings), (
+        "and which of the three is the one a device delivers")
+
+
+def test_the_complex_capacitance_comes_from_the_data_not_a_circuit():
+    session = _demo_session()
+    result = session.analyse()
+    complex_c = result.complex_capacitance
+    assert complex_c is not None
+    assert complex_c.relaxation_s is not None
+    # tau_0 = 1/(2 pi f_0) at the maximum of C''.
+    peak = int(np.argmax(complex_c.imaginary))
+    assert complex_c.relaxation_frequency_hz == pytest.approx(
+        complex_c.frequency[peak], rel=1e-6)
+    assert complex_c.relaxation_s == pytest.approx(
+        1.0 / (2 * np.pi * complex_c.frequency[peak]), rel=1e-6)
+    # And it is positive, which it is not if the code was written against
+    # the -Z'' of a Nyquist plot.
+    assert complex_c.low_frequency_capacitance > 0
+
+
+def test_a_gcd_series_is_ordered_by_its_own_current():
+    """By the MEDIAN of |i|, not its maximum: the rest step between the
+    branches is at zero and the switch between them can overshoot, and
+    either would order the series by an artefact."""
+    from ramancarbon.gui.echem_state import EchemSession, _typical_current
+    from ramancarbon.examples.demo_data import make_gcd_demo
+
+    session = EchemSession()
+    for current in (5e-3, 0.5e-3, 2e-3):
+        session.gcd_series.append(make_gcd_demo("condensador", current=current))
+    session.gcd_series.sort(key=_typical_current)
+    assert [round(1e3 * _typical_current(c), 1) for c in session.gcd_series] == [
+        0.5, 2.0, 5.0]
+
+    # Immune to an overshoot at a reversal, which a maximum is not: the
+    # first version filtered on a fraction of the MAXIMUM, so a single
+    # 50 A spike threw away every real point and the "typical current"
+    # came out as the spike.
+    curve = make_gcd_demo("condensador", current=3e-3)
+    curve.current[0] = 50.0
+    assert _typical_current(curve) == pytest.approx(3e-3, rel=0.05)

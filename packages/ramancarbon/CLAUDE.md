@@ -1033,6 +1033,43 @@ fondo siguen dando bastante menos de un pico falso por patrón con umbral
   Ponerla en un eje propio reescalado queda más limpio y destruye justo la
   comparación para la que sirve.
 
+## La sección de electroquímica
+
+- **La DRT y C(ω) se calculan siempre que haya un espectro, no a
+  petición.** Las dos son sin modelo, y un circuito es una hipótesis: el
+  usuario tiene que poder ver lo que dicen los datos ANTES de elegir una.
+  Cuestan veinte milisegundos.
+- **El eje Y de la DRT se escala al intervalo MEDIDO de constantes de
+  tiempo y el resto se sombrea.** El buscador de picos ya se limita a ese
+  intervalo por una razón, y la razón vale igual para la figura: en el
+  espectro de demostración la acumulación del extremo lento sin medir es
+  setecientas veces los picos reales, y una gráfica autoescalada a eso es
+  una línea plana con un muro en un extremo, con los seis procesos
+  resueltos invisibles. Es el mismo fallo del que ya protege el buscador,
+  llegando por la figura.
+- **Un Ragone con un punto no es un Ragone.** Todo el contenido de la
+  figura es cómo cae la energía al subir la potencia, así que la sección
+  carga una SERIE de curvas de carga-descarga, una por corriente. Y la
+  comprobación que no necesita el caso cerrado es P = E·3600/t: cada punto
+  tiene que devolver el tiempo de descarga de su propia curva.
+- **La corriente típica de una curva galvanostática es la MEDIANA de |i|,
+  sin filtrar nada antes.** Basta con que la corriente estuviera en su
+  valor más de la mitad del registro, que es lo que significa
+  «galvanostático». La primera versión descartaba los puntos por debajo de
+  una fracción del MÁXIMO, y entonces un solo pico de sobreimpulso en una
+  inversión tiraba todos los puntos buenos y la «corriente típica» salía
+  siendo el pico.
+- **`in` sobre una lista de curvas revienta.** Son dataclasses con arrays
+  dentro, así que `x in lista` llama al `__eq__` generado, que compara
+  arrays elemento a elemento y luego falla al evaluar su valor de verdad.
+  Identidad (`c is x`), no igualdad.
+- **El mapa de lienzos por pestaña va por el índice del notebook**, así
+  que sigue el orden en que se AÑADEN las pestañas, no el orden en que
+  están los métodos en el archivo. Insertar una pestaña en medio y no
+  correr las demás no da error: dibuja la figura equivocada en la pestaña
+  equivocada, o deja una en blanco. Hay una prueba estática que lo
+  comprueba pestaña por pestaña en las cuatro secciones nuevas.
+
 ## Controles de ajuste y de sesión
 
 - **Ligar no es fijar, y no es un atajo.** Un parámetro que los datos no

@@ -41,6 +41,9 @@ class EchemApp(SectionApp):
             "gcd": self._draw_gcd,
             "nyquist": self._draw_nyquist,
             "bode": self._draw_bode,
+            "drt": self._draw_drt,
+            "capacitance": self._draw_capacitance,
+            "ragone": self._draw_ragone,
             "tafel": self._draw_tafel,
         }
         self._tab_canvases = {
@@ -48,7 +51,9 @@ class EchemApp(SectionApp):
             1: ("cv", "rates"),
             2: ("gcd",),
             3: ("nyquist", "bode"),
-            4: ("tafel",),
+            4: ("drt",),
+            5: ("capacitance", "ragone"),
+            6: ("tafel",),
         }
         self._build()
         self.set_status("Carga una medida o pulsa Demo.")
@@ -74,6 +79,8 @@ class EchemApp(SectionApp):
         self._build_tab_cv()
         self._build_tab_gcd()
         self._build_tab_eis()
+        self._build_tab_drt()
+        self._build_tab_capacitance()
         self._build_tab_catalysis()
         self.build_status(self.container)
         self.root.after(150, self.drain_queue)
@@ -146,6 +153,7 @@ class EchemApp(SectionApp):
             ("Cargar CV…", lambda: self._load("cv")),
             ("Añadir a la serie…", lambda: self._load("rates")),
             ("Cargar GCD…", lambda: self._load("gcd")),
+            ("Añadir a la serie GCD…", lambda: self._load("gcd_series")),
             ("Cargar EIS…", lambda: self._load("eis")),
             ("Cargar polarización…", lambda: self._load("lsv")),
         ):
@@ -307,6 +315,89 @@ class EchemApp(SectionApp):
              "Y la Q de un CPE no son faradios.",
              wrap=900)
 
+    def _build_tab_drt(self) -> None:
+        ttk = self.ttk
+        tab = ttk.Frame(self.notebook, padding=PAD["md"])
+        self.notebook.add(tab, text="  DRT  ")
+        controls = ttk.Frame(tab)
+        controls.pack(fill="x", pady=(0, PAD["sm"]))
+        self.drt_auto_var = self.tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            controls, text="Elegir λ por la curva L",
+            variable=self.drt_auto_var, command=self._on_drt_auto,
+        ).pack(side="left")
+        ttk.Label(controls, text="λ").pack(side="left", padx=(PAD["md"], 0))
+        self.drt_lambda_var = self.tk.StringVar(value="")
+        self.drt_lambda_entry = ttk.Entry(
+            controls, textvariable=self.drt_lambda_var, width=12,
+            state="disabled")
+        self.drt_lambda_entry.pack(side="left", padx=(PAD["xs"], PAD["md"]))
+        ttk.Button(controls, text="Recalcular",
+                   command=self._recompute_drt).pack(side="left")
+
+        outer, body = card(tab, None)
+        outer.pack(fill="both", expand=True)
+        self.make_canvas(body, "drt", lambda f: f.add_subplot(111),
+                         figsize=(7.6, 4.2))
+        info, info_body = card(tab, "Procesos resueltos")
+        info.pack(fill="x", pady=(PAD["sm"], 0))
+        self.drt_table = table(
+            info_body, ["τ (s)", "R (Ω)", "C = τ/R (mF)", "fracción de R"],
+            height=6)
+        hint(info_body,
+             "La DRT es una inversión MAL CONDICIONADA: λ no es un detalle "
+             "de implementación, es una elección sobre cuánta estructura "
+             "creerse, y una década a cada lado del codo de la curva L da una "
+             "DRT igual de defendible con otro número de picos. γ está "
+             "penalizada en su RUGOSIDAD, no en su tamaño, así que el fallo "
+             "honrado es fundir dos constantes de tiempo vecinas — «éstas dos "
+             "no se resuelven» — y no encoger las dos resistencias. Y dos picos "
+             "a menos de un factor de tres en τ son uno.",
+             wrap=900)
+
+    def _build_tab_capacitance(self) -> None:
+        ttk = self.ttk
+        tab = ttk.Frame(self.notebook, padding=PAD["md"])
+        self.notebook.add(tab, text="  Capacitancia  ")
+        outer, body = card(tab, "C(ω) sin ajustar nada")
+        outer.pack(fill="both", expand=True)
+        self.make_canvas(body, "capacitance",
+                         lambda f: (f.add_subplot(121), f.add_subplot(122)),
+                         figsize=(7.6, 3.2))
+        hint(body,
+             "Un circuito es una hipótesis; C(ω) = 1/(jωZ) son los datos. El "
+             "máximo de C″ da τ₀ sin necesitar la masa. Ojo: aquí Z″ se "
+             "guarda con su signo físico, así que código escrito contra el "
+             "−Z″ de un Nyquist devuelve capacitancias negativas.",
+             wrap=900)
+
+        compare_card, compare_body = card(tab, "La misma muestra por tres métodos")
+        compare_card.pack(fill="x", pady=(PAD["sm"], 0))
+        self.capacitance_table = table(
+            compare_body, ["método", "condición", "C (mF)", "C (F/g)"],
+            height=5)
+        hint(compare_body,
+             "No son la misma medida. Lo que entrega un dispositivo es la de "
+             "GCD; la de EIS se mide con 10 mV alrededor de un punto fijo, "
+             "donde nada está limitado por velocidad, y es una COTA SUPERIOR "
+             "que el dispositivo nunca ve. Una dispersión por encima del 30 % "
+             "ES el resultado.",
+             wrap=900)
+
+        ragone_card, ragone_body = card(tab, "Ragone")
+        ragone_card.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        self.make_canvas(ragone_body, "ragone", lambda f: f.add_subplot(111),
+                         figsize=(6.0, 3.6))
+        hint(ragone_body,
+             "Un punto por curva de carga-descarga: carga varias a "
+             "corrientes distintas con «Añadir a la serie GCD…», porque todo "
+             "el contenido de la figura es cómo cae la energía al subir la "
+             "potencia. Y un Ragone sin decir su base no se compara con nada: "
+             "por gramo de material activo y por kilogramo de celda "
+             "empaquetada difieren en un factor de tres a cinco. Éstos son por "
+             "gramo de material activo.",
+             wrap=900)
+
     def _build_tab_catalysis(self) -> None:
         ttk = self.ttk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
@@ -362,6 +453,48 @@ class EchemApp(SectionApp):
         self._settings_from_widgets()
         self.set_status(f"R_u = {value:.4g} Ω — {how}")
 
+    # -- the DRT controls ----------------------------------------------
+    def _on_drt_auto(self) -> None:
+        automatic = bool(self.drt_auto_var.get())
+        self.drt_lambda_entry.configure(
+            state="disabled" if automatic else "normal")
+        if automatic:
+            self.session.drt_regularisation = None
+            self.drt_lambda_var.set("")
+        elif self.session.result is not None and self.session.result.drt:
+            # Start from the one the L-curve chose rather than from
+            # nothing: a lambda typed blind is a lambda off by decades.
+            self.drt_lambda_var.set(
+                f"{self.session.result.drt.regularisation:.4g}")
+
+    def _recompute_drt(self) -> None:
+        """Re-solve the DRT alone, without redoing the whole analysis."""
+        from ..echem.eis import drt
+
+        if self.session.eis is None:
+            self.warn("Sin impedancia",
+                      "Carga un espectro de impedancia primero.")
+            return
+        if self.drt_auto_var.get():
+            self.session.drt_regularisation = None
+        else:
+            value = _number(self.drt_lambda_var.get())
+            if value is None or value <= 0:
+                self.warn("λ no válida",
+                          "λ tiene que ser un número positivo, o marca la "
+                          "curva L para que lo elija.")
+                return
+            self.session.drt_regularisation = value
+        if self.session.result is None:
+            self._analyse()
+            return
+        self.session.result.drt = drt(
+            self.session.eis, regularisation=self.session.drt_regularisation)
+        self._fill_tables()
+        self.mark_dirty("drt")
+        self.flush_dirty(self._visible())
+        self.set_status(self.session.result.drt.describe())
+
     # -- the circuit editor --------------------------------------------
     def _on_circuit_chosen(self) -> None:
         """A name picked from the list fills the box with its string.
@@ -378,6 +511,12 @@ class EchemApp(SectionApp):
         self.circuit_text_var.set(self.session.circuit_text())
         self._show_circuit_note()
         self._fill_circuit_setup()
+        fill_table(self.drt_table,
+                   ["τ (s)", "R (Ω)", "C = τ/R (mF)", "fracción de R"],
+                   self.session.drt_rows())
+        fill_table(self.capacitance_table,
+                   ["método", "condición", "C (mF)", "C (F/g)"],
+                   self.session.capacitance_rows())
 
     def _show_circuit_note(self) -> None:
         use, caution = self.session.circuit_note()
@@ -503,6 +642,10 @@ class EchemApp(SectionApp):
             ok = self.session.load_gcd(
                 path, current=(current / 1000.0) if current else None
             )
+        elif kind == "gcd_series":
+            ok = self.session.add_gcd_to_series(
+                path, current=(current / 1000.0) if current else None
+            )
         elif kind == "eis":
             ok = self.session.load_eis(path)
         elif kind == "lsv":
@@ -533,6 +676,16 @@ class EchemApp(SectionApp):
             cv=make_cv_demo("pseudocondensador", seed=1),
             rate_series=cv_rate_series("pseudocondensador", seed=2),
             gcd=make_gcd_demo("pseudocondensador", seed=1),
+            # Several currents, because a Ragone plot with one point is
+            # not a Ragone plot: the whole content of the figure is how
+            # the energy falls as the power rises.
+            gcd_series=[
+                make_gcd_demo("pseudocondensador", current=current, seed=seed)
+                # 1 mA is left out: that is what `gcd` above already is,
+                # and the same measurement twice on a Ragone plot reads
+                # as two devices that happen to agree.
+                for seed, current in enumerate((0.5e-3, 2e-3, 5e-3, 10e-3), start=10)
+            ],
             eis=make_eis_demo("R0-(R1|Q1)-Q2", seed=3),
             lsv=make_lsv_demo("OER", seed=1),
         )
@@ -709,6 +862,43 @@ class EchemApp(SectionApp):
             plot_kk_residuals(right, result.eis, self.figure_palette)
         else:
             placeholder(right, "Analiza para ver Kramers-Kronig", self.figure_palette)
+
+    def _draw_drt(self, figure) -> None:
+        from .plots_echem import plot_drt
+
+        ax = figure.add_subplot(111)
+        result = self.session.result
+        if result is None or result.drt is None:
+            placeholder(ax, "Carga un espectro de impedancia y analiza",
+                        self.figure_palette)
+            return
+        plot_drt(ax, result.drt, self.figure_palette)
+
+    def _draw_capacitance(self, figure) -> None:
+        from .plots_echem import plot_complex_capacitance
+
+        left = figure.add_subplot(121)
+        right = figure.add_subplot(122)
+        result = self.session.result
+        plot_complex_capacitance(
+            left, right,
+            result.complex_capacitance if result else None,
+            self.figure_palette)
+
+    def _draw_ragone(self, figure) -> None:
+        from .plots_echem import plot_ragone
+
+        ax = figure.add_subplot(111)
+        points = self.session.ragone_points()
+        if not points:
+            placeholder(ax, "Carga una o varias curvas de carga-descarga",
+                        self.figure_palette)
+            return
+        plot_ragone(ax, points, self.figure_palette)
+        if len(points) == 1:
+            ax.set_title(
+                "un solo punto: añade curvas a otras corrientes",
+                fontsize=9, color=self.figure_palette.text_muted)
 
     def _draw_tafel(self, figure) -> None:
         from .plots_echem import plot_tafel

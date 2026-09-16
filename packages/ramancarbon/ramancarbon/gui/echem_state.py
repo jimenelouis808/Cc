@@ -32,9 +32,28 @@ MEASUREMENT_KINDS: tuple[tuple[str, str], ...] = (
     ("cv", "Voltamperometría cíclica"),
     ("rates", "Serie de velocidades"),
     ("gcd", "Carga-descarga"),
+    ("gcd_series", "Serie de carga-descarga (Ragone)"),
     ("eis", "Impedancia"),
     ("lsv", "Curva de polarización (HER/OER)"),
 )
+
+
+def _typical_current(curve: ChargeDischarge) -> float:
+    """The magnitude of the current a charge-discharge curve was run at.
+
+    The median of |i| over the whole curve, which needs only that the
+    current sat at its set value for more than half the record -- which
+    is what "galvanostatic" means. Nothing is filtered out first: an
+    earlier version dropped points below a fraction of the MAXIMUM, and
+    then a single overshoot at a reversal threw away every real point and
+    the "typical current" came back as the spike. A maximum is the wrong
+    statistic here for the same reason it is everywhere else in this
+    package.
+    """
+    import numpy as np
+
+    magnitude = np.abs(np.asarray(curve.current, dtype=float))
+    return float(np.median(magnitude)) if magnitude.size else 0.0
 
 
 @dataclass
@@ -46,6 +65,11 @@ class EchemSession:
     cv: Optional[Voltammogram] = None
     rate_series: list[Voltammogram] = field(default_factory=list)
     gcd: Optional[ChargeDischarge] = None
+    gcd_series: list[ChargeDischarge] = field(default_factory=list)
+    """Charge-discharge curves at several currents. One Ragone point per
+    curve, and a Ragone plot with one point is not a Ragone plot: the
+    whole content of the figure is how the energy falls as the power
+    rises, which needs the curves at the other currents."""
     eis: Optional[Impedance] = None
     lsv: Optional[Voltammogram] = None
     reaction: str = "OER"
@@ -59,6 +83,11 @@ class EchemSession:
     normally happen."""
     circuit_fixed: set[str] = field(default_factory=set)
     """Labels held rather than refined."""
+    drt_regularisation: Optional[float] = None
+    """λ for the distribution of relaxation times. ``None`` chooses it
+    by the L-curve. Whichever it is, it is reported: a DRT is an
+    ill-posed inversion and λ is a choice about how much structure to
+    believe, so a DRT without its λ is not a measurement."""
     non_faradaic: bool = False
     """Whether the rate study's window was chosen free of faradaic current.
     It is off by default because most windows are not, and claiming
@@ -102,6 +131,19 @@ class EchemSession:
             return False
         return True
 
+    def add_gcd_to_series(
+        self, path: str | Path, current: Optional[float] = None
+    ) -> bool:
+        """Another charge-discharge curve, at a different current."""
+        try:
+            curve = read_gcd(path, electrode=self.electrode, current=current)
+        except (OSError, ValueError, EchemIOError) as exc:
+            self.log("error", f"{Path(path).name}: {exc}")
+            return False
+        self.gcd_series.append(curve)
+        self.gcd_series.sort(key=_typical_current)
+        return True
+
     def load_eis(self, path: str | Path) -> bool:
         try:
             self.eis = read_eis(path, electrode=self.electrode)
@@ -123,8 +165,8 @@ class EchemSession:
         for key, value in curves.items():
             if value is None:
                 continue
-            if key == "rate_series":
-                self.rate_series = list(value)
+            if key in ("rate_series", "gcd_series"):
+                setattr(self, key, list(value))
             else:
                 setattr(self, key, value)
         self.retag_electrode()
@@ -142,11 +184,14 @@ class EchemSession:
     def all_curves(self) -> list:
         out = [c for c in (self.cv, self.gcd, self.eis, self.lsv) if c is not None]
         out.extend(self.rate_series)
+        out.extend(self.gcd_series)
         return out
 
     def clear(self, kind: str) -> None:
         if kind == "rates":
             self.rate_series = []
+        elif kind == "gcd_series":
+            self.gcd_series = []
         elif kind in ("cv", "gcd", "eis", "lsv"):
             setattr(self, kind, None)
         self.result = None
@@ -162,6 +207,10 @@ class EchemSession:
             out["rates"] = f"{len(self.rate_series)} curvas: {rates} mV/s"
         if self.gcd is not None:
             out["gcd"] = self.gcd.describe()
+        if self.gcd_series:
+            currents = ", ".join(f"{1e3 * _typical_current(c):g}"
+                                 for c in self.gcd_series)
+            out["gcd_series"] = f"{len(self.gcd_series)} curvas: {currents} mA"
         if self.eis is not None:
             out["eis"] = self.eis.describe()
         if self.lsv is not None:
@@ -189,6 +238,7 @@ class EchemSession:
             circuit=self.circuit,
             circuit_initial=dict(self.circuit_initial) or None,
             circuit_fixed=sorted(self.circuit_fixed) or None,
+            drt_regularisation=self.drt_regularisation,
             non_faradaic=self.non_faradaic,
         )
         for warning in self.result.warnings:
@@ -335,6 +385,77 @@ class EchemSession:
                 )
             )
         return rows
+
+    def drt_rows(self) -> list[tuple[str, str, str, str]]:
+        """``(τ, R, C = τ/R, share of the total)`` per resolved process.
+
+        The capacitance is the useful column: two processes with the same
+        resistance and time constants a decade apart are different things,
+        and τ/R is what says which.
+        """
+        result = self.result
+        if result is None or result.drt is None:
+            return []
+        total = sum(result.drt.peak_resistances) or 1.0
+        rows = []
+        for tau, resistance in zip(result.drt.peaks_s,
+                                   result.drt.peak_resistances):
+            rows.append((
+                f"{tau:.4g}",
+                f"{resistance:.4g}",
+                f"{1e3 * tau / resistance:.4g}" if resistance > 0 else "—",
+                f"{100 * resistance / total:.0f} %",
+            ))
+        return rows
+
+    def ragone_points(self) -> list[tuple[float, float, str]]:
+        """``(Wh/kg, W/kg, label)``, one per charge-discharge curve.
+
+        Both per KILOGRAM, and the thousand is the point: ``specific``
+        normalises by the mass in grams, so it returns J/g. A Ragone plot
+        whose power axis is three decades out still looks like a Ragone
+        plot.
+        """
+        from ..echem.gcd import analyse_gcd
+
+        points: list[tuple[float, float, str]] = []
+        curves = list(self.gcd_series)
+        # Identity, not equality: these dataclasses hold arrays, so `in`
+        # calls the generated __eq__, which compares arrays element-wise
+        # and raises on the truth value of the result.
+        if self.gcd is not None and not any(c is self.gcd for c in curves):
+            curves.insert(0, self.gcd)
+        for curve in curves:
+            try:
+                analysis = analyse_gcd(curve)
+            except (ValueError, ZeroDivisionError) as exc:
+                self.log("warning", f"Ragone: {exc}")
+                continue
+            energy = analysis.energy_wh_per_kg
+            power = analysis.power_w_per_kg
+            if not energy or not power:
+                continue
+            points.append((energy, power,
+                           f"{1e3 * _typical_current(curve):g} mA"))
+        return points
+
+    def capacitance_rows(self) -> list[tuple[str, str, str, str]]:
+        """``(method, condition, mF, F/g)``.
+
+        The three are not the same measurement and the table says so by
+        carrying the condition: what a device delivers is the GCD value,
+        while the EIS one is measured with 10 mV about a fixed point
+        where nothing is rate-limited and is an upper bound the device
+        never sees.
+        """
+        result = self.result
+        if result is None or result.capacitance is None:
+            return []
+        return [
+            (entry.method, entry.condition, f"{1e3 * entry.farads:.4g}",
+             f"{entry.per_gram:.4g}" if entry.per_gram is not None else "—")
+            for entry in result.capacitance.entries
+        ]
 
     # -- the circuit ---------------------------------------------------
     def circuit_choices(self) -> list[str]:

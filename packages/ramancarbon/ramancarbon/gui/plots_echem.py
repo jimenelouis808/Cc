@@ -19,6 +19,7 @@ from ..echem.cv import RateStudy
 from ..echem.eis import EISResult
 from ..echem.evaluate import CatalysisResult
 from ..echem.gcd import GCDResult
+from .base import placeholder
 from .theme import Palette
 
 
@@ -329,11 +330,145 @@ def plot_cycling(ax, cycles: Sequence[int], capacity: Sequence[float],
     ax.legend(loc="lower left", frameon=False, fontsize=8)
 
 
+def plot_drt(ax, result, palette: Palette) -> None:
+    """γ(τ) against τ, logarithmic in τ, with the resolved processes marked.
+
+    Logarithmic because the whole point of a DRT is separating time
+    constants that span decades, and the peak areas — not the peak
+    heights — are the resistances, so the shaded basins are the number to
+    read. The regularisation is in the title because a DRT without it is
+    not a measurement: it is one choice of how much structure to believe,
+    and another choice gives a defensible distribution with a different
+    number of peaks.
+    """
+    if result is None:
+        placeholder(ax, "Carga un espectro de impedancia", palette)
+        return
+    tau = np.asarray(result.tau_s, dtype=float)
+    gamma = np.asarray(result.gamma, dtype=float)
+    ax.semilogx(tau, gamma, color=palette.data, linewidth=1.4)
+    ax.fill_between(tau, 0.0, gamma, color=palette.data, alpha=0.15)
+
+    # The y-axis is scaled to the MEASURED range of time constants and
+    # the rest is shaded. Outside it gamma is not determined by the data
+    # and does not sit quietly at zero either: the unmeasured slow end
+    # collects whatever the diffusion tail implies, which on the demo
+    # spectrum is a spike seven hundred times the real peaks. Autoscaled
+    # to that, the plot is a flat line with a wall at one end and every
+    # resolved process is invisible -- the same failure the peak finder
+    # already guards against, arriving through the figure instead.
+    low, high = result.measured_s
+    inside = ((tau >= low) & (tau <= high)) if high > low else np.ones(
+        tau.shape, dtype=bool)
+    if inside.any() and gamma[inside].max() > 0:
+        ax.set_ylim(0.0, 1.35 * float(gamma[inside].max()))
+    if high > low:
+        for start, stop in ((tau.min(), low), (high, tau.max())):
+            if stop > start:
+                ax.axvspan(start, stop, color=palette.text_muted,
+                           alpha=0.18, linewidth=0)
+        ax.annotate("sin medir", xy=(high, 0.0), xytext=(6, 6),
+                    textcoords="offset points", fontsize=7,
+                    color=palette.text_muted)
+
+    top = ax.get_ylim()[1]
+    for index, (peak, resistance) in enumerate(
+        zip(result.peaks_s, result.peak_resistances)
+    ):
+        colour = palette.component_colour(index)
+        ax.axvline(peak, color=colour, linestyle="--", linewidth=0.9, alpha=0.8)
+        ax.annotate(f"{resistance:.3g} Ω", xy=(peak, top),
+                    xytext=(0, -10 - 11 * (index % 3)),
+                    textcoords="offset points", fontsize=7, color=colour,
+                    ha="center")
+    ax.set_xlabel("τ (s)")
+    ax.set_ylabel("γ(τ) (Ω)")
+    ax.set_title(f"λ = {result.regularisation:.3g}   residuo "
+                 f"{100 * result.residual:.2f} %", fontsize=9)
+    ax.grid(True, which="both", alpha=0.2)
+
+
+def plot_complex_capacitance(ax_real, ax_imag, result, palette: Palette) -> None:
+    """C′(ω) and C″(ω), with τ₀ marked on the second.
+
+    Straight from the data: ``C(ω) = 1/(jωZ)`` needs no circuit and no
+    mass, and the maximum of C″ is the device's relaxation time — the
+    boundary between the frequencies where it behaves as a capacitor and
+    the ones where it behaves as a resistor.
+    """
+    if result is None:
+        placeholder(ax_real, "Carga un espectro de impedancia", palette)
+        placeholder(ax_imag, "", palette)
+        return
+    frequency = np.asarray(result.frequency, dtype=float)
+    ax_real.semilogx(frequency, 1e3 * np.asarray(result.real), color=palette.data,
+                     linewidth=1.4, label="C′")
+    ax_real.semilogx(frequency, 1e3 * np.asarray(result.series),
+                     color=palette.accent, linewidth=1.0, linestyle="--",
+                     label="C serie")
+    ax_real.set_xlabel("Frecuencia (Hz)")
+    ax_real.set_ylabel("C′ (mF)")
+    ax_real.legend(loc="best", frameon=False, fontsize=8)
+    ax_real.grid(True, which="both", alpha=0.2)
+
+    ax_imag.semilogx(frequency, 1e3 * np.asarray(result.imaginary),
+                     color=palette.fitted, linewidth=1.4)
+    if result.relaxation_frequency_hz:
+        ax_imag.axvline(result.relaxation_frequency_hz, color=palette.accent,
+                        linestyle="--", linewidth=0.9)
+        ax_imag.annotate(f"τ₀ = {result.relaxation_s:.3g} s",
+                         xy=(result.relaxation_frequency_hz, 0.0),
+                         xytext=(4, 12), textcoords="offset points",
+                         fontsize=8, color=palette.accent)
+    ax_imag.set_xlabel("Frecuencia (Hz)")
+    ax_imag.set_ylabel("C″ (mF)")
+    ax_imag.grid(True, which="both", alpha=0.2)
+
+
+def plot_capacitance_comparison(ax, comparison, palette: Palette) -> None:
+    """The same electrode measured three ways, side by side.
+
+    The disagreement IS the result. What a device delivers is the GCD
+    value; the EIS one is measured with 10 mV about a fixed point where
+    nothing is rate-limited, and is an upper bound the device never sees.
+    A spread above 30 % is worth more than any one of the three numbers,
+    so it is written on the plot rather than left to be worked out.
+    """
+    if comparison is None or not comparison.entries:
+        placeholder(ax, "Hacen falta al menos dos métodos", palette)
+        return
+    entries = list(comparison.entries)
+    labels = [entry.method for entry in entries]
+    # F/g where the mass is known, farads otherwise: mixing the two on
+    # one axis would put a 2 F/g and a 2 F bar at the same height.
+    per_gram = all(entry.per_gram is not None for entry in entries)
+    values = [entry.per_gram if per_gram else 1e3 * entry.farads
+              for entry in entries]
+    positions = np.arange(len(entries))
+    ax.bar(positions, values,
+           color=[palette.component_colour(i) for i in range(len(entries))],
+           width=0.6)
+    for position, entry, value in zip(positions, entries, values):
+        ax.annotate(entry.condition, xy=(position, value), xytext=(0, 4),
+                    textcoords="offset points", fontsize=7, ha="center",
+                    color=palette.text)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(labels, fontsize=8)
+    ax.set_ylabel("C (F/g)" if per_gram else "C (mF)")
+    if comparison.spread is not None:
+        ax.set_title(f"dispersión entre métodos: "
+                     f"{100 * comparison.spread:.0f} %", fontsize=9)
+    ax.grid(True, axis="y", alpha=0.2)
+
+
 __all__ = [
     "plot_b_values",
     "plot_bode",
     "plot_cv",
+    "plot_capacitance_comparison",
+    "plot_complex_capacitance",
     "plot_cycling",
+    "plot_drt",
     "plot_dunn",
     "plot_gcd",
     "plot_kk_residuals",

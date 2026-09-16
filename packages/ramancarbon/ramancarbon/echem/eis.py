@@ -1345,6 +1345,13 @@ class DRTResult:
     peaks_s: list[float] = field(default_factory=list)
     peak_resistances: list[float] = field(default_factory=list)
     ohmic: float = 0.0
+    measured_s: tuple[float, float] = (0.0, 0.0)
+    """The range of time constants the frequencies actually covered,
+    ``(1/ω_max, 1/ω_min)``. Outside it γ is not determined by data and
+    does not sit quietly at zero either — the slow end collects whatever
+    the diffusion tail implies, which on the demo spectrum is seven
+    hundred times the real features. Anything that reads γ, the plot
+    included, has to know where the data stop."""
     warnings: list[str] = field(default_factory=list)
 
     def describe(self) -> str:
@@ -1449,7 +1456,7 @@ def drt(
     # spectrum was a γ two hundred times the real features and hid every
     # one of them under a threshold expressed as a fraction of the
     # maximum. The pile-up is still reported, as a warning.
-    measured = (1.0 / omega.max(), 1.0 / omega.min())
+    measured = (float(1.0 / omega.max()), float(1.0 / omega.min()))
     peaks, resistances = _drt_peaks(tau, gamma, measured=measured)
     warnings = [
         "la inversión es mal condicionada: la regularización no es un "
@@ -1487,7 +1494,8 @@ def drt(
     return DRTResult(
         tau_s=tau, gamma=gamma, regularisation=float(regularisation),
         fitted=fitted, residual=residual, peaks_s=peaks,
-        peak_resistances=resistances, ohmic=ohmic, warnings=warnings,
+        peak_resistances=resistances, ohmic=ohmic, measured_s=measured,
+        warnings=warnings,
     )
 
 

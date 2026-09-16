@@ -114,6 +114,33 @@ def test_new_section_tab_maps_cover_every_tab(stem):
     )
 
 
+@pytest.mark.parametrize("stem", ["tmd_app", "xrd_app", "echem_app", "xps_app"])
+def test_each_new_section_tab_lists_the_canvases_it_actually_builds(stem):
+    """The map is keyed by the notebook's own tab index, so it follows the
+    order the tabs are ADDED in, not the order the methods appear in the
+    file. Inserting a tab in the middle and forgetting to shift the rest
+    does not raise: it draws the wrong figure into the wrong tab, or
+    leaves one blank until something else marks it dirty."""
+    text = source(stem)
+    build_order = re.findall(r"self\._build_tab_(\w+)\(\)", text)
+    mapping = re.search(r"_tab_canvases = \{(.*?)\n        \}", text, re.S)
+    entries = re.findall(r"^\s*(\d+):\s*\(([^)]*)\)", mapping.group(1), re.M)
+    assert len(entries) == len(build_order), (
+        f"{stem}: {len(build_order)} tabs built, {len(entries)} mapped")
+    for index, (_, canvases) in enumerate(entries):
+        listed = re.findall(r'"(\w+)"', canvases)
+        body = re.search(
+            rf"def _build_tab_{build_order[index]}\(self\).*?(?=\n    def )",
+            text, re.S,
+        )
+        assert body, f"{stem}: cannot find _build_tab_{build_order[index]}"
+        created = re.findall(r'make_canvas\(\w+, "(\w+)"', body.group(0))
+        assert sorted(listed) == sorted(created), (
+            f"{stem} tab {index} ({build_order[index]}) builds {created} "
+            f"but the map says {listed}"
+        )
+
+
 @pytest.mark.parametrize("stem, name", sorted(SECTION_MODULES.items()))
 def test_every_self_attribute_used_is_assigned_somewhere(stem, name):
     """Catches the bug a linter misses: ``self.something`` read but never
