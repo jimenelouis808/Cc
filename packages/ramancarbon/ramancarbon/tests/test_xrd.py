@@ -832,3 +832,66 @@ def test_the_threshold_still_holds_on_pure_noise_with_the_broad_pass():
             pattern = Pattern(angles, counts, wavelength=1.5406, counts=True)
             found.append(len(find_peaks(pattern)))
         assert np.mean(found) < 1.0, (level, found)
+
+
+def test_counts_that_were_scaled_are_recognised_and_corrected():
+    """A diffractogram that says "counts" very often is not: instrument
+    software divides by the acquisition time, by a monitor, by the
+    maximum. The numbers keep the label and lose the statistics, and then
+    sqrt(N) is the uncertainty of a quantity nobody measured.
+
+    The user's own pattern arrived reported between 1.0 and 3.5 "counts".
+    sqrt(N) there says the noise on every point is 1.4 while the
+    point-to-point scatter says 0.02, so the tallest reflection in the
+    pattern scored one sigma, NOTHING was detected, and the peak list
+    came back empty with no indication of why."""
+    from ramancarbon.xrd.search import find_peaks
+
+    rng = np.random.default_rng(4)
+    angles = np.arange(10.0, 90.0, 0.02)
+    shape = (1.0 + 0.9 * (angles / 90.0)
+             + 0.75 * _pseudo_voigt(angles, 25.9, 5.0, 1.0)
+             + 1.45 * _pseudo_voigt(angles, 44.5, 0.6, 1.0)
+             + 0.35 * _pseudo_voigt(angles, 28.4, 0.5, 1.0))
+    counts = rng.poisson(np.maximum(shape, 0.05) * 3000.0).astype(float)
+
+    raw = Pattern(angles, counts, wavelength=1.5406, counts=True)
+    assert raw.counting_scale() == 1.0, "integers are counts"
+    assert raw.sigma_origin == "poisson"
+    found_raw = find_peaks(raw)
+    assert len(found_raw) >= 3
+
+    # The same measurement, divided by three thousand and still ticked as
+    # counts. This is the file the user actually had.
+    scaled = Pattern(angles, counts / 3000.0, wavelength=1.5406, counts=True)
+    scale = scaled.counting_scale()
+    assert scale is not None
+    assert scale == pytest.approx(1.0 / 3000.0, rel=0.35), scale
+    assert scaled.sigma_origin == "poisson_escalado"
+    assert "no son cuentas crudas" in scaled.metadata["sigma_note"]
+
+    found_scaled = find_peaks(scaled)
+    assert len(found_scaled) == len(found_raw), (
+        f"{len(found_raw)} peaks in counts but {len(found_scaled)} after "
+        "dividing by 3000: the scale was not recovered")
+    for original, rescaled in zip(found_raw, found_scaled):
+        assert rescaled.two_theta == pytest.approx(original.two_theta, abs=0.05)
+        assert rescaled.significance == pytest.approx(
+            original.significance, rel=0.1)
+
+
+def test_data_that_are_not_counting_statistics_get_a_flat_sigma_and_say_so():
+    """Normalised, smoothed or averaged data do not have Poisson noise in
+    ANY scale. Inventing one for them would be worse than admitting there
+    is none."""
+    rng = np.random.default_rng(5)
+    angles = np.arange(10.0, 90.0, 0.02)
+    # Constant noise on a varying level: the variance does not track the
+    # mean, so no scale exists.
+    level = 100.0 + 900.0 * _pseudo_voigt(angles, 44.5, 1.0, 1.0)
+    flat = level + rng.normal(0.0, 3.0, angles.size)
+    pattern = Pattern(angles, flat, wavelength=1.5406, counts=True)
+    assert pattern.counting_scale() is None
+    assert pattern.sigma_origin == "flat"
+    assert "desmarcar" in pattern.metadata["sigma_note"]
+    assert np.allclose(pattern.sigma, pattern.sigma[0])

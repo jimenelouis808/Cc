@@ -743,7 +743,31 @@ def _fit_two_d(
     seeds = [p for p in find_peaks(spectrum, window=(lo, hi))
              if inner_lo <= p.position <= inner_hi]
     if not seeds:
-        return None, None
+        # A broad 2D fills its own search window, and a band that fills
+        # the window has no prominence inside it, so peak detection
+        # cannot see it however strong it is: in a disordered carbon the
+        # envelope is three hundred wavenumbers wide and the window is
+        # three hundred and ten. Fall back to the integrated intensity
+        # against the flanking regions, which is the matched filter for a
+        # position the database already gives us.
+        #
+        # This does NOT reopen the hole the seed test was closing. That
+        # was the fitter pinning a component to the window edge on a
+        # spectrum with no 2D at all; an oxide has no excess intensity
+        # here either, and the contrast is taken against the flanks so a
+        # leftover baseline offset cannot fire it.
+        from ..core.peaks import window_excess
+
+        # The flank is the valley between first and second order. The
+        # automatic flanks are useless here because the D+D′ sits in the
+        # upper one, so the reference line gets drawn THROUGH the band
+        # and the contrast collapses to 6 sigma where the band is plainly
+        # there.
+        valley = [(inner_lo - 420.0, inner_lo - 120.0)]
+        if window_excess(spectrum, inner_lo, inner_hi,
+                         flanks=valley) < TWO_D_WINDOW_SIGMA:
+            return None, None
+        return True, _fit_or_none(spectrum, db)
     try:
         one = fit_model(spectrum, build_model(spectrum, preset="two_d", db=db))
     except ValueError:
@@ -759,6 +783,35 @@ def _fit_two_d(
     if one.bic <= many.bic:
         return True, one
     return False, many
+
+
+#: How many sigma of integrated excess the 2D window needs before the band
+#: is fitted without a detected peak in it.
+#:
+#: NOT comparable with the peak-detection threshold: that one scores a
+#: maximum against its own width, this one scores a whole window against
+#: its flanks, and they are different statistics in different units.
+#: Calibrated the same way, by running it on spectra that have no 2D at
+#: all — a D and a G and nothing above 2400 cm⁻¹, thirty of them, plus
+#: twenty more with a smooth background step under the second-order
+#: region to make it harder. The largest value any of those fifty
+#: produced was 4.1. A 2D that is plainly there gives 4.6 to 11.7.
+#:
+#: The two distributions touch, and that is the measurement rather than a
+#: shortcoming: at this noise level a weak second-order envelope is not
+#: distinguishable from none. Six puts the bar above every one of the
+#: fifty negatives and below the clearly present cases, so the failure
+#: mode is declining to report a marginal 2D rather than inventing one —
+#: which is the direction this package errs in everywhere else.
+TWO_D_WINDOW_SIGMA = 6.0
+
+
+def _fit_or_none(spectrum: Spectrum, db: Database):
+    """One Lorentzian over the 2D window, or ``None`` if it will not fit."""
+    try:
+        return fit_model(spectrum, build_model(spectrum, preset="two_d", db=db))
+    except ValueError:
+        return None
 
 
 def _merge_swcnt_g(

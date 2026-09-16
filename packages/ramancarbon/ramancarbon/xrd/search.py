@@ -885,6 +885,9 @@ def identify_phases(
 
     observed = list(peaks) if peaks is not None else find_peaks(pattern)
     result = PhaseSearchResult(peaks=observed)
+    note = pattern.metadata.get("sigma_note")
+    if note:
+        result.warnings.append(note)
     if not observed:
         message = (
             "no se ha detectado ningún pico por encima del umbral de "

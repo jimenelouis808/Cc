@@ -1555,6 +1555,7 @@ class RamanCarbonApp:
                 peaks=item.result.peaks if item.result else None,
                 title=item.name,
                 explained=_explained_positions(item.result),
+                carbon=_carbon_bands(item.result),
                 match_tolerance=_phase_tolerance(),
             )
             figure.subplots_adjust(left=0.10, right=0.98, top=0.93, bottom=0.12)
@@ -1920,6 +1921,27 @@ def _explained_positions(result) -> list[float]:
                  for ident in phases.identifications for hit in ident.hits]
     positions += [position for position, _ in phases.rbm_suspects]
     return sorted(set(positions))
+
+
+def _carbon_bands(result) -> list[tuple[float, str]]:
+    """``(position, name)`` for every carbon band the assignment found.
+
+    Including the extras: a sample with a spread of tube diameters has
+    one RBM per resonant diameter, and marking only the strongest would
+    leave the others in the unexplained pile, which is where this whole
+    problem started.
+    """
+    if result is None:
+        return []
+    assignment = getattr(result, "assignment", None)
+    if assignment is None:
+        return []
+    out: list[tuple[float, str]] = []
+    for name in assignment.bands:
+        for band in assignment.all_of(name):
+            if band.position is not None:
+                out.append((float(band.position), name))
+    return sorted(out)
 
 
 def _phase_tolerance() -> float:

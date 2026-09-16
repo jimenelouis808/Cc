@@ -400,6 +400,34 @@ LAMBDA_LIMITS = (1e4, 1e12)
 #: is the recoverable direction.
 MIN_WIDEST_BAND_CM = 80.0
 
+#: Ceiling on the "widest band" the cutoff is derived from, in cm⁻¹.
+#:
+#: The probe below deliberately uses a stiff baseline so it cannot eat a
+#: band, and the price of that is that a slow fluorescence hump can come
+#: back looking like a very wide one. No carbon band is wider than this:
+#: the broadest real features are the 2D envelope of a disordered carbon
+#: and the D–G envelope of an amorphous one, both a few hundred
+#: wavenumbers. Capping here bounds the damage in the direction that is
+#: recoverable — a baseline slightly too stiff leaves background in, which
+#: is visible; one too soft eats a band, which is not.
+MAX_WIDEST_BAND_CM = 400.0
+
+#: Stiffness of the probe baseline used to measure the widest band.
+#:
+#: This number exists because the obvious choice is circular and fails
+#: silently. Measuring the widest band through a baseline chosen for
+#: ordinary bands means the broad ones have already been partly removed
+#: before they are measured, so they come back narrow, so the real
+#: baseline is chosen too soft, so they are eaten. On a CVD carbon that
+#: loop reported the widest band as 119 cm⁻¹ — the G — set the cutoff at
+#: 595 cm⁻¹, and removed most of a 2D envelope 300 cm⁻¹ wide; the 2D and
+#: the D+D′ then came back as "not found" while a noise spike near the
+#: edge was assigned as 2D′.
+#:
+#: So the probe is stiff enough that its cutoff (≈1300 cm⁻¹) is above any
+#: band and below the scale fluorescence varies on.
+PROBE_LAMBDA = 1.5e9
+
 
 def lambda_for_cutoff(period_points: float) -> float:
     """Stiffness whose half-power cutoff is at a given period, in points.
@@ -545,14 +573,16 @@ def auto_lambda(
     if widest is None:
         try:
             probe = spectrum.with_intensity(
-                spectrum.intensity - arpls_baseline(spectrum.intensity, lam=1e7),
+                spectrum.intensity
+                - arpls_baseline(spectrum.intensity, lam=PROBE_LAMBDA),
                 "probe",
             )
             widths = [p.fwhm for p in find_peaks(probe) if p.fwhm]
         except (ValueError, np.linalg.LinAlgError):  # pragma: no cover
             widths = []
         if widths:
-            widest = max(float(max(widths)), MIN_WIDEST_BAND_CM)
+            widest = float(np.clip(max(widths), MIN_WIDEST_BAND_CM,
+                                   MAX_WIDEST_BAND_CM))
             origin = "medida en el propio espectro"
         else:
             widest = 120.0
@@ -926,6 +956,8 @@ __all__ = [
     "asls_baseline",
     "auto_lambda",
     "background_mask",
+    "MAX_WIDEST_BAND_CM",
+    "PROBE_LAMBDA",
     "cutoff_for_lambda",
     "lambda_for_cutoff",
     "estimate_baseline",

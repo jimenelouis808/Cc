@@ -16,6 +16,7 @@ Two different jobs live here and they should not be confused:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Optional, Sequence
 
 import numpy as np
@@ -140,7 +141,13 @@ def find_peaks(
     if y.size < 5:
         return []
 
-    sigma = work.noise_estimate()
+    # Per-point, not one number for the spectrum. A CCD's quantum
+    # efficiency falls off towards the red, so the noise above 2300 cm⁻¹
+    # is routinely three times what it is under the G band, and a single
+    # sigma is wrong in both directions at once: too large where the
+    # first-order bands are, too small where the second-order ones are.
+    noise = work.local_noise()
+    sigma = float(np.median(noise))
     step = work.step
     distance = max(1, int(round(min_distance_cm / max(step, 1e-9))))
     threshold = min_significance * _trials_factor(y.size)
@@ -178,9 +185,10 @@ def find_peaks(
         fwhm = right_cm - left_cm
         if not np.isfinite(fwhm) or fwhm < min_fwhm_cm:
             continue
+        local = float(noise[int(idx)])
         significance = (
-            height * np.sqrt(fwhm / max(step, 1e-9)) / sigma
-            if sigma > 0
+            height * np.sqrt(fwhm / max(step, 1e-9)) / local
+            if local > 0
             else float("inf")
         )
         if significance < threshold:
@@ -195,12 +203,192 @@ def find_peaks(
                 fwhm=fwhm,
                 area=area,
                 prominence=float(prominences[k]),
-                snr=height / sigma if sigma > 0 else float("inf"),
+                snr=height / local if local > 0 else float("inf"),
                 significance=float(significance),
             )
         )
+    peaks.extend(_broad_pass(x, y, noise, step, threshold, peaks,
+                             min_prominence_fraction))
     peaks.sort(key=lambda p: p.position)
     return peaks
+
+
+#: Widths, in cm⁻¹, at which the broad pass looks for bands the first pass
+#: cannot measure.
+#:
+#: The narrowest is already wider than any sharp Raman line of a carbon or
+#: a chalcogenide, so this pass never competes for those; the widest covers
+#: the 2D envelope of a disordered carbon and the D band of an amorphous
+#: one, both of which run to several hundred wavenumbers.
+BROAD_SCALES_CM: tuple[float, ...] = (40.0, 90.0, 180.0, 350.0)
+
+
+def _broad_pass(
+    x: np.ndarray,
+    y: np.ndarray,
+    noise: np.ndarray,
+    step: float,
+    threshold: float,
+    found: Sequence[PeakMeasurement],
+    min_prominence_fraction: float,
+) -> list[PeakMeasurement]:
+    """A second look, for bands too broad for the first one to measure.
+
+    ``peak_widths`` walks outward from the apex until the signal falls to
+    half, and on a noisy trace that walk stops at the first noise dip. A
+    2D envelope three hundred wavenumbers wide then measures as five,
+    its matched-filter significance collapses with the square root of
+    that width, and what gets reported is not the band but a noise spike
+    riding on it — at the wrong position, with the wrong height, and
+    with its neighbour missing entirely. Measured on a spectrum shaped
+    like a real CVD carbon: the 2D at 2680 came back as a 5.5 cm⁻¹
+    "band" at 2663, and the D+D′ at 2930 did not come back at all.
+
+    That is not a threshold that needs lowering. It is a width that was
+    never measured, so the band is looked for at its own scale: the
+    spectrum is smoothed to each of :data:`BROAD_SCALES_CM` in turn,
+    which removes the dips that stopped the walk, and any maximum that
+    clears the same threshold at that scale is kept with that scale as
+    its width.
+
+    Deliberately ADDITIVE and deliberately second. A band the first pass
+    already measured keeps that measurement, because for a resolved band
+    it is the better one; a broad candidate within half a width of an
+    existing peak is dropped rather than competing with it, judged
+    against BOTH widths — a candidate half a width from a band already
+    measured as very broad is the same band.
+    """
+    from scipy.ndimage import gaussian_filter1d
+
+    claimed = [(p.position, p.fwhm or 0.0) for p in found]
+    biggest = max((p.prominence for p in found), default=0.0)
+    extra: list[PeakMeasurement] = []
+    for width_cm in BROAD_SCALES_CM:
+        width_points = width_cm / max(step, 1e-9)
+        if width_points < 3.0 or width_points > x.size / 4:
+            continue
+        smoothed = gaussian_filter1d(y, width_points / 2.3548, mode="nearest")
+        indices, _ = _scipy_find_peaks(smoothed, distance=max(1, int(width_points)))
+        if indices.size == 0:
+            continue
+        prominences = peak_prominences(smoothed, indices)[0]
+        for idx, prominence in zip(indices, prominences):
+            local = float(noise[int(idx)])
+            significance = (prominence * np.sqrt(width_points) / local
+                            if local > 0 else float("inf"))
+            if significance < threshold:
+                continue
+            if biggest > 0 and prominence < min_prominence_fraction * biggest:
+                continue
+            position = float(x[int(idx)])
+            if any(abs(position - other) < max(0.5 * width_cm, 0.5 * other_width)
+                   for other, other_width in claimed):
+                continue
+            claimed.append((position, width_cm))
+            span = max(1, int(round(width_points)))
+            low = max(0, int(idx) - span)
+            high = min(x.size, int(idx) + span + 1)
+            base = min(float(smoothed[low]), float(smoothed[high - 1]))
+            height = float(smoothed[int(idx)]) - base
+            area = (float(trapezoid(np.clip(y[low:high] - base, 0.0, None),
+                                    x[low:high])) if high - low > 1 else 0.0)
+            extra.append(
+                PeakMeasurement(
+                    position=position,
+                    height=height,
+                    fwhm=float(width_cm),
+                    area=area,
+                    prominence=float(prominence),
+                    snr=height / local if local > 0 else float("inf"),
+                    significance=float(significance),
+                )
+            )
+    return extra
+
+
+def window_excess(
+    spectrum: "Spectrum",
+    low: float,
+    high: float,
+    flank_fraction: float = 0.6,
+    flanks: Optional[Sequence[tuple[float, float]]] = None,
+) -> float:
+    """Significance of the intensity inside a window over its own flanks.
+
+    Peak detection asks "is there a local maximum here". For a band whose
+    position is already known from the database that is the wrong
+    question, and for a BROAD one it is unanswerable: prominence is
+    measured against the minima on either side of a maximum, so a band
+    that fills the window it is being looked for in has no prominence
+    inside that window. The 2D envelope of a disordered carbon is three
+    hundred wavenumbers wide and the 2D search window is three hundred and
+    ten; every "peak" found in there is a noise spike of two to five
+    points, and the band itself — eighty counts above zero across the
+    whole window, unmistakable by eye — is invisible to the search.
+
+    The right test for a band at a known position is its integrated
+    intensity, which is the matched filter for a template you already
+    have. It is taken against a straight line through the two flanking
+    regions rather than against zero, so a baseline that left an offset
+    behind cannot fire it: what is measured is the CONTRAST between the
+    window and its surroundings.
+
+    Parameters
+    ----------
+    spectrum:
+        Baseline-corrected spectrum.
+    low, high:
+        The band's window.
+    flank_fraction:
+        Width of each flanking region, as a fraction of the window, when
+        ``flanks`` is not given.
+    flanks:
+        Explicit ``(low, high)`` regions to take the background from.
+        Necessary whenever the neighbourhood is not background: the 2D of
+        a disordered carbon has the D+D′ sitting in its upper flank, so
+        the automatic flanks draw the reference line THROUGH the band and
+        the contrast collapses — 6 sigma where the band is plainly there.
+        The clean region for the carbon second order is the valley
+        between first and second order, and the caller knows where that
+        is.
+
+    Returns
+    -------
+    float
+        Excess area divided by its own uncertainty. Comparable with the
+        significances :func:`find_peaks` reports, and negative when the
+        window sits below its flanks.
+    """
+    x = np.asarray(spectrum.shift, dtype=float)
+    y = np.asarray(spectrum.intensity, dtype=float)
+    span = high - low
+    if span <= 0 or x.size < 16:
+        return 0.0
+    inside = (x >= low) & (x <= high)
+    if flanks:
+        outside = np.zeros(x.shape, dtype=bool)
+        for start, stop in flanks:
+            outside |= (x >= start) & (x <= stop)
+    else:
+        pad = max(span * flank_fraction, 1e-9)
+        outside = (((x >= low - pad) & (x < low))
+                   | ((x > high) & (x <= high + pad)))
+    if inside.sum() < 5 or outside.sum() < 5:
+        return 0.0
+    # A straight line through the flanks, so a sloping leftover background
+    # is removed rather than counted as a band. With a single flank there
+    # is no slope to fit, and a constant is the honest reference.
+    if np.ptp(x[outside]) <= 0:
+        slope, intercept = 0.0, float(np.median(y[outside]))
+    else:
+        slope, intercept = np.polyfit(x[outside], y[outside], 1)
+    excess = y[inside] - (slope * x[inside] + intercept)
+    noise = spectrum.local_noise()
+    sigma = float(np.median(noise[inside]))
+    if sigma <= 0:
+        return 0.0
+    count = int(inside.sum())
+    return float(np.sum(excess) / (sigma * math.sqrt(count)))
 
 
 #: Window length, in points, the default detection threshold was calibrated on.
@@ -354,6 +542,7 @@ __all__ = [
     "CALIBRATION_POINTS",
     "PeakMeasurement",
     "find_peaks",
+    "window_excess",
     "measure_peak",
     "strongest_in",
 ]

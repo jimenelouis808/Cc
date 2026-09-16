@@ -84,6 +84,7 @@ def plot_spectrum(
     label_peaks: bool = True,
     title: Optional[str] = None,
     explained: Optional[Sequence[float]] = None,
+    carbon: Optional[Sequence[tuple[float, str]]] = None,
     match_tolerance: float = 1.0,
 ) -> None:
     """Draw a spectrum, optionally with the raw trace and the baseline.
@@ -113,6 +114,14 @@ def plot_spectrum(
         not noise and not a failure. It is the phase you were not
         expecting, and on a sample with a catalyst in it that is usually
         the interesting one.
+    carbon:
+        ``(position, band name)`` for the carbon bands the assignment
+        identified — D, G, 2D, D+D′ and the rest. They are a THIRD group,
+        not part of the other two. Without them the D and the G of a
+        carbon sample come out marked "unexplained", which is exactly
+        backwards: they are the best understood bands in the spectrum,
+        and a figure that calls them unknown while the report names them
+        makes the marking useless for the one thing it is for.
     match_tolerance:
         How close a peak must be to a position in ``explained`` to count
         as the same band, in cm⁻¹.
@@ -152,30 +161,51 @@ def plot_spectrum(
         # catalyst in it, and a single colour makes the viewer count
         # positions against the report by hand.
         known = set(explained or ())
-        is_known = [any(abs(x - k) <= match_tolerance for k in known) for x in xs]
+        bands = list(carbon or ())
+        # Three groups, not two. A carbon band is explained by the
+        # assignment, a phase line by the catalogue, and only what is
+        # neither is actually left over.
+        kinds: list[str] = []
+        names: list[str] = []
+        for x in xs:
+            nearest = min(bands, key=lambda b: abs(x - b[0]), default=None)
+            if nearest is not None and abs(x - nearest[0]) <= max(match_tolerance, 8.0):
+                kinds.append("carbono")
+                names.append(nearest[1])
+            elif any(abs(x - k) <= match_tolerance for k in known):
+                kinds.append("fase")
+                names.append("")
+            else:
+                kinds.append("resto")
+                names.append("")
         groups = (
-            (False, "picos sin explicar", palette.accent, "v"),
-            (True, "picos de una fase catalogada", palette.warning, "D"),
+            ("carbono", "bandas de carbono", palette.data, "o", 4.5),
+            ("fase", "picos de una fase catalogada", palette.warning, "D", 4.0),
+            ("resto", "picos sin explicar", palette.accent, "v", 5.0),
         )
-        for flag, label, colour, marker in groups:
-            picked = [(x, y) for x, y, k in zip(xs, ys, is_known) if k is flag]
+        colour_of = {key: colour for key, _, colour, _, _ in groups}
+        for key, label, colour, marker, size in groups:
+            picked = [(x, y) for x, y, k in zip(xs, ys, kinds) if k == key]
             if not picked:
                 continue
             ax.plot([x for x, _ in picked], [y for _, y in picked],
-                    linestyle="none", marker=marker,
-                    markersize=5 if marker == "v" else 4,
-                    color=colour, label=label)
+                    linestyle="none", marker=marker, markersize=size,
+                    markerfacecolor="none" if marker == "o" else colour,
+                    markeredgewidth=1.2, color=colour, label=label)
         if label_peaks:
             offsets = _stagger(xs, spectrum.range, spacing=0.035)
-            for x, y, dy, k in zip(xs, ys, offsets, is_known):
+            for x, y, dy, kind, name in zip(xs, ys, offsets, kinds, names):
+                # A named band says its name; everything else says where
+                # it is, because that is all that is known about it.
                 ax.annotate(
-                    f"{x:.0f}",
+                    name if name else f"{x:.0f}",
                     (x, y),
                     textcoords="offset points",
                     xytext=(0, dy),
                     ha="center",
                     fontsize=7,
-                    color=palette.warning if k else palette.text_muted,
+                    color=colour_of[kind] if kind != "resto"
+                    else palette.text_muted,
                 )
             ax.margins(y=0.18)
     ax.set_xlabel("Desplazamiento Raman (cm⁻¹)")

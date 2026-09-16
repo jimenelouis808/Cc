@@ -304,7 +304,80 @@ class Spectrum:
             return 0.0
         d2 = np.diff(y, n=2)
         mad = float(np.median(np.abs(d2 - np.median(d2))))
-        return mad / (0.6745 * np.sqrt(6.0))
+        measured = mad / (0.6745 * np.sqrt(6.0))
+        # A smoothed spectrum looks better measured than it is, and every
+        # threshold here is a ratio against this number. `smooth` records
+        # the noise it started from; that floor is honoured rather than
+        # letting the filter lower the bar it will then be judged against.
+        floor = self.metadata.get("noise_floor")
+        return max(measured, float(floor)) if floor else measured
+
+    #: Width, in cm⁻¹, of the window the local noise is measured over.
+    #:
+    #: Wide enough that a band cannot raise its own noise estimate — the
+    #: broadest carbon features are a few hundred wavenumbers — and narrow
+    #: enough to follow a detector whose response falls off across the
+    #: second-order region.
+    LOCAL_NOISE_WINDOW_CM = 500.0
+
+    def local_noise(self, window_cm: Optional[float] = None) -> np.ndarray:
+        """Per-point noise σ, measured over a rolling window.
+
+        :meth:`noise_estimate` returns ONE number for the whole spectrum,
+        and a CCD does not have one number. Quantum efficiency falls off
+        towards the red, so on a 532 nm measurement the noise above about
+        2300 cm⁻¹ is routinely three times what it is under the G band.
+        A single σ is then wrong in both directions at once: it is too
+        large where the first-order bands are, and too small where the
+        second-order ones are — so a noise spike in the 2D region scores
+        as a significant peak while the broad 2D underneath it does not.
+        Measured on a spectrum shaped like a real CVD carbon, the global
+        estimate was 12 while the noise above 2400 was 35, and what came
+        back from that region was a 5 cm⁻¹ "band" at the wrong position.
+
+        Same statistic as the global one — the median absolute second
+        difference, which removes any smooth background and any linear
+        ramp — evaluated in a moving window.
+
+        Returns
+        -------
+        numpy.ndarray
+            σ at every point, never below the smoothing floor when one
+            was recorded.
+        """
+        from scipy.ndimage import median_filter
+
+        y = np.asarray(self.intensity, dtype=float)
+        if y.size < 16:
+            return np.full(y.shape, max(self.noise_estimate(), 1e-12))
+        step = max(self.step, 1e-9)
+        window = window_cm if window_cm is not None else self.LOCAL_NOISE_WINDOW_CM
+        span = int(np.clip(round(window / step) | 1, 9, max(9, y.size // 2 | 1)))
+
+        absolute = np.abs(np.diff(y, n=2))
+        # MIRROR, not "nearest". A median filter whose window is five
+        # hundred points wide and whose padding repeats one edge value
+        # returns that edge value: half the window is real data and half
+        # is copies of a single number, so the median is the copy. The
+        # estimate then collapses at the ends — 2.5 against 30 a hundred
+        # wavenumbers earlier — the detection threshold collapses with
+        # it, and whatever noise is at the edge of the spectrum comes
+        # back as a narrow band. Mirroring fills the window with real
+        # data instead.
+        rolling = median_filter(absolute, size=span, mode="mirror")
+        sigma = 1.4826 * rolling / np.sqrt(6.0)
+        # np.diff(n=2) loses one point at each end.
+        sigma = np.concatenate(([sigma[0]], sigma, [sigma[-1]]))
+
+        floor = self.metadata.get("noise_floor") if hasattr(self, "metadata") else None
+        if floor:
+            # Raise the whole profile rather than clipping it, so a
+            # smoothed spectrum keeps the SHAPE of its noise while
+            # honouring the level it actually had before smoothing.
+            median = float(np.median(sigma))
+            if median > 0 and float(floor) > median:
+                sigma = sigma * (float(floor) / median)
+        return np.maximum(sigma, 1e-12)
 
     def snr_at(self, position: float, window: float = 20.0) -> float:
         """Crude peak signal-to-noise: local height over the global noise σ.

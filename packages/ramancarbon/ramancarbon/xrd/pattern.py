@@ -100,12 +100,141 @@ class Pattern:
             self.sigma = self._default_sigma()
 
     def _default_sigma(self) -> np.ndarray:
-        """√N for counts, a flat estimate otherwise."""
+        """√N for counts, a flat estimate otherwise.
+
+        With one correction that turns out to matter more than anything
+        else in this module: the counts may have been SCALED before they
+        reached the file, and then √N is not the uncertainty of anything.
+        See :meth:`counting_scale`.
+        """
         if self.counts:
-            self.sigma_origin = "poisson"
-            return np.sqrt(np.maximum(self.intensity, 1.0))
+            scale = self.counting_scale()
+            if scale is None:
+                self.sigma_origin = "flat"
+                self.metadata.setdefault(
+                    "sigma_note",
+                    "los datos están marcados como cuentas pero su ruido no "
+                    "sigue la estadística de conteo en ninguna escala: se ha "
+                    "usado una σ plana medida del propio patrón. Si vienen "
+                    "normalizados, suavizados o promediados, eso es lo "
+                    "esperable y lo correcto es desmarcar «son cuentas»",
+                )
+                return np.full(self.intensity.shape,
+                               max(self.noise_estimate(), 1e-9))
+            if scale == 1.0:
+                self.sigma_origin = "poisson"
+                return np.sqrt(np.maximum(self.intensity, 1.0))
+            self.sigma_origin = "poisson_escalado"
+            self.metadata.setdefault("counting_scale", scale)
+            self.metadata.setdefault(
+                "sigma_note",
+                f"las intensidades no son cuentas crudas: llevan un factor de "
+                f"{1.0 / scale:.4g} (una cuenta vale {scale:.4g} unidades de "
+                "las del archivo). Se ha deducido del propio ruido y la σ se "
+                "ha corregido; sin eso, √N sobreestima el ruido en un factor "
+                f"de {1.0 / math.sqrt(scale):.4g} y no se detecta ningún pico",
+            )
+            return np.sqrt(np.maximum(scale * self.intensity, scale * 1.0))
         self.sigma_origin = "flat"
         return np.full(self.intensity.shape, max(self.noise_estimate(), 1e-9))
+
+    def counting_scale(self) -> Optional[float]:
+        """Counts per unit of the reported intensity, deduced from the noise.
+
+        A diffractogram that says "counts" very often is not. Instrument
+        software divides by the acquisition time, by a monitor, by the
+        maximum; a two-theta scan gets averaged over repeats. The numbers
+        keep the label and lose the statistics, and then ``√N`` is the
+        uncertainty of a quantity nobody measured.
+
+        It is not a small error and it does not look like one. On a real
+        CVD pattern reported between 1.0 and 3.5 "counts", √N says the
+        noise on every point is about 1.4 while the point-to-point scatter
+        says 0.023 — a factor of sixty — so the tallest reflection in the
+        pattern scores one sigma, nothing at all is detected, and the
+        peak list is empty with no indication of why. The same measurement
+        in its original counts gives eleven peaks.
+
+        The scale is recoverable because Poisson noise carries it. If
+        ``y = k·N`` with ``N`` Poisson, then ``Var[y] = k·E[y]``: the
+        local variance is proportional to the local mean, and the constant
+        of proportionality is the scale. So the pattern is cut into
+        windows, each one's variance is measured from its second
+        differences (which remove the background and the peak's own
+        slope) and its level from its median, and the scale is the median
+        ratio.
+
+        Returns
+        -------
+        float or None
+            Counts per reported unit — 1.0 for raw counts — or ``None``
+            when the variance does not track the mean at all, which means
+            the data are not counting statistics in ANY scale and a flat
+            uncertainty is the honest answer.
+        """
+        cached = self.metadata.get("counting_scale")
+        if cached is not None:
+            return float(cached) if cached else None
+        y = np.asarray(self.intensity, dtype=float)
+        if y.size < 120:
+            return 1.0
+        # Integers are counts. This is the common case and it keeps the
+        # behaviour of every pattern that was already right exactly as it
+        # was: no estimate, no drift in the fourth digit.
+        if np.allclose(y, np.round(y), atol=1e-8):
+            return 1.0
+        if float(np.max(y)) <= 0.0:
+            return None
+
+        windows = int(np.clip(y.size // 60, 8, 60))
+        edges = np.linspace(0, y.size, windows + 1).astype(int)
+        levels: list[float] = []
+        variances: list[float] = []
+        for start, stop in zip(edges[:-1], edges[1:]):
+            chunk = y[start:stop]
+            if chunk.size < 12:
+                continue
+            level = float(np.median(chunk))
+            if level <= 0.0:
+                continue
+            second = np.diff(chunk, n=2)
+            mad = float(np.median(np.abs(second - np.median(second))))
+            variance = (1.4826 * mad / math.sqrt(6.0)) ** 2
+            if variance <= 0.0:
+                continue
+            levels.append(level)
+            variances.append(variance)
+        if len(levels) < 5:
+            return 1.0
+
+        level = np.asarray(levels, dtype=float)
+        variance = np.asarray(variances, dtype=float)
+
+        # Two models for the noise, compared on how well each predicts the
+        # scatter actually measured in each window:
+        #
+        #   scaled counts   variance = k · level
+        #   anything else   variance = constant
+        #
+        # Deciding by "is the ratio roughly constant" does not work,
+        # because on a pattern whose level barely varies both models say
+        # the same thing and the ratio is constant either way — a flat
+        # background with one sharp peak was accepted as counts on that
+        # test, and then sigma on the peak came out three times too
+        # large. Comparing predictions has no such blind spot: where the
+        # level does not vary the two models tie, and the tie goes to the
+        # flat one, which claims less.
+        scale = float(np.median(variance / level))
+        if not np.isfinite(scale) or scale <= 0.0:
+            return None
+        flat = float(np.median(variance))
+        poisson_error = float(np.median(np.abs(np.log(
+            np.maximum(scale * level, 1e-30) / variance))))
+        flat_error = float(np.median(np.abs(np.log(
+            max(flat, 1e-30) / variance))))
+        if poisson_error >= flat_error:
+            return None
+        return scale
 
     # -- geometry -----------------------------------------------------
 
@@ -222,11 +351,16 @@ class Pattern:
         )
 
     def describe(self) -> str:
+        scale = self.metadata.get("counting_scale")
         origin = {
             "measured": "e.s.d. del archivo",
             "poisson": "√N (cuentas)",
+            "poisson_escalado": (
+                f"√N con las cuentas reescaladas ×{1.0 / scale:.4g}"
+                if scale else "√N reescalada"
+            ),
             "flat": "estimación plana (los datos no son cuentas)",
-        }[self.sigma_origin]
+        }.get(self.sigma_origin, self.sigma_origin)
         return (
             f"{self.name}: {self.n} puntos, {self.range[0]:.3f}–{self.range[1]:.3f}° "
             f"2θ, paso {self.step:.4f}°, λ={self.wavelength:.6f} Å "

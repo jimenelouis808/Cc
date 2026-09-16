@@ -41,6 +41,37 @@ from .spectrum import Spectrum
 NOISE_FLOOR_FRACTION = 1e-5
 
 
+def _running_median(y: np.ndarray, kernel: int) -> np.ndarray:
+    """Median filter with ODD reflection at the ends, not zero padding.
+
+    ``scipy.signal.medfilt`` pads with zeros, so within half a kernel of
+    either end the running median is computed over a window that is part
+    data and part zeros and is dragged towards zero. Every one of those
+    points then stands high above "its" median, is flagged as a cosmic
+    ray, and is REPLACED by that wrong median — so a despiked spectrum
+    ends in a run of identical values that are not the measurement.
+
+    Downstream that is worse than it sounds: the flattened tail makes the
+    local noise estimate collapse there (2.3 against 30 a hundred
+    wavenumbers earlier), so the detection threshold collapses with it
+    and the leftover structure at the very edge comes back as narrow
+    bands. On a CVD spectrum that produced a 4 cm⁻¹ "band" at 3193 cm⁻¹
+    which the assignment then named 2D′.
+
+    Odd reflection — ``2·y[0] − y[i]`` — continues the local slope
+    instead of turning it round, which is the same correction, and for
+    the same reason, that SNIP needs at its edges.
+    """
+    half = kernel // 2
+    if half < 1 or y.size < 3:
+        return np.asarray(y, dtype=float).copy()
+    half = min(half, y.size - 1)
+    left = 2.0 * y[0] - y[half:0:-1]
+    right = 2.0 * y[-1] - y[-2:-half - 2:-1]
+    padded = np.concatenate([left, y, right])
+    return medfilt(padded, kernel_size=kernel)[left.size:left.size + y.size]
+
+
 def despike(
     spectrum: Spectrum,
     threshold: float = 8.0,
@@ -112,7 +143,17 @@ def despike(
     # spread of the median residual itself. That residual carries the
     # curvature of every band top, so normalising by its own MAD makes the
     # threshold depend on how peaky the spectrum is and clips sharp apices.
-    sigma = spectrum.noise_estimate()
+    # Per-point, for the same reason the peak finder is: a CCD's noise is
+    # not one number. On a 532 nm measurement the scatter above 2300 cm⁻¹
+    # is routinely three times what it is under the G band, so a single
+    # sigma makes the threshold there about 2.5 local sigma — and at 2.5
+    # sigma a large part of ordinary noise is "a cosmic ray". The
+    # despiker then chews through the whole second-order region,
+    # flattening real scatter and leaving structured residue that the
+    # peak finder afterwards reports as narrow bands. That is where the
+    # 4 cm⁻¹ "2D′" at the end of a CVD spectrum came from.
+    noise = spectrum.local_noise()
+    sigma = float(np.median(noise))
     scale = float(np.ptp(y))
     if sigma <= NOISE_FLOOR_FRACTION * max(scale, 1e-30):
         # No measurable noise means no cosmic rays to find, and no scale
@@ -125,11 +166,12 @@ def despike(
             np.zeros(n, dtype=bool),
         )
 
-    smoothed = medfilt(y, kernel_size=k)
+    smoothed = _running_median(y, k)
     residual = y - smoothed
-    flagged = residual > threshold * sigma
+    limit = threshold * noise
+    flagged = residual > limit
     if not positive_only:
-        flagged |= residual < -threshold * sigma
+        flagged |= residual < -limit
 
     cleaned = y.copy()
     cleaned[flagged] = smoothed[flagged]
@@ -210,8 +252,28 @@ def smooth(spectrum: Spectrum, window: int = 9, order: int = 3) -> Spectrum:
             f"smoothing window ({w} points) is not shorter than the spectrum "
             f"({spectrum.shift.size} points)"
         )
+    # The noise BEFORE smoothing, carried forward. Every detection
+    # threshold in this package is a ratio against the point-to-point
+    # scatter, and a Savitzky-Golay filter destroys that scatter by
+    # construction: the estimate collapses, the threshold collapses with
+    # it, and the peak finder reports every remaining wiggle. Measured on
+    # a spectrum shaped like a real CVD carbon, five-point smoothing took
+    # eight real bands to fifty-eight "peaks", most of them noise in the
+    # second-order region, and three of those were assigned names. The
+    # diffraction side already recorded this floor; this side did not,
+    # which is why smoothing there was safe and here was not.
+    floor = float(spectrum.noise_estimate())
     smoothed = savgol_filter(spectrum.intensity, window_length=w, polyorder=order)
-    return spectrum.with_intensity(smoothed, f"smooth(savgol, window={w}, order={order})")
+    out = spectrum.with_intensity(
+        smoothed, f"smooth(savgol, window={w}, order={order})")
+    out.metadata["noise_floor"] = max(
+        floor, float(out.metadata.get("noise_floor", 0.0)))
+    out.metadata["smoothed"] = (
+        f"suavizado con {w} puntos: el ruido punto a punto ya no mide nada, "
+        f"se conserva el de antes (σ = {floor:.4g}). NO se ajusta ni se "
+        "publican incertidumbres sobre un espectro suavizado"
+    )
+    return out
 
 
 def normalise(

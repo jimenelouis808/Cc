@@ -423,6 +423,105 @@ Los tres, recalibrados: veinte patrones de Poisson puro a dos niveles de
 fondo siguen dando bastante menos de un pico falso por patrón con umbral
 18. El umbral **no** se ha tocado.
 
+### Y una cuarta, que hace invisible a todo lo demás
+
+- **Un difractograma que dice «cuentas» muy a menudo no lo es.** El
+  programa del equipo divide por el tiempo de adquisición, por un monitor,
+  por el máximo; un barrido se promedia sobre repeticiones. Los números
+  conservan la etiqueta y pierden la estadística, y entonces √N es la
+  incertidumbre de algo que nadie midió. El patrón real del usuario venía
+  entre 1.0 y 3.5 «cuentas»: √N decía que el ruido de cada punto era 1.4
+  mientras la dispersión punto a punto decía 0.023 —un factor de sesenta—
+  así que la reflexión más intensa del patrón puntuaba UNA sigma, no se
+  detectaba absolutamente nada y la lista de picos salía vacía sin decir
+  por qué. El mismo patrón en sus cuentas originales da once picos.
+- **La escala se recupera, porque el ruido de Poisson la lleva dentro.**
+  Si `y = k·N` con N de Poisson, `Var[y] = k·E[y]`: la varianza local es
+  proporcional al nivel local y la constante es la escala.
+  `Pattern.counting_scale()` la deduce por ventanas. Los enteros son
+  cuentas y se atajan con k = 1, que deja intacto todo patrón que ya
+  estaba bien.
+- **Y se decide COMPARANDO los dos modelos, no viendo si el cociente es
+  constante.** Donde el nivel apenas varía, «varianza ∝ nivel» y «varianza
+  constante» dicen lo mismo y el cociente sale constante igualmente: un
+  fondo plano con un pico agudo se aceptaba como cuentas, y la σ sobre el
+  pico salía tres veces mayor de lo que toca. Se mira cuál de los dos
+  predice mejor la dispersión medida en cada ventana, y el empate lo gana
+  el plano, que afirma menos.
+
+## Un CCD no tiene UN ruido
+
+Cuatro fallos distintos, una sola causa: todo el paquete es un cociente
+contra σ, y se usaba una σ para todo el espectro.
+
+- **La eficiencia cuántica cae hacia el rojo**, así que en una medida a
+  532 nm el ruido por encima de 2300 cm⁻¹ es rutinariamente el triple que
+  bajo la banda G. Una sola σ se equivoca en las dos direcciones a la vez:
+  es demasiado grande donde están las bandas de primer orden y demasiado
+  pequeña donde están las de segundo. `Spectrum.local_noise()` la mide en
+  ventana móvil, y la usan el buscador de picos y el despicador.
+- **El despicador con una σ global se come la región de segundo orden.**
+  Con umbral 8 global, donde el ruido local es el triple el umbral vale
+  2.5 σ locales — y a 2.5 σ buena parte del ruido normal «es un rayo
+  cósmico». Aplanaba la región entera y dejaba residuo estructurado que el
+  buscador informaba después como bandas estrechas.
+- **`scipy.signal.medfilt` rellena con CEROS.** A media ventana de
+  cualquier extremo la mediana móvil se va hacia cero, todos esos puntos
+  quedan muy por encima de «su» mediana, se marcan como rayos cósmicos y
+  se SUSTITUYEN por ella: el espectro despicado terminaba en una tirada de
+  valores idénticos que no son la medida. Relleno reflejado IMPAR, igual y
+  por lo mismo que en SNIP.
+- **Un filtro de mediana de 500 puntos cuyo relleno repite el valor del
+  borde DEVUELVE ese valor**: media ventana son datos y media son copias
+  de un solo número, así que la mediana es la copia. La estimación de
+  ruido se desplomaba a 2.5 en el último punto contra 30 cien números de
+  onda antes, el umbral se desplomaba con ella y el ruido del borde volvía
+  como banda — un «2D′» de 4 cm⁻¹ en 3193. `mode="mirror"`, que rellena
+  con datos de verdad.
+- **Suavizar aquí rompía lo mismo que en DRX, y aquí no estaba
+  protegido.** El lado de difracción ya guardaba el ruido anterior; éste
+  no. Cinco puntos de suavizado convertían ocho bandas reales en cincuenta
+  y ocho «picos», casi todos ruido de segundo orden, y tres se asignaban
+  con nombre. `smooth` guarda `metadata["noise_floor"]` y
+  `noise_estimate()` lo respeta.
+
+## Una banda más ancha que su ventana no tiene prominencia
+
+- **La detección por prominencia no puede ver, POR CONSTRUCCIÓN, una banda
+  que llena la ventana en la que se la busca.** La envolvente 2D de un
+  carbono desordenado mide trescientos números de onda y la ventana de
+  búsqueda del 2D mide trescientos diez: todo lo que se encuentra ahí
+  dentro son púas de ruido de dos a cinco puntos, y la banda —ochenta
+  cuentas por encima de cero a lo ancho de toda la ventana, evidente a
+  simple vista— es invisible para el buscador.
+- **Para una banda cuya posición ya da la base de datos, la pregunta
+  correcta no es «¿hay un máximo aquí?» sino «¿cuánta intensidad hay en
+  esta ventana?»**, que es el filtro adaptado de una plantilla que ya se
+  tiene. `window_excess` la mide contra una recta por los FLANCOS, no
+  contra cero, para que un desplazamiento que haya dejado la línea base no
+  pueda dispararla.
+- **Y los flancos hay que darlos a mano en el segundo orden**, porque la
+  D+D′ se sienta en el flanco superior de la 2D: con flancos automáticos
+  la recta de referencia se traza POR DENTRO de la banda y el contraste se
+  desploma a 6 σ donde la banda está clarísima. El flanco limpio es el
+  valle entre primer y segundo orden.
+- **Calibrado como todo lo demás**: cincuenta espectros SIN 2D —una D y
+  una G y nada por encima de 2400, y veinte con un escalón suave de fondo
+  debajo del segundo orden para ponerlo difícil— dan como máximo 4.1. Una
+  2D que está da de 4.6 a 11.7. Las dos distribuciones se TOCAN, y eso es
+  la medida, no una carencia: con ese ruido una envolvente débil de
+  segundo orden no se distingue de nada. El umbral está en 6, por encima
+  de los cincuenta negativos, así que el modo de fallo es no informar una
+  2D marginal en vez de inventarse una.
+- **La sonda que mide «la banda más ancha» no puede usar una línea base
+  elegida para bandas normales.** Es circular y falla en silencio: las
+  anchas ya están medio quitadas antes de medirlas, así que vuelven
+  estrechas, así que la línea base real se elige demasiado blanda, así que
+  se las come. En un carbono CVD ese bucle informaba 119 cm⁻¹ —la G— ponía
+  el corte en 595 y se llevaba la mayor parte de una 2D de 300.
+  `PROBE_LAMBDA` es rígida a propósito, y `MAX_WIDEST_BAND_CM` acota el
+  precio de serlo.
+
 ## Modelos a medida
 
 - **Las componentes llevan nombre solo mientras la física se lo dé**: D, D3,

@@ -24,6 +24,7 @@ What none of this checks is whether the window *looks* right.
 from __future__ import annotations
 
 import ast
+import inspect
 import re
 from pathlib import Path
 
@@ -702,3 +703,45 @@ def test_the_colour_dialog_is_wired_into_the_header():
     # Every place that rebuilds the figure palette goes through one method,
     # so a colour change and a theme change cannot diverge.
     assert text.count("self.session.figure_palette(") >= 1
+
+
+def test_a_carbon_band_is_not_marked_as_an_unexplained_peak():
+    """The spectrum plot split its markers two ways: explained by a
+    catalogued PHASE, or unexplained. Carbon bands are assigned by a
+    different path, so the D and the G of a carbon sample came out marked
+    "sin explicar" — the best understood bands in the spectrum, called
+    unknown, while the report named them on the next tab."""
+    import numpy as np
+
+    from ramancarbon.analysis.report import analyse
+    from ramancarbon.examples.demo_data import demo_spectra
+    from ramancarbon.gui.app import _carbon_bands, _explained_positions
+
+    spectrum = next(s for s in demo_spectra() if "DWCNT" in s.name)
+    result = analyse(spectrum)
+
+    bands = _carbon_bands(result)
+    assert bands, "no carbon bands came back at all"
+    names = {name for _, name in bands}
+    assert {"D", "G+"} & names or {"D", "G"} & names, names
+
+    # Every detected peak that sits on an assigned band must be findable
+    # as one, or the plot will mark it unexplained.
+    phase = _explained_positions(result)
+    for peak in result.peaks:
+        nearest = min((abs(peak.position - p) for p, _ in bands), default=1e9)
+        on_phase = any(abs(peak.position - p) <= 12.0 for p in phase)
+        assert nearest <= 12.0 or on_phase, (
+            f"the peak at {peak.position:.0f} cm-1 is neither a carbon band "
+            f"nor a catalogued phase line, so it would be drawn as "
+            f"unexplained; assigned bands are "
+            f"{[(round(p), n) for p, n in bands]}")
+
+
+def test_the_spectrum_plot_draws_three_groups_not_two():
+    from ramancarbon.gui import plots
+
+    source = inspect.getsource(plots.plot_spectrum)
+    assert "bandas de carbono" in source
+    assert "picos de una fase catalogada" in source
+    assert "picos sin explicar" in source
