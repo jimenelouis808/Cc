@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+import numpy as np
+
 from ..xps.calibrate import Calibration, calibrate, calibrate_to_state
 from ..xps.elements import XPSDatabase, load_xps_database
 from ..xps.fitting import XPSFitResult, fit_region, resolution_floor
@@ -39,6 +41,22 @@ BACKGROUNDS: tuple[tuple[str, str], ...] = (
     ("lineal", "Lineal (solo regiones débiles)"),
     ("ninguno", "Ninguno"),
 )
+
+#: Line shapes offered per component, by profile key.
+#:
+#: Built from the engine's own table rather than written out again, so a
+#: profile added there appears here: a list of shapes that has quietly
+#: fallen behind the ones the fitter knows is a menu that lies.
+def _profile_choices() -> tuple[tuple[str, str], ...]:
+    from ..xps.lineshapes import XPS_PROFILES
+
+    return tuple(
+        (key, spec["label"] + (" — asimétrica" if spec["asymmetric"] else ""))
+        for key, spec in XPS_PROFILES.items()
+    )
+
+
+PROFILES: tuple[tuple[str, str], ...] = _profile_choices()
 
 #: Charge references offered, by database key.
 REFERENCES: tuple[tuple[str, str], ...] = (
@@ -68,6 +86,33 @@ class RegionChoice:
     free: bool = False
     """Fit ``count`` unnamed components instead of literature states, for a
     region the database does not describe."""
+    window: Optional[tuple[float, float]] = None
+    """The binding-energy window to fit, or ``None`` for the whole
+    region. The ends of the window are a PARAMETER, not a detail: moving
+    the high-binding-energy limit of a C 1s by one electronvolt moves the
+    carbonyl area by several per cent. That is not a defect of the method
+    — it is what "the area of a peak over a background" means — and it is
+    why the ends go in the report."""
+    extra: list[dict[str, Any]] = field(default_factory=list)
+    """Components added by hand, each ``{name, centre, fwhm, profile}``.
+
+    The operation the residual asks for: there is a shoulder at 285.5 eV
+    that no tabulated state of this region explains, so put a component
+    there and see whether it survives. It is also the easiest way to
+    invent a chemical state, so a hand-added component carries no
+    ``state`` and the report says where it came from — the composition
+    counts its area, but nothing claims to know what it is."""
+    overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    """Per-component changes, by component name: ``centre``, ``fwhm``,
+    ``profile`` and ``fixed`` (a tuple of parameter names).
+
+    Fixing is not free and not neutral, the same as everywhere else in
+    this package: the parameter stops contributing a degree of freedom,
+    so every other uncertainty comes out smaller, and a wrong fixed value
+    moves into its neighbours instead of showing up as a bad fit. What it
+    is FOR is a parameter the measurement cannot determine — the position
+    of a satellite whose parent is clear, the width of a component buried
+    under a stronger one — and it is a deception anywhere else."""
 
 
 @dataclass
@@ -268,26 +313,30 @@ class XPSSession:
             return None
         choice = self.choice_for(label)
         try:
+            window = choice.window or spectrum.range
             if choice.free:
                 model = free_model(
-                    spectrum, spectrum.range, choice.count or 2,
+                    spectrum, window, choice.count or 2,
                     background=choice.background, region=label,
                     link_widths=choice.link_widths,
                 )
             elif choice.states:
                 model = state_model(
-                    spectrum, label, choice.states, background=choice.background,
+                    spectrum, label, choice.states, window=choice.window,
+                    background=choice.background,
                     link_widths=choice.link_widths,
                     include_satellites=choice.satellites, database=self.database,
                 )
             else:
                 model, notes = count_model(
-                    spectrum, label, choice.count,
+                    spectrum, label, choice.count, window=choice.window,
                     background=choice.background, link_widths=choice.link_widths,
                     include_satellites=choice.satellites, database=self.database,
                 )
                 for note in notes:
                     self.log("info", f"{label}: {note}")
+            self._add_extra(choice, model, spectrum)
+            self._apply_overrides(choice, model)
             result = fit_region(spectrum, model, database=self.database)
         except (XPSError, ValueError) as error:
             self.log("error", f"{label}: {error}")
@@ -297,6 +346,217 @@ class XPSSession:
             self.log("aviso", f"{label}: {text}")
         self.composition = None
         return result
+
+    def _add_extra(self, choice: RegionChoice, model, spectrum) -> None:
+        """Append the user's hand-added components to a built model."""
+        from ..xps.fitting import XPSComponent
+        from ..xps.lineshapes import fwhm_for_total
+
+        if not choice.extra:
+            return
+        low, high = model.window
+        for entry in choice.extra:
+            centre = float(entry["centre"])
+            if not low - 2.0 <= centre <= high + 2.0:
+                self.log(
+                    "error",
+                    f"la componente en {centre:g} eV cae fuera de la ventana "
+                    f"{low:g}–{high:g} eV; ensánchala o mueve la componente",
+                )
+                continue
+            name = str(entry.get("name") or f"manual_{centre:.1f}")
+            name = name.replace(" ", "_")
+            if any(c.name == name for c in model.components):
+                name = f"{name}_2"
+            index = int(np.argmin(np.abs(spectrum.binding_energy - centre)))
+            model.components.append(XPSComponent(
+                name=name,
+                label=str(entry.get("label") or name),
+                centre=centre,
+                height=max(float(spectrum.counts[index]), 1.0),
+                fwhm=fwhm_for_total(str(entry.get("profile", "gl")),
+                                    float(entry.get("fwhm", 1.4))),
+                profile=str(entry.get("profile", "gl")),
+                justification="añadida a mano; no corresponde a ningún "
+                              "estado tabulado de esta región",
+            ))
+
+    def add_component(self, label: str, centre: float, fwhm: float = 1.4,
+                      name: str = "", profile: str = "gl") -> bool:
+        """Put a component where the residual says there is one."""
+        if fwhm <= 0:
+            self.log("error", "la anchura tiene que ser positiva")
+            return False
+        self.choice_for(label).extra.append({
+            "name": name or f"manual_{centre:.1f}",
+            "label": name or f"manual {centre:.1f} eV",
+            "centre": float(centre),
+            "fwhm": float(fwhm),
+            "profile": profile,
+        })
+        return True
+
+    def remove_component(self, label: str, name: str) -> bool:
+        """Drop a hand-added component. The tabulated ones are chosen by
+        picking states, not by deleting them one at a time."""
+        choice = self.choice_for(label)
+        for entry in list(choice.extra):
+            if name in (entry.get("name"), entry.get("label")):
+                choice.extra.remove(entry)
+                return True
+        self.log(
+            "error",
+            f"«{name}» no la añadiste tú: las componentes de la base de "
+            "datos se eligen en la lista de estados químicos",
+        )
+        return False
+
+    def _apply_overrides(self, choice: RegionChoice, model) -> None:
+        """Put the user's per-component edits onto a freshly built model.
+
+        Applied AFTER the model is built rather than instead of building
+        it, so the literature windows, the doublets and the width links
+        are still the ones the database says. What the user is editing is
+        a starting point and a set of holds, not the physics.
+        """
+        from ..xps.lineshapes import fwhm_for_total, resolve_xps_profile
+
+        for component in model.components:
+            edit = choice.overrides.get(component.name)
+            if not edit:
+                continue
+            if "centre" in edit:
+                component.centre = float(edit["centre"])
+                # The bounds came from the state's published window, and
+                # a starting value the user moved outside it would be
+                # clipped straight back. Their number wins; it is their
+                # sample.
+                if component.centre_bounds is not None:
+                    low, high = component.centre_bounds
+                    if not low <= component.centre <= high:
+                        component.centre_bounds = (
+                            min(low, component.centre - 0.5),
+                            max(high, component.centre + 0.5),
+                        )
+                        self.log(
+                            "aviso",
+                            f"{component.label}: {component.centre:.2f} eV "
+                            "queda fuera de la ventana publicada de ese "
+                            "estado; se ha ampliado la ventana para "
+                            "admitirlo, pero comprueba que sigue siendo ese "
+                            "estado",
+                        )
+            if edit.get("profile"):
+                component.profile = resolve_xps_profile(str(edit["profile"]))
+                component.extra = None
+                component.extra_bounds = None
+                component.__post_init__()
+            if "fwhm" in edit:
+                # The user typed the TOTAL width, because that is what
+                # the table shows and what the literature publishes. For
+                # every profile but the plain Gaussian and Lorentzian it
+                # is not the width PARAMETER -- a GL product is 4 % narrower
+                # than its parameter and a Doniach-Sunjic 13 % wider -- so
+                # storing the typed number directly would mean typing the
+                # displayed value back changed the peak.
+                component.fwhm = fwhm_for_total(
+                    component.profile, float(edit["fwhm"]), component.extra)
+                if component.fwhm_bounds is not None:
+                    low, high = component.fwhm_bounds
+                    component.fwhm_bounds = (min(low, component.fwhm),
+                                             max(high, component.fwhm))
+            if "fixed" in edit:
+                component.fixed = tuple(edit["fixed"])
+
+    def component_rows(self, label: str) -> list[tuple[str, ...]]:
+        """``(name, E, FWHM, area, %, profile, held)`` for a fitted region.
+
+        The held column is not decoration: holding a parameter removes a
+        degree of freedom, so every uncertainty in the row next to it
+        comes out smaller, and a reader who cannot see which were held
+        cannot read the table.
+        """
+        result = self.fits.get(label)
+        if result is None:
+            return []
+        rows = []
+        for component in result.components:
+            rows.append((
+                component.label,
+                f"{component.centre:.2f}",
+                # The TOTAL width. In a Doniach-Šunjić the ``fwhm``
+                # parameter is only the Lorentzian part, and it is the
+                # total that the literature publishes and that has to be
+                # compared against the resolution floor.
+                f"{component.true_fwhm:.2f}",
+                f"{component.area:.4g}",
+                f"{100 * component.area_fraction:.1f}",
+                component.profile,
+                ", ".join(component.fixed) if component.fixed else "",
+            ))
+        return rows
+
+    def set_component(self, label: str, name: str, **edits: Any) -> None:
+        """Override one component's starting values, profile or holds.
+
+        ``name`` is the component's *label* as the table shows it; it is
+        resolved back to the model name, because the constraint syntax and
+        the report identify components by name and the table shows the
+        readable one.
+        """
+        result = self.fits.get(label)
+        internal = name
+        if result is not None:
+            internal = next((c.name for c in result.components
+                             if c.label == name or c.name == name), name)
+        choice = self.choice_for(label)
+        entry = choice.overrides.setdefault(internal, {})
+        for key, value in edits.items():
+            if value is None:
+                entry.pop(key, None)
+            else:
+                entry[key] = value
+        if not entry:
+            choice.overrides.pop(internal, None)
+
+    def reset_components(self, label: str) -> None:
+        """Back to what the database and the data suggest."""
+        choice = self.choice_for(label)
+        choice.overrides.clear()
+        choice.extra.clear()
+
+    def set_window(self, label: str,
+                   window: Optional[tuple[float, float]]) -> bool:
+        """Set the region's fit window, or ``None`` for the whole region."""
+        if window is None:
+            self.choice_for(label).window = None
+            return True
+        low, high = sorted(float(v) for v in window)
+        spectrum = next((item for item in self.regions
+                         if self.region_label(item) == label), None)
+        if spectrum is not None:
+            available = spectrum.range
+            if high <= available[0] or low >= available[1]:
+                self.log(
+                    "error",
+                    f"{low:g}–{high:g} eV no solapa con el espectro, que va "
+                    f"de {available[0]:.1f} a {available[1]:.1f} eV",
+                )
+                return False
+        if high - low < 1.0:
+            self.log("error", "una ventana de menos de 1 eV no da para ajustar")
+            return False
+        self.choice_for(label).window = (low, high)
+        return True
+
+    def window_for(self, label: str) -> tuple[float, float]:
+        """The window that would be fitted: the user's, or the region's."""
+        choice = self.choice_for(label)
+        if choice.window:
+            return choice.window
+        spectrum = next((item for item in self.regions
+                         if self.region_label(item) == label), None)
+        return spectrum.range if spectrum is not None else (0.0, 0.0)
 
     def fit_all(self) -> int:
         """Fit every region the database describes. Returns how many worked."""
@@ -407,4 +667,5 @@ class XPSSession:
         return build_report(analysis)
 
 
-__all__ = ["BACKGROUNDS", "REFERENCES", "RegionChoice", "XPSSession"]
+__all__ = ["BACKGROUNDS", "PROFILES", "REFERENCES", "RegionChoice",
+           "XPSSession"]

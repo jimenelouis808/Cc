@@ -983,6 +983,42 @@ fondo siguen dando bastante menos de un pico falso por patrón con umbral
   eje, y mandar el original con una frase sobre el desplazamiento es como
   ese desplazamiento se aplica dos veces. Por eso se exporta VAMAS.
 
+## La sección de fotoemisión
+
+- **La anchura que escribes tiene que ser la anchura que lees.** La tabla
+  enseña la anchura TOTAL, porque es la que publica la literatura y la que
+  hay que comparar con el suelo de resolución; para todos los perfiles
+  salvo la gaussiana y la lorentziana puras ésa NO es el parámetro de
+  anchura — un producto GL es un 4 % más estrecho que su parámetro con
+  mezcla 0.3 y una Doniach-Šunjić un 13 % más ancha. Un editor que
+  guardara el número tal cual haría que volver a escribir el valor que se
+  ve en pantalla cambiara el pico. `fwhm_for_total` hace la conversión, y
+  se resuelve numéricamente porque `ds_gauss` no es invariante de escala:
+  convoluciona con una gaussiana de anchura fija, así que el reescalado de
+  un punto que vale para los demás falla en un tercio.
+- **Los extremos de la ventana se pueden tocar, porque SON un parámetro.**
+  Mover el límite de alta energía de enlace de un C 1s un electronvoltio
+  mueve el área del carbonilo varios por ciento. Y se toman del zoom: así
+  es como se elige una ventana de verdad, mirándola.
+- **Las ediciones del usuario se aplican DESPUÉS de construir el modelo, no
+  en su lugar.** Las ventanas de la literatura, los dobletes y las
+  ligaduras de anchura siguen siendo las que dice la base de datos; lo que
+  el usuario edita es un punto de partida y un conjunto de fijaciones, no
+  la física.
+- **Su número gana, y se le dice.** Una componente que el usuario mueve
+  fuera de la ventana publicada de su estado se admite —es su muestra—
+  pero ya no es prueba de ese estado, y eso se informa en vez de recortarle
+  el valor en silencio.
+- **Una componente añadida a mano no lleva estado.** Es la operación que
+  pide el residuo («hay un hombro en 285.5 que no explica nada tabulado»)
+  y también la forma más fácil de inventarse un estado químico: la
+  composición cuenta su área y nada afirma saber qué es. Y las componentes
+  de la base de datos no se borran de una en una: se eligen en la lista de
+  estados.
+- **Fijar sigue sin ser gratis, aquí también.** Con las anchuras LIGADAS,
+  fijar una las fija todas. Y la columna «fijado» de la tabla no es adorno:
+  quien no ve qué se fijó no puede leer la columna de al lado.
+
 ## La suite: cinco secciones
 
 - **Cinco instrumentos, cinco secciones**: Raman carbono, Raman TMD, DRX,

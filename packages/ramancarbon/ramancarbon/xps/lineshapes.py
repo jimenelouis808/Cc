@@ -210,6 +210,47 @@ def profile_fwhm(name: str, fwhm: float, extra: tuple[float, ...] = ()) -> float
     return float(above[-1] - above[0])
 
 
+def fwhm_for_total(name: str, total: float,
+                   extra: tuple[float, ...] = ()) -> float:
+    """The width PARAMETER that gives a profile a given true width.
+
+    The inverse of :func:`profile_fwhm`, and it has to exist because the
+    two numbers are not the same and the published one is the total: a
+    GL product is 4 % narrower than its parameter at mixing 0.3, and a
+    Doniach-Šunjić is 13 % wider. Anything that lets a user type a width
+    has to convert, or they are setting a different quantity from the one
+    they read off the table — typing the displayed number back would
+    change the peak.
+
+    Solved numerically because ``ds_gauss`` is not scale-invariant: it
+    convolves with a Gaussian of fixed width, so its true width is not
+    proportional to its parameter and the one-point rescaling that works
+    for every other profile is wrong for it by up to a third.
+
+    Accurate to about half a per cent, which is the resolution of the
+    forward function rather than of this one: :func:`profile_fwhm`
+    measures the half-maximum crossings on a 4001-point grid, so it is
+    quantised at roughly 0.4 % and no inverse of it can be tighter. On a
+    1.4 eV component that is six thousandths of an electronvolt.
+    """
+    target = max(float(total), 1e-9)
+    spec = XPS_PROFILES[name]
+    extra = tuple(extra) if extra else tuple(spec["defaults"])
+
+    guess = target * target / max(profile_fwhm(name, target, extra), 1e-9)
+    if abs(profile_fwhm(name, guess, extra) - target) <= 1e-6 * target:
+        return float(guess)
+
+    low, high = 1e-4 * target, 10.0 * target
+    for _ in range(60):
+        middle = 0.5 * (low + high)
+        if profile_fwhm(name, middle, extra) < target:
+            low = middle
+        else:
+            high = middle
+    return float(0.5 * (low + high))
+
+
 def window_area(name: str, height: float, fwhm: float,
                 extra: tuple[float, ...] = (),
                 window: Optional[tuple[float, float]] = None,
@@ -321,6 +362,7 @@ __all__ = [
     "ds",
     "ds_gauss",
     "ds_peak",
+    "fwhm_for_total",
     "gl",
     "profile_fwhm",
     "resolve_xps_profile",

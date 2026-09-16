@@ -753,3 +753,218 @@ def test_a_photoelectron_spectrum_survives_a_project_round_trip(tmp_path):
     assert back.pass_energy == pytest.approx(original.pass_energy)
     assert back.sweeps == original.sweeps
     assert back.region == original.region
+
+
+# -- per-component control in the section -------------------------------
+
+def _xps_session():
+    from ramancarbon.gui.xps_state import XPSSession
+
+    session = XPSSession()
+    spectra = make_xps_demo("NCNT_FeSe", seed=0)
+    session.spectra = list(spectra)
+    session.shifted = list(spectra)
+    return session
+
+
+def test_the_fit_window_is_a_parameter_and_can_be_set():
+    """Moving the high-binding-energy limit of a C 1s by one electronvolt
+    moves the carbonyl area by several per cent. That is not a defect of
+    the method -- it is what "the area of a peak over a background" means
+    -- so the ends have to be reachable, and they go in the report."""
+    session = _xps_session()
+    whole = session.window_for("C 1s")
+    assert session.fit("C 1s") is not None
+    wide = {row[0]: float(row[3]) for row in session.component_rows("C 1s")}
+
+    assert session.set_window("C 1s", (whole[0], whole[1] - 2.0))
+    assert session.window_for("C 1s") == (whole[0], whole[1] - 2.0)
+    assert session.fit("C 1s") is not None
+    narrow = {row[0]: float(row[3]) for row in session.component_rows("C 1s")}
+
+    moved = [name for name in wide
+             if name in narrow and abs(narrow[name] - wide[name])
+             > 0.02 * max(wide[name], 1.0)]
+    assert moved, "narrowing the window by 2 eV changed no area at all"
+
+    # And the ends are checked, not trusted.
+    assert session.set_window("C 1s", (1500.0, 1501.0)) is False
+    assert session.set_window("C 1s", (284.0, 284.2)) is False
+    assert session.window_for("C 1s") == (whole[0], whole[1] - 2.0), (
+        "a rejected window was applied anyway")
+    assert session.set_window("C 1s", None) is True
+    assert session.window_for("C 1s") == whole
+
+
+def test_a_component_can_be_moved_and_held():
+    """The same rule as the circuit fit and the Rietveld refinement:
+    holding a parameter removes a degree of freedom, so every other
+    uncertainty comes out smaller and a wrong held value moves into its
+    neighbours instead of showing up as a bad fit. So it has to be
+    visible in the table."""
+    session = _xps_session()
+    assert session.fit("N 1s") is not None
+    rows = session.component_rows("N 1s")
+    assert rows
+    name = rows[0][0]
+
+    session.set_component("N 1s", name, fwhm=1.30, fixed=("fwhm",))
+    assert session.fit("N 1s") is not None
+    held = next(r for r in session.component_rows("N 1s") if r[0] == name)
+    assert float(held[2]) == pytest.approx(1.30, abs=0.01)
+    assert "fwhm" in held[6]
+
+    result = session.fits["N 1s"]
+    component = next(c for c in result.components if c.label == name)
+    assert "fwhm" not in component.errors, (
+        "a held parameter must not carry an uncertainty")
+
+    session.reset_components("N 1s")
+    assert session.choice_for("N 1s").overrides == {}
+
+
+def test_moving_a_component_out_of_its_published_window_is_allowed_and_said():
+    """It is the user's sample, so their number wins -- but a component
+    that has left its state's published window is no longer evidence for
+    that state, and the report says so rather than quietly clipping the
+    value back inside."""
+    session = _xps_session()
+    assert session.fit("Fe 2p3/2") is not None
+    rows = session.component_rows("Fe 2p3/2")
+    name, centre = rows[0][0], float(rows[0][1])
+
+    session.set_component("Fe 2p3/2", name, centre=centre + 3.0)
+    result = session.fit("Fe 2p3/2")
+    assert result is not None
+    assert any("ventana" in text for text in session.messages[-1]) or any(
+        "ventana" in text for _, text in session.messages[-6:]), (
+        "nothing was said about a component outside its published window")
+
+
+def test_a_component_can_be_added_where_the_residual_shows_one():
+    """The operation the difference curve asks for. It is also the
+    easiest way to invent a chemical state, so a hand-added component
+    carries no tabulated identity."""
+    session = _xps_session()
+    assert session.fit("C 1s") is not None
+    before = len(session.fits["C 1s"].components)
+
+    assert session.add_component("C 1s", 288.6, 1.6, name="COOH")
+    result = session.fit("C 1s")
+    assert len(result.components) == before + 1
+    added = next(c for c in result.components if c.label == "COOH")
+    assert added.state is None, "a hand-added component claimed a state"
+    assert "mano" in added.justification
+
+    # Adding one ALWAYS lowers the residual, which is why the section has
+    # a component-count comparison and not just this button.
+    assert session.remove_component("C 1s", "COOH") is True
+    assert session.remove_component("C 1s", "C=O (carbonilo)") is False, (
+        "a tabulated component must not be deletable one at a time; those "
+        "are chosen by picking states")
+    assert len(session.fit("C 1s").components) == before
+
+    # And it has to be inside the window that will be fitted.
+    low, high = session.window_for("C 1s")
+    session.add_component("C 1s", low - 50.0)
+    session.fit("C 1s")
+    assert any("fuera de la ventana" in text
+               for level, text in session.messages if level == "error")
+
+
+def test_a_component_can_be_given_an_asymmetric_shape():
+    """A metal needs one. With symmetric shapes the fit has to cover the
+    tail with something, and that something is reported as an oxide that
+    is not there."""
+    from ramancarbon.gui.xps_state import PROFILES
+
+    keys = [key for key, _ in PROFILES]
+    assert "ds_gauss" in keys and "gl" in keys
+    assert any("asim" in text for _, text in PROFILES), (
+        "the menu has to say which shapes are asymmetric")
+
+    session = _xps_session()
+    assert session.fit("Fe 2p3/2") is not None
+    name = session.component_rows("Fe 2p3/2")[0][0]
+    session.set_component("Fe 2p3/2", name, profile="ds_gauss")
+    result = session.fit("Fe 2p3/2")
+    changed = next(c for c in result.components if c.label == name)
+    assert changed.profile == "ds_gauss"
+
+    # And the Shirley/asymmetry interaction is still declared: they are
+    # not independent over a finite window, and the metallic area comes
+    # out short in a known direction.
+    assert any("asim" in text and "Shirley" in text
+               for text in result.warnings), result.warnings
+
+
+def test_the_component_table_shows_the_total_width():
+    """In a Doniach-Sunjic the ``fwhm`` parameter is only the Lorentzian
+    part. The literature publishes the TOTAL, and it is the total that
+    has to be compared against the resolution floor."""
+    session = _xps_session()
+    assert session.fit("C 1s") is not None
+    result = session.fits["C 1s"]
+    rows = {row[0]: row for row in session.component_rows("C 1s")}
+    for component in result.components:
+        assert float(rows[component.label][2]) == pytest.approx(
+            component.true_fwhm, abs=0.005)
+    asymmetric = [c for c in result.components if c.profile.startswith("ds")]
+    if asymmetric:
+        one = asymmetric[0]
+        assert one.true_fwhm != pytest.approx(one.fwhm, abs=1e-6), (
+            "this demo no longer has an asymmetric component whose total "
+            "width differs from its parameter; the test needs another one")
+
+
+def test_the_width_you_type_is_the_width_you_read():
+    """The table shows the TOTAL width, because that is what the
+    literature publishes and what has to be compared against the
+    resolution floor. For every profile but the plain Gaussian and
+    Lorentzian that is not the width PARAMETER -- a GL product is 4 %
+    narrower than its parameter at mixing 0.3 and a Doniach-Sunjic 13 %
+    wider -- so an editor that stored the typed number directly would
+    change the peak when you typed the displayed value back."""
+    from ramancarbon.xps.lineshapes import (XPS_PROFILES, fwhm_for_total,
+                                            profile_fwhm)
+
+    for name, spec in XPS_PROFILES.items():
+        extra = tuple(spec["defaults"])
+        for total in (0.8, 1.4, 3.0):
+            parameter = fwhm_for_total(name, total, extra)
+            # 0.5 %, which is the FORWARD function's own resolution:
+            # profile_fwhm measures the half-maximum crossings on a
+            # 4001-point grid spanning +-8 widths, so it is quantised at
+            # about 0.4 % and no inverse of it can be tighter. On a 1.4 eV
+            # component that is six thousandths of an electronvolt.
+            assert profile_fwhm(name, parameter, extra) == pytest.approx(
+                total, rel=6e-3), (name, total, parameter)
+
+    # It is a real conversion, not the identity, for the shapes that need
+    # one -- and ds_gauss is not scale-invariant, so a single rescaling
+    # would not do.
+    assert fwhm_for_total("gl", 1.4, (0.3,)) != pytest.approx(1.4, rel=1e-3)
+    ratios = [fwhm_for_total("ds_gauss", t, (0.1, 0.5)) / t
+              for t in (0.8, 3.0)]
+    assert ratios[0] != pytest.approx(ratios[1], rel=0.05), (
+        "ds_gauss looks scale-invariant here; the numeric inverse would "
+        "not be needed and this test is no longer testing anything")
+
+    # And through the section: type back what the table shows, refit,
+    # and the width has not moved.
+    session = _xps_session()
+    assert session.fit("C 1s") is not None
+    rows = session.component_rows("C 1s")
+    name, shown = rows[0][0], float(rows[0][2])
+    session.set_component("C 1s", name, fwhm=shown, fixed=("fwhm",))
+    assert session.fit("C 1s") is not None
+    again = next(r for r in session.component_rows("C 1s") if r[0] == name)
+    # Within 0.02 eV: the table rounds to two decimals and the forward
+    # width measurement is quantised at about 0.4 %, so a round trip
+    # cannot be tighter than the last displayed digit. Without the
+    # conversion this component -- the asymmetric one -- came back 4 %
+    # narrower every time the displayed number was typed back.
+    assert float(again[2]) == pytest.approx(shown, abs=0.02)
+    assert session.fits["C 1s"].components[0].profile.startswith("ds"), (
+        "this test wants the asymmetric component, where the parameter "
+        "and the true width differ most")

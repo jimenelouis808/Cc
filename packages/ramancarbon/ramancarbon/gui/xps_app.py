@@ -29,7 +29,7 @@ from typing import Optional
 from .base import SectionApp, placeholder
 from .theme import PAD
 from .widgets import card, fill_table, hint, labelled, scrolled_text, set_text, table, scrollable_column
-from .xps_state import BACKGROUNDS, REFERENCES, XPSSession
+from .xps_state import BACKGROUNDS, PROFILES, REFERENCES, XPSSession
 
 FILE_TYPES = (
     ("Espectros XPS", "*.spe *.vms *.npl *.txt *.csv *.dat *.asc"),
@@ -247,6 +247,30 @@ class XPSApp(SectionApp):
             borderwidth=0, font=self.fonts["small"],
         )
         self.state_list.pack(fill="x", pady=(PAD["xs"], 0))
+        window_row = ttk.Frame(cbody)
+        window_row.pack(fill="x", pady=(PAD["sm"], 0))
+        ttk.Label(window_row, text="Ventana (eV)").pack(side="left")
+        self.window_low_var = tk.StringVar(value="")
+        self.window_high_var = tk.StringVar(value="")
+        ttk.Entry(window_row, textvariable=self.window_low_var, width=9).pack(
+            side="left", padx=(PAD["xs"], 0))
+        ttk.Label(window_row, text="–").pack(side="left", padx=2)
+        ttk.Entry(window_row, textvariable=self.window_high_var, width=9).pack(
+            side="left")
+        ttk.Button(window_row, text="Tomar del zoom",
+                   command=self._window_from_zoom).pack(
+                       side="left", padx=(PAD["xs"], 0))
+        ttk.Button(window_row, text="Toda la región",
+                   command=self._window_whole_region).pack(side="left",
+                                                           padx=(PAD["xs"], 0))
+        hint(cbody,
+             "Los extremos de la ventana SON un parámetro. Mover el límite de "
+             "alta energía de enlace de un C 1s un electronvoltio mueve el "
+             "área del carbonilo varios por ciento. No es un defecto del "
+             "método: es lo que significa «área de un pico sobre un fondo», y "
+             "por eso los extremos van en el informe.",
+             wrap=820)
+
         buttons = ttk.Frame(cbody)
         buttons.pack(fill="x", pady=(PAD["sm"], 0))
         ttk.Button(buttons, text="Ajustar región", style="Accent.TButton",
@@ -273,9 +297,35 @@ class XPSApp(SectionApp):
         left.pack(side="left", fill="both", expand=True)
         self.components_table = table(
             left_body,
-            ["componente", "E_enlace (eV)", "FWHM (eV)", "área", "%", "nota"],
+            ["componente", "E_enlace (eV)", "FWHM (eV)", "área", "%",
+             "forma", "fijado"],
             height=8,
         )
+        self.components_table.bind("<Double-1>", self._edit_component)
+        component_buttons = ttk.Frame(left_body)
+        component_buttons.pack(fill="x", pady=(PAD["xs"], 0))
+        for text, command in (
+            ("Editar…", self._edit_component),
+            ("Fijar posición", lambda: self._toggle_hold("centre")),
+            ("Fijar anchura", lambda: self._toggle_hold("fwhm")),
+            ("Forma…", self._change_profile),
+            ("Añadir…", self._add_component),
+            ("Quitar", self._remove_component),
+            ("Restablecer", self._reset_components),
+        ):
+            ttk.Button(component_buttons, text=text, command=command).pack(
+                side="left", padx=(0, PAD["xs"]))
+        hint(left_body,
+             "Doble clic edita la posición y la anchura de PARTIDA de una "
+             "componente. Fijar un parámetro no es gratis: deja de contar "
+             "como grado de libertad, así que todas las demás "
+             "incertidumbres salen más pequeñas, y un valor fijado que esté "
+             "mal se reparte entre sus vecinos sin que el ajuste empeore. Y "
+             "con las anchuras LIGADAS, fijar una las fija todas. Un metal "
+             "necesita forma asimétrica (Doniach-Šunjić): con formas "
+             "simétricas el ajuste tiene que tapar la cola con algo, y ese "
+             "algo se informa como un óxido que no está.",
+             wrap=420)
         right, right_body = card(bottom, "Número de componentes")
         right.pack(side="left", fill="both", expand=True,
                    padx=(PAD["sm"], 0))
@@ -342,7 +392,203 @@ class XPSApp(SectionApp):
         choice.states = selected or None
         count = _number(self.count_var.get())
         choice.count = int(count) if count else None
+        low = _number(self.window_low_var.get())
+        high = _number(self.window_high_var.get())
+        if low is not None and high is not None:
+            self.session.set_window(label, (low, high))
         return label
+
+    # -- the component editor ------------------------------------------
+    def _selected_component(self) -> Optional[str]:
+        selection = self.components_table.selection()
+        if not selection:
+            self.warn("Sin selección",
+                      "Elige primero una componente de la tabla.")
+            return None
+        return self.components_table.item(selection[0], "values")[0]
+
+    def _edit_component(self, _event=None) -> None:
+        from tkinter import simpledialog
+
+        label = self.region_var.get()
+        name = self._selected_component()
+        if not label or name is None:
+            return
+        row = next((r for r in self.session.component_rows(label)
+                    if r[0] == name), None)
+        if row is None:
+            return
+        centre = simpledialog.askfloat(
+            "Posición de partida", f"Energía de enlace de {name} (eV):",
+            initialvalue=float(row[1]), parent=self.root)
+        if centre is None:
+            return
+        fwhm = simpledialog.askfloat(
+            "Anchura de partida", f"FWHM de {name} (eV):",
+            initialvalue=float(row[2]), parent=self.root)
+        if fwhm is None:
+            return
+        self.session.set_component(label, name, centre=centre, fwhm=fwhm)
+        self.flush_messages(self.session.messages)
+        self.set_status(
+            f"{name}: partida en {centre:.2f} eV, {fwhm:.2f} eV. "
+            "Pulsa «Ajustar región» para aplicarlo."
+        )
+
+    def _toggle_hold(self, parameter: str) -> None:
+        label = self.region_var.get()
+        name = self._selected_component()
+        if not label or name is None:
+            return
+        choice = self.session.choice_for(label)
+        internal = next(
+            (c.name for c in self.session.fits[label].components
+             if c.label == name or c.name == name), name
+        ) if label in self.session.fits else name
+        held = set(choice.overrides.get(internal, {}).get("fixed", ()))
+        row = next((r for r in self.session.component_rows(label)
+                    if r[0] == name), None)
+        if parameter in held:
+            held.discard(parameter)
+        else:
+            held.add(parameter)
+            # Hold it at what the fit found, not at whatever the library
+            # default happens to be: fixing a parameter to a value nobody
+            # chose is how a confident wrong answer is produced.
+            if row is not None:
+                column = {"centre": 1, "fwhm": 2}[parameter]
+                self.session.set_component(label, name,
+                                           **{parameter: float(row[column])})
+        self.session.set_component(label, name, fixed=tuple(sorted(held)) or None)
+        self.set_status(
+            f"{name}: {parameter} {'fijado' if parameter in held else 'libre'}. "
+            "Pulsa «Ajustar región» para aplicarlo."
+        )
+
+    def _change_profile(self) -> None:
+        label = self.region_var.get()
+        name = self._selected_component()
+        if not label or name is None:
+            return
+        window = self.tk.Toplevel(self.root)
+        window.title("Forma de línea")
+        window.configure(background=self.palette.background)
+        frame = self.ttk.Frame(window, padding=PAD["md"])
+        frame.pack(fill="both", expand=True)
+        choice = self.tk.StringVar(value=PROFILES[0][0])
+        for key, text in PROFILES:
+            self.ttk.Radiobutton(frame, text=text, value=key,
+                                 variable=choice).pack(anchor="w")
+        self.ttk.Label(
+            frame,
+            text=("Un metal necesita forma asimétrica. Con formas simétricas "
+                  "el ajuste tiene que tapar la cola con algo, y ese algo se "
+                  "informa como un óxido que no está. Pero la Doniach-Šunjić "
+                  "no decae a cero por NINGUNO de los dos lados, así que sobre "
+                  "una ventana finita el Shirley se come parte de la cola y el "
+                  "área metálica sale corta: −2 % con α = 0.05, −5 % con 0.15 "
+                  "y −12 % con 0.30, siempre en esa dirección."),
+            wraplength=420, justify="left", style="Hint.TLabel",
+        ).pack(anchor="w", pady=(PAD["sm"], 0))
+
+        def apply() -> None:
+            self.session.set_component(label, name, profile=choice.get())
+            window.destroy()
+            self.set_status(
+                f"{name}: forma {choice.get()}. Pulsa «Ajustar región» "
+                "para aplicarlo."
+            )
+
+        buttons = self.ttk.Frame(frame)
+        buttons.pack(fill="x", pady=(PAD["sm"], 0))
+        self.ttk.Button(buttons, text="Aplicar", style="Accent.TButton",
+                        command=apply).pack(side="right")
+        self.ttk.Button(buttons, text="Cancelar",
+                        command=window.destroy).pack(side="right",
+                                                     padx=(0, PAD["xs"]))
+
+    def _add_component(self) -> None:
+        """Put a component where the residual says there is one.
+
+        The operation the difference curve asks for, and also the easiest
+        way to invent a chemical state, so the added component carries no
+        tabulated identity: the composition counts its area and nothing
+        claims to know what it is.
+        """
+        from tkinter import simpledialog
+
+        label = self.region_var.get()
+        if not label:
+            self.warn("Sin región", "Elige una región primero.")
+            return
+        low, high = self.session.window_for(label)
+        centre = simpledialog.askfloat(
+            "Añadir componente",
+            f"Energía de enlace (eV), entre {low:.1f} y {high:.1f}:",
+            parent=self.root)
+        if centre is None:
+            return
+        fwhm = simpledialog.askfloat(
+            "Añadir componente", "FWHM de partida (eV):",
+            initialvalue=1.4, minvalue=0.1, parent=self.root)
+        if fwhm is None:
+            return
+        name = simpledialog.askstring(
+            "Añadir componente", "Nombre (opcional):", parent=self.root)
+        if self.session.add_component(label, centre, fwhm, name=name or ""):
+            self.set_status(
+                f"componente en {centre:.2f} eV añadida. Pulsa «Ajustar "
+                "región» — y mira el χ² y el residuo, porque añadir una "
+                "componente SIEMPRE baja el residuo."
+            )
+        self.flush_messages(self.session.messages)
+
+    def _remove_component(self) -> None:
+        label = self.region_var.get()
+        name = self._selected_component()
+        if not label or name is None:
+            return
+        if self.session.remove_component(label, name):
+            self.set_status(f"«{name}» quitada. Pulsa «Ajustar región».")
+        self.flush_messages(self.session.messages)
+
+    def _reset_components(self) -> None:
+        label = self.region_var.get()
+        if not label:
+            return
+        self.session.reset_components(label)
+        self.set_status(
+            "componentes restablecidas a lo que dicen la base de datos y los "
+            "datos. Pulsa «Ajustar región»."
+        )
+
+    def _window_from_zoom(self) -> None:
+        """Take the fit window from what is on screen.
+
+        How people actually choose one: zoom until the region looks
+        right, then fit that. Typing two numbers blind and looking at the
+        result is the same operation with an extra step.
+        """
+        limits = self.canvas_limits("region")
+        if limits is None:
+            self.warn("Sin gráfica", "Ajusta la región una vez primero.")
+            return
+        low, high = limits
+        self.window_low_var.set(f"{low:.1f}")
+        self.window_high_var.set(f"{high:.1f}")
+        self.set_status(
+            f"ventana {low:.1f}–{high:.1f} eV. Pulsa «Ajustar región»."
+        )
+
+    def _window_whole_region(self) -> None:
+        label = self.region_var.get()
+        if not label:
+            return
+        self.session.set_window(label, None)
+        low, high = self.session.window_for(label)
+        self.window_low_var.set(f"{low:.1f}")
+        self.window_high_var.set(f"{high:.1f}")
+        self.set_status(f"ventana completa: {low:.1f}–{high:.1f} eV")
 
     def _load(self) -> None:
         from tkinter import filedialog
@@ -593,14 +839,17 @@ class XPSApp(SectionApp):
         self.run_async(work, done, "Analizando…")
 
     def _fill_components(self, result) -> None:
+        del result  # the session owns the table now, holds included
+        label = self.region_var.get()
         fill_table(
             self.components_table,
-            ["componente", "E_enlace (eV)", "FWHM (eV)", "área", "%", "nota"],
-            [(item.label, f"{item.centre:.2f}", f"{item.true_fwhm:.2f}",
-              f"{item.area:.4g}", f"{100 * item.area_fraction:.1f}",
-              ("satélite" if item.satellite else item.justification[:60]))
-             for item in result.components],
+            ["componente", "E_enlace (eV)", "FWHM (eV)", "área", "%",
+             "forma", "fijado"],
+            self.session.component_rows(label),
         )
+        low, high = self.session.window_for(label)
+        self.window_low_var.set(f"{low:.1f}")
+        self.window_high_var.set(f"{high:.1f}")
 
     def _save_report(self) -> None:
         from tkinter import filedialog

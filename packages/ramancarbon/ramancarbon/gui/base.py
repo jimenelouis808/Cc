@@ -260,6 +260,20 @@ class SectionApp:
 
         messagebox.showwarning(title, message, parent=self.root)
 
+    def canvas_limits(self, key: str) -> Optional[tuple[float, float]]:
+        """The x-limits currently shown on one canvas, low first.
+
+        For the sections that let the user pick a range by zooming to it
+        rather than by typing two numbers. Returned low-first because
+        several of these axes are inverted — binding energy runs right to
+        left — and ``get_xlim`` gives them back in display order.
+        """
+        figure = self._figures.get(key)
+        if figure is None or not figure.axes:
+            return None
+        left, right = figure.axes[0].get_xlim()
+        return (float(min(left, right)), float(max(left, right)))
+
     def ask_yes_no(self, title: str, message: str) -> bool:
         """Confirm before something the user cannot undo."""
         from tkinter import messagebox
