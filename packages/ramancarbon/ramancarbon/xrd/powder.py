@@ -183,6 +183,21 @@ def reflections(
     hkl = np.stack([g.ravel() for g in grids], axis=1)
     hkl = hkl[np.any(hkl != 0, axis=1)]
 
+    if getattr(crystal, "stacking", "ordered") == "turbostratic":
+        # Sheets rotated at random about c share no common origin from
+        # one layer to the next, so a reflection needs either l = 0 (an
+        # in-plane hk band, which survives because it lives inside a
+        # single sheet) or h = k = 0 (a 00l, which only counts layers).
+        # Everything mixed is incoherent and absent. Leaving them in is
+        # why a CVD carbon never matched anything: the search demanded a
+        # 101 and a 112 that the material cannot produce, scored graphite
+        # at 0.2, and reported the 002 as an unexplained peak.
+        in_plane = hkl[:, 2] == 0
+        stacking_only = (hkl[:, 0] == 0) & (hkl[:, 1] == 0)
+        hkl = hkl[in_plane | stacking_only]
+        if hkl.size == 0:
+            return []
+
     spacing = lattice.d_spacing(hkl)
     keep = (spacing >= d_min - 1e-9) & (spacing <= d_max + 1e-9)
     hkl, spacing = hkl[keep], spacing[keep]

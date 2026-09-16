@@ -146,10 +146,26 @@ class SectionApp:
 
         threading.Thread(target=target, daemon=True).start()
 
+    def report_progress(self, text: str) -> None:
+        """Show a line from a worker thread, without ending the job.
+
+        A worker thread must never touch a widget — doing it wrong does
+        not crash, it corrupts the display occasionally on some platforms
+        and never on others — so progress goes through the same queue as
+        the result and the main thread puts it on screen. What separates
+        it from a result is that it leaves ``busy`` alone: a refinement
+        reporting its twentieth iteration has not finished, and stopping
+        the progress bar there would say it had.
+        """
+        self.queue.put(("progress", None, text))
+
     def drain_queue(self) -> None:
         try:
             while True:
                 kind, done, payload = self.queue.get_nowait()
+                if kind == "progress":
+                    self.status_var.set(str(payload))
+                    continue
                 self.busy = False
                 if self.progress is not None:
                     self.progress.stop()
@@ -214,6 +230,27 @@ class SectionApp:
         from tkinter import messagebox
 
         messagebox.showwarning(title, message, parent=self.root)
+
+    def show_text(self, title: str, text: str) -> None:
+        """A scrollable, selectable, copyable window of text.
+
+        Not a message box. A refinement report is a page long and the
+        reason to look at it is usually to copy a number out of it, and a
+        message box lets you do neither.
+        """
+        from .widgets import scrolled_text, set_text
+
+        window = self.tk.Toplevel(self.root)
+        window.title(title)
+        window.geometry("820x620")
+        window.configure(background=self.palette.background)
+        frame = self.ttk.Frame(window, padding=PAD["md"])
+        frame.pack(fill="both", expand=True)
+        widget = scrolled_text(frame, self.palette, self.fonts["mono"], height=34)
+        set_text(widget, text)
+        self.ttk.Button(frame, text="Cerrar", command=window.destroy).pack(
+            anchor="e", pady=(PAD["sm"], 0))
+        return window
 
     def show_error(self, exception: Exception, tb: str) -> None:
         from tkinter import messagebox

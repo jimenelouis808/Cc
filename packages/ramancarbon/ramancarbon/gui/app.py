@@ -712,6 +712,30 @@ class RamanCarbonApp:
             body, ["Banda", "Posición", "Ventana", "Dispersión", "Confianza"], height=18)
         self.band_table.bind("<<TreeviewSelect>>", self._on_band_selected)
 
+        # The non-carbon phases, with their provenance. Two things the
+        # user asked for and one that follows from them: being able to add
+        # a reference, being able to take it out again, and being able to
+        # see at a glance which entries came with the program and which
+        # did not — because they do not carry the same warranty.
+        phases_card, phases_body = card(
+            left, "Fases no carbonosas",
+            "Las que el programa busca en tu muestra además del carbono.")
+        phases_card.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        self.phase_table = table(
+            phases_body,
+            ["Fase", "Fórmula", "Familia", "Origen", "Confianza"], height=12)
+        self.phase_table.bind("<<TreeviewSelect>>", self._on_phase_selected)
+        phase_row = ttk.Frame(phases_body, style="Card.TFrame")
+        phase_row.pack(fill="x", pady=(PAD["xs"], 0))
+        ttk.Button(phase_row, text="Añadir fase propia…",
+                   command=self._add_user_phase).pack(
+            side="left", fill="x", expand=True, padx=(0, PAD["xs"]))
+        ttk.Button(phase_row, text="Quitar la seleccionada",
+                   command=self._remove_user_phase).pack(
+            side="left", fill="x", expand=True, padx=(0, PAD["xs"]))
+        ttk.Button(phase_row, text="Abrir carpeta",
+                   command=self._open_phase_folder).pack(side="left")
+
         right = ttk.Frame(tab)
         right.pack(side="left", fill="both", expand=True)
         detail, detail_body = card(right, "Detalle y fuente")
@@ -735,6 +759,153 @@ class RamanCarbonApp:
             ])
         fill_table(self.band_table,
                    ["Banda", "Posición", "Ventana", "Dispersión", "Confianza"], rows)
+        self._fill_phase_table()
+
+    def _fill_phase_table(self) -> None:
+        from .widgets import fill_table
+        from ..analysis.phases import load_phases
+
+        columns = ["Fase", "Fórmula", "Familia", "Origen", "Confianza"]
+        rows = [
+            [phase.key, phase.formula, phase.family, phase.origin, phase.confidence]
+            for phase in sorted(load_phases(),
+                                key=lambda p: (p.origin != "usuario", p.key))
+        ]
+        fill_table(self.phase_table, columns, rows)
+
+    def _selected_phase_key(self) -> str:
+        selection = self.phase_table.selection()
+        if not selection:
+            return ""
+        return str(self.phase_table.item(selection[0], "values")[0])
+
+    def _on_phase_selected(self, _event=None) -> None:
+        from .widgets import set_text
+        from ..analysis.phases import load_phases
+
+        key = self._selected_phase_key()
+        phase = next((p for p in load_phases() if p.key == key), None)
+        if phase is None:
+            return
+        lines = [
+            f"{phase.label}  [{phase.formula}]",
+            "",
+            f"Familia    : {phase.family}",
+            f"Sistema    : {phase.crystal_system}"
+            + (f"   ({phase.space_group})" if phase.space_group else ""),
+            f"Origen     : {phase.origin}",
+            f"Confianza  : {phase.confidence}",
+            "",
+            "Bandas (cm⁻¹):",
+        ]
+        for band in phase.bands:
+            mark = "*" if any(abs(band.position - d) < 1e-6
+                              for d in phase.discriminating) else " "
+            strong = "fuerte" if any(abs(band.position - v) < 1e-6
+                                     for v in phase.strong) else ""
+            lines.append(
+                f"  {mark} {band.position:7.1f}  "
+                f"[{band.window[0]:.0f}–{band.window[1]:.0f}]  "
+                f"rel {band.relative:.2f}  {strong}  {band.assignment}")
+        lines += [
+            "",
+            "* línea discriminante: separa esta fase de sus hermanas de familia.",
+            "",
+            "Fuente:", f"  {phase.source}", "",
+        ]
+        if phase.xrd_hint:
+            hint_text = phase.xrd_advice()
+            lines += ["Lo que zanja la duda en difracción:", f"  {hint_text}", ""]
+        lines += ["Notas:", "", phase.notes]
+        set_text(self.band_text, "\n".join(lines))
+
+    def _add_user_phase(self) -> None:
+        """Import a phase from a JSON file the user wrote.
+
+        A file rather than a form, on purpose. A phase is a dozen numbers
+        with windows, relative intensities, a family and a source; a
+        dialog for that is a worse editor than a text editor, and the file
+        can be kept with the project, versioned and sent to a coauthor.
+        The format is the one in the program's own catalogue, and the
+        button below opens a folder with an example already in it.
+        """
+        from tkinter import filedialog
+        import json
+
+        from ..analysis.phases import PhaseDatabaseError, save_user_phase
+
+        path = filedialog.askopenfilename(
+            title="Archivo JSON con la fase",
+            filetypes=[("JSON", "*.json"), ("Todos", "*.*")], parent=self.root)
+        if not path:
+            return
+        try:
+            payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            self._warn("No se ha podido leer", str(exc))
+            return
+        entries = payload.get("phases", payload) if isinstance(payload, dict) else payload
+        if isinstance(entries, dict):
+            entries = [entries]
+        added, failed = 0, []
+        for entry in entries:
+            try:
+                target = save_user_phase(entry)
+                added += 1
+            except (PhaseDatabaseError, KeyError, TypeError) as exc:
+                failed.append(f"{entry.get('key', '?')}: {exc}")
+        self._fill_phase_table()
+        if failed:
+            self._warn("Algunas fases no se han añadido", "\n".join(failed))
+        if added:
+            self._set_status(f"{added} fase(s) añadidas en {target}")
+
+    def _remove_user_phase(self) -> None:
+        from ..analysis.phases import delete_user_phase
+
+        key = self._selected_phase_key()
+        if not key:
+            self._warn("Sin selección", "Elige una fase de la tabla primero.")
+            return
+        if delete_user_phase(key):
+            self._fill_phase_table()
+            self._set_status(f"{key} quitada de tu catálogo.")
+            return
+        self._warn(
+            "No se puede quitar",
+            f"«{key}» es una fase del programa, no tuya.\n\n"
+            "Las del programa no se borran: el archivo que las contiene se "
+            "reemplaza al actualizar el paquete y el borrado volvería solo. "
+            "Para anular una, añade una fase TUYA con la misma clave: "
+            "sustituye a la del programa y queda marcada como tuya.")
+
+    def _open_phase_folder(self) -> None:
+        """Open the folder with the user's phase file, creating an example."""
+        import json
+        import subprocess
+        import sys
+
+        from ..analysis.phases import user_phase_file
+
+        path = user_phase_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        example = path.parent / "fase_ejemplo.json"
+        if not example.is_file():
+            example.write_text(json.dumps({"phases": [_EXAMPLE_PHASE]},
+                                          ensure_ascii=False, indent=2),
+                               encoding="utf-8")
+        folder = str(path.parent)
+        try:
+            if sys.platform == "win32":
+                subprocess.Popen(["explorer", folder])
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", folder])
+            else:
+                subprocess.Popen(["xdg-open", folder])
+        except OSError:
+            pass
+        self._set_status(
+            f"Tus fases están en {path}. Hay un ejemplo en {example.name}.")
 
     def _on_band_selected(self, _event=None) -> None:
         from .widgets import set_text
@@ -1707,6 +1878,36 @@ def _phase_tolerance() -> float:
     from ..analysis.phases import match_tolerance
 
     return match_tolerance()
+
+
+#: What a user phase looks like, written to the drop folder as an example.
+#: The comment field is the one that matters: a reference without a source
+#: is a guess that the report will present with the same confidence as
+#: everything else.
+_EXAMPLE_PHASE = {
+    "key": "mi_fase",
+    "label": "Mi fase (cámbiale el nombre)",
+    "formula": "FeSe",
+    "family": "FeSe",
+    "crystal_system": "tetragonal",
+    "space_group": "P4/nmm",
+    "bands": [
+        {"position": 181.0, "window": [174.0, 188.0],
+         "assignment": "A₁g", "relative": 1.0},
+        {"position": 196.0, "window": [189.0, 204.0],
+         "assignment": "B₁g", "relative": 0.6},
+    ],
+    "strong": [181.0, 196.0],
+    "discriminating": [181.0, 196.0],
+    "confidence": "medium",
+    "source": "De dónde salen estas posiciones. Obligatorio: una referencia "
+              "sin procedencia se informa con la misma confianza que las "
+              "demás y nadie puede comprobarla. Vale «medido en mi muestra "
+              "el 3/4/2026 con 532 nm».",
+    "xrd_hint": {"reflection": "101", "two_theta_cu": 28.4,
+                 "note": "Lo que zanjaría la duda por difracción."},
+    "notes": "Para qué sirve, con qué se confunde y qué la descarta.",
+}
 
 
 def _placeholder(ax, text: str, palette) -> None:

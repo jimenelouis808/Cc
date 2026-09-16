@@ -172,12 +172,25 @@ class Pattern:
         ramp, so what is left is noise plus curvature at the peaks; the
         median is insensitive to the latter. The 1/√6 converts the second
         difference of independent noise back to the noise itself.
+
+        **On a smoothed pattern the measurement is a lie**, and a
+        dangerous one. Smoothing removes point-to-point scatter by
+        construction, so this returns a σ several times too small, the
+        detection threshold collapses with it, and the peak finder reports
+        every remaining wiggle: on one test pattern, one true peak became
+        a hundred and forty, and two phases that are not in the sample
+        were accepted. :func:`~ramancarbon.xrd.preprocess.savitzky_golay`
+        therefore records the noise it started from, and that floor is
+        honoured here — the pattern looks smoother, and the statistics do
+        not pretend it is better measured.
         """
         if self.intensity.size < 3:
             return 0.0
         second = np.diff(self.intensity, n=2)
         mad = float(np.median(np.abs(second - np.median(second))))
-        return 1.4826 * mad / math.sqrt(6.0)
+        measured = 1.4826 * mad / math.sqrt(6.0)
+        floor = self.metadata.get("noise_floor")
+        return max(measured, float(floor)) if floor else measured
 
     def crop(self, low: float, high: float) -> "Pattern":
         """A copy restricted to a 2θ window."""

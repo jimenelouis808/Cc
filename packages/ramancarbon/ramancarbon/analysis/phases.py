@@ -99,6 +99,12 @@ class Phase:
     xrd_hint: dict
     notes: str
     width_rule: Optional[dict] = None
+    origin: str = "programa"
+    """``"programa"`` for a phase that ships with the package and
+    ``"usuario"`` for one the user added. Shown everywhere a phase is
+    named, because the two do not carry the same warranty: the bundled
+    ones were checked against the literature they cite, and a phase
+    somebody typed in last Tuesday was not."""
     """Optional band-width test, ``{"line", "min_fwhm"|"max_fwhm", "reason"}``.
 
     Some polymorphs differ in the width of a band rather than its position.
@@ -382,6 +388,70 @@ class PhaseReport:
         return "\n".join(lines)
 
 
+def user_phase_file() -> Path:
+    """Where the user's own Raman phases live.
+
+    One fixed, documented place next to the preferences file, read on
+    every load. Same answer as the CIF drop folder on the diffraction
+    side, for the same reason: "where do I put my own references" should
+    have an answer, not a dialog to find again every session.
+
+    The bundled catalogue is never written to. A package upgrade replaces
+    it, and a user's phases living inside it would be lost without
+    warning — which is a good way to lose a year of somebody's
+    measurements.
+    """
+    from ..core.history import config_directory
+
+    return config_directory() / "fases_usuario.json"
+
+
+def _merge_user_phases(payload: dict) -> dict:
+    """Fold the user's own phases into the catalogue payload.
+
+    A user phase whose key matches a bundled one REPLACES it, so a
+    position the user has measured better than the reference can be
+    corrected without editing the package. That is deliberate and it is
+    why every phase carries its origin: an overridden entry says
+    "usuario", and a report that names it says so too.
+
+    A malformed user file is reported and skipped, never fatal. The
+    bundled catalogue has to keep working when somebody's hand-written
+    JSON has a trailing comma in it.
+    """
+    path = user_phase_file()
+    if not path.is_file():
+        return payload
+    try:
+        extra = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        payload.setdefault("_problems", []).append(
+            f"no se ha podido leer {path}: {error}. Se ignoran las fases "
+            "propias y se sigue con el catálogo del programa"
+        )
+        return payload
+    if not isinstance(extra, dict):
+        payload.setdefault("_problems", []).append(
+            f"{path} no contiene un objeto JSON; se ignora")
+        return payload
+
+    families = {f["key"]: f for f in payload.get("families", [])}
+    for family in extra.get("families", []):
+        if isinstance(family, dict) and family.get("key"):
+            families[family["key"]] = family
+    payload["families"] = list(families.values())
+
+    phases = {p["key"]: p for p in payload.get("phases", [])}
+    for entry in extra.get("phases", []):
+        if not isinstance(entry, dict) or not entry.get("key"):
+            continue
+        entry = dict(entry)
+        entry["origin"] = "usuario"
+        phases[entry["key"]] = entry
+    payload["phases"] = list(phases.values())
+    return payload
+
+
 @lru_cache(maxsize=2)
 def _load(directory: str) -> tuple[dict[str, Family], tuple[Phase, ...], float]:
     path = Path(directory) / "phases.json"
@@ -391,6 +461,7 @@ def _load(directory: str) -> tuple[dict[str, Family], tuple[Phase, ...], float]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:  # pragma: no cover - hand edits
         raise PhaseDatabaseError(f"{path} no es JSON válido: {exc}") from exc
+    payload = _merge_user_phases(payload)
 
     families = {
         entry["key"]: Family(
@@ -434,10 +505,78 @@ def _load(directory: str) -> tuple[dict[str, Family], tuple[Phase, ...], float]:
                 xrd_hint=entry.get("xrd_hint", {}),
                 notes=entry.get("notes", ""),
                 width_rule=entry.get("width_rule"),
+                origin=entry.get("origin", "programa"),
             )
         )
     tolerance = float(payload.get("match_tolerance_cm1", DEFAULT_TOLERANCE))
     return families, tuple(phases), tolerance
+
+
+def save_user_phase(entry: dict) -> Path:
+    """Add or replace one phase in the user's own catalogue.
+
+    The entry is the same shape as one in ``phases.json``. It is checked
+    hard before being written, because a phase with no discriminating
+    line or no source is not a reference — it is a guess that will be
+    reported with the same confidence as everything else.
+    """
+    required = ("key", "label", "family", "bands")
+    missing = [field for field in required if not entry.get(field)]
+    if missing:
+        raise PhaseDatabaseError(
+            "faltan campos obligatorios: " + ", ".join(missing))
+    if not entry.get("source"):
+        raise PhaseDatabaseError(
+            "una fase sin 'source' no es una referencia. Pon de dónde salen "
+            "las posiciones, aunque sea «medido en mi muestra el 3/4/26»")
+    for band in entry["bands"]:
+        low, high = band["window"]
+        if not low < band["position"] < high:
+            raise PhaseDatabaseError(
+                f"la banda de {band['position']} cm⁻¹ está fuera de su propia "
+                f"ventana [{low}, {high}]")
+
+    path = user_phase_file()
+    payload = {"families": [], "phases": []}
+    if path.is_file():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            payload = {"families": [], "phases": []}
+    phases = [p for p in payload.get("phases", []) if p.get("key") != entry["key"]]
+    phases.append(entry)
+    payload["phases"] = phases
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
+                    encoding="utf-8")
+    _load.cache_clear()
+    return path
+
+
+def delete_user_phase(key: str) -> bool:
+    """Remove one phase from the user's catalogue.
+
+    Only from the user's. A bundled phase cannot be deleted, because the
+    file it lives in is replaced on the next package upgrade and the
+    deletion would come back — which is worse than refusing. To suppress
+    a bundled phase, override it with a user entry of the same key.
+    """
+    path = user_phase_file()
+    if not path.is_file():
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    phases = payload.get("phases", [])
+    kept = [p for p in phases if p.get("key") != key]
+    if len(kept) == len(phases):
+        return False
+    payload["phases"] = kept
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
+                    encoding="utf-8")
+    _load.cache_clear()
+    return True
 
 
 def load_phases(directory: Optional[str | Path] = None) -> list[Phase]:
@@ -1010,7 +1149,10 @@ __all__ = [
     "RBM_WINDOW",
     "elements_of",
     "find_phases",
+    "delete_user_phase",
     "match_tolerance",
+    "save_user_phase",
+    "user_phase_file",
     "load_families",
     "load_phases",
 ]

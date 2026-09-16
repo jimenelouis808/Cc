@@ -53,6 +53,25 @@ SEARCH_WINDOW = 0.25
 #: Window used after the zero shift has been removed.
 MATCH_WINDOW = 0.12
 
+#: Fraction of a peak's own FWHM added to the matching window.
+#:
+#: A fixed window assumes every peak's position is known to the same
+#: precision, which is true of a well-crystallised powder and false of
+#: everything this package is aimed at. A CVD sample's graphite 002 is
+#: three to five degrees wide and its centroid sits wherever the
+#: interlayer spacing put it -- 3.44 A rather than graphite's 3.354 gives
+#: 25.9 degrees instead of 26.5, a shift of 0.6 that a 0.12 window cannot
+#: reach. So every reflection under a broad peak read as unexplained, and
+#: nothing was ever identified.
+#:
+#: Half the FWHM is the honest tolerance: a reflection anywhere under the
+#: peak is a plausible assignment, and demanding better than the peak's
+#: own width is demanding a precision the measurement does not have. The
+#: cost is paid in the score rather than hidden -- see
+#: :meth:`PhaseMatch.score`, where the position error is judged against
+#: the window that was actually used.
+WIDTH_TOLERANCE = 0.5
+
 #: Calculated reflections weaker than this (relative to 100) are not
 #: required to be observed: they are below a normal detection limit.
 WEAK_REFLECTION = 5.0
@@ -159,7 +178,15 @@ def find_peaks(
             continue
         fwhm = float(width * step) if width > 0 else None
         span = max(width, 1.0)
-        significance = height * math.sqrt(span) / float(noise[position])
+        # PROMINENCE, not height. The distinction is invisible on a clean
+        # pattern with a flat background and decisive on a nanocrystalline
+        # one: a noise ripple riding on a 4-degree-wide graphite 002 sits
+        # at the hump's own intensity, so scoring it by height hands it
+        # the hump's significance. On a simulated CVD pattern that put
+        # thirteen ripples of 0.02-0.09 degrees FWHM into the peak list,
+        # every one of them "significant", every one unexplained -- which
+        # is exactly what a real CVD pattern was doing.
+        significance = float(prominence) * math.sqrt(span) / float(noise[position])
         if significance < threshold:
             continue
         low, high = int(math.floor(a)), int(math.ceil(b)) + 1
@@ -221,17 +248,44 @@ class PhaseMatch:
     """Strong calculated reflections with no observed peak. The damning
     evidence against a phase: an extra peak can belong to something else,
     a missing strong reflection cannot be explained away."""
+    undetectable: list[Reflection] = field(default_factory=list)
+    """Calculated reflections strong enough to be listed but too weak, at
+    this phase's fitted scale and this pattern's noise, for the peak
+    finder to have found them. Their absence is not evidence: see
+    :meth:`coverage`."""
     zero_shift: float = 0.0
     expected_strong: int = 0
+    window_used: float = MATCH_WINDOW
+    """Mean matching window over the matched reflections, in degrees. Wider
+    than :data:`MATCH_WINDOW` when the peaks are broad; the score is judged
+    against this rather than against the constant."""
+    _calculated_total: float = 0.0
+    """Summed calculated intensity of every reflection inside the measured
+    range. The denominator of :attr:`intensity_coverage`."""
 
     @property
     def coverage(self) -> float:
-        """Fraction of the phase's strong reflections that were found."""
-        if not self.expected_strong:
-            return 0.0
+        """Fraction of the phase's *detectable* strong reflections found.
+
+        Detectable is the operative word, and leaving it out is why a
+        nanocrystalline carbon never identified. A turbostratic carbon's
+        pattern is one enormous 002 and a handful of reflections at 5-6 %
+        of it; spread over three or four degrees, a 6 % reflection is
+        below the noise, so it is never found, so coverage came out at
+        0.5 with a perfect position match and the phase scored under the
+        acceptance threshold. The absence of a reflection the measurement
+        could not have shown is not evidence against the phase — the same
+        rule the Raman side applies to a band outside the measured range.
+        """
+        expected = self.expected_strong - len(self.undetectable)
+        if expected <= 0:
+            # Every strong reflection is below the noise. One matched peak
+            # is then all the evidence there can be, and it is thin: the
+            # score's coverage term says so rather than dividing by zero.
+            return 1.0 if self.matched else 0.0
         found = sum(1 for reflection, _ in self.matched
                     if reflection.intensity >= WEAK_REFLECTION)
-        return min(1.0, found / self.expected_strong)
+        return min(1.0, found / expected)
 
     @property
     def position_error(self) -> float:
@@ -243,6 +297,29 @@ class PhaseMatch:
             for reflection, peak in self.matched
         ]
         return float(np.sqrt(np.mean(np.square(errors))))
+
+    @property
+    def intensity_coverage(self) -> float:
+        """Share of the phase's calculated intensity that was actually seen.
+
+        The guard on the "too weak to detect" excuse, and it is needed:
+        without it a phase that matched ONE weak peak declared all its
+        other reflections undetectable — because the scale fitted to that
+        one peak makes them so — and scored a perfect coverage. On a
+        simulated CVD pattern that accepted MoSe₂, on a single line, in a
+        sample containing no molybdenum.
+
+        The difference between that and a genuine one-line phase is
+        quantitative and clean. A turbostratic carbon really is 88 % of
+        its diffracted intensity in the 002 alone; MoSe₂'s strongest
+        reflection is 30 % of its total. So the question is not how many
+        reflections were found but how much of the phase they account
+        for, and that is what this measures.
+        """
+        if not self.matched or not self._calculated_total:
+            return 0.0
+        seen = sum(reflection.intensity for reflection, _ in self.matched)
+        return float(min(1.0, seen / self._calculated_total))
 
     @property
     def intensity_agreement(self) -> Optional[float]:
@@ -272,10 +349,15 @@ class PhaseMatch:
         """
         if not self.matched:
             return 0.0
-        precision = math.exp(-(self.position_error / MATCH_WINDOW) ** 2)
+        # Against the window actually used, not the constant. Judging a
+        # 4-degree-wide peak matched to within 0.6 degrees by a 0.12
+        # yardstick scores it zero, which would undo the whole point of
+        # allowing the wider window in the first place.
+        precision = math.exp(-(self.position_error / max(self.window_used, 1e-6)) ** 2)
         agreement = self.intensity_agreement
         bonus = 0.0 if agreement is None else 0.15 * max(0.0, agreement)
-        return float(min(1.0, 0.85 * self.coverage * precision + bonus))
+        seen = self.intensity_coverage
+        return float(min(1.0, 0.85 * self.coverage * precision * seen + bonus))
 
     @property
     def verdict(self) -> str:
@@ -378,25 +460,76 @@ def match_phase(
         return match
     match.zero_shift = fit_zero_shift(peaks, calculated) if fit_zero else 0.0
     match.expected_strong = sum(1 for r in calculated if r.intensity >= WEAK_REFLECTION)
+    match._calculated_total = float(sum(r.intensity for r in calculated))
 
     used: set[int] = set()
+    windows: list[float] = []
     for reflection in sorted(calculated, key=lambda r: -r.intensity):
         target = reflection.two_theta + match.zero_shift
-        best, best_distance = None, window
+        best, best_distance, best_window = None, None, window
         for index, peak in enumerate(peaks):
             if index in used:
                 continue
+            # Each peak brings its own tolerance. A sharp reflection is
+            # still held to 0.12 degrees; a 4-degree-wide nanocrystalline
+            # hump is not, because nothing about that measurement locates
+            # a reflection to a tenth of a degree.
+            allowed = window + WIDTH_TOLERANCE * float(peak.fwhm or 0.0)
             distance = abs(peak.two_theta - target)
-            if distance <= best_distance:
-                best, best_distance = index, distance
+            if distance <= allowed and (best_distance is None
+                                        or distance < best_distance):
+                best, best_distance, best_window = index, distance, allowed
         if best is None:
             if reflection.intensity >= WEAK_REFLECTION:
                 match.missing.append(reflection)
             continue
         used.add(best)
+        windows.append(best_window)
         match.matched.append((reflection, peaks[best]))
     match.matched.sort(key=lambda pair: pair[1].two_theta)
+    match.window_used = (float(np.mean(windows)) if windows else window)
+    _mark_undetectable(match, pattern)
     return match
+
+
+def _mark_undetectable(match: PhaseMatch, pattern: Pattern) -> None:
+    """Move missing reflections the measurement could not have shown.
+
+    The phase's scale comes from the reflections that DID match — median
+    of observed height over calculated intensity — and every missing one
+    is then predicted at that scale. A prediction below the detection
+    threshold means the peak finder was never going to find it, whatever
+    the phase's abundance, so its absence says nothing about whether the
+    phase is there.
+
+    Width matters as much as height: the same integrated intensity spread
+    over four degrees instead of a tenth of one is thirty times shorter,
+    which is precisely the situation in a nanocrystalline sample and
+    precisely where the naive rule went wrong.
+    """
+    if not match.matched or not match.missing:
+        return
+    scales = [peak.height / reflection.intensity
+              for reflection, peak in match.matched
+              if reflection.intensity > 1e-9 and peak.height > 0.0]
+    if not scales:
+        return
+    scale = float(np.median(scales))
+    widths = [peak.fwhm for _, peak in match.matched if peak.fwhm]
+    width = float(np.median(widths)) if widths else MATCH_WINDOW
+    step = max(pattern.step, 1e-9)
+    noise = max(pattern.noise_estimate(), 1e-9)
+    threshold = MIN_SIGNIFICANCE * _trials_factor(pattern.n)
+
+    still_missing: list[Reflection] = []
+    for reflection in match.missing:
+        height = scale * reflection.intensity
+        span = max(width / step, 1.0)
+        if height * math.sqrt(span) / noise < threshold:
+            match.undetectable.append(reflection)
+        else:
+            still_missing.append(reflection)
+    match.missing = still_missing
 
 
 @dataclass
@@ -588,8 +721,42 @@ def _split_kalpha2_residuals(
     return genuine, residuals
 
 
+#: Score gap below which two candidates of the same composition are a tie.
+SIBLING_MARGIN = 0.12
+
+
+def _flag_sibling_ties(result: PhaseSearchResult) -> None:
+    """Say when the runner-up is the same compound at a different cell.
+
+    The three turbostratic carbons differ only in interlayer spacing —
+    3.36, 3.44 and 3.50 Å, putting the 002 at 26.5, 25.9 and 25.4°. A
+    002 that is three degrees wide cannot choose between them, and
+    reporting the winner alone would turn a coin toss into a measured
+    spacing. Naming the tie is the honest result, and it is also the
+    useful one: it says the number you want comes from refining the cell,
+    not from the search.
+    """
+    for accepted in result.accepted:
+        rivals = [
+            m for m in result.rejected
+            if m.crystal.formula == accepted.crystal.formula
+            and m.crystal.name != accepted.crystal.name
+            and accepted.score - m.score <= SIBLING_MARGIN
+        ]
+        if not rivals:
+            continue
+        names = ", ".join(f"{m.crystal.name} ({m.score:.2f})" for m in rivals[:3])
+        result.warnings.append(
+            f"{accepted.crystal.name} ({accepted.score:.2f}) empata con "
+            f"{names}: es el mismo compuesto con otra celda y el "
+            "difractograma no los separa. No informes el espaciado que sale "
+            "de aquí — refina la celda, que para eso está el Rietveld"
+        )
+
+
 def _add_warnings(result: PhaseSearchResult, pattern: Pattern) -> None:
     """Say what a result implies about the measurement, not just the sample."""
+    _flag_sibling_ties(result)
     if abs(result.zero_shift) > LARGE_ZERO_SHIFT:
         result.warnings.append(
             f"el desplazamiento de cero ajustado es {result.zero_shift:+.3f}°, "

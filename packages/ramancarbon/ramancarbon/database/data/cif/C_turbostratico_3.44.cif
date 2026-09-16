@@ -1,0 +1,58 @@
+data_C_turbostratico_3.44
+_chemical_formula_sum          'C'
+_symmetry_space_group_name_H-M 'P6_3/mmc'
+_cell_length_a                 2.464000
+_cell_length_b                 2.464000
+_cell_length_c                 6.880000
+_cell_angle_alpha              90.0000
+_cell_angle_beta               90.0000
+_cell_angle_gamma              120.0000
+_cell_volume                   36.1743
+
+loop_
+_symmetry_equiv_pos_as_xyz
+  'x, y, z'
+  'x-y, x, z+1/2'
+  '-x, -y, z+1/2'
+  'y, x, -z'
+  '-x, -y, -z'
+  '-y, x-y, z'
+  '-x+y, -x, z'
+  '-x+y, y, -z+1/2'
+  'x, x-y, -z+1/2'
+  '-x+y, -x, -z+1/2'
+  '-y, -x, -z+1/2'
+  'x, y, -z+1/2'
+  'y, -x+y, z+1/2'
+  'x-y, -y, -z'
+  '-x, -x+y, -z'
+  'x-y, x, -z'
+  '-y, -x, z'
+  '-x, -x+y, z+1/2'
+  'x-y, -y, z+1/2'
+  'y, x, z+1/2'
+  'x, x-y, z'
+  '-x+y, y, z'
+  'y, -x+y, -z'
+  '-y, x-y, -z+1/2'
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_U_iso_or_equiv
+  C1       C      0.000000   0.000000   0.250000   1.0000  0.01500
+  C2       C      0.333333   0.666667   0.250000   1.0000  0.01500
+
+_ramancarbon_stacking     'turbostratic'
+_ramancarbon_confidence   'high'
+_ramancarbon_source       'Limite turbostratico de Franklin, Acta Cryst. 4 (1951) 253'
+_ramancarbon_notes
+;
+Carbono turbostratico expandido, d(002) = 3.44 A, 002 a 25.9 grados. Es el limite superior clasico de Franklin: laminas paralelas sin ninguna correlacion de apilamiento. Buena parte del carbono de un CVD a temperatura moderada esta aqui o cerca.
+
+La 002 de una muestra real casi nunca es una sola banda: es la suma de dominios con espaciados distintos, y por eso esta fase viene con dos hermanas a 3.36 y 3.50 A. Separarlas por su posicion es aritmetica de Bragg, no un ajuste: 3.36 -> 26.5, 3.44 -> 25.9, 3.50 -> 25.4 grados. Lo que NO se puede separar asi es cuanta de la anchura viene del tamano de cristalito y cuanta de la distribucion de espaciados; para eso hace falta analisis de perfil, y aun asi las dos contribuciones se parecen mucho.
+;

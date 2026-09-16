@@ -1,0 +1,58 @@
+data_C_turbostratico_3.50
+_chemical_formula_sum          'C'
+_symmetry_space_group_name_H-M 'P6_3/mmc'
+_cell_length_a                 2.464000
+_cell_length_b                 2.464000
+_cell_length_c                 7.000000
+_cell_angle_alpha              90.0000
+_cell_angle_beta               90.0000
+_cell_angle_gamma              120.0000
+_cell_volume                   36.8053
+
+loop_
+_symmetry_equiv_pos_as_xyz
+  'x, y, z'
+  'x-y, x, z+1/2'
+  '-x, -y, z+1/2'
+  'y, x, -z'
+  '-x, -y, -z'
+  '-y, x-y, z'
+  '-x+y, -x, z'
+  '-x+y, y, -z+1/2'
+  'x, x-y, -z+1/2'
+  '-x+y, -x, -z+1/2'
+  '-y, -x, -z+1/2'
+  'x, y, -z+1/2'
+  'y, -x+y, z+1/2'
+  'x-y, -y, -z'
+  '-x, -x+y, -z'
+  'x-y, x, -z'
+  '-y, -x, z'
+  '-x, -x+y, z+1/2'
+  'x-y, -y, z+1/2'
+  'y, x, z+1/2'
+  'x, x-y, z'
+  '-x+y, y, z'
+  'y, -x+y, -z'
+  '-y, x-y, -z+1/2'
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_U_iso_or_equiv
+  C1       C      0.000000   0.000000   0.250000   1.0000  0.01500
+  C2       C      0.333333   0.666667   0.250000   1.0000  0.01500
+
+_ramancarbon_stacking     'turbostratic'
+_ramancarbon_confidence   'medium'
+_ramancarbon_source       'Espaciados de 3.5 A y mayores en carbones activados y en carbono muy defectuoso; el valor exacto depende de la muestra'
+_ramancarbon_notes
+;
+Carbono muy desordenado o expandido, d(002) = 3.50 A, 002 a 25.4 grados. Aparece en carbones activados, en material muy defectuoso y donde algo se ha intercalado entre las laminas.
+
+Confianza media a proposito: por encima de 3.44 A el espaciado deja de tener un valor de referencia y pasa a ser una propiedad de tu muestra. Esta entrada sirve para SEPARAR la cola de angulo bajo de la 002 de la componente principal, no para afirmar que el espaciado son 3.50 A exactos. Si la usas, refina c y mira que valor sale.
+;

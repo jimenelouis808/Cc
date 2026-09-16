@@ -121,13 +121,95 @@ def subtract_background(
     return clone, background
 
 
+def savitzky_golay(pattern: Pattern, window: int = 15, order: int = 3) -> Pattern:
+    """Savitzky-Golay smoothing: for peak finding, not for refinement.
+
+    A moving average flattens a peak as well as the noise, which on a
+    nanocrystalline pattern is the wrong trade: the broad reflections are
+    the signal. Savitzky-Golay fits a low-order polynomial in a sliding
+    window instead, so it follows curvature and leaves a peak's height and
+    position alone while removing point-to-point scatter. That is why it
+    is the standard choice in diffraction and the moving average is not.
+
+    Two things it does not fix, and one it makes worse.
+
+    It does not add counts. A pattern too noisy to see is a pattern that
+    needed a longer scan; smoothing makes it *look* measured.
+
+    It does not help a broad peak: a reflection four degrees wide has
+    two hundred points under it, and the noise on it already averages
+    down by itself when the peak is fitted. What smoothing helps with is
+    the point-to-point scatter that makes a peak finder report ripples,
+    and this package solved that a better way — by scoring peaks on
+    prominence rather than height.
+
+    And it correlates neighbouring points. **Never refine a smoothed
+    pattern.** The weights in a Rietveld fit assume independent points;
+    once they are correlated the χ² is not a χ², the estimated standard
+    uncertainties come out too small, and every conclusion drawn from
+    them is wrong in the flattering direction. The returned pattern
+    carries a note saying so.
+
+    Parameters
+    ----------
+    pattern:
+        The measured diffractogram.
+    window:
+        Points in the sliding window. Must be odd and larger than
+        ``order``; it is adjusted rather than rejected. As a rule it
+        should be well under the FWHM of the narrowest real peak — a
+        window wider than the peak flattens it however clever the
+        polynomial.
+    order:
+        Polynomial order. Three is the usual choice: high enough to
+        follow a peak, low enough to average noise.
+    """
+    from scipy.signal import savgol_filter
+
+    window = int(window)
+    if window % 2 == 0:
+        window += 1
+    order = int(order)
+    if window <= order:
+        window = order + 1 + (order % 2 == 0)
+        if window % 2 == 0:
+            window += 1
+    if window < 3 or pattern.n < window:
+        return pattern.copy()
+
+    clone = pattern.copy()
+    clone.intensity = np.asarray(
+        savgol_filter(pattern.intensity, window, order), dtype=float)
+    clone.counts = False
+    clone.sigma = None
+    clone.sigma_origin = "suavizado: la incertidumbre punto a punto ya no vale"
+    clone.history.append(f"savitzky_golay(window={window}, order={order})")
+    # The noise BEFORE smoothing, carried forward. Everything downstream
+    # thresholds on sigma, and sigma measured after smoothing is a
+    # fiction -- see Pattern.noise_estimate.
+    clone.metadata["noise_floor"] = float(pattern.noise_estimate())
+    narrowest = window * pattern.step
+    clone.metadata["smoothed"] = (
+        f"Savitzky-Golay, ventana de {window} puntos ({narrowest:.2f}° 2θ), "
+        f"orden {order}. Solo para ver y para buscar picos. NO refines sobre "
+        "un patrón suavizado: correlaciona puntos vecinos, y entonces la "
+        "chi-cuadrado y todas las incertidumbres del ajuste salen mejores de "
+        "lo que son. Si algún pico real es más estrecho que "
+        f"{narrowest:.2f}°, esta ventana lo está achatando."
+    )
+    return clone
+
+
 def smooth(pattern: Pattern, window: int = 5) -> Pattern:
     """Moving average, for display only.
 
-    Deliberately blunt and deliberately discouraged. Smoothing a
-    diffractogram before refining it correlates neighbouring points, which
-    makes χ² meaningless and every estimated uncertainty too small. If the
-    pattern is too noisy to see, count for longer.
+    Deliberately blunt and deliberately discouraged, and kept only
+    because it is what an old script expects. Prefer
+    :func:`savitzky_golay`, which does not flatten the peaks along with
+    the noise. Smoothing a diffractogram before refining it correlates
+    neighbouring points, which makes χ² meaningless and every estimated
+    uncertainty too small. If the pattern is too noisy to see, count for
+    longer.
     """
     if window < 3:
         return pattern.copy()
@@ -162,6 +244,7 @@ def instrument_resolution(two_theta: float, u: float = 0.0, v: float = 0.0,
 
 
 __all__ = [
+    "savitzky_golay",
     "BACKGROUND_LAMBDA",
     "instrument_resolution",
     "kalpha2_offset",

@@ -122,6 +122,39 @@ class XRDApp(SectionApp):
              "es la suposición.",
              wrap=250)
 
+        # Peak finding on a nanocrystalline pattern. None of this existed,
+        # and the defaults are wrong for a CVD sample in two ways that
+        # both end in "nothing was identified": the background follows
+        # features wider than about half a degree, so a graphite 002 four
+        # degrees wide is partly removed as background; and there was no
+        # way to loosen the detection threshold when a pattern is genuinely
+        # noisy.
+        search, searchbody = card(parent, "Búsqueda de picos")
+        search.pack(fill="x", pady=(PAD["sm"], 0))
+        self.smooth_var = tk.StringVar(value="0")
+        labelled(searchbody, "Suavizado (pts)", lambda p: ttk.Spinbox(
+            p, from_=0, to=101, increment=2, textvariable=self.smooth_var,
+            width=6))
+        self.background_lambda_var = tk.StringVar(value="1e6")
+        labelled(searchbody, "Rigidez del fondo", lambda p: ttk.Entry(
+            p, textvariable=self.background_lambda_var, width=10))
+        self.significance_var = tk.StringVar(value="")
+        labelled(searchbody, "Umbral (vacío = 18)", lambda p: ttk.Entry(
+            p, textvariable=self.significance_var, width=10))
+        hint(searchbody,
+             "El suavizado es Savitzky-Golay y SOLO se usa para buscar "
+             "picos: el refinamiento corre siempre sobre el patrón medido, "
+             "porque suavizar correlaciona puntos vecinos y entonces la "
+             "chi-cuadrado deja de ser una chi-cuadrado. El programa lo "
+             "sabe y no deja que el suavizado le baje el ruido estimado.   "
+             "La rigidez del fondo es lo que más afecta a una muestra CVD. "
+             "Con 1e6 el fondo sigue todo lo más ancho de medio grado, así "
+             "que una 002 de cuatro grados se va en parte como fondo: si "
+             "tus picos son muy anchos, súbela a 1e8 o 1e9.   "
+             "El umbral está calibrado sobre ruido puro; bajarlo no "
+             "encuentra más fases, encuentra más rizos.",
+             wrap=250)
+
         options, optionsbody = card(parent, "Análisis")
         options.pack(fill="x", pady=(PAD["sm"], 0))
         self.texture_var = tk.StringVar(value="")
@@ -222,6 +255,31 @@ class XRDApp(SectionApp):
             side="left", padx=(0, PAD["xs"]))
         ttk.Button(toolbar, text="Añadir", command=self._free_group).pack(side="left")
 
+        # Phases in and out of the MODEL, which is a different thing from
+        # the parameters. The case this exists for is the one every
+        # refinement meets: a systematic bump left in the difference curve
+        # that no amount of refining the phases already in the model will
+        # remove, because it belongs to one that is not in it. Until now
+        # the only way to add it was to re-run the identification and hope.
+        phases_bar = ttk.Frame(tab)
+        phases_bar.pack(fill="x", pady=(0, PAD["sm"]))
+        ttk.Label(phases_bar, text="Fases del modelo:").pack(
+            side="left", padx=(0, PAD["xs"]))
+        self.model_phase_var = self.tk.StringVar(value="")
+        self.model_phase_combo = ttk.Combobox(
+            phases_bar, textvariable=self.model_phase_var, width=24,
+            state="readonly", values=[])
+        self.model_phase_combo.pack(side="left", padx=(0, PAD["xs"]))
+        ttk.Button(phases_bar, text="Añadir al modelo",
+                   command=self._add_model_phase).pack(side="left",
+                                                       padx=(0, PAD["xs"]))
+        ttk.Button(phases_bar, text="Quitar del modelo",
+                   command=self._remove_model_phase).pack(side="left",
+                                                          padx=(0, PAD["sm"]))
+        self.model_phases_label = ttk.Label(phases_bar, text="—",
+                                            style="Muted.TLabel")
+        self.model_phases_label.pack(side="left")
+
         panes = ttk.Panedwindow(tab, orient="horizontal")
         panes.pack(fill="both", expand=True)
 
@@ -251,6 +309,29 @@ class XRDApp(SectionApp):
              "recomendado desde que existe el método. Soltarlos todos a la vez "
              "converge, da factores R plausibles y devuelve una estructura "
              "equivocada.",
+             wrap=380)
+
+        metrics, metrics_body = card(right, "Resultado del refinamiento")
+        metrics.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        self.metrics_table = table(metrics_body, ["magnitud", "valor"], height=10)
+        row = ttk.Frame(metrics_body)
+        row.pack(fill="x", pady=(PAD["xs"], 0))
+        ttk.Button(row, text="Ver informe completo…",
+                   command=self._show_refinement_report).pack(
+            side="left", fill="x", expand=True, padx=(0, PAD["xs"]))
+        ttk.Button(row, text="Guardar informe…",
+                   command=self._save_refinement_report).pack(
+            side="left", fill="x", expand=True)
+        hint(metrics_body,
+             "La χ² reducida y la GOF son la misma cosa: χ² = GOF². Se dan "
+             "las dos porque cada comunidad lee una.   "
+             "Lo que NINGUNA de las dos dice es que la estructura sea la "
+             "correcta: una χ² de 1.05 con una ondulación sistemática en la "
+             "curva diferencia es peor refinamiento que una de 3 con residuo "
+             "sin estructura. Mira la diferencia primero.   "
+             "Las fracciones en peso son de la parte cristalina QUE ESTÁ EN "
+             "EL MODELO. Una fase que falte no baja el total de 100 %: su "
+             "intensidad se reparte entre las demás. El amorfo no aparece.",
              wrap=380)
 
     def _build_tab_library(self) -> None:
@@ -312,6 +393,19 @@ class XRDApp(SectionApp):
         except ValueError:
             session.background_order = 6
         session.texture_axis = _parse_axis(self.texture_var.get())
+        try:
+            session.smooth_window = max(0, int(self.smooth_var.get()))
+        except ValueError:
+            session.smooth_window = 0
+        try:
+            session.background_lambda = max(1e2, float(self.background_lambda_var.get()))
+        except ValueError:
+            session.background_lambda = 1e6
+        text = self.significance_var.get().strip()
+        try:
+            session.min_significance = float(text) if text else None
+        except ValueError:
+            session.min_significance = None
 
     def _open_files(self) -> None:
         from tkinter import filedialog
@@ -395,11 +489,61 @@ class XRDApp(SectionApp):
             self._redraw()
             if result is not None:
                 self.set_status(
-                    f"Rwp = {100 * result.r_wp:.2f} %, GOF = {result.gof:.3f}"
+                    f"{result.n_evaluations} iteraciones — Rwp = "
+                    f"{100 * result.r_wp:.2f} %, GOF = {result.gof:.3f}, "
+                    f"χ² = {result.chi_squared:.3f}"
                 )
 
-        self.run_async(self.session.auto_refine_current, done,
-                       "Refinamiento por etapas…")
+        def work():
+            # The worker thread never touches a widget. It queues the
+            # progress lines and the main thread drains them, which is the
+            # only safe way to show a counter from inside a fit.
+            return self.session.auto_refine_current(progress=self._queue_progress)
+
+        self.run_async(work, done, "Refinamiento por etapas…")
+
+    def _queue_progress(self, text: str) -> None:
+        """Called from the refinement thread; hands the line to Tk safely."""
+        self.report_progress(text)
+
+    def _add_model_phase(self) -> None:
+        name = self.model_phase_var.get().strip()
+        if not name:
+            self.warn("Sin fase", "Elige una fase de la lista primero.")
+            return
+        if self.session.add_phase_to_model(name):
+            self._fill_parameters()
+            self._redraw()
+        self.flush_messages(self.session.messages)
+
+    def _remove_model_phase(self) -> None:
+        name = self.model_phase_var.get().strip()
+        if name and self.session.remove_phase_from_model(name):
+            self._fill_parameters()
+            self._redraw()
+        self.flush_messages(self.session.messages)
+
+    def _show_refinement_report(self) -> None:
+        text = self.session.report()
+        if not text.strip():
+            self.warn("Sin refinamiento", "Refina un difractograma primero.")
+            return
+        self.show_text("Informe del refinamiento", text)
+
+    def _save_refinement_report(self) -> None:
+        from tkinter import filedialog
+
+        text = self.session.report()
+        if not text.strip():
+            self.warn("Sin refinamiento", "Refina un difractograma primero.")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Guardar informe", defaultextension=".txt",
+            initialfile="rietveld.txt", parent=self.root)
+        if not path:
+            return
+        Path(path).write_text(text, encoding="utf-8")
+        self.set_status(f"Informe guardado en {path}")
 
     def _prepare_manual(self) -> None:
         self._settings_from_widgets()
@@ -477,6 +621,22 @@ class XRDApp(SectionApp):
             self.parameter_table,
             ["parámetro", "libre", "valor", "error", "grupo"],
             self.session.parameter_rows(),
+        )
+        fill_table(self.metrics_table, ["magnitud", "valor"],
+                   self.session.refinement_metrics())
+        self._fill_model_phases()
+
+    def _fill_model_phases(self) -> None:
+        """Offer every library phase, and say which are in the model."""
+        in_model = self.session.model_phase_names()
+        available = sorted({entry.crystal.name for entry in self.session.library()}
+                           | set(in_model))
+        self.model_phase_combo.configure(values=available)
+        if self.model_phase_var.get() not in available:
+            self.model_phase_var.set(available[0] if available else "")
+        self.model_phases_label.configure(
+            text=(", ".join(in_model) if in_model
+                  else "ninguna — identifica o prepara el refinamiento")
         )
 
     def _add_cif_directory(self) -> None:

@@ -328,6 +328,53 @@ una tiene una prueba que la protege.
   celda y contenido a la vez) y posición de la reflexión más intensa frente a
   su ficha. Las dos están en las pruebas. Si añades una fase, añade las dos.
 
+## Patrones nanocristalinos: el caso CVD
+
+Tres errores que juntos hacían que un difractograma CVD real no
+identificara NADA y devolviera veintiún picos sin explicar. Cada uno solo
+se ve en material ancho:
+
+- **La significancia se calcula sobre la PROMINENCIA, no sobre la
+  altura.** Sobre fondo plano da igual; sobre una joroba de grafito 002 de
+  cuatro grados, un rizo de ruido está a la altura de la joroba y hereda
+  su significancia. Trece picos falsos de 0.02-0.09° de FWHM, todos
+  «significativos», todos sin explicar.
+- **La ventana de casado sigue la ANCHURA del pico**
+  (`MATCH_WINDOW + WIDTH_TOLERANCE·FWHM`). Una ventana fija de 0.12°
+  supone que toda posición se conoce con la misma precisión, y eso es
+  cierto en un polvo bien cristalizado y falso en todo lo demás: el 002 de
+  un carbono a d = 3.44 Å está en 25.9° y el del grafito en 26.5. Y la
+  puntuación se juzga contra la ventana USADA, o exigir la ventana ancha
+  no serviría de nada.
+- **Un carbono CVD no es grafito: es turbostrático**, y eso quita
+  reflexiones. El giro al azar entre láminas destruye la coherencia 3D, así
+  que solo existen las 00l y las hk0. Pedirle la 101 y la 112 es pedirle
+  reflexiones que el material no puede producir. `Crystal.stacking` lo
+  declara y `reflections()` lo respeta; hay tres carbonos turbostráticos
+  en la biblioteca a 3.36, 3.44 y 3.50 Å, que es como se separa una 002
+  ancha en sus componentes.
+
+Y una regla que nació de arreglar lo anterior y casi lo estropea:
+
+- **«Demasiado débil para verse» no puede sostener una fase entera.** Una
+  reflexión que la medida no podía mostrar no cuenta en contra (la misma
+  regla que en Raman para una banda fuera del rango), pero la escala con
+  la que se predice sale de las reflexiones casadas — así que una fase que
+  case UN pico débil declara indetectable todo lo demás y puntúa perfecto.
+  Aceptaba MoSe₂, con una sola línea, en una muestra sin molibdeno. Lo que
+  lo separa de una fase de una sola línea legítima es
+  `intensity_coverage`: cuánta de la intensidad calculada de la fase se ha
+  visto. Un carbono turbostrático es el 88 % en su 002; el MoSe₂, el 30 %
+  en su línea más fuerte.
+
+- **Suavizar rompe la estadística de este programa, y hay que compensarlo
+  explícitamente.** Todo el umbral de detección es σ medida punto a punto,
+  y un Savitzky-Golay la destruye por construcción: sin guardia, un pico
+  verdadero se convertía en ciento cuarenta y entraban dos fases que no
+  están. `savitzky_golay` guarda el ruido ANTERIOR en
+  `metadata["noise_floor"]` y `noise_estimate()` lo respeta. Y nunca se
+  refina sobre un patrón suavizado.
+
 ## Modelos a medida
 
 - **Las componentes llevan nombre solo mientras la física se lo dé**: D, D3,
@@ -864,6 +911,21 @@ una tiene una prueba que la protege.
 - **El diagrama de Nyquist va con caja cuadrada y límites iguales**, no con
   `aspect="equal"` y límites libres: eso último satisface el aspecto
   ensanchando el eje X hacia Z′ negativa, que ninguna impedancia alcanza.
+- **clam trae su propio MAPA de estados para readonly y disabled, y un
+  mapa gana a un configure.** Configurar solo el estado por defecto dejaba
+  todos los combos readonly de la suite dibujando nuestro texto claro sobre
+  el campo gris pálido de clam: invisibles en la paleta oscura, que es la
+  que abre. Los spinbox no estaban estilados en absoluto. Y el desplegable
+  es un listbox de Tk puro que ignora ttk: se colorea con `option_add`.
+- **El fondo de las FIGURAS es una elección aparte del tema de la
+  ventana.** Oscuro para trabajar, blanco para el manuscrito. Todo método
+  `_draw_*` dibuja con `figure_palette`, no con `palette`; uno que se
+  quede atrás es una línea oscura sobre figura blanca, invisible, y solo
+  en el archivo exportado. Hay una prueba que recorre las cinco secciones.
+- **Un hilo de trabajo informa del progreso por la COLA**, con
+  `report_progress`, y ese mensaje no toca `busy`: un refinamiento que va
+  por la iteración veinte no ha terminado, y parar ahí la barra diría que
+  sí.
 - **El gráfico de Rietveld lleva la diferencia DEBAJO y en la misma escala.**
   Ponerla en un eje propio reescalado queda más limpio y destruye justo la
   comparación para la que sirve.
@@ -994,6 +1056,27 @@ ramancarbon analizar datos/demo_DWCNT_532nm.txt --laser 532 --auto --perfil pseu
 ramancarbon xps survey.vms C1s.vms --referencia-estado "C 1s:C-C sp2" --region "N 1s=4"
 ramancarbon laseres datos/m_532nm.txt datos/m_633nm.txt
 ```
+
+## Referencias del usuario
+
+- **Las fases Raman propias viven FUERA del paquete**, en
+  `config_directory()/fases_usuario.json`, igual que los CIF de la COD.
+  El catálogo del programa no se escribe nunca: una actualización lo
+  reemplaza, y las fases del usuario dentro se perderían sin aviso.
+- **Cada fase lleva su `origin`** — `programa` o `usuario` — y se enseña
+  en todas partes. No tienen la misma garantía: las del programa se
+  contrastaron contra la literatura que citan.
+- **Una fase del usuario con la misma clave SUSTITUYE a la del programa.**
+  Es deliberado: una posición mejor medida que la referencia se corrige sin
+  tocar el paquete. Y la entrada resultante dice `usuario`.
+- **Una del programa no se borra**, se anula sustituyéndola. Borrarla
+  escribiría en el archivo que la próxima actualización reemplaza, y el
+  borrado volvería solo.
+- **Sin `source` no se guarda.** Una referencia sin procedencia se informa
+  con la misma confianza que las demás y nadie puede comprobarla.
+- **Un archivo de usuario ilegible se informa y se ignora**, nunca es
+  fatal: el catálogo del programa tiene que seguir funcionando cuando el
+  JSON escrito a mano lleva una coma de más.
 
 ## La capa Tk
 

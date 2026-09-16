@@ -300,6 +300,14 @@ def crystal_from_block(block: dict, name: str = "") -> Crystal:
                               default="")).strip()[:200],
             confidence="unknown",
             notes=notes,
+            # A private key, because no CIF dictionary has one: a CIF
+            # describes a three-dimensional crystal and turbostratic
+            # carbon is not one. Writing it down is still better than the
+            # alternative, which is a program that asks a CVD carbon for
+            # reflections it cannot produce.
+            stacking=str(_first(block, "_ramancarbon_stacking",
+                                default="ordered")).strip().strip("'\"").lower()
+            or "ordered",
         )
     except SymmetryError as exc:
         raise CIFError(f"simetría ilegible: {exc}") from exc

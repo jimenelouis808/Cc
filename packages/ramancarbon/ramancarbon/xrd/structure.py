@@ -198,6 +198,14 @@ class Crystal:
     """How much the *coordinates* are to be trusted. Positions of peaks
     depend only on the lattice and are safe regardless; intensities do not."""
     notes: str = ""
+    stacking: str = "ordered"
+    """``"turbostratic"`` for a layered carbon whose sheets are rotated at
+    random about the stacking axis. That is not a detail: random rotation
+    destroys three-dimensional coherence, so every ``hkl`` with ``l ≠ 0``
+    AND ``(h, k) ≠ (0, 0)`` simply does not exist. A CVD carbon is this,
+    not graphite, and asking it for graphite's 101 and 112 is asking for
+    reflections the material cannot produce. See
+    :func:`~ramancarbon.xrd.powder.reflections`."""
 
     def __post_init__(self) -> None:
         if not self.sites:

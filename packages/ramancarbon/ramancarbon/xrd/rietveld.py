@@ -81,6 +81,11 @@ SIZE_CEILING = 120.0
 #: A goodness of fit above this is a bad fit whatever the R factors say.
 GOF_LIMIT = 4.0
 
+#: Report progress every this many residual evaluations. Small enough that
+#: a slow refinement visibly moves, large enough that the reporting itself
+#: is not the cost.
+PROGRESS_EVERY = 10
+
 #: March–Dollase r outside this range is severe texture.
 TEXTURE_LIMITS = (0.7, 1.4)
 
@@ -157,6 +162,11 @@ class RietveldResult:
     gof: float = 0.0
     converged: bool = False
     message: str = ""
+    n_evaluations: int = 0
+    """Residual evaluations the least-squares solver used. A refinement
+    that looks instantaneous usually IS: with a good starting point and
+    few free parameters it converges in a handful of steps. Reporting the
+    number is what distinguishes that from one that never started."""
     stages: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -164,6 +174,20 @@ class RietveldResult:
     def difference(self) -> np.ndarray:
         """Observed minus calculated — the curve that is actually read."""
         return self.pattern.intensity - self.calculated
+
+    @property
+    def chi_squared(self) -> float:
+        """Reduced χ², which is the goodness of fit squared.
+
+        The two are the same statement — ``GOF = Rwp/Rexp`` and
+        ``χ²_red = GOF²`` — and both are quoted because different
+        communities read one or the other. What neither means, on its own,
+        is that the structure is right: a χ² of 1.05 with a systematic
+        ripple in the difference curve is a worse refinement than a χ² of
+        3 with structureless residuals, and the difference curve is where
+        to look first.
+        """
+        return float(self.gof ** 2)
 
     @property
     def free_parameters(self) -> int:
@@ -235,7 +259,8 @@ class RietveldResult:
             f"  Rp   = {100 * self.r_p:6.2f} %",
             f"  Rwp  = {100 * self.r_wp:6.2f} %",
             f"  Rexp = {100 * self.r_expected:6.2f} %",
-            f"  GOF  = {self.gof:6.3f}   (χ² = {self.gof ** 2:.3f})",
+            f"  GOF  = {self.gof:6.3f}   (χ² reducida = {self.chi_squared:.3f})",
+            f"  {self.n_evaluations} evaluaciones del residuo",
         ]
         if self.stages:
             lines.append("")
@@ -626,9 +651,24 @@ def refine(
             reflection_cache=cache,
         )
 
+    evaluations = 0
+    root_weights = np.sqrt(weights)
+
     def residual(values: np.ndarray) -> np.ndarray:
+        nonlocal evaluations
         unpack(values)
-        return (observed - model()) * np.sqrt(weights)
+        difference = (observed - model()) * root_weights
+        evaluations += 1
+        if callback and evaluations % PROGRESS_EVERY == 0:
+            # Rwp from the residual already in hand, so reporting progress
+            # costs no extra pattern calculation -- which would otherwise
+            # be the single most expensive thing in the loop.
+            current = math.sqrt(
+                float(np.sum(difference ** 2))
+                / max(float(np.sum(weights * observed ** 2)), 1e-30)
+            )
+            callback(f"iteración {evaluations}: Rwp = {100 * current:.2f} %")
+        return difference
 
     start = np.array([p.value for p in free], dtype=float)
     lower = np.array([p.lower for p in free], dtype=float)
@@ -666,10 +706,14 @@ def refine(
         gof=gof,
         converged=bool(outcome.success),
         message=str(outcome.message),
+        n_evaluations=evaluations,
     )
     _check(result, instrument_fwhm)
     if callback:
-        callback(f"Rwp = {100 * r_wp:.2f} %, GOF = {gof:.3f}")
+        callback(
+            f"{evaluations} iteraciones: Rwp = {100 * r_wp:.2f} %, "
+            f"GOF = {gof:.3f}, χ² = {gof ** 2:.3f}"
+        )
     return result
 
 
@@ -743,6 +787,11 @@ def auto_refine(
         if any(p.preferred_axis is None for p in models) and "preferred" in active:
             active = [k for k in active if k != "preferred"]
         free_kinds(parameters, active)
+        # The stage's own name goes in front of the inner counter, so a
+        # long refinement says which stage it is in and how far into it,
+        # rather than going quiet for twenty seconds.
+        inner = (lambda text, stage=label: callback(f"[{stage}] {text}")
+                 ) if callback else None
         try:
             result = refine(
                 pattern,
@@ -750,6 +799,7 @@ def auto_refine(
                 parameters=parameters,
                 background_order=background_order,
                 instrument_fwhm=instrument_fwhm,
+                callback=inner,
             )
         except (RefinementError, ValueError) as exc:  # pragma: no cover - defensive
             if result is None:

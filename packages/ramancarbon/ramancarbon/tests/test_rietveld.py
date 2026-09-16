@@ -270,3 +270,96 @@ def test_theoretical_pattern_returns_a_comparable_curve():
     assert calculated.shape == pattern.intensity.shape
     assert np.allclose(difference, pattern.intensity - calculated)
     assert refinement.r_wp < 0.1
+
+
+# -- what the refinement reports about itself --------------------------
+
+
+def test_the_refinement_counts_its_own_iterations():
+    """A refinement that returns instantly is either converged or never
+    started, and from outside the two look identical. The count is what
+    separates them."""
+    from ramancarbon.examples.demo_data import xrd_demo_spectra
+    from ramancarbon.xrd.report import analyse_pattern
+
+    result = analyse_pattern(xrd_demo_spectra(seed=3)[0])
+    refinement = result.refinement
+    assert refinement is not None
+    assert refinement.n_evaluations > 10
+    assert "evaluaciones" in refinement.summary()
+
+
+def test_reduced_chi_squared_is_the_goodness_of_fit_squared():
+    """They are the same statement; both are quoted because different
+    communities read different ones."""
+    from ramancarbon.examples.demo_data import xrd_demo_spectra
+    from ramancarbon.xrd.report import analyse_pattern
+
+    refinement = analyse_pattern(xrd_demo_spectra(seed=3)[0]).refinement
+    assert refinement.chi_squared == pytest.approx(refinement.gof ** 2)
+    assert "χ² reducida" in refinement.summary()
+
+
+def test_progress_is_reported_from_inside_the_fit_not_only_between_stages():
+    """Between stages is too coarse: a single stage of a many-phase
+    refinement can take most of the time, and the window goes quiet for
+    all of it."""
+    from ramancarbon.examples.demo_data import xrd_demo_spectra
+    from ramancarbon.xrd.report import analyse_pattern
+    from ramancarbon.xrd.rietveld import PhaseModel, auto_refine
+
+    pattern = xrd_demo_spectra(seed=3)[0]
+    search = analyse_pattern(pattern, refine=False).search
+    models = [PhaseModel(crystal=m.crystal) for m in search.accepted]
+
+    lines: list[str] = []
+    auto_refine(pattern, models, callback=lines.append)
+    assert len(lines) > len(("escala", "cero", "celda"))
+    assert any("iteración" in line for line in lines)
+    # Every line names the stage it came from.
+    assert all(line.startswith("[") for line in lines)
+
+
+def test_a_phase_can_be_put_into_the_model_and_taken_out_again():
+    """The case every refinement meets: a systematic bump in the
+    difference curve that belongs to a phase not in the model. Until now
+    the only way to add one was to re-run the identification and hope."""
+    from ramancarbon.examples.demo_data import xrd_demo_spectra
+    from ramancarbon.gui.xrd_state import XRDSession
+
+    session = XRDSession()
+    session.add_pattern(xrd_demo_spectra(seed=3)[0])
+    session.current = 0
+    session.analyse_current(refine_after=False)
+    session.prepare_manual()
+    before = session.model_phase_names()
+    assert before
+
+    assert session.add_phase_to_model("Fe_alfa")
+    assert "Fe_alfa" in session.model_phase_names()
+    assert not session.add_phase_to_model("Fe_alfa")       # already there
+    assert not session.add_phase_to_model("no_existe")
+
+    assert session.remove_phase_from_model("Fe_alfa")
+    assert session.model_phase_names() == before
+
+    # The last phase cannot go: a refinement with no phases fits the
+    # background and calls it a structure.
+    for name in before[1:]:
+        session.remove_phase_from_model(name)
+    assert not session.remove_phase_from_model(session.model_phase_names()[0])
+
+
+def test_the_metrics_table_carries_the_numbers_and_the_fractions():
+    from ramancarbon.examples.demo_data import xrd_demo_spectra
+    from ramancarbon.gui.xrd_state import XRDSession
+
+    session = XRDSession()
+    session.add_pattern(xrd_demo_spectra(seed=3)[0])
+    session.current = 0
+    session.analyse_current(refine_after=True)
+    rows = dict(session.refinement_metrics())
+    for key in ("Rp", "Rwp", "Rexp", "GOF", "χ² reducida", "evaluaciones"):
+        assert key in rows, rows
+    fractions = [v for k, v in rows.items() if "% peso" in v]
+    assert fractions, rows

@@ -81,6 +81,9 @@ def analyse_pattern(
     max_phases: int = 4,
     preferred_axis: Optional[Sequence[int]] = None,
     instrument_fwhm: float = 0.06,
+    smooth_window: int = 0,
+    background_lambda: float = 1e6,
+    min_significance: Optional[float] = None,
 ) -> XRDResult:
     """Identify the phases in a diffractogram and, optionally, refine them.
 
@@ -101,11 +104,34 @@ def analyse_pattern(
         it cannot, and a textured sample then shows up as a stubborn
         intensity misfit that U_iso will try to absorb.
 
+    smooth_window:
+        Savitzky-Golay window in points for the PEAK SEARCH only; 0
+        disables it. The refinement always runs on the pattern as
+        measured, because smoothing correlates neighbouring points and a
+        χ² over correlated points is not a χ². See
+        :func:`~ramancarbon.xrd.preprocess.savitzky_golay`.
+    background_lambda:
+        Stiffness of the background removed before peak finding. The
+        default follows features wider than roughly half a degree, which
+        is right for a crystalline powder and wrong for a nanocrystalline
+        one: a graphite 002 four degrees wide is partly eaten as
+        background. Raise it for broad peaks.
+    min_significance:
+        Detection threshold. ``None`` uses the calibrated default.
+
     Returns
     -------
     XRDResult
     """
-    peaks = find_peaks(pattern)
+    searched = pattern
+    if smooth_window and smooth_window >= 3:
+        from .preprocess import savitzky_golay
+
+        searched = savitzky_golay(pattern, window=smooth_window, order=3)
+    peak_kwargs = {"baseline_lambda": background_lambda}
+    if min_significance is not None:
+        peak_kwargs["min_significance"] = float(min_significance)
+    peaks = find_peaks(searched, **peak_kwargs)
     search = identify_phases(
         pattern,
         candidates=candidates,

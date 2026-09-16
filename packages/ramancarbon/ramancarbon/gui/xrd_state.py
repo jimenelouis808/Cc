@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 
 from ..xrd.io import read_pattern
 from ..xrd.pattern import Pattern
@@ -84,6 +84,14 @@ class XRDSession:
         self.instrument_fwhm: float = 0.06
         self.background_order: int = 6
         self.max_phases: int = 4
+        self.smooth_window: int = 0
+        """Savitzky-Golay window for the PEAK SEARCH, in points. 0 is off.
+        Never applied to the refinement."""
+        self.background_lambda: float = 1e6
+        """Stiffness of the background removed before peak finding. Raise
+        it for nanocrystalline patterns, whose reflections are wide enough
+        that the default treats them as background."""
+        self.min_significance: Optional[float] = None
         self.messages: list[tuple[str, str]] = []
 
     # -- messages ------------------------------------------------------
@@ -168,6 +176,9 @@ class XRDSession:
             max_phases=self.max_phases,
             preferred_axis=self.texture_axis,
             instrument_fwhm=self.instrument_fwhm,
+            smooth_window=self.smooth_window,
+            background_lambda=self.background_lambda,
+            min_significance=self.min_significance,
         )
         item.result = result
         item.refinement = result.refinement
@@ -207,6 +218,94 @@ class XRDSession:
         free_kinds(item.parameters, ("scale", "background"))
         return item.parameters
 
+    def model_phase_names(self) -> list[str]:
+        """Names of the phases currently IN the refinement model."""
+        item = self.item
+        return [m.crystal.name for m in item.models] if item and item.models else []
+
+    def add_phase_to_model(self, name: str) -> bool:
+        """Put one library phase into the refinement model.
+
+        The case this exists for is the one every refinement runs into: a
+        systematic bump left in the difference curve that no amount of
+        refining the phases already in the model will remove, because it
+        belongs to a phase that is not in it. Until now the only way to
+        add one was to re-run the identification and hope it found it.
+        """
+        item = self.item
+        if item is None:
+            return False
+        if name in self.model_phase_names():
+            self.log("info", f"{name} ya está en el modelo")
+            return False
+        crystal = next((e.crystal for e in self.library() if e.crystal.name == name),
+                       None)
+        if crystal is None:
+            self.log("error", f"{name} no está en la biblioteca de referencia")
+            return False
+        item.models = list(item.models) + [PhaseModel(crystal=crystal)]
+        # The parameter list is built from the model, so it has to be
+        # rebuilt; keeping the old one would refine a phase that is no
+        # longer the model's shape.
+        item.parameters = build_parameters(item.models, self.background_order)
+        free_kinds(item.parameters, ("scale", "background"))
+        self.log("info",
+                 f"{name} añadida al modelo. Los parámetros se han vuelto a "
+                 "preparar: solo escala y fondo están libres")
+        return True
+
+    def remove_phase_from_model(self, name: str) -> bool:
+        """Take one phase out of the refinement model."""
+        item = self.item
+        if item is None or not item.models:
+            return False
+        kept = [m for m in item.models if m.crystal.name != name]
+        if len(kept) == len(item.models):
+            return False
+        if not kept:
+            self.log("error",
+                     "no se puede quitar la última fase: un refinamiento sin "
+                     "fases solo ajusta el fondo")
+            return False
+        item.models = kept
+        item.parameters = build_parameters(item.models, self.background_order)
+        free_kinds(item.parameters, ("scale", "background"))
+        self.log("info", f"{name} quitada del modelo")
+        return True
+
+    def refinement_metrics(self) -> list[tuple[str, str]]:
+        """The numbers a refinement is judged by, as label/value rows.
+
+        χ² reduced next to the goodness of fit because they are the same
+        statement and different communities read different ones, and the
+        evaluation count next to both because a refinement that returns
+        instantly is either converged or never started, and the two look
+        identical from outside.
+        """
+        item = self.item
+        outcome = item.refinement if item else None
+        if outcome is None:
+            return []
+        rows = [
+            ("Rp", f"{100 * outcome.r_p:.2f} %"),
+            ("Rwp", f"{100 * outcome.r_wp:.2f} %"),
+            ("Rexp", f"{100 * outcome.r_expected:.2f} %"),
+            ("GOF", f"{outcome.gof:.3f}"),
+            ("χ² reducida", f"{outcome.chi_squared:.3f}"),
+            ("evaluaciones", str(outcome.n_evaluations)),
+            ("parámetros libres", f"{outcome.free_parameters} / {outcome.pattern.n} pts"),
+            ("convergido", "sí" if outcome.converged else "NO"),
+        ]
+        fractions = outcome.weight_fractions()
+        sizes = outcome.crystallite_sizes(self.instrument_fwhm)
+        for name, fraction in fractions.items():
+            size = sizes.get(name)
+            text = "no disponible" if fraction is None else f"{100 * fraction:.1f} % peso"
+            if size:
+                text += f", {size:.0f} nm"
+            rows.append((name, text))
+        return rows
+
     def refine_current(self) -> Optional[RietveldResult]:
         """Run one refinement with whatever parameters are marked free."""
         item = self.item
@@ -229,8 +328,17 @@ class XRDSession:
             self.log("warning", warning)
         return outcome
 
-    def auto_refine_current(self) -> Optional[RietveldResult]:
-        """Run the staged automatic protocol."""
+    def auto_refine_current(
+        self, progress: Optional[Callable[[str], None]] = None
+    ) -> Optional[RietveldResult]:
+        """Run the staged automatic protocol.
+
+        ``progress`` is called with one line per stage and every tenth
+        residual evaluation, so a refinement can be watched instead of
+        guessed at. A staged refinement with a good starting point really
+        does converge in a few seconds, and without a counter that is
+        indistinguishable from one that never ran.
+        """
         item = self.item
         if item is None:
             return None
@@ -243,6 +351,7 @@ class XRDSession:
             background_order=self.background_order,
             preferred_axis=self.texture_axis,
             instrument_fwhm=self.instrument_fwhm,
+            callback=progress,
         )
         item.refinement = outcome
         item.parameters = outcome.parameters

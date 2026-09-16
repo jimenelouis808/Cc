@@ -436,3 +436,99 @@ def test_a_clean_nanotube_is_still_not_interrupted_without_a_composition():
                          spectrum_range=(100.0, 3000.0))
     assert not report.rbm_suspects
     assert not report.found_anything
+
+
+# -- the user's own references -----------------------------------------
+
+
+@pytest.fixture
+def user_catalogue(tmp_path, monkeypatch):
+    """Point the user phase file at a temporary directory."""
+    from ramancarbon.analysis import phases as module
+
+    monkeypatch.setenv("RAMANCARBON_CONFIG", str(tmp_path))
+    module._load.cache_clear()
+    yield tmp_path
+    module._load.cache_clear()
+
+
+ENTRY = {
+    "key": "mi_fase",
+    "label": "Mi β-FeSe medido",
+    "formula": "FeSe",
+    "family": "FeSe",
+    "crystal_system": "tetragonal",
+    "bands": [
+        {"position": 183.0, "window": [176.0, 190.0], "relative": 1.0},
+        {"position": 198.0, "window": [191.0, 205.0], "relative": 0.6},
+    ],
+    "strong": [183.0, 198.0],
+    "discriminating": [183.0],
+    "confidence": "medium",
+    "source": "medido en mi muestra el 3/4/2026",
+    "notes": "Sale 2 cm-1 por encima del catálogo.",
+}
+
+
+def test_a_user_phase_is_searched_and_marked_as_the_users(user_catalogue):
+    from ramancarbon.analysis.phases import load_phases, save_user_phase
+
+    save_user_phase(dict(ENTRY))
+    catalogue = {p.key: p for p in load_phases()}
+    assert catalogue["mi_fase"].origin == "usuario"
+    assert catalogue["Fe3C_cementite"].origin == "programa"
+
+    report = find_phases([pk(183, 300), pk(198, 180), pk(1580, 400, 40)],
+                         spectrum_range=(100.0, 3000.0))
+    assert "mi_fase" in {i.phase.key for i in report.identifications}
+
+
+def test_a_user_phase_can_override_a_bundled_one(user_catalogue):
+    """A position measured better than the reference should be
+    correctable without editing the package, and the override has to be
+    visible: it says 'usuario', so a report naming it says so too."""
+    from ramancarbon.analysis.phases import load_phases, save_user_phase
+
+    override = dict(ENTRY, key="FeSe_tetragonal", label="β-FeSe (el mío)")
+    save_user_phase(override)
+    catalogue = {p.key: p for p in load_phases()}
+    assert catalogue["FeSe_tetragonal"].origin == "usuario"
+    assert catalogue["FeSe_tetragonal"].label == "β-FeSe (el mío)"
+    assert catalogue["FeSe_tetragonal"].bands[0].position == 183.0
+
+
+def test_only_the_users_own_phases_can_be_deleted(user_catalogue):
+    """A bundled phase lives in a file the next upgrade replaces, so the
+    deletion would come back. Refusing is better than pretending."""
+    from ramancarbon.analysis.phases import delete_user_phase, save_user_phase
+
+    save_user_phase(dict(ENTRY))
+    assert delete_user_phase("mi_fase")
+    assert not delete_user_phase("mi_fase")
+    assert not delete_user_phase("Fe3C_cementite")
+
+
+def test_a_reference_without_a_source_is_refused(user_catalogue):
+    from ramancarbon.analysis.phases import PhaseDatabaseError, save_user_phase
+
+    with pytest.raises(PhaseDatabaseError, match="source"):
+        save_user_phase({k: v for k, v in ENTRY.items() if k != "source"})
+    with pytest.raises(PhaseDatabaseError, match="obligatorios"):
+        save_user_phase({"key": "x", "label": "y", "source": "z", "family": "FeSe"})
+    with pytest.raises(PhaseDatabaseError, match="ventana"):
+        save_user_phase(dict(
+            ENTRY,
+            bands=[{"position": 300.0, "window": [176.0, 190.0], "relative": 1.0}]))
+
+
+def test_a_broken_user_file_never_stops_the_catalogue_loading(user_catalogue):
+    """Somebody's hand-written JSON with a trailing comma must not take
+    the program down with it."""
+    from ramancarbon.analysis import phases as module
+
+    module.user_phase_file().parent.mkdir(parents=True, exist_ok=True)
+    module.user_phase_file().write_text("{no es json,,,", encoding="utf-8")
+    module._load.cache_clear()
+    catalogue = module.load_phases()
+    assert len(catalogue) > 30
+    assert all(p.origin == "programa" for p in catalogue)

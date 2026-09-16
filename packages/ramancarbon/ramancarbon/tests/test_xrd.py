@@ -124,6 +124,12 @@ DENSITIES = {
     # 11.7 g/cm3 against the mineral's 4.30.
     "Fe_gamma": 8.01, "FeP": 6.07, "Fe2P": 6.86,
     "FeS_mackinawita": 4.30, "FeS2_pirita": 5.01, "NiS_beta": 5.50,
+    # The turbostratic carbons. Their density follows from the interlayer
+    # spacing alone -- 2.26 g/cm3 at graphite's 3.356 A, falling as the
+    # sheets separate -- so this check is a check on the cell, which is
+    # the only thing about these three that carries information.
+    "C_turbostratico_3.36": 2.259, "C_turbostratico_3.44": 2.206,
+    "C_turbostratico_3.50": 2.169,
 }
 
 #: Strongest reflection, degrees 2theta with Cu Ka1.
@@ -136,6 +142,11 @@ STRONGEST = {
     # which is the whole reason for carrying both.
     "Fe_gamma": 43.6, "FeP": 48.1, "Fe2P": 40.3,
     "FeS_mackinawita": 17.6, "NiS_beta": 45.5,
+    # Bragg, nothing else: d = 3.36, 3.44, 3.50 A for the 002. Separating
+    # a broad 002 into these three is arithmetic, and pinning the three
+    # angles is pinning that arithmetic.
+    "C_turbostratico_3.36": 26.5, "C_turbostratico_3.44": 25.9,
+    "C_turbostratico_3.50": 25.4,
 }
 
 #: Pyrite is left out of STRONGEST on purpose. Its 311 at 56.3 deg and its
@@ -447,3 +458,177 @@ def test_covers_distinguishes_absent_from_unmeasured():
     pattern = make_xrd_demo("CNT_FeSe", two_theta_range=(20.0, 60.0), seed=1)
     assert pattern.covers(30.0, 50.0)
     assert not pattern.covers(70.0, 90.0)
+
+
+# -- nanocrystalline patterns: broad peaks, noise, no 3D order ---------
+
+
+def _pseudo_voigt(x, centre, fwhm, height):
+    sigma = fwhm / 2.3548
+    gamma = fwhm / 2.0
+    gauss = np.exp(-0.5 * ((x - centre) / sigma) ** 2)
+    lorentz = 1.0 / (1.0 + ((x - centre) / gamma) ** 2)
+    return height * (0.4 * gauss + 0.6 * lorentz)
+
+
+def _cvd_pattern(seed=0, noise=0.35, d002=3.44):
+    """A CVD carbon on an iron catalyst, the sample this package is for.
+
+    Broad turbostratic 002, nanocrystalline iron, a sloping background and
+    real noise. Built self-consistently from Bragg so the 002 and the 004
+    come from the same interlayer spacing.
+    """
+    from ramancarbon.xrd.pattern import Pattern
+
+    wavelength = 1.5406
+
+    def angle(d):
+        return 2.0 * math.degrees(math.asin(wavelength / (2.0 * d)))
+
+    rng = np.random.default_rng(seed)
+    x = np.arange(10.0, 90.0, 0.02)
+    y = _pseudo_voigt(x, angle(d002), 4.0, 11.0)
+    y += _pseudo_voigt(x, angle(d002 / 2.0), 5.0, 0.55)
+    y += _pseudo_voigt(x, 43.4, 2.5, 1.0)
+    for centre, fwhm, height in ((44.67, 0.9, 1.6), (65.02, 1.1, 0.5),
+                                 (82.33, 1.3, 0.4)):
+        y += _pseudo_voigt(x, centre, fwhm, height)
+    y += 3.0 + 4.8 * np.exp(-(x - 10.0) / 12.0)
+    y += rng.normal(0.0, noise, x.size)
+    return Pattern(two_theta=x, intensity=y, wavelength=wavelength,
+                   name="cvd", counts=False)
+
+
+def test_peak_significance_uses_prominence_not_height():
+    """A ripple riding on a broad hump sits at the hump's intensity.
+
+    Scoring it by height hands it the hump's significance, and on a
+    nanocrystalline pattern that turns one 002 into a dozen peaks of
+    0.02-0.09 degrees FWHM -- every one of them 'significant', every one
+    unexplained. Which is exactly what a real CVD pattern did.
+    """
+    from ramancarbon.xrd.search import find_peaks
+
+    pattern = _cvd_pattern(noise=0.35)
+    peaks = find_peaks(pattern)
+    assert len(peaks) <= 6, [round(p.two_theta, 2) for p in peaks]
+    narrow = [p for p in peaks if p.fwhm and p.fwhm < 0.15]
+    assert not narrow, "noise ripples are being reported as peaks"
+    broad = max(peaks, key=lambda p: p.height)
+    assert broad.fwhm > 2.0 and 24.0 < broad.two_theta < 27.0
+
+
+def test_the_matching_window_follows_the_peak_width():
+    """A fixed 0.12 degree window cannot match a peak three degrees wide.
+
+    Turbostratic carbon at d = 3.44 A puts its 002 at 25.9 degrees where
+    graphite's is at 26.5: a shift of 0.6 that the old window could not
+    reach, so every reflection under a broad peak read as unexplained.
+    """
+    from ramancarbon.xrd.search import MATCH_WINDOW, WIDTH_TOLERANCE, find_peaks, match_phase
+    from ramancarbon.xrd.reference import library_crystals
+
+    assert WIDTH_TOLERANCE > 0
+    pattern = _cvd_pattern(noise=0.35)
+    peaks = find_peaks(pattern)
+    carbon = next(c for c in library_crystals()
+                  if c.name == "C_turbostratico_3.44")
+    match = match_phase(peaks, carbon, pattern)
+    assert match.matched, "the 002 was not matched at all"
+    assert match.window_used > MATCH_WINDOW * 3
+
+
+def test_turbostratic_carbon_has_no_three_dimensional_reflections():
+    """Random rotation between sheets destroys 3D coherence: only 00l and
+    hk0 survive. Asking a CVD carbon for graphite's 101 and 112 asks for
+    reflections the material cannot produce, which is why graphite scored
+    below the acceptance threshold on every one of these patterns."""
+    from ramancarbon.xrd.powder import reflections
+    from ramancarbon.xrd.reference import library_crystals
+
+    library = {c.name: c for c in library_crystals()}
+    turbostratic = library["C_turbostratico_3.44"]
+    assert turbostratic.stacking == "turbostratic"
+    for reflection in reflections(turbostratic, two_theta_range=(10.0, 90.0)):
+        h, k, ell = reflection.hkl
+        assert ell == 0 or (h == 0 and k == 0), reflection.hkl
+
+    graphite = library["grafito_2H"]
+    assert graphite.stacking == "ordered"
+    mixed = [r.hkl for r in reflections(graphite, two_theta_range=(10.0, 90.0))
+             if r.hkl[2] != 0 and (r.hkl[0], r.hkl[1]) != (0, 0)]
+    assert mixed, "graphite should keep its 3D reflections"
+
+
+def test_a_cvd_pattern_identifies_its_carbon_and_its_catalyst():
+    """The end-to-end case: the three fixes together on a realistic
+    pattern. Before them this identified nothing and reported twenty-one
+    unexplained peaks."""
+    from ramancarbon.xrd.search import find_peaks, identify_phases
+
+    pattern = _cvd_pattern(noise=0.35)
+    result = identify_phases(pattern, peaks=find_peaks(pattern))
+    names = [m.crystal.name for m in result.accepted]
+    assert any(n.startswith("C_turbostratico") for n in names), names
+    assert "Fe_alfa" in names, names
+
+
+def test_one_matched_line_cannot_carry_a_whole_phase():
+    """The guard on the 'too weak to detect' excuse.
+
+    Without it a phase matching ONE weak peak declared every other
+    reflection undetectable -- the scale fitted to that peak makes them so
+    -- and scored perfect coverage. It accepted MoSe2 on a single line in
+    a sample with no molybdenum. What separates that from a genuine
+    one-line phase is how much of the phase's intensity was seen: 88 % for
+    a turbostratic carbon's 002, 30 % for MoSe2's strongest.
+    """
+    from ramancarbon.xrd.search import find_peaks, identify_phases, match_phase
+    from ramancarbon.xrd.reference import library_crystals
+
+    pattern = _cvd_pattern(noise=0.10)
+    peaks = find_peaks(pattern)
+    library = {c.name: c for c in library_crystals()}
+
+    impostor = match_phase(peaks, library["MoSe2_2H"], pattern)
+    if impostor.matched:
+        assert impostor.intensity_coverage < 0.5
+        assert impostor.score < 0.45
+
+    carbon = match_phase(peaks, library["C_turbostratico_3.44"], pattern)
+    assert carbon.intensity_coverage > 0.8
+
+    names = [m.crystal.name for m in identify_phases(pattern, peaks=peaks).accepted]
+    assert "MoSe2_2H" not in names
+
+
+def test_sibling_cells_of_the_same_compound_are_reported_as_a_tie():
+    """A 002 three degrees wide cannot choose between d = 3.44 and 3.50.
+    Naming the winner alone would turn a coin toss into a measurement."""
+    from ramancarbon.xrd.search import find_peaks, identify_phases
+
+    pattern = _cvd_pattern(noise=0.35)
+    result = identify_phases(pattern, peaks=find_peaks(pattern))
+    if any(m.crystal.name.startswith("C_turbo") for m in result.accepted):
+        assert any("empata" in w for w in result.warnings), result.warnings
+
+
+def test_smoothing_does_not_get_to_pretend_the_data_are_better():
+    """Savitzky-Golay removes point-to-point scatter by construction, so
+    the noise estimate collapses with it, so the detection threshold
+    collapses too. Unguarded, one true peak became a hundred and forty and
+    two absent phases were accepted."""
+    from ramancarbon.xrd.preprocess import savitzky_golay
+    from ramancarbon.xrd.search import find_peaks
+
+    pattern = _cvd_pattern(noise=1.2)
+    smoothed = savitzky_golay(pattern, window=21, order=3)
+
+    raw_scatter = float(np.median(np.abs(np.diff(pattern.intensity, n=2))))
+    smooth_scatter = float(np.median(np.abs(np.diff(smoothed.intensity, n=2))))
+    assert smooth_scatter < raw_scatter / 3.0, "the smoothing did nothing"
+
+    assert smoothed.noise_estimate() == pytest.approx(
+        pattern.noise_estimate(), rel=0.05)
+    assert len(find_peaks(smoothed)) < 10
+    assert "NO refines" in smoothed.metadata["smoothed"]

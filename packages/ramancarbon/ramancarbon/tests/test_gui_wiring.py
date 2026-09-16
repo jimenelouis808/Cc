@@ -139,7 +139,8 @@ def test_every_self_attribute_used_is_assigned_somewhere(stem, name):
         "fonts", "queue", "busy",
         "status_var", "progress", "make_canvas", "with_style", "mark_dirty",
         "flush_dirty", "run_async", "drain_queue", "build_status", "set_status",
-        "flush_messages", "warn", "show_error",
+        "flush_messages", "warn", "show_error", "report_progress",
+        "show_text",
     }
     missing = read - assigned - defined - inherited
     assert not missing, f"{stem}: read but never assigned: {sorted(missing)}"
@@ -206,6 +207,12 @@ def test_the_two_raman_sections_share_one_session():
         # mode or my iron carbide".
         ("app", "elements_var"),
         ("app", "_explained_positions"),
+        # The user's own Raman references: add, remove, and see which
+        # entries came with the program and which did not.
+        ("app", "phase_table"),
+        ("app", "_add_user_phase"),
+        ("app", "_remove_user_phase"),
+        ("app", "_open_phase_folder"),
         ("tmd_app", "_analyse"),
         ("tmd_app", "tmd_text"),
         ("tmd_app", "oxide_text"),
@@ -231,6 +238,20 @@ def test_the_two_raman_sections_share_one_session():
         ("xrd_app", "_add_cif_directory"),
         ("xrd_app", "texture_var"),
         ("xrd_app", "kalpha2_var"),
+        # Peak finding on a nanocrystalline pattern. The defaults are
+        # wrong for a CVD sample and there was no way to change them.
+        ("xrd_app", "smooth_var"),
+        ("xrd_app", "background_lambda_var"),
+        ("xrd_app", "significance_var"),
+        # Rietveld: phases in and out of the MODEL, the numbers it is
+        # judged by, and a counter so a fit that returns instantly can be
+        # told from one that never started.
+        ("xrd_app", "model_phase_combo"),
+        ("xrd_app", "_add_model_phase"),
+        ("xrd_app", "_remove_model_phase"),
+        ("xrd_app", "metrics_table"),
+        ("xrd_app", "_queue_progress"),
+        ("xrd_app", "_show_refinement_report"),
         ("echem_app", "_analyse"),
         ("echem_app", "mass_var"),
         ("echem_app", "reference_var"),
