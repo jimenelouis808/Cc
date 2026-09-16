@@ -82,7 +82,7 @@ def analyse_pattern(
     preferred_axis: Optional[Sequence[int]] = None,
     instrument_fwhm: float = 0.06,
     smooth_window: int = 0,
-    background_lambda: float = 1e6,
+    background_lambda: Optional[float] = None,
     min_significance: Optional[float] = None,
 ) -> XRDResult:
     """Identify the phases in a diffractogram and, optionally, refine them.
@@ -111,11 +111,13 @@ def analyse_pattern(
         χ² over correlated points is not a χ². See
         :func:`~ramancarbon.xrd.preprocess.savitzky_golay`.
     background_lambda:
-        Stiffness of the background removed before peak finding. The
-        default follows features wider than roughly half a degree, which
-        is right for a crystalline powder and wrong for a nanocrystalline
-        one: a graphite 002 four degrees wide is partly eaten as
-        background. Raise it for broad peaks.
+        Stiffness of the background removed before peak finding.
+        ``None``, the default, derives it from the pattern's sampling
+        step with :func:`~ramancarbon.xrd.search.baseline_lambda_for`, so
+        that the cutoff sits outside the broadest reflection the search
+        can report rather than at a fixed number of points. Pass a number
+        to override it; lower values follow the background more closely
+        and take intensity from wide reflections.
     min_significance:
         Detection threshold. ``None`` uses the calibrated default.
 

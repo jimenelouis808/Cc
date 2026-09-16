@@ -87,7 +87,7 @@ class XRDSession:
         self.smooth_window: int = 0
         """Savitzky-Golay window for the PEAK SEARCH, in points. 0 is off.
         Never applied to the refinement."""
-        self.background_lambda: float = 1e6
+        self.background_lambda: Optional[float] = None
         """Stiffness of the background removed before peak finding. Raise
         it for nanocrystalline patterns, whose reflections are wide enough
         that the default treats them as background."""

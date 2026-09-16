@@ -632,3 +632,203 @@ def test_smoothing_does_not_get_to_pretend_the_data_are_better():
         pattern.noise_estimate(), rel=0.05)
     assert len(find_peaks(smoothed)) < 10
     assert "NO refines" in smoothed.metadata["smoothed"]
+
+
+def _starved_pattern(seed=0, peak_counts=9.0, background=3.2, d002=3.44):
+    """A CVD pattern with *counting* statistics, a few counts deep.
+
+    The pattern the user brought in: ten to twenty counts at the top of
+    the graphite 002, a sloping background of two or three, and Poisson
+    noise on every point. Everything the detector does is a ratio against
+    sqrt(N), and at N of three that denominator is itself noisy, which is
+    why this case fails in ways the Gaussian-noise pattern above does not.
+    """
+    from ramancarbon.xrd.pattern import Pattern
+
+    wavelength = 1.5406
+
+    def angle(d):
+        return 2.0 * math.degrees(math.asin(wavelength / (2.0 * d)))
+
+    rng = np.random.default_rng(seed)
+    x = np.arange(10.0, 90.0, 0.02)
+    y = _pseudo_voigt(x, angle(d002), 4.5, peak_counts)
+    y += _pseudo_voigt(x, angle(d002 / 2.0), 5.5, 0.05 * peak_counts)
+    y += _pseudo_voigt(x, 44.67, 1.0, 0.14 * peak_counts)
+    y += _pseudo_voigt(x, 65.02, 1.2, 0.05 * peak_counts)
+    y += background + 3.0 * np.exp(-(x - 10.0) / 15.0)
+    y = rng.poisson(np.maximum(y, 0.01)).astype(float)
+    return Pattern(two_theta=x, intensity=y, wavelength=wavelength,
+                   name="starved", counts=True)
+
+
+def test_the_background_cutoff_stays_outside_the_broadest_reflection():
+    """A fixed lam is a fixed cutoff in POINTS, and a point is worth a
+    different number of degrees on every diffractometer. At the old fixed
+    1e6 the half-power cutoff sat at 3.97 degrees on a 0.02-degree step —
+    inside the widest reflection the search will report — so the
+    background followed the turbostratic 002 and took a quarter of its
+    height away."""
+    from ramancarbon.core.baseline import cutoff_for_lambda
+    from ramancarbon.xrd.search import (BROAD_SCALES_DEG,
+                                        CUTOFF_REFLECTION_WIDTHS,
+                                        baseline_lambda_for)
+
+    for step in (0.005, 0.01, 0.02, 0.05):
+        angles = np.arange(10.0, 90.0, step)
+        pattern = Pattern(angles, np.ones(angles.size), wavelength=1.5406)
+        lam = baseline_lambda_for(pattern)
+        cutoff_deg = cutoff_for_lambda(lam) * pattern.step
+        assert cutoff_deg >= CUTOFF_REFLECTION_WIDTHS * BROAD_SCALES_DEG[-1] * 0.99, (
+            f"step {step}: cutoff {cutoff_deg:.2f} deg is inside the "
+            "broadest reportable reflection")
+
+    # And it is the STEP that sets it, not the number of points: the same
+    # angular range sampled twice as finely needs a stiffness sixteen
+    # times larger to keep the cutoff at the same number of degrees.
+    coarse = Pattern(np.arange(10.0, 90.0, 0.02), np.ones(4000), wavelength=1.5406)
+    fine = Pattern(np.arange(10.0, 90.0, 0.01), np.ones(8000), wavelength=1.5406)
+    assert baseline_lambda_for(fine) == pytest.approx(
+        16.0 * baseline_lambda_for(coarse), rel=0.02)
+
+
+def test_a_photon_starved_pattern_still_finds_its_broad_002():
+    """The whole point. With the old fixed background, the point-wise
+    sigma read off one sample and the doublet stripped before the broad
+    pass, this pattern returned ZERO peaks and identified nothing, while
+    the 002 hump is plainly visible on screen."""
+    from ramancarbon.xrd.search import find_peaks, identify_phases
+
+    pattern = _starved_pattern()
+    peaks = find_peaks(pattern)
+    assert peaks, "no peak found on a pattern whose 002 is visible by eye"
+
+    broad = [p for p in peaks if (p.fwhm or 0.0) > 1.0]
+    assert broad, f"the 002 was not found as a broad peak: {peaks}"
+    assert min(abs(p.d - 3.44) for p in broad) < 0.06, (
+        f"the interlayer spacing is wrong: {[round(p.d, 3) for p in broad]}")
+
+    result = identify_phases(pattern, peaks=peaks)
+    assert any(m.crystal.name.startswith("C_turbostratico")
+               for m in result.accepted), [m.crystal.name for m in result.accepted]
+
+
+def test_the_broad_pass_sees_the_pattern_as_measured():
+    """Rachinger stripping corrects a splitting of a few hundredths of a
+    degree. It cannot help a reflection several degrees wide, and it is
+    not free: it subtracts a shifted copy of the data, which on a
+    photon-starved pattern costs the broad 002 about a fifth of its
+    prominence and correlates its neighbours."""
+    from ramancarbon.xrd.preprocess import strip_kalpha2
+    from ramancarbon.xrd.search import find_peaks
+
+    pattern = _starved_pattern()
+    assert pattern.has_doublet
+
+    as_measured = find_peaks(pattern)
+    pre_stripped = find_peaks(strip_kalpha2(pattern), strip_doublet=False)
+
+    def broad_significance(peaks):
+        wide = [p for p in peaks if (p.fwhm or 0.0) > 1.0]
+        return max((p.significance for p in wide), default=0.0)
+
+    assert broad_significance(as_measured) > broad_significance(pre_stripped)
+
+    # And the narrow pass still gets the stripped pattern, or every
+    # reflection above about 40 degrees is found twice.
+    sharp = simulate(find_phase("Fe_alfa"), two_theta_range=(30.0, 90.0),
+                     background=300.0, counts_at_max=40000.0, seed=4)
+    assert len(find_peaks(sharp)) <= 2 * len(find_peaks(sharp, strip_doublet=True))
+
+
+def test_the_noise_of_a_broad_feature_is_measured_over_its_width():
+    """sqrt(N) of ONE sample is a lottery when N is three: the same
+    reflection scores 12 or 25 depending on which Poisson draw landed on
+    its maximum. Averaging the variance over the feature's own width
+    keeps the point-wise philosophy — the noise on a 10 000-count peak is
+    still a hundred — while estimating it from the points the statistic
+    actually used."""
+    from ramancarbon.xrd.search import _window_noise
+
+    rng = np.random.default_rng(3)
+    counts = rng.poisson(np.full(4000, 4.0)).astype(float)
+    point = np.maximum(np.sqrt(counts), 1e-9)
+    windowed = _window_noise(point, 125.0)
+
+    assert windowed.std() < point.std() / 3.0, "the window did not steady it"
+    assert windowed.mean() == pytest.approx(2.0, rel=0.1), "and it is still sqrt(N)"
+
+    # Point-wise, not global: a bright peak still carries its own noise.
+    counts[2000:2100] = 10000.0
+    windowed = _window_noise(np.sqrt(counts), 51.0)
+    assert windowed[2050] > 50.0 * windowed[500]
+
+
+def test_a_reflection_predicted_at_the_threshold_cannot_veto_a_phase():
+    """A reflection predicted at exactly the detection threshold is found
+    about half the time, so its absence decides nothing — and the
+    prediction is a known over-estimate, because it scales a clean height
+    by a calculated intensity and ignores what the detector loses to a
+    neighbour raising the local minima. On the CVD pattern the
+    turbostratic 004 is predicted at 23 and observed at 14, and the
+    carbon was being rejected for the absence of a reflection this same
+    code could not have found."""
+    from ramancarbon.xrd.search import (DETECTION_MARGIN, find_peaks,
+                                        identify_phases)
+
+    assert DETECTION_MARGIN > 1.0
+
+    pattern = _cvd_pattern(noise=0.35)
+    result = identify_phases(pattern, peaks=find_peaks(pattern))
+    names = [m.crystal.name for m in result.accepted]
+    assert any(n.startswith("C_turbostratico") for n in names), names
+
+    # But it is not a way in: a phase still has to account for most of
+    # its own calculated intensity, which is what stopped MoSe2 being
+    # accepted in a sample with no molybdenum.
+    carbon = next(m for m in result.accepted
+                  if m.crystal.name.startswith("C_turbostratico"))
+    assert carbon.intensity_coverage > 0.5
+
+
+def test_a_near_miss_is_reported_with_its_number():
+    """Silence is the least useful answer a peak search can give. If the
+    best candidate came close, say so with its angle, its width and its
+    significance, and hand the decision back — rather than quietly
+    lowering a threshold that is calibrated against pure noise."""
+    from ramancarbon.xrd.search import (find_peaks, identify_phases,
+                                        strongest_below_threshold)
+
+    pattern = _starved_pattern(seed=11, peak_counts=3.0)
+    peaks = find_peaks(pattern)
+    if peaks:
+        pytest.skip("this pattern is detectable; the warning is for when it is not")
+
+    near = strongest_below_threshold(pattern)
+    assert near is not None
+    angle, width, significance = near
+    assert 20.0 < angle < 32.0, angle
+    assert width > 0.0 and significance > 0.0
+
+    result = identify_phases(pattern, peaks=peaks)
+    assert result.warnings
+    message = result.warnings[0]
+    assert f"{angle:.2f}" in message
+    assert "umbral" in message
+
+
+def test_the_threshold_still_holds_on_pure_noise_with_the_broad_pass():
+    """The detection threshold was recalibrated after the broad pass and
+    the new background rule, NOT lowered to make the CVD pattern work:
+    twenty pure-Poisson patterns at two background levels still give well
+    under one false peak each at 18."""
+    angles = np.arange(10.0, 90.0, 0.02)
+    for level in (40.0, 5.0):
+        found = []
+        for seed in range(8):
+            rng = np.random.default_rng(900 + seed)
+            background = level * (0.6 + 2.0 * np.exp(-(angles - 10.0) / 20.0))
+            counts = rng.poisson(background).astype(float)
+            pattern = Pattern(angles, counts, wavelength=1.5406, counts=True)
+            found.append(len(find_peaks(pattern)))
+        assert np.mean(found) < 1.0, (level, found)

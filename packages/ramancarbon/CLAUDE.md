@@ -375,6 +375,54 @@ Y una regla que nació de arreglar lo anterior y casi lo estropea:
   `metadata["noise_floor"]` y `noise_estimate()` lo respeta. Y nunca se
   refina sobre un patrón suavizado.
 
+### Y con estadística de conteo, otros tres
+
+Un difractograma CVD de dos a doce cuentas por punto devolvía CERO picos
+con la joroba del 002 perfectamente visible en pantalla. Ninguno de los
+tres es un umbral que bajar; los tres son medidas mal hechas.
+
+- **La rigidez del fondo sale del PASO, no de una constante.** Un `lam`
+  fijo es un corte fijo en PUNTOS, y un punto vale un número distinto de
+  grados en cada difractómetro. El 1e6 de antes pone el corte en 199
+  puntos, que son 3.97° con paso de 0.02: más ESTRECHO que la reflexión
+  más ancha que el buscador está dispuesto a informar. El fondo seguía al
+  002 turbostrático y se llevaba un cuarto de su altura, la significancia
+  caía de 22 a 16 contra un umbral de 18, y el patrón no identificaba
+  nada. `baseline_lambda_for` pone el corte en tres veces la reflexión más
+  ancha informable, por el mismo argumento que `auto_lambda` en Raman con
+  el factor bajado de cinco porque un fondo de difracción sí tiene
+  estructura real en decenas de grados.
+- **El Kα₂ se pela para el paso ESTRECHO y no para el ancho.** Rachinger
+  corrige un desdoblamiento de centésimas de grado: no puede ayudar a una
+  reflexión de varios grados, y no es gratis, porque resta una copia
+  desplazada de los datos. Sobre un patrón con pocas cuentas le quita a la
+  002 ancha un quinto de su prominencia y correlaciona sus vecinos.
+- **El ruido de una estructura ancha se mide sobre SU anchura.** √N de UNA
+  muestra es una lotería cuando N vale tres: la misma reflexión puntúa 12
+  o 25 según qué tirada de Poisson cayó en su máximo. `_window_noise`
+  promedia la varianza sobre la anchura de la propia estructura — sigue
+  siendo punto a punto, el ruido sobre un pico de 10 000 cuentas sigue
+  siendo cien — pero estimado con los cien puntos que el estadístico usó
+  de verdad.
+
+Y el corolario, que es el mismo error del `intensity_coverage` visto por
+el otro lado:
+
+- **Una reflexión predicha JUSTO en el umbral no vota.** Ahí se encuentra
+  la mitad de las veces, así que su ausencia no decide nada; y la
+  predicción es un sobreestimado conocido, porque escala una altura limpia
+  por una intensidad calculada y no sabe lo que el detector pierde con un
+  vecino levantándole los mínimos. Medido: la 004 turbostrática se predice
+  en 23 y se observa en 14, y el carbono se rechazaba por la ausencia de
+  una reflexión que este mismo código no podía encontrar.
+  `DETECTION_MARGIN` es ese factor. No es una puerta de entrada:
+  `intensity_coverage` sigue exigiendo que se haya visto casi toda la
+  intensidad calculada de la fase.
+
+Los tres, recalibrados: veinte patrones de Poisson puro a dos niveles de
+fondo siguen dando bastante menos de un pico falso por patrón con umbral
+18. El umbral **no** se ha tocado.
+
 ## Modelos a medida
 
 - **Las componentes llevan nombre solo mientras la física se lo dé**: D, D3,

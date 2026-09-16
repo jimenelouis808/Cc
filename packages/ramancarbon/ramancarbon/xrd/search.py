@@ -72,6 +72,23 @@ MATCH_WINDOW = 0.12
 #: the window that was actually used.
 WIDTH_TOLERANCE = 0.5
 
+#: How far above the detection threshold a missing reflection has to be
+#: predicted before its absence counts against the phase.
+#:
+#: At exactly the threshold a reflection is found about half the time, so
+#: "it is not there" carries no information; and the prediction is a
+#: known over-estimate, because it scales a clean measured height by a
+#: calculated intensity and takes no account of what the detector loses
+#: to a neighbour raising the local minima or to smoothing at a scale
+#: that does not match the reflection's own width. Measured on the CVD
+#: test pattern: the turbostratic 004 is predicted at 23 and observed at
+#: 14, and the carbon was rejected for the absence of a reflection the
+#: same code could not have found. Two is that factor rounded up. It
+#: cannot be used to admit a phase on its own — ``intensity_coverage``
+#: still requires that most of the phase's calculated intensity was
+#: actually seen.
+DETECTION_MARGIN = 2.0
+
 #: Calculated reflections weaker than this (relative to 100) are not
 #: required to be observed: they are below a normal detection limit.
 WEAK_REFLECTION = 5.0
@@ -86,6 +103,75 @@ WEAK_REFLECTION = 5.0
 #: 002. Lowering it does not find more phases; it finds more ripples on
 #: the flank of the strongest peak, and reports them as unknown phases.
 MIN_SIGNIFICANCE = 18.0
+
+#: Widths, in degrees 2θ, at which the broad pass looks. A reflection
+#: wider than the first of these is one the narrow search cannot measure.
+BROAD_SCALES_DEG: tuple[float, ...] = (0.6, 1.2, 2.5, 5.0)
+
+#: How many times the broadest reportable reflection the background's
+#: cutoff period is set to, by the same argument as
+#: :data:`ramancarbon.core.baseline.CUTOFF_BAND_WIDTHS` on the Raman side:
+#: a baseline whose cutoff sits inside a reflection follows it and takes
+#: its intensity away. Three was chosen by measurement rather than by
+#: analogy — see :func:`baseline_lambda_for`.
+CUTOFF_REFLECTION_WIDTHS = 3.0
+
+#: Bounds on the derived stiffness. The floor is the fixed value this
+#: module used before the rule existed, so no pattern gets a SOFTER
+#: background than it used to; the ceiling is where the banded solve
+#: starts to lose conditioning.
+BASELINE_LAMBDA_LIMITS = (1e6, 1e12)
+
+
+def baseline_lambda_for(pattern: Pattern) -> float:
+    """Background stiffness matched to the pattern's sampling step.
+
+    A fixed ``lam`` is a fixed cutoff **in points**, and a point is worth
+    a different number of degrees on every diffractometer. The value this
+    module used before, 1e6, puts the half-power cutoff at 199 points,
+    which is 3.97° on a 0.02° step — *narrower* than the broadest
+    reflection the search is willing to report. The consequence is not
+    subtle and it is silent: on a simulated CVD pattern the asymmetric
+    least-squares background followed the turbostratic 002 and took a
+    quarter of its height with it, the reflection's significance fell
+    from 22 to 16 against a threshold of 18, and the pattern identified
+    nothing at all while the hump stayed plainly visible on screen.
+
+    So the cutoff is set from the sample instead: three times the
+    broadest reflection the broad pass can report. That is the same
+    reasoning as :func:`ramancarbon.core.baseline.auto_lambda`, with the
+    factor lowered from five because a diffraction background has real
+    structure — fluorescence, air scatter, the sample holder — over the
+    tens of degrees a factor of five would protect.
+    """
+    from ..core.baseline import lambda_for_cutoff
+
+    period = CUTOFF_REFLECTION_WIDTHS * BROAD_SCALES_DEG[-1] / max(pattern.step, 1e-6)
+    return float(np.clip(lambda_for_cutoff(period), *BASELINE_LAMBDA_LIMITS))
+
+
+def _window_noise(noise: np.ndarray, width_points: float) -> np.ndarray:
+    """Per-point noise level averaged over a feature's own width.
+
+    The significance of a broad feature is its mean amplitude times the
+    square root of its span, over the per-point noise level *in that
+    neighbourhood*. Reading that level off the single point at the
+    maximum is a lottery when the counts are low: with a background of
+    three counts, √N of one sample is 1, 2 or 3 depending on which
+    Poisson draw landed there, so the same reflection scores 12 or 25
+    according to luck. Averaging the variance over the feature's own
+    width keeps the point-wise philosophy — the noise on a 10 000-count
+    peak is still a hundred and on a 100-count background still ten —
+    while estimating it from the hundred points the statistic actually
+    used.
+    """
+    from scipy.ndimage import uniform_filter1d
+
+    span = max(3, int(round(width_points)) | 1)
+    return np.sqrt(
+        np.maximum(uniform_filter1d(noise**2, span, mode="nearest"), 1e-18)
+    )
+
 
 #: Pattern length the threshold above was calibrated on.
 CALIBRATION_POINTS = 3500.0
@@ -117,7 +203,7 @@ class XRDPeak:
 def find_peaks(
     pattern: Pattern,
     min_significance: float = MIN_SIGNIFICANCE,
-    baseline_lambda: float = 1e6,
+    baseline_lambda: Optional[float] = None,
     min_separation_deg: float = 0.10,
     strip_doublet: bool = True,
 ) -> list[XRDPeak]:
@@ -152,13 +238,26 @@ def find_peaks(
     )
     if not pattern.counts:
         noise = np.full(pattern.n, max(pattern.noise_estimate(), 1e-9))
+    if baseline_lambda is None:
+        baseline_lambda = baseline_lambda_for(pattern)
+    # The broad pass gets the pattern as measured. Rachinger stripping
+    # corrects a splitting of a few hundredths of a degree, which cannot
+    # matter to a reflection several degrees wide, and it is not free:
+    # the recursion subtracts a shifted copy of the data, so on a
+    # photon-starved pattern it costs the broad 002 a fifth of its
+    # prominence and correlates its neighbours. The narrow pass, where
+    # the doublet is the difference between finding one reflection and
+    # two, still gets the stripped one.
+    raw = np.asarray(pattern.intensity, dtype=float)
+    broad_corrected = raw - asls_baseline(raw, lam=baseline_lambda, p=0.001)
     if strip_doublet and pattern.has_doublet:
         from .preprocess import strip_kalpha2
 
         pattern = strip_kalpha2(pattern)
-    y = np.asarray(pattern.intensity, dtype=float)
-    background = asls_baseline(y, lam=baseline_lambda, p=0.001)
-    corrected = y - background
+        y = np.asarray(pattern.intensity, dtype=float)
+        corrected = y - asls_baseline(y, lam=baseline_lambda, p=0.001)
+    else:
+        corrected = broad_corrected
     step = max(pattern.step, 1e-6)
     distance = max(1, int(round(min_separation_deg / step)))
 
@@ -204,8 +303,146 @@ def find_peaks(
                 significance=float(significance),
             )
         )
+    peaks.extend(_broad_pass(pattern, broad_corrected, noise, threshold, peaks))
     peaks.sort(key=lambda p: p.two_theta)
     return peaks
+
+
+def strongest_below_threshold(
+    pattern: Pattern,
+    min_significance: float = MIN_SIGNIFICANCE,
+    baseline_lambda: Optional[float] = None,
+) -> Optional[tuple[float, float, float]]:
+    """The best maximum that did NOT clear the detection threshold.
+
+    Silence is the least useful answer a peak search can give, and on a
+    photon-starved pattern it is the usual one. The threshold is
+    calibrated against pure noise and lowering it quietly would trade a
+    real false-alarm rate for the appearance of working; saying how close
+    the best candidate came costs nothing and hands the decision back,
+    with a number attached.
+
+    Returns ``(2θ, width in degrees, significance)`` or ``None``.
+    """
+    from scipy.ndimage import gaussian_filter1d
+
+    noise = np.maximum(
+        np.asarray(pattern.sigma, dtype=float)
+        if pattern.sigma is not None
+        else np.full(pattern.n, pattern.noise_estimate()),
+        1e-9,
+    )
+    if not pattern.counts:
+        noise = np.full(pattern.n, max(pattern.noise_estimate(), 1e-9))
+    if baseline_lambda is None:
+        baseline_lambda = baseline_lambda_for(pattern)
+    y = np.asarray(pattern.intensity, dtype=float)
+    corrected = y - asls_baseline(y, lam=baseline_lambda, p=0.001)
+    step = max(pattern.step, 1e-6)
+    threshold = min_significance * _trials_factor(pattern.n)
+
+    best: Optional[tuple[float, float, float]] = None
+    for width_deg in (0.1, 0.2, 0.4) + BROAD_SCALES_DEG:
+        width_points = width_deg / step
+        if width_points < 3.0 or width_points > pattern.n / 4:
+            continue
+        smoothed = gaussian_filter1d(corrected, width_points / 2.3548,
+                                     mode="nearest")
+        indices, _ = _scipy_find_peaks(smoothed, distance=max(1, int(width_points)))
+        if indices.size == 0:
+            continue
+        prominences = peak_prominences(smoothed, indices)[0]
+        local = _window_noise(noise, width_points)
+        significance = prominences * math.sqrt(width_points) / local[indices]
+        for position, value in zip(indices, significance):
+            if value >= threshold:
+                continue
+            if best is None or value > best[2]:
+                best = (float(pattern.two_theta[position]), float(width_deg),
+                        float(value))
+    return best
+
+
+def _broad_pass(
+    pattern: Pattern,
+    corrected: np.ndarray,
+    noise: np.ndarray,
+    threshold: float,
+    found: Sequence[XRDPeak],
+) -> list[XRDPeak]:
+    """A second look, for reflections too broad for the first one to see.
+
+    The search above measures a peak's width with ``peak_widths``, which
+    walks outward from the top until the signal falls to half. On a noisy
+    pattern that walk stops at the first noise dip, so a graphite 002 four
+    and a half degrees wide is measured as a twentieth of a degree wide,
+    its matched-filter significance collapses with the square root of that
+    width, and it is not detected at all — on a pattern where the hump is
+    plainly visible by eye. That is not a threshold that needs lowering:
+    it is a width that was never measured.
+
+    So a broad feature is looked for at its own scale. The corrected
+    pattern is smoothed to each of :data:`BROAD_SCALES_DEG` in turn, which
+    removes the dips that stopped the walk, and any maximum that clears
+    the same threshold at that scale is kept with that scale as its width.
+
+    It is deliberately ADDITIVE and deliberately second. Anything the
+    narrow search already found keeps the width the narrow search
+    measured, because for a resolved reflection that measurement is the
+    better one; a broad candidate within half its width of an existing
+    peak is dropped rather than competing with it. What this pass can
+    contribute is only what the first one structurally cannot see, and on
+    every pattern whose peaks are resolved it contributes nothing.
+    """
+    from scipy.ndimage import gaussian_filter1d
+
+    step = max(pattern.step, 1e-6)
+    # Each claimed position carries its own width: a broad candidate half a
+    # degree from a peak already measured at three and a half degrees wide
+    # is the same peak, and judging the gap against only the candidate's
+    # width let it through as a second one — which then let a second
+    # turbostratic carbon be "identified" on it.
+    claimed = [(peak.two_theta, peak.fwhm or 0.0) for peak in found]
+    extra: list[XRDPeak] = []
+    for width_deg in BROAD_SCALES_DEG:
+        width_points = width_deg / step
+        if width_points < 3.0 or width_points > pattern.n / 4:
+            continue
+        smoothed = gaussian_filter1d(corrected, width_points / 2.3548,
+                                     mode="nearest")
+        indices, _ = _scipy_find_peaks(smoothed, distance=max(1, int(width_points)))
+        if indices.size == 0:
+            continue
+        prominences = peak_prominences(smoothed, indices)[0]
+        local = _window_noise(noise, width_points)
+        for position, prominence in zip(indices, prominences):
+            significance = prominence * math.sqrt(width_points) / local[position]
+            if significance < threshold:
+                continue
+            angle = float(pattern.two_theta[position])
+            if any(abs(angle - other) < max(0.5 * width_deg, 0.5 * other_width)
+                   for other, other_width in claimed):
+                continue
+            claimed.append((angle, width_deg))
+            span = max(1, int(round(width_points)))
+            low = max(0, int(position) - span)
+            high = min(len(corrected), int(position) + span + 1)
+            area = float(trapezoid(corrected[low:high],
+                                   pattern.two_theta[low:high]))
+            height = float(smoothed[position])
+            d = pattern.wavelength / (2.0 * math.sin(math.radians(angle) / 2.0))
+            extra.append(
+                XRDPeak(
+                    two_theta=angle,
+                    d=d,
+                    height=height,
+                    fwhm=float(width_deg),
+                    area=area,
+                    prominence=float(prominence),
+                    significance=float(significance),
+                )
+            )
+    return extra
 
 
 def _trials_factor(n_points: int) -> float:
@@ -506,6 +743,11 @@ def _mark_undetectable(match: PhaseMatch, pattern: Pattern) -> None:
     over four degrees instead of a tenth of one is thirty times shorter,
     which is precisely the situation in a nanocrystalline sample and
     precisely where the naive rule went wrong.
+
+    The comparison is against :data:`DETECTION_MARGIN` times the
+    threshold, not the threshold itself, because a reflection predicted
+    at exactly the threshold is found about half the time and its absence
+    decides nothing.
     """
     if not match.matched or not match.missing:
         return
@@ -525,7 +767,7 @@ def _mark_undetectable(match: PhaseMatch, pattern: Pattern) -> None:
     for reflection in match.missing:
         height = scale * reflection.intensity
         span = max(width / step, 1.0)
-        if height * math.sqrt(span) / noise < threshold:
+        if height * math.sqrt(span) / noise < threshold * DETECTION_MARGIN:
             match.undetectable.append(reflection)
         else:
             still_missing.append(reflection)
@@ -644,12 +886,27 @@ def identify_phases(
     observed = list(peaks) if peaks is not None else find_peaks(pattern)
     result = PhaseSearchResult(peaks=observed)
     if not observed:
-        result.warnings.append(
+        message = (
             "no se ha detectado ningún pico por encima del umbral de "
             "significancia. O el difractograma es de material amorfo, o el "
             "fondo se ha comido las reflexiones, o el rango medido no "
             "contiene ninguna"
         )
+        near = strongest_below_threshold(pattern)
+        if near is not None:
+            angle, width, value = near
+            threshold = MIN_SIGNIFICANCE * _trials_factor(pattern.n)
+            message += (
+                f".   Lo que MÁS cerca estuvo: un máximo en 2θ = {angle:.2f}°, "
+                f"de unos {width:g}° de ancho, con significancia {value:.1f} "
+                f"frente al umbral de {threshold:.0f}. Si lo ves en la gráfica "
+                "y te parece real, baja el umbral en «Búsqueda de picos» hasta "
+                f"{max(5.0, value - 1):.0f} y vuelve a identificar — pero mira "
+                "primero si es un pico o es el fondo, porque el umbral está "
+                "calibrado contra ruido puro y por debajo de él el programa "
+                "empieza a inventarse máximos"
+            )
+        result.warnings.append(message)
         return result
 
     remaining = list(observed)
@@ -793,6 +1050,7 @@ def _add_warnings(result: PhaseSearchResult, pattern: Pattern) -> None:
 
 __all__ = [
     "LARGE_ZERO_SHIFT",
+    "DETECTION_MARGIN",
     "MATCH_WINDOW",
     "MIN_SIGNIFICANCE",
     "SEARCH_WINDOW",
@@ -804,4 +1062,5 @@ __all__ = [
     "fit_zero_shift",
     "identify_phases",
     "match_phase",
+    "strongest_below_threshold",
 ]
