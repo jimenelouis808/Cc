@@ -676,8 +676,18 @@ def test_plot_colours_are_roles_and_survive_a_restart():
     from ramancarbon.gui.state import Session
     from ramancarbon.gui.theme import DARK, LIGHT, PLOT_ROLES, with_colours
 
-    assert {role for role, _ in PLOT_ROLES} == {"data", "fitted", "residual",
-                                                "baseline"}
+    assert {role for role, _ in PLOT_ROLES} == {
+        "data", "fitted", "residual", "baseline",
+        # The peak markers are roles too, and for the same reason plus
+        # one: they used to borrow the theme's accent and warning, which
+        # also colour buttons and status text, so recolouring the
+        # unexplained peaks repainted the interface.
+        "peak_carbon", "peak_phase", "peak_unknown",
+    }
+    for role, _ in PLOT_ROLES:
+        assert hasattr(LIGHT, role) and hasattr(DARK, role), role
+        assert with_colours(LIGHT, {role: "#123456"}).__getattribute__(
+            role) == "#123456"
     recoloured = with_colours(DARK, {"data": "#ff0000",
                                      "components": ["#00ff00", "#0000ff"]})
     assert recoloured.data == "#ff0000"
@@ -711,7 +721,6 @@ def test_a_carbon_band_is_not_marked_as_an_unexplained_peak():
     different path, so the D and the G of a carbon sample came out marked
     "sin explicar" — the best understood bands in the spectrum, called
     unknown, while the report named them on the next tab."""
-    import numpy as np
 
     from ramancarbon.analysis.report import analyse
     from ramancarbon.examples.demo_data import demo_spectra

@@ -597,3 +597,80 @@ def test_the_polymer_library_covers_what_a_carbon_laboratory_touches():
     for phase in polymers:
         assert phase.source and phase.notes
         assert phase.discriminating, phase.key
+
+
+def test_an_unexplained_peak_says_what_came_closest():
+    """"SIN EXPLICAR" is the result, not a failure -- it is the phase you
+    were not expecting -- but it is a result nobody can act on. A peak at
+    580 with nothing beside it leaves the user to search the literature
+    from scratch; the same peak with the three nearest catalogued lines
+    and their distances tells them which cards to pull."""
+    from ramancarbon.analysis.phases import NEAR_MISS_CM, find_phases
+
+    peaks = [
+        pk(215.0, 120.0, 22.0),
+        pk(282.0, 150.0, 26.0),
+        pk(580.0, 45.0, 60.0),
+    ]
+    report = find_phases(peaks, spectrum_range=(100.0, 3200.0))
+
+    assert any(i.corroborated for i in report.identifications)
+    unexplained = [round(p.position) for p in report.unmatched_peaks]
+    assert 580 in unexplained
+
+    hits = report.near_misses.get(580.0)
+    assert hits, report.near_misses
+    assert len(hits) <= 3
+    labels = [label for label, _, _ in hits]
+    assert len(labels) == len(set(labels)), "one line per phase, not four"
+    distances = [distance for _, _, distance in hits]
+    assert distances == sorted(distances), "closest first"
+    assert all(d <= NEAR_MISS_CM for d in distances)
+    for label, position, distance in hits:
+        assert abs(580.0 - position) == pytest.approx(distance, abs=1e-6)
+
+
+def test_the_near_miss_list_is_not_offered_for_bands_the_analysis_named():
+    """The phase scan runs before the band assignment and knows nothing
+    about it, so the D and the G arrive as "unexplained" -- and the
+    near-miss list then helpfully offers hexagonal boron nitride for the
+    D band. Those are not leads."""
+    from ramancarbon.analysis.phases import find_phases
+
+    peaks = [pk(1345.0, 300.0, 120.0), pk(1585.0, 500.0, 60.0),
+             pk(580.0, 45.0, 60.0)]
+    report = find_phases(peaks, spectrum_range=(100.0, 3200.0))
+    assert any(abs(p.position - 1345.0) < 1.0 for p in report.unmatched_peaks)
+
+    report.drop_explained([1345.0, 1585.0])
+    left = [round(p.position) for p in report.unmatched_peaks]
+    assert left == [580], left
+    assert set(report.near_misses) == {580.0}
+
+    # An empty list changes nothing, and a position nowhere near a peak
+    # does not remove one.
+    report.drop_explained([])
+    assert [round(p.position) for p in report.unmatched_peaks] == [580]
+    report.drop_explained([900.0])
+    assert [round(p.position) for p in report.unmatched_peaks] == [580]
+
+
+def test_the_whole_analysis_hands_the_phase_scan_its_carbon_bands():
+    from ramancarbon.analysis.report import analyse
+    from ramancarbon.examples.demo_data import demo_spectra
+
+    spectrum = next(s for s in demo_spectra() if "MWCNT" in s.name)
+    result = analyse(spectrum)
+    if result.phases is None or not result.phases.enabled:
+        pytest.skip("phase scanning is off for this spectrum")
+
+    named = {
+        round(band.position)
+        for name in result.assignment.bands
+        for band in result.assignment.all_of(name)
+        if band.position is not None
+    }
+    for peak in result.phases.unmatched_peaks:
+        assert not any(abs(peak.position - p) <= 12.0 for p in named), (
+            f"{peak.position:.0f} cm-1 is an assigned carbon band and is "
+            "still being reported as unexplained")

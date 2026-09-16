@@ -40,6 +40,13 @@ class Palette:
     fitted: str
     residual: str
     baseline: str
+    # Peak markers. Their own roles rather than the theme's accent and
+    # warning, because those two also colour buttons and status text: a
+    # user who wants the unexplained peaks in a different colour should
+    # not have to repaint the interface to get it.
+    peak_carbon: str
+    peak_phase: str
+    peak_unknown: str
     components: tuple[str, ...]
 
     def component_colour(self, index: int) -> str:
@@ -68,6 +75,9 @@ LIGHT = Palette(
     fitted="#c8461e",
     residual="#8a9099",
     baseline="#2f6f8f",
+    peak_carbon="#3b414b",
+    peak_phase="#a86a15",
+    peak_unknown="#c8461e",
     components=("#2f6f8f", "#c8461e", "#2e7d5b", "#8a5fa8", "#a86a15", "#3f7d8c"),
 )
 
@@ -90,6 +100,9 @@ DARK = Palette(
     fitted="#ef7a4e",
     residual="#7b8492",
     baseline="#4f9fc4",
+    peak_carbon="#d5dae2",
+    peak_phase="#d8a247",
+    peak_unknown="#ef7a4e",
     components=("#4f9fc4", "#ef7a4e", "#5fbf95", "#b58ad4", "#d8a247", "#6fb6c4"),
 )
 
@@ -135,6 +148,9 @@ PLOT_ROLES: tuple[tuple[str, str], ...] = (
     ("fitted", "Curva ajustada"),
     ("residual", "Residuo"),
     ("baseline", "Línea base"),
+    ("peak_carbon", "Marcas: bandas de carbono"),
+    ("peak_phase", "Marcas: fase catalogada"),
+    ("peak_unknown", "Marcas: picos sin explicar"),
 )
 
 #: How many component colours the cycle carries.

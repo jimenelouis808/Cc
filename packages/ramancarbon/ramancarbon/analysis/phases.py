@@ -317,6 +317,20 @@ class PhaseReport:
     lone line each and went through in silence.
     """
     unmatched_peaks: list[PeakMeasurement] = field(default_factory=list)
+    near_misses: dict[float, list[tuple[str, float, float]]] = field(
+        default_factory=dict)
+    """For each unexplained peak, the catalogued lines that came closest:
+    ``position -> [(phase label, band position, distance)]``.
+
+    "SIN EXPLICAR" is the result, not a failure — it is the phase you were
+    not expecting — but it is a result nobody can act on. A peak at
+    580 cm⁻¹ with nothing beside it leaves the user to search the
+    literature from scratch; the same peak with "el 550 de la goethita
+    está a 30 cm⁻¹, el 612 de la hematita a 32" tells them which two
+    cards to pull and how far off each is. It is the same reasoning as
+    reporting the strongest sub-threshold maximum on a diffractogram that
+    identified nothing: a number the user can judge costs nothing and
+    silence costs them the afternoon."""
     elements: list[str] = field(default_factory=list)
     """The elements the search was restricted to, empty when it was not.
     A restricted search is both narrower and LOUDER: see
@@ -333,6 +347,32 @@ class PhaseReport:
     def excluded_from_rbm(self) -> list[float]:
         """Positions the diameter analysis must not convert."""
         return [position for position, _ in self.rbm_conflicts]
+
+    def drop_explained(self, positions: Sequence[float],
+                       tolerance: float = 12.0) -> None:
+        """Forget peaks another part of the analysis already accounts for.
+
+        The phase scan runs before the band assignment and knows nothing
+        about it, so the D and the G of a carbon sample arrive here as
+        "unexplained" — and then the near-miss list helpfully offers
+        hexagonal boron nitride for the D band and graphitic carbon
+        nitride for the G. Those are not leads, they are noise generated
+        by asking the wrong question of the best understood bands in the
+        spectrum.
+        """
+        if not positions:
+            return
+        def spoken_for(value: float) -> bool:
+            return any(abs(value - other) <= tolerance for other in positions)
+
+        self.unmatched_peaks = [
+            peak for peak in self.unmatched_peaks
+            if not spoken_for(peak.position)
+        ]
+        self.near_misses = {
+            position: hits for position, hits in self.near_misses.items()
+            if not spoken_for(position)
+        }
 
     def abundance_caveat(self) -> str:
         """Why the intensity numbers are not weight fractions."""
@@ -831,7 +871,50 @@ def find_phases(
 
     matched = {id(h.peak) for i in identifications if i.corroborated for h in i.hits}
     report.unmatched_peaks = [p for p in peaks if id(p) not in matched]
+    report.near_misses = _near_misses(report.unmatched_peaks, catalogue)
     return report
+
+
+#: How far from a catalogued line a peak can sit and still be worth
+#: naming as a near miss, in cm⁻¹.
+#:
+#: Well outside the matching tolerance on purpose — this is not a match
+#: and is never presented as one. It is the distance at which "look at
+#: this card" is still useful advice: Raman positions of the same phase
+#: move by tens of wavenumbers with crystallite size, strain and
+#: stoichiometry, so 40 covers the real spread while staying far short of
+#: the "any peak is near something" regime.
+NEAR_MISS_CM = 40.0
+
+
+def _near_misses(
+    peaks: Sequence[PeakMeasurement], catalogue: Sequence["Phase"]
+) -> dict[float, list[tuple[str, float, float]]]:
+    """The catalogued lines nearest each unexplained peak."""
+    out: dict[float, list[tuple[str, float, float]]] = {}
+    for peak in peaks:
+        candidates: list[tuple[str, float, float]] = []
+        for phase in catalogue:
+            for band in phase.bands:
+                distance = abs(peak.position - band.position)
+                if distance <= NEAR_MISS_CM:
+                    candidates.append((phase.label, band.position, distance))
+        if not candidates:
+            continue
+        candidates.sort(key=lambda item: item[2])
+        # One line per phase, closest first: a phase with four bands in
+        # the neighbourhood would otherwise fill the list on its own.
+        seen: set[str] = set()
+        trimmed = []
+        for label, position, distance in candidates:
+            if label in seen:
+                continue
+            seen.add(label)
+            trimmed.append((label, position, distance))
+            if len(trimmed) == 3:
+                break
+        out[float(peak.position)] = trimmed
+    return out
 
 
 def _apply_width_rule(ident: PhaseIdentification, tolerance: float) -> None:

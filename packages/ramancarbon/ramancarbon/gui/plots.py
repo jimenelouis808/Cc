@@ -179,9 +179,9 @@ def plot_spectrum(
                 kinds.append("resto")
                 names.append("")
         groups = (
-            ("carbono", "bandas de carbono", palette.data, "o", 4.5),
-            ("fase", "picos de una fase catalogada", palette.warning, "D", 4.0),
-            ("resto", "picos sin explicar", palette.accent, "v", 5.0),
+            ("carbono", "bandas de carbono", palette.peak_carbon, "o", 4.5),
+            ("fase", "picos de una fase catalogada", palette.peak_phase, "D", 4.0),
+            ("resto", "picos sin explicar", palette.peak_unknown, "v", 5.0),
         )
         colour_of = {key: colour for key, _, colour, _, _ in groups}
         for key, label, colour, marker, size in groups:
@@ -204,8 +204,7 @@ def plot_spectrum(
                     xytext=(0, dy),
                     ha="center",
                     fontsize=7,
-                    color=colour_of[kind] if kind != "resto"
-                    else palette.text_muted,
+                    color=colour_of[kind],
                 )
             ax.margins(y=0.18)
     ax.set_xlabel("Desplazamiento Raman (cm⁻¹)")

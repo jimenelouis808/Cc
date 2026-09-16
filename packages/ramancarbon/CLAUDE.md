@@ -202,6 +202,35 @@ una tiene una prueba que la protege.
   secciones eficaces difieren en órdenes de magnitud y dependen de la
   resonancia. Para cuantificar, Rietveld.
 
+## Un pico sin explicar tiene que decir qué se le pareció
+
+- **«SIN EXPLICAR» es el resultado, no un fallo —es la fase que no
+  esperabas— pero es un resultado sobre el que nadie puede actuar.** Un
+  pico en 580 cm⁻¹ y nada al lado deja al usuario buscando en la
+  literatura desde cero; el mismo pico con las tres líneas catalogadas más
+  cercanas y su distancia le dice qué fichas sacar. Es el mismo
+  razonamiento que informar el máximo sub-umbral más fuerte en un
+  difractograma que no identificó nada: un número que se puede juzgar no
+  cuesta nada y el silencio cuesta la tarde.
+- **`NEAR_MISS_CM` está muy por encima de la tolerancia de casado a
+  propósito.** Esto no es una coincidencia y nunca se presenta como tal:
+  es la distancia a la que «mira esta ficha» sigue siendo un consejo útil.
+  Las posiciones Raman de una misma fase se mueven decenas de números de
+  onda con el tamaño de cristalito, la deformación y la estequiometría.
+- **Una línea por fase, la más cercana.** Una fase con cuatro bandas en el
+  vecindario llenaría la lista ella sola.
+- **Y las bandas de carbono NO entran en esa lista.** El escaneo de fases
+  corre ANTES de la asignación y no sabe nada de ella, así que la D y la G
+  le llegan como «sin explicar» — y entonces la lista de cercanías ofrece
+  amablemente nitruro de boro hexagonal para la D y g-C₃N₄ para la G. Eso
+  no son pistas, es ruido generado por hacerle la pregunta equivocada a
+  las bandas mejor entendidas del espectro. `PhaseReport.drop_explained`
+  recibe la respuesta cuando la asignación existe.
+- **Las marcas de pico son un ROL de figura, no un color del tema.**
+  Usaban el `accent` y el `warning`, que también pintan botones y texto de
+  estado: quien quisiera los picos sin explicar de otro color tenía que
+  repintar la interfaz para conseguirlo.
+
 ## Dicalcogenuros (TMD)
 
 - **La medida es una SEPARACIÓN, no una posición.** E₂g se ablanda y A₁g se

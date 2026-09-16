@@ -469,6 +469,16 @@ def analyse(
         _merge_swcnt_g(assignment, swcnt_fit, processed, database)
 
     # -- ratios and derived structure ----------------------------------
+    # The phase scan ran before the assignment existed, so every carbon
+    # band was "unexplained" to it. Hand it the answer now.
+    if phases is not None and phases.enabled:
+        phases.drop_explained([
+            band.position
+            for name in assignment.bands
+            for band in assignment.all_of(name)
+            if band.position is not None
+        ])
+
     ratios = intensity_ratios(assignment, basis=basis)
     g_entry = assignment.g_like()
     g_fwhm = g_entry.fwhm if g_entry else None

@@ -658,7 +658,7 @@ def test_the_section_lets_you_edit_a_circuit_and_hold_its_parameters(tmp_path,
 
     session.set_circuit_parameter("T1.n", value=0.92, fixed=True)
     assert session.circuit_fixed == {"T1.n"}
-    assert dict((l, v) for l, v, _ in session.circuit_parameters())["T1.n"] == 0.92
+    assert dict((label, v) for label, v, _ in session.circuit_parameters())["T1.n"] == 0.92
 
     # Changing the circuit clears them, because R1.R in one circuit is
     # not R1.R in another.
