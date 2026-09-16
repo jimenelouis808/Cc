@@ -834,6 +834,44 @@ fondo siguen dando bastante menos de un pico falso por patrón con umbral
   condensador ideal el término difusivo es exactamente cero y el ruido lo
   pone por debajo en la mitad de los potenciales: el aviso exige que sea
   negativo en más de un 5 % de su propia escala.
+- **Veinte circuitos, y cada uno dice para qué es y qué hace mal.** El
+  nombre y la cadena no bastan: TODO circuito equivalente ajusta algo, y
+  lo que los separa no es el residuo sino qué significan sus parámetros
+  después. Un CPE donde va un condensador sigue ajustando, y entonces
+  `Q1.Q` no son faradios. Están ordenados por complejidad porque ése es el
+  orden en que se prueban: uno con más elementos ajusta siempre al menos
+  igual de bien, así que que baje el residuo al añadir uno no prueba nada
+  — lo que decide es si el parámetro nuevo sale con una incertidumbre
+  usable y un valor físico.
+- **La línea de transmisión de un electrodo poroso no se puede montar con
+  elementos concentrados.** A alta frecuencia el ion sólo ha entrado en la
+  boca del poro y la respuesta es la recta a 45° de un RC distribuido; a
+  baja, el poro está cargado entero y se pone vertical, desplazada de la
+  resistencia en serie **R_ion/3**. Ese tres es el asunto: ajustar la zona
+  de 45° con un Warburg da un coeficiente de difusión de un ion que no
+  está difundiendo a ninguna parte, y ajustarlo todo con R-(R|Q) entierra
+  la resistencia iónica, que es justo la que limita la potencia del
+  dispositivo.
+- **Un Gerischer y un CPE se parecen en el Nyquist y no significan lo
+  mismo.** La `k` del Gerischer es una constante de velocidad en s⁻¹ que
+  se puede contrastar con una medida cinética; la `n` de un CPE es una
+  dispersión de constantes de tiempo. Lo que los separa está en el Bode a
+  alta frecuencia: el Gerischer va a 45° como un Warburg, el CPE a una
+  fase constante de 90n grados.
+- **Fijar un parámetro NO es gratis y no es neutro.** Deja de contar como
+  grado de libertad, así que TODAS las demás incertidumbres de la tabla
+  salen más pequeñas, y si el valor fijado está mal el error se reparte
+  entre sus vecinos sin que el ajuste empeore. Es lo correcto para lo que
+  la medida no determina — la inductancia de los cables si el barrido paró
+  en 100 kHz, un Warburg en un espectro que no llegó a la región de
+  difusión — y un engaño para todo lo demás. Por eso cada parámetro fijado
+  va nombrado en el informe y en la tabla.
+- **Los circuitos del usuario viven FUERA del paquete**, en
+  `config_directory()/circuitos_usuario.json`, por la misma razón que las
+  fases Raman propias. Y se comprueban al guardarlos, no al usarlos: un
+  circuito guardado con una errata vuelve como error de sintaxis en mitad
+  de un análisis, una semana después, sin pista de cuál de los guardados
+  está roto.
 - **Dos picos a menos de un factor de tres en τ son uno.** A esa distancia
   la separación depende de λ más que de los datos, y un circuito
   equivalente los describiría igual de bien con un solo CPE.

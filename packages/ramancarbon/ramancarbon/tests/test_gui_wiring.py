@@ -140,7 +140,7 @@ def test_every_self_attribute_used_is_assigned_somewhere(stem, name):
         "status_var", "progress", "make_canvas", "with_style", "mark_dirty",
         "flush_dirty", "run_async", "drain_queue", "build_status", "set_status",
         "flush_messages", "warn", "show_error", "report_progress",
-        "show_text",
+        "show_text", "ask_yes_no",
     }
     missing = read - assigned - defined - inherited
     assert not missing, f"{stem}: read but never assigned: {sorted(missing)}"

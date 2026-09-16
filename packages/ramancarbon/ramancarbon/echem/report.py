@@ -114,6 +114,8 @@ def analyse_sample(
     catalysis_curve: Optional[Voltammogram] = None,
     reaction: str = "OER",
     circuit: Optional[str] = "randles_cpe",
+    circuit_initial: Optional[dict[str, float]] = None,
+    circuit_fixed: Optional[Sequence[str]] = None,
     non_faradaic: bool = False,
 ) -> EchemResult:
     """Analyse whatever measurements are available for one electrode.
@@ -139,7 +141,8 @@ def analyse_sample(
         result.gcd = analyse_gcd(gcd)
         result.warnings.extend(f"GCD: {w}" for w in result.gcd.warnings)
     if eis is not None:
-        result.eis = analyse_eis(eis, circuit=circuit)
+        result.eis = analyse_eis(eis, circuit=circuit, initial=circuit_initial,
+                                 fixed=circuit_fixed)
         result.warnings.extend(f"EIS: {w}" for w in result.eis.warnings)
     if catalysis_curve is not None:
         result.catalysis = analyse_catalysis(

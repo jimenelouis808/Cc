@@ -54,20 +54,278 @@ KK_LIMIT = 0.02
 #: produces is a residual with long stretches of one sign.
 KK_RUNS_LIMIT = 0.6
 
+@dataclass(frozen=True)
+class CircuitTemplate:
+    """A named circuit, with the measurement it is for.
+
+    The name and the string are not enough. Every equivalent circuit fits
+    *something*, and the ones below differ less in how well they fit than
+    in what their parameters mean afterwards: a CPE where a capacitor
+    belongs still fits, and then ``Q1.Q`` is not a capacitance and cannot
+    be quoted as one. So each carries the case it is for and the trap it
+    has, and the report prints them next to the numbers.
+    """
+
+    name: str
+    circuit: str
+    use: str
+    """When this circuit is the right one, in one line."""
+    caution: str = ""
+    """What it will do wrong if it is not."""
+    origin: str = "programa"
+
+
 #: Circuits offered by name.
-LIBRARY: dict[str, str] = {
-    "randles": "R0-(R1|C1)",
-    "randles_cpe": "R0-(R1|Q1)",
-    "randles_warburg": "R0-(R1-W1|Q1)",
-    "supercondensador": "R0-(R1|Q1)-Q2",
-    "bateria": "R0-(R1|Q1)-(R2|Q2)-Wo1",
-    "dos_semicirculos": "R0-(R1|Q1)-(R2|Q2)",
-    "con_inductancia": "L0-R0-(R1|Q1)",
-}
+#:
+#: Ordered roughly by complexity, because that is the order to try them
+#: in: a circuit with more elements always fits at least as well, so
+#: adding one and seeing the residual drop proves nothing on its own.
+#: What decides is whether the extra element's parameters come out with
+#: usable uncertainties and a physical value.
+TEMPLATES: tuple[CircuitTemplate, ...] = (
+    CircuitTemplate(
+        "resistencia", "R0",
+        "Sólo la resistencia de la disolución; para comprobar la celda.",
+        "No hay electrodo en este modelo. Si ajusta bien, no mediste nada.",
+    ),
+    CircuitTemplate(
+        "edlc_ideal", "R0-C1",
+        "Condensador de doble capa ideal: R en serie y un condensador.",
+        "Ningún electrodo poroso real lo cumple; la dispersión de "
+        "frecuencias pide un CPE.",
+    ),
+    CircuitTemplate(
+        "edlc_cpe", "R0-Q1",
+        "Doble capa con dispersión de frecuencias, sin transferencia de "
+        "carga. El punto de partida de un supercondensador de carbono.",
+        "Q NO son faradios. Sin una R en paralelo no hay conversión de "
+        "Brug posible.",
+    ),
+    CircuitTemplate(
+        "randles", "R0-(R1|C1)",
+        "Un semicírculo limpio: transferencia de carga con doble capa "
+        "ideal.",
+        "Un semicírculo achatado no es éste: es randles_cpe.",
+    ),
+    CircuitTemplate(
+        "randles_cpe", "R0-(R1|Q1)",
+        "Un semicírculo achatado. El caso corriente de un electrodo "
+        "rugoso o poroso.",
+        "El achatamiento puede ser rugosidad o puede ser una distribución "
+        "de constantes de tiempo; n no dice cuál.",
+    ),
+    CircuitTemplate(
+        "randles_warburg", "R0-(R1-W1|Q1)",
+        "Semicírculo más cola de difusión semiinfinita a 45°.",
+        "Si la cola se dobla hacia la vertical o hacia el eje real, la "
+        "difusión NO es semiinfinita: usa randles_ws o randles_wo.",
+    ),
+    CircuitTemplate(
+        "randles_ws", "R0-(R1-Ws1|Q1)",
+        "Difusión de longitud finita con el otro extremo permeable "
+        "(transmisiva): capa de difusión con reserva al otro lado.",
+        "Termina en una resistencia finita. Si tus datos acaban verticales, "
+        "el correcto es el reflectante.",
+    ),
+    CircuitTemplate(
+        "randles_wo", "R0-(R1-Wo1|Q1)",
+        "Difusión de longitud finita con el extremo cerrado "
+        "(reflectante): el interior de una partícula.",
+        "Termina capacitivo, en vertical. Si tus datos acaban en el eje "
+        "real, el correcto es el transmisivo.",
+    ),
+    CircuitTemplate(
+        "supercondensador", "R0-(R1|Q1)-Q2",
+        "Transferencia de carga de la interfase más la cola de "
+        "almacenamiento del dispositivo.",
+        "La Q2 es del dispositivo entero, no del material.",
+    ),
+    CircuitTemplate(
+        "poroso", "R0-T1",
+        "Línea de transmisión de De Levie/Bisquert para un poro "
+        "bloqueante: la recta a 45° que se dobla a vertical. El modelo de "
+        "un carbono poroso de verdad.",
+        "T1.Ri es la resistencia IÓNICA dentro del poro, no la de la "
+        "disolución: es la que limita la potencia.",
+    ),
+    CircuitTemplate(
+        "poroso_con_transferencia", "R0-(R1|Q1)-T1",
+        "Electrodo poroso con una reacción de superficie además de la "
+        "doble capa.",
+        "Con tres tiempos característicos parecidos, R1 y T1 se "
+        "correlacionan: mira las incertidumbres antes de creerte el "
+        "reparto.",
+    ),
+    CircuitTemplate(
+        "recubrimiento", "R0-(Q1|R1-(R2|Q2))",
+        "Una película sobre el electrodo: poros de la capa en paralelo "
+        "con su capacidad, y la interfase debajo. El caso de un FeSe "
+        "recubierto de carbono.",
+        "Los dos arcos se separan sólo si sus constantes de tiempo "
+        "difieren en más de una década.",
+    ),
+    CircuitTemplate(
+        "dos_semicirculos", "R0-(R1|Q1)-(R2|Q2)",
+        "Dos procesos en serie con constantes de tiempo distintas.",
+        "Dos CPE en serie ajustan casi cualquier arco achatado. Que baje "
+        "el residuo no prueba que haya dos procesos.",
+    ),
+    CircuitTemplate(
+        "tres_semicirculos", "R0-(R1|Q1)-(R2|Q2)-(R3|Q3)",
+        "Tres procesos en serie: película, transferencia y difusión "
+        "lenta.",
+        "Nueve parámetros libres. Sin una DRT que enseñe tres picos "
+        "separados, esto es dibujar.",
+    ),
+    CircuitTemplate(
+        "bateria", "R0-(R1|Q1)-(R2|Q2)-Wo1",
+        "Electrodo de batería: SEI, transferencia de carga y difusión en "
+        "el sólido.",
+        "La cola vertical puede ser difusión o puede ser capacidad de la "
+        "celda; Wo1.tau sólo significa algo si mediste hasta bien por "
+        "debajo de 1/tau.",
+    ),
+    CircuitTemplate(
+        "bateria_ws", "R0-(R1|Q1)-(R2|Q2)-Ws1",
+        "Como el anterior pero con la difusión permeable: un electrodo "
+        "en película delgada sobre un colector.",
+        "Igual que arriba, con el extremo opuesto.",
+    ),
+    CircuitTemplate(
+        "gerischer", "R0-(G1|Q1)",
+        "Reacción química acoplada a la difusión (Gerischer): un arco "
+        "deprimido que NO es un CPE. Típico de electrocatálisis y de "
+        "conductores mixtos.",
+        "Un Gerischer y un CPE se parecen mucho en el Nyquist. Lo que los "
+        "separa es el diagrama de Bode a alta frecuencia.",
+    ),
+    CircuitTemplate(
+        "adsorcion_inductiva", "R0-(R1|Q1|R2-L1)",
+        "El lazo inductivo a baja frecuencia de un intermedio adsorbido: "
+        "HER y OER lo dan casi siempre.",
+        "Un lazo inductivo también lo produce la deriva del electrodo "
+        "durante la medida. Repite el barrido antes de interpretarlo.",
+    ),
+    CircuitTemplate(
+        "con_inductancia", "L0-R0-(R1|Q1)",
+        "Con la inductancia de los cables, que domina por encima de unos "
+        "kHz.",
+        "Si L0 sale mayor que 1 µH no es la muestra, es el montaje: "
+        "acorta y trenza los cables.",
+    ),
+    CircuitTemplate(
+        "supercondensador_completo", "L0-R0-(R1|Q1)-T1",
+        "Un supercondensador de carbono medido de MHz a mHz, con los "
+        "cables, la interfase y el poro.",
+        "Seis parámetros y tres regiones de frecuencia. Si no mediste las "
+        "tres, fija los elementos de las que falten.",
+    ),
+)
+
+#: Circuits offered by name. Kept as a plain mapping because that is what
+#: the rest of the package and the tests use; :data:`TEMPLATES` carries
+#: everything else.
+LIBRARY: dict[str, str] = {t.name: t.circuit for t in TEMPLATES}
 
 
 class CircuitError(ValueError):
     """Raised when a circuit string cannot be parsed or evaluated."""
+
+
+def user_circuit_file():
+    """Where the user's own circuits live.
+
+    Outside the package, next to the preferences and the user's Raman
+    phases, for the same reason: a package upgrade replaces what is
+    inside the package, and a circuit somebody worked out for their own
+    cell would go with it.
+    """
+    from ..core.history import config_directory
+
+    return config_directory() / "circuitos_usuario.json"
+
+
+def user_circuits() -> dict[str, str]:
+    """The user's own circuits, by name.
+
+    An unreadable file is reported and ignored, never fatal: a stray
+    comma in hand-written JSON cannot be allowed to take the bundled
+    circuits down with it.
+    """
+    import json
+
+    path = user_circuit_file()
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return {
+        str(name): str(circuit)
+        for name, circuit in payload.items()
+        if isinstance(circuit, str) and circuit.strip()
+    }
+
+
+def save_user_circuit(name: str, circuit: str, use: str = "") -> CircuitTemplate:
+    """Store a circuit under a name, after checking that it parses.
+
+    Checked before it is written, not when it is next used: a circuit
+    saved with a typo comes back as a parse error in the middle of an
+    analysis, a week later, with no clue as to which of the saved ones
+    is broken.
+    """
+    import json
+
+    label = name.strip()
+    if not label:
+        raise CircuitError("un circuito guardado necesita un nombre")
+    parse_circuit(LIBRARY.get(circuit, circuit))
+    stored = user_circuits()
+    stored[label] = circuit.strip()
+    path = user_circuit_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(stored, ensure_ascii=False, indent=2),
+                    encoding="utf-8")
+    return CircuitTemplate(label, circuit.strip(), use or "Circuito propio.",
+                           origin="usuario")
+
+
+def delete_user_circuit(name: str) -> bool:
+    """Forget a user circuit. Bundled ones cannot be deleted.
+
+    Same rule as the Raman phases: deleting a bundled entry would mean
+    writing to a file the next upgrade replaces, so the deletion would
+    silently come back. Shadow it with one of your own instead.
+    """
+    import json
+
+    stored = user_circuits()
+    if name not in stored:
+        return False
+    del stored[name]
+    path = user_circuit_file()
+    path.write_text(json.dumps(stored, ensure_ascii=False, indent=2),
+                    encoding="utf-8")
+    return True
+
+
+def circuit_templates() -> list[CircuitTemplate]:
+    """Every circuit on offer, bundled and user, each saying where it is
+    from. A user circuit with the name of a bundled one replaces it."""
+    by_name = {t.name: t for t in TEMPLATES}
+    for name, circuit in user_circuits().items():
+        by_name[name] = CircuitTemplate(
+            name, circuit, "Circuito propio.", origin="usuario")
+    return sorted(by_name.values(), key=lambda t: (t.origin != "programa", t.name))
+
+
+def circuit_for(name: str) -> str:
+    """The circuit string for a name, or the name itself if it is one."""
+    return LIBRARY.get(name, user_circuits().get(name, name))
 
 
 # -- circuit elements --------------------------------------------------
@@ -112,6 +370,44 @@ def _z_wo(omega: np.ndarray, r: float, tau: float) -> np.ndarray:
     return r / (np.tanh(root) * root)
 
 
+def _z_g(omega: np.ndarray, z0: float, k: float) -> np.ndarray:
+    """Gerischer: a chemical reaction coupled to diffusion.
+
+    ``Z = Z₀ / √(k + jω)``. It looks like a depressed arc and is
+    routinely fitted with a CPE instead, which fits about as well and
+    means something else entirely: the CPE's ``n`` is a dispersion of
+    time constants, while ``k`` here is a rate constant with units of
+    s⁻¹ that can be compared against a kinetic measurement. What
+    separates them is the high-frequency end — a Gerischer goes to 45°
+    like a Warburg, a CPE to a constant phase of 90n degrees.
+    """
+    return z0 / np.sqrt(max(k, 1e-12) + 1j * omega)
+
+
+def _z_t(omega: np.ndarray, r_ion: float, q: float, n: float) -> np.ndarray:
+    """Blocking porous electrode: the De Levie / Bisquert transmission line.
+
+    ``Z = √(R_ion · Z_c) · coth √(R_ion / Z_c)``, with the pore wall a
+    CPE, ``Z_c = 1/(Q (jω)^n)``.
+
+    This is what a porous carbon actually does, and no combination of
+    lumped elements reproduces it: at high frequency the ion has only
+    entered the mouth of the pore, so the response is the 45° line of a
+    distributed RC; at low frequency the whole pore is charged and it
+    turns vertical, offset from the series resistance by ``R_ion/3``.
+    That factor of three is the point — fitting the 45° region with a
+    Warburg instead gives a "diffusion coefficient" for an ion that is
+    not diffusing anywhere, and fitting the whole thing with R-(R|Q)
+    buries the ionic resistance, which is the quantity that limits the
+    device's power.
+    """
+    z_wall = 1.0 / (max(q, 1e-18) * (1j * omega) ** n)
+    ratio = np.sqrt(max(r_ion, 1e-12) / z_wall)
+    # coth saturates at 1 for large argument; clip so the high-frequency
+    # end does not overflow to nan on a wide spectrum.
+    return np.sqrt(max(r_ion, 1e-12) * z_wall) / np.tanh(np.clip(ratio, -30.0, 30.0))
+
+
 #: Element symbol → (impedance function, parameter names, defaults, bounds,
 #: whether each parameter is fitted in logarithmic space).
 #:
@@ -129,9 +425,17 @@ ELEMENTS: dict[str, tuple] = {
     "W": (_z_w, ("sigma",), (10.0,), ((1e-6,), (1e9,)), (True,)),
     "Ws": (_z_ws, ("R", "tau"), (10.0, 1.0), ((1e-6, 1e-6), (1e9, 1e6)), (True, True)),
     "Wo": (_z_wo, ("R", "tau"), (10.0, 1.0), ((1e-6, 1e-6), (1e9, 1e6)), (True, True)),
+    "G": (_z_g, ("Z0", "k"), (10.0, 1.0), ((1e-6, 1e-6), (1e9, 1e6)), (True, True)),
+    "T": (
+        _z_t,
+        ("Ri", "Q", "n"),
+        (10.0, 1e-3, 0.9),
+        ((1e-6, 1e-15, 0.3), (1e9, 10.0, 1.0)),
+        (True, True, False),
+    ),
 }
 
-_TOKEN = re.compile(r"(Ws|Wo|[RCLQW])(\d*)")
+_TOKEN = re.compile(r"(Ws|Wo|[RCLQWGT])(\d*)")
 
 
 @dataclass
@@ -250,6 +554,10 @@ class CircuitFit:
     converged: bool = False
     message: str = ""
     warnings: list[str] = field(default_factory=list)
+    fixed: list[str] = field(default_factory=list)
+    """Parameters held rather than refined. Named because fixing one
+    shrinks every other uncertainty in the table, so a reader who does
+    not know which were held cannot read the table."""
 
     def values(self) -> dict[str, float]:
         return {
@@ -273,9 +581,19 @@ class CircuitFit:
                 error = self.errors.get(label)
                 unit = _unit(element.symbol, name)
                 text = f"  {label:<10s} = {value:12.6g} {unit}"
-                if error is not None and value != 0:
+                if label in self.fixed:
+                    text += "  (FIJADO)"
+                elif error is not None and value != 0:
                     text += f"  (± {100 * error / abs(value):.1f} %)"
                 lines.append(text)
+        if self.fixed:
+            lines.append("")
+            lines.append(
+                "  Parámetros fijados: " + ", ".join(self.fixed) + ". Las "
+                "incertidumbres de los demás salen más pequeñas por eso, y "
+                "un valor fijado que esté mal se reparte entre ellos sin que "
+                "el ajuste empeore."
+            )
         if self.warnings:
             lines.append("")
             lines.extend("  ⚠ " + w for w in self.warnings)
@@ -288,6 +606,8 @@ def _unit(symbol: str, parameter: str) -> str:
         ("Q", "Q"): "S·sⁿ", ("Q", "n"): "", ("W", "sigma"): "Ω·s^-½",
         ("Ws", "R"): "Ω", ("Ws", "tau"): "s",
         ("Wo", "R"): "Ω", ("Wo", "tau"): "s",
+        ("G", "Z0"): "Ω·s^-½", ("G", "k"): "s⁻¹",
+        ("T", "Ri"): "Ω", ("T", "Q"): "S·sⁿ", ("T", "n"): "",
     }
     return units.get((symbol, parameter), "")
 
@@ -381,6 +701,7 @@ def fit_circuit(
     circuit: str = "randles_cpe",
     initial: Optional[dict[str, float]] = None,
     max_iterations: int = 4000,
+    fixed: Optional[Sequence[str]] = None,
 ) -> CircuitFit:
     """Fit an equivalent circuit by complex non-linear least squares.
 
@@ -397,12 +718,23 @@ def fit_circuit(
         low-frequency one, and the capacitances from the frequency of the
         imaginary maximum — which matters, because a CNLS fit started far
         from the answer finds a local minimum and reports it happily.
+    fixed:
+        Labels to HOLD at their starting values instead of refining.
+        Fixing is not free and it is not neutral: the parameter stops
+        contributing a degree of freedom, so every other uncertainty
+        comes out smaller, and if the fixed value is wrong that error
+        moves into its neighbours rather than showing up as a bad fit.
+        It is the right move for a parameter the measurement cannot
+        determine — the cable inductance when the sweep stopped at
+        100 kHz, a Warburg on a spectrum that never reached the
+        diffusion region — and the wrong one everywhere else. Every
+        fixed parameter is named in the report for that reason.
 
     Returns
     -------
     CircuitFit
     """
-    text = LIBRARY.get(circuit, circuit)
+    text = LIBRARY.get(circuit, user_circuits().get(circuit, circuit))
     tree = parse_circuit(text)
     elements = tree.elements()
     if not elements:
@@ -429,6 +761,19 @@ def fit_circuit(
             upper.append(bounds[1][index])
             logarithmic.append(bool(logs[index]))
 
+    held = set(fixed or ())
+    unknown = held - set(labels)
+    if unknown:
+        raise CircuitError(
+            f"no hay ningún parámetro llamado {', '.join(sorted(unknown))} en "
+            f"{text!r}; los que hay son: {', '.join(labels)}"
+        )
+    free = np.array([label not in held for label in labels])
+    if not free.any():
+        raise CircuitError(
+            "están fijados todos los parámetros: no queda nada que ajustar"
+        )
+
     is_log = np.array(logarithmic)
     start_array = np.clip(
         np.asarray(start, dtype=float),
@@ -450,6 +795,12 @@ def fit_circuit(
     observed = spectrum.z
     weight = 1.0 / np.maximum(np.abs(observed), 1e-12)
 
+    def expand(reduced: np.ndarray) -> np.ndarray:
+        """Free parameters back into the full internal vector."""
+        full = np.array(to_internal(start_array), dtype=float)
+        full[free] = reduced
+        return full
+
     def unpack(internal: np.ndarray) -> None:
         values = to_external(internal)
         position = 0
@@ -458,7 +809,8 @@ def fit_circuit(
             element.values = [float(v) for v in values[position:position + count]]
             position += count
 
-    def residual(internal: np.ndarray) -> np.ndarray:
+    def residual(reduced: np.ndarray) -> np.ndarray:
+        internal = expand(reduced)
         unpack(internal)
         model = tree.impedance(omega)
         difference = (model - observed) * weight
@@ -470,8 +822,8 @@ def fit_circuit(
     def run(guess: np.ndarray):
         return least_squares(
             residual,
-            np.clip(guess, internal_lower + 1e-9, internal_upper - 1e-9),
-            bounds=(internal_lower, internal_upper),
+            np.clip(guess, internal_lower + 1e-9, internal_upper - 1e-9)[free],
+            bounds=(internal_lower[free], internal_upper[free]),
             x_scale="jac",
             max_nfev=max_iterations,
             ftol=1e-13,
@@ -485,13 +837,14 @@ def fit_circuit(
     base = to_internal(start_array)
     rng = np.random.default_rng(0)
     outcome = run(base)
+    scatter = is_log & free
     for _ in range(3):
         perturbed = base.copy()
-        perturbed[is_log] += rng.normal(0.0, 0.7, int(is_log.sum()))
+        perturbed[scatter] += rng.normal(0.0, 0.7, int(scatter.sum()))
         candidate = run(perturbed)
         if candidate.cost < outcome.cost * 0.999:
             outcome = candidate
-    unpack(outcome.x)
+    unpack(expand(outcome.x))
     model = tree.impedance(omega)
 
     chi_squared = float((outcome.fun**2).sum())
@@ -505,8 +858,10 @@ def fit_circuit(
         fitted=model,
         converged=bool(outcome.success),
         message=str(outcome.message),
+        fixed=sorted(held),
     )
-    _errors(outcome, labels, is_log, fit, spectrum.n)
+    _errors(outcome, [label for label in labels if label not in held],
+            is_log[free], fit, spectrum.n)
     _check_bounds(fit, labels, lower, upper)
     _circuit_warnings(fit, spectrum)
     return fit
@@ -564,6 +919,16 @@ def _seed(elements: Sequence[Element], spectrum: Impedance) -> None:
             element.values = [polarisation, 1.0 / omega_peak]
         elif element.symbol == "L":
             element.values = [1e-6]
+        elif element.symbol == "G":
+            element.values = [polarisation * math.sqrt(omega_peak), omega_peak]
+        elif element.symbol == "T":
+            # The vertical part of a transmission line is offset from the
+            # series resistance by R_ion/3, so the tail's own capacitance
+            # and three times the span to the tail are the seeds that put
+            # the fit in the right basin. Started from the defaults it
+            # converges to a pore a thousand times too resistive.
+            offset = max(float(real[-1]) - series, 1e-3)
+            element.values = [3.0 * offset, max(tail, capacitance), 0.9]
 
 
 def _semicircle_apex(imaginary: np.ndarray, real: np.ndarray, series: float) -> int:
@@ -877,12 +1242,17 @@ def analyse_eis(
     spectrum: Impedance,
     circuit: Optional[str] = "randles_cpe",
     check_kk: bool = True,
+    initial: Optional[dict[str, float]] = None,
+    fixed: Optional[Sequence[str]] = None,
 ) -> EISResult:
     """Impedance analysis: consistency first, then a circuit.
 
     ``circuit=None`` skips the fit and returns only the model-free
     quantities, which is the right thing to do when the Kramers–Kronig test
     fails.
+
+    ``initial`` and ``fixed`` are passed through to :func:`fit_circuit`;
+    see there for why fixing a parameter is not a free action.
     """
     result = EISResult(spectrum=spectrum)
     if check_kk:
@@ -901,7 +1271,7 @@ def analyse_eis(
         result.knee_frequency = float(spectrum.frequency[knee])
 
     if circuit:
-        result.fit = fit_circuit(spectrum, circuit)
+        result.fit = fit_circuit(spectrum, circuit, initial=initial, fixed=fixed)
         values = result.fit.values()
         resistances = [
             (label, value) for label, value in values.items() if label.endswith(".R")
@@ -930,16 +1300,24 @@ __all__ = [
     "KK_PER_DECADE",
     "KK_RUNS_LIMIT",
     "LIBRARY",
+    "TEMPLATES",
     "CircuitError",
     "CircuitFit",
+    "CircuitTemplate",
     "EISResult",
     "Element",
     "KKResult",
     "analyse_eis",
+    "circuit_for",
+    "circuit_templates",
     "cpe_to_capacitance",
+    "delete_user_circuit",
     "fit_circuit",
     "kramers_kronig",
     "parse_circuit",
+    "save_user_circuit",
+    "user_circuit_file",
+    "user_circuits",
     "uncompensated_resistance",
     "with_resistance_from",
 ]

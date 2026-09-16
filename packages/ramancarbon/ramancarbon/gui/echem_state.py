@@ -15,7 +15,15 @@ from pathlib import Path
 from typing import Optional
 
 from ..echem.curve import ChargeDischarge, Electrode, Impedance, Voltammogram
-from ..echem.eis import LIBRARY
+from ..echem.eis import (
+    CircuitError,
+    CircuitTemplate,
+    circuit_for,
+    circuit_templates,
+    delete_user_circuit,
+    parse_circuit,
+    save_user_circuit,
+)
 from ..echem.io import EchemIOError, read_cv, read_eis, read_gcd
 from ..echem.report import EchemResult, analyse_sample
 
@@ -42,6 +50,15 @@ class EchemSession:
     lsv: Optional[Voltammogram] = None
     reaction: str = "OER"
     circuit: str = "randles_cpe"
+    """The circuit NAME, or a circuit string typed by hand. Both work:
+    the name is resolved against the bundled and user libraries and
+    anything unrecognised is parsed as a circuit."""
+    circuit_initial: dict[str, float] = field(default_factory=dict)
+    """Starting values by label, for the ones the user has overridden.
+    Empty means "read them off the spectrum", which is what should
+    normally happen."""
+    circuit_fixed: set[str] = field(default_factory=set)
+    """Labels held rather than refined."""
     non_faradaic: bool = False
     """Whether the rate study's window was chosen free of faradaic current.
     It is off by default because most windows are not, and claiming
@@ -170,6 +187,8 @@ class EchemSession:
             catalysis_curve=self.lsv,
             reaction=self.reaction,
             circuit=self.circuit,
+            circuit_initial=dict(self.circuit_initial) or None,
+            circuit_fixed=sorted(self.circuit_fixed) or None,
             non_faradaic=self.non_faradaic,
         )
         for warning in self.result.warnings:
@@ -288,7 +307,14 @@ class EchemSession:
                 )
         return rows
 
-    def circuit_rows(self) -> list[tuple[str, str, str]]:
+    def circuit_rows(self) -> list[tuple[str, str, str, str]]:
+        """``(label, value, uncertainty, fixed?)`` for the fitted circuit.
+
+        The fixed column is not decoration. Holding a parameter removes a
+        degree of freedom, so every other uncertainty in the table comes
+        out smaller; a reader who cannot see which were held cannot read
+        the column next to it.
+        """
         result = self.result
         if result is None or result.eis is None or result.eis.fit is None:
             return []
@@ -296,19 +322,133 @@ class EchemSession:
         rows = []
         for label, value in fit.values().items():
             error = fit.errors.get(label)
+            held = label in fit.fixed
             rows.append(
                 (
                     label,
                     f"{value:.6g}",
-                    f"± {100 * error / abs(value):.1f} %"
+                    "fijado" if held
+                    else f"± {100 * error / abs(value):.1f} %"
                     if error is not None and value
                     else "—",
+                    "sí" if held else "",
                 )
             )
         return rows
 
+    # -- the circuit ---------------------------------------------------
     def circuit_choices(self) -> list[str]:
-        return sorted(LIBRARY)
+        return [t.name for t in circuit_templates()]
+
+    def circuit_catalogue(self) -> list[CircuitTemplate]:
+        """Every circuit on offer, bundled and user, in the order to try
+        them in."""
+        return circuit_templates()
+
+    def circuit_text(self) -> str:
+        """The circuit string behind the current choice, for the entry
+        box: a preset the user can then edit is more useful than one they
+        can only accept."""
+        return circuit_for(self.circuit)
+
+    def circuit_note(self) -> tuple[str, str]:
+        """``(what it is for, what it gets wrong)`` for the current
+        choice, or empty strings for a hand-typed one."""
+        for template in circuit_templates():
+            if template.name == self.circuit:
+                return template.use, template.caution
+        return "", ""
+
+    def set_circuit(self, text: str) -> bool:
+        """Choose a circuit by name or by string, checking it parses.
+
+        Checked here rather than at fit time so a typo is a message next
+        to the box that produced it, not a traceback ten seconds into an
+        analysis. Changing the circuit clears the per-parameter overrides,
+        because ``R1.R`` in one circuit is not ``R1.R`` in another.
+        """
+        candidate = text.strip()
+        if not candidate:
+            self.log("error", "el circuito no puede estar vacío")
+            return False
+        try:
+            parse_circuit(circuit_for(candidate))
+        except CircuitError as exc:
+            self.log("error", f"circuito no válido: {exc}")
+            return False
+        if candidate != self.circuit:
+            self.circuit_initial.clear()
+            self.circuit_fixed.clear()
+        self.circuit = candidate
+        return True
+
+    def circuit_parameters(self) -> list[tuple[str, float, bool]]:
+        """``(label, starting value, fixed)`` for every parameter of the
+        current circuit, before any fit.
+
+        Read from the circuit itself rather than from the last result, so
+        the table is there to set up the fit rather than only to look at
+        afterwards.
+        """
+        try:
+            elements = parse_circuit(circuit_for(self.circuit)).elements()
+        except CircuitError:
+            return []
+        rows = []
+        for element in elements:
+            for label, value in zip(element.labels, element.values):
+                rows.append((label, self.circuit_initial.get(label, value),
+                             label in self.circuit_fixed))
+        return rows
+
+    def set_circuit_parameter(self, label: str,
+                              value: Optional[float] = None,
+                              fixed: Optional[bool] = None) -> None:
+        """Override a starting value, hold a parameter, or both."""
+        if value is not None:
+            self.circuit_initial[label] = float(value)
+        if fixed is not None:
+            if fixed:
+                self.circuit_fixed.add(label)
+                # Fixing a parameter at whatever the library default
+                # happens to be is a way to get a confident wrong answer.
+                # If no value was given, take the one on the table.
+                self.circuit_initial.setdefault(
+                    label,
+                    next((v for lab, v, _ in self.circuit_parameters()
+                          if lab == label), 0.0),
+                )
+            else:
+                self.circuit_fixed.discard(label)
+
+    def reset_circuit_parameters(self) -> None:
+        """Back to values read off the spectrum, nothing held."""
+        self.circuit_initial.clear()
+        self.circuit_fixed.clear()
+
+    def save_circuit(self, name: str, circuit: Optional[str] = None) -> bool:
+        """Store the current circuit under a name of the user's own."""
+        try:
+            save_user_circuit(name, circuit or circuit_for(self.circuit))
+        except CircuitError as exc:
+            self.log("error", str(exc))
+            return False
+        self.log("info", f"circuito guardado como «{name.strip()}»")
+        return True
+
+    def delete_circuit(self, name: str) -> bool:
+        """Forget a user circuit. The bundled ones cannot be deleted."""
+        if delete_user_circuit(name):
+            self.log("info", f"circuito «{name}» borrado")
+            if self.circuit == name:
+                self.set_circuit("randles_cpe")
+            return True
+        self.log(
+            "error",
+            f"«{name}» no es un circuito tuyo. Los del programa no se "
+            "borran: guárdate uno con el mismo nombre para sustituirlo",
+        )
+        return False
 
     def report(self) -> str:
         if self.result is None:

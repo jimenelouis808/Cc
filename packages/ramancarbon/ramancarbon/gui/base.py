@@ -260,6 +260,12 @@ class SectionApp:
 
         messagebox.showwarning(title, message, parent=self.root)
 
+    def ask_yes_no(self, title: str, message: str) -> bool:
+        """Confirm before something the user cannot undo."""
+        from tkinter import messagebox
+
+        return bool(messagebox.askyesno(title, message, parent=self.root))
+
     def show_text(self, title: str, text: str) -> None:
         """A scrollable, selectable, copyable window of text.
 

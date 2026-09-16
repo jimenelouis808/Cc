@@ -462,3 +462,227 @@ def test_a_battery_gets_the_farads_caveat_at_the_top_level():
         rate_series=cv_rate_series("bateria", seed=2),
     )
     assert any("mecanismo es de tipo BATERÍA" in w for w in result.warnings)
+
+
+# -- the circuit library ------------------------------------------------
+
+def _from_circuit(text, values, noise=0.003, seed=1, decades=(5, -2), n=60):
+    """A synthetic spectrum built from a circuit with known parameters."""
+    from ramancarbon.echem.eis import parse_circuit
+
+    frequency = np.logspace(decades[0], decades[1], n)
+    tree = parse_circuit(text)
+    for element in tree.elements():
+        element.values = list(values[element.name])
+    z = tree.impedance(2.0 * np.pi * frequency)
+    rng = np.random.default_rng(seed)
+    z = z * (1.0 + rng.normal(0.0, noise, z.size)
+             + 1j * rng.normal(0.0, noise, z.size))
+    return Impedance(frequency=frequency, z=z)
+
+
+def test_every_bundled_circuit_parses_and_says_what_it_is_for():
+    """A name and a string are not enough. Every equivalent circuit fits
+    SOMETHING; what separates them is what the parameters mean
+    afterwards, so each one carries its case and its trap."""
+    from ramancarbon.echem.eis import LIBRARY, TEMPLATES, parse_circuit
+
+    assert len(TEMPLATES) >= 20
+    for template in TEMPLATES:
+        parse_circuit(template.circuit)
+        assert template.use.strip(), template.name
+        assert template.caution.strip(), template.name
+        assert template.origin == "programa"
+    assert set(LIBRARY) == {t.name for t in TEMPLATES}
+    assert len({t.circuit for t in TEMPLATES}) == len(TEMPLATES), (
+        "two names for the same circuit")
+
+
+def test_the_porous_line_gives_a_third_of_the_ionic_resistance():
+    """De Levie / Bisquert, and the factor of three is the whole point.
+    At low frequency the pore is charged along its length, so its real
+    part settles at R_ion/3, NOT at R_ion — and R_ion is the quantity
+    that limits a supercapacitor's power. Fitting the 45-degree region
+    with a Warburg instead reports a diffusion coefficient for an ion
+    that is not diffusing anywhere."""
+    from ramancarbon.echem.eis import _z_t
+
+    omega = 2.0 * np.pi * np.logspace(-3, 6, 400)
+    z = _z_t(omega, 30.0, 0.8, 1.0)
+    assert np.isfinite(z).all(), "the coth overflowed at the high-frequency end"
+    assert z.real[0] == pytest.approx(10.0, rel=0.01)
+    # And the low-frequency tail is the wall capacitance, |Z''| = 1/(wC).
+    assert (-z.imag[0]) * omega[0] * 0.8 == pytest.approx(1.0, rel=0.01)
+    # 45 degrees at high frequency: a distributed RC, not a capacitor.
+    assert np.degrees(np.angle(z[-1])) == pytest.approx(-45.0, abs=1.0)
+
+
+def test_a_porous_electrode_recovers_its_own_ionic_resistance():
+    from ramancarbon.echem.eis import fit_circuit
+
+    spectrum = _from_circuit("R0-T1", {"R0": (1.5,), "T1": (36.0, 0.8, 0.95)})
+    fit = fit_circuit(spectrum, "poroso")
+    assert fit.converged
+    values = fit.values()
+    assert values["T1.Ri"] == pytest.approx(36.0, rel=0.05)
+    assert values["T1.Q"] == pytest.approx(0.8, rel=0.05)
+    assert values["T1.n"] == pytest.approx(0.95, abs=0.02)
+
+
+def test_a_gerischer_is_not_a_cpe():
+    """Both make a depressed arc and both fit. The difference is that
+    the Gerischer's k is a rate constant in s-1 that can be checked
+    against a kinetic measurement, and a CPE's n is not."""
+    from ramancarbon.echem.eis import _z_g, fit_circuit
+
+    omega = 2.0 * np.pi * np.logspace(-3, 6, 400)
+    z = _z_g(omega, 20.0, 5.0)
+    assert z.real[0] == pytest.approx(20.0 / np.sqrt(5.0), rel=0.01)
+    assert np.degrees(np.angle(z[-1])) == pytest.approx(-45.0, abs=1.0)
+
+    spectrum = _from_circuit(
+        "R0-(G1|Q1)", {"R0": (2.0,), "G1": (15.0, 3.0), "Q1": (5e-4, 0.9)})
+    fit = fit_circuit(spectrum, "gerischer")
+    assert fit.values()["G1.Z0"] == pytest.approx(15.0, rel=0.05)
+    assert fit.values()["G1.k"] == pytest.approx(3.0, rel=0.1)
+
+
+def test_a_fixed_parameter_stays_put_and_is_named():
+    """Fixing is not free: the parameter stops contributing a degree of
+    freedom, so every OTHER uncertainty comes out smaller. A reader who
+    cannot see which were held cannot read the column next to them."""
+    from ramancarbon.echem.eis import fit_circuit
+
+    spectrum = _from_circuit(
+        "R0-(R1|Q1)", {"R0": (2.0,), "R1": (40.0,), "Q1": (2e-4, 0.88)})
+    held = fit_circuit(spectrum, "randles_cpe",
+                       initial={"Q1.n": 0.80}, fixed=["Q1.n"])
+
+    assert held.values()["Q1.n"] == 0.80, "the fit moved a fixed parameter"
+    assert held.fixed == ["Q1.n"]
+    assert "Q1.n" not in held.errors, "a held parameter has no uncertainty"
+    assert "FIJADO" in held.summary()
+    assert "fijados" in held.summary()
+
+    # Fixing it at the wrong value does not wreck the fit: the error
+    # moves into its neighbours instead, which is exactly why it has to
+    # be declared.
+    free = fit_circuit(spectrum, "randles_cpe")
+    assert free.values()["Q1.n"] == pytest.approx(0.88, abs=0.02)
+    assert held.residual_pct > free.residual_pct
+
+
+def test_fixing_everything_is_refused_and_so_is_a_name_that_is_not_there():
+    from ramancarbon.echem.eis import fit_circuit
+
+    spectrum = _from_circuit("R0-(R1|C1)", {"R0": (2.0,), "R1": (40.0,),
+                                            "C1": (1e-4,)})
+    with pytest.raises(CircuitError, match="fijados todos"):
+        fit_circuit(spectrum, "randles", fixed=["R0.R", "R1.R", "C1.C"])
+    with pytest.raises(CircuitError, match="no hay ningún parámetro"):
+        fit_circuit(spectrum, "randles", fixed=["R7.R"])
+
+
+def test_user_circuits_live_outside_the_package(tmp_path, monkeypatch):
+    """Same rule as the user's Raman phases: a package upgrade replaces
+    what is inside the package, and a circuit somebody worked out for
+    their own cell would go with it."""
+    from ramancarbon.echem import eis
+
+    monkeypatch.setattr(eis, "user_circuit_file",
+                        lambda: tmp_path / "circuitos_usuario.json")
+
+    assert eis.user_circuits() == {}
+    eis.save_user_circuit("mi_celda", "R0-(R1|Q1)-T1")
+    assert eis.user_circuits()["mi_celda"] == "R0-(R1|Q1)-T1"
+    assert eis.circuit_for("mi_celda") == "R0-(R1|Q1)-T1"
+
+    names = [t.name for t in eis.circuit_templates()]
+    assert "mi_celda" in names and "randles_cpe" in names
+    mine = next(t for t in eis.circuit_templates() if t.name == "mi_celda")
+    assert mine.origin == "usuario"
+
+    # It is checked when it is saved, not a week later in the middle of
+    # an analysis.
+    with pytest.raises(CircuitError):
+        eis.save_user_circuit("roto", "R0-(R1|Q1")
+    with pytest.raises(CircuitError):
+        eis.save_user_circuit("   ", "R0")
+
+    assert eis.delete_user_circuit("mi_celda") is True
+    assert eis.delete_user_circuit("randles_cpe") is False, (
+        "a bundled circuit must not be deletable: the deletion would be "
+        "written to a file the next upgrade replaces and would come back")
+
+
+def test_an_unreadable_user_circuit_file_is_ignored_not_fatal(tmp_path, monkeypatch):
+    from ramancarbon.echem import eis
+
+    path = tmp_path / "circuitos_usuario.json"
+    path.write_text("{ esto no es json,, }", encoding="utf-8")
+    monkeypatch.setattr(eis, "user_circuit_file", lambda: path)
+    assert eis.user_circuits() == {}
+    assert [t.name for t in eis.circuit_templates()][:1] != []
+
+
+def test_the_section_lets_you_edit_a_circuit_and_hold_its_parameters(tmp_path,
+                                                                     monkeypatch):
+    """What the user asked for: more circuits in the list, and the list
+    editable rather than a set of presets to accept or leave."""
+    from ramancarbon.echem import eis
+    from ramancarbon.gui.echem_state import EchemSession
+
+    monkeypatch.setattr(eis, "user_circuit_file",
+                        lambda: tmp_path / "circuitos_usuario.json")
+    session = EchemSession()
+    assert len(session.circuit_choices()) >= 20
+
+    # A name picked from the list fills the box with its string, which is
+    # how the notation gets learnt.
+    assert session.set_circuit("poroso")
+    assert session.circuit_text() == "R0-T1"
+    use, caution = session.circuit_note()
+    assert "poroso" in use.lower() and caution
+
+    # And a string typed by hand is accepted on the same footing.
+    assert session.set_circuit("R0-(R1|Q1)-T1")
+    assert session.circuit_text() == "R0-(R1|Q1)-T1"
+    labels = [label for label, _, _ in session.circuit_parameters()]
+    assert labels == ["R0.R", "R1.R", "Q1.Q", "Q1.n", "T1.Ri", "T1.Q", "T1.n"]
+
+    # Nonsense is refused where it was typed, not ten seconds into an
+    # analysis.
+    assert session.set_circuit("R0-(R1|Q1") is False
+    assert session.circuit_text() == "R0-(R1|Q1)-T1", "a bad edit was kept"
+    assert session.messages and session.messages[-1][0] == "error"
+
+    session.set_circuit_parameter("T1.n", value=0.92, fixed=True)
+    assert session.circuit_fixed == {"T1.n"}
+    assert dict((l, v) for l, v, _ in session.circuit_parameters())["T1.n"] == 0.92
+
+    # Changing the circuit clears them, because R1.R in one circuit is
+    # not R1.R in another.
+    assert session.set_circuit("randles_cpe")
+    assert session.circuit_fixed == set()
+    assert session.circuit_initial == {}
+
+    assert session.save_circuit("mi_celda", "R0-(R1|Q1)-T1")
+    assert "mi_celda" in session.circuit_choices()
+    assert session.delete_circuit("mi_celda")
+    assert session.delete_circuit("randles_cpe") is False
+
+
+def test_the_fitted_table_says_which_parameters_were_held():
+    from ramancarbon.gui.echem_state import EchemSession
+
+    session = EchemSession()
+    session.eis = _from_circuit(
+        "R0-(R1|Q1)", {"R0": (2.0,), "R1": (40.0,), "Q1": (2e-4, 0.88)})
+    session.set_circuit("randles_cpe")
+    session.set_circuit_parameter("Q1.n", value=0.88, fixed=True)
+    assert session.analyse() is not None
+
+    rows = {row[0]: row for row in session.circuit_rows()}
+    assert rows["Q1.n"][2] == "fijado" and rows["Q1.n"][3] == "sí"
+    assert rows["R1.R"][3] == ""
+    assert float(rows["R1.R"][1]) == pytest.approx(40.0, rel=0.05)

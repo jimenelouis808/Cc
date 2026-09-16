@@ -159,9 +159,10 @@ class EchemApp(SectionApp):
             p, textvariable=self.reaction_var, width=8, state="readonly",
             values=["OER", "HER"]))
         self.circuit_var = tk.StringVar(value="randles_cpe")
-        labelled(obody, "Circuito", lambda p: ttk.Combobox(
+        self.circuit_box = labelled(obody, "Circuito", lambda p: ttk.Combobox(
             p, textvariable=self.circuit_var, width=16,
             values=self.session.circuit_choices()))
+        self.circuit_var.trace_add("write", lambda *_: self._on_circuit_chosen())
         self.non_faradaic_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             obody, text="La ventana del CV no tiene corriente faradaica",
@@ -244,11 +245,62 @@ class EchemApp(SectionApp):
         self.make_canvas(bode_body, "bode",
                          lambda f: (f.add_subplot(121), f.add_subplot(122)),
                          figsize=(7.6, 3.0))
+        editor, editor_body = card(tab, "Circuito equivalente")
+        editor.pack(fill="x", pady=(PAD["sm"], 0))
+        row = ttk.Frame(editor_body)
+        row.pack(fill="x")
+        ttk.Label(row, text="Circuito").pack(side="left")
+        self.circuit_text_var = self.tk.StringVar(
+            value=self.session.circuit_text())
+        ttk.Entry(row, textvariable=self.circuit_text_var, width=44).pack(
+            side="left", fill="x", expand=True, padx=(PAD["sm"], PAD["sm"]))
+        ttk.Button(row, text="Aplicar", command=self._apply_circuit).pack(
+            side="left")
+        ttk.Button(row, text="Guardar como…",
+                   command=self._save_circuit).pack(side="left",
+                                                    padx=(PAD["xs"], 0))
+        ttk.Button(row, text="Borrar el mío",
+                   command=self._delete_circuit).pack(side="left",
+                                                      padx=(PAD["xs"], 0))
+        self.circuit_note = ttk.Label(
+            editor_body, text="", wraplength=900, justify="left",
+            style="Hint.TLabel")
+        self.circuit_note.pack(fill="x", pady=(PAD["xs"], 0))
+        hint(editor_body,
+             "- serie, | paralelo, paréntesis agrupan. Elementos: R "
+             "resistencia, C condensador, L inductancia, Q CPE, W Warburg "
+             "semiinfinito, Ws finito transmisivo, Wo finito reflectante, "
+             "G Gerischer, T electrodo poroso (línea de transmisión). "
+             "Ejemplo: R0-(R1|Q1)-T1.",
+             wrap=900)
+
+        setup, setup_body = card(tab, "Valores de partida y parámetros fijos")
+        setup.pack(fill="x", pady=(PAD["sm"], 0))
+        self.circuit_setup_table = table(
+            setup_body, ["parámetro", "valor de partida", "fijo"], height=6)
+        self.circuit_setup_table.bind("<Double-1>", self._edit_circuit_parameter)
+        buttons = ttk.Frame(setup_body)
+        buttons.pack(fill="x", pady=(PAD["xs"], 0))
+        ttk.Button(buttons, text="Fijar / soltar",
+                   command=self._toggle_circuit_fixed).pack(side="left")
+        ttk.Button(buttons, text="Restablecer",
+                   command=self._reset_circuit_parameters).pack(
+                       side="left", padx=(PAD["xs"], 0))
+        hint(setup_body,
+             "Doble clic para cambiar un valor de partida. Fijar un "
+             "parámetro NO es gratis: deja de contar como grado de libertad, "
+             "así que TODAS las demás incertidumbres salen más pequeñas, y si "
+             "el valor fijado está mal el error se reparte entre sus vecinos "
+             "sin que el ajuste empeore. Es lo correcto para lo que la medida "
+             "no determina — la inductancia de los cables si paraste en "
+             "100 kHz — y un engaño para todo lo demás.",
+             wrap=900)
+
         info, info_body = card(tab, "Parámetros del circuito")
         info.pack(fill="x", pady=(PAD["sm"], 0))
-        self.circuit_table = table(info_body,
-                                   ["parámetro", "valor", "incertidumbre"],
-                                   height=7)
+        self.circuit_table = table(
+            info_body, ["parámetro", "valor", "incertidumbre", "fijo"],
+            height=7)
         hint(info_body,
              "Kramers-Kronig va ANTES que el circuito: un ajuste a datos que "
              "han derivado da parámetros sin significado y el χ² no lo delata. "
@@ -310,11 +362,122 @@ class EchemApp(SectionApp):
         self._settings_from_widgets()
         self.set_status(f"R_u = {value:.4g} Ω — {how}")
 
+    # -- the circuit editor --------------------------------------------
+    def _on_circuit_chosen(self) -> None:
+        """A name picked from the list fills the box with its string.
+
+        A preset the user can then edit is more useful than one they can
+        only accept, and it is how they learn the notation.
+        """
+        name = self.circuit_var.get()
+        if not name or not hasattr(self, "circuit_text_var"):
+            return
+        if not self.session.set_circuit(name):
+            self.flush_messages(self.session.messages)
+            return
+        self.circuit_text_var.set(self.session.circuit_text())
+        self._show_circuit_note()
+        self._fill_circuit_setup()
+
+    def _show_circuit_note(self) -> None:
+        use, caution = self.session.circuit_note()
+        text = use
+        if caution:
+            text = f"{use}   ⚠ {caution}" if use else f"⚠ {caution}"
+        self.circuit_note.configure(text=text)
+
+    def _apply_circuit(self) -> None:
+        """Take whatever is in the box, whether it is a name or a circuit."""
+        if not self.session.set_circuit(self.circuit_text_var.get()):
+            self.flush_messages(self.session.messages)
+            return
+        self.circuit_text_var.set(self.session.circuit_text())
+        self._show_circuit_note()
+        self._fill_circuit_setup()
+        self.set_status(f"circuito: {self.session.circuit_text()}")
+
+    def _save_circuit(self) -> None:
+        from tkinter import simpledialog
+
+        name = simpledialog.askstring(
+            "Guardar circuito", "Nombre para este circuito:", parent=self.root)
+        if not name:
+            return
+        if self.session.save_circuit(name, self.circuit_text_var.get()):
+            self.circuit_box.configure(values=self.session.circuit_choices())
+            self.circuit_var.set(name)
+        self.flush_messages(self.session.messages)
+
+    def _delete_circuit(self) -> None:
+        name = self.circuit_var.get()
+        if not self.ask_yes_no(
+            "Borrar circuito",
+            f"¿Borrar «{name}» de tus circuitos guardados? Los del "
+            "programa no se borran.",
+        ):
+            return
+        if self.session.delete_circuit(name):
+            self.circuit_box.configure(values=self.session.circuit_choices())
+            self.circuit_var.set(self.session.circuit)
+        self.flush_messages(self.session.messages)
+
+    def _fill_circuit_setup(self) -> None:
+        fill_table(
+            self.circuit_setup_table,
+            ["parámetro", "valor de partida", "fijo"],
+            [(label, f"{value:.6g}", "sí" if fixed else "")
+             for label, value, fixed in self.session.circuit_parameters()],
+        )
+
+    def _selected_circuit_parameter(self):
+        selection = self.circuit_setup_table.selection()
+        if not selection:
+            self.warn("Sin selección",
+                      "Elige primero un parámetro de la tabla.")
+            return None
+        return self.circuit_setup_table.item(selection[0], "values")[0]
+
+    def _edit_circuit_parameter(self, _event=None) -> None:
+        from tkinter import simpledialog
+
+        label = self._selected_circuit_parameter()
+        if label is None:
+            return
+        current = next((v for lab, v, _ in self.session.circuit_parameters()
+                        if lab == label), 0.0)
+        value = simpledialog.askfloat(
+            "Valor de partida", f"Valor de partida de {label}:",
+            initialvalue=current, parent=self.root)
+        if value is None:
+            return
+        self.session.set_circuit_parameter(label, value=value)
+        self._fill_circuit_setup()
+
+    def _toggle_circuit_fixed(self) -> None:
+        label = self._selected_circuit_parameter()
+        if label is None:
+            return
+        held = label in self.session.circuit_fixed
+        self.session.set_circuit_parameter(label, fixed=not held)
+        self._fill_circuit_setup()
+
+    def _reset_circuit_parameters(self) -> None:
+        self.session.reset_circuit_parameters()
+        self._fill_circuit_setup()
+        self.set_status("valores de partida leídos del espectro, nada fijado")
+
     def _settings_from_widgets(self) -> None:
         self.session.name = self.name_var.get() or "muestra"
         self.session.electrode = self._electrode_from_widgets()
         self.session.reaction = self.reaction_var.get()
-        self.session.circuit = self.circuit_var.get()
+        # NOT from the combobox: the box holds a name, and what the user
+        # edited is the string in the entry. Taking the name back would
+        # throw away every hand-made change the moment they pressed
+        # Analizar, which is the one moment it has to survive.
+        if hasattr(self, "circuit_text_var"):
+            self.session.set_circuit(self.circuit_text_var.get())
+        else:
+            self.session.set_circuit(self.circuit_var.get())
         self.session.non_faradaic = bool(self.non_faradaic_var.get())
         self.session.retag_electrode()
 
@@ -441,8 +604,10 @@ class EchemApp(SectionApp):
     def _fill_tables(self) -> None:
         fill_table(self.summary_table, ["magnitud", "valor", "nota"],
                    self.session.summary_rows())
-        fill_table(self.circuit_table, ["parámetro", "valor", "incertidumbre"],
+        fill_table(self.circuit_table,
+                   ["parámetro", "valor", "incertidumbre", "fijo"],
                    self.session.circuit_rows())
+        self._fill_circuit_setup()
         set_text(self.report_text, self.session.report())
         result = self.session.result
         rows = []
