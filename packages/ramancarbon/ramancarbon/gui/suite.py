@@ -23,7 +23,7 @@ from typing import Any, Optional
 
 from ..plotting.style import PRESETS as PLOT_PRESET_LABELS
 from .state import Session
-from .theme import PAD, PALETTES, apply_theme
+from .theme import N_COMPONENTS, PAD, PALETTES, PLOT_ROLES, apply_theme
 
 #: The plot presets offered in the header, in the order they are shown.
 #: Screen first, then the journals, then the rest — which is the order
@@ -65,8 +65,7 @@ class Suite:
         self.root = root
         self.session = Session()
         self.palette = PALETTES["claro"]
-        self.figure_palette = PALETTES[
-            self.session.figure_palette_name(self.session.palette_name)]
+        self.figure_palette = self.session.figure_palette(self.session.palette_name)
         self.fonts = apply_theme(root, self.palette)
         self.sections: dict[str, Any] = {}
         self._frames: dict[str, Any] = {}
@@ -98,6 +97,9 @@ class Suite:
         ttk.Label(header, textvariable=self.subtitle_var,
                   style="Muted.TLabel").pack(side="left", padx=(PAD["md"], 0))
         ttk.Button(header, text="Tema", command=self._toggle_theme).pack(side="right")
+        ttk.Button(header, text="Colores…",
+                   command=self._choose_colours).pack(side="right",
+                                                      padx=(0, PAD["xs"]))
 
         # The plot preset lives in the header rather than inside one
         # section because it applies to every figure the suite saves, and
@@ -132,11 +134,7 @@ class Suite:
         """Repaint every figure on the chosen background, right away."""
         self.session.figure_theme = self.figure_theme_var.get()
         self.session.remember()
-        self.figure_palette = PALETTES[
-            self.session.figure_palette_name(self.session.palette_name)]
-        for section in self.sections.values():
-            section.figure_palette = self.figure_palette
-            self._redraw(section)
+        self._apply_figure_palette()
         for setter in self._status_setters():
             setter(
                 f"Fondo de las figuras: {self.session.figure_theme}"
@@ -144,6 +142,109 @@ class Suite:
                    if self.session.figure_theme == "tema" else
                    ". La ventana no cambia; las figuras sí, y así se guardan.")
             )
+
+    def _apply_figure_palette(self) -> None:
+        """Rebuild the figure palette and repaint every built section."""
+        self.figure_palette = self.session.figure_palette(self.session.palette_name)
+        for section in self.sections.values():
+            section.figure_palette = self.figure_palette
+            self._redraw(section)
+
+    def _choose_colours(self) -> None:
+        """Recolour the plot ROLES, for every figure in the suite at once.
+
+        Roles, not individual curves. "The fitted curve" has one colour
+        throughout the application so that the code is learnt once, and a
+        per-figure colour picker would undo exactly that. What is offered
+        is the meaning — data, fit, residual, baseline, and the component
+        cycle — and changing one changes it everywhere, including in the
+        figures that get exported.
+        """
+        from tkinter import colorchooser
+
+        ttk, tk = self.ttk, self.tk
+        window = tk.Toplevel(self.root)
+        window.title("Colores de las figuras")
+        window.configure(background=self.palette.background)
+        window.transient(self.root)
+        frame = ttk.Frame(window, padding=PAD["lg"])
+        frame.pack(fill="both", expand=True)
+
+        current: dict = dict(self.session.plot_colours)
+
+        def pick(role: str, button) -> None:
+            start = current.get(role) or getattr(self.figure_palette, role, "#888888")
+            chosen = colorchooser.askcolor(color=start, parent=window,
+                                           title=label_of(role))[1]
+            if chosen:
+                current[role] = chosen
+                button.configure(text=chosen)
+
+        def label_of(role: str) -> str:
+            return dict(PLOT_ROLES).get(role, role)
+
+        for role, label in PLOT_ROLES:
+            row = ttk.Frame(frame)
+            row.pack(fill="x", pady=PAD["xs"])
+            ttk.Label(row, text=label, width=22).pack(side="left")
+            button = ttk.Button(row, width=12)
+            button.configure(
+                text=current.get(role) or getattr(self.figure_palette, role, ""),
+                command=lambda r=role, b=button: pick(r, b))
+            button.pack(side="left")
+
+        ttk.Label(frame, text="Componentes del ajuste",
+                  style="Muted.TLabel").pack(anchor="w", pady=(PAD["md"], 0))
+        component_row = ttk.Frame(frame)
+        component_row.pack(fill="x")
+        stored = list(current.get("components") or self.figure_palette.components)
+        stored = (stored + list(self.figure_palette.components))[:N_COMPONENTS]
+
+        def pick_component(index: int, button) -> None:
+            chosen = colorchooser.askcolor(color=stored[index], parent=window,
+                                           title=f"Componente {index + 1}")[1]
+            if chosen:
+                stored[index] = chosen
+                button.configure(text=chosen[:7])
+                current["components"] = list(stored)
+
+        for index in range(N_COMPONENTS):
+            button = ttk.Button(component_row, width=8)
+            button.configure(text=stored[index][:7],
+                             command=lambda i=index, b=button: pick_component(i, b))
+            button.pack(side="left", padx=(0, PAD["xs"]))
+
+        ttk.Label(
+            frame,
+            text=("Los colores son de ROLES, no de curvas sueltas: «la curva "
+                  "ajustada» tiene el mismo color en toda la aplicación para "
+                  "que el código se aprenda una vez. Se guardan con las "
+                  "preferencias y se aplican también a las figuras que "
+                  "exportes."),
+            style="Muted.TLabel", wraplength=420, justify="left",
+        ).pack(anchor="w", pady=(PAD["md"], 0))
+
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x", pady=(PAD["md"], 0))
+
+        def apply_and_close() -> None:
+            self.session.plot_colours = current
+            self.session.remember()
+            self._apply_figure_palette()
+            window.destroy()
+
+        def restore() -> None:
+            self.session.plot_colours = {}
+            self.session.remember()
+            self._apply_figure_palette()
+            window.destroy()
+
+        ttk.Button(buttons, text="Aplicar", style="Accent.TButton",
+                   command=apply_and_close).pack(side="right")
+        ttk.Button(buttons, text="Cancelar", command=window.destroy).pack(
+            side="right", padx=(0, PAD["xs"]))
+        ttk.Button(buttons, text="Colores de fábrica", command=restore).pack(
+            side="left")
 
     def _status_setters(self):
         for section in self.sections.values():
@@ -245,12 +346,9 @@ class Suite:
             parent=self.root,
         )
         self.palette = PALETTES[self.session.palette_name]
-        self.figure_palette = PALETTES[
-            self.session.figure_palette_name(self.session.palette_name)]
         for section in self.sections.values():
             section.palette = self.palette
-            section.figure_palette = self.figure_palette
-            self._redraw(section)
+        self._apply_figure_palette()
 
 
 _TK_MISSING = """

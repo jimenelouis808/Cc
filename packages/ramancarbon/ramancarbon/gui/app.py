@@ -98,8 +98,7 @@ class RamanCarbonApp:
         #: the window. A dark window is comfortable to work in and a white
         #: figure is what a manuscript wants, and there is no reason to
         #: choose once for both. See :meth:`Suite._on_figure_theme_changed`.
-        self.figure_palette = PALETTES[
-            self.session.figure_palette_name(self.session.palette_name)]
+        self.figure_palette = self.session.figure_palette(self.session.palette_name)
         self.fonts = apply_theme(root, self.palette)
 
         if not self.embedded:
@@ -246,6 +245,27 @@ class RamanCarbonApp:
             wrap=230,
         )
 
+        self.polymers_var = self.tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            body,
+            text="Buscar polímeros",
+            variable=self.polymers_var,
+        ).pack(anchor="w", pady=PAD["xs"])
+        hint(
+            body,
+            "Aglomerantes (PVDF, PTFE), dispersantes (PVP, PVA), polímeros "
+            "conductores (PANI, PPy, PEDOT), precursores (PAN, celulosa) y "
+            "el PDMS de los tubos. Veinte en total.   "
+            "APAGADO por defecto, y no por orden: la PANI tiene bandas en "
+            "1340 y 1590, el polipirrol en 1330 y 1590, el PET en 1615. Eso "
+            "es la D y es la G. Buscándolos siempre, coincidirían con "
+            "cualquier espectro de carbono por el mero hecho de que un "
+            "polímero conjugado y una red grafítica vibran a frecuencias "
+            "parecidas. Enciéndelo si tu muestra lleva aglomerante, si es un "
+            "compuesto con polímero conductor, o si sospechas contaminación.",
+            wrap=230,
+        )
+
         # What the sample is made of. This is the single most useful
         # thing the user knows and the program cannot: it removes every
         # chemically impossible phase from the search, and — the part
@@ -328,9 +348,43 @@ class RamanCarbonApp:
         toolbar.configure(background=self.palette.surface_alt)
         toolbar.update()
         toolbar.pack(fill="x")
+        # See SectionApp.reset_zoom: matplotlib's Home rewinds the view
+        # stack, which after a redraw restores the previous figure's
+        # limits and on an empty stack does nothing at all.
+        self.ttk.Button(toolbar, text="Restablecer zoom",
+                        command=lambda k=key: self._reset_zoom(k)).pack(
+            side="right", padx=PAD["xs"])
         self._canvases[key] = canvas
         self._figures[key] = figure
         return figure, canvas
+
+    def _drawer_for(self, key: str):
+        return {
+            "spectrum": self._draw_spectrum,
+            "fit": self._draw_fit,
+            "diameters": self._draw_diameters,
+            "overlay": self._draw_overlay,
+        }.get(key)
+
+    def _reset_zoom(self, key: str) -> None:
+        """Redraw one canvas at the limits its data imply."""
+        canvas = self._canvases.get(key)
+        if canvas is None:
+            return
+        toolbar = getattr(canvas, "toolbar", None)
+        if toolbar is not None and hasattr(toolbar, "_nav_stack"):
+            try:
+                toolbar._nav_stack.clear()
+            except Exception:  # noqa: BLE001 - private API, best effort
+                pass
+        draw = self._drawer_for(key)
+        if draw is not None:
+            draw()
+            return
+        for axes in self._figures[key].axes:
+            axes.relim()
+            axes.autoscale()
+        canvas.draw_idle()
 
     def _build_tab_spectrum(self) -> None:
         from .widgets import card, hint, labelled, separator
@@ -1101,6 +1155,7 @@ class RamanCarbonApp:
             settings.baseline_p = 0.001
         analysis = self.session.analysis_settings
         analysis.check_interferences = bool(self.interference_var.get())
+        analysis.search_polymers = bool(self.polymers_var.get())
         analysis.sample_elements = tuple(
             token.strip().title()
             for token in self.elements_var.get().replace(";", ",").split(",")
@@ -1449,16 +1504,10 @@ class RamanCarbonApp:
 
     def _flush_dirty(self) -> None:
         """Redraw the dirty canvases that are actually on screen."""
-        drawers = {
-            "spectrum": self._draw_spectrum,
-            "fit": self._draw_fit,
-            "diameters": self._draw_diameters,
-            "overlay": self._draw_overlay,
-        }
         for key in self._visible_canvases():
             if key in self._dirty:
                 self._dirty.discard(key)
-                draw = drawers.get(key)
+                draw = self._drawer_for(key)
                 if draw is not None:
                     draw()
 

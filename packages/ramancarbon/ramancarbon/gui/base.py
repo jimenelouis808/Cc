@@ -86,9 +86,38 @@ class SectionApp:
         toolbar.configure(background=self.palette.surface_alt)
         toolbar.update()
         toolbar.pack(fill="x")
+        # A real reset, next to matplotlib's own Home. Home rewinds the
+        # view STACK, so after a redraw with new data it restores limits
+        # that belonged to the previous figure; and if the stack is empty
+        # it does nothing at all, which reads as a dead button. This
+        # redraws from the data and autoscales, which is what "reset zoom"
+        # means to anyone who presses it.
+        self.ttk.Button(toolbar, text="Restablecer zoom",
+                        command=lambda k=key: self.reset_zoom(k)).pack(
+            side="right", padx=PAD["xs"])
         self._canvases[key] = canvas
         self._figures[key] = figure
         return figure, canvas
+
+    def reset_zoom(self, key: str) -> None:
+        """Redraw one canvas at the limits its data imply."""
+        canvas = self._canvases.get(key)
+        if canvas is None:
+            return
+        toolbar = getattr(canvas, "toolbar", None)
+        if toolbar is not None and hasattr(toolbar, "_nav_stack"):
+            try:
+                toolbar._nav_stack.clear()
+            except Exception:  # noqa: BLE001 - private API, best effort
+                pass
+        drawer = getattr(self, "_drawers", {}).get(key)
+        if drawer is not None:
+            self.with_style(key, drawer)
+            return
+        for axes in self._figures[key].axes:
+            axes.relim()
+            axes.autoscale()
+        canvas.draw_idle()
 
     def with_style(self, key: str, draw: Callable) -> None:
         """Redraw one canvas under the current palette's matplotlib style."""

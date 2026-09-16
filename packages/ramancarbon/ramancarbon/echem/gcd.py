@@ -271,10 +271,19 @@ def analyse_gcd(
         if partner.energy_j > 0:
             result.energy_efficiency = chosen.energy_j / partner.energy_j
 
+    # Both per KILOGRAM, and the factor of a thousand is the whole reason
+    # this is spelled out. `specific` normalises by the mass in GRAMS, so
+    # it returns J/g; the energy conversion folds the thousand into the
+    # 3.6 (1 J/g = 1000 J/kg = 1000/3600 Wh/kg) and the power one has to
+    # carry it explicitly. Dividing J/g by seconds gives W/g, and
+    # reporting that as W/kg put every Ragone plot this program drew a
+    # factor of a thousand to the left. Checked against an ideal 1 F
+    # capacitor: 1 V, 1 A, 1 g gives 0.5 J in 1 s, which is 0.1389 Wh/kg
+    # and 500 W/kg.
     per_gram = electrode.specific(chosen.energy_j, "mass")
     if per_gram is not None and chosen.duration_s > 0:
         result.energy_wh_per_kg = per_gram / 3.6
-        result.power_w_per_kg = per_gram / chosen.duration_s
+        result.power_w_per_kg = 1000.0 * per_gram / chosen.duration_s
 
     _gcd_warnings(result, chosen)
     return result

@@ -532,3 +532,68 @@ def test_a_broken_user_file_never_stops_the_catalogue_loading(user_catalogue):
     catalogue = module.load_phases()
     assert len(catalogue) > 30
     assert all(p.origin == "programa" for p in catalogue)
+
+
+# -- polymers, and why they are off by default -------------------------
+
+
+def test_polymers_are_not_searched_unless_asked_for():
+    """The reason is specific, not tidiness. Polyaniline has bands at 1340
+    and 1590, polypyrrole at 1330 and 1590, PET at 1615: the D band and
+    the G band. Searched by default they would match every carbon spectrum
+    ever measured, on a coincidence between how a conjugated polymer
+    vibrates and how a graphitic lattice does."""
+    from ramancarbon.analysis.phases import load_families
+
+    optional = {f.key for f in load_families() if f.optional}
+    assert optional, "no family is marked optional"
+    assert all(f.group == "polimeros" for f in load_families() if f.optional)
+
+    carbon = [pk(1350, 800, 70), pk(1580, 900, 55), pk(2700, 300, 90)]
+    quiet = find_phases(carbon, spectrum_range=(100.0, 3200.0))
+    assert not any(i.phase.family in optional for i in quiet.identifications)
+
+    # And even switched ON, a plain carbon must not become a polymer: the
+    # lines that discriminate a conjugated polymer are the ones BELOW the
+    # D band, and a carbon has nothing there.
+    loud = find_phases(carbon, spectrum_range=(100.0, 3200.0),
+                       groups=["polimeros"])
+    assert not loud.found_anything
+
+
+def test_a_conjugated_polymer_composite_is_found_once_polymers_are_on():
+    """PANI/carbon is the case the group exists for: the spectrum looks
+    like a disordered carbon and the I_D/I_G means nothing, because both
+    bands have contributions from both materials. What gives it away is
+    what sits BELOW them, at 1165 and 1220, where carbon has nothing."""
+    peaks = [pk(1165, 300), pk(1220, 220), pk(1340, 900, 60),
+             pk(1480, 250), pk(1590, 850, 50)]
+    report = find_phases(peaks, spectrum_range=(100.0, 3200.0),
+                         groups=["polimeros"])
+    assert "PANI" in {i.phase.key for i in report.identifications if i.corroborated}
+
+
+def test_the_common_laboratory_contaminant_is_catalogued():
+    """PDMS comes off the tubing, the vacuum grease and the seals, and it
+    is the most common contaminant there is."""
+    peaks = [pk(488, 200), pk(708, 260), pk(788, 320), pk(2905, 280, 30)]
+    report = find_phases(peaks, spectrum_range=(100.0, 3200.0),
+                         groups=["polimeros"])
+    assert "PDMS" in {i.phase.key for i in report.identifications if i.corroborated}
+
+
+def test_the_polymer_library_covers_what_a_carbon_laboratory_touches():
+    """A coverage test: binders, dispersants, conducting polymers,
+    precursors and the contaminants. Dropping one to fix something else
+    should be a visible act."""
+    keys = {p.key for p in load_phases()}
+    assert {"PVDF", "PTFE", "Nafion"} <= keys                 # binders
+    assert {"PVP", "PVA", "PEO"} <= keys                      # dispersants
+    assert {"PANI", "PPy", "PEDOT"} <= keys                   # conducting
+    assert {"PAN", "celulosa"} <= keys                        # precursors
+    assert {"PDMS", "PS", "PE", "PP", "PET"} <= keys          # what it sits on
+    polymers = [p for p in load_phases() if p.crystal_system == "polímero"]
+    assert len(polymers) >= 20
+    for phase in polymers:
+        assert phase.source and phase.notes
+        assert phase.discriminating, phase.key

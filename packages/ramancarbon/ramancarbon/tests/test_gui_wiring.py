@@ -213,6 +213,8 @@ def test_the_two_raman_sections_share_one_session():
         ("app", "_add_user_phase"),
         ("app", "_remove_user_phase"),
         ("app", "_open_phase_folder"),
+        ("app", "polymers_var"),
+        ("app", "_reset_zoom"),
         ("tmd_app", "_analyse"),
         ("tmd_app", "tmd_text"),
         ("tmd_app", "oxide_text"),
@@ -627,3 +629,49 @@ def test_drawing_code_uses_the_figure_palette_and_chrome_code_does_not():
     assert "matplotlib_style(self.figure_palette)" in source("base")
     assert "matplotlib_style(self.figure_palette)" in source("app")
     assert "matplotlib_style(self.palette)" not in source("base")
+
+
+def test_every_canvas_gets_a_reset_zoom_button():
+    """matplotlib's Home rewinds the view STACK, so after a redraw with new
+    data it restores limits that belonged to the previous figure, and on an
+    empty stack it does nothing at all — which reads as a dead button."""
+    for stem in ("base", "app"):
+        text = source(stem)
+        assert "Restablecer zoom" in text, stem
+    assert "def reset_zoom" in source("base")
+    assert "def _reset_zoom" in source("app")
+
+
+def test_plot_colours_are_roles_and_survive_a_restart():
+    """Roles, not individual curves: the fitted curve has one colour
+    throughout the application so the code is learnt once."""
+    from ramancarbon.gui.state import Session
+    from ramancarbon.gui.theme import DARK, LIGHT, PLOT_ROLES, with_colours
+
+    assert {role for role, _ in PLOT_ROLES} == {"data", "fitted", "residual",
+                                                "baseline"}
+    recoloured = with_colours(DARK, {"data": "#ff0000",
+                                     "components": ["#00ff00", "#0000ff"]})
+    assert recoloured.data == "#ff0000"
+    assert recoloured.components == ("#00ff00", "#0000ff")
+    assert recoloured.fitted == DARK.fitted          # untouched roles stay
+
+    # Nonsense is ignored, not raised on: these come from a preferences
+    # file a user may have edited by hand.
+    assert with_colours(LIGHT, {"data": "rojo"}).data == LIGHT.data
+    assert with_colours(LIGHT, {}) is LIGHT
+
+    session = Session()
+    session.plot_colours = {"fitted": "#123456"}
+    assert session.figure_palette("oscuro").fitted == "#123456"
+    assert session.figure_palette("claro").fitted == "#123456"
+
+
+def test_the_colour_dialog_is_wired_into_the_header():
+    text = source("suite")
+    assert "Colores…" in text
+    assert "def _choose_colours" in text
+    assert "def _apply_figure_palette" in text
+    # Every place that rebuilds the figure palette goes through one method,
+    # so a colour change and a theme change cannot diverge.
+    assert text.count("self.session.figure_palette(") >= 1

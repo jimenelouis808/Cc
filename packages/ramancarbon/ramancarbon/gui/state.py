@@ -175,6 +175,11 @@ class AnalysisSettings:
     check_interferences: bool = False
     """Look for non-carbon bands. Off by default; see
     :mod:`ramancarbon.analysis.interference`."""
+    search_polymers: bool = False
+    """Whether to include the polymer families in the phase search. Off by
+    default and not a tidiness choice: polyaniline has bands at 1340 and
+    1590, polypyrrole at 1330 and 1590, PET at 1615. Those are the D band
+    and the G band."""
     sample_elements: tuple[str, ...] = ()
     """Elements the sample can contain, e.g. ``("C", "Fe", "Se")``. Empty
     means "no idea, search everything". Saying so narrows the phase search
@@ -195,6 +200,7 @@ class AnalysisSettings:
             "profile": self.profile,
             "check_interferences": self.check_interferences,
             "sample_elements": self.sample_elements or None,
+            "phase_groups": ("polimeros",) if self.search_polymers else None,
         }
 
 
@@ -260,6 +266,11 @@ class Session:
         #: a manuscript will print.
         self.figure_theme: str = str(
             self.preferences.get("figure_theme", "tema"))
+        #: Per-role plot colours the user has chosen, e.g.
+        #: ``{"data": "#c8461e", "components": ["#...", ...]}``. Empty means
+        #: the palette's own. See :func:`~ramancarbon.gui.theme.with_colours`.
+        stored = self.preferences.get("plot_colours", {})
+        self.plot_colours: dict = dict(stored) if isinstance(stored, dict) else {}
         self.preprocess_settings.baseline_method = str(
             self.preferences.get("baseline_method", "asls"))
         self.analysis_settings.check_interferences = bool(
@@ -268,6 +279,13 @@ class Session:
         if self.preferences.problem:
             self.messages.append(("warning", self.preferences.problem))
         """``(level, text)``; level is ``"info"``, ``"warning"`` or ``"error"``."""
+
+    def figure_palette(self, chrome: str):
+        """The palette the FIGURES should use: theme choice plus colours."""
+        from .theme import PALETTES, with_colours
+
+        return with_colours(PALETTES[self.figure_palette_name(chrome)],
+                            self.plot_colours)
 
     def figure_palette_name(self, chrome: str) -> str:
         """Which palette the figures should use, given the window's.
@@ -291,6 +309,7 @@ class Session:
         self.preferences.set("palette", self.palette_name)
         self.preferences.set("plot_preset", self.plot_preset)
         self.preferences.set("figure_theme", self.figure_theme)
+        self.preferences.set("plot_colours", self.plot_colours)
         self.preferences.set("baseline_method",
                              self.preprocess_settings.baseline_method)
         self.preferences.set("check_interferences",

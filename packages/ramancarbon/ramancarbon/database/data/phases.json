@@ -145,6 +145,62 @@
       "label": "Óxidos de manganeso",
       "note": "Catalizador y material de pseudocapacidad. El manganeso cambia de estado de oxidacion con facilidad y el laser lo reduce.",
       "resolved_by": "Todos tienen una banda intensa entre 640 y 670 cm-1 y eso NO los separa. Lo que los separa es lo demas: 374 (Mn3O4), 535 (beta-MnO2), 575 (birnesita)."
+    },
+    {
+      "key": "fluoropolimero",
+      "label": "Polímeros fluorados",
+      "note": "PVDF y PTFE son los aglomerantes de casi todo electrodo compuesto, y el Nafion el ionómero de las tintas de catalizador. Si preparaste un electrodo, alguno de los tres está en la muestra.",
+      "resolved_by": "El PTFE tiene su tensión C-F simétrica a 733 cm-1, intensísima y sola. El PVDF se reconoce por 796 (alfa) frente a 839 (beta), que es la fase piezoeléctrica. El Nafion suma el sulfonato a 1060.",
+      "group": "polimeros",
+      "optional": true
+    },
+    {
+      "key": "poliolefina",
+      "label": "Poliolefinas",
+      "note": "Polietileno y polipropileno: envases, separadores, y la bolsa en la que venía la muestra.",
+      "resolved_by": "El PE no tiene nada entre 1500 y 2800; el PP sí, y su banda de 809 cm-1 es exclusiva.",
+      "group": "polimeros",
+      "optional": true
+    },
+    {
+      "key": "vinilico",
+      "label": "Polímeros vinílicos y acrílicos",
+      "note": "Poliestireno, PMMA, PVC, PVA y PVP. Los dos últimos son dispersantes habituales en la síntesis de nanomateriales.",
+      "resolved_by": "Cada uno tiene una banda propia y aislada: 1001 el PS (respiración del anillo), 812 el PMMA, 638 el PVC, 918 el PVA, 933 el PVP.",
+      "group": "polimeros",
+      "optional": true
+    },
+    {
+      "key": "poliester",
+      "label": "Poliésteres y policarbonato",
+      "note": "PET y PC. Aparecen como sustrato flexible, como portamuestras y como el vial en el que estaba el polvo.",
+      "resolved_by": "El carbonilo: 1728 en el PET y 1775 en el PC, separados de sobra.",
+      "group": "polimeros",
+      "optional": true
+    },
+    {
+      "key": "polimero_conductor",
+      "label": "Polímeros conductores",
+      "note": "Polianilina, polipirrol y PEDOT. Son materiales de electrodo por derecho propio y a la vez el caso peligroso de esta biblioteca.",
+      "resolved_by": "AVISO: sus bandas principales caen ENCIMA de la D y la G del carbono. Lo que los separa es que tienen bandas donde el carbono no tiene nada: 1165 y 1220 la PANI, 930 y 1050 el PPy, 990 y 1435 el PEDOT.",
+      "group": "polimeros",
+      "optional": true
+    },
+    {
+      "key": "precursor_polimerico",
+      "label": "Precursores poliméricos de carbono",
+      "note": "Poliacrilonitrilo y celulosa: de lo que está hecha una nanofibra de carbono antes de carbonizarla.",
+      "resolved_by": "El PAN tiene el nitrilo a 2240 cm-1, en una región donde no hay nada más; la celulosa, el esqueleto a 1095 y 1121.",
+      "group": "polimeros",
+      "optional": true
+    },
+    {
+      "key": "otro_polimero",
+      "label": "Otros polímeros",
+      "note": "PEO (electrolito sólido y dispersante), PDMS (siliconas: tubos, grasa de vacío, sellos) y nailon 6.",
+      "resolved_by": "El PDMS es el contaminante más común de todos y el más fácil de reconocer: 488, 708 y 2905 cm-1.",
+      "group": "polimeros",
+      "optional": true
     }
   ],
   "phases": [
@@ -2238,6 +2294,1395 @@
         "note": "Reflexion laminar a angulo bajo, de 7.2 A. Es la que delata la estructura de capas con agua y cationes entre ellas; si mides desde 2-theta = 20 no la veras."
       },
       "notes": "La fase laminar, con agua y cationes entre capas, y la que de verdad se usa como material de pseudocapacidad: su capacidad viene de esa galeria, no de la superficie. La banda de 575 cm-1 es la que la separa de las otras dos. Ojo con la DRX: su reflexion caracteristica esta a 12.3, por debajo de donde empieza un barrido tipico."
+    },
+    {
+      "key": "PVDF",
+      "label": "PVDF (fluoruro de polivinilideno)",
+      "formula": "C2H2F2",
+      "family": "fluoropolimero",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 796.0,
+          "window": [
+            786.0,
+            806.0
+          ],
+          "assignment": "CH₂ balanceo (fase α)",
+          "relative": 0.7
+        },
+        {
+          "position": 839.0,
+          "window": [
+            829.0,
+            849.0
+          ],
+          "assignment": "CH₂ balanceo (fase β)",
+          "relative": 0.8
+        },
+        {
+          "position": 1430.0,
+          "window": [
+            1415.0,
+            1445.0
+          ],
+          "assignment": "CH₂ flexión",
+          "relative": 1.0
+        },
+        {
+          "position": 2980.0,
+          "window": [
+            2955.0,
+            3005.0
+          ],
+          "assignment": "tensión C–H",
+          "relative": 0.5
+        }
+      ],
+      "strong": [
+        1430.0,
+        839.0,
+        796.0
+      ],
+      "discriminating": [
+        796.0,
+        839.0
+      ],
+      "confidence": "high",
+      "source": "Constantino et al., Appl. Spectrosc. 59 (2005) 275; Boccaccio et al., J. Membr. Sci. 210 (2002) 315",
+      "notes": "El aglomerante de casi todo electrodo compuesto, así que si preparaste un electrodo esto está en la muestra y su señal NO es del material activo. Las bandas de 796 y 839 cm⁻¹ separan las dos fases: la α es la que sale al secar y la β la piezoeléctrica, que aparece al estirar o con carga alta de nanorrelleno. Su banda de 1430 cm⁻¹ está lejos de la D, pero un PVDF abundante levanta fondo en toda la región del carbono."
+    },
+    {
+      "key": "PTFE",
+      "label": "PTFE (teflón)",
+      "formula": "C2F4",
+      "family": "fluoropolimero",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 292.0,
+          "window": [
+            282.0,
+            302.0
+          ],
+          "assignment": "CF₂ flexión",
+          "relative": 0.4
+        },
+        {
+          "position": 385.0,
+          "window": [
+            375.0,
+            395.0
+          ],
+          "assignment": "CF₂ balanceo",
+          "relative": 0.35
+        },
+        {
+          "position": 733.0,
+          "window": [
+            723.0,
+            743.0
+          ],
+          "assignment": "tensión C–F simétrica",
+          "relative": 1.0
+        },
+        {
+          "position": 1216.0,
+          "window": [
+            1201.0,
+            1231.0
+          ],
+          "assignment": "tensión C–F asimétrica",
+          "relative": 0.25
+        },
+        {
+          "position": 1300.0,
+          "window": [
+            1285.0,
+            1315.0
+          ],
+          "assignment": "tensión C–C",
+          "relative": 0.3
+        }
+      ],
+      "strong": [
+        733.0
+      ],
+      "discriminating": [
+        733.0
+      ],
+      "confidence": "high",
+      "source": "Koenig & Boerio, J. Chem. Phys. 50 (1969) 2823",
+      "notes": "Aglomerante de electrodos y material de juntas, tubos y cinta de fontanero. Su banda de 733 cm⁻¹ es intensa, estrecha y está sola: es de las identificaciones más limpias que hay. Si aparece sin que hayas puesto PTFE, mira la junta de la celda o el portamuestras."
+    },
+    {
+      "key": "Nafion",
+      "label": "Nafion (ionómero perfluorosulfonado)",
+      "formula": "C7HF13O5S",
+      "family": "fluoropolimero",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 733.0,
+          "window": [
+            721.0,
+            745.0
+          ],
+          "assignment": "tensión C–F simétrica",
+          "relative": 0.8
+        },
+        {
+          "position": 805.0,
+          "window": [
+            793.0,
+            817.0
+          ],
+          "assignment": "tensión C–O–C",
+          "relative": 0.4
+        },
+        {
+          "position": 970.0,
+          "window": [
+            958.0,
+            982.0
+          ],
+          "assignment": "tensión C–O–C",
+          "relative": 0.35
+        },
+        {
+          "position": 1060.0,
+          "window": [
+            1048.0,
+            1072.0
+          ],
+          "assignment": "tensión SO₃⁻ simétrica",
+          "relative": 1.0
+        },
+        {
+          "position": 1300.0,
+          "window": [
+            1280.0,
+            1320.0
+          ],
+          "assignment": "tensión C–C",
+          "relative": 0.3
+        }
+      ],
+      "strong": [
+        1060.0,
+        733.0
+      ],
+      "discriminating": [
+        1060.0
+      ],
+      "confidence": "medium",
+      "source": "Gruger et al., Vib. Spectrosc. 26 (2001) 215",
+      "notes": "El ionómero de toda tinta de catalizador. Comparte con el PTFE la banda de 733 cm⁻¹ —es el mismo esqueleto perfluorado— y lo que los separa es el sulfonato a 1060 cm⁻¹, que el PTFE no tiene. Si ves 733 sin 1060, es PTFE; con las dos, Nafion."
+    },
+    {
+      "key": "PE",
+      "label": "Polietileno",
+      "formula": "C2H4",
+      "family": "poliolefina",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 1063.0,
+          "window": [
+            1051.0,
+            1075.0
+          ],
+          "assignment": "tensión C–C asimétrica",
+          "relative": 0.6
+        },
+        {
+          "position": 1130.0,
+          "window": [
+            1118.0,
+            1142.0
+          ],
+          "assignment": "tensión C–C simétrica",
+          "relative": 0.6
+        },
+        {
+          "position": 1295.0,
+          "window": [
+            1280.0,
+            1310.0
+          ],
+          "assignment": "CH₂ torsión",
+          "relative": 0.8
+        },
+        {
+          "position": 1440.0,
+          "window": [
+            1422.0,
+            1458.0
+          ],
+          "assignment": "CH₂ flexión",
+          "relative": 0.9
+        },
+        {
+          "position": 2848.0,
+          "window": [
+            2823.0,
+            2873.0
+          ],
+          "assignment": "tensión C–H simétrica",
+          "relative": 1.0
+        },
+        {
+          "position": 2883.0,
+          "window": [
+            2858.0,
+            2908.0
+          ],
+          "assignment": "tensión C–H asimétrica",
+          "relative": 0.95
+        }
+      ],
+      "strong": [
+        2848.0,
+        2883.0,
+        1440.0
+      ],
+      "discriminating": [
+        1063.0,
+        1130.0
+      ],
+      "confidence": "high",
+      "source": "Strobl & Hagedorn, J. Polym. Sci. Polym. Phys. 16 (1978) 1181",
+      "notes": "El plástico más común del mundo, y por tanto el de la bolsa, el bote y el guante. El par 1063/1130 cm⁻¹ mide además la cristalinidad. Nada entre 1500 y 2800 cm⁻¹: eso lo separa del polipropileno y de casi todo lo demás."
+    },
+    {
+      "key": "PP",
+      "label": "Polipropileno",
+      "formula": "C3H6",
+      "family": "poliolefina",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 809.0,
+          "window": [
+            797.0,
+            821.0
+          ],
+          "assignment": "tensión C–C esqueleto",
+          "relative": 1.0
+        },
+        {
+          "position": 841.0,
+          "window": [
+            829.0,
+            853.0
+          ],
+          "assignment": "CH₂ balanceo",
+          "relative": 0.7
+        },
+        {
+          "position": 973.0,
+          "window": [
+            961.0,
+            985.0
+          ],
+          "assignment": "CH₃ balanceo",
+          "relative": 0.6
+        },
+        {
+          "position": 1152.0,
+          "window": [
+            1137.0,
+            1167.0
+          ],
+          "assignment": "tensión C–C",
+          "relative": 0.5
+        },
+        {
+          "position": 1458.0,
+          "window": [
+            1440.0,
+            1476.0
+          ],
+          "assignment": "CH₃ flexión",
+          "relative": 0.8
+        },
+        {
+          "position": 2882.0,
+          "window": [
+            2857.0,
+            2907.0
+          ],
+          "assignment": "tensión C–H",
+          "relative": 0.9
+        }
+      ],
+      "strong": [
+        809.0,
+        1458.0,
+        2882.0
+      ],
+      "discriminating": [
+        809.0,
+        973.0
+      ],
+      "confidence": "high",
+      "source": "Nielsen et al., Macromolecules 35 (2002) 1041",
+      "notes": "Separadores de batería, botes de muestra y material de laboratorio. Su banda de 809 cm⁻¹ es exclusiva y la separa del polietileno sin discusión."
+    },
+    {
+      "key": "PS",
+      "label": "Poliestireno",
+      "formula": "C8H8",
+      "family": "vinilico",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 621.0,
+          "window": [
+            611.0,
+            631.0
+          ],
+          "assignment": "deformación del anillo",
+          "relative": 0.3
+        },
+        {
+          "position": 1001.0,
+          "window": [
+            993.0,
+            1009.0
+          ],
+          "assignment": "respiración del anillo",
+          "relative": 1.0
+        },
+        {
+          "position": 1031.0,
+          "window": [
+            1021.0,
+            1041.0
+          ],
+          "assignment": "deformación C–H en el plano",
+          "relative": 0.5
+        },
+        {
+          "position": 1602.0,
+          "window": [
+            1590.0,
+            1614.0
+          ],
+          "assignment": "tensión C=C del anillo",
+          "relative": 0.6
+        },
+        {
+          "position": 3054.0,
+          "window": [
+            3029.0,
+            3079.0
+          ],
+          "assignment": "tensión C–H aromática",
+          "relative": 0.5
+        }
+      ],
+      "strong": [
+        1001.0,
+        1031.0
+      ],
+      "discriminating": [
+        1001.0
+      ],
+      "confidence": "high",
+      "source": "Palm, J. Phys. Chem. 55 (1951) 1320; ASTM E1840 (patrón de calibración Raman)",
+      "notes": "Dos cosas a la vez. Es plástico de laboratorio —placas, botes, espuma— y es el patrón de calibración del eje Raman: su banda de 1001 cm⁻¹ es estrechísima y está tabulada al 0.1 cm⁻¹, por lo que sirve para comprobar la calibración. Ojo con la de 1602: cae cerca de la G, pero es mucho más estrecha y viene acompañada de la de 1001, que el carbono no tiene."
+    },
+    {
+      "key": "PMMA",
+      "label": "PMMA (metacrilato)",
+      "formula": "C5H8O2",
+      "family": "vinilico",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 600.0,
+          "window": [
+            588.0,
+            612.0
+          ],
+          "assignment": "deformación C–C–O",
+          "relative": 0.4
+        },
+        {
+          "position": 812.0,
+          "window": [
+            800.0,
+            824.0
+          ],
+          "assignment": "tensión C–O–C",
+          "relative": 1.0
+        },
+        {
+          "position": 1450.0,
+          "window": [
+            1432.0,
+            1468.0
+          ],
+          "assignment": "CH₃ flexión",
+          "relative": 0.7
+        },
+        {
+          "position": 1730.0,
+          "window": [
+            1715.0,
+            1745.0
+          ],
+          "assignment": "tensión C=O",
+          "relative": 0.6
+        },
+        {
+          "position": 2955.0,
+          "window": [
+            2930.0,
+            2980.0
+          ],
+          "assignment": "tensión C–H",
+          "relative": 0.8
+        }
+      ],
+      "strong": [
+        812.0,
+        1450.0
+      ],
+      "discriminating": [
+        812.0
+      ],
+      "confidence": "high",
+      "source": "Willis, Zichy & Hendra, Polymer 10 (1969) 737",
+      "notes": "Cubetas, ventanas y portamuestras de metacrilato. Su banda de 812 cm⁻¹ es fuerte y está aislada. El carbonilo a 1730 lo separa del poliestireno."
+    },
+    {
+      "key": "PVC",
+      "label": "PVC (cloruro de polivinilo)",
+      "formula": "C2H3Cl",
+      "family": "vinilico",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 638.0,
+          "window": [
+            626.0,
+            650.0
+          ],
+          "assignment": "tensión C–Cl",
+          "relative": 1.0
+        },
+        {
+          "position": 695.0,
+          "window": [
+            683.0,
+            707.0
+          ],
+          "assignment": "tensión C–Cl",
+          "relative": 0.7
+        },
+        {
+          "position": 1100.0,
+          "window": [
+            1085.0,
+            1115.0
+          ],
+          "assignment": "tensión C–C",
+          "relative": 0.4
+        },
+        {
+          "position": 1430.0,
+          "window": [
+            1412.0,
+            1448.0
+          ],
+          "assignment": "CH₂ flexión",
+          "relative": 0.5
+        },
+        {
+          "position": 2910.0,
+          "window": [
+            2885.0,
+            2935.0
+          ],
+          "assignment": "tensión C–H",
+          "relative": 0.6
+        }
+      ],
+      "strong": [
+        638.0,
+        695.0
+      ],
+      "discriminating": [
+        638.0,
+        695.0
+      ],
+      "confidence": "medium",
+      "source": "Baruya, Gerrard & Maddams, Macromolecules 16 (1983) 578",
+      "notes": "Tubos y mangueras. El par de tensiones C–Cl a 638 y 695 cm⁻¹ lo identifica; su cociente cambia con la tacticidad, así que no esperes que coincida con la referencia. Es además el único polímero de esta lista que trae cloro, que es lo que verás en EDS."
+    },
+    {
+      "key": "PVA",
+      "label": "PVA (alcohol polivinílico)",
+      "formula": "C2H4O",
+      "family": "vinilico",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 918.0,
+          "window": [
+            906.0,
+            930.0
+          ],
+          "assignment": "tensión C–C",
+          "relative": 0.7
+        },
+        {
+          "position": 1094.0,
+          "window": [
+            1079.0,
+            1109.0
+          ],
+          "assignment": "tensión C–O",
+          "relative": 0.6
+        },
+        {
+          "position": 1440.0,
+          "window": [
+            1422.0,
+            1458.0
+          ],
+          "assignment": "CH₂ flexión",
+          "relative": 1.0
+        },
+        {
+          "position": 2910.0,
+          "window": [
+            2885.0,
+            2935.0
+          ],
+          "assignment": "tensión C–H",
+          "relative": 0.9
+        }
+      ],
+      "strong": [
+        1440.0,
+        2910.0,
+        918.0
+      ],
+      "discriminating": [
+        918.0,
+        1094.0
+      ],
+      "confidence": "medium",
+      "source": "Iliescu et al., J. Raman Spectrosc. 41 (2010) 1273",
+      "notes": "Dispersante y agente de moldeo en síntesis de nanomateriales, y el aglomerante de muchas tintas acuosas. Su banda de 1440 cm⁻¹ está a medio camino entre la D y la G y es ancha: en una muestra con mucho PVA residual, la línea base entre D y G sube y el ajuste lo reparte entre las dos bandas. Lávalo antes de calcular I_D/I_G."
+    },
+    {
+      "key": "PVP",
+      "label": "PVP (polivinilpirrolidona)",
+      "formula": "C6H9NO",
+      "family": "vinilico",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 933.0,
+          "window": [
+            921.0,
+            945.0
+          ],
+          "assignment": "respiración del anillo",
+          "relative": 1.0
+        },
+        {
+          "position": 1425.0,
+          "window": [
+            1407.0,
+            1443.0
+          ],
+          "assignment": "CH₂ flexión",
+          "relative": 0.6
+        },
+        {
+          "position": 1495.0,
+          "window": [
+            1477.0,
+            1513.0
+          ],
+          "assignment": "deformación del anillo",
+          "relative": 0.5
+        },
+        {
+          "position": 1660.0,
+          "window": [
+            1642.0,
+            1678.0
+          ],
+          "assignment": "tensión C=O",
+          "relative": 0.7
+        },
+        {
+          "position": 2930.0,
+          "window": [
+            2905.0,
+            2955.0
+          ],
+          "assignment": "tensión C–H",
+          "relative": 0.7
+        }
+      ],
+      "strong": [
+        933.0,
+        1660.0
+      ],
+      "discriminating": [
+        933.0
+      ],
+      "confidence": "medium",
+      "source": "Borodko et al., J. Phys. Chem. C 110 (2006) 23052",
+      "notes": "El surfactante de síntesis coloidal por excelencia: si tus nanopartículas se hicieron con PVP, queda PVP en la superficie. Su banda de 933 cm⁻¹ es la que lo identifica. Ojo: sobre metales nobles da SERS y su señal se multiplica, de modo que un PVP invisible en el polvo puede dominar el espectro de la misma muestra sobre plata u oro."
+    },
+    {
+      "key": "PET",
+      "label": "PET (tereftalato de polietileno)",
+      "formula": "C10H8O4",
+      "family": "poliester",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 633.0,
+          "window": [
+            621.0,
+            645.0
+          ],
+          "assignment": "deformación del anillo",
+          "relative": 0.4
+        },
+        {
+          "position": 858.0,
+          "window": [
+            846.0,
+            870.0
+          ],
+          "assignment": "tensión C(O)–O",
+          "relative": 0.4
+        },
+        {
+          "position": 1096.0,
+          "window": [
+            1081.0,
+            1111.0
+          ],
+          "assignment": "tensión C–O",
+          "relative": 0.5
+        },
+        {
+          "position": 1290.0,
+          "window": [
+            1275.0,
+            1305.0
+          ],
+          "assignment": "tensión del anillo",
+          "relative": 0.6
+        },
+        {
+          "position": 1615.0,
+          "window": [
+            1603.0,
+            1627.0
+          ],
+          "assignment": "tensión C=C del anillo",
+          "relative": 1.0
+        },
+        {
+          "position": 1728.0,
+          "window": [
+            1713.0,
+            1743.0
+          ],
+          "assignment": "tensión C=O",
+          "relative": 0.8
+        }
+      ],
+      "strong": [
+        1615.0,
+        1728.0,
+        1290.0
+      ],
+      "discriminating": [
+        1728.0,
+        858.0
+      ],
+      "confidence": "high",
+      "source": "Boerio, Bahl & McGraw, J. Polym. Sci. Polym. Phys. 14 (1976) 1029",
+      "notes": "Sustrato flexible, botellas y film. AVISO: su banda de 1615 cm⁻¹ cae sobre la G del carbono y la de 1290 sobre la D. Lo que lo delata es el carbonilo a 1728 cm⁻¹, donde el carbono no tiene nada, y la de 858. Si mediste un depósito sobre PET y el haz llegó al sustrato, esto es lo que estás viendo."
+    },
+    {
+      "key": "PC",
+      "label": "Policarbonato",
+      "formula": "C16H14O3",
+      "family": "poliester",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 703.0,
+          "window": [
+            691.0,
+            715.0
+          ],
+          "assignment": "deformación del anillo",
+          "relative": 0.5
+        },
+        {
+          "position": 886.0,
+          "window": [
+            874.0,
+            898.0
+          ],
+          "assignment": "tensión O–C–O",
+          "relative": 0.5
+        },
+        {
+          "position": 1113.0,
+          "window": [
+            1098.0,
+            1128.0
+          ],
+          "assignment": "tensión C–O",
+          "relative": 0.6
+        },
+        {
+          "position": 1177.0,
+          "window": [
+            1162.0,
+            1192.0
+          ],
+          "assignment": "deformación C–H",
+          "relative": 0.5
+        },
+        {
+          "position": 1602.0,
+          "window": [
+            1590.0,
+            1614.0
+          ],
+          "assignment": "tensión C=C del anillo",
+          "relative": 1.0
+        },
+        {
+          "position": 1775.0,
+          "window": [
+            1760.0,
+            1790.0
+          ],
+          "assignment": "tensión C=O",
+          "relative": 0.6
+        }
+      ],
+      "strong": [
+        1602.0,
+        1113.0,
+        1775.0
+      ],
+      "discriminating": [
+        1775.0,
+        886.0
+      ],
+      "confidence": "medium",
+      "source": "Dybal & Krimm, Macromolecules 23 (1990) 1301",
+      "notes": "Gafas de seguridad, ventanas de celda y membranas de filtración track-etched. Su carbonilo está a 1775 cm⁻¹, casi 50 cm⁻¹ por encima del del PET, que es lo que los separa. La banda de 1602 vuelve a caer cerca de la G."
+    },
+    {
+      "key": "PANI",
+      "label": "Polianilina (sal de esmeraldina)",
+      "formula": "C6H5N",
+      "family": "polimero_conductor",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 1165.0,
+          "window": [
+            1150.0,
+            1180.0
+          ],
+          "assignment": "deformación C–H (forma quinoide)",
+          "relative": 0.8
+        },
+        {
+          "position": 1220.0,
+          "window": [
+            1205.0,
+            1235.0
+          ],
+          "assignment": "tensión C–N",
+          "relative": 0.6
+        },
+        {
+          "position": 1340.0,
+          "window": [
+            1322.0,
+            1358.0
+          ],
+          "assignment": "tensión C~N⁺• (polarón)",
+          "relative": 1.0
+        },
+        {
+          "position": 1480.0,
+          "window": [
+            1462.0,
+            1498.0
+          ],
+          "assignment": "tensión C=N",
+          "relative": 0.6
+        },
+        {
+          "position": 1590.0,
+          "window": [
+            1575.0,
+            1605.0
+          ],
+          "assignment": "tensión C=C del anillo",
+          "relative": 0.9
+        }
+      ],
+      "strong": [
+        1340.0,
+        1590.0,
+        1165.0
+      ],
+      "discriminating": [
+        1165.0,
+        1220.0
+      ],
+      "confidence": "high",
+      "source": "Cochet et al., J. Raman Spectrosc. 31 (2000) 1041; Bernard & Hugot-Le Goff, Electrochim. Acta 51 (2006) 6015",
+      "notes": "AVISO EXPRESO. Sus dos bandas más intensas están en 1340 y 1590 cm⁻¹, es decir ENCIMA de la D y de la G. Un compuesto PANI/carbono da un espectro que parece carbono desordenado y una I_D/I_G que no significa nada, porque las dos bandas tienen contribución de los dos materiales. Lo que separa a la PANI es lo que tiene DEBAJO: 1165 y 1220 cm⁻¹, donde el carbono no tiene nada. Y la banda de 1340 es sensible al estado de oxidación y al dopado, así que se mueve con el potencial si mides in situ: eso es información, no un error."
+    },
+    {
+      "key": "PPy",
+      "label": "Polipirrol",
+      "formula": "C4H3N",
+      "family": "polimero_conductor",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 930.0,
+          "window": [
+            918.0,
+            942.0
+          ],
+          "assignment": "deformación del anillo (bipolarón)",
+          "relative": 0.6
+        },
+        {
+          "position": 1050.0,
+          "window": [
+            1035.0,
+            1065.0
+          ],
+          "assignment": "deformación C–H en el plano",
+          "relative": 0.6
+        },
+        {
+          "position": 1240.0,
+          "window": [
+            1225.0,
+            1255.0
+          ],
+          "assignment": "deformación C–H",
+          "relative": 0.5
+        },
+        {
+          "position": 1330.0,
+          "window": [
+            1312.0,
+            1348.0
+          ],
+          "assignment": "tensión del anillo",
+          "relative": 1.0
+        },
+        {
+          "position": 1380.0,
+          "window": [
+            1362.0,
+            1398.0
+          ],
+          "assignment": "tensión C–C",
+          "relative": 0.7
+        },
+        {
+          "position": 1590.0,
+          "window": [
+            1575.0,
+            1605.0
+          ],
+          "assignment": "tensión C=C",
+          "relative": 0.9
+        }
+      ],
+      "strong": [
+        1330.0,
+        1590.0,
+        930.0
+      ],
+      "discriminating": [
+        930.0,
+        1050.0
+      ],
+      "confidence": "high",
+      "source": "Furukawa et al., Synth. Met. 24 (1988) 329; Crowley & Cassidy, J. Electroanal. Chem. 547 (2003) 75",
+      "notes": "Mismo aviso que la polianilina y por el mismo motivo: 1330 y 1590 cm⁻¹ son la D y la G. Lo que lo delata son las bandas de 930 y 1050 cm⁻¹, que además distinguen el estado dopado del neutro —930 es del bipolarón— y por tanto cambian al ciclar."
+    },
+    {
+      "key": "PEDOT",
+      "label": "PEDOT (poli(3,4-etilendioxitiofeno))",
+      "formula": "C6H6O2S",
+      "family": "polimero_conductor",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 990.0,
+          "window": [
+            978.0,
+            1002.0
+          ],
+          "assignment": "deformación del anillo oxietileno",
+          "relative": 0.5
+        },
+        {
+          "position": 1105.0,
+          "window": [
+            1090.0,
+            1120.0
+          ],
+          "assignment": "tensión C–O–C",
+          "relative": 0.4
+        },
+        {
+          "position": 1265.0,
+          "window": [
+            1250.0,
+            1280.0
+          ],
+          "assignment": "tensión Cα–Cα'",
+          "relative": 0.5
+        },
+        {
+          "position": 1370.0,
+          "window": [
+            1352.0,
+            1388.0
+          ],
+          "assignment": "tensión Cβ–Cβ",
+          "relative": 0.6
+        },
+        {
+          "position": 1435.0,
+          "window": [
+            1420.0,
+            1450.0
+          ],
+          "assignment": "tensión Cα=Cβ simétrica",
+          "relative": 1.0
+        },
+        {
+          "position": 1510.0,
+          "window": [
+            1492.0,
+            1528.0
+          ],
+          "assignment": "tensión Cα=Cβ asimétrica",
+          "relative": 0.5
+        }
+      ],
+      "strong": [
+        1435.0,
+        1370.0,
+        990.0
+      ],
+      "discriminating": [
+        1435.0,
+        990.0
+      ],
+      "confidence": "high",
+      "source": "Garreau et al., Macromolecules 32 (1999) 6807",
+      "notes": "El polímero conductor más usado en electrodos flexibles. Su banda de 1435 cm⁻¹ es intensísima y cae en el valle entre la D y la G, que es el peor sitio posible: infla la línea base justo donde se mide el valle y hace que I_D/I_G salga baja. La posición de esa banda se desplaza con el estado de dopado, así que sirve para seguir la oxidación in situ."
+    },
+    {
+      "key": "PAN",
+      "label": "PAN (poliacrilonitrilo)",
+      "formula": "C3H3N",
+      "family": "precursor_polimerico",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 1090.0,
+          "window": [
+            1075.0,
+            1105.0
+          ],
+          "assignment": "tensión C–C",
+          "relative": 0.4
+        },
+        {
+          "position": 1360.0,
+          "window": [
+            1340.0,
+            1380.0
+          ],
+          "assignment": "CH flexión",
+          "relative": 0.5
+        },
+        {
+          "position": 1450.0,
+          "window": [
+            1430.0,
+            1470.0
+          ],
+          "assignment": "CH₂ flexión",
+          "relative": 0.7
+        },
+        {
+          "position": 2240.0,
+          "window": [
+            2220.0,
+            2260.0
+          ],
+          "assignment": "tensión C≡N",
+          "relative": 1.0
+        },
+        {
+          "position": 2940.0,
+          "window": [
+            2915.0,
+            2965.0
+          ],
+          "assignment": "tensión C–H",
+          "relative": 0.6
+        }
+      ],
+      "strong": [
+        2240.0,
+        1450.0
+      ],
+      "discriminating": [
+        2240.0
+      ],
+      "confidence": "high",
+      "source": "Liu et al., J. Appl. Polym. Sci. 102 (2006) 1428",
+      "notes": "De esto está hecha una nanofibra de carbono antes de carbonizarla, así que es el residuo que delata una carbonización incompleta. Su nitrilo a 2240 cm⁻¹ está en una región donde no hay absolutamente nada más, lo que lo hace una identificación limpia y una prueba directa: si sigue ahí, queda PAN sin ciclar. Al estabilizar a 200-300 °C el nitrilo desaparece y aparecen las bandas del anillo de piridina; al carbonizar, la D y la G. Las tres etapas se ven en el mismo espectro."
+    },
+    {
+      "key": "celulosa",
+      "label": "Celulosa",
+      "formula": "C6H10O5",
+      "family": "precursor_polimerico",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 380.0,
+          "window": [
+            365.0,
+            395.0
+          ],
+          "assignment": "deformación del esqueleto",
+          "relative": 0.5
+        },
+        {
+          "position": 1095.0,
+          "window": [
+            1080.0,
+            1110.0
+          ],
+          "assignment": "tensión C–O–C del anillo",
+          "relative": 1.0
+        },
+        {
+          "position": 1121.0,
+          "window": [
+            1106.0,
+            1136.0
+          ],
+          "assignment": "tensión C–O–C asimétrica",
+          "relative": 0.7
+        },
+        {
+          "position": 1380.0,
+          "window": [
+            1362.0,
+            1398.0
+          ],
+          "assignment": "deformación C–H",
+          "relative": 0.4
+        },
+        {
+          "position": 2890.0,
+          "window": [
+            2865.0,
+            2915.0
+          ],
+          "assignment": "tensión C–H",
+          "relative": 0.8
+        }
+      ],
+      "strong": [
+        1095.0,
+        2890.0
+      ],
+      "discriminating": [
+        1095.0,
+        1121.0
+      ],
+      "confidence": "medium",
+      "source": "Wiley & Atalla, Carbohydr. Res. 160 (1987) 113",
+      "notes": "El precursor de todo carbono derivado de biomasa, y también el papel de filtro sobre el que secaste la muestra. El par 1095/1121 cm⁻¹ lo identifica. Su banda de 1380 cm⁻¹ está cerca de la D pero es estrecha, y desaparece por completo en cuanto la carbonización pasa de 400 °C: verla significa que hay material sin carbonizar."
+    },
+    {
+      "key": "PEO",
+      "label": "PEO / PEG (óxido de polietileno)",
+      "formula": "C2H4O",
+      "family": "otro_polimero",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 843.0,
+          "window": [
+            831.0,
+            855.0
+          ],
+          "assignment": "CH₂ balanceo",
+          "relative": 0.7
+        },
+        {
+          "position": 1063.0,
+          "window": [
+            1048.0,
+            1078.0
+          ],
+          "assignment": "tensión C–O–C",
+          "relative": 0.6
+        },
+        {
+          "position": 1128.0,
+          "window": [
+            1113.0,
+            1143.0
+          ],
+          "assignment": "tensión C–O–C simétrica",
+          "relative": 0.7
+        },
+        {
+          "position": 1280.0,
+          "window": [
+            1265.0,
+            1295.0
+          ],
+          "assignment": "CH₂ torsión",
+          "relative": 0.6
+        },
+        {
+          "position": 1480.0,
+          "window": [
+            1462.0,
+            1498.0
+          ],
+          "assignment": "CH₂ flexión",
+          "relative": 0.8
+        },
+        {
+          "position": 2880.0,
+          "window": [
+            2855.0,
+            2905.0
+          ],
+          "assignment": "tensión C–H",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        2880.0,
+        1480.0,
+        843.0
+      ],
+      "discriminating": [
+        843.0,
+        1128.0
+      ],
+      "confidence": "medium",
+      "source": "Maxfield & Shepherd, Polymer 16 (1975) 505",
+      "notes": "Electrolito polimérico sólido, plantilla porogénica y dispersante. Su banda de 843 cm⁻¹ lo identifica. Como el PVA, un residuo abundante levanta la línea base en la región D–G."
+    },
+    {
+      "key": "PDMS",
+      "label": "PDMS (silicona)",
+      "formula": "C2H6OSi",
+      "family": "otro_polimero",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 488.0,
+          "window": [
+            476.0,
+            500.0
+          ],
+          "assignment": "tensión Si–O–Si",
+          "relative": 0.7
+        },
+        {
+          "position": 708.0,
+          "window": [
+            696.0,
+            720.0
+          ],
+          "assignment": "tensión Si–C simétrica",
+          "relative": 0.8
+        },
+        {
+          "position": 788.0,
+          "window": [
+            776.0,
+            800.0
+          ],
+          "assignment": "CH₃ balanceo + Si–C",
+          "relative": 1.0
+        },
+        {
+          "position": 1263.0,
+          "window": [
+            1248.0,
+            1278.0
+          ],
+          "assignment": "CH₃ deformación simétrica",
+          "relative": 0.4
+        },
+        {
+          "position": 2905.0,
+          "window": [
+            2880.0,
+            2930.0
+          ],
+          "assignment": "tensión C–H simétrica",
+          "relative": 0.9
+        },
+        {
+          "position": 2965.0,
+          "window": [
+            2940.0,
+            2990.0
+          ],
+          "assignment": "tensión C–H asimétrica",
+          "relative": 0.8
+        }
+      ],
+      "strong": [
+        788.0,
+        708.0,
+        2905.0
+      ],
+      "discriminating": [
+        488.0,
+        708.0,
+        788.0
+      ],
+      "confidence": "high",
+      "source": "Cai, Neyer, Kuckuk & Heise, J. Mol. Struct. 976 (2010) 274",
+      "notes": "El contaminante más común de un laboratorio y el más fácil de reconocer: viene de los tubos, de la grasa de vacío, de los sellos y de los guantes. Tres bandas juntas en 488, 708 y 788 cm⁻¹ y un par muy marcado en 2905/2965. En una región limpia del carbono, así que identificarlo es fácil; lo que no es fácil es quitarlo de la muestra."
+    },
+    {
+      "key": "nylon6",
+      "label": "Nailon 6 (poliamida 6)",
+      "formula": "C6H11NO",
+      "family": "otro_polimero",
+      "crystal_system": "polímero",
+      "space_group": null,
+      "bands": [
+        {
+          "position": 1063.0,
+          "window": [
+            1048.0,
+            1078.0
+          ],
+          "assignment": "tensión C–C",
+          "relative": 0.5
+        },
+        {
+          "position": 1128.0,
+          "window": [
+            1113.0,
+            1143.0
+          ],
+          "assignment": "tensión C–C esqueleto",
+          "relative": 0.6
+        },
+        {
+          "position": 1296.0,
+          "window": [
+            1281.0,
+            1311.0
+          ],
+          "assignment": "CH₂ torsión",
+          "relative": 0.6
+        },
+        {
+          "position": 1440.0,
+          "window": [
+            1422.0,
+            1458.0
+          ],
+          "assignment": "CH₂ flexión",
+          "relative": 0.8
+        },
+        {
+          "position": 1635.0,
+          "window": [
+            1617.0,
+            1653.0
+          ],
+          "assignment": "amida I (tensión C=O)",
+          "relative": 0.7
+        },
+        {
+          "position": 2900.0,
+          "window": [
+            2875.0,
+            2925.0
+          ],
+          "assignment": "tensión C–H",
+          "relative": 1.0
+        }
+      ],
+      "strong": [
+        2900.0,
+        1440.0,
+        1635.0
+      ],
+      "discriminating": [
+        1635.0,
+        1128.0
+      ],
+      "confidence": "medium",
+      "source": "Hendra et al., Spectrochim. Acta A 33 (1977) 445",
+      "notes": "Membranas de filtración, bridas y mallas. La amida I a 1635 cm⁻¹ es lo que lo separa de una poliolefina, y cae cerca de la G: en una muestra filtrada sobre membrana de nailon, comprueba que el haz no llegó a la membrana."
     }
   ]
 }

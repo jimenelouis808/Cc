@@ -391,3 +391,69 @@ def test_the_drt_of_a_real_demo_spectrum_runs():
     result = drt(make_eis_demo())
     assert result.tau_s.size == result.gamma.size
     assert result.residual < 0.3
+
+
+# -- Ragone: the units, against a case with a closed-form answer -------
+
+
+def _ideal_capacitor(mass_mg=1000.0, capacitance_f=1.0, window_v=1.0, current_a=1.0):
+    """A 1 F capacitor charged and discharged at constant current.
+
+    Everything about it is known in closed form, which is the point: the
+    discharge carries q = C·V = 1 C in t = C·V/I = 1 s, and its energy is
+    ½CV² = 0.5 J exactly. With 1 g of active material that is 0.5 J/g,
+    which is 0.13889 Wh/kg and 500 W/kg.
+    """
+    from ramancarbon.echem.curve import ChargeDischarge, Electrode
+
+    duration = capacitance_f * window_v / current_a
+    rise = np.linspace(0.0, duration, 2000)
+    fall = np.linspace(duration, 2.0 * duration, 2000)[1:]
+    time = np.concatenate([rise, fall])
+    potential = np.concatenate([
+        window_v * rise / duration,
+        window_v * (1.0 - (fall - duration) / duration),
+    ])
+    current = np.concatenate([np.full(rise.size, current_a),
+                              np.full(fall.size, -current_a)])
+    return ChargeDischarge(time=time, potential=potential, current=current,
+                           electrode=Electrode(mass_mg=mass_mg), name="ideal")
+
+
+def test_energy_and_power_densities_are_both_per_kilogram():
+    """The factor of a thousand that put every Ragone plot in the wrong
+    place.
+
+    ``Electrode.specific`` normalises by the mass in GRAMS, so it returns
+    J/g. The energy conversion folds the thousand into the 3.6 and the
+    power one has to carry it explicitly; dividing J/g by seconds gives
+    W/g, and reporting that as W/kg moved the power axis by three decades.
+    """
+    from ramancarbon.echem.gcd import analyse_gcd
+
+    result = analyse_gcd(_ideal_capacitor())
+    assert result.energy_wh_per_kg == pytest.approx(0.13889, rel=0.01)
+    assert result.power_w_per_kg == pytest.approx(500.0, rel=0.01)
+
+
+def test_the_two_densities_agree_with_each_other():
+    """P = E·3600/t is the definition, so the two numbers are not
+    independent and a unit slip in either shows up as them disagreeing.
+    This is the check that does not need the closed-form case.
+    """
+    from ramancarbon.echem.gcd import analyse_gcd
+
+    for current in (0.5, 1.0, 2.0):
+        result = analyse_gcd(_ideal_capacitor(current_a=current))
+        discharge = result.discharges[0]
+        expected = result.energy_wh_per_kg * 3600.0 / discharge.duration_s
+        assert result.power_w_per_kg == pytest.approx(expected, rel=1e-6)
+
+
+def test_ragone_sorts_by_power_and_says_what_the_basis_was():
+    from ramancarbon.echem.kinetics import ragone
+
+    plot = ragone([12.0, 8.0, 10.0], [900.0, 4000.0, 2000.0])
+    assert list(plot["potencia_W_kg"]) == [900.0, 2000.0, 4000.0]
+    assert list(plot["energia_Wh_kg"]) == [12.0, 10.0, 8.0]
+    assert plot["avisos"] and "base" in plot["avisos"][0]

@@ -126,6 +126,53 @@ def pick_font(available: list[str], stack: tuple[str, ...], fallback: str = "TkD
     return fallback
 
 
+#: The plot roles a user may recolour, with what each one draws. Only the
+#: roles: the chrome colours are not offered, because a window whose text
+#: and background can be set independently is a window somebody will make
+#: unreadable.
+PLOT_ROLES: tuple[tuple[str, str], ...] = (
+    ("data", "Datos medidos"),
+    ("fitted", "Curva ajustada"),
+    ("residual", "Residuo"),
+    ("baseline", "Línea base"),
+)
+
+#: How many component colours the cycle carries.
+N_COMPONENTS = 6
+
+
+def with_colours(palette: Palette, overrides: dict) -> Palette:
+    """A copy of ``palette`` with some plot roles recoloured.
+
+    Only the roles in :data:`PLOT_ROLES` and the component cycle, and only
+    values that look like a colour. An unreadable entry is ignored rather
+    than raised on: these come from a preferences file that a user may
+    have edited by hand, and a bad colour must not stop the program
+    starting.
+    """
+    from dataclasses import replace
+
+    changes: dict = {}
+    for key, _ in PLOT_ROLES:
+        value = overrides.get(key)
+        if isinstance(value, str) and _is_colour(value):
+            changes[key] = value
+    components = overrides.get("components")
+    if isinstance(components, (list, tuple)):
+        cleaned = tuple(c for c in components if isinstance(c, str) and _is_colour(c))
+        if cleaned:
+            changes["components"] = cleaned
+    return replace(palette, **changes) if changes else palette
+
+
+def _is_colour(text: str) -> bool:
+    """Whether a string is a hex colour matplotlib will accept."""
+    if not text.startswith("#"):
+        return False
+    body = text[1:]
+    return len(body) in (3, 6, 8) and all(c in "0123456789abcdefABCDEF" for c in body)
+
+
 def matplotlib_style(palette: Palette) -> dict:
     """rcParams making a matplotlib figure match the application chrome.
 
@@ -337,6 +384,9 @@ __all__ = [
     "SIZES",
     "Palette",
     "apply_theme",
+    "N_COMPONENTS",
+    "PLOT_ROLES",
     "matplotlib_style",
+    "with_colours",
     "pick_font",
 ]

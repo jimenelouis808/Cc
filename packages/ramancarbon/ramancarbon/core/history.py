@@ -178,6 +178,7 @@ class Preferences:
         "check_interferences": False,
         "plot_preset": "predeterminado",
         "figure_theme": "tema",
+        "plot_colours": {},
         "export_format": "csv",
         "window_size": [1200, 800],
         "last_directory": "",

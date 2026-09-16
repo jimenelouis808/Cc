@@ -150,6 +150,19 @@ class Family:
     label: str
     note: str
     resolved_by: str
+    group: str = ""
+    """Optional grouping above the family, e.g. ``"polimeros"``."""
+    optional: bool = False
+    """Whether the family is searched only on request.
+
+    The polymers are, and the reason is specific rather than tidiness:
+    polyaniline has bands at 1340 and 1590, polypyrrole at 1330 and 1590,
+    PET at 1615. Those sit on the D band and on the G band. Searched by
+    default they would match every carbon spectrum ever measured, and the
+    match would be a coincidence of position between a conjugated polymer
+    and a graphitic lattice — two different physics that happen to
+    vibrate at the same frequency. So they are there when you ask for
+    them and absent when you do not."""
 
 
 @dataclass
@@ -469,6 +482,8 @@ def _load(directory: str) -> tuple[dict[str, Family], tuple[Phase, ...], float]:
             label=entry["label"],
             note=entry.get("note", ""),
             resolved_by=entry.get("resolved_by", ""),
+            group=entry.get("group", ""),
+            optional=bool(entry.get("optional", False)),
         )
         for entry in payload.get("families", [])
     }
@@ -626,6 +641,7 @@ def find_phases(
     rbm_window: tuple[float, float] = RBM_WINDOW,
     directory: Optional[str | Path] = None,
     elements: Optional[Sequence[str]] = None,
+    groups: Optional[Sequence[str]] = None,
 ) -> PhaseReport:
     """Identify sample phases from detected peaks, family by family.
 
@@ -670,6 +686,18 @@ def find_phases(
         whatever the literature's confidence in it, and the report names
         that confidence instead of hiding behind it.
 
+    groups:
+        Optional groups of families to switch ON, e.g. ``["polimeros"]``.
+        A family marked optional is not searched unless its group is named
+        here or the family itself is named in ``families``.
+
+        There is one such group and it exists for a concrete reason:
+        polyaniline has bands at 1340 and 1590 cm⁻¹, polypyrrole at 1330
+        and 1590, PET at 1615. Those are the D band and the G band. A
+        polymer library searched by default would match every carbon
+        spectrum in existence, on a coincidence between how a conjugated
+        polymer vibrates and how a graphitic lattice does.
+
     Returns
     -------
     PhaseReport
@@ -679,6 +707,15 @@ def find_phases(
     )
     tol = float(tolerance) if tolerance is not None else file_tolerance
     wanted = set(families) if families else None
+    enabled_groups = {str(g) for g in groups} if groups else set()
+    optional_off = {
+        key for key, family in family_map.items()
+        if family.optional
+        and family.group not in enabled_groups
+        and not (wanted and key in wanted)
+    }
+    if optional_off:
+        catalogue = [p for p in catalogue if p.family not in optional_off]
     allowed = {symbol.strip().title() for symbol in elements} if elements else None
     if allowed:
         catalogue = [phase for phase in catalogue

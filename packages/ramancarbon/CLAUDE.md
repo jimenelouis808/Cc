@@ -410,6 +410,15 @@ Y una regla que nació de arreglar lo anterior y casi lo estropea:
   integrado.
 - **La caída IR se quita de la ventana de descarga**, y su tamaño se
   informa: es el diagnóstico más útil que da una curva galvanostática.
+- **Energía y potencia van las dos por KILOGRAMO, y el factor mil es el
+  punto.** `Electrode.specific` normaliza por la masa en GRAMOS, así que
+  devuelve J/g; la conversión de energía mete el mil dentro del 3.6
+  (1 J/g = 1000 J/kg = 1000/3600 Wh/kg) y la de potencia tiene que
+  llevarlo explícito. Dividir J/g entre segundos da W/g, e informarlo como
+  W/kg movía tres décadas el eje de todo gráfico de Ragone. Comprobado
+  contra un condensador ideal de 1 F: 1 V, 1 A y 1 g dan 0.5 J en 1 s, que
+  son 0.1389 Wh/kg y 500 W/kg. Hay además una prueba de coherencia,
+  P = E·3600/t, que no necesita el caso cerrado.
 - **La energía se INTEGRA (∫V dq), no se supone (½CV²).** Ojo con la prueba:
   ½CV² acierta también en una meseta CENTRADA, por casualidad. Por eso la
   meseta del demo está descentrada, como las de verdad.
@@ -922,6 +931,14 @@ Y una regla que nació de arreglar lo anterior y casi lo estropea:
   `_draw_*` dibuja con `figure_palette`, no con `palette`; uno que se
   quede atrás es una línea oscura sobre figura blanca, invisible, y solo
   en el archivo exportado. Hay una prueba que recorre las cinco secciones.
+- **matplotlib's Home NO es un «restablecer zoom».** Rehace la pila de
+  vistas, así que tras redibujar con datos nuevos restaura los límites de
+  la figura anterior, y con la pila vacía no hace nada: se lee como un
+  botón muerto. `reset_zoom` vuelve a dibujar desde los datos.
+- **Los colores de las figuras son de ROLES, no de curvas.** «La curva
+  ajustada» tiene un color en toda la aplicación para que el código se
+  aprenda una vez; un selector por figura desharía justo eso. Un color
+  ilegible en las preferencias se ignora, no revienta.
 - **Un hilo de trabajo informa del progreso por la COLA**, con
   `report_progress`, y ese mensaje no toca `busy`: un refinamiento que va
   por la iteración veinte no ha terminado, y parar ahí la barra diría que
@@ -1077,6 +1094,25 @@ ramancarbon laseres datos/m_532nm.txt datos/m_633nm.txt
 - **Un archivo de usuario ilegible se informa y se ignora**, nunca es
   fatal: el catálogo del programa tiene que seguir funcionando cuando el
   JSON escrito a mano lleva una coma de más.
+
+## Polímeros: un grupo que se pide, no que se busca
+
+- **La familia de polímeros va APAGADA por defecto**, y no por orden. La
+  polianilina tiene bandas en 1340 y 1590 cm-1, el polipirrol en 1330 y
+  1590, el PET en 1615: eso es la D y eso es la G. Buscándolos siempre,
+  coincidirían con cualquier espectro de carbono por el mero hecho de que
+  un polímero conjugado y una red grafítica vibran a frecuencias
+  parecidas. `Family.optional` lo marca y `find_phases(groups=[...])` lo
+  enciende.
+- **Y lo que los identifica es lo que tienen DEBAJO de la región D-G**:
+  1165 y 1220 de la PANI, 930 y 1050 del PPy, 990 y 1435 del PEDOT, donde
+  el carbono no tiene nada. Por eso un carbono limpio no se convierte en
+  polímero ni con el grupo encendido: hay una prueba de eso.
+- **El aglomerante está en la muestra.** Si preparaste un electrodo, hay
+  PVDF o PTFE en ella y su señal no es del material activo. El PDMS de
+  tubos y grasa de vacío es el contaminante más común del laboratorio.
+- **El PAN a 2240 cm-1 es la prueba de una carbonización incompleta**, en
+  una región donde no hay nada más.
 
 ## La capa Tk
 
