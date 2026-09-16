@@ -295,10 +295,42 @@ class XRDApp(SectionApp):
 
         right = ttk.Frame(panes)
         panes.add(right, weight=2)
+
+        # The results card goes FIRST and does not expand. It used to be
+        # packed after the parameter table, which does expand, so on any
+        # window shorter than about 1200 px the whole card -- the
+        # convergence flag, the evaluation count, the weight fractions
+        # and the two report buttons -- was pushed off the bottom edge
+        # and simply not drawn. The user reported all four as missing
+        # features; every one of them was already computed.
+        metrics, metrics_body = card(right, "Resultado del refinamiento")
+        metrics.pack(fill="x")
+        self.metrics_table = table(metrics_body, ["magnitud", "valor"], height=10)
+        row = ttk.Frame(metrics_body)
+        row.pack(fill="x", pady=(PAD["xs"], 0))
+        ttk.Button(row, text="Ver informe completo…",
+                   command=self._show_refinement_report).pack(
+            side="left", fill="x", expand=True, padx=(0, PAD["xs"]))
+        ttk.Button(row, text="Guardar informe…",
+                   command=self._save_refinement_report).pack(
+            side="left", fill="x", expand=True)
+
+        hint(metrics_body,
+             "La χ² reducida y la GOF son la misma cosa: χ² = GOF². Se dan "
+             "las dos porque cada comunidad lee una.   "
+             "Lo que NINGUNA de las dos dice es que la estructura sea la "
+             "correcta: una χ² de 1.05 con una ondulación sistemática en la "
+             "curva diferencia es peor refinamiento que una de 3 con residuo "
+             "sin estructura. Mira la diferencia primero.   "
+             "Las fracciones en peso son de la parte cristalina QUE ESTÁ EN "
+             "EL MODELO. Una fase que falte no baja el total de 100 %: su "
+             "intensidad se reparte entre las demás. El amorfo no aparece.",
+             wrap=380)
+
         params, params_body = card(right, "Parámetros",
                                    "Doble clic para liberar o fijar; clic derecho "
                                    "para editar el valor.")
-        params.pack(fill="both", expand=True)
+        params.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
         self.parameter_table = table(
             params_body, ["parámetro", "libre", "valor", "error", "grupo"], height=18
         )
@@ -311,28 +343,6 @@ class XRDApp(SectionApp):
              "equivocada.",
              wrap=380)
 
-        metrics, metrics_body = card(right, "Resultado del refinamiento")
-        metrics.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
-        self.metrics_table = table(metrics_body, ["magnitud", "valor"], height=10)
-        row = ttk.Frame(metrics_body)
-        row.pack(fill="x", pady=(PAD["xs"], 0))
-        ttk.Button(row, text="Ver informe completo…",
-                   command=self._show_refinement_report).pack(
-            side="left", fill="x", expand=True, padx=(0, PAD["xs"]))
-        ttk.Button(row, text="Guardar informe…",
-                   command=self._save_refinement_report).pack(
-            side="left", fill="x", expand=True)
-        hint(metrics_body,
-             "La χ² reducida y la GOF son la misma cosa: χ² = GOF². Se dan "
-             "las dos porque cada comunidad lee una.   "
-             "Lo que NINGUNA de las dos dice es que la estructura sea la "
-             "correcta: una χ² de 1.05 con una ondulación sistemática en la "
-             "curva diferencia es peor refinamiento que una de 3 con residuo "
-             "sin estructura. Mira la diferencia primero.   "
-             "Las fracciones en peso son de la parte cristalina QUE ESTÁ EN "
-             "EL MODELO. Una fase que falte no baja el total de 100 %: su "
-             "intensidad se reparte entre las demás. El amorfo no aparece.",
-             wrap=380)
 
     def _build_tab_library(self) -> None:
         ttk = self.ttk

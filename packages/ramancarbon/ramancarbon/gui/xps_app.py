@@ -28,7 +28,17 @@ from typing import Optional
 
 from .base import SectionApp, placeholder
 from .theme import PAD
-from .widgets import card, fill_table, hint, labelled, scrolled_text, set_text, table, scrollable_column
+from .widgets import (
+    card,
+    fill_table,
+    hint,
+    labelled,
+    scrollable_column,
+    scrolled_text,
+    set_text,
+    split_column,
+    table,
+)
 from .xps_state import BACKGROUNDS, PROFILES, REFERENCES, XPSSession
 
 FILE_TYPES = (
@@ -196,12 +206,14 @@ class XPSApp(SectionApp):
              "explique nadie más. Sin esa última regla, todo hierro «contiene» "
              "cobalto: su Auger LMM cae sobre el Co 2p con ánodo de aluminio.",
              wrap=720)
-        outer, body = card(tab, None)
+        paned, (top, bottom) = split_column(tab, (3, 2))
+        paned.pack(fill="both", expand=True)
+        outer, body = card(top, None)
         outer.pack(fill="both", expand=True)
         self.make_canvas(body, "survey", lambda f: f.add_subplot(111),
                          figsize=(8.2, 3.6))
-        info, info_body = card(tab, "Elementos")
-        info.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        info, info_body = card(bottom, "Elementos")
+        info.pack(fill="both", expand=True)
         self.survey_table = table(info_body,
                                   ["elemento", "confianza", "líneas"], height=9)
 
@@ -287,12 +299,14 @@ class XPSApp(SectionApp):
              "tiene estructura (Durbin-Watson lejos de 2).",
              wrap=820)
 
-        outer, body = card(tab, None)
-        outer.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        paned, (plot_pane, table_pane) = split_column(tab, (3, 2))
+        paned.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        outer, body = card(plot_pane, None)
+        outer.pack(fill="both", expand=True)
         self.make_canvas(body, "region", lambda f: f.add_subplot(111),
                          figsize=(8.2, 4.4))
-        bottom = ttk.Frame(tab)
-        bottom.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        bottom = ttk.Frame(table_pane)
+        bottom.pack(fill="both", expand=True)
         left, left_body = card(bottom, "Componentes")
         left.pack(side="left", fill="both", expand=True)
         self.components_table = table(

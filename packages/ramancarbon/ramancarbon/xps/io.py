@@ -121,12 +121,15 @@ def parse_spe_header(raw: bytes) -> tuple[dict[str, Any], list[SpeRegion], int]:
         (repeated keys collected into lists), the parsed region
         definitions, and the byte offset just past ``EOFH``.
     """
+    # SOFH does not have to be at byte zero. Some exports put a short
+    # preamble in front of it, and refusing those on a byte-offset
+    # technicality reads to the user as "this program cannot open my
+    # files".
+    start = raw.find(b"SOFH", 0, 8192)
     end = raw.find(_HEADER_END)
-    if not raw.lstrip()[:4] == b"SOFH" or end < 0:
-        raise XPSError(
-            "esto no parece un .spe de PHI: falta la cabecera SOFH/EOFH"
-        )
-    text = raw[:end].decode("latin-1")
+    if start < 0 or end < 0 or end < start:
+        raise XPSError(_spe_diagnosis(raw))
+    text = raw[start:end].decode("latin-1")
     offset = end + len(_HEADER_END)
     while offset < len(raw) and raw[offset : offset + 1] in (b"\r", b"\n"):
         offset += 1
@@ -164,6 +167,62 @@ def parse_spe_header(raw: bytes) -> tuple[dict[str, Any], list[SpeRegion], int]:
                 f"{len(regions)}: el archivo está truncado o mal escrito"
             )
     return fields, regions, offset
+
+
+def _looks_binary(head: bytes) -> bool:
+    """Whether a file is binary, by its control characters.
+
+    Vendors write binary inside ``.txt`` and text inside ``.spe``, so the
+    extension decides nothing and the content decides everything.
+    """
+    sample = head[:512]
+    if not sample:
+        return False
+    control = sum(1 for b in sample if b < 9 or (13 < b < 32))
+    return b"\x00" in sample or control > 0.02 * len(sample)
+
+
+def _spe_diagnosis(raw: bytes) -> str:
+    """Say what the file actually is, rather than what it is not.
+
+    "No parece un .spe de PHI" is true and useless: the user cannot act
+    on it, and ``.spe`` is not one format. PHI MultiPak writes an ASCII
+    SOFH/EOFH header; Princeton Instruments WinSpec writes a completely
+    unrelated binary CCD format under the same extension; and some
+    instrument software writes plain two-column text and calls it
+    ``.spe`` too. Naming which one this is turns a dead end into one
+    action.
+    """
+    head = raw[:64]
+    printable = "".join(
+        chr(b) if 32 <= b < 127 else "." for b in head[:32]
+    )
+    binary = _looks_binary(raw)
+
+    if raw[:2] in (b"\x00\x00", b"\x1e\x00", b"\x06\x00") and binary:
+        kind = (
+            "parece un .spe de WinSpec/Princeton Instruments, que es un "
+            "formato de imagen de CCD y no tiene nada que ver con XPS "
+            "aunque comparta extensión"
+        )
+    elif binary:
+        kind = (
+            "es binario y no lleva la cabecera SOFH/EOFH de PHI, así que no "
+            "se puede saber dónde están las intensidades. Adivinar la "
+            "disposición de un binario es como se leen mal unos datos sin "
+            "que nadie se entere, y por eso este lector no lo intenta"
+        )
+    else:
+        kind = (
+            "es texto pero no lleva la cabecera SOFH/EOFH de PHI. Si son dos "
+            "columnas (energía e intensidad), renómbralo a .txt y ábrelo: el "
+            "lector de texto lo acepta y deduce si el eje es de enlace o "
+            "cinético"
+        )
+    return (
+        f"no se reconoce como .spe de PHI MultiPak: {kind}. "
+        f"Empieza por: {printable!r}. " + SPE_EXPORT_ADVICE
+    )
 
 
 def _region_from(line: str) -> SpeRegion:
@@ -942,10 +1001,19 @@ def read_xps(path: str | Path, **options: Any) -> list[XPSSpectrum]:
     holding VAMAS.
     """
     path = Path(path)
-    head = path.read_bytes()[:4096]
-    if head.lstrip()[:4] == b"SOFH":
+    head = path.read_bytes()[:8192]
+    if b"SOFH" in head:
         accepted = {"work_function", "photon_energy"}
         return read_spe(path, **{k: v for k, v in options.items() if k in accepted})
+    if path.suffix.lower() == ".spe" and _looks_binary(head):
+        # The extension promised PHI and the content is binary and not
+        # PHI. Falling through to the text reader produces an error about
+        # columns that says nothing about the real problem, and guessing
+        # the layout of a binary is how data get read wrong silently.
+        # Plain text under a .spe extension is NOT refused: it is read,
+        # because telling someone to rename their file is not an answer
+        # when the program can simply open it.
+        raise XPSError(f"{path.name}: " + _spe_diagnosis(head))
     try:
         sample = head.decode("latin-1")
     except UnicodeDecodeError:                  # pragma: no cover

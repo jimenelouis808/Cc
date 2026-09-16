@@ -696,6 +696,29 @@ class DunnAnalysis:
         """The diffusion-controlled part at one scan rate, in A."""
         return self.k2 * math.sqrt(float(scan_rate))
 
+    #: What the separation is NOT, stated every time it is reported.
+    #:
+    #: This is the most misread result in the whole field and the
+    #: misreading always goes the same way: a voltammogram with obvious
+    #: redox peaks comes back "99 % capacitive" and the peaks look like
+    #: they have been swallowed. They have not. Dunn separates
+    #: SURFACE-CONTROLLED from DIFFUSION-CONTROLLED current, and a
+    #: surface-confined redox reaction is surface-controlled — its
+    #: current scales with ν, which is what "pseudocapacitive" means — so
+    #: it belongs in k₁ by definition and not by accident. It is the same
+    #: point the b-value carries: b ≈ 1 does not distinguish double layer
+    #: from pseudocapacitive, because both give it.
+    CAVEAT = (
+        "esta separación es capacitivo frente a DIFUSIVO, no doble capa "
+        "frente a redox. Un proceso redox confinado en la superficie es "
+        "superficial: su corriente escala con ν, que es lo que significa "
+        "«pseudocapacitivo», así que entra en k₁ por definición. Que un "
+        "voltamperograma con picos redox evidentes salga «99 % capacitivo» "
+        "es el resultado correcto, no un pico que se haya perdido. Lo que "
+        "separa doble capa de pseudocapacitivo es la PRESENCIA de picos "
+        "redox en el CV, y eso lo decide la clasificación de mecanismo"
+    )
+
     def summary(self) -> str:
         lines = ["Separación de Dunn (i = k₁ν + k₂√ν):", ""]
         for rate, fraction in sorted(self.fractions.items()):
@@ -710,6 +733,8 @@ class DunnAnalysis:
                     f"  en {poor} de {self.r_squared.size} potenciales el "
                     "ajuste de dos términos no describe los datos (R² < 0.95)"
                 )
+        lines.append("")
+        lines.append("  " + self.CAVEAT)
         if self.warnings:
             lines.append("")
             lines.extend("  ⚠ " + text for text in self.warnings)

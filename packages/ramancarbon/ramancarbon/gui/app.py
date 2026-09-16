@@ -584,7 +584,11 @@ class RamanCarbonApp:
 
         right = ttk.Frame(tab)
         right.pack(side="left", fill="both", expand=True)
-        plot_area, plot_body = card(right, None)
+        from .widgets import scrolled_text, split_column
+
+        fit_panes, (fit_top, fit_bottom) = split_column(right, (3, 2))
+        fit_panes.pack(fill="both", expand=True)
+        plot_area, plot_body = card(fit_top, None)
         plot_area.pack(fill="both", expand=True)
 
         def build(figure):
@@ -594,10 +598,8 @@ class RamanCarbonApp:
 
         self._make_canvas(plot_body, "fit", build)
 
-        summary, summary_body = card(right, None)
-        summary.pack(fill="x", pady=(PAD["sm"], 0))
-        from .widgets import scrolled_text
-
+        summary, summary_body = card(fit_bottom, None)
+        summary.pack(fill="both", expand=True)
         self.fit_text = scrolled_text(summary_body, self.palette, self.fonts["mono"],
                                       height=9)
 
@@ -628,7 +630,11 @@ class RamanCarbonApp:
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Diámetros  ")
 
-        top, top_body = card(tab, None)
+        from .widgets import split_column
+
+        panes, (pane_top, pane_bottom) = split_column(tab, (3, 2))
+        panes.pack(fill="both", expand=True)
+        top, top_body = card(pane_top, None)
         top.pack(fill="both", expand=True)
 
         def build(figure):
@@ -638,8 +644,8 @@ class RamanCarbonApp:
 
         self._make_canvas(top_body, "diameters", build)
 
-        bottom, bottom_body = card(tab, None)
-        bottom.pack(fill="x", pady=(PAD["sm"], 0))
+        bottom, bottom_body = card(pane_bottom, None)
+        bottom.pack(fill="both", expand=True)
         self.diameter_text = scrolled_text(bottom_body, self.palette,
                                            self.fonts["mono"], height=12)
 

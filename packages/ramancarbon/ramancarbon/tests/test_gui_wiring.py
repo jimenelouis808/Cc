@@ -745,3 +745,102 @@ def test_the_spectrum_plot_draws_three_groups_not_two():
     assert "bandas de carbono" in source
     assert "picos de una fase catalogada" in source
     assert "picos sin explicar" in source
+
+
+def _parent_of(node: ast.FunctionDef) -> dict[str, str]:
+    """Map each widget name in one build method to its parent's name.
+
+    Only the forms this package actually uses: ``x = ttk.Frame(parent)``,
+    ``outer, body = card(parent)`` (where ``body`` lives inside
+    ``outer``), and ``paned, (a, b) = split_column(parent)``.
+    """
+    parents: dict[str, str] = {}
+
+    def first_arg(call: ast.Call) -> str | None:
+        if call.args and isinstance(call.args[0], ast.Name):
+            return call.args[0].id
+        if call.args and isinstance(call.args[0], ast.Attribute):
+            return ast.unparse(call.args[0])
+        return None
+
+    for statement in ast.walk(node):
+        if not isinstance(statement, ast.Assign):
+            continue
+        value = statement.value
+        if not isinstance(value, ast.Call):
+            continue
+        parent = first_arg(value)
+        if parent is None:
+            continue
+        target = statement.targets[0]
+        if isinstance(target, ast.Name):
+            parents[target.id] = parent
+        elif isinstance(target, ast.Tuple):
+            names = [e for e in target.elts if isinstance(e, ast.Name)]
+            if names:
+                parents[names[0].id] = parent
+            # card() returns (outer, body): the body lives in the outer.
+            if len(names) > 1:
+                parents[names[1].id] = names[0].id
+    return parents
+
+
+@pytest.mark.parametrize("stem", sorted(SECTION_MODULES))
+def test_nothing_that_expands_is_packed_before_a_fixed_card(stem):
+    """Tk's packer gives each widget its requested size and only then
+    divides what is left, so a card packed AFTER an expanding SIBLING
+    gets whatever is over — which on a short window is nothing, and it is
+    simply not drawn.
+
+    This is not hypothetical. The Rietveld results card (convergence,
+    evaluation count, weight fractions, and the two report buttons) sat
+    after the parameter table, which expands, in the same pane; all four
+    were below the fold, and the user reported every one of them as a
+    missing feature when each was already computed. The electrochemistry
+    companion figures were crushed to a strip against the bottom edge for
+    the same reason.
+
+    So within one notebook page, once something has been packed with
+    ``expand=True``, nothing may be packed with ``fill="x"`` after it in
+    the same parent.
+    """
+    text = source(stem)
+    tree = ast.parse(text)
+    offenders: list[str] = []
+
+    for node in ast.walk(tree):
+        # Tab builders only. A sidebar lives inside `scrollable_column`,
+        # whose frame sizes itself to its contents, so there is no spare
+        # height for `expand` to claim and a fixed card below one keeps
+        # its natural size. A notebook page has a fixed height and does
+        # not scroll, which is what makes the ordering matter there.
+        if not (isinstance(node, ast.FunctionDef)
+                and node.name.startswith("_build_tab")):
+            continue
+        parents = _parent_of(node)
+        expanded: dict[str, list[str]] = {}
+        for call in ast.walk(node):
+            if not (isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Attribute)
+                    and call.func.attr == "pack"
+                    and isinstance(call.func.value, ast.Name)):
+                continue
+            name = call.func.value.id
+            parent = parents.get(name)
+            if parent is None:
+                continue
+            keywords = {k.arg: k.value for k in call.keywords}
+            expand = keywords.get("expand")
+            expands = isinstance(expand, ast.Constant) and expand.value is True
+            fill = keywords.get("fill")
+            fill_value = fill.value if isinstance(fill, ast.Constant) else None
+            if expands:
+                expanded.setdefault(parent, []).append(name)
+            elif fill_value == "x" and expanded.get(parent):
+                offenders.append(
+                    f"{stem}.{node.name}: {name}.pack(fill='x') comes after "
+                    f"{expanded[parent]} in the same parent ({parent}), so it "
+                    "gets whatever height is left over — often none"
+                )
+
+    assert not offenders, "\n".join(offenders)

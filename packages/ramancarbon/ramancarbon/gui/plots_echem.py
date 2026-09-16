@@ -235,7 +235,7 @@ def plot_dunn(ax, analysis, curve, palette: Palette,
     capacitive = analysis.capacitive_current(rate)
     ax.fill_between(analysis.potentials, 0.0, 1e3 * capacitive,
                     color=palette.component_colour(0), alpha=0.35,
-                    linewidth=0, label="capacitivo (k₁ν)")
+                    linewidth=0, label="superficial (k₁ν)")
     if curve is not None and abs(curve.scan_rate - rate) < 1e-9:
         try:
             anodic, _ = curve.sweeps()
@@ -245,9 +245,16 @@ def plot_dunn(ax, analysis, curve, palette: Palette,
             pass
     ax.plot(analysis.potentials, 1e3 * (capacitive + analysis.diffusive_current(rate)),
             color=palette.fitted, linewidth=1.0, label="k₁ν + k₂√ν")
+    ax.plot(analysis.potentials, 1e3 * analysis.diffusive_current(rate),
+            color=palette.accent, linewidth=0.9, linestyle="--",
+            label="difusivo (k₂√ν)")
     fraction = analysis.fractions.get(rate)
+    # "Superficial", not "capacitivo". A surface-confined redox reaction
+    # is surface-controlled, so it sits in k1 by definition, and the word
+    # "capacitive" on this plot is what makes people read a correct
+    # 99 % as their redox peaks having been swallowed.
     ax.set_title(
-        f"{1e3 * rate:g} mV/s" + (f" — {100 * fraction:.0f} % capacitivo"
+        f"{1e3 * rate:g} mV/s" + (f" — {100 * fraction:.0f} % superficial"
                                   if fraction is not None else ""),
         fontsize=8,
     )

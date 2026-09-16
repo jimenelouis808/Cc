@@ -21,7 +21,17 @@ from ..echem.curve import Electrode
 from .base import SectionApp, placeholder
 from .echem_state import EchemSession
 from .theme import PAD
-from .widgets import card, fill_table, hint, labelled, scrolled_text, set_text, table, scrollable_column
+from .widgets import (
+    card,
+    fill_table,
+    hint,
+    labelled,
+    scrollable_column,
+    scrolled_text,
+    set_text,
+    split_column,
+    table,
+)
 
 FILE_TYPES = (
     ("Exportaciones de potenciostato", "*.txt *.csv *.dat *.mpt *.DTA *.dta *.asc"),
@@ -214,25 +224,29 @@ class EchemApp(SectionApp):
              "superponen exactamente. Lo que no se superponga es la parte que "
              "no es capacitiva.",
              wrap=700)
-        outer, body = card(tab, None)
+        paned, (top, bottom) = split_column(tab, (3, 2))
+        paned.pack(fill="both", expand=True)
+        outer, body = card(top, None)
         outer.pack(fill="both", expand=True)
         self.make_canvas(body, "cv", lambda f: f.add_subplot(111))
-        rates_card, rates_body = card(tab, None)
-        rates_card.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        rates_card, rates_body = card(bottom, None)
+        rates_card.pack(fill="both", expand=True)
         self.make_canvas(rates_body, "rates",
                          lambda f: (f.add_subplot(131), f.add_subplot(132),
                                     f.add_subplot(133)),
-                         figsize=(7.6, 2.8))
+                         figsize=(7.6, 3.4))
 
     def _build_tab_gcd(self) -> None:
         ttk = self.ttk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Carga-descarga  ")
-        outer, body = card(tab, None)
+        paned, (top, bottom) = split_column(tab, (3, 2))
+        paned.pack(fill="both", expand=True)
+        outer, body = card(top, None)
         outer.pack(fill="both", expand=True)
         self.make_canvas(body, "gcd", lambda f: f.add_subplot(111))
-        info, info_body = card(tab, "Ramas")
-        info.pack(fill="x", pady=(PAD["sm"], 0))
+        info, info_body = card(bottom, "Ramas")
+        info.pack(fill="both", expand=True)
         self.branch_table = table(
             info_body,
             ["rama", "duración (s)", "V inicio", "V fin", "I (mA)", "IR (mV)",
@@ -244,17 +258,24 @@ class EchemApp(SectionApp):
         ttk = self.ttk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Impedancia  ")
-        outer, body = card(tab, None)
+        paned, (top, middle, lower) = split_column(tab, (3, 2, 3))
+        paned.pack(fill="both", expand=True)
+        outer, body = card(top, None)
         outer.pack(fill="both", expand=True)
         self.make_canvas(body, "nyquist", lambda f: f.add_subplot(111),
                          figsize=(6.0, 5.0))
-        bode_card, bode_body = card(tab, None)
-        bode_card.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        bode_card, bode_body = card(middle, None)
+        bode_card.pack(fill="both", expand=True)
         self.make_canvas(bode_body, "bode",
                          lambda f: (f.add_subplot(121), f.add_subplot(122)),
-                         figsize=(7.6, 3.0))
-        editor, editor_body = card(tab, "Circuito equivalente")
-        editor.pack(fill="x", pady=(PAD["sm"], 0))
+                         figsize=(7.6, 3.4))
+        # The circuit editor and its two tables get their own pane with a
+        # scrollbar rather than being packed under the figures, where the
+        # figures take the height first and leave them a sliver.
+        controls_column, controls = scrollable_column(lower, width=640)
+        controls_column.pack(fill="both", expand=True)
+        editor, editor_body = card(controls, "Circuito equivalente")
+        editor.pack(fill="x")
         row = ttk.Frame(editor_body)
         row.pack(fill="x")
         ttk.Label(row, text="Circuito").pack(side="left")
@@ -282,7 +303,7 @@ class EchemApp(SectionApp):
              "Ejemplo: R0-(R1|Q1)-T1.",
              wrap=900)
 
-        setup, setup_body = card(tab, "Valores de partida y parámetros fijos")
+        setup, setup_body = card(controls, "Valores de partida y parámetros fijos")
         setup.pack(fill="x", pady=(PAD["sm"], 0))
         self.circuit_setup_table = table(
             setup_body, ["parámetro", "valor de partida", "fijo"], height=6)
@@ -304,7 +325,7 @@ class EchemApp(SectionApp):
              "100 kHz — y un engaño para todo lo demás.",
              wrap=900)
 
-        info, info_body = card(tab, "Parámetros del circuito")
+        info, info_body = card(controls, "Parámetros del circuito")
         info.pack(fill="x", pady=(PAD["sm"], 0))
         self.circuit_table = table(
             info_body, ["parámetro", "valor", "incertidumbre", "fijo"],
@@ -335,12 +356,14 @@ class EchemApp(SectionApp):
         ttk.Button(controls, text="Recalcular",
                    command=self._recompute_drt).pack(side="left")
 
-        outer, body = card(tab, None)
+        paned, (top, bottom) = split_column(tab, (3, 2))
+        paned.pack(fill="both", expand=True)
+        outer, body = card(top, None)
         outer.pack(fill="both", expand=True)
         self.make_canvas(body, "drt", lambda f: f.add_subplot(111),
                          figsize=(7.6, 4.2))
-        info, info_body = card(tab, "Procesos resueltos")
-        info.pack(fill="x", pady=(PAD["sm"], 0))
+        info, info_body = card(bottom, "Procesos resueltos")
+        info.pack(fill="both", expand=True)
         self.drt_table = table(
             info_body, ["τ (s)", "R (Ω)", "C = τ/R (mF)", "fracción de R"],
             height=6)
@@ -359,11 +382,13 @@ class EchemApp(SectionApp):
         ttk = self.ttk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Capacitancia  ")
-        outer, body = card(tab, "C(ω) sin ajustar nada")
+        paned, (top, bottom) = split_column(tab, (1, 1))
+        paned.pack(fill="both", expand=True)
+        outer, body = card(top, "C(ω) sin ajustar nada")
         outer.pack(fill="both", expand=True)
         self.make_canvas(body, "capacitance",
                          lambda f: (f.add_subplot(121), f.add_subplot(122)),
-                         figsize=(7.6, 3.2))
+                         figsize=(7.6, 3.4))
         hint(body,
              "Un circuito es una hipótesis; C(ω) = 1/(jωZ) son los datos. El "
              "máximo de C″ da τ₀ sin necesitar la masa. Ojo: aquí Z″ se "
@@ -371,8 +396,8 @@ class EchemApp(SectionApp):
              "−Z″ de un Nyquist devuelve capacitancias negativas.",
              wrap=900)
 
-        compare_card, compare_body = card(tab, "La misma muestra por tres métodos")
-        compare_card.pack(fill="x", pady=(PAD["sm"], 0))
+        compare_card, compare_body = card(bottom, "La misma muestra por tres métodos")
+        compare_card.pack(fill="x")
         self.capacitance_table = table(
             compare_body, ["método", "condición", "C (mF)", "C (F/g)"],
             height=5)
@@ -384,7 +409,7 @@ class EchemApp(SectionApp):
              "ES el resultado.",
              wrap=900)
 
-        ragone_card, ragone_body = card(tab, "Ragone")
+        ragone_card, ragone_body = card(bottom, "Ragone")
         ragone_card.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
         self.make_canvas(ragone_body, "ragone", lambda f: f.add_subplot(111),
                          figsize=(6.0, 3.6))

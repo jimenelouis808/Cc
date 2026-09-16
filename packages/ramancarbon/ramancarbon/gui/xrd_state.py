@@ -420,6 +420,74 @@ class XRDSession:
             )
         return rows
 
+    def refinement_rows(self) -> list[tuple[str, str]]:
+        """The agreement factors, as a refinement program reports them.
+
+        The engine has carried all of these since the counter was added;
+        the section was showing two of them in a plot title. FullProf
+        prints Rp, Rwp, Rexp and chi-squared together because they answer
+        different questions — Rwp against Rexp is whether the fit is as
+        good as the counting statistics allow, and neither is worth
+        anything until the difference curve has no structure in it.
+        """
+        item = self.item
+        result = item.refinement if item is not None else None
+        if result is None:
+            return []
+        rows = [
+            ("Estado", "convergido" if result.converged else "NO convergido"),
+            ("Mensaje", result.message or "—"),
+            ("Rp", f"{100 * result.r_p:.2f} %"),
+            ("Rwp", f"{100 * result.r_wp:.2f} %"),
+            ("Rexp", f"{100 * result.r_expected:.2f} %"),
+            ("GOF (Rwp/Rexp)", f"{result.gof:.3f}"),
+            ("χ² reducida", f"{result.chi_squared:.3f}"),
+            ("Evaluaciones del residuo", f"{result.n_evaluations}"),
+            ("Parámetros libres",
+             f"{result.free_parameters} sobre {result.pattern.n} puntos"),
+            ("Cero", f"{result.zero:+.4f}°"),
+            ("Desplazamiento de muestra", f"{result.displacement:+.4f}°"),
+        ]
+        if result.stages:
+            rows.append(("Etapas", " → ".join(result.stages)))
+        return rows
+
+    def fraction_rows(self) -> list[tuple[str, str, str, str]]:
+        """``(phase, formula, weight %, crystallite size)``.
+
+        The fractions are of the CRYSTALLINE, MODELLED part and they sum
+        to 100 % always: a phase nobody modelled does not lower the
+        others, its intensity is shared out among them, and the amorphous
+        content does not appear at all. That warning travels with the
+        numbers rather than being left in the report.
+        """
+        item = self.item
+        result = item.refinement if item is not None else None
+        if result is None:
+            return []
+        fractions = result.weight_fractions()
+        sizes = result.crystallite_sizes(self.instrument_fwhm)
+        rows = []
+        for phase in result.phases:
+            crystal = phase.current_crystal()
+            fraction = fractions.get(crystal.name)
+            size = sizes.get(crystal.name)
+            rows.append((
+                crystal.name,
+                crystal.formula,
+                f"{100 * fraction:.1f} %" if fraction is not None else "—",
+                f"{size:.1f} nm" if size else "—",
+            ))
+        return rows
+
+    def refinement_output(self) -> str:
+        """The full refinement report, for reading or saving."""
+        item = self.item
+        result = item.refinement if item is not None else None
+        if result is None:
+            return "No hay ningún refinamiento todavía."
+        return result.summary(self.instrument_fwhm)
+
     def parameter_rows(self) -> list[tuple[str, ...]]:
         item = self.item
         if item is None or item.parameters is None:

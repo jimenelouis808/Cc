@@ -38,6 +38,37 @@ def card(parent, title: Optional[str] = None, subtitle: Optional[str] = None):
     return outer, body
 
 
+def split_column(parent, weights: Sequence[int] = (3, 2)):
+    """A vertical stack of panes with draggable sashes between them.
+
+    Two cards packed with ``fill="both", expand=True`` do NOT share the
+    height fairly: the packer gives each its requested size first and
+    only then divides what is left, so a 500 px main figure and a 280 px
+    strip of companion figures come out as a full-size plot and a sliver
+    — which is what every one of these tabs looked like, with the
+    companion panels crushed against the bottom edge and no way to see
+    them. Worse, the sliver has no minimum, so on a shorter window the
+    companions disappear entirely.
+
+    A paned window gives each pane a real share AND lets the user drag
+    the boundary, which is the actual answer to "I cannot expand it".
+
+    Returns
+    -------
+    (ttk.PanedWindow, list[ttk.Frame])
+        The container and one frame per weight, already added.
+    """
+    from tkinter import ttk
+
+    paned = ttk.PanedWindow(parent, orient="vertical")
+    panes = []
+    for weight in weights:
+        frame = ttk.Frame(paned)
+        paned.add(frame, weight=int(weight))
+        panes.append(frame)
+    return paned, panes
+
+
 def scrollable_column(parent, width: int = 280):
     """A fixed-width column that scrolls when its contents outgrow it.
 
@@ -264,5 +295,6 @@ __all__ = [
     "scrolled_text",
     "separator",
     "set_text",
+    "split_column",
     "table",
 ]

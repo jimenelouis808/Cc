@@ -1205,6 +1205,65 @@ contra σ, y se usaba una σ para todo el espectro.
   equivocada, o deja una en blanco. Hay una prueba estática que lo
   comprueba pestaña por pestaña en las cuatro secciones nuevas.
 
+## El empaquetador de Tk reparte lo que SOBRA
+
+- **Una tarjeta empaquetada DESPUÉS de una hermana con `expand=True` se
+  queda con lo que sobre, que en una ventana corta es nada, y
+  sencillamente no se dibuja.** Tk da a cada widget su tamaño pedido y
+  sólo entonces reparte el resto.
+- No es hipotético y costó cuatro funcionalidades que ya existían: la
+  tarjeta de resultado del Rietveld —convergencia, contador de
+  evaluaciones, fracciones en peso y los dos botones de informe— iba
+  después de la tabla de parámetros, que se expande, así que estaba por
+  debajo del borde. El usuario informó de las cuatro como si faltaran, y
+  las cuatro estaban calculadas desde hacía dos versiones. Las figuras
+  complementarias de electroquímica quedaban aplastadas contra el borde
+  inferior por lo mismo.
+- **La regla: dentro de una pestaña, en cuanto algo se empaqueta con
+  `expand=True`, nada puede empaquetarse con `fill="x"` después en el
+  mismo padre.** Hay una prueba estática que lo comprueba en las cinco
+  secciones y que cazó tres casos más que yo mismo acababa de introducir.
+- Las barras laterales quedan fuera de la regla a propósito: viven dentro
+  de `scrollable_column`, cuyo marco se dimensiona a su contenido, así que
+  no hay altura sobrante que `expand` pueda reclamar.
+- **Y donde hay dos figuras apiladas, va un divisor arrastrable**
+  (`split_column`), no dos `expand=True` compitiendo. «No se puede
+  expandir» era literal.
+
+## Un `.spe` no es un formato
+
+- **La extensión no decide nada; el contenido sí.** PHI MultiPak escribe
+  una cabecera ASCII SOFH/EOFH; WinSpec de Princeton Instruments escribe
+  un formato binario de imagen de CCD que no tiene nada que ver con XPS
+  bajo la misma extensión; y hay software que escribe dos columnas de
+  texto y lo llama `.spe` igual.
+- **«No parece un .spe de PHI» es cierto e inútil.** El usuario no puede
+  actuar sobre eso. El lector dice ahora cuál de los tres es, con los
+  primeros bytes del archivo, y la acción concreta para cada caso.
+- **El SOFH no tiene por qué estar en el byte cero**, y rechazar por ese
+  tecnicismo se lee como «este programa no abre mis archivos».
+- **Y un `.spe` que es texto de dos columnas se LEE**, no se rechaza
+  pidiendo que lo renombren: decirle a alguien que renombre su archivo no
+  es una respuesta cuando el programa puede abrirlo. Lo que se sigue
+  rechazando es el binario desconocido, por la razón de siempre.
+
+## Dunn: lo que NO separa
+
+- **Es capacitivo frente a DIFUSIVO, no doble capa frente a redox.** Un
+  proceso redox confinado en la superficie es superficial: su corriente
+  escala con ν, que es exactamente lo que significa «pseudocapacitivo»,
+  así que entra en k₁ por definición y no por accidente. Que un
+  voltamperograma con picos redox evidentes salga «99 % capacitivo» es el
+  resultado correcto, no un pico que se haya perdido.
+- Es la lectura equivocada más común del campo y va escrita en el propio
+  resultado (`DunnAnalysis.CAVEAT`), no sólo en la documentación. La
+  gráfica dice «superficial», no «capacitivo», por la misma razón, y
+  dibuja también la parte difusiva para que se vea que no es nula por
+  omisión.
+- **Comprobado contra el caso cerrado**: voltamperogramas construidos con
+  k₁ y k₂ conocidos —k₂ concentrada en un pico redox— devuelven k₁ = 0.002
+  frente a 2e-3 y k₂ = 0.00797 frente a 8e-3, con R² = 1.
+
 ## Controles de ajuste y de sesión
 
 - **Ligar no es fijar, y no es un atajo.** Un parámetro que los datos no
