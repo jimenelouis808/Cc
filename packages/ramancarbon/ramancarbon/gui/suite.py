@@ -28,6 +28,9 @@ from .theme import PAD, PALETTES, apply_theme
 #: The plot presets offered in the header, in the order they are shown.
 #: Screen first, then the journals, then the rest — which is the order
 #: somebody actually needs them in.
+#: Backgrounds offered for the figures, apart from the window's theme.
+FIGURE_THEMES: tuple[str, ...] = ("tema", "claro", "oscuro")
+
 PLOT_PRESETS: tuple[str, ...] = (
     "predeterminado", "acs", "acs-doble", "rsc", "elsevier", "nature",
     "aps", "wiley", "tesis", "presentacion", "poster", "grises", "cascada",
@@ -62,6 +65,8 @@ class Suite:
         self.root = root
         self.session = Session()
         self.palette = PALETTES["claro"]
+        self.figure_palette = PALETTES[
+            self.session.figure_palette_name(self.session.palette_name)]
         self.fonts = apply_theme(root, self.palette)
         self.sections: dict[str, Any] = {}
         self._frames: dict[str, Any] = {}
@@ -108,6 +113,52 @@ class Suite:
         ttk.Label(header, text="Figura:", style="Muted.TLabel").pack(
             side="right", padx=(0, PAD["xs"]))
 
+        # The figure background is a SEPARATE choice from the window's.
+        # A dark window is what you want for an afternoon of fitting and a
+        # white figure is what the manuscript wants, and there is no
+        # reason to have to pick one for both. Unlike the theme, this one
+        # applies immediately: the figures are redrawn, not the chrome.
+        self.figure_theme_var = self.tk.StringVar(value=self.session.figure_theme)
+        background = ttk.Combobox(
+            header, textvariable=self.figure_theme_var, width=8,
+            state="readonly", values=list(FIGURE_THEMES),
+        )
+        background.pack(side="right", padx=(0, PAD["sm"]))
+        background.bind("<<ComboboxSelected>>", self._on_figure_theme_changed)
+        ttk.Label(header, text="Fondo:", style="Muted.TLabel").pack(
+            side="right", padx=(0, PAD["xs"]))
+
+    def _on_figure_theme_changed(self, _event=None) -> None:
+        """Repaint every figure on the chosen background, right away."""
+        self.session.figure_theme = self.figure_theme_var.get()
+        self.session.remember()
+        self.figure_palette = PALETTES[
+            self.session.figure_palette_name(self.session.palette_name)]
+        for section in self.sections.values():
+            section.figure_palette = self.figure_palette
+            self._redraw(section)
+        for setter in self._status_setters():
+            setter(
+                f"Fondo de las figuras: {self.session.figure_theme}"
+                + (" (el mismo que la ventana)"
+                   if self.session.figure_theme == "tema" else
+                   ". La ventana no cambia; las figuras sí, y así se guardan.")
+            )
+
+    def _status_setters(self):
+        for section in self.sections.values():
+            setter = getattr(section, "_set_status", None)
+            if callable(setter):
+                yield setter
+
+    @staticmethod
+    def _redraw(section) -> None:
+        """Ask a section to repaint, whatever it calls that."""
+        redraw = (getattr(section, "_redraw", None)
+                  or getattr(section, "_redraw_all", None))
+        if redraw is not None:
+            redraw()
+
     def _on_preset_changed(self, _event=None) -> None:
         """Remember the chosen preset, and say what it means."""
         chosen = self.preset_var.get()
@@ -145,6 +196,15 @@ class Suite:
         """Build a section the first time it is shown."""
         if key in self.sections:
             return
+        self._build_section(key)
+        section = self.sections.get(key)
+        if section is not None:
+            # Sections are built lazily, so one opened after the figure
+            # background was chosen would otherwise come up on the old one.
+            section.figure_palette = self.figure_palette
+            self._redraw(section)
+
+    def _build_section(self, key: str) -> None:
         frame = self._frames[key]
         if key == "carbono":
             from .app import RamanCarbonApp
@@ -185,13 +245,12 @@ class Suite:
             parent=self.root,
         )
         self.palette = PALETTES[self.session.palette_name]
+        self.figure_palette = PALETTES[
+            self.session.figure_palette_name(self.session.palette_name)]
         for section in self.sections.values():
             section.palette = self.palette
-            redraw = getattr(section, "_redraw", None) or getattr(
-                section, "_redraw_all", None
-            )
-            if redraw is not None:
-                redraw()
+            section.figure_palette = self.figure_palette
+            self._redraw(section)
 
 
 _TK_MISSING = """

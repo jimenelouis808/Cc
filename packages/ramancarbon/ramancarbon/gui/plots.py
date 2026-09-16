@@ -83,6 +83,8 @@ def plot_spectrum(
     peaks: Optional[Sequence[PeakMeasurement]] = None,
     label_peaks: bool = True,
     title: Optional[str] = None,
+    explained: Optional[Sequence[float]] = None,
+    match_tolerance: float = 1.0,
 ) -> None:
     """Draw a spectrum, optionally with the raw trace and the baseline.
 
@@ -103,6 +105,17 @@ def plot_spectrum(
         Detected peaks to mark.
     label_peaks:
         Whether to annotate each marker with its position.
+    explained:
+        Positions a catalogued phase accounts for. Those peaks are drawn
+        in a second colour, so "what is left over" — the actual question —
+        can be read off the figure instead of compared against the report
+        line by line. Note what this does NOT mean: an unexplained peak is
+        not noise and not a failure. It is the phase you were not
+        expecting, and on a sample with a catalyst in it that is usually
+        the interesting one.
+    match_tolerance:
+        How close a peak must be to a position in ``explained`` to count
+        as the same band, in cm⁻¹.
     title:
         Axes title.
     """
@@ -134,10 +147,27 @@ def plot_spectrum(
     if peaks:
         xs = [p.position for p in peaks]
         ys = [spectrum.interpolate_at([p.position])[0] for p in peaks]
-        ax.plot(xs, ys, linestyle="none", marker="v", markersize=5,
-                color=palette.accent, label="picos")
+        # Explained and unexplained peaks in different colours. Which are
+        # which is the first question anyone asks of a spectrum with a
+        # catalyst in it, and a single colour makes the viewer count
+        # positions against the report by hand.
+        known = set(explained or ())
+        is_known = [any(abs(x - k) <= match_tolerance for k in known) for x in xs]
+        groups = (
+            (False, "picos sin explicar", palette.accent, "v"),
+            (True, "picos de una fase catalogada", palette.warning, "D"),
+        )
+        for flag, label, colour, marker in groups:
+            picked = [(x, y) for x, y, k in zip(xs, ys, is_known) if k is flag]
+            if not picked:
+                continue
+            ax.plot([x for x, _ in picked], [y for _, y in picked],
+                    linestyle="none", marker=marker,
+                    markersize=5 if marker == "v" else 4,
+                    color=colour, label=label)
         if label_peaks:
-            for x, y, dy in zip(xs, ys, _stagger(xs, spectrum.range, spacing=0.035)):
+            offsets = _stagger(xs, spectrum.range, spacing=0.035)
+            for x, y, dy, k in zip(xs, ys, offsets, is_known):
                 ax.annotate(
                     f"{x:.0f}",
                     (x, y),
@@ -145,7 +175,7 @@ def plot_spectrum(
                     xytext=(0, dy),
                     ha="center",
                     fontsize=7,
-                    color=palette.text_muted,
+                    color=palette.warning if k else palette.text_muted,
                 )
             ax.margins(y=0.18)
     ax.set_xlabel("Desplazamiento Raman (cm⁻¹)")

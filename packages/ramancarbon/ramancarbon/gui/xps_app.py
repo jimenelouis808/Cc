@@ -670,9 +670,9 @@ class XPSApp(SectionApp):
         ax = figure.add_subplot(111)
         surveys = self.session.surveys
         if not surveys:
-            placeholder(ax, "Sin barrido ancho cargado", self.palette)
+            placeholder(ax, "Sin barrido ancho cargado", self.figure_palette)
             return
-        plot_survey(ax, surveys[0], self.palette, self.session.survey)
+        plot_survey(ax, surveys[0], self.figure_palette, self.session.survey)
 
     def _draw_region(self, figure) -> None:
         from .plots_xps import plot_region
@@ -680,18 +680,18 @@ class XPSApp(SectionApp):
         result = self.session.fits.get(self.region_var.get())
         if result is None:
             placeholder(figure.add_subplot(111),
-                        "Elige una región y pulsa Ajustar", self.palette)
+                        "Elige una región y pulsa Ajustar", self.figure_palette)
             return
-        plot_region(figure, result, self.palette)
+        plot_region(figure, result, self.figure_palette)
 
     def _draw_counts(self, figure) -> None:
         from .plots_xps import plot_count_comparison
 
         ax = figure.add_subplot(111)
         if not self._comparison:
-            placeholder(ax, "Pulsa «¿Cuántas componentes?»", self.palette)
+            placeholder(ax, "Pulsa «¿Cuántas componentes?»", self.figure_palette)
             return
-        plot_count_comparison(ax, self._comparison, self.palette)
+        plot_count_comparison(ax, self._comparison, self.figure_palette)
 
     def _draw_composition(self, figure) -> None:
         from .plots_xps import plot_composition, plot_states
@@ -699,13 +699,13 @@ class XPSApp(SectionApp):
         left = figure.add_subplot(121)
         right = figure.add_subplot(122)
         if self.session.composition is None:
-            placeholder(left, "Pulsa Cuantificar", self.palette)
+            placeholder(left, "Pulsa Cuantificar", self.figure_palette)
         else:
-            plot_composition(left, self.session.composition, self.palette)
+            plot_composition(left, self.session.composition, self.figure_palette)
         if not self.session.fits:
-            placeholder(right, "Sin regiones ajustadas", self.palette)
+            placeholder(right, "Sin regiones ajustadas", self.figure_palette)
         else:
-            plot_states(right, list(self.session.fits.values()), self.palette)
+            plot_states(right, list(self.session.fits.values()), self.figure_palette)
 
 
 def _number(text: str) -> Optional[float]:

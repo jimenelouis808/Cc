@@ -240,12 +240,63 @@ def apply_theme(root, palette: Palette) -> dict:
               background=[("selected", palette.surface)],
               foreground=[("selected", palette.text)])
 
+    # Entry, combobox and spinbox all need a state MAP, not just a
+    # configure. clam ships its own map for the readonly and disabled
+    # states, and a map beats a configure: on a dark palette the field
+    # stayed clam's pale grey while the text took our light foreground,
+    # so every readonly combo box in the suite -- the figure preset, the
+    # baseline method, the normalisation, the deconvolution preset, the
+    # profile, the ratio basis -- was light grey on light grey and could
+    # not be read at all. Spinboxes were never configured in the first
+    # place. This is also why the numbers in the preprocessing panel
+    # looked empty.
     style.configure("TEntry", fieldbackground=palette.surface,
                     foreground=palette.text, bordercolor=palette.border,
                     insertcolor=palette.text)
+    style.map("TEntry",
+              fieldbackground=[("readonly", palette.surface_alt),
+                               ("disabled", palette.surface_alt)],
+              foreground=[("readonly", palette.text),
+                          ("disabled", palette.text_muted)])
     style.configure("TCombobox", fieldbackground=palette.surface,
                     background=palette.surface, foreground=palette.text,
-                    arrowcolor=palette.text_muted, bordercolor=palette.border)
+                    arrowcolor=palette.text_muted, bordercolor=palette.border,
+                    selectbackground=palette.surface,
+                    selectforeground=palette.text)
+    style.map("TCombobox",
+              fieldbackground=[("readonly", palette.surface),
+                               ("disabled", palette.surface_alt)],
+              background=[("readonly", palette.surface),
+                          ("disabled", palette.surface_alt)],
+              foreground=[("readonly", palette.text),
+                          ("disabled", palette.text_muted)],
+              # A readonly combobox draws its text as a SELECTION when it
+              # has focus. Without these two the value vanishes the moment
+              # you click it, which reads as the widget clearing itself.
+              selectbackground=[("readonly", palette.surface),
+                                ("focus", palette.surface)],
+              selectforeground=[("readonly", palette.text),
+                                ("focus", palette.text)],
+              arrowcolor=[("disabled", palette.border)])
+    style.configure("TSpinbox", fieldbackground=palette.surface,
+                    background=palette.surface_alt, foreground=palette.text,
+                    arrowcolor=palette.text_muted, bordercolor=palette.border,
+                    insertcolor=palette.text,
+                    selectbackground=palette.accent,
+                    selectforeground=palette.accent_text)
+    style.map("TSpinbox",
+              fieldbackground=[("readonly", palette.surface),
+                               ("disabled", palette.surface_alt)],
+              foreground=[("readonly", palette.text),
+                          ("disabled", palette.text_muted)],
+              arrowcolor=[("disabled", palette.border)])
+
+    # The combobox dropdown is a plain Tk listbox, not a ttk widget, so it
+    # ignores every style above and has to be told separately.
+    root.option_add("*TCombobox*Listbox.background", palette.surface)
+    root.option_add("*TCombobox*Listbox.foreground", palette.text)
+    root.option_add("*TCombobox*Listbox.selectBackground", palette.accent)
+    root.option_add("*TCombobox*Listbox.selectForeground", palette.accent_text)
     style.configure("TCheckbutton", background=palette.surface,
                     foreground=palette.text)
     style.configure("TRadiobutton", background=palette.surface,

@@ -479,11 +479,11 @@ class EchemApp(SectionApp):
         curves = [c for c in ([self.session.cv] if self.session.cv else [])]
         curves.extend(self.session.rate_series)
         if not curves:
-            placeholder(ax, "Carga un voltamperograma", self.palette)
+            placeholder(ax, "Carga un voltamperograma", self.figure_palette)
             return
         result = self.session.result
         plot_cv(
-            ax, curves, self.palette,
+            ax, curves, self.figure_palette,
             peaks=result.cv.peaks if result and result.cv else None,
             normalise_by_rate=bool(self.normalise_var.get()),
         )
@@ -496,26 +496,26 @@ class EchemApp(SectionApp):
         right = figure.add_subplot(133)
         result = self.session.result
         if result is None or result.rates is None:
-            placeholder(left, "Carga una serie de velocidades", self.palette)
-            placeholder(middle, "", self.palette)
-            placeholder(right, "", self.palette)
+            placeholder(left, "Carga una serie de velocidades", self.figure_palette)
+            placeholder(middle, "", self.figure_palette)
+            placeholder(right, "", self.figure_palette)
             return
-        plot_rate_capacitance(left, result.rates, self.palette)
-        plot_b_values(middle, result.rates, self.palette)
+        plot_rate_capacitance(left, result.rates, self.figure_palette)
+        plot_b_values(middle, result.rates, self.figure_palette)
         if result.dunn is None:
-            placeholder(right, "Dunn necesita tres velocidades", self.palette)
+            placeholder(right, "Dunn necesita tres velocidades", self.figure_palette)
         else:
-            plot_dunn(right, result.dunn, self.session.cv, self.palette)
+            plot_dunn(right, result.dunn, self.session.cv, self.figure_palette)
 
     def _draw_gcd(self, figure) -> None:
         from .plots_echem import plot_gcd
 
         ax = figure.add_subplot(111)
         if self.session.gcd is None:
-            placeholder(ax, "Carga una curva de carga-descarga", self.palette)
+            placeholder(ax, "Carga una curva de carga-descarga", self.figure_palette)
             return
         result = self.session.result
-        plot_gcd(ax, self.session.gcd, self.palette,
+        plot_gcd(ax, self.session.gcd, self.figure_palette,
                  result.gcd if result else None)
 
     def _draw_nyquist(self, figure) -> None:
@@ -523,10 +523,10 @@ class EchemApp(SectionApp):
 
         ax = figure.add_subplot(111)
         if self.session.eis is None:
-            placeholder(ax, "Carga un espectro de impedancia", self.palette)
+            placeholder(ax, "Carga un espectro de impedancia", self.figure_palette)
             return
         result = self.session.result
-        plot_nyquist(ax, self.session.eis, self.palette,
+        plot_nyquist(ax, self.session.eis, self.figure_palette,
                      result.eis if result else None)
 
     def _draw_bode(self, figure) -> None:
@@ -535,15 +535,15 @@ class EchemApp(SectionApp):
         left = figure.add_subplot(121)
         right = figure.add_subplot(122)
         if self.session.eis is None:
-            placeholder(left, "", self.palette)
-            placeholder(right, "", self.palette)
+            placeholder(left, "", self.figure_palette)
+            placeholder(right, "", self.figure_palette)
             return
         result = self.session.result
-        plot_bode(left, self.session.eis, self.palette, result.eis if result else None)
+        plot_bode(left, self.session.eis, self.figure_palette, result.eis if result else None)
         if result is not None and result.eis is not None:
-            plot_kk_residuals(right, result.eis, self.palette)
+            plot_kk_residuals(right, result.eis, self.figure_palette)
         else:
-            placeholder(right, "Analiza para ver Kramers-Kronig", self.palette)
+            placeholder(right, "Analiza para ver Kramers-Kronig", self.figure_palette)
 
     def _draw_tafel(self, figure) -> None:
         from .plots_echem import plot_tafel
@@ -552,19 +552,19 @@ class EchemApp(SectionApp):
         result = self.session.result
         curve = self.session.lsv
         if result is None or result.catalysis is None or curve is None:
-            placeholder(ax, "Carga una curva de polarización", self.palette)
+            placeholder(ax, "Carga una curva de polarización", self.figure_palette)
             return
         catalysis = result.catalysis
         rhe, _ = curve.electrode.to_rhe(curve.potential)
         if rhe is None:
-            placeholder(ax, "Hace falta el pH para pasar a RHE", self.palette)
+            placeholder(ax, "Hace falta el pH para pasar a RHE", self.figure_palette)
             return
         corrected, _ = curve.electrode.ir_correct(rhe, curve.current)
         equilibrium = 1.23 if catalysis.reaction == "OER" else 0.0
         sign = 1.0 if catalysis.reaction == "OER" else -1.0
         area = curve.electrode.area_cm2 or 1.0
         plot_tafel(
-            ax, catalysis, self.palette,
+            ax, catalysis, self.figure_palette,
             overpotential=sign * (corrected - equilibrium),
             current_density=1e3 * curve.current / area,
         )

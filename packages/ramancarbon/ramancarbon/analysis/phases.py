@@ -39,6 +39,7 @@ an ordinary crystal does not move at all.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -297,6 +298,10 @@ class PhaseReport:
     lone line each and went through in silence.
     """
     unmatched_peaks: list[PeakMeasurement] = field(default_factory=list)
+    elements: list[str] = field(default_factory=list)
+    """The elements the search was restricted to, empty when it was not.
+    A restricted search is both narrower and LOUDER: see
+    :func:`find_phases`."""
     warnings: list[str] = field(default_factory=list)
     xrd_questions: list[str] = field(default_factory=list)
     enabled: bool = True
@@ -447,6 +452,33 @@ def load_families(directory: Optional[str | Path] = None) -> list[Family]:
     return list(families.values())
 
 
+#: Element symbols, longest first so "Se" is not read as "S" + "e".
+_SYMBOL = re.compile(r"[A-Z][a-z]?")
+
+
+def match_tolerance(directory: Optional[str | Path] = None) -> float:
+    """The catalogue's own match window, in cm⁻¹.
+
+    Exposed so that anything drawing the result — the spectrum plot marks
+    explained peaks in their own colour — uses the same window the search
+    used, instead of a second constant that drifts away from it.
+    """
+    return _load(str(Path(directory) if directory else DATA_DIR))[2]
+
+
+def elements_of(formula: str) -> set[str]:
+    """The element symbols in a chemical formula.
+
+    Deliberately crude: it reads capital-then-optional-lowercase runs and
+    ignores counts, charges and brackets, which is everything a formula in
+    this catalogue actually contains (``Fe3C``, ``FeOOH``, ``C3H6N6``,
+    ``CaCO3``). It exists to answer one question — could this phase be in
+    a sample made of these elements — and that question does not need a
+    parser.
+    """
+    return set(_SYMBOL.findall(formula or ""))
+
+
 def find_phases(
     peaks: Sequence[PeakMeasurement],
     spectrum_range: Optional[tuple[float, float]] = None,
@@ -454,6 +486,7 @@ def find_phases(
     families: Optional[Sequence[str]] = None,
     rbm_window: tuple[float, float] = RBM_WINDOW,
     directory: Optional[str | Path] = None,
+    elements: Optional[Sequence[str]] = None,
 ) -> PhaseReport:
     """Identify sample phases from detected peaks, family by family.
 
@@ -478,6 +511,25 @@ def find_phases(
         Range in which a corroborated match blocks a diameter calculation.
     directory:
         Where to load ``phases.json`` from.
+    elements:
+        The elements the sample can contain, e.g. ``["C", "Fe", "Se"]``.
+        Phases needing an element that is not on the list are not searched
+        at all — a manganese oxide cannot be in a sample with no
+        manganese, and with three dozen phases catalogued those
+        impossible matches are most of the noise.
+
+        It also changes what counts as an RBM suspect, and that is the
+        point of it. Without a composition the program has to be cautious:
+        nearly any genuine radial breathing mode lands within tolerance of
+        *some* catalogued line, so only a high-confidence phase's own
+        exclusive line raises a flag. That caution silences the case this
+        whole module exists for — iron carbide's bands at 212 and 280 sit
+        inside the RBM window, and its catalogue entry is low confidence
+        because cementite's Raman cross-section is poor, so a sample full
+        of Fe₃C got no warning at all. Once you have said the sample
+        contains iron, a line in the RBM window is worth interrupting for
+        whatever the literature's confidence in it, and the report names
+        that confidence instead of hiding behind it.
 
     Returns
     -------
@@ -488,6 +540,10 @@ def find_phases(
     )
     tol = float(tolerance) if tolerance is not None else file_tolerance
     wanted = set(families) if families else None
+    allowed = {symbol.strip().title() for symbol in elements} if elements else None
+    if allowed:
+        catalogue = [phase for phase in catalogue
+                     if elements_of(phase.formula) <= allowed]
 
     positions = [p.position for p in peaks]
     if spectrum_range is None:
@@ -496,6 +552,7 @@ def find_phases(
         )
 
     report = PhaseReport()
+    report.elements = sorted(allowed) if allowed else []
     identifications: list[PhaseIdentification] = []
 
     for phase in catalogue:
@@ -803,26 +860,42 @@ def _flag_rbm_conflicts(report: PhaseReport, rbm_window: tuple[float, float]) ->
     report.rbm_conflicts.sort()
 
     # A suspect has to be worth interrupting for, or it interrupts every
-    # real nanotube spectrum instead. With two dozen phases catalogued,
+    # real nanotube spectrum instead. With three dozen phases catalogued,
     # nearly any genuine RBM lands within tolerance of *some* single
     # line: a clean SWCNT at 220 cm-1 drew a delta-FeSe hexagonal flag,
     # and that phase's own catalogue entry says it has no reliable Raman
-    # literature. So only a high-confidence phase's own discriminating
-    # line raises one. Everything weaker stays in the identifications
-    # list, where a curious reader can find it, and out of the warnings.
+    # literature. So without a stated composition only a high-confidence
+    # phase's own discriminating line raises one.
+    #
+    # WITH a stated composition the caution is misplaced, and silently so.
+    # Cementite's bands at 212 and 280 sit inside the RBM window and its
+    # entry is low confidence -- because cementite's Raman cross-section
+    # is poor, not because the positions are doubtful -- so a CVD sample
+    # grown on an iron catalyst, which is the case this module was written
+    # for, got no warning at all while the program quietly converted 212
+    # into a 1.2 nm tube. Once the user has said the sample contains iron,
+    # any catalogued line of an allowed phase inside the window is worth
+    # raising, and the report states the confidence rather than hiding
+    # behind it.
+    restricted = bool(report.elements)
     for ident in report.identifications:
-        if ident.corroborated or ident.phase.confidence != "high":
+        if ident.corroborated:
+            continue
+        if not restricted and ident.phase.confidence != "high":
             continue
         for hit in ident.hits:
             position = hit.peak.position
             if not (rbm_window[0] <= position <= rbm_window[1]):
                 continue
-            if not hit.is_discriminating:
+            if not restricted and not hit.is_discriminating:
                 continue
             if any(abs(position - p) < 1e-6 for p in seen):
                 continue
             seen.add(position)
-            report.rbm_suspects.append((position, ident.phase.label))
+            label = ident.phase.label
+            if restricted and ident.phase.confidence != "high":
+                label += f" — confianza de la referencia: {ident.phase.confidence}"
+            report.rbm_suspects.append((position, label))
     report.rbm_suspects.sort()
 
 
@@ -935,7 +1008,9 @@ __all__ = [
     "PhaseIdentification",
     "PhaseReport",
     "RBM_WINDOW",
+    "elements_of",
     "find_phases",
+    "match_tolerance",
     "load_families",
     "load_phases",
 ]

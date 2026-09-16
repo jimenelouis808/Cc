@@ -175,6 +175,12 @@ class AnalysisSettings:
     check_interferences: bool = False
     """Look for non-carbon bands. Off by default; see
     :mod:`ramancarbon.analysis.interference`."""
+    sample_elements: tuple[str, ...] = ()
+    """Elements the sample can contain, e.g. ``("C", "Fe", "Se")``. Empty
+    means "no idea, search everything". Saying so narrows the phase search
+    to what is chemically possible AND makes it louder about the lines
+    that land in the RBM window — see
+    :func:`~ramancarbon.analysis.phases.find_phases`."""
     bootstrap_replicates: int = 0
     """Resampled refits for realistic uncertainties. 0 disables it — each
     replicate costs a full fit."""
@@ -188,6 +194,7 @@ class AnalysisSettings:
             "material_hint": self.material_hint,
             "profile": self.profile,
             "check_interferences": self.check_interferences,
+            "sample_elements": self.sample_elements or None,
         }
 
 
@@ -246,6 +253,13 @@ class Session:
         self.palette_name = str(self.preferences.get("palette", "claro"))
         self.plot_preset: str = str(self.preferences.get("plot_preset",
                                                          "predeterminado"))
+        #: Background wanted for the FIGURES: ``"tema"`` follows the window,
+        #: ``"claro"`` and ``"oscuro"`` override it. Separate from
+        #: ``palette_name`` because the two choices answer different
+        #: questions -- what is comfortable to work in for hours, and what
+        #: a manuscript will print.
+        self.figure_theme: str = str(
+            self.preferences.get("figure_theme", "tema"))
         self.preprocess_settings.baseline_method = str(
             self.preferences.get("baseline_method", "asls"))
         self.analysis_settings.check_interferences = bool(
@@ -254,6 +268,17 @@ class Session:
         if self.preferences.problem:
             self.messages.append(("warning", self.preferences.problem))
         """``(level, text)``; level is ``"info"``, ``"warning"`` or ``"error"``."""
+
+    def figure_palette_name(self, chrome: str) -> str:
+        """Which palette the figures should use, given the window's.
+
+        ``"tema"`` means "whatever the window is"; anything else is taken
+        literally. Kept here rather than in the widget layer so the CLI
+        and the tests can ask the same question.
+        """
+        if self.figure_theme in ("claro", "oscuro"):
+            return self.figure_theme
+        return chrome
 
     # -- preferences ---------------------------------------------------
     def remember(self) -> None:
@@ -265,6 +290,7 @@ class Session:
         """
         self.preferences.set("palette", self.palette_name)
         self.preferences.set("plot_preset", self.plot_preset)
+        self.preferences.set("figure_theme", self.figure_theme)
         self.preferences.set("baseline_method",
                              self.preprocess_settings.baseline_method)
         self.preferences.set("check_interferences",

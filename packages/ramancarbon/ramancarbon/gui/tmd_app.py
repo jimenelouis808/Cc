@@ -685,14 +685,14 @@ class TMDApp(SectionApp):
         ax = figure.add_subplot(111)
         item = self.session.active
         if item is None:
-            placeholder(ax, "Carga un espectro", self.palette)
+            placeholder(ax, "Carga un espectro", self.figure_palette)
             return
         result = item.tmd_result
         if result is None or result.fit is None:
-            plot_spectrum(ax, item.raw, self.palette)
+            plot_spectrum(ax, item.raw, self.figure_palette)
             ax.set_title(item.raw.name, fontsize=9)
             return
-        plot_fit(ax, result.fit, self.palette)
+        plot_fit(ax, result.fit, self.figure_palette)
         ax.set_title(
             f"{result.label} — {result.layers or '?'} capa(s), fase {result.phase}",
             fontsize=9,
@@ -709,7 +709,7 @@ class TMDApp(SectionApp):
         item = self.session.active
         result = item.tmd_result if item else None
         if result is None or not result.positions:
-            placeholder(ax, "Analiza un espectro para ver sus modos", self.palette)
+            placeholder(ax, "Analiza un espectro para ver sus modos", self.figure_palette)
             return
         reference = _reference_modes(result.material)
         keys = sorted(result.positions, key=lambda k: result.positions[k])
@@ -717,13 +717,13 @@ class TMDApp(SectionApp):
             observed = result.positions[key]
             mode = reference.get(key)
             if mode is None:
-                ax.plot([observed], [index], "o", color=self.palette.accent)
+                ax.plot([observed], [index], "o", color=self.figure_palette.accent)
                 continue
             ax.plot([mode.position, observed], [index, index], "-",
-                    color=self.palette.text_muted, linewidth=1.2, zorder=1)
+                    color=self.figure_palette.text_muted, linewidth=1.2, zorder=1)
             ax.plot([mode.position], [index], "|", markersize=14,
-                    color=self.palette.text_muted, zorder=2)
-            ax.plot([observed], [index], "o", color=self.palette.accent, zorder=3)
+                    color=self.figure_palette.text_muted, zorder=2)
+            ax.plot([observed], [index], "o", color=self.figure_palette.accent, zorder=3)
         ax.set_yticks(range(len(keys)))
         ax.set_yticklabels(keys, fontsize=8)
         ax.set_xlabel("Desplazamiento Raman (cm⁻¹)")
@@ -744,9 +744,9 @@ class TMDApp(SectionApp):
         ax = figure.add_subplot(111)
         item = self.session.active
         if item is None:
-            placeholder(ax, "Carga un espectro", self.palette)
+            placeholder(ax, "Carga un espectro", self.figure_palette)
             return
-        plot_spectrum(ax, item.display, self.palette, label_peaks=False)
+        plot_spectrum(ax, item.display, self.figure_palette, label_peaks=False)
         result = item.tmd_result
         if result is None or result.material is None:
             ax.set_title("Analiza para ver los óxidos posibles", fontsize=9)
@@ -754,8 +754,8 @@ class TMDApp(SectionApp):
         from ..analysis.heterostructure import expected_oxides
 
         found = {o.key for o in (result.oxides.oxides_present if result.oxides else [])}
-        colours = [self.palette.accent, self.palette.warning, self.palette.text_muted,
-                   self.palette.text]
+        colours = [self.figure_palette.accent, self.figure_palette.warning, self.figure_palette.text_muted,
+                   self.figure_palette.text]
         low, high = item.display.range
         for index, oxide in enumerate(expected_oxides(result.material)):
             colour = colours[index % len(colours)]

@@ -57,6 +57,10 @@ class SectionApp:
         self.status_var = tk.StringVar(value="")
         #: Tiempo transcurrido del cálculo en curso, junto a la barra.
         self.elapsed_var = tk.StringVar(value="")
+        #: Palette for the FIGURES. Starts as the chrome palette and is
+        #: replaced by the suite when the user asks for a figure
+        #: background that differs from the window's.
+        self.figure_palette = palette
         self._started: float | None = None
         self._clock_job: str | None = None
         self.progress = None
@@ -71,7 +75,7 @@ class SectionApp:
         )
         from matplotlib.figure import Figure
 
-        with matplotlib.rc_context(matplotlib_style(self.palette)):
+        with matplotlib.rc_context(matplotlib_style(self.figure_palette)):
             figure = Figure(figsize=figsize, dpi=100)
             subplots(figure)
         canvas = FigureCanvasTkAgg(figure, master=parent)
@@ -94,7 +98,7 @@ class SectionApp:
         canvas = self._canvases.get(key)
         if figure is None or canvas is None:
             return
-        with matplotlib.rc_context(matplotlib_style(self.palette)):
+        with matplotlib.rc_context(matplotlib_style(self.figure_palette)):
             figure.clear()
             draw(figure)
             figure.tight_layout()

@@ -135,7 +135,8 @@ def test_every_self_attribute_used_is_assigned_somewhere(stem, name):
                 read.add(child.attr)
     defined = {n.name for n in node.body if isinstance(n, ast.FunctionDef)}
     inherited = {
-        "tk", "ttk", "root", "container", "palette", "fonts", "queue", "busy",
+        "tk", "ttk", "root", "container", "palette", "figure_palette",
+        "fonts", "queue", "busy",
         "status_var", "progress", "make_canvas", "with_style", "mark_dirty",
         "flush_dirty", "run_async", "drain_queue", "build_status", "set_status",
         "flush_messages", "warn", "show_error",
@@ -200,6 +201,11 @@ def test_the_two_raman_sections_share_one_session():
         ("app", "n_d_var"),
         ("app", "n_g_var"),
         ("app", "_load_region_model"),
+        # What the sample is made of, and the peak marking that depends
+        # on it: the two things that answer "is that 212 line a breathing
+        # mode or my iron carbide".
+        ("app", "elements_var"),
+        ("app", "_explained_positions"),
         ("tmd_app", "_analyse"),
         ("tmd_app", "tmd_text"),
         ("tmd_app", "oxide_text"),
@@ -497,7 +503,7 @@ def test_the_modes_plot_and_table_survive_every_material():
         assert result.material == material.key
         assert set(result.positions) <= set(_reference_modes(material.key)) | {"x"}
         fake = SimpleNamespace(
-            palette=palette,
+            palette=palette, figure_palette=palette,
             session=SimpleNamespace(active=SimpleNamespace(tmd_result=result)),
         )
         figure = Figure()
@@ -525,7 +531,7 @@ def test_the_oxide_plot_draws_only_the_chemically_possible_oxides():
                              oxide="MoO3_alpha", seed=5)
     result = analyse_tmd(spectrum)
     fake = SimpleNamespace(
-        palette=palette,
+        palette=palette, figure_palette=palette,
         session=SimpleNamespace(active=SimpleNamespace(
             tmd_result=result, display=spectrum, raw=spectrum)),
     )
@@ -536,6 +542,67 @@ def test_the_oxide_plot_draws_only_the_chemically_possible_oxides():
     assert any("MoO3" in text and "✓" in text for text in labels)
 
     # No spectrum at all: a placeholder, not a traceback.
-    empty = SimpleNamespace(palette=palette,
+    empty = SimpleNamespace(palette=palette, figure_palette=palette,
                             session=SimpleNamespace(active=None))
     TMDApp._draw_oxides(empty, Figure())
+
+
+# -- theme: the parts that are data, not widgets ------------------------
+
+
+@pytest.mark.parametrize("widget", ["TEntry", "TCombobox", "TSpinbox"])
+def test_the_readonly_states_are_mapped_and_not_only_configured(widget):
+    """clam ships its own state map for readonly and disabled, and a map
+    beats a configure. Setting only the default state left every readonly
+    combo box in the suite -- the figure preset, the baseline method, the
+    normalisation, the deconvolution preset, the profile, the ratio basis
+    -- drawing our light foreground on clam's pale grey field: invisible
+    on the dark palette, which is the one this window opens on."""
+    text = source("theme")
+    assert f'style.map("{widget}"' in text, f"{widget} has no state map"
+
+
+def test_the_combobox_dropdown_is_coloured_too():
+    """The dropdown is a plain Tk listbox and ignores every ttk style."""
+    text = source("theme")
+    assert "*TCombobox*Listbox.background" in text
+    assert "*TCombobox*Listbox.foreground" in text
+
+
+def test_a_readonly_combobox_keeps_its_text_when_focused():
+    """A readonly combobox draws its value as a SELECTION once it has
+    focus. Without the selection colours the value disappears the moment
+    you click it, which reads as the widget clearing itself."""
+    text = source("theme")
+    assert "selectbackground=[" in text and "selectforeground=[" in text
+
+
+def test_the_figure_background_is_a_separate_choice_from_the_window():
+    """A dark window is comfortable to work in; a white figure is what a
+    manuscript prints. Choosing one should not choose the other."""
+    from ramancarbon.gui.state import Session
+
+    session = Session()
+    session.figure_theme = "tema"
+    assert session.figure_palette_name("oscuro") == "oscuro"
+    assert session.figure_palette_name("claro") == "claro"
+    session.figure_theme = "claro"
+    assert session.figure_palette_name("oscuro") == "claro"
+    session.figure_theme = "oscuro"
+    assert session.figure_palette_name("claro") == "oscuro"
+
+
+def test_drawing_code_uses_the_figure_palette_and_chrome_code_does_not():
+    """The split only works if every _draw_ method draws with the figure
+    palette. One left on the chrome palette is a line that stays dark on
+    a white figure -- invisible, and only in the exported file."""
+    for stem in ("app", "tmd_app", "xrd_app", "echem_app", "xps_app"):
+        text = source(stem)
+        for block in re.findall(r"\n    def _draw_\w+\(self.*?(?=\n    def |\Z)",
+                                text, re.S):
+            assert "self.palette" not in block, (
+                f"{stem}: a _draw_ method still uses the chrome palette")
+    # And the rc_context that sets the background, in both canvas layers.
+    assert "matplotlib_style(self.figure_palette)" in source("base")
+    assert "matplotlib_style(self.figure_palette)" in source("app")
+    assert "matplotlib_style(self.palette)" not in source("base")

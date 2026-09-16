@@ -10,6 +10,7 @@ from ramancarbon.analysis.phases import (
     PhaseReport,
     find_phases,
     load_families,
+    elements_of,
     load_phases,
 )
 from ramancarbon.core.peaks import PeakMeasurement
@@ -370,3 +371,68 @@ def test_a_phase_whose_strong_lines_you_did_not_measure_is_not_confirmed():
     assert lead.strong_out_of_range
     assert any("ninguna de sus líneas fuertes" in w and "707" in w
                for w in report.warnings)
+
+
+# -- saying what the sample is made of ---------------------------------
+
+
+def test_a_formula_gives_up_its_elements():
+    from ramancarbon.analysis.phases import elements_of
+
+    assert elements_of("Fe3C") == {"Fe", "C"}
+    assert elements_of("FeSe") == {"Fe", "Se"}       # not F + e + S + e
+    assert elements_of("FeOOH") == {"Fe", "O", "H"}
+    assert elements_of("C3H6N6") == {"C", "H", "N"}
+    assert elements_of("") == set()
+
+
+def test_declaring_the_elements_removes_the_impossible_phases():
+    """A manganese oxide cannot be in a sample with no manganese. With
+    three dozen phases catalogued those impossible matches are most of
+    the noise in a real report."""
+    peaks = [pk(p) for p in (119, 212, 273, 372, 477, 585, 621)]
+    peaks += [pk(1355, 2000, 60), pk(1583, 2300, 50)]
+
+    everything = find_phases(peaks, spectrum_range=(100.0, 3000.0))
+    named = {i.phase.key for i in everything.identifications}
+    assert {"Mn3O4_hausmannite", "Co3O4_spinel"} & named
+
+    declared = find_phases(peaks, spectrum_range=(100.0, 3000.0),
+                           elements=["C", "Fe", "Se"])
+    for ident in declared.identifications:
+        assert elements_of(ident.phase.formula) <= {"C", "Fe", "Se"}
+    assert declared.elements == ["C", "Fe", "Se"]
+
+
+def test_declaring_the_elements_makes_the_rbm_warning_louder_not_quieter():
+    """The case the module exists for, and the one the caution silenced.
+
+    Cementite's bands at 212 and 280 cm-1 are inside the RBM window. Its
+    entry is LOW confidence — because cementite's Raman cross-section is
+    poor, not because the positions are doubtful — so the rule that only
+    a high-confidence phase may raise a suspect said nothing at all about
+    a CVD sample grown on an iron catalyst, which is exactly the sample
+    this program is for. Once the user has said there is iron, the line is
+    worth raising, and the report states the confidence rather than hiding
+    behind it.
+    """
+    peaks = [pk(212), pk(273), pk(1355, 2000, 60), pk(1583, 2300, 50)]
+
+    quiet = find_phases(peaks, spectrum_range=(100.0, 3000.0))
+    assert not any("Cementita" in label for _, label in quiet.rbm_suspects)
+
+    loud = find_phases(peaks, spectrum_range=(100.0, 3000.0),
+                       elements=["C", "Fe", "Se"])
+    flagged = [label for position, label in loud.rbm_suspects if position == 212]
+    assert flagged and "Cementita" in flagged[0]
+    assert "confianza de la referencia: low" in flagged[0]
+
+
+def test_a_clean_nanotube_is_still_not_interrupted_without_a_composition():
+    """The caution has to stay where there is no composition to justify
+    dropping it, or every real breathing mode draws a flag."""
+    report = find_phases([pk(150), pk(168), pk(190), pk(214), pk(265),
+                          pk(1580, 400, 20)],
+                         spectrum_range=(100.0, 3000.0))
+    assert not report.rbm_suspects
+    assert not report.found_anything

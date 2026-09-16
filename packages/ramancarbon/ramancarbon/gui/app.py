@@ -94,6 +94,12 @@ class RamanCarbonApp:
         self.queue: queue.Queue = queue.Queue()
         self.busy = False
         self.palette = PALETTES[self.session.palette_name]
+        #: Palette used for the FIGURES, which need not be the one used for
+        #: the window. A dark window is comfortable to work in and a white
+        #: figure is what a manuscript wants, and there is no reason to
+        #: choose once for both. See :meth:`Suite._on_figure_theme_changed`.
+        self.figure_palette = PALETTES[
+            self.session.figure_palette_name(self.session.palette_name)]
         self.fonts = apply_theme(root, self.palette)
 
         if not self.embedded:
@@ -240,6 +246,33 @@ class RamanCarbonApp:
             wrap=230,
         )
 
+        # What the sample is made of. This is the single most useful
+        # thing the user knows and the program cannot: it removes every
+        # chemically impossible phase from the search, and — the part
+        # that matters more — it lets a line inside the RBM window raise
+        # a warning even when the literature's confidence in that phase
+        # is low. Cementite is the case: its bands at 212 and 280 cm⁻¹
+        # sit in the window, its entry is low confidence because the
+        # cross-section is poor rather than because the positions are
+        # doubtful, and a CVD sample grown on iron got no warning at all.
+        self.elements_var = self.tk.StringVar(value="")
+        ttk.Label(body, text="Elementos presentes",
+                  style="Card.TLabel").pack(anchor="w", pady=(PAD["xs"], 0))
+        ttk.Entry(body, textvariable=self.elements_var).pack(fill="x")
+        hint(
+            body,
+            "Los elementos que tu síntesis puede contener, separados por "
+            "comas: «C, Fe, Se». En blanco se busca todo el catálogo.   "
+            "Decirlo hace dos cosas. Quita las fases imposibles — un óxido "
+            "de manganeso no puede estar en una muestra sin manganeso, y "
+            "con 36 fases catalogadas esas coincidencias son casi todo el "
+            "ruido. Y sube el volumen: una línea catalogada dentro de la "
+            "ventana RBM pasa a avisarte aunque la confianza de la "
+            "referencia sea baja, porque ya no hace falta ser prudente "
+            "sobre si el elemento está.",
+            wrap=230,
+        )
+
         ttk.Button(body, text="Calibrar con la línea de Si",
                    command=self._calibrate).pack(fill="x", pady=(0, PAD["xs"]))
 
@@ -284,7 +317,7 @@ class RamanCarbonApp:
         from matplotlib.figure import Figure
         import matplotlib
 
-        with matplotlib.rc_context(matplotlib_style(self.palette)):
+        with matplotlib.rc_context(matplotlib_style(self.figure_palette)):
             figure = Figure(figsize=(7.6, 5.0), dpi=100)
             subplots(figure)
         canvas = FigureCanvasTkAgg(figure, master=parent)
@@ -574,6 +607,22 @@ class RamanCarbonApp:
                    "rango de desorden. En una muestra muy desordenada — un "
                    "MWCNT, una nanofibra, algo dopado con fuerza — es el número "
                    "más útil y el que menos se publica.", wrap=900)
+        hint(body,
+             "NOTACIÓN.   A_X = ÁREA integrada de la banda X (la que da el "
+             "ajuste, no la altura).   I_X = ALTURA de la banda X.   "
+             "Γ_X = anchura a media altura (FWHM) de X, en cm⁻¹.\n"
+             "Las bandas: D ≈ 1350 (desorden, necesita un defecto para "
+             "existir) · G ≈ 1580 (modo E₂g del grafito, la única que hay en "
+             "un grafito perfecto) · D′ ≈ 1620 (hombro de G, también por "
+             "desorden) · D3 ≈ 1500 (carbono amorfo, entre D y G) · "
+             "D4 ≈ 1200 (sp³ y fragmentos poliénicos).\n"
+             "Por qué el área y no la altura: para un mismo espectro, un "
+             "I_D/I_G de áreas sale 2–3 veces el de alturas, porque D es "
+             "bastante más ancha que G. Los dos se informan y el que se usa "
+             "para L_a y para clasificar es el que elijas en «Base de "
+             "cocientes», en la pestaña de Deconvolución. Si comparas con "
+             "un artículo, mira primero cuál usó: la mitad no lo dice.",
+             wrap=900)
         self.indices_text = scrolled_text(body, self.palette, self.fonts["mono"],
                                           height=22)
 
@@ -881,6 +930,11 @@ class RamanCarbonApp:
             settings.baseline_p = 0.001
         analysis = self.session.analysis_settings
         analysis.check_interferences = bool(self.interference_var.get())
+        analysis.sample_elements = tuple(
+            token.strip().title()
+            for token in self.elements_var.get().replace(";", ",").split(",")
+            if token.strip()
+        )
         analysis.basis = _key_for_label(BASES, self.basis_var.get())
         analysis.profile = (
             _key_for_label(DECONVOLUTION_PROFILES, self.profile_var.get()) or None
@@ -1256,7 +1310,7 @@ class RamanCarbonApp:
         figure = self._figures.get(key)
         if figure is None:
             return
-        with matplotlib.rc_context(matplotlib_style(self.palette)):
+        with matplotlib.rc_context(matplotlib_style(self.figure_palette)):
             for ax in figure.axes:
                 ax.clear()
             draw(figure)
@@ -1268,18 +1322,20 @@ class RamanCarbonApp:
         def draw(figure):
             ax = figure.axes[0]
             if item is None:
-                _placeholder(ax, "Carga un espectro para verlo aquí", self.palette)
+                _placeholder(ax, "Carga un espectro para verlo aquí", self.figure_palette)
                 return
             diagnostics = item.diagnostics or {}
             plot_spectrum(
                 ax,
                 item.display,
-                self.palette,
+                self.figure_palette,
                 raw=item.raw if item.processed is not None else None,
                 baseline=diagnostics.get("baseline"),
                 baseline_x=diagnostics.get("baseline_x"),
                 peaks=item.result.peaks if item.result else None,
                 title=item.name,
+                explained=_explained_positions(item.result),
+                match_tolerance=_phase_tolerance(),
             )
             figure.subplots_adjust(left=0.10, right=0.98, top=0.93, bottom=0.12)
 
@@ -1294,10 +1350,10 @@ class RamanCarbonApp:
         def draw(figure):
             main, residual = figure.axes[0], figure.axes[1]
             if fit is None:
-                _placeholder(main, "Carga un preajuste y pulsa «Ajustar»", self.palette)
+                _placeholder(main, "Carga un preajuste y pulsa «Ajustar»", self.figure_palette)
                 residual.set_axis_off()
                 return
-            plot_fit(main, fit, self.palette, residual_axes=residual,
+            plot_fit(main, fit, self.figure_palette, residual_axes=residual,
                      title=f"Deconvolución — {item.name}")
             main.set_xticklabels([])
             main.set_xlabel("")
@@ -1362,11 +1418,11 @@ class RamanCarbonApp:
         def draw(figure):
             left, right = figure.axes[0], figure.axes[1]
             if result is None:
-                _placeholder(left, "Analiza un espectro", self.palette)
+                _placeholder(left, "Analiza un espectro", self.figure_palette)
                 right.set_axis_off()
                 return
-            plot_rbm(left, result, self.palette)
-            plot_strain_doping(right, result, self.palette)
+            plot_rbm(left, result, self.figure_palette)
+            plot_strain_doping(right, result, self.figure_palette)
             figure.subplots_adjust(left=0.09, right=0.98, top=0.90, bottom=0.14)
 
         self._with_style("diameters", draw)
@@ -1390,9 +1446,9 @@ class RamanCarbonApp:
         def draw(figure):
             ax = figure.axes[0]
             if not spectra:
-                _placeholder(ax, "Carga espectros para superponerlos", self.palette)
+                _placeholder(ax, "Carga espectros para superponerlos", self.figure_palette)
                 return
-            plot_overlay(ax, spectra, self.palette, offset=0.25)
+            plot_overlay(ax, spectra, self.figure_palette, offset=0.25)
             ax.set_title("Espectros superpuestos (desplazados verticalmente)")
             figure.subplots_adjust(left=0.09, right=0.98, top=0.92, bottom=0.13)
 
@@ -1445,8 +1501,8 @@ class RamanCarbonApp:
             # for a manuscript whatever resolution it is saved at.
             self._save_figure_with_preset(item, path, preset_name)
         else:
-            with matplotlib.rc_context(matplotlib_style(self.palette)):
-                figure = figure_for_report(item.result, self.palette)
+            with matplotlib.rc_context(matplotlib_style(self.figure_palette)):
+                figure = figure_for_report(item.result, self.figure_palette)
                 figure.savefig(path)
         self._set_status(f"Figura guardada en {path} ({preset_name})")
 
@@ -1627,6 +1683,32 @@ class RamanCarbonApp:
 # ----------------------------------------------------------------------
 # helpers
 # ----------------------------------------------------------------------
+def _explained_positions(result) -> list[float]:
+    """Peak positions a catalogued phase accounts for.
+
+    Corroborated identifications AND the leads: a peak that matches a
+    catalogued line without enough corroboration to name the phase is
+    still not an unknown band, and colouring it as one would be the
+    opposite of what the marking is for.
+    """
+    if result is None:
+        return []
+    phases = getattr(result, "phases", None)
+    if phases is None or not getattr(phases, "enabled", False):
+        return []
+    positions = [hit.peak.position
+                 for ident in phases.identifications for hit in ident.hits]
+    positions += [position for position, _ in phases.rbm_suspects]
+    return sorted(set(positions))
+
+
+def _phase_tolerance() -> float:
+    """The catalogue's own match window, so the plot and the report agree."""
+    from ..analysis.phases import match_tolerance
+
+    return match_tolerance()
+
+
 def _placeholder(ax, text: str, palette) -> None:
     """Empty-state message on an otherwise blank axes."""
     ax.text(0.5, 0.5, text, ha="center", va="center", transform=ax.transAxes,

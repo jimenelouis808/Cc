@@ -177,6 +177,7 @@ class Preferences:
         "check_phases": True,
         "check_interferences": False,
         "plot_preset": "predeterminado",
+        "figure_theme": "tema",
         "export_format": "csv",
         "window_size": [1200, 800],
         "last_directory": "",

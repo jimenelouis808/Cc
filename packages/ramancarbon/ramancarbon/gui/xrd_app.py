@@ -622,11 +622,11 @@ class XRDApp(SectionApp):
         ax = figure.add_subplot(111)
         item = self.session.item
         if item is None:
-            placeholder(ax, "Carga un difractograma", self.palette)
+            placeholder(ax, "Carga un difractograma", self.figure_palette)
             return
         result = item.result
         plot_pattern(
-            ax, item.pattern, self.palette,
+            ax, item.pattern, self.figure_palette,
             peaks=result.peaks if result else None,
             unexplained=result.search.unexplained if result else None,
         )
@@ -638,9 +638,9 @@ class XRDApp(SectionApp):
         ax = figure.add_subplot(111)
         item = self.session.item
         if item is None or item.result is None:
-            placeholder(ax, "Identifica las fases", self.palette)
+            placeholder(ax, "Identifica las fases", self.figure_palette)
             return
-        plot_phase_sticks(ax, item.result, self.palette)
+        plot_phase_sticks(ax, item.result, self.figure_palette)
 
     def _draw_rietveld(self, figure) -> None:
         from .plots_xrd import plot_rietveld
@@ -648,9 +648,9 @@ class XRDApp(SectionApp):
         ax = figure.add_subplot(111)
         item = self.session.item
         if item is None or item.refinement is None:
-            placeholder(ax, "Refina para ver el ajuste", self.palette)
+            placeholder(ax, "Refina para ver el ajuste", self.figure_palette)
             return
-        plot_rietveld(ax, item.refinement, self.palette)
+        plot_rietveld(ax, item.refinement, self.figure_palette)
 
     def _draw_residual(self, figure) -> None:
         from .plots_xrd import plot_weighted_difference
@@ -658,9 +658,9 @@ class XRDApp(SectionApp):
         ax = figure.add_subplot(111)
         item = self.session.item
         if item is None or item.refinement is None:
-            placeholder(ax, "", self.palette)
+            placeholder(ax, "", self.figure_palette)
             return
-        plot_weighted_difference(ax, item.refinement, self.palette)
+        plot_weighted_difference(ax, item.refinement, self.figure_palette)
 
 
 def _parse_axis(text: str) -> Optional[tuple[int, int, int]]:

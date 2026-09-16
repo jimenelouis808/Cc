@@ -208,6 +208,7 @@ def analyse(
     interference_groups: Optional[Sequence[str]] = None,
     check_phases: bool = True,
     phase_families: Optional[Sequence[str]] = None,
+    sample_elements: Optional[Sequence[str]] = None,
     n_d: Optional[int] = None,
     n_g: Optional[int] = None,
     db: Optional[Database] = None,
@@ -348,6 +349,7 @@ def analyse(
             peaks,
             spectrum_range=(float(processed.shift[0]), float(processed.shift[-1])),
             families=phase_families,
+            elements=sample_elements,
         )
         blocked_positions = tuple(
             sorted(set(blocked_positions) | set(phases.excluded_from_rbm))
