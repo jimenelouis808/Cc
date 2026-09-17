@@ -1071,11 +1071,9 @@ def test_a_descending_region_reads_because_that_is_the_normal_direction(tmp_path
         "EOFH\n"
     )
     body = "".join(f"{x:.3f} {y:.3f}\n" for x, y in zip(axis, counts))
-    path = tmp_path / "260909.112.vms"
+    path = tmp_path / "260909.112.spe"
     path.write_text(header + body, encoding="latin-1")
 
-    # And it goes in by CONTENT: the extension says VAMAS, the header says
-    # PHI, and the header wins -- which is how the user's file arrived.
     spectrum = read_xps(path)[0]
     assert spectrum.counts.size == 301
     assert spectrum.pass_energy == pytest.approx(26.0)
@@ -1099,3 +1097,43 @@ def test_a_region_whose_step_really_disagrees_is_still_refused(tmp_path):
     path.write_text(header + "1.0 2.0\n" * 301, encoding="latin-1")
     with pytest.raises(XPSError, match="no cuadra consigo misma"):
         read_spe(path)
+
+
+def test_a_vamas_that_quotes_a_phi_header_is_still_vamas(tmp_path):
+    """A PHI Quantera writes its whole SOFH/EOFH header into the comment
+    lines of the VAMAS it exports. Looking for SOFH anywhere in the first
+    8 kB therefore handed a real VAMAS file to the PHI reader, which read
+    the regions out of the comment and then looked for a binary block
+    that is not there -- "el bloque de datos binario admite más de una
+    lectura". The identifier decides; SOFH inside it is a quotation."""
+    from ramancarbon.xps.io import read_xps, write_vamas
+
+    energy = np.linspace(280.0, 300.0, 401)
+    counts = 1000.0 + 5000.0 * np.exp(-0.5 * ((energy - 284.6) / 0.8) ** 2)
+    spectrum = XPSSpectrum(binding_energy=energy, counts=counts, name="C 1s",
+                           region="C1s", photon_energy=1486.6, pass_energy=26.0)
+    path = write_vamas(tmp_path / "quantera.vms", spectrum,
+                       institution="SOFH PHI Quantera SXM")
+    assert [item.region for item in read_xps(path)] == ["C1s"]
+
+
+def test_the_file_settles_the_work_function_when_it_states_the_window():
+    """VAMAS says the abscissa is the kinetic energy as measured, so the
+    work function comes off it; PHI has already taken it off. Nothing in
+    the block says which, and getting it wrong moves every region by the
+    whole work function -- 4.05 eV here -- in silence. The PHI header in
+    the comments states each window, which settles it."""
+    from ramancarbon.xps.io import _declared_for, _declared_windows
+
+    comments = [
+        "SpectralRegDef: 1 1 C1s 6 401 -0.0500 298.0000 278.0000 297.0000 "
+        "279.0000 0.360000 55.00 AREA",
+        "SpectralRegDef: 3 1 O1s 8 321 -0.0500 540.0000 524.0000 539.0000 "
+        "525.0000 3.600000 55.00 AREA",
+        "Platform: PC",
+    ]
+    windows = _declared_windows(comments)
+    assert windows == {"c1s": (298.0, 278.0), "o1s": (540.0, 524.0)}
+    assert _declared_for(windows, "C", "1s") == (298.0, 278.0)
+    assert _declared_for(windows, "S", "2p") is None
+    assert _declared_for({}, "C", "1s") is None

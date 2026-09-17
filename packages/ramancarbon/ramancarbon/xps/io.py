@@ -604,7 +604,13 @@ def read_vamas(path: str | Path) -> list[XPSSpectrum]:
     instrument = cursor.next()
     cursor.next()                              # operator
     experiment = cursor.next()
-    cursor.skip(cursor.integer("el número de líneas de comentario"))
+    comment_count = cursor.integer("el número de líneas de comentario")
+    comments = [cursor.next() for _ in range(max(0, comment_count))]
+    # A PHI Quantera writes its whole SOFH/EOFH header into those comment
+    # lines, and with it the binding-energy window of every region. That
+    # is one number more than the block needs, so it is a check -- the
+    # same reason the .spe reader compares the step against the endpoints.
+    declared = _declared_windows(comments)
     experiment_mode = cursor.next().upper()
     scan_mode = cursor.next().upper()
     if scan_mode != "REGULAR":
@@ -642,9 +648,39 @@ def read_vamas(path: str | Path) -> list[XPSSpectrum]:
                 experiment_mode=experiment_mode,
                 variables=variables,
                 future_block=future_block,
+                declared=declared,
             )
         )
     return out
+
+
+def _declared_windows(comments: list[str]) -> dict[str, tuple[float, float]]:
+    """Binding-energy windows a PHI header states, by region name.
+
+    ``SpectralRegDef: 2 1 C1s 6 401 -0.0500 298.0000 278.0000 ...`` --
+    name at field 2, endpoints at 6 and 7.
+    """
+    out: dict[str, tuple[float, float]] = {}
+    for line in comments:
+        if "SpectralRegDef" not in line or ":" not in line:
+            continue
+        parts = line.partition(":")[2].split()
+        if len(parts) < 8:
+            continue
+        try:
+            out.setdefault(parts[2].lower(),
+                           (float(parts[6]), float(parts[7])))
+        except ValueError:
+            continue
+    return out
+
+
+def _declared_for(declared, species: str, transition: str):
+    """The window for one block, matched on ``C`` + ``1s`` -> ``c1s``."""
+    if not declared:
+        return None
+    key = f"{species}{transition}".replace(" ", "").lower()
+    return declared.get(key)
 
 
 def _read_vamas_block(
@@ -657,6 +693,7 @@ def _read_vamas_block(
     experiment_mode: str,
     variables: int,
     future_block: int,
+    declared: dict[str, tuple[float, float]] | None = None,
 ) -> XPSSpectrum:
     """One VAMAS block, in the field order of ISO 14976.
 
@@ -741,8 +778,25 @@ def _read_vamas_block(
     axis = start + increment * np.arange(points, dtype=float)
     label = f"{abscissa_label} {abscissa_units}".lower()
     if "kinetic" in label or "cinétic" in label:
+        # The standard says the abscissa is the kinetic energy as
+        # measured, so the work function comes off it. PHI's export has
+        # already taken it off: its own header declares the C 1s window as
+        # 298.0 to 278.0 eV, and hv - KE reproduces that exactly while
+        # hv - KE - phi misses it by 4.05 eV -- the whole work function,
+        # in every region, silently. Neither convention can be deduced
+        # from the block, so when the file states the window, the file
+        # decides; when it does not, the standard does.
         binding = photon_energy - axis - work_function
         original = "energía cinética"
+        window = _declared_for(declared, species, transition)
+        if window is not None:
+            plain = photon_energy - axis
+            low, high = min(window), max(window)
+            centre = 0.5 * (low + high)
+            if abs(np.median(plain) - centre) < abs(np.median(binding) - centre):
+                binding = plain
+                original = ("energía cinética (ya corregida por la función "
+                            "de trabajo en el archivo)")
     else:
         binding = axis
         original = "energía de enlace"
@@ -1030,6 +1084,28 @@ def read_xps(path: str | Path, **options: Any) -> list[XPSSpectrum]:
     """
     path = Path(path)
     head = path.read_bytes()[:8192]
+    try:
+        sample = head.decode("latin-1")
+    except UnicodeDecodeError:                  # pragma: no cover
+        sample = ""
+    # VAMAS is decided FIRST, and on the opening lines, because a VAMAS
+    # file may legitimately CONTAIN a PHI header: the PHI Quantera writes
+    # its whole SOFH/EOFH block into the comment lines of the VAMAS it
+    # exports, and the block count on line 6 says how many lines it is.
+    # Looking for SOFH anywhere in the first 8 kB therefore found a real
+    # VAMAS file and handed it to the PHI reader, which then read the
+    # regions out of the comment and tried to recover intensities from a
+    # binary block that is not there. The identifier is the only thing
+    # that settles what a file IS; SOFH inside it is a quotation.
+    opening = sample.upper().split("\n")[:5]
+    if any("VAMAS" in line for line in opening):
+        return read_vamas(path)
+    if path.suffix.lower() in (".vms", ".npl"):
+        # The extension says VAMAS and the identifier is not there. Let
+        # the VAMAS reader refuse it by name and quote what it found,
+        # rather than handing the file to a reader that will describe the
+        # wrong problem.
+        return read_vamas(path)
     if b"SOFH" in head:
         accepted = {"work_function", "photon_energy"}
         return read_spe(path, **{k: v for k, v in options.items() if k in accepted})
@@ -1042,25 +1118,6 @@ def read_xps(path: str | Path, **options: Any) -> list[XPSSpectrum]:
         # because telling someone to rename their file is not an answer
         # when the program can simply open it.
         raise XPSError(f"{path.name}: " + _spe_diagnosis(head))
-    try:
-        sample = head.decode("latin-1")
-    except UnicodeDecodeError:                  # pragma: no cover
-        sample = ""
-    # The identifier is meant to be the first line, and in files people
-    # actually have it sometimes is not: a byte-order mark, a blank line
-    # or an exporter's own banner gets in front of it. Looking only at
-    # line one sent those files to the two-column text reader, which
-    # failed with a complaint about columns that says nothing about the
-    # real problem. Look through the opening lines instead.
-    opening = [line for line in sample.upper().split("\n")[:5]]
-    if any("VAMAS" in line for line in opening):
-        return read_vamas(path)
-    if path.suffix.lower() in (".vms", ".npl"):
-        # The extension says VAMAS and the identifier is not there. Let
-        # the VAMAS reader refuse it by name and quote what it found,
-        # rather than handing the file to a reader that will describe the
-        # wrong problem.
-        return read_vamas(path)
     accepted = {
         "photon_energy", "pass_energy", "axis", "work_function",
         "dwell_s", "sweeps", "region",
