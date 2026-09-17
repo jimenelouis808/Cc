@@ -928,3 +928,71 @@ def test_the_toolbar_is_packed_before_the_figure_it_belongs_to(stem):
         checked += 1
 
     assert checked, f"{stem}: no canvas factory found to check"
+
+
+def test_every_toolbar_is_really_drawn_in_a_real_window():
+    """Open the window and MEASURE every toolbar. Skipped without Tk.
+
+    The static test above states the rule; this one is the rule being
+    true. It builds the suite at a window size a laptop actually has,
+    walks every tab of every section and asks each navigation toolbar for
+    its height and whether it is mapped. Before the packing order was
+    fixed, 23 of the 26 toolbars in the suite came back one pixel tall.
+
+    It also catches what the static test cannot: three cards packed with
+    ``expand=True`` in one tab break no ordering rule and still leave the
+    third with nothing, which is what had happened to the whole figure --
+    toolbar included -- on the carbon section's Comparación tab.
+    """
+    tkinter = pytest.importorskip("tkinter")
+    import matplotlib
+
+    matplotlib.use("Agg", force=False)
+    from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+
+    try:
+        root = tkinter.Tk()
+    except tkinter.TclError as exc:  # pragma: no cover - no display
+        pytest.skip(f"sin pantalla: {exc}")
+
+    from ramancarbon.gui.suite import SECTIONS, Suite
+
+    def toolbars(widget, found):
+        if isinstance(widget, NavigationToolbar2Tk):
+            found.append(widget)
+        for child in widget.winfo_children():
+            toolbars(child, found)
+        return found
+
+    crushed: list[str] = []
+    seen = 0
+    try:
+        root.geometry("1366x768")
+        suite = Suite(root)
+        for index, (key, _, _) in enumerate(SECTIONS):
+            suite.notebook.select(index)
+            root.update()
+            section = suite.sections[key]
+            section._load_demo()
+            root.update()
+            pages = (range(len(section.notebook.tabs()))
+                     if hasattr(section, "notebook") else [0])
+            for tab in pages:
+                if hasattr(section, "notebook"):
+                    section.notebook.select(tab)
+                root.update()
+                page = (section.notebook.nametowidget(section.notebook.select())
+                        if hasattr(section, "notebook") else root)
+                for bar in toolbars(page, []):
+                    seen += 1
+                    height = bar.winfo_height()
+                    if not bar.winfo_ismapped() or height < 20:
+                        crushed.append(
+                            f"{key}, pestaña {tab}: la barra mide {height} px "
+                            f"y mapeada={bar.winfo_ismapped()}"
+                        )
+    finally:
+        root.destroy()
+
+    assert seen, "no se encontró ninguna barra de herramientas"
+    assert not crushed, "\n".join(crushed)

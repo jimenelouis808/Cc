@@ -761,7 +761,7 @@ class RamanCarbonApp:
                                          height=20)
 
     def _build_tab_batch(self) -> None:
-        from .widgets import card, hint, table
+        from .widgets import card, hint, split_column, table
 
         ttk = self.ttk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
@@ -774,7 +774,17 @@ class RamanCarbonApp:
         ttk.Button(toolbar, text="Superponer espectros",
                    command=self._draw_overlay).pack(side="left")
 
-        outer, body = card(tab, "Resultados del lote")
+        # Three stacked cards, and their requested heights together are
+        # more than the page has: measured in a 1480x940 window, the table
+        # took 283 px, the statistics 285, and the figure -- which asks for
+        # 500 -- was given ONE, so neither it nor its toolbar was drawn.
+        # Three siblings that all expand break no ordering rule, which is
+        # why only the real window caught this. Panes with a draggable
+        # sash, for the same reason the electrochemistry tabs have them.
+        paned, (top, middle, bottom) = split_column(tab, (2, 2, 3))
+        paned.pack(fill="both", expand=True)
+
+        outer, body = card(top, "Resultados del lote")
         outer.pack(fill="both", expand=True)
         hint(body, "Los cocientes de una fila solo son comparables con los de "
                    "otra si ambos se midieron con el mismo láser y con la misma "
@@ -784,16 +794,16 @@ class RamanCarbonApp:
 
         from .widgets import scrolled_text
 
-        stats, stats_body = card(tab, "Estadística del lote",
+        stats, stats_body = card(middle, "Estadística del lote",
                                  "Mediana y dispersión robusta junto a la media: "
                                  "un punto medido sobre un grumo de catalizador "
                                  "mueve mucho la media y casi nada la mediana.")
-        stats.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        stats.pack(fill="both", expand=True)
         self.batch_text = scrolled_text(stats_body, self.palette,
                                         self.fonts["mono"], height=12)
 
-        plot_area, plot_body = card(tab, None)
-        plot_area.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        plot_area, plot_body = card(bottom, None)
+        plot_area.pack(fill="both", expand=True)
         self._make_canvas(plot_body, "overlay", lambda f: f.add_subplot(111))
 
     def _build_tab_database(self) -> None:

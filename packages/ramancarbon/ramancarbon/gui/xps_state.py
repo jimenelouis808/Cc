@@ -150,7 +150,13 @@ class XPSSession:
         try:
             found = read_xps(path, **options)
         except (XPSError, OSError, ValueError) as error:
-            self.log("error", f"{Path(path).name}: {error}")
+            # Some readers name the file themselves, because their message
+            # is useful outside this session too. Saying it twice reads
+            # like a bug in the message.
+            name = Path(path).name
+            text = str(error)
+            self.log("error", text if text.startswith(name)
+                     else f"{name}: {text}")
             return 0
         for item in found:
             self.spectra.append(item)

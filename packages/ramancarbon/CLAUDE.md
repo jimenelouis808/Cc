@@ -1344,6 +1344,15 @@ El módulo `echem/io.py` dice que los formatos binarios se rechazan, y
   lienzos (`SectionApp.make_canvas` y `RamanCarbonApp._make_canvas`), que
   es justo donde la prueba estática de la regla anterior no miraba porque
   sólo recorre los `_build_tab*`. Ahora hay una prueba para ellas.
+- **Y TRES hermanas con `expand=True` no rompen ninguna regla de orden y
+  dejan a la tercera sin nada igualmente.** En la pestaña Comparación la
+  tabla pedía 283 px, la estadística 285 y la figura 500 dentro de una
+  página de 733: la figura entera, con su barra, medía UN píxel. Eso no
+  lo ve ninguna prueba estática, así que hay una que ABRE la ventana y
+  MIDE cada barra de la suite. Con el orden de empaquetado anterior, 23
+  de las 26 volvían de un píxel de alto; ahora las 26 se dibujan a
+  1920x1080, 1366x768 y 1152x648. Se salta sin Tkinter ni pantalla, como
+  la prueba de humo.
 
 ## Un `.spe` no es un formato
 
