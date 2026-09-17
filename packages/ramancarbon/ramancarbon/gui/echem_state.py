@@ -38,6 +38,27 @@ MEASUREMENT_KINDS: tuple[tuple[str, str], ...] = (
 )
 
 
+#: Unit choices offered for the columns of a text export, as
+#: ``(label, multiplier to SI)``.
+#:
+#: Explicit, not guessed. A column of numbers around 0.001 is equally
+#: plausibly amps or milliamps, and the consequence of getting it wrong
+#: is not subtle: a current density a thousand times too large drags the
+#: iR correction with it, so an overpotential of 170 mV comes back as
+#: 400 V and the axis runs to 2·10⁵ mA/cm². A file with a unit header
+#: still wins — this is for the ones without one.
+POTENTIAL_UNITS: tuple[tuple[str, float], ...] = (
+    ("V / cabecera", 1.0),
+    ("mV", 1e-3),
+)
+
+CURRENT_UNITS: tuple[tuple[str, float], ...] = (
+    ("A / cabecera", 1.0),
+    ("mA", 1e-3),
+    ("µA", 1e-6),
+)
+
+
 def _typical_current(curve: ChargeDischarge) -> float:
     """The magnitude of the current a charge-discharge curve was run at.
 
@@ -83,6 +104,12 @@ class EchemSession:
     normally happen."""
     circuit_fixed: set[str] = field(default_factory=set)
     """Labels held rather than refined."""
+    potential_scale: float = 1.0
+    """Multiplier from the file's potential column to VOLTS."""
+    current_scale: float = 1.0
+    """Multiplier from the file's current column to AMPS. A thousand here
+    is a thousand in every capacitance, every current density and every
+    overpotential."""
     dunn_sweep: str = "media"
     """Which branch of the cycle the Dunn separation reads. The anodic
     sweep alone is the usual published choice, and it is a choice: on a
@@ -122,7 +149,9 @@ class EchemSession:
         into_series: bool = False,
     ) -> bool:
         try:
-            curve = read_cv(path, scan_rate=scan_rate, electrode=self.electrode)
+            curve = read_cv(path, scan_rate=scan_rate, electrode=self.electrode,
+                            potential_scale=self.potential_scale,
+                            current_scale=self.current_scale)
         except (OSError, ValueError, EchemIOError) as exc:
             self.log("error", f"{Path(path).name}: {exc}")
             return False
@@ -137,7 +166,9 @@ class EchemSession:
         self, path: str | Path, current: Optional[float] = None
     ) -> bool:
         try:
-            self.gcd = read_gcd(path, electrode=self.electrode, current=current)
+            self.gcd = read_gcd(path, electrode=self.electrode, current=current,
+                                potential_scale=self.potential_scale,
+                                current_scale=self.current_scale)
         except (OSError, ValueError, EchemIOError) as exc:
             self.log("error", f"{Path(path).name}: {exc}")
             return False
@@ -148,7 +179,9 @@ class EchemSession:
     ) -> bool:
         """Another charge-discharge curve, at a different current."""
         try:
-            curve = read_gcd(path, electrode=self.electrode, current=current)
+            curve = read_gcd(path, electrode=self.electrode, current=current,
+                             potential_scale=self.potential_scale,
+                             current_scale=self.current_scale)
         except (OSError, ValueError, EchemIOError) as exc:
             self.log("error", f"{Path(path).name}: {exc}")
             return False
@@ -166,7 +199,10 @@ class EchemSession:
 
     def load_lsv(self, path: str | Path, scan_rate: float = 0.005) -> bool:
         try:
-            self.lsv = read_cv(path, scan_rate=scan_rate, electrode=self.electrode)
+            self.lsv = read_cv(path, scan_rate=scan_rate,
+                               electrode=self.electrode,
+                               potential_scale=self.potential_scale,
+                               current_scale=self.current_scale)
         except (OSError, ValueError, EchemIOError) as exc:
             self.log("error", f"{Path(path).name}: {exc}")
             return False
@@ -671,4 +707,5 @@ class EchemSession:
         return self.result.report()
 
 
-__all__ = ["MEASUREMENT_KINDS", "EchemSession"]
+__all__ = ["CURRENT_UNITS", "MEASUREMENT_KINDS", "POTENTIAL_UNITS",
+           "EchemSession"]

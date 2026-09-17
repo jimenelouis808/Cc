@@ -716,6 +716,27 @@ class DunnAnalysis:
     """Which branch the currents were read from. Reported because the two
     halves of a cycle give different coefficients on any material whose
     oxidation and reduction are not mirror images."""
+    k1_anodic: Optional[np.ndarray] = None
+    k2_anodic: Optional[np.ndarray] = None
+    k1_cathodic: Optional[np.ndarray] = None
+    k2_cathodic: Optional[np.ndarray] = None
+    """Coefficients for each branch separately, whatever :attr:`sweep`
+    reports. The published figure needs both: it shades the
+    surface-controlled region BETWEEN the two capacitive curves, and what
+    is left between each of them and the measured trace is the diffusive
+    part. Drawing only one half, as this section did at first, leaves a
+    figure nobody in the field recognises."""
+
+    def branch_currents(self, scan_rate: float):
+        """``(capacitive_anodic, capacitive_cathodic)`` in amps.
+
+        ``None`` when the separation was not run on both branches, which
+        happens on a linear sweep that has no return.
+        """
+        if self.k1_anodic is None or self.k1_cathodic is None:
+            return None, None
+        rate = float(scan_rate)
+        return self.k1_anodic * rate, self.k1_cathodic * rate
     """Capacitive fraction of the total charge, by scan rate."""
     rates: tuple[float, ...] = ()
     warnings: list[str] = field(default_factory=list)
@@ -832,17 +853,34 @@ def dunn_analysis(
     capacitive = np.zeros((len(ordered), potentials.size))
     total = np.zeros_like(capacitive)
 
-    for column, potential in enumerate(potentials):
-        currents = [_current_at(curve, potential, sweep) for curve in ordered]
-        if any(value is None for value in currents):
-            continue
-        observed = np.array(currents, dtype=float)
-        # i/√ν = k₁√ν + k₂ — a straight line in √ν, which is the form that
-        # keeps the fit linear and the two coefficients separable.
-        slope, intercept, _, r2 = _fit_line(root, observed / root)
-        k1[column], k2[column], quality[column] = slope, intercept, r2
-        capacitive[:, column] = slope * rates
-        total[:, column] = observed
+    def separate(branch: str):
+        """``(k₁, k₂, R²)`` against potential for one branch."""
+        one = np.zeros(potentials.size)
+        two = np.zeros(potentials.size)
+        fit_quality = np.full(potentials.size, np.nan)
+        measured = np.zeros((len(ordered), potentials.size))
+        for column, potential in enumerate(potentials):
+            currents = [_current_at(curve, potential, branch) for curve in ordered]
+            if any(value is None for value in currents):
+                continue
+            observed = np.array(currents, dtype=float)
+            # i/√ν = k₁√ν + k₂ — a straight line in √ν, which is the form
+            # that keeps the fit linear and the two coefficients separable.
+            slope, intercept, _, r2 = _fit_line(root, observed / root)
+            one[column], two[column], fit_quality[column] = slope, intercept, r2
+            measured[:, column] = observed
+        return one, two, fit_quality, measured
+
+    # Both branches, always. The `sweep` choice decides which one the
+    # headline fractions report, but the FIGURE everybody publishes needs
+    # both: it fills the surface-controlled region between the cathodic
+    # and anodic capacitive curves, and the diffusive part is what is left
+    # between each of those and the measured trace.
+    k1_anodic, k2_anodic, _, _ = separate("media")
+    k1_cathodic, k2_cathodic, _, _ = separate("catodica")
+    k1, k2, quality, total = separate(sweep)
+    for index in range(len(ordered)):
+        capacitive[index] = k1 * rates[index]
 
     fractions: dict[float, float] = {}
     for index, curve in enumerate(ordered):
@@ -889,6 +927,8 @@ def dunn_analysis(
         potentials=potentials, k1=k1, k2=k2, r_squared=quality,
         fractions=fractions, rates=tuple(rates), warnings=warnings,
         sweep=sweep,
+        k1_anodic=k1_anodic, k2_anodic=k2_anodic,
+        k1_cathodic=k1_cathodic, k2_cathodic=k2_cathodic,
     )
 
 

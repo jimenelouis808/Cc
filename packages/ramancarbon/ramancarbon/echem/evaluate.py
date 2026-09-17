@@ -312,6 +312,18 @@ class TafelResult:
 #: the pair says so. Fifty and a hundred are what the field asks for now.
 BENCHMARK_DENSITIES: tuple[float, ...] = (10.0, 50.0, 100.0)
 
+#: Current density, in mA/cm², above which the numbers are not physical.
+#:
+#: A very good laboratory catalyst on a very good support reaches a few
+#: thousand mA/cm² in a flow cell; a beaker with a glassy-carbon disc does
+#: not get near it. So a curve that claims more than this is not reporting
+#: a remarkable electrode, it is reporting amps taken for milliamps or the
+#: wrong area — and the mistake is worth catching here because the iR
+#: correction is multiplied by the same factor and the overpotential with
+#: it. Seen: an axis running to 2·10⁵ mA/cm² and an overpotential of
+#: 400 V, from a measurement whose real maximum was 240 mA/cm².
+ABSURD_CURRENT_DENSITY = 1.0e4
+
 
 @dataclass
 class CatalysisResult:
@@ -647,14 +659,43 @@ def analyse_catalysis(
 
     result.curve_j = j
     result.curve_eta = eta
-    if j.max() >= benchmark:
-        result.overpotential_at_benchmark = float(np.interp(benchmark, j, eta))
-    if j.max() >= 1.0:
-        result.onset_overpotential = float(np.interp(1.0, j, eta))
-    result.overpotentials = {
-        level: (float(np.interp(level, j, eta)) if j.max() >= level else None)
-        for level in BENCHMARK_DENSITIES
-    }
+
+    def at(level: float) -> Optional[float]:
+        """η where the curve reaches ``level``, or ``None``.
+
+        BOTH ends are checked. ``np.interp`` clamps: asked for a density
+        below the measured range it returns the first value without
+        saying so, and a guard on the upper end alone lets that through.
+        On a curve whose active branch starts at 250 mA/cm² — an ordinary
+        HER measurement that simply never went slower — that reported the
+        SAME overpotential at 10, 50 and 100 mA/cm², and the number it
+        reported was the potential at the very end of the sweep.
+        """
+        if j.size < 2 or not (j.min() <= level <= j.max()):
+            return None
+        return float(np.interp(level, j, eta))
+
+    result.overpotential_at_benchmark = at(benchmark)
+    result.onset_overpotential = at(1.0)
+    result.overpotentials = {level: at(level) for level in BENCHMARK_DENSITIES}
+
+    if result.overpotential_at_benchmark is None and j.min() > benchmark:
+        result.warnings.append(
+            f"la rama activa empieza en {j.min():.0f} mA/cm², por encima de "
+            f"los {benchmark:g} del punto de comparación, así que η a esa "
+            "densidad no está medido. Extrapolarlo hacia abajo sería dibujar: "
+            "mide más despacio o desde un potencial menos activo"
+        )
+    if j.max() > ABSURD_CURRENT_DENSITY:
+        result.warnings.append(
+            f"la densidad de corriente llega a {j.max():.3g} mA/cm², que son "
+            f"{j.max() / 1000:.3g} A/cm². Ningún electrodo de laboratorio da "
+            "eso: casi siempre es que la CORRIENTE está en otras unidades de "
+            "las que se han supuesto (un factor de mil entre A y mA) o que el "
+            "área es la equivocada. Compruébalas antes de leer nada de lo de "
+            "abajo, porque la corrección óhmica también se multiplica por ese "
+            "factor y el sobrepotencial con ella"
+        )
 
     result.tafel = tafel_analysis(eta, j)
 

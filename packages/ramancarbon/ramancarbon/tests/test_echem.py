@@ -943,3 +943,86 @@ def test_the_overpotential_is_reported_at_more_than_one_current_density():
     assert result.curve_j is not None and result.curve_eta is not None
     assert result.curve_j.size == result.curve_eta.size > 10
     assert np.all(np.diff(result.curve_j) >= 0), "sorted by current density"
+
+
+def test_dunn_carries_both_branches_for_the_published_figure():
+    """The figure the field prints is the CLOSED voltammogram with the
+    surface-controlled region shaded between the two capacitive curves
+    and the diffusive part filling out to the measured trace on both
+    branches. Half a cycle with a line on it is the same arithmetic and
+    not the same figure."""
+    from ramancarbon.echem.cv import dunn_analysis
+    from ramancarbon.examples.demo_data import cv_rate_series
+
+    curves = cv_rate_series("hibrido", seed=2)
+    analysis = dunn_analysis(curves, sweep="media")
+
+    assert analysis.k1_anodic is not None and analysis.k1_cathodic is not None
+    slow = min(analysis.rates)
+    anodic, cathodic = analysis.branch_currents(slow)
+    assert anodic is not None and cathodic is not None
+    assert anodic.shape == cathodic.shape == analysis.potentials.shape
+
+    # The two branches straddle zero: the anodic capacitive current is
+    # positive and the cathodic one negative, which is what makes the
+    # shaded band a band and not a line.
+    assert np.median(anodic) > 0 > np.median(cathodic)
+
+    # And the sweep choice does not change what the figure can draw.
+    other = dunn_analysis(curves, sweep="catodica")
+    assert other.k1_anodic is not None and other.k1_cathodic is not None
+    assert other.k1_anodic == pytest.approx(analysis.k1_anodic)
+
+
+def test_an_overpotential_below_the_measured_range_is_not_invented():
+    """np.interp CLAMPS: asked for a density below the measured range it
+    returns the first value without saying so, and a guard on the upper
+    end alone lets that through. On a real HER curve whose active branch
+    starts at 250 mA/cm2 that reported the SAME overpotential at 10, 50
+    and 100 -- the potential at the very end of the sweep, three times."""
+    from ramancarbon.echem.evaluate import analyse_catalysis
+
+    n = 300
+    potential = np.linspace(0.0, -0.12, n)
+    density = np.linspace(250.0, 900.0, n)        # mA/cm2, never below 250
+    curve = Voltammogram(
+        potential=potential, current=-density * 1e-3, scan_rate=0.005,
+        electrode=Electrode(area_cm2=1.0, reference="RHE",
+                            resistance_ohm=0.0),
+        name="HER parcial")
+    result = analyse_catalysis(curve, reaction="HER")
+
+    assert result.overpotentials == {10.0: None, 50.0: None, 100.0: None}
+    assert result.overpotential_at_benchmark is None
+    assert result.onset_overpotential is None
+    assert any("por encima de los 10" in w for w in result.warnings)
+
+    # A curve that DOES span the benchmarks still reports them, and they
+    # are distinct.
+    wide = Voltammogram(
+        potential=np.linspace(0.0, -0.30, n),
+        current=-np.linspace(0.5, 300.0, n) * 1e-3, scan_rate=0.005,
+        electrode=Electrode(area_cm2=1.0, reference="RHE",
+                            resistance_ohm=0.0),
+        name="HER completo")
+    spanning = analyse_catalysis(wide, reaction="HER")
+    values = [v for v in spanning.overpotentials.values() if v is not None]
+    assert len(values) == 3 and len(set(np.round(values, 6))) == 3
+
+
+def test_an_impossible_current_density_is_called_out():
+    """2e5 mA/cm2 is 200 A/cm2. No laboratory electrode does that: it is
+    amps taken for milliamps, or the wrong area, and the iR correction is
+    multiplied by the same factor."""
+    from ramancarbon.echem.evaluate import ABSURD_CURRENT_DENSITY, analyse_catalysis
+
+    n = 200
+    curve = Voltammogram(
+        potential=np.linspace(0.0, -0.2, n),
+        current=-np.linspace(10.0, 240.0, n),     # AMPS, i.e. 1000x too big
+        scan_rate=0.005,
+        electrode=Electrode(area_cm2=1.0, reference="RHE", resistance_ohm=0.0),
+        name="unidades mal")
+    result = analyse_catalysis(curve, reaction="HER")
+    assert max(result.curve_j) > ABSURD_CURRENT_DENSITY
+    assert any("A/cm²" in w and "unidades" in w for w in result.warnings)

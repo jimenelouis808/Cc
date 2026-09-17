@@ -222,45 +222,85 @@ def plot_b_values(ax, study: RateStudy, palette: Palette) -> None:
 
 
 def plot_dunn(ax, analysis, curve, palette: Palette,
-              scan_rate: Optional[float] = None) -> None:
-    """The capacitive current drawn inside the measured voltammogram.
+              scan_rate: Optional[float] = None,
+              per_gram: bool = False) -> None:
+    """The published Dunn figure: the whole cycle, with both parts shaded.
 
-    This is the figure the Dunn separation exists to produce. The shaded
-    area is the surface-controlled part and what is left between it and the
-    measured curve is the diffusion-controlled part — so the plot shows
-    *where* in the window the diffusive contribution actually sits, which a
-    single percentage cannot.
+    The figure the field actually prints is the CLOSED voltammogram with
+    the surface-controlled region shaded between the two capacitive
+    curves and the diffusion-controlled part filling what is left out to
+    the measured trace, on both branches. Drawing half a cycle with a
+    line on it — which is what this was — shows the same arithmetic and
+    is not the same figure: the eye reads a voltammogram as a loop, and
+    the diffusive contribution is the area between the loop and the
+    shaded core, so both halves have to be there for it to be readable
+    at all.
     """
-    rate = scan_rate if scan_rate is not None else max(analysis.rates or (0.0,))
-    capacitive = analysis.capacitive_current(rate)
-    ax.fill_between(analysis.potentials, 0.0, 1e3 * capacitive,
-                    color=palette.component_colour(0), alpha=0.35,
-                    linewidth=0, label="superficial (k₁ν)")
-    if curve is not None and abs(curve.scan_rate - rate) < 1e-9:
+    if analysis is None:
+        placeholder(ax, "Dunn necesita tres velocidades", palette)
+        return
+    rate = scan_rate if scan_rate is not None else min(analysis.rates or (0.0,))
+    potentials = np.asarray(analysis.potentials, dtype=float)
+    anodic, cathodic = analysis.branch_currents(rate)
+    if anodic is None or cathodic is None:
+        anodic = analysis.capacitive_current(rate)
+        cathodic = -anodic
+
+    scale = 1.0
+    unit = "mA"
+    if per_gram and curve is not None:
+        grams = getattr(getattr(curve, "electrode", None), "mass_mg", None)
+        if grams:
+            scale = 1.0 / (grams * 1e-3)
+            unit = "A/g"
+    factor = (1e3 if unit == "mA" else 1.0) * scale
+
+    measured_up = measured_down = None
+    if curve is not None:
         try:
-            anodic, _ = curve.sweeps()
-            ax.plot(anodic.potential, 1e3 * anodic.current, color=palette.data,
-                    linewidth=1.0, label="medido")
-        except Exception:                        # noqa: BLE001 - no clean sweep
-            pass
-    ax.plot(analysis.potentials, 1e3 * (capacitive + analysis.diffusive_current(rate)),
-            color=palette.fitted, linewidth=1.0, label="k₁ν + k₂√ν")
-    ax.plot(analysis.potentials, 1e3 * analysis.diffusive_current(rate),
-            color=palette.accent, linewidth=0.9, linestyle="--",
-            label="difusivo (k₂√ν)")
+            up, down = curve.sweeps()
+            measured_up = np.interp(potentials, *_sorted(up))
+            measured_down = np.interp(potentials, *_sorted(down))
+        except Exception:                       # noqa: BLE001 - no clean cycle
+            measured_up = measured_down = None
+
+    surface = palette.component_colour(0)
+    diffusive = palette.fitted
+
+    # The diffusive part FIRST, so the surface band is drawn over it and
+    # the boundary between them is the capacitive curve, as printed.
+    if measured_up is not None and measured_down is not None:
+        ax.fill_between(potentials, factor * anodic, factor * measured_up,
+                        color=diffusive, alpha=0.85, linewidth=0,
+                        label="difusivo (k₂√ν)")
+        ax.fill_between(potentials, factor * measured_down, factor * cathodic,
+                        color=diffusive, alpha=0.85, linewidth=0)
+        ax.plot(np.concatenate([potentials, potentials[::-1]]),
+                factor * np.concatenate([measured_up, measured_down[::-1]]),
+                color=palette.data, linewidth=1.4,
+                label=f"{1e3 * rate:g} mV/s")
+    ax.fill_between(potentials, factor * cathodic, factor * anodic,
+                    color=surface, alpha=0.85, linewidth=0,
+                    label="superficial (k₁ν)")
+
     fraction = analysis.fractions.get(rate)
-    # "Superficial", not "capacitivo". A surface-confined redox reaction
-    # is surface-controlled, so it sits in k1 by definition, and the word
-    # "capacitive" on this plot is what makes people read a correct
-    # 99 % as their redox peaks having been swallowed.
-    ax.set_title(
-        f"{1e3 * rate:g} mV/s" + (f" — {100 * fraction:.0f} % superficial"
-                                  if fraction is not None else ""),
-        fontsize=8,
-    )
+    if fraction is not None:
+        # Written inside the shaded region, where the published figures
+        # put it, rather than in a title nobody reads next to the number.
+        middle = potentials[len(potentials) // 2]
+        ax.annotate(f"{100 * fraction:.0f} % superficial",
+                    xy=(middle, 0.0), ha="center", va="center",
+                    fontsize=8, color=palette.text)
     ax.set_xlabel("Potencial (V)")
-    ax.set_ylabel("Corriente (mA)")
-    ax.legend(loc="upper left", frameon=False, fontsize=6.5)
+    ax.set_ylabel(f"Corriente ({unit})")
+    ax.legend(loc="upper left", frameon=False, fontsize=7)
+    ax.axhline(0.0, color=palette.border, linewidth=0.6, zorder=0)
+
+
+def _sorted(branch):
+    """A branch's ``(potential, current)`` sorted for interpolation."""
+    order = np.argsort(branch.potential)
+    return branch.potential[order], branch.current[order]
 
 
 def plot_tafel(ax, result: CatalysisResult, palette: Palette,

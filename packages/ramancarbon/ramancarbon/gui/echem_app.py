@@ -20,7 +20,7 @@ from typing import Optional
 from ..echem.curve import Electrode
 from ..echem.cv import SWEEP_CHOICES
 from .base import SectionApp, placeholder
-from .echem_state import EchemSession
+from .echem_state import CURRENT_UNITS, POTENTIAL_UNITS, EchemSession
 from .theme import PAD
 from .widgets import (
     card,
@@ -157,6 +157,22 @@ class EchemApp(SectionApp):
             highlightthickness=0, borderwidth=0, font=self.fonts["small"],
         )
         self.loaded_list.pack(fill="both", expand=True, pady=(0, PAD["sm"]))
+
+        self.potential_unit_var = tk.StringVar(value=POTENTIAL_UNITS[0][0])
+        labelled(lbody, "Unidad de E", lambda p: ttk.Combobox(
+            p, textvariable=self.potential_unit_var, width=13, state="readonly",
+            values=[label for label, _ in POTENTIAL_UNITS]))
+        self.current_unit_var = tk.StringVar(value=CURRENT_UNITS[0][0])
+        labelled(lbody, "Unidad de I", lambda p: ttk.Combobox(
+            p, textvariable=self.current_unit_var, width=13, state="readonly",
+            values=[label for label, _ in CURRENT_UNITS]))
+        hint(lbody,
+             "Sólo para archivos SIN cabecera de unidades; si la trae, gana "
+             "la cabecera. No se adivina: una columna de números alrededor de "
+             "0.001 puede ser amperios o miliamperios con la misma "
+             "verosimilitud, y equivocarse arrastra la corrección óhmica, así "
+             "que un sobrepotencial de 170 mV vuelve como 400 V.",
+             wrap=260)
 
         self.scan_rate_var = tk.StringVar(value="20")
         labelled(lbody, "Velocidad (mV/s)", lambda p: ttk.Entry(
@@ -744,6 +760,10 @@ class EchemApp(SectionApp):
     def _settings_from_widgets(self) -> None:
         self.session.name = self.name_var.get() or "muestra"
         self.session.electrode = self._electrode_from_widgets()
+        self.session.potential_scale = dict(POTENTIAL_UNITS).get(
+            self.potential_unit_var.get(), 1.0)
+        self.session.current_scale = dict(CURRENT_UNITS).get(
+            self.current_unit_var.get(), 1.0)
         self.session.reaction = self.reaction_var.get()
         # NOT from the combobox: the box holds a name, and what the user
         # edited is the string in the entry. Taking the name back would
@@ -966,7 +986,7 @@ class EchemApp(SectionApp):
                 self.session.cv,
             )
             plot_dunn(right, result.dunn, curve, self.figure_palette,
-                      scan_rate=rate)
+                      scan_rate=rate, per_gram=True)
 
     def _draw_gcd(self, figure) -> None:
         from .plots_echem import plot_gcd

@@ -930,6 +930,25 @@ El módulo `echem/io.py` dice que los formatos binarios se rechazan, y
   panel.** Etiquetas, límites y escalas son del panel; compartir estilo no
   puede rotular un difractograma con los ejes de un voltamperograma.
 
+## `np.interp` recorta, y recortar en silencio es inventar
+
+- **Una densidad de corriente por debajo del rango medido devuelve el
+  primer valor** sin decir nada, y una guarda sólo en el extremo superior
+  lo deja pasar. En una curva HER real cuya rama activa empieza en
+  250 mA/cm² eso informaba el MISMO sobrepotencial a 10, 50 y 100 —el
+  potencial del final del barrido, tres veces— y los tres números se leían
+  como una medida. Se comprueban los DOS extremos, y lo que no se alcanzó
+  se informa como no alcanzado con el motivo.
+- **Y una densidad de corriente imposible se dice.** 2·10⁵ mA/cm² son
+  200 A/cm²: ningún electrodo de laboratorio da eso. Es corriente en otras
+  unidades (el factor mil entre A y mA) o el área equivocada, y hay que
+  cazarlo aquí porque la corrección óhmica se multiplica por ese mismo
+  factor y el sobrepotencial con ella — un η de 170 mV volvía como 400 V.
+- **Las unidades de las columnas se ELIGEN, no se adivinan**, cuando el
+  archivo no trae cabecera. Una columna de números alrededor de 0.001
+  puede ser amperios o miliamperios con la misma verosimilitud. Si la
+  cabecera las trae, gana la cabecera.
+
 ## Cinética electroquímica
 
 - **Todo esto acaba en un coeficiente de difusión, y un coeficiente de
@@ -1331,6 +1350,19 @@ El módulo `echem/io.py` dice que los formatos binarios se rechazan, y
   pidiendo que lo renombren: decirle a alguien que renombre su archivo no
   es una respuesta cuando el programa puede abrirlo. Lo que se sigue
   rechazando es el binario desconocido, por la razón de siempre.
+
+## Dunn: la figura que se publica
+
+- **Es el ciclo CERRADO con las dos partes sombreadas**, no medio ciclo
+  con una línea encima. La aritmética es la misma y la figura no: el ojo
+  lee un voltamperograma como un lazo, y la contribución difusiva es el
+  área entre el lazo y el núcleo sombreado, así que hacen falta las dos
+  ramas para que se pueda leer.
+- Por eso `dunn_analysis` calcula SIEMPRE los coeficientes de las dos
+  ramas, aunque `sweep` decida cuál informan las fracciones de cabecera.
+- El orden de dibujo importa: primero lo difusivo, luego la banda
+  superficial encima, así la frontera entre los dos colores es la curva
+  capacitiva, que es lo que se imprime.
 
 ## Dunn: lo que NO separa
 
