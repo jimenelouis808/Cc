@@ -81,11 +81,9 @@ class SectionApp:
         canvas = FigureCanvasTkAgg(figure, master=parent)
         widget = canvas.get_tk_widget()
         widget.configure(background=self.palette.surface, highlightthickness=0)
-        widget.pack(fill="both", expand=True)
         toolbar = NavigationToolbar2Tk(canvas, parent, pack_toolbar=False)
         toolbar.configure(background=self.palette.surface_alt)
         toolbar.update()
-        toolbar.pack(fill="x")
         # A real reset, next to matplotlib's own Home. Home rewinds the
         # view STACK, so after a redraw with new data it restores limits
         # that belonged to the previous figure; and if the stack is empty
@@ -101,6 +99,18 @@ class SectionApp:
         self.ttk.Button(toolbar, text="Guardar datos…",
                         command=lambda k=key: self.export_canvas(k)).pack(
             side="right", padx=PAD["xs"])
+        # The toolbar is packed BEFORE the figure, and from the bottom.
+        # The packer hands out the cavity in packing order and gives each
+        # widget its requested size first: the figure asks for
+        # ``figsize * dpi`` -- 500 px tall for the default -- so in a pane
+        # shorter than that it swallowed the whole cavity and the toolbar,
+        # packed after it, was allocated nothing and never drawn. That is
+        # why the navigation bar and "Guardar datos..." disappeared as
+        # soon as the tabs were split into panes. Reserving the strip
+        # first costs the figure 40 px it can spare and cannot be
+        # squeezed out at any window size.
+        toolbar.pack(side="bottom", fill="x")
+        widget.pack(side="top", fill="both", expand=True)
         self._canvases[key] = canvas
         self._figures[key] = figure
         return figure, canvas

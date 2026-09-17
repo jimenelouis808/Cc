@@ -968,3 +968,76 @@ def test_the_width_you_type_is_the_width_you_read():
     assert session.fits["C 1s"].components[0].profile.startswith("ds"), (
         "this test wants the asymmetric component, where the parameter "
         "and the true width differ most")
+
+
+# ----------------------------------------------------------------------
+# what happens to a file that will not open
+# ----------------------------------------------------------------------
+def _a_vamas_file(tmp_path):
+    from ramancarbon.xps.io import write_vamas
+
+    energy = np.linspace(280.0, 300.0, 401)
+    counts = 1000.0 + 5000.0 * np.exp(-0.5 * ((energy - 284.6) / 0.8) ** 2)
+    spectrum = XPSSpectrum(
+        binding_energy=energy, counts=counts, name="C 1s", region="C1s",
+        photon_energy=1486.6, pass_energy=26.0,
+    )
+    return write_vamas(tmp_path / "muestra.vms", spectrum)
+
+
+# The reader decodes with latin-1, so a UTF-8 byte-order mark reaches
+# it as these three characters.
+@pytest.mark.parametrize("preamble", ["ï»¿", "\n", "   \n\n"])
+def test_a_vamas_file_is_read_even_when_the_identifier_is_not_line_one(
+        tmp_path, preamble):
+    """A byte-order mark or a blank line in front of the identifier used to
+    send the file to the two-column text reader, which then complained
+    about columns — a message that describes the wrong problem entirely."""
+    from ramancarbon.xps.io import read_xps
+
+    path = _a_vamas_file(tmp_path)
+    path.write_text(preamble + path.read_text(encoding="latin-1"),
+                    encoding="latin-1")
+    spectra = read_xps(path)
+    assert [item.region for item in spectra] == ["C1s"]
+
+
+def test_a_vms_that_is_not_vamas_is_refused_by_name(tmp_path):
+    """The extension claims VAMAS, so the VAMAS reader answers — quoting
+    the line it found. Falling through to the text reader produced an
+    error about column counts that sent the user looking in the wrong
+    place."""
+    from ramancarbon.xps.io import read_xps
+
+    path = tmp_path / "raro.vms"
+    path.write_text("# exportado por otra cosa\n1 2\n3 4\n", encoding="latin-1")
+    with pytest.raises(XPSError) as raised:
+        read_xps(path)
+    assert "VAMAS" in str(raised.value)
+
+
+def test_the_xps_section_shows_the_reason_a_file_would_not_open():
+    """Static: the load handler must put the reader's diagnosis in front of
+    the user and must not overwrite it with a count.
+
+    This was the whole of "the XPS section does not open anything". The
+    readers diagnose precisely what an unreadable file is; ``_load`` pushed
+    that diagnosis into the status bar with ``flush_messages`` and then, on
+    the very next line, replaced it with ``0 espectro(s) cargados``. The
+    list said ``(ningún espectro)`` and no reason appeared anywhere.
+    """
+    import ast
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "gui" / "xps_app.py").read_text(
+        encoding="utf-8")
+    tree = ast.parse(source)
+    handler = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "_load"
+    )
+    body = ast.unparse(handler)
+    assert "showerror" in body, "an unreadable file has to say so in a dialog"
+    assert "level == 'error'" in body, "the errors the readers logged are ignored"
+    # The early return is what keeps the count from overwriting the reason.
+    assert any(isinstance(node, ast.Return) for node in ast.walk(handler))

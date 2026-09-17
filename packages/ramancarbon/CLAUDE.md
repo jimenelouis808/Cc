@@ -1333,6 +1333,17 @@ El módulo `echem/io.py` dice que los formatos binarios se rechazan, y
 - **Y donde hay dos figuras apiladas, va un divisor arrastrable**
   (`split_column`), no dos `expand=True` compitiendo. «No se puede
   expandir» era literal.
+- **La barra de herramientas se empaqueta ANTES que su figura, y desde
+  abajo.** Un lienzo de matplotlib pide `figsize * dpi` —760x500 px con
+  los valores por defecto— así que dentro de un panel más corto que eso
+  se queda con toda la cavidad y la barra, empaquetada después, no recibe
+  nada. No hay error: la tira simplemente no está, y con ella se van el
+  zoom, el desplazamiento y «Guardar datos…» de TODAS las figuras del
+  programa. Fue el precio, no visto, de partir las pestañas en paneles:
+  el mismo reparto de siempre, llegando por las dos funciones que crean
+  lienzos (`SectionApp.make_canvas` y `RamanCarbonApp._make_canvas`), que
+  es justo donde la prueba estática de la regla anterior no miraba porque
+  sólo recorre los `_build_tab*`. Ahora hay una prueba para ellas.
 
 ## Un `.spe` no es un formato
 
@@ -1350,6 +1361,22 @@ El módulo `echem/io.py` dice que los formatos binarios se rechazan, y
   pidiendo que lo renombren: decirle a alguien que renombre su archivo no
   es una respuesta cuando el programa puede abrirlo. Lo que se sigue
   rechazando es el binario desconocido, por la razón de siempre.
+- **Y todo ese diagnóstico no servía de nada porque nadie lo veía.** La
+  sección mandaba el motivo a la barra de estado con `flush_messages` y
+  lo sobrescribía en la línea siguiente con «0 espectro(s) cargados»: la
+  lista decía «(ningún espectro)», no aparecía ninguna razón en ninguna
+  parte de la pantalla, y el módulo entero se leía como que no abre
+  archivos. Un archivo que no se puede leer se dice en un diálogo, con lo
+  que el lector dedujo, y el recuento no puede pisarlo.
+- **El identificador VAMAS no siempre está en la línea uno.** Una marca de
+  orden de bytes o una línea en blanco delante mandaban el archivo al
+  lector de texto de dos columnas, que se quejaba de columnas: un mensaje
+  sobre un problema que no era. Se salta lo que hay ANTES del
+  identificador y sólo si está vacío; una línea en blanco más adentro es
+  un campo —un operador sin nombre— y saltársela correría todos los
+  valores siguientes. Y un `.vms` sin identificador lo rechaza el lector
+  VAMAS, por su nombre, en vez de caer en otro lector que describiría mal
+  el problema.
 
 ## Dunn: la figura que se publica
 

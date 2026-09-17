@@ -343,11 +343,9 @@ class RamanCarbonApp:
         canvas = FigureCanvasTkAgg(figure, master=parent)
         widget = canvas.get_tk_widget()
         widget.configure(background=self.palette.surface, highlightthickness=0)
-        widget.pack(fill="both", expand=True)
         toolbar = NavigationToolbar2Tk(canvas, parent, pack_toolbar=False)
         toolbar.configure(background=self.palette.surface_alt)
         toolbar.update()
-        toolbar.pack(fill="x")
         # See SectionApp.reset_zoom: matplotlib's Home rewinds the view
         # stack, which after a redraw restores the previous figure's
         # limits and on an empty stack does nothing at all.
@@ -357,6 +355,11 @@ class RamanCarbonApp:
         self.ttk.Button(toolbar, text="Guardar datos…",
                         command=lambda k=key: self._export_canvas(k)).pack(
             side="right", padx=PAD["xs"])
+        # Packed before the figure and from the bottom: see
+        # SectionApp.make_canvas. A figure that asks for more height than
+        # its pane has leaves nothing for a toolbar packed after it.
+        toolbar.pack(side="bottom", fill="x")
+        widget.pack(side="top", fill="both", expand=True)
         self._canvases[key] = canvas
         self._figures[key] = figure
         return figure, canvas

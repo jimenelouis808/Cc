@@ -865,3 +865,66 @@ def test_nothing_that_expands_is_packed_before_a_fixed_card(stem):
                 )
 
     assert not offenders, "\n".join(offenders)
+
+
+@pytest.mark.parametrize("stem", ["base", "app"])
+def test_the_toolbar_is_packed_before_the_figure_it_belongs_to(stem):
+    """A navigation toolbar packed after its figure is not drawn.
+
+    The packer hands out the cavity in packing order, giving each widget
+    its requested size before it divides what is left. A matplotlib canvas
+    requests ``figsize * dpi`` -- 760x500 px for the default -- so inside
+    a pane shorter than that it takes the whole cavity and a toolbar
+    packed afterwards is allocated nothing. Nothing errors; the strip
+    simply is not there, and with it go zoom, pan and ``Guardar datos...``
+    on every figure in the suite.
+
+    :func:`test_nothing_that_expands_is_packed_before_a_fixed_card` states
+    the same rule for tab builders, but the canvas factories live in
+    ``SectionApp.make_canvas`` and ``RamanCarbonApp._make_canvas``, which
+    that test does not look at -- which is how this one got through.
+    """
+    tree = ast.parse(source(stem))
+    checked = 0
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        toolbars = {
+            statement.targets[0].id
+            for statement in ast.walk(node)
+            if isinstance(statement, ast.Assign)
+            and isinstance(statement.targets[0], ast.Name)
+            and isinstance(statement.value, ast.Call)
+            and "NavigationToolbar2Tk" in ast.unparse(statement.value.func)
+        }
+        if not toolbars:
+            continue
+        widgets = {
+            statement.targets[0].id
+            for statement in ast.walk(node)
+            if isinstance(statement, ast.Assign)
+            and isinstance(statement.targets[0], ast.Name)
+            and isinstance(statement.value, ast.Call)
+            and ast.unparse(statement.value.func).endswith("get_tk_widget")
+        }
+        assert widgets, f"{stem}.{node.name}: a toolbar with no canvas widget"
+        order = [
+            (call.func.value.id, call.lineno)
+            for call in ast.walk(node)
+            if isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Attribute)
+            and call.func.attr == "pack"
+            and isinstance(call.func.value, ast.Name)
+            and (call.func.value.id in toolbars or call.func.value.id in widgets)
+        ]
+        toolbar_line = min(line for name, line in order if name in toolbars)
+        widget_line = min(line for name, line in order if name in widgets)
+        assert toolbar_line < widget_line, (
+            f"{stem}.{node.name}: the toolbar is packed at line {toolbar_line}, "
+            f"after the figure at line {widget_line}; in a pane shorter than "
+            "the figure's requested height it will not be drawn at all"
+        )
+        checked += 1
+
+    assert checked, f"{stem}: no canvas factory found to check"

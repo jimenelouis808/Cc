@@ -511,6 +511,18 @@ def read_spe(
 # ----------------------------------------------------------------------
 # VAMAS / ISO 14976
 # ----------------------------------------------------------------------
+#: A UTF-8 byte-order mark, and the same three bytes seen through
+#: latin-1, which is how this reader decodes the file.
+_BYTE_ORDER_MARKS = ("\ufeff", "\u00ef\u00bb\u00bf")
+
+
+def _without_mark(line: str) -> str:
+    for mark in _BYTE_ORDER_MARKS:
+        if line.startswith(mark):
+            return line[len(mark):]
+    return line
+
+
 def _vamas_lines(text: str) -> list[str]:
     return [line.rstrip("\r") for line in text.split("\n")]
 
@@ -564,9 +576,18 @@ def read_vamas(path: str | Path) -> list[XPSSpectrum]:
     """
     path = Path(path)
     text = path.read_text(encoding="latin-1")
-    cursor = _Cursor(_vamas_lines(text))
+    lines = _vamas_lines(text)
+    # Only what comes BEFORE the identifier is skipped, and only if it is
+    # empty or a byte-order mark. A blank line further in is a field --
+    # an unnamed operator, an empty comment -- and dropping those would
+    # shift every value that follows, which in a positional format means
+    # reading the wrong numbers rather than failing.
+    start = 0
+    while start < len(lines) and not _without_mark(lines[start]).strip():
+        start += 1
+    cursor = _Cursor(lines[start:])
 
-    identifier = cursor.next()
+    identifier = _without_mark(cursor.next())
     if "VAMAS" not in identifier.upper():
         raise XPSError(
             f"{path.name}: la primera línea no es el identificador VAMAS "
@@ -1018,7 +1039,20 @@ def read_xps(path: str | Path, **options: Any) -> list[XPSSpectrum]:
         sample = head.decode("latin-1")
     except UnicodeDecodeError:                  # pragma: no cover
         sample = ""
-    if "VAMAS" in sample.upper().split("\n")[0]:
+    # The identifier is meant to be the first line, and in files people
+    # actually have it sometimes is not: a byte-order mark, a blank line
+    # or an exporter's own banner gets in front of it. Looking only at
+    # line one sent those files to the two-column text reader, which
+    # failed with a complaint about columns that says nothing about the
+    # real problem. Look through the opening lines instead.
+    opening = [line for line in sample.upper().split("\n")[:5]]
+    if any("VAMAS" in line for line in opening):
+        return read_vamas(path)
+    if path.suffix.lower() in (".vms", ".npl"):
+        # The extension says VAMAS and the identifier is not there. Let
+        # the VAMAS reader refuse it by name and quote what it found,
+        # rather than handing the file to a reader that will describe the
+        # wrong problem.
         return read_vamas(path)
     accepted = {
         "photon_energy", "pass_energy", "axis", "work_function",

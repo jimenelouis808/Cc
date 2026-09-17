@@ -624,10 +624,33 @@ class XPSApp(SectionApp):
         pass_energy = _number(self.pass_var.get())
         if pass_energy:
             options["pass_energy"] = pass_energy
-        total = sum(self.session.load(path, **options) for path in paths)
+        # A file that cannot be read has to SAY so, in front of the user.
+        # This used to push the reader's explanation into the status bar
+        # with flush_messages and then overwrite it, on the next line,
+        # with "0 espectro(s) cargados" -- so every unreadable file looked
+        # like a section that simply does nothing, and the list showed
+        # "(ningún espectro)" with no reason anywhere on screen. The
+        # readers already diagnose what a file actually is; the interface
+        # was throwing that away.
+        before = len(self.session.messages)
+        total = 0
+        for path in paths:
+            total += self.session.load(path, **options)
+        problems = [text for level, text in self.session.messages[before:]
+                    if level == "error"]
+        self._refresh_loaded()
+        if problems:
+            from tkinter import messagebox
+
+            messagebox.showerror(
+                "No se pudo leer el archivo",
+                "\n\n".join(problems), parent=self.root)
+            self.set_status(
+                f"{total} espectro(s) cargados; "
+                f"{len(problems)} archivo(s) sin leer (ver el aviso)")
+            return
         self.flush_messages(self.session.messages)
         self.set_status(f"{total} espectro(s) cargados")
-        self._refresh_loaded()
 
     def _load_demo(self) -> None:
         from ..examples.demo_data import make_xps_demo
