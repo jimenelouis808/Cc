@@ -304,6 +304,15 @@ class TafelResult:
         )
 
 
+#: Current densities the overpotential is reported at, in mA/cm².
+#:
+#: Ten is the convention — it comes from a 10 %-efficient solar cell
+#: under one sun — and it is not enough on its own: a catalyst that is
+#: excellent at 10 and collapses at 100 is one nobody can use, and only
+#: the pair says so. Fifty and a hundred are what the field asks for now.
+BENCHMARK_DENSITIES: tuple[float, ...] = (10.0, 50.0, 100.0)
+
+
 @dataclass
 class CatalysisResult:
     """HER or OER figures of merit."""
@@ -312,6 +321,23 @@ class CatalysisResult:
     overpotential_at_benchmark: Optional[float] = None
     """η at 10 mA/cm², in volts. The field's comparison point."""
     benchmark_ma_cm2: float = 10.0
+    overpotentials: dict[float, Optional[float]] = field(default_factory=dict)
+    """η at each of :data:`BENCHMARK_DENSITIES`, in volts, ``None`` where
+    the curve does not reach it.
+
+    Ten alone stopped being enough some years ago: a catalyst that is
+    excellent at 10 mA/cm² and collapses at 100 is a catalyst nobody can
+    use, and the difference between η₁₀ and η₁₀₀ is what says so. The
+    ones the measurement did not reach are reported as not reached rather
+    than extrapolated — a Tafel line extended two decades past the data
+    is a drawing."""
+    curve_j: Optional[np.ndarray] = None
+    """|j| in mA/cm², iR-corrected, on the active branch."""
+    curve_eta: Optional[np.ndarray] = None
+    """η in volts, matching :attr:`curve_j`. Carried so the section can
+    draw the polarisation curve itself and not only its logarithm: a
+    Tafel plot hides the shape, and the shape is where a mass-transport
+    limit or a bubble problem shows up."""
     tafel: Optional[TafelResult] = None
     onset_overpotential: Optional[float] = None
     mass_activity_a_per_g: Optional[float] = None
@@ -327,6 +353,14 @@ class CatalysisResult:
         if self.ir_note:
             lines.append(f"  {self.ir_note}")
         lines.append("")
+        for level, value in sorted(self.overpotentials.items()):
+            if level == self.benchmark_ma_cm2:
+                continue
+            lines.append(
+                f"  η a {level:g} mA/cm²  : "
+                + (f"{1e3 * value:.0f} mV" if value is not None
+                   else "la curva no llega a esa densidad")
+            )
         if self.overpotential_at_benchmark is not None:
             lines.append(
                 f"η a {self.benchmark_ma_cm2:g} mA/cm² : "
@@ -611,10 +645,16 @@ def analyse_catalysis(
     order = np.argsort(j)
     eta, j = eta[order], j[order]
 
+    result.curve_j = j
+    result.curve_eta = eta
     if j.max() >= benchmark:
         result.overpotential_at_benchmark = float(np.interp(benchmark, j, eta))
     if j.max() >= 1.0:
         result.onset_overpotential = float(np.interp(1.0, j, eta))
+    result.overpotentials = {
+        level: (float(np.interp(level, j, eta)) if j.max() >= level else None)
+        for level in BENCHMARK_DENSITIES
+    }
 
     result.tafel = tafel_analysis(eta, j)
 

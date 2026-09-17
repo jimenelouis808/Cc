@@ -195,6 +195,11 @@ def test_every_mechanism_is_classified_correctly(kind):
     expected = {
         "condensador": "EDLC",
         "pseudocondensador": "pseudocapacitive",
+        # Broad overlapping redox plus a diffusive TAIL is still a
+        # pseudocapacitor. What makes an electrode a battery is a narrow,
+        # dominant, diffusion-limited pair -- a phase transition -- and
+        # that is the next entry.
+        "hibrido": "pseudocapacitive",
         "bateria": "battery",
     }[kind]
     assert verdict.mechanism == expected, verdict.summary()
@@ -838,3 +843,103 @@ def test_a_gcd_series_is_ordered_by_its_own_current():
     curve = make_gcd_demo("condensador", current=3e-3)
     curve.current[0] = 50.0
     assert _typical_current(curve) == pytest.approx(3e-3, rel=0.05)
+
+
+# -- the choices a rate study needs -------------------------------------
+
+def test_dunn_can_be_run_on_either_branch_or_the_whole_cycle():
+    """The anodic sweep alone is the usual published choice, and it is a
+    CHOICE: on a material whose oxidation and reduction are not mirror
+    images the two halves give different coefficients, and that
+    difference is information."""
+    from ramancarbon.echem.cv import SWEEP_CHOICES, dunn_analysis
+    from ramancarbon.examples.demo_data import cv_rate_series
+
+    curves = cv_rate_series("hibrido", seed=2)
+    results = {}
+    for key, label in SWEEP_CHOICES:
+        analysis = dunn_analysis(curves, sweep=key)
+        assert analysis.sweep == key
+        assert label.split(":")[0] in analysis.summary() or key in analysis.summary()
+        results[key] = analysis.fractions
+
+    slowest = min(results["media"])
+    assert results["media"][slowest] != pytest.approx(
+        results["catodica"][slowest], abs=1e-6), (
+        "the two branches gave identical answers; this demo is symmetric "
+        "and cannot show what the option is for")
+
+    with pytest.raises(CurveError, match="rama desconocida"):
+        dunn_analysis(curves, sweep="diagonal")
+
+
+def test_the_hybrid_demo_has_a_diffusive_part_to_separate():
+    """The plain pseudocapacitor is surface-confined by construction, so
+    Dunn correctly returns ~100 % for it and there is nothing to see. A
+    demonstration of the method needs an electrode that has both."""
+    from ramancarbon.echem.cv import dunn_analysis
+    from ramancarbon.examples.demo_data import cv_rate_series
+
+    plain = dunn_analysis(cv_rate_series("pseudocondensador", seed=2))
+    hybrid = dunn_analysis(cv_rate_series("hibrido", seed=2))
+
+    assert min(plain.fractions.values()) > 0.95
+    slow = min(hybrid.fractions)
+    fast = max(hybrid.fractions)
+    assert 0.55 < hybrid.fractions[slow] < 0.9, hybrid.fractions
+    # And it RISES with scan rate, which is the whole signature: the
+    # diffusive term grows as sqrt(nu) while the surface one grows as nu.
+    assert hybrid.fractions[fast] > hybrid.fractions[slow] + 0.08
+
+
+def test_three_capacitance_conventions_and_the_spread_is_the_diagnostic():
+    """On an ideal capacitor they agree to about a per cent; on a plateau
+    the delta-V convention over-reports by exactly what the curve bends."""
+    from ramancarbon.echem.gcd import analyse_gcd
+    from ramancarbon.examples.demo_data import make_gcd_demo
+
+    ideal = analyse_gcd(make_gcd_demo("condensador", capacitance=0.05, seed=1))
+    branch = ideal.discharges[-1]
+    values = [v for v in branch.capacitances().values() if v]
+    assert len(values) == 3
+    # The slope convention is the closed case: I/|dV/dt| on a straight
+    # discharge must give back the capacitance the demo was built from.
+    assert branch.capacitance_slope_f == pytest.approx(0.05, rel=0.02)
+    assert branch.capacitance_spread < 0.05
+    assert not any("convenios" in w for w in ideal.warnings)
+
+    curved = analyse_gcd(make_gcd_demo("bateria", seed=1))
+    bent = curved.discharges[-1]
+    assert bent.capacitance_spread > 0.10
+    assert bent.capacitance_f > bent.capacitance_energy_f, (
+        "the delta-V convention must be the one that over-reports on a "
+        "plateau; that is why it needs saying")
+    assert any("convenios" in w for w in curved.warnings)
+
+
+def test_the_overpotential_is_reported_at_more_than_one_current_density():
+    """A catalyst that is excellent at 10 mA/cm2 and collapses at 100 is
+    one nobody can use, and only the pair says so. What the curve did not
+    reach is reported as not reached, never extrapolated."""
+    from ramancarbon.echem.evaluate import BENCHMARK_DENSITIES, analyse_catalysis
+    from ramancarbon.examples.demo_data import make_lsv_demo
+
+    curve = make_lsv_demo("OER", seed=1)
+    curve.electrode = Electrode(area_cm2=1.0, ph=14.0, resistance_ohm=2.0)
+    result = analyse_catalysis(curve, reaction="OER")
+
+    assert set(result.overpotentials) == set(BENCHMARK_DENSITIES)
+    reached = {k: v for k, v in result.overpotentials.items() if v is not None}
+    assert reached, result.overpotentials
+    # Monotonic: more current costs more overpotential.
+    levels = sorted(reached)
+    for low, high in zip(levels, levels[1:]):
+        assert reached[high] > reached[low]
+    assert result.overpotentials[10.0] == pytest.approx(
+        result.overpotential_at_benchmark, rel=1e-6)
+
+    # And the polarisation curve itself is carried, so the section can
+    # draw the shape and not only its logarithm.
+    assert result.curve_j is not None and result.curve_eta is not None
+    assert result.curve_j.size == result.curve_eta.size > 10
+    assert np.all(np.diff(result.curve_j) >= 0), "sorted by current density"

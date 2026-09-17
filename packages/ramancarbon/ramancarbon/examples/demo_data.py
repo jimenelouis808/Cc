@@ -278,6 +278,7 @@ __all__ = [
     "TMD_DEMOS",
     "TMD_OXIDE_DEMOS",
     "ECHEM_DEMOS",
+    "HYBRID_DIFFUSIVE_SHARE",
     "XRD_DEMOS",
     "add_doping",
     "demo_spectra",
@@ -631,7 +632,19 @@ def xrd_demo_spectra(seed: int = 0):
 #: parameters: the capacitor from a constant differential capacitance, the
 #: pseudocapacitor from broad surface redox, the battery from a narrow
 #: two-phase plateau.
-ECHEM_DEMOS = ("condensador", "pseudocondensador", "bateria")
+ECHEM_DEMOS = ("condensador", "pseudocondensador", "hibrido", "bateria")
+
+#: Fraction of the peak current that is diffusion controlled in the
+#: hybrid demo, at the reference scan rate of 5 mV/s.
+#:
+#: The plain ``pseudocondensador`` is entirely surface-confined by
+#: construction — every one of its processes scales with ν — so Dunn
+#: correctly returns about 100 % surface for it and there is nothing to
+#: see in the separation. That is the right answer for that electrode and
+#: a useless demonstration of the method. A real composite electrode has
+#: both, and this one does: a double layer, a surface redox pair on top
+#: of it, and a diffusion-controlled pair that scales as √ν.
+HYBRID_DIFFUSIVE_SHARE = 0.35
 
 
 def _cv_current(
@@ -651,6 +664,29 @@ def _cv_current(
         ):
             peak = np.exp(-0.5 * ((potential - centre) / width) ** 2)
             current += sign * height * capacitance * scan_rate * peak * (direction == sign)
+    elif kind == "hibrido":
+        # Double layer + surface redox (scales with nu) + a
+        # diffusion-controlled pair (scales with sqrt(nu)). The point of
+        # the demo is that the two DIVERGE with scan rate, which is the
+        # only thing that lets the separation work at all.
+        reference = 0.005
+        for centre, height, width, sign in (
+            (0.33, 1.4, 0.10, 1.0),
+            (0.27, 1.4, 0.10, -1.0),
+        ):
+            peak = np.exp(-0.5 * ((potential - centre) / width) ** 2)
+            current += (sign * height * capacitance * scan_rate * peak
+                        * (direction == sign))
+        share = HYBRID_DIFFUSIVE_SHARE / max(1.0 - HYBRID_DIFFUSIVE_SHARE, 1e-9)
+        diffusive = math.sqrt(scan_rate / reference)
+        # BROAD, like the surface pair. A narrow, dominant diffusive pair
+        # is a phase transition, and the classifier is right to call that
+        # a battery; a pseudocapacitor's bulk contribution is a tail, not
+        # a spike.
+        for centre, sign in ((0.42, 1.0), (0.21, -1.0)):
+            peak = np.exp(-0.5 * ((potential - centre) / 0.105) ** 2)
+            current += (sign * share * 2.4 * capacitance * reference
+                        * diffusive * peak * (direction == sign))
     elif kind == "bateria":
         # A narrow pair of redox peaks, well separated: a phase transition.
         # The current scales as sqrt(scan rate) because it is diffusion

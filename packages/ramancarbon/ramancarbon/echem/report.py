@@ -127,6 +127,7 @@ def analyse_sample(
     circuit_initial: Optional[dict[str, float]] = None,
     circuit_fixed: Optional[Sequence[str]] = None,
     non_faradaic: bool = False,
+    dunn_sweep: str = "media",
     drt_regularisation: Optional[float] = None,
 ) -> EchemResult:
     """Analyse whatever measurements are available for one electrode.
@@ -180,7 +181,7 @@ def analyse_sample(
 
     if rate_series and len(rate_series) >= 3:
         try:
-            result.dunn = dunn_analysis(rate_series)
+            result.dunn = dunn_analysis(rate_series, sweep=dunn_sweep)
             result.warnings.extend(f"Dunn: {w}" for w in result.dunn.warnings)
         except CurveError as error:
             result.warnings.append(f"Dunn: {error}")

@@ -83,6 +83,18 @@ class EchemSession:
     normally happen."""
     circuit_fixed: set[str] = field(default_factory=set)
     """Labels held rather than refined."""
+    dunn_sweep: str = "media"
+    """Which branch of the cycle the Dunn separation reads. The anodic
+    sweep alone is the usual published choice, and it is a choice: on a
+    material whose oxidation and reduction are not mirror images the two
+    halves give different coefficients, and that difference is
+    information."""
+    dunn_rate: Optional[float] = None
+    """Which scan rate the Dunn figure is drawn at, in V/s. ``None``
+    takes the SLOWEST, because that is where the diffusive contribution
+    is largest and therefore where the separation has something to
+    show — the fastest sweep is where every electrode looks surface
+    controlled."""
     drt_regularisation: Optional[float] = None
     """λ for the distribution of relaxation times. ``None`` chooses it
     by the L-curve. Whichever it is, it is reported: a DRT is an
@@ -240,6 +252,7 @@ class EchemSession:
             circuit_fixed=sorted(self.circuit_fixed) or None,
             drt_regularisation=self.drt_regularisation,
             non_faradaic=self.non_faradaic,
+            dunn_sweep=self.dunn_sweep,
         )
         for warning in self.result.warnings:
             self.log("warning", warning)
@@ -408,6 +421,66 @@ class EchemSession:
             ))
         return rows
 
+    def gcd_capacitance_rows(self) -> list[tuple[str, str, str]]:
+        """``(convenio, mF, F/g)`` for the chosen discharge.
+
+        Three, not one. They agree to about a per cent on a straight
+        discharge and by tens of per cent on a plateau, and the
+        disagreement is the diagnostic: it measures how far the curve is
+        from the straight line the ΔV convention assumes.
+        """
+        result = self.result
+        if result is None or result.gcd is None or not result.gcd.discharges:
+            return []
+        branch = result.gcd.discharges[-1]
+        per_gram = result.gcd.specific_by_method
+        rows = []
+        for name, value in branch.capacitances().items():
+            gram = per_gram.get(name)
+            rows.append((
+                name,
+                f"{1e3 * value:.4g}" if value else "—",
+                f"{gram:.4g}" if gram else "—",
+            ))
+        spread = branch.capacitance_spread
+        if spread is not None:
+            rows.append(("dispersión entre convenios",
+                         f"{100 * spread:.0f} %",
+                         f"R² recta = {branch.linearity:.3f}"))
+        return rows
+
+    def capacitance_vs_current(self) -> list[tuple[float, float, str]]:
+        """``(current density or mA, specific capacitance, method)``.
+
+        One point per charge–discharge curve, for the rate-capability
+        plot. Built from the ENERGY convention, because that is the one
+        that stays honest when the discharge bends, and a rate plot whose
+        points are each over-reported by a different amount is worse than
+        no plot.
+        """
+        from ..echem.gcd import analyse_gcd
+
+        curves = list(self.gcd_series)
+        if self.gcd is not None and not any(c is self.gcd for c in curves):
+            curves.insert(0, self.gcd)
+        points: list[tuple[float, float, str]] = []
+        for curve in curves:
+            try:
+                analysis = analyse_gcd(curve)
+            except (ValueError, ZeroDivisionError):
+                continue
+            if not analysis.discharges:
+                continue
+            branch = analysis.discharges[-1]
+            value = (analysis.specific_by_method.get("energía (2E/ΔV²)")
+                     or analysis.specific_by_method.get("ΔV (I·Δt/ΔV)"))
+            if not value:
+                continue
+            points.append((1e3 * _typical_current(curve), float(value),
+                           f"{1e3 * abs(branch.current_a):g} mA"))
+        points.sort(key=lambda item: item[0])
+        return points
+
     def ragone_points(self) -> list[tuple[float, float, str]]:
         """``(Wh/kg, W/kg, label)``, one per charge-discharge curve.
 
@@ -458,6 +531,24 @@ class EchemSession:
         ]
 
     # -- the circuit ---------------------------------------------------
+    def dunn_rate_choices(self) -> list[float]:
+        """The scan rates the separation can be drawn at, slowest first."""
+        result = self.result
+        if result is None or result.dunn is None:
+            return sorted({c.scan_rate for c in self.rate_series})
+        return sorted(result.dunn.rates)
+
+    def dunn_rate_for_plot(self) -> Optional[float]:
+        """The rate the figure should use: the user's, or the slowest."""
+        rates = self.dunn_rate_choices()
+        if not rates:
+            return None
+        if self.dunn_rate is not None:
+            nearest = min(rates, key=lambda r: abs(r - self.dunn_rate))
+            if abs(nearest - self.dunn_rate) < 1e-9:
+                return nearest
+        return rates[0]
+
     def circuit_choices(self) -> list[str]:
         return [t.name for t in circuit_templates()]
 

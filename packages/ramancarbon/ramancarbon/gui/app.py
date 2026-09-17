@@ -354,6 +354,9 @@ class RamanCarbonApp:
         self.ttk.Button(toolbar, text="Restablecer zoom",
                         command=lambda k=key: self._reset_zoom(k)).pack(
             side="right", padx=PAD["xs"])
+        self.ttk.Button(toolbar, text="Guardar datos…",
+                        command=lambda k=key: self._export_canvas(k)).pack(
+            side="right", padx=PAD["xs"])
         self._canvases[key] = canvas
         self._figures[key] = figure
         return figure, canvas
@@ -365,6 +368,42 @@ class RamanCarbonApp:
             "diameters": self._draw_diameters,
             "overlay": self._draw_overlay,
         }.get(key)
+
+    def _export_canvas(self, key: str) -> None:
+        """Write what this canvas is drawing to a file.
+
+        Same as :meth:`SectionApp.export_canvas`; this window predates
+        that base class and keeps its own canvas plumbing.
+        """
+        from tkinter import filedialog
+
+        from ..dataio.export import export_figure
+
+        figure = self._figures.get(key)
+        if figure is None:
+            return
+        path = filedialog.asksaveasfilename(
+            title="Guardar los datos de la figura",
+            defaultextension=".csv",
+            filetypes=(("CSV", "*.csv"), ("Texto separado por tabuladores", "*.tsv"),
+                       ("JSON", "*.json"), ("Markdown", "*.md"),
+                       ("LaTeX", "*.tex"), ("Todos", "*.*")),
+            parent=self.root,
+        )
+        if not path:
+            return
+        try:
+            written = export_figure(figure, path)
+        except (OSError, ValueError) as error:
+            from tkinter import messagebox
+
+            messagebox.showwarning("No se ha podido exportar", str(error),
+                                   parent=self.root)
+            return
+        self._set_status(
+            "datos de la figura guardados en "
+            + ", ".join(item.name for item in written)
+        )
 
     def _reset_zoom(self, key: str) -> None:
         """Redraw one canvas at the limits its data imply."""

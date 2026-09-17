@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..echem.curve import Electrode
+from ..echem.cv import SWEEP_CHOICES
 from .base import SectionApp, placeholder
 from .echem_state import EchemSession
 from .theme import PAD
@@ -49,21 +50,23 @@ class EchemApp(SectionApp):
             "cv": self._draw_cv,
             "rates": self._draw_rates,
             "gcd": self._draw_gcd,
+            "rate_capacitance": self._draw_rate_capacitance,
             "nyquist": self._draw_nyquist,
             "bode": self._draw_bode,
             "drt": self._draw_drt,
             "capacitance": self._draw_capacitance,
             "ragone": self._draw_ragone,
             "tafel": self._draw_tafel,
+            "polarisation": self._draw_polarisation,
         }
         self._tab_canvases = {
             0: (),
             1: ("cv", "rates"),
-            2: ("gcd",),
+            2: ("gcd", "rate_capacitance"),
             3: ("nyquist", "bode"),
             4: ("drt",),
             5: ("capacitance", "ragone"),
-            6: ("tafel",),
+            6: ("tafel", "polarisation"),
         }
         self._build()
         self.set_status("Carga una medida o pulsa Demo.")
@@ -224,6 +227,31 @@ class EchemApp(SectionApp):
              "superponen exactamente. Lo que no se superponga es la parte que "
              "no es capacitiva.",
              wrap=700)
+
+        dunn_bar = ttk.Frame(tab)
+        dunn_bar.pack(fill="x", pady=(0, PAD["sm"]))
+        ttk.Label(dunn_bar, text="Dunn — rama:").pack(side="left")
+        self.dunn_sweep_var = self.tk.StringVar(value=SWEEP_CHOICES[0][1])
+        ttk.Combobox(
+            dunn_bar, textvariable=self.dunn_sweep_var, width=38,
+            state="readonly",
+            values=[label for _, label in SWEEP_CHOICES],
+        ).pack(side="left", padx=(PAD["xs"], PAD["md"]))
+        ttk.Label(dunn_bar, text="velocidad del gráfico (mV/s):").pack(side="left")
+        self.dunn_rate_var = self.tk.StringVar(value="")
+        self.dunn_rate_box = ttk.Combobox(
+            dunn_bar, textvariable=self.dunn_rate_var, width=10,
+            state="readonly", values=[])
+        self.dunn_rate_box.pack(side="left", padx=(PAD["xs"], PAD["xs"]))
+        self.dunn_rate_box.bind("<<ComboboxSelected>>",
+                                lambda _e: self._on_dunn_rate())
+        ttk.Button(dunn_bar, text="Recalcular Dunn",
+                   command=self._recompute_dunn).pack(side="left")
+        hint(dunn_bar,
+             "  El gráfico se dibuja a la velocidad MÁS LENTA por defecto, "
+             "que es donde la contribución difusiva es mayor: a la más "
+             "rápida todo electrodo parece superficial.",
+             wrap=560)
         paned, (top, bottom) = split_column(tab, (3, 2))
         paned.pack(fill="both", expand=True)
         outer, body = card(top, None)
@@ -240,11 +268,33 @@ class EchemApp(SectionApp):
         ttk = self.ttk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Carga-descarga  ")
-        paned, (top, bottom) = split_column(tab, (3, 2))
+        paned, (top, middle, bottom) = split_column(tab, (3, 2, 2))
         paned.pack(fill="both", expand=True)
         outer, body = card(top, None)
         outer.pack(fill="both", expand=True)
         self.make_canvas(body, "gcd", lambda f: f.add_subplot(111))
+
+        rate_card, rate_body = card(middle, "Capacitancia y capacidad de velocidad")
+        rate_card.pack(fill="both", expand=True)
+        inner = ttk.Frame(rate_body)
+        inner.pack(fill="both", expand=True)
+        left = ttk.Frame(inner)
+        left.pack(side="left", fill="both", expand=True)
+        self.gcd_capacitance_table = table(
+            left, ["convenio", "C (mF)", "C (F/g)"], height=5)
+        hint(left,
+             "Tres convenios, no uno. En una descarga recta coinciden en un "
+             "1 %; en una meseta difieren un 30 %, y el de ΔV sobreinforma "
+             "exactamente lo que la curva se dobla porque supone que es una "
+             "recta. Para un pseudocondensador el defendible es el de "
+             "ENERGÍA: la capacitancia que almacenaría la misma energía en "
+             "la misma ventana.",
+             wrap=420)
+        right = ttk.Frame(inner)
+        right.pack(side="left", fill="both", expand=True, padx=(PAD["sm"], 0))
+        self.make_canvas(right, "rate_capacitance",
+                         lambda f: f.add_subplot(111), figsize=(4.4, 2.8))
+
         info, info_body = card(bottom, "Ramas")
         info.pack(fill="both", expand=True)
         self.branch_table = table(
@@ -427,11 +477,23 @@ class EchemApp(SectionApp):
         ttk = self.ttk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  HER / OER  ")
-        outer, body = card(tab, None)
+        paned, (top, middle, bottom) = split_column(tab, (3, 3, 2))
+        paned.pack(fill="both", expand=True)
+        outer, body = card(top, "Tafel")
         outer.pack(fill="both", expand=True)
         self.make_canvas(body, "tafel", lambda f: f.add_subplot(111))
-        info, info_body = card(tab, "Actividad")
-        info.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        pol_card, pol_body = card(middle, "Curva de polarización")
+        pol_card.pack(fill="both", expand=True)
+        self.make_canvas(pol_body, "polarisation", lambda f: f.add_subplot(111),
+                         figsize=(7.6, 3.2))
+        hint(pol_body,
+             "El gráfico de Tafel es un logaritmo y esconde la FORMA. Una "
+             "corriente que deja de subir es transporte de materia o una "
+             "película de burbujas, y en escala logarítmica parece un cambio "
+             "de pendiente que se informa como una segunda región de Tafel.",
+             wrap=820)
+        info, info_body = card(bottom, "Actividad")
+        info.pack(fill="both", expand=True)
         self.catalysis_text = scrolled_text(info_body, self.palette,
                                             self.fonts["mono"], height=12)
 
@@ -477,6 +539,48 @@ class EchemApp(SectionApp):
         self.resistance_var.set(f"{value:.4g}")
         self._settings_from_widgets()
         self.set_status(f"R_u = {value:.4g} Ω — {how}")
+
+    # -- the Dunn controls ---------------------------------------------
+    def _on_dunn_rate(self) -> None:
+        value = _number(self.dunn_rate_var.get())
+        self.session.dunn_rate = value / 1000.0 if value else None
+        self.mark_dirty("rates")
+        self.flush_dirty(self._visible())
+
+    def _recompute_dunn(self) -> None:
+        """Re-run the separation on the chosen branch, nothing else."""
+        from ..echem.cv import dunn_analysis
+
+        labels = {label: key for key, label in SWEEP_CHOICES}
+        self.session.dunn_sweep = labels.get(self.dunn_sweep_var.get(), "media")
+        if len(self.session.rate_series) < 3:
+            self.warn("Hacen falta tres velocidades",
+                      "La separación ajusta dos coeficientes por potencial. "
+                      "Con dos, el ajuste pasa exactamente por los dos puntos "
+                      "y el reparto es el que quieras.")
+            return
+        if self.session.result is None:
+            self._analyse()
+            return
+        try:
+            self.session.result.dunn = dunn_analysis(
+                self.session.rate_series, sweep=self.session.dunn_sweep)
+        except Exception as error:               # noqa: BLE001 - shown to user
+            self.warn("Dunn", str(error))
+            return
+        self._refresh_dunn_rates()
+        self._fill_tables()
+        self.mark_dirty("rates")
+        self.flush_dirty(self._visible())
+        self.set_status(
+            f"Dunn recalculado — {dict(SWEEP_CHOICES)[self.session.dunn_sweep]}")
+
+    def _refresh_dunn_rates(self) -> None:
+        rates = self.session.dunn_rate_choices()
+        self.dunn_rate_box.configure(
+            values=[f"{1e3 * rate:g}" for rate in rates])
+        chosen = self.session.dunn_rate_for_plot()
+        self.dunn_rate_var.set(f"{1e3 * chosen:g}" if chosen else "")
 
     # -- the DRT controls ----------------------------------------------
     def _on_drt_auto(self) -> None:
@@ -536,6 +640,10 @@ class EchemApp(SectionApp):
         self.circuit_text_var.set(self.session.circuit_text())
         self._show_circuit_note()
         self._fill_circuit_setup()
+        self._refresh_dunn_rates()
+        fill_table(self.gcd_capacitance_table,
+                   ["convenio", "C (mF)", "C (F/g)"],
+                   self.session.gcd_capacitance_rows())
         fill_table(self.drt_table,
                    ["τ (s)", "R (Ω)", "C = τ/R (mF)", "fracción de R"],
                    self.session.drt_rows())
@@ -694,18 +802,18 @@ class EchemApp(SectionApp):
         self.electrolyte_var.set("KOH 6 M")
         self.ph_var.set("14")
         self.resistance_var.set("2.0")
-        self.name_var.set("demo pseudocondensador")
+        self.name_var.set("demo pseudocondensador híbrido")
         self.circuit_var.set("R0-(R1|Q1)-Q2")
         self._settings_from_widgets()
         self.session.add_curves(
-            cv=make_cv_demo("pseudocondensador", seed=1),
-            rate_series=cv_rate_series("pseudocondensador", seed=2),
-            gcd=make_gcd_demo("pseudocondensador", seed=1),
+            cv=make_cv_demo("hibrido", seed=1),
+            rate_series=cv_rate_series("hibrido", seed=2),
+            gcd=make_gcd_demo("hibrido", seed=1),
             # Several currents, because a Ragone plot with one point is
             # not a Ragone plot: the whole content of the figure is how
             # the energy falls as the power rises.
             gcd_series=[
-                make_gcd_demo("pseudocondensador", current=current, seed=seed)
+                make_gcd_demo("hibrido", current=current, seed=seed)
                 # 1 mA is left out: that is what `gcd` above already is,
                 # and the same measurement twice on a Ragone plot reads
                 # as two devices that happen to agree.
@@ -848,7 +956,14 @@ class EchemApp(SectionApp):
         if result.dunn is None:
             placeholder(right, "Dunn necesita tres velocidades", self.figure_palette)
         else:
-            plot_dunn(right, result.dunn, self.session.cv, self.figure_palette)
+            rate = self.session.dunn_rate_for_plot()
+            curve = next(
+                (c for c in self.session.rate_series
+                 if rate is not None and abs(c.scan_rate - rate) < 1e-9),
+                self.session.cv,
+            )
+            plot_dunn(right, result.dunn, curve, self.figure_palette,
+                      scan_rate=rate)
 
     def _draw_gcd(self, figure) -> None:
         from .plots_echem import plot_gcd
@@ -860,6 +975,13 @@ class EchemApp(SectionApp):
         result = self.session.result
         plot_gcd(ax, self.session.gcd, self.figure_palette,
                  result.gcd if result else None)
+
+    def _draw_rate_capacitance(self, figure) -> None:
+        from .plots_echem import plot_capacitance_vs_current
+
+        ax = figure.add_subplot(111)
+        plot_capacitance_vs_current(ax, self.session.capacitance_vs_current(),
+                                    self.figure_palette)
 
     def _draw_nyquist(self, figure) -> None:
         from .plots_echem import plot_nyquist
@@ -924,6 +1046,14 @@ class EchemApp(SectionApp):
             ax.set_title(
                 "un solo punto: añade curvas a otras corrientes",
                 fontsize=9, color=self.figure_palette.text_muted)
+
+    def _draw_polarisation(self, figure) -> None:
+        from .plots_echem import plot_polarisation
+
+        ax = figure.add_subplot(111)
+        result = self.session.result
+        plot_polarisation(ax, result.catalysis if result else None,
+                          self.figure_palette)
 
     def _draw_tafel(self, figure) -> None:
         from .plots_echem import plot_tafel

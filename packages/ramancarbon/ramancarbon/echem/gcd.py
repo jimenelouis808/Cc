@@ -51,10 +51,48 @@ class Branch:
     energy_j: float
     """``∫V dq`` over the branch, in joules. Exact for any electrode."""
     capacitance_f: Optional[float]
-    linearity: float
+    """``I·Δt/ΔV`` over the branch's own window, the IR jump removed. The
+    number everybody quotes, and the one that is wrong first when the
+    curve is not a straight line."""
+    capacitance_slope_f: Optional[float] = None
+    """``I/|dV/dt|`` from a straight line through the MIDDLE of the
+    branch. On a curved discharge this is the local capacitance where the
+    curve is straightest, which is a different question from the average
+    over the window and usually a smaller answer."""
+    capacitance_energy_f: Optional[float] = None
+    """``2E/ΔV²`` with ``E`` the energy actually delivered down to the
+    lower limit. This is the capacitance an ideal capacitor would need to
+    store the SAME ENERGY over the same window, and it is the one that
+    should be quoted for a pseudocapacitor: the ΔV method assumes the
+    discharge is linear and over-reports when it is not, by exactly the
+    amount the plateau bends."""
+    linearity: float = 1.0
     """R² of a straight line through V(t). Near 1 means capacitor-like; a
     plateau gives a low value and means the number in farads is not the
     right way to describe this electrode."""
+
+    def capacitances(self) -> dict[str, Optional[float]]:
+        """The three conventions by name, for reporting side by side."""
+        return {
+            "ΔV (I·Δt/ΔV)": self.capacitance_f,
+            "pendiente (I/|dV/dt|)": self.capacitance_slope_f,
+            "energía (2E/ΔV²)": self.capacitance_energy_f,
+        }
+
+    @property
+    def capacitance_spread(self) -> Optional[float]:
+        """``(max−min)/max`` over the three, or ``None``.
+
+        The disagreement is the diagnostic. Three numbers within a few
+        per cent say the discharge really is a straight line and any of
+        them can be quoted; a spread of thirty per cent says it is not,
+        and then choosing the largest is a choice rather than a
+        measurement.
+        """
+        values = [v for v in self.capacitances().values() if v and v > 0]
+        if len(values) < 2:
+            return None
+        return (max(values) - min(values)) / max(values)
 
     @property
     def energy_half_cv2(self) -> Optional[float]:
@@ -81,6 +119,14 @@ class GCDResult:
     curve: ChargeDischarge
     branches: list[Branch] = field(default_factory=list)
     capacitance_f: Optional[float] = None
+    capacitance_slope_f: Optional[float] = None
+    capacitance_energy_f: Optional[float] = None
+    capacitance_spread: Optional[float] = None
+    """``(max−min)/max`` over the three conventions. The disagreement is
+    the diagnostic: it measures how far the discharge is from a straight
+    line, which is the one thing a single capacitance cannot say."""
+    specific_by_method: dict[str, Optional[float]] = field(default_factory=dict)
+    """F/g by convention name, for the report and the GUI."""
     specific_f_per_g: Optional[float] = None
     capacity_c_per_g: Optional[float] = None
     capacity_mah_per_g: Optional[float] = None
@@ -180,6 +226,61 @@ def _ir_drop(branch: ChargeDischarge, previous_potential: Optional[float]) -> fl
     return float(previous_potential - intercept)
 
 
+#: Fraction of a branch trimmed from each end before the slope fit.
+#:
+#: The IR jump lives at the start and the curve bends hard at the end of
+#: a real discharge; a straight line through either is not the slope of
+#: anything.
+SLOPE_TRIM = 0.15
+
+
+def _slope_capacitance(branch, current: float) -> Optional[float]:
+    """``I/|dV/dt|`` from the straightest part of the branch."""
+    time = np.asarray(branch.time, dtype=float)
+    potential = np.asarray(branch.potential, dtype=float)
+    if time.size < 12 or abs(current) <= 0.0:
+        return None
+    trim = max(1, int(round(SLOPE_TRIM * time.size)))
+    inner_t, inner_v = time[trim:-trim], potential[trim:-trim]
+    if inner_t.size < 5 or np.ptp(inner_t) <= 0:
+        return None
+    slope = float(np.polyfit(inner_t, inner_v, 1)[0])
+    if abs(slope) < 1e-12:
+        return None
+    return abs(current) / abs(slope)
+
+
+def _energy_capacitance(branch, current: float,
+                        effective: float) -> Optional[float]:
+    """``2E/ΔV²`` with ``E`` the energy delivered down to the lower limit.
+
+    Referenced to the branch's own end potential rather than to zero,
+    because zero on a three-electrode axis is wherever the reference
+    electrode happens to sit and an energy measured from there is not an
+    energy anybody can recover.
+    """
+    time = np.asarray(branch.time, dtype=float)
+    potential = np.asarray(branch.potential, dtype=float)
+    if time.size < 4 or effective <= 1e-9 or abs(current) <= 0.0:
+        return None
+    floor = float(potential[-1])
+    above = potential - floor
+    energy = abs(current) * abs(float(trapezoid(above, time)))
+    if energy <= 0.0:
+        return None
+    return 2.0 * energy / (effective ** 2)
+
+
+#: Spread between the three capacitance conventions that counts as
+#: disagreement rather than rounding.
+#:
+#: On an ideal capacitor the three agree to about one per cent, measured
+#: on a synthetic 50 mF discharge; on a plateau they came out 49 and
+#: 36 mF, a spread of 28 %. Ten is comfortably above the first and well
+#: below the second.
+CAPACITANCE_SPREAD_LIMIT = 0.10
+
+
 def analyse_gcd(
     curve: ChargeDischarge,
     use_cycle: int = -1,
@@ -240,6 +341,9 @@ def analyse_gcd(
                 charge_c=charge,
                 energy_j=energy,
                 capacitance_f=capacitance,
+                capacitance_slope_f=_slope_capacitance(branch, current),
+                capacitance_energy_f=_energy_capacitance(
+                    branch, current, effective),
                 linearity=_linearity(branch.time, branch.potential),
             )
         )
@@ -252,9 +356,31 @@ def analyse_gcd(
 
     chosen = discharges[use_cycle]
     result.capacitance_f = chosen.capacitance_f
+    result.capacitance_slope_f = chosen.capacitance_slope_f
+    result.capacitance_energy_f = chosen.capacitance_energy_f
     electrode = curve.electrode
     if chosen.capacitance_f is not None:
         result.specific_f_per_g = electrode.specific(chosen.capacitance_f, "mass")
+    result.specific_by_method = {
+        name: (electrode.specific(value, "mass") if value else None)
+        for name, value in chosen.capacitances().items()
+    }
+    spread = chosen.capacitance_spread
+    result.capacitance_spread = spread
+    if spread is not None and spread > CAPACITANCE_SPREAD_LIMIT:
+        best = max((v for v in chosen.capacitances().values() if v), default=0.0)
+        worst = min((v for v in chosen.capacitances().values() if v), default=0.0)
+        result.warnings.append(
+            f"los tres convenios de capacitancia difieren un "
+            f"{100 * spread:.0f} % ({1e3 * best:.4g} mF frente a "
+            f"{1e3 * worst:.4g} mF). Eso NO es ruido: es que la descarga no "
+            f"es una recta (R² = {chosen.linearity:.3f}). El de ΔV supone "
+            "que sí lo es y sobreinforma exactamente lo que la meseta se "
+            "curva; para un pseudocondensador el defendible es el de "
+            "ENERGÍA, que es la capacitancia que almacenaría la misma "
+            "energía en la misma ventana. Elegir el mayor es una elección, "
+            "no una medida"
+        )
     result.capacity_c_per_g = electrode.specific(chosen.charge_c, "mass")
     if result.capacity_c_per_g is not None:
         result.capacity_mah_per_g = result.capacity_c_per_g / 3.6

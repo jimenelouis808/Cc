@@ -431,6 +431,8 @@ def _jcamp_units(obj: Any) -> str:
 
 
 __all__ = [
+    "export_figure",
+    "figure_tables",
     "FORMATS",
     "Table",
     "export",
@@ -439,3 +441,115 @@ __all__ = [
     "summary_table",
     "with_uncertainty",
 ]
+
+
+# ----------------------------------------------------------------------
+# What is on the screen
+# ----------------------------------------------------------------------
+def figure_tables(figure, digits: int = 6) -> list[Table]:
+    """One :class:`Table` per axes of a drawn matplotlib figure.
+
+    This exports **the numbers that are plotted**, which is the only
+    export that answers the question people actually have when they press
+    the button: "give me what I am looking at so I can redraw it
+    somewhere else". Exporting the source objects instead would hand back
+    the raw spectrum when the screen shows it baseline-corrected,
+    offset, normalised and magnified, and leave the reader to work out
+    what was done to it.
+
+    It also means the button works on every canvas in the suite without
+    each one having to grow its own exporter: a Nyquist plot, a Rietveld
+    difference curve and a Ragone chart are all lines on axes.
+
+    Each curve becomes a pair of columns named after its legend entry,
+    padded to the longest curve in that axes, because two curves on one
+    axes rarely share a sampling grid — a measured spectrum and the
+    ticks of a phase certainly do not.
+
+    Parameters
+    ----------
+    figure:
+        A ``matplotlib`` figure that has been drawn.
+    digits:
+        Significant figures.
+
+    Returns
+    -------
+    list of Table
+        Empty when nothing on the figure carries data.
+    """
+    tables: list[Table] = []
+    for index, axes in enumerate(figure.axes, start=1):
+        columns: list[str] = []
+        units: list[str] = []
+        series: list[tuple[np.ndarray, np.ndarray]] = []
+        x_label = axes.get_xlabel() or "x"
+        y_label = axes.get_ylabel() or "y"
+
+        for order, line in enumerate(axes.get_lines(), start=1):
+            x = np.asarray(line.get_xdata(), dtype=float)
+            y = np.asarray(line.get_ydata(), dtype=float)
+            if x.size == 0:
+                continue
+            label = line.get_label()
+            if not label or label.startswith("_"):
+                label = f"serie {order}"
+            columns.extend([f"{label} · x", f"{label} · y"])
+            units.extend([x_label, y_label])
+            series.append((x, y))
+
+        if not series:
+            continue
+        height = max(x.size for x, _ in series)
+        rows: list[list[Any]] = []
+        for row in range(height):
+            line_values: list[Any] = []
+            for x, y in series:
+                # Ragged on purpose. Truncating to the shortest curve
+                # would silently drop the end of the longest one, which
+                # on a diffractogram is the half of the pattern nobody
+                # would notice was missing.
+                line_values.append(x[row] if row < x.size else "")
+                line_values.append(y[row] if row < y.size else "")
+            rows.append(line_values)
+
+        title = axes.get_title() or (
+            f"panel {index}" if len(figure.axes) > 1 else ""
+        )
+        tables.append(Table(
+            columns=columns, rows=rows, title=title, units=units,
+            notes=[
+                "Son los números DIBUJADOS: llevan aplicado lo que se les "
+                "hizo para la figura (línea base, desplazamiento, "
+                "normalización, magnificación). No son los datos de origen."
+            ],
+            digits=digits,
+        ))
+    return tables
+
+
+def export_figure(figure, path: str | Path, digits: int = 6) -> list[Path]:
+    """Write every axes of a figure to a file next to ``path``.
+
+    A figure with one axes writes one file at ``path``; a figure with
+    several writes ``path`` with ``-1``, ``-2`` … before the suffix, one
+    per panel, because two panels with different axes do not belong in
+    one rectangle of numbers.
+
+    Returns the paths written, so a caller can say which.
+    """
+    path = Path(path)
+    tables = figure_tables(figure, digits=digits)
+    if not tables:
+        raise ValueError(
+            "no hay ninguna curva con datos en esta figura: dibújala antes "
+            "de exportarla"
+        )
+    fmt = FORMATS.get(path.suffix.lower(), "csv")
+    written: list[Path] = []
+    for index, table in enumerate(tables, start=1):
+        target = (path if len(tables) == 1
+                  else path.with_name(f"{path.stem}-{index}{path.suffix}"))
+        target.write_text(table.render(fmt), encoding="utf-8")
+        written.append(target)
+    return written

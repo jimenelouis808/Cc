@@ -243,6 +243,7 @@ def test_the_two_raman_sections_share_one_session():
         ("app", "_open_phase_folder"),
         ("app", "polymers_var"),
         ("app", "_reset_zoom"),
+        ("app", "_export_canvas"),
         ("tmd_app", "_analyse"),
         ("tmd_app", "tmd_text"),
         ("tmd_app", "oxide_text"),
@@ -668,6 +669,17 @@ def test_every_canvas_gets_a_reset_zoom_button():
         assert "Restablecer zoom" in text, stem
     assert "def reset_zoom" in source("base")
     assert "def _reset_zoom" in source("app")
+
+
+def test_every_canvas_can_export_the_numbers_it_is_drawing():
+    """A figure you can only look at has to be retyped to be used
+    anywhere else, and retyped numbers are wrong numbers. The button goes
+    on the canvas plumbing, so it reaches every tab of every section
+    rather than being a per-section feature somebody has to remember."""
+    for stem in ("base", "app"):
+        assert "Guardar datos" in source(stem), stem
+    assert "def export_canvas" in source("base")
+    assert "def _export_canvas" in source("app")
 
 
 def test_plot_colours_are_roles_and_survive_a_restart():

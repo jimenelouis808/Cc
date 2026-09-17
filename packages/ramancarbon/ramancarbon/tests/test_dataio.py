@@ -594,3 +594,62 @@ def test_loading_a_map_as_one_measurement_says_where_to_open_it(tmp_path):
                      tmp_path / "m.txt", layout="largo")
     with pytest.raises(LoadError, match="read_map"):
         load(path)
+
+
+# -- exporting what is on the screen ------------------------------------
+
+def test_a_figure_exports_the_numbers_it_is_drawing(tmp_path):
+    """A figure you can only look at has to be retyped to be used
+    anywhere else, and retyped numbers are wrong numbers. What goes out
+    is what is DRAWN, with every transformation the figure applied
+    already in it -- exporting the source object would hand back a raw
+    spectrum while the screen shows it baseline-corrected and normalised,
+    and leave the reader to guess what was done."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    from matplotlib.figure import Figure
+
+    from ramancarbon.dataio.export import export_figure, figure_tables
+
+    figure = Figure(figsize=(6.0, 4.0))
+    left = figure.add_subplot(121)
+    left.set_xlabel("2θ (grados)")
+    left.set_ylabel("Intensidad")
+    left.set_title("difractograma")
+    left.plot([10.0, 20.0, 30.0, 40.0], [1.0, 4.0, 9.0, 16.0], label="medido")
+    left.plot([10.0, 20.0], [0.5, 3.0], label="calculado")
+    right = figure.add_subplot(122)
+    right.set_xlabel("E (V)")
+    right.plot([0.0, 0.5], [1.0, 2.0], label="CV")
+
+    tables = figure_tables(figure)
+    assert len(tables) == 2, "one table per axes"
+
+    first = tables[0]
+    assert first.title == "difractograma"
+    assert first.columns == ["medido · x", "medido · y",
+                             "calculado · x", "calculado · y"]
+    assert first.units[:2] == ["2θ (grados)", "Intensidad"]
+    # Ragged on purpose: truncating to the shortest curve would silently
+    # drop the end of the longest one.
+    assert len(first.rows) == 4
+    assert first.rows[0] == [10.0, 1.0, 10.0, 0.5]
+    assert first.rows[3][2] == "" and first.rows[3][3] == ""
+    assert any("DIBUJADOS" in note for note in first.notes)
+
+    written = export_figure(figure, tmp_path / "fig.csv")
+    assert [p.name for p in written] == ["fig-1.csv", "fig-2.csv"]
+    text = written[0].read_text(encoding="utf-8")
+    assert "medido · x" in text and "difractograma" in text
+
+    # One axes writes one file at the path it was given.
+    single = Figure()
+    axes = single.add_subplot(111)
+    axes.plot([1.0, 2.0], [3.0, 4.0], label="serie")
+    assert export_figure(single, tmp_path / "one.csv") == [tmp_path / "one.csv"]
+
+    # And a figure with nothing drawn says so instead of writing an
+    # empty file that looks like a failed measurement.
+    with pytest.raises(ValueError, match="ninguna curva"):
+        export_figure(Figure(), tmp_path / "empty.csv")

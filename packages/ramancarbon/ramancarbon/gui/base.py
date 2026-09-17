@@ -95,9 +95,53 @@ class SectionApp:
         self.ttk.Button(toolbar, text="Restablecer zoom",
                         command=lambda k=key: self.reset_zoom(k)).pack(
             side="right", padx=PAD["xs"])
+        # Every canvas in the suite, not a per-section feature. A figure
+        # you can only look at has to be retyped to be used anywhere
+        # else, and retyped numbers are wrong numbers.
+        self.ttk.Button(toolbar, text="Guardar datos…",
+                        command=lambda k=key: self.export_canvas(k)).pack(
+            side="right", padx=PAD["xs"])
         self._canvases[key] = canvas
         self._figures[key] = figure
         return figure, canvas
+
+    def export_canvas(self, key: str) -> None:
+        """Write the numbers a canvas is drawing to a file of the user's
+        choosing.
+
+        What goes out is what is DRAWN, with every transformation the
+        figure applied already in it. Exporting the source objects would
+        hand back a raw spectrum while the screen shows it
+        baseline-corrected, offset and normalised, and leave the reader
+        to guess what was done to make it look like the figure.
+        """
+        from tkinter import filedialog
+
+        from ..dataio.export import export_figure
+
+        figure = self._figures.get(key)
+        if figure is None:
+            return
+        path = filedialog.asksaveasfilename(
+            title="Guardar los datos de la figura",
+            defaultextension=".csv",
+            filetypes=(("CSV", "*.csv"), ("Texto separado por tabuladores", "*.tsv"),
+                       ("JSON", "*.json"), ("Markdown", "*.md"),
+                       ("LaTeX", "*.tex"), ("Todos", "*.*")),
+            parent=self.root,
+        )
+        if not path:
+            return
+        try:
+            written = export_figure(figure, path)
+        except (OSError, ValueError) as error:
+            self.warn("No se ha podido exportar", str(error))
+            return
+        names = ", ".join(p.name for p in written)
+        self.set_status(
+            f"datos de la figura guardados en {names}"
+            + ("  (un archivo por panel)" if len(written) > 1 else "")
+        )
 
     def reset_zoom(self, key: str) -> None:
         """Redraw one canvas at the limits its data imply."""

@@ -320,6 +320,64 @@ def plot_ragone(ax, points: Sequence[tuple[float, float, str]],
     ax.grid(True, which="both", alpha=0.2)
 
 
+def plot_polarisation(ax, result, palette: Palette) -> None:
+    """η against j on LINEAR axes, with the benchmark densities marked.
+
+    The Tafel plot is a logarithm and hides the shape. What the shape
+    shows is everything the kinetics do not: a current that stops rising
+    is mass transport or a bubble film, and on a log axis it looks like a
+    slope change that people report as a second Tafel region.
+    """
+    if result is None or result.curve_j is None or result.curve_eta is None:
+        placeholder(ax, "Carga una curva de polarización", palette)
+        return
+    j = np.asarray(result.curve_j, dtype=float)
+    eta = 1e3 * np.asarray(result.curve_eta, dtype=float)
+    ax.plot(j, eta, color=palette.data, linewidth=1.3, label="medido")
+    for index, (level, value) in enumerate(sorted(result.overpotentials.items())):
+        if value is None:
+            continue
+        colour = palette.component_colour(index)
+        ax.plot([level], [1e3 * value], "o", markersize=5, color=colour)
+        ax.annotate(f"{level:g} mA/cm²\n{1e3 * value:.0f} mV",
+                    xy=(level, 1e3 * value), xytext=(6, -14),
+                    textcoords="offset points", fontsize=7, color=colour)
+    ax.set_xlabel("|j| (mA/cm²)")
+    ax.set_ylabel("Sobrepotencial (mV)")
+    ax.grid(True, alpha=0.2)
+    ax.legend(loc="lower right", frameon=False, fontsize=8)
+
+
+def plot_capacitance_vs_current(ax, points, palette: Palette) -> None:
+    """Specific capacitance against current, the rate-capability plot.
+
+    The number that gets published is the one at the lowest current, and
+    the number that matters for a device is how much of it survives at
+    the highest. Drawing both, with the retention written on, is the
+    whole content of a rate study.
+    """
+    if not points:
+        placeholder(ax, "Carga varias curvas de carga-descarga", palette)
+        return
+    currents = [c for c, _, _ in points]
+    values = [v for _, v, _ in points]
+    ax.plot(currents, values, "o-", color=palette.data, markersize=5,
+            linewidth=1.2)
+    for current, value, label in points:
+        ax.annotate(label, xy=(current, value), xytext=(0, 7),
+                    textcoords="offset points", fontsize=7, ha="center",
+                    color=palette.text_muted)
+    ax.set_xlabel("Corriente (mA)")
+    ax.set_ylabel("C específica (F/g)")
+    ax.set_xscale("log")
+    ax.grid(True, which="both", alpha=0.2)
+    if len(values) > 1 and values[0] > 0:
+        retention = 100.0 * values[-1] / values[0]
+        ax.set_title(
+            f"retención {retention:.0f} % de {currents[0]:g} a "
+            f"{currents[-1]:g} mA", fontsize=9)
+
+
 def plot_cycling(ax, cycles: Sequence[int], capacity: Sequence[float],
                  efficiency: Sequence[float], palette: Palette) -> None:
     """Capacity retention and coulombic efficiency against cycle number."""
@@ -473,6 +531,7 @@ __all__ = [
     "plot_bode",
     "plot_cv",
     "plot_capacitance_comparison",
+    "plot_capacitance_vs_current",
     "plot_complex_capacitance",
     "plot_cycling",
     "plot_drt",
@@ -480,6 +539,7 @@ __all__ = [
     "plot_gcd",
     "plot_kk_residuals",
     "plot_nyquist",
+    "plot_polarisation",
     "plot_ragone",
     "plot_rate_capacitance",
     "plot_tafel",

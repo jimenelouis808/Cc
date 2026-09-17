@@ -629,17 +629,48 @@ def analyse_rate_study(
     return study
 
 
-def _current_at(curve: Voltammogram, potential: float) -> Optional[float]:
-    """Anodic current at one potential, interpolated on the forward sweep."""
+#: Which half of the cycle the Dunn separation is run on.
+#:
+#: The anodic sweep alone is the usual published choice and is the
+#: default, but it is a CHOICE and not a fact about the method. On a
+#: material whose oxidation and reduction are not mirror images — most
+#: pseudocapacitors — the two halves give different k₁ and k₂, and that
+#: difference is information rather than a nuisance. ``"media"`` takes
+#: the anodic branch, ``"catodica"`` the cathodic one, and ``"ciclo"``
+#: uses ``|i|`` averaged over both, which is what to use when the
+#: question is about the electrode rather than about one direction.
+SWEEP_CHOICES: tuple[tuple[str, str], ...] = (
+    ("media", "Media: sólo la rama anódica"),
+    ("catodica", "Media: sólo la rama catódica"),
+    ("ciclo", "Ciclo entero: |i| promediado en las dos ramas"),
+)
+
+
+def _current_at(curve: Voltammogram, potential: float,
+                sweep: str = "media") -> Optional[float]:
+    """Current at one potential, interpolated on the chosen branch."""
     try:
-        anodic, _ = curve.sweeps()
+        anodic, cathodic = curve.sweeps()
     except CurveError:
         return None
-    order = np.argsort(anodic.potential)
-    x, y = anodic.potential[order], anodic.current[order]
-    if potential < x[0] or potential > x[-1]:
-        return None
-    return float(np.interp(potential, x, y))
+
+    def on(branch) -> Optional[float]:
+        order = np.argsort(branch.potential)
+        x, y = branch.potential[order], branch.current[order]
+        if x.size < 2 or potential < x[0] or potential > x[-1]:
+            return None
+        return float(np.interp(potential, x, y))
+
+    if sweep == "catodica":
+        return on(cathodic)
+    if sweep == "ciclo":
+        # |i| on both branches, averaged. Taking the signed mean instead
+        # would cancel a symmetric capacitive current to zero, which is
+        # the one quantity this separation is about.
+        forward, backward = on(anodic), on(cathodic)
+        values = [abs(v) for v in (forward, backward) if v is not None]
+        return float(np.mean(values)) if values else None
+    return on(anodic)
 
 
 @dataclass
@@ -681,6 +712,10 @@ class DunnAnalysis:
     """Quality of the two-term fit at each potential. Where this is poor
     the separation at that potential means nothing."""
     fractions: dict[float, float] = field(default_factory=dict)
+    sweep: str = "media"
+    """Which branch the currents were read from. Reported because the two
+    halves of a cycle give different coefficients on any material whose
+    oxidation and reduction are not mirror images."""
     """Capacitive fraction of the total charge, by scan rate."""
     rates: tuple[float, ...] = ()
     warnings: list[str] = field(default_factory=list)
@@ -720,7 +755,8 @@ class DunnAnalysis:
     )
 
     def summary(self) -> str:
-        lines = ["Separación de Dunn (i = k₁ν + k₂√ν):", ""]
+        branch = dict(SWEEP_CHOICES).get(self.sweep, self.sweep)
+        lines = [f"Separación de Dunn (i = k₁ν + k₂√ν) — {branch}:", ""]
         for rate, fraction in sorted(self.fractions.items()):
             lines.append(f"  {rate * 1e3:7.1f} mV/s   capacitivo "
                          f"{100 * fraction:5.1f} %   difusivo "
@@ -745,6 +781,7 @@ def dunn_analysis(
     curves: Sequence[Voltammogram],
     window: Optional[tuple[float, float]] = None,
     points: int = 60,
+    sweep: str = "media",
 ) -> DunnAnalysis:
     """Separate capacitive from diffusive current, Dunn's way.
 
@@ -760,6 +797,8 @@ def dunn_analysis(
         not reach cannot enter a fit across curves.
     points:
         How many potentials to separate at.
+    sweep:
+        Which branch to read the current from; see :data:`SWEEP_CHOICES`.
 
     Returns
     -------
@@ -794,7 +833,7 @@ def dunn_analysis(
     total = np.zeros_like(capacitive)
 
     for column, potential in enumerate(potentials):
-        currents = [_current_at(curve, potential) for curve in ordered]
+        currents = [_current_at(curve, potential, sweep) for curve in ordered]
         if any(value is None for value in currents):
             continue
         observed = np.array(currents, dtype=float)
@@ -841,9 +880,15 @@ def dunn_analysis(
             "y entonces a la velocidad más alta ese potencial ya no está "
             "sobre el pico"
         )
+    if sweep not in {key for key, _ in SWEEP_CHOICES}:
+        raise CurveError(
+            f"rama desconocida {sweep!r}; las que hay son: "
+            + ", ".join(key for key, _ in SWEEP_CHOICES)
+        )
     return DunnAnalysis(
         potentials=potentials, k1=k1, k2=k2, r_squared=quality,
         fractions=fractions, rates=tuple(rates), warnings=warnings,
+        sweep=sweep,
     )
 
 
