@@ -15,7 +15,13 @@ from ramancarbon.xps.background import estimate_background, shirley_background
 from ramancarbon.xps.calibrate import calibrate, calibrate_to_state
 from ramancarbon.xps.elements import load_xps_database
 from ramancarbon.xps.fitting import XPSComponent, XPSModel, fit_region
-from ramancarbon.xps.io import read_spe, read_vamas, read_xps_text, write_vamas
+from ramancarbon.xps.io import (
+    read_spe,
+    read_vamas,
+    read_xps,
+    read_xps_text,
+    write_vamas,
+)
 from ramancarbon.xps.lineshapes import ds, gl, profile_fwhm, window_area
 from ramancarbon.xps.presets import count_model, state_model
 from ramancarbon.xps.quantify import LineArea, quantify, survey_areas
@@ -1041,3 +1047,55 @@ def test_the_xps_section_shows_the_reason_a_file_would_not_open():
     assert "level == 'error'" in body, "the errors the readers logged are ignored"
     # The early return is what keeps the count from overwriting the reason.
     assert any(isinstance(node, ast.Return) for node in ast.walk(handler))
+
+
+def test_a_descending_region_reads_because_that_is_the_normal_direction(tmp_path):
+    """PHI writes the step SIGNED, and a photoelectron scan normally runs
+    downwards in binding energy.
+
+    The user's own file declared ``-0.05`` for a C 1s from 295 to 280 eV --
+    301 points, perfectly self-consistent -- and the reader refused it for
+    "declaring a step of -0.05", which reads like a corrupt header and is
+    in fact the ordinary case. Every fixture in this file had been written
+    with a positive step, so nothing caught it.
+    """
+    axis = np.linspace(295.0, 280.0, 301)
+    counts = 2000 + 20000 * gl(axis, 284.8, 1, 1.2, 0.3)
+    header = (
+        "SOFH\n"
+        "SofhRev: 5.0\n"
+        "XraySource: Al 1486.6 mono\n"
+        "NoSpectralReg: 1\n"
+        "SpectralRegDef: 1 1 C1s 6 301 -0.050 295.0 280.0 295.0 280.0 "
+        "0.050 26.00 \"C1s\"\n"
+        "EOFH\n"
+    )
+    body = "".join(f"{x:.3f} {y:.3f}\n" for x, y in zip(axis, counts))
+    path = tmp_path / "260909.112.vms"
+    path.write_text(header + body, encoding="latin-1")
+
+    # And it goes in by CONTENT: the extension says VAMAS, the header says
+    # PHI, and the header wins -- which is how the user's file arrived.
+    spectrum = read_xps(path)[0]
+    assert spectrum.counts.size == 301
+    assert spectrum.pass_energy == pytest.approx(26.0)
+    assert spectrum.binding_energy[0] == pytest.approx(280.0)
+    assert read_spe(path)[0].counts.size == 301
+
+
+def test_a_region_whose_step_really_disagrees_is_still_refused(tmp_path):
+    """The self-consistency check survives the sign fix: the magnitude has
+    to match, so a header whose fields were misread is still caught."""
+    header = (
+        "SOFH\n"
+        "SofhRev: 5.0\n"
+        "XraySource: Al 1486.6 mono\n"
+        "NoSpectralReg: 1\n"
+        "SpectralRegDef: 1 1 C1s 6 301 -0.200 295.0 280.0 295.0 280.0 "
+        "0.050 26.00 \"C1s\"\n"
+        "EOFH\n"
+    )
+    path = tmp_path / "malo.spe"
+    path.write_text(header + "1.0 2.0\n" * 301, encoding="latin-1")
+    with pytest.raises(XPSError, match="no cuadra consigo misma"):
+        read_spe(path)

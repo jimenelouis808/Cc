@@ -60,6 +60,15 @@ DefectKind = Literal["stone_wales", "divacancy"]
 # strain, and it depends on the tube, not on the angle alone.
 MAX_BEND_ANGLE = 2.0 * np.pi
 
+#: The thinnest capped tube the mesh can make. At freq=1 the two domes
+#: meet with no body between them and the construction collapses: 60
+#: atoms, a radius of 0.27 A, and pairs of atoms at exactly 0.000 A.
+#: Nothing downstream can rescue that, and it used to be discovered only
+#: at the very end, by the sp2 check, after the whole build had run --
+#: which on a swept tube is minutes -- and then reported as a sweep
+#: tearing the wall, on a tube that had not been swept at all.
+MIN_CAP_FREQ = 2
+
 # Axial length contributed by one body ring, as a multiple of the tube
 # radius. Measured across freq 2-4 and 10-20 rings, where the ratio is
 # 1.067-1.088; the small excess over 1 is the two end caps.
@@ -278,7 +287,8 @@ def build_capped_cnt(
     n_body_rings
         Lattice rings along the body (>= 2). Controls tube length.
     freq
-        Geodesic subdivision frequency (>= 1). **Controls the diameter**,
+        Geodesic subdivision frequency (>= 2; see :data:`MIN_CAP_FREQ`).
+        **Controls the diameter**,
         which is quantised by the lattice: the body circumference must fit
         a whole number of hexagons, so the radius is
         ``5 * freq * sqrt(3) * bond / (2*pi)`` -- about ``1.96 * freq`` Å
@@ -346,8 +356,17 @@ def build_capped_cnt(
         raise ValueError("n_body_rings must be >= 2.")
     if target_radius is not None:
         freq = fm.freq_for_radius(target_radius, bond=bond)
-    if freq < 1:
-        raise ValueError("freq must be >= 1.")
+    if freq < MIN_CAP_FREQ:
+        raise ValueError(
+            f"freq must be >= {MIN_CAP_FREQ} for a capped tube; got {freq}. "
+            "At freq=1 the two domes meet with no body between them and the "
+            "mesh collapses: measured, it comes out as 60 atoms with a "
+            "radius of 0.27 A and pairs of atoms exactly on top of each "
+            "other. The quantised radius 1.96*freq A that radius_for_freq "
+            "reports assumes 5*freq hexagons around the circumference, and "
+            "that only starts holding at freq=2 (3.97 A built against 3.91 "
+            "predicted). freq=2 is the thinnest capped tube there is."
+        )
     if bond <= 0:
         raise ValueError("bond must be positive.")
     if bend_angle > 0 and shape != "straight":
@@ -530,14 +549,27 @@ def build_capped_cnt(
     quality = geometry_report(positions, bonds)
     verdict, why = sp2_quality(quality)
     if verdict == "broken":
+        # Only blame the sweep when there WAS one. A straight, unbent tube
+        # that fails this check has a geometry problem of its own, and
+        # sending its author off to widen a path that does not exist --
+        # or to thin a tube that is already as thin as it goes -- is worse
+        # than saying nothing.
+        swept = shape != "straight" or bend_angle > 0
+        if swept:
+            raise ValueError(
+                f"This sweep tears the wall rather than bending it: {why} "
+                "A swept tube keeps its hexagons, so the only way it can "
+                "follow a curve is to stretch. Either widen the path (a "
+                "larger helix radius or a gentler bend), lengthen the tube "
+                "(more body rings), or use an implicit mode such as «coil "
+                "(relaxed)», which inserts the pentagons and heptagons the "
+                "curvature calls for instead of stretching."
+            )
         raise ValueError(
-            f"This sweep tears the wall rather than bending it: {why} "
-            "A swept tube keeps its hexagons, so the only way it can follow "
-            "a curve is to stretch. Either widen the path (a larger helix "
-            "radius or a gentler bend), thin the tube (a lower subdivision "
-            "frequency), or use an implicit mode such as «coil (relaxed)», "
-            "which inserts the pentagons and heptagons the curvature calls "
-            "for instead of stretching."
+            f"This tube's geometry is not sp2: {why} Nothing was swept -- "
+            "the tube is straight and unbent -- so the curvature of a path "
+            "is not the cause. Check the subdivision frequency (the "
+            "diameter) and the bond length against each other."
         )
 
     atoms.info.update(

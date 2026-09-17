@@ -96,3 +96,38 @@ def test_the_supercell_goes_through_the_helper_that_carries_the_bonds():
     text = source()
     assert "supercell(self.atoms, counts)" in text
     assert "self.atoms.repeat(counts)" not in text
+
+
+def test_the_subdivision_slider_cannot_offer_a_frequency_that_cannot_build():
+    """The control offered freq=1, which no capped tube can use.
+
+    Picking it cost a minute and a half of building and produced a message
+    about a sweep tearing a wall. A control that offers a value the
+    builder refuses is not a control.
+    """
+    text = source()
+    assert "MIN_CAP_FREQ" in text, "the floor is hard-coded again"
+    # Not [^)]* -- the label itself contains "(diameter)".
+    call = re.search(
+        r'self\._param\(\s*box,\s*"Subdivision freq.*?'
+        r'command=self\._update_radius_hint\)', text, re.S)
+    assert call, "the subdivision control moved"
+    snippet = call.group(0)
+    assert "MIN_CAP_FREQ, 8" in snippet, (
+        f"slider floor is not the builder's: {snippet}")
+    assert "hard_lo=MIN_CAP_FREQ" in text, (
+        "the entry box still accepts a typed 1, which the slider no longer "
+        f"offers: {snippet}")
+
+
+def test_a_failed_build_is_reported_as_a_failure():
+    """The elapsed line is what people read when the progress bar stops,
+    and it used to say "took 1:31" whether the structure arrived or the
+    builder refused it -- so a failure looked like a success that had not
+    refreshed the preview."""
+    text = source()
+    assert 'failed=kind != "done"' in text, (
+        "the poll no longer tells _finish_build that the build failed")
+    assert "FAILED after" in text, "the elapsed line no longer marks failures"
+    assert "_mark_preview_stale" in text, (
+        "nothing labels the previous structure that stays on screen")

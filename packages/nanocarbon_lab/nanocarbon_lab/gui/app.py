@@ -78,6 +78,7 @@ from matplotlib.figure import Figure
 
 from .. import __version__
 from ..builders import fullerene_mesh as fm
+from ..builders.capped_cnt import MIN_CAP_FREQ
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
 from ..cell import (
@@ -890,8 +891,14 @@ class NanocarbonGUI:
 
         self._param(box, "Body rings (length)", self.var_rings, 2, 30, 0,
                     integer=True, hard_hi=200, command=self._update_bend_hint)
-        self._param(box, "Subdivision freq (diameter)", self.var_freq, 1, 8, 2,
-                    integer=True, hard_hi=20, command=self._update_radius_hint)
+        # Low end 2, not 1: a capped tube at freq=1 collapses (see
+        # builders.capped_cnt.MIN_CAP_FREQ), and the slider offering it
+        # meant a minute and a half of building before a message that
+        # blamed a sweep. The bundle shares this control and shares the
+        # floor for the same reason.
+        self._param(box, "Subdivision freq (diameter)", self.var_freq,
+                    MIN_CAP_FREQ, 8, 2, integer=True, hard_lo=MIN_CAP_FREQ,
+                    hard_hi=20, command=self._update_radius_hint)
         self.lbl_radius.grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 6))
         self._param(box, "Bend angle (°)", self.var_bend, 0.0, 180.0, 5,
                     resolution=1.0, hard_hi=359.0,
@@ -3094,7 +3101,8 @@ class NanocarbonGUI:
             if degraded else "Build cancelled."
         )
 
-    def _finish_build(self, atoms: int | None = None, mode: str = "") -> None:
+    def _finish_build(self, atoms: int | None = None, mode: str = "",
+                      failed: bool = False) -> None:
         self._busy = False
         self.progress.stop()
         self.btn_build.config(state="normal")
@@ -3110,9 +3118,16 @@ class NanocarbonGUI:
             return
         if atoms is not None and mode:
             self._measured[mode] = (atoms, elapsed)
+        # "took 1:31" says the same thing whether the structure arrived or
+        # the builder refused it, and the elapsed line is what people
+        # actually look at when the progress bar stops. A build that
+        # failed says so, in red, or the previous structure sitting in the
+        # preview reads as the new one.
         self.lbl_elapsed.config(
-            text=f"took {_clock(elapsed)}"
-                 + (f" for {atoms} atoms" if atoms is not None else ""))
+            text=(f"FAILED after {_clock(elapsed)}" if failed else
+                  f"took {_clock(elapsed)}"
+                  + (f" for {atoms} atoms" if atoms is not None else "")),
+            foreground=BAD_RED if failed else MUTED)
 
     def _tick_clock(self) -> None:
         """Count up while a build runs, and check it is still running.
@@ -3147,7 +3162,8 @@ class NanocarbonGUI:
                 _job_id, kind, payload = result
                 self._finish_build(
                     atoms=len(payload) if kind == "done" else None,
-                    mode=self.var_mode_kind.get() if kind == "done" else "")
+                    mode=self.var_mode_kind.get() if kind == "done" else "",
+                    failed=kind != "done")
                 if kind == "done":
                     self.atoms = payload
                     self.last_saved_stem = None
@@ -3161,6 +3177,7 @@ class NanocarbonGUI:
                         self._show_error("Display failed",
                                          traceback.format_exc())
                 else:
+                    self._mark_preview_stale()
                     text, tb = payload
                     if text == WORKER_DIED:
                         self._set_status("Build process died.")
@@ -3928,6 +3945,28 @@ class NanocarbonGUI:
         self.txt_error.pack(fill="both", expand=True)
         ttk.Button(self.frame_error, text="Dismiss",
                    command=self._clear_error).pack(fill="x", pady=(4, 0))
+
+    def _mark_preview_stale(self) -> None:
+        """Say that what is on screen is NOT what was just asked for.
+
+        When a build fails, the preview, the readout and the structure
+        panel all keep showing the previous structure, unchanged and
+        unmarked -- and the user reads that as "it built and nothing
+        updated". It is the opposite: nothing was built, so nothing
+        updated. The one thing that must not happen is the old numbers
+        passing for the new ones, so they are labelled where they are
+        read.
+        """
+        if self.atoms is None:
+            return
+        self.lbl_preview.config(
+            text=self.lbl_preview.cget("text").split("  —  ")[0]
+            + "  —  previous structure; the last build failed")
+        self.txt_info.configure(state="normal")
+        self.txt_info.insert(
+            "1.0", "THE LAST BUILD FAILED — everything below describes the\n"
+                   "previous structure, not the one you just asked for.\n\n")
+        self.txt_info.configure(state="disabled")
 
     def _show_error(self, title: str, detail: str, error: bool = True) -> None:
         """Put a message in the panel. Never opens a dialog.

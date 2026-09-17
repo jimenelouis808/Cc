@@ -98,15 +98,22 @@ class SpeRegion:
         """
         if self.points < 5:
             return f"la región «{self.name}» declara {self.points} puntos"
-        if self.step_ev <= 0:
+        # The step is compared in MAGNITUDE, because the instrument writes
+        # it SIGNED and a photoelectron scan normally runs downwards in
+        # binding energy: a C 1s from 295 to 280 eV declares -0.05, and
+        # that is the usual case, not a broken file. Demanding a positive
+        # step refused every such region -- which is most of them -- with
+        # a message about the step that read like a corrupt header.
+        step = abs(self.step_ev)
+        if step <= 0:
             return f"la región «{self.name}» declara un paso de {self.step_ev}"
         implied = self.implied_step
-        if abs(implied - self.step_ev) > 0.02 * self.step_ev:
+        if abs(implied - step) > 0.02 * step:
             return (
                 f"la región «{self.name}» no cuadra consigo misma: "
                 f"{self.start_ev:g}→{self.stop_ev:g} eV en {self.points} puntos "
                 f"son {implied:.4f} eV por punto y la cabecera declara "
-                f"{self.step_ev:.4f}"
+                f"{step:.4f}"
             )
         return None
 

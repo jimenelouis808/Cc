@@ -556,3 +556,62 @@ class TestHelixDimensions:
             cl.helix_control_points(40.0, 20.0, 1.0, handedness=0)
         with pytest.raises(ValueError):
             cl.helix_control_points(40.0, 20.0, 1.0, taper=0.0)
+
+
+class TestTheThinnestTubeThereIs:
+    """freq=1 does not make a thin capped tube; it makes nothing at all.
+
+    The two domes meet with no body between them and the mesh collapses.
+    Measured before this was refused: 60 atoms, a radius of 0.27 Å against
+    the 1.96 Å the quantised formula predicts, and pairs of atoms at
+    exactly 0.000 Å. The build ran to completion and was then rejected at
+    the very end by the sp2 check -- on a swept tube, a minute and a half
+    later -- with a message that blamed the sweep for tearing a wall that
+    had never been swept.
+    """
+
+    def test_freq_one_is_refused_by_name_and_not_by_the_sp2_check(self):
+        from nanocarbon_lab.builders.capped_cnt import MIN_CAP_FREQ
+
+        assert MIN_CAP_FREQ == 2
+        with pytest.raises(ValueError) as raised:
+            build_capped_cnt(n_body_rings=6, freq=1, seed=0)
+        message = str(raised.value)
+        assert "freq" in message
+        # The old failure came out of the sweep check. If this ever reads
+        # "sweep" again, the refusal has moved back to the end of the build.
+        assert "sweep" not in message.lower()
+
+    def test_the_floor_is_where_the_geometry_actually_starts(self):
+        """Not an arbitrary bound: freq=2 builds, and builds correctly."""
+        atoms = build_capped_cnt(n_body_rings=6, freq=2, seed=0)
+        assert atoms.info["radius"] == pytest.approx(3.97, abs=0.05)
+        positions = atoms.get_positions()
+        separation = np.linalg.norm(
+            positions[:, None] - positions[None], axis=-1)
+        np.fill_diagonal(separation, np.inf)
+        assert separation.min() > HARD_MIN_DISTANCE
+
+    def test_a_straight_tube_that_fails_does_not_blame_a_sweep(self,
+                                                              monkeypatch):
+        """The sp2 check still guards straight tubes -- it just no longer
+        sends their author off to widen a path that does not exist."""
+        import nanocarbon_lab.builders.capped_cnt as module
+
+        monkeypatch.setattr(module, "sp2_quality",
+                            lambda quality: ("broken", "a made-up reason."))
+        with pytest.raises(ValueError) as raised:
+            build_capped_cnt(n_body_rings=6, freq=3, seed=0)
+        message = str(raised.value)
+        assert "a made-up reason." in message
+        assert "sweep" not in message.lower()
+        assert "straight and unbent" in message
+
+    def test_a_swept_tube_that_fails_still_blames_the_sweep(self, monkeypatch):
+        import nanocarbon_lab.builders.capped_cnt as module
+
+        monkeypatch.setattr(module, "sp2_quality",
+                            lambda quality: ("broken", "a made-up reason."))
+        with pytest.raises(ValueError) as raised:
+            build_capped_cnt(n_body_rings=6, freq=3, bend_angle=0.5, seed=0)
+        assert "sweep tears the wall" in str(raised.value)
