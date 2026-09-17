@@ -135,6 +135,32 @@ def _read_table(path: Path) -> tuple[list[str], np.ndarray, dict[str, Any]]:
     return header[:width], table, metadata
 
 
+def _is_eclab_binary(path: Path) -> bool:
+    """Whether this is a Bio-Logic ``.mpr``, by its content.
+
+    By content and not by extension, for the reason the whole detection
+    layer exists: instruments write binary inside ``.txt`` and text
+    inside ``.spe``, so the suffix decides nothing.
+    """
+    from .biologic import MPR_MAGIC
+
+    try:
+        with path.open("rb") as handle:
+            return handle.read(len(MPR_MAGIC)) == MPR_MAGIC
+    except OSError:
+        return False
+
+
+def _eclab(path: Path, kind: str, electrode, **options):
+    """Read an ``.mpr`` and translate its errors into this module's."""
+    from .biologic import BioLogicError, read_eclab
+
+    try:
+        return read_eclab(path, kind=kind, electrode=electrode, **options)
+    except BioLogicError as error:
+        raise EchemIOError(str(error)) from None
+
+
 def read_cv(
     path: str | Path,
     scan_rate: Optional[float] = None,
@@ -156,6 +182,10 @@ def read_cv(
         plausibly amps or milliamps.
     """
     location = Path(path)
+    if _is_eclab_binary(location):
+        curve, notes = _eclab(location, "cv", electrode, scan_rate=scan_rate)
+        curve.metadata.setdefault("avisos", notes)
+        return curve
     header, table, metadata = _read_table(location)
     columns = _identify(header) if header else {}
 
@@ -231,6 +261,10 @@ def read_gcd(
     charge. When a current column exists it is used instead.
     """
     location = Path(path)
+    if _is_eclab_binary(location):
+        curve, notes = _eclab(location, "gcd", electrode)
+        curve.metadata.setdefault("avisos", notes)
+        return curve
     header, table, metadata = _read_table(location)
     columns = _identify(header) if header else {}
 
@@ -280,6 +314,10 @@ def read_eis(
     one taken — and the choice is recorded in the metadata.
     """
     location = Path(path)
+    if _is_eclab_binary(location):
+        spectrum, notes = _eclab(location, "eis", electrode)
+        spectrum.metadata.setdefault("avisos", notes)
+        return spectrum
     header, table, metadata = _read_table(location)
     columns = _identify(header) if header else {}
 

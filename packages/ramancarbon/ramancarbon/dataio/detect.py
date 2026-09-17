@@ -42,7 +42,8 @@ KNOWN_SUFFIXES: dict[str, str] = {
     ".xrdml": "xrd", ".uxd": "xrd", ".xye": "xrd", ".qam": "xrd",
     ".xy": "xrd", ".cif": "cif",
     ".jdx": "jcamp", ".dx": "jcamp", ".jcm": "jcamp",
-    ".mpt": "echem", ".mpr": "echem-binario", ".nox": "echem",
+    ".mpt": "echem", ".mpr": "echem", ".mps": "echem-ajustes",
+    ".nox": "echem",
     ".spc": "raman-binario", ".wdf": "raman-binario", ".sp": "raman-binario",
     ".spa": "raman-binario", ".ngs": "raman-binario",
     ".raw": "xrd-binario", ".brml": "xrd-binario",
@@ -57,6 +58,9 @@ BINARY_ADVICE: dict[str, str] = {
     "xrd-binario": "expórtalo como .xy, .xye o .xrdml desde el programa del "
                    "difractómetro",
     "echem-binario": "expórtalo como texto (.mpt en EC-Lab, «Export as text»)",
+    "echem-ajustes": "un .mps son sólo los AJUSTES del experimento; los datos "
+                     "están en el .mpr del mismo nombre, y conviene copiar los "
+                     "dos juntos porque el .mps lleva la velocidad de barrido",
 }
 
 
@@ -234,6 +238,31 @@ def detect(path: str | Path) -> Detection:
         return Detection(
             kind="xps", fmt="spe", confidence="alta",
             reasons=["cabecera SOFH de PHI MultiPak"],
+        )
+
+    # An .mps holds no measurement at all, so "no numeric table found" is
+    # true and unhelpful: what it needs is the name of the file that does.
+    if b"EC-LAB SETTING FILE" in sample[:400].upper():
+        return Detection(
+            kind="ajustes", fmt="mps", confidence="alta",
+            reasons=["cabecera «EC-LAB SETTING FILE»"],
+            advice=BINARY_ADVICE["echem-ajustes"],
+        )
+
+    # A Bio-Logic .mpr is binary and SELF-DESCRIBING: it declares its
+    # point count, its column count and which quantity each column is, so
+    # the layout is computed from the file and checked to close against
+    # its length. That is the same standard the PHI .spe is held to, and
+    # it is why neither is lumped in with the formats that are refused.
+    if sample.startswith(b"BIO-LOGIC MODULAR FILE"):
+        return Detection(
+            kind="echem", fmt="mpr", confidence="alta",
+            reasons=["cabecera «BIO-LOGIC MODULAR FILE» de EC-Lab"],
+            advice=(
+                "se lee, pero la disposición binaria es ingeniería inversa de "
+                "la comunidad: compara una medida con la exportación .mpt la "
+                "primera vez, y para lo que se publica exporta .mpt"
+            ),
         )
 
     if named.endswith("-binario") or (_looks_binary(sample) and named != "proyecto"):

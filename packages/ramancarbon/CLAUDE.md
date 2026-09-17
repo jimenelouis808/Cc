@@ -779,6 +779,62 @@ contra σ, y se usaba una σ para todo el espectro.
   toca. Y con tres ángulos cualquier modulación ajusta perfecto: hacen
   falta cuatro, y 180° de recorrido.
 
+## EC-Lab: el binario que SÍ se lee, y por qué
+
+El módulo `echem/io.py` dice que los formatos binarios se rechazan, y
+`echem/biologic.py` es la excepción, así que tiene que justificarse.
+
+- **El `.mps` es TEXTO.** Es el archivo de ajustes que EC-Lab escribe al
+  lado: la técnica, la velocidad de barrido, la corriente, la ventana, los
+  ciclos. No hay nada que adivinar, y lleva justo los números que un
+  voltamperograma necesita y que sus columnas no suelen tener. Sin él hay
+  que teclear la velocidad, y una velocidad tecleada mal da una
+  capacitancia mal en esa misma proporción sin que nada aguas abajo lo
+  delate.
+- **El `.mpr` es binario y AUTODESCRIPTIVO**, y ése es todo el argumento.
+  El archivo declara cuántos puntos tiene, cuántas columnas y qué magnitud
+  es cada una; cada magnitud tiene una anchura conocida; así que el tamaño
+  de registro y el desplazamiento al que empieza la tabla se CALCULAN del
+  archivo y luego se comprueba que cierren exactamente contra su longitud.
+  Es el mismo listón que el `.spe` de PHI: la cabecera da un número más de
+  los necesarios, y que no cuadre significa que los campos no estaban donde
+  el lector creía.
+- **El desplazamiento se calcula, no se supone.** Cambia entre versiones
+  del formato, y fijar una de ellas a fuego es exactamente la adivinanza
+  que este módulo existe para no hacer.
+- **Y la aritmética sola deja un hueco**, que se tapa aparte: un archivo
+  que sobredeclare su número de puntos por unos pocos simplemente se come
+  el relleno de la cabecera, la longitud sigue cuadrando, y las primeras
+  filas salen siendo relleno interpretado como números. Por eso el
+  desplazamiento calculado se contrasta además contra los que se conocen
+  (`MPR_DATA_OFFSETS`), y uno que no esté en la lista no se rechaza —puede
+  ser una versión no vista— pero se dice en voz alta.
+- **Un identificador de columna desconocido rechaza el archivo ENTERO**,
+  por nombre. Saltárselo desplazaría todas las columnas de detrás y el
+  resultado seguiría pareciendo datos.
+- **Lo que NO es verificable se dice, no se entierra**: el mapa de
+  identificador a magnitud es ingeniería inversa de la comunidad, no una
+  especificación publicada. La aritmética caza un identificador cuya
+  ANCHURA esté mal, porque entonces no cierra nada; no puede cazar uno cuya
+  anchura esté bien y cuyo NOMBRE esté mal. Por eso cada lectura lleva su
+  nota de procedencia y el flujo honrado es contrastar una medida contra la
+  exportación ASCII la primera vez.
+- **La ruta reproducible sigue siendo `.mpt`.** EC-Lab la exporta directa,
+  se lee sin ingeniería inversa en ningún punto del camino, y un resultado
+  que depende de una disposición binaria deducida depende de que este
+  módulo esté bien.
+- **El `-Im(Z)` de EC-Lab se NIEGA al entrar.** Su columna es el convenio
+  de dibujo del Nyquist; aquí Z″ se guarda con su signo físico, y negarlo
+  en la entrada es lo que impide que todos los ajustes de circuito de
+  después cambien de signo en silencio.
+- **Los miliamperios se pasan a amperios al entrar**, por lo mismo: un
+  factor de mil aquí es un factor de mil en todas las capacitancias.
+- **No hay ningún `.mpr` real en el repositorio.** Las pruebas construyen
+  uno con la disposición documentada y lo leen de vuelta, lo que prueba el
+  decodificador —la aritmética, la búsqueda del desplazamiento, los
+  rechazos— y explícitamente no prueba lo único que no se puede probar sin
+  la especificación de Bio-Logic.
+
 ## Entrada y salida
 
 - **El tipo de archivo se decide por los NÚMEROS, no por la extensión.**

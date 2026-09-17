@@ -35,7 +35,10 @@ from .widgets import (
 )
 
 FILE_TYPES = (
-    ("Exportaciones de potenciostato", "*.txt *.csv *.dat *.mpt *.DTA *.dta *.asc"),
+    ("Medidas de potenciostato",
+     "*.txt *.csv *.dat *.mpt *.mpr *.DTA *.dta *.asc"),
+    ("EC-Lab", "*.mpr *.mpt *.mps"),
+    ("Texto", "*.txt *.csv *.dat *.asc"),
     ("Todos", "*.*"),
 )
 
