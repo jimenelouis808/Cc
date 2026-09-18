@@ -30,7 +30,7 @@ from ..xps.io import read_xps, write_vamas
 from ..xps.presets import compare_counts, count_model, free_model, state_model
 from ..xps.quantify import Quantification, areas_from_fits, quantify
 from ..xps.spectrum import XPSError, XPSSpectrum
-from ..xps.survey import SurveyResult, identify
+from ..xps.survey import SurveyResult, add_region_evidence, identify
 from ..xps.tables import read_components, write_fit
 
 #: Background choices offered in the section, in the order they are usually
@@ -281,7 +281,11 @@ class XPSSession:
             self.log("aviso", "no hay barrido ancho que identificar")
             return None
         try:
-            self.survey = identify(surveys[0], database=self.database)
+            found = identify(surveys[0], database=self.database)
+            # The regions are evidence too, and better evidence than the
+            # survey. See survey.add_region_evidence.
+            self.survey = add_region_evidence(found, self.regions,
+                                              database=self.database)
         except XPSError as error:
             self.log("error", f"survey: {error}")
             return None

@@ -32,7 +32,7 @@ report says which other region settles it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional, Sequence
 
 import numpy as np
@@ -553,3 +553,100 @@ __all__ = [
     "find_survey_peaks",
     "identify",
 ]
+
+
+#: How far a region's peak may sit from its tabulated line and still count
+#: as that line. Wider than :data:`LINE_TOLERANCE` because a region is not
+#: being searched -- the instrument already declared which line it scanned
+#: -- so this only has to survive charging, which moves everything by a
+#: few eV at once.
+REGION_TOLERANCE = 6.0
+
+#: Significance a region's strongest peak needs. The same scale the survey
+#: uses, on a scan aimed at one line and measured with far more dwell.
+REGION_SIGNIFICANCE = MIN_SIGNIFICANCE
+
+
+def add_region_evidence(
+    result: SurveyResult,
+    regions: Sequence[XPSSpectrum],
+    database: Optional[XPSDatabase] = None,
+    tolerance: float = REGION_TOLERANCE,
+    min_significance: float = REGION_SIGNIFICANCE,
+) -> SurveyResult:
+    """Fold the high-resolution regions into what the survey found.
+
+    A survey is a compromise: wide range, coarse step, short dwell, so a
+    minor element sits at the noise floor even when it is unmistakably
+    there. Nitrogen in a doped carbon is the standard case -- a few atomic
+    per cent, its 1s line on the shoulder of a falling background -- and
+    it is also, always, the reason the narrow region was measured in the
+    first place.
+
+    So a region that was scanned is evidence, and better evidence than the
+    survey: the instrument declared which line it was aiming at, and the
+    scan spends sixty times the dwell on it. Reporting "no nitrogen" from
+    the survey while an N 1s region with a 17-sigma peak sits loaded in
+    the same session is the program disagreeing with data it already has.
+
+    The three corroboration rules of :func:`identify` are not weakened by
+    this and do not apply to it: they exist because a match anywhere in
+    1200 eV is cheap. Nothing here searches. The region names its line,
+    the peak has to be significant, and it has to sit within
+    ``tolerance`` of where that line belongs -- which is a check on the
+    region, not a search for an element.
+
+    Elements the survey already reports are left alone, so this only ever
+    adds. Each addition says where it came from.
+    """
+    database = database or load_xps_database()
+    known = {item.symbol for item in result.elements}
+    added: list[ElementFinding] = []
+
+    for spectrum in regions:
+        label = (spectrum.region or "").strip()
+        symbol = label.split()[0] if label else ""
+        if not symbol or symbol in known:
+            continue
+        try:
+            element = database.element(symbol)
+        except (KeyError, XPSError):
+            continue
+        line = element.primary_line
+        if line is None:
+            continue
+        low, high = spectrum.range
+        if not low <= line.energy_ev <= high:
+            continue
+        peaks, _ = find_survey_peaks(spectrum, min_significance)
+        if not peaks:
+            continue
+        peak = max(peaks, key=lambda item: item.significance)
+        if abs(peak.binding_energy - line.energy_ev) > tolerance:
+            continue
+        known.add(symbol)
+        added.append(ElementFinding(
+            symbol=symbol,
+            name=element.name,
+            confidence="alta",
+            matched=[LineMatch(label=line.label, kind="fotoemisión",
+                               expected_ev=line.energy_ev,
+                               observed_ev=peak.binding_energy,
+                               height=peak.height, primary=True)],
+            notes=[f"de la región de alta resolución «{label}», no del "
+                   f"survey: {peak.significance:.0f} sigma. Un survey no "
+                   "tiene el tiempo por punto para ver un elemento menor, "
+                   "y esta región se midió precisamente por eso"],
+        ))
+
+    if not added:
+        return result
+    # A new result, not the old one edited. Mutating the argument meant a
+    # second call saw the first call's additions, which is how a flat
+    # sulphur region came back reporting nitrogen.
+    return replace(
+        result,
+        elements=result.elements + added,
+        uncorroborated=[item for item in result.uncorroborated
+                        if item.symbol not in known],
+    )

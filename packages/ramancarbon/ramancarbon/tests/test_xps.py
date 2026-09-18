@@ -1137,3 +1137,65 @@ def test_the_file_settles_the_work_function_when_it_states_the_window():
     assert _declared_for(windows, "C", "1s") == (298.0, 278.0)
     assert _declared_for(windows, "S", "2p") is None
     assert _declared_for({}, "C", "1s") is None
+
+
+def test_a_region_that_was_scanned_is_evidence_the_survey_cannot_override():
+    """A survey is a compromise -- wide range, coarse step, short dwell --
+    so a minor element sits at its noise floor even when it is plainly
+    there. Nitrogen in a doped carbon is the standard case, and it is also
+    why the narrow region was measured. Reporting "no nitrogen" while an
+    N 1s region with a 17-sigma peak is loaded in the same session is the
+    program disagreeing with data it already has.
+    """
+    from ramancarbon.xps.survey import SurveyResult, add_region_evidence
+
+    energy = np.linspace(391.0, 411.0, 401)
+    counts = 6500.0 + 1500.0 * np.exp(-0.5 * ((energy - 400.6) / 1.0) ** 2)
+    region = XPSSpectrum(binding_energy=energy, counts=counts, name="N 1s",
+                         region="N 1s", photon_energy=1486.6, pass_energy=55.0)
+    empty = SurveyResult(peaks=[], elements=[], uncorroborated=[],
+                         unexplained=[], overlaps=[])
+    out = add_region_evidence(empty, [region])
+    assert [item.symbol for item in out.elements] == ["N"]
+    assert out.elements[0].confidence == "alta"
+    assert "alta resolución" in out.elements[0].notes[0]
+
+    # And a region with no peak adds nothing: the sulphur region of the
+    # user's own sample is flat, and the program must not invent it.
+    flat = XPSSpectrum(binding_energy=np.linspace(155.0, 175.0, 401),
+                       counts=np.full(401, 1100.0), name="S 2p",
+                       region="S 2p", photon_energy=1486.6, pass_energy=55.0)
+    assert add_region_evidence(empty, [flat]).elements == []
+
+
+def test_the_states_a_sulphur_doped_carbon_needs_are_in_the_catalogue():
+    """The thiophenic C–S–C at ~163.9 eV is the dominant state in an
+    S-doped carbon. Without it its intensity is absorbed by the S–S and
+    the sulphide, and the sulphur comes out more reduced than it is."""
+    database = load_xps_database()
+    keys = {state.key for state in database.states_for("S 2p3/2")}
+    assert {"C-S-C", "sulfoxide", "sulfonate"} <= keys
+    assert "pyridinium" in {s.key for s in database.states_for("N 1s")}
+    assert "C-S" in {s.key for s in database.states_for("C 1s")}
+
+
+def test_every_chemical_state_that_was_added_cites_where_it_came_from():
+    """CLAUDE.md: a literature value goes in the JSON with its source.
+    The entries that predate that rule are grandfathered; nothing new is."""
+    import json
+    from pathlib import Path
+
+    data = json.loads(
+        (Path(__file__).resolve().parents[1] / "database" / "data" /
+         "xps.json").read_text(encoding="utf-8"))
+    added = {"C-S", "C-S-C", "metal-sulfide", "sulfoxide", "sulfonate",
+             "amine", "pyridinium", "quinone", "sulfate-O"}
+    seen = set()
+    for region, states in data["chemical_states"].items():
+        if region.startswith("_"):
+            continue
+        for state in states:
+            if state["key"] in added:
+                seen.add(state["key"])
+                assert state.get("source"), f"{region}/{state['key']} sin fuente"
+    assert seen == added
