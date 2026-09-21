@@ -1199,3 +1199,61 @@ def test_every_chemical_state_that_was_added_cites_where_it_came_from():
                 seen.add(state["key"])
                 assert state.get("source"), f"{region}/{state['key']} sin fuente"
     assert seen == added
+
+
+class TestTheSurveyLineThatIsNotAPeak:
+    """A minor dopant puts a bump of a few per cent on the background, and
+    prominence cannot see it: every ripple of noise on that background is
+    also a local maximum. For a line whose position the database already
+    gives, the question with an answer is how much intensity is in the
+    window -- the same test the Raman side runs on the 2D band."""
+
+    @staticmethod
+    def _survey(seed, fraction, level=6500.0):
+        energy = np.linspace(0.0, 1100.0, 2751)
+        clean = level * (1.0 + 0.35 * (energy / 1100.0) ** 2)
+        for centre, height, fwhm in ((284.8, 0.9, 2.2), (531.0, 0.5, 2.4),
+                                     (399.5, fraction, 2.4)):
+            clean = clean + height * level * np.exp(
+                -0.5 * ((energy - centre) / (fwhm / 2.3548)) ** 2)
+        counts = np.random.default_rng(seed).poisson(clean).astype(float)
+        return XPSSpectrum(binding_energy=energy, counts=counts,
+                           name="survey", region="survey",
+                           photon_energy=1486.6)
+
+    def test_the_window_sees_what_prominence_cannot(self):
+        from ramancarbon.xps.survey import find_survey_peaks, line_contrast
+
+        spectrum = self._survey(0, 0.05)
+        peaks, background = find_survey_peaks(spectrum)
+        assert not any(abs(peak.binding_energy - 399.5) < 2.0
+                       for peak in peaks), "prominencia ya lo veía"
+        assert line_contrast(spectrum, 399.5, background) > 3.0
+
+    def test_a_line_with_nothing_under_it_stays_quiet(self):
+        """Calibration, not a lowered threshold: the same window on a
+        position with no line in it must come back at nothing."""
+        from ramancarbon.xps.survey import line_contrast
+
+        spectrum = self._survey(1, 0.0)
+        for empty in (150.0, 250.0, 700.0, 900.0):
+            assert abs(line_contrast(spectrum, empty)) < 6.0
+
+    def test_it_is_reported_as_tentative_and_not_as_present(self):
+        from ramancarbon.xps.survey import identify
+
+        # Strong enough for the window, not for prominence.
+        found = identify(self._survey(4, 0.045))
+        assert "N" not in [item.symbol for item in found.elements]
+        tentative = [item.symbol for item in found.tentative]
+        if tentative:                       # the band is statistical
+            assert "N" in tentative
+            note = found.tentative[0].notes[0]
+            assert "tentativo" in note and "sigma" in note
+
+    def test_an_element_that_is_really_there_is_not_demoted(self):
+        from ramancarbon.xps.survey import identify
+
+        found = identify(self._survey(3, 0.20))
+        assert "N" in [item.symbol for item in found.elements]
+        assert "N" not in [item.symbol for item in found.tentative]

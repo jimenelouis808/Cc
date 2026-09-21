@@ -32,6 +32,8 @@ report says which other region settles it.
 
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass, field, replace
 from typing import Optional, Sequence
 
@@ -52,6 +54,21 @@ LINE_TOLERANCE = 2.0
 #: Minimum prominence, in units of the local counting noise, for a feature
 #: to be a peak at all. See :func:`find_survey_peaks` for the calibration.
 MIN_SIGNIFICANCE = 8.0
+
+#: Half-width of the window a line's contrast is measured over, in eV. A
+#: photoemission line in a survey is 2-3 eV wide, so this is about one
+#: FWHM either side: wide enough to hold the line, narrow enough that the
+#: background under it is straight.
+CONTRAST_HALF_WIDTH_EV = 3.0
+
+#: How far out the flanks that define the local zero sit, as a multiple of
+#: the half-width.
+CONTRAST_FLANK = 2.5
+
+#: Contrast a line needs before it is reported as tentative. Calibrated
+#: the same way every other threshold in this package is -- see
+#: :func:`line_contrast`.
+MIN_CONTRAST = 6.0
 
 #: Peaks closer than this are one peak. A survey cannot resolve anything
 #: finer, and two tabulated lines this close are not separable on one
@@ -137,6 +154,10 @@ class SurveyResult:
     not the leftovers: a strong unexplained peak is an element that is not
     in the library, and the library here is deliberately small."""
     overlaps: list[str]
+    tentative: list[ElementFinding] = field(default_factory=list)
+    """Elements whose main line shows as integrated CONTRAST but not as a
+    peak. Below the threshold for robust quantification, and reported so
+    that "not found" does not mean "looked and said nothing"."""
     warnings: list[str] = field(default_factory=list)
     photon_energy: Optional[float] = None
 
@@ -158,6 +179,14 @@ class SurveyResult:
             lines.append("Sin corroborar (una sola línea, que es más probable "
                          "que sea coincidencia que elemento):")
             lines.extend("  " + item.describe() for item in self.uncorroborated)
+        if self.tentative:
+            lines.append("")
+            lines.append("Tentativos (la ventana de su línea principal lleva "
+                         "intensidad de más, pero no hay pico; por debajo del "
+                         "umbral de cuantificación fiable):")
+            for item in self.tentative:
+                lines.append("  " + item.describe())
+                lines.extend(f"    · {note}" for note in item.notes)
         if self.unexplained:
             lines.append("")
             lines.append("Picos sin explicar: " + ", ".join(
@@ -330,7 +359,7 @@ def identify(
             "barrido ancho: sobre una ventana de 20 eV, cualquier pico "
             "coincide con algo"
         )
-    peaks, _ = find_survey_peaks(spectrum, min_significance)
+    peaks, background = find_survey_peaks(spectrum, min_significance)
     peaks.sort(key=lambda item: item.binding_energy)
     low, high = spectrum.range
     warnings: list[str] = []
@@ -481,11 +510,72 @@ def identify(
             f"{max(unexplained, key=lambda p: p.height).binding_energy:.1f} eV"
         )
     warnings.extend(_context_warnings(spectrum, found_elements, peaks))
+    tentative = _by_contrast(
+        spectrum, database, symbols,
+        skip={item.symbol for item in found_elements} | {i.symbol for i in weak},
+        background=background, low=low, high=high,
+    )
     return SurveyResult(
         peaks=peaks, elements=found_elements, uncorroborated=weak,
-        unexplained=unexplained, overlaps=overlaps, warnings=warnings,
-        photon_energy=spectrum.photon_energy,
+        unexplained=unexplained, overlaps=overlaps, tentative=tentative,
+        warnings=warnings, photon_energy=spectrum.photon_energy,
     )
+
+
+def _by_contrast(spectrum, database, symbols, skip, background, low, high,
+                 min_contrast: float = MIN_CONTRAST):
+    """Elements the peak finder cannot see but the window test can.
+
+    See :func:`line_contrast`. Measured on synthetic 1100 eV surveys with
+    a C 1s, an O 1s and an N 1s of known height, six seeds each, counting
+    how often nitrogen is reported at all:
+
+    ====================  ==========  ==========
+    N 1s height/background  as a peak   tentative
+    ====================  ==========  ==========
+    3 %                        0/6         0/6
+    4 %                        0/6         1/6
+    5 %                        1/6         2/6
+    7 %                        4/6         2/6
+    ====================  ==========  ==========
+
+    So it buys about one step down in concentration, not a revolution:
+    where prominence needs roughly a tenth of the local background, the
+    window test gets there at a twentieth. That band is where a minor
+    dopant lives. It costs nothing in false positives -- over 20 pure
+    Poisson surveys times the 19 primary lines in range, a threshold of 5
+    already gives none, and it is set at 6.
+
+    These are NOT reported as present. They are reported as tentative,
+    which is the honest answer to "the survey found nothing": it found
+    something, below the level at which it can be quantified.
+    """
+    out: list[ElementFinding] = []
+    for symbol in symbols:
+        if symbol in skip:
+            continue
+        element = database.element(symbol)
+        line = element.primary_line
+        if line is None or not low <= line.energy_ev <= high:
+            continue
+        contrast = line_contrast(spectrum, line.energy_ev, background)
+        if contrast is None or contrast < min_contrast:
+            continue
+        out.append(ElementFinding(
+            symbol=symbol, name=element.name, confidence="baja",
+            matched=[LineMatch(label=line.label, kind="fotoemisión",
+                               expected_ev=line.energy_ev,
+                               observed_ev=line.energy_ev, height=0.0,
+                               primary=True)],
+            notes=[
+                f"tentativo: su línea principal no aparece como PICO, pero la "
+                f"ventana de {2 * CONTRAST_HALF_WIDTH_EV:.0f} eV alrededor "
+                f"lleva {contrast:.0f} sigma de intensidad de más frente a sus "
+                "propios flancos. Por debajo del umbral de cuantificación "
+                "fiable: mide la región de alta resolución para decidirlo"
+            ],
+        ))
+    return out
 
 
 def _features_in_range(element, spectrum: XPSSpectrum,
@@ -618,7 +708,7 @@ def add_region_evidence(
         low, high = spectrum.range
         if not low <= line.energy_ev <= high:
             continue
-        peaks, _ = find_survey_peaks(spectrum, min_significance)
+        peaks, background = find_survey_peaks(spectrum, min_significance)
         if not peaks:
             continue
         peak = max(peaks, key=lambda item: item.significance)
@@ -650,3 +740,69 @@ def add_region_evidence(
         uncorroborated=[item for item in result.uncorroborated
                         if item.symbol not in known],
     )
+
+
+def line_contrast(
+    spectrum: XPSSpectrum,
+    centre: float,
+    background: Optional[np.ndarray] = None,
+    half_width: float = CONTRAST_HALF_WIDTH_EV,
+) -> Optional[float]:
+    """How much intensity sits in a window, in units of its own noise.
+
+    Prominence asks "is there a local maximum here?", and for a minor
+    element in a survey the answer is no even when the element is plainly
+    there: a few atomic per cent puts a bump of a few hundred counts on a
+    background of several thousand, and every ripple of noise on it is
+    also a local maximum. The N 1s of a nitrogen-doped carbon is the
+    standard case -- it is why the narrow region gets measured.
+
+    For a line whose position the database already gives, the question
+    with an answer is the other one: **how much intensity is in this
+    window**, against a straight line through its flanks. That is the
+    matched filter for a template that is already known, and it is the
+    same test :func:`ramancarbon.core.peaks.window_excess` runs on the
+    Raman 2D band for the same reason.
+
+    It is NOT a lower threshold on the peak finder. Nothing here searches:
+    the window is where the database says the line is, so this cannot
+    invent a position, and what it buys -- integrating n channels -- costs
+    a factor of sqrt(n) in noise rather than nothing.
+
+    Returns ``None`` when the window or its flanks fall outside the scan.
+    """
+    energy = spectrum.binding_energy
+    if background is None:
+        step = abs(spectrum.step)
+        iterations = max(4, int(round(SNIP_WINDOW_EV / max(step, 1e-6))))
+        background = snip_baseline(spectrum.counts, iterations=iterations)
+    above = spectrum.counts - background
+
+    inner = np.abs(energy - centre) <= half_width
+    outer = np.abs(energy - centre) <= half_width * CONTRAST_FLANK
+    flanks = outer & ~inner
+    if inner.sum() < 5 or flanks.sum() < 5:
+        return None
+    low, high = spectrum.range
+    if not (low + half_width <= centre <= high - half_width):
+        return None
+
+    # The flanks define the local zero. SNIP leaves a little structure
+    # under a strong neighbour, and measuring the excess against zero
+    # would report that structure as an element.
+    zero = float(np.median(above[flanks]))
+    excess = float(np.sum(above[inner] - zero))
+
+    accumulated = spectrum.accumulated_counts
+    if accumulated is None:
+        sigma = spectrum.noise_estimate() or 1.0
+        noise = float(sigma) * math.sqrt(float(inner.sum()))
+    else:
+        scale = (float(np.max(spectrum.counts
+                              / np.clip(accumulated, 1e-9, None)))
+                 if np.any(accumulated > 0) else 1.0)
+        variance = np.clip(accumulated[inner], 1.0, None) * scale ** 2
+        noise = math.sqrt(float(np.sum(variance)))
+    if noise <= 0:
+        return None
+    return excess / noise

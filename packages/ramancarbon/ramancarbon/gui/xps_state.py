@@ -302,6 +302,11 @@ class XPSSession:
         rows.extend((item.symbol, "sin corroborar",
                      "; ".join(str(match) for match in item.matched))
                     for item in self.survey.uncorroborated)
+        # Tentative last, and labelled: the window around the line carries
+        # intensity but there is no peak. "Not found" was hiding this.
+        rows.extend((item.symbol, "tentativo",
+                     item.notes[0] if item.notes else "")
+                    for item in self.survey.tentative)
         return rows
 
     # -- fitting -------------------------------------------------------
