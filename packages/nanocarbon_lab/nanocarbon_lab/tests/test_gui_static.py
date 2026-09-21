@@ -15,6 +15,7 @@ itself.
 from __future__ import annotations
 
 import ast
+import pathlib
 import re
 from pathlib import Path
 
@@ -131,3 +132,70 @@ def test_a_failed_build_is_reported_as_a_failure():
     assert "FAILED after" in text, "the elapsed line no longer marks failures"
     assert "_mark_preview_stale" in text, (
         "nothing labels the previous structure that stays on screen")
+
+
+def _source() -> str:
+    """The GUI module as text. It imports tkinter, which most checkouts
+    do not have, so it is read rather than imported."""
+    import nanocarbon_lab
+    return (pathlib.Path(nanocarbon_lab.__file__).parent
+            / "gui" / "app.py").read_text()
+
+
+def _presets(source: str) -> dict:
+    """The PRESETS literal, parsed rather than imported."""
+    start = source.index("PRESETS: dict[str, dict[str, object]] = {")
+    start = source.index("{", start)
+    depth = 0
+    for i in range(start, len(source)):
+        if source[i] == "{":
+            depth += 1
+        elif source[i] == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    return ast.literal_eval(source[start:end])
+
+
+class TestThePresetsPointAtRealThings:
+    """A preset is a dict of variable names applied in a loop, so a typo
+    in a key is silent: the preset applies, that one field keeps its old
+    value, and the structure built is not the one named. The same goes
+    for a mode: the window would switch to a panel that does not exist.
+
+    Both are resolved at click time, so nothing else here sees them.
+    """
+
+    def test_every_preset_key_is_a_registered_variable(self):
+        source = _source()
+        registered = set(re.findall(r'self\._var\(\s*"([^"]+)"', source))
+        assert registered, "no variables found -- the pattern has drifted"
+        for name, preset in _presets(source).items():
+            for key in preset:
+                if key == "mode_kind":
+                    continue
+                assert key in registered, (
+                    f"preset {name!r} sets {key!r}, which no _var registers")
+
+    def test_every_preset_names_a_real_mode(self):
+        from nanocarbon_lab.jobs import HETERO_MODES, MODES, TMD_MODES
+
+        known = set(MODES) | set(TMD_MODES) | set(HETERO_MODES)
+        for name, preset in _presets(_source()).items():
+            mode = preset.get("mode_kind")
+            assert mode in known, f"preset {name!r} names unknown mode {mode!r}"
+
+    def test_no_curved_surface_preset_anneals(self):
+        """On a curved surface the 5-7 pairs ARE how the net covers its
+        curvature, so annealing them away leaves the survivors carrying
+        all of it. Measured on the Y junction, 80 sweeps widen the bond
+        spread from 0.0136 to 0.0175 Å. Every preset here carried 80
+        until this test existed.
+        """
+        curved = {"junction", "schwarzite", "network", "supernetwork",
+                  "coil (relaxed)", "coil (periodic, DFT)"}
+        for name, preset in _presets(_source()).items():
+            if preset.get("mode_kind") in curved:
+                assert preset.get("anneal", 0) == 0, (
+                    f"preset {name!r} anneals a curved surface")

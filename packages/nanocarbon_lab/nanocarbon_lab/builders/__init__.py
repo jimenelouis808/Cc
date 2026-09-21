@@ -16,6 +16,7 @@ from .network import build_nanotube_network
 from .periodic_coil import build_periodic_coil
 from .supernetwork import SUPERLATTICES, build_supernetwork, icosahedral_cage, supergraph_from_atoms
 from .swept import build_coil, build_swept_tube
+from .toroid import build_toroid, describe_toroid
 
 __all__ = [
     "build_bundle",
@@ -39,9 +40,11 @@ __all__ = [
     "build_haeckelite_tube",
     "build_heptanene",
     "build_supernetwork",
+    "build_toroid",
     "build_schwarzite",
     "describe_haeckelite",
     "describe_haeckelite_tube",
+    "describe_toroid",
     "icosahedral_cage",
     "klein_quartic_map",
     "supergraph_from_atoms",

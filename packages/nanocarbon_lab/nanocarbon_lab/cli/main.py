@@ -64,6 +64,7 @@ from ..builders import (
     build_periodic_coil,
     build_schwarzite,
     build_supernetwork,
+    build_toroid,
 )
 from ..builders.haeckelite import PATTERNS as HAECKELITE_PATTERNS
 from ..builders.periodic_coil import LITERATURE_RATIO as PERIODIC_COIL_RATIO
@@ -977,6 +978,33 @@ def _cmd_haeckelite_tube(args):
           f"({100 * info['roll_compression']:.2f}% chord compression)")
     print(f"  axis        = {info['axial_period']:.2f} A period, "
           f"{100 * (info['axial_factor'] - 1):+.1f}% on the flat sheet's")
+    return 0
+
+
+def _cmd_toroid(args):
+    atoms = build_toroid(
+        major_radius=args.major_radius, minor_radius=args.minor_radius,
+        bond=args.bond, vacuum=args.vacuum,
+        remesh_iterations=args.remesh_iterations,
+        anneal_sweeps=args.anneal_sweeps, roughness=args.roughness,
+        seed=args.seed,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    low, high = info["literature_aspect"]
+    band = ("in" if low <= info["aspect_ratio"] <= high else "outside")
+    print(f"  torus       = R {info['major_radius']:.1f} / r "
+          f"{info['minor_radius']:.1f} A, R/r {info['aspect_ratio']:.2f} "
+          f"({band} the published {low}-{high} band)")
+    # Genus 1, so the budget is exactly zero and every pentagon is paired
+    # with a heptagon. Printing the pair count is printing the check.
+    counts = info["ring_counts"]
+    print(f"  pairing     = {counts.get(5, 0)} pentagon(s) against "
+          f"{counts.get(7, 0)} heptagon(s); a torus is genus 1, so "
+          "sum(6-n) is 0 and they must match")
+    print(f"  inner bend  = {100 * info['inner_bend_strain']:.1f}% "
+          "(r/R, the wall's curvature at the inner equator)")
     return 0
 
 
@@ -1947,6 +1975,29 @@ def build_parser() -> argparse.ArgumentParser:
         ht, seed_help="Seed for the 'random' pattern and for dopant "
                       "placement.")
     ht.set_defaults(func=_cmd_haeckelite_tube)
+
+    tr = sub.add_parser(
+        "toroid",
+        help="A nanotube bent until its ends meet. Genus 1, so sum(6-n) "
+             "is exactly 0 and every pentagon is paired with a heptagon "
+             "-- the cleanest test of the rule that pentagons sit in "
+             "positive curvature and heptagons in negative.",
+    )
+    tr.add_argument("--major-radius", type=float, default=20.0,
+                    help="Ring radius, centre to tube axis (A).")
+    tr.add_argument("--minor-radius", type=float, default=5.0,
+                    help="Tube radius (A). Free rather than quantised, the "
+                         "wall being meshed rather than rolled. R/r below "
+                         "2.5 is refused -- the hole closes and what comes "
+                         "out is a dimpled sphere; the published toroidal "
+                         "carbons sit at 3 to 6.")
+    tr.add_argument("--bond", type=float, default=1.42)
+    tr.add_argument("--vacuum", type=float, default=12.0)
+    tr.add_argument("--remesh-iterations", type=int, default=25)
+    tr.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_surface_flags(tr)
+    tr.set_defaults(func=_cmd_toroid)
 
     hp = sub.add_parser(
         "heptanene",

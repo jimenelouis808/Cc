@@ -250,6 +250,7 @@ ACTION_COLUMN_WIDTH = 330
 # registered with `_var`, so applying a preset is a plain loop and the
 # same format serves the save/load file.
 PRESETS: dict[str, dict[str, object]] = {
+    # --- carbon cages
     "C60 buckyball": {
         "mode_kind": "fullerene", "cage_family": "C60", "cage_freq": 1},
     "C540 giant cage": {
@@ -257,64 +258,96 @@ PRESETS: dict[str, dict[str, object]] = {
     "Nano-onion C60@C240@C540": {
         "mode_kind": "nano-onion", "cage_family": "C60", "cage_freq": 1,
         "onion_shells": 3},
+    # --- carbon tubes
     "Capped nanotube": {
         "mode_kind": "capped tube", "rings": 10, "freq": 3, "shape": "straight",
         "roughness": 0.0, "n_sw": 0, "n_dv": 0},
-    "CVD-rough nanotube": {
-        "mode_kind": "capped tube", "rings": 10, "freq": 3, "shape": "straight",
-        "roughness": 0.25, "anneal": 0, "n_sw": 2, "n_dv": 1},
     "N-doped nanotube": {
         "mode_kind": "capped tube", "rings": 10, "freq": 3,
         "dopant": "N", "dopant_conc": 0.03},
-    # A coil can be built two ways and they are not interchangeable, so
-    # the names say which.
+    "Double-wall nanotube": {
+        "mode_kind": "multi-wall", "mw_shells": 2, "mw_inner": 3, "rings": 10},
+    "Seven-tube rope": {
+        "mode_kind": "bundle", "bundle_shells": 1, "freq": 3, "rings": 10},
+    "Carbon toroid (R/r = 4)": {
+        "mode_kind": "toroid", "tor_major": 20.0, "tor_minor": 5.0,
+        "anneal": 0},
+    # --- 2D carbon allotropes
+    # Pentagons and heptagons only, no hexagons: the lattice published as
+    # pentaheptite. The catalogue entry is an exact cover, so its census
+    # is exact rather than whatever the rules let through.
+    "Haeckelite R5,7 sheet": {
+        "mode_kind": "haeckelite", "hk_pattern": "r57", "hk_nx": 4,
+        "hk_ny": 4},
+    "Haeckelite R5,7 tube": {
+        "mode_kind": "haeckelite tube", "ht_pattern": "r57", "ht_nx": 12,
+        "ht_ny": 4, "ht_roll": "a"},
+    # A trivalent net of nothing but heptagons. It exists only in
+    # hyperbolic geometry and its smallest orientable member does not
+    # reach carbon, so this preset REFUSES -- which is the result, and
+    # the one entry here whose answer is a proof rather than a structure.
+    "Heptanene (Klein quartic, genus 3)": {
+        "mode_kind": "heptanene", "hp_strict": True},
+    # --- coils. Two routes, and they are not interchangeable, so the
+    # names say which. One preset each; the old menu carried three
+    # meshed coils differing only in radius and turn count, which is a
+    # parameter sweep rather than three structures.
     #
-    # The **rolled lattice** winds a real (n, m) nanotube: every ring is a
-    # hexagon and the wall is graphitic. Bending a finished lattice can
-    # only stretch it, so the coil has to be wide -- a (5,5) tube needs
-    # about 45 Å of coil radius before its wall strain drops under 8%.
-    # That is not a tuning problem, it is why real carbon nanocoils are
-    # tens to hundreds of Å across. It is also fast, because nothing is
-    # meshed or relaxed: 4600 atoms in a second.
+    # The **rolled lattice** winds a real (n, m) nanotube: every ring is
+    # a hexagon and the wall is graphitic. Bending a finished lattice can
+    # only stretch it, so the coil has to be wide -- which is why real
+    # carbon nanocoils are tens to hundreds of Å across.
     "Nanocoil (graphitic, rolled lattice)": {
         "mode_kind": "nanocoil", "cnt_shape": "helix", "cnt_n": 5, "cnt_m": 5,
         "coil_radius": 45.0, "coil_pitch": 12.0, "coil_turns": 2.0,
         "n_sw": 0, "n_dv": 0, "roughness": 0.0},
     # The **meshed wall** route fits a surface to the helix and tiles it,
-    # so it can make a coil of any radius -- but what it tiles it with is
-    # an amorphous CVD-like network, not a rolled lattice. A two-turn one
-    # comes back with ~90 non-hexagonal rings where Euler needs 12. The
-    # geometry is sound (no bond outside the sp2 range, no overlap); the
-    # wall is disordered. These were called "clean" here, which was a
-    # verdict about bond lengths used as a claim about appearance.
-    "Nanocoil (meshed wall, compact)": {
+    # so it reaches any radius -- but what it tiles with is an amorphous
+    # CVD-like network, not a rolled lattice. `anneal` is 0 and must
+    # stay 0: on a curved surface the 5-7 pairs ARE how the net covers
+    # its curvature, and annealing them away leaves the survivors to
+    # carry all of it. Measured on this Y junction, 80 sweeps widen the
+    # bond spread from 0.0136 to 0.0175 Å.
+    "Nanocoil (meshed wall)": {
         "mode_kind": "coil (relaxed)", "coil_radius": 18.0, "coil_pitch": 13.0,
-        "coil_turns": 2.0, "coil_tube_radius": 4.5, "anneal": 80,
+        "coil_turns": 2.0, "coil_tube_radius": 4.5, "anneal": 0,
         "roughness": 0.0, "n_sw": 0, "n_dv": 0},
-    "Nanocoil (meshed wall, three turns)": {
-        "mode_kind": "coil (relaxed)", "coil_radius": 22.0, "coil_pitch": 13.0,
-        "coil_turns": 3.0, "coil_tube_radius": 4.5, "anneal": 80,
-        "roughness": 0.0, "n_sw": 0, "n_dv": 0},
-    # The one that goes into a plane-wave code: one turn, closed on the
+    # The one that goes into a plane-wave code: one turn closed on the
     # z-torus, so it is a cell and not a fragment with two dangling ends.
+    # Six sides, because seen down its axis a real single-wall coil is a
+    # POLYGON -- Liu et al. show the (6,6) as a hexagonal torus -- and at
+    # D/d = 3.92 the hexagon puts 85% of its disclinations on the correct
+    # side against the smooth helix's 68%.
     "Nanocoil (periodic cell, DFT)": {
-        "mode_kind": "coil (periodic, DFT)", "coil_radius": 15.0,
-        "coil_pitch": 9.6, "coil_tube_radius": 3.0,
+        "mode_kind": "coil (periodic, DFT)", "coil_radius": 8.75,
+        "coil_pitch": 9.6, "coil_tube_radius": 3.0, "coil_sides": 6,
         "roughness": 0.0, "n_sw": 0, "n_dv": 0},
-    "Nanocoil (meshed wall, wide)": {
-        "mode_kind": "coil (relaxed)", "coil_radius": 25.0, "coil_pitch": 14.0,
-        "coil_turns": 3.0, "coil_tube_radius": 5.0, "anneal": 80,
-        "roughness": 0.0, "n_sw": 0, "n_dv": 0},
+    # --- junctions and periodic 3D carbon
     "Y junction": {
         "mode_kind": "junction", "j_kind": "Y", "j_radius": 6.0,
-        "j_arm": 22.0, "j_blend": 4.0, "anneal": 80},
+        "j_arm": 22.0, "j_blend": 4.0, "anneal": 0},
     "Gyroid schwarzite": {
         "mode_kind": "schwarzite", "s_kind": "gyroid", "s_cell": 36.0,
         "anneal": 0},
-    "Double-wall nanotube": {
-        "mode_kind": "multi-wall", "mw_shells": 2, "mw_inner": 3, "rings": 10},
-    "Seven-tube rope": {
-        "mode_kind": "bundle", "bundle_shells": 1, "freq": 3, "rings": 10},
+    "Schwarz P schwarzite": {
+        "mode_kind": "schwarzite", "s_kind": "primitive", "s_cell": 36.0,
+        "anneal": 0},
+    "Nanotube network (cubic)": {
+        "mode_kind": "network", "net_kind": "cubic", "net_cell": 40.0,
+        "net_radius": 6.0, "net_blend": 5.0, "anneal": 0},
+    # --- superlattices of nanotubes
+    "Super-graphene (tubes at 120°)": {
+        "mode_kind": "supernetwork", "sn_graph": "super-graphene",
+        "sn_scale": 34.0, "sn_radius": 5.0, "sn_blend": 4.0, "anneal": 0},
+    "Super-diamond (tubes at 109.47°)": {
+        "mode_kind": "supernetwork", "sn_graph": "super-diamond",
+        "sn_scale": 60.0, "sn_radius": 5.0, "sn_blend": 4.0, "anneal": 0},
+    "Icosahedral cage of tubes": {
+        "mode_kind": "supernetwork", "sn_graph": "super-icosahedron",
+        "sn_scale": 24.0, "sn_radius": 4.0, "sn_blend": 3.0, "anneal": 0},
+    "Superfullerene (C60 of tubes)": {
+        "mode_kind": "supernetwork", "sn_graph": "superfullerene-C60",
+        "sn_scale": 14.2, "sn_radius": 3.0, "sn_blend": 2.0, "anneal": 0},
     # --- dichalcogenides
     "MoS2 monolayer (2H)": {
         "mode_kind": "TMD layers", "tmd_material": "MoS2", "tmd_phase": "2H",
@@ -336,21 +369,6 @@ PRESETS: dict[str, dict[str, object]] = {
     "WSe2 monolayer": {
         "mode_kind": "TMD layers", "tmd_material": "WSe2", "tmd_phase": "2H",
         "tmd_layers": 1},
-    # A quarter turn keeps this near 11k atoms. A full turn at a radius
-    # loose enough to be unstrained runs to six figures, which is the
-    # physics rather than a timid default.
-    "Twisted bilayer graphene 21.8°": {
-        "mode_kind": "twisted bilayer", "het_bottom": "graphene",
-        "het_top": "same", "het_angle": 21.79, "het_max_index": 40},
-    "Magic-angle bilayer 1.08°": {
-        "mode_kind": "twisted bilayer", "het_bottom": "graphene",
-        "het_top": "same", "het_angle": 1.08, "het_max_index": 40},
-    "Graphene on hBN": {
-        "mode_kind": "twisted bilayer", "het_bottom": "graphene",
-        "het_top": "hBN", "het_angle": 7.34, "het_max_index": 40},
-    "MoS2/WS2 stack": {
-        "mode_kind": "vdW stack", "het_bottom": "MoS2", "het_top": "WS2",
-        "het_third": "none", "het_nx": 2, "het_ny": 2},
     "MoS2 Y junction": {
         "mode_kind": "TMD junction", "tmd_material": "MoS2",
         "tmd_j_kind": "Y", "tmd_j_radius": 12.0, "tmd_j_arm": 26.0,
@@ -363,6 +381,22 @@ PRESETS: dict[str, dict[str, object]] = {
         "mode_kind": "TMD coil", "tmd_material": "MoS2", "tmd_n": 30,
         "tmd_m": 0, "tmd_coil_radius": 220.0, "tmd_coil_pitch": 90.0,
         "tmd_coil_turns": 0.25, "tmd_coil_hand": "right"},
+    # --- heterostructures
+    # A quarter turn keeps the MX2 coil near 11k atoms. A full turn at a
+    # radius loose enough to be unstrained runs to six figures, which is
+    # the physics rather than a timid default.
+    "Twisted bilayer graphene 21.8°": {
+        "mode_kind": "twisted bilayer", "het_bottom": "graphene",
+        "het_top": "same", "het_angle": 21.79, "het_max_index": 40},
+    "Magic-angle bilayer 1.08°": {
+        "mode_kind": "twisted bilayer", "het_bottom": "graphene",
+        "het_top": "same", "het_angle": 1.08, "het_max_index": 40},
+    "Graphene on hBN": {
+        "mode_kind": "twisted bilayer", "het_bottom": "graphene",
+        "het_top": "hBN", "het_angle": 7.34, "het_max_index": 40},
+    "MoS2/WS2 stack": {
+        "mode_kind": "vdW stack", "het_bottom": "MoS2", "het_top": "WS2",
+        "het_third": "none", "het_nx": 2, "het_ny": 2},
 }
 
 
@@ -844,6 +878,10 @@ class NanocarbonGUI:
         self.var_s_kind = self._var("s_kind", tk.StringVar(value="primitive"))
         self.var_s_cell = self._var("s_cell", tk.DoubleVar(value=36.0))
         self.var_s_thickness = self._var("s_thickness", tk.DoubleVar(value=0.0))
+        self.var_tor_major = self._var("tor_major",
+                                       tk.DoubleVar(value=20.0))
+        self.var_tor_minor = self._var("tor_minor",
+                                       tk.DoubleVar(value=5.0))
         self.var_hp_strict = self._var("hp_strict",
                                        tk.BooleanVar(value=True))
         self.var_ht_pattern = self._var("ht_pattern",
@@ -1193,6 +1231,20 @@ class NanocarbonGUI:
                   justify="left").grid(row=5, column=0, columnspan=2, sticky="w")
 
         # --- 3D interconnected nanotube network
+        # --- toroid
+        self.frame_tor = ttk.LabelFrame(parent, text="Carbon toroid",
+                                        padding=8)
+        self.frame_tor.columnconfigure(0, weight=1)
+        self._param(self.frame_tor, "Ring radius R (Å)", self.var_tor_major,
+                    8.0, 80.0, 0, resolution=1.0,
+                    command=self._update_tor_hint)
+        self._param(self.frame_tor, "Tube radius r (Å)", self.var_tor_minor,
+                    2.0, 15.0, 2, resolution=0.5,
+                    command=self._update_tor_hint)
+        self.lbl_tor = ttk.Label(self.frame_tor, text="", foreground=MUTED,
+                                 wraplength=260, justify="left")
+        self.lbl_tor.grid(row=4, column=0, columnspan=2, sticky="w")
+
         # --- heptanene
         self.frame_hp = ttk.LabelFrame(parent, text="Heptanene", padding=8)
         self.frame_hp.columnconfigure(0, weight=1)
@@ -1930,6 +1982,7 @@ class NanocarbonGUI:
                       self.frame_cage, self.frame_mw, self.frame_bundle,
                       self.frame_network,
                       self.frame_ht, self.frame_sn, self.frame_hp,
+                      self.frame_tor,
                       self.frame_tmd, self.frame_tmd_layers,
                       self.frame_tmd_ribbon, self.frame_tmd_tube,
                       self.frame_tmd_coil, self.frame_tmd_sw,
@@ -2002,6 +2055,12 @@ class NanocarbonGUI:
         elif mode == "haeckelite tube":
             self.frame_ht.pack(fill="x")
             self._update_ht_hint()
+        elif mode == "toroid":
+            self.frame_tor.pack(fill="x")
+            # Same reason as every other curved surface: the 5-7 pairs
+            # are how the net covers the curvature.
+            self.var_anneal.set(0)
+            self._update_tor_hint()
         elif mode == "heptanene":
             self.frame_hp.pack(fill="x")
         elif mode == "supernetwork":
@@ -2387,6 +2446,39 @@ class NanocarbonGUI:
                   f"leave one face and return through the opposite one, so "
                   f"this is ready for a DFT code as it stands."),
             foreground=MUTED)
+
+    def _update_tor_hint(self) -> None:
+        """Say whether the hole survives, and whether the ratio is one
+        anybody has relaxed.
+
+        A torus is genus 1, so its budget is exactly zero and its
+        pentagons and heptagons must come in equal numbers -- worth
+        saying before the build, because it is the one census here that
+        can be predicted rather than measured.
+        """
+        from ..builders.toroid import LITERATURE_ASPECT, MIN_ASPECT
+
+        major = float(self.var_tor_major.get())
+        minor = float(self.var_tor_minor.get())
+        if minor <= 0:
+            return
+        aspect = major / minor
+        if aspect < MIN_ASPECT:
+            self.lbl_tor.config(
+                text=(f"✗ R/r = {aspect:.2f}, under {MIN_ASPECT}: the hole "
+                      "is smaller than the tube is thick, so this would be "
+                      "a dimpled sphere rather than a torus. Refused."))
+            return
+        low, high = LITERATURE_ASPECT
+        band = ("" if low <= aspect <= high else
+                f" Outside the published {low}–{high} band — not wrong, "
+                "but not the geometry those calculations relaxed to.")
+        self.lbl_tor.config(
+            text=(f"R/r = {aspect:.2f}, inner-equator bend "
+                  f"{100 * minor / major:.1f}%. Genus 1, so sum(6−n) is "
+                  "exactly 0 and the pentagons and heptagons must come out "
+                  "in equal numbers — the pentagons on the outer equator, "
+                  f"the heptagons on the inner.{band}"))
 
     def _update_ht_hint(self) -> None:
         """Say what the roll will give before it runs.
@@ -3052,6 +3144,13 @@ class NanocarbonGUI:
                 ny=int(self.var_ht_ny.get()),
                 pattern=self.var_ht_pattern.get(),
                 roll=self.var_ht_roll.get(),
+            )
+        elif mode == "toroid":
+            params = dict(
+                major_radius=float(self.var_tor_major.get()),
+                minor_radius=float(self.var_tor_minor.get()),
+                anneal_sweeps=int(self.var_anneal.get()),
+                roughness=float(self.var_roughness.get()),
             )
         elif mode == "heptanene":
             params = dict(strict=bool(self.var_hp_strict.get()))

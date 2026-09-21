@@ -64,6 +64,11 @@ CARBON_MODES = (
     "coil (relaxed)",
     "fullerene",
     "nano-onion",
+    # A nanotube bent until its ends meet. Genus 1, so sum(6-n) = 0 and
+    # every pentagon is paired with a heptagon -- the cleanest test there
+    # is of the disclination rule, because a torus is the surface the
+    # coil papers are actually describing.
+    "toroid",
     "junction",
     "schwarzite",
     "network",
@@ -273,6 +278,7 @@ def builder_for(mode: str):
         build_nanotube_network,
         build_periodic_coil,
         build_schwarzite,
+        build_toroid,
     )
     from .builders.supernetwork import build_supernetwork
     from .hetero import build_twisted_bilayer, build_vdw_stack
@@ -307,6 +313,7 @@ def builder_for(mode: str):
         "haeckelite tube": build_haeckelite_tube,
         "heptanene": build_heptanene,
         "nano-onion": build_nano_onion,
+        "toroid": build_toroid,
         "junction": build_junction,
         "schwarzite": build_schwarzite,
         "network": build_nanotube_network,
@@ -597,6 +604,14 @@ def estimate_atoms(job: Job) -> int:
         # Exact for the same reason the flat sheet is: rolling moves no
         # atoms either, so the tube holds graphene's own count.
         return 4 * int(p.get("nx", 8)) * int(p.get("ny", 4))
+
+    if mode == "toroid":
+        # Surface of a torus over graphene's area per atom: the same
+        # relation every meshed builder here uses.
+        major = float(p.get("major_radius", 20.0))
+        minor = float(p.get("minor_radius", 5.0))
+        return int(4.0 * math.pi ** 2 * major * minor / RING_AREA
+                   * ATOMS_PER_RING)
 
     if mode == "heptanene":
         # Exact: the Klein quartic has 56 vertices and there is nothing
@@ -925,6 +940,10 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     "haeckelite tube": ("haeckelite-tube", {
         "nx": "--nx", "ny": "--ny", "pattern": "--pattern",
         "roll": "--roll", "period": "--period", "density": "--density",
+        "bond": "--bond", "vacuum": "--vacuum",
+    }),
+    "toroid": ("toroid", {
+        "major_radius": "--major-radius", "minor_radius": "--minor-radius",
         "bond": "--bond", "vacuum": "--vacuum",
     }),
     "heptanene": ("heptanene", {

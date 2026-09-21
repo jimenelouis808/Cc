@@ -867,6 +867,61 @@ passes. A hexagon is the flat case and has no side to be on; scoring it
 would inflate every number, and on a nanotube network -- mostly hexagons
 -- it would hide the answer entirely.
 
+## Toroids: the one census that can be predicted before the build
+
+`builders/toroid.py` bends a tube until its ends meet. It is genus 1, so
+`sum(6-n) = 6*chi = 0` **exactly**, and with only 5s, 6s and 7s available
+that forces the pentagons and heptagons to come out in *equal numbers* --
+the only curved builder here whose census is predictable rather than
+merely measurable, and a test pins it. Measured at R=20, r=5: 68
+pentagons, 560 hexagons, 68 heptagons, budget 0, and 93% of the
+disclinations on the curvature side they belong on.
+
+It is also the surface the coil papers are actually describing, with
+nothing else going on: a torus has positive Gaussian curvature on its
+outer equator and negative on its inner one, so the pentagons belong
+outside and the heptagons inside and there is nowhere else for either to
+go.
+
+**The builder is deliberately thin, and should stay that way.**
+`swept.build_swept_tube` already sweeps a tube along any centreline, and
+a torus is just a **closed** one: the capsule sweep that would cap two
+free ends instead overlaps itself and closes the surface. A second field
+for it would be a second thing to keep right.
+
+`R/r` is the physics. The wall bends by `r/R` at the inner equator, and
+below `R = 2.5r` the hole is smaller than the tube is thick -- what comes
+out is a dimpled sphere with a torus's name on it, so that is refused
+rather than returned. The published toroidal carbons sit at 3 to 6;
+outside that the structure is built and labelled, because it is not
+wrong, only not the geometry those calculations relaxed to.
+
+## Presets are a catalogue of textbook structures, not a parameter sweep
+
+`gui/app.PRESETS` is a reference shelf: one entry per structure worth
+knowing, not several per structure at different sizes. It carried three
+"meshed wall" nanocoils differing only in radius and turn count, which is
+a sweep and belongs in `workflows/sweep.py`.
+
+Two rules, and a test for each in `tests/test_gui_static.py`:
+
+* **Every key must be a registered `_var` name and every `mode_kind` a
+  real mode.** A preset is applied in a plain loop, so a typo is silent:
+  the preset applies, that one field keeps its old value, and the
+  structure built is not the one named.
+* **No preset may anneal a curved surface.** Every junction, schwarzite,
+  network and meshed-coil preset carried `anneal: 80` while this file
+  said not to -- the documentation and the menu disagreed, and the menu
+  is what people click. Measured on the Y junction preset's own
+  parameters, 80 sweeps widen the bond spread from **0.0136 to 0.0175 Å**
+  and the bond range from 1.366-1.484 to 1.319-1.506.
+
+  Worth knowing, because it is the one thing annealing improves: it also
+  tidies the census (88 non-hexagons down to 45) and takes the
+  disclination placement from 94% to **100%**. The wall is still the
+  deciding metric, as this file has always said -- but say it as a
+  trade-off that was measured, not as a rule with no cost.
+
 ## Unit cells: pad only what does not repeat, measure only what is vacuum
 
 `cell.to_unit_cell` turns any structure into `pbc=(True, True, True)`
