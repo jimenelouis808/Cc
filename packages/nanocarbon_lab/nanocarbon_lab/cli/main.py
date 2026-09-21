@@ -65,7 +65,8 @@ from ..builders import (
     build_supernetwork,
 )
 from ..builders.haeckelite import PATTERNS as HAECKELITE_PATTERNS
-from ..builders.supernetwork import SUPERLATTICES
+from ..builders.periodic_coil import LITERATURE_RATIO as PERIODIC_COIL_RATIO
+from ..builders.supernetwork import CAGES, SUPERLATTICES
 from ..cell import (
     MIN_IMAGE_SEPARATION,
     cell_report,
@@ -1029,6 +1030,7 @@ def _cmd_coil_periodic(args):
     atoms = build_periodic_coil(
         coil_radius=args.coil_radius, pitch=args.pitch,
         tube_radius=args.tube_radius, bond=args.bond,
+        sides=args.sides,
         handedness=-1 if args.handedness == "left" else 1,
         vacuum=args.vacuum, resolution=args.resolution,
         remesh_iterations=args.remesh_iterations,
@@ -1040,6 +1042,35 @@ def _cmd_coil_periodic(args):
     print(f"periodic cell  {cell[0][0]:.1f} x {cell[1][1]:.1f} x "
           f"{cell[2][2]:.1f} A, periodic along z only")
     print(f"mesh genus     {atoms.info['mesh_genus']} (one turn is a torus)")
+    info = atoms.info
+    shape = (f"polygon, {info['sides']} sides" if info.get("sides")
+             else "smooth helix")
+    print(f"centreline     {shape}")
+    # The one structural claim about a coil that can be checked on a
+    # finished model without running anything: the surface is torus-like,
+    # so Gaussian curvature is positive on the outer equator and negative
+    # on the inner one -- pentagons belong outside, heptagons inside, and
+    # both papers say it in those words. Recorded since the coil work and
+    # never printed until now.
+    check = info.get("curvature_check")
+    if check:
+        print(f"disclinations  {check['pentagons_outside']}/"
+              f"{check['pentagons']} pentagon(s) on the outside, "
+              f"{check['heptagons_inside']}/{check['heptagons']} "
+              "heptagon(s) on the inside")
+        wrong = ((check["pentagons"] - check["pentagons_outside"])
+                 + (check["heptagons"] - check["heptagons_inside"]))
+        if wrong:
+            print(f"               {wrong} on the wrong side: defects of "
+                  "the model, reported rather than rounded away")
+    ratio = info.get("diameter_ratio")
+    if ratio is not None:
+        low, high = PERIODIC_COIL_RATIO
+        verdict = ("in the single-wall band" if low <= ratio <= high
+                   else "outside the single-wall band")
+        print(f"D/d            {ratio:.2f} ({verdict} {low}-{high}; "
+              "Popovic finds ~3.5 and Liu's Table 2 gives 3.53-3.88 for "
+              "the (5,5) through (8,8))")
     return 0
 
 
@@ -1750,6 +1781,18 @@ def build_parser() -> argparse.ArgumentParser:
                          "gap or successive turns merge.")
     cp.add_argument("--tube-radius", type=float, default=3.0,
                     help="Radius of the tube itself (Å).")
+    cp.add_argument("--sides", type=int, default=None,
+                    help="Vertices per turn. Seen down the axis a real "
+                         "single-wall coil is a POLYGON -- Liu et al. show "
+                         "the (6,6) coil as a hexagonal torus and say it "
+                         "matches what is observed, because the wall "
+                         "relieves its strain at a few knees rather than "
+                         "everywhere at once. Measured on the (5,5) "
+                         "geometry, six sides give 8 pentagons and 8 "
+                         "heptagons with EVERY pentagon on the outside, "
+                         "against 11 and 11 with two of each on the wrong "
+                         "side for the smooth helix. Omit for the smooth "
+                         "helix; at least 3.")
     cp.add_argument("--handedness", choices=["right", "left"], default="right")
     cp.add_argument("--bond", type=float, default=1.42)
     cp.add_argument("--vacuum", type=float, default=10.0,
@@ -1848,18 +1891,28 @@ def build_parser() -> argparse.ArgumentParser:
              "bonds are tubes.",
     )
     sn.add_argument("--graph", default="super-graphene",
-                    choices=list(SUPERLATTICES),
+                    choices=list(SUPERLATTICES) + list(CAGES),
                     help="Which net. 'super-graphene' joins three tubes at "
                          "120 deg, which is the angle an sp2 branch adopts "
                          "by itself and the most stable node here; "
                          "'super-square' four at 90 deg; 'super-cubic' six "
                          "along the axes; 'super-diamond' four at the "
                          "tetrahedral 109.47 deg; 'super-fcc' twelve, which "
-                         "is reported rather than recommended.")
+                         "is reported rather than recommended. "
+                         "'super-icosahedron' and 'superfullerene-C60' are "
+                         "finite CAGES rather than crystals: twelve "
+                         "vertices with five tubes each, and a C60 whose "
+                         "ninety bonds are all tubes.")
     sn.add_argument("--scale", type=float, default=40.0,
-                    help="Cell edge (Å). Must leave a real tube between two "
-                         "vertices, each of which eats about "
-                         "tube-radius + blend of either end of a strut.")
+                    help="For a periodic net, the cell edge (Å); for a cage, "
+                         "the STRUT LENGTH (Å), a cage having no cell. Either "
+                         "way it must leave a real tube between two vertices, "
+                         "each of which eats about tube-radius + blend of "
+                         "either end of a strut -- so a cage wants a much "
+                         "larger number than looks necessary. Measured "
+                         "clean: the icosahedron at 24 Å struts with "
+                         "--tube-radius 4 --blend 3 (4318 atoms), the C60 at "
+                         "14.2 Å with --tube-radius 3 --blend 2 (7518).")
     sn.add_argument("--tube-radius", type=float, default=5.0,
                     help="Radius of every tube (Å). Free rather than "
                          "quantised, the wall being meshed rather than "

@@ -16,10 +16,12 @@ import numpy as np
 import pytest
 
 from nanocarbon_lab.builders.supernetwork import (
+    CAGES,
     SUPERLATTICES,
     SuperGraph,
     build_supernetwork,
     icosahedral_cage,
+    named_graph,
     supergraph_from_atoms,
 )
 
@@ -209,3 +211,45 @@ class TestTheRingBudgetComesFromTheSkeleton:
         with pytest.raises(RuntimeError, match="skeleton's own topology"):
             build_supernetwork(liar, scale=34.0, tube_radius=5.0,
                                blend=4.0, grid_resolution=64)
+
+
+class TestTheCagesAreReachable:
+    """A cage that exists only as a Python function is not available to
+    anyone using the program.
+
+    Both cages were built and measured and then left out of
+    ``SUPERLATTICES``, so the window's dropdown and the command line's
+    ``--graph`` never offered them. These tests pin the registry that
+    fixes it, because "it exists in the module" is exactly the claim that
+    was wrong.
+    """
+
+    def test_both_cages_are_registered(self):
+        assert set(CAGES) == {"super-icosahedron", "superfullerene-C60"}
+
+    @pytest.mark.parametrize("name", ["super-icosahedron",
+                                      "superfullerene-C60"])
+    def test_scale_means_the_strut_length(self, name):
+        """A periodic net's scale is its cell edge; a cage has no cell,
+        so scale is how long each tube is -- the number that decides
+        whether a tube survives between two vertices at all."""
+        for strut in (18.0, 24.0):
+            graph = named_graph(name, strut)
+            lengths = graph.strut_lengths(strut)
+            assert lengths.min() == pytest.approx(strut, rel=1e-6)
+            assert lengths.max() == pytest.approx(strut, rel=1e-6)
+
+    def test_the_cages_are_the_structures_they_claim(self):
+        cage = named_graph("super-icosahedron", 24.0)
+        assert len(cage.nodes) == 12 and len(cage.edges) == 30
+        assert cage.coordination == 5
+        fullerene = named_graph("superfullerene-C60", 14.2)
+        assert len(fullerene.nodes) == 60 and len(fullerene.edges) == 90
+        assert fullerene.coordination == 3
+
+    def test_a_periodic_net_still_resolves(self):
+        assert named_graph("super-cubic", 40.0) is SUPERLATTICES["super-cubic"]
+
+    def test_an_unknown_name_names_both_catalogues(self):
+        with pytest.raises(ValueError, match="super-icosahedron"):
+            named_graph("super-nonsense", 40.0)

@@ -81,6 +81,7 @@ from ..builders import fullerene_mesh as fm
 from ..builders.capped_cnt import MIN_CAP_FREQ
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
+from ..builders.supernetwork import CAGES as supercages
 from ..builders.supernetwork import SUPERLATTICES as superlattices
 from ..cell import (
     MIN_IMAGE_SEPARATION,
@@ -202,6 +203,11 @@ HAECKELITE_CATALOGUE = haeckelite_catalogue
 #: copy: a net the window offers and the builder does not know
 #: is a dead menu entry.
 SUPERLATTICES = superlattices
+
+#: The finite cages, offered beside the periodic nets. A cage
+#: reads `scale` as its strut length rather than a cell edge,
+#: which the hint says before the build.
+SUPERCAGES = supercages
 NETWORK_KINDS = ["cubic", "diamond"]
 CAGE_FAMILIES = ["C60", "C20"]
 
@@ -1215,8 +1221,9 @@ class NanocarbonGUI:
         self.frame_sn.columnconfigure(0, weight=1)
         ttk.Label(self.frame_sn, text="Net").grid(row=0, column=0, sticky="w")
         ttk.Combobox(self.frame_sn, textvariable=self.var_sn_graph,
-                     values=list(SUPERLATTICES), state="readonly",
-                     width=16).grid(row=0, column=1, sticky="ew")
+                     values=list(SUPERLATTICES) + list(SUPERCAGES),
+                     state="readonly",
+                     width=18).grid(row=0, column=1, sticky="ew")
         self._param(self.frame_sn, "Cell length (Å)", self.var_sn_scale,
                     20.0, 120.0, 1, resolution=1.0,
                     command=self._update_sn_hint)
@@ -2419,11 +2426,14 @@ class NanocarbonGUI:
         before anything is meshed, so the hint can show the answer the
         build will be checked against.
         """
+        from ..builders.supernetwork import named_graph
+
         name = self.var_sn_graph.get()
-        graph = SUPERLATTICES.get(name)
-        if graph is None:
-            return
         scale = float(self.var_sn_scale.get())
+        try:
+            graph = named_graph(name, scale)
+        except ValueError:
+            return
         radius = float(self.var_sn_radius.get())
         blend = float(self.var_sn_blend.get())
         shortest = float(graph.strut_lengths(scale).min())
@@ -2444,7 +2454,10 @@ class NanocarbonGUI:
                   f"{free:.0f} Å of free tube between them. The skeleton "
                   f"fixes sum(6−n) at {graph.ring_budget:+d} before "
                   "anything is meshed, and the build is checked against "
-                  f"it. {graph.note}"))
+                  f"it. {graph.note}"
+                  + ("" if name in SUPERLATTICES else
+                     " This is a finite cage, so the length above is the "
+                     "strut, not a cell edge.")))
 
     def _graft_fields(self) -> dict:
         """The grafting half of a Job, shared by all three families.

@@ -596,13 +596,13 @@ def estimate_atoms(job: Job) -> int:
         # summing strut areas counts the node once per strut meeting
         # there. The graph knows its own struts, so unlike `network`
         # nothing here is keyed on a hardcoded net.
-        from .builders.supernetwork import SUPERLATTICES
+        from .builders.supernetwork import named_graph
 
-        graph = p.get("graph", "super-graphene")
-        if isinstance(graph, str):
-            graph = SUPERLATTICES.get(graph, SUPERLATTICES["super-graphene"])
         radius = float(p.get("tube_radius", 5.0))
         scale = float(p.get("scale", 40.0))
+        graph = p.get("graph", "super-graphene")
+        if isinstance(graph, str):
+            graph = named_graph(graph, scale)
         length = float(graph.strut_lengths(scale).sum())
         area = 2 * math.pi * radius * length
         # Coordination 3 buries least, 12 most; the same linear form as
@@ -861,6 +861,12 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     }),
     "coil (periodic, DFT)": ("coil-periodic", {
         "coil_radius": "--coil-radius", "pitch": "--pitch",
+        # Seen down its axis a real single-wall coil is a POLYGON, not a
+        # circle (Liu et al.), and this is what builds one. It was in the
+        # window and missing from here, so the copy-as-command-line
+        # button handed back a command that quietly built a SMOOTH helix
+        # -- a different structure with a different ring census.
+        "sides": "--sides",
         "tube_radius": "--tube-radius", "bond": "--bond",
         "handedness": "--handedness", "vacuum": "--vacuum",
         "resolution": "--resolution",

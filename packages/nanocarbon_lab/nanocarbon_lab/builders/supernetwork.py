@@ -53,10 +53,12 @@ from . import remesh as rm
 from .junction import _finish
 
 __all__ = [
+    "CAGES",
     "ICOSAHEDRON",
     "SUPERLATTICES",
     "build_supernetwork",
     "icosahedral_cage",
+    "named_graph",
     "SuperGraph",
     "edges_from_positions",
     "supergraph_from_atoms",
@@ -346,6 +348,51 @@ def icosahedral_cage(scale: float = 12.0) -> SuperGraph:
     )
 
 
+def _icosahedral(strut: float) -> SuperGraph:
+    return icosahedral_cage(0.5 * float(strut))
+
+
+def _superfullerene(family: str):
+    def make(strut: float) -> SuperGraph:
+        from .fullerene import build_fullerene
+
+        cage = build_fullerene(family=family)
+        # The cage's own bonds are 1.42 Å, so scaling by strut/1.42 puts
+        # every edge at the requested tube length.
+        return supergraph_from_atoms(cage, scale=float(strut) / CC_BOND,
+                                     name=f"superfullerene-{family}")
+    return make
+
+
+#: Finite cages, as factories rather than fixed graphs.
+#:
+#: A periodic net's ``scale`` is its cell edge; a cage has no cell, so
+#: here ``scale`` is **the strut length in Å** -- how long each tube is,
+#: which is the number that decides whether a tube survives between two
+#: vertices at all. Keeping them in a registry beside
+#: :data:`SUPERLATTICES` is what lets the window and the command line
+#: offer them: as bare functions they were reachable only from Python,
+#: which is not "available" in any sense that matters to someone using
+#: the program.
+CAGES: dict[str, object] = {
+    "super-icosahedron": _icosahedral,
+    "superfullerene-C60": _superfullerene("C60"),
+}
+
+
+def named_graph(name: str, scale: float) -> SuperGraph:
+    """Look a net or cage up by name, applying ``scale`` the right way."""
+    if name in SUPERLATTICES:
+        return SUPERLATTICES[name]
+    if name in CAGES:
+        return CAGES[name](scale)
+    raise ValueError(
+        f"unknown net {name!r}; the periodic catalogue has "
+        f"{list(SUPERLATTICES)} and the cages are {list(CAGES)}. A cage "
+        "from any other structure comes from supergraph_from_atoms()."
+    )
+
+
 def build_supernetwork(
     graph: SuperGraph | str = "super-graphene",
     scale: float = 40.0,
@@ -396,13 +443,7 @@ def build_supernetwork(
         If no grid resolution gives a closed surface.
     """
     if isinstance(graph, str):
-        try:
-            graph = SUPERLATTICES[graph]
-        except KeyError:
-            raise ValueError(
-                f"unknown net {graph!r}; the catalogue has "
-                f"{list(SUPERLATTICES)}, and a cage comes from "
-                "icosahedral_cage() or supergraph_from_atoms()") from None
+        graph = named_graph(graph, scale)
     if tube_radius <= 0 or blend <= 0:
         raise ValueError("tube_radius and blend must be positive.")
 

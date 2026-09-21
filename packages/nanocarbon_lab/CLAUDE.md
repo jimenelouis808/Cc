@@ -370,10 +370,19 @@ Two studies of single-wall coils, read against the periodic builder
 * **Seen down the axis a real coil is a POLYGON.** Liu et al. show the
   (6,6) coil's top view as a hexagonal torus and say it matches what is
   observed: the wall relieves its strain at a few knees, not everywhere
-  at once. Measured on the (5,5) geometry, six sides per turn give a
-  census of exactly 8 pentagons and 8 heptagons with **every pentagon on
-  the outside**, against 11 and 11 with two of each on the wrong side for
-  the smooth helix.
+  at once. Measured at `coil_radius=8.75, pitch=9.6, tube_radius=3.0`
+  (D/d = 3.92, inside the single-wall band), six sides per turn put
+  **85% of the disclinations on their correct side** -- 9 of 10
+  pentagons outside and 8 of 10 heptagons inside -- against **68%** for
+  the smooth helix at the same parameters (8 of 11 and 7 of 11). The
+  polygon is better, and it is better by a wide margin.
+
+  **Quote these numbers with the geometry they came from.** An earlier
+  version of this file claimed "8 and 8 with every pentagon outside",
+  which does not reproduce: at D/d = 6.00 the hexagon is *worse* than
+  the smooth helix (21 wrong against 15). The placement depends on the
+  coil's proportions, so a census without its parameters is not a
+  measurement of anything, and that is how the two got separated.
 * **D/d is about 3.5.** Popović finds it for both of their classes; Liu's
   Table 2 gives 3.53 to 3.88 for the (5,5) through (8,8). A coil outside
   that band is not wrong — multi-wall coils reach ten and more — but it
