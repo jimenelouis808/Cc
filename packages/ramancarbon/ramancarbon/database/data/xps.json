@@ -791,7 +791,10 @@
         "asymmetric": false,
         "confidence": "medium",
         "note": "Cae encima del C–N y del C–O. En una muestra con S y N a la vez esta componente no es prueba de nada por sí sola: la prueba está en el S 2p.",
-        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa"
+        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
+        "requires_any": [
+          "S"
+        ]
       },
       {
         "key": "C-N",
@@ -806,7 +809,10 @@
           2.0
         ],
         "asymmetric": false,
-        "confidence": "medium"
+        "confidence": "medium",
+        "requires_any": [
+          "N"
+        ]
       },
       {
         "key": "C-O",
@@ -821,7 +827,10 @@
           2.2
         ],
         "asymmetric": false,
-        "confidence": "high"
+        "confidence": "high",
+        "requires_any": [
+          "O"
+        ]
       },
       {
         "key": "C=O",
@@ -836,7 +845,10 @@
           2.2
         ],
         "asymmetric": false,
-        "confidence": "high"
+        "confidence": "high",
+        "requires_any": [
+          "O"
+        ]
       },
       {
         "key": "O-C=O",
@@ -851,7 +863,10 @@
           2.2
         ],
         "asymmetric": false,
-        "confidence": "high"
+        "confidence": "high",
+        "requires_any": [
+          "O"
+        ]
       },
       {
         "key": "carbonate",
@@ -866,7 +881,10 @@
           2.2
         ],
         "asymmetric": false,
-        "confidence": "medium"
+        "confidence": "medium",
+        "requires_any": [
+          "O"
+        ]
       },
       {
         "key": "pi-pi*",
@@ -916,7 +934,19 @@
         ],
         "asymmetric": false,
         "confidence": "medium",
-        "note": "Se solapa con el piridínico. Distinguirlos con XPS solo no se puede: hace falta el metal 2p o XAS."
+        "note": "Se solapa con el piridínico. Distinguirlos con XPS solo no se puede: hace falta el metal 2p o XAS.",
+        "requires_any": [
+          "Fe",
+          "Co",
+          "Ni",
+          "Mo",
+          "W",
+          "Se",
+          "Ti",
+          "Zn",
+          "Cu",
+          "Mn"
+        ]
       },
       {
         "key": "amine",
@@ -1012,7 +1042,19 @@
           1.8
         ],
         "asymmetric": false,
-        "confidence": "high"
+        "confidence": "high",
+        "requires_any": [
+          "Fe",
+          "Co",
+          "Ni",
+          "Mo",
+          "W",
+          "Se",
+          "Ti",
+          "Zn",
+          "Cu",
+          "Mn"
+        ]
       },
       {
         "key": "quinone",
@@ -1061,7 +1103,10 @@
         ],
         "asymmetric": false,
         "confidence": "low",
-        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa"
+        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
+        "requires_any": [
+          "S"
+        ]
       },
       {
         "key": "C-O",
@@ -1158,7 +1203,10 @@
         ],
         "asymmetric": false,
         "confidence": "low",
-        "note": "Poca literatura y muy dispersa. Confirma con el Se 3d y con DRX."
+        "note": "Poca literatura y muy dispersa. Confirma con el Se 3d y con DRX.",
+        "requires_any": [
+          "Se"
+        ]
       },
       {
         "key": "Fe-C",
@@ -1173,7 +1221,10 @@
           2.0
         ],
         "asymmetric": false,
-        "confidence": "low"
+        "confidence": "low",
+        "requires_any": [
+          "C"
+        ]
       }
     ],
     "Se 3d5/2": [
@@ -1238,7 +1289,19 @@
           1.6
         ],
         "asymmetric": false,
-        "confidence": "high"
+        "confidence": "high",
+        "requires_any": [
+          "Fe",
+          "Co",
+          "Ni",
+          "Mo",
+          "W",
+          "Se",
+          "Ti",
+          "Zn",
+          "Cu",
+          "Mn"
+        ]
       },
       {
         "key": "metal-sulfide",
@@ -1255,7 +1318,19 @@
         "asymmetric": false,
         "confidence": "medium",
         "note": "Solapa con el sulfuro iónico. Lo que los separa es el 2p del metal, no esta ventana.",
-        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa"
+        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
+        "requires_any": [
+          "Fe",
+          "Co",
+          "Ni",
+          "Mo",
+          "W",
+          "Se",
+          "Ti",
+          "Zn",
+          "Cu",
+          "Mn"
+        ]
       },
       {
         "key": "S-S",
@@ -1287,7 +1362,10 @@
         "asymmetric": false,
         "confidence": "high",
         "note": "El estado dominante en un carbono dopado con azufre. Sin él, su intensidad la absorben el S–S y el sulfuro, y el azufre sale reducido de más.",
-        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa"
+        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
+        "requires_any": [
+          "C"
+        ]
       },
       {
         "key": "sulfoxide",
@@ -1303,7 +1381,10 @@
         ],
         "asymmetric": false,
         "confidence": "medium",
-        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa"
+        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
+        "requires_any": [
+          "O"
+        ]
       },
       {
         "key": "sulfonate",
@@ -1320,7 +1401,10 @@
         "asymmetric": false,
         "confidence": "medium",
         "note": "Muy cerca del sulfato; en un carbono sulfonado los dos están, y la ventana ancha es deliberada.",
-        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa"
+        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
+        "requires_any": [
+          "O"
+        ]
       },
       {
         "key": "sulfate",
@@ -1335,7 +1419,10 @@
           2.5
         ],
         "asymmetric": false,
-        "confidence": "high"
+        "confidence": "high",
+        "requires_any": [
+          "O"
+        ]
       }
     ],
     "P 2p3/2": [
@@ -1352,7 +1439,19 @@
           1.8
         ],
         "asymmetric": false,
-        "confidence": "high"
+        "confidence": "high",
+        "requires_any": [
+          "Fe",
+          "Co",
+          "Ni",
+          "Mo",
+          "W",
+          "Se",
+          "Ti",
+          "Zn",
+          "Cu",
+          "Mn"
+        ]
       },
       {
         "key": "P-C",
@@ -1367,7 +1466,10 @@
           2.2
         ],
         "asymmetric": false,
-        "confidence": "medium"
+        "confidence": "medium",
+        "requires_any": [
+          "C"
+        ]
       },
       {
         "key": "phosphate",
@@ -1383,7 +1485,10 @@
         ],
         "asymmetric": false,
         "confidence": "high",
-        "note": "En un fosfuro recién hecho, el fosfato de la superficie suele dominar el área. Eso NO significa que la muestra sea fosfato."
+        "note": "En un fosfuro recién hecho, el fosfato de la superficie suele dominar el área. Eso NO significa que la muestra sea fosfato.",
+        "requires_any": [
+          "O"
+        ]
       }
     ],
     "Ni 2p3/2": [
@@ -1447,7 +1552,10 @@
           2.0
         ],
         "asymmetric": false,
-        "confidence": "low"
+        "confidence": "low",
+        "requires_any": [
+          "P"
+        ]
       }
     ],
     "Co 2p3/2": [

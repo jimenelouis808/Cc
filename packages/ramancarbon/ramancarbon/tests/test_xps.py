@@ -1257,3 +1257,86 @@ class TestTheSurveyLineThatIsNotAPeak:
         found = identify(self._survey(3, 0.20))
         assert "N" in [item.symbol for item in found.elements]
         assert "N" not in [item.symbol for item in found.tentative]
+
+
+class TestChemistryFiltersTheCandidates:
+    """Binding energy is not a functional group.
+
+    «O de red (óxido metálico)» at 530 eV and a quinone C=O at 531 eV are
+    one electronvolt apart, and which of the two a shoulder is depends on
+    something the region cannot see: whether the sample contains a metal.
+    Offering both and letting least squares choose is how a nitrogen- and
+    sulphur-doped carbon acquires a metal oxide it does not have -- which
+    is exactly what it did on the user's own O 1s.
+    """
+
+    def test_a_state_declares_what_it_needs(self):
+        database = load_xps_database()
+        lattice = database.state("O 1s", "lattice")
+        assert lattice.requires_any, "el óxido de red no declara requisitos"
+        assert not lattice.possible_in(["C", "N", "O"])
+        assert lattice.possible_in(["C", "O", "Fe"])
+        # No information is not a licence to filter.
+        assert lattice.possible_in(None)
+
+    def test_the_catalogue_filters_on_composition(self):
+        database = load_xps_database()
+        everything = {s.key for s in
+                      database.states_for("O 1s", include_satellites=False)}
+        carbon = {s.key for s in
+                  database.states_for("O 1s", include_satellites=False,
+                                      present=["C", "N", "O"])}
+        assert "lattice" in everything and "lattice" not in carbon
+        assert "C-O" in carbon, "el C–O orgánico no depende de ningún metal"
+
+    def test_the_automatic_model_does_not_offer_the_impossible(self):
+        from ramancarbon.xps.presets import count_model
+
+        energy = np.linspace(524.0, 540.0, 321)
+        counts = 6500.0 + 5000.0 * np.exp(
+            -0.5 * ((energy - 531.0) / 1.2) ** 2) + 3000.0 * np.exp(
+            -0.5 * ((energy - 533.0) / 1.4) ** 2)
+        spectrum = XPSSpectrum(binding_energy=energy, counts=counts,
+                               name="O 1s", region="O 1s",
+                               photon_energy=1486.6, pass_energy=55.0)
+        model, notes = count_model(spectrum, "O 1s", 3,
+                                   present=["C", "N", "O"])
+        assert "lattice" not in {c.state for c in model.components}
+        assert any("descartados por la composición" in note for note in notes)
+
+    def test_an_explicit_choice_by_the_user_is_not_overruled(self):
+        """Section 28: the constraint is inspectable and can be switched
+        off. What the user names, the user gets -- the cross-check says so
+        afterwards rather than the model silently disagreeing."""
+        from ramancarbon.xps.presets import state_model
+
+        energy = np.linspace(524.0, 540.0, 321)
+        counts = 6500.0 + 5000.0 * np.exp(-0.5 * ((energy - 530.0) / 1.2) ** 2)
+        spectrum = XPSSpectrum(binding_energy=energy, counts=counts,
+                               name="O 1s", region="O 1s",
+                               photon_energy=1486.6, pass_energy=55.0)
+        model = state_model(spectrum, "O 1s", ["lattice"])
+        assert [c.state for c in model.components] == ["lattice"]
+
+
+def test_a_region_cannot_check_itself_but_two_regions_can():
+    """Section 25. A C 1s fit puts a C–N component at 285.9 eV whether or
+    not the sample has nitrogen: the shoulder is there, C–O sits on top of
+    C–N, and least squares has no opinion. What decides is the N 1s."""
+    from ramancarbon.gui.xps_state import XPSSession
+
+    session = XPSSession()
+    energy = np.linspace(278.0, 298.0, 401)
+    counts = 3000.0 + 20000.0 * np.exp(-0.5 * ((energy - 284.6) / 0.9) ** 2) \
+        + 4000.0 * np.exp(-0.5 * ((energy - 286.0) / 1.2) ** 2)
+    session.spectra.append(XPSSpectrum(
+        binding_energy=energy, counts=counts, name="C 1s", region="C 1s",
+        photon_energy=1486.6, pass_energy=55.0))
+    session.shifted = list(session.spectra)
+    session.choice_for("C 1s").states = ["C-C sp2", "C-N"]
+    assert session.fit("C 1s") is not None
+
+    verdicts = dict((text, verdict) for verdict, text in session.cross_checks())
+    assert any(verdict == "incoherente" and "C–N" in text
+               for text, verdict in verdicts.items()), \
+        "un C–N sin nitrógeno en la muestra tiene que salir como incoherente"

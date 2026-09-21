@@ -1186,6 +1186,39 @@ El módulo `echem/io.py` dice que los formatos binarios se rechazan, y
   eje, y mandar el original con una frase sobre el desplazamiento es como
   ese desplazamiento se aplica dos veces. Por eso se exporta VAMAS.
 
+## Una energía de enlace NO es un grupo funcional
+
+- **«O de red (óxido metálico)» a 530 eV y una quinona C=O a 531 están a
+  un electronvoltio, y lo que decide cuál es no está en la región.** Está
+  en si la muestra tiene un metal, que lo dice el survey. Ofrecerle los
+  dos al ajuste y dejar que elija es como un carbono dopado con N y S
+  acaba teniendo un óxido metálico: el hombro a 531 es real, y los
+  mínimos cuadrados no tienen opinión sobre química. Pasó con el O 1s del
+  usuario.
+- **Los candidatos se filtran ANTES de ajustar, no se discuten después.**
+  `ChemicalState.requires_any` dice qué elementos hacen falta y
+  `states_for(present=...)` los quita. Medido sobre el archivo real:
+  el N 1s pasa de ofrecer N–metal a dar piridínico, pirrólico, grafítico,
+  piridinio y N oxidado —el modelo de manual de un carbono dopado— y el
+  O 1s pasa de óxido de red a quinona, hidroxilo, C–O y agua.
+- **Sin información no se filtra.** `present=None` deja pasar todo: un
+  filtro que dispara sin saber nada es un filtro que esconde estados.
+- **Y lo que el usuario nombra, el usuario lo obtiene.** El filtro es
+  para la generación AUTOMÁTICA de candidatos. `state_model` con estados
+  explícitos no filtra nada; lo que hace el programa es decirlo después,
+  en la validación cruzada. La casilla que lo apaga está en la pestaña, y
+  los descartados se enseñan con su motivo: un filtro que nadie puede
+  discutir es peor que no tenerlo.
+
+## Una región no puede comprobarse a sí misma
+
+- **El ajuste de un C 1s pone un C–N a 285.9 eV haya nitrógeno o no.** El
+  hombro está, el C–O se solapa con el C–N, y el ajuste no distingue. Lo
+  que lo decide es el N 1s — y para cuando el N 1s está en pantalla,
+  nadie mira ya el C 1s. `cross_checks()` compara lo que afirma cada
+  región contra las demás y contra la composición, y una incoherencia es
+  un RESULTADO: no cambia ningún ajuste, se informa.
+
 ## La sección de fotoemisión
 
 - **La anchura que escribes tiene que ser la anchura que lees.** La tabla

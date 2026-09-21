@@ -28,7 +28,7 @@ import json
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 from ..database.loader import DATA_DIR, DatabaseError
 
@@ -207,6 +207,27 @@ class ChemicalState:
     confidence: str
     source: str = ""
     note: str = ""
+    requires_any: tuple[str, ...] = ()
+    """Elements at least one of which has to be in the sample for this
+    assignment to be chemically possible at all.
+
+    Binding energy is not a functional group. «O de red (óxido
+    metálico)» at 530 eV and a quinone C=O at 531 eV are one electronvolt
+    apart, and which of the two a peak at 530.5 eV is depends on
+    something the region cannot see: whether the sample contains a metal.
+    Offering both and letting the fit choose is how a nitrogen- and
+    sulphur-doped carbon acquires a metal oxide it does not have.
+
+    Empty means the state is possible in any sample.
+    """
+
+    def possible_in(self, present: Optional[Sequence[str]]) -> bool:
+        """Whether this state is chemically possible given the elements
+        found. Unknown composition (``None``) allows everything: a filter
+        that fires on no information is a filter that hides states."""
+        if not self.requires_any or present is None:
+            return True
+        return bool(set(self.requires_any) & set(present))
 
     @property
     def is_satellite(self) -> bool:
@@ -322,17 +343,26 @@ class XPSDatabase:
         """Every high-resolution region that has literature states."""
         return tuple(sorted(self.states))
 
-    def states_for(self, region: str, include_satellites: bool = True) -> tuple[ChemicalState, ...]:
+    def states_for(self, region: str, include_satellites: bool = True,
+                   present: Optional[Sequence[str]] = None
+                   ) -> tuple[ChemicalState, ...]:
         """The literature states for one region, e.g. ``"N 1s"``.
 
         Returns an empty tuple for a region with no entries rather than
         raising: fitting a region the database does not cover is legitimate,
         it just means the components come back unnamed.
+
+        ``present`` is the elements the sample is known to contain. States
+        that need an element which is not there are dropped -- see
+        :attr:`ChemicalState.requires_any`. Passing ``None`` keeps
+        everything, which is the right default when nothing is known.
         """
         found = self.states.get(region, ())
-        if include_satellites:
-            return found
-        return tuple(s for s in found if not s.is_satellite)
+        if not include_satellites:
+            found = tuple(s for s in found if not s.is_satellite)
+        if present is not None:
+            found = tuple(s for s in found if s.possible_in(present))
+        return found
 
     def state(self, region: str, key: str) -> ChemicalState:
         """One named state."""
@@ -444,6 +474,7 @@ def _build(path: Path) -> XPSDatabase:
                 confidence=str(item.get("confidence", "unknown")),
                 source=str(item.get("source", "")),
                 note=str(item.get("note", "")),
+                requires_any=tuple(item.get("requires_any", ())),
             )
             for item in entries
         )

@@ -126,6 +126,10 @@ class XPSSession:
     """After referencing. Equal to ``spectra`` when no reference is used."""
     reference: str = "C1s_adventitious"
     reference_state: Optional[tuple[str, str]] = None
+    only_possible_states: bool = True
+    """Offer only the states the sample's composition allows. Section 21
+    of the user's specification: if no sulphur is detected, NiS is
+    rejected as a candidate rather than fitted and then discussed."""
     transmission: str = "potencia"
     exponent: float = -0.65
     choices: dict[str, RegionChoice] = field(default_factory=dict)
@@ -313,11 +317,61 @@ class XPSSession:
     def choice_for(self, label: str) -> RegionChoice:
         return self.choices.setdefault(label, RegionChoice(label=label))
 
+    def present_elements(self) -> Optional[list[str]]:
+        """The elements this sample is known to contain, or ``None``.
+
+        Only elements with real evidence count: what the survey
+        identified, plus what a loaded region actually shows a peak for.
+        A region that was SCANNED is not evidence on its own -- the
+        sulphur region of a sample with no sulphur is flat, and it was
+        still measured.
+
+        ``None`` when nothing has been established yet, which keeps every
+        state on offer: a filter that fires on no information is a filter
+        that hides things.
+        """
+        found: set[str] = set()
+        if self.survey is not None:
+            found.update(self.survey.symbols())
+        if self.regions:
+            from ..xps.survey import SurveyResult, add_region_evidence
+
+            blank = SurveyResult(peaks=[], elements=[], uncorroborated=[],
+                                 unexplained=[], overlaps=[])
+            found.update(item.symbol for item in
+                         add_region_evidence(blank, self.regions,
+                                             database=self.database).elements)
+        return sorted(found) or None
+
     def available_states(self, label: str) -> list[tuple[str, str]]:
-        """``(key, name)`` of every state the database has for a region."""
+        """``(key, name)`` of every state the database has for a region.
+
+        Filtered to what the sample can chemically contain unless the
+        user has turned that off. Binding energy is not a functional
+        group: «O de red (óxido metálico)» at 530 eV and a quinone C=O at
+        531 eV are one electronvolt apart, and which one a peak is
+        depends on whether the sample has a metal in it -- which the
+        region cannot see and the survey can.
+        """
+        present = self.present_elements() if self.only_possible_states else None
         return [(item.key, item.name)
                 for item in self.database.states_for(label,
-                                                     include_satellites=False)]
+                                                     include_satellites=False,
+                                                     present=present)]
+
+    def impossible_states(self, label: str) -> list[tuple[str, str]]:
+        """``(name, why)`` for the states this sample rules out."""
+        present = self.present_elements()
+        if present is None:
+            return []
+        out = []
+        for item in self.database.states_for(label, include_satellites=False):
+            if item.possible_in(present):
+                continue
+            out.append((item.name,
+                        "hace falta " + " o ".join(item.requires_any)
+                        + f", y en la muestra hay {', '.join(present)}"))
+        return out
 
     def fit(self, label: str) -> Optional[XPSFitResult]:
         """Fit one region with whatever the user chose for it."""
@@ -347,6 +401,8 @@ class XPSSession:
                     spectrum, label, choice.count, window=choice.window,
                     background=choice.background, link_widths=choice.link_widths,
                     include_satellites=choice.satellites, database=self.database,
+                    present=(self.present_elements()
+                             if self.only_possible_states else None),
                 )
                 for note in notes:
                     self.log("info", f"{label}: {note}")
@@ -669,6 +725,84 @@ class XPSSession:
         )
         return label
 
+    # -- cross-region validation ---------------------------------------
+    def cross_checks(self) -> list[tuple[str, str]]:
+        """``(veredicto, texto)`` comparing what each region claims.
+
+        Section 25 of the specification, and the one check a single
+        region can never do on itself. A C 1s fit will happily put a C–N
+        component at 285.9 eV whether or not the sample has nitrogen in
+        it: the shoulder is there, C–O sits on top of C–N, and least
+        squares has no opinion about chemistry. What decides is the other
+        region -- and by the time the N 1s is on screen, nobody is
+        looking at the C 1s any more.
+
+        ``veredicto`` is ``"ok"``, ``"aviso"`` or ``"incoherente"``.
+        Nothing here changes a fit; an inconsistency is a result.
+        """
+        present = self.present_elements() or []
+        checks: list[tuple[str, str]] = []
+
+        # Which states each fitted region actually used.
+        used: dict[str, set[str]] = {}
+        for label, result in self.fits.items():
+            used[label] = {c.state for c in result.components if c.state}
+
+        def area_of(label: str, keys: set[str]) -> float:
+            result = self.fits.get(label)
+            if result is None:
+                return 0.0
+            return sum(float(c.area) for c in result.components
+                       if c.state in keys)
+
+        # C–N against the nitrogen region.
+        if "C-N" in used.get("C 1s", set()):
+            share = area_of("C 1s", {"C-N"})
+            total = area_of("C 1s", used.get("C 1s", set())) or 1.0
+            fraction = 100.0 * share / total
+            if "N" not in present:
+                checks.append(("incoherente", (
+                    f"el C 1s asigna un {fraction:.0f} % a C–N y no hay "
+                    "nitrógeno en la muestra. A 285.9 eV el C–N y el C–O se "
+                    "solapan y el ajuste no distingue: lo decide el N 1s")))
+            elif "N 1s" not in self.fits:
+                checks.append(("aviso", (
+                    f"el C 1s asigna un {fraction:.0f} % a C–N; ajusta el "
+                    "N 1s para contrastarlo")))
+            else:
+                checks.append(("ok", (f"C–N ({fraction:.0f} % del C 1s) con "
+                                      "N 1s ajustado: coherente")))
+
+        # Oxygenated carbon against the oxygen region.
+        oxygenated = {"C-O", "C=O", "O-C=O", "carbonate"} & used.get("C 1s", set())
+        if oxygenated and "O" not in present:
+            checks.append((
+                "incoherente",
+                "el C 1s asigna carbono oxigenado ("
+                + ", ".join(sorted(oxygenated))
+                + ") y no hay oxígeno en la muestra"))
+
+        # A sulphide needs a metal to be a sulphide of.
+        metals = {"Fe", "Co", "Ni", "Mo", "W", "Se", "Ti", "Zn", "Cu", "Mn"}
+        sulfide = {"sulfide", "metal-sulfide"} & used.get("S 2p3/2", set())
+        if sulfide and not (metals & set(present)):
+            checks.append(("incoherente", (
+                "el S 2p asigna sulfuro metálico y no hay ningún metal "
+                "detectado. Sin el 2p del metal eso no se sostiene")))
+
+        # A state the composition rules out, wherever it was used.
+        for label, keys in used.items():
+            for name, why in self.impossible_states(label):
+                state = next((s for s in
+                              self.database.states_for(label,
+                                                       include_satellites=True)
+                              if s.name == name and s.key in keys), None)
+                if state is not None:
+                    checks.append((
+                        "incoherente",
+                        f"{label}: «{name}» está ajustado y {why}"))
+        return checks
+
     def report(self) -> str:
         """The written report, built from what is currently in the session."""
         from ..xps.report import XPSAnalysis, build_report
@@ -679,7 +813,19 @@ class XPSSession:
             calibration=self.calibration,
             warnings=[text for level, text in self.messages if level == "aviso"],
         )
-        return build_report(analysis)
+        text = build_report(analysis)
+        checks = self.cross_checks()
+        if not checks:
+            return text
+        marks = {"ok": "✓", "aviso": "⚠", "incoherente": "✗"}
+        lines = ["", "Validación cruzada entre regiones",
+                 "-" * 34]
+        lines.extend(f"{marks.get(verdict, '·')} {body}"
+                     for verdict, body in checks)
+        lines.append(
+            "Una región no puede comprobarse a sí misma: el ajuste de un "
+            "C 1s pone un C–N donde hay hombro, haya nitrógeno o no.")
+        return text + "\n".join(lines) + "\n"
 
 
 __all__ = ["BACKGROUNDS", "PROFILES", "REFERENCES", "RegionChoice",

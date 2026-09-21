@@ -247,10 +247,23 @@ class XPSApp(SectionApp):
         ttk.Checkbutton(row, text=" satélites",
                         variable=self.satellite_var).pack(side="left")
 
+        # Section 21 of the specification: candidates are filtered by what
+        # the sample is made of before anything is fitted, not discussed
+        # afterwards. And section 28: the constraint is inspectable and
+        # the user can switch it off.
+        self.possible_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(row, text=" sólo estados posibles",
+                        variable=self.possible_var,
+                        command=self._on_possible_toggled).pack(side="left")
+
         picker = ttk.Frame(cbody)
         picker.pack(fill="x", pady=(PAD["sm"], 0))
         ttk.Label(picker, text="Estados químicos (ninguno = que los elija la "
                                "propia región):").pack(anchor="w")
+        self.lbl_impossible = ttk.Label(
+            picker, text="", style="Muted.TLabel", wraplength=560,
+            font=self.fonts["small"])
+        self.lbl_impossible.pack(anchor="w")
         self.state_list = tk.Listbox(
             picker, height=5, selectmode="extended", exportselection=False,
             activestyle="none", background=self.palette.surface_alt,
@@ -695,6 +708,11 @@ class XPSApp(SectionApp):
             self.region_var.set(labels[0])
         self._on_region_changed()
 
+    def _on_possible_toggled(self) -> None:
+        """Switch the chemical-plausibility filter and rebuild the list."""
+        self.session.only_possible_states = bool(self.possible_var.get())
+        self._on_region_changed()
+
     def _on_region_changed(self, _event=None) -> None:
         label = self.region_var.get()
         self.state_list.delete(0, "end")
@@ -705,6 +723,13 @@ class XPSApp(SectionApp):
         for key, name in self.session.available_states(label):
             self._state_keys.append(key)
             self.state_list.insert("end", f"{name}  ({key})")
+        # What the sample rules out, and why. Hiding a state silently is
+        # how the filter would become a thing nobody can argue with.
+        dropped = self.session.impossible_states(label)
+        self.lbl_impossible.config(
+            text=("descartados por la composición: "
+                  + "; ".join(f"{name} ({why})" for name, why in dropped))
+            if dropped else "")
         for position, key in enumerate(self._state_keys):
             if choice.states and key in choice.states:
                 self.state_list.selection_set(position)

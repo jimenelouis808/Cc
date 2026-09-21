@@ -336,6 +336,7 @@ def count_model(
     region: str,
     n: Optional[int] = None,
     database: Optional[XPSDatabase] = None,
+    present: Optional[Sequence[str]] = None,
     **options,
 ) -> tuple[XPSModel, list[str]]:
     """A model with exactly ``n`` components, chosen from the region's states.
@@ -370,8 +371,17 @@ def count_model(
         ``(model, notes)`` — the notes name what was kept and what was not.
     """
     database = database or load_xps_database()
-    available = [s for s in database.states_for(region, include_satellites=True)
-                 if not s.is_satellite]
+    # Candidate generation is filtered by what the sample is made of
+    # BEFORE anything is fitted (section 21 of the specification), not
+    # discussed afterwards. An automatic model that offers «O de red
+    # (óxido metálico)» to a metal-free carbon will use it: the shoulder
+    # at 531 eV is real, and least squares has no opinion about chemistry.
+    # An explicit choice by the user is not filtered -- see state_model.
+    everything = [s for s in database.states_for(region,
+                                                 include_satellites=True)
+                  if not s.is_satellite]
+    available = [s for s in everything if s.possible_in(present)]
+    impossible = [s.name for s in everything if not s.possible_in(present)]
     if not available:
         raise XPSError(f"la base de datos no tiene estados para {region!r}")
     if n is not None and n < 1:
@@ -463,6 +473,13 @@ def count_model(
         )
     model = state_model(spectrum, region, [s.key for s in kept],
                         database=database, **options)
+    if impossible:
+        notes.append(
+            "descartados por la composición de la muestra: "
+            + ", ".join(impossible)
+            + ". Un estado que necesita un elemento que no está no es un "
+            "candidato, y ofrecérselo al ajuste es como aparece en el "
+            "resultado")
     return model, notes
 
 
