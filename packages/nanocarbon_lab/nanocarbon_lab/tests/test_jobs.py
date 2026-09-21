@@ -75,6 +75,10 @@ SAMPLES: dict[str, Job] = {
     # The cheapest network: a cubic net is one node per cell against
     # diamond's eight, and 40 Å is just above the floor that leaves a
     # real tube between them.
+    # strict=False, because the point of the sample is that the mode
+    # builds; under strict it refuses by design and every test that
+    # builds every sample would fail on it.
+    "heptanene": Job("heptanene", {"strict": False}),
     # The cheapest supernetwork: super-square is one node and two struts
     # per cell, and 2D, so it meshes on a smaller grid than any 3D net.
     "supernetwork": Job("supernetwork", {"graph": "super-square",

@@ -55,6 +55,12 @@ CARBON_MODES = (
     # the roll is an isometry and the census carries over unchanged --
     # the one curved builder here that does NOT have to derive its rings.
     "haeckelite tube",
+    # A trivalent net of nothing but heptagons. It exists only in
+    # hyperbolic geometry, and its smallest orientable realisation --
+    # the Klein quartic, 56 atoms at genus 3 -- does not reach carbon's
+    # bond lengths. The mode is here because the REFUSAL is the result,
+    # and a result nobody can reach from the window is not a result.
+    "heptanene",
     "coil (relaxed)",
     "fullerene",
     "nano-onion",
@@ -258,6 +264,7 @@ def builder_for(mode: str):
         build_fullerene,
         build_haeckelite,
         build_haeckelite_tube,
+        build_heptanene,
         build_junction,
         build_multiwall_cnt,
         build_nano_onion,
@@ -298,6 +305,7 @@ def builder_for(mode: str):
         "fullerene": build_fullerene,
         "haeckelite": build_haeckelite,
         "haeckelite tube": build_haeckelite_tube,
+        "heptanene": build_heptanene,
         "nano-onion": build_nano_onion,
         "junction": build_junction,
         "schwarzite": build_schwarzite,
@@ -589,6 +597,11 @@ def estimate_atoms(job: Job) -> int:
         # Exact for the same reason the flat sheet is: rolling moves no
         # atoms either, so the tube holds graphene's own count.
         return 4 * int(p.get("nx", 8)) * int(p.get("ny", 4))
+
+    if mode == "heptanene":
+        # Exact: the Klein quartic has 56 vertices and there is nothing
+        # to estimate. The next member up is 84.
+        return 56
 
     if mode == "supernetwork":
         # Struts as cylinders, with the same measured overlap correction
@@ -914,6 +927,9 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "roll": "--roll", "period": "--period", "density": "--density",
         "bond": "--bond", "vacuum": "--vacuum",
     }),
+    "heptanene": ("heptanene", {
+        "bond": "--bond", "strict": "--no-strict",
+    }),
     "supernetwork": ("supernetwork", {
         "graph": "--graph", "scale": "--scale",
         "tube_radius": "--tube-radius", "blend": "--blend", "bond": "--bond",
@@ -1134,6 +1150,16 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
             if value:
                 parts.append("--pin-ends")
             continue
+        if name == "strict":
+            # Inverted, because the builder REFUSES by default and the
+            # generic bool rule below emits a flag only when the value is
+            # true. Left to that rule, strict=False would emit nothing
+            # and the copied command would refuse where the window did
+            # not -- a command line that does not reproduce what it was
+            # copied from.
+            if not value:
+                parts.append("--no-strict")
+            continue
         flag = flags.get(name)
         if flag is None:
             continue
@@ -1168,6 +1194,15 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
             parts += _graft_flags(job)
             if not (job.mode in TMD_MODES and job.tmd_edit):
                 parts += ["--seed", str(job.seed)]
+        parts += ["--out", out]
+        return " ".join(parts)
+
+    if job.mode == "heptanene":
+        # Nothing here is random: the map is derived from PSL(2,7), the
+        # placement is a linear solve and the relaxation starts from it.
+        # A --seed would be a knob that does nothing, so the parser has
+        # none and this must not emit one. Dopants are equally out of
+        # place on a lattice that is refused for not being carbon.
         parts += ["--out", out]
         return " ".join(parts)
 

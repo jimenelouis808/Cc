@@ -32,6 +32,7 @@ from __future__ import annotations
 import numpy as np
 from ase import Atoms
 
+from ..analyse.curvature import disclination_check
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D
 from ..utils.geometry import center_in_cell
 from ..utils.rng import make_rng
@@ -513,6 +514,19 @@ def _finish(
             "rings": [[int(a) for a in r] for r in rings],
             "bonds": [[int(a), int(b)] for a, b in bonds],
             "geometry": quality,
+            # The coil papers' one checkable structural claim, in its
+            # general form: a pentagon is a +60 deg disclination and a
+            # heptagon a -60 deg one, so they belong in positive and
+            # negative curvature respectively. The coil tests it against
+            # a torus axis, which only a coil has; this is intrinsic, so
+            # every surface through _finish -- junction, schwarzite,
+            # network, supernetwork -- is held to the same claim. It
+            # costs 0.08 s at 1134 atoms.
+            "disclination_check": disclination_check(
+                positions, rings, sorted(bonds),
+                box=None if box is None else np.broadcast_to(
+                    np.asarray(box, dtype=float), (3,)).copy(),
+            ),
         }
     )
     return atoms

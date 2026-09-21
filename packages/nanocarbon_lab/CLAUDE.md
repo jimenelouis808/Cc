@@ -796,6 +796,77 @@ around whose walls meet. The series climbs only slowly (21.0 at genus 4,
 larger member, which needs a larger Hurwitz group than PSL(2,7)** -- not
 a better relaxation of this one.
 
+## A disclination sits where the curvature puts it, and that is measurable
+
+`analyse/curvature.py` generalises the one structural claim the coil
+papers make that can be checked on a finished model without running
+anything: a pentagon is a +60 deg disclination and a heptagon a -60 deg
+one, so **pentagons belong in positive Gaussian curvature and heptagons
+in negative**. `periodic_coil.curvature_check` tests it by asking which
+side of the torus axis each ring falls on -- which needs an axis, so it
+works on a coil and nothing else. The claim is about curvature, not
+coils, and `disclination_check` states it intrinsically so the junction,
+the schwarzite, the network and the supernetwork are all held to it. It
+goes in through `junction._finish`, so every implicit-route builder
+records it without asking, and `_report_structure` prints it, so every
+one of them says so.
+
+**The obvious measure is wrong in a way that looks right.** The discrete
+Gaussian curvature of a polyhedron is the angular defect
+`2*pi - sum(angles)` at a vertex -- but a carbon atom here is
+**trivalent**, and three angles at a point can never sum past 360 deg
+(the spherical triangle inequality). So that defect is never negative on
+any structure: measured, it called Schwarz P -- a minimal surface,
+negatively curved everywhere -- positive at every ring size. It measures
+pyramidalisation. The curvature of a trivalent net is not at its atoms,
+it is in the non-planar faces. So the surface is fitted instead:
+`z = a x^2 + b xy + c y^2` in a frame aligned with the local normal over
+each atom's two-bond neighbourhood, and `K` has the sign of `4ac - b^2`.
+0.08 s at 1134 atoms.
+
+**The flat haeckelite control is what makes the rest mean anything.** The
+objection is circularity -- the patch around a pentagon is dominated by
+that pentagon, so does the fit just recover the ring size? R5,7 settles
+it: a *flat* lattice of 16 pentagons and 16 heptagons, every ring at
+genuinely zero curvature, and the fit returns **exactly 0.000 for both**,
+mean sign and median alike. Its agreement score is 0%, which is the
+correct answer and not a failure -- there is no curvature for a
+disclination to be on the right side of. **Keep that test.** Without it
+the other numbers prove nothing.
+
+Measured, as mean sign of `K` per ring size:
+
+| surface | pentagons | hexagons | heptagons | agreement |
+|---|---|---|---|---|
+| C60 | +1.00 | +1.00 | -- | -- |
+| graphene | -- | 0.00 | -- | -- |
+| haeckelite R5,7 (flat) | 0.00 | -- | 0.00 | 0% |
+| Y junction | +0.88 | +0.11 | -0.75 | 91% |
+| X junction | +0.81 | +0.08 | -0.86 | 92% |
+| Schwarz P | +0.51 | -0.51 | **-1.00** | 91% |
+| super-square | +0.63 | -0.32 | -0.79 | 86% |
+| periodic coil | +1.00 | -- | **-1.00** | **100%** |
+
+A junction's hexagons sit near zero because its arms are cylinders, and
+that is the row that shows the measure is reading shape rather than ring
+size on a *curved* structure too.
+
+**Where the two routes disagree, the intrinsic one is right.** The coil
+scores 100% intrinsically against 68% (smooth helix) and 85% (hexagon)
+from its own axis test. The axis test asks only which side of the torus
+axis a ring falls on, so it misreads a ring sitting near the top or
+bottom of the tube, where the real curvature is near zero. Those
+"wrong side" counts are the crude criterion's artefact, not defects of
+the model -- so do not quote them as model defects, which an earlier
+version of this file effectively did. Both are recorded; the coil is the
+one structure that carries both, and it is worth keeping that way
+precisely because they can be compared.
+
+Hexagons are **excluded from the agreement score**, not counted as
+passes. A hexagon is the flat case and has no side to be on; scoring it
+would inflate every number, and on a nanotube network -- mostly hexagons
+-- it would hide the answer entirely.
+
 ## Unit cells: pad only what does not repeat, measure only what is vacuum
 
 `cell.to_unit_cell` turns any structure into `pbc=(True, True, True)`

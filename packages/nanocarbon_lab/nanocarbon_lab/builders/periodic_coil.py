@@ -38,6 +38,7 @@ from __future__ import annotations
 import numpy as np
 from ase import Atoms
 
+from ..analyse.curvature import disclination_check
 from ..utils.constants import CC_BOND
 from ..utils.rng import make_rng
 from . import fullerene_mesh as fm
@@ -445,6 +446,12 @@ def build_periodic_coil(
         "tubular_diameter": round(tubular_diameter, 3),
         "diameter_ratio": round(ratio, 3),
         "wall_gap": round(pitch - 2.0 * tube_radius, 3),
+        # The axis-based test above asks which side of the torus each
+        # ring falls on, which needs an axis and so works here and
+        # nowhere else. The intrinsic one fits the surface instead, so
+        # it holds the coil to the SAME claim by a second and
+        # independent route -- and it is the one every other curved
+        # builder here is now held to as well.
         "curvature_check": placement,
         "notes": notes,
         "handedness": int(sign),
@@ -455,6 +462,9 @@ def build_periodic_coil(
         "genus": int(stats.get("genus", -1)),
         "ring_deficit": int(deficit),
         "euler": 1 - int(stats.get("genus", 1)),
+        "disclination_check": disclination_check(
+            positions, rings, sorted(bonds),
+            box=np.array([0.0, 0.0, float(cell[2])])),
         "ring_counts": {int(k): int(v) for k, v in sorted(counts.items())},
         "rings": [[int(a) for a in r] for r in rings],
         "bonds": [[int(a), int(b)] for a, b in bonds],

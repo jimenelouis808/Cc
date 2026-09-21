@@ -844,6 +844,8 @@ class NanocarbonGUI:
         self.var_s_kind = self._var("s_kind", tk.StringVar(value="primitive"))
         self.var_s_cell = self._var("s_cell", tk.DoubleVar(value=36.0))
         self.var_s_thickness = self._var("s_thickness", tk.DoubleVar(value=0.0))
+        self.var_hp_strict = self._var("hp_strict",
+                                       tk.BooleanVar(value=True))
         self.var_ht_pattern = self._var("ht_pattern",
                                         tk.StringVar(value="r57"))
         self.var_ht_nx = self._var("ht_nx", tk.IntVar(value=12))
@@ -1191,6 +1193,28 @@ class NanocarbonGUI:
                   justify="left").grid(row=5, column=0, columnspan=2, sticky="w")
 
         # --- 3D interconnected nanotube network
+        # --- heptanene
+        self.frame_hp = ttk.LabelFrame(parent, text="Heptanene", padding=8)
+        self.frame_hp.columnconfigure(0, weight=1)
+        ttk.Checkbutton(
+            self.frame_hp,
+            text="Refuse if it is not carbon (recommended)",
+            variable=self.var_hp_strict).grid(row=0, column=0, columnspan=2,
+                                              sticky="w")
+        self.lbl_hp = ttk.Label(
+            self.frame_hp,
+            text=("A trivalent net of nothing but heptagons. The Euler "
+                  "budget rules out a sphere (it would need −12 heptagons) "
+                  "and a flat periodic sheet (0), so it exists only in "
+                  "hyperbolic geometry — and Hilbert's theorem then says "
+                  "there is no flat sheet to build at any size. The "
+                  "smallest orientable one is the Klein quartic: 24 "
+                  "heptagons, 56 atoms, genus 3. Its geometry does not "
+                  "reach carbon (bonds 1.11–1.70 Å), and the refusal is "
+                  "the result. Untick to look at it anyway."),
+            foreground=MUTED, wraplength=260, justify="left")
+        self.lbl_hp.grid(row=1, column=0, columnspan=2, sticky="w")
+
         # --- haeckelite tube
         self.frame_ht = ttk.LabelFrame(parent, text="Haeckelite tube",
                                        padding=8)
@@ -1905,7 +1929,7 @@ class NanocarbonGUI:
                       self.frame_haeckelite,
                       self.frame_cage, self.frame_mw, self.frame_bundle,
                       self.frame_network,
-                      self.frame_ht, self.frame_sn,
+                      self.frame_ht, self.frame_sn, self.frame_hp,
                       self.frame_tmd, self.frame_tmd_layers,
                       self.frame_tmd_ribbon, self.frame_tmd_tube,
                       self.frame_tmd_coil, self.frame_tmd_sw,
@@ -1978,6 +2002,8 @@ class NanocarbonGUI:
         elif mode == "haeckelite tube":
             self.frame_ht.pack(fill="x")
             self._update_ht_hint()
+        elif mode == "heptanene":
+            self.frame_hp.pack(fill="x")
         elif mode == "supernetwork":
             self.frame_sn.pack(fill="x")
             # Same reason as the network and the schwarzite: at a vertex
@@ -3027,6 +3053,8 @@ class NanocarbonGUI:
                 pattern=self.var_ht_pattern.get(),
                 roll=self.var_ht_roll.get(),
             )
+        elif mode == "heptanene":
+            params = dict(strict=bool(self.var_hp_strict.get()))
         elif mode == "supernetwork":
             params = dict(
                 graph=self.var_sn_graph.get(),

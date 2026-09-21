@@ -54,6 +54,7 @@ from ..builders import (
     build_graphene_supercell,
     build_haeckelite,
     build_haeckelite_tube,
+    build_heptanene,
     build_junction,
     build_multiwall_cnt,
     build_nano_onion,
@@ -631,6 +632,24 @@ def _report_structure(atoms, xyz_path, json_path):
     # hexagonal window calls every sound one BROKEN.
     verdict, why = sp2_quality(g, atoms.info.get("quality_family", "sp2"))
     print(f"  sp2 verdict = {verdict.upper()}: {why}")
+    # A pentagon is a +60 deg disclination and a heptagon a -60 deg one,
+    # so they belong in positive and negative curvature respectively --
+    # the one structural claim about these surfaces that can be checked
+    # on a finished model without running anything. Printed here rather
+    # than per command so every builder that records it says so.
+    check = atoms.info.get("disclination_check")
+    if check and check.get("agreement") is not None:
+        pieces = []
+        for size, row in sorted(check["sizes"].items()):
+            pieces.append(f"{size}:{row['mean_sign']:+.2f}")
+        print(f"  disclinations = {100 * check['agreement']:.0f}% on the "
+              f"curvature side they belong on "
+              f"({check['n_correct']}/{check['n_scored']} non-hexagonal); "
+              f"mean sign of K per ring size {', '.join(pieces)}")
+        wrong = check["n_scored"] - check["n_correct"]
+        if wrong:
+            print(f"                  {wrong} on the wrong side: defects of "
+                  "the model, reported rather than rounded away")
 
 
 def _report_tmd_chemistry(atoms) -> None:
@@ -958,6 +977,51 @@ def _cmd_haeckelite_tube(args):
           f"({100 * info['roll_compression']:.2f}% chord compression)")
     print(f"  axis        = {info['axial_period']:.2f} A period, "
           f"{100 * (info['axial_factor'] - 1):+.1f}% on the flat sheet's")
+    return 0
+
+
+def _cmd_heptanene(args):
+    """Print the geometry verdict, then try to build the smallest one."""
+    from ..builders.heptanene import (
+        admissible_geometries,
+        angular_excess,
+        atoms_per_handle,
+        closed_surface_series,
+        klein_quartic_map,
+    )
+
+    print("Can a trivalent net of nothing but heptagons exist?")
+    print("  sum(6-n) = 6*chi, and every heptagon pays -1, so chi = -F/6:")
+    for geometry in admissible_geometries(7):
+        mark = "yes" if geometry.possible else "NO "
+        print(f"    {geometry.name:11s} {mark}  -- {geometry.reason}")
+    print("  The {p,3} test agrees: {6,3} is Euclidean at exactly 4 and")
+    print("  {7,3} hyperbolic at 5. Hilbert's theorem then forbids a flat")
+    print("  sheet, so heptanene is not a 2D material at any size.")
+    print("\n  Smallest closed orientable surfaces that carry it:")
+    print("    heptagons  atoms  bonds    chi  genus")
+    for faces, vertices, edges, chi, genus in closed_surface_series(7, 3):
+        print(f"    {faces:9d}  {vertices:5d}  {edges:5d}  {chi:+5d}  {genus:5d}")
+    bonds, rings = klein_quartic_map()
+    print(f"\n  The genus-3 member is the Klein quartic, built here from "
+          f"PSL(2,7): {len(rings)} heptagons, "
+          f"{len({a for b in bonds for a in b})} trivalent atoms, "
+          f"{len(bonds)} bonds.")
+    print(f"  Angular excess {angular_excess(7):.1f} deg per vertex -- LESS "
+          "than the 36 deg C20 carries, and C20 exists, so the curvature")
+    print(f"  is not the obstruction. Genus 3 gives only "
+          f"{atoms_per_handle(2):.1f} atoms per handle, and the walls meet.")
+
+    print("\nBuilding it...")
+    try:
+        atoms = build_heptanene(bond=args.bond, strict=not args.no_strict)
+    except ValueError as exc:
+        print(f"\nRefused, and the refusal IS the result:\n  {exc}")
+        return 0
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    print(f"  cocycle     = {atoms.info['cocycle']}, cell "
+          f"{atoms.info['cell']:.2f} A, genus {atoms.info['genus']}")
+    print(f"  sp2         = {atoms.info['sp2']}")
     return 0
 
 
@@ -1883,6 +1947,26 @@ def build_parser() -> argparse.ArgumentParser:
         ht, seed_help="Seed for the 'random' pattern and for dopant "
                       "placement.")
     ht.set_defaults(func=_cmd_haeckelite_tube)
+
+    hp = sub.add_parser(
+        "heptanene",
+        help="A trivalent net of nothing but heptagons: prove which "
+             "geometry admits it, then try to build the smallest one. "
+             "Euclidean and elliptic are impossible; only hyperbolic "
+             "works, and the smallest orientable member is the Klein "
+             "quartic at genus 3.",
+    )
+    hp.add_argument("--bond", type=float, default=1.42)
+    hp.add_argument("--no-strict", action="store_true",
+                    help="Return the strained lattice instead of refusing "
+                         "it. The refusal is the honest result -- no "
+                         "cocycle reaches carbon's bond lengths -- but the "
+                         "structure is a real answer about a real object "
+                         "and this is the only way to look at it.")
+    hp.add_argument("--out", default="out/heptanene",
+                    help="Output path without extension; only used when "
+                         "the build is not refused.")
+    hp.set_defaults(func=_cmd_heptanene)
 
     sn = sub.add_parser(
         "supernetwork",
