@@ -772,6 +772,12 @@ class NanocarbonGUI:
         self.var_coil_turns = self._var("coil_turns", tk.DoubleVar(value=3.0))
         self.var_coil_hand = self._var("coil_hand", tk.StringVar(value="right"))
         self.var_coil_taper = self._var("coil_taper", tk.DoubleVar(value=1.0))
+        # 0 = smooth helix. A real coil is a polygon seen down the axis:
+        # Liu et al. show the (6,6) coil's top view as a hexagonal torus
+        # and say it matches what is observed, and concentrating the
+        # curvature at a few knees measurably improves where the
+        # pentagons and heptagons land.
+        self.var_coil_sides = self._var("coil_sides", tk.IntVar(value=0))
         self.var_coil_tube_radius = self._var(
             "coil_tube_radius", tk.DoubleVar(value=5.0))
         self.var_pin_ends = self._var("pin_ends", tk.BooleanVar(value=False))
@@ -1057,6 +1063,15 @@ class NanocarbonGUI:
         self._param(self.frame_coil_tube, "Tube radius (Å)",
                     self.var_coil_tube_radius, 4.0, 12.0, 0, resolution=0.1,
                     hard_lo=2.0, hard_hi=30.0, command=self._update_coil_hint)
+        # Seen down the axis a real coil is a polygon, not a circle. Liu
+        # et al. show the (6,6) coil's top view as a hexagonal torus and
+        # say it matches what is observed; measured here, concentrating
+        # the curvature at six knees puts every pentagon on the outer
+        # wall, where the smooth helix leaves two of eleven inside.
+        self._coil_sides = self._param(
+            self.frame_coil_tube, "Sides per turn (0 = smooth)",
+            self.var_coil_sides, 0, 12, 2, integer=True, hard_hi=24,
+            command=self._update_coil_hint)
         ttk.Checkbutton(self.frame_coil_tube, text="Pin ends (hold the pitch)",
                         variable=self.var_pin_ends).grid(
             row=2, column=0, columnspan=2, sticky="w", pady=(2, 2))
@@ -2594,20 +2609,31 @@ class NanocarbonGUI:
 
         if self.var_mode_kind.get() == "coil (periodic, DFT)":
             tube_radius = float(self.var_coil_tube_radius.get())
-            clearance = 2.0 * tube_radius + 3.4
             one_turn = cl.helix_arc_length(radius, pitch, 1.0)
             atoms = int(2.4 * tube_radius * one_turn)
-            if pitch < clearance:
+            # Two different things, and the builder no longer conflates
+            # them: turns that INTERSECT are impossible, turns merely
+            # closer than a graphitic gap are tight -- and the relaxed
+            # single-wall coils in the literature are tight. Liu et al.'s
+            # (7,7) has a 12.11 Å pitch around a 9.52 Å tube.
+            if pitch <= 2.0 * tube_radius:
                 self.lbl_coil.config(
-                    text=f"pitch must be ≥{clearance:.1f} Å or successive "
-                         "turns merge into one solid.", foreground=BAD_RED)
+                    text=f"pitch must exceed the {2.0 * tube_radius:.1f} Å the "
+                         "tube itself occupies, or one turn passes through "
+                         "the next.", foreground=BAD_RED)
                 return
+            gap = pitch - 2.0 * tube_radius
+            tight = ("" if gap >= 3.4 else
+                     f"\nTight: {gap:.1f} Å wall to wall, inside the 3.4 Å "
+                     "graphitic gap, so the walls touch. The published "
+                     "single-wall coils are like this.")
             self.lbl_coil.config(
                 text=f"One turn, {atoms} atoms, cell {2 * (radius + tube_radius + 10):.0f}"
                      f" × {2 * (radius + tube_radius + 10):.0f} × {pitch:.1f} Å, "
                      "periodic along z only. Turns and taper do not apply: the "
                      "cell is one period, and you extend it with the ×z box "
-                     "under the viewer or with nz in your DFT input.\n"
+                     "under the viewer or with nz in your DFT input." + tight
+                     + "\n"
                      "The wall carries pentagons and heptagons on purpose — "
                      "that is how a real coil relieves curvature, and a "
                      "pure-hexagon coil is stretched instead.",
@@ -2862,10 +2888,12 @@ class NanocarbonGUI:
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "coil (periodic, DFT)":
+            sides = int(self.var_coil_sides.get())
             params = dict(
                 coil_radius=float(self.var_coil_radius.get()),
                 pitch=float(self.var_coil_pitch.get()),
                 tube_radius=float(self.var_coil_tube_radius.get()),
+                sides=sides if sides >= 3 else None,
                 bond=float(self.var_bond.get()),
                 handedness=1 if self.var_coil_hand.get() == "right" else -1,
             )

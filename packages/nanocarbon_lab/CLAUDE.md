@@ -351,6 +351,56 @@ there is no next turn, only the two free ends, and whether those overlap
 depends on the radius (R = 80 Å builds, 50 and 120 do not). Tests about
 turn collision ask for two turns.
 
+## A coil is a polygon, and its pentagons go outside
+
+Two studies of single-wall coils, read against the periodic builder
+(Popović et al., *Contemp. Mater.* III-1 (2012) 51; Liu et al.,
+*Nanoscale Res. Lett.* 5 (2010) 478):
+
+* **The surface is torus-like, so the Gaussian curvature is positive on
+  the outer equator and negative on the inner one.** A pentagon is a
+  +60° disclination and a heptagon a −60° one, so the pentagons belong
+  on the outside and the heptagons on the inside — both papers say it in
+  those words. It is the one structural claim about a coil that can be
+  checked on a finished model without running anything, and
+  `curvature_check` does. Measured on the smooth helix: 82 % of the
+  non-hexagons land correctly, so the remesher gets the physics mostly
+  right and not entirely. The ones on the wrong side are defects of the
+  model and are reported as defects, not rounded away.
+* **Seen down the axis a real coil is a POLYGON.** Liu et al. show the
+  (6,6) coil's top view as a hexagonal torus and say it matches what is
+  observed: the wall relieves its strain at a few knees, not everywhere
+  at once. Measured on the (5,5) geometry, six sides per turn give a
+  census of exactly 8 pentagons and 8 heptagons with **every pentagon on
+  the outside**, against 11 and 11 with two of each on the wrong side for
+  the smooth helix.
+* **D/d is about 3.5.** Popović finds it for both of their classes; Liu's
+  Table 2 gives 3.53 to 3.88 for the (5,5) through (8,8). A coil outside
+  that band is not wrong — multi-wall coils reach ten and more — but it
+  is not the single-wall geometry those calculations relaxed to, and the
+  builder says so.
+* **Tight is not impossible, and the guard conflated them.** Turns that
+  INTERSECT cannot be built. Turns merely closer than a graphitic gap are
+  tight, and the published single-wall coils ARE tight: Liu's relaxed
+  (7,7) has a 12.11 Å pitch around a 9.52 Å tube, a 2.59 Å gap. The old
+  `2*r_tube + 3.4` guard refused a structure somebody had already relaxed
+  with DFT. It now refuses only `pitch <= 2*r_tube` and labels the rest.
+
+### A polygon corner must not land on a sample
+
+The centreline is sampled on a grid that starts at a turn boundary and
+holds a whole number of samples per turn — both are needed for the field
+to be periodic to machine precision, and the module's own docstring says
+so. If the side count **divides** that sample count, a corner lands
+exactly on a sample; the tangent there is two-valued, the swept frame
+flips, and the seam does not weld. Measured: 5 and 10 sides tore against
+4000 samples per turn while 6, 7, 8 and 12 welded, and **raising the
+resolution made it worse** (208 boundary edges at 64, 332 at 96), which
+is how it was told apart from a mesh that is merely too coarse. The grid
+is chosen coprime with the side count. Rounding the corners instead does
+not work: it shortens the path, the analytic spacing stops dividing one
+turn, and every side count tears.
+
 ## The bend angle's limit is the tube's, not a constant
 
 `build_capped_cnt(bend_angle=...)` used to reject anything past a flat

@@ -1150,7 +1150,10 @@ class TestThePeriodicCoilInTheWindow:
         job = app.current_job()
         assert job.mode == "coil (periodic, DFT)"
         assert set(job.params) == {"coil_radius", "pitch", "tube_radius",
-                                   "bond", "handedness"}
+                                   "sides", "bond", "handedness"}
+        # 0 on the slider means the smooth helix, and the builder spells
+        # that None rather than a side count it would have to special-case.
+        assert job.params["sides"] is None
 
     def test_the_hint_says_the_cell_is_one_period(self, app):
         text = self._select(app)
@@ -1162,9 +1165,16 @@ class TestThePeriodicCoilInTheWindow:
         text = self._select(app)
         assert "Turns and taper do not apply" in text
 
-    def test_a_merging_pitch_is_refused_before_building(self, app):
+    def test_an_intersecting_pitch_is_refused_before_building(self, app):
+        """A pitch inside the tube's own width, not merely a tight one."""
         text = self._select(app, pitch=5.0)
-        assert "merge" in text
+        assert "passes through" in text
+
+    def test_a_tight_pitch_is_built_and_labelled(self, app):
+        """Liu et al.'s relaxed (7,7) has its walls 2.6 Å apart. Refusing
+        that refused a structure somebody had already relaxed."""
+        text = self._select(app, pitch=8.0)
+        assert "Tight" in text and "One turn" in text
 
     def test_the_preset_selects_the_periodic_mode(self, app):
         from nanocarbon_lab.gui.app import PRESETS
