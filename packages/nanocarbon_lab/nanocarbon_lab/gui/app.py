@@ -81,6 +81,7 @@ from ..builders import fullerene_mesh as fm
 from ..builders.capped_cnt import MIN_CAP_FREQ
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
+from ..builders.supernetwork import SUPERLATTICES as superlattices
 from ..cell import (
     MIN_IMAGE_SEPARATION,
     cell_report,
@@ -196,6 +197,11 @@ SCHWARZITE_KINDS = ["primitive", "diamond", "gyroid"]
 #: than retyped -- the hint quotes each entry's own block and note.
 HAECKELITE_PATTERNS = haeckelite_patterns
 HAECKELITE_CATALOGUE = haeckelite_catalogue
+
+#: The supernetwork catalogue, from the builder rather than a
+#: copy: a net the window offers and the builder does not know
+#: is a dead menu entry.
+SUPERLATTICES = superlattices
 NETWORK_KINDS = ["cubic", "diamond"]
 CAGE_FAMILIES = ["C60", "C20"]
 
@@ -832,6 +838,16 @@ class NanocarbonGUI:
         self.var_s_kind = self._var("s_kind", tk.StringVar(value="primitive"))
         self.var_s_cell = self._var("s_cell", tk.DoubleVar(value=36.0))
         self.var_s_thickness = self._var("s_thickness", tk.DoubleVar(value=0.0))
+        self.var_ht_pattern = self._var("ht_pattern",
+                                        tk.StringVar(value="r57"))
+        self.var_ht_nx = self._var("ht_nx", tk.IntVar(value=12))
+        self.var_ht_ny = self._var("ht_ny", tk.IntVar(value=4))
+        self.var_ht_roll = self._var("ht_roll", tk.StringVar(value="a"))
+        self.var_sn_graph = self._var("sn_graph",
+                                      tk.StringVar(value="super-graphene"))
+        self.var_sn_scale = self._var("sn_scale", tk.DoubleVar(value=40.0))
+        self.var_sn_radius = self._var("sn_radius", tk.DoubleVar(value=5.0))
+        self.var_sn_blend = self._var("sn_blend", tk.DoubleVar(value=4.0))
         self.var_net_kind = self._var("net_kind", tk.StringVar(value="cubic"))
         self.var_net_cell = self._var("net_cell", tk.DoubleVar(value=40.0))
         self.var_net_radius = self._var("net_radius", tk.DoubleVar(value=6.0))
@@ -1169,6 +1185,52 @@ class NanocarbonGUI:
                   justify="left").grid(row=5, column=0, columnspan=2, sticky="w")
 
         # --- 3D interconnected nanotube network
+        # --- haeckelite tube
+        self.frame_ht = ttk.LabelFrame(parent, text="Haeckelite tube",
+                                       padding=8)
+        self.frame_ht.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_ht, text="Pattern").grid(
+            row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_ht, textvariable=self.var_ht_pattern,
+                     values=list(HAECKELITE_PATTERNS), state="readonly",
+                     width=12).grid(row=0, column=1, sticky="ew")
+        ttk.Label(self.frame_ht, text="Roll along").grid(
+            row=1, column=0, sticky="w")
+        ttk.Combobox(self.frame_ht, textvariable=self.var_ht_roll,
+                     values=["a", "b"], state="readonly",
+                     width=12).grid(row=1, column=1, sticky="ew")
+        self._param(self.frame_ht, "Cells along x", self.var_ht_nx,
+                    4, 40, 2, integer=True, command=self._update_ht_hint)
+        self._param(self.frame_ht, "Cells along y", self.var_ht_ny,
+                    2, 40, 4, integer=True, command=self._update_ht_hint)
+        self.lbl_ht = ttk.Label(self.frame_ht, text="", foreground=MUTED,
+                                wraplength=260, justify="left")
+        self.lbl_ht.grid(row=6, column=0, columnspan=2, sticky="w")
+        for _var in (self.var_ht_pattern, self.var_ht_roll):
+            _var.trace_add("write", lambda *_: self._update_ht_hint())
+
+        # --- supernetwork
+        self.frame_sn = ttk.LabelFrame(parent, text="Supernetwork of tubes",
+                                       padding=8)
+        self.frame_sn.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_sn, text="Net").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_sn, textvariable=self.var_sn_graph,
+                     values=list(SUPERLATTICES), state="readonly",
+                     width=16).grid(row=0, column=1, sticky="ew")
+        self._param(self.frame_sn, "Cell length (Å)", self.var_sn_scale,
+                    20.0, 120.0, 1, resolution=1.0,
+                    command=self._update_sn_hint)
+        self._param(self.frame_sn, "Tube radius (Å)", self.var_sn_radius,
+                    2.0, 15.0, 3, resolution=0.5,
+                    command=self._update_sn_hint)
+        self._param(self.frame_sn, "Node blend (Å)", self.var_sn_blend,
+                    1.0, 12.0, 5, resolution=0.5,
+                    command=self._update_sn_hint)
+        self.lbl_sn = ttk.Label(self.frame_sn, text="", foreground=MUTED,
+                                wraplength=260, justify="left")
+        self.lbl_sn.grid(row=7, column=0, columnspan=2, sticky="w")
+        self.var_sn_graph.trace_add("write", lambda *_: self._update_sn_hint())
+
         self.frame_network = ttk.LabelFrame(parent, text="Nanotube network",
                                             padding=8)
         self.frame_network.columnconfigure(0, weight=1)
@@ -1836,6 +1898,7 @@ class NanocarbonGUI:
                       self.frame_haeckelite,
                       self.frame_cage, self.frame_mw, self.frame_bundle,
                       self.frame_network,
+                      self.frame_ht, self.frame_sn,
                       self.frame_tmd, self.frame_tmd_layers,
                       self.frame_tmd_ribbon, self.frame_tmd_tube,
                       self.frame_tmd_coil, self.frame_tmd_sw,
@@ -1905,6 +1968,17 @@ class NanocarbonGUI:
         elif mode == "haeckelite":
             self.frame_haeckelite.pack(fill="x")
             self._update_haeckelite_hint()
+        elif mode == "haeckelite tube":
+            self.frame_ht.pack(fill="x")
+            self._update_ht_hint()
+        elif mode == "supernetwork":
+            self.frame_sn.pack(fill="x")
+            # Same reason as the network and the schwarzite: at a vertex
+            # the 5-7 pairs are how a hexagonal net covers the curvature,
+            # so annealing them away only stretches the bonds that are
+            # left.
+            self.var_anneal.set(0)
+            self._update_sn_hint()
         elif mode == "schwarzite":
             self.frame_schwarzite.pack(fill="x")
             # Annealing is counterproductive on a minimal surface (it
@@ -2280,6 +2354,97 @@ class NanocarbonGUI:
                   f"leave one face and return through the opposite one, so "
                   f"this is ready for a DFT code as it stands."),
             foreground=MUTED)
+
+    def _update_ht_hint(self) -> None:
+        """Say what the roll will give before it runs.
+
+        Two things about a rolled haeckelite are not obvious from the
+        boxes and are both refusals rather than warnings: a catalogue
+        pattern needs its block to divide the sheet, and the wrapped edge
+        fixes the radius, which has a floor. Saying so here is the
+        difference between learning it now and learning it after the
+        relaxation.
+        """
+        from ..builders.haeckelite_tube import MIN_TUBE_RADIUS, WARN_TUBE_RADIUS
+
+        nx = int(self.var_ht_nx.get())
+        ny = int(self.var_ht_ny.get())
+        pattern = self.var_ht_pattern.get()
+        roll = self.var_ht_roll.get()
+        # Graphene's rectangular cell, which is what the sheet is counted
+        # in; the wrapped edge is a whole number of them either way.
+        cells = nx if roll == "a" else ny
+        edge = math.sqrt(3.0) * 1.42 if roll == "a" else 3.0 * 1.42
+        radius = cells * edge / (2.0 * math.pi)
+
+        if pattern in HAECKELITE_CATALOGUE:
+            block_m, block_n = HAECKELITE_CATALOGUE[pattern]["block"]
+            if nx % block_m or ny % block_n:
+                self.lbl_ht.config(
+                    text=(f"✗ the {pattern} lattice tiles a {block_m}×"
+                          f"{block_n} block, so x must be a multiple of "
+                          f"{block_m} and y of {block_n}. This sheet would "
+                          "be refused before it was ever rolled."))
+                return
+        if radius < MIN_TUBE_RADIUS:
+            self.lbl_ht.config(
+                text=(f"✗ wrapping {cells} cells gives a {radius:.1f} Å "
+                      f"radius, below the {MIN_TUBE_RADIUS} Å of the "
+                      "narrowest nanotube ever observed — and that one was "
+                      "grown inside a template holding it open. Raise the "
+                      f"{'x' if roll == 'a' else 'y'} count."))
+            return
+
+        note = (" Narrower than a (5,5): the geometry will pass every check "
+                "here, but those checks are a valence force field, which "
+                "barely sees curvature — the real cost of a narrow tube is "
+                "rehybridisation and nothing here prices it."
+                if radius < WARN_TUBE_RADIUS else "")
+        self.lbl_ht.config(
+            text=(f"{4 * nx * ny} atoms, radius about {radius:.1f} Å before "
+                  "relaxation. A cylinder is developable, so the roll is an "
+                  "isometry: the flat lattice's pentagons and heptagons "
+                  "carry over unchanged and sum(6−n) stays 0. The radius "
+                  "and the axial period are outputs — both are re-fitted "
+                  f"and reported, not held.{note}"))
+
+    def _update_sn_hint(self) -> None:
+        """Say whether a tube survives between two vertices, and what the
+        ring budget will be.
+
+        The same failure the plain network has -- shrink the cell and the
+        vertices grow into each other until what is left is a sponge
+        rather than tubes -- plus one this builder can state that the
+        others cannot: the skeleton fixes ``sum(6-n)`` at ``12*(V-E)``
+        before anything is meshed, so the hint can show the answer the
+        build will be checked against.
+        """
+        name = self.var_sn_graph.get()
+        graph = SUPERLATTICES.get(name)
+        if graph is None:
+            return
+        scale = float(self.var_sn_scale.get())
+        radius = float(self.var_sn_radius.get())
+        blend = float(self.var_sn_blend.get())
+        shortest = float(graph.strut_lengths(scale).min())
+        free = shortest - 2.0 * (radius + blend)
+
+        if free <= 0:
+            self.lbl_sn.config(
+                text=(f"✗ {shortest:.0f} Å struts, and each vertex eats "
+                      f"about {radius + blend:.0f} Å of either end, so "
+                      "nothing recognisable as a tube is left between them. "
+                      "This would be refused: a larger cell, a narrower "
+                      "tube or a smaller blend."))
+            return
+        self.lbl_sn.config(
+            text=(f"{graph.coordination} tubes per vertex, "
+                  f"{len(graph.nodes)} vertex/vertices and "
+                  f"{len(graph.edges)} strut(s) per cell, leaving "
+                  f"{free:.0f} Å of free tube between them. The skeleton "
+                  f"fixes sum(6−n) at {graph.ring_budget:+d} before "
+                  "anything is meshed, and the build is checked against "
+                  f"it. {graph.note}"))
 
     def _graft_fields(self) -> dict:
         """The grafting half of a Job, shared by all three families.
@@ -2841,6 +3006,22 @@ class NanocarbonGUI:
                 pattern=self.var_hk_pattern.get(),
                 period=int(self.var_hk_period.get()),
                 density=float(self.var_hk_density.get()),
+            )
+        elif mode == "haeckelite tube":
+            params = dict(
+                nx=int(self.var_ht_nx.get()),
+                ny=int(self.var_ht_ny.get()),
+                pattern=self.var_ht_pattern.get(),
+                roll=self.var_ht_roll.get(),
+            )
+        elif mode == "supernetwork":
+            params = dict(
+                graph=self.var_sn_graph.get(),
+                scale=float(self.var_sn_scale.get()),
+                tube_radius=float(self.var_sn_radius.get()),
+                blend=float(self.var_sn_blend.get()),
+                anneal_sweeps=int(self.var_anneal.get()),
+                roughness=float(self.var_roughness.get()),
             )
         elif mode == "schwarzite":
             params = dict(

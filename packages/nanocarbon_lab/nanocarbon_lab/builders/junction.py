@@ -474,8 +474,14 @@ def _finish(
     else:
         positions = np.mod(positions, scaled_box)
         atoms = Atoms(symbols=["C"] * len(positions), positions=positions, pbc=True)
+        # A cell of three lengths, not one: the nets that came through
+        # here first were all cubic, and a honeycomb supersheet is a wide
+        # and a*sqrt(3) deep. `np.eye(3) * v` does the right thing for
+        # both a scalar and a 3-vector.
         atoms.set_cell(np.eye(3) * scaled_box)
-        info = {**info, "cell": float(scaled_box)}
+        lengths = np.broadcast_to(np.asarray(scaled_box, dtype=float), (3,))
+        info = {**info, "cell": (float(lengths[0]) if len(set(lengths)) == 1
+                                 else [float(v) for v in lengths])}
 
     if roughness > 0:
         positions = fm.apply_surface_roughness(

@@ -1,0 +1,211 @@
+"""Networks whose edges are nanotubes and whose vertices are junctions.
+
+The hierarchy of Romo-Herrera et al., *Nano Lett.* 7 (2007) 570: a 1D
+block, a multi-terminal node made from it, and then the node used as the
+new building block. What makes it testable is that the skeleton is a
+graph, and a graph's coordination number is a fact about it -- so the
+catalogue can be checked against what each net is *supposed* to have
+before anything is meshed.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+
+import numpy as np
+import pytest
+
+from nanocarbon_lab.builders.supernetwork import (
+    SUPERLATTICES,
+    SuperGraph,
+    build_supernetwork,
+    icosahedral_cage,
+    supergraph_from_atoms,
+)
+
+#: What each net's vertices must have. These are properties of the nets,
+#: not of this code: a simple cubic site has six nearest neighbours, a
+#: diamond site four, an fcc site twelve, a honeycomb site three.
+EXPECTED_COORDINATION = {
+    "super-square": 4,
+    "super-graphene": 3,
+    "super-cubic": 6,
+    "super-diamond": 4,
+    "super-fcc": 12,
+}
+
+
+class TestTheSkeletonBeforeAnythingIsMeshed:
+    """The edges are worked out from the positions, so they can be
+    checked. A hand-written edge table with a missing periodic image
+    gives a three-coordinate diamond site and still builds."""
+
+    @pytest.mark.parametrize("name", sorted(EXPECTED_COORDINATION))
+    def test_each_net_has_the_coordination_it_is_named_for(self, name):
+        assert SUPERLATTICES[name].coordination == EXPECTED_COORDINATION[name]
+
+    @pytest.mark.parametrize("name", sorted(EXPECTED_COORDINATION))
+    def test_every_edge_is_the_same_length(self, name):
+        """A uniform net has one strut length. Two lengths means the
+        tolerance swept in a second-neighbour shell."""
+        lengths = SUPERLATTICES[name].strut_lengths(40.0)
+        assert lengths.std() < 1e-6 * lengths.mean()
+
+    def test_an_edge_is_stored_once_and_not_twice(self):
+        """i to j through one face and j to i through the opposite one
+        are the same tube. Storing both doubles the field's weight there
+        and thickens the strut."""
+        square = SUPERLATTICES["super-square"]
+        assert len(square.edges) == 2          # one node, four half-edges
+        assert square.coordination == 4
+
+    def test_a_missing_image_is_caught_rather_than_built(self):
+        graph = SuperGraph(
+            name="broken",
+            nodes=np.array([[0.0, 0.0, 0.0], [0.5, 0.5, 0.0]]),
+            edges=((0, 1, (0, 0, 0)),),        # one vertex short of uniform
+            pbc=(True, True, False),
+        )
+        assert graph.coordination == 1          # both are 1 here, so fine
+        lopsided = SuperGraph(
+            name="lopsided",
+            nodes=np.array([[0.0, 0.0, 0.0], [0.5, 0.0, 0.0],
+                            [0.0, 0.5, 0.0]]),
+            edges=((0, 1, (0, 0, 0)), (0, 2, (0, 0, 0))),
+            pbc=(False, False, False),
+        )
+        with pytest.raises(ValueError, match="missing"):
+            _ = lopsided.coordination
+
+
+class TestTheCagesComeFromStructuresThatAlreadyExist:
+    """The hierarchy's own step: the node becomes the building block. A
+    C60 cage is a graph, so scaling it up and hanging a tube on every
+    edge is a superfullerene, and nothing in the step knows what it was
+    handed."""
+
+    def test_a_c60_gives_sixty_vertices_and_ninety_edges(self):
+        from nanocarbon_lab.builders.fullerene import build_fullerene
+
+        graph = supergraph_from_atoms(build_fullerene(family="C60"), scale=7.0)
+        assert len(graph.nodes) == 60
+        assert len(graph.edges) == 90          # Euler: 60 - 90 + 32 = 2
+        assert graph.coordination == 3
+
+    def test_an_icosahedron_gives_twelve_vertices_and_thirty_edges(self):
+        graph = icosahedral_cage(scale=9.0)
+        assert len(graph.nodes) == 12
+        assert len(graph.edges) == 30          # Euler: 12 - 30 + 20 = 2
+        assert graph.coordination == 5
+
+    def test_scaling_is_the_only_knob_that_matters(self):
+        small = icosahedral_cage(scale=3.0)
+        large = icosahedral_cage(scale=9.0)
+        assert large.strut_lengths(1.0).mean() == pytest.approx(
+            3.0 * small.strut_lengths(1.0).mean())
+
+
+class TestItRefusesWhatCannotBeATube:
+    def test_edges_too_short_for_a_tube_are_refused(self):
+        with pytest.raises(ValueError, match="nothing recognisable as a tube"):
+            build_supernetwork("super-cubic", scale=12.0, tube_radius=5.0,
+                               blend=4.0)
+
+    def test_an_unknown_net_names_the_catalogue(self):
+        with pytest.raises(ValueError, match="unknown net"):
+            build_supernetwork("super-octagonal")
+
+
+class TestASupersheetIsTwoDimensional:
+    """A 2D net must not acquire a period through the vacuum. The third
+    direction is padded and the structure centred in it, so the periodic
+    mesher's weld of that face finds nothing to join."""
+
+    @pytest.fixture(scope="class")
+    def sheet(self):
+        return build_supernetwork("super-graphene", scale=36.0,
+                                  tube_radius=5.0, blend=4.0,
+                                  grid_resolution=64)
+
+    def test_it_repeats_in_two_directions_and_not_the_third(self, sheet):
+        assert list(sheet.get_pbc()) == [True, True, False]
+
+    def test_the_cell_is_the_honeycomb_rectangle(self, sheet):
+        a, b, _c = sheet.cell.lengths()
+        assert b / a == pytest.approx(np.sqrt(3.0), rel=1e-3)
+
+    def test_the_wall_is_graphitic(self, sheet):
+        geometry = sheet.info["geometry"]
+        assert geometry["bond_mean"] == pytest.approx(1.42, abs=0.03)
+        assert geometry["bond_std"] < 0.06
+        assert geometry["n_close_contacts"] == 0
+
+    def test_the_nodes_carry_the_curvature(self, sheet):
+        """Nobody puts heptagons at a three-way node. A node is a saddle,
+        a saddle is negative Gaussian curvature, and the remesher returns
+        that as degree-7 vertices which the dual renders as heptagons."""
+        census = sheet.info["ring_counts"]
+        assert census.get(7, 0) > 0
+        assert census.get(6, 0) > 10 * census.get(7, 0) / 10
+
+
+class TestTheRingBudgetComesFromTheSkeleton:
+    """``sum(6-n) = 12 * (V - E)``, known before anything is meshed.
+
+    The wall is the boundary of a thickened graph, so the surface has one
+    handle per independent cycle of the graph: ``chi = 2 * (V - E)``, and
+    with ``sum(6-n) = 6 * chi`` the budget follows. This is the check
+    that is *independent* of the mesh -- ``junction._finish`` already
+    tests the census against the mesh's own Euler characteristic, which
+    catches a torn mesh but not a mesh that closed cleanly around the
+    wrong graph.
+    """
+
+    def test_it_reproduces_the_networks_hardcoded_constants(self):
+        """``network.py`` carries cubic -24 and diamond -96 as genus
+        knowledge. The same formula gives both, so they are not separate
+        facts."""
+        assert SUPERLATTICES["super-cubic"].ring_budget == -24
+        assert SUPERLATTICES["super-diamond"].ring_budget == -96
+
+    @pytest.mark.parametrize("name, expected", [
+        ("super-square", -12),
+        ("super-graphene", -24),
+        ("super-cubic", -24),
+        ("super-diamond", -96),
+        ("super-fcc", -240),
+    ])
+    def test_every_net_in_the_catalogue(self, name, expected):
+        graph = SUPERLATTICES[name]
+        assert graph.ring_budget == expected
+        assert graph.ring_budget == 12 * (len(graph.nodes) - len(graph.edges))
+
+    def test_a_finite_cage_too(self):
+        cage = icosahedral_cage()
+        assert cage.ring_budget == 12 * (12 - 30) == -216
+
+    def test_a_built_net_meets_its_budget(self):
+        """Measured rather than asserted: the census of a real build,
+        against a number fixed before the field was ever evaluated."""
+        built = build_supernetwork("super-square", scale=34.0,
+                                   tube_radius=5.0, blend=4.0,
+                                   grid_resolution=64)
+        counts = built.info["ring_counts"]
+        deficit = sum((6 - size) * count for size, count in counts.items())
+        assert deficit == built.info["ring_budget"] == -12
+
+    def test_the_check_is_live_and_not_decoration(self):
+        """A graph claiming a strut its geometry does not have must be
+        refused.
+
+        Duplicating an edge leaves the surface essentially unchanged and
+        moves the budget by -12, so the census and the budget disagree.
+        If this passes, the check in the builder is dead code.
+        """
+        graph = SUPERLATTICES["super-square"]
+        liar = dataclasses.replace(graph, name="square-that-lies",
+                                   edges=graph.edges + (graph.edges[0],))
+        assert liar.ring_budget == graph.ring_budget - 12
+        with pytest.raises(RuntimeError, match="skeleton's own topology"):
+            build_supernetwork(liar, scale=34.0, tube_radius=5.0,
+                               blend=4.0, grid_resolution=64)

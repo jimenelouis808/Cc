@@ -602,6 +602,117 @@ cubic 0.71 / diamond 0.74), not the junction's linear law in the node
 count: that law predicts diamond to 1% and cubic 27% low, because
 coordination 6 hits its own floor.
 
+## Supernetworks: the graph is the input, and it fixes the ring budget
+
+`builders/supernetwork.py` generalises `network.py`: instead of choosing
+between two hardcoded nets, it hangs a nanotube on every edge of a graph
+handed to it. The catalogue (`SUPERLATTICES`) holds super-square,
+super-graphene, super-cubic, super-diamond and super-fcc; a finite cage
+comes from `icosahedral_cage()` or from `supergraph_from_atoms()`, which
+turns any finished carbon structure into the skeleton of a bigger one --
+a C60 whose bonds are tubes is the same construction as a cubic lattice
+of them.
+
+**The skeleton fixes `sum(6-n)` before anything is meshed.** The wall is
+the boundary of a thickened graph, so `chi = 2*(V - E)` -- one handle per
+independent cycle -- and the budget is `12*(V - E)`. That is
+`SuperGraph.ring_budget`, and it is an **independent** check rather than
+a restatement: `junction._finish` already tests the census against the
+*mesh's* own Euler characteristic, which catches a torn mesh but cannot
+catch a mesh that closed perfectly around the wrong graph. A blend wide
+enough to merge two struts, or a grid coarse enough to pinch a neck shut,
+gives a flawless surface of the wrong genus. Measured, the budget is met
+exactly by every net built: square -12, graphene -24, cubic -24, diamond
+-96, fcc -240, icosahedral cage -216. It also reproduces the two
+constants `network.py` hardcodes (cubic `12*(1-3)`, diamond
+`12*(8-16)`), so those are no longer separate knowledge. The check is
+live, not decorative: a graph declaring three struts where its geometry
+has two is refused at every resolution.
+
+**Struts are stored as whichever image the edge search found first**, and
+for a one-node net that can be the -x neighbour as easily as the +x one.
+Geometrically the same infinite net -- and *not* the same field, because
+the 27-image replication that makes the field periodic is then centred a
+cell off. Measured against the proven cubic field, struts written
+backwards moved the surface by 0.55 A near the faces and the periodic
+weld failed with 264 boundary edges. `segments()` slides each strut so
+its **midpoint** lies in the cell, which put the replication back on
+centre: the difference against `network_field` is then 1.8e-15 (cubic)
+and exactly 0 (diamond). Do not remove that canonicalisation.
+
+`super-fcc` is in the catalogue because it is the densest sphere packing
+and the obvious thing to ask for, and it is **reported rather than
+recommended**: twelve tubes meeting at one point leave no room for a wall
+between them at any radius that is still a tube. It does build (6890
+atoms, 1.420 +- 0.023 A, zero contacts, budget met), which is the honest
+answer -- read the node, not the verdict.
+
+A finite cage needs a much roomier scale than looks necessary, and the
+failure is not obvious: each vertex eats about `tube_radius + blend` of
+*either* end of every edge it touches, so a C60 scaled by 7 has 9.9 A
+edges against 12 A of appetite and is refused outright, while an
+icosahedron at scale 9 passes the length test and then relaxes into
+something the quality gate throws out. Scale the cage until there is real
+tube left.
+
+## Haeckelite tubes: a cylinder is developable, so nothing is re-derived
+
+`builders/haeckelite_tube.py` rolls a finished haeckelite sheet. It is
+the one curved builder here that does **not** derive its rings from a
+mesh, and the reason is geometric rather than stylistic: a cylinder has
+zero Gaussian curvature, so the roll is an *isometry* and the flat
+lattice's census is carried over atom for atom. A sphere or a saddle has
+curvature and must pay for it in pentagons or heptagons -- which is why
+the fullerene, the schwarzite, the junction and the supernetwork all mesh.
+A tube pays nothing, so re-perceiving its rings could only introduce an
+error. The census is **carried, then verified**: the finished tube's own
+faces are traced and checked, because the relaxation afterwards can still
+tear. `sum(6-n)` is 0 on both sides, a periodic tube being a torus
+exactly as the flat periodic sheet is.
+
+* **`pattern="none"` is the control, not a degenerate case.** It goes
+  down the same code path, so anything it gets wrong is the rolling and
+  not the pattern -- and unlike a haeckelite it has an answer from
+  outside this framework. An 8-cell roll is an (8,0): rolled radius
+  3.13 A against the literature's 3.13, relaxing to 3.19, bonds
+  1.417-1.419 A. That is the only check here that is not the builder
+  marking its own work.
+
+* **Which way the radius moves is not obvious, and both directions are
+  real.** The chord is shorter than the arc by about `l^2/(24 R^2)`, so
+  the waist starts under compression; the all-hexagon tube answers by
+  expanding (3.13 -> 3.19 A), and every patterned one by contracting
+  instead (4.89 -> 4.72, 8.00 -> 7.65), relieving the same compression
+  through the axis, which shortens by 4.5% and 8.5%. The chord term is
+  0.35% and 0.13% in those cases, so it is not what moves them. Neither
+  radius is held; both are reported.
+
+* **A cell search pinned at its own bound is reporting the bound.** The
+  axial period is the one degree of freedom the roll leaves the cell
+  holding (the radius re-fits itself, the atoms being free in x and y),
+  and the first scan here was a fixed +-4% window. Every patterned
+  lattice came back at exactly 0.96 -- its lower edge. The window now
+  widens toward whichever end won until the minimum is strictly interior,
+  and a test asserts it is. Do not put a fixed window back.
+
+* **The radius floor is observed, not computed.** A valence force field
+  barely sees curvature -- the real cost of a narrow tube is sigma-pi
+  rehybridisation, which nothing here prices -- so it would happily
+  return a 1 A tube with excellent bonds. `MIN_TUBE_RADIUS` is 2 A
+  because that is where the narrowest nanotube ever observed sits, and it
+  was grown inside a template holding it open. Do not replace it with a
+  number this relaxer produced.
+
+* **`roll="a"` and `roll="b"` are different tubes**, not one described
+  twice: the lattice is anisotropic, so neither is a rotation of the
+  other, and they come out at different radii and different axial
+  periods from the same atom count.
+
+* `r57` **is pentaheptite** -- pentagons and heptagons only, no hexagons
+  -- which is the published name for that lattice. The catalogue entry
+  predates the comparison and keeps its own name; the equivalence is
+  worth knowing before adding a "pentaheptite" entry beside it.
+
 ## Unit cells: pad only what does not repeat, measure only what is vacuum
 
 `cell.to_unit_cell` turns any structure into `pbc=(True, True, True)`

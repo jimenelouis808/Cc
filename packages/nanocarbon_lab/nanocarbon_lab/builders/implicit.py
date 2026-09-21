@@ -402,6 +402,68 @@ def network_field(
     return field, cell
 
 
+def graph_field(
+    segments: np.ndarray,
+    box: np.ndarray,
+    pbc: tuple[bool, bool, bool],
+    tube_radius: float = 6.0,
+    blend: float = 5.0,
+) -> Field:
+    """Field for tubes on the edges of an arbitrary graph.
+
+    :func:`network_field` with the net's identity taken out of it: the
+    caller hands over the edges it wants as capsules and which of the
+    three directions repeat. Everything that makes that function correct
+    is kept, because each part of it was there for a measured reason --
+
+    * images are replicated **only along the directions that repeat**, so
+      a 2D net does not acquire a spurious period through the vacuum,
+    * the union is smooth and restricted to the nearest few struts: a
+      plain ``min`` leaves a crease no hexagonal net can tile, and a
+      soft-min over every image drags the field down everywhere and
+      inflates the tubes until they fill the cell,
+    * and the point-by-strut array is chunked, because a 72³ grid against
+      a few hundred struts wants gigabytes for the offsets alone.
+    """
+    if tube_radius <= 0 or blend <= 0:
+        raise ValueError("tube_radius and blend must be positive.")
+    box = np.asarray(box, dtype=float)
+    images = [range(-1, 2) if repeat else (0,) for repeat in pbc]
+    shifts = np.array([(i, j, k)
+                       for i in images[0] for j in images[1] for k in images[2]],
+                      dtype=float) * box
+    segments = (np.asarray(segments, float)[None, :, :, :]
+                + shifts[:, None, None, :]).reshape(-1, 2, 3)
+
+    starts = segments[:, 0, :]
+    directions = segments[:, 1, :] - starts
+    lengths_squared = np.einsum("ij,ij->i", directions, directions)
+    n_blend = min(8, segments.shape[0])
+    chunk = max(1024, int(256e6 / (max(1, segments.shape[0]) * 64)))
+
+    def field(points: np.ndarray) -> np.ndarray:
+        flat = points.reshape(-1, 3)
+        out = np.empty(flat.shape[0], dtype=float)
+        for begin in range(0, flat.shape[0], chunk):
+            block = flat[begin:begin + chunk]
+            offset = block[:, None, :] - starts[None, :, :]
+            t = np.einsum("psi,si->ps", offset, directions) / lengths_squared
+            np.clip(t, 0.0, 1.0, out=t)
+            closest = offset - t[:, :, None] * directions[None, :, :]
+            distance = np.linalg.norm(closest, axis=-1) - tube_radius
+            nearest = np.partition(distance, n_blend - 1, axis=1)[:, :n_blend]
+            nearest.sort(axis=1)
+            result = nearest[:, 0]
+            for column in range(1, n_blend):
+                other = nearest[:, column]
+                h = np.clip(0.5 + 0.5 * (other - result) / blend, 0.0, 1.0)
+                result = other * (1.0 - h) + result * h - blend * h * (1.0 - h)
+            out[begin:begin + chunk] = result
+        return out.reshape(points.shape[:-1])
+
+    return field
+
+
 def schwarzite_field(
     kind: SchwarziteKind = "primitive",
     cell: float = 30.0,

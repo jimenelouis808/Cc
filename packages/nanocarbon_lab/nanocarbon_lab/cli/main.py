@@ -53,6 +53,7 @@ from ..builders import (
     build_fullerene,
     build_graphene_supercell,
     build_haeckelite,
+    build_haeckelite_tube,
     build_junction,
     build_multiwall_cnt,
     build_nano_onion,
@@ -61,8 +62,10 @@ from ..builders import (
     build_nanotube_network,
     build_periodic_coil,
     build_schwarzite,
+    build_supernetwork,
 )
 from ..builders.haeckelite import PATTERNS as HAECKELITE_PATTERNS
+from ..builders.supernetwork import SUPERLATTICES
 from ..cell import (
     MIN_IMAGE_SEPARATION,
     cell_report,
@@ -933,6 +936,55 @@ def _cmd_haeckelite(args):
     return 0
 
 
+def _cmd_haeckelite_tube(args):
+    atoms = build_haeckelite_tube(
+        nx=args.nx, ny=args.ny, pattern=args.pattern, roll=args.roll,
+        period=args.period, density=args.density, bond=args.bond,
+        vacuum=args.vacuum, seed=args.seed,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    kind = "catalogue" if info.get("catalogue") else "generative"
+    print(f"  lattice     = {info['pattern']} ({kind}) rolled along "
+          f"{info['roll']}, {100 * info['non_hexagonal_fraction']:.0f}% "
+          "non-hexagonal")
+    # Rolled against achieved, because neither is held: the wall relieves
+    # the chord compression by moving, and which way it moves depends on
+    # the lattice.
+    print(f"  radius      = {info['radius']:.2f} A achieved, rolled at "
+          f"{info['rolled_radius']:.2f} A "
+          f"({100 * info['roll_compression']:.2f}% chord compression)")
+    print(f"  axis        = {info['axial_period']:.2f} A period, "
+          f"{100 * (info['axial_factor'] - 1):+.1f}% on the flat sheet's")
+    return 0
+
+
+def _cmd_supernetwork(args):
+    atoms = build_supernetwork(
+        graph=args.graph, scale=args.scale, tube_radius=args.tube_radius,
+        blend=args.blend, bond=args.bond, grid_resolution=args.grid,
+        remesh_iterations=args.remesh_iterations,
+        anneal_sweeps=args.anneal_sweeps, roughness=args.roughness,
+        seed=args.seed,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    print(f"  net         = {info['network_kind']}, {info['n_nodes']} "
+          f"vertex/vertices and {info['n_struts']} strut(s) per cell, "
+          f"{info['node_coordination']}-coordinate")
+    print(f"  tubes       = R {info['tube_radius']:.1f} A, struts "
+          f"{info['strut_length']:.1f} A long")
+    # The skeleton fixes the ring budget before anything is meshed, so
+    # printing both is printing a prediction beside its test.
+    print(f"  rings       = sum(6-n) = {info['euler'] * 6:+d} measured "
+          f"against {info['ring_budget']:+d} from the graph's own topology")
+    if info.get("note"):
+        print(f"  note        = {info['note']}")
+    return 0
+
+
 def _cmd_schwarzite(args):
     atoms = build_schwarzite(
         kind=args.kind, cell=args.cell,
@@ -1749,6 +1801,82 @@ def build_parser() -> argparse.ArgumentParser:
     _add_doping_arguments(
         hk, seed_help="Seed for the 'random' pattern and for dopant placement.")
     hk.set_defaults(func=_cmd_haeckelite)
+
+    ht = sub.add_parser(
+        "haeckelite-tube",
+        help="Roll a haeckelite sheet into a periodic nanotube. A cylinder "
+             "is developable, so the roll is an isometry and the lattice's "
+             "pentagons and heptagons carry over unchanged.",
+    )
+    ht.add_argument("--nx", type=int, default=8,
+                    help="Repeats of graphene's 4-atom rectangular cell "
+                         "along x. With --roll a this sets the "
+                         "circumference, so it is what picks the radius.")
+    ht.add_argument("--ny", type=int, default=4,
+                    help="Repeats along y; with --roll a this is the axial "
+                         "period.")
+    ht.add_argument("--pattern", default="r57",
+                    choices=list(HAECKELITE_PATTERNS),
+                    help="The flat lattice to roll; see 'haeckelite'. "
+                         "'none' gives an ordinary all-hexagon nanotube, "
+                         "which is the control rather than a degenerate "
+                         "case: same code path, so anything it gets wrong "
+                         "is the rolling and not the pattern.")
+    ht.add_argument("--roll", default="a", choices=("a", "b"),
+                    help="Which cell edge wraps. These are different tubes "
+                         "from the same lattice -- the pattern is not "
+                         "isotropic -- and neither is a rotation of the "
+                         "other.")
+    ht.add_argument("--period", type=int, default=2,
+                    help="Spacing, in cells, for 'stripes' and 'sparse'.")
+    ht.add_argument("--density", type=float, default=0.15,
+                    help="Fraction of eligible bonds for 'random'.")
+    ht.add_argument("--bond", type=float, default=1.42)
+    ht.add_argument("--vacuum", type=float, default=12.0,
+                    help="Vacuum gap (Å) between the tube and its images.")
+    ht.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        ht, seed_help="Seed for the 'random' pattern and for dopant "
+                      "placement.")
+    ht.set_defaults(func=_cmd_haeckelite_tube)
+
+    sn = sub.add_parser(
+        "supernetwork",
+        help="Hang a nanotube on every edge of a graph: 2D and 3D "
+             "superlattices of tubes, and finite cages such as a C60 whose "
+             "bonds are tubes.",
+    )
+    sn.add_argument("--graph", default="super-graphene",
+                    choices=list(SUPERLATTICES),
+                    help="Which net. 'super-graphene' joins three tubes at "
+                         "120 deg, which is the angle an sp2 branch adopts "
+                         "by itself and the most stable node here; "
+                         "'super-square' four at 90 deg; 'super-cubic' six "
+                         "along the axes; 'super-diamond' four at the "
+                         "tetrahedral 109.47 deg; 'super-fcc' twelve, which "
+                         "is reported rather than recommended.")
+    sn.add_argument("--scale", type=float, default=40.0,
+                    help="Cell edge (Å). Must leave a real tube between two "
+                         "vertices, each of which eats about "
+                         "tube-radius + blend of either end of a strut.")
+    sn.add_argument("--tube-radius", type=float, default=5.0,
+                    help="Radius of every tube (Å). Free rather than "
+                         "quantised, the wall being meshed rather than "
+                         "rolled.")
+    sn.add_argument("--blend", type=float, default=4.0,
+                    help="Smooth-union radius at the vertices (Å). Too "
+                         "small leaves a crease no hexagonal net can tile; "
+                         "too large rounds the vertex into a sphere and the "
+                         "tubes stop being tubes.")
+    sn.add_argument("--bond", type=float, default=1.42)
+    sn.add_argument("--grid", type=int, default=72,
+                    help="Grid points across the cell.")
+    sn.add_argument("--remesh-iterations", type=int, default=25)
+    sn.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_surface_flags(sn)
+    sn.set_defaults(func=_cmd_supernetwork)
 
     sz = sub.add_parser(
         "schwarzite",

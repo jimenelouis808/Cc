@@ -66,9 +66,20 @@ SAMPLES: dict[str, Job] = {
     # applied, no hexagons left. Also the case that would catch the block
     # divisibility rule being dropped.
     "haeckelite": Job("haeckelite", {"nx": 4, "ny": 4, "pattern": "r57"}),
+    # The cheapest tube the r57 catalogue allows: it tiles a 4x4 block,
+    # so both counts must be multiples of 4, and rolling the 4-wide edge
+    # would give a radius under the 2 Å floor.
+    "haeckelite tube": Job("haeckelite tube",
+                           {"nx": 12, "ny": 4, "pattern": "r57",
+                            "roll": "a"}),
     # The cheapest network: a cubic net is one node per cell against
     # diamond's eight, and 40 Å is just above the floor that leaves a
     # real tube between them.
+    # The cheapest supernetwork: super-square is one node and two struts
+    # per cell, and 2D, so it meshes on a smaller grid than any 3D net.
+    "supernetwork": Job("supernetwork", {"graph": "super-square",
+                                         "scale": 34.0, "tube_radius": 5.0,
+                                         "blend": 4.0}),
     "network": Job("network", {"kind": "cubic", "cell": 40.0,
                                "tube_radius": 6.0, "blend": 5.0}),
     "coil (relaxed)": Job("coil (relaxed)",

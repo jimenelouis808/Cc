@@ -7,11 +7,13 @@ from .foam3d import build_carbon_foam
 from .fullerene import build_fullerene, build_nano_onion
 from .graphene import build_graphene, build_graphene_supercell
 from .haeckelite import build_haeckelite, describe_haeckelite
+from .haeckelite_tube import build_haeckelite_tube, describe_haeckelite_tube
 from .junction import build_junction, build_schwarzite
 from .nanocoil import build_nanocoil
 from .nanoribbon import build_nanoribbon
 from .network import build_nanotube_network
 from .periodic_coil import build_periodic_coil
+from .supernetwork import SUPERLATTICES, build_supernetwork, icosahedral_cage, supergraph_from_atoms
 from .swept import build_coil, build_swept_tube
 
 __all__ = [
@@ -30,8 +32,14 @@ __all__ = [
     "build_nanocoil",
     "build_nanoribbon",
     "build_nanotube_network",
+    "SUPERLATTICES",
     "build_haeckelite",
+    "build_haeckelite_tube",
+    "build_supernetwork",
     "build_schwarzite",
     "describe_haeckelite",
+    "describe_haeckelite_tube",
+    "icosahedral_cage",
+    "supergraph_from_atoms",
     "build_swept_tube",
 ]

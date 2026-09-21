@@ -51,12 +51,21 @@ CARBON_MODES = (
     # bending a finished lattice can only stretch it.
     "nanocoil",
     "haeckelite",
+    # The flat haeckelite lattice rolled. A cylinder is developable, so
+    # the roll is an isometry and the census carries over unchanged --
+    # the one curved builder here that does NOT have to derive its rings.
+    "haeckelite tube",
     "coil (relaxed)",
     "fullerene",
     "nano-onion",
     "junction",
     "schwarzite",
     "network",
+    # A nanotube on every edge of a graph: the same implicit route as the
+    # network above, with the net given rather than chosen from two. It
+    # covers the 3D nets and the finite cages alike -- a C60 whose bonds
+    # are tubes is the same construction as a cubic lattice of them.
+    "supernetwork",
     "multi-wall",
     "bundle",
 )
@@ -248,6 +257,7 @@ def builder_for(mode: str):
         build_coil,
         build_fullerene,
         build_haeckelite,
+        build_haeckelite_tube,
         build_junction,
         build_multiwall_cnt,
         build_nano_onion,
@@ -257,6 +267,7 @@ def builder_for(mode: str):
         build_periodic_coil,
         build_schwarzite,
     )
+    from .builders.supernetwork import build_supernetwork
     from .hetero import build_twisted_bilayer, build_vdw_stack
     from .tmd import (
         build_tmd_bulk,
@@ -286,10 +297,12 @@ def builder_for(mode: str):
         "coil (relaxed)": build_coil,
         "fullerene": build_fullerene,
         "haeckelite": build_haeckelite,
+        "haeckelite tube": build_haeckelite_tube,
         "nano-onion": build_nano_onion,
         "junction": build_junction,
         "schwarzite": build_schwarzite,
         "network": build_nanotube_network,
+        "supernetwork": build_supernetwork,
         "multi-wall": build_multiwall_cnt,
         "bundle": build_bundle,
     }
@@ -571,6 +584,31 @@ def estimate_atoms(job: Job) -> int:
         # Exact, not an estimate: a Stone-Wales rotation moves bonds, never
         # atoms, so every pattern gives graphene's own count.
         return 4 * int(p.get("nx", 4)) * int(p.get("ny", 4))
+
+    if mode == "haeckelite tube":
+        # Exact for the same reason the flat sheet is: rolling moves no
+        # atoms either, so the tube holds graphene's own count.
+        return 4 * int(p.get("nx", 8)) * int(p.get("ny", 4))
+
+    if mode == "supernetwork":
+        # Struts as cylinders, with the same measured overlap correction
+        # the `network` mode uses -- tubes bury each other at a node, so
+        # summing strut areas counts the node once per strut meeting
+        # there. The graph knows its own struts, so unlike `network`
+        # nothing here is keyed on a hardcoded net.
+        from .builders.supernetwork import SUPERLATTICES
+
+        graph = p.get("graph", "super-graphene")
+        if isinstance(graph, str):
+            graph = SUPERLATTICES.get(graph, SUPERLATTICES["super-graphene"])
+        radius = float(p.get("tube_radius", 5.0))
+        scale = float(p.get("scale", 40.0))
+        length = float(graph.strut_lengths(scale).sum())
+        area = 2 * math.pi * radius * length
+        # Coordination 3 buries least, 12 most; the same linear form as
+        # `network`, read off the graph instead of a table.
+        overlap = max(0.45, 1.0 - 0.05 * graph.coordination)
+        return int(ATOMS_PER_RING * overlap * area / RING_AREA)
 
     if mode == "schwarzite":
         cell = float(p.get("cell", 36.0))
@@ -864,6 +902,15 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "nx": "--nx", "ny": "--ny", "pattern": "--pattern",
         "period": "--period", "density": "--density", "bond": "--bond",
         "vacuum": "--vacuum",
+    }),
+    "haeckelite tube": ("haeckelite-tube", {
+        "nx": "--nx", "ny": "--ny", "pattern": "--pattern",
+        "roll": "--roll", "period": "--period", "density": "--density",
+        "bond": "--bond", "vacuum": "--vacuum",
+    }),
+    "supernetwork": ("supernetwork", {
+        "graph": "--graph", "scale": "--scale",
+        "tube_radius": "--tube-radius", "blend": "--blend", "bond": "--bond",
     }),
     "schwarzite": ("schwarzite", {
         "kind": "--kind", "cell": "--cell", "thickness": "--thickness",
