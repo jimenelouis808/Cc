@@ -1210,6 +1210,72 @@ El módulo `echem/io.py` dice que los formatos binarios se rechazan, y
   los descartados se enseñan con su motivo: un filtro que nadie puede
   discutir es peor que no tenerlo.
 
+## Las tablas maestras, y lo que significan
+
+- **Las tablas del documento del usuario están en `xps.json`, no en
+  prosa**, con la ventana de ajuste, el rango de anchura, la confianza,
+  el NIVEL DE EVIDENCIA (A–D), la familia, qué elementos exige y la
+  procedencia. Se consultan sin abrir el código: pestaña «Referencia» de
+  la sección XPS y `ramancarbon xps --tabla "N 1s"` (`--tabla lista`
+  enumera las regiones). Eso no es comodidad: la ventana en la que se
+  sujeta una componente decide qué puede valer, así que un resultado no
+  se puede leer sin ella.
+- **Los rangos del documento se UNEN con los que ya estaban, no los
+  sustituyen.** Los del documento son «típicos»; los del paquete estaban
+  calibrados contra sus propios datos. Estrechar un rango pega el ajuste
+  al límite y sesga la anchura —la barrera de siempre— y se comprobó
+  midiendo: con la anchura del documento sola (0.8–1.3 para el sp²), la
+  componente asimétrica del C 1s salía clavada en el tope.
+- **Y ensanchar tampoco es gratis.** La ventana de agua a 536.5 eV del
+  documento empuja la ventana de AJUSTE más allá del final de un barrido
+  normal de 524–540, y entonces la región no se ajusta en absoluto. Donde
+  el documento y la literatura de carbones discrepan, la discrepancia va
+  en la nota; el límite se queda donde la medida llega.
+
+## Ester, lactona, anhídrido y ácido son UNA componente
+
+- **XPS no los separa.** Los cuatro ponen su C 1s entre 288 y 290 eV y su
+  O 1s entre 532 y 534. Un modelo con los cuatro no descubre cuál está:
+  reparte el área de un pico entre cuatro etiquetas y presenta el reparto
+  como medida. Igual con alcohol frente a éter, y con el pirrólico frente
+  al piridónico.
+- **Por eso existen las familias.** Una familia se ajusta con UNA
+  componente, la marcada `preferred`, y su nombre nombra a la familia
+  entera: «O–C=O (ácido, éster, lactona o anhídrido)». Informar
+  «anhídrido» de un pico que es igual de bien los otros tres es la
+  precisión falsa que el documento prohíbe. Los miembros concretos siguen
+  en el catálogo para elegirlos a mano.
+- **Y el buscador de hombros respeta la familia**: un hombro dentro de la
+  ventana de una familia ya representada no abre una componente nueva.
+
+## El modelo por defecto del material es un SUELO
+
+- **Los tres nitrógenos de un carbono dopado están a 0.8 eV con anchuras
+  de 1.2: la segunda derivada no los resuelve.** Dejar que ella decida
+  quitaba del modelo una de las tres componentes con las que se ajusta
+  cualquier carbono dopado — medido sobre el archivo real del usuario, se
+  llevaba el pirrólico y metía una amina en su sitio.
+- **Así que el modelo del material va siempre** (`default_models` en el
+  JSON, §19 del documento), y la búsqueda de hombros AÑADE lo que el
+  espectro enseñe encima. No es un techo: un N 1s con cuatro entornos
+  sigue saliendo con cuatro, que es la otra barrera de este paquete.
+- **Y los estados `conditional` no son candidatos automáticos.** No es
+  neutro tenerlos: solapan con los que SÍ son el modelo por defecto.
+
+## Un parámetro que se para en su límite no es una medida
+
+- **El ajuste está diciendo que la intensidad cae fuera de donde se le
+  deja ponerla.** Ese número es el borde, no una posición, y su área es
+  la que quepa bajo un pico sujeto donde no va. `xps/checks.py` lo
+  informa, para el centro y para la anchura, y no cambia ningún ajuste.
+- **Varias componentes pegadas al MISMO borde son UN problema, no
+  varios**: la región entera quiere estar a otra energía, y eso es la
+  referencia de carga, no la química. Cinco avisos de química es
+  exactamente la forma de que un error de eje se ajuste en vez de
+  corregirse.
+- **Dos componentes a menos de un cuarto de su anchura son una.** El
+  reparto de su área lo decide el punto de partida del ajuste.
+
 ## Una región no puede comprobarse a sí misma
 
 - **El ajuste de un C 1s pone un C–N a 285.9 eV haya nitrógeno o no.** El

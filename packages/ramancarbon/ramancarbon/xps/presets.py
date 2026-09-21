@@ -331,12 +331,49 @@ def _width_compatible(first: ChemicalState, second: ChemicalState) -> bool:
     return max(a, b) / max(min(a, b), 1e-9) <= WIDTH_LINK_RATIO
 
 
+def _one_per_family(states):
+    """Keep one state per family; say which families had more than one.
+
+    The specification says it three times, and it is the single most
+    common way a C 1s fit invents chemistry: ester, lactone, anhydride
+    and carboxylic acid all sit between 288 and 290 eV, and their O 1s
+    between 532 and 534. No fit separates them. A model with all four
+    does not find out which is present -- it splits one peak's area four
+    ways and reports the split.
+
+    The member kept is the family's ``preferred`` one, whose NAME is the
+    family's name. Keeping whichever happened to be found first reports
+    «anhídrido» for a peak that is equally an ester, a lactone or an
+    acid, which is the false precision the specification forbids: the
+    honest label names all four.
+    """
+    order = {"preferred": 0, "conditional": 1, "last_resort": 2}
+    families: dict[str, list] = {}
+    kept = []
+    for state in states:
+        family = getattr(state, "family", "")
+        if family:
+            families.setdefault(family, []).append(state)
+        else:
+            kept.append(state)
+    doubled: dict[str, list[str]] = {}
+    for family, members in families.items():
+        best = min(members, key=lambda s: (
+            order.get(getattr(s, "fitting_priority", "preferred"), 1),
+            states.index(s)))
+        kept.append(best)
+        if len(members) > 1:
+            doubled[family] = [s.name for s in members]
+    return kept, sorted(doubled.items())
+
+
 def count_model(
     spectrum: XPSSpectrum,
     region: str,
     n: Optional[int] = None,
     database: Optional[XPSDatabase] = None,
     present: Optional[Sequence[str]] = None,
+    material: str = "carbono",
     **options,
 ) -> tuple[XPSModel, list[str]]:
     """A model with exactly ``n`` components, chosen from the region's states.
@@ -380,8 +417,27 @@ def count_model(
     everything = [s for s in database.states_for(region,
                                                  include_satellites=True)
                   if not s.is_satellite]
-    available = [s for s in everything if s.possible_in(present)]
+    possible = [s for s in everything if s.possible_in(present)]
     impossible = [s.name for s in everything if not s.possible_in(present)]
+    # Section 21, step 4: do NOT generate every component the database
+    # has. A `conditional` state is one the literature gives low or
+    # moderate confidence and that a material-specific default model does
+    # not include -- an amine in a nitrogen-doped carbon, a pyridonic N,
+    # a nitrate. They overlap the states that ARE the default, so leaving
+    # them in the automatic candidate list is not neutral: measured on a
+    # real N 1s, a seed at 398.7 eV -- the ripple between pyridinic and
+    # pyrrolic -- was handed to the amine, and the pyrrolic nitrogen, one
+    # of the three components every N-doped carbon is fitted with, was
+    # pushed out of the model entirely.
+    #
+    # They stay in the catalogue and the user can name any of them.
+    preferred = [s for s in possible if s.fitting_priority == "preferred"]
+    conditional = [s for s in possible if s.fitting_priority != "preferred"]
+    available = preferred or possible
+    if n is not None and n > len(available):
+        # More components asked for than the default model has: fall back
+        # to the wider list rather than refusing.
+        available = possible
     if not available:
         raise XPSError(f"la base de datos no tiene estados para {region!r}")
     if n is not None and n < 1:
@@ -394,6 +450,21 @@ def count_model(
             "estados conocidos, usa free_model y explica en el informe qué "
             "es cada una"
         )
+    # Section 19/42: where the material has a default model, it IS the
+    # model. Not a suggestion the shoulder search may overrule -- the
+    # three nitrogens of a doped carbon sit 0.8 eV apart with widths of
+    # 1.2 and a second derivative does not resolve them, so letting it
+    # decide silently drops one of the three.
+    default = [s for s in
+               (next((x for x in possible if x.key == key), None)
+                for key in database.default_model(region, material))
+               if s is not None]
+    # And it is a FLOOR, not a ceiling. The other barrier this package
+    # already had says the region decides how many components it needs --
+    # a fixed number is a decision taken on somebody else's sample, and
+    # two components in an N 1s with four environments gives a reduced
+    # chi-squared of seventy. So the default states go in, and the
+    # shoulder search still adds whatever else the spectrum shows.
     low = min(s.window[0] for s in available) - WINDOW_PAD
     high = max(s.window[1] for s in available) + WINDOW_PAD
     low = max(low, float(spectrum.range[0]))
@@ -417,20 +488,39 @@ def count_model(
     # of the region — which is a peak of its own — is left out.
     separation = 0.8 * float(np.median([state.fwhm[0] for state in available]))
     limit = len(available) if n is None else n
-    kept: list[ChemicalState] = []
-    taken: list[float] = []
+    kept: list[ChemicalState] = list(default)
+    taken: list[float] = [s.energy_ev for s in default]
     for _, seed in candidates:
         if len(kept) >= limit:
             break
         if any(abs(seed - other) < separation for other in taken):
             continue
+        # A family already represented is not a second candidate, and the
+        # member chosen inside a family is the PREFERRED one -- the one
+        # whose name is the family's. Nearest-by-energy alone reported
+        # «anhídrido» for a shoulder at 289.2 eV that is equally an
+        # ester, a lactone and a carboxylic acid; no fit separates those,
+        # so naming one of them is a claim the measurement cannot make.
+        used = {state.family for state in kept if state.family}
         inside = [state for state in available
-                  if state.contains(seed, tolerance=0.3) and state not in kept]
+                  if state.contains(seed, tolerance=0.3)
+                  and state not in kept
+                  and state.family not in used]
         if not inside:
             continue
-        kept.append(min(inside, key=lambda state: abs(state.energy_ev - seed)))
+        rank = {"preferred": 0, "conditional": 1, "last_resort": 2}
+        kept.append(min(inside, key=lambda state: (
+            rank.get(state.fitting_priority, 1),
+            abs(state.energy_ev - seed))))
         taken.append(seed)
-    notes = [
+    notes = []
+    if default:
+        notes.append(
+            f"modelo por defecto de «{material}» para {region}: "
+            + ", ".join(f"{s.name} ({s.energy_ev:.1f} eV)" for s in default)
+            + ". Van siempre: se solapan por construcción y la segunda "
+            "derivada no los separa. Lo que encuentre la búsqueda se AÑADE")
+    notes += [
         ("el número de componentes lo ha decidido la propia región"
          if n is None else "componentes elegidas")
         + f" — {len(kept)} hombro(s) dentro de una ventana publicada: "
@@ -464,6 +554,14 @@ def count_model(
                 + ", ".join(f"{s.name} ({s.energy_ev:.1f} eV)" for s in filled)
                 + ". Una componente puesta así no la pide la medida"
             )
+    kept, doubled = _one_per_family(kept)
+    for family, names in doubled:
+        notes.append(
+            f"dos estados de la familia «{family}» ({', '.join(names)}) caben "
+            "en el mismo hueco y XPS no los separa: se ha dejado uno. "
+            "Repartir un pico entre los dos no descubre cuál está, reparte "
+            "su área entre dos etiquetas y presenta el reparto como medida"
+        )
     kept = sorted(kept[:limit], key=lambda state: state.energy_ev)
     dropped = [state for state in available if state not in kept]
     if dropped:
@@ -473,6 +571,13 @@ def count_model(
         )
     model = state_model(spectrum, region, [s.key for s in kept],
                         database=database, **options)
+    held_back = [s.name for s in conditional if s not in available]
+    if held_back:
+        notes.append(
+            "no son candidatos automáticos (la literatura les da confianza "
+            "baja o media y el modelo por defecto del material no los lleva), "
+            "pero están en el catálogo si los pides: "
+            + ", ".join(held_back))
     if impossible:
         notes.append(
             "descartados por la composición de la muestra: "

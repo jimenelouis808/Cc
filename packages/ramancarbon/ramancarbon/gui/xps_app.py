@@ -67,6 +67,7 @@ class XPSApp(SectionApp):
             1: ("survey",),
             2: ("region", "counts"),
             3: ("composition",),
+            4: (),
         }
         self._build()
         self.set_status("Carga espectros o pulsa Demo.")
@@ -92,6 +93,7 @@ class XPSApp(SectionApp):
         self._build_tab_survey()
         self._build_tab_region()
         self._build_tab_composition()
+        self._build_tab_reference()
         self.build_status(self.container)
         self.root.after(150, self.drain_queue)
 
@@ -360,6 +362,102 @@ class XPSApp(SectionApp):
                          figsize=(4.2, 2.6))
         self.verdict_text = scrolled_text(right_body, self.palette,
                                           self.fonts["small"], height=4)
+
+    def _build_tab_reference(self) -> None:
+        """The catalogue, readable. Section 65: every constraint inspectable.
+
+        The window a component was held in decides what its position
+        could have been, so a result is not readable without it. Putting
+        the table in the program rather than in the source is the
+        difference between a constraint the user can argue with and one
+        they can only obey.
+        """
+        ttk = self.ttk
+        tab = ttk.Frame(self.notebook, padding=PAD["md"])
+        self.notebook.add(tab, text="  Referencia  ")
+
+        bar = ttk.Frame(tab)
+        bar.pack(fill="x", pady=(0, PAD["sm"]))
+        ttk.Label(bar, text="Región:").pack(side="left")
+        self.reference_var = self.tk.StringVar(value="C 1s")
+        self.reference_box = ttk.Combobox(
+            bar, textvariable=self.reference_var, width=14, state="readonly",
+            values=list(self.session.database.region_names()))
+        self.reference_box.pack(side="left", padx=(PAD["xs"], PAD["md"]))
+        self.reference_box.bind("<<ComboboxSelected>>",
+                                lambda _e: self._refresh_reference())
+        ttk.Button(bar, text="Exportar tabla…",
+                   command=self._export_reference).pack(side="left")
+        hint(bar,
+             "  BE_min y BE_max son los límites con los que se ajusta, no un "
+             "adorno: una componente que sale en 289.7 con límite 289.7 no "
+             "está medida, está sujeta. «uso» dice si entra en el modelo por "
+             "defecto del material o sólo si la pides tú.",
+             wrap=560)
+
+        outer, body = card(tab, None)
+        outer.pack(fill="both", expand=True)
+        self.reference_table = table(
+            body, ["estado", "asignación", "BE", "BE_min", "BE_max",
+                   "FWHM_min", "FWHM_max", "confianza", "evidencia", "uso",
+                   "necesita"], height=14)
+        notes, notes_body = card(tab, "Notas y procedencia")
+        notes.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        self.reference_notes = scrolled_text(notes_body, self.palette,
+                                             self.fonts["small"], height=10)
+        self._refresh_reference()
+
+    def _reference_rows(self):
+        from ..xps.tables import reference_table
+
+        return reference_table(self.reference_var.get(),
+                               database=self.session.database,
+                               present=self.session.present_elements())
+
+    def _refresh_reference(self) -> None:
+        data = self._reference_rows()
+        show = ["estado", "asignación", "BE", "BE_min", "BE_max", "FWHM_min",
+                "FWHM_max", "confianza", "evidencia", "uso", "necesita"]
+        index = [data.columns.index(name) for name in show]
+        fill_table(self.reference_table, show,
+                   [tuple(str(row[i]) for i in index) for row in data.rows])
+        lines = []
+        possible = data.columns.index("posible")
+        for row in data.rows:
+            bits = []
+            if row[possible] == "no":
+                bits.append("la composición de la muestra lo descarta")
+            note = row[data.columns.index("nota")]
+            if note:
+                bits.append(note)
+            family = row[data.columns.index("familia")]
+            if family:
+                bits.append(f"familia «{family}»: XPS no separa a sus "
+                            "miembros entre sí")
+            if bits:
+                lines.append(f"{row[1]} — " + " ".join(bits))
+        source = {row[data.columns.index("referencia")] for row in data.rows}
+        lines.append("")
+        lines.extend(f"Procedencia: {text}" for text in sorted(source) if text)
+        self.reference_notes.configure(state="normal")
+        self.reference_notes.delete("1.0", "end")
+        self.reference_notes.insert("1.0", "\n\n".join(lines))
+        self.reference_notes.configure(state="disabled")
+
+    def _export_reference(self) -> None:
+        from tkinter import filedialog
+
+        from ..dataio.export import export
+
+        path = filedialog.asksaveasfilename(
+            title="Guardar el catálogo", defaultextension=".csv",
+            filetypes=(("CSV", "*.csv"), ("Texto separado por tabuladores",
+                                          "*.tsv"), ("Markdown", "*.md")),
+            parent=self.root)
+        if not path:
+            return
+        export(self._reference_rows(), path)
+        self.set_status(f"Catálogo guardado en {path}")
 
     def _build_tab_composition(self) -> None:
         ttk = self.ttk

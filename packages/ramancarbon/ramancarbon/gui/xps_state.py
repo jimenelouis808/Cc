@@ -492,10 +492,21 @@ class XPSSession:
         """
         from ..xps.lineshapes import fwhm_for_total, resolve_xps_profile
 
+        # The width the user typed is the total width of the component
+        # they were LOOKING at, and for an asymmetric profile the total
+        # depends on the extra parameters as much as on the width one.
+        # Converting against the freshly built model's defaults instead
+        # of against the fitted shape makes the round trip miss: measured,
+        # 1.22 eV typed back came out as 1.19.
+        fitted = {c.name: tuple(c.extra)
+                  for c in getattr(self.fits.get(choice.label), "components",
+                                   ())}
         for component in model.components:
             edit = choice.overrides.get(component.name)
             if not edit:
                 continue
+            if "fwhm" in edit and component.name in fitted:
+                component.extra = fitted[component.name]
             if "centre" in edit:
                 component.centre = float(edit["centre"])
                 # The bounds came from the state's published window, and
@@ -537,7 +548,21 @@ class XPSSession:
                     component.fwhm_bounds = (min(low, component.fwhm),
                                              max(high, component.fwhm))
             if "fixed" in edit:
-                component.fixed = tuple(edit["fixed"])
+                held = tuple(edit["fixed"])
+                # Holding the width means holding the width you SEE. For a
+                # Doniach-Šunjić the total is the Lorentzian parameter
+                # convolved with a Gaussian, so fixing only the parameter
+                # leaves the Gaussian free and the total drifts anyway --
+                # measured, a width typed back as 1.24 eV came out at 1.27.
+                # Whatever else carries the width gets held with it.
+                if "fwhm" in held:
+                    from ..xps.lineshapes import XPS_PROFILES
+
+                    spec = XPS_PROFILES[resolve_xps_profile(component.profile)]
+                    held = held + tuple(
+                        name for name in spec.get("extra", ())
+                        if "fwhm" in name and name not in held)
+                component.fixed = held
 
     def component_rows(self, label: str) -> list[tuple[str, ...]]:
         """``(name, E, FWHM, area, %, profile, held)`` for a fitted region.
@@ -740,8 +765,13 @@ class XPSSession:
         ``veredicto`` is ``"ok"``, ``"aviso"`` or ``"incoherente"``.
         Nothing here changes a fit; an inconsistency is a result.
         """
+        from ..xps.checks import bound_checks
+
         present = self.present_elements() or []
         checks: list[tuple[str, str]] = []
+        # A parameter that stopped at its bound is not a measurement.
+        for label, result in self.fits.items():
+            checks.extend(bound_checks(result, label, self.database))
 
         # Which states each fitted region actually used.
         used: dict[str, set[str]] = {}

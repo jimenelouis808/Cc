@@ -37,6 +37,62 @@ from .fitting import XPSComponent, XPSFitResult
 from .spectrum import XPSError
 
 
+def reference_table(
+    region: str,
+    database: Optional[XPSDatabase] = None,
+    present: Optional[Sequence[str]] = None,
+) -> Table:
+    """The catalogue for one region, as a table anyone can read.
+
+    The constraints a fit runs under are not an implementation detail:
+    they decide what the answer can be. A window of 288.0-289.7 eV on the
+    O-C=O family is the reason a component came out at 289.7 and not at
+    290.4, and somebody reading the result has to be able to see that
+    number without opening the source. Section 65 of the user's
+    specification: every constraint inspectable.
+
+    ``present`` marks which states the sample's composition allows,
+    rather than hiding the rest: what was ruled out, and why, is part of
+    the answer.
+    """
+    database = database or load_xps_database()
+    states = database.states_for(region, include_satellites=True)
+    if not states:
+        raise XPSError(
+            f"la base de datos no tiene estados para {region!r}; tiene: "
+            + ", ".join(database.region_names()))
+    default = set(database.default_model(region))
+
+    columns = ["estado", "asignación", "BE", "BE_min", "BE_max", "FWHM_min",
+               "FWHM_max", "confianza", "evidencia", "familia", "uso",
+               "necesita", "posible", "nota", "referencia"]
+    units = ["", "", "eV", "eV", "eV", "eV", "eV", "", "A-D", "", "", "", "",
+             "", ""]
+    rows = []
+    for state in states:
+        rows.append([
+            state.key,
+            state.name,
+            round(float(state.energy_ev), 2),
+            round(float(state.window[0]), 2),
+            round(float(state.window[1]), 2),
+            round(float(state.fwhm[0]), 2),
+            round(float(state.fwhm[1]), 2),
+            state.confidence,
+            state.evidence_level,
+            state.family,
+            ("por defecto" if state.key in default
+             else "satélite" if state.is_satellite
+             else state.fitting_priority),
+            " o ".join(state.requires_any),
+            ("sí" if state.possible_in(present) else "no"),
+            state.note,
+            state.reference or state.source,
+        ])
+    return Table(columns=columns, rows=rows, units=units,
+                 title=f"Catálogo de estados químicos — {region}")
+
+
 def fit_table(result: XPSFitResult, digits: int = 6) -> Table:
     """The fitted curves, one column per component.
 
@@ -269,6 +325,7 @@ def heights_from(spectrum, components: Sequence[XPSComponent],
 
 
 __all__ = [
+    "reference_table",
     "components_table",
     "fit_table",
     "heights_from",

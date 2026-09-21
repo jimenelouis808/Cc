@@ -207,6 +207,28 @@ class ChemicalState:
     confidence: str
     source: str = ""
     note: str = ""
+    evidence_level: str = ""
+    """``A``-``D`` from the user's specification: A is a well-established
+    shift in a material where it makes sense, B is strongly supported but
+    overlapping with another state, C needs a second region or another
+    technique, D is speculative and must never be reported as settled."""
+    family: str = ""
+    """States XPS cannot separate from one another share a family.
+
+    Ester, lactone, anhydride and carboxylic acid all put their C 1s
+    between 288 and 290 eV and their O 1s between 532 and 534. There is
+    no fit that tells them apart, and a model that offers all four does
+    not discover which one is present -- it distributes one peak's area
+    among four labels and reports the split as a measurement. One member
+    per family, and the report names the family."""
+    reference: str = ""
+    fitting_priority: str = "preferred"
+    """``preferred``, ``conditional`` or ``last_resort``. Within a family
+    the preferred member is the one the automatic model uses, and its
+    name is the FAMILY's name: reporting «anhídrido» for a peak that is
+    equally an ester, a lactone or an acid is the false precision the
+    specification forbids. The specific members stay in the catalogue to
+    be chosen deliberately."""
     requires_any: tuple[str, ...] = ()
     """Elements at least one of which has to be in the sample for this
     assignment to be chemically possible at all.
@@ -269,6 +291,8 @@ class XPSDatabase:
 
     elements: dict[str, Element]
     states: dict[str, tuple[ChemicalState, ...]]
+    defaults: dict[str, dict[str, tuple[str, ...]]]
+    """Material -> region -> the default model's state keys."""
     references: dict[str, CalibrationReference]
     sources: dict[str, dict]
     rsf_basis: dict
@@ -342,6 +366,20 @@ class XPSDatabase:
     def region_names(self) -> tuple[str, ...]:
         """Every high-resolution region that has literature states."""
         return tuple(sorted(self.states))
+
+    def default_model(self, region: str, material: str = "carbono"
+                      ) -> tuple[str, ...]:
+        """State keys the default model for this material uses, in order.
+
+        Section 19 of the specification, and section 42: material
+        knowledge overrides a generic database search. The three
+        nitrogens of a doped carbon are 0.8 eV apart with widths of 1.2,
+        so a second derivative does not resolve them -- and letting it
+        decide drops one of the three components every N-doped carbon is
+        fitted with. Empty when the database has no default for that
+        pair, and then the search decides as before.
+        """
+        return tuple(self.defaults.get(material, {}).get(region, ()))
 
     def states_for(self, region: str, include_satellites: bool = True,
                    present: Optional[Sequence[str]] = None
@@ -474,6 +512,10 @@ def _build(path: Path) -> XPSDatabase:
                 confidence=str(item.get("confidence", "unknown")),
                 source=str(item.get("source", "")),
                 note=str(item.get("note", "")),
+                evidence_level=str(item.get("evidence_level", "")),
+                family=str(item.get("family", "")),
+                reference=str(item.get("reference", "")),
+                fitting_priority=str(item.get("fitting_priority", "preferred")),
                 requires_any=tuple(item.get("requires_any", ())),
             )
             for item in entries
@@ -493,9 +535,15 @@ def _build(path: Path) -> XPSDatabase:
         for item in raw.get("calibration", {}).get("references", ())
     }
 
+    defaults = {
+        material: {region: tuple(keys) for region, keys in regions.items()}
+        for material, regions in raw.get("default_models", {}).items()
+        if not material.startswith("_") and isinstance(regions, dict)
+    }
     return XPSDatabase(
         elements=elements,
         states=states,
+        defaults=defaults,
         references=references,
         sources=dict(raw.get("sources", {})),
         rsf_basis=dict(raw.get("rsf_basis", {})),

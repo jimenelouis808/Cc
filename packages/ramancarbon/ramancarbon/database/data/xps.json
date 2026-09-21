@@ -751,7 +751,7 @@
         "energy_ev": 284.4,
         "window": [
           284.0,
-          284.8
+          285.0
         ],
         "fwhm": [
           0.7,
@@ -759,7 +759,10 @@
         ],
         "asymmetric": true,
         "confidence": "high",
-        "note": "En grafito y grafeno la línea es ASIMÉTRICA por el apantallamiento de los electrones de conducción. Ajustarla con una forma simétrica obliga a meter una componente extra a ~285.5 que luego se lee como C sp3. Es el error más común en XPS de carbono."
+        "note": "En grafito y grafeno la línea es ASIMÉTRICA por el apantallamiento de los electrones de conducción. Ajustarla con una forma simétrica obliga a meter una componente extra a ~285.5 que luego se lee como C sp3. Es el error más común en XPS de carbono.",
+        "evidence_level": "A",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "C-C sp3",
@@ -767,14 +770,17 @@
         "energy_ev": 285.0,
         "window": [
           284.6,
-          285.4
+          285.7
         ],
         "fwhm": [
           0.8,
           2.0
         ],
         "asymmetric": false,
-        "confidence": "high"
+        "confidence": "high",
+        "evidence_level": "B",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "C-S",
@@ -790,19 +796,21 @@
         ],
         "asymmetric": false,
         "confidence": "medium",
-        "note": "Cae encima del C–N y del C–O. En una muestra con S y N a la vez esta componente no es prueba de nada por sí sola: la prueba está en el S 2p.",
+        "note": "Encima del C–N y del C–O. La prueba está en el S 2p.",
         "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
         "requires_any": [
           "S"
-        ]
+        ],
+        "evidence_level": "C",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "C-N",
         "name": "C–N",
         "energy_ev": 285.9,
         "window": [
-          285.4,
-          286.4
+          285.3,
+          286.5
         ],
         "fwhm": [
           0.8,
@@ -812,69 +820,19 @@
         "confidence": "medium",
         "requires_any": [
           "N"
-        ]
+        ],
+        "evidence_level": "C",
+        "note": "Se solapa con el C–O. No es prueba de nada sin el N 1s.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "C-O",
-        "name": "C–O (epóxido, hidroxilo, éter)",
+        "name": "C–O (alcohol, fenol o éter)",
         "energy_ev": 286.4,
         "window": [
-          285.9,
+          285.6,
           287.0
-        ],
-        "fwhm": [
-          0.9,
-          2.2
-        ],
-        "asymmetric": false,
-        "confidence": "high",
-        "requires_any": [
-          "O"
-        ]
-      },
-      {
-        "key": "C=O",
-        "name": "C=O (carbonilo)",
-        "energy_ev": 287.8,
-        "window": [
-          287.2,
-          288.4
-        ],
-        "fwhm": [
-          0.9,
-          2.2
-        ],
-        "asymmetric": false,
-        "confidence": "high",
-        "requires_any": [
-          "O"
-        ]
-      },
-      {
-        "key": "O-C=O",
-        "name": "O–C=O (carboxilo, éster)",
-        "energy_ev": 289.0,
-        "window": [
-          288.4,
-          289.6
-        ],
-        "fwhm": [
-          0.9,
-          2.2
-        ],
-        "asymmetric": false,
-        "confidence": "high",
-        "requires_any": [
-          "O"
-        ]
-      },
-      {
-        "key": "carbonate",
-        "name": "carbonato",
-        "energy_ev": 290.0,
-        "window": [
-          289.6,
-          290.6
         ],
         "fwhm": [
           0.9,
@@ -884,15 +842,233 @@
         "confidence": "medium",
         "requires_any": [
           "O"
-        ]
+        ],
+        "evidence_level": "C",
+        "family": "C–O",
+        "note": "El C 1s NO separa alcohol de éter: los dos caen aquí.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "preferred"
+      },
+      {
+        "key": "C-O-C",
+        "name": "C–O–C éter / epóxido",
+        "energy_ev": 286.5,
+        "asymmetric": false,
+        "window": [
+          285.6,
+          286.9
+        ],
+        "fwhm": [
+          1.0,
+          1.6
+        ],
+        "confidence": "medium",
+        "evidence_level": "C",
+        "family": "C–O",
+        "requires_any": [
+          "O"
+        ],
+        "note": "Misma familia que el C–O: indistinguibles desde el C 1s solo. Solo si lo pides tú: la familia entera se ajusta con una componente.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "conditional"
+      },
+      {
+        "key": "C=O",
+        "name": "C=O (cetona, aldehído o quinona)",
+        "energy_ev": 287.4,
+        "window": [
+          286.6,
+          288.4
+        ],
+        "fwhm": [
+          0.9,
+          2.2
+        ],
+        "asymmetric": false,
+        "confidence": "medium",
+        "requires_any": [
+          "O"
+        ],
+        "evidence_level": "B",
+        "family": "C=O",
+        "note": "Contrástalo con el O 1s.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "preferred"
+      },
+      {
+        "key": "quinone-C",
+        "name": "C=O de quinona",
+        "energy_ev": 287.6,
+        "asymmetric": false,
+        "window": [
+          286.8,
+          288.2
+        ],
+        "fwhm": [
+          1.0,
+          1.7
+        ],
+        "confidence": "medium",
+        "evidence_level": "C",
+        "family": "C=O",
+        "requires_any": [
+          "O"
+        ],
+        "note": "Trátalo como familia C=O salvo que haya prueba independiente. Solo si lo pides tú: la familia entera se ajusta con una componente.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "conditional"
+      },
+      {
+        "key": "amide",
+        "name": "amida N–C=O",
+        "energy_ev": 288.1,
+        "asymmetric": false,
+        "window": [
+          287.2,
+          289.0
+        ],
+        "fwhm": [
+          1.0,
+          1.7
+        ],
+        "confidence": "medium",
+        "evidence_level": "C",
+        "requires_any": [
+          "N"
+        ],
+        "note": "Necesita prueba en el N 1s.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
+      },
+      {
+        "key": "ester",
+        "name": "éster O–C=O",
+        "energy_ev": 288.8,
+        "asymmetric": false,
+        "window": [
+          288.0,
+          289.7
+        ],
+        "fwhm": [
+          1.0,
+          1.7
+        ],
+        "confidence": "low",
+        "evidence_level": "D",
+        "family": "O–C=O",
+        "requires_any": [
+          "O"
+        ],
+        "note": "NO se distingue del ácido ni de la lactona desde el C 1s. Solo si lo pides tú: la familia entera se ajusta con una componente.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "conditional"
+      },
+      {
+        "key": "O-C=O",
+        "name": "O–C=O (ácido, éster, lactona o anhídrido)",
+        "energy_ev": 289.0,
+        "window": [
+          288.0,
+          289.7
+        ],
+        "fwhm": [
+          0.9,
+          2.2
+        ],
+        "asymmetric": false,
+        "confidence": "medium",
+        "requires_any": [
+          "O"
+        ],
+        "evidence_level": "C",
+        "family": "O–C=O",
+        "note": "Familia O–C=O: ácido, éster, lactona y anhídrido se solapan por completo.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "preferred"
+      },
+      {
+        "key": "lactone",
+        "name": "lactona",
+        "energy_ev": 289.1,
+        "asymmetric": false,
+        "window": [
+          288.0,
+          289.8
+        ],
+        "fwhm": [
+          1.0,
+          1.8
+        ],
+        "confidence": "low",
+        "evidence_level": "D",
+        "family": "O–C=O",
+        "requires_any": [
+          "O"
+        ],
+        "note": "Hacen falta C 1s + O 1s + la química de la muestra. Solo si lo pides tú: la familia entera se ajusta con una componente.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "conditional"
+      },
+      {
+        "key": "anhydride",
+        "name": "anhídrido",
+        "energy_ev": 289.3,
+        "asymmetric": false,
+        "window": [
+          288.0,
+          289.8
+        ],
+        "fwhm": [
+          1.0,
+          1.8
+        ],
+        "confidence": "low",
+        "evidence_level": "D",
+        "family": "O–C=O",
+        "requires_any": [
+          "O"
+        ],
+        "note": "Exige dos entornos de carbonilo o una prueba independiente. Solo si lo pides tú: la familia entera se ajusta con una componente.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "conditional"
+      },
+      {
+        "key": "carbonate",
+        "name": "carbonato",
+        "energy_ev": 290.0,
+        "window": [
+          289.2,
+          291.0
+        ],
+        "fwhm": [
+          0.9,
+          2.2
+        ],
+        "asymmetric": false,
+        "confidence": "low",
+        "requires_any": [
+          "O"
+        ],
+        "evidence_level": "C",
+        "note": "Solo cuando sea químicamente plausible.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "pi-pi*",
         "name": "satélite π→π*",
         "energy_ev": 291.3,
         "window": [
-          290.5,
-          292.5
+          289.5,
+          294.0
         ],
         "fwhm": [
           1.5,
@@ -901,7 +1077,10 @@
         "asymmetric": false,
         "satellite_of": "C-C sp2",
         "confidence": "high",
-        "note": "NO es un estado químico: es un satélite shake-up del sp². Contarlo como carbono oxidado infla el contenido de oxígeno. Su presencia, en cambio, es la prueba de que hay sp²."
+        "note": "NO es un estado químico: es un satélite shake-up del sp². Contarlo como carbono oxidado infla el contenido de oxígeno. Su presencia, en cambio, es la prueba de que hay sp².",
+        "evidence_level": "A",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       }
     ],
     "N 1s": [
@@ -910,22 +1089,26 @@
         "name": "N piridínico",
         "energy_ev": 398.5,
         "window": [
-          398.0,
-          399.0
+          397.8,
+          399.3
         ],
         "fwhm": [
           0.9,
           2.0
         ],
         "asymmetric": false,
-        "confidence": "high"
+        "confidence": "high",
+        "evidence_level": "B",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "preferred"
       },
       {
         "key": "N-metal",
         "name": "N–metal (nitruro, M–N₄)",
         "energy_ev": 399.3,
         "window": [
-          398.8,
+          398.6,
           399.8
         ],
         "fwhm": [
@@ -946,31 +1129,38 @@
           "Zn",
           "Cu",
           "Mn"
-        ]
+        ],
+        "evidence_level": "C",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "conditional"
       },
       {
         "key": "amine",
         "name": "amina / amida (C–NH₂, C–NH–C)",
         "energy_ev": 399.6,
         "window": [
-          399.0,
-          400.2
+          398.5,
+          400.5
         ],
         "fwhm": [
           0.9,
           2.2
         ],
         "asymmetric": false,
-        "confidence": "medium",
-        "note": "Solapa con el piridínico y con el N–metal. Tres estados en un eV y medio: no los separa el ajuste, los separa otra medida.",
-        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa"
+        "confidence": "low",
+        "note": "Solapa con el piridínico y con el N–metal.",
+        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
+        "evidence_level": "C",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "conditional"
       },
       {
         "key": "pyrrolic",
-        "name": "N pirrólico",
-        "energy_ev": 400.2,
+        "name": "N pirrólico / piridónico / de defecto (≈400 eV)",
+        "energy_ev": 400.0,
         "window": [
-          399.8,
+          399.2,
           400.8
         ],
         "fwhm": [
@@ -978,14 +1168,44 @@
           2.2
         ],
         "asymmetric": false,
-        "confidence": "high"
+        "confidence": "medium",
+        "evidence_level": "B",
+        "family": "≈400 eV",
+        "note": "Nunca «400 eV = pirrólico»: es la región más ambigua del N 1s.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "preferred"
+      },
+      {
+        "key": "pyridonic",
+        "name": "N piridónico / de defecto",
+        "energy_ev": 400.5,
+        "asymmetric": false,
+        "window": [
+          399.5,
+          401.2
+        ],
+        "fwhm": [
+          1.0,
+          1.6
+        ],
+        "confidence": "low",
+        "evidence_level": "C",
+        "family": "≈400 eV",
+        "requires_any": [
+          "O"
+        ],
+        "note": "Cae encima del pirrólico. Solo con prueba independiente. Solo si lo pides tú: la familia entera se ajusta con una componente.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "conditional"
       },
       {
         "key": "graphitic",
         "name": "N grafítico (cuaternario)",
-        "energy_ev": 401.2,
+        "energy_ev": 401.0,
         "window": [
-          400.8,
+          400.5,
           401.8
         ],
         "fwhm": [
@@ -993,14 +1213,18 @@
           2.2
         ],
         "asymmetric": false,
-        "confidence": "high"
+        "confidence": "medium",
+        "evidence_level": "B",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "preferred"
       },
       {
         "key": "pyridinium",
-        "name": "piridínico protonado / N⁺–H",
+        "name": "N piridínico protonado / de borde",
         "energy_ev": 401.8,
         "window": [
-          401.3,
+          400.8,
           402.5
         ],
         "fwhm": [
@@ -1008,14 +1232,17 @@
           2.6
         ],
         "asymmetric": false,
-        "confidence": "medium",
+        "confidence": "low",
         "note": "Entre el grafítico y el oxidado. Aparece en muestras tratadas en ácido y se confunde con el grafítico.",
-        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa"
+        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
+        "evidence_level": "C",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "conditional"
       },
       {
         "key": "N-oxide",
         "name": "N oxidado (N–O)",
-        "energy_ev": 403.5,
+        "energy_ev": 403.0,
         "window": [
           402.0,
           405.5
@@ -1025,7 +1252,36 @@
           3.0
         ],
         "asymmetric": false,
-        "confidence": "medium"
+        "confidence": "medium",
+        "evidence_level": "C",
+        "requires_any": [
+          "O"
+        ],
+        "note": "Solo si hay intensidad clara por encima de 402 eV.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
+      },
+      {
+        "key": "nitrate",
+        "name": "NOx / tipo nitrato",
+        "energy_ev": 405.0,
+        "asymmetric": false,
+        "window": [
+          403.5,
+          407.0
+        ],
+        "fwhm": [
+          1.0,
+          1.8
+        ],
+        "confidence": "low",
+        "evidence_level": "C",
+        "requires_any": [
+          "O"
+        ],
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "conditional"
       }
     ],
     "O 1s": [
@@ -1042,7 +1298,7 @@
           1.8
         ],
         "asymmetric": false,
-        "confidence": "high",
+        "confidence": "medium",
         "requires_any": [
           "Fe",
           "Co",
@@ -1054,24 +1310,29 @@
           "Zn",
           "Cu",
           "Mn"
-        ]
+        ],
+        "evidence_level": "C",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "quinone",
-        "name": "quinona / C=O aromático",
-        "energy_ev": 531.1,
+        "name": "C=O carbonilo / quinona",
+        "energy_ev": 531.2,
         "window": [
           530.6,
-          531.8
+          532.1
         ],
         "fwhm": [
-          1.0,
+          0.9,
           2.4
         ],
         "asymmetric": false,
         "confidence": "medium",
         "note": "Solapa con el O de red de un óxido metálico. En un carbono sin metal es la asignación correcta de esa intensidad.",
-        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa"
+        "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
+        "evidence_level": "B",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "defect-OH",
@@ -1087,7 +1348,10 @@
         ],
         "asymmetric": false,
         "confidence": "medium",
-        "note": "La atribución a 'vacantes de oxígeno' es muy común y muy discutida: hidroxilos superficiales, carbonatos y agua quimisorbida caen en la misma ventana. Sin una medida independiente, decir vacantes es una interpretación, no un resultado."
+        "note": "Solapa con el carbonilo.",
+        "evidence_level": "C",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "sulfate-O",
@@ -1095,7 +1359,7 @@
         "energy_ev": 532.0,
         "window": [
           531.5,
-          532.6
+          532.8
         ],
         "fwhm": [
           1.0,
@@ -1106,37 +1370,97 @@
         "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
         "requires_any": [
           "S"
-        ]
+        ],
+        "evidence_level": "C",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "C-O",
-        "name": "C–O orgánico",
-        "energy_ev": 532.8,
+        "name": "C–O (alcohol, fenol o éter)",
+        "energy_ev": 532.6,
         "window": [
-          532.0,
-          533.4
+          531.8,
+          533.5
         ],
         "fwhm": [
           0.9,
           2.2
         ],
         "asymmetric": false,
-        "confidence": "medium"
+        "confidence": "medium",
+        "evidence_level": "C",
+        "family": "C–O",
+        "note": "El O 1s no separa alcohol de éter, ni éster de lactona.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "preferred"
+      },
+      {
+        "key": "ester-O",
+        "name": "O de O–C=O (éster, lactona, anhídrido o ácido)",
+        "energy_ev": 533.2,
+        "asymmetric": false,
+        "window": [
+          532.3,
+          534.0
+        ],
+        "fwhm": [
+          1.0,
+          1.7
+        ],
+        "confidence": "low",
+        "evidence_level": "D",
+        "family": "O–C=O",
+        "requires_any": [
+          "C"
+        ],
+        "note": "Familia entera. Ninguna medida de XPS sola la parte.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "preferred"
+      },
+      {
+        "key": "carboxyl-O",
+        "name": "O carboxílico",
+        "energy_ev": 533.6,
+        "asymmetric": false,
+        "window": [
+          532.8,
+          534.7
+        ],
+        "fwhm": [
+          1.0,
+          1.7
+        ],
+        "confidence": "low",
+        "evidence_level": "D",
+        "family": "O–C=O",
+        "requires_any": [
+          "C"
+        ],
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "conditional",
+        "note": "Solo si lo pides tú: la familia entera se ajusta con una componente."
       },
       {
         "key": "water",
         "name": "agua adsorbida",
-        "energy_ev": 533.6,
+        "energy_ev": 533.8,
         "window": [
           533.0,
-          534.5
+          535.0
         ],
         "fwhm": [
           1.0,
           2.5
         ],
         "asymmetric": false,
-        "confidence": "medium"
+        "confidence": "medium",
+        "evidence_level": "C",
+        "note": "La tabla del documento la pone en 534.3–536.5 eV y la literatura de carbones cerca de 533.5. La ventana cubre el solape; por encima de 535 eV hace falta prueba aparte, y un O 1s que acabe en 538 no llega a verlo.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       }
     ],
     "Fe 2p3/2": [
@@ -1278,18 +1602,18 @@
     "S 2p3/2": [
       {
         "key": "sulfide",
-        "name": "sulfuro (S²⁻)",
-        "energy_ev": 161.5,
+        "name": "sulfuro metálico S²⁻",
+        "energy_ev": 161.8,
         "window": [
-          160.8,
-          162.3
+          160.5,
+          162.8
         ],
         "fwhm": [
           0.7,
           1.6
         ],
         "asymmetric": false,
-        "confidence": "high",
+        "confidence": "medium",
         "requires_any": [
           "Fe",
           "Co",
@@ -1301,14 +1625,18 @@
           "Zn",
           "Cu",
           "Mn"
-        ]
+        ],
+        "evidence_level": "B",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "preferred"
       },
       {
         "key": "metal-sulfide",
         "name": "S–metal (sulfuro metálico)",
         "energy_ev": 162.0,
         "window": [
-          161.2,
+          160.5,
           162.8
         ],
         "fwhm": [
@@ -1317,7 +1645,7 @@
         ],
         "asymmetric": false,
         "confidence": "medium",
-        "note": "Solapa con el sulfuro iónico. Lo que los separa es el 2p del metal, no esta ventana.",
+        "note": "No distingue NiS de NiS₂: hace falta el 2p del metal. Solo si lo pides tú: la familia entera se ajusta con una componente.",
         "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
         "requires_any": [
           "Fe",
@@ -1330,14 +1658,18 @@
           "Zn",
           "Cu",
           "Mn"
-        ]
+        ],
+        "evidence_level": "C",
+        "family": "sulfuro",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "fitting_priority": "conditional"
       },
       {
         "key": "S-S",
-        "name": "S–S / polisulfuro / S elemental",
-        "energy_ev": 163.6,
+        "name": "disulfuro / polisulfuro / tiol",
+        "energy_ev": 163.0,
         "window": [
-          162.8,
+          161.5,
           164.5
         ],
         "fwhm": [
@@ -1345,34 +1677,39 @@
           1.8
         ],
         "asymmetric": false,
-        "confidence": "high"
+        "confidence": "medium",
+        "evidence_level": "C",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "C-S-C",
-        "name": "S tiofénico (C–S–C)",
-        "energy_ev": 163.9,
+        "name": "S tiofénico / tioéter (C–S)",
+        "energy_ev": 164.0,
         "window": [
-          163.4,
-          164.5
+          163.2,
+          164.7
         ],
         "fwhm": [
           0.9,
           2.0
         ],
         "asymmetric": false,
-        "confidence": "high",
+        "confidence": "medium",
         "note": "El estado dominante en un carbono dopado con azufre. Sin él, su intensidad la absorben el S–S y el sulfuro, y el azufre sale reducido de más.",
         "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
         "requires_any": [
           "C"
-        ]
+        ],
+        "evidence_level": "B",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "sulfoxide",
-        "name": "sulfóxido / S=O (C–SOₓ–C)",
-        "energy_ev": 166.2,
+        "name": "sulfóxido",
+        "energy_ev": 165.5,
         "window": [
-          165.2,
+          164.5,
           167.0
         ],
         "fwhm": [
@@ -1384,15 +1721,38 @@
         "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
         "requires_any": [
           "O"
-        ]
+        ],
+        "evidence_level": "C",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
+      },
+      {
+        "key": "sulfone",
+        "name": "sulfona",
+        "energy_ev": 166.5,
+        "asymmetric": false,
+        "window": [
+          165.5,
+          167.5
+        ],
+        "fwhm": [
+          1.0,
+          1.6
+        ],
+        "confidence": "medium",
+        "evidence_level": "C",
+        "requires_any": [
+          "O"
+        ],
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "sulfonate",
-        "name": "sulfonato (–SO₃⁻)",
-        "energy_ev": 167.8,
+        "name": "sulfonato / sulfito",
+        "energy_ev": 168.0,
         "window": [
-          167.0,
-          168.4
+          166.5,
+          169.5
         ],
         "fwhm": [
           1.0,
@@ -1404,25 +1764,31 @@
         "source": "valores de referencia de la literatura de carbones dopados; contrástalos contra la NIST XPS Database SRD 20, que no se redistribuye con el programa",
         "requires_any": [
           "O"
-        ]
+        ],
+        "evidence_level": "C",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       },
       {
         "key": "sulfate",
         "name": "sulfato",
-        "energy_ev": 168.5,
+        "energy_ev": 169.0,
         "window": [
           167.5,
-          169.5
+          170.5
         ],
         "fwhm": [
           1.0,
           2.5
         ],
         "asymmetric": false,
-        "confidence": "high",
+        "confidence": "medium",
         "requires_any": [
           "O"
-        ]
+        ],
+        "evidence_level": "C",
+        "note": "Se solapa con el sulfonato.",
+        "source": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)",
+        "reference": "tabla maestra de las instrucciones del usuario (NIST XPS Database v5, documentación de CasaXPS y Major et al. sobre ajuste de picos)"
       }
     ],
     "P 2p3/2": [
@@ -1624,5 +1990,32 @@
         "confidence": "low"
       }
     ]
+  },
+  "default_models": {
+    "_comment": "Modelos por defecto por material, del §19 de las instrucciones. No es una lista de sugerencias: son los estados con los que se ajusta esa región en ese material, estén o no resueltos como hombros. La segunda derivada no separa el N pirrólico del grafítico —están a 0.8 eV y las anchuras son de 1.2— y dejar que decida ella quita del modelo una de las tres componentes con las que se ajusta cualquier carbono dopado.",
+    "carbono": {
+      "C 1s": [
+        "C-C sp2",
+        "C-C sp3",
+        "C-N",
+        "C-O",
+        "C=O",
+        "O-C=O"
+      ],
+      "N 1s": [
+        "pyridinic",
+        "pyrrolic",
+        "graphitic"
+      ],
+      "O 1s": [
+        "quinone",
+        "C-O",
+        "ester-O"
+      ],
+      "S 2p3/2": [
+        "C-S-C",
+        "sulfonate"
+      ]
+    }
   }
 }

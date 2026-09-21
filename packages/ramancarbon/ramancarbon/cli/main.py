@@ -825,8 +825,56 @@ def _xps_regions(entries) -> dict:
     return out
 
 
+def _xps_table(region: str) -> int:
+    """Print the chemical-state catalogue for one region.
+
+    The constraints a fit runs under decide what the answer can be, so
+    they have to be readable without opening the source.
+    """
+    from ..xps.elements import load_xps_database
+    from ..xps.spectrum import XPSError
+    from ..xps.tables import reference_table
+
+    database = load_xps_database()
+    if region.lower() in ("lista", "list", "?"):
+        print("Regiones con catálogo de estados químicos:")
+        for name in database.region_names():
+            states = database.states_for(name, include_satellites=False)
+            default = database.default_model(name)
+            print(f"  {name:10s} {len(states):2d} estados"
+                  + (f", modelo por defecto: {', '.join(default)}"
+                     if default else ""))
+        return 0
+    try:
+        table = reference_table(region, database=database)
+    except XPSError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print(table.title)
+    show = ["estado", "asignación", "BE", "BE_min", "BE_max", "FWHM_min",
+            "FWHM_max", "confianza", "evidencia", "uso", "necesita"]
+    index = [table.columns.index(name) for name in show]
+    rows = [[str(row[i]) for i in index] for row in table.rows]
+    widths = [max(len(show[k]), *(len(r[k]) for r in rows))
+              for k in range(len(show))]
+    print("  ".join(name.ljust(widths[k]) for k, name in enumerate(show)))
+    print("  ".join("-" * w for w in widths))
+    for row in rows:
+        print("  ".join(value.ljust(widths[k]) for k, value in enumerate(row)))
+    for row in table.rows:
+        note = row[table.columns.index("nota")]
+        if note:
+            print(f"\n  · {row[0]}: {note}")
+    return 0
+
+
 def cmd_xps(args) -> int:
     """Analyse a set of photoelectron spectra."""
+    if getattr(args, "tabla", None):
+        return _xps_table(args.tabla)
+    if not args.archivos:
+        print("error: hacen falta archivos, o --tabla REGION", file=sys.stderr)
+        return 1
     from ..xps.io import read_xps, write_vamas
     from ..xps.report import analyse_xps
     from ..xps.spectrum import source_energy
@@ -1568,9 +1616,15 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "xps", help="analizar espectros XPS: survey, regiones y composición"
     )
-    p.add_argument("archivos", nargs="+",
+    p.add_argument("archivos", nargs="*",
                    help="archivos .spe, VAMAS (.vms) o texto; survey y regiones "
                         "mezclados, se distinguen por su anchura")
+    p.add_argument("--tabla", default=None, metavar="REGION",
+                   help="imprimir el catálogo de estados químicos de una "
+                        "región («C 1s», «N 1s»…) y salir: energía de enlace, "
+                        "la ventana y la anchura con las que se ajusta, "
+                        "confianza, nivel de evidencia y qué elementos exige. "
+                        "«--tabla lista» enumera las regiones")
     p.add_argument("--nombre", default=None, metavar="TEXTO")
     p.add_argument("--fuente", default=None, metavar="ANODO",
                    help="ánodo (Al, Mg…) si el archivo no lo declara. Suponerlo "

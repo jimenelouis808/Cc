@@ -14,6 +14,8 @@ from ramancarbon.examples.demo_data import make_xps_demo
 from ramancarbon.xps.background import estimate_background, shirley_background
 from ramancarbon.xps.calibrate import calibrate, calibrate_to_state
 from ramancarbon.xps.elements import load_xps_database
+from dataclasses import replace
+
 from ramancarbon.xps.fitting import XPSComponent, XPSModel, fit_region
 from ramancarbon.xps.io import (
     read_spe,
@@ -244,10 +246,14 @@ def test_too_few_components_shows_up_in_chi_squared_and_the_residual(demo):
         region, "N 1s", ["pyridinic", "pyrrolic", "graphitic", "N-oxide"]))
     assert poor.reduced_chi2 > 10 * good.reduced_chi2
     assert poor.durbin_watson < 0.5 < good.durbin_watson
-    # Meanwhile R² barely moves: it goes from 0.95 to 0.999 while χ² moves
-    # by a factor of fifty. That is why the report leads with χ² and DW.
-    assert poor.r_squared > 0.95
-    assert good.r_squared - poor.r_squared < 0.05
+    # Meanwhile R² barely moves: 0.940 against 0.999, six hundredths,
+    # while the reduced chi-squared goes from 56 to 1.1 -- a factor of
+    # forty-nine. That is why the report leads with χ² and DW. (The
+    # numbers shifted slightly when the published windows were widened to
+    # the master tables; the gap between the two statistics did not.)
+    assert poor.r_squared > 0.93
+    assert good.r_squared - poor.r_squared < 0.07
+    assert poor.reduced_chi2 / good.reduced_chi2 > 20
 
 
 def test_the_component_count_is_taken_from_the_regions_own_shoulders(demo):
@@ -542,7 +548,11 @@ def test_a_components_table_carries_the_window_each_component_was_held_in(demo):
     result = fit_region(region, state_model(region, "N 1s",
                                             ["pyridinic", "pyrrolic"]))
     text = components_table(result).to_csv()
-    assert "398.0–399.0 eV" in text or "398.0" in text
+    # Read the window from the database rather than hard-coding it: the
+    # numbers are data and they move when the tables are revised. What
+    # must not move is that the table CARRIES them.
+    window = load_xps_database().state("N 1s", "pyridinic").window
+    assert f"{window[0]:.1f}" in text and f"{window[1]:.1f}" in text
     assert "confianza" in text
 
 
@@ -1126,10 +1136,10 @@ def test_the_file_settles_the_work_function_when_it_states_the_window():
     from ramancarbon.xps.io import _declared_for, _declared_windows
 
     comments = [
-        "SpectralRegDef: 1 1 C1s 6 401 -0.0500 298.0000 278.0000 297.0000 "
-        "279.0000 0.360000 55.00 AREA",
-        "SpectralRegDef: 3 1 O1s 8 321 -0.0500 540.0000 524.0000 539.0000 "
-        "525.0000 3.600000 55.00 AREA",
+        ("SpectralRegDef: 1 1 C1s 6 401 -0.0500 298.0000 278.0000 297.0000 "
+         "279.0000 0.360000 55.00 AREA"),
+        ("SpectralRegDef: 3 1 O1s 8 321 -0.0500 540.0000 524.0000 539.0000 "
+         "525.0000 3.600000 55.00 AREA"),
         "Platform: PC",
     ]
     windows = _declared_windows(comments)
@@ -1340,3 +1350,139 @@ def test_a_region_cannot_check_itself_but_two_regions_can():
     assert any(verdict == "incoherente" and "C–N" in text
                for text, verdict in verdicts.items()), \
         "un C–N sin nitrógeno en la muestra tiene que salir como incoherente"
+
+
+class TestTheMasterTables:
+    """The document's tables, in the database rather than in prose."""
+
+    def test_every_state_starts_inside_its_own_window(self):
+        """The window is the bound the fit uses and the energy is where it
+        starts. A start outside its own bound is a component the optimiser
+        has to move before it can do anything."""
+        database = load_xps_database()
+        for region in database.region_names():
+            for state in database.states_for(region):
+                low, high = state.window
+                assert low <= state.energy_ev <= high, f"{region}/{state.key}"
+                assert state.fwhm[0] < state.fwhm[1], f"{region}/{state.key}"
+
+    def test_the_light_element_regions_carry_an_evidence_level(self):
+        database = load_xps_database()
+        for region in ("C 1s", "N 1s", "O 1s", "S 2p3/2"):
+            for state in database.states_for(region, include_satellites=False):
+                assert state.evidence_level in ("A", "B", "C", "D"), \
+                    f"{region}/{state.key}: nivel {state.evidence_level!r}"
+                assert state.reference, f"{region}/{state.key} sin referencia"
+
+    def test_the_families_are_the_ones_xps_cannot_separate(self):
+        database = load_xps_database()
+        carbon = {s.key: s for s in
+                  database.states_for("C 1s", include_satellites=False)}
+        # Ester, lactone, anhydride and acid are one family: no fit tells
+        # them apart, and the document says so three times.
+        family = carbon["O-C=O"].family
+        assert family
+        assert {carbon[k].family for k in
+                ("ester", "lactone", "anhydride")} == {family}
+        # And the one the automatic model uses names all four.
+        assert carbon["O-C=O"].fitting_priority == "preferred"
+        for key in ("ester", "lactone", "anhydride"):
+            assert carbon[key].fitting_priority == "conditional"
+        for word in ("ácido", "éster", "lactona", "anhídrido"):
+            assert word in carbon["O-C=O"].name
+
+    def test_the_default_model_is_the_material_s_not_the_search_s(self):
+        """Section 19.2 and 42. The three nitrogens of a doped carbon sit
+        0.8 eV apart with widths of 1.2: a second derivative does not
+        resolve them, and letting it decide drops one of the three."""
+        database = load_xps_database()
+        assert database.default_model("N 1s") == (
+            "pyridinic", "pyrrolic", "graphitic")
+
+        energy = np.linspace(394.0, 410.0, 401)
+        counts = 6500.0
+        for centre, height, width in ((398.3, 1500.0, 1.3),
+                                      (400.0, 1200.0, 1.4),
+                                      (401.1, 1300.0, 1.4)):
+            counts = counts + height * np.exp(
+                -0.5 * ((energy - centre) / (width / 2.3548)) ** 2)
+        spectrum = XPSSpectrum(binding_energy=energy, counts=counts,
+                               name="N 1s", region="N 1s",
+                               photon_energy=1486.6, pass_energy=55.0)
+        from ramancarbon.xps.presets import count_model
+
+        model, notes = count_model(spectrum, "N 1s", None,
+                                   present=["C", "N", "O"])
+        assert [c.state for c in model.components] == [
+            "pyridinic", "pyrrolic", "graphitic"]
+        assert any("modelo por defecto" in note for note in notes)
+
+
+class TestAFitThatStoppedAtItsBound:
+    """A least-squares fit always returns numbers. Whether they mean
+    anything depends on where they stopped."""
+
+    @staticmethod
+    def _fit(centre, width=1.2, region="N 1s", state="pyridinic"):
+        from ramancarbon.xps.presets import state_model
+
+        energy = np.linspace(394.0, 410.0, 401)
+        counts = 6500.0 + 3000.0 * np.exp(
+            -0.5 * ((energy - centre) / (width / 2.3548)) ** 2)
+        spectrum = XPSSpectrum(binding_energy=energy, counts=counts,
+                               name=region, region=region,
+                               photon_energy=1486.6, pass_energy=55.0)
+        model = state_model(spectrum, region, [state])
+        return fit_region(spectrum, model)
+
+    def test_a_component_pinned_to_its_window_says_so(self):
+        from ramancarbon.xps.checks import bound_checks
+
+        # The peak is at 396.5; pyridinic may not go below 397.8.
+        result = self._fit(396.5)
+        found = bound_checks(result, "N 1s")
+        assert any("límite inferior" in text for _, text in found), found
+
+    def test_a_fit_that_landed_where_the_data_is_says_nothing(self):
+        from ramancarbon.xps.checks import bound_checks
+
+        result = self._fit(398.5)
+        assert not [t for v, t in bound_checks(result, "N 1s")
+                    if "límite" in t]
+
+    def test_two_components_on_top_of_each_other_are_one(self):
+        from ramancarbon.xps.checks import DEGENERATE_FRACTION, bound_checks
+
+        result = self._fit(398.5)
+        twin = result.components[0]
+        clone = replace(twin, peak_position=twin.peak_position + 0.05)
+        doubled = replace(result, components=[twin, clone])
+        found = bound_checks(doubled, "N 1s")
+        assert DEGENERATE_FRACTION > 0
+        assert any(verdict == "incoherente" and "dos etiquetas" in text
+                   for verdict, text in found), found
+
+
+def test_the_catalogue_can_be_read_without_opening_the_source():
+    """What the user asked for: the tables, consultable in the program."""
+    from ramancarbon.xps.tables import reference_table
+
+    table = reference_table("C 1s", present=["C", "N", "O"])
+    for column in ("estado", "BE_min", "BE_max", "FWHM_min", "FWHM_max",
+                   "confianza", "evidencia", "familia", "uso", "necesita",
+                   "posible", "referencia"):
+        assert column in table.columns, column
+    keys = [row[0] for row in table.rows]
+    assert "C-C sp2" in keys and "pi-pi*" in keys
+    use = table.columns.index("uso")
+    assert "por defecto" in {row[use] for row in table.rows}
+
+
+def test_the_command_line_prints_the_table(capsys):
+    from ramancarbon.cli.main import main
+
+    assert main(["xps", "--tabla", "N 1s"]) == 0
+    printed = capsys.readouterr().out
+    assert "pyridinic" in printed and "BE_min" in printed
+    assert main(["xps", "--tabla", "lista"]) == 0
+    assert "modelo por defecto" in capsys.readouterr().out
