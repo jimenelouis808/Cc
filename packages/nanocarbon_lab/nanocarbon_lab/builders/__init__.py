@@ -8,6 +8,7 @@ from .fullerene import build_fullerene, build_nano_onion
 from .graphene import build_graphene, build_graphene_supercell
 from .haeckelite import build_haeckelite, describe_haeckelite
 from .haeckelite_tube import build_haeckelite_tube, describe_haeckelite_tube
+from .heptanene import admissible_geometries, build_heptanene, klein_quartic_map
 from .junction import build_junction, build_schwarzite
 from .nanocoil import build_nanocoil
 from .nanoribbon import build_nanoribbon
@@ -33,13 +34,16 @@ __all__ = [
     "build_nanoribbon",
     "build_nanotube_network",
     "SUPERLATTICES",
+    "admissible_geometries",
     "build_haeckelite",
     "build_haeckelite_tube",
+    "build_heptanene",
     "build_supernetwork",
     "build_schwarzite",
     "describe_haeckelite",
     "describe_haeckelite_tube",
     "icosahedral_cage",
+    "klein_quartic_map",
     "supergraph_from_atoms",
     "build_swept_tube",
 ]

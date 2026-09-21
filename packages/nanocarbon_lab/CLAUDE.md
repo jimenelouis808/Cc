@@ -713,6 +713,80 @@ exactly as the flat periodic sheet is.
   predates the comparison and keeps its own name; the equivalence is
   worth knowing before adding a "pentaheptite" entry beside it.
 
+## Heptanene: the Euler budget decides it before any geometry runs
+
+`builders/heptanene.py` answers "may a trivalent net of nothing but
+heptagons exist", and the answer comes from the same identity the rest of
+this package checks against, `sum(6-n) = 6*chi`. All heptagons means `F`
+faces paying -1 each, so `chi = -F/6`:
+
+* **Elliptic** (sphere, chi=+2) needs F = -12. A negative face count is a
+  contradiction, not a hard case. The same budget that gives a fullerene
+  twelve pentagons rules heptagons out entirely: positive curvature is
+  paid in faces *smaller* than six.
+* **Euclidean** (a periodic sheet is a torus, chi=0) needs F = 0. The only
+  flat all-heptagon net is the one with no heptagons. This is exactly why
+  `haeckelite.py` must pair every heptagon with a pentagon -- on a flat
+  sheet they are each other's payment.
+* **Hyperbolic** (chi<0) gives F = -6*chi > 0. Possible, and only here.
+
+The `{p,q}` test agrees independently: `{6,3}` is Euclidean at exactly 4
+and `{7,3}` hyperbolic at 5. `admissible_geometries` takes a ring size so
+the reasoning can be run on hexagons and pentagons as controls -- it must
+return graphene for 6 and C20 for 5, and a test pins both.
+
+**So heptanene is not a 2D material.** Hilbert's theorem forbids an
+isometric embedding of the hyperbolic plane in three-space, so there is
+no flat sheet at any size and no relaxation reaches one. What can exist
+is a closed negatively-curved surface. Orientability forces F to be a
+multiple of 12, giving genus 2 (F=12, V=28), **genus 3 (F=24, V=56)**,
+genus 4 (F=36, V=84) -- and genus 3 is the genus of a triply periodic
+minimal surface's primitive cell, which is what a periodic carbon crystal
+has.
+
+That genus-3 member is the **Klein quartic**, and `klein_quartic_map`
+builds it from `PSL(2,7)` rather than transcribing a table: darts are
+group elements, and vertices, edges and faces are cosets of the three
+rotation subgroups, so 56/84/24 comes out with no arithmetic left over.
+Do not replace this with a hardcoded adjacency list -- the derivation is
+what makes the counts checkable.
+
+**The lattice shift per bond is a cocycle, and its rank measures the
+genus a second time.** A periodic realisation gives each bond an integer
+translation, and the faces close only if those sum to zero round every
+heptagon. Gauged to zero on a spanning tree, the remaining freedom is
+`H_1`, rank `2g` -- and it comes out 6 **without ever using Euler's
+formula**, which is an independent reading. It is solved over the
+integers by Hermite reduction, not by an SVD: a floating null space spans
+the right subspace but its vectors are not translations, and a shift of
+0.9999 is not a shift.
+
+**Most cocycles are not embeddings at all.** Placed barycentrically --
+every atom at the mean of its neighbours, which is linear once the shifts
+are fixed, and is the canonical crystallographic embedding -- eighteen of
+the twenty three-of-six cocycles collapse, with atoms landing on each
+other. Those nets are unstable in the crystallographic sense. Two survive.
+
+**The geometry does not reach carbon, and the reason is room rather than
+curvature.** Measured over both surviving cocycles and cells from 0.70 to
+1.35 of the barycentric one: bonds **1.107-1.704 Å**, angles
+**65.1-146.0 deg**, against the sp2 window 1.22-1.60 and 95-145. A
+further 60 000 cocycles sampled from the lattice scored *worse*
+(1.114-2.187 Å), so this is not a poor choice a wider search would fix.
+`build_heptanene` therefore **raises** with the numbers attached, exactly
+as `build_haeckelite` refuses a frustrated pattern; `strict=False`
+returns it for inspection.
+
+The diagnosis matters for whoever picks this up next. Heptanene's angular
+excess is **25.7 deg per vertex, less than the 36 deg deficit C20 carries
+at every one of its vertices -- and C20 exists**. So the curvature
+magnitude is not the obstruction. What genus 3 cannot afford is surface:
+56 atoms over three handles is 18.7 atoms each, a tube about two rings
+around whose walls meet. The series climbs only slowly (21.0 at genus 4,
+26.7 at genus 21, 28 in the limit), so the next thing to try is **a
+larger member, which needs a larger Hurwitz group than PSL(2,7)** -- not
+a better relaxation of this one.
+
 ## Unit cells: pad only what does not repeat, measure only what is vacuum
 
 `cell.to_unit_cell` turns any structure into `pbc=(True, True, True)`
