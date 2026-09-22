@@ -640,12 +640,21 @@ def isotropic_remesh(
             sweeps=anneal_sweeps,
             temperature=anneal_temperature,
             restarts=anneal_restarts,
+            # Two equilateral triangles sharing an edge have a diagonal
+            # of sqrt(3) times it, so a LEGITIMATE flip already needs
+            # 1.73x headroom -- at the splitter's 4/3 every flip is
+            # rejected and the annealer silently does nothing. A flip
+            # across a 3 A tube would make a ~6 A edge, which is 2.4x
+            # the target, so the two are separable.
+            max_edge=FLIP_MAX_EDGE * target_edge,
+            box=box,
         )
     if place_curvature:
         # The full refinement, not one greedy pass: placement alone
         # stalls at 47/43 on a toroid where alternating it with the
         # annealer reaches 17/15. See `refine_disclinations`.
-        mesh, _log = refine_disclinations(mesh, rng)
+        mesh, _log = refine_disclinations(
+            mesh, rng, max_edge=FLIP_MAX_EDGE * target_edge, box=box)
         mesh = _tangential_smooth(mesh, field, box=box, max_step=smooth_step)
 
     # Final cleanup: three- and four-membered rings cannot exist in sp2
@@ -685,6 +694,8 @@ def refine_disclinations(
     temperature: float = 0.3,
     pair_weight: float = 5.0,
     rounds: int = 40,
+    max_edge: float | None = None,
+    box=None,
 ) -> tuple[Mesh, list[str]]:
     """Anneal the spurious pairs away while holding the curvature split.
 
@@ -759,9 +770,11 @@ def refine_disclinations(
     previous = None
     for cycle in range(max(1, cycles)):
         current = anneal_edge_flips(current, rng, sweeps=sweeps,
-                                    temperature=temperature, restarts=2)
-        current, _history = place_disclinations(current, max_rounds=rounds,
-                                                pair_weight=pair_weight)
+                                    temperature=temperature, restarts=2,
+                                    max_edge=max_edge)
+        current, _history = place_disclinations(
+            current, max_rounds=rounds, pair_weight=pair_weight,
+            max_edge=max_edge, box=box)
         degrees = _adjacency(current[1])
         defects = sum(1 for ns in degrees.values() if len(ns) != 6)
         log.append(f"cycle {cycle + 1}: {defects} disclinations, "
@@ -781,6 +794,8 @@ def place_disclinations(
     min_degree: int = 5,
     max_degree: int = 8,
     pair_weight: float = 0.0,
+    max_edge: float | None = None,
+    box=None,
 ) -> tuple[Mesh, list[float]]:
     """Move disclinations to where the curvature wants them, by flips.
 
@@ -891,6 +906,9 @@ def place_disclinations(
             if (degree[u] - 1 < min_degree or degree[v] - 1 < min_degree
                     or degree[w1] + 1 > max_degree
                     or degree[w2] + 1 > max_degree):
+                continue
+            if max_edge is not None and _edge_too_long(verts, w1, w2,
+                                                       max_edge, box):
                 continue
             # A flip lowers degree at u and v, and charge is 6 - degree,
             # so u and v GAIN charge while w1 and w2 lose it. Reversed,
@@ -1067,6 +1085,42 @@ def vertex_curvature_targets(mesh: Mesh, smoothing: int = 2) -> np.ndarray:
     return 3.0 * deficit / np.pi
 
 
+#: Longest edge a flip may create, as a multiple of the target edge.
+#:
+#: Two equilateral triangles sharing an edge have a diagonal of sqrt(3)
+#: times it, so a legitimate flip already needs 1.73x headroom -- at the
+#: splitter's 4/3 every flip is rejected and the annealer silently does
+#: nothing. A flip across a 3 A tube makes a ~6 A edge, 2.4x the target.
+#: Measured on the thinnest tube this route builds: 1.8 leaves it sound
+#: (angle sum 329.9 deg), 2.0 and 2.5 collapse it (319.2 and 321.4) and
+#: 3.0 tears it outright. The wider hexagonal coil places its rings a
+#: little better at 2.0 (95% against 88%), and that is not worth a
+#: collapsed wall on the thin one.
+FLIP_MAX_EDGE = 1.8
+
+
+def _edge_too_long(vertices: np.ndarray, first: int, second: int,
+                   limit: float, box=None) -> bool:
+    """Whether a flip would create an edge longer than ``limit``.
+
+    **The flip tests were purely topological**: degrees, and whether the
+    new edge already exists. Nothing looked at where the vertices are,
+    so on a coarse mesh a flip could join two points clear across the
+    structure. On a 3 Å tube -- under eight rings around its
+    circumference -- that is a flip straight through the tube, and the
+    wall folds through itself. Both the census annealer and the
+    curvature placement did it: the same coil came back with an angle
+    sum of 324.3 deg from one and 320.4 from the other, both past
+    tetrahedral, which no carbon reaches.
+    """
+    from .fullerene_mesh import minimum_image
+
+    delta = vertices[second] - vertices[first]
+    if box is not None:
+        delta = minimum_image(delta, box)
+    return bool(float(np.linalg.norm(delta)) > limit)
+
+
 def anneal_edge_flips(
     mesh: Mesh,
     rng: np.random.Generator,
@@ -1075,6 +1129,8 @@ def anneal_edge_flips(
     min_degree: int = 5,
     max_degree: int = 8,
     restarts: int = 1,
+    max_edge: float | None = None,
+    box=None,
 ) -> Mesh:
     """Metropolis-anneal edge flips to remove spurious dislocation pairs.
 
@@ -1133,7 +1189,7 @@ def anneal_edge_flips(
     best_pairs = None
     for _ in range(max(1, restarts)):
         candidate = _anneal_once(mesh, rng, sweeps, temperature,
-                                 min_degree, max_degree)
+                                 min_degree, max_degree, max_edge, box)
         pairs = dislocation_pairs(candidate)
         if best_pairs is None or pairs < best_pairs:
             best, best_pairs = candidate, pairs
@@ -1147,6 +1203,8 @@ def _anneal_once(
     temperature: float,
     min_degree: int,
     max_degree: int,
+    max_edge: float | None = None,
+    box=None,
 ) -> Mesh:
     """One Metropolis run. See :func:`anneal_edge_flips` for the reasoning."""
     if sweeps <= 0:
@@ -1186,6 +1244,9 @@ def _anneal_once(
                 or degree[w1] + 1 > max_degree
                 or degree[w2] + 1 > max_degree
             ):
+                continue
+            if max_edge is not None and _edge_too_long(verts, w1, w2,
+                                                       max_edge, box):
                 continue
             delta = deviation(
                 degree[u] - 1, degree[v] - 1,

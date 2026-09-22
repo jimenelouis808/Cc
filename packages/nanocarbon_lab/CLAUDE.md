@@ -1274,30 +1274,71 @@ not a hybridisation at all. Sound structures clear it comfortably -- C60
 at 348.0 is the most pyramidal thing here that is still carbon, and a
 (5,5) tube reads 356.8.
 
-### The fix is not found, and three attempts failed
+### It was a flip with no length check, and five diagnoses were wrong first
 
-The mechanism is understood and the cure is not. What was tried:
+**The flip tests were purely topological.** `_anneal_once` and
+`place_disclinations` both checked degrees and whether the new edge
+already existed, and **neither looked at where the vertices are**. So a
+flip could join two points clear across the structure. On a 3 Å tube --
+185 mesh vertices, under eight rings around its circumference -- that is
+a flip straight through the tube, and the wall folds through itself.
 
-1. **`anchor_normals` at fixed normals.** The docstring's own
-   recommendation for stopping a shell wrinkling. It made things worse:
-   bonds 1.19-1.75 Å with 5 contacts at `k_anchor=1`, degrading as the
-   stiffness rose. The normal is evaluated once, and atoms must slide
-   tangentially, so the stored normal stops describing the surface under
-   them.
-2. **Relax, then re-project onto the field's level set**, alternating.
-   Far worse -- bonds 0.06-6.24 Å with 634 contacts.
-3. **Wrapping into the cell before projecting**, in case points had
-   drifted where the swept-path field is undefined. Byte-identical
-   results, so that was not it either.
+`FLIP_MAX_EDGE` is the fix: a flip may not create an edge longer than
+1.8x the target. The number is bounded on both sides and both bounds were
+measured. Two equilateral triangles sharing an edge have a diagonal of
+`sqrt(3)` times it, so a **legitimate** flip already needs 1.73x -- at the
+splitter's 4/3 every flip is rejected and the annealer silently does
+nothing, which is how the first attempt at this guard behaved. A flip
+across a 3 Å tube makes a ~6 Å edge, 2.4x the target. On that tube: 1.8
+leaves it sound at an angle sum of 329.9 deg, 2.0 and 2.5 collapse it
+(319.2 and 321.4) and 3.0 tears it outright.
 
-Also measured: **no tube radius avoids it.** At this pitch 3.5, 4.0 and
-4.5 Å all fail the gate as torn, and 5 Å upward fails the pitch check
-because the tube no longer fits between turns. Raising the mesher
-resolution to 220 and 280 does not help. Larger coils collapse the same
-way: R=16, pitch 18, r=5 gives 0.41-16.24 Å.
+With the guard, annealing **helps** where it was documented as hurting:
 
-**So the periodic coil preset is currently unsound and the window now
-says so** rather than drawing it as if it were built.
+==========  ==============  ==============  ==================
+structure   placed, 0       placed, 80      bonds at 80 (Å)
+==========  ==============  ==============  ==================
+Y junction  94.3%           **97.6%**       1.361-1.483
+L junction  90.0%           **100.0%**      1.319-1.503
+coil (hex)  74%             **88%**         1.344-1.525
+==========  ==============  ==============  ==================
+
+**The `anneal_sweeps` table in `build_junction` predates this guard**, and
+its conclusion -- that annealing buckles the wall -- was measuring flips
+reaching across the structure rather than annealing itself. The other
+builders' defaults are left at 0 all the same: re-measuring every one of
+them is a separate decision, not a side effect of this fix.
+
+**Five diagnoses were wrong before this one**, each costing a measured
+experiment, and each kept because each looked right:
+
+1. **"The relaxation collapses it."** The dual measured 2.72 +- 0.31 Å
+   from the helix axis before relaxing and 3.15 +- 1.59 after, so the
+   damage did appear there -- but only because the mesh handed to it was
+   already ruined.
+2. **"Hold the wall on its surface."** `anchor_normals` at fixed normals
+   made it worse (1.19-1.75 Å bonds, 5 contacts); relax-then-reproject
+   far worse (0.06-6.24 Å, 634 contacts). Both treated a symptom.
+3. **"The turns merge."** At pitch 9.6 a 3 Å tube leaves a 3.6 Å gap.
+   Refuted: at pitch 24 the gap is 18 Å and the mesh is as bad.
+4. **"It skips the cell rescale `_finish` does."** True -- the dual
+   arrives 12.3% off -- and fixing it changed nothing while breaking
+   pitch 12.
+5. **"Annealing is simply wrong here, set it to 0."** It does stop the
+   collapse, and it costs the placement the annealing was for: 74%
+   against 88%. Turning off the pass that exposes a bug is not fixing
+   the bug.
+
+What isolated it was comparing against builders that are sound on the
+same machinery -- the junction (mesh edges 1.92-3.17), the relaxed coil
+(1.81-3.67) and the **periodic** schwarzite (1.70-3.97) all remesh
+cleanly -- and then remeshing the coil's **own captured mesh** with
+annealing off, which gave 1.91-3.21 where the builder gave 1.94-12.90.
+One parameter's difference, and it was not the periodic path.
+
+**It is better, not perfect.** The tube still runs about 0.15-5.47 Å
+around a requested 3.0. A 3 Å tube carries under eight rings around its
+circumference, which is the floor of what this route can mesh at all.
 
 ## Heptanene: sp3 makes it worse, and by a factor of six
 

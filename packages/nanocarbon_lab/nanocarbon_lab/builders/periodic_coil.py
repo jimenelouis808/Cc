@@ -265,6 +265,21 @@ def build_periodic_coil(
         refused -- only where they sit. Measured on the junctions:
         94.3 -> 98.4% of disclinations on the correct side of the
         curvature on a Y, 90.0 -> 93.8% on an L, 95.7 -> 97.9% on an X.
+    anneal_sweeps
+        Stays at 80, unlike the other meshed builders, because with the
+        flip-length guard in :data:`~nanocarbon_lab.builders.remesh.FLIP_MAX_EDGE`
+        annealing helps here rather than hurting: 88 % of the rings on
+        the correct side of the curvature against 74 % without it, and
+        an angle sum of 342.7 deg against 336.7.
+
+        **Without that guard it was catastrophic and looked like
+        something else entirely.** A flip cannot move a vertex, so on a
+        mesh as coarse as a 3 Å tube carries -- 185 vertices, under
+        eight rings around the tube -- it reached clear across the tube
+        and the wall folded through itself: the tube ran 0.04-7.15 Å
+        about a requested 3.0, with an angle sum of 320.8 deg, past
+        tetrahedral and so not carbon at all. Four other diagnoses were
+        measured and wrong first; CLAUDE.md keeps them.
     remesh_iterations, anneal_sweeps, relax_iterations, seed
         Passed through to the remesh and relaxation, as for the other
         implicit builders.

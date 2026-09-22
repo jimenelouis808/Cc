@@ -119,16 +119,39 @@ class TestItRefusesWhatItCannotBuild:
 
 
 
-    def test_a_torn_network_is_refused_even_when_euler_is_happy(self):
-        """Euler is necessary and not sufficient.
+    def test_the_torn_guard_fires_when_the_network_really_is_torn(self,
+                                                                   monkeypatch):
+        """Euler is necessary and not sufficient, so the guard stays.
 
-        A 25 Å coil at this resolution comes back with the ring budget a
-        torus owes and a 2.2 Å "bond": topologically consistent, and torn.
-        Without this guard it would have been handed back as a DFT cell.
+        It used to be exercised by a 25 Å coil, which came back with the
+        right ring budget and a 2.2 Å "bond". **That coil is sound now**
+        -- the tearing was the annealer flipping edges across the tube,
+        not the radius -- so the guard is tested by handing it a torn
+        measurement directly rather than by a geometry that no longer
+        tears.
         """
+        import nanocarbon_lab.builders.periodic_coil as pc
+
+        real = pc.geometry_report
+
+        def torn(positions, bonds, box=None):
+            out = dict(real(positions, bonds, box=box))
+            out["bond_max"] = 2.2
+            return out
+
+        monkeypatch.setattr(pc, "geometry_report", torn)
         with pytest.raises(ValueError, match="torn"):
-            build_periodic_coil(coil_radius=25.0, pitch=PITCH,
+            build_periodic_coil(coil_radius=9.79, pitch=PITCH,
                                 tube_radius=R_TUBE, resolution=64)
+
+    def test_the_coil_that_used_to_tear_now_builds(self):
+        """The regression test for the flip-length guard: a 25 Å coil was
+        refused as torn and is not any more."""
+        atoms = build_periodic_coil(coil_radius=25.0, pitch=PITCH,
+                                    tube_radius=R_TUBE, resolution=64)
+        assert len(atoms) > 0
+        assert atoms.info["geometry"]["bond_max"] < 1.80
+        assert atoms.info["geometry"]["n_close_contacts"] == 0
 
     def test_nonpositive_dimensions_are_refused(self):
         with pytest.raises(ValueError, match="positive"):
@@ -250,12 +273,36 @@ class TestThePolygonalCoil:
         assert hexagonal.cell[2, 2] == pytest.approx(13.61)
 
     def test_concentrating_the_curvature_places_the_rings_better(self, hexagonal):
-        """Measured on the (5,5) geometry: the smooth helix puts 82 % of
-        its non-hexagons on the correct side, the hexagonal polygon 88 %,
-        and every one of the polygon's pentagons is on the outside."""
+        """Measured on the (5,5) geometry: the hexagonal polygon puts
+        88 % of its non-hexagons on the correct side.
+
+        **"Every pentagon on the outside" used to hold and no longer
+        does, because it was a property of a collapsed wall.** The flips
+        that concentrated the curvature so neatly were reaching across
+        the tube -- the same build had an angle sum of 324.3 deg, past
+        tetrahedral, which no carbon reaches. With the flip length
+        guarded the wall stays sound (342.7 deg) and the placement is
+        88 % with most pentagons outside, which is the honest number.
+        """
         placement = hexagonal.info["curvature_check"]
-        assert placement["pentagons"] == placement["pentagons_outside"]
+        assert placement["pentagons_outside"] >= 0.7 * placement["pentagons"]
         assert placement["placed_correctly"] >= 0.8
+
+    def test_the_wall_is_not_collapsed(self, hexagonal):
+        """The check the old placement assertion was hiding."""
+        import numpy as np
+
+        from nanocarbon_lab.analyse.hybridisation import (
+            collapsed_wall,
+            hybridisation_report,
+        )
+
+        report = hybridisation_report(hexagonal.positions,
+                                      hexagonal.info["bonds"],
+                                      np.asarray(hexagonal.cell))
+        assert not collapsed_wall(report), (
+            f"angle sums start at {report['angle_sum_min']:.1f} deg, past "
+            "tetrahedral")
 
     def test_a_corner_on_a_sample_is_not_a_resolution_problem(self):
         """The sample grid holds a whole number of samples per turn, and
