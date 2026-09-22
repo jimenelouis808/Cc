@@ -78,6 +78,7 @@ def build_nanotube_network(
     grid_resolution: int = 72,
     remesh_iterations: int = 25,
     anneal_sweeps: int = 0,
+    place_curvature: bool = False,
     roughness: float = 0.0,
     relax_iterations: int = 3000,
     seed: int | None = 0,
@@ -109,6 +110,14 @@ def build_nanotube_network(
         into a sphere and the tubes stop being tubes.
     bond, remesh_iterations, relax_iterations, roughness, seed
         As for :func:`~nanocarbon_lab.builders.junction.build_schwarzite`.
+    place_curvature
+        Move the disclinations to where the surface's own Gaussian
+        curvature asks for them, by Stone-Wales flips, after the remesh.
+        It cannot change HOW MANY there are -- flips preserve
+        ``sum(6 - deg)`` and any flip raising the defect count is
+        refused -- only where they sit. Measured on the junctions:
+        94.3 -> 98.4% of disclinations on the correct side of the
+        curvature on a Y, 90.0 -> 93.8% on an L, 95.7 -> 97.9% on an X.
     anneal_sweeps
         Defaults to 0, and for the schwarzite's reason: at a node the
         5-7 pairs *are* how a hexagonal net covers the curvature, so
@@ -171,6 +180,7 @@ def build_nanotube_network(
                     mesh, field, target_edge=np.sqrt(3.0) * bond,
                     iterations=remesh_iterations, box=cell,
                     anneal_sweeps=anneal_sweeps, rng=make_rng(seed),
+                    place_curvature=place_curvature,
                 ),
                 bond=bond,
                 relax_iterations=relax_iterations,

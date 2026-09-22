@@ -61,6 +61,7 @@ def build_toroid(
     voxel: float | None = None,
     remesh_iterations: int = 25,
     anneal_sweeps: int = 0,
+    place_curvature: bool = False,
     roughness: float = 0.0,
     relax_iterations: int = 3000,
     vacuum: float = DEFAULT_VACUUM_1D,
@@ -75,6 +76,10 @@ def build_toroid(
     minor_radius
         Radius of the tube itself (Å). Free rather than quantised,
         because the wall is meshed rather than rolled.
+    place_curvature
+        Move the disclinations to where the surface's own Gaussian
+        curvature asks for them, by Stone-Wales flips, after the remesh.
+        It cannot change HOW MANY there are, only where they sit.
     anneal_sweeps
         Defaults to 0 and should stay there. On a curved surface the 5-7
         pairs **are** how a hexagonal net covers the curvature; annealing
@@ -127,6 +132,7 @@ def build_toroid(
     atoms = build_swept_tube(
         path, tube_radius=minor_radius, bond=bond, voxel=voxel,
         remesh_iterations=remesh_iterations, anneal_sweeps=anneal_sweeps,
+        place_curvature=place_curvature,
         roughness=roughness, relax_iterations=relax_iterations,
         vacuum=vacuum, pin_ends=False, seed=seed,
     )

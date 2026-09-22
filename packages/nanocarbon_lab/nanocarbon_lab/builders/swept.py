@@ -63,6 +63,7 @@ def build_swept_tube(
     voxel: float | None = None,
     remesh_iterations: int = 25,
     anneal_sweeps: int = 0,
+    place_curvature: bool = False,
     roughness: float = 0.0,
     relax_iterations: int = 3000,
     vacuum: float = DEFAULT_VACUUM_1D,
@@ -87,6 +88,14 @@ def build_swept_tube(
     voxel
         Marching-cubes voxel edge (Å). Defaults to
         ``max(MIN_VOXEL, VOXEL_FRACTION * tube_radius)``.
+    place_curvature
+        Move the disclinations to where the surface's own Gaussian
+        curvature asks for them, by Stone-Wales flips, after the remesh.
+        It cannot change HOW MANY there are -- flips preserve
+        ``sum(6 - deg)`` and any flip raising the defect count is
+        refused -- only where they sit. Measured on the junctions:
+        94.3 -> 98.4% of disclinations on the correct side of the
+        curvature on a Y, 90.0 -> 93.8% on an L, 95.7 -> 97.9% on an X.
     remesh_iterations, anneal_sweeps, roughness, relax_iterations, vacuum
         ``anneal_sweeps`` defaults to 0, as it does for the junction and
         the schwarzite, and for the same measured reason: the 5-7 pairs
@@ -160,6 +169,7 @@ def build_swept_tube(
     mesh = rm.isotropic_remesh(
         mesh, field, target_edge=np.sqrt(3.0) * bond,
         iterations=remesh_iterations, anneal_sweeps=anneal_sweeps, rng=rng,
+        place_curvature=place_curvature,
     )
     steps = np.linalg.norm(np.diff(path, axis=0), axis=1)
     return _finish(

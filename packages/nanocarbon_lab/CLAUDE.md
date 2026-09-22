@@ -1242,6 +1242,50 @@ is that a planar bevel cut cannot do it: the (5,5) and (10,0) tubes a
 cannot coincide at any bevel angle, and cutting one tube and mirroring it
 tears the lattice outright.
 
+## Four things the window got wrong about structures that were right
+
+All four were reported from screenshots, and in every case the structure
+was correct and the window was not. Worth keeping together, because the
+common thread is that a display fault reads as a physics fault.
+
+**A cubic box is not equal limits.** `_apply_limits` set the same span on
+x, y and z and the C60 still rendered visibly squashed -- while its own
+panel read bonds 1.420-1.420 Å and angles 108.0-120.0, which is a perfect
+truncated icosahedron. Matplotlib's 3D box aspect defaults to `(4, 4, 3)`,
+so equal limits still render flattened along z. `set_box_aspect((1, 1, 1))`
+is the fix and it belongs beside every `set_xlim` trio.
+
+**Colouring atoms by ring cannot work on a closed cage.** Every one of
+C60's 60 atoms belongs to exactly one pentagon, so `_ring_of_atom`'s
+priority rule gives all 60 the pentagon colour and the picture says "all
+pentagons" about a structure that is 12 pentagons and 20 hexagons. This
+is not a bug in the rule -- the rule is right and the question is
+unanswerable per atom. Filling the **rings** is the view that answers it,
+and it is also the only way to see at a glance whether the 5s, 7s and 8s
+are scattered or placed. Rings spanning more than `MAX_RING_SPAN` are
+left unfilled: a ring straddling the periodic boundary is a correct list
+of atoms whose coordinates sit on opposite sides of the cell, and joining
+them in order draws a polygon across the whole structure.
+
+**`_update_info` runs after `_redraw`, so a KeyError there is silent and
+wrong.** Heptanene's geometry dict had no `n_close_contacts` and the
+panel indexed it directly, so the new structure was drawn while the panel
+kept describing the *previous* build -- 64 atoms and a 16/16 census from
+a haeckelite, against heptanene's real 56 atoms and `{7: 24}`. A stale
+panel is worse than a blank one: it is a wrong reading that looks right.
+The panel now uses `.get`, and heptanene reports contacts like everything
+else (127 of them, which is itself evidence for the refusal).
+
+**A GUI keyword the builder does not take is a TypeError on first tick.**
+Wiring `place_curvature` through, the window passed it to
+`coil (relaxed)` and missed `coil (periodic, DFT)`. Checking
+`parameter_names` does not settle it either way: `build_coil` takes
+`**kwargs` and forwards to the swept-tube builder, so it accepts the
+keyword without declaring it, while a builder could declare it and never
+reach the remesher. `test_place_curvature_wiring.py` reads the modes out
+of `app.py` itself -- a hand-kept list would drift from the window, which
+is the failure it exists to stop -- and checks both halves.
+
 ## Where a disclination belongs: the placement rule
 
 The flip annealer's objective was `sum(|deg - 6|)`: every vertex wants to

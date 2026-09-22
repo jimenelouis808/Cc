@@ -129,6 +129,16 @@ from .worker import WORKER_DIED, BuildWorker
 # Ring-type colours, shared with the Blender presets' intent: hexagons are
 # the neutral body, everything else marks curvature or a defect.
 RING_COLOURS = {5: "#e4572e", 6: "#5b6472", 7: "#2e86ab", 8: "#f2c14e"}
+
+#: Filled rings drawn before thinning. Faces are far heavier to render
+#: than the bonds, so this sits below PREVIEW_BOND_LIMIT.
+PREVIEW_RING_FACE_LIMIT = 4000
+
+
+def _to_rgb(colour: str) -> tuple[float, float, float]:
+    """`#rrggbb` to a 0-1 triple, without importing matplotlib here."""
+    value = colour.lstrip("#")
+    return tuple(int(value[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
 #: For an element with no entry in the palette, and for the "plain" mode
 #: where the point is to see shape rather than composition.
 UNKNOWN_ELEMENT_COLOUR = "#888888"
@@ -853,6 +863,7 @@ class NanocarbonGUI:
         self.var_pin_ends = self._var("pin_ends", tk.BooleanVar(value=False))
         self.var_anneal = self._var("anneal", tk.IntVar(value=80))
         self.var_roughness = self._var("roughness", tk.DoubleVar(value=0.0))
+        self.var_place = self._var("place", tk.BooleanVar(value=False))
         self.var_dopant = self._var("dopant", tk.StringVar(value="none"))
         self.var_dopant_conc = self._var("dopant_conc", tk.DoubleVar(value=0.03))
         self.var_dopant_site = self._var("dopant_site", tk.StringVar(value="random"))
@@ -1463,6 +1474,11 @@ class NanocarbonGUI:
         self._param(self.frame_surface, "Roughness (Å)", self.var_roughness,
                     0.0, 0.6, 2, resolution=0.01, hard_hi=2.0,
                     command=self._update_surface_hint)
+        ttk.Checkbutton(
+            self.frame_surface,
+            text="Put the 5s and 7s where the curvature wants them",
+            variable=self.var_place, command=self._update_surface_hint,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
         self.lbl_surface = ttk.Label(self.frame_surface, text="", foreground=MUTED,
                                      font=("TkDefaultFont", 8), wraplength=230,
                                      justify="left")
@@ -3011,6 +3027,27 @@ class NanocarbonGUI:
             text = "@".join(names) + f", shells {spacing}."
         self.lbl_cage.config(text=text)
 
+    def _place_hint(self) -> str:
+        """What the placement switch does, in the window's own words.
+
+        It is the one control here that changes WHERE the defects are
+        rather than how many, and that distinction is the whole reason
+        it exists -- so it is stated rather than left to the name.
+        """
+        if not self.var_place.get():
+            return ("Off: the remesher's own scatter of 5s and 7s is kept, "
+                    "wherever it happened to put them.")
+        return (
+            "On: pentagons are moved toward the positively curved parts "
+            "(caps, outer bends) and heptagons toward the negatively "
+            "curved ones (necks, inner bends), by Stone-Wales flips. It "
+            "cannot change HOW MANY there are — a flip that would add a "
+            "5-7 pair is refused — only where they sit. Measured on the "
+            "junctions: 94→98% of them on the correct side of the "
+            "curvature on a Y, 90→94% on an L, 96→98% on an X. Costs a "
+            "few seconds and is safe to leave on."
+        )
+
     def _update_surface_hint(self) -> None:
         anneal = int(self.var_anneal.get())
         rough = float(self.var_roughness.get())
@@ -3038,7 +3075,9 @@ class NanocarbonGUI:
                     "not meshed, so there are no stray rings to flip away")
             if anneal > 0:
                 colour = WARN_AMBER
-        self.lbl_surface.config(text=f"{topo}; {geom}.", foreground=colour)
+        self.lbl_surface.config(
+            text=f"{topo}; {geom}.\n\n{self._place_hint()}",
+            foreground=colour)
 
     def _update_coil_hint(self) -> None:
         # The wound (n, m) tube shares the radius/pitch/turns controls but
@@ -3271,6 +3310,7 @@ class NanocarbonGUI:
                 arm_length=float(self.var_j_arm.get()),
                 blend=float(self.var_j_blend.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
+                place_curvature=bool(self.var_place.get()),
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "network":
@@ -3280,6 +3320,7 @@ class NanocarbonGUI:
                 tube_radius=float(self.var_net_radius.get()),
                 blend=float(self.var_net_blend.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
+                place_curvature=bool(self.var_place.get()),
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "haeckelite":
@@ -3302,6 +3343,7 @@ class NanocarbonGUI:
                 major_radius=float(self.var_tor_major.get()),
                 minor_radius=float(self.var_tor_minor.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
+                place_curvature=bool(self.var_place.get()),
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "nanocone":
@@ -3325,6 +3367,7 @@ class NanocarbonGUI:
                 tube_radius=float(self.var_sn_radius.get()),
                 blend=float(self.var_sn_blend.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
+                place_curvature=bool(self.var_place.get()),
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "schwarzite":
@@ -3333,6 +3376,7 @@ class NanocarbonGUI:
                 cell=float(self.var_s_cell.get()),
                 thickness=float(self.var_s_thickness.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
+                place_curvature=bool(self.var_place.get()),
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "coil (relaxed)":
@@ -3346,6 +3390,7 @@ class NanocarbonGUI:
                 bond=float(self.var_bond.get()),
                 pin_ends=bool(self.var_pin_ends.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
+                place_curvature=bool(self.var_place.get()),
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "fullerene":
@@ -3381,6 +3426,7 @@ class NanocarbonGUI:
                 sides=sides if sides >= 3 else None,
                 bond=float(self.var_bond.get()),
                 handedness=1 if self.var_coil_hand.get() == "right" else -1,
+                place_curvature=bool(self.var_place.get()),
             )
         elif mode == "nanotube (open)":
             params = dict(
@@ -3921,6 +3967,13 @@ class NanocarbonGUI:
         self.ax.set_xlim(mid[0] - span, mid[0] + span)
         self.ax.set_ylim(mid[1] - span, mid[1] + span)
         self.ax.set_zlim(mid[2] - span, mid[2] + span)
+        # Equal LIMITS are not equal AXES. Matplotlib's 3D box defaults
+        # to (4, 4, 3), so a sphere with identical x, y and z ranges
+        # still renders flattened along z -- a C60 came out visibly
+        # squashed while its bonds measured 1.420-1.420 Å and its angles
+        # 108.0-120.0, which is a perfect truncated icosahedron. The
+        # structure was right and the picture was lying.
+        self.ax.set_box_aspect((1.0, 1.0, 1.0))
         self.canvas.draw_idle()
 
     def _draw_cell(self) -> None:
@@ -4071,6 +4124,15 @@ class NanocarbonGUI:
         self.var_show_wrapped = tk.BooleanVar(value=True)
         ttk.Checkbutton(bar, text="edge bonds", variable=self.var_show_wrapped,
                         command=self._redraw).pack(side="left")
+        # Colouring ATOMS by ring cannot answer "where are the pentagons"
+        # on a closed cage, and C60 is the proof: every one of its 60
+        # atoms belongs to exactly one pentagon, so every atom takes the
+        # pentagon colour and the picture says "all pentagons" about a
+        # structure that is 12 pentagons and 20 hexagons. Filling the
+        # RINGS is the only view that separates them.
+        self.var_ring_faces = tk.BooleanVar(value=False)
+        ttk.Checkbutton(bar, text="ring faces", variable=self.var_ring_faces,
+                        command=self._redraw).pack(side="left")
         ttk.Label(bar, text="  colour:").pack(side="left")
         ttk.Combobox(bar, textvariable=self.var_colour_by, width=8,
                      state="readonly", values=["element", "ring", "plain"]
@@ -4202,6 +4264,61 @@ class NanocarbonGUI:
             f"{len(self.atoms)} atoms. Every export button now writes this."
         )
 
+    #: Rings wider than this are not drawn as faces. A ring whose atoms
+    #: straddle the periodic boundary comes back from the ring finder as
+    #: a correct list of atoms with coordinates on opposite sides of the
+    #: cell, and joining those in order draws a polygon across the whole
+    #: structure. A real ring of at most eight sp2 carbons never spans
+    #: more than about 5 Å.
+    MAX_RING_SPAN = 6.0
+
+    def _draw_ring_faces(self, pos, offsets, keep) -> str:
+        """Fill each ring, coloured by its size.
+
+        This is the view that answers the question the ring colours were
+        meant to answer and cannot: which rings are the pentagons. The
+        atom colouring assigns each ATOM one ring size, and on a closed
+        cage every atom is in a pentagon, so it says nothing.
+
+        Hexagons are drawn faintly and everything else strongly, because
+        the hexagons are the background and the 5s, 7s and 8s are the
+        subject -- that is also why the ring filters exist.
+        """
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+        rings = self.atoms.info.get("rings", [])
+        if not rings:
+            return "no ring list — nothing to fill"
+
+        polys, colours, dropped = [], [], 0
+        for ring in rings:
+            size = len(ring)
+            if size in self.var_ring_filter and not self.var_ring_filter[size].get():
+                continue
+            if not all(keep[a] for a in ring):
+                continue
+            corners = pos[list(ring)]
+            if float(np.ptp(corners, axis=0).max()) > self.MAX_RING_SPAN:
+                dropped += 1
+                continue
+            for shift in offsets:
+                polys.append(corners + shift)
+                colours.append(RING_COLOURS.get(size, RING_COLOURS[6]))
+        if not polys:
+            return "no rings to fill at this filter"
+        if len(polys) > PREVIEW_RING_FACE_LIMIT:
+            stride = len(polys) // PREVIEW_RING_FACE_LIMIT + 1
+            polys, colours = polys[::stride], colours[::stride]
+        alphas = [0.18 if c == RING_COLOURS[6] else 0.55 for c in colours]
+        collection = Poly3DCollection(
+            polys, facecolors=colours, edgecolors="none")
+        collection.set_alpha(None)
+        collection.set_facecolor([
+            (*_to_rgb(c), a) for c, a in zip(colours, alphas, strict=True)])
+        self.ax.add_collection3d(collection)
+        return (f"{dropped} rings cross the cell and are not filled"
+                if dropped else "")
+
     def _redraw(self) -> None:
         if self.atoms is None:
             return
@@ -4214,6 +4331,9 @@ class NanocarbonGUI:
         self.ax.clear()
 
         note = ""
+        if self.var_ring_faces.get():
+            note = self._draw_ring_faces(pos, offsets, keep) or note
+
         if self.var_show_bonds.get():
             from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
@@ -4531,7 +4651,11 @@ class NanocarbonGUI:
             "euler_expected",
             components * (12 - 12 * int(a.info.get("genus", 0))),
         ))
-        clash = g["n_close_contacts"] if g else 0
+        # `.get`, not `[...]`: this method runs after the redraw, so a
+        # missing key here leaves the new structure on screen beside the
+        # PREVIOUS structure's numbers. Heptanene shipped without
+        # `n_close_contacts` and did exactly that.
+        clash = g.get("n_close_contacts", 0) if g else 0
 
         lines = [f"atoms        {len(a):>6d}"]
         if "formula" in a.info:

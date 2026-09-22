@@ -224,6 +224,7 @@ def build_schwarzite(
     bond: float = CC_BOND,
     grid_resolution: int = 64,
     anneal_sweeps: int = 0,
+    place_curvature: bool = False,
     remesh_iterations: int = 25,
     roughness: float = 0.0,
     relax_iterations: int = 3000,
@@ -262,6 +263,12 @@ def build_schwarzite(
         narrower than a carbon ring and the build is rejected.
     thickness
         Level-set offset; nonzero thins or thickens the channels.
+    place_curvature
+        Move the disclinations to where the surface's own Gaussian
+        curvature asks for them, by Stone-Wales flips, after the remesh.
+        It cannot change HOW MANY there are, only where they sit. On a
+        schwarzite the wall is saddle everywhere, so the heptagons have
+        somewhere definite to go.
     anneal_sweeps
         Metropolis flip-annealing passes. **Defaults to 0 here, unlike
         :func:`build_junction`, and raising it makes the structure
@@ -336,6 +343,7 @@ def build_schwarzite(
                     mesh, field, target_edge=np.sqrt(3.0) * bond,
                     iterations=remesh_iterations, box=cell,
                     anneal_sweeps=anneal_sweeps, rng=make_rng(seed),
+                    place_curvature=place_curvature,
                 ),
                 bond=bond,
                 relax_iterations=relax_iterations,

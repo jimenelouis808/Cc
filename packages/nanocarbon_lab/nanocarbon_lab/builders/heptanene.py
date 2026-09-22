@@ -508,7 +508,48 @@ def _measure(positions, bonds, shifts, cell):
         "bond_max": float(lengths.max()), "bond_std": float(lengths.std()),
         "angle_min": float(angles.min()), "angle_mean": float(angles.mean()),
         "angle_max": float(angles.max()),
+        # Every other builder's geometry carries this, and the window
+        # reads it without asking whether it is there. Leaving it out
+        # raised a KeyError inside the panel update, which runs AFTER
+        # the redraw -- so the structure appeared and the panel kept
+        # describing the previous one. A stale panel is worse than a
+        # missing field: it is a wrong reading that looks right.
+        "n_close_contacts": int(_close_contacts(positions, bonds, shifts,
+                                                cell)),
     }
+
+
+def _close_contacts(positions, bonds, shifts, cell, cutoff: float = 2.0
+                    ) -> int:
+    """Non-bonded pairs closer than ``cutoff`` Å, across the cell.
+
+    The Klein quartic's embedding is strained enough that this is a real
+    measurement rather than a formality -- it is one of the numbers the
+    refusal rests on.
+
+    ``cell`` is the cubic edge as a scalar here, matching what
+    :func:`_measure` already assumes, so images scale rather than
+    multiply as a matrix.
+    """
+    bonded = {tuple(sorted(pair[:2])) for pair in bonds}
+    count = 0
+    for i in range(len(positions)):
+        for j in range(i + 1, len(positions)):
+            if (i, j) in bonded:
+                continue
+            best = min(
+                float(np.linalg.norm(positions[j] + image * cell
+                                     - positions[i]))
+                for image in _IMAGES
+            )
+            if best < cutoff:
+                count += 1
+    return count
+
+
+#: The 27 neighbouring cells. A contact across the seam is a contact.
+_IMAGES = np.array([[i, j, k] for i in (-1, 0, 1)
+                    for j in (-1, 0, 1) for k in (-1, 0, 1)], dtype=float)
 
 
 #: The sp2 window, shared with the flat haeckelite builder so that the
