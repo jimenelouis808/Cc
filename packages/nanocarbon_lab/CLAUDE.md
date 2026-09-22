@@ -896,6 +896,95 @@ rather than returned. The published toroidal carbons sit at 3 to 6;
 outside that the structure is built and labelled, because it is not
 wrong, only not the geometry those calculations relaxed to.
 
+## Amorphous wall or crystalline: the mesh route always picks the first
+
+This is the single biggest thing separating what this package draws from
+what the literature draws, and it is not a bug in any one builder.
+
+The implicit route -- field, marching cubes, remesh, dual -- **derives**
+its topology, so the remesher picks whatever ring sizes the local
+curvature calls for. Measured across every curved builder, the
+disclinations land where they belong (85-100% on the correct side of the
+curvature; see the table above), and there are **far too many of them**:
+11-21% of all rings are non-hexagonal. That is a *sound* wall and an
+**amorphous** one. Published pictures of toroids, cones and coils show
+crystalline walls with a handful of disclinations in known places.
+
+Where a crystalline route exists, offer it as a **separate mode**, not a
+flag -- the two are different structures, and the names must say which:
+
+| structure | mesh route | crystalline route |
+|---|---|---|
+| toroid | 68 pentagons + 68 heptagons at R=20 | `{6: 1100}` -- none at all |
+| nanocone (112.9 deg) | 183 pentagons + 171 heptagons, 3800 atoms | `{5: 1, 6: 210}`, 470 atoms |
+| coil | ~90 non-hexagons | `nanocoil.py`, all hexagons |
+
+**The crystalline route always costs size, and the reason is the same
+every time.** Bending or rolling a finished lattice can only *stretch*
+it: there is no disclination to relieve the curvature with, which is
+precisely what the mesh route buys with its 5-7 pairs. So a polyhex
+toroid of a (5,5) tube needs R = 43 A and 2200 atoms to fit an 8% strain
+budget, and the small round toroids in the literature are **not**
+polyhexes -- they use knees with a pentagon outside and a heptagon
+inside, which is a third route this package does not have yet.
+
+**A developable surface is the easy case, and there are only two.** A
+cylinder and a cone have zero Gaussian curvature, so unrolling them is an
+isometry: bond lengths are exact by construction and no relaxation is
+needed at all. `haeckelite_tube.py`, `toroid.build_polyhex_toroid` and
+`nanocone.py` all exploit this. A sphere or a saddle cannot be unrolled,
+which is why the fullerene, the schwarzite, the junction and the
+supernetwork must mesh and must pay in disclinations.
+
+### Nanocones: the apex angle is quantised, and only one is chemistry
+
+`builders/nanocone.py` cuts a wedge of `N * 60` degrees out of graphene
+about a **hexagon centre** and joins the edges. The apex hexagon loses N
+of its six sectors, so `sin(theta/2) = 1 - N/6` -- the angle is an output.
+Those five angles (112.9, 83.6, 60.0, 38.9, 19.2) are the ones Krishnan
+et al. observed (*Nature* **388**, 451), so this is one of the few
+builders with an external answer to check against.
+
+* **Only `N = 1` is clean**: 470 atoms, `{5: 1, 6: 210}`, bonds
+  **1.391-1.420 A**, angles 108.0-120.1. `N = 2` and `N = 3` put a square
+  or a triangle at the apex -- sound topology, and 1.339 / 1.230 A bonds
+  with 90 / 60 deg angles. Nature splits those disclinations into
+  *separate* pentagons instead, which is how the 19.2 deg nanohorn works.
+  `strict=True` refuses them; `N >= 4` cannot be a single apex ring at
+  all (it would need a 2-gon) and is refused outright.
+* **The cut must run through atoms for some N and between them for
+  others.** Both are mirror lines of the hexagon, so both look equally
+  valid -- and at 0 deg the `N = 1` cone gains a spurious four-membered
+  ring at the seam, while at 30 deg the `N = 2` cone comes back with four
+  squares instead of one (`sum(6-n) = +8` against +2). So the offset is
+  **searched, not fixed**: the builder tries the candidates and keeps the
+  one whose budget equals N. That test is exact -- a developable roll
+  cannot create a ring -- which turns a magic number into a checked
+  choice. Do not replace it with a constant; one was tried, and it was
+  right for exactly one case.
+* **The apex must be a hexagon centre, and that was verified by counting
+  neighbours** rather than derived: with the basis at `(0,0)` and
+  `(0,bond)` the centre is at `(0,-bond)`, and the origin of that basis
+  is an *atom*, whose three-fold symmetry does not admit most wedges.
+* **The rim is open on purpose** and recorded in `info["rim_atoms"]` and
+  `info["terminal_atoms"]`, as a nanoribbon's edges are.
+
+### The literature's own method, for when this is not enough
+
+László, *Theor Chem Acc* **134**, 104 (2015) gives the general route:
+**topological coordinates**. Cartesian positions come from the bi-lobal
+eigenvectors of the adjacency or Laplacian matrix -- three for a sphere
+(Fowler & Manolopoulos), **four** for a torus, and for junctions and
+coils neither works: a 1165-atom junction needs 16, so there is no simple
+rule. The general answer is a matrix `W`, built from a harmonic potential
+over first and second neighbours, whose **null space contains X, Y and
+Z**. It is worth knowing two things before reaching for it: `W` is
+defined at the equilibrium geometry, so constructing it exactly needs the
+coordinates it is meant to produce (the paper approximates it), and this
+package already met the spherical case's limit from the other side --
+`heptanene`'s Laplacian has an 8-fold degenerate first eigenvalue, so no
+three of its eigenvectors embed it at all.
+
 ## Presets are a catalogue of textbook structures, not a parameter sweep
 
 `gui/app.PRESETS` is a reference shelf: one entry per structure worth

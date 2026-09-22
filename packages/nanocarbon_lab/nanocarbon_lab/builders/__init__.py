@@ -11,12 +11,13 @@ from .haeckelite_tube import build_haeckelite_tube, describe_haeckelite_tube
 from .heptanene import admissible_geometries, build_heptanene, klein_quartic_map
 from .junction import build_junction, build_schwarzite
 from .nanocoil import build_nanocoil
+from .nanocone import build_nanocone, describe_nanocone
 from .nanoribbon import build_nanoribbon
 from .network import build_nanotube_network
 from .periodic_coil import build_periodic_coil
 from .supernetwork import SUPERLATTICES, build_supernetwork, icosahedral_cage, supergraph_from_atoms
 from .swept import build_coil, build_swept_tube
-from .toroid import build_toroid, describe_toroid
+from .toroid import build_polyhex_toroid, build_toroid, describe_toroid
 
 __all__ = [
     "build_bundle",
@@ -40,10 +41,13 @@ __all__ = [
     "build_haeckelite_tube",
     "build_heptanene",
     "build_supernetwork",
+    "build_nanocone",
+    "build_polyhex_toroid",
     "build_toroid",
     "build_schwarzite",
     "describe_haeckelite",
     "describe_haeckelite_tube",
+    "describe_nanocone",
     "describe_toroid",
     "icosahedral_cage",
     "klein_quartic_map",

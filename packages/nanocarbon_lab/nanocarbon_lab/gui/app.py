@@ -269,9 +269,19 @@ PRESETS: dict[str, dict[str, object]] = {
         "mode_kind": "multi-wall", "mw_shells": 2, "mw_inner": 3, "rings": 10},
     "Seven-tube rope": {
         "mode_kind": "bundle", "bundle_shells": 1, "freq": 3, "rings": 10},
+    # The crystalline ring: no disclinations at all. 110 periods of a
+    # (5,5) is the smallest that fits the 8% strain budget.
+    "Carbon toroid (all hexagons)": {
+        "mode_kind": "toroid (polyhex)", "tp_n": 5, "tp_m": 5,
+        "tp_periods": 110},
     "Carbon toroid (R/r = 4)": {
         "mode_kind": "toroid", "tor_major": 20.0, "tor_minor": 5.0,
         "anneal": 0},
+    # The only disclination the sector cut places cleanly: one apex
+    # pentagon, 210 hexagons, bonds 1.391–1.420 Å.
+    "Nanocone (112.9°, one pentagon)": {
+        "mode_kind": "nanocone", "nc_pent": 1, "nc_radius": 22.0,
+        "nc_strict": True},
     # --- 2D carbon allotropes
     # Pentagons and heptagons only, no hexagons: the lattice published as
     # pentaheptite. The catalogue entry is an exact cover, so its census
@@ -878,6 +888,15 @@ class NanocarbonGUI:
         self.var_s_kind = self._var("s_kind", tk.StringVar(value="primitive"))
         self.var_s_cell = self._var("s_cell", tk.DoubleVar(value=36.0))
         self.var_s_thickness = self._var("s_thickness", tk.DoubleVar(value=0.0))
+        self.var_nc_pent = self._var("nc_pent", tk.IntVar(value=1))
+        self.var_nc_radius = self._var("nc_radius",
+                                       tk.DoubleVar(value=22.0))
+        self.var_nc_strict = self._var("nc_strict",
+                                       tk.BooleanVar(value=True))
+        self.var_tp_n = self._var("tp_n", tk.IntVar(value=5))
+        self.var_tp_m = self._var("tp_m", tk.IntVar(value=5))
+        self.var_tp_periods = self._var("tp_periods",
+                                        tk.IntVar(value=110))
         self.var_tor_major = self._var("tor_major",
                                        tk.DoubleVar(value=20.0))
         self.var_tor_minor = self._var("tor_minor",
@@ -1231,6 +1250,39 @@ class NanocarbonGUI:
                   justify="left").grid(row=5, column=0, columnspan=2, sticky="w")
 
         # --- 3D interconnected nanotube network
+        # --- nanocone
+        self.frame_nc = ttk.LabelFrame(parent, text="Nanocone", padding=8)
+        self.frame_nc.columnconfigure(0, weight=1)
+        self._param(self.frame_nc, "Pentagons at apex", self.var_nc_pent,
+                    1, 3, 0, integer=True, command=self._update_nc_hint)
+        self._param(self.frame_nc, "Slant radius (Å)", self.var_nc_radius,
+                    8.0, 60.0, 2, resolution=1.0,
+                    command=self._update_nc_hint)
+        ttk.Checkbutton(
+            self.frame_nc,
+            text="Only the clean cone (1 pentagon)",
+            variable=self.var_nc_strict,
+            command=self._update_nc_hint).grid(row=4, column=0, columnspan=2,
+                                               sticky="w")
+        self.lbl_nc = ttk.Label(self.frame_nc, text="", foreground=MUTED,
+                                wraplength=260, justify="left")
+        self.lbl_nc.grid(row=5, column=0, columnspan=2, sticky="w")
+
+        # --- toroid, polyhex route
+        self.frame_tp = ttk.LabelFrame(parent, text="Toroid (all hexagons)",
+                                       padding=8)
+        self.frame_tp.columnconfigure(0, weight=1)
+        self._param(self.frame_tp, "Chiral index n", self.var_tp_n,
+                    2, 20, 0, integer=True, command=self._update_tp_hint)
+        self._param(self.frame_tp, "Chiral index m", self.var_tp_m,
+                    0, 20, 2, integer=True, command=self._update_tp_hint)
+        self._param(self.frame_tp, "Periods round the ring",
+                    self.var_tp_periods, 10, 400, 4, integer=True,
+                    command=self._update_tp_hint)
+        self.lbl_tp = ttk.Label(self.frame_tp, text="", foreground=MUTED,
+                                wraplength=260, justify="left")
+        self.lbl_tp.grid(row=6, column=0, columnspan=2, sticky="w")
+
         # --- toroid
         self.frame_tor = ttk.LabelFrame(parent, text="Carbon toroid",
                                         padding=8)
@@ -1982,7 +2034,7 @@ class NanocarbonGUI:
                       self.frame_cage, self.frame_mw, self.frame_bundle,
                       self.frame_network,
                       self.frame_ht, self.frame_sn, self.frame_hp,
-                      self.frame_tor,
+                      self.frame_tor, self.frame_tp, self.frame_nc,
                       self.frame_tmd, self.frame_tmd_layers,
                       self.frame_tmd_ribbon, self.frame_tmd_tube,
                       self.frame_tmd_coil, self.frame_tmd_sw,
@@ -2061,6 +2113,12 @@ class NanocarbonGUI:
             # are how the net covers the curvature.
             self.var_anneal.set(0)
             self._update_tor_hint()
+        elif mode == "nanocone":
+            self.frame_nc.pack(fill="x")
+            self._update_nc_hint()
+        elif mode == "toroid (polyhex)":
+            self.frame_tp.pack(fill="x")
+            self._update_tp_hint()
         elif mode == "heptanene":
             self.frame_hp.pack(fill="x")
         elif mode == "supernetwork":
@@ -2446,6 +2504,86 @@ class NanocarbonGUI:
                   f"leave one face and return through the opposite one, so "
                   f"this is ready for a DFT code as it stands."),
             foreground=MUTED)
+
+    def _update_nc_hint(self) -> None:
+        """Say the angle the disclination forces, before the build.
+
+        The apex angle is not a parameter here -- it follows from the
+        pentagon count as ``sin(theta/2) = 1 - N/6`` -- so the useful
+        thing to show is which of the five possible cones this is, and
+        that only the first is good chemistry.
+        """
+        from ..builders.nanocone import CLEAN, apex_angle
+
+        pentagons = int(self.var_nc_pent.get())
+        radius = float(self.var_nc_radius.get())
+        angle = apex_angle(pentagons)
+        ring = 6 - pentagons
+        names = {5: "pentagon", 4: "square", 3: "triangle"}
+        if pentagons != CLEAN and bool(self.var_nc_strict.get()):
+            self.lbl_nc.config(
+                text=(f"✗ {pentagons}×60° puts a {names.get(ring, '?')} at "
+                      f"the apex — sound topology, poor chemistry ("
+                      f"{'1.339' if pentagons == 2 else '1.230'} Å bonds, "
+                      f"{'90' if pentagons == 2 else '60'}° angles). Nature "
+                      f"uses {pentagons} separate pentagons instead. Untick "
+                      "the box to build it anyway."))
+            return
+        note = ("" if pentagons == CLEAN else
+                f" A {names.get(ring, '?')} apex is strained — this is the "
+                "single-disclination form, not what nature does.")
+        self.lbl_nc.config(
+            text=(f"Apex angle {angle:.1f}° — quantised, not chosen: "
+                  "sin(θ/2) = 1 − N/6, so the only cones are 112.9 / 83.6 / "
+                  "60.0 / 38.9 / 19.2°, which are the five Krishnan et al. "
+                  f"observed. A cone is developable, so the roll is an "
+                  f"isometry and the wall stays all-hexagon around a single "
+                  f"{names.get(ring, '?')}. Slant {radius:.0f} Å; the base "
+                  f"rim is open, as a nanoribbon's edges are.{note}"))
+
+    def _update_tp_hint(self) -> None:
+        """Say the radius and the strain before the build.
+
+        This route has no disclinations to relieve curvature with, so
+        the outer wall simply stretches by r/R and no relaxation will
+        shorten those bonds. That makes the strain the whole decision,
+        and it is worth showing while the slider moves rather than as a
+        warning afterwards.
+        """
+        from ..builders.toroid import POLYHEX_MAX_STRAIN, POLYHEX_TEAR_STRAIN
+
+        n = int(self.var_tp_n.get())
+        m = int(self.var_tp_m.get())
+        periods = int(self.var_tp_periods.get())
+        if m > n or n < 2 or periods < 3:
+            self.lbl_tp.config(
+                text="✗ needs n ≥ 2, 0 ≤ m ≤ n and at least 3 periods.")
+            return
+        # a = sqrt(3) * bond; the tube's circumference is a*sqrt(n^2+nm+m^2).
+        bond = float(self.var_bond.get())
+        lattice = math.sqrt(3.0) * bond
+        radius = lattice * math.sqrt(n * n + n * m + m * m) / (2 * math.pi)
+        period = (lattice * math.sqrt(3.0 * (n * n + n * m + m * m))
+                  / math.gcd(2 * n + m, 2 * m + n))
+        major = period * periods / (2 * math.pi)
+        strain = radius / major if major else 1.0
+        if strain > POLYHEX_TEAR_STRAIN:
+            self.lbl_tp.config(
+                text=(f"✗ r/R = {100 * strain:.1f}%, past the "
+                      f"{100 * POLYHEX_TEAR_STRAIN:.0f}% where the wall "
+                      "tears rather than loads. Refused — raise the period "
+                      "count or narrow the tube."))
+            return
+        note = ("" if strain <= POLYHEX_MAX_STRAIN else
+                f" Past the {100 * POLYHEX_MAX_STRAIN:.0f}% budget: real, "
+                "but strained, and no relaxation will fix it — the stretch "
+                "is geometric.")
+        self.lbl_tp.config(
+            text=(f"({n},{m}) tube, r ≈ {radius:.2f} Å, ring R ≈ "
+                  f"{major:.1f} Å, outer wall stretched {100 * strain:.1f}% "
+                  "(r/R). The wall stays ALL HEXAGONS — no disclinations at "
+                  "all, unlike the meshed route, which pays for the same "
+                  f"curvature in 5–7 pairs.{note}"))
 
     def _update_tor_hint(self) -> None:
         """Say whether the hole survives, and whether the ratio is one
@@ -3151,6 +3289,18 @@ class NanocarbonGUI:
                 minor_radius=float(self.var_tor_minor.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
                 roughness=float(self.var_roughness.get()),
+            )
+        elif mode == "nanocone":
+            params = dict(
+                n_pentagons=int(self.var_nc_pent.get()),
+                radius=float(self.var_nc_radius.get()),
+                strict=bool(self.var_nc_strict.get()),
+            )
+        elif mode == "toroid (polyhex)":
+            params = dict(
+                n=int(self.var_tp_n.get()),
+                m=int(self.var_tp_m.get()),
+                periods=int(self.var_tp_periods.get()),
             )
         elif mode == "heptanene":
             params = dict(strict=bool(self.var_hp_strict.get()))
@@ -4452,6 +4602,24 @@ class NanocarbonGUI:
             # window calls broken and a specialist would call correct.
             verdict, why = sp2_quality(g, a.info.get("quality_family", "sp2"))
             lines += ["", f"sp2 verdict  {verdict.upper()}", f"  {why}"]
+        # Whether the disclinations sit where the curvature puts them: a
+        # pentagon is a +60 deg disclination and a heptagon a -60 deg one,
+        # so pentagons belong in positive Gaussian curvature and
+        # heptagons in negative. This was computed on every meshed build
+        # and shown nowhere, which left the census on screen with no way
+        # to tell an ordered wall from a disordered one.
+        check = a.info.get("disclination_check")
+        if check and check.get("agreement") is not None:
+            lines += ["", "disclinations",
+                      f"  {100 * check['agreement']:.0f}% on the curvature "
+                      f"side they belong on",
+                      f"  ({check['n_correct']}/{check['n_scored']} "
+                      "non-hexagonal rings)"]
+            for size, row in sorted(check["sizes"].items()):
+                want = ("wants +" if size < 6
+                        else "wants −" if size > 6 else "flat    ")
+                lines.append(f"  {size}-ring  n={row['count']:<4d} "
+                             f"mean sign {row['mean_sign']:+.2f}  {want}")
         else:
             # An exact-lattice builder has nothing to measure against: the
             # geometry is ideal by construction, which is a different

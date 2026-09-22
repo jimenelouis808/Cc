@@ -59,9 +59,11 @@ from ..builders import (
     build_multiwall_cnt,
     build_nano_onion,
     build_nanocoil,
+    build_nanocone,
     build_nanoribbon,
     build_nanotube_network,
     build_periodic_coil,
+    build_polyhex_toroid,
     build_schwarzite,
     build_supernetwork,
     build_toroid,
@@ -1005,6 +1007,53 @@ def _cmd_toroid(args):
           "sum(6-n) is 0 and they must match")
     print(f"  inner bend  = {100 * info['inner_bend_strain']:.1f}% "
           "(r/R, the wall's curvature at the inner equator)")
+    return 0
+
+
+def _cmd_nanocone(args):
+    atoms = build_nanocone(
+        n_pentagons=args.pentagons, radius=args.radius, bond=args.bond,
+        vacuum=args.vacuum, strict=not args.no_strict,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    print(f"  cone        = {info['n_pentagons']} x 60 deg disclination -> "
+          f"apex angle {info['apex_angle']:.1f} deg, apex ring "
+          f"{info['apex_ring']}-membered")
+    # The angle is not a parameter; it follows from the disclination, and
+    # these are the five angles Krishnan et al. observed.
+    print("  angle        = sin(theta/2) = 1 - N/6, so the five possible "
+          "cones are 112.9 / 83.6 / 60.0 / 38.9 / 19.2 deg")
+    print(f"  seam         = cut at {info['cut_offset_deg']:.0f} deg, chosen "
+          f"because it is the one whose ring budget came out at "
+          f"{info['n_pentagons']:+d} as the disclination requires")
+    print(f"  rim          = {len(info['rim_atoms'])} two-coordinate atoms; "
+          "a nanocone is open at the base, as a nanoribbon is at its edges")
+    return 0
+
+
+def _cmd_toroid_polyhex(args):
+    atoms = build_polyhex_toroid(
+        n=args.n, m=args.m, periods=args.periods, bond=args.bond,
+        vacuum=args.vacuum,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    print(f"  ring        = ({info['n']},{info['m']}) tube bent over "
+          f"{info['periods']} periods: R {info['major_radius']:.1f} / r "
+          f"{info['minor_radius']:.2f} A, R/r {info['aspect_ratio']:.2f}")
+    # The whole point of this route: no disclinations at all. Saying so
+    # beside the strain is saying what it cost.
+    census = info["ring_counts"]
+    verdict = ("all hexagons -- no disclinations at all"
+               if set(census) == {6} else
+               f"NOT all hexagons: {dict(sorted(census.items()))}")
+    print(f"  wall        = {verdict}")
+    print(f"  outer wall  = stretched {100 * info['outer_wall_strain']:.1f}% "
+          "(r/R). Bending a finished lattice can only stretch it, so this "
+          "is geometry rather than an unfinished relaxation")
     return 0
 
 
@@ -1998,6 +2047,61 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Output path without extension.")
     _add_surface_flags(tr)
     tr.set_defaults(func=_cmd_toroid)
+
+    nc = sub.add_parser(
+        "nanocone",
+        help="Cut a wedge of N*60 deg out of graphene and join the edges. "
+             "A cone is developable, so the roll is an isometry: the wall "
+             "stays all-hexagon and the apex angle is quantised by N.",
+    )
+    nc.add_argument("--pentagons", type=int, default=1, choices=(1, 2, 3),
+                    help="The disclination in units of 60 deg, which IS "
+                         "the apex angle: 1 -> 112.9 deg (a pentagon at "
+                         "the apex, the only clean one), 2 -> 83.6 (a "
+                         "square), 3 -> 60.0 (a triangle). 4 and 5 would "
+                         "need a 2-gon and a 1-gon, so they cannot be a "
+                         "single apex ring at all -- nature splits them "
+                         "into separate pentagons, which is how the 19.2 "
+                         "deg nanohorn works and is not a sector cut.")
+    nc.add_argument("--radius", type=float, default=22.0,
+                    help="Slant radius of the flat sector (A), which "
+                         "becomes the cone's slant height.")
+    nc.add_argument("--no-strict", action="store_true",
+                    help="Build the 2- and 3-pentagon cones anyway. Their "
+                         "square and triangular apex rings are sound "
+                         "topology and poor chemistry -- 1.339 and 1.230 A "
+                         "bonds, 90 and 60 deg angles.")
+    nc.add_argument("--bond", type=float, default=1.42)
+    nc.add_argument("--vacuum", type=float, default=12.0)
+    nc.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        nc, seed_help="Seed for dopant placement; the cone itself is exact.")
+    nc.set_defaults(func=_cmd_nanocone)
+
+    tp = sub.add_parser(
+        "toroid-polyhex",
+        help="A toroid built the other way: a finished (n,m) lattice bent "
+             "until its ends meet, so the wall is ALL HEXAGONS with no "
+             "disclinations. The price is size -- bending a polyhex can "
+             "only stretch it.",
+    )
+    tp.add_argument("--n", type=int, default=5,
+                    help="Chiral index n of the tube to bend.")
+    tp.add_argument("--m", type=int, default=5, help="Chiral index m.")
+    tp.add_argument("--periods", type=int, default=110,
+                    help="Translational periods around the ring. This sets "
+                         "the circumference, so it picks the radius and the "
+                         "strain: a (5,5) needs about 110 periods (R = 43 A, "
+                         "2200 atoms) to fit the 8% budget, and is refused "
+                         "past 15% where the wall tears instead of loading.")
+    tp.add_argument("--bond", type=float, default=1.42)
+    tp.add_argument("--vacuum", type=float, default=12.0)
+    tp.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        tp, seed_help="Seed for dopant placement; the ring itself is exact.")
+    tp.set_defaults(func=_cmd_toroid_polyhex)
 
     hp = sub.add_parser(
         "heptanene",

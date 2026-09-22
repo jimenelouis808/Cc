@@ -75,7 +75,15 @@ SAMPLES: dict[str, Job] = {
     # The cheapest network: a cubic net is one node per cell against
     # diamond's eight, and 40 Å is just above the floor that leaves a
     # real tube between them.
+    # N=1 is the only disclination this construction places cleanly:
+    # 470 atoms, one apex pentagon, 210 hexagons, bonds 1.391-1.420 A.
+    "nanocone": Job("nanocone", {"n_pentagons": 1, "radius": 16.0}),
     "toroid": Job("toroid", {"major_radius": 20.0, "minor_radius": 5.0}),
+    # 110 periods of a (5,5) is the smallest all-hexagon ring that fits
+    # the 8% strain budget: R = 43 A, 2200 atoms. Fewer periods is a
+    # tighter ring, and bending a polyhex can only stretch it.
+    "toroid (polyhex)": Job("toroid (polyhex)",
+                            {"n": 5, "m": 5, "periods": 110}),
     # strict=False, because the point of the sample is that the mode
     # builds; under strict it refuses by design and every test that
     # builds every sample would fail on it.

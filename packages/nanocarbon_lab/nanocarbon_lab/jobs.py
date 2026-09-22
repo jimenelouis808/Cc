@@ -68,7 +68,18 @@ CARBON_MODES = (
     # every pentagon is paired with a heptagon -- the cleanest test there
     # is of the disclination rule, because a torus is the surface the
     # coil papers are actually describing.
+    # A wedge cut out of graphene and the edges joined. A cone is
+    # developable, so the roll is an isometry and the apex angle is
+    # QUANTISED by the disclination: sin(theta/2) = 1 - N/6, which is the
+    # five angles Krishnan observed.
+    "nanocone",
     "toroid",
+    # The same ring, built the other way: a finished (n,m) lattice bent
+    # until its ends meet, so the wall is ALL HEXAGONS and there are no
+    # disclinations at all. The price is size -- bending can only stretch
+    # a polyhex -- so it is a separate mode rather than a flag, exactly
+    # as the two coil routes are.
+    "toroid (polyhex)",
     "junction",
     "schwarzite",
     "network",
@@ -274,9 +285,11 @@ def builder_for(mode: str):
         build_multiwall_cnt,
         build_nano_onion,
         build_nanocoil,
+        build_nanocone,
         build_nanoribbon,
         build_nanotube_network,
         build_periodic_coil,
+        build_polyhex_toroid,
         build_schwarzite,
         build_toroid,
     )
@@ -313,7 +326,9 @@ def builder_for(mode: str):
         "haeckelite tube": build_haeckelite_tube,
         "heptanene": build_heptanene,
         "nano-onion": build_nano_onion,
+        "nanocone": build_nanocone,
         "toroid": build_toroid,
+        "toroid (polyhex)": build_polyhex_toroid,
         "junction": build_junction,
         "schwarzite": build_schwarzite,
         "network": build_nanotube_network,
@@ -612,6 +627,23 @@ def estimate_atoms(job: Job) -> int:
         minor = float(p.get("minor_radius", 5.0))
         return int(4.0 * math.pi ** 2 * major * minor / RING_AREA
                    * ATOMS_PER_RING)
+
+    if mode == "nanocone":
+        # A disc of graphene at 2.62 A^2 per atom, less the wedge.
+        radius = float(p.get("radius", 22.0))
+        pentagons = int(p.get("n_pentagons", 1))
+        area = math.pi * radius ** 2 * (1.0 - pentagons / 6.0)
+        return int(area / 2.62)
+
+    if mode == "toroid (polyhex)":
+        # Exact: an (n,m) tube has 4*(n^2+nm+m^2)/gcd... atoms per period
+        # in general, but the builder knows, so ask it rather than
+        # re-deriving. Cheap -- one unit cell, no relaxation.
+        from .builders.cnt import build_cnt
+
+        unit = build_cnt(n=int(p.get("n", 5)), m=int(p.get("m", 5)),
+                         length=1.0)
+        return len(unit) * int(p.get("periods", 110))
 
     if mode == "heptanene":
         # Exact: the Klein quartic has 56 vertices and there is nothing
@@ -945,6 +977,14 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     "toroid": ("toroid", {
         "major_radius": "--major-radius", "minor_radius": "--minor-radius",
         "bond": "--bond", "vacuum": "--vacuum",
+    }),
+    "nanocone": ("nanocone", {
+        "n_pentagons": "--pentagons", "radius": "--radius",
+        "bond": "--bond", "vacuum": "--vacuum", "strict": "--no-strict",
+    }),
+    "toroid (polyhex)": ("toroid-polyhex", {
+        "n": "--n", "m": "--m", "periods": "--periods", "bond": "--bond",
+        "vacuum": "--vacuum",
     }),
     "heptanene": ("heptanene", {
         "bond": "--bond", "strict": "--no-strict",
