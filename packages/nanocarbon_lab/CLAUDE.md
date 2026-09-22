@@ -985,6 +985,137 @@ package already met the spherical case's limit from the other side --
 `heptanene`'s Laplacian has an 8-fold degenerate first eigenvalue, so no
 three of its eigenvectors embed it at all.
 
+## Topological coordinates: positions from the bonds alone
+
+`analyse/topological.py` implements Istvan Laszlo's review (*Theor Chem
+Acc* **134**, 104, 2015). Certain eigenvectors of the adjacency matrix
+are **bi-lobal** -- deleting the vertices where they vanish and the edges
+across which they change sign leaves exactly two components -- and those
+read as angles on the surface. Three of them place a fullerene (Fowler &
+Manolopoulos); a torus needs **four**, because three always flatten it
+(Graovac et al.), and a test here reproduces that failure rather than
+merely citing it.
+
+**Which four was measured, not assumed.** Take the toroidal polyhex this
+package builds exactly -- a (5,5) over 60 periods, 1200 atoms, all
+hexagons -- throw its coordinates away and keep the bonds:
+
+| bi-lobal pair | eigenvalue | agrees with the ring angle | with the tube angle |
+|---|---|---|---|
+| (1, 2) | 2.9973 | **1.0000** | 0.0000 |
+| (13, 14) | 2.8699 | 0.0000 | **1.0000** |
+| (15, 16) | 2.8672 | 0.0019 | 0.0001 |
+| (21, 22) | 2.8591 | 0.0000 | 0.0000 |
+
+So it is the two highest-eigenvalue *degenerate* bi-lobal pairs, and the
+agreement is exact up to an offset. Every other pair is orthogonal to
+both. Re-deriving that costs one build, and it is the reason to believe
+the recipe rather than the citation.
+
+**The round trip is the test, and it has an answer.** Placing the torus
+from its adjacency alone and then asking what bonds the *placement*
+implies returns the 1800 bonds that went in, with the same length
+distribution (1.267-1.570 A against 1.270-1.574). C60 likewise returns
+its 90 bonds and its radius (3.532 A against 3.519). Its bonds come out
+less uniform than the builder's -- 1.357-1.545 against a flat 1.420 --
+which is the known character of the method: these are **placements, not
+relaxations**, and they are excellent starting coordinates.
+
+**There is no general case, and Laszlo says so.** A 1165-atom nanotube
+junction needs sixteen bi-lobal eigenvectors; the method works only for
+structures related to the sphere. The general answer is a matrix `W`
+built from a harmonic potential over first and second neighbours, whose
+null space holds X, Y and Z -- and constructing `W` exactly needs the
+coordinates it is meant to produce. This package met that wall from the
+other side: `heptanene`'s Laplacian has an **8-fold degenerate** first
+non-trivial eigenvalue, so no three of its eigenvectors embed it at all.
+
+## The Dunlap toroid is not reachable by meshing, and this is the evidence
+
+A Dunlap toroid is a ring of straight tube segments joined at **knees**,
+each knee an armchair-to-zigzag junction carrying one pentagon on the
+outside and one heptagon on the inside. The arithmetic is clean: the
+(n,n) and (2n,0) radii are in the ratio 2/sqrt(3) = 1.1547 for every n,
+their chiral directions differ by 30 degrees, so a closed ring takes
+**12 knees** -- and 12 is even, which it must be for the tube type to
+come back to itself. The census is then exactly 12 pentagons and 12
+heptagons, `sum(6-n) = 0`, genus 1.
+
+**The implicit route cannot make one**, and it is worth having measured
+rather than assumed. Sweeping a *polygonal* closed path, which is the
+obvious way to ask for knees:
+
+| centreline | census | disclinations near a knee |
+|---|---|---|
+| circular | 75 + 75 | -- |
+| 12 sides | 72 + 72 | **10%** |
+| 6 sides | 71 + 71 | 39% |
+
+A true Dunlap toroid needs 12 + 12. The remesher **distributes**
+curvature over the whole wall rather than concentrating it at the
+corners, so the polygon changes almost nothing -- at 12 sides the
+disclinations are, if anything, *further* from the knees than a uniform
+scatter would put them. Do not ship a polygonal meshed toroid under
+Dunlap's name.
+
+The route that would work is the lattice one: build the (n,n) and (2n,0)
+segments as real lattices and join them at each knee. Naive mitred
+geometric welding was tried during the coil work and does not work -- it
+produced 3-, 4-, 8- and 9-rings and atoms of degree 1, 2 and 4. The knee
+has to be a **combinatorial** construction on the dual, as
+`fullerene_mesh` does for caps, and then `topological.toroidal_coordinates`
+is the natural way to place the finished graph.
+
+## Hypercubes and supertubes: the skeleton can be any graph at all
+
+Two entries that cost almost nothing because `build_supernetwork` takes
+a graph rather than a name:
+
+* **`super-hypercube`** is the 4-cube: sixteen vertices, 32 edges,
+  4-regular, budget `12*(16-32) = -192`, met exactly at 6522 atoms. Its
+  geometry is the usual perspective projection along `w`, so the struts
+  come out in **three different lengths** (ratio 2.31) -- that is what a
+  tesseract looks like in three dimensions, not a defect, and `scale`
+  sets the shortest because that is the one that has to leave a tube.
+* **`supertube-(n,m)`** is super-graphene rolled. The super-graphene net
+  *is* a honeycomb, so rolling it is the same operation as rolling
+  graphene one scale up -- which means `build_cnt` already does the
+  geometry, the seam closes by construction and the axial period is
+  exact. Measured (4,4) over 2 periods: 4608 atoms, `pbc=(F,F,T)`, cell
+  89.6 x 89.6 x 54.5 A, budget -192 met exactly. The `(n,m)` are the
+  **super**-lattice's indices, not the wall's.
+
+**Every cage reads `scale` as the strut length**, and the supertube
+nearly broke that: writing all three axes as fractions of the axial
+period made its struts read 0.3 A in the menu and the build refuse. The
+two transverse axes are fractions of the strut and `z` of the period,
+with the ratio carried in `shape`. A test pins the contract across all
+of them -- at 2% rather than machine precision, because a *rolled*
+skeleton's struts genuinely vary by about 1%, exactly as a real
+nanotube's bonds do.
+
+## `build` asks the signature; it does not assume a seed
+
+`jobs.build` appended `seed=job.seed` to every carbon builder. An
+exact-lattice builder -- the nanocone's sector cut, the polyhex toroid's
+bend, heptanene's group-theoretic map -- has no randomness and no such
+parameter, so the call raised `TypeError` before any geometry ran.
+**Three modes shipped broken this way**, and in the window it surfaced
+the instant their preset was picked, before anything had been drawn.
+
+It now consults `parameter_names`. The test that guards it must **call
+`build`**, not bind the signature: the first version bound `builder`
+against `parameter_names`, which is exactly what `build` now consults, so
+it agreed with itself and passed against the broken code. The three
+deterministic modes are all under three seconds, which is what makes
+calling them affordable in a unit test.
+
+Applying a preset **builds immediately**, so a preset must not name a
+combination the builder refuses. The heptanene preset set `strict=True`,
+whose whole purpose is to refuse -- so picking it fired the refusal as an
+error dialog. It sets `strict=False` now, and the panel's text carries
+the finding instead.
+
 ## Presets are a catalogue of textbook structures, not a parameter sweep
 
 `gui/app.PRESETS` is a reference shelf: one entry per structure worth

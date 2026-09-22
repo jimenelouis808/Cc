@@ -54,6 +54,8 @@ from .junction import _finish
 
 __all__ = [
     "CAGES",
+    "hypercube_cage",
+    "supertube_graph",
     "ICOSAHEDRON",
     "SUPERLATTICES",
     "build_supernetwork",
@@ -348,6 +350,130 @@ def icosahedral_cage(scale: float = 12.0) -> SuperGraph:
     )
 
 
+def supertube_graph(n: int = 6, m: int = 6, periods: int = 3,
+                    strut: float = 20.0, bond: float = CC_BOND
+                    ) -> SuperGraph:
+    """Super-graphene rolled into a tube: a nanotube of nanotubes.
+
+    The super-graphene net *is* a honeycomb -- three tubes meeting at
+    120 degrees -- so rolling that sheet into a cylinder is the same
+    operation as rolling graphene into a nanotube, one level of scale
+    up. Which means it needs no new geometry at all: `build_cnt` already
+    places a honeycomb on a cylinder exactly, with the seam closing by
+    construction and the axial period exact, so the skeleton is a real
+    ``(n, m)`` tube whose 1.42 Å bonds are scaled up to ``strut``.
+
+    The result is periodic along its axis and finite across it, and
+    every strut of it becomes a nanotube. The ``(n, m)`` indices are the
+    super-lattice's, not the wall's: a ``(6,6)`` supertube is six
+    super-hexagons around, each edge of which is itself a tube.
+
+    **The curvature is the skeleton's, not the wall's.** Rolling a
+    honeycomb bends nothing physical here -- the struts are straight
+    lines between vertices either way -- so unlike a real nanotube there
+    is no roll strain to pay. What changes is the angle at each vertex,
+    and a supertube narrow enough to distort those badly is refused by
+    the same rule every net here obeys: the vertices must leave a real
+    tube between them.
+    """
+    from .cnt import build_cnt
+
+    unit = build_cnt(n=n, m=m, length=1.0, bond=bond, axis=2)
+    period = float(unit.info["period_length"])
+    tube = build_cnt(n=n, m=m, length=period * periods * 0.999, bond=bond,
+                     axis=2)
+    factor = float(strut) / float(bond)
+    positions = tube.get_positions() * factor
+    positions[:, 0] -= positions[:, 0].mean()
+    positions[:, 1] -= positions[:, 1].mean()
+    length = float(tube.cell[2][2]) * factor
+
+    # Bonds, including the one pair that crosses the axial seam. The
+    # skeleton is periodic in z only, so that is the only image to look
+    # for -- and it must be found, or the supertube would come back as a
+    # finite barrel with two open ends.
+    cutoff = strut * 1.25
+    count = len(positions)
+    edges = []
+    for i in range(count):
+        for j in range(i + 1, count):
+            for shift in (0, 1, -1):
+                delta = positions[j] + np.array([0.0, 0.0, shift * length]) \
+                    - positions[i]
+                if float(np.linalg.norm(delta)) < cutoff:
+                    edges.append((i, j, (0, 0, int(shift))))
+                    break
+
+    # SuperGraph multiplies fractional nodes by `shape * scale`, and
+    # every other cage here reads `scale` as the STRUT length. Keeping
+    # that contract means the two transverse axes are fractions of the
+    # strut while z is a fraction of the axial period, which the shape
+    # carries: cell(strut) then comes out (strut, strut, length).Writing
+    # all three as fractions of `length` instead -- the obvious thing --
+    # made this one cage answer `scale` differently from the rest, and
+    # its struts read 0.3 A in the menu.
+    nodes = np.column_stack([positions[:, 0] / strut,
+                             positions[:, 1] / strut,
+                             positions[:, 2] / length])
+    return SuperGraph(
+        name=f"supertube-({n},{m})", nodes=nodes, edges=tuple(edges),
+        pbc=(False, False, True),
+        shape=(1.0, 1.0, float(length) / float(strut)),
+        note=f"super-graphene rolled into a ({n},{m}) tube: {count} "
+             f"vertices over {tube.info['n_periods']} periods, every "
+             "strut a nanotube. The indices are the super-lattice's, not "
+             "the wall's.",
+    )
+
+
+def hypercube_cage(strut: float = 20.0, depth: float = 3.0) -> SuperGraph:
+    """The 4-cube, with a nanotube on every one of its 32 edges.
+
+    Sixteen vertices at ``(+-1, +-1, +-1, +-1)``, joined when they differ
+    in exactly one coordinate: 4-regular, 32 edges, and the topology is
+    the tesseract's exactly. What cannot be exact is the *geometry* --
+    the 4-cube does not fit in three dimensions -- so the vertices are
+    carried here by the standard perspective projection along ``w``,
+    which is the cube-within-a-cube everyone draws.
+
+    **The struts therefore cannot all be the same length, and that is
+    the projection rather than a flaw in the build.** At ``depth = 3``
+    the inner cube's edges come out half the outer's, and the sixteen
+    radial struts between them shorter still. ``strut`` sets the
+    *shortest* of them, because that is the one that has to leave a real
+    tube between two vertices; the longest lands about 2.3 times it.
+
+    Its ring budget is ``12 * (16 - 32) = -192``, which the build is
+    checked against like any other net.
+    """
+    signs = np.array([[a, b, c, d]
+                      for a in (-1.0, 1.0) for b in (-1.0, 1.0)
+                      for c in (-1.0, 1.0) for d in (-1.0, 1.0)])
+    # Perspective projection from w = depth: the w = +1 cube lands
+    # larger, which is the conventional picture.
+    projected = signs[:, :3] / (depth - signs[:, 3])[:, None]
+    edges = tuple(
+        (int(i), int(j), (0, 0, 0))
+        for i in range(len(signs)) for j in range(i + 1, len(signs))
+        if int(np.sum(signs[i] != signs[j])) == 1
+    )
+    lengths = np.linalg.norm(projected[[e[1] for e in edges]]
+                             - projected[[e[0] for e in edges]], axis=1)
+    nodes = projected * (float(strut) / float(lengths.min()))
+    return SuperGraph(
+        name="super-hypercube", nodes=nodes, edges=edges,
+        pbc=(False, False, False),
+        note="the 4-cube's 32 edges as nanotubes, drawn by the usual "
+             "perspective projection along w -- so the struts are "
+             "deliberately unequal, the inner cube's being about half "
+             "the outer's.",
+    )
+
+
+def _hypercube(strut: float) -> SuperGraph:
+    return hypercube_cage(strut)
+
+
 def _icosahedral(strut: float) -> SuperGraph:
     return icosahedral_cage(0.5 * float(strut))
 
@@ -376,6 +502,13 @@ def _superfullerene(family: str):
 #: the program.
 CAGES: dict[str, object] = {
     "super-icosahedron": _icosahedral,
+    "super-hypercube": _hypercube,
+    # Rolled super-graphene. The (6,6) here is the SUPER-lattice's index,
+    # not the wall's; the periods are fixed at 2 so the entry has one
+    # knob like every other cage, and `supertube_graph` is there for the
+    # rest of the family.
+    "supertube-(4,4)": lambda strut: supertube_graph(4, 4, 2, strut),
+    "supertube-(6,6)": lambda strut: supertube_graph(6, 6, 2, strut),
     "superfullerene-C60": _superfullerene("C60"),
 }
 

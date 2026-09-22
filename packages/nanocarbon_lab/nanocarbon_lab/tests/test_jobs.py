@@ -22,6 +22,7 @@ from nanocarbon_lab.jobs import (
     build,
     estimate_atoms,
     estimate_cost,
+    parameter_names,
     parse_swaps,
     to_cli,
 )
@@ -515,3 +516,46 @@ class TestGraftingSweeps:
         for job in grafted:
             atoms = build(job)
             assert atoms.info["functionalization"][-1]["group"] == "hydroxyl"
+
+
+class TestEveryModeCanActuallyBeCalled:
+    """`build` must pass arguments the builder accepts.
+
+    Three modes shipped where it did not: `build` appended ``seed`` to
+    every carbon builder, and an exact-lattice one has no randomness and
+    no such parameter, so the call raised ``TypeError`` before any
+    geometry ran. In the window that surfaced the moment the preset was
+    picked, before anything had been drawn.
+
+    **This has to call `build`, not bind the signature.** The first
+    version of this test bound ``builder`` against ``parameter_names``,
+    which is what `build` now consults -- so it agreed with itself and
+    passed happily against the broken code. Mutation-checked: reverting
+    `build` to the unconditional ``seed=`` makes these three fail.
+    """
+
+    #: The exact-lattice carbon modes: no relaxation, no mesh, and all
+    #: under three seconds, which is what makes calling them affordable
+    #: here. Every one of them is a builder with no `seed`.
+    DETERMINISTIC = ("heptanene", "nanocone", "toroid (polyhex)")
+
+    @pytest.mark.parametrize("mode", DETERMINISTIC)
+    def test_the_deterministic_modes_build(self, mode):
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            atoms = build(SAMPLES[mode])
+        assert len(atoms) > 0
+
+    def test_none_of_them_takes_a_seed(self):
+        """If one grows a `seed` this test is not wrong -- but it is no
+        longer testing anything, so it should be pointed at whichever
+        mode is exact-lattice then."""
+        for mode in self.DETERMINISTIC:
+            assert "seed" not in parameter_names(mode)
+
+    @pytest.mark.parametrize("mode", sorted(SAMPLES))
+    def test_no_sample_names_a_parameter_the_builder_lacks(self, mode):
+        unknown = set(SAMPLES[mode].params) - set(parameter_names(mode))
+        assert not unknown, f"{mode} sample sets {sorted(unknown)}"

@@ -292,12 +292,17 @@ PRESETS: dict[str, dict[str, object]] = {
     "Haeckelite R5,7 tube": {
         "mode_kind": "haeckelite tube", "ht_pattern": "r57", "ht_nx": 12,
         "ht_ny": 4, "ht_roll": "a"},
-    # A trivalent net of nothing but heptagons. It exists only in
-    # hyperbolic geometry and its smallest orientable member does not
-    # reach carbon, so this preset REFUSES -- which is the result, and
-    # the one entry here whose answer is a proof rather than a structure.
+    # A trivalent net of nothing but heptagons: the one entry here whose
+    # answer is a proof rather than a structure. `hp_strict` is False on
+    # purpose. Applying a preset BUILDS immediately, and under strict the
+    # builder refuses by design -- so selecting this preset fired its
+    # refusal as an error dialog before the window had drawn anything,
+    # which is the worst possible way to deliver a result. Unticked, it
+    # returns the strained lattice to look at, and the panel's own text
+    # plus `sp2 verdict` carry the finding. Tick the box to see the
+    # refusal in full.
     "Heptanene (Klein quartic, genus 3)": {
-        "mode_kind": "heptanene", "hp_strict": True},
+        "mode_kind": "heptanene", "hp_strict": False},
     # --- coils. Two routes, and they are not interchangeable, so the
     # names say which. One preset each; the old menu carried three
     # meshed coils differing only in radius and turn count, which is a
@@ -352,6 +357,15 @@ PRESETS: dict[str, dict[str, object]] = {
     "Super-diamond (tubes at 109.47°)": {
         "mode_kind": "supernetwork", "sn_graph": "super-diamond",
         "sn_scale": 60.0, "sn_radius": 5.0, "sn_blend": 4.0, "anneal": 0},
+    # Each of the 4-cube's 32 edges a nanotube. The struts are
+    # deliberately unequal -- that is what a 4D object looks like in 3D.
+    "Hypercube of tubes (4-cube)": {
+        "mode_kind": "supernetwork", "sn_graph": "super-hypercube",
+        "sn_scale": 20.0, "sn_radius": 3.5, "sn_blend": 2.5, "anneal": 0},
+    # Super-graphene rolled: a nanotube whose every bond is a nanotube.
+    "Supertube (6,6) of super-graphene": {
+        "mode_kind": "supernetwork", "sn_graph": "supertube-(6,6)",
+        "sn_scale": 14.0, "sn_radius": 3.0, "sn_blend": 2.0, "anneal": 0},
     "Icosahedral cage of tubes": {
         "mode_kind": "supernetwork", "sn_graph": "super-icosahedron",
         "sn_scale": 24.0, "sn_radius": 4.0, "sn_blend": 3.0, "anneal": 0},

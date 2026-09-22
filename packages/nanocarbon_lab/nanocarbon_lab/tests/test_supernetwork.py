@@ -20,9 +20,11 @@ from nanocarbon_lab.builders.supernetwork import (
     SUPERLATTICES,
     SuperGraph,
     build_supernetwork,
+    hypercube_cage,
     icosahedral_cage,
     named_graph,
     supergraph_from_atoms,
+    supertube_graph,
 )
 
 #: What each net's vertices must have. These are properties of the nets,
@@ -224,20 +226,28 @@ class TestTheCagesAreReachable:
     was wrong.
     """
 
-    def test_both_cages_are_registered(self):
-        assert set(CAGES) == {"super-icosahedron", "superfullerene-C60"}
+    def test_the_cages_are_registered(self):
+        assert set(CAGES) == {"super-icosahedron", "superfullerene-C60",
+                              "super-hypercube", "supertube-(4,4)",
+                              "supertube-(6,6)"}
 
     @pytest.mark.parametrize("name", ["super-icosahedron",
-                                      "superfullerene-C60"])
+                                      "superfullerene-C60",
+                                      "supertube-(4,4)"])
     def test_scale_means_the_strut_length(self, name):
         """A periodic net's scale is its cell edge; a cage has no cell,
         so scale is how long each tube is -- the number that decides
         whether a tube survives between two vertices at all."""
+        # rel=0.02 rather than machine precision, because a ROLLED
+        # skeleton's struts are not all identical: putting a honeycomb on
+        # a cylinder replaces each arc by its chord, so a supertube's
+        # struts vary by about 1% exactly as a real nanotube's bonds do.
+        # The icosahedron and the C60 are exact and pass either way.
         for strut in (18.0, 24.0):
             graph = named_graph(name, strut)
             lengths = graph.strut_lengths(strut)
-            assert lengths.min() == pytest.approx(strut, rel=1e-6)
-            assert lengths.max() == pytest.approx(strut, rel=1e-6)
+            assert lengths.min() == pytest.approx(strut, rel=0.02)
+            assert lengths.max() == pytest.approx(strut, rel=0.02)
 
     def test_the_cages_are_the_structures_they_claim(self):
         cage = named_graph("super-icosahedron", 24.0)
@@ -253,3 +263,74 @@ class TestTheCagesAreReachable:
     def test_an_unknown_name_names_both_catalogues(self):
         with pytest.raises(ValueError, match="super-icosahedron"):
             named_graph("super-nonsense", 40.0)
+
+
+class TestTheHypercube:
+    """The 4-cube's 32 edges as nanotubes. The topology is exact; the
+    geometry cannot be, because a tesseract does not fit in three
+    dimensions."""
+
+    def test_it_is_the_tesseract(self):
+        graph = hypercube_cage(20.0)
+        assert len(graph.nodes) == 16
+        assert len(graph.edges) == 32
+        assert graph.coordination == 4
+
+    def test_its_budget_follows_from_the_skeleton(self):
+        assert hypercube_cage(20.0).ring_budget == 12 * (16 - 32) == -192
+
+    def test_the_struts_are_deliberately_unequal(self):
+        """Three lengths -- the outer cube's, the inner cube's and the
+        radial ones between them -- because that is what a perspective
+        projection along w does. `scale` sets the shortest, which is the
+        one that has to leave a real tube."""
+        lengths = hypercube_cage(20.0).strut_lengths(20.0)
+        assert lengths.min() == pytest.approx(20.0)
+        assert len(set(np.round(lengths, 2))) == 3
+        assert 2.2 < lengths.max() / lengths.min() < 2.4
+
+    def test_every_edge_joins_vertices_differing_in_one_coordinate(self):
+        """The defining property of a hypercube, checked on the
+        projection rather than assumed from it."""
+        graph = hypercube_cage(20.0)
+        degree = np.zeros(16, dtype=int)
+        for start, end, _shift in graph.edges:
+            degree[start] += 1
+            degree[end] += 1
+        assert set(degree.tolist()) == {4}
+
+
+class TestTheSupertube:
+    """Super-graphene rolled. The net IS a honeycomb, so rolling it is
+    the same operation as rolling graphene -- which means `build_cnt`
+    does the geometry and nothing new is needed."""
+
+    def test_the_seam_closes(self):
+        """Every vertex trivalent. A supertube whose seam did not close
+        would have two rows of two-coordinate vertices, and the
+        coordination property would raise."""
+        assert supertube_graph(6, 6, 2, 20.0).coordination == 3
+
+    def test_it_repeats_along_its_axis_only(self):
+        assert supertube_graph(6, 6, 2, 20.0).pbc == (False, False, True)
+
+    def test_the_vertex_count_is_the_tubes(self):
+        """4*n atoms per armchair period, so (6,6) over 2 periods is 48."""
+        assert len(supertube_graph(6, 6, 2, 20.0).nodes) == 48
+        assert len(supertube_graph(4, 4, 2, 20.0).nodes) == 32
+
+    def test_scale_is_the_strut_here_too(self):
+        """Every other cage reads `scale` as the strut length, and this
+        one nearly did not: writing all three axes as fractions of the
+        axial period made its struts read 0.3 Å in the menu."""
+        for strut in (14.0, 20.0):
+            lengths = supertube_graph(6, 6, 2, strut).strut_lengths(strut)
+            assert lengths.max() == pytest.approx(strut, rel=0.02)
+            assert lengths.min() == pytest.approx(strut, rel=0.02)
+
+    def test_a_seam_bond_carries_the_axial_shift(self):
+        """The ring closes through the cell, so some edges must be
+        recorded with a non-zero z image -- otherwise the supertube is a
+        barrel with two open ends."""
+        edges = supertube_graph(6, 6, 2, 20.0).edges
+        assert any(shift[2] != 0 for _a, _b, shift in edges)

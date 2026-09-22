@@ -378,7 +378,15 @@ def build(job: Job):
         if job.tmd_edit:
             atoms = apply_tmd_chemistry(atoms, job)
     else:
-        atoms = builder(**job.params, seed=job.seed)
+        # Ask the signature rather than assuming. Most carbon builders
+        # place defects or roughness and need a seed; an exact-lattice
+        # one -- the nanocone's sector cut, the polyhex toroid's bend,
+        # heptanene's group-theoretic map -- has no randomness at all and
+        # no `seed` parameter, and passing one is a TypeError rather than
+        # a no-op. Three modes shipped broken this way: the GUI raised
+        # the moment their preset was picked, before anything was drawn.
+        extra = {"seed": job.seed} if "seed" in parameter_names(job.mode) else {}
+        atoms = builder(**job.params, **extra)
         if job.codope:
             atoms = apply_codoping(atoms, job)
         elif job.dopant and job.dopant_conc > 0:
