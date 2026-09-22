@@ -1206,6 +1206,99 @@ Until then **the package ships no Dunlap toroid**, which is the honest
 state: two toroid routes that are what they say they are, and a third
 that would not have been.
 
+### Why the knee is hard, stated precisely
+
+Two more constructions were tried and both hit the *same* wall, which is
+worth stating once because it governs junctions and coils too.
+
+Rows perpendicular to the tube axis fix the smearing problem completely:
+a count change then lands on **one vertex at one azimuth**, and the
+ring's phase places it to the degree -- measured 0.00 -> 194 deg,
+0.25 -> 284 deg, 0.50 -> 14 deg, exactly 360 deg per unit of phase. So
+azimuthal placement is solved and controllable.
+
+What is not solved is **isolation**. Every move that changes the mesh
+locally creates a 5 and a 7 *together*:
+
+- A count step of one (`N, N, N+1, N+1, N`) gives `{5: 2, 6: 232, 7: 2}`
+  with each 5 stacked directly on a 7, ~2 Å apart at the same azimuth.
+- A shift band (both rings at `N`, the join offset stepping 0 -> 1 at one
+  azimuth and back at another) gives `{5: 2, 6: 152, 7: 2}` with the 5 at
+  0 deg and the 7 at 180 deg -- which *looks* like a knee until you notice
+  the second pair sits at 165 and 345 deg, so each disclination is
+  adjacent to an opposite one and they cancel.
+
+Both are **dislocations**, which is the same object that defeated the
+flip route: a 5-7 pair is a dislocation, and no local construction emits
+one half of it. An isolated pentagon needs the rows to shrink
+*progressively* -- a cone sector, which is exactly how `nanocone.py`
+already gets its single clean pentagon (bonds 1.391-1.420, budget
+exactly 1).
+
+**So the route to a knee is two cone sectors joined, not a cylinder
+edited.** That is a real build and it is not started. What *is* settled
+is that a planar bevel cut cannot do it: the (5,5) and (10,0) tubes a
+30 deg knee would join have radii 3.39 and 3.92 Å, so their cut ellipses
+cannot coincide at any bevel angle, and cutting one tube and mirroring it
+tears the lattice outright.
+
+## Where a disclination belongs, as a rule the annealer can use
+
+The flip annealer's objective was `sum(|deg - 6|)`: every vertex wants to
+be a hexagon, wherever it sits. That is right on a flat sheet and wrong
+on everything else this package builds, and it is why annealing was
+measured making walls *wavier* -- it removes disclinations the curvature
+actually needs, leaving the survivors to carry all of it.
+
+The replacement is discrete Gauss-Bonnet read locally. Over a region
+`sum(6 - deg) = (3/pi) * integral K dA`, so one vertex's share is
+`3 * K(v) / pi`, and `vertex_curvature_targets()` returns exactly that as
+a *fractional* degree excess per vertex. The objective becomes
+`sum(((6 - deg(v)) - target(v))**2)`: a pentagon on a cap is free, the
+same pentagon in a straight barrel is not.
+
+**`K(v)` here is the angle deficit `2*pi - sum(theta)`, and it is
+geometric rather than combinatorial.** That is the whole reason it can
+serve as a target: a degree-5 vertex on a flat sheet has five 72 deg
+angles summing to exactly `2*pi`, so its deficit is zero and it asks for
+nothing. The test suite pins that case at `< 1e-9`. (Note this is the
+*triangulation's* deficit, which is signed and usable -- unlike the
+trivalent net's, which the curvature section above records is never
+negative and measures pyramidalisation instead.)
+
+The check that makes it a rule rather than a heuristic is that the
+targets must sum to `6*chi`, the same budget everything else here is
+tested against. Measured: **11.951, 11.943 and 11.865 against an exact 12**
+on the L, Y and X junctions, and 12 on a sphere -- under 1%, all of it
+from the two-ring smoothing.
+
+**It is not uniformly better in practice, and the default therefore stays
+`"census"`.** At 80 sweeps:
+
+=========  ==============  ==============  =====================
+junction   objective       placed          bond spread (Å)
+=========  ==============  ==============  =====================
+Y          none (0)        94%             0.118
+Y          census          100%            0.187
+Y          curvature       100%            **0.138**
+L          none (0)        90%             0.141
+L          census          100%            **0.123**
+L          curvature       100%            0.141
+=========  ==============  ==============  =====================
+
+Both objectives reach 100% placement, so on *that* measure the census
+objective was already doing the right thing by accident -- stray pairs
+are mostly misplaced pairs, so removing them improves placement too. The
+curvature objective wins the bond spread on the Y and loses it on the L.
+
+**What is not established is the wall smoothness**, which is the measure
+that motivated this. The wobble figures in the `anneal_sweeps` table were
+not reproduced here: a re-implementation read 2.0-2.5 Å where that table
+records 0.6-1.9, and picked 123 atoms into one barrel against 65 into the
+others, so the arm selection is wrong somewhere. **Do not quote a wobble
+comparison between the two objectives until that measurement is rebuilt
+and reproduces the table.** The numbers above are the ones that hold.
+
 ## Hypercubes and supertubes: the skeleton can be any graph at all
 
 Two entries that cost almost nothing because `build_supernetwork` takes

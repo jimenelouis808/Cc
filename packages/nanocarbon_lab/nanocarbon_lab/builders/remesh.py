@@ -568,6 +568,7 @@ def isotropic_remesh(
     anneal_sweeps: int = 80,
     anneal_temperature: float = 0.3,
     anneal_restarts: int = 1,
+    anneal_objective: str = "census",
     rng: np.random.Generator | None = None,
 ) -> Mesh:
     """Remesh to near-uniform triangles of side ``target_edge``.
@@ -586,6 +587,13 @@ def isotropic_remesh(
         Desired triangle side. In the dual this sets the carbon ring
         size, so it should be roughly the ring-centre spacing you want --
         about ``sqrt(3) * bond`` (2.46 Å) for graphitic carbon.
+    anneal_objective
+        ``"census"`` (the default) drives every vertex toward degree 6.
+        ``"curvature"`` drives each toward the degree excess its own
+        Gaussian curvature asks for, via
+        :func:`vertex_curvature_targets`. See that function for the
+        measured comparison -- it is not uniformly better, which is why
+        it is opt-in.
     anneal_sweeps, anneal_temperature, anneal_restarts, rng
         Passed to :func:`anneal_edge_flips` after the main loop. Set
         ``anneal_sweeps=0`` to keep the as-remeshed defect population,
@@ -632,6 +640,7 @@ def isotropic_remesh(
             sweeps=anneal_sweeps,
             temperature=anneal_temperature,
             restarts=anneal_restarts,
+            objective=anneal_objective,
         )
         mesh = _tangential_smooth(mesh, field, box=box, max_step=smooth_step)
 
@@ -647,6 +656,66 @@ def isotropic_remesh(
     return mesh
 
 
+def vertex_curvature_targets(mesh: Mesh, smoothing: int = 2) -> np.ndarray:
+    """The degree excess each vertex's own curvature asks for.
+
+    Discrete Gauss-Bonnet, read locally. The angle deficit
+    ``K(v) = 2*pi - sum(theta)`` is the discrete Gaussian curvature at a
+    vertex, and it is **geometric rather than combinatorial**: a degree-5
+    vertex on a flat sheet has five 72 deg angles summing to exactly
+    2*pi, so its deficit is zero. That is what makes it usable as a
+    target -- it says what the *surface* is doing, not what the mesh
+    happens to be doing.
+
+    Over a region, ``sum(6 - deg) = (3/pi) * integral K dA``, so the share
+    belonging to one vertex is ``3 * K(v) / pi``. Summed over a closed
+    mesh that returns ``6 * chi`` exactly, which is the budget the rest of
+    this package checks against -- so a mesh that matched its targets
+    everywhere would satisfy the Euler check automatically.
+
+    The raw per-vertex deficit is noisy on a remeshed surface, so it is
+    averaged over ``smoothing`` rings of neighbours first. The point is
+    the curvature of the surface, not of one triangle fan.
+
+    Parameters
+    ----------
+    mesh
+        Triangulation. Only positions are read; connectivity is used for
+        the angle sums and for the smoothing neighbourhood.
+    smoothing
+        Neighbour shells to average over. ``0`` leaves the raw deficit.
+
+    Returns
+    -------
+    numpy.ndarray
+        One float per vertex: the *fractional* degree excess its
+        curvature justifies. Near zero on a cylinder or a flat sheet,
+        positive on a cap, negative in a neck.
+    """
+    verts, faces = mesh
+    deficit = np.full(len(verts), 2.0 * np.pi)
+    for tri in faces:
+        a, b, c = (verts[int(tri[i])] for i in range(3))
+        for i, (p0, p1, p2) in enumerate(((a, b, c), (b, c, a), (c, a, b))):
+            e1, e2 = p1 - p0, p2 - p0
+            n1 = np.linalg.norm(e1) * np.linalg.norm(e2)
+            if n1 <= 0.0:
+                continue
+            cosine = float(np.clip(np.dot(e1, e2) / n1, -1.0, 1.0))
+            deficit[int(tri[i])] -= np.arccos(cosine)
+
+    if smoothing > 0:
+        nbrs = _adjacency(faces)
+        for _ in range(smoothing):
+            smoothed = deficit.copy()
+            for v, ring in nbrs.items():
+                if ring:
+                    smoothed[v] = (deficit[v] + sum(deficit[w] for w in ring)
+                                   ) / (1 + len(ring))
+            deficit = smoothed
+    return 3.0 * deficit / np.pi
+
+
 def anneal_edge_flips(
     mesh: Mesh,
     rng: np.random.Generator,
@@ -655,6 +724,7 @@ def anneal_edge_flips(
     min_degree: int = 5,
     max_degree: int = 8,
     restarts: int = 1,
+    objective: str = "census",
 ) -> Mesh:
     """Metropolis-anneal edge flips to remove spurious dislocation pairs.
 
@@ -709,14 +779,29 @@ def anneal_edge_flips(
     """
     if sweeps <= 0 or restarts < 1:
         return mesh
+    if objective not in ("census", "curvature"):
+        raise ValueError(
+            f"objective must be 'census' or 'curvature', not {objective!r}")
+    targets = (vertex_curvature_targets(mesh)
+               if objective == "curvature" else None)
     best = None
-    best_pairs = None
+    best_score = None
     for _ in range(max(1, restarts)):
         candidate = _anneal_once(mesh, rng, sweeps, temperature,
-                                 min_degree, max_degree)
-        pairs = dislocation_pairs(candidate)
-        if best_pairs is None or pairs < best_pairs:
-            best, best_pairs = candidate, pairs
+                                 min_degree, max_degree, targets)
+        if targets is None:
+            score = float(dislocation_pairs(candidate))
+        else:
+            # Judge the restarts by the objective they were run under.
+            # Scoring a curvature anneal on its dislocation count would
+            # keep whichever run flattened the census hardest, which is
+            # the behaviour this objective exists to stop.
+            degree = _adjacency(candidate[1])
+            score = float(sum(
+                ((6 - len(degree[v])) - targets[v]) ** 2
+                for v in range(len(candidate[0]))))
+        if best_score is None or score < best_score:
+            best, best_score = candidate, score
     return best
 
 
@@ -727,6 +812,7 @@ def _anneal_once(
     temperature: float,
     min_degree: int,
     max_degree: int,
+    targets: np.ndarray | None = None,
 ) -> Mesh:
     """One Metropolis run. See :func:`anneal_edge_flips` for the reasoning."""
     if sweeps <= 0:
@@ -737,8 +823,20 @@ def _anneal_once(
     nbrs = _adjacency(faces)
     degree = {v: len(ns) for v, ns in nbrs.items()}
 
-    def deviation(*values: int) -> int:
-        return sum(abs(v - 6) for v in values)
+    if targets is None:
+        # The census objective: every vertex wants degree 6, wherever it
+        # sits. Right on a flat sheet and wrong on anything curved, which
+        # is why the curvature objective exists.
+        def deviation(*pairs: tuple[int, int]) -> float:
+            return float(sum(abs(d - 6) for _, d in pairs))
+    else:
+        # The curvature objective: every vertex wants the degree excess
+        # its OWN Gaussian curvature asks for, so a pentagon on a cap is
+        # free and the same pentagon in a straight barrel is not. Squared,
+        # because one badly placed disclination is worse than two slightly
+        # misplaced ones -- a stray 5 in a flat wall is the thing to move.
+        def deviation(*pairs: tuple[int, int]) -> float:
+            return float(sum(((6 - d) - targets[v]) ** 2 for v, d in pairs))
 
     for sweep in range(sweeps):
         temp = temperature * (1.0 - sweep / max(1, sweeps - 1))
@@ -768,8 +866,10 @@ def _anneal_once(
             ):
                 continue
             delta = deviation(
-                degree[u] - 1, degree[v] - 1, degree[w1] + 1, degree[w2] + 1
-            ) - deviation(degree[u], degree[v], degree[w1], degree[w2])
+                (u, degree[u] - 1), (v, degree[v] - 1),
+                (w1, degree[w1] + 1), (w2, degree[w2] + 1),
+            ) - deviation((u, degree[u]), (v, degree[v]),
+                          (w1, degree[w1]), (w2, degree[w2]))
             if delta > 0 and (
                 temp <= 0.0 or rng.random() >= np.exp(-delta / temp)
             ):
