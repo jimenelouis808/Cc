@@ -1242,6 +1242,61 @@ is that a planar bevel cut cannot do it: the (5,5) and (10,0) tubes a
 cannot coincide at any bevel angle, and cutting one tube and mirroring it
 tears the lattice outright.
 
+## Where Dunlap's twelve comes from
+
+Not from `4*pi*r/e`. That formula was written here first, depends on the
+tube radius, and gives 17 or 27 -- it was never the right quantity.
+
+On a torus `K dA = cos(phi) dphi dtheta`: **the radii cancel**. So
+`integral K dA` over the outer half is `4*pi` for any `R` and any `r`,
+and the disclination budget there is `3/pi * 4*pi = `**`12`**, with `-12`
+on the inner half. **That is Dunlap's twelve**, and it is a topological
+statement about the surface rather than a fact about carbon.
+
+Two things follow, and both were measured:
+
+- **A remeshed torus already satisfies it exactly.** Straight out of the
+  remesher, the outer half carries `+12` and the inner `-12`. Nothing
+  needed fixing about the budget.
+- **What it lacks is the census.** It carries that budget as 73
+  pentagons and 71 heptagons rather than 12 and 12. The surplus is
+  neutral 5-7 pairs -- dislocations, which cost the budget nothing and
+  are exactly the "scattered at random" the eye sees.
+
+So a Dunlap toroid is not a different budget. It is the same budget with
+the dislocations annealed away.
+
+### Neither pass alone gets there
+
+- **Census annealing** removes pairs and scrambles the split: 73/71 down
+  to 21/17, outer charge falling `+12 -> +8`. `sum(|deg - 6|)` does not
+  know which side of the equator a defect belongs on.
+- **Placement** holds the split and stalls on the pairs: greedy descent
+  cannot escape its own minimum, stopping at 47/43.
+
+**Alternating them beats both**: 73/71 -> **17/15 with the split at
++11/-11**, converged by the fifth cycle. `refine_disclinations` is that
+loop, and `place_curvature=True` now runs it rather than one greedy pass.
+End to end through the builders:
+
+============  =================  =================  =========  =========
+structure     rings before       rings after        placed     placed
+                                                    before     after
+============  =================  =================  =========  =========
+toroid        68 / 560 / 68      **22 / 653 / 22**  93.4%      **100%**
+Y junction    50 / 443 / 38      **23 / 497 / 11**  94.3%      **100%**
+============  =================  =================  =========  =========
+
+No close contacts either way, and the toroid's bond spread improves
+(0.164 -> 0.151). The toroid comes out two atoms heavier: the refinement
+itself is verified to preserve `V`, `F` and every position exactly, so
+that is the dual step downstream, not the flips.
+
+**It is still not 12/12.** 22/22 is 68% of the way from 68/68, with every
+one of them on the correct side of the curvature. The remaining ten pairs
+are what greedy descent plus a cooled anneal could not find, not a
+different budget.
+
 ## Four things the window got wrong about structures that were right
 
 All four were reported from screenshots, and in every case the structure

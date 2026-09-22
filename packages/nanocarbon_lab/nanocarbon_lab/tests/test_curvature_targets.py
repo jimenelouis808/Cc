@@ -168,3 +168,99 @@ class TestPlacement:
         assert len(history) == 1
 
 
+
+class TestRefinement:
+    """`refine_disclinations` alternates the two passes. Neither alone works.
+
+    The toroid is the demonstration, and the numbers are in the
+    function's own docstring: census annealing alone reaches 21/17 and
+    scrambles the Gauss-Bonnet split, placement alone holds the split and
+    stalls at 47/43, and alternating reaches 17/15 holding it.
+    """
+
+    def test_it_changes_no_vertex_and_no_face(self):
+        """Flips are the only move, so V and F are invariant and the
+        positions are untouched. A toroid built through the full builder
+        came out two atoms heavier, which is the dual step downstream,
+        not this."""
+        mesh = _mesh("Y")
+        out, _log = rm.refine_disclinations(mesh, np.random.default_rng(0),
+                                            cycles=2)
+        assert len(out[0]) == len(mesh[0])
+        assert len(out[1]) == len(mesh[1])
+        assert np.array_equal(out[0], mesh[0])
+
+    def test_the_euler_budget_survives(self):
+        mesh = _mesh("Y")
+        out, _log = rm.refine_disclinations(mesh, np.random.default_rng(0),
+                                            cycles=2)
+
+        def budget(m):
+            adjacency = rm._adjacency(m[1])
+            return sum(6 - len(adjacency[v]) for v in range(len(m[0])))
+
+        assert budget(out) == budget(mesh)
+
+    def test_it_removes_disclinations_rather_than_adding(self):
+        mesh = _mesh("Y")
+        out, _log = rm.refine_disclinations(mesh, np.random.default_rng(0),
+                                            cycles=3)
+
+        def defects(m):
+            return sum(1 for ns in rm._adjacency(m[1]).values()
+                       if len(ns) != 6)
+
+        assert defects(out) < defects(mesh)
+
+    def test_it_reports_a_cycle_log(self):
+        """Returned rather than printed, so a caller can show it
+        converged instead of assuming it did."""
+        _out, log = rm.refine_disclinations(_mesh("L"),
+                                            np.random.default_rng(0), cycles=2)
+        assert log and all("disclinations" in line for line in log)
+
+
+class TestTheDunlapBudget:
+    """Where Dunlap's twelve actually comes from.
+
+    In ``K dA = cos(phi) dphi dtheta`` the radii cancel, so the integral
+    over a torus's outer half is 4*pi for ANY R and r, and the
+    disclination budget there is ``3/pi * 4*pi = 12``. The formula tried
+    first here, ``4*pi*r/e``, depends on the tube radius and gave 17 or
+    27 -- it was never the right quantity.
+    """
+
+    @pytest.mark.parametrize("major,minor",
+                             [(20.0, 5.0), (30.0, 3.0), (12.0, 4.0)])
+    def test_the_outer_half_owes_exactly_twelve(self, major, minor):
+        outer = 2.0 * math.pi * (math.sin(math.pi / 2) - math.sin(-math.pi / 2))
+        assert 3.0 * outer / math.pi == pytest.approx(12.0)
+        # and the whole torus owes nothing, which is genus 1.
+        whole = 2.0 * math.pi * (math.sin(3 * math.pi / 2)
+                                 - math.sin(-math.pi / 2))
+        assert 3.0 * whole / math.pi == pytest.approx(0.0, abs=1e-9)
+
+    def test_the_mesh_measure_agrees_with_the_analytic_one(self):
+        """`vertex_curvature_targets` must reproduce the +12, or it is
+        not measuring the same thing the rule is derived from."""
+        major, minor, rings_round, rings_tube = 20.0, 5.0, 120, 40
+        verts, faces = [], []
+        for i in range(rings_round):
+            theta = 2 * math.pi * i / rings_round
+            for k in range(rings_tube):
+                phi = 2 * math.pi * k / rings_tube
+                rho = major + minor * math.cos(phi)
+                verts.append([rho * math.cos(theta), rho * math.sin(theta),
+                              minor * math.sin(phi)])
+        def index(i, k):
+            return (i % rings_round) * rings_tube + (k % rings_tube)
+        for i in range(rings_round):
+            for k in range(rings_tube):
+                a, b = index(i, k), index(i + 1, k)
+                c, d = index(i, k + 1), index(i + 1, k + 1)
+                faces += [[a, b, c], [b, d, c]]
+        mesh = (np.asarray(verts, float), np.asarray(faces, int))
+        targets = rm.vertex_curvature_targets(mesh, smoothing=0)
+        outer = sum(t for t, v in zip(targets, mesh[0], strict=True)
+                    if math.hypot(v[0], v[1]) >= major)
+        assert outer == pytest.approx(12.0, rel=0.05)

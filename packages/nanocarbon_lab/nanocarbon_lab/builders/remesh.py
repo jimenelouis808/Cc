@@ -641,7 +641,10 @@ def isotropic_remesh(
             restarts=anneal_restarts,
         )
     if place_curvature:
-        mesh, _history = place_disclinations(mesh)
+        # The full refinement, not one greedy pass: placement alone
+        # stalls at 47/43 on a toroid where alternating it with the
+        # annealer reaches 17/15. See `refine_disclinations`.
+        mesh, _log = refine_disclinations(mesh, rng)
         mesh = _tangential_smooth(mesh, field, box=box, max_step=smooth_step)
 
     # Final cleanup: three- and four-membered rings cannot exist in sp2
@@ -664,6 +667,87 @@ def isotropic_remesh(
 CURVATURE_WINDOW_RINGS = 2
 
 
+def refine_disclinations(
+    mesh: Mesh,
+    rng: np.random.Generator | None = None,
+    cycles: int = 5,
+    sweeps: int = 40,
+    temperature: float = 0.3,
+    pair_weight: float = 5.0,
+    rounds: int = 40,
+) -> tuple[Mesh, list[str]]:
+    """Anneal the spurious pairs away while holding the curvature split.
+
+    Neither half of this works alone, and the toroid is the clean
+    demonstration. **Gauss-Bonnet fixes the disclination budget of a
+    torus's outer half at exactly +12 and its inner half at -12, for any
+    R and any r** -- in ``K dA = cos(phi) dphi dtheta`` the radii cancel,
+    so the integral over the outer half is 4*pi and the budget is
+    ``3/pi * 4*pi = 12``. That is where Dunlap's twelve comes from. It is
+    not ``4*pi*r/e``, the formula tried first here, which depends on the
+    tube radius and gave 17 or 27.
+
+    A remeshed torus already carries that budget **exactly**: measured
+    +12 outside and -12 inside straight out of the remesher. What it
+    does not have is Dunlap's census, because the budget is carried by 73
+    pentagons and 71 heptagons rather than 12 and 12 -- the surplus being
+    neutral 5-7 pairs, which are dislocations and cost nothing to the
+    budget.
+
+    - **Census annealing alone** removes pairs and scrambles the split:
+      73/71 down to 21/17, with the outer charge falling +12 -> +8,
+      because nothing in ``sum(|deg - 6|)`` knows which side of the
+      equator a defect belongs on.
+    - **Placement alone** holds the split and stalls on the pairs: greedy
+      descent cannot escape its own minimum, stopping at 47/43.
+
+    Alternating them beats both: **73/71 -> 17/15 with the split at
+    +11/-11**, converged by the fifth cycle. The stochastic pass finds
+    the pairs, the exact pass puts what is left back where the curvature
+    wants it, and neither undoes the other.
+
+    Parameters
+    ----------
+    mesh
+        Remeshed triangulation.
+    rng
+        Seeded generator. The annealing half is stochastic, so this is
+        the only thing making a result reproducible.
+    cycles
+        Anneal-then-place rounds. Measured to converge by five on a
+        toroid; more cost time and change nothing.
+    sweeps, temperature
+        Passed to :func:`anneal_edge_flips` for the stochastic half.
+    pair_weight, rounds
+        Passed to :func:`place_disclinations` for the exact half.
+
+    Returns
+    -------
+    (mesh, log)
+        The refined mesh and one line per cycle, so a caller can show
+        that it converged rather than assume it.
+    """
+    if rng is None:
+        rng = np.random.default_rng(0)
+    log: list[str] = []
+    current = mesh
+    previous = None
+    for cycle in range(max(1, cycles)):
+        current = anneal_edge_flips(current, rng, sweeps=sweeps,
+                                    temperature=temperature, restarts=2)
+        current, _history = place_disclinations(current, max_rounds=rounds,
+                                                pair_weight=pair_weight)
+        degrees = _adjacency(current[1])
+        defects = sum(1 for ns in degrees.values() if len(ns) != 6)
+        log.append(f"cycle {cycle + 1}: {defects} disclinations, "
+                   f"misfit {curvature_misfit(current):.1f}")
+        # Converged: the last cycle changed nothing at all.
+        if previous is not None and np.array_equal(current[1], previous):
+            break
+        previous = current[1].copy()
+    return current, log
+
+
 def place_disclinations(
     mesh: Mesh,
     targets: np.ndarray | None = None,
@@ -671,6 +755,7 @@ def place_disclinations(
     max_rounds: int = 60,
     min_degree: int = 5,
     max_degree: int = 8,
+    pair_weight: float = 0.0,
 ) -> tuple[Mesh, list[float]]:
     """Move disclinations to where the curvature wants them, by flips.
 
@@ -709,6 +794,19 @@ def place_disclinations(
         Per-vertex curvature targets; computed from the mesh if omitted.
     rings
         Window radius. Defaults to :data:`CURVATURE_WINDOW_RINGS`.
+    pair_weight
+        Cost charged per disclination, on top of the misfit. ``0`` leaves
+        the count alone and only moves what is there. Positive also
+        **annihilates spurious 5-7 pairs**, which is what separates a
+        remeshed torus from a Dunlap one: both carry the same net charge
+        -- Gauss-Bonnet fixes the outer half of any torus at exactly +12
+        and the inner at -12, whatever R and r -- but the remeshed one
+        carries it as 73 pentagons and 71 heptagons rather than 12 and
+        12, the surplus being neutral pairs. Annealing the pairs away by
+        census alone reaches 21 and 17 and *scrambles the split*, +12
+        falling to +8, because nothing in that objective knows which side
+        of the equator a defect belongs on. Charging for both at once is
+        the only thing that holds the split while the pairs go.
     max_rounds
         Cap on descent rounds. Each is a full recomputation.
     min_degree, max_degree
@@ -730,8 +828,17 @@ def place_disclinations(
 
     verts, faces = mesh
     face_list = [tuple(int(x) for x in tri) for tri in faces]
-    history = [curvature_misfit((verts, np.asarray(face_list, dtype=int)),
-                                targets, rings)]
+    def total_cost(faces_now) -> float:
+        """Misfit plus the per-disclination charge."""
+        candidate = (verts, np.asarray(faces_now, dtype=int))
+        cost = curvature_misfit(candidate, targets, rings)
+        if pair_weight:
+            adjacency = _adjacency(candidate[1])
+            cost += pair_weight * sum(
+                1 for ns in adjacency.values() if len(ns) != 6)
+        return cost
+
+    history = [total_cost(face_list)]
 
     for _ in range(max_rounds):
         current = np.asarray(face_list, dtype=int)
@@ -787,6 +894,7 @@ def place_disclinations(
                         if d != 6)
             if after > before:
                 continue
+            delta += pair_weight * (after - before)
             if delta < -1e-9:
                 moves.append((delta, edge, tuple(incident), u, v, w1, w2))
 
@@ -813,8 +921,7 @@ def place_disclinations(
         if not applied:
             break
 
-        score = curvature_misfit((verts, np.asarray(trial, dtype=int)),
-                                 targets, rings)
+        score = total_cost(trial)
         if score >= history[-1] - 1e-9:
             break
         face_list = trial
