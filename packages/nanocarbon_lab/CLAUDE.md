@@ -1242,62 +1242,95 @@ is that a planar bevel cut cannot do it: the (5,5) and (10,0) tubes a
 cannot coincide at any bevel angle, and cutting one tube and mirroring it
 tears the lattice outright.
 
-## Where a disclination belongs, as a rule the annealer can use
+## Where a disclination belongs: the placement rule
 
 The flip annealer's objective was `sum(|deg - 6|)`: every vertex wants to
-be a hexagon, wherever it sits. That is right on a flat sheet and wrong
-on everything else this package builds, and it is why annealing was
-measured making walls *wavier* -- it removes disclinations the curvature
-actually needs, leaving the survivors to carry all of it.
+be a hexagon, wherever it sits. Right on a flat sheet and wrong on
+everything else here. The replacement is discrete Gauss-Bonnet read
+locally -- over a region `sum(6 - deg) = (3/pi) * integral K dA`, so one
+vertex's share is `3 * K(v) / pi`, which `vertex_curvature_targets()`
+returns.
 
-The replacement is discrete Gauss-Bonnet read locally. Over a region
-`sum(6 - deg) = (3/pi) * integral K dA`, so one vertex's share is
-`3 * K(v) / pi`, and `vertex_curvature_targets()` returns exactly that as
-a *fractional* degree excess per vertex. The objective becomes
-`sum(((6 - deg(v)) - target(v))**2)`: a pentagon on a cap is free, the
-same pentagon in a straight barrel is not.
+`K(v)` is the angle deficit `2*pi - sum(theta)` of the **triangulation**,
+and it is geometric rather than a restatement of the degree: a degree-5
+vertex on a flat sheet has five 72 deg angles summing to exactly `2*pi`
+and asks for nothing. The suite pins that at `< 1e-9`. (Not the trivalent
+net's deficit, which the curvature section above records is never
+negative.) The rule is checked by the one identity that makes it a rule:
+the targets sum to `6*chi` -- measured **11.951, 11.943, 11.865 against
+an exact 12** on L, Y, X, and 12 on a sphere.
 
-**`K(v)` here is the angle deficit `2*pi - sum(theta)`, and it is
-geometric rather than combinatorial.** That is the whole reason it can
-serve as a target: a degree-5 vertex on a flat sheet has five 72 deg
-angles summing to exactly `2*pi`, so its deficit is zero and it asks for
-nothing. The test suite pins that case at `< 1e-9`. (Note this is the
-*triangulation's* deficit, which is signed and usable -- unlike the
-trivalent net's, which the curvature section above records is never
-negative and measures pyramidalisation instead.)
+### Charge over a neighbourhood, never per vertex
 
-The check that makes it a rule rather than a heuristic is that the
-targets must sum to `6*chi`, the same budget everything else here is
-tested against. Measured: **11.951, 11.943 and 11.865 against an exact 12**
-on the L, Y and X junctions, and 12 on a sphere -- under 1%, all of it
-from the two-ring smoothing.
+The first version compared them **per vertex and was worthless**, in a way
+worth keeping because it looks correct. Curvature is spread over area; a
+disclination is a point. Per vertex every target lies under 0.2 while a
+degree excess is +-1, so a heptagon costs 1.045 wherever it sits against
+0.0005 for a hexagon -- **2067:1, and completely blind to position.** It
+was a squared census with a rounding error, and it measured as one.
 
-**It is not uniformly better in practice, and the default therefore stays
-`"census"`.** At 80 sweeps:
+Summed over a **two-ring window** (19 vertices) the two become comparable
+-- targets -1.29 to 2.98 against excesses -3 to 4 -- and correlate at
+0.814. One ring (7 vertices) is too small to hold a disclination's worth
+of curvature and correlates at 0.574; three (37) reaches 0.897 but smears
+a junction neck into its arms. Two is the working choice, and
+`curvature_misfit()` is that comparison summed.
 
-=========  ==============  ==============  =====================
-junction   objective       placed          bond spread (Å)
-=========  ==============  ==============  =====================
-Y          none (0)        94%             0.118
-Y          census          100%            0.187
-Y          curvature       100%            **0.138**
-L          none (0)        90%             0.141
-L          census          100%            **0.123**
-L          curvature       100%            0.141
-=========  ==============  ==============  =====================
+### Why the placement pass recomputes instead of updating
 
-Both objectives reach 100% placement, so on *that* measure the census
-objective was already doing the right thing by accident -- stray pairs
-are mostly misplaced pairs, so removing them improves placement too. The
-curvature objective wins the bond spread on the Y and loses it on the L.
+`place_disclinations()` is greedy descent that **rebuilds the whole state
+every round**. A faster incremental version was written first and did not
+work, twice over, both failures worth recording:
 
-**What is not established is the wall smoothness**, which is the measure
-that motivated this. The wobble figures in the `anneal_sweeps` table were
-not reproduced here: a re-implementation read 2.0-2.5 Å where that table
-records 0.6-1.9, and picked 123 atoms into one barrel against 65 into the
-others, so the arm selection is wrong somewhere. **Do not quote a wobble
-comparison between the two objectives until that measurement is rebuilt
-and reproduces the table.** The numbers above are the ones that hold.
+- **Windows go stale across sweeps.** Flips change the adjacency, so
+  neighbourhoods taken once no longer exist. Optimised against stale
+  windows a Y junction ended at misfit 418 having *started* at 355 --
+  worse than doing nothing, which a minimiser cannot be.
+- **They go stale within a sweep too.** With the snapshot refreshed each
+  sweep, 45 flips were accepted in one sweep, every one of them
+  "improving" by its own delta, and the sweep still ended worse. Only the
+  first was measured against the real graph.
+
+Blocking each accepted flip's window is *not* enough either: two flips are
+independent only when their windows are disjoint, which is **twice** the
+window radius apart, not one. The pass therefore applies only
+mutually-unreachable flips per round and then **verifies the true misfit
+fell**, rolling the round back if it did not. The returned history is
+monotonic by construction and the suite asserts it.
+
+### The guard that makes it a placement rather than a rewrite
+
+A flip preserves `sum(6 - deg)` but can still turn two hexagons into a
+5-7 pair. Left free, the descent **buys misfit by manufacturing pairs**
+to chase curvature finer than one disclination can represent -- fitting
+noise. Measured with the guard off, the two measures moved in opposite
+directions: misfit down 17-36% while the fraction of disclinations on the
+correct side of the curvature went **95.7% -> 85.6%** on an X junction.
+So the pass refuses any flip that raises the defect count. With it:
+
+=========  ==========  =========  ===================  ==================
+junction   placed      placed     rings before         rings after
+           before      after
+=========  ==========  =========  ===================  ==================
+Y          94.3%       **98.4%**  50 / 443 / 38        37 / 469 / 25
+L          90.0%       **93.8%**  41 / 313 / 29        38 / 320 / 26
+T          92.3%       92.5%      58 / 422 / 46        46 / 447 / 34
+X          95.7%       **97.9%**  64 / 539 / 50 + 1o   53 / 562 / 39 + 1o
+=========  ==========  =========  ===================  ==================
+
+All four improve, the disclination count falls as well, and no structure
+gains a close contact. The bond spread moves both ways and by little
+(0.117 -> 0.137 on a Y, 0.140 -> 0.126 on an X), so it is not a bond-
+quality argument either way.
+
+**The octagon survives the pass** on the X junction, which is the right
+answer rather than a tolerance: `max_degree=8` admits it and the
+objective keeps it where the curvature is most negative, at the neck. An
+octagon carries -2 of budget, so it is worth two heptagons of negative
+curvature and belongs only where that much is concentrated.
+
+It is off by default (`place_curvature=False`) because turning it on
+moves every structure that uses the remesher.
 
 ## Hypercubes and supertubes: the skeleton can be any graph at all
 

@@ -92,30 +92,79 @@ class TestCurvatureTargets:
         assert total == pytest.approx(12.0, rel=0.03)
 
 
-class TestObjectiveIsSelectable:
-    """The objective is opt-in, and refuses a name it does not know."""
+class TestPlacement:
+    """`place_disclinations` moves disclinations; it must not invent them."""
 
-    def test_an_unknown_objective_is_refused(self):
-        mesh = _mesh("L")
-        with pytest.raises(ValueError, match="census.*curvature"):
-            rm.anneal_edge_flips(mesh, np.random.default_rng(0), sweeps=1,
-                                 objective="whatever")
+    @pytest.mark.parametrize("kind", ["L", "Y"])
+    def test_the_descent_is_monotonic(self, kind):
+        """Every round must lower the misfit. A round that does not is
+        rolled back, so a non-monotonic history means the incremental
+        bookkeeping has drifted from the true measure again."""
+        _out, history = rm.place_disclinations(_mesh(kind))
+        assert len(history) > 1, "no round improved at all"
+        assert all(b < a for a, b in zip(history, history[1:], strict=False)), history
 
-    def test_the_census_objective_is_unchanged_by_the_new_argument(self):
-        """The default must be bit-identical to what shipped before, or
-        every structure in the package quietly moves."""
-        mesh = _mesh("L")
-        a = rm.anneal_edge_flips(mesh, np.random.default_rng(7), sweeps=8)
-        b = rm.anneal_edge_flips(mesh, np.random.default_rng(7), sweeps=8,
-                                 objective="census")
-        assert np.array_equal(a[1], b[1])
+    @pytest.mark.parametrize("kind", ["L", "Y"])
+    def test_the_euler_budget_is_untouched(self, kind):
+        """Flips cannot change sum(6 - deg), so this is exact, not close."""
+        mesh = _mesh(kind)
+        out, _ = rm.place_disclinations(mesh)
 
-    def test_the_curvature_objective_produces_a_valid_mesh(self):
+        def budget(m):
+            adjacency = rm._adjacency(m[1])
+            return sum(6 - len(adjacency[v]) for v in range(len(m[0])))
+
+        assert budget(out) == budget(mesh)
+
+    @pytest.mark.parametrize("kind", ["L", "Y"])
+    def test_it_never_adds_a_disclination(self, kind):
+        """Without this guard the descent buys misfit by manufacturing
+        5-7 pairs to chase curvature finer than a disclination can
+        represent -- the misfit fell 17-36% while the fraction of
+        disclinations on the right side of the curvature fell, the two
+        measures moving opposite ways."""
+        mesh = _mesh(kind)
+        out, _ = rm.place_disclinations(mesh)
+
+        def defects(m):
+            return sum(1 for ns in rm._adjacency(m[1]).values()
+                       if len(ns) != 6)
+
+        assert defects(out) <= defects(mesh)
+
+    def test_positions_are_never_moved(self):
         mesh = _mesh("L")
-        out = rm.anneal_edge_flips(mesh, np.random.default_rng(3), sweeps=8,
-                                   objective="curvature")
-        assert len(out[0]) == len(mesh[0])
-        assert len(out[1]) == len(mesh[1])
-        degrees = {v: len(ns) for v, ns in rm._adjacency(out[1]).items()}
-        assert min(degrees.values()) >= 5
-        assert max(degrees.values()) <= 8
+        out, _ = rm.place_disclinations(mesh)
+        assert np.array_equal(out[0], mesh[0])
+
+    def test_degrees_stay_inside_the_clamp(self):
+        """Three- and four-membered rings cannot exist in sp2 carbon, so
+        the clamp is a hard constraint rather than a preference."""
+        out, _ = rm.place_disclinations(_mesh("Y"))
+        degrees = [len(ns) for ns in rm._adjacency(out[1]).values()]
+        assert min(degrees) >= 5
+        assert max(degrees) <= 8
+
+    def test_a_flat_sheet_has_nothing_to_place(self):
+        """Zero curvature everywhere means zero target everywhere, so a
+        defect-free flat mesh is already at the floor."""
+        points, index = [], {}
+        for i in range(-5, 6):
+            for j in range(-5, 6):
+                if abs(i + j) > 5:
+                    continue
+                index[(i, j)] = len(points)
+                points.append([i + 0.5 * j, j * math.sqrt(3.0) / 2.0, 0.0])
+        faces = []
+        for (i, j), a in index.items():
+            b, c = index.get((i + 1, j)), index.get((i, j + 1))
+            d = index.get((i - 1, j + 1))
+            if b is not None and c is not None:
+                faces.append([a, b, c])
+            if c is not None and d is not None:
+                faces.append([a, c, d])
+        mesh = (np.asarray(points, float), np.asarray(faces, int))
+        _out, history = rm.place_disclinations(mesh)
+        assert len(history) == 1
+
+

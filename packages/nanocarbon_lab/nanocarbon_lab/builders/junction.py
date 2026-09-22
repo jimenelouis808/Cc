@@ -78,7 +78,7 @@ def build_junction(
     grid_resolution: int = 70,
     remesh_iterations: int = 25,
     anneal_sweeps: int = 0,
-    anneal_objective: str = "census",
+    place_curvature: bool = False,
     roughness: float = 0.0,
     relax_iterations: int = 3000,
     vacuum: float = DEFAULT_VACUUM_1D,
@@ -148,16 +148,12 @@ def build_junction(
         angle is 128.6 deg before any strain at all, so more of them
         pushes ``angle_max`` toward the window's edge. Neither is the wall
         getting worse.
-    anneal_objective
-        What the annealer is trying to achieve. ``"census"`` pushes every
-        ring toward a hexagon; ``"curvature"`` pushes each toward what its
-        own Gaussian curvature asks for, so a pentagon on a cap is free
-        and the same pentagon in a straight barrel is not. Measured on
-        this builder at 80 sweeps: both reach 100% of disclinations on
-        the curvature side they belong on (against 90-94% unannealed),
-        and the bond spread goes 0.187 -> 0.138 Å on a Y but 0.123 ->
-        0.141 Å on an L. It is a better-founded rule that is **not
-        uniformly better in practice**, so the default stays "census".
+    place_curvature
+        Move the disclinations to where the surface's own Gaussian
+        curvature asks for them, by Stone-Wales flips, after the
+        remesh. It cannot change HOW MANY there are -- flips preserve
+        ``sum(6 - deg)`` -- only where they sit, which is the thing the
+        census objective never looked at.
     roughness
         RMS out-of-plane corrugation in Å applied after relaxation. ``0``
         leaves an ideally smooth shell; 0.1-0.3 Å looks CVD-grown.
@@ -198,7 +194,7 @@ def build_junction(
     mesh = rm.isotropic_remesh(
         mesh, field, target_edge=np.sqrt(3.0) * bond,
         iterations=remesh_iterations, anneal_sweeps=anneal_sweeps,
-        anneal_objective=anneal_objective, rng=rng,
+        place_curvature=place_curvature, rng=rng,
     )
     return _finish(
         mesh,
@@ -210,7 +206,7 @@ def build_junction(
         info={
             "structure_type": "junction",
             "anneal_sweeps": anneal_sweeps,
-            "anneal_objective": anneal_objective,
+            "place_curvature": place_curvature,
             "roughness": roughness,
             "junction_kind": kind,
             "tube_radius": tube_radius,
