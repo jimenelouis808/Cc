@@ -1132,6 +1132,80 @@ vertex-changing moves, checking after each that `sum(6 - deg)` is still
 *Stone-Wales toroid* -- the right census, the wrong arrangement -- and it
 should not be shipped under Dunlap's name.
 
+### The row-count route: the third attempt, and the third wall
+
+Climb was never reached, because a better idea got there first and then
+failed for a reason worth more than the builder would have been. If the
+disclinations must be *placed*, do not place them: **let the row counts
+place them.** A torus's outer equator is longer than its inner one, so
+triangulate it with a different number of vertices per row, proportional
+to that row's own circumference. Every row-count change of one is a
+disclination, and it lands where the curvature asks for it without
+anybody choosing.
+
+It reaches the census exactly. Scanning `(R, r)` under the constraint
+that the mesh stay isotropic -- row spacing equal to in-row spacing
+equal to `sqrt(3) * bond`, which is the only way the dual comes out at
+graphene's bond length -- **44 cells give exactly `{5: 12, ..., 7: 12}`
+with no degree outside 5-7**, all of them at `rows = 8` and
+`r = 3.05-3.30 Å`, with `R` free from 12.5 to 59.5 Å. The relaxed nets
+are good carbon: bonds 1.359-1.477 Å at `R = 12.5` and 1.376-1.472 at
+`R = 36`, spreads of 0.118 and 0.096 against **0.164 for the meshed
+toroid and 0.166 for the polyhex one**. By the bond statistics alone it
+is the best toroid in the package.
+
+It is still not a Dunlap toroid, and the measurement that settles it is
+azimuthal rather than radial:
+
+- **Radially it is right.** Pentagons sit at rho = 39.4 Å and heptagons
+  at 34.4 Å on the `R = 36` cell -- outside and inside, which is what the
+  "92% placed" figure in `disclination_check` was reporting.
+- **Azimuthally it is wrong.** The gaps between consecutive pentagons
+  round the ring run **0.1 deg to 60.9 deg**, not 30 deg. The twelve
+  disclinations come out as **six pairs, not twelve isolated knees.**
+- **The shape agrees.** Fourier-analysing the axis radius, the strongest
+  harmonics are `n = 2` (1.52 Å) and `n = 6` (1.96 Å); `n = 12` is third
+  and weak (0.51 Å). Six pairs of knees make a six-fold shape.
+
+**This is structural, not a tuning failure, and that is the point.** A
+row-count change happens at a *meridional band* -- constant angle round
+the tube -- and a meridional band is a circle that runs all the way
+round the ring. Its disclinations are therefore smeared round the ring
+by construction. The route can never localise them into a knee, at any
+`R`, any `r`, any row count. **The row-count route cannot produce a
+Dunlap toroid**, and no search inside it will change that.
+
+Two further traps met on the way, both worth keeping:
+
+- **The census is not the structure.** The first version of this hit
+  `{5: 12, 6: 1049, 7: 12}` and `sum(6-n) = 0` and looked finished. Its
+  tube radius, measured, ran **0.17 to 12.14 Å** around a reported 3.01 --
+  the wall had corrugated flat. A census can be perfect while the object
+  is not a torus at all, so measure the shape as well, always.
+- **`relax_shell` alone will wrinkle a wall.** The mesh and its dual were
+  exact tori (`r = 4.75 +- 0.00`, dual bonds averaging exactly 1.420);
+  free relaxation destroyed them, because equalising bond lengths is
+  satisfied just as well by a corrugated surface as a smooth one. The
+  cure already existed in the function: pass `anchor_normals` and the
+  restraint acts only along the surface normal, holding the wall on its
+  surface while every atom stays free within it. That cut the spread
+  from +-2.55 Å to +-0.345.
+
+**What is left is the lattice-exact knee**, which is what Dunlap actually
+built: a polygon of straight `(n,n)` and `(2n,0)` segments, their axes 30
+deg apart because that is the angle between the armchair and zigzag
+directions, twelve of them closing the ring. A planar bevel cut does
+*not* give it -- cutting a (5,5) tube on a plane and mirroring it tore
+the lattice (dangling atoms at degree 1 and 2, triangles and squares at
+the seam, measured at four bend angles), because the cut curve unrolls to
+a sinusoid on the sheet rather than to a lattice mirror line. The knee
+has to be built as the lattice object it is, one pentagon and one
+heptagon matching an armchair rim to a zigzag one.
+
+Until then **the package ships no Dunlap toroid**, which is the honest
+state: two toroid routes that are what they say they are, and a third
+that would not have been.
+
 ## Hypercubes and supertubes: the skeleton can be any graph at all
 
 Two entries that cost almost nothing because `build_supernetwork` takes
