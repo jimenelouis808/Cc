@@ -1242,6 +1242,94 @@ is that a planar bevel cut cannot do it: the (5,5) and (10,0) tubes a
 cannot coincide at any bevel angle, and cutting one tube and mirroring it
 tears the lattice outright.
 
+## Heptanene: sp3 makes it worse, and by a factor of six
+
+The proposal was a 2D all-heptagon sheet with the sp2/sp3 mix as the free
+parameter. The Euler accounting settles it. With all faces heptagons,
+`n3` vertices of degree 3 (sp2, or sp3 with one bond leaving the net) and
+`n4` of degree 4 (sp3 with all four in it):
+
+    2E = 3*n3 + 4*n4,   7F = 2E,   V = n3 + n4
+    chi = V - E + F = -(n3 + 6*n4) / 14
+
+A 2D-periodic sheet is a torus per cell, so `chi = 0`, so
+`n3 + 6*n4 = 0`, so `n3 = n4 = 0` -- no net at all. **And every
+four-coordinate sp3 vertex counts six times an sp2 one**, so raising the
+sp3 fraction drives `chi` further negative: it needs *more* handles, not
+fewer. The refusal is not a limitation of the sp2 assumption.
+
+What the accounting does give is where heptanene lives: `n3 = 56, n4 = 0`
+gives `chi = -4`, genus 3 -- exactly one schwarzite unit cell. Heptanene
+is a schwarzite, not a sheet.
+
+**And no cell size rescues the embedding.** Expanding the Klein quartic's
+cubic 3-torus and relaxing under periodic boundary:
+
+======  ==========  =================  =========
+scale   cell (Å)    bonds (Å)          contacts
+======  ==========  =================  =========
+x1.0    6.19        0.83-1.75          86
+x1.3    8.05        1.05-2.03          12
+x1.6    9.91        1.20-2.50          **0**
+x2.2    13.63       1.56-3.50          0
+======  ==========  =================  =========
+
+The contacts go, and the bonds simply scale with the cell -- a 2:1 spread
+at every size. There is no cell where it is carbon.
+
+## Hybridisation is not curvature, and the flat haeckelite proves it
+
+`analyse/hybridisation.py` measures sp3 character from the **angle sum**
+at each carbon: 360 deg flat (sp2), 328.4 deg tetrahedral (sp3), and the
+fraction is the linear interpolation. Validated against the knowns:
+
+==================  ============  ================
+structure           angle sum     sp3 character
+==================  ============  ================
+haeckelite (flat)   360.0 deg     **0.00**
+CNT (10,10)         359.2         0.03
+CNT (4,4)           355.0         0.16
+C60                 348.0         0.38
+heptanene           301.4-354.2   **1.03**
+==================  ============  ================
+
+**The haeckelite is the control that matters.** It is nothing but
+pentagons and heptagons and it reads exactly zero sp3. Curvature lives in
+the ring census; hybridisation lives in the angles, and a measure that
+confused them would be reporting the census twice.
+
+Note this is the same angle sum the curvature section warns is never
+negative at a trivalent vertex. That is precisely why it cannot give a
+curvature *sign* -- and precisely why it does give pyramidalisation,
+which is what it is used for here. Heptanene reading past 1.0 is the
+quantitative form of the refusal: its carbons are bent further than
+tetrahedral, which no carbon is.
+
+## Two display faults on structures with a tiny cell
+
+**Edge-bond stubs can dominate a picture.** A crossing bond is drawn from
+one atom toward the *image* of the other, so the stub reaches up to a
+full cell outside the cluster. Heptanene has 29 of its 84 bonds crossing
+a 6.19 Å cell -- 35% -- so the stubs reach twice as far as the structure
+and are most of what is on screen, which is what "does not visualise
+correctly" was. The limits now include the drawn segments rather than
+only the atoms, and the preview says the crossing share when it is over
+20% so the picture is explained rather than merely drawn.
+
+**The superlattices were not a regression.** Rebuilt at HEAD, the
+super-hypercube returns the identical census to the screenshot that
+raised it -- `{5: 254, 6: 2539, 7: 398, 8: 24}`, 6494 atoms. What changed
+is `set_box_aspect`: the old view squashed z by a quarter, so every
+structure now shows depth it was previously hiding. That is a correction,
+and it does make a dense superlattice look busier.
+
+`refine_disclinations` is separately capped above
+`LARGE_MESH_VERTICES`. The per-round cost is small and near-linear where
+it was measured -- 0.10 s at 654 vertices, 0.21 s at 1153, so forty
+rounds is seconds -- but a 12 592-atom superfullerene did not finish in
+fifteen minutes with the pass on, and **that has not been isolated**. The
+cap bounds the work; it does not explain the case.
+
 ## Where Dunlap's twelve comes from
 
 Not from `4*pi*r/e`. That formula was written here first, depends on the

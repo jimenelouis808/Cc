@@ -3960,6 +3960,12 @@ class NanocarbonGUI:
         # and then seeing only the original cell is the same bug as
         # drawing them and calling it a picture of the structure.
         corners = np.vstack([pos + shift for shift in self._offsets()])
+        # Include the drawn edge-bond stubs. They reach up to a cell
+        # beyond the atoms, and framing only the atoms cropped them off
+        # the view on any structure where they are a large share.
+        extra = getattr(self, "_drawn_extent", None)
+        if extra is not None and len(extra):
+            corners = np.vstack([corners, extra])
         scale = getattr(self, "_zoom_scale", 1.0)
         span = (float((corners.max(axis=0) - corners.min(axis=0)).max()) / 2.0
                 or 1.0) * scale
@@ -4362,8 +4368,26 @@ class NanocarbonGUI:
                 note = f"showing 1 bond in {stride}"
             if hidden:
                 note = ", ".join(filter(None, [note, f"{hidden} edge bonds hidden"]))
+            # A structure whose cell is barely bigger than its bonds has
+            # a large share of them crossing, and each is drawn as a stub
+            # reaching a full cell OUTSIDE the cluster. Heptanene is the
+            # extreme: 29 of its 84 bonds cross a 6.2 Å cell, so the
+            # stubs reach twice as far as the structure and the picture
+            # is mostly stubs. Saying the share is the difference
+            # between a confusing image and an explained one.
+            elif show_wrapped:
+                crossing = int(sum(1 for row in shifts if row.any()))
+                total = max(1, len(shifts))
+                if crossing / total > 0.2:
+                    note = ", ".join(filter(None, [
+                        note,
+                        f"{100 * crossing / total:.0f}% of bonds cross the "
+                        "cell — untick 'edge bonds' for a clearer view"]))
             segs = [(start + shift, end + shift)
                     for shift in offsets for start, end in bonds]
+            self._drawn_extent = (
+                np.array([p for seg in segs for p in seg])
+                if segs else None)
             if segs:
                 self.ax.add_collection3d(
                     Line3DCollection(segs, colors="#9aa3ad", linewidths=0.7)
@@ -4715,12 +4739,34 @@ class NanocarbonGUI:
             lines.append("composition  " + " ".join(
                 f"{el}{by_element[el]}" for el in sorted(by_element)))
 
+        # sp2/sp3 is the question asked of every real sample in this
+        # field, and here it can be measured rather than inferred from a
+        # D/G ratio. It is NOT a restatement of the ring census: a flat
+        # haeckelite is full of pentagons and heptagons and reads 360.0
+        # deg, exactly sp2.
+        hyb = ""
+        if a.info.get("bonds") is not None and len(a) >= 4:
+            try:
+                from ..analyse.hybridisation import hybridisation_report
+
+                report = hybridisation_report(
+                    a.positions, a.info.get("bonds", []), np.asarray(a.cell))
+                if report["n_measured"]:
+                    hyb = (f"  sp3        {100 * report['sp3_fraction']:>5.1f}% "
+                           f"of {report['n_measured']} C\n"
+                           f"  angle sum  {report['angle_sum_min']:.1f}"
+                           f"-{report['angle_sum_max']:.1f}° "
+                           f"(360 flat, 328 sp3)")
+            except Exception:  # noqa: BLE001 - a reading, never fatal
+                hyb = ""
+
         lines += [
             "",
             "rings",
             rings_txt,
             (f"  Euler sum  {deficit:>5d}  "
              f"{'OK' if deficit == expected else 'BROKEN'}"),
+            *(["", "hybridisation", hyb] if hyb else []),
             "",
             "geometry",
         ]

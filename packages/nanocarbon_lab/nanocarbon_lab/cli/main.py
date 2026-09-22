@@ -630,6 +630,24 @@ def _report_structure(atoms, xyz_path, json_path):
           f" / {g['angle_max']:.1f} deg")
     print(f"  close contacts (<2 A, non-bonded) = {g['n_close_contacts']}")
     _report_doping(atoms)
+    # Measured, not inferred from a D/G ratio. And NOT a restatement of
+    # the ring census: a flat haeckelite is all pentagons and heptagons
+    # and reads exactly 360.0 deg, which is exactly sp2.
+    try:
+        import numpy as _np
+
+        from ..analyse.hybridisation import (
+            describe_hybridisation,
+            hybridisation_report,
+        )
+
+        _hyb = hybridisation_report(atoms.positions,
+                                    atoms.info.get("bonds", []),
+                                    _np.asarray(atoms.cell))
+        if _hyb["n_measured"]:
+            print(f"  hybridisation = {describe_hybridisation(_hyb)}")
+    except Exception:  # noqa: BLE001 - a reading, never fatal
+        pass
     # The window follows the structure. A heptagon's interior angle is
     # 128.6 deg before any strain, so judging a haeckelite against the
     # hexagonal window calls every sound one BROKEN.

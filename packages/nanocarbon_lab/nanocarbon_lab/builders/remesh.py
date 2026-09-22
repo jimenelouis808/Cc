@@ -26,6 +26,7 @@ the surface, so those collapses are rejected.
 
 from __future__ import annotations
 
+import warnings
 from collections import Counter, defaultdict
 
 import numpy as np
@@ -667,6 +668,15 @@ def isotropic_remesh(
 CURVATURE_WINDOW_RINGS = 2
 
 
+#: Above this many mesh vertices the refinement is cut back rather than
+#: run in full. Each round recomputes every window from scratch, so the
+#: cost grows with the mesh and with the round count at once: a 700-vertex
+#: toroid converges in minutes, while a 6300-vertex superfullerene had
+#: not finished in far longer. A structure that looks like a hung window
+#: is worse than one refined less.
+LARGE_MESH_VERTICES = 2000
+
+
 def refine_disclinations(
     mesh: Mesh,
     rng: np.random.Generator | None = None,
@@ -729,6 +739,21 @@ def refine_disclinations(
     """
     if rng is None:
         rng = np.random.default_rng(0)
+    if len(mesh[0]) > LARGE_MESH_VERTICES:
+        # Cut back rather than refuse: some improvement, bounded time.
+        # The annealing half is cheap and does most of the pair removal;
+        # the exact half is what costs, so that is what shrinks.
+        scale = LARGE_MESH_VERTICES / len(mesh[0])
+        cycles = max(1, int(cycles * scale) or 1)
+        rounds = max(4, int(rounds * scale))
+        warnings.warn(
+            f"{len(mesh[0])} mesh vertices is past "
+            f"{LARGE_MESH_VERTICES}, where each refinement round costs more "
+            f"than it returns; running {cycles} cycle(s) of {rounds} rounds "
+            "instead of the full schedule. The disclinations will be better "
+            "placed than unrefined and not as well as on a small cell.",
+            stacklevel=2,
+        )
     log: list[str] = []
     current = mesh
     previous = None
