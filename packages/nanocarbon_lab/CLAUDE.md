@@ -1030,6 +1030,46 @@ coordinates it is meant to produce. This package met that wall from the
 other side: `heptanene`'s Laplacian has an **8-fold degenerate** first
 non-trivial eigenvalue, so no three of its eigenvectors embed it at all.
 
+## Perfect is two questions, and most builders answer only one
+
+"Is it textbook-exact?" splits into **topology** (is the census the one
+the structure is defined by?) and **geometry** (are the bonds carbon's?).
+They are independent, and no builder here scores full marks on both by
+accident. Measured:
+
+| structure | route | bonds (A) | spread | non-hex |
+|---|---|---|---|---|
+| CNT (10,10) | exact lattice | placed, not measured | -- | 0% |
+| **C60** | dual mesh + VFF | **1.420-1.420** | **0.000** | 37.5% (its twelve) |
+| **nanocone 112.9** | sector cut | **1.391-1.420** | 0.029 | 0.6% (its one) |
+| haeckelite R5,7 | honeycomb + rotations | 1.324-1.524 | 0.199 | 100% (by design) |
+| polyhex toroid | bent lattice | 1.337-1.503 | 0.166 | **0%** |
+| meshed toroid | implicit | 1.344-1.508 | 0.164 | 19.5% |
+| Y junction | implicit | 1.366-1.484 | 0.117 | 16.6% |
+
+Three things in that table are worth keeping in mind before claiming
+anything is "perfect":
+
+* **Only C60 and the nanocone are exact on both axes.** C60 relaxes to a
+  flat 1.420 because a VFF on a sphere-like shell has an exact minimum;
+  the nanocone never relaxes at all -- a cone is developable, so its
+  bonds are 1.42 by construction and only the apex pentagon departs.
+* **The polyhex toroid is topologically perfect and geometrically is
+  not.** Zero disclinations, and bonds spanning 1.337-1.503 -- because
+  bending a finished lattice stretches it, and there is no disclination
+  to relieve that with. Do not read "all hexagons" as "ideal".
+* **Its bond spread is 0.166 against the meshed toroid's 0.164.** The
+  crystalline route buys a clean *census*, not better bonds, at this
+  size. That is the honest summary of what the whole mesh-versus-lattice
+  distinction is worth, and it is smaller than it looks.
+
+Everything built through the implicit route -- junctions, schwarzites,
+networks, supernetworks, the hypercube, the supertube, meshed coils and
+toroids -- is sound and **amorphous-walled**, 11-21% non-hexagonal. For
+most of those there is no published "perfect" version either: the ON-CNT
+figures in the literature are idealised drawings, and real DFT junction
+models carry 5-7 pairs too. Say "sound" for those, not "textbook".
+
 ## The Dunlap toroid is not reachable by meshing, and this is the evidence
 
 A Dunlap toroid is a ring of straight tube segments joined at **knees**,
@@ -1058,13 +1098,39 @@ disclinations are, if anything, *further* from the knees than a uniform
 scatter would put them. Do not ship a polygonal meshed toroid under
 Dunlap's name.
 
-The route that would work is the lattice one: build the (n,n) and (2n,0)
-segments as real lattices and join them at each knee. Naive mitred
-geometric welding was tried during the coil work and does not work -- it
-produced 3-, 4-, 8- and 9-rings and atoms of degree 1, 2 and 4. The knee
-has to be a **combinatorial** construction on the dual, as
-`fullerene_mesh` does for caps, and then `topological.toroidal_coordinates`
-is the natural way to place the finished graph.
+### What the dual route reached, and exactly where it stops
+
+The combinatorial route does work as far as the census, and then hits a
+wall worth writing down.
+
+A triangulated torus (24 x 12, 288 vertices) comes out with every degree
+6 and `V - E + F = 0`. **Six edge flips, spaced round the ring, give
+exactly the Dunlap census: `{5: 12, 6: 264, 7: 12}`, with all twelve
+pentagons on the outer equator** -- which is right, because a flip
+changes four degrees by (-1, -1, +1, +1) and six of them make twelve
+fives and twelve sevens.
+
+The wall is *where the heptagons are*. A flip always puts its two
+sevens on neighbours of its two fives, so straight out of the flips the
+heptagons sit one row either side of the pentagons -- rows 1 and 11
+against row 0. A Dunlap knee needs the heptagon on the **inner** equator,
+half a circumference away.
+
+**Flips cannot separate them, and 56 attempts is the evidence.** Gliding
+greedily toward the inner equator moved the pentagons too: the census
+stayed perfect throughout and the pair ended interleaved across rows 3
+to 9, still adjacent. That is not a search failure, it is the physics --
+a 5-7 pair is a **dislocation**, a flip **glides** it, and glide
+preserves the pair. Separating the two requires **climb**, which adds or
+removes a row of atoms and so cannot be a flip at all: it needs
+`contract_edge` or a split, changing the vertex count.
+
+So the next step is precise rather than open-ended: create the pairs with
+six flips (done, and exact), then **climb** each heptagon inward with
+vertex-changing moves, checking after each that `sum(6 - deg)` is still
+0 and no degree leaves {5, 6, 7}. What six flips alone produce is a
+*Stone-Wales toroid* -- the right census, the wrong arrangement -- and it
+should not be shipped under Dunlap's name.
 
 ## Hypercubes and supertubes: the skeleton can be any graph at all
 
