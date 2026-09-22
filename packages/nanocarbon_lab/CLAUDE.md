@@ -1242,6 +1242,63 @@ is that a planar bevel cut cannot do it: the (5,5) and (10,0) tubes a
 cannot coincide at any bevel angle, and cutting one tube and mirroring it
 tears the lattice outright.
 
+## A collapsed wall passes every check in this package
+
+The periodic coil preset -- 8.75 Å coil, 9.6 Å pitch, **3 Å tube** --
+comes back with its tube **pinched fully shut in places**, and nothing
+in the package noticed. Measured against the helix centreline:
+
+============================  ==========================
+stage                         distance from the axis (Å)
+============================  ==========================
+dual, straight off the mesh   2.72 +- **0.31** (0.34-3.44)
+after `relax_shell`           3.15 +- **1.59** (0.04-7.15)
+============================  ==========================
+
+Five times the spread, with atoms ending **0.04 Å from the axis** for a
+requested 3.0. The control is the point: the mesh is fine and **the
+relaxation is what collapses it**, for the same reason it wrinkles a
+wall -- equalising bond lengths is satisfied exactly as well by a
+collapsed tube as by a round one, and nothing in the force field knows
+the difference.
+
+**It passed the quality gate**: bonds 1.279-1.544 Å and *zero* close
+contacts. That gate measures bond lengths and non-bonded distances, both
+**local**, and a collapse is not local. Every bond was the right length;
+the tube was gone.
+
+`collapsed_wall()` is the check that catches it, and it is physical
+rather than a tolerance: **no carbon has an angle sum below 328.4 deg**,
+that being three tetrahedral angles. The coil reads **320.8**, which is
+not a hybridisation at all. Sound structures clear it comfortably -- C60
+at 348.0 is the most pyramidal thing here that is still carbon, and a
+(5,5) tube reads 356.8.
+
+### The fix is not found, and three attempts failed
+
+The mechanism is understood and the cure is not. What was tried:
+
+1. **`anchor_normals` at fixed normals.** The docstring's own
+   recommendation for stopping a shell wrinkling. It made things worse:
+   bonds 1.19-1.75 Å with 5 contacts at `k_anchor=1`, degrading as the
+   stiffness rose. The normal is evaluated once, and atoms must slide
+   tangentially, so the stored normal stops describing the surface under
+   them.
+2. **Relax, then re-project onto the field's level set**, alternating.
+   Far worse -- bonds 0.06-6.24 Å with 634 contacts.
+3. **Wrapping into the cell before projecting**, in case points had
+   drifted where the swept-path field is undefined. Byte-identical
+   results, so that was not it either.
+
+Also measured: **no tube radius avoids it.** At this pitch 3.5, 4.0 and
+4.5 Å all fail the gate as torn, and 5 Å upward fails the pitch check
+because the tube no longer fits between turns. Raising the mesher
+resolution to 220 and 280 does not help. Larger coils collapse the same
+way: R=16, pitch 18, r=5 gives 0.41-16.24 Å.
+
+**So the periodic coil preset is currently unsound and the window now
+says so** rather than drawing it as if it were built.
+
 ## Heptanene: sp3 makes it worse, and by a factor of six
 
 The proposal was a 2D all-heptagon sheet with the sp2/sp3 mix as the free

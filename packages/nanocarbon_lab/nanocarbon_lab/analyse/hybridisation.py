@@ -157,18 +157,43 @@ def hybridisation_report(
     }
 
 
+def collapsed_wall(report: dict) -> bool:
+    """Whether any carbon is bent further than tetrahedral.
+
+    **No carbon does this.** sp2 sits at an angle sum of 360 deg and sp3
+    at 328.4; anything below 328.4 is past the most pyramidal carbon
+    there is, so it is not a hybridisation at all -- it is a wall that
+    has folded or pinched shut.
+
+    This is worth checking because the existing quality gate cannot see
+    it. A periodic coil with a 3 Å tube passed that gate with bonds
+    1.279-1.544 Å and **zero** close contacts while its tube radius ran
+    from 0.04 to 7.15 Å about a requested 3.0 -- pinched fully shut in
+    places. Every bond was the right length; the tube was gone. Bond
+    lengths and contacts are local, and a collapse is not.
+    """
+    lowest = report.get("angle_sum_min")
+    return bool(lowest is not None and not math.isnan(lowest)
+                and lowest < TETRAHEDRAL_SUM)
+
+
 def describe_hybridisation(report: dict) -> str:
     """One line: the split, and the angle sums it was read from."""
     if not report.get("n_measured"):
         return "hybridisation: nothing with three bonds to measure"
+    warning = ""
+    if collapsed_wall(report):
+        warning = (f" -- WALL COLLAPSED: {report['angle_sum_min']:.1f} deg is "
+                   "past tetrahedral, which no carbon reaches. The bond "
+                   "lengths can still be perfect; a collapse is not local.")
     return (
         f"sp3 {100 * report['sp3_fraction']:.1f}% of "
         f"{report['n_measured']} carbons "
         f"(mean character {report['mean_character']:.2f}, angle sums "
         f"{report['angle_sum_min']:.1f}-{report['angle_sum_max']:.1f} deg; "
-        f"360 is flat sp2, 328.4 tetrahedral sp3)"
+        f"360 is flat sp2, 328.4 tetrahedral sp3)" + warning
     )
 
 
-__all__ = ["PLANAR_SUM", "SP3_CUT", "TETRAHEDRAL_SUM", "describe_hybridisation",
-           "hybridisation_report", "sp3_character"]
+__all__ = ["PLANAR_SUM", "SP3_CUT", "TETRAHEDRAL_SUM", "collapsed_wall",
+           "describe_hybridisation", "hybridisation_report", "sp3_character"]

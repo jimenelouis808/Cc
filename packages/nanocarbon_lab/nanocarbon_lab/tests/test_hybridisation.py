@@ -125,3 +125,49 @@ class TestDescription:
     def test_nothing_to_measure_says_so(self):
         assert "nothing" in describe_hybridisation(
             hybridisation_report(np.zeros((2, 3)), [(0, 1)]))
+
+
+class TestCollapseDetection:
+    """A collapsed wall is invisible to every other check in the package.
+
+    The case this exists for is real: a periodic coil with a 3 A tube
+    passed the quality gate with bonds 1.279-1.544 A and ZERO close
+    contacts while its tube radius ran 0.04 to 7.15 A about a requested
+    3.0 -- pinched fully shut in places. Every bond was the right
+    length. Bond lengths and contacts are local measurements, and a
+    collapse is not one.
+    """
+
+    def test_past_tetrahedral_is_flagged(self):
+        from nanocarbon_lab.analyse.hybridisation import collapsed_wall
+
+        assert collapsed_wall({"angle_sum_min": 320.8})
+        assert not collapsed_wall({"angle_sum_min": 348.0})
+        assert not collapsed_wall({"angle_sum_min": TETRAHEDRAL_SUM})
+
+    def test_a_missing_measurement_is_not_a_collapse(self):
+        from nanocarbon_lab.analyse.hybridisation import collapsed_wall
+
+        assert not collapsed_wall({})
+        assert not collapsed_wall({"angle_sum_min": float("nan")})
+
+    def test_sound_structures_are_not_flagged(self):
+        """C60 is the most pyramidal thing here that is still carbon, so
+        if anything sound trips this, it is C60."""
+        from nanocarbon_lab.analyse.hybridisation import collapsed_wall
+        from nanocarbon_lab.builders.cnt import build_cnt
+        from nanocarbon_lab.builders.fullerene import build_fullerene
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            assert not collapsed_wall(_report(build_fullerene(freq=1)))
+            assert not collapsed_wall(_report(build_cnt(n=5, m=5, length=15.0)))
+
+    def test_the_description_says_so(self):
+        from nanocarbon_lab.analyse.hybridisation import describe_hybridisation
+
+        text = describe_hybridisation({
+            "n_measured": 100, "n_sp3": 20, "sp3_fraction": 0.2,
+            "mean_character": 0.3, "max_character": 1.2,
+            "angle_sum_min": 320.8, "angle_sum_max": 360.0})
+        assert "COLLAPSED" in text

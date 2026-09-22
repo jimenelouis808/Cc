@@ -4757,6 +4757,15 @@ class NanocarbonGUI:
                            f"  angle sum  {report['angle_sum_min']:.1f}"
                            f"-{report['angle_sum_max']:.1f}° "
                            f"(360 flat, 328 sp3)")
+                    # A collapse is invisible to the bond and contact checks,
+                    # which are local. This is the only line that would have
+                    # caught a coil whose tube pinched shut while every bond
+                    # stayed 1.28-1.54 A and no contact fired.
+                    from ..analyse.hybridisation import collapsed_wall
+
+                    if collapsed_wall(report):
+                        hyb += ("\n  WALL COLLAPSED - past tetrahedral, "
+                                "which no carbon reaches")
             except Exception:  # noqa: BLE001 - a reading, never fatal
                 hyb = ""
 
