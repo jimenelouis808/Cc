@@ -7,6 +7,7 @@ Sub-commands:
 * ``ribbon``     — build a graphene nanoribbon.
 * ``foam``       — build a 3D carbon foam.
 * ``validate``   — run validation on an existing structure file.
+* ``vibspec``    — finite nanoribbon models for IR (``carbonforge vibspec -h``).
 """
 
 from __future__ import annotations
@@ -52,6 +53,7 @@ from ..exports.lammps import write_lammps
 from ..exports.siesta import SiestaSettings, write_siesta
 from ..validation.calculations import check_full_setup
 from ..validation.checks import run_basic_checks
+from ..vibspec.cli import add_parser as _add_vibspec_parser
 
 #: CLI task name → (QE calculation, spectroscopy mode or None)
 _TASKS: dict[str, tuple[str, str | None]] = {
@@ -833,6 +835,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Validate an existing structure file (CIF, XYZ, POSCAR…).")
     vl.add_argument("path", help="Path to a structure file readable by ASE.")
     vl.set_defaults(func=_cmd_validate)
+
+    _add_vibspec_parser(sub)
 
     return parser
 

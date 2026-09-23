@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal, Optional, Sequence
 
 import numpy as np
 from ase import Atoms
@@ -20,6 +20,7 @@ def introduce_vacancies(
     kind: VacancyKind = "mono",
     seed: Optional[int] = None,
     min_separation: float = 4.0,
+    sites: Optional[Sequence[int]] = None,
 ) -> Atoms:
     """Remove atoms to introduce ``n_defects`` vacancies.
 
@@ -37,6 +38,12 @@ def introduce_vacancies(
     min_separation
         Minimum distance between defect centres (Å) to avoid overlapping
         defects in the same neighbourhood.
+    sites
+        Explicit atom indices, one per defect, to remove instead of drawing
+        them at random. Overrides ``n_defects``. For ``"di"`` the partner is
+        still the nearest available neighbour. Use this when the position of
+        the defect is part of the question -- a vacancy at the centre of a
+        flake and one beside its edge are different systems.
 
     Returns
     -------
@@ -44,6 +51,12 @@ def introduce_vacancies(
         Defective structure. The list of removed indices (in the original
         numbering) is stored in ``atoms.info["vacancies"]``.
     """
+    if sites is not None:
+        sites = [int(i) for i in sites]
+        n_defects = len(sites)
+        for i in sites:
+            if not 0 <= i < len(atoms):
+                raise IndexError(f"Atom index {i} out of range (n={len(atoms)}).")
     if n_defects <= 0:
         raise ValueError("n_defects must be >= 1.")
     rng = make_rng(seed)
@@ -55,7 +68,19 @@ def introduce_vacancies(
     defect_centres: list[np.ndarray] = []
     positions = atoms.get_positions()
 
-    for _ in range(n_defects):
+    for k in range(n_defects):
+        if sites is not None:
+            candidates = [sites[k]] if sites[k] in available else []
+            if not candidates:
+                raise RuntimeError(f"Site {sites[k]} was already removed.")
+            i = candidates[0]
+            available.discard(i)
+            removed.append(i)
+            centre = positions[i].copy()
+            if kind == "di":
+                centre = _remove_partner(i, dmat, available, removed, positions)
+            defect_centres.append(centre)
+            continue
         # Filter candidates that respect min_separation wrt existing defects.
         candidates = []
         for idx in available:
@@ -75,17 +100,7 @@ def introduce_vacancies(
         centre = positions[i].copy()
 
         if kind == "di":
-            # Find the nearest available neighbour and remove it too.
-            nbrs = np.argsort(dmat[i])
-            j = next(
-                (int(k) for k in nbrs if k in available and k != i),
-                None,
-            )
-            if j is None:
-                raise RuntimeError("No neighbour available for divacancy.")
-            available.discard(j)
-            removed.append(j)
-            centre = 0.5 * (positions[i] + positions[j])
+            centre = _remove_partner(i, dmat, available, removed, positions)
 
         defect_centres.append(centre)
 
@@ -101,3 +116,23 @@ def introduce_vacancies(
         }
     )
     return out
+
+
+def _remove_partner(
+    i: int,
+    dmat: np.ndarray,
+    available: set[int],
+    removed: list[int],
+    positions: np.ndarray,
+) -> np.ndarray:
+    """Remove the nearest available neighbour of ``i``; return the defect centre."""
+    nbrs = np.argsort(dmat[i])
+    j = next(
+        (int(k) for k in nbrs if k in available and k != i),
+        None,
+    )
+    if j is None:
+        raise RuntimeError("No neighbour available for divacancy.")
+    available.discard(j)
+    removed.append(j)
+    return 0.5 * (positions[i] + positions[j])

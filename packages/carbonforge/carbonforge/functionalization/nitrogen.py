@@ -30,7 +30,7 @@ can and cannot do there.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Sequence
 
 from ase import Atoms
 
@@ -56,6 +56,7 @@ def make_graphitic_n(
     atoms: Atoms,
     n_sites: int = 1,
     seed: Optional[int] = None,
+    indices: Optional[Sequence[int]] = None,
 ) -> Atoms:
     """Substitute basal carbons with nitrogen (quaternary / graphitic N).
 
@@ -71,23 +72,35 @@ def make_graphitic_n(
         How many carbons to replace.
     seed
         RNG seed.
+    indices
+        Carbons to replace, instead of drawing them at random. Overrides
+        ``n_sites``. Each must be a three-coordinated carbon.
 
     Returns
     -------
     ase.Atoms
     """
+    basal = [site.index for site in find_sites(atoms, kind="basal")]
+    if indices is not None:
+        chosen = [int(i) for i in indices]
+        n_sites = len(chosen)
+        wrong = [i for i in chosen if i not in basal]
+        if wrong:
+            raise ValueError(
+                f"Los átomos {wrong} no son carbonos con coordinación 3: "
+                "el N grafítico sustituye un carbono del plano."
+            )
     if n_sites <= 0:
         raise ValueError("n_sites debe ser >= 1.")
-
-    basal = [site.index for site in find_sites(atoms, kind="basal")]
-    if len(basal) < n_sites:
-        raise ValueError(
-            f"Se pidieron {n_sites} nitrógenos grafíticos pero solo hay "
-            f"{len(basal)} carbonos con coordinación 3."
-        )
-    rng = make_rng(seed)
-    chosen = rng.choice(basal, size=n_sites, replace=False)
-    out = substitute_atoms(atoms, chosen.tolist(), "N")
+    if indices is None:
+        if len(basal) < n_sites:
+            raise ValueError(
+                f"Se pidieron {n_sites} nitrógenos grafíticos pero solo hay "
+                f"{len(basal)} carbonos con coordinación 3."
+            )
+        rng = make_rng(seed)
+        chosen = rng.choice(basal, size=n_sites, replace=False).tolist()
+    out = substitute_atoms(atoms, chosen, "N")
     out.info.setdefault("nitrogen_configurations", []).append(
         {"type": "graphitic", "n": n_sites, "indices": sorted(map(int, chosen)),
          "seed": seed}
@@ -101,6 +114,7 @@ def make_pyridinic_n(
     n_per_vacancy: int = 1,
     seed: Optional[int] = None,
     min_separation: float = 6.0,
+    sites: Optional[Sequence[int]] = None,
 ) -> Atoms:
     """Create pyridinic nitrogen: a vacancy whose rim carbons become N.
 
@@ -122,6 +136,9 @@ def make_pyridinic_n(
         RNG seed.
     min_separation
         Minimum distance between vacancies, in Å.
+    sites
+        Carbons to remove, one per vacancy, instead of random ones.
+        Overrides ``n_defects``.
 
     Returns
     -------
@@ -144,7 +161,7 @@ def make_pyridinic_n(
 
     defective = introduce_vacancies(
         atoms, n_defects=n_defects, kind="mono", seed=seed,
-        min_separation=min_separation,
+        min_separation=min_separation, sites=sites,
     )
     removed = set(defective.info["defects"][-1]["removed_indices"])
 
@@ -175,7 +192,7 @@ def make_pyridinic_n(
     out.info.setdefault("nitrogen_configurations", []).append(
         {
             "type": "pyridinic",
-            "n_vacancies": n_defects,
+            "n_vacancies": len(removed),
             "n_per_vacancy": n_per_vacancy,
             "indices": sorted(rim_new),
             "seed": seed,
@@ -189,6 +206,7 @@ def make_pyrrolic_like(
     n_defects: int = 1,
     seed: Optional[int] = None,
     min_separation: float = 6.0,
+    sites: Optional[Sequence[int]] = None,
 ) -> Atoms:
     """Build a **precursor** to pyrrolic nitrogen, not the finished motif.
 
@@ -211,13 +229,16 @@ def make_pyrrolic_like(
 
     The name says "like" for that reason: calling it pyrrolic before the
     relaxation would be a lie about what the file contains.
+
+    ``sites`` fixes the first carbon of each divacancy instead of drawing it
+    at random; its nearest neighbour goes with it.
     """
     rng = make_rng(seed)
     graph = build_bond_graph(atoms)
 
     defective = introduce_vacancies(
         atoms, n_defects=n_defects, kind="di", seed=seed,
-        min_separation=min_separation,
+        min_separation=min_separation, sites=sites,
     )
     removed = set(defective.info["defects"][-1]["removed_indices"])
     remaining = [i for i in range(len(atoms)) if i not in removed]
@@ -246,7 +267,7 @@ def make_pyrrolic_like(
     out.info.setdefault("nitrogen_configurations", []).append(
         {
             "type": "pyrrolic_precursor",
-            "n_defects": n_defects,
+            "n_defects": len(removed) // 2,
             "indices": chosen,
             "seed": seed,
             "warning": (
@@ -262,13 +283,16 @@ def make_pyridinic_n_oxide(
     atoms: Atoms,
     n_defects: int = 1,
     seed: Optional[int] = None,
+    sites: Optional[Sequence[int]] = None,
 ) -> Atoms:
     """Pyridinic nitrogen carrying an oxygen on the N (pyridinic N-oxide).
 
     Built as a pyridinic site plus a carbonyl-style oxygen on the nitrogen.
     This is the configuration around 402-403 eV in N 1s XPS.
     """
-    out = make_pyridinic_n(atoms, n_defects=n_defects, n_per_vacancy=1, seed=seed)
+    out = make_pyridinic_n(
+        atoms, n_defects=n_defects, n_per_vacancy=1, seed=seed, sites=sites,
+    )
     nitrogen_indices = set(out.info["nitrogen_configurations"][-1]["indices"])
 
     oxidised = 0

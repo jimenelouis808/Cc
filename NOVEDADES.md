@@ -6,6 +6,39 @@ está la trampa.
 
 ---
 
+## carbonforge · vibspec (fase 1)
+
+### Cintas finitas con una funcionalidad, para asignar bandas de FTIR
+
+`carbonforge vibspec build` construye una nanocinta **finita**, terminada en H
+por todos los bordes y con 7 Å de vacío por lado, y le pone una funcionalidad
+en un sitio reproducible: N grafítico, piridínico de borde, piridínico en
+vacante (N3V), precursor pirrólico, amina, nitrilo, N-óxido piridínico,
+hidroxilo, carboxilo, carbonilo o epóxido. Los grupos de borde sustituyen un H;
+el sitio por defecto es el centro de un borde largo, lejos de las esquinas.
+
+Finita y no periódica por una razón: el IR se calcula derivando el momento
+dipolar, y una cinta periódica no tiene dipolo definido a lo largo de su eje.
+
+**Qué comprueba antes de dejarte seguir** (`carbonforge vibspec check`):
+vacío por lado, que no sea periódica, número de electrones y si hace falta
+espín, con momentos iniciales antiferromagnéticos para los bordes zigzag. Para
+la fase de vibraciones deja preparados los rechazos: estructura sin relajar,
+fmax por encima de 0,05 eV/Å, y cálculo sin espín de un sistema de capa abierta.
+
+**Dónde está la trampa:**
+
+- Tres presets dejan un número impar de electrones (grafítico, N3V y carbonilo
+  aislado). Son de capa abierta de verdad, no es un fallo del builder.
+- Una cinta armchair termina en bordes zigzag de 4 sitios. Se pide cálculo con
+  espín; si los momentos se van a cero, el sistema era de capa cerrada.
+- El pirrólico sigue siendo un precursor: el pentágono solo aparece al relajar,
+  y el chequeo previo a las vibraciones lo exige.
+
+Todavía no calcula nada: el flujo IR con GPAW es la fase 2.
+
+---
+
 ## Raman · biblioteca de carbono
 
 ### Fases de precursor: N, P, B, Cl, S

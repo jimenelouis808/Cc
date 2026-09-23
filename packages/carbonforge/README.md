@@ -259,6 +259,51 @@ Everything here produces **idealised, unrelaxed** geometries. Groups rotate
 about their single bonds and interact with neighbours; relax before drawing
 conclusions.
 
+## IR models of functionalised nanoribbons (vibspec)
+
+`carbonforge.vibspec` builds the models for assigning FTIR bands of
+functionalised carbon: a **finite**, hydrogen-terminated nanoribbon carrying
+one functionality at one reproducible site. Finite, because IR intensities
+by finite differences of the dipole (`ase.vibrations.Infrared`) need a
+dipole, and a periodic model has none along its periodic axis.
+
+```bash
+carbonforge vibspec presets
+carbonforge vibspec build --edge armchair --width 5 --length 3 \
+                          --preset pyridinic_edge -o out/pyr.xyz
+carbonforge vibspec check out/pyr.xyz
+```
+
+```python
+from carbonforge.builders import build_finite_nanoribbon
+from carbonforge.vibspec.core import apply_preset, check_structure, suggest_spin
+
+flake = build_finite_nanoribbon(5, 3, edge="armchair")   # C58H20, 7 Å vacuum per side
+amine = apply_preset(flake, "amine")                      # middle of a long edge
+print(check_structure(amine).summary())
+spin = suggest_spin(amine)                                # spinpol + initial magmoms
+```
+
+Presets: `graphitic`, `pyridinic_edge`, `pyridinic_vacancy` (N3V),
+`pyrrolic_precursor`, `amine`, `nitrile`, `pyridinic_n_oxide`, `hydroxyl`,
+`carboxyl`, `carbonyl`, `epoxide`. Edge presets replace a terminal H; the
+site is `middle` of a long edge by default, `center` or `near_edge` for
+interior ones, or an explicit atom index.
+
+What the checks refuse, and why:
+
+| Check | Why |
+|---|---|
+| Periodic structure | No dipole along a periodic axis |
+| < 6 Å vacuum on any side | Images interact through the cell |
+| Unrelaxed, or residual force > 0.05 eV/Å (warns above 0.01) | Harmonic frequencies need a minimum |
+| Spin-paired run of an odd-electron system, dangling bonds, or zigzag edges ≥ 4 sites | Wrong surface, wrong frequencies, no error |
+| Pyrrolic N-H not in a pentagon after relaxing | It is not a pyrrolic site |
+| `nfree` not 2/4; `delta`, LCAO `h`, scale factor out of range | Noise, anharmonicity, egg-box, typos |
+
+The IR workflow itself (GPAW, then the spectrum against your FTIR) is the
+next phase; these checks are what it will run first.
+
 ## Batch sweeps over any structure
 
 ```python
@@ -599,6 +644,7 @@ carbonforge/
 ├── results/       # parse + plot band structures and vibrational spectra
 ├── workflows/     # batch generation, convergence sweeps, ML dataset
 ├── gui/           # Tkinter desktop app (params logic + widgets)
+├── vibspec/       # finite-ribbon IR models: presets, sites, physical checks
 ├── utils/         # constants, geometry, RNG
 ├── cli/           # command line
 ├── tests/         # pytest suite

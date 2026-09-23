@@ -26,6 +26,7 @@ carbonforge/
 ├── relax/         # ASE optimizer wrapper + calculator-free harmonic pre-relax
 ├── viz/           # matplotlib 3D viewer
 ├── gui/           # Tkinter desktop app (params + edlc_params logic, widgets)
+├── vibspec/       # IR models of functionalised finite ribbons; core/ has no GUI imports
 ├── workflows/     # batch generation, convergence sweeps, ML dataset
 ├── utils/         # constants, geometry helpers
 ├── cli/           # command line interface
@@ -60,6 +61,11 @@ carbonforge/
   the warning honest.
 - `dynmat.x`: `filout` must never be `dynmat.out` — the runner script
   redirects stdout there and the two would clobber each other.
+- IR by finite differences of the dipole needs a FINITE model. vibspec's
+  checks reject periodic structures, < 6 Å vacuum per side, unrelaxed
+  geometries and spin-paired runs of systems that need spin (odd electrons,
+  dangling bonds, zigzag edges of >= 4 sites). `vibspec/core/` must never
+  import from `gui/`.
 - A zigzag nanoribbon MUST be spin-polarised. Its edges are magnetic and
   antiferromagnetically coupled; without nspin=2 the SCF converges to a state
   that is not the ground state, with no error. Presets enable it
