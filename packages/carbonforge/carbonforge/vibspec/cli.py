@@ -9,6 +9,7 @@
 * ``index``   -- put every calculation under a directory into an ASE database.
 * ``plot``    -- the computed IR spectrum, optionally against an FTIR, with a
   band-matching table and CSV export for ramancarbon.
+* ``gui``     -- open the window (model, calculation queue, results).
 """
 
 from __future__ import annotations
@@ -198,6 +199,12 @@ def _cmd_plot(args) -> int:
     return 0
 
 
+def _cmd_gui(args) -> int:
+    from .gui import main
+
+    return main(args.workdir)
+
+
 def add_parser(sub: argparse._SubParsersAction) -> None:
     """Register ``vibspec`` and its sub-commands on the main parser."""
     vs = sub.add_parser("vibspec", help="IR models of functionalised nanoribbons.")
@@ -288,3 +295,8 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     pl.add_argument("--csv", default=None,
                     help="Prefijo para exportar las curvas en CSV (para ramancarbon).")
     pl.set_defaults(func=_cmd_plot)
+
+    gu = vsub.add_parser("gui", help="Open the vibspec window.")
+    gu.add_argument("--workdir", default=None,
+                    help="Directorio de cálculos (por defecto ./calculos).")
+    gu.set_defaults(func=_cmd_gui)

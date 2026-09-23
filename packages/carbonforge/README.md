@@ -361,6 +361,32 @@ carbonforge vibspec plot runs/pyr --ftir muestra.csv --fit-scale \
 The figure is drawn on a `matplotlib.figure.Figure` (no pyplot), so it
 works headless on a cluster.
 
+### The window
+
+```bash
+carbonforge vibspec gui            # or: python -m carbonforge.vibspec.gui
+```
+
+Three tabs over the same core:
+
+- **Modelo** — ribbon, preset and site, with the 3D structure (seen down
+  the plane normal) and every check and spin recommendation.
+- **Cálculo** — the GPAW settings, validated before anything is written;
+  *Preparar* writes the calculation directory, *Preparar y correr* also
+  queues it. Jobs run as **subprocesses** (so *Cancelar* really stops them,
+  and `run.py` resumes later), one at a time, with state (en cola /
+  corriendo / terminado / error / cancelado), progress read from the files
+  (relaxation step, displacements done) and the live log. Without GPAW
+  (Windows) the run buttons are disabled and it says why: prepare here,
+  run on Ubuntu, open the result.
+- **Resultados** — the computed spectrum against your FTIR, the band table,
+  scale-factor fit, and a **click on a band animates its normal mode** in
+  3D, with the share of motion per element and per atom (an O–H stretch
+  reads "H 93 %").
+
+The window is a thin layer: all of its logic is in
+`vibspec/gui/logic.py`, tested without a display.
+
 Raman is not computed yet; it will reuse the same relaxed structure and
 record.
 
@@ -704,7 +730,7 @@ carbonforge/
 ├── results/       # parse + plot band structures and vibrational spectra
 ├── workflows/     # batch generation, convergence sweeps, ML dataset
 ├── gui/           # Tkinter desktop app (params logic + widgets)
-├── vibspec/       # finite-ribbon IR models: presets, sites, physical checks
+├── vibspec/       # finite-ribbon IR: core/ (presets, checks, workflow, analysis), gui/
 ├── utils/         # constants, geometry, RNG
 ├── cli/           # command line
 ├── tests/         # pytest suite

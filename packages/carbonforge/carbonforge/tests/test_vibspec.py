@@ -373,7 +373,7 @@ def test_core_imports_no_gui():
         "before = set(sys.modules); "
         "import carbonforge.vibspec.core; "
         "bad = [m for m in set(sys.modules) - before "
-        "if m.startswith(('carbonforge.gui', 'tkinter', 'gpaw'))]; "
+        "if m.startswith(('carbonforge.gui', 'carbonforge.vibspec.gui', 'tkinter', 'gpaw'))]; "
         "print(bad); sys.exit(1 if bad else 0)"
     )
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)

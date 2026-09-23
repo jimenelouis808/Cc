@@ -6,6 +6,40 @@ está la trampa.
 
 ---
 
+## carbonforge · vibspec (fase 4)
+
+### La ventana: modelo, cola de cálculos y modos animados
+
+```bash
+carbonforge vibspec gui
+```
+
+Tres pestañas sobre el mismo núcleo que la línea de comandos:
+
+- **Modelo:** eliges cinta, funcionalización y sitio, ves la estructura en 3D
+  (de frente, mirando por la normal del plano) y todos los avisos, incluido si
+  hace falta espín.
+- **Cálculo:** los parámetros de GPAW se validan antes de escribir nada.
+  *Preparar* deja el directorio listo; *Preparar y correr* además lo pone en la
+  cola. Cada trabajo es un proceso aparte, así que *Cancelar* lo para de
+  verdad, y `run.py` lo retoma después. Ves el estado, el progreso (paso de
+  relajación, desplazamientos hechos de cuántos) y el log en vivo.
+- **Resultados:** el espectro contra tu FTIR, la tabla de bandas, el ajuste del
+  factor de escala y, **al hacer clic en una banda, la animación de su modo
+  normal** con el reparto del movimiento por elemento y por átomo.
+
+**Dónde está la trampa:**
+
+- En Windows, sin GPAW, los botones de correr aparecen desactivados y la ventana
+  dice por qué: se prepara ahí, se corre en Ubuntu y el resultado se abre en
+  Resultados.
+- Un trabajo que termina con código 0 pero sin `record.json` en estado `done`
+  cuenta como error: la ventana se fía del registro, no solo del proceso.
+- Una sola tarea a la vez por defecto: dos GPAW en los mismos núcleos tardan más
+  que uno detrás de otro.
+
+---
+
 ## carbonforge · vibspec (fase 3)
 
 ### Tu FTIR contra el cálculo, con tabla de asignación
