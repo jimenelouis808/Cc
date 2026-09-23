@@ -1096,6 +1096,29 @@ def vertex_curvature_targets(mesh: Mesh, smoothing: int = 2) -> np.ndarray:
 #: 3.0 tears it outright. The wider hexagonal coil places its rings a
 #: little better at 2.0 (95% against 88%), and that is not worth a
 #: collapsed wall on the thin one.
+def field_normals(field, positions: np.ndarray, step: float = 0.05
+                  ) -> np.ndarray:
+    """Unit surface normals at ``positions``, from the field's gradient.
+
+    The gradient of an implicit field points across its level set, so
+    normalising it gives the wall's own normal -- which is what
+    :func:`~nanocarbon_lab.builders.fullerene_mesh.relax_shell` needs to
+    hold a shell on its surface without pinning it in place. Central
+    differences, because these fields are built by composition and carry
+    no derivatives.
+    """
+    positions = np.asarray(positions, dtype=float)
+    gradient = np.empty_like(positions)
+    for axis in range(3):
+        offset = np.zeros(3)
+        offset[axis] = step
+        gradient[:, axis] = (np.asarray(field(positions + offset))
+                             - np.asarray(field(positions - offset))
+                             ) / (2.0 * step)
+    norms = np.linalg.norm(gradient, axis=1, keepdims=True)
+    return gradient / np.where(norms > 0.0, norms, 1.0)
+
+
 FLIP_MAX_EDGE = 1.8
 
 

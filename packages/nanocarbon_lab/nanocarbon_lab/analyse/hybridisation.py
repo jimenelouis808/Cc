@@ -185,7 +185,9 @@ def describe_hybridisation(report: dict) -> str:
     if collapsed_wall(report):
         warning = (f" -- WALL COLLAPSED: {report['angle_sum_min']:.1f} deg is "
                    "past tetrahedral, which no carbon reaches. The bond "
-                   "lengths can still be perfect; a collapse is not local.")
+                   "lengths can still be perfect; a collapse is not local. "
+                   "On a meshed builder, wall_anchor=1 holds the wall on "
+                   "its own surface and usually clears this.")
     return (
         f"sp3 {100 * report['sp3_fraction']:.1f}% of "
         f"{report['n_measured']} carbons "

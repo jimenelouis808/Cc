@@ -1340,6 +1340,93 @@ One parameter's difference, and it was not the periodic path.
 around a requested 3.0. A 3 Å tube carries under eight rings around its
 circumference, which is the floor of what this route can mesh at all.
 
+## Holding a wall on its own surface, and where that pays
+
+The implicit field is **zero on the wall**, so ``|field(atom)|`` measures
+exactly how far an atom has left it -- no binning, no assumed axis, and
+none of the systematic error that a hand-rolled roundness measure
+carries. (One was tried first and was useless: it read the *raw
+marching-cubes surface*, which is the exact tube by construction, as
+11% collapsed. An angular wedge of a curved tube has its centroid off
+the local axis. The pristine (5,5) control passed only because a
+straight tube has no curvature to get wrong.)
+
+Measured on the periodic coil, by stage:
+
+============  ==============  ========  ==================
+stage         mean off (Å)    max       beyond 0.5 Å
+============  ==============  ========  ==================
+raw surface   0.004           0.020     0.0%
+dual          0.227           0.645     4.3%
+**relaxed**   **0.801**       **2.84**  **56.5%**
+============  ==============  ========  ==================
+
+So the mesh and its dual are on the tube and the **relaxation walks the
+atoms off it** -- for the same reason it does everything else here:
+equalising bond lengths is satisfied as well off the surface as on it.
+
+``wall_anchor`` passes ``anchor_normals`` built from the field's own
+gradient, restraining each atom **along its normal only** so it still
+slides freely within the wall. On the coils:
+
+===========  =============  =============
+coil         mean off, 0    mean off, 1.0
+===========  =============  =============
+preset       0.801 Å        **0.387**
+hexagonal    1.010          **0.327**
+R = 25       2.378          **0.361**
+===========  =============  =============
+
+**This was tried twice before and failed both times**, and the reason is
+worth keeping: the mesh underneath was still torn by the unguarded
+flips. A restraint on a broken mesh makes it worse, which is exactly
+what was measured (1.19-1.75 Å bonds, contacts). It only became useful
+once `FLIP_MAX_EDGE` had fixed the mesh.
+
+### It pays where the wall is leaving, and costs where it is not
+
+=================  ===============  ===============  ==============
+structure          off-surface      angle sum        verdict
+=================  ===============  ===============  ==============
+periodic coil      0.801 -> 0.387   329.9 -> 334.0   **on by default**
+superfullerene     --               **328.3 -> 333.0**  fixes a collapse
+Y junction         0.790 -> 0.350   339.8 -> 338.5   off by default
+X junction         0.838 -> 0.378   337.6 -> 338.9   off by default
+=================  ===============  ===============  ==============
+
+A junction's wall is **not** leaving its surface -- angle sums 337-340,
+well clear of tetrahedral -- so the restraint buys fidelity nobody
+needed and costs bonds (1.366-1.484 to 1.332-1.564) and placement
+(94.3% to 92.0%). A thin coiled tube is the opposite case.
+
+**The superfullerene was collapsed and is the clearest case for it**:
+328.3 deg at the default, past tetrahedral, and 333.0 with the anchor.
+It is still off by default there because the cost is real (bond spread
+0.216 -> 0.363) and only the thin-tube cells need it -- so the collapse
+warning names `wall_anchor` as the remedy rather than the builder
+guessing.
+
+### The flip guard helps every meshed builder, and the old defaults are stale
+
+With `FLIP_MAX_EDGE` in place, annealing improves placement everywhere
+it was measured, which is the opposite of what the `anneal_sweeps` table
+records:
+
+==================  ==========  ==========  ==================
+structure           placed, 0   placed, 80  bonds at 80
+==================  ==========  ==========  ==================
+Y junction          94.3%       **97.6%**   1.361-1.483
+L junction          90.0%       **100.0%**  1.319-1.503
+schwarzite          79.2%       **87.5%**   1.323-1.577
+super-graphene      89.6%       **94.3%**   **1.348-1.529**
+superfullerene      95.0%       **99.1%**   1.296-1.604
+==================  ==========  ==========  ==================
+
+Super-graphene improves on **both** placement and bond spread, which no
+reading of the old table would predict. **The other builders' defaults
+are left at 0 regardless**: changing five builders' output is a decision
+to take deliberately, with these numbers in hand, not a side effect.
+
 ## Heptanene: sp3 makes it worse, and by a factor of six
 
 The proposal was a 2D all-heptagon sheet with the sp2/sp3 mix as the free

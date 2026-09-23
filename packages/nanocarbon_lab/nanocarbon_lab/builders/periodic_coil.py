@@ -231,6 +231,7 @@ def build_periodic_coil(
     remesh_iterations: int = 25,
     anneal_sweeps: int = 80,
     place_curvature: bool = False,
+    wall_anchor: float = 1.0,
     relax_iterations: int = 3000,
     seed: int | None = 0,
 ) -> Atoms:
@@ -257,6 +258,29 @@ def build_periodic_coil(
     resolution
         Grid points across the longest cell axis. Too coarse and the seam
         does not weld, which is reported rather than returned.
+    wall_anchor
+        Stiffness of a restraint holding each atom on the wall's own
+        surface, **along the surface normal only**, so every atom is
+        still free to slide within the wall. The field is zero on the
+        tube, so ``|field(atom)|`` measures exactly how far an atom has
+        left it, and free relaxation leaves a lot of them off it:
+
+        ==========  =============  =============
+        coil        mean off, 0    mean off, 1.0
+        ==========  =============  =============
+        preset      0.801 Å        **0.387**
+        hexagonal   1.010          **0.327**
+        R = 25      2.378          **0.361**
+        ==========  =============  =============
+
+        The wide coil is the striking one: 88 % of its atoms sat more
+        than 0.5 Å off the tube, and the worst was 8.07 Å out. Bonds
+        widen a little in exchange (1.344-1.525 to 1.328-1.600 on the
+        hexagonal one) and no structure gains a close contact.
+
+        **This was tried before the flip guard and made things worse**,
+        which is what a restraint does when the mesh under it is already
+        torn. It only became useful once the mesh was sound.
     place_curvature
         Move the disclinations to where the surface's own Gaussian
         curvature asks for them, by Stone-Wales flips, after the remesh.
@@ -387,9 +411,22 @@ def build_periodic_coil(
         place_curvature=place_curvature,
     )
     positions, bond_set, rings = fm.dual_honeycomb(mesh, box=cell)
+    # The dual sits on the tube to within 0.23 Å; free relaxation pulls
+    # 57% of the atoms more than 0.5 Å off it, up to 2.8 Å on a 3 Å
+    # tube. `anchor_normals` restrains each atom ALONG ITS OWN NORMAL
+    # only, so the wall keeps its shape while every atom stays free to
+    # slide within it.
+    anchoring = {}
+    if wall_anchor > 0.0:
+        anchoring = dict(
+            anchors=np.arange(len(positions)),
+            anchor_targets=positions.copy(),
+            anchor_normals=rm.field_normals(centred, np.mod(positions, cell)),
+            k_anchor=float(wall_anchor),
+        )
     positions = fm.relax_shell(
         positions, bond_set, equilibrium=bond, box=cell,
-        max_iterations=relax_iterations,
+        max_iterations=relax_iterations, **anchoring,
     )
     positions = np.mod(positions, cell)
 

@@ -79,6 +79,7 @@ def build_junction(
     remesh_iterations: int = 25,
     anneal_sweeps: int = 0,
     place_curvature: bool = False,
+    wall_anchor: float = 0.0,
     roughness: float = 0.0,
     relax_iterations: int = 3000,
     vacuum: float = DEFAULT_VACUUM_1D,
@@ -148,6 +149,16 @@ def build_junction(
         angle is 128.6 deg before any strain at all, so more of them
         pushes ``angle_max`` toward the window's edge. Neither is the wall
         getting worse.
+    wall_anchor
+        Restrain each atom on the wall's own surface, along the normal
+        only. **Off here, and on for the periodic coil**, because it
+        pays only where the wall is actually leaving its surface. A
+        junction's wall is not: its angle sums sit at 337-340 deg, well
+        clear of tetrahedral. Turning it on does pull the atoms back
+        (mean deviation 0.790 -> 0.350 Å on a Y, 0.838 -> 0.378 on an X)
+        and costs bonds (1.366-1.484 to 1.332-1.564) and placement
+        (94.3% to 92.0%) for a wall that was already sound. A thin
+        coiled tube is the opposite case and gains on every measure.
     place_curvature
         Move the disclinations to where the surface's own Gaussian
         curvature asks for them, by Stone-Wales flips, after the
@@ -198,6 +209,8 @@ def build_junction(
     )
     return _finish(
         mesh,
+        field=field,
+        wall_anchor=wall_anchor,
         bond=bond,
         relax_iterations=relax_iterations,
         vacuum=vacuum,
@@ -387,6 +400,8 @@ def _finish(
     pin_near: np.ndarray | None = None,
     pin_radius: float = 0.0,
     k_pin: float = 5.0,
+    field=None,
+    wall_anchor: float = 0.0,
 ) -> Atoms:
     """Shared tail: validate the mesh, take its dual, relax, package.
 
@@ -457,10 +472,28 @@ def _finish(
                 anchor_targets = positions[anchors]
             else:
                 anchors = None
-        positions = fm.relax_shell(
-            positions, bond_set, equilibrium=bond, max_iterations=relax_iterations,
-            anchors=anchors, anchor_targets=anchor_targets, k_anchor=k_pin,
-        )
+        if field is not None and wall_anchor > 0.0 and anchors is None:
+            # Hold the wall on its own surface, along the normal only,
+            # so atoms still slide within it. Free relaxation walks a
+            # large share of them off the surface entirely.
+            # `positions` were scaled, so the field is read at the
+            # pre-scale coordinates it was built in.
+            anchors = np.arange(len(positions))
+            anchor_targets = positions.copy()
+            positions = fm.relax_shell(
+                positions, bond_set, equilibrium=bond,
+                max_iterations=relax_iterations,
+                anchors=anchors, anchor_targets=anchor_targets,
+                anchor_normals=rm.field_normals(field, positions / scale),
+                k_anchor=float(wall_anchor),
+            )
+        else:
+            positions = fm.relax_shell(
+                positions, bond_set, equilibrium=bond,
+                max_iterations=relax_iterations,
+                anchors=anchors, anchor_targets=anchor_targets,
+                k_anchor=k_pin,
+            )
     else:
         # Variable-cell relaxation. With the cell held fixed the network
         # cannot reach its natural bond length -- it is stretched or
@@ -470,6 +503,11 @@ def _finish(
         # the mean bond is from equilibrium, and rescale cell and atoms
         # together by that ratio.
         for _ in range(CELL_RELAX_CYCLES):
+            # The periodic branch rescales the cell as it goes, so the
+            # coordinates the field was built in keep moving. Anchoring
+            # here would need that mapping tracked, and it is not worth
+            # getting subtly wrong: the schwarzites are the periodic
+            # users and they are not the ones collapsing.
             positions = fm.relax_shell(
                 positions, bond_set, equilibrium=bond,
                 box=scaled_box, max_iterations=relax_iterations,
