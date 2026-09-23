@@ -1,5 +1,21 @@
 """Script-level core of vibspec: no GUI imports, runnable in batch on a cluster."""
 
+from .analysis import (
+    BandMatch,
+    ExperimentalSpectrum,
+    computed_curve,
+    export_csv,
+    find_bands,
+    fit_scale_factor,
+    match_bands,
+    match_table,
+    normalise,
+    prepare_experiment,
+    read_ftir,
+    rubberband_baseline,
+    search_scale_factor,
+    to_absorbance,
+)
 from .calcspec import CalcSpec
 from .checks import (
     FMAX_LIMIT,
@@ -26,9 +42,27 @@ from .sites import (
     strip_hydrogen,
     zigzag_runs,
 )
+from .plot import draw_ir_comparison, plot_ir_comparison
 from .workflow import VibspecError, collect, prepare, run
 
 __all__ = [
+    # analysis and plotting
+    "BandMatch",
+    "ExperimentalSpectrum",
+    "computed_curve",
+    "draw_ir_comparison",
+    "export_csv",
+    "find_bands",
+    "fit_scale_factor",
+    "match_bands",
+    "match_table",
+    "normalise",
+    "plot_ir_comparison",
+    "prepare_experiment",
+    "read_ftir",
+    "rubberband_baseline",
+    "search_scale_factor",
+    "to_absorbance",
     # workflow
     "CalcSpec",
     "CalcRecord",

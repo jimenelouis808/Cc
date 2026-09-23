@@ -330,6 +330,37 @@ they flag a poor relaxation or the egg-box effect. The Frederiksen correction
 egg-box from the translations (`ir_method="standard"` turns it off). Frequencies are stored
 unscaled; the scale factor is applied at analysis time.
 
+### Against your FTIR
+
+```bash
+carbonforge vibspec plot runs/pyr --ftir muestra.csv --fit-scale \
+                         --fwhm 15 --profile gaussian -o pyr.png --csv figuras/pyr
+```
+
+- **Reads** any two-column CSV/TXT export: tab, semicolon, comma or space
+  delimited, decimal point or decimal comma, absorbance or transmittance
+  (%T or fraction). The quantity comes from the header when it says, is
+  guessed from the values otherwise — and a guess is printed as a guess;
+  `--quantity` settles it.
+- **Converts** transmittance to absorbance (IR intensity is proportional to
+  absorbance, not %T), subtracts a rubber-band baseline (`--no-baseline` to
+  skip) and normalises both spectra to 1 on one y axis.
+- **Broadens** with a Lorentzian or Gaussian of the FWHM you give; the
+  stored frequencies are never scaled in place.
+- **Matches** each IR-active computed mode to the nearest experimental band
+  and prints the table. `--fit-scale` searches the factor in [0.90, 1.05]
+  that brings the most computed intensity onto bands, then refines it by
+  least squares; unscaled DFT frequencies are often further off than any
+  sane tolerance, so pairing first finds nothing to fit. At least three
+  pairs are required. The table is a proposal: check the mode (`modes.npz`)
+  before calling a band assigned.
+- **Exports** one two-column CSV per curve (`_calculado`, `_barras`,
+  `_experimental`), the format ramancarbon's plot engine opens for
+  publication styling.
+
+The figure is drawn on a `matplotlib.figure.Figure` (no pyplot), so it
+works headless on a cluster.
+
 Raman is not computed yet; it will reuse the same relaxed structure and
 record.
 

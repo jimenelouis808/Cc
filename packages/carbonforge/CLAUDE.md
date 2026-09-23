@@ -72,6 +72,10 @@ carbonforge/
   8 Å of vacuum per side; LCAO/FD (zero boundary conditions) are the default.
   Vibrations only start after a converged relaxation AND a passing
   `check_ready_for_vibrations` on the relaxed structure.
+- vibspec compares computed IR with FTIR in ABSORBANCE (converted from %T),
+  both normalised on ONE y axis. Stored frequencies are never scaled in
+  place; the scale factor is applied at analysis time. Band matches are a
+  proposal, and the fitted scale factor needs >= 3 matched pairs.
 - A zigzag nanoribbon MUST be spin-polarised. Its edges are magnetic and
   antiferromagnetically coupled; without nspin=2 the SCF converges to a state
   that is not the ground state, with no error. Presets enable it

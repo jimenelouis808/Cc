@@ -246,16 +246,17 @@ def broaden(
     n_points: int = 2000,
     laser_wavelength_nm: Optional[float] = None,
     temperature_k: Optional[float] = None,
+    profile: str = "lorentzian",
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Convolve discrete lines into a continuous spectrum with Lorentzians.
+    """Convolve discrete lines into a continuous spectrum.
 
     Parameters
     ----------
     frequencies, activities
         Mode positions (cm⁻¹) and their activities. Equal length.
     width_cm1
-        Half-width at half-maximum. 4-10 cm⁻¹ matches typical Raman
-        instrumental resolution.
+        Half-width at half-maximum, for either profile. 4-10 cm⁻¹ matches
+        typical Raman instrumental resolution.
     grid
         Explicit frequency grid. Built automatically when omitted.
     padding_cm1, n_points
@@ -267,6 +268,11 @@ def broaden(
     temperature_k
         When given, apply the Bose-Einstein occupation factor
         ``1 / (1 − exp(−hcν / k_BT))`` for Stokes scattering.
+    profile
+        ``"lorentzian"`` (lifetime broadening, the default) or ``"gaussian"``
+        (inhomogeneous broadening, the better match for a disordered solid
+        such as functionalised nanotubes). Both are area-normalised, so each
+        line contributes its activity as integrated intensity.
 
     Returns
     -------
@@ -290,6 +296,8 @@ def broaden(
         )
     if width_cm1 <= 0:
         raise ValueError("width_cm1 debe ser positivo.")
+    if profile not in ("lorentzian", "gaussian"):
+        raise ValueError(f"profile debe ser 'lorentzian' o 'gaussian', no {profile!r}.")
 
     # Only positive-frequency modes carry Stokes intensity; acoustic and
     # imaginary modes are excluded rather than producing a spurious peak at 0.
@@ -326,7 +334,14 @@ def broaden(
         weights = weights * (laser_cm1 - freqs) ** 4 / laser_cm1 ** 4
 
     intensity = np.zeros_like(grid)
-    for centre, weight in zip(freqs, weights):
+    if profile == "gaussian":
+        sigma = width_cm1 / np.sqrt(2.0 * np.log(2.0))
+        for centre, weight in zip(freqs, weights, strict=True):
+            intensity += weight * np.exp(-0.5 * ((grid - centre) / sigma) ** 2) / (
+                sigma * np.sqrt(2.0 * np.pi)
+            )
+        return grid, intensity
+    for centre, weight in zip(freqs, weights, strict=True):
         intensity += weight * (width_cm1 / np.pi) / (
             (grid - centre) ** 2 + width_cm1 ** 2
         )

@@ -163,6 +163,7 @@ carbonforge vibspec build --preset amine -o amina.xyz              # Windows o U
 carbonforge vibspec prepare amina.xyz -d calculos/amina            # valida y escribe el directorio
 cd calculos/amina && mpiexec -n 4 gpaw python run.py               # Ubuntu, con GPAW
 carbonforge vibspec show calculos/amina                            # de vuelta en Windows
+carbonforge vibspec plot calculos/amina --ftir mi_ftir.csv --fit-scale -o amina.png
 ```
 
 `run.py` se puede relanzar si se corta: la relajación terminada no se repite y

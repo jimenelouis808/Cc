@@ -6,6 +6,38 @@ está la trampa.
 
 ---
 
+## carbonforge · vibspec (fase 3)
+
+### Tu FTIR contra el cálculo, con tabla de asignación
+
+```bash
+carbonforge vibspec plot calculos/amina --ftir mi_ftir.csv --fit-scale -o amina.png
+```
+
+Lee el FTIR tal como lo exporta el equipo: separado por tabuladores, punto y
+coma, comas o espacios, con coma decimal o punto, en absorbancia o
+transmitancia. Lo pasa a absorbancia, le quita la línea base (envolvente
+convexa inferior), ensancha el calculado (Lorentziano o Gaussiano, con la FWHM
+que digas) y los dibuja normalizados sobre un único eje, con el número de onda
+decreciente como en el espectrómetro. Además imprime una tabla de qué modo cae
+en qué banda y exporta las curvas a CSV para darles estilo en ramancarbon.
+
+**Dónde está la trampa:**
+
+- El factor de escala no se ajusta emparejando primero: sin escalar, las
+  frecuencias DFT suelen caer más lejos que cualquier tolerancia razonable (el
+  agua en PBE: 3698 frente a 3756 cm⁻¹), y no habría nada que ajustar.
+  `--fit-scale` busca el factor en [0,90, 1,05] que lleva más intensidad a
+  bandas y luego lo refina por mínimos cuadrados. Con menos de tres parejas se
+  niega.
+- Si el archivo no dice si es absorbancia o transmitancia, se deduce de los
+  valores y **se avisa de que es una deducción**. `--quantity` lo zanja.
+- La tabla es una propuesta. Dos modos pueden caer en la misma banda, y una
+  banda puede ser un sobretono que el cálculo armónico no tiene. Mira el modo
+  antes de dar la banda por asignada.
+
+---
+
 ## carbonforge · vibspec (fase 2)
 
 ### El cálculo IR con GPAW, de principio a fin

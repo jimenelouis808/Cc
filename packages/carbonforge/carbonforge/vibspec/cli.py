@@ -7,6 +7,8 @@
 * ``run``     -- relax and compute the IR spectrum of a prepared directory (GPAW).
 * ``show``    -- report on one calculation, or every one under a directory.
 * ``index``   -- put every calculation under a directory into an ASE database.
+* ``plot``    -- the computed IR spectrum, optionally against an FTIR, with a
+  band-matching table and CSV export for ramancarbon.
 """
 
 from __future__ import annotations
@@ -26,7 +28,15 @@ from .core import (
     check_structure,
     collect,
     describe_presets,
+    export_csv,
+    find_bands,
     find_records,
+    match_bands,
+    match_table,
+    plot_ir_comparison,
+    prepare_experiment,
+    read_ftir,
+    search_scale_factor,
     index_records,
     prepare,
     run,
@@ -129,6 +139,65 @@ def _cmd_index(args) -> int:
     return 0
 
 
+def _cmd_plot(args) -> int:
+    from .core.checks import SCALE_FACTOR_RANGE
+
+    directory = Path(args.directory)
+    try:
+        spectrum = collect(directory)
+    except VibspecError as exc:
+        print(exc)
+        return 1
+    record = CalcRecord.load(directory)
+    scale = args.scale if args.scale is not None else float(record.spec.get("scale_factor", 1.0))
+    window = (args.xmin, args.xmax)
+
+    experiment = None
+    matches = None
+    if args.ftir:
+        try:
+            measured = read_ftir(args.ftir, quantity=args.quantity)
+        except (OSError, ValueError) as exc:
+            print(f"No se pudo leer el FTIR: {exc}")
+            return 1
+        if measured.quantity_source == "values":
+            print(f"⚠️  {measured.name}: sin cabecera que lo diga, se interpretó como "
+                  f"{measured.quantity}. Si no es así, usa --quantity.")
+        experiment = prepare_experiment(measured, baseline=not args.no_baseline, window=window)
+        bands = find_bands(*experiment, prominence=args.prominence)
+        matches = match_bands(spectrum, bands, scale, tolerance_cm1=args.tolerance,
+                              min_relative_intensity=args.min_intensity)
+        if args.fit_scale:
+            try:
+                fitted, fitted_matches = search_scale_factor(
+                    spectrum, bands, tolerance_cm1=args.tolerance,
+                    min_relative_intensity=args.min_intensity, bounds=SCALE_FACTOR_RANGE,
+                )
+            except ValueError as exc:
+                print(f"⚠️  {exc} Se mantiene el factor {scale:.4f}.")
+            else:
+                n = sum(m.experimental_cm1 is not None for m in fitted_matches)
+                print(f"Factor de escala ajustado: {fitted:.4f} con {n} bandas (antes "
+                      f"{scale:.4f}). Guárdalo solo si las parejas de la tabla tienen sentido.")
+                scale, matches = fitted, fitted_matches
+        print(match_table(matches))
+
+    figure, drawn = plot_ir_comparison(
+        spectrum, title=record.name, experiment=experiment, fwhm_cm1=args.fwhm,
+        profile=args.profile, scale_factor=scale, window=window, offset=args.offset,
+        matches=matches, experiment_label=Path(args.ftir).stem if args.ftir else "FTIR",
+    )
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(out, dpi=200)
+    print(f"\nFigura → {out}")
+    if args.csv:
+        for path in export_csv(args.csv, drawn["grid"], drawn["computed"],
+                               drawn["stick_positions"], drawn["stick_heights"], experiment):
+            print(f"CSV → {path}")
+    return 0
+
+
 def add_parser(sub: argparse._SubParsersAction) -> None:
     """Register ``vibspec`` and its sub-commands on the main parser."""
     vs = sub.add_parser("vibspec", help="IR models of functionalised nanoribbons.")
@@ -191,3 +260,31 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     ix.add_argument("root")
     ix.add_argument("--db", default="vibspec.db")
     ix.set_defaults(func=_cmd_index)
+
+    pl = vsub.add_parser("plot", help="Computed IR spectrum, optionally against an FTIR.")
+    pl.add_argument("directory", help="Cálculo terminado (estado 'done').")
+    pl.add_argument("--ftir", help="Espectro experimental, CSV/TXT de dos columnas.")
+    pl.add_argument("--quantity", choices=("absorbance", "transmittance"), default=None,
+                    help="Qué contiene el FTIR (por defecto, se deduce y se avisa).")
+    pl.add_argument("--no-baseline", action="store_true",
+                    help="No restar la línea base (envolvente convexa inferior).")
+    pl.add_argument("--fwhm", type=float, default=10.0, help="Anchura a media altura, cm⁻¹.")
+    pl.add_argument("--profile", choices=("lorentzian", "gaussian"), default="lorentzian")
+    pl.add_argument("--scale", type=float, default=None,
+                    help="Factor de escala (por defecto, el guardado con el cálculo).")
+    pl.add_argument("--fit-scale", action="store_true",
+                    help="Ajustar el factor de escala a las bandas emparejadas.")
+    pl.add_argument("--tolerance", type=float, default=30.0,
+                    help="Distancia máxima para emparejar una banda, cm⁻¹.")
+    pl.add_argument("--min-intensity", type=float, default=0.05,
+                    help="Intensidad relativa mínima de un modo calculado para emparejarlo.")
+    pl.add_argument("--prominence", type=float, default=0.05,
+                    help="Prominencia mínima de una banda experimental (fracción del máximo).")
+    pl.add_argument("--xmin", type=float, default=400.0)
+    pl.add_argument("--xmax", type=float, default=4000.0)
+    pl.add_argument("--offset", type=float, default=0.0,
+                    help="Desplazar el calculado hacia arriba (≈1.1 para apilar).")
+    pl.add_argument("-o", "--out", default="ir.png")
+    pl.add_argument("--csv", default=None,
+                    help="Prefijo para exportar las curvas en CSV (para ramancarbon).")
+    pl.set_defaults(func=_cmd_plot)

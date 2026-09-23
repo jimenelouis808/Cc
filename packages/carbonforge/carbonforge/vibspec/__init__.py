@@ -17,8 +17,9 @@ Layout
 :mod:`~carbonforge.vibspec.core`
     Everything that can run from a script or a batch job: presets, site
     selection, physical checks, calculation settings, the prepare / run /
-    collect workflow and the on-disk records. No GUI imports, ever, and GPAW
-    only inside a running calculation.
+    collect workflow, the on-disk records, and the comparison with an
+    experimental FTIR (broadening, scale factor, band matching, the figure).
+    No GUI imports, ever, and GPAW only inside a running calculation.
 
 Raman is not computed yet. It will reuse the relaxed structure, the record
 and :class:`~carbonforge.results.spectra.VibrationalSpectrum` (which already
