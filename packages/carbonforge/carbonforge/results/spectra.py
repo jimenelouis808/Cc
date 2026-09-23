@@ -68,11 +68,17 @@ class VibrationalMode:
 
 @dataclass
 class VibrationalSpectrum:
-    """A parsed set of normal modes."""
+    """A parsed set of normal modes.
+
+    ``expected_acoustic`` is how many near-zero modes the summary expects: 3
+    for a crystal at Γ (the acoustic branch). A spectrum of a finite molecule
+    whose six rigid-body modes were already removed sets it to 0.
+    """
 
     modes: list[VibrationalMode] = field(default_factory=list)
     has_ir: bool = False
     has_raman: bool = False
+    expected_acoustic: int = 3
 
     def __len__(self) -> int:
         return len(self.modes)
@@ -134,9 +140,10 @@ class VibrationalSpectrum:
                 "relájala mejor antes de fiarte del espectro."
             )
         n_acoustic = sum(1 for m in self.modes if m.is_acoustic)
-        if n_acoustic != 3 and len(self.modes) > 3:
+        expected = self.expected_acoustic
+        if n_acoustic != expected and len(self.modes) > expected:
             lines.append(
-                f"\n⚠️  Se esperaban 3 modos acústicos cerca de 0 cm⁻¹ y hay "
+                f"\n⚠️  Se esperaban {expected} modos acústicos cerca de 0 cm⁻¹ y hay "
                 f"{n_acoustic}. Suele indicar que no se aplicó la regla de "
                 "suma acústica (asr) o que la relajación es insuficiente."
             )

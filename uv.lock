@@ -70,10 +70,14 @@ dev = [
     { name = "pytest-xdist" },
     { name = "ruff" },
 ]
+gpaw = [
+    { name = "gpaw" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "ase", specifier = ">=3.22" },
+    { name = "gpaw", marker = "extra == 'gpaw'", specifier = ">=25.1" },
     { name = "matplotlib", specifier = ">=3.7" },
     { name = "networkx", specifier = ">=3.0" },
     { name = "numpy", specifier = ">=2.0" },
@@ -83,7 +87,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
     { name = "scipy", specifier = ">=1.10" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "gpaw"]
 
 [[package]]
 name = "certifi"
@@ -658,6 +662,28 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/00/6a/58597f16e1265fe9205de3069e338a339e3eef0b1daf049ee08269458091/fonttools-4.65.0-cp315-cp315t-win32.whl", hash = "sha256:c779d838815b91889c95ed64c9be5950ad5a683279f91aeb23384cb757ddc6a3", size = 2464925, upload-time = "2026-09-10T15:35:47.224Z" },
     { url = "https://files.pythonhosted.org/packages/4b/95/122fc172006db747f4968e08c710f52a94f55eb007173b859b3f80b5b810/fonttools-4.65.0-cp315-cp315t-win_amd64.whl", hash = "sha256:d9484b7ee1b49b6b8a0231c849f3983723dec29e3a7366d9b1b02f4036f71944", size = 2513945, upload-time = "2026-09-10T15:35:49.895Z" },
     { url = "https://files.pythonhosted.org/packages/e6/35/f894ceb867118c0261d0f69a9bd516b045a3754238f76c88a49513ac7a83/fonttools-4.65.0-py3-none-any.whl", hash = "sha256:3060b8c1fc2329fa20265b7c138614143ea7c1624e26c5c180c76aeb74deae6f", size = 1196441, upload-time = "2026-09-10T15:35:52.347Z" },
+]
+
+[[package]]
+name = "gpaw"
+version = "26.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ase" },
+    { name = "gpaw-data" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
+    { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/f5/f2e3edb90e0d09b2f8d3da77eb356994ed9ef217903de368697c34048ec5/gpaw-26.7.0.tar.gz", hash = "sha256:1509af00cfcd032bbbce197a5b3e37edb82bf458db5e200f6a105ec74efbca15", size = 2679607, upload-time = "2026-07-06T09:30:59.312Z" }
+
+[[package]]
+name = "gpaw-data"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ad/7e/670a7786be78013f61c493fbb46125d82d194d1605e940481fc1bc8f63fe/gpaw_data-1.1.0-py3-none-any.whl", hash = "sha256:d6d2f2450cd6b22aa421738fce21c9c83b7f534cbc3bb4081ce5593fd9487173", size = 71507940, upload-time = "2026-09-01T12:54:14.771Z" },
 ]
 
 [[package]]

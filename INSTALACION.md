@@ -132,6 +132,48 @@ nanocarbon cnt --n 6 --m 6 --length 12 --dopant N --dopant-conc 0.03 \
 
 ---
 
+## GPAW para los cálculos IR de `carbonforge vibspec` (Ubuntu o WSL2)
+
+Solo hace falta para **correr** los cálculos. Construir las cintas, preparar
+los cálculos y analizar los espectros funciona en Windows sin GPAW.
+
+GPAW solo se publica como código fuente y no compila en Windows de forma
+nativa: usa Ubuntu, o WSL2 con Ubuntu en el mismo equipo. En Ubuntu 22.04/24.04:
+
+```bash
+# Compiladores (g++ es imprescindible: GPAW 26 se compila como C++), libxc y BLAS
+sudo apt install build-essential libxc-dev libopenblas-dev
+# Para correr en paralelo con MPI (opcional pero recomendado):
+sudo apt install openmpi-bin libopenmpi-dev libscalapack-openmpi-dev libfftw3-dev
+
+uv sync --all-packages --extra dev
+CC=g++ uv pip install gpaw          # o: uv sync --package carbonforge --extra gpaw
+uv run gpaw info                    # libxc: yes; MPI: yes si instalaste OpenMPI
+```
+
+`CC=g++` no es un capricho: con `gcc` la compilación de GPAW 26 se para en
+`fatal error: algorithm: No such file or directory`. Desde GPAW 26 los datasets
+PAW llegan como paquete (`gpaw-data`), así que `gpaw install-data` ya no hace
+falta; `gpaw info` muestra dónde están.
+
+**El flujo completo:**
+
+```bash
+carbonforge vibspec build --preset amine -o amina.xyz              # Windows o Ubuntu
+carbonforge vibspec prepare amina.xyz -d calculos/amina            # valida y escribe el directorio
+cd calculos/amina && mpiexec -n 4 gpaw python run.py               # Ubuntu, con GPAW
+carbonforge vibspec show calculos/amina                            # de vuelta en Windows
+```
+
+`run.py` se puede relanzar si se corta: la relajación terminada no se repite y
+los desplazamientos ya calculados tampoco.
+
+**Cuánto tarda:** una molécula de agua en serie, LCAO-dzp, ~10 min. Una cinta
+de 80 átomos son ~480 cálculos SCF de un sistema bastante mayor: horas en un
+PC de sobremesa, así que usa MPI (`mpiexec -n <núcleos>`) o el clúster.
+
+---
+
 ## Si algo falla
 
 **`ModuleNotFoundError: No module named 'tkinter'`** — solo afecta a las GUIs.
@@ -145,6 +187,9 @@ Sáltalo: no lo necesitas para nada más.
 **Los tests de `nanocarbon_lab` tardan muchísimo** — sin `-m "not slow"` la
 suite completa son diez minutos largos. Son construcciones de mallas que tardan
 minutos cada una; están marcadas como `slow` precisamente para poder saltarlas.
+
+**`ImportError: GPAW no está instalado`** al hacer `vibspec run` — es lo
+esperado en Windows. Prepara el cálculo ahí y córrelo en Ubuntu (arriba).
 
 **El resultado de un test difiere en el último decimal** — varias rutinas usan
 mínimos cuadrados y el resultado depende de la versión de scipy. La Opción A

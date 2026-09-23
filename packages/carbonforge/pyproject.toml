@@ -47,6 +47,14 @@ dev = [
     "pytest-xdist>=3.5",
     "ruff>=0.4",
 ]
+# The DFT engine for vibspec's IR workflow. Optional, and imported only when a
+# calculation runs: GPAW publishes source only, needs a C++ compiler, libxc
+# and BLAS, and does not build natively on Windows (use Ubuntu or WSL2; see
+# INSTALACION.md). It is GPL-3, which is another reason not to make the MIT
+# package depend on it.
+gpaw = [
+    "gpaw>=25.1",
+]
 
 [project.scripts]
 carbonforge = "carbonforge.cli.main:main"
@@ -62,6 +70,10 @@ exclude = ["tests*", "examples*"]
 [tool.pytest.ini_options]
 testpaths = ["carbonforge/tests"]
 addopts = "-ra --strict-markers"
+markers = [
+    "slow: minutes each; run nightly, not on every push",
+    "gpaw: needs GPAW installed (skipped otherwise)",
+]
 
 [tool.ruff]
 line-length = 100

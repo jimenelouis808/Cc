@@ -63,6 +63,14 @@ LCAO_MAX_H: float = 0.18
 #: et al. 2007); a value outside it is almost certainly a typo or the inverse.
 SCALE_FACTOR_RANGE: tuple[float, float] = (0.90, 1.05)
 
+#: Relaxation moves the outermost atoms, so the vacuum measured after it may
+#: be a little under what was prepared. Before relaxing, a margin this large
+#: above the minimum is asked for (as a warning); after relaxing, the
+#: minimum is enforced this much more leniently. Re-boxing after the
+#: relaxation is not an option: a new cell means a new grid, and the relaxed
+#: forces would no longer be zero on it.
+RELAX_VACUUM_SLACK: float = 0.5
+
 #: Zigzag edges at least this many sites long get a spin-polarised check.
 ZIGZAG_MAGNETIC_RUN: int = 4
 
@@ -211,8 +219,17 @@ def check_structure(
     atoms: Atoms,
     charge: int = 0,
     min_vacuum_per_side: float = MIN_VACUUM_PER_SIDE,
+    comfortable_vacuum: Optional[float] = None,
 ) -> ValidationReport:
-    """Everything about the *structure* that must hold before an IR calculation."""
+    """Everything about the *structure* that must hold before an IR calculation.
+
+    Vacuum under ``min_vacuum_per_side`` is an error; under
+    ``comfortable_vacuum`` (default: the minimum plus
+    :data:`RELAX_VACUUM_SLACK`) a warning, since relaxation may still move
+    the outermost atoms outwards.
+    """
+    if comfortable_vacuum is None:
+        comfortable_vacuum = min_vacuum_per_side + RELAX_VACUUM_SLACK
     report = ValidationReport()
 
     if any(atoms.get_pbc()):
@@ -224,10 +241,16 @@ def check_structure(
 
     for axis, gap in vacuum_per_side(atoms).items():
         report.info[f"vacuum_per_side_axis_{axis}"] = round(gap, 2)
-        if gap < min_vacuum_per_side:
+        if gap < min_vacuum_per_side - 1e-6:
             report.errors.append(
                 f"Eje {axis}: solo {gap:.2f} Å de vacío por lado (mínimo "
                 f"{min_vacuum_per_side} Å). La molécula interactúa con sus imágenes."
+            )
+        elif gap < comfortable_vacuum - 1e-6:
+            report.warnings.append(
+                f"Eje {axis}: {gap:.2f} Å de vacío por lado, justo por encima del "
+                f"mínimo; deja al menos {comfortable_vacuum} Å para que la relajación "
+                "no se lo coma."
             )
 
     # Only its errors: its warnings are tuned for C-C and fire on every C-H.
@@ -339,7 +362,13 @@ def check_ready_for_vibrations(
     spinpol
         Whether the calculation is spin-polarised, when known.
     """
-    report = check_structure(atoms, charge=charge)
+    # After relaxing, the vacuum minimum is enforced with some slack (see
+    # RELAX_VACUUM_SLACK) and "comfortable" means the minimum itself.
+    report = check_structure(
+        atoms, charge=charge,
+        min_vacuum_per_side=MIN_VACUUM_PER_SIDE - RELAX_VACUUM_SLACK,
+        comfortable_vacuum=MIN_VACUUM_PER_SIDE,
+    )
 
     if relaxed_fmax is None:
         report.errors.append(

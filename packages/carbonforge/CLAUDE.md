@@ -65,7 +65,13 @@ carbonforge/
   checks reject periodic structures, < 6 Å vacuum per side, unrelaxed
   geometries and spin-paired runs of systems that need spin (odd electrons,
   dangling bonds, zigzag edges of >= 4 sites). `vibspec/core/` must never
-  import from `gui/`.
+  import from `gui/`, and must import GPAW only inside a running calculation
+  (`core/engines.py`): carbonforge has to work on Windows without it.
+- vibspec's GPAW PW mode solves Hartree periodically even with pbc=False:
+  images interact through their dipoles. It is allowed with a warning and
+  8 Å of vacuum per side; LCAO/FD (zero boundary conditions) are the default.
+  Vibrations only start after a converged relaxation AND a passing
+  `check_ready_for_vibrations` on the relaxed structure.
 - A zigzag nanoribbon MUST be spin-polarised. Its edges are magnetic and
   antiferromagnetically coupled; without nspin=2 the SCF converges to a state
   that is not the ground state, with no error. Presets enable it

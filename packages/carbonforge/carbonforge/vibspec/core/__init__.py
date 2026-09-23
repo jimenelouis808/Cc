@@ -1,5 +1,6 @@
 """Script-level core of vibspec: no GUI imports, runnable in batch on a cluster."""
 
+from .calcspec import CalcSpec
 from .checks import (
     FMAX_LIMIT,
     FMAX_RECOMMENDED,
@@ -13,7 +14,9 @@ from .checks import (
     unformed_pyrrolic_nitrogens,
     vacuum_per_side,
 )
+from .engines import gpaw_available
 from .presets import PRESETS, Preset, apply_preset, describe_presets, get_preset
+from .record import CalcRecord, find_records, index_records
 from .sites import (
     EdgeSite,
     edge_sites,
@@ -23,8 +26,19 @@ from .sites import (
     strip_hydrogen,
     zigzag_runs,
 )
+from .workflow import VibspecError, collect, prepare, run
 
 __all__ = [
+    # workflow
+    "CalcSpec",
+    "CalcRecord",
+    "VibspecError",
+    "collect",
+    "find_records",
+    "gpaw_available",
+    "index_records",
+    "prepare",
+    "run",
     # presets
     "PRESETS",
     "Preset",

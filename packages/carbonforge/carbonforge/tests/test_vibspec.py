@@ -359,14 +359,40 @@ class TestCli:
 
 
 def test_core_imports_no_gui():
-    """The core must run headless on a cluster: importing it loads no GUI code."""
+    """The core must run headless on a cluster: importing it loads no GUI code.
+
+    Nor GPAW: it is optional, and absent on Windows.
+    """
     import subprocess
     import sys
 
+    # A GPAW installation registers an ASE plugin, which ASE itself imports;
+    # only what importing the core adds on top of plain ASE counts.
     code = (
-        "import sys, carbonforge.vibspec.core; "
-        "bad = [m for m in sys.modules if m.startswith(('carbonforge.gui', 'tkinter'))]; "
+        "import sys, ase.io, ase.calculators.calculator; "
+        "before = set(sys.modules); "
+        "import carbonforge.vibspec.core; "
+        "bad = [m for m in set(sys.modules) - before "
+        "if m.startswith(('carbonforge.gui', 'tkinter', 'gpaw'))]; "
         "print(bad); sys.exit(1 if bad else 0)"
     )
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_core_never_imports_gpaw_at_module_level():
+    """GPAW may only be imported inside a function (a running calculation)."""
+    import ast
+    from pathlib import Path
+
+    import carbonforge.vibspec.core as core
+
+    for path in Path(core.__file__).parent.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in tree.body:
+            names = []
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names = [node.module]
+            assert not any(n.split(".")[0] == "gpaw" for n in names), path.name

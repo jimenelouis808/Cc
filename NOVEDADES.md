@@ -6,6 +6,48 @@ está la trampa.
 
 ---
 
+## carbonforge · vibspec (fase 2)
+
+### El cálculo IR con GPAW, de principio a fin
+
+`carbonforge vibspec prepare` valida la estructura y los parámetros y escribe
+un directorio autocontenido; `run.py` dentro de él relaja, vuelve a comprobar
+la estructura relajada y calcula el IR por diferencias finitas del dipolo
+(`ase.vibrations.Infrared`). Se prepara en Windows y se corre en Ubuntu:
+
+```bash
+carbonforge vibspec prepare amina.xyz -d calculos/amina
+cd calculos/amina && mpiexec -n 4 gpaw python run.py
+carbonforge vibspec show calculos/
+```
+
+Cada cálculo guarda en `record.json` los parámetros, los chequeos, las
+versiones (con el commit de git), la relajación, los resultados y un historial
+de estados con hora: `prepared → relaxing → relaxed → vibrations → done`, o
+`error` con el motivo. `vibspec index` lo vuelca todo a una base de datos ASE.
+
+**Qué NO hace todavía:** Raman, el ensanchado del espectro y la comparación con
+tu FTIR (fase 3).
+
+**Dónde está la trampa:**
+
+- LCAO (por defecto) y FD usan condiciones de contorno cero. El modo PW también
+  corre, pero resuelve el potencial de Hartree como periódico aunque la celda no
+  lo sea: un grupo polar nota a sus imágenes. Avisa y pide 8 Å de vacío por lado.
+- Los seis modos de sólido rígido se quitan del espectro y se informan. Unas
+  decenas de cm⁻¹ son normales (fuerza residual y paso finito); por encima de
+  100 cm⁻¹ avisa: relajación insuficiente o efecto huevera. Contra la huevera
+  se aplica por defecto la corrección de Frederiksen (las fuerzas de cada
+  desplazamiento suman cero): en N₂ con LCAO lleva las traslaciones de
+  150–270 cm⁻¹ a cero y mueve la tensión menos de un 1 %. Las rotaciones siguen
+  notando la rejilla (~80 cm⁻¹ en N₂); en una cinta, con su momento de inercia
+  mucho mayor, pesan menos.
+- Deja algo de margen de vacío: la relajación mueve los átomos del borde. Al
+  preparar se exige 6 Å por lado y se avisa por debajo de 6,5.
+- Coste: el agua, en serie, ~10 min. Una cinta de 80 átomos son ~480 SCF.
+
+---
+
 ## carbonforge · vibspec (fase 1)
 
 ### Cintas finitas con una funcionalidad, para asignar bandas de FTIR

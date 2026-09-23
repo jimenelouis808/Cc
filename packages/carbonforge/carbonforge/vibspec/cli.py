@@ -3,6 +3,10 @@
 * ``presets`` -- list the functionalisation presets.
 * ``build``   -- build a finite ribbon, apply a preset, check it and write it.
 * ``check``   -- run the physical checks on an existing structure file.
+* ``prepare`` -- validate a structure and settings, write a calculation directory.
+* ``run``     -- relax and compute the IR spectrum of a prepared directory (GPAW).
+* ``show``    -- report on one calculation, or every one under a directory.
+* ``index``   -- put every calculation under a directory into an ASE database.
 """
 
 from __future__ import annotations
@@ -14,7 +18,20 @@ from ase import io as ase_io
 
 from ..builders.nanoribbon import DEFAULT_VACUUM_PER_SIDE, build_finite_nanoribbon
 from ..validation.checks import run_basic_checks
-from .core import apply_preset, check_structure, describe_presets, suggest_spin
+from .core import (
+    CalcRecord,
+    CalcSpec,
+    VibspecError,
+    apply_preset,
+    check_structure,
+    collect,
+    describe_presets,
+    find_records,
+    index_records,
+    prepare,
+    run,
+    suggest_spin,
+)
 
 
 def _position(text: str | None):
@@ -59,6 +76,59 @@ def _cmd_check(args) -> int:
     return _report(ase_io.read(args.path), args.charge)
 
 
+def _cmd_prepare(args) -> int:
+    spinpol = {"auto": None, "on": True, "off": False}[args.spinpol]
+    spec = CalcSpec(
+        xc=args.xc, mode=args.mode, basis=args.basis, h=args.h, ecut=args.ecut, spinpol=spinpol,
+        charge=args.charge, fmax=args.fmax, delta=args.delta, nfree=args.nfree,
+        scale_factor=args.scale_factor,
+    )
+    try:
+        record = prepare(ase_io.read(args.structure), spec, Path(args.directory),
+                         force=args.force, overwrite=args.overwrite)
+    except (VibspecError, FileExistsError) as exc:
+        print(exc)
+        return 1
+    print(record.summary())
+    warnings = record.checks["prepare"]["warnings"]
+    for warning in warnings:
+        print(f"  ⚠️  {warning}")
+    print(f"\nPara correrlo donde esté GPAW:\n  cd {args.directory} && "
+          "mpiexec -n 4 gpaw python run.py")
+    return 0
+
+
+def _cmd_run(args) -> int:
+    try:
+        record = run(Path(args.directory))
+    except (VibspecError, ImportError) as exc:
+        print(exc)
+        return 1
+    print(record.summary())
+    return 0
+
+
+def _cmd_show(args) -> int:
+    path = Path(args.path)
+    directories = find_records(path)
+    if not directories:
+        print(f"No hay cálculos en {path}.")
+        return 1
+    for directory in directories:
+        record = CalcRecord.load(directory)
+        print(record.summary())
+        if record.status == "done" and len(directories) == 1:
+            print()
+            print(collect(directory).summary())
+    return 0
+
+
+def _cmd_index(args) -> int:
+    count = index_records(Path(args.root), Path(args.db))
+    print(f"{count} cálculo(s) indexado(s) en {args.db}.")
+    return 0
+
+
 def add_parser(sub: argparse._SubParsersAction) -> None:
     """Register ``vibspec`` and its sub-commands on the main parser."""
     vs = sub.add_parser("vibspec", help="IR models of functionalised nanoribbons.")
@@ -88,3 +158,36 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     ck.add_argument("path")
     ck.add_argument("--charge", type=int, default=0)
     ck.set_defaults(func=_cmd_check)
+
+    defaults = CalcSpec()
+    pp = vsub.add_parser("prepare", help="Validate and write a calculation directory.")
+    pp.add_argument("structure", help="Estructura finita (p. ej. de `vibspec build`).")
+    pp.add_argument("-d", "--directory", required=True)
+    pp.add_argument("--xc", default=defaults.xc)
+    pp.add_argument("--mode", choices=("lcao", "fd", "pw"), default=defaults.mode)
+    pp.add_argument("--basis", default=defaults.basis)
+    pp.add_argument("--h", type=float, default=defaults.h)
+    pp.add_argument("--ecut", type=float, default=defaults.ecut, help="eV, solo en modo pw.")
+    pp.add_argument("--spinpol", choices=("auto", "on", "off"), default="auto")
+    pp.add_argument("--charge", type=int, default=defaults.charge)
+    pp.add_argument("--fmax", type=float, default=defaults.fmax)
+    pp.add_argument("--delta", type=float, default=defaults.delta)
+    pp.add_argument("--nfree", type=int, default=defaults.nfree)
+    pp.add_argument("--scale-factor", type=float, default=defaults.scale_factor)
+    pp.add_argument("--force", action="store_true",
+                    help="Escribir aunque la validación falle (run lo seguirá rechazando).")
+    pp.add_argument("--overwrite", action="store_true")
+    pp.set_defaults(func=_cmd_prepare)
+
+    rn = vsub.add_parser("run", help="Relax and compute the IR spectrum (needs GPAW).")
+    rn.add_argument("directory")
+    rn.set_defaults(func=_cmd_run)
+
+    sh = vsub.add_parser("show", help="Report on a calculation or a tree of them.")
+    sh.add_argument("path")
+    sh.set_defaults(func=_cmd_show)
+
+    ix = vsub.add_parser("index", help="Index every calculation into an ASE database.")
+    ix.add_argument("root")
+    ix.add_argument("--db", default="vibspec.db")
+    ix.set_defaults(func=_cmd_index)

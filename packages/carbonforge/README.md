@@ -301,8 +301,37 @@ What the checks refuse, and why:
 | Pyrrolic N-H not in a pentagon after relaxing | It is not a pyrrolic site |
 | `nfree` not 2/4; `delta`, LCAO `h`, scale factor out of range | Noise, anharmonicity, egg-box, typos |
 
-The IR workflow itself (GPAW, then the spectrum against your FTIR) is the
-next phase; these checks are what it will run first.
+### Running the IR calculation
+
+Prepare on any machine, run where GPAW is (Ubuntu or WSL2; see
+`INSTALACION.md`), read back anywhere:
+
+```bash
+carbonforge vibspec prepare out/pyr.xyz -d runs/pyr          # validates, writes the directory
+cd runs/pyr && mpiexec -n 4 gpaw python run.py                # relax → gate → Infrared
+carbonforge vibspec show runs/                                # status of every calculation
+carbonforge vibspec index runs/ --db vibspec.db               # ASE database, one row each
+```
+
+Each directory is one reproducible unit: `record.json` (settings, checks,
+code versions and git commit, relaxation, results, a timestamped status
+history), the initial and relaxed structures, `modes.npz` with every mode
+vector, and the raw ASE/GPAW output. Paths are relative, so it moves between
+machines. `run.py` is restartable: a finished relaxation and finished
+displacements are not repeated.
+
+GPAW modes: `lcao` (default, dzp, h = 0.18 Å) to screen, `fd` to confirm.
+`pw` runs too, but GPAW solves the Hartree potential periodically even with
+`pbc=False`, so polar groups feel their images: it warns, and asks for 8 Å
+of vacuum per side. The six
+rigid-body modes are removed from the spectrum and reported; above 100 cm⁻¹
+they flag a poor relaxation or the egg-box effect. The Frederiksen correction
+(forces of each displacement summed to zero) is on by default and removes the
+egg-box from the translations (`ir_method="standard"` turns it off). Frequencies are stored
+unscaled; the scale factor is applied at analysis time.
+
+Raman is not computed yet; it will reuse the same relaxed structure and
+record.
 
 ## Batch sweeps over any structure
 
