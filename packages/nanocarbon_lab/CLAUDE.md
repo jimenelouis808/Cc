@@ -1442,14 +1442,17 @@ super-graphene        1180     335.1       sound        89.6%       34 s
 **super-cubic**       836      **327.8**   **COLLAPSED**  76.1%     38 s
 super-diamond         --       --          refused at cell 40       --
 super-fcc             3082     330.7       sound        87.1%       **1440 s**
-**super-icosahedron** 3052     **328.4**   **COLLAPSED**  93.7%     24 s
+super-icosahedron     4292     331.4       sound        93.9%       33 s
 super-hypercube       6494     331.6       sound        92.9%       78 s
 supertube-(4,4)       6728     334.1       sound        93.1%       447 s
+supertube-(6,6)       5936     330.7       sound        91.6%       526 s
 superfullerene-C60    7534     328.3       **COLLAPSED**  95.0%     73 s
 ====================  =======  ==========  ===========  ==========  ======
 
-`wall_anchor=1` clears all three: super-cubic **327.8 -> 330.6**,
-super-icosahedron **328.4 -> 333.0**, superfullerene **328.3 -> 333.0**.
+The table is the shipped presets, all ten rows, none extrapolated.
+`wall_anchor=1` clears both collapses: super-cubic **327.8 -> 330.6** and
+superfullerene **328.3 -> 333.0**; super-diamond's was a voxel problem
+and is fixed outright (see below).
 The cost is bonds and placement, and on super-cubic the placement cost is
 steep -- 76.1% to 65.9%.
 
