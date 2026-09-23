@@ -1542,6 +1542,51 @@ has ten, several take minutes each, and changing what every meshed
 builder emits deserves the full sweep rather than an extrapolation from
 the two that were quick.
 
+## The builder now refuses to hand back an impossible wall
+
+A collapsed wall is not a poor structure, it is an **impossible** one --
+an angle sum under 328.4 deg is past tetrahedral, which no carbon
+reaches. `rescue_collapsed_wall` rebuilds it once with the wall held on
+its own surface, the same pattern this module already uses for a weld
+that fails: vary one thing and re-measure. Only a wall that actually
+collapsed pays, because `wall_anchor` widens bonds and would be a loss
+on a wall that was already sound.
+
+**One anchor strength does not fit all**, and assuming it did left the
+job half done. super-cubic clears at 1.0. The superfullerene gets
+**worse** at 1.0 (327.6 -> 325.8) and needs 2.0 to clear, so a single
+attempt returned it collapsed and looked like the fix simply not
+working. `RESCUE_ANCHORS = (1.0, 2.0, 4.0)` escalates and keeps whichever
+rebuild has the highest minimum angle sum.
+
+**And "not collapsed" is not a stopping condition.** Stopping the moment
+`collapsed_wall` passes left the superfullerene at **328.4 deg, the
+threshold itself to one decimal** -- a wall that would read collapsed
+again on the next change to anything. `RESCUE_MARGIN = 1.5` makes it
+keep going, and one more step reached 330.8.
+
+===================  =========  ==========  ============
+structure            before     after       anchor used
+===================  =========  ==========  ============
+super-cubic          327.8      **330.6**   1.0
+superfullerene-C60   327.6      **330.8**   4.0
+super-graphene       338.6      untouched   --
+===================  =========  ==========  ============
+
+The cost is real and falls only where it must: the superfullerene takes
+757 s instead of 357 because it is built three more times.
+
+## Both switches are in the window
+
+`anneal_sweeps` already had its slider; `wall_anchor` now has a
+checkbox beside the placement one, and the hint says what each buys and
+costs, because **they pull in opposite directions**: annealing places
+the rings better and leaves the wall rougher, and the anchor is what
+pays that back. Both reach all seven meshed modes, and
+`test_place_curvature_wiring.py` asserts they reach the *same* seven --
+a mode offering one and silently dropping the other is a wiring slip,
+which is exactly how `coil (periodic, DFT)` was missed the first time.
+
 ## Heptanene: sp3 makes it worse, and by a factor of six
 
 The proposal was a 2D all-heptagon sheet with the sp2/sp3 mix as the free

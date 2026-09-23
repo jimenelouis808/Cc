@@ -20,6 +20,19 @@ from nanocarbon_lab.jobs import builder_for
 APP = Path(__file__).resolve().parents[1] / "gui" / "app.py"
 
 
+def _modes_the_window_passes(marker: str) -> set[str]:
+    """Modes whose GUI parameter block contains `marker`."""
+    source = APP.read_text()
+    found, mode = set(), None
+    for line in source.splitlines():
+        match = re.search(r'(?:el)?if mode == "([^"]+)"', line)
+        if match:
+            mode = match.group(1)
+        elif marker in line and mode:
+            found.add(mode)
+    return found
+
+
 def _modes_the_window_passes_it_for() -> set[str]:
     """Read the GUI's own parameter blocks rather than a second list.
 
@@ -81,3 +94,31 @@ class TestPlacementSwitchWiring:
 
 class _Stop(BaseException):
     """Stops a builder the moment the remesher is reached."""
+
+
+class TestWallAnchorWiring:
+    """The same class of bug, for the second switch.
+
+    A keyword the window passes and the builder does not take is a
+    TypeError the moment someone ticks the box, with nothing drawn.
+    """
+
+    def test_the_window_offers_it(self):
+        assert _modes_the_window_passes("wall_anchor=1.0")
+
+    @pytest.mark.parametrize(
+        "mode", sorted(_modes_the_window_passes("wall_anchor=1.0")))
+    def test_the_builder_accepts_it(self, mode):
+        signature = inspect.signature(builder_for(mode))
+        explicit = "wall_anchor" in signature.parameters
+        variadic = any(p.kind is inspect.Parameter.VAR_KEYWORD
+                       for p in signature.parameters.values())
+        assert explicit or variadic, (
+            f"the window passes wall_anchor to {mode!r}, whose builder "
+            f"{builder_for(mode).__name__} does not take it")
+
+    def test_both_switches_reach_the_same_modes(self):
+        """They sit side by side in the window, so a mode that offers one
+        and silently drops the other is a wiring slip, not a choice."""
+        assert (_modes_the_window_passes("wall_anchor=1.0")
+                == _modes_the_window_passes("place_curvature=bool("))

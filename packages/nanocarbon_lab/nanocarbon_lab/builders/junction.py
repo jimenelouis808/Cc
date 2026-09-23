@@ -29,6 +29,8 @@ characteristic instead.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 from ase import Atoms
 
@@ -238,6 +240,7 @@ def build_schwarzite(
     grid_resolution: int = 64,
     anneal_sweeps: int = 0,
     place_curvature: bool = False,
+    wall_anchor: float = 0.0,
     remesh_iterations: int = 25,
     roughness: float = 0.0,
     relax_iterations: int = 3000,
@@ -358,6 +361,8 @@ def build_schwarzite(
                     anneal_sweeps=anneal_sweeps, rng=make_rng(seed),
                     place_curvature=place_curvature,
                 ),
+                field=field,
+                wall_anchor=wall_anchor,
                 bond=bond,
                 relax_iterations=relax_iterations,
                 vacuum=0.0,
@@ -386,6 +391,82 @@ def build_schwarzite(
         + "\nTry a larger cell, where the channels are wider relative to a "
         "carbon ring."
     )
+
+
+#: Anchor strengths the rescue tries, in order, stopping at the first
+#: sound wall. One strength does not fit all: super-cubic clears at 1.0
+#: while the superfullerene gets *worse* there (327.6 -> 325.8) and needs
+#: 2.0 to clear and 4.0 to clear comfortably. Each step costs a rebuild,
+#: so only a wall that actually collapsed pays, and it stops as soon as
+#: it works.
+RESCUE_ANCHORS = (1.0, 2.0, 4.0)
+
+#: Degrees clear of tetrahedral the rescue wants before it stops trying.
+RESCUE_MARGIN = 1.5
+
+
+def rescue_collapsed_wall(atoms, rebuild, anchors=RESCUE_ANCHORS):
+    """Rebuild once with the wall held, if the wall came back collapsed.
+
+    A collapsed wall is not a bad structure, it is an **impossible**
+    one: an angle sum under 328.4 deg is past tetrahedral, which no
+    carbon reaches. Handing it back is worse than taking the time to try
+    again, and the retry is the same pattern this module already uses
+    for a weld that fails -- vary one thing and re-measure.
+
+    Only a wall that actually collapsed pays the cost, and the rebuild
+    is kept only if it is genuinely better: `wall_anchor` widens bonds,
+    so on a wall that was already sound it would be a loss.
+
+    The strength is escalated rather than fixed, because one value does
+    not fit all: super-cubic clears at 1.0, and the superfullerene gets
+    *worse* at 1.0 (327.6 -> 325.8) before clearing at 2.0 and reaching
+    330.8 at 4.0. It keeps whichever rebuild has the highest minimum
+    angle sum and stops at the first sound one.
+    """
+    from ..analyse.hybridisation import (
+        TETRAHEDRAL_SUM,
+        collapsed_wall,
+        hybridisation_report,
+    )
+
+    def verdict(candidate):
+        return hybridisation_report(candidate.positions,
+                                    candidate.info.get("bonds", []),
+                                    np.asarray(candidate.cell))
+
+    before = verdict(atoms)
+    if not collapsed_wall(before):
+        return atoms
+    warnings.warn(
+        f"The wall came back collapsed (angle sums start at "
+        f"{before['angle_sum_min']:.1f} deg, past the 328.4 of a "
+        "tetrahedral carbon), so it is being rebuilt with the wall held "
+        "on its own surface. Pass wall_anchor=0 to keep the collapsed "
+        "one, or a larger wall_anchor if this is not enough.",
+        stacklevel=2,
+    )
+    best, best_report = atoms, before
+    for strength in anchors:
+        try:
+            candidate = rebuild(strength)
+        except Exception:  # noqa: BLE001 - the original is still valid output
+            continue
+        report = verdict(candidate)
+        if report["angle_sum_min"] > best_report["angle_sum_min"]:
+            best, best_report = candidate, report
+        # Not merely "not collapsed": stopping the moment the check
+        # passes left the superfullerene at 328.4 deg, which is the
+        # threshold itself to one decimal. One more step took it to
+        # 330.8. A hairline pass is not a sound wall, it is a wall that
+        # will read collapsed again on the next change to anything.
+        if report["angle_sum_min"] >= TETRAHEDRAL_SUM + RESCUE_MARGIN:
+            break
+    if best is atoms:
+        return atoms
+    best.info["wall_rescued_from"] = round(float(before["angle_sum_min"]), 1)
+    best.info["wall_anchor_used"] = float(strength)
+    return best
 
 
 def _finish(

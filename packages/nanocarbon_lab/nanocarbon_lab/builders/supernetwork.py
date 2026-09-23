@@ -50,7 +50,7 @@ from ..utils.constants import CC_BOND
 from ..utils.rng import make_rng
 from . import implicit as im
 from . import remesh as rm
-from .junction import _finish
+from .junction import _finish, rescue_collapsed_wall
 
 __all__ = [
     "CAGES",
@@ -736,6 +736,25 @@ def build_supernetwork(
                     "smaller blend, a narrower tube or a finer grid."
                 )
             atoms.info["ring_budget"] = budget
+            # A collapsed wall is impossible rather than merely poor, so
+            # it is rebuilt once with the wall held on its own surface.
+            # Only a wall that actually collapsed pays for this: the
+            # audit found super-cubic at 327.8 deg and
+            # superfullerene-C60 at 328.3, both past tetrahedral.
+            if wall_anchor <= 0.0:
+                atoms = rescue_collapsed_wall(
+                    atoms,
+                    lambda k: build_supernetwork(
+                        graph=graph, scale=scale, tube_radius=tube_radius,
+                        blend=blend, bond=bond, vacuum=vacuum,
+                        grid_resolution=grid_resolution,
+                        remesh_iterations=remesh_iterations,
+                        anneal_sweeps=anneal_sweeps,
+                        place_curvature=place_curvature, wall_anchor=k,
+                        relax_iterations=relax_iterations,
+                        roughness=roughness, seed=seed,
+                    ),
+                )
             return atoms
         except RuntimeError as exc:
             failures.append(f"resolution {resolution}: {exc}")

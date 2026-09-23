@@ -62,6 +62,7 @@ def build_toroid(
     remesh_iterations: int = 25,
     anneal_sweeps: int = 0,
     place_curvature: bool = False,
+    wall_anchor: float = 0.0,
     roughness: float = 0.0,
     relax_iterations: int = 3000,
     vacuum: float = DEFAULT_VACUUM_1D,
@@ -76,6 +77,9 @@ def build_toroid(
     minor_radius
         Radius of the tube itself (Å). Free rather than quantised,
         because the wall is meshed rather than rolled.
+    wall_anchor
+        Hold each atom on the wall's own surface, along the normal only.
+        Passed through to :func:`build_swept_tube`.
     place_curvature
         Move the disclinations to where the surface's own Gaussian
         curvature asks for them, by Stone-Wales flips, after the remesh.
@@ -133,6 +137,7 @@ def build_toroid(
         path, tube_radius=minor_radius, bond=bond, voxel=voxel,
         remesh_iterations=remesh_iterations, anneal_sweeps=anneal_sweeps,
         place_curvature=place_curvature,
+        wall_anchor=wall_anchor,
         roughness=roughness, relax_iterations=relax_iterations,
         vacuum=vacuum, pin_ends=False, seed=seed,
     )

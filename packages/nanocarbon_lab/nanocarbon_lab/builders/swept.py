@@ -64,6 +64,7 @@ def build_swept_tube(
     remesh_iterations: int = 25,
     anneal_sweeps: int = 0,
     place_curvature: bool = False,
+    wall_anchor: float = 0.0,
     roughness: float = 0.0,
     relax_iterations: int = 3000,
     vacuum: float = DEFAULT_VACUUM_1D,
@@ -174,6 +175,8 @@ def build_swept_tube(
     steps = np.linalg.norm(np.diff(path, axis=0), axis=1)
     return _finish(
         mesh,
+        field=field,
+        wall_anchor=wall_anchor,
         bond=bond,
         relax_iterations=relax_iterations,
         vacuum=vacuum,

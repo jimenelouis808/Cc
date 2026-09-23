@@ -864,6 +864,7 @@ class NanocarbonGUI:
         self.var_anneal = self._var("anneal", tk.IntVar(value=80))
         self.var_roughness = self._var("roughness", tk.DoubleVar(value=0.0))
         self.var_place = self._var("place", tk.BooleanVar(value=False))
+        self.var_anchor = self._var("anchor", tk.BooleanVar(value=False))
         self.var_dopant = self._var("dopant", tk.StringVar(value="none"))
         self.var_dopant_conc = self._var("dopant_conc", tk.DoubleVar(value=0.03))
         self.var_dopant_site = self._var("dopant_site", tk.StringVar(value="random"))
@@ -1479,10 +1480,15 @@ class NanocarbonGUI:
             text="Put the 5s and 7s where the curvature wants them",
             variable=self.var_place, command=self._update_surface_hint,
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ttk.Checkbutton(
+            self.frame_surface,
+            text="Hold the wall on its own surface",
+            variable=self.var_anchor, command=self._update_surface_hint,
+        ).grid(row=4, column=0, columnspan=2, sticky="w")
         self.lbl_surface = ttk.Label(self.frame_surface, text="", foreground=MUTED,
                                      font=("TkDefaultFont", 8), wraplength=230,
                                      justify="left")
-        self.lbl_surface.grid(row=4, column=0, columnspan=2, sticky="w")
+        self.lbl_surface.grid(row=5, column=0, columnspan=2, sticky="w")
 
         # --- chemistry
         self.frame_chem = ttk.LabelFrame(parent, text="Chemistry", padding=8)
@@ -3048,6 +3054,27 @@ class NanocarbonGUI:
             "few seconds and is safe to leave on."
         )
 
+    def _anchor_hint(self) -> str:
+        """What holding the wall buys, and what it costs.
+
+        The two switches pull in different directions and the window
+        should say so: annealing places the rings better and leaves the
+        wall rougher, and this is what pays that back.
+        """
+        if not self.var_anchor.get():
+            return ("Wall free: relaxing only equalises bond lengths, and a "
+                    "corrugated or collapsed wall does that just as well as "
+                    "a round one.")
+        return (
+            "Wall held: each atom is restrained along its own surface "
+            "normal, so it still slides within the wall but cannot leave "
+            "it. Measured off-surface deviation on the coils: 0.80→0.39, "
+            "1.01→0.33, 2.38→0.36 Å. It clears a collapsed wall — the "
+            "super-cubic and the superfullerene both need it — and costs "
+            "some bond spread, so it is worth leaving off where the "
+            "Structure panel already reads sound."
+        )
+
     def _update_surface_hint(self) -> None:
         anneal = int(self.var_anneal.get())
         rough = float(self.var_roughness.get())
@@ -3076,7 +3103,8 @@ class NanocarbonGUI:
             if anneal > 0:
                 colour = WARN_AMBER
         self.lbl_surface.config(
-            text=f"{topo}; {geom}.\n\n{self._place_hint()}",
+            text=(f"{topo}; {geom}.\n\n{self._place_hint()}"
+                  f"\n\n{self._anchor_hint()}"),
             foreground=colour)
 
     def _update_coil_hint(self) -> None:
@@ -3311,6 +3339,7 @@ class NanocarbonGUI:
                 blend=float(self.var_j_blend.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
                 place_curvature=bool(self.var_place.get()),
+                wall_anchor=1.0 if self.var_anchor.get() else 0.0,
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "network":
@@ -3321,6 +3350,7 @@ class NanocarbonGUI:
                 blend=float(self.var_net_blend.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
                 place_curvature=bool(self.var_place.get()),
+                wall_anchor=1.0 if self.var_anchor.get() else 0.0,
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "haeckelite":
@@ -3344,6 +3374,7 @@ class NanocarbonGUI:
                 minor_radius=float(self.var_tor_minor.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
                 place_curvature=bool(self.var_place.get()),
+                wall_anchor=1.0 if self.var_anchor.get() else 0.0,
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "nanocone":
@@ -3368,6 +3399,7 @@ class NanocarbonGUI:
                 blend=float(self.var_sn_blend.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
                 place_curvature=bool(self.var_place.get()),
+                wall_anchor=1.0 if self.var_anchor.get() else 0.0,
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "schwarzite":
@@ -3377,6 +3409,7 @@ class NanocarbonGUI:
                 thickness=float(self.var_s_thickness.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
                 place_curvature=bool(self.var_place.get()),
+                wall_anchor=1.0 if self.var_anchor.get() else 0.0,
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "coil (relaxed)":
@@ -3391,6 +3424,7 @@ class NanocarbonGUI:
                 pin_ends=bool(self.var_pin_ends.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
                 place_curvature=bool(self.var_place.get()),
+                wall_anchor=1.0 if self.var_anchor.get() else 0.0,
                 roughness=float(self.var_roughness.get()),
             )
         elif mode == "fullerene":
@@ -3427,6 +3461,7 @@ class NanocarbonGUI:
                 bond=float(self.var_bond.get()),
                 handedness=1 if self.var_coil_hand.get() == "right" else -1,
                 place_curvature=bool(self.var_place.get()),
+                wall_anchor=1.0 if self.var_anchor.get() else 0.0,
             )
         elif mode == "nanotube (open)":
             params = dict(
