@@ -1474,8 +1474,70 @@ is a code path that never ran, and it should be read that way.
 
 Sound, and by far the slowest thing in the catalogue: 1440 s against
 23-78 s for most, because an fcc node has **twelve** struts meeting at
-it, so the blend region is far denser than any other net's. Nothing is
-wrong with it; it is a size to know about before pressing Build.
+it. Nothing is wrong with it; it is a size to know about before Build.
+
+### A fixed grid over a growing cell
+
+`grid_resolution` was a fixed 72 whatever the cell, so **the bigger the
+structure the coarser its voxels** -- which is backwards, and it showed.
+super-diamond is sound at scale 50 and collapses at 60:
+
+===========  ==========  ==========  ============
+cell         resolution  voxel (Å)   angle sum
+===========  ==========  ==========  ============
+scale 50     72          0.69        332.4 sound
+scale 60     72          **0.83**    **327.4 COLLAPSED**
+scale 60     100         0.60        **331.8 sound**
+===========  ==========  ==========  ============
+
+Nothing about a bigger cell makes the wall worse; only the voxel did.
+`build_junction` has scaled its grid with its box since it was written
+and this never did, so `grid_resolution` is now a **floor** and the
+voxel is tied to the tube radius (`VOXEL_PER_TUBE = 0.12`, i.e. 0.60 Å
+for a 5 Å tube -- the safe side of the boundary above). **The shipped
+super-diamond preset was collapsed and now is not.**
+
+It moves more than the arithmetic on `scale` suggests: the voxel follows
+`max(box)`, and for a 2D-periodic sheet the box includes the vacuum
+direction, so super-graphene went from resolution 72 to ~99 as well
+(1180 atoms to 1148, angle sum 335.1 -> 338.6, placement 89.6% ->
+85.7%). Mixed, and worth knowing rather than glossing.
+
+### Correcting the audit above: the icosahedral preset is sound
+
+The catalogue audit called super-icosahedron collapsed at 328.4. That
+was **at the parameters the audit chose** (scale 20, tube 3.5), not at
+the ones the window ships (scale 24, tube 4.0, blend 3.0), which read
+331.4 and sound. A collapse found at invented parameters is a fact about
+those parameters.
+
+### Annealing really does roughen the wall, and the anchor pays for it
+
+The `anneal_sweeps` table's claim held up when measured the right way.
+Off-surface deviation, mean:
+
+==================  ========  =========  ==========
+structure           anneal 0  anneal 80  80 + anchor
+==================  ========  =========  ==========
+Y junction          0.711     0.751      --
+super-graphene      0.939     **1.096**  **0.676**
+super-cubic         0.990     **1.076**  **0.808**
+==================  ========  =========  ==========
+
+So annealing costs 6-17% more roughness -- and the anchor more than
+repays it. On **super-cubic the combination is best on every axis that
+matters**: the wall goes from collapsed (327.8) to sound (337.3),
+placement from 76.1% to **88.0%**, and roughness below the baseline.
+Only the bond spread widens, 0.230 to 0.254.
+
+**Annealing alone also clears super-cubic's collapse** (338.1) with the
+*tightest* bonds of the four combinations (0.185), which is the opposite
+of what "annealing buckles the wall" would predict.
+
+The defaults are still 0 and 0. These are two structures; the catalogue
+has ten, several take minutes each, and changing what every meshed
+builder emits deserves the full sweep rather than an extrapolation from
+the two that were quick.
 
 ## Heptanene: sp3 makes it worse, and by a factor of six
 

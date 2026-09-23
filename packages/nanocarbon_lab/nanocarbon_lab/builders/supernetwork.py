@@ -526,6 +526,22 @@ def named_graph(name: str, scale: float) -> SuperGraph:
     )
 
 
+#: Free tube demanded between two vertex blends, in Å. Two rings of
+#: carbon is the least that reads as a tube rather than a neck.
+FREE_TUBE = 4.0
+
+#: Voxel size wanted, as a fraction of the tube radius. A 5 Å tube
+#: collapses at 0.83 Å voxels and is sound at 0.60, so 0.12 (= 0.60 Å
+#: there) sits on the safe side of a measured boundary. Only cells big
+#: enough to breach the `grid_resolution` floor move at all: the
+#: super-graphene, icosahedral and superfullerene presets are all
+#: already finer than this asks.
+VOXEL_PER_TUBE = 0.12
+
+#: Cost goes as resolution**3, so the grid stops here however big the cell.
+MAX_GRID_RESOLUTION = 160
+
+
 def build_supernetwork(
     graph: SuperGraph | str = "super-graphene",
     scale: float = 40.0,
@@ -586,11 +602,19 @@ def build_supernetwork(
     lengths = np.linalg.norm(segments[:, 1] - segments[:, 0], axis=1)
     eaten = 2.0 * (tube_radius + blend)
     if lengths.min() <= eaten:
+        # Say WHICH larger scale. The caller is holding a number and the
+        # refusal knows what that number has to be: the edge scales with
+        # `scale`, so the answer is arithmetic rather than a search.
+        # Without it a super-diamond at scale 40 just reads as broken,
+        # when it only wants 51.
+        wanted = (eaten + FREE_TUBE) * float(scale) / float(lengths.min())
         raise ValueError(
             f"{graph.name}: the shortest edge is {lengths.min():.1f} Å and "
             f"each vertex eats about {tube_radius + blend:.1f} Å of either "
             "end, so nothing recognisable as a tube is left between them. "
-            "Use a larger scale, a narrower tube, or a smaller blend."
+            f"At this tube and blend the net needs scale >= {wanted:.0f}; "
+            f"or keep scale={float(scale):.0f} and drop the tube radius "
+            f"below {lengths.min() / 2.0 - blend - FREE_TUBE / 2.0:.1f} Å."
         )
 
     if graph.periodic:
@@ -635,9 +659,20 @@ def build_supernetwork(
     # neck is resolved depends on how the surface falls between sample
     # points, so one (scale, resolution) pair can tear where both its
     # neighbours are fine.
+    # `grid_resolution` is a FLOOR, not the answer. A fixed grid over a
+    # growing cell gives coarser voxels the bigger the structure, which
+    # is backwards, and it shows: super-diamond is sound at scale 50 and
+    # COLLAPSES at 60 -- 327.4 deg, past tetrahedral -- for no reason but
+    # the voxel going 0.69 -> 0.83 Å. At resolution 100 the same cell,
+    # voxel 0.60, comes back sound at 331.8. `build_junction` has scaled
+    # its grid with its box since it was written; this never did.
+    voxel_target = VOXEL_PER_TUBE * float(tube_radius)
+    needed = int(np.ceil(float(np.max(box)) / voxel_target))
+    base = int(np.clip(needed, grid_resolution, MAX_GRID_RESOLUTION))
+
     failures: list[str] = []
     for attempt, resolution in enumerate(
-        (grid_resolution, grid_resolution + 8, grid_resolution + 16)
+        (base, base + 8, base + 16)
     ):
         mesh = mesher(resolution)
         stats = rm.mesh_statistics(mesh)

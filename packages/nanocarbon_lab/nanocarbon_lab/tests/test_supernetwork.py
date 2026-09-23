@@ -334,3 +334,44 @@ class TestTheSupertube:
         barrel with two open ends."""
         edges = supertube_graph(6, 6, 2, 20.0).edges
         assert any(shift[2] != 0 for _a, _b, shift in edges)
+
+
+class TestTheRefusalNamesTheScale:
+    """A refusal that leaves the caller guessing is half a refusal.
+
+    super-diamond at scale 40 with a 5 Å tube reads as simply broken
+    until the message says it wants 51. The edge scales with `scale`, so
+    that number is arithmetic rather than a search.
+    """
+
+    def test_it_states_the_scale_that_would_work(self):
+        import re
+
+        import pytest
+
+        from nanocarbon_lab.builders.supernetwork import build_supernetwork
+
+        with pytest.raises(ValueError, match="needs scale") as excinfo:
+            build_supernetwork(graph="super-diamond", scale=40.0,
+                               tube_radius=5.0, blend=4.0)
+        match = re.search(r"needs scale >= (\d+)", str(excinfo.value))
+        assert match, str(excinfo.value)
+        wanted = int(match.group(1))
+        # The number it names must actually clear the check it failed.
+        assert wanted > 40
+        from nanocarbon_lab.builders.supernetwork import named_graph
+
+        graph = named_graph("super-diamond", float(wanted))
+        segments = graph.segments(float(wanted))
+        shortest = min(
+            float(((b - a) ** 2).sum() ** 0.5) for a, b in segments)
+        assert shortest > 2.0 * (5.0 + 4.0)
+
+    def test_it_offers_the_other_way_out(self):
+        import pytest
+
+        from nanocarbon_lab.builders.supernetwork import build_supernetwork
+
+        with pytest.raises(ValueError, match="drop the tube radius"):
+            build_supernetwork(graph="super-diamond", scale=40.0,
+                               tube_radius=5.0, blend=4.0)
