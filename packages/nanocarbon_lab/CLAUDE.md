@@ -1427,6 +1427,56 @@ reading of the old table would predict. **The other builders' defaults
 are left at 0 regardless**: changing five builders' output is a decision
 to take deliberately, with these numbers in hand, not a side effect.
 
+## Every net and cage, audited rather than assumed
+
+The defaults above were set from the handful of structures that happened
+to be under the microscope. Running `collapsed_wall` over the whole
+catalogue at its own defaults found **two more collapsed walls that
+nobody had looked at**:
+
+====================  =======  ==========  ===========  ==========  ======
+net or cage           atoms    angle sum   verdict      placed      time
+====================  =======  ==========  ===========  ==========  ======
+super-square          664      331.6       sound        88.1%       23 s
+super-graphene        1180     335.1       sound        89.6%       34 s
+**super-cubic**       836      **327.8**   **COLLAPSED**  76.1%     38 s
+super-diamond         --       --          refused at cell 40       --
+super-fcc             3082     330.7       sound        87.1%       **1440 s**
+**super-icosahedron** 3052     **328.4**   **COLLAPSED**  93.7%     24 s
+super-hypercube       6494     331.6       sound        92.9%       78 s
+supertube-(4,4)       6728     334.1       sound        93.1%       447 s
+superfullerene-C60    7534     328.3       **COLLAPSED**  95.0%     73 s
+====================  =======  ==========  ===========  ==========  ======
+
+`wall_anchor=1` clears all three: super-cubic **327.8 -> 330.6**,
+super-icosahedron **328.4 -> 333.0**, superfullerene **328.3 -> 333.0**.
+The cost is bonds and placement, and on super-cubic the placement cost is
+steep -- 76.1% to 65.9%.
+
+### Anchoring reached the cages and silently skipped the periodic nets
+
+Worth keeping, because it looked like the fix simply failing. With the
+anchor on, **super-cubic came back byte-identical** -- same atom count,
+same bonds, same placement, same 37 s -- and still collapsed. A cage goes
+through `_finish`'s finite branch, where the anchor was wired; a periodic
+net goes through the variable-cell branch, where it had been left out
+deliberately as "not worth getting subtly wrong".
+
+Getting it right needs the **cumulative** scale: the field lives in the
+mesh's original coordinates and that branch rescales cell and atoms
+together each cycle, so the map back is `scaled_box / box`, tracked as
+it goes. With that, super-cubic responds like everything else.
+
+**A result identical to four decimal places is not a weak effect.** It
+is a code path that never ran, and it should be read that way.
+
+### super-fcc costs 24 minutes
+
+Sound, and by far the slowest thing in the catalogue: 1440 s against
+23-78 s for most, because an fcc node has **twelve** struts meeting at
+it, so the blend region is far denser than any other net's. Nothing is
+wrong with it; it is a size to know about before pressing Build.
+
 ## Heptanene: sp3 makes it worse, and by a factor of six
 
 The proposal was a 2D all-heptagon sheet with the sp2/sp3 mix as the free

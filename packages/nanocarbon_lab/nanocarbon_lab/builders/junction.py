@@ -503,14 +503,26 @@ def _finish(
         # the mean bond is from equilibrium, and rescale cell and atoms
         # together by that ratio.
         for _ in range(CELL_RELAX_CYCLES):
-            # The periodic branch rescales the cell as it goes, so the
-            # coordinates the field was built in keep moving. Anchoring
-            # here would need that mapping tracked, and it is not worth
-            # getting subtly wrong: the schwarzites are the periodic
-            # users and they are not the ones collapsing.
+            # The field lives in the mesh's ORIGINAL coordinates, and
+            # this branch keeps rescaling cell and atoms together, so
+            # the map back is the cumulative scale -- tracked rather
+            # than assumed. Without this the periodic nets never got
+            # the anchor at all: super-cubic came back byte-identical
+            # with it on and off, still collapsed at 327.8 deg.
+            extra = {}
+            if field is not None and wall_anchor > 0.0:
+                cumulative = float(np.mean(np.asarray(scaled_box)
+                                           / np.asarray(box)))
+                extra = dict(
+                    anchors=np.arange(len(positions)),
+                    anchor_targets=positions.copy(),
+                    anchor_normals=rm.field_normals(
+                        field, np.mod(positions, scaled_box) / cumulative),
+                    k_anchor=float(wall_anchor),
+                )
             positions = fm.relax_shell(
                 positions, bond_set, equilibrium=bond,
-                box=scaled_box, max_iterations=relax_iterations,
+                box=scaled_box, max_iterations=relax_iterations, **extra,
             )
             mean_bond = float(np.mean([
                 np.linalg.norm(fm.minimum_image(positions[b] - positions[a], scaled_box))
