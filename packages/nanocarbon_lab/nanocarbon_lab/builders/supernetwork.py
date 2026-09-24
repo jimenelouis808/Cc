@@ -575,70 +575,59 @@ FREE_TUBE = 4.0
 RESCUE_GRID = 1.4
 
 
-#: Wall area, in Angstrom squared, marking the two ends of what a build
-#: costs -- for a PERIODIC cell. A finite cage is a different animal and
-#: gets `CAGE_SLOW_AREA` instead.
+#: Wall area, in Angstrom squared, above which a net is one of the big
+#: ones. It is a SIZE, not a time -- see `build_cost_note`.
 #:
-#: Every number is measured on this builder, and the split between the
-#: two kinds is the whole point:
-#:
-#: ===================  ===========  ========  ======  ==========
-#: net                  kind         area A^2  build   s per kA^2
-#: ===================  ===========  ========  ======  ==========
-#: super-graphene       2D periodic     3_700    36 s         9.7
-#: super-cubic          3D periodic     3_204    37 s        11.5
-#: supertube-(6,6)      2D periodic    18_964   434 s        22.9
-#: super-diamond        3D periodic    13_059  ~400 s        30.6
-#: super-fcc            3D periodic    12_796   413 s        32.3
-#: super-fcc            3D periodic    31_989  >90 min      168.8
-#: super-icosahedron    cage           18_096    35 s         1.9
-#: superfullerene-C60   cage           24_090    79 s         3.3
-#: super-hypercube      cage           21_802    88 s         4.0
-#: ===================  ===========  ========  ======  ==========
-#:
-#: **Area alone was tried first and is wrong.** It puts the hypercube
-#: cage at 21_802 A^2 above super-diamond's 13_059 and would call the
-#: 88-second build the slow one and the seven-minute build the quick
-#: one. What separates them is not how much wall there is but whether
-#: the cell's faces have to be welded to their opposite numbers: a cage
-#: closes on itself and costs 2-4 s per thousand A^2 flat, a periodic
-#: cell costs 10-170 and climbs with size.
-#:
-#: The climb is why `SLOW_AREA` sits where it does. Periodic builds run
-#: seven minutes at 13_000 and again at 19_000, then ninety at 32_000 --
-#: so the line goes between those, not at the point the first one stops
-#: being instant.
-#:
-#: That last row is the reason any of this exists. Nothing was wrong
-#: with it: 42 A struts, 24 A of free tube, every geometry check passed
-#: and the hint read perfectly healthy. It was simply an enormous thing
-#: to ask for, and nothing said so.
-BRISK_AREA = 6_000.0
-SLOW_AREA = 25_000.0
-
-#: The same, for a cage. No cage in the catalogue has yet been slow --
-#: the largest measured is 24_090 A^2 in 79 s -- so the brisk band runs
-#: all the way to where the evidence stops rather than pretending to
-#: knowledge of what a cage twice that size does.
-CAGE_SLOW_AREA = 25_000.0
+#: The largest periodic cell measured, super-fcc at scale 60 with a 5 A
+#: tube, carries 31_989 A^2; the smallest, super-cubic at 34/5, carries
+#: 3_204. This sits above everything in the catalogue at its own preset
+#: and below that worst case.
+LARGE_AREA = 25_000.0
 
 
 def build_cost_note(area: float, periodic: bool = True) -> str:
-    """One clause on what a wall of this area costs to build.
+    """One clause on how big a wall of this area is.
 
-    `periodic` is not a detail: the same area costs an order of
-    magnitude more when the cell's faces have to be welded. See
-    `SLOW_AREA` for the measurements.
+    **It deliberately does not predict a build time, because the
+    measurements do not support one.** Wall area, atom count and cost
+    per unit area were all tried, and all three rank the catalogue
+    wrongly:
+
+    ==================  ===========  ========  ======  =====
+    net                 kind         area A^2  atoms   build
+    ==================  ===========  ========  ======  =====
+    super-cubic         3D periodic     3_204     836    37 s
+    super-graphene      2D periodic     3_700   1_180    36 s
+    super-fcc           3D periodic    12_796   2_982   413 s
+    super-diamond       3D periodic    13_059   3_752  ~400 s
+    supertube-(6,6)     2D periodic    18_964   5_922   434 s
+    super-fcc           3D periodic    21_340   4_694   483 s
+    super-fcc           3D periodic    31_989   6_862   566 s
+    super-icosahedron   cage           18_096   4_292    35 s
+    super-hypercube     cage           21_802   6_494    88 s
+    superfullerene-C60  cage           24_090   7_534    79 s
+    ==================  ===========  ========  ======  =====
+
+    Area fails on the cages: the hypercube carries more wall than the
+    super-diamond cell and builds in a sixteenth of the time, because a
+    cage closes on itself and a periodic cell has to have its faces
+    welded to their opposite numbers.
+
+    Area fails on the periodic cells too, in the other direction. Cost
+    per thousand A^2 runs 9.7, 11.5, 22.9, 30.6, 32.3, 22.6, 17.7 --
+    it rises and then falls, because `grid_resolution` is fixed at 72
+    whatever the cell, so a larger cell is sampled more coarsely and
+    does NOT carry proportionally more mesh. Between 12_800 and 32_000
+    A^2 the build time barely moves: 413 s to 566 s for 2.5x the wall.
+
+    So the note says large or small and stops there. A number that
+    would have called a nine-minute build "tens of minutes" is worse
+    than no number: it is the hint telling someone not to press a
+    button that works.
     """
-    if not periodic:
-        return ("about a minute to build" if area < CAGE_SLOW_AREA
-                else "several minutes to build")
-    if area < BRISK_AREA:
-        return "about a minute to build"
-    if area < SLOW_AREA:
-        return "several minutes to build"
-    return ("tens of minutes to build -- a smaller cell or a narrower "
-            "tube costs far less")
+    del periodic  # kept: callers know it, and the cage/cell gap is real
+    return ("one of the larger nets in the catalogue" if area >= LARGE_AREA
+            else "a modest one")
 
 
 def build_supernetwork(

@@ -1974,41 +1974,51 @@ the best minimum angle sum of any 3D periodic net in the catalogue.
 no preset of its own, if a preset would be refused by the builder's own
 strut check, or if one asks for a build of tens of minutes.
 
-## Cost is area *and* whether the faces have to be welded
+## Size can be stated before a build; time cannot
 
 `SuperGraph.wall_area` is `2*pi*r` times the total strut length, known
-before anything is meshed, and `build_cost_note` turns it into a clause
-the hint shows. Both are calibrated on measurements, not chosen:
+before anything is meshed, and the supernetwork hint shows it. It is a
+**size**. Three attempts to turn it into a predicted build time all
+failed, and each failure is pinned by a test in `test_build_cost.py` so
+it is not tried again.
 
-| net | kind | area Å² | build | s per kÅ² |
+| net | kind | area Å² | atoms | build |
 |---|---|---|---|---|
-| super-graphene | 2D periodic | 3 700 | 36 s | 9.7 |
-| super-cubic | 3D periodic | 3 204 | 37 s | 11.5 |
-| supertube-(6,6) | 2D periodic | 18 964 | 434 s | 22.9 |
-| super-diamond | 3D periodic | 13 059 | ~400 s | 30.6 |
-| super-fcc | 3D periodic | 12 796 | 413 s | 32.3 |
-| super-fcc | 3D periodic | 31 989 | >90 min | **168.8** |
-| super-icosahedron | cage | 18 096 | 35 s | 1.9 |
-| superfullerene-C60 | cage | 24 090 | 79 s | 3.3 |
-| super-hypercube | cage | 21 802 | 88 s | 4.0 |
+| super-cubic | 3D periodic | 3 204 | 836 | 37 s |
+| super-graphene | 2D periodic | 3 700 | 1 180 | 36 s |
+| super-fcc | 3D periodic | 12 796 | 2 982 | 413 s |
+| super-diamond | 3D periodic | 13 059 | 3 752 | ~400 s |
+| supertube-(6,6) | 2D periodic | 18 964 | 5 922 | 434 s |
+| super-fcc | 3D periodic | 21 340 | 4 694 | 483 s |
+| super-fcc | 3D periodic | 31 989 | 6 862 | 566 s |
+| super-icosahedron | cage | 18 096 | 4 292 | 35 s |
+| super-hypercube | cage | 21 802 | 6 494 | 88 s |
+| superfullerene-C60 | cage | 24 090 | 7 534 | 79 s |
 
-**Area alone was tried first and is wrong, and a test caught it.** It
-puts the hypercube cage at 21 802 Å² above super-diamond's 13 059 and so
-calls the 88-second build the slow one and the seven-minute build the
-quick one. What separates them is not how much wall there is but whether
-the cell's faces have to be welded to their opposite numbers: a cage
-closes on itself and costs a flat 2-4 s per thousand Å², a periodic cell
-costs 10-170 and climbs with size. `build_cost_note` takes `periodic`
-for exactly that reason.
+* **Area ranks the cages backwards.** The hypercube carries more wall
+  than the super-diamond cell (21 802 against 13 059) and builds in a
+  sixteenth of the time. A cage closes on itself; a periodic cell has
+  its faces welded to their opposite numbers, and that is the cost.
+* **Area flattens among the periodic cells.** `grid_resolution` is 72
+  whatever the cell is, so a larger cell is sampled more coarsely and
+  does not carry proportionally more mesh. From 12 800 to 32 000 Å²
+  the build goes 413 s to 566 s -- 2.5× the wall for 1.4× the time.
+* **Cost per unit area is not monotone** (9.7, 11.5, 22.9, 30.6, 32.3,
+  22.6, 17.7), so it cannot order anything.
+* **Atom count does not separate a cage from a cell**, the same reason
+  it was wrong as a rescue budget: 7534 atoms in 79 s against 2982 in
+  413.
 
-The climb is also why `SLOW_AREA` is 25 000 rather than the point where
-builds stop being instant: periodic cells run seven minutes at 13 000 and
-again at 19 000, then ninety at 32 000, so the line goes between those.
+A bad prediction here is worse than none. Bands fitted to the first
+five rows called super-fcc at scale 60 "tens of minutes to build"; it
+builds **sound at 331.9° in 566 s**. That is the hint talking someone
+out of pressing a button that works.
 
-**Atom count is the wrong measure here too**, for the same reason it was
-wrong as a rescue budget: it does not separate a cage from a cell. A
-superfullerene is 7534 atoms in 79 s and a super-fcc cell is 3082 atoms
-in 1440 s.
+**So the ninety minutes a user reported has a cause that is not size.**
+At 60/5/4 with the defaults the same net builds in under ten minutes.
+The window passes `anneal_sweeps` from `var_anneal`, which goes stale
+across a mode switch exactly as the cell length does -- that is the
+open suspect, and it is being measured.
 
 ## Unit cells: pad only what does not repeat, measure only what is vacuum
 

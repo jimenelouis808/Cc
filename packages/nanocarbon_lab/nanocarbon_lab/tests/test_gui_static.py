@@ -230,10 +230,11 @@ class TestEverySuperlatticeIsReachableFromAPreset:
             f"{missing} can only be reached from the Net box, which keeps "
             "the previous preset's cell and tube radius")
 
-    def test_no_preset_asks_for_a_build_of_tens_of_minutes(self):
+    def test_no_preset_asks_for_one_of_the_large_nets(self):
+        """A preset is a shelf of structures worth knowing, so none of
+        them should be the eight-times-bigger version of another."""
         from nanocarbon_lab.builders.supernetwork import (
-            CAGE_SLOW_AREA,
-            SLOW_AREA,
+            LARGE_AREA,
             named_graph,
         )
 
@@ -241,11 +242,7 @@ class TestEverySuperlatticeIsReachableFromAPreset:
             scale = float(preset["sn_scale"])
             graph = named_graph(str(preset["sn_graph"]), scale)
             area = graph.wall_area(scale, float(preset["sn_radius"]))
-            # A cage of the same area is an order of magnitude cheaper,
-            # so the hypercube's 21_802 Å² at 88 s is not the hour that
-            # a periodic cell of that size would be.
-            limit = SLOW_AREA if graph.periodic else CAGE_SLOW_AREA
-            assert area < limit, (
+            assert area < LARGE_AREA, (
                 f"preset {name!r} asks for {area:,.0f} Å² of wall")
 
     def test_every_preset_leaves_room_for_a_tube_between_the_vertices(self):

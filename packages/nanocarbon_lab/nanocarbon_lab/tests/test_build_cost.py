@@ -1,91 +1,110 @@
-"""What a supernetwork costs to build, said before it is built.
+"""How big a supernetwork is, said before it is built.
 
 The geometry check a net already had passes on one that is perfectly
 sound and merely enormous. A super-fcc reached from the Net box while
 super-diamond's ``scale=60, tube_radius=5`` was still in the fields has
 42 Å struts with 24 Å of free tube -- healthy by every test there was --
-and had not finished building after ninety minutes. These tests pin the
-measure that notices, and the numbers it is calibrated on.
+and is eight times the wall of the same net at its own preset.
+
+These tests pin the size measure, and, just as importantly, pin the
+three things that were tried as a **time** measure and do not work.
 """
 import numpy as np
 import pytest
 
 from nanocarbon_lab.builders.supernetwork import (
-    BRISK_AREA,
-    SLOW_AREA,
+    LARGE_AREA,
     SUPERLATTICES,
     build_cost_note,
     named_graph,
 )
 
-#: ``(net, scale, tube_radius, area, seconds)`` -- every row measured on
-#: this builder, and the reason the thresholds are where they are.
-#: The periodic cells and the cages are kept apart because they cost
-#: differently by an order of magnitude, which is the whole finding.
+#: ``(net, scale, tube_radius, area, atoms, seconds)`` -- every row
+#: measured on this builder, single-threaded, seed 0.
 PERIODIC = [
-    ("super-graphene", 34.0, 5.0, 3_700, 36),
-    ("super-cubic", 34.0, 5.0, 3_204, 37),
-    ("super-fcc", 40.0, 3.0, 12_796, 413),
-    ("super-diamond", 60.0, 5.0, 13_059, 400),
-    ("supertube-(6,6)", 14.0, 3.0, 18_964, 434),
-    ("super-fcc", 60.0, 5.0, 31_989, 5_400),
+    ("super-cubic", 34.0, 5.0, 3_204, 836, 37),
+    ("super-graphene", 34.0, 5.0, 3_700, 1_180, 36),
+    ("super-fcc", 40.0, 3.0, 12_796, 2_982, 413),
+    ("super-diamond", 60.0, 5.0, 13_059, 3_752, 400),
+    ("supertube-(6,6)", 14.0, 3.0, 18_964, 5_922, 434),
+    ("super-fcc", 50.0, 4.0, 21_340, 4_694, 483),
+    ("super-fcc", 60.0, 5.0, 31_989, 6_862, 566),
 ]
 CAGES_MEASURED = [
-    ("super-icosahedron", 24.0, 4.0, 18_096, 35),
-    ("super-hypercube", 20.0, 3.5, 21_802, 88),
-    ("superfullerene-C60", 14.2, 3.0, 24_090, 79),
+    ("super-icosahedron", 24.0, 4.0, 18_096, 4_292, 35),
+    ("super-hypercube", 20.0, 3.5, 21_802, 6_494, 88),
+    ("superfullerene-C60", 14.2, 3.0, 24_090, 7_534, 79),
 ]
 MEASURED = PERIODIC + CAGES_MEASURED
 
 
-@pytest.mark.parametrize("name, scale, radius, area, _seconds", MEASURED)
+@pytest.mark.parametrize("name, scale, radius, area, _atoms, _secs", MEASURED)
 def test_wall_area_reproduces_the_measured_table(name, scale, radius, area,
-                                                 _seconds):
+                                                 _atoms, _secs):
     graph = named_graph(name, scale)
     assert graph.wall_area(scale, radius) == pytest.approx(area, rel=1e-3)
 
 
-def test_cost_bands_sort_the_periodic_builds_by_what_they_took():
-    """A minute, several minutes and tens of them, in that order."""
-    notes = [build_cost_note(area) for _n, _s, _r, area, _t in PERIODIC]
-    assert notes[0] == notes[1] == "about a minute to build"
-    assert notes[2] == notes[3] == notes[4] == "several minutes to build"
-    assert notes[5].startswith("tens of minutes")
+class TestTheMeasuresThatDoNotPredictTime:
+    """Three were tried. Each is pinned here so none is tried again.
 
-
-def test_a_cage_is_not_priced_like_a_periodic_cell():
-    """The correction that area alone got wrong.
-
-    Every cage measured ran in 35-88 s, and the largest of them carries
-    more wall than the super-diamond cell that takes seven minutes. Area
-    ranked them the wrong way round; what actually costs is welding the
-    cell's faces, which a cage does not do.
+    This matters more than it looks: a hint that tells someone a
+    nine-minute build will take tens of minutes is worse than a hint
+    with no number at all, because it talks them out of pressing a
+    button that works.
     """
-    for _name, _scale, _radius, area, seconds in CAGES_MEASURED:
-        assert seconds < 120
-        assert build_cost_note(area, periodic=False) == \
-            "about a minute to build"
-        # The same area, in a cell that has to be welded, is not.
-        assert build_cost_note(area, periodic=True) != \
-            "about a minute to build"
+
+    def test_area_ranks_the_cages_backwards(self):
+        """More wall, a sixteenth of the time."""
+        cage = next(r for r in CAGES_MEASURED if r[0] == "super-hypercube")
+        cell = next(r for r in PERIODIC if r[0] == "super-diamond")
+        assert cage[3] > cell[3]            # 21_802 Å² against 13_059
+        assert cage[5] < cell[5] / 4.0      # 88 s against ~400
+
+    def test_area_flattens_out_among_the_periodic_cells(self):
+        """2.5x the wall for 1.4x the time, because the grid is fixed.
+
+        ``grid_resolution`` is 72 whatever the cell is, so a larger cell
+        is sampled more coarsely and does not carry proportionally more
+        mesh. Any rule linear in area gets this badly wrong.
+        """
+        small = next(r for r in PERIODIC
+                     if r[0] == "super-fcc" and r[1] == 40.0)
+        large = next(r for r in PERIODIC
+                     if r[0] == "super-fcc" and r[1] == 60.0)
+        assert large[3] / small[3] > 2.4
+        assert large[5] / small[5] < 1.5
+
+    def test_cost_per_unit_area_is_not_monotone(self):
+        """It rises and then falls, so it cannot order anything."""
+        per = [secs / (area / 1000.0)
+               for _n, _s, _r, area, _a, secs in PERIODIC]
+        assert per != sorted(per)
+        assert per != sorted(per, reverse=True)
+
+    def test_atom_count_does_not_separate_a_cage_from_a_cell(self):
+        """7534 atoms in 79 s against 2982 in 413."""
+        cage = next(r for r in CAGES_MEASURED
+                    if r[0] == "superfullerene-C60")
+        cell = next(r for r in PERIODIC
+                    if r[0] == "super-fcc" and r[1] == 40.0)
+        assert cage[4] > 2 * cell[4]
+        assert cage[5] < cell[5] / 4.0
+
+    def test_the_note_claims_no_minutes(self):
+        """The wording is checked, because this is the whole point."""
+        for area in (1_000.0, LARGE_AREA, 100_000.0):
+            for periodic in (True, False):
+                note = build_cost_note(area, periodic)
+                assert "minute" not in note and "hour" not in note
 
 
-def test_the_hypercube_cage_outweighs_the_diamond_cell_and_still_beats_it():
-    """The single row that refuted the first calibration."""
-    cage = named_graph("super-hypercube", 20.0).wall_area(20.0, 3.5)
-    cell = named_graph("super-diamond", 60.0).wall_area(60.0, 5.0)
-    assert cage > cell                       # more wall ...
-    assert build_cost_note(cage, periodic=False) == "about a minute to build"
-    assert build_cost_note(cell, periodic=True) == "several minutes to build"
-
-
-def test_the_ninety_minute_case_is_the_one_that_reads_slow():
-    """The exact settings the user reached, and the ones that work."""
-    graph = named_graph("super-fcc", 60.0)
-    assert graph.wall_area(60.0, 5.0) > SLOW_AREA
-    # The preset the window now offers instead builds in seven minutes.
-    assert BRISK_AREA < named_graph("super-fcc", 40.0).wall_area(40.0, 3.0) \
-        < SLOW_AREA
+def test_the_note_sorts_large_nets_from_modest_ones():
+    at_preset = named_graph("super-fcc", 40.0).wall_area(40.0, 3.0)
+    inherited = named_graph("super-fcc", 60.0).wall_area(60.0, 5.0)
+    assert build_cost_note(at_preset) == "a modest one"
+    assert build_cost_note(inherited) == \
+        "one of the larger nets in the catalogue"
 
 
 def test_area_is_linear_in_radius_and_in_scale():
@@ -93,7 +112,6 @@ def test_area_is_linear_in_radius_and_in_scale():
     graph = named_graph("super-cubic", 34.0)
     single = graph.wall_area(34.0, 5.0)
     assert graph.wall_area(34.0, 10.0) == pytest.approx(2.0 * single)
-    # Doubling the cell doubles every strut.
     bigger = named_graph("super-cubic", 68.0)
     assert bigger.wall_area(68.0, 5.0) == pytest.approx(2.0 * single)
 
@@ -104,8 +122,6 @@ def test_a_denser_net_costs_more_at_the_same_cell():
           for name in SUPERLATTICES}
     assert at["super-fcc"] == max(at.values())
     assert at["super-square"] == min(at.values())
-    # The spread is the point: an eightfold difference between two
-    # entries of one combobox, at identical settings.
     assert at["super-fcc"] / at["super-square"] > 5.0
 
 
