@@ -29,6 +29,7 @@ characteristic instead.
 
 from __future__ import annotations
 
+import time
 import warnings
 
 import numpy as np
@@ -393,19 +394,36 @@ def build_schwarzite(
     )
 
 
-#: Anchor strengths the rescue tries, in order, stopping at the first
-#: sound wall. One strength does not fit all: super-cubic clears at 1.0
-#: while the superfullerene gets *worse* there (327.6 -> 325.8) and needs
-#: 2.0 to clear and 4.0 to clear comfortably. Each step costs a rebuild,
-#: so only a wall that actually collapsed pays, and it stops as soon as
-#: it works.
+#: What the rescue tries, in order, stopping at the first wall that
+#: clears tetrahedral by `RESCUE_MARGIN`. One remedy does not fit all:
+#: super-cubic clears with anchor 1.0; the superfullerene gets *worse*
+#: there (327.6 -> 325.8) and needs 2.0 to clear, 4.0 to clear
+#: comfortably; and super-diamond at scale 60 is not an anchor problem
+#: at all -- it is under-resolved, sound at voxel 0.60 and collapsed at
+#: 0.83, so it needs a finer grid instead.
+#:
+#: Each step is a full rebuild, so only a wall that actually collapsed
+#: pays, and the ladder stops as soon as one works.
 RESCUE_ANCHORS = (1.0, 2.0, 4.0)
+
+#: Seconds the rescue may spend rebuilding, in total, before it gives up
+#: and names the remedy instead.
+#:
+#: **Atom count is the wrong measure and was tried first.** A super-fcc
+#: cell is 3082 atoms and takes 1440 s; a superfullerene is 7534 atoms
+#: and takes 79. An atom limit that spares the fcc from an hour and a
+#: half of rebuilds also refuses the superfullerene, which could be
+#: rescued three times over inside four minutes. Cost is what matters,
+#: and cost is time.
+RESCUE_TIME_BUDGET = 900.0
 
 #: Degrees clear of tetrahedral the rescue wants before it stops trying.
 RESCUE_MARGIN = 1.5
 
 
-def rescue_collapsed_wall(atoms, rebuild, anchors=RESCUE_ANCHORS):
+def rescue_collapsed_wall(atoms, rebuild, anchors=RESCUE_ANCHORS,
+                          time_budget: float = RESCUE_TIME_BUDGET,
+                          seconds_spent: float = 0.0):
     """Rebuild once with the wall held, if the wall came back collapsed.
 
     A collapsed wall is not a bad structure, it is an **impossible**
@@ -438,6 +456,17 @@ def rescue_collapsed_wall(atoms, rebuild, anchors=RESCUE_ANCHORS):
     before = verdict(atoms)
     if not collapsed_wall(before):
         return atoms
+    if seconds_spent > time_budget:
+        # Rebuilding is worth minutes, not an hour. Say what to set.
+        warnings.warn(
+            f"The wall came back collapsed (angle sums start at "
+            f"{before['angle_sum_min']:.1f} deg, past the 328.4 of a "
+            f"tetrahedral carbon), and this cell took {seconds_spent:.0f} s "
+            f"to build once, so rebuilding it is left to you. Pass "
+            "wall_anchor=2, or a finer grid_resolution, and build again.",
+            stacklevel=2,
+        )
+        return atoms
     warnings.warn(
         f"The wall came back collapsed (angle sums start at "
         f"{before['angle_sum_min']:.1f} deg, past the 328.4 of a "
@@ -446,12 +475,18 @@ def rescue_collapsed_wall(atoms, rebuild, anchors=RESCUE_ANCHORS):
         "one, or a larger wall_anchor if this is not enough.",
         stacklevel=2,
     )
-    best, best_report = atoms, before
+    best, best_report, strength = atoms, before, None
+    spent = float(seconds_spent)
     for strength in anchors:
+        if spent > time_budget:
+            break
+        started = time.monotonic()
         try:
             candidate = rebuild(strength)
         except Exception:  # noqa: BLE001 - the original is still valid output
+            spent += time.monotonic() - started
             continue
+        spent += time.monotonic() - started
         report = verdict(candidate)
         if report["angle_sum_min"] > best_report["angle_sum_min"]:
             best, best_report = candidate, report
@@ -465,7 +500,10 @@ def rescue_collapsed_wall(atoms, rebuild, anchors=RESCUE_ANCHORS):
     if best is atoms:
         return atoms
     best.info["wall_rescued_from"] = round(float(before["angle_sum_min"]), 1)
-    best.info["wall_anchor_used"] = float(strength)
+    # `None` is the ladder's "try a finer grid" step, so this cannot
+    # just be a float -- it names what actually worked.
+    best.info["wall_rescue_step"] = (
+        "finer grid" if strength is None else f"wall_anchor={strength:g}")
     return best
 
 

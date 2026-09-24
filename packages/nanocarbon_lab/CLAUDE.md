@@ -1479,32 +1479,38 @@ Sound, and by far the slowest thing in the catalogue: 1440 s against
 23-78 s for most, because an fcc node has **twelve** struts meeting at
 it. Nothing is wrong with it; it is a size to know about before Build.
 
-### A fixed grid over a growing cell
+### A fixed grid over a growing cell -- and the fix that was worse
 
-`grid_resolution` was a fixed 72 whatever the cell, so **the bigger the
-structure the coarser its voxels** -- which is backwards, and it showed.
-super-diamond is sound at scale 50 and collapses at 60:
+super-diamond is sound at scale 50 and collapses at 60, on nothing but
+the voxel: 0.69 Å against 0.83. At resolution 100 the same cell, voxel
+0.60, comes back sound at 331.8. That much is real.
 
-===========  ==========  ==========  ============
-cell         resolution  voxel (Å)   angle sum
-===========  ==========  ==========  ============
-scale 50     72          0.69        332.4 sound
-scale 60     72          **0.83**    **327.4 COLLAPSED**
-scale 60     100         0.60        **331.8 sound**
-===========  ==========  ==========  ============
+**The fix inferred from it was not.** Tying the voxel to the tube radius
+on EVERY build (`VOXEL_PER_TUBE = 0.12`) generalised one measurement to
+ten structures, and the cages paid for it:
 
-Nothing about a bigger cell makes the wall worse; only the voxel did.
-`build_junction` has scaled its grid with its box since it was written
-and this never did, so `grid_resolution` is now a **floor** and the
-voxel is tied to the tube radius (`VOXEL_PER_TUBE = 0.12`, i.e. 0.60 Å
-for a 5 Å tube -- the safe side of the boundary above). **The shipped
-super-diamond preset was collapsed and now is not.**
+==================  =========  ======  =========  ==========
+preset              box (Å)    wanted  got        cost
+==================  =========  ======  =========  ==========
+super-hypercube     77.2       184     160 (cap)  **11x**
+supertube-(6,6)     110.2      307     160 (cap)  **11x**
+superfullerene-C60  98.9       275     160 (cap)  **11x**
+super-icosahedron   70.8       148     148        **8.7x**
+==================  =========  ======  =========  ==========
 
-It moves more than the arithmetic on `scale` suggests: the voxel follows
-`max(box)`, and for a 2D-periodic sheet the box includes the vacuum
-direction, so super-graphene went from resolution 72 to ~99 as well
-(1180 atoms to 1148, angle sum 335.1 -> 338.6, placement 89.6% ->
-85.7%). Mixed, and worth knowing rather than glossing.
+Eleven times the cost **and clipped**, so they did not even get what the
+rule demanded -- and they came back collapsed, which is what the user
+saw. The error: the voxel was tied to `max(box)`, and **a cage's box is
+mostly the vacuum around it**. A 3 Å tube in a 98.9 Å box was being
+asked for a 0.36 Å voxel because of empty space.
+
+Reverted. `grid_resolution` is a fixed floor again and the finer grid
+moved into the rescue, where only a wall that actually collapsed pays
+for it. The three cages returned to their audit numbers exactly --
+331.6, 331.4, 330.7 -- at 88, 35 and 434 s.
+
+**One measurement is a measurement, not a rule.** The general form is
+the thing to distrust.
 
 ### Correcting the audit above: the icosahedral preset is sound
 
@@ -1573,8 +1579,16 @@ superfullerene-C60   327.6      **330.8**   4.0
 super-graphene       338.6      untouched   --
 ===================  =========  ==========  ============
 
-The cost is real and falls only where it must: the superfullerene takes
-757 s instead of 357 because it is built three more times.
+The cost is real and bounded by **time, not atom count**, which was
+tried first and is the wrong measure: a super-fcc cell is 3082 atoms and
+takes 1440 s while a superfullerene is 7534 atoms and takes 79. An atom
+limit that spares the fcc from an hour and a half of rebuilds also
+refuses the superfullerene, which could be rescued three times over
+inside four minutes. `RESCUE_TIME_BUDGET` counts seconds instead, and
+the ladder stops when they run out.
+
+The ladder carries a finer grid as well as anchor strengths, because
+super-diamond's collapse is a resolution problem no anchor fixes.
 
 ## Both switches are in the window
 

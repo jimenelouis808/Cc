@@ -41,6 +41,7 @@ entry in the catalogue, in the tests.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -530,16 +531,16 @@ def named_graph(name: str, scale: float) -> SuperGraph:
 #: carbon is the least that reads as a tube rather than a neck.
 FREE_TUBE = 4.0
 
-#: Voxel size wanted, as a fraction of the tube radius. A 5 Å tube
-#: collapses at 0.83 Å voxels and is sound at 0.60, so 0.12 (= 0.60 Å
-#: there) sits on the safe side of a measured boundary. Only cells big
-#: enough to breach the `grid_resolution` floor move at all: the
-#: super-graphene, icosahedral and superfullerene presets are all
-#: already finer than this asks.
-VOXEL_PER_TUBE = 0.12
-
-#: Cost goes as resolution**3, so the grid stops here however big the cell.
-MAX_GRID_RESOLUTION = 160
+#: How much finer a grid the rescue tries when a wall comes back
+#: collapsed. Scaling the grid on EVERY build was tried and reverted: it
+#: was inferred from one measurement (super-diamond at scale 60, sound
+#: at voxel 0.60 and collapsed at 0.83) and generalised to ten
+#: structures, where it asked for grids of 184 to 307 against a cap of
+#: 160 -- so four cages paid ELEVEN TIMES the cost and still did not get
+#: what the rule demanded. The voxel was tied to `max(box)`, and a
+#: cage's box is mostly the vacuum around it. Only a wall that actually
+#: collapsed should pay for a finer grid.
+RESCUE_GRID = 1.4
 
 
 def build_supernetwork(
@@ -659,20 +660,10 @@ def build_supernetwork(
     # neck is resolved depends on how the surface falls between sample
     # points, so one (scale, resolution) pair can tear where both its
     # neighbours are fine.
-    # `grid_resolution` is a FLOOR, not the answer. A fixed grid over a
-    # growing cell gives coarser voxels the bigger the structure, which
-    # is backwards, and it shows: super-diamond is sound at scale 50 and
-    # COLLAPSES at 60 -- 327.4 deg, past tetrahedral -- for no reason but
-    # the voxel going 0.69 -> 0.83 Å. At resolution 100 the same cell,
-    # voxel 0.60, comes back sound at 331.8. `build_junction` has scaled
-    # its grid with its box since it was written; this never did.
-    voxel_target = VOXEL_PER_TUBE * float(tube_radius)
-    needed = int(np.ceil(float(np.max(box)) / voxel_target))
-    base = int(np.clip(needed, grid_resolution, MAX_GRID_RESOLUTION))
-
     failures: list[str] = []
+    started = time.monotonic()
     for attempt, resolution in enumerate(
-        (base, base + 8, base + 16)
+        (grid_resolution, grid_resolution + 8, grid_resolution + 16)
     ):
         mesh = mesher(resolution)
         stats = rm.mesh_statistics(mesh)
@@ -742,18 +733,28 @@ def build_supernetwork(
             # audit found super-cubic at 327.8 deg and
             # superfullerene-C60 at 328.3, both past tetrahedral.
             if wall_anchor <= 0.0:
-                atoms = rescue_collapsed_wall(
-                    atoms,
-                    lambda k: build_supernetwork(
+                # The ladder is (anchor, grid): super-cubic is an anchor
+                # problem and super-diamond at scale 60 is a resolution
+                # one -- sound at voxel 0.60, collapsed at 0.83 -- so a
+                # rescue that only ever pulls the anchor cannot fix it.
+                def again(anchor, grid=1.0):
+                    return build_supernetwork(
                         graph=graph, scale=scale, tube_radius=tube_radius,
                         blend=blend, bond=bond, vacuum=vacuum,
-                        grid_resolution=grid_resolution,
+                        grid_resolution=int(grid_resolution * grid),
                         remesh_iterations=remesh_iterations,
                         anneal_sweeps=anneal_sweeps,
-                        place_curvature=place_curvature, wall_anchor=k,
+                        place_curvature=place_curvature, wall_anchor=anchor,
                         relax_iterations=relax_iterations,
                         roughness=roughness, seed=seed,
-                    ),
+                    )
+
+                atoms = rescue_collapsed_wall(
+                    atoms,
+                    lambda k: (again(0.0, RESCUE_GRID) if k is None
+                               else again(k)),
+                    anchors=(1.0, 2.0, None, 4.0),
+                    seconds_spent=time.monotonic() - started,
                 )
             return atoms
         except RuntimeError as exc:

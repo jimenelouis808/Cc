@@ -80,7 +80,7 @@ class TestRescue:
             warnings.simplefilter("ignore")
             out = rescue_collapsed_wall(_wall(320.0), lambda k: _wall(335.0))
         assert out.info["wall_rescued_from"] == pytest.approx(320.0, abs=0.6)
-        assert out.info["wall_anchor_used"] == RESCUE_ANCHORS[0]
+        assert out.info["wall_rescue_step"] == f"wall_anchor={RESCUE_ANCHORS[0]:g}"
 
     def test_it_escalates_until_the_wall_clears_with_margin(self):
         """super-cubic clears at 1.0; the superfullerene gets WORSE at
@@ -97,7 +97,7 @@ class TestRescue:
         # 328.5 clears `collapsed_wall` by a tenth of a degree and must
         # NOT stop the search; only the margin does.
         assert seen == [1.0, 2.0, 4.0]
-        assert out.info["wall_anchor_used"] == 4.0
+        assert out.info["wall_rescue_step"] == "wall_anchor=4"
 
     def test_it_stops_as_soon_as_the_margin_is_met(self):
         seen = []
@@ -138,3 +138,48 @@ class TestRescue:
     def test_it_says_so(self):
         with pytest.warns(UserWarning, match="collapsed"):
             rescue_collapsed_wall(_wall(320.0), lambda k: _wall(336.0))
+
+
+class TestTheLadderCarriesMoreThanAnchors:
+    """`None` in the ladder means "try a finer grid", because
+    super-diamond's collapse is a resolution problem no anchor fixes."""
+
+    def test_a_none_step_is_named_not_floated(self):
+        seen = []
+
+        def rebuild(step):
+            seen.append(step)
+            return _wall(336.0 if step is None else 320.0)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            out = rescue_collapsed_wall(_wall(318.0), rebuild,
+                                        anchors=(1.0, None))
+        assert seen == [1.0, None]
+        assert out.info["wall_rescue_step"] == "finer grid"
+
+    def test_a_slow_build_is_left_alone_with_a_named_remedy(self):
+        """A super-fcc cell takes 24 minutes to build once; three more
+        rebuilds is an hour and a half of a window that looks hung.
+
+        The budget is TIME, not atoms: super-fcc is 3082 atoms at 1440 s
+        and a superfullerene is 7534 at 79, so an atom limit that spares
+        one refuses the other for no reason."""
+        slow = _wall(320.0)
+        calls = []
+        with pytest.warns(UserWarning, match="left to you"):
+            out = rescue_collapsed_wall(slow, lambda k: calls.append(k),
+                                        time_budget=60.0,
+                                        seconds_spent=1440.0)
+        assert out is slow
+        assert not calls
+
+    def test_a_quick_build_is_rescued_however_many_atoms(self):
+        """The superfullerene: 7534 atoms and 79 s, well inside budget."""
+        many = _wall(320.0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            out = rescue_collapsed_wall(many, lambda k: _wall(336.0),
+                                        time_budget=900.0,
+                                        seconds_spent=79.0)
+        assert out.info["wall_rescued_from"] == pytest.approx(320.0, abs=0.6)
