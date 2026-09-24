@@ -134,16 +134,44 @@ class VibspecApp:
         right = ttk.Frame(tab)
         right.pack(side="left", fill="both", expand=True)
 
-        form = ttk.LabelFrame(left, text="Cinta finita y funcionalización", padding=6)
-        form.pack(fill="x")
+        tk = self.tk
+        origin = ttk.LabelFrame(left, text="Origen de la geometría", padding=6)
+        origin.pack(fill="x")
+        self.source_mode = tk.StringVar(value="build")
+        ttk.Radiobutton(origin, text="Construir una cinta", value="build",
+                        variable=self.source_mode).grid(row=0, column=0, columnspan=3, sticky="w")
+        ttk.Radiobutton(origin, text="Desde archivo (tus átomos y grupos)", value="file",
+                        variable=self.source_mode).grid(row=1, column=0, columnspan=3, sticky="w")
+        self.source_var = tk.StringVar(value="")
+        ttk.Entry(origin, textvariable=self.source_var).grid(row=2, column=0, columnspan=2,
+                                                             sticky="ew")
+        ttk.Button(origin, text="…", width=3, command=self._on_pick_source).grid(row=2, column=2)
+        ttk.Label(origin, text="Biblioteca").grid(row=3, column=0, sticky="w", pady=(4, 0))
+        self.library_var = tk.StringVar(value=str(self.workdir.parent / "estructuras"))
+        self.library_combo = ttk.Combobox(origin, state="readonly", width=24)
+        self.library_combo.grid(row=3, column=1, sticky="ew", pady=(4, 0))
+        self.library_combo.bind("<<ComboboxSelected>>", self._on_library_pick)
+        ttk.Button(origin, text="…", width=3, command=self._on_pick_library).grid(row=3, column=2,
+                                                                                pady=(4, 0))
+        origin.columnconfigure(1, weight=1)
+        self._refresh_library()
+
+        form = ttk.LabelFrame(left, text="Cinta y funcionalización", padding=6)
+        form.pack(fill="x", pady=(6, 0))
         self.builder_vars: dict[str, Any] = {}
         self._form(form, logic.BUILDER_PARAMS, self.builder_vars)
+        ttk.Label(form, text="Con un archivo, borde/ancho/largo se ignoran; la "
+                             "funcionalización se añade encima.",
+                  wraplength=330, foreground="#6b6b66").grid(
+            row=len(logic.BUILDER_PARAMS), column=0, columnspan=3, sticky="w")
 
         buttons = ttk.Frame(left)
         buttons.pack(fill="x", pady=6)
         ttk.Button(buttons, text="Construir", command=self._on_build).pack(side="left")
-        ttk.Button(buttons, text="Guardar estructura…", command=self._on_save_structure
-                   ).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Guardar…", command=self._on_save_structure
+                   ).pack(side="left", padx=4)
+        ttk.Button(buttons, text="A la biblioteca", command=self._on_save_to_library
+                   ).pack(side="left")
         ttk.Button(buttons, text="Ir a Cálculo",
                    command=lambda: self.notebook.select(self.tabs["Cálculo"])
                    ).pack(side="right")
@@ -156,9 +184,68 @@ class VibspecApp:
         self.model_ax = self.model_figure.add_subplot(projection="3d")
         self.model_canvas = self._canvas(right, self.model_figure)
 
-    def _on_build(self) -> None:
+    # -- geometry source and library
+
+    def _on_pick_source(self) -> None:
+        from tkinter import filedialog
+
+        from ..core import STRUCTURE_EXTENSIONS
+
+        pattern = " ".join(f"*{ext}" for ext in STRUCTURE_EXTENSIONS)
+        path = filedialog.askopenfilename(filetypes=[("Estructuras", pattern), ("Todos", "*.*")])
+        if path:
+            self.source_var.set(path)
+            self.source_mode.set("file")
+
+    def _refresh_library(self) -> None:
+        files = logic.library(Path(self.library_var.get()))
+        self.library_files = {path.name: path for path in files}
+        self.library_combo.configure(values=list(self.library_files))
+        self.library_combo.set("" if files else "(vacía)")
+
+    def _on_pick_library(self) -> None:
+        from tkinter import filedialog
+
+        path = filedialog.askdirectory(initialdir=self.library_var.get())
+        if path:
+            self.library_var.set(path)
+            self._refresh_library()
+
+    def _on_library_pick(self, _event=None) -> None:
+        path = self.library_files.get(self.library_combo.get())
+        if path is not None:
+            self.source_var.set(str(path))
+            self.source_mode.set("file")
+            self._on_build()
+
+    def _on_save_to_library(self) -> None:
+        from tkinter import simpledialog
+
+        if self.model is None:
+            self._status("Primero construye o carga un modelo.")
+            return
+        name = simpledialog.askstring("A la biblioteca", "Nombre del modelo:",
+                                      initialvalue=logic.job_name(self.model.atoms))
+        if not name:
+            return
         try:
-            self.model = logic.build_model(self._read(self.builder_vars))
+            path = logic.save_to_library(self.model.atoms, Path(self.library_var.get()), name)
+        except Exception as exc:        # noqa: BLE001
+            self._error(exc)
+            return
+        self._refresh_library()
+        self.library_combo.set(path.name)
+        self._status(f"Guardado en la biblioteca: {path}")
+
+    def _on_build(self) -> None:
+        source = None
+        if self.source_mode.get() == "file":
+            if not self.source_var.get().strip():
+                self._status("Elige un archivo o una estructura de la biblioteca.")
+                return
+            source = Path(self.source_var.get())
+        try:
+            self.model = logic.build_model(self._read(self.builder_vars), source=source)
         except Exception as exc:        # noqa: BLE001 -- surfaced to the user
             self._error(exc)
             return

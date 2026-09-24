@@ -301,6 +301,28 @@ What the checks refuse, and why:
 | Pyrrolic N-H not in a pentagon after relaxing | It is not a pyrrolic site |
 | `nfree` not 2/4; `delta`, LCAO `h`, scale factor out of range | Noise, anharmonicity, egg-box, typos |
 
+### Your own geometry
+
+```bash
+carbonforge vibspec import mi_cinta.xyz --preset nitrile -o modelo.xyz
+```
+
+Any format ASE reads (XYZ from Avogadro or GaussView, CIF, PDB, MOL, POSCAR,
+QE output, trajectories — the last frame by default) comes in through
+carbonforge's importer and is made a finite vibspec model: a file without a
+cell gets a box with the requested vacuum; a declared-periodic one is
+accepted only as a molecule in a box, and refused, with the reason, if any
+bond crosses the cell; overlapping atoms are refused, never moved. The
+ribbon's edge type is read from the C–H geometry (corners excluded) and
+set only when one type clearly dominates. Its atoms and groups are kept, and
+a preset can be added on top. `vibspec prepare` reads through the same
+path, so a plain XYZ can be prepared directly.
+
+In the window, *Desde archivo* loads a file, and the **library** — a plain
+folder of structures, listed in a drop-down — keeps the models you want to
+reuse; *A la biblioteca* saves the current one as extended XYZ, with its
+provenance.
+
 ### Running the IR calculation
 
 Prepare on any machine, run where GPAW is (Ubuntu or WSL2; see

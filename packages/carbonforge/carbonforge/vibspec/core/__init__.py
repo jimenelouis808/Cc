@@ -31,6 +31,7 @@ from .checks import (
     vacuum_per_side,
 )
 from .engines import gpaw_available
+from .imported import STRUCTURE_EXTENSIONS, ImportRefused, list_library, load_structure
 from .presets import PRESETS, Preset, apply_preset, describe_presets, get_preset
 from .record import CalcRecord, find_records, index_records
 from .sites import (
@@ -46,6 +47,11 @@ from .plot import draw_ir_comparison, plot_ir_comparison
 from .workflow import VibspecError, collect, prepare, run
 
 __all__ = [
+    # your own geometry
+    "STRUCTURE_EXTENSIONS",
+    "ImportRefused",
+    "list_library",
+    "load_structure",
     # analysis and plotting
     "BandMatch",
     "ExperimentalSpectrum",

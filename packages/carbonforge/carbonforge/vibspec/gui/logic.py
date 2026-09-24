@@ -46,6 +46,8 @@ from ..core import (
     apply_preset,
     check_structure,
     gpaw_available,
+    list_library,
+    load_structure,
     prepare,
     suggest_spin,
 )
@@ -118,11 +120,12 @@ def defaults(specs: Sequence[ParamSpec]) -> dict[str, Any]:
 
 @dataclass
 class ModelResult:
-    """A built structure and what the checks say about it."""
+    """A built or loaded structure and what the checks say about it."""
 
     atoms: Atoms
     report: ValidationReport
     spin: SpinAdvice
+    import_report: str = ""
 
     def summary(self) -> str:
         preset = self.atoms.info.get("vibspec_preset", {}).get("key", "pristine")
@@ -132,23 +135,62 @@ class ModelResult:
         # Plain-text markers: they render with any Tk font.
         lines += [f"ERROR: {e}" for e in self.report.errors]
         lines += [f"AVISO: {w}" for w in self.report.warnings]
+        if self.import_report:
+            lines += ["", "--- Archivo cargado ---", self.import_report]
         return "\n".join(lines)
 
 
-def build_model(raw: dict[str, Any]) -> ModelResult:
-    """Build the ribbon, apply the preset and check it, from raw form values."""
+def build_model(raw: dict[str, Any], source: Optional[Path] = None) -> ModelResult:
+    """Build (or load) the ribbon, apply the preset and check it.
+
+    Parameters
+    ----------
+    raw
+        Raw form values (:data:`BUILDER_PARAMS`).
+    source
+        A structure file to start from instead of building a ribbon. Its
+        atoms and groups are kept; the form's edge, width and length are
+        ignored, its vacuum and preset are applied (``pristine`` adds
+        nothing).
+    """
     values = collect_values(BUILDER_PARAMS, raw)
-    atoms = build_finite_nanoribbon(
-        values["width"], values["length"], edge=values["edge"],
-        vacuum_per_side=values["vacuum_per_side"],
-    )
+    import_report = ""
+    if source is not None:
+        atoms, import_report = load_structure(source, vacuum_per_side=values["vacuum_per_side"])
+    else:
+        atoms = build_finite_nanoribbon(
+            values["width"], values["length"], edge=values["edge"],
+            vacuum_per_side=values["vacuum_per_side"],
+        )
     if values["site_index"] >= 0:
         position: Any = values["site_index"]
     else:
         position = None if values["site"] == AUTO else values["site"]
     edge = None if values["site_edge"] == AUTO else values["site_edge"]
     atoms = apply_preset(atoms, values["preset"], position=position, edge=edge)
-    return ModelResult(atoms, check_structure(atoms), suggest_spin(atoms))
+    return ModelResult(atoms, check_structure(atoms), suggest_spin(atoms), import_report)
+
+
+def library(directory: Path) -> list[Path]:
+    """The structure files in the user's library folder."""
+    return list_library(directory)
+
+
+def save_to_library(atoms: Atoms, directory: Path, name: str) -> Path:
+    """Save a model into the library folder as extended XYZ; returns the path.
+
+    Extended XYZ keeps the model's provenance (preset, site, source file) in
+    the comment line, so reloading it later restores more than coordinates.
+    Refuses to overwrite: a library entry is something you chose to keep.
+    """
+    stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("_") or "modelo"
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{stem}.xyz"
+    if path.exists():
+        raise FileExistsError(f"Ya hay un modelo llamado {path.name} en la biblioteca.")
+    atoms.write(path, format="extxyz")
+    return path
 
 
 def spec_from_form(raw: dict[str, Any]) -> CalcSpec:
@@ -160,10 +202,18 @@ def spec_from_form(raw: dict[str, Any]) -> CalcSpec:
 
 
 def job_name(atoms: Atoms) -> str:
-    """A readable, filesystem-safe default name: ``amine_armchair_5x3``."""
+    """A readable, filesystem-safe default name: ``amine_armchair_5x3``.
+
+    A loaded structure is named after its file: ``mi_cinta_amine``.
+    """
     info = atoms.info
     preset = info.get("vibspec_preset", {}).get("key", "modelo")
-    name = f"{preset}_{info.get('edge', 'gnr')}_{info.get('width', '')}x{info.get('length', '')}"
+    if "source_file" in info:
+        stem = Path(info["source_file"]).stem
+        name = stem if preset == "pristine" else f"{stem}_{preset}"
+    else:
+        name = (f"{preset}_{info.get('edge', 'gnr')}_"
+                f"{info.get('width', '')}x{info.get('length', '')}")
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("_")
 
 

@@ -262,11 +262,14 @@ def apply_preset(
         )
     out = preset.apply(atoms, position, edge)
     rebox(out, float(atoms.info.get("vacuum_per_side", DEFAULT_VACUUM_PER_SIDE)))
-    out.info["vibspec_preset"] = {
-        "key": key,
-        "position": position,
-        "edge": edge,
-    }
+    # "pristine" adds nothing, so it must not erase the provenance of a
+    # model loaded from a file that already carries a preset.
+    if key != "pristine" or "vibspec_preset" not in out.info:
+        out.info["vibspec_preset"] = {
+            "key": key,
+            "position": position,
+            "edge": edge,
+        }
     return out
 
 

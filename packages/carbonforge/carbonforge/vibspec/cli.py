@@ -3,6 +3,8 @@
 * ``presets`` -- list the functionalisation presets.
 * ``build``   -- build a finite ribbon, apply a preset, check it and write it.
 * ``check``   -- run the physical checks on an existing structure file.
+* ``import``  -- load your own geometry (any format), box it, optionally add a
+  preset, check it and write it.
 * ``prepare`` -- validate a structure and settings, write a calculation directory.
 * ``run``     -- relax and compute the IR spectrum of a prepared directory (GPAW).
 * ``show``    -- report on one calculation, or every one under a directory.
@@ -24,6 +26,7 @@ from ..validation.checks import run_basic_checks
 from .core import (
     CalcRecord,
     CalcSpec,
+    ImportRefused,
     VibspecError,
     apply_preset,
     check_structure,
@@ -39,6 +42,7 @@ from .core import (
     read_ftir,
     search_scale_factor,
     index_records,
+    load_structure,
     prepare,
     run,
     suggest_spin,
@@ -87,6 +91,28 @@ def _cmd_check(args) -> int:
     return _report(ase_io.read(args.path), args.charge)
 
 
+def _cmd_import(args) -> int:
+    try:
+        atoms, report = load_structure(args.path, vacuum_per_side=args.vacuum_per_side)
+    except (ImportRefused, ValueError) as exc:
+        print(exc)
+        return 1
+    print(report)
+    if args.preset != "pristine" or args.site is not None:
+        try:
+            atoms = apply_preset(atoms, args.preset, position=_position(args.site),
+                                 edge=args.site_edge)
+        except ValueError as exc:
+            print(f"\nNo se pudo aplicar '{args.preset}': {exc}")
+            return 1
+        print(f"\nPreset '{args.preset}' aplicado: {atoms.get_chemical_formula()}.")
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    ase_io.write(out, atoms)
+    print(f"\n→ {out}\n")
+    return _report(atoms, args.charge)
+
+
 def _cmd_prepare(args) -> int:
     spinpol = {"auto": None, "on": True, "off": False}[args.spinpol]
     spec = CalcSpec(
@@ -95,9 +121,12 @@ def _cmd_prepare(args) -> int:
         scale_factor=args.scale_factor,
     )
     try:
-        record = prepare(ase_io.read(args.structure), spec, Path(args.directory),
+        # Through load_structure, so an XYZ without a cell (Avogadro, GaussView)
+        # is boxed instead of failing the vacuum check.
+        atoms, _ = load_structure(args.structure)
+        record = prepare(atoms, spec, Path(args.directory),
                          force=args.force, overwrite=args.overwrite)
-    except (VibspecError, FileExistsError) as exc:
+    except (VibspecError, FileExistsError, ValueError) as exc:
         print(exc)
         return 1
     print(record.summary())
@@ -234,6 +263,18 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     ck.add_argument("path")
     ck.add_argument("--charge", type=int, default=0)
     ck.set_defaults(func=_cmd_check)
+
+    im = vsub.add_parser("import", help="Load your own geometry as a vibspec model.")
+    im.add_argument("path", help="Cualquier formato que lea ASE (xyz, cif, pdb, mol, vasp...).")
+    im.add_argument("-o", "--out", default="modelo.xyz")
+    im.add_argument("--vacuum-per-side", type=float, default=None,
+                    help="Vacío por lado, Å (por defecto 7, o el guardado en el archivo).")
+    im.add_argument("--preset", default="pristine",
+                    help="Funcionalización a añadir encima (por defecto, ninguna).")
+    im.add_argument("--site", default=None)
+    im.add_argument("--site-edge", choices=("armchair", "zigzag"), default=None)
+    im.add_argument("--charge", type=int, default=0)
+    im.set_defaults(func=_cmd_import)
 
     defaults = CalcSpec()
     pp = vsub.add_parser("prepare", help="Validate and write a calculation directory.")

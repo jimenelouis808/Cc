@@ -80,6 +80,10 @@ carbonforge/
   (`vibspec/gui/logic.JobQueue`), because a thread cannot be cancelled. A
   job's state comes from the process AND `record.json`; exit code 0 without a
   `done` record is an error. Keep decisions in `gui/logic.py`, not `app.py`.
+- vibspec imports (`core/imported.load_structure`) refuse a structure whose
+  bonds cross the cell (truly periodic) and overlapping atoms; they never cut
+  bonds or move atoms. The edge type is set only when one type dominates
+  (corners excluded). Applying "pristine" must not erase existing provenance.
 - A zigzag nanoribbon MUST be spin-polarised. Its edges are magnetic and
   antiferromagnetically coupled; without nspin=2 the SCF converges to a state
   that is not the ground state, with no error. Presets enable it

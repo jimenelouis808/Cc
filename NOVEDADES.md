@@ -6,6 +6,29 @@ está la trampa.
 
 ---
 
+## carbonforge · vibspec — tus propias geometrías y una biblioteca
+
+**Cargar una cinta ya hecha**, con sus átomos y grupos: en la pestaña Modelo,
+"Desde archivo", o `carbonforge vibspec import mi_cinta.xyz`. Vale cualquier
+formato que lea ASE (XYZ de Avogadro o GaussView, CIF, PDB, MOL, POSCAR, salida
+de QE). Si no trae celda se le pone caja con vacío; lo que ya tiene se respeta,
+y se le puede añadir un preset encima.
+
+**La biblioteca** es una carpeta (`estructuras/`) cuyos archivos aparecen en una
+lista de la ventana. "A la biblioteca" guarda el modelo actual con su
+procedencia, para precargarlo la próxima vez.
+
+**Dónde está la trampa:**
+
+- Una estructura periódica de verdad (con enlaces que cruzan la celda) se
+  rechaza: el IR necesita un modelo finito, y cortarla sin terminar los bordes
+  dejaría carbonos colgantes. Recórtala y termínala con H antes.
+- Átomos superpuestos también se rechazan; no se mueven para "arreglarlos".
+- El tipo de borde se deduce de la geometría solo si uno domina claramente; en
+  una cinta casi cuadrada no pasa, y hay que elegir el borde del sitio.
+
+---
+
 ## carbonforge · vibspec (fase 4)
 
 ### La ventana: modelo, cola de cálculos y modos animados

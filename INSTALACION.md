@@ -132,6 +132,33 @@ nanocarbon cnt --n 6 --m 6 --length 12 --dopant N --dopant-conc 0.03 \
 
 ---
 
+## Ubuntu, de cero a `carbonforge vibspec` con ventana
+
+Todo en la carpeta descomprimida del zip (trae los tres paquetes: nanocarbon_lab,
+carbonforge con vibspec, y ramancarbon):
+
+```bash
+sudo apt install build-essential libxc-dev libopenblas-dev python3-tk
+curl -LsSf https://astral.sh/uv/install.sh | sh        # si no tienes uv; abre otra terminal
+cd nanocarbon-main                                     # o como se llame la carpeta
+uv sync --all-packages --extra dev
+CC=g++ uv pip install gpaw
+uv run gpaw info                                       # libxc: yes
+uv run carbonforge vibspec gui
+```
+
+En Ubuntu 22.04, cuyo Python es el 3.10, uv descarga él solo un Python 3.11 (que
+ya trae Tkinter). Para comprobar la instalación sin GPAW:
+`uv run python -m pytest packages/carbonforge/carbonforge/tests -q -m "not slow"`.
+
+**Tus propias geometrías.** En la pestaña Modelo, "Desde archivo" carga
+cualquier estructura que lea ASE (XYZ de Avogadro o GaussView, CIF, PDB, MOL,
+POSCAR, salidas de QE, trayectorias): se conservan sus átomos y grupos, se le
+pone caja con vacío, y se le puede añadir un preset encima. Lo que quieras
+reutilizar va a la **biblioteca**: una carpeta (por defecto `estructuras/`, junto
+a `calculos/`) cuyos archivos aparecen en una lista; "A la biblioteca" guarda
+ahí el modelo actual. Desde la terminal: `carbonforge vibspec import mi_cinta.xyz`.
+
 ## GPAW para los cálculos IR de `carbonforge vibspec` (Ubuntu o WSL2)
 
 Solo hace falta para **correr** los cálculos. Construir las cintas, preparar
