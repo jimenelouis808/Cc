@@ -1954,6 +1954,62 @@ Two rules, and a test for each in `tests/test_gui_static.py`:
   deciding metric, as this file has always said -- but say it as a
   trade-off that was measured, not as a rule with no cost.
 
+## A net with no preset can only be built with someone else's numbers
+
+The `Net` combobox writes `sn_graph` and nothing else -- `_update_sn_hint`
+is its only listener -- so picking a net there leaves the cell length,
+tube radius and blend at whatever the **last preset** put in them.
+
+`super-fcc`, `super-cubic` and `super-square` had no preset, so the
+combobox was the only way to reach them. Choosing `super-fcc` after
+"Super-diamond (tubes at 109.47°)" therefore built it at `scale=60,
+tube_radius=5, blend=4`, and a user reported it still going after ninety
+minutes. Nothing was wrong with it: 42 Å struts, 24 Å of free tube, every
+geometry check passed and the hint read perfectly healthy. It was simply
+an enormous thing to ask for, and nothing said so. Its own preset --
+`scale=40, tube_radius=3, blend=2` -- builds **sound at 334.0°** in 413 s,
+the best minimum angle sum of any 3D periodic net in the catalogue.
+
+`tests/test_gui_static.py` now fails if any entry of `SUPERLATTICES` has
+no preset of its own, if a preset would be refused by the builder's own
+strut check, or if one asks for a build of tens of minutes.
+
+## Cost is area *and* whether the faces have to be welded
+
+`SuperGraph.wall_area` is `2*pi*r` times the total strut length, known
+before anything is meshed, and `build_cost_note` turns it into a clause
+the hint shows. Both are calibrated on measurements, not chosen:
+
+| net | kind | area Å² | build | s per kÅ² |
+|---|---|---|---|---|
+| super-graphene | 2D periodic | 3 700 | 36 s | 9.7 |
+| super-cubic | 3D periodic | 3 204 | 37 s | 11.5 |
+| supertube-(6,6) | 2D periodic | 18 964 | 434 s | 22.9 |
+| super-diamond | 3D periodic | 13 059 | ~400 s | 30.6 |
+| super-fcc | 3D periodic | 12 796 | 413 s | 32.3 |
+| super-fcc | 3D periodic | 31 989 | >90 min | **168.8** |
+| super-icosahedron | cage | 18 096 | 35 s | 1.9 |
+| superfullerene-C60 | cage | 24 090 | 79 s | 3.3 |
+| super-hypercube | cage | 21 802 | 88 s | 4.0 |
+
+**Area alone was tried first and is wrong, and a test caught it.** It
+puts the hypercube cage at 21 802 Å² above super-diamond's 13 059 and so
+calls the 88-second build the slow one and the seven-minute build the
+quick one. What separates them is not how much wall there is but whether
+the cell's faces have to be welded to their opposite numbers: a cage
+closes on itself and costs a flat 2-4 s per thousand Å², a periodic cell
+costs 10-170 and climbs with size. `build_cost_note` takes `periodic`
+for exactly that reason.
+
+The climb is also why `SLOW_AREA` is 25 000 rather than the point where
+builds stop being instant: periodic cells run seven minutes at 13 000 and
+again at 19 000, then ninety at 32 000, so the line goes between those.
+
+**Atom count is the wrong measure here too**, for the same reason it was
+wrong as a rescue budget: it does not separate a cage from a cell. A
+superfullerene is 7534 atoms in 79 s and a super-fcc cell is 3082 atoms
+in 1440 s.
+
 ## Unit cells: pad only what does not repeat, measure only what is vacuum
 
 `cell.to_unit_cell` turns any structure into `pbc=(True, True, True)`

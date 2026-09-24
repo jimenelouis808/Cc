@@ -199,3 +199,71 @@ class TestThePresetsPointAtRealThings:
             if preset.get("mode_kind") in curved:
                 assert preset.get("anneal", 0) == 0, (
                     f"preset {name!r} anneals a curved surface")
+
+
+class TestEverySuperlatticeIsReachableFromAPreset:
+    """The Net box writes ``sn_graph`` and nothing else.
+
+    ``_update_sn_hint`` is its only listener, so picking a net there
+    leaves the cell, the tube radius and the blend at whatever the LAST
+    preset put in them. That is not a theory: super-fcc had no preset,
+    so the only way to it was the Net box, and choosing it after
+    "Super-diamond (tubes at 109.47°)" built it at scale 60 with a 5 Å
+    tube -- 32_000 Å² of wall, still going after ninety minutes, where
+    its own preset asks for 12_800 and finishes in seven.
+
+    A periodic net without a preset is therefore a net that can only be
+    reached with someone else's numbers.
+    """
+
+    def _supernetwork_presets(self) -> dict:
+        return {name: preset for name, preset in _presets(_source()).items()
+                if preset.get("mode_kind") == "supernetwork"}
+
+    def test_every_periodic_net_has_a_preset_of_its_own(self):
+        from nanocarbon_lab.builders.supernetwork import SUPERLATTICES
+
+        named = {preset["sn_graph"]
+                 for preset in self._supernetwork_presets().values()}
+        missing = sorted(set(SUPERLATTICES) - named)
+        assert not missing, (
+            f"{missing} can only be reached from the Net box, which keeps "
+            "the previous preset's cell and tube radius")
+
+    def test_no_preset_asks_for_a_build_of_tens_of_minutes(self):
+        from nanocarbon_lab.builders.supernetwork import (
+            CAGE_SLOW_AREA,
+            SLOW_AREA,
+            named_graph,
+        )
+
+        for name, preset in self._supernetwork_presets().items():
+            scale = float(preset["sn_scale"])
+            graph = named_graph(str(preset["sn_graph"]), scale)
+            area = graph.wall_area(scale, float(preset["sn_radius"]))
+            # A cage of the same area is an order of magnitude cheaper,
+            # so the hypercube's 21_802 Å² at 88 s is not the hour that
+            # a periodic cell of that size would be.
+            limit = SLOW_AREA if graph.periodic else CAGE_SLOW_AREA
+            assert area < limit, (
+                f"preset {name!r} asks for {area:,.0f} Å² of wall")
+
+    def test_every_preset_leaves_room_for_a_tube_between_the_vertices(self):
+        """The refusal the builder raises, checked before the click."""
+        from nanocarbon_lab.builders.supernetwork import named_graph
+
+        for name, preset in self._supernetwork_presets().items():
+            scale = float(preset["sn_scale"])
+            graph = named_graph(str(preset["sn_graph"]), scale)
+            eaten = 2.0 * (float(preset["sn_radius"])
+                           + float(preset["sn_blend"]))
+            shortest = float(graph.strut_lengths(scale).min())
+            assert shortest > eaten, (
+                f"preset {name!r} would be refused: {shortest:.1f} Å struts "
+                f"and {eaten:.1f} Å eaten by the vertices")
+
+    def test_the_hint_reports_the_size_and_not_only_the_shape(self):
+        source = _source()
+        assert "wall_area(" in source and "build_cost_note(" in source, (
+            "the supernetwork hint no longer prices the build, so an "
+            "enormous net reads the same as a small one")

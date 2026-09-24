@@ -382,6 +382,22 @@ PRESETS: dict[str, dict[str, object]] = {
     "Superfullerene (C60 of tubes)": {
         "mode_kind": "supernetwork", "sn_graph": "superfullerene-C60",
         "sn_scale": 14.2, "sn_radius": 3.0, "sn_blend": 2.0, "anneal": 0},
+    # The three periodic nets that had no preset. Without one the Net
+    # box is the only way to reach them, and picking a net there leaves
+    # the cell, radius and blend at whatever the LAST preset set -- which
+    # is how super-fcc got built at super-diamond's scale=60, radius=5
+    # and ran for ninety minutes. Every number below is measured: fcc is
+    # sound at 334.0 deg in 413 s at 40/3.0/2.0, and at 60/5/4 it asks
+    # for 32_000 A^2 of wall instead of 12_800.
+    "Super-square (tubes at 90°)": {
+        "mode_kind": "supernetwork", "sn_graph": "super-square",
+        "sn_scale": 34.0, "sn_radius": 5.0, "sn_blend": 4.0, "anneal": 0},
+    "Super-cubic (tubes along the axes)": {
+        "mode_kind": "supernetwork", "sn_graph": "super-cubic",
+        "sn_scale": 34.0, "sn_radius": 5.0, "sn_blend": 4.0, "anneal": 0},
+    "Super-fcc (twelve tubes per node)": {
+        "mode_kind": "supernetwork", "sn_graph": "super-fcc",
+        "sn_scale": 40.0, "sn_radius": 3.0, "sn_blend": 2.0, "anneal": 0},
     # --- dichalcogenides
     "MoS2 monolayer (2H)": {
         "mode_kind": "TMD layers", "tmd_material": "MoS2", "tmd_phase": "2H",
@@ -2718,7 +2734,7 @@ class NanocarbonGUI:
         before anything is meshed, so the hint can show the answer the
         build will be checked against.
         """
-        from ..builders.supernetwork import named_graph
+        from ..builders.supernetwork import build_cost_note, named_graph
 
         name = self.var_sn_graph.get()
         scale = float(self.var_sn_scale.get())
@@ -2739,14 +2755,21 @@ class NanocarbonGUI:
                       "This would be refused: a larger cell, a narrower "
                       "tube or a smaller blend."))
             return
+        # The geometry check above passes on a net that is perfectly
+        # sound and simply enormous, which is how a super-fcc left at
+        # super-diamond's scale ran for ninety minutes without a word of
+        # warning. Say the size as well as the shape.
+        area = graph.wall_area(scale, radius)
         self.lbl_sn.config(
             text=(f"{graph.coordination} tubes per vertex, "
                   f"{len(graph.nodes)} vertex/vertices and "
                   f"{len(graph.edges)} strut(s) per cell, leaving "
-                  f"{free:.0f} Å of free tube between them. The skeleton "
-                  f"fixes sum(6−n) at {graph.ring_budget:+d} before "
-                  "anything is meshed, and the build is checked against "
-                  f"it. {graph.note}"
+                  f"{free:.0f} Å of free tube between them. That is "
+                  f"{area:,.0f} Å² of wall, "
+                  f"{build_cost_note(area, graph.periodic)}. "
+                  f"The skeleton fixes sum(6−n) at {graph.ring_budget:+d} "
+                  "before anything is meshed, and the build is checked "
+                  f"against it. {graph.note}"
                   + ("" if name in SUPERLATTICES else
                      " This is a finite cage, so the length above is the "
                      "strut, not a cell edge.")))

@@ -172,6 +172,38 @@ class SuperGraph:
         segments = self.segments(scale)
         return np.linalg.norm(segments[:, 1] - segments[:, 0], axis=1)
 
+    def wall_area(self, scale: float, tube_radius: float) -> float:
+        """Roughly how much wall the cell carries, in Angstrom squared.
+
+        ``2 * pi * r`` times the total strut length: the barrels only,
+        counting the node regions twice rather than solving for where
+        the blend actually puts the surface. That approximation is fine
+        for what this is for, because the number is not used as a
+        measurement -- it is used to say what a build will cost, and
+        cost tracks it over an order of magnitude:
+
+        ===================  =========  ==========  ======
+        net                  scale, r   area (A^2)  build
+        ===================  =========  ==========  ======
+        super-cubic          34, 5           3_200    37 s
+        super-graphene       34, 5           3_700    36 s
+        super-fcc            40, 3          12_800   413 s
+        super-diamond        60, 5          13_100  ~400 s
+        super-fcc            60, 5          32_000   >90 m
+        ===================  =========  ==========  ======
+
+        **Atom count was tried first and is worse.** It does not
+        separate a finite cage from a periodic cell: a superfullerene is
+        7534 atoms in 79 s and a super-fcc cell is 3082 atoms in 1440 s,
+        so a threshold that catches the one clears the other. Area is
+        the geometry the mesher actually has to resolve, and it is known
+        before anything is meshed.
+        """
+        if tube_radius <= 0:
+            raise ValueError("tube_radius must be positive.")
+        length = float(self.strut_lengths(scale).sum())
+        return 2.0 * float(np.pi) * float(tube_radius) * length
+
 
 def edges_from_positions(
     nodes: np.ndarray,
@@ -541,6 +573,72 @@ FREE_TUBE = 4.0
 #: cage's box is mostly the vacuum around it. Only a wall that actually
 #: collapsed should pay for a finer grid.
 RESCUE_GRID = 1.4
+
+
+#: Wall area, in Angstrom squared, marking the two ends of what a build
+#: costs -- for a PERIODIC cell. A finite cage is a different animal and
+#: gets `CAGE_SLOW_AREA` instead.
+#:
+#: Every number is measured on this builder, and the split between the
+#: two kinds is the whole point:
+#:
+#: ===================  ===========  ========  ======  ==========
+#: net                  kind         area A^2  build   s per kA^2
+#: ===================  ===========  ========  ======  ==========
+#: super-graphene       2D periodic     3_700    36 s         9.7
+#: super-cubic          3D periodic     3_204    37 s        11.5
+#: supertube-(6,6)      2D periodic    18_964   434 s        22.9
+#: super-diamond        3D periodic    13_059  ~400 s        30.6
+#: super-fcc            3D periodic    12_796   413 s        32.3
+#: super-fcc            3D periodic    31_989  >90 min      168.8
+#: super-icosahedron    cage           18_096    35 s         1.9
+#: superfullerene-C60   cage           24_090    79 s         3.3
+#: super-hypercube      cage           21_802    88 s         4.0
+#: ===================  ===========  ========  ======  ==========
+#:
+#: **Area alone was tried first and is wrong.** It puts the hypercube
+#: cage at 21_802 A^2 above super-diamond's 13_059 and would call the
+#: 88-second build the slow one and the seven-minute build the quick
+#: one. What separates them is not how much wall there is but whether
+#: the cell's faces have to be welded to their opposite numbers: a cage
+#: closes on itself and costs 2-4 s per thousand A^2 flat, a periodic
+#: cell costs 10-170 and climbs with size.
+#:
+#: The climb is why `SLOW_AREA` sits where it does. Periodic builds run
+#: seven minutes at 13_000 and again at 19_000, then ninety at 32_000 --
+#: so the line goes between those, not at the point the first one stops
+#: being instant.
+#:
+#: That last row is the reason any of this exists. Nothing was wrong
+#: with it: 42 A struts, 24 A of free tube, every geometry check passed
+#: and the hint read perfectly healthy. It was simply an enormous thing
+#: to ask for, and nothing said so.
+BRISK_AREA = 6_000.0
+SLOW_AREA = 25_000.0
+
+#: The same, for a cage. No cage in the catalogue has yet been slow --
+#: the largest measured is 24_090 A^2 in 79 s -- so the brisk band runs
+#: all the way to where the evidence stops rather than pretending to
+#: knowledge of what a cage twice that size does.
+CAGE_SLOW_AREA = 25_000.0
+
+
+def build_cost_note(area: float, periodic: bool = True) -> str:
+    """One clause on what a wall of this area costs to build.
+
+    `periodic` is not a detail: the same area costs an order of
+    magnitude more when the cell's faces have to be welded. See
+    `SLOW_AREA` for the measurements.
+    """
+    if not periodic:
+        return ("about a minute to build" if area < CAGE_SLOW_AREA
+                else "several minutes to build")
+    if area < BRISK_AREA:
+        return "about a minute to build"
+    if area < SLOW_AREA:
+        return "several minutes to build"
+    return ("tens of minutes to build -- a smaller cell or a narrower "
+            "tube costs far less")
 
 
 def build_supernetwork(
