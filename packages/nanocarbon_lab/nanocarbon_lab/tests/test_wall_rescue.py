@@ -183,3 +183,63 @@ class TestTheLadderCarriesMoreThanAnchors:
                                         time_budget=900.0,
                                         seconds_spent=79.0)
         assert out.info["wall_rescued_from"] == pytest.approx(320.0, abs=0.6)
+
+
+class TestTheRescueCannotReEnterItself:
+    """The rescue is armed by ``wall_anchor <= 0``, and one of its own
+    rungs rebuilds with ``wall_anchor=0`` on a finer grid. Nothing but
+    the private ``_rescue`` flag stops that rung from arming a second
+    rescue, which arms a third.
+
+    Traced on superfullerene-C60 it nested five deep, multiplying
+    ``grid_resolution`` by ``RESCUE_GRID`` each time -- 72, 100, 141,
+    197, **274** -- which is 55x the voxels of the grid asked for, and
+    one rebuild at that size took 2005 s. The time budget does not
+    catch it: each level measures ``seconds_spent`` inside its own
+    fresh build, so every level starts its budget again at zero.
+    """
+
+    def test_the_finer_grid_rung_disarms_the_rescue(self):
+        """Read out of the source, because reaching it means building."""
+        import inspect
+
+        from nanocarbon_lab.builders import supernetwork
+
+        body = inspect.getsource(supernetwork.build_supernetwork)
+        assert "_rescue=False" in body, (
+            "the rescue's own rebuild no longer disarms the rescue, so "
+            "the finer-grid rung will recurse")
+        assert "wall_anchor <= 0.0 and _rescue" in body, (
+            "the rescue is armed without consulting _rescue")
+
+    def test_the_flag_defaults_to_armed(self):
+        """An ordinary call must still be rescued."""
+        import inspect
+
+        from nanocarbon_lab.builders import supernetwork
+
+        signature = inspect.signature(supernetwork.build_supernetwork)
+        assert signature.parameters["_rescue"].default is True
+
+    def test_a_rescue_rebuild_does_not_rescue_again(self):
+        """The guard, exercised rather than read.
+
+        A stub records how deep the nesting goes: with the flag honoured
+        the rebuild runs once per rung and never calls back in.
+        """
+        depth = {"max": 0, "now": 0}
+
+        def rebuild(strength):
+            depth["now"] += 1
+            depth["max"] = max(depth["max"], depth["now"])
+            try:
+                # A real rescue rung rebuilds; if that rebuild were to
+                # arm another rescue this is where it would show.
+                return _wall(330.0)
+            finally:
+                depth["now"] -= 1
+
+        rescued = rescue_collapsed_wall(_wall(320.0), rebuild,
+                                        anchors=(1.0, 2.0))
+        assert depth["max"] == 1
+        assert rescued.info["wall_rescue_step"] == "wall_anchor=1"

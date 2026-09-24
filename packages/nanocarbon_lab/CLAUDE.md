@@ -1974,6 +1974,30 @@ the best minimum angle sum of any 3D periodic net in the catalogue.
 no preset of its own, if a preset would be refused by the builder's own
 strut check, or if one asks for a build of tens of minutes.
 
+## The rescue must never re-arm the rescue
+
+`rescue_collapsed_wall` is armed by `wall_anchor <= 0`, and one of its
+own rungs rebuilds on a finer grid with **`wall_anchor=0`** -- exactly
+that condition. Nothing but the private `_rescue` flag stops that rung
+from arming a second rescue, which arms a third.
+
+Traced on superfullerene-C60 it nested five deep, multiplying
+`grid_resolution` by `RESCUE_GRID` at every level:
+
+```
+72 -> 100 -> 141 -> 197 -> 274
+```
+
+55x the voxels of the grid asked for, one rebuild at that size taking
+2005 s, and four rungs at each level. `RESCUE_TIME_BUDGET` does not
+catch it: each level measures `seconds_spent` inside its own fresh
+build, so every level starts its budget again at zero.
+
+So `again()` passes `_rescue=False` and the rescue block reads
+`if wall_anchor <= 0.0 and _rescue:`. `tests/test_wall_rescue.py` pins
+all three parts -- the flag in the rebuild, the flag in the guard, and
+an exercised stub asserting the nesting depth stays at 1.
+
 ## Size can be stated before a build; time cannot
 
 `SuperGraph.wall_area` is `2*pi*r` times the total strut length, known

@@ -645,6 +645,7 @@ def build_supernetwork(
     relax_iterations: int = 3000,
     roughness: float = 0.0,
     seed: int | None = 0,
+    _rescue: bool = True,
 ) -> Atoms:
     """Hang a nanotube on every edge of ``graph`` and weld the vertices.
 
@@ -673,6 +674,15 @@ def build_supernetwork(
     ase.Atoms
         ``pbc`` matching the graph, the ring census and Euler budget in
         ``atoms.info``, and the graph's own description alongside.
+
+    Other Parameters
+    ----------------
+    _rescue : bool
+        Private. False inside a rescue rebuild, so that the rescue
+        cannot re-enter itself. See `again` in the body -- this is the
+        only thing stopping an unbounded recursion, because the rescue
+        is armed by ``wall_anchor <= 0`` and one of its own rungs
+        rebuilds with exactly that.
 
     Raises
     ------
@@ -819,12 +829,24 @@ def build_supernetwork(
             # Only a wall that actually collapsed pays for this: the
             # audit found super-cubic at 327.8 deg and
             # superfullerene-C60 at 328.3, both past tetrahedral.
-            if wall_anchor <= 0.0:
+            if wall_anchor <= 0.0 and _rescue:
                 # The ladder is (anchor, grid): super-cubic is an anchor
                 # problem and super-diamond at scale 60 is a resolution
                 # one -- sound at voxel 0.60, collapsed at 0.83 -- so a
                 # rescue that only ever pulls the anchor cannot fix it.
                 def again(anchor, grid=1.0):
+                    # `_rescue=False` is not a detail, it is the whole
+                    # reason this is safe. The finer-grid rung rebuilds
+                    # with `wall_anchor=0`, which is EXACTLY the
+                    # condition that arms the rescue -- so without it
+                    # the rung re-enters this block, multiplies the grid
+                    # by RESCUE_GRID again, and runs its own four rungs.
+                    # Traced on the superfullerene, that nested five
+                    # deep and reached grid_resolution 274 against the
+                    # 72 asked for: 55x the voxels, a single rebuild
+                    # taking 2005 s, and no bound on any of it, because
+                    # each level measures `seconds_spent` inside its own
+                    # fresh build and so starts its budget again at zero.
                     return build_supernetwork(
                         graph=graph, scale=scale, tube_radius=tube_radius,
                         blend=blend, bond=bond, vacuum=vacuum,
@@ -833,7 +855,7 @@ def build_supernetwork(
                         anneal_sweeps=anneal_sweeps,
                         place_curvature=place_curvature, wall_anchor=anchor,
                         relax_iterations=relax_iterations,
-                        roughness=roughness, seed=seed,
+                        roughness=roughness, seed=seed, _rescue=False,
                     )
 
                 atoms = rescue_collapsed_wall(
