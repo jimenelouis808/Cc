@@ -179,13 +179,25 @@ c.push(p("queda fijado por el esqueleto antes de mallar nada. Esto detecta lo qu
   + "dos puntales en uno, o una rejilla lo bastante gruesa para estrangular un cuello, produce "
   + "exactamente eso: una superficie impecable del género equivocado."));
 c.push(spacer(80));
-c.push(table(["Superred", "V", "E", "12·(V−E) exigido", "Σ(6−n) medido"],
-  [["Super-grafeno", "4", "6", "−24", "−24 ✔"],
-   ["Super-cúbica", "1", "3", "−24", "−24 ✔"]],
-  [2800, 900, 900, 2400, 2360]));
+c.push(table(["Superred", "V", "E", "12·(V−E) exigido", "Σ(6−n) medido", "Átomos"],
+  [["Super-grafeno", "4", "6", "−24", "−24 ✔", "1 180"],
+   ["Super-cúbica", "1", "3", "−24", "−24 ✔", "836"],
+   ["Super-hipercubo (4-cubo)", "16", "32", "−192", "−192 ✔", "6 494"],
+   ["Jaula icosaédrica", "12", "30", "−216", "−216 ✔", "4 292"],
+   ["Super-fcc", "4", "24", "−240", "−240 ✔", "2 982"],
+   ["Superfulereno C₆₀", "60", "90", "−360", "−360 ✔", "7 534"]],
+  [2500, 750, 750, 1900, 1900, 1560]));
 c.push(spacer(120));
-c.push(p("Reproduce además las dos constantes que el módulo de redes traía escritas a mano: "
-  + "cúbica 12·(1−3) = −24 y diamante 12·(8−16) = −96.", { italics: true }));
+c.push(rich([{ t: "Seis de seis, exactamente, sobre un rango de −24 a −360", b: true },
+  { t: ". Ninguna de esas cifras se le dijo al constructor: cada una es el censo de anillos "
+     + "que salió del remallado, y cada una coincide con lo que el esqueleto exigía antes de "
+     + "que hubiera geometría. Reproduce además las dos constantes que el módulo de redes "
+     + "traía escritas a mano: cúbica 12·(1−3) = −24 y diamante 12·(8−16) = −96." }]));
+c.push(spacer(100));
+c.push(p("Las schwarzitas admiten la misma lectura por el género de su superficie: la Schwarz "
+  + "P primitiva da Σ(6−n) = −24, que es 6χ con χ = −4 (género 3), y el giroide da −48, es "
+  + "decir χ = −8 (género 5). La red cúbica de nanotubos da −24, como su superred homóloga.",
+  { italics: true }));
 
 c.push(h2("3.3 Dónde va cada disclinación: Gauss-Bonnet discreto"));
 c.push(p("Que el censo global sea correcto no garantiza que cada disclinación esté donde la "

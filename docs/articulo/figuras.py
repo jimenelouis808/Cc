@@ -78,18 +78,41 @@ def _caras(pos: np.ndarray, anillos, corte: float, resaltar=None):
     return polys, colores
 
 
+def _traslaciones(atoms, repetir):
+    """Los desplazamientos de red que hay que dibujar.
+
+    Una celda periódica dibujada sola se lee como un fragmento roto: los
+    enlaces que cruzan la frontera se cortan y el resultado parece flotar.
+    Repetirla no añade información nueva, pero es lo que hace que una red
+    se lea como una red.
+    """
+    if repetir is None or tuple(repetir) == (1, 1, 1):
+        return [np.zeros(3)]
+    celda = np.asarray(atoms.cell, dtype=float)
+    nx, ny, nz = repetir
+    out = []
+    for i in range(nx):
+        for j in range(ny):
+            for k in range(nz):
+                out.append(i * celda[0] + j * celda[1] + k * celda[2])
+    return out
+
+
 def panel(ax, atoms, *, caras=False, elev=22.0, azim=-60.0, corte=2.2,
           corte_anillo=6.0, grosor=0.55, titulo=None, atomos=False,
-          zoom=1.0, resaltar=None):
+          zoom=1.0, resaltar=None, repetir=None):
     """Un panel 3D listo para publicación: sin ejes, proporción real."""
     pos = np.asarray(atoms.get_positions(), dtype=float)
     pares = enlaces(atoms)
+    desplaz = _traslaciones(atoms, repetir)
 
     if caras:
         anillos = atoms.info.get("rings")
         if not anillos:
             anillos = perceive_rings(atoms, pares)
-        polys, colores = _caras(pos, anillos, corte_anillo, resaltar)
+        base, colores = _caras(pos, anillos, corte_anillo, resaltar)
+        polys = [p_ + d for d in desplaz for p_ in base]
+        colores = colores * len(desplaz)
         if polys:
             # Los hexágonos son el fondo; los 5, 7 y 8 son el tema.
             alfas = [0.15 if c == COLOR_ANILLO[6] else 0.75 for c in colores]
@@ -98,12 +121,13 @@ def panel(ax, atoms, *, caras=False, elev=22.0, azim=-60.0, corte=2.2,
                                for c, a in zip(colores, alfas, strict=True)])
             ax.add_collection3d(col)
 
-    segs = _segmentos(pos, pares, corte)
+    base_segs = _segmentos(pos, pares, corte)
+    segs = [[a + d, b + d] for d in desplaz for a, b in base_segs]
     if segs:
         ax.add_collection3d(Line3DCollection(
             segs, colors=COLOR_ENLACE, linewidths=grosor, alpha=0.85))
     if atomos:
-        ax.scatter(pos[:, 0], pos[:, 1], pos[:, 2], s=1.6,
+        ax.scatter(todo[:, 0], todo[:, 1], todo[:, 2], s=1.6,
                    c="#2b2b2b", depthshade=False, linewidths=0)
 
     # Proporciones reales por eje, no una caja cúbica: un tubo de 20 A de
@@ -111,7 +135,8 @@ def panel(ax, atoms, *, caras=False, elev=22.0, azim=-60.0, corte=2.2,
     # marco en blanco. Los límites son la extensión real de cada eje y la
     # relación de la caja es esa misma extensión, de modo que la figura
     # llena el marco SIN deformar la geometría.
-    minimo, maximo = pos.min(axis=0), pos.max(axis=0)
+    todo = np.vstack([pos + d for d in desplaz])
+    minimo, maximo = todo.min(axis=0), todo.max(axis=0)
     centro = 0.5 * (minimo + maximo)
     extension = np.maximum(maximo - minimo, 1e-6)
     margen = 0.04 * float(extension.max())
@@ -147,7 +172,7 @@ def rejilla(nombre, paneles, *, ncols=3, pie=None):
     """Varias estructuras en una lámina."""
     n = len(paneles)
     nrows = (n + ncols - 1) // ncols
-    fig = plt.figure(figsize=(3.5 * ncols, 3.6 * nrows), dpi=250, facecolor=FONDO)
+    fig = plt.figure(figsize=(3.5 * ncols, 3.95 * nrows), dpi=250, facecolor=FONDO)
     for k, (titulo, atoms, kw) in enumerate(paneles, start=1):
         ax = fig.add_subplot(nrows, ncols, k, projection="3d", facecolor=FONDO)
         panel(ax, atoms, titulo=titulo, **kw)
@@ -155,7 +180,7 @@ def rejilla(nombre, paneles, *, ncols=3, pie=None):
         fig.text(0.5, 0.012, pie, ha="center", fontsize=8, color="#555555")
     # Los títulos llevan dos líneas (nombre y censo), así que necesitan
     # sitio: con top=0.97 la fila de arriba se corta.
-    fig.subplots_adjust(left=0.01, right=0.99, top=0.90,
+    fig.subplots_adjust(left=0.01, right=0.99, top=0.88,
                         bottom=0.055 if pie else 0.02, wspace=0.02, hspace=0.20)
     destino = SALIDA / f"{nombre}.png"
     fig.savefig(destino, facecolor=FONDO)
@@ -170,3 +195,26 @@ def censo(atoms) -> str:
     c = rep["counts"]
     partes = [f"{c[k]}×{k}" for k in sorted(c) if c[k]]
     return f"{len(atoms)} átomos · {' '.join(partes)} · Σ(6−n) = {rep['euler_deficit']:+d}"
+
+
+CACHE = SALIDA.parent / "cache"
+CACHE.mkdir(exist_ok=True)
+
+
+def construir(nombre, fn):
+    """Construye una estructura, o la lee del caché si ya se construyó.
+
+    Una super-fcc tarda nueve minutos. Ajustar el ángulo de la cámara no
+    debería costar nueve minutos, así que la estructura se guarda con sus
+    enlaces y su censo -- que es lo que el dibujo necesita y lo que un
+    .xyz corriente pierde.
+    """
+    import pickle
+    ruta = CACHE / f"{nombre}.pkl"
+    if ruta.exists():
+        with open(ruta, "rb") as fh:
+            return pickle.load(fh)
+    atoms = fn()
+    with open(ruta, "wb") as fh:
+        pickle.dump(atoms, fh)
+    return atoms
