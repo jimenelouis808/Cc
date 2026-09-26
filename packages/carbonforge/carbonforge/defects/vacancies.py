@@ -57,13 +57,19 @@ def introduce_vacancies(
         for i in sites:
             if not 0 <= i < len(atoms):
                 raise IndexError(f"Atom index {i} out of range (n={len(atoms)}).")
+            if atoms[i].symbol != "C":
+                raise ValueError(f"Atom {i} is {atoms[i].symbol}: only carbons can be removed.")
     if n_defects <= 0:
         raise ValueError("n_defects must be >= 1.")
     rng = make_rng(seed)
 
     dmat = minimum_image_distances(atoms)
     n = len(atoms)
-    available = set(range(n))
+    # Only framework carbons can be vacancies. Picking a terminal H (or a
+    # dopant) was possible on passivated structures and gave a "vacancy"
+    # that was really a dangling bond, or a divacancy made of C + H.
+    symbols = atoms.get_chemical_symbols()
+    available = {i for i in range(n) if symbols[i] == "C"}
     removed: list[int] = []
     defect_centres: list[np.ndarray] = []
     positions = atoms.get_positions()

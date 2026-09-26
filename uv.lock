@@ -79,7 +79,7 @@ requires-dist = [
     { name = "ase", specifier = ">=3.22" },
     { name = "gpaw", marker = "extra == 'gpaw'", specifier = ">=25.1" },
     { name = "matplotlib", specifier = ">=3.7" },
-    { name = "networkx", specifier = ">=3.0" },
+    { name = "networkx", specifier = ">=3.1" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1" },

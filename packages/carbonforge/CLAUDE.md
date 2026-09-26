@@ -88,6 +88,11 @@ carbonforge/
   antiferromagnetically coupled; without nspin=2 the SCF converges to a state
   that is not the ground state, with no error. Presets enable it
   automatically and validation raises an error otherwise.
+- Sites are classified by FRAMEWORK neighbours (C, N, B, S, P). An H-terminated
+  edge carbon is an edge whose H a group replaces, never a "basal" site; a
+  vacancy rim is never an "edge". Groups keep clear of dopants and other
+  groups by default (`avoid_radius`), and turn about their bond away from
+  neighbours (`attach._best_torsion`).
 - ASE rejects invented symbols like "C_up"; sublattices ride on ASE tags,
   which the QE writer expands into C1/C2 sharing one pseudopotential.
 - MD scripts must separate equilibration from production. Averaging over the
@@ -134,7 +139,10 @@ python -m carbonforge.cli.main cnt --n 6 --m 6 --length 10 --out out/cnt --forma
 
 ## Where to add things
 - New builder type → `builders/<name>.py` + export in `builders/__init__.py` + test in `tests/test_<name>.py`.
-- New dopant chemistry → `dopants/<element>.py`, reuse `dopants.base.substitute_atoms`.
+- New dopant chemistry → `dopants/<element>.py`, reuse `dopants.substitutional.substitute_atoms`.
+- Where a dopant or group goes → `placement.py` (site classes, regions, seeded
+  choice with separation and exclusion). Do not pick sites ad hoc in a new
+  function: every modification must see the others.
 - New exporter → `exports/<backend>.py` implementing `write(atoms, outdir, **kwargs)`.
 
 ## What not to do

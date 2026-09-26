@@ -11,7 +11,7 @@ the dataset metadata.
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence  # noqa: F401
 
 import numpy as np
 from ase import Atoms
@@ -38,6 +38,49 @@ def _place(
     x_hat, y_hat, z_hat = local_frame(direction)
     basis = np.vstack([x_hat, y_hat, z_hat])
     return origin + group.positions @ basis
+
+
+def _best_torsion(
+    atoms: Atoms,
+    anchor: int,
+    positions: np.ndarray,
+    step_deg: float = 15.0,
+) -> np.ndarray:
+    """Rotate a group about its anchor bond to keep clear of everything else.
+
+    The group library places each group in a fixed local frame that knows
+    nothing of the neighbours. On an edge that frame can fold the H of an
+    -OH back onto the lattice (0.5 Å from the next carbon). The rotation is
+    a free torsion about the anchor-to-first-atom bond, so it changes
+    nothing chemical; the orientation farthest from every other atom wins,
+    the first found among equals, so the result is reproducible. Distances
+    are minimum-image, so a group near a periodic boundary sees its images.
+    """
+    from ase.geometry import get_distances
+
+    if len(positions) < 2 or len(atoms) < 2:
+        return positions
+    others = np.array([i for i in range(len(atoms)) if i != anchor])
+    pivot = positions[0]
+    axis = pivot - atoms.positions[anchor]
+    norm = np.linalg.norm(axis)
+    if norm < 1e-8:
+        return positions
+    axis = axis / norm
+    moving = positions[1:] - pivot
+
+    best, best_gap = positions, -1.0
+    for angle in np.radians(np.arange(0.0, 360.0, step_deg)):
+        c, s = np.cos(angle), np.sin(angle)
+        rotated = (moving * c + np.cross(axis, moving) * s
+                   + np.outer(moving @ axis, axis) * (1 - c))
+        trial = np.vstack([pivot, pivot + rotated])
+        _, distances = get_distances(trial[1:], atoms.positions[others],
+                                     cell=atoms.cell, pbc=atoms.pbc)
+        gap = float(distances.min())
+        if gap > best_gap + 1e-6:
+            best, best_gap = trial, gap
+    return best
 
 
 def attach_group(
@@ -84,7 +127,7 @@ def attach_group(
 
     out = atoms.copy()
     out.info = {**atoms.info}
-    positions = _place(group, site.origin, site.direction)
+    positions = _best_torsion(atoms, site.index, _place(group, site.origin, site.direction))
     out += Atoms(symbols=list(group.symbols), positions=positions)
 
     record = out.info.setdefault("functionalization", [])
@@ -281,6 +324,112 @@ def functionalize_bridges(
     return repad_vacuum(out)
 
 
+def functionalize_at_sites(
+    atoms: Atoms,
+    group_key: str,
+    count: int = 1,
+    region: str = "edge",
+    indices: Optional[Sequence[int]] = None,
+    seed: Optional[int] = None,
+    min_separation: float = 2.5,
+    avoid_radius: float = 2.6,
+    avoid_occupied: bool = True,
+    face: str = "+",
+) -> Atoms:
+    """Attach ``count`` groups at sites of a chosen kind.
+
+    Parameters
+    ----------
+    atoms
+        Structure to decorate (not mutated).
+    group_key
+        Group to attach (not the bridging epoxide: use
+        :func:`functionalize_bridges`).
+    count
+        How many groups. Ignored with ``indices``.
+    region
+        Kind of site, from :data:`carbonforge.placement.REGIONS`: ``edge``,
+        ``edge_armchair``, ``edge_zigzag``, ``basal``, ``pentagon``,
+        ``heptagon``, ``defect_57``, ``near_defect``, ``vacancy_rim``,
+        ``any``. An H-terminated edge carbon is a valid edge site: the group
+        **replaces** its H. A vacancy rim is never an ``edge`` site -- a
+        group there points into the hole -- so it has to be asked for.
+    indices
+        Exact anchor carbons; overrides ``region`` and ``count``.
+    seed
+        RNG seed.
+    min_separation
+        Minimum distance between anchors, Å.
+    avoid_radius
+        Minimum distance from existing heteroatoms and groups, Å -- the
+        guard that keeps a group off the carbon next to a dopant.
+    avoid_occupied
+        Apply ``avoid_radius``.
+    face
+        On a flat structure, the side basal groups go (``"+"``/``"-"``).
+
+    Returns
+    -------
+    ase.Atoms
+    """
+    from ..placement import candidate_sites, choose_sites, classify_sites, occupied_atoms
+
+    group = get_group(group_key)
+    if group.bridging:
+        raise ValueError(f"'{group_key}' es un grupo puente. Usa functionalize_bridges().")
+    info = classify_sites(atoms)
+    edge_like = {"bare_edge", "terminated_edge", "vacancy_rim"}
+
+    if indices is not None:
+        chosen = [int(i) for i in indices]
+        wrong = [i for i in chosen if i not in info or info[i].element != "C"
+                 or info[i].substituents]
+        if wrong:
+            raise ValueError(f"Los átomos {wrong} no son carbonos libres de la red.")
+        region = "índices"
+    else:
+        candidates = candidate_sites(atoms, region, "C", info=info)
+        if group_key in EDGE_ONLY_GROUPS:
+            candidates = [i for i in candidates if info[i].tags & edge_like]
+        if not candidates:
+            hint = (" Una lámina periódica sin bordes no tiene sitios de borde: usa "
+                    "'basal', o construye una cinta o un fragmento finito."
+                    if region.startswith("edge") else "")
+            raise ValueError(f"No hay sitios '{region}' libres en esta estructura.{hint}")
+        avoid = occupied_atoms(atoms, info) if avoid_occupied else []
+        chosen = choose_sites(atoms, candidates, count, seed=seed,
+                              min_separation=min_separation, avoid=avoid,
+                              avoid_radius=avoid_radius)
+    if group_key in EDGE_ONLY_GROUPS:
+        not_edge = [i for i in chosen if not info[i].tags & edge_like]
+        if not_edge:
+            raise ValueError(
+                f"'{group_key}' ({group.formula}) consume dos valencias: solo cabe en un "
+                f"carbono de borde, y {not_edge} no lo son."
+            )
+
+    # Terminated edges: the group takes the place of the H.
+    hydrogens = sorted({h for i in chosen for h in info[i].hydrogens}, reverse=True)
+    out = atoms.copy()
+    out.info = {**atoms.info}
+    for h in hydrogens:
+        del out[h]
+    anchors = [i - sum(1 for h in hydrogens if h < i) for i in chosen]
+
+    sites = {site.index: site for site in find_sites(out, face=face)}
+    for anchor, original in zip(anchors, chosen, strict=True):
+        site = sites.get(anchor)
+        if site is None:
+            raise ValueError(
+                f"El carbono {original} no tiene una valencia libre para '{group_key}'."
+            )
+        out = attach_group(out, site, group_key)
+        out.info["functionalization"][-1]["region"] = region
+    _check_no_overlap(out, f"functionalize_at_sites('{group_key}')")
+    out.info["functionalization_seed"] = seed
+    return repad_vacuum(out)
+
+
 def functionalize_random(
     atoms: Atoms,
     group_key: str,
@@ -322,6 +471,12 @@ def functionalize_random(
         )
     if n_groups <= 0:
         raise ValueError("n_groups debe ser >= 1.")
+    # Since the placement module exists, this is a thin wrapper over it: the
+    # same draw, but H-terminated edges count (the group replaces the H),
+    # vacancy rims do not, and groups keep clear of dopants and other groups.
+    if site_kind is not None and not (group_key in EDGE_ONLY_GROUPS and site_kind == "basal"):
+        return functionalize_at_sites(atoms, group_key, count=n_groups, region=site_kind,
+                                      seed=seed, min_separation=min_separation)
 
     if group_key in EDGE_ONLY_GROUPS and site_kind == "basal":
         raise ValueError(

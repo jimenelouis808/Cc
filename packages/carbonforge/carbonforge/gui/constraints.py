@@ -186,11 +186,13 @@ def _check_group_capacity(values: dict[str, Any], atoms: Optional[Atoms]):
         return []
     count = _as_int(values, "group_count", 1)
     site_kind = values.get("group_site", "edge")
+    if str(values.get("group_indices", "")).strip():
+        return []
 
-    from ..functionalization.sites import find_sites
+    from ..placement import candidate_sites
 
     try:
-        available = len(find_sites(atoms, kind=site_kind))
+        available = len(candidate_sites(atoms, site_kind))
     except Exception:
         return []
 

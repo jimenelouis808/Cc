@@ -161,17 +161,38 @@ class TestAttaching:
         assert len(out) == len(ribbon) + 2 * len(get_group("COOH"))
 
     def test_reproducible_with_seed(self):
-        a = functionalize_random(_ribbon(), "NH2", n_groups=3, seed=7)
-        b = functionalize_random(_ribbon(), "NH2", n_groups=3, seed=7)
+        # Two, not three: on this 3-cell periodic ribbon the zigzag edge sites
+        # are 2.46 Å apart through the boundary, and min_separation counts it.
+        a = functionalize_random(_ribbon(), "NH2", n_groups=2, seed=7)
+        b = functionalize_random(_ribbon(), "NH2", n_groups=2, seed=7)
         assert a.get_chemical_symbols() == b.get_chemical_symbols()
         np.testing.assert_allclose(a.get_positions(), b.get_positions())
 
     def test_overlap_is_caught(self):
-        """Crowding groups onto neighbours must fail loudly, not silently."""
+        """An unavoidable clash must fail loudly, not silently.
+
+        Two groups on one anchor collide whatever their torsion.
+        """
+        ribbon = _ribbon()
+        edge = find_sites(ribbon, kind="edge")[0].index
         with pytest.raises(ValueError, match="mínimo físico"):
-            functionalize_random(
-                _ribbon(), "COOH", n_groups=6, seed=0, min_separation=0.0
-            )
+            functionalize(ribbon, "COOH", indices=[edge, edge])
+
+    def test_crowded_neighbours_fit_by_torsion(self):
+        """Neighbouring -COOH turn about their bonds instead of colliding."""
+        out = functionalize_random(_ribbon(), "COOH", n_groups=6, seed=0, min_separation=0.0)
+        d = out.get_all_distances(mic=True)
+        np.fill_diagonal(d, np.inf)
+        assert d.min() >= HARD_MIN_DISTANCE
+
+    def test_hydroxyl_hydrogen_does_not_fold_onto_the_lattice(self):
+        """The -OH hydrogen used to land 0.5 Å from the next edge carbon."""
+        out = functionalize_random(_ribbon(), "OH", n_groups=2, seed=1)
+        symbols = out.get_chemical_symbols()
+        d = out.get_all_distances(mic=True)
+        hydrogens = [i for i, s in enumerate(symbols) if s == "H"]
+        carbons = [i for i, s in enumerate(symbols) if s == "C"]
+        assert d[np.ix_(hydrogens, carbons)].min() > 1.6
 
     def test_vacuum_is_restored_after_attaching(self):
         """Groups protrude into the padding; it must be grown back."""
@@ -185,11 +206,11 @@ class TestAttaching:
             assert cell[axis, axis] - span >= 11.9
 
     def test_too_many_groups_rejected(self):
-        with pytest.raises(ValueError, match="solo hay"):
+        with pytest.raises(ValueError, match="Solo 2 sitio"):
             functionalize_random(_ribbon(), "H", n_groups=999, seed=0)
 
     def test_no_edge_sites_gives_clear_message(self):
-        with pytest.raises(ValueError, match="sin bordes"):
+        with pytest.raises(ValueError, match="sin bordes no tiene sitios de borde"):
             functionalize_random(
                 build_graphene_supercell(3, 3), "OH", n_groups=1, seed=0
             )

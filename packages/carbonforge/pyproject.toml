@@ -32,7 +32,8 @@ dependencies = [
     "numpy>=2.0",
     "scipy>=1.10",
     "ase>=3.22",
-    "networkx>=3.0",
+    # 3.1: nx.chordless_cycles(length_bound=...), used for ring perception.
+    "networkx>=3.1",
     # Required by the 3D preview in the GUI and by carbonforge.viz.
     # Tkinter itself ships with Python and cannot be installed via pip.
     "matplotlib>=3.7",

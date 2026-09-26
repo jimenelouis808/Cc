@@ -12,6 +12,13 @@ That direction differs by site type:
   must be relaxed.
 * **Bridge site**: two adjacent carbons sharing an epoxide, whose oxygen
   sits above their midpoint along the average normal.
+
+Coordination here counts **framework** neighbours only (C and substitutional
+N, B, S, P). An edge carbon already terminated by H, or any carbon already
+carrying a group, is not a free site of either kind: counting its H as a
+third neighbour used to make every C-H of a passivated edge look "basal",
+so basal groups and random graphitic N landed on the edge. To put a group
+where an H is, replace the H (see :mod:`carbonforge.placement`).
 """
 
 from __future__ import annotations
@@ -113,6 +120,7 @@ def find_sites(
     kind: Optional[SiteKind] = None,
     element: str = "C",
     outward_from_center: bool = True,
+    face: str = "+",
 ) -> list[AttachmentSite]:
     """Enumerate attachment sites.
 
@@ -129,22 +137,35 @@ def find_sites(
         of geometry. That puts groups on the outside of a nanotube and on a
         consistent face of a sheet. Set ``False`` to keep the raw normal,
         whose sign then depends on neighbour ordering.
+    face
+        On a flat structure, which side basal groups go: ``"+"`` or ``"-"``
+        (see :func:`carbonforge.placement.plane_normal`). Curved structures
+        use ``outward_from_center`` instead.
 
     Returns
     -------
     list[AttachmentSite]
         Ordered by atom index.
     """
+    from ..placement import FRAMEWORK, plane_normal
+
     graph = build_bond_graph(atoms)
     positions = atoms.get_positions()
     symbols = atoms.get_chemical_symbols()
     centre = positions.mean(axis=0)
+    # On a flat structure the radial reference is useless (it lies in the
+    # plane); a fixed face does the job and keeps every group on one side.
+    flat_normal = plane_normal(atoms, face)
 
     sites: list[AttachmentSite] = []
     for index in range(len(atoms)):
         if symbols[index] != element:
             continue
-        neighbours = list(graph.neighbors(index)) if index in graph else []
+        all_neighbours = list(graph.neighbors(index)) if index in graph else []
+        neighbours = [n for n in all_neighbours if symbols[n] in FRAMEWORK]
+        if len(neighbours) != len(all_neighbours):
+            # Already terminated or functionalised: not a free site.
+            continue
         coordination = len(neighbours)
         if coordination == 2:
             site_kind: SiteKind = "edge"
@@ -163,11 +184,12 @@ def find_sites(
         if site_kind == "edge":
             direction = _edge_direction(vectors)
         else:
-            reference = (
-                positions[index] - centre
-                if outward_from_center
-                else np.array([0.0, 0.0, 1.0])
-            )
+            if flat_normal is not None:
+                reference = flat_normal
+            elif outward_from_center:
+                reference = positions[index] - centre
+            else:
+                reference = np.array([0.0, 0.0, 1.0])
             if np.linalg.norm(reference) < 1e-6:
                 reference = np.array([0.0, 0.0, 1.0])
             direction = _basal_normal(vectors, reference)
@@ -182,7 +204,8 @@ def find_sites(
             )
         )
 
-    _make_normals_consistent(sites, positions, centre)
+    if flat_normal is None:
+        _make_normals_consistent(sites, positions, centre)
     return sites
 
 

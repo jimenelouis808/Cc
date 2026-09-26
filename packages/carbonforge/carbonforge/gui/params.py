@@ -25,7 +25,18 @@ from ..defects import introduce_vacancies
 from ..dopants import dope_random
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D, DEFAULT_VACUUM_2D
 
-ParamKind = Literal["int", "float", "bool", "choice"]
+ParamKind = Literal["int", "float", "bool", "choice", "text"]
+
+#: Site kinds for dopants and groups, from carbonforge.placement.REGIONS.
+_REGION_CHOICES: tuple[str, ...] = (
+    "any", "edge", "edge_armchair", "edge_zigzag", "basal", "pentagon", "heptagon",
+    "defect_57", "near_defect", "vacancy_rim",
+)
+_REGION_HELP = (
+    "edge / edge_armchair / edge_zigzag: bordes (en un C–H, el grupo sustituye al H). "
+    "basal: plano (sp3). pentagon / heptagon / defect_57: anillos del defecto 5-7. "
+    "near_defect: vecinos de un defecto. vacancy_rim: borde de una vacante."
+)
 
 
 @dataclass(frozen=True)
@@ -216,7 +227,8 @@ CALCULATION_PARAMS: tuple[ParamSpec, ...] = (
                        "fonones", "infrarrojo", "raman"),
               help="'bandas' escribe scf+bands+bands.x; los espectroscópicos, scf+ph.x+dynmat.x."),
     ParamSpec("spinorbit", "Acoplamiento espín-órbita", "bool", False,
-              help="Requiere pseudopotenciales relativistas. En carbono puro el efecto es ~0.01 meV."),
+              help="Requiere pseudopotenciales relativistas. En carbono puro el "
+                   "efecto es ~0.01 meV."),
     ParamSpec("kpoint_density", "Densidad de puntos k (1/Å)", "float", 0.20,
               minimum=0.02, maximum=1.0,
               help="Menor = malla más densa y cálculo más caro."),
@@ -253,9 +265,17 @@ FUNCTIONALIZATION_PARAMS: tuple[ParamSpec, ...] = (
               help="Se ANCLA al carbono. Los nitrogenados son NH2, NO2, CN y CONH2."),
     ParamSpec("group_count", "Cuántos grupos", "int", 1, minimum=1, maximum=50),
     ParamSpec("group_site", "Dónde anclarlos", "choice", "edge",
-              choices=("edge", "basal"),
-              help="'edge' es lo habitual. 'basal' fuerza sp3 y arruga la "
-                   "lámina: así es el óxido de grafeno."),
+              choices=tuple(r for r in _REGION_CHOICES if r != "any"),
+              help=_REGION_HELP),
+    ParamSpec("group_indices", "Átomos exactos (opcional)", "text", "",
+              help="Índices separados por comas o rangos, p. ej. '12, 30-32'. "
+                   "Si se rellena, manda sobre la región y la cantidad."),
+    ParamSpec("group_face", "Cara del plano (basal)", "choice", "+",
+              choices=("+", "-"),
+              help="En una lámina plana, a qué lado van los grupos basales."),
+    ParamSpec("group_avoid", "Distancia mínima a dopantes/grupos (Å)", "float", 2.6,
+              minimum=0.0, maximum=10.0,
+              help="Evita anclar junto a un heteroátomo o a otro grupo. 0 lo permite."),
     ParamSpec("nitrogen", "Nitrógeno en la red", "choice", "ninguno",
               choices=("ninguno", "graphitic", "pyridinic", "pyrrolic", "n-oxide"),
               help="Esto NO es un grupo anclado: el N va DENTRO de los anillos. "
@@ -274,7 +294,16 @@ MODIFIER_PARAMS: tuple[ParamSpec, ...] = (
               help="Sustitución de carbonos por el elemento elegido."),
     ParamSpec("dopant_concentration", "Concentración de dopante", "float", 0.0,
               minimum=0.0, maximum=0.5,
-              help="Fracción de carbonos sustituidos (0.05 = 5%)."),
+              help="Fracción de carbonos sustituidos (0.05 = 5%). Se ignora si se "
+                   "da un número de dopantes."),
+    ParamSpec("dopant_count", "Número de dopantes (0 = usar concentración)", "int", 0,
+              minimum=0, maximum=500),
+    ParamSpec("dopant_region", "Dónde doparlos", "choice", "any",
+              choices=_REGION_CHOICES, help=_REGION_HELP),
+    ParamSpec("dopant_indices", "Átomos exactos (opcional)", "text", "",
+              help="Índices, p. ej. '5, 17'. Mandan sobre región y cantidad."),
+    ParamSpec("dopant_separation", "Separación entre dopantes (Å)", "float", 2.5,
+              minimum=0.0, maximum=20.0),
     ParamSpec("vacancies", "Vacancias", "int", 0, minimum=0, maximum=200,
               help="Número de átomos eliminados."),
     ParamSpec("seed", "Semilla (dopaje/defectos)", "int", 0,
@@ -309,6 +338,9 @@ def coerce_value(spec: ParamSpec, raw: Any) -> Any:
         if isinstance(raw, bool):
             return raw
         return str(raw).strip().lower() in {"1", "true", "sí", "si", "yes", "on"}
+
+    if spec.kind == "text":
+        return str(raw).strip()
 
     if spec.kind == "choice":
         value = str(raw).strip()
@@ -383,14 +415,29 @@ def apply_modifiers(atoms: Atoms, raw_values: dict[str, Any]) -> Atoms:
     zero vacancy count. Both operations are seeded, so the same inputs always
     give the same structure.
     """
+    from ..dopants import dope_at_sites
+    from ..placement import parse_indices
+
     values = collect_values(MODIFIER_PARAMS, raw_values)
     seed = int(values["seed"])
     out = atoms
 
     dopant = values["dopant"]
     concentration = float(values["dopant_concentration"])
-    if dopant != "ninguno" and concentration > 0:
-        out = dope_random(out, dopant, concentration, seed=seed)
+    indices = parse_indices(values["dopant_indices"])
+    count = int(values["dopant_count"])
+    region = values["dopant_region"]
+    if dopant != "ninguno":
+        if indices:
+            out = dope_at_sites(out, dopant, indices=indices, seed=seed)
+        elif count > 0 or (region != "any" and concentration > 0):
+            if count == 0:
+                n_carbon = sum(1 for s in out.get_chemical_symbols() if s == "C")
+                count = max(1, int(round(concentration * n_carbon)))
+            out = dope_at_sites(out, dopant, count=count, region=region, seed=seed,
+                                min_separation=float(values["dopant_separation"]))
+        elif concentration > 0:
+            out = dope_random(out, dopant, concentration, seed=seed)
 
     n_vac = int(values["vacancies"])
     if n_vac > 0:
@@ -575,7 +622,6 @@ def apply_functionalization(atoms: Atoms, raw_values: dict[str, Any]) -> Atoms:
     """
     from ..functionalization import (
         functionalize_bridges,
-        functionalize_random,
         make_graphitic_n,
         make_pyridinic_n,
         make_pyridinic_n_oxide,
@@ -604,13 +650,19 @@ def apply_functionalization(atoms: Atoms, raw_values: dict[str, Any]) -> Atoms:
 
     group = values["group"]
     if group != "ninguno":
+        from ..functionalization import functionalize_at_sites
+        from ..placement import parse_indices
+
         count = int(values["group_count"])
         if group == "epoxy":
             out = functionalize_bridges(out, n_groups=count, seed=seed)
         else:
-            out = functionalize_random(
-                out, group, n_groups=count,
-                site_kind=values["group_site"], seed=seed,
+            indices = parse_indices(values["group_indices"])
+            avoid = float(values["group_avoid"])
+            out = functionalize_at_sites(
+                out, group, count=count, region=values["group_site"],
+                indices=indices or None, seed=seed, avoid_radius=avoid,
+                avoid_occupied=avoid > 0, face=values["group_face"],
             )
     return out
 

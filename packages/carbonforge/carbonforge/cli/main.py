@@ -31,7 +31,6 @@ from ..dopants import dope_random
 from ..functionalization import (
     describe_groups,
     functionalize_bridges,
-    functionalize_random,
     make_graphitic_n,
     make_pyridinic_n,
     make_pyridinic_n_oxide,
@@ -52,6 +51,7 @@ from ..exports.qe import (
 from ..exports.lammps import write_lammps
 from ..exports.siesta import SiestaSettings, write_siesta
 from ..validation.calculations import check_full_setup
+from ..placement import REGIONS as _REGIONS
 from ..validation.checks import run_basic_checks
 from ..vibspec.cli import add_parser as _add_vibspec_parser
 
@@ -85,7 +85,22 @@ def _apply_post(atoms, args):
     removed.
     """
     if getattr(args, "dopant", None):
-        atoms = dope_random(atoms, args.dopant, args.dopant_conc, seed=args.seed)
+        from ..dopants import dope_at_sites
+        from ..placement import parse_indices
+
+        indices = parse_indices(getattr(args, "dopant_indices", "") or "")
+        count = getattr(args, "dopant_count", 0)
+        region = getattr(args, "dopant_region", "any")
+        if indices:
+            atoms = dope_at_sites(atoms, args.dopant, indices=indices, seed=args.seed)
+        elif count or region != "any":
+            if not count:
+                n_carbon = sum(1 for s in atoms.get_chemical_symbols() if s == "C")
+                count = max(1, round(args.dopant_conc * n_carbon))
+            atoms = dope_at_sites(atoms, args.dopant, count=count, region=region,
+                                  seed=args.seed)
+        else:
+            atoms = dope_random(atoms, args.dopant, args.dopant_conc, seed=args.seed)
 
     nitrogen = getattr(args, "nitrogen", None)
     if nitrogen:
@@ -111,9 +126,15 @@ def _apply_post(atoms, args):
                 atoms, n_groups=args.group_count, seed=args.seed
             )
         else:
-            atoms = functionalize_random(
-                atoms, group, n_groups=args.group_count,
-                site_kind=args.group_site, seed=args.seed,
+            from ..functionalization import functionalize_at_sites
+            from ..placement import parse_indices
+
+            indices = parse_indices(getattr(args, "group_indices", "") or "")
+            avoid = getattr(args, "group_avoid", 2.6)
+            atoms = functionalize_at_sites(
+                atoms, group, count=args.group_count, region=args.group_site,
+                indices=indices or None, seed=args.seed, avoid_radius=avoid,
+                avoid_occupied=avoid > 0, face=getattr(args, "group_face", "+"),
             )
     return atoms
 
@@ -606,6 +627,12 @@ def _add_common(p):
     p.add_argument("--vacuum", type=float, default=15.0, help="Vacuum padding (Å).")
     p.add_argument("--dopant", choices=["N", "B", "S", "P"], default=None)
     p.add_argument("--dopant-conc", type=float, default=0.0)
+    p.add_argument("--dopant-count", type=int, default=0,
+                   help="Número exacto de dopantes (manda sobre --dopant-conc).")
+    p.add_argument("--dopant-region", default="any", choices=list(_REGIONS),
+                   help="Dónde doparlos: " + ", ".join(_REGIONS) + ".")
+    p.add_argument("--dopant-indices", default="",
+                   help="Átomos exactos, p. ej. '5,17' o '10-12'.")
     p.add_argument("--vacancies", type=int, default=0)
     p.add_argument("--nitrogen", default=None,
                    choices=["graphitic", "pyridinic", "pyrrolic", "n-oxide"],
@@ -616,8 +643,15 @@ def _add_common(p):
     p.add_argument("--group", default=None,
                    help="Grupo funcional a anclar. Lista: carbonforge groups")
     p.add_argument("--group-count", type=int, default=1)
-    p.add_argument("--group-site", default="edge", choices=["edge", "basal"],
-                   help="Anclar en borde (habitual) o en plano basal (sp3).")
+    p.add_argument("--group-site", default="edge",
+                   choices=[r for r in _REGIONS if r != "any"],
+                   help="Dónde anclarlos. En un borde C-H el grupo sustituye al H.")
+    p.add_argument("--group-indices", default="",
+                   help="Carbonos exactos donde anclar (mandan sobre --group-site).")
+    p.add_argument("--group-face", default="+", choices=["+", "-"],
+                   help="Cara de la lámina para grupos basales.")
+    p.add_argument("--group-avoid", type=float, default=2.6,
+                   help="Distancia mínima a dopantes y otros grupos, Å (0 = permitir).")
     p.add_argument("--passivate-edges", action="store_true",
                    help="Saturar los bordes con H antes de funcionalizar.")
     p.add_argument("--seed", type=int, default=0)

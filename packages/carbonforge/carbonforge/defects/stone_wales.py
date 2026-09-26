@@ -97,11 +97,16 @@ def stone_wales_defect(
             norm = np.linalg.norm(n)
             if norm > 1e-6:
                 normals.append(n / norm)
-    if not normals:
+    # The two local normals come out with arbitrary signs, and on a flat
+    # sheet they are often exactly opposite: averaging them as they are gave
+    # a zero axis, a zero rotation matrix, and both atoms collapsed onto the
+    # bond midpoint. Align the signs first.
+    if len(normals) == 2 and np.dot(normals[0], normals[1]) < 0:
+        normals[1] = -normals[1]
+    axis = np.mean(normals, axis=0) if normals else np.zeros(3)
+    if np.linalg.norm(axis) < 1e-6:
         axis = np.array([0.0, 0.0, 1.0])
-    else:
-        axis = np.mean(normals, axis=0)
-        axis = axis / (np.linalg.norm(axis) + 1e-12)
+    axis = axis / np.linalg.norm(axis)
 
     # 90° rotation matrix around axis (Rodrigues).
     theta = np.pi / 2.0

@@ -748,9 +748,9 @@ def test_the_drt_table_gives_a_capacitance_per_process():
     assert session.analyse() is not None
     rows = session.drt_rows()
     assert rows, "the DRT found nothing on the demo spectrum"
-    for tau, resistance, capacitance, share in rows:
+    for tau, resistance, capacitance_mf, share in rows:
         assert float(tau) > 0 and float(resistance) > 0
-        assert float(capacitance) == pytest.approx(
+        assert float(capacitance_mf) == pytest.approx(
             1e3 * float(tau) / float(resistance), rel=1e-3)
         assert share.endswith("%")
     assert sum(float(r[3].rstrip(" %")) for r in rows) == pytest.approx(

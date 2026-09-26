@@ -147,7 +147,6 @@ def find_peaks(
     # sigma is wrong in both directions at once: too large where the
     # first-order bands are, too small where the second-order ones are.
     noise = work.local_noise()
-    sigma = float(np.median(noise))
     step = work.step
     distance = max(1, int(round(min_distance_cm / max(step, 1e-9))))
     threshold = min_significance * _trials_factor(y.size)

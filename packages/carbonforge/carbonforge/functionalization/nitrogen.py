@@ -30,6 +30,7 @@ can and cannot do there.
 
 from __future__ import annotations
 
+import warnings
 from typing import Optional, Sequence
 
 from ase import Atoms
@@ -189,15 +190,24 @@ def make_pyridinic_n(
         )
 
     out = substitute_atoms(defective, rim_new, "N")
-    out.info.setdefault("nitrogen_configurations", []).append(
-        {
-            "type": "pyridinic",
-            "n_vacancies": len(removed),
-            "n_per_vacancy": n_per_vacancy,
-            "indices": sorted(rim_new),
-            "seed": seed,
-        }
-    )
+    entry = {
+        "type": "pyridinic",
+        "n_vacancies": len(removed),
+        "n_per_vacancy": n_per_vacancy,
+        "indices": sorted(rim_new),
+        "seed": seed,
+    }
+    if n_per_vacancy < 3:
+        # A monovacancy has three rim atoms. Those not turned into N stay as
+        # carbons with a dangling bond: radicals, which change the electronic
+        # structure and need a spin-polarised calculation.
+        dangling = 3 - n_per_vacancy
+        entry["warning"] = (
+            f"Cada vacante deja {dangling} carbono(s) colgante(s) (radicales): "
+            "usa n_per_vacancy=3 para el motivo N3V cerrado, o calcula con espín."
+        )
+        warnings.warn(entry["warning"], RuntimeWarning, stacklevel=2)
+    out.info.setdefault("nitrogen_configurations", []).append(entry)
     return out
 
 

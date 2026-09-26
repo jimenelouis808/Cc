@@ -5,6 +5,7 @@ from .substitutional import (
     dope_random,
     dope_directed,
     codope,
+    dope_at_sites,
 )
 
-__all__ = ["substitute_atoms", "dope_random", "dope_directed", "codope"]
+__all__ = ["substitute_atoms", "dope_random", "dope_directed", "codope", "dope_at_sites"]

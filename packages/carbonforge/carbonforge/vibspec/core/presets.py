@@ -22,7 +22,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Literal, Optional, Union
 
-import numpy as np
 from ase import Atoms
 
 from ...builders.nanoribbon import DEFAULT_VACUUM_PER_SIDE, rebox
@@ -62,46 +61,6 @@ class Preset:
     note: str = ""
 
 
-def _turn_away(atoms: Atoms, anchor: int, n_added: int, step_deg: float = 15.0) -> Atoms:
-    """Rotate a just-attached group about its bond to keep clear of its neighbours.
-
-    The group library places a group in a fixed local frame, which knows
-    nothing of what is next to the site. On an armchair edge that frame can
-    put the H of an -OH 0.6 Å from the neighbouring edge hydrogen. Rotating
-    about the anchor-to-first-atom bond changes nothing chemical (it is a
-    free torsion) and picks the orientation farthest from everything else;
-    among equally good ones, the first found, so the result is reproducible.
-    """
-    positions = atoms.get_positions()
-    first = len(atoms) - n_added
-    moving = np.arange(first + 1, len(atoms))
-    if len(moving) == 0:
-        return atoms
-    others = np.array([i for i in range(first) if i != anchor])
-    axis = positions[first] - positions[anchor]
-    axis /= np.linalg.norm(axis)
-    pivot = positions[first]
-
-    def rotated(angle: float) -> np.ndarray:
-        # Rodrigues' formula about ``axis`` through ``pivot``.
-        v = positions[moving] - pivot
-        c, s = np.cos(angle), np.sin(angle)
-        return pivot + v * c + np.cross(axis, v) * s + np.outer(v @ axis, axis) * (1 - c)
-
-    best, best_gap = positions[moving], -1.0
-    for angle in np.radians(np.arange(0.0, 360.0, step_deg)):
-        trial = rotated(angle)
-        gap = float(np.min(np.linalg.norm(trial[:, None] - positions[others][None], axis=2)))
-        if gap > best_gap + 1e-6:
-            best, best_gap = trial, gap
-    out = atoms.copy()
-    out.info = atoms.info
-    new = out.get_positions()
-    new[moving] = best
-    out.set_positions(new)
-    return out
-
-
 def _edge_group(group_key: str):
     """Replace the H of an edge carbon with ``group_key``."""
 
@@ -109,9 +68,8 @@ def _edge_group(group_key: str):
         site = pick_edge_site(atoms, position or "middle", edge=edge)
         out, carbon = strip_hydrogen(atoms, site)
         anchor = next(s for s in find_sites(out, kind="edge") if s.index == carbon)
-        before = len(out)
+        # attach_group turns the group about its bond away from neighbours.
         out = attach_group(out, anchor, group_key)
-        out = _turn_away(out, carbon, len(out) - before)
         out.info["functionalization"][-1]["edge"] = site.edge
         return out
 

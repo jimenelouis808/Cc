@@ -248,3 +248,89 @@ def codope(
     out.info["doping_mode"] = "codope"
     out.info["codoping_spec"] = list(spec)
     return out
+
+
+def dope_at_sites(
+    atoms: Atoms,
+    element: str,
+    count: int = 1,
+    region: str = "basal",
+    indices: Optional[Sequence[int]] = None,
+    seed: Optional[int] = None,
+    min_separation: float = 2.5,
+    avoid_radius: float = 2.6,
+    avoid_occupied: bool = True,
+    remove_edge_hydrogen: Optional[bool] = None,
+) -> Atoms:
+    """Substitute carbons with ``element`` at sites of a chosen kind.
+
+    Where :func:`dope_random` picks any carbon, this picks from a **region**
+    (see :data:`carbonforge.placement.REGIONS`: basal, edge, edge_zigzag,
+    edge_armchair, pentagon, heptagon, defect_57, near_defect,
+    vacancy_rim...) or from explicit ``indices``, keeping new dopants apart
+    from each other and away from heteroatoms and groups already present.
+
+    Parameters
+    ----------
+    atoms
+        Host structure (not mutated).
+    element
+        N, B, S or P.
+    count
+        How many dopants. Ignored when ``indices`` is given.
+    region
+        Kind of site to draw from.
+    indices
+        Exact carbons to substitute; overrides ``region``, ``count`` and the
+        distance constraints (an explicit choice is respected, and recorded).
+    seed
+        RNG seed.
+    min_separation
+        Minimum dopant-dopant distance, Å.
+    avoid_radius
+        Minimum distance from existing heteroatoms and attached groups, Å.
+    avoid_occupied
+        Apply ``avoid_radius``. Turn off to allow dopants next to groups.
+    remove_edge_hydrogen
+        For an H-terminated edge carbon: remove its H. Defaults to True for
+        N (a pyridinic edge N has a lone pair, not an N-H) and False
+        otherwise (B-H, P-H edges keep their termination).
+
+    Returns
+    -------
+    ase.Atoms
+        With ``info["dopants"]`` extended and ``info["doping_region"]`` set.
+    """
+    from ..placement import candidate_sites, choose_sites, classify_sites, occupied_atoms
+
+    _validate_element(element)
+    info = classify_sites(atoms)
+    if indices is not None:
+        chosen = [int(i) for i in indices]
+        wrong = [i for i in chosen if i not in info or info[i].element != "C"]
+        if wrong:
+            raise ValueError(f"Los átomos {wrong} no son carbonos de la red.")
+        region = "índices"
+    else:
+        candidates = candidate_sites(atoms, region, "C", info=info)
+        avoid = occupied_atoms(atoms, info) if avoid_occupied else []
+        chosen = choose_sites(atoms, candidates, count, seed=seed,
+                              min_separation=min_separation, avoid=avoid,
+                              avoid_radius=avoid_radius)
+
+    if remove_edge_hydrogen is None:
+        remove_edge_hydrogen = element == "N"
+    out = substitute_atoms(atoms, chosen, element)
+    removed_h: list[int] = []
+    if remove_edge_hydrogen:
+        removed_h = sorted({h for i in chosen for h in info[i].hydrogens}, reverse=True)
+        for h in removed_h:
+            del out[h]
+        # Re-map the recorded dopant indices past the removed hydrogens.
+        shift = lambda i: i - sum(1 for h in removed_h if h < i)  # noqa: E731
+        out.info["dopants"][-1]["indices"] = [shift(i) for i in chosen]
+    out.info["doping_region"] = region
+    out.info["doping_seed"] = seed
+    if removed_h:
+        out.info["doping_removed_hydrogens"] = len(removed_h)
+    return out
