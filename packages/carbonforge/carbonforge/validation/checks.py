@@ -16,7 +16,7 @@ unless explicitly forced.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 from ase import Atoms
@@ -30,6 +30,26 @@ from ..utils.geometry import minimum_image_distances
 from ..topology.graph import coordination_numbers
 
 
+@dataclass(frozen=True)
+class Fix:
+    """A remedy for a reported problem, as a setting to change.
+
+    Checks that know the cure attach one, so an interface can offer to
+    apply it instead of leaving the user to translate prose into settings.
+    ``setting`` is a key of the shared vocabulary below; the GUI maps it to
+    its own field.
+
+    Vocabulary: ``spin`` (``"afm_edges"``, ``"none"``), ``vdw``,
+    ``functional``, ``occupations``, ``cell_dofree``, ``task``,
+    ``pseudo_family`` (``"NC"``/``"PAW"``), ``band_npoints``, ``ecutrho``,
+    ``vacuum``, ``group_count``, ``spinorbit``.
+    """
+
+    setting: str
+    value: Any
+    label: str
+
+
 @dataclass
 class ValidationReport:
     """Aggregate outcome of one or more validation checks."""
@@ -37,6 +57,7 @@ class ValidationReport:
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     info: dict[str, float | int | str] = field(default_factory=dict)
+    fixes: list[Fix] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -47,6 +68,9 @@ class ValidationReport:
         self.errors.extend(other.errors)
         self.warnings.extend(other.warnings)
         self.info.update(other.info)
+        for fix in other.fixes:
+            if fix not in self.fixes:
+                self.fixes.append(fix)
 
     def summary(self) -> str:
         lines = [f"OK: {self.ok}"]
@@ -59,6 +83,9 @@ class ValidationReport:
         if self.info:
             lines.append("INFO:")
             lines.extend(f"  - {k}: {v}" for k, v in self.info.items())
+        if self.fixes:
+            lines.append("CORRECCIONES POSIBLES:")
+            lines.extend(f"  - {fix.label}" for fix in self.fixes)
         return "\n".join(lines)
 
 

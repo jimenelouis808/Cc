@@ -32,7 +32,7 @@ de cálculo desactivadas y explicando por qué.
 - [x] Control de colocación: borde armchair / zigzag, basal, anillos de 5 y 7
       (defecto Stone-Wales), vecinos de un defecto, índices explícitos, y una
       separación mínima entre heteroátomos y grupos.
-- [ ] Advertencias corregibles en la propia GUI: cada aviso lleva, cuando la
+- [x] Advertencias corregibles en la propia GUI: cada aviso lleva, cuando la
       hay, una corrección que se aplica con un botón.
 - [ ] Catálogo de capacidades por código (QE, SIESTA, GPAW, y TB cuando exista):
       parámetros avanzados con tipo, valores válidos y descripción, editables en

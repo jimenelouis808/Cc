@@ -345,10 +345,13 @@ class TestConstraints:
     def test_zigzag_without_preset_is_blocked(self):
         from carbonforge.gui.constraints import check_constraints
 
-        violations = check_constraints(
-            {"preset": "ninguna"}, build_nanoribbon(6, 3, edge="zigzag")
-        )
-        assert any(v.blocking for v in violations)
+        ribbon = build_nanoribbon(6, 3, edge="zigzag")
+        violations = check_constraints({"preset": "ninguna", "spin": "none"}, ribbon)
+        blocking = [v for v in violations if v.blocking]
+        assert blocking and blocking[0].fix.setting == "spin"
+        # "auto" sets up the antiferromagnetic edges itself.
+        assert not any(v.blocking for v in check_constraints(
+            {"preset": "ninguna", "spin": "auto"}, ribbon))
 
     def test_zigzag_with_preset_is_fine(self):
         from carbonforge.gui.constraints import check_constraints

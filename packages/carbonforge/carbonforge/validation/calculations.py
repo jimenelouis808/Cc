@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+import numpy as np
 from ase import Atoms
 
 from ..calculations.kpaths import BandPathSpec
@@ -35,7 +36,7 @@ from ..calculations.spinorbit import (
     heaviest_element,
     soc_is_physically_relevant,
 )
-from .checks import ValidationReport
+from .checks import Fix, ValidationReport
 
 # Substrings identifying pseudopotential families in PSLibrary / SSSP /
 # PseudoDojo filenames.
@@ -155,6 +156,8 @@ def check_spectroscopy(
                 "frecuencias, sin intensidades), o elige una quiralidad "
                 "semiconductora."
             )
+            report.fixes.append(Fix("task", "phonon",
+                                    "Calcular solo frecuencias (fonones, sin intensidades)"))
 
     if spec.needs_raman and pseudopotentials:
         offenders = {
@@ -169,6 +172,8 @@ def check_spectroscopy(
                 f"PAW ni ultrasoft, y estos lo son ({detail}). Necesitas "
                 "norm-conserving (ONCV, SG15). Sin ellos ph.x se detiene."
             )
+            report.fixes.append(Fix("pseudo_family", "NC",
+                                    "Usar pseudopotenciales norm-conserving (ONCV)"))
         unknown = {
             symbol: filename
             for symbol, filename in pseudopotentials.items()
@@ -288,9 +293,12 @@ def check_electronic_setup(
             "estados magnéticos acoplados antiferromagnéticamente, y ese es "
             "el estado fundamental. Sin nspin=2 el SCF converge a un estado "
             "no magnético que NO es el fundamental: obtendrás bandas y gap "
-            "equivocados, sin ningún aviso del código. Usa "
-            "setup_antiferromagnetic_edges(), o --spin afm en la terminal."
+            "equivocados, sin ningún aviso del código. Actívalo con "
+            "setup_antiferromagnetic_edges(), con una receta (--preset), o "
+            "con 'Espín' = afm_edges en la GUI."
         )
+        report.fixes.append(Fix("spin", "afm_edges",
+                                "Activar espín antiferromagnético en los bordes"))
 
     if spec is None:
         return report
@@ -313,12 +321,14 @@ def check_electronic_setup(
                 "tiene: la estructura se desmoronará al relajar. Usa "
                 "vdw_correction='grimme-d3'."
             )
+            report.fixes.append(Fix("vdw", "grimme-d3", "Añadir corrección vdW Grimme D3"))
         elif kind == "nanocoil":
             report.warnings.append(
                 "Nanoespiral sin corrección de van der Waals. Las vueltas "
                 "vecinas interaccionan por dispersión; sin ella el paso de "
                 "hélice relajado saldrá demasiado grande."
             )
+            report.fixes.append(Fix("vdw", "grimme-d3", "Añadir corrección vdW Grimme D3"))
 
     if spec.is_hybrid:
         n_atoms = len(atoms)
@@ -328,6 +338,7 @@ def check_electronic_setup(
             "este tamaño puede pasar de días. Converge primero con PBE y usa "
             "el híbrido solo para el gap final."
         )
+        report.fixes.append(Fix("functional", "pbe", "Cambiar a PBE (converger primero)"))
         if int(sum(atoms.get_pbc())) == 2:
             report.warnings.append(
                 "Además, en sistemas 2D con vacío el intercambio exacto "
@@ -369,6 +380,14 @@ def check_calculation_type(
                 0: "ninguno: un sistema 0D no admite vc-relax",
             }
             suggestion = frozen.get(dim, "el subconjunto adecuado")
+            dofree = {1: "z", 2: "2Dxy"}.get(dim)
+            if dim == 1:
+                # The periodic axis is not always z.
+                dofree = "xyz"[int(np.flatnonzero(pbc)[0])]
+            if dofree:
+                report.fixes.append(Fix(
+                    "cell_dofree", dofree,
+                    f"Relajar solo la celda periódica (cell_dofree='{dofree}')"))
             report.errors.append(
                 f"vc-relax en un sistema {dim}D relajará también las "
                 "direcciones con vacío y lo comprimirá, porque mantener vacío "
@@ -384,6 +403,7 @@ def check_calculation_type(
             "vc-relax no tiene sentido en un sistema aislado (0D): no hay "
             "celda física que optimizar. Usa 'relax'."
         )
+        report.fixes.append(Fix("task", "relax", "Cambiar a 'relax'"))
 
     metallic, reason = is_likely_metallic(atoms)
     if metallic and occupations == "fixed":
@@ -392,6 +412,7 @@ def check_calculation_type(
             "Converge a un resultado sin sentido en lugar de fallar. Usa "
             "occupations='smearing'."
         )
+        report.fixes.append(Fix("occupations", "smearing", "Usar occupations='smearing'"))
     if not metallic and occupations == "smearing":
         report.warnings.append(
             f"{reason} Con gap puedes usar occupations='fixed', que da "
@@ -423,6 +444,7 @@ def check_band_path(spec: BandPathSpec) -> ValidationReport:
             f"Solo {spec.npoints_per_segment} puntos por segmento: la "
             "dispersión saldrá angulosa. 30-50 es lo habitual."
         )
+        report.fixes.append(Fix("band_npoints", 40, "Usar 40 puntos por segmento"))
     return report
 
 

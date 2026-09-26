@@ -6,6 +6,47 @@ está la trampa.
 
 ---
 
+## carbonforge · dónde va cada cosa, y avisos que se corrigen con un botón
+
+**Colocación con control.** Dopantes y grupos funcionales se colocan por
+**región**: borde, borde armchair, borde zigzag, plano basal, pentágono,
+heptágono, defecto 5-7, vecino de un defecto o borde de vacante; o en átomos
+concretos (`12, 30-32`). Se mantiene una distancia mínima entre ellos **y**
+respecto a lo que ya hay: un grupo ya no cae junto a un dopante. En un borde
+terminado en H, el grupo sustituye al H; un N de borde queda piridínico (sin
+N-H). Los grupos basales van a la cara del plano que elijas. En la GUI y en la
+terminal (`--dopant-region`, `--group-site`, `--group-indices`, `--group-face`,
+`--group-avoid`).
+
+**Arreglado por el camino:**
+
+- El H de un -OH de borde se doblaba sobre la red (a 0,5 Å del carbono
+  vecino). Ahora cada grupo gira sobre su enlace hasta quedar libre.
+- Un C-H de borde contaba como "basal": el N grafítico aleatorio y los grupos
+  basales podían caer en el borde. Tampoco se detectaban los bordes de una cinta
+  pasivada al activar el espín antiferromagnético.
+- `stone_wales_defect` dejaba los dos átomos del enlace rotado uno encima del
+  otro.
+- Una vacante podía quitar un hidrógeno.
+
+**Correcciones con un botón.** El panel "Correcciones" de la pestaña de
+construcción muestra cada problema con remedio conocido y lo aplica: espín
+antiferromagnético en una cinta zigzag, solo frecuencias en un metal,
+pseudopotenciales norm-conserving para Raman, `cell_dofree` en vc-relax, vdW en
+espumas, ecutrho... El panel de cálculo tiene ahora espín, funcional, vdW,
+ocupaciones, smearing, ecutrho, `cell_dofree` y familia de pseudopotenciales, y
+**lo que se valida es lo que se escribe**: validación y exportación usan la
+misma configuración.
+
+**Dónde está la trampa:**
+
+- Con dopantes y la separación mínima puede que no quepan todos los grupos
+  pedidos: el programa lo dice y cuántos caben, en vez de amontonarlos.
+- Espín "auto" activa el estado antiferromagnético solo en cintas zigzag
+  periódicas. En otras estructuras con bordes zigzag, elígelo a mano.
+
+---
+
 ## carbonforge · vibspec — tus propias geometrías y una biblioteca
 
 **Cargar una cinta ya hecha**, con sus átomos y grupos: en la pestaña Modelo,

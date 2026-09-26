@@ -23,6 +23,8 @@ from ..builders import (
 )
 from ..defects import introduce_vacancies
 from ..dopants import dope_random
+import numpy as np
+
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D, DEFAULT_VACUUM_2D
 
 ParamKind = Literal["int", "float", "bool", "choice", "text"]
@@ -240,7 +242,53 @@ CALCULATION_PARAMS: tuple[ParamSpec, ...] = (
     ParamSpec("laser_nm", "Longitud de onda del láser (nm)", "float", 532.0,
               minimum=200.0, maximum=1200.0,
               help="Solo para intensidades Raman."),
+    ParamSpec("spin", "Espín", "choice", "auto",
+              choices=("auto", "none", "afm_edges", "ferro"),
+              help="auto: antiferromagnético en los bordes de una cinta zigzag, sin "
+                   "espín en lo demás. afm_edges lo fuerza; ferro, paralelo."),
+    ParamSpec("functional", "Funcional", "choice", "pbe",
+              choices=("pbe", "pbesol", "revpbe", "hse", "b3lyp", "vdw-df2"),
+              help="Los híbridos (hse, b3lyp) cuestan 10-100 veces un PBE."),
+    ParamSpec("vdw", "Corrección de van der Waals", "choice", "none",
+              choices=("none", "grimme-d2", "grimme-d3", "ts", "xdm"),
+              help="Imprescindible en espumas, espirales, apilamientos y fisisorción."),
+    ParamSpec("occupations", "Ocupaciones", "choice", "smearing",
+              choices=("smearing", "fixed"),
+              help="'fixed' solo en sistemas con gap."),
+    ParamSpec("degauss", "Ancho del smearing (Ry)", "float", 0.01,
+              minimum=0.0005, maximum=0.1),
+    ParamSpec("ecutrho", "Cutoff de densidad (Ry, 0 = automático)", "float", 0.0,
+              minimum=0.0, maximum=2400.0,
+              help="Automático: 8x ecutwfc con PAW, 4x con norm-conserving."),
+    ParamSpec("cell_dofree", "Celda en vc-relax", "choice", "auto",
+              choices=("auto", "all", "2Dxy", "2Dshape", "xy", "x", "y", "z"),
+              help="auto: solo las direcciones periódicas, para no comprimir el vacío."),
+    ParamSpec("pseudo_family", "Pseudopotenciales", "choice", "auto",
+              choices=("auto", "PAW", "NC"),
+              help="auto: norm-conserving para Raman (ph.x no admite PAW), PAW en "
+                   "lo demás."),
 )
+
+#: How a Fix's value maps onto this form, where the labels differ.
+_FIX_VALUES: dict[str, dict[Any, Any]] = {
+    "task": {"phonon": "fonones", "relax": "relax"},
+}
+
+
+def apply_fix(raw_values: dict[str, Any], fix) -> dict[str, Any]:
+    """Return a copy of the form values with one :class:`Fix` applied.
+
+    Raises
+    ------
+    KeyError
+        If the fix names a setting this form does not have.
+    """
+    known = {spec.key for spec in (*CALCULATION_PARAMS, *PRESET_PARAMS,
+                                   *FUNCTIONALIZATION_PARAMS, *MODIFIER_PARAMS)}
+    if fix.setting not in known:
+        raise KeyError(f"La corrección cambia '{fix.setting}', que este formulario no tiene.")
+    value = _FIX_VALUES.get(fix.setting, {}).get(fix.value, fix.value)
+    return {**raw_values, fix.setting: value}
 
 
 #: Maps the GUI's task label onto (QE calculation, spectroscopy mode).
@@ -577,37 +625,164 @@ def build_calculation_specs(raw_values: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def validate_calculation(atoms: Atoms, raw_values: dict[str, Any]) -> str:
-    """Return a human-readable physics report for the requested calculation.
+def electronic_setup(atoms: Atoms, raw_values: dict[str, Any]):
+    """The electronic-structure choices of the form, applied to ``atoms``.
 
-    This is what tells the user, *before* they queue anything, that Raman on
-    an armchair nanotube with PAW pseudopotentials cannot work.
+    Returns ``(atoms, spec, notes)``: the structure (tagged by edge when the
+    antiferromagnetic edge state is set up), the
+    :class:`~carbonforge.calculations.electronic.ElectronicSpec`, and what
+    was decided, in words. The same function feeds validation and export,
+    so what is validated is what gets written.
     """
+    from ..calculations.electronic import ElectronicSpec, setup_antiferromagnetic_edges
+
+    values = collect_values(CALCULATION_PARAMS, raw_values)
+    kind = str(atoms.info.get("structure_type", ""))
+    zigzag = kind == "nanoribbon" and str(atoms.info.get("edge", "")) == "zigzag"
+    spin = values["spin"]
+    if spin == "auto":
+        spin = "afm_edges" if zigzag else "none"
+    notes: list[str] = []
+
+    if spin == "afm_edges":
+        try:
+            atoms, spec = setup_antiferromagnetic_edges(atoms)
+        except ValueError as exc:
+            raise ValueError(
+                f"No se pudo activar el espín antiferromagnético de los bordes: {exc}"
+            ) from exc
+        notes.append("Espín: antiferromagnético entre los dos bordes (C1/C2).")
+    elif spin == "ferro":
+        elements = sorted(set(atoms.get_chemical_symbols()) - {"H"})
+        spec = ElectronicSpec(spin="collinear",
+                              starting_magnetization={el: 0.3 for el in elements})
+        notes.append("Espín: ferromagnético (momentos iniciales paralelos).")
+    else:
+        spec = ElectronicSpec()
+    functional = values["functional"]
+    spec.functional = None if functional == "pbe" else functional
+    spec.vdw_correction = values["vdw"]
+    spec.__post_init__()                      # re-validate the edited choices
+    return atoms, spec, notes
+
+
+def qe_settings_for(atoms: Atoms, raw_values: dict[str, Any], electronic=None):
+    """:class:`~carbonforge.exports.qe.QESettings` from the form.
+
+    Pseudopotentials: norm-conserving when asked for, or automatically when
+    the task computes Raman (ph.x refuses PAW); otherwise the PAW defaults.
+    The density cutoff, when left automatic, follows the family: 8x ecutwfc
+    for PAW, 4x for norm-conserving.
+    """
+    from ..exports.pseudos import pseudopotential_map, requirements_for
     from ..exports.qe import QESettings, infer_qe_settings
-    from ..validation.calculations import check_full_setup
-    from ..calculations.kpaths import suggest_band_path
 
     specs = build_calculation_specs(raw_values)
-    settings = infer_qe_settings(
-        atoms,
-        base=QESettings(
-            calculation=specs["calculation"],
-            spinorbit=specs["spinorbit"],
-        ),
+    values = collect_values(CALCULATION_PARAMS, raw_values)
+    spectro = specs["spectroscopy"]
+    family = values["pseudo_family"]
+    if family == "auto":
+        family = "NC" if spectro is not None and spectro.needs_raman else "PAW"
+    pseudos = None
+    if family == "NC":
+        pseudos = pseudopotential_map(requirements_for(
+            atoms, needs_raman=True, needs_soc=specs["spinorbit"] is not None))
+    ecutrho = float(values["ecutrho"]) or specs["ecutwfc"] * (4.0 if family == "NC" else 8.0)
+
+    dofree = values["cell_dofree"]
+    if dofree == "auto":
+        dofree = None
+        pbc = atoms.get_pbc()
+        if specs["calculation"] == "vc-relax" and 0 < int(sum(pbc)) < 3:
+            dofree = "2Dxy" if int(sum(pbc)) == 2 else "xyz"[int(np.flatnonzero(pbc)[0])]
+    settings = QESettings(
+        calculation=specs["calculation"],
+        spinorbit=specs["spinorbit"],
+        kpoint_density=specs["kpoint_density"],
+        ecutwfc=specs["ecutwfc"],
+        ecutrho=ecutrho,
+        occupations=values["occupations"],
+        degauss=float(values["degauss"]),
+        cell_dofree=dofree,
+        electronic=electronic,
+        pseudopotentials=pseudos,
     )
+    return infer_qe_settings(atoms, base=settings)
+
+
+def validate_calculation_report(atoms: Atoms, raw_values: dict[str, Any]):
+    """The physics report for the requested calculation, with its fixes.
+
+    Built from exactly the settings :func:`export_structure` will write.
+    """
+    from ..calculations.kpaths import suggest_band_path
+    from ..validation.calculations import check_full_setup
+    from ..validation.checks import ValidationReport
+
+    specs = build_calculation_specs(raw_values)
+    try:
+        tagged, electronic, notes = electronic_setup(atoms, raw_values)
+    except ValueError as exc:
+        report = ValidationReport()
+        report.errors.append(str(exc))
+        return report
+    settings = qe_settings_for(tagged, raw_values, electronic)
     band_path = (
         suggest_band_path(atoms, npoints_per_segment=specs["band_npoints"])
         if specs["task"] == "bandas"
         else None
     )
     report = check_full_setup(
-        atoms,
+        tagged,
         calculation=specs["calculation"],
+        occupations=settings.occupations,
+        cell_dofree=settings.cell_dofree,
         spectroscopy=specs["spectroscopy"],
         spinorbit=specs["spinorbit"],
         band_path=band_path,
         pseudopotentials=settings.pseudopotentials,
+        electronic=electronic,
     )
+    for k, note in enumerate(notes):
+        report.info[f"decisión {k + 1}"] = note
+    return report
+
+
+def collect_fixes(atoms: Optional[Atoms], raw_values: dict[str, Any]) -> list:
+    """Every fixable problem with the current form, for the GUI's fix panel.
+
+    Returns a list of ``(severity, message, Fix)``: parameter constraints
+    first, then the physics of the calculation. Problems without a known
+    settings cure are left out here (they still appear in the reports).
+    """
+    from .constraints import check_constraints
+
+    out = [(v.severity, v.message, v.fix) for v in check_constraints(raw_values, atoms)
+           if v.fix is not None]
+    if atoms is not None and str(raw_values.get("preset", "ninguna")) == "ninguna":
+        report = validate_calculation_report(atoms, raw_values)
+        messages = report.errors + report.warnings
+        for fix in report.fixes:
+            severity = "error" if report.errors else "warning"
+            out.append((severity, messages[0] if messages else fix.label, fix))
+    # The same cure can be proposed by a constraint and by the physics check.
+    unique, seen = [], set()
+    for severity, message, fix in out:
+        if (fix.setting, fix.value) not in seen:
+            seen.add((fix.setting, fix.value))
+            unique.append((severity, message, fix))
+    return unique
+
+
+def validate_calculation(atoms: Atoms, raw_values: dict[str, Any]) -> str:
+    """Return a human-readable physics report for the requested calculation.
+
+    This is what tells the user, *before* they queue anything, that Raman on
+    an armchair nanotube with PAW pseudopotentials cannot work -- and, where
+    the cure is a setting, which one (:func:`validate_calculation_report`
+    carries them as structured fixes the GUI can apply).
+    """
+    report = validate_calculation_report(atoms, raw_values)
     if report.ok and not report.warnings:
         return "✅ El cálculo solicitado no presenta problemas conocidos."
     return report.summary()
@@ -738,7 +913,14 @@ def export_structure(
         }
     )
 
+    if calculation_values is not None:
+        # The same electronic choices the validation saw (spin, functional,
+        # vdW), applied to the structure that gets written.
+        atoms, electronic, _ = electronic_setup(atoms, calculation_values)
+
     def _qe_settings() -> QESettings:
+        if calculation_values is not None:
+            return qe_settings_for(atoms, calculation_values, electronic)
         return QESettings(
             calculation=specs["calculation"],
             spinorbit=specs["spinorbit"],

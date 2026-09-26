@@ -19,6 +19,8 @@ from typing import Any, Callable, Optional
 
 from ase import Atoms
 
+from ..validation.checks import Fix
+
 
 @dataclass
 class ConstraintViolation:
@@ -27,6 +29,7 @@ class ConstraintViolation:
     severity: str  # "error" blocks; "warning" informs
     message: str
     fields: tuple[str, ...] = ()
+    fix: Optional["Fix"] = None
 
     @property
     def blocking(self) -> bool:
@@ -70,10 +73,11 @@ def _as_bool(values: dict[str, Any], key: str) -> bool:
 def _check_cutoff_ratio(values: dict[str, Any], atoms: Optional[Atoms]):
     """``ecutrho`` must be at least 4x ``ecutwfc``; 8x for PAW and ultrasoft."""
     wfc = _as_float(values, "ecutwfc", 60.0)
-    rho = _as_float(values, "ecutrho", wfc * 8.0)
-    if wfc <= 0:
+    rho = _as_float(values, "ecutrho", 0.0)
+    if wfc <= 0 or rho <= 0:          # 0 = automatic: the writer picks 4x or 8x
         return []
     ratio = rho / wfc
+    norm_conserving = str(values.get("pseudo_family", "auto")) == "NC"
     if ratio < 4.0:
         return [ConstraintViolation(
             "error",
@@ -82,14 +86,16 @@ def _check_cutoff_ratio(values: dict[str, Any], atoms: Optional[Atoms]):
             "4x, y con PAW o ultrasoft hace falta 8x. Sube ecutrho o baja "
             "ecutwfc.",
             ("ecutwfc", "ecutrho"),
+            Fix("ecutrho", 0.0, "Dejar ecutrho en automático"),
         )]
-    if ratio < 8.0:
+    if ratio < 8.0 and not norm_conserving:
         return [ConstraintViolation(
             "warning",
             f"ecutrho es {ratio:.1f}x ecutwfc. Con norm-conserving basta 4x, "
             "pero los pseudopotenciales PAW y ultrasoft (los de por defecto "
             "aquí) necesitan 8x para converger la densidad.",
             ("ecutwfc", "ecutrho"),
+            Fix("ecutrho", 8.0 * wfc, f"Subir ecutrho a {8.0 * wfc:g} Ry (8x)"),
         )]
     return []
 
@@ -132,6 +138,7 @@ def _check_raman_feasibility(values: dict[str, Any], atoms: Optional[Atoms]):
             "frecuencias sin intensidades, o elige una quiralidad o borde "
             "semiconductor.",
             ("task", "preset"),
+            Fix("task", "phonon", "Calcular solo frecuencias (fonones)"),
         )]
     return []
 
@@ -145,18 +152,20 @@ def _check_spin_needed(values: dict[str, Any], atoms: Optional[Atoms]):
     if kind != "nanoribbon" or edge != "zigzag":
         return []
 
-    # A preset handles this automatically; only the manual path can get it
-    # wrong.
+    # A preset handles this automatically, and so does Espín = auto or
+    # afm_edges; only an explicit "none"/"ferro" gets it wrong.
     if values.get("preset", "ninguna") != "ninguna":
+        return []
+    if str(values.get("spin", "auto")) in ("auto", "afm_edges"):
         return []
     return [ConstraintViolation(
         "error",
         "Esta cinta zigzag tiene bordes magnéticos acoplados "
         "antiferromagnéticamente, y ese es su estado fundamental. Sin "
-        "polarización de espín el SCF converge a otro estado sin dar ningún "
-        "error, y las bandas salen mal. Usa una receta (la activa sola) o "
-        "configura el espín a mano.",
-        ("preset",),
+        "polarización de espín antiferromagnética el SCF converge a otro "
+        "estado sin dar ningún error, y las bandas salen mal.",
+        ("spin",),
+        Fix("spin", "afm_edges", "Activar espín antiferromagnético en los bordes"),
     )]
 
 
@@ -210,6 +219,7 @@ def _check_group_capacity(values: dict[str, Any], atoms: Optional[Atoms]):
             f"Se piden {count} grupos pero solo hay {available} sitios "
             f"'{site_kind}'.",
             ("group_count",),
+            Fix("group_count", available, f"Poner {available} grupos"),
         )]
     if site_kind == "edge" and count > available // 2:
         return [ConstraintViolation(
@@ -263,6 +273,7 @@ def _check_vacuum_for_dft(values: dict[str, Any], atoms: Optional[Atoms]):
             "estructura interacciona con su propia imagen periódica y las "
             "energías dejan de ser las del sistema aislado.",
             ("vacuum",),
+            Fix("vacuum", 15.0, "Usar 15 Å de vacío"),
         )]
     return []
 

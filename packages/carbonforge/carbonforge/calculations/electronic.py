@@ -237,6 +237,12 @@ def exx_grid(
     return tuple(max(1, value // factor) for value in kmesh)  # type: ignore[return-value]
 
 
+@dataclass
+class _EdgeAtom:
+    index: int
+    origin: np.ndarray
+
+
 def setup_antiferromagnetic_edges(
     atoms: Atoms,
     moment: float = 0.5,
@@ -285,9 +291,13 @@ def setup_antiferromagnetic_edges(
     right for a straight ribbon; for an irregular flake, inspect the result
     before trusting it.
     """
-    from ..functionalization.sites import find_sites
+    from ..placement import candidate_sites
 
-    edges = find_sites(atoms, kind="edge", element="C")
+    # Bare and H-terminated edge carbons alike: counting the H as a neighbour
+    # used to make every passivated edge invisible here, so a passivated
+    # zigzag ribbon silently lost its antiferromagnetic setup.
+    edge_indices = candidate_sites(atoms, "edge", "C")
+    edges = [_EdgeAtom(i, atoms.positions[i]) for i in edge_indices]
     if len(edges) < 2:
         raise ValueError(
             f"Solo se encontraron {len(edges)} carbonos de borde. La "

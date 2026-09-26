@@ -1,6 +1,7 @@
 """Structural validation of nanocarbon structures."""
 
 from .checks import (
+    Fix,
     ValidationReport,
     check_minimum_distances,
     check_coordination,
@@ -13,6 +14,7 @@ from .checks import (
 )
 
 __all__ = [
+    "Fix",
     "ValidationReport",
     "check_minimum_distances",
     "check_coordination",

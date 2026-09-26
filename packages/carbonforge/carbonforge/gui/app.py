@@ -31,7 +31,9 @@ from .params import (
     CALCULATION_PARAMS,
     PRESET_PARAMS,
     preview_preset,
+    apply_fix,
     check_parameter_constraints,
+    collect_fixes,
     import_and_repair,
     scan_pseudopotentials,
     FUNCTIONALIZATION_PARAMS,
@@ -220,6 +222,12 @@ class CarbonForgeApp:
             state="disabled",
         )
         self.png_button.pack(fill="x", pady=(4, 0))
+
+        # Problems whose cure is a setting, each with a button that applies it.
+        self.fix_frame = ttk.LabelFrame(left, text="Correcciones", padding=4)
+        self.fix_frame.pack(fill="x", pady=(8, 0))
+        ttk.Label(self.fix_frame, text="Comprueba o construye para ver qué se puede corregir.",
+                  foreground="#777777", wraplength=330).pack(anchor="w")
 
         self.status_var = tk.StringVar(value="Listo.")
         ttk.Label(
@@ -1045,6 +1053,73 @@ class CarbonForgeApp:
             variable=self.force_var,
         ).pack(anchor="w", pady=(4, 0))
 
+    # ------------------------------------------------------------------
+    # Fixes
+    # ------------------------------------------------------------------
+    def _all_values(self) -> dict[str, Any]:
+        return {
+            **self._read_raw(self._param_vars),
+            **self._read_raw(self._modifier_vars),
+            **self._read_raw(self._functionalization_vars),
+            **self._read_raw(self._calculation_vars),
+            **self._read_raw(self._preset_vars),
+        }
+
+    def _refresh_fixes(self, atoms: Optional[Atoms]) -> None:
+        """Rebuild the fix panel from the current form and structure."""
+        ttk = self.ttk
+        for child in self.fix_frame.winfo_children():
+            child.destroy()
+        try:
+            fixes = collect_fixes(atoms, self._all_values())
+        except Exception as exc:  # the panel must never break the window
+            ttk.Label(self.fix_frame, text=f"No se pudieron evaluar: {exc}",
+                      wraplength=330).pack(anchor="w")
+            return
+        if not fixes:
+            ttk.Label(self.fix_frame, text="Nada que corregir.",
+                      foreground="#0a6").pack(anchor="w")
+            return
+        for severity, message, fix in fixes:
+            row = ttk.Frame(self.fix_frame)
+            row.pack(fill="x", pady=1)
+            mark = "ERROR" if severity == "error" else "AVISO"
+            label = ttk.Label(row, text=f"{mark}: {fix.label}", wraplength=250,
+                              foreground="#a33" if severity == "error" else "#a60")
+            label.pack(side="left", fill="x", expand=True)
+            label.bind("<Enter>", lambda _e, m=message: self.status_var.set(m[:300]))
+            ttk.Button(row, text="Aplicar", width=8,
+                       command=lambda fx=fix: self._apply_fixes([fx])).pack(side="right")
+        ttk.Button(self.fix_frame, text="Aplicar todas",
+                   command=lambda: self._apply_fixes([fx for _, _, fx in fixes])
+                   ).pack(fill="x", pady=(4, 0))
+
+    def _apply_fixes(self, fixes) -> None:
+        """Set the fields the fixes name, then re-check."""
+        values = self._all_values()
+        stores = (self._calculation_vars, self._preset_vars, self._functionalization_vars,
+                  self._modifier_vars, self._param_vars)
+        structural = False
+        for fix in fixes:
+            try:
+                values = apply_fix(values, fix)
+            except KeyError as exc:
+                self.status_var.set(str(exc))
+                continue
+            for store in stores:
+                if fix.setting in store:
+                    store[fix.setting].set(values[fix.setting])
+                    structural |= store is not self._calculation_vars \
+                        and store is not self._preset_vars
+                    break
+        if structural and self.atoms is not None:
+            # A change to the structure itself: rebuild so the preview matches.
+            self._on_build()
+            return
+        self._on_check_constraints()
+        if self.atoms is not None:
+            self._on_built(self.atoms)
+
     def _on_check_constraints(self) -> None:
         """Report incompatible parameter combinations before building.
 
@@ -1070,6 +1145,7 @@ class CarbonForgeApp:
             except Exception:
                 atoms = None
         self._set_info(check_parameter_constraints(atoms, values))
+        self._refresh_fixes(atoms)
         self.status_var.set("Parámetros comprobados.")
 
     def _on_preview_preset(self) -> None:
@@ -1293,6 +1369,7 @@ class CarbonForgeApp:
         except Exception as exc:  # never let the report break the preview
             physics = f"No se pudo evaluar el cálculo: {exc}"
         self._set_info(f"{summary}\n\n--- Cálculo solicitado ---\n{physics}")
+        self._refresh_fixes(atoms)
 
     def _render(self, atoms: Atoms) -> None:
         from ..viz.plot import draw_structure_on_axes
