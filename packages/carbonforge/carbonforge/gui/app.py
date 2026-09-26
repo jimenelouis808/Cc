@@ -28,6 +28,7 @@ from .edlc_params import (
     export_edlc,
 )
 from .params import (
+    ADVANCED_KEY,
     CALCULATION_PARAMS,
     PRESET_PARAMS,
     preview_preset,
@@ -210,6 +211,13 @@ class CarbonForgeApp:
         ttk.Button(
             actions, text="Comprobar parámetros",
             command=self._on_check_constraints,
+        ).pack(fill="x", pady=(4, 0))
+
+        # Every other keyword QE and SIESTA accept, from their catalogues.
+        self._advanced: dict[str, dict[str, Any]] = {}
+        ttk.Button(
+            actions, text="Parámetros avanzados (QE, SIESTA)…",
+            command=self._on_advanced,
         ).pack(fill="x", pady=(4, 0))
 
         self.export_button = ttk.Button(
@@ -1063,7 +1071,14 @@ class CarbonForgeApp:
             **self._read_raw(self._functionalization_vars),
             **self._read_raw(self._calculation_vars),
             **self._read_raw(self._preset_vars),
+            ADVANCED_KEY: self._advanced,
         }
+
+    def _on_advanced(self) -> None:
+        from .advanced import AdvancedParamsDialog
+
+        AdvancedParamsDialog(self.root, self._advanced, codes=("qe", "siesta"),
+                             on_change=self._on_check_constraints)
 
     def _refresh_fixes(self, atoms: Optional[Atoms]) -> None:
         """Rebuild the fix panel from the current form and structure."""
@@ -1126,13 +1141,7 @@ class CarbonForgeApp:
         Per-field bounds catch a bad number alone; this catches numbers that
         are each fine but wrong together, which is the commoner mistake.
         """
-        values = {
-            **self._read_raw(self._param_vars),
-            **self._read_raw(self._modifier_vars),
-            **self._read_raw(self._functionalization_vars),
-            **self._read_raw(self._calculation_vars),
-            **self._read_raw(self._preset_vars),
-        }
+        values = self._all_values()
         # Several rules need the structure; build it if we can, but never let
         # a build failure hide the parameter feedback.
         atoms = self.atoms
@@ -1413,6 +1422,7 @@ class CarbonForgeApp:
                 calculation_values={
                     **self._read_raw(self._calculation_vars),
                     **self._read_raw(self._preset_vars),
+                    ADVANCED_KEY: self._advanced,
                 },
             )
         except Exception as exc:

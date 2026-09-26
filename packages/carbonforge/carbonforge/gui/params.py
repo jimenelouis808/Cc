@@ -552,7 +552,16 @@ def check_parameter_constraints(
     """Report incompatible parameter combinations, before building."""
     from .constraints import check_constraints, format_violations
 
-    return format_violations(check_constraints(raw_values, atoms))
+    text = format_violations(check_constraints(raw_values, atoms))
+    for code in ("qe", "siesta"):
+        typed, report = advanced_overrides(raw_values, code)
+        if typed or report.errors or report.warnings:
+            lines = [f"\n--- Parámetros avanzados ({code}) ---"]
+            lines += [f"  ✗ {e}" for e in report.errors]
+            lines += [f"  ! {w}" for w in report.warnings]
+            lines += [f"  {k} = {v}" for k, v in typed.items()]
+            text += "\n".join(lines)
+    return text
 
 
 def preview_preset(atoms: Atoms, raw_values: dict[str, Any]) -> str:
@@ -666,6 +675,41 @@ def electronic_setup(atoms: Atoms, raw_values: dict[str, Any]):
     return atoms, spec, notes
 
 
+#: Key of the form dict holding advanced parameters: ``{code: {name: raw}}``.
+ADVANCED_KEY = "advanced"
+
+
+def advanced_overrides(raw_values: dict[str, Any], code: str):
+    """The advanced parameters of ``code`` in the form, typed and checked.
+
+    Returns ``(typed, report)``: ``typed`` is what the writer receives
+    (``QESettings.extra``, ``SiestaSettings.extra``, ``CalcSpec.extra``);
+    ``report`` carries unknown names, wrong types and overrides of values
+    carbonforge decides, as errors and warnings.
+    """
+    from ..codes import load_catalog
+    from ..validation.checks import ValidationReport
+
+    raw = dict((raw_values.get(ADVANCED_KEY) or {}).get(code) or {})
+    if not raw:
+        return {}, ValidationReport()
+    typed, report = load_catalog(code).check(raw)
+    if code == "qe":
+        calculation = build_calculation_specs(raw_values)["calculation"]
+        written = {"control", "system", "electrons"}
+        written |= {"ions"} if calculation in ("relax", "vc-relax") else set()
+        written |= {"cell"} if calculation == "vc-relax" else set()
+        for key in list(typed):
+            section = key.rpartition(".")[0].lower()
+            if section not in written:
+                report.errors.append(
+                    f"'{key}': un cálculo '{calculation}' no escribe "
+                    f"&{(section or '?').upper()}; cambia el tipo de cálculo o quita el parámetro."
+                )
+                del typed[key]
+    return typed, report
+
+
 def qe_settings_for(atoms: Atoms, raw_values: dict[str, Any], electronic=None):
     """:class:`~carbonforge.exports.qe.QESettings` from the form.
 
@@ -706,6 +750,7 @@ def qe_settings_for(atoms: Atoms, raw_values: dict[str, Any], electronic=None):
         cell_dofree=dofree,
         electronic=electronic,
         pseudopotentials=pseudos,
+        extra=advanced_overrides(raw_values, "qe")[0] or None,
     )
     return infer_qe_settings(atoms, base=settings)
 
@@ -732,11 +777,14 @@ def validate_calculation_report(atoms: Atoms, raw_values: dict[str, Any]):
         if specs["task"] == "bandas"
         else None
     )
+    # An advanced override of a checked setting is what gets written, so it
+    # is what gets checked.
+    extra = {k.lower(): v for k, v in (settings.extra or {}).items()}
     report = check_full_setup(
         tagged,
         calculation=specs["calculation"],
-        occupations=settings.occupations,
-        cell_dofree=settings.cell_dofree,
+        occupations=str(extra.get("system.occupations", settings.occupations)),
+        cell_dofree=extra.get("cell.cell_dofree", settings.cell_dofree),
         spectroscopy=specs["spectroscopy"],
         spinorbit=specs["spinorbit"],
         band_path=band_path,
@@ -745,6 +793,8 @@ def validate_calculation_report(atoms: Atoms, raw_values: dict[str, Any]):
     )
     for k, note in enumerate(notes):
         report.info[f"decisión {k + 1}"] = note
+    for code in ("qe", "siesta"):
+        report.merge(advanced_overrides(raw_values, code)[1])
     return report
 
 
@@ -918,6 +968,18 @@ def export_structure(
         # vdW), applied to the structure that gets written.
         atoms, electronic, _ = electronic_setup(atoms, calculation_values)
 
+    siesta_extra: dict[str, Any] = {}
+    if calculation_values is not None:
+        for code in ("qe", "siesta"):
+            if code not in formats:
+                continue
+            typed, advanced_report = advanced_overrides(calculation_values, code)
+            if advanced_report.errors and not force:
+                raise ValueError("Parámetros avanzados inválidos:\n"
+                                 + "\n".join(advanced_report.errors))
+            if code == "siesta":
+                siesta_extra = typed
+
     def _qe_settings() -> QESettings:
         if calculation_values is not None:
             return qe_settings_for(atoms, calculation_values, electronic)
@@ -966,6 +1028,7 @@ def export_structure(
                         run_type=run_type,
                         spinorbit=specs["spinorbit"],
                         kpoint_density=specs["kpoint_density"],
+                        extra=siesta_extra or None,
                     ),
                     spectroscopy=specs["spectroscopy"],
                     force=force,

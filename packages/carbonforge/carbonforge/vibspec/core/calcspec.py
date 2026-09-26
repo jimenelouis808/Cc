@@ -60,6 +60,15 @@ DEFAULT_CONVERGENCE: dict[str, float] = {"energy": 1e-6, "density": 1e-6, "force
 LOOSEST_DENSITY: float = 1e-5
 
 
+#: GPAW arguments that must not be overridden, and why.
+_FORBIDDEN_EXTRA = {
+    "symmetry": "la simetría debe estar apagada: cada desplazamiento la rompe y "
+                "simetrizar borraría la fuerza que se mide.",
+    "spinpol": "usa el control de espín de la especificación (spinpol), que se valida.",
+    "txt": "el registro lo gestiona el flujo de trabajo.",
+}
+
+
 @dataclass
 class CalcSpec:
     """Settings of a relaxation followed by an IR calculation.
@@ -124,6 +133,10 @@ class CalcSpec:
     ir_method: Literal["frederiksen", "standard"] = "frederiksen"
     convergence: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_CONVERGENCE))
     scale_factor: float = 1.0
+    #: Advanced GPAW keyword arguments (``{"occupations": {...}}``), checked
+    #: with ``carbonforge.codes.load_catalog("gpaw")``. Merged last, over the
+    #: values above; ``symmetry``, ``spinpol`` and ``txt`` are refused.
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -179,6 +192,13 @@ class CalcSpec:
             report.errors.append(
                 f"ir_method='{self.ir_method}': solo 'frederiksen' o 'standard'."
             )
+        for key in sorted(set(self.extra) & set(_FORBIDDEN_EXTRA)):
+            report.errors.append(f"Parámetro avanzado '{key}': {_FORBIDDEN_EXTRA[key]}")
+        if self.extra:
+            from ...codes import load_catalog
+
+            allowed = {k: v for k, v in self.extra.items() if k not in _FORBIDDEN_EXTRA}
+            report.merge(load_catalog("gpaw").check(allowed)[1])
         if self.max_steps < 1:
             report.errors.append("max_steps debe ser >= 1.")
 

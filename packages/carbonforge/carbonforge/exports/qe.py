@@ -84,6 +84,10 @@ class QESettings:
     cell_dofree: Optional[str] = None
     #: Spin, van der Waals, functional and Hubbard settings.
     electronic: Optional[ElectronicSpec] = None
+    #: Advanced parameters, ``{"system.nosym": True, ...}``: any namelist
+    #: keyword carbonforge does not set itself, or an override of one it
+    #: does. Check them first with ``carbonforge.codes.load_catalog("qe")``.
+    extra: Optional[dict[str, object]] = None
 
 
 _DEFAULT_PSEUDOS: dict[str, str] = {
@@ -182,6 +186,59 @@ def _fmt_namelist(name: str, fields: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+_EXTRA_NAMELISTS = ("control", "system", "electrons", "ions", "cell")
+
+
+def _literal(value: object) -> object:
+    """Text from an unchecked override that is really a number or a logical."""
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    low = text.lower()
+    if low in (".true.", ".false."):
+        return low == ".true."
+    try:
+        return int(text)
+    except ValueError:
+        pass
+    try:
+        return float(text.replace("d", "e").replace("D", "e"))
+    except ValueError:
+        return text.strip("'\"")
+
+
+def _apply_extra(namelists: dict[str, dict[str, object]],
+                 extra: Optional[dict[str, object]]) -> None:
+    """Merge ``section.name`` overrides into the namelists, in place.
+
+    An override replaces carbonforge's value of the same keyword
+    (case-insensitively). A keyword for a namelist this run does not write
+    (``ions.*`` in an scf) is an error, not a silent drop.
+    """
+    for raw_key, value in (extra or {}).items():
+        section, _, name = raw_key.rpartition(".")
+        section = section.lower()
+        if not section:
+            raise ValueError(
+                f"Parámetro avanzado '{raw_key}': falta el namelist "
+                f"(p. ej. 'system.{raw_key}')."
+            )
+        if section not in _EXTRA_NAMELISTS:
+            raise ValueError(
+                f"'{raw_key}': namelist '{section}' no admitido. "
+                f"Opciones: {', '.join(_EXTRA_NAMELISTS)}."
+            )
+        if section not in namelists:
+            raise ValueError(
+                f"'{raw_key}': este cálculo no escribe &{section.upper()} "
+                "(solo relax/vc-relax usan &IONS, solo vc-relax &CELL)."
+            )
+        fields = namelists[section]
+        for existing in [k for k in fields if k.lower() == name.lower()]:
+            del fields[existing]
+        fields[name] = _literal(value)
+
+
 def write_qe_input(
     atoms: Atoms,
     outdir: str | Path,
@@ -274,18 +331,18 @@ def write_qe_input(
         "mixing_beta": s.mixing_beta,
     }
 
-    parts = [
-        _fmt_namelist("CONTROL", control),
-        _fmt_namelist("SYSTEM", system),
-        _fmt_namelist("ELECTRONS", electrons),
-    ]
+    namelists: dict[str, dict[str, object]] = {
+        "control": control, "system": system, "electrons": electrons,
+    }
     if s.calculation in ("relax", "vc-relax"):
-        parts.append(_fmt_namelist("IONS", {"ion_dynamics": "bfgs"}))
+        namelists["ions"] = {"ion_dynamics": "bfgs"}
     if s.calculation == "vc-relax":
         cell_fields: dict[str, object] = {"cell_dynamics": "bfgs"}
         if s.cell_dofree:
             cell_fields["cell_dofree"] = s.cell_dofree
-        parts.append(_fmt_namelist("CELL", cell_fields))
+        namelists["cell"] = cell_fields
+    _apply_extra(namelists, s.extra)
+    parts = [_fmt_namelist(name.upper(), fields) for name, fields in namelists.items()]
 
     # Cards ---------------------------------------------------------------
     species_lines = ["ATOMIC_SPECIES"]

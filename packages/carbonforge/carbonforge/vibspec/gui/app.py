@@ -308,6 +308,9 @@ class VibspecApp:
 
         buttons = ttk.Frame(left)
         buttons.pack(fill="x")
+        self._advanced: dict[str, dict[str, Any]] = {}
+        ttk.Button(left, text="Parámetros avanzados de GPAW…",
+                   command=self._on_advanced).pack(fill="x", pady=(0, 4))
         ttk.Button(buttons, text="Comprobar", command=self._on_check).pack(side="left")
         ttk.Button(buttons, text="Preparar", command=lambda: self._on_prepare(False)
                    ).pack(side="left", padx=4)
@@ -350,7 +353,13 @@ class VibspecApp:
             self.workdir_var.set(path)
 
     def _spec(self):
-        return logic.spec_from_form(self._read(self.calc_vars))
+        return logic.spec_from_form(self._read(self.calc_vars), self._advanced.get("gpaw"))
+
+    def _on_advanced(self) -> None:
+        from ...gui.advanced import AdvancedParamsDialog
+
+        AdvancedParamsDialog(self.root, self._advanced, codes=("gpaw",),
+                             on_change=self._on_check)
 
     def _on_check(self) -> None:
         try:

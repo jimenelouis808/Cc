@@ -50,6 +50,7 @@ def gpaw_parameters(spec: CalcSpec, spinpol: bool) -> dict[str, Any]:
         params["h"] = spec.h
     if spec.mode == "lcao":
         params["basis"] = spec.basis
+    params.update({k: v for k, v in spec.extra.items() if k not in ("symmetry", "spinpol", "txt")})
     return params
 
 

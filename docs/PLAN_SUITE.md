@@ -34,10 +34,12 @@ de cálculo desactivadas y explicando por qué.
       separación mínima entre heteroátomos y grupos.
 - [x] Advertencias corregibles en la propia GUI: cada aviso lleva, cuando la
       hay, una corrección que se aplica con un botón.
-- [ ] Catálogo de capacidades por código (QE, SIESTA, GPAW, y TB cuando exista):
-      parámetros avanzados con tipo, valores válidos y descripción, editables en
-      la GUI y pasados a los escritores; importación de la documentación que
-      trae cada código (`INPUT_PW.def`/`.xml` de QE, introspección de GPAW).
+- [x] Catálogo de capacidades por código (QE, SIESTA, GPAW):
+      `carbonforge/codes/`, parámetros avanzados con tipo, valores válidos y
+      descripción, editables en la GUI (`gui/advanced.py`) y pasados a los
+      escritores; importación de `INPUT_PW.def` (QE), `siesta.tex` (SIESTA) e
+      introspección de GPAW. El TB registrará su propio catálogo en su paquete
+      (misma forma, sin importar carbonforge).
 - [x] `make_pyridinic_n` con un solo N deja dos carbonos colgantes: avisar.
 - [x] Los 2 errores de ruff preexistentes en CI; ruta `dopants.base` inexistente
       citada en `packages/carbonforge/CLAUDE.md`.

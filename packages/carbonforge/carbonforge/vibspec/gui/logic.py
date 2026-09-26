@@ -193,11 +193,22 @@ def save_to_library(atoms: Atoms, directory: Path, name: str) -> Path:
     return path
 
 
-def spec_from_form(raw: dict[str, Any]) -> CalcSpec:
-    """A :class:`CalcSpec` from raw form values (bounds checked, Spanish errors)."""
+def spec_from_form(raw: dict[str, Any], advanced: Optional[dict[str, Any]] = None) -> CalcSpec:
+    """A :class:`CalcSpec` from raw form values (bounds checked, Spanish errors).
+
+    ``advanced`` holds extra GPAW keywords as raw text (``{"maxiter": "500"}``),
+    checked against the GPAW catalogue; an invalid one raises ``ValueError``.
+    """
+    from ...codes import load_catalog
+
     values = collect_values(CALC_PARAMS, raw)
     values["spinpol"] = {AUTO: None, "sí": True, "no": False}[values["spinpol"]]
     values["nfree"] = int(values["nfree"])
+    if advanced:
+        typed, report = load_catalog("gpaw").check(advanced)
+        if report.errors:
+            raise ValueError("Parámetros avanzados de GPAW:\n" + "\n".join(report.errors))
+        values["extra"] = typed
     return CalcSpec(**values)
 
 

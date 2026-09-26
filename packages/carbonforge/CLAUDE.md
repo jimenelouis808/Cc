@@ -29,6 +29,7 @@ carbonforge/
 ├── vibspec/       # IR models of functionalised finite ribbons; core/ has no GUI imports
 ├── workflows/     # batch generation, convergence sweeps, ML dataset
 ├── utils/         # constants, geometry helpers
+├── codes/         # per-code parameter catalogues + manual importers (QE, SIESTA, GPAW)
 ├── cli/           # command line interface
 ├── tests/         # pytest unit tests
 └── examples/      # runnable example scripts
@@ -93,6 +94,11 @@ carbonforge/
   vacancy rim is never an "edge". Groups keep clear of dopants and other
   groups by default (`avoid_radius`), and turn about their bond away from
   neighbours (`attach._best_torsion`).
+- Advanced parameters go through `codes.Catalog.check` before any writer
+  sees them, and what is validated is the overridden value. Never drop an
+  override silently: a keyword for a namelist the run does not write is an
+  error. Manuals are read from the user's installation into
+  `$CARBONFORGE_HOME/catalogos`; never bundle them (GPL documentation).
 - ASE rejects invented symbols like "C_up"; sublattices ride on ASE tags,
   which the QE writer expands into C1/C2 sharing one pseudopotential.
 - MD scripts must separate equilibration from production. Averaging over the

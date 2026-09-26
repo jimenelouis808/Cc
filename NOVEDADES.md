@@ -6,6 +6,41 @@ está la trampa.
 
 ---
 
+## carbonforge · todos los parámetros de QE, SIESTA y GPAW, comprobados
+
+**Parámetros avanzados.** Un botón "Parámetros avanzados (QE, SIESTA)…" en la
+pestaña de construcción, y "Parámetros avanzados de GPAW…" en la pestaña
+Cálculo de vibspec, abren el catálogo del código: buscas una palabra clave, lees
+qué hace, su tipo, su valor por defecto y sus opciones, y le das un valor. Se
+comprueba al escribirlo (tipo, opciones válidas) y otra vez antes de exportar;
+un valor inválido bloquea la exportación. Llega al archivo: al namelist
+correcto de `pw.x`, como línea del `.fdf` de SIESTA (sustituyendo la que
+carbonforge habría escrito) o como argumento de `GPAW(...)`.
+
+**Importar los manuales.** De serie hay un núcleo curado (~50 palabras de QE,
+~25 de SIESTA, ~17 de GPAW). Con "Importar manual…" se lee la documentación de
+tu propia instalación: `INPUT_PW.def` de QE (en `PW/Doc/` de las fuentes, ~260
+parámetros con sus opciones explicadas), `siesta.tex` de SIESTA (en `Docs/`,
+~540 entradas) y, para GPAW, el propio paquete instalado. Se guarda en
+`~/.carbonforge/catalogos/` (o `$CARBONFORGE_HOME/catalogos/`); se importa una
+vez. Los manuales no se incluyen con carbonforge: son de sus proyectos.
+
+**Qué NO hace, y dónde está la trampa:**
+
+- Un nombre desconocido es **aviso** con el núcleo curado (no es exhaustivo) y
+  **error** con el manual importado. Importa el manual para validar de verdad.
+- Si sustituyes algo que carbonforge decide (`ecutwfc`, `nspin`,
+  `MeshCutoff`...) se avisa: tu valor manda, y lo que se valida es tu valor
+  (un `occupations='fixed'` en un metal sigue siendo un error).
+- `&IONS` y `&CELL` solo existen en relax/vc-relax: un parámetro de esos
+  namelists en un scf es un error, no se descarta en silencio.
+- En vibspec, `symmetry`, `spinpol` y `txt` no se pueden sustituir: la simetría
+  apagada es necesaria para las diferencias finitas.
+- Las tarjetas de QE (`ATOMIC_POSITIONS`, `K_POINTS`...) y los bloques de
+  SIESTA los sigue escribiendo carbonforge; aquí solo van palabras clave.
+- El lector de `siesta.tex` interpreta LaTeX de forma aproximada: alguna
+  descripción o valor por defecto puede salir incompleto.
+
 ## carbonforge · dónde va cada cosa, y avisos que se corrigen con un botón
 
 **Colocación con control.** Dopantes y grupos funcionales se colocan por

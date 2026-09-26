@@ -23,6 +23,7 @@ run, and says plainly that Raman intensities need Quantum ESPRESSO instead.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Optional
@@ -95,6 +96,11 @@ class SiestaSettings:
     spinorbit: Optional[SpinOrbitSpec] = None
     band_path: Optional[BandPathSpec] = None
     write_forces: bool = True
+    #: Advanced fdf keywords, ``{"Mesh.Cutoff": "400 Ry", ...}``. An entry
+    #: replaces carbonforge's line for the same keyword (fdf ignores case,
+    #: ``.``, ``_`` and ``-``). Check them with
+    #: ``carbonforge.codes.load_catalog("siesta")``.
+    extra: Optional[dict[str, object]] = None
 
 
 def _kgrid(atoms: Atoms, density: float) -> tuple[int, int, int]:
@@ -108,6 +114,30 @@ def _kgrid(atoms: Atoms, density: float) -> tuple[int, int, int]:
             continue
         mesh[axis] = max(1, int(np.ceil(np.linalg.norm(recip[axis]) / density)))
     return tuple(mesh)  # type: ignore[return-value]
+
+
+def _fdf_key(name: str) -> str:
+    return re.sub(r"[._-]", "", name).lower()
+
+
+def _fdf_value(value: object) -> str:
+    if isinstance(value, bool):
+        return ".true." if value else ".false."
+    return str(value)
+
+
+def _apply_extra(lines: list[str], extra: Optional[dict[str, object]]) -> list[str]:
+    """Drop carbonforge's lines for overridden keywords; append the overrides."""
+    if not extra:
+        return lines
+    overridden = {_fdf_key(name) for name in extra}
+    kept = [line for line in lines
+            if not (line.strip() and not line.lstrip().startswith(("#", "%"))
+                    and _fdf_key(line.split()[0]) in overridden)]
+    kept += ["# Parámetros avanzados (catálogo de SIESTA)"]
+    kept += [f"{name:<18} {_fdf_value(value)}" for name, value in extra.items()]
+    kept.append("")
+    return kept
 
 
 def write_siesta(
@@ -285,6 +315,8 @@ def write_siesta(
 
     if s.write_forces:
         lines += ["WriteForces        .true.", "WriteCoorStep      .true.", ""]
+
+    lines = _apply_extra(lines, s.extra)
 
     output = outdir / filename
     output.write_text("\n".join(lines) + "\n")
