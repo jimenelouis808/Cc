@@ -453,6 +453,38 @@ def rescue_collapsed_wall(atoms, rebuild, anchors=RESCUE_ANCHORS,
                                     candidate.info.get("bonds", []),
                                     np.asarray(candidate.cell))
 
+    def bonds_outside(candidate) -> int:
+        """How many bonds are outside the sp2 window.
+
+        This is the measure the rescue used to ignore, and ignoring it
+        was the whole defect. `wall_anchor` holds every atom against the
+        implicit surface, which fights the force field trying to bring
+        the bonds to 1.42 A -- the module says so a few lines up -- and
+        nothing checked what that cost. Measured on the superfullerene:
+        the un-anchored build has 0 of 11301 bonds outside the window
+        and ONE atom of 7534 a twelfth of a degree past tetrahedral;
+        the anchored rebuild fixes that atom and puts 128 bonds
+        outside, stretching the worst to 1.644 A. The window is
+        `validation.sp2_quality`'s, which the schwarzite cell minimums
+        were already calibrated against, so this is the package's own
+        existing criterion rather than a new one.
+        """
+        from ..validation.quality import SP2_BOND_RANGE
+
+        positions = np.asarray(candidate.get_positions(), dtype=float)
+        cell = np.asarray(candidate.cell, dtype=float)
+        box = np.diag(cell) if cell.ndim == 2 else cell
+        if not np.any(box):
+            box = None
+        low, high = SP2_BOND_RANGE
+        count = 0
+        for first, second in candidate.info.get("bonds", []):
+            delta = positions[second] - positions[first]
+            length = float(np.linalg.norm(fm.minimum_image(delta, box)))
+            if length < low or length > high:
+                count += 1
+        return count
+
     before = verdict(atoms)
     if not collapsed_wall(before):
         return atoms
@@ -476,7 +508,9 @@ def rescue_collapsed_wall(atoms, rebuild, anchors=RESCUE_ANCHORS,
         stacklevel=2,
     )
     best, best_report, strength = atoms, before, None
+    before_bad = bonds_outside(atoms)
     spent = float(seconds_spent)
+    accepted = None
     for strength in anchors:
         if spent > time_budget:
             break
@@ -488,8 +522,25 @@ def rescue_collapsed_wall(atoms, rebuild, anchors=RESCUE_ANCHORS,
             continue
         spent += time.monotonic() - started
         report = verdict(candidate)
+        # A rebuild that trades the wall for the bonds is not a rescue.
+        # Rebuilding for the angle sum alone is what stretched the
+        # superfullerene's bonds to 1.644 A, and the audit that blessed
+        # it reported only the angle sum -- the very quantity the rescue
+        # optimises -- so it could not have caught this.
+        candidate_bad = bonds_outside(candidate)
+        if candidate_bad > before_bad:
+            warnings.warn(
+                f"A rebuild at wall_anchor={strength} lifted the worst "
+                f"angle sum to {report['angle_sum_min']:.1f} deg but put "
+                f"{candidate_bad} bonds outside the sp2 range against "
+                f"{before_bad} before, so it is being discarded: a wall "
+                "held on its surface is not worth a net that is no longer "
+                "graphitic.",
+                stacklevel=2,
+            )
+            continue
         if report["angle_sum_min"] > best_report["angle_sum_min"]:
-            best, best_report = candidate, report
+            best, best_report, accepted = candidate, report, strength
         # Not merely "not collapsed": stopping the moment the check
         # passes left the superfullerene at 328.4 deg, which is the
         # threshold itself to one decimal. One more step took it to
@@ -503,7 +554,7 @@ def rescue_collapsed_wall(atoms, rebuild, anchors=RESCUE_ANCHORS,
     # `None` is the ladder's "try a finer grid" step, so this cannot
     # just be a float -- it names what actually worked.
     best.info["wall_rescue_step"] = (
-        "finer grid" if strength is None else f"wall_anchor={strength:g}")
+        "finer grid" if accepted is None else f"wall_anchor={accepted:g}")
     return best
 
 
