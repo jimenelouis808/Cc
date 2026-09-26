@@ -6,14 +6,16 @@ them, calls the logic and draws what comes back. Calculations run as
 subprocesses through :class:`~carbonforge.vibspec.gui.logic.JobQueue`, polled
 from Tk's event loop with ``after``, so the window never blocks on DFT.
 
-Run with ``carbonforge vibspec gui`` or ``python -m carbonforge.vibspec.gui``.
+The pages are embedded in carbonforge's main window
+(:mod:`carbonforge.gui.app`); ``carbonforge vibspec gui`` and
+``python -m carbonforge.vibspec.gui`` open that window at the vibspec pages.
 """
 
 from __future__ import annotations
 
 import traceback
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 
@@ -22,24 +24,31 @@ from . import logic
 _POLL_MS = 1000
 _FRAME_MS = 60
 
-_TK_MISSING = (
-    "No se encontró Tkinter, que es lo que dibuja la ventana.\n"
-    "  • Windows: reinstala Python desde python.org con la opción 'tcl/tk'.\n"
-    "  • Ubuntu:  sudo apt install python3-tk\n"
-    "La línea de comandos (carbonforge vibspec ...) funciona sin Tkinter."
-)
-
 
 class VibspecApp:
-    """Main window. Holds widget state only; the logic layer holds the rest."""
+    """The vibspec tabs: model, calculation, results. Widget state only.
 
-    def __init__(self, root, workdir: Optional[Path] = None) -> None:
+    Standalone (``frames=None``) it lays out its own notebook in ``root``.
+    Embedded in carbonforge's main window it fills the three frames it is
+    given, reports through the window's status bar, selects tabs through
+    ``select``, and exchanges structures through ``session``
+    (:class:`carbonforge.gui.session.Session`). The window owns closing:
+    it calls :meth:`confirm_close`.
+    """
+
+    #: The three pages, in order.
+    PAGES = ("Modelo", "Cálculo", "Resultados")
+
+    def __init__(self, root, workdir: Optional[Path] = None, *,
+                 frames: Optional[dict[str, Any]] = None,
+                 select: Optional[Callable[[str], None]] = None,
+                 status_var=None, session=None) -> None:
         import tkinter as tk
         from tkinter import ttk
 
         self.tk, self.ttk, self.root = tk, ttk, root
-        root.title("carbonforge · vibspec — IR de nanocintas funcionalizadas")
-        root.geometry("1280x800")
+        self.session = session
+        self._select_page = select
 
         self.workdir = Path(workdir or Path.cwd() / "calculos")
         self.queue = logic.JobQueue()
@@ -50,25 +59,39 @@ class VibspecApp:
         self.animation: Optional[dict[str, Any]] = None
         self.can_run, self.cannot_run_reason = logic.can_run_locally()
 
-        # Packed before the notebook, so the notebook cannot squeeze it out.
-        self.status_var = tk.StringVar(value="Construye un modelo para empezar.")
-        ttk.Label(root, textvariable=self.status_var, anchor="w",
-                  padding=(8, 2)).pack(side="bottom", fill="x")
-
-        notebook = ttk.Notebook(root)
-        notebook.pack(fill="both", expand=True)
-        self.notebook = notebook
-        self.tabs = {name: ttk.Frame(notebook, padding=8)
-                     for name in ("Modelo", "Cálculo", "Resultados")}
-        for name, frame in self.tabs.items():
-            notebook.add(frame, text=name)
+        if frames is None:
+            root.title("carbonforge · vibspec — IR de nanocintas funcionalizadas")
+            root.geometry("1280x800")
+            # Packed before the notebook, so the notebook cannot squeeze it out.
+            self.status_var = tk.StringVar(value="Construye un modelo para empezar.")
+            ttk.Label(root, textvariable=self.status_var, anchor="w",
+                      padding=(8, 2)).pack(side="bottom", fill="x")
+            notebook = ttk.Notebook(root)
+            notebook.pack(fill="both", expand=True)
+            self.notebook = notebook
+            self.tabs = {name: ttk.Frame(notebook, padding=8) for name in self.PAGES}
+            for name, frame in self.tabs.items():
+                notebook.add(frame, text=name)
+            root.protocol("WM_DELETE_WINDOW", self._on_close)
+        else:
+            self.notebook = None
+            self.tabs = {name: frames[name] for name in self.PAGES}
+            self.status_var = status_var or tk.StringVar()
+            self.status_var.set("Construye un modelo para empezar.")
 
         self._build_model_tab(self.tabs["Modelo"])
         self._build_calc_tab(self.tabs["Cálculo"])
         self._build_results_tab(self.tabs["Resultados"])
 
-        root.protocol("WM_DELETE_WINDOW", self._on_close)
+        if self.session is not None:
+            self.session.subscribe(self._on_session_change)
         root.after(_POLL_MS, self._poll)
+
+    def _select(self, page: str) -> None:
+        if self._select_page is not None:
+            self._select_page(page)
+        else:
+            self.notebook.select(self.tabs[page])
 
     # ------------------------------------------------------------------ helpers
 
@@ -142,6 +165,11 @@ class VibspecApp:
                         variable=self.source_mode).grid(row=0, column=0, columnspan=3, sticky="w")
         ttk.Radiobutton(origin, text="Desde archivo (tus átomos y grupos)", value="file",
                         variable=self.source_mode).grid(row=1, column=0, columnspan=3, sticky="w")
+        if self.session is not None:
+            self.current_button = ttk.Radiobutton(
+                origin, text="Estructura actual (nada aún)", value="session",
+                variable=self.source_mode, state="disabled")
+            self.current_button.grid(row=4, column=0, columnspan=3, sticky="w", pady=(4, 0))
         self.source_var = tk.StringVar(value="")
         ttk.Entry(origin, textvariable=self.source_var).grid(row=2, column=0, columnspan=2,
                                                              sticky="ew")
@@ -173,7 +201,7 @@ class VibspecApp:
         ttk.Button(buttons, text="A la biblioteca", command=self._on_save_to_library
                    ).pack(side="left")
         ttk.Button(buttons, text="Ir a Cálculo",
-                   command=lambda: self.notebook.select(self.tabs["Cálculo"])
+                   command=lambda: self._select("Cálculo")
                    ).pack(side="right")
 
         ttk.Label(left, text="Comprobaciones").pack(anchor="w")
@@ -237,8 +265,34 @@ class VibspecApp:
         self.library_combo.set(path.name)
         self._status(f"Guardado en la biblioteca: {path}")
 
+    def _on_session_change(self, current) -> None:
+        """Offer the window's current structure as a starting geometry."""
+        if current is None or current.origin == self.MODEL_ORIGIN:
+            if current is None:
+                self.current_button.configure(text="Estructura actual (nada aún)",
+                                              state="disabled")
+            return
+        self.current_button.configure(text=f"Estructura actual: {current.describe()}",
+                                      state="normal")
+
+    #: How a vibspec model is named in the window's session.
+    MODEL_ORIGIN = "Modelo finito (IR)"
+
     def _on_build(self) -> None:
         source = None
+        if self.source_mode.get() == "session":
+            current = self.session.current if self.session is not None else None
+            if current is None:
+                self._status("No hay estructura actual: construye o importa una primero.")
+                return
+            try:
+                self.model = logic.build_model(self._read(self.builder_vars),
+                                               atoms=current.atoms, label=current.origin)
+            except Exception as exc:        # noqa: BLE001 -- surfaced to the user
+                self._error(exc)
+                return
+            self._show_model()
+            return
         if self.source_mode.get() == "file":
             if not self.source_var.get().strip():
                 self._status("Elige un archivo o una estructura de la biblioteca.")
@@ -249,11 +303,17 @@ class VibspecApp:
         except Exception as exc:        # noqa: BLE001 -- surfaced to the user
             self._error(exc)
             return
+        self._show_model()
+
+    def _show_model(self) -> None:
+        """Draw and report the new model, and publish it to the window."""
         self._set_text(self.model_report, self.model.summary())
         self._draw_structure(self.model_ax, self.model.atoms)
         self.model_canvas.draw_idle()
         self.name_var.set(logic.job_name(self.model.atoms))
         self._status(f"Modelo listo: {self.model.atoms.get_chemical_formula()}.")
+        if self.session is not None:
+            self.session.publish(self.model.atoms, self.MODEL_ORIGIN)
 
     def _draw_structure(self, ax, atoms) -> None:
         from ...viz.plot import draw_structure_on_axes
@@ -426,7 +486,7 @@ class VibspecApp:
         job = self._selected_job()
         if job is not None:
             self.results_dir_var.set(str(job.directory))
-            self.notebook.select(self.tabs["Resultados"])
+            self._select("Resultados")
             self._on_load_results()
 
     def _refresh_jobs(self) -> None:
@@ -449,15 +509,23 @@ class VibspecApp:
         finally:
             self.root.after(_POLL_MS, self._poll)
 
-    def _on_close(self) -> None:
+    def confirm_close(self) -> bool:
+        """Ask before abandoning running jobs; stop them if the user agrees.
+
+        Returns False when the user chose to keep the window open.
+        """
         from tkinter import messagebox
 
         if self.queue.active() and not messagebox.askyesno(
             "vibspec", "Hay cálculos corriendo. ¿Cancelarlos y salir? "
                        "(se pueden reanudar con run.py)"):
-            return
+            return False
         self.queue.shutdown()
-        self.root.destroy()
+        return True
+
+    def _on_close(self) -> None:
+        if self.confirm_close():
+            self.root.destroy()
 
     # ------------------------------------------------------------------ results tab
 
@@ -727,13 +795,13 @@ class VibspecApp:
 
 
 def main(workdir: Optional[str] = None) -> int:
-    """Open the window. Returns a process exit code."""
-    try:
-        import tkinter as tk
-    except ImportError:
-        print(_TK_MISSING)
-        return 1
-    root = tk.Tk()
-    VibspecApp(root, Path(workdir) if workdir else None)
-    root.mainloop()
-    return 0
+    """Open carbonforge's main window at the vibspec pages.
+
+    vibspec used to have a window of its own; it now lives in the main
+    window (Estructura → Modelo finito, Calcular, Resultados). Returns a
+    process exit code.
+    """
+    from ...gui.app import main as main_window
+
+    return main_window(page="Modelo finito (IR)",
+                       vibspec_workdir=Path(workdir) if workdir else None)

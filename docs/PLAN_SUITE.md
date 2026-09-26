@@ -60,6 +60,26 @@ de cálculo desactivadas y explicando por qué.
 - Retirar la ventana separada de vibspec cuando todo esté en la principal
   (`carbonforge vibspec gui` pasa a abrir la ventana principal en su sección).
 
+Hecho (primer bloque):
+
+- [x] Ventana por secciones: Estructura (Construir, Importar, Modelo finito
+      (IR)), Preparar (Celda EDLC), Calcular (IR con GPAW), Resultados
+      (Bandas y espectros, IR frente a FTIR). Las páginas de vibspec se
+      construyen al abrirlas por primera vez.
+- [x] "Estructura actual" compartida (`gui/session.py`): se publica al
+      construir, importar o armar un modelo; se toma con un botón. vibspec
+      acepta estructuras en memoria (`core.load_atoms`) con las mismas
+      comprobaciones que un archivo.
+- [x] `carbonforge vibspec gui` abre la ventana principal en Modelo finito.
+
+Pendiente:
+
+- [ ] Llevar la exportación QE/SIESTA/LAMMPS de la página Construir a
+      Preparar (hoy sigue en Construir).
+- [ ] Cola de trabajos y `record.json` para todos los motores (QE, SIESTA,
+      LAMMPS), no solo GPAW; que cada cálculo lanzado quede en la misma cola.
+- [ ] Resultados: DOS/PDOS y modos de QE junto a los de vibspec.
+
 ## Fase C — Raman en vibspec
 
 - Primer paso barato: conectar la exportación DFPT de QE (`ph.x` con

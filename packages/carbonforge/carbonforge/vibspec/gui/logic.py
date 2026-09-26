@@ -47,6 +47,7 @@ from ..core import (
     check_structure,
     gpaw_available,
     list_library,
+    load_atoms,
     load_structure,
     prepare,
     suggest_spin,
@@ -140,7 +141,8 @@ class ModelResult:
         return "\n".join(lines)
 
 
-def build_model(raw: dict[str, Any], source: Optional[Path] = None) -> ModelResult:
+def build_model(raw: dict[str, Any], source: Optional[Path] = None,
+                atoms: Optional[Atoms] = None, label: str = "estructura actual") -> ModelResult:
     """Build (or load) the ribbon, apply the preset and check it.
 
     Parameters
@@ -152,10 +154,16 @@ def build_model(raw: dict[str, Any], source: Optional[Path] = None) -> ModelResu
         atoms and groups are kept; the form's edge, width and length are
         ignored, its vacuum and preset are applied (``pristine`` adds
         nothing).
+    atoms, label
+        A structure from another part of carbonforge (the builder's current
+        structure), treated like a file: same checks and refusals. Takes
+        precedence over ``source``; the caller's atoms are not modified.
     """
     values = collect_values(BUILDER_PARAMS, raw)
     import_report = ""
-    if source is not None:
+    if atoms is not None:
+        atoms, import_report = load_atoms(atoms, values["vacuum_per_side"], label=label)
+    elif source is not None:
         atoms, import_report = load_structure(source, vacuum_per_side=values["vacuum_per_side"])
     else:
         atoms = build_finite_nanoribbon(

@@ -97,6 +97,12 @@ carbonforge/
 - GUI tabs (`gui/tabs/`) are mixins of `CarbonForgeApp`; a tab never imports
   another tab or `app.py`, and imports Tk only inside methods. What a tab
   needs from the window is listed in its class docstring.
+- One window. Structures move between pages only through `gui/session.py`:
+  a page publishes what it produces and takes the current structure only on
+  a user action, never by itself. vibspec's pages are embedded
+  (`VibspecApp(frames=...)`), built on first visit, and consume other pages'
+  structures through `core.load_atoms`, with the same refusals as a file.
+  The window asks `VibspecApp.confirm_close` before closing (running jobs).
 - Advanced parameters go through `codes.Catalog.check` before any writer
   sees them, and what is validated is the overridden value. Never drop an
   override silently: a keyword for a namelist the run does not write is an

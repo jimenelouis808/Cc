@@ -135,6 +135,13 @@ class BuilderTab:
             command=self._on_advanced,
         ).pack(fill="x", pady=(4, 0))
 
+        # A structure made on another page (a vibspec model, an import):
+        # bring it here to export it, check it or decorate it.
+        ttk.Button(
+            actions, text="Traer la estructura actual",
+            command=self._on_take_current,
+        ).pack(fill="x", pady=(4, 0))
+
         self.export_button = ttk.Button(
             actions, text="Exportar…", command=self._on_export, state="disabled"
         )
@@ -364,6 +371,20 @@ class BuilderTab:
         self._set_info(text)
         self.status_var.set("Vista previa de la receta (nada construido aún).")
 
+    def _on_take_current(self) -> None:
+        """Adopt the window's current structure (from another page)."""
+        session = getattr(self, "session", None)
+        current = session.current if session is not None else None
+        if current is None:
+            self.status_var.set("No hay estructura actual: construye, importa o arma un "
+                                "modelo en otra página.")
+            return
+        if current is getattr(self, "_published", None):
+            self.status_var.set("La estructura actual ya es la de esta página.")
+            return
+        self._on_built(session.take(), origin=current.origin)
+        self.status_var.set(f"Traída de «{current.origin}»: {len(self.atoms)} átomos.")
+
     def _discard_current_structure(self) -> None:
         """Drop the built structure and disable the actions that consume it."""
         # An EDLC cell built from this structure goes with it. Leaving it
@@ -444,8 +465,11 @@ class BuilderTab:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_built(self, atoms: Atoms) -> None:
+    def _on_built(self, atoms: Atoms, origin: str = "Construir") -> None:
         self.atoms = atoms
+        session = getattr(self, "session", None)
+        if session is not None:
+            self._published = session.publish(atoms, origin)
         self._set_busy(False, f"Estructura lista: {len(atoms)} átomos.")
         self.export_button.configure(state="normal")
         self.png_button.configure(state="normal")

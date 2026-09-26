@@ -328,3 +328,30 @@ def test_window_smoke(tmp_path, water_done):
         assert app.animation["k"] >= 1
     finally:
         root.destroy()
+
+
+@pytest.mark.skipif(not _display_available(), reason="sin Tk o sin pantalla")
+def test_unified_window_shares_the_structure(tmp_path):
+    """vibspec's pages live in the main window and trade structures with it."""
+    import tkinter
+
+    from carbonforge.gui.app import CarbonForgeApp
+
+    root = tkinter.Tk()
+    try:
+        app = CarbonForgeApp(root, vibspec_workdir=tmp_path / "calculos")
+        assert app._vibspec is None                        # built on first visit
+        app.select_page("Modelo finito (IR)")
+        vib = app._vibspec
+        assert vib is not None and vib.notebook is None
+        vib.builder_vars["preset"].set("amine")
+        vib._on_build()
+        assert app.session.current.origin == vib.MODEL_ORIGIN
+        assert "C58H21N" in app.current_var.get()
+        app.select_page("Construir")
+        app._on_take_current()
+        assert app.atoms.get_chemical_formula() == "C58H21N"
+        vib._select("Resultados")
+        assert app._current_page() == "IR frente a FTIR"
+    finally:
+        root.destroy()

@@ -108,6 +108,35 @@ def load_structure(
         If the file cannot be read.
     """
     result = import_structure(path, index=index)
+    atoms, report = _finite_model(result, Path(path).name, vacuum_per_side)
+    atoms.info["source_file"] = str(Path(path).resolve())
+    return atoms, report
+
+
+def load_atoms(
+    atoms: Atoms,
+    vacuum_per_side: Optional[float] = None,
+    label: str = "estructura actual",
+) -> tuple[Atoms, str]:
+    """:func:`load_structure` for a structure already in memory.
+
+    Used when another part of carbonforge (the builder, the importer) hands
+    its structure to vibspec. Same diagnosis, same refusals (periodic,
+    overlapping atoms), same re-boxing; the input is copied, never changed.
+    ``label`` names the origin in messages and in ``info["source"]``.
+    """
+    from ...io.importer import ImportResult, diagnose
+
+    atoms = atoms.copy()
+    result = ImportResult(atoms=atoms, source=Path(label), format_used="en memoria",
+                          issues=diagnose(atoms))
+    model, report = _finite_model(result, f"La estructura de «{label}»", vacuum_per_side)
+    model.info["source"] = label
+    return model, report
+
+
+def _finite_model(result, name: str, vacuum_per_side: Optional[float]) -> tuple[Atoms, str]:
+    """Checks and re-boxing shared by :func:`load_structure` and :func:`load_atoms`."""
     atoms = result.atoms
     # A missing cell is expected (XYZ, MOL) and fixed below; listing it among
     # the problems that block an export would only alarm.
@@ -119,7 +148,7 @@ def load_structure(
 
     errors = [issue for issue in result.issues if issue.severity == "error"]
     if any(issue.code == "empty" for issue in errors):
-        raise ImportRefused(f"{Path(path).name} no contiene ningún átomo.")
+        raise ImportRefused(f"{name} no contiene ningún átomo.")
     overlapping = [issue for issue in errors if issue.code in ("overlap", "duplicates")]
     if overlapping:
         raise ImportRefused(
@@ -131,7 +160,7 @@ def load_structure(
     if any(atoms.get_pbc()):
         if atoms.cell.rank == 3 and _crosses_boundary(atoms):
             raise ImportRefused(
-                f"{Path(path).name} es periódica de verdad: hay enlaces que cruzan la celda. "
+                f"{name} es periódica de verdad: hay enlaces que cruzan la celda. "
                 "El IR por diferencias finitas del dipolo necesita un modelo finito. Corta un "
                 "fragmento finito y termina sus bordes con H (por ejemplo con "
                 "build_finite_nanoribbon o en tu editor molecular)."
@@ -148,7 +177,6 @@ def load_structure(
         )
     rebox(atoms, vacuum_per_side)
     atoms.info["vacuum_per_side"] = vacuum_per_side
-    atoms.info["source_file"] = str(Path(path).resolve())
     atoms.info.setdefault("structure_type", "imported")
 
     lines.append(

@@ -156,7 +156,7 @@ class ImportTab:
         atoms = getattr(self, "_imported_atoms", None)
         if atoms is None:
             return
-        self._on_built(atoms)
+        self._on_built(atoms, origin="Importar")
         self.import_status_var.set(
             "Estructura adoptada: ya puedes exportarla o funcionalizarla "
             "desde la primera pestaña."

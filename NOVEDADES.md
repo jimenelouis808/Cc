@@ -6,6 +6,34 @@ está la trampa.
 
 ---
 
+## carbonforge · una sola ventana, con vibspec dentro
+
+**Secciones por tarea.** La ventana se organiza como se trabaja:
+**Estructura** (Construir, Importar, Modelo finito (IR)), **Preparar** (Celda
+EDLC), **Calcular** (IR con GPAW) y **Resultados** (Bandas y espectros, IR
+frente a FTIR). vibspec ya no abre una ventana aparte: `carbonforge vibspec gui`
+abre la principal en su página.
+
+**Estructura actual.** La barra inferior dice con qué estructura se está
+trabajando y de dónde salió. Lo que construyes, importas o modelas pasa a ser
+la estructura actual; las otras páginas la toman **con un botón**, nunca solas:
+
+- En Modelo finito (IR), la opción "Estructura actual" arranca el modelo desde
+  ella (una cinta hecha o importada en Construir), con las mismas
+  comprobaciones que un archivo.
+- En Construir, "Traer la estructura actual" recupera un modelo de vibspec para
+  exportarlo a QE o SIESTA, o seguir funcionalizándolo.
+
+**Qué NO hace, y dónde está la trampa:**
+
+- Una estructura periódica (un nanotubo, una cinta infinita) no entra en
+  vibspec: el IR por diferencias finitas necesita un modelo finito. Se rechaza
+  y se dice por qué; no se corta nada.
+- La exportación a QE/SIESTA sigue en la página Construir, no en Preparar.
+- La cola de trabajos solo lanza cálculos de GPAW; QE y SIESTA se preparan
+  aquí y se corren fuera.
+- Cerrar la ventana con cálculos de vibspec en marcha pide confirmación.
+
 ## carbonforge · la ventana, partida por pestañas
 
 Por dentro: `gui/app.py` pasaba de 1400 líneas; ahora cada pestaña vive en su

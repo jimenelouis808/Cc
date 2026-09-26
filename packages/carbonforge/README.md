@@ -383,17 +383,25 @@ carbonforge vibspec plot runs/pyr --ftir muestra.csv --fit-scale \
 The figure is drawn on a `matplotlib.figure.Figure` (no pyplot), so it
 works headless on a cluster.
 
-### The window
+### The pages in the main window
 
 ```bash
-carbonforge vibspec gui            # or: python -m carbonforge.vibspec.gui
+carbonforge vibspec gui            # or: carbonforge-gui, then Estructura → Modelo finito (IR)
 ```
 
-Three tabs over the same core:
+vibspec has no window of its own any more: its three pages live in
+carbonforge's main window, which is organised by task — **Estructura**
+(Construir, Importar, Modelo finito (IR)), **Preparar** (Celda EDLC),
+**Calcular** (IR con GPAW), **Resultados** (Bandas y espectros, IR frente a
+FTIR). The bar at the bottom shows the **current structure**: whatever was
+last built, imported or modelled. The Modelo page can start from it
+("Estructura actual", same checks as a file: a periodic structure is refused),
+and the Construir page can bring a vibspec model back ("Traer la estructura
+actual") to export it to QE or SIESTA.
 
-- **Modelo** — ribbon, preset and site, with the 3D structure (seen down
+- **Modelo finito (IR)** — ribbon, preset and site, with the 3D structure (seen down
   the plane normal) and every check and spin recommendation.
-- **Cálculo** — the GPAW settings, validated before anything is written;
+- **IR con GPAW** — the GPAW settings, validated before anything is written;
   *Preparar* writes the calculation directory, *Preparar y correr* also
   queues it. Jobs run as **subprocesses** (so *Cancelar* really stops them,
   and `run.py` resumes later), one at a time, with state (en cola /
@@ -401,12 +409,12 @@ Three tabs over the same core:
   (relaxation step, displacements done) and the live log. Without GPAW
   (Windows) the run buttons are disabled and it says why: prepare here,
   run on Ubuntu, open the result.
-- **Resultados** — the computed spectrum against your FTIR, the band table,
+- **IR frente a FTIR** — the computed spectrum against your FTIR, the band table,
   scale-factor fit, and a **click on a band animates its normal mode** in
   3D, with the share of motion per element and per atom (an O–H stretch
   reads "H 93 %").
 
-The window is a thin layer: all of its logic is in
+The pages are a thin layer: all of their logic is in
 `vibspec/gui/logic.py`, tested without a display.
 
 Raman is not computed yet; it will reuse the same relaxed structure and
