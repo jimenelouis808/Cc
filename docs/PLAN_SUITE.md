@@ -45,7 +45,9 @@ de cálculo desactivadas y explicando por qué.
       citada en `packages/carbonforge/CLAUDE.md`.
 - [x] Encontrado de paso: `stone_wales_defect` colapsaba los dos átomos del
       enlace en el mismo punto (normales de signo opuesto promediadas a cero).
-- [ ] Partir `gui/app.py` (1400 líneas) por pestañas: primer paso de la fase B.
+- [x] Partir `gui/app.py` (1400 líneas) por pestañas: primer paso de la fase B.
+      `gui/tabs/` (builder, preview, importing, edlc, analysis); `app.py` queda
+      en ~200 líneas con lo compartido (cola de trabajos, formularios, errores).
 
 ## Fase B — GUI unificada
 

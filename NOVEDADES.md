@@ -6,6 +6,14 @@ está la trampa.
 
 ---
 
+## carbonforge · la ventana, partida por pestañas
+
+Por dentro: `gui/app.py` pasaba de 1400 líneas; ahora cada pestaña vive en su
+módulo (`gui/tabs/`) y la ventana solo guarda lo compartido. Por fuera no
+cambia nada, salvo un arreglo: el resumen tras construir ya tiene en cuenta los
+parámetros avanzados (antes solo lo hacían "Comprobar" y la exportación). Es el
+paso previo a una ventana única con vibspec.
+
 ## carbonforge · todos los parámetros de QE, SIESTA y GPAW, comprobados
 
 **Parámetros avanzados.** Un botón "Parámetros avanzados (QE, SIESTA)…" en la

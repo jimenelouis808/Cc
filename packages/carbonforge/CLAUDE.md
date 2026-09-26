@@ -25,7 +25,7 @@ carbonforge/
 ├── exports/       # Quantum ESPRESSO, SIESTA and LAMMPS writers
 ├── relax/         # ASE optimizer wrapper + calculator-free harmonic pre-relax
 ├── viz/           # matplotlib 3D viewer
-├── gui/           # Tkinter desktop app (params + edlc_params logic, widgets)
+├── gui/           # Tkinter app: params/edlc_params logic, app.py host, tabs/ one module per tab
 ├── vibspec/       # IR models of functionalised finite ribbons; core/ has no GUI imports
 ├── workflows/     # batch generation, convergence sweeps, ML dataset
 ├── utils/         # constants, geometry helpers
@@ -94,6 +94,9 @@ carbonforge/
   vacancy rim is never an "edge". Groups keep clear of dopants and other
   groups by default (`avoid_radius`), and turn about their bond away from
   neighbours (`attach._best_torsion`).
+- GUI tabs (`gui/tabs/`) are mixins of `CarbonForgeApp`; a tab never imports
+  another tab or `app.py`, and imports Tk only inside methods. What a tab
+  needs from the window is listed in its class docstring.
 - Advanced parameters go through `codes.Catalog.check` before any writer
   sees them, and what is validated is the overridden value. Never drop an
   override silently: a keyword for a namelist the run does not write is an

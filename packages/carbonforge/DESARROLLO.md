@@ -123,13 +123,19 @@ carbonforge/
 ├── results/       Lectura y graficado de salidas
 ├── workflows/     Lotes, convergencia, datasets ML
 ├── gui/
-│   ├── params.py  Lógica (testeable sin pantalla)
-│   └── app.py     Widgets Tk
+│   ├── params.py    Lógica (testeable sin pantalla)
+│   ├── advanced.py  Diálogo de parámetros avanzados (catálogos de codes/)
+│   ├── app.py       La ventana: cuaderno y lo que comparten las pestañas
+│   └── tabs/        Una pestaña por módulo: builder, preview, importing,
+│                    edlc, analysis
 └── cli/main.py    Línea de comandos
 ```
 
 **Regla de oro de la GUI:** la lógica va en `params.py`, los widgets en
-`app.py`. Si metes lógica en `app.py` deja de ser testeable sin pantalla.
+`app.py` y `tabs/`. Si metes lógica en los widgets deja de ser testeable sin
+pantalla. Cada pestaña es un mixin de `CarbonForgeApp` y **no importa otra
+pestaña ni `app.py`**: lo que necesita de fuera lo pone la ventana, y el
+docstring de cada clase lo lista (`test_gui_tabs.py` lo vigila).
 
 ---
 
