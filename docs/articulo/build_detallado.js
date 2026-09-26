@@ -449,23 +449,110 @@ c.push(p("Una suma angular por debajo de 328.4° está más allá de lo tetraéd
 c.push(p("El campo implícito vale cero sobre la pared, de modo que |f(átomo)| es la desviación "
   + "exacta fuera de superficie, sin aproximación alguna, y sirve como métrica de calidad."));
 
-c.push(h2("5.3 Estado del catálogo de superestructuras"));
-c.push(p("Auditoría completa, monohilo, semilla 0:"));
+c.push(h2("5.3 Dos métricas, y por qué hay que reportar las dos"));
+c.push(rich([{ t: "Esta sección corrige una versión anterior de este documento", b: true },
+  { t: ", y la corrección es en sí misma el punto metodológico más útil que tiene." }]));
+c.push(p(
+  "El paquete juzga una estructura por dos criterios independientes. El primero es "
+  + "geométrico: validation.sp2_quality exige que toda longitud de enlace caiga en "
+  + "1.30–1.55 Å y todo ángulo en 100–135°, y clasifica en «clean», «strained» o «broken». "
+  + "El segundo es de hibridación: una suma angular por debajo de 328.4° está más allá de lo "
+  + "tetraédrico y describe una pared imposible."));
+c.push(p(
+  "Una auditoría del catálogo reportó sólo el segundo y concluyó que ocho de ocho "
+  + "estructuras estaban sanas. Medidas contra el primero, cuatro de seis estaban «broken» y "
+  + "ninguna «clean». Las dos cosas eran ciertas a la vez, porque no son la misma pregunta."));
 c.push(spacer(80));
-c.push(table(["Preset", "Átomos", "Suma angular mín.", "Veredicto", "Remedio", "Tiempo"],
-  [["super-hypercube", "6 494", "331.6°", "sana", "—", "85 s"],
-   ["super-icosahedron", "4 292", "331.4°", "sana", "—", "34 s"],
-   ["supertube-(6,6)", "5 922", "330.7°", "sana", "—", "407 s"],
-   ["superfullerene-C60", "7 534", "333.0°", "sana", "wall_anchor = 1", "123 s"],
-   ["super-graphene", "1 180", "335.1°", "sana", "—", "35 s"],
-   ["super-cubic", "836", "330.6°", "sana", "wall_anchor = 1", "71 s"],
-   ["super-diamond", "3 752", "331.8°", "sana", "rejilla más fina", "980 s"],
-   ["super-fcc", "2 982", "334.0°", "sana", "—", "413 s"]],
-  [2200, 1000, 1700, 1200, 1900, 1360]));
+c.push(table(["Superred", "Enlaces (Å)", "sp2_quality", "Suma angular mín.", "Pared"],
+  [["Super-grafeno", "1.344 – 1.544", "strained", "335.1°", "sana"],
+   ["Jaula icosaédrica", "1.326 – 1.525", "strained", "331.4°", "sana"],
+   ["Super-cúbica", "1.295 – 1.546", "broken", "330.6°", "sana"],
+   ["Super-fcc", "1.301 – 1.575", "broken", "334.0°", "sana"],
+   ["Super-hipercubo", "1.316 – 1.574", "broken", "331.6°", "sana"],
+   ["Superfulereno C₆₀", "1.281 – 1.644", "broken", "333.0°", "sana"]],
+  [2300, 2100, 1700, 1900, 1360]));
 c.push(spacer(120));
-c.push(p("Ocho de ocho sanas, cero paredes colapsadas."));
+c.push(h3("La distribución dice más que el extremo"));
+c.push(p(
+  "sp2_quality usa el mínimo y el máximo, que sobre miles de enlaces son estadísticos de "
+  + "valor extremo. La distribución completa separa dos situaciones muy distintas:"));
+c.push(spacer(80));
+c.push(table(["Superred", "Enlaces", "Media (Å)", "p99 (Å)", "Máx (Å)", "Fuera de ventana"],
+  [["Super-grafeno", "1 770", "1.420", "1.493", "1.544", "0"],
+   ["Jaula icosaédrica", "6 438", "1.420", "1.483", "1.525", "0"],
+   ["Super-hipercubo", "9 741", "1.420", "1.488", "1.574", "1"],
+   ["Super-cúbica", "1 254", "1.420", "1.508", "1.546", "1"],
+   ["Super-fcc", "4 473", "1.420", "1.511", "1.575", "4"],
+   ["Superfulereno C₆₀", "11 301", "1.432", "1.551", "1.644", "128"]],
+  [2200, 1300, 1400, 1300, 1300, 1860]));
+c.push(spacer(120));
+c.push(p(
+  "Cinco de seis tienen la media exactamente en el valor objetivo de 1.420 Å y entre cero y "
+  + "cuatro enlaces fuera de la ventana: el hipercubo se clasifica «broken» por UN enlace "
+  + "entre 9 741. El superfulereno es el único genuinamente dañado, con la media desplazada y "
+  + "128 enlaces fuera."));
+c.push(h3("La causa, y lo que enseña"));
+c.push(cita("Optimizar una métrica y después auditar con esa misma métrica no es una "
+  + "comprobación. El superfulereno se reconstruía sujetando la pared a su superficie para "
+  + "subir la suma angular, y eso pelea con el campo de fuerzas que lleva los enlaces a "
+  + "1.42 Å. Sin esa reconstrucción tenía UN átomo de 7 534 a 328.33° —siete centésimas de "
+  + "grado por debajo del umbral— y CERO enlaces fuera de ventana. Con ella, el átomo quedaba "
+  + "corregido y 128 enlaces rotos, el peor a 1.644 Å."));
+c.push(p(
+  "Es el mismo error que este paquete ya había documentado para la colocación de "
+  + "disclinaciones —la carga debe compararse sobre un entorno, nunca por vértice— repetido "
+  + "en un detector que mira el mínimo sobre miles de átomos. Un átomo pasado de tetraédrico "
+  + "es un defecto local; una pared colapsada es una región doblada.", { italics: true }));
+c.push(p(
+  "Comprobación independiente: reproduciendo el colapso real de una bobina (desactivando el "
+  + "límite de longitud en el volteo de aristas, que es el fallo que lo causaba) la estructura "
+  + "sale con 103 enlaces de 1 122 fuera de ventana y el peor a 1.696 Å, y el detector de "
+  + "suma angular reporta CERO átomos bajo el umbral. No detecta el colapso real; la longitud "
+  + "de enlace sí."));
+c.push(p(
+  "El remedio aplicado: la reconstrucción cuenta ahora los enlaces fuera de ventana antes y "
+  + "después y descarta toda variante que empeore ese número. El superfulereno pasa de "
+  + "1.281–1.644 Å con 128 enlaces fuera a 1.306–1.538 Å con cero."));
 
-c.push(h2("5.4 Conjunto de pruebas"));
+c.push(h2("5.4 Un censo correcto puede esconder dislocaciones"));
+c.push(p(
+  "El presupuesto de Euler fija la suma Σ(6−n), no cada anillo por separado, y un par "
+  + "pentágono-heptágono aporta exactamente cero a esa suma. De ahí que una estructura pueda "
+  + "cumplir su presupuesto al dígito y estar llena de pares 5-7 que ninguna curvatura pide: "
+  + "se cancelan entre sí y la contabilidad no los ve."));
+c.push(p(
+  "Son dislocaciones de Stone-Wales. Sobre un tubo recto, cuya curvatura gaussiana es cero, "
+  + "no hay nada que las justifique. Contadas en el catálogo:"));
+c.push(spacer(80));
+c.push(table(["Superred", "5", "6", "7", "8", "Σ(6−n)", "Pares 5-7 que se cancelan", "% de los no hexagonales"],
+  [["Super-grafeno", "42", "480", "62", "2", "−24", "42", "79.2 %"],
+   ["Super-hipercubo", "254", "2 539", "398", "24", "−192", "254", "75.1 %"],
+   ["Super-cúbica", "33", "326", "53", "2", "−24", "33", "75.0 %"],
+   ["Jaula icosaédrica", "129", "1 666", "285", "30", "−216", "129", "58.1 %"],
+   ["Superfulereno C₆₀", "196", "2 981", "504", "26", "−360", "196", "54.0 %"],
+   ["Super-fcc", "84", "1 089", "234", "42", "−240", "84", "46.4 %"]],
+  [1750, 650, 800, 700, 620, 900, 1900, 2040]));
+c.push(spacer(120));
+c.push(p(
+  "Entre el 46 % y el 79 % de todos los pentágonos y heptágonos no aportan nada a la "
+  + "topología. La colocación por curvatura los reduce a un tercio —de 42 a 14 en "
+  + "super-grafeno, de 33 a 16 en super-cúbica— y de paso mejora la geometría, llevando el "
+  + "super-grafeno de «strained» a «clean» y el acuerdo con el signo de la curvatura del 93 % "
+  + "al 100 %."));
+c.push(rich([{ t: "Lo que la colocación no puede hacer, y conviene declararlo: ", b: true },
+  { t: "los pares que quedan son dislocaciones aisladas, y un volteo de arista no las "
+     + "elimina, las mueve. Aniquilarlas exige juntar dos dislocaciones opuestas, que es un "
+     + "problema de transporte y no una corrección local; el descenso codicioso se detiene en "
+     + "ellas porque ningún volteo suelto mejora la desviación local. La configuración "
+     + "7-7-5-5 —un Stone-Wales completo— sí se deshace de un volteo, y la rutina de "
+     + "remallado ya lo hace: los cuatro grados pasan a 6 y la desviación cae de 4 a 0." }]));
+c.push(p(
+  "Para un artículo esto es una limitación que conviene declarar antes que esconder, y "
+  + "sugiere la métrica que falta: junto al censo y al déficit de Euler, informar cuántos "
+  + "pares se cancelan. Es la diferencia entre una red que cumple su topología y una red "
+  + "limpia.", { italics: true }));
+
+c.push(h2("5.5 Conjunto de pruebas"));
 c.push(p("1476 pruebas automatizadas (1 omitida por ausencia de tkinter en un entorno sin "
   + "pantalla). No comprueban únicamente que el código corra: fijan los resultados medidos y, "
   + "en varios casos, fijan también los criterios que se ensayaron y no funcionan, para que no "
@@ -584,6 +671,11 @@ c.push(bullet("La validez física se comprueba con un criterio de imposibilidad,
 c.push(bullet("Euler decide la existencia antes que la geometría. El caso del heptaneno lo "
   + "muestra en su forma más limpia: tres geometrías resueltas por una sola línea de "
   + "contabilidad, dos de ellas declaradas imposibles sin calcular nada."));
+c.push(bullet("Dos criterios independientes, y hay que reportar los dos. La topología (censo "
+  + "y déficit de Euler) y la geometría (longitudes y ángulos) responden preguntas distintas, "
+  + "y una estructura puede cumplir una y fallar la otra. Optimizar una métrica y auditar con "
+  + "esa misma métrica no es una comprobación: es una tautología, y en este trabajo produjo "
+  + "un catálogo declarado sano que tenía enlaces de 1.644 Å."));
 c.push(spacer(140));
 c.push(new Paragraph({ border: { top: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" } },
                        spacing: { before: 140, after: 120 }, children: [] }));
