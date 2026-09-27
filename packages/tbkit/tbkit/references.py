@@ -109,12 +109,16 @@ def _valence_electrons(calc) -> int:
 
 
 def gpaw_calculator(settings: dict, n_bands: int, txt=None):
-    """A GPAW calculator from the settings (imports GPAW)."""
+    """A GPAW calculator from the settings (imports GPAW).
+
+    Symmetry is off: displaced geometries (distortions, finite-difference
+    vibrations) break the symmetry GPAW would detect in the first one.
+    """
     from gpaw import GPAW
 
     return GPAW(mode=settings["mode"], basis=settings["basis"], xc=settings["xc"],
                 h=settings["h"], convergence=settings["convergence"], nbands=n_bands,
-                txt=txt, spinpol=False)
+                txt=txt, spinpol=False, symmetry="off")
 
 
 def _n_bands(atoms: Atoms, settings: dict) -> int:
