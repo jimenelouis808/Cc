@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+
 class TestBandsDoNotTradePlaces:
     """The database's G window (1550-1610) and D' window (1595-1640)
     share fifteen wavenumbers, and nothing used to force an order.

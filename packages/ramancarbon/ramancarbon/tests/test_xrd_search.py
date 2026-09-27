@@ -1,3 +1,7 @@
+"""Peak search and phase matching on real, awkward patterns."""
+from __future__ import annotations
+
+import pytest
 
 
 class TestUnresolvedAndScale:
@@ -101,3 +105,56 @@ def _scale_match():
     match.missing = [_reflection((9, 9, 9), 60.0, 3.0)]
     match.expected_strong = 3
     return match
+
+
+class TestNormalisedPatternsInventPeaks:
+    """Dividing a diffractogram by a constant is not free.
+
+    A user sent the same measurement twice: the instrument's own .ras,
+    544-1543 counts, and an export divided by 543, running 1.00-2.84.
+    The first gives ten peaks and the second seventeen, and the nine
+    extras have FWHM of 0.06-0.12 deg -- six to twelve points -- with
+    significance 19-24 against a threshold of 19. They are ripples.
+
+    The mechanism is the point-wise uncertainty. On counts the sigma is
+    sqrt(N) at every point: 23 on the 550-count background and 39 on the
+    1543-count peak. Once the file is normalised the per-point estimate
+    is gone and a single number stands in for the whole pattern, so the
+    noise on top of a strong reflection is judged by the background's --
+    and every wobble on its flank clears the bar.
+
+    Three of the eight reflections Fe3C "matched" on the normalised file
+    were among those ripples, which is worth knowing before trusting any
+    figure of merit computed from it.
+    """
+
+    def _pattern(self, scale=1.0, seed=0):
+        import numpy as np
+
+        from ramancarbon.xrd.pattern import Pattern
+
+        two_theta = np.arange(20.0, 80.0, 0.01)
+        rng = np.random.default_rng(seed)
+        signal = 550.0 + 1000.0 * np.exp(
+            -0.5 * ((two_theta - 44.9) / 0.25) ** 2)
+        counts = rng.poisson(signal).astype(float)
+        return Pattern(two_theta=two_theta, intensity=counts * scale,
+                       wavelength=1.540593)
+
+    def test_counts_get_a_point_wise_sigma_that_follows_the_signal(self):
+        import numpy as np
+
+        sigma = np.asarray(self._pattern().sigma)
+        assert sigma.min() == pytest.approx(np.sqrt(550.0), rel=0.15)
+        assert sigma.max() > 1.4 * sigma.min()
+
+    def test_the_normalised_copy_finds_no_more_reflections(self):
+        """One real reflection is in there. Anything past that is the
+        normalisation talking."""
+        from ramancarbon.xrd.search import find_peaks
+
+        real = find_peaks(self._pattern())
+        divided = find_peaks(self._pattern(scale=1.0 / 543.0))
+        assert len(divided) <= len(real) + 1, (
+            f"{len(divided)} picos sobre el patrón normalizado contra "
+            f"{len(real)} sobre las cuentas")
