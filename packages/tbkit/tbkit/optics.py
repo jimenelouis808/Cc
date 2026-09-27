@@ -207,20 +207,28 @@ def charge_response(solution: Solution) -> np.ndarray:
 
 
 def polarizability_linear_response(system: System, kT: float = 0.01, U=None,
-                                   screened: bool = True) -> np.ndarray:
+                                   screened: bool = True,
+                                   ground_scc: Optional[bool] = None) -> np.ndarray:
     """α (Å³) of a finite system by linear response of the SCC model.
 
     ``δq = (1 - χ γ)⁻¹ χ V_ext`` with ``V_ext,A = e E·R_A`` and ``μ = -Σ δq_A R_A``:
     exactly the derivative of the self-consistent dipole with respect to the
     field, from one diagonalisation of the ground state. ``screened=False``
     drops γ (independent particles).
+
+    The ground state is self-consistent when ``ground_scc`` is True (default:
+    the model's ``scc`` flag). A model fitted without SCC (Xu, π) keeps its
+    own ground state and only the response is screened; with a symmetric
+    pure-carbon molecule (C60) the two coincide.
     """
     from .scc import gamma_matrix, self_consistent
 
     if system.periodic:
         raise ValueError("Respuesta lineal SCC: solo sistemas finitos (sin Ewald).")
-    reference = self_consistent(system, U=U, kT=kT, tol=1e-10) if screened else None
-    solution = reference.solution if screened else solve(system, *gamma(), kT=kT)
+    if ground_scc is None:
+        ground_scc = system.model.scc
+    reference = self_consistent(system, U=U, kT=kT, tol=1e-10) if ground_scc else None
+    solution = reference.solution if ground_scc else solve(system, *gamma(), kT=kT)
     _check_gapped(solution, 0.0)
     chi = charge_response(solution)
     positions = system.atoms.get_positions()[system.basis.atoms]

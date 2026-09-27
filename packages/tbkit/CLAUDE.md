@@ -25,6 +25,8 @@ tbkit/
 ├── optics.py         # polarizability: sum over states, SCC linear response, ε∞
 ├── raman.py          # non-resonant Raman on the model's own Γ phonons
 ├── record.py         # reproducible records, `tbkit run simulation.json`, replay
+├── references.py     # DFT reference sets (JSON): GPAW levels, energies, forces, frequencies
+├── recipes/          # reproducible fits: chn_references (GPAW data), xu_chn (the C/H/N set)
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 └── cli.py            # `tbkit` console script
 ```
@@ -60,6 +62,20 @@ tbkit/
 - Published `.skf` sets are never bundled (their licences); tests generate
   synthetic files in the documented format.
 - SCC refuses periodic systems (no Ewald). Do not approximate silently.
+- `TBModel.scc` says which ground state the parameters were made for: True
+  for `.skf` sets and `xu_chn`, False for Xu and π. Calculators, tasks and
+  the linear-response α follow it unless told otherwise; a set fitted with
+  SCC must not be run without it (and vice versa) by default.
+- `.skf` heteronuclear convention: `A-B.skf` Hsp0 = <s_A|H|p_B>, verified
+  against DFTB+'s `getFullTable`. Do not flip it without a new reference.
+- `xu_chn` keeps Xu's C-C untouched; H and N are fitted around it
+  (`recipes/xu_chn.py`, from `recipes/chn_references.py` GPAW data whose
+  SHA-256 is stored in the parameter file). Refit by rerunning the recipe
+  and saving a new file; never hand-edit fitted numbers. Hubbard U are
+  computed (GPAW atom, dε/dn), not fitted.
+- Repulsion polynomials are only determined where the training data are:
+  check V(r) and its slope in that range, not the coefficients, and state
+  the range in `validity`.
 - Mean-field moments are an order parameter, not a correlated ground state;
   user-facing text must not imply otherwise. Lieb's theorem is the check.
 - Energies and forces require `model.repulsive`; the π model has none and

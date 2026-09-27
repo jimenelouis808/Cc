@@ -9,6 +9,8 @@ sum over states) and experiment (diamond ε∞, C60 α), with the error stated.
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import pytest
 from ase.build import bulk, graphene
@@ -59,9 +61,19 @@ class TestPolarizability:
                             nonorthogonal_model(with_nitrogen=True))
 
     def test_linear_response_equals_finite_field(self, molecule_system):
-        lr = polarizability_linear_response(molecule_system)
+        lr = polarizability_linear_response(molecule_system, ground_scc=True)
         ff = polarizability_screened(molecule_system, field=0.002)
         assert lr == pytest.approx(ff, rel=1e-4, abs=1e-4)
+
+    def test_ground_state_follows_the_model(self, molecule_system):
+        """A model fitted without SCC keeps its own ground state (only the
+        response is screened); a model flagged scc gets the SCC one."""
+        own = polarizability_linear_response(molecule_system)
+        scc = polarizability_linear_response(molecule_system, ground_scc=True)
+        assert not np.allclose(own, scc, rtol=1e-3)        # C4N2 has real charge transfer
+        flagged = System.build(molecule_system.atoms,
+                               dataclasses.replace(molecule_system.model, scc=True))
+        assert polarizability_linear_response(flagged) == pytest.approx(scc, rel=1e-8)
 
     def test_unscreened_equals_sum_over_states(self, molecule_system):
         lr = polarizability_linear_response(molecule_system, screened=False)

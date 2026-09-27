@@ -11,6 +11,8 @@ from __future__ import annotations
 import os
 import tempfile
 
+from typing import Optional
+
 import numpy as np
 from ase import Atoms
 
@@ -26,9 +28,9 @@ def _kpts(system: System, kmesh: int):
 
 
 def levels(atoms: Atoms, model: TBModel, kmesh: int = 24, kT: float = 0.01,
-           charge: float = 0.0, scc: bool = False):
+           charge: float = 0.0, scc: Optional[bool] = None):
     system = System.build(atoms, model)
-    if scc:
+    if model.scc if scc is None else scc:
         from .scc import self_consistent
 
         result = self_consistent(system, charge=charge, kT=kT)
@@ -81,7 +83,7 @@ def hubbard(atoms: Atoms, model: TBModel, U: float | None = None, kmesh: int = 2
 
 
 def relax(atoms: Atoms, model: TBModel, kmesh: int = 8, kT: float = 0.02, fmax: float = 0.01,
-          steps: int = 500, scc: bool = False):
+          steps: int = 500, scc: Optional[bool] = None):
     """BFGS relaxation of positions (cell fixed) with the model's forces."""
     from ase.optimize import BFGS
 
@@ -98,7 +100,7 @@ def relax(atoms: Atoms, model: TBModel, kmesh: int = 8, kT: float = 0.02, fmax: 
 
 
 def phonons(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.02,
-            delta: float = 0.005, scc: bool = False):
+            delta: float = 0.005, scc: Optional[bool] = None):
     """Γ-point phonons (finite differences of the forces, via ase.vibrations).
 
     For a periodic cell these are the Γ modes of the crystal (the ones Raman

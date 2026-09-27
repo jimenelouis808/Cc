@@ -1,0 +1,212 @@
+"""Reference data from DFT for fitting: structures, levels, energies, forces.
+
+A reference set is a list of :class:`ReferenceStructure`, each a geometry
+with what a DFT code computed for it: the Kohn-Sham levels, the total
+energy and the forces. It is saved as one JSON file together with the
+settings of the calculation (code, version, functional, basis, grid...),
+so a fit can be repeated -- and checked by the tests -- without the DFT
+code installed.
+
+:func:`generate_gpaw` produces such a set with GPAW: each molecule is
+relaxed, then displaced at random and scaled uniformly, so the data cover
+bond lengths around equilibrium (distance dependence of the hoppings) and
+the forces off equilibrium (the repulsive part). GPAW is imported only
+there; the rest of tbkit never needs it.
+
+The zero of the Kohn-Sham levels of a finite system with zero boundary
+conditions (GPAW's LCAO/FD default for ``pbc=False``) is the vacuum, the
+same for every molecule; a fit may therefore use one common shift between
+model and DFT levels for all of them.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable, Iterable, Optional
+
+import numpy as np
+from ase import Atoms
+
+#: GPAW settings used when none are given. LCAO with a double-zeta
+#: polarised basis: its empty levels are basis-limited, which is why a fit
+#: should weight only the lowest few of them.
+GPAW_DEFAULTS = {"mode": "lcao", "basis": "dzp", "xc": "PBE", "h": 0.2, "vacuum": 5.0,
+                 "convergence": {"density": 1e-6}, "extra_bands": 6, "fmax": 0.02}
+
+
+@dataclass
+class ReferenceStructure:
+    """One geometry and its DFT results (eV, Å)."""
+
+    label: str
+    group: str                          # the molecule it derives from
+    atoms: Atoms
+    energy: float                       # total energy (code's own zero)
+    forces: np.ndarray                  # (N, 3) eV/Å
+    levels: np.ndarray                  # Kohn-Sham levels, eV, ascending
+    n_occupied: int                     # doubly occupied levels (closed shell)
+    role: str = "train"                 # "train" or "test"
+    extra: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {"label": self.label, "group": self.group, "role": self.role,
+                "symbols": self.atoms.get_chemical_symbols(),
+                "positions": np.round(self.atoms.get_positions(), 8).tolist(),
+                "energy": self.energy, "forces": np.round(self.forces, 8).tolist(),
+                "levels": np.round(self.levels, 6).tolist(), "n_occupied": self.n_occupied,
+                "extra": self.extra}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ReferenceStructure":
+        atoms = Atoms(data["symbols"], positions=data["positions"])
+        return cls(data["label"], data["group"], atoms, float(data["energy"]),
+                   np.array(data["forces"], dtype=float), np.array(data["levels"], dtype=float),
+                   int(data["n_occupied"]), data.get("role", "train"), data.get("extra", {}))
+
+
+def save_references(path: str | Path, structures: Iterable[ReferenceStructure],
+                    settings: dict) -> Path:
+    """Write a reference set (and the settings that produced it) as JSON."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {"settings": settings, "structures": [s.to_dict() for s in structures]}
+    path.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def load_references(path: str | Path) -> tuple[list[ReferenceStructure], dict]:
+    """``(structures, settings)`` from a file written by :func:`save_references`."""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return [ReferenceStructure.from_dict(s) for s in data["structures"]], data["settings"]
+
+
+def distortions(atoms: Atoms, n_random: int = 4, sigma: float = 0.04,
+                scales: tuple[float, ...] = (0.95, 1.05), seed: int = 0) -> list[tuple[str, Atoms]]:
+    """Geometries around ``atoms``: random displacements and uniform scalings.
+
+    Random displacements (Gaussian, ``sigma`` Å per component) probe forces
+    and bond angles; a uniform scaling changes every bond length together
+    and probes how levels depend on distance.
+    """
+    rng = np.random.default_rng(seed)
+    out = []
+    for k in range(n_random):
+        moved = atoms.copy()
+        moved.positions += rng.normal(0.0, sigma, size=moved.positions.shape)
+        out.append((f"rnd{k}", moved))
+    centre = atoms.get_positions().mean(axis=0)
+    for scale in scales:
+        scaled = atoms.copy()
+        scaled.positions = centre + scale * (atoms.get_positions() - centre)
+        out.append((f"x{scale:.2f}", scaled))
+    return out
+
+
+def _valence_electrons(calc) -> int:
+    return int(round(calc.get_number_of_electrons()))
+
+
+def gpaw_calculator(settings: dict, n_bands: int, txt=None):
+    """A GPAW calculator from the settings (imports GPAW)."""
+    from gpaw import GPAW
+
+    return GPAW(mode=settings["mode"], basis=settings["basis"], xc=settings["xc"],
+                h=settings["h"], convergence=settings["convergence"], nbands=n_bands,
+                txt=txt, spinpol=False)
+
+
+def _n_bands(atoms: Atoms, settings: dict) -> int:
+    valence = {"H": 1, "C": 4, "N": 5, "O": 6, "B": 3}
+    electrons = sum(valence[s] for s in atoms.get_chemical_symbols())
+    return electrons // 2 + int(settings["extra_bands"])
+
+
+def gpaw_single_point(atoms: Atoms, settings: dict) -> tuple[float, np.ndarray, np.ndarray, int]:
+    """``(energy, forces, levels, n_occupied)`` of a closed-shell molecule with GPAW."""
+    atoms = atoms.copy()
+    atoms.calc = gpaw_calculator(settings, _n_bands(atoms, settings))
+    energy = float(atoms.get_potential_energy())
+    forces = np.array(atoms.get_forces())
+    levels = np.sort(np.array(atoms.calc.get_eigenvalues()))
+    electrons = _valence_electrons(atoms.calc)
+    if electrons % 2:
+        raise ValueError("Referencia de capa abierta: solo moléculas de capa cerrada.")
+    return energy, forces, levels, electrons // 2
+
+
+def gpaw_relax(atoms: Atoms, settings: dict, log: Optional[str] = None) -> Atoms:
+    """Relax a molecule with GPAW (BFGS to ``settings['fmax']``)."""
+    from ase.optimize import BFGS
+
+    atoms = atoms.copy()
+    atoms.calc = gpaw_calculator(settings, _n_bands(atoms, settings))
+    BFGS(atoms, logfile=log).run(fmax=settings["fmax"], steps=200)
+    relaxed = atoms.copy()
+    relaxed.calc = None
+    return relaxed
+
+
+def generate_gpaw(molecules: dict[str, Atoms], settings: Optional[dict] = None,
+                  role: str = "train", n_random: int = 4, sigma: float = 0.04,
+                  scales: tuple[float, ...] = (0.95, 1.05), seed: int = 0,
+                  progress: Optional[Callable[[str], None]] = None
+                  ) -> list[ReferenceStructure]:
+    """Relax each molecule with GPAW and compute it and its distortions.
+
+    ``n_random=0`` and ``scales=()`` keep only the relaxed geometry (a test
+    set). Molecules must be closed-shell and finite.
+    """
+    settings = {**GPAW_DEFAULTS, **(settings or {})}
+    out = []
+    for index, (name, atoms) in enumerate(molecules.items()):
+        atoms = atoms.copy()
+        atoms.pbc = False
+        atoms.center(vacuum=settings["vacuum"])
+        relaxed = gpaw_relax(atoms, settings)
+        geometries = [("eq", relaxed)] + distortions(relaxed, n_random, sigma, scales,
+                                                      seed + index)
+        for tag, geometry in geometries:
+            energy, forces, levels, n_occ = gpaw_single_point(geometry, settings)
+            out.append(ReferenceStructure(f"{name}/{tag}", name, geometry, energy, forces,
+                                          levels, n_occ, role))
+            if progress:
+                progress(f"{name}/{tag}: E = {energy:.4f} eV, |F|max = "
+                         f"{np.abs(forces).max():.3f} eV/Å")
+    return out
+
+
+def gpaw_frequencies(atoms: Atoms, settings: Optional[dict] = None,
+                     delta: float = 0.01) -> np.ndarray:
+    """Harmonic frequencies (cm⁻¹, ascending, imaginary as negative) with GPAW.
+
+    ``ase.vibrations`` by central differences of the forces; ``atoms`` should
+    be the GPAW-relaxed geometry. Rigid-body modes are included (near 0).
+    """
+    import os
+    import tempfile
+
+    from ase.units import invcm
+    from ase.vibrations import Vibrations
+
+    settings = {**GPAW_DEFAULTS, **(settings or {})}
+    atoms = atoms.copy()
+    atoms.calc = gpaw_calculator(settings, _n_bands(atoms, settings))
+    with tempfile.TemporaryDirectory() as directory:
+        vibrations = Vibrations(atoms, name=os.path.join(directory, "vib"), delta=delta)
+        vibrations.run()
+        energies = vibrations.get_energies()
+    values = np.where(np.abs(energies.imag) > np.abs(energies.real), -np.abs(energies.imag),
+                      np.abs(energies.real)) / invcm
+    return np.sort(values)
+
+
+def gpaw_settings_record(settings: Optional[dict] = None) -> dict:
+    """The settings plus the versions of GPAW and ASE, for the reference file."""
+    import ase
+    import gpaw
+
+    return {"code": "GPAW", "gpaw_version": gpaw.__version__, "ase_version": ase.__version__,
+            "spin": "closed shell, spin-paired", "boundary": "zero (pbc=False)",
+            **GPAW_DEFAULTS, **(settings or {})}

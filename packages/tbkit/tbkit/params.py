@@ -166,13 +166,38 @@ class Tail:
         return np.where(d < self.r1, inner, np.where(d < self.rm, tail, 0.0))
 
 
+@dataclass(frozen=True)
+class CutoffPolynomial:
+    """``Σ_k c_k (rc - d)^k`` for ``d < rc`` (k = ``first_power``, ``first_power`` + 1...), else 0.
+
+    With ``first_power >= 3`` the value, slope and curvature vanish at
+    ``rc``. Linear in the coefficients: the form fitted for pair repulsions
+    (:mod:`tbkit.recipes.xu_chn`), as in DFTB's polynomial repulsion.
+    """
+
+    coefficients: tuple[float, ...]
+    rc: float
+    first_power: int = 3
+
+    @property
+    def cutoff(self) -> float:
+        return self.rc
+
+    def __call__(self, d):
+        d = np.asarray(d, dtype=float)
+        x = np.clip(self.rc - d, 0.0, None)
+        value = sum(c * x ** (self.first_power + k) for k, c in enumerate(self.coefficients))
+        return np.where(d < self.rc, value, 0.0)
+
+
 def derivative(law: DistanceLaw, d, h: float = 1e-5):
     """dV/dd by central differences (exact to O(h²); every law is smooth)."""
     d = np.asarray(d, dtype=float)
     return (law(d + h) - law(d - h)) / (2 * h)
 
 
-_LAWS = {cls.__name__: cls for cls in (Constant, Exponential, Harrison, GSP, Table)}
+_LAWS = {cls.__name__: cls for cls in (Constant, Exponential, Harrison, GSP, Table,
+                                       CutoffPolynomial)}
 
 
 def law_to_dict(law) -> dict:
@@ -201,6 +226,8 @@ def law_from_dict(data: dict):
         raise ValueError(f"Ley de distancia desconocida: {kind!r}.")
     if kind == "Table":
         data["r"], data["values"] = tuple(data["r"]), tuple(data["values"])
+    if kind == "CutoffPolynomial":
+        data["coefficients"] = tuple(data["coefficients"])
     return _LAWS[kind](**data)
 
 
@@ -235,6 +262,10 @@ class TBModel:
         Pair or embedded repulsion, needed for total energies and forces.
     metadata
         Provenance of the parameters (reference, validity...).
+    scc
+        True when the parameters were made for a self-consistent-charge
+        ground state (DFTB and DFTB-like sets): calculators and responses
+        then use SCC by default. False for models fitted without it (Xu).
     """
 
     name: str
@@ -251,6 +282,7 @@ class TBModel:
     #: Where the numbers come from: reference, system, validity, notes, and
     #: the per-parameter descriptions of the file they were read from.
     metadata: dict = field(default_factory=dict)
+    scc: bool = False
 
     @property
     def orthogonal(self) -> bool:
@@ -364,6 +396,7 @@ def model_from_dict(data: dict) -> TBModel:
         hubbard_u={el: float(_value(v)) for el, v in data.get("hubbard_u", {}).items()},
         repulsive=repulsive,
         metadata=metadata,
+        scc=bool(_value(data.get("scc", False))),
     )
 
 
@@ -390,6 +423,8 @@ def model_to_dict(model: TBModel) -> dict:
     }
     if rule:
         data["valence_rule"] = rule
+    if model.scc:
+        data["scc"] = True
     if model.repulsive is not None:
         data["repulsive"] = model.repulsive.to_dict()
     for key in ("reference", "system", "validity", "notes"):

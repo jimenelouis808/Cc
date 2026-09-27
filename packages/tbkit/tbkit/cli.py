@@ -2,6 +2,7 @@
 
     tbkit levels  cinta.xyz                       # niveles, gap, cargas
     tbkit levels  cinta.xyz --model sp3 --scc     # sp3 de carbono, cargas autoconsistentes
+    tbkit raman   piridina.xyz --model chn        # C/H/N (Xu + H, N ajustados a GPAW)
     tbkit bands   grafeno.xyz --path GKMG -o bandas.csv
     tbkit dos     tubo.xyz --kmesh 60 --pdos element -o dos.csv
     tbkit hubbard zgnr.xyz --U 2.7 --kmesh 48 --m-energy m.csv
@@ -15,7 +16,10 @@
 
 Structures: any file ASE reads (extxyz from carbonforge or nanocarbon_lab
 keeps the cell and periodicity). Models: ``--model pi`` (default), ``sp3``
-(Xu carbon), or ``--skf DIR --orbitals "C=s,px,py,pz H=s"``.
+(Xu carbon), ``chn`` (Xu carbon plus H and N fitted to GPAW, SCC),
+``--parameters FILE.json`` (any parameter file, e.g. your own fit), or
+``--skf DIR --orbitals "C=s,px,py,pz H=s"``. Charges are self-consistent
+when the model is (chn, .skf); ``--scc``/``--no-scc`` overrides.
 """
 
 from __future__ import annotations
@@ -30,9 +34,11 @@ import numpy as np
 
 
 def _model(args):
-    from .params import pi_model, xu_carbon
+    from .params import load_parameters, pi_model, xu_carbon
     from .skf import load_skf_set
 
+    if getattr(args, "parameters", None):
+        return load_parameters(args.parameters)
     if args.skf:
         orbitals = {}
         for item in args.orbitals.split():
@@ -41,6 +47,8 @@ def _model(args):
         return load_skf_set(args.skf, orbitals)
     if args.model == "sp3":
         return xu_carbon()
+    if args.model == "chn":
+        return load_parameters("xu_chn")
     return pi_model(t=args.t)
 
 
@@ -76,7 +84,7 @@ def cmd_levels(args) -> int:
     from .solver import solve
 
     system = _system(args)
-    if args.scc:
+    if system.model.scc if args.scc is None else args.scc:
         result = self_consistent(system, charge=args.charge)
         solution, charges = result.solution, result.charges
         print(result.summary())
@@ -284,8 +292,11 @@ def build_parser() -> argparse.ArgumentParser:
     def structure_command(name, help_text, func):
         p = sub.add_parser(name, help=help_text)
         p.add_argument("structure")
-        p.add_argument("--model", choices=("pi", "sp3"), default="pi",
-                       help="pi (π Hückel) o sp3 (carbono de Xu, con parte repulsiva).")
+        p.add_argument("--model", choices=("pi", "sp3", "chn"), default="pi",
+                       help="pi (π Hückel), sp3 (carbono de Xu, con parte repulsiva) o chn "
+                            "(Xu + H y N ajustados a GPAW, SCC).")
+        p.add_argument("--parameters", default=None,
+                       help="Archivo JSON de parámetros (sustituye a --model).")
         p.add_argument("--t", type=float, default=-2.7, help="Hopping π, eV (modelo pi).")
         p.add_argument("--skf", default=None, help="Carpeta con archivos A-B.skf de DFTB.")
         p.add_argument("--orbitals", default="C=s,px,py,pz H=s",
@@ -296,7 +307,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     lv = structure_command("levels", "Niveles, gap y cargas.", cmd_levels)
     lv.add_argument("--charge", type=float, default=0.0)
-    lv.add_argument("--scc", action="store_true", help="Cargas autoconsistentes (finitos).")
+    lv.add_argument("--scc", action=argparse.BooleanOptionalAction, default=None,
+                    help="Cargas autoconsistentes (por defecto, las del modelo).")
     lv.add_argument("--bonds", action="store_true", help="Órdenes de enlace de Mayer.")
     lv.add_argument("--json", default=None)
 
@@ -335,14 +347,16 @@ def build_parser() -> argparse.ArgumentParser:
     rl.add_argument("--kT", type=float, default=0.02)
     rl.add_argument("--fmax", type=float, default=0.01)
     rl.add_argument("--steps", type=int, default=500)
-    rl.add_argument("--scc", action="store_true")
+    rl.add_argument("--scc", action=argparse.BooleanOptionalAction, default=None,
+                    help="Cargas autoconsistentes (por defecto, las del modelo).")
     rl.add_argument("-o", "--out", default="relajada.extxyz")
 
     ph = structure_command("phonons", "Fonones en Γ (modelos con parte repulsiva).",
                            cmd_phonons)
     ph.add_argument("--kT", type=float, default=0.02)
     ph.add_argument("--delta", type=float, default=0.005)
-    ph.add_argument("--scc", action="store_true")
+    ph.add_argument("--scc", action=argparse.BooleanOptionalAction, default=None,
+                    help="Cargas autoconsistentes (por defecto, las del modelo).")
     ph.add_argument("-o", "--out", default=None)
 
     rm = structure_command("raman", "Raman no resonante (modelo con parte repulsiva; con gap).",

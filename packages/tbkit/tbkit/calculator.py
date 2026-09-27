@@ -7,7 +7,8 @@
 Properties: ``energy`` and ``free_energy`` (both the Mermin free energy the
 forces derive from), ``forces``, and for finite systems ``dipole`` (from
 Mulliken charges, e·Å) and ``charges``. The model must have a repulsive
-term. With ``scc=True`` charges are self-consistent (finite systems only).
+term. With ``scc=True`` charges are self-consistent (finite systems only);
+the default follows the model (``TBModel.scc``: True for DFTB-like sets).
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ class TBCalculator(Calculator):
     implemented_properties = ["energy", "free_energy", "forces", "dipole", "charges"]
 
     def __init__(self, model: TBModel, kpts: Optional[int | tuple] = None, kT: float = 0.02,
-                 charge: float = 0.0, scc: bool = False, **kwargs):
+                 charge: float = 0.0, scc: Optional[bool] = None, **kwargs):
         super().__init__(**kwargs)
         if model.repulsive is None:
             raise ValueError(f"El modelo '{model.name}' no tiene parte repulsiva: no puede "
@@ -37,7 +38,7 @@ class TBCalculator(Calculator):
         self.kpts = kpts
         self.kT = kT
         self.charge = charge
-        self.scc = scc
+        self.scc = model.scc if scc is None else bool(scc)
         self.last_solution = None
 
     def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):

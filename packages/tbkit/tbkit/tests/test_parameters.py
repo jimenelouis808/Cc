@@ -65,6 +65,7 @@ class TestSKF:
 
     def test_tabulated_xu_reproduces_xu(self, xu_skf):
         model = load_skf_set(xu_skf, {"C": ("s", "px", "py", "pz")})
+        assert model.scc                  # DFTB sets are made for SCC
         assert model.orthogonal                  # all overlap columns were zero
         assert model.valence["C"] == 4.0 and model.hubbard_u["C"] == pytest.approx(
             0.36 * Hartree)

@@ -65,11 +65,18 @@ class PairRepulsive:
 
 @dataclass
 class EmbeddedRepulsive:
-    """``E = Σ_i f(x_i)``, ``x_i = Σ_j φ(r_ij)``, ``f(x) = Σ_n c_n x^n`` (Xu et al.)."""
+    """``E = Σ_i f(x_i)``, ``x_i = Σ_j φ(r_ij)``, ``f(x) = Σ_n c_n x^n`` (Xu et al.).
+
+    Alone, it refuses atoms outside ``elements``. Inside a
+    :class:`SumRepulsive` (``others="ignore"``) it acts on those elements
+    only: other atoms neither embed nor count as neighbours, and their
+    repulsion comes from the other terms.
+    """
 
     phi: object
     polynomial: tuple[float, ...]
     elements: tuple[str, ...] = ("C",)
+    others: str = "error"
 
     def cutoff(self) -> float:
         return self.phi.cutoff
@@ -83,10 +90,14 @@ class EmbeddedRepulsive:
     def energy_and_forces(self, atoms: Atoms) -> tuple[float, np.ndarray]:
         symbols = atoms.get_chemical_symbols()
         unknown = sorted(set(symbols) - set(self.elements))
-        if unknown:
+        if unknown and self.others != "ignore":
             raise ValueError(f"La repulsión embebida solo describe {self.elements}; "
                              f"no {', '.join(unknown)}.")
         ii, jj, dd, vv = neighbor_list("ijdD", atoms, self.cutoff())
+        if unknown:
+            inside = np.isin(symbols, self.elements)
+            keep = inside[ii] & inside[jj]
+            ii, jj, dd, vv = ii[keep], jj[keep], dd[keep], vv[keep]
         x = np.zeros(len(atoms))
         np.add.at(x, ii, self.phi(dd))
         energy = float(np.sum(self._f(x)))
@@ -95,11 +106,35 @@ class EmbeddedRepulsive:
         push = (weight / dd)[:, None] * vv
         np.add.at(forces, ii, push)
         np.add.at(forces, jj, -push)
+        if unknown:
+            # f(0) is a per-atom constant: it belongs to the embedded elements only.
+            energy -= float(np.sum(~np.isin(symbols, self.elements))) * self._f(0.0)
         return energy, forces
 
     def to_dict(self) -> dict:
         return {"type": "embedded", "elements": list(self.elements),
                 "phi": law_to_dict(self.phi), "polynomial": list(self.polynomial)}
+
+
+@dataclass
+class SumRepulsive:
+    """The sum of several repulsive terms (e.g. Xu's embedded C-C plus C-H pairs)."""
+
+    terms: tuple
+
+    def cutoff(self) -> float:
+        return max(term.cutoff() for term in self.terms)
+
+    def energy_and_forces(self, atoms: Atoms) -> tuple[float, np.ndarray]:
+        energy, forces = 0.0, np.zeros((len(atoms), 3))
+        for term in self.terms:
+            e, f = term.energy_and_forces(atoms)
+            energy += e
+            forces += f
+        return energy, forces
+
+    def to_dict(self) -> dict:
+        return {"type": "sum", "terms": [term.to_dict() for term in self.terms]}
 
 
 @dataclass(frozen=True)
@@ -164,6 +199,14 @@ def repulsive_from_dict(data: dict):
     from .params import Tail
 
     kind = data["type"]
+    if kind == "sum":
+        terms = []
+        for entry in data["terms"]:
+            term = repulsive_from_dict(entry)
+            if isinstance(term, EmbeddedRepulsive):
+                term.others = "ignore"
+            terms.append(term)
+        return SumRepulsive(tuple(terms))
     if kind == "embedded":
         phi = law_from_dict(data["phi"])
         if data.get("tail"):

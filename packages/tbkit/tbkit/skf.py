@@ -19,8 +19,17 @@ converted here to eV and Å. ``n*value`` (Fortran repetition) is accepted.
 The extended format (``@`` on line 1, f orbitals) is refused.
 
 Convention for the heteronuclear ``sp`` integral: in ``A-B.skf``, ``Hsp0``
-is taken as <s on A | H | p on B> (tbkit's ``(A, B, "sps")``). The d
-columns are read and ignored (s/p basis only).
+is <s on A | H | p on B> (tbkit's ``(A, B, "sps")``), and <p on A | H | s on
+B> comes from ``B-A.skf``. Checked against DFTB+'s reader
+(``src/dftbp/dftbplus/parser.F90``): ``A-B.skf`` fills ``skData12`` for the
+pair (A, B), and ``getFullTable`` takes an (l1 on A, l2 on B) integral from
+``skData12`` when l1 <= l2 and from ``skData21`` (``B-A.skf``) otherwise; the
+column is ``Hsp0`` in both cases. The d columns are read and ignored (s/p
+basis only).
+
+A set read from ``.skf`` files is flagged ``scc=True``: DFTB parameters are
+made for a self-consistent-charge ground state, so calculators and
+polarizabilities use SCC by default.
 
 Licences: the published sets (mio, 3ob, pbc...) belong to their authors
 and are distributed by dftb.org under their own terms. tbkit reads them
@@ -161,7 +170,7 @@ def load_skf_set(directory: str | Path, orbitals: dict[str, tuple[str, ...]],
         // 2 else None
     return TBModel(name=name or f"integrales .skf ({directory.name})", orbitals=dict(orbitals),
                    onsite=onsite, hopping=hopping, overlap=overlap, valence=valence,
-                   hubbard_u=hubbard, repulsive=repulsive,
+                   hubbard_u=hubbard, repulsive=repulsive, scc=True,
                    metadata={"reference": f"archivos .skf de {directory}",
                              "notes": "Integrales de dos centros y repulsión de DFTB; con "
                                       "tbkit.scc es un modelo tipo DFTB2 (sin tercer orden)."})
