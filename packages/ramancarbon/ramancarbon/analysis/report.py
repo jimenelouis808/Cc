@@ -113,6 +113,14 @@ class AnalysisResult:
     profile: Optional[str] = None
     """Lineshape forced on the deconvolution, or ``None`` for the database
     defaults."""
+    absence: list = field(default_factory=list)
+    """What the phases that were *not* identified are bounded to.
+
+    The phase scan's three open endings — an unexplained peak with a list
+    of near misses, a phase matched on one line, a family where one
+    polymorph was named — all reduce to the same unanswered question: how
+    much of the phase could be there and not have been seen. See
+    :mod:`ramancarbon.analysis.detection_limit`."""
     audit: Optional[Any] = None
     """The acceptance audit of :attr:`fit`.
 
@@ -220,6 +228,7 @@ def analyse(
     basis: str = "area",
     presets: Sequence[str] = ("two_band", "three_band", "four_band",
                               "five_band_no_dprime", "five_band"),
+    bound_phases: Sequence[str] = (),
     metallic: Optional[bool] = None,
     rbm_parameterisation: Optional[str] = None,
     material_hint: Optional[str] = None,
@@ -250,6 +259,14 @@ def analyse(
         them and because they are insensitive to instrument resolution.
     presets:
         Deconvolution models to compare for the D–G region.
+    bound_phases:
+        Phase keys to bound whether or not the scan raised them, for a
+        question this analysis has no way to know was asked. A Rietveld
+        refinement of the same sample that puts FeSe-T at 2.7 % by weight
+        raises "should Raman have seen that?", and the answer —
+        on the spectrum that prompted this, every FeSe-T line lies under
+        the cementite band at 215 cm⁻¹, so Raman neither confirms nor
+        contradicts it — is worth having and cannot be guessed at.
     n_d, n_g:
         Number of components in the D and in the G region, overriding
         ``presets`` with an explicit convention. Many groups fit a fixed
@@ -475,6 +492,18 @@ def analyse(
     except ValueError as exc:
         warnings.append(f"no se ha podido deconvolucionar la región D–G: {exc}")
 
+    absence: list = []
+    if phases is not None and phases.enabled:
+        from .detection_limit import absence_limits
+
+        try:
+            absence = absence_limits(processed, phases, peaks=peaks,
+                                     extra=tuple(bound_phases))
+        except Exception as error:                       # noqa: BLE001
+            # A limit is a refinement on the report, never a reason to
+            # lose it.
+            warnings.append(f"no se han podido acotar las fases ausentes: {error}")
+
     audit = None
     if fit is not None:
         from ..models.acceptance import audit_fit
@@ -602,6 +631,7 @@ def analyse(
         interference=interference,
         phases=phases,
         profile=profile,
+        absence=absence,
         audit=audit,
         warnings=warnings,
     )
@@ -946,6 +976,16 @@ def build_report(result: AnalysisResult, verbose: bool = True) -> str:
         if result.phases.found_anything:
             lines.append("")
             lines.append(result.phases.abundance_caveat())
+
+    if result.absence:
+        lines.append(section("QUÉ SE HABRÍA VISTO Y NO SE VIO"))
+        lines.append("  Una fase que el barrido no identificó puede estar "
+                     "ausente o puede estar por debajo de lo que este "
+                     "espectro distingue. Estas son las alturas mínimas que "
+                     "el buscador de picos habría detectado.")
+        for limit in result.absence:
+            lines.append("")
+            lines.append("  " + limit.summary().replace("\n", "\n  "))
 
     if result.interference is not None and result.interference.found_anything:
         lines.append(section("BANDAS NO CARBONOSAS (interferencias)"))
