@@ -6,6 +6,27 @@ está la trampa.
 
 ---
 
+## tbkit · la polarizabilidad ya no es cero fuera del plano
+
+Hasta ahora, la α del modelo era exactamente cero en la dirección
+perpendicular a una cadena y fuera del plano de una molécula plana, y eso
+fijaba razones de despolarización artificiales (1/3 en HCN, 0,125 en la
+respiración del benceno). Ahora el operador de posición incluye el dipolo entre
+los orbitales s y p de cada átomo, calculado con el átomo libre de GPAW, y el
+apantallamiento incluye dipolos atómicos sin ningún parámetro nuevo. Se activa
+solo en `xu_carbon` y `xu_chn`; `onsite_dipoles=False` recupera lo anterior.
+
+**Qué mejora.** Desaparecen los ceros y las ρ fijas; la α de C₆₀ pasa de 61,7
+a 69,0 Å³ (medida: 76,5 ± 8).
+
+**Lo que NO arregla.** A lo largo de los enlaces σ la α baja (es correcto: los
+dipolos de transición unen centroides de híbridos, no núcleos), así que la del
+benceno queda en 8,5 Å³ en el plano y 1,5 fuera (medidas: ~12,3 y ~6,5) y la
+ε∞ del diamante en 2,96 (medida: 5,7). Lo que falta es polarización que una
+base mínima no tiene: las α absolutas siguen siendo orientativas.
+
+---
+
 ## tbkit · fonones de Quantum ESPRESSO con intensidades de tight binding
 
 `tbkit raman estructura.xyz --model chn --modes dynmat.out` toma frecuencias y

@@ -208,6 +208,26 @@ def gpaw_frequencies(atoms: Atoms, settings: Optional[dict] = None,
     return np.sort(values)
 
 
+def gpaw_onsite_dipole(symbol: str, xc: str = "PBE") -> float:
+    """``d = (1/√3) ∫ R_2s R_2p r³ dr`` of the free atom (Å), with GPAW's atom.
+
+    Radial functions of the valence s and p shells (spin-paired), each with
+    its outer lobe positive; the magnitude used by :mod:`tbkit.dipoles`.
+    """
+    from ase.units import Bohr
+    from gpaw.atom.aeatom import AllElectronAtom
+
+    atom = AllElectronAtom(symbol, xc=xc, spinpol=False, log=None)
+    atom.run()
+    r = atom.rgd.r_g
+    n_s = {"H": 1, "He": 1}.get(symbol, 2)
+    s = atom.channels[0].phi_ng[n_s - 1]
+    p = atom.channels[1].phi_ng[0]
+    outer = np.searchsorted(r, 4.0)
+    s, p = s * np.sign(s[outer]), p * np.sign(p[outer])
+    return float(atom.rgd.integrate(s * p * r) / (4 * np.pi) / np.sqrt(3) * Bohr)
+
+
 def gpaw_settings_record(settings: Optional[dict] = None) -> dict:
     """The settings plus the versions of GPAW and ASE, for the reference file."""
     import ase

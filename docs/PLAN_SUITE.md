@@ -217,11 +217,13 @@ Pendiente de la fase E:
 - [x] Fonones importados de QE (paso 3): lector propio en tbkit (`qe.py`:
       dynmat/matdyn en Γ, desplazamientos o autovectores, fase y subespacios
       degenerados), `raman(phonons=...)`, `raman_from_qe`, `tbkit raman --modes`.
-- [ ] Dipolos intraatómicos en la óptica: α⊥ = 0 exacto en cadenas y fuera del
-      plano en moléculas planas (respuesta de monopolos y dipolos puntuales).
-      Añadir ⟨s|r|p⟩ por elemento (calculable con el átomo de GPAW) al operador
-      de posición y extender el apantallamiento a dipolos atómicos. Es lo que
-      más limita hoy las intensidades Raman.
+- [x] Dipolos intraatómicos en la óptica (paso 4): ⟨s|r|p⟩ del átomo libre de
+      GPAW, signo desde la convención del modelo, apantallamiento con dipolos
+      atómicos derivado del γ de Klopman–Ohno; campo finito como prueba.
+      Desaparecen α⊥ = 0 y ρ = 1/3; α de C₆₀ 61,7 → 69,0 Å³ (exp. 76,5 ± 8).
+- [ ] Base más allá de la mínima para la α (fuera del plano del benceno 1,5
+      frente a ~6,5 Å³; ε∞ del diamante 2,96 frente a 5,7): orbitales de
+      polarización o una corrección de polarizabilidad atómica.
 - [ ] Raman resonante (elementos de matriz ópticos y electrón–fonón).
 - [ ] Segundo orden (banda 2D, doble resonancia): periódico, suma en toda la zona
       de Brillouin.

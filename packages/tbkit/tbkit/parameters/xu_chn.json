@@ -76,6 +76,20 @@
    "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"
   }
  },
+ "onsite_dipole": {
+  "C": {
+   "value": 0.4952,
+   "unit": "Å",
+   "source": "GPAW aeatom PBE, |⟨2s|r|2p⟩| del átomo libre",
+   "description": "dipolo intraatómico s-p para la respuesta óptica; el signo lo fija la convención de orbitales del modelo (tbkit.dipoles)"
+  },
+  "N": {
+   "value": 0.4131,
+   "unit": "Å",
+   "source": "GPAW aeatom PBE, |⟨2s|r|2p⟩| del átomo libre",
+   "description": "dipolo intraatómico s-p para la respuesta óptica; el signo lo fija la convención de orbitales del modelo (tbkit.dipoles)"
+  }
+ },
  "hopping": [
   {
    "pair": [

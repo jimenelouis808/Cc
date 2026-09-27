@@ -47,8 +47,13 @@ class TestDiamond:
         eps = dielectric_constant(System.build(bulk("C", "diamond", a=3.567), xu_carbon()),
                                   kmesh=8)
         assert np.allclose(eps, eps[0, 0] * np.eye(3), atol=1e-6)            # cubic
-        # Independent particles, point dipoles: 4.75 against 5.7 measured.
-        assert eps[0, 0] == pytest.approx(5.7, rel=0.20)
+        # Independent particles. Point dipoles give 4.75 against 5.7 measured;
+        # the intra-atomic s-p dipoles shorten the σ→σ* transition dipoles
+        # (hybrid centroids) and give 2.96: a minimal basis misses the rest.
+        point = dielectric_constant(System.build(bulk("C", "diamond", a=3.567), xu_carbon()),
+                                    kmesh=8, onsite_dipoles=False)
+        assert point[0, 0] == pytest.approx(5.7, rel=0.20)
+        assert 1.0 < eps[0, 0] < point[0, 0]
 
 
 class TestPolarizability:
@@ -144,7 +149,8 @@ def test_c60_selection_rules_and_polarizability():
     c60.calc = TBCalculator(xu_carbon(), kT=0.01)
     BFGS(c60, logfile=None).run(fmax=0.005)
     alpha = polarizability_linear_response(System.build(c60, xu_carbon()))
-    assert np.trace(alpha) / 3 == pytest.approx(76.5, rel=0.25)     # exp. 76.5 ± 8 Å³
+    # exp. 76.5 ± 8 Å³; 69.0 with intra-atomic dipoles (61.7 with point dipoles)
+    assert np.trace(alpha) / 3 == pytest.approx(76.5, rel=0.15)
     result = raman(c60, xu_carbon(), kT=0.01)
     # Hg(3) is weak (~5e-5 of the strongest line, measured at 710 cm⁻¹ and weak
     # there too); inactive modes carry finite-difference noise below ~3e-6.

@@ -99,7 +99,8 @@ class TestRamanWithImportedModes:
         path = write_qe_modes(tmp_path / "dynmat.out", frequencies, modes)
         imported = raman_from_qe(atoms, chn, path)
         assert imported.frequencies == pytest.approx(native.frequencies, abs=1e-4)
-        assert imported.activities == pytest.approx(native.activities, rel=1e-5, abs=1e-8)
+        # the file carries six decimals per component
+        assert imported.activities == pytest.approx(native.activities, rel=1e-4, abs=1e-6)
         assert imported.depolarization == pytest.approx(native.depolarization, abs=1e-5)
         assert any("importados" in w for w in imported.warnings)
 

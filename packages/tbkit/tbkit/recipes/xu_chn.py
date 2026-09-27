@@ -78,6 +78,10 @@ POWERS = (3, 4, 5, 6, 7)
 #: GPAW 25.7. DFTB mio: H 0.4195, C 0.3647, N 0.4309 Ha -- the same.
 HUBBARD_U = {"H": 11.4154, "C": 9.9228, "N": 11.7247}
 
+#: Intra-atomic dipole |⟨2s|r|2p⟩| (Å) of the free atom, GPAW's all-electron
+#: atom, PBE (``tbkit.references.gpaw_onsite_dipole``); optics only.
+ONSITE_DIPOLE = {"C": 0.4952, "N": 0.4131}
+
 #: Harrison's universal η (Harrison, Electronic Structure, 1980) for the
 #: starting guesses, V = η ħ²/(m d²) with ħ²/m = 7.62 eV Å².
 _ETA = {"sss": -1.40, "sps": 1.84, "pps": 3.24, "ppp": -0.81}
@@ -132,7 +136,8 @@ def build_model(x: np.ndarray, repulsive: Optional[object] = None) -> TBModel:
                    orbitals={"C": ("s", "px", "py", "pz"), "N": ("s", "px", "py", "pz"),
                              "H": ("s",)},
                    onsite=onsite, hopping=hopping, valence={"C": 4.0, "N": 5.0, "H": 1.0},
-                   hubbard_u=dict(HUBBARD_U), repulsive=repulsive, scc=True)
+                   hubbard_u=dict(HUBBARD_U), repulsive=repulsive, scc=True,
+                   onsite_dipole=dict(ONSITE_DIPOLE))
 
 
 # --------------------------------------------------------------------------
@@ -554,6 +559,9 @@ def parameter_file(model: TBModel, x: np.ndarray, shift: float, report: dict,
     data["fit"] = {"references": references.name, "references_sha256": _sha256(references),
                    "parameters": dict(zip(names, map(float, x), strict=True)),
                    "level_shift_eV": shift, **report}
+    data["onsite_dipole"] = {el: {"value": d, "unit": "Å",
+                                  "source": "GPAW aeatom PBE, |⟨2s|r|2p⟩| del átomo libre"}
+                             for el, d in ONSITE_DIPOLE.items()}
     data["hubbard_u"] = {el: {"value": u, "unit": "eV",
                               "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"}
                          for el, u in HUBBARD_U.items()}

@@ -71,8 +71,15 @@ def _response(energies, occupations, r_matrices, omega: float) -> np.ndarray:
     return out
 
 
-def polarizability_finite(solution: Solution, omega: float = 0.0) -> np.ndarray:
-    """α (Å³) of a finite system from its solution."""
+def polarizability_finite(solution: Solution, omega: float = 0.0,
+                          onsite_dipoles: bool = True) -> np.ndarray:
+    """α (Å³) of a finite system from its solution.
+
+    With ``onsite_dipoles`` (and ``model.onsite_dipole`` set) the position
+    operator includes the intra-atomic s-p dipoles (:mod:`tbkit.dipoles`).
+    """
+    from .dipoles import dipole_matrices, has_dipoles
+
     system = solution.system
     if system.periodic:
         raise ValueError("Sistema periódico: usa polarizability().")
@@ -81,6 +88,7 @@ def polarizability_finite(solution: Solution, omega: float = 0.0) -> np.ndarray:
     centres = np.array([positions[o.atom] for o in system.basis.orbitals])
     centres = centres - centres.mean(axis=0)
     overlap = solution.overlaps[0] if solution.overlaps is not None else None
+    onsite = dipole_matrices(system) if onsite_dipoles and has_dipoles(system.model) else None
     alpha = np.zeros((3, 3))
     for s in range(solution.nspin):
         c = solution.vectors[s, 0]
@@ -91,6 +99,8 @@ def polarizability_finite(solution: Solution, omega: float = 0.0) -> np.ndarray:
                 operator = np.diag(centres[:, a])
             else:
                 operator = 0.5 * (centres[:, a][:, None] + centres[:, a][None, :]) * overlap
+            if onsite is not None:
+                operator = operator + onsite[a]
             r.append(c.conj().T @ operator @ c)
         alpha += _response(solution.energies[s, 0], occupations, r, omega)
     return alpha * COULOMB
@@ -120,8 +130,17 @@ def _bloch_ii(system: System, k_fractional: np.ndarray):
 
 def polarizability_periodic(system: System, kpts: np.ndarray, weights: np.ndarray,
                             kT: float = 0.01, omega: float = 0.0,
-                            charge: float = 0.0) -> tuple[np.ndarray, float]:
-    """α per unit cell (Å³) of a periodic, gapped system; also returns the gap (eV)."""
+                            charge: float = 0.0,
+                            onsite_dipoles: bool = True) -> tuple[np.ndarray, float]:
+    """α per unit cell (Å³) of a periodic, gapped system; also returns the gap (eV).
+
+    The intra-atomic dipoles, when the model has them, add ``⟨n|D|m⟩`` to the
+    interband position elements (the velocity ``∂_k H + i[H, D]`` gives
+    exactly that).
+    """
+    from .dipoles import dipole_matrices, has_dipoles
+
+    onsite = dipole_matrices(system) if onsite_dipoles and has_dipoles(system.model) else None
     energies, blocks = [], []
     for k in kpts:
         h, s, dh, ds = _bloch_ii(system, k)
@@ -150,21 +169,27 @@ def polarizability_periodic(system: System, kpts: np.ndarray, weights: np.ndarra
             if ds is not None:
                 velocity = velocity - (c.conj().T @ ds[a] @ c) * e[None, :]
             with np.errstate(divide="ignore", invalid="ignore"):
-                r.append(np.where(np.abs(e_mn) > 1e-9, 1j * velocity / e_mn, 0.0))
+                element = np.where(np.abs(e_mn) > 1e-9, 1j * velocity / e_mn, 0.0)
+            if onsite is not None:
+                element = element + np.where(np.abs(e_mn) > 1e-9,
+                                             c.conj().T @ onsite[a] @ c, 0.0)
+            r.append(element)
         alpha += weights[index] * _response(e, occupations[0, index], r, omega)
     return alpha * COULOMB, gap
 
 
 def polarizability(system: System, kmesh: int = 12, kT: float = 0.01, omega: float = 0.0,
                    charge: float = 0.0, kpts: Optional[np.ndarray] = None,
-                   weights: Optional[np.ndarray] = None) -> np.ndarray:
+                   weights: Optional[np.ndarray] = None,
+                   onsite_dipoles: bool = True) -> np.ndarray:
     """α (Å³): per molecule for a finite system, per unit cell for a periodic one."""
     if system.periodic:
         if kpts is None:
             kpts, weights = mesh(system.atoms, kmesh)
-        return polarizability_periodic(system, kpts, weights, kT, omega, charge)[0]
+        return polarizability_periodic(system, kpts, weights, kT, omega, charge,
+                                       onsite_dipoles)[0]
     solution = solve(system, *gamma(), charge=charge, kT=kT)
-    return polarizability_finite(solution, omega)
+    return polarizability_finite(solution, omega, onsite_dipoles)
 
 
 def charge_response(solution: Solution) -> np.ndarray:
@@ -206,9 +231,55 @@ def charge_response(solution: Solution) -> np.ndarray:
     return chi
 
 
+def multipole_response(solution: Solution) -> np.ndarray:
+    """χ between atomic charges and intra-atomic dipoles, (4N, 4N) (finite systems).
+
+    As :func:`charge_response`, with transition multipoles (Mulliken charge,
+    then the three components of ``Σ_{μν∈A} c_μn D_μν c_νm``) in place of
+    transition charges.
+    """
+    from .dipoles import dipole_matrices, transition_multipoles
+
+    system = solution.system
+    d_matrices = dipole_matrices(system)
+    size = 4 * len(system.basis.atoms)
+    chi = np.zeros((size, size))
+    for s in range(solution.nspin):
+        c = np.real(solution.vectors[s, 0])
+        sc = c if solution.overlaps is None else np.real(solution.overlaps[0]) @ c
+        f = solution.occupations[s, 0]
+        e = solution.energies[s, 0]
+        active = np.flatnonzero(f > 1e-12)
+        passive = np.flatnonzero(f < (2.0 if solution.nspin == 1 else 1.0) - 1e-12)
+        m = transition_multipoles(system, c, sc, active, passive, d_matrices)
+        de = e[active][:, None] - e[passive][None, :]
+        df = f[active][:, None] - f[passive][None, :]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            weight = np.where(np.abs(de) > 1e-9, df / de, 0.0)
+        in_passive = np.isin(active, passive)
+        in_active = np.isin(passive, active)
+        multiplicity = np.where(in_passive[:, None] & in_active[None, :], 1.0, 2.0)
+        chi += np.einsum("ink,nk,jnk->ij", m, weight * multiplicity, m)
+    return chi
+
+
+def _field_coupling(system: System) -> np.ndarray:
+    """X (4N, 3): how a uniform field couples to charges (E·R_A) and dipoles (E)."""
+    atoms = system.basis.atoms
+    positions = system.atoms.get_positions()[atoms]
+    centred = positions - positions.mean(axis=0)
+    n = len(atoms)
+    coupling = np.zeros((4 * n, 3))
+    coupling[:n] = centred
+    for x in range(3):
+        coupling[n + x::3, x] = 1.0
+    return coupling
+
+
 def polarizability_linear_response(system: System, kT: float = 0.01, U=None,
                                    screened: bool = True,
-                                   ground_scc: Optional[bool] = None) -> np.ndarray:
+                                   ground_scc: Optional[bool] = None,
+                                   onsite_dipoles: bool = True) -> np.ndarray:
     """α (Å³) of a finite system by linear response of the SCC model.
 
     ``δq = (1 - χ γ)⁻¹ χ V_ext`` with ``V_ext,A = e E·R_A`` and ``μ = -Σ δq_A R_A``:
@@ -220,6 +291,11 @@ def polarizability_linear_response(system: System, kT: float = 0.01, U=None,
     the model's ``scc`` flag). A model fitted without SCC (Xu, π) keeps its
     own ground state and only the response is screened; with a symmetric
     pure-carbon molecule (C60) the two coincide.
+
+    With ``onsite_dipoles`` (and ``model.onsite_dipole`` set) the induced
+    density carries atomic dipoles as well as charges, screened by the
+    multipole kernel of :mod:`tbkit.dipoles`: α⊥ of chains and out-of-plane
+    α of planar molecules are then no longer zero.
     """
     from .scc import gamma_matrix, self_consistent
 
@@ -230,15 +306,18 @@ def polarizability_linear_response(system: System, kT: float = 0.01, U=None,
     reference = self_consistent(system, U=U, kT=kT, tol=1e-10) if ground_scc else None
     solution = reference.solution if ground_scc else solve(system, *gamma(), kT=kT)
     _check_gapped(solution, 0.0)
-    chi = charge_response(solution)
-    positions = system.atoms.get_positions()[system.basis.atoms]
-    centred = positions - positions.mean(axis=0)
-    if screened:
-        gamma_ = gamma_matrix(system, U)
-        response = np.linalg.solve(np.eye(len(chi)) - chi @ gamma_, chi)
+    from .dipoles import has_dipoles, multipole_kernel
+
+    if onsite_dipoles and has_dipoles(system.model):
+        chi = multipole_response(solution)
+        coupling = _field_coupling(system)
+        kernel = multipole_kernel(system, U) if screened else None
     else:
-        response = chi
-    alpha = -centred.T @ response @ centred
+        chi = charge_response(solution)
+        coupling = _field_coupling(system)[:len(chi)]
+        kernel = gamma_matrix(system, U) if screened else None
+    response = chi if kernel is None else np.linalg.solve(np.eye(len(chi)) - chi @ kernel, chi)
+    alpha = -coupling.T @ response @ coupling
     return 0.5 * (alpha + alpha.T) * COULOMB
 
 

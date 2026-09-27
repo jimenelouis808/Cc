@@ -23,6 +23,7 @@ tbkit/
 ├── calculator.py     # ASE calculator (relax, ase.vibrations)
 ├── tasks.py          # levels, dos, bands, hubbard, relax, phonons as functions
 ├── optics.py         # polarizability: sum over states, SCC linear response, ε∞
+├── dipoles.py        # intra-atomic s-p dipoles: position operator, multipole screening
 ├── raman.py          # non-resonant Raman on the model's own Γ phonons
 ├── record.py         # reproducible records, `tbkit run simulation.json`, replay
 ├── qe.py             # Quantum ESPRESSO Γ modes (dynmat/matdyn) for Raman with QE phonons
@@ -78,9 +79,14 @@ tbkit/
   displacements (or eigenvectors), per degenerate set a real basis of the
   subspace; never take the real part of a complex Γ mode without fixing its
   phase. The model then gives only α (no repulsion needed).
-- The screened α is monopole-only with point dipoles: α⊥ = 0 for linear
-  chains and out-of-plane for planar molecules, exactly. Do not tune
-  parameters to "fix" α; the fix is intra-atomic dipoles (plan).
+- Intra-atomic dipoles (`dipoles.py`): ⟨s|r|p⟩ magnitudes are computed
+  (GPAW free atom), never fitted; their sign comes from the model's orbital
+  convention (probe), so flipping every spσ must leave α unchanged (tested).
+  The multipole kernel derives from the same Klopman-Ohno γ; the ground
+  state stays as fitted and the dipole terms act on δM. The finite-field
+  solver of that functional is the test of the linear response.
+- With dipoles, α along σ bonds drops (hybrid centroids): that is physics,
+  not a bug. Do not retune d or U to recover a number.
 - Repulsion polynomials are only determined where the training data are:
   check V(r) and its slope in that range, not the coefficients, and state
   the range in `validity`.

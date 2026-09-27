@@ -34,7 +34,7 @@ uno ajustado) en ese mismo formato, y `load_parameters(ruta)` lo lee.
 | 5. Espín | `hubbard` | Hubbard de campo medio; magnetización frente a la energía (m(E), dm/dE), frente al campo (M(h), χ) y frente al dopaje o el nivel de Fermi |
 | 6. Periódico | `hamiltonian`, `kpoints` | H(k) por suma de Bloch; mallas Γ-centradas y caminos de bandas de ASE |
 | 7. Parte repulsiva | `repulsive`, `forces`, `calculator` | Energía libre total (banda − TS + repulsión, + SCC), fuerzas de Hellmann–Feynman (ortogonal, no ortogonal, periódico, SCC), repulsión embebida de Xu y spline de los `.skf`; calculadora ASE para relajar y para fonones en Γ |
-| Raman no resonante (fase E, paso 1) | `optics`, `raman` | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
+| Raman no resonante (fase E, pasos 1 y 4) | `optics`, `raman`, `dipoles` | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
 | C, H y N (fase E, paso 2) | `parameters/xu_chn.json`, `references`, `recipes` | C–C de Xu intacto; H y N ajustados a GPAW (PBE, LCAO dzp) en niveles, fuerzas y energías; U de H, C, N calculadas con el átomo de GPAW; SCC. Receta reproducible y referencias incluidas |
 | Reproducibilidad | `record`, `tasks` | `tbkit run simulacion.json` guarda estructura, parámetros completos, versión, commit, fecha, ajustes y resultados; `record.replay` lo repite |
 
@@ -133,7 +133,7 @@ Resultado (todo frente a GPAW salvo α):
 | Frecuencias (RMS) | CH₄ 52, NH₃ 55, benceno 50, piridina 69, HCN 156 cm⁻¹ (las de GPAW LCAO rompen degeneraciones hasta ~50 cm⁻¹ en los modos blandos: esa es la resolución de la comparación) |
 | Raman del benceno | 2A₁g + 4E₂g + E₁g, como debe; respiración 1021 cm⁻¹ polarizada (exp. 992) |
 | Raman de la piridina | modos de anillo polarizados a 992 y 1028 cm⁻¹ (exp. 991 y 1030) |
-| α | en el plano, benceno 10,3 frente a ~12,3 Å³ medidos; fuera del plano, 0 (ver abajo): la media queda al 35–70 % |
+| α | benceno 8,5 (plano) y 1,5 Å³ (fuera) frente a ~12,3 y ~6,5 medidos: la base mínima se queda corta (ver abajo) |
 
 Límites que el archivo declara en `validity`: solo sistemas finitos de capa
 cerrada (SCC sin Ewald); energías comparables solo entre geometrías de la misma
@@ -141,17 +141,33 @@ composición (no se ajustaron atomizaciones); sin interacción H–H; y el C–C
 Xu falla en anillos tensos (aziridina, 0,22 Å), y los C–C y C–N simples junto
 a un heteroátomo (aminas, nitrilos) se desvían ~0,08 Å.
 
-**Por qué la α sale baja.** La respuesta apantallada solo mueve cargas
-atómicas (monopolos) y el operador de posición es de dipolos puntuales (sin
-⟨s|r|p⟩ dentro del átomo). Una carga en un átomo no puede polarizarse
-perpendicular a una cadena ni fuera del plano de una molécula plana: α⊥ = 0
-exactamente en HCN, α_zz = 0 en el benceno. Consecuencias para el Raman: en
-moléculas lineales los modos totalmente simétricos salen con ρ = 1/3 exacto, y
-las componentes fuera del plano de los tensores de moléculas planas faltan.
-Las intensidades relativas de los modos en el plano son las fiables. El
-arreglo (dipolos intraatómicos y su apantallamiento) está en el plan. La α baja es propia de una base mínima sin funciones de
-polarización: las intensidades Raman relativas son orientativas, las
-absolutas, no.
+**Dipolos intraatómicos (`dipoles`).** Con orbitales puntuales, la respuesta
+solo mueve cargas atómicas y una carga no puede polarizarse perpendicular a
+una cadena ni fuera del plano de una molécula plana: α⊥ = 0 exacto en HCN,
+α_zz = 0 en el benceno, y ρ = 1/3 exacto en los modos totalmente simétricos de
+una molécula lineal (0,125 en la respiración del benceno). Ahora el operador de
+posición incluye ⟨s|r|p⟩ = d por elemento (`onsite_dipole`, calculado con el
+átomo libre de GPAW: C 0,495 Å, N 0,413 Å; nada ajustado), su signo sale de la
+convención de orbitales del propio modelo, y el apantallamiento incluye dipolos
+atómicos con el mismo núcleo de Klopman–Ohno que las cargas (derivadas de γ;
+sin parámetros nuevos). La respuesta lineal coincide con el campo finito del
+mismo funcional y, sin apantallar, con la suma sobre estados.
+
+Qué cambia (con dipolos / con dipolos puntuales):
+
+| | con d | puntual | experimento |
+|---|---|---|---|
+| α de C₆₀ | 69,0 Å³ | 61,7 | 76,5 ± 8 |
+| α del benceno (plano / fuera) | 8,5 / 1,5 Å³ | 10,3 / 0 | ~12,3 / ~6,5 |
+| ε∞ del diamante | 2,96 | 4,75 | 5,7 |
+| ρ de la respiración del benceno | 0,092 | 0,125 | (muy polarizada) |
+| ρ de los modos Σ⁺ de HCN | 0,20 y 0,26 | 1/3 y 1/3 | |
+
+A lo largo de los enlaces σ la α baja, y es correcto: el dipolo de transición
+σ→σ* une los centroides de los dos híbridos, más cercanos que los núcleos, y la
+aproximación puntual lo sobrestimaba. Lo que falta ahora (α fuera del plano,
+ε∞ del diamante) es polarización que una base mínima no tiene. Los ceros y
+las ρ exactas eran artefactos; las α absolutas siguen siendo orientativas.
 
 ## Fonones de Quantum ESPRESSO con intensidades de tbkit
 

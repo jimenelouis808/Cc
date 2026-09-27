@@ -262,6 +262,10 @@ class TBModel:
         Pair or embedded repulsion, needed for total energies and forces.
     metadata
         Provenance of the parameters (reference, validity...).
+    onsite_dipole
+        Per element, the magnitude of ⟨s|r_α|p_α⟩ on one atom (Å), for the
+        optical response (:mod:`tbkit.dipoles`); its sign is taken from the
+        model's orbital convention. Empty: point dipoles only.
     scc
         True when the parameters were made for a self-consistent-charge
         ground state (DFTB and DFTB-like sets): calculators and responses
@@ -283,6 +287,7 @@ class TBModel:
     #: the per-parameter descriptions of the file they were read from.
     metadata: dict = field(default_factory=dict)
     scc: bool = False
+    onsite_dipole: dict[str, float] = field(default_factory=dict)
 
     @property
     def orthogonal(self) -> bool:
@@ -397,6 +402,7 @@ def model_from_dict(data: dict) -> TBModel:
         repulsive=repulsive,
         metadata=metadata,
         scc=bool(_value(data.get("scc", False))),
+        onsite_dipole={el: float(_value(v)) for el, v in data.get("onsite_dipole", {}).items()},
     )
 
 
@@ -425,6 +431,8 @@ def model_to_dict(model: TBModel) -> dict:
         data["valence_rule"] = rule
     if model.scc:
         data["scc"] = True
+    if model.onsite_dipole:
+        data["onsite_dipole"] = dict(model.onsite_dipole)
     if model.repulsive is not None:
         data["repulsive"] = model.repulsive.to_dict()
     for key in ("reference", "system", "validity", "notes"):
