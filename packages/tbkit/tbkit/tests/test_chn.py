@@ -17,6 +17,7 @@ from tbkit.calculator import TBCalculator
 from tbkit.params import (
     CutoffPolynomial,
     derivative,
+    load_parameters,
     model_from_dict,
     model_to_dict,
     xu_carbon,
@@ -156,3 +157,93 @@ class TestRecipe:
 
     def test_parameter_names_match_the_vector(self):
         assert len(xu_chn.parameter_names()) == len(xu_chn.initial_guess())
+
+
+class TestShippedSet:
+    """``parameters/xu_chn.json`` against the GPAW references it was fitted to."""
+
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def shipped():
+        import json
+
+        from tbkit.params import PARAMETER_DIR
+
+        data = json.loads((PARAMETER_DIR / "xu_chn.json").read_text(encoding="utf-8"))
+        refs, settings = load_references(PARAMETER_DIR / "references" / data["fit"]["references"])
+        return data, load_parameters("xu_chn"), refs, settings
+
+    def test_every_number_has_unit_and_source(self, shipped):
+        data = shipped[0]
+        entries = [v for table in data["onsite"].values() for v in table.values()]
+        entries += data["hopping"] + [data["repulsive"]] + list(data["hubbard_u"].values())
+        for entry in entries:
+            assert entry.get("unit") and entry.get("source"), entry
+
+    def test_carbon_is_xu_untouched(self, shipped):
+        model, xu = shipped[1], xu_carbon()
+        assert model.onsite["C"] == xu.onsite["C"]
+        d = np.linspace(1.2, 2.6, 15)
+        for bond in ("sss", "sps", "pps", "ppp"):
+            assert np.allclose(model.law(model.hopping, "C", "C", bond)(d),
+                               xu.law(xu.hopping, "C", "C", bond)(d))
+
+    def test_references_are_the_ones_fitted(self, shipped):
+        import hashlib
+
+        from tbkit.params import PARAMETER_DIR
+
+        data = shipped[0]
+        path = PARAMETER_DIR / "references" / data["fit"]["references"]
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == data["fit"]["references_sha256"]
+
+    def test_reproduces_its_level_fit(self, shipped):
+        data, model, refs, _ = shipped
+        train = [r for r in refs if r.role == "train"]
+        _, shift, _ = xu_chn.level_residuals(model, train)
+        assert shift == pytest.approx(data["fit"]["level_shift_eV"], abs=1e-4)
+        d = np.concatenate([xu_chn.model_levels(model, r)[xu_chn._selection(r)[0]]
+                            - r.levels[xu_chn._selection(r)[0]] for r in train])
+        rms = float(np.sqrt(np.mean((d - shift) ** 2)))
+        assert rms == pytest.approx(data["fit"]["level_rms_train"], abs=1e-4)
+
+    def test_hubbard_u_equals_dftb_mio(self, shipped):
+        from ase.units import Hartree
+
+        mio = {"H": 0.4195, "C": 0.3647, "N": 0.4309}          # Ha
+        for element, u in shipped[1].hubbard_u.items():
+            assert u / Hartree == pytest.approx(mio[element], abs=2e-4)
+
+    def test_scc_by_default_and_finite_only(self, shipped):
+        from ase.build import bulk
+
+        model = shipped[1]
+        assert model.scc
+        diamond = bulk("C", "diamond", a=3.56)
+        diamond.calc = TBCalculator(model, kpts=2)
+        with pytest.raises(ValueError, match="Ewald"):
+            diamond.get_potential_energy()
+
+    def test_pyridine_geometry_close_to_gpaw(self, shipped):
+        _, model, refs, _ = shipped
+        pyridine = next(r for r in refs if r.label == "C5H5N/eq")
+        errors = xu_chn.relaxed_bond_errors(model, pyridine, fmax=0.02)
+        assert max(errors.values()) < 0.04
+
+    def test_methane_frequencies_against_gpaw(self, shipped):
+        import json
+
+        from ase.optimize import BFGS
+
+        from tbkit.params import PARAMETER_DIR
+        from tbkit.tasks import phonons
+
+        _, model, refs, _ = shipped
+        gpaw = json.loads((PARAMETER_DIR / "references" / "gpaw_chn_frequencies.json")
+                          .read_text(encoding="utf-8"))["frequencies"]["CH4"]
+        atoms = next(r for r in refs if r.label == "CH4/eq").atoms.copy()
+        atoms.calc = TBCalculator(model)
+        BFGS(atoms, logfile=None).run(fmax=0.002, steps=300)
+        tb = np.sort(phonons(atoms, model)[0]["frequencies_cm1"])[6:]
+        error = tb - np.sort(gpaw)[6:]
+        assert np.sqrt(np.mean(error ** 2)) < 80           # 52 cm⁻¹ when fitted

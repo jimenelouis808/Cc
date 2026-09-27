@@ -6,6 +6,40 @@ está la trampa.
 
 ---
 
+## tbkit · hidrógeno y nitrógeno: `--model chn`
+
+`tbkit raman piridina.xyz --model chn` ya funciona: el nuevo conjunto `xu_chn`
+añade H y N al carbono de Xu sin tocar el C–C, con cargas autoconsistentes.
+Sirve para cintas pasivadas, copos y moléculas con N piridínico, pirrólico o
+en aminas y nitrilos.
+
+**De dónde sale.** De GPAW (PBE), con dos recetas que se pueden repetir:
+`tbkit.recipes.chn_references` calcula 118 geometrías de 22 moléculas
+(relajadas, desplazadas y escaladas), y `tbkit.recipes.xu_chn` ajusta primero a
+los niveles y después a niveles, fuerzas y energías a la vez. Las referencias
+van dentro del paquete y el archivo de parámetros guarda su huella SHA-256.
+Las U de Hubbard se calculan con el átomo de GPAW y salen iguales a las de
+DFTB mio.
+
+**Cuánto vale.** Enlaces C–H, N–H y aromáticos a ≤ 0,02 Å de GPAW (también en
+un coroneno con N que el ajuste no vio); frecuencias a 50–70 cm⁻¹ en CH₄, NH₃,
+benceno y piridina; el Raman del benceno tiene exactamente 2A₁g + 4E₂g + E₁g y
+el de la piridina pone sus dos modos de anillo polarizados a 992 y 1028 cm⁻¹
+(medidos: 991 y 1030).
+
+**Lo que NO hace.** Solo sistemas finitos de capa cerrada (sin Ewald no hay
+SCC periódico). La α sale entre un 35 y un 70 % de la experimental (base
+mínima), así que las intensidades Raman relativas son orientativas y las
+absolutas no valen. Las energías solo se comparan entre geometrías de la misma
+composición. Los C–C y C–N simples junto a un heteroátomo se desvían ~0,08 Å,
+y los anillos tensos (aziridina) fallan.
+
+**`.skf` de DFTB.** La convención del integral sp heteronuclear está
+comprobada contra el lector de DFTB+, y un conjunto `.skf` se usa con SCC por
+defecto (`--scc`/`--no-scc` lo cambia).
+
+---
+
 ## tbkit · Raman con tight binding (primer orden, no resonante)
 
 `tbkit raman estructura --model sp3` calcula el espectro Raman con el propio

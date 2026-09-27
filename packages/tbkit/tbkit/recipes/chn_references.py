@@ -117,11 +117,18 @@ def main(argv=None) -> None:
                 print(f"{name}: frecuencias", flush=True)
     structures = []
     for job in jobs:
-        items = json.loads((parts / f"{job[0]}.json").read_text())
-        frequencies = parts / f"{job[0]}.freq.json"
-        if frequencies.exists():
-            items[0]["extra"]["frequencies_cm1"] = json.loads(frequencies.read_text())
-        structures += items
+        structures += json.loads((parts / f"{job[0]}.json").read_text())
+    # Frequencies go to their own file: they validate the fit, they are not
+    # fitted, and adding them must not change the fitted references' hash.
+    frequencies = {n: json.loads((parts / f"{n}.freq.json").read_text())
+                   for n in FREQUENCIES if (parts / f"{n}.freq.json").exists()}
+    if frequencies:
+        target = args.out.with_name(args.out.stem + "_frequencies.json")
+        target.write_text(json.dumps({"settings": gpaw_settings_record(settings),
+                                      "unit": "cm-1", "note": "armónicas, ase.vibrations "
+                                      "(delta 0.01 Å) sobre la geometría relajada; incluye "
+                                      "los modos rígidos (≈ 0)", "frequencies": frequencies},
+                                     indent=1, ensure_ascii=False), encoding="utf-8")
     data = {"settings": gpaw_settings_record(settings), "structures": structures}
     args.out.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
     print(f"{len(structures)} estructuras en {args.out}")

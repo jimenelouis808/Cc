@@ -1,0 +1,912 @@
+{
+ "name": "C/H/N: Xu (C-C) + H, N ajustados a GPAW",
+ "units": {
+  "energy": "eV",
+  "length": "Å"
+ },
+ "orbitals": {
+  "C": [
+   "s",
+   "px",
+   "py",
+   "pz"
+  ],
+  "N": [
+   "s",
+   "px",
+   "py",
+   "pz"
+  ],
+  "H": [
+   "s"
+  ]
+ },
+ "onsite": {
+  "C": {
+   "s": {
+    "value": -2.99,
+    "unit": "eV",
+    "source": "Xu 1992 (idéntico a xu_carbon)"
+   },
+   "p": {
+    "value": 3.71,
+    "unit": "eV",
+    "source": "Xu 1992 (idéntico a xu_carbon)"
+   }
+  },
+  "H": {
+   "s": {
+    "value": 3.7900497512852236,
+    "unit": "eV",
+    "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+   }
+  },
+  "N": {
+   "s": {
+    "value": -8.856852222550238,
+    "unit": "eV",
+    "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+   },
+   "p": {
+    "value": 0.3752557131323223,
+    "unit": "eV",
+    "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+   }
+  }
+ },
+ "valence": {
+  "C": 4.0,
+  "N": 5.0,
+  "H": 1.0
+ },
+ "hubbard_u": {
+  "H": {
+   "value": 11.4154,
+   "unit": "eV",
+   "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"
+  },
+  "C": {
+   "value": 9.9228,
+   "unit": "eV",
+   "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"
+  },
+  "N": {
+   "value": 11.7247,
+   "unit": "eV",
+   "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"
+  }
+ },
+ "hopping": [
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -5.0,
+     "r0": 1.536329,
+     "n": 2.0,
+     "nc": 6.5,
+     "rc": 2.18,
+     "cutoff": 2.6
+    },
+    "r1": 2.45,
+    "rm": 2.6
+   },
+   "unit": "eV",
+   "source": "Xu 1992 (idéntico a xu_carbon)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.7,
+     "r0": 1.536329,
+     "n": 2.0,
+     "nc": 6.5,
+     "rc": 2.18,
+     "cutoff": 2.6
+    },
+    "r1": 2.45,
+    "rm": 2.6
+   },
+   "unit": "eV",
+   "source": "Xu 1992 (idéntico a xu_carbon)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.5,
+     "r0": 1.536329,
+     "n": 2.0,
+     "nc": 6.5,
+     "rc": 2.18,
+     "cutoff": 2.6
+    },
+    "r1": 2.45,
+    "rm": 2.6
+   },
+   "unit": "eV",
+   "source": "Xu 1992 (idéntico a xu_carbon)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -1.55,
+     "r0": 1.536329,
+     "n": 2.0,
+     "nc": 6.5,
+     "rc": 2.18,
+     "cutoff": 2.6
+    },
+    "r1": 2.45,
+    "rm": 2.6
+   },
+   "unit": "eV",
+   "source": "Xu 1992 (idéntico a xu_carbon)"
+  },
+  {
+   "pair": [
+    "H",
+    "C"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -4.377007074755046,
+     "r0": 1.09,
+     "n": 0.6455813105239927,
+     "nc": 6.5,
+     "rc": 1.5466739220570596,
+     "cutoff": 1.8446569712607133
+    },
+    "r1": 1.73823445368798,
+    "rm": 1.8446569712607133
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  },
+  {
+   "pair": [
+    "H",
+    "C"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.4822234915054056,
+     "r0": 1.09,
+     "n": 0.6455813105239927,
+     "nc": 6.5,
+     "rc": 1.5466739220570596,
+     "cutoff": 1.8446569712607133
+    },
+    "r1": 1.73823445368798,
+    "rm": 1.8446569712607133
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  },
+  {
+   "pair": [
+    "H",
+    "N"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -6.015761443573533,
+     "r0": 1.01,
+     "n": 0.5000000860433628,
+     "nc": 6.5,
+     "rc": 1.433156569979477,
+     "cutoff": 1.7092693036452478
+    },
+    "r1": 1.6106576130503296,
+    "rm": 1.7092693036452478
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  },
+  {
+   "pair": [
+    "H",
+    "N"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.822734004102957,
+     "r0": 1.01,
+     "n": 0.5000000860433628,
+     "nc": 6.5,
+     "rc": 1.433156569979477,
+     "cutoff": 1.7092693036452478
+    },
+    "r1": 1.6106576130503296,
+    "rm": 1.7092693036452478
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  },
+  {
+   "pair": [
+    "C",
+    "N"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -3.6217335746901314,
+     "r0": 1.47,
+     "n": 1.5797804949451806,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  },
+  {
+   "pair": [
+    "C",
+    "N"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 3.459062654229041,
+     "r0": 1.47,
+     "n": 1.5797804949451806,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  },
+  {
+   "pair": [
+    "N",
+    "C"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 3.3167596580924,
+     "r0": 1.47,
+     "n": 1.5797804949451806,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  },
+  {
+   "pair": [
+    "C",
+    "N"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.408640310321533,
+     "r0": 1.47,
+     "n": 1.5797804949451806,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  },
+  {
+   "pair": [
+    "C",
+    "N"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.0928241655504207,
+     "r0": 1.47,
+     "n": 1.5797804949451806,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  },
+  {
+   "pair": [
+    "N",
+    "N"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -4.182591564293082,
+     "r0": 1.45,
+     "n": 1.4782095987244015,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  },
+  {
+   "pair": [
+    "N",
+    "N"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.917296751643673,
+     "r0": 1.45,
+     "n": 1.4782095987244015,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  },
+  {
+   "pair": [
+    "N",
+    "N"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.764273070948416,
+     "r0": 1.45,
+     "n": 1.4782095987244015,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  },
+  {
+   "pair": [
+    "N",
+    "N"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.9083995197869847,
+     "r0": 1.45,
+     "n": 1.4782095987244015,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+  }
+ ],
+ "overlap": [],
+ "scc": true,
+ "repulsive": {
+  "type": "sum",
+  "terms": [
+   {
+    "type": "embedded",
+    "elements": [
+     "C"
+    ],
+    "phi": {
+     "type": "Tail",
+     "inner": {
+      "type": "GSP",
+      "v0": 8.18555,
+      "r0": 1.64,
+      "n": 3.30304,
+      "nc": 8.6655,
+      "rc": 2.1052,
+      "cutoff": 2.6
+     },
+     "r1": 2.45,
+     "rm": 2.6
+    },
+    "polynomial": [
+     -2.5909765118191,
+     0.5721151498619,
+     -0.0017896349903996,
+     2.3539221516757e-05,
+     -1.24251169551587e-07
+    ]
+   },
+   {
+    "type": "pair",
+    "pairs": [
+     {
+      "pair": [
+       "C",
+       "H"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        83.46526074472203,
+        -114.11825684923352,
+        -86.07724983301436,
+        246.50336161710706,
+        -116.21181363834386
+       ],
+       "rc": 1.75,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)",
+      "fitted_range_angstrom": [
+       0.971,
+       1.259
+      ]
+     },
+     {
+      "pair": [
+       "N",
+       "H"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        111.5719957372424,
+        -230.1533284818647,
+        97.77211473156022,
+        110.457439840103,
+        -72.52604749082896
+       ],
+       "rc": 1.65,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)",
+      "fitted_range_angstrom": [
+       0.91,
+       1.172
+      ]
+     },
+     {
+      "pair": [
+       "C",
+       "N"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        -124.13887375377371,
+        493.41102070057195,
+        -675.108990215255,
+        407.5326558348802,
+        -88.35559026895531
+       ],
+       "rc": 2.2,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)",
+      "fitted_range_angstrom": [
+       1.108,
+       1.575
+      ]
+     },
+     {
+      "pair": [
+       "N",
+       "N"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        72.34723124502624,
+        -98.05133671498204,
+        102.42406921020603,
+        -92.37687253964503,
+        42.25637741822615
+       ],
+       "rc": 2.1,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)",
+      "fitted_range_angstrom": [
+       1.07,
+       1.522
+      ]
+     }
+    ]
+   }
+  ],
+  "unit": "eV",
+  "source": "C-C: Xu 1992 (embebida); pares C-H, N-H, C-N, N-N: ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn)"
+ },
+ "reference": "C-C: C. H. Xu, C. Z. Wang, C. T. Chan, K. M. Ho, J. Phys.: Condens. Matter 4, 6047 (1992). H y N: ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chn",
+ "system": "moléculas C/H/N de capa cerrada: hidrocarburos saturados, insaturados y aromáticos; aminas, iminas, nitrilos, N piridínico y pirrólico",
+ "validity": "sistemas finitos de capa cerrada (SCC sin Ewald); enlaces dentro de lo muestreado (C-H 0.97-1.26 Å, C-N 1.11-1.57 Å, H-N 0.91-1.17 Å, N-N 1.07-1.52 Å); energías relativas solo dentro de una misma composición (no se ajustaron energías de atomización); C-C como en xu_carbon, que falla en anillos tensos (aziridina); los C-C y C-N simples junto a un heteroátomo se desvían ~0.08 Å",
+ "notes": "C-C idéntico a xu_carbon. Niveles: todos los ocupados y el LUMO, con un desplazamiento común de 7.2101 eV entre el cero de Xu y el vacío de GPAW. Sin interacción H-H. U de Hubbard: dε/dn del átomo libre con GPAW (PBE), igual a DFTB mio.",
+ "fit": {
+  "references": "gpaw_chn.json",
+  "references_sha256": "774c64c29f44c18d6deee4919986181c8367aaa888828b1b2fd0b1b3df008f97",
+  "parameters": {
+   "onsite H s": 3.7900497512852236,
+   "onsite N s": -8.856852222550238,
+   "onsite N p": 0.3752557131323223,
+   "C-H sss(H,C) v0": -4.377007074755046,
+   "C-H sps(H,C) v0": 5.4822234915054056,
+   "C-H n": 0.6455813105239927,
+   "N-H sss(H,N) v0": -6.015761443573533,
+   "N-H sps(H,N) v0": 5.822734004102957,
+   "N-H n": 0.5000000860433628,
+   "C-N sss(C,N) v0": -3.6217335746901314,
+   "C-N sps(C,N) v0": 3.459062654229041,
+   "C-N sps(N,C) v0": 3.3167596580924,
+   "C-N pps(C,N) v0": 4.408640310321533,
+   "C-N ppp(C,N) v0": -2.0928241655504207,
+   "C-N n": 1.5797804949451806,
+   "N-N sss(N,N) v0": -4.182591564293082,
+   "N-N sps(N,N) v0": 4.917296751643673,
+   "N-N pps(N,N) v0": 4.764273070948416,
+   "N-N ppp(N,N) v0": -2.9083995197869847,
+   "N-N n": 1.4782095987244015
+  },
+  "level_shift_eV": 7.210061248006839,
+  "stage1_level_rms": 1.2461667504150455,
+  "joint_start": {
+   "level_rms": 1.2634506809503707,
+   "force_rms": 0.563774539854453,
+   "energy_rms": 0.12681182334686453
+  },
+  "level_rms_train": 1.2038531968657475,
+  "force_rms": 0.4827607509679617,
+  "energy_rms": 0.11547531001892229,
+  "optimiser": "`xtol` termination condition is satisfied.",
+  "bond_ranges": {
+   "C-C": [
+    1.161,
+    1.642
+   ],
+   "C-H": [
+    0.971,
+    1.259
+   ],
+   "C-N": [
+    1.108,
+    1.575
+   ],
+   "H-N": [
+    0.91,
+    1.172
+   ],
+   "N-N": [
+    1.07,
+    1.522
+   ]
+  },
+  "validation": {
+   "coronene_N": {
+    "role": "test",
+    "level_rms": 1.8860103666812922,
+    "gap_tb": 2.11442335957285,
+    "gap_dft": 2.7247969999999997,
+    "bond_error_max": {
+     "C-C": 0.020025557814404626,
+     "C-N": 0.014878798926436954,
+     "C-H": 0.002558813376734026
+    }
+   },
+   "C3H9N": {
+    "role": "test",
+    "level_rms": 1.0607878358357095,
+    "gap_tb": 6.37274764962905,
+    "gap_dft": 6.197055000000001,
+    "bond_error_max": {
+     "C-N": 0.033264558337869454,
+     "C-H": 0.012732221992226789
+    }
+   },
+   "C6H6": {
+    "role": "train",
+    "level_rms": 1.751346060215105,
+    "gap_tb": 4.026403816328126,
+    "gap_dft": 5.1168890000000005,
+    "bond_error_max": {
+     "C-C": 0.01590057897373498,
+     "C-H": 0.0017412580757714125
+    },
+    "alpha_mean": 7.103723391247541,
+    "alpha_experiment": 10.32
+   },
+   "isobutene": {
+    "role": "test",
+    "level_rms": 1.134116405424745,
+    "gap_tb": 4.163354668773481,
+    "gap_dft": 5.428736000000001,
+    "bond_error_max": {
+     "C-C": 0.004199392296682536,
+     "C-H": 0.0030244099146510273
+    }
+   },
+   "C5H5N": {
+    "role": "train",
+    "level_rms": 0.8317193459409374,
+    "gap_tb": 3.85174597350367,
+    "gap_dft": 4.10356,
+    "bond_error_max": {
+     "C-N": 0.013407361952842312,
+     "C-C": 0.01925659254493506,
+     "C-H": 0.003133086665585205
+    }
+   },
+   "C3H8": {
+    "role": "test",
+    "level_rms": 0.7769055629206654,
+    "gap_tb": 10.09620579392654,
+    "gap_dft": 9.401925,
+    "bond_error_max": {
+     "C-C": 0.01575719114232421,
+     "C-H": 0.003029988105376802
+    }
+   },
+   "butadiene": {
+    "role": "train",
+    "level_rms": 1.6128561361365952,
+    "gap_tb": 3.0076162165091205,
+    "gap_dft": 3.9185770000000004,
+    "bond_error_max": {
+     "C-C": 0.024585888788923205,
+     "C-H": 0.00258823240274908
+    }
+   },
+   "C4H4NH": {
+    "role": "train",
+    "level_rms": 0.746969664677827,
+    "gap_tb": 3.987472589865746,
+    "gap_dft": 5.119645,
+    "bond_error_max": {
+     "H-N": 0.01009477517587154,
+     "C-N": 0.009334175254437582,
+     "C-C": 0.036571002527337804,
+     "C-H": 0.00753977618485524
+    }
+   },
+   "CH3CH2NH2": {
+    "role": "test",
+    "level_rms": 0.591737095427908,
+    "gap_tb": 7.1514972638697785,
+    "gap_dft": 6.723871,
+    "bond_error_max": {
+     "C-C": 0.07407094039888529,
+     "C-H": 0.004038976633058633,
+     "C-N": 0.07700433865687883,
+     "H-N": 0.002579344980507603
+    }
+   },
+   "C2H6": {
+    "role": "train",
+    "level_rms": 0.7704955339992725,
+    "gap_tb": 10.72082023902075,
+    "gap_dft": 9.988757,
+    "bond_error_max": {
+     "C-C": 0.0457172181972596,
+     "C-H": 0.002832530649516274
+    },
+    "alpha_mean": 2.594192881038071,
+    "alpha_experiment": 4.47
+   },
+   "CH2NHCH2": {
+    "role": "train",
+    "level_rms": 0.7895502860216723,
+    "gap_tb": 6.530150491623106,
+    "gap_dft": 6.989461,
+    "bond_error_max": {
+     "C-N": 0.00047470515156033954,
+     "C-C": 0.21658804975485957,
+     "C-H": 0.006447509130962814,
+     "H-N": 0.0017271328879744363
+    }
+   },
+   "H3CNH2": {
+    "role": "train",
+    "level_rms": 0.6400441591218625,
+    "gap_tb": 7.194581349413287,
+    "gap_dft": 6.747064,
+    "bond_error_max": {
+     "C-N": 0.07697466478086246,
+     "C-H": 0.004678654125769066,
+     "H-N": 0.0012979790923230983
+    }
+   },
+   "H2CCHCN": {
+    "role": "test",
+    "level_rms": 0.7777074301840688,
+    "gap_tb": 3.7342893121419003,
+    "gap_dft": 4.493111000000001,
+    "bond_error_max": {
+     "C-C": 0.01958387497328351,
+     "C-H": 0.0039594760908399085,
+     "C-N": 0.007242615877136593
+    }
+   },
+   "C2H4": {
+    "role": "train",
+    "level_rms": 1.479246511456751,
+    "gap_tb": 4.577433625198594,
+    "gap_dft": 5.8061609999999995,
+    "bond_error_max": {
+     "C-C": 0.013619843379922614,
+     "C-H": 0.0018718367001557823
+    },
+    "alpha_mean": 2.2909602677979666,
+    "alpha_experiment": 4.252
+   },
+   "N2H4": {
+    "role": "train",
+    "level_rms": 0.21150478052173557,
+    "gap_tb": 6.851103328648616,
+    "gap_dft": 6.708131,
+    "bond_error_max": {
+     "N-N": 0.002033399804492797,
+     "H-N": 0.004370924700292322
+    }
+   },
+   "CH3CN": {
+    "role": "train",
+    "level_rms": 0.706843238614545,
+    "gap_tb": 6.466391875805829,
+    "gap_dft": 7.646775,
+    "bond_error_max": {
+     "C-C": 0.0702938477464401,
+     "C-H": 0.0013054950346138572,
+     "C-N": 0.008400329041885257
+    }
+   },
+   "CH4": {
+    "role": "train",
+    "level_rms": 0.6628046728631712,
+    "gap_tb": 12.016516267872706,
+    "gap_dft": 11.528528,
+    "bond_error_max": {
+     "C-H": 0.0002278412956073783
+    },
+    "alpha_mean": 1.3291888086073975,
+    "alpha_experiment": 2.593
+   },
+   "C2H2": {
+    "role": "train",
+    "level_rms": 2.6399495059145996,
+    "gap_tb": 5.723444515032411,
+    "gap_dft": 6.916022000000001,
+    "bond_error_max": {
+     "C-C": 0.017614914155097416,
+     "C-H": 0.01769229346616985
+    }
+   },
+   "NH3": {
+    "role": "train",
+    "level_rms": 0.6975266585528381,
+    "gap_tb": 8.412651891218987,
+    "gap_dft": 7.290851,
+    "bond_error_max": {
+     "H-N": 0.005913949763280746
+    }
+   },
+   "NCCN": {
+    "role": "train",
+    "level_rms": 0.8638556619738442,
+    "gap_tb": 4.98773109643927,
+    "gap_dft": 5.412673999999999,
+    "bond_error_max": {
+     "C-N": 0.0032664996567683957,
+     "C-C": 0.06668644974511029
+    }
+   },
+   "HCN": {
+    "role": "train",
+    "level_rms": 0.9907059475592536,
+    "gap_tb": 6.853182329960885,
+    "gap_dft": 7.938121000000001,
+    "bond_error_max": {
+     "C-N": 0.011934502647900302,
+     "C-H": 0.01756038632383561
+    }
+   },
+   "N2": {
+    "role": "train",
+    "level_rms": 0.3631863273780994,
+    "gap_tb": 7.6652663971324655,
+    "gap_dft": 7.879189,
+    "bond_error_max": {
+     "N-N": 0.0005592261162039591
+    },
+    "alpha_mean": 0.5970925818304271,
+    "alpha_experiment": 1.7403
+   }
+  }
+ }
+}

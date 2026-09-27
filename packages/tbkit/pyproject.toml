@@ -52,7 +52,7 @@ exclude = ["tests*"]
 [tool.setuptools.package-data]
 # Parameter sets are data with their sources, not code: without this line a
 # real install would have none.
-tbkit = ["parameters/*.json"]
+tbkit = ["parameters/*.json", "parameters/references/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tbkit/tests"]

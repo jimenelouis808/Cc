@@ -35,6 +35,7 @@ uno ajustado) en ese mismo formato, y `load_parameters(ruta)` lo lee.
 | 6. Periódico | `hamiltonian`, `kpoints` | H(k) por suma de Bloch; mallas Γ-centradas y caminos de bandas de ASE |
 | 7. Parte repulsiva | `repulsive`, `forces`, `calculator` | Energía libre total (banda − TS + repulsión, + SCC), fuerzas de Hellmann–Feynman (ortogonal, no ortogonal, periódico, SCC), repulsión embebida de Xu y spline de los `.skf`; calculadora ASE para relajar y para fonones en Γ |
 | Raman no resonante (fase E, paso 1) | `optics`, `raman` | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
+| C, H y N (fase E, paso 2) | `parameters/xu_chn.json`, `references`, `recipes` | C–C de Xu intacto; H y N ajustados a GPAW (PBE, LCAO dzp) en niveles, fuerzas y energías; U de H, C, N calculadas con el átomo de GPAW; SCC. Receta reproducible y referencias incluidas |
 | Reproducibilidad | `record`, `tasks` | `tbkit run simulacion.json` guarda estructura, parámetros completos, versión, commit, fecha, ajustes y resultados; `record.replay` lo repite |
 
 Salidas (`analysis`): matriz densidad P = Σ f c c†, poblaciones Mulliken y
@@ -94,6 +95,54 @@ El apantallamiento no es un detalle: sin él, la polarizabilidad de una molécul
 sale unas tres veces mayor. En cristales no hay apantallamiento SCC (haría falta
 Ewald), así que su α es de partículas independientes.
 
+## C, H y N: cómo se obtuvo `xu_chn` y cuánto vale
+
+`--model chn` (o `load_parameters("xu_chn")`) añade H y N al carbono de Xu sin
+tocar el C–C. Todo sale de dos recetas que cualquiera puede repetir:
+
+1. `python -m tbkit.recipes.chn_references refs.json --frequencies` (necesita
+   GPAW): relaja con GPAW (PBE, LCAO dzp, h = 0,2 Å) 16 moléculas de
+   entrenamiento — hidrocarburos saturados, insaturados y aromáticos, aminas,
+   iminas, nitrilos, piridina (N piridínico), pirrol (N pirrólico), N₂H₄, N₂ —
+   y calcula cada una con cuatro desplazamientos al azar y dos escalados; guarda
+   niveles, energías, fuerzas y frecuencias de CH₄, NH₃, HCN, benceno y
+   piridina. Otras 6 moléculas, entre ellas un coroneno con N piridínico
+   (C₂₃H₁₁N), son el conjunto de prueba, que el ajuste no ve. El resultado está
+   en `parameters/references/gpaw_chn.json` (su SHA-256 va en el archivo de
+   parámetros); las frecuencias, que validan y no se ajustan, en
+   `gpaw_chn_frequencies.json`.
+2. `python -m tbkit.recipes.xu_chn refs.json xu_chn.json`: primero ajusta los
+   parámetros electrónicos a los niveles (todos los ocupados, el LUMO y el
+   LUMO+1, con un desplazamiento común entre el cero de Xu y el vacío de GPAW);
+   luego los reajusta a niveles, fuerzas y energías a la vez, resolviendo la
+   repulsión por pares de forma exacta en cada paso (es lineal en sus
+   coeficientes), como el ajuste conjunto de NRL-TB (Papaconstantopoulos et
+   al., 2024).
+
+Las U de Hubbard no se ajustan: son dε/dn del nivel de valencia del átomo libre
+con el átomo de GPAW (PBE), la definición de DFTB, y coinciden con las de DFTB
+mio (H 0,4195, C 0,3647, N 0,4309 Ha).
+
+Resultado (todo frente a GPAW salvo α):
+
+| Qué | Valor |
+|---|---|
+| Niveles (entrenamiento) | RMS 1,20 eV (los profundos pesan más; HOMO–LUMO mejor) |
+| Fuerzas / energías relativas | RMS 0,48 eV/Å / 0,12 eV |
+| Enlaces tras relajar con TB | C–H, N–H ≤ 0,02 Å; aromáticos C–C, C–N ≤ 0,02 Å; coroneno con N (prueba) ≤ 0,02 Å |
+| Frecuencias (RMS) | CH₄ 52, NH₃ 55, benceno 50, piridina 69, HCN 156 cm⁻¹ (las de GPAW LCAO rompen degeneraciones hasta ~50 cm⁻¹ en los modos blandos: esa es la resolución de la comparación) |
+| Raman del benceno | 2A₁g + 4E₂g + E₁g, como debe; respiración 1021 cm⁻¹ polarizada (exp. 992) |
+| Raman de la piridina | modos de anillo polarizados a 992 y 1028 cm⁻¹ (exp. 991 y 1030) |
+| α media | 35–70 % del experimento (benceno 7,1 frente a 10,3 Å³) |
+
+Límites que el archivo declara en `validity`: solo sistemas finitos de capa
+cerrada (SCC sin Ewald); energías comparables solo entre geometrías de la misma
+composición (no se ajustaron atomizaciones); sin interacción H–H; y el C–C de
+Xu falla en anillos tensos (aziridina, 0,22 Å), y los C–C y C–N simples junto
+a un heteroátomo (aminas, nitrilos) se desvían ~0,08 Å. La α baja es propia de una base mínima sin funciones de
+polarización: las intensidades Raman relativas son orientativas, las
+absolutas, no.
+
 ## Lo que no hace, y dónde está la trampa
 
 - **Raman solo no resonante y con gap**: metales, semimetales (el grafeno) y
@@ -102,8 +151,8 @@ Ewald), así que su α es de partículas independientes.
   doble resonancia) es el paso siguiente de la fase E, no este.
 
 - **Energías y fuerzas solo con modelos que tienen parte repulsiva**: el de Xu
-  (carbono puro) y los `.skf` con su spline. El modelo π no la tiene y lo dice.
-  El modelo de Xu no describe H ni heteroátomos.
+  (carbono puro), `xu_chn` (C, H, N) y los `.skf` con su spline. El modelo π no
+  la tiene y lo dice.
 - **Campo medio no es correlación**: un copo con M = 0 y momentos locales es, en
   realidad, un singlete correlacionado; los momentos son el parámetro de orden
   de la aproximación.
@@ -111,9 +160,10 @@ Ewald), así que su α es de partículas independientes.
   Ewald; se rechaza en vez de aproximarlo.
 - **Parámetros π de Hückel para heteroátomos**: buenos para tendencias, no para
   niveles cuantitativos. Ajústalos a tu DFT con `fit`.
-- **Convención `sp` de los `.skf` heteronucleares**: se toma Hsp0 de `A-B.skf`
-  como ⟨s de A|H|p de B⟩. Compruébalo con un dímero frente a DFTB+ antes de
-  confiar en un conjunto heteronuclear.
+- **Convención `sp` de los `.skf` heteronucleares**: Hsp0 de `A-B.skf` es
+  ⟨s de A|H|p de B⟩, comprobado en el lector de DFTB+ (`getFullTable` en
+  `parser.F90`). Un conjunto `.skf` se marca `scc`: se usa con cargas
+  autoconsistentes por defecto.
 - **Ajuste alineado en mitad del gap**: las energías absolutas de DFT no tienen
   cero común con el modelo, así que las energías on-site quedan definidas salvo
   un desplazamiento y puede haber soluciones espejo; revisa el resultado.

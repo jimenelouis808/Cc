@@ -519,13 +519,37 @@ def parameter_file(model: TBModel, x: np.ndarray, shift: float, report: dict,
                          "Matter 4, 6047 (1992). H y N: " + source)
     data["system"] = ("moléculas C/H/N de capa cerrada: hidrocarburos saturados, insaturados "
                       "y aromáticos; aminas, iminas, nitrilos, N piridínico y pirrólico")
-    data["validity"] = ("sistemas finitos (SCC sin Ewald); enlaces C-H, N-H de 0.95 a 1.2 Å, "
-                        "C-N y N-N de 1.1 a 1.6 Å; energías relativas dentro de una misma "
-                        "composición (no se ajustaron energías de atomización)")
+    ranges = ", ".join(f"{k} {v[0]:.2f}-{v[1]:.2f} Å" for k, v in
+                       sorted(report.get("bond_ranges", {}).items()) if k != "C-C")
+    data["validity"] = ("sistemas finitos de capa cerrada (SCC sin Ewald); enlaces dentro de lo "
+                        f"muestreado ({ranges}); energías relativas solo dentro de una misma "
+                        "composición (no se ajustaron energías de atomización); C-C como en "
+                        "xu_carbon, que falla en anillos tensos (aziridina); los C-C y C-N "
+                        "simples junto a un heteroátomo se desvían ~0.08 Å")
     data["notes"] = ("C-C idéntico a xu_carbon. Niveles: todos los ocupados y el LUMO, con un "
                      f"desplazamiento común de {shift:.4f} eV entre el cero de Xu y el vacío "
                      "de GPAW. Sin interacción H-H. U de Hubbard: dε/dn del átomo libre con "
                      "GPAW (PBE), igual a DFTB mio.")
+    xu_source = "Xu 1992 (idéntico a xu_carbon)"
+    fit_source = f"ajustado ({source})"
+    for element, table in data["onsite"].items():
+        for shell, value in table.items():
+            table[shell] = {"value": value, "unit": "eV",
+                            "source": xu_source if element == "C" else fit_source}
+    for entry in data["hopping"]:
+        entry["unit"] = "eV"
+        entry["source"] = xu_source if entry["pair"] == ["C", "C"] else fit_source
+    data["repulsive"]["unit"] = "eV"
+    data["repulsive"]["source"] = ("C-C: Xu 1992 (embebida); pares C-H, N-H, C-N, N-N: "
+                                   + fit_source)
+    for term in data["repulsive"]["terms"]:
+        if term["type"] == "pair":
+            for entry in term["pairs"]:
+                entry["unit"] = "eV"
+                entry["source"] = fit_source
+                pair = "-".join(sorted(entry["pair"]))
+                if pair in report.get("bond_ranges", {}):
+                    entry["fitted_range_angstrom"] = report["bond_ranges"][pair]
     names = parameter_names()
     data["fit"] = {"references": references.name, "references_sha256": _sha256(references),
                    "parameters": dict(zip(names, map(float, x), strict=True)),
@@ -534,6 +558,18 @@ def parameter_file(model: TBModel, x: np.ndarray, shift: float, report: dict,
                               "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"}
                          for el, u in HUBBARD_U.items()}
     return data
+
+
+def bond_ranges(structures: list[ReferenceStructure]) -> dict[str, list[float]]:
+    """Shortest and longest bond of each element pair in the structures (Å)."""
+    ranges: dict[str, list[float]] = {}
+    for ref in structures:
+        symbols = ref.atoms.get_chemical_symbols()
+        for (i, j), d in bond_lengths(ref.atoms).items():
+            kind = "-".join(sorted((symbols[i], symbols[j])))
+            low, high = ranges.get(kind, [d, d])
+            ranges[kind] = [round(min(low, d), 3), round(max(high, d), 3)]
+    return ranges
 
 
 def run(references: Path, out: Path, verbose: bool = True, workers: int = 4) -> dict:
@@ -553,7 +589,8 @@ def run(references: Path, out: Path, verbose: bool = True, workers: int = 4) -> 
     report = {"stage1_level_rms": float(np.sqrt(np.mean(np.square(list(rms.values()))))),
               "joint_start": {k: info0[k] for k in ("level_rms", "force_rms", "energy_rms")},
               "level_rms_train": info["level_rms"], "force_rms": info["force_rms"],
-              "energy_rms": info["energy_rms"], "optimiser": str(joint.message)}
+              "energy_rms": info["energy_rms"], "optimiser": str(joint.message),
+              "bond_ranges": bond_ranges(train)}
     if verbose:
         for name, before, after in zip(parameter_names(), result.x, x, strict=True):
             print(f"  {name:28s} {before:9.4f} → {after:9.4f}")

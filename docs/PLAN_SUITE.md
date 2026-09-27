@@ -205,12 +205,15 @@ Hecho (paso 1, `packages/tbkit`):
 
 Pendiente de la fase E:
 
-- [ ] Parámetros con H y N (cintas pasivadas y dopadas): `.skf` publicados o
-      ajuste propio a GPAW; hasta entonces, solo carbono puro. **En curso (paso 2)**:
-      convención `.skf` verificada contra DFTB+; bandera `scc` en el modelo;
-      U de H, C, N calculadas con el átomo de GPAW (= DFTB mio); receta
-      `xu_chn` (C–C de Xu intacto, H y N ajustados a niveles, fuerzas y
-      energías de GPAW); falta el conjunto final y su validación.
+- [x] Parámetros con H y N (paso 2): convención `.skf` verificada contra
+      DFTB+; bandera `scc` en el modelo; U de H, C, N calculadas con el átomo
+      de GPAW (= DFTB mio); conjunto `xu_chn` (C–C de Xu intacto; H y N
+      ajustados a niveles, fuerzas y energías de GPAW, ajuste conjunto con
+      repulsión por proyección variable), con referencias y receta en el
+      paquete. Validado: enlaces ≤ 0,02 Å (aromáticos, X–H), frecuencias
+      50–70 cm⁻¹, reglas de selección del benceno, modos de anillo de la
+      piridina. Pendiente: α baja (base mínima), C–C/C–N simples ~0,08 Å,
+      O y B.
 - [ ] Fonones importados de QE (dynmat) como alternativa a los del modelo.
 - [ ] Raman resonante (elementos de matriz ópticos y electrón–fonón).
 - [ ] Segundo orden (banda 2D, doble resonancia): periódico, suma en toda la zona
