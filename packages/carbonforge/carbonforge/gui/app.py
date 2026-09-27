@@ -19,9 +19,9 @@ from typing import Any, Optional
 
 from ase import Atoms
 
-from .params import ParamSpec
+from .params import ADVANCED_KEY, ParamSpec
 from .session import Session
-from .tabs import AnalysisTab, BuilderTab, EdlcTab, ImportTab, PreviewPanel
+from .tabs import AnalysisTab, BuilderTab, EdlcTab, ImportTab, PrepareTab, PreviewPanel
 from .tabs.builder import _clock  # noqa: F401  (re-exported: tests and callers)
 
 _TK_MISSING_MSG = """
@@ -40,7 +40,7 @@ Tkinter:
 """.strip()
 
 
-class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, EdlcTab, AnalysisTab):
+class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, AnalysisTab):
     """Main application window: the notebook, and what its tabs share."""
 
     def __init__(self, root, vibspec_workdir: Optional[Path] = None) -> None:
@@ -71,6 +71,8 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, EdlcTab, AnalysisTab):
         #: `after` pendiente del reloj, para poder cancelarlo.
         self._clock_job: str | None = None
 
+        #: Fix panels (Construir and Preparar show the same list).
+        self._fix_frames: list[Any] = []
         #: The structure the tabs hand to each other (gui/session.py).
         self.session = Session()
         self._vibspec = None
@@ -87,7 +89,7 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, EdlcTab, AnalysisTab):
     #: Sections in the order the work happens, and their pages.
     SECTIONS: dict[str, tuple[str, ...]] = {
         "Estructura": ("Construir", "Importar", "Modelo finito (IR)"),
-        "Preparar": ("Celda EDLC (LAMMPS)",),
+        "Preparar": ("Cálculo (QE, SIESTA, LAMMPS)", "Celda EDLC (LAMMPS)"),
         "Calcular": ("IR con GPAW",),
         "Resultados": ("Bandas y espectros", "IR frente a FTIR"),
     }
@@ -102,7 +104,7 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, EdlcTab, AnalysisTab):
         """Sections by task, each a notebook of pages.
 
         Make or bring a structure (Estructura), turn it into inputs
-        (Preparar; QE/SIESTA export stays on the Construir page for now),
+        (Preparar: QE, SIESTA, LAMMPS, EDLC),
         run what runs from here (Calcular), read results back (Resultados).
         The vibspec pages are built the first time one is shown: they probe
         for GPAW and start a job poller, which a builder-only session does
@@ -137,6 +139,7 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, EdlcTab, AnalysisTab):
 
         self._build_builder_tab(self.pages["Construir"])
         self._build_import_tab(self.pages["Importar"])
+        self._build_prepare_tab(self.pages["Cálculo (QE, SIESTA, LAMMPS)"])
         self._build_edlc_tab(self.pages["Celda EDLC (LAMMPS)"])
         self._build_analysis_tab(self.pages["Bandas y espectros"])
         self.session.subscribe(self._on_session_change)
@@ -211,6 +214,17 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, EdlcTab, AnalysisTab):
                 foreground="#777777", font=("TkDefaultFont", 8),
             ).pack(anchor="w")
         store[spec.key] = var
+
+    def _all_values(self) -> dict[str, Any]:
+        """The whole form, both pages: geometry and calculation."""
+        return {
+            **self._read_raw(self._param_vars),
+            **self._read_raw(self._modifier_vars),
+            **self._read_raw(self._functionalization_vars),
+            **self._read_raw(self._calculation_vars),
+            **self._read_raw(self._preset_vars),
+            ADVANCED_KEY: getattr(self, "_advanced", {}),
+        }
 
     def _read_raw(self, store: dict[str, Any]) -> dict[str, Any]:
         return {key: var.get() for key, var in store.items()}

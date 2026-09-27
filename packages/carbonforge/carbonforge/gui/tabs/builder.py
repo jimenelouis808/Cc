@@ -1,8 +1,8 @@
-"""The "Construir estructura" tab: parameters, fixes, build and export.
+"""The "Estructura → Construir" page: geometry, doping, groups; build and check.
 
 Structures are built on a worker thread; the host's queue brings the result
-back to the Tk thread (``_on_built``). The fix panel and the advanced-parameter
-dialog read the whole form through ``_all_values``.
+back to the Tk thread (``_on_built``), which publishes it as the window's
+current structure. The calculation is prepared on the Preparar page.
 """
 
 from __future__ import annotations
@@ -10,19 +10,11 @@ from __future__ import annotations
 import threading
 import time
 import traceback
-from pathlib import Path
-from typing import Any, Optional
 
 from ase import Atoms
 
 from ..params import (
-    ADVANCED_KEY,
-    CALCULATION_PARAMS,
-    PRESET_PARAMS,
-    preview_preset,
-    apply_fix,
     check_parameter_constraints,
-    collect_fixes,
     FUNCTIONALIZATION_PARAMS,
     apply_functionalization,
     MODIFIER_PARAMS,
@@ -30,18 +22,8 @@ from ..params import (
     apply_modifiers,
     build_structure,
     describe_structure,
-    export_structure,
     validate_calculation,
 )
-
-_EXPORT_FORMATS = (
-    ("qe", "Quantum ESPRESSO (pw.x / ph.x)"),
-    ("siesta", "SIESTA (.fdf)"),
-    ("lammps", "LAMMPS (data + input)"),
-    ("xyz", "XYZ (visores: OVITO, VMD)"),
-    ("cif", "CIF (VESTA)"),
-)
-
 
 def _clock(seconds: float) -> str:
     """Tiempo transcurrido como lo lee un cronómetro.
@@ -56,7 +38,10 @@ def _clock(seconds: float) -> str:
 
 
 class BuilderTab:
-    """Parameters on the left, preview on the right; build, check, fix, export.
+    """Geometry on the left, preview on the right; build and check.
+
+    The calculation (recipe, settings, export) is prepared on the Preparar
+    page from the window's current structure, which this page publishes.
 
     Uses from the host: ``tk``, ``ttk``, ``root``, ``atoms``, the ``_*_vars``
     stores, ``_queue``, ``_add_field``, ``_read_raw``, ``_show_error``, and the
@@ -128,24 +113,12 @@ class BuilderTab:
             command=self._on_check_constraints,
         ).pack(fill="x", pady=(4, 0))
 
-        # Every other keyword QE and SIESTA accept, from their catalogues.
-        self._advanced: dict[str, dict[str, Any]] = {}
-        ttk.Button(
-            actions, text="Parámetros avanzados (QE, SIESTA)…",
-            command=self._on_advanced,
-        ).pack(fill="x", pady=(4, 0))
-
         # A structure made on another page (a vibspec model, an import):
-        # bring it here to export it, check it or decorate it.
+        # bring it here to see it, check it or keep decorating it.
         ttk.Button(
             actions, text="Traer la estructura actual",
             command=self._on_take_current,
         ).pack(fill="x", pady=(4, 0))
-
-        self.export_button = ttk.Button(
-            actions, text="Exportar…", command=self._on_export, state="disabled"
-        )
-        self.export_button.pack(fill="x", pady=(4, 0))
 
         self.png_button = ttk.Button(
             actions, text="Guardar imagen PNG…", command=self._on_save_png,
@@ -156,6 +129,7 @@ class BuilderTab:
         # Problems whose cure is a setting, each with a button that applies it.
         self.fix_frame = ttk.LabelFrame(left, text="Correcciones", padding=4)
         self.fix_frame.pack(fill="x", pady=(8, 0))
+        self._fix_frames.append(self.fix_frame)
         ttk.Label(self.fix_frame, text="Comprueba o construye para ver qué se puede corregir.",
                   foreground="#777777", wraplength=330).pack(anchor="w")
 
@@ -186,10 +160,7 @@ class BuilderTab:
             child.destroy()
         self._param_vars.clear()
         self._modifier_vars.clear()
-        self._calculation_vars.clear()
-        self._preset_vars.clear()
         self._functionalization_vars.clear()
-        self._format_vars.clear()
 
         # Switching structure type invalidates whatever was built before;
         # otherwise "Exportar" would silently write the previous structure.
@@ -198,20 +169,8 @@ class BuilderTab:
         spec = STRUCTURES[self._current_structure_key()]
         self.description_label.configure(text=spec.description)
 
-        # The recipe comes first: most people want a goal, not twenty knobs.
-        recipe = ttk.LabelFrame(
-            self.params_frame, text="1. ¿Qué quieres calcular?", padding=4
-        )
-        recipe.pack(fill="x")
-        for param in PRESET_PARAMS:
-            self._add_field(recipe, param, self._preset_vars)
-        ttk.Button(
-            recipe, text="Ver qué decidiría la receta",
-            command=self._on_preview_preset,
-        ).pack(fill="x", pady=(6, 0))
-
         geometry = ttk.LabelFrame(
-            self.params_frame, text="2. Geometría", padding=4
+            self.params_frame, text="1. Geometría", padding=4
         )
         geometry.pack(fill="x", pady=(10, 0))
         for param in spec.params:
@@ -219,7 +178,7 @@ class BuilderTab:
 
         if spec.supports_modifiers:
             mods = ttk.LabelFrame(
-                self.params_frame, text="3. Dopaje y defectos", padding=4
+                self.params_frame, text="2. Dopaje y defectos", padding=4
             )
             mods.pack(fill="x", pady=(10, 0))
             for param in MODIFIER_PARAMS:
@@ -227,112 +186,23 @@ class BuilderTab:
 
             groups = ttk.LabelFrame(
                 self.params_frame,
-                text="4. Grupos funcionales y nitrógeno",
+                text="3. Grupos funcionales y nitrógeno",
                 padding=4,
             )
             groups.pack(fill="x", pady=(10, 0))
             for param in FUNCTIONALIZATION_PARAMS:
                 self._add_field(groups, param, self._functionalization_vars)
 
-        calc = ttk.LabelFrame(
+        ttk.Label(
             self.params_frame,
-            text="5. Ajustes manuales (se ignoran si usas una receta)",
-            padding=4,
-        )
-        calc.pack(fill="x", pady=(10, 0))
-        for param in CALCULATION_PARAMS:
-            self._add_field(calc, param, self._calculation_vars)
-
-        fmts = ttk.LabelFrame(
-            self.params_frame, text="6. Formatos de salida", padding=4
-        )
-        fmts.pack(fill="x", pady=(10, 0))
-        for key, label in _EXPORT_FORMATS:
-            var = self.tk.BooleanVar(value=key in ("qe", "lammps"))
-            ttk.Checkbutton(fmts, text=label, variable=var).pack(anchor="w")
-            self._format_vars[key] = var
-
-        self.force_var = self.tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            fmts,
-            text="Exportar aunque falle la validación",
-            variable=self.force_var,
-        ).pack(anchor="w", pady=(4, 0))
+            text="El cálculo (receta, ajustes, formatos) se prepara en Preparar → "
+                 "Cálculo, sobre la estructura actual.",
+            wraplength=320, justify="left", foreground="#777777",
+        ).pack(fill="x", pady=(10, 0))
 
     # ------------------------------------------------------------------
-    # Fixes
+    # Checks
     # ------------------------------------------------------------------
-    def _all_values(self) -> dict[str, Any]:
-        return {
-            **self._read_raw(self._param_vars),
-            **self._read_raw(self._modifier_vars),
-            **self._read_raw(self._functionalization_vars),
-            **self._read_raw(self._calculation_vars),
-            **self._read_raw(self._preset_vars),
-            ADVANCED_KEY: self._advanced,
-        }
-
-    def _on_advanced(self) -> None:
-        from ..advanced import AdvancedParamsDialog
-
-        AdvancedParamsDialog(self.root, self._advanced, codes=("qe", "siesta"),
-                             on_change=self._on_check_constraints)
-
-    def _refresh_fixes(self, atoms: Optional[Atoms]) -> None:
-        """Rebuild the fix panel from the current form and structure."""
-        ttk = self.ttk
-        for child in self.fix_frame.winfo_children():
-            child.destroy()
-        try:
-            fixes = collect_fixes(atoms, self._all_values())
-        except Exception as exc:  # the panel must never break the window
-            ttk.Label(self.fix_frame, text=f"No se pudieron evaluar: {exc}",
-                      wraplength=330).pack(anchor="w")
-            return
-        if not fixes:
-            ttk.Label(self.fix_frame, text="Nada que corregir.",
-                      foreground="#0a6").pack(anchor="w")
-            return
-        for severity, message, fix in fixes:
-            row = ttk.Frame(self.fix_frame)
-            row.pack(fill="x", pady=1)
-            mark = "ERROR" if severity == "error" else "AVISO"
-            label = ttk.Label(row, text=f"{mark}: {fix.label}", wraplength=250,
-                              foreground="#a33" if severity == "error" else "#a60")
-            label.pack(side="left", fill="x", expand=True)
-            label.bind("<Enter>", lambda _e, m=message: self.status_var.set(m[:300]))
-            ttk.Button(row, text="Aplicar", width=8,
-                       command=lambda fx=fix: self._apply_fixes([fx])).pack(side="right")
-        ttk.Button(self.fix_frame, text="Aplicar todas",
-                   command=lambda: self._apply_fixes([fx for _, _, fx in fixes])
-                   ).pack(fill="x", pady=(4, 0))
-
-    def _apply_fixes(self, fixes) -> None:
-        """Set the fields the fixes name, then re-check."""
-        values = self._all_values()
-        stores = (self._calculation_vars, self._preset_vars, self._functionalization_vars,
-                  self._modifier_vars, self._param_vars)
-        structural = False
-        for fix in fixes:
-            try:
-                values = apply_fix(values, fix)
-            except KeyError as exc:
-                self.status_var.set(str(exc))
-                continue
-            for store in stores:
-                if fix.setting in store:
-                    store[fix.setting].set(values[fix.setting])
-                    structural |= store is not self._calculation_vars \
-                        and store is not self._preset_vars
-                    break
-        if structural and self.atoms is not None:
-            # A change to the structure itself: rebuild so the preview matches.
-            self._on_build()
-            return
-        self._on_check_constraints()
-        if self.atoms is not None:
-            self._on_built(self.atoms)
-
     def _on_check_constraints(self) -> None:
         """Report incompatible parameter combinations before building.
 
@@ -354,22 +224,6 @@ class BuilderTab:
         self._set_info(check_parameter_constraints(atoms, values))
         self._refresh_fixes(atoms)
         self.status_var.set("Parámetros comprobados.")
-
-    def _on_preview_preset(self) -> None:
-        """Show what the chosen recipe would decide, before building anything.
-
-        Building the structure first is the point: a recipe adapts to it, so
-        the answer for a zigzag ribbon differs from an armchair one.
-        """
-        kind = self._current_structure_key()
-        try:
-            atoms = build_structure(kind, self._read_raw(self._param_vars))
-            text = preview_preset(atoms, self._read_raw(self._preset_vars))
-        except Exception as exc:
-            self._show_error(exc, traceback.format_exc())
-            return
-        self._set_info(text)
-        self.status_var.set("Vista previa de la receta (nada construido aún).")
 
     def _on_take_current(self) -> None:
         """Adopt the window's current structure (from another page)."""
@@ -398,8 +252,13 @@ class BuilderTab:
             self.edlc_status_var.set(
                 "La celda EDLC se descartó al cambiar la estructura."
             )
+        # The window's current structure goes too, if it was this one:
+        # otherwise Preparar would export a structure no longer on screen.
+        session = getattr(self, "session", None)
+        if session is not None and session.current is not None \
+                and session.current is getattr(self, "_published", None):
+            session.clear()
         self.atoms = None
-        self.export_button.configure(state="disabled")
         self.png_button.configure(state="disabled")
         self.axes.clear()
         self.axes.set_title("Pulsa «Construir y previsualizar»")
@@ -471,7 +330,6 @@ class BuilderTab:
         if session is not None:
             self._published = session.publish(atoms, origin)
         self._set_busy(False, f"Estructura lista: {len(atoms)} átomos.")
-        self.export_button.configure(state="normal")
         self.png_button.configure(state="normal")
         self._render(atoms)
         summary = describe_structure(atoms)
@@ -481,7 +339,8 @@ class BuilderTab:
             physics = validate_calculation(atoms, self._all_values())
         except Exception as exc:  # never let the report break the preview
             physics = f"No se pudo evaluar el cálculo: {exc}"
-        self._set_info(f"{summary}\n\n--- Cálculo solicitado ---\n{physics}")
+        self._set_info(f"{summary}\n\n--- Cálculo solicitado (Preparar → Cálculo) ---\n"
+                       f"{physics}")
         self._refresh_fixes(atoms)
 
     def _set_info(self, text: str) -> None:
@@ -490,40 +349,3 @@ class BuilderTab:
         self.info_text.insert("1.0", text)
         self.info_text.configure(state="disabled")
 
-    # ------------------------------------------------------------------
-    # Export
-    # ------------------------------------------------------------------
-    def _on_export(self) -> None:
-        from tkinter import filedialog, messagebox
-
-        if self.atoms is None:
-            return
-        formats = [key for key, var in self._format_vars.items() if var.get()]
-        if not formats:
-            messagebox.showwarning(
-                "Sin formatos", "Marca al menos un formato de salida."
-            )
-            return
-
-        outdir = filedialog.askdirectory(title="Carpeta de destino")
-        if not outdir:
-            return
-        try:
-            written = export_structure(
-                self.atoms,
-                Path(outdir),
-                formats,
-                force=bool(self.force_var.get()),
-                calculation_values={
-                    **self._read_raw(self._calculation_vars),
-                    **self._read_raw(self._preset_vars),
-                    ADVANCED_KEY: self._advanced,
-                },
-            )
-        except Exception as exc:
-            self._show_error(exc, traceback.format_exc())
-            return
-
-        listado = "\n".join(f"  • {p}" for p in written)
-        self.status_var.set(f"Exportado: {len(written)} archivo(s).")
-        messagebox.showinfo("Exportación completada", f"Archivos escritos:\n{listado}")

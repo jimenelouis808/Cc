@@ -138,16 +138,24 @@ nueva** — es el paso que más se olvida.
 carbonforge-gui
 ```
 
-La ventana tiene **cuatro pestañas**, en el orden en que se trabaja:
+La ventana tiene **cuatro secciones**, en el orden en que se trabaja, cada una
+con sus páginas:
 
-| Pestaña | Para qué |
-|---|---|
-| Construir estructura | Elegir el tipo, ajustarlo, verlo en 3D y exportarlo |
-| Importar y preparar | Traer una estructura de otro programa y repararla |
-| Celda EDLC (LAMMPS) | Montar un condensador de doble capa a partir de ella |
-| Analizar resultados | Abrir un cálculo terminado y graficarlo |
+| Sección | Página | Para qué |
+|---|---|---|
+| Estructura | Construir | Elegir el tipo, ajustarlo, doparlo, funcionalizarlo y verlo en 3D |
+| | Importar | Traer una estructura de otro programa y repararla |
+| | Modelo finito (IR) | Cinta finita para el IR de vibspec |
+| Preparar | Cálculo (QE, SIESTA, LAMMPS) | Receta, ajustes, correcciones y exportación |
+| | Celda EDLC (LAMMPS) | Montar un condensador de doble capa |
+| Calcular | IR con GPAW | Preparar y lanzar el cálculo IR |
+| Resultados | Bandas y espectros | Abrir un cálculo terminado y graficarlo |
+| | IR frente a FTIR | Comparar el IR calculado con tu FTIR |
 
-La primera tiene esta disposición:
+La barra inferior muestra la **estructura actual**: la última que construiste,
+importaste o modelaste. Preparar y la celda EDLC trabajan siempre sobre ella.
+
+La página Construir tiene esta disposición:
 
 ```
 ┌────────────────────────┬──────────────────────────────┐
@@ -155,16 +163,14 @@ La primera tiene esta disposición:
 │  [ Nanotubo (CNT)  ▾]  │      Vista previa 3D         │
 │                        │   (rotar con el ratón)       │
 │  Parámetros            │                              │
-│   Índice quiral n [6]  │                              │
-│   Índice quiral m [6]  ├──────────────────────────────┤
-│   Longitud     [10.0]  │  Resumen y validación        │
-│   ...                  │  Fórmula: C120               │
-│                        │  Dimensionalidad: 1D         │
-│  Dopaje y defectos     │  Coordinación media: 3.000   │
-│  Formatos de salida    │  ✅ Validación superada      │
-│                        │                              │
-│ [Construir y previsualizar]                           │
-│ [Exportar…]                                           │
+│   1. Geometría         │                              │
+│   2. Dopaje y defectos ├──────────────────────────────┤
+│   3. Grupos funcionales│  Resumen y validación        │
+│                        │  Fórmula: C120               │
+│ [Construir y previsualizar]  Dimensionalidad: 1D      │
+│ [Comprobar parámetros] │  ✅ Validación superada      │
+│ [Traer la estructura actual]                          │
+│  Correcciones          │                              │
 └────────────────────────┴──────────────────────────────┘
 ```
 
@@ -173,16 +179,18 @@ La primera tiene esta disposición:
 1. Elige el tipo de estructura en el desplegable de arriba.
 2. Ajusta los parámetros. Cada campo lleva debajo una nota explicando qué
    significa y qué valores son razonables.
-3. Pulsa **Construir y previsualizar**. La estructura aparece en 3D y el
-   panel inferior te dice si pasa la validación.
-4. Marca los formatos que quieras y pulsa **Exportar…** para elegir carpeta.
+3. Pulsa **Construir y previsualizar**. La estructura aparece en 3D, el panel
+   inferior te dice si pasa la validación, y pasa a ser la estructura actual.
+4. Ve a **Preparar → Cálculo**: elige una receta o ajusta el cálculo a mano,
+   pulsa **Comprobar el cálculo**, aplica las correcciones que proponga, marca
+   los formatos y pulsa **Exportar…** para elegir carpeta.
 
 Puedes rotar, hacer zoom y desplazar la vista 3D con la barra de
 herramientas bajo la figura.
 
-### La pestaña «Celda EDLC (LAMMPS)»
+### La página «Celda EDLC (LAMMPS)»
 
-Toma la estructura que tengas cargada, la pone como electrodo, la duplica
+Toma la estructura actual, la pone como electrodo, la duplica
 enfrente y rellena el hueco con electrolito. Los electrodos se mantienen a
 potencial fijo (±V/2) y su carga responde: eso es lo que hace que la
 capacitancia sea medible.
@@ -513,8 +521,8 @@ tenías, así que se te reporta y se deja como está.
 La celda que se añade queda **no periódica**: suponer periodicidad sería la
 hipótesis más arriesgada. Márcala tú si es una lámina o un cristal.
 
-En la interfaz gráfica todo esto está en la pestaña **«Importar y preparar»**,
-con un botón para adoptar la estructura importada y seguir trabajando con ella.
+En la interfaz gráfica todo esto está en **Estructura → Importar**, con un botón
+para adoptarla como estructura actual y seguir trabajando con ella.
 
 ---
 
@@ -761,7 +769,7 @@ exportación no se ve afectada.
 **La validación falla en una espuma**
 Es lo esperado. Las espumas se generan colocando fragmentos al azar, así que
 antes de relajarlas tienen coordinaciones imperfectas. Marca *"Exportar
-aunque falle la validación"* y relaja con LAMMPS.
+aunque falle la validación"* (en Preparar → Cálculo) y relaja con LAMMPS.
 
 **`ModuleNotFoundError: No module named 'carbonforge'`**
 No instalaste el paquete o estás en otra carpeta. Desde `Cc/carbonforge`

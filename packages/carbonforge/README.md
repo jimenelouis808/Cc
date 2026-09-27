@@ -83,22 +83,26 @@ Python 3.10+ required. Dependencies: `numpy`, `scipy`, `ase`, `networkx`,
 carbonforge-gui
 ```
 
-A desktop app with four tabs. **Construir estructura** picks a structure type,
-tunes its parameters, shows a live 3D preview plus the geometry and physics
-reports, and exports to QE / SIESTA / LAMMPS / XYZ / CIF. **Analizar
-resultados** opens a finished calculation — a band file or `dynmat.out` — and
-plots it inline, with the same warnings the CLI gives.
+A desktop app organised by task, with a **current structure** shown at the
+bottom that every page shares. **Estructura → Construir** picks a structure
+type, tunes, dopes and decorates it, and shows a live 3D preview with the
+geometry report; **Importar** brings in a structure from another program,
+repairs it, and scans a pseudopotential folder; **Modelo finito (IR)** is
+vibspec's model page. **Preparar → Cálculo** takes the current structure —
+built, imported or a vibspec model — and holds the recipe, the calculation
+settings, the advanced parameters, the fix panel and the export to QE /
+SIESTA / LAMMPS / XYZ / CIF. **Resultados → Bandas y espectros** opens a
+finished calculation — a band file or `dynmat.out` — and plots it inline,
+with the same warnings the CLI gives.
 
-The build tab exposes functional groups and lattice nitrogen in their own
-panel, kept visually separate because they are different chemistry, and a
-**Comprobar parámetros** button reports combinations that are individually
-valid but wrong together — a density cutoff under 4x the wavefunction one,
-Raman on a metal, more functional groups than there are sites.
+The build page exposes functional groups and lattice nitrogen in their own
+panel, kept visually separate because they are different chemistry. Both
+**Comprobar parámetros** (Construir) and **Comprobar el cálculo** (Preparar)
+report combinations that are individually valid but wrong together — a
+density cutoff under 4x the wavefunction one, Raman on a metal, more
+functional groups than there are sites — and the fix panel applies the cure.
 
-**Importar y preparar** brings in a structure from another program, repairs
-it, and scans a pseudopotential folder against what the calculation needs.
-
-**Celda EDLC (LAMMPS)** takes whatever structure is loaded and turns it into
+**Preparar → Celda EDLC (LAMMPS)** takes the current structure and turns it into
 a constant-potential double-layer cell: electrode, electrolyte, mirrored
 electrode. **Comprobar parámetros** runs first and costs nothing — it
 estimates the final atom count and reports the setup mistakes that produce a

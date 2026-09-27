@@ -1,6 +1,7 @@
 """The "Celda EDLC (LAMMPS)" tab: electrode + electrolyte cell for constant-potential MD.
 
-The electrode is the built structure or, failing that, the imported one.
+The electrode is the window's current structure (built, imported or
+modelled); a cell built from it is dropped when the current structure changes.
 Packing is slow, so the cell is assembled on a worker thread and delivered
 through the host's queue (``_on_edlc_built``).
 """
@@ -11,6 +12,7 @@ import threading
 import traceback
 from pathlib import Path
 
+from ase import Atoms
 
 from ..edlc_params import (
     EDLC_PARAMS,
@@ -99,7 +101,7 @@ class EdlcTab:
         self.edlc_export_button.pack(fill="x", pady=2)
 
         self.edlc_status_var = tk.StringVar(
-            value="Construye una estructura en la primera pestaña."
+            value="Usa la estructura actual: constrúyela, impórtala o arma un modelo."
         )
         ttk.Label(
             left, textvariable=self.edlc_status_var, wraplength=380,
@@ -118,6 +120,21 @@ class EdlcTab:
         self.edlc_text.pack(side="left", fill="both", expand=True)
         report_scroll.pack(side="right", fill="y")
 
+        session = getattr(self, "session", None)
+        if session is not None:
+            session.subscribe(self._on_edlc_session)
+
+    def _on_edlc_session(self, current) -> None:
+        """Drop a cell whose electrode is no longer the current structure."""
+        source = getattr(self, "_edlc_source", None)
+        if self.edlc_cell is not None and source is not None and source is not current \
+                and not isinstance(source, Atoms):
+            self.edlc_cell = None
+            self._edlc_source = None
+            self.edlc_export_button.configure(state="disabled")
+            self._set_edlc_report("")
+            self.edlc_status_var.set("La celda EDLC se descartó al cambiar la estructura actual.")
+
     def _set_edlc_report(self, text: str) -> None:
         self.edlc_text.configure(state="normal")
         self.edlc_text.delete("1.0", "end")
@@ -126,11 +143,15 @@ class EdlcTab:
 
     def _edlc_electrode(self):
         """The structure to use as electrode, or ``None`` with a message set."""
+        session = getattr(self, "session", None)
+        if session is not None and session.current is not None:
+            self._edlc_pending_source = session.current
+            return session.take()
+        self._edlc_pending_source = None
         atoms = self.atoms or getattr(self, "_imported_atoms", None)
         if atoms is None:
             self.edlc_status_var.set(
-                "No hay estructura. Constrúyela en la primera pestaña o "
-                "impórtala en la segunda."
+                "No hay estructura actual: constrúyela, impórtala o arma un modelo."
             )
         return atoms
 
@@ -171,7 +192,8 @@ class EdlcTab:
 
     def _on_edlc_built(self, cell) -> None:
         self.edlc_cell = cell
-        self._edlc_source = self.atoms or getattr(self, "_imported_atoms", None)
+        self._edlc_source = getattr(self, "_edlc_pending_source", None) or (
+            self.atoms or getattr(self, "_imported_atoms", None))
         self.edlc_build_button.configure(state="normal")
         self.edlc_export_button.configure(state="normal")
         self._set_edlc_report(describe_edlc(cell))

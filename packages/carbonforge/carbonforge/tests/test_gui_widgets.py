@@ -361,3 +361,45 @@ class TestTheBuildClock:
         first = app.elapsed_var.get()
         app._set_busy(False, "")
         assert app.elapsed_var.get() == first
+
+
+class TestPreparePage:
+    """Preparar → Cálculo works on the window's current structure."""
+
+    def _cnt(self):
+        from carbonforge.gui.params import STRUCTURES, build_structure
+
+        return build_structure("cnt", {s.key: s.default for s in STRUCTURES["cnt"].params})
+
+    def test_follows_the_current_structure(self, app):
+        assert app._prepared_atoms() is None
+        assert app.export_button.kwargs.get("state") == "disabled"
+        atoms = self._cnt()
+        app._on_built(atoms)
+        assert "Construir" in app.prepare_structure_var.get()
+        assert app.export_button.kwargs.get("state") == "normal"
+        prepared = app._prepared_atoms()
+        assert prepared is not atoms and len(prepared) == len(atoms)
+
+    def test_discarding_the_build_clears_what_is_prepared(self, app):
+        app._on_built(self._cnt())
+        app._rebuild_param_fields()                 # switching type discards
+        assert app.session.current is None
+        assert app.export_button.kwargs.get("state") == "disabled"
+
+    def test_a_structure_from_elsewhere_is_prepared_too(self, app):
+        from carbonforge.builders.nanoribbon import build_finite_nanoribbon
+
+        app.session.publish(build_finite_nanoribbon(5, 3), "Modelo finito (IR)")
+        assert app._prepared_atoms().get_chemical_formula().startswith("C58H")
+        app._on_check_prepare()
+        assert "Cálculo solicitado" in app.prepare_text.text_content
+
+    def test_calculation_form_lives_here_not_in_construir(self, app):
+        assert app._calculation_vars and app._preset_vars and app._format_vars
+        before = dict(app._calculation_vars)
+        app._rebuild_param_fields()                 # Construir redraws its form
+        assert app._calculation_vars == before      # the calculation form stays
+
+    def test_fix_panels_show_the_same_list(self, app):
+        assert len(app._fix_frames) == 2

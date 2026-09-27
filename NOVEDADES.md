@@ -29,7 +29,12 @@ la estructura actual; las otras páginas la toman **con un botón**, nunca solas
 - Una estructura periódica (un nanotubo, una cinta infinita) no entra en
   vibspec: el IR por diferencias finitas necesita un modelo finito. Se rechaza
   y se dice por qué; no se corta nada.
-- La exportación a QE/SIESTA sigue en la página Construir, no en Preparar.
+- ~~La exportación a QE/SIESTA sigue en la página Construir~~ Ya está en
+  **Preparar → Cálculo (QE, SIESTA, LAMMPS)**, junto con la receta, los ajustes
+  del cálculo, los parámetros avanzados y las correcciones; exporta la
+  estructura actual, venga de donde venga. Construir se queda con la geometría,
+  el dopaje y los grupos. La celda EDLC también parte de la estructura actual, y
+  se descarta si esta cambia.
 - La cola de trabajos solo lanza cálculos de GPAW; QE y SIESTA se preparan
   aquí y se corren fuera.
 - Cerrar la ventana con cálculos de vibspec en marcha pide confirmación.

@@ -281,3 +281,19 @@ class TestTabWiring:
 
         assert app.edlc_cell is None
         assert "descartó" in app.edlc_status_var.get()
+
+
+def test_a_new_current_structure_drops_the_cell(electrode):
+    """With the window's session, the cell follows the current structure."""
+    from carbonforge.gui.session import Session
+
+    app = _stub_app()
+    app.session = Session()
+    app.session.subscribe(app._on_edlc_session)
+    app.session.publish(electrode, "Construir")
+    assert app._edlc_electrode() is not None
+    app.edlc_cell = build_edlc(electrode, _defaults())
+    app._edlc_source = app._edlc_pending_source
+    app.session.publish(electrode, "Importar")
+    assert app.edlc_cell is None
+    assert "descartó" in app.edlc_status_var.get()
