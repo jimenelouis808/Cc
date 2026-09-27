@@ -14,6 +14,7 @@ import pytest
 from ase.build import molecule
 
 from tbkit.calculator import TBCalculator
+from tbkit.hamiltonian import System
 from tbkit.params import (
     CutoffPolynomial,
     derivative,
@@ -229,6 +230,35 @@ class TestShippedSet:
         pyridine = next(r for r in refs if r.label == "C5H5N/eq")
         errors = xu_chn.relaxed_bond_errors(model, pyridine, fmax=0.02)
         assert max(errors.values()) < 0.04
+
+    def test_polarizability_references_are_the_ones_fitted(self, shipped):
+        import hashlib
+
+        from tbkit.params import PARAMETER_DIR
+
+        fit = shipped[0]["alpha_fit"]
+        path = PARAMETER_DIR / "references" / fit["references"]
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == fit["references_sha256"]
+
+    def test_benzene_alpha_tensor_against_gpaw(self, shipped):
+        import json
+
+        from tbkit.optics import polarizability_linear_response
+        from tbkit.params import PARAMETER_DIR
+
+        _, model, refs, _ = shipped
+        data = json.loads((PARAMETER_DIR / "references" / "gpaw_chn_alpha.json")
+                          .read_text(encoding="utf-8"))
+        gpaw = next(e for e in data["polarizabilities"] if e["group"] == "C6H6")["alpha"]
+        atoms = next(r for r in refs if r.label == "C6H6/eq").atoms
+        tb = polarizability_linear_response(System.build(atoms, model))
+        assert np.sort(np.linalg.eigvalsh(tb)) == pytest.approx(
+            np.sort(np.linalg.eigvalsh(gpaw)), rel=0.10)
+
+    def test_xu_carbon_shares_the_carbon_optics(self, shipped):
+        model = shipped[1]
+        assert xu_carbon().extra_polarizability["C"] == model.extra_polarizability["C"]
+        assert xu_carbon().onsite_dipole["C"] == model.onsite_dipole["C"]
 
     def test_methane_frequencies_against_gpaw(self, shipped):
         import json

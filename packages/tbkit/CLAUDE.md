@@ -87,6 +87,9 @@ tbkit/
   solver of that functional is the test of the linear response.
 - With dipoles, α along σ bonds drops (hybrid centroids): that is physics,
   not a bug. Do not retune d or U to recover a number.
+- `extra_polarizability` is the only optical number fitted (3 values, to GPAW
+  FD tensors, `recipes/xu_chn_alpha.py`); extra dipoles never interact with
+  their own atom. C60 and diamond are validation, never fit targets.
 - Repulsion polynomials are only determined where the training data are:
   check V(r) and its slope in that range, not the coefficients, and state
   the range in `validity`.

@@ -922,5 +922,278 @@
     "alpha_experiment": 1.7403
    }
   }
+ },
+ "extra_polarizability": {
+  "H": {
+   "value": 0.42865,
+   "unit": "Å^3",
+   "source": "ajustada a tensores α de GPAW (PBE, FD, h = 0.18 Å); receta tbkit.recipes.xu_chn_alpha",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
+  },
+  "C": {
+   "value": 0.95312,
+   "unit": "Å^3",
+   "source": "ajustada a tensores α de GPAW (PBE, FD, h = 0.18 Å); receta tbkit.recipes.xu_chn_alpha",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
+  },
+  "N": {
+   "value": 0.73688,
+   "unit": "Å^3",
+   "source": "ajustada a tensores α de GPAW (PBE, FD, h = 0.18 Å); receta tbkit.recipes.xu_chn_alpha",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
+  }
+ },
+ "alpha_fit": {
+  "references": "gpaw_chn_alpha.json",
+  "references_sha256": "429e5a6e17cce84fd4c9020a6121a17689cabbd8aa9af91a7d7a3b13790c9432",
+  "optimiser": "`ftol` termination condition is satisfied.",
+  "molecules": {
+   "CH4": {
+    "role": "train",
+    "gpaw": [
+     2.7085,
+     2.7085,
+     2.7085
+    ],
+    "tb": [
+     2.7838627168092764,
+     2.783862716809277,
+     2.783862716809278
+    ],
+    "mean_error_percent": 2.7824521620556597
+   },
+   "C2H6": {
+    "role": "train",
+    "gpaw": [
+     4.4124488037836676,
+     4.41258,
+     5.074621196216333
+    ],
+    "tb": [
+     4.619152649330871,
+     4.620310388502672,
+     5.018433584072005
+    ],
+    "mean_error_percent": 2.577378724684065
+   },
+   "C2H4": {
+    "role": "train",
+    "gpaw": [
+     3.52273,
+     4.08237,
+     5.58665
+    ],
+    "tb": [
+     3.1441582245465525,
+     4.045758474292911,
+     5.8405776493426185
+    ],
+    "mean_error_percent": -1.2223977244711137
+   },
+   "C2H2": {
+    "role": "train",
+    "gpaw": [
+     3.07195,
+     3.07195,
+     5.01074
+    ],
+    "tb": [
+     2.6152703510945585,
+     2.615270351094559,
+     5.4022179684864104
+    ],
+    "mean_error_percent": -4.678603068538944
+   },
+   "C6H6": {
+    "role": "train",
+    "gpaw": [
+     6.921,
+     13.00771,
+     13.01469
+    ],
+    "tb": [
+     6.339837511038293,
+     13.385087997043103,
+     13.391425322920531
+    ],
+    "mean_error_percent": 0.524993871312418
+   },
+   "NH3": {
+    "role": "train",
+    "gpaw": [
+     2.24356,
+     2.2437337490690905,
+     2.5911762509309098
+    ],
+    "tb": [
+     1.776144005404257,
+     2.2595345623556033,
+     2.2595873196635026
+    ],
+    "mean_error_percent": -11.064596057857646
+   },
+   "HCN": {
+    "role": "train",
+    "gpaw": [
+     2.24323,
+     2.24323,
+     3.64939
+    ],
+    "tb": [
+     2.2380797858066535,
+     2.238079785806654,
+     3.8513885672358406
+    ],
+    "mean_error_percent": 2.3562152553101123
+   },
+   "N2": {
+    "role": "train",
+    "gpaw": [
+     1.61592,
+     1.61592,
+     2.38613
+    ],
+    "tb": [
+     1.662618569732347,
+     1.662618569732348,
+     2.482829762578522
+    ],
+    "mean_error_percent": 3.383729390566592
+   },
+   "H3CNH2": {
+    "role": "train",
+    "gpaw": [
+     3.92467,
+     4.077155557761413,
+     4.685524442238586
+    ],
+    "tb": [
+     3.7188110990726124,
+     4.148521242301865,
+     4.873535921390868
+    ],
+    "mean_error_percent": 0.4218238069048974
+   },
+   "C5H5N": {
+    "role": "train",
+    "gpaw": [
+     6.30964,
+     11.67798,
+     12.44733
+    ],
+    "tb": [
+     5.998488826707804,
+     11.719792546285568,
+     12.9502035590961
+    ],
+    "mean_error_percent": 0.767324842293049
+   },
+   "CH3CN": {
+    "role": "train",
+    "gpaw": [
+     3.8756555496945766,
+     3.87586,
+     6.5529144503054235
+    ],
+    "tb": [
+     4.053386665634153,
+     4.054471725283808,
+     6.568157646601862
+    ],
+    "mean_error_percent": 2.5976990171564074
+   },
+   "N2H4": {
+    "role": "train",
+    "gpaw": [
+     3.5346390193662343,
+     3.59302,
+     4.3097509806337655
+    ],
+    "tb": [
+     3.230681245949324,
+     3.2932776641874844,
+     4.65985653849314
+    ],
+    "mean_error_percent": -2.217237568383501
+   },
+   "C3H8": {
+    "role": "test",
+    "gpaw": [
+     6.08572,
+     6.47925,
+     7.29603
+    ],
+    "tb": [
+     6.323158173832416,
+     6.539515625421539,
+     7.111156729013182
+    ],
+    "mean_error_percent": 0.5681009428887718
+   },
+   "butadiene": {
+    "role": "test",
+    "gpaw": [
+     5.7737,
+     7.4263200350939576,
+     14.119779964906044
+    ],
+    "tb": [
+     5.231126736892883,
+     7.259487277870292,
+     14.66289723846218
+    ],
+    "mean_error_percent": -0.6086748320802027
+   },
+   "C4H4NH": {
+    "role": "test",
+    "gpaw": [
+     6.07135,
+     9.74163,
+     10.24562
+    ],
+    "tb": [
+     5.274813446779017,
+     9.986599467310064,
+     10.17126312914759
+    ],
+    "mean_error_percent": -2.401986126512301
+   },
+   "isobutene": {
+    "role": "test",
+    "gpaw": [
+     6.64576,
+     8.6779,
+     10.31861
+    ],
+    "tb": [
+     6.610170606011068,
+     8.266974281931057,
+     10.401528760096978
+    ],
+    "mean_error_percent": -1.4179569591962982
+   },
+   "H2CCHCN": {
+    "role": "test",
+    "gpaw": [
+     4.51339,
+     5.7694546314427955,
+     10.304775368557205
+    ],
+    "tb": [
+     4.329127154377801,
+     5.9824599953669795,
+     10.436310573024102
+    ],
+    "mean_error_percent": 0.7785150627847237
+   }
+  },
+  "checks": {
+   "c60_alpha": 84.51134627253138,
+   "c60_alpha_experiment": 76.5,
+   "c60_alpha_without_extra": 69.21484490644471,
+   "diamond_eps": 5.0728209358513,
+   "diamond_eps_experiment": 5.7,
+   "diamond_eps_without_extra": 2.961582347059487
+  }
  }
 }

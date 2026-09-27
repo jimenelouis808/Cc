@@ -6,6 +6,25 @@ está la trampa.
 
 ---
 
+## tbkit · polarizabilidades cuantitativas
+
+La α del modelo ya no se queda corta: cada átomo lleva una polarizabilidad
+extra (H 0,43, C 0,95, N 0,74 Å³) por lo que su base mínima no puede
+polarizarse, apantallada junto con el resto. Los tres números salen de ajustar
+los tensores α de 12 moléculas calculados con GPAW en rejilla real.
+
+**Cuánto vale.** En cinco moléculas que el ajuste no vio, la α media queda a
+±2 % de GPAW y la anisotropía se reproduce (el benceno: 6,3 fuera del plano y
+13,4 en él, frente a 6,9 y 13,0). C₆₀ da 84,5 Å³ (medido: 76,5 ± 8) y el
+diamante ε∞ = 5,07 (medido: 5,7), sin haberlos usado.
+
+**Lo que NO hace.** En cristales la parte extra se suma sin campos locales (no
+hay apantallamiento periódico todavía). Las referencias son PBE, que ya
+sobreestima las α un 4–7 %. Energías, fuerzas y geometrías no cambian: esto
+solo toca la respuesta óptica.
+
+---
+
 ## tbkit · la polarizabilidad ya no es cero fuera del plano
 
 Hasta ahora, la α del modelo era exactamente cero en la dirección

@@ -18,6 +18,9 @@
   "onsite_dipole": {
     "C": {"value": 0.4952, "unit": "Å", "description": "dipolo intraatómico |⟨2s|r|2p⟩| para la respuesta óptica; el signo lo fija la convención de orbitales del modelo (tbkit.dipoles)", "source": "GPAW aeatom PBE, átomo libre (no forma parte del modelo de Xu)"}
   },
+  "extra_polarizability": {
+    "C": {"value": 0.95312, "unit": "Å^3", "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos", "source": "el valor del C de xu_chn (mismo C-C de Xu), ajustado a tensores α de GPAW FD con tbkit.recipes.xu_chn_alpha (no forma parte del modelo de Xu)"}
+  },
   "hopping": [
     {"pair": ["C", "C"], "bond": "sss", "law": {"type": "GSP", "v0": -5.0, "r0": 1.536329, "n": 2.0, "nc": 6.5, "rc": 2.18, "cutoff": 2.6}, "tail": [2.45, 2.6], "unit": "eV", "description": "V_ssσ en r0", "source": "Xu 1992, tabla I"},
     {"pair": ["C", "C"], "bond": "sps", "law": {"type": "GSP", "v0": 4.7, "r0": 1.536329, "n": 2.0, "nc": 6.5, "rc": 2.18, "cutoff": 2.6}, "tail": [2.45, 2.6], "unit": "eV", "description": "V_spσ en r0", "source": "Xu 1992, tabla I"},

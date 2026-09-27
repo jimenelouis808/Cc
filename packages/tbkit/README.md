@@ -133,7 +133,7 @@ Resultado (todo frente a GPAW salvo α):
 | Frecuencias (RMS) | CH₄ 52, NH₃ 55, benceno 50, piridina 69, HCN 156 cm⁻¹ (las de GPAW LCAO rompen degeneraciones hasta ~50 cm⁻¹ en los modos blandos: esa es la resolución de la comparación) |
 | Raman del benceno | 2A₁g + 4E₂g + E₁g, como debe; respiración 1021 cm⁻¹ polarizada (exp. 992) |
 | Raman de la piridina | modos de anillo polarizados a 992 y 1028 cm⁻¹ (exp. 991 y 1030) |
-| α | benceno 8,5 (plano) y 1,5 Å³ (fuera) frente a ~12,3 y ~6,5 medidos: la base mínima se queda corta (ver abajo) |
+| α | con la polarizabilidad atómica extra, ±5 % de GPAW en entrenamiento y ±2 % en prueba, anisotropía incluida (ver abajo) |
 
 Límites que el archivo declara en `validity`: solo sistemas finitos de capa
 cerrada (SCC sin Ewald); energías comparables solo entre geometrías de la misma
@@ -153,21 +153,29 @@ atómicos con el mismo núcleo de Klopman–Ohno que las cargas (derivadas de γ
 sin parámetros nuevos). La respuesta lineal coincide con el campo finito del
 mismo funcional y, sin apantallar, con la suma sobre estados.
 
-Qué cambia (con dipolos / con dipolos puntuales):
+**Polarizabilidad atómica extra.** Aun con esos dipolos, una base s+p no puede
+polarizarse hacia las funciones difusas y de polarización que un átomo real
+tiene. Lo que falta se da a cada átomo como un dipolo polarizable
+(`extra_polarizability`: H 0,43, C 0,95, N 0,74 Å³), apantallado junto con las
+cargas y los dipolos por el mismo núcleo (sin autointeracción). Los tres
+números se ajustan a los tensores α completos, anisotropía incluida, de 12
+moléculas calculadas con GPAW en rejilla real (FD, PBE; receta
+`tbkit.recipes.xu_chn_alpha`, referencias en
+`parameters/references/gpaw_chn_alpha.json`); nada más del modelo cambia.
 
-| | con d | puntual | experimento |
-|---|---|---|---|
-| α de C₆₀ | 69,0 Å³ | 61,7 | 76,5 ± 8 |
-| α del benceno (plano / fuera) | 8,5 / 1,5 Å³ | 10,3 / 0 | ~12,3 / ~6,5 |
-| ε∞ del diamante | 2,96 | 4,75 | 5,7 |
-| ρ de la respiración del benceno | 0,092 | 0,125 | (muy polarizada) |
-| ρ de los modos Σ⁺ de HCN | 0,20 y 0,26 | 1/3 y 1/3 | |
+| | puntual | + dipolos d | + α extra | referencia |
+|---|---|---|---|---|
+| α media, entrenamiento (vs GPAW) | | −41 a −73 % | ±5 % (NH₃ −11 %) | |
+| α media, 5 moléculas de prueba (vs GPAW) | | −43 a −62 % | −2 a +1 % | |
+| benceno, fuera / en el plano | 0 / 10,3 | 1,5 / 8,8 | 6,3 / 13,4 Å³ | GPAW 6,9 / 13,0 |
+| C₆₀ | 61,7 | 69,2 | 84,5 Å³ | exp. 76,5 ± 8 |
+| ε∞ del diamante | 4,75 | 2,96 | 5,07 | exp. 5,7 |
+| ρ de la respiración del benceno | 0,125 | 0,092 | 0,071 | muy polarizada |
 
-A lo largo de los enlaces σ la α baja, y es correcto: el dipolo de transición
-σ→σ* une los centroides de los dos híbridos, más cercanos que los núcleos, y la
-aproximación puntual lo sobrestimaba. Lo que falta ahora (α fuera del plano,
-ε∞ del diamante) es polarización que una base mínima no tiene. Los ceros y
-las ρ exactas eran artefactos; las α absolutas siguen siendo orientativas.
+C₆₀ y el diamante no entran en el ajuste. GPAW-PBE ya sobreestima las α un
+4–7 % frente al experimento (CH₄ 2,71 frente a 2,59; benceno 10,98 frente a
+10,32). En cristales la polarizabilidad extra se suma por celda sin campos
+locales (no hay apantallamiento periódico todavía).
 
 ## Fonones de Quantum ESPRESSO con intensidades de tbkit
 

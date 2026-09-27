@@ -221,9 +221,10 @@ Pendiente de la fase E:
       GPAW, signo desde la convención del modelo, apantallamiento con dipolos
       atómicos derivado del γ de Klopman–Ohno; campo finito como prueba.
       Desaparecen α⊥ = 0 y ρ = 1/3; α de C₆₀ 61,7 → 69,0 Å³ (exp. 76,5 ± 8).
-- [ ] Base más allá de la mínima para la α (fuera del plano del benceno 1,5
-      frente a ~6,5 Å³; ε∞ del diamante 2,96 frente a 5,7): orbitales de
-      polarización o una corrección de polarizabilidad atómica.
+- [x] Más allá de la base mínima para la α (paso 5): polarizabilidad atómica
+      extra por elemento, apantallada con el resto, ajustada a tensores α de
+      GPAW FD (12 moléculas). Prueba ±2 %; C₆₀ 84,5 Å³ (exp. 76,5 ± 8); ε∞ del
+      diamante 5,07 (exp. 5,7). Pendiente: campos locales en cristales (Ewald).
 - [ ] Raman resonante (elementos de matriz ópticos y electrón–fonón).
 - [ ] Segundo orden (banda 2D, doble resonancia): periódico, suma en toda la zona
       de Brillouin.

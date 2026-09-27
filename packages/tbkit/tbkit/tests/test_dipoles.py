@@ -51,7 +51,8 @@ def flipped_p(model):
 
 @pytest.fixture(scope="module")
 def chn():
-    return load_parameters("xu_chn")
+    """xu_chn without its extra atomic polarizability: the TB response alone."""
+    return dataclasses.replace(load_parameters("xu_chn"), extra_polarizability={})
 
 
 class TestSignAndMatrices:
