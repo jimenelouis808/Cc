@@ -1,0 +1,26 @@
+{
+  "name": "π Hückel",
+  "reference": "t: A. H. Castro Neto et al., Rev. Mod. Phys. 81, 109 (2009). Heteroátomos: A. Streitwieser, Molecular Orbital Theory for Organic Chemists (Wiley, 1961)",
+  "system": "carbono sp2: grafeno, nanotubos, cintas, copos, fullerenos; N, B y O sustitucionales",
+  "validity": "solo estados π cerca del nivel de Fermi (±3 eV); enlaces C-C de 1.35 a 1.50 Å; sin energías totales",
+  "units": {"energy": "eV", "length": "Å"},
+  "t": {"value": -2.7, "unit": "eV", "description": "hopping π a primeros vecinos del grafeno", "source": "Castro Neto 2009 (los ajustes a DFT dan 2.5-2.8 eV)"},
+  "a_cc": {"value": 1.42, "unit": "Å", "description": "distancia C-C del grafeno (referencia de la ley con deformación)", "source": "grafeno experimental"},
+  "cutoff": {"value": 1.75, "unit": "Å", "description": "solo primeros vecinos", "source": "convención del modelo a primeros vecinos"},
+  "strain_beta": {"value": 3.37, "unit": "1", "description": "β de t(d) = t exp(-β(d/a_cc - 1)) cuando se activa la deformación", "source": "V. M. Pereira, A. H. Castro Neto, N. M. R. Peres, Phys. Rev. B 80, 045401 (2009)"},
+  "hubbard_u_over_t": {"value": 1.0, "unit": "|t|", "description": "U/|t| para el Hubbard de campo medio", "source": "O. V. Yazyev, Rep. Prog. Phys. 73, 056501 (2010): U ≈ |t| reproduce el magnetismo de bordes de DFT"},
+  "heteroatoms": {
+    "N": {"h": 1.5, "description": "α_N = α + h β (N trigonal); el N bicoordinado se distingue por sus electrones π (1 frente a 2)", "source": "Streitwieser 1961"},
+    "B": {"h": -1.0, "description": "α_B = α + h β", "source": "Streitwieser 1961"},
+    "O": {"h": 1.0, "description": "α_O = α + h β (carbonilo; 2.0 para éter no incluido)", "source": "Streitwieser 1961"}
+  },
+  "bond_factors": {
+    "C-N": {"k": 1.0, "source": "Streitwieser 1961"},
+    "C-B": {"k": 0.7, "source": "Streitwieser 1961"},
+    "C-O": {"k": 1.0, "source": "Streitwieser 1961"},
+    "N-N": {"k": 1.0, "source": "Streitwieser 1961"},
+    "B-N": {"k": 0.7, "source": "Streitwieser 1961"}
+  },
+  "valence_rule": "pi_huckel",
+  "notes": "Parámetros π de libro: tendencias, no niveles cuantitativos. Ajústalos a DFT con tbkit.fit."
+}

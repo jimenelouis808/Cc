@@ -7,6 +7,9 @@
     tbkit hubbard zgnr.xyz --U 2.7 --kmesh 48 --m-energy m.csv
     tbkit hubbard flake.xyz --field 0 0.5 11 -o campo.csv
     tbkit orbital benceno.xyz --band homo -o homo.cube
+    tbkit relax   cluster.xyz --model sp3 -o relajado.extxyz
+    tbkit phonons diamante.extxyz --model sp3 --kmesh 8
+    tbkit run     simulacion.json                  # reproducible: guarda un registro
     tbkit gpaw-levels calc/gpaw.txt
 
 Structures: any file ASE reads (extxyz from carbonforge or nanocarbon_lab
@@ -192,6 +195,55 @@ def cmd_orbital(args) -> int:
     return 0
 
 
+def cmd_run(args) -> int:
+    from .record import run_simulation
+
+    record = run_simulation(args.config)
+    results = record["results"]
+    summary = {k: v for k, v in results.items() if not isinstance(v, (list, dict))}
+    print(f"Tarea {record['task']} con '{record['model']['name']}' "
+          f"(tbkit {record['tbkit']}, commit {record['commit'] or 'desconocido'})")
+    for key, value in summary.items():
+        print(f"  {key}: {value}")
+    print(f"→ {record['_path']}")
+    return 0
+
+
+def cmd_relax(args) -> int:
+    from ase.io import read, write
+
+    from .tasks import relax
+
+    atoms = read(args.structure)
+    results, final = relax(atoms, _model(args), kmesh=args.kmesh, kT=args.kT, fmax=args.fmax,
+                           steps=args.steps, scc=args.scc)
+    print(f"{'Convergido' if results['converged'] else 'SIN CONVERGER'} en "
+          f"{results['steps']} pasos: E = {results['energy']:.6f} eV, fuerza máxima "
+          f"{results['max_force']:.4f} eV/Å")
+    write(args.out, final)
+    print(f"→ {args.out}")
+    return 0 if results["converged"] else 2
+
+
+def cmd_phonons(args) -> int:
+    from ase.io import read
+
+    from .tasks import phonons
+
+    results, _ = phonons(read(args.structure), _model(args), kmesh=args.kmesh, kT=args.kT,
+                         delta=args.delta, scc=args.scc)
+    if results["residual_force"] > 0.05:
+        print(f"AVISO: fuerza residual {results['residual_force']:.3f} eV/Å; relaja antes "
+              "(tbkit relax) o las frecuencias no son las armónicas.")
+    frequencies = results["frequencies_cm1"]
+    print("Frecuencias Γ (cm⁻¹, negativas = imaginarias):")
+    print("  " + " ".join(f"{f:.1f}" for f in frequencies))
+    if args.out:
+        np.savetxt(args.out, frequencies, header="frecuencia_cm-1", comments="")
+        print(f"→ {args.out}")
+    return 0
+
+
 def cmd_gpaw_levels(args) -> int:
     from .fit import read_gpaw_eigenvalues
 
@@ -214,7 +266,8 @@ def build_parser() -> argparse.ArgumentParser:
     def structure_command(name, help_text, func):
         p = sub.add_parser(name, help=help_text)
         p.add_argument("structure")
-        p.add_argument("--model", choices=("pi", "sp3"), default="pi")
+        p.add_argument("--model", choices=("pi", "sp3"), default="pi",
+                       help="pi (π Hückel) o sp3 (carbono de Xu, con parte repulsiva).")
         p.add_argument("--t", type=float, default=-2.7, help="Hopping π, eV (modelo pi).")
         p.add_argument("--skf", default=None, help="Carpeta con archivos A-B.skf de DFTB.")
         p.add_argument("--orbitals", default="C=s,px,py,pz H=s",
@@ -258,6 +311,25 @@ def build_parser() -> argparse.ArgumentParser:
     ob.add_argument("--band", default="homo", help="homo, lumo o un índice.")
     ob.add_argument("--spacing", type=float, default=0.2)
     ob.add_argument("-o", "--out", default="orbital.cube")
+
+    rl = structure_command("relax", "Relajar posiciones (modelos con parte repulsiva).",
+                           cmd_relax)
+    rl.add_argument("--kT", type=float, default=0.02)
+    rl.add_argument("--fmax", type=float, default=0.01)
+    rl.add_argument("--steps", type=int, default=500)
+    rl.add_argument("--scc", action="store_true")
+    rl.add_argument("-o", "--out", default="relajada.extxyz")
+
+    ph = structure_command("phonons", "Fonones en Γ (modelos con parte repulsiva).",
+                           cmd_phonons)
+    ph.add_argument("--kT", type=float, default=0.02)
+    ph.add_argument("--delta", type=float, default=0.005)
+    ph.add_argument("--scc", action="store_true")
+    ph.add_argument("-o", "--out", default=None)
+
+    rn = sub.add_parser("run", help="Ejecutar un archivo de simulación y guardar su registro.")
+    rn.add_argument("config")
+    rn.set_defaults(func=cmd_run)
 
     gp = sub.add_parser("gpaw-levels", help="Niveles de un gpaw.txt (para ajustar).")
     gp.add_argument("path")

@@ -10,7 +10,17 @@ tbkit levels benceno.xyz                      # niveles, gap, cargas
 tbkit bands grafeno.extxyz --path GKMG -o bandas.csv
 tbkit hubbard zgnr.extxyz --U 2.7 --kmesh 48 --m-energy m.csv
 tbkit orbital coroneno.xyz --band homo -o homo.cube
+tbkit relax cluster.xyz --model sp3 -o relajado.extxyz
+tbkit phonons diamante.extxyz --model sp3 --kmesh 8
+tbkit run simulacion.json          # reproducible desde el archivo
 ```
+
+## Parámetros: fuera del código y con su fuente
+
+Los conjuntos incluidos viven en `tbkit/parameters/*.json`. Cada número lleva
+unidad, descripción y fuente, y cada archivo, su referencia, el sistema para el
+que se obtuvo y su rango de validez. `model_to_dict` escribe un modelo (incluido
+uno ajustado) en ese mismo formato, y `load_parameters(ruta)` lo lee.
 
 ## Qué hay
 
@@ -22,6 +32,8 @@ tbkit orbital coroneno.xyz --band homo -o homo.cube
 | 4. Cargas autoconsistentes | `scc` | DFTB2 con γ de Klopman–Ohno; solo sistemas finitos (sin Ewald) |
 | 5. Espín | `hubbard` | Hubbard de campo medio; magnetización frente a la energía (m(E), dm/dE), frente al campo (M(h), χ) y frente al dopaje o el nivel de Fermi |
 | 6. Periódico | `hamiltonian`, `kpoints` | H(k) por suma de Bloch; mallas Γ-centradas y caminos de bandas de ASE |
+| 7. Parte repulsiva | `repulsive`, `forces`, `calculator` | Energía libre total (banda − TS + repulsión, + SCC), fuerzas de Hellmann–Feynman (ortogonal, no ortogonal, periódico, SCC), repulsión embebida de Xu y spline de los `.skf`; calculadora ASE para relajar y para fonones en Γ |
+| Reproducibilidad | `record`, `tasks` | `tbkit run simulacion.json` guarda estructura, parámetros completos, versión, commit, fecha, ajustes y resultados; `record.replay` lo repite |
 
 Salidas (`analysis`): matriz densidad P = Σ f c c†, poblaciones Mulliken y
 Löwdin, cargas y momentos por átomo, órdenes de enlace de Mayer/Wiberg y de
@@ -42,10 +54,27 @@ m(E_F) = M, apantallamiento de la carga del N de la piridina con SCC, un `.skf`
 generado a partir del modelo de Xu que lo reproduce (2 meV), y ajustes que
 recuperan parámetros conocidos.
 
+## Validación de la parte repulsiva (carbono de Xu, sin ajustar nada)
+
+| Magnitud | tbkit | Experimento |
+|---|---|---|
+| Constante de red del diamante | ≈ 3,555 Å | 3,567 Å |
+| Enlace C–C del grafeno | ≈ 1,42 Å | 1,42 Å |
+| Energía de cohesión del diamante | ≈ 7,24 eV/átomo | 7,37 eV/átomo |
+| Fonón óptico del diamante (Γ, línea Raman) | ≈ 1224 cm⁻¹ | 1332 cm⁻¹ (−8 %) |
+| Banda G del grafeno | ≈ 1666–1682 cm⁻¹ | 1582 cm⁻¹ (+6 %) |
+
+Las fuerzas se comparan con diferencias finitas de la energía en todos los
+casos (ortogonal periódico con puntos k, no ortogonal finito y periódico, SCC
+con solapamiento). La banda G tiene una anomalía de Kohn (se acopla al cono de
+Dirac): su frecuencia depende de la malla de puntos k y del ensanchamiento, y
+converge despacio; usa mallas densas (≥ 36×36) y comprueba la convergencia.
+
 ## Lo que no hace, y dónde está la trampa
 
-- **Sin energías totales ni fuerzas**: no hay parte repulsiva (ni la de Xu ni la
-  spline de los `.skf`). Sirve para estructura electrónica, no para relajar.
+- **Energías y fuerzas solo con modelos que tienen parte repulsiva**: el de Xu
+  (carbono puro) y los `.skf` con su spline. El modelo π no la tiene y lo dice.
+  El modelo de Xu no describe H ni heteroátomos.
 - **Campo medio no es correlación**: un copo con M = 0 y momentos locales es, en
   realidad, un singlete correlacionado; los momentos son el parámetro de orden
   de la aproximación.

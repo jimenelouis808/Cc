@@ -6,6 +6,42 @@ está la trampa.
 
 ---
 
+## tbkit · energías, fuerzas, relajación y fonones
+
+**Parte repulsiva.** Con el modelo sp³ de carbono de Xu (y con archivos `.skf`
+que traen su spline), tbkit calcula ahora energías totales y fuerzas, así que
+puede **relajar** estructuras y calcular **fonones en Γ**:
+
+```bash
+tbkit relax cluster.xyz --model sp3 -o relajado.extxyz
+tbkit phonons diamante.extxyz --model sp3 --kmesh 8
+```
+
+Sin reajustar nada, el modelo da el diamante con 3,555 Å (exp. 3,567), el enlace
+del grafeno 1,42 Å, una cohesión de 7,24 eV/átomo (exp. 7,37), la línea Raman del
+diamante en 1224 cm⁻¹ (exp. 1332: −8 %) y la banda G del grafeno en ~1670 cm⁻¹
+(exp. 1582: +6 %). Son los errores típicos de un modelo empírico; se informan, no
+se esconden.
+
+**Reproducibilidad.** `tbkit run simulacion.json` ejecuta una tarea (niveles,
+DOS, bandas, Hubbard, relajación, fonones) y guarda un registro con la
+estructura, **todos** los parámetros, la versión, el commit, la fecha y los
+ajustes; con ese registro solo, el cálculo se repite.
+
+**Parámetros con fuente.** Los conjuntos incluidos están ahora en archivos JSON
+(`tbkit/parameters/`), cada número con unidad, descripción y fuente, y cada
+conjunto con su referencia, el sistema para el que se obtuvo y su validez. Un
+ajuste informa de cada parámetro que cambia (antes → después) y de si el error
+mejora o empeora.
+
+**Qué NO hace, y dónde está la trampa:**
+
+- El modelo π sigue sin parte repulsiva: no relaja ni da fonones, y lo dice.
+- El modelo de Xu es carbono puro: no describe H, N ni O.
+- La banda G tiene una anomalía de Kohn: su frecuencia depende de la malla de
+  puntos k y converge despacio (usa ≥ 36×36 y compruébalo).
+- Las fuerzas con Hubbard de campo medio no están implementadas.
+
 ## tbkit · tight binding, el cuarto paquete
 
 Nuevo paquete independiente, `packages/tbkit`, con su propio comando `tbkit`.

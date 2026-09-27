@@ -157,13 +157,32 @@ Hecho (`packages/tbkit`, 0.1.0):
 
 Pendiente de la fase D:
 
-- [ ] Parte repulsiva (energías totales, fuerzas, fonones TB): necesaria para el
-      Raman con fonones propios de la fase E.
+- [x] Parte repulsiva: energía libre total, fuerzas de Hellmann–Feynman
+      (ortogonal, no ortogonal, periódico, SCC), repulsión de Xu y spline de los
+      `.skf`, calculadora ASE, relajación y fonones en Γ. Validado contra
+      experimento sin reajustar (diamante, grafeno; ver README de tbkit).
 - [ ] SCC periódico (suma de Ewald).
 - [ ] Hubbard + SCC combinados; espín no colineal.
 - [ ] Verificar la convención `sp` heteronuclear de los `.skf` contra DFTB+.
 - [ ] Catálogo de parámetros de tbkit con la forma del de carbonforge (sin
       importarlo) y GUI (toolkit por decidir).
+
+### Directriz científica del usuario (27-09-2026)
+
+Adoptado de la "Directriz maestra" para tbkit: parámetros en JSON con unidad,
+fuente, sistema y validez; colas suaves en los cortes; comprobación de H = H†,
+S > 0 y C†SC = I; registro reproducible y `tbkit run`; informe de cada ajuste
+(antes → después, métricas); nombres honestos ("tipo DFTB2" solo con integrales
+de dos centros + SCC + repulsión); validación en tres niveles (unidad, física,
+regresión) y protocolo requisito → formulación → implementación → test →
+validación → documentación.
+
+Anotado para más adelante (no forma parte de los objetivos actuales, salvo que
+se decida): acoplamiento espín–órbita (validar primero en un átomo), MoS₂/WS₂ con
+orbitales d, funciones de Green y NEGF (cadena 1D como primera validación),
+transporte I(V), hamiltonianos asistidos por ML, matrices dispersas y
+benchmarks. No adoptado: reorganizar tbkit en las carpetas de la directriz
+(ya separa estructura, hamiltoniano, parámetros, solver y análisis).
 
 ## Fase E — Raman con tight binding
 

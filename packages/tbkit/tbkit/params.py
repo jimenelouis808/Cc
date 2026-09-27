@@ -29,7 +29,9 @@ in their docstring: no number here is unexplained.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, Optional, Protocol
 
 import numpy as np
@@ -127,6 +129,79 @@ class Table:
         return np.where(d <= self.cutoff, out, 0.0)
 
 
+@dataclass(frozen=True)
+class Tail:
+    """``inner`` up to ``r1``, then a cubic to zero at ``rm``: a smooth cutoff.
+
+    The cubic matches the value and slope of ``inner`` at ``r1`` and reaches
+    zero with zero slope at ``rm``, so energies and forces are continuous
+    through the cutoff (Xu et al. use this form between 2.45 and 2.6 Å).
+    """
+
+    inner: DistanceLaw
+    r1: float
+    rm: float
+
+    @property
+    def cutoff(self) -> float:
+        return self.rm
+
+    def _coefficients(self):
+        h = 1e-6
+        f = float(self.inner(self.r1))
+        slope = float((self.inner(self.r1 + h) - self.inner(self.r1 - h)) / (2 * h))
+        delta = self.rm - self.r1
+        a2 = (-3 * f - 2 * slope * delta) / delta ** 2
+        a3 = (2 * f + slope * delta) / delta ** 3
+        return f, slope, a2, a3
+
+    def __call__(self, d):
+        d = np.asarray(d, dtype=float)
+        f, slope, a2, a3 = self._coefficients()
+        x = d - self.r1
+        tail = f + slope * x + a2 * x ** 2 + a3 * x ** 3
+        inner = self.inner(np.minimum(d, self.r1))
+        return np.where(d < self.r1, inner, np.where(d < self.rm, tail, 0.0))
+
+
+def derivative(law: DistanceLaw, d, h: float = 1e-5):
+    """dV/dd by central differences (exact to O(h²); every law is smooth)."""
+    d = np.asarray(d, dtype=float)
+    return (law(d + h) - law(d - h)) / (2 * h)
+
+
+_LAWS = {cls.__name__: cls for cls in (Constant, Exponential, Harrison, GSP, Table)}
+
+
+def law_to_dict(law) -> dict:
+    """A JSON-ready description of a distance law (for records and files)."""
+    from dataclasses import asdict
+
+    if isinstance(law, Tail):
+        return {"type": "Tail", "inner": law_to_dict(law.inner), "r1": law.r1, "rm": law.rm}
+    if hasattr(law, "to_dict"):
+        return law.to_dict()
+    data = asdict(law)
+    data = {k: (list(v) if isinstance(v, tuple) else v) for k, v in data.items()}
+    return {"type": type(law).__name__, **data}
+
+
+def law_from_dict(data: dict):
+    data = dict(data)
+    kind = data.pop("type")
+    if kind == "Tail":
+        return Tail(law_from_dict(data["inner"]), float(data["r1"]), float(data["rm"]))
+    if kind == "SkfSpline":
+        from .repulsive import SkfSpline
+
+        return SkfSpline.from_dict(data)
+    if kind not in _LAWS:
+        raise ValueError(f"Ley de distancia desconocida: {kind!r}.")
+    if kind == "Table":
+        data["r"], data["values"] = tuple(data["r"]), tuple(data["values"])
+    return _LAWS[kind](**data)
+
+
 ValenceRule = Callable[[str, int], float]
 
 
@@ -154,6 +229,10 @@ class TBModel:
         versus pyridinic N in a π model).
     hubbard_u
         On-site Coulomb U per element, eV (self-consistent charges, Hubbard).
+    repulsive
+        Pair or embedded repulsion, needed for total energies and forces.
+    metadata
+        Provenance of the parameters (reference, validity...).
     """
 
     name: str
@@ -164,6 +243,12 @@ class TBModel:
     valence: dict[str, float] = field(default_factory=dict)
     valence_rule: Optional[ValenceRule] = None
     hubbard_u: dict[str, float] = field(default_factory=dict)
+    #: Short-range repulsion for total energies and forces
+    #: (:mod:`tbkit.repulsive`); None means electronic structure only.
+    repulsive: Optional[object] = None
+    #: Where the numbers come from: reference, system, validity, notes, and
+    #: the per-parameter descriptions of the file they were read from.
+    metadata: dict = field(default_factory=dict)
 
     @property
     def orthogonal(self) -> bool:
@@ -205,15 +290,10 @@ class TBModel:
 
 
 # --------------------------------------------------------------------------
-# Built-in parameter sets
+# Parameter files
 # --------------------------------------------------------------------------
 
-#: C-C distance of graphene, Å.
-A_CC = 1.42
-
-#: Graphene nearest-neighbour hopping, eV. 2.7 eV is the standard value
-#: (Castro Neto et al., Rev. Mod. Phys. 81, 109 (2009)); DFT fits give 2.5-2.8.
-T_GRAPHENE = -2.7
+PARAMETER_DIR = Path(__file__).with_name("parameters")
 
 
 def _pi_valence(element: str, coordination: int) -> float:
@@ -230,66 +310,145 @@ def _pi_valence(element: str, coordination: int) -> float:
     raise KeyError(element)
 
 
-def pi_model(t: float = T_GRAPHENE, cutoff: float = 1.75, strain_beta: float | None = None,
-             heteroatoms: bool = True) -> TBModel:
+#: Valence rules a parameter file may name.
+VALENCE_RULES: dict[str, ValenceRule] = {"pi_huckel": _pi_valence}
+
+
+def read_parameter_file(name_or_path: str | Path) -> dict:
+    """The raw content of a parameter file: a built-in name or a path."""
+    path = Path(name_or_path)
+    if not path.suffix:
+        path = PARAMETER_DIR / f"{name_or_path}.json"
+    if not path.exists():
+        available = ", ".join(p.stem for p in sorted(PARAMETER_DIR.glob("*.json")))
+        raise FileNotFoundError(f"No existe el conjunto de parámetros {name_or_path!r}. "
+                                f"Incluidos: {available}.")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _value(entry):
+    return entry["value"] if isinstance(entry, dict) else entry
+
+
+def model_from_dict(data: dict) -> TBModel:
+    """A model from the generic parameter-file layout (see ``parameters/*.json``)."""
+    def laws(entries):
+        out = {}
+        for entry in entries:
+            law = law_from_dict(entry["law"])
+            if entry.get("tail"):
+                law = Tail(law, *map(float, entry["tail"]))
+            out[(entry["pair"][0], entry["pair"][1], entry["bond"])] = law
+        return out
+
+    repulsive = None
+    if data.get("repulsive"):
+        from .repulsive import repulsive_from_dict
+
+        repulsive = repulsive_from_dict(data["repulsive"])
+    rule = data.get("valence_rule")
+    metadata = {k: data[k] for k in ("reference", "system", "validity", "notes", "units")
+                if k in data}
+    metadata["parameters"] = data
+    return TBModel(
+        name=data["name"],
+        orbitals={el: tuple(orbs) for el, orbs in data["orbitals"].items()},
+        onsite={el: {shell: float(_value(v)) for shell, v in table.items()}
+                for el, table in data["onsite"].items()},
+        hopping=laws(data.get("hopping", [])),
+        overlap=laws(data.get("overlap", [])),
+        valence={el: float(_value(v)) for el, v in data.get("valence", {}).items()},
+        valence_rule=VALENCE_RULES[rule] if rule else None,
+        hubbard_u={el: float(_value(v)) for el, v in data.get("hubbard_u", {}).items()},
+        repulsive=repulsive,
+        metadata=metadata,
+    )
+
+
+def model_to_dict(model: TBModel) -> dict:
+    """A parameter-file dictionary for ``model`` (records, sharing a fitted set).
+
+    Laws are written in full; the per-parameter descriptions of the source
+    file are kept when the model was read from one.
+    """
+    def entries(table):
+        return [{"pair": [a, b], "bond": bond, "law": law_to_dict(law)}
+                for (a, b, bond), law in table.items()]
+
+    rule = next((name for name, fn in VALENCE_RULES.items() if fn is model.valence_rule), None)
+    data = {
+        "name": model.name,
+        "units": {"energy": "eV", "length": "Å"},
+        "orbitals": {el: list(orbs) for el, orbs in model.orbitals.items()},
+        "onsite": model.onsite,
+        "valence": model.valence,
+        "hubbard_u": model.hubbard_u,
+        "hopping": entries(model.hopping),
+        "overlap": entries(model.overlap),
+    }
+    if rule:
+        data["valence_rule"] = rule
+    if model.repulsive is not None:
+        data["repulsive"] = model.repulsive.to_dict()
+    for key in ("reference", "system", "validity", "notes"):
+        if key in model.metadata:
+            data[key] = model.metadata[key]
+    return data
+
+
+def load_parameters(name_or_path: str | Path) -> TBModel:
+    """A model from a parameter file (``"xu_carbon"`` or a path to a JSON file)."""
+    data = read_parameter_file(name_or_path)
+    if "t" in data and "orbitals" not in data:
+        raise ValueError("Ese archivo describe el modelo π: usa pi_model().")
+    return model_from_dict(data)
+
+
+def pi_model(t: Optional[float] = None, cutoff: Optional[float] = None,
+             strain_beta: Optional[float] = None, heteroatoms: bool = True) -> TBModel:
     """Orthogonal π model: graphene, nanotubes, ribbons, flakes, fullerenes.
 
-    Carbon on-site 0 (the energy reference), nearest-neighbour hopping ``t``
-    within ``cutoff``. With ``strain_beta`` the hopping follows
-    ``t exp(-beta (d/1.42 - 1))`` instead of being constant.
-
-    Heteroatoms use Hückel parameters (Streitwieser, *Molecular Orbital
-    Theory for Organic Chemists*, 1961): on-site ``h |t|`` below carbon and
-    hopping ``k t``: N (two-fold, pyridinic) h 0.5, N (three-fold) h 1.5,
-    B h -1.0, O h 1.0 (carbonyl) / 2.0 (ether); k_CN 1.0, k_CB 0.7,
-    k_CO 1.0 (0.8 for ether-like). The three-fold N value is used for all N
-    here; the two-fold correction is the valence rule (1 π electron). These
-    are textbook π parameters, good for trends, not for quantitative levels.
+    Numbers from ``parameters/pi_huckel.json`` (each with its source):
+    carbon on-site 0 (the energy reference), nearest-neighbour hopping
+    ``t = -2.7 eV`` within 1.75 Å; with ``strain_beta`` the hopping follows
+    ``t exp(-beta (d/1.42 - 1))``. Heteroatoms (N, B, O) use Hückel's
+    ``α_X = α + h β`` and ``β_CX = k β``. Textbook π parameters: good for
+    trends, not for quantitative levels (fit them with :mod:`tbkit.fit`).
+    Arguments override the file's values.
     """
-    law: Callable[[float], DistanceLaw]
-    if strain_beta is None:
-        def law(v): return Constant(v, cutoff)
-    else:
-        def law(v): return Exponential(v, A_CC, strain_beta, cutoff)
+    data = read_parameter_file("pi_huckel")
+    t = float(data["t"]["value"]) if t is None else float(t)
+    cutoff = float(data["cutoff"]["value"]) if cutoff is None else float(cutoff)
+    a_cc = float(data["a_cc"]["value"])
+
+    def law(v):
+        return Constant(v, cutoff) if strain_beta is None else Exponential(
+            v, a_cc, strain_beta, cutoff)
+
     orbitals = {"C": ("pi",)}
     onsite = {"C": {"p": 0.0}}
     hopping = {("C", "C", "ppp"): law(t)}
     if heteroatoms:
-        a = abs(t)
-        orbitals.update({"N": ("pi",), "B": ("pi",), "O": ("pi",)})
-        # Below carbon = more negative energy (more electronegative).
-        onsite.update({"N": {"p": -1.5 * a}, "B": {"p": 1.0 * a}, "O": {"p": -1.0 * a}})
-        hopping.update({("C", "N", "ppp"): law(1.0 * t), ("C", "B", "ppp"): law(0.7 * t),
-                        ("C", "O", "ppp"): law(1.0 * t), ("N", "N", "ppp"): law(1.0 * t),
-                        ("B", "N", "ppp"): law(0.7 * t)})
-    return TBModel(
-        name=f"π Hückel (t = {t} eV)", orbitals=orbitals, onsite=onsite, hopping=hopping,
-        valence_rule=_pi_valence, hubbard_u={"C": 1.0 * abs(t), "N": 1.0 * abs(t),
-                                             "B": 1.0 * abs(t), "O": 1.0 * abs(t)},
-    )
+        for element, entry in data["heteroatoms"].items():
+            orbitals[element] = ("pi",)
+            onsite[element] = {"p": float(entry["h"]) * t}      # α + h β with β = t
+        for pair, entry in data["bond_factors"].items():
+            a, b = pair.split("-")
+            hopping[(a, b, "ppp")] = law(float(entry["k"]) * t)
+    u = float(data["hubbard_u_over_t"]["value"]) * abs(t)
+    metadata = {k: data[k] for k in ("reference", "system", "validity", "notes") if k in data}
+    metadata["parameters"] = data
+    return TBModel(name=f"π Hückel (t = {t} eV)", orbitals=orbitals, onsite=onsite,
+                   hopping=hopping, valence_rule=_pi_valence,
+                   hubbard_u={el: u for el in orbitals}, metadata=metadata)
 
 
 def xu_carbon() -> TBModel:
-    """Orthogonal sp³ model of carbon: Xu, Wang, Chan and Ho,
-    J. Phys.: Condens. Matter 4, 6047 (1992).
+    """sp³ carbon of Xu, Wang, Chan and Ho (1992), with its repulsive term.
 
-    E_s = -2.99, E_p = 3.71 eV; ssσ -5.0, spσ 4.7, ppσ 5.5, ppπ -1.55 eV at
-    r0 = 1.536 Å, GSP scaling with n = 2, nc = 6.5, rc = 2.18 Å, cut off at
-    2.6 Å. Fitted to diamond, graphite, the C2 dimer and linear chains; the
-    repulsive part of the original model is not included (no total
-    energies or forces here).
+    All numbers in ``parameters/xu_carbon.json``: orthogonal s+p basis, GSP
+    hopping with smooth tails between 2.45 and 2.6 Å, and the embedded
+    repulsion ``E_rep = Σ_i f(Σ_j φ(r_ij))`` that makes total energies and
+    forces possible. Fitted to diamond, graphite, C2 and chains.
     """
-    r0, n, nc, rc, cut = 1.536, 2.0, 6.5, 2.18, 2.6
-
-    def gsp(v):
-        return GSP(v, r0, n, nc, rc, cut)
-
-    return TBModel(
-        name="sp3 carbono (Xu, Wang, Chan, Ho 1992)",
-        orbitals={"C": ("s", "px", "py", "pz")},
-        onsite={"C": {"s": -2.99, "p": 3.71}},
-        hopping={("C", "C", "sss"): gsp(-5.0), ("C", "C", "sps"): gsp(4.7),
-                 ("C", "C", "pps"): gsp(5.5), ("C", "C", "ppp"): gsp(-1.55)},
-        valence={"C": 4.0},
-        hubbard_u={"C": 10.0},
-    )
+    return load_parameters("xu_carbon")

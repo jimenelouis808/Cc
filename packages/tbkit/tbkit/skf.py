@@ -11,8 +11,8 @@ free atom. The "simple" format (Aradi et al., DFTB+ documentation,
 * line 3: mass and repulsive polynomial (ignored here)
 * ``nGridPoints`` lines of 20 columns: ``Hdd0 Hdd1 Hdd2 Hpd0 Hpd1 Hpp0 Hpp1
   Hsd0 Hsp0 Hss0`` then the same ten for S.
-* a ``Spline`` block with the repulsive potential (not used: tbkit computes
-  electronic structure, not forces).
+* a ``Spline`` block with the repulsive pair potential, read into
+  :class:`tbkit.repulsive.SkfSpline` (total energies and forces).
 
 Row i (1-based) is at ``r = i · gridDist``; units Hartree and Bohr,
 converted here to eV and Å. ``n*value`` (Fortran repetition) is accepted.
@@ -53,6 +53,7 @@ class SKFile:
     onsite: Optional[dict[str, float]]      # "s", "p", "d" -> eV (homonuclear)
     hubbard: Optional[dict[str, float]]     # eV
     occupations: Optional[dict[str, float]]
+    repulsive: Optional[object] = None         # SkfSpline (eV, Å) or None
 
 
 def _numbers(line: str) -> list[float]:
@@ -107,7 +108,9 @@ def read_skf(path: str | Path) -> SKFile:
     for index, name in enumerate(_COLUMNS):
         scale = Hartree if name.startswith("H") else 1.0
         table[name] = data[:, index] * scale
-    return SKFile((a, b), r, table, onsite, hubbard, occupations)
+    from .repulsive import read_skf_spline
+
+    return SKFile((a, b), r, table, onsite, hubbard, occupations, read_skf_spline(lines))
 
 
 def _law(r: np.ndarray, values: np.ndarray) -> Optional[Table]:
@@ -130,12 +133,15 @@ def load_skf_set(directory: str | Path, orbitals: dict[str, tuple[str, ...]],
     elements = list(orbitals)
     onsite, hubbard, valence = {}, {}, {}
     hopping, overlap = {}, {}
+    splines: dict = {}
     for a in elements:
         for b in elements:
             path = directory / f"{a}-{b}.skf"
             if not path.exists():
                 raise FileNotFoundError(f"Falta {path.name} en {directory}.")
             sk = read_skf(path)
+            if sk.repulsive is not None and (b, a) not in splines:
+                splines[(a, b)] = sk.repulsive
             if a == b:
                 onsite[a] = {"s": sk.onsite["s"], "p": sk.onsite["p"]}
                 has_p = any(o != "s" for o in orbitals[a])
@@ -149,6 +155,13 @@ def load_skf_set(directory: str | Path, orbitals: dict[str, tuple[str, ...]],
                     law = _law(sk.r, sk.table[column])
                     if law is not None:
                         store[(a, b, bond)] = law
-    return TBModel(name=name or f"DFTB .skf ({directory.name})", orbitals=dict(orbitals),
+    from .repulsive import PairRepulsive
+
+    repulsive = PairRepulsive(splines) if len(splines) == len(elements) * (len(elements) + 1) \
+        // 2 else None
+    return TBModel(name=name or f"integrales .skf ({directory.name})", orbitals=dict(orbitals),
                    onsite=onsite, hopping=hopping, overlap=overlap, valence=valence,
-                   hubbard_u=hubbard)
+                   hubbard_u=hubbard, repulsive=repulsive,
+                   metadata={"reference": f"archivos .skf de {directory}",
+                             "notes": "Integrales de dos centros y repulsión de DFTB; con "
+                                      "tbkit.scc es un modelo tipo DFTB2 (sin tercer orden)."})

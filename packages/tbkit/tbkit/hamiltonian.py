@@ -20,6 +20,15 @@ from .params import TBModel
 from .slater_koster import block
 
 
+def check_hermitian(matrix: np.ndarray, name: str, k=None, tol: float = 1e-9) -> None:
+    """Raise if ``matrix`` is not Hermitian: a broken block or a bond missing its mirror."""
+    error = float(np.abs(matrix - matrix.conj().T).max()) if matrix.size else 0.0
+    if error > tol:
+        raise ValueError(f"{name}(k={tuple(np.round(k, 4)) if k is not None else 'Γ'}) no es "
+                         f"hermítica (desviación {error:.2e}): parámetros o enlaces "
+                         "inconsistentes.")
+
+
 @dataclass
 class Bond:
     i: int
@@ -113,4 +122,7 @@ class System:
                 s[ri.start:ri.stop, rj.start:rj.stop] += sb * phase
         diagonal = self.onsite if extra_onsite is None else self.onsite + extra_onsite
         h[np.diag_indices(n)] += diagonal
+        check_hermitian(h, "H", k)
+        if s is not None:
+            check_hermitian(s, "S", k)
         return h, s

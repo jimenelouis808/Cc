@@ -1,0 +1,36 @@
+{
+  "name": "sp3 carbono (Xu, Wang, Chan, Ho 1992)",
+  "reference": "C. H. Xu, C. Z. Wang, C. T. Chan, K. M. Ho, J. Phys.: Condens. Matter 4, 6047 (1992)",
+  "system": "carbono: diamante, grafito, dímero C2, cadenas lineales y fases de alta coordinación",
+  "validity": "enlaces C-C de 1.2 a 2.6 Å; C puro (sin H ni heteroátomos); base ortogonal s+p",
+  "units": {"energy": "eV", "length": "Å"},
+  "orbitals": {"C": ["s", "px", "py", "pz"]},
+  "valence": {"C": 4},
+  "onsite": {
+    "C": {
+      "s": {"value": -2.99, "unit": "eV", "description": "energía on-site 2s", "source": "Xu 1992, tabla I"},
+      "p": {"value": 3.71, "unit": "eV", "description": "energía on-site 2p", "source": "Xu 1992, tabla I"}
+    }
+  },
+  "hubbard_u": {
+    "C": {"value": 10.0, "unit": "eV", "description": "U para SCC (no forma parte del modelo de Xu; valor típico del C atómico)", "source": "orden de magnitud de la U de Hubbard del C en DFTB (≈ 9.9 eV)"}
+  },
+  "hopping": [
+    {"pair": ["C", "C"], "bond": "sss", "law": {"type": "GSP", "v0": -5.0, "r0": 1.536329, "n": 2.0, "nc": 6.5, "rc": 2.18, "cutoff": 2.6}, "tail": [2.45, 2.6], "unit": "eV", "description": "V_ssσ en r0", "source": "Xu 1992, tabla I"},
+    {"pair": ["C", "C"], "bond": "sps", "law": {"type": "GSP", "v0": 4.7, "r0": 1.536329, "n": 2.0, "nc": 6.5, "rc": 2.18, "cutoff": 2.6}, "tail": [2.45, 2.6], "unit": "eV", "description": "V_spσ en r0", "source": "Xu 1992, tabla I"},
+    {"pair": ["C", "C"], "bond": "pps", "law": {"type": "GSP", "v0": 5.5, "r0": 1.536329, "n": 2.0, "nc": 6.5, "rc": 2.18, "cutoff": 2.6}, "tail": [2.45, 2.6], "unit": "eV", "description": "V_ppσ en r0", "source": "Xu 1992, tabla I"},
+    {"pair": ["C", "C"], "bond": "ppp", "law": {"type": "GSP", "v0": -1.55, "r0": 1.536329, "n": 2.0, "nc": 6.5, "rc": 2.18, "cutoff": 2.6}, "tail": [2.45, 2.6], "unit": "eV", "description": "V_ppπ en r0", "source": "Xu 1992, tabla I"}
+  ],
+  "overlap": [],
+  "repulsive": {
+    "type": "embedded",
+    "elements": ["C"],
+    "phi": {"type": "GSP", "v0": 8.18555, "r0": 1.64, "n": 3.30304, "nc": 8.6655, "rc": 2.1052, "cutoff": 2.6},
+    "tail": [2.45, 2.6],
+    "polynomial": [-2.5909765118191, 0.5721151498619, -1.7896349903996e-3, 2.3539221516757e-5, -1.24251169551587e-7],
+    "unit": "eV",
+    "description": "E_rep = Σ_i f(Σ_j φ(r_ij)), f polinomio de grado 4 en x = Σ_j φ",
+    "source": "Xu 1992, ecs. (3)-(4) y tabla I"
+  },
+  "notes": "Las colas entre 2.45 y 2.6 Å son cúbicas que igualan valor y pendiente en 2.45 Å y se anulan con pendiente cero en 2.6 Å, como en el artículo; los coeficientes se calculan aquí de esas condiciones."
+}

@@ -71,6 +71,12 @@ def model_window(model: TBModel, reference: Reference) -> np.ndarray:
 
 @dataclass
 class FitResult:
+    """A fit and its report (what changed, from what, and what it bought).
+
+    Parameter fitting is kept apart from production runs: the fitted model
+    is returned, never written over a built-in set.
+    """
+
     x: np.ndarray
     names: list[str]
     model: TBModel
@@ -79,11 +85,22 @@ class FitResult:
     success: bool
     message: str
     residuals: np.ndarray = field(repr=False, default=None)
+    x0: np.ndarray = field(default=None)
+    rms_initial: dict[str, float] = field(default_factory=dict)
+    gap_error: dict[str, float] = field(default_factory=dict)       # model - reference, eV
 
     def summary(self) -> str:
-        params = ", ".join(f"{n} = {v:.4f}" for n, v in zip(self.names, self.x, strict=True))
-        errors = ", ".join(f"{k}: {v * 1000:.1f} meV" for k, v in self.rms.items())
-        return f"Ajuste {'ok' if self.success else 'FALLIDO'}: {params}. RMS: {errors}"
+        lines = [f"Ajuste {'convergido' if self.success else 'FALLIDO'} ({self.message})"]
+        for name, before, after in zip(self.names, self.x0, self.x, strict=True):
+            lines.append(f"  {name}: {before:.4f} → {after:.4f}")
+        for label in self.rms:
+            lines.append(f"  {label}: RMS {self.rms_initial.get(label, float('nan')) * 1000:.1f}"
+                         f" → {self.rms[label] * 1000:.1f} meV; ΔEg = "
+                         f"{self.gap_error.get(label, float('nan')) * 1000:+.1f} meV")
+        worse = [k for k in self.rms if self.rms[k] > self.rms_initial.get(k, np.inf)]
+        if worse:
+            lines.append("  EMPEORA: " + ", ".join(worse))
+        return "\n".join(lines)
 
 
 def fit(build: Callable[[np.ndarray], TBModel], x0: Sequence[float],
@@ -98,15 +115,24 @@ def fit(build: Callable[[np.ndarray], TBModel], x0: Sequence[float],
         return np.concatenate([np.sqrt(ref.weight) * (model_window(model, ref) - target)
                                for ref, target in zip(references, targets, strict=True)])
 
-    result = least_squares(residuals, np.asarray(x0, dtype=float), bounds=bounds)
+    def metrics(model):
+        rms, gaps = {}, {}
+        for i, (ref, target) in enumerate(zip(references, targets, strict=True)):
+            window = model_window(model, ref)
+            label = ref.label or f"ref{i}"
+            rms[label] = float(np.sqrt(np.mean((window - target) ** 2)))
+            gaps[label] = float((window[ref.n_below] - window[ref.n_below - 1])
+                                - (target[ref.n_below] - target[ref.n_below - 1]))
+        return rms, gaps
+
+    x0 = np.asarray(x0, dtype=float)
+    rms_initial, _ = metrics(build(x0))
+    result = least_squares(residuals, x0, bounds=bounds)
     model = build(result.x)
-    rms = {}
-    for i, (ref, target) in enumerate(zip(references, targets, strict=True)):
-        diff = model_window(model, ref) - target
-        rms[ref.label or f"ref{i}"] = float(np.sqrt(np.mean(diff ** 2)))
+    rms, gaps = metrics(model)
     return FitResult(result.x, list(names or [f"x{i}" for i in range(len(x0))]), model, rms,
                      float(result.cost), bool(result.success), str(result.message),
-                     result.fun)
+                     result.fun, x0, rms_initial, gaps)
 
 
 # --------------------------------------------------------------------------

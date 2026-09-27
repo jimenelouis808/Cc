@@ -84,6 +84,13 @@ def diagonalise(system: System, kpts: np.ndarray,
     energies, vectors, overlaps = [], [], []
     for k in kpts:
         h, s = system.hamiltonian(k, extra_onsite)
+        if s is not None:
+            smallest = float(np.linalg.eigvalsh(s).min())
+            if smallest <= 1e-8:
+                raise ValueError(
+                    f"S(k={tuple(np.round(k, 4))}) no es definida positiva (autovalor mínimo "
+                    f"{smallest:.2e}): átomos demasiado cerca o solapamientos fuera del rango "
+                    "de validez de los parámetros.")
         e, c = eigh(h, s) if s is not None else eigh(h)
         energies.append(e)
         vectors.append(c)
