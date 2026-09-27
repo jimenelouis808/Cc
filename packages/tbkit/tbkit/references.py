@@ -192,6 +192,8 @@ def gpaw_frequencies(atoms: Atoms, settings: Optional[dict] = None,
 
     settings = {**GPAW_DEFAULTS, **(settings or {})}
     atoms = atoms.copy()
+    atoms.pbc = False
+    atoms.center(vacuum=settings["vacuum"])      # a translation: frequencies unchanged
     atoms.calc = gpaw_calculator(settings, _n_bands(atoms, settings))
     with tempfile.TemporaryDirectory() as directory:
         vibrations = Vibrations(atoms, name=os.path.join(directory, "vib"), delta=delta)

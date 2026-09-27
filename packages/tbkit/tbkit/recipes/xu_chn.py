@@ -271,6 +271,160 @@ def fit_repulsion(model: TBModel, refs: list[ReferenceStructure], energy_weight:
 
 
 # --------------------------------------------------------------------------
+# Stage 3: levels, forces and energies together
+# --------------------------------------------------------------------------
+
+_WORKER: dict = {}
+
+
+def _init_worker(refs):
+    _WORKER["refs"] = refs
+
+
+def _evaluate_one(args):
+    """Levels, electronic energy and forces of one reference under ``build_model(x)``."""
+    x, index = args
+    from ..scc import energy_and_forces
+
+    ref = _WORKER["refs"][index]
+    model = build_model(x)
+    result = self_consistent(System.build(ref.atoms, model), kT=0.01, tol=1e-10)
+    if not result.converged:
+        raise RuntimeError(f"{ref.label}: SCC sin converger")
+    energy, forces, _ = energy_and_forces(result)
+    return np.sort(result.solution.energies[0, 0]), energy, forces
+
+
+def _repulsion_design(refs):
+    """Per reference: the pair-repulsion basis energies (n,) and forces (n, N, 3)."""
+    out = []
+    for ref in refs:
+        blocks_e, blocks_f = [], []
+        for pair, spec in PAIRS.items():
+            e, f = _pair_basis(ref.atoms, pair, spec["rc_rep"])
+            blocks_e.append(e)
+            blocks_f.append(f)
+        out.append((np.concatenate(blocks_e), np.concatenate(blocks_f)))
+    return out
+
+
+class JointObjective:
+    """Residuals of levels, forces and energies, with the repulsion solved exactly.
+
+    For given electronic parameters the best pair repulsion is a linear
+    least-squares problem (variable projection); what is minimised over the
+    electronic parameters is what remains after it. The weighting follows the
+    spirit of NRL-TB's joint fit of eigenvalues and total energies
+    (Papaconstantopoulos et al. 2024, their eq. 11).
+    """
+
+    def __init__(self, refs, level_weight=1.0, force_weight=1.0, energy_weight=3.0,
+                 ridge=1e-6, workers=4):
+        from concurrent.futures import ProcessPoolExecutor
+
+        self.refs = refs
+        self.wl, self.wf, self.we = level_weight, force_weight, energy_weight
+        self.ridge = ridge
+        self.design = _repulsion_design(refs)
+        self.groups: dict[str, list[int]] = {}
+        for i, ref in enumerate(refs):
+            self.groups.setdefault(ref.group, []).append(i)
+        self.pool = ProcessPoolExecutor(workers, initializer=_init_worker, initargs=(refs,))
+
+    def close(self):
+        self.pool.shutdown()
+
+    def evaluate(self, x):
+        return list(self.pool.map(_evaluate_one, [(np.asarray(x), i)
+                                                  for i in range(len(self.refs))],
+                                  chunksize=4))
+
+    def solve_repulsion(self, results):
+        rows, targets, e_rows, e_targets = [], [], [], []
+        for ref, (basis_e, basis_f), (_, e_tb, f_tb) in zip(self.refs, self.design, results,
+                                                            strict=True):
+            rows.append(basis_f.reshape(len(basis_e), -1).T)
+            targets.append((ref.forces - f_tb).ravel())
+            e_rows.append(basis_e)
+            e_targets.append(ref.energy - e_tb)
+        e_rows, e_targets = np.array(e_rows), np.array(e_targets)
+        for members in self.groups.values():
+            e_rows[members] -= e_rows[members].mean(axis=0)
+            e_targets[members] -= e_targets[members].mean()
+        a = np.vstack([self.wf * r for r in rows] + [self.we * e_rows])
+        y = np.concatenate([self.wf * t for t in targets] + [self.we * e_targets])
+        active = np.abs(a).sum(axis=0) > 0
+        lhs = a[:, active].T @ a[:, active] + self.ridge * np.eye(int(active.sum()))
+        c = np.zeros(a.shape[1])
+        c[active] = np.linalg.solve(lhs, a[:, active].T @ y)
+        n_force = sum(len(t) for t in targets)
+        residual = y - a @ c
+        return c, residual[:n_force], residual[n_force:]
+
+    def residuals(self, x, full: bool = False):
+        try:
+            results = self.evaluate(x)
+        except (RuntimeError, np.linalg.LinAlgError, ValueError):
+            if full:
+                raise
+            return np.full(self.size, 30.0)
+        differences, weights = [], []
+        for ref, (levels, _, _) in zip(self.refs, results, strict=True):
+            indices, w = _selection(ref)
+            differences.append(levels[indices] - ref.levels[indices])
+            weights.append(w)
+        d, w = np.concatenate(differences), np.concatenate(weights)
+        shift = float(np.sum(w ** 2 * d) / np.sum(w ** 2))
+        c, r_force, r_energy = self.solve_repulsion(results)
+        out = np.concatenate([self.wl * w * (d - shift), r_force, r_energy])
+        self.size = len(out)
+        if full:
+            return out, {"shift": shift, "coefficients": c,
+                         "level_rms": float(np.sqrt(np.mean((d - shift) ** 2))),
+                         "force_rms": float(np.sqrt(np.mean((r_force / self.wf) ** 2))),
+                         "energy_rms": float(np.sqrt(np.mean((r_energy / self.we) ** 2)))}
+        return out
+
+
+def repulsion_from_coefficients(coefficients) -> SumRepulsive:
+    from ..params import CutoffPolynomial
+
+    laws = {}
+    n = len(POWERS)
+    for p, (pair, spec) in enumerate(PAIRS.items()):
+        c = tuple(float(v) for v in coefficients[p * n:(p + 1) * n])
+        laws[pair] = CutoffPolynomial(c, spec["rc_rep"], POWERS[0])
+    xu = build_model(initial_guess()).repulsive.terms[0]
+    return SumRepulsive((xu, PairRepulsive(laws)))
+
+
+def fit_joint(refs, x0, workers: int = 4, max_nfev: int = 400, verbose: bool = True, **weights):
+    """Least squares over the electronic parameters on levels + forces + energies."""
+    objective = JointObjective(refs, workers=workers, **weights)
+    try:
+        start, info0 = objective.residuals(x0, full=True)
+        if verbose:
+            print(f"conjunto, inicio: niveles {info0['level_rms']:.3f} eV, fuerzas "
+                  f"{info0['force_rms']:.3f} eV/Å, energías {info0['energy_rms']:.3f} eV",
+                  flush=True)
+        lower = np.full(len(x0), -np.inf)
+        upper = np.full(len(x0), np.inf)
+        for i, name in enumerate(parameter_names()):
+            if name.endswith(" n"):
+                lower[i], upper[i] = 0.5, 6.0
+        result = least_squares(objective.residuals, np.clip(x0, lower + 1e-9, upper - 1e-9),
+                               bounds=(lower, upper), x_scale="jac", max_nfev=max_nfev)
+        _, info = objective.residuals(result.x, full=True)
+    finally:
+        objective.close()
+    if verbose:
+        print(f"conjunto, final ({result.message}): niveles {info['level_rms']:.3f} eV, "
+              f"fuerzas {info['force_rms']:.3f} eV/Å, energías {info['energy_rms']:.3f} eV",
+              flush=True)
+    return result, info, info0
+
+
+# --------------------------------------------------------------------------
 # Validation
 # --------------------------------------------------------------------------
 
@@ -382,7 +536,7 @@ def parameter_file(model: TBModel, x: np.ndarray, shift: float, report: dict,
     return data
 
 
-def run(references: Path, out: Path, verbose: bool = True) -> dict:
+def run(references: Path, out: Path, verbose: bool = True, workers: int = 4) -> dict:
     structures, settings = load_references(references)
     train = [s for s in structures if s.role == "train"]
     result = fit_levels(train)
@@ -392,17 +546,22 @@ def run(references: Path, out: Path, verbose: bool = True) -> dict:
         print(f"Niveles: {result.message}; desplazamiento {shift:.3f} eV")
         for name, value in zip(parameter_names(), result.x, strict=True):
             print(f"  {name:28s} {value:9.4f}")
-    repulsive, report = fit_repulsion(electronic, train)
-    model = build_model(result.x, repulsive)
-    report["level_rms_train"] = float(np.sqrt(np.mean(np.square(list(rms.values())))))
+    joint, info, info0 = fit_joint(train, result.x, workers=workers, verbose=verbose)
+    x = joint.x
+    shift = info["shift"]
+    model = build_model(x, repulsion_from_coefficients(info["coefficients"]))
+    report = {"stage1_level_rms": float(np.sqrt(np.mean(np.square(list(rms.values()))))),
+              "joint_start": {k: info0[k] for k in ("level_rms", "force_rms", "energy_rms")},
+              "level_rms_train": info["level_rms"], "force_rms": info["force_rms"],
+              "energy_rms": info["energy_rms"], "optimiser": str(joint.message)}
     if verbose:
-        print(f"RMS niveles {report['level_rms_train']:.3f} eV; fuerzas "
-              f"{report['force_rms']:.3f} eV/Å; energías {report['energy_rms']:.3f} eV")
+        for name, before, after in zip(parameter_names(), result.x, x, strict=True):
+            print(f"  {name:28s} {before:9.4f} → {after:9.4f}")
     validation = validate(model, structures, shift)
     if verbose:
         print(validation_table(validation))
     report["validation"] = validation
-    data = parameter_file(model, result.x, shift, report, Path(references), settings)
+    data = parameter_file(model, x, shift, report, Path(references), settings)
     Path(out).write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
     return data
 
@@ -411,8 +570,9 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="Ajusta H y N a GPAW sobre el C de Xu.")
     parser.add_argument("references", type=Path)
     parser.add_argument("out", type=Path)
+    parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args(argv)
-    run(args.references, args.out)
+    run(args.references, args.out, workers=args.workers)
 
 
 if __name__ == "__main__":
