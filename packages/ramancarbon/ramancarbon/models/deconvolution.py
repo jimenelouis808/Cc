@@ -206,7 +206,55 @@ def build_model(
             spec.extra = (-0.12,)
             spec.extra_bounds = ((-0.45, 0.0),)
         peaks.append(spec)
+    _separate_overlapping_windows(peaks)
     return FitModel(peaks=peaks, window=(lo, hi), background=background, name=preset)
+
+
+#: Least a neighbouring pair of components must be kept apart, in cm-1.
+#:
+#: Not a physical constant: the smallest gap at which the two are still
+#: two. Below it the optimiser is free to swap them, and it does.
+MIN_CENTRE_GAP = 12.0
+
+#: Pairs whose database windows overlap enough for the fit to exchange
+#: them, ordered (lower, upper).
+ORDERED_PAIRS = (("G", "D'"), ("D3", "G"), ("G-", "G+"), ("G+", "D'"))
+
+
+def _separate_overlapping_windows(peaks: list[PeakSpec]) -> None:
+    """Stop two components trading places inside a shared window.
+
+    The database's G window runs 1550-1610 and its D' window 1595-1640,
+    so fifteen wavenumbers belong to both. Nothing forced an order, and
+    on a real disordered carbon the three-band fit took the invitation:
+    it put "G" at 1554 and "D'" at 1597, which is D3 territory and G
+    territory respectively. The fit converged, it had the best AICc of
+    any model tried, and both labels were wrong -- the worst kind of
+    failure, because every ratio computed from it looks reasonable.
+
+    The cure is the ordering the names already imply: D' is defined as
+    sitting above G, so the shared strip is split between them and a gap
+    is left in the middle. Both keep the rest of their own window, so a
+    G at 1580 or a D' at 1620 is untouched; only the ambiguous overlap
+    is resolved, and it is resolved the way the physics names it.
+    """
+    index = {spec.name: spec for spec in peaks}
+    for lower_name, upper_name in ORDERED_PAIRS:
+        lower, upper = index.get(lower_name), index.get(upper_name)
+        if lower is None or upper is None:
+            continue
+        low_lo, low_hi = lower.centre_bounds
+        up_lo, up_hi = upper.centre_bounds
+        if low_hi <= up_lo:
+            continue  # already disjoint
+        middle = 0.5 * (max(low_lo, up_lo) + min(low_hi, up_hi))
+        half = 0.5 * MIN_CENTRE_GAP
+        new_low_hi = max(low_lo + 1e-6, middle - half)
+        new_up_lo = min(up_hi - 1e-6, middle + half)
+        lower.centre_bounds = (low_lo, new_low_hi)
+        upper.centre_bounds = (new_up_lo, up_hi)
+        lower.centre = float(np.clip(lower.centre, low_lo, new_low_hi))
+        upper.centre = float(np.clip(upper.centre, new_up_lo, up_hi))
 
 
 def _shifted_window(

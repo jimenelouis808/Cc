@@ -89,6 +89,11 @@ WIDTH_TOLERANCE = 0.5
 #: actually seen.
 DETECTION_MARGIN = 2.0
 
+#: Calculated intensity, as a percentage of the phase's strongest line,
+#: below which a matched reflection is too weak to set the phase's scale.
+#: See :func:`_mark_undetectable` for the measurement that fixed it here.
+SCALE_REFLECTION = 10.0
+
 #: Calculated reflections weaker than this (relative to 100) are not
 #: required to be observed: they are below a normal detection limit.
 WEAK_REFLECTION = 5.0
@@ -485,6 +490,11 @@ class PhaseMatch:
     """Strong calculated reflections with no observed peak. The damning
     evidence against a phase: an extra peak can belong to something else,
     a missing strong reflection cannot be explained away."""
+    unresolved: list[Reflection] = field(default_factory=list)
+    """Reflections blended into an observed peak the phase already
+    explains. Not absent -- unresolved, which is a property of the
+    diffractometer and not evidence about the sample, so they are left
+    out of :attr:`coverage` the same way the undetectable ones are."""
     undetectable: list[Reflection] = field(default_factory=list)
     """Calculated reflections strong enough to be listed but too weak, at
     this phase's fitted scale and this pattern's noise, for the peak
@@ -513,8 +523,16 @@ class PhaseMatch:
         acceptance threshold. The absence of a reflection the measurement
         could not have shown is not evidence against the phase — the same
         rule the Raman side applies to a band outside the measured range.
+
+        Reflections the instrument could not *separate* are excluded for
+        the same reason. Fe3C's (220) and (031) lie 0.42° apart under one
+        measured peak 0.57° wide; charging the phase for the half of that
+        pair that did not get the credit is charging it for the
+        resolution of the diffractometer.
         """
-        expected = self.expected_strong - len(self.undetectable)
+        blended = sum(1 for r in self.unresolved
+                      if r.intensity >= WEAK_REFLECTION)
+        expected = self.expected_strong - len(self.undetectable) - blended
         if expected <= 0:
             # Every strong reflection is below the noise. One matched peak
             # is then all the evidence there can be, and it is thin: the
@@ -751,11 +769,23 @@ def _mark_undetectable(match: PhaseMatch, pattern: Pattern) -> None:
     """
     if not match.matched or not match.missing:
         return
-    scales = [peak.height / reflection.intensity
-              for reflection, peak in match.matched
+    # The scale is a ratio, so a weak denominator makes it worthless. On
+    # a real multiphase pattern Fe3C's (020), calculated at 1.8 % of its
+    # strongest line, landed on the carbon 002 at 26.4 deg and returned a
+    # scale of 0.30 against the 0.010 its strong lines agree on -- a
+    # factor of thirty, from one accidental coincidence. Taking the
+    # median over every match let two such outliers set it.
+    #
+    # So the scale comes from the reflections strong enough for the ratio
+    # to mean something, and only falls back to all of them when the
+    # phase has nothing strong matched at all.
+    usable = [(reflection, peak) for reflection, peak in match.matched
               if reflection.intensity > 1e-9 and peak.height > 0.0]
-    if not scales:
+    if not usable:
         return
+    strong = [(r, pk) for r, pk in usable if r.intensity >= SCALE_REFLECTION]
+    chosen = strong or usable
+    scales = [peak.height / reflection.intensity for reflection, peak in chosen]
     scale = float(np.median(scales))
     widths = [peak.fwhm for _, peak in match.matched if peak.fwhm]
     width = float(np.median(widths)) if widths else MATCH_WINDOW
@@ -763,11 +793,27 @@ def _mark_undetectable(match: PhaseMatch, pattern: Pattern) -> None:
     noise = max(pattern.noise_estimate(), 1e-9)
     threshold = MIN_SIGNIFICANCE * _trials_factor(pattern.n)
 
+    # A reflection that falls inside an observed peak this phase already
+    # explains is not absent: it is unresolved. Fe3C's (220) at 44.57 deg
+    # and (031) at 44.99 sit 0.42 deg apart under one measured peak of
+    # 0.57 deg FWHM; crediting only (031) and counting (220) as missing
+    # charged the phase for the diffractometer's resolution.
+    matched_peaks = [peak for _, peak in match.matched]
+
+    def blended(reflection: Reflection) -> bool:
+        for peak in matched_peaks:
+            width_here = peak.fwhm or width
+            if abs(reflection.two_theta - peak.two_theta) <= width_here:
+                return True
+        return False
+
     still_missing: list[Reflection] = []
     for reflection in match.missing:
         height = scale * reflection.intensity
         span = max(width / step, 1.0)
-        if height * math.sqrt(span) / noise < threshold * DETECTION_MARGIN:
+        if blended(reflection):
+            match.unresolved.append(reflection)
+        elif height * math.sqrt(span) / noise < threshold * DETECTION_MARGIN:
             match.undetectable.append(reflection)
         else:
             still_missing.append(reflection)

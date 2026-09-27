@@ -161,6 +161,33 @@ def _load_xrd(path: Path, found: Detection, options: dict[str, Any]):
     from ..xrd.io import read_pattern
     from ..xrd.pattern import Pattern
 
+    if found.fmt == "ras":
+        # The header carries the wavelength the instrument actually used
+        # and the dwell time the counting statistics need, so both are
+        # read rather than assumed. Falling through to the generic text
+        # reader does parse the numbers -- the block is three plain
+        # columns -- but silently substitutes a default 1.540598 A for
+        # the 1.540593 the machine recorded, and drops the dwell.
+        from ..xrd.ras import read_ras
+
+        parsed = read_ras(path)
+        wavelength = options.get("wavelength") or parsed.get("wavelength")
+        if wavelength is None:
+            from ..xrd.scattering import wavelength_for
+
+            wavelength = wavelength_for(options.get("anode", "Cu"), "ka1")
+        metadata = {"path": str(path), "formato": "ras"}
+        for field in ("wavelength_alpha2", "dwell", "unit", "sample",
+                      "operator", "started", "step"):
+            if parsed.get(field) is not None:
+                metadata[field] = parsed[field]
+        return Pattern(
+            two_theta=parsed["two_theta"], intensity=parsed["intensity"],
+            wavelength=float(wavelength),
+            name=(parsed.get("sample") or "").strip() or path.stem,
+            metadata=metadata,
+        )
+
     if found.fmt == "jcamp":
         from .jcamp import read_jcamp
 

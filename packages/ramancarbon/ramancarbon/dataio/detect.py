@@ -40,6 +40,7 @@ import numpy as np
 #: Extensions that name their instrument unambiguously.
 KNOWN_SUFFIXES: dict[str, str] = {
     ".xrdml": "xrd", ".uxd": "xrd", ".xye": "xrd", ".qam": "xrd",
+    ".ras": "xrd",
     ".xy": "xrd", ".cif": "cif",
     ".jdx": "jcamp", ".dx": "jcamp", ".jcm": "jcamp",
     ".mpt": "echem", ".mpr": "echem", ".mps": "echem-ajustes",
@@ -311,6 +312,12 @@ def detect(path: str | Path) -> Detection:
             or "##XYPOINTS" in text_head or named == "jcamp":
         return _detect_jcamp(p, text_head)
 
+    if "*RAS_DATA_START" in text_head or "*RAS_INT_START" in text_head:
+        # Rigaku SmartLab. Recognised by its own marker rather than by
+        # the extension alone, because the two-column export people
+        # often send instead carries the same one.
+        return Detection(kind="xrd", fmt="ras", confidence="alta",
+                         reasons=["cabecera *RAS_DATA_START de Rigaku"])
     if "<xrdMeasurement" in text_head or suffix == ".xrdml":
         return Detection(kind="xrd", fmt="xrdml", confidence="alta",
                          reasons=["XML de PANalytical"])
