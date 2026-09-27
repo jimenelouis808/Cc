@@ -12,6 +12,7 @@ tbkit hubbard zgnr.extxyz --U 2.7 --kmesh 48 --m-energy m.csv
 tbkit orbital coroneno.xyz --band homo -o homo.cube
 tbkit relax cluster.xyz --model sp3 -o relajado.extxyz
 tbkit phonons diamante.extxyz --model sp3 --kmesh 8
+tbkit raman diamante.extxyz --model sp3 --kmesh 8 -o raman.csv
 tbkit run simulacion.json          # reproducible desde el archivo
 ```
 
@@ -33,6 +34,7 @@ uno ajustado) en ese mismo formato, y `load_parameters(ruta)` lo lee.
 | 5. Espín | `hubbard` | Hubbard de campo medio; magnetización frente a la energía (m(E), dm/dE), frente al campo (M(h), χ) y frente al dopaje o el nivel de Fermi |
 | 6. Periódico | `hamiltonian`, `kpoints` | H(k) por suma de Bloch; mallas Γ-centradas y caminos de bandas de ASE |
 | 7. Parte repulsiva | `repulsive`, `forces`, `calculator` | Energía libre total (banda − TS + repulsión, + SCC), fuerzas de Hellmann–Feynman (ortogonal, no ortogonal, periódico, SCC), repulsión embebida de Xu y spline de los `.skf`; calculadora ASE para relajar y para fonones en Γ |
+| Raman no resonante (fase E, paso 1) | `optics`, `raman` | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
 | Reproducibilidad | `record`, `tasks` | `tbkit run simulacion.json` guarda estructura, parámetros completos, versión, commit, fecha, ajustes y resultados; `record.replay` lo repite |
 
 Salidas (`analysis`): matriz densidad P = Σ f c c†, poblaciones Mulliken y
@@ -70,7 +72,34 @@ con solapamiento). La banda G tiene una anomalía de Kohn (se acopla al cono de
 Dirac): su frecuencia depende de la malla de puntos k y del ensanchamiento, y
 converge despacio; usa mallas densas (≥ 36×36) y comprueba la convergencia.
 
+## Raman no resonante: cómo se valida
+
+Primero por simetría, que no depende de los parámetros:
+
+- **Diamante:** un solo triplete activo (T₂g), tensor con diagonal nula y
+  ρ = 0,75.
+- **C₆₀:** exactamente 10 frecuencias activas, 2 polarizadas (A_g, ρ ≈ 0) y 8
+  despolarizadas y quíntuples (H_g, ρ = 0,75). Test marcado `slow`.
+
+Luego consistencia (respuesta lineal = campo finito = suma sobre estados sin
+apantallar) y experimento, diciendo el error:
+
+| Magnitud | tbkit | Experimento |
+|---|---|---|
+| ε∞ del diamante (partículas independientes) | 4,75 | 5,7 (−17 %) |
+| α de C₆₀ sin apantallar | ≈ 260 Å³ | 76,5 ± 8 Å³ |
+| α de C₆₀ apantallado (SCC, U = 10 eV) | ≈ 62 Å³ | 76,5 ± 8 Å³ (−20 %) |
+
+El apantallamiento no es un detalle: sin él, la polarizabilidad de una molécula
+sale unas tres veces mayor. En cristales no hay apantallamiento SCC (haría falta
+Ewald), así que su α es de partículas independientes.
+
 ## Lo que no hace, y dónde está la trampa
+
+- **Raman solo no resonante y con gap**: metales, semimetales (el grafeno) y
+  sistemas de capa abierta se rechazan, y también un láser a menos del 20 % del
+  gap. El Raman del grafeno es siempre resonante; la banda 2D (segundo orden,
+  doble resonancia) es el paso siguiente de la fase E, no este.
 
 - **Energías y fuerzas solo con modelos que tienen parte repulsiva**: el de Xu
   (carbono puro) y los `.skf` con su spline. El modelo π no la tiene y lo dice.

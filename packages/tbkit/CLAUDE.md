@@ -22,6 +22,8 @@ tbkit/
 ├── forces.py         # Mermin free energy, Hellmann-Feynman forces
 ├── calculator.py     # ASE calculator (relax, ase.vibrations)
 ├── tasks.py          # levels, dos, bands, hubbard, relax, phonons as functions
+├── optics.py         # polarizability: sum over states, SCC linear response, ε∞
+├── raman.py          # non-resonant Raman on the model's own Γ phonons
 ├── record.py         # reproducible records, `tbkit run simulation.json`, replay
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 └── cli.py            # `tbkit` console script
@@ -47,6 +49,14 @@ tbkit/
   the calculator); a loose tolerance shows up as a force error, not a crash.
 - Validation against experiment states the model's error; do not retune a
   built-in set to hit a number.
+- Raman is non-resonant: refuse gapless systems (any fractionally occupied
+  state means no gap: `Solution.gap()`), open shells and lasers near the gap.
+  Selection rules (diamond T2g, C60 2Ag+8Hg) are the first check of any
+  change to optics or phonons. Finite polarizabilities default to the
+  screened SCC linear response; the finite-field version is its test.
+- In pair sums over states (χ, α), count each unordered pair once: with
+  smearing a state can be both "occupied" and "empty" (the bug of a 20 %
+  overcount that the linear-response = sum-over-states test caught).
 - Published `.skf` sets are never bundled (their licences); tests generate
   synthetic files in the documented format.
 - SCC refuses periodic systems (no Ewald). Do not approximate silently.

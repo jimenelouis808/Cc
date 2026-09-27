@@ -6,6 +6,32 @@ está la trampa.
 
 ---
 
+## tbkit · Raman con tight binding (primer orden, no resonante)
+
+`tbkit raman estructura --model sp3` calcula el espectro Raman con el propio
+modelo: sus fonones en Γ, la polarizabilidad de cada geometría desplazada y, por
+modo, la actividad y la razón de despolarización. `-o raman.csv` guarda el
+espectro ensanchado con los factores de láser (ν_L − ν)⁴ y de Bose.
+
+**Cómo se ha comprobado:** por simetría, que no depende de ningún parámetro. En
+el diamante sale un solo triplete activo con el tensor y la despolarización de un
+modo T₂g; en C₆₀, exactamente las 10 frecuencias activas que exige su simetría
+(2 A_g polarizadas y 8 H_g despolarizadas), con las A_g en 508 y 1607 cm⁻¹
+(exp. 496 y 1469) y las H_g entre 237 y 1651 cm⁻¹ (exp. 273 a 1575). La polarizabilidad de C₆₀ sale 62 Å³
+con apantallamiento (exp. 76,5 ± 8) y la constante dieléctrica del diamante 4,75
+(exp. 5,7).
+
+**Qué NO hace, y dónde está la trampa:**
+
+- Solo Raman **no resonante**: se rechazan metales, semimetales (el grafeno,
+  cuyo Raman es siempre resonante), moléculas de capa abierta y láseres cerca del
+  gap.
+- Por ahora **solo carbono puro** (modelo de Xu): cintas con H o N necesitan
+  parámetros `.skf` o un ajuste propio.
+- En cristales la polarizabilidad es de partículas independientes (sin el
+  apantallamiento que sí tienen las moléculas).
+- La banda 2D del grafeno (segundo orden, doble resonancia) no está.
+
 ## tbkit · energías, fuerzas, relajación y fonones
 
 **Parte repulsiva.** Con el modelo sp³ de carbono de Xu (y con archivos `.skf`

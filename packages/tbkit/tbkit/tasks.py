@@ -125,5 +125,16 @@ def phonons(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.02,
             "modes": modes}, atoms
 
 
+def raman_task(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.01,
+               delta: float = 0.01, screening: str = "auto"):
+    """Non-resonant Raman (Γ modes, activities, depolarization); see tbkit.raman."""
+    from .raman import raman
+
+    result = raman(atoms, model, kmesh=kmesh, kT=kT, delta=delta, screening=screening)
+    return {"method": result.method, "alpha": result.alpha, "groups": result.groups(),
+            "frequencies_cm1": result.frequencies, "activities": result.activities,
+            "depolarization": result.depolarization, "warnings": result.warnings}, atoms
+
+
 TASKS = {"levels": levels, "dos": density_of_states, "bands": band_structure,
-         "hubbard": hubbard, "relax": relax, "phonons": phonons}
+         "hubbard": hubbard, "relax": relax, "phonons": phonons, "raman": raman_task}

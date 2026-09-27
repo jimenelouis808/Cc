@@ -192,6 +192,25 @@ benchmarks. No adoptado: reorganizar tbkit en las carpetas de la directriz
 | 1er orden resonante | Elementos de matriz ópticos y electrón–fonón en TB | Bastante más trabajo |
 | 2º orden (banda 2D, doble resonancia) | Perturbaciones de 4º orden con suma en k en toda la zona de Brillouin | Nivel artículo; meses; solo periódico |
 
+
+Hecho (paso 1, `packages/tbkit`):
+
+- [x] Polarizabilidad TB: suma sobre estados (finitos y cristales, con el operador
+      velocidad ∂ₖH en la convención de fases con posiciones), respuesta lineal
+      SCC con apantallamiento para finitos (comprobada contra campo finito), ε∞.
+- [x] Raman de primer orden no resonante sobre los fonones del propio modelo:
+      tensores dα/dQ, actividades, despolarización, espectro con láser y Bose.
+- [x] Validación por reglas de selección (diamante T₂g; C₆₀ 2A_g + 8H_g) y
+      contra experimento (ε∞ del diamante, α de C₆₀), con el error declarado.
+
+Pendiente de la fase E:
+
+- [ ] Parámetros con H y N (cintas pasivadas y dopadas): `.skf` publicados o
+      ajuste propio a GPAW; hasta entonces, solo carbono puro.
+- [ ] Fonones importados de QE (dynmat) como alternativa a los del modelo.
+- [ ] Raman resonante (elementos de matriz ópticos y electrón–fonón).
+- [ ] Segundo orden (banda 2D, doble resonancia): periódico, suma en toda la zona
+      de Brillouin.
 ---
 
 ## Reglas que siguen valiendo

@@ -18,7 +18,8 @@ not implemented, and is refused rather than approximated.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as dataclass_field
+from typing import Optional
 
 import numpy as np
 
@@ -38,12 +39,12 @@ class SCCResult:
     iterations: int
     converged: bool
     energy: float
-    history: list[float] = field(default_factory=list)
+    history: list[float] = dataclass_field(default_factory=list)
     #: Converged Δq (electrons per model atom), γ and orbital shifts (eV),
     #: kept for the forces.
-    dq: np.ndarray = field(default=None, repr=False)
-    gamma: np.ndarray = field(default=None, repr=False)
-    shift: np.ndarray = field(default=None, repr=False)
+    dq: np.ndarray = dataclass_field(default=None, repr=False)
+    gamma: np.ndarray = dataclass_field(default=None, repr=False)
+    shift: np.ndarray = dataclass_field(default=None, repr=False)
 
     def summary(self) -> str:
         state = "convergido" if self.converged else "SIN CONVERGER"
@@ -86,7 +87,8 @@ def anderson(inputs: list[np.ndarray], residuals: list[np.ndarray], mixing: floa
 
 def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.01,
                     mixing: float = 0.3, tol: float = 1e-9, max_iter: int = 500,
-                    history_length: int = 6) -> SCCResult:
+                    history_length: int = 6, field: Optional[np.ndarray] = None,
+                    initial_dq: Optional[np.ndarray] = None) -> SCCResult:
     """Solve with self-consistent Mulliken charges (finite systems).
 
     Parameters
@@ -101,6 +103,12 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
         Convergence on the largest change of an atomic charge between input
         and output, e. Forces need a tight value: their error is of the order
         of the residual charge times the potential it creates.
+    field
+        Uniform external electric field (V/Å): adds ``e E·(R_A - R_centre)``
+        to the orbital energies of atom A, so the induced charges screen it
+        (polarizability with local fields at the monopole level).
+    initial_dq
+        Starting Δq (e.g. the zero-field solution, for a small field).
     """
     if system.periodic:
         raise ValueError("SCC en sistemas periódicos necesita una suma de Ewald (no "
@@ -111,13 +119,17 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
     owner = np.array([atoms.index(o.atom) for o in system.basis.orbitals])
     neutral_atom = np.array([n0[system.basis.of_atom(a).start:system.basis.of_atom(a).stop].sum()
                              for a in atoms])
-    dq_in = np.zeros(len(atoms))
+    external = np.zeros(len(atoms))
+    if field is not None:
+        positions = system.atoms.get_positions()[atoms]
+        external = (positions - positions.mean(axis=0)) @ np.asarray(field, dtype=float)
+    dq_in = np.zeros(len(atoms)) if initial_dq is None else np.array(initial_dq, dtype=float)
     inputs: list[np.ndarray] = []
     residuals: list[np.ndarray] = []
     history: list[float] = []
     converged = False
     for iteration in range(1, max_iter + 1):
-        solution = _solve_shifted(system, (gamma @ dq_in)[owner], charge, kT)
+        solution = _solve_shifted(system, (gamma @ dq_in + external)[owner], charge, kT)
         pops = populations(solution).sum(axis=0)
         dq_out = np.array([pops[system.basis.of_atom(a).start:system.basis.of_atom(a).stop].sum()
                            for a in atoms]) - neutral_atom
@@ -132,7 +144,8 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
         dq_in = anderson(inputs, residuals, mixing)
     shift_in = gamma @ dq_in
     # The exact functional of the density the solution has:
-    # Σ f ε counts V_in on the whole population q0 + Δq_out.
+    # Σ f ε counts V_in on the whole population q0 + Δq_out (the external
+    # potential, if any, stays in: it is part of the energy in the field).
     energy = solution.band_energy() - float(shift_in @ (neutral_atom + dq_out)) \
         + 0.5 * float(dq_out @ gamma @ dq_out)
     charges = {a: float(-q) for a, q in zip(atoms, dq_out, strict=True)}

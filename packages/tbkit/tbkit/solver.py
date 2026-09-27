@@ -53,6 +53,16 @@ class Solution:
         return float(occupied.max()), float(empty.min())
 
     def gap(self) -> float:
+        """HOMO-LUMO (band) gap; 0 when any state is partially occupied.
+
+        Partial occupation means levels at the Fermi level (a metal, a
+        semimetal's Dirac point, a degenerate open shell): there is no gap,
+        whatever the nearest fully occupied and empty levels are.
+        """
+        full = 2.0 if self.nspin == 1 else 1.0
+        fractional = (self.occupations > 0.02 * full) & (self.occupations < 0.98 * full)
+        if fractional.any():
+            return 0.0
         homo, lumo = self.homo_lumo()
         return max(0.0, lumo - homo)
 

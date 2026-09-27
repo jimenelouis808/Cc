@@ -9,6 +9,7 @@
     tbkit orbital benceno.xyz --band homo -o homo.cube
     tbkit relax   cluster.xyz --model sp3 -o relajado.extxyz
     tbkit phonons diamante.extxyz --model sp3 --kmesh 8
+    tbkit raman   diamante.extxyz --model sp3 --kmesh 8 -o raman.csv
     tbkit run     simulacion.json                  # reproducible: guarda un registro
     tbkit gpaw-levels calc/gpaw.txt
 
@@ -244,6 +245,23 @@ def cmd_phonons(args) -> int:
     return 0
 
 
+def cmd_raman(args) -> int:
+    from ase.io import read
+
+    from .raman import raman, spectrum
+
+    result = raman(read(args.structure), _model(args), kmesh=args.kmesh, kT=args.kT,
+                   delta=args.delta, screening=args.screening)
+    print(result.summary())
+    if args.out:
+        laser = None if args.bare else args.laser
+        temperature = None if args.bare else args.temperature
+        grid, intensity = spectrum(result, fwhm=args.fwhm, laser_nm=laser,
+                                   temperature_k=temperature)
+        _write_table(args.out, ["desplazamiento_cm-1", "intensidad"], [grid, intensity])
+    return 0
+
+
 def cmd_gpaw_levels(args) -> int:
     from .fit import read_gpaw_eigenvalues
 
@@ -326,6 +344,17 @@ def build_parser() -> argparse.ArgumentParser:
     ph.add_argument("--delta", type=float, default=0.005)
     ph.add_argument("--scc", action="store_true")
     ph.add_argument("-o", "--out", default=None)
+
+    rm = structure_command("raman", "Raman no resonante (modelo con parte repulsiva; con gap).",
+                           cmd_raman)
+    rm.add_argument("--kT", type=float, default=0.01)
+    rm.add_argument("--delta", type=float, default=0.01)
+    rm.add_argument("--screening", choices=("auto", "scc", "none"), default="auto")
+    rm.add_argument("--fwhm", type=float, default=8.0)
+    rm.add_argument("--laser", type=float, default=532.0, help="nm")
+    rm.add_argument("--temperature", type=float, default=300.0, help="K")
+    rm.add_argument("--bare", action="store_true", help="Actividades sin láser ni Bose.")
+    rm.add_argument("-o", "--out", default=None, help="CSV del espectro ensanchado.")
 
     rn = sub.add_parser("run", help="Ejecutar un archivo de simulación y guardar su registro.")
     rn.add_argument("config")

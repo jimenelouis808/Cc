@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import Callable, Optional, Protocol
 
@@ -146,6 +147,7 @@ class Tail:
     def cutoff(self) -> float:
         return self.rm
 
+    @cached_property
     def _coefficients(self):
         h = 1e-6
         f = float(self.inner(self.r1))
@@ -157,7 +159,7 @@ class Tail:
 
     def __call__(self, d):
         d = np.asarray(d, dtype=float)
-        f, slope, a2, a3 = self._coefficients()
+        f, slope, a2, a3 = self._coefficients
         x = d - self.r1
         tail = f + slope * x + a2 * x ** 2 + a3 * x ** 3
         inner = self.inner(np.minimum(d, self.r1))
