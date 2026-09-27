@@ -156,4 +156,93 @@ def load_ras_pattern(path: str | Path):
     return pattern
 
 
-__all__ = ["RASError", "load_ras_pattern", "read_ras"]
+ASC_HEADER = re.compile(r"^\*([A-Z0-9_]+)\s*=\s*(.*?)\s*$")
+
+
+def read_asc(path: str | Path) -> dict:
+    """Read a Rigaku ``.asc`` export.
+
+    The same instrument as the ``.ras``, written differently: the header
+    is ``*KEY =  value`` and the counts come packed several to a line,
+    comma separated, with **no angle column at all** -- the angle is
+    implied by ``*START``, ``*STEP`` and the position in the stream.
+
+    That packing is why the file has to be read rather than fed to a
+    generic table parser. Four counts per line look exactly like four
+    columns of data, and the generic reader duly reported "x from 305 to
+    1044 in 2000 points, 4 columns" and refused the file. Nothing about
+    the numbers says they are not columns; only the header does.
+    """
+    p = Path(path)
+    text = p.read_bytes().decode("latin-1")
+    header: dict[str, str] = {}
+    counts: list[float] = []
+    inside = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("*BEGIN"):
+            inside = True
+            continue
+        if stripped.startswith(("*END", "*EOF")):
+            inside = False
+            continue
+        found = ASC_HEADER.match(stripped)
+        if found:
+            # Keys repeat inside a group (*START, *STEP...); the last one
+            # wins, which is the group actually being read.
+            header[found.group(1)] = found.group(2)
+            continue
+        if inside and stripped:
+            for piece in stripped.split(","):
+                piece = piece.strip()
+                if not piece:
+                    continue
+                try:
+                    counts.append(float(piece))
+                except ValueError:
+                    pass
+
+    if len(counts) < 8:
+        raise RASError(
+            f"{p.name}: sólo se leyeron {len(counts)} cuentas entre *BEGIN y "
+            "*END; ¿es realmente un .asc de Rigaku?")
+
+    start = _number(header, "START")
+    step = _number(header, "STEP")
+    declared = _number(header, "COUNT")
+    if start is None or step is None or step <= 0:
+        raise RASError(
+            f"{p.name}: el cabecero no trae *START y *STEP utilizables, y sin "
+            "ellos no hay eje: el archivo no guarda los ángulos")
+    if declared and abs(declared - len(counts)) > 0.5:
+        # Worth saying rather than silently trusting one of the two: a
+        # short read gives a pattern that ends early and looks fine.
+        raise RASError(
+            f"{p.name}: el cabecero declara {declared:.0f} puntos y se "
+            f"leyeron {len(counts)}")
+
+    intensity = np.asarray(counts, dtype=float)
+    two_theta = start + step * np.arange(intensity.size, dtype=float)
+
+    speed = _number(header, "SPEED")
+    dwell = speed if (header.get("SPEED_DIM", "").startswith("sec")
+                      and speed) else None
+    return {
+        "two_theta": two_theta,
+        "intensity": intensity,
+        "attenuation": np.ones_like(intensity),
+        "wavelength": _number(header, "WAVE_LENGTH1"),
+        "wavelength_alpha2": _number(header, "WAVE_LENGTH2"),
+        "step": step,
+        "scan_speed_deg_per_min": None,
+        "dwell": dwell,
+        "unit": header.get("YUNIT"),
+        "sample": (header.get("SAMPLE") or "").strip(),
+        "operator": "",
+        "started": header.get("DATE"),
+        "axis": header.get("SCAN_AXIS"),
+        "header": header,
+    }
+
+
+__all__ = ["RASError", "load_ras_pattern", "read_asc", "read_ras"]

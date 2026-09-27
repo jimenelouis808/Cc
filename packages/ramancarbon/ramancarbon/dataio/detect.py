@@ -40,7 +40,7 @@ import numpy as np
 #: Extensions that name their instrument unambiguously.
 KNOWN_SUFFIXES: dict[str, str] = {
     ".xrdml": "xrd", ".uxd": "xrd", ".xye": "xrd", ".qam": "xrd",
-    ".ras": "xrd",
+    ".ras": "xrd", ".asc": "xrd",
     ".xy": "xrd", ".cif": "cif",
     ".jdx": "jcamp", ".dx": "jcamp", ".jcm": "jcamp",
     ".mpt": "echem", ".mpr": "echem", ".mps": "echem-ajustes",
@@ -312,6 +312,12 @@ def detect(path: str | Path) -> Detection:
             or "##XYPOINTS" in text_head or named == "jcamp":
         return _detect_jcamp(p, text_head)
 
+    if "*ASC" in text_head and "*SCAN_AXIS" in text_head:
+        # Rigaku's ASCII export. Its counts come packed several per line
+        # with no angle column, so a generic table parser reads them as
+        # columns of data and refuses the file.
+        return Detection(kind="xrd", fmt="asc", confidence="alta",
+                         reasons=["cabecera *ASC / *SCAN_AXIS de Rigaku"])
     if "*RAS_DATA_START" in text_head or "*RAS_INT_START" in text_head:
         # Rigaku SmartLab. Recognised by its own marker rather than by
         # the extension alone, because the two-column export people
