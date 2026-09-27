@@ -81,7 +81,16 @@ class SectionApp:
         canvas = FigureCanvasTkAgg(figure, master=parent)
         widget = canvas.get_tk_widget()
         widget.configure(background=self.palette.surface, highlightthickness=0)
-        toolbar = NavigationToolbar2Tk(canvas, parent, pack_toolbar=False)
+        # The strip gets its own frame so it can be laid out as a
+        # wrapping row; NavigationToolbar2Tk takes its master at
+        # construction, so the frame has to exist first. Packed BEFORE
+        # the figure and from the bottom: the packer hands out the cavity
+        # in packing order and gives each widget its requested size
+        # first, so a figure asking for figsize*dpi swallowed the whole
+        # cavity and the toolbar, packed after it, was never drawn.
+        strip = self.ttk.Frame(parent)
+        strip.pack(side="bottom", fill="x")
+        toolbar = NavigationToolbar2Tk(canvas, strip, pack_toolbar=False)
         toolbar.configure(background=self.palette.surface_alt)
         toolbar.update()
         # A real reset, next to matplotlib's own Home. Home rewinds the
@@ -90,15 +99,23 @@ class SectionApp:
         # it does nothing at all, which reads as a dead button. This
         # redraws from the data and autoscales, which is what "reset zoom"
         # means to anyone who presses it.
-        self.ttk.Button(toolbar, text="Restablecer zoom",
-                        command=lambda k=key: self.reset_zoom(k)).pack(
-            side="right", padx=PAD["xs"])
-        # Every canvas in the suite, not a per-section feature. A figure
-        # you can only look at has to be retyped to be used anywhere
-        # else, and retyped numbers are wrong numbers.
-        self.ttk.Button(toolbar, text="Guardar datos…",
-                        command=lambda k=key: self.export_canvas(k)).pack(
-            side="right", padx=PAD["xs"])
+        # "Restablecer zoom" is a real reset, next to matplotlib's own
+        # Home. Home rewinds the view STACK, so after a redraw with new
+        # data it restores limits that belonged to the previous figure;
+        # and if the stack is empty it does nothing at all, which reads
+        # as a dead button. "Guardar datos…" is on every canvas in the
+        # suite, not a per-section feature: a figure you can only look at
+        # has to be retyped to be used anywhere else, and retyped numbers
+        # are wrong numbers.
+        #
+        # Both go through plot_toolbar so the strip WRAPS instead of
+        # squeezing them to 49 and 67 px in a narrow pane.
+        from .widgets import plot_toolbar
+
+        plot_toolbar(strip, toolbar, [
+            ("Restablecer zoom", lambda k=key: self.reset_zoom(k)),
+            ("Guardar datos…", lambda k=key: self.export_canvas(k)),
+        ])
         # The toolbar is packed BEFORE the figure, and from the bottom.
         # The packer hands out the cavity in packing order and gives each
         # widget its requested size first: the figure asks for
@@ -109,7 +126,6 @@ class SectionApp:
         # soon as the tabs were split into panes. Reserving the strip
         # first costs the figure 40 px it can spare and cannot be
         # squeezed out at any window size.
-        toolbar.pack(side="bottom", fill="x")
         widget.pack(side="top", fill="both", expand=True)
         self._canvases[key] = canvas
         self._figures[key] = figure
@@ -177,6 +193,8 @@ class SectionApp:
         """Redraw one canvas under the current palette's matplotlib style."""
         import matplotlib
 
+        from .widgets import lay_out
+
         figure = self._figures.get(key)
         canvas = self._canvases.get(key)
         if figure is None or canvas is None:
@@ -184,7 +202,7 @@ class SectionApp:
         with matplotlib.rc_context(matplotlib_style(self.figure_palette)):
             figure.clear()
             draw(figure)
-            figure.tight_layout()
+            lay_out(figure)
         canvas.draw_idle()
 
     def mark_dirty(self, *keys: str) -> None:

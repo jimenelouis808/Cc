@@ -92,10 +92,14 @@ class Suite:
             self.root, padding=(PAD["lg"], PAD["md"], PAD["lg"], PAD["xs"])
         )
         header.pack(fill="x")
-        ttk.Label(header, text="ramancarbon", style="Title.TLabel").pack(side="left")
-        self.subtitle_var = self.tk.StringVar(value=SECTIONS[0][2])
-        ttk.Label(header, textvariable=self.subtitle_var,
-                  style="Muted.TLabel").pack(side="left", padx=(PAD["md"], 0))
+        # The controls are packed BEFORE the title, although they sit to
+        # the right of it. Pack hands out the cavity in packing order and
+        # gives each widget its request first, so with the title packed
+        # first the right-hand group absorbed the whole shortfall: in an
+        # 1100 px window "Figura:" was allocated 5 px of the 47 it needs
+        # and "Fondo:" 9 of 47, on every tab of every section. The title
+        # is the elastic part of a header -- it is the one thing here
+        # nobody has to read twice -- so it is the one that gives.
         ttk.Button(header, text="Tema", command=self._toggle_theme).pack(side="right")
         ttk.Button(header, text="Colores…",
                    command=self._choose_colours).pack(side="right",
@@ -129,6 +133,32 @@ class Suite:
         background.bind("<<ComboboxSelected>>", self._on_figure_theme_changed)
         ttk.Label(header, text="Fondo:", style="Muted.TLabel").pack(
             side="right", padx=(0, PAD["xs"]))
+
+        # Packed last, filling whatever the controls left. The subtitle
+        # is clipped rather than the controls, and it is a one-line
+        # reminder of which section you are on, not something to lose a
+        # button over.
+        title = ttk.Frame(header)
+        title.pack(side="left", fill="x", expand=True)
+        ttk.Label(title, text="ramancarbon", style="Title.TLabel").pack(side="left")
+        self.subtitle_var = self.tk.StringVar(value=SECTIONS[0][2])
+        subtitle = ttk.Label(title, textvariable=self.subtitle_var,
+                             style="Muted.TLabel", justify="left")
+        subtitle.pack(side="left", fill="x", expand=True,
+                      padx=(PAD["md"], 0))
+
+        def _fit_subtitle(event) -> None:
+            # Wrapped, not cut. Letting the subtitle give was the right
+            # call -- it beats losing a button -- but "Nanotubos, grafeno,
+            # carbones" ending mid-word at 253 px reads as a bug. A header
+            # two lines tall at 1100 px does not.
+            from .widgets import _wraplength
+
+            width = max(int(event.width) - 160, 120)
+            if abs(width - _wraplength(subtitle)) > 4:
+                subtitle.configure(wraplength=width)
+
+        title.bind("<Configure>", _fit_subtitle, add="+")
 
     def _on_figure_theme_changed(self, _event=None) -> None:
         """Repaint every figure on the chosen background, right away."""

@@ -18,7 +18,17 @@ from typing import Optional
 
 from .base import SectionApp, placeholder
 from .theme import PAD
-from .widgets import card, fill_table, hint, labelled, scrolled_text, set_text, table, scrollable_column
+from .widgets import (
+    card,
+    fill_table,
+    flow,
+    hint,
+    labelled,
+    scrollable_column,
+    scrolled_text,
+    set_text,
+    table,
+)
 from .xrd_state import PARAMETER_GROUPS, XRDSession
 
 #: File types offered in the open dialog.
@@ -93,11 +103,13 @@ class XRDApp(SectionApp):
 
         row = ttk.Frame(listbody)
         row.pack(fill="x")
-        ttk.Button(row, text="Abrir…", command=self._open_files).pack(
-            side="left", padx=(0, PAD["xs"]))
-        ttk.Button(row, text="Demo", command=self._load_demo).pack(
-            side="left", padx=(0, PAD["xs"]))
-        ttk.Button(row, text="Quitar", command=self._remove).pack(side="left")
+        # Wrapped: three buttons side by side in this column left
+        # "Quitar" two pixels wide, which is not a button.
+        bar = flow(row, style="TFrame")
+        bar.add(ttk.Button(bar.frame, text="Abrir…", command=self._open_files),
+                grow=True)
+        bar.add(ttk.Button(bar.frame, text="Demo", command=self._load_demo))
+        bar.add(ttk.Button(bar.frame, text="Quitar", command=self._remove))
 
         setup, setupbody = card(parent, "Equipo")
         setup.pack(fill="x", pady=(PAD["sm"], 0))
@@ -240,20 +252,22 @@ class XRDApp(SectionApp):
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Rietveld  ")
 
-        toolbar = ttk.Frame(tab)
-        toolbar.pack(fill="x", pady=(0, PAD["sm"]))
-        ttk.Button(toolbar, text="Refinamiento automático", style="Accent.TButton",
-                   command=self._auto_refine).pack(side="left", padx=(0, PAD["xs"]))
-        ttk.Button(toolbar, text="Preparar manual",
-                   command=self._prepare_manual).pack(side="left", padx=(0, PAD["xs"]))
-        ttk.Button(toolbar, text="Refinar los libres",
-                   command=self._refine_once).pack(side="left", padx=(0, PAD["sm"]))
-        ttk.Label(toolbar, text="Liberar grupo:").pack(side="left", padx=(0, PAD["xs"]))
+        toolbar = flow(tab, style="TFrame")
+        toolbar.add(ttk.Button(toolbar.frame, text="Refinamiento automático",
+                               style="Accent.TButton",
+                               command=self._auto_refine))
+        toolbar.add(ttk.Button(toolbar.frame, text="Preparar manual",
+                               command=self._prepare_manual))
+        toolbar.add(ttk.Button(toolbar.frame, text="Refinar los libres",
+                               command=self._refine_once))
+        toolbar.add(ttk.Label(toolbar.frame, text="Liberar grupo:"))
         self.group_var = self.tk.StringVar(value=PARAMETER_GROUPS[0][1])
-        ttk.Combobox(toolbar, textvariable=self.group_var, width=26, state="readonly",
-                     values=[label for _, label, _ in PARAMETER_GROUPS]).pack(
-            side="left", padx=(0, PAD["xs"]))
-        ttk.Button(toolbar, text="Añadir", command=self._free_group).pack(side="left")
+        toolbar.add(ttk.Combobox(
+            toolbar.frame, textvariable=self.group_var, width=26,
+            state="readonly",
+            values=[label for _, label, _ in PARAMETER_GROUPS]), grow=True)
+        toolbar.add(ttk.Button(toolbar.frame, text="Añadir",
+                               command=self._free_group))
 
         # Phases in and out of the MODEL, which is a different thing from
         # the parameters. The case this exists for is the one every
@@ -261,24 +275,24 @@ class XRDApp(SectionApp):
         # that no amount of refining the phases already in the model will
         # remove, because it belongs to one that is not in it. Until now
         # the only way to add it was to re-run the identification and hope.
-        phases_bar = ttk.Frame(tab)
-        phases_bar.pack(fill="x", pady=(0, PAD["sm"]))
-        ttk.Label(phases_bar, text="Fases del modelo:").pack(
-            side="left", padx=(0, PAD["xs"]))
+        # Wrapped: a label, a chooser and two buttons in one row left the
+        # chooser 58 px wide, which shows four characters — not enough to
+        # tell "C turbostrático 3.44" from "C turbostrático 3.50", which
+        # is the entire decision this control exists for.
+        phases_bar = flow(tab, style="TFrame")
+        phases_bar.add(ttk.Label(phases_bar.frame, text="Fases del modelo:"))
         self.model_phase_var = self.tk.StringVar(value="")
         self.model_phase_combo = ttk.Combobox(
-            phases_bar, textvariable=self.model_phase_var, width=24,
+            phases_bar.frame, textvariable=self.model_phase_var, width=24,
             state="readonly", values=[])
-        self.model_phase_combo.pack(side="left", padx=(0, PAD["xs"]))
-        ttk.Button(phases_bar, text="Añadir al modelo",
-                   command=self._add_model_phase).pack(side="left",
-                                                       padx=(0, PAD["xs"]))
-        ttk.Button(phases_bar, text="Quitar del modelo",
-                   command=self._remove_model_phase).pack(side="left",
-                                                          padx=(0, PAD["sm"]))
-        self.model_phases_label = ttk.Label(phases_bar, text="—",
+        phases_bar.add(self.model_phase_combo, grow=True)
+        phases_bar.add(ttk.Button(phases_bar.frame, text="Añadir al modelo",
+                                  command=self._add_model_phase))
+        phases_bar.add(ttk.Button(phases_bar.frame, text="Quitar del modelo",
+                                  command=self._remove_model_phase))
+        self.model_phases_label = ttk.Label(phases_bar.frame, text="—",
                                             style="Muted.TLabel")
-        self.model_phases_label.pack(side="left")
+        phases_bar.add(self.model_phases_label, grow=True)
 
         panes = ttk.Panedwindow(tab, orient="horizontal")
         panes.pack(fill="both", expand=True)
@@ -306,14 +320,11 @@ class XRDApp(SectionApp):
         metrics, metrics_body = card(right, "Resultado del refinamiento")
         metrics.pack(fill="x")
         self.metrics_table = table(metrics_body, ["magnitud", "valor"], height=10)
-        row = ttk.Frame(metrics_body)
-        row.pack(fill="x", pady=(PAD["xs"], 0))
-        ttk.Button(row, text="Ver informe completo…",
-                   command=self._show_refinement_report).pack(
-            side="left", fill="x", expand=True, padx=(0, PAD["xs"]))
-        ttk.Button(row, text="Guardar informe…",
-                   command=self._save_refinement_report).pack(
-            side="left", fill="x", expand=True)
+        actions = flow(metrics_body)
+        actions.add(ttk.Button(actions.frame, text="Ver informe completo…",
+                               command=self._show_refinement_report), grow=True)
+        actions.add(ttk.Button(actions.frame, text="Guardar informe…",
+                               command=self._save_refinement_report), grow=True)
 
         hint(metrics_body,
              "La χ² reducida y la GOF son la misma cosa: χ² = GOF². Se dan "

@@ -174,7 +174,7 @@ class RamanCarbonApp:
         body = ttk.Frame(self.host, padding=(PAD["lg"], 0, PAD["lg"], PAD["sm"]))
         body.pack(fill="both", expand=True)
 
-        from .widgets import scrollable_column
+        from .widgets import flow, scrollable_column
 
         # Scrollable: this column's cards add up to more than any
         # window is tall, and a fixed frame simply clips them.
@@ -343,22 +343,32 @@ class RamanCarbonApp:
         canvas = FigureCanvasTkAgg(figure, master=parent)
         widget = canvas.get_tk_widget()
         widget.configure(background=self.palette.surface, highlightthickness=0)
-        toolbar = NavigationToolbar2Tk(canvas, parent, pack_toolbar=False)
+        # The strip gets its own frame so it can be laid out as a
+        # wrapping row; NavigationToolbar2Tk takes its master at
+        # construction, so the frame has to exist first. Packed BEFORE
+        # the figure and from the bottom: the packer hands out the cavity
+        # in packing order and gives each widget its requested size
+        # first, so a figure asking for figsize*dpi swallowed the whole
+        # cavity and the toolbar, packed after it, was never drawn.
+        strip = self.ttk.Frame(parent)
+        strip.pack(side="bottom", fill="x")
+        toolbar = NavigationToolbar2Tk(canvas, strip, pack_toolbar=False)
         toolbar.configure(background=self.palette.surface_alt)
         toolbar.update()
         # See SectionApp.reset_zoom: matplotlib's Home rewinds the view
         # stack, which after a redraw restores the previous figure's
         # limits and on an empty stack does nothing at all.
-        self.ttk.Button(toolbar, text="Restablecer zoom",
-                        command=lambda k=key: self._reset_zoom(k)).pack(
-            side="right", padx=PAD["xs"])
-        self.ttk.Button(toolbar, text="Guardar datos…",
-                        command=lambda k=key: self._export_canvas(k)).pack(
-            side="right", padx=PAD["xs"])
         # Packed before the figure and from the bottom: see
         # SectionApp.make_canvas. A figure that asks for more height than
-        # its pane has leaves nothing for a toolbar packed after it.
-        toolbar.pack(side="bottom", fill="x")
+        # its pane has leaves nothing for a toolbar packed after it. The
+        # strip wraps rather than squeezing its last two buttons: see
+        # widgets.plot_toolbar.
+        from .widgets import plot_toolbar
+
+        plot_toolbar(strip, toolbar, [
+            ("Restablecer zoom", lambda k=key: self._reset_zoom(k)),
+            ("Guardar datos…", lambda k=key: self._export_canvas(k)),
+        ])
         widget.pack(side="top", fill="both", expand=True)
         self._canvases[key] = canvas
         self._figures[key] = figure
@@ -509,7 +519,7 @@ class RamanCarbonApp:
                           lambda f: f.add_subplot(111))
 
     def _build_tab_deconvolution(self) -> None:
-        from .widgets import card, hint, labelled, separator, table
+        from .widgets import card, flow, hint, labelled, separator, table
 
         ttk, tk = self.ttk, self.tk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
@@ -542,20 +552,20 @@ class RamanCarbonApp:
 
         separator(body)
         ttk.Label(body, text="…o a medida", style="Heading.TLabel").pack(anchor="w")
-        counts = ttk.Frame(body, style="Card.TFrame")
-        counts.pack(fill="x", pady=PAD["xs"])
+        # Two labels, two spinboxes and a button in a 230 px column: the
+        # button was last in the packing order and came out 58 px wide.
+        counts = flow(body)
         self.n_d_var = tk.IntVar(value=3)
         self.n_g_var = tk.IntVar(value=2)
-        ttk.Label(counts, text="Picos en D", style="Card.TLabel",
-                  width=11).pack(side="left")
-        ttk.Spinbox(counts, from_=1, to=8, width=4,
-                    textvariable=self.n_d_var).pack(side="left")
-        ttk.Label(counts, text="  en G", style="Card.TLabel").pack(side="left")
-        ttk.Spinbox(counts, from_=1, to=6, width=4,
-                    textvariable=self.n_g_var).pack(side="left")
-        ttk.Button(counts, text="Construir",
-                   command=self._load_region_model).pack(
-                       side="left", fill="x", expand=True, padx=(PAD["sm"], 0))
+        counts.add(ttk.Label(counts.frame, text="Picos en D",
+                             style="Card.TLabel"))
+        counts.add(ttk.Spinbox(counts.frame, from_=1, to=8, width=4,
+                               textvariable=self.n_d_var))
+        counts.add(ttk.Label(counts.frame, text="en G", style="Card.TLabel"))
+        counts.add(ttk.Spinbox(counts.frame, from_=1, to=6, width=4,
+                               textvariable=self.n_g_var))
+        counts.add(ttk.Button(counts.frame, text="Construir",
+                              command=self._load_region_model), grow=True)
         hint(body, "Las tres primeras de la región D son D, D3 y D4; las tres "
                    "primeras de la G son G, D' y G⁻. Más allá de eso salen sin "
                    "nombre (Dx1, Gx1…): entran en el ajuste y en la "
@@ -565,13 +575,17 @@ class RamanCarbonApp:
 
         self.window_low_var = tk.StringVar(value="1100")
         self.window_high_var = tk.StringVar(value="1750")
-        window_row = ttk.Frame(body, style="Card.TFrame")
-        window_row.pack(fill="x", pady=PAD["xs"])
-        ttk.Label(window_row, text="Ventana", style="Card.TLabel", width=16).pack(side="left")
-        ttk.Entry(window_row, textvariable=self.window_low_var, width=8).pack(side="left")
-        ttk.Label(window_row, text=" – ", style="Card.TLabel").pack(side="left")
-        ttk.Entry(window_row, textvariable=self.window_high_var, width=8).pack(side="left")
-        ttk.Label(window_row, text=" cm⁻¹", style="Card.TLabel").pack(side="left")
+        window_row = flow(body)
+        window_row.add(ttk.Label(window_row.frame, text="Ventana",
+                                 style="Card.TLabel"))
+        window_row.add(ttk.Entry(window_row.frame,
+                                 textvariable=self.window_low_var, width=7))
+        window_row.add(ttk.Label(window_row.frame, text="–",
+                                 style="Card.TLabel"))
+        window_row.add(ttk.Entry(window_row.frame,
+                                 textvariable=self.window_high_var, width=7))
+        window_row.add(ttk.Label(window_row.frame, text="cm⁻¹",
+                                 style="Card.TLabel"))
 
         self.background_var = tk.StringVar(value="linear")
         labelled(body, "Fondo del ajuste",
@@ -837,16 +851,24 @@ class RamanCarbonApp:
             phases_body,
             ["Fase", "Fórmula", "Familia", "Origen", "Confianza"], height=12)
         self.phase_table.bind("<<TreeviewSelect>>", self._on_phase_selected)
-        phase_row = ttk.Frame(phases_body, style="Card.TFrame")
-        phase_row.pack(fill="x", pady=(PAD["xs"], 0))
-        ttk.Button(phase_row, text="Añadir fase propia…",
-                   command=self._add_user_phase).pack(
-            side="left", fill="x", expand=True, padx=(0, PAD["xs"]))
-        ttk.Button(phase_row, text="Quitar la seleccionada",
-                   command=self._remove_user_phase).pack(
-            side="left", fill="x", expand=True, padx=(0, PAD["xs"]))
-        ttk.Button(phase_row, text="Abrir carpeta",
-                   command=self._open_phase_folder).pack(side="left")
+        from .widgets import flow
+
+        phase_row = flow(phases_body)
+        phase_row.add(ttk.Button(phase_row.frame, text="Añadir fase propia…",
+                                 command=self._add_user_phase), grow=True)
+        phase_row.add(ttk.Button(phase_row.frame, text="Quitar la seleccionada",
+                                 command=self._remove_user_phase), grow=True)
+        phase_row.add(ttk.Button(phase_row.frame, text="Abrir carpeta",
+                                 command=self._open_phase_folder))
+        # The question a phase table cannot answer on its own, and the one
+        # that actually gets asked: the scan did not find this phase —
+        # does that mean it is not there? On a carbon-on-FeSe spectrum the
+        # answer was that every FeSe line sits under the cementite band at
+        # 215 cm⁻¹, so Raman neither confirms nor contradicts the 2.7 % the
+        # diffraction refinement of the same sample reports. That is worth
+        # a button.
+        phase_row.add(ttk.Button(phase_row.frame, text="¿Se habría visto?",
+                                 command=self._bound_phase), grow=True)
 
         right = ttk.Frame(tab)
         right.pack(side="left", fill="both", expand=True)
@@ -890,6 +912,41 @@ class RamanCarbonApp:
         if not selection:
             return ""
         return str(self.phase_table.item(selection[0], "values")[0])
+
+    def _bound_phase(self) -> None:
+        """How much of the selected phase could be there and not be seen.
+
+        Runs against the spectrum on screen, because a detection limit is
+        a property of one measurement and not of the phase: the same line
+        is worth a different bound on a noisy trace and on a clean one.
+        """
+        from .widgets import set_text
+
+        key = self._selected_phase_key()
+        if not key:
+            self._warn("Sin fase", "Selecciona una fase de la tabla.")
+            return
+        item = self.session.active
+        if item is None:
+            self._warn("Sin espectro",
+                       "Carga y analiza un espectro: el límite es de esta "
+                       "medida, no de la fase.")
+            return
+        target = item.processed or item.raw
+
+        def work():
+            from ..analysis.detection_limit import detection_limit
+
+            peaks = item.result.peaks if item.result else None
+            return detection_limit(target, key, peaks=peaks)
+
+        def done(limit) -> None:
+            if limit is None:
+                return
+            set_text(self.band_text, limit.summary())
+            self._set_status(limit.verdict())
+
+        self._run_async(work, done, "Acotando…")
 
     def _on_phase_selected(self, _event=None) -> None:
         from .widgets import set_text

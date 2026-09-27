@@ -37,6 +37,7 @@ from .base import SectionApp, placeholder
 from .state import BASELINE_METHODS, NORMALISATIONS, key_for_label, label_for_key
 from .theme import PAD
 from .widgets import (
+    flow,
     card,
     fill_table,
     hint,

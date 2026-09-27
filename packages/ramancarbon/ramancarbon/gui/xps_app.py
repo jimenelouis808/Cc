@@ -31,6 +31,7 @@ from .theme import PAD
 from .widgets import (
     card,
     fill_table,
+    flow,
     hint,
     labelled,
     scrollable_column,
@@ -238,16 +239,20 @@ class XPSApp(SectionApp):
         ttk.Spinbox(row, from_=1, to=8, width=4,
                     textvariable=self.count_var).pack(side="left")
         self.background_var = tk.StringVar(value=BACKGROUNDS[0][1])
-        ttk.Label(row, text="   fondo ").pack(side="left")
-        ttk.Combobox(row, textvariable=self.background_var, width=22,
-                     state="readonly",
-                     values=[label for _, label in BACKGROUNDS]).pack(side="left")
+        # Wrapped, not packed: the two checkbuttons came last in the row
+        # and were given 6 px and 59 px.
+        options = flow(row.master)
+        options.add(ttk.Label(options.frame, text="Fondo"))
+        options.add(ttk.Combobox(options.frame, textvariable=self.background_var,
+                                 width=22, state="readonly",
+                                 values=[label for _, label in BACKGROUNDS]),
+                    grow=True)
         self.link_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(row, text=" ligar anchuras",
-                        variable=self.link_var).pack(side="left", padx=(PAD["sm"], 0))
+        options.add(ttk.Checkbutton(options.frame, text="Ligar anchuras",
+                                    variable=self.link_var))
         self.satellite_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(row, text=" satélites",
-                        variable=self.satellite_var).pack(side="left")
+        options.add(ttk.Checkbutton(options.frame, text="Satélites",
+                                    variable=self.satellite_var))
 
         # Section 21 of the specification: candidates are filtered by what
         # the sample is made of before anything is fitted, not discussed
@@ -322,8 +327,15 @@ class XPSApp(SectionApp):
                          figsize=(8.2, 4.4))
         bottom = ttk.Frame(table_pane)
         bottom.pack(fill="both", expand=True)
+        # Gridded with equal weights, not packed. Packed side by side,
+        # the components card asks for a seven-column table and takes
+        # almost all of the row, leaving the card beside it 76 px — so
+        # its own title, "Número de componentes", did not fit in it.
+        bottom.columnconfigure(0, weight=1, uniform="xps-bottom")
+        bottom.columnconfigure(1, weight=1, uniform="xps-bottom")
+        bottom.rowconfigure(0, weight=1)
         left, left_body = card(bottom, "Componentes")
-        left.pack(side="left", fill="both", expand=True)
+        left.grid(row=0, column=0, sticky="nsew")
         self.components_table = table(
             left_body,
             ["componente", "E_enlace (eV)", "FWHM (eV)", "área", "%",
@@ -356,8 +368,7 @@ class XPSApp(SectionApp):
              "algo se informa como un óxido que no está.",
              wrap=420)
         right, right_body = card(bottom, "Número de componentes")
-        right.pack(side="left", fill="both", expand=True,
-                   padx=(PAD["sm"], 0))
+        right.grid(row=0, column=1, sticky="nsew", padx=(PAD["sm"], 0))
         self.make_canvas(right_body, "counts", lambda f: f.add_subplot(111),
                          figsize=(4.2, 2.6))
         self.verdict_text = scrolled_text(right_body, self.palette,

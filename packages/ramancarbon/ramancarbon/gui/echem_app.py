@@ -23,6 +23,7 @@ from .base import SectionApp, placeholder
 from .echem_state import CURRENT_UNITS, POTENTIAL_UNITS, EchemSession
 from .theme import PAD
 from .widgets import (
+    flow,
     card,
     fill_table,
     hint,
@@ -204,10 +205,16 @@ class EchemApp(SectionApp):
             values=self.session.circuit_choices()))
         self.circuit_var.trace_add("write", lambda *_: self._on_circuit_chosen())
         self.non_faradaic_var = tk.BooleanVar(value=False)
+        # A checkbutton's text does not wrap on its own, so a sentence in
+        # one is a sentence that gets cut: this one was given 276 px of
+        # the 350 it needs. Short label, explanation underneath.
         ttk.Checkbutton(
-            obody, text="La ventana del CV no tiene corriente faradaica",
+            obody, text="Sin corriente faradaica",
             variable=self.non_faradaic_var,
         ).pack(anchor="w", pady=(PAD["xs"], 0))
+        hint(obody, "Marca esto si la ventana del CV no tiene picos redox: "
+                    "la capacitancia se integra entonces sobre toda la "
+                    "ventana en vez de descontarlos.", wrap=420)
 
         actions = ttk.Frame(parent)
         actions.pack(fill="x", pady=(PAD["sm"], 0))
@@ -247,27 +254,29 @@ class EchemApp(SectionApp):
              "no es capacitiva.",
              wrap=700)
 
-        dunn_bar = ttk.Frame(tab)
-        dunn_bar.pack(fill="x", pady=(0, PAD["sm"]))
-        ttk.Label(dunn_bar, text="Dunn — rama:").pack(side="left")
+        dunn_bar = flow(tab, style="TFrame")
+        dunn_bar.add(ttk.Label(dunn_bar.frame, text="Dunn — rama:"))
         self.dunn_sweep_var = self.tk.StringVar(value=SWEEP_CHOICES[0][1])
-        ttk.Combobox(
-            dunn_bar, textvariable=self.dunn_sweep_var, width=38,
+        dunn_bar.add(ttk.Combobox(
+            dunn_bar.frame, textvariable=self.dunn_sweep_var, width=38,
             state="readonly",
-            values=[label for _, label in SWEEP_CHOICES],
-        ).pack(side="left", padx=(PAD["xs"], PAD["md"]))
-        ttk.Label(dunn_bar, text="velocidad del gráfico (mV/s):").pack(side="left")
+            values=[label for _, label in SWEEP_CHOICES]), grow=True)
+        dunn_bar.add(ttk.Label(dunn_bar.frame,
+                               text="velocidad del gráfico (mV/s):"))
         self.dunn_rate_var = self.tk.StringVar(value="")
         self.dunn_rate_box = ttk.Combobox(
-            dunn_bar, textvariable=self.dunn_rate_var, width=10,
+            dunn_bar.frame, textvariable=self.dunn_rate_var, width=10,
             state="readonly", values=[])
-        self.dunn_rate_box.pack(side="left", padx=(PAD["xs"], PAD["xs"]))
+        dunn_bar.add(self.dunn_rate_box)
         self.dunn_rate_box.bind("<<ComboboxSelected>>",
                                 lambda _e: self._on_dunn_rate())
-        ttk.Button(dunn_bar, text="Recalcular Dunn",
-                   command=self._recompute_dunn).pack(side="left")
-        hint(dunn_bar,
-             "  El gráfico se dibuja a la velocidad MÁS LENTA por defecto, "
+        dunn_bar.add(ttk.Button(dunn_bar.frame, text="Recalcular Dunn",
+                                command=self._recompute_dunn))
+        # Under the row, not inside it: a paragraph packed beside three
+        # controls competes with them for width and loses -- this one was
+        # given 121 px of the 520 it asked for, on a 1480 px window.
+        hint(tab,
+             "El gráfico se dibuja a la velocidad MÁS LENTA por defecto, "
              "que es donde la contribución difusiva es mayor: a la más "
              "rápida todo electrodo parece superficial.",
              wrap=560)
@@ -350,16 +359,17 @@ class EchemApp(SectionApp):
         ttk.Label(row, text="Circuito").pack(side="left")
         self.circuit_text_var = self.tk.StringVar(
             value=self.session.circuit_text())
-        ttk.Entry(row, textvariable=self.circuit_text_var, width=44).pack(
-            side="left", fill="x", expand=True, padx=(PAD["sm"], PAD["sm"]))
-        ttk.Button(row, text="Aplicar", command=self._apply_circuit).pack(
-            side="left")
-        ttk.Button(row, text="Guardar como…",
-                   command=self._save_circuit).pack(side="left",
-                                                    padx=(PAD["xs"], 0))
-        ttk.Button(row, text="Borrar el mío",
-                   command=self._delete_circuit).pack(side="left",
-                                                      padx=(PAD["xs"], 0))
+        # A wrapping row: four controls side by side in this panel left
+        # "Guardar como…" 52 px of the 145 it needs.
+        bar = flow(row, style="TFrame")
+        bar.add(ttk.Entry(bar.frame, textvariable=self.circuit_text_var,
+                          width=28), grow=True)
+        bar.add(ttk.Button(bar.frame, text="Aplicar",
+                           command=self._apply_circuit))
+        bar.add(ttk.Button(bar.frame, text="Guardar como…",
+                           command=self._save_circuit))
+        bar.add(ttk.Button(bar.frame, text="Borrar el mío",
+                           command=self._delete_circuit))
         self.circuit_note = ttk.Label(
             editor_body, text="", wraplength=900, justify="left",
             style="Hint.TLabel")

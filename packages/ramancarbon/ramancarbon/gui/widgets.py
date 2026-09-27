@@ -12,6 +12,28 @@ from typing import Any, Callable, Iterable, Optional, Sequence
 from .theme import PAD, Palette
 
 
+def _fit(label, event, wrap: int) -> None:
+    """Set a label's wrap width from the width it was just given."""
+    target = min(max(int(event.width), MIN_WRAP), max(int(wrap), MIN_WRAP))
+    if abs(target - _wraplength(label)) > 2:
+        label.configure(wraplength=target)
+
+
+def _wraplength(label) -> int:
+    """A label's current wrap width, as a number.
+
+    ``cget("wraplength")`` returns an empty string on a label that never
+    had one set — which is every heading — and ``int("")`` raises. The
+    resize callbacks read this value to decide whether anything changed,
+    so an unset one has to mean "no wrapping yet", not a traceback in
+    every ``<Configure>`` event.
+    """
+    try:
+        return int(label.cget("wraplength") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def card(parent, title: Optional[str] = None, subtitle: Optional[str] = None):
     """A bordered surface panel with an optional heading.
 
@@ -25,14 +47,29 @@ def card(parent, title: Optional[str] = None, subtitle: Optional[str] = None):
     from tkinter import ttk
 
     outer = ttk.Frame(parent, style="Card.TFrame", padding=PAD["md"])
+    heads: list = []
     if title:
-        ttk.Label(outer, text=title, style="Heading.TLabel").pack(
-            anchor="w", pady=(0, PAD["xs"] if subtitle else PAD["sm"])
-        )
+        # Headings wrap too. "Número de componentes" is a perfectly
+        # ordinary card title and it was given 76 px of the 237 it needs,
+        # because the card it heads is in a narrow column -- so the card
+        # announced itself as "Número de com".
+        head = ttk.Label(outer, text=title, style="Heading.TLabel",
+                         justify="left")
+        head.pack(anchor="w", fill="x",
+                  pady=(0, PAD["xs"] if subtitle else PAD["sm"]))
+        heads.append(head)
     if subtitle:
-        ttk.Label(outer, text=subtitle, style="Muted.TLabel", wraplength=520).pack(
-            anchor="w", pady=(0, PAD["sm"])
-        )
+        note = ttk.Label(outer, text=subtitle, style="Muted.TLabel",
+                         wraplength=520, justify="left")
+        note.pack(anchor="w", fill="x", pady=(0, PAD["sm"]))
+        heads.append(note)
+    for head in heads:
+        def _refit(event, label=head) -> None:
+            width = max(int(event.width), MIN_WRAP)
+            if abs(width - _wraplength(label)) > 2:
+                label.configure(wraplength=width)
+
+        head.bind("<Configure>", _refit, add="+")
     body = ttk.Frame(outer, style="Card.TFrame")
     body.pack(fill="both", expand=True)
     return outer, body
@@ -249,8 +286,25 @@ def fill_table(tree, columns: Sequence[str], rows: Iterable[Sequence[Any]]) -> N
         tree.insert("", "end", values=list(row))
 
 
+#: Narrowest a control may become before its label moves above it.
+#:
+#: A combobox 58 px wide shows about four characters and is useless for
+#: choosing between "C turbostrático 3.44" and "C turbostrático 3.50",
+#: which is what the Rietveld phase chooser came out as in a 1100 px
+#: window. Below this the label and the control stop sharing a line.
+MIN_CONTROL = 120
+
+
 def labelled(parent, text: str, widget_factory: Callable[[Any], Any], width: int = 16):
-    """A left-aligned label followed by a widget, packed in a row.
+    """A label and a control, side by side — or stacked when narrow.
+
+    The side-by-side row is right until the column is too narrow for it,
+    and then it is badly wrong: the label keeps its ``width`` characters
+    and the control absorbs the whole shortfall. Rather than choose one
+    arrangement for every window size, the row measures itself and moves
+    the label above the control when the control would drop below
+    :data:`MIN_CONTROL`. Stacking costs a line of height, which a
+    scrolling sidebar has, and buys back the width, which it does not.
 
     Returns the created widget, so the caller can keep a reference without
     a temporary variable for the row.
@@ -259,10 +313,178 @@ def labelled(parent, text: str, widget_factory: Callable[[Any], Any], width: int
 
     row = ttk.Frame(parent, style="Card.TFrame")
     row.pack(fill="x", pady=PAD["xs"])
-    ttk.Label(row, text=text, style="Card.TLabel", width=width, anchor="w").pack(side="left")
+    label = ttk.Label(row, text=text, style="Card.TLabel", width=width,
+                      anchor="w")
     widget = widget_factory(row)
-    widget.pack(side="left", fill="x", expand=True)
+    state = {"stacked": None}
+
+    def arrange(_event=None) -> None:
+        available = row.winfo_width()
+        if available <= 1:
+            available = row.winfo_reqwidth()
+        stacked = available - label.winfo_reqwidth() < MIN_CONTROL
+        if stacked == state["stacked"]:
+            return
+        state["stacked"] = stacked
+        label.grid_forget()
+        widget.grid_forget()
+        row.columnconfigure(0, weight=0)
+        row.columnconfigure(1, weight=0)
+        if stacked:
+            label.grid(row=0, column=0, sticky="w")
+            widget.grid(row=1, column=0, sticky="ew", pady=(PAD["xs"], 0))
+            row.columnconfigure(0, weight=1)
+        else:
+            label.grid(row=0, column=0, sticky="w")
+            widget.grid(row=0, column=1, sticky="ew")
+            row.columnconfigure(1, weight=1)
+
+    arrange()
+    row.bind("<Configure>", arrange, add="+")
     return widget
+
+
+class Flow:
+    """A row of controls that wraps to the next line instead of squeezing.
+
+    Tk has no flow manager, and its absence is what most of this
+    application's layout damage came from. A sidebar is about 230 px wide
+    once the scrollbar and the card padding are taken out; a row that
+    packs a label, two spinboxes and a button side by side asks for 380,
+    and ``pack`` resolves that by handing out what it has in order — so
+    the last widget in the row gets whatever is left. Measured on the
+    real widget tree: the "Quitar" button in the diffractogram panel was
+    allocated **2 pixels** of the 129 it asked for, and "Guardar datos…"
+    got 7 of 145. They were not misaligned, they were gone, and no amount
+    of resizing the window brought them back because the row was packed,
+    not wrapped.
+
+    So the children are placed on a grid and the number of columns is
+    recomputed whenever the row's width changes: everything keeps its
+    natural size and the row grows downwards, which is the direction a
+    scrolling sidebar has room in.
+
+    Use it through :func:`flow`.
+    """
+
+    def __init__(self, frame, gap: int) -> None:
+        self.frame = frame
+        self.gap = gap
+        self.items: list[tuple[Any, bool]] = []
+        self._columns = 0
+        frame.bind("<Configure>", self._relayout, add="+")
+
+    def add(self, widget, grow: bool = False):
+        """Put ``widget`` in the row. ``grow`` lets it take spare width."""
+        self.items.append((widget, grow))
+        self._relayout()
+        return widget
+
+    def _fits(self, width: int) -> int:
+        """How many of the widgets fit across ``width``, at least one."""
+        columns, used = 0, 0
+        for widget, _grow in self.items:
+            need = widget.winfo_reqwidth() + self.gap
+            if used + need > width and columns:
+                break
+            used += need
+            columns += 1
+        return max(columns, 1)
+
+    def _relayout(self, _event=None) -> None:
+        if not self.items:
+            return
+        width = self.frame.winfo_width()
+        if width <= 1:
+            width = self.frame.winfo_reqwidth()
+        columns = self._fits(width)
+        if columns == self._columns:
+            return
+        # Re-gridding changes the row's own height, which fires another
+        # <Configure>; without this the two chase each other forever.
+        self._columns = columns
+        for index in range(columns):
+            self.frame.columnconfigure(index, weight=0)
+        for index, (widget, grow) in enumerate(self.items):
+            row, column = divmod(index, columns)
+            widget.grid(row=row, column=column, sticky="ew",
+                        padx=(0, self.gap), pady=(0, self.gap))
+            if grow:
+                self.frame.columnconfigure(column, weight=1)
+        # A single column must stretch, or a wrapped row leaves its
+        # buttons at their natural width against the left edge.
+        if columns == 1:
+            self.frame.columnconfigure(0, weight=1)
+
+
+def flow(parent, gap: Optional[int] = None, style: str = "Card.TFrame") -> Flow:
+    """A wrapping row of controls. See :class:`Flow`."""
+    from tkinter import ttk
+
+    frame = ttk.Frame(parent, style=style)
+    frame.pack(fill="x", pady=PAD["xs"])
+    return Flow(frame, PAD["xs"] if gap is None else gap)
+
+
+def plot_toolbar(holder, toolbar, extras: Sequence[tuple[str, Callable]]):
+    """Matplotlib's navigation bar plus this application's own buttons.
+
+    Packed as a wrapping row, because a toolbar is exactly the case
+    :class:`Flow` exists for. ``NavigationToolbar2Tk`` packs its own
+    seven buttons and a coordinate label first, so anything added
+    afterwards is last in the packing order and absorbs the whole
+    shortfall: measured in a 1100 px window, "Restablecer zoom" was given
+    49 px of the 156 it needs and "Guardar datos…" 67 of 145 — both
+    unreadable, one barely clickable. Squeezing the navigation bar
+    instead is no better; matplotlib's own "Forward" came out 10 px wide.
+
+    Treating the navigation bar as one item in a wrapping row means the
+    extra buttons drop to a second line when the pane is narrow, and
+    nothing is ever cut.
+
+    ``holder`` must already be the navigation bar's master and be packed:
+    a widget can only be gridded beside its own siblings, and
+    ``NavigationToolbar2Tk`` takes its master at construction.
+
+    Returns the :class:`Flow` that manages the strip.
+    """
+    from tkinter import ttk
+
+    row = Flow(holder, PAD["xs"])
+    row.add(toolbar)
+    for label, command in extras:
+        row.add(ttk.Button(holder, text=label, command=command))
+    return row
+
+
+def lay_out(figure) -> None:
+    """Fit a figure's decorations, and do something sensible when it cannot.
+
+    ``tight_layout`` gives up when the axes decorations need more room
+    than the figure has — "the bottom and top margins cannot be made
+    large enough" — and gives up by doing NOTHING, leaving the default
+    margins. The default margins are a fraction of the figure, so on a
+    short pane the axis labels land on top of the ticks and the title on
+    top of the axes: this is most of what "badly scaled" looks like from
+    the outside, and the suite raised the warning on every redraw of the
+    panes that are short by design.
+
+    Falling back to explicit fractional margins is not as good as a real
+    fit, but it is a layout rather than an absence of one, and the
+    numbers are chosen so the labels have somewhere to go.
+    """
+    import warnings
+
+    with warnings.catch_warnings(record=True) as raised:
+        warnings.simplefilter("always")
+        try:
+            figure.tight_layout()
+        except (ValueError, RuntimeError):
+            raised.append(None)
+        if not any(raised):
+            return
+    figure.subplots_adjust(left=0.16, right=0.97, bottom=0.20, top=0.90,
+                           hspace=0.45, wspace=0.30)
 
 
 def separator(parent) -> None:
@@ -272,26 +494,133 @@ def separator(parent) -> None:
     ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=PAD["sm"])
 
 
+#: Narrowest a paragraph is allowed to get before it stops shrinking.
+#:
+#: Below about this the words break more often than they fit and the
+#: column reads as a ladder. A panel narrower than this has a different
+#: problem, and clipping the text is not the fix for it.
+MIN_WRAP = 160
+
+
+#: Longer than this, in characters, and a note folds itself away.
+#:
+#: This application explains its decisions at length and should: the
+#: choice between areas and heights, or between three components and
+#: five, changes the numbers, and a user who picks one at random is worse
+#: off than one who reads three sentences first. But a note is only
+#: guidance the first few times, and after that it is furniture standing
+#: between the controls and the figure. Worse, once the notes wrap to
+#: their real width they get TALL, and a panel with a fixed share of the
+#: height clips them: the Rietveld note was showing 109 px of the 169 it
+#: needed, so the last thing it said — the one about weight fractions
+#: being of the modelled crystalline part only — was not on screen at all.
+#:
+#: Four hundred characters is about five lines in a sidebar.
+FOLD_ABOVE = 400
+
+
+def _first_sentence(text: str) -> tuple[str, str]:
+    """Split a note into its opening claim and the rest.
+
+    The opening sentence of every note in this package says what the
+    control does; the rest says why and what goes wrong. So the split is
+    not arbitrary truncation — it is the line that has to stay visible.
+    """
+    cleaned = " ".join(text.split())
+    for stop in (". ", "? ", ": "):
+        index = cleaned.find(stop)
+        if 40 <= index <= 240:
+            return cleaned[:index + 1], cleaned[index + 2:]
+    if len(cleaned) > 240:
+        cut = cleaned.rfind(" ", 0, 200)
+        return cleaned[:cut] + "…", cleaned[cut + 1:]
+    return cleaned, ""
+
+
 def hint(parent, text: str, wrap: int = 380) -> None:
-    """A small muted explanatory paragraph.
+    """A small muted explanatory paragraph, wrapped to its container.
 
     Used liberally: this application makes a lot of decisions that change
     the numbers (area versus height, which RBM parameterisation, how many
     components), and a one-line explanation beside the control is what
     stops a user picking one at random.
+
+    ``wrap`` is a MAXIMUM, not the width. It used to be the width, in
+    pixels, chosen by hand at each call site — the codebase had fifteen
+    different values from 230 to 900 — and every one of them was right
+    for exactly one window size. Measured on the real widget tree at
+    1480, 1280 and 1100 px, 377 widgets came back allocated less than
+    they asked for, almost all of them these paragraphs: the note under
+    the voltammetry controls wanted 520 px in a panel 121 px wide and
+    simply vanished off the edge. A paragraph cannot be given a width in
+    advance because the panel it sits in does not have one either, so the
+    label asks the container at every resize instead.
+
+    A long measure is as bad as a short one, which is why ``wrap`` stays:
+    prose set across 900 px is hard to read even when it fits, so the
+    caller's number still caps it.
     """
     from tkinter import ttk
 
-    ttk.Label(parent, text=text, style="Muted.TLabel", wraplength=wrap,
-              justify="left").pack(anchor="w", pady=(0, PAD["sm"]))
+    head, tail = ("", "")
+    if len(" ".join(text.split())) > FOLD_ABOVE:
+        head, tail = _first_sentence(text)
+
+    label = ttk.Label(parent, text=head or text, style="Muted.TLabel",
+                      wraplength=max(int(wrap), MIN_WRAP), justify="left")
+    label.pack(anchor="w", fill="x", pady=(0, 0 if tail else PAD["sm"]))
+
+    if tail:
+        rest = ttk.Label(parent, text=tail, style="Muted.TLabel",
+                         wraplength=max(int(wrap), MIN_WRAP), justify="left")
+        toggle = ttk.Label(parent, text="▸ más", style="Muted.TLabel",
+                           cursor="hand2")
+        toggle.pack(anchor="w", pady=(0, PAD["sm"]))
+
+        def flip(_event=None) -> None:
+            if rest.winfo_ismapped():
+                rest.pack_forget()
+                toggle.configure(text="▸ más")
+            else:
+                rest.pack(anchor="w", fill="x", pady=(0, PAD["sm"]),
+                          before=toggle)
+                toggle.configure(text="▾ menos")
+
+        toggle.bind("<Button-1>", flip)
+        rest.bind("<Configure>", lambda e: _fit(rest, e, wrap), add="+")
+
+    def refit(event) -> None:
+        # Bound to the LABEL, not to its parent. Asking the parent means
+        # guessing how much padding it will claim, and getting it wrong
+        # wherever a card sits inside a paned window: four paragraphs in
+        # the XPS and electrochemistry panels stayed cut because the
+        # frame they were in reported a width the label never received.
+        # The label is packed with fill="x", so its own width IS the
+        # width available to it — and because the fill decides that width
+        # rather than the text, setting wraplength from it cannot ratchet
+        # the paragraph narrower on every resize.
+        target = min(max(int(event.width), MIN_WRAP),
+                     max(int(wrap), MIN_WRAP))
+        if abs(target - _wraplength(label)) > 2:
+            label.configure(wraplength=target)
+
+    label.bind("<Configure>", refit, add="+")
+    return label
 
 
 __all__ = [
-    "scrollable_column",
+    "FOLD_ABOVE",
+    "MIN_CONTROL",
+    "MIN_WRAP",
+    "Flow",
     "card",
     "fill_table",
+    "flow",
     "hint",
     "labelled",
+    "lay_out",
+    "plot_toolbar",
+    "scrollable_column",
     "scrolled_text",
     "separator",
     "set_text",

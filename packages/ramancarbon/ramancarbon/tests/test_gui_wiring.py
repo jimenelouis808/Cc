@@ -890,14 +890,26 @@ def test_the_toolbar_is_packed_before_the_figure_it_belongs_to(stem):
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue
-        toolbars = {
-            statement.targets[0].id
-            for statement in ast.walk(node)
-            if isinstance(statement, ast.Assign)
-            and isinstance(statement.targets[0], ast.Name)
-            and isinstance(statement.value, ast.Call)
-            and "NavigationToolbar2Tk" in ast.unparse(statement.value.func)
-        }
+        # The toolbar itself, and whatever frame it was given as its
+        # master. The strip is a frame now -- the navigation bar and the
+        # suite's own two buttons are laid out as a WRAPPING row, or the
+        # buttons added after matplotlib's own are last in the packing
+        # order and come out 49 px wide -- so the thing that reserves the
+        # height is that frame, and it is the one that has to be packed
+        # first. The rule is unchanged; only the widget it applies to is.
+        toolbars = set()
+        for statement in ast.walk(node):
+            if not (isinstance(statement, ast.Assign)
+                    and isinstance(statement.targets[0], ast.Name)
+                    and isinstance(statement.value, ast.Call)):
+                continue
+            called = ast.unparse(statement.value.func)
+            if "NavigationToolbar2Tk" not in called:
+                continue
+            toolbars.add(statement.targets[0].id)
+            for argument in statement.value.args[1:2]:
+                if isinstance(argument, ast.Name):
+                    toolbars.add(argument.id)
         if not toolbars:
             continue
         widgets = {
