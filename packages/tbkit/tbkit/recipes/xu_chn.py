@@ -19,8 +19,11 @@ transfer between C and N depends on the environment (graphitic, pyridinic,
 pyrrolic), which a fixed on-site energy cannot follow.
 
 Stage 1 (electronic): least squares on the Kohn-Sham levels of the
-training structures -- all occupied valence levels and the LUMO, the
-frontier ones weighted double -- with one common shift between model and
+training structures -- all occupied valence levels, the LUMO and (lightly)
+the LUMO+1, the frontier ones weighted double; empty levels matter for the
+polarizability, as fitting a few empty bands does in NRL-TB
+(Papaconstantopoulos et al., Encycl. Condens. Matter Phys. 2024) -- with one
+common shift between model and
 DFT levels (both are absolute for finite molecules; the shift is Xu's
 arbitrary zero). Stage 2 (repulsion): with the electronic part fixed, the
 repulsion must supply ``F_DFT - F_TB`` and, within each molecule's set of
@@ -139,9 +142,10 @@ def build_model(x: np.ndarray, repulsive: Optional[object] = None) -> TBModel:
 def _selection(ref: ReferenceStructure) -> tuple[np.ndarray, np.ndarray]:
     """Indices of the compared levels and their weights."""
     n = ref.n_occupied
-    indices = np.arange(n + 1)
-    weights = np.ones(n + 1)
+    indices = np.arange(n + 2)
+    weights = np.ones(n + 2)
     weights[n - 1] = weights[n] = 2.0       # HOMO, LUMO
+    weights[n + 1] = 0.5                    # LUMO+1: basis-limited in LCAO, lightly
     return indices, weights
 
 
@@ -177,7 +181,7 @@ def fit_levels(refs: list[ReferenceStructure], x0: Optional[np.ndarray] = None):
         try:
             return level_residuals(build_model(x), refs)[0]
         except (RuntimeError, np.linalg.LinAlgError, ValueError):
-            return np.full(sum(r.n_occupied + 1 for r in refs), 10.0)
+            return np.full(sum(r.n_occupied + 2 for r in refs), 10.0)
 
     lower = np.full(len(x0), -np.inf)
     upper = np.full(len(x0), np.inf)
@@ -316,9 +320,10 @@ def validate(model: TBModel, structures: list[ReferenceStructure], shift: float,
             continue
         indices, _ = _selection(ref)
         levels = model_levels(model, ref)[indices] - shift
+        n = ref.n_occupied
         entry = {"role": ref.role,
                  "level_rms": float(np.sqrt(np.mean((levels - ref.levels[indices]) ** 2))),
-                 "gap_tb": float(levels[-1] - levels[-2]),
+                 "gap_tb": float(levels[n] - levels[n - 1]),
                  "gap_dft": float(ref.levels[ref.n_occupied] - ref.levels[ref.n_occupied - 1])}
         if relax:
             entry["bond_error_max"] = relaxed_bond_errors(model, ref)

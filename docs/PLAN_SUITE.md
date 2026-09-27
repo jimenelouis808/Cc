@@ -206,11 +206,34 @@ Hecho (paso 1, `packages/tbkit`):
 Pendiente de la fase E:
 
 - [ ] Parámetros con H y N (cintas pasivadas y dopadas): `.skf` publicados o
-      ajuste propio a GPAW; hasta entonces, solo carbono puro.
+      ajuste propio a GPAW; hasta entonces, solo carbono puro. **En curso (paso 2)**:
+      convención `.skf` verificada contra DFTB+; bandera `scc` en el modelo;
+      U de H, C, N calculadas con el átomo de GPAW (= DFTB mio); receta
+      `xu_chn` (C–C de Xu intacto, H y N ajustados a niveles, fuerzas y
+      energías de GPAW); falta el conjunto final y su validación.
 - [ ] Fonones importados de QE (dynmat) como alternativa a los del modelo.
 - [ ] Raman resonante (elementos de matriz ópticos y electrón–fonón).
 - [ ] Segundo orden (banda 2D, doble resonancia): periódico, suma en toda la zona
       de Brillouin.
+
+Ideas tomadas de la literatura del usuario (Papaconstantopoulos, Mehl, Chronis,
+Sigalas, "Tight-binding method in electronic structure", Encyclopedia of
+Condensed Matter Physics, 2ª ed., 2024; el método NRL-TB), para después:
+
+- [ ] Formas NRL como leyes de tbkit: hopping `(e + f r + g r²) exp(-t² r) F(r)`,
+      solapamiento `(δ + p r + q r² + s r³) exp(-u² r) F(r)`, corte de Fermi
+      `F(r) = 1/(1 + exp((r - R0)/l))`.
+- [ ] On-site dependiente del entorno, `h = a + b ρ^{2/3} + c ρ^{4/3} + d ρ²` con
+      `ρ_i = Σ_j exp(-λ² R_ij) F(R_ij)`: sin término repulsivo (el desplazamiento
+      V0 de los autovalores DFT lo absorbe), y la transferibilidad entre
+      coordinaciones que a Xu le falta. Sus fuerzas incluyen ∂h/∂R.
+- [ ] Ajuste conjunto de energías totales y autovalores (su ec. 11, energías con
+      peso ~200 veces el de una banda), ocupados y algunos vacíos.
+- [ ] Lector de los parámetros NRL publicados para C (Papaconstantopoulos,
+      Mehl, Erwin, Pederson 1998): su fonón Γ₂₅′ del diamante es 39.3 THz frente
+      a 39.9 medido (1311 frente a 1332 cm⁻¹), mejor que los 1224 cm⁻¹ de Xu.
+- [ ] Validar con propiedades fuera del ajuste, como hacen ellos: constantes
+      elásticas, vacantes, superficies, fonones en toda la zona.
 ---
 
 ## Reglas que siguen valiendo
