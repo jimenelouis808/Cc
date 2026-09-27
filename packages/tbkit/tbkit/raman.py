@@ -131,9 +131,32 @@ def _alpha_function(system_of: Callable[[Atoms], System], atoms: Atoms, model: T
             f"α por {kind}")
 
 
+def _model_phonons(atoms: Atoms, model: TBModel, kmesh: int, kT: float, phonon_delta: float,
+                   warnings: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    """Γ frequencies (cm⁻¹, imaginary as negative) and e/√m modes from the model."""
+    from ase.units import invcm
+    from ase.vibrations import Vibrations
+
+    from .calculator import TBCalculator
+
+    atoms.calc = TBCalculator(model, kpts=kmesh, kT=kT)
+    residual = float(np.linalg.norm(atoms.get_forces(), axis=1).max())
+    if residual > 0.05:
+        warnings.append(f"Fuerza residual {residual:.3f} eV/Å: la geometría no está relajada; "
+                        "frecuencias y tensores no son los del mínimo.")
+    with tempfile.TemporaryDirectory() as directory:
+        vibrations = Vibrations(atoms, name=os.path.join(directory, "vib"), delta=phonon_delta)
+        vibrations.run()
+        energies, modes = vibrations.get_vibrations().get_energies_and_modes(all_atoms=True)
+    frequencies = np.where(np.abs(energies.imag) > np.abs(energies.real),
+                           -np.abs(energies.imag), np.abs(energies.real)) / invcm
+    return frequencies, modes
+
+
 def raman(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.01,
           delta: float = 0.01, omega: float = 0.0, screening: str = "auto",
-          phonon_delta: float = 0.005) -> RamanResult:
+          phonon_delta: float = 0.005,
+          phonons: Optional[tuple[np.ndarray, np.ndarray]] = None) -> RamanResult:
     """Non-resonant Raman activities of ``atoms`` (relaxed) under ``model``.
 
     Parameters
@@ -150,26 +173,24 @@ def raman(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.01,
         ``"scc"`` or ``"none"``.
     phonon_delta
         Displacement for the force constants, Å.
+    phonons
+        ``(frequencies_cm1, L)`` from elsewhere (QE: :func:`raman_from_qe`),
+        ``L`` the displacement per unit normal coordinate, ``(n, N, 3)``. The
+        model then supplies only the polarizability and needs no repulsive
+        term; ``atoms`` must be the geometry the phonons were computed at.
     """
-    from ase.vibrations import Vibrations
-
-    from .calculator import TBCalculator
-
     warnings: list[str] = []
     atoms = atoms.copy()
-    atoms.calc = TBCalculator(model, kpts=kmesh, kT=kT)
-    residual = float(np.linalg.norm(atoms.get_forces(), axis=1).max())
-    if residual > 0.05:
-        warnings.append(f"Fuerza residual {residual:.3f} eV/Å: la geometría no está relajada; "
-                        "frecuencias y tensores no son los del mínimo.")
-    with tempfile.TemporaryDirectory() as directory:
-        vibrations = Vibrations(atoms, name=os.path.join(directory, "vib"), delta=phonon_delta)
-        vibrations.run()
-        energies, modes = vibrations.get_vibrations().get_energies_and_modes(all_atoms=True)
-    from ase.units import invcm
-
-    frequencies = np.where(np.abs(energies.imag) > np.abs(energies.real),
-                           -np.abs(energies.imag), np.abs(energies.real)) / invcm
+    if phonons is None:
+        frequencies, modes = _model_phonons(atoms, model, kmesh, kT, phonon_delta, warnings)
+    else:
+        frequencies = np.asarray(phonons[0], dtype=float)
+        modes = np.asarray(phonons[1], dtype=float)
+        if modes.shape != (len(frequencies), len(atoms), 3):
+            raise ValueError(f"Fonones externos con forma {modes.shape}; se esperaba "
+                             f"({len(frequencies)}, {len(atoms)}, 3).")
+        warnings.append("Frecuencias y modos importados: el modelo TB solo da la "
+                        "polarizabilidad, a la geometría dada.")
 
     finite = not atoms.get_pbc().any()
     n_rigid = 6 if finite else 3
@@ -210,6 +231,22 @@ def raman(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.01,
         ratios.append(_depolarization(mean, gamma2))
     return RamanResult(frequencies[internal], np.array(activities), np.array(ratios), tensors,
                        alpha0, method, frequencies, warnings)
+
+
+def raman_from_qe(atoms: Atoms, model: TBModel, modes_file, kind: str = "auto",
+                  **kwargs) -> RamanResult:
+    """Raman with Quantum ESPRESSO's Γ phonons and the TB polarizability.
+
+    ``modes_file`` is a ``dynmat.x``/``matdyn.x`` mode file (:mod:`tbkit.qe`);
+    ``atoms`` the structure of that phonon run, in the same atom order. Masses
+    are ``atoms``' (ASE's standard ones unless set: match them to the run's
+    if it used isotopes).
+    """
+    from .qe import modes_for_raman, read_qe_modes
+
+    modes = read_qe_modes(modes_file)
+    vectors = modes_for_raman(modes, atoms.get_masses(), kind)
+    return raman(atoms, model, phonons=(modes.frequencies, vectors), **kwargs)
 
 
 def spectrum(result: RamanResult, grid: Optional[np.ndarray] = None, fwhm: float = 8.0,

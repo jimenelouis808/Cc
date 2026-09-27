@@ -25,6 +25,7 @@ tbkit/
 ├── optics.py         # polarizability: sum over states, SCC linear response, ε∞
 ├── raman.py          # non-resonant Raman on the model's own Γ phonons
 ├── record.py         # reproducible records, `tbkit run simulation.json`, replay
+├── qe.py             # Quantum ESPRESSO Γ modes (dynmat/matdyn) for Raman with QE phonons
 ├── references.py     # DFT reference sets (JSON): GPAW levels, energies, forces, frequencies
 ├── recipes/          # reproducible fits: chn_references (GPAW data), xu_chn (the C/H/N set)
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
@@ -73,6 +74,13 @@ tbkit/
   SHA-256 is stored in the parameter file). Refit by rerunning the recipe
   and saving a new file; never hand-edit fitted numbers. Hubbard U are
   computed (GPAW atom, dε/dn), not fitted.
+- Imported QE modes: L = e/√m with e normalised from the file's
+  displacements (or eigenvectors), per degenerate set a real basis of the
+  subspace; never take the real part of a complex Γ mode without fixing its
+  phase. The model then gives only α (no repulsion needed).
+- The screened α is monopole-only with point dipoles: α⊥ = 0 for linear
+  chains and out-of-plane for planar molecules, exactly. Do not tune
+  parameters to "fix" α; the fix is intra-atomic dipoles (plan).
 - Repulsion polynomials are only determined where the training data are:
   check V(r) and its slope in that range, not the coefficients, and state
   the range in `validity`.

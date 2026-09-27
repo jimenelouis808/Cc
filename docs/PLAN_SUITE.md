@@ -214,7 +214,14 @@ Pendiente de la fase E:
       50–70 cm⁻¹, reglas de selección del benceno, modos de anillo de la
       piridina. Pendiente: α baja (base mínima), C–C/C–N simples ~0,08 Å,
       O y B.
-- [ ] Fonones importados de QE (dynmat) como alternativa a los del modelo.
+- [x] Fonones importados de QE (paso 3): lector propio en tbkit (`qe.py`:
+      dynmat/matdyn en Γ, desplazamientos o autovectores, fase y subespacios
+      degenerados), `raman(phonons=...)`, `raman_from_qe`, `tbkit raman --modes`.
+- [ ] Dipolos intraatómicos en la óptica: α⊥ = 0 exacto en cadenas y fuera del
+      plano en moléculas planas (respuesta de monopolos y dipolos puntuales).
+      Añadir ⟨s|r|p⟩ por elemento (calculable con el átomo de GPAW) al operador
+      de posición y extender el apantallamiento a dipolos atómicos. Es lo que
+      más limita hoy las intensidades Raman.
 - [ ] Raman resonante (elementos de matriz ópticos y electrón–fonón).
 - [ ] Segundo orden (banda 2D, doble resonancia): periódico, suma en toda la zona
       de Brillouin.

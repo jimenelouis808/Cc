@@ -3,6 +3,7 @@
     tbkit levels  cinta.xyz                       # niveles, gap, cargas
     tbkit levels  cinta.xyz --model sp3 --scc     # sp3 de carbono, cargas autoconsistentes
     tbkit raman   piridina.xyz --model chn        # C/H/N (Xu + H, N ajustados a GPAW)
+    tbkit raman   piridina.xyz --model chn --modes dynmat.out   # fonones de QE, α de TB
     tbkit bands   grafeno.xyz --path GKMG -o bandas.csv
     tbkit dos     tubo.xyz --kmesh 60 --pdos element -o dos.csv
     tbkit hubbard zgnr.xyz --U 2.7 --kmesh 48 --m-energy m.csv
@@ -256,10 +257,15 @@ def cmd_phonons(args) -> int:
 def cmd_raman(args) -> int:
     from ase.io import read
 
-    from .raman import raman, spectrum
+    from .raman import raman, raman_from_qe, spectrum
 
-    result = raman(read(args.structure), _model(args), kmesh=args.kmesh, kT=args.kT,
-                   delta=args.delta, screening=args.screening)
+    options = {"kmesh": args.kmesh, "kT": args.kT, "delta": args.delta,
+               "screening": args.screening}
+    if args.modes:
+        result = raman_from_qe(read(args.structure), _model(args), args.modes,
+                               kind=args.modes_kind, **options)
+    else:
+        result = raman(read(args.structure), _model(args), **options)
     print(result.summary())
     if args.out:
         laser = None if args.bare else args.laser
@@ -364,6 +370,13 @@ def build_parser() -> argparse.ArgumentParser:
     rm.add_argument("--kT", type=float, default=0.01)
     rm.add_argument("--delta", type=float, default=0.01)
     rm.add_argument("--screening", choices=("auto", "scc", "none"), default="auto")
+    rm.add_argument("--modes", default=None,
+                    help="Modos en Γ de Quantum ESPRESSO (filout/fileig de dynmat.x, "
+                         "flvec/fleig de matdyn.x): frecuencias y modos de QE, α del modelo.")
+    rm.add_argument("--modes-kind", default="auto",
+                    choices=("auto", "displacements", "eigenvectors"),
+                    help="Qué contiene el archivo de modos (auto: autovectores si son "
+                         "ortonormales).")
     rm.add_argument("--fwhm", type=float, default=8.0)
     rm.add_argument("--laser", type=float, default=532.0, help="nm")
     rm.add_argument("--temperature", type=float, default=300.0, help="K")

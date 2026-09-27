@@ -6,6 +6,25 @@ está la trampa.
 
 ---
 
+## tbkit · fonones de Quantum ESPRESSO con intensidades de tight binding
+
+`tbkit raman estructura.xyz --model chn --modes dynmat.out` toma frecuencias y
+modos de QE y calcula las intensidades con la polarizabilidad del modelo. Vale
+cualquier archivo de modos de `dynmat.x` o `matdyn.x` (desplazamientos o
+autovectores; se detecta). La estructura tiene que ser la del cálculo de QE, con
+los átomos en el mismo orden.
+
+**Lo que NO hace.** No lee la geometría del archivo de modos (no la trae); no
+comprueba el orden de los átomos más allá de su número; y no se ha probado
+todavía contra la salida de una instalación real de QE.
+
+**Una limitación que salió al probarlo.** La α del modelo es cero en la
+dirección perpendicular a una cadena y fuera del plano de una molécula plana
+(solo se mueven cargas atómicas). Las intensidades de los modos en el plano son
+las fiables; el arreglo está planificado.
+
+---
+
 ## tbkit · hidrógeno y nitrógeno: `--model chn`
 
 `tbkit raman piridina.xyz --model chn` ya funciona: el nuevo conjunto `xu_chn`
@@ -28,9 +47,9 @@ el de la piridina pone sus dos modos de anillo polarizados a 992 y 1028 cm⁻¹
 (medidos: 991 y 1030).
 
 **Lo que NO hace.** Solo sistemas finitos de capa cerrada (sin Ewald no hay
-SCC periódico). La α sale entre un 35 y un 70 % de la experimental (base
-mínima), así que las intensidades Raman relativas son orientativas y las
-absolutas no valen. Las energías solo se comparan entre geometrías de la misma
+SCC periódico). La α media sale entre un 35 y un 70 % de la experimental,
+sobre todo porque la componente fuera del plano es cero (ver el apartado de
+QE): las intensidades absolutas no valen. Las energías solo se comparan entre geometrías de la misma
 composición. Los C–C y C–N simples junto a un heteroátomo se desvían ~0,08 Å,
 y los anillos tensos (aziridina) fallan.
 

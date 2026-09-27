@@ -133,15 +133,40 @@ Resultado (todo frente a GPAW salvo α):
 | Frecuencias (RMS) | CH₄ 52, NH₃ 55, benceno 50, piridina 69, HCN 156 cm⁻¹ (las de GPAW LCAO rompen degeneraciones hasta ~50 cm⁻¹ en los modos blandos: esa es la resolución de la comparación) |
 | Raman del benceno | 2A₁g + 4E₂g + E₁g, como debe; respiración 1021 cm⁻¹ polarizada (exp. 992) |
 | Raman de la piridina | modos de anillo polarizados a 992 y 1028 cm⁻¹ (exp. 991 y 1030) |
-| α media | 35–70 % del experimento (benceno 7,1 frente a 10,3 Å³) |
+| α | en el plano, benceno 10,3 frente a ~12,3 Å³ medidos; fuera del plano, 0 (ver abajo): la media queda al 35–70 % |
 
 Límites que el archivo declara en `validity`: solo sistemas finitos de capa
 cerrada (SCC sin Ewald); energías comparables solo entre geometrías de la misma
 composición (no se ajustaron atomizaciones); sin interacción H–H; y el C–C de
 Xu falla en anillos tensos (aziridina, 0,22 Å), y los C–C y C–N simples junto
-a un heteroátomo (aminas, nitrilos) se desvían ~0,08 Å. La α baja es propia de una base mínima sin funciones de
+a un heteroátomo (aminas, nitrilos) se desvían ~0,08 Å.
+
+**Por qué la α sale baja.** La respuesta apantallada solo mueve cargas
+atómicas (monopolos) y el operador de posición es de dipolos puntuales (sin
+⟨s|r|p⟩ dentro del átomo). Una carga en un átomo no puede polarizarse
+perpendicular a una cadena ni fuera del plano de una molécula plana: α⊥ = 0
+exactamente en HCN, α_zz = 0 en el benceno. Consecuencias para el Raman: en
+moléculas lineales los modos totalmente simétricos salen con ρ = 1/3 exacto, y
+las componentes fuera del plano de los tensores de moléculas planas faltan.
+Las intensidades relativas de los modos en el plano son las fiables. El
+arreglo (dipolos intraatómicos y su apantallamiento) está en el plan. La α baja es propia de una base mínima sin funciones de
 polarización: las intensidades Raman relativas son orientativas, las
 absolutas, no.
+
+## Fonones de Quantum ESPRESSO con intensidades de tbkit
+
+`tbkit raman estructura.xyz --model chn --modes dynmat.out` usa las
+frecuencias y los modos de QE (más fiables que los del modelo) y calcula las
+intensidades con la α del modelo. Lee los archivos de modos de `dynmat.x`
+(`filout`, `fileig`) y `matdyn.x` (`flvec`, `fleig`) en q = 0; distingue solo
+desplazamientos normalizados de autovectores (`--modes-kind auto`), fija la fase
+global de cada modo y, en los conjuntos degenerados que QE imprime como
+combinaciones complejas, toma una base real del mismo subespacio (la actividad
+sumada no depende de ella). El modelo no necesita parte repulsiva para esto.
+Lo que el usuario debe garantizar: la estructura es la del cálculo de QE, en el
+mismo orden de átomos, y con las mismas masas (las de ASE si no se cambian).
+El lector está comprobado con archivos escritos en el formato documentado; aún
+no contra una instalación real de QE.
 
 ## Lo que no hace, y dónde está la trampa
 
