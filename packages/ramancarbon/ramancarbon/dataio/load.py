@@ -132,6 +132,18 @@ def _load_raman(path: Path, found: Detection, options: dict[str, Any]):
     from ..core.io import read_spectrum
     from ..core.spectrum import Spectrum
 
+    if found.fmt == "wdf":
+        # The instrument's own file carries the excitation, and that is the
+        # whole reason to read it instead of the two-column export: every
+        # ratio and every crystallite size downstream is quoted per
+        # wavelength, and the export drops it.
+        from .wdf import WdfError, load_wdf_spectrum
+
+        try:
+            return load_wdf_spectrum(path, laser_nm=options.get("laser_nm"))
+        except WdfError as error:
+            raise LoadError(str(error)) from error
+
     if found.fmt == "jcamp":
         from .jcamp import read_jcamp
 

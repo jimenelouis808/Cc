@@ -40,12 +40,12 @@ import numpy as np
 #: Extensions that name their instrument unambiguously.
 KNOWN_SUFFIXES: dict[str, str] = {
     ".xrdml": "xrd", ".uxd": "xrd", ".xye": "xrd", ".qam": "xrd",
-    ".ras": "xrd", ".asc": "xrd",
+    ".ras": "xrd",
     ".xy": "xrd", ".cif": "cif",
     ".jdx": "jcamp", ".dx": "jcamp", ".jcm": "jcamp",
     ".mpt": "echem", ".mpr": "echem", ".mps": "echem-ajustes",
     ".nox": "echem",
-    ".spc": "raman-binario", ".wdf": "raman-binario", ".sp": "raman-binario",
+    ".spc": "raman-binario", ".wdf": "raman", ".sp": "raman-binario",
     ".spa": "raman-binario", ".ngs": "raman-binario",
     ".raw": "xrd-binario", ".brml": "xrd-binario",
     ".vms": "xps", ".npl": "xps", ".spe": "xps",
@@ -110,6 +110,25 @@ def _read_text(path: Path, limit: int = 60_000) -> tuple[list[str], bytes]:
     except UnicodeDecodeError:
         text = head.decode("latin-1")
     return text.splitlines()[:limit], raw[:512]
+
+
+def _wdf_header_holds(sample: bytes) -> bool:
+    """Whether the first 512 bytes are really a WiRE header.
+
+    Four magic bytes are not enough. The fixed header declares its own
+    length and the size of the spectrum, so those are checked: a stub, a
+    truncated download or another format that happens to start with the
+    same four characters fails the arithmetic and falls through to the
+    binary refusal, which is the right answer for it. Without this a
+    260-byte fragment read its point count out of whatever followed and
+    came back as a Raman map of four billion spectra.
+    """
+    if len(sample) < 512:
+        return False
+    declared = int.from_bytes(sample[8:16], "little")
+    points = int.from_bytes(sample[0x3c:0x40], "little")
+    spectra = int.from_bytes(sample[0x48:0x50], "little")
+    return declared == 512 and 0 < points <= 10_000_000 and spectra <= 10_000_000
 
 
 def _looks_binary(sample: bytes) -> bool:
@@ -260,6 +279,27 @@ def detect(path: str | Path) -> Detection:
             advice=BINARY_ADVICE["echem-ajustes"],
         )
 
+    # A Renishaw .wdf is binary and self-describing too, and held to the
+    # same standard: it declares its point count and how many spectra it
+    # holds, and both are checked to close against the file's length by
+    # the reader. Recognising it here rather than refusing it is what
+    # keeps the excitation wavelength -- which the two-column export
+    # discards -- attached to the spectrum.
+    if sample[:4] == b"WDF1" and _wdf_header_holds(sample):
+        spectra = int.from_bytes(sample[0x48:0x50], "little") or 1
+        points = int.from_bytes(sample[0x3c:0x40], "little")
+        if spectra > 1:
+            return Detection(
+                kind="mapa", fmt="wdf", confidence="alta",
+                reasons=[f"cabecera WDF1 de Renishaw WiRE con {spectra} "
+                         f"espectros de {points} puntos"],
+            )
+        return Detection(
+            kind="raman", fmt="wdf", confidence="alta",
+            reasons=[f"cabecera WDF1 de Renishaw WiRE, un espectro de "
+                     f"{points} puntos"],
+        )
+
     # A Bio-Logic .mpr is binary and SELF-DESCRIBING: it declares its
     # point count, its column count and which quantity each column is, so
     # the layout is computed from the file and checked to close against
@@ -343,6 +383,12 @@ def detect(path: str | Path) -> Detection:
     detection = _from_shape(table, header_text=text_head)
     detection.columns = int(table.shape[1])
     if named == "xrd" and detection.kind != "xrd":
+        # Only for the extensions that name one instrument and nothing
+        # else. `.asc` used to be in that list and is not: every machine
+        # in the building writes `.asc`, so a Raman spectrum saved under
+        # it came back "xrd" with the shape reading demoted to an
+        # alternative. Rigaku's own ASC is recognised above by its
+        # `*ASC` header, which is the check that should decide.
         detection.alternatives.append(detection.kind)
         detection.kind = "xrd"
         detection.reasons.append(f"la extensión {suffix} es de difracción")

@@ -215,3 +215,69 @@ def test_batch_export_unions_the_columns(tmp_path):
 def test_batch_export_refuses_an_empty_list(tmp_path):
     with pytest.raises(ValueError, match="exportar"):
         export_batch([], tmp_path / "x.csv")
+
+
+class TestTwoQuantitiesCannotShareOneColumn:
+    """The exported ``R2`` column held whichever of two things was written last.
+
+    ``AnalysisResult.to_dict`` wrote the deconvolution's goodness of fit as
+    ``R2`` and then merged the structural indices into the same row — and
+    the structural indices define an ``R2`` of their own, Beyssac's
+    A_D/(A_D+A_G+A_D'). The index won, because it was written second. On a
+    spectrum whose D' is not resolved the index is unavailable, so the
+    column came back empty on a fit whose R² was 0.986: a reader of the
+    table would conclude the fit had failed. They are different quantities
+    and they now have different names.
+    """
+
+    def _result(self):
+        import numpy as np
+
+        from ramancarbon.analysis.report import analyse
+        from ramancarbon.core.spectrum import Spectrum
+
+        shift = np.linspace(900.0, 3000.0, 900)
+        signal = (
+            80.0
+            + 330.0 / (1.0 + ((shift - 1348.0) / 75.0) ** 2)
+            + 290.0 / (1.0 + ((shift - 1588.0) / 32.0) ** 2)
+            + 90.0 / (1.0 + ((shift - 2700.0) / 90.0) ** 2)
+        )
+        rng = np.random.default_rng(7)
+        signal = signal + rng.normal(0.0, 2.5, signal.shape)
+        spectrum = Spectrum(shift=shift, intensity=signal, laser_nm=532.0,
+                            name="colision")
+        return analyse(spectrum, profile="pseudo_voigt")
+
+    def test_the_fit_quality_has_its_own_column(self):
+        result = self._result()
+        row = result.to_dict()
+        assert "R2_ajuste" in row
+        assert row["R2_ajuste"] == pytest.approx(result.fit.r_squared)
+
+    def test_the_index_r2_is_not_the_fit_quality(self):
+        result = self._result()
+        row = result.to_dict()
+        # Whatever the index came out as, it must not have eaten the fit's.
+        assert row["R2_ajuste"] is not None
+        assert row["R2_ajuste"] != row.get("R2")
+
+    def test_the_audit_travels_with_the_numbers_it_qualifies(self):
+        """A ratio without the audit of the fit it came from is unreadable.
+
+        Five models of the same real spectrum gave A_D/A_G between 1.75 and
+        3.83, so the confidence belongs in the same row as the ratio, not
+        in a text report nobody opens for a batch of forty.
+        """
+        result = self._result()
+        assert result.audit is not None
+        row = result.to_dict()
+        assert row["ajuste_confianza"] in {
+            "HIGH", "MODERATE", "LOW", "AMBIGUOUS"}
+        assert isinstance(row["ajuste_observaciones"], int)
+
+    def test_the_text_report_prints_the_audit(self):
+        from ramancarbon.analysis.report import build_report
+
+        text = build_report(self._result())
+        assert "Confianza:" in text

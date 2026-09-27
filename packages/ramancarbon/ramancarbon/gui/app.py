@@ -1512,6 +1512,30 @@ class RamanCarbonApp:
             "Ajustando…",
         )
 
+    @staticmethod
+    def _fit_report(result) -> str:
+        """The fit, followed by the acceptance audit of it.
+
+        The audit existed for a while and was reachable only from Python,
+        which made it worth nothing to anyone using the application: the
+        checks that say "this component's area is 0.5 % of the largest",
+        "this width finished against its own limit" and "these two
+        parameters are not separable, so do not quote their areas apart"
+        are exactly the ones a person reading a deconvolution needs, and
+        they were invisible. It goes under the fit rather than beside it
+        because it is a verdict on those numbers and has to be read with
+        them.
+        """
+        text = result.summary()
+        try:
+            from ..models.acceptance import audit_fit
+
+            return text + "\n\n" + str(audit_fit(result))
+        except Exception:                                # noqa: BLE001
+            # A fit on screen is worth more than an audit of it. If the
+            # check itself fails, the numbers still get shown.
+            return text
+
     def _after_manual_fit(self, result) -> None:
         from .widgets import set_text
 
@@ -1520,7 +1544,7 @@ class RamanCarbonApp:
             self._set_status("El ajuste no se ha podido completar; mira los avisos.")
             return
         self._draw_fit()
-        set_text(self.fit_text, result.summary())
+        set_text(self.fit_text, self._fit_report(result))
         self._set_status(f"Ajuste terminado: R² = {result.r_squared:.5f}")
 
     def _compare_models(self) -> None:
@@ -1541,7 +1565,8 @@ class RamanCarbonApp:
             item.manual_fit = comparison.results[comparison.best]
             self._draw_fit()
             set_text(self.fit_text,
-                     comparison.summary() + "\n\n" + item.manual_fit.summary())
+                     comparison.summary() + "\n\n"
+                     + self._fit_report(item.manual_fit))
             self._set_status(f"Mejor modelo: {comparison.best}")
 
         self._run_async(work, done, "Comparando modelos…")
@@ -1870,7 +1895,7 @@ class RamanCarbonApp:
             self._flush_messages()
             if result is None:
                 return
-            set_text(self.fit_text, result.summary())
+            set_text(self.fit_text, self._fit_report(result))
             self._set_status("Incertidumbres por remuestreo calculadas.")
 
         self._run_async(self.session.bootstrap_active, done,

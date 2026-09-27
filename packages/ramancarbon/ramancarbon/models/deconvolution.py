@@ -64,6 +64,7 @@ PRESETS = (
     "three_band",
     "four_band",
     "five_band",
+    "five_band_no_dprime",
     "swcnt_full",
     "swcnt_g",
     "rbm",
@@ -76,6 +77,7 @@ PRESET_LABELS = {
     "three_band": "3 bandas: D + G + D'",
     "four_band": "4 bandas: D + D3 + G + D'",
     "five_band": "5 bandas (Sadezky): D4 + D + D3 + G + D'",
+    "five_band_no_dprime": "4 bandas: D4 + D + D3 + G (Sadezky sin D')",
     "swcnt_full": "Nanotubo: D + G⁻ + G⁺ + D'",
     "swcnt_g": "Región G de SWCNT: G⁻ + G⁺ + D'",
     "rbm": "Región RBM: lorentzianas estrechas",
@@ -88,6 +90,18 @@ PRESET_BANDS = {
     "three_band": ("D", "G", "D'"),
     "four_band": ("D", "D3", "G", "D'"),
     "five_band": ("D4", "D", "D3", "G", "D'"),
+    # Sadezky's model without D'. Not a simplification for its own sake: on
+    # a carbon disordered enough that G is 70-75 cm-1 wide, D' is inside G
+    # and the fit cannot find it. On a real 532 nm spectrum of carbon on
+    # FeSe the five-band fit put D' at 1616 cm-1 with a width of 11 cm-1 --
+    # below the band's own window -- and 0.5 % of the largest area, which
+    # is the overfitting table's "area near zero". Dropping it was better
+    # on both criteria at once (AICc 3328.5 against 3331.6, BIC 3407.6
+    # against 3427.9) with four parameters fewer, and that is the whole
+    # argument for having the preset: without it the only way to honour the
+    # auditor's finding was to leave a component in that the data do not
+    # support.
+    "five_band_no_dprime": ("D4", "D", "D3", "G"),
     "swcnt_full": ("D", "G-", "G+", "D'"),
 }
 
@@ -97,6 +111,7 @@ PRESET_WINDOWS = {
     "three_band": (1100.0, 1750.0),
     "four_band": (1050.0, 1750.0),
     "five_band": (900.0, 1800.0),
+    "five_band_no_dprime": (900.0, 1800.0),
     "swcnt_full": (1100.0, 1750.0),
     "swcnt_g": (1450.0, 1700.0),
     "two_d": (2500.0, 2850.0),
@@ -447,7 +462,8 @@ class ModelComparison:
 
 def compare_models(
     spectrum: Spectrum,
-    presets: Iterable[str] = ("two_band", "three_band", "four_band", "five_band"),
+    presets: Iterable[str] = ("two_band", "three_band", "four_band",
+                              "five_band_no_dprime", "five_band"),
     criterion: str = "bic",
     db: Optional[Database] = None,
     metallic: bool = False,

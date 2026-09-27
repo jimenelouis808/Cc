@@ -113,6 +113,15 @@ class AnalysisResult:
     profile: Optional[str] = None
     """Lineshape forced on the deconvolution, or ``None`` for the database
     defaults."""
+    audit: Optional[Any] = None
+    """The acceptance audit of :attr:`fit`.
+
+    Part of the result and not a separate call, because the confidence it
+    reports qualifies every number derived from the fit. A deconvolution
+    whose components are not separable still yields an I_D/I_G — on a real
+    532 nm spectrum of carbon on FeSe the five models compared gave
+    A_D/A_G between 1.75 and 3.83 — and a reader given the ratio without
+    the audit has no way to know that."""
     warnings: list[str] = field(default_factory=list)
 
     # -- convenience accessors ----------------------------------------
@@ -158,7 +167,20 @@ class AnalysisResult:
             "I2D_IG": self.i2d_ig,
             "ID_IDp": self.id_idprime,
             "modelo": self.comparison.best if self.comparison else None,
-            "R2": self.fit.r_squared if self.fit else None,
+            # NOT "R2". The structural indices define an R2 of their own --
+            # Beyssac's A_D/(A_D+A_G+A_D') -- and the indices are merged
+            # into this row afterwards, so a column called "R2" here was
+            # silently overwritten by a different quantity, or by None when
+            # D' was unavailable and the index could not be computed. Two
+            # meanings in one column is worse than either: a reader of the
+            # exported table has no way to tell which they got.
+            "R2_ajuste": self.fit.r_squared if self.fit else None,
+            # In the exported table, next to the ratios it qualifies. A
+            # batch of forty spectra is read as a spreadsheet and nobody
+            # opens forty text reports to find out which fits were sound.
+            "ajuste_confianza": self.audit.confidence if self.audit else None,
+            "ajuste_observaciones": (len(self.audit.grave) if self.audit
+                                     else None),
         }
         if self.crystallite:
             row["La_nm"] = self.crystallite.la_low_defect_nm
@@ -196,7 +218,8 @@ class AnalysisResult:
 def analyse(
     spectrum: Spectrum,
     basis: str = "area",
-    presets: Sequence[str] = ("two_band", "three_band", "four_band", "five_band"),
+    presets: Sequence[str] = ("two_band", "three_band", "four_band",
+                              "five_band_no_dprime", "five_band"),
     metallic: Optional[bool] = None,
     rbm_parameterisation: Optional[str] = None,
     material_hint: Optional[str] = None,
@@ -452,6 +475,13 @@ def analyse(
     except ValueError as exc:
         warnings.append(f"no se ha podido deconvolucionar la región D–G: {exc}")
 
+    audit = None
+    if fit is not None:
+        from ..models.acceptance import audit_fit
+
+        audit = audit_fit(fit)
+        warnings.extend(f"ajuste: {finding}" for finding in audit.grave)
+
     if g_region is None and fit is not None:
         g_region = resolve_g_region(fit, rbm_present=False, db=database)
 
@@ -572,6 +602,7 @@ def analyse(
         interference=interference,
         phases=phases,
         profile=profile,
+        audit=audit,
         warnings=warnings,
     )
 
@@ -941,6 +972,9 @@ def build_report(result: AnalysisResult, verbose: bool = True) -> str:
         lines.append(result.fit.summary())
     else:
         lines.append("no realizada")
+    if result.audit is not None:
+        lines.append("")
+        lines.append(str(result.audit))
 
     lines.append(section("COCIENTES DE INTENSIDAD"))
     lines.append(f"base: {result.basis} (áreas integradas)" if result.basis == "area"

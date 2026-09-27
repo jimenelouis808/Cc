@@ -155,3 +155,95 @@ def test_audit_renders_for_a_report():
     text = str(audit_fit(_sound()))
     assert "HIGH" in text and "sin observaciones" in text
     assert isinstance(audit_fit(_sound()), Audit)
+
+
+class TestTheFitCarriesItsOwnBounds:
+    """The pinned-parameter check was blind, and it was the one that mattered.
+
+    A real 532 nm spectrum of carbon on FeSe came back from the two- and
+    three-band models with the D band's FWHM at exactly 200.0 cm⁻¹ — its
+    ceiling. The auditor could say the width was unusual but not that it
+    was against its limit, which is a different and much stronger
+    statement: a parameter at its bound means the optimiser wanted to go
+    further, so the model is wrong, not the bound. It could not say it
+    because the caller had to supply the bounds and nobody did. They are
+    known where the fit runs, so that is where they are recorded.
+    """
+
+    def _spectrum(self):
+        import numpy as np
+
+        from ramancarbon.core.spectrum import Spectrum
+
+        shift = np.linspace(1100.0, 1750.0, 400)
+        signal = (60.0
+                  + 300.0 * np.exp(-0.5 * ((shift - 1350.0) / 110.0) ** 2)
+                  + 260.0 / (1.0 + ((shift - 1590.0) / 35.0) ** 2))
+        return Spectrum(shift=shift, intensity=signal, laser_nm=532.0,
+                        name="pegado")
+
+    def _model(self, ceiling: float):
+        from ramancarbon.models.fitting import FitModel, PeakSpec
+
+        return FitModel(
+            peaks=[
+                PeakSpec(name="D", centre=1350.0, height=300.0, fwhm=100.0,
+                         fwhm_bounds=(20.0, ceiling)),
+                PeakSpec(name="G", centre=1590.0, height=260.0, fwhm=40.0,
+                         fwhm_bounds=(10.0, 120.0)),
+            ],
+            window=(1100.0, 1750.0),
+        )
+
+    def test_the_bounds_are_on_the_result(self):
+        from ramancarbon.models.fitting import fit_model
+
+        result = fit_model(self._spectrum(), self._model(200.0))
+        assert result.bounds["D.fwhm"] == (20.0, 200.0)
+        assert result.bounds["G.fwhm"] == (10.0, 120.0)
+
+    def test_a_parameter_at_its_ceiling_is_reported_without_being_asked(self):
+        from ramancarbon.models.acceptance import audit_fit
+        from ramancarbon.models.fitting import fit_model
+
+        # A ceiling well below the width the data want: the fit has to end
+        # against it.
+        result = fit_model(self._spectrum(), self._model(60.0))
+        audit = audit_fit(result)
+        pinned = [f for f in audit.findings if f.code == "pegado-al-limite"]
+        assert any(f.component == "D" for f in pinned), str(audit)
+        assert audit.confidence != "HIGH"
+
+    def test_a_comfortable_bound_is_not_reported(self):
+        from ramancarbon.models.acceptance import audit_fit
+        from ramancarbon.models.fitting import fit_model
+
+        result = fit_model(self._spectrum(), self._model(400.0))
+        audit = audit_fit(result)
+        assert not [f for f in audit.findings
+                    if f.code == "pegado-al-limite" and f.component == "D"]
+
+    def test_an_explicit_empty_dict_still_skips_the_check(self):
+        """Because a caller may have a reason to, and silence is a choice."""
+        from ramancarbon.models.acceptance import audit_fit
+        from ramancarbon.models.fitting import fit_model
+
+        result = fit_model(self._spectrum(), self._model(60.0))
+        audit = audit_fit(result, bounds={})
+        assert not [f for f in audit.findings if f.code == "pegado-al-limite"]
+
+    def test_fixed_parameters_are_not_in_the_bounds(self):
+        """They were never free, so ending at a limit means nothing."""
+        from ramancarbon.models.fitting import FitModel, PeakSpec, fit_model
+
+        model = FitModel(
+            peaks=[
+                PeakSpec(name="D", centre=1350.0, height=300.0, fwhm=100.0,
+                         fwhm_bounds=(20.0, 200.0), fixed=("centre",)),
+                PeakSpec(name="G", centre=1590.0, height=260.0, fwhm=40.0),
+            ],
+            window=(1100.0, 1750.0),
+        )
+        result = fit_model(self._spectrum(), model)
+        assert "D.centre" not in result.bounds
+        assert "D.fwhm" in result.bounds

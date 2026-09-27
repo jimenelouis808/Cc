@@ -144,10 +144,14 @@ def audit_fit(result, bounds: dict | None = None) -> Audit:
     result:
         A :class:`~ramancarbon.models.fitting.FitResult`.
     bounds:
-        Optional ``{f"{component}.{parameter}": (low, high)}`` used to
-        report a parameter that finished against its own limit. Without
-        it that check is skipped rather than guessed at.
+        ``{f"{component}.{parameter}": (low, high)}`` used to report a
+        parameter that finished against its own limit. Defaults to the
+        limits the fit recorded on the result itself, so the check runs
+        without the caller having to reconstruct them; passing a dict
+        overrides those, and an empty dict skips the check.
     """
+    if bounds is None:
+        bounds = getattr(result, "bounds", None)
     findings: list[Finding] = []
     peaks = list(getattr(result, "peaks", []) or [])
     if not peaks:

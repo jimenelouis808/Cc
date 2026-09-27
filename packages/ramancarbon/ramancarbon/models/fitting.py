@@ -186,6 +186,23 @@ class FitResult:
     """Ranges left out of the fit. Same reason: a fit that excludes the
     region where it fits worst is not the same measurement as one that
     does not, and the exclusion has to travel with the numbers."""
+    bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+    """The limits each free parameter was actually fitted between, keyed
+    ``"component.parameter"``.
+
+    Carried on the result, not left for the caller to reconstruct, because
+    the acceptance check that matters most needs them: a parameter that
+    finished *against* its own limit means the optimiser wanted to go
+    further and the model, not the limit, is what is wrong. On a real
+    spectrum of carbon on FeSe the D band came back with FWHM exactly
+    200.0 cm⁻¹ in the two- and three-band models — its ceiling — and the
+    auditor could only say the width was unusual, not that it was pinned,
+    because nobody had passed it the bounds. The effective limits are
+    known here, where the defaults for an unbounded parameter are filled
+    in, and nowhere else.
+
+    Fixed and linked parameters are absent: they were never free, so
+    finishing at a limit means nothing for them."""
     durbin_watson: Optional[float] = None
     """Durbin–Watson statistic of the residual.
 
@@ -590,6 +607,14 @@ def fit_model(
     aic = n * np.log(max(ss_res / n, 1e-300)) + 2 * k
     bic = n * np.log(max(ss_res / n, 1e-300)) + k * np.log(n)
 
+    effective_bounds: dict[str, tuple[float, float]] = {}
+    for slot, (index, parameter) in enumerate(layout):
+        if index < 0:                         # background coefficient
+            continue
+        effective_bounds[f"{model.peaks[index].name}.{parameter}"] = (
+            float(lower[slot]), float(upper[slot])
+        )
+
     errors, correlations = _uncertainties(result, judged, layout, model)
     watson = _durbin_watson(judged)
     values, bg_coeffs = _unpack(result.x, model, layout)
@@ -649,6 +674,7 @@ def fit_model(
         correlations=correlations,
         links=tuple(str(link) for link in model.links),
         excluded=tuple(excluded),
+        bounds=effective_bounds,
         durbin_watson=watson,
     )
 
