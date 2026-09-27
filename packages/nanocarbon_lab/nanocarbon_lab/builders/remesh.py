@@ -696,6 +696,7 @@ def refine_disclinations(
     rounds: int = 40,
     max_edge: float | None = None,
     box=None,
+    like_penalty: float = 0.0,
 ) -> tuple[Mesh, list[str]]:
     """Anneal the spurious pairs away while holding the curvature split.
 
@@ -754,15 +755,25 @@ def refine_disclinations(
         # Cut back rather than refuse: some improvement, bounded time.
         # The annealing half is cheap and does most of the pair removal;
         # the exact half is what costs, so that is what shrinks.
+        # Only `rounds` shrinks. `cycles` used to shrink as well, which
+        # contradicted the intent stated right above: each cycle runs one
+        # anneal AND one exact pass, so cutting cycles cut the cheap half
+        # too -- and the cheap half is the one that works. On a
+        # 1200-vertex six-arm junction, five anneals against one take the
+        # count from 88 non-hexagons to 79 for nine seconds of extra work,
+        # while the exact pass on an already-annealed mesh moves the
+        # misfit from 254.5 to 252.7 in three rounds and leaves the degree
+        # histogram bit-for-bit identical. A superstructure of 6300
+        # vertices was getting one anneal instead of five, which is most
+        # of why its walls came out dirtier than a small cell's.
         scale = LARGE_MESH_VERTICES / len(mesh[0])
-        cycles = max(1, int(cycles * scale) or 1)
         rounds = max(4, int(rounds * scale))
         warnings.warn(
             f"{len(mesh[0])} mesh vertices is past "
-            f"{LARGE_MESH_VERTICES}, where each refinement round costs more "
+            f"{LARGE_MESH_VERTICES}, where each EXACT round costs more "
             f"than it returns; running {cycles} cycle(s) of {rounds} rounds "
-            "instead of the full schedule. The disclinations will be better "
-            "placed than unrefined and not as well as on a small cell.",
+            "instead of the full schedule. The annealing half is not cut "
+            "back, because it is cheap and it is what removes the pairs.",
             stacklevel=2,
         )
     log: list[str] = []
@@ -771,13 +782,15 @@ def refine_disclinations(
     for cycle in range(max(1, cycles)):
         current = anneal_edge_flips(current, rng, sweeps=sweeps,
                                     temperature=temperature, restarts=2,
-                                    max_edge=max_edge)
+                                    max_edge=max_edge,
+                                    like_penalty=like_penalty)
         current, _history = place_disclinations(
             current, max_rounds=rounds, pair_weight=pair_weight,
             max_edge=max_edge, box=box)
         degrees = _adjacency(current[1])
         defects = sum(1 for ns in degrees.values() if len(ns) != 6)
         log.append(f"cycle {cycle + 1}: {defects} disclinations, "
+                   f"{like_sign_adjacencies(current)} same-sign adjacencies, "
                    f"misfit {curvature_misfit(current):.1f}")
         # Converged: the last cycle changed nothing at all.
         if previous is not None and np.array_equal(current[1], previous):
@@ -973,6 +986,142 @@ def place_disclinations(
     return (verts, np.asarray(face_list, dtype=int)), history
 
 
+def like_sign_adjacencies(mesh: Mesh) -> int:
+    """Edges joining two rings of the same disclination sign.
+
+    Two pentagons sharing an edge, or two heptagons. Counted because it is
+    what a lobe of pentagons or a fused heptagon pair IS, and because no
+    objective that only looks at degrees can see it: two pentagons cost
+    the same apart as together. A 5 beside a 7 is not counted — that is a
+    Stone-Wales dislocation, which is neutral and physically ordinary.
+    """
+    adjacency = _adjacency(mesh[1])
+
+    def sign(vertex: int) -> int:
+        degree = len(adjacency[vertex])
+        return 0 if degree == 6 else (1 if degree > 6 else -1)
+
+    total = 0
+    for vertex, neighbours in adjacency.items():
+        own = sign(vertex)
+        if own == 0:
+            continue
+        for other in neighbours:
+            if other > vertex and sign(other) == own:
+                total += 1
+    return total
+
+
+def unbudgeted_disclinations(
+    mesh: Mesh,
+    targets: np.ndarray | None = None,
+    rings: int | None = None,
+    tolerance: float = 0.75,
+) -> list[int]:
+    """The rings that are not hexagons and have no curvature to justify them.
+
+    :func:`curvature_misfit` answers "how badly placed is the charge" with
+    one number, which is what an optimiser needs and not what a person
+    asking "why is there a pentagon in the middle of my straight tube"
+    needs. This answers that question directly: for each non-hexagon, it
+    sums the disclination charge in the vertex's own neighbourhood and the
+    charge that neighbourhood's Gaussian curvature asks for, and returns
+    the vertices where the two differ by more than ``tolerance``.
+
+    The window, not the vertex, because the curvature of a spherical cap
+    is spread over the whole cap: on a Y junction the per-vertex target
+    never exceeds 0.167 anywhere, while a pentagon carries exactly 1. No
+    single vertex ever "wants a pentagon"; a patch of about twenty of them
+    does, and that is the unit the question has to be asked in.
+
+    Returns
+    -------
+    list[int]
+        Vertex indices, in order. Its length is the number a caller should
+        watch: on a Y junction it is 10 straight out of the remesh and 8
+        after annealing, against 32 non-hexagons in total -- so most of
+        the surplus IS where the curvature can pay for it, and the visible
+        damage is this smaller set.
+    """
+    if rings is None:
+        rings = CURVATURE_WINDOW_RINGS
+    if targets is None:
+        targets = vertex_curvature_targets(mesh)
+    adjacency = _adjacency(mesh[1])
+    count = len(mesh[0])
+    windows = _vertex_windows(adjacency, count, rings)
+    out: list[int] = []
+    for vertex in range(count):
+        if len(adjacency.get(vertex, ())) == 6:
+            continue
+        window = windows[vertex]
+        charge = sum(6 - len(adjacency[w]) for w in window)
+        budget = sum(float(targets[w]) for w in window)
+        if abs(charge - budget) > tolerance:
+            out.append(vertex)
+    return out
+
+
+def ring_report(mesh: Mesh, targets: np.ndarray | None = None) -> str:
+    """One paragraph on the ring population: how many, where, how clustered.
+
+    Written for the person looking at a structure and asking why it has
+    pentagons on a flat wall, so it says the three things that answer
+    that: the census, how much of it the curvature pays for, and whether
+    the rest is spread out or piled into lobes.
+    """
+    adjacency = _adjacency(mesh[1])
+    degrees = {v: len(ns) for v, ns in adjacency.items()}
+    histogram = dict(sorted(Counter(degrees.values()).items()))
+    charge = sum(6 - d for d in degrees.values())
+    defects = [v for v, d in degrees.items() if d != 6]
+    if targets is None:
+        targets = vertex_curvature_targets(mesh)
+    unbudgeted = unbudgeted_disclinations(mesh, targets)
+
+    neighbours = Counter()
+    for v in defects:
+        for w in adjacency[v]:
+            if w > v and degrees.get(w, 6) != 6:
+                neighbours[tuple(sorted((degrees[v], degrees[w])))] += 1
+
+    seen: set[int] = set()
+    sizes: list[int] = []
+    bad = set(defects)
+    for v in defects:
+        if v in seen:
+            continue
+        stack, size = [v], 0
+        seen.add(v)
+        while stack:
+            current = stack.pop()
+            size += 1
+            for w in adjacency[current]:
+                if w in bad and w not in seen:
+                    seen.add(w)
+                    stack.append(w)
+        sizes.append(size)
+
+    lines = [
+        f"anillos: {histogram}",
+        f"carga Σ(6−n) = {charge} (Gauss-Bonnet la fija; no es un defecto)",
+        f"no hexágonos: {len(defects)}, de los que {len(unbudgeted)} están "
+        "donde la curvatura no los pide",
+        f"misfit de colocación: {curvature_misfit(mesh, targets):.1f}",
+    ]
+    if neighbours:
+        pairs = ", ".join(f"{a}-{b}: {n}" for (a, b), n in
+                          sorted(neighbours.items()))
+        lines.append(f"pares adyacentes: {pairs}")
+    else:
+        lines.append("pares adyacentes: ninguno")
+    if sizes:
+        lines.append(
+            f"cúmulos: {dict(sorted(Counter(sizes).items()))}, "
+            f"el mayor de {max(sizes)}")
+    return "\n".join(lines)
+
+
 def curvature_misfit(mesh: Mesh, targets: np.ndarray | None = None,
                      rings: int = None) -> float:
     """How far the disclinations sit from where curvature wants them.
@@ -1154,6 +1303,11 @@ def anneal_edge_flips(
     restarts: int = 1,
     max_edge: float | None = None,
     box=None,
+    objective: str = "census",
+    targets: np.ndarray | None = None,
+    rings: int | None = None,
+    pair_weight: float = 0.0,
+    like_penalty: float = 0.0,
 ) -> Mesh:
     """Metropolis-anneal edge flips to remove spurious dislocation pairs.
 
@@ -1200,23 +1354,107 @@ def anneal_edge_flips(
         sweeps on one Y-junction mesh gave 8 to 15 pairs. One draw from
         that is a coin toss; the best of a few is not, and each costs
         under two seconds against a ten-second build.
+    objective
+        ``"census"`` minimises ``sum |degree - 6|``, which is what this
+        function has always done and what every caller got. It is blind
+        to WHERE a defect sits: it charges the same for a pentagon on a
+        spherical cap, where Gauss-Bonnet requires one, as for a pentagon
+        on a flat tube wall, where it is damage. So it has no reason to
+        move anything, and on a Y junction it leaves twenty surplus
+        disclinations sitting on the flat arms.
+
+        ``"curvature"`` minimises the window misfit of
+        :func:`curvature_misfit` instead — the squared difference between
+        the disclination charge in each vertex's neighbourhood and the
+        charge that neighbourhood's own Gaussian curvature asks for. Now
+        a pentagon on a flat wall costs and the same pentagon on a cap
+        does not, which is the gradient that was missing.
+
+        Annealing rather than descending is not a refinement here, it is
+        the whole point. A flip changes four degrees: two fall, two rise.
+        Moving a LONE heptagon therefore costs +2 no matter which flip is
+        chosen — it must leave a pentagon behind — so two separated
+        disclinations cannot approach each other without passing through
+        worse states. :func:`place_disclinations` descends greedily and
+        stalls at the first such barrier: measured on a Y junction it ran
+        three rounds, moved the misfit from 254.5 to 252.7 and left the
+        degree histogram bit-for-bit identical. Metropolis climbs the
+        barrier; the curvature objective tells it which way is downhill
+        once it is over.
+    targets
+        Per-vertex curvature targets for ``objective="curvature"``,
+        computed from the mesh when omitted. Computed ONCE and held
+        fixed: flips do not move vertices, so the surface — and therefore
+        what it asks for — does not change during the anneal.
+    rings
+        Window radius for the curvature objective. Defaults to
+        :data:`CURVATURE_WINDOW_RINGS`.
+    pair_weight
+        Extra cost per disclination, on top of the misfit. Without it the
+        objective is satisfied by charge in the right PLACE and does not
+        care whether it is carried by two defects or twenty; with it the
+        anneal also prefers to carry it with fewer.
+    like_penalty
+        Cost per edge joining two disclinations of the SAME sign — two
+        pentagons, or two heptagons. Applies under either objective,
+        because neither of them can see it: ``|5-6| + |5-6|`` is 2 whether
+        the two pentagons are adjacent or on opposite sides of the
+        structure, so the census objective is free to pile them up, and it
+        does. Measured on a 1200-vertex six-arm junction, running the
+        census anneal five times instead of once took the count from 88 to
+        79 and the same-sign adjacencies the WRONG way, from one 5-5 and
+        three 7-7 to five 5-5 and four 7-7. Those clumps are what a
+        structure shows as a lobe of pentagons or a pair of fused
+        heptagons, and no amount of further annealing removes them.
+
+        A 5 next to a 7 is deliberately not charged. That is a Stone-Wales
+        dislocation: neutral, low in energy, real in grown material, and
+        the configuration a pair naturally relaxes into. The thing to
+        discourage is like charges sitting on top of each other, which
+        costs curvature the surface does not have.
 
     Returns
     -------
     (vertices, triangles)
         Same vertices, re-flipped triangles.
     """
+    if objective not in ("census", "curvature"):
+        raise ValueError(
+            f"objective debe ser 'census' o 'curvature', no {objective!r}"
+        )
     if sweeps <= 0 or restarts < 1:
         return mesh
+    if objective == "curvature":
+        if rings is None:
+            rings = CURVATURE_WINDOW_RINGS
+        if targets is None:
+            targets = vertex_curvature_targets(mesh)
     best = None
-    best_pairs = None
+    best_score = None
     for _ in range(max(1, restarts)):
         candidate = _anneal_once(mesh, rng, sweeps, temperature,
-                                 min_degree, max_degree, max_edge, box)
-        pairs = dislocation_pairs(candidate)
-        if best_pairs is None or pairs < best_pairs:
-            best, best_pairs = candidate, pairs
+                                 min_degree, max_degree, max_edge, box,
+                                 objective, targets, rings, pair_weight,
+                                 like_penalty)
+        # Judged by the same measure that was minimised. Picking the
+        # restart with the fewest pairs while having annealed on the
+        # curvature misfit would throw away the run that put the charge
+        # where it belongs in favour of the one that merely has less of it.
+        if objective == "curvature":
+            score = (curvature_misfit(candidate, targets, rings)
+                     + pair_weight * _disclination_count(candidate))
+        else:
+            score = float(dislocation_pairs(candidate))
+        if like_penalty:
+            score += like_penalty * like_sign_adjacencies(candidate)
+        if best_score is None or score < best_score:
+            best, best_score = candidate, score
     return best
+
+
+def _disclination_count(mesh: Mesh) -> int:
+    """How many rings are not hexagons."""
+    return sum(1 for ns in _adjacency(mesh[1]).values() if len(ns) != 6)
 
 
 def _anneal_once(
@@ -1228,6 +1466,11 @@ def _anneal_once(
     max_degree: int,
     max_edge: float | None = None,
     box=None,
+    objective: str = "census",
+    targets: np.ndarray | None = None,
+    rings: int | None = None,
+    pair_weight: float = 0.0,
+    like_penalty: float = 0.0,
 ) -> Mesh:
     """One Metropolis run. See :func:`anneal_edge_flips` for the reasoning."""
     if sweeps <= 0:
@@ -1240,6 +1483,54 @@ def _anneal_once(
 
     def deviation(*values: int) -> int:
         return sum(abs(v - 6) for v in values)
+
+    # -- curvature objective, kept incrementally -----------------------
+    #
+    # Recomputing every window for every candidate flip is what makes
+    # place_disclinations recompute once per ROUND rather than per flip,
+    # and an anneal needs an evaluation per candidate. So the window
+    # charges are carried in an array and updated in place: a flip moves
+    # four degrees, and a vertex's degree appears in the windows of
+    # exactly those vertices within `rings` of it -- about nineteen at
+    # rings=2 -- so the update is bounded and the same neighbour lists
+    # serve for the delta and for the commit.
+    window_charge = None
+    window_target = None
+    touches: list[list[int]] = []
+    if objective == "curvature":
+        count = len(verts)
+        windows = _vertex_windows(nbrs, count, rings)
+        window_charge = np.array(
+            [sum(6 - degree[w] for w in win) for win in windows], dtype=float)
+        window_target = np.array(
+            [float(sum(targets[w] for w in win)) for win in windows],
+            dtype=float)
+        # touches[v] = the windows v belongs to. Symmetric with `windows`,
+        # so it is the same relation read the other way round.
+        membership: list[list[int]] = [[] for _ in range(count)]
+        for index, win in enumerate(windows):
+            for w in win:
+                membership[w].append(index)
+        touches = membership
+
+    def curvature_delta(changes: dict[int, int]) -> float:
+        """Cost change from ``{vertex: degree delta}``, without applying it."""
+        affected: dict[int, float] = {}
+        for vertex, step in changes.items():
+            # charge is 6 - degree, so a degree rise LOWERS the charge
+            for index in touches[vertex]:
+                affected[index] = affected.get(index, 0.0) - step
+        total = 0.0
+        for index, shift in affected.items():
+            before = window_charge[index] - window_target[index]
+            after = before + shift
+            total += after * after - before * before
+        return total
+
+    def curvature_commit(changes: dict[int, int]) -> None:
+        for vertex, step in changes.items():
+            for index in touches[vertex]:
+                window_charge[index] -= step
 
     for sweep in range(sweeps):
         temp = temperature * (1.0 - sweep / max(1, sweeps - 1))
@@ -1271,14 +1562,57 @@ def _anneal_once(
             if max_edge is not None and _edge_too_long(verts, w1, w2,
                                                        max_edge, box):
                 continue
-            delta = deviation(
-                degree[u] - 1, degree[v] - 1,
-                degree[w1] + 1, degree[w2] + 1,
-            ) - deviation(degree[u], degree[v], degree[w1], degree[w2])
+            changes = {u: -1, v: -1, w1: +1, w2: +1}
+            like_delta = 0.0
+            if like_penalty:
+                # Only edges touching the four changed vertices can change
+                # their like-sign status, so the count is compared on that
+                # neighbourhood alone rather than over the whole mesh.
+                def sign(value: int) -> int:
+                    return 0 if value == 6 else (1 if value > 6 else -1)
+
+                local = set()
+                for vertex in changes:
+                    for other in nbrs[vertex]:
+                        local.add((min(vertex, other), max(vertex, other)))
+                local.discard((min(u, v), max(u, v)))
+                after_degree = dict(degree)
+                for vertex, step in changes.items():
+                    after_degree[vertex] += step
+                before = sum(
+                    1 for a, b in local
+                    if sign(degree[a]) != 0 and sign(degree[a]) == sign(degree[b])
+                )
+                edges_after = set(local)
+                edges_after.add((min(w1, w2), max(w1, w2)))
+                after = sum(
+                    1 for a, b in edges_after
+                    if sign(after_degree[a]) != 0
+                    and sign(after_degree[a]) == sign(after_degree[b])
+                )
+                like_delta = like_penalty * (after - before)
+            if objective == "curvature":
+                delta = curvature_delta(changes)
+                if pair_weight:
+                    before = sum(1 for value in (degree[u], degree[v],
+                                                 degree[w1], degree[w2])
+                                 if value != 6)
+                    after = sum(1 for value in (degree[u] - 1, degree[v] - 1,
+                                                degree[w1] + 1, degree[w2] + 1)
+                                if value != 6)
+                    delta += pair_weight * (after - before)
+            else:
+                delta = float(deviation(
+                    degree[u] - 1, degree[v] - 1,
+                    degree[w1] + 1, degree[w2] + 1,
+                ) - deviation(degree[u], degree[v], degree[w1], degree[w2]))
+            delta += like_delta
             if delta > 0 and (
                 temp <= 0.0 or rng.random() >= np.exp(-delta / temp)
             ):
                 continue
+            if objective == "curvature":
+                curvature_commit(changes)
             face_list[incident[0]] = (u, w1, w2)
             face_list[incident[1]] = (v, w2, w1)
             degree[u] -= 1
