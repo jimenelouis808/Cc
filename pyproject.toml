@@ -1,5 +1,5 @@
 # Workspace root. Deliberately has no [project] table: this is not a package
-# and nothing imports it. It exists so that the three packages under
+# and nothing imports it. It exists so that the four packages under
 # packages/ resolve against one dependency set and one lockfile, which is the
 # whole point of putting them in the same repository.
 #

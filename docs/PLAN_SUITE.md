@@ -139,6 +139,32 @@ coeficientes, isosuperficies), cargas Mulliken/Löwdin, matriz de densidad
 P = Σ fᵢ cᵢ cᵢ† (con S), órdenes de enlace, DOS/PDOS, bandas, y las tres
 magnetizaciones de la decisión 4.
 
+Hecho (`packages/tbkit`, 0.1.0):
+
+- [x] 1. Modelo π con orbital π local (sirve en tubos y fullerenos), Hückel para
+      N/B/O, hopping con deformación opcional. Grafeno, benceno, acenos y
+      nanotubos zigzag contra fórmulas cerradas.
+- [x] 2. Slater–Koster s/p con leyes constante, exponencial, Harrison, GSP y tabla;
+      solapamiento (H c = E S c); carbono sp³ de Xu–Wang–Chan–Ho.
+- [x] 3. Lector `.skf` (formato simple) y ajuste por mínimos cuadrados a niveles de
+      referencia, con lector de `gpaw.txt`.
+- [x] 4. Cargas autoconsistentes (DFTB2, Klopman–Ohno), solo sistemas finitos.
+- [x] 5. Hubbard de campo medio con las tres magnetizaciones; teorema de Lieb
+      comprobado en el trianguleno.
+- [x] 6. Periódico con puntos k (suma de Bloch, mallas, caminos de ASE).
+- [x] Salidas: P, Mulliken/Löwdin, Mayer/Wiberg/Coulson, DOS/PDOS, bandas, orbitales
+      en rejilla → `.cube`. CLI `tbkit`.
+
+Pendiente de la fase D:
+
+- [ ] Parte repulsiva (energías totales, fuerzas, fonones TB): necesaria para el
+      Raman con fonones propios de la fase E.
+- [ ] SCC periódico (suma de Ewald).
+- [ ] Hubbard + SCC combinados; espín no colineal.
+- [ ] Verificar la convención `sp` heteronuclear de los `.skf` contra DFTB+.
+- [ ] Catálogo de parámetros de tbkit con la forma del de carbonforge (sin
+      importarlo) y GUI (toolkit por decidir).
+
 ## Fase E — Raman con tight binding
 
 | Paso | Método | Alcance |

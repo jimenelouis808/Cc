@@ -1,12 +1,13 @@
 # nanocarbon
 
-Three packages for nanocarbon and nanomaterials research, in one workspace.
+Four packages for nanocarbon and nanomaterials research, in one workspace.
 
 | Package | What it does |
 |---|---|
 | `packages/ramancarbon` | Raman, XRD, XPS and electrochemistry: readers, fitting, analysis, a configurable plot engine, a Tkinter application |
 | `packages/carbonforge` | Structures into DFT and MD: Quantum ESPRESSO, SIESTA, LAMMPS, force fields, EDLC cells, reading results back |
 | `packages/nanocarbon_lab` | Structure generation: nanotubes, fullerenes, haeckelites, schwarzites, junctions, foams, TMDs, dopants and defects |
+| `packages/tbkit` | Parametrisable tight binding: π and sp³ Slater-Koster models, DFTB `.skf`, fitting, self-consistent charges, mean-field Hubbard magnetism, k-points (decision 2 of `docs/PLAN_SUITE.md`) |
 
 ## The one rule
 

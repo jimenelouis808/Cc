@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tbkit"
+version = "0.1.0"
+description = "Tight binding parametrizable para nanocarbonos: modelo π, Slater-Koster sp3 con solapamiento, archivos .skf de DFTB y ajuste a DFT, cargas autoconsistentes, Hubbard de campo medio (magnetismo de bordes y magnetización frente a energía, campo y dopaje), sistemas periódicos con puntos k; orbitales, densidad, cargas, órdenes de enlace, DOS/PDOS y bandas."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "tbkit contributors" }]
+keywords = ["tight binding", "Slater-Koster", "DFTB", "Hubbard", "graphene", "nanoribbon",
+            "carbon nanotube", "magnetism", "density of states", "band structure"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: Spanish",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    # Structures (extxyz from carbonforge / nanocarbon_lab), neighbour lists
+    # and band paths. tbkit exchanges structures with the other packages by
+    # file only; it imports none of them.
+    "ase>=3.22",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-xdist>=3.5",
+    "ruff>=0.4",
+]
+plot = [
+    "matplotlib>=3.7",
+]
+
+[project.scripts]
+tbkit = "tbkit.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["tbkit*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tbkit/tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: minutes each; run nightly, not on every push",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

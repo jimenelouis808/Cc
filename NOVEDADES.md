@@ -6,6 +6,46 @@ está la trampa.
 
 ---
 
+## tbkit · tight binding, el cuarto paquete
+
+Nuevo paquete independiente, `packages/tbkit`, con su propio comando `tbkit`.
+Lee cualquier estructura que lea ASE (el extxyz de carbonforge o nanocarbon_lab
+conserva la celda y la periodicidad).
+
+**Qué calcula:** niveles y gap, bandas, DOS y PDOS (por elemento, átomo u
+orbital), cargas Mulliken y Löwdin, órdenes de enlace, la matriz densidad, y
+orbitales moleculares en archivos `.cube` para ver isosuperficies en VESTA o
+Avogadro. Con **Hubbard de campo medio**, el magnetismo de bordes zigzag y la
+magnetización de tres maneras: frente a la energía (m(E) y dm/dE = ρ↑ − ρ↓),
+frente al campo (M(h) y la susceptibilidad χ) y frente al dopaje o el nivel de
+Fermi. Con **cargas autoconsistentes**, la transferencia de carga de dopantes
+apantallada.
+
+**Modelos:** π (t = −2,7 eV, con N, B y O de Hückel), sp³ de carbono de
+Xu–Wang–Chan–Ho, o tus propios parámetros: archivos `.skf` de DFTB (no se
+incluyen: son de sus autores) o un ajuste a tus niveles de GPAW
+(`tbkit gpaw-levels calc/gpaw.txt` los lee).
+
+```bash
+tbkit levels piridina.xyz --scc --bonds
+tbkit hubbard zgnr.extxyz --U 2.7 --kmesh 48 --m-energy m.csv
+tbkit hubbard copo.xyz --field 0 0.5 11 -o campo.csv
+tbkit orbital coroneno.xyz --band homo -o homo.cube
+```
+
+**Qué NO hace, y dónde está la trampa:**
+
+- No hay energías totales ni fuerzas (falta la parte repulsiva): estructura
+  electrónica sí, relajar no.
+- El campo medio rompe la simetría de espín para imitar la correlación: los
+  momentos locales de un copo con M = 0 no son el estado fundamental real (un
+  singlete). El teorema de Lieb (M = |N_A − N_B|) sí se cumple y está comprobado.
+- Las cargas autoconsistentes solo funcionan en sistemas finitos (un periódico
+  necesitaría Ewald; se rechaza).
+- Los parámetros π de los heteroátomos son de libro (Hückel): tendencias, no
+  niveles cuantitativos. Ajústalos a tu DFT.
+- Sin interfaz gráfica todavía.
+
 ## vibspec · Raman
 
 **Raman con GPAW, sobre el mismo cálculo del IR.** En Calcular → IR y Raman

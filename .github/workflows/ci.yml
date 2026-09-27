@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [ramancarbon, carbonforge, nanocarbon_lab]
+        package: [ramancarbon, carbonforge, nanocarbon_lab, tbkit]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
