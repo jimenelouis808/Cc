@@ -256,6 +256,23 @@ def _region_from(line: str) -> SpeRegion:
         raise XPSError(f"SpectralRegDef ilegible ({exc}): {line!r}") from None
 
 
+#: Words a header uses when it really is saying "no monochromator".
+UNMONOCHROMATED_WORDS = ("non-mono", "nonmono", "no mono", "unmono",
+                         "achromatic", "twin anode", "dual anode")
+
+
+def _DECLARED_UNMONOCHROMATED(text: str) -> bool:
+    """Whether the header states the source is NOT monochromated.
+
+    Returns True for monochromated, which is the permissive default; only
+    an explicit statement flips it. Named in capitals because it reads as
+    a constant at the call site and the point there is that the absence of
+    a word is not evidence.
+    """
+    lowered = text.lower()
+    return not any(word in lowered for word in UNMONOCHROMATED_WORDS)
+
+
 def _source_from_header(fields: dict[str, Any]) -> tuple[Optional[float], bool, str]:
     """Photon energy, whether monochromated, and the raw string.
 
@@ -272,7 +289,21 @@ def _source_from_header(fields: dict[str, Any]) -> tuple[Optional[float], bool, 
             break
     if not text:
         return None, True, ""
-    mono = "mono" in text.lower()
+    # "mono" present means monochromated. "mono" ABSENT means the header
+    # did not say, which is not the same as an unmonochromated anode and
+    # must not be recorded as one: on a real PHI Quantera SXM -- an
+    # instrument whose defining feature is its monochromator -- the VAMAS
+    # header carries "Al 1486.6" with no such word, and reading that as a
+    # bare anode put the resolution floor at 1.19 eV instead of 0.88 and
+    # made the acceptance check accuse three perfectly ordinary components
+    # of being narrower than physics allows.
+    #
+    # The default stays True because the floor derived from it is used to
+    # REJECT components, and a floor used to reject has to be the most
+    # permissive one consistent with what is known. An unmonochromated
+    # anode announces itself in other ways -- its X-ray satellites 8-12 eV
+    # below every line -- and that is a check on the data, not on a word.
+    mono = True if "mono" in text.lower() else _DECLARED_UNMONOCHROMATED(text)
     numbers = [float(n) for n in _NUMBER.findall(text)]
     energy = next((n for n in numbers if 100.0 < n < 12000.0), None)
     if energy is None:
@@ -828,7 +859,8 @@ def _read_vamas_block(
         dwell_s=dwell if dwell > 0 else None,
         sweeps=scans if scans > 0 else None,
         work_function=work_function if work_function else DEFAULT_WORK_FUNCTION,
-        monochromated="mono" in source_label.lower(),
+        monochromated=(True if "mono" in source_label.lower()
+                       else _DECLARED_UNMONOCHROMATED(source_label)),
         region=region,
         name=f"{path.stem}:{region}",
         metadata=metadata,

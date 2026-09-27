@@ -935,6 +935,11 @@ class XPSApp(SectionApp):
 
         self.run_async(work, done, "Ajustando todas…")
 
+    def _audit_text(self, label: str) -> str:
+        """The acceptance checklist for one region, as text."""
+        audit = self.session.audits.get(label)
+        return "" if audit is None else str(audit)
+
     def _compare_counts(self) -> None:
         self._settings_from_widgets()
         label = self._choice_from_widgets()

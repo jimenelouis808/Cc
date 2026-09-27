@@ -852,8 +852,12 @@ def test_moving_a_component_out_of_its_published_window_is_allowed_and_said():
     session.set_component("Fe 2p3/2", name, centre=centre + 3.0)
     result = session.fit("Fe 2p3/2")
     assert result is not None
-    assert any("ventana" in text for text in session.messages[-1]) or any(
-        "ventana" in text for _, text in session.messages[-6:]), (
+    # Anywhere in the log, not within the last six entries. Every fit now
+    # also logs the acceptance checklist, which on this region says the
+    # same thing from the other direction ("BE 710.70 eV fuera del rango
+    # químico de Fe–Se"), so counting back a fixed number of lines was
+    # measuring how chatty the fitter is rather than whether it spoke.
+    assert any("ventana" in text for _, text in session.messages), (
         "nothing was said about a component outside its published window")
 
 

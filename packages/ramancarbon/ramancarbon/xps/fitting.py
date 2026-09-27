@@ -314,6 +314,32 @@ class XPSFitResult:
     warnings: list[str] = field(default_factory=list)
     region_label: str = ""
     weighted: bool = True
+    aic: float = float("nan")
+    bic: float = float("nan")
+    """Information criteria, from the weighted residual.
+
+    Here because a component is only worth having if it pays for its
+    parameters, and R² cannot say that: it improves whenever a component
+    is added. The reference checklist puts it as a question — "does adding
+    the peak only improve the residual? Then do not accept it
+    automatically" — and a question about over-fitting cannot be answered
+    without a quantity that charges for parameters."""
+    bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+    """The limits each free parameter was fitted between, keyed
+    ``"component.parameter"``.
+
+    A parameter that finished ON its limit means the optimiser wanted to
+    go further, so the model is wrong and not the limit. That is a
+    different and much stronger statement than "this value is unusual",
+    and it cannot be made without the limits. They are known here, where
+    the defaults for an unbounded parameter are filled in."""
+    correlations: dict[tuple[str, str], float] = field(default_factory=dict)
+    """Parameter pairs the data do not separate.
+
+    Two components 0.4 eV apart in a region whose resolution is 1.2 eV
+    have a joint area the fit determines well and individual areas it does
+    not. Reporting the two areas without saying so is the false precision
+    the reference tables forbid."""
     acquisition: dict = field(default_factory=dict)
     """Dwell time, sweeps and intensity unit of the spectrum that was fitted.
 
@@ -578,7 +604,24 @@ def fit_region(
     reduced_chi2 = float(np.sum(weighted_residual**2)) / dof
     watson = _durbin_watson(residual_values)
 
+    # Gaussian log-likelihood form, on the WEIGHTED residual: the counts
+    # are Poisson and the sigma is already in the fit, so using the raw
+    # sum of squares here would weight a 40000-count region and a
+    # 400-count one the same and make the criteria incomparable between
+    # regions of the same sample.
+    ss_weighted = float(np.sum(weighted_residual**2))
+    aic = n * np.log(max(ss_weighted / n, 1e-300)) + 2 * k
+    bic = n * np.log(max(ss_weighted / n, 1e-300)) + k * np.log(n)
+
+    effective_bounds: dict[str, tuple[float, float]] = {}
+    for slot, (index, parameter) in enumerate(layout):
+        effective_bounds[f"{model.components[index].name}.{parameter}"] = (
+            float(lower[slot]), float(upper[slot])
+        )
+
     errors = _uncertainties(result, weighted_residual, layout, model, weighted)
+    correlations = _correlations(result, weighted_residual, layout, model,
+                                weighted)
     flat = evaluate.flat(params)
     components = _finish(model, evaluate, flat, energy, previous_areas)
 
@@ -590,6 +633,10 @@ def fit_region(
         component.errors = errors.get(index, {})
 
     return XPSFitResult(
+        aic=float(aic),
+        bic=float(bic),
+        bounds=effective_bounds,
+        correlations=correlations,
         components=components,
         background=background,
         energy=energy,
@@ -694,6 +741,57 @@ def _durbin_watson(residual: np.ndarray) -> Optional[float]:
     if denominator <= 0:
         return None
     return float(np.sum(np.diff(residual) ** 2) / denominator)
+
+
+def _correlations(result, weighted_residual: np.ndarray,
+                  layout: list[tuple[int, str]], model: XPSModel,
+                  weighted: bool) -> dict[tuple[str, str], float]:
+    """Correlation coefficients between the free parameters.
+
+    Not a diagnostic of the optimiser — a diagnostic of the DATA. Two XPS
+    components separated by less than the analyser resolution have a joint
+    area the fit pins down and individual areas it cannot: the covariance
+    off-diagonal goes to ±1 and the two heights trade off freely. On a
+    real C 1s the pair that came back at +0.99 was reported as two
+    chemical states with per-cent compositions, which is exactly the false
+    precision the reference tables refuse.
+
+    Only pairs from DIFFERENT components are returned. A component's own
+    height and width are correlated in every peak fit ever made and
+    saying so is noise.
+    """
+    try:
+        _, singular, vt = np.linalg.svd(result.jac, full_matrices=False)
+    except np.linalg.LinAlgError:               # pragma: no cover
+        return {}
+    if singular.size == 0 or singular[0] <= 0:  # pragma: no cover
+        return {}
+    threshold = np.finfo(float).eps * max(result.jac.shape) * singular[0]
+    keep = singular > threshold
+    if not keep.any():                          # pragma: no cover
+        return {}
+    covariance = (vt[keep].T / singular[keep] ** 2) @ vt[keep]
+    if not weighted:
+        dof = max(weighted_residual.size - result.x.size, 1)
+        covariance = covariance * float(np.sum(weighted_residual**2)) / dof
+    sigma = np.sqrt(np.clip(np.diag(covariance), 0.0, None))
+    out: dict[tuple[str, str], float] = {}
+    for first in range(len(layout)):
+        for second in range(first + 1, len(layout)):
+            index_a, key_a = layout[first]
+            index_b, key_b = layout[second]
+            if index_a == index_b:
+                continue
+            scale = sigma[first] * sigma[second]
+            if scale <= 0:
+                continue
+            value = float(covariance[first, second] / scale)
+            if not np.isfinite(value):
+                continue
+            name_a = f"{model.components[index_a].name}.{key_a}"
+            name_b = f"{model.components[index_b].name}.{key_b}"
+            out[(name_a, name_b)] = value
+    return out
 
 
 def _uncertainties(result, weighted_residual: np.ndarray,

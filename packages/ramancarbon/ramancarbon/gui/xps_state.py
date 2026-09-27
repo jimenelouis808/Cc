@@ -135,6 +135,8 @@ class XPSSession:
     choices: dict[str, RegionChoice] = field(default_factory=dict)
     survey: Optional[SurveyResult] = None
     fits: dict[str, XPSFitResult] = field(default_factory=dict)
+    audits: dict[str, Any] = field(default_factory=dict)
+    """The acceptance checklist for each fitted region, by label."""
     composition: Optional[Quantification] = None
     calibration: Optional[Calibration] = None
     messages: list[tuple[str, str]] = field(default_factory=list)
@@ -415,6 +417,27 @@ class XPSSession:
         self.fits[label] = result
         for text in result.warnings:
             self.log("aviso", f"{label}: {text}")
+        # The checklist, on the numbers that were just produced. Logged as
+        # well as stored because a verdict nobody sees is worth what the
+        # Raman auditor was worth before it was wired up: nothing.
+        from ..xps.acceptance import audit_region
+
+        try:
+            audit = audit_region(
+                result, spectrum=spectrum,
+                present=self.present_elements(),
+                complete=self.survey is not None,
+                database=self.database,
+            )
+        except Exception as error:                       # noqa: BLE001
+            audit = None
+            self.log("aviso", f"{label}: no se pudo auditar el ajuste: {error}")
+        self.audits[label] = audit
+        if audit is not None:
+            self.log("info", f"{label}: confianza {audit.confidence} — "
+                             f"{audit.reason}")
+            for finding in audit.grave:
+                self.log("aviso", f"{label}: {finding}")
         self.composition = None
         return result
 

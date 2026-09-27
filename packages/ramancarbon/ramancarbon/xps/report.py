@@ -27,7 +27,9 @@ from typing import Any, Optional, Sequence
 from .calibrate import Calibration, calibrate, calibrate_to_state
 from .elements import XPSDatabase, load_xps_database
 from .fitting import XPSFitResult, fit_region
+from .acceptance import audit_region
 from .presets import count_model, state_model
+from .selection import evidence_model
 from .quantify import Quantification, areas_from_fits, quantify
 from .spectrum import XPSError, XPSSpectrum
 from .survey import SurveyResult, identify
@@ -42,7 +44,23 @@ class XPSAnalysis:
     regions: list[XPSFitResult] = field(default_factory=list)
     composition: Optional[Quantification] = None
     calibration: Optional[Calibration] = None
+    selections: list[Any] = field(default_factory=list)
+    """How each region's states were chosen. See
+    :mod:`ramancarbon.xps.selection`: a component that entered the model
+    did so either because the literature calls it well established or
+    because it paid for its parameters, and this is where that is written
+    down."""
+    audits: list[Any] = field(default_factory=list)
+    """The acceptance checklist applied to each region, in the same order
+    as :attr:`regions`. See :mod:`ramancarbon.xps.acceptance`."""
     warnings: list[str] = field(default_factory=list)
+
+    def audit(self, label: str):
+        """The audit of one region, by label."""
+        for result, audit in zip(self.regions, self.audits):
+            if result.region_label == label:
+                return audit
+        return None
 
     def region(self, label: str) -> Optional[XPSFitResult]:
         for item in self.regions:
@@ -202,6 +220,18 @@ def analyse_xps(
         )
 
     # -- regions -------------------------------------------------------
+    #
+    # What is known to be in the sample, and whether that knowledge is
+    # complete. The two are not the same and the difference decides
+    # whether a state may be DROPPED for a missing element: a measured
+    # region proves its own element is there, and says nothing about the
+    # ones nobody measured. Only a survey can establish an absence.
+    present = sorted({
+        (database.region_for_line(item.region) or item.region).split()[0]
+        for item in scans
+    } | set(analysis.survey.symbols() if analysis.survey else ()))
+    complete = analysis.survey is not None
+
     wanted = dict(regions or {})
     for spectrum in scans:
         label = database.region_for_line(spectrum.region) or spectrum.region
@@ -214,14 +244,34 @@ def analyse_xps(
             continue
         choice = wanted.get(label, wanted.get(spectrum.region))
         try:
+            selection = None
             if isinstance(choice, int):
                 model, notes = count_model(spectrum, label, choice,
                                            database=database)
                 analysis.warnings.extend(f"{label}: {note}" for note in notes)
-            else:
+                fit = fit_region(spectrum, model, database=database)
+            elif choice:
+                # An explicit list of states is the user's decision and is
+                # fitted as given. Overruling it would make the argument
+                # useless; the audit still says what it thinks of it.
                 model = state_model(spectrum, label, choice, database=database,
                                     include_satellites=True)
-            analysis.regions.append(fit_region(spectrum, model, database=database))
+                fit = fit_region(spectrum, model, database=database)
+            else:
+                # The default used to be EVERY state the database lists for
+                # the region — fourteen for C 1s — which on a real spectrum
+                # produced eleven pairs of parameters the data cannot
+                # separate and binding energies quoted to millions of eV.
+                # Now the states have to earn their place.
+                selection = evidence_model(
+                    spectrum, label, present=present, complete=complete,
+                    database=database)
+                fit = selection.result
+            analysis.regions.append(fit)
+            analysis.selections.append(selection)
+            analysis.audits.append(audit_region(
+                fit, spectrum=spectrum, present=present, complete=complete,
+                database=database))
         except XPSError as error:
             analysis.warnings.append(f"{label}: {error}")
 
@@ -281,7 +331,9 @@ def build_report(analysis: XPSAnalysis, verbose: bool = True) -> str:
                          for text in analysis.survey.overlaps)
         lines.append("")
 
-    for result in analysis.regions:
+    selections = list(analysis.selections) + [None] * len(analysis.regions)
+    audits = list(analysis.audits) + [None] * len(analysis.regions)
+    for index, result in enumerate(analysis.regions):
         lines.append(f"REGIÓN {result.region_label}")
         lines.append("  " + result.background.describe())
         lines.append(
@@ -296,6 +348,15 @@ def build_report(analysis: XPSAnalysis, verbose: bool = True) -> str:
             lines.append("  ligaduras: " + "; ".join(result.links))
         if verbose:
             lines.extend("  ⚠ " + text for text in result.warnings)
+        # The verdict goes under the numbers it judges, and the selection
+        # under that: a composition read without them is a composition read
+        # without knowing whether its components were measured or assumed.
+        audit = audits[index]
+        if audit is not None:
+            lines.append("  " + str(audit).replace("\n", "\n  "))
+        selection = selections[index]
+        if verbose and selection is not None:
+            lines.append("  " + selection.summary().replace("\n", "\n  "))
         lines.append("")
 
     if analysis.composition:
