@@ -1,4 +1,4 @@
-"""Prepare, run and collect a relax-then-IR calculation.
+"""Prepare, run and collect a relax-then-IR (and optionally Raman) calculation.
 
 The three steps are separate on purpose:
 
@@ -8,7 +8,9 @@ The three steps are separate on purpose:
     so it runs on Windows.
 :func:`run`
     Relaxes, re-checks, and computes the IR spectrum by finite differences
-    (:class:`ase.vibrations.Infrared`). Needs GPAW; run it where GPAW is, with
+    (:class:`ase.vibrations.Infrared`), then, if asked, Raman activities from
+    polarizability derivatives along the same modes
+    (:mod:`carbonforge.vibspec.core.raman`). Needs GPAW; run it where GPAW is, with
     the generated ``run.py``::
 
         mpiexec -n 4 gpaw python run.py
@@ -45,6 +47,7 @@ from ...results.spectra import VibrationalMode, VibrationalSpectrum
 from .calcspec import CalcSpec
 from .checks import check_ready_for_vibrations, suggest_spin
 from .engines import CalculatorFactory, make_gpaw_calculator
+from .raman import PolarizabilityFunction
 from .record import RECORD_FILE, CalcRecord, code_versions
 
 #: Rigid-body modes further than this from zero mean the structure is not
@@ -260,9 +263,48 @@ def _vibrations(atoms: Atoms, spec: CalcSpec, directory: Path, record: CalcRecor
     }
 
 
+def _raman(atoms: Atoms, spec: CalcSpec, directory: Path, record: CalcRecord,
+           polarizability: Optional[PolarizabilityFunction] = None) -> None:
+    """Raman activities of the internal modes, from the IR step's modes."""
+    from .raman import (
+        RAMAN_ACTIVITY_UNIT,
+        bond_polarizability,
+        displacement_count,
+        field_polarizability,
+        polarizability_derivatives,
+        raman_activities,
+    )
+
+    record.set_status("raman", f"{displacement_count(len(atoms))} polarizabilidades "
+                               f"({spec.raman})")
+    _save(record, directory)
+    if polarizability is None:
+        if spec.raman == "bond":
+            polarizability = bond_polarizability
+        else:
+            def polarizability(a: Atoms):
+                return field_polarizability(a, spec.raman_field)
+    derivative = polarizability_derivatives(atoms, polarizability, directory / "raman",
+                                            delta=spec.delta, save=_master())
+    with np.load(directory / record.files["modes"]) as data:
+        modes = data["modes"]
+    activities, ratios = raman_activities(derivative, modes)
+    internal = record.results["mode_indices"]
+    record.results.update({
+        "raman_activity": activities[internal].tolist(),
+        "depolarization": ratios[internal].tolist(),
+        "raman_unit": RAMAN_ACTIVITY_UNIT,
+        "raman_method": spec.raman,
+    })
+    if spec.raman == "bond":
+        record.results["warnings"].append(
+            "Raman del modelo de enlaces (empírico): intensidades relativas orientativas.")
+
+
 def run(
     directory: Path,
     calculator_factory: Optional[CalculatorFactory] = None,
+    polarizability: Optional[PolarizabilityFunction] = None,
 ) -> CalcRecord:
     """Relax and compute the IR spectrum of a prepared calculation.
 
@@ -272,6 +314,9 @@ def run(
         A directory written by :func:`prepare`.
     calculator_factory
         ``factory(spec, txt, spinpol) -> Calculator``. Defaults to GPAW.
+    polarizability
+        ``polarizability(atoms) -> (3, 3)`` Å³ for the Raman step, replacing
+        the method the spec names (tests pass their own).
 
     Returns
     -------
@@ -332,6 +377,8 @@ def run(
                                "vibraciones:\n" + gate.summary())
 
         _vibrations(atoms, spec, directory, record)
+        if spec.raman != "off":
+            _raman(atoms, spec, directory, record, polarizability)
         record.error = None
         record.set_status("done", f"{len(record.results['frequencies_cm1'])} modos internos")
         _save(record, directory)
@@ -353,9 +400,15 @@ def collect(directory: Path) -> VibrationalSpectrum:
     if record.status != "done":
         raise VibspecError(f"{directory}: el cálculo está en estado '{record.status}', no 'done'.")
     results = record.results
+    n = len(results["mode_indices"])
+    raman = results.get("raman_activity") or [None] * n
+    ratio = results.get("depolarization") or [None] * n
     modes = [
-        VibrationalMode(index=int(i), frequency_cm1=float(f), ir_activity=float(a))
-        for i, f, a in zip(results["mode_indices"], results["frequencies_cm1"],
-                           results["ir_intensity"], strict=True)
+        VibrationalMode(index=int(i), frequency_cm1=float(f), ir_activity=float(a),
+                        raman_activity=None if r is None else float(r),
+                        depolarisation=None if d is None else float(d))
+        for i, f, a, r, d in zip(results["mode_indices"], results["frequencies_cm1"],
+                                 results["ir_intensity"], raman, ratio, strict=True)
     ]
-    return VibrationalSpectrum(modes=modes, has_ir=True, expected_acoustic=0)
+    return VibrationalSpectrum(modes=modes, has_ir=True,
+                               has_raman="raman_activity" in results, expected_acoustic=0)

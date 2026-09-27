@@ -118,7 +118,7 @@ def _cmd_prepare(args) -> int:
     spec = CalcSpec(
         xc=args.xc, mode=args.mode, basis=args.basis, h=args.h, ecut=args.ecut, spinpol=spinpol,
         charge=args.charge, fmax=args.fmax, delta=args.delta, nfree=args.nfree,
-        scale_factor=args.scale_factor,
+        scale_factor=args.scale_factor, raman=args.raman, raman_field=args.raman_field,
     )
     try:
         # Through load_structure, so an XYZ without a cell (Avogadro, GaussView)
@@ -170,25 +170,39 @@ def _cmd_index(args) -> int:
 
 
 def _cmd_plot(args) -> int:
+    from .core.analysis import default_window, load_computed, read_raman
     from .core.checks import SCALE_FACTOR_RANGE
 
-    directory = Path(args.directory)
+    source = Path(args.directory)
     try:
-        spectrum = collect(directory)
-    except VibspecError as exc:
+        spectrum, origin = load_computed(source)
+    except (VibspecError, ValueError) as exc:
         print(exc)
         return 1
-    record = CalcRecord.load(directory)
-    scale = args.scale if args.scale is not None else float(record.spec.get("scale_factor", 1.0))
-    window = (args.xmin, args.xmax)
+    kind = args.kind
+    if kind == "raman" and not spectrum.has_raman:
+        print("Este cálculo no tiene actividades Raman (vibspec: prepara con --raman; "
+              "QE: ph.x con lraman).")
+        return 1
+    if kind == "ir" and not spectrum.has_ir:
+        print("Este cálculo no tiene intensidades IR.")
+        return 1
+    record = CalcRecord.load(source) if (source / "record.json").exists() else None
+    stored = float(record.spec.get("scale_factor", 1.0)) if record else 1.0
+    scale = args.scale if args.scale is not None else stored
+    low, high = default_window(kind)
+    window = (args.xmin if args.xmin is not None else low,
+              args.xmax if args.xmax is not None else high)
 
     experiment = None
     matches = None
-    if args.ftir:
+    measured_path = args.raman_exp if kind == "raman" else args.ftir
+    if measured_path:
         try:
-            measured = read_ftir(args.ftir, quantity=args.quantity)
+            measured = (read_raman(measured_path) if kind == "raman"
+                        else read_ftir(measured_path, quantity=args.quantity))
         except (OSError, ValueError) as exc:
-            print(f"No se pudo leer el FTIR: {exc}")
+            print(f"No se pudo leer el espectro experimental: {exc}")
             return 1
         if measured.quantity_source == "values":
             print(f"⚠️  {measured.name}: sin cabecera que lo diga, se interpretó como "
@@ -196,12 +210,13 @@ def _cmd_plot(args) -> int:
         experiment = prepare_experiment(measured, baseline=not args.no_baseline, window=window)
         bands = find_bands(*experiment, prominence=args.prominence)
         matches = match_bands(spectrum, bands, scale, tolerance_cm1=args.tolerance,
-                              min_relative_intensity=args.min_intensity)
+                              min_relative_intensity=args.min_intensity, kind=kind)
         if args.fit_scale:
             try:
                 fitted, fitted_matches = search_scale_factor(
                     spectrum, bands, tolerance_cm1=args.tolerance,
                     min_relative_intensity=args.min_intensity, bounds=SCALE_FACTOR_RANGE,
+                    kind=kind,
                 )
             except ValueError as exc:
                 print(f"⚠️  {exc} Se mantiene el factor {scale:.4f}.")
@@ -212,12 +227,16 @@ def _cmd_plot(args) -> int:
                 scale, matches = fitted, fitted_matches
         print(match_table(matches))
 
+    laser = args.laser if kind == "raman" and not args.bare else None
+    temperature = args.temperature if kind == "raman" and not args.bare else None
     figure, drawn = plot_ir_comparison(
-        spectrum, title=record.name, experiment=experiment, fwhm_cm1=args.fwhm,
-        profile=args.profile, scale_factor=scale, window=window, offset=args.offset,
-        matches=matches, experiment_label=Path(args.ftir).stem if args.ftir else "FTIR",
+        spectrum, title=f"{record.name if record else source.name} — {origin}",
+        experiment=experiment, fwhm_cm1=args.fwhm, profile=args.profile, scale_factor=scale,
+        window=window, offset=args.offset, matches=matches,
+        experiment_label=Path(measured_path).stem if measured_path else None,
+        kind=kind, laser_nm=laser, temperature_k=temperature,
     )
-    out = Path(args.out)
+    out = Path(args.out or ("raman.png" if kind == "raman" else "ir.png"))
     out.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(out, dpi=200)
     print(f"\nFigura → {out}")
@@ -291,12 +310,17 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     pp.add_argument("--delta", type=float, default=defaults.delta)
     pp.add_argument("--nfree", type=int, default=defaults.nfree)
     pp.add_argument("--scale-factor", type=float, default=defaults.scale_factor)
+    pp.add_argument("--raman", choices=("off", "field", "bond"), default=defaults.raman,
+                    help="Raman tras el IR: field = DFT por campo finito (36N SCF), "
+                         "bond = modelo de enlaces empírico (segundos).")
+    pp.add_argument("--raman-field", type=float, default=defaults.raman_field,
+                    help="Campo para --raman field, V/Å.")
     pp.add_argument("--force", action="store_true",
                     help="Escribir aunque la validación falle (run lo seguirá rechazando).")
     pp.add_argument("--overwrite", action="store_true")
     pp.set_defaults(func=_cmd_prepare)
 
-    rn = vsub.add_parser("run", help="Relax and compute the IR spectrum (needs GPAW).")
+    rn = vsub.add_parser("run", help="Relax and compute IR (and Raman) spectra (needs GPAW).")
     rn.add_argument("directory")
     rn.set_defaults(func=_cmd_run)
 
@@ -309,9 +333,20 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     ix.add_argument("--db", default="vibspec.db")
     ix.set_defaults(func=_cmd_index)
 
-    pl = vsub.add_parser("plot", help="Computed IR spectrum, optionally against an FTIR.")
-    pl.add_argument("directory", help="Cálculo terminado (estado 'done').")
-    pl.add_argument("--ftir", help="Espectro experimental, CSV/TXT de dos columnas.")
+    pl = vsub.add_parser("plot", help="Computed IR or Raman spectrum, optionally against "
+                                      "experiment.")
+    pl.add_argument("directory", help="Cálculo terminado de vibspec, o un dynmat.out de QE "
+                                      "(o su carpeta).")
+    pl.add_argument("--kind", choices=("ir", "raman"), default="ir")
+    pl.add_argument("--ftir", help="FTIR experimental (con --kind ir), CSV/TXT de dos columnas.")
+    pl.add_argument("--raman-exp", help="Raman experimental (con --kind raman): desplazamiento, "
+                                        "intensidad.")
+    pl.add_argument("--laser", type=float, default=532.0,
+                    help="Láser, nm, para el factor (ν_láser − ν)⁴ del Raman.")
+    pl.add_argument("--temperature", type=float, default=300.0,
+                    help="Temperatura, K, para el factor de Bose del Raman.")
+    pl.add_argument("--bare", action="store_true",
+                    help="Raman: actividades sin los factores de láser y temperatura.")
     pl.add_argument("--quantity", choices=("absorbance", "transmittance"), default=None,
                     help="Qué contiene el FTIR (por defecto, se deduce y se avisa).")
     pl.add_argument("--no-baseline", action="store_true",
@@ -328,11 +363,13 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
                     help="Intensidad relativa mínima de un modo calculado para emparejarlo.")
     pl.add_argument("--prominence", type=float, default=0.05,
                     help="Prominencia mínima de una banda experimental (fracción del máximo).")
-    pl.add_argument("--xmin", type=float, default=400.0)
-    pl.add_argument("--xmax", type=float, default=4000.0)
+    pl.add_argument("--xmin", type=float, default=None,
+                    help="Por defecto 400 (IR) o 100 (Raman).")
+    pl.add_argument("--xmax", type=float, default=None,
+                    help="Por defecto 4000 (IR) o 3600 (Raman).")
     pl.add_argument("--offset", type=float, default=0.0,
                     help="Desplazar el calculado hacia arriba (≈1.1 para apilar).")
-    pl.add_argument("-o", "--out", default="ir.png")
+    pl.add_argument("-o", "--out", default=None, help="Por defecto ir.png o raman.png.")
     pl.add_argument("--csv", default=None,
                     help="Prefijo para exportar las curvas en CSV (para ramancarbon).")
     pl.set_defaults(func=_cmd_plot)

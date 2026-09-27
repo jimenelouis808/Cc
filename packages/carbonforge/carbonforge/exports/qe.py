@@ -515,6 +515,10 @@ def write_qe_spectroscopy(
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     base = settings or QESettings()
+    # A finite model (a vibspec ribbon, a molecule) has six rigid-body modes,
+    # three of them rotations the crystal rule does not know about.
+    if not any(atoms.get_pbc()) and spectroscopy.asr == "crystal":
+        spectroscopy = replace(spectroscopy, asr="zero-dim")
 
     written: dict[str, Path] = {}
     scf = replace(base, calculation="scf")

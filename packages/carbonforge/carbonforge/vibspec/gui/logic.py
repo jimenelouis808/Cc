@@ -121,6 +121,11 @@ CALC_PARAMS: tuple[ParamSpec, ...] = (
               choices=("frederiksen", "standard")),
     ParamSpec("scale_factor", "Factor de escala", "float", _DEFAULT_SPEC.scale_factor,
               minimum=0.5, maximum=1.5),
+    ParamSpec("raman", "Raman", "choice", _DEFAULT_SPEC.raman, choices=("off", "field", "bond"),
+              help="field: DFT por campo finito (36N SCF más). bond: modelo de enlaces "
+                   "empírico, segundos, intensidades orientativas."),
+    ParamSpec("raman_field", "Campo Raman (V/Å)", "float", _DEFAULT_SPEC.raman_field,
+              minimum=0.005, maximum=0.2),
 )
 
 RUN_PARAMS: tuple[ParamSpec, ...] = (

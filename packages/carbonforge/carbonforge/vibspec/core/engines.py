@@ -65,3 +65,24 @@ def make_gpaw_calculator(spec: CalcSpec, txt: Path, spinpol: bool = False) -> An
     from gpaw import GPAW
 
     return GPAW(txt=str(txt), **gpaw_parameters(spec, spinpol))
+
+
+def set_uniform_field(calc: Any, strength_v_per_a: float, axis: int) -> None:
+    """Apply a uniform electric field along ``axis`` (0, 1, 2), or remove it (0).
+
+    A calculator may provide its own ``set_uniform_field(strength, axis)``
+    (tests do); otherwise GPAW's ``ConstantElectricField`` is used, which
+    takes V/Å and makes the next energy or dipole a new SCF.
+    """
+    hook = getattr(calc, "set_uniform_field", None)
+    if hook is not None:
+        hook(strength_v_per_a, axis)
+        return
+    from gpaw.external import ConstantElectricField
+
+    if strength_v_per_a == 0.0:
+        calc.set(external=None)
+        return
+    direction = [0.0, 0.0, 0.0]
+    direction[axis] = 1.0
+    calc.set(external=ConstantElectricField(strength_v_per_a, direction))

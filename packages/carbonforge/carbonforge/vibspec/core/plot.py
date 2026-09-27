@@ -26,7 +26,15 @@ from typing import Optional, Sequence
 import numpy as np
 
 from ...results.spectra import VibrationalSpectrum
-from .analysis import MID_IR, BandMatch, Profile, computed_curve, normalise, sticks
+from .analysis import (
+    BandMatch,
+    Kind,
+    Profile,
+    computed_curve,
+    default_window,
+    normalise,
+    sticks,
+)
 
 COMPUTED_COLOUR = "#2a78d6"
 EXPERIMENT_COLOUR = "#eb6834"
@@ -42,14 +50,21 @@ def draw_ir_comparison(
     fwhm_cm1: float = 10.0,
     profile: Profile = "lorentzian",
     scale_factor: float = 1.0,
-    window: tuple[float, float] = MID_IR,
+    window: Optional[tuple[float, float]] = None,
     offset: float = 0.0,
     matches: Optional[Sequence[BandMatch]] = None,
     computed_label: str = "Calculado",
-    experiment_label: str = "FTIR",
+    experiment_label: Optional[str] = None,
     n_points: int = 4000,
+    kind: Kind = "ir",
+    laser_nm: Optional[float] = None,
+    temperature_k: Optional[float] = None,
 ) -> dict[str, np.ndarray]:
     """Draw the computed spectrum, and optionally the experiment, on ``ax``.
+
+    ``kind="raman"`` draws Raman activities (with the (ν_laser − ν)⁴ and Bose
+    factors when ``laser_nm``/``temperature_k`` are given) against a
+    measured Raman spectrum; the default is IR against FTIR absorbance.
 
     Parameters
     ----------
@@ -78,12 +93,15 @@ def draw_ir_comparison(
         The numbers actually drawn: ``grid``, ``computed`` (normalised),
         ``stick_positions``, ``stick_heights``.
     """
+    window = window or default_window(kind)
+    experiment_label = experiment_label or ("Raman exp." if kind == "raman" else "FTIR")
     low, high = min(window), max(window)
     grid = np.linspace(low, high, n_points)
     intensity = computed_curve(spectrum, grid, fwhm_cm1=fwhm_cm1, profile=profile,
-                               scale_factor=scale_factor)
+                               scale_factor=scale_factor, kind=kind, laser_nm=laser_nm,
+                               temperature_k=temperature_k)
     computed = normalise(grid, intensity) if intensity.max() > 0 else intensity
-    positions, heights = sticks(spectrum, scale_factor)
+    positions, heights = sticks(spectrum, scale_factor, kind)
     visible = (positions >= low) & (positions <= high) & (heights > 0)
 
     ax.vlines(positions[visible], offset, offset + heights[visible], color=COMPUTED_COLOUR,
@@ -118,11 +136,15 @@ def draw_ir_comparison(
             if len(placed) == 8:
                 break
 
-    ax.set_xlim(high, low)
+    # IR is plotted high-to-low wavenumber, as spectrometers do; Raman
+    # shift runs low-to-high.
+    ax.set_xlim(*((low, high) if kind == "raman" else (high, low)))
     top = 1.15 + offset
     ax.set_ylim(-0.03, top)
-    ax.set_xlabel("Número de onda (cm⁻¹)", color=_TEXT)
-    ax.set_ylabel("Absorbancia normalizada (u.a.)", color=_TEXT)
+    ax.set_xlabel("Desplazamiento Raman (cm⁻¹)" if kind == "raman" else "Número de onda (cm⁻¹)",
+                  color=_TEXT)
+    ax.set_ylabel("Intensidad Raman normalizada (u.a.)" if kind == "raman"
+                  else "Absorbancia normalizada (u.a.)", color=_TEXT)
     ax.grid(axis="x", color=_GRID, linewidth=0.6)
     ax.set_axisbelow(True)
     for side in ("top", "right"):
@@ -137,6 +159,10 @@ def draw_ir_comparison(
 
     return {"grid": grid, "computed": computed,
             "stick_positions": positions[visible], "stick_heights": heights[visible]}
+
+
+#: The same function; the name predates Raman.
+draw_comparison = draw_ir_comparison
 
 
 def plot_ir_comparison(spectrum: VibrationalSpectrum, title: Optional[str] = None, **kwargs):

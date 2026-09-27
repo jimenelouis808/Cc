@@ -1,4 +1,10 @@
-"""Computed IR spectrum against an experimental FTIR: the analysis half of vibspec.
+"""Computed IR or Raman spectrum against experiment: the analysis half of vibspec.
+
+IR is compared with an FTIR trace in absorbance; Raman with a measured Raman
+spectrum (intensity against Raman shift, used as it comes). Every function
+takes ``kind="ir"`` or ``"raman"``; for Raman, :func:`computed_curve` can
+apply the (ν_laser − ν)⁴ and Bose factors that turn an activity into
+something proportional to a measured intensity.
 
 Everything the comparison needs, and nothing that draws:
 
@@ -40,10 +46,17 @@ import numpy as np
 from ...results.spectra import VibrationalSpectrum, broaden
 
 Profile = Literal["lorentzian", "gaussian"]
-Quantity = Literal["absorbance", "transmittance"]
+Quantity = Literal["absorbance", "transmittance", "raman"]
+Kind = Literal["ir", "raman"]
 
 #: Default plotting window, cm^-1: the mid-IR a typical FTIR covers.
 MID_IR: tuple[float, float] = (400.0, 4000.0)
+#: Default Raman window, cm^-1 (shift): D, G, 2D and the C-H/N-H/O-H stretches.
+RAMAN_WINDOW: tuple[float, float] = (100.0, 3600.0)
+
+
+def default_window(kind: Kind) -> tuple[float, float]:
+    return RAMAN_WINDOW if kind == "raman" else MID_IR
 
 
 # --------------------------------------------------------------------------
@@ -56,8 +69,11 @@ def computed_curve(
     fwhm_cm1: float = 10.0,
     profile: Profile = "lorentzian",
     scale_factor: float = 1.0,
+    kind: Kind = "ir",
+    laser_nm: Optional[float] = None,
+    temperature_k: Optional[float] = None,
 ) -> np.ndarray:
-    """Broadened computed IR spectrum on ``grid``.
+    """Broadened computed IR or Raman spectrum on ``grid``.
 
     Parameters
     ----------
@@ -72,31 +88,72 @@ def computed_curve(
         ``"lorentzian"`` or ``"gaussian"``.
     scale_factor
         Multiplies every frequency before broadening.
+    kind
+        ``"ir"`` (intensities) or ``"raman"`` (activities).
+    laser_nm, temperature_k
+        Raman only: apply the (ν_laser − ν)⁴ prefactor and the Stokes Bose
+        factor, as a measured spectrum carries them. Omit both to plot bare
+        activities.
 
     Returns
     -------
     numpy.ndarray
-        Intensity in the calculation's units, (D/Å)²/amu per cm^-1.
+        Intensity in the calculation's units per cm^-1: (D/Å)²/amu for IR,
+        Å⁴/amu (times the optional factors) for Raman.
     """
     if fwhm_cm1 <= 0:
         raise ValueError("fwhm_cm1 debe ser positivo.")
     if scale_factor <= 0:
         raise ValueError("scale_factor debe ser positivo.")
+    raman = kind == "raman"
     _, intensity = broaden(
-        spectrum.frequencies * scale_factor, spectrum.activities("ir"),
+        spectrum.frequencies * scale_factor, spectrum.activities(kind),
         width_cm1=fwhm_cm1 / 2.0, grid=np.asarray(grid, dtype=float), profile=profile,
+        laser_wavelength_nm=laser_nm if raman else None,
+        temperature_k=temperature_k if raman else None,
     )
     return intensity
 
 
 def sticks(
-    spectrum: VibrationalSpectrum, scale_factor: float = 1.0
+    spectrum: VibrationalSpectrum, scale_factor: float = 1.0, kind: Kind = "ir"
 ) -> tuple[np.ndarray, np.ndarray]:
     """Scaled line positions and their intensities relative to the strongest."""
     frequencies = spectrum.frequencies * scale_factor
-    intensities = spectrum.activities("ir")
+    intensities = spectrum.activities(kind)
     top = intensities.max() if intensities.size and intensities.max() > 0 else 1.0
     return frequencies, intensities / top
+
+
+def load_computed(path: str | Path, n_rigid: int = 6) -> tuple[VibrationalSpectrum, str]:
+    """A computed spectrum from vibspec (GPAW) or from QE DFPT, for comparison.
+
+    ``path`` is a vibspec calculation directory (``record.json``), a QE
+    ``dynmat.out`` or a directory holding one. For QE, up to ``n_rigid`` of
+    the lowest modes are dropped when they are below 100 cm^-1: a finite
+    model has six rigid-body modes, which ``asr='zero-dim'`` puts near zero
+    and which are no part of a measured spectrum. Returns the spectrum and where it came from.
+    """
+    from ...results.spectra import read_dynmat
+
+    path = Path(path)
+    if path.is_dir() and (path / "record.json").exists():
+        from .workflow import collect
+
+        return collect(path), "vibspec (GPAW)"
+    dynmat = path if path.is_file() else path / "dynmat.out"
+    if not dynmat.exists():
+        raise ValueError(f"{path}: ni record.json de vibspec ni dynmat.out de QE.")
+    spectrum = read_dynmat(dynmat)
+    order = np.argsort(np.abs(spectrum.frequencies))
+    # Only modes that really sit near zero are rigid-body ones; a spectrum
+    # already without them (or a short test file) keeps everything else.
+    rigid = [k for k in order[:n_rigid] if abs(spectrum.frequencies[k]) < 100.0]
+    keep = sorted(set(range(len(spectrum.modes))) - set(rigid))
+    spectrum = VibrationalSpectrum(modes=[spectrum.modes[k] for k in keep],
+                                   has_ir=spectrum.has_ir, has_raman=spectrum.has_raman,
+                                   expected_acoustic=0)
+    return spectrum, "QE (ph.x + dynmat.x)"
 
 
 # --------------------------------------------------------------------------
@@ -105,7 +162,7 @@ def sticks(
 
 @dataclass
 class ExperimentalSpectrum:
-    """An FTIR trace, always stored with ascending wavenumber.
+    """An FTIR or Raman trace, always stored with ascending wavenumber.
 
     ``quantity_source`` says how :attr:`quantity` was decided -- ``"given"``,
     ``"header"`` or ``"values"`` -- so a guess is never mistaken for a fact.
@@ -202,8 +259,9 @@ def read_ftir(
         else:
             quantity = "transmittance" if float(np.median(y)) > 1.5 else "absorbance"
             source = "values"
-    if quantity not in ("absorbance", "transmittance"):
-        raise ValueError(f"quantity debe ser 'absorbance' o 'transmittance', no {quantity!r}.")
+    if quantity not in ("absorbance", "transmittance", "raman"):
+        raise ValueError(f"quantity debe ser 'absorbance', 'transmittance' o 'raman', "
+                         f"no {quantity!r}.")
     percent = quantity == "transmittance" and float(np.max(y)) > 1.5
 
     return ExperimentalSpectrum(
@@ -212,12 +270,24 @@ def read_ftir(
     )
 
 
+def read_raman(path: str | Path, name: Optional[str] = None) -> ExperimentalSpectrum:
+    """Read a two-column Raman export (Raman shift in cm^-1, intensity).
+
+    Same file handling as :func:`read_ftir`; the intensity is used as it is
+    (no absorbance conversion: a Raman spectrum is already an intensity).
+    """
+    return read_ftir(path, quantity="raman", name=name)
+
+
 def to_absorbance(experiment: ExperimentalSpectrum) -> ExperimentalSpectrum:
     """Return the spectrum as absorbance, ``A = -log10(T)``.
 
     Transmittance at or below zero (noise at the bottom of a saturated band)
     is clipped to 1e-4, i.e. A = 4, rather than producing infinities.
     """
+    if experiment.quantity == "raman":
+        raise ValueError("Un espectro Raman no se convierte a absorbancia: ya es una "
+                         "intensidad.")
     if experiment.quantity == "absorbance":
         return experiment
     transmittance = experiment.values / (100.0 if experiment.percent else 1.0)
@@ -273,11 +343,14 @@ def normalise(
 def prepare_experiment(
     experiment: ExperimentalSpectrum,
     baseline: bool = True,
-    window: tuple[float, float] = MID_IR,
+    window: Optional[tuple[float, float]] = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Absorbance, baseline-corrected, normalised to 1 inside ``window``."""
-    absorbance = to_absorbance(experiment)
-    x, y = absorbance.wavenumber, absorbance.values
+    """Absorbance (IR) or intensity (Raman), baseline-corrected, normalised to
+    1 inside ``window`` (default: mid-IR, or the Raman window)."""
+    raman = experiment.quantity == "raman"
+    window = window or default_window("raman" if raman else "ir")
+    prepared = experiment if raman else to_absorbance(experiment)
+    x, y = prepared.wavenumber, prepared.values
     mask = (x >= min(window)) & (x <= max(window))
     x, y = x[mask], y[mask]
     if len(x) < 2:
@@ -333,8 +406,9 @@ def match_bands(
     scale_factor: float = 1.0,
     tolerance_cm1: float = 30.0,
     min_relative_intensity: float = 0.05,
+    kind: Kind = "ir",
 ) -> list[BandMatch]:
-    """Pair each IR-active computed mode with the nearest experimental band.
+    """Pair each IR- (or Raman-) active computed mode with the nearest band.
 
     Only modes with at least ``min_relative_intensity`` of the strongest are
     considered: the rest would not be visible in the experiment anyway. A
@@ -342,7 +416,7 @@ def match_bands(
     Several modes may land on the same band -- which is real (overlapping
     modes) as often as it is a mismatch, and is left for you to judge.
     """
-    frequencies, relative = sticks(spectrum, scale_factor)
+    frequencies, relative = sticks(spectrum, scale_factor, kind)
     bands = np.asarray(sorted(bands_cm1), dtype=float)
     matches = []
     for mode, frequency, strength in zip(
@@ -392,6 +466,7 @@ def search_scale_factor(
     min_relative_intensity: float = 0.05,
     bounds: tuple[float, float] = (0.90, 1.05),
     step: float = 0.001,
+    kind: Kind = "ir",
 ) -> tuple[float, list[BandMatch]]:
     """Find the scale factor that brings the most computed intensity onto bands.
 
@@ -414,7 +489,7 @@ def search_scale_factor(
     best: Optional[tuple[tuple[float, float], float, list[BandMatch]]] = None
     for factor in np.arange(min(bounds), max(bounds) + step / 2, step):
         matches = match_bands(spectrum, bands_cm1, float(factor), tolerance_cm1,
-                              min_relative_intensity)
+                              min_relative_intensity, kind)
         paired = [m for m in matches if m.delta_cm1 is not None]
         if not paired:
             continue
@@ -431,7 +506,7 @@ def search_scale_factor(
     _, factor, matches = best
     refined = fit_scale_factor(matches, unscaled_by=factor)
     return refined, match_bands(spectrum, bands_cm1, refined, tolerance_cm1,
-                                min_relative_intensity)
+                                min_relative_intensity, kind)
 
 
 def match_table(matches: Sequence[BandMatch]) -> str:

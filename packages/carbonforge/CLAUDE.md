@@ -74,6 +74,14 @@ carbonforge/
   8 Å of vacuum per side; LCAO/FD (zero boundary conditions) are the default.
   Vibrations only start after a converged relaxation AND a passing
   `check_ready_for_vibrations` on the relaxed structure.
+- vibspec Raman (`core/raman.py`) projects polarizability derivatives on the
+  IR step's modes (`modes.npz` holds ASE's e/sqrt(m) vectors: displacement per
+  unit normal coordinate); activity 45a'^2 + 7g'^2 in Å⁴/amu. Never store the
+  laser/Bose factors; apply them at analysis time. "field" (DFT ±E) is refused
+  in PW mode; "bond" (Lippincott-Stuttman) is empirical and must say so
+  wherever its result is shown. A finite model exported to QE gets
+  asr='zero-dim'. A measured Raman spectrum is an intensity: never convert it
+  to absorbance.
 - vibspec compares computed IR with FTIR in ABSORBANCE (converted from %T),
   both normalised on ONE y axis. Stored frequencies are never scaled in
   place; the scale factor is applied at analysis time. Band matches are a

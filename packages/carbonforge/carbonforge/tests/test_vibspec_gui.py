@@ -354,6 +354,6 @@ def test_unified_window_shares_the_structure(tmp_path):
         app._on_take_current()
         assert app.atoms.get_chemical_formula() == "C58H21N"
         vib._select("Resultados")
-        assert app._current_page() == "IR frente a FTIR"
+        assert app._current_page() == "Frente al experimento"
     finally:
         root.destroy()

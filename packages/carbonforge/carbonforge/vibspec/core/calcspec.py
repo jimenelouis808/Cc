@@ -116,6 +116,15 @@ class CalcSpec:
         Frequency scale factor to apply when comparing with experiment.
         Stored with the calculation; the raw frequencies are never scaled in
         place.
+    raman
+        Raman activities after the IR: ``"off"``; ``"field"``, DFT
+        polarizabilities from ±E finite fields (six extra SCFs per displaced
+        geometry, 36N in all); or ``"bond"``, the empirical
+        Lippincott-Stuttman bond model (seconds, indicative intensities).
+        See :mod:`carbonforge.vibspec.core.raman`.
+    raman_field
+        Field strength for ``"field"``, V/Å. Small enough to stay linear,
+        large enough to beat SCF noise: 0.02-0.1.
     """
 
     engine: Literal["gpaw"] = "gpaw"
@@ -133,6 +142,8 @@ class CalcSpec:
     ir_method: Literal["frederiksen", "standard"] = "frederiksen"
     convergence: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_CONVERGENCE))
     scale_factor: float = 1.0
+    raman: Literal["off", "field", "bond"] = "off"
+    raman_field: float = 0.05
     #: Advanced GPAW keyword arguments (``{"occupations": {...}}``), checked
     #: with ``carbonforge.codes.load_catalog("gpaw")``. Merged last, over the
     #: values above; ``symmetry``, ``spinpol`` and ``txt`` are refused.
@@ -199,6 +210,27 @@ class CalcSpec:
 
             allowed = {k: v for k, v in self.extra.items() if k not in _FORBIDDEN_EXTRA}
             report.merge(load_catalog("gpaw").check(allowed)[1])
+        if self.raman not in ("off", "field", "bond"):
+            report.errors.append(f"raman='{self.raman}': solo 'off', 'field' o 'bond'.")
+        elif self.raman == "field":
+            if self.mode == "pw":
+                report.errors.append(
+                    "Raman por campo finito en modo PW: un campo uniforme no es periódico, "
+                    "así que no cabe en una celda periódica. Usa LCAO o FD.")
+            if not 0.005 <= self.raman_field <= 0.2:
+                report.warnings.append(
+                    f"raman_field={self.raman_field} V/Å: fuera de 0.005-0.2; muy pequeño se "
+                    "ahoga en el ruido del SCF, muy grande deja de ser lineal.")
+            density = self.convergence.get("density")
+            if density is not None and density > 1e-6:
+                report.warnings.append(
+                    f"Convergencia de densidad {density}: la polarizabilidad es una diferencia "
+                    "de dipolos pequeña; usa <= 1e-6 para Raman por campo.")
+        elif self.raman == "bond":
+            report.warnings.append(
+                "Raman con modelo de enlaces (Lippincott-Stuttman): empírico. Dice qué modos "
+                "son activos, pero sus intensidades relativas son solo orientativas (no ve "
+                "conjugación, transferencia de carga ni el efecto electrónico de dopantes).")
         if self.max_steps < 1:
             report.errors.append("max_steps debe ser >= 1.")
 
@@ -227,4 +259,14 @@ class CalcSpec:
                     + " ".join(advice.reasons)
                 )
             report.info["spinpol"] = str(self.resolved_spinpol(atoms))
+            if self.raman == "bond":
+                from .raman import BOND_MODEL_ELEMENTS
+
+                missing = sorted(set(atoms.get_chemical_symbols()) - BOND_MODEL_ELEMENTS)
+                if missing:
+                    report.errors.append(
+                        f"El modelo de enlaces no tiene parámetros para {', '.join(missing)}; "
+                        "usa raman='field'.")
+            if self.raman == "field":
+                report.info["raman_scf"] = str(36 * len(atoms))
         return report

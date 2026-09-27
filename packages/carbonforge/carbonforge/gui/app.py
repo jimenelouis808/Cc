@@ -102,14 +102,14 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, J
     SECTIONS: dict[str, tuple[str, ...]] = {
         "Estructura": ("Construir", "Importar", "Modelo finito (IR)"),
         "Preparar": ("Cálculo (QE, SIESTA, LAMMPS)", "Celda EDLC (LAMMPS)"),
-        "Calcular": ("Trabajos", "IR con GPAW"),
-        "Resultados": ("Bandas y espectros", "IR frente a FTIR"),
+        "Calcular": ("Trabajos", "IR y Raman (GPAW)"),
+        "Resultados": ("Bandas y espectros", "Frente al experimento"),
     }
     #: vibspec's pages and where they live in the window.
     VIBSPEC_PAGES: dict[str, str] = {
         "Modelo": "Modelo finito (IR)",
-        "Cálculo": "IR con GPAW",
-        "Resultados": "IR frente a FTIR",
+        "Cálculo": "IR y Raman (GPAW)",
+        "Resultados": "Frente al experimento",
     }
 
     def _build_layout(self) -> None:

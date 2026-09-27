@@ -6,6 +6,46 @@ está la trampa.
 
 ---
 
+## vibspec · Raman
+
+**Raman con GPAW, sobre el mismo cálculo del IR.** En Calcular → IR y Raman
+(GPAW), el campo **Raman** ofrece:
+
+- `field`: polarizabilidad DFT de cada geometría desplazada, por diferencias de
+  dipolo bajo un campo eléctrico ±E. Es el método con fundamento físico, y el
+  caro: 36 SCF por átomo además del IR. Solo en LCAO o FD (un campo uniforme no
+  cabe en una celda periódica, así que en PW se rechaza).
+- `bond`: modelo de polarizabilidad de enlaces de Lippincott–Stuttman (ASE).
+  Segundos. Dice qué modos son activos en Raman, pero sus intensidades son solo
+  orientativas: no ve conjugación, transferencia de carga ni el efecto
+  electrónico de un dopante. Se avisa en la validación y en los resultados.
+
+Cada polarizabilidad se guarda al calcularse: un cálculo interrumpido retoma.
+Resultado por modo: actividad (Å⁴/amu) y razón de despolarización.
+
+**Comparar con el experimento.** "Frente al experimento" (antes "IR frente a
+FTIR") tiene un selector IR/Raman. El Raman experimental se usa como intensidad
+(sin convertir a absorbancia); el calculado puede llevar los factores de láser y
+Bose (ν_láser − ν)⁴ para parecerse a lo medido, o mostrarse como actividad. El
+emparejado de bandas y el ajuste del factor de escala funcionan igual que en IR.
+En terminal: `carbonforge vibspec plot calc/agua --kind raman --raman-exp mi_raman.txt`.
+
+**QE conectado al modelo finito.** Un `dynmat.out` de QE (ph.x con `lraman`) se
+compara igual que un cálculo de vibspec: botón "dynmat.out (QE)…" o `vibspec plot
+dynmat.out`. Al exportar una estructura finita a QE, `dynmat.in` lleva ahora
+`asr='zero-dim'` (seis modos rígidos, no tres).
+
+**Qué NO hace, y dónde está la trampa:**
+
+- `field` no se ha podido probar contra GPAW real aquí (no hay GPAW en este
+  entorno): la aritmética, las unidades y la caché están comprobadas con un
+  calculador de prueba que reproduce exactamente el modelo de enlaces. Antes de
+  usarlo en una cinta, compáralo con una referencia publicada (benceno).
+- No hay Raman resonante: si tu láser cae cerca de una transición del modelo,
+  las intensidades medidas no serán las no resonantes.
+- Los modos de un `dynmat.out` de QE se animan en Resultados → Bandas y
+  espectros (con `dynmat.axsf`), no en esta página.
+
 ## carbonforge · Resultados completos y recetas en la cola
 
 **Densidad de estados en la ventana.** Resultados → Bandas y espectros abre la

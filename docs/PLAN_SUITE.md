@@ -100,6 +100,26 @@ Fase B cerrada.
   emparejamiento), con el factor de Bose y el (ν_láser − ν)⁴ que ya aplica
   `results.spectra.broaden`.
 
+Hecho:
+
+- [x] QE conectado al modelo finito: `asr='zero-dim'` en `dynmat.in` para
+      estructuras finitas; "Frente al experimento" y `vibspec plot` aceptan un
+      `dynmat.out` como espectro calculado (se quitan los modos rígidos < 100 cm⁻¹).
+- [x] Raman en el flujo de vibspec (`core/raman.py`): `CalcSpec.raman` =
+      `field` (polarizabilidad DFT por ±E, 36N SCF) o `bond` (Lippincott–Stuttman,
+      empírico); 6N geometrías con caché reanudable; actividad 45a'²+7γ'² en
+      Å⁴/amu y razón de despolarización sobre los modos del IR.
+- [x] Análisis y GUI: tipo IR/Raman, Raman experimental como intensidad,
+      factores de láser y Bose en el análisis (nunca almacenados), `vibspec
+      plot --kind raman --raman-exp`.
+
+Pendiente de la fase C:
+
+- [ ] Raman resonante (`ase.vibrations.ResonantRaman`/Placzek con TDDFT): caro;
+      solo si el láser cae cerca de una transición del modelo.
+- [ ] Probar `field` con GPAW real (aquí no hay GPAW): comparar con la
+      referencia de benceno o coroneno publicada antes de usarlo en cintas.
+
 ## Fase D — Paquete de tight binding
 
 Motor, por capas y en este orden:

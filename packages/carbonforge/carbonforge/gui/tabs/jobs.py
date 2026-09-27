@@ -55,7 +55,7 @@ class JobsTab:
         self.jobs_tree.bind("<<TreeviewSelect>>", lambda _e: self._refresh_job_log())
 
         self.jobs_status_var = tk.StringVar(
-            value="Encola desde Preparar (QE, SIESTA, LAMMPS) o desde IR con GPAW; o añade "
+            value="Encola desde Preparar (QE, SIESTA, LAMMPS) o desde IR y Raman (GPAW); o añade "
                   "un directorio ya preparado.")
         ttk.Label(outer, textvariable=self.jobs_status_var, wraplength=900,
                   foreground="#667").pack(anchor="w", pady=4)

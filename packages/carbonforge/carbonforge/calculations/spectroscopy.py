@@ -49,7 +49,9 @@ class SpectroscopySpec:
         Acoustic sum rule applied by ``dynmat.x``: ``"crystal"``,
         ``"simple"``, ``"no"``, or the axis-projected variants. Enforcing it
         pushes the three acoustic modes to zero; without it they come out at
-        tens of cm⁻¹ and pollute the low-frequency spectrum.
+        tens of cm⁻¹ and pollute the low-frequency spectrum. A finite
+        (non-periodic) model needs ``"zero-dim"`` (six rigid modes);
+        ``write_qe_spectroscopy`` switches to it for such structures.
     laser_wavelength_nm
         Laser line assumed when reporting Raman intensities (``dynmat.x``
         input). 532 nm is the common green laser.

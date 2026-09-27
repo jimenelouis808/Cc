@@ -396,7 +396,7 @@ carbonforge vibspec gui            # or: carbonforge-gui, then Estructura → Mo
 vibspec has no window of its own any more: its three pages live in
 carbonforge's main window, which is organised by task — **Estructura**
 (Construir, Importar, Modelo finito (IR)), **Preparar** (Celda EDLC),
-**Calcular** (IR con GPAW), **Resultados** (Bandas y espectros, IR frente a
+**Calcular** (IR y Raman (GPAW)), **Resultados** (Bandas y espectros, IR frente a
 FTIR). The bar at the bottom shows the **current structure**: whatever was
 last built, imported or modelled. The Modelo page can start from it
 ("Estructura actual", same checks as a file: a periodic structure is refused),
@@ -405,7 +405,7 @@ actual") to export it to QE or SIESTA.
 
 - **Modelo finito (IR)** — ribbon, preset and site, with the 3D structure (seen down
   the plane normal) and every check and spin recommendation.
-- **IR con GPAW** — the GPAW settings, validated before anything is written;
+- **IR y Raman (GPAW)** — the GPAW settings, validated before anything is written;
   *Preparar* writes the calculation directory, *Preparar y correr* also
   queues it in the window's one job queue (**Calcular → Trabajos**, shared
   with QE, SIESTA and LAMMPS jobs). Jobs run as **subprocesses** (so *Cancelar* really stops them,
@@ -414,7 +414,7 @@ actual") to export it to QE or SIESTA.
   (relaxation step, displacements done) and the live log. Without GPAW
   (Windows) the run buttons are disabled and it says why: prepare here,
   run on Ubuntu, open the result.
-- **IR frente a FTIR** — the computed spectrum against your FTIR, the band table,
+- **Frente al experimento** — the computed spectrum against your FTIR, the band table,
   scale-factor fit, and a **click on a band animates its normal mode** in
   3D, with the share of motion per element and per atom (an O–H stretch
   reads "H 93 %").
@@ -422,8 +422,19 @@ actual") to export it to QE or SIESTA.
 The pages are a thin layer: all of their logic is in
 `vibspec/gui/logic.py`, tested without a display.
 
-Raman is not computed yet; it will reuse the same relaxed structure and
-record.
+### Raman
+
+`CalcSpec(raman="field")` adds Raman activities after the IR, on the same
+relaxed structure and modes: the polarizability of each of the 6N displaced
+geometries from ±E finite fields in GPAW (36N extra SCFs; LCAO/FD only, since a
+uniform field does not fit a periodic cell), then `S = 45a'² + 7γ'²` (Å⁴/amu)
+and the depolarization ratio per mode. `raman="bond"` uses the empirical
+Lippincott–Stuttman bond-polarizability model instead: seconds, but only
+indicative intensities. Polarizabilities are cached per displacement, so an
+interrupted run resumes. The (ν_laser − ν)⁴ and Bose factors are applied at
+analysis time (`vibspec plot --kind raman --laser 532 --temperature 300`), never
+stored. A QE `dynmat.out` (DFPT with `lraman`) can be compared the same way;
+finite models get `asr='zero-dim'` in `dynmat.in`.
 
 ## Batch sweeps over any structure
 

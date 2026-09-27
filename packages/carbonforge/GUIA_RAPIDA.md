@@ -149,9 +149,9 @@ con sus páginas:
 | Preparar | Cálculo (QE, SIESTA, LAMMPS) | Receta, ajustes, correcciones y exportación |
 | | Celda EDLC (LAMMPS) | Montar un condensador de doble capa |
 | Calcular | Trabajos | La cola de todos los cálculos: estado, progreso, log, cancelar, abrir resultados |
-| | IR con GPAW | Preparar y lanzar el cálculo IR |
+| | IR y Raman (GPAW) | Preparar y lanzar el cálculo IR |
 | Resultados | Bandas y espectros | Abrir un cálculo terminado y graficarlo |
-| | IR frente a FTIR | Comparar el IR calculado con tu FTIR |
+| | Frente al experimento | Comparar el IR calculado con tu FTIR |
 
 La barra inferior muestra la **estructura actual**: la última que construiste,
 importaste o modelaste. Preparar y la celda EDLC trabajan siempre sobre ella.

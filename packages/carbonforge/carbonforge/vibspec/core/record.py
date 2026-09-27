@@ -9,12 +9,14 @@ A calculation lives in its own directory::
         run.py          the script to run it: ``mpiexec -n 4 gpaw python run.py``
         modes.npz       all frequencies and mode vectors, for animation
         relax.traj, relax.log, gpaw.txt, ir/   raw output of ASE and GPAW
+        raman/          one polarizability per displaced geometry (Raman runs)
 
 Paths inside ``record.json`` are relative to the directory, so the directory
 can be prepared on Windows, run on Ubuntu or a cluster, and brought back.
 
 The record's ``status`` follows the job states a GUI shows:
-``prepared`` (queued), ``relaxing`` / ``relaxed`` / ``vibrations`` (running),
+``prepared`` (queued), ``relaxing`` / ``relaxed`` / ``vibrations`` /
+``raman`` (running),
 ``done`` and ``error``. Every change is appended to ``history`` with a
 timestamp, so a failed run says where it failed.
 
@@ -42,7 +44,7 @@ RECORD_FILE = "record.json"
 SCHEMA_VERSION = 1
 
 #: Job states, in the order a successful run goes through them.
-STATES = ("prepared", "relaxing", "relaxed", "vibrations", "done", "error")
+STATES = ("prepared", "relaxing", "relaxed", "vibrations", "raman", "done", "error")
 
 
 def _now() -> str:

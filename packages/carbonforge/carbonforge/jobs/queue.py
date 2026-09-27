@@ -113,6 +113,10 @@ class VibspecAdapter(Adapter):
             cache = directory / "ir"
             done = len(list(cache.glob("cache.*.json"))) if cache.exists() else 0
             return f"vibraciones: {done}/{total} desplazamientos"
+        if status == "raman":
+            from ..vibspec.core.raman import raman_progress
+
+            return raman_progress(directory / "raman", record.n_atoms) or "raman"
         return {"prepared": "preparado", "relaxed": "relajado", "done": "terminado",
                 "error": f"error: {record.history[-1]['message'] if record.history else ''}"
                 }.get(status, status)

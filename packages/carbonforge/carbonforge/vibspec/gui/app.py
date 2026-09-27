@@ -60,6 +60,7 @@ class VibspecApp:
         self.model: Optional[logic.ModelResult] = None
         self.results_dir: Optional[Path] = None
         self.results_record = None
+        self.computed = None
         self.experiment = None
         self.animation: Optional[dict[str, Any]] = None
         self.can_run, self.cannot_run_reason = logic.can_run_locally()
@@ -568,9 +569,22 @@ class VibspecApp:
         row = ttk.Frame(pick)
         row.pack(fill="x", pady=2)
         ttk.Button(row, text="Abrir…", command=self._on_pick_results).pack(side="left")
-        ttk.Button(row, text="Cargar", command=self._on_load_results).pack(side="left", padx=4)
+        ttk.Button(row, text="dynmat.out (QE)…", command=self._on_pick_qe_results
+                   ).pack(side="left", padx=4)
+        ttk.Button(row, text="Cargar", command=self._on_load_results).pack(side="left")
+        kind_row = ttk.Frame(pick)
+        kind_row.pack(fill="x", pady=2)
+        ttk.Label(kind_row, text="Espectro").pack(side="left")
+        self.kind_var = tk.StringVar(value="ir")
+        kind_box = ttk.Combobox(kind_row, textvariable=self.kind_var, state="readonly",
+                                values=["ir", "raman"], width=8)
+        kind_box.pack(side="left", padx=4)
+        kind_box.bind("<<ComboboxSelected>>", lambda _e: self._on_kind_changed())
+        self.computed_origin_var = tk.StringVar(value="")
+        ttk.Label(pick, textvariable=self.computed_origin_var, foreground="#6b6b66",
+                  wraplength=320).pack(anchor="w")
 
-        exp = ttk.LabelFrame(left, text="FTIR experimental", padding=6)
+        exp = ttk.LabelFrame(left, text="Espectro experimental (FTIR o Raman)", padding=6)
         exp.pack(fill="x", pady=6)
         self.ftir_var = tk.StringVar(value="")
         ttk.Entry(exp, textvariable=self.ftir_var).pack(fill="x")
@@ -581,7 +595,7 @@ class VibspecApp:
                                                                                   padx=4)
         self.quantity_var = tk.StringVar(value=logic.AUTO)
         ttk.Combobox(exp, textvariable=self.quantity_var, state="readonly",
-                     values=[logic.AUTO, "absorbance", "transmittance"]).pack(fill="x")
+                     values=[logic.AUTO, "absorbance", "transmittance", "raman"]).pack(fill="x")
         self.baseline_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(exp, text="Restar línea base", variable=self.baseline_var).pack(anchor="w")
 
@@ -591,7 +605,8 @@ class VibspecApp:
         fields = (("fwhm", "FWHM (cm-1)", "10"), ("scale", "Factor de escala", ""),
                   ("tolerance", "Tolerancia (cm-1)", "30"),
                   ("min_intensity", "Intensidad mínima", "0.05"),
-                  ("xmin", "Desde (cm-1)", "400"), ("xmax", "Hasta (cm-1)", "4000"))
+                  ("xmin", "Desde (cm-1)", "400"), ("xmax", "Hasta (cm-1)", "4000"),
+                  ("laser", "Láser Raman (nm)", "532"), ("temperature", "Temperatura (K)", "300"))
         for key, label, default in fields:
             line = ttk.Frame(view)
             line.pack(fill="x", pady=1)
@@ -599,6 +614,11 @@ class VibspecApp:
             var = tk.StringVar(value=default)
             ttk.Entry(line, textvariable=var, width=10).pack(side="left", fill="x", expand=True)
             self.view_vars[key] = var
+        # Raman: activities become measured-like intensities with the laser
+        # and Bose factors; off shows the bare activities.
+        self.measured_like_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(view, text="Raman como intensidad medida (láser, Bose)",
+                        variable=self.measured_like_var).pack(anchor="w")
         self.profile_var = tk.StringVar(value="lorentzian")
         ttk.Combobox(view, textvariable=self.profile_var, state="readonly",
                      values=["lorentzian", "gaussian"]).pack(fill="x", pady=2)
@@ -636,6 +656,24 @@ class VibspecApp:
             self.results_dir_var.set(path)
             self._on_load_results()
 
+    def _on_pick_qe_results(self) -> None:
+        from tkinter import filedialog
+
+        path = filedialog.askopenfilename(title="Salida de dynmat.x",
+                                          filetypes=[("dynmat.out", "*.out"), ("Todos", "*.*")])
+        if path:
+            self.results_dir_var.set(path)
+            self._on_load_results()
+
+    def _on_kind_changed(self) -> None:
+        from ..core.analysis import default_window
+
+        low, high = default_window(self.kind_var.get())
+        self.view_vars["xmin"].set(f"{low:g}")
+        self.view_vars["xmax"].set(f"{high:g}")
+        if self.results_dir is not None:
+            self._on_plot(False)
+
     def _on_pick_ftir(self) -> None:
         from tkinter import filedialog
 
@@ -645,19 +683,34 @@ class VibspecApp:
             self.ftir_var.set(path)
 
     def _on_load_results(self) -> None:
+        """Load a vibspec calculation, or a QE dynmat.out, as the computed side."""
         from ..core import CalcRecord
+        from ..core.analysis import load_computed
 
+        path = Path(self.results_dir_var.get())
         try:
-            directory = Path(self.results_dir_var.get())
-            record = CalcRecord.load(directory)
+            if path.is_dir() and (path / "record.json").exists():
+                record = CalcRecord.load(path)
+                if record.status != "done":
+                    self._status(f"{path.name}: {logic.progress(path)}. Aún no hay espectro.")
+                    return
+                self.results_record = record
+                self.view_vars["scale"].set(f"{record.spec.get('scale_factor', 1.0):g}")
+            else:
+                self.results_record = None
+                self.view_vars["scale"].set("1")
+            self.computed, origin = load_computed(path)
         except Exception as exc:        # noqa: BLE001
             self._error(exc)
             return
-        if record.status != "done":
-            self._status(f"{directory.name}: {logic.progress(directory)}. Aún no hay espectro.")
+        self.results_dir = path
+        kinds = [k for k, has in (("ir", self.computed.has_ir),
+                                  ("raman", self.computed.has_raman)) if has]
+        self.computed_origin_var.set(f"{origin}: {', '.join(kinds).upper() or 'sin intensidades'}")
+        if self.kind_var.get() not in kinds and kinds:
+            self.kind_var.set(kinds[0])
+            self._on_kind_changed()
             return
-        self.results_dir, self.results_record = directory, record
-        self.view_vars["scale"].set(f"{record.spec.get('scale_factor', 1.0):g}")
         self._on_plot(False)
 
     def _float(self, key: str) -> float:
@@ -683,14 +736,28 @@ class VibspecApp:
         if self.results_dir is None:
             self._status("Carga primero un cálculo terminado.")
             return
+        kind = self.kind_var.get()
         try:
-            spectrum = collect(self.results_dir)
+            spectrum = self.computed if self.computed is not None else collect(self.results_dir)
+            if kind == "raman" and not spectrum.has_raman:
+                raise ValueError("Este cálculo no tiene actividades Raman: prepáralo con Raman "
+                                 "(Calcular → IR y Raman (GPAW)) o usa un dynmat.out con lraman.")
+            if kind == "ir" and not spectrum.has_ir:
+                raise ValueError("Este cálculo no tiene intensidades IR.")
+            laser = self._float("laser") if kind == "raman" and self.measured_like_var.get() \
+                else None
+            temperature = self._float("temperature") if laser is not None else None
             scale, window = self._float("scale"), (self._float("xmin"), self._float("xmax"))
             tolerance, fwhm = self._float("tolerance"), self._float("fwhm")
             min_intensity = self._float("min_intensity")
             experiment, matches, notes = None, None, []
             if self.ftir_var.get().strip():
                 quantity = self.quantity_var.get()
+                if kind == "raman":
+                    quantity = "raman"
+                elif quantity == "raman":
+                    raise ValueError("Un espectro Raman experimental se compara con el Raman "
+                                     "calculado: elige 'raman' en Espectro.")
                 measured = read_ftir(self.ftir_var.get(),
                                      quantity=None if quantity == logic.AUTO else quantity)
                 if measured.quantity_source == "values":
@@ -706,7 +773,8 @@ class VibspecApp:
                     try:
                         scale, matches = search_scale_factor(
                             spectrum, bands, tolerance_cm1=tolerance,
-                            min_relative_intensity=min_intensity, bounds=SCALE_FACTOR_RANGE)
+                            min_relative_intensity=min_intensity, bounds=SCALE_FACTOR_RANGE,
+                            kind=kind)
                     except ValueError as exc:
                         notes.append(f"AVISO: {exc} Se mantiene el factor {scale:g}.")
                     else:
@@ -714,41 +782,54 @@ class VibspecApp:
                         notes.append(f"Factor de escala ajustado: {scale:.4f}")
                 if matches is None:
                     matches = match_bands(spectrum, bands, scale, tolerance_cm1=tolerance,
-                                          min_relative_intensity=min_intensity)
+                                          min_relative_intensity=min_intensity, kind=kind)
             elif fit_scale:
-                notes.append("Para ajustar la escala hace falta un FTIR.")
+                notes.append("Para ajustar la escala hace falta un espectro experimental.")
             self.spectrum_ax.clear()
             draw_ir_comparison(self.spectrum_ax, spectrum, experiment=experiment, fwhm_cm1=fwhm,
                                profile=self.profile_var.get(), scale_factor=scale, window=window,
                                matches=matches,
-                               experiment_label=Path(self.ftir_var.get()).stem or "FTIR")
+                               experiment_label=Path(self.ftir_var.get()).stem or None,
+                               kind=kind, laser_nm=laser, temperature_k=temperature)
             self.spectrum_ax.set_title(self.results_dir.name, fontsize=9, loc="left")
             self.spectrum_canvas.draw_idle()
-            table = match_table(matches) if matches is not None else self._mode_list(scale)
+            table = match_table(matches) if matches is not None else \
+                self._mode_list(scale, spectrum, kind)
             self._set_text(self.band_table, "\n".join(notes + [table]))
             self.experiment = experiment
         except Exception as exc:        # noqa: BLE001
             self._error(exc)
 
-    def _mode_list(self, scale: float) -> str:
-        results = self.results_record.results
+    def _mode_list(self, scale: float, spectrum=None, kind: str = "ir") -> str:
+        spectrum = spectrum or self.computed
         rows = [f"{'modo':>5} {'cm-1 (escalado)':>16} {'I rel':>6}"]
-        intensities = np.asarray(results["ir_intensity"])
+        intensities = spectrum.activities(kind)
         top = intensities.max() if intensities.size and intensities.max() > 0 else 1.0
-        for index, frequency, intensity in zip(results["mode_indices"], results["frequencies_cm1"],
-                                               intensities, strict=True):
+        for mode, intensity in zip(spectrum.modes, intensities, strict=True):
             if intensity / top >= 0.02:
-                rows.append(f"{index:5d} {frequency * scale:16.1f} {intensity / top:6.2f}")
+                rows.append(f"{mode.index:5d} {mode.frequency_cm1 * scale:16.1f} "
+                            f"{intensity / top:6.2f}")
         return "\n".join(rows)
 
     def _on_spectrum_click(self, event) -> None:
-        if event.inaxes is not self.spectrum_ax or self.results_record is None:
+        from ...results.modes import nearest_mode
+
+        if event.inaxes is not self.spectrum_ax or self.results_dir is None:
+            return
+        if self.results_record is None:
+            self._status("Los modos de un cálculo de QE se animan en Resultados → Bandas y "
+                         "espectros (con dynmat.axsf).")
             return
         try:
             scale = self._float("scale")
         except ValueError:
             scale = 1.0
-        index = logic.mode_at(self.results_record, event.xdata, scale)
+        if self.kind_var.get() == "raman" and self.computed is not None:
+            k = nearest_mode(self.computed.frequencies * scale,
+                             self.computed.activities("raman"), event.xdata)
+            index = None if k is None else self.computed.modes[k].index
+        else:
+            index = logic.mode_at(self.results_record, event.xdata, scale)
         if index is not None:
             self._animate_mode(index, scale)
 
