@@ -135,32 +135,82 @@ def atomic_dipoles(system: System, density: np.ndarray, d_matrices: Optional[np.
     return np.einsum("am,xmn,mn->ax", projector, d_matrices, np.real(density))
 
 
-def multipole_kernel(system: System, U=None) -> np.ndarray:
-    """Interaction between atomic charges and dipoles, (4N, 4N), eV per e² (Å)."""
+def _geometry_blocks(system: System, U=None):
+    """γ (N, N), ∇v (N, N, 3) and ∇∇v (N, N, 3, 3) of the Klopman-Ohno kernel."""
     from .scc import gamma_matrix
 
     gamma = gamma_matrix(system, U)
     atoms = system.basis.atoms
-    n = len(atoms)
     positions = system.atoms.get_positions()[atoms]
     diagonal = np.diag(gamma)                              # γ_AA = U_A = C/a_A
     ubar = 0.5 * (diagonal[:, None] + diagonal[None, :])
     a2 = (COULOMB / ubar) ** 2
     vectors = positions[:, None, :] - positions[None, :, :]          # R_A - R_B
-    r2 = np.sum(vectors ** 2, axis=-1)
-    base = r2 + a2
+    base = np.sum(vectors ** 2, axis=-1) + a2
     grad = -COULOMB * vectors * base[..., None] ** -1.5               # ∇v(R_A - R_B)
     hessian = COULOMB * (3 * vectors[..., :, None] * vectors[..., None, :]
                          * base[..., None, None] ** -2.5
                          - np.eye(3) * base[..., None, None] ** -1.5)
-    kernel = np.zeros((4 * n, 4 * n))
-    kernel[:n, :n] = gamma
+    return gamma, grad, hessian
+
+
+def _dipole_blocks(grad, hessian, onsite: bool):
+    """Charge-dipole (N, 3N), dipole-charge (3N, N), dipole-dipole (3N, 3N) blocks."""
+    n = len(grad)
+    q_p = np.zeros((n, 3 * n))
+    p_q = np.zeros((3 * n, n))
+    p_p = np.zeros((3 * n, 3 * n))
     for x in range(3):
-        kernel[:n, n + x::3][:, :n] = -grad[..., x]                   # q_A with p_B
-        kernel[n + x::3, :n][:n, :] = grad[..., x]                    # p_A with q_B
+        q_p[:, x::3] = -grad[..., x]                       # q_A with p_B
+        p_q[x::3, :] = grad[..., x]                        # p_A with q_B
         for y in range(3):
-            kernel[n + x::3, n + y::3][:n, :n] = -hessian[..., x, y]
-    return kernel
+            p_p[x::3, y::3] = -hessian[..., x, y]
+    if not onsite:
+        for atom in range(n):
+            p_p[3 * atom:3 * atom + 3, 3 * atom:3 * atom + 3] = 0.0
+    return q_p, p_q, p_p
+
+
+def multipole_kernel(system: System, U=None) -> np.ndarray:
+    """Interaction between atomic charges and dipoles, (4N, 4N), eV per e² (Å)."""
+    gamma, grad, hessian = _geometry_blocks(system, U)
+    q_p, p_q, p_p = _dipole_blocks(grad, hessian, onsite=True)
+    return np.block([[gamma, q_p], [p_q, p_p]])
+
+
+def has_extra(model: TBModel) -> bool:
+    return any(model.extra_polarizability.get(el) for el in model.orbitals)
+
+
+def extra_alphas(system: System) -> np.ndarray:
+    """Extra atomic polarizability of each model atom (Å³)."""
+    symbols = system.atoms.get_chemical_symbols()
+    return np.array([float(system.model.extra_polarizability.get(symbols[a], 0.0))
+                     for a in system.basis.atoms])
+
+
+def response_kernel(system: System, U=None, dipoles: bool = True, extra: bool = True
+                    ) -> np.ndarray:
+    """Kernel over the active channels: charges, [intra-atomic dipoles], [extra dipoles].
+
+    The extra dipoles (``model.extra_polarizability``) interact like the
+    intra-atomic ones with every other atom's charges and dipoles, and not at
+    all on their own atom: their self-energy is already inside the atomic
+    polarizability they represent.
+    """
+    gamma, grad, hessian = _geometry_blocks(system, U)
+    q_p, p_q, p_p = _dipole_blocks(grad, hessian, onsite=True)
+    _, _, x_x = _dipole_blocks(grad, hessian, onsite=False)
+    rows = [[gamma]]
+    if dipoles:
+        rows = [[gamma, q_p], [p_q, p_p]]
+    if extra:
+        # q-p' and p'-q have no on-site part (∇v(0) = 0) anyway.
+        if dipoles:
+            rows = [[gamma, q_p, q_p], [p_q, p_p, x_x], [p_q, x_x, x_x]]
+        else:
+            rows = [[gamma, q_p], [p_q, x_x]]
+    return np.block(rows)
 
 
 def transition_multipoles(system: System, c: np.ndarray, sc: np.ndarray, active: np.ndarray,
@@ -209,14 +259,18 @@ def _multipoles(solution, system: System, neutral_atom: np.ndarray, d_matrices: 
 
 def polarizability_finite_field(system: System, field: float = 0.002, kT: float = 0.01,
                                 U=None, ground_scc: Optional[bool] = None, tol: float = 1e-10,
-                                mixing: float = 0.3, max_iter: int = 500) -> np.ndarray:
-    """α (Å³) by ±E with self-consistent charges AND intra-atomic dipoles.
+                                mixing: float = 0.3, max_iter: int = 500,
+                                onsite_dipoles: bool = True,
+                                extra_polarizability: bool = True) -> np.ndarray:
+    """α (Å³) by ±E with self-consistent charges, intra-atomic and extra dipoles.
 
     The functional is the ground state's (monopole SCC when ``ground_scc``,
     the model's ``scc`` flag by default; bare otherwise) plus the multipole
     interaction of the changes δM = M - M_ground, charge-charge excluded
-    when the ground state already counts it. Its second derivative is what
-    :func:`tbkit.optics.polarizability_linear_response` computes in one step.
+    when the ground state already counts it; each extra dipole responds as
+    ``p' = -(α/C) w'`` to its local field. The second derivative of this
+    functional is what :func:`tbkit.optics.polarizability_linear_response`
+    computes in one step.
     """
     from .hubbard import _neutral
     from .scc import anderson, gamma_matrix, self_consistent
@@ -225,15 +279,16 @@ def polarizability_finite_field(system: System, field: float = 0.002, kT: float 
     if system.periodic:
         raise ValueError("Campo finito con dipolos: solo sistemas finitos.")
     ground_scc = system.model.scc if ground_scc is None else ground_scc
-    d_matrices = dipole_matrices(system)
-    kernel = multipole_kernel(system, U)
+    dipoles = onsite_dipoles and has_dipoles(system.model)
+    extra = extra_polarizability and has_extra(system.model)
+    d_matrices = dipole_matrices(system) if dipoles else np.zeros((3,) + (system.basis.size,) * 2)
+    kernel = response_kernel(system, U, dipoles, extra)
     atoms = system.basis.atoms
     n = len(atoms)
     gamma = gamma_matrix(system, U)
     projector = atom_projector(system)
     owner = np.argmax(projector, axis=0)
-    n0 = _neutral(system)
-    neutral_atom = projector @ n0
+    neutral_atom = projector @ _neutral(system)
     if ground_scc:
         ground = self_consistent(system, U=U, kT=kT, tol=tol).solution
         kernel = kernel.copy()
@@ -241,29 +296,37 @@ def polarizability_finite_field(system: System, field: float = 0.002, kT: float 
     else:
         ground = solve(system, kT=kT)
     dq0, p0 = _multipoles(ground, system, neutral_atom, d_matrices)
-    m0 = np.concatenate([dq0, p0.ravel()])
+    blocks0 = [dq0] + ([p0.ravel()] if dipoles else []) + ([np.zeros(3 * n)] if extra else [])
+    m0 = np.concatenate(blocks0)
+    alphas = np.repeat(extra_alphas(system), 3) if extra else None
     positions = system.atoms.get_positions()[atoms]
     centred = positions - positions.mean(axis=0)
     alpha = np.zeros((3, 3))
     for axis in range(3):
-        dipoles = []
+        moments = []
         for sign in (1.0, -1.0):
             e_field = np.zeros(3)
             e_field[axis] = sign * field
             m_in = m0.copy()
             inputs, residuals = [], []
             for _ in range(max_iter):
-                delta = m_in - m0
-                potential = kernel @ delta
+                potential = kernel @ (m_in - m0)
                 shift_atom = potential[:n] + centred @ e_field
                 if ground_scc:
                     shift_atom = shift_atom + gamma @ m_in[:n]
-                w = potential[n:].reshape(n, 3) + e_field
-                extra = np.einsum("am,ax,xmn->mn", projector, w, d_matrices)
-                extra = 0.5 * (extra + extra.T)
-                solution = _solve(system, shift_atom[owner], extra, 0.0, kT)
+                offset = n
+                extra_matrix = np.zeros((system.basis.size,) * 2)
+                if dipoles:
+                    w = potential[offset:offset + 3 * n].reshape(n, 3) + e_field
+                    extra_matrix = np.einsum("am,ax,xmn->mn", projector, w, d_matrices)
+                    offset += 3 * n
+                solution = _solve(system, shift_atom[owner], extra_matrix, 0.0, kT)
                 dq, p = _multipoles(solution, system, neutral_atom, d_matrices)
-                m_out = np.concatenate([dq, p.ravel()])
+                out = [dq] + ([p.ravel()] if dipoles else [])
+                if extra:
+                    local = potential[offset:] + np.tile(e_field, n)
+                    out.append(-alphas / COULOMB * local)
+                m_out = np.concatenate(out)
                 residual = m_out - m_in
                 if np.abs(residual).max() < tol:
                     break
@@ -272,6 +335,11 @@ def polarizability_finite_field(system: System, field: float = 0.002, kT: float 
                 m_in = anderson(inputs, residuals, mixing)
             else:
                 raise RuntimeError("Campo finito con dipolos: sin converger.")
-            dipoles.append(-(dq @ centred + p.sum(axis=0)))
-        alpha[:, axis] = (dipoles[0] - dipoles[1]) / (2 * field)
+            moment = dq @ centred
+            if dipoles:
+                moment = moment + p.sum(axis=0)
+            if extra:
+                moment = moment + m_out[offset:].reshape(n, 3).sum(axis=0)
+            moments.append(-moment)
+        alpha[:, axis] = (moments[0] - moments[1]) / (2 * field)
     return 0.5 * (alpha + alpha.T) * COULOMB

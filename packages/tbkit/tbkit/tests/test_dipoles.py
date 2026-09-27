@@ -140,3 +140,53 @@ class TestThePhysics:
                                   kmesh=6)
         assert np.allclose(eps, eps[0, 0] * np.eye(3), atol=1e-6)
         assert eps[0, 0] > 1.0
+
+
+class TestExtraPolarizability:
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def extra(chn):
+        return dataclasses.replace(chn, extra_polarizability={"H": 0.3, "C": 0.8, "N": 0.6})
+
+    @pytest.mark.parametrize("dipoles", [True, False])
+    def test_linear_response_equals_finite_field(self, extra, dipoles):
+        system = System.build(molecule("C5H5N"), extra)
+        lr = polarizability_linear_response(system, onsite_dipoles=dipoles)
+        ff = polarizability_finite_field(system, field=0.002, onsite_dipoles=dipoles)
+        assert lr == pytest.approx(ff, rel=1e-5, abs=1e-5)
+
+    def test_unscreened_adds_the_atomic_sum(self, extra):
+        system = System.build(molecule("HCN"), extra)
+        unscreened = polarizability_linear_response(system, screened=False)
+        sos = polarizability_finite(self_consistent(system, tol=1e-10).solution)
+        assert unscreened == pytest.approx(sos, rel=1e-8, abs=1e-8)
+        bare = polarizability_finite(self_consistent(system, tol=1e-10).solution,
+                                     extra_polarizability=False)
+        assert np.diag(sos - bare) == pytest.approx([0.3 + 0.8 + 0.6] * 3)
+
+    def test_switching_off_recovers_the_model(self, chn, extra):
+        atoms = molecule("C5H5N")
+        a = polarizability_linear_response(System.build(atoms, chn))
+        b = polarizability_linear_response(System.build(atoms, extra),
+                                           extra_polarizability=False)
+        assert a == pytest.approx(b, rel=1e-10)
+
+    def test_extra_dipoles_have_no_self_interaction(self, extra):
+        from tbkit.dipoles import response_kernel
+
+        system = System.build(molecule("HCN"), extra)
+        kernel = response_kernel(system, dipoles=True, extra=True)
+        n = len(system.basis.atoms)
+        start = 4 * n
+        for atom in range(n):
+            block = kernel[start + 3 * atom:start + 3 * atom + 3, :]
+            assert not block[:, start + 3 * atom:start + 3 * atom + 3].any()
+            assert not block[:, n + 3 * atom:n + 3 * atom + 3].any()
+        assert np.allclose(kernel, kernel.T)
+
+    def test_raises_every_component(self, chn, extra):
+        atoms = molecule("C6H6")
+        a = np.sort(np.linalg.eigvalsh(polarizability_linear_response(System.build(atoms, chn))))
+        b = np.sort(np.linalg.eigvalsh(polarizability_linear_response(
+            System.build(atoms, extra))))
+        assert np.all(b > a)

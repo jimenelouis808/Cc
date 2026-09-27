@@ -208,6 +208,43 @@ def gpaw_frequencies(atoms: Atoms, settings: Optional[dict] = None,
     return np.sort(values)
 
 
+#: GPAW settings for polarizabilities: a real-space grid (FD), which, unlike
+#: an LCAO dzp basis, is not short of diffuse functions.
+GPAW_ALPHA_DEFAULTS = {"mode": "fd", "xc": "PBE", "h": 0.18, "vacuum": 6.0,
+                       "convergence": {"density": 1e-7, "eigenstates": 1e-10},
+                       "field_v_per_angstrom": 0.01}
+
+
+def gpaw_polarizability(atoms: Atoms, settings: Optional[dict] = None) -> np.ndarray:
+    """Static α (Å³, 3x3) of a closed-shell molecule by ±E finite field with GPAW.
+
+    ``α_ij = ∂μ_i/∂E_j`` by central differences (six SCF runs), converted
+    from e·Å²/V with 1/(4πε0) = 14.3996 eV·Å/e².
+    """
+    from gpaw import GPAW
+    from gpaw.external import ConstantElectricField
+
+    settings = {**GPAW_ALPHA_DEFAULTS, **(settings or {})}
+    atoms = atoms.copy()
+    atoms.pbc = False
+    atoms.center(vacuum=settings["vacuum"])
+    field = float(settings["field_v_per_angstrom"])
+    alpha = np.zeros((3, 3))
+    for axis in range(3):
+        dipoles = []
+        for sign in (1.0, -1.0):
+            direction = [0.0, 0.0, 0.0]
+            direction[axis] = 1.0
+            atoms.calc = GPAW(mode=settings["mode"], xc=settings["xc"], h=settings["h"],
+                              convergence=settings["convergence"], spinpol=False,
+                              symmetry="off", txt=None,
+                              external=ConstantElectricField(sign * field, direction))
+            atoms.get_potential_energy()
+            dipoles.append(np.array(atoms.get_dipole_moment()))
+        alpha[:, axis] = (dipoles[0] - dipoles[1]) / (2 * field) * 14.399645
+    return 0.5 * (alpha + alpha.T)
+
+
 def gpaw_onsite_dipole(symbol: str, xc: str = "PBE") -> float:
     """``d = (1/√3) ∫ R_2s R_2p r³ dr`` of the free atom (Å), with GPAW's atom.
 

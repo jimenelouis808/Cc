@@ -266,6 +266,10 @@ class TBModel:
         Per element, the magnitude of ⟨s|r_α|p_α⟩ on one atom (Å), for the
         optical response (:mod:`tbkit.dipoles`); its sign is taken from the
         model's orbital convention. Empty: point dipoles only.
+    extra_polarizability
+        Per element, an atomic polarizability (Å³) added to the optical
+        response for what the minimal basis cannot polarise
+        (:mod:`tbkit.dipoles`). Empty: none.
     scc
         True when the parameters were made for a self-consistent-charge
         ground state (DFTB and DFTB-like sets): calculators and responses
@@ -288,6 +292,7 @@ class TBModel:
     metadata: dict = field(default_factory=dict)
     scc: bool = False
     onsite_dipole: dict[str, float] = field(default_factory=dict)
+    extra_polarizability: dict[str, float] = field(default_factory=dict)
 
     @property
     def orthogonal(self) -> bool:
@@ -403,6 +408,8 @@ def model_from_dict(data: dict) -> TBModel:
         metadata=metadata,
         scc=bool(_value(data.get("scc", False))),
         onsite_dipole={el: float(_value(v)) for el, v in data.get("onsite_dipole", {}).items()},
+        extra_polarizability={el: float(_value(v))
+                              for el, v in data.get("extra_polarizability", {}).items()},
     )
 
 
@@ -433,6 +440,8 @@ def model_to_dict(model: TBModel) -> dict:
         data["scc"] = True
     if model.onsite_dipole:
         data["onsite_dipole"] = dict(model.onsite_dipole)
+    if model.extra_polarizability:
+        data["extra_polarizability"] = dict(model.extra_polarizability)
     if model.repulsive is not None:
         data["repulsive"] = model.repulsive.to_dict()
     for key in ("reference", "system", "validity", "notes"):
