@@ -203,6 +203,16 @@ def _turning_points(values: np.ndarray, fraction: float = 0.05) -> int:
     return reversals
 
 
+def _descending(x: np.ndarray) -> bool:
+    """Non-increasing, and actually going somewhere.
+
+    The mirror of :func:`_ascending`, and used for the same reason: an
+    instrument that writes its axis backwards is still writing a spectrum.
+    """
+    step = np.diff(x)
+    return bool(np.all(step <= 1e-12) and np.count_nonzero(step < 0) > 0.5 * step.size)
+
+
 def _ascending(x: np.ndarray) -> bool:
     """Non-decreasing, and actually going somewhere.
 
@@ -381,6 +391,19 @@ def _from_shape(table: np.ndarray, header_text: str = "") -> Detection:
     """The decision itself, from the columns' own shape."""
     x = table[:, 0]
     y = table[:, 1]
+    # A descending axis is an ordering, not a different measurement. Plenty
+    # of Raman instruments export high-to-low -- a real file from a 532 nm
+    # instrument arrived running 3000.8 down to 99.9 cm-1 -- and every test
+    # below is written for an axis that grows, so the whole recognition
+    # block sat behind `_ascending(x)` and such a file came back
+    # "desconocido". Sorting first costs nothing and is what any reader
+    # would do with it anyway. Descending TIME would be a broken file, but
+    # that is caught by the checks themselves, not by refusing to look.
+    if x.size > 1 and _descending(x):
+        order = np.argsort(x, kind="stable")
+        table = table[order]
+        x = table[:, 0]
+        y = table[:, 1]
     columns = table.shape[1]
     span = float(np.nanmax(x) - np.nanmin(x))
     low, high = float(np.nanmin(x)), float(np.nanmax(x))
