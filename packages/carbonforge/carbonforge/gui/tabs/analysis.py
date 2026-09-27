@@ -183,7 +183,8 @@ class AnalysisTab:
         except ValueError:
             raise ValueError(f"'{label}' debe ser un número (recibido: {raw!r}).")
 
-    def _on_open_bands(self) -> None:
+    def _on_open_bands(self, path=None) -> None:
+        """Open a band file: ``path`` when given (a finished job), else ask."""
         from tkinter import filedialog
 
         from ...results.bands import (
@@ -193,7 +194,7 @@ class AnalysisTab:
             read_siesta_bands,
         )
 
-        path = filedialog.askopenfilename(
+        path = path or filedialog.askopenfilename(
             title="Abrir archivo de bandas",
             filetypes=[
                 ("Todos los formatos", "*.dat *.gnu *.bands"),
@@ -264,12 +265,13 @@ class AnalysisTab:
         self.analysis_status_var.set("Bandas cargadas.")
         self.save_plot_button.configure(state="normal")
 
-    def _on_open_spectrum(self) -> None:
+    def _on_open_spectrum(self, path=None) -> None:
+        """Open a dynmat.x output: ``path`` when given (a finished job), else ask."""
         from tkinter import filedialog
 
         from ...results.spectra import read_dynmat
 
-        path = filedialog.askopenfilename(
+        path = path or filedialog.askopenfilename(
             title="Abrir salida de dynmat.x",
             filetypes=[("Salida de dynmat", "*.out"), ("Cualquiera", "*")],
         )

@@ -148,7 +148,8 @@ con sus páginas:
 | | Modelo finito (IR) | Cinta finita para el IR de vibspec |
 | Preparar | Cálculo (QE, SIESTA, LAMMPS) | Receta, ajustes, correcciones y exportación |
 | | Celda EDLC (LAMMPS) | Montar un condensador de doble capa |
-| Calcular | IR con GPAW | Preparar y lanzar el cálculo IR |
+| Calcular | Trabajos | La cola de todos los cálculos: estado, progreso, log, cancelar, abrir resultados |
+| | IR con GPAW | Preparar y lanzar el cálculo IR |
 | Resultados | Bandas y espectros | Abrir un cálculo terminado y graficarlo |
 | | IR frente a FTIR | Comparar el IR calculado con tu FTIR |
 
@@ -184,6 +185,10 @@ La página Construir tiene esta disposición:
 4. Ve a **Preparar → Cálculo**: elige una receta o ajusta el cálculo a mano,
    pulsa **Comprobar el cálculo**, aplica las correcciones que proponga, marca
    los formatos y pulsa **Exportar…** para elegir carpeta.
+5. Si QE, SIESTA o LAMMPS están instalados en esta máquina, marca **Encolar al
+   exportar**: el cálculo se lanza y lo sigues en **Calcular → Trabajos**. Si
+   no, cada carpeta exportada lleva un `job.json` y se corre en otra máquina con
+   `python -m carbonforge.jobs.run carpeta/qe --nprocs 8`.
 
 Puedes rotar, hacer zoom y desplazar la vista 3D con la barra de
 herramientas bajo la figura.

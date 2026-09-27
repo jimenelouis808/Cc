@@ -205,10 +205,12 @@ class TestJobQueue:
 class TestCommandAndProgress:
     def test_default_command(self, tmp_path, monkeypatch):
         assert logic.default_command(tmp_path, 1) == [sys.executable, str(tmp_path / "run.py")]
-        monkeypatch.setattr(logic.shutil, "which", lambda name: "/usr/bin/" + name)
+        from carbonforge.jobs import queue as shared    # the queue lives there now
+
+        monkeypatch.setattr(shared.shutil, "which", lambda name: "/usr/bin/" + name)
         command = logic.default_command(tmp_path, 4)
         assert command[:3] == ["/usr/bin/mpiexec", "-n", "4"]
-        monkeypatch.setattr(logic.shutil, "which", lambda name: None)
+        monkeypatch.setattr(shared.shutil, "which", lambda name: None)
         with pytest.raises(RuntimeError, match="mpiexec"):
             logic.default_command(tmp_path, 4)
 

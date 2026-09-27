@@ -42,7 +42,8 @@ class VibspecApp:
     def __init__(self, root, workdir: Optional[Path] = None, *,
                  frames: Optional[dict[str, Any]] = None,
                  select: Optional[Callable[[str], None]] = None,
-                 status_var=None, session=None) -> None:
+                 status_var=None, session=None, queue=None,
+                 on_submit: Optional[Callable[[Any], None]] = None) -> None:
         import tkinter as tk
         from tkinter import ttk
 
@@ -51,7 +52,11 @@ class VibspecApp:
         self._select_page = select
 
         self.workdir = Path(workdir or Path.cwd() / "calculos")
-        self.queue = logic.JobQueue()
+        # Embedded, the window's queue runs every engine's jobs and has its
+        # own page; standalone, this window keeps a queue and a job panel.
+        self.queue = queue if queue is not None else logic.JobQueue()
+        self._shared_queue = queue is not None
+        self._on_submit = on_submit
         self.model: Optional[logic.ModelResult] = None
         self.results_dir: Optional[Path] = None
         self.results_record = None
@@ -85,7 +90,8 @@ class VibspecApp:
 
         if self.session is not None:
             self.session.subscribe(self._on_session_change)
-        root.after(_POLL_MS, self._poll)
+        if not self._shared_queue:
+            root.after(_POLL_MS, self._poll)
 
     def _select(self, page: str) -> None:
         if self._select_page is not None:
@@ -385,6 +391,14 @@ class VibspecApp:
 
         jobs = ttk.LabelFrame(right, text="Cola de trabajos", padding=6)
         jobs.pack(fill="both", expand=True)
+        if self._shared_queue:
+            ttk.Label(jobs, text="Los trabajos de todos los motores (GPAW, QE, SIESTA, "
+                                 "LAMMPS) están en Calcular → Trabajos.",
+                      wraplength=420).pack(anchor="w")
+            ttk.Button(jobs, text="Ver la cola de trabajos",
+                       command=lambda: self._on_submit and self._on_submit(None)
+                       ).pack(anchor="w", pady=6)
+            return
         columns = ("estado", "progreso")
         self.job_tree = ttk.Treeview(jobs, columns=columns, height=8)
         self.job_tree.heading("#0", text="cálculo")
@@ -459,6 +473,11 @@ class VibspecApp:
         except Exception as exc:        # noqa: BLE001
             self._error(exc)
             return
+        if self._shared_queue:
+            self.queue.poll()
+            if self._on_submit is not None:
+                self._on_submit(job)
+            return
         self.job_tree.insert("", "end", iid=str(job.directory), text=job.name,
                              values=(job.state, logic.progress(job.directory)))
         self.queue.poll()
@@ -485,9 +504,13 @@ class VibspecApp:
     def _on_show_results(self) -> None:
         job = self._selected_job()
         if job is not None:
-            self.results_dir_var.set(str(job.directory))
-            self._select("Resultados")
-            self._on_load_results()
+            self.show_results(job.directory)
+
+    def show_results(self, directory: Path) -> None:
+        """Open a finished calculation on the Resultados page."""
+        self.results_dir_var.set(str(directory))
+        self._select("Resultados")
+        self._on_load_results()
 
     def _refresh_jobs(self) -> None:
         for job in self.queue.jobs:

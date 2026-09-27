@@ -6,6 +6,44 @@ está la trampa.
 
 ---
 
+## carbonforge · una cola para todos los cálculos
+
+**Calcular → Trabajos.** Todos los cálculos que se lanzan desde la ventana
+(GPAW de vibspec, QE, SIESTA, LAMMPS) van a la misma cola: motor, estado,
+progreso ("paso 2/3: ph.x"), log en vivo, **Cancelar** y **Abrir resultados**,
+que abre las bandas o el espectro terminados en Resultados, o el IR de vibspec
+en su página.
+
+**Encolar al exportar.** En Preparar → Cálculo, marca "Encolar al exportar": las
+carpetas exportadas entran en la cola si el programa está instalado en esta
+máquina. Si falta (pw.x en Windows, por ejemplo) no se encola y se dice cómo
+correrlo en otra.
+
+**`job.json` y el runner.** Cada carpeta exportada (qe/, siesta/, lammps/) lleva
+un `job.json` con sus pasos en orden (pw.x → ph.x → dynmat.x; pw.x scf → bands
+→ bands.x; siesta < input.fdf; lmp -in in.lammps). En cualquier máquina:
+
+```bash
+python -m carbonforge.jobs.run salida/qe --nprocs 8     # --restart para empezar de cero
+```
+
+Cada paso se registra en `job.json`; si uno falla o se cancela, la siguiente
+ejecución **retoma tras el último paso terminado** (no repite el scf). Otro
+binario: `CARBONFORGE_PW_X=/opt/qe/bin/pw.x`; otro lanzador MPI:
+`CARBONFORGE_MPI="srun -n {n}"`.
+
+**Qué NO hace, y dónde está la trampa:**
+
+- Un paso que se corta a medias (pw.x cancelado) se repite entero la próxima
+  vez; lo que se retoma es la cadena, no el paso.
+- Cancelar detiene también el programa (pw.x, siesta) en Linux y macOS. En
+  Windows solo se detiene el runner; allí QE y SIESTA no suelen correr.
+- La DOS terminada aún no se grafica en la ventana: `carbonforge plot-dos`.
+- Las recetas (presets) escriben su propio proyecto con `run_all.sh`; esos no
+  llevan `job.json` todavía.
+- Una cola, un trabajo a la vez: dos cálculos DFT en los mismos núcleos van
+  más lentos que uno tras otro.
+
 ## carbonforge · una sola ventana, con vibspec dentro
 
 **Secciones por tarea.** La ventana se organiza como se trabaja:
@@ -35,8 +73,8 @@ la estructura actual; las otras páginas la toman **con un botón**, nunca solas
   estructura actual, venga de donde venga. Construir se queda con la geometría,
   el dopaje y los grupos. La celda EDLC también parte de la estructura actual, y
   se descarta si esta cambia.
-- La cola de trabajos solo lanza cálculos de GPAW; QE y SIESTA se preparan
-  aquí y se corren fuera.
+- ~~La cola de trabajos solo lanza cálculos de GPAW~~ Ahora hay una sola cola
+  para todo (ver abajo).
 - Cerrar la ventana con cálculos de vibspec en marcha pide confirmación.
 
 ## carbonforge · la ventana, partida por pestañas

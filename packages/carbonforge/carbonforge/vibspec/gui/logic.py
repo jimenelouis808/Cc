@@ -22,20 +22,32 @@ never from guessing.
 
 from __future__ import annotations
 
-import os
 import re
-import shutil
-import subprocess
-import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import numpy as np
 from ase import Atoms
 from ase.io import read
 
 from ...builders.nanoribbon import DEFAULT_VACUUM_PER_SIDE, build_finite_nanoribbon
+# The job queue is carbonforge's (carbonforge.jobs), shared with QE, SIESTA
+# and LAMMPS jobs; re-exported here so vibspec's API does not change.
+from ...jobs.queue import (  # noqa: F401
+    CANCELLED,
+    DONE,
+    ERROR,
+    QUEUED,
+    RUNNING,
+    CommandBuilder,
+    Job,
+    JobQueue,
+    VibspecAdapter,
+    job_log,
+    tail,
+)
+from ...jobs.queue import gpaw_command as default_command  # noqa: F401
 from ...gui.params import ParamSpec, collect_values
 from ...validation.checks import ValidationReport
 from ..core import (
@@ -248,27 +260,6 @@ def prepare_job(atoms: Atoms, spec: CalcSpec, root: Path, name: Optional[str] = 
 # Jobs
 # --------------------------------------------------------------------------
 
-#: Job states as the window shows them.
-QUEUED, RUNNING, DONE, ERROR, CANCELLED = "en cola", "corriendo", "terminado", "error", "cancelado"
-
-CommandBuilder = Callable[[Path, int], list[str]]
-
-
-def default_command(directory: Path, nprocs: int = 1) -> list[str]:
-    """The command that runs a prepared calculation.
-
-    ``python run.py`` in serial; ``mpiexec -n N python run.py`` in parallel,
-    which is how GPAW runs under MPI since version 22.
-    """
-    script = str(Path(directory) / "run.py")
-    if nprocs > 1:
-        mpiexec = shutil.which("mpiexec") or shutil.which("mpirun")
-        if mpiexec is None:
-            raise RuntimeError("No se encontró mpiexec: instala OpenMPI o usa 1 proceso.")
-        return [mpiexec, "-n", str(nprocs), sys.executable, script]
-    return [sys.executable, script]
-
-
 def can_run_locally() -> tuple[bool, str]:
     """Whether this machine can run calculations, and why not if it cannot."""
     if gpaw_available():
@@ -279,154 +270,7 @@ def can_run_locally() -> tuple[bool, str]:
 
 def progress(directory: Path) -> str:
     """One line on how far a calculation has got, read from its files."""
-    directory = Path(directory)
-    try:
-        record = CalcRecord.load(directory)
-    except (FileNotFoundError, ValueError):
-        return "sin record.json"
-    status = record.status
-    if status == "relaxing":
-        log = directory / "relax.log"
-        steps = max(0, len(log.read_text(encoding="utf-8").splitlines()) - 1) if log.exists() else 0
-        return f"relajando: paso {steps}"
-    if status == "vibrations":
-        per_atom = 6 if int(record.spec.get("nfree", 2)) == 2 else 12
-        total = per_atom * record.n_atoms + 1
-        cache = directory / "ir"
-        done = len(list(cache.glob("cache.*.json"))) if cache.exists() else 0
-        return f"vibraciones: {done}/{total} desplazamientos"
-    return {"prepared": "preparado", "relaxed": "relajado", "done": "terminado",
-            "error": f"error: {record.history[-1]['message'] if record.history else ''}"
-            }.get(status, status)
-
-
-@dataclass
-class Job:
-    """One calculation directory and the process running it, if any."""
-
-    directory: Path
-    nprocs: int = 1
-    state: str = QUEUED
-    process: Optional[subprocess.Popen] = None
-    returncode: Optional[int] = None
-    command: list[str] = field(default_factory=list)
-
-    @property
-    def name(self) -> str:
-        return self.directory.name
-
-    @property
-    def log_path(self) -> Path:
-        return self.directory / "job.log"
-
-
-class JobQueue:
-    """Runs prepared calculations as subprocesses, a few at a time.
-
-    Parameters
-    ----------
-    max_parallel
-        How many jobs may run at once. One is right for a desktop: two GPAW
-        runs on the same cores are slower than one after the other.
-    command
-        ``command(directory, nprocs) -> argv``. Tests pass a stand-in.
-    """
-
-    def __init__(self, max_parallel: int = 1, command: CommandBuilder = default_command):
-        self.max_parallel = max_parallel
-        self.command = command
-        self.jobs: list[Job] = []
-
-    def submit(self, directory: Path, nprocs: int = 1) -> Job:
-        """Queue a prepared calculation. Refuses one already queued or running."""
-        directory = Path(directory)
-        CalcRecord.load(directory)          # must be a calculation directory
-        for job in self.jobs:
-            if job.directory == directory and job.state in (QUEUED, RUNNING):
-                raise ValueError(f"{directory.name} ya está {job.state}.")
-        job = Job(directory=directory, nprocs=nprocs)
-        self.jobs.append(job)
-        return job
-
-    def _start(self, job: Job) -> None:
-        job.command = self.command(job.directory, job.nprocs)
-        handle = job.log_path.open("ab")
-        env = dict(os.environ, PYTHONUNBUFFERED="1")
-        job.process = subprocess.Popen(
-            job.command, cwd=job.directory, stdout=handle, stderr=subprocess.STDOUT, env=env,
-        )
-        handle.close()                      # the child has its own descriptor
-        job.state = RUNNING
-
-    def poll(self) -> list[Job]:
-        """Advance the queue; return the jobs whose state changed."""
-        changed = []
-        for job in self.jobs:
-            if job.state != RUNNING or job.process is None:
-                continue
-            code = job.process.poll()
-            if code is None:
-                continue
-            job.returncode = code
-            try:
-                status = CalcRecord.load(job.directory).status
-            except (FileNotFoundError, ValueError):
-                status = "error"
-            job.state = DONE if code == 0 and status == "done" else ERROR
-            changed.append(job)
-        running = sum(job.state == RUNNING for job in self.jobs)
-        for job in self.jobs:
-            if running >= self.max_parallel:
-                break
-            if job.state == QUEUED:
-                try:
-                    self._start(job)
-                except (OSError, RuntimeError) as exc:
-                    job.state = ERROR
-                    with job.log_path.open("a", encoding="utf-8") as handle:
-                        handle.write(f"No se pudo lanzar: {exc}\n")
-                else:
-                    running += 1
-                changed.append(job)
-        return changed
-
-    def cancel(self, job: Job, timeout: float = 10.0) -> None:
-        """Stop a job. Its directory stays valid: run.py resumes where it stopped."""
-        if job.state == RUNNING and job.process is not None:
-            job.process.terminate()
-            try:
-                job.process.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                job.process.kill()
-                job.process.wait()
-        if job.state in (QUEUED, RUNNING):
-            job.state = CANCELLED
-
-    def active(self) -> bool:
-        return any(job.state in (QUEUED, RUNNING) for job in self.jobs)
-
-    def shutdown(self) -> None:
-        """Cancel everything; called when the window closes."""
-        for job in self.jobs:
-            self.cancel(job)
-
-
-def tail(path: Path, lines: int = 40) -> str:
-    """The last ``lines`` lines of a text file, or an empty string."""
-    path = Path(path)
-    if not path.exists():
-        return ""
-    text = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    return "\n".join(text[-lines:])
-
-
-def job_log(job: Job, lines: int = 40) -> str:
-    """What the window shows for a job: its output, then the relaxation log."""
-    parts = [f"$ {' '.join(job.command)}" if job.command else "", tail(job.log_path, lines)]
-    relax = tail(job.directory / "relax.log", 12)
-    if relax:
-        parts += ["--- relax.log ---", relax]
-    return "\n".join(p for p in parts if p)
+    return VibspecAdapter().progress(Path(directory))
 
 
 # --------------------------------------------------------------------------

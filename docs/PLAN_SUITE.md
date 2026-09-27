@@ -77,8 +77,10 @@ Pendiente:
 - [x] Exportación QE/SIESTA/LAMMPS en Preparar → Cálculo, sobre la
       estructura actual (receta, ajustes, avanzados, correcciones, formatos).
       La celda EDLC también usa la estructura actual.
-- [ ] Cola de trabajos y `record.json` para todos los motores (QE, SIESTA,
-      LAMMPS), no solo GPAW; que cada cálculo lanzado quede en la misma cola.
+- [x] Una cola para todos los motores (`carbonforge/jobs/`): `job.json` con
+      los pasos de cada exportación QE/SIESTA/LAMMPS, runner reanudable
+      (`python -m carbonforge.jobs.run DIR`), página Calcular → Trabajos, y
+      "Encolar al exportar" en Preparar. vibspec usa la misma cola.
 - [ ] Resultados: DOS/PDOS y modos de QE junto a los de vibspec.
 
 ## Fase C — Raman en vibspec

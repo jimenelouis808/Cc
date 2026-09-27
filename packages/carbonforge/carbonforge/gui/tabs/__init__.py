@@ -12,7 +12,8 @@ from .analysis import AnalysisTab
 from .builder import BuilderTab
 from .edlc import EdlcTab
 from .importing import ImportTab
+from .jobs import JobsTab
 from .prepare import PrepareTab
 from .preview import PreviewPanel
 
-__all__ = ["AnalysisTab", "BuilderTab", "EdlcTab", "ImportTab", "PrepareTab", "PreviewPanel"]
+__all__ = ["AnalysisTab", "BuilderTab", "EdlcTab", "ImportTab", "JobsTab", "PrepareTab", "PreviewPanel"]

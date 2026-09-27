@@ -1047,6 +1047,13 @@ def export_structure(
             written.append(path)
         else:
             raise ValueError(f"Formato de exportación desconocido: '{fmt}'.")
+    # Each engine directory describes its own run (job.json), so the window's
+    # queue, a terminal and a cluster all run it the same way.
+    from ..jobs.manifest import write_manifest
+
+    for fmt in formats:
+        if fmt in ("qe", "siesta", "lammps") and (outdir / fmt).is_dir():
+            written.append(write_manifest(outdir / fmt))
     return written
 
 

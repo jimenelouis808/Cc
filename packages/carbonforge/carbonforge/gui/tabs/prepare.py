@@ -99,6 +99,10 @@ class PrepareTab:
         self.force_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(fmts, text="Exportar aunque falle la validación",
                         variable=self.force_var).pack(anchor="w", pady=(4, 0))
+        # Run it from here when the program is installed on this machine.
+        self.enqueue_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(fmts, text="Encolar al exportar (Calcular → Trabajos)",
+                        variable=self.enqueue_var).pack(anchor="w")
 
         actions = ttk.Frame(left)
         actions.pack(fill="x", pady=(8, 0))
@@ -227,7 +231,22 @@ class PrepareTab:
             return
         listado = "\n".join(f"  • {p}" for p in written)
         self.prepare_status_var.set(f"Exportado: {len(written)} archivo(s).")
+        if getattr(self, "enqueue_var", None) is not None and self.enqueue_var.get():
+            self._enqueue_exported(written)
         messagebox.showinfo("Exportación completada", f"Archivos escritos:\n{listado}")
+
+    def _enqueue_exported(self, written) -> None:
+        """Queue each exported engine directory (those with a job.json)."""
+        from ...jobs.manifest import MANIFEST
+
+        directories = [Path(p).parent for p in written if Path(p).name == MANIFEST]
+        queued = [d.name for d in directories if self.submit_job(d) is not None]
+        skipped = len(directories) - len(queued)
+        note = f"Encolado: {', '.join(queued)}." if queued else "Nada encolado."
+        if skipped:
+            note += (f" {skipped} sin encolar: falta el programa aquí (ver Calcular → "
+                     "Trabajos).")
+        self.prepare_status_var.set(note)
 
     # -- fixes (shown on Construir and here) -----------------------------
 

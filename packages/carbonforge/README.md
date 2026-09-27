@@ -407,7 +407,8 @@ actual") to export it to QE or SIESTA.
   the plane normal) and every check and spin recommendation.
 - **IR con GPAW** — the GPAW settings, validated before anything is written;
   *Preparar* writes the calculation directory, *Preparar y correr* also
-  queues it. Jobs run as **subprocesses** (so *Cancelar* really stops them,
+  queues it in the window's one job queue (**Calcular → Trabajos**, shared
+  with QE, SIESTA and LAMMPS jobs). Jobs run as **subprocesses** (so *Cancelar* really stops them,
   and `run.py` resumes later), one at a time, with state (en cola /
   corriendo / terminado / error / cancelado), progress read from the files
   (relaxation step, displacements done) and the live log. Without GPAW

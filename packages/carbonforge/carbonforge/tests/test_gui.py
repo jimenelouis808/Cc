@@ -141,7 +141,10 @@ class TestExport:
         written = export_structure(
             atoms, tmp_path, ["qe", "lammps", "xyz", "cif"]
         )
-        assert len(written) == 5  # qe(1) + lammps(2) + xyz(1) + cif(1)
+        # qe(1) + lammps(2) + xyz(1) + cif(1), plus a job.json per engine run
+        assert len(written) == 7
+        assert sorted(p.parent.name for p in written if p.name == "job.json") == \
+            ["lammps", "qe"]
         for path in written:
             assert path.exists() and path.stat().st_size > 0
 

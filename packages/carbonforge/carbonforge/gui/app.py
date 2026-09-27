@@ -21,7 +21,16 @@ from ase import Atoms
 
 from .params import ADVANCED_KEY, ParamSpec
 from .session import Session
-from .tabs import AnalysisTab, BuilderTab, EdlcTab, ImportTab, PrepareTab, PreviewPanel
+from ..jobs.queue import JobQueue
+from .tabs import (
+    AnalysisTab,
+    BuilderTab,
+    EdlcTab,
+    ImportTab,
+    JobsTab,
+    PrepareTab,
+    PreviewPanel,
+)
 from .tabs.builder import _clock  # noqa: F401  (re-exported: tests and callers)
 
 _TK_MISSING_MSG = """
@@ -40,7 +49,8 @@ Tkinter:
 """.strip()
 
 
-class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, AnalysisTab):
+class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, JobsTab,
+                     AnalysisTab):
     """Main application window: the notebook, and what its tabs share."""
 
     def __init__(self, root, vibspec_workdir: Optional[Path] = None) -> None:
@@ -76,6 +86,8 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, A
         #: The structure the tabs hand to each other (gui/session.py).
         self.session = Session()
         self._vibspec = None
+        #: Every calculation launched from the window (carbonforge.jobs).
+        self.jobs = JobQueue()
         self._vibspec_workdir: Optional[Path] = vibspec_workdir
 
         self._build_layout()
@@ -90,7 +102,7 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, A
     SECTIONS: dict[str, tuple[str, ...]] = {
         "Estructura": ("Construir", "Importar", "Modelo finito (IR)"),
         "Preparar": ("Cálculo (QE, SIESTA, LAMMPS)", "Celda EDLC (LAMMPS)"),
-        "Calcular": ("IR con GPAW",),
+        "Calcular": ("Trabajos", "IR con GPAW"),
         "Resultados": ("Bandas y espectros", "IR frente a FTIR"),
     }
     #: vibspec's pages and where they live in the window.
@@ -142,6 +154,7 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, A
         self._build_prepare_tab(self.pages["Cálculo (QE, SIESTA, LAMMPS)"])
         self._build_edlc_tab(self.pages["Celda EDLC (LAMMPS)"])
         self._build_analysis_tab(self.pages["Bandas y espectros"])
+        self._build_jobs_tab(self.pages["Trabajos"])
         self.session.subscribe(self._on_session_change)
 
     def select_page(self, page: str) -> None:
@@ -175,6 +188,7 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, A
                 frames={name: self.pages[page] for name, page in self.VIBSPEC_PAGES.items()},
                 select=lambda name: self.select_page(self.VIBSPEC_PAGES[name]),
                 status_var=self.page_status_var, session=self.session,
+                queue=self.jobs, on_submit=self._on_job_submitted,
             )
         return self._vibspec
 
@@ -183,10 +197,14 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, A
                              + ("ninguna" if current is None else current.describe()))
 
     def _on_close(self) -> None:
-        """Close the window, unless vibspec jobs are running and the user
-        prefers to keep them."""
-        if self._vibspec is not None and not self._vibspec.confirm_close():
+        """Close the window; with jobs running, ask first and stop them."""
+        from tkinter import messagebox
+
+        if self.jobs.active() and not messagebox.askyesno(
+                "carbonforge", "Hay cálculos en cola o corriendo. ¿Cancelarlos y salir? "
+                               "(se pueden reanudar: python -m carbonforge.jobs.run o run.py)"):
             return
+        self.jobs.shutdown()
         self.root.destroy()
 
     def _add_field(self, parent, spec: ParamSpec, store: dict[str, Any]) -> None:

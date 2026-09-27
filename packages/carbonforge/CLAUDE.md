@@ -30,6 +30,7 @@ carbonforge/
 ├── workflows/     # batch generation, convergence sweeps, ML dataset
 ├── utils/         # constants, geometry helpers
 ├── codes/         # per-code parameter catalogues + manual importers (QE, SIESTA, GPAW)
+├── jobs/          # job.json manifests, step runner, the one subprocess queue for all engines
 ├── cli/           # command line interface
 ├── tests/         # pytest unit tests
 └── examples/      # runnable example scripts
@@ -77,10 +78,15 @@ carbonforge/
   both normalised on ONE y axis. Stored frequencies are never scaled in
   place; the scale factor is applied at analysis time. Band matches are a
   proposal, and the fitted scale factor needs >= 3 matched pairs.
-- vibspec's window never runs DFT in its own process: jobs are subprocesses
-  (`vibspec/gui/logic.JobQueue`), because a thread cannot be cancelled. A
-  job's state comes from the process AND `record.json`; exit code 0 without a
-  `done` record is an error. Keep decisions in `gui/logic.py`, not `app.py`.
+- The window never runs a calculation in its own process: jobs are
+  subprocesses in the one `jobs.JobQueue` (GPAW, QE, SIESTA, LAMMPS), because
+  a thread cannot be cancelled. A job's state comes from the process AND the
+  directory's record (`record.json` for vibspec, `job.json` for exports);
+  exit code 0 without a `done` record is an error. Cancelling stops the
+  whole process group (pw.x too), and a rerun resumes after the last step
+  that finished. `job.json` is inferred from the exported files
+  (`jobs.manifest_for_directory`), so writers and runner cannot drift apart.
+  vibspec keeps its decisions in `vibspec/gui/logic.py`, not `app.py`.
 - vibspec imports (`core/imported.load_structure`) refuse a structure whose
   bonds cross the cell (truly periodic) and overlapping atoms; they never cut
   bonds or move atoms. The edge type is set only when one type dominates
@@ -102,7 +108,8 @@ carbonforge/
   a user action, never by itself. vibspec's pages are embedded
   (`VibspecApp(frames=...)`), built on first visit, and consume other pages'
   structures through `core.load_atoms`, with the same refusals as a file.
-  The window asks `VibspecApp.confirm_close` before closing (running jobs).
+  Embedded, vibspec uses the window's queue; the window asks before closing
+  with jobs running and stops them.
 - Advanced parameters go through `codes.Catalog.check` before any writer
   sees them, and what is validated is the overridden value. Never drop an
   override silently: a keyword for a namelist the run does not write is an

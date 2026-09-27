@@ -102,7 +102,7 @@ def _install_fake_tk(monkeypatch) -> None:
     ttk = types.ModuleType("tkinter.ttk")
     for name in (
         "Frame", "LabelFrame", "Label", "Button", "Combobox",
-        "Entry", "Checkbutton", "Scrollbar", "Notebook",
+        "Entry", "Checkbutton", "Scrollbar", "Notebook", "Treeview",
     ):
         setattr(ttk, name, _Widget)
     tk.ttk = ttk
