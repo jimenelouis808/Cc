@@ -49,6 +49,13 @@ from ...jobs.queue import (  # noqa: F401
 )
 from ...jobs.queue import gpaw_command as default_command  # noqa: F401
 from ...gui.params import ParamSpec, collect_values
+# Mode helpers are shared with QE's modes on the Resultados page.
+from ...results.modes import (  # noqa: F401
+    mode_character,
+    mode_frames,
+    normalised,
+    view_angles,
+)
 from ...validation.checks import ValidationReport
 from ..core import (
     PRESETS,
@@ -309,53 +316,4 @@ def mode_at(record: CalcRecord, wavenumber: float, scale_factor: float = 1.0,
 
 def mode_vector(modes: dict[str, np.ndarray], mode_index: int) -> np.ndarray:
     """Cartesian displacement of one mode, scaled so the largest is 1 Å."""
-    vector = np.asarray(modes["modes"][mode_index], dtype=float)
-    largest = float(np.linalg.norm(vector, axis=1).max())
-    return vector / largest if largest > 0 else vector
-
-
-def mode_frames(atoms: Atoms, vector: np.ndarray, n_frames: int = 24,
-                amplitude: float = 0.35) -> list[np.ndarray]:
-    """Positions for one period of the mode, largest excursion ``amplitude`` Å."""
-    base = atoms.get_positions()
-    phases = np.sin(2 * np.pi * np.arange(n_frames) / n_frames)
-    return [base + amplitude * phase * vector for phase in phases]
-
-
-def view_angles(atoms: Atoms) -> tuple[float, float]:
-    """Matplotlib ``(elev, azim)`` that looks straight down on a planar molecule.
-
-    The view direction is the principal axis of least spread -- the plane
-    normal of a flake, whichever way it lies -- so a mode in the plane is
-    seen face-on instead of edge-on.
-    """
-    positions = atoms.get_positions() - atoms.get_positions().mean(axis=0)
-    _, _, vt = np.linalg.svd(positions, full_matrices=False)
-    normal = vt[-1] if len(vt) == 3 else np.array([0.0, 0.0, 1.0])
-    x, y, z = normal / np.linalg.norm(normal)
-    elevation = float(np.degrees(np.arcsin(np.clip(z, -1.0, 1.0))))
-    azimuth = float(np.degrees(np.arctan2(y, x)))
-    return elevation, azimuth
-
-
-def mode_character(atoms: Atoms, vector: np.ndarray, top: int = 4) -> str:
-    """Which atoms carry the motion, as a line for the band table.
-
-    Shares are of the mass-weighted kinetic energy, the usual measure of
-    how much of a mode belongs to each atom; an N-H stretch shows up as
-    mostly H with some N, whatever the rest of the ribbon does.
-    """
-    weights = atoms.get_masses() * (np.asarray(vector) ** 2).sum(axis=1)
-    total = weights.sum()
-    if total <= 0:
-        return "sin desplazamiento"
-    share = weights / total
-    symbols = atoms.get_chemical_symbols()
-    order = np.argsort(share)[::-1][:top]
-    by_element: dict[str, float] = {}
-    for symbol, value in zip(symbols, share, strict=True):
-        by_element[symbol] = by_element.get(symbol, 0.0) + float(value)
-    elements = ", ".join(f"{k} {v:.0%}" for k, v in sorted(by_element.items(),
-                                                            key=lambda kv: -kv[1]) if v >= 0.05)
-    atoms_text = ", ".join(f"{symbols[i]}{i} {share[i]:.0%}" for i in order)
-    return f"{elements}  |  {atoms_text}"
+    return normalised(modes["modes"][mode_index])

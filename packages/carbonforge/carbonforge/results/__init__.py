@@ -8,6 +8,9 @@ diagram or a spectrum.
   the ``.gnu`` variant) and SIESTA ``.bands`` files.
 * :mod:`~carbonforge.results.spectra` — the ``dynmat.x`` frequency /
   IR / Raman table, with Lorentzian broadening into a plottable spectrum.
+* :mod:`~carbonforge.results.dos` — ``dos.x`` and ``projwfc.x`` output.
+* :mod:`~carbonforge.results.modes` — normal modes from ``dynmat.axsf``, and
+  the mode helpers vibspec shares.
 
 A caveat worth stating plainly: these parsers were written against the
 documented file formats and are covered by tests using synthetic fixtures.

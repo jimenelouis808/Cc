@@ -58,14 +58,21 @@ def mpi_prefix(nprocs: int) -> list[str]:
 
 def step_command(step: Step, nprocs: int) -> list[str]:
     """argv of one step (standard input and output are handled by the caller)."""
+    if step.program == "carbonforge":
+        return [sys.executable, "-m", "carbonforge.cli.main", *step.args]
     program = find_program(step.program)
     if program is None:
         raise RuntimeError(
             f"No se encontró {step.program} en el PATH. Instálalo, o indica su ruta con "
             f"CARBONFORGE_{re.sub(r'[^A-Za-z0-9]', '_', step.program).upper()}."
         )
-    argv = (mpi_prefix(nprocs) if step.parallel else []) + [program]
-    return argv if step.stdin else argv + ["-in", step.input]
+    parallel = step.parallel and nprocs > 1
+    argv = (mpi_prefix(nprocs) if parallel else []) + [program]
+    # Pools must divide the processes; otherwise QE refuses to start.
+    if parallel and step.pools > 1 and nprocs % step.pools == 0:
+        argv += ["-nk", str(step.pools)]
+    argv += list(step.args)
+    return argv if step.stdin or not step.input else argv + ["-in", step.input]
 
 
 class _Cancelled(Exception):

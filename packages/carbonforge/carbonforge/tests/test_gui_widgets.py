@@ -133,6 +133,9 @@ def _install_fake_tk(monkeypatch) -> None:
         def draw_idle(self):
             return None
 
+        def mpl_connect(self, *_a, **_k):
+            return 0
+
     backend.FigureCanvasTkAgg = _Canvas
     backend.NavigationToolbar2Tk = _Widget
 

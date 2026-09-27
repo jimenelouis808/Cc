@@ -277,6 +277,12 @@ def write_preset_project(
     )
     written["notes"] = notes
 
+    # The same chain as run_all.sh, for the window's queue and for
+    # `python -m carbonforge.jobs.run` (resumable, logged, cancellable).
+    from ..jobs.manifest import write_manifest
+
+    written["job"] = write_manifest(outdir, pools=plan.pools)
+
     return result, plan, written
 
 

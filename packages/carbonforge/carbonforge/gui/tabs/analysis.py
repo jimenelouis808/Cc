@@ -1,4 +1,9 @@
-"""The "Analizar resultados" tab: read finished runs back (bands, Raman/IR spectra)."""
+"""The "Resultados → Bandas y espectros" page: read finished runs back.
+
+Bands (QE, SIESTA), vibrational spectra from ``dynmat.x`` with their normal
+modes (click a band to animate it, from ``dynmat.axsf``), and total or
+projected densities of states.
+"""
 
 from __future__ import annotations
 
@@ -6,9 +11,11 @@ import traceback
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
+
 
 class AnalysisTab:
-    """Open band structures and spectra and plot them.
+    """Open band structures, spectra, modes and densities of states and plot them.
 
     Uses from the host: ``tk``, ``ttk``, ``root``, ``_show_error``.
     """
@@ -38,8 +45,8 @@ class AnalysisTab:
         intro = ttk.Label(
             left,
             text=(
-                "carbonforge no ejecuta los cálculos. Cuando el tuyo termine, "
-                "abre aquí el archivo de salida."
+                "Abre la salida de un cálculo terminado, o usa «Abrir resultados» "
+                "en Calcular → Trabajos."
             ),
             wraplength=310, justify="left", foreground="#444444",
         )
@@ -126,6 +133,27 @@ class AnalysisTab:
             side="left", padx=(4, 0)
         )
 
+        ttk.Label(
+            spectrum_box,
+            text=("Con dynmat.axsf junto a dynmat.out, un clic en una banda "
+                  "anima su modo."),
+            wraplength=300, justify="left", foreground="#777777",
+            font=("TkDefaultFont", 8),
+        ).pack(anchor="w", pady=(4, 0))
+
+        dos_box = ttk.LabelFrame(left, text="Densidad de estados", padding=6)
+        dos_box.pack(fill="x", pady=(10, 0))
+        ttk.Button(dos_box, text="Abrir DOS (dos.dat)…",
+                   command=self._on_open_dos).pack(fill="x")
+        ttk.Button(dos_box, text="Abrir PDOS (carpeta de projwfc.x)…",
+                   command=self._on_open_pdos).pack(fill="x", pady=(4, 0))
+        ttk.Label(
+            dos_box,
+            text="Usa el nivel de Fermi de arriba si lo escribes; si no, el del archivo.",
+            wraplength=300, justify="left", foreground="#777777",
+            font=("TkDefaultFont", 8),
+        ).pack(anchor="w")
+
         self.save_plot_button = ttk.Button(
             left, text="Guardar figura…", command=self._on_save_analysis_png,
             state="disabled",
@@ -155,6 +183,10 @@ class AnalysisTab:
         toolbar.update()
         toolbar.pack(fill="x")
         self.analysis_canvas.draw()
+        self.analysis_canvas.mpl_connect("button_press_event", self._on_analysis_click)
+        self._shown_spectrum = None
+        self._qe_modes = None
+        self._mode_window = None
 
         report_box = ttk.LabelFrame(right, text="Informe", padding=4)
         report_box.pack(fill="both", expand=False, pady=(8, 0))
@@ -303,6 +335,7 @@ class AnalysisTab:
             return
 
         self._render_spectrum(spectrum, kind, width, laser, temperature)
+        self._load_qe_modes(Path(path), spectrum, kind)
 
     def _render_spectrum(self, spectrum, kind, width, laser, temperature) -> None:
         from ...results.spectra import draw_spectrum_on_axes
@@ -335,3 +368,176 @@ class AnalysisTab:
             self._show_error(exc, traceback.format_exc())
             return
         messagebox.showinfo("Figura guardada", str(path))
+
+    # -- densities of states ---------------------------------------------
+
+    def _on_open_dos(self, path=None) -> None:
+        """Total DOS from ``dos.x`` (``path`` from a finished job, else ask)."""
+        from tkinter import filedialog
+
+        from ...results.dos import read_dos
+
+        path = path or filedialog.askopenfilename(
+            title="Abrir salida de dos.x", filetypes=[("DOS", "*.dat *.dos"), ("Cualquiera", "*")])
+        if not path:
+            return
+        try:
+            dos = read_dos(path)
+            reference = self._parse_optional_float(self.fermi_var.get(), "Nivel de Fermi")
+        except Exception as exc:
+            self._show_error(exc, traceback.format_exc())
+            return
+        self._render_dos(dos, reference)
+
+    def _on_open_pdos(self, directory=None) -> None:
+        """Projected DOS: the folder where ``projwfc.x`` wrote its files."""
+        from tkinter import filedialog
+
+        from ...results.dos import read_pdos
+
+        directory = directory or filedialog.askdirectory(title="Carpeta de projwfc.x")
+        if not directory:
+            return
+        try:
+            dos = read_pdos(directory)
+            reference = self._parse_optional_float(self.fermi_var.get(), "Nivel de Fermi")
+        except Exception as exc:
+            self._show_error(exc, traceback.format_exc())
+            return
+        self._render_dos(dos, reference)
+
+    def _render_dos(self, dos, reference) -> None:
+        from ...results.dos import ProjectedDOS, draw_dos_on_axes
+
+        self._shown_spectrum = None
+        self.analysis_figure.clear()
+        self.analysis_axes = self.analysis_figure.add_subplot(111)
+        draw_dos_on_axes(dos, self.analysis_axes, reference=reference)
+        self.analysis_figure.tight_layout()
+        self.analysis_canvas.draw_idle()
+        level = reference if reference is not None else dos.fermi_energy
+        if isinstance(dos, ProjectedDOS):
+            text = dos.summary(fermi=level)
+        else:
+            lines = [f"{len(dos.energies)} puntos, {dos.energies.min():.2f} a "
+                     f"{dos.energies.max():.2f} eV"]
+            if level is None:
+                lines.append("Sin nivel de Fermi: escríbelo arriba (está en pw.scf.out).")
+            else:
+                lines.append(f"Nivel de Fermi: {level:.4f} eV; DOS(E_F) = "
+                             f"{dos.at_fermi(level):.3f} estados/eV")
+                gap = dos.gap_estimate(fermi=level)
+                lines.append("Sin gap en torno a E_F (metálico o semimetal)." if gap is None
+                             else f"Gap estimado: {gap:.3f} eV (limitado por el ensanchado "
+                                  "y la malla del nscf).")
+            text = "\n".join(lines)
+        self._set_analysis_report(text)
+        self.analysis_status_var.set("Densidad de estados cargada.")
+        self.save_plot_button.configure(state="normal")
+
+    # -- QE normal modes ---------------------------------------------------
+
+    def _load_qe_modes(self, dynmat_out: Path, spectrum, kind: str) -> None:
+        """Pick up ``dynmat.axsf`` beside ``dynmat.out`` so peaks can be clicked."""
+        from ...results.modes import read_axsf_modes
+
+        self._shown_spectrum = (spectrum, kind)
+        self._qe_modes = None
+        axsf = Path(dynmat_out).with_name("dynmat.axsf")
+        if not axsf.exists():
+            return
+        try:
+            atoms, vectors = read_axsf_modes(axsf)
+        except Exception as exc:
+            self.analysis_status_var.set(f"No se pudieron leer los modos: {exc}")
+            return
+        if len(vectors) != len(spectrum.modes):
+            self.analysis_status_var.set(
+                f"dynmat.axsf tiene {len(vectors)} modos y dynmat.out {len(spectrum.modes)}: "
+                "no se animan (¿son del mismo cálculo?).")
+            return
+        self._qe_modes = (atoms, vectors)
+        self.analysis_status_var.set(f"Espectro {kind} cargado; clic en una banda para ver "
+                                     "su modo.")
+
+    def _on_analysis_click(self, event) -> None:
+        from ...results.modes import nearest_mode
+
+        if self._shown_spectrum is None or self._qe_modes is None or event.xdata is None \
+                or event.inaxes is not self.analysis_axes:
+            return
+        spectrum, kind = self._shown_spectrum
+        try:
+            activities = spectrum.activities(kind)
+        except (ValueError, KeyError):
+            activities = None
+        index = nearest_mode(spectrum.frequencies, activities, float(event.xdata))
+        if index is not None:
+            self._show_qe_mode(index)
+
+    def _show_qe_mode(self, index: int) -> None:
+        """Animate one QE mode in its own small window."""
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        from matplotlib.figure import Figure
+        from mpl_toolkits.mplot3d.art3d import Line3DCollection
+
+        from ...results.modes import mode_character, mode_frames, normalised, view_angles
+        from ...topology.graph import build_bond_graph
+        from ...viz.plot import _ELEMENT_COLORS, _ELEMENT_SIZES
+
+        atoms, vectors = self._qe_modes
+        spectrum, _ = self._shown_spectrum
+        mode = spectrum.modes[index]
+        vector = normalised(vectors[index])
+        frames = mode_frames(atoms, vector)
+        if self._mode_window is not None:
+            try:
+                self.root.after_cancel(self._mode_window["after"])
+                self._mode_window["top"].destroy()
+            except Exception:
+                pass
+        top = self.tk.Toplevel(self.root)
+        top.title(f"Modo {mode.index}: {mode.frequency_cm1:.1f} cm-1")
+        self.ttk.Label(top, text=mode_character(atoms, vector), wraplength=520).pack(
+            fill="x", padx=6, pady=4)
+        figure = Figure(figsize=(5.5, 5.0), dpi=100)
+        ax = figure.add_subplot(projection="3d")
+        canvas = FigureCanvasTkAgg(figure, master=top)
+        canvas.get_tk_widget().pack(fill="both", expand=True)
+        symbols = atoms.get_chemical_symbols()
+        scatter = ax.scatter(*frames[0].T, c=[_ELEMENT_COLORS.get(x, "#888888") for x in symbols],
+                             s=[_ELEMENT_SIZES.get(x, 30) for x in symbols],
+                             edgecolors="black", linewidths=0.3)
+        finite = atoms.copy()
+        finite.pbc = False
+        bonds = list(build_bond_graph(finite).edges)
+        lines = Line3DCollection([(frames[0][i], frames[0][j]) for i, j in bonds],
+                                 colors="#555555", linewidths=0.6)
+        ax.add_collection3d(lines)
+        centre = atoms.get_positions().mean(axis=0)
+        half = float(np.ptp(atoms.get_positions(), axis=0).max()) / 2 + 1.0
+        for setter, c in zip((ax.set_xlim, ax.set_ylim, ax.set_zlim), centre, strict=True):
+            setter(c - half, c + half)
+        ax.set_box_aspect((1, 1, 1))
+        ax.view_init(*view_angles(atoms))
+        ax.set_axis_off()
+        state = {"top": top, "k": 0, "after": None}
+
+        def step() -> None:
+            positions = frames[state["k"] % len(frames)]
+            scatter._offsets3d = tuple(positions.T)
+            lines.set_segments([(positions[i], positions[j]) for i, j in bonds])
+            canvas.draw_idle()
+            state["k"] += 1
+            state["after"] = self.root.after(60, step)
+
+        def close() -> None:
+            if state["after"] is not None:
+                self.root.after_cancel(state["after"])
+            top.destroy()
+            self._mode_window = None
+
+        top.protocol("WM_DELETE_WINDOW", close)
+        self._mode_window = state
+        step()
+        self.analysis_status_var.set(f"Modo {mode.index}: {mode.frequency_cm1:.1f} cm-1.")

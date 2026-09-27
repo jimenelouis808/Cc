@@ -81,7 +81,13 @@ Pendiente:
       los pasos de cada exportación QE/SIESTA/LAMMPS, runner reanudable
       (`python -m carbonforge.jobs.run DIR`), página Calcular → Trabajos, y
       "Encolar al exportar" en Preparar. vibspec usa la misma cola.
-- [ ] Resultados: DOS/PDOS y modos de QE junto a los de vibspec.
+- [x] Resultados: DOS/PDOS en la ventana y modos de QE (desde `dynmat.axsf`,
+      clic en una banda → animación), con los mismos ayudantes de modos que
+      vibspec (`results/modes.py`).
+- [x] Proyectos de receta con `job.json` (relajación → `update-geometry` →
+      propiedad, con pools de puntos k).
+
+Fase B cerrada.
 
 ## Fase C — Raman en vibspec
 

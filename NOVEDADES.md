@@ -6,6 +6,28 @@ está la trampa.
 
 ---
 
+## carbonforge · Resultados completos y recetas en la cola
+
+**Densidad de estados en la ventana.** Resultados → Bandas y espectros abre la
+DOS total (`dos.dat`) y la proyectada (la carpeta de `projwfc.x`), con el nivel
+de Fermi del archivo o el que escribas, el gap estimado y la completitud de la
+proyección. "Abrir resultados" en Trabajos la abre directamente.
+
+**Modos de QE.** Si junto a `dynmat.out` está `dynmat.axsf` (carbonforge ya lo
+pide en `dynmat.in`), un clic en una banda del espectro abre una ventana con el
+modo animado y el reparto del movimiento por elemento y por átomo, igual que en
+vibspec (comparten el código).
+
+**Recetas en la cola.** Los proyectos de receta llevan `job.json` con la cadena
+completa: relajación → `carbonforge update-geometry` (la propiedad se calcula
+sobre la geometría relajada) → propiedad, con los pools de puntos k (`-nk`) que
+decidió la receta. Los pools solo se aplican si dividen al número de procesos;
+si no, QE no arrancaría.
+
+**Trampas:** el lector de `.axsf` está probado con archivos sintéticos del
+formato documentado, no con una salida real de QE; si los modos no cuadran con
+`dynmat.out` (otro cálculo), no se animan y se dice.
+
 ## carbonforge · una cola para todos los cálculos
 
 **Calcular → Trabajos.** Todos los cálculos que se lanzan desde la ventana
@@ -38,9 +60,8 @@ binario: `CARBONFORGE_PW_X=/opt/qe/bin/pw.x`; otro lanzador MPI:
   vez; lo que se retoma es la cadena, no el paso.
 - Cancelar detiene también el programa (pw.x, siesta) en Linux y macOS. En
   Windows solo se detiene el runner; allí QE y SIESTA no suelen correr.
-- La DOS terminada aún no se grafica en la ventana: `carbonforge plot-dos`.
-- Las recetas (presets) escriben su propio proyecto con `run_all.sh`; esos no
-  llevan `job.json` todavía.
+- ~~La DOS terminada aún no se grafica en la ventana~~ Ya se grafica (ver abajo).
+- ~~Las recetas no llevan `job.json`~~ Ya lo llevan (ver abajo).
 - Una cola, un trabajo a la vez: dos cálculos DFT en los mismos núcleos van
   más lentos que uno tras otro.
 

@@ -156,7 +156,8 @@ class StepsAdapter(Adapter):
 
         manifest = JobManifest.load(directory)
         missing = sorted({s.program for s in manifest.steps
-                          if not s.done and find_program(s.program) is None})
+                          if not s.done and s.program != "carbonforge"
+                          and find_program(s.program) is None})
         if not missing:
             return True, ""
         return False, (f"Falta {', '.join(missing)} en esta máquina. Córrelo donde esté "
@@ -331,14 +332,16 @@ def result_of(directory: Path) -> Optional[tuple[str, Path]]:
 
     Returns ``(kind, path)`` with kind ``"ir_gpaw"`` (vibspec), ``"bands"``
     (QE ``bands.dat.gnu`` or SIESTA ``*.bands``), ``"spectrum"`` (QE
-    ``dynmat.out``) or ``"dos"`` (QE ``dos.dat``); None when there is nothing
+    ``dynmat.out``), ``"pdos"`` (``projwfc.x`` files) or ``"dos"`` (QE
+    ``dos.dat``); None when there is nothing
     to show (a LAMMPS run, a plain scf).
     """
     directory = Path(directory)
     if (directory / "record.json").exists():
         return "ir_gpaw", directory
     for kind, pattern in (("bands", "bands.dat.gnu"), ("bands", "*.bands"),
-                          ("spectrum", "dynmat.out"), ("dos", "*.dos"), ("dos", "dos.dat")):
+                          ("spectrum", "dynmat.out"), ("pdos", "*pdos_tot"),
+                          ("dos", "*.dos"), ("dos", "dos.dat")):
         found = sorted(directory.glob(pattern))
         if found:
             return kind, found[0]

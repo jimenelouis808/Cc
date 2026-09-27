@@ -24,7 +24,8 @@ class JobsTab:
 
     Uses from the host: ``tk``, ``ttk``, ``root``, ``jobs`` (the queue),
     ``_show_error``, ``select_page``, ``_ensure_vibspec``, and the analysis
-    page's ``_on_open_bands`` / ``_on_open_spectrum``.
+    page's ``_on_open_bands`` / ``_on_open_spectrum`` / ``_on_open_dos`` /
+    ``_on_open_pdos``.
     """
 
     def _build_jobs_tab(self, parent) -> None:
@@ -179,6 +180,9 @@ class JobsTab:
         elif kind == "spectrum":
             self.select_page("Bandas y espectros")
             self._on_open_spectrum(path)
+        elif kind == "pdos":
+            self.select_page("Bandas y espectros")
+            self._on_open_pdos(str(path.parent))
         else:
-            self.jobs_status_var.set(f"DOS en {path}: por ahora, carbonforge plot-dos "
-                                     f"{job.directory} (aún no en la ventana).")
+            self.select_page("Bandas y espectros")
+            self._on_open_dos(path)

@@ -49,6 +49,12 @@ class Step:
         Post-processing tools (``bands.x``, ``dynmat.x``) are serial.
     stdin
         Feed the input on standard input (SIESTA) instead of ``-in FILE``.
+    args
+        Extra arguments. For ``program="carbonforge"`` they are a carbonforge
+        command run with this Python (``update-geometry pw.relax.out ...``).
+    pools
+        k-point pools (``-nk``) for pw.x / ph.x; used only when the number of
+        processes is a multiple of it.
     done
         Set by the runner when the step finished with exit code 0.
     """
@@ -59,6 +65,8 @@ class Step:
     output: str
     parallel: bool = True
     stdin: bool = False
+    args: list[str] = field(default_factory=list)
+    pools: int = 1
     done: bool = False
 
 
@@ -146,11 +154,41 @@ def _qe_chain(directory: Path) -> Optional[tuple[str, list[Step]]]:
         ]
     if has("pw.in"):
         return "QE pw.x", [Step("pw", "pw.x", "pw.in", "pw.out")]
+    if has("pw.scf.in"):
+        return "QE scf", [Step("scf", "pw.x", "pw.scf.in", "pw.scf.out")]
     return None
 
 
-def manifest_for_directory(directory: str | Path) -> JobManifest:
-    """Describe an export directory (``qe/``, ``siesta/``, ``lammps/``) as steps.
+def _qe_steps(directory: Path, pools: int) -> Optional[tuple[str, list[Step]]]:
+    """The QE chain, preceded by a relaxation when a recipe asked for one.
+
+    A recipe project (``workflows.pipeline.write_preset_project``) relaxes
+    first and rewrites the property inputs with the relaxed geometry
+    (``carbonforge update-geometry``) before computing the property on it.
+    """
+    chain = _qe_chain(directory)
+    steps: list[Step] = []
+    title = chain[0] if chain else "QE relajación"
+    if (directory / "pw.relax.in").exists():
+        steps.append(Step("relax", "pw.x", "pw.relax.in", "pw.relax.out"))
+        if chain is not None:
+            steps.append(Step("geometría", "carbonforge", "", "update-geometry.out",
+                              parallel=False,
+                              args=["update-geometry", "pw.relax.out", "--apply-to", "."]))
+            title = f"{title} tras relajar"
+    if chain is not None:
+        steps += chain[1]
+    if not steps:
+        return None
+    for step in steps:
+        if step.program in ("pw.x", "ph.x"):
+            step.pools = pools
+    return title, steps
+
+
+def manifest_for_directory(directory: str | Path, pools: int = 1) -> JobManifest:
+    """Describe an export directory (``qe/``, ``siesta/``, ``lammps/``, or a
+    recipe project) as steps. ``pools`` sets pw.x/ph.x ``-nk``.
 
     Raises
     ------
@@ -158,7 +196,7 @@ def manifest_for_directory(directory: str | Path) -> JobManifest:
         If the directory holds no input carbonforge knows how to run.
     """
     directory = Path(directory)
-    chain = _qe_chain(directory)
+    chain = _qe_steps(directory, pools)
     if chain is not None:
         title, steps = chain
         return JobManifest("qe", title, steps)
@@ -176,6 +214,6 @@ def manifest_for_directory(directory: str | Path) -> JobManifest:
     )
 
 
-def write_manifest(directory: str | Path) -> Path:
+def write_manifest(directory: str | Path, pools: int = 1) -> Path:
     """Infer and save ``job.json`` for an export directory; returns its path."""
-    return manifest_for_directory(directory).save(Path(directory))
+    return manifest_for_directory(directory, pools=pools).save(Path(directory))
