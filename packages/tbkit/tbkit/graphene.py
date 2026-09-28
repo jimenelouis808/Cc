@@ -186,6 +186,20 @@ class GraphenePhonons:
         constants = np.array([entries[k] for k in keys])
         return cls(primitive, vectors, constants, source)
 
+    def with_acoustic_sum_rule(self) -> "GraphenePhonons":
+        """Force constants with Σ_{t,R} Φ_{sα,tβ}(R) = 0 imposed (a rigid translation
+        costs nothing): the violation, from grid noise in DFT forces, is removed
+        from each atom's self term, then Φ is re-symmetrised."""
+        constants = self.constants.copy()
+        zero = int(np.argmin(np.linalg.norm(self.vectors, axis=1)))
+        for s_atom in range(2):
+            total = constants[:, s_atom].sum(axis=(0, 2))                 # (3, 3) over t, R
+            constants[zero, s_atom, :, s_atom, :] -= total
+        block = constants[zero]
+        constants[zero] = 0.5 * (block + block.transpose(2, 3, 0, 1))
+        return GraphenePhonons(self.atoms, self.vectors, constants,
+                               self.source + "; regla de la suma acústica impuesta")
+
     @cached_property
     def _masses(self) -> np.ndarray:
         return self.atoms.get_masses()
@@ -547,7 +561,10 @@ def second_order_spectrum(result: dict, grid: Optional[np.ndarray] = None,
 
 
 def load_phonons(which: str = "gpaw") -> GraphenePhonons:
-    """Force constants: ``"gpaw"`` (stored DFT, PBE), ``"xu"`` (computed now) or a JSON path."""
+    """Force constants: ``"gpaw"`` (stored DFT, PBE), ``"xu"`` (computed now) or a JSON path.
+
+    Files are read as stored and the acoustic sum rule is imposed on reading.
+    """
     import json
     from pathlib import Path
 
@@ -557,7 +574,10 @@ def load_phonons(which: str = "gpaw") -> GraphenePhonons:
         return GraphenePhonons.from_model(xu_carbon(), n=6, kmesh=4, kT=0.05)
     path = PARAMETER_DIR / "references" / "gpaw_graphene_phonons.json" if which == "gpaw" \
         else Path(which)
-    return GraphenePhonons.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
+    phonons = GraphenePhonons.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
+    # DFT forces carry grid noise that breaks the acoustic sum rule (≈ -180 cm⁻¹
+    # "acoustic" modes at Γ for the stored GPAW set); restore it.
+    return phonons.with_acoustic_sum_rule()
 
 
 def graphene_raman(lasers_ev, phonons: Optional[GraphenePhonons] = None, gamma: float = 0.1,
