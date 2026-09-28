@@ -184,6 +184,15 @@ transporte I(V), hamiltonianos asistidos por ML, matrices dispersas y
 benchmarks. No adoptado: reorganizar tbkit en las carpetas de la directriz
 (ya separa estructura, hamiltoniano, parámetros, solver y análisis).
 
+## Objetivo (28-09-2026)
+
+Calcular **IR y Raman de carbono dopado y funcionalizado** con los heteroátomos
+más estudiados (N, O, B, S, P; grupos hidroxilo, epoxi, carbonilo, carboxilo,
+amino). Descartado: FeSe y su interfaz, potenciales clásicos dentro de tbkit.
+La auditoría del modelo está en `packages/tbkit/MODEL_AUDIT.md`; el orden de
+trabajo, en su sección 9: validación con CNT prístinos → análisis de modos →
+IR → oxígeno → B, S, P.
+
 ## Fase E — Raman con tight binding
 
 | Paso | Método | Alcance |
