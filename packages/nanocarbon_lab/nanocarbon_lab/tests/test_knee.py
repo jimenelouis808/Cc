@@ -21,11 +21,14 @@ from nanocarbon_lab.builders.knee import (
     PAIRS_PER_KNEE,
     SOUND_SHAPE,
     TURN_PER_PAIR,
+    build_knee_coil,
     build_knee_toroid,
     clean_circumferences,
     clean_shapes,
     defect_contacts,
+    describe_knee_coil,
     describe_knee_toroid,
+    knee_path_mesh,
     knee_polygon_mesh,
     mesh_census,
 )
@@ -236,3 +239,91 @@ class TestWhatItSaysAboutItself:
         assert toroid.info["structure_type"] == "toroid"
         assert toroid.info["bend_per_knee_deg"] == 60.0
         assert toroid.info["knee"] == "pentagon"
+
+
+@pytest.fixture(scope="module")
+def coil():
+    """D/d 3.73 -- inside the band the single-wall coil papers report, and
+    a radius the lattice-winding route refuses outright."""
+    return build_knee_coil(coil_radius=12.0, pitch=12.0, sides_per_turn=8,
+                           turns=2, circumference=8)
+
+
+class TestTheSameKneeWindsACoil:
+    """A coil is the same mitre on a helix instead of a ring. The
+    reflection sends one corner to the next on any equal-step path, so one
+    routine covers both -- and the coil is the case that needs it most,
+    since winding a finished lattice refuses a 25 A radius outright."""
+
+    def test_two_pentagons_and_two_heptagons_a_knee(self, coil):
+        counts = coil.info["ring_counts"]
+        expected = PAIRS_PER_KNEE * coil.info["knees"]
+        assert counts[5] == counts[7] == expected
+
+    def test_nothing_but_pentagons_hexagons_and_heptagons(self, coil):
+        assert set(coil.info["ring_counts"]) == {5, 6, 7}
+
+    def test_pentagons_outside_the_helix_and_heptagons_inside(self, coil):
+        assert coil.info["disclinations_placed"] == 1.0
+
+    def test_every_disclination_is_alone_in_hexagons(self, coil):
+        assert coil.info["like_sign_pairs"] == 0
+        assert coil.info["fused_dipoles"] == 0
+
+    def test_the_wall_is_sp2(self, coil):
+        quality = coil.info["geometry"]
+        assert 1.30 <= quality["bond_min"]
+        assert quality["bond_max"] <= 1.55
+        assert quality["angle_min"] >= 100.0
+        assert quality["n_close_contacts"] == 0
+
+    def test_it_is_tight_enough_to_be_a_single_wall_coil(self, coil):
+        low, high = coil.info["literature_coil_aspect"]
+        assert low <= coil.info["coil_aspect"] <= high
+
+    def test_the_two_rims_are_two_coordinate_and_recorded(self, coil):
+        """A coil is open at both ends, as a nanocone is at its base."""
+        rim = coil.info["rim_atoms"]
+        assert rim
+        degree: dict[int, int] = {}
+        for i, j in coil.info["bonds"]:
+            degree[i] = degree.get(i, 0) + 1
+            degree[j] = degree.get(j, 0) + 1
+        assert all(degree.get(x, 0) < 3 for x in rim)
+        assert coil.info["terminal_atoms"] == rim
+
+    def test_a_pitch_that_does_not_clear_the_tube_is_refused(self):
+        with pytest.raises(ValueError, match="clear"):
+            build_knee_coil(coil_radius=12.0, pitch=3.0, circumference=8)
+
+    def test_the_description_names_the_turns_and_the_placement(self, coil):
+        line = describe_knee_coil(coil)
+        assert "2 turns of 8 sides" in line
+        assert "D/d 3.73" in line
+        assert "100%" in line
+        assert "every one isolated in hexagons" in line
+
+
+class TestOnePathRoutineCoversBoth:
+    def test_the_general_path_reproduces_the_toroid(self):
+        """The polygon is just the closed, planar case, so the two must
+        agree exactly on it."""
+        bond = 1.42
+        spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+        radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 8))
+        centre = 7 * spacing / (2.0 * np.tan(np.pi / 6))
+        corners = np.array([
+            [centre * np.cos(np.pi * q / 3.0), centre * np.sin(np.pi * q / 3.0),
+             0.0] for q in range(6)])
+        vertices, tris, _ = knee_path_mesh(corners, 8, radius, spacing)
+        census, _, broken = mesh_census(vertices, tris)
+        assert broken == 0
+        assert census == {5: 12, 6: 222, 7: 12}
+
+    def test_an_uneven_path_is_refused_with_the_reason(self):
+        """The reflection sends one corner to the next only when the steps
+        are equal, so an uneven path would leave a knee out of register."""
+        points = np.array([[0.0, 0.0, 0.0], [10.0, 0.0, 0.0],
+                           [10.0, 3.0, 0.0], [0.0, 3.0, 0.0]])
+        with pytest.raises(ValueError, match="not equal"):
+            knee_path_mesh(points, 8, 3.2, 2.13)

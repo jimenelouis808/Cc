@@ -56,6 +56,7 @@ from ..builders import (
     build_haeckelite_tube,
     build_heptanene,
     build_junction,
+    build_knee_coil,
     build_knee_toroid,
     build_multiwall_cnt,
     build_nano_onion,
@@ -1107,6 +1108,36 @@ def _cmd_toroid_knees(args):
           f"buys; {census.get(5, 0) or census.get(4, 0)} disclinations "
           f"against the {info['curvature_pentagons']} a torus asks for "
           f"(balance {info['curvature_balance']:.2f})")
+    return 0
+
+
+def _cmd_coil_knees(args):
+    atoms = build_knee_coil(
+        coil_radius=args.coil_radius, pitch=args.pitch,
+        sides_per_turn=args.sides, turns=args.turns,
+        circumference=args.circumference, knee=args.knee, bond=args.bond,
+        vacuum=args.vacuum, relax=not args.no_relax,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    print(f"  coil        = {info['turns']} turns of {info['sides_per_turn']} "
+          f"sides, {info['knees']} knees of "
+          f"{info['bend_per_knee_deg']:.1f} deg, R {info['coil_radius']:.1f} "
+          f"/ r {info['tube_radius']:.2f} A, pitch {info['pitch']:.1f} A")
+    low, high = info["literature_coil_aspect"]
+    band = ("inside" if low <= info["coil_aspect"] <= high else "outside")
+    print(f"  D/d         = {info['coil_aspect']:.2f}, {band} the "
+          f"{low}-{high} band the single-wall coil papers report")
+    print(f"  wall        = {dict(sorted(info['ring_counts'].items()))}")
+    # The two numbers this route exists for.
+    print(f"  placement   = {100 * info['disclinations_placed']:.0f}% on the "
+          "curvature side they belong on (pentagons outside the helix, "
+          "heptagons inside)")
+    print(f"  isolation   = {info['like_sign_pairs']} like-sign contacts, "
+          f"{info['fused_dipoles']} fused 5-7 dipoles")
+    print(f"  rim         = {len(info['rim_atoms'])} two-coordinate atoms; a "
+          "coil is open at both ends, as a nanocone is at its base")
     return 0
 
 
@@ -2203,6 +2234,45 @@ def build_parser() -> argparse.ArgumentParser:
     _add_doping_arguments(
         tk, seed_help="Seed for dopant placement; the ring itself is exact.")
     tk.set_defaults(func=_cmd_toroid_knees)
+
+    ck = sub.add_parser(
+        "coil-knees",
+        help="A nanocoil built the third way: straight all-hexagon arms "
+             "joined by mitred KNEES. The lattice route can only stretch, "
+             "so it refuses a 25 A coil; here the disclinations absorb the "
+             "bend and a 12 A one comes out inside the published "
+             "single-wall band.",
+    )
+    ck.add_argument("--coil-radius", type=float, default=12.0,
+                    dest="coil_radius", help="Helix radius (A).")
+    ck.add_argument("--pitch", type=float, default=12.0,
+                    help="Rise per turn (A). Must clear the tube, or "
+                         "consecutive turns pass through each other.")
+    ck.add_argument("--sides", type=int, default=8,
+                    help="Knees per turn, so the axis turns 360/sides at "
+                         "each one. This is the polygon a real coil shows "
+                         "when seen down its axis.")
+    ck.add_argument("--turns", type=int, default=2,
+                    help="How many turns to wind.")
+    ck.add_argument("--circumference", type=int, default=8,
+                    help="Mesh vertices around the tube, which sets the "
+                         "tube radius.")
+    ck.add_argument("--knee", choices=("pentagon", "octagon"),
+                    default="pentagon",
+                    help="Two pentagons outside and two heptagons inside "
+                         "each bend, or a square outside and an octagon "
+                         "inside.")
+    ck.add_argument("--bond", type=float, default=1.42)
+    ck.add_argument("--vacuum", type=float, default=12.0)
+    ck.add_argument("--no-relax", action="store_true",
+                    help="Skip the force field. The census is set by the "
+                         "mesh, so this changes the geometry and nothing "
+                         "else.")
+    ck.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        ck, seed_help="Seed for dopant placement; the coil itself is exact.")
+    ck.set_defaults(func=_cmd_coil_knees)
 
     hp = sub.add_parser(
         "heptanene",

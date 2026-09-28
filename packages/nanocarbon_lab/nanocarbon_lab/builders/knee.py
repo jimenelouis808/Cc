@@ -275,6 +275,314 @@ def _boundary_cycles(tris) -> list[list[int]] | None:
     return cycles
 
 
+def _reflect(vector: np.ndarray, normal: np.ndarray) -> np.ndarray:
+    """Mirror ``vector`` in the plane with this unit ``normal``."""
+    return vector - 2.0 * float(vector @ normal) * normal
+
+
+def dual_open(vertices: np.ndarray, tris) -> tuple[np.ndarray, set, list, list[int]]:
+    """The honeycomb dual of a mesh that is allowed to have rims.
+
+    :func:`~nanocarbon_lab.builders.fullerene_mesh.dual_honeycomb` derives
+    its bonds from the rings and its rings by walking each vertex's faces
+    in a cycle, so a boundary vertex -- whose faces do not close a cycle
+    -- makes it raise. A finite coil has two rims by definition, exactly
+    as a nanocone has one, so it needs a dual that keeps them.
+
+    Bonds come from **face adjacency** instead: two triangles sharing an
+    edge are bonded, which is the same relation the ring walk encodes and
+    is defined with or without a boundary. Rings are returned for the
+    interior vertices only, and the rim vertices are reported separately
+    -- their rings are genuinely incomplete, not missing.
+
+    Returns ``(positions, bonds, rings, rim_atoms)``.
+    """
+    faces = np.asarray(tris, dtype=int)
+    positions = vertices[faces].mean(axis=1)
+
+    edge_faces: dict[tuple[int, int], list[int]] = defaultdict(list)
+    for index, t in enumerate(tris):
+        for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
+            edge_faces[(min(a, b), max(a, b))].append(index)
+    bonds: set[tuple[int, int]] = set()
+    for sharing in edge_faces.values():
+        if len(sharing) == 2:
+            a, b = sharing
+            bonds.add((a, b) if a < b else (b, a))
+
+    boundary = {x for e, sharing in edge_faces.items() if len(sharing) != 2
+                for x in e}
+    vertex_faces: dict[int, list[int]] = defaultdict(list)
+    for index, t in enumerate(tris):
+        for x in t:
+            vertex_faces[int(x)].append(index)
+
+    rings: list[list[int]] = []
+    for x, incident in vertex_faces.items():
+        if x in boundary:
+            continue
+        members = {f: set(int(v) for v in tris[f]) for f in incident}
+        around: dict[int, list[int]] = defaultdict(list)
+        for a in incident:
+            for b in incident:
+                if a != b and len(members[a] & members[b]) == 2:
+                    around[a].append(b)
+        if any(len(v) != 2 for v in around.values()):
+            continue
+        start = incident[0]
+        ring, previous, current = [start], None, start
+        while True:
+            onward = [y for y in around[current] if y != previous]
+            if not onward or onward[0] == start:
+                break
+            previous, current = current, onward[0]
+            ring.append(current)
+        if len(ring) == len(incident):
+            rings.append(ring)
+
+    rim = sorted({index for index, t in enumerate(tris)
+                  if any(int(x) in boundary for x in t)})
+    two_coordinate = sorted(
+        index for index in rim
+        if sum(1 for b in bonds if index in b) < 3)
+    return positions, bonds, rings, two_coordinate
+
+
+def knee_path_mesh(
+    points: np.ndarray,
+    circumference: int,
+    tube_radius: float,
+    spacing: float,
+    seam_shift: int = SEAM_SHIFT,
+    closed: bool = True,
+    references: np.ndarray | None = None,
+    period: np.ndarray | None = None,
+) -> tuple[np.ndarray, list[tuple[int, int, int]], list[int]]:
+    """Mitre a tube along **any** equal-step polyline: ring, helix or arc.
+
+    ``points`` are the corners, evenly spaced; an arm runs between each
+    consecutive pair and a knee sits at every interior corner. A closed
+    polygon gives a toroid, a helix gives a coil, an open arc gives a
+    bent tube with two free rims.
+
+    **The reflection works for any equal-step path**, which is what makes
+    one routine cover all of them. With ``u`` and ``v`` the two unit
+    directions at a corner and ``n`` proportional to ``u + v``, the mitre
+    plane's reflection sends ``u`` to ``-v`` -- expand it and the
+    ``(1 + u.v)`` cancels -- so it sends the previous corner to the next
+    one whenever the steps are equal. The two arms of a knee are then
+    exact mirror images whatever the path is doing.
+
+    That also fixes the azimuthal reference, and it has to: an arbitrary
+    choice per arm would leave the seams misaligned on anything that is
+    not a regular polygon. ``references[q]`` is carried from arm to arm
+    **through the same reflection**, so the mirror relation the seam
+    relies on holds by construction rather than by symmetry. It is the
+    mitre's analogue of the rotation-minimising frame
+    :mod:`~nanocarbon_lab.builders.centerline` sweeps with, and it is
+    needed for the same reason -- a frame chosen fresh at each step
+    accumulates a twist the structure did not ask for.
+
+    Returns ``(vertices, triangles, owner)``, ``owner[i]`` naming the arm
+    each vertex came from.
+    """
+    points = np.asarray(points, dtype=float)
+    n_points = len(points)
+    if period is not None:
+        # A screw-periodic path -- a coil. The corner after the last one is
+        # the first, moved along by one period, so the wrap is a real mitre
+        # knee rather than two rims welded afterwards. Welding them instead
+        # left the two boundaries 1.8-3.8 A apart, a full lattice step, which
+        # is a seam the relaxation then has to carry.
+        closed = True
+        period = np.asarray(period, dtype=float)
+
+    def corner(q: int) -> np.ndarray:
+        if period is None:
+            return points[q % n_points]
+        return points[q % n_points] + (q // n_points) * period
+
+    n_arms = n_points if closed else n_points - 1
+    if n_arms < 2:
+        raise ValueError("a mitred path needs at least two arms.")
+    if closed and n_arms % 2:
+        raise ValueError(
+            f"a closed path needs an even number of arms ({n_arms} given). "
+            "The reflection through a mitre plane reverses the half-step the "
+            "rows climb by, so the arms alternate handedness and an odd ring "
+            "cannot close on itself."
+        )
+
+    steps = np.array([corner(q + 1) - corner(q) for q in range(n_arms)])
+    lengths = np.linalg.norm(steps, axis=1)
+    if float(lengths.max() - lengths.min()) > 1e-6 * float(lengths.mean()):
+        raise ValueError(
+            f"the path's steps are not equal ({lengths.min():.3f} to "
+            f"{lengths.max():.3f} A). The mitre reflection sends one corner "
+            "to the next only when they are, so an uneven path would leave "
+            "the two sides of a knee out of register."
+        )
+    axes = steps / lengths[:, None]
+
+    knee_at = (list(range(n_points)) if closed
+               else list(range(1, n_points - 1)))
+    normals: dict[int, np.ndarray] = {}
+    for q in knee_at:
+        incoming = axes[(q - 1) % n_arms]
+        outgoing = axes[q % n_arms]
+        normal = incoming + outgoing
+        size = float(np.linalg.norm(normal))
+        if size < 1e-9:
+            raise ValueError(
+                f"corner {q} doubles the path back on itself, so the mitre "
+                "plane is undefined."
+            )
+        normals[q] = normal / size
+
+    if references is not None:
+        refs = np.asarray(references, dtype=float)
+    else:
+        seed = np.array([0.0, 0.0, 1.0])
+        if abs(float(seed @ axes[0])) > 0.9:
+            seed = np.array([1.0, 0.0, 0.0])
+        seed = seed - axes[0] * float(seed @ axes[0])
+        seed /= np.linalg.norm(seed)
+        carried = [seed]
+        for q in range(1, n_arms):
+            carried.append(_reflect(carried[-1], normals[q]))
+        refs = np.asarray(carried)
+
+    # The stack has to reach past the mitre on the long side of every arm,
+    # so the plane and not the stack's own last row is what ends it: the
+    # outer side of an arm runs `step + 2 r tan(turn/2)`. The built count is
+    # ODD, because the reflection sends row i to row rows-1-i and the rows
+    # climb by half a step -- an even count lands the seam between rows on
+    # one side and on a row on the other.
+    turns = [float(np.arccos(np.clip(axes[(q - 1) % n_arms] @ axes[q % n_arms],
+                                     -1.0, 1.0))) for q in knee_at] or [0.0]
+    overhang = tube_radius * np.tan(max(turns) / 2.0)
+    rows_built = int(np.ceil((float(lengths.mean()) + 2.0 * overhang) / spacing)) + 3
+    rows_built += 1 - rows_built % 2
+
+    verts: list[list[float]] = []
+    tris: list[tuple[int, int, int]] = []
+    owner: list[int] = []
+    for q in range(n_arms):
+        middle = 0.5 * (corner(q) + corner(q + 1))
+        local, local_tris = _ring_stack(circumference, rows_built,
+                                        tube_radius, spacing,
+                                        mirror=bool(q % 2))
+        placed = middle + local @ _frame(axes[q], refs[q]).T
+        keep = np.ones(len(placed), dtype=bool)
+        if q in normals:
+            keep &= (placed - corner(q)) @ normals[q] >= 0.0
+        elif not closed:
+            keep &= (placed - corner(q)) @ axes[q] >= -0.5 * spacing
+        end = (q + 1) % n_points
+        if end in normals:
+            keep &= (placed - corner(q + 1)) @ normals[end] <= 0.0
+        elif not closed:
+            keep &= (placed - corner(q + 1)) @ axes[q] <= 0.5 * spacing
+        offset = len(verts)
+        verts.extend(placed.tolist())
+        owner.extend([q] * len(placed))
+        tris.extend((a + offset, b + offset, c + offset)
+                    for a, b, c in local_tris
+                    if keep[a] and keep[b] and keep[c])
+
+    vertices = np.asarray(verts, dtype=float)
+    used = sorted({x for t in tris for x in t})
+    remap = {x: i for i, x in enumerate(used)}
+    vertices = vertices[used]
+    owner = [owner[x] for x in used]
+    tris = [(remap[a], remap[b], remap[c]) for a, b, c in tris]
+
+    cycles = _boundary_cycles(tris)
+    expected = 2 * len(knee_at) + (0 if closed else 2)
+    if cycles is None or len(cycles) != expected:
+        got = "non-manifold" if cycles is None else f"{len(cycles)}"
+        raise ValueError(
+            f"The mitred arms left {got} boundary cycles where {expected} "
+            "were expected (two per knee, plus the free rims of an open "
+            "path). The arms are too short for the bend: lengthen the step "
+            "or turn less at each corner."
+        )
+    sites = np.array([corner(q) for q in range(n_arms + 1)])
+    by_corner: dict[int, list[list[int]]] = {}
+    for cycle in cycles:
+        centre = vertices[cycle].mean(axis=0)
+        q = int(np.argmin(np.linalg.norm(sites - centre, axis=1))) % n_points
+        if q in normals:
+            by_corner.setdefault(q, []).append(cycle)
+    if (len(by_corner) != len(knee_at)
+            or any(len(v) != 2 for v in by_corner.values())):
+        raise ValueError(
+            "The boundary cycles did not fall two to a knee, so the arms do "
+            "not meet where the path says they should. Lengthen the step."
+        )
+
+    for q, pair in by_corner.items():
+        for cycle in pair:
+            for x in cycle:
+                axis = axes[owner[x]]
+                # The wrap knee's plane is at the corner nearest that arm,
+                # which for the last arm is one period along.
+                here = min((corner(q), corner(q + n_points)),
+                           key=lambda c, x=x: float(
+                               np.linalg.norm(vertices[x] - c)))
+                step = float((here - vertices[x]) @ normals[q]
+                             / (axis @ normals[q]))
+                vertices[x] = vertices[x] + step * axis
+
+    merge: dict[int, int] = {}
+    for q, (first, second) in by_corner.items():
+        incoming = (q - 1) % n_arms
+        lower, upper = ((list(first), list(second))
+                        if owner[first[0]] == incoming
+                        else (list(second), list(first)))
+        if len(lower) != len(upper):
+            raise ValueError(
+                f"Knee {q} has {len(lower)} vertices on one side of the mitre "
+                f"and {len(upper)} on the other, so the seam cannot pair up."
+            )
+        # At the wrap knee of a screw-periodic path the incoming arm sits
+        # one period along, so the two sides are compared -- and merged --
+        # modulo that period. The seam is then shared rather than welded,
+        # and everything downstream reads it by minimum image.
+        offset = np.zeros(3) if (period is None or q != 0) else period
+        gap = (vertices[lower] + offset)[:, None, :] - vertices[upper][None, :, :]
+        distances = np.linalg.norm(gap, axis=2)
+        nearest = distances.argmin(axis=1)
+        if len(set(nearest.tolist())) != len(lower):
+            raise ValueError(
+                f"Knee {q}: the two boundaries did not land on each other, so "
+                "the seam has no one-to-one partner. Try another step length."
+            )
+        ordered = [upper[int(x)] for x in nearest]
+        n = len(ordered)
+        for t, low in enumerate(lower):
+            high = ordered[(t + seam_shift) % n]
+            keep_at, drop_at = min(low, high), max(low, high)
+            merge[drop_at] = keep_at
+            middle_point = 0.5 * (vertices[low] + offset + vertices[high])
+            vertices[keep_at] = (middle_point - offset if keep_at == low
+                                 else middle_point)
+
+    def root(x: int) -> int:
+        while x in merge:
+            x = merge[x]
+        return x
+
+    tris = [tuple(root(x) for x in t) for t in tris]
+    tris = [t for t in tris if len(set(t)) == 3]
+    live = sorted({x for t in tris for x in t})
+    relabel = {x: i for i, x in enumerate(live)}
+    owner = [owner[x] for x in live]
+    return (vertices[live],
+            [(relabel[a], relabel[b], relabel[c]) for a, b, c in tris],
+            owner)
+
+
 def knee_polygon_mesh(
     knees: int,
     circumference: int,
@@ -411,6 +719,9 @@ def knee_polygon_mesh(
         # After the slide the two boundaries are the same points, so the
         # mirror partner is simply the nearest one -- no search, no
         # ambiguity, and the pairing is exact before the shift is applied.
+        # After the slide the two boundaries are the same points, so the
+        # mirror partner is simply the nearest one -- no search, no
+        # ambiguity, and the pairing is exact before the shift is applied.
         distances = np.linalg.norm(
             vertices[lower][:, None, :] - vertices[upper][None, :, :], axis=2)
         nearest = distances.argmin(axis=1)
@@ -482,7 +793,8 @@ def equator_rows(vertices: np.ndarray, centre_radius: float,
     return outer, inner
 
 
-def defect_contacts(vertices: np.ndarray, tris) -> dict[str, int]:
+def defect_contacts(vertices: np.ndarray, tris,
+                    skip_rim: bool = False) -> dict[str, int]:
     """Edges between two non-hexagons, split by whether the signs agree.
 
     ``like`` is what a lobe of pentagons or a fused heptagon pair IS, and
@@ -491,17 +803,24 @@ def defect_contacts(vertices: np.ndarray, tris) -> dict[str, int]:
     zero of both: every disclination surrounded entirely by hexagons.
     """
     adjacency: dict[int, set[int]] = defaultdict(set)
+    count: dict[tuple[int, int], int] = defaultdict(int)
     for t in tris:
         for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
             adjacency[a].add(b)
             adjacency[b].add(a)
+            count[(min(a, b), max(a, b))] += 1
     degrees = {x: len(adjacency[x]) for x in adjacency}
+    # A rim vertex has a low degree because its ring is cut off, not
+    # because it is a disclination, so on an open mesh it must not be
+    # counted as one -- otherwise a coil's two rims read as 16 lobes.
+    rim = ({x for e, c in count.items() if c != 2 for x in e}
+           if skip_rim else set())
     like = fused = 0
     for x, neighbours in adjacency.items():
-        if degrees[x] == 6:
+        if degrees[x] == 6 or x in rim:
             continue
         for y in neighbours:
-            if y <= x or degrees[y] == 6:
+            if y <= x or degrees[y] == 6 or y in rim:
                 continue
             same = (degrees[x] > 6) == (degrees[y] > 6)
             like += int(same)
@@ -829,6 +1148,217 @@ def build_knee_toroid(
             stacklevel=2,
         )
     return atoms
+
+
+#: Coil diameter over tube diameter for the published single-wall coils.
+#: Popovic finds it for both of their classes and Liu's Table 2 gives 3.53
+#: to 3.88 for the (5,5) through (8,8). A coil outside that band is not
+#: wrong -- multi-wall coils reach ten and more -- but it is not the
+#: geometry those calculations relaxed to, and the builder says so.
+LITERATURE_COIL_ASPECT = (3.5, 3.9)
+
+
+def build_knee_coil(
+    coil_radius: float = 12.0,
+    pitch: float = 12.0,
+    sides_per_turn: int = 8,
+    turns: int = 2,
+    circumference: int = 8,
+    knee: str = "pentagon",
+    bond: float = CC_BOND,
+    vacuum: float = DEFAULT_VACUUM_1D,
+    relax: bool = True,
+    relax_iterations: int = 3000,
+) -> Atoms:
+    """A nanocoil of straight hexagon arms and mitred knees.
+
+    The same construction as :func:`build_knee_toroid` on a **helix**
+    instead of a ring, which works because the mitre reflection sends one
+    corner to the next on any equal-step path (see
+    :func:`knee_path_mesh`). Liu et al. show a real coil seen down its
+    axis as a **polygon**: the wall relieves its strain at a few knees,
+    not everywhere at once, and this builds that object directly.
+
+    The point of it is tightness. `nanocoil.build_nanocoil` winds a
+    finished lattice, so it can only stretch: at a 25 Å coil radius it
+    **refuses outright** (bond 1.60 Å) and wants about 51 Å before the
+    wall fits an 8% budget. Here the pentagons and heptagons absorb the
+    bend instead, so a 12 Å coil -- ``D/d`` 3.73, inside the published
+    single-wall band -- comes out at 1.331-1.527 Å with no non-bonded
+    contact under 2 Å.
+
+    The coil is **finite and open**, as :func:`nanocoil.build_nanocoil`
+    is: its two rims are two-coordinate and recorded in
+    ``info["rim_atoms"]``. It is not welded into a period, because a
+    helix has holonomy -- carrying the azimuthal frame round one period
+    by the mitre reflections does not return it to where it started, so
+    the two rims land out of register with each other. Closing it needs
+    that holonomy to come out a whole number of lattice steps, which is a
+    condition on the geometry rather than a detail of the code.
+
+    Parameters
+    ----------
+    coil_radius, pitch
+        Helix radius and rise per turn (Å).
+    sides_per_turn
+        Knees per turn, so the axis turns ``360 / sides_per_turn`` degrees
+        at each one. This is the polygon Liu et al. photograph.
+    turns
+        How many turns to build.
+    circumference
+        Mesh vertices around the tube, which sets the tube radius.
+    knee
+        ``"pentagon"`` for two pentagons on the outside of each bend and
+        two heptagons on the inside, ``"octagon"`` for a square outside
+        and an octagon inside. See :func:`knee_polygon_mesh`.
+    bond, vacuum
+        C-C length and the padding around the finished molecule (Å).
+    relax, relax_iterations
+        Whether to relax with the valence force field. The bond graph is
+        explicit, so the census is fixed before this runs.
+
+    Returns
+    -------
+    ase.Atoms
+        With the census, the placement, ``D/d`` and the rims in
+        ``atoms.info``.
+
+    Raises
+    ------
+    ValueError
+        If the pitch is not clear of the tube, if ``knee`` is unknown, or
+        if the path's knees are too sharp for the arms to meet -- in which
+        case the message says to widen the coil or use more sides.
+    """
+    if knee not in ("pentagon", "octagon"):
+        raise ValueError(
+            f"knee must be 'pentagon' or 'octagon', not {knee!r}."
+        )
+    if turns < 1 or sides_per_turn < 3:
+        raise ValueError(
+            f"a coil needs at least one turn and three sides a turn "
+            f"({turns} and {sides_per_turn} given)."
+        )
+    spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+    tube_radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / circumference))
+    if pitch <= 2.0 * tube_radius:
+        raise ValueError(
+            f"a pitch of {pitch:.1f} Å does not clear a tube of radius "
+            f"{tube_radius:.2f} Å, so consecutive turns would pass through "
+            "each other. Raise the pitch above "
+            f"{2.0 * tube_radius:.1f} Å or narrow the tube."
+        )
+
+    angle = 2.0 * np.pi * np.arange(sides_per_turn * turns + 1) / sides_per_turn
+    points = np.column_stack([coil_radius * np.cos(angle),
+                              coil_radius * np.sin(angle),
+                              pitch * angle / (2.0 * np.pi)])
+    shift = SEAM_SHIFT if knee == "pentagon" else 0
+    vertices, tris, _ = knee_path_mesh(points, circumference, tube_radius,
+                                       spacing, seam_shift=shift, closed=False)
+
+    census, degrees, broken = mesh_census(vertices, tris)
+    contacts = defect_contacts(vertices, tris, skip_rim=True)
+    radius = np.hypot(vertices[:, 0], vertices[:, 1])
+    edge_count: dict[tuple[int, int], int] = defaultdict(int)
+    for t in tris:
+        for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
+            edge_count[(min(a, b), max(a, b))] += 1
+    on_rim = {x for e, c in edge_count.items() if c != 2 for x in e}
+    fives = [x for x, d in degrees.items() if d == 5 and x not in on_rim]
+    sevens = [x for x, d in degrees.items() if d == 7 and x not in on_rim]
+    outside = sum(1 for x in fives if radius[x] > coil_radius)
+    inside = sum(1 for x in sevens if radius[x] < coil_radius)
+    placed = ((outside + inside) / float(len(fives) + len(sevens))
+              if fives or sevens else 1.0)
+
+    from .capped_cnt import geometry_report
+    from .fullerene_mesh import relax_shell
+
+    positions, bonds, rings, rim = dual_open(vertices, tris)
+    if relax:
+        positions = relax_shell(positions, bonds, equilibrium=bond,
+                                max_iterations=relax_iterations)
+
+    ring_counts: dict[int, int] = {}
+    for ring in rings:
+        ring_counts[len(ring)] = ring_counts.get(len(ring), 0) + 1
+
+    atoms = Atoms(symbols=["C"] * len(positions), positions=positions,
+                  pbc=(False, False, False))
+    span = positions.max(axis=0) - positions.min(axis=0)
+    atoms.set_cell(span + 2.0 * vacuum)
+    atoms.center()
+
+    aspect = coil_radius / tube_radius
+    knees = sides_per_turn * turns - 1
+    atoms.info.update({
+        "builder": "knee_coil",
+        "structure_type": "nanocoil",
+        "knee": knee,
+        "knees": int(knees),
+        "sides_per_turn": int(sides_per_turn),
+        "turns": int(turns),
+        "bend_per_knee_deg": round(360.0 / sides_per_turn, 2),
+        "pairs_per_knee": PAIRS_PER_KNEE,
+        "coil_radius": round(float(coil_radius), 3),
+        "pitch": round(float(pitch), 3),
+        "tube_radius": round(float(tube_radius), 3),
+        # D/d, the number the single-wall coil papers report.
+        "coil_aspect": round(float(aspect), 3),
+        "literature_coil_aspect": list(LITERATURE_COIL_ASPECT),
+        "circumference": int(circumference),
+        "ring_counts": dict(sorted(ring_counts.items())),
+        "mesh_census": dict(sorted(census.items())),
+        "disclinations_placed": round(float(placed), 4),
+        "like_sign_pairs": int(contacts["like"]),
+        "fused_dipoles": int(contacts["fused"]),
+        # The rims are two-coordinate by construction, as a nanocone's is.
+        "rim_atoms": [int(x) for x in rim],
+        "terminal_atoms": [int(x) for x in rim],
+        "bonds": sorted(bonds),
+        "relaxed": bool(relax),
+        "geometry": geometry_report(positions, sorted(bonds)),
+    })
+    if broken and not rim:                              # pragma: no cover
+        warnings.warn(
+            "The coil mesh is not manifold and has no rim to explain it.",
+            stacklevel=2,
+        )
+    low, high = LITERATURE_COIL_ASPECT
+    if not low <= aspect <= high:
+        warnings.warn(
+            f"D/d = {aspect:.2f} is outside the {low}-{high} band the "
+            "published single-wall coils sit in. The structure is not wrong "
+            "-- multi-wall coils reach ten and more -- but it is not the "
+            "geometry those calculations relaxed to.",
+            stacklevel=2,
+        )
+    return atoms
+
+
+def describe_knee_coil(atoms: Atoms) -> str:
+    """One line: what was wound, and where the disclinations went."""
+    info = atoms.info
+    counts = info.get("ring_counts", {})
+    census = ", ".join(f"{s}:{c}" for s, c in sorted(counts.items()))
+    placed = info.get("disclinations_placed")
+    where = ("" if placed is None
+             else f", {100 * placed:.0f}% of disclinations on the curvature "
+                  "side they belong on")
+    like, fused = info.get("like_sign_pairs"), info.get("fused_dipoles")
+    clean = ("" if like is None
+             else (", every one isolated in hexagons"
+                   if not like and not fused
+                   else f", {like} like-sign and {fused} fused contacts"))
+    return (
+        f"knee coil: {info.get('turns', 0)} turns of "
+        f"{info.get('sides_per_turn', 0)} sides, {info.get('knees', 0)} knees "
+        f"of {info.get('bend_per_knee_deg', 0):.1f} deg, R="
+        f"{info.get('coil_radius', 0):.1f} r={info.get('tube_radius', 0):.2f} "
+        f"Å (D/d {info.get('coil_aspect', 0):.2f}), {len(atoms)} atoms, rings "
+        f"{census}{where}{clean}."
+    )
 
 
 def describe_knee_toroid(atoms: Atoms) -> str:

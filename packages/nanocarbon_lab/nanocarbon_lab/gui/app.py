@@ -284,6 +284,18 @@ PRESETS: dict[str, dict[str, object]] = {
     "Carbon toroid (all hexagons)": {
         "mode_kind": "toroid (polyhex)", "tp_n": 5, "tp_m": 5,
         "tp_periods": 110},
+    # The third ring, and the exact one: six knees of two pentagon-heptagon
+    # pairs each. A pair turns the axis 30 deg and a torus asks for exactly
+    # twelve, so six knees is the whole budget. 492 atoms, {5: 12, 6: 222,
+    # 7: 12}, bonds 1.400-1.444 A, every disclination alone in hexagons.
+    # It takes no parameters here: the defaults are the law-exact shape.
+    "Carbon toroid (12 knees, exact)": {
+        "mode_kind": "toroid (knees)", "anneal": 0},
+    # The same knee wound on a helix. `nanocoil` winds a finished lattice
+    # and refuses a 25 A coil outright; this one is 12 A, D/d 3.73, inside
+    # the band the single-wall coil papers report.
+    "Nanocoil (knees, D/d 3.7)": {
+        "mode_kind": "coil (knees)", "anneal": 0},
     "Carbon toroid (R/r = 4)": {
         "mode_kind": "toroid", "tor_major": 20.0, "tor_minor": 5.0,
         "anneal": 0},

@@ -80,6 +80,17 @@ CARBON_MODES = (
     # a polyhex -- so it is a separate mode rather than a flag, exactly
     # as the two coil routes are.
     "toroid (polyhex)",
+    # The third ring: straight all-hexagon arms joined by mitred KNEES,
+    # each carrying two pentagons on the outer elbow and two heptagons on
+    # the inner one. A 5-7 pair turns the axis 30 deg and a torus asks for
+    # exactly twelve, so six knees is the whole budget -- the census is
+    # exact by construction rather than derived from a remesh.
+    "toroid (knees)",
+    # The same knee on a helix instead of a ring. `nanocoil` winds a
+    # finished lattice and can only stretch it, so it refuses a 25 A coil;
+    # here the disclinations absorb the bend and a 12 A one comes out at
+    # D/d 3.73, inside the published single-wall band.
+    "coil (knees)",
     "junction",
     "schwarzite",
     "network",
@@ -282,6 +293,7 @@ def builder_for(mode: str):
         build_haeckelite_tube,
         build_heptanene,
         build_junction,
+        build_knee_coil,
         build_knee_toroid,
         build_multiwall_cnt,
         build_nano_onion,
@@ -331,6 +343,7 @@ def builder_for(mode: str):
         "toroid": build_toroid,
         "toroid (polyhex)": build_polyhex_toroid,
         "toroid (knees)": build_knee_toroid,
+        "coil (knees)": build_knee_coil,
         "junction": build_junction,
         "schwarzite": build_schwarzite,
         "network": build_nanotube_network,
@@ -654,6 +667,18 @@ def estimate_atoms(job: Job) -> int:
         unit = build_cnt(n=int(p.get("n", 5)), m=int(p.get("m", 5)),
                          length=1.0)
         return len(unit) * int(p.get("periods", 110))
+
+    if mode in ("toroid (knees)", "coil (knees)"):
+        # Exact, and cheap to ask for: the mesh is combinatorial, so build
+        # it without relaxing and count the triangles -- one atom each.
+        from .builders.knee import build_knee_coil, build_knee_toroid
+
+        maker = (build_knee_toroid if mode == "toroid (knees)"
+                 else build_knee_coil)
+        keep = set(parameter_names(mode))
+        arguments = {k: v for k, v in p.items() if k in keep}
+        arguments["relax"] = False
+        return len(maker(**arguments))
 
     if mode == "heptanene":
         # Exact: the Klein quartic has 56 vertices and there is nothing
@@ -995,6 +1020,17 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     "toroid (polyhex)": ("toroid-polyhex", {
         "n": "--n", "m": "--m", "periods": "--periods", "bond": "--bond",
         "vacuum": "--vacuum",
+    }),
+    "toroid (knees)": ("toroid-knees", {
+        "knees": "--knees", "circumference": "--circumference",
+        "arm_rows": "--arm-rows", "knee": "--knee", "bond": "--bond",
+        "vacuum": "--vacuum",
+    }),
+    "coil (knees)": ("coil-knees", {
+        "coil_radius": "--coil-radius", "pitch": "--pitch",
+        "sides_per_turn": "--sides", "turns": "--turns",
+        "circumference": "--circumference", "knee": "--knee",
+        "bond": "--bond", "vacuum": "--vacuum",
     }),
     "heptanene": ("heptanene", {
         "bond": "--bond", "strict": "--no-strict",

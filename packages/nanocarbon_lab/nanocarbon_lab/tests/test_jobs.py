@@ -85,6 +85,17 @@ SAMPLES: dict[str, Job] = {
     # tighter ring, and bending a polyhex can only stretch it.
     "toroid (polyhex)": Job("toroid (polyhex)",
                             {"n": 5, "m": 5, "periods": 110}),
+    # The law-exact ring: six knees of two pentagon-heptagon pairs each,
+    # which is the twelve a torus asks for and 30 deg of axis turn a pair.
+    # 492 atoms, {5: 12, 6: 222, 7: 12}.
+    "toroid (knees)": Job("toroid (knees)",
+                          {"knees": 6, "circumference": 8, "arm_rows": 7}),
+    # D/d 3.73, inside the 3.5-3.9 band the single-wall coil papers
+    # report, and a radius `nanocoil` refuses outright.
+    "coil (knees)": Job("coil (knees)",
+                        {"coil_radius": 12.0, "pitch": 12.0,
+                         "sides_per_turn": 8, "turns": 1,
+                         "circumference": 8}),
     # strict=False, because the point of the sample is that the mode
     # builds; under strict it refuses by design and every test that
     # builds every sample would fail on it.
@@ -537,7 +548,8 @@ class TestEveryModeCanActuallyBeCalled:
     #: The exact-lattice carbon modes: no relaxation, no mesh, and all
     #: under three seconds, which is what makes calling them affordable
     #: here. Every one of them is a builder with no `seed`.
-    DETERMINISTIC = ("heptanene", "nanocone", "toroid (polyhex)")
+    DETERMINISTIC = ("heptanene", "nanocone", "toroid (polyhex)",
+                     "toroid (knees)", "coil (knees)")
 
     @pytest.mark.parametrize("mode", DETERMINISTIC)
     def test_the_deterministic_modes_build(self, mode):
