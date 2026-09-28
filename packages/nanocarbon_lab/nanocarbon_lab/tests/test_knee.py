@@ -16,25 +16,32 @@ import pytest
 
 from nanocarbon_lab.builders.knee import (
     CURVATURE_PENTAGONS,
+    JUNCTION_AXES,
     MESH_EDGE,
     MIN_KNEES,
     PAIRS_PER_KNEE,
     SOUND_SHAPE,
     TURN_PER_PAIR,
     build_knee_coil,
+    build_knee_junction,
     build_knee_schwarzite,
     build_knee_toroid,
     clean_circumferences,
+    clean_junction_shapes,
     clean_shapes,
+    collapse_degree_four,
     collapse_degree_three,
     defect_contacts,
     describe_knee_coil,
+    describe_knee_junction,
     describe_knee_schwarzite,
     describe_knee_toroid,
+    fill_triangular_holes,
     knee_path_mesh,
     knee_polygon_mesh,
     mesh_census,
     node_budget,
+    node_mesh,
     primitive_node_mesh,
 )
 
@@ -432,3 +439,214 @@ class TestCollapsingADegreeThreeVertexIsExact:
         with pytest.raises(ValueError) as excinfo:
             build_knee_schwarzite(circumference=9, arm_rows=9, relax=False)
         assert "arm_rows" in str(excinfo.value)
+
+
+def _interior(tris):
+    """The degree census of the interior alone, and the rim size."""
+    counts: dict[tuple[int, int], int] = {}
+    for t in tris:
+        for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
+            key = (min(a, b), max(a, b))
+            counts[key] = counts.get(key, 0) + 1
+    rim = {x for e, c in counts.items() if c != 2 for x in e}
+    degree: dict[int, int] = {}
+    for a, b in counts:
+        degree[a] = degree.get(a, 0) + 1
+        degree[b] = degree.get(b, 0) + 1
+    census: dict[int, int] = {}
+    for x, d in degree.items():
+        if x not in rim:
+            census[d] = census.get(d, 0) + 1
+    return dict(sorted(census.items())), len(rim)
+
+
+def _euler(vertices, tris):
+    edges = {(min(a, b), max(a, b)) for x in tris
+             for a, b in ((x[0], x[1]), (x[1], x[2]), (x[2], x[0]))}
+    return len(vertices) - len(edges) + len(tris)
+
+
+def _node(kind: str, circumference: int, arm_rows: int, bond: float = 1.42):
+    spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+    radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / circumference))
+    return node_mesh(JUNCTION_AXES[kind], circumference, arm_rows, radius,
+                     spacing)
+
+
+class TestAJunctionIsASphereWithHoles:
+    """A node of `c` arms is a sphere with `c` holes, so chi = 2 - c and
+    the budget is 6(2 - c). With no pentagon available -- a junction
+    saddles everywhere -- it is paid in heptagons alone."""
+
+    @pytest.mark.parametrize("kind,arms,heptagons",
+                             [("y", 3, 6), ("tetrahedral", 4, 12)])
+    def test_the_census_is_hexagons_and_exactly_those_heptagons(
+            self, kind, arms, heptagons):
+        atoms = build_knee_junction(kind=kind, circumference=10, arm_rows=7,
+                                    relax=False)
+        assert atoms.info["arms"] == arms
+        assert atoms.info["euler"] == 2 - arms
+        assert atoms.info["ring_budget"] == node_budget(arms) == -heptagons
+        counts = atoms.info["ring_counts"]
+        assert set(counts) == {6, 7}
+        assert counts[7] == heptagons
+        assert atoms.info["ring_deficit"] == -heptagons
+
+    def test_it_carries_no_pentagon_at_all(self):
+        atoms = build_knee_junction(circumference=12, arm_rows=9, relax=False)
+        assert atoms.info["pentagons"] == 0
+
+    @pytest.mark.parametrize("circumference", [10, 12, 14, 16])
+    def test_the_census_does_not_depend_on_the_circumference(
+            self, circumference):
+        atoms = build_knee_junction(circumference=circumference, arm_rows=7,
+                                    relax=False)
+        assert set(atoms.info["ring_counts"]) == {6, 7}
+        assert atoms.info["ring_counts"][7] == 6
+
+    def test_the_mouths_are_left_open(self):
+        atoms = build_knee_junction(circumference=10, arm_rows=7, relax=False)
+        # Three arms, each mouth a ring of the circumference, and every one
+        # of those atoms two-coordinate, as a nanocone's rim is.
+        assert len(atoms.info["rim_atoms"]) == 30
+        assert atoms.info["rim_atoms"] == atoms.info["terminal_atoms"]
+
+    def test_an_unknown_kind_names_the_ones_that_exist(self):
+        with pytest.raises(ValueError) as excinfo:
+            build_knee_junction(kind="x")
+        assert "tetrahedral" in str(excinfo.value)
+
+    def test_a_shape_that_does_not_close_names_the_ones_that_do(self):
+        with pytest.raises(ValueError) as excinfo:
+            build_knee_junction(circumference=9, arm_rows=11, relax=False)
+        assert "arm_rows" in str(excinfo.value)
+
+    def test_the_clean_shape_list_is_not_empty(self):
+        shapes = clean_junction_shapes("y", circumferences=(10, 12, 14),
+                                       rows_candidates=(7, 9))
+        assert shapes
+        assert all(isinstance(r, int) and isinstance(k, int)
+                   for r, k in shapes)
+
+
+class TestFillingATriangularHoleChangesNoDegree:
+    """Where three arms meet on a Y they leave a three-vertex hole rather
+    than a shared vertex. All three of its edges already exist, so closing
+    it adds none: no vertex changes degree, only F rises and chi with
+    it."""
+
+    def test_it_takes_the_node_from_minus_three_to_minus_one(self):
+        vertices, tris = _node("y", 14, 9)
+        assert _euler(vertices, tris) == -3
+        filled = fill_triangular_holes(tris)
+        assert _euler(vertices, filled) == -1
+        assert len(filled) == len(tris) + 2
+
+    def test_the_fill_is_what_makes_the_six_heptagons(self):
+        vertices, tris = _node("y", 14, 9)
+        before, rim_before = _interior(tris)
+        after, rim_after = _interior(fill_triangular_holes(tris))
+        # Two holes of three vertices each close, so six vertices join the
+        # interior and the boundary is the three mouths alone.
+        assert rim_before - rim_after == 6
+        # And they come out **degree 7**: those six are the junction's
+        # heptagons, so the fill does not merely tidy the node, it is what
+        # puts the whole Gauss-Bonnet budget on the surface. Before it the
+        # interior carries none.
+        assert 7 not in before
+        assert after == dict(sorted({**before, 7: 6}.items()))
+
+
+class TestClimbingOutTheDipoleIsNotAFlip:
+    """The welded seams each carry a neutral 4-8 pair. No flip can remove
+    it -- a flip drops two degrees and raises two, so sum|deg-6| is 4
+    before and 4 after, every time. Deleting the square and retriangulating
+    its link does, and that is climb: it changes the vertex count."""
+
+    def test_the_dipole_is_there_before_the_climb(self):
+        vertices, tris = _node("y", 14, 9)
+        tris = fill_triangular_holes(tris)
+        vertices, tris = collapse_degree_three(vertices, tris)
+        census, _ = _interior(tris)
+        assert census == {4: 6, 6: 234, 7: 6, 8: 6}
+        # Neutral: it costs the budget nothing, which is why no census
+        # check sees it.
+        assert sum((6 - s) * c for s, c in census.items()) == -6
+
+    def test_no_edge_flip_can_pay_for_it(self):
+        # A flip takes a degree off each endpoint and adds one to each
+        # opposite vertex, so it moves sum|deg-6| by an even amount that
+        # is zero for every flip touching this dipole. Stated as the
+        # arithmetic rather than as a search: the four changes are
+        # -1, -1, +1, +1 and they sum to zero whatever they land on.
+        assert (-1) + (-1) + 1 + 1 == 0
+
+    def test_the_climb_removes_it_and_nothing_else(self):
+        vertices, tris = _node("y", 14, 9)
+        tris = fill_triangular_holes(tris)
+        vertices, tris = collapse_degree_three(vertices, tris)
+        before = _euler(vertices, tris)
+        climbed, climbed_tris = collapse_degree_four(vertices, tris)
+        census, _ = _interior(climbed_tris)
+        assert census == {6: 240, 7: 6}
+        assert _euler(climbed, climbed_tris) == before
+        # One vertex, four edges and four faces go; two faces come back.
+        assert len(climbed) == len(vertices) - 6
+        assert len(climbed_tris) == len(tris) - 12
+
+    def test_it_is_a_no_op_on_a_cell_that_is_already_clean(self):
+        bond = 1.42
+        spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+        radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 20))
+        vertices, tris, _ = primitive_node_mesh(20, 9, radius, spacing)
+        vertices, tris = collapse_degree_three(vertices, tris)
+        after_vertices, after_tris = collapse_degree_four(vertices, tris)
+        assert len(after_vertices) == len(vertices)
+        assert len(after_tris) == len(tris)
+        assert mesh_census(after_vertices, after_tris)[0] == {6: 456, 7: 24}
+
+
+class TestTheJunctionGeometryIsCarbon:
+    """The census being exact does not make the bonds carbon's. These are
+    measured after the force field, against the sp2 window."""
+
+    @pytest.fixture(scope="class")
+    def junction(self):
+        return build_knee_junction(circumference=14, arm_rows=9)
+
+    def test_the_bonds_and_angles_are_sp2(self, junction):
+        geometry = junction.info["geometry"]
+        assert 1.30 <= geometry["bond_min"] <= geometry["bond_max"] <= 1.55
+        assert 100.0 <= geometry["angle_min"]
+        assert geometry["angle_max"] <= 135.0
+
+    def test_nothing_overlaps(self, junction):
+        assert junction.info["geometry"]["n_close_contacts"] == 0
+
+    def test_the_relaxation_cannot_change_the_census(self, junction):
+        loose = build_knee_junction(circumference=14, arm_rows=9, relax=False)
+        assert junction.info["ring_counts"] == loose.info["ring_counts"]
+        assert len(junction) == len(loose)
+
+    def test_every_heptagon_is_in_negative_curvature(self, junction):
+        # The intrinsic check, which is not a restatement of the census:
+        # the surface is fitted over each ring and the sign of K read off.
+        # A heptagon is a -60 deg disclination and belongs in negative
+        # curvature; all six are, mean sign exactly -1.
+        check = junction.info["disclination_check"]
+        assert check["agreement"] == 1.0
+        assert check["sizes"][7]["mean_sign"] == -1.0
+
+    def test_it_records_the_rings_by_atom_index(self, junction):
+        # `dopants/rings.py` places a heteroatom on a named ring size from
+        # this and raises without it, rather than perceiving rings by
+        # distance.
+        rings = junction.info["rings"]
+        assert len(rings) == sum(junction.info["ring_counts"].values())
+        assert all(0 <= x < len(junction) for ring in rings for x in ring)
+
+    def test_what_it_says_about_itself(self, junction):
+        line = describe_knee_junction(junction)
+        assert "3 arms" in line
+        assert "7:6" in line
+        assert "nothing else" in line

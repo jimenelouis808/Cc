@@ -1242,6 +1242,109 @@ is that a planar bevel cut cannot do it: the (5,5) and (10,0) tubes a
 cannot coincide at any bevel angle, and cutting one tube and mirroring it
 tears the lattice outright.
 
+### The same node makes the junction, and there the census is exact
+
+`builders/knee.py` builds a junction the way it builds the schwarzite
+cell: arms trimmed by **dominance** -- a vertex keeps the arm whose axis
+it lies furthest along, and the surface separating two arms is then the
+bisector plane of their axes, which is a plane for **any** pair and not
+only for perpendicular ones. So nothing new is needed off the cube axes,
+and `node_mesh` takes any directions at all.
+
+**The budget is fixed before anything is meshed.** A node of `c` arms is
+a sphere with `c` holes, so `chi = 2 - c` and `sum(6-n) = 6(2-c)`. A
+junction saddles everywhere, so it can carry **no pentagon**, and the
+whole budget is paid in heptagons:
+
+| kind | arms | chi | census | bonds (Å) | placement |
+|---|---|---|---|---|---|
+| `y` | 3 | -1 | `{6: N, 7: 6}` | 1.410-1.431 | **100%** |
+| `tetrahedral` | 4 | -2 | `{6: N, 7: 12}` | 1.415-1.428 | **100%** |
+
+Measured at every circumference from 10 to 20 and every arm length
+tried, exactly. Six is the number the published Y junctions carry. The
+implicit route at a comparable size returns **50 pentagons and 38
+heptagons** -- sound, and an amorphous wall. This is the same table row
+the "mesh route versus crystalline route" section has for the toroid and
+the coil, and here the crystalline route costs nothing: the Y's bond
+spread is **0.021 Å against the meshed Y junction's 0.117**, so for once
+it buys a clean census *and* better bonds.
+
+The placement column is `analyse/curvature.disclination_check`, the
+intrinsic measure, and it is not a restatement of the census: the surface
+is fitted over each ring and the sign of `K` read off. Every heptagon is
+in negative curvature, mean sign exactly **-1.00**. Only the periodic
+coil reaches that elsewhere in this file.
+
+**A planar X is deliberately absent from `JUNCTION_AXES`.** Four arms at
+90 deg in a plane builds, and comes out at `chi = -4` where a sphere with
+four holes has -2: the four corner unions close a tunnel through the
+middle. That is a real surface, and it is not the X junction anybody
+means. It is left out rather than shipped under the name.
+
+#### The 4-8 dipole, and why climb is the only move that removes it
+
+The welded seams each come out carrying a neutral **4-8 pair sitting side
+by side**. It is neutral -- `(6-4) + (6-8) = 0` -- so it costs the budget
+nothing and **no census check sees it**: `sum(6-n)` reads -6 with the
+dipoles there and -6 with them gone.
+
+**No edge flip can remove it, and that is arithmetic rather than a search
+failure.** A flip drops its two endpoints a degree and raises its two
+opposites, so taking the 8 down takes a neighbouring hexagon down with it
+and bringing the 4 up brings another hexagon up: `sum|deg - 6|` is 4
+before and 4 after, whatever the flip lands on. Measured, greedy descent
+over every flip finds not one improving move, and a plateau anneal across
+four seeds stays put. This is the **same wall the Dunlap toroid met** --
+gliding a dislocation preserves it, and separating or annihilating one
+needs **climb**, which changes the vertex count and so cannot be a flip.
+
+`collapse_degree_four` is that climb: delete the degree-4 vertex and fill
+the quadrilateral its link leaves with two triangles. One vertex, four
+edges and four faces go and two faces come back, so `chi` is untouched,
+and all four neighbours drop a degree. **The diagonal decides which two
+get it back, and choosing it is the whole move.** The link comes out in
+the cyclic order `6, 7, 6, 8`; the diagonal joining the two hexagons
+returns their degree and leaves the 8 at 7 and the 4 gone:
+
+| diagonal | result at k=14 |
+|---|---|
+| the two hexagons | `{4: 5, 6: 235, 7: 6, 8: 5}` -- the dipole gone, nothing else touched |
+| the 7 and the 8 | `{4: 5, 5: 2, 6: 232, 7: 6, 8: 6}` -- two pentagons invented |
+
+Both are tried, a diagonal that is already an edge is skipped, and the
+move is taken only when `sum|deg - 6|` over the **interior** strictly
+falls. It is a **no-op** on a mesh that is already clean, which the
+Schwarz P cell pins.
+
+#### Three things measured and refuted on the way
+
+Worth keeping, because each looked like the answer:
+
+* **"It is a phase."** Rotating every arm's ring stack by half a step
+  does change the census -- and for the worse: `{4: 6, 6: N, 8: 6, 9: 2}`,
+  which trades the six heptagons for two **nonagons** and keeps the
+  dipoles. No phase in a scan over four values and six circumferences
+  reaches `{6: N, 7: 6}`.
+* **"It is chirality."** `_ring_stack` climbs helically, so a neighbouring
+  arm is a rotation of this one rather than its mirror -- and with three
+  pairwise-adjacent arms there is no 2-colouring to fix that. It reads as
+  a clean explanation and it is wrong: the census is **byte-identical
+  across all eight per-arm mirror combinations**. The mirror changes the
+  geometry and not the topology here.
+* **"Anneal it out."** The flip annealer *worsens* it, from
+  `sum|deg-6| = 24` to 30-37, and invents twenty pentagons where there
+  were none, because its objective counts rim vertices. Turning a pass on
+  is not the same as it helping.
+
+**The fill is what puts the budget on the surface, not a tidying step.**
+Where three arms meet, the trim leaves a *triangular hole* rather than
+the shared degree-3 vertex the cube node leaves. Closing it adds no edge
+-- all three already exist -- so no vertex changes degree and only `F`
+rises. But the six vertices that stop being boundary come out at
+**degree 7**: they *are* the junction's heptagons. Before the fill the
+interior carries none at all.
+
 ## A collapsed wall passes every check in this package
 
 The periodic coil preset -- 8.75 Å coil, 9.6 Å pitch, **3 Å tube** --

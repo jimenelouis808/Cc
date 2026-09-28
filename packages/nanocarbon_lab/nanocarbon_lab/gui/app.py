@@ -301,6 +301,12 @@ PRESETS: dict[str, dict[str, object]] = {
     # returns 33 pentagons at a comparable cell.
     "Schwarz P (knees, no pentagons)": {
         "mode_kind": "schwarzite (knees)", "anneal": 0},
+    # 536 atoms, {6: 240, 7: 6} and not one pentagon -- exactly the six
+    # heptagons Gauss-Bonnet asks of a three-arm node, where the meshed
+    # route returns fifty pentagons and thirty-eight heptagons. Bonds
+    # 1.410-1.431 A, the tightest of any junction here.
+    "Y junction (knees, six heptagons)": {
+        "mode_kind": "junction (knees)", "anneal": 0},
     "Carbon toroid (R/r = 4)": {
         "mode_kind": "toroid", "tor_major": 20.0, "tor_minor": 5.0,
         "anneal": 0},

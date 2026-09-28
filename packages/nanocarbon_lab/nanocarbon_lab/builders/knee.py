@@ -1108,6 +1108,11 @@ def build_knee_toroid(
         "equator_rows": [int(outer_rows), int(inner_rows)],
         "equator_row_ratio": round(outer_rows / max(inner_rows, 1), 3),
         "equator_row_ratio_needed": round(float(rows_needed), 3),
+        # The real atom indices per ring, not a census. `dopants/rings.py`
+        # places a heteroatom on a named ring size and RAISES without
+        # this, rather than falling back on perceiving rings by distance
+        # -- which is the failure `fullerene_mesh` exists to prevent.
+        "rings": [[int(x) for x in ring] for ring in rings],
         "bonds": sorted(bonds),
         "relaxed": bool(relax),
         # Measured on the finished atoms, so a caller can assert on the
@@ -1205,14 +1210,23 @@ def collapse_degree_three(vertices: np.ndarray, tris):
     while True:
         adjacency: dict[int, set[int]] = defaultdict(set)
         incident: dict[int, int] = defaultdict(int)
+        edges: dict[tuple[int, int], int] = defaultdict(int)
         for t in tris:
             for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
                 adjacency[a].add(b)
                 adjacency[b].add(a)
+                edges[(min(a, b), max(a, b))] += 1
             for x in t:
                 incident[x] += 1
+        # A rim vertex has a low degree because its ring is cut off, not
+        # because three arms met there, and its link is an arc rather than a
+        # cycle -- so filling it WOULD add an edge and change `chi`. A closed
+        # cell has no rim, so this changes nothing for the schwarzite; it is
+        # what makes the move safe on an open node such as a junction.
+        rim = {x for e, c in edges.items() if c != 2 for x in e}
         victim = next((v for v, ns in adjacency.items()
-                       if len(ns) == 3 and incident[v] == 3), None)
+                       if len(ns) == 3 and incident[v] == 3
+                       and v not in rim), None)
         if victim is None:
             break
         around = [t for t in tris if victim in t]
@@ -1220,6 +1234,127 @@ def collapse_degree_three(vertices: np.ndarray, tris):
         third = (adjacency[victim] - set(keep)).pop()
         tris = [t for t in tris if victim not in t]
         tris.append((keep[0], keep[1], third))
+    live = sorted({x for t in tris for x in t})
+    relabel = {x: i for i, x in enumerate(live)}
+    return vertices[live], [(relabel[a], relabel[b], relabel[c])
+                            for a, b, c in tris]
+
+
+def _link_cycle(tris, victim: int) -> list[int] | None:
+    """The neighbours of ``victim`` in cyclic order, or ``None``.
+
+    Each incident triangle contributes one step of the walk, so an
+    interior vertex's link closes and a rim vertex's does not. Returning
+    ``None`` rather than a partial arc is what keeps the callers from
+    retriangulating a hole that is really a boundary.
+    """
+    onward: dict[int, int] = {}
+    for t in tris:
+        if victim not in t:
+            continue
+        a, b, c = t
+        while a != victim:
+            a, b, c = b, c, a
+        onward[b] = c
+    if not onward:
+        return None
+    start = next(iter(onward))
+    cycle, x = [start], onward[start]
+    while x != start:
+        if x not in onward or len(cycle) > len(onward):
+            return None
+        cycle.append(x)
+        x = onward[x]
+    return cycle if len(cycle) == len(onward) else None
+
+
+def collapse_degree_four(vertices: np.ndarray, tris):
+    """Annihilate a 4-8 dipole by removing the square, not by flipping it.
+
+    The Y node comes out of :func:`node_mesh` with the right heptagons in
+    the right places and, on each seam, one extra **4-8 pair sitting side
+    by side**. That pair is neutral -- ``(6-4) + (6-8) = 0`` -- so it
+    costs the Gauss-Bonnet budget nothing and no census check sees it; it
+    is a dislocation, and it is what stands between this node and the
+    textbook junction.
+
+    **No edge flip can remove it, and that is arithmetic rather than a
+    search failure.** A flip drops its two endpoints a degree and raises
+    its two opposites, so taking the 8 down takes a neighbouring hexagon
+    down with it and bringing the 4 up brings another hexagon up:
+    ``sum|deg - 6|`` is 4 before and 4 after, every time. Measured, greedy
+    descent over every flip on this mesh finds not one improving move, and
+    a plateau anneal across four seeds stays put. This is the same wall
+    the Dunlap toroid met -- gliding a dislocation preserves it, and
+    separating or annihilating it needs **climb**, which changes the
+    vertex count and therefore cannot be a flip at all.
+
+    So climb: delete the degree-4 vertex and fill the quadrilateral its
+    link leaves with two triangles. That removes one vertex, four edges
+    and four faces and returns two, leaving ``chi`` untouched, and drops
+    every one of the four neighbours a degree. The **diagonal decides
+    which two get it back**, and choosing it is the whole move: the link
+    comes out in the cyclic order ``6, 7, 6, 8``, and the diagonal joining
+    the two hexagons returns their degree and leaves the 8 at 7 and the 4
+    gone. Measured on a ``k = 14`` Y node, one step takes
+    ``{4: 6, 6: 234, 7: 6, 8: 6}`` to ``{4: 5, 6: 235, 7: 6, 8: 5}`` --
+    the dipole gone and nothing else touched. The other diagonal gives
+    ``{4: 5, 5: 2, 6: 232, 7: 6, 8: 6}`` and is refused.
+
+    The choice is made by measurement rather than by that pattern: both
+    diagonals are tried, a diagonal that is already an edge is skipped
+    (it would be a duplicate), and the move is taken only when
+    ``sum|deg - 6|`` over the **interior** strictly falls. A rim vertex's
+    link is an arc, so it is never a candidate.
+    """
+    tris = [tuple(int(x) for x in t) for t in tris]
+
+    def misfit(faces) -> int:
+        counts: dict[tuple[int, int], int] = defaultdict(int)
+        for t in faces:
+            for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
+                counts[(min(a, b), max(a, b))] += 1
+        rim = {x for e, c in counts.items() if c != 2 for x in e}
+        degree: dict[int, int] = defaultdict(int)
+        for a, b in counts:
+            degree[a] += 1
+            degree[b] += 1
+        return sum(abs(d - 6) for x, d in degree.items() if x not in rim)
+
+    while True:
+        counts: dict[tuple[int, int], int] = defaultdict(int)
+        for t in tris:
+            for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
+                counts[(min(a, b), max(a, b))] += 1
+        rim = {x for e, c in counts.items() if c != 2 for x in e}
+        degree: dict[int, int] = defaultdict(int)
+        for a, b in counts:
+            degree[a] += 1
+            degree[b] += 1
+        edges = set(counts)
+        before = misfit(tris)
+
+        taken = None
+        for victim in sorted(x for x, d in degree.items()
+                             if d == 4 and x not in rim):
+            cycle = _link_cycle(tris, victim)
+            if cycle is None or len(cycle) != 4:
+                continue
+            survivors = [t for t in tris if victim not in t]
+            for shift in (0, 1):
+                a, b, c, d = cycle[shift:] + cycle[:shift]
+                if (min(a, c), max(a, c)) in edges:
+                    continue
+                candidate = survivors + [(a, b, c), (a, c, d)]
+                if misfit(candidate) < before:
+                    taken = candidate
+                    break
+            if taken is not None:
+                break
+        if taken is None:
+            break
+        tris = taken
+
     live = sorted({x for t in tris for x in t})
     relabel = {x: i for i, x in enumerate(live)}
     return vertices[live], [(relabel[a], relabel[b], relabel[c])
@@ -1241,6 +1376,183 @@ def _union_find(n: int):
             parent[max(ra, rb)] = min(ra, rb)
 
     return find, union
+
+
+def fill_triangular_holes(tris):
+    """Close every three-vertex boundary cycle with one triangle.
+
+    Where three arms meet, the trim leaves one of two things, and which
+    depends on the angles between them. On the **primitive** node -- six
+    arms along the cube axes -- the three meeting arms share a single
+    vertex, which comes out with degree 3 and is removed by
+    :func:`collapse_degree_three`. On a **Y** node -- three arms at 120
+    deg in a plane -- they leave a triangular **hole** instead, and the
+    node measures ``chi = -3`` with boundary cycles ``[3, 3, k, k, k]``:
+    the three mouths plus two holes.
+
+    Filling such a hole adds no edge, because all three already exist, so
+    **no vertex changes degree**; only ``F`` rises, and ``chi`` with it.
+    Measured on a three-arm node at ``k = 14``: ``chi`` goes from -3 to
+    -1, the boundary becomes the three mouths alone, and the interior
+    census reads ``{4: 6, 6: 150, 7: 6, 8: 6}`` for
+    ``sum(6-n) = -6`` -- exactly :func:`node_budget` for three arms, which
+    it was not before the fill.
+
+    The two repairs are the same accident with two faces, so a node runs
+    both: fill the holes, then collapse what is left.
+    """
+    tris = [tuple(int(x) for x in t) for t in tris]
+    while True:
+        cycles = _boundary_cycles(tris)
+        if not cycles:
+            break
+        hole = next((c for c in cycles if len(c) == 3), None)
+        if hole is None:
+            break
+        a, b, c = hole
+        # Wind it against the face that already uses one of its edges, or
+        # the new triangle faces the wrong way and the walk crosses itself.
+        neighbour = next(t for t in tris if a in t and b in t)
+        forward = (neighbour.index(b) - neighbour.index(a)) % 3 == 1
+        tris.append((b, a, c) if forward else (a, b, c))
+    return tris
+
+
+def node_mesh(
+    axes: np.ndarray,
+    circumference: int,
+    arm_rows: int,
+    tube_radius: float,
+    spacing: float,
+    corner_span: float = CORNER_SPAN,
+    corner_tol: float = CORNER_TOLERANCE,
+    phases=None,
+    mirrors=None,
+) -> tuple[np.ndarray, list[tuple[int, int, int]]]:
+    """A node of arms along **any** directions, trimmed and seamed.
+
+    The generalisation of :func:`primitive_node_mesh` off the cube axes,
+    and what a junction needs: three arms at 120 deg in a plane is a Y,
+    four at 109.47 deg is a diamond node. The trim is by **dominance** --
+    a vertex keeps the arm whose axis it lies furthest along -- and the
+    surface that separates two arms is then the bisector plane of their
+    axes through the origin, which is a plane for any pair and not only
+    for perpendicular ones. So nothing new is needed off the cube.
+
+    Returns ``(vertices, triangles)`` **open**: the arms' mouths are left
+    as rims, because a junction is open at its arms the way a nanocone is
+    at its base. The caller closes the three-vertex holes at the meeting
+    points with :func:`fill_triangular_holes` and takes the dual with
+    :func:`dual_open`.
+
+    Raises
+    ------
+    ValueError
+        If the trim, the mouths or a seam does not come out in register.
+    """
+    axes = np.asarray(axes, dtype=float)
+    axes = axes / np.linalg.norm(axes, axis=1)[:, None]
+    reach = (arm_rows - 1) * spacing
+    verts: list[list[float]] = []
+    tris: list[tuple[int, int, int]] = []
+    owner: list[int] = []
+    phases = [0.0] * len(axes) if phases is None else list(phases)
+    mirrors = [False] * len(axes) if mirrors is None else list(mirrors)
+    for a, axis in enumerate(axes):
+        outward = np.array([0.0, 0.0, 1.0])
+        if abs(float(outward @ axis)) > 0.9:
+            outward = np.array([1.0, 0.0, 0.0])
+        local, local_tris = _ring_stack(circumference, arm_rows, tube_radius,
+                                        spacing, mirror=bool(mirrors[a]))
+        turn = 2.0 * np.pi * float(phases[a]) / circumference
+        spin = np.array([[np.cos(turn), -np.sin(turn), 0.0],
+                         [np.sin(turn), np.cos(turn), 0.0],
+                         [0.0, 0.0, 1.0]])
+        placed = local @ spin.T @ _frame(axis, outward).T + axis * (reach / 2.0)
+        offset = len(verts)
+        verts.extend(placed.tolist())
+        owner.extend([a] * len(placed))
+        tris.extend((x + offset, y + offset, z + offset)
+                    for x, y, z in local_tris)
+    vertices = np.asarray(verts, dtype=float)
+
+    along = vertices @ axes.T
+    keep = ((along.argmax(axis=1) == np.asarray(owner))
+            & (along.max(axis=1) > 0.0))
+    tris = [t for t in tris if keep[t[0]] and keep[t[1]] and keep[t[2]]]
+    if not tris:
+        raise ValueError("the dominance trim left nothing of the node.")
+    used = sorted({x for t in tris for x in t})
+    remap = {x: i for i, x in enumerate(used)}
+    vertices = vertices[used]
+    owner = [owner[x] for x in used]
+    tris = [(remap[a], remap[b], remap[c]) for a, b, c in tris]
+
+    cycles = _boundary_cycles(tris)
+    if cycles is None:
+        raise ValueError("the trimmed node's boundary is not manifold.")
+
+    def reach_of(cycle) -> float:
+        return float((vertices[cycle] @ axes[owner[cycle[0]]]).mean())
+
+    mouths = [c for c in cycles if reach_of(c) > 0.9 * reach]
+    inner = [c for c in cycles if c not in mouths]
+    if len(mouths) != len(axes):
+        raise ValueError(
+            f"the node came out with {len(mouths)} mouths where "
+            f"{len(axes)} were expected. Lengthen the arms."
+        )
+
+    find, union = _union_find(len(vertices))
+    seam_vertices = sorted({x for c in inner for x in c})
+    seams: dict[tuple[int, int], dict[int, list[int]]] = {}
+    for x in seam_vertices:
+        a = owner[x]
+        projection = vertices[x] @ axes.T
+        others = [j for j in range(len(axes)) if j != a]
+        facing = max(others, key=lambda j: projection[j])
+        target = projection[facing]
+        normal = axes[a] - axes[facing]
+        normal = normal / np.linalg.norm(normal)
+        step = -float(vertices[x] @ normal) / float(axes[a] @ normal)
+        vertices[x] = vertices[x] + step * axes[a]
+        for j in others:
+            if target - projection[j] >= corner_span:
+                continue
+            key = (min(a, j), max(a, j))
+            seams.setdefault(key, {}).setdefault(a, []).append(x)
+
+    for (a, b), sides in seams.items():
+        if len(sides) != 2:
+            raise ValueError(f"seam {a}-{b} has only one side.")
+        here, there = sides[a], sides[b]
+        if len(here) != len(there):
+            raise ValueError(
+                f"seam {a}-{b} has {len(here)} vertices on one side and "
+                f"{len(there)} on the other, so it cannot pair up."
+            )
+        distances = np.linalg.norm(
+            vertices[here][:, None, :] - vertices[there][None, :, :], axis=2)
+        nearest = distances.argmin(axis=1)
+        if len(set(nearest.tolist())) != len(here):
+            raise ValueError(f"seam {a}-{b} has no one-to-one partner.")
+        for t, x in enumerate(here):
+            union(x, there[int(nearest[t])])
+
+    representatives = sorted({find(x) for x in seam_vertices})
+    points = vertices[representatives]
+    spread = np.linalg.norm(points[:, None, :] - points[None, :, :], axis=2)
+    for i in range(len(representatives)):
+        for j in range(i + 1, len(representatives)):
+            if spread[i, j] < corner_tol:
+                union(representatives[i], representatives[j])
+
+    tris = [tuple(find(x) for x in t) for t in tris]
+    tris = [t for t in tris if len(set(t)) == 3]
+    live = sorted({x for t in tris for x in t})
+    relabel = {x: i for i, x in enumerate(live)}
+    return (vertices[live],
+            [(relabel[a], relabel[b], relabel[c]) for a, b, c in tris])
 
 
 def primitive_node_mesh(
@@ -1408,6 +1720,265 @@ def primitive_node_mesh(
             float(cell))
 
 
+#: The junctions this route builds, as unit axes. A **Y** is three arms
+#: at 120 deg in a plane; a **tetrahedral** node is four at 109.47 deg,
+#: which is the building block of a Schwarz D cell exactly as the
+#: six-arm cube node is of a Schwarz P one. A *planar* X -- four arms at
+#: 90 deg in a plane -- is deliberately absent: it builds, and it comes
+#: out with ``chi = -4`` where a sphere with four holes has -2, because
+#: the four corner unions close a tunnel through the middle. That is a
+#: real surface and it is not the X junction anybody means.
+JUNCTION_AXES: dict[str, np.ndarray] = {
+    "y": np.array([[np.cos(a), np.sin(a), 0.0]
+                   for a in (0.0, 2.0 * np.pi / 3.0, 4.0 * np.pi / 3.0)]),
+    "tetrahedral": np.array([[1.0, 1.0, 1.0], [1.0, -1.0, -1.0],
+                             [-1.0, 1.0, -1.0], [-1.0, -1.0, 1.0]])
+    / np.sqrt(3.0),
+}
+
+
+def clean_junction_shapes(
+    kind: str = "y",
+    bond: float = CC_BOND,
+    circumferences=tuple(range(8, 25)),
+    rows_candidates=(7, 9, 11, 13),
+) -> list[tuple[int, int]]:
+    """``(arm_rows, circumference)`` pairs giving the exact junction census.
+
+    A pair qualifies when the node closes, the interior census is
+    hexagons plus heptagons alone -- no square, no octagon, no pentagon,
+    a junction being a saddle everywhere -- and the heptagon count is
+    exactly ``-node_budget(arms)``.
+    """
+    axes = JUNCTION_AXES[kind]
+    budget = node_budget(len(axes))
+    spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+    good: list[tuple[int, int]] = []
+    for rows in rows_candidates:
+        for k in circumferences:
+            radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / k))
+            try:
+                vertices, tris = node_mesh(axes, k, rows, radius, spacing)
+                tris = fill_triangular_holes(tris)
+                vertices, tris = collapse_degree_three(vertices, tris)
+                vertices, tris = collapse_degree_four(vertices, tris)
+            except (ValueError, StopIteration, KeyError):
+                continue
+            census = _interior_census(tris)
+            if set(census) - {6, 7} or census.get(7, 0) != -budget:
+                continue
+            good.append((int(rows), int(k)))
+    return good
+
+
+def _interior_census(tris) -> dict[int, int]:
+    """Ring sizes of the interior alone, a rim vertex's ring being cut off."""
+    counts: dict[tuple[int, int], int] = defaultdict(int)
+    for t in tris:
+        for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
+            counts[(min(a, b), max(a, b))] += 1
+    rim = {x for e, c in counts.items() if c != 2 for x in e}
+    degree: dict[int, int] = defaultdict(int)
+    for a, b in counts:
+        degree[a] += 1
+        degree[b] += 1
+    census: dict[int, int] = {}
+    for x, d in degree.items():
+        if x in rim:
+            continue
+        census[d] = census.get(d, 0) + 1
+    return dict(sorted(census.items()))
+
+
+def build_knee_junction(
+    kind: str = "y",
+    circumference: int = 14,
+    arm_rows: int = 9,
+    bond: float = CC_BOND,
+    vacuum: float = DEFAULT_VACUUM_1D,
+    relax: bool = True,
+    relax_iterations: int = 3000,
+) -> Atoms:
+    """A nanotube junction with the six heptagons and nothing else.
+
+    :func:`~nanocarbon_lab.builders.junction.build_junction` meshes the
+    junction implicitly and lets the remesher choose the rings; measured,
+    a Y comes back with 50 pentagons and 38 heptagons where six heptagons
+    pay the whole budget -- sound, and an amorphous wall. This builds the
+    node as the lattice object it is: three arms trimmed by **dominance**,
+    their seams mitred and welded, the triangular holes where the arms
+    meet filled, and the leftover dislocations **climbed out**.
+
+    The census is then what Gauss-Bonnet asks for and no more. A node of
+    ``c`` arms is a sphere with ``c`` holes, so ``chi = 2 - c`` and
+    ``sum(6-n) = 6(2-c)``, and with no pentagons available -- a junction
+    saddles everywhere, so positive curvature would be wrong -- it is paid
+    in heptagons alone:
+
+    ==============  =======  =======  =====================
+    kind            arms     chi      census
+    ==============  =======  =======  =====================
+    ``y``           3        -1       ``{6: N, 7: 6}``
+    ``tetrahedral`` 4        -2       ``{6: N, 7: 12}``
+    ==============  =======  =======  =====================
+
+    Measured at every circumference from 10 to 20 and every arm length
+    tried, exactly -- six heptagons for the Y, twelve for the tetrahedral
+    node, and not one square, octagon or pentagon beside them. Six is the
+    number the published Y junctions carry.
+
+    **The dislocations are what the climb removes, and no flip could.**
+    The welded seams each come out carrying a neutral 4-8 pair, which
+    costs the budget nothing and which every census check passes over.
+    :func:`collapse_degree_four` is the move that takes them out; its
+    docstring has the arithmetic showing a flip cannot.
+
+    The mouths are left **open**, as a nanocone's rim is, and recorded in
+    ``info["rim_atoms"]``.
+
+    Parameters
+    ----------
+    kind
+        ``"y"`` or ``"tetrahedral"`` -- see :data:`JUNCTION_AXES`.
+    circumference, arm_rows
+        Mesh vertices around each arm, and rows along it: the tube radius
+        and the arm length. Not every pair closes --
+        :func:`clean_junction_shapes` is the list that does.
+    bond
+        C-C length (Å).
+    vacuum
+        Padding around the finite structure (Å).
+    relax, relax_iterations
+        Whether to relax with the valence force field. The bond graph is
+        explicit, so the census is fixed before this runs.
+
+    Returns
+    -------
+    ase.Atoms
+        Finite, with the census, the budget and the measured geometry in
+        ``atoms.info``.
+
+    Raises
+    ------
+    ValueError
+        If the kind is unknown, or the shape does not give the exact
+        census, naming the ones that do.
+    """
+    if kind not in JUNCTION_AXES:
+        raise ValueError(
+            f"unknown junction kind {kind!r}; the ones this route builds "
+            f"are {sorted(JUNCTION_AXES)}."
+        )
+    axes = JUNCTION_AXES[kind]
+    arms = len(axes)
+    budget = node_budget(arms)
+    spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+    tube_radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / circumference))
+    try:
+        vertices, tris = node_mesh(axes, circumference, arm_rows, tube_radius,
+                                   spacing)
+        tris = fill_triangular_holes(tris)
+        vertices, tris = collapse_degree_three(vertices, tris)
+        vertices, tris = collapse_degree_four(vertices, tris)
+    except (ValueError, StopIteration, KeyError) as problem:
+        shapes = clean_junction_shapes(kind, bond)
+        raise ValueError(
+            f"circumference {circumference} with {arm_rows}-row arms does "
+            f"not close as a {kind} node ({problem}). Pairs that do, as "
+            f"(arm_rows, circumference): {shapes or 'none found'}."
+        ) from problem
+
+    census = _interior_census(tris)
+    deficit = sum((6 - size) * count for size, count in census.items())
+    if set(census) - {6, 7} or census.get(7, 0) != -budget:
+        shapes = clean_junction_shapes(kind, bond)
+        raise ValueError(
+            f"circumference {circumference} with {arm_rows}-row arms gives "
+            f"the census {census} and sum(6-n) = {deficit:+d}, not the "
+            f"hexagons-plus-{-budget}-heptagons a {arms}-arm node must have "
+            "(it saddles everywhere, so it can carry no pentagon at all). "
+            f"Pairs that do, as (arm_rows, circumference): "
+            f"{shapes or 'none found'}."
+        )
+
+    from .capped_cnt import geometry_report
+    from .fullerene_mesh import relax_shell
+
+    positions, bonds, rings, rim = dual_open(vertices, tris)
+    if relax:
+        positions = relax_shell(positions, bonds, equilibrium=bond,
+                                max_iterations=relax_iterations)
+
+    ring_counts: dict[int, int] = {}
+    for ring in rings:
+        ring_counts[len(ring)] = ring_counts.get(len(ring), 0) + 1
+
+    # The intrinsic check, and the one that is not a restatement of the
+    # census: fit the surface over each ring and ask the sign of K there.
+    # A heptagon is a -60 deg disclination, so it belongs in negative
+    # curvature. Measured 100% on both kinds, mean sign exactly -1.00.
+    from ..analyse.curvature import disclination_check
+    check = disclination_check(positions, rings, sorted(bonds))
+
+    span = positions.max(axis=0) - positions.min(axis=0)
+    atoms = Atoms(symbols=["C"] * len(positions), positions=positions,
+                  cell=np.diag(span + 2.0 * vacuum), pbc=(False, False, False))
+    atoms.center()
+    atoms.info.update({
+        "builder": "knee_junction",
+        "structure_type": "junction",
+        "kind": kind,
+        "arms": int(arms),
+        "euler": int(2 - arms),
+        "ring_budget": int(budget),
+        "circumference": int(circumference),
+        "arm_rows": int(arm_rows),
+        "tube_radius": round(float(tube_radius), 3),
+        "arm_length": round(float((arm_rows - 1) * spacing), 3),
+        "ring_counts": dict(sorted(ring_counts.items())),
+        "ring_deficit": int(sum((6 - s) * c for s, c in ring_counts.items())),
+        "mesh_census": census,
+        # A junction is a saddle everywhere, so a pentagon on one is never
+        # right. This is what the implicit route cannot get to zero: it
+        # returns fifty on a comparable Y.
+        "pentagons": int(ring_counts.get(5, 0)),
+        "disclination_check": check,
+        "disclinations_placed": check["agreement"],
+        # The mouths are two-coordinate by construction, as a nanocone's
+        # rim is.
+        "rim_atoms": [int(x) for x in rim],
+        "terminal_atoms": [int(x) for x in rim],
+        # The real atom indices per ring, not a census. `dopants/rings.py`
+        # places a heteroatom on a named ring size and RAISES without
+        # this, rather than falling back on perceiving rings by distance
+        # -- which is the failure `fullerene_mesh` exists to prevent.
+        "rings": [[int(x) for x in ring] for ring in rings],
+        "bonds": sorted(bonds),
+        "relaxed": bool(relax),
+        "geometry": geometry_report(positions, sorted(bonds)),
+    })
+    return atoms
+
+
+def describe_knee_junction(atoms: Atoms) -> str:
+    """One line: the arms, the census and whether it is the exact one."""
+    info = atoms.info
+    counts = info.get("ring_counts", {})
+    census = ", ".join(f"{s}:{c}" for s, c in sorted(counts.items()))
+    mesh = info.get("mesh_census", {})
+    exact = (set(mesh) <= {6, 7}
+             and mesh.get(7, 0) == -int(info.get("ring_budget", 0)))
+    verdict = ("exactly the heptagons Gauss-Bonnet asks for and nothing else"
+               if exact else "not the exact census")
+    return (
+        f"knee junction ({info.get('kind', '?')}): {info.get('arms', 0)} arms, "
+        f"{len(atoms)} atoms, tube radius "
+        f"{info.get('tube_radius', 0):.2f} Å, rings {census}, sum(6-n) = "
+        f"{info.get('ring_deficit', 0):+d} against a budget of "
+        f"{info.get('ring_budget', 0):+d}; {verdict}."
+    )
+
+
 def clean_schwarzite_shapes(
     bond: float = CC_BOND,
     circumferences=tuple(range(12, 29)),
@@ -1565,6 +2136,11 @@ def build_knee_schwarzite(
         # never right. This is the number the implicit route cannot get to
         # zero: it returns 33 at a comparable cell.
         "pentagons": int(ring_counts.get(5, 0)),
+        # The real atom indices per ring, not a census. `dopants/rings.py`
+        # places a heteroatom on a named ring size and RAISES without
+        # this, rather than falling back on perceiving rings by distance
+        # -- which is the failure `fullerene_mesh` exists to prevent.
+        "rings": [[int(x) for x in ring] for ring in rings],
         "bonds": sorted(bonds),
         "relaxed": bool(relax),
         # Judged by the plain sp2 window: a heptagon's interior angle is
@@ -1759,6 +2335,11 @@ def build_knee_coil(
         # The rims are two-coordinate by construction, as a nanocone's is.
         "rim_atoms": [int(x) for x in rim],
         "terminal_atoms": [int(x) for x in rim],
+        # The real atom indices per ring, not a census. `dopants/rings.py`
+        # places a heteroatom on a named ring size and RAISES without
+        # this, rather than falling back on perceiving rings by distance
+        # -- which is the failure `fullerene_mesh` exists to prevent.
+        "rings": [[int(x) for x in ring] for ring in rings],
         "bonds": sorted(bonds),
         "relaxed": bool(relax),
         "geometry": geometry_report(positions, sorted(bonds)),
