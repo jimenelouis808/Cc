@@ -16,6 +16,8 @@ import pytest
 
 from nanocarbon_lab.builders.knee import (
     CURVATURE_PENTAGONS,
+    DEFAULT_JUNCTION_SHAPE,
+    DEFAULT_SUPERNET_SHAPE,
     JUNCTION_AXES,
     MESH_EDGE,
     MIN_KNEES,
@@ -38,7 +40,9 @@ from nanocarbon_lab.builders.knee import (
     describe_knee_schwarzite,
     describe_knee_supernetwork,
     describe_knee_toroid,
+    fill_node_holes,
     fill_triangular_holes,
+    hole_size,
     knee_path_mesh,
     knee_polygon_mesh,
     mesh_census,
@@ -518,8 +522,9 @@ class TestAJunctionIsASphereWithHoles:
 
     def test_an_unknown_kind_names_the_ones_that_exist(self):
         with pytest.raises(ValueError) as excinfo:
-            build_knee_junction(kind="x")
+            build_knee_junction(kind="octahedral")
         assert "tetrahedral" in str(excinfo.value)
+        assert "'x'" in str(excinfo.value)
 
     def test_a_shape_that_does_not_close_names_the_ones_that_do(self):
         with pytest.raises(ValueError) as excinfo:
@@ -978,3 +983,130 @@ class TestNoFiniteKneeSuperstructureExists:
             seen.append(set(census))
         assert seen
         assert all(sizes - {6, 7} for sizes in seen)
+
+
+class TestCoplanarArmsLeaveTheirPolesOpen:
+    """A node is a union of trimmed cylinders, and the trim covers only
+    the directions its arms span. Coplanar arms leave the two poles
+    uncovered, and the hole there has one edge per arm."""
+
+    def test_the_hole_size_is_the_arm_count_only_when_coplanar(self):
+        assert hole_size(JUNCTION_AXES["y"]) == 3
+        assert hole_size(JUNCTION_AXES["x"]) == 4
+        # Arms spanning all three dimensions leave nothing to fill.
+        assert hole_size(JUNCTION_AXES["tetrahedral"]) == 3
+
+    def test_a_planar_four_arm_node_leaves_two_square_holes(self):
+        bond = 1.42
+        spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+        radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 12))
+        vertices, tris = node_mesh(JUNCTION_AXES["x"], 12, 7, radius, spacing)
+        cycles = _boundary_cycles_of(tris)
+        # Four mouths of twelve, plus two poles of four: a sphere with
+        # SIX holes, which is where the chi = -4 came from.
+        assert sorted(len(c) for c in cycles) == [4, 4, 12, 12, 12, 12]
+
+    def test_filling_them_puts_chi_where_four_arms_belong(self):
+        bond = 1.42
+        spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+        radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 12))
+        vertices, tris = node_mesh(JUNCTION_AXES["x"], 12, 7, radius, spacing)
+        assert _euler(vertices, tris) == -4
+        filled = fill_node_holes(tris, max_size=4)
+        assert _euler(vertices, filled) == -2 == 2 - 4
+
+    def test_the_default_still_fills_triangles_only(self):
+        # `fill_triangular_holes` must keep its old behaviour: a node
+        # whose arms span three dimensions has no square hole, and a
+        # k-gon mouth must never be eaten.
+        bond = 1.42
+        spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+        radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 12))
+        vertices, tris = node_mesh(JUNCTION_AXES["x"], 12, 7, radius, spacing)
+        assert _euler(vertices, fill_triangular_holes(tris)) == -4
+
+
+class TestAPlanarCrossingsPentagonsAreCorrect:
+    """The one node here that carries pentagons and should: the poles of
+    a four-way planar crossing are a pillow over the crossing point and
+    are genuinely positively curved."""
+
+    @pytest.fixture(scope="class")
+    def crossing(self):
+        return build_knee_junction(kind="x", circumference=12, arm_rows=7)
+
+    def test_the_census_is_four_pentagons_and_sixteen_heptagons(self,
+                                                                crossing):
+        assert crossing.info["ring_counts"] == {5: 4, 6: 140, 7: 16}
+        assert crossing.info["ring_deficit"] == -12 == node_budget(4)
+        assert crossing.info["euler"] == -2
+
+    def test_every_disclination_is_on_its_own_side(self, crossing):
+        # Including the pentagons: this is the check that says the poles
+        # really are positively curved rather than that being a story.
+        check = crossing.info["disclination_check"]
+        assert check["agreement"] == 1.0
+        assert check["sizes"][5]["mean_sign"] == 1.0
+        assert check["sizes"][7]["mean_sign"] == -1.0
+
+    def test_the_geometry_is_carbon(self, crossing):
+        geometry = crossing.info["geometry"]
+        assert 1.30 <= geometry["bond_min"] <= geometry["bond_max"] <= 1.55
+        assert geometry["n_close_contacts"] == 0
+
+
+class TestASheetOfPlanarCrossings:
+    """`super-square` is the square net's version of the same node."""
+
+    def test_it_closes_at_twelve_times_v_minus_e(self):
+        atoms = build_knee_supernetwork(net="super-square", circumference=12,
+                                        arm_rows=5, relax=False)
+        # One node, two edges per cell.
+        assert atoms.info["ring_budget"] == -12 == 12 * (1 - 2)
+        assert atoms.info["ring_counts"] == {5: 4, 6: 68, 7: 16}
+        assert atoms.info["ring_deficit"] == -12
+
+    def test_its_pentagons_are_the_poles_and_are_reported(self):
+        atoms = build_knee_supernetwork(net="super-square", circumference=12,
+                                        arm_rows=5, relax=False)
+        assert atoms.info["pentagons"] == 4
+        assert "pentagons on the positively curved poles" in \
+            describe_knee_supernetwork(atoms)
+
+
+class TestEveryKindCarriesItsOwnShape:
+    """The kinds do not share one. A Y builds at circumference 14 and a
+    tetrahedral node does not build there at all, so a single default is
+    a kind nobody can pick from a menu."""
+
+    @pytest.mark.parametrize("kind", sorted(JUNCTION_AXES))
+    def test_the_default_shape_builds_that_kind(self, kind):
+        atoms = build_knee_junction(kind=kind, relax=False)
+        budget = node_budget(len(JUNCTION_AXES[kind]))
+        assert set(atoms.info["ring_counts"]) <= {5, 6, 7}
+        assert atoms.info["ring_deficit"] == budget
+
+    def test_the_defaults_really_do_differ(self):
+        assert len(set(DEFAULT_JUNCTION_SHAPE.values())) > 1
+        assert set(DEFAULT_JUNCTION_SHAPE) == set(JUNCTION_AXES)
+
+    @pytest.mark.parametrize("net", sorted(DEFAULT_SUPERNET_SHAPE))
+    def test_the_default_shape_builds_that_net(self, net):
+        atoms = build_knee_supernetwork(net=net, relax=False)
+        assert set(atoms.info["ring_counts"]) <= {5, 6, 7}
+
+    def test_a_shape_away_from_the_default_still_comes_out_exact(self):
+        # The point of the presets question: the exact census holds over
+        # a FAMILY of sizes, so a preset is a starting point rather than
+        # the only thing the mode can build.
+        for circumference in (10, 12, 14, 16):
+            atoms = build_knee_junction(kind="y",
+                                        circumference=circumference,
+                                        arm_rows=7, relax=False)
+            assert atoms.info["ring_counts"][7] == 6
+            assert set(atoms.info["ring_counts"]) == {6, 7}
+
+
+def _boundary_cycles_of(tris):
+    from nanocarbon_lab.builders.knee import _boundary_cycles
+    return _boundary_cycles(tris)

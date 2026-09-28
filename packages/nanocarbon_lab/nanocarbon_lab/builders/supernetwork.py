@@ -58,6 +58,8 @@ __all__ = [
     "hypercube_cage",
     "supertube_graph",
     "ICOSAHEDRON",
+    "PLATONIC_VERTICES",
+    "platonic_cage",
     "SUPERLATTICES",
     "build_supernetwork",
     "icosahedral_cage",
@@ -511,6 +513,89 @@ def _icosahedral(strut: float) -> SuperGraph:
     return icosahedral_cage(0.5 * float(strut))
 
 
+#: The other four Platonic solids' vertices, at whatever size the
+#: formulae give; :func:`platonic_cage` rescales each to the strut length
+#: asked for, so only the shape matters here.
+_CUBE_CORNERS = np.array([[x, y, z] for x in (-1.0, 1.0)
+                          for y in (-1.0, 1.0) for z in (-1.0, 1.0)])
+PLATONIC_VERTICES: dict[str, np.ndarray] = {
+    "tetrahedron": np.array([[1.0, 1.0, 1.0], [1.0, -1.0, -1.0],
+                             [-1.0, 1.0, -1.0], [-1.0, -1.0, 1.0]]),
+    "cube": _CUBE_CORNERS,
+    "octahedron": np.array([[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0],
+                            [0.0, 1.0, 0.0], [0.0, -1.0, 0.0],
+                            [0.0, 0.0, 1.0], [0.0, 0.0, -1.0]]),
+    "dodecahedron": np.vstack([
+        _CUBE_CORNERS,
+        np.array([[0.0, s1 / _PHI, s2 * _PHI] for s1 in (-1.0, 1.0)
+                  for s2 in (-1.0, 1.0)]),
+        np.array([[s1 / _PHI, s2 * _PHI, 0.0] for s1 in (-1.0, 1.0)
+                  for s2 in (-1.0, 1.0)]),
+        np.array([[s1 * _PHI, 0.0, s2 / _PHI] for s1 in (-1.0, 1.0)
+                  for s2 in (-1.0, 1.0)]),
+    ]),
+    "icosahedron": ICOSAHEDRON,
+}
+
+
+def platonic_cage(solid: str, strut: float = 24.0) -> SuperGraph:
+    """A cage of tubes on a Platonic solid's edges.
+
+    ``strut`` is the **edge length in ångström**, which is what decides
+    whether a tube survives between two vertices at all: each vertex eats
+    about ``tube_radius + blend`` of either end of every edge it touches,
+    so a 24 Å strut leaves about 10 Å of real tube at the builder's own
+    defaults. The vertices are rescaled to it rather than to a
+    circumradius, so the same number means the same thing across the five.
+
+    The budget follows from the skeleton and nothing else,
+    ``12 * (V - E)``:
+
+    ==============  ===  ===  ======  =======  ========
+    solid           V    E    degree  budget   genus
+    ==============  ===  ===  ======  =======  ========
+    tetrahedron     4    6    3       -24      3
+    cube            8    12   3       -48      5
+    octahedron      6    12   4       -72      7
+    dodecahedron    20   30   3       -120     11
+    icosahedron     12   30   5       -216     19
+    ==============  ===  ===  ======  =======  ========
+
+    **These are meshed cages, so their walls are amorphous** -- 11-21%
+    non-hexagonal, with the disclinations in the right places but far too
+    many of them. That is not a shortcoming of the mesh here: a cage of
+    knee nodes **cannot exist**, because a node's census comes out clean
+    only when its arms sum to zero, and a convex polyhedron's vertex lies
+    on its own hull, so every edge at it points into the supporting
+    half-space and the sum cannot vanish. See
+    :func:`~nanocarbon_lab.builders.knee.build_knee_supernetwork`.
+
+    Raises
+    ------
+    ValueError
+        If the solid is not one of the five.
+    """
+    if solid not in PLATONIC_VERTICES:
+        raise ValueError(
+            f"unknown solid {solid!r}; the five are "
+            f"{sorted(PLATONIC_VERTICES)}."
+        )
+    vertices = np.asarray(PLATONIC_VERTICES[solid], dtype=float)
+    spread = np.linalg.norm(vertices[:, None, :] - vertices[None, :, :],
+                            axis=2)
+    np.fill_diagonal(spread, np.inf)
+    nodes = vertices * (float(strut) / float(spread.min()))
+    shape = (1.0, 1.0, 1.0)
+    return SuperGraph(
+        name=f"super-{solid}", nodes=nodes,
+        edges=edges_from_positions(nodes, shape, (False, False, False)),
+        pbc=(False, False, False), shape=shape,
+        note=f"a finite cage on the {solid}'s edges; its wall is meshed and "
+             "therefore amorphous, which is not a choice -- a cage of exact "
+             "knee nodes cannot exist at all.",
+    )
+
+
 def _superfullerene(family: str):
     def make(strut: float) -> SuperGraph:
         from .fullerene import build_fullerene
@@ -535,6 +620,12 @@ def _superfullerene(family: str):
 #: the program.
 CAGES: dict[str, object] = {
     "super-icosahedron": _icosahedral,
+    # The other four Platonic solids. `scale` is the strut length here,
+    # as for every cage.
+    "super-tetrahedron": lambda strut: platonic_cage("tetrahedron", strut),
+    "super-cube": lambda strut: platonic_cage("cube", strut),
+    "super-octahedron": lambda strut: platonic_cage("octahedron", strut),
+    "super-dodecahedron": lambda strut: platonic_cage("dodecahedron", strut),
     "super-hypercube": _hypercube,
     # Rolled super-graphene. The (6,6) here is the SUPER-lattice's index,
     # not the wall's; the periods are fixed at 2 so the entry has one

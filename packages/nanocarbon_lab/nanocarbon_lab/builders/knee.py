@@ -1188,6 +1188,26 @@ def node_budget(arms: int) -> int:
     return 6 * (2 - int(arms))
 
 
+def hole_size(axes) -> int:
+    """How many edges the polar holes of a node have.
+
+    A node is a union of trimmed cylinders, and the trim covers only the
+    directions its arms span. **Coplanar arms leave the two poles
+    uncovered**, and the hole there has one edge per arm: three coplanar
+    arms leave a triangle, four leave a square -- measured at every
+    circumference and arm length tried. Arms spanning all three
+    dimensions leave nothing, so the answer is 3, which is both the
+    default of :func:`fill_node_holes` and the smallest cycle that can be
+    a hole rather than a mouth.
+
+    This is what a planar four-arm node's ``chi = -4`` was: a sphere with
+    **six** holes -- four mouths and two unclosed poles -- not a sphere
+    with four.
+    """
+    axes = np.asarray(axes, dtype=float)
+    return int(len(axes)) if np.linalg.matrix_rank(axes, tol=1e-9) < 3 else 3
+
+
 def collapse_degree_three(vertices: np.ndarray, tris):
     """Remove every degree-3 vertex and close its link with one triangle.
 
@@ -1378,8 +1398,8 @@ def _union_find(n: int):
     return find, union
 
 
-def fill_triangular_holes(tris):
-    """Close every three-vertex boundary cycle with one triangle.
+def fill_node_holes(tris, max_size: int = 3):
+    """Close every small boundary cycle where the arms meet.
 
     Where three arms meet, the trim leaves one of two things, and which
     depends on the angles between them. On the **primitive** node -- six
@@ -1398,24 +1418,75 @@ def fill_triangular_holes(tris):
     ``sum(6-n) = -6`` -- exactly :func:`node_budget` for three arms, which
     it was not before the fill.
 
+    **The hole has one edge per arm, so its size is the coordination.**
+    Three coplanar arms leave a triangle; four leave a **square**, at
+    every circumference and arm length measured. That is why a planar
+    four-arm node came out at ``chi = -4`` where a sphere with four holes
+    has -2: it is a sphere with **six** holes, the four mouths plus the
+    two poles, and nothing had closed the poles. ``max_size`` is what the
+    caller knows and this does not -- pass the arm count for a coplanar
+    node and leave it at 3 otherwise, or a genuine mouth could be eaten.
+
+    A cycle longer than three needs a diagonal, and **which** diagonal
+    matters for the same reason it does in :func:`collapse_degree_four`:
+    both are tried and the one leaving the interior closer to all
+    hexagons is kept.
+
     The two repairs are the same accident with two faces, so a node runs
     both: fill the holes, then collapse what is left.
     """
     tris = [tuple(int(x) for x in t) for t in tris]
+
+    def misfit(faces) -> int:
+        counts: dict[tuple[int, int], int] = defaultdict(int)
+        for t in faces:
+            for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
+                counts[(min(a, b), max(a, b))] += 1
+        rim = {x for e, c in counts.items() if c != 2 for x in e}
+        degree: dict[int, int] = defaultdict(int)
+        for a, b in counts:
+            degree[a] += 1
+            degree[b] += 1
+        return sum(abs(d - 6) for x, d in degree.items() if x not in rim)
+
     while True:
         cycles = _boundary_cycles(tris)
         if not cycles:
             break
-        hole = next((c for c in cycles if len(c) == 3), None)
+        hole = next((c for c in cycles if 3 <= len(c) <= max_size), None)
         if hole is None:
             break
-        a, b, c = hole
-        # Wind it against the face that already uses one of its edges, or
-        # the new triangle faces the wrong way and the walk crosses itself.
+        # Wind the fan against the face that already uses the first edge,
+        # or the new triangles face the wrong way and the walk crosses
+        # itself.
+        a, b = hole[0], hole[1]
         neighbour = next(t for t in tris if a in t and b in t)
         forward = (neighbour.index(b) - neighbour.index(a)) % 3 == 1
-        tris.append((b, a, c) if forward else (a, b, c))
+        walk = list(reversed(hole)) if forward else list(hole)
+        best = None
+        for start in range(len(walk) if len(walk) > 3 else 1):
+            turned = walk[start:] + walk[:start]
+            fan = [(turned[0], turned[i], turned[i + 1])
+                   for i in range(1, len(turned) - 1)]
+            if any((min(x, y), max(x, y)) in
+                   {(min(t[i], t[(i + 1) % 3]), max(t[i], t[(i + 1) % 3]))
+                    for t in tris for i in range(3)}
+                   for x, y in ((turned[0], turned[i])
+                                for i in range(2, len(turned) - 1))):
+                continue
+            candidate = tris + fan
+            score = misfit(candidate)
+            if best is None or score < best[0]:
+                best = (score, candidate)
+        if best is None:                                # pragma: no cover
+            break
+        tris = best[1]
     return tris
+
+
+def fill_triangular_holes(tris):
+    """Close every three-vertex boundary cycle. See :func:`fill_node_holes`."""
+    return fill_node_holes(tris, max_size=3)
 
 
 def node_mesh(
@@ -1723,17 +1794,36 @@ def primitive_node_mesh(
 #: The junctions this route builds, as unit axes. A **Y** is three arms
 #: at 120 deg in a plane; a **tetrahedral** node is four at 109.47 deg,
 #: which is the building block of a Schwarz D cell exactly as the
-#: six-arm cube node is of a Schwarz P one. A *planar* X -- four arms at
-#: 90 deg in a plane -- is deliberately absent: it builds, and it comes
-#: out with ``chi = -4`` where a sphere with four holes has -2, because
-#: the four corner unions close a tunnel through the middle. That is a
-#: real surface and it is not the X junction anybody means.
+#: six-arm cube node is of a Schwarz P one. ``x`` is four arms at 90 deg
+#: in a plane, and it was left out for a while because it came out at
+#: ``chi = -4`` where a sphere with four holes has -2. The cause was not
+#: a tunnel: coplanar arms leave the directions they do not span
+#: uncovered, so the node had **two unclosed poles** on top of its four
+#: mouths. :func:`hole_size` is what closes them, and the X then comes
+#: out at ``chi = -2`` with ``{5: 4, 6: N, 7: 16}``. Its **pentagons are
+#: correct**, which no other node here has: the poles of a four-way
+#: crossing are a pillow over the crossing point and are genuinely
+#: positively curved, while the four crotches saddle.
 JUNCTION_AXES: dict[str, np.ndarray] = {
     "y": np.array([[np.cos(a), np.sin(a), 0.0]
                    for a in (0.0, 2.0 * np.pi / 3.0, 4.0 * np.pi / 3.0)]),
     "tetrahedral": np.array([[1.0, 1.0, 1.0], [1.0, -1.0, -1.0],
                              [-1.0, 1.0, -1.0], [-1.0, -1.0, 1.0]])
     / np.sqrt(3.0),
+    "x": np.array([[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0],
+                   [0.0, 1.0, 0.0], [0.0, -1.0, 0.0]]),
+}
+
+
+#: ``(circumference, arm_rows)`` per junction kind. **Not shared**, and
+#: the reason is a bug this had: one default of (14, 9) for all three
+#: builds the Y and refuses the tetrahedral node outright, which closes
+#: at k = 10 and 18 and not at 14. A kind whose own default cannot be
+#: built is a kind nobody can pick from a menu.
+DEFAULT_JUNCTION_SHAPE: dict[str, tuple[int, int]] = {
+    "y": (14, 9),
+    "tetrahedral": (18, 9),
+    "x": (20, 9),
 }
 
 
@@ -1759,13 +1849,15 @@ def clean_junction_shapes(
             radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / k))
             try:
                 vertices, tris = node_mesh(axes, k, rows, radius, spacing)
-                tris = fill_triangular_holes(tris)
+                tris = fill_node_holes(tris, max_size=hole_size(axes))
                 vertices, tris = collapse_degree_three(vertices, tris)
                 vertices, tris = collapse_degree_four(vertices, tris)
             except (ValueError, StopIteration, KeyError):
                 continue
             census = _interior_census(tris)
-            if set(census) - {6, 7} or census.get(7, 0) != -budget:
+            if set(census) - {5, 6, 7}:
+                continue
+            if sum((6 - n) * c for n, c in census.items()) != budget:
                 continue
             good.append((int(rows), int(k)))
     return good
@@ -1792,8 +1884,8 @@ def _interior_census(tris) -> dict[int, int]:
 
 def build_knee_junction(
     kind: str = "y",
-    circumference: int = 14,
-    arm_rows: int = 9,
+    circumference: int | None = None,
+    arm_rows: int | None = None,
     bond: float = CC_BOND,
     vacuum: float = DEFAULT_VACUUM_1D,
     relax: bool = True,
@@ -1815,12 +1907,21 @@ def build_knee_junction(
     saddles everywhere, so positive curvature would be wrong -- it is paid
     in heptagons alone:
 
-    ==============  =======  =======  =====================
+    ==============  =======  =======  =========================
     kind            arms     chi      census
-    ==============  =======  =======  =====================
+    ==============  =======  =======  =========================
     ``y``           3        -1       ``{6: N, 7: 6}``
     ``tetrahedral`` 4        -2       ``{6: N, 7: 12}``
-    ==============  =======  =======  =====================
+    ``x``           4        -2       ``{5: 4, 6: N, 7: 16}``
+    ==============  =======  =======  =========================
+
+    The ``x`` row is the one exception to "a junction carries no
+    pentagon", and it is not a blemish: a four-way **planar** crossing has
+    a pillow above and below the crossing point that is genuinely
+    positively curved, so four pentagons belong there and sixteen
+    heptagons in the four crotches. Measured, the intrinsic
+    :func:`~nanocarbon_lab.analyse.curvature.disclination_check` puts
+    **all twenty** on the correct side.
 
     Measured at every circumference from 10 to 20 and every arm length
     tried, exactly -- six heptagons for the Y, twelve for the tetrahedral
@@ -1842,7 +1943,9 @@ def build_knee_junction(
         ``"y"`` or ``"tetrahedral"`` -- see :data:`JUNCTION_AXES`.
     circumference, arm_rows
         Mesh vertices around each arm, and rows along it: the tube radius
-        and the arm length. Not every pair closes --
+        and the arm length. Left out, the shape that measured best for
+        **this kind** -- they differ, and a Y's does not build a
+        tetrahedral node. Not every pair closes;
         :func:`clean_junction_shapes` is the list that does.
     bond
         C-C length (Å).
@@ -1872,12 +1975,16 @@ def build_knee_junction(
     axes = JUNCTION_AXES[kind]
     arms = len(axes)
     budget = node_budget(arms)
+    # Per kind, not shared: k=14 builds a Y and refuses a tetrahedral node.
+    default_k, default_rows = DEFAULT_JUNCTION_SHAPE[kind]
+    circumference = default_k if circumference is None else int(circumference)
+    arm_rows = default_rows if arm_rows is None else int(arm_rows)
     spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
     tube_radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / circumference))
     try:
         vertices, tris = node_mesh(axes, circumference, arm_rows, tube_radius,
                                    spacing)
-        tris = fill_triangular_holes(tris)
+        tris = fill_node_holes(tris, max_size=hole_size(axes))
         vertices, tris = collapse_degree_three(vertices, tris)
         vertices, tris = collapse_degree_four(vertices, tris)
     except (ValueError, StopIteration, KeyError) as problem:
@@ -1890,15 +1997,20 @@ def build_knee_junction(
 
     census = _interior_census(tris)
     deficit = sum((6 - size) * count for size, count in census.items())
-    if set(census) - {6, 7} or census.get(7, 0) != -budget:
+    # A **planar crossing** is the one node here whose pentagons are
+    # right: its two poles are a pillow over the crossing point and are
+    # genuinely positively curved, so `x` pays four of them there and
+    # sixteen heptagons in the crotches. A Y or a tetrahedral node saddles
+    # everywhere and comes out with none, which `info["pentagons"]`
+    # reports either way. A square or an octagon is still a refusal.
+    if set(census) - {5, 6, 7} or deficit != budget:
         shapes = clean_junction_shapes(kind, bond)
         raise ValueError(
             f"circumference {circumference} with {arm_rows}-row arms gives "
             f"the census {census} and sum(6-n) = {deficit:+d}, not the "
-            f"hexagons-plus-{-budget}-heptagons a {arms}-arm node must have "
-            "(it saddles everywhere, so it can carry no pentagon at all). "
-            f"Pairs that do, as (arm_rows, circumference): "
-            f"{shapes or 'none found'}."
+            f"five-, six- and seven-membered rings summing to {budget:+d} a "
+            f"{arms}-arm node must have. Pairs that do, as "
+            f"(arm_rows, circumference): {shapes or 'none found'}."
         )
 
     from .capped_cnt import geometry_report
@@ -1960,16 +2072,35 @@ def build_knee_junction(
     return atoms
 
 
+def _exactness(census: dict, budget: int, law: str) -> str:
+    """How to phrase a census against the budget its skeleton fixes.
+
+    Pentagons are **not** automatically a flaw: a planar crossing's two
+    poles are genuinely positively curved and four of them belong there.
+    So the test is that the rings are 5, 6 and 7 and that they sum to the
+    budget -- and the wording then says which of the two cases it is,
+    rather than calling a correct structure "not exact".
+    """
+    if not census:                                      # pragma: no cover
+        return "no census recorded"
+    if set(census) - {5, 6, 7}:
+        return "not the exact census"
+    if sum((6 - n) * c for n, c in census.items()) != budget:
+        return "not the exact census"
+    if not census.get(5):
+        return f"exactly the heptagons {law} asks for and nothing else"
+    return (f"exactly what {law} asks for: {census[5]} pentagons on the "
+            f"positively curved poles and {census.get(7, 0)} heptagons")
+
+
 def describe_knee_junction(atoms: Atoms) -> str:
     """One line: the arms, the census and whether it is the exact one."""
     info = atoms.info
     counts = info.get("ring_counts", {})
     census = ", ".join(f"{s}:{c}" for s, c in sorted(counts.items()))
-    mesh = info.get("mesh_census", {})
-    exact = (set(mesh) <= {6, 7}
-             and mesh.get(7, 0) == -int(info.get("ring_budget", 0)))
-    verdict = ("exactly the heptagons Gauss-Bonnet asks for and nothing else"
-               if exact else "not the exact census")
+    verdict = _exactness(info.get("mesh_census", {}),
+                         int(info.get("ring_budget", 0)),
+                         "Gauss-Bonnet")
     return (
         f"knee junction ({info.get('kind', '?')}): {info.get('arms', 0)} arms, "
         f"{len(atoms)} atoms, tube radius "
@@ -2226,7 +2357,7 @@ def glue_nodes(
     for centre, axes in zip(centres, axes_per_node, strict=True):
         local, local_tris = node_mesh(axes, circumference, arm_rows,
                                       tube_radius, spacing)
-        local_tris = fill_triangular_holes(local_tris)
+        local_tris = fill_node_holes(local_tris, max_size=hole_size(axes))
         local, local_tris = collapse_degree_three(local, local_tris)
         local, local_tris = collapse_degree_four(local, local_tris)
         offset = len(verts)
@@ -2538,6 +2669,10 @@ DEFAULT_SUPERNET_SHAPE: dict[str, tuple[int, int]] = {
     # k=18 (broken) down to 0.0036 at k=22 and back up to 0.0210 at k=28,
     # so this is a minimum rather than an edge.
     "super-graphene": (22, 5),
+    # The square net is pickier: most circumferences pay the poles with
+    # octagons instead of heptagon pairs, and only k = 12 and 20 give the
+    # five-six-seven census.
+    "super-square": (12, 5),
 }
 
 
@@ -2598,10 +2733,7 @@ def build_knee_supernetwork(
     ------
     ValueError
         If the net is unknown or is not a sheet, or if the shape does not
-        close. ``super-square`` is the case worth knowing: it is a sheet
-        of **planar crossings**, and a planar four-arm node closes a
-        tunnel through its own corner welds -- the same reason a planar X
-        is absent from :data:`JUNCTION_AXES`. No shape tried closes it.
+        close.
     """
     if net not in SCHWARZITE_NETS:
         raise ValueError(
@@ -2635,12 +2767,20 @@ def build_knee_supernetwork(
 
     census, _, broken = mesh_census(vertices, tris)
     deficit = sum((6 - size) * count for size, count in census.items())
-    if broken or set(census) - {6, 7} or deficit != budget:
+    # 5, 6 and 7 rather than 6 and 7 alone: a **planar crossing** has
+    # genuinely positive curvature at its two poles -- the pillow over
+    # the crossing point -- so `super-square` pays part of its budget in
+    # four pentagons there and the rest in heptagons in the crotches.
+    # That is the one net here whose pentagons are right. The count goes
+    # into `info` either way, and a square or an octagon is still a
+    # refusal.
+    if broken or set(census) - {5, 6, 7} or deficit != budget:
         raise ValueError(
             f"circumference {circumference} with {arm_rows}-row arms gives "
             f"the census {dict(sorted(census.items()))} and sum(6-n) = "
-            f"{deficit:+d}, not the hexagons-plus-{-budget}-heptagons a "
-            f"sheet of {nodes} nodes of {arms} arms must have."
+            f"{deficit:+d}, not the five-, six- and seven-membered rings "
+            f"summing to {budget:+d} a sheet of {nodes} nodes of {arms} "
+            "arms must have."
         )
 
     from .capped_cnt import geometry_report
@@ -2706,11 +2846,8 @@ def describe_knee_supernetwork(atoms: Atoms) -> str:
     info = atoms.info
     counts = info.get("ring_counts", {})
     census = ", ".join(f"{s}:{c}" for s, c in sorted(counts.items()))
-    mesh = info.get("mesh_census", {})
     budget = int(info.get("ring_budget", 0))
-    exact = set(mesh) <= {6, 7} and mesh.get(7, 0) == -budget
-    verdict = ("exactly the heptagons 12(V-E) asks for and nothing else"
-               if exact else "not the exact census")
+    verdict = _exactness(info.get("mesh_census", {}), budget, "12(V-E)")
     lengths = info.get("cell_lengths", [0.0, 0.0, 0.0])
     return (
         f"knee supernetwork ({info.get('kind', '?')}): {len(atoms)} atoms, "

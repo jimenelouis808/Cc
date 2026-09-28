@@ -1655,9 +1655,13 @@ def _cmd_dopants(args):
                   f"r={chem.radius:.2f} Å ({chem.size_mismatch:+.0%} vs C)")
             print(f"      {chem.note}")
         print()
-    print("Placement: " + ", ".join(DOPANT_SITES) +
-          ".  'pentagon' needs a builder that records rings (capped tube,\n"
-          "fullerene, nano-onion, junction, schwarzite, multi-wall, bundle).")
+    print("Placement: " + ", ".join(DOPANT_SITES) + ".")
+    print("  A ring-selected site needs a builder that records rings, and")
+    print("  counts its fraction against THAT ring's sites. Which size is")
+    print("  the interesting one follows the sign of the curvature: a")
+    print("  fullerene or a capped tube does its chemistry on the")
+    print("  pentagons; a saddle -- schwarzite, junction, knee")
+    print("  supernetwork -- has none at all, and does it on the heptagons.")
     return 0
 
 
@@ -2400,8 +2404,12 @@ def build_parser() -> argparse.ArgumentParser:
              "being a saddle everywhere. The meshed route returns fifty.",
     )
     jk.add_argument("--kind", choices=sorted(JUNCTION_AXES), default="y",
-                    help="Three arms at 120 deg in a plane, or four at "
-                         "109.47 deg, which is the Schwarz D node.")
+                    help="y: three arms at 120 deg in a plane, six "
+                         "heptagons. tetrahedral: four at 109.47 deg, "
+                         "twelve heptagons, the Schwarz D node. x: four at "
+                         "90 deg in a plane -- the one node whose PENTAGONS "
+                         "are right, four of them on the positively curved "
+                         "poles plus sixteen heptagons in the crotches.")
     jk.add_argument("--circumference", type=int, default=14,
                     help="Mesh vertices around each arm, which sets the "
                          "tube radius.")

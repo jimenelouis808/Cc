@@ -17,6 +17,7 @@ import pytest
 
 from nanocarbon_lab.builders.supernetwork import (
     CAGES,
+    PLATONIC_VERTICES,
     SUPERLATTICES,
     SuperGraph,
     build_supernetwork,
@@ -229,7 +230,10 @@ class TestTheCagesAreReachable:
     def test_the_cages_are_registered(self):
         assert set(CAGES) == {"super-icosahedron", "superfullerene-C60",
                               "super-hypercube", "supertube-(4,4)",
-                              "supertube-(6,6)"}
+                              "supertube-(6,6)",
+                              # The other four Platonic solids.
+                              "super-tetrahedron", "super-cube",
+                              "super-octahedron", "super-dodecahedron"}
 
     @pytest.mark.parametrize("name", ["super-icosahedron",
                                       "superfullerene-C60",
@@ -375,3 +379,81 @@ class TestTheRefusalNamesTheScale:
         with pytest.raises(ValueError, match="drop the tube radius"):
             build_supernetwork(graph="super-diamond", scale=40.0,
                                tube_radius=5.0, blend=4.0)
+
+
+class TestTheFivePlatonicCages:
+    """A cage of tubes on each Platonic solid's edges. The budget comes
+    from the skeleton and nothing else, ``12 * (V - E)``, so it can be
+    checked before anything is meshed."""
+
+    #: ``(vertices, edges, degree, budget)`` per solid, from Euler's
+    #: formula and not from this code.
+    EXPECTED = {
+        "tetrahedron": (4, 6, 3, -24),
+        "cube": (8, 12, 3, -48),
+        "octahedron": (6, 12, 4, -72),
+        "dodecahedron": (20, 30, 3, -120),
+        "icosahedron": (12, 30, 5, -216),
+    }
+
+    @pytest.mark.parametrize("solid", sorted(EXPECTED))
+    def test_the_skeleton_is_the_solid_it_names(self, solid):
+        from collections import Counter
+
+        from nanocarbon_lab.builders.supernetwork import platonic_cage
+
+        vertices, edges, degree, budget = self.EXPECTED[solid]
+        graph = platonic_cage(solid, 24.0)
+        assert len(graph.nodes) == vertices
+        assert len(graph.edges) == edges
+        counted: Counter = Counter()
+        for edge in graph.edges:
+            counted[edge[0]] += 1
+            counted[edge[1]] += 1
+        assert set(counted.values()) == {degree}
+        assert graph.ring_budget == budget == 12 * (vertices - edges)
+
+    @pytest.mark.parametrize("solid", sorted(EXPECTED))
+    def test_the_strut_is_the_scale_asked_for(self, solid):
+        from nanocarbon_lab.builders.supernetwork import platonic_cage
+
+        graph = platonic_cage(solid, 24.0)
+        lengths = np.linalg.norm(graph.segments(1.0)[:, 1]
+                                 - graph.segments(1.0)[:, 0], axis=1)
+        # Every edge of a Platonic solid is the same length, by definition.
+        assert np.allclose(lengths, 24.0, atol=1e-6)
+
+    def test_all_five_are_reachable_by_name(self):
+        for solid in self.EXPECTED:
+            assert f"super-{solid}" in CAGES
+
+    def test_an_unknown_solid_names_the_five(self):
+        from nanocarbon_lab.builders.supernetwork import platonic_cage
+
+        with pytest.raises(ValueError) as excinfo:
+            platonic_cage("hexahedron", 24.0)
+        assert "dodecahedron" in str(excinfo.value)
+
+    def test_the_vertex_table_holds_exactly_the_five(self):
+        assert set(PLATONIC_VERTICES) == set(self.EXPECTED)
+
+    def test_no_cage_vertex_balances(self):
+        """Why these are meshed and not knee-node cages.
+
+        A node's census comes out clean only when its arms sum to zero,
+        and a convex polyhedron's vertex lies on its own hull -- every
+        edge at it points into the supporting half-space, so the sum has
+        a strictly positive component along the inward normal. So there
+        is no exact-census cage at any size, for any solid, and the
+        amorphous wall these get is not a choice.
+        """
+        for solid, vertices in PLATONIC_VERTICES.items():
+            spread = np.linalg.norm(vertices[:, None, :]
+                                    - vertices[None, :, :], axis=2)
+            np.fill_diagonal(spread, np.inf)
+            edge = spread.min()
+            for i in range(len(vertices)):
+                partners = np.where(spread[i] < edge * 1.05)[0]
+                arms = vertices[partners] - vertices[i]
+                arms = arms / np.linalg.norm(arms, axis=1)[:, None]
+                assert np.linalg.norm(arms.sum(axis=0)) > 0.5, solid

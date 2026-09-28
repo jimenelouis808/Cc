@@ -1289,11 +1289,69 @@ is fitted over each ring and the sign of `K` read off. Every heptagon is
 in negative curvature, mean sign exactly **-1.00**. Only the periodic
 coil reaches that elsewhere in this file.
 
-**A planar X is deliberately absent from `JUNCTION_AXES`.** Four arms at
-90 deg in a plane builds, and comes out at `chi = -4` where a sphere with
-four holes has -2: the four corner unions close a tunnel through the
-middle. That is a real surface, and it is not the X junction anybody
-means. It is left out rather than shipped under the name.
+#### Correcting this file: the planar X, and what `chi = -4` really was
+
+An earlier version of this section said a planar X "closes a tunnel
+through the middle" and left it out of `JUNCTION_AXES`. **That diagnosis
+was wrong**, and the right one makes the X buildable.
+
+A node is a union of trimmed cylinders, and the dominance trim covers
+only the directions its arms span. **Coplanar arms leave the two poles
+uncovered**, and the hole there has one edge per arm. The Y had them too
+-- three coplanar arms leave a *triangle* at each pole, which
+`fill_triangular_holes` was already closing, which is why nobody noticed.
+Four coplanar arms leave a **square**, measured at every circumference
+and arm length, and nothing was closing those. So the node was a sphere
+with **six** holes -- four mouths and two open poles -- and `chi = -4` is
+exactly `2 - 6`. There was no tunnel.
+
+`hole_size` is the rule (`len(axes)` when the axes are rank-deficient, 3
+otherwise) and `fill_node_holes` closes anything up to that size. With
+the poles shut the X comes out at `chi = -2 = 2 - 4` and:
+
+| kind | census | bonds (Å) | placement |
+|---|---|---|---|
+| `x` (4 arms, 90 deg, planar) | `{5: 4, 6: N, 7: 16}` | 1.395-1.464 | **100%** |
+
+**Its pentagons are correct, which no other node here has.** The poles of
+a four-way planar crossing are a pillow above and below the crossing
+point and are *genuinely positively curved*, while the four crotches
+saddle -- so four pentagons belong at the poles and sixteen heptagons in
+the crotches. That is not a story told after the fact: the intrinsic
+`disclination_check` puts **all twenty** on the correct side, with the
+pentagons' mean sign of `K` at exactly **+1.00** and the heptagons' at
+**-1.00**, and a test pins both.
+
+So the census gate is `{5, 6, 7}` summing to the budget, not `{6, 7}`.
+`sum(6-n)` alone cannot tell a correct pentagon from a wrong one -- the
+gyroid's k=18 cell pays its exact -48 with sixteen pentagons that are
+wrong -- so the gate is on the **ring set plus the budget**, and
+`info["pentagons"]` reports the count whichever case it is.
+
+#### Every kind carries its own shape, and one default was a bug
+
+`DEFAULT_JUNCTION_SHAPE`, `DEFAULT_SCHWARZITE_SHAPE` and
+`DEFAULT_SUPERNET_SHAPE` are per kind. That is not tidiness: the junction
+builder shipped with a single default of `(14, 9)` for all kinds, which
+builds a Y and **refuses a tetrahedral node outright** -- it closes at
+k = 10 and 18 and not at 14. A kind whose own default cannot be built is
+a kind nobody can pick from a menu, and that is what the window offered.
+
+| kind | default | census |
+|---|---|---|
+| `y` | (14, 9) | `{6: N, 7: 6}` |
+| `tetrahedral` | (18, 9) | `{6: N, 7: 12}` |
+| `x` | (20, 9) | `{5: 4, 6: N, 7: 16}` |
+
+#### super-square closes too, and it is a sheet of those crossings
+
+With the poles shut, `super-square` -- one node of four coplanar arms per
+cell -- comes out at `sum(6-n) = -12 = 12(1 - 2)`, `chi = -2`, with no
+broken edge at every shape tried. The shipped `(12, 5)`: **180 atoms, a
+14.6 Å cell, `{5: 4, 6: 68, 7: 16}`, bonds 1.374-1.505 Å, CLEAN, every
+one of the twenty disclinations on its own side.** Most circumferences
+pay the poles with octagons instead of heptagon pairs; only k = 12 and 20
+give the five-six-seven census.
 
 #### The 4-8 dipole, and why climb is the only move that removes it
 
@@ -1534,6 +1592,114 @@ nearest. Measured, that returned a two-armed node and read a net that
 balances perfectly as one that does not. The offsets are enumerated over
 the live axes instead. (This is the same fact `analyse/rings.py` refuses
 a too-small cell over, met from the other side.)
+
+### The periodic coil: the machinery is there and it does not close
+
+`knee_path_mesh` takes a `period`, and the screw-periodic wrap is
+written: the corner after the last one is the first moved along by one
+period, so the join is a real mitre knee rather than two rims welded
+afterwards (welding them left the boundaries 1.8-3.8 Å apart, a full
+lattice step). **It has never produced a closed mesh**, and this is what
+was measured rather than assumed.
+
+The obstruction is the **frame holonomy**. Composing the mitre
+reflections once round a turn gives an orthogonal map `M`, and since a
+reflection sends the incoming axis to minus the outgoing one, `M` fixes
+`axes[0]`: it is a rotation *about the first arm*, by an angle the
+structure did not ask for. Measured, that angle is a smooth, continuous
+function of the coil radius and the pitch -- `-23.7` to `-124.2` degrees
+over R = 8-20 Å and pitch 8-16 Å -- and it goes to **zero as the pitch
+goes to zero**, which is the flat ring, which is the toroid, which does
+close. Nothing about it is quantised.
+
+So the obvious condition is that the holonomy be a whole number of
+lattice steps, `m * 2*pi/k`, since a rotation by one step maps the ring
+stack `(i, j) -> (i, j+1)` and is a symmetry of it. Solving for the R
+that gives exactly that, by Brent on a bracket, is a one-line root find
+and **it is not enough**: every solved radius still fails at the wrap
+knee with "the two boundaries did not land on each other".
+
+A fine sweep settles it rather than leaving it a hunch: R from 6 to 40 Å
+in 0.05 Å steps, at 6, 8 and 12 sides, k = 8 and 10, pitch 10 and 12 --
+about 8000 meshes, and **not one closes**. So the holonomy condition is
+necessary and demonstrably not sufficient, and whatever the second
+condition is, it is not a codimension-one set in the radius.
+
+**The finite knee coil is exact and unaffected** -- 798 atoms,
+`{5: 30, 6: 331, 7: 30}`, D/d 3.73 -- and a periodic one is open work,
+not a thing the route quietly does badly. Do not report this as done on
+the strength of the `period` parameter existing; that is the mistake
+this note exists to prevent.
+
+### A saddle has no pentagons, so its doping had no site
+
+`DOPANT_SITES` offered `"pentagon"` and nothing else in the ring-selected
+family. That is the right site on a fullerene or a capped tube -- their
+chemistry *is* at the pentagons -- and it is a site that **does not
+exist** on anything the knee route builds past the toroid: a schwarzite,
+a junction or a knee supernetwork is hexagons plus heptagons, and the
+reactivity is on the heptagons.
+
+`dopants/rings.py` always took the ring size; only the policy layer in
+`jobs.py` hardcoded five. `DOPANT_RING_SIZES` now maps `"pentagon"`,
+`"heptagon"` and `"octagon"` onto 5, 7 and 8, and the window and the
+command line read `DOPANT_SITES` so both pick them up.
+
+**Which ring size is the interesting one follows the sign of the
+curvature**, which is the same rule `analyse/curvature.py` states: a
+pentagon is a +60 deg disclination and a heptagon a -60 deg one, so a
+positively curved shell does its chemistry on pentagons and a saddle on
+heptagons. Measured on a Y junction at 20% heptagon N: every nitrogen
+lands on a heptagon, and the count is 20% of the **heptagon sites**, not
+of the 272 atoms.
+
+Asking for pentagons on a saddle raises with what rings the structure
+*does* have, which is the useful refusal: `"This structure has no
+5-membered rings to dope. It has 6-rings: 272 sites, 7-rings: ..."`.
+
+The other two chemistry axes were already fine and are now pinned:
+codoping places both species on every knee structure, and grafting adds
+atoms to all of them (hydroxyl 2 per site, carboxyl 4, achieved coverage
+within 0.001 of the request).
+
+### The five Platonic cages, and why their walls are amorphous
+
+`platonic_cage` puts a meshed tube on every edge of any of the five
+solids; `scale` is the **strut length**, as for every cage, because that
+is what decides whether a tube survives between two vertices at all.
+
+| solid | V | E | degree | budget | genus | measured |
+|---|---|---|---|---|---|---|
+| tetrahedron | 4 | 6 | 3 | -24 | 3 | 812 atoms, met exactly, 0 contacts |
+| cube | 8 | 12 | 3 | -48 | 5 | 1748 atoms, met exactly, 0 contacts |
+| octahedron | 6 | 12 | 4 | -72 | 7 | 1510 atoms, met exactly, 0 contacts |
+| dodecahedron | 20 | 30 | 3 | -120 | 11 | 4424 atoms, met exactly, 0 contacts |
+| icosahedron | 12 | 30 | 5 | -216 | 19 | (already shipped) |
+
+All at strut 24 Å, tube 3 Å, blend 2 Å, and all in under a minute.
+
+**Their walls are amorphous and that is not a choice.** A cage of exact
+knee nodes cannot exist, for the reason stated above: a node's census
+comes out clean only when its arms sum to zero, and a convex
+polyhedron's vertex lies on its own hull. A test asserts it directly on
+all five -- the worst vertex imbalance is 1.73 and the best still over
+0.5, against machine zero for every periodic net.
+
+### The window exposes the shape, or the presets would be the only sizes
+
+The knee modes passed nothing but the kind, so the circumference and the
+arm length were unreachable from the window -- the presets would have
+been the *only* structures those modes could make. They are spinboxes in
+the `Knee node` frame now, and picking a kind writes **that kind's own**
+default into them (they do not share one; see above) and leaves them
+editable.
+
+That is the honest shape of the claim: the **census** is exact over a
+whole family of sizes -- a Y junction is `{6: N, 7: 6}` at every
+circumference from 10 to 20 and every arm length tried -- while the
+**geometry** is not, and that is what the default picks. A test builds a
+Y at four circumferences away from its default and asserts the census
+each time.
 
 ## A collapsed wall passes every check in this package
 

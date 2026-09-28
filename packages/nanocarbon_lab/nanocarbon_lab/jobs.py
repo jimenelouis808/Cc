@@ -213,12 +213,17 @@ class Job:
         domain case), keep apart (``"avoid"``) or ignore each other
         (``"random"``). See :mod:`~nanocarbon_lab.dopants.codoping`.
     dopant_site
-        Where the substitutions go: ``"random"`` anywhere, ``"pentagon"``
-        on the five-membered rings that carry a curved structure's
-        curvature and its reactivity, ``"edge"`` on under-coordinated
-        atoms, ``"bulk"`` on fully sp2 ones. For ``"pentagon"`` the
-        fraction is of the pentagon sites, not of the whole structure --
-        those differ by a large factor on a long tube.
+        Where the substitutions go: ``"random"`` anywhere, ``"edge"`` on
+        under-coordinated atoms, ``"bulk"`` on fully sp2 ones, or a ring
+        size -- ``"pentagon"``, ``"heptagon"``, ``"octagon"`` -- on the
+        disclinations that carry a curved structure's curvature and its
+        reactivity. **Which** ring size is the interesting one follows
+        the sign of that curvature: a fullerene or a capped tube is where
+        the pentagons are, and a saddle -- a schwarzite, a junction, a
+        knee supernetwork -- carries no pentagon at all and does its
+        chemistry on the heptagons. For a ring-selected site the fraction
+        is of that ring's sites, not of the whole structure; those differ
+        by a large factor on a long tube.
     tmd_edit
         Post-build chemistry for a dichalcogenide: ``None``, ``"janus"``,
         ``"alloy"``, ``"vacancies"`` or ``"antisites"``. The carbon
@@ -445,16 +450,29 @@ def build(job: Job):
 #: Where a substitution may be placed. "pentagon" is the one that needs
 #: ring metadata, which every mesh-based builder records and a plain
 #: sheet does not.
-DOPANT_SITES = ("random", "pentagon", "edge", "bulk")
+#: Where a substitution goes. The three ring sizes are one rule, not
+#: three: a disclination is where a curved wall's curvature and therefore
+#: its reactivity sit, and **which** disclination depends on the sign of
+#: that curvature. A fullerene or a capped tube carries pentagons, so
+#: "pentagon" is the interesting site there. A saddle carries none at all
+#: -- a schwarzite, a junction or a knee-route supernetwork is hexagons
+#: plus heptagons and nothing else -- so asking for "pentagon" on one is
+#: asking for a site that does not exist, and the heptagons are where the
+#: chemistry happens. `dopants.rings` always took the ring size; only
+#: this policy layer hardcoded five.
+DOPANT_SITES = ("random", "pentagon", "heptagon", "octagon", "edge", "bulk")
+
+#: The ring size each ring-selected site names.
+DOPANT_RING_SIZES = {"pentagon": 5, "heptagon": 7, "octagon": 8}
 
 
 def apply_doping(atoms, job: Job):
     """Substitute ``job.dopant`` into a freshly built structure.
 
     Split out of :func:`build` so the CLI and the GUI go through one
-    placement policy rather than three. ``"pentagon"`` counts its
-    fraction against the pentagon sites; the others against all carbons,
-    or against the eligible pool for edge and bulk.
+    placement policy rather than three. A **ring-selected** site counts
+    its fraction against that ring size's sites; the others against all
+    carbons, or against the eligible pool for edge and bulk.
     """
     from .dopants import dope_directed, dope_random, dope_rings
 
@@ -465,8 +483,9 @@ def apply_doping(atoms, job: Job):
         )
     if site == "random":
         return dope_random(atoms, job.dopant, job.dopant_conc, seed=job.seed)
-    if site == "pentagon":
-        return dope_rings(atoms, job.dopant, ring_size=5,
+    if site in DOPANT_RING_SIZES:
+        return dope_rings(atoms, job.dopant,
+                          ring_size=DOPANT_RING_SIZES[site],
                           concentration=job.dopant_conc, seed=job.seed)
     # Edge and bulk take a count rather than a fraction, so turn the
     # fraction into one against that pool -- against the whole structure
