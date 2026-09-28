@@ -24,6 +24,7 @@ tbkit/
 ├── tasks.py          # levels, dos, bands, hubbard, relax, phonons as functions
 ├── optics.py         # polarizability: sum over states, SCC linear response, ε∞
 ├── dipoles.py        # intra-atomic s-p dipoles: position operator, multipole screening
+├── infrared.py       # IR: model dipole (SCC charges + intra-atomic dipoles), Born charges
 ├── modes.py          # mode analysis: participation, cylindrical character, symmetry, VDOS
 ├── graphene.py       # graphene G / 2D / 2D' by (double) resonance, phonons in the whole BZ
 ├── raman.py          # non-resonant Raman on the model's own Γ phonons
@@ -96,6 +97,10 @@ tbkit/
 - `extra_polarizability` is the only optical number fitted (3 values, to GPAW
   FD tensors, `recipes/xu_chn_alpha.py`); extra dipoles never interact with
   their own atom. C60 and diamond are validation, never fit targets.
+- IR uses the same position operator as α (charges + intra-atomic dipoles,
+  λ = 1): do not switch the default to "charges only" to improve static
+  dipoles without re-running the GPAW comparison. Born charges must sum to
+  the total charge (tested).
 - Mode identification (RBM, G) is by symmetry and character, never by
   frequency window alone: zone folding puts other A modes nearby (M-point
   modes in zigzag tubes). DFT force constants get the acoustic sum rule on

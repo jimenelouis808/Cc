@@ -243,7 +243,8 @@ Pendiente de la fase E:
 - [x] Validación con CNT prístinos (paso 8): RBM de 11 tubos a −1,3/−4,0 % de
       227/d; G con desplazamiento y ΔG pequeño (sin anomalía de Kohn).
 - [x] Análisis de modos (`modes.py`).
-- [ ] IR (|∂μ/∂Q|²) → oxígeno → B, S, P (auditoría, sección 9).
+- [x] IR (paso 9): `infrared.py`; frente a GPAW, factor típico ~2 por modo.
+- [ ] Oxígeno (grupos funcionales) → B, S, P (auditoría, sección 9).
 
 Ideas tomadas de la literatura del usuario (Papaconstantopoulos, Mehl, Chronis,
 Sigalas, "Tight-binding method in electronic structure", Encyclopedia of

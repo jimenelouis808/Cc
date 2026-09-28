@@ -131,7 +131,8 @@ energía.
 - **Análisis de modos** (`modes.py`): participación por especie,
   proyecciones cilíndricas, simetría rotacional, DOS vibracional total y
   proyectada, masa frente a química.
-- **No hay**: dispersión q de sistemas que no sean grafeno (CNT, cintas), IR.
+- **IR**: `infrared.py` (dipolo = cargas SCC + dipolos intraatómicos).
+- **No hay**: dispersión q de sistemas que no sean grafeno (CNT, cintas).
 
 ## 6. Polarizabilidad y Raman
 
@@ -177,7 +178,7 @@ energía.
 | Nanotubos: RBM | **Validado** (11 tubos, −1,3 a −4,0 % de 227/d) |
 | Nanotubos: G | Tendencias y dirección de G⁻; posiciones ~+80 cm⁻¹; ΔG 2–5× pequeño; sin anomalía de Kohn |
 | Grafeno 2D (doble resonancia) | Dispersión 112 cm⁻¹/eV (exp. ~100); posiciones altas por los fonones PBE |
-| IR | **No implementado** |
+| IR | Implementado (`infrared.py`); semicuantitativo frente a GPAW: factor típico ~2 por modo |
 | O, B, S, P | **Sin parámetros** |
 
 ## 9. Propuesta (en este orden)

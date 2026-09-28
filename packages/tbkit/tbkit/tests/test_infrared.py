@@ -76,3 +76,25 @@ def test_refuses_crystals(chn):
 
     with pytest.raises(ValueError, match="finitos"):
         infrared(bulk("C", "diamond", a=3.56), chn)
+
+
+def test_benzene_against_gpaw_on_gpaw_modes(chn):
+    """TB Born charges on GPAW's own modes (so only the dipole model is tested):
+    the IR-active benzene modes within a factor of 2 of GPAW."""
+    import json
+
+    from tbkit.infrared import KM_PER_MOL, born_charges
+    from tbkit.params import PARAMETER_DIR
+    from tbkit.references import load_references
+
+    data = json.loads((PARAMETER_DIR / "references" / "gpaw_chn_ir.json")
+                      .read_text(encoding="utf-8"))["infrared"]
+    entry = next(e for e in data if e["group"] == "C6H6")
+    refs, _ = load_references(PARAMETER_DIR / "references" / "gpaw_chn.json")
+    atoms = next(r for r in refs if r.label == "C6H6/eq").atoms
+    modes = np.array(entry["eigenvectors"]) / np.sqrt(atoms.get_masses())[None, :, None]
+    gpaw = np.array(entry["intensities_km_mol"])
+    z = born_charges(atoms, chn)
+    tb = np.sum(np.einsum("aij,mai->mj", z, modes) ** 2, axis=1) * DEBYE_PER_EA ** 2 * KM_PER_MOL
+    strong = gpaw > 0.1 * gpaw.max()
+    assert np.all(np.abs(np.log10(tb[strong] / gpaw[strong])) < np.log10(2.0))

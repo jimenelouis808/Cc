@@ -6,6 +6,22 @@ está la trampa.
 
 ---
 
+## tbkit · infrarrojo
+
+`tbkit ir molecula.xyz --model chn` calcula las intensidades IR (km/mol) con el
+dipolo del propio modelo, el mismo que da la polarizabilidad: IR y Raman salen
+coherentes. Acepta modos de QE (`--modes`).
+
+**Cuánto vale.** Frente a GPAW en ocho moléculas, los modos intensos aparecen
+donde deben y con el orden de magnitud correcto; el error típico es un factor
+~2 por modo, con fallos claros en algún caso (las tensiones C–H de la
+metilamina). Es semicuantitativo: sirve para asignar y comparar tendencias,
+no para intensidades absolutas.
+
+**Lo que NO hace.** Cristales (no hay polarización de Berry).
+
+---
+
 ## tbkit · nanotubos, grafeno de segundo orden y análisis de modos
 
 **Nanotubos.** La RBM de once tubos (zigzag, armchair, quirales) sale a entre

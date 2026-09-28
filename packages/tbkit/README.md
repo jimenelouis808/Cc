@@ -34,7 +34,8 @@ uno ajustado) en ese mismo formato, y `load_parameters(ruta)` lo lee.
 | 5. Espín | `hubbard` | Hubbard de campo medio; magnetización frente a la energía (m(E), dm/dE), frente al campo (M(h), χ) y frente al dopaje o el nivel de Fermi |
 | 6. Periódico | `hamiltonian`, `kpoints` | H(k) por suma de Bloch; mallas Γ-centradas y caminos de bandas de ASE |
 | 7. Parte repulsiva | `repulsive`, `forces`, `calculator` | Energía libre total (banda − TS + repulsión, + SCC), fuerzas de Hellmann–Feynman (ortogonal, no ortogonal, periódico, SCC), repulsión embebida de Xu y spline de los `.skf`; calculadora ASE para relajar y para fonones en Γ |
-| Raman no resonante y resonante (fase E) | `optics`, `raman`, `dipoles`, `resonance` | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
+| Raman no resonante y resonante (fase E) | `optics`, `raman`, `dipoles`, `resonance` |
+| Infrarrojo | `infrared` | μ del modelo (cargas + dipolos intraatómicos), cargas de Born, km/mol | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
 | C, H y N (fase E, paso 2) | `parameters/xu_chn.json`, `references`, `recipes` | C–C de Xu intacto; H y N ajustados a GPAW (PBE, LCAO dzp) en niveles, fuerzas y energías; U de H, C, N calculadas con el átomo de GPAW; SCC. Receta reproducible y referencias incluidas |
 | Reproducibilidad | `record`, `tasks` | `tbkit run simulacion.json` guarda estructura, parámetros completos, versión, commit, fecha, ajustes y resultados; `record.replay` lo repite |
 
@@ -202,6 +203,40 @@ de un TB mínimo (y los de Kohn–Sham a los que se ajustó) son más pequeños 
 los ópticos. Compara perfiles relativos, no energías absolutas. En semimetales
 (grafeno) la suma en k converge mal con diferencias finitas: el grafeno tiene
 su módulo perturbativo.
+
+## Infrarrojo
+
+`tbkit ir molecula.xyz --model chn` (o `infrared.infrared`): el dipolo del
+modelo es μ = Σ Q_A R_A − Σ p_A, con las cargas de Mulliken (autoconsistentes)
+y los dipolos intraatómicos del mismo operador de posición que da la α, de
+modo que IR y Raman salen de una sola respuesta. Cargas de Born por
+diferencias centrales, intensidades |∂μ/∂Q|² en km/mol, espectro ensanchado;
+`--modes` acepta los modos de QE y `--charges-only` quita los dipolos
+intraatómicos.
+
+Comprobado: las cargas de Born de una molécula neutra suman cero; girar la
+molécula no cambia nada; el benceno absorbe solo en A₂u y en los tres E₁u.
+
+Frente a GPAW (PBE, LCAO dzp) en 8 moléculas, usando **los modos de GPAW**
+para aislar el modelo de dipolo (`validation/ir_tb_vs_gpaw.json`, referencias
+en `parameters/references/gpaw_chn_ir.json`):
+
+| | solo cargas | cargas + dipolos intraatómicos |
+|---|---|---|
+| log₁₀(TB/GPAW), modos > 5 % del más intenso: media | −0,38 | −0,24 |
+| mediana de \|log₁₀\| (factor típico) | 0,41 (×2,6) | 0,32 (×2,1) |
+
+Con solo las cargas los **momentos dipolares** estáticos salen cerca del
+experimento (HCN 2,93 frente a 2,98 D; CH₃CN 3,24 frente a 3,92 D), pero las
+tensiones C–H de aromáticos y alquenos salen el doble de intensas; con los
+dipolos intraatómicos esas mejoran y el dipolo estático queda alto (el término
+de estado fundamental de los pares solitarios no se calibró). Un peso
+intermedio no mejora (barrido de λ en μ = ΣQR − λΣp). Queda λ = 1 por defecto.
+
+Alcance: el IR es **semicuantitativo**: los patrones y los modos intensos
+aparecen donde deben, con errores típicos de un factor ~2 por modo y algunos
+fallos claros (las tensiones C–H de la metilamina salen 10–50 veces débiles).
+Solo sistemas finitos (sin polarización de Berry).
 
 ## Nanotubos prístinos: validación del modelo de Xu
 
