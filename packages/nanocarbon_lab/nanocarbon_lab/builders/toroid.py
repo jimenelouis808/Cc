@@ -238,7 +238,9 @@ def build_polyhex_toroid(
     3.39 Å in radius, so an 8% budget puts the ring at 43 Å and 2200
     atoms. That is why the small round toroids in the literature are
     *not* polyhexes: they use knees with a pentagon outside and a
-    heptagon inside, which is a third route this module does not yet have.
+    heptagon inside. That third route now exists --
+    :func:`~nanocarbon_lab.builders.knee.build_knee_toroid` -- and it
+    reaches ``R/r`` 3 to 6 with an exact census instead of a strain.
 
     Parameters
     ----------
@@ -292,8 +294,9 @@ def build_polyhex_toroid(
             f"{100 * POLYHEX_TEAR_STRAIN:.0f}% where it tears rather than "
             "loads. Bending a finished lattice can only stretch it, so "
             "raise `periods` or narrow the tube. (A small round toroid "
-            "needs knees with a pentagon outside and a heptagon inside, "
-            "which is what the meshed route approximates.)"
+            "needs knees with a pentagon outside and a heptagon inside: "
+            "that is `knee.build_knee_toroid`, and the meshed route "
+            "approximates it.)"
         )
 
     positions = tube.get_positions()

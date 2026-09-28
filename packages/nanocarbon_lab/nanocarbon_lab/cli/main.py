@@ -56,6 +56,7 @@ from ..builders import (
     build_haeckelite_tube,
     build_heptanene,
     build_junction,
+    build_knee_toroid,
     build_multiwall_cnt,
     build_nano_onion,
     build_nanocoil,
@@ -1072,6 +1073,40 @@ def _cmd_toroid_polyhex(args):
     print(f"  outer wall  = stretched {100 * info['outer_wall_strain']:.1f}% "
           "(r/R). Bending a finished lattice can only stretch it, so this "
           "is geometry rather than an unfinished relaxation")
+    return 0
+
+
+def _cmd_toroid_knees(args):
+    atoms = build_knee_toroid(
+        knees=args.knees, circumference=args.circumference,
+        arm_rows=args.arm_rows, knee=args.knee, bond=args.bond,
+        vacuum=args.vacuum, relax=not args.no_relax,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    print(f"  ring        = {info['knees']} knees of "
+          f"{info['bend_per_knee_deg']:.1f} deg, R {info['major_radius']:.1f} "
+          f"/ r {info['minor_radius']:.2f} A, R/r {info['aspect_ratio']:.2f}")
+    census = info["ring_counts"]
+    print(f"  wall        = {dict(sorted(census.items()))}, sum(6-n) = "
+          f"{info['ring_deficit']:+d}")
+    # The two numbers this route exists for: where the disclinations went,
+    # and whether any of them are touching.
+    print(f"  placement   = {100 * info['disclinations_placed']:.0f}% on the "
+          "curvature side they belong on (pentagons outside, heptagons in)")
+    print(f"  isolation   = {info['like_sign_pairs']} like-sign contacts, "
+          f"{info['fused_dipoles']} fused 5-7 dipoles")
+    # A torus's positive curvature integrates to 4*pi whatever its radii,
+    # which is twelve 60 deg disclinations -- so the budget is a constant.
+    # The law: a 5-7 pair turns the axis 30 deg and a torus asks for 12 of
+    # them, so knees * pairs has to be 12 and six knees of two pairs is it.
+    print(f"  law         = {info['pairs_per_knee']} pairs a knee, "
+          f"{info['turn_per_pair_deg']:.1f} deg a pair against the "
+          f"{info['turn_per_pair_law_deg']:.0f} deg a pentagon-heptagon pair "
+          f"buys; {census.get(5, 0) or census.get(4, 0)} disclinations "
+          f"against the {info['curvature_pentagons']} a torus asks for "
+          f"(balance {info['curvature_balance']:.2f})")
     return 0
 
 
@@ -2120,6 +2155,54 @@ def build_parser() -> argparse.ArgumentParser:
     _add_doping_arguments(
         tp, seed_help="Seed for dopant placement; the ring itself is exact.")
     tp.set_defaults(func=_cmd_toroid_polyhex)
+
+    tk = sub.add_parser(
+        "toroid-knees",
+        help="A toroid built the third way: straight all-hexagon arms joined "
+             "by mitred KNEES, each carrying a pentagon on the outer elbow "
+             "and a heptagon on the inner one. Exact census, every "
+             "disclination on the curvature side it belongs on and none of "
+             "them touching.",
+    )
+    tk.add_argument("--knees", type=int, default=6,
+                    help="Number of knees, so the bend per knee is 360/knees. "
+                         "Each knee carries two pentagons and two heptagons, "
+                         "and a torus's positive curvature is exactly twelve "
+                         "60 deg disclinations whatever its radii -- so six "
+                         "is the curvature-neutral count and more "
+                         "over-correct.")
+    tk.add_argument("--circumference", type=int, default=None,
+                    help="Mesh vertices around the tube, which sets the tube "
+                         "radius. Omitted, the builder picks one that gives "
+                         "an exact census: the wedge a knee removes has to be "
+                         "a whole number of lattice steps, so not every "
+                         "combination closes cleanly.")
+    tk.add_argument("--arm-rows", type=int, default=None, dest="arm_rows",
+                    help="Rows of mesh per arm; must be ODD (the reflection "
+                         "through a mitre plane sends row i to row "
+                         "rows-1-i, and the rows alternate a half-step "
+                         "stagger). Omitted, the builder picks the shape "
+                         "closest to R/r 4.5.")
+    tk.add_argument("--knee", choices=("pentagon", "octagon"),
+                    default="pentagon",
+                    help="What each knee carries. 'pentagon' turns the seam "
+                         "one position and puts two pentagons on the outer "
+                         "elbow and two heptagons on the inner one; "
+                         "'octagon' turns it by none and puts a square "
+                         "outside and an octagon inside. Both obey "
+                         "sum(6-n) = 0; the square is poor sp2 carbon, which "
+                         "is the only reason it is not the default.")
+    tk.add_argument("--bond", type=float, default=1.42)
+    tk.add_argument("--vacuum", type=float, default=12.0)
+    tk.add_argument("--no-relax", action="store_true",
+                    help="Skip the force field. The census is set by the "
+                         "mesh, so this changes the geometry and nothing "
+                         "else.")
+    tk.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        tk, seed_help="Seed for dopant placement; the ring itself is exact.")
+    tk.set_defaults(func=_cmd_toroid_knees)
 
     hp = sub.add_parser(
         "heptanene",
