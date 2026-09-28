@@ -53,6 +53,9 @@ CHNO = XuFamily(
     experimental_alpha=EXPERIMENTAL_ALPHA,
     acute={"powers": 2, "theta0_degrees": 80.0, "r1": 1.7, "rm": 2.0,
            "elements": ("C", "N", "O")},
+    held_out={"bicyclobutane": ("tensión extrema (dos anillos de tres miembros fusionados), "
+                                "nada representativa del carbono funcionalizado; en el "
+                                "entrenamiento aportaba la mitad del error de fuerzas")},
 )
 
 

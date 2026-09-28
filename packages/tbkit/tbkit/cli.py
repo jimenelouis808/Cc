@@ -18,10 +18,10 @@
 
 Structures: any file ASE reads (extxyz from carbonforge or nanocarbon_lab
 keeps the cell and periodicity). Models: ``--model pi`` (default), ``sp3``
-(Xu carbon), ``chn`` (Xu carbon plus H and N fitted to GPAW, SCC),
+(Xu carbon), ``chn`` (Xu carbon plus H and N fitted to GPAW, SCC), ``chno`` (plus O),
 ``--parameters FILE.json`` (any parameter file, e.g. your own fit), or
 ``--skf DIR --orbitals "C=s,px,py,pz H=s"``. Charges are self-consistent
-when the model is (chn, .skf); ``--scc``/``--no-scc`` overrides.
+when the model is (chn, chno, .skf); ``--scc``/``--no-scc`` overrides.
 """
 
 from __future__ import annotations
@@ -51,6 +51,8 @@ def _model(args):
         return xu_carbon()
     if args.model == "chn":
         return load_parameters("xu_chn")
+    if args.model == "chno":
+        return load_parameters("xu_chno")
     return pi_model(t=args.t)
 
 
@@ -367,9 +369,9 @@ def build_parser() -> argparse.ArgumentParser:
     def structure_command(name, help_text, func):
         p = sub.add_parser(name, help=help_text)
         p.add_argument("structure")
-        p.add_argument("--model", choices=("pi", "sp3", "chn"), default="pi",
-                       help="pi (π Hückel), sp3 (carbono de Xu, con parte repulsiva) o chn "
-                            "(Xu + H y N ajustados a GPAW, SCC).")
+        p.add_argument("--model", choices=("pi", "sp3", "chn", "chno"), default="pi",
+                       help="pi (π Hückel), sp3 (carbono de Xu, con parte repulsiva), chn "
+                            "(Xu + H y N ajustados a GPAW, SCC) o chno (además O).")
         p.add_argument("--parameters", default=None,
                        help="Archivo JSON de parámetros (sustituye a --model).")
         p.add_argument("--t", type=float, default=-2.7, help="Hopping π, eV (modelo pi).")

@@ -83,6 +83,9 @@ class XuFamily:
     #: Acute-angle correction (:class:`tbkit.repulsive.AcuteAngleTerm`): number
     #: of powers fitted, with its fixed shape; None = no correction (xu_chn).
     acute: Optional[dict] = None
+    #: Reference groups computed as training data but kept out of the fit
+    #: (validated only), with the reason recorded in the parameter file.
+    held_out: dict = field(default_factory=dict)
 
     def acute_term(self, coefficients=None):
         from ..repulsive import AcuteAngleTerm
@@ -563,6 +566,8 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
                    else [_sha256(r) for r in refs],
                    "parameters": dict(zip(family.parameter_names(), map(float, x), strict=True)),
                    "level_shift_eV": shift, **report}
+    if family.held_out:
+        data["fit"]["held_out"] = dict(family.held_out)
     data["onsite_dipole"] = {el: {"value": d, "unit": "Å",
                                   "source": "GPAW aeatom PBE, |⟨2s|r|2p⟩| del átomo libre"}
                              for el, d in family.onsite_dipole.items()}
@@ -579,6 +584,9 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     for path in references:
         items, settings = load_references(path)
         structures += items
+    for s in structures:
+        if s.group in family.held_out:
+            s.role = "test"
     train = [s for s in structures if s.role == "train"]
     result = fit_levels(family, train, x0)
     electronic = family.build_model(result.x)
