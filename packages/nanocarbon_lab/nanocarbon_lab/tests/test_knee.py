@@ -36,6 +36,7 @@ from nanocarbon_lab.builders.knee import (
     describe_knee_junction,
     describe_knee_schwarzite,
     describe_knee_toroid,
+    diamond_cell_mesh,
     fill_triangular_holes,
     knee_path_mesh,
     knee_polygon_mesh,
@@ -43,6 +44,7 @@ from nanocarbon_lab.builders.knee import (
     node_budget,
     node_mesh,
     primitive_node_mesh,
+    schwarzite_budget,
 )
 
 
@@ -650,3 +652,75 @@ class TestTheJunctionGeometryIsCarbon:
         assert "3 arms" in line
         assert "7:6" in line
         assert "nothing else" in line
+
+
+class TestTheSchwarzDCellIsEightTetrahedralNodes:
+    """The D surface is the diamond lattice thickened into a wall, so its
+    piece is the four-arm node the junction already builds. Gluing two
+    boundary circles adds nothing to chi -- a circle has chi = 0 -- so the
+    budget follows from the nodes alone: 8 * 6(2-4) = -96."""
+
+    def test_the_budget_comes_from_the_nodes_and_their_arms(self):
+        assert schwarzite_budget("primitive") == -24
+        assert schwarzite_budget("diamond") == -96
+        # And it is 6*chi in both cases, chi = 2 - 2*genus.
+        assert schwarzite_budget("primitive") == 6 * (2 - 2 * 3)
+        assert schwarzite_budget("diamond") == 6 * (2 - 2 * 9)
+
+    def test_the_cell_closes_with_no_boundary_at_all(self):
+        bond = 1.42
+        spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+        radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 18))
+        vertices, tris, cell = diamond_cell_mesh(18, 5, radius, spacing)
+        census, _, broken = mesh_census(vertices, tris)
+        # No edge shared by other than two faces: a closed 3-torus cell.
+        assert broken == 0
+        assert set(census) == {6, 7}
+        assert census[7] == 96
+        assert sum((6 - s) * c for s, c in census.items()) == -96
+
+    def test_the_cell_edge_follows_from_the_arm_length(self):
+        # Two mouths meeting make the diamond bond, a*sqrt(3)/4, so
+        # 2*reach = a*sqrt(3)/4 and a = 8*reach/sqrt(3). Nothing is fitted.
+        bond = 1.42
+        spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+        radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 18))
+        _, _, cell = diamond_cell_mesh(18, 5, radius, spacing)
+        reach = (5 - 1) * spacing
+        assert cell == pytest.approx(8.0 * reach / np.sqrt(3.0))
+
+    @pytest.mark.parametrize("circumference", [10, 18])
+    def test_the_census_does_not_depend_on_the_circumference(
+            self, circumference):
+        atoms = build_knee_schwarzite(kind="diamond",
+                                      circumference=circumference,
+                                      arm_rows=5, relax=False)
+        assert set(atoms.info["ring_counts"]) == {6, 7}
+        assert atoms.info["ring_counts"][7] == 96
+        assert atoms.info["ring_deficit"] == -96
+        assert atoms.info["pentagons"] == 0
+        assert atoms.info["genus"] == 9
+        assert atoms.info["nodes"] == 8
+
+    def test_a_circumference_the_node_cannot_do_is_refused(self):
+        # At k=12 the tetrahedral node's own census carries nonagons, so
+        # the cell closes and is still not a schwarzite. The refusal is on
+        # the census, not on the weld.
+        with pytest.raises(ValueError) as excinfo:
+            build_knee_schwarzite(kind="diamond", circumference=12,
+                                  arm_rows=5, relax=False)
+        assert "9" in str(excinfo.value)
+        assert "arm_rows" in str(excinfo.value)
+
+    def test_an_unknown_kind_names_the_ones_that_exist(self):
+        with pytest.raises(ValueError) as excinfo:
+            build_knee_schwarzite(kind="gyroid")
+        assert "diamond" in str(excinfo.value)
+
+    def test_the_primitive_cell_is_unchanged_by_the_generalisation(self):
+        atoms = build_knee_schwarzite(circumference=20, arm_rows=9,
+                                      relax=False)
+        assert atoms.info["kind"] == "primitive"
+        assert atoms.info["genus"] == 3
+        assert atoms.info["nodes"] == 1
+        assert atoms.info["ring_counts"] == {6: 456, 7: 24}

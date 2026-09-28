@@ -81,6 +81,7 @@ from ..builders import fullerene_mesh as fm
 from ..builders.capped_cnt import MIN_CAP_FREQ
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
+from ..builders.knee import JUNCTION_AXES, SCHWARZITE_CELLS
 from ..builders.supernetwork import CAGES as supercages
 from ..builders.supernetwork import SUPERLATTICES as superlattices
 from ..cell import (
@@ -300,13 +301,21 @@ PRESETS: dict[str, dict[str, object]] = {
     # which is what a minimal surface must look like. The meshed route
     # returns 33 pentagons at a comparable cell.
     "Schwarz P (knees, no pentagons)": {
-        "mode_kind": "schwarzite (knees)", "anneal": 0},
+        "mode_kind": "schwarzite (knees)", "knee_cell": "primitive",
+        "anneal": 0},
+    # Eight of those tetrahedral nodes on the diamond lattice: 1440
+    # atoms, {6: 608, 7: 96}, sum(6-n) = -96 = 6*chi at genus 9, and not
+    # one pentagon. The D surface is what the schwarzite figures call
+    # D216; this is its conventional cubic cell.
+    "Schwarz D (knees, no pentagons)": {
+        "mode_kind": "schwarzite (knees)", "knee_cell": "diamond",
+        "anneal": 0},
     # 536 atoms, {6: 240, 7: 6} and not one pentagon -- exactly the six
     # heptagons Gauss-Bonnet asks of a three-arm node, where the meshed
     # route returns fifty pentagons and thirty-eight heptagons. Bonds
     # 1.410-1.431 A, the tightest of any junction here.
     "Y junction (knees, six heptagons)": {
-        "mode_kind": "junction (knees)", "anneal": 0},
+        "mode_kind": "junction (knees)", "knee_node": "y", "anneal": 0},
     "Carbon toroid (R/r = 4)": {
         "mode_kind": "toroid", "tor_major": 20.0, "tor_minor": 5.0,
         "anneal": 0},
@@ -941,6 +950,14 @@ class NanocarbonGUI:
         self.var_cage_freq = self._var("cage_freq", tk.IntVar(value=1))
         self.var_onion_shells = self._var("onion_shells", tk.IntVar(value=3))
         self.var_j_kind = self._var("j_kind", tk.StringVar(value="Y"))
+        # The knee route's own cell and node kinds. They are separate
+        # vars from `j_kind`: that one names an implicit-route junction
+        # (L/T/Y/X) and these name a lattice node, and a preset writing
+        # one into the other would build something nobody asked for.
+        self.var_knee_cell = self._var(
+            "knee_cell", tk.StringVar(value="primitive"))
+        self.var_knee_node = self._var(
+            "knee_node", tk.StringVar(value="y"))
         self.var_j_radius = self._var("j_radius", tk.DoubleVar(value=6.0))
         self.var_j_arm = self._var("j_arm", tk.DoubleVar(value=22.0))
         self.var_j_blend = self._var("j_blend", tk.DoubleVar(value=4.0))
@@ -1260,6 +1277,30 @@ class NanocarbonGUI:
                        "heptagons — nothing prescribes them.",
                   foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
                   justify="left").grid(row=7, column=0, columnspan=2, sticky="w")
+
+        # --- knee route: the lattice node behind a cell or a junction
+        self.frame_knee = ttk.LabelFrame(
+            parent, text="Knee node (exact census)", padding=8)
+        self.frame_knee.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_knee, text="Schwarzite cell").grid(
+            row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_knee, textvariable=self.var_knee_cell,
+                     values=sorted(SCHWARZITE_CELLS), state="readonly",
+                     width=10).grid(row=0, column=1, sticky="e", pady=(0, 6))
+        ttk.Label(self.frame_knee, text="Junction node").grid(
+            row=1, column=0, sticky="w")
+        ttk.Combobox(self.frame_knee, textvariable=self.var_knee_node,
+                     values=sorted(JUNCTION_AXES), state="readonly",
+                     width=10).grid(row=1, column=1, sticky="e", pady=(0, 6))
+        ttk.Label(self.frame_knee,
+                  text="A node of c arms is a sphere with c holes, so "
+                       "sum(6-n) = 6(2-c) and it is paid in heptagons "
+                       "alone — six for a Y, twelve for a tetrahedral node, "
+                       "24 for a P cell, 96 for a D one. No pentagons at "
+                       "all: these surfaces saddle everywhere.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
+                  justify="left").grid(row=2, column=0, columnspan=2,
+                                       sticky="w")
 
         # --- haeckelite
         self.frame_haeckelite = ttk.LabelFrame(
@@ -2105,6 +2146,7 @@ class NanocarbonGUI:
                       self.frame_ribbon,
                       self.frame_centreline, self.frame_defects,
                       self.frame_coil, self.frame_junction, self.frame_schwarzite,
+                      self.frame_knee,
                       self.frame_haeckelite,
                       self.frame_cage, self.frame_mw, self.frame_bundle,
                       self.frame_network,
@@ -2161,7 +2203,12 @@ class NanocarbonGUI:
             self._schedule_estimate()
             return
 
-        if mode == "junction":
+        if mode in ("schwarzite (knees)", "junction (knees)"):
+            self.frame_knee.pack(fill="x")
+            # There is nothing to anneal: the census is exact before any
+            # relaxation and a flip could only leave it.
+            self.var_anneal.set(0)
+        elif mode == "junction":
             self.frame_junction.pack(fill="x")
             # Same reason as the schwarzite and the network, and measured
             # on all four kinds: the 5-7 pairs spread over the surface are
@@ -3377,7 +3424,14 @@ class NanocarbonGUI:
                        != "none" else 0,
                        **self._graft_fields())
 
-        if mode == "junction":
+        if mode == "schwarzite (knees)":
+            # The shape is left to the builder: what suits a P cell does
+            # not suit a D one, and each kind carries the shape that
+            # measured best.
+            params = dict(kind=self.var_knee_cell.get())
+        elif mode == "junction (knees)":
+            params = dict(kind=self.var_knee_node.get())
+        elif mode == "junction":
             params = dict(
                 kind=self.var_j_kind.get(),
                 tube_radius=float(self.var_j_radius.get()),

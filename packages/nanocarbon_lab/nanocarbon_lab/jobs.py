@@ -1057,6 +1057,7 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "bond": "--bond", "vacuum": "--vacuum",
     }),
     "schwarzite (knees)": ("schwarzite-knees", {
+        "kind": "--kind",
         "circumference": "--circumference", "arm_rows": "--arm-rows",
         "bond": "--bond",
     }),

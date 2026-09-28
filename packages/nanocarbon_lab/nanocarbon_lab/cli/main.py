@@ -73,7 +73,7 @@ from ..builders import (
     build_toroid,
 )
 from ..builders.haeckelite import PATTERNS as HAECKELITE_PATTERNS
-from ..builders.knee import JUNCTION_AXES
+from ..builders.knee import JUNCTION_AXES, SCHWARZITE_CELLS
 from ..builders.periodic_coil import LITERATURE_RATIO as PERIODIC_COIL_RATIO
 from ..builders.supernetwork import CAGES, SUPERLATTICES
 from ..cell import (
@@ -1146,14 +1146,15 @@ def _cmd_coil_knees(args):
 
 def _cmd_schwarzite_knees(args):
     atoms = build_knee_schwarzite(
+        kind=args.kind,
         circumference=args.circumference, arm_rows=args.arm_rows,
         bond=args.bond, relax=not args.no_relax,
     )
     atoms = _maybe_dope(atoms, args)
     _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
     info = atoms.info
-    print(f"  cell        = {info['cell_length']:.1f} A cubic, {info['arms']} "
-          f"arms a node, genus {info['genus']}")
+    print(f"  cell        = {info['cell_length']:.1f} A cubic, {info['nodes']} "
+          f"node(s) of {info['arms']} arms, genus {info['genus']} ({info['surface']})")
     print(f"  wall        = {dict(sorted(info['ring_counts'].items()))}, "
           f"sum(6-n) = {info['ring_deficit']:+d} against a budget of "
           f"{info['ring_budget']:+d}")
@@ -2331,13 +2332,20 @@ def build_parser() -> argparse.ArgumentParser:
     sk = sub.add_parser(
         "schwarzite-knees",
         help="A Schwarz P schwarzite built from a six-arm node: hexagons "
-             "and exactly 24 heptagons, and NO pentagons -- a minimal "
+             "and exactly the heptagons its genus asks for, and NO "
+             "pentagons -- a minimal "
              "surface has no positive curvature anywhere, so a pentagon on "
              "one is never right. The meshed route returns 33 of them.",
     )
-    sk.add_argument("--circumference", type=int, default=20,
-                    help="Mesh vertices around each arm.")
-    sk.add_argument("--arm-rows", type=int, default=9, dest="arm_rows",
+    sk.add_argument("--kind", choices=sorted(SCHWARZITE_CELLS),
+                    default="primitive",
+                    help="A P cell is one six-arm node; a D cell is eight "
+                         "tetrahedral nodes on the diamond lattice, genus "
+                         "9 and a budget of -96.")
+    sk.add_argument("--circumference", type=int, default=None,
+                    help="Mesh vertices around each arm. Left out, the shape "
+                         "that measured best for this kind is used.")
+    sk.add_argument("--arm-rows", type=int, default=None, dest="arm_rows",
                     help="Rows along each arm. With the circumference this "
                          "sets the cell. Not every pair closes cleanly; the "
                          "refusal names the ones that do.")

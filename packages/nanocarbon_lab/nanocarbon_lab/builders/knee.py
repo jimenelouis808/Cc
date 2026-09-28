@@ -1979,18 +1979,200 @@ def describe_knee_junction(atoms: Atoms) -> str:
     )
 
 
+#: The eight sites of the conventional cubic diamond cell, as fractions
+#: of its edge, and which way their arms point: the A sublattice looks
+#: out along +(1,1,1) and its family, the B sublattice along the
+#: negatives. That is the diamond structure, and it is why a node of four
+#: arms at 109.47 deg is the piece a Schwarz D cell is made of.
+DIAMOND_SITES: tuple[tuple[tuple[float, float, float], int], ...] = (
+    ((0.00, 0.00, 0.00), +1), ((0.00, 0.50, 0.50), +1),
+    ((0.50, 0.00, 0.50), +1), ((0.50, 0.50, 0.00), +1),
+    ((0.25, 0.25, 0.25), -1), ((0.25, 0.75, 0.75), -1),
+    ((0.75, 0.25, 0.75), -1), ((0.75, 0.75, 0.25), -1),
+)
+
+#: How far two glued mouths may miss each other, in Å, before the cell is
+#: refused. A mouth is a ring of the mesh edge, ~2.5 Å, so this is well
+#: inside one step and cannot accept a neighbour's ring by mistake.
+MOUTH_REGISTER = 0.6
+
+
+def diamond_cell_mesh(
+    circumference: int,
+    arm_rows: int,
+    tube_radius: float,
+    spacing: float,
+) -> tuple[np.ndarray, list[tuple[int, int, int]], float]:
+    """One Schwarz D cell: eight tetrahedral nodes, closed on the 3-torus.
+
+    The D surface is the diamond lattice thickened into a wall, so its
+    piece is the four-arm node :func:`node_mesh` already builds -- the
+    same construction as :func:`primitive_node_mesh`'s six-arm one, with
+    the nodes kept separate and glued rather than trimmed against each
+    other. Each arm is **half** the strut to a neighbour, so two mouths
+    meeting set the cell: ``2 * reach`` is the diamond bond ``a*sqrt(3)/4``
+    and therefore ``a = 8 * reach / sqrt(3)``.
+
+    **The budget is fixed before anything is built.** Gluing two boundary
+    circles adds nothing to ``chi`` -- a circle has ``chi = 0`` -- so a
+    cell of ``n`` nodes of ``c`` arms has ``chi = n(2-c)``, here
+    ``8 * (2-4) = -16``, genus 9, and ``sum(6-n) = 6*chi = -96``. Measured
+    at ``circumference=10, arm_rows=5``: 1408 triangles in a 39.4 Å cell,
+    census ``{6: 592, 7: 96}``, ``sum(6-n) = -96``, no boundary edge and
+    none shared by other than two faces. Ninety-six heptagons and nothing
+    else -- no pentagon, which a minimal surface can have none of, and no
+    square or octagon either.
+
+    **This is the conventional cell, not the primitive one.** The
+    rhombohedral primitive cell holds two nodes and is genus 3, which is
+    what Lenosky's D216 is; it is not orthorhombic, and
+    :func:`~nanocarbon_lab.builders.fullerene_mesh.minimum_image` takes an
+    orthorhombic box only, so a bond across its seam would read as a
+    cell-length stretch. The cubic cell is four primitive cells of the
+    same surface, and it is the one that can be measured correctly.
+
+    **Not every circumference works, and the node says so first.** At
+    ``circumference=12`` the cell closes with ``{6: N, 9: 32}`` --
+    nonagons, which is the tetrahedral node's own census at that size
+    rather than anything the gluing did. :func:`clean_schwarzite_shapes`
+    with ``kind="diamond"`` is the list that comes out exact.
+
+    Returns ``(vertices, triangles, cell)`` with the cell **closed**: no
+    rim, so :func:`mesh_census` reads every vertex.
+
+    Raises
+    ------
+    ValueError
+        If a node does not close, the mouths do not come out in pairs, or
+        two glued mouths are out of register.
+    """
+    axes = JUNCTION_AXES["tetrahedral"]
+    reach = (arm_rows - 1) * spacing
+    cell = 8.0 * reach / np.sqrt(3.0)
+
+    verts: list[list[float]] = []
+    tris: list[tuple[int, int, int]] = []
+    for fraction, sign in DIAMOND_SITES:
+        local, local_tris = node_mesh(sign * axes, circumference, arm_rows,
+                                      tube_radius, spacing)
+        local_tris = fill_triangular_holes(local_tris)
+        local, local_tris = collapse_degree_three(local, local_tris)
+        local, local_tris = collapse_degree_four(local, local_tris)
+        offset = len(verts)
+        verts.extend((local + np.asarray(fraction) * cell).tolist())
+        tris.extend((x + offset, y + offset, z + offset)
+                    for x, y, z in local_tris)
+    vertices = np.asarray(verts, dtype=float)
+
+    cycles = _boundary_cycles(tris)
+    if cycles is None:
+        raise ValueError("a node's boundary is not manifold.")
+    wanted = len(DIAMOND_SITES) * len(axes)
+    if len(cycles) != wanted:
+        raise ValueError(
+            f"the cell came out with {len(cycles)} mouths where {wanted} "
+            "were expected, so a node did not close."
+        )
+
+    find, union = _union_find(len(vertices))
+    centres = np.array([vertices[c].mean(axis=0) for c in cycles])
+    paired: set[int] = set()
+    for i in range(len(cycles)):
+        if i in paired:
+            continue
+        delta = centres - centres[i]
+        delta -= cell * np.round(delta / cell)
+        distance = np.linalg.norm(delta, axis=1)
+        distance[i] = np.inf
+        for j in paired:
+            distance[j] = np.inf
+        j = int(distance.argmin())
+        if distance[j] > MOUTH_REGISTER:
+            raise ValueError(
+                f"mouth {i} has no partner: the nearest is "
+                f"{distance[j]:.2f} Å away, past the {MOUTH_REGISTER} Å a "
+                "weld allows."
+            )
+        paired.update((i, j))
+        here = vertices[cycles[i]]
+        # The partner may be in a neighbouring cell; carry the translation
+        # that brought its centre into register, not a wrap of each vertex.
+        shift = cell * np.round((centres[i] - centres[j]) / cell)
+        there = vertices[cycles[j]] + shift
+        spread = np.linalg.norm(here[:, None, :] - there[None, :, :], axis=2)
+        nearest = spread.argmin(axis=1)
+        if len(set(nearest.tolist())) != len(cycles[i]):
+            raise ValueError(
+                f"mouths {i} and {j} have no one-to-one partner, so they "
+                "are out of phase rather than merely apart."
+            )
+        worst = float(spread[np.arange(len(cycles[i])), nearest].max())
+        if worst > MOUTH_REGISTER:
+            raise ValueError(
+                f"mouths {i} and {j} are out of register by {worst:.2f} Å."
+            )
+        for q, x in enumerate(cycles[i]):
+            union(x, cycles[j][int(nearest[q])])
+
+    tris = [tuple(find(x) for x in t) for t in tris]
+    tris = [t for t in tris if len(set(t)) == 3]
+    live = sorted({x for t in tris for x in t})
+    relabel = {x: i for i, x in enumerate(live)}
+    return (vertices[live],
+            [(relabel[a], relabel[b], relabel[c]) for a, b, c in tris],
+            float(cell))
+
+
+#: The schwarzite cells this route builds, as (mesh routine, node arms,
+#: nodes per cell, genus). The budget follows from the last three:
+#: gluing two boundary circles adds nothing to chi, so a cell of `n`
+#: nodes of `c` arms has chi = n(2-c) and sum(6-n) = 6*chi.
+SCHWARZITE_CELLS: dict[str, tuple[int, int, int]] = {
+    #     arms, nodes, genus
+    "primitive": (6, 1, 3),
+    "diamond": (4, 8, 9),
+}
+
+#: ``(circumference, arm_rows)`` per cell kind: the shape whose relaxed
+#: geometry measured best, not a round number. A P cell wants a wide arm
+#: and a long one; a D cell wants the opposite, because eight nodes in one
+#: cube leave far less room between them.
+DEFAULT_SCHWARZITE_SHAPE: dict[str, tuple[int, int]] = {
+    "primitive": (20, 9),
+    "diamond": (18, 5),
+}
+
+
+def _cell_mesh(kind: str, circumference: int, arm_rows: int,
+               tube_radius: float, spacing: float):
+    """The mesh routine for a cell kind, both of one signature."""
+    if kind == "primitive":
+        return primitive_node_mesh(circumference, arm_rows, tube_radius,
+                                   spacing)
+    return diamond_cell_mesh(circumference, arm_rows, tube_radius, spacing)
+
+
+def schwarzite_budget(kind: str) -> int:
+    """``sum(6-n)`` for a cell kind, from its nodes and their arms alone."""
+    arms, nodes, _ = SCHWARZITE_CELLS[kind]
+    return nodes * node_budget(arms)
+
+
 def clean_schwarzite_shapes(
     bond: float = CC_BOND,
     circumferences=tuple(range(12, 29)),
     rows_candidates=(7, 9, 11, 13, 15),
+    kind: str = "primitive",
 ) -> list[tuple[int, int]]:
-    """``(arm_rows, circumference)`` pairs that give the exact P census.
+    """``(arm_rows, circumference)`` pairs that give the exact census.
 
     The wedge the dominance trim removes has to be a whole number of
     lattice steps, exactly as the toroid's mitre does, so the pairs that
     close cleanly are found by building and counting rather than derived.
-    A pair qualifies only when the cell is closed, ``chi`` is -4 and the
-    census is hexagons plus **exactly 24 heptagons** -- no pentagons,
+    A pair qualifies only when the cell is closed, the census matches the
+    kind's own genus, and the
+    census is hexagons plus **exactly** ``-schwarzite_budget(kind)``
+    heptagons -- 24 for a P cell, 96 for a D one -- and no pentagons,
     which a minimal surface can have none of, and no octagons.
     """
     spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
@@ -1999,26 +2181,26 @@ def clean_schwarzite_shapes(
         for k in circumferences:
             radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / k))
             try:
-                vertices, tris, _ = primitive_node_mesh(k, rows, radius,
-                                                        spacing)
+                vertices, tris, _ = _cell_mesh(kind, k, rows, radius, spacing)
                 vertices, tris = collapse_degree_three(vertices, tris)
             except (ValueError, StopIteration, KeyError):
                 continue
             census, _, broken = mesh_census(vertices, tris)
             if broken or set(census) - {6, 7}:
                 continue
-            if census.get(7, 0) != -node_budget(len(PRIMITIVE_AXES)):
+            if census.get(7, 0) != -schwarzite_budget(kind):
                 continue
             good.append((int(rows), int(k)))
     return good
 
 
 def build_knee_schwarzite(
-    circumference: int = 20,
-    arm_rows: int = 9,
+    circumference: int | None = None,
+    arm_rows: int | None = None,
     bond: float = CC_BOND,
     relax: bool = True,
     relax_iterations: int = 3000,
+    kind: str = "primitive",
 ) -> Atoms:
     """A Schwarz P schwarzite with the census a minimal surface must have.
 
@@ -2067,31 +2249,43 @@ def build_knee_schwarzite(
         If the pair does not give the exact census, naming the ones that
         do.
     """
+    if kind not in SCHWARZITE_CELLS:
+        raise ValueError(
+            f"unknown schwarzite kind {kind!r}; the ones this route builds "
+            f"are {sorted(SCHWARZITE_CELLS)}."
+        )
+    # The shape that measured best for this kind, since what suits a P
+    # cell does not suit a D one: eight nodes in a cube leave far less
+    # room between them than one node does.
+    default_k, default_rows = DEFAULT_SCHWARZITE_SHAPE[kind]
+    circumference = default_k if circumference is None else int(circumference)
+    arm_rows = default_rows if arm_rows is None else int(arm_rows)
     spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
     tube_radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / circumference))
-    arms = len(PRIMITIVE_AXES)
-    budget = node_budget(arms)
+    arms, nodes, genus = SCHWARZITE_CELLS[kind]
+    budget = schwarzite_budget(kind)
+    surface = "Schwarz P" if kind == "primitive" else "Schwarz D"
     try:
-        vertices, tris, cell = primitive_node_mesh(circumference, arm_rows,
-                                                   tube_radius, spacing)
+        vertices, tris, cell = _cell_mesh(kind, circumference, arm_rows,
+                                          tube_radius, spacing)
         vertices, tris = collapse_degree_three(vertices, tris)
     except (ValueError, StopIteration, KeyError) as problem:
-        shapes = clean_schwarzite_shapes(bond)
+        shapes = clean_schwarzite_shapes(bond, kind=kind)
         raise ValueError(
             f"circumference {circumference} with {arm_rows}-row arms does "
-            f"not close as a Schwarz P cell ({problem}). Pairs that do, as "
+            f"not close as a {surface} cell ({problem}). Pairs that do, as "
             f"(arm_rows, circumference): {shapes or 'none found'}."
         ) from problem
 
     census, _, broken = mesh_census(vertices, tris)
     deficit = sum((6 - size) * count for size, count in census.items())
     if broken or set(census) - {6, 7} or deficit != budget:
-        shapes = clean_schwarzite_shapes(bond)
+        shapes = clean_schwarzite_shapes(bond, kind=kind)
         raise ValueError(
             f"circumference {circumference} with {arm_rows}-row arms gives "
             f"the census {dict(sorted(census.items()))} and sum(6-n) = "
             f"{deficit:+d}, not the hexagons-plus-{-budget}-heptagons a "
-            "Schwarz P cell must have (it is a minimal surface, so it can "
+            f"{surface} cell must have (it is a minimal surface, so it can "
             "have no pentagons at all). Pairs that do, as "
             f"(arm_rows, circumference): {shapes or 'none found'}."
         )
@@ -2121,10 +2315,12 @@ def build_knee_schwarzite(
     atoms.info.update({
         "builder": "knee_schwarzite",
         "structure_type": "schwarzite",
-        "kind": "primitive",
+        "kind": kind,
+        "surface": surface,
         "arms": int(arms),
-        "genus": 3,
-        "euler": 2 - 2 * 3,
+        "nodes": int(nodes),
+        "genus": int(genus),
+        "euler": 2 - 2 * genus,
         "ring_budget": int(budget),
         "circumference": int(circumference),
         "arm_rows": int(arm_rows),

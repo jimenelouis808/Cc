@@ -918,6 +918,17 @@ flag -- the two are different structures, and the names must say which:
 | toroid | 68 pentagons + 68 heptagons at R=20 | `{6: 1100}` -- none at all |
 | nanocone (112.9 deg) | 183 pentagons + 171 heptagons, 3800 atoms | `{5: 1, 6: 210}`, 470 atoms |
 | coil | ~90 non-hexagons | `nanocoil.py`, all hexagons |
+| **Y junction** | 50 pentagons + 38 heptagons | `{6: N, 7: 6}` -- the six Gauss-Bonnet asks for |
+| **Schwarz P** | 33 pentagons + 57 heptagons | `{6: 456, 7: 24}`, no pentagons |
+| **Schwarz D** | -- | `{6: 608, 7: 96}`, no pentagons |
+
+The bottom three are the knee route (`builders/knee.py`), and they are
+the rows where the crystalline side wins on **both** axes: a Y junction's
+bond spread is 0.021 Å against the meshed Y's 0.117, at a third of the
+atoms. That is the opposite of the rule below and the reason is that
+nothing is being bent -- the node is assembled from straight arms and
+pays its curvature in rings, exactly as the mesh route does, but with the
+rings *placed by the construction* rather than chosen by a remesher.
 
 **The crystalline route always costs size, and the reason is the same
 every time.** Bending or rolling a finished lattice can only *stretch*
@@ -1344,6 +1355,58 @@ the shared degree-3 vertex the cube node leaves. Closing it adds no edge
 rises. But the six vertices that stop being boundary come out at
 **degree 7**: they *are* the junction's heptagons. Before the fill the
 interior carries none at all.
+
+### Schwarz D is eight of those nodes, and the budget comes for free
+
+The D surface is the diamond lattice thickened into a wall, so its piece
+is the **four-arm node the junction already builds**. `diamond_cell_mesh`
+puts one on each of the eight sites of the conventional cubic diamond
+cell -- the A sublattice looking out along +(1,1,1) and its family, the B
+sublattice along the negatives -- and glues each mouth to its neighbour's.
+
+**Nothing about the census is fitted.** Gluing two boundary circles adds
+nothing to `chi`, a circle having `chi = 0`, so a cell of `n` nodes of
+`c` arms has `chi = n(2-c)`: here `8 * (2-4) = -16`, genus 9, and
+`sum(6-n) = 6*chi = -96`. The cell edge is not fitted either -- two
+mouths meeting make the diamond bond, so `2*reach = a*sqrt(3)/4` and
+`a = 8*reach/sqrt(3)`.
+
+Measured at the shipped shape (`circumference=18, arm_rows=5`): **1440
+atoms in a 30.0 Å cell, `{6: 608, 7: 96}`, `sum(6-n) = -96`, bonds
+1.347-1.489 Å, angles 109.1-125.0, zero contacts, CLEAN**, and every
+heptagon in negative curvature. Ninety-six heptagons and nothing else --
+no pentagon, and no square or octagon either.
+
+**This is the conventional cell, not the primitive one.** The
+rhombohedral primitive cell holds two nodes and is genus 3, which is what
+D216 is. It is not orthorhombic, and `minimum_image` takes an
+orthorhombic box only, so a bond across its seam would read as a
+cell-length stretch. The cubic cell is four primitive cells of the same
+surface and is the one that can be measured correctly.
+
+**The circumference decides it, and the node says so first.** Scanned
+over k = 8 to 24 at three arm lengths:
+
+| k | verdict | why |
+|---|---|---|
+| 8, 14, 16, 20, 22 | refused | the node's seams do not pair up |
+| 10 | builds | **broken** at 5 rows, strained at 7 and 9 |
+| 12 | refused | `{6: N, 9: 32}` -- nonagons, which is the tetrahedral node's own census at that size |
+| **18** | **clean at 5, 7 and 9 rows** | 0.0176-0.0199 Å bond spread |
+| 24 | refused | `{5: 96, ...}` -- pentagons, on a surface that has no positive curvature |
+
+So the default is `(18, 5)`, the smallest clean one, and
+`DEFAULT_SCHWARZITE_SHAPE` is per kind rather than shared: what suits a P
+cell (20, 9) does not suit a D one, because eight nodes in one cube leave
+far less room between them than a single node does. A shape argument left
+out takes the kind's own default; the refusal still names the pairs that
+close.
+
+**`build_knee_schwarzite` takes a `kind`, it is not a second builder.**
+`SCHWARZITE_CELLS` holds `(arms, nodes, genus)` per kind and
+`schwarzite_budget` derives `sum(6-n)` from those three alone, so adding
+a surface is a table entry plus a mesh routine of the one signature, not
+a copy of the finishing, the rescale and the census gate.
 
 ## A collapsed wall passes every check in this package
 
