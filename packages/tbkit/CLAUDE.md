@@ -109,7 +109,11 @@ tbkit/
   zero for angles ≥ θ0 = 80°: graphene, diamond, nanotubes, fullerenes and
   aromatics keep Xu's results (tested). It exists for three-membered rings
   (epoxide, oxirane, aziridine, cyclopropane); never raise θ0 to fix
-  something else.
+  something else. Its coefficients are only pinned down by the ring-opening
+  scans (`chno_references.RING_SCANS`, ring C-C to 1.95 Å): random
+  distortions sample only the minimum, and without the scans the fit left
+  the rings with no barrier (epoxide C-C +0.57 Å). Check the relaxed
+  coronene epoxide after any refit.
 - Repulsion polynomials are only determined where the training data are:
   check V(r) and its slope in that range, not the coefficients, and state
   the range in `validity`.

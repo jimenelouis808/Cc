@@ -11,7 +11,10 @@ and acetic acid, CO, CO₂, dimethyl ether, oxirane (an epoxide), furan
 (aromatic O), H₂O₂ (O-O), nitromethane (N-O) and acetamide (amide), plus
 cyclopropane and bicyclobutane: three-membered rings, which Xu's C-C cannot
 close (the acute-angle correction of :mod:`tbkit.repulsive` is fitted to
-them together with oxirane and aziridine). Test
+them together with oxirane and aziridine), and ring-opening scans of
+cyclopropane, oxirane and aziridine (the ring C-C at 1.65, 1.80 and 1.95 Å,
+single points, same group as the molecule). Bicyclobutane is computed but
+kept out of the fit (``xu_chno.CHNO.held_out``). Test
 (relaxed only): ethanol, acetone, methyl formate, glyoxal and two
 graphene-oxide motifs on coronene -- a basal epoxide and a basal 1,4-diol.
 The C/H/N references are not recomputed: the fit reads both files.
@@ -90,6 +93,69 @@ def structure(name: str) -> Atoms:
     return builders[name]() if name in builders else molecule(name)
 
 
+#: Ring-opening scans: the C-C bond of each three-membered ring stretched
+#: symmetrically from the GPAW minimum (nothing else moved), single points.
+#: Random distortions (σ = 0.04 Å) only sample the minimum; without these the
+#: fitted acute-angle term is free to leave the ring without a barrier.
+RING_SCANS = ("C3H6_D3h", "CH2OCH2", "CH2NHCH2")
+RING_CC = (1.65, 1.80, 1.95)                       # Å
+
+
+def ring_bond(atoms: Atoms) -> tuple[int, int]:
+    """The C-C bond of the three-membered ring (both carbons bonded to a third heavy atom)."""
+    symbols = atoms.get_chemical_symbols()
+    distance = atoms.get_all_distances()
+    heavy = [i for i, s in enumerate(symbols) if s != "H"]
+    for i in heavy:
+        for j in heavy:
+            if j > i and symbols[i] == symbols[j] == "C" and distance[i, j] < 1.7 and any(
+                    distance[i, k] < 1.7 and distance[j, k] < 1.7
+                    for k in heavy if k not in (i, j)):
+                return i, j
+    raise ValueError("sin anillo de tres miembros")
+
+
+def ring_scan(name: str, relaxed: Atoms, lengths=RING_CC) -> list[tuple[str, Atoms]]:
+    i, j = ring_bond(relaxed)
+    axis = relaxed.positions[j] - relaxed.positions[i]
+    d0 = np.linalg.norm(axis)
+    axis /= d0
+    out = []
+    for d in lengths:
+        atoms = relaxed.copy()
+        atoms.positions[i] -= 0.5 * (d - d0) * axis
+        atoms.positions[j] += 0.5 * (d - d0) * axis
+        out.append((f"{name}/cc{d:.2f}", atoms))
+    return out
+
+
+def _scan(args):
+    name, relaxed, settings = args
+    from tbkit.references import ReferenceStructure, gpaw_single_point
+
+    items = []
+    for label, atoms in ring_scan(name, relaxed):
+        atoms.pbc = False
+        atoms.center(vacuum=settings["vacuum"])    # a translation; the file has no cell
+        energy, forces, levels, n_occ = gpaw_single_point(atoms, settings)
+        items.append(ReferenceStructure(label, name, atoms, energy, forces, levels, n_occ,
+                                        "train").to_dict())
+    return f"{name}_open", items
+
+
+def _relaxed(name: str, parts: Path) -> Atoms:
+    """GPAW minimum of ``name``: from this run's parts, else from the C/H/N set."""
+    from tbkit.params import PARAMETER_DIR
+    from tbkit.references import ReferenceStructure, load_references
+
+    part = parts / f"{name}.json"
+    if part.exists():
+        refs = [ReferenceStructure.from_dict(d) for d in json.loads(part.read_text())]
+    else:
+        refs = load_references(PARAMETER_DIR / "references" / "gpaw_chn.json")[0]
+    return next(r for r in refs if r.label == f"{name}/eq").atoms
+
+
 def _one(args):
     name, role, index, settings = args
     from tbkit.references import generate_gpaw
@@ -120,9 +186,17 @@ def main(argv=None) -> None:
             name, result = future.result()
             (parts / f"{name}.json").write_text(json.dumps(result))
             print(f"{name}: {len(result)} estructuras", flush=True)
+    scans = [name for name in RING_SCANS if not (parts / f"{name}_open.json").exists()]
+    with ProcessPoolExecutor(args.workers) as pool:
+        futures = [pool.submit(_scan, (name, _relaxed(name, parts), settings))
+                   for name in scans]
+        for future in as_completed(futures):
+            name, result = future.result()
+            (parts / f"{name}.json").write_text(json.dumps(result))
+            print(f"{name}: {len(result)} estructuras", flush=True)
     structures = []
-    for job in jobs:
-        structures += json.loads((parts / f"{job[0]}.json").read_text())
+    for name in [job[0] for job in jobs] + [f"{n}_open" for n in RING_SCANS]:
+        structures += json.loads((parts / f"{name}.json").read_text())
     data = {"settings": gpaw_settings_record(settings), "structures": structures}
     args.out.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
     print(f"{len(structures)} estructuras en {args.out}")
