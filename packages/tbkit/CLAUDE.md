@@ -24,6 +24,8 @@ tbkit/
 ├── tasks.py          # levels, dos, bands, hubbard, relax, phonons as functions
 ├── optics.py         # polarizability: sum over states, SCC linear response, ε∞
 ├── dipoles.py        # intra-atomic s-p dipoles: position operator, multipole screening
+├── modes.py          # mode analysis: participation, cylindrical character, symmetry, VDOS
+├── graphene.py       # graphene G / 2D / 2D' by (double) resonance, phonons in the whole BZ
 ├── raman.py          # non-resonant Raman on the model's own Γ phonons
 ├── resonance.py      # resonant Raman: ∂α(ω_L + iη)/∂Q, excitation profiles
 ├── record.py         # reproducible records, `tbkit run simulation.json`, replay
@@ -94,6 +96,10 @@ tbkit/
 - `extra_polarizability` is the only optical number fitted (3 values, to GPAW
   FD tensors, `recipes/xu_chn_alpha.py`); extra dipoles never interact with
   their own atom. C60 and diamond are validation, never fit targets.
+- Mode identification (RBM, G) is by symmetry and character, never by
+  frequency window alone: zone folding puts other A modes nearby (M-point
+  modes in zigzag tubes). DFT force constants get the acoustic sum rule on
+  loading; never report their raw acoustic "frequencies".
 - Repulsion polynomials are only determined where the training data are:
   check V(r) and its slope in that range, not the coefficients, and state
   the range in `validity`.

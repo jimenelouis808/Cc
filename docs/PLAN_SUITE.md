@@ -237,8 +237,13 @@ Pendiente de la fase E:
 - [x] Raman resonante de primer orden (paso 6): ∂α(ω_L + iη)/∂Q con la α
       compleja apantallada (finitos) o interbanda (cristales), perfiles de
       excitación; `tbkit raman --resonant`. Sin estructura vibrónica.
-- [ ] Segundo orden (banda 2D, doble resonancia): periódico, suma en toda la zona
-      de Brillouin.
+- [x] Segundo orden (paso 7): G, 2D y 2D′ del grafeno por doble resonancia
+      (`graphene.py`); dispersión de la 2D 112 cm⁻¹/eV (exp. ~100) con fonones
+      GPAW; posiciones altas por los fonones PBE. Sin banda D (defectos).
+- [x] Validación con CNT prístinos (paso 8): RBM de 11 tubos a −1,3/−4,0 % de
+      227/d; G con desplazamiento y ΔG pequeño (sin anomalía de Kohn).
+- [x] Análisis de modos (`modes.py`).
+- [ ] IR (|∂μ/∂Q|²) → oxígeno → B, S, P (auditoría, sección 9).
 
 Ideas tomadas de la literatura del usuario (Papaconstantopoulos, Mehl, Chronis,
 Sigalas, "Tight-binding method in electronic structure", Encyclopedia of

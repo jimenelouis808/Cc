@@ -6,6 +6,26 @@ está la trampa.
 
 ---
 
+## tbkit · nanotubos, grafeno de segundo orden y análisis de modos
+
+**Nanotubos.** La RBM de once tubos (zigzag, armchair, quirales) sale a entre
+−1,3 y −4,0 % de la relación 227/d sin ajustar nada; la G, desplazada hacia
+arriba y con un desdoblamiento G⁺/G⁻ demasiado pequeño (a Xu le falta la
+anomalía de Kohn de los metálicos). `python -m tbkit.recipes.cnt_validation`.
+
+**Grafeno.** `tbkit graphene-raman --laser 1.96 2.41 2.80` calcula G, 2D y 2D′
+por doble resonancia. La 2D se desplaza 112 cm⁻¹ por eV de láser (medido: ~100);
+sus posiciones absolutas salen ~190 cm⁻¹ altas, que es lo que dan los fonones
+PBE. No hay banda D (no hay defectos en el cálculo).
+
+**Qué es cada modo.** `tbkit.modes` dice qué átomos y qué especie llevan cada
+modo, si es radial, tangencial o axial, su simetría, la DOS vibracional
+proyectada, y cuánto de un desplazamiento se debe a la masa del dopante y
+cuánto al cambio de enlace. Una frecuencia de la DOS no es un pico Raman: eso
+lo decide la actividad.
+
+---
+
 ## tbkit · Raman resonante
 
 `tbkit raman butadieno.xyz --model chn --resonant 2.33 3.5 4.0` da la actividad

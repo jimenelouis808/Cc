@@ -203,6 +203,72 @@ los ópticos. Compara perfiles relativos, no energías absolutas. En semimetales
 (grafeno) la suma en k converge mal con diferencias finitas: el grafeno tiene
 su módulo perturbativo.
 
+## Nanotubos prístinos: validación del modelo de Xu
+
+`python -m tbkit.recipes.cnt_validation salida.json` relaja cada tubo (periodo
+axial por barrido de energía), calcula sus modos en Γ y los identifica por
+simetría (invariantes bajo la rotación C_g del tubo) y por carácter
+(`modes`): la RBM por su solapamiento con la respiración pura, G⁺ y G⁻ entre
+los modos ópticos (cada átomo contra sus vecinos) por su dirección. Resultado
+con `xu_carbon`, sin ajustar nada (`validation/cnt_xu_carbon.json`):
+
+| tubo | tipo | d (nm) | RBM TB | 227/d | error | 248/d | error | G⁺ | G⁻ (dir.) | ΔG TB | ΔG ref |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| (8,0) | semic. | 0.636 | 349 | 357 | -2.1 % | 390 | -10.4 % | 1668 | 1623 (circ.) | 45 | 118 |
+| (10,0) | semic. | 0.790 | 282 | 287 | -1.8 % | 314 | -10.1 % | 1669 | 1643 (circ.) | 25 | 76 |
+| (12,0) | metálico | 0.945 | 235 | 240 | -2.3 % | 262 | -10.6 % | 1643 | 1626 (circ.) | 17 | 89 |
+| (14,0) | semic. | 1.100 | 201 | 206 | -2.6 % | 225 | -10.9 % | 1687 | 1665 (circ.) | 21 | 39 |
+| (17,0) | semic. | 1.334 | 165 | 170 | -3.3 % | 186 | -11.5 % | 1689 | 1671 (circ.) | 18 | 27 |
+| (5,5) | metálico | 0.685 | 327 | 332 | -1.3 % | 362 | -9.7 % | 1655 | 1587 (axia.) | 67 | 170 |
+| (6,6) | metálico | 0.819 | 271 | 277 | -2.4 % | 303 | -10.6 % | 1672 | 1621 (axia.) | 51 | 119 |
+| (8,8) | metálico | 1.088 | 201 | 209 | -3.6 % | 228 | -11.8 % | 1684 | 1652 (axia.) | 32 | 67 |
+| (10,10) | metálico | 1.358 | 160 | 167 | -4.0 % | 183 | -12.1 % | 1689 | 1665 (axia.) | 23 | 43 |
+| (8,2) | metálico | 0.725 | 306 | 313 | -2.1 % | 342 | -10.4 % | 1652 | 1598 (axia.) | 54 | 151 |
+| (6,3) | metálico | 0.630 | 352 | 361 | -2.3 % | 394 | -10.6 % | 1661 | 1623 (circ.) | 38 | 201 |
+
+- **RBM**: entre −1,3 y −4,0 % de 227/d (Araujo et al., PRB 77, 241403, 2008,
+  el límite sin entorno) en los once tubos; ~−11 % frente a 248/d (Jorio et
+  al., PRL 86, 1118, 2001, tubos sobre Si/SiO₂, que el entorno endurece).
+- **G**: todo el espectro va ~70–90 cm⁻¹ alto (la G del grafeno con Xu es
+  1667 cm⁻¹ frente a 1582). El desdoblamiento ΔG = G⁺ − G⁻ sale 2–5 veces más
+  pequeño que C/d² (Jorio et al., PRB 65, 155412, 2002). La dirección de G⁻
+  es la medida en semiconductores (circunferencial) y en los armchair
+  metálicos (axial), pero en metálicos falta el ablandamiento del modo LO por
+  la anomalía de Kohn, que Xu no reproduce: en esos tubos la G⁻ calculada no
+  es comparable con la medida (la línea BWF).
+
+Conclusión: la RBM y su dependencia con el diámetro son fiables; la G sirve
+para tendencias y asignaciones, no para posiciones absolutas ni para el
+desdoblamiento.
+
+## Grafeno: G, 2D y 2D′ por doble resonancia
+
+`tbkit graphene-raman --laser 1.96 2.41 2.80` (o `graphene.graphene_raman`):
+electrones del modelo π (t y β de su archivo), acoplamiento electrón–fonón
+analítico (comprobado contra una suma explícita de ΔH), fonones en toda la
+zona de Brillouin; G de tercer orden y 2D/2D′ de cuarto orden con los
+procesos ee, hh, eh y he (Thomsen y Reich 2000; Venezuela, Lazzeri y Mauri
+2011). Por defecto, fonones de GPAW (PBE, supercelda 6×6, regla acústica
+impuesta; `parameters/references/gpaw_graphene_phonons.json`); también los de
+Xu o cualquier archivo de constantes de fuerza (`validation/graphene_2d_gpaw.json`):
+
+| láser (eV) | G (cm⁻¹) | 2D | 2D′ | I(2D)/I(G) |
+|---|---|---|---|---|
+| 1,96 | 1605 | 2819 | 3287 | 9,6 |
+| 2,41 | 1605 | 2872 | 3313 | 12,0 |
+| 2,80 | 1605 | 2913 | 3327 | 13,1 |
+
+- **Dispersión de la 2D: 112 cm⁻¹/eV** (medida: ~100). El mecanismo es el
+  correcto: la 2D sale de la rama TO cerca de K, en |q − K| ≈ E_L/ħv_F.
+- **Posiciones absolutas altas** (2D a 2,41 eV: 2872 frente a ~2680 medidos;
+  G 1605 frente a 1582): son las de los fonones PBE, que subestiman la
+  anomalía de Kohn del TO en K. Con los fonones de Xu la 2D sale aún más alta
+  (~2967 cm⁻¹).
+- I(2D)/I(G) ~10 es del orden del grafeno suspendido; el valor depende de γ
+  y del sustrato (no incluido).
+- No incluye defectos (no hay banda D), excitones ni la renormalización
+  electrón–electrón de v_F.
+
 ## Fonones de Quantum ESPRESSO con intensidades de tbkit
 
 `tbkit raman estructura.xyz --model chn --modes dynmat.out` usa las

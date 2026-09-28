@@ -128,9 +128,10 @@ energía.
   fuerza en supercelda n×n, imagen mínima con pesos repartidos, D(q) con fases
   de posiciones.
 - **Fonones externos**: modos de QE en Γ (`qe.py`).
-- **No hay**: dispersión q de sistemas que no sean grafeno (CNT, cintas),
-  DOS vibracional, análisis de participación por especie, separación masa /
-  efecto químico, IR.
+- **Análisis de modos** (`modes.py`): participación por especie,
+  proyecciones cilíndricas, simetría rotacional, DOS vibracional total y
+  proyectada, masa frente a química.
+- **No hay**: dispersión q de sistemas que no sean grafeno (CNT, cintas), IR.
 
 ## 6. Polarizabilidad y Raman
 
@@ -173,17 +174,20 @@ energía.
 | Conjunto C/H/N | Ajustado a GPAW; validado en moléculas; **sin validar en nanotubos ni en carbono extendido dopado** |
 | Fonones en Γ | Correctos en método; precisión limitada por el modelo (Xu: G 1653–1667 frente a 1582 cm⁻¹; diamante 1224 frente a 1332) |
 | Raman de moléculas | Reglas de selección y tendencias fiables; intensidades absolutas orientativas |
-| Nanotubos: RBM, G, dependencia con el diámetro | **No validado** (siguiente paso) |
+| Nanotubos: RBM | **Validado** (11 tubos, −1,3 a −4,0 % de 227/d) |
+| Nanotubos: G | Tendencias y dirección de G⁻; posiciones ~+80 cm⁻¹; ΔG 2–5× pequeño; sin anomalía de Kohn |
+| Grafeno 2D (doble resonancia) | Dispersión 112 cm⁻¹/eV (exp. ~100); posiciones altas por los fonones PBE |
 | IR | **No implementado** |
 | O, B, S, P | **Sin parámetros** |
 
 ## 9. Propuesta (en este orden)
 
-1. **Validación con CNT prístinos**: ω_RBM(d) y la G (G⁺/G⁻) para zigzag,
+1. ~~**Validación con CNT prístinos**~~ hecho (README, «Nanotubos prístinos»).
+   Texto original: **Validación con CNT prístinos**: ω_RBM(d) y la G (G⁺/G⁻) para zigzag,
    armchair y quirales; errores frente a relaciones de la literatura. Con
    `xu_carbon` en celdas periódicas (sin SCC) y, para los finitos pasivados,
    `xu_chn`.
-2. **Análisis de modos** (nuevo módulo `modes.py`): participación por especie
+2. ~~**Análisis de modos**~~ hecho (`modes.py`). Texto original: **Análisis de modos** (nuevo módulo `modes.py`): participación por especie
    P_X(ν) = Σ_{i∈X} |e_i(ν)|², proyecciones radial/tangencial/axial en
    tubos, DOS vibracional total y proyectada con ensanchamiento configurable,
    y separación masa / efecto químico (recalcular con la masa del C en el
