@@ -921,6 +921,8 @@ flag -- the two are different structures, and the names must say which:
 | **Y junction** | 50 pentagons + 38 heptagons | `{6: N, 7: 6}` -- the six Gauss-Bonnet asks for |
 | **Schwarz P** | 33 pentagons + 57 heptagons | `{6: 456, 7: 24}`, no pentagons |
 | **Schwarz D** | -- | `{6: 608, 7: 96}`, no pentagons |
+| **gyroid** | -- | `{6: 816, 7: 48}`, no pentagons |
+| **super-graphene** | 89.6% placed, 11-21% non-hex | `{6: 432, 7: 24}`, bonds 1.408-1.436 Å |
 
 The bottom three are the knee route (`builders/knee.py`), and they are
 the rows where the crystalline side wins on **both** axes: a Y junction's
@@ -1356,7 +1358,7 @@ rises. But the six vertices that stop being boundary come out at
 **degree 7**: they *are* the junction's heptagons. Before the fill the
 interior carries none at all.
 
-### Schwarz D is eight of those nodes, and the budget comes for free
+### Every triply periodic surface is its net thickened, so one routine does all
 
 The D surface is the diamond lattice thickened into a wall, so its piece
 is the **four-arm node the junction already builds**. `diamond_cell_mesh`
@@ -1405,8 +1407,133 @@ close.
 **`build_knee_schwarzite` takes a `kind`, it is not a second builder.**
 `SCHWARZITE_CELLS` holds `(arms, nodes, genus)` per kind and
 `schwarzite_budget` derives `sum(6-n)` from those three alone, so adding
-a surface is a table entry plus a mesh routine of the one signature, not
-a copy of the finishing, the rescale and the census gate.
+a surface is a table entry plus its net, not a copy of the finishing, the
+rescale and the census gate.
+
+#### Only the sites are written down
+
+`SCHWARZITE_NETS` holds eight fractional coordinates per net and nothing
+else. `net_geometry` derives each node's **arm directions from its
+nearest neighbours** under the minimum image, and the bond as a fraction
+of the cell edge from the same distances, so a net cannot carry an axis
+table that disagrees with its own sites. The derivation is checked rather
+than trusted: every site of a net must come out with the same
+coordination, which is what catches a mistyped site.
+
+The srs sites are written as their construction -- Wyckoff 8a of
+I4(1)32 plus the body centring -- rather than as eight transcribed
+triples, for the same reason.
+
+#### The gyroid's node is the junction's Y, turned
+
+srs (the Laves graph, (10,3)-a) is 3-coordinate, and **three unit vectors
+with pairwise 120 deg angles sum to zero and are coplanar, with no choice
+about it.** So a gyroid node *is* the planar Y `JUNCTION_AXES` already
+holds, and the four distinct plane normals are the four <111>
+directions. The junction and the gyroid are one object at two scales, and
+a test asserts the coplanarity by the triple product rather than citing
+it.
+
+Eight of them per conventional cubic cell gives `chi = 8(2-3) = -8`,
+genus 5, budget **-48**. Measured at the shipped shape
+(`circumference=20, arm_rows=5`): **1744 atoms in a 39.0 Å cell,
+`{6: 816, 7: 48}`, bonds 1.395-1.508 Å, angles 114.7-125.3, zero
+contacts, CLEAN**, every heptagon in negative curvature, sp3 0.0%.
+
+**The gyroid wants a fatter tube than P or D, and that is its node rather
+than a preference.** Its arms leave at 120 deg against the diamond node's
+109.47, so the saddle between them is tighter. Scanned:
+
+| k | tube radius (Å) | verdict |
+|---|---|---|
+| 10, 12, 14, 22, 24 | -- | refused, the node's seams do not pair |
+| 8 | 3.05 | **broken** -- 1.324-1.722 Å |
+| 16 | 5.40 | **broken** -- 1.383-1.553 Å |
+| 18 | -- | refused: `{5: 16, 6: N, 7: 32, 8: 16}` |
+| **20** | **6.37** | **clean** -- 1.395-1.508 Å |
+
+The k=18 row is the one worth keeping: it closes at **exactly the right
+budget**, `sum(6-n) = -48`, and pays part of it with sixteen pentagons
+against sixteen octagons. A minimal surface saddles everywhere, so a
+pentagon on one is never right -- and `sum(6-n)` cannot see the
+difference. The gate is on the **census**, not on the budget, and this is
+the case that shows why it has to be.
+
+### The superstructure is the same law on a graph, and it agrees with the meshed route
+
+`build_knee_supernetwork` hangs the **node** on every vertex of a net
+instead of hanging a tube on every edge, so the rings are placed by the
+construction rather than chosen by a remesher. `super-graphene` is a
+honeycomb of tubes -- which is to say a **periodic sheet of the Y
+junctions** the same module builds.
+
+**The budget is one law reached from two directions, and they agree to
+the integer.** `supernetwork.py` derives `12*(V - E)` from
+`chi = 2*(V - E)`, one handle per independent cycle of the graph.
+`knee.node_budget` derives `6*(2 - c)` from "a node of `c` arms is a
+sphere with `c` holes". Summed over a graph the second gives
+`sum_v 6(2 - deg v) = 12V - 6*2E = 12(V - E)` -- the first. Checked
+against every entry of that catalogue (super-square -12, super-graphene
+-24, super-cubic -24, super-diamond -96, super-fcc -240, icosahedral
+cage -216), and a test pins it.
+
+Measured on `super-graphene`: `{6: N, 7: 24}` and `sum(6-n) = -24` at
+`chi = -4`, at **every** circumference from 8 to 28 and every arm length
+tried, with no pentagon and no boundary edge. The geometry is not
+shape-independent and picks the default: the bond spread runs 0.0543 Å at
+k=18 (broken) down to **0.0036 at k=22** and back to 0.0210 at k=28, so
+the shipped `(22, 5)` is a minimum rather than an edge. At it: 920 atoms,
+bonds **1.408-1.436 Å**, angles 117.5-121.6, zero contacts, every
+heptagon in negative curvature. That is the tightest geometry anything in
+this package produces after C60.
+
+#### A node comes out pure exactly when its arms balance
+
+This is the rule the whole route turns on, and it was found by measuring
+the cases that failed:
+
+| node | arms sum to | census |
+|---|---|---|
+| Y, 3 arms at 120 deg | **0** | `{6: N, 7: 6}` |
+| tetrahedral, 4 at 109.47 | **0** | `{6: N, 7: 12}` |
+| octahedral, 6 arms (Schwarz P) | **0** | `{6: N, 7: 24}` |
+| cube vertex, 3 perpendicular | (1,1,1) | never pure -- squares, pentagons or a nonagon at every shape |
+| tetrahedron vertex, 3 at 60 deg | 2.449 | does not close: the dominance trim eats the arm |
+
+An unbalanced node still pays its budget **exactly** -- the cube vertex
+reads `sum(6-n) = -6` at every shape that closes -- it just pays it in a
+different coin. So `sum(6-n)` cannot tell the two apart, and
+`net_geometry` checks the balance itself and refuses rather than
+returning a sheet with squares in it.
+
+#### So there is no finite knee superstructure, at all
+
+A convex polyhedron's vertex lies on its hull, so every edge at it points
+into the supporting half-space and their sum has a strictly positive
+component along the inward normal: it **cannot** balance. And every
+finite graph has a vertex on its convex hull. So no finite cage of knee
+nodes exists at any size, for any polyhedron -- a fact about geometry,
+not a limitation here, and a test pins both halves (no Platonic cage has
+a balanced vertex; every periodic super-net is balanced to machine zero).
+
+Measured, the cages behave exactly as that predicts. The cube closes at
+the right budget (`sum(6-n) = -48`, `chi = -8`) at twenty-nine shapes and
+at **none** of them with a pure census; the tetrahedron, octahedron,
+icosahedron and dodecahedron do not close at all. `supernetwork.py`'s
+meshed cages -- the icosahedral cage, superfullerene-C60 -- remain the
+route for a finite superstructure, and they are amorphous-walled by
+construction. That is not a gap to be closed.
+
+#### Images are enumerated, not minimum-imaged
+
+`net_geometry` derives each node's arms from its neighbours, and doing
+that under the **minimum image is wrong on a honeycomb**: two sites there
+are neighbours through more than one image -- a Y node's three partners
+are two images of the same site -- and the minimum image keeps only the
+nearest. Measured, that returned a two-armed node and read a net that
+balances perfectly as one that does not. The offsets are enumerated over
+the live axes instead. (This is the same fact `analyse/rings.py` refuses
+a too-small cell over, met from the other side.)
 
 ## A collapsed wall passes every check in this package
 

@@ -81,7 +81,11 @@ from ..builders import fullerene_mesh as fm
 from ..builders.capped_cnt import MIN_CAP_FREQ
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
-from ..builders.knee import JUNCTION_AXES, SCHWARZITE_CELLS
+from ..builders.knee import (
+    DEFAULT_SUPERNET_SHAPE,
+    JUNCTION_AXES,
+    SCHWARZITE_CELLS,
+)
 from ..builders.supernetwork import CAGES as supercages
 from ..builders.supernetwork import SUPERLATTICES as superlattices
 from ..cell import (
@@ -309,6 +313,21 @@ PRESETS: dict[str, dict[str, object]] = {
     # D216; this is its conventional cubic cell.
     "Schwarz D (knees, no pentagons)": {
         "mode_kind": "schwarzite (knees)", "knee_cell": "diamond",
+        "anneal": 0},
+    # The third minimal surface, and its node is the SAME planar Y as the
+    # junction preset below: srs is 3-coordinate, and three unit vectors
+    # at 120 deg have no choice but to be coplanar. 1744 atoms,
+    # {6: 816, 7: 48}, sum(6-n) = -48 at genus 5. It wants a fatter tube
+    # than P or D -- its arms leave at 120 deg rather than 109.47, so the
+    # saddle is tighter and every narrower cell relaxes to a broken wall.
+    "Gyroid (knees, no pentagons)": {
+        "mode_kind": "schwarzite (knees)", "knee_cell": "gyroid",
+        "anneal": 0},
+    # The same Y node repeated on a honeycomb instead of standing
+    # alone: 920 atoms, {6: 432, 7: 24}, sum(6-n) = -24 = 12(V-E), and
+    # bonds 1.408-1.436 A -- the tightest of anything this route builds.
+    "Super-graphene (knees, tubes on a honeycomb)": {
+        "mode_kind": "supernetwork (knees)", "knee_net": "super-graphene",
         "anneal": 0},
     # 536 atoms, {6: 240, 7: 6} and not one pentagon -- exactly the six
     # heptagons Gauss-Bonnet asks of a three-arm node, where the meshed
@@ -958,6 +977,8 @@ class NanocarbonGUI:
             "knee_cell", tk.StringVar(value="primitive"))
         self.var_knee_node = self._var(
             "knee_node", tk.StringVar(value="y"))
+        self.var_knee_net = self._var(
+            "knee_net", tk.StringVar(value="super-graphene"))
         self.var_j_radius = self._var("j_radius", tk.DoubleVar(value=6.0))
         self.var_j_arm = self._var("j_arm", tk.DoubleVar(value=22.0))
         self.var_j_blend = self._var("j_blend", tk.DoubleVar(value=4.0))
@@ -1292,6 +1313,11 @@ class NanocarbonGUI:
         ttk.Combobox(self.frame_knee, textvariable=self.var_knee_node,
                      values=sorted(JUNCTION_AXES), state="readonly",
                      width=10).grid(row=1, column=1, sticky="e", pady=(0, 6))
+        ttk.Label(self.frame_knee, text="Sheet net").grid(
+            row=2, column=0, sticky="w")
+        ttk.Combobox(self.frame_knee, textvariable=self.var_knee_net,
+                     values=sorted(DEFAULT_SUPERNET_SHAPE), state="readonly",
+                     width=14).grid(row=2, column=1, sticky="e", pady=(0, 6))
         ttk.Label(self.frame_knee,
                   text="A node of c arms is a sphere with c holes, so "
                        "sum(6-n) = 6(2-c) and it is paid in heptagons "
@@ -1299,7 +1325,7 @@ class NanocarbonGUI:
                        "24 for a P cell, 96 for a D one. No pentagons at "
                        "all: these surfaces saddle everywhere.",
                   foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
-                  justify="left").grid(row=2, column=0, columnspan=2,
+                  justify="left").grid(row=3, column=0, columnspan=2,
                                        sticky="w")
 
         # --- haeckelite
@@ -2203,7 +2229,8 @@ class NanocarbonGUI:
             self._schedule_estimate()
             return
 
-        if mode in ("schwarzite (knees)", "junction (knees)"):
+        if mode in ("schwarzite (knees)", "junction (knees)",
+                    "supernetwork (knees)"):
             self.frame_knee.pack(fill="x")
             # There is nothing to anneal: the census is exact before any
             # relaxation and a flip could only leave it.
@@ -3431,6 +3458,8 @@ class NanocarbonGUI:
             params = dict(kind=self.var_knee_cell.get())
         elif mode == "junction (knees)":
             params = dict(kind=self.var_knee_node.get())
+        elif mode == "supernetwork (knees)":
+            params = dict(net=self.var_knee_net.get())
         elif mode == "junction":
             params = dict(
                 kind=self.var_j_kind.get(),

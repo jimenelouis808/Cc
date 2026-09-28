@@ -105,6 +105,11 @@ SAMPLES: dict[str, Job] = {
     "junction (knees)": Job("junction (knees)",
                             {"kind": "y", "circumference": 10,
                              "arm_rows": 7}),
+    # 920 atoms, {6: 432, 7: 24}, sum(6-n) = -24 = 12(V-E) for the
+    # honeycomb, and the tightest bonds of the whole route.
+    "supernetwork (knees)": Job("supernetwork (knees)",
+                                {"net": "super-graphene",
+                                 "circumference": 10, "arm_rows": 5}),
     # strict=False, because the point of the sample is that the mode
     # builds; under strict it refuses by design and every test that
     # builds every sample would fail on it.
@@ -559,7 +564,8 @@ class TestEveryModeCanActuallyBeCalled:
     #: here. Every one of them is a builder with no `seed`.
     DETERMINISTIC = ("heptanene", "nanocone", "toroid (polyhex)",
                      "toroid (knees)", "coil (knees)",
-                     "schwarzite (knees)", "junction (knees)")
+                     "schwarzite (knees)", "junction (knees)",
+                     "supernetwork (knees)")
 
     @pytest.mark.parametrize("mode", DETERMINISTIC)
     def test_the_deterministic_modes_build(self, mode):

@@ -106,7 +106,7 @@ from collections import defaultdict
 import numpy as np
 from ase import Atoms
 
-from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D
+from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D, DEFAULT_VACUUM_2D
 
 #: Mesh edge length in units of the C-C bond. The honeycomb dual of an
 #: equilateral triangulation of edge ``a`` has bonds of ``a / sqrt(3)``, so
@@ -1979,17 +1979,137 @@ def describe_knee_junction(atoms: Atoms) -> str:
     )
 
 
-#: The eight sites of the conventional cubic diamond cell, as fractions
-#: of its edge, and which way their arms point: the A sublattice looks
-#: out along +(1,1,1) and its family, the B sublattice along the
-#: negatives. That is the diamond structure, and it is why a node of four
-#: arms at 109.47 deg is the piece a Schwarz D cell is made of.
-DIAMOND_SITES: tuple[tuple[tuple[float, float, float], int], ...] = (
-    ((0.00, 0.00, 0.00), +1), ((0.00, 0.50, 0.50), +1),
-    ((0.50, 0.00, 0.50), +1), ((0.50, 0.50, 0.00), +1),
-    ((0.25, 0.25, 0.25), -1), ((0.25, 0.75, 0.75), -1),
-    ((0.75, 0.25, 0.75), -1), ((0.75, 0.75, 0.25), -1),
-)
+def _srs_sites() -> np.ndarray:
+    """The eight srs sites of a conventional cubic cell.
+
+    Wyckoff 8a of I4(1)32 plus the body centring. Written as the
+    construction rather than as eight transcribed triples, so it cannot
+    be mistyped -- and the net's own properties are then checked rather
+    than asserted: every site comes out with exactly three neighbours at
+    ``a*sqrt(2)/4``, their unit vectors summing to zero with every
+    pairwise cosine ``-1/2``.
+    """
+    base = np.array([[1, 1, 1], [7, 3, 5], [3, 5, 7], [5, 7, 3]],
+                    dtype=float) / 8.0
+    return np.vstack([base, (base + 0.5) % 1.0])
+
+
+#: The skeletal nets, as site positions in fractions of the conventional
+#: cubic cell. **Only the sites are given**: each node's arm directions
+#: and the cell's relation to the arm length are derived from the net by
+#: :func:`net_geometry`, so a new surface is eight numbers rather than
+#: eight numbers and a hand-written axis table that can disagree with
+#: them.
+#:
+#: * ``diamond`` is the diamond net, four arms at 109.47 deg, and its
+#:   thickened wall is **Schwarz D**.
+#: * ``gyroid`` is the srs net (the Laves graph, (10,3)-a), three arms at
+#:   120 deg -- coplanar, because three unit vectors with pairwise 120 deg
+#:   angles have no choice -- so a gyroid node **is** the planar Y the
+#:   junction builds, and its thickened wall is the **gyroid**.
+#: Every net is ``(sites, cell)`` in units of its own **bond**, which is
+#: the one length the knee route fixes: a strut is two arms meeting, so
+#: the bond is ``2 * (arm_rows - 1) * spacing`` and everything else
+#: follows. A zero cell component marks an aperiodic axis, the convention
+#: :func:`~nanocarbon_lab.builders.fullerene_mesh.minimum_image` already
+#: uses, so a 2D net gets vacuum where a 3D one repeats.
+SCHWARZITE_NETS: dict[str, tuple[np.ndarray, np.ndarray]] = {
+    "diamond": (
+        np.array([
+            [0.00, 0.00, 0.00], [0.00, 0.50, 0.50],
+            [0.50, 0.00, 0.50], [0.50, 0.50, 0.00],
+            [0.25, 0.25, 0.25], [0.25, 0.75, 0.75],
+            [0.75, 0.25, 0.75], [0.75, 0.75, 0.25],
+        ]) * (4.0 / np.sqrt(3.0)),
+        np.full(3, 4.0 / np.sqrt(3.0)),
+    ),
+    "gyroid": (_srs_sites() * (4.0 / np.sqrt(2.0)),
+               np.full(3, 4.0 / np.sqrt(2.0))),
+    # The 2D nets: a honeycomb of tubes is a sheet of Y junctions, and a
+    # square one a sheet of planar crossings. Both repeat in x and y and
+    # have vacuum in z.
+    "super-graphene": (
+        np.array([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0],
+                  [np.sqrt(3.0) / 2.0, 1.5, 0.0],
+                  [np.sqrt(3.0) / 2.0, 2.5, 0.0]]),
+        np.array([np.sqrt(3.0), 3.0, 0.0]),
+    ),
+    "super-square": (np.zeros((1, 3)), np.array([1.0, 1.0, 0.0])),
+}
+
+
+def _wrap(delta: np.ndarray, cell: np.ndarray) -> np.ndarray:
+    """Shortest image of ``delta``, leaving zero-length axes alone.
+
+    A zero cell component means the axis does not repeat, and dividing by
+    it would give ``nan`` for every displacement in the structure -- the
+    same trap ``relax_shell``'s periodic tree has.
+    """
+    live = np.asarray(cell) > 0.0
+    out = np.array(delta, dtype=float, copy=True)
+    out[..., live] -= (np.asarray(cell)[live]
+                       * np.round(out[..., live] / np.asarray(cell)[live]))
+    return out
+
+
+def net_geometry(net: str) -> tuple[np.ndarray, list[np.ndarray], np.ndarray]:
+    """``(sites, axes per site, cell)``, all in units of the net's bond.
+
+    The arms point at the nearest neighbours under the minimum image, so
+    nothing about a net is written twice: only its sites and its cell go
+    in the table, and the coordination, the directions and the bond come
+    out of them.
+
+    Two properties are **checked rather than asserted**, because each
+    catches a different mistake:
+
+    * Every site must have the same coordination. A diamond site with
+      three neighbours, or a gyroid site with four, is a mistyped site.
+    * **Every node's arms must sum to zero.** That is what makes it a node
+      of a minimal surface rather than a bend, and measured, it is exactly
+      the condition under which the node's census comes out pure -- see
+      :func:`build_knee_supernetwork` for the evidence and for what it
+      rules out.
+
+    Raises
+    ------
+    ValueError
+        If the coordination varies, or a node's arms do not balance.
+    """
+    sites, cell = SCHWARZITE_NETS[net]
+    # **Images are enumerated, not minimum-imaged.** Two sites of a
+    # honeycomb are neighbours through more than one image -- A's three
+    # partners are two images of the same site -- and the minimum image
+    # keeps only the nearest of them, so a Y node came out with two arms
+    # and a net that balances read as one that does not.
+    live = np.asarray(cell) > 0.0
+    steps = [(-1, 0, 1) if x else (0,) for x in live]
+    offsets = np.array([[a, b, c] for a in steps[0] for b in steps[1]
+                        for c in steps[2]], dtype=float) * np.asarray(cell)
+    separations = (sites[None, :, None, :] + offsets[None, None, :, :]
+                   - sites[:, None, None, :])
+    distance = np.linalg.norm(separations, axis=3)
+    distance[distance < 1e-9] = np.inf                  # a site and itself
+    bond = float(distance.min())
+    axes: list[np.ndarray] = []
+    for i in range(len(sites)):
+        partner, image = np.where(distance[i] < bond * 1.05)
+        directions = separations[i, partner, image]
+        axes.append(directions / np.linalg.norm(directions, axis=1)[:, None])
+    coordination = {len(a) for a in axes}
+    if len(coordination) != 1:
+        raise ValueError(
+            f"the {net} net has sites of coordination {sorted(coordination)}, "
+            "so its sites are not all the same node."
+        )
+    worst = max(float(np.linalg.norm(a.sum(axis=0))) for a in axes)
+    if worst > 1e-9:
+        raise ValueError(
+            f"the {net} net has a node whose arms do not balance "
+            f"(|sum| = {worst:.4f}). Such a node is pulled, and measured, "
+            "its census never comes out hexagons-plus-heptagons."
+        )
+    return sites, axes, cell
 
 #: How far two glued mouths may miss each other, in Å, before the cell is
 #: refused. A mouth is a ring of the mesh edge, ~2.5 Å, so this is well
@@ -1997,45 +2117,59 @@ DIAMOND_SITES: tuple[tuple[tuple[float, float, float], int], ...] = (
 MOUTH_REGISTER = 0.6
 
 
-def diamond_cell_mesh(
+def net_cell_mesh(
+    net: str,
     circumference: int,
     arm_rows: int,
     tube_radius: float,
     spacing: float,
 ) -> tuple[np.ndarray, list[tuple[int, int, int]], float]:
-    """One Schwarz D cell: eight tetrahedral nodes, closed on the 3-torus.
+    """One cell of a triply periodic surface, closed on the 3-torus.
 
-    The D surface is the diamond lattice thickened into a wall, so its
-    piece is the four-arm node :func:`node_mesh` already builds -- the
-    same construction as :func:`primitive_node_mesh`'s six-arm one, with
-    the nodes kept separate and glued rather than trimmed against each
-    other. Each arm is **half** the strut to a neighbour, so two mouths
-    meeting set the cell: ``2 * reach`` is the diamond bond ``a*sqrt(3)/4``
-    and therefore ``a = 8 * reach / sqrt(3)``.
+    A minimal surface is its skeletal net thickened into a wall, so its
+    piece is the node :func:`node_mesh` already builds -- the same
+    construction as :func:`primitive_node_mesh`'s six-arm one, with the
+    nodes kept separate and glued rather than trimmed against each other.
+    Each arm is **half** the strut to a neighbour, so two mouths meeting
+    set the cell: ``2 * reach`` is the net's own bond, and the cell edge
+    follows from it. Nothing here is fitted.
+
+    ==========  ====================  =====  =======  ============
+    net         node                  chi    genus    ``sum(6-n)``
+    ==========  ====================  =====  =======  ============
+    ``diamond`` 4 arms at 109.47 deg  -16    9        -96
+    ``gyroid``  3 arms at 120 deg     -8     5        -48
+    ==========  ====================  =====  =======  ============
+
+    A gyroid node **is** the planar Y :data:`JUNCTION_AXES` already holds,
+    only turned: three unit vectors with pairwise 120 deg angles sum to
+    zero and are therefore coplanar, with no choice about it. So the
+    junction and the gyroid are the same object at two scales, and the
+    four distinct plane normals are the four <111> directions.
 
     **The budget is fixed before anything is built.** Gluing two boundary
     circles adds nothing to ``chi`` -- a circle has ``chi = 0`` -- so a
-    cell of ``n`` nodes of ``c`` arms has ``chi = n(2-c)``, here
-    ``8 * (2-4) = -16``, genus 9, and ``sum(6-n) = 6*chi = -96``. Measured
-    at ``circumference=10, arm_rows=5``: 1408 triangles in a 39.4 Å cell,
-    census ``{6: 592, 7: 96}``, ``sum(6-n) = -96``, no boundary edge and
-    none shared by other than two faces. Ninety-six heptagons and nothing
-    else -- no pentagon, which a minimal surface can have none of, and no
-    square or octagon either.
+    cell of ``n`` nodes of ``c`` arms has ``chi = n(2-c)``, and
+    ``sum(6-n) = 6*chi``. Measured on Schwarz D at
+    ``circumference=10, arm_rows=5``: 1408 triangles in a 39.4 Å cell,
+    census ``{6: 592, 7: 96}``, no boundary edge and none shared by other
+    than two faces -- ninety-six heptagons and nothing else, no pentagon
+    (which a minimal surface can have none of) and no square or octagon.
 
-    **This is the conventional cell, not the primitive one.** The
-    rhombohedral primitive cell holds two nodes and is genus 3, which is
-    what Lenosky's D216 is; it is not orthorhombic, and
+    **These are conventional cells, not primitive ones.** A D primitive
+    cell holds two nodes and is genus 3, which is what Lenosky's D216 is;
+    it is rhombohedral, and
     :func:`~nanocarbon_lab.builders.fullerene_mesh.minimum_image` takes an
     orthorhombic box only, so a bond across its seam would read as a
     cell-length stretch. The cubic cell is four primitive cells of the
-    same surface, and it is the one that can be measured correctly.
+    same surface, and it is the one that can be measured correctly. The
+    gyroid's is two, its net being body-centred.
 
-    **Not every circumference works, and the node says so first.** At
+    **Not every circumference works, and the node says so first.** On D at
     ``circumference=12`` the cell closes with ``{6: N, 9: 32}`` --
     nonagons, which is the tetrahedral node's own census at that size
     rather than anything the gluing did. :func:`clean_schwarzite_shapes`
-    with ``kind="diamond"`` is the list that comes out exact.
+    is the list that comes out exact.
 
     Returns ``(vertices, triangles, cell)`` with the cell **closed**: no
     rim, so :func:`mesh_census` reads every vertex.
@@ -2046,20 +2180,57 @@ def diamond_cell_mesh(
         If a node does not close, the mouths do not come out in pairs, or
         two glued mouths are out of register.
     """
-    axes = JUNCTION_AXES["tetrahedral"]
-    reach = (arm_rows - 1) * spacing
-    cell = 8.0 * reach / np.sqrt(3.0)
+    sites, axes_per_site, cell_in_bonds = net_geometry(net)
+    bond = 2.0 * (arm_rows - 1) * spacing
+    cell = cell_in_bonds * bond
+    vertices, tris = glue_nodes(sites * bond, axes_per_site, circumference,
+                                arm_rows, tube_radius, spacing, cell=cell)
+    return vertices, tris, cell
+
+
+def glue_nodes(
+    centres: np.ndarray,
+    axes_per_node,
+    circumference: int,
+    arm_rows: int,
+    tube_radius: float,
+    spacing: float,
+    cell=None,
+) -> tuple[np.ndarray, list[tuple[int, int, int]]]:
+    """Build one node per centre and weld every mouth to its partner.
+
+    The operation behind both a periodic cell and a finite cage of tubes,
+    and the only difference between them is ``cell``: given, mouths are
+    matched under the minimum image so a strut may leave one face and
+    enter the opposite one; left ``None``, they are matched as they lie.
+    ``cell`` is a three-vector of edge lengths, a zero component marking
+    an axis that does not repeat, so a 2D net gets vacuum in z.
+
+    Every strut is two arms meeting, so the caller has already placed the
+    centres ``2 * (arm_rows - 1) * spacing`` apart. Nothing here fits a
+    length; a pair of mouths further apart than :data:`MOUTH_REGISTER`
+    raises rather than being stretched to meet.
+
+    Returns ``(vertices, triangles)``, closed.
+
+    Raises
+    ------
+    ValueError
+        If a node does not close, the mouths do not come out in pairs, or
+        two glued mouths are out of register.
+    """
+    centres = np.asarray(centres, dtype=float)
 
     verts: list[list[float]] = []
     tris: list[tuple[int, int, int]] = []
-    for fraction, sign in DIAMOND_SITES:
-        local, local_tris = node_mesh(sign * axes, circumference, arm_rows,
+    for centre, axes in zip(centres, axes_per_node, strict=True):
+        local, local_tris = node_mesh(axes, circumference, arm_rows,
                                       tube_radius, spacing)
         local_tris = fill_triangular_holes(local_tris)
         local, local_tris = collapse_degree_three(local, local_tris)
         local, local_tris = collapse_degree_four(local, local_tris)
         offset = len(verts)
-        verts.extend((local + np.asarray(fraction) * cell).tolist())
+        verts.extend((local + centre).tolist())
         tris.extend((x + offset, y + offset, z + offset)
                     for x, y, z in local_tris)
     vertices = np.asarray(verts, dtype=float)
@@ -2067,21 +2238,22 @@ def diamond_cell_mesh(
     cycles = _boundary_cycles(tris)
     if cycles is None:
         raise ValueError("a node's boundary is not manifold.")
-    wanted = len(DIAMOND_SITES) * len(axes)
+    wanted = sum(len(a) for a in axes_per_node)
     if len(cycles) != wanted:
         raise ValueError(
-            f"the cell came out with {len(cycles)} mouths where {wanted} "
-            "were expected, so a node did not close."
+            f"it came out with {len(cycles)} mouths where {wanted} were "
+            "expected, so a node did not close."
         )
 
     find, union = _union_find(len(vertices))
-    centres = np.array([vertices[c].mean(axis=0) for c in cycles])
+    mouths = np.array([vertices[c].mean(axis=0) for c in cycles])
     paired: set[int] = set()
     for i in range(len(cycles)):
         if i in paired:
             continue
-        delta = centres - centres[i]
-        delta -= cell * np.round(delta / cell)
+        delta = mouths - mouths[i]
+        if cell is not None:
+            delta = _wrap(delta, cell)
         distance = np.linalg.norm(delta, axis=1)
         distance[i] = np.inf
         for j in paired:
@@ -2097,7 +2269,9 @@ def diamond_cell_mesh(
         here = vertices[cycles[i]]
         # The partner may be in a neighbouring cell; carry the translation
         # that brought its centre into register, not a wrap of each vertex.
-        shift = cell * np.round((centres[i] - centres[j]) / cell)
+        shift = (0.0 if cell is None
+                 else (mouths[i] - mouths[j]) - _wrap(mouths[i] - mouths[j],
+                                                      cell))
         there = vertices[cycles[j]] + shift
         spread = np.linalg.norm(here[:, None, :] - there[None, :, :], axis=2)
         nearest = spread.argmin(axis=1)
@@ -2119,8 +2293,7 @@ def diamond_cell_mesh(
     live = sorted({x for t in tris for x in t})
     relabel = {x: i for i, x in enumerate(live)}
     return (vertices[live],
-            [(relabel[a], relabel[b], relabel[c]) for a, b, c in tris],
-            float(cell))
+            [(relabel[a], relabel[b], relabel[c]) for a, b, c in tris])
 
 
 #: The schwarzite cells this route builds, as (mesh routine, node arms,
@@ -2131,6 +2304,7 @@ SCHWARZITE_CELLS: dict[str, tuple[int, int, int]] = {
     #     arms, nodes, genus
     "primitive": (6, 1, 3),
     "diamond": (4, 8, 9),
+    "gyroid": (3, 8, 5),
 }
 
 #: ``(circumference, arm_rows)`` per cell kind: the shape whose relaxed
@@ -2140,6 +2314,12 @@ SCHWARZITE_CELLS: dict[str, tuple[int, int, int]] = {
 DEFAULT_SCHWARZITE_SHAPE: dict[str, tuple[int, int]] = {
     "primitive": (20, 9),
     "diamond": (18, 5),
+    # The gyroid wants a **fatter** tube than the other two, and that is
+    # its node rather than a preference: its arms leave at 120 deg against
+    # the diamond node's 109.47, so the saddle between them is tighter.
+    # Measured, every narrower cell relaxes to a broken wall -- k=8 (a
+    # 3.05 A tube) reaches 1.722 A bonds and k=16 (5.40 A) 1.553.
+    "gyroid": (20, 5),
 }
 
 
@@ -2147,9 +2327,10 @@ def _cell_mesh(kind: str, circumference: int, arm_rows: int,
                tube_radius: float, spacing: float):
     """The mesh routine for a cell kind, both of one signature."""
     if kind == "primitive":
-        return primitive_node_mesh(circumference, arm_rows, tube_radius,
-                                   spacing)
-    return diamond_cell_mesh(circumference, arm_rows, tube_radius, spacing)
+        vertices, tris, edge = primitive_node_mesh(circumference, arm_rows,
+                                                   tube_radius, spacing)
+        return vertices, tris, np.full(3, float(edge))
+    return net_cell_mesh(kind, circumference, arm_rows, tube_radius, spacing)
 
 
 def schwarzite_budget(kind: str) -> int:
@@ -2264,7 +2445,8 @@ def build_knee_schwarzite(
     tube_radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / circumference))
     arms, nodes, genus = SCHWARZITE_CELLS[kind]
     budget = schwarzite_budget(kind)
-    surface = "Schwarz P" if kind == "primitive" else "Schwarz D"
+    surface = {"primitive": "Schwarz P", "diamond": "Schwarz D",
+               "gyroid": "gyroid"}[kind]
     try:
         vertices, tris, cell = _cell_mesh(kind, circumference, arm_rows,
                                           tube_radius, spacing)
@@ -2310,7 +2492,8 @@ def build_knee_schwarzite(
         ring_counts[len(ring)] = ring_counts.get(len(ring), 0) + 1
 
     atoms = Atoms(symbols=["C"] * len(positions), positions=positions,
-                  cell=[cell, cell, cell], pbc=(True, True, True))
+                  cell=list(np.asarray(cell, dtype=float)),
+                  pbc=(True, True, True))
     atoms.wrap()
     atoms.info.update({
         "builder": "knee_schwarzite",
@@ -2324,7 +2507,8 @@ def build_knee_schwarzite(
         "ring_budget": int(budget),
         "circumference": int(circumference),
         "arm_rows": int(arm_rows),
-        "cell_length": round(float(cell), 3),
+        "cell_length": round(float(np.asarray(cell)[0]), 3),
+        "cell_lengths": [round(float(x), 3) for x in np.asarray(cell)],
         "tube_radius": round(float(tube_radius * scale), 3),
         "ring_counts": dict(sorted(ring_counts.items())),
         "ring_deficit": int(sum((6 - s) * c for s, c in ring_counts.items())),
@@ -2345,6 +2529,198 @@ def build_knee_schwarzite(
         "geometry": geometry_report(positions, sorted(bonds), box=cell),
     })
     return atoms
+
+
+#: ``(circumference, arm_rows)`` per super-net, as for the schwarzites.
+DEFAULT_SUPERNET_SHAPE: dict[str, tuple[int, int]] = {
+    # Measured across k = 8 to 28: the census is exact at every one of
+    # them and the **geometry** is not. The bond spread runs 0.0543 A at
+    # k=18 (broken) down to 0.0036 at k=22 and back up to 0.0210 at k=28,
+    # so this is a minimum rather than an edge.
+    "super-graphene": (22, 5),
+}
+
+
+def build_knee_supernetwork(
+    net: str = "super-graphene",
+    circumference: int | None = None,
+    arm_rows: int | None = None,
+    bond: float = CC_BOND,
+    vacuum: float = DEFAULT_VACUUM_2D,
+    relax: bool = True,
+    relax_iterations: int = 3000,
+) -> Atoms:
+    """A periodic sheet of nanotubes, one knee node at every net vertex.
+
+    :func:`~nanocarbon_lab.builders.supernetwork.build_supernetwork` hangs
+    a meshed tube on every edge of a graph and lets the remesher choose
+    the rings; this hangs the **node** on every vertex, so the rings are
+    placed by the construction. ``super-graphene`` is a honeycomb of
+    tubes -- which is to say a periodic sheet of the Y junctions
+    :func:`build_knee_junction` builds, one on each of the four sites of
+    the rectangular cell.
+
+    **The budget is the same law as everywhere else, and it agrees with
+    the meshed route's independently.** A node of ``c`` arms is a sphere
+    with ``c`` holes, so summed over a graph
+    ``sum_v 6(2 - deg v) = 12V - 6*2E = 12(V - E)`` -- which is exactly
+    ``SuperGraph.ring_budget``, reached there from ``chi = 2(V - E)``,
+    one handle per independent cycle. Checked against every entry of that
+    catalogue, the two agree to the integer.
+
+    Measured on ``super-graphene`` at the shipped shape: ``{6: N, 7: 24}``
+    and ``sum(6-n) = -24`` at ``chi = -4``, at **every** circumference
+    from 8 to 24 and every arm length tried, with no pentagon and no
+    boundary edge.
+
+    Parameters
+    ----------
+    net
+        A key of :data:`SCHWARZITE_NETS` whose cell has an aperiodic
+        axis. Only ``super-graphene`` closes; see **Raises**.
+    circumference, arm_rows
+        Mesh vertices around each arm and rows along it. Left out, the
+        shape that measured best for this net.
+    bond
+        C-C length (Å).
+    vacuum
+        Padding along the aperiodic axis (Å).
+    relax, relax_iterations
+        Whether to relax with the valence force field, under the minimum
+        image convention in the plane.
+
+    Returns
+    -------
+    ase.Atoms
+        Periodic in the plane, finite across it.
+
+    Raises
+    ------
+    ValueError
+        If the net is unknown or is not a sheet, or if the shape does not
+        close. ``super-square`` is the case worth knowing: it is a sheet
+        of **planar crossings**, and a planar four-arm node closes a
+        tunnel through its own corner welds -- the same reason a planar X
+        is absent from :data:`JUNCTION_AXES`. No shape tried closes it.
+    """
+    if net not in SCHWARZITE_NETS:
+        raise ValueError(
+            f"unknown net {net!r}; this route holds {sorted(SCHWARZITE_NETS)}."
+        )
+    sites, axes_per_site, cell_in_bonds = net_geometry(net)
+    if bool(np.all(np.asarray(cell_in_bonds) > 0.0)):
+        raise ValueError(
+            f"{net!r} repeats in all three directions, so it is a "
+            "schwarzite cell rather than a sheet. Build it with "
+            "build_knee_schwarzite(kind=...)."
+        )
+    default_k, default_rows = DEFAULT_SUPERNET_SHAPE.get(net, (14, 5))
+    circumference = default_k if circumference is None else int(circumference)
+    arm_rows = default_rows if arm_rows is None else int(arm_rows)
+
+    arms = len(axes_per_site[0])
+    nodes = len(sites)
+    budget = nodes * node_budget(arms)
+    spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+    tube_radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / circumference))
+    try:
+        vertices, tris, cell = net_cell_mesh(net, circumference, arm_rows,
+                                             tube_radius, spacing)
+        vertices, tris = collapse_degree_three(vertices, tris)
+    except (ValueError, StopIteration, KeyError) as problem:
+        raise ValueError(
+            f"circumference {circumference} with {arm_rows}-row arms does "
+            f"not close as a {net} sheet ({problem})."
+        ) from problem
+
+    census, _, broken = mesh_census(vertices, tris)
+    deficit = sum((6 - size) * count for size, count in census.items())
+    if broken or set(census) - {6, 7} or deficit != budget:
+        raise ValueError(
+            f"circumference {circumference} with {arm_rows}-row arms gives "
+            f"the census {dict(sorted(census.items()))} and sum(6-n) = "
+            f"{deficit:+d}, not the hexagons-plus-{-budget}-heptagons a "
+            f"sheet of {nodes} nodes of {arms} arms must have."
+        )
+
+    from .capped_cnt import geometry_report
+    from .fullerene_mesh import dual_honeycomb, minimum_image, relax_shell
+
+    # A zero component marks the axis that does not repeat, so the same
+    # box serves the dual, the rescale and the relaxation.
+    box = np.asarray(cell, dtype=float)
+    positions, bonds, rings = dual_honeycomb(
+        (vertices, np.asarray(tris, dtype=int)), box=box)
+    pairs = np.asarray(sorted(bonds), dtype=int)
+    raw = np.array([np.linalg.norm(minimum_image(positions[j] - positions[i],
+                                                 box))
+                    for i, j in pairs])
+    scale = bond / float(raw.mean())
+    positions, box = positions * scale, box * scale
+    if relax:
+        positions = relax_shell(positions, bonds, equilibrium=bond,
+                                max_iterations=relax_iterations, box=box)
+
+    ring_counts: dict[int, int] = {}
+    for ring in rings:
+        ring_counts[len(ring)] = ring_counts.get(len(ring), 0) + 1
+
+    from ..analyse.curvature import disclination_check
+    check = disclination_check(positions, rings, sorted(bonds), box=box)
+
+    thickness = float(positions[:, 2].max() - positions[:, 2].min())
+    edges = np.where(box > 0.0, box, thickness + 2.0 * vacuum)
+    atoms = Atoms(symbols=["C"] * len(positions), positions=positions,
+                  cell=list(edges), pbc=tuple(bool(x) for x in box > 0.0))
+    atoms.center(axis=2)
+    atoms.wrap()
+    atoms.info.update({
+        "builder": "knee_supernetwork",
+        "structure_type": "supernetwork",
+        "kind": net,
+        "arms": int(arms),
+        "nodes": int(nodes),
+        "euler": int(budget // 6),
+        "ring_budget": int(budget),
+        "circumference": int(circumference),
+        "arm_rows": int(arm_rows),
+        "cell_lengths": [round(float(x), 3) for x in edges],
+        "tube_radius": round(float(tube_radius * scale), 3),
+        "strut_length": round(float(2.0 * (arm_rows - 1) * spacing * scale), 3),
+        "ring_counts": dict(sorted(ring_counts.items())),
+        "ring_deficit": int(sum((6 - s) * c for s, c in ring_counts.items())),
+        "mesh_census": dict(sorted(census.items())),
+        "pentagons": int(ring_counts.get(5, 0)),
+        "disclination_check": check,
+        "disclinations_placed": check["agreement"],
+        "rings": [[int(x) for x in ring] for ring in rings],
+        "bonds": sorted(bonds),
+        "relaxed": bool(relax),
+        "geometry": geometry_report(positions, sorted(bonds), box=box),
+    })
+    return atoms
+
+
+def describe_knee_supernetwork(atoms: Atoms) -> str:
+    """One line: the sheet, its census and whether it is the exact one."""
+    info = atoms.info
+    counts = info.get("ring_counts", {})
+    census = ", ".join(f"{s}:{c}" for s, c in sorted(counts.items()))
+    mesh = info.get("mesh_census", {})
+    budget = int(info.get("ring_budget", 0))
+    exact = set(mesh) <= {6, 7} and mesh.get(7, 0) == -budget
+    verdict = ("exactly the heptagons 12(V-E) asks for and nothing else"
+               if exact else "not the exact census")
+    lengths = info.get("cell_lengths", [0.0, 0.0, 0.0])
+    return (
+        f"knee supernetwork ({info.get('kind', '?')}): {len(atoms)} atoms, "
+        f"{info.get('nodes', 0)} nodes of {info.get('arms', 0)} arms, cell "
+        f"{lengths[0]:.1f} x {lengths[1]:.1f} Å, struts "
+        f"{info.get('strut_length', 0):.1f} Å of radius "
+        f"{info.get('tube_radius', 0):.2f}, rings {census}, sum(6-n) = "
+        f"{info.get('ring_deficit', 0):+d} against a budget of {budget:+d}; "
+        f"{verdict}."
+    )
 
 
 def describe_knee_schwarzite(atoms: Atoms) -> str:

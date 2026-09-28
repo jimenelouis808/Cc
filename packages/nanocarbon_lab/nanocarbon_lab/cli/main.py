@@ -59,6 +59,7 @@ from ..builders import (
     build_knee_coil,
     build_knee_junction,
     build_knee_schwarzite,
+    build_knee_supernetwork,
     build_knee_toroid,
     build_multiwall_cnt,
     build_nano_onion,
@@ -73,7 +74,11 @@ from ..builders import (
     build_toroid,
 )
 from ..builders.haeckelite import PATTERNS as HAECKELITE_PATTERNS
-from ..builders.knee import JUNCTION_AXES, SCHWARZITE_CELLS
+from ..builders.knee import (
+    DEFAULT_SUPERNET_SHAPE,
+    JUNCTION_AXES,
+    SCHWARZITE_CELLS,
+)
 from ..builders.periodic_coil import LITERATURE_RATIO as PERIODIC_COIL_RATIO
 from ..builders.supernetwork import CAGES, SUPERLATTICES
 from ..cell import (
@@ -1193,6 +1198,32 @@ def _cmd_junction_knees(args):
           f"{info['arms']}")
     print(f"  mouths      = {len(info['rim_atoms'])} two-coordinate atoms; a "
           "junction is open at its arms, as a nanocone is at its base")
+    return 0
+
+
+def _cmd_supernetwork_knees(args):
+    atoms = build_knee_supernetwork(
+        net=args.net, circumference=args.circumference,
+        arm_rows=args.arm_rows, bond=args.bond, vacuum=args.vacuum,
+        relax=not args.no_relax,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    lengths = info["cell_lengths"]
+    print(f"  sheet       = {info['nodes']} nodes of {info['arms']} arms, "
+          f"cell {lengths[0]:.1f} x {lengths[1]:.1f} A, chi = {info['euler']}")
+    print(f"  struts      = {info['strut_length']:.1f} A of radius "
+          f"{info['tube_radius']:.2f} A")
+    print(f"  wall        = {dict(sorted(info['ring_counts'].items()))}, "
+          f"sum(6-n) = {info['ring_deficit']:+d} against a budget of "
+          f"{info['ring_budget']:+d}")
+    verdict = ("none, which is what a saddle must have"
+               if not info["pentagons"] else f"{info['pentagons']}")
+    print(f"  pentagons   = {verdict}")
+    print("  law         = summed over a graph, sum_v 6(2 - deg v) = "
+          f"12(V - E) = {info['ring_budget']:+d} -- the same number "
+          "SuperGraph.ring_budget reaches from chi = 2(V - E)")
     return 0
 
 
@@ -2340,8 +2371,9 @@ def build_parser() -> argparse.ArgumentParser:
     sk.add_argument("--kind", choices=sorted(SCHWARZITE_CELLS),
                     default="primitive",
                     help="A P cell is one six-arm node; a D cell is eight "
-                         "tetrahedral nodes on the diamond lattice, genus "
-                         "9 and a budget of -96.")
+                         "tetrahedral nodes on the diamond lattice, genus 9 "
+                         "and a budget of -96; a gyroid is eight PLANAR Y "
+                         "nodes on the srs net, genus 5 and -48.")
     sk.add_argument("--circumference", type=int, default=None,
                     help="Mesh vertices around each arm. Left out, the shape "
                          "that measured best for this kind is used.")
@@ -2387,6 +2419,33 @@ def build_parser() -> argparse.ArgumentParser:
     _add_doping_arguments(
         jk, seed_help="Seed for dopant placement; the node itself is exact.")
     jk.set_defaults(func=_cmd_junction_knees)
+
+    nk = sub.add_parser(
+        "supernetwork-knees",
+        help="A periodic sheet of nanotubes with a knee node at every net "
+             "vertex: hexagons and exactly the heptagons 12(V-E) asks for, "
+             "and NO pentagons. super-graphene is a honeycomb of tubes, "
+             "which is a periodic sheet of Y junctions.",
+    )
+    nk.add_argument("--net", choices=sorted(DEFAULT_SUPERNET_SHAPE),
+                    default="super-graphene",
+                    help="The skeletal net the sheet hangs on.")
+    nk.add_argument("--circumference", type=int, default=None,
+                    help="Mesh vertices around each strut. Left out, the "
+                         "shape that measured best for this net.")
+    nk.add_argument("--arm-rows", type=int, default=None, dest="arm_rows",
+                    help="Rows along each arm; a strut is two of them.")
+    nk.add_argument("--bond", type=float, default=1.42)
+    nk.add_argument("--vacuum", type=float, default=15.0)
+    nk.add_argument("--no-relax", action="store_true",
+                    help="Skip the force field. The census is set by the "
+                         "mesh, so this changes the geometry and nothing "
+                         "else.")
+    nk.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        nk, seed_help="Seed for dopant placement; the sheet itself is exact.")
+    nk.set_defaults(func=_cmd_supernetwork_knees)
 
     hp = sub.add_parser(
         "heptanene",

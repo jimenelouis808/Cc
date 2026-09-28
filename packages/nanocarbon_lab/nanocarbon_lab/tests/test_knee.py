@@ -25,6 +25,7 @@ from nanocarbon_lab.builders.knee import (
     build_knee_coil,
     build_knee_junction,
     build_knee_schwarzite,
+    build_knee_supernetwork,
     build_knee_toroid,
     clean_circumferences,
     clean_junction_shapes,
@@ -35,12 +36,14 @@ from nanocarbon_lab.builders.knee import (
     describe_knee_coil,
     describe_knee_junction,
     describe_knee_schwarzite,
+    describe_knee_supernetwork,
     describe_knee_toroid,
-    diamond_cell_mesh,
     fill_triangular_holes,
     knee_path_mesh,
     knee_polygon_mesh,
     mesh_census,
+    net_cell_mesh,
+    net_geometry,
     node_budget,
     node_mesh,
     primitive_node_mesh,
@@ -671,7 +674,7 @@ class TestTheSchwarzDCellIsEightTetrahedralNodes:
         bond = 1.42
         spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
         radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 18))
-        vertices, tris, cell = diamond_cell_mesh(18, 5, radius, spacing)
+        vertices, tris, cell = net_cell_mesh("diamond", 18, 5, radius, spacing)
         census, _, broken = mesh_census(vertices, tris)
         # No edge shared by other than two faces: a closed 3-torus cell.
         assert broken == 0
@@ -685,7 +688,7 @@ class TestTheSchwarzDCellIsEightTetrahedralNodes:
         bond = 1.42
         spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
         radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 18))
-        _, _, cell = diamond_cell_mesh(18, 5, radius, spacing)
+        _, _, cell = net_cell_mesh("diamond", 18, 5, radius, spacing)
         reach = (5 - 1) * spacing
         assert cell == pytest.approx(8.0 * reach / np.sqrt(3.0))
 
@@ -714,8 +717,9 @@ class TestTheSchwarzDCellIsEightTetrahedralNodes:
 
     def test_an_unknown_kind_names_the_ones_that_exist(self):
         with pytest.raises(ValueError) as excinfo:
-            build_knee_schwarzite(kind="gyroid")
+            build_knee_schwarzite(kind="hexagonal")
         assert "diamond" in str(excinfo.value)
+        assert "gyroid" in str(excinfo.value)
 
     def test_the_primitive_cell_is_unchanged_by_the_generalisation(self):
         atoms = build_knee_schwarzite(circumference=20, arm_rows=9,
@@ -724,3 +728,253 @@ class TestTheSchwarzDCellIsEightTetrahedralNodes:
         assert atoms.info["genus"] == 3
         assert atoms.info["nodes"] == 1
         assert atoms.info["ring_counts"] == {6: 456, 7: 24}
+
+
+class TestANetDecidesItsOwnNodes:
+    """Only the sites of a net are written down; each node's arms and the
+    cell's relation to the arm length are derived from them. So the net's
+    own properties are checked rather than asserted."""
+
+    @pytest.mark.parametrize("net,arms", [("diamond", 4), ("gyroid", 3)])
+    def test_every_site_has_the_same_coordination(self, net, arms):
+        sites, axes, _ = net_geometry(net)
+        assert len(sites) == 8
+        assert {len(a) for a in axes} == {arms}
+
+    @pytest.mark.parametrize("net", ["diamond", "gyroid"])
+    def test_the_arms_of_a_node_balance(self, net):
+        # A minimal surface's node has no net pull: the unit vectors sum
+        # to zero. That is what makes it a node rather than a bend.
+        _, axes, _ = net_geometry(net)
+        for arm in axes:
+            assert np.allclose(arm.sum(axis=0), 0.0, atol=1e-9)
+
+    def test_a_gyroid_node_is_the_planar_y(self):
+        # Three unit vectors with pairwise 120 deg angles sum to zero and
+        # are coplanar, with no choice about it -- so an srs node IS the
+        # junction's Y, only turned.
+        _, axes, cell = net_geometry("gyroid")
+        for arm in axes:
+            cosines = [float(arm[i] @ arm[j])
+                       for i in range(3) for j in range(i + 1, 3)]
+            assert np.allclose(cosines, -0.5, atol=1e-9)
+            # Coplanar: the triple product vanishes.
+            assert abs(float(np.linalg.det(arm))) < 1e-9
+        # The cell is in units of the net's own bond, which is a*sqrt(2)/4
+        # for srs -- so the cell is 4/sqrt(2) bonds across.
+        assert np.allclose(cell, 4.0 / np.sqrt(2.0))
+
+    def test_the_diamond_cell_is_the_one_the_lattice_has(self):
+        # The diamond bond is a*sqrt(3)/4, so the cell is 4/sqrt(3) bonds.
+        _, _, cell = net_geometry("diamond")
+        assert np.allclose(cell, 4.0 / np.sqrt(3.0))
+
+    @pytest.mark.parametrize("net", ["super-graphene", "super-square"])
+    def test_the_two_dimensional_nets_have_vacuum_in_z(self, net):
+        _, axes, cell = net_geometry(net)
+        assert cell[2] == 0.0
+        assert cell[0] > 0.0 and cell[1] > 0.0
+        for arm in axes:
+            assert np.allclose(arm[:, 2], 0.0)
+
+    def test_a_node_whose_arms_do_not_balance_is_refused(self):
+        # A cube's vertex has three perpendicular edges, which sum to
+        # (1,1,1) rather than to zero. Measured, such a node's census
+        # never comes out hexagons-plus-heptagons, so the net is refused
+        # rather than built.
+        from nanocarbon_lab.builders import knee as module
+        saved = module.SCHWARZITE_NETS.get("_test")
+        # A dimer in a roomy cell: each site has exactly one neighbour,
+        # so the coordination is uniform and the arms cannot balance.
+        # (A *single* site in a cubic cell is not the example it looks
+        # like -- its six image neighbours balance perfectly. That is the
+        # Schwarz P node.)
+        module.SCHWARZITE_NETS["_test"] = (
+            np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+            np.array([5.0, 5.0, 5.0]))
+        try:
+            with pytest.raises(ValueError) as excinfo:
+                net_geometry("_test")
+            assert "balance" in str(excinfo.value)
+        finally:
+            if saved is None:
+                del module.SCHWARZITE_NETS["_test"]
+            else:                                       # pragma: no cover
+                module.SCHWARZITE_NETS["_test"] = saved
+
+
+class TestTheGyroidCellIsEightPlanarYs:
+    """srs is 3-coordinate, so a gyroid cell is eight Y nodes and the
+    budget is 8 * 6(2-3) = -48, chi = -8, genus 5."""
+
+    def test_the_budget_follows_from_the_nodes(self):
+        assert schwarzite_budget("gyroid") == -48
+        assert schwarzite_budget("gyroid") == 6 * (2 - 2 * 5)
+
+    def test_the_cell_closes_with_forty_eight_heptagons(self):
+        bond = 1.42
+        spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+        radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 20))
+        vertices, tris, cell = net_cell_mesh("gyroid", 20, 5, radius, spacing)
+        census, _, broken = mesh_census(vertices, tris)
+        assert broken == 0
+        assert set(census) == {6, 7}
+        assert census[7] == 48
+        assert sum((6 - s) * c for s, c in census.items()) == -48
+
+    def test_the_cell_edge_follows_from_the_arm_length(self):
+        bond = 1.42
+        spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+        radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 20))
+        _, _, cell = net_cell_mesh("gyroid", 20, 5, radius, spacing)
+        reach = (5 - 1) * spacing
+        assert cell == pytest.approx(2.0 * reach / (np.sqrt(2.0) / 4.0))
+
+    def test_a_circumference_that_puts_pentagons_on_it_is_refused(self):
+        # At k=18 the cell closes at the right budget and pays part of it
+        # with pentagons and octagons. A minimal surface saddles
+        # everywhere, so a pentagon on one is never right, and the gate is
+        # on the census rather than on sum(6-n), which is -48 either way.
+        with pytest.raises(ValueError) as excinfo:
+            build_knee_schwarzite(kind="gyroid", circumference=18,
+                                  arm_rows=5, relax=False)
+        assert "pentagons" in str(excinfo.value)
+
+    def test_the_default_shape_is_the_one_that_relaxes_cleanly(self):
+        atoms = build_knee_schwarzite(kind="gyroid", relax=False)
+        assert atoms.info["genus"] == 5
+        assert atoms.info["nodes"] == 8
+        assert atoms.info["arms"] == 3
+        assert atoms.info["ring_counts"] == {6: 816, 7: 48}
+        assert atoms.info["pentagons"] == 0
+
+
+class TestTheSuperstructureIsTheSameLawOnAGraph:
+    """A node of c arms is a sphere with c holes, so summed over a graph
+    `sum_v 6(2 - deg v) = 12V - 6*2E = 12(V - E)` -- which is exactly
+    `SuperGraph.ring_budget`, reached there from `chi = 2(V - E)`, one
+    handle per independent cycle. Two derivations, one number."""
+
+    def test_it_agrees_with_the_meshed_route_on_every_catalogue_net(self):
+        from collections import Counter
+
+        from nanocarbon_lab.builders.supernetwork import (
+            SUPERLATTICES,
+            icosahedral_cage,
+        )
+        graphs = dict(SUPERLATTICES)
+        graphs["icosahedral"] = icosahedral_cage()
+        for name, graph in graphs.items():
+            degree: Counter = Counter()
+            for edge in graph.edges:
+                degree[edge[0]] += 1
+                degree[edge[1]] += 1
+            mine = sum(node_budget(degree[v]) for v in range(len(graph.nodes)))
+            assert mine == graph.ring_budget, name
+            assert mine == 12 * (len(graph.nodes) - len(graph.edges)), name
+
+    def test_a_honeycomb_of_tubes_carries_exactly_those_heptagons(self):
+        atoms = build_knee_supernetwork(circumference=10, arm_rows=5,
+                                        relax=False)
+        # Four nodes of three arms: 4 * 6(2-3) = -24, and V - E = 4 - 6.
+        assert atoms.info["ring_budget"] == -24 == 12 * (4 - 6)
+        assert atoms.info["euler"] == -4
+        assert set(atoms.info["ring_counts"]) == {6, 7}
+        assert atoms.info["ring_counts"][7] == 24
+        assert atoms.info["pentagons"] == 0
+
+    def test_it_is_a_sheet_and_says_so(self):
+        atoms = build_knee_supernetwork(circumference=10, arm_rows=5,
+                                        relax=False)
+        assert list(atoms.pbc) == [True, True, False]
+        assert atoms.cell.lengths()[2] > atoms.info["tube_radius"]
+
+    @pytest.mark.parametrize("circumference", [8, 12, 16, 20])
+    def test_the_census_does_not_depend_on_the_circumference(
+            self, circumference):
+        atoms = build_knee_supernetwork(circumference=circumference,
+                                        arm_rows=5, relax=False)
+        assert set(atoms.info["ring_counts"]) == {6, 7}
+        assert atoms.info["ring_counts"][7] == 24
+
+    def test_a_schwarzite_net_is_refused_as_a_sheet(self):
+        with pytest.raises(ValueError) as excinfo:
+            build_knee_supernetwork(net="diamond")
+        assert "schwarzite" in str(excinfo.value)
+
+    def test_the_default_shape_is_carbon(self):
+        atoms = build_knee_supernetwork()
+        geometry = atoms.info["geometry"]
+        assert 1.30 <= geometry["bond_min"] <= geometry["bond_max"] <= 1.55
+        assert 100.0 <= geometry["angle_min"]
+        assert geometry["angle_max"] <= 135.0
+        assert geometry["n_close_contacts"] == 0
+        assert atoms.info["disclinations_placed"] == 1.0
+        assert "nothing else" in describe_knee_supernetwork(atoms)
+
+
+class TestNoFiniteKneeSuperstructureExists:
+    """Every node whose census comes out pure has arms summing to zero,
+    and a convex polyhedron's vertex cannot: it lies on the hull, so all
+    its edges point into the supporting half-space and their sum has a
+    strictly positive component along the inward normal. Every finite
+    graph has a vertex on its convex hull, so there is no finite knee
+    superstructure at all -- a fact about geometry, not about this code.
+    """
+
+    @staticmethod
+    def _vertex_sums(vertices):
+        spread = np.linalg.norm(vertices[:, None, :] - vertices[None, :, :],
+                                axis=2)
+        np.fill_diagonal(spread, np.inf)
+        edge = spread.min()
+        out = []
+        for i in range(len(vertices)):
+            partners = np.where(spread[i] < edge * 1.05)[0]
+            arms = vertices[partners] - vertices[i]
+            arms = arms / np.linalg.norm(arms, axis=1)[:, None]
+            out.append(float(np.linalg.norm(arms.sum(axis=0))))
+        return out
+
+    def test_no_platonic_cage_has_a_balanced_vertex(self):
+        import itertools
+        cages = {
+            "tetrahedron": np.array([[1.0, 1, 1], [1, -1, -1],
+                                     [-1, 1, -1], [-1, -1, 1]]),
+            "cube": np.array(list(itertools.product((-1.0, 1.0), repeat=3))),
+            "octahedron": np.array([[1.0, 0, 0], [-1, 0, 0], [0, 1.0, 0],
+                                    [0, -1, 0], [0, 0, 1.0], [0, 0, -1]]),
+        }
+        for name, vertices in cages.items():
+            assert min(self._vertex_sums(vertices)) > 0.5, name
+
+    def test_every_periodic_super_net_is_balanced(self):
+        # The contrast that makes the previous test mean something.
+        for net in ("diamond", "gyroid", "super-graphene", "super-square"):
+            _, axes, _ = net_geometry(net)
+            worst = max(float(np.linalg.norm(a.sum(axis=0))) for a in axes)
+            assert worst < 1e-9, net
+
+    def test_the_cube_vertex_node_never_comes_out_pure(self):
+        # Three perpendicular arms sum to (1,1,1), and measured across
+        # every shape that closes, the node pays its -6 with squares,
+        # pentagons or a nonagon -- never with six heptagons.
+        bond = 1.42
+        spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+        seen = []
+        for circumference in (8, 12, 16, 24):
+            radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / circumference))
+            try:
+                vertices, tris = node_mesh(np.eye(3), circumference, 5,
+                                           radius, spacing)
+                tris = fill_triangular_holes(tris)
+                vertices, tris = collapse_degree_three(vertices, tris)
+                vertices, tris = collapse_degree_four(vertices, tris)
+            except (ValueError, StopIteration, KeyError):
+                continue
+            census = _interior(tris)[0]
+            # The budget is still paid exactly; only the coin differs.
+            assert sum((6 - s) * c for s, c in census.items()) == -6
+            seen.append(set(census))
+        assert seen
+        assert all(sizes - {6, 7} for sizes in seen)
