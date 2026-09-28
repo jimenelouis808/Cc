@@ -153,6 +153,39 @@ def _model_phonons(atoms: Atoms, model: TBModel, kmesh: int, kT: float, phonon_d
     return frequencies, modes
 
 
+def phonons_for(atoms: Atoms, model: TBModel, kmesh: int, kT: float, phonon_delta: float,
+                phonons: Optional[tuple], warnings: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    """The model's Γ phonons, or the given ``(frequencies, L)`` after checking them."""
+    if phonons is None:
+        return _model_phonons(atoms, model, kmesh, kT, phonon_delta, warnings)
+    frequencies = np.asarray(phonons[0], dtype=float)
+    modes = np.asarray(phonons[1], dtype=float)
+    if modes.shape != (len(frequencies), len(atoms), 3):
+        raise ValueError(f"Fonones externos con forma {modes.shape}; se esperaba "
+                         f"({len(frequencies)}, {len(atoms)}, 3).")
+    warnings.append("Frecuencias y modos importados: el modelo TB solo da la "
+                    "polarizabilidad, a la geometría dada.")
+    return frequencies, modes
+
+
+def internal_modes(atoms: Atoms, frequencies: np.ndarray, warnings: list[str]) -> np.ndarray:
+    """Indices of the vibrational (non rigid-body) modes; warns about imaginary ones."""
+    finite = not atoms.get_pbc().any()
+    n_rigid = 6 if finite else 3
+    if finite and len(atoms) > 2:
+        inertia = np.sort(atoms.get_moments_of_inertia())
+        n_rigid = 5 if inertia[0] < 1e-3 * inertia[-1] else 6
+    elif finite:
+        n_rigid = 5
+    order = np.argsort(np.abs(frequencies))
+    internal = np.sort(order[n_rigid:])
+    imaginary = frequencies[internal][frequencies[internal] < -20]
+    if len(imaginary):
+        warnings.append(f"{len(imaginary)} modo(s) imaginario(s) (hasta {imaginary.min():.0f} "
+                        "cm⁻¹): la estructura no está en un mínimo.")
+    return internal
+
+
 def raman(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.01,
           delta: float = 0.01, omega: float = 0.0, screening: str = "auto",
           phonon_delta: float = 0.005,
@@ -181,28 +214,8 @@ def raman(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.01,
     """
     warnings: list[str] = []
     atoms = atoms.copy()
-    if phonons is None:
-        frequencies, modes = _model_phonons(atoms, model, kmesh, kT, phonon_delta, warnings)
-    else:
-        frequencies = np.asarray(phonons[0], dtype=float)
-        modes = np.asarray(phonons[1], dtype=float)
-        if modes.shape != (len(frequencies), len(atoms), 3):
-            raise ValueError(f"Fonones externos con forma {modes.shape}; se esperaba "
-                             f"({len(frequencies)}, {len(atoms)}, 3).")
-        warnings.append("Frecuencias y modos importados: el modelo TB solo da la "
-                        "polarizabilidad, a la geometría dada.")
-
-    finite = not atoms.get_pbc().any()
-    n_rigid = 6 if finite else 3
-    if finite and len(atoms) > 2:
-        inertia = np.sort(atoms.get_moments_of_inertia())
-        n_rigid = 5 if inertia[0] < 1e-3 * inertia[-1] else 6
-    order = np.argsort(np.abs(frequencies))
-    internal = np.sort(order[n_rigid:])
-    imaginary = frequencies[internal][frequencies[internal] < -20]
-    if len(imaginary):
-        warnings.append(f"{len(imaginary)} modo(s) imaginario(s) (hasta {imaginary.min():.0f} "
-                        "cm⁻¹): la estructura no está en un mínimo.")
+    frequencies, modes = phonons_for(atoms, model, kmesh, kT, phonon_delta, phonons, warnings)
+    internal = internal_modes(atoms, frequencies, warnings)
 
     def system_of(a: Atoms) -> System:
         return System.build(a, model)

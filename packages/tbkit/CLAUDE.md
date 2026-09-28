@@ -25,6 +25,7 @@ tbkit/
 ├── optics.py         # polarizability: sum over states, SCC linear response, ε∞
 ├── dipoles.py        # intra-atomic s-p dipoles: position operator, multipole screening
 ├── raman.py          # non-resonant Raman on the model's own Γ phonons
+├── resonance.py      # resonant Raman: ∂α(ω_L + iη)/∂Q, excitation profiles
 ├── record.py         # reproducible records, `tbkit run simulation.json`, replay
 ├── qe.py             # Quantum ESPRESSO Γ modes (dynmat/matdyn) for Raman with QE phonons
 ├── references.py     # DFT reference sets (JSON): GPAW levels, energies, forces, frequencies
@@ -53,6 +54,9 @@ tbkit/
   the calculator); a loose tolerance shows up as a force error, not a crash.
 - Validation against experiment states the model's error; do not retune a
   built-in set to hit a number.
+- Resonant Raman (`resonance.py`) needs η > 0; its static, below-gap limit
+  must equal the non-resonant result (tested). Resonance energies are the
+  model's (small TB/KS gaps): never present them as optical energies.
 - Raman is non-resonant: refuse gapless systems (any fractionally occupied
   state means no gap: `Solution.gap()`), open shells and lasers near the gap.
   Selection rules (diamond T2g, C60 2Ag+8Hg) are the first check of any

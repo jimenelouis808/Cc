@@ -4,6 +4,7 @@
     tbkit levels  cinta.xyz --model sp3 --scc     # sp3 de carbono, cargas autoconsistentes
     tbkit raman   piridina.xyz --model chn        # C/H/N (Xu + H, N ajustados a GPAW)
     tbkit raman   piridina.xyz --model chn --modes dynmat.out   # fonones de QE, α de TB
+    tbkit raman   butadieno.xyz --model chn --resonant 2.33 3.5 4.0  # perfiles resonantes
     tbkit bands   grafeno.xyz --path GKMG -o bandas.csv
     tbkit dos     tubo.xyz --kmesh 60 --pdos element -o dos.csv
     tbkit hubbard zgnr.xyz --U 2.7 --kmesh 48 --m-energy m.csv
@@ -259,6 +260,29 @@ def cmd_raman(args) -> int:
 
     from .raman import raman, raman_from_qe, spectrum
 
+    if args.resonant:
+        from .qe import modes_for_raman, read_qe_modes
+        from .resonance import resonant_raman
+
+        atoms = read(args.structure)
+        model = _model(args)
+        phonons = None
+        if args.modes:
+            modes = read_qe_modes(args.modes)
+            phonons = (modes.frequencies,
+                       modes_for_raman(modes, atoms.get_masses(), args.modes_kind))
+        resonant = resonant_raman(atoms, model, args.resonant, eta=args.eta,
+                                  kmesh=args.kmesh, kT=args.kT, delta=args.delta,
+                                  phonons=phonons)
+        print(resonant.summary())
+        result = resonant.at(args.resonant[0])
+        if args.out:
+            laser = None if args.bare else 1239.84193 / args.resonant[0]
+            temperature = None if args.bare else args.temperature
+            grid, intensity = spectrum(result, fwhm=args.fwhm, laser_nm=laser,
+                                       temperature_k=temperature)
+            _write_table(args.out, ["desplazamiento_cm-1", "intensidad"], [grid, intensity])
+        return 0
     options = {"kmesh": args.kmesh, "kT": args.kT, "delta": args.delta,
                "screening": args.screening}
     if args.modes:
@@ -373,6 +397,11 @@ def build_parser() -> argparse.ArgumentParser:
     rm.add_argument("--modes", default=None,
                     help="Modos en Γ de Quantum ESPRESSO (filout/fileig de dynmat.x, "
                          "flvec/fleig de matdyn.x): frecuencias y modos de QE, α del modelo.")
+    rm.add_argument("--resonant", type=float, nargs="+", default=None, metavar="EV",
+                    help="Raman resonante a estas energías de láser (eV); el espectro (-o) es "
+                         "el de la primera.")
+    rm.add_argument("--eta", type=float, default=0.1,
+                    help="Ensanchamiento de las excitaciones en resonancia (eV).")
     rm.add_argument("--modes-kind", default="auto",
                     choices=("auto", "displacements", "eigenvectors"),
                     help="Qué contiene el archivo de modos (auto: autovectores si son "

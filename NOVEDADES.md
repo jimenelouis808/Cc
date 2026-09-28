@@ -6,6 +6,22 @@ está la trampa.
 
 ---
 
+## tbkit · Raman resonante
+
+`tbkit raman butadieno.xyz --model chn --resonant 2.33 3.5 4.0` da la actividad
+de cada modo a cada energía de láser y el perfil de excitación de cada modo.
+Se calcula con la polarizabilidad compleja a la frecuencia del láser, con su
+apantallamiento completo. Cerca de una transición los modos que la acoplan se
+disparan: el C=C del butadieno crece unas 3000 veces y domina el espectro.
+
+**Lo que NO hace.** No incluye la estructura vibrónica (sobretonos, forma de
+Franck–Condon). Las energías de resonancia son las del modelo, más bajas que
+las ópticas reales (la del butadieno sale a 4,25 eV y se mide a ~5,9): compara
+perfiles, no energías. En el grafeno este camino converge mal; tendrá su
+propio cálculo.
+
+---
+
 ## tbkit · polarizabilidades cuantitativas
 
 La α del modelo ya no se queda corta: cada átomo lleva una polarizabilidad

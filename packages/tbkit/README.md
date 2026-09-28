@@ -34,7 +34,7 @@ uno ajustado) en ese mismo formato, y `load_parameters(ruta)` lo lee.
 | 5. Espín | `hubbard` | Hubbard de campo medio; magnetización frente a la energía (m(E), dm/dE), frente al campo (M(h), χ) y frente al dopaje o el nivel de Fermi |
 | 6. Periódico | `hamiltonian`, `kpoints` | H(k) por suma de Bloch; mallas Γ-centradas y caminos de bandas de ASE |
 | 7. Parte repulsiva | `repulsive`, `forces`, `calculator` | Energía libre total (banda − TS + repulsión, + SCC), fuerzas de Hellmann–Feynman (ortogonal, no ortogonal, periódico, SCC), repulsión embebida de Xu y spline de los `.skf`; calculadora ASE para relajar y para fonones en Γ |
-| Raman no resonante (fase E, pasos 1 y 4) | `optics`, `raman`, `dipoles` | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
+| Raman no resonante y resonante (fase E) | `optics`, `raman`, `dipoles`, `resonance` | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
 | C, H y N (fase E, paso 2) | `parameters/xu_chn.json`, `references`, `recipes` | C–C de Xu intacto; H y N ajustados a GPAW (PBE, LCAO dzp) en niveles, fuerzas y energías; U de H, C, N calculadas con el átomo de GPAW; SCC. Receta reproducible y referencias incluidas |
 | Reproducibilidad | `record`, `tasks` | `tbkit run simulacion.json` guarda estructura, parámetros completos, versión, commit, fecha, ajustes y resultados; `record.replay` lo repite |
 
@@ -176,6 +176,32 @@ C₆₀ y el diamante no entran en el ajuste. GPAW-PBE ya sobreestima las α un
 4–7 % frente al experimento (CH₄ 2,71 frente a 2,59; benceno 10,98 frente a
 10,32). En cristales la polarizabilidad extra se suma por celda sin campos
 locales (no hay apantallamiento periódico todavía).
+
+## Raman resonante (primer orden)
+
+`tbkit raman estructura.xyz --model chn --resonant 2.33 3.5 4.0 --eta 0.1`
+(o `resonance.resonant_raman`) da la actividad de cada modo a cada energía de
+láser: los tensores son ∂α(ω_L + iη)/∂Q con la polarizabilidad compleja
+dependiente de la frecuencia (`optics.dynamic_polarizability_*`; en finitos,
+apantallada con cargas, dipolos y α extra), el método de fonón congelado de
+Gillet, Giantomassi y Gonze (PRB 88, 094305, 2013). η es el ensanchamiento de
+las excitaciones. `perfil = resultado.profile(1690)` es el perfil de
+excitación de un modo; `resultado.at(E)` alimenta `spectrum`.
+
+Comprobado: con ω_L = η = 0 es exactamente la α estática; muy por debajo del
+gap reproduce el Raman no resonante (2 %); Im α es positiva (absorción); los
+modos prohibidos por simetría siguen prohibidos a cualquier láser; y el C=C
+del butadieno se amplifica ~3000 veces cuando el láser alcanza su transición
+π→π*, hasta dominar el espectro, como en los polienos reales.
+
+Lo que no es: el Raman de resonancia vibrónico (Franck–Condon, término A de
+Albrecht) con sobretonos; aquí los estados excitados entran solo por sus
+energías y densidades de transición. Y las energías de resonancia son las del
+modelo: la π→π* del butadieno sale a 4,25 eV (medida ~5,9 eV), porque los gaps
+de un TB mínimo (y los de Kohn–Sham a los que se ajustó) son más pequeños que
+los ópticos. Compara perfiles relativos, no energías absolutas. En semimetales
+(grafeno) la suma en k converge mal con diferencias finitas: el grafeno tiene
+su módulo perturbativo.
 
 ## Fonones de Quantum ESPRESSO con intensidades de tbkit
 

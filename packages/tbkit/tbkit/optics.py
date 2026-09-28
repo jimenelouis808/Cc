@@ -381,3 +381,149 @@ def dielectric_constant(system: System, **kwargs) -> np.ndarray:
         raise ValueError("ε∞ solo para cristales 3D (pbc en los tres ejes).")
     alpha = polarizability(system, **kwargs)
     return np.eye(3) + 4 * np.pi * alpha / system.atoms.get_volume()
+
+
+# --------------------------------------------------------------------------
+# Frequency-dependent (complex) polarizability: resonant Raman
+# --------------------------------------------------------------------------
+
+def _dynamic_weights(de: np.ndarray, df: np.ndarray, multiplicity: np.ndarray,
+                     z: complex) -> np.ndarray:
+    """Both time orderings of each (active, passive) pair at complex frequency z.
+
+    Static limit: 2 df/de (with multiplicity 2), as in :func:`charge_response`.
+    """
+    with np.errstate(divide="ignore", invalid="ignore"):
+        w = df * (1.0 / (de + z) + 1.0 / (de - z)) * (multiplicity / 2.0)
+    return np.where(np.abs(de) > 1e-9, w, 0.0)
+
+
+def _transition_data(solution: Solution, dipoles: bool):
+    """Transition multipoles (charges[, dipoles]) and energy/occupation differences."""
+    from .dipoles import atom_projector, dipole_matrices, transition_multipoles
+
+    system = solution.system
+    d_matrices = dipole_matrices(system) if dipoles else None
+    projector = atom_projector(system)
+    out = []
+    for s in range(solution.nspin):
+        c = np.real(solution.vectors[s, 0])
+        sc = c if solution.overlaps is None else np.real(solution.overlaps[0]) @ c
+        f = solution.occupations[s, 0]
+        e = solution.energies[s, 0]
+        active = np.flatnonzero(f > 1e-12)
+        passive = np.flatnonzero(f < (2.0 if solution.nspin == 1 else 1.0) - 1e-12)
+        if dipoles:
+            m = transition_multipoles(system, c, sc, active, passive, d_matrices)
+        else:
+            m = 0.5 * np.einsum("am,mn,mk->ank", projector, c[:, active], sc[:, passive]) \
+                + 0.5 * np.einsum("am,mn,mk->ank", projector, sc[:, active], c[:, passive])
+        de = e[active][:, None] - e[passive][None, :]
+        df = f[active][:, None] - f[passive][None, :]
+        in_passive = np.isin(active, passive)
+        in_active = np.isin(passive, active)
+        multiplicity = np.where(in_passive[:, None] & in_active[None, :], 1.0, 2.0)
+        out.append((m, de, df, multiplicity))
+    return out
+
+
+def dynamic_polarizability_finite(system: System, energies, eta: float = 0.1,
+                                  kT: float = 0.01, U=None, screened: bool = True,
+                                  onsite_dipoles: bool = True,
+                                  extra_polarizability: bool = True) -> np.ndarray:
+    """Complex α(ω + iη) (Å³) of a finite system, one 3x3 per photon energy (eV).
+
+    The same response as :func:`polarizability_linear_response` (charges,
+    intra-atomic and extra dipoles, screened by the multipole kernel), at
+    complex frequency: ``χ(z) = Σ (f_n - f_m) M^{nm} M^{mn} / (E_n - E_m + z)``
+    over both time orderings, ``α = -Xᵀ (1 - χK)⁻¹ χ X``. η is the lifetime
+    broadening of the excited states (eV): it keeps α finite at resonance.
+    ``energies = [0]`` with η = 0 is the static α. The extra atomic
+    polarizability is taken as frequency independent (its own resonances
+    lie far above the valence ones).
+    """
+    from .dipoles import extra_alphas, has_dipoles, has_extra, response_kernel
+    from .scc import self_consistent
+
+    if system.periodic:
+        raise ValueError("Sistema periódico: usa dynamic_polarizability_periodic().")
+    if system.model.scc:
+        solution = self_consistent(system, U=U, kT=kT, tol=1e-10).solution
+    else:
+        solution = solve(system, *gamma(), kT=kT)
+    if solution.gap() < max(0.05, 20 * kT):
+        raise ValueError("Molécula sin gap (capa abierta o metálica): fuera del alcance.")
+    dipoles = onsite_dipoles and has_dipoles(system.model)
+    extra = extra_polarizability and has_extra(system.model)
+    data = _transition_data(solution, dipoles)
+    coupling = _field_coupling(system, dipoles, extra)
+    kernel = response_kernel(system, U, dipoles, extra) if screened else None
+    alphas = np.repeat(extra_alphas(system), 3) if extra else None
+    out = []
+    for energy in np.atleast_1d(np.asarray(energies, dtype=float)):
+        z = complex(energy, eta)
+        chi = sum(np.einsum("ink,nk,jnk->ij", m, _dynamic_weights(de, df, mult, z), m)
+                  for m, de, df, mult in data)
+        if extra:
+            size = len(chi)
+            chi = np.block([[chi, np.zeros((size, len(alphas)))],
+                            [np.zeros((len(alphas), size)), np.diag(-alphas / COULOMB)]])
+        if kernel is not None:
+            chi = np.linalg.solve(np.eye(len(chi)) - chi @ kernel, chi)
+        alpha = -coupling.T @ chi @ coupling
+        out.append(0.5 * (alpha + alpha.T) * COULOMB)
+    return np.array(out)
+
+
+def dynamic_polarizability_periodic(system: System, energies, eta: float = 0.1,
+                                    kpts: Optional[np.ndarray] = None,
+                                    weights: Optional[np.ndarray] = None, kmesh: int = 24,
+                                    kT: float = 0.01, onsite_dipoles: bool = True,
+                                    extra_polarizability: bool = True) -> np.ndarray:
+    """Complex interband α(ω + iη) per unit cell (Å³), independent particles.
+
+    ``α_ab(z) = Σ_k w_k Σ_{nm} (f_n - f_m) r^a_nm r^b_mn / (E_m - E_n - z)``
+    with the interband position elements of :func:`polarizability_periodic`.
+    Metals and semimetals are allowed here (graphene's Raman is resonant at
+    any laser), but only interband transitions are counted: the intraband
+    (Drude) term is left out, which is what the Raman tensor of a Γ phonon
+    needs away from ω = 0.
+    """
+    from .dipoles import dipole_matrices, has_dipoles
+
+    if kpts is None:
+        kpts, weights = mesh(system.atoms, kmesh)
+    onsite = dipole_matrices(system) if onsite_dipoles and has_dipoles(system.model) else None
+    zs = np.array([complex(e, eta) for e in np.atleast_1d(np.asarray(energies, float))])
+    spectra, blocks = [], []
+    for k in kpts:
+        h, s, dh, ds = _bloch_ii(system, k)
+        e, c = eigh(h, s) if s is not None else eigh(h)
+        spectra.append(e)
+        blocks.append((c, dh, ds, e))
+    energies_k = np.array(spectra)[None]
+    mu = fermi_level(energies_k, weights, system.electrons, kT, 2.0)
+    occupations = 2.0 * _fermi_dirac(energies_k, mu, kT)
+    alpha = np.zeros((len(zs), 3, 3), dtype=complex)
+    for index, (c, dh, ds, e) in enumerate(blocks):
+        e_mn = e[None, :] - e[:, None]
+        r = []
+        for a in range(3):
+            velocity = c.conj().T @ dh[a] @ c
+            if ds is not None:
+                velocity = velocity - (c.conj().T @ ds[a] @ c) * e[None, :]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                element = np.where(np.abs(e_mn) > 1e-9, 1j * velocity / e_mn, 0.0)
+            if onsite is not None:
+                element = element + np.where(np.abs(e_mn) > 1e-9, c.conj().T @ onsite[a] @ c, 0.0)
+            r.append(element)
+        f = occupations[0, index]
+        diff_f = f[:, None] - f[None, :]
+        for iz, z in enumerate(zs):
+            with np.errstate(divide="ignore", invalid="ignore"):
+                factor = np.where(np.abs(e_mn) > 1e-9, diff_f / (e_mn - z), 0.0)
+            for a in range(3):
+                for b in range(3):
+                    alpha[iz, a, b] += weights[index] * np.sum(factor * r[a] * r[b].T)
+    alpha = 0.5 * (alpha + alpha.transpose(0, 2, 1)) * COULOMB
+    return alpha + _extra_sum(system, extra_polarizability)[None]

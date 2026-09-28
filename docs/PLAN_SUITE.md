@@ -225,7 +225,9 @@ Pendiente de la fase E:
       extra por elemento, apantallada con el resto, ajustada a tensores α de
       GPAW FD (12 moléculas). Prueba ±2 %; C₆₀ 84,5 Å³ (exp. 76,5 ± 8); ε∞ del
       diamante 5,07 (exp. 5,7). Pendiente: campos locales en cristales (Ewald).
-- [ ] Raman resonante (elementos de matriz ópticos y electrón–fonón).
+- [x] Raman resonante de primer orden (paso 6): ∂α(ω_L + iη)/∂Q con la α
+      compleja apantallada (finitos) o interbanda (cristales), perfiles de
+      excitación; `tbkit raman --resonant`. Sin estructura vibrónica.
 - [ ] Segundo orden (banda 2D, doble resonancia): periódico, suma en toda la zona
       de Brillouin.
 
