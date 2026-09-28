@@ -300,6 +300,29 @@ def cmd_raman(args) -> int:
     return 0
 
 
+def cmd_graphene_raman(args) -> int:
+    from .graphene import graphene_raman, load_phonons
+
+    results = graphene_raman(args.laser, load_phonons(args.phonons), gamma=args.gamma,
+                             dk=args.dk, dq=args.dq, workers=args.workers)
+    print(f"Grafeno prístino, fonones: {args.phonons}; γ = {args.gamma} eV")
+    print(f"{'láser eV':>9} {'G cm⁻¹':>8} {'2D cm⁻¹':>8} {'2D´ cm⁻¹':>9} {'I(2D)/I(G)':>11}")
+    for r in results:
+        prime = r["2D'_position"]
+        print(f"{r['laser_ev']:9.2f} {r['g_frequency']:8.1f} {r['2D_position']:8.0f} "
+              f"{prime:9.0f} "
+              f"{r['2D_intensity'] / r['g_intensity']:11.2f}")
+    if len(results) > 1:
+        slope = np.polyfit([r["laser_ev"] for r in results],
+                           [r["2D_position"] for r in results], 1)[0]
+        print(f"dispersión de la 2D: {slope:.0f} cm⁻¹/eV")
+    if args.out:
+        columns = [results[0]["grid"]] + [r["spectrum"] for r in results]
+        _write_table(args.out, ["desplazamiento_cm-1"] + [f"I_{r['laser_ev']:.2f}eV"
+                                                          for r in results], columns)
+    return 0
+
+
 def cmd_gpaw_levels(args) -> int:
     from .fit import read_gpaw_eigenvalues
 
@@ -419,6 +442,17 @@ def build_parser() -> argparse.ArgumentParser:
     gp = sub.add_parser("gpaw-levels", help="Niveles de un gpaw.txt (para ajustar).")
     gp.add_argument("path")
     gp.set_defaults(func=cmd_gpaw_levels)
+    gr = sub.add_parser("graphene-raman",
+                        help="G, 2D y 2D' del grafeno por doble resonancia (modelo π).")
+    gr.add_argument("--laser", type=float, nargs="+", default=[2.41], metavar="EV")
+    gr.add_argument("--phonons", default="gpaw",
+                    help="gpaw (PBE, incluidos), xu (modelo de Xu) o un JSON de constantes.")
+    gr.add_argument("--gamma", type=float, default=0.1, help="Ensanchamiento electrónico, eV.")
+    gr.add_argument("--dk", type=float, default=0.01, help="Paso de la malla en k, 1/Å.")
+    gr.add_argument("--dq", type=float, default=0.03, help="Paso de la malla en q, 1/Å.")
+    gr.add_argument("--workers", type=int, default=1)
+    gr.add_argument("-o", "--out", default=None, help="CSV con los espectros de segundo orden.")
+    gr.set_defaults(func=cmd_graphene_raman)
     return parser
 
 
