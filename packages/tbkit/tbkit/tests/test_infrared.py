@@ -1,0 +1,78 @@
+"""IR intensities from the TB dipole (tbkit.infrared): exact relations and symmetry."""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+from ase.build import molecule
+from ase.optimize import BFGS
+
+from tbkit.calculator import TBCalculator
+from tbkit.hamiltonian import System
+from tbkit.infrared import DEBYE_PER_EA, dipole_moment, infrared
+from tbkit.params import load_parameters
+
+
+@pytest.fixture(scope="module")
+def chn():
+    return load_parameters("xu_chn")
+
+
+def _relaxed(name, model):
+    atoms = molecule(name)
+    atoms.calc = TBCalculator(model)
+    BFGS(atoms, logfile=None).run(fmax=0.002, steps=400)
+    return atoms.copy()
+
+
+@pytest.fixture(scope="module")
+def ammonia(chn):
+    atoms = _relaxed("NH3", chn)
+    return atoms, infrared(atoms, chn)
+
+
+def test_born_charges_sum_to_zero(ammonia):
+    _, result = ammonia
+    assert np.abs(result.born.sum(axis=0)).max() < 1e-4
+    assert not result.warnings or all("Born" not in w for w in result.warnings)
+
+
+def test_rotation_leaves_intensities_unchanged(chn, ammonia):
+    atoms, result = ammonia
+    turned = atoms.copy()
+    turned.rotate(37, (1, 2, 3), center="COM")
+    again = infrared(turned, chn)
+    assert again.frequencies == pytest.approx(result.frequencies, abs=0.5)
+    assert again.intensities == pytest.approx(result.intensities, rel=1e-3, abs=1e-3)
+
+
+def test_benzene_selection_rules(chn):
+    """D6h: only A2u (one) and E1u (three pairs) absorb."""
+    result = infrared(_relaxed("C6H6", chn), chn)
+    assert np.linalg.norm(result.dipole) < 1e-6
+    active = result.groups(tolerance=0.5, threshold=1e-3)
+    degeneracies = sorted(g["degeneracy"] for g in active)
+    assert degeneracies == [1, 2, 2, 2]
+
+
+def test_ammonia_dipole_from_charges(chn):
+    """Mulliken charges alone give NH3's dipole: 1.10 D at the TB geometry
+    (1.31 D at GPAW's), 1.47 D measured."""
+    mu = dipole_moment(System.build(_relaxed("NH3", chn), chn), onsite_dipoles=False)
+    assert np.linalg.norm(mu) * DEBYE_PER_EA == pytest.approx(1.47, rel=0.3)
+
+
+def test_imported_modes_give_the_same_result(chn, ammonia):
+    from tbkit.raman import _model_phonons
+
+    atoms, result = ammonia
+    frequencies, modes = _model_phonons(atoms.copy(), chn, 12, 0.01, 0.005, [])
+    again = infrared(atoms, chn, phonons=(frequencies, modes))
+    assert again.intensities == pytest.approx(result.intensities, rel=1e-6, abs=1e-6)
+
+
+def test_refuses_crystals(chn):
+    from ase.build import bulk
+
+    with pytest.raises(ValueError, match="finitos"):
+        infrared(bulk("C", "diamond", a=3.56), chn)

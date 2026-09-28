@@ -300,6 +300,28 @@ def cmd_raman(args) -> int:
     return 0
 
 
+def cmd_ir(args) -> int:
+    from ase.io import read
+
+    from .infrared import infrared, ir_spectrum
+
+    atoms = read(args.structure)
+    phonons = None
+    if args.modes:
+        from .qe import modes_for_raman, read_qe_modes
+
+        modes = read_qe_modes(args.modes)
+        phonons = (modes.frequencies, modes_for_raman(modes, atoms.get_masses(),
+                                                      args.modes_kind))
+    result = infrared(atoms, _model(args), phonons=phonons,
+                      onsite_dipoles=not args.charges_only)
+    print(result.summary())
+    if args.out:
+        grid, intensity = ir_spectrum(result, fwhm=args.fwhm)
+        _write_table(args.out, ["numero_de_onda_cm-1", "absorcion_km_mol_cm"], [grid, intensity])
+    return 0
+
+
 def cmd_graphene_raman(args) -> int:
     from .graphene import graphene_raman, load_phonons
 
@@ -442,6 +464,16 @@ def build_parser() -> argparse.ArgumentParser:
     gp = sub.add_parser("gpaw-levels", help="Niveles de un gpaw.txt (para ajustar).")
     gp.add_argument("path")
     gp.set_defaults(func=cmd_gpaw_levels)
+    ir = structure_command("ir", "Intensidades IR (finitos; modelo con parte repulsiva o "
+                                 "--modes).", cmd_ir)
+    ir.add_argument("--modes", default=None, help="Modos en Γ de Quantum ESPRESSO.")
+    ir.add_argument("--modes-kind", default="auto",
+                    choices=("auto", "displacements", "eigenvectors"))
+    ir.add_argument("--charges-only", action="store_true",
+                    help="Dipolo solo de las cargas (sin dipolos intraatómicos).")
+    ir.add_argument("--fwhm", type=float, default=10.0)
+    ir.add_argument("-o", "--out", default=None, help="CSV del espectro ensanchado.")
+
     gr = sub.add_parser("graphene-raman",
                         help="G, 2D y 2D' del grafeno por doble resonancia (modelo π).")
     gr.add_argument("--laser", type=float, nargs="+", default=[2.41], metavar="EV")
