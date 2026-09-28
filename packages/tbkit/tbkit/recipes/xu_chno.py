@@ -6,7 +6,11 @@ hoppings and pair repulsions C-O, O-H, N-O and O-O, fitted together with the
 H and N parameters (which start from their ``xu_chn`` values) to the GPAW
 references of both sets. Hubbard U and intra-atomic dipole of O computed
 with GPAW's atom like the others (U_O = 13.48 eV, = DFTB mio's 0.4954 Ha;
-d_O = 0.355 Å). O-O is needed although peroxides are rare in functionalised
+d_O = 0.355 Å). Three-membered rings (epoxide, oxirane, aziridine,
+cyclopropane) get the acute-angle correction of
+:class:`tbkit.repulsive.AcuteAngleTerm`, zero for every angle ≥ 80° (so
+graphene, nanotubes, fullerenes and aromatics keep Xu's results exactly),
+fitted with the pair repulsion. O-O is needed although peroxides are rare in functionalised
 carbon: the two oxygens of a carboxyl or nitro group are 2.2 Å apart, inside
 the hopping range.
 
@@ -44,9 +48,11 @@ CHNO = XuFamily(
     system=("moléculas C/H/N/O de capa cerrada: las de xu_chn más alcoholes, éteres, "
             "epóxidos, aldehídos, cetonas, ácidos carboxílicos, ésteres, amidas, furano, "
             "nitro; motivos de óxido de grafeno (epóxido e hidroxilos basales)"),
-    validity_notes=("falla en anillos tensos de C (aziridina); los C-C y C-N simples junto a "
-                    "un heteroátomo se desvían ~0.08 Å"),
+    validity_notes=("anillos de tres miembros con la corrección de ángulos agudos ajustada; "
+                    "los C-C y C-N simples junto a un heteroátomo se desvían ~0.08 Å"),
     experimental_alpha=EXPERIMENTAL_ALPHA,
+    acute={"powers": 2, "theta0_degrees": 80.0, "r1": 1.7, "rm": 2.0,
+           "elements": ("C", "N", "O")},
 )
 
 

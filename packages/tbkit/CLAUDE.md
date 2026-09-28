@@ -32,7 +32,7 @@ tbkit/
 ├── record.py         # reproducible records, `tbkit run simulation.json`, replay
 ├── qe.py             # Quantum ESPRESSO Γ modes (dynmat/matdyn) for Raman with QE phonons
 ├── references.py     # DFT reference sets (JSON): GPAW levels, energies, forces, frequencies
-├── recipes/          # reproducible fits: chn_references (GPAW data), xu_chn (the C/H/N set)
+├── recipes/          # reproducible fits: xu_family (machinery), xu_chn, xu_chno; GPAW references
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 └── cli.py            # `tbkit` console script
 ```
@@ -105,6 +105,11 @@ tbkit/
   frequency window alone: zone folding puts other A modes nearby (M-point
   modes in zigzag tubes). DFT force constants get the acoustic sum rule on
   loading; never report their raw acoustic "frequencies".
+- The acute-angle term (`repulsive.AcuteAngleTerm`, xu_chno) must stay exactly
+  zero for angles ≥ θ0 = 80°: graphene, diamond, nanotubes, fullerenes and
+  aromatics keep Xu's results (tested). It exists for three-membered rings
+  (epoxide, oxirane, aziridine, cyclopropane); never raise θ0 to fix
+  something else.
 - Repulsion polynomials are only determined where the training data are:
   check V(r) and its slope in that range, not the coefficients, and state
   the range in `validity`.

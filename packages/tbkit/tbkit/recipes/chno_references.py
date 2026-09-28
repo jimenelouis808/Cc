@@ -8,7 +8,10 @@ Same protocol as :mod:`tbkit.recipes.chn_references` (PBE, LCAO dzp; each
 training molecule relaxed, then four random displacements and two uniform
 scalings). Training: water, methanol, formaldehyde, acetaldehyde, formic
 and acetic acid, CO, CO₂, dimethyl ether, oxirane (an epoxide), furan
-(aromatic O), H₂O₂ (O-O), nitromethane (N-O) and acetamide (amide). Test
+(aromatic O), H₂O₂ (O-O), nitromethane (N-O) and acetamide (amide), plus
+cyclopropane and bicyclobutane: three-membered rings, which Xu's C-C cannot
+close (the acute-angle correction of :mod:`tbkit.repulsive` is fitted to
+them together with oxirane and aziridine). Test
 (relaxed only): ethanol, acetone, methyl formate, glyoxal and two
 graphene-oxide motifs on coronene -- a basal epoxide and a basal 1,4-diol.
 The C/H/N references are not recomputed: the fit reads both files.
@@ -26,7 +29,7 @@ from ase import Atoms
 from ase.build import molecule
 
 TRAINING = ("H2O", "CH3OH", "H2CO", "CH3CHO", "HCOOH", "CH3COOH", "CO", "CO2", "CH3OCH3",
-            "CH2OCH2", "C4H4O", "H2O2", "CH3NO2", "CH3CONH2")
+            "CH2OCH2", "C4H4O", "H2O2", "CH3NO2", "CH3CONH2", "C3H6_D3h", "bicyclobutane")
 TEST = ("CH3CH2OH", "CH3COCH3", "HCOOCH3", "OCHCHO", "coronene_epoxide", "coronene_diol")
 
 

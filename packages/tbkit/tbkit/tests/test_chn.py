@@ -277,3 +277,42 @@ class TestShippedSet:
         tb = np.sort(phonons(atoms, model)[0]["frequencies_cm1"])[6:]
         error = tb - np.sort(gpaw)[6:]
         assert np.sqrt(np.mean(error ** 2)) < 80           # 52 cm⁻¹ when fitted
+
+
+class TestAcuteAngleTerm:
+    """The three-membered-ring correction: exact forces, and zero where Xu was validated."""
+
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def term():
+        from tbkit.repulsive import AcuteAngleTerm
+
+        return AcuteAngleTerm((1.3, -0.7))
+
+    def test_forces(self, term):
+        atoms = molecule("CH2OCH2")
+        atoms.positions += np.random.default_rng(0).normal(0, 0.03, atoms.positions.shape)
+        _, forces = term.energy_and_forces(atoms)
+        numeric = _numeric_forces(atoms, lambda a: term.energy_and_forces(a)[0], h=1e-5)
+        assert np.abs(forces - numeric).max() < 1e-7
+
+    def test_zero_for_every_validated_carbon_structure(self, term):
+        from ase.build import bulk
+
+        from tbkit.graphene import graphene_cell
+
+        for atoms in (molecule("C6H6"), molecule("C60"), bulk("C", "diamond", a=3.56),
+                      graphene_cell(), molecule("C5H5N")):
+            energy, forces = term.energy_and_forces(atoms)
+            assert energy == 0.0 and not forces.any()
+
+    def test_acts_on_three_membered_rings(self, term):
+        for name in ("CH2OCH2", "CH2NHCH2", "C3H6_D3h"):
+            assert term.energy_and_forces(molecule(name))[0] != 0.0
+
+    def test_round_trip(self, term):
+        from tbkit.repulsive import repulsive_from_dict
+
+        again = repulsive_from_dict(term.to_dict())
+        atoms = molecule("CH2OCH2")
+        assert again.energy_and_forces(atoms)[0] == pytest.approx(term.energy_and_forces(atoms)[0])

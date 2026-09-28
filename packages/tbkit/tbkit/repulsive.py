@@ -207,6 +207,10 @@ def repulsive_from_dict(data: dict):
                 term.others = "ignore"
             terms.append(term)
         return SumRepulsive(tuple(terms))
+    if kind == "acute_angle":
+        return AcuteAngleTerm(tuple(float(c) for c in data["coefficients"]),
+                              float(data.get("theta0_degrees", 80.0)), float(data.get("r1", 1.7)),
+                              float(data.get("rm", 2.0)), tuple(data.get("elements", ("C", "N", "O"))))
     if kind == "embedded":
         phi = law_from_dict(data["phi"])
         if data.get("tail"):
@@ -222,3 +226,89 @@ def repulsive_from_dict(data: dict):
             laws[tuple(entry["pair"])] = law
         return PairRepulsive(laws)
     raise ValueError(f"Tipo de repulsión desconocido: {kind!r}.")
+
+
+@dataclass
+class AcuteAngleTerm:
+    """A correction for bond angles far below any in Xu's training: three-membered rings.
+
+    ``E = Σ_{j-i-k} s(θ_jik) f(r_ij) f(r_ik)`` over triplets of heavy atoms
+    (``elements``) with both bonds shorter than ``rm``, where
+
+    * ``s(θ) = Σ_n c_n (cos θ - cos θ0)^(n+2)`` for θ < θ0, 0 otherwise (value
+      and slope vanish at θ0);
+    * ``f(r) = 1`` below ``r1`` and a cubic to zero (value and slope) at ``rm``.
+
+    With θ0 = 80°, no angle of graphene, diamond, nanotubes, fullerenes or
+    aromatic rings (all ≥ 100°) is touched: those results are exactly those
+    of the uncorrected model. It exists because an orthogonal minimal-basis
+    model cannot describe the bent bonds of cyclopropane-like rings (Xu's
+    C-C gives cyclopropane a 1.72 Å bond, measured 1.51 Å, and opens the
+    epoxide of graphene oxide into an ether). Its coefficients are fitted,
+    and declared as such, never assumed.
+    """
+
+    coefficients: tuple[float, ...]
+    theta0_degrees: float = 80.0
+    r1: float = 1.7
+    rm: float = 2.0
+    elements: tuple[str, ...] = ("C", "N", "O")
+
+    def cutoff(self) -> float:
+        return self.rm
+
+    def _f(self, r):
+        x = np.clip((r - self.r1) / (self.rm - self.r1), 0.0, 1.0)
+        value = 1 - 3 * x ** 2 + 2 * x ** 3
+        slope = (-6 * x + 6 * x ** 2) / (self.rm - self.r1)
+        return value, slope
+
+    def basis(self, atoms: Atoms) -> tuple[np.ndarray, np.ndarray]:
+        """Energy (n,) and forces (n, N, 3) of each power with unit coefficient."""
+        n_terms = len(self.coefficients)
+        energies = np.zeros(n_terms)
+        forces = np.zeros((n_terms, len(atoms), 3))
+        symbols = np.array(atoms.get_chemical_symbols())
+        heavy = np.isin(symbols, self.elements)
+        ii, jj, dd, vv = neighbor_list("ijdD", atoms, self.rm)
+        keep = heavy[ii] & heavy[jj]
+        ii, jj, dd, vv = ii[keep], jj[keep], dd[keep], vv[keep]
+        c0 = np.cos(np.radians(self.theta0_degrees))
+        for centre in np.unique(ii):
+            mine = np.flatnonzero(ii == centre)
+            if len(mine) < 2:
+                continue
+            for a_index, a in enumerate(mine):
+                for b in mine[a_index + 1:]:
+                    ra, rb = vv[a], vv[b]
+                    da, db = dd[a], dd[b]
+                    cos = float(ra @ rb / (da * db))
+                    if cos <= c0:
+                        continue
+                    fa, dfa = self._f(da)
+                    fb, dfb = self._f(db)
+                    # ∂cos/∂r_a and ∂cos/∂r_b (bond vectors from the centre)
+                    dcos_a = rb / (da * db) - cos * ra / da ** 2
+                    dcos_b = ra / (da * db) - cos * rb / db ** 2
+                    u = cos - c0
+                    for n in range(n_terms):
+                        p = n + 2
+                        s, ds = u ** p, p * u ** (p - 1)
+                        energies[n] += s * fa * fb
+                        grad_a = ds * dcos_a * fa * fb + s * dfa * fb * ra / da
+                        grad_b = ds * dcos_b * fa * fb + s * fa * dfb * rb / db
+                        # E depends on r_a = x_j - x_i and r_b = x_k - x_i
+                        forces[n, jj[a]] -= grad_a
+                        forces[n, jj[b]] -= grad_b
+                        forces[n, centre] += grad_a + grad_b
+        return energies, forces
+
+    def energy_and_forces(self, atoms: Atoms) -> tuple[float, np.ndarray]:
+        energies, forces = self.basis(atoms)
+        c = np.asarray(self.coefficients, dtype=float)
+        return float(c @ energies), np.einsum("n,nax->ax", c, forces)
+
+    def to_dict(self) -> dict:
+        return {"type": "acute_angle", "coefficients": list(self.coefficients),
+                "theta0_degrees": self.theta0_degrees, "r1": self.r1, "rm": self.rm,
+                "elements": list(self.elements)}

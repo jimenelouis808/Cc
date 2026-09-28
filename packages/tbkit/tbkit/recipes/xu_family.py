@@ -80,6 +80,17 @@ class XuFamily:
     system: str = ""
     validity_notes: str = ""
     experimental_alpha: dict = field(default_factory=dict)
+    #: Acute-angle correction (:class:`tbkit.repulsive.AcuteAngleTerm`): number
+    #: of powers fitted, with its fixed shape; None = no correction (xu_chn).
+    acute: Optional[dict] = None
+
+    def acute_term(self, coefficients=None):
+        from ..repulsive import AcuteAngleTerm
+
+        spec = self.acute
+        c = tuple(coefficients) if coefficients is not None else (1.0,) * spec["powers"]
+        return AcuteAngleTerm(c, spec.get("theta0_degrees", 80.0), spec.get("r1", 1.7),
+                              spec.get("rm", 2.0), tuple(spec.get("elements", ("C", "N", "O"))))
 
     def __post_init__(self):
         for (a, b), spec in self.pairs.items():
@@ -162,7 +173,11 @@ class XuFamily:
             c = tuple(float(v) for v in coefficients[p * n:(p + 1) * n])
             laws[pair] = CutoffPolynomial(c, spec["rc_rep"], POWERS[0])
         xu = self.build_model(self.initial_guess()).repulsive.terms[0]
-        return SumRepulsive((xu, PairRepulsive(laws)))
+        terms = [xu, PairRepulsive(laws)]
+        if self.acute:
+            start = len(self.pairs) * n
+            terms.append(self.acute_term([float(v) for v in coefficients[start:]]))
+        return SumRepulsive(tuple(terms))
 
 
 # --------------------------------------------------------------------------
@@ -256,6 +271,10 @@ def repulsion_design(family: XuFamily, refs):
         blocks_e, blocks_f = [], []
         for pair, spec in family.pairs.items():
             e, f = pair_basis(ref.atoms, pair, spec["rc_rep"])
+            blocks_e.append(e)
+            blocks_f.append(f)
+        if family.acute:
+            e, f = family.acute_term().basis(ref.atoms)
             blocks_e.append(e)
             blocks_f.append(f)
         out.append((np.concatenate(blocks_e), np.concatenate(blocks_f)))
@@ -527,6 +546,10 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
     pairs = ", ".join(f"{a}-{b}" for a, b in family.pairs)
     data["repulsive"]["source"] = f"C-C: Xu 1992 (embebida); pares {pairs}: " + fit_source
     for term in data["repulsive"]["terms"]:
+        if term["type"] == "acute_angle":
+            term["unit"] = "eV"
+            term["source"] = ("corrección de ángulos agudos (anillos de tres miembros), " +
+                              fit_source)
         if term["type"] == "pair":
             for entry in term["pairs"]:
                 entry["unit"] = "eV"
