@@ -91,6 +91,11 @@ CARBON_MODES = (
     # here the disclinations absorb the bend and a 12 A one comes out at
     # D/d 3.73, inside the published single-wall band.
     "coil (knees)",
+    # One turn of the same coil, welded to itself through the cell
+    # rather than left with two rims -- what a plane-wave code wants.
+    # A periodic cell of a coil is a TORUS, so chi = 0 and the
+    # pentagons and heptagons come out equal: 2 per knee of each.
+    "coil (knees, periodic)",
     # The same node with six arms instead of two. A node of `c` arms is a
     # sphere with `c` holes, so sum(6-n) = 6(2-c) = -24 -- which is the
     # Schwarz P budget, reached with hexagons and exactly 24 heptagons and
@@ -318,6 +323,7 @@ def builder_for(mode: str):
         build_junction,
         build_knee_coil,
         build_knee_junction,
+        build_knee_periodic_coil,
         build_knee_schwarzite,
         build_knee_supernetwork,
         build_knee_toroid,
@@ -370,6 +376,7 @@ def builder_for(mode: str):
         "toroid (polyhex)": build_polyhex_toroid,
         "toroid (knees)": build_knee_toroid,
         "coil (knees)": build_knee_coil,
+        "coil (knees, periodic)": build_knee_periodic_coil,
         "schwarzite (knees)": build_knee_schwarzite,
         "junction (knees)": build_knee_junction,
         "supernetwork (knees)": build_knee_supernetwork,
@@ -713,12 +720,13 @@ def estimate_atoms(job: Job) -> int:
 
     if mode in ("toroid (knees)", "coil (knees)",
                 "schwarzite (knees)", "junction (knees)",
-                "supernetwork (knees)"):
+                "supernetwork (knees)", "coil (knees, periodic)"):
         # Exact, and cheap to ask for: the mesh is combinatorial, so build
         # it without relaxing and count the triangles -- one atom each.
         from .builders.knee import (
             build_knee_coil,
             build_knee_junction,
+            build_knee_periodic_coil,
             build_knee_schwarzite,
             build_knee_supernetwork,
             build_knee_toroid,
@@ -726,6 +734,7 @@ def estimate_atoms(job: Job) -> int:
 
         maker = {"toroid (knees)": build_knee_toroid,
                  "coil (knees)": build_knee_coil,
+                 "coil (knees, periodic)": build_knee_periodic_coil,
                  "schwarzite (knees)": build_knee_schwarzite,
                  "junction (knees)": build_knee_junction,
                  "supernetwork (knees)": build_knee_supernetwork}[mode]
@@ -1083,6 +1092,12 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     "coil (knees)": ("coil-knees", {
         "coil_radius": "--coil-radius", "pitch": "--pitch",
         "sides_per_turn": "--sides", "turns": "--turns",
+        "circumference": "--circumference", "knee": "--knee",
+        "bond": "--bond", "vacuum": "--vacuum",
+    }),
+    "coil (knees, periodic)": ("coil-knees-periodic", {
+        "coil_radius": "--coil-radius", "pitch": "--pitch",
+        "sides_per_turn": "--sides",
         "circumference": "--circumference", "knee": "--knee",
         "bond": "--bond", "vacuum": "--vacuum",
     }),

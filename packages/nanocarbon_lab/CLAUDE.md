@@ -1593,43 +1593,95 @@ balances perfectly as one that does not. The offsets are enumerated over
 the live axes instead. (This is the same fact `analyse/rings.py` refuses
 a too-small cell over, met from the other side.)
 
-### The periodic coil: the machinery is there and it does not close
+### The periodic coil, and the sign that hid it
 
-`knee_path_mesh` takes a `period`, and the screw-periodic wrap is
-written: the corner after the last one is the first moved along by one
-period, so the join is a real mitre knee rather than two rims welded
-afterwards (welding them left the boundaries 1.8-3.8 Å apart, a full
-lattice step). **It has never produced a closed mesh**, and this is what
-was measured rather than assumed.
+**Correcting this file.** An earlier version of this section said the
+periodic coil "does not close", with the holonomy measured and about 8000
+radii swept and none working. The holonomy part is right and the
+conclusion was wrong: the sweep was measuring **a sign error**.
 
-The obstruction is the **frame holonomy**. Composing the mitre
-reflections once round a turn gives an orthogonal map `M`, and since a
-reflection sends the incoming axis to minus the outgoing one, `M` fixes
-`axes[0]`: it is a rotation *about the first arm*, by an angle the
-structure did not ask for. Measured, that angle is a smooth, continuous
-function of the coil radius and the pitch -- `-23.7` to `-124.2` degrees
-over R = 8-20 Å and pitch 8-16 Å -- and it goes to **zero as the pitch
-goes to zero**, which is the flat ring, which is the toroid, which does
-close. Nothing about it is quantised.
+At the wrap knee the *incoming* arm is the last one, whose boundary
+already sits one period along the axis. The seam code added the period to
+that side instead of subtracting it, pushing it to two periods. Every
+other knee has an offset of zero, so nothing else could show the fault,
+and the symptom -- "the two boundaries did not land on each other" -- is
+exactly what a real holonomy mismatch looks like. With the sign flipped
+the coil welds, and `knee_path_mesh`'s `period` does what it was written
+to do: the wrap is a genuine mitre knee rather than two rims welded
+afterwards.
 
-So the obvious condition is that the holonomy be a whole number of
-lattice steps, `m * 2*pi/k`, since a rotation by one step maps the ring
-stack `(i, j) -> (i, j+1)` and is a symmetry of it. Solving for the R
-that gives exactly that, by Brent on a bracket, is a one-line root find
-and **it is not enough**: every solved radius still fails at the wrap
-knee with "the two boundaries did not land on each other".
+**The census is predictable before anything is built.** A periodic cell
+of a coil is a **torus** -- the tube closes on itself through the
+boundary -- so `chi = 0`, `sum(6-n) = 0`, and with only 5s, 6s and 7s
+available that forces equal numbers. The law fixes them: two pairs at
+each knee, so a turn of `s` sides carries `2s` of each. At the shipped
+shape (6 sides, k=10, pitch 15 Å, R=14): **672 atoms, `{5: 12, 6: 312,
+7: 12}`, bonds 1.376-1.495 Å, angles 107.0-123.5, zero contacts, CLEAN,
+`D/d = 3.52`** -- inside the 3.5-3.9 band the single-wall coil papers
+report -- and **100% of the disclinations on the side they belong on**,
+every pentagon outside and every heptagon inside, which is the one
+structural claim those papers make that can be checked without running
+anything.
 
-A fine sweep settles it rather than leaving it a hunch: R from 6 to 40 Å
-in 0.05 Å steps, at 6, 8 and 12 sides, k = 8 and 10, pitch 10 and 12 --
-about 8000 meshes, and **not one closes**. So the holonomy condition is
-necessary and demonstrably not sufficient, and whatever the second
-condition is, it is not a codimension-one set in the radius.
+#### Most radii do not close, and closing is not obeying the law
 
-**The finite knee coil is exact and unaffected** -- 798 atoms,
-`{5: 30, 6: 331, 7: 30}`, D/d 3.73 -- and a periodic one is open work,
-not a thing the route quietly does badly. Do not report this as done on
-the strength of the `period` parameter existing; that is the mistake
-this note exists to prevent.
+Two separate facts, and the first is the one the old note got half right.
+
+The mitre reflections carry a frame once round the turn and return it
+rotated -- compose them and the map **fixes the first arm**, so it is a
+rotation about it by an angle the structure did not ask for. That angle
+is continuous in the radius and the pitch (`-23.7` to `-124.2` degrees
+over R = 8-20 Å and pitch 8-16 Å) and goes to zero as the pitch does,
+which is the flat ring, which is the toroid. The wrap pairs up only where
+it is close to a whole lattice step. Measured at 6 sides, k=10, pitch 15,
+over R = 12 to 17 in 0.05 Å steps: **19 of 101 radii close**, in two
+windows, 13.90-14.35 and 15.05-15.45 Å. Windows, not points -- but not a
+free parameter either.
+
+And inside a window the pair count still moves: 13.90-14.20 gives the
+law's twelve, 14.25-14.35 gives **thirteen**. Thirteen is a sound torus,
+`sum(6-n)` is 0 either way, and **no census check sees the difference** --
+which is precisely why the builder warns rather than passing it in
+silence, and why `clean_periodic_coils` filters on the law while the
+builder only requires the budget.
+
+A radius that fails the weld and a radius that welds into the wrong
+census give **different refusals**, and a test pins both: R = 12.5 never
+pairs, R = 13.0 welds and comes out `{5: 16, ..., 7: 12, 8: 2}`.
+
+**The finite coil is untouched.** The offset only applies when a period
+is given, so `build_knee_coil` cannot have moved, and a test asserts it
+still has its two rims.
+
+### One script builds every exact structure and checks it
+
+`examples/verify_exact_structures.py` is the thing to run when the
+question is "does any of this actually hold". It builds each structure
+and prints the measured census beside **the budget its skeleton fixed
+before anything was meshed** -- so the "law" column is a comparison, not
+a restatement.
+
+```
+structure                 atoms  census              sum(6-n)  law  verdict  placed
+toroid, 6 knees            1032  5:12 6:492 7:12           +0   ok  clean      100%
+coil, finite                406  5:14 6:167 7:14           +0   --  clean      100%
+coil, periodic cell         672  5:12 6:312 7:12           +0   ok  clean      100%
+junction Y                  536  6:240 7:6                 -6   ok  clean      100%
+junction X (planar)         780  5:4 6:328 7:16           -12   ok  clean      100%
+junction, diamond node      756  6:328 7:12               -12   ok  clean      100%
+sheet, super-square         180  5:4 6:68 7:16            -12   ok  clean      100%
+sheet, super-graphene       920  6:432 7:24               -24   ok  clean      100%
+Schwarz P / D / gyroid           (pass --all: -24, -96, -48)
+```
+
+Every row `clean` and every row at 100% placement, which is the column
+worth reading twice: it is measured by **fitting the surface over each
+ring** and taking the sign of `K` there, not read off the ring size, and
+the flat-haeckelite control in `analyse/curvature.py` is what makes that
+number mean anything.
+
+`tests/test_verify_example.py` runs the script, because a silent breakage
+there would report "All laws met" about a table it never built.
 
 ### A saddle has no pentagons, so its doping had no site
 

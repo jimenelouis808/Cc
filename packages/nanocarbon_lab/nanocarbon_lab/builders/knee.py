@@ -549,7 +549,7 @@ def knee_path_mesh(
         # one period along, so the two sides are compared -- and merged --
         # modulo that period. The seam is then shared rather than welded,
         # and everything downstream reads it by minimum image.
-        offset = np.zeros(3) if (period is None or q != 0) else period
+        offset = np.zeros(3) if (period is None or q != 0) else -period
         gap = (vertices[lower] + offset)[:, None, :] - vertices[upper][None, :, :]
         distances = np.linalg.norm(gap, axis=2)
         nearest = distances.argmin(axis=1)
@@ -3068,6 +3068,311 @@ def build_knee_coil(
             stacklevel=2,
         )
     return atoms
+
+
+#: ``(sides_per_turn, circumference, pitch, coil_radius)`` for the
+#: periodic coil: a shape that comes out exact **and** sits inside the
+#: single-wall band the coil papers report. Not every shape closes -- the
+#: wrap knee has to land on a lattice step -- and
+#: :func:`clean_periodic_coils` is the list that does.
+#: Measured: 672 atoms, ``{5: 12, 6: 648, 7: 12}``, bonds 1.376-1.495 Å,
+#: angles 107.0-123.5, zero contacts, CLEAN, every disclination on its own
+#: side, and ``D/d = 3.52`` -- inside the 3.5-3.9 band Popovic and Liu
+#: report for the single-wall coils. It was picked by relaxing the
+#: in-band shapes and keeping the tightest, not by rounding.
+SOUND_PERIODIC_COIL = (6, 10, 15.0, 14.0)
+
+
+def clean_periodic_coils(
+    bond: float = CC_BOND,
+    sides=(6, 8, 10, 12),
+    circumferences=(8, 10, 12),
+    pitches=tuple(float(x) for x in range(8, 19)),
+    radii=tuple(float(x) / 2.0 for x in range(16, 65)),
+) -> list[tuple[int, int, float, float]]:
+    """Periodic-coil shapes whose census is exactly the law's.
+
+    A periodic cell of a coil is a **torus** -- the tube closes on itself
+    through the boundary -- so ``chi = 0`` and ``sum(6-n) = 0``, which with
+    only 5s, 6s and 7s available forces equal numbers of each. The law
+    then fixes them: each knee carries
+    :data:`PAIRS_PER_KNEE` pairs, so a turn of ``s`` sides carries ``2s``
+    pentagons and ``2s`` heptagons.
+
+    Whether a shape closes at all is not continuous in the radius; see
+    :func:`build_knee_periodic_coil` for why.
+    """
+    spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+    good: list[tuple[int, int, float, float]] = []
+    for s in sides:
+        want = s * PAIRS_PER_KNEE
+        for k in circumferences:
+            radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / k))
+            for pitch in pitches:
+                if pitch <= 2.0 * radius:
+                    continue
+                for coil_radius in radii:
+                    angle = 2.0 * np.pi * np.arange(s) / s
+                    points = np.column_stack([
+                        coil_radius * np.cos(angle),
+                        coil_radius * np.sin(angle),
+                        pitch * angle / (2.0 * np.pi)])
+                    try:
+                        vertices, tris, _ = knee_path_mesh(
+                            points, k, radius, spacing,
+                            seam_shift=SEAM_SHIFT,
+                            period=np.array([0.0, 0.0, pitch]))
+                    except (ValueError, StopIteration, KeyError):
+                        continue
+                    census, _, broken = mesh_census(vertices, tris)
+                    if broken or set(census) - {5, 6, 7}:
+                        continue
+                    if census.get(5, 0) != want or census.get(7, 0) != want:
+                        continue
+                    good.append((int(s), int(k), float(pitch),
+                                 float(coil_radius)))
+    return good
+
+
+def build_knee_periodic_coil(
+    coil_radius: float | None = None,
+    pitch: float | None = None,
+    sides_per_turn: int | None = None,
+    circumference: int | None = None,
+    knee: str = "pentagon",
+    bond: float = CC_BOND,
+    vacuum: float = DEFAULT_VACUUM_1D,
+    relax: bool = True,
+    relax_iterations: int = 3000,
+) -> Atoms:
+    """One turn of a knee coil, welded to itself through the cell.
+
+    :func:`build_knee_coil` builds a finite coil with a rim at each end.
+    This builds **one period**, periodic along the axis, which is what a
+    plane-wave calculation wants: the wrap is a real mitre knee rather
+    than two rims welded afterwards, so there is no seam for the
+    relaxation to carry.
+
+    **The census is predictable before anything is built.** A periodic
+    cell of a coil is a *torus* -- the tube closes on itself through the
+    boundary -- so ``chi = 0``, ``sum(6-n) = 0``, and with only 5s, 6s and
+    7s available that forces equal numbers. The law fixes them: each knee
+    carries two pentagon-heptagon pairs, so a turn of ``s`` sides carries
+    ``2s`` of each. Measured at the shipped shape (8 sides, k=8, pitch 8,
+    R=12): ``{5: 16, 6: N, 7: 16}`` and ``sum(6-n) = 0`` exactly.
+
+    **Most radii do not close, and closing is not the same as obeying the
+    law.** The mitre reflections carry a frame once round the turn and
+    return it rotated -- a holonomy the structure did not ask for -- and
+    the wrap pairs up only where that rotation is close enough to a whole
+    lattice step. Measured at 6 sides, k=10, pitch 15 Å, over R = 12 to 17
+    in 0.05 Å steps: **19 of 101 radii close**, in two windows,
+    13.90-14.35 Å and 15.05-15.45 Å. So it is windows rather than points,
+    and narrow ones -- but it is not a free parameter either.
+
+    Inside a window the census is *usually* the law's ``2s`` pairs and not
+    always: at 6 sides, 13.90-14.20 gives twelve of each and 14.25-14.35
+    gives **thirteen**. Thirteen is still a sound torus -- ``sum(6-n)`` is
+    0 either way, and no census check sees the difference -- so this
+    builder **warns** rather than refusing, and `info["pairs_expected"]`
+    records what the law asked for beside what came out.
+    :func:`clean_periodic_coils` filters on the law, so its list is the
+    stricter one.
+
+    Parameters
+    ----------
+    coil_radius, pitch, sides_per_turn, circumference
+        Left out, :data:`SOUND_PERIODIC_COIL` -- a shape that is exact and
+        inside the published single-wall ``D/d`` band.
+    knee
+        ``"pentagon"`` puts a pentagon outside and a heptagon inside, as
+        the coil papers describe; ``"octagon"`` is the other seam offset.
+    bond
+        C-C length (Å).
+    vacuum
+        Padding across the axis (Å); along it the cell is the pitch.
+    relax, relax_iterations
+        Whether to relax with the valence force field, under the minimum
+        image convention along the axis.
+
+    Returns
+    -------
+    ase.Atoms
+        ``pbc=(False, False, True)`` with the cell's z equal to the pitch.
+
+    Raises
+    ------
+    ValueError
+        If the pitch does not clear the tube, or the shape does not close
+        -- in which case the message names shapes that do.
+    """
+    if knee not in ("pentagon", "octagon"):
+        raise ValueError(
+            f"knee must be 'pentagon' or 'octagon', not {knee!r}."
+        )
+    fallback = SOUND_PERIODIC_COIL
+    sides_per_turn = (fallback[0] if sides_per_turn is None
+                      else int(sides_per_turn))
+    circumference = (fallback[1] if circumference is None
+                     else int(circumference))
+    pitch = fallback[2] if pitch is None else float(pitch)
+    coil_radius = fallback[3] if coil_radius is None else float(coil_radius)
+    if sides_per_turn < 3:
+        raise ValueError(
+            f"a turn needs at least three sides ({sides_per_turn} given)."
+        )
+    spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+    tube_radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / circumference))
+    if pitch <= 2.0 * tube_radius:
+        raise ValueError(
+            f"a pitch of {pitch:.1f} Å does not clear a tube of radius "
+            f"{tube_radius:.2f} Å, so consecutive turns would pass through "
+            f"each other. Raise it above {2.0 * tube_radius:.1f} Å."
+        )
+
+    angle = 2.0 * np.pi * np.arange(sides_per_turn) / sides_per_turn
+    points = np.column_stack([coil_radius * np.cos(angle),
+                              coil_radius * np.sin(angle),
+                              pitch * angle / (2.0 * np.pi)])
+    shift = SEAM_SHIFT if knee == "pentagon" else 0
+    period = np.array([0.0, 0.0, float(pitch)])
+    want = sides_per_turn * PAIRS_PER_KNEE
+    try:
+        vertices, tris, _ = knee_path_mesh(points, circumference, tube_radius,
+                                           spacing, seam_shift=shift,
+                                           period=period)
+    except (ValueError, StopIteration, KeyError) as problem:
+        raise ValueError(
+            f"{sides_per_turn} sides of circumference {circumference} at "
+            f"pitch {pitch:.1f} Å and R = {coil_radius:.1f} Å does not weld "
+            f"through the cell ({problem}). The wrap knee pairs up only "
+            "where the frame's holonomy is close to a whole lattice step, "
+            "and measured, that is about a fifth of the radii, in narrow "
+            "windows; clean_periodic_coils() lists shapes that close."
+        ) from problem
+
+    census, degrees, broken = mesh_census(vertices, tris)
+    deficit = sum((6 - size) * count for size, count in census.items())
+    if broken or set(census) - {5, 6, 7} or deficit != 0:
+        raise ValueError(
+            f"the cell came out with the census "
+            f"{dict(sorted(census.items()))} and sum(6-n) = {deficit:+d}, "
+            "not the equal pentagons and heptagons a periodic coil is a "
+            "torus and must have. clean_periodic_coils() lists shapes that "
+            "do."
+        )
+
+    contacts = defect_contacts(vertices, tris)
+    radial = np.hypot(vertices[:, 0], vertices[:, 1])
+    fives = [x for x, d in degrees.items() if d == 5]
+    sevens = [x for x, d in degrees.items() if d == 7]
+    outside = sum(1 for x in fives if radial[x] > coil_radius)
+    inside = sum(1 for x in sevens if radial[x] < coil_radius)
+    placed = ((outside + inside) / float(len(fives) + len(sevens))
+              if fives or sevens else 1.0)
+
+    from .capped_cnt import geometry_report
+    from .fullerene_mesh import dual_honeycomb, relax_shell
+
+    # Zero on x and y marks them aperiodic; only the axis repeats.
+    box = np.array([0.0, 0.0, float(pitch)])
+    positions, bonds, rings = dual_honeycomb(
+        (vertices, np.asarray(tris, dtype=int)), box=box)
+    # **No cell rescale here**, unlike the schwarzite. The pitch IS the
+    # cell and the coil radius is quantised by the holonomy, so there is
+    # no free length to absorb a uniform stretch: rescaling the axis
+    # alone would shear the wall off its own helix.
+    if relax:
+        positions = relax_shell(positions, bonds, equilibrium=bond,
+                                max_iterations=relax_iterations, box=box)
+
+    ring_counts: dict[int, int] = {}
+    for ring in rings:
+        ring_counts[len(ring)] = ring_counts.get(len(ring), 0) + 1
+
+    span = positions.max(axis=0) - positions.min(axis=0)
+    cell = [span[0] + 2.0 * vacuum, span[1] + 2.0 * vacuum, float(pitch)]
+    atoms = Atoms(symbols=["C"] * len(positions), positions=positions,
+                  cell=cell, pbc=(False, False, True))
+    atoms.center(axis=(0, 1))
+    atoms.wrap()
+    aspect = coil_radius / tube_radius
+    atoms.info.update({
+        "builder": "knee_periodic_coil",
+        "structure_type": "coil",
+        "kind": "periodic",
+        "knee": knee,
+        "knees": int(sides_per_turn),
+        "sides_per_turn": int(sides_per_turn),
+        "bend_per_knee_deg": round(360.0 / sides_per_turn, 2),
+        "pairs_per_knee": PAIRS_PER_KNEE,
+        "pairs_expected": int(want),
+        "coil_radius": round(float(coil_radius), 3),
+        "pitch": round(float(pitch), 3),
+        "tube_radius": round(float(tube_radius), 3),
+        "coil_aspect": round(float(aspect), 3),
+        "literature_coil_aspect": list(LITERATURE_COIL_ASPECT),
+        "circumference": int(circumference),
+        "euler": 0,
+        "genus": 1,
+        "ring_budget": 0,
+        "ring_counts": dict(sorted(ring_counts.items())),
+        "ring_deficit": int(sum((6 - s) * c for s, c in ring_counts.items())),
+        "mesh_census": dict(sorted(census.items())),
+        "disclinations_placed": round(float(placed), 4),
+        "like_sign_pairs": int(contacts["like"]),
+        "fused_dipoles": int(contacts["fused"]),
+        "rings": [[int(x) for x in ring] for ring in rings],
+        "bonds": sorted(bonds),
+        "relaxed": bool(relax),
+        "geometry": geometry_report(positions, sorted(bonds), box=box),
+    })
+    got = ring_counts.get(5, 0)
+    if got != want:
+        warnings.warn(
+            f"{sides_per_turn} knees of {PAIRS_PER_KNEE} pairs is {want} "
+            f"pentagons by the law, and this shape came out with {got}. It "
+            "is still a sound torus -- sum(6-n) is 0 either way, which is "
+            "why no census check sees the difference -- but it is not the "
+            "arrangement the law asks for. Nudge the radius: the census "
+            "changes within a window that closes.",
+            stacklevel=2,
+        )
+    low, high = LITERATURE_COIL_ASPECT
+    if not low <= aspect <= high:
+        warnings.warn(
+            f"D/d = {aspect:.2f} is outside the {low}-{high} band the "
+            "published single-wall coils sit in. The structure is not wrong "
+            "-- multi-wall coils reach ten and more -- but it is not the "
+            "geometry those calculations relaxed to.",
+            stacklevel=2,
+        )
+    return atoms
+
+
+def describe_knee_periodic_coil(atoms: Atoms) -> str:
+    """One line: the cell, the law and where the disclinations went."""
+    info = atoms.info
+    counts = info.get("ring_counts", {})
+    census = ", ".join(f"{s}:{c}" for s, c in sorted(counts.items()))
+    want = int(info.get("pairs_expected", 0))
+    exact = (counts.get(5, 0) == counts.get(7, 0) == want
+             and not set(counts) - {5, 6, 7})
+    law = (f"exactly the {want} pairs the law asks of "
+           f"{info.get('sides_per_turn', 0)} knees"
+           if exact else "not the exact census")
+    placed = info.get("disclinations_placed")
+    where = ("" if placed is None
+             else f", {100 * placed:.0f}% of disclinations on the curvature "
+                  "side they belong on")
+    return (
+        f"periodic knee coil: one turn of {info.get('sides_per_turn', 0)} "
+        f"sides, R={info.get('coil_radius', 0):.1f} r="
+        f"{info.get('tube_radius', 0):.2f} Å (D/d "
+        f"{info.get('coil_aspect', 0):.2f}), period "
+        f"{info.get('pitch', 0):.1f} Å, {len(atoms)} atoms, rings {census}, "
+        f"sum(6-n) = {info.get('ring_deficit', 0):+d}; {law}{where}."
+    )
 
 
 def describe_knee_coil(atoms: Atoms) -> str:

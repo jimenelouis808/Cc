@@ -58,6 +58,7 @@ from ..builders import (
     build_junction,
     build_knee_coil,
     build_knee_junction,
+    build_knee_periodic_coil,
     build_knee_schwarzite,
     build_knee_supernetwork,
     build_knee_toroid,
@@ -1170,6 +1171,35 @@ def _cmd_schwarzite_knees(args):
     print(f"  law         = a node of c arms is a sphere with c holes, so "
           f"sum(6-n) = 6(2-c) = {info['ring_budget']:+d} for c = "
           f"{info['arms']}")
+    return 0
+
+
+def _cmd_coil_knees_periodic(args):
+    atoms = build_knee_periodic_coil(
+        coil_radius=args.coil_radius, pitch=args.pitch,
+        sides_per_turn=args.sides, circumference=args.circumference,
+        knee=args.knee, bond=args.bond, vacuum=args.vacuum,
+        relax=not args.no_relax,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    print(f"  cell        = one turn of {info['sides_per_turn']} sides, "
+          f"period {info['pitch']:.1f} A along the axis, genus "
+          f"{info['genus']}")
+    print(f"  coil        = R={info['coil_radius']:.1f} r="
+          f"{info['tube_radius']:.2f} A, D/d {info['coil_aspect']:.2f} "
+          f"(single-wall band {info['literature_coil_aspect'][0]}-"
+          f"{info['literature_coil_aspect'][1]})")
+    print(f"  wall        = {dict(sorted(info['ring_counts'].items()))}, "
+          f"sum(6-n) = {info['ring_deficit']:+d}")
+    print(f"  law         = a periodic coil cell is a TORUS, so sum(6-n) = 0 "
+          f"and the {info['pairs_expected']} pentagons and "
+          f"{info['pairs_expected']} heptagons come out equal: "
+          f"{info['pairs_per_knee']} pairs at each of "
+          f"{info['sides_per_turn']} knees")
+    print(f"  placement   = {100 * info['disclinations_placed']:.0f}% of "
+          "disclinations on the curvature side they belong on")
     return 0
 
 
@@ -2395,6 +2425,41 @@ def build_parser() -> argparse.ArgumentParser:
     _add_doping_arguments(
         sk, seed_help="Seed for dopant placement; the cell itself is exact.")
     sk.set_defaults(func=_cmd_schwarzite_knees)
+
+    cp = sub.add_parser(
+        "coil-knees-periodic",
+        help="One turn of a knee coil welded to itself through the cell: "
+             "periodic along the axis, no rims, and the census the law "
+             "fixes -- a periodic coil cell is a torus, so the pentagons "
+             "and heptagons come out equal, two pairs at each knee.",
+    )
+    cp.add_argument("--coil-radius", type=float, default=None,
+                    dest="coil_radius",
+                    help="Å. The radius is QUANTISED -- the wrap only pairs "
+                         "up when the frame's holonomy lands on a lattice "
+                         "step -- so a refusal names shapes that close.")
+    cp.add_argument("--pitch", type=float, default=None,
+                    help="Å along the axis; this is the cell.")
+    cp.add_argument("--sides", type=int, default=None,
+                    help="Knees in one turn.")
+    cp.add_argument("--circumference", type=int, default=None,
+                    help="Mesh vertices around the tube.")
+    cp.add_argument("--knee", choices=("pentagon", "octagon"),
+                    default="pentagon",
+                    help="Which seam offset: a pentagon outside and a "
+                         "heptagon inside, as the coil papers describe, or "
+                         "an octagon.")
+    cp.add_argument("--bond", type=float, default=1.42)
+    cp.add_argument("--vacuum", type=float, default=12.0)
+    cp.add_argument("--no-relax", action="store_true",
+                    help="Skip the force field. The census is set by the "
+                         "mesh, so this changes the geometry and nothing "
+                         "else.")
+    cp.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        cp, seed_help="Seed for dopant placement; the coil itself is exact.")
+    cp.set_defaults(func=_cmd_coil_knees_periodic)
 
     jk = sub.add_parser(
         "junction-knees",

@@ -22,21 +22,25 @@ from nanocarbon_lab.builders.knee import (
     MESH_EDGE,
     MIN_KNEES,
     PAIRS_PER_KNEE,
+    SOUND_PERIODIC_COIL,
     SOUND_SHAPE,
     TURN_PER_PAIR,
     build_knee_coil,
     build_knee_junction,
+    build_knee_periodic_coil,
     build_knee_schwarzite,
     build_knee_supernetwork,
     build_knee_toroid,
     clean_circumferences,
     clean_junction_shapes,
+    clean_periodic_coils,
     clean_shapes,
     collapse_degree_four,
     collapse_degree_three,
     defect_contacts,
     describe_knee_coil,
     describe_knee_junction,
+    describe_knee_periodic_coil,
     describe_knee_schwarzite,
     describe_knee_supernetwork,
     describe_knee_toroid,
@@ -1110,3 +1114,127 @@ class TestEveryKindCarriesItsOwnShape:
 def _boundary_cycles_of(tris):
     from nanocarbon_lab.builders.knee import _boundary_cycles
     return _boundary_cycles(tris)
+
+
+class TestAPeriodicCoilCellIsATorus:
+    """One turn welded to itself through the cell. The tube closes on
+    itself through the boundary, so ``chi = 0``, ``sum(6-n) = 0``, and
+    with only 5s, 6s and 7s available that forces equal numbers -- which
+    the law then fixes at two pairs per knee."""
+
+    @pytest.fixture(scope="class")
+    def coil(self):
+        return build_knee_periodic_coil()
+
+    def test_the_census_is_the_law_and_the_budget_is_zero(self, coil):
+        sides = coil.info["sides_per_turn"]
+        want = sides * PAIRS_PER_KNEE
+        assert coil.info["ring_counts"][5] == want
+        assert coil.info["ring_counts"][7] == want
+        assert set(coil.info["ring_counts"]) == {5, 6, 7}
+        assert coil.info["ring_deficit"] == 0
+        assert coil.info["euler"] == 0
+        assert coil.info["genus"] == 1
+
+    def test_it_repeats_along_the_axis_and_nowhere_else(self, coil):
+        assert list(coil.pbc) == [False, False, True]
+        # The cell along the axis IS the pitch, not a padded span.
+        assert coil.cell.lengths()[2] == pytest.approx(coil.info["pitch"])
+
+    def test_every_pentagon_is_outside_and_heptagon_inside(self, coil):
+        # The one structural claim the coil papers make that can be
+        # checked on a finished model without running anything.
+        assert coil.info["disclinations_placed"] == 1.0
+
+    def test_the_geometry_is_carbon(self, coil):
+        geometry = coil.info["geometry"]
+        assert 1.30 <= geometry["bond_min"] <= geometry["bond_max"] <= 1.55
+        assert 100.0 <= geometry["angle_min"]
+        assert geometry["angle_max"] <= 135.0
+        assert geometry["n_close_contacts"] == 0
+
+    def test_it_sits_in_the_published_single_wall_band(self, coil):
+        low, high = coil.info["literature_coil_aspect"]
+        assert low <= coil.info["coil_aspect"] <= high
+
+    def test_what_it_says_about_itself(self, coil):
+        line = describe_knee_periodic_coil(coil)
+        assert "exactly the 12 pairs" in line
+        assert "100%" in line
+
+    def test_most_radii_do_not_close_at_all(self):
+        # The wrap pairs up only where the frame's holonomy is close to a
+        # whole lattice step. Measured over R = 12 to 17 at 0.05 Å steps,
+        # 19 of 101 close, in two windows -- so it is windows rather than
+        # a free parameter, and there is a list rather than a formula.
+        sides, circumference, pitch, _ = SOUND_PERIODIC_COIL
+        closed = 0
+        for step in range(101):
+            radius = 12.0 + 0.05 * step
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    build_knee_periodic_coil(
+                        coil_radius=radius, pitch=pitch,
+                        sides_per_turn=sides, circumference=circumference,
+                        relax=False)
+            except ValueError:
+                continue
+            closed += 1
+        assert 0 < closed < 40
+
+    def test_a_radius_that_does_not_weld_says_why(self):
+        # R = 12.5 is outside both windows, so the wrap knee never pairs.
+        with pytest.raises(ValueError) as excinfo:
+            build_knee_periodic_coil(coil_radius=12.5, pitch=15.0,
+                                     sides_per_turn=6, circumference=10,
+                                     relax=False)
+        assert "holonomy" in str(excinfo.value)
+
+    def test_a_radius_that_welds_but_misses_the_census_says_that_instead(
+            self):
+        # R = 13.0 DOES weld and comes out {5: 16, ..., 7: 12, 8: 2}: a
+        # closed torus whose rings are not five, six and seven alone. The
+        # two refusals are different and say so.
+        with pytest.raises(ValueError) as excinfo:
+            build_knee_periodic_coil(coil_radius=13.0, pitch=15.0,
+                                     sides_per_turn=6, circumference=10,
+                                     relax=False)
+        assert "census" in str(excinfo.value)
+        assert "holonomy" not in str(excinfo.value)
+
+    def test_closing_is_not_the_same_as_obeying_the_law(self):
+        # Inside a window that closes, the pair count still moves: at 6
+        # sides 13.90-14.20 gives the law's twelve and 14.25 gives
+        # thirteen. Thirteen is a sound torus -- sum(6-n) is 0 either way
+        # and no census check sees it -- so the builder warns.
+        with pytest.warns(UserWarning, match="by the law"):
+            atoms = build_knee_periodic_coil(coil_radius=14.3, pitch=15.0,
+                                             sides_per_turn=6,
+                                             circumference=10, relax=False)
+        assert atoms.info["ring_deficit"] == 0
+        assert atoms.info["ring_counts"][5] != atoms.info["pairs_expected"]
+
+    def test_the_shape_list_is_not_empty_and_every_entry_builds(self):
+        shapes = clean_periodic_coils(sides=(6,), circumferences=(10,),
+                                      pitches=(15.0,),
+                                      radii=(13.5, 14.0, 14.5, 15.0))
+        assert shapes
+        for sides, circumference, pitch, radius in shapes:
+            atoms = build_knee_periodic_coil(
+                coil_radius=radius, pitch=pitch, sides_per_turn=sides,
+                circumference=circumference, relax=False)
+            assert atoms.info["ring_deficit"] == 0
+
+    def test_a_pitch_that_does_not_clear_the_tube_is_refused(self):
+        with pytest.raises(ValueError) as excinfo:
+            build_knee_periodic_coil(pitch=4.0)
+        assert "clear" in str(excinfo.value)
+
+    def test_the_finite_coil_is_untouched(self):
+        # The wrap offset only applies when a period is given, so the
+        # finite coil cannot have moved: it still has its two rims.
+        finite = build_knee_coil(turns=1, relax=False)
+        assert finite.info["builder"] == "knee_coil"
+        assert finite.info["rim_atoms"]
+        assert not all(finite.pbc)

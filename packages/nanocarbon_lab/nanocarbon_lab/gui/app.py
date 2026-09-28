@@ -308,6 +308,12 @@ PRESETS: dict[str, dict[str, object]] = {
     # 968 atoms, {6: 456, 7: 24}, sum(6-n) = -24 and not one pentagon --
     # which is what a minimal surface must look like. The meshed route
     # returns 33 pentagons at a comparable cell.
+    # One turn of the same coil welded through the cell: periodic along
+    # the axis, no rims, D/d 3.52 inside the published single-wall band.
+    # 672 atoms, {5: 12, 6: 312, 7: 12} -- a periodic coil cell is a
+    # TORUS, so sum(6-n) = 0 and the two come out equal.
+    "Nanocoil (knees, periodic, DFT-ready)": {
+        "mode_kind": "coil (knees, periodic)", "anneal": 0},
     "Schwarz P (knees, no pentagons)": {
         "mode_kind": "schwarzite (knees)", "knee_cell": "primitive",
         "anneal": 0},
