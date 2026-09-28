@@ -57,6 +57,7 @@ from ..builders import (
     build_heptanene,
     build_junction,
     build_knee_coil,
+    build_knee_schwarzite,
     build_knee_toroid,
     build_multiwall_cnt,
     build_nano_onion,
@@ -1138,6 +1139,29 @@ def _cmd_coil_knees(args):
           f"{info['fused_dipoles']} fused 5-7 dipoles")
     print(f"  rim         = {len(info['rim_atoms'])} two-coordinate atoms; a "
           "coil is open at both ends, as a nanocone is at its base")
+    return 0
+
+
+def _cmd_schwarzite_knees(args):
+    atoms = build_knee_schwarzite(
+        circumference=args.circumference, arm_rows=args.arm_rows,
+        bond=args.bond, relax=not args.no_relax,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    print(f"  cell        = {info['cell_length']:.1f} A cubic, {info['arms']} "
+          f"arms a node, genus {info['genus']}")
+    print(f"  wall        = {dict(sorted(info['ring_counts'].items()))}, "
+          f"sum(6-n) = {info['ring_deficit']:+d} against a budget of "
+          f"{info['ring_budget']:+d}")
+    # The number the implicit route cannot get to zero.
+    verdict = ("none, which is what a minimal surface must have"
+               if not info["pentagons"] else f"{info['pentagons']}")
+    print(f"  pentagons   = {verdict}")
+    print(f"  law         = a node of c arms is a sphere with c holes, so "
+          f"sum(6-n) = 6(2-c) = {info['ring_budget']:+d} for c = "
+          f"{info['arms']}")
     return 0
 
 
@@ -2273,6 +2297,30 @@ def build_parser() -> argparse.ArgumentParser:
     _add_doping_arguments(
         ck, seed_help="Seed for dopant placement; the coil itself is exact.")
     ck.set_defaults(func=_cmd_coil_knees)
+
+    sk = sub.add_parser(
+        "schwarzite-knees",
+        help="A Schwarz P schwarzite built from a six-arm node: hexagons "
+             "and exactly 24 heptagons, and NO pentagons -- a minimal "
+             "surface has no positive curvature anywhere, so a pentagon on "
+             "one is never right. The meshed route returns 33 of them.",
+    )
+    sk.add_argument("--circumference", type=int, default=20,
+                    help="Mesh vertices around each arm.")
+    sk.add_argument("--arm-rows", type=int, default=9, dest="arm_rows",
+                    help="Rows along each arm. With the circumference this "
+                         "sets the cell. Not every pair closes cleanly; the "
+                         "refusal names the ones that do.")
+    sk.add_argument("--bond", type=float, default=1.42)
+    sk.add_argument("--no-relax", action="store_true",
+                    help="Skip the force field. The census is set by the "
+                         "mesh, so this changes the geometry and nothing "
+                         "else.")
+    sk.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        sk, seed_help="Seed for dopant placement; the cell itself is exact.")
+    sk.set_defaults(func=_cmd_schwarzite_knees)
 
     hp = sub.add_parser(
         "heptanene",

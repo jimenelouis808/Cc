@@ -22,15 +22,20 @@ from nanocarbon_lab.builders.knee import (
     SOUND_SHAPE,
     TURN_PER_PAIR,
     build_knee_coil,
+    build_knee_schwarzite,
     build_knee_toroid,
     clean_circumferences,
     clean_shapes,
+    collapse_degree_three,
     defect_contacts,
     describe_knee_coil,
+    describe_knee_schwarzite,
     describe_knee_toroid,
     knee_path_mesh,
     knee_polygon_mesh,
     mesh_census,
+    node_budget,
+    primitive_node_mesh,
 )
 
 
@@ -327,3 +332,103 @@ class TestOnePathRoutineCoversBoth:
                            [10.0, 3.0, 0.0], [0.0, 3.0, 0.0]])
         with pytest.raises(ValueError, match="not equal"):
             knee_path_mesh(points, 8, 3.2, 2.13)
+
+
+@pytest.fixture(scope="module")
+def schwarzite():
+    """One Schwarz P cell from a six-arm node."""
+    return build_knee_schwarzite(circumference=20, arm_rows=9)
+
+
+class TestOneLawForEveryNode:
+    """A node of `c` arms is a sphere with `c` holes, so chi = 2 - c and
+    sum(6-n) = 6(2-c). Counting arms reproduces the genus table the
+    implicit schwarzite builder quotes."""
+
+    def test_a_knee_is_the_two_arm_case_and_pays_nothing(self):
+        assert node_budget(2) == 0
+
+    def test_it_reproduces_the_published_surface_budgets(self):
+        assert node_budget(6) == -24                      # Schwarz P, 1 node
+        assert 8 * node_budget(3) == -48                  # gyroid, srs net
+        assert 8 * node_budget(4) == -96                  # Schwarz D
+
+
+class TestTheSchwarziteCensusIsExact:
+    def test_hexagons_and_exactly_twenty_four_heptagons(self, schwarzite):
+        assert schwarzite.info["ring_counts"] == {6: 456, 7: 24}
+
+    def test_not_one_pentagon(self, schwarzite):
+        """A minimal surface saddles everywhere, so it has no positive
+        curvature for a pentagon to sit in. The implicit route returns 33
+        at a comparable cell."""
+        assert schwarzite.info["pentagons"] == 0
+
+    def test_the_budget_is_the_node_law(self, schwarzite):
+        assert schwarzite.info["ring_deficit"] == node_budget(6)
+        assert schwarzite.info["ring_budget"] == -24
+
+    def test_it_is_periodic_in_all_three_directions(self, schwarzite):
+        assert all(schwarzite.get_pbc())
+        assert schwarzite.cell[0][0] == pytest.approx(
+            schwarzite.info["cell_length"], abs=1e-3)
+
+    def test_every_atom_is_three_coordinate(self, schwarzite):
+        degree: dict[int, int] = {}
+        for i, j in schwarzite.info["bonds"]:
+            degree[i] = degree.get(i, 0) + 1
+            degree[j] = degree.get(j, 0) + 1
+        assert set(degree.values()) == {3}
+        assert len(degree) == len(schwarzite)
+
+    def test_the_wall_is_sp2(self, schwarzite):
+        quality = schwarzite.info["geometry"]
+        assert 1.30 <= quality["bond_min"]
+        assert quality["bond_max"] <= 1.56
+        assert quality["angle_min"] >= 100.0
+        assert quality["n_close_contacts"] == 0
+
+    def test_the_description_says_it_is_pentagon_free(self, schwarzite):
+        line = describe_knee_schwarzite(schwarzite)
+        assert "genus 3" in line
+        assert "sum(6-n) = -24" in line
+        assert "no pentagons" in line
+
+
+class TestCollapsingADegreeThreeVertexIsExact:
+    """Where three arms meet each brings one edge, so the shared vertex
+    comes out degree 3 -- a three-membered ring. Removing it and filling
+    its link adds no edge, because its three neighbours are already
+    adjacent, so chi is untouched and each of them drops a degree."""
+
+    def test_it_turns_the_octagons_into_heptagons(self):
+        bond = 1.42
+        spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+        radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 20))
+        vertices, tris, _ = primitive_node_mesh(20, 9, radius, spacing)
+        before, _, _ = mesh_census(vertices, tris)
+        assert before == {3: 8, 6: 456, 8: 24}
+        after_vertices, after_tris = collapse_degree_three(vertices, tris)
+        after, _, broken = mesh_census(after_vertices, after_tris)
+        assert after == {6: 456, 7: 24}
+        assert broken == 0
+
+    def test_it_leaves_the_euler_characteristic_alone(self):
+        bond = 1.42
+        spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+        radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / 20))
+        vertices, tris, _ = primitive_node_mesh(20, 9, radius, spacing)
+
+        def euler(v, t):
+            edges = {(min(a, b), max(a, b)) for x in t
+                     for a, b in ((x[0], x[1]), (x[1], x[2]), (x[2], x[0]))}
+            return len(v) - len(edges) + len(t)
+
+        moved_vertices, moved_tris = collapse_degree_three(vertices, tris)
+        assert euler(vertices, tris) == euler(moved_vertices, moved_tris)
+        assert euler(moved_vertices, moved_tris) == -4      # genus 3
+
+    def test_a_pair_that_does_not_close_names_the_ones_that_do(self):
+        with pytest.raises(ValueError) as excinfo:
+            build_knee_schwarzite(circumference=9, arm_rows=9, relax=False)
+        assert "arm_rows" in str(excinfo.value)

@@ -12,10 +12,12 @@ from .heptanene import admissible_geometries, build_heptanene, klein_quartic_map
 from .junction import build_junction, build_schwarzite
 from .knee import (
     build_knee_coil,
+    build_knee_schwarzite,
     build_knee_toroid,
     clean_circumferences,
     clean_shapes,
     describe_knee_coil,
+    describe_knee_schwarzite,
     describe_knee_toroid,
 )
 from .nanocoil import build_nanocoil
@@ -39,6 +41,7 @@ __all__ = [
     "build_graphene_supercell",
     "build_junction",
     "build_knee_coil",
+    "build_knee_schwarzite",
     "build_knee_toroid",
     "build_multiwall_cnt",
     "build_nano_onion",
@@ -61,6 +64,7 @@ __all__ = [
     "clean_circumferences",
     "clean_shapes",
     "describe_knee_coil",
+    "describe_knee_schwarzite",
     "describe_knee_toroid",
     "describe_toroid",
     "icosahedral_cage",

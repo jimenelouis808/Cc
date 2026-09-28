@@ -1150,6 +1150,449 @@ def build_knee_toroid(
     return atoms
 
 
+#: Arm directions for the primitive (Schwarz P) node: six, along the cube
+#: axes. A node of ``c`` arms is a sphere with ``c`` holes, so
+#: ``chi = 2 - c`` and ``sum(6-n) = 6(2-c)`` -- see :func:`node_budget`.
+PRIMITIVE_AXES = np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0],
+                           [0, -1, 0], [0, 0, 1], [0, 0, -1]], dtype=float)
+
+#: How far apart two seam representatives may be and still be the same
+#: corner of the cube, and how close the two binding planes' magnitudes
+#: must be for a vertex to count as sitting on both arcs. Both are in Å at
+#: the mesh's own scale, and both are checked by the census rather than
+#: tuned: a wrong value shows up as a seam with unequal sides.
+CORNER_TOLERANCE = 1.2
+CORNER_SPAN = 0.6
+
+#: How far the two mouths of a periodic cell may miss each other.
+MOUTH_TOLERANCE = 1.2
+
+
+def node_budget(arms: int) -> int:
+    """``sum(6 - n)`` a node of ``arms`` arms carries: ``6 * (2 - arms)``.
+
+    A node is a sphere with one hole per arm, so ``chi = 2 - arms`` and
+    Gauss-Bonnet in ring units gives the rest. It reproduces the genus
+    table :func:`~nanocarbon_lab.builders.junction.build_schwarzite`
+    quotes from nothing but counting arms: Schwarz P is one six-arm node
+    per cubic cell (**-24**), the gyroid eight three-arm ones (**-48**)
+    and Schwarz D eight four-arm ones (**-96**). A knee is the ``arms=2``
+    case and pays 0, which is why a toroid's pentagons and heptagons come
+    out in equal numbers.
+    """
+    return 6 * (2 - int(arms))
+
+
+def collapse_degree_three(vertices: np.ndarray, tris):
+    """Remove every degree-3 vertex and close its link with one triangle.
+
+    Where three arms meet -- the eight corners of the cube on a primitive
+    node -- each arm contributes a single edge to the shared vertex, so it
+    comes out with degree 3: a three-membered ring, which is not carbon.
+    The move that fixes it is exact rather than a repair. A degree-3
+    vertex's three neighbours are already adjacent to one another, being
+    its link, so deleting it and filling the hole adds no edge: one
+    vertex, three edges and three faces go and one face comes back, which
+    leaves ``chi`` untouched, while each of the three neighbours drops a
+    degree.
+
+    Measured on the primitive node: ``{3: 8, 6: 696, 8: 24}`` becomes
+    ``{6: 696, 7: 24}``, because the neighbours of those eight vertices
+    are exactly the twenty-four octagons. That is the Schwarz P census --
+    hexagons and heptagons, nothing else.
+    """
+    tris = [tuple(int(x) for x in t) for t in tris]
+    while True:
+        adjacency: dict[int, set[int]] = defaultdict(set)
+        incident: dict[int, int] = defaultdict(int)
+        for t in tris:
+            for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
+                adjacency[a].add(b)
+                adjacency[b].add(a)
+            for x in t:
+                incident[x] += 1
+        victim = next((v for v, ns in adjacency.items()
+                       if len(ns) == 3 and incident[v] == 3), None)
+        if victim is None:
+            break
+        around = [t for t in tris if victim in t]
+        keep = [x for x in around[0] if x != victim]
+        third = (adjacency[victim] - set(keep)).pop()
+        tris = [t for t in tris if victim not in t]
+        tris.append((keep[0], keep[1], third))
+    live = sorted({x for t in tris for x in t})
+    relabel = {x: i for i, x in enumerate(live)}
+    return vertices[live], [(relabel[a], relabel[b], relabel[c])
+                            for a, b, c in tris]
+
+
+def _union_find(n: int):
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+
+    return find, union
+
+
+def primitive_node_mesh(
+    circumference: int,
+    arm_rows: int,
+    tube_radius: float,
+    spacing: float,
+) -> tuple[np.ndarray, list[tuple[int, int, int]], float]:
+    """One Schwarz P cell: a six-arm node closed on the 3-torus.
+
+    The arms run along the cube axes from a common origin and are trimmed
+    by **dominance** -- a vertex keeps the arm whose axis it lies furthest
+    along -- which for perpendicular axes is exactly the set of bisector
+    planes, the same mitre the knee uses. The locus equidistant from two
+    perpendicular lines through a point is a plane, so nothing new is
+    needed to cut a node that was not already needed to cut a bend.
+
+    The cell closes **by periodicity, not by capping**: in the crystal the
+    ``+x`` mouth of one node *is* the ``-x`` mouth of its neighbour, so
+    gluing them to each other leaves a genuinely closed surface with no
+    boundary term in Gauss-Bonnet. Six arms give ``chi = -4``, genus 3,
+    and ``sum(6-n) = -24``.
+
+    Returns ``(vertices, triangles, cell)``. The eight cube corners come
+    out as degree-3 vertices and are removed by
+    :func:`collapse_degree_three`; the caller does that, because the
+    intermediate is worth being able to look at.
+
+    Raises
+    ------
+    ValueError
+        If the trim, the seams or the periodic mouths do not come out in
+        register, with which of the three it was.
+    """
+    reach = (arm_rows - 1) * spacing
+    axes = PRIMITIVE_AXES
+    verts: list[list[float]] = []
+    tris: list[tuple[int, int, int]] = []
+    owner: list[int] = []
+    for a, axis in enumerate(axes):
+        outward = (np.array([0.0, 0.0, 1.0]) if abs(axis[2]) < 0.9
+                   else np.array([1.0, 0.0, 0.0]))
+        local, local_tris = _ring_stack(circumference, arm_rows, tube_radius,
+                                        spacing)
+        placed = local @ _frame(axis, outward).T + axis * (reach / 2.0)
+        offset = len(verts)
+        verts.extend(placed.tolist())
+        owner.extend([a] * len(placed))
+        tris.extend((x + offset, y + offset, z + offset)
+                    for x, y, z in local_tris)
+    vertices = np.asarray(verts, dtype=float)
+
+    dominant = np.argmax(np.abs(vertices), axis=1)
+    sign = np.sign(vertices[np.arange(len(vertices)), dominant])
+    wanted = np.array([int(np.argmax(np.abs(ax))) for ax in axes])
+    wanted_sign = np.array([np.sign(ax[int(np.argmax(np.abs(ax)))])
+                            for ax in axes])
+    held = np.asarray(owner)
+    keep = (dominant == wanted[held]) & (sign == wanted_sign[held])
+    tris = [t for t in tris if keep[t[0]] and keep[t[1]] and keep[t[2]]]
+    if not tris:
+        raise ValueError("the dominance trim left nothing of the node.")
+    used = sorted({x for t in tris for x in t})
+    remap = {x: i for i, x in enumerate(used)}
+    vertices = vertices[used]
+    owner = [owner[x] for x in used]
+    tris = [(remap[a], remap[b], remap[c]) for a, b, c in tris]
+
+    cycles = _boundary_cycles(tris)
+    if cycles is None:
+        raise ValueError("the trimmed node's boundary is not manifold.")
+
+    def reach_of(cycle) -> float:
+        axis = int(np.argmax(np.abs(axes[owner[cycle[0]]])))
+        return float(np.abs(vertices[cycle][:, axis]).mean())
+
+    mouths = [c for c in cycles if reach_of(c) > 0.9 * reach]
+    inner = [c for c in cycles if c not in mouths]
+    if len(mouths) != len(axes):
+        raise ValueError(
+            f"the node came out with {len(mouths)} mouths where "
+            f"{len(axes)} were expected. Lengthen the arms."
+        )
+
+    find, union = _union_find(len(vertices))
+    seam_vertices = sorted({x for c in inner for x in c})
+    seams: dict[tuple[int, int], dict[int, list[int]]] = {}
+    for x in seam_vertices:
+        a = owner[x]
+        own_axis = int(np.argmax(np.abs(axes[a])))
+        others = [c for c in range(3) if c != own_axis]
+        sizes = [abs(vertices[x][c]) for c in others]
+        target = max(sizes)
+        # Slide onto the plane that binds, along this arm's own axis.
+        vertices[x][own_axis] = np.sign(vertices[x][own_axis]) * target
+        # A CORNER of the cube has both magnitudes equal and belongs to
+        # two arcs; filing it under one leaves the other seam an endpoint
+        # short, which is where the unequal sides came from.
+        for other, size in zip(others, sizes, strict=True):
+            if target - size >= CORNER_SPAN:
+                continue
+            facing = np.sign(vertices[x][other]) or 1.0
+            b = next(j for j in range(len(axes))
+                     if int(np.argmax(np.abs(axes[j]))) == other
+                     and np.sign(axes[j][other]) == facing)
+            key = (min(a, b), max(a, b))
+            seams.setdefault(key, {}).setdefault(a, []).append(x)
+
+    for (a, b), sides in seams.items():
+        if len(sides) != 2:
+            raise ValueError(f"seam {a}-{b} has only one side.")
+        here, there = sides[a], sides[b]
+        if len(here) != len(there):
+            raise ValueError(
+                f"seam {a}-{b} has {len(here)} vertices on one side and "
+                f"{len(there)} on the other, so it cannot pair up."
+            )
+        distances = np.linalg.norm(
+            vertices[here][:, None, :] - vertices[there][None, :, :], axis=2)
+        nearest = distances.argmin(axis=1)
+        if len(set(nearest.tolist())) != len(here):
+            raise ValueError(f"seam {a}-{b} has no one-to-one partner.")
+        for t, x in enumerate(here):
+            union(x, there[int(nearest[t])])
+
+    # The eight cube corners: three arms bring a vertex each and all three
+    # are the same point. They fall outside the pairwise seams, so they are
+    # grouped by proximity along the (+-1, +-1, +-1) diagonals.
+    representatives = sorted({find(x) for x in seam_vertices})
+    points = vertices[representatives]
+    spread = np.linalg.norm(points[:, None, :] - points[None, :, :], axis=2)
+    for i in range(len(representatives)):
+        for j in range(i + 1, len(representatives)):
+            if spread[i, j] < CORNER_TOLERANCE:
+                union(representatives[i], representatives[j])
+
+    cell = 2.0 * reach
+    for first, second in ((0, 1), (2, 3), (4, 5)):
+        near = next((c for c in mouths if owner[c[0]] == first), None)
+        far = next((c for c in mouths if owner[c[0]] == second), None)
+        if near is None or far is None:
+            raise ValueError("a mouth has no opposite number.")
+        axis = int(np.argmax(np.abs(axes[first])))
+        moved = vertices[far].copy()
+        moved[:, axis] += cell
+        distances = np.linalg.norm(
+            vertices[near][:, None, :] - moved[None, :, :], axis=2)
+        nearest = distances.argmin(axis=1)
+        if len(set(nearest.tolist())) != len(near):
+            raise ValueError("the two mouths do not pair one to one.")
+        if float(distances[np.arange(len(near)), nearest].max()) > MOUTH_TOLERANCE:
+            raise ValueError(
+                "the two mouths do not land on each other, so the cell "
+                "would not be periodic. Try another arm length."
+            )
+        for t, x in enumerate(near):
+            union(x, far[int(nearest[t])])
+
+    tris = [tuple(find(x) for x in t) for t in tris]
+    tris = [t for t in tris if len(set(t)) == 3]
+    live = sorted({x for t in tris for x in t})
+    relabel = {x: i for i, x in enumerate(live)}
+    return (vertices[live],
+            [(relabel[a], relabel[b], relabel[c]) for a, b, c in tris],
+            float(cell))
+
+
+def clean_schwarzite_shapes(
+    bond: float = CC_BOND,
+    circumferences=tuple(range(12, 29)),
+    rows_candidates=(7, 9, 11, 13, 15),
+) -> list[tuple[int, int]]:
+    """``(arm_rows, circumference)`` pairs that give the exact P census.
+
+    The wedge the dominance trim removes has to be a whole number of
+    lattice steps, exactly as the toroid's mitre does, so the pairs that
+    close cleanly are found by building and counting rather than derived.
+    A pair qualifies only when the cell is closed, ``chi`` is -4 and the
+    census is hexagons plus **exactly 24 heptagons** -- no pentagons,
+    which a minimal surface can have none of, and no octagons.
+    """
+    spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+    good: list[tuple[int, int]] = []
+    for rows in rows_candidates:
+        for k in circumferences:
+            radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / k))
+            try:
+                vertices, tris, _ = primitive_node_mesh(k, rows, radius,
+                                                        spacing)
+                vertices, tris = collapse_degree_three(vertices, tris)
+            except (ValueError, StopIteration, KeyError):
+                continue
+            census, _, broken = mesh_census(vertices, tris)
+            if broken or set(census) - {6, 7}:
+                continue
+            if census.get(7, 0) != -node_budget(len(PRIMITIVE_AXES)):
+                continue
+            good.append((int(rows), int(k)))
+    return good
+
+
+def build_knee_schwarzite(
+    circumference: int = 20,
+    arm_rows: int = 9,
+    bond: float = CC_BOND,
+    relax: bool = True,
+    relax_iterations: int = 3000,
+) -> Atoms:
+    """A Schwarz P schwarzite with the census a minimal surface must have.
+
+    :func:`~nanocarbon_lab.builders.junction.build_schwarzite` meshes the
+    surface implicitly and lets the remesher choose; measured at a 32 Å
+    cell it returns 910 atoms and ``{5: 33, 6: 361, 7: 57}`` -- the budget
+    right at ``sum(6-n) = -24`` and the arrangement wrong, ninety
+    disclinations where twenty-four suffice and **thirty-three of them
+    pentagons on a surface that has no positive curvature anywhere**.
+
+    This builds the node instead: six arms trimmed by dominance, their
+    seams mitred, the eight cube corners collapsed, and the cell closed by
+    gluing each mouth to its opposite number. Measured at
+    ``circumference=20, arm_rows=9``: 968 atoms in a 31.9 Å cell, rings
+    ``{6: 456, 7: 24}``, ``sum(6-n) = -24``, bonds 1.417-1.540 Å, angles
+    from 114.2 deg and no non-bonded contact under 2 Å.
+
+    The cell is **rescaled to its own mean bond before relaxing**, for the
+    same reason ``junction._finish`` relaxes the cell with the atoms: the
+    mesh is coarser than the surface area asks for, so everything comes
+    out stretched by the same factor and the force field cannot fix a
+    uniform scale with the cell held.
+
+    Parameters
+    ----------
+    circumference, arm_rows
+        Mesh vertices around each arm, and rows along it. Together they
+        set the cell. Not every pair closes cleanly --
+        :func:`clean_schwarzite_shapes` is the list that does.
+    bond
+        C-C length (Å).
+    relax, relax_iterations
+        Whether to relax with the valence force field, under the minimum
+        image convention. The bond graph is explicit, so the census is
+        fixed before this runs.
+
+    Returns
+    -------
+    ase.Atoms
+        Periodic in all three directions, with the census, the budget and
+        the measured geometry in ``atoms.info``.
+
+    Raises
+    ------
+    ValueError
+        If the pair does not give the exact census, naming the ones that
+        do.
+    """
+    spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+    tube_radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / circumference))
+    arms = len(PRIMITIVE_AXES)
+    budget = node_budget(arms)
+    try:
+        vertices, tris, cell = primitive_node_mesh(circumference, arm_rows,
+                                                   tube_radius, spacing)
+        vertices, tris = collapse_degree_three(vertices, tris)
+    except (ValueError, StopIteration, KeyError) as problem:
+        shapes = clean_schwarzite_shapes(bond)
+        raise ValueError(
+            f"circumference {circumference} with {arm_rows}-row arms does "
+            f"not close as a Schwarz P cell ({problem}). Pairs that do, as "
+            f"(arm_rows, circumference): {shapes or 'none found'}."
+        ) from problem
+
+    census, _, broken = mesh_census(vertices, tris)
+    deficit = sum((6 - size) * count for size, count in census.items())
+    if broken or set(census) - {6, 7} or deficit != budget:
+        shapes = clean_schwarzite_shapes(bond)
+        raise ValueError(
+            f"circumference {circumference} with {arm_rows}-row arms gives "
+            f"the census {dict(sorted(census.items()))} and sum(6-n) = "
+            f"{deficit:+d}, not the hexagons-plus-{-budget}-heptagons a "
+            "Schwarz P cell must have (it is a minimal surface, so it can "
+            "have no pentagons at all). Pairs that do, as "
+            f"(arm_rows, circumference): {shapes or 'none found'}."
+        )
+
+    from .capped_cnt import geometry_report
+    from .fullerene_mesh import dual_honeycomb, minimum_image, relax_shell
+
+    positions, bonds, rings = dual_honeycomb(
+        (vertices, np.asarray(tris, dtype=int)), box=cell)
+    pairs = np.asarray(sorted(bonds), dtype=int)
+    raw = np.array([np.linalg.norm(minimum_image(positions[j] - positions[i],
+                                                 cell))
+                    for i, j in pairs])
+    scale = bond / float(raw.mean())
+    positions, cell = positions * scale, cell * scale
+    if relax:
+        positions = relax_shell(positions, bonds, equilibrium=bond,
+                                max_iterations=relax_iterations, box=cell)
+
+    ring_counts: dict[int, int] = {}
+    for ring in rings:
+        ring_counts[len(ring)] = ring_counts.get(len(ring), 0) + 1
+
+    atoms = Atoms(symbols=["C"] * len(positions), positions=positions,
+                  cell=[cell, cell, cell], pbc=(True, True, True))
+    atoms.wrap()
+    atoms.info.update({
+        "builder": "knee_schwarzite",
+        "structure_type": "schwarzite",
+        "kind": "primitive",
+        "arms": int(arms),
+        "genus": 3,
+        "euler": 2 - 2 * 3,
+        "ring_budget": int(budget),
+        "circumference": int(circumference),
+        "arm_rows": int(arm_rows),
+        "cell_length": round(float(cell), 3),
+        "tube_radius": round(float(tube_radius * scale), 3),
+        "ring_counts": dict(sorted(ring_counts.items())),
+        "ring_deficit": int(sum((6 - s) * c for s, c in ring_counts.items())),
+        # A minimal surface saddles everywhere, so a pentagon on one is
+        # never right. This is the number the implicit route cannot get to
+        # zero: it returns 33 at a comparable cell.
+        "pentagons": int(ring_counts.get(5, 0)),
+        "bonds": sorted(bonds),
+        "relaxed": bool(relax),
+        # Judged by the plain sp2 window: a heptagon's interior angle is
+        # 128.6 deg before any strain, and this cell's widest is 122.4, so
+        # it does not need the haeckelite family's looser band.
+        "geometry": geometry_report(positions, sorted(bonds), box=cell),
+    })
+    return atoms
+
+
+def describe_knee_schwarzite(atoms: Atoms) -> str:
+    """One line: the cell, the census and whether it is pentagon-free."""
+    info = atoms.info
+    counts = info.get("ring_counts", {})
+    census = ", ".join(f"{s}:{c}" for s, c in sorted(counts.items()))
+    clean = ("no pentagons, as a minimal surface must have"
+             if not info.get("pentagons")
+             else f"{info['pentagons']} pentagons, which a minimal surface "
+                  "should have none of")
+    return (
+        f"knee schwarzite ({info.get('kind', '?')}): {len(atoms)} atoms in a "
+        f"{info.get('cell_length', 0):.1f} Å cell, genus "
+        f"{info.get('genus', 0)}, rings {census}, sum(6-n) = "
+        f"{info.get('ring_deficit', 0):+d} against a budget of "
+        f"{info.get('ring_budget', 0):+d}; {clean}."
+    )
+
+
 #: Coil diameter over tube diameter for the published single-wall coils.
 #: Popovic finds it for both of their classes and Liu's Table 2 gives 3.53
 #: to 3.88 for the (5,5) through (8,8). A coil outside that band is not

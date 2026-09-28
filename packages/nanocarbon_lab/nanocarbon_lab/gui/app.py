@@ -296,6 +296,11 @@ PRESETS: dict[str, dict[str, object]] = {
     # the band the single-wall coil papers report.
     "Nanocoil (knees, D/d 3.7)": {
         "mode_kind": "coil (knees)", "anneal": 0},
+    # 968 atoms, {6: 456, 7: 24}, sum(6-n) = -24 and not one pentagon --
+    # which is what a minimal surface must look like. The meshed route
+    # returns 33 pentagons at a comparable cell.
+    "Schwarz P (knees, no pentagons)": {
+        "mode_kind": "schwarzite (knees)", "anneal": 0},
     "Carbon toroid (R/r = 4)": {
         "mode_kind": "toroid", "tor_major": 20.0, "tor_minor": 5.0,
         "anneal": 0},

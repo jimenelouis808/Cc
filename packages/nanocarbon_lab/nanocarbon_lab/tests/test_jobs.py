@@ -96,6 +96,10 @@ SAMPLES: dict[str, Job] = {
                         {"coil_radius": 12.0, "pitch": 12.0,
                          "sides_per_turn": 8, "turns": 1,
                          "circumference": 8}),
+    # 968 atoms in a 31.9 A cell: {6: 456, 7: 24}, sum(6-n) = -24, and
+    # not one pentagon, which is what a minimal surface must look like.
+    "schwarzite (knees)": Job("schwarzite (knees)",
+                              {"circumference": 20, "arm_rows": 9}),
     # strict=False, because the point of the sample is that the mode
     # builds; under strict it refuses by design and every test that
     # builds every sample would fail on it.
@@ -549,7 +553,8 @@ class TestEveryModeCanActuallyBeCalled:
     #: under three seconds, which is what makes calling them affordable
     #: here. Every one of them is a builder with no `seed`.
     DETERMINISTIC = ("heptanene", "nanocone", "toroid (polyhex)",
-                     "toroid (knees)", "coil (knees)")
+                     "toroid (knees)", "coil (knees)",
+                     "schwarzite (knees)")
 
     @pytest.mark.parametrize("mode", DETERMINISTIC)
     def test_the_deterministic_modes_build(self, mode):

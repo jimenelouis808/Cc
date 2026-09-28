@@ -91,6 +91,11 @@ CARBON_MODES = (
     # here the disclinations absorb the bend and a 12 A one comes out at
     # D/d 3.73, inside the published single-wall band.
     "coil (knees)",
+    # The same node with six arms instead of two. A node of `c` arms is a
+    # sphere with `c` holes, so sum(6-n) = 6(2-c) = -24 -- which is the
+    # Schwarz P budget, reached with hexagons and exactly 24 heptagons and
+    # NO pentagons, a minimal surface having no positive curvature at all.
+    "schwarzite (knees)",
     "junction",
     "schwarzite",
     "network",
@@ -294,6 +299,7 @@ def builder_for(mode: str):
         build_heptanene,
         build_junction,
         build_knee_coil,
+        build_knee_schwarzite,
         build_knee_toroid,
         build_multiwall_cnt,
         build_nano_onion,
@@ -344,6 +350,7 @@ def builder_for(mode: str):
         "toroid (polyhex)": build_polyhex_toroid,
         "toroid (knees)": build_knee_toroid,
         "coil (knees)": build_knee_coil,
+        "schwarzite (knees)": build_knee_schwarzite,
         "junction": build_junction,
         "schwarzite": build_schwarzite,
         "network": build_nanotube_network,
@@ -668,13 +675,19 @@ def estimate_atoms(job: Job) -> int:
                          length=1.0)
         return len(unit) * int(p.get("periods", 110))
 
-    if mode in ("toroid (knees)", "coil (knees)"):
+    if mode in ("toroid (knees)", "coil (knees)",
+                "schwarzite (knees)"):
         # Exact, and cheap to ask for: the mesh is combinatorial, so build
         # it without relaxing and count the triangles -- one atom each.
-        from .builders.knee import build_knee_coil, build_knee_toroid
+        from .builders.knee import (
+            build_knee_coil,
+            build_knee_schwarzite,
+            build_knee_toroid,
+        )
 
-        maker = (build_knee_toroid if mode == "toroid (knees)"
-                 else build_knee_coil)
+        maker = {"toroid (knees)": build_knee_toroid,
+                 "coil (knees)": build_knee_coil,
+                 "schwarzite (knees)": build_knee_schwarzite}[mode]
         keep = set(parameter_names(mode))
         arguments = {k: v for k, v in p.items() if k in keep}
         arguments["relax"] = False
@@ -1031,6 +1044,10 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "sides_per_turn": "--sides", "turns": "--turns",
         "circumference": "--circumference", "knee": "--knee",
         "bond": "--bond", "vacuum": "--vacuum",
+    }),
+    "schwarzite (knees)": ("schwarzite-knees", {
+        "circumference": "--circumference", "arm_rows": "--arm-rows",
+        "bond": "--bond",
     }),
     "heptanene": ("heptanene", {
         "bond": "--bond", "strict": "--no-strict",
