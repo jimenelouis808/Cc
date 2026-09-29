@@ -38,6 +38,7 @@ uno ajustado) en ese mismo formato, y `load_parameters(ruta)` lo lee.
 | Infrarrojo | `infrared` | μ del modelo (cargas + dipolos intraatómicos), cargas de Born, km/mol | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
 | C, H y N (fase E, paso 2) | `parameters/xu_chn.json`, `references`, `recipes` | C–C de Xu intacto; H y N ajustados a GPAW (PBE, LCAO dzp) en niveles, fuerzas y energías; U de H, C, N calculadas con el átomo de GPAW; SCC. Receta reproducible y referencias incluidas |
 | Oxígeno | `parameters/xu_chno.json`, `recipes/xu_chno.py` | `xu_chn` más O (hidroxilo, epóxido, carbonilo, carboxilo, éter, furano, nitro), C–O, O–H, N–O, O–O; corrección de ángulos agudos para anillos de tres miembros; α extra del O ajustada a GPAW |
+| B, S, P | `parameters/xu_chnob.json`, `xu_chnos.json`, `xu_chnop.json`; `recipes/xu_bsp.py` | Un elemento más sobre `xu_chno` fijo: el resto da exactamente lo de `xu_chno`; todos los pares del elemento con H, C, N, O y consigo mismo |
 | Reproducibilidad | `record`, `tasks` | `tbkit run simulacion.json` guarda estructura, parámetros completos, versión, commit, fecha, ajustes y resultados; `record.replay` lo repite |
 
 Salidas (`analysis`): matriz densidad P = Σ f c c†, poblaciones Mulliken y
@@ -229,6 +230,33 @@ python -m tbkit.recipes.xu_chn_alpha gpaw_chno_alpha.json gpaw_chn_alpha.json \
     --geometries gpaw_chn.json gpaw_chno.json
 ```
 
+## Boro, azufre y fósforo: `xu_chnob`, `xu_chnos`, `xu_chnop`
+
+`--model chnob | chnos | chnop`: cada uno es `xu_chno` **fijo** más un
+elemento (`XuFamily.base`). Una molécula sin B, S o P da exactamente el
+resultado de `xu_chno` (test), y el desplazamiento de niveles es el suyo. Se
+ajustan solo los 28 parámetros del elemento nuevo (energías s y p, saltos y
+repulsiones con H, C, N, O y consigo mismo), con las moléculas que lo
+contienen. Todos esos pares son obligatorios: un par sin ley de salto daría
+cero en silencio, y la familia se niega a construirse sin él. U y ⟨ns|r|np⟩
+salen del átomo de GPAW, como los demás (B 8,06, S 8,95, P 7,87 eV, iguales a
+DFTB 3ob/matsci; d = 0,62, 0,55, 0,62 Å). Co-dopados B-N, N-S y N-P sí; B con S
+o P en la misma estructura, no.
+
+Referencias (`bsp_references`, geometrías de partida de RDKit guardadas en
+`recipes/data/bsp_start.extxyz`, todas relajadas con GPAW):
+
+| | entrenamiento | prueba | ajuste (niveles / fuerzas / energías) | enlaces relajados frente a GPAW |
+|---|---|---|---|---|
+| B | BH₃, BMe₃, B(OH)₃, B(OMe)₃, MeB(OH)₂, H₃B·NH₃, borazina, vinilborano, B₂(OH)₄ | PhB(OH)₂, BEt₃, par B-N en el anillo central del coroneno | 0,54 eV / 0,38 eV/Å / 0,11 eV | ≤ 0,05 Å; B-N en coroneno 0,037 Å |
+| S | H₂S, CH₃SH, Me₂S, Me₂S₂, tiofeno, H₂CS, CS₂, OCS, DMSO, Me₂SO₂, SO₂, CH₃SO₃H, CH₃SO₂NH₂ | EtSH, PhSH, PhSO₃H, tiol en el borde del coroneno | 0,67 eV / 0,43 eV/Å / 0,11 eV | S=O, S-S, S-H, S-N y C-S aromático < 0,04 Å; C(sp³)-S simple 0,06-0,09 Å |
+<!-- P -->
+
+```bash
+python -m tbkit.recipes.bsp_references S gpaw_s.json
+python -m tbkit.recipes.xu_bsp S gpaw_s.json xu_chnos.json
+```
+
 ## Raman resonante (primer orden)
 
 `tbkit raman estructura.xyz --model chn --resonant 2.33 3.5 4.0 --eta 0.1`
@@ -378,7 +406,7 @@ no contra una instalación real de QE.
   doble resonancia) es el paso siguiente de la fase E, no este.
 
 - **Energías y fuerzas solo con modelos que tienen parte repulsiva**: el de Xu
-  (carbono puro), `xu_chn` (C, H, N), `xu_chno` (C, H, N, O) y los `.skf` con su spline. El modelo π no
+  (carbono puro), `xu_chn` (C, H, N), `xu_chno` (C, H, N, O), `xu_chnob/s/p` y los `.skf` con su spline. El modelo π no
   la tiene y lo dice.
 - **Campo medio no es correlación**: un copo con M = 0 y momentos locales es, en
   realidad, un singlete correlacionado; los momentos son el parámetro de orden

@@ -82,6 +82,12 @@ tbkit/
   SHA-256 is stored in the parameter file). Refit by rerunning the recipe
   and saving a new file; never hand-edit fitted numbers. Hubbard U are
   computed (GPAW atom, dε/dn), not fitted.
+- `xu_chnob`/`xu_chnos`/`xu_chnop` (`recipes/xu_bsp.py`) are `xu_chno` held
+  fixed (`XuFamily.base`) plus one element: a structure without B, S or P
+  must give exactly the `xu_chno` energy (tested). Do not refit `xu_chno`
+  without refitting them. Every pair among a set's elements (H-H aside) must
+  have hopping laws: a missing law is silently zero, so the family refuses
+  to build without it.
 - Imported QE modes: L = e/√m with e normalised from the file's
   displacements (or eigenvectors), per degenerate set a real basis of the
   subspace; never take the real part of a complex Γ mode without fixing its
