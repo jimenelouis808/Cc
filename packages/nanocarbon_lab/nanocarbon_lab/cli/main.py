@@ -57,7 +57,10 @@ from ..builders import (
     build_heptanene,
     build_junction,
     build_knee_coil,
+    build_knee_junction,
+    build_knee_periodic_coil,
     build_knee_schwarzite,
+    build_knee_supernetwork,
     build_knee_toroid,
     build_multiwall_cnt,
     build_nano_onion,
@@ -72,6 +75,11 @@ from ..builders import (
     build_toroid,
 )
 from ..builders.haeckelite import PATTERNS as HAECKELITE_PATTERNS
+from ..builders.knee import (
+    DEFAULT_SUPERNET_SHAPE,
+    JUNCTION_AXES,
+    SCHWARZITE_CELLS,
+)
 from ..builders.periodic_coil import LITERATURE_RATIO as PERIODIC_COIL_RATIO
 from ..builders.supernetwork import CAGES, SUPERLATTICES
 from ..cell import (
@@ -1144,14 +1152,15 @@ def _cmd_coil_knees(args):
 
 def _cmd_schwarzite_knees(args):
     atoms = build_knee_schwarzite(
+        kind=args.kind,
         circumference=args.circumference, arm_rows=args.arm_rows,
         bond=args.bond, relax=not args.no_relax,
     )
     atoms = _maybe_dope(atoms, args)
     _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
     info = atoms.info
-    print(f"  cell        = {info['cell_length']:.1f} A cubic, {info['arms']} "
-          f"arms a node, genus {info['genus']}")
+    print(f"  cell        = {info['cell_length']:.1f} A cubic, {info['nodes']} "
+          f"node(s) of {info['arms']} arms, genus {info['genus']} ({info['surface']})")
     print(f"  wall        = {dict(sorted(info['ring_counts'].items()))}, "
           f"sum(6-n) = {info['ring_deficit']:+d} against a budget of "
           f"{info['ring_budget']:+d}")
@@ -1162,6 +1171,89 @@ def _cmd_schwarzite_knees(args):
     print(f"  law         = a node of c arms is a sphere with c holes, so "
           f"sum(6-n) = 6(2-c) = {info['ring_budget']:+d} for c = "
           f"{info['arms']}")
+    return 0
+
+
+def _cmd_coil_knees_periodic(args):
+    atoms = build_knee_periodic_coil(
+        coil_radius=args.coil_radius, pitch=args.pitch,
+        sides_per_turn=args.sides, circumference=args.circumference,
+        knee=args.knee, bond=args.bond, vacuum=args.vacuum,
+        relax=not args.no_relax,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    print(f"  cell        = one turn of {info['sides_per_turn']} sides, "
+          f"period {info['pitch']:.1f} A along the axis, genus "
+          f"{info['genus']}")
+    print(f"  coil        = R={info['coil_radius']:.1f} r="
+          f"{info['tube_radius']:.2f} A, D/d {info['coil_aspect']:.2f} "
+          f"(single-wall band {info['literature_coil_aspect'][0]}-"
+          f"{info['literature_coil_aspect'][1]})")
+    print(f"  wall        = {dict(sorted(info['ring_counts'].items()))}, "
+          f"sum(6-n) = {info['ring_deficit']:+d}")
+    print(f"  law         = a periodic coil cell is a TORUS, so sum(6-n) = 0 "
+          f"and the {info['pairs_expected']} pentagons and "
+          f"{info['pairs_expected']} heptagons come out equal: "
+          f"{info['pairs_per_knee']} pairs at each of "
+          f"{info['sides_per_turn']} knees")
+    print(f"  placement   = {100 * info['disclinations_placed']:.0f}% of "
+          "disclinations on the curvature side they belong on")
+    return 0
+
+
+def _cmd_junction_knees(args):
+    atoms = build_knee_junction(
+        kind=args.kind, circumference=args.circumference,
+        arm_rows=args.arm_rows, bond=args.bond, vacuum=args.vacuum,
+        relax=not args.no_relax,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    print(f"  node        = {info['arms']} arms of radius "
+          f"{info['tube_radius']:.2f} A and {info['arm_length']:.1f} A, "
+          f"chi = {info['euler']}")
+    print(f"  wall        = {dict(sorted(info['ring_counts'].items()))}, "
+          f"sum(6-n) = {info['ring_deficit']:+d} against a budget of "
+          f"{info['ring_budget']:+d}")
+    # A junction saddles everywhere, so a pentagon on one is never right.
+    # The implicit route returns fifty on a comparable Y.
+    verdict = ("none, which is what a saddle must have"
+               if not info["pentagons"] else f"{info['pentagons']}")
+    print(f"  pentagons   = {verdict}")
+    print(f"  law         = a node of c arms is a sphere with c holes, so "
+          f"sum(6-n) = 6(2-c) = {info['ring_budget']:+d} for c = "
+          f"{info['arms']}")
+    print(f"  mouths      = {len(info['rim_atoms'])} two-coordinate atoms; a "
+          "junction is open at its arms, as a nanocone is at its base")
+    return 0
+
+
+def _cmd_supernetwork_knees(args):
+    atoms = build_knee_supernetwork(
+        net=args.net, circumference=args.circumference,
+        arm_rows=args.arm_rows, bond=args.bond, vacuum=args.vacuum,
+        relax=not args.no_relax,
+    )
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    lengths = info["cell_lengths"]
+    print(f"  sheet       = {info['nodes']} nodes of {info['arms']} arms, "
+          f"cell {lengths[0]:.1f} x {lengths[1]:.1f} A, chi = {info['euler']}")
+    print(f"  struts      = {info['strut_length']:.1f} A of radius "
+          f"{info['tube_radius']:.2f} A")
+    print(f"  wall        = {dict(sorted(info['ring_counts'].items()))}, "
+          f"sum(6-n) = {info['ring_deficit']:+d} against a budget of "
+          f"{info['ring_budget']:+d}")
+    verdict = ("none, which is what a saddle must have"
+               if not info["pentagons"] else f"{info['pentagons']}")
+    print(f"  pentagons   = {verdict}")
+    print("  law         = summed over a graph, sum_v 6(2 - deg v) = "
+          f"12(V - E) = {info['ring_budget']:+d} -- the same number "
+          "SuperGraph.ring_budget reaches from chi = 2(V - E)")
     return 0
 
 
@@ -1593,9 +1685,13 @@ def _cmd_dopants(args):
                   f"r={chem.radius:.2f} Å ({chem.size_mismatch:+.0%} vs C)")
             print(f"      {chem.note}")
         print()
-    print("Placement: " + ", ".join(DOPANT_SITES) +
-          ".  'pentagon' needs a builder that records rings (capped tube,\n"
-          "fullerene, nano-onion, junction, schwarzite, multi-wall, bundle).")
+    print("Placement: " + ", ".join(DOPANT_SITES) + ".")
+    print("  A ring-selected site needs a builder that records rings, and")
+    print("  counts its fraction against THAT ring's sites. Which size is")
+    print("  the interesting one follows the sign of the curvature: a")
+    print("  fullerene or a capped tube does its chemistry on the")
+    print("  pentagons; a saddle -- schwarzite, junction, knee")
+    print("  supernetwork -- has none at all, and does it on the heptagons.")
     return 0
 
 
@@ -2301,13 +2397,21 @@ def build_parser() -> argparse.ArgumentParser:
     sk = sub.add_parser(
         "schwarzite-knees",
         help="A Schwarz P schwarzite built from a six-arm node: hexagons "
-             "and exactly 24 heptagons, and NO pentagons -- a minimal "
+             "and exactly the heptagons its genus asks for, and NO "
+             "pentagons -- a minimal "
              "surface has no positive curvature anywhere, so a pentagon on "
              "one is never right. The meshed route returns 33 of them.",
     )
-    sk.add_argument("--circumference", type=int, default=20,
-                    help="Mesh vertices around each arm.")
-    sk.add_argument("--arm-rows", type=int, default=9, dest="arm_rows",
+    sk.add_argument("--kind", choices=sorted(SCHWARZITE_CELLS),
+                    default="primitive",
+                    help="A P cell is one six-arm node; a D cell is eight "
+                         "tetrahedral nodes on the diamond lattice, genus 9 "
+                         "and a budget of -96; a gyroid is eight PLANAR Y "
+                         "nodes on the srs net, genus 5 and -48.")
+    sk.add_argument("--circumference", type=int, default=None,
+                    help="Mesh vertices around each arm. Left out, the shape "
+                         "that measured best for this kind is used.")
+    sk.add_argument("--arm-rows", type=int, default=None, dest="arm_rows",
                     help="Rows along each arm. With the circumference this "
                          "sets the cell. Not every pair closes cleanly; the "
                          "refusal names the ones that do.")
@@ -2321,6 +2425,100 @@ def build_parser() -> argparse.ArgumentParser:
     _add_doping_arguments(
         sk, seed_help="Seed for dopant placement; the cell itself is exact.")
     sk.set_defaults(func=_cmd_schwarzite_knees)
+
+    cp = sub.add_parser(
+        "coil-knees-periodic",
+        help="One turn of a knee coil welded to itself through the cell: "
+             "periodic along the axis, no rims, and the census the law "
+             "fixes -- a periodic coil cell is a torus, so the pentagons "
+             "and heptagons come out equal, two pairs at each knee.",
+    )
+    cp.add_argument("--coil-radius", type=float, default=None,
+                    dest="coil_radius",
+                    help="Å. The radius is QUANTISED -- the wrap only pairs "
+                         "up when the frame's holonomy lands on a lattice "
+                         "step -- so a refusal names shapes that close.")
+    cp.add_argument("--pitch", type=float, default=None,
+                    help="Å along the axis; this is the cell.")
+    cp.add_argument("--sides", type=int, default=None,
+                    help="Knees in one turn.")
+    cp.add_argument("--circumference", type=int, default=None,
+                    help="Mesh vertices around the tube.")
+    cp.add_argument("--knee", choices=("pentagon", "octagon"),
+                    default="pentagon",
+                    help="Which seam offset: a pentagon outside and a "
+                         "heptagon inside, as the coil papers describe, or "
+                         "an octagon.")
+    cp.add_argument("--bond", type=float, default=1.42)
+    cp.add_argument("--vacuum", type=float, default=12.0)
+    cp.add_argument("--no-relax", action="store_true",
+                    help="Skip the force field. The census is set by the "
+                         "mesh, so this changes the geometry and nothing "
+                         "else.")
+    cp.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        cp, seed_help="Seed for dopant placement; the coil itself is exact.")
+    cp.set_defaults(func=_cmd_coil_knees_periodic)
+
+    jk = sub.add_parser(
+        "junction-knees",
+        help="A nanotube junction built from a node of arms: hexagons and "
+             "exactly the heptagons Gauss-Bonnet asks for -- six for a Y, "
+             "twelve for a tetrahedral node -- and NO pentagons, a junction "
+             "being a saddle everywhere. The meshed route returns fifty.",
+    )
+    jk.add_argument("--kind", choices=sorted(JUNCTION_AXES), default="y",
+                    help="y: three arms at 120 deg in a plane, six "
+                         "heptagons. tetrahedral: four at 109.47 deg, "
+                         "twelve heptagons, the Schwarz D node. x: four at "
+                         "90 deg in a plane -- the one node whose PENTAGONS "
+                         "are right, four of them on the positively curved "
+                         "poles plus sixteen heptagons in the crotches.")
+    jk.add_argument("--circumference", type=int, default=14,
+                    help="Mesh vertices around each arm, which sets the "
+                         "tube radius.")
+    jk.add_argument("--arm-rows", type=int, default=9, dest="arm_rows",
+                    help="Rows along each arm. Not every pair closes "
+                         "cleanly; the refusal names the ones that do.")
+    jk.add_argument("--bond", type=float, default=1.42)
+    jk.add_argument("--vacuum", type=float, default=12.0)
+    jk.add_argument("--no-relax", action="store_true",
+                    help="Skip the force field. The census is set by the "
+                         "mesh, so this changes the geometry and nothing "
+                         "else.")
+    jk.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        jk, seed_help="Seed for dopant placement; the node itself is exact.")
+    jk.set_defaults(func=_cmd_junction_knees)
+
+    nk = sub.add_parser(
+        "supernetwork-knees",
+        help="A periodic sheet of nanotubes with a knee node at every net "
+             "vertex: hexagons and exactly the heptagons 12(V-E) asks for, "
+             "and NO pentagons. super-graphene is a honeycomb of tubes, "
+             "which is a periodic sheet of Y junctions.",
+    )
+    nk.add_argument("--net", choices=sorted(DEFAULT_SUPERNET_SHAPE),
+                    default="super-graphene",
+                    help="The skeletal net the sheet hangs on.")
+    nk.add_argument("--circumference", type=int, default=None,
+                    help="Mesh vertices around each strut. Left out, the "
+                         "shape that measured best for this net.")
+    nk.add_argument("--arm-rows", type=int, default=None, dest="arm_rows",
+                    help="Rows along each arm; a strut is two of them.")
+    nk.add_argument("--bond", type=float, default=1.42)
+    nk.add_argument("--vacuum", type=float, default=15.0)
+    nk.add_argument("--no-relax", action="store_true",
+                    help="Skip the force field. The census is set by the "
+                         "mesh, so this changes the geometry and nothing "
+                         "else.")
+    nk.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        nk, seed_help="Seed for dopant placement; the sheet itself is exact.")
+    nk.set_defaults(func=_cmd_supernetwork_knees)
 
     hp = sub.add_parser(
         "heptanene",

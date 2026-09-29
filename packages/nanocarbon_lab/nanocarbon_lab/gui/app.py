@@ -81,6 +81,14 @@ from ..builders import fullerene_mesh as fm
 from ..builders.capped_cnt import MIN_CAP_FREQ
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
+from ..builders.knee import (
+    DEFAULT_JUNCTION_SHAPE,
+    DEFAULT_SCHWARZITE_SHAPE,
+    DEFAULT_SUPERNET_SHAPE,
+    JUNCTION_AXES,
+    MESH_EDGE,
+    SCHWARZITE_CELLS,
+)
 from ..builders.supernetwork import CAGES as supercages
 from ..builders.supernetwork import SUPERLATTICES as superlattices
 from ..cell import (
@@ -101,6 +109,7 @@ from ..functionalize import (
     viable_swaps,
 )
 from ..jobs import (
+    DOPANT_RING_SIZES,
     DOPANT_SITES,
     FAMILIES,
     MODES,
@@ -299,8 +308,59 @@ PRESETS: dict[str, dict[str, object]] = {
     # 968 atoms, {6: 456, 7: 24}, sum(6-n) = -24 and not one pentagon --
     # which is what a minimal surface must look like. The meshed route
     # returns 33 pentagons at a comparable cell.
+    # One turn of the same coil welded through the cell: periodic along
+    # the axis, no rims, D/d 3.52 inside the published single-wall band.
+    # 672 atoms, {5: 12, 6: 312, 7: 12} -- a periodic coil cell is a
+    # TORUS, so sum(6-n) = 0 and the two come out equal.
+    "Nanocoil (knees, periodic, DFT-ready)": {
+        "mode_kind": "coil (knees, periodic)", "anneal": 0},
     "Schwarz P (knees, no pentagons)": {
-        "mode_kind": "schwarzite (knees)", "anneal": 0},
+        "mode_kind": "schwarzite (knees)", "knee_cell": "primitive",
+        "anneal": 0},
+    # Eight of those tetrahedral nodes on the diamond lattice: 1440
+    # atoms, {6: 608, 7: 96}, sum(6-n) = -96 = 6*chi at genus 9, and not
+    # one pentagon. The D surface is what the schwarzite figures call
+    # D216; this is its conventional cubic cell.
+    "Schwarz D (knees, no pentagons)": {
+        "mode_kind": "schwarzite (knees)", "knee_cell": "diamond",
+        "anneal": 0},
+    # The third minimal surface, and its node is the SAME planar Y as the
+    # junction preset below: srs is 3-coordinate, and three unit vectors
+    # at 120 deg have no choice but to be coplanar. 1744 atoms,
+    # {6: 816, 7: 48}, sum(6-n) = -48 at genus 5. It wants a fatter tube
+    # than P or D -- its arms leave at 120 deg rather than 109.47, so the
+    # saddle is tighter and every narrower cell relaxes to a broken wall.
+    "Gyroid (knees, no pentagons)": {
+        "mode_kind": "schwarzite (knees)", "knee_cell": "gyroid",
+        "anneal": 0},
+    # The same Y node repeated on a honeycomb instead of standing
+    # alone: 920 atoms, {6: 432, 7: 24}, sum(6-n) = -24 = 12(V-E), and
+    # bonds 1.408-1.436 A -- the tightest of anything this route builds.
+    "Super-graphene (knees, tubes on a honeycomb)": {
+        "mode_kind": "supernetwork (knees)", "knee_net": "super-graphene",
+        "anneal": 0},
+    # A sheet of planar crossings. 180 atoms, {5: 4, 6: 68, 7: 16} --
+    # the pentagons are the poles of each crossing and belong there.
+    "Super-square (knees, tubes on a square net)": {
+        "mode_kind": "supernetwork (knees)", "knee_net": "super-square",
+        "anneal": 0},
+    # 536 atoms, {6: 240, 7: 6} and not one pentagon -- exactly the six
+    # heptagons Gauss-Bonnet asks of a three-arm node, where the meshed
+    # route returns fifty pentagons and thirty-eight heptagons. Bonds
+    # 1.410-1.431 A, the tightest of any junction here.
+    "Y junction (knees, six heptagons)": {
+        "mode_kind": "junction (knees)", "knee_node": "y", "anneal": 0},
+    # The one node here whose PENTAGONS are right: a four-way planar
+    # crossing has a pillow above and below the crossing point that is
+    # genuinely positively curved. 780 atoms, {5: 4, 6: 328, 7: 16},
+    # sum(6-n) = -12, and all twenty disclinations on the correct side.
+    "X junction (knees, four poles + sixteen crotches)": {
+        "mode_kind": "junction (knees)", "knee_node": "x", "anneal": 0},
+    # The Schwarz D node standing alone rather than tiled: four arms at
+    # 109.47 deg, twelve heptagons, no pentagon.
+    "Diamond junction (knees, twelve heptagons)": {
+        "mode_kind": "junction (knees)", "knee_node": "tetrahedral",
+        "anneal": 0},
     "Carbon toroid (R/r = 4)": {
         "mode_kind": "toroid", "tor_major": 20.0, "tor_minor": 5.0,
         "anneal": 0},
@@ -393,6 +453,28 @@ PRESETS: dict[str, dict[str, object]] = {
     "Supertube (6,6) of super-graphene": {
         "mode_kind": "supernetwork", "sn_graph": "supertube-(6,6)",
         "sn_scale": 14.0, "sn_radius": 3.0, "sn_blend": 2.0, "anneal": 0},
+    # The five Platonic cages. `sn_scale` is the STRUT LENGTH here, not a
+    # cell edge, and each vertex eats about tube_radius + blend of either
+    # end of every edge it touches -- so 24 Å leaves about 10 Å of real
+    # tube at these radii. Measured, all five meet 12(V-E) exactly with no
+    # close contacts: -24, -48, -72, -120, -216.
+    #
+    # Their walls are meshed and therefore amorphous, and that is not a
+    # choice: a cage of exact KNEE nodes cannot exist, because a node's
+    # census comes out clean only when its arms sum to zero and a convex
+    # polyhedron's vertex lies on its own hull.
+    "Tetrahedral cage of tubes": {
+        "mode_kind": "supernetwork", "sn_graph": "super-tetrahedron",
+        "sn_scale": 24.0, "sn_radius": 3.0, "sn_blend": 2.0, "anneal": 0},
+    "Cubic cage of tubes": {
+        "mode_kind": "supernetwork", "sn_graph": "super-cube",
+        "sn_scale": 24.0, "sn_radius": 3.0, "sn_blend": 2.0, "anneal": 0},
+    "Octahedral cage of tubes": {
+        "mode_kind": "supernetwork", "sn_graph": "super-octahedron",
+        "sn_scale": 24.0, "sn_radius": 3.0, "sn_blend": 2.0, "anneal": 0},
+    "Dodecahedral cage of tubes": {
+        "mode_kind": "supernetwork", "sn_graph": "super-dodecahedron",
+        "sn_scale": 24.0, "sn_radius": 3.0, "sn_blend": 2.0, "anneal": 0},
     "Icosahedral cage of tubes": {
         "mode_kind": "supernetwork", "sn_graph": "super-icosahedron",
         "sn_scale": 24.0, "sn_radius": 4.0, "sn_blend": 3.0, "anneal": 0},
@@ -935,6 +1017,22 @@ class NanocarbonGUI:
         self.var_cage_freq = self._var("cage_freq", tk.IntVar(value=1))
         self.var_onion_shells = self._var("onion_shells", tk.IntVar(value=3))
         self.var_j_kind = self._var("j_kind", tk.StringVar(value="Y"))
+        # The knee route's own cell and node kinds. They are separate
+        # vars from `j_kind`: that one names an implicit-route junction
+        # (L/T/Y/X) and these name a lattice node, and a preset writing
+        # one into the other would build something nobody asked for.
+        self.var_knee_cell = self._var(
+            "knee_cell", tk.StringVar(value="primitive"))
+        self.var_knee_node = self._var(
+            "knee_node", tk.StringVar(value="y"))
+        self.var_knee_net = self._var(
+            "knee_net", tk.StringVar(value="super-graphene"))
+        # The shape. A preset picks the kind and these follow it, but they
+        # stay editable: the exact census holds over a whole family of
+        # sizes, so the preset is a starting point rather than the only
+        # thing the mode can build.
+        self.var_knee_k = self._var("knee_k", tk.DoubleVar(value=20.0))
+        self.var_knee_rows = self._var("knee_rows", tk.DoubleVar(value=9.0))
         self.var_j_radius = self._var("j_radius", tk.DoubleVar(value=6.0))
         self.var_j_arm = self._var("j_arm", tk.DoubleVar(value=22.0))
         self.var_j_blend = self._var("j_blend", tk.DoubleVar(value=4.0))
@@ -1255,6 +1353,41 @@ class NanocarbonGUI:
                   foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
                   justify="left").grid(row=7, column=0, columnspan=2, sticky="w")
 
+        # --- knee route: the lattice node behind a cell or a junction
+        self.frame_knee = ttk.LabelFrame(
+            parent, text="Knee node (exact census)", padding=8)
+        self.frame_knee.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_knee, text="Schwarzite cell").grid(
+            row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_knee, textvariable=self.var_knee_cell,
+                     values=sorted(SCHWARZITE_CELLS), state="readonly",
+                     width=10).grid(row=0, column=1, sticky="e", pady=(0, 6))
+        ttk.Label(self.frame_knee, text="Junction node").grid(
+            row=1, column=0, sticky="w")
+        ttk.Combobox(self.frame_knee, textvariable=self.var_knee_node,
+                     values=sorted(JUNCTION_AXES), state="readonly",
+                     width=10).grid(row=1, column=1, sticky="e", pady=(0, 6))
+        ttk.Label(self.frame_knee, text="Sheet net").grid(
+            row=2, column=0, sticky="w")
+        ttk.Combobox(self.frame_knee, textvariable=self.var_knee_net,
+                     values=sorted(DEFAULT_SUPERNET_SHAPE), state="readonly",
+                     width=14).grid(row=2, column=1, sticky="e", pady=(0, 6))
+        self._param(self.frame_knee, "Circumference (mesh)",
+                    self.var_knee_k, 8.0, 28.0, 3, integer=True,
+                    resolution=1.0, hard_lo=6.0, hard_hi=40.0,
+                    command=self._update_knee_hint)
+        self._param(self.frame_knee, "Arm rows", self.var_knee_rows,
+                    5.0, 15.0, 5, integer=True, resolution=2.0,
+                    hard_lo=3.0, hard_hi=31.0,
+                    command=self._update_knee_hint)
+        self.lbl_knee = ttk.Label(
+            self.frame_knee, text="", foreground=MUTED,
+            font=("TkDefaultFont", 8), wraplength=230, justify="left")
+        self.lbl_knee.grid(row=7, column=0, columnspan=2, sticky="w")
+        for var in (self.var_knee_cell, self.var_knee_node,
+                    self.var_knee_net):
+            var.trace_add("write", lambda *_: self._knee_kind_changed())
+
         # --- haeckelite
         self.frame_haeckelite = ttk.LabelFrame(
             parent, text="Haeckelite (patterned Stone-Wales)", padding=8)
@@ -1533,7 +1666,7 @@ class NanocarbonGUI:
         self.var_dopant.trace_add("write", lambda *_: self._update_dopant_hint())
         ttk.Label(self.frame_chem, text="Site").grid(row=1, column=0, sticky="w")
         ttk.Combobox(self.frame_chem, textvariable=self.var_dopant_site,
-                     values=list(DOPANT_SITES), state="readonly", width=9).grid(
+                     values=list(DOPANT_SITES), state="readonly", width=10).grid(
             row=1, column=1, sticky="e", pady=(0, 6))
         self.var_dopant_site.trace_add("write", lambda *_: self._update_dopant_hint())
         self._param(self.frame_chem, "Concentration", self.var_dopant_conc,
@@ -2099,6 +2232,7 @@ class NanocarbonGUI:
                       self.frame_ribbon,
                       self.frame_centreline, self.frame_defects,
                       self.frame_coil, self.frame_junction, self.frame_schwarzite,
+                      self.frame_knee,
                       self.frame_haeckelite,
                       self.frame_cage, self.frame_mw, self.frame_bundle,
                       self.frame_network,
@@ -2155,7 +2289,16 @@ class NanocarbonGUI:
             self._schedule_estimate()
             return
 
-        if mode == "junction":
+        if mode in ("schwarzite (knees)", "junction (knees)",
+                    "supernetwork (knees)"):
+            self.frame_knee.pack(fill="x")
+            # Each kind carries its own shape, so switching into the mode
+            # has to fetch it -- the box may still hold the last mode's.
+            self._knee_kind_changed()
+            # There is nothing to anneal: the census is exact before any
+            # relaxation and a flip could only leave it.
+            self.var_anneal.set(0)
+        elif mode == "junction":
             self.frame_junction.pack(fill="x")
             # Same reason as the schwarzite and the network, and measured
             # on all four kinds: the 5-7 pairs spread over the surface are
@@ -2740,6 +2883,74 @@ class NanocarbonGUI:
                   "and the axial period are outputs — both are re-fitted "
                   f"and reported, not held.{note}"))
 
+    def _knee_kind_changed(self) -> None:
+        """Write the newly chosen kind's own shape into the two boxes.
+
+        The kinds do not share a shape -- a Y builds at circumference 14
+        and a tetrahedral node does not build there at all -- so picking a
+        kind has to carry its default with it. They stay **editable**
+        afterwards, which is the point: the exact census holds over a
+        family of sizes, so a preset is where to start rather than the
+        only thing the mode can make.
+        """
+        mode = self.var_mode.get()
+        if mode == "schwarzite (knees)":
+            shape = DEFAULT_SCHWARZITE_SHAPE.get(self.var_knee_cell.get())
+        elif mode == "junction (knees)":
+            shape = DEFAULT_JUNCTION_SHAPE.get(self.var_knee_node.get())
+        elif mode == "supernetwork (knees)":
+            shape = DEFAULT_SUPERNET_SHAPE.get(self.var_knee_net.get())
+        else:
+            shape = None
+        if shape is not None:
+            self.var_knee_k.set(float(shape[0]))
+            self.var_knee_rows.set(float(shape[1]))
+        self._update_knee_hint()
+
+    def _update_knee_hint(self) -> None:
+        """Say what census this shape is aiming at, before it is built.
+
+        The budget is fixed by the skeleton, so it can be stated rather
+        than measured: a node of ``c`` arms is a sphere with ``c`` holes,
+        and summed over a net that is ``12*(V - E)``. What the shape
+        decides is whether the seams pair up at all -- most do not, and
+        the refusal names the ones that do.
+        """
+        mode = self.var_mode.get()
+        try:
+            circumference = int(self.var_knee_k.get())
+            rows = int(self.var_knee_rows.get())
+        except (tk.TclError, ValueError):                # pragma: no cover
+            return
+        bond = 1.42
+        radius = MESH_EDGE * bond / (2.0 * math.sin(math.pi / circumference))
+        spacing = MESH_EDGE * bond * math.sqrt(3.0) / 2.0
+        arm = (rows - 1) * spacing
+        if mode == "schwarzite (knees)":
+            kind = self.var_knee_cell.get()
+            arms, nodes, genus = SCHWARZITE_CELLS[kind]
+            budget = nodes * (6 * (2 - arms))
+            what = (f"{nodes} node(s) of {arms} arms, genus {genus}, "
+                    f"sum(6-n) = {budget:+d}")
+        elif mode == "junction (knees)":
+            arms = len(JUNCTION_AXES[self.var_knee_node.get()])
+            what = (f"{arms} arms, chi = {2 - arms}, "
+                    f"sum(6-n) = {6 * (2 - arms):+d}")
+        elif mode == "supernetwork (knees)":
+            what = "a periodic sheet; sum(6-n) = 12(V - E)"
+        else:                                            # pragma: no cover
+            return
+        if rows % 2 == 0:
+            self.lbl_knee.config(
+                text="Arm rows must be odd — the mitre reflection sends row "
+                     "i to row rows-1-i.", foreground=WARN_AMBER)
+            return
+        self.lbl_knee.config(
+            text=f"{what}. Tube radius {radius:.2f} Å, arms {arm:.1f} Å. "
+                 "Not every shape closes; the refusal names the ones that "
+                 "do, and the census is exact at all of them.",
+            foreground=MUTED)
+
     def _update_sn_hint(self) -> None:
         """Say whether a tube survives between two vertices, and what the
         ring budget will be.
@@ -2910,12 +3121,14 @@ class NanocarbonGUI:
             colour = WARN_AMBER
             text = (f"{fraction:.1%} is past the ~{chem.max_fraction:.0%} that "
                     f"is physically meaningful for {element}. " + text)
-        if site == "pentagon":
+        if site in DOPANT_RING_SIZES:
             # The fraction means something different here, and silently
             # is exactly how it would be misread.
-            text += (" Pentagon placement counts the fraction against the "
-                     "pentagon sites, not the whole structure, and needs a "
-                     "builder that records rings.")
+            text += (f" {site.capitalize()} placement counts the fraction "
+                     f"against the {site} sites, not the whole structure, "
+                     "and needs a builder that records rings. A saddle "
+                     "(schwarzite, junction, knee supernetwork) has no "
+                     "pentagons at all — its chemistry is on the heptagons.")
         self.lbl_dopant.config(text=text, foreground=colour)
 
     def _update_tmd_hint(self) -> None:
@@ -3371,7 +3584,17 @@ class NanocarbonGUI:
                        != "none" else 0,
                        **self._graft_fields())
 
-        if mode == "junction":
+        if mode in ("schwarzite (knees)", "junction (knees)",
+                    "supernetwork (knees)"):
+            shape = dict(circumference=int(self.var_knee_k.get()),
+                         arm_rows=int(self.var_knee_rows.get()))
+            if mode == "schwarzite (knees)":
+                params = dict(kind=self.var_knee_cell.get(), **shape)
+            elif mode == "junction (knees)":
+                params = dict(kind=self.var_knee_node.get(), **shape)
+            else:
+                params = dict(net=self.var_knee_net.get(), **shape)
+        elif mode == "junction":
             params = dict(
                 kind=self.var_j_kind.get(),
                 tube_radius=float(self.var_j_radius.get()),

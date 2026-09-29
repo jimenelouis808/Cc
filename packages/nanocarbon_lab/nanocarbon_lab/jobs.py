@@ -91,11 +91,29 @@ CARBON_MODES = (
     # here the disclinations absorb the bend and a 12 A one comes out at
     # D/d 3.73, inside the published single-wall band.
     "coil (knees)",
+    # One turn of the same coil, welded to itself through the cell
+    # rather than left with two rims -- what a plane-wave code wants.
+    # A periodic cell of a coil is a TORUS, so chi = 0 and the
+    # pentagons and heptagons come out equal: 2 per knee of each.
+    "coil (knees, periodic)",
     # The same node with six arms instead of two. A node of `c` arms is a
     # sphere with `c` holes, so sum(6-n) = 6(2-c) = -24 -- which is the
     # Schwarz P budget, reached with hexagons and exactly 24 heptagons and
     # NO pentagons, a minimal surface having no positive curvature at all.
     "schwarzite (knees)",
+    # The same node with three arms at 120 deg, or four at 109.47.
+    # A node of `c` arms is a sphere with `c` holes, so chi = 2-c and
+    # sum(6-n) = 6(2-c), paid in heptagons alone -- six for the Y,
+    # twelve for the tetrahedral node -- because a junction saddles
+    # everywhere and can carry no pentagon. The implicit route returns
+    # fifty pentagons and thirty-eight heptagons on a comparable Y.
+    "junction (knees)",
+    # The same node repeated on a net instead of standing alone. A
+    # node of c arms is a sphere with c holes, so summed over a graph
+    # sum_v 6(2 - deg v) = 12(V - E) -- which is exactly
+    # SuperGraph.ring_budget, reached there from chi = 2(V - E). The
+    # two laws agree to the integer on every net in that catalogue.
+    "supernetwork (knees)",
     "junction",
     "schwarzite",
     "network",
@@ -200,12 +218,17 @@ class Job:
         domain case), keep apart (``"avoid"``) or ignore each other
         (``"random"``). See :mod:`~nanocarbon_lab.dopants.codoping`.
     dopant_site
-        Where the substitutions go: ``"random"`` anywhere, ``"pentagon"``
-        on the five-membered rings that carry a curved structure's
-        curvature and its reactivity, ``"edge"`` on under-coordinated
-        atoms, ``"bulk"`` on fully sp2 ones. For ``"pentagon"`` the
-        fraction is of the pentagon sites, not of the whole structure --
-        those differ by a large factor on a long tube.
+        Where the substitutions go: ``"random"`` anywhere, ``"edge"`` on
+        under-coordinated atoms, ``"bulk"`` on fully sp2 ones, or a ring
+        size -- ``"pentagon"``, ``"heptagon"``, ``"octagon"`` -- on the
+        disclinations that carry a curved structure's curvature and its
+        reactivity. **Which** ring size is the interesting one follows
+        the sign of that curvature: a fullerene or a capped tube is where
+        the pentagons are, and a saddle -- a schwarzite, a junction, a
+        knee supernetwork -- carries no pentagon at all and does its
+        chemistry on the heptagons. For a ring-selected site the fraction
+        is of that ring's sites, not of the whole structure; those differ
+        by a large factor on a long tube.
     tmd_edit
         Post-build chemistry for a dichalcogenide: ``None``, ``"janus"``,
         ``"alloy"``, ``"vacancies"`` or ``"antisites"``. The carbon
@@ -299,7 +322,10 @@ def builder_for(mode: str):
         build_heptanene,
         build_junction,
         build_knee_coil,
+        build_knee_junction,
+        build_knee_periodic_coil,
         build_knee_schwarzite,
+        build_knee_supernetwork,
         build_knee_toroid,
         build_multiwall_cnt,
         build_nano_onion,
@@ -350,7 +376,10 @@ def builder_for(mode: str):
         "toroid (polyhex)": build_polyhex_toroid,
         "toroid (knees)": build_knee_toroid,
         "coil (knees)": build_knee_coil,
+        "coil (knees, periodic)": build_knee_periodic_coil,
         "schwarzite (knees)": build_knee_schwarzite,
+        "junction (knees)": build_knee_junction,
+        "supernetwork (knees)": build_knee_supernetwork,
         "junction": build_junction,
         "schwarzite": build_schwarzite,
         "network": build_nanotube_network,
@@ -428,16 +457,29 @@ def build(job: Job):
 #: Where a substitution may be placed. "pentagon" is the one that needs
 #: ring metadata, which every mesh-based builder records and a plain
 #: sheet does not.
-DOPANT_SITES = ("random", "pentagon", "edge", "bulk")
+#: Where a substitution goes. The three ring sizes are one rule, not
+#: three: a disclination is where a curved wall's curvature and therefore
+#: its reactivity sit, and **which** disclination depends on the sign of
+#: that curvature. A fullerene or a capped tube carries pentagons, so
+#: "pentagon" is the interesting site there. A saddle carries none at all
+#: -- a schwarzite, a junction or a knee-route supernetwork is hexagons
+#: plus heptagons and nothing else -- so asking for "pentagon" on one is
+#: asking for a site that does not exist, and the heptagons are where the
+#: chemistry happens. `dopants.rings` always took the ring size; only
+#: this policy layer hardcoded five.
+DOPANT_SITES = ("random", "pentagon", "heptagon", "octagon", "edge", "bulk")
+
+#: The ring size each ring-selected site names.
+DOPANT_RING_SIZES = {"pentagon": 5, "heptagon": 7, "octagon": 8}
 
 
 def apply_doping(atoms, job: Job):
     """Substitute ``job.dopant`` into a freshly built structure.
 
     Split out of :func:`build` so the CLI and the GUI go through one
-    placement policy rather than three. ``"pentagon"`` counts its
-    fraction against the pentagon sites; the others against all carbons,
-    or against the eligible pool for edge and bulk.
+    placement policy rather than three. A **ring-selected** site counts
+    its fraction against that ring size's sites; the others against all
+    carbons, or against the eligible pool for edge and bulk.
     """
     from .dopants import dope_directed, dope_random, dope_rings
 
@@ -448,8 +490,9 @@ def apply_doping(atoms, job: Job):
         )
     if site == "random":
         return dope_random(atoms, job.dopant, job.dopant_conc, seed=job.seed)
-    if site == "pentagon":
-        return dope_rings(atoms, job.dopant, ring_size=5,
+    if site in DOPANT_RING_SIZES:
+        return dope_rings(atoms, job.dopant,
+                          ring_size=DOPANT_RING_SIZES[site],
                           concentration=job.dopant_conc, seed=job.seed)
     # Edge and bulk take a count rather than a fraction, so turn the
     # fraction into one against that pool -- against the whole structure
@@ -676,18 +719,25 @@ def estimate_atoms(job: Job) -> int:
         return len(unit) * int(p.get("periods", 110))
 
     if mode in ("toroid (knees)", "coil (knees)",
-                "schwarzite (knees)"):
+                "schwarzite (knees)", "junction (knees)",
+                "supernetwork (knees)", "coil (knees, periodic)"):
         # Exact, and cheap to ask for: the mesh is combinatorial, so build
         # it without relaxing and count the triangles -- one atom each.
         from .builders.knee import (
             build_knee_coil,
+            build_knee_junction,
+            build_knee_periodic_coil,
             build_knee_schwarzite,
+            build_knee_supernetwork,
             build_knee_toroid,
         )
 
         maker = {"toroid (knees)": build_knee_toroid,
                  "coil (knees)": build_knee_coil,
-                 "schwarzite (knees)": build_knee_schwarzite}[mode]
+                 "coil (knees, periodic)": build_knee_periodic_coil,
+                 "schwarzite (knees)": build_knee_schwarzite,
+                 "junction (knees)": build_knee_junction,
+                 "supernetwork (knees)": build_knee_supernetwork}[mode]
         keep = set(parameter_names(mode))
         arguments = {k: v for k, v in p.items() if k in keep}
         arguments["relax"] = False
@@ -1045,9 +1095,26 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "circumference": "--circumference", "knee": "--knee",
         "bond": "--bond", "vacuum": "--vacuum",
     }),
+    "coil (knees, periodic)": ("coil-knees-periodic", {
+        "coil_radius": "--coil-radius", "pitch": "--pitch",
+        "sides_per_turn": "--sides",
+        "circumference": "--circumference", "knee": "--knee",
+        "bond": "--bond", "vacuum": "--vacuum",
+    }),
     "schwarzite (knees)": ("schwarzite-knees", {
+        "kind": "--kind",
         "circumference": "--circumference", "arm_rows": "--arm-rows",
         "bond": "--bond",
+    }),
+    "junction (knees)": ("junction-knees", {
+        "kind": "--kind", "circumference": "--circumference",
+        "arm_rows": "--arm-rows", "bond": "--bond",
+        "vacuum": "--vacuum",
+    }),
+    "supernetwork (knees)": ("supernetwork-knees", {
+        "net": "--net", "circumference": "--circumference",
+        "arm_rows": "--arm-rows", "bond": "--bond",
+        "vacuum": "--vacuum",
     }),
     "heptanene": ("heptanene", {
         "bond": "--bond", "strict": "--no-strict",
