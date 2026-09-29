@@ -1,0 +1,482 @@
+"""tbkit's window: structure and model on the left, 3D view in the middle, tasks on the right."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.figure import Figure
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
+    QComboBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSlider,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from . import actions
+from .viewer import StructureView
+from .worker import Runner
+
+
+class PlotPanel(QWidget):
+    """A matplotlib figure with its toolbar."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.figure = Figure(figsize=(5, 4), tight_layout=True)
+        self.canvas = FigureCanvasQTAgg(self.figure)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(NavigationToolbar2QT(self.canvas, self))
+        layout.addWidget(self.canvas)
+
+    def axes(self):
+        self.figure.clear()
+        return self.figure.add_subplot(111)
+
+    def draw(self):
+        self.canvas.draw_idle()
+
+
+def table(headers) -> QTableWidget:
+    widget = QTableWidget(0, len(headers))
+    widget.setHorizontalHeaderLabels(headers)
+    widget.setEditTriggers(QAbstractItemView.NoEditTriggers)
+    widget.setSelectionBehavior(QAbstractItemView.SelectRows)
+    widget.horizontalHeader().setStretchLastSection(True)
+    widget.verticalHeader().setVisible(False)
+    return widget
+
+
+def fill(widget: QTableWidget, rows):
+    widget.setRowCount(len(rows))
+    for r, row in enumerate(rows):
+        for c, value in enumerate(row):
+            text = f"{value:.4f}" if isinstance(value, float) else str(value)
+            widget.setItem(r, c, QTableWidgetItem(text))
+
+
+class MainWindow(QMainWindow):
+    def __init__(self, interactive: bool = True):
+        super().__init__()
+        self.setWindowTitle("tbkit")
+        self.resize(1500, 900)
+        self.atoms = None
+        self.model = None
+        self.model_name = None
+        self.state: Optional[actions.GroundState] = None
+        self.runner = Runner(self)
+        self.runner.message.connect(self.statusBar().showMessage)
+        self.runner.busy.connect(self._busy)
+        self.timer = QTimer(self)
+
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(self._left_panel())
+        if interactive:
+            from pyvistaqt import QtInteractor
+
+            self.plotter = QtInteractor(splitter)
+            splitter.addWidget(self.plotter.interactor)
+        else:                                          # tests, no OpenGL window
+            import pyvista as pv
+
+            self.plotter = pv.Plotter(off_screen=True)
+            splitter.addWidget(QLabel("(vista 3D fuera de pantalla)"))
+        self.view = StructureView(self.plotter)
+        self.tabs = QTabWidget()
+        self.pages = {}
+        for page in self.page_classes():
+            widget = page(self)
+            self.pages[widget.title] = widget
+            self.tabs.addTab(widget, widget.title)
+        splitter.addWidget(self.tabs)
+        splitter.setSizes([300, 700, 600])
+        self.setCentralWidget(splitter)
+        self.statusBar().showMessage("Abre una estructura (xyz, extxyz, cif, POSCAR…).")
+
+    def page_classes(self):
+        return [ElectronicPage, OrbitalPage]
+
+    # --- left panel ---------------------------------------------------------------
+
+    def _left_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+
+        structure = QGroupBox("Estructura")
+        form = QFormLayout(structure)
+        open_button = QPushButton("Abrir…")
+        open_button.clicked.connect(self.open_dialog)
+        self.structure_label = QLabel("—")
+        self.structure_label.setWordWrap(True)
+        form.addRow(open_button)
+        form.addRow(self.structure_label)
+        layout.addWidget(structure)
+
+        model = QGroupBox("Modelo")
+        form = QFormLayout(model)
+        self.model_combo = QComboBox()
+        for name, (label, _) in actions.MODELS.items():
+            self.model_combo.addItem(label, name)
+        self.model_combo.addItem("Archivo de parámetros…", "file")
+        self.model_combo.activated.connect(self._model_chosen)
+        self.charge = QDoubleSpinBox()
+        self.charge.setRange(-10, 10)
+        self.charge.setSingleStep(1)
+        self.charge.valueChanged.connect(self.invalidate)
+        self.scc = QComboBox()
+        self.scc.addItems(["según el modelo", "sí", "no"])
+        self.scc.currentIndexChanged.connect(self.invalidate)
+        self.kT = QDoubleSpinBox()
+        self.kT.setRange(0.001, 1.0)
+        self.kT.setDecimals(3)
+        self.kT.setValue(0.01)
+        self.kT.setSuffix(" eV")
+        self.kT.valueChanged.connect(self.invalidate)
+        self.model_label = QLabel("—")
+        self.model_label.setWordWrap(True)
+        form.addRow("Parámetros", self.model_combo)
+        form.addRow("Carga (e)", self.charge)
+        form.addRow("SCC", self.scc)
+        form.addRow("kT", self.kT)
+        form.addRow(self.model_label)
+        layout.addWidget(model)
+
+        colour = QGroupBox("Colorear átomos")
+        form = QFormLayout(colour)
+        self.colour = QComboBox()
+        self.colour.addItems(["por elemento", "por carga (Mulliken)"])
+        self.colour.currentIndexChanged.connect(self.redraw)
+        form.addRow(self.colour)
+        layout.addWidget(colour)
+
+        self.cancel_button = QPushButton("Cancelar cálculo")
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.clicked.connect(self.runner.cancel)
+        layout.addWidget(self.cancel_button)
+        layout.addStretch(1)
+        return panel
+
+    def _busy(self, busy: bool):
+        self.cancel_button.setEnabled(busy)
+
+    # --- structure and model ------------------------------------------------------------
+
+    def open_dialog(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Abrir estructura", "",
+                                              "Estructuras (*.xyz *.extxyz *.cif *.vasp "
+                                              "POSCAR* *.pdb *.json *.traj);;Todos (*)")
+        if path:
+            self.open_structure(path)
+
+    def open_structure(self, path):
+        try:
+            atoms = actions.read_structure(path)
+        except Exception as error:
+            self.error(f"No se pudo leer {path}", str(error))
+            return
+        self.set_atoms(atoms, Path(path).name)
+
+    def set_atoms(self, atoms, name: str = ""):
+        self.atoms = atoms
+        info = actions.structure_summary(atoms)
+        self.structure_label.setText(f"{name}\n{info['formula']} · {info['atoms']} átomos · "
+                                     f"periódica: {info['periodic']}")
+        suggested = actions.suggest_model(atoms)
+        if self.model is None or actions.check_model(atoms, self.model):
+            self.set_model(suggested)
+        self.invalidate()
+        self.view.show(atoms)
+
+    def _model_chosen(self, index):
+        name = self.model_combo.itemData(index)
+        if name == "file":
+            path, _ = QFileDialog.getOpenFileName(self, "Parámetros", "", "JSON (*.json)")
+            if path:
+                self.set_model(path)
+        else:
+            self.set_model(name)
+
+    def set_model(self, name_or_path: str):
+        try:
+            self.model = actions.load_model(name_or_path)
+        except Exception as error:
+            self.error("No se pudo cargar el modelo", str(error))
+            return
+        self.model_name = name_or_path
+        index = self.model_combo.findData(name_or_path)
+        if index >= 0:
+            self.model_combo.setCurrentIndex(index)
+        text = f"{self.model.name}\nSCC: {'sí' if self.model.scc else 'no'} · " \
+               f"elementos: {', '.join(sorted(self.model.orbitals))}"
+        if self.atoms is not None:
+            problems = actions.check_model(self.atoms, self.model)
+            if problems:
+                text += "\n⚠ " + " ".join(problems)
+        self.model_label.setText(text)
+        self.invalidate()
+
+    def scc_choice(self) -> Optional[bool]:
+        return {0: None, 1: True, 2: False}[self.scc.currentIndex()]
+
+    def invalidate(self, *_):
+        self.state = None
+        for page in self.pages.values():
+            page.invalidated()
+
+    def redraw(self, *_):
+        if self.atoms is None:
+            return
+        if self.colour.currentIndex() == 1 and self.state is not None:
+            charges = np.array([self.state.charges.get(i, 0.0) for i in range(len(self.atoms))])
+            self.view.show(self.atoms, charges, "carga (e)", keep_camera=True)
+        else:
+            self.view.show(self.atoms, keep_camera=True)
+
+    # --- shared ground state --------------------------------------------------------------
+
+    def require(self) -> bool:
+        if self.atoms is None:
+            self.error("Sin estructura", "Abre primero una estructura.")
+            return False
+        if self.model is None:
+            self.error("Sin modelo", "Elige un modelo.")
+            return False
+        problems = actions.check_model(self.atoms, self.model, self.scc_choice())
+        if problems:
+            self.error("El modelo no sirve para esta estructura", " ".join(problems))
+            return False
+        return True
+
+    def with_ground_state(self, then):
+        """Call ``then(state)``, computing the ground state first if needed."""
+        if self.state is not None:
+            then(self.state)
+            return
+        if not self.require():
+            return
+
+        def store(state):
+            self.state = state
+            self.redraw()
+            for page in self.pages.values():
+                page.ground_state_ready(state)
+            then(state)
+
+        self.runner.start("Estado fundamental", actions.ground_state, self.atoms, self.model,
+                          charge=self.charge.value(), kT=self.kT.value(), scc=self.scc_choice(),
+                          on_done=store, on_error=self.error)
+
+    def error(self, title, detail=""):
+        self.statusBar().showMessage(title)
+        box = QMessageBox(QMessageBox.Warning, "tbkit", title, parent=self)
+        if detail:
+            box.setInformativeText(detail.splitlines()[0][:400] if "\n" in detail else detail)
+            box.setDetailedText(detail)
+        if QApplication.instance().platformName() != "offscreen":
+            box.exec()
+
+
+class Page(QWidget):
+    title = ""
+
+    def __init__(self, window: MainWindow):
+        super().__init__()
+        self.window = window
+
+    def invalidated(self):
+        pass
+
+    def ground_state_ready(self, state):
+        pass
+
+
+class ElectronicPage(Page):
+    title = "Electrónica"
+
+    def __init__(self, window):
+        super().__init__(window)
+        layout = QVBoxLayout(self)
+        row = QHBoxLayout()
+        self.compute = QPushButton("Calcular estado fundamental")
+        self.compute.clicked.connect(lambda: self.window.with_ground_state(self.show_state))
+        row.addWidget(self.compute)
+        row.addWidget(QLabel("PDOS por"))
+        self.projection = QComboBox()
+        self.projection.addItems(["elemento", "átomo", "orbital", "ninguna"])
+        self.projection.currentIndexChanged.connect(self.plot_dos)
+        row.addWidget(self.projection)
+        row.addWidget(QLabel("σ"))
+        self.sigma = QDoubleSpinBox()
+        self.sigma.setRange(0.01, 1.0)
+        self.sigma.setValue(0.1)
+        self.sigma.setSuffix(" eV")
+        self.sigma.valueChanged.connect(self.plot_dos)
+        row.addWidget(self.sigma)
+        layout.addLayout(row)
+        self.summary = QLabel("—")
+        layout.addWidget(self.summary)
+        tabs = QTabWidget()
+        self.dos_plot = PlotPanel()
+        tabs.addTab(self.dos_plot, "DOS / PDOS")
+        self.levels = table(["#", "E (eV)", "ocupación", ""])
+        tabs.addTab(self.levels, "Niveles")
+        bands = QWidget()
+        bl = QVBoxLayout(bands)
+        br = QHBoxLayout()
+        br.addWidget(QLabel("Camino"))
+        self.path = QLineEdit()
+        self.path.setPlaceholderText("automático (p. ej. GMKG)")
+        br.addWidget(self.path)
+        self.bands_button = QPushButton("Calcular bandas")
+        self.bands_button.clicked.connect(self.compute_bands)
+        br.addWidget(self.bands_button)
+        bl.addLayout(br)
+        self.bands_plot = PlotPanel()
+        bl.addWidget(self.bands_plot)
+        tabs.addTab(bands, "Bandas")
+        self.charges = table(["átomo", "elemento", "carga (e)"])
+        tabs.addTab(self.charges, "Cargas")
+        layout.addWidget(tabs)
+
+    def invalidated(self):
+        self.summary.setText("—")
+
+    def ground_state_ready(self, state):
+        self.show_state(state)
+
+    def show_state(self, state):
+        info = state.info
+        gap = f"{info['gap']:.3f} eV" if info["gap"] and info["gap"] > 0 else "sin gap"
+        scc = f" · SCC en {state.iterations} iteraciones" if state.scc else ""
+        self.summary.setText(f"gap {gap} · HOMO {info['homo']:.3f} · LUMO {info['lumo']:.3f} · "
+                             f"E_F {info['fermi']:.3f} eV · {info['electrons']:.0f} electrones"
+                             f"{scc}")
+        fill(self.levels, actions.levels_table(state, around=15))
+        symbols = self.window.atoms.get_chemical_symbols()
+        fill(self.charges, [(i, symbols[i], float(q)) for i, q in sorted(state.charges.items())])
+        self.plot_dos()
+
+    def plot_dos(self, *_):
+        state = self.window.state
+        if state is None:
+            return
+        by = {0: "element", 1: "atom", 2: "orbital", 3: None}[self.projection.currentIndex()]
+        if by == "atom" and len(self.window.atoms) > 30:
+            by = "element"
+        curves = actions.dos_curves(state, self.sigma.value(), by)
+        ax = self.dos_plot.axes()
+        ax.plot(curves["energy"], curves["total"], color="black", lw=1.2, label="total")
+        for label, values in curves["projected"].items():
+            ax.plot(curves["energy"], values, lw=0.9, label=label)
+        ax.axvline(0, color="grey", ls="--", lw=0.8)
+        ax.set_xlabel("E − E_F (eV)")
+        ax.set_ylabel("estados/eV")
+        ax.legend(fontsize=8)
+        self.dos_plot.draw()
+
+    def compute_bands(self):
+        if not self.window.require():
+            return
+        self.window.runner.start("Bandas", actions.band_curves, self.window.atoms,
+                                 self.window.model, self.path.text().strip() or None,
+                                 kT=self.window.kT.value(), on_done=self.plot_bands,
+                                 on_error=self.window.error)
+
+    def plot_bands(self, curves):
+        ax = self.bands_plot.axes()
+        ax.plot(curves["x"], curves["energies"], color="black", lw=0.8)
+        for tick in curves["ticks"]:
+            ax.axvline(tick, color="grey", lw=0.5)
+        ax.set_xticks(curves["ticks"], [lab.replace("G", "Γ") for lab in curves["labels"]])
+        ax.axhline(0, color="grey", ls="--", lw=0.8)
+        ax.set_ylabel("E − E_F (eV)")
+        ax.set_xlim(curves["x"][0], curves["x"][-1])
+        self.bands_plot.draw()
+
+
+class OrbitalPage(Page):
+    title = "Orbitales"
+
+    def __init__(self, window):
+        super().__init__(window)
+        layout = QVBoxLayout(self)
+        self.hint = QLabel("Calcula el estado fundamental y elige un nivel.")
+        layout.addWidget(self.hint)
+        self.list = table(["#", "E (eV)", "ocupación", ""])
+        self.list.itemSelectionChanged.connect(self.selected)
+        layout.addWidget(self.list)
+        row = QHBoxLayout()
+        self.load = QPushButton("Cargar niveles")
+        self.load.clicked.connect(lambda: self.window.with_ground_state(self.ground_state_ready))
+        row.addWidget(self.load)
+        row.addWidget(QLabel("isovalor"))
+        self.level = QSlider(Qt.Horizontal)
+        self.level.setRange(2, 90)
+        self.level.setValue(25)
+        self.level.valueChanged.connect(self.redraw)
+        row.addWidget(self.level)
+        clear = QPushButton("Quitar")
+        clear.clicked.connect(self.window.view.clear_isosurface)
+        row.addWidget(clear)
+        layout.addLayout(row)
+        self.grid = None
+        self.rows = []
+
+    def invalidated(self):
+        self.list.setRowCount(0)
+        self.grid = None
+
+    def ground_state_ready(self, state):
+        self.rows = actions.levels_table(state, around=12)
+        fill(self.list, self.rows)
+
+    def selected(self):
+        rows = self.list.selectionModel().selectedRows()
+        if not rows or self.window.state is None:
+            return
+        band = self.rows[rows[0].row()][0]
+        self.window.runner.start(f"Orbital {band}", actions.orbital_grid, self.window.state,
+                                 band, on_done=self.show_grid, on_error=self.window.error)
+
+    def show_grid(self, grid):
+        self.grid = grid
+        self.redraw()
+
+    def redraw(self, *_):
+        if self.grid is None:
+            return
+        values = self.grid["values"]
+        level = self.level.value() / 100 * float(np.abs(values).max())
+        self.window.view.isosurface(self.grid["origin"], self.grid["spacing"], values, level)
+        self.hint.setText(f"E = {self.grid['energy']:.3f} eV · isovalor {level:.3g}")
+
+
+def main(argv=None):
+    app = QApplication.instance() or QApplication(sys.argv if argv is None else argv)
+    window = MainWindow()
+    args = sys.argv[1:] if argv is None else argv[1:]
+    if args:
+        window.open_structure(args[0])
+    window.show()
+    return app.exec()
