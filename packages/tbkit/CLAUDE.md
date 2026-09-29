@@ -34,7 +34,8 @@ tbkit/
 ├── references.py     # DFT reference sets (JSON): GPAW levels, energies, forces, frequencies
 ├── recipes/          # reproducible fits: xu_family (machinery), xu_chn, xu_chno; GPAW references
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
-└── cli.py            # `tbkit` console script
+├── cli.py            # `tbkit` console script
+└── gui/              # tbkit-gui (PySide6 + pyvista, extra `gui`): actions (no Qt), worker, viewer, app
 ```
 
 ## Guardrails (do not weaken)
@@ -124,6 +125,12 @@ tbkit/
 - Repulsion polynomials are only determined where the training data are:
   check V(r) and its slope in that range, not the coefficients, and state
   the range in `validity`.
+- GUI: calculations live in `gui/actions.py` (no Qt, tested like the rest);
+  `app.py` only lays out and draws. The worker pauses Python's cyclic GC while
+  a job runs and collects in the GUI thread: the collector running in the
+  worker destroyed Qt objects of the GUI thread and crashed the window at
+  random places. Do not remove that; results come back through queued slots.
+  PySide6/pyvista stay optional (the `gui` extra); GUI tests skip without them.
 - Mean-field moments are an order parameter, not a correlated ground state;
   user-facing text must not imply otherwise. Lieb's theorem is the check.
 - Energies and forces require `model.repulsive`; the π model has none and

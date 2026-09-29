@@ -406,3 +406,72 @@ def write_csv(path: str | Path, columns: dict[str, np.ndarray]) -> Path:
     data = np.column_stack([np.asarray(columns[n], dtype=float) for n in names])
     np.savetxt(path, data, delimiter=",", header=",".join(names), comments="")
     return path
+
+
+# --------------------------------------------------------------------------
+# Graphene: G, 2D, 2D' by (double) resonance
+# --------------------------------------------------------------------------
+
+GRAPHENE_PHONONS = {"gpaw": "GPAW (PBE, incluidas)", "xu": "modelo de Xu (se calculan)"}
+
+
+def graphene_spectra(lasers_ev, phonons: str = "gpaw", gamma: float = 0.1, dk: float = 0.01,
+                     dq: float = 0.03, workers: int = 1, fwhm: float = 10.0) -> dict:
+    """G, 2D and 2D′ of pristine graphene per laser, and the 2D dispersion (cm⁻¹/eV).
+
+    π electrons with t(d) and the chosen force constants; the resonance
+    energies are the π model's. ``phonons``: ``gpaw``, ``xu`` or a JSON path."""
+    from ..graphene import graphene_raman, load_phonons
+
+    lasers = np.atleast_1d(np.asarray(lasers_ev, dtype=float))
+    results = graphene_raman(lasers, load_phonons(phonons), gamma=gamma, dk=dk, dq=dq,
+                             workers=workers, fwhm=fwhm)
+    positions = np.array([r["2D_position"] for r in results])
+    slope = float(np.polyfit(lasers, positions, 1)[0]) if len(lasers) > 1 else float("nan")
+    return {"results": results, "lasers": lasers, "dispersion_2d": slope,
+            "rows": [(r["laser_ev"], r["g_frequency"], r["2D_position"], r["2D'_position"],
+                      r["2D_intensity"] / r["g_intensity"]) for r in results]}
+
+
+# --------------------------------------------------------------------------
+# Reproducible records
+# --------------------------------------------------------------------------
+
+def plain(value):
+    """Only what a JSON record can hold: numbers, text, arrays, lists and dicts of them
+    (solutions, Vibrations and other objects are dropped)."""
+    if isinstance(value, dict):
+        return {str(k): plain(v) for k, v in value.items() if _keep(v)}
+    if isinstance(value, (list, tuple)):
+        return [plain(v) for v in value if _keep(v)]
+    if isinstance(value, np.ndarray):
+        return value.real.tolist() if np.iscomplexobj(value) else value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
+def _keep(value) -> bool:
+    return isinstance(value, (dict, list, tuple, np.ndarray, np.generic, int, float, str,
+                              bool, type(None)))
+
+
+def record(atoms: Atoms, model: TBModel, task: str, settings: dict, results: dict) -> dict:
+    """The record of one calculation made in the window (``tbkit.record`` format)."""
+    from ..record import make_record
+
+    return make_record(atoms, model, task, plain(settings), plain(results))
+
+
+def open_record(path: str | Path) -> tuple[Atoms, TBModel, dict]:
+    """Structure, model and the whole record back from a record file."""
+    import io
+    import json
+
+    from ase.io import read
+
+    from ..params import model_from_dict
+
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    atoms = read(io.StringIO(data["structure"]), format="extxyz")
+    return atoms, model_from_dict(data["model"]), data

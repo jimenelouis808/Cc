@@ -128,6 +128,8 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, J
         bar.pack(side="bottom", fill="x")
         self.current_var = tk.StringVar(value="Estructura actual: ninguna")
         ttk.Label(bar, textvariable=self.current_var, foreground="#335").pack(side="left")
+        ttk.Button(bar, text="Abrir en tbkit", command=self._open_in_tbkit).pack(
+            side="left", padx=8)
         self.page_status_var = tk.StringVar(value="")
         ttk.Label(bar, textvariable=self.page_status_var, foreground="#667").pack(side="right")
 
@@ -191,6 +193,23 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, J
                 queue=self.jobs, on_submit=self._on_job_submitted,
             )
         return self._vibspec
+
+    def _open_in_tbkit(self) -> None:
+        """Start tbkit's window (a separate program) on the current structure."""
+        from tkinter import messagebox
+
+        from .external import open_in_tbkit
+
+        atoms = self.session.take()
+        if atoms is None:
+            messagebox.showinfo("tbkit", "No hay estructura actual: construye o importa una.")
+            return
+        try:
+            path, _ = open_in_tbkit(atoms)
+        except (RuntimeError, OSError) as error:
+            messagebox.showerror("tbkit", str(error))
+            return
+        self.page_status_var.set(f"Abierta en tbkit: {path}")
 
     def _on_session_change(self, current) -> None:
         self.current_var.set("Estructura actual: "

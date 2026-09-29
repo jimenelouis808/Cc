@@ -114,10 +114,76 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.tabs)
         splitter.setSizes([300, 700, 600])
         self.setCentralWidget(splitter)
+        self.last_record = None
+        self._menu()
         self.statusBar().showMessage("Abre una estructura (xyz, extxyz, cif, POSCAR…).")
 
+    def _menu(self):
+        menu = self.menuBar().addMenu("Archivo")
+        for text, slot in (("Abrir estructura…", self.open_dialog),
+                           ("Guardar estructura…", self.save_structure),
+                           (None, None),
+                           ("Guardar registro del último cálculo…", self.save_record),
+                           ("Abrir registro…", self.load_record),
+                           (None, None),
+                           ("Salir", self.close)):
+            if text is None:
+                menu.addSeparator()
+            else:
+                menu.addAction(text).triggered.connect(slot)
+
+    def remember(self, task: str, settings: dict, results: dict):
+        """The last finished calculation, for «Guardar registro»."""
+        if self.atoms is not None and self.model is not None:
+            self.last_record = (self.atoms.copy(), self.model, task, dict(settings), results)
+
+    def save_structure(self):
+        if self.atoms is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Guardar estructura", "estructura.extxyz",
+                                              "extxyz (*.extxyz);;xyz (*.xyz);;Todos (*)")
+        if path:
+            from ase.io import write
+
+            write(path, self.atoms)
+            self.statusBar().showMessage(f"Guardada {path}")
+
+    def save_record(self, path: Optional[str] = None):
+        if self.last_record is None:
+            self.error("Nada que registrar", "Haz antes un cálculo.")
+            return None
+        if not path:
+            path, _ = QFileDialog.getSaveFileName(self, "Guardar registro", "registro.json",
+                                                  "JSON (*.json)")
+        if not path:
+            return None
+        import json
+
+        atoms, model, task, settings, results = self.last_record
+        data = actions.record(atoms, model, task, settings, results)
+        Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        self.statusBar().showMessage(f"Registro guardado en {path}")
+        return path
+
+    def load_record(self, path: Optional[str] = None):
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(self, "Abrir registro", "", "JSON (*.json)")
+        if not path:
+            return
+        try:
+            atoms, model, data = actions.open_record(path)
+        except Exception as error:
+            self.error("No es un registro de tbkit", str(error))
+            return
+        self.model, self.model_name = model, str(path)
+        self.model_label.setText(f"{model.name}\n(del registro: {data.get('task')}, "
+                                 f"{data.get('date')}, tbkit {data.get('tbkit')}, "
+                                 f"commit {str(data.get('commit'))[:8]})")
+        self.set_atoms(atoms, Path(path).name)
+
     def page_classes(self):
-        return [ElectronicPage, OrbitalPage, MagnetismPage, GeometryPage, SpectraPage]
+        return [ElectronicPage, OrbitalPage, MagnetismPage, GeometryPage, SpectraPage,
+                GraphenePage]
 
     # --- left panel ---------------------------------------------------------------
 
@@ -376,6 +442,12 @@ class ElectronicPage(Page):
                              f"E_F {info['fermi']:.3f} eV · {info['electrons']:.0f} electrones"
                              f"{scc}")
         fill(self.levels, actions.levels_table(state, around=15))
+        self.window.remember("estado fundamental",
+                             {"charge": self.window.charge.value(), "kT": self.window.kT.value(),
+                              "scc": state.scc},
+                             {**state.info, "charges": state.charges,
+                              "levels": state.solution.energies[0, 0],
+                              "scc_iterations": state.iterations})
         symbols = self.window.atoms.get_chemical_symbols()
         fill(self.charges, [(i, symbols[i], float(q)) for i, q in sorted(state.charges.items())])
         self.plot_dos()
@@ -407,6 +479,7 @@ class ElectronicPage(Page):
                                  on_error=self.window.error)
 
     def plot_bands(self, curves):
+        self.window.remember("bandas", {"path": self.path.text().strip() or "auto"}, curves)
         ax = self.bands_plot.axes()
         ax.plot(curves["x"], curves["energies"], color="black", lw=0.8)
         for tick in curves["ticks"]:
@@ -581,6 +654,8 @@ class MagnetismPage(Page):
 
     def show(self, out):
         self.result = out
+        self.window.remember("hubbard", {**self.settings(), "field_tesla": self.field.value()},
+                             out)
         state = "convergido" if out["converged"] else "SIN CONVERGER"
         gap = f"{out['gap']:.3f} eV" if out["gap"] and out["gap"] > 0 else "sin gap"
         self.summary.setText(
@@ -643,6 +718,7 @@ class MagnetismPage(Page):
                                      on_done=self.show_sweep, on_error=self.window.error)
 
     def show_sweep(self, out):
+        self.window.remember("barrido de magnetización", self.settings(), out)
         ax = self.sweep_plot.axes()
         if "tesla" in out:
             ax.plot(out["tesla"], out["M"], "o-", ms=3)
@@ -731,6 +807,8 @@ class GeometryPage(Page):
                                  on_error=self.window.error)
 
     def relaxed(self, out):
+        self.window.remember("relajación", {"fmax": self.fmax.value(),
+                                            "steps": int(self.steps.value())}, out)
         if self.original is None:
             self.original = self.window.atoms.copy()
         state = "convergida" if out["converged"] else "SIN CONVERGER"
@@ -765,6 +843,9 @@ class GeometryPage(Page):
         self.result = out
         vib = out["vibrations"]
         self.window.phonons = (vib.frequencies, vib.modes, f"modelo ({self.window.model.name})")
+        self.window.remember("modos en Γ", {}, {"frequencies_cm1": vib.frequencies,
+                                                "modes": vib.modes, "rows": out["rows"],
+                                                "warnings": out["warnings"]})
         fill(self.table, out["rows"])
         warnings = " ".join(out["warnings"])
         self.summary.setText(f"{len(out['rows'])} modos. Clic en uno para animarlo. {warnings}")
@@ -935,6 +1016,7 @@ class SpectraPage(Page):
 
     def show_raman(self, out):
         self.last = ("raman", out)
+        self.window.remember("raman", self._settings(), out)
         self._table(out["rows"], "actividad (Å⁴/amu)")
         ax = self.plot.axes()
         ax.plot(out["grid"], out["intensity"], color="black", lw=1)
@@ -961,6 +1043,8 @@ class SpectraPage(Page):
 
     def show_resonant(self, out):
         self.last = ("resonant", out)
+        self.window.remember("raman resonante", {**self._settings(), "eta": self.eta.value(),
+                                                 "lasers_ev": list(out["lasers"])}, out)
         self.resonant = out
         lasers = out["lasers"]
         headers = ["ω (cm⁻¹)"] + [f"{e:.2f} eV" for e in lasers]
@@ -1006,6 +1090,7 @@ class SpectraPage(Page):
 
     def show_ir(self, out):
         self.last = ("ir", out)
+        self.window.remember("ir", self._settings(), out)
         self._table(out["rows"], "intensidad (km/mol)")
         ax = self.plot.axes()
         ax.plot(out["grid"], out["absorption"], color="tab:red", lw=1)
@@ -1016,6 +1101,12 @@ class SpectraPage(Page):
         self.summary.setText(f"IR con el dipolo del modelo (cargas + dipolos intraatómicos) · "
                              f"μ = {out['dipole_debye']:.2f} D · semicuantitativo (factor ~2 por "
                              "modo frente a GPAW). " + " ".join(out["warnings"]))
+
+    def _settings(self):
+        source = "QE" if self.qe is not None else \
+            (self.window.phonons[2] if self.window.phonons is not None else "modelo")
+        return {"phonons": source, "laser_nm": self.laser.value(),
+                "temperature_k": self.temperature.value(), "fwhm_cm1": self.fwhm.value()}
 
     def _table(self, rows, label):
         self.table.clear()
@@ -1041,6 +1132,93 @@ class SpectraPage(Page):
                 columns[f"activity_{energy:.3f}eV"] = out["activities"][i]
             actions.write_csv(path, columns)
         self.window.statusBar().showMessage(f"Exportado {path}")
+
+
+class GraphenePage(Page):
+    """Pristine graphene: G (third order) and 2D, 2D′ (double resonance) per laser."""
+
+    title = "Grafeno"
+
+    def __init__(self, window):
+        super().__init__(window)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.lasers = QLineEdit("1.96 2.41 2.71")
+        form.addRow("Láseres (eV)", self.lasers)
+        self.phonons = QComboBox()
+        for key, label in actions.GRAPHENE_PHONONS.items():
+            self.phonons.addItem(label, key)
+        self.phonons.addItem("archivo JSON de constantes de fuerza…", "file")
+        form.addRow("Fonones", self.phonons)
+        self.gamma = _spin(0.01, 1.0, 0.1, 0.01, 2, " eV")
+        form.addRow("γ electrónico", self.gamma)
+        self.dk = _spin(0.002, 0.1, 0.01, 0.002, 3, " 1/Å")
+        self.dq = _spin(0.005, 0.2, 0.03, 0.005, 3, " 1/Å")
+        row = QHBoxLayout()
+        row.addWidget(self.dk)
+        row.addWidget(QLabel("dq"))
+        row.addWidget(self.dq)
+        form.addRow("malla dk", row)
+        self.workers = _spin(1, 64, 1, 1, 0)
+        form.addRow("procesos", self.workers)
+        layout.addLayout(form)
+        self.run_button = QPushButton("Calcular G, 2D y 2D′")
+        self.run_button.clicked.connect(self.run)
+        layout.addWidget(self.run_button)
+        self.summary = QLabel("Grafeno prístino, electrones π con t(d). Cuesta minutos con la "
+                              "malla fina; dk = 0,05, dq = 0,1 da una vista rápida.")
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+        tabs = QTabWidget()
+        self.spectra = PlotPanel()
+        tabs.addTab(self.spectra, "Segundo orden")
+        self.table = table(["láser (eV)", "G (cm⁻¹)", "2D (cm⁻¹)", "2D′ (cm⁻¹)", "I(2D)/I(G)"])
+        tabs.addTab(self.table, "Posiciones")
+        self.dispersion = PlotPanel()
+        tabs.addTab(self.dispersion, "Dispersión de la 2D")
+        layout.addWidget(tabs)
+
+    def run(self):
+        try:
+            lasers = [float(v) for v in self.lasers.text().replace(",", " ").split()]
+        except ValueError:
+            self.window.error("Energías de láser", "Escribe números en eV separados por espacios.")
+            return
+        source = self.phonons.currentData()
+        if source == "file":
+            source, _ = QFileDialog.getOpenFileName(self, "Constantes de fuerza", "",
+                                                    "JSON (*.json)")
+            if not source:
+                return
+        self.settings = {"lasers_ev": lasers, "phonons": source, "gamma": self.gamma.value(),
+                         "dk": self.dk.value(), "dq": self.dq.value()}
+        self.window.runner.start("Grafeno", actions.graphene_spectra, lasers, source,
+                                 gamma=self.gamma.value(), dk=self.dk.value(),
+                                 dq=self.dq.value(), workers=int(self.workers.value()),
+                                 on_done=self.show, on_error=self.window.error)
+
+    def show(self, out):
+        if self.window.atoms is not None and self.window.model is not None:
+            self.window.remember("grafeno G/2D/2D′", self.settings, out)
+        fill(self.table, out["rows"])
+        ax = self.spectra.axes()
+        for i, r in enumerate(out["results"]):
+            ax.plot(r["grid"], r["spectrum"] / r["g_intensity"], lw=1, color=f"C{i}",
+                    label=f"{r['laser_ev']:.2f} eV")
+        ax.set_xlabel("desplazamiento Raman (cm⁻¹)")
+        ax.set_ylabel("I / I(G)")
+        ax.legend(fontsize=8)
+        self.spectra.draw()
+        ax = self.dispersion.axes()
+        ax.plot(out["lasers"], [r[2] for r in out["rows"]], "o-", label="2D")
+        ax.set_xlabel("ħω_L (eV)")
+        ax.set_ylabel("posición de la 2D (cm⁻¹)")
+        self.dispersion.draw()
+        slope = out["dispersion_2d"]
+        text = f"dispersión de la 2D: {slope:.0f} cm⁻¹/eV (exp. ~100)" if np.isfinite(slope) \
+            else "un solo láser: sin dispersión"
+        self.summary.setText(f"{text}. Posiciones altas por los fonones PBE; energías de "
+                             "resonancia del modelo π.")
 
 
 def main(argv=None):

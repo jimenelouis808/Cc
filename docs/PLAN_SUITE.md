@@ -263,6 +263,10 @@ ventana (modelos y parámetros, niveles/DOS/PDOS/bandas, orbitales e
 isosuperficies, Hubbard y magnetización, relajación, fonones y modos, Raman
 no resonante y resonante, IR, grafeno 2D, QE, registros reproducibles).
 
+Hecho (29-09-2026): `tbkit-gui` con Electrónica, Orbitales, Magnetismo,
+Geometría y modos, Espectros (Raman, resonante, IR, QE), Grafeno y registros;
+«Abrir en tbkit» en carbonforge (proceso aparte, por archivo).
+
 ## Pendiente, por decisión del usuario (29-09-2026)
 
 - H₂ fisisorbido en superestructuras (2000+ átomos): flujo GCMC en carbonforge

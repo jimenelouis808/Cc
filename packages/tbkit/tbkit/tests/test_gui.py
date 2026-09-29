@@ -252,3 +252,40 @@ def test_window_spectra_page():
     spectra.resonant_button.click()
     _wait(window)
     spectra.table.selectRow(0)
+
+
+def test_record_keeps_numbers_and_drops_objects(tmp_path):
+    import json
+
+    model = actions.load_model("chn")
+    atoms = molecule("C6H6")
+    state = actions.ground_state(atoms, model)
+    data = actions.record(atoms, model, "estado fundamental", {"charge": 0.0},
+                          {"info": state.info, "state": state, "charges": state.charges})
+    path = tmp_path / "r.json"
+    path.write_text(json.dumps(data))
+    again, model_again, back = actions.open_record(path)
+    assert back["task"] == "estado fundamental" and "state" not in back["results"]
+    assert len(again) == 12 and model_again.onsite == model.onsite
+
+
+@pytest.mark.slow
+def test_graphene_spectra_coarse():
+    out = actions.graphene_spectra([2.0, 2.6], dk=0.05, dq=0.1)
+    assert 1500 < out["rows"][0][1] < 1700                 # G
+    assert out["dispersion_2d"] > 0                        # 2D moves up with the laser
+
+
+def test_window_saves_and_reopens_a_record(tmp_path):
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    window.set_atoms(molecule("C5H5N"), "piridina")
+    window.pages["Electrónica"].compute.click()
+    _wait(window)
+    path = window.save_record(str(tmp_path / "registro.json"))
+    assert path and window.last_record[2] == "estado fundamental"
+    other = MainWindow(interactive=False)
+    other.load_record(path)
+    assert len(other.atoms) == 11 and "registro" in other.model_label.text()

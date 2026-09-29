@@ -6,6 +6,21 @@ está la trampa.
 
 ---
 
+## tbkit · la ventana (`tbkit-gui`)
+
+`uv run tbkit-gui molecula.xyz` abre todo tbkit en una ventana: estructura y
+modelo a la izquierda, vista 3D en el centro y una pestaña por capacidad
+(electrónica, orbitales, magnetismo, geometría y modos, espectros Raman/IR,
+grafeno). Desde carbonforge, «Abrir en tbkit» manda la estructura actual.
+
+**La trampa.** Necesita el extra `gui` (PySide6 + pyvista) y, en Linux, las
+bibliotecas de Qt del sistema. Cancelar descarta el resultado, no para el
+cálculo. Las frecuencias con O de `xu_chno` están en revisión (enlaces O–H y
+C=O demasiado rígidos en algunas moléculas): no te fíes todavía de las
+posiciones IR/Raman de grupos oxigenados.
+
+---
+
 ## tbkit · oxígeno (`--model chno`)
 
 `tbkit raman molecula.xyz --model chno` y `tbkit ir molecula.xyz --model chno`

@@ -16,6 +16,37 @@ tbkit raman diamante.extxyz --model sp3 --kmesh 8 -o raman.csv
 tbkit run simulacion.json          # reproducible desde el archivo
 ```
 
+## La ventana: `tbkit-gui`
+
+```bash
+uv sync --all-packages --extra dev --extra gui     # PySide6 + pyvista (opcionales)
+uv run tbkit-gui [estructura.xyz]
+```
+
+Izquierda, la estructura (cualquier archivo que lea ASE) y el modelo (sugiere
+el conjunto mínimo que cubre sus elementos; carga, SCC, kT). Centro, la vista
+3D (átomos, enlaces, colores por carga o momento, isosuperficies, modos
+animados). Derecha, una pestaña por capacidad:
+
+| Pestaña | Qué hace |
+|---|---|
+| Electrónica | estado fundamental (SCC si el modelo lo pide), gap, niveles, DOS/PDOS por elemento, átomo u orbital, bandas (periódicos), cargas |
+| Orbitales | isosuperficie de cualquier nivel, isovalor ajustable |
+| Magnetismo | Hubbard de campo medio: momentos sobre la estructura, DOS de espín, m(E), comparación de puntos de partida, barridos en campo (T) y dopaje |
+| Geometría y modos | relajación con las fuerzas del modelo (con vuelta a la original), modos en Γ con participación, DOS vibracional, animación y flechas, `modes.npz` |
+| Espectros | Raman (láser, T), Raman resonante (láseres, η, perfiles de excitación), IR en km/mol; fonones de la pestaña anterior, del modelo o de un archivo de QE; CSV |
+| Grafeno | G, 2D y 2D′ por láser con fonones GPAW, Xu o de archivo; dispersión de la 2D |
+
+Archivo → «Guardar registro del último cálculo» escribe el registro
+reproducible de `tbkit.record` (versión, commit, parámetros completos,
+ajustes, resultados); «Abrir registro» recupera estructura y modelo. Desde
+carbonforge, «Abrir en tbkit» (barra inferior) lanza esta ventana con la
+estructura actual, por archivo: los paquetes no se importan.
+
+Los cálculos corren en otro hilo; «Cancelar» descarta el resultado (un hilo de
+Python no se puede matar). En Linux, Qt necesita libEGL, libxkbcommon y las
+libxcb-* del sistema.
+
 ## Parámetros: fuera del código y con su fuente
 
 Los conjuntos incluidos viven en `tbkit/parameters/*.json`. Cada número lleva
