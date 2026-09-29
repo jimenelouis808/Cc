@@ -14,6 +14,9 @@ from .actions import bonds_of
 
 
 def element_color(symbol: str):
+    """Jmol colours, except H: pure white vanishes on the white background."""
+    if symbol == "H":
+        return (0.82, 0.82, 0.86)
     return tuple(float(c) for c in jmol_colors[atomic_numbers[symbol]])
 
 
@@ -67,7 +70,7 @@ class StructureView:
             glyphs = cloud.glyph(scale="radius", geom=sphere, orient=False)
             if scalars is None:
                 self.plotter.add_mesh(glyphs, color=element_color(element), smooth_shading=True,
-                                      name=f"{name}-{element}")
+                                      specular=0.4, name=f"{name}-{element}")
             else:
                 values = np.asarray(scalars, dtype=float)[index]
                 glyphs[label or "valor"] = np.repeat(values, sphere.n_points)

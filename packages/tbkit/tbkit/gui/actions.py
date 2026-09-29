@@ -280,3 +280,61 @@ def doping_sweep(atoms: Atoms, model: TBModel, charges, U: Optional[float] = Non
     x, m, _ = magnetization_vs_doping(system, charges=charges, U=U, kpts=kpts, weights=weights,
                                       kT=kT, guess=guess)
     return {"charge": x, "M": m}
+
+
+# --------------------------------------------------------------------------
+# Geometry and vibrations
+# --------------------------------------------------------------------------
+
+def _needs_repulsion(model: TBModel):
+    if model.repulsive is None:
+        raise ValueError(f"«{model.name}» no tiene parte repulsiva: sin energías ni fuerzas "
+                         "(el modelo π no relaja ni da fonones). Usa sp3, chn, chno…")
+
+
+def relax_structure(atoms: Atoms, model: TBModel, fmax: float = 0.02, steps: int = 500,
+                    kT: float = 0.02, kmesh: int = 8, scc: Optional[bool] = None) -> dict:
+    """BFGS with the model's forces (cell fixed); returns the new structure too."""
+    from ase.optimize import BFGS
+
+    from ..calculator import TBCalculator
+
+    _needs_repulsion(model)
+    problems = check_model(atoms, model, scc)
+    if problems:
+        raise ValueError(" ".join(problems))
+    moved = atoms.copy()
+    moved.calc = TBCalculator(model, kpts=kmesh, kT=kT, scc=scc)
+    start = float(moved.get_potential_energy())
+    trajectory = [start]
+    optimizer = BFGS(moved, logfile=None)
+    optimizer.attach(lambda: trajectory.append(float(moved.get_potential_energy())))
+    converged = bool(optimizer.run(fmax=fmax, steps=steps))
+    forces = moved.get_forces()
+    result = moved.copy()
+    result.calc = None
+    shift = np.linalg.norm(result.get_positions() - atoms.get_positions(), axis=1)
+    return {"atoms": result, "converged": converged, "steps": optimizer.get_number_of_steps(),
+            "energy": float(moved.get_potential_energy()), "energy_start": start,
+            "max_force": float(np.linalg.norm(forces, axis=1).max()),
+            "max_displacement": float(shift.max()), "trajectory": np.array(trajectory)}
+
+
+def vibration_modes(atoms: Atoms, model: TBModel, kT: float = 0.02, kmesh: int = 12,
+                    scc: Optional[bool] = None, sigma: float = 10.0) -> dict:
+    """Γ modes with the Hessian (``tbkit.modes``), a table and the vibrational DOS."""
+    from ..modes import participation, vibrational_dos, vibrations
+
+    _needs_repulsion(model)
+    problems = check_model(atoms, model, scc)
+    if problems:
+        raise ValueError(" ".join(problems))
+    vib = vibrations(atoms, model, kmesh=kmesh, kT=kT, scc=scc)
+    shares = participation(vib)
+    rows = []
+    for index, frequency in enumerate(vib.frequencies):
+        parts = ", ".join(f"{name} {share[index]:.0%}" for name, share in shares.items()
+                          if share[index] >= 0.05)
+        rows.append((index, float(frequency), parts))
+    return {"vibrations": vib, "rows": rows, "vdos": vibrational_dos(vib, sigma=sigma),
+            "warnings": list(vib.warnings)}

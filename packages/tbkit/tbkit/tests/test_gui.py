@@ -148,3 +148,63 @@ def test_window_magnetism_page():
     page.sweep_n.setValue(3)
     page.sweep_button.click()
     _wait(window)
+
+
+def test_relax_and_modes_of_water():
+    model = actions.load_model("chno")
+    out = actions.relax_structure(molecule("H2O"), model, fmax=0.005)
+    assert out["converged"] and out["energy"] <= out["energy_start"] + 1e-9
+    modes = actions.vibration_modes(out["atoms"], model)
+    frequencies = np.sort(modes["vibrations"].frequencies)[6:]
+    assert len(frequencies) == 3 and frequencies.min() > 1000     # bend, two stretches
+    assert "H" in modes["rows"][-1][2] and not modes["warnings"]
+
+
+def test_pi_model_refuses_relaxation():
+    with pytest.raises(ValueError, match="repulsiva"):
+        actions.relax_structure(molecule("C6H6"), actions.load_model("pi"))
+
+
+def test_window_geometry_page():
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    window.set_atoms(molecule("H2O"), "agua")
+    page = window.pages["Geometría y modos"]
+    page.relax.click()
+    _wait(window)
+    assert "convergida" in page.summary.text() and page.undo.isEnabled()
+    page.modes_button.click()
+    _wait(window)
+    assert page.table.rowCount() == 9
+    page.table.selectRow(8)                      # animate the highest mode
+    page.arrows()
+    page.restore()
+    assert not page.undo.isEnabled()
+
+
+def test_runner_collects_garbage_only_in_the_gui_thread():
+    # The cyclic collector running in the worker destroyed Qt objects of the
+    # GUI thread and crashed the window at random places: it is paused while a
+    # job runs and resumed (with a collection) in the GUI thread afterwards.
+    import gc
+
+    _qt()
+    from tbkit.gui.worker import Runner
+
+    runner = Runner()
+    seen = []
+    runner.start("prueba", lambda: gc.isenabled(), on_done=seen.append)
+
+    class _Window:
+        pass
+
+    window = _Window()
+    window.runner = runner
+    _wait(window)
+    assert seen == [False] and gc.isenabled()
+    for _ in range(3):                       # consecutive jobs, old threads released
+        runner.start("otra", lambda: 1)
+        _wait(window)
+    assert len(runner._finished) == 1

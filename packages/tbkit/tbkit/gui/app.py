@@ -115,7 +115,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Abre una estructura (xyz, extxyz, cif, POSCAR…).")
 
     def page_classes(self):
-        return [ElectronicPage, OrbitalPage, MagnetismPage]
+        return [ElectronicPage, OrbitalPage, MagnetismPage, GeometryPage]
 
     # --- left panel ---------------------------------------------------------------
 
@@ -652,6 +652,163 @@ class MagnetismPage(Page):
             ax.set_xlabel("carga añadida (e; + quita electrones)")
         ax.set_ylabel("M (μB)")
         self.sweep_plot.draw()
+
+
+class GeometryPage(Page):
+    """Relaxation with the model's forces, Γ modes, vibrational DOS, animated modes."""
+
+    title = "Geometría y modos"
+
+    def __init__(self, window):
+        super().__init__(window)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.fmax = _spin(0.001, 1.0, 0.02, 0.005, 3, " eV/Å")
+        form.addRow("fmax", self.fmax)
+        self.steps = _spin(10, 5000, 500, 50, 0)
+        form.addRow("pasos máx.", self.steps)
+        self.kmesh = _spin(1, 64, 8, 1, 0)
+        form.addRow("malla k (periódicos)", self.kmesh)
+        layout.addLayout(form)
+        row = QHBoxLayout()
+        self.relax = QPushButton("Relajar")
+        self.relax.clicked.connect(self.run_relax)
+        row.addWidget(self.relax)
+        self.undo = QPushButton("Volver a la original")
+        self.undo.setEnabled(False)
+        self.undo.clicked.connect(self.restore)
+        row.addWidget(self.undo)
+        self.modes_button = QPushButton("Modos en Γ")
+        self.modes_button.clicked.connect(self.run_modes)
+        row.addWidget(self.modes_button)
+        self.save = QPushButton("Guardar modos…")
+        self.save.setEnabled(False)
+        self.save.clicked.connect(self.save_modes)
+        row.addWidget(self.save)
+        layout.addLayout(row)
+        self.summary = QLabel("Relaja antes de calcular modos: fuera del mínimo las "
+                              "frecuencias no son las armónicas.")
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+        tabs = QTabWidget()
+        self.table = table(["#", "ω (cm⁻¹)", "participación"])
+        self.table.itemSelectionChanged.connect(self.selected)
+        tabs.addTab(self.table, "Modos")
+        self.vdos_plot = PlotPanel()
+        tabs.addTab(self.vdos_plot, "DOS vibracional")
+        self.relax_plot = PlotPanel()
+        tabs.addTab(self.relax_plot, "Relajación")
+        layout.addWidget(tabs)
+        anim = QHBoxLayout()
+        anim.addWidget(QLabel("amplitud"))
+        self.amplitude = _spin(0.05, 2.0, 0.4, 0.05, 2, " Å")
+        anim.addWidget(self.amplitude)
+        self.show_arrows = QPushButton("Flechas")
+        self.show_arrows.clicked.connect(self.arrows)
+        anim.addWidget(self.show_arrows)
+        stop = QPushButton("Parar")
+        stop.clicked.connect(self.stop)
+        anim.addWidget(stop)
+        layout.addLayout(anim)
+        self.original = None
+        self.result = None
+
+    def invalidated(self):
+        self.result = None
+        self.table.setRowCount(0)
+        self.save.setEnabled(False)
+
+    def run_relax(self):
+        if not self.window.require():
+            return
+        self.window.runner.start("Relajación", actions.relax_structure, self.window.atoms,
+                                 self.window.model, fmax=self.fmax.value(),
+                                 steps=int(self.steps.value()), kmesh=int(self.kmesh.value()),
+                                 scc=self.window.scc_choice(), on_done=self.relaxed,
+                                 on_error=self.window.error)
+
+    def relaxed(self, out):
+        if self.original is None:
+            self.original = self.window.atoms.copy()
+        state = "convergida" if out["converged"] else "SIN CONVERGER"
+        self.summary.setText(
+            f"Relajación {state} en {out['steps']} pasos · ΔE = "
+            f"{out['energy'] - out['energy_start']:+.4f} eV · fuerza máx. "
+            f"{out['max_force']:.4f} eV/Å · desplazamiento máx. {out['max_displacement']:.3f} Å")
+        ax = self.relax_plot.axes()
+        ax.plot(out["trajectory"] - out["trajectory"][-1], "o-", ms=3)
+        ax.set_xlabel("paso")
+        ax.set_ylabel("E − E_final (eV)")
+        ax.set_yscale("symlog", linthresh=1e-3)
+        self.relax_plot.draw()
+        self.window.set_atoms(out["atoms"], "relajada")
+        self.undo.setEnabled(True)
+
+    def restore(self):
+        if self.original is not None:
+            self.window.set_atoms(self.original, "original")
+            self.original = None
+            self.undo.setEnabled(False)
+
+    def run_modes(self):
+        if not self.window.require():
+            return
+        self.window.runner.start("Modos en Γ", actions.vibration_modes, self.window.atoms,
+                                 self.window.model, kmesh=int(self.kmesh.value()),
+                                 scc=self.window.scc_choice(), on_done=self.show_modes,
+                                 on_error=self.window.error)
+
+    def show_modes(self, out):
+        self.result = out
+        fill(self.table, out["rows"])
+        warnings = " ".join(out["warnings"])
+        self.summary.setText(f"{len(out['rows'])} modos. Clic en uno para animarlo. {warnings}")
+        vdos = out["vdos"]
+        ax = self.vdos_plot.axes()
+        ax.plot(vdos["grid"], vdos["total"], color="black", lw=1.2, label="total")
+        for name, values in vdos.items():
+            if name not in ("grid", "total"):
+                ax.plot(vdos["grid"], values, lw=0.9, label=name)
+        ax.set_xlabel("ω (cm⁻¹)")
+        ax.set_ylabel("estados/cm⁻¹")
+        ax.legend(fontsize=8)
+        self.vdos_plot.draw()
+        self.save.setEnabled(True)
+
+    def _mode(self):
+        rows = self.table.selectionModel().selectedRows()
+        if not rows or self.result is None:
+            return None
+        return self.result["vibrations"].modes[rows[0].row()]
+
+    def selected(self):
+        mode = self._mode()
+        if mode is not None:
+            self.window.view.show(self.window.atoms, keep_camera=True)
+            self.window.view.animate_mode(mode, self.amplitude.value(), self.window.timer)
+
+    def arrows(self):
+        mode = self._mode()
+        if mode is not None:
+            self.window.view.stop_animation()
+            self.window.view.show(self.window.atoms, keep_camera=True)
+            largest = float(np.linalg.norm(mode, axis=1).max()) or 1.0
+            self.window.view.arrows(mode, 3.0 * self.amplitude.value() / largest)
+
+    def stop(self):
+        self.window.view.stop_animation()
+        self.window.view.show(self.window.atoms, keep_camera=True)
+
+    def save_modes(self):
+        if self.result is None:
+            return
+        directory = QFileDialog.getExistingDirectory(self, "Carpeta (se crea modes.npz)")
+        if directory:
+            try:
+                path = self.result["vibrations"].save(directory)
+                self.window.statusBar().showMessage(f"Guardado {path}")
+            except FileExistsError as error:
+                self.window.error("No se sobrescribe", str(error))
 
 
 def main(argv=None):
