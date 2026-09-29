@@ -70,7 +70,10 @@ FAMILIES = {
         pairs=_pairs("P", {"H": 1.42, "C": 1.85, "N": 1.70, "O": 1.60, "P": 2.22}),
         hubbard_u={"P": HUBBARD_U["P"]},
         onsite_dipole={"P": ONSITE_DIPOLE["P"]},
-        validity_notes="P junto con B o S en la misma estructura no está cubierto",
+        validity_notes=("P junto con B o S en la misma estructura no está cubierto; el C-P de "
+                        "P(V) (ácidos fosfónicos, óxidos de fosfina) sale 0.07-0.14 Å largo, el "
+                        "de P(III) 0.03-0.05 Å; P-O, P=O, P-P, P-N, P-H y C-P aromático a menos "
+                        "de 0.025 Å"),
         system=("xu_chno más fósforo: fosfinas, óxidos de fosfina, ácidos fosfórico y "
                 "fosfónicos, fosfatos, fosfinina"),
         base="xu_chno"),

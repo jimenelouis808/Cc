@@ -246,7 +246,27 @@ Pendiente de la fase E:
 - [x] IR (paso 9): `infrared.py`; frente a GPAW, factor típico ~2 por modo.
 - [x] Oxígeno: `xu_chno` (grupos funcionales, epóxido basal cerrado con la
       corrección de ángulos agudos y barridos de apertura; α ±10 % frente a GPAW).
-- [ ] B, S, P (auditoría, sección 9).
+- [x] B, S, P: `xu_chnob`, `xu_chnos`, `xu_chnop`, cada uno `xu_chno` fijo más un
+      elemento (fuerzas 0,38 / 0,43 / 0,46 eV/Å). Falta su α extra.
+- [ ] α extra de B, S, P (GPAW FD, `chn_polarizability --set b|s|p`).
+- [ ] Validación en sistemas reales (copos y tubos dopados) antes de meter las
+      frecuencias en el objetivo (orden acordado el 29-09-2026).
+- [ ] Frecuencias en la función objetivo; U calculada en `xu_carbon`.
+
+## Fase F — GUI de tbkit (decidido el 29-09-2026)
+
+Decisiones 2 y 3 cerradas: **ventana propia** (`tbkit-gui`, dentro de tbkit;
+carbonforge solo gana un botón «Abrir en tbkit» que la lanza como proceso
+externo con la estructura actual) y **PySide6 + pyvista** (dependencias
+opcionales, extra `gui`). Objetivo: todas las capacidades de tbkit desde la
+ventana (modelos y parámetros, niveles/DOS/PDOS/bandas, orbitales e
+isosuperficies, Hubbard y magnetización, relajación, fonones y modos, Raman
+no resonante y resonante, IR, grafeno 2D, QE, registros reproducibles).
+
+## Pendiente, por decisión del usuario (29-09-2026)
+
+- H₂ fisisorbido en superestructuras (2000+ átomos): flujo GCMC en carbonforge
+  (LAMMPS `fix gcmc`, LJ H₂–C, corrección de Feynman–Hibbs a 77 K). Aplazado.
 
 Ideas tomadas de la literatura del usuario (Papaconstantopoulos, Mehl, Chronis,
 Sigalas, "Tight-binding method in electronic structure", Encyclopedia of
