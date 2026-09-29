@@ -261,6 +261,31 @@ def test_the_two_raman_sections_share_one_session():
         ("tmd_app", "_export_table"),
         ("tmd_app", "library_list"),
         ("tmd_app", "_on_library_select"),
+        # A deconvolution adjusted by hand has to reach the indices, the
+        # ratios and the report; until this button existed it reached
+        # nothing, and the numbers on screen came from a model the user
+        # had just replaced.
+        ("app", "_reanalyse_with_manual"),
+        # XPS: the element set is editable, alpha can be set, the
+        # composition says which route it came from, and the region plot
+        # has a Y-scale control. Every one of these was a question the
+        # window could not answer or a thing it could not be told.
+        ("xps_app", "elements_table"),
+        ("xps_app", "_add_element"),
+        ("xps_app", "_remove_element"),
+        ("xps_app", "_reset_elements"),
+        ("xps_app", "_edit_asymmetry"),
+        ("xps_app", "composition_source_var"),
+        ("xps_app", "zero_base_var"),
+        ("xps_app", "_redraw_region"),
+        # When the search proposes nothing, the question left is "would
+        # THIS one line up?" -- which needs no verdict, only the lines
+        # drawn on the same axis.
+        ("xrd_app", "overlay_box"),
+        ("xrd_app", "overlay_var"),
+        ("xrd_app", "_add_overlay"),
+        ("xrd_app", "_remove_overlay"),
+        ("xrd_app", "_clear_overlays"),
         ("xrd_app", "_identify"),
         ("xrd_app", "_auto_refine"),
         ("xrd_app", "_prepare_manual"),
@@ -283,6 +308,15 @@ def test_the_two_raman_sections_share_one_session():
         ("xrd_app", "metrics_table"),
         ("xrd_app", "_queue_progress"),
         ("xrd_app", "_show_refinement_report"),
+        # A refinement must be stoppable and its numbers must leave the
+        # program. Without the first the only way out of a long fit was
+        # to kill the window, which loses the patterns, the model and the
+        # library folders with it; without the second the fit could be
+        # looked at but never redrawn.
+        ("xrd_app", "stop_button"),
+        ("xrd_app", "_stop_refinement"),
+        ("xrd_app", "_should_stop"),
+        ("xrd_app", "_save_fit_data"),
         ("echem_app", "_analyse"),
         ("echem_app", "mass_var"),
         ("echem_app", "reference_var"),

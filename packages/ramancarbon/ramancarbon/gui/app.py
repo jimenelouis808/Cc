@@ -630,8 +630,22 @@ class RamanCarbonApp:
 
         ttk.Button(body, text="Ajustar", style="Accent.TButton",
                    command=self._fit_manual).pack(fill="x", pady=PAD["sm"])
+        # Adjusting the components by hand produced a fit, a residual and
+        # an audit, and nothing else moved: the indices, the ratios, the
+        # crystallite size and the whole report still came from the model
+        # the comparison had chosen before the edits. Someone who fits
+        # D-G their group's way -- the ordinary case -- read I_D/I_G off
+        # a model they had just replaced.
+        ttk.Button(body, text="Recalcular índices e informe con este ajuste",
+                   command=self._reanalyse_with_manual).pack(fill="x")
+        hint(body, "Rehace el análisis completo usando ESTA deconvolución en "
+                   "lugar de la que eligió la comparación de modelos. Los "
+                   "índices, los cocientes, el tamaño de cristalito y el "
+                   "informe leen el ajuste, así que sin esto un ajuste hecho "
+                   "a mano es un dibujo de un ajuste. Vuelve a «Analizar» "
+                   "para regresar al modelo automático.", wrap=320)
         ttk.Button(body, text="Exportar componentes y curvas…",
-                   command=self._export_fit).pack(fill="x")
+                   command=self._export_fit).pack(fill="x", pady=(PAD["sm"], 0))
         ttk.Button(body, text="Incertidumbres por remuestreo",
                    command=self._bootstrap).pack(fill="x", pady=(PAD["xs"], 0))
         hint(body, "Vuelve a ajustar sobre datos remuestreados. Las barras de "
@@ -1604,6 +1618,32 @@ class RamanCarbonApp:
         set_text(self.fit_text, self._fit_report(result))
         self._set_status(f"Ajuste terminado: R² = {result.r_squared:.5f}")
 
+    def _reanalyse_with_manual(self) -> None:
+        """Redo the whole analysis on the hand-adjusted deconvolution."""
+        if self.session.active is None:
+            self._warn("Sin espectro", "Carga y selecciona un espectro primero.")
+            return
+        if self.session.active.manual_fit is None:
+            self._warn("Sin ajuste manual",
+                       "Pulsa «Ajustar» antes de recalcular: hace falta un "
+                       "ajuste hecho a mano del que salgan los números.")
+            return
+
+        def done(item) -> None:
+            self._flush_messages()
+            if item is None or item.result is None:
+                self._set_status(
+                    "No se ha podido rehacer el análisis; mira los avisos.")
+                return
+            self._refresh_spectrum_list()
+            self._redraw_all()
+            self._set_status(
+                "Índices, cocientes e informe recalculados con la "
+                "deconvolución manual.")
+
+        self._run_async(self.session.reanalyse_with_manual_fit, done,
+                        "Recalculando con el ajuste manual…")
+
     def _compare_models(self) -> None:
         item = self.session.active
         if item is None:
@@ -1770,7 +1810,16 @@ class RamanCarbonApp:
             set_text(self.indices_text,
                      "Pulsa «Analizar» para calcular los índices estructurales.")
             return
-        set_text(self.indices_text, item.result.indices.summary())
+        # Which deconvolution these came from travels with them. Every
+        # area-based index reads the fit, so the same spectrum gives
+        # different numbers under a different model -- and a number
+        # without its model is not comparable with anyone else's.
+        origin = ("MODELO AJUSTADO A MANO en la pestaña de Deconvolución.\n"
+                  "Los índices de área salen de ESA deconvolución, no de la "
+                  "que eligió la comparación de modelos.\n"
+                  "Pulsa «Analizar» para volver al modelo automático.\n\n"
+                  if getattr(item, "from_manual_fit", False) else "")
+        set_text(self.indices_text, origin + item.result.indices.summary())
 
     def _draw_diameters(self) -> None:
         item = self.session.active

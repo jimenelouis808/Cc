@@ -26,6 +26,14 @@ BOUND_FRACTION = 0.02
 #: are one component with two labels.
 DEGENERATE_FRACTION = 0.25
 
+#: Below this singularity index a Doniach-Šunjić is a Lorentzian with
+#: extra steps: alpha enters as |u|^(alpha-1), so at 0.01 the tail is
+#: within a per cent of symmetric over any window anyone fits. Measured
+#: on synthetic peaks, the area error a symmetric shape makes on a
+#: genuinely asymmetric line is 2 % at alpha = 0.05, so this sits an
+#: order of magnitude below the smallest asymmetry worth claiming.
+MIN_MEANINGFUL_ASYMMETRY = 0.01
+
 
 def bound_checks(
     result: XPSFitResult,
@@ -102,7 +110,61 @@ def bound_checks(
             f"energía {direction}. Revisa la referencia de carga antes de "
             "tocar el modelo")))
 
+    out.extend(_symmetric_in_all_but_name(result, region))
     out.extend(_degenerate(result, region))
+    return out
+
+
+def _symmetric_in_all_but_name(result: XPSFitResult,
+                               region: str) -> list[tuple[str, str]]:
+    """An asymmetric component whose alpha stopped at zero.
+
+    This is the same fault as a position pinned to its window, and it
+    hid because alpha is a profile parameter rather than one of the
+    three the checks above walk. It matters more than most: in graphite
+    and graphene the C 1s is asymmetric because the conduction electrons
+    screen the core hole, and fitting it with a symmetric shape forces an
+    extra component at about 285.5 eV that is then read as sp3 carbon.
+    The database calls that the most common error in carbon XPS, and the
+    whole point of giving the state an asymmetric profile is to avoid it.
+
+    A component that says ``ds`` in the model and fits alpha = 0 has
+    quietly gone back to it, and its area comes out short by whatever
+    the tail was carrying -- which is exactly the direction of "the sp2
+    is coming out too low".
+
+    An alpha pinned to the TOP of its range is the mirror image and is
+    worth as much: there the line shape is being used to absorb
+    something else, usually a background that is not right or a
+    component that is missing.
+    """
+    from .lineshapes import MAX_ASYMMETRY
+
+    out: list[tuple[str, str]] = []
+    for component in result.components:
+        names = component.extra_names or ()
+        if "asymmetry" not in names:
+            continue
+        alpha = float(component.extra[list(names).index("asymmetry")])
+        label = component.label or component.name
+        if alpha <= MIN_MEANINGFUL_ASYMMETRY:
+            out.append(("aviso", (
+                f"{region}: «{label}» se ajustó con forma ASIMÉTRICA y su "
+                f"índice de singularidad se ha ido a α = {alpha:.3f}, que es "
+                "el límite inferior: sobre estos datos la componente es "
+                "simétrica de hecho, no de nombre. Una línea simétrica no "
+                "puede llevar la cola, así que su área sale CORTA — y en un "
+                "carbono grafítico ese defecto suele reaparecer como una "
+                "componente sp³ de más hacia 285.5 eV. Prueba con una "
+                "ventana más ancha y fondo lineal, o fija α al valor que "
+                "uses en tu grupo")))
+        elif alpha >= MAX_ASYMMETRY - BOUND_FRACTION * MAX_ASYMMETRY:
+            out.append(("aviso", (
+                f"{region}: «{label}» ha llegado al máximo de asimetría "
+                f"(α = {alpha:.2f}). Una cola así de larga se está comiendo "
+                "algo que no es la componente: casi siempre un fondo que no "
+                "es el que toca o una componente que falta a energía de "
+                "enlace mayor")))
     return out
 
 
@@ -130,4 +192,5 @@ def _degenerate(result: XPSFitResult, region: str) -> list[tuple[str, str]]:
     return out
 
 
-__all__ = ["BOUND_FRACTION", "DEGENERATE_FRACTION", "bound_checks"]
+__all__ = ["BOUND_FRACTION", "DEGENERATE_FRACTION",
+           "MIN_MEANINGFUL_ASYMMETRY", "bound_checks"]

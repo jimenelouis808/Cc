@@ -140,6 +140,45 @@ def plot_rietveld(
     )
 
 
+def plot_manual_sticks(ax, pattern, crystals, palette: Palette) -> None:
+    """Chosen phases drawn against the data, with nothing identified.
+
+    Identification answers "which of these does the program accept", and
+    that is a decision with a bar: a phase has to match positions,
+    account for enough of its own calculated intensity, and not be
+    contradicted by a reflection it should have shown. The bar is right
+    for a claim and useless for the question a person asks when the
+    search came back empty -- "would THIS one line up?" -- which needs
+    no verdict, only the lines on the same axis.
+
+    Sticks rather than profiles, for the same reason as below: at this
+    stage the question is whether the lines fall in the right places,
+    and a profile invites the eye to compare intensities that preferred
+    orientation has already changed.
+    """
+    ax.plot(
+        pattern.two_theta,
+        pattern.intensity / max(float(pattern.intensity.max()), 1e-9) * 100.0,
+        color=palette.data, linewidth=0.8, label="medido (normalizado)",
+    )
+    for index, crystal in enumerate(crystals):
+        colour = palette.component_colour(index)
+        lines = reflections(crystal, wavelength=pattern.wavelength,
+                            two_theta_range=pattern.range)
+        for line in lines:
+            ax.vlines(line.two_theta, 0.0,
+                      -line.intensity * 0.6 - index * 65.0,
+                      color=colour, linewidth=1.0)
+        ax.plot([], [], color=colour, label=crystal.name)
+    ax.axhline(0.0, color=palette.border, linewidth=0.6)
+    ax.set_xlabel("2θ (grados)")
+    ax.set_ylabel("Intensidad relativa")
+    ax.set_xlim(*pattern.range)
+    ax.set_title("Superposición manual — sin veredicto, sin desplazamiento "
+                 "de cero ajustado", fontsize=9)
+    ax.legend(loc="upper right", frameon=False, fontsize=8)
+
+
 def plot_phase_sticks(
     ax, result: XRDResult, palette: Palette, top_n: int = 3
 ) -> None:
@@ -230,6 +269,7 @@ __all__ = [
     "DIFFERENCE_BAND",
     "TICK_BAND",
     "figure_for_report",
+    "plot_manual_sticks",
     "plot_pattern",
     "plot_phase_sticks",
     "plot_rietveld",

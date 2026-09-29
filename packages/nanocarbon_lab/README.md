@@ -34,6 +34,7 @@ validation pass before writing.
 | `fullerene`     | Closed cages (C60, C240, C540, C20, C80, …) and carbon nano-onions |
 | `assemblies`    | Multi-wall nanotubes and hexagonally packed bundles, at the van der Waals gap |
 | `tmd`           | **Transition-metal dichalcogenides** (MoS2, WS2, …): monolayers, stacks, bulk crystals, ribbons, rolled nanotubes, helical coils, **schwarzites** and **L/T/Y/X junctions**; Janus layers, alloys, vacancies and antisites |
+| `builders/knee` | **The exact-census route**: straight all-hexagon tube joined by mitred knees. The ring census is fixed by the skeleton *before* anything is meshed rather than counted afterwards — toroids, coils (finite and periodic), Y/X/tetrahedral junctions, super-graphene and super-square sheets, and the Schwarz P, D and gyroid cells, every one of them landing on `sum(6-n) = 6*chi` with its disclinations on the correct side of the curvature |
 | `hetero`        | **Twisted bilayers and van der Waals stacks**: commensurate moiré cells (including the 1.08° magic angle), graphene/hBN/MX2 in any combination |
 
 ## Installation
@@ -115,6 +116,39 @@ nanocarbon junction --kind Y --tube-radius 6 --arm-length 22 --out out/junction
 
 # Periodic gyroid schwarzite unit cell (writes .cif too)
 nanocarbon schwarzite --kind gyroid --cell 26 --out out/gyroid
+
+# The KNEE ROUTE: straight all-hexagon tube joined by mitred knees, so the
+# ring census is fixed by the skeleton before anything is meshed rather
+# than counted afterwards. Every one of these lands on sum(6-n) = 6*chi
+# with its disclinations on the correct side of the curvature, and not
+# every (circumference, arm_rows) pair closes -- the refusal names the
+# ones that do.
+#
+# A torus: a pentagon-heptagon pair turns the axis 30 degrees and a ring
+# asks for 360, so six knees is the whole budget. 1032 atoms,
+# {5: 12, 6: 492, 7: 12}, sum(6-n) = 0.
+nanocarbon toroid-knees --knees 6 --out out/toroide
+
+# One turn of the same knee welded through the cell: periodic along the
+# axis, no rims, D/d = 3.52 -- inside the band the single-wall coil
+# papers report. A periodic coil cell is a TORUS, so sum(6-n) = 0 too.
+nanocarbon coil-knees-periodic --out out/bobina
+
+# Nodes. Each KIND has its own shape: a Y closes at circumference 14 and
+# a tetrahedral node does not close there at all.
+nanocarbon junction-knees --kind y --out out/y             # {6: 240, 7: 6}
+nanocarbon junction-knees --kind tetrahedral --out out/td  # {6: 328, 7: 12}
+
+# Minimal surfaces, with no pentagon at all -- which is what a surface of
+# purely negative curvature must look like.
+nanocarbon schwarzite-knees --kind diamond --out out/D     # {6: 608, 7: 96}
+
+# The same node repeated on a 2D net instead of standing alone.
+nanocarbon supernetwork-knees --net super-graphene --out out/sg
+
+# Build every exact structure and print the measured census beside the
+# budget the skeleton fixes. This is the check, not the documentation.
+python -m nanocarbon_lab.examples.verify_exact_structures --all
 
 # Haeckelite: pentagons and heptagons patterned into graphene.
 # "none" returns graphene exactly, which is the baseline every check here

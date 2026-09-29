@@ -138,6 +138,16 @@ class XPSSession:
     audits: dict[str, Any] = field(default_factory=dict)
     """The acceptance checklist for each fitted region, by label."""
     composition: Optional[Quantification] = None
+    composition_source: str = "regiones"
+    """Which route produced ``composition``: ``"regiones"`` (fitted) or
+    ``"survey"`` (integrated). It travels with the numbers because the
+    two are not the same measurement and disagree by 10-30 %."""
+    added_elements: set[str] = field(default_factory=set)
+    """Elements the user declared present that the identification did not
+    find. Kept apart from the detected set because a declaration and a
+    measurement are not the same evidence, and the composition has to be
+    able to say which is which."""
+    removed_elements: set[str] = field(default_factory=set)
     calibration: Optional[Calibration] = None
     messages: list[tuple[str, str]] = field(default_factory=list)
 
@@ -185,7 +195,10 @@ class XPSSession:
         self.fits.clear()
         self.choices.clear()
         self.survey = None
+        self.added_elements.clear()
+        self.removed_elements.clear()
         self.composition = None
+        self.composition_source = "regiones"
         self.calibration = None
 
     @property
@@ -332,6 +345,13 @@ class XPSSession:
         state on offer: a filter that fires on no information is a filter
         that hides things.
         """
+        found = set(self.detected_elements())
+        found.update(self.added_elements)
+        found.difference_update(self.removed_elements)
+        return sorted(found) or None
+
+    def detected_elements(self) -> list[str]:
+        """What the evidence alone says, before the user edits it."""
         found: set[str] = set()
         if self.survey is not None:
             found.update(self.survey.symbols())
@@ -343,7 +363,69 @@ class XPSSession:
             found.update(item.symbol for item in
                          add_region_evidence(blank, self.regions,
                                              database=self.database).elements)
-        return sorted(found) or None
+        return sorted(found)
+
+    def quantified_elements(self) -> list[str]:
+        """The element set to quantify: detected, plus and minus the edits."""
+        return self.present_elements() or []
+
+    def add_element(self, symbol: str) -> bool:
+        """Declare an element present that the identification missed.
+
+        The survey needs a main line, a strong doublet partner and a peak
+        nobody else explains before it will say an element is there, and
+        that is the right bar for a claim — but the person who made the
+        sample knows what went into it. A declared element is recorded as
+        declared rather than detected, because the two are not the same
+        evidence.
+        """
+        symbol = symbol.strip().capitalize()
+        try:
+            self.database.element(symbol)
+        except Exception as error:                       # noqa: BLE001
+            # The database raises its own error type for an unknown
+            # symbol; catching the name rather than the class would tie
+            # this to where that type happens to live today.
+            self.log("error", f"«{symbol}»: {error}")
+            return False
+        self.removed_elements.discard(symbol)
+        if symbol in self.detected_elements():
+            self.log("info", f"{symbol} ya estaba identificado en el survey")
+            return True
+        self.added_elements.add(symbol)
+        self.log("aviso",
+                 f"{symbol} DECLARADO por el usuario, no identificado: no "
+                 "hay en el espectro la evidencia que el programa exige "
+                 "para afirmarlo. Su composición cuenta con esa salvedad")
+        return True
+
+    def remove_element(self, symbol: str) -> bool:
+        """Take an element out of the set, for example a misassigned line."""
+        symbol = symbol.strip().capitalize()
+        self.added_elements.discard(symbol)
+        if symbol not in self.detected_elements():
+            return False
+        self.removed_elements.add(symbol)
+        self.log("aviso",
+                 f"{symbol} RETIRADO a mano de los elementos identificados. "
+                 "Los picos que lo sostenían siguen en el espectro y pasan a "
+                 "contar como sin explicar")
+        return True
+
+    def reset_elements(self) -> None:
+        """Back to what the evidence says, with no edits."""
+        self.added_elements.clear()
+        self.removed_elements.clear()
+
+    def element_rows(self) -> list[tuple[str, str]]:
+        """``(symbol, where it comes from)`` for the editable list."""
+        detected = set(self.detected_elements())
+        rows = [(symbol, "retirado a mano" if symbol in self.removed_elements
+                 else "identificado")
+                for symbol in sorted(detected)]
+        rows.extend((symbol, "declarado a mano")
+                    for symbol in sorted(self.added_elements))
+        return rows
 
     def available_states(self, label: str) -> list[tuple[str, str]]:
         """``(key, name)`` of every state the database has for a region.
@@ -570,6 +652,32 @@ class XPSSession:
                     low, high = component.fwhm_bounds
                     component.fwhm_bounds = (min(low, component.fwhm),
                                              max(high, component.fwhm))
+            if "asymmetry" in edit:
+                # The singularity index is the one parameter of an
+                # asymmetric line that the data often cannot pin down,
+                # and it has a lower bound of zero -- where a narrow
+                # window plus a Shirley background will happily park it,
+                # turning the asymmetric shape back into the symmetric
+                # one it was chosen to avoid. Groups that fit carbon
+                # routinely fix it at their own value for exactly that
+                # reason, so it has to be settable.
+                names = list(component.extra_names or ())
+                if "asymmetry" not in names:
+                    self.log("aviso",
+                             f"{component.label}: el perfil «"
+                             f"{component.profile}» no tiene asimetría; "
+                             "elige ds o ds_gauss antes de fijarla")
+                else:
+                    index = names.index("asymmetry")
+                    extra = list(component.extra)
+                    extra[index] = float(edit["asymmetry"])
+                    component.extra = tuple(extra)
+                    if component.extra_bounds is not None:
+                        bounds = list(component.extra_bounds)
+                        low, high = bounds[index]
+                        bounds[index] = (min(low, extra[index]),
+                                         max(high, extra[index]))
+                        component.extra_bounds = tuple(bounds)
             if "fixed" in edit:
                 held = tuple(edit["fixed"])
                 # Holding the width means holding the width you SEE. For a
@@ -708,8 +816,25 @@ class XPSSession:
             return [], str(error)
 
     # -- quantification ------------------------------------------------
-    def quantify(self) -> Optional[Quantification]:
-        if not self.fits:
+    def quantify(self, source: str = "regiones") -> Optional[Quantification]:
+        """Composition from the fitted regions, or straight off the survey.
+
+        ``source`` is ``"regiones"`` (the default, and the one that goes
+        in a paper) or ``"survey"``. They are not interchangeable and the
+        result says which it was: on a survey the neighbouring elements'
+        lines overlap, the step is too coarse to place a background well,
+        and nothing separates a satellite from its own line. The two
+        routinely disagree by 10–30 %, and the fit is the one that is
+        right.
+
+        The survey route exists because it answers a different question:
+        whether a composition is in the right ballpark before spending an
+        hour fitting five regions, and what the sample contains that no
+        region was recorded for.
+        """
+        if source not in ("regiones", "survey"):
+            raise ValueError(f"fuente desconocida: {source!r}")
+        if source == "regiones" and not self.fits:
             self.log("aviso", "no hay ninguna región ajustada que cuantificar")
             return None
         photon = next((item.photon_energy for item in self.shifted
@@ -722,17 +847,52 @@ class XPSSession:
             )
             return None
         try:
+            if source == "survey":
+                areas = self._survey_areas()
+                if areas is None:
+                    return None
+            else:
+                areas = areas_from_fits(list(self.fits.values()))
             self.composition = quantify(
-                areas_from_fits(list(self.fits.values())), photon_energy=photon,
+                areas, photon_energy=photon,
                 transmission=self.transmission, exponent=self.exponent,
                 database=self.database,
             )
         except XPSError as error:
             self.log("error", f"cuantificación: {error}")
             return None
+        self.composition_source = source
+        if source == "survey":
+            self.log(
+                "aviso",
+                "composición INTEGRADA DEL SURVEY, no ajustada: las líneas "
+                "vecinas se solapan, el paso es demasiado grueso para "
+                "colocar bien el fondo y nada separa un satélite de su "
+                "línea. Sirve para ver si el resultado está en el orden "
+                "correcto; para publicar, ajusta las regiones. Las dos "
+                "discrepan un 10–30 % de forma rutinaria",
+            )
         for text in self.composition.warnings:
             self.log("aviso", text)
         return self.composition
+
+    def _survey_areas(self):
+        """Integrated main lines of the elements the survey says are there."""
+        from ..xps.quantify import survey_areas
+
+        spectrum = next(iter(self.surveys), None)
+        if spectrum is None:
+            self.log("error", "no hay ningún survey cargado")
+            return None
+        elements = self.quantified_elements()
+        if not elements:
+            self.log(
+                "error",
+                "no hay elementos que cuantificar: identifica el survey "
+                "primero, o añade los elementos a mano",
+            )
+            return None
+        return survey_areas(spectrum, elements, database=self.database)
 
     # -- output --------------------------------------------------------
     def export_tables(self, directory: str | Path) -> list[Path]:

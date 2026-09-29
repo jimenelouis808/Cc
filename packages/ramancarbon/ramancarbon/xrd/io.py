@@ -221,6 +221,9 @@ def read_pattern(
         pattern = _read_xrdml(location)
     elif suffix == ".uxd":
         pattern = _read_uxd(location)
+    elif suffix in (".ras", ".asc"):
+        pattern = _read_rigaku(location, suffix, wavelength, anode, line,
+                               counts, kalpha2_ratio)
     else:
         text = location.read_text(encoding="utf-8", errors="replace")
         columns = _columns(text)
@@ -245,9 +248,89 @@ def read_pattern(
     if wavelength is not None:
         pattern.wavelength = float(wavelength)
         pattern.metadata["wavelength_overridden"] = True
-    pattern.counts = counts
+    # A Rigaku file that says "cps" and carries no dwell cannot be put
+    # back into counts, and the reader records that. Honour it over the
+    # caller's default: the caller is stating a preference, the file is
+    # stating a fact.
+    pattern.counts = bool(counts) and not pattern.metadata.get(
+        "counts_unavailable", False)
     pattern.kalpha2_ratio = float(kalpha2_ratio)
     return pattern
+
+
+def _read_rigaku(location: Path, suffix: str, wavelength, anode: str,
+                 line: str, counts: bool, kalpha2_ratio: float) -> Pattern:
+    """A Rigaku .ras or .asc, header and all.
+
+    Without this branch a .ras falls to the generic text reader, which
+    does parse it -- the measurement block is three plain columns -- and
+    throws away everything the header knows. Three of those matter.
+
+    The **wavelength**: the file records 1.540593 Å and the default
+    substitutes 1.540598. A part in three thousand is a tenth of a
+    degree at 80° 2θ, wider than the peak-matching window, so every
+    d-spacing comes out shifted and nothing in the fit objects.
+
+    The **dwell**: the display shows counts per second and the counting
+    statistics need counts. Only the header has the time per step.
+
+    The **attenuator**: when the filter is in, the recorded counts are
+    what got through. Ignoring a factor that changes mid-scan leaves a
+    step in the pattern exactly where the instrument switched it.
+
+    The sample name, the operator and the start time come along because
+    a diffractogram nobody can trace back to a measurement is a picture.
+    """
+    from .ras import read_asc, read_ras
+
+    try:
+        parsed = read_asc(location) if suffix == ".asc" else read_ras(location)
+    except ValueError as exc:
+        raise PatternIOError(f"{location.name}: {exc}") from exc
+
+    metadata = {"format": suffix.lstrip("."), "path": str(location)}
+    for field in ("wavelength_alpha2", "dwell", "unit", "sample", "operator",
+                  "started", "step", "scan_speed_deg_per_min", "axis"):
+        value = parsed.get(field)
+        if value not in (None, ""):
+            metadata[field] = value
+    recorded = parsed.get("wavelength")
+    if recorded is not None:
+        metadata["wavelength_recorded"] = float(recorded)
+
+    # Counts per second is a rate, and sigma = sqrt(N) is a statement
+    # about counts. Weighting a rate by sqrt(rate) understates the
+    # variance by the dwell time, and nothing downstream objects: the
+    # refinement converges, chi-squared comes out small, and the error
+    # bars are wrong by a constant factor. The header knows the time per
+    # step, so the honest move is to convert rather than to warn.
+    intensity = np.asarray(parsed["intensity"], dtype=float)
+    dwell = parsed.get("dwell")
+    if str(parsed.get("unit") or "").lower() in ("cps", "counts/sec",
+                                                 "counts per second"):
+        if dwell and dwell > 0:
+            intensity = intensity * float(dwell)
+            metadata["cps_to_counts"] = float(dwell)
+            metadata["unit"] = "counts"
+        else:
+            # No dwell means no way back to counts, so say the
+            # intensities are not counts rather than pretend.
+            counts = False
+            metadata["counts_unavailable"] = True
+    try:
+        return Pattern(
+            two_theta=parsed["two_theta"],
+            intensity=intensity,
+            wavelength=float(wavelength or recorded
+                             or wavelength_for(anode, line)),
+            name=(parsed.get("sample") or "").strip() or location.stem,
+            anode=anode,
+            counts=counts,
+            kalpha2_ratio=kalpha2_ratio,
+            metadata=metadata,
+        )
+    except PatternError as exc:
+        raise PatternIOError(f"{location.name}: {exc}") from exc
 
 
 def write_pattern(pattern: Pattern, path: str | Path) -> Path:

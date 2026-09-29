@@ -76,6 +76,13 @@ class XRDSession:
         self.selected_phases: list[str] = []
         """Names of reference phases the user pinned. Empty means "search
         the whole library"."""
+        self.overlay_phases: list[str] = []
+        """Names of phases to DRAW over the measured pattern, with no
+        verdict attached. A different thing from `selected_phases`: that
+        one narrows what the search will consider, this one narrows
+        nothing and asserts nothing. It exists for the case the search
+        is worst at -- it came back with nothing, and the question is
+        which candidate to go and look up."""
         self.anode: str = "Cu"
         self.wavelength: Optional[float] = None
         self.kalpha2_ratio: float = 0.5
@@ -118,10 +125,57 @@ class XRDSession:
                 self.log("error", f"{location.name}: {exc}")
                 continue
             self.patterns.append(LoadedPattern(pattern=pattern))
+            self._report_header(pattern)
             added += 1
         if added and self.current < 0:
             self.current = 0
         return added
+
+    def _report_header(self, pattern: Pattern) -> None:
+        """Say what the file's own header supplied, and what it did not.
+
+        A .ras records the wavelength the tube actually ran at, the step,
+        the scan speed and the counting unit. Until the reader had a
+        branch for the format these were all discarded -- the file opened
+        and the numbers were right, so nothing looked wrong, while every
+        d-spacing sat on a default 1.540598 Å instead of the recorded
+        1.540593. That is a part in three thousand, a tenth of a degree
+        at 80° 2θ, and wider than the peak-matching window.
+
+        So the header is now reported rather than absorbed silently: the
+        user can see that the file was read as a .ras and not as three
+        anonymous columns.
+        """
+        meta = getattr(pattern, "metadata", None) or {}
+        recorded = meta.get("wavelength_recorded")
+        parts: list[str] = []
+        if recorded is not None:
+            parts.append(f"λ(Kα₁) = {float(recorded):.6f} Å del archivo")
+        if meta.get("wavelength_alpha2") is not None:
+            parts.append(f"Kα₂ = {float(meta['wavelength_alpha2']):.6f} Å")
+        if meta.get("step") is not None:
+            parts.append(f"paso {float(meta['step']):g}°")
+        if meta.get("dwell") is not None:
+            parts.append(f"{float(meta['dwell']):.3f} s/punto")
+        if meta.get("unit"):
+            parts.append(f"unidad «{meta['unit']}»")
+        if meta.get("sample"):
+            parts.append(f"muestra «{meta['sample']}»")
+        if not parts:
+            fmt = meta.get("format")
+            if fmt in ("ras", "asc"):                    # pragma: no cover
+                self.log("warn", f"{pattern.name}: el archivo .{fmt} no trajo "
+                                 "cabecera legible; se usan los valores del "
+                                 "panel Equipo.")
+            return
+        self.log("info", f"{pattern.name}: " + ", ".join(parts) + ".")
+        if meta.get("unit") == "cps" and self.counts:
+            self.log(
+                "warn",
+                f"{pattern.name}: la cabecera dice «cps», así que las "
+                "intensidades no son cuentas y σ = √N no es su "
+                "incertidumbre. Desmarca «Los datos son cuentas» o "
+                "multiplica por el tiempo por punto.")
 
     def add_pattern(self, pattern: Pattern) -> None:
         self.patterns.append(LoadedPattern(pattern=pattern))
@@ -153,6 +207,46 @@ class XRDSession:
 
     def library(self) -> list[LibraryEntry]:
         return load_library(self.cif_directories)
+
+    def overlay_crystals(self) -> list[Crystal]:
+        """The structures the user asked to see drawn on the pattern.
+
+        Separate from `selected_phases`, which narrows the SEARCH. This
+        narrows nothing and claims nothing: it answers "would this one
+        line up?", which is the question left when the identification
+        came back empty, and which the search cannot answer because its
+        job is to refuse.
+        """
+        out: list[Crystal] = []
+        by_name = {entry.crystal.name: entry for entry in self.library()}
+        for name in self.overlay_phases:
+            entry = by_name.get(name)
+            if entry is None:
+                self.log("aviso", f"«{name}» ya no está en la biblioteca")
+                continue
+            out.append(entry.crystal)
+        return out
+
+    def add_overlay(self, name: str) -> bool:
+        """Draw one more library phase over the measured pattern."""
+        if not name:
+            return False
+        if name in self.overlay_phases:
+            return True
+        if name not in {entry.crystal.name for entry in self.library()}:
+            self.log("error", f"«{name}» no está en la biblioteca")
+            return False
+        self.overlay_phases.append(name)
+        return True
+
+    def remove_overlay(self, name: str) -> bool:
+        if name not in self.overlay_phases:
+            return False
+        self.overlay_phases.remove(name)
+        return True
+
+    def clear_overlays(self) -> None:
+        self.overlay_phases.clear()
 
     def candidates(self) -> Optional[list[Crystal]]:
         """The structures to test, or ``None`` for the whole library."""
@@ -306,8 +400,21 @@ class XRDSession:
             rows.append((name, text))
         return rows
 
-    def refine_current(self) -> Optional[RietveldResult]:
-        """Run one refinement with whatever parameters are marked free."""
+    def refine_current(
+        self,
+        progress: Optional[Callable[[str], None]] = None,
+        should_stop: Optional[Callable[[], bool]] = None,
+    ) -> Optional[RietveldResult]:
+        """Run one refinement with whatever parameters are marked free.
+
+        ``progress`` and ``should_stop`` are the same pair
+        :meth:`auto_refine_current` takes, and they were missing here --
+        so the manual button ran a fit of arbitrary length with no
+        counter and no way out, which from the outside is exactly what a
+        hang looks like. With five phases the budget is thousands of
+        evaluations, and a refinement that is working looks identical to
+        one that is stuck.
+        """
         item = self.item
         if item is None or item.parameters is None or not item.models:
             self.log("error", "prepara primero los parámetros del refinamiento")
@@ -319,6 +426,8 @@ class XRDSession:
                 parameters=item.parameters,
                 background_order=self.background_order,
                 instrument_fwhm=self.instrument_fwhm,
+                callback=progress,
+                should_stop=should_stop,
             )
         except ValueError as exc:
             self.log("error", str(exc))
@@ -329,7 +438,9 @@ class XRDSession:
         return outcome
 
     def auto_refine_current(
-        self, progress: Optional[Callable[[str], None]] = None
+        self,
+        progress: Optional[Callable[[str], None]] = None,
+        should_stop: Optional[Callable[[], bool]] = None,
     ) -> Optional[RietveldResult]:
         """Run the staged automatic protocol.
 
@@ -352,6 +463,7 @@ class XRDSession:
             preferred_axis=self.texture_axis,
             instrument_fwhm=self.instrument_fwhm,
             callback=progress,
+            should_stop=should_stop,
         )
         item.refinement = outcome
         item.parameters = outcome.parameters
