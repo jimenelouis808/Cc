@@ -1,4 +1,4 @@
-"""GPAW harmonic frequencies at the relaxed geometries of a reference file.
+"""GPAW Hessians and harmonic frequencies at the relaxed geometries of a reference file.
 
 Run (needs GPAW)::
 
@@ -6,9 +6,10 @@ Run (needs GPAW)::
         --molecules H2O CH3OH HCOOH ... --workers 4
 
 Each molecule's ``/eq`` structure (already relaxed with GPAW in the reference
-file) goes through :func:`tbkit.references.gpaw_frequencies` (central
-differences of the forces, same settings as the file). The frequencies are
-validation of a parameter set and, once they enter the fit, a target: the
+file) goes through :func:`tbkit.references.gpaw_hessian` (central
+differences of the forces, same settings as the file); the geometry is stored
+with its Hessian. Frequencies validate a parameter set; the Hessian, linear
+in the pair-repulsion coefficients, is what a fit can target: the
 force RMS of a joint fit can hide a curvature 40 % off (``xu_chno`` gave the
 O-H of formic acid at 4480 cm⁻¹, GPAW ~3600). Results are cached per
 molecule next to ``OUT`` and never overwritten.
@@ -21,16 +22,22 @@ import json
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
+import numpy as np
+
 
 def _one(args):
     name, references, settings = args
-    from tbkit.references import gpaw_frequencies, load_references
+    from tbkit.references import gpaw_hessian, load_references
 
     refs = []
     for path in references:
         refs += load_references(path)[0]
     eq = next(r for r in refs if r.label == f"{name}/eq")
-    return name, [round(float(v), 2) for v in gpaw_frequencies(eq.atoms, settings)]
+    hessian, frequencies = gpaw_hessian(eq.atoms, settings)
+    return name, {"frequencies": [round(float(v), 2) for v in frequencies],
+                  "hessian": np.round(hessian, 5).tolist(),
+                  "symbols": eq.atoms.get_chemical_symbols(),
+                  "positions": np.round(eq.atoms.get_positions(), 8).tolist()}
 
 
 def main(argv=None) -> None:
@@ -56,17 +63,20 @@ def main(argv=None) -> None:
         for future in as_completed(futures):
             name, values = future.result()
             (parts / f"{name}.json").write_text(json.dumps(values))
-            print(f"{name}: {len(values)} frecuencias", flush=True)
-    frequencies = {n: json.loads((parts / f"{n}.json").read_text()) for n in args.molecules}
+            print(f"{name}: {len(values['frequencies'])} frecuencias", flush=True)
+    entries = {n: json.loads((parts / f"{n}.json").read_text()) for n in args.molecules}
     if args.out.exists():
         raise SystemExit(f"{args.out} ya existe: no se sobrescribe.")
     args.out.write_text(json.dumps({
-        "settings": gpaw_settings_record(settings), "unit": "cm^-1",
-        "note": "armónicas en Γ, diferencias centrales de las fuerzas; imaginarias como "
-                "negativas; incluyen los modos rígidos (≈ 0)",
-        "references": [p.name for p in args.references], "frequencies": frequencies},
+        "settings": gpaw_settings_record(settings),
+        "units": {"frequencies": "cm^-1", "hessian": "eV/Å^2", "positions": "Å"},
+        "note": "armónicas en Γ, diferencias centrales de las fuerzas (δ = 0.01 Å); "
+                "imaginarias como negativas; incluyen los modos rígidos (≈ 0)",
+        "references": [p.name for p in args.references],
+        "frequencies": {n: e["frequencies"] for n, e in entries.items()},
+        "molecules": entries},
         indent=1, ensure_ascii=False), encoding="utf-8")
-    print(f"{len(frequencies)} moléculas en {args.out}")
+    print(f"{len(entries)} moléculas en {args.out}")
 
 
 if __name__ == "__main__":

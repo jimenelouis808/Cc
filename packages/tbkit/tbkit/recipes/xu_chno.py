@@ -78,8 +78,12 @@ def main(argv=None) -> None:
     parser.add_argument("references", type=Path, nargs="+")
     parser.add_argument("out", type=Path)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--hessians", type=Path, default=None,
+                        help="hessianas GPAW (frequency_references) para ajustar la curvatura")
+    parser.add_argument("--hessian-weight", type=float, default=0.1)
     args = parser.parse_args(argv)
-    xu_family.run(CHNO, args.references, args.out, workers=args.workers, x0=warm_start())
+    xu_family.run(CHNO, args.references, args.out, workers=args.workers, x0=warm_start(),
+                  hessians=args.hessians, hessian_weight=args.hessian_weight)
 
 
 if __name__ == "__main__":

@@ -159,6 +159,36 @@ class TestRecipe:
     def test_parameter_names_match_the_vector(self):
         assert len(xu_chn.parameter_names()) == len(xu_chn.initial_guess())
 
+    def test_hessian_splits_into_electronic_and_basis_parts(self, true_model):
+        from tbkit.recipes import xu_family
+
+        atoms = molecule("NH3")
+        electronic = xu_family.electronic_hessian(xu_chn.build_model(xu_chn.initial_guess()),
+                                                  atoms)
+        basis = xu_family.basis_hessians(xu_chn.CHN, atoms)
+        c = np.concatenate([KNOWN[pair] for pair in xu_chn.PAIRS])
+        total = xu_family.electronic_hessian(true_model, atoms)
+        assert np.allclose(electronic + np.tensordot(c, basis, axes=1), total, atol=2e-3)
+        assert np.allclose(electronic, electronic.T)
+
+    def test_hessian_rows_recover_the_curvature(self, true_model):
+        from tbkit.recipes import xu_family
+
+        electronic_model = xu_chn.build_model(xu_chn.initial_guess())
+        targets, h_design, h_electronic = [], [], []
+        for name in ("CH4", "NH3", "HCN", "N2H4"):
+            atoms = molecule(name)
+            hessian = xu_family.electronic_hessian(true_model, atoms)
+            targets.append(xu_family.HessianTarget(name, atoms, hessian, np.zeros(1)))
+            h_design.append(xu_family.basis_hessians(xu_chn.CHN, atoms))
+            h_electronic.append(xu_family.electronic_hessian(electronic_model, atoms))
+        c, r_force, r_energy, r_hessian = xu_family.solve_repulsion(
+            [], [], [], {}, hessians=targets, h_design=h_design, h_electronic=h_electronic,
+            wh=1.0, ridge=1e-12)
+        assert len(r_force) == 0 and np.abs(r_hessian).max() < 5e-3
+        for h, b, t in zip(h_electronic, h_design, targets):
+            assert np.allclose(h + np.tensordot(c, b, axes=1), t.hessian, atol=5e-3)
+
 
 class TestShippedSet:
     """``parameters/xu_chn.json`` against the GPAW references it was fitted to."""

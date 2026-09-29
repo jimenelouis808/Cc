@@ -333,26 +333,42 @@ def repulsion_design(family: XuFamily, refs):
     return out
 
 
-def solve_repulsion(refs, design, results, groups, wf=1.0, we=3.0, ridge=1e-6):
-    """Linear least squares for the pair coefficients given electronic E and F."""
+def solve_repulsion(refs, design, results, groups, wf=1.0, we=3.0, ridge=1e-6,
+                    hessians=(), h_design=(), h_electronic=(), wh=0.1):
+    """Linear least squares for the pair coefficients given electronic E and F
+    (and, with ``hessians``, the curvature: GPAW Hessian minus the electronic one,
+    upper triangle, weight ``wh`` per eV/Å²)."""
     rows, targets, e_rows, e_targets = [], [], [], []
     for ref, (basis_e, basis_f), (_, e_tb, f_tb) in zip(refs, design, results, strict=True):
         rows.append(basis_f.reshape(len(basis_e), -1).T)
         targets.append((ref.forces - f_tb).ravel())
         e_rows.append(basis_e)
         e_targets.append(ref.energy - e_tb)
-    e_rows, e_targets = np.array(e_rows), np.array(e_targets)
+    n_basis = len(design[0][0]) if design else len(h_design[0]) if h_design else 0
+    e_rows = np.array(e_rows).reshape(-1, n_basis)
+    e_targets = np.array(e_targets, dtype=float)
     for members in groups.values():             # remove each molecule's constant
         e_rows[members] -= e_rows[members].mean(axis=0)
         e_targets[members] -= e_targets[members].mean()
-    a = np.vstack([wf * r for r in rows] + [we * e_rows])
-    y = np.concatenate([wf * t for t in targets] + [we * e_targets])
+    h_rows, h_targets = [], []
+    for target, basis, electronic in zip(hessians, h_design, h_electronic, strict=True):
+        upper = np.triu_indices(basis.shape[1])
+        h_rows.append(np.stack([b[upper] for b in basis], axis=1))
+        h_targets.append((target.hessian - electronic)[upper])
+    a = np.vstack([wf * r for r in rows] + [we * e_rows] + [wh * r for r in h_rows]
+                  ).reshape(-1, n_basis)
+    y = np.concatenate([wf * t for t in targets] + [we * e_targets]
+                       + [wh * t for t in h_targets])
     active = np.abs(a).sum(axis=0) > 0
     lhs = a[:, active].T @ a[:, active] + ridge * np.eye(int(active.sum()))
     c = np.zeros(a.shape[1])
     c[active] = np.linalg.solve(lhs, a[:, active].T @ y)
     n_force = sum(len(t) for t in targets)
+    n_energy = len(e_targets)
     residual = y - a @ c
+    if hessians:
+        return (c, residual[:n_force], residual[n_force:n_force + n_energy],
+                residual[n_force + n_energy:])
     return c, residual[:n_force], residual[n_force:]
 
 
@@ -374,12 +390,96 @@ def fit_repulsion(family: XuFamily, model: TBModel, refs, energy_weight: float =
 # Levels, forces and energies together
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# Hessians (curvature) as fit targets
+# --------------------------------------------------------------------------
+
+@dataclass
+class HessianTarget:
+    """GPAW's Cartesian Hessian of a molecule at its own minimum (eV/Å²)."""
+
+    name: str
+    atoms: object
+    hessian: np.ndarray
+    frequencies: np.ndarray
+
+
+def load_hessians(path: Path) -> list[HessianTarget]:
+    """Targets from a file of :mod:`tbkit.recipes.frequency_references`."""
+    from ase import Atoms
+
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return [HessianTarget(name, Atoms(e["symbols"], positions=e["positions"]),
+                          np.array(e["hessian"], dtype=float),
+                          np.array(e["frequencies"], dtype=float))
+            for name, e in data["molecules"].items()]
+
+
+def _symmetric(columns: np.ndarray) -> np.ndarray:
+    return 0.5 * (columns + columns.T)
+
+
+def electronic_hessian(model: TBModel, atoms, delta: float = 0.005) -> np.ndarray:
+    """(3N, 3N) Hessian of the SCC electronic energy (no pair repulsion added by the
+    fit), central differences of its forces."""
+    from ..scc import energy_and_forces
+
+    positions = atoms.get_positions()
+    n = len(atoms)
+    columns = np.zeros((3 * n, 3 * n))
+    for k in range(3 * n):
+        forces = []
+        for sign in (1.0, -1.0):
+            moved = atoms.copy()
+            p = positions.copy()
+            p[k // 3, k % 3] += sign * delta
+            moved.set_positions(p)
+            result = self_consistent(System.build(moved, model), kT=0.01, tol=1e-10)
+            if not result.converged:
+                raise RuntimeError("SCC sin converger en la hessiana")
+            forces.append(energy_and_forces(result)[1].ravel())
+        columns[:, k] = -(forces[0] - forces[1]) / (2 * delta)
+    return _symmetric(columns)
+
+
+def basis_hessians(family: "XuFamily", atoms, delta: float = 1e-4) -> np.ndarray:
+    """(n_basis, 3N, 3N) Hessians of the repulsion basis (pair powers and acute
+    terms): independent of the electronic parameters, computed once."""
+    positions = atoms.get_positions()
+    n = len(atoms)
+
+    def basis_forces(p):
+        moved = atoms.copy()
+        moved.set_positions(p)
+        blocks = [pair_basis(moved, pair, spec["rc_rep"])[1]
+                  for pair, spec in family.pairs.items()]
+        if family.acute:
+            blocks.append(family.acute_term().basis(moved)[1])
+        return np.concatenate(blocks).reshape(-1, 3 * n)
+
+    size = len(basis_forces(positions))
+    out = np.zeros((size, 3 * n, 3 * n))
+    for k in range(3 * n):
+        plus, minus = positions.copy(), positions.copy()
+        plus[k // 3, k % 3] += delta
+        minus[k // 3, k % 3] -= delta
+        out[:, :, k] = -(basis_forces(plus) - basis_forces(minus)) / (2 * delta)
+    return np.array([_symmetric(h) for h in out])
+
+
 _WORKER: dict = {}
 
 
-def _init_worker(family, refs):
+def _init_worker(family, refs, hessians=()):
     _WORKER["family"] = family
     _WORKER["refs"] = refs
+    _WORKER["hessians"] = list(hessians)
+
+
+def _evaluate_hessian(args):
+    x, index = args
+    target = _WORKER["hessians"][index]
+    return electronic_hessian(_WORKER["family"].build_model(x), target.atoms)
 
 
 def _evaluate_one(args):
@@ -406,7 +506,7 @@ class JointObjective:
     """
 
     def __init__(self, family: XuFamily, refs, level_weight=1.0, force_weight=1.0,
-                 energy_weight=3.0, ridge=1e-6, workers=4):
+                 energy_weight=3.0, ridge=1e-6, workers=4, hessians=(), hessian_weight=0.1):
         from concurrent.futures import ProcessPoolExecutor
 
         self.family = family
@@ -418,17 +518,24 @@ class JointObjective:
         self.groups: dict[str, list[int]] = {}
         for i, ref in enumerate(refs):
             self.groups.setdefault(ref.group, []).append(i)
+        self.hessians = list(hessians)
+        self.wh = hessian_weight
+        self.h_design = [basis_hessians(family, t.atoms) for t in self.hessians]
         self.pool = ProcessPoolExecutor(workers, initializer=_init_worker,
-                                        initargs=(family, refs))
+                                        initargs=(family, refs, self.hessians))
         self.size = None
 
     def close(self):
         self.pool.shutdown()
 
     def evaluate(self, x):
-        return list(self.pool.map(_evaluate_one, [(np.asarray(x), i)
-                                                  for i in range(len(self.refs))],
-                                  chunksize=4))
+        x = np.asarray(x)
+        hessians = [self.pool.submit(_evaluate_hessian, (x, i))
+                    for i in range(len(self.hessians))]          # the slow ones first
+        results = list(self.pool.map(_evaluate_one, [(x, i) for i in range(len(self.refs))],
+                                     chunksize=4))
+        self._h_electronic = [h.result() for h in hessians]
+        return results
 
     def residuals(self, x, full: bool = False):
         try:
@@ -445,15 +552,20 @@ class JointObjective:
         d, w = np.concatenate(differences), np.concatenate(weights)
         shift = self.fixed_shift if self.fixed_shift is not None else \
             float(np.sum(w ** 2 * d) / np.sum(w ** 2))
-        c, r_force, r_energy = solve_repulsion(self.refs, self.design, results, self.groups,
-                                               self.wf, self.we, self.ridge)
-        out = np.concatenate([self.wl * w * (d - shift), r_force, r_energy])
+        solved = solve_repulsion(self.refs, self.design, results, self.groups,
+                                 self.wf, self.we, self.ridge, self.hessians, self.h_design,
+                                 self._h_electronic, self.wh)
+        c, r_force, r_energy = solved[:3]
+        r_hessian = solved[3] if self.hessians else np.zeros(0)
+        out = np.concatenate([self.wl * w * (d - shift), r_force, r_energy, r_hessian])
         self.size = len(out)
         if full:
             return out, {"shift": shift, "coefficients": c,
                          "level_rms": float(np.sqrt(np.mean((d - shift) ** 2))),
                          "force_rms": float(np.sqrt(np.mean((r_force / self.wf) ** 2))),
-                         "energy_rms": float(np.sqrt(np.mean((r_energy / self.we) ** 2)))}
+                         "energy_rms": float(np.sqrt(np.mean((r_energy / self.we) ** 2))),
+                         "hessian_rms": float(np.sqrt(np.mean((r_hessian / self.wh) ** 2)))
+                         if self.hessians else None}
         return out
 
 
@@ -465,18 +577,22 @@ def fit_joint(family: XuFamily, refs, x0, workers: int = 4, max_nfev: int = 400,
     try:
         _, info0 = objective.residuals(x0, full=True)
         if verbose:
+            extra = f", hessiana {info0['hessian_rms']:.2f} eV/Å²" \
+                if info0.get("hessian_rms") is not None else ""
             print(f"conjunto, inicio: niveles {info0['level_rms']:.3f} eV, fuerzas "
-                  f"{info0['force_rms']:.3f} eV/Å, energías {info0['energy_rms']:.3f} eV",
-                  flush=True)
+                  f"{info0['force_rms']:.3f} eV/Å, energías {info0['energy_rms']:.3f} eV"
+                  f"{extra}", flush=True)
         result = least_squares(objective.residuals, np.clip(x0, lower + 1e-9, upper - 1e-9),
                                bounds=(lower, upper), x_scale="jac", max_nfev=max_nfev)
         _, info = objective.residuals(result.x, full=True)
     finally:
         objective.close()
     if verbose:
+        extra = f", hessiana {info['hessian_rms']:.2f} eV/Å²" \
+            if info.get("hessian_rms") is not None else ""
         print(f"conjunto, final ({result.message}): niveles {info['level_rms']:.3f} eV, "
-              f"fuerzas {info['force_rms']:.3f} eV/Å, energías {info['energy_rms']:.3f} eV",
-              flush=True)
+              f"fuerzas {info['force_rms']:.3f} eV/Å, energías {info['energy_rms']:.3f} eV"
+              f"{extra}", flush=True)
     return result, info, info0
 
 
@@ -542,6 +658,36 @@ def validate(family: XuFamily, model: TBModel, structures, shift: float,
             entry["alpha_experiment"] = family.experimental_alpha[ref.group]
         report[ref.group] = entry
     return report
+
+
+def frequency_validation(model: TBModel, targets, fmax: float = 0.001) -> dict:
+    """Model frequencies at its own minimum (relaxed from GPAW's) against GPAW's,
+    per molecule: RMS over the internal modes and both lists (cm⁻¹)."""
+    from ase.optimize import BFGS
+
+    from ..calculator import TBCalculator
+    from ..tasks import phonons
+
+    out = {}
+    for target in targets:
+        atoms = target.atoms.copy()
+        atoms.calc = TBCalculator(model)
+        BFGS(atoms, logfile=None).run(fmax=fmax, steps=500)
+        tb = np.sort(phonons(atoms, model)[0]["frequencies_cm1"])
+        rigid = 5 if _linear(target.atoms) else 6
+        gpaw = np.sort(target.frequencies)[rigid:]
+        tb = tb[rigid:]
+        out[target.name] = {"rms": float(np.sqrt(np.mean((tb - gpaw) ** 2))),
+                            "max_error": float(np.max(np.abs(tb - gpaw))),
+                            "gpaw": gpaw.round(1).tolist(), "tb": tb.round(1).tolist()}
+    return out
+
+
+def _linear(atoms) -> bool:
+    if len(atoms) < 3:
+        return True
+    centred = atoms.get_positions() - atoms.get_positions().mean(axis=0)
+    return bool(np.linalg.svd(centred, compute_uv=False)[1] < 1e-3)
 
 
 def validation_table(report: dict) -> str:
@@ -664,8 +810,14 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
 
 
 def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool = True,
-        workers: int = 4, x0: Optional[np.ndarray] = None) -> dict:
-    """Fit ``family`` to the references (one or several files) and write the set."""
+        workers: int = 4, x0: Optional[np.ndarray] = None, hessians: Optional[Path] = None,
+        hessian_weight: float = 0.1) -> dict:
+    """Fit ``family`` to the references (one or several files) and write the set.
+
+    ``hessians``: a file of :mod:`tbkit.recipes.frequency_references`; its
+    Hessians join forces and energies in the joint fit (curvature, i.e. the
+    frequencies), weighted by ``hessian_weight`` per eV/Å²."""
+    targets = load_hessians(hessians) if hessians else []
     structures, settings = [], {}
     for path in references:
         items, settings = load_references(path)
@@ -679,7 +831,8 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     _, shift, rms = level_residuals(electronic, train, family.fixed_shift())
     if verbose:
         print(f"Niveles: {result.message}; desplazamiento {shift:.3f} eV", flush=True)
-    joint, info, info0 = fit_joint(family, train, result.x, workers=workers, verbose=verbose)
+    joint, info, info0 = fit_joint(family, train, result.x, workers=workers, verbose=verbose,
+                                   hessians=targets, hessian_weight=hessian_weight)
     x = joint.x
     shift = info["shift"]
     model = family.build_model(x, family.repulsion_from_coefficients(info["coefficients"]))
@@ -687,6 +840,7 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
               "joint_start": {k: info0[k] for k in ("level_rms", "force_rms", "energy_rms")},
               "level_rms_train": info["level_rms"], "force_rms": info["force_rms"],
               "energy_rms": info["energy_rms"], "optimiser": str(joint.message),
+              "hessian_rms": info.get("hessian_rms"),
               "bond_ranges": bond_ranges(train)}
     if verbose:
         for name, before, after in zip(family.parameter_names(), result.x, x, strict=True):
@@ -695,6 +849,15 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     if verbose:
         print(validation_table(validation))
     report["validation"] = validation
+    if targets:
+        report["frequencies"] = frequency_validation(model, targets)
+        report["hessian_weight"] = hessian_weight
+        if verbose:
+            for name, entry in report["frequencies"].items():
+                print(f"  {name:12s} RMS {entry['rms']:6.0f} cm⁻¹, máx {entry['max_error']:6.0f}")
     data = parameter_file(family, model, x, shift, report, references, settings)
+    if hessians:
+        data["fit"]["hessians"] = Path(hessians).name
+        data["fit"]["hessians_sha256"] = _sha256(hessians)
     Path(out).write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
     return data

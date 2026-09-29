@@ -181,12 +181,14 @@ def generate_gpaw(molecules: dict[str, Atoms], settings: Optional[dict] = None,
     return out
 
 
-def gpaw_frequencies(atoms: Atoms, settings: Optional[dict] = None,
-                     delta: float = 0.01) -> np.ndarray:
-    """Harmonic frequencies (cm⁻¹, ascending, imaginary as negative) with GPAW.
+def gpaw_hessian(atoms: Atoms, settings: Optional[dict] = None,
+                 delta: float = 0.01) -> tuple[np.ndarray, np.ndarray]:
+    """``(hessian, frequencies)`` with GPAW: the (3N, 3N) Hessian in eV/Å² (central
+    differences of the forces, ``ase.vibrations``) and the harmonic frequencies
+    (cm⁻¹, ascending, imaginary as negative, rigid-body modes included).
 
-    ``ase.vibrations`` by central differences of the forces; ``atoms`` should
-    be the GPAW-relaxed geometry. Rigid-body modes are included (near 0).
+    ``atoms`` should be the GPAW-relaxed geometry. The Hessian is what a fit
+    can use directly: it is linear in the pair-repulsion coefficients.
     """
     import os
     import tempfile
@@ -202,10 +204,18 @@ def gpaw_frequencies(atoms: Atoms, settings: Optional[dict] = None,
     with tempfile.TemporaryDirectory() as directory:
         vibrations = Vibrations(atoms, name=os.path.join(directory, "vib"), delta=delta)
         vibrations.run()
-        energies = vibrations.get_energies()
+        data = vibrations.get_vibrations()
+        hessian = data.get_hessian_2d()
+        energies = data.get_energies()
     values = np.where(np.abs(energies.imag) > np.abs(energies.real), -np.abs(energies.imag),
                       np.abs(energies.real)) / invcm
-    return np.sort(values)
+    return hessian, np.sort(values)
+
+
+def gpaw_frequencies(atoms: Atoms, settings: Optional[dict] = None,
+                     delta: float = 0.01) -> np.ndarray:
+    """Harmonic frequencies (cm⁻¹) with GPAW; see :func:`gpaw_hessian`."""
+    return gpaw_hessian(atoms, settings, delta)[1]
 
 
 #: GPAW settings for polarizabilities: a real-space grid (FD), which, unlike
