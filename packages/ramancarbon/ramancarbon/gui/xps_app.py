@@ -215,10 +215,26 @@ class XPSApp(SectionApp):
         outer.pack(fill="both", expand=True)
         self.make_canvas(body, "survey", lambda f: f.add_subplot(111),
                          figsize=(8.2, 3.6))
-        info, info_body = card(bottom, "Elementos")
-        info.pack(fill="both", expand=True)
+        # Two cards side by side, gridded with equal weights -- NOT one
+        # card with the editing controls packed underneath the table.
+        # `table()` packs its own frame with expand=True, so everything
+        # after it in the same parent gets whatever is left over, which
+        # in a pane this short is nothing: the entry, the three buttons
+        # and the second table were being drawn zero pixels high. That is
+        # the packer rule this package already has a static test for, and
+        # it caught me from the one direction the test does not look --
+        # the expansion happens inside `table()`, not at this call site.
+        bottom_row = ttk.Frame(bottom)
+        bottom_row.pack(fill="both", expand=True)
+        bottom_row.columnconfigure(0, weight=3, uniform="xps-survey")
+        bottom_row.columnconfigure(1, weight=2, uniform="xps-survey")
+        bottom_row.rowconfigure(0, weight=1)
+
+        info, info_body = card(bottom_row, "Elementos identificados")
+        info.grid(row=0, column=0, sticky="nsew")
         self.survey_table = table(info_body,
                                   ["elemento", "confianza", "líneas"], height=9)
+
         # The identification's bar is deliberately high -- main line,
         # strong doublet partner, and a peak nobody else explains -- and
         # that is right for a claim the program makes. It is not right
@@ -226,8 +242,10 @@ class XPSApp(SectionApp):
         # went into it, and a line that was misassigned has to be
         # removable. Declared and detected stay distinguishable, because
         # they are not the same evidence.
-        elements_bar = ttk.Frame(info_body)
-        elements_bar.pack(fill="x", pady=(PAD["xs"], 0))
+        edit, edit_body = card(bottom_row, "Añadir o quitar a mano")
+        edit.grid(row=0, column=1, sticky="nsew", padx=(PAD["sm"], 0))
+        elements_bar = ttk.Frame(edit_body)
+        elements_bar.pack(fill="x")
         ttk.Label(elements_bar, text="Elemento:").pack(side="left")
         self.element_var = self.tk.StringVar(value="")
         ttk.Entry(elements_bar, textvariable=self.element_var,
@@ -235,20 +253,22 @@ class XPSApp(SectionApp):
         ttk.Button(elements_bar, text="Añadir",
                    command=self._add_element).pack(side="left",
                                                    padx=(0, PAD["xs"]))
-        ttk.Button(elements_bar, text="Quitar el seleccionado",
+        buttons_bar = ttk.Frame(edit_body)
+        buttons_bar.pack(fill="x", pady=(PAD["xs"], 0))
+        ttk.Button(buttons_bar, text="Quitar el seleccionado",
                    command=self._remove_element).pack(side="left",
                                                       padx=(0, PAD["xs"]))
-        ttk.Button(elements_bar, text="Restablecer",
+        ttk.Button(buttons_bar, text="Restablecer",
                    command=self._reset_elements).pack(side="left")
-        self.elements_table = table(
-            info_body, ["elemento", "procedencia"], height=5)
-        hint(info_body,
+        hint(edit_body,
              "Un elemento AÑADIDO a mano no tiene en el espectro la "
              "evidencia que el programa exige para afirmarlo, y su "
              "composición se cuenta con esa salvedad. Uno RETIRADO deja "
              "sus picos en el espectro: pasan a contar como sin explicar, "
              "que es un resultado y no un resto.",
-             wrap=720)
+             wrap=300)
+        self.elements_table = table(
+            edit_body, ["elemento", "procedencia"], height=5)
 
     def _build_tab_region(self) -> None:
         ttk, tk = self.ttk, self.tk
@@ -452,9 +472,19 @@ class XPSApp(SectionApp):
         bar = ttk.Frame(tab)
         bar.pack(fill="x", pady=(0, PAD["sm"]))
         ttk.Label(bar, text="Región:").pack(side="left")
-        self.reference_var = self.tk.StringVar(value="C 1s")
+        # NOT `reference_var`. That name already belongs to the charge
+        # reference in the sidebar, and this tab is built last, so it was
+        # rebinding it: the sidebar's combobox kept pointing at the
+        # StringVar it was created with while `_settings_from_widgets`
+        # read this one, found "C 1s" in a table of REFERENCES labels,
+        # missed, and fell back to "C1s_adventitious" every single time.
+        # The chooser looked like it worked and could not change
+        # anything -- the same fault as reading the Blender box where the
+        # structure mode was meant.
+        self.reference_region_var = self.tk.StringVar(value="C 1s")
         self.reference_box = ttk.Combobox(
-            bar, textvariable=self.reference_var, width=14, state="readonly",
+            bar, textvariable=self.reference_region_var, width=14,
+            state="readonly",
             values=list(self.session.database.region_names()))
         self.reference_box.pack(side="left", padx=(PAD["xs"], PAD["md"]))
         self.reference_box.bind("<<ComboboxSelected>>",
@@ -483,7 +513,7 @@ class XPSApp(SectionApp):
     def _reference_rows(self):
         from ..xps.tables import reference_table
 
-        return reference_table(self.reference_var.get(),
+        return reference_table(self.reference_region_var.get(),
                                database=self.session.database,
                                present=self.session.present_elements())
 
