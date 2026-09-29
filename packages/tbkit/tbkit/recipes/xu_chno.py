@@ -48,7 +48,10 @@ CHNO = XuFamily(
     system=("moléculas C/H/N/O de capa cerrada: las de xu_chn más alcoholes, éteres, "
             "epóxidos, aldehídos, cetonas, ácidos carboxílicos, ésteres, amidas, furano, "
             "nitro; motivos de óxido de grafeno (epóxido e hidroxilos basales)"),
-    validity_notes=("anillos de tres miembros con la corrección de ángulos agudos ajustada; "
+    validity_notes=("anillos de tres miembros con la corrección de ángulos agudos ajustada a "
+                    "barridos de apertura del anillo: epóxido basal sobre coroneno C-C 0.03 Å, "
+                    "C-O 0.10 Å; oxirano y aziridina C-C ~0.12 Å; ciclopropano C-C +0.19 Å con "
+                    "un mínimo poco profundo; el biciclobutano (excluido del ajuste) se abre; "
                     "los C-C y C-N simples junto a un heteroátomo se desvían ~0.08 Å"),
     experimental_alpha=EXPERIMENTAL_ALPHA,
     acute={"powers": 2, "theta0_degrees": 80.0, "r1": 1.7, "rm": 2.0,
