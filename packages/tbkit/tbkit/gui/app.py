@@ -112,7 +112,7 @@ class MainWindow(QMainWindow):
             self.pages[widget.title] = widget
             self.tabs.addTab(widget, widget.title)
         splitter.addWidget(self.tabs)
-        splitter.setSizes([300, 700, 600])
+        splitter.setSizes([430, 620, 600])
         self.setCentralWidget(splitter)
         self.last_record = None
         self._menu()
@@ -188,6 +188,8 @@ class MainWindow(QMainWindow):
     # --- left panel ---------------------------------------------------------------
 
     def _left_panel(self) -> QWidget:
+        """Controls on top, the terminal below, with a divider between them."""
+        column = QSplitter(Qt.Vertical)
         panel = QWidget()
         layout = QVBoxLayout(panel)
 
@@ -242,8 +244,22 @@ class MainWindow(QMainWindow):
         self.cancel_button.setEnabled(False)
         self.cancel_button.clicked.connect(self.runner.cancel)
         layout.addWidget(self.cancel_button)
+
+        terminal = QGroupBox("Terminal")
+        box = QVBoxLayout(terminal)
+        box.setContentsMargins(4, 4, 4, 4)
+        from .console import ConsolePanel
+
+        self.console = ConsolePanel()
+        box.addWidget(self.console)
+        self.runner.log_line.connect(self.console.line)
+        self.runner.output.connect(self.console.write)
         layout.addStretch(1)
-        return panel
+        column.addWidget(panel)
+        column.addWidget(terminal)
+        column.setStretchFactor(0, 0)
+        column.setStretchFactor(1, 1)
+        return column
 
     def _busy(self, busy: bool):
         self.cancel_button.setEnabled(busy)
@@ -268,6 +284,8 @@ class MainWindow(QMainWindow):
     def set_atoms(self, atoms, name: str = ""):
         self.atoms = atoms
         info = actions.structure_summary(atoms)
+        self.console.line(f"estructura: {name or '—'} · {info['formula']} · {info['atoms']} "
+                          f"átomos · periódica: {info['periodic']}")
         self.structure_label.setText(f"{name}\n{info['formula']} · {info['atoms']} átomos · "
                                      f"periódica: {info['periodic']}")
         suggested = actions.suggest_model(atoms)
@@ -292,6 +310,7 @@ class MainWindow(QMainWindow):
             self.error("No se pudo cargar el modelo", str(error))
             return
         self.model_name = name_or_path
+        self.console.line(f"modelo: {self.model.name} (SCC {'sí' if self.model.scc else 'no'})")
         index = self.model_combo.findData(name_or_path)
         if index >= 0:
             self.model_combo.setCurrentIndex(index)
@@ -358,6 +377,9 @@ class MainWindow(QMainWindow):
 
     def error(self, title, detail=""):
         self.statusBar().showMessage(title)
+        if hasattr(self, "console") and not detail.startswith("Traceback") and \
+                "Traceback" not in detail:
+            self.console.line(f"✗ {title}" + (f": {detail.splitlines()[0]}" if detail else ""))
         box = QMessageBox(QMessageBox.Warning, "tbkit", title, parent=self)
         if detail:
             box.setInformativeText(detail.splitlines()[0][:400] if "\n" in detail else detail)
