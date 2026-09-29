@@ -191,3 +191,92 @@ def read_structure(path: str | Path) -> Atoms:
     if not any(atoms.get_pbc()) and atoms.cell.rank == 0:
         atoms.pbc = False
     return atoms
+
+
+# --------------------------------------------------------------------------
+# Magnetism (mean-field Hubbard)
+# --------------------------------------------------------------------------
+
+GUESSES = {"antiferro": "antiferro (subredes)", "ferro": "ferro", "random": "aleatorio",
+           "paramagnetic": "paramagnético"}
+
+
+def _hubbard_system(atoms, model, kmesh):
+    system = System.build(atoms, model)
+    kpts, weights = mesh(atoms, kmesh) if system.periodic else gamma()
+    return system, kpts, weights
+
+
+def hubbard_solution(atoms: Atoms, model: TBModel, U: Optional[float] = None,
+                     charge: float = 0.0, kT: float = 0.005, field_tesla: float = 0.0,
+                     guess: str = "antiferro", kmesh: int = 24, sigma: float = 0.05) -> dict:
+    """One mean-field solution: moments, M, energy, m(E) and the spin-resolved DOS.
+
+    ``U`` None takes the model's ``hubbard_u``. Moments are an order parameter
+    of the approximation, not a correlated ground state (Lieb's theorem is the
+    check for bipartite lattices)."""
+    from ..hubbard import magnetization_vs_energy, mean_field, tesla_to_ev
+
+    problems = [p for p in check_model(atoms, model, scc=False)]
+    if problems:
+        raise ValueError(" ".join(problems))
+    system, kpts, weights = _hubbard_system(atoms, model, kmesh)
+    result = mean_field(system, U=U, charge=charge, kpts=kpts, weights=weights, kT=kT,
+                        field=tesla_to_ev(field_tesla), guess=guess)
+    grid = np.linspace(-6.0, 6.0, 1200)
+    energy, m, dm = magnetization_vs_energy(result, grid, sigma)
+    absolute = grid + result.solution.fermi
+    _, up = dos(result.solution, absolute, sigma, spin=0)
+    _, down = dos(result.solution, absolute, sigma, spin=1)
+    moments = result.moments
+    return {"magnetization": result.magnetization, "energy": result.energy,
+            "converged": result.converged, "iterations": result.iterations,
+            "fermi": result.solution.fermi, "gap": result.solution.gap(),
+            "moments": np.array([moments.get(i, 0.0) for i in range(len(atoms))]),
+            "grid": grid, "m_of_E": m, "dm_dE": dm, "dos_up": up, "dos_down": down,
+            "U": float(np.max(result.U)), "guess": guess}
+
+
+def compare_guesses(atoms: Atoms, model: TBModel, guesses=("antiferro", "ferro", "paramagnetic"),
+                    **kwargs) -> list[dict]:
+    """Solve from several starting patterns: the lowest energy is the mean-field state."""
+    rows = []
+    for guess in guesses:
+        try:
+            out = hubbard_solution(atoms, model, guess=guess, **kwargs)
+            rows.append({"guess": guess, "energy": out["energy"], "M": out["magnetization"],
+                         "max_moment": float(np.abs(out["moments"]).max()),
+                         "converged": out["converged"], "note": ""})
+        except ValueError as error:        # e.g. antiferro on a non-bipartite lattice
+            rows.append({"guess": guess, "energy": np.nan, "M": np.nan, "max_moment": np.nan,
+                         "converged": False, "note": str(error)})
+    lowest = np.nanmin([r["energy"] for r in rows]) if rows else np.nan
+    for r in rows:
+        r["delta"] = r["energy"] - lowest
+    return rows
+
+
+def field_sweep(atoms: Atoms, model: TBModel, tesla, U: Optional[float] = None,
+                charge: float = 0.0, kT: float = 0.005, guess: str = "antiferro",
+                kmesh: int = 24) -> dict:
+    """M against the Zeeman field; each point starts from the previous one (one branch)."""
+    from ..hubbard import magnetization_vs_field, tesla_to_ev
+
+    system, kpts, weights = _hubbard_system(atoms, model, kmesh)
+    tesla = np.asarray(tesla, dtype=float)
+    _, m, _, _ = magnetization_vs_field(system, [tesla_to_ev(t) for t in tesla], U=U,
+                                        charge=charge, kpts=kpts, weights=weights, kT=kT,
+                                        guess=guess)
+    chi = np.gradient(m, tesla) if len(tesla) > 1 else np.full(1, np.nan)
+    return {"tesla": tesla, "M": m, "chi_per_tesla": chi}
+
+
+def doping_sweep(atoms: Atoms, model: TBModel, charges, U: Optional[float] = None,
+                 kT: float = 0.005, guess: str = "antiferro", kmesh: int = 24) -> dict:
+    """M against added charge (e; positive removes electrons)."""
+    from ..hubbard import magnetization_vs_doping
+
+    system, kpts, weights = _hubbard_system(atoms, model, kmesh)
+    x, m, _ = magnetization_vs_doping(system, charges=charges, U=U, kpts=kpts, weights=weights,
+                                      kT=kT, guess=guess)
+    return {"charge": x, "M": m}

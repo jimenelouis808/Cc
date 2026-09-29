@@ -115,7 +115,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Abre una estructura (xyz, extxyz, cif, POSCAR…).")
 
     def page_classes(self):
-        return [ElectronicPage, OrbitalPage]
+        return [ElectronicPage, OrbitalPage, MagnetismPage]
 
     # --- left panel ---------------------------------------------------------------
 
@@ -470,6 +470,188 @@ class OrbitalPage(Page):
         level = self.level.value() / 100 * float(np.abs(values).max())
         self.window.view.isosurface(self.grid["origin"], self.grid["spacing"], values, level)
         self.hint.setText(f"E = {self.grid['energy']:.3f} eV · isovalor {level:.3g}")
+
+
+def _spin(minimum, maximum, value, step=1.0, decimals=2, suffix=""):
+    box = QDoubleSpinBox()
+    box.setRange(minimum, maximum)
+    box.setDecimals(decimals)
+    box.setSingleStep(step)
+    box.setValue(value)
+    if suffix:
+        box.setSuffix(suffix)
+    return box
+
+
+class MagnetismPage(Page):
+    """Mean-field Hubbard: moments on the structure, m(E), spin DOS, sweeps."""
+
+    title = "Magnetismo"
+
+    def __init__(self, window):
+        super().__init__(window)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.use_model_u = QComboBox()
+        self.use_model_u.addItems(["U del modelo", "U fija"])
+        self.U = _spin(0.0, 20.0, 3.0, 0.1, 2, " eV")
+        row = QHBoxLayout()
+        row.addWidget(self.use_model_u)
+        row.addWidget(self.U)
+        form.addRow("Hubbard U", row)
+        self.guess = QComboBox()
+        for key, label in actions.GUESSES.items():
+            self.guess.addItem(label, key)
+        form.addRow("Punto de partida", self.guess)
+        self.kT = _spin(0.0005, 0.5, 0.005, 0.001, 4, " eV")
+        form.addRow("kT", self.kT)
+        self.field = _spin(-2000, 2000, 0.0, 10, 1, " T")
+        form.addRow("Campo (Zeeman)", self.field)
+        self.kmesh = QDoubleSpinBox()
+        self.kmesh.setRange(1, 400)
+        self.kmesh.setDecimals(0)
+        self.kmesh.setValue(24)
+        form.addRow("Malla k (periódicos)", self.kmesh)
+        layout.addLayout(form)
+        buttons = QHBoxLayout()
+        self.solve = QPushButton("Resolver")
+        self.solve.clicked.connect(self.run)
+        buttons.addWidget(self.solve)
+        self.compare = QPushButton("Comparar puntos de partida")
+        self.compare.clicked.connect(self.run_compare)
+        buttons.addWidget(self.compare)
+        layout.addLayout(buttons)
+        self.summary = QLabel("Los momentos son el parámetro de orden del campo medio, no un "
+                              "estado correlacionado.")
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+        tabs = QTabWidget()
+        self.m_plot = PlotPanel()
+        tabs.addTab(self.m_plot, "m(E) y DOS de espín")
+        self.moments = table(["átomo", "elemento", "m (μB)"])
+        tabs.addTab(self.moments, "Momentos")
+        self.guesses = table(["partida", "E − E_min (eV)", "M (μB)", "|m| máx", "nota"])
+        tabs.addTab(self.guesses, "Comparación")
+        sweep = QWidget()
+        sl = QVBoxLayout(sweep)
+        sr = QHBoxLayout()
+        self.sweep_kind = QComboBox()
+        self.sweep_kind.addItems(["campo (T)", "dopaje (e)"])
+        self.sweep_from = _spin(-5000, 5000, 0.0, 1, 2)
+        self.sweep_to = _spin(-5000, 5000, 200.0, 1, 2)
+        self.sweep_n = _spin(2, 200, 11, 1, 0)
+        for widget, text in ((self.sweep_kind, None), (self.sweep_from, "de"),
+                             (self.sweep_to, "a"), (self.sweep_n, "puntos")):
+            if text:
+                sr.addWidget(QLabel(text))
+            sr.addWidget(widget)
+        self.sweep_button = QPushButton("Barrer")
+        self.sweep_button.clicked.connect(self.run_sweep)
+        sr.addWidget(self.sweep_button)
+        sl.addLayout(sr)
+        self.sweep_plot = PlotPanel()
+        sl.addWidget(self.sweep_plot)
+        tabs.addTab(sweep, "Barridos")
+        layout.addWidget(tabs)
+        self.result = None
+
+    def settings(self) -> dict:
+        return {"U": None if self.use_model_u.currentIndex() == 0 else self.U.value(),
+                "charge": self.window.charge.value(), "kT": self.kT.value(),
+                "guess": self.guess.currentData(), "kmesh": int(self.kmesh.value())}
+
+    def _ready(self) -> bool:
+        if self.window.atoms is None or self.window.model is None:
+            self.window.error("Sin estructura o modelo", "Abre una estructura y elige un modelo.")
+            return False
+        if self.use_model_u.currentIndex() == 0 and not self.window.model.hubbard_u:
+            self.window.error("El modelo no tiene U", "Elige «U fija».")
+            return False
+        return True
+
+    def run(self):
+        if self._ready():
+            self.window.runner.start("Hubbard", actions.hubbard_solution, self.window.atoms,
+                                     self.window.model, field_tesla=self.field.value(),
+                                     **self.settings(), on_done=self.show,
+                                     on_error=self.window.error)
+
+    def show(self, out):
+        self.result = out
+        state = "convergido" if out["converged"] else "SIN CONVERGER"
+        gap = f"{out['gap']:.3f} eV" if out["gap"] and out["gap"] > 0 else "sin gap"
+        self.summary.setText(
+            f"{state} en {out['iterations']} iteraciones · M = {out['magnetization']:+.4f} μB · "
+            f"|m| máx = {np.abs(out['moments']).max():.4f} μB · E = {out['energy']:.5f} eV · "
+            f"gap {gap} · U = {out['U']:.2f} eV. Momentos: parámetro de orden del campo medio.")
+        symbols = self.window.atoms.get_chemical_symbols()
+        fill(self.moments, [(i, symbols[i], float(m)) for i, m in enumerate(out["moments"])])
+        self.window.view.show(self.window.atoms, out["moments"], "m (μB)", cmap="PuOr",
+                              keep_camera=True)
+        fig = self.m_plot.figure
+        fig.clear()
+        top, bottom = fig.subplots(2, 1, sharex=True)
+        top.plot(out["grid"], out["dos_up"], color="tab:red", lw=1, label="↑")
+        top.plot(out["grid"], -out["dos_down"], color="tab:blue", lw=1, label="↓")
+        top.axhline(0, color="black", lw=0.5)
+        top.set_ylabel("DOS (estados/eV)")
+        top.legend(fontsize=8)
+        bottom.plot(out["grid"], out["m_of_E"], color="black", lw=1.2, label="m(E)")
+        bottom.plot(out["grid"], out["dm_dE"], color="tab:green", lw=0.8, label="dm/dE")
+        bottom.set_xlabel("E − E_F (eV)")
+        bottom.set_ylabel("μB")
+        # ρ↑ = ρ↓ exactly (an antiferromagnetic state): do not blow rounding up
+        # into structure on the axis.
+        limit = max(0.05, 1.1 * float(np.abs(np.r_[out["m_of_E"], out["dm_dE"]]).max()))
+        bottom.set_ylim(-limit, limit)
+        bottom.legend(fontsize=8)
+        for ax in (top, bottom):
+            ax.axvline(0, color="grey", ls="--", lw=0.8)
+        self.m_plot.draw()
+
+    def run_compare(self):
+        if self._ready():
+            settings = self.settings()
+            settings.pop("guess")
+            self.window.runner.start("Comparar puntos de partida", actions.compare_guesses,
+                                     self.window.atoms, self.window.model,
+                                     field_tesla=self.field.value(), **settings,
+                                     on_done=self.show_compare, on_error=self.window.error)
+
+    def show_compare(self, rows):
+        fill(self.guesses, [(actions.GUESSES[r["guess"]], r["delta"], r["M"], r["max_moment"],
+                             r["note"] or ("" if r["converged"] else "sin converger"))
+                            for r in rows])
+
+    def run_sweep(self):
+        if not self._ready():
+            return
+        values = np.linspace(self.sweep_from.value(), self.sweep_to.value(),
+                             int(self.sweep_n.value()))
+        settings = self.settings()
+        if self.sweep_kind.currentIndex() == 0:
+            self.window.runner.start("Barrido en campo", actions.field_sweep, self.window.atoms,
+                                     self.window.model, values, **settings,
+                                     on_done=self.show_sweep, on_error=self.window.error)
+        else:
+            settings.pop("charge")
+            self.window.runner.start("Barrido en dopaje", actions.doping_sweep,
+                                     self.window.atoms, self.window.model, values, **settings,
+                                     on_done=self.show_sweep, on_error=self.window.error)
+
+    def show_sweep(self, out):
+        ax = self.sweep_plot.axes()
+        if "tesla" in out:
+            ax.plot(out["tesla"], out["M"], "o-", ms=3)
+            ax.set_xlabel("B (T)")
+            twin = ax.twinx()
+            twin.plot(out["tesla"], out["chi_per_tesla"], color="tab:orange", lw=0.8)
+            twin.set_ylabel("χ = dM/dB (μB/T)", color="tab:orange")
+        else:
+            ax.plot(out["charge"], out["M"], "o-", ms=3)
+            ax.set_xlabel("carga añadida (e; + quita electrones)")
+        ax.set_ylabel("M (μB)")
+        self.sweep_plot.draw()
 
 
 def main(argv=None):

@@ -116,3 +116,35 @@ def test_window_changing_charge_drops_the_ground_state():
     assert window.state is not None
     window.charge.setValue(1.0)
     assert window.state is None
+
+
+def test_hubbard_zigzag_ribbon_is_antiferromagnetic_between_edges():
+    ribbon = graphene_nanoribbon(4, 1, type="zigzag", saturated=False, vacuum=6.0)
+    model = actions.load_model("pi")
+    out = actions.hubbard_solution(ribbon, model, U=3.0, kmesh=40)
+    assert out["converged"] and abs(out["magnetization"]) < 1e-6      # Lieb: S = 0
+    assert out["moments"][0] * out["moments"][-1] < 0                  # opposite edges
+    rows = {r["guess"]: r for r in actions.compare_guesses(ribbon, model, U=3.0, kmesh=40)}
+    assert rows["antiferro"]["delta"] == 0.0 < rows["ferro"]["delta"]
+
+
+def test_window_magnetism_page():
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    window.set_model("pi")
+    window.set_atoms(graphene_nanoribbon(3, 1, type="zigzag", saturated=False, vacuum=6.0),
+                     "cinta")
+    page = window.pages["Magnetismo"]
+    page.use_model_u.setCurrentIndex(1)
+    page.U.setValue(3.0)
+    page.solve.click()
+    _wait(window)
+    assert "convergido" in page.summary.text() and page.moments.rowCount() == 6
+    page.sweep_kind.setCurrentIndex(1)
+    page.sweep_from.setValue(0.0)
+    page.sweep_to.setValue(1.0)
+    page.sweep_n.setValue(3)
+    page.sweep_button.click()
+    _wait(window)
