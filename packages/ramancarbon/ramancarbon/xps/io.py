@@ -315,6 +315,50 @@ def _source_from_header(fields: dict[str, Any]) -> tuple[Optional[float], bool, 
     return energy, mono, text
 
 
+#: A PHI region name: element symbol and orbital run together, with no
+#: space. ``C1s``, ``N1s``, ``Fe2p3``, ``Se3d``.
+_PHI_REGION = re.compile(r"^([A-Z][a-z]?)\s*(\d[spdf]\d*(?:/\d)?)$")
+
+
+def normalise_region(name: str) -> str:
+    """PHI's compact region name in the form the rest of the package uses.
+
+    MultiPak writes ``C1s`` and ``Fe2p3``; the state tables, the element
+    lookup and the region chooser all speak ``C 1s`` and ``Fe 2p3/2``.
+    Nothing translated between them, so a file could be read correctly
+    and still arrive with regions nobody recognised: the chemical states
+    came back empty because ``region_for_line("C1s")`` matched nothing,
+    and the survey's region evidence asked the database for an element
+    called ``"C1s"`` and got an exception instead of an answer.
+
+    Only the orbital part is filled in here. ``Fe 2p3`` is left as a
+    prefix of ``Fe 2p3/2`` rather than spelled out, because
+    :meth:`~ramancarbon.xps.elements.XPSDatabase.region_for_line` already
+    resolves a prefix to the component that is actually fitted, and two
+    places inventing the same completion is how they come to disagree.
+
+    The symbol has to be a real element, checked against the database and
+    not against the shape of the string. Without that, PHI's own name for
+    a survey -- ``Su1s`` -- parses as element-plus-orbital and comes back
+    as ``Su 1s``, which reads as an element that does not exist. It does
+    no downstream harm, because a survey is recognised by its span and
+    not by its name, but inventing an element in a label is the kind of
+    thing somebody later reads as a measurement.
+
+    Anything else -- a name an operator typed -- comes back untouched.
+    """
+    found = _PHI_REGION.match((name or "").strip())
+    if found is None:
+        return name
+    from .elements import load_xps_database
+
+    try:
+        load_xps_database().element(found.group(1))
+    except Exception:                                    # noqa: BLE001
+        return name
+    return f"{found.group(1)} {found.group(2)}"
+
+
 def _looks_like_a_spectrum(values: np.ndarray) -> bool:
     """Whether a candidate block behaves like counts rather than like noise.
 
@@ -334,20 +378,98 @@ def _looks_like_a_spectrum(values: np.ndarray) -> bool:
     return float(np.mean(np.abs(np.diff(values)))) < 0.25 * span
 
 
+#: Bytes in one region's binary sub-header, as PHI writes them: a block
+#: per region carrying its own field names (``pnt``, ``sar``, ``c/s``) and
+#: the type tag of the values that follow.
+SPE_SUBHEADER_BYTES = 96
+
+#: The type tag that ends each of those sub-headers. Counting it is what
+#: ties the binary directory to the region count the ASCII header
+#: declares -- two numbers from opposite ends of the file that have to
+#: agree.
+SPE_TYPE_TAG = b"f4"
+
+
+def _blocks_at(payload: bytes, offset: int, dtype: np.dtype,
+               regions: list[SpeRegion], total: int
+               ) -> Optional[list[np.ndarray]]:
+    """The per-region blocks at one offset, or ``None`` if they do not fit."""
+    if offset < 0 or offset + total * dtype.itemsize > len(payload):
+        return None
+    values = np.frombuffer(payload, dtype=dtype, count=total, offset=offset)
+    blocks: list[np.ndarray] = []
+    cursor = 0
+    for region in regions:
+        block = np.asarray(values[cursor:cursor + region.points], dtype=float)
+        cursor += region.points
+        if not _looks_like_a_spectrum(block):
+            return None
+        blocks.append(block)
+    return blocks
+
+
+def _computed_offset(payload: bytes, regions: list[SpeRegion], total: int,
+                     dtype: np.dtype) -> Optional[list[np.ndarray]]:
+    """The blocks where the file's own arithmetic says they are.
+
+    PHI writes the region sub-headers first and the values last, so the
+    measurement is the FINAL ``itemsize * total`` bytes of the payload and
+    the offset is a subtraction, not a search. That matters because the
+    search cannot settle this file: the data is one long run of smooth
+    positive floats, so sliding the window by one sample still looks like
+    a spectrum, a hundred offsets "fit", and the reader refuses a file it
+    could have read exactly. Measured on a seven-region VersaProbe II
+    survey: 17258 payload bytes, 4142 declared points, 4142 x 4 = 16568,
+    so the values begin at 690 -- which is 7 sub-headers of 96 bytes plus
+    an 18-byte gap, and decodes to C 1s at 284.70 eV, N 1s at 400.75,
+    O 1s at 530.10, Fe 2p3/2 at 711.35 and Se 3d at 55.30. Every one of
+    those is where its chemistry puts it.
+
+    Corroborated, not assumed: the prefix has to carry one type tag per
+    declared region, which is the ASCII header and the binary directory
+    agreeing from opposite ends of the file. Without that the offset is
+    arithmetic that happens to close, and this module does not accept
+    those.
+    """
+    prefix = len(payload) - total * dtype.itemsize
+    if prefix < 0:
+        return None
+    if payload[:prefix].count(SPE_TYPE_TAG) != len(regions):
+        return None
+    return _blocks_at(payload, prefix, dtype, regions, total)
+
+
 def _recover_binary(payload: bytes, regions: list[SpeRegion]) -> list[np.ndarray]:
     """Find the intensities in a ``.spe`` binary payload, or refuse.
 
-    The search is over the two floating layouts PHI writes (little-endian
-    float32 and float64) and over byte offsets; a candidate is accepted
-    only if **one** offset in the whole file yields, for every region in
-    order and back to back, a block of exactly the declared length that
-    passes :func:`_looks_like_a_spectrum`. Two surviving candidates are as
-    bad as none, and both are refused: an ambiguous layout read one way is
-    a silently wrong spectrum.
+    Two routes, in this order.
+
+    **The offset is computed.** The values are the last block of the
+    payload, so the header's point count fixes where they start. One
+    answer, checked twice -- the sub-header count has to match the region
+    count, and every region has to read as a spectrum.
+
+    **Otherwise the layout is searched**, over the two floating forms PHI
+    writes and over byte offsets, and there a candidate is accepted only
+    if exactly ONE offset yields every region back to back at its declared
+    length. Two survivors are as bad as none and both are refused: an
+    ambiguous layout read one way is a silently wrong spectrum.
+
+    The search came first and was the whole of this function, which is why
+    a perfectly ordinary seven-region file could not be opened: with the
+    data one long smooth run, many offsets pass the "looks like a
+    spectrum" test and the tie is real rather than resolvable. Guessing
+    between them would have been wrong; not computing the offset was the
+    actual mistake.
     """
     total = sum(region.points for region in regions)
     if total <= 0:
         raise XPSError("la cabecera no define ningún punto que leer")
+
+    for dtype in (np.dtype("<f4"), np.dtype("<f8")):
+        blocks = _computed_offset(payload, regions, total, dtype)
+        if blocks is not None:
+            return blocks
 
     hits: list[tuple[str, int, list[np.ndarray]]] = []
     for name, dtype in (("float32", np.dtype("<f4")), ("float64", np.dtype("<f8"))):
@@ -538,7 +660,7 @@ def read_spe(
                 work_function=float(phi),
                 monochromated=mono,
                 intensity_unit=unit,
-                region=region.name,
+                region=normalise_region(region.name),
                 name=f"{stem}:{region.name}",
                 metadata=metadata,
             )
@@ -1161,6 +1283,7 @@ __all__ = [
     "SPE_EXPORT_ADVICE",
     "VAMAS_IDENTIFIER",
     "SpeRegion",
+    "normalise_region",
     "parse_spe_header",
     "read_spe",
     "read_vamas",

@@ -700,7 +700,13 @@ def add_region_evidence(
             continue
         try:
             element = database.element(symbol)
-        except (KeyError, XPSError):
+        except Exception:                          # noqa: BLE001, S112
+            # A region whose name does not resolve to an element is not
+            # an error here: it is a region this step has nothing to say
+            # about. The database raises its own error type, so catching
+            # the two that were named let a DatabaseError out of a loop
+            # whose whole job is to skip what it cannot use -- and one
+            # unrecognised region name took the entire survey down.
             continue
         line = element.primary_line
         if line is None:

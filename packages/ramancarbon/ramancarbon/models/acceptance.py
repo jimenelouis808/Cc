@@ -27,6 +27,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Optional
 
 import numpy as np
 
@@ -63,6 +64,23 @@ NEGLIGIBLE_AREA_FRACTION = 0.02
 #: How close to a bound counts as pinned, as a fraction of the bound's
 #: own span.
 PINNED_TOLERANCE = 0.01
+
+#: How close to its own ceiling a width has to get before the gap stops
+#: meaning anything, as a fraction of the ceiling.
+#:
+#: `PINNED_TOLERANCE` is deliberately tight, because "this parameter
+#: stopped exactly on its bound" is a statement about the optimiser and
+#: has to be literal. A width is the one parameter where that tightness
+#: hides the finding: on a real disordered carbon the D band came back at
+#: 200.0 of 200 in the three-band model, 195.7 in the four-band and 191.0
+#: in the five-band -- the same wall in all three, and only the first was
+#: reported, because the other two are 2 % and 5 % short of it. Those two
+#: numbers are not measurements of a width either: they are where the
+#: optimiser stopped pushing. Five per cent of the ceiling is the gap
+#: below which the distinction is not worth making, and the check only
+#: fires when the width is ALSO above its usual range, so a band that is
+#: legitimately broad and nowhere near its bound says nothing.
+NO_ROOM_FRACTION = 0.05
 
 #: Correlation above which two parameters are not independently
 #: determined, so their individual values must not be quoted.
@@ -178,11 +196,24 @@ def audit_fit(result, bounds: dict | None = None) -> Audit:
                     f"{key} ({low:.0f}–{high:.0f}); un componente demasiado "
                     "estrecho suele estar ajustando ruido"))
             elif width > high:
-                findings.append(Finding(
-                    "fwhm-ancha", "aviso", name,
-                    f"FWHM {width:.1f} cm⁻¹ por encima de lo habitual para "
-                    f"{key} ({low:.0f}–{high:.0f}); puede estar absorbiendo "
-                    "intensidad de un componente que falta en el modelo"))
+                ceiling = _fwhm_ceiling(bounds, name)
+                if ceiling is not None and width >= ceiling * (1.0 - NO_ROOM_FRACTION):
+                    findings.append(Finding(
+                        "anchura-sin-sitio", "grave", name,
+                        f"FWHM {width:.1f} cm⁻¹ contra un techo de "
+                        f"{ceiling:.0f}: el ajuste ha llevado la anchura "
+                        f"hasta donde se le deja, así que {width:.0f} cm⁻¹ no "
+                        "es una medida de la anchura sino el borde. Un "
+                        f"componente tan ancho como {key} está aquí se está "
+                        "comiendo intensidad que pertenece a otro: prueba un "
+                        "preajuste con más componentes antes de leer ningún "
+                        "cociente de este ajuste"))
+                else:
+                    findings.append(Finding(
+                        "fwhm-ancha", "aviso", name,
+                        f"FWHM {width:.1f} cm⁻¹ por encima de lo habitual para "
+                        f"{key} ({low:.0f}–{high:.0f}); puede estar absorbiendo "
+                        "intensidad de un componente que falta en el modelo"))
 
         if largest > 0 and area < NEGLIGIBLE_AREA_FRACTION * largest:
             findings.append(Finding(
@@ -247,6 +278,23 @@ def audit_fit(result, bounds: dict | None = None) -> Audit:
     return Audit(findings, confidence, reason)
 
 
+def _fwhm_ceiling(bounds, name: str) -> Optional[float]:
+    """The upper width bound the fit actually used, if it is known.
+
+    ``bounds`` is the fit's own record of what each parameter was allowed
+    to do, which is not the same thing as the band's usual range: the
+    first is what constrained this fit and the second is what the
+    literature reports. The check that calls this needs the first.
+    """
+    if not bounds:
+        return None
+    limits = bounds.get(f"{name}.fwhm")
+    if not limits:
+        return None
+    high = float(limits[1])
+    return high if np.isfinite(high) and high > 0 else None
+
+
 def _confidence(findings: Sequence[Finding], result) -> tuple[str, str]:
     """Table 13 of the reference, applied to what was found.
 
@@ -288,6 +336,7 @@ __all__ = [
     "DEGENERATE_CORRELATION",
     "FWHM_WINDOWS",
     "NEGLIGIBLE_AREA_FRACTION",
+    "NO_ROOM_FRACTION",
     "SEVERITY",
     "Audit",
     "Finding",

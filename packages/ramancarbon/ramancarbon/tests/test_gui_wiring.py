@@ -1042,3 +1042,85 @@ def test_every_toolbar_is_really_drawn_in_a_real_window():
 
     assert seen, "no se encontró ninguna barra de herramientas"
     assert not crushed, "\n".join(crushed)
+
+
+#: Calls that produce something a CONTROL is: a Tk variable, a widget,
+#: or one of this package's widget builders. A plain flag assigned in
+#: three places is ordinary state and not what this check is about.
+CONTROL_CALLS = ("Var", "Combobox", "Entry", "Spinbox", "Listbox", "Button",
+                 "Checkbutton", "Radiobutton", "Scale", "Treeview", "Text",
+                 "table", "scrolled_text")
+
+
+def _control_name(node: ast.Assign) -> str:
+    """The call's own name, for deciding whether it builds a control."""
+    value = node.value
+    if not isinstance(value, ast.Call):
+        return ""
+    func = value.func
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    if isinstance(func, ast.Name):
+        return func.id
+    return ""
+
+
+def _assignments(source: str) -> dict[str, list[int]]:
+    """``self.<name> = <a control>`` sites, by name, with line numbers.
+
+    Restricted to things that ARE a control. Any ``self.x`` assigned
+    twice is worth a glance, but a counter reset in three handlers is
+    normal and the noise would bury the case this exists for.
+    """
+    tree = ast.parse(source)
+    found: dict[str, list[int]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        call = _control_name(node)
+        if not any(call.endswith(suffix) or call == suffix
+                   for suffix in CONTROL_CALLS):
+            continue
+        for target in node.targets:
+            if (isinstance(target, ast.Attribute)
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id == "self"):
+                found.setdefault(target.attr, []).append(node.lineno)
+    return found
+
+
+#: Attributes a section legitimately assigns more than once: a rebuild
+#: that replaces a widget, or a value reset between runs. A NAME is on
+#: this list only with a reason, because the whole point of the check is
+#: that two different things sharing one name is invisible until someone
+#: reports that a control does nothing.
+REBOUND_ON_PURPOSE: dict[str, set[str]] = {}
+
+
+@pytest.mark.parametrize("stem", sorted(SECTION_MODULES))
+def test_no_two_controls_share_a_variable(stem):
+    """Two widgets bound to one ``self.<name>`` is a silent dead control.
+
+    This has now happened three times in this codebase and cost a real
+    bug each time. In the structure generator a lookup read
+    ``self.var_mode`` -- the *Blender representation* box, holding
+    "ballstick" -- where it meant the structure mode, so no knee kind
+    ever received its own shape. In the photoemission section the charge
+    reference in the sidebar and the region chooser on the Reference tab
+    were both ``self.reference_var``; the tab is built last, so it won,
+    and ``_settings_from_widgets`` read "C 1s", failed to find it among
+    the REFERENCES labels and fell back to "C1s_adventitious" every
+    single time. The sidebar control looked fine and could not change
+    anything.
+
+    Nothing catches this: both assignments are valid Python, both
+    widgets draw, and the failure is a value silently coming from the
+    wrong place.
+    """
+    duplicates = {
+        name: lines for name, lines in _assignments(source(stem)).items()
+        if len(lines) > 1 and name not in REBOUND_ON_PURPOSE.get(stem, set())
+    }
+    assert not duplicates, (
+        f"{stem}: estas variables se asignan en más de un sitio y puede que "
+        f"sean dos controles distintos compartiendo nombre: {duplicates}")
