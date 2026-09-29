@@ -1,7 +1,8 @@
 # Instalación y primera prueba
 
-Tres paquetes independientes en un mismo repositorio. Puedes instalarlos todos
-de una vez o solo el que te interese.
+Cuatro paquetes independientes en un mismo repositorio: `ramancarbon`,
+`carbonforge`, `nanocarbon_lab` y `tbkit`. Puedes instalarlos todos de una vez
+o solo el que te interese.
 
 ## Requisitos
 
@@ -38,7 +39,7 @@ Luego, dentro de la carpeta descomprimida:
 uv sync --all-packages --extra dev
 ```
 
-Eso crea `.venv/` con los tres paquetes instalados en modo editable. Para
+Eso crea `.venv/` con los cuatro paquetes instalados en modo editable. Para
 ejecutar cualquier cosa, antepón `uv run`:
 
 ```bash
@@ -134,8 +135,8 @@ nanocarbon cnt --n 6 --m 6 --length 12 --dopant N --dopant-conc 0.03 \
 
 ## Ubuntu, de cero a `carbonforge vibspec` con ventana
 
-Todo en la carpeta descomprimida del zip (trae los tres paquetes: nanocarbon_lab,
-carbonforge con vibspec, y ramancarbon):
+Todo en la carpeta descomprimida del zip (trae los cuatro paquetes:
+nanocarbon_lab, carbonforge con vibspec, ramancarbon y tbkit):
 
 ```bash
 sudo apt install build-essential libxc-dev libopenblas-dev python3-tk
