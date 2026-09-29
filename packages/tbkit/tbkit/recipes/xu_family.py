@@ -287,13 +287,19 @@ def level_residuals(model: TBModel, refs: list[ReferenceStructure],
 
 
 def fit_levels(family: XuFamily, refs: list[ReferenceStructure],
-               x0: Optional[np.ndarray] = None):
+               x0: Optional[np.ndarray] = None, checkpoint: Optional[Path] = None):
     x0 = family.initial_guess() if x0 is None else np.asarray(x0, dtype=float)
     fixed = family.fixed_shift()
+    best = [np.inf]
 
     def residuals(x):
         try:
-            return level_residuals(family.build_model(x), refs, fixed)[0]
+            out = level_residuals(family.build_model(x), refs, fixed)[0]
+            cost = float(out @ out)
+            if cost < best[0]:
+                best[0] = cost
+                _save_checkpoint(checkpoint, "levels_partial", x, cost)
+            return out
         except (RuntimeError, np.linalg.LinAlgError, ValueError):
             return np.full(sum(r.n_occupied + 2 for r in refs), 10.0)
 
@@ -483,6 +489,24 @@ def basis_hessians(family: "XuFamily", atoms, delta: float = 1e-4) -> np.ndarray
     return np.array([_symmetric(h) for h in out])
 
 
+def _save_checkpoint(path: Optional[Path], stage: str, x, cost: float) -> None:
+    """Best parameters so far, written atomically (a restart resumes from them)."""
+    if path is None:
+        return
+    path = Path(path)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps({"stage": stage, "cost": float(cost),
+                                     "x": [float(v) for v in x]}), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _load_checkpoint(path: Optional[Path], size: int) -> Optional[dict]:
+    if path is None or not Path(path).exists():
+        return None
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return data if len(data.get("x", [])) == size else None
+
+
 _WORKER: dict = {}
 
 
@@ -522,7 +546,8 @@ class JointObjective:
     """
 
     def __init__(self, family: XuFamily, refs, level_weight=1.0, force_weight=1.0,
-                 energy_weight=3.0, ridge=1e-6, workers=4, hessians=(), hessian_weight=0.1):
+                 energy_weight=3.0, ridge=1e-6, workers=4, hessians=(), hessian_weight=0.1,
+                 checkpoint: Optional[Path] = None):
         from concurrent.futures import ProcessPoolExecutor
 
         self.family = family
@@ -534,6 +559,8 @@ class JointObjective:
         self.groups: dict[str, list[int]] = {}
         for i, ref in enumerate(refs):
             self.groups.setdefault(ref.group, []).append(i)
+        self.checkpoint = checkpoint
+        self.best = np.inf
         self.hessians = list(hessians)
         self.wh = hessian_weight
         self.h_design = [basis_hessians(family, t.atoms) for t in self.hessians]
@@ -575,6 +602,10 @@ class JointObjective:
         r_hessian = solved[3] if self.hessians else np.zeros(0)
         out = np.concatenate([self.wl * w * (d - shift), r_force, r_energy, r_hessian])
         self.size = len(out)
+        cost = float(out @ out)
+        if cost < self.best:
+            self.best = cost
+            _save_checkpoint(self.checkpoint, "joint", x, cost)
         if full:
             return out, {"shift": shift, "coefficients": c,
                          "level_rms": float(np.sqrt(np.mean((d - shift) ** 2))),
@@ -852,12 +883,17 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
 
 def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool = True,
         workers: int = 4, x0: Optional[np.ndarray] = None, hessians: Optional[Path] = None,
-        hessian_weight: float = 0.1) -> dict:
+        hessian_weight: float = 0.1, checkpoint: Optional[Path] = None) -> dict:
     """Fit ``family`` to the references (one or several files) and write the set.
 
     ``hessians``: a file of :mod:`tbkit.recipes.frequency_references`; its
     Hessians join forces and energies in the joint fit (curvature, i.e. the
-    frequencies), weighted by ``hessian_weight`` per eV/Å²."""
+    frequencies), weighted by ``hessian_weight`` per eV/Å².
+
+    Progress is saved to ``checkpoint`` (default ``OUT.checkpoint.json``): the
+    level fit when it ends and the best joint parameters at every evaluation,
+    so a run killed by a restart resumes where it was; removed on success."""
+    checkpoint = Path(checkpoint) if checkpoint else Path(out).with_suffix(".checkpoint.json")
     targets = load_hessians(hessians) if hessians else []
     structures, settings = [], {}
     for path in references:
@@ -867,13 +903,23 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
         if s.group in family.held_out:
             s.role = "test"
     train = [s for s in structures if s.role == "train"]
-    result = fit_levels(family, train, x0)
-    electronic = family.build_model(result.x)
+    saved = _load_checkpoint(checkpoint, len(family.parameter_names()))
+    if saved is not None and saved["stage"] != "levels_partial":
+        start = np.array(saved["x"])
+        stage1 = "retomado de " + checkpoint.name + f" ({saved['stage']})"
+    else:
+        if saved is not None:              # the level fit was interrupted: go on from there
+            x0 = np.array(saved["x"])
+        result = fit_levels(family, train, x0, checkpoint)
+        start, stage1 = result.x, str(result.message)
+        _save_checkpoint(checkpoint, "levels", start, np.inf)
+    electronic = family.build_model(start)
     _, shift, rms = level_residuals(electronic, train, family.fixed_shift())
     if verbose:
-        print(f"Niveles: {result.message}; desplazamiento {shift:.3f} eV", flush=True)
-    joint, info, info0 = fit_joint(family, train, result.x, workers=workers, verbose=verbose,
-                                   hessians=targets, hessian_weight=hessian_weight)
+        print(f"Niveles: {stage1}; desplazamiento {shift:.3f} eV", flush=True)
+    joint, info, info0 = fit_joint(family, train, start, workers=workers, verbose=verbose,
+                                   hessians=targets, hessian_weight=hessian_weight,
+                                   checkpoint=checkpoint)
     x = joint.x
     shift = info["shift"]
     model = family.build_model(x, family.repulsion_from_coefficients(info["coefficients"]))
@@ -884,7 +930,7 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
               "hessian_rms": info.get("hessian_rms"),
               "bond_ranges": bond_ranges(train)}
     if verbose:
-        for name, before, after in zip(family.parameter_names(), result.x, x, strict=True):
+        for name, before, after in zip(family.parameter_names(), start, x, strict=True):
             print(f"  {name:30s} {before:9.4f} → {after:9.4f}")
     validation = validate(family, model, structures, shift)
     if verbose:
@@ -904,4 +950,5 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
         data["fit"]["hessians"] = Path(hessians).name
         data["fit"]["hessians_sha256"] = _sha256(hessians)
     Path(out).write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
+    checkpoint.unlink(missing_ok=True)
     return data

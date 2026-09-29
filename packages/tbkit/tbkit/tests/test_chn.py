@@ -346,3 +346,13 @@ class TestAcuteAngleTerm:
         again = repulsive_from_dict(term.to_dict())
         atoms = molecule("CH2OCH2")
         assert again.energy_and_forces(atoms)[0] == pytest.approx(term.energy_and_forces(atoms)[0])
+
+
+def test_checkpoint_round_trip(tmp_path):
+    from tbkit.recipes import xu_family
+
+    path = tmp_path / "fit.checkpoint.json"
+    xu_family._save_checkpoint(path, "joint", [1.0, 2.0], 3.5)
+    assert xu_family._load_checkpoint(path, 2)["x"] == [1.0, 2.0]
+    assert xu_family._load_checkpoint(path, 3) is None        # another family: ignored
+    assert xu_family._load_checkpoint(tmp_path / "none.json", 2) is None

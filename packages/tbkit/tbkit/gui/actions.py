@@ -307,7 +307,7 @@ def relax_structure(atoms: Atoms, model: TBModel, fmax: float = 0.02, steps: int
     moved.calc = TBCalculator(model, kpts=kmesh, kT=kT, scc=scc)
     start = float(moved.get_potential_energy())
     trajectory = [start]
-    optimizer = BFGS(moved, logfile=None)
+    optimizer = BFGS(moved, logfile="-")            # steps to stdout: the window's terminal
     optimizer.attach(lambda: trajectory.append(float(moved.get_potential_energy())))
     converged = bool(optimizer.run(fmax=fmax, steps=steps))
     forces = moved.get_forces()

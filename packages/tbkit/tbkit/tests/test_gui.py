@@ -289,3 +289,26 @@ def test_window_saves_and_reopens_a_record(tmp_path):
     other = MainWindow(interactive=False)
     other.load_record(path)
     assert len(other.atoms) == 11 and "registro" in other.model_label.text()
+
+
+def test_window_terminal_shows_commands_output_and_errors(tmp_path):
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    window.set_atoms(molecule("H2O"), "agua")
+    geometry = window.pages["Geometría y modos"]
+    geometry.relax.click()
+    _wait(window)
+    _wait(window)                              # let the queued output arrive
+    text = window.console.text()
+    assert "estructura: agua" in text and "relax_structure(H2O" in text
+    assert "BFGS" in text and "✓ Relajación" in text
+    window.set_model("pi")
+    window.set_atoms(molecule("C60"), "C60")
+    assert window.model_name == "pi"
+    geometry.relax.click()
+    _wait(window)
+    text = window.console.text()
+    assert "✗ Relajación" in text and "Traceback" in text
+    assert window.console.save(tmp_path / "t.log").read_text() == text
