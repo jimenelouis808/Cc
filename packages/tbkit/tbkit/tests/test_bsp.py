@@ -126,7 +126,7 @@ def test_shipped_set_keeps_xu_chno(element):
 
 @pytest.mark.parametrize("element, label, limit", [
     ("B", "coronene_BN/eq", 0.06), ("B", "borazine/eq", 0.03),
-    ("S", "coronene_SH/eq", 0.06), ("S", "CH3SO3H/eq", 0.08),
+    ("S", "coronene_SH/eq", 0.06), ("S", "thiophene/eq", 0.06),
     ("P", "coronene_PO3H2/eq", 0.08), ("P", "H3PO4/eq", 0.08)])
 def test_geometry_close_to_gpaw(element, label, limit):
     _, model, refs = _shipped(element)

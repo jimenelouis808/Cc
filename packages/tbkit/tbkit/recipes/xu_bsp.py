@@ -57,7 +57,9 @@ FAMILIES = {
         pairs=_pairs("S", {"H": 1.34, "C": 1.82, "N": 1.65, "O": 1.45, "S": 2.05}),
         hubbard_u={"S": HUBBARD_U["S"]},
         onsite_dipole={"S": ONSITE_DIPOLE["S"]},
-        validity_notes="S junto con B o P en la misma estructura no está cubierto",
+        validity_notes=("S junto con B o P en la misma estructura no está cubierto; los C-S "
+                        "simples con carbono sp3 se desvían 0.06-0.09 Å (S=O, S-S, S-H, S-N y "
+                        "C-S aromático a menos de 0.04 Å)"),
         system=("xu_chno más azufre: tioles, sulfuros, disulfuros, tiofeno, sulfóxidos, "
                 "sulfonas, ácidos sulfónicos, sulfonamidas"),
         base="xu_chno"),

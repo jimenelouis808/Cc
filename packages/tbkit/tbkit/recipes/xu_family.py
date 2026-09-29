@@ -484,13 +484,19 @@ def fit_joint(family: XuFamily, refs, x0, workers: int = 4, max_nfev: int = 400,
 # Validation and the parameter file
 # --------------------------------------------------------------------------
 
-def bond_lengths(atoms, cutoff: float = 1.75) -> dict[tuple[int, int], float]:
-    """Bonded pairs (i < j): heavy-heavy within ``cutoff``, X-H within 1.3 Å."""
+def bond_lengths(atoms, factor: float = 1.2) -> dict[tuple[int, int], float]:
+    """Bonded pairs (i < j): closer than ``factor`` times the sum of the covalent
+    radii (Cordero et al. 2008, via ASE): C-C 1.82, C-H 1.28, O-H 1.16,
+    S-H 1.63, C-S 2.17, S-S 2.52, P-C 2.24 Å."""
+    from ase.data import covalent_radii
+
     symbols = atoms.get_chemical_symbols()
-    ii, jj, dd = neighbor_list("ijd", atoms, cutoff)
+    radii = covalent_radii[atoms.numbers]
+    ii, jj, dd = neighbor_list("ijd", atoms, factor * 2 * radii.max())
     out = {}
     for i, j, d in zip(ii, jj, dd, strict=True):
-        if i < j and (d < 1.3 or "H" not in (symbols[i], symbols[j])):
+        if i < j and d < factor * (radii[i] + radii[j]) and \
+                not symbols[i] == symbols[j] == "H":
             out[(int(i), int(j))] = float(d)
     return out
 
