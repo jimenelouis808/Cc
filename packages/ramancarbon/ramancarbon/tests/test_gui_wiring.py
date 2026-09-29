@@ -261,6 +261,11 @@ def test_the_two_raman_sections_share_one_session():
         ("tmd_app", "_export_table"),
         ("tmd_app", "library_list"),
         ("tmd_app", "_on_library_select"),
+        # A deconvolution adjusted by hand has to reach the indices, the
+        # ratios and the report; until this button existed it reached
+        # nothing, and the numbers on screen came from a model the user
+        # had just replaced.
+        ("app", "_reanalyse_with_manual"),
         ("xrd_app", "_identify"),
         ("xrd_app", "_auto_refine"),
         ("xrd_app", "_prepare_manual"),

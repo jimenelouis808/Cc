@@ -244,6 +244,7 @@ def analyse(
     phase_groups: Optional[Sequence[str]] = None,
     n_d: Optional[int] = None,
     n_g: Optional[int] = None,
+    dg_fit: Optional[FitResult] = None,
     db: Optional[Database] = None,
 ) -> AnalysisResult:
     """Run the complete analysis on one spectrum.
@@ -267,6 +268,14 @@ def analyse(
         on the spectrum that prompted this, every FeSe-T line lies under
         the cementite band at 215 cm⁻¹, so Raman neither confirms nor
         contradicts it — is worth having and cannot be guessed at.
+    dg_fit:
+        A D–G deconvolution to use instead of building one. This is how
+        a hand-adjusted model reaches the rest of the analysis: the
+        indices, the intensity ratios, the crystallite size and the
+        report all read the fit, so a manual deconvolution that does not
+        get here is a picture of a fit rather than a fit. No model
+        comparison is run — you supplied the model — and the report says
+        so rather than implying it was selected.
     n_d, n_g:
         Number of components in the D and in the G region, overriding
         ``presets`` with an explicit convention. Many groups fit a fixed
@@ -456,7 +465,21 @@ def analyse(
     comparison: Optional[ModelComparison] = None
     fit: Optional[FitResult] = None
     try:
-        if (n_d or n_g) and not no_signal:
+        if dg_fit is not None:
+            # The caller has already deconvolved the D-G region and wants
+            # THAT model carried through, not a fresh one. This is what
+            # makes a hand-adjusted deconvolution mean anything: the
+            # indices, the ratios, the crystallite size and the report
+            # all read the fit, so a manual fit that does not reach them
+            # is a picture of a fit rather than a fit.
+            fit = dg_fit
+            warnings.append(
+                "deconvolución D–G suministrada por quien llama: los índices "
+                "y los cocientes salen de ESE modelo. No se han comparado "
+                "modelos, así que los criterios de información no dicen si "
+                "es el mejor"
+            )
+        elif (n_d or n_g) and not no_signal:
             # An explicit convention is not a candidate to be compared
             # against others: it is the model. Comparing it against the
             # presets and then picking by BIC would silently discard what

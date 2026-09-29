@@ -222,6 +222,11 @@ class LoadedSpectrum:
     sample — unreacted selenium or sulfur, an iron oxide from the catalyst,
     a titania support."""
     manual_fit: Optional[FitResult] = None
+    from_manual_fit: bool = False
+    """Whether ``result`` was built from ``manual_fit`` rather than from
+    the model the comparison chose. Every number downstream -- the
+    indices, the ratios, the crystallite size, the report -- reads the
+    fit, so which model produced them has to travel with them."""
     is_control: bool = False
     error: str = ""
 
@@ -454,12 +459,64 @@ class Session:
             )
             item.processed = item.result.processed
             item.diagnostics = item.result.diagnostics
+            # Back to the model the comparison chose, so the label that
+            # says where the numbers came from has to come off with it.
+            item.from_manual_fit = False
             item.error = ""
             for warning in item.result.warnings:
                 self.log("warning", f"{item.name}: {warning}")
         except (ValueError, RuntimeError) as exc:
             item.error = str(exc)
             self.log("error", f"{item.name}: {exc}")
+        return item
+
+    def reanalyse_with_manual_fit(self) -> Optional[LoadedSpectrum]:
+        """Redo the analysis using the hand-adjusted deconvolution.
+
+        Adjusting the components by hand produced a fit, a residual and
+        an audit -- and nothing else moved. The indices, the intensity
+        ratios, the crystallite size and the whole report still came
+        from the automatic model chosen before the edits, so the manual
+        deconvolution was a picture of a fit rather than a fit. Someone
+        who fits D–G their group's way, which is the ordinary case, got
+        I_D/I_G from a model they had just replaced.
+
+        Everything else -- preprocessing, the control, the settings --
+        stays exactly as it was: the only thing that changes is which
+        D–G model the rest of the analysis reads.
+        """
+        item = self.active
+        if item is None:
+            return None
+        if item.manual_fit is None:
+            self.log("error",
+                     "ajusta primero el modelo a mano en la pestaña de "
+                     "deconvolución")
+            return None
+        control = next(
+            (s.result for s in self.spectra
+             if s.is_control and s.result and s is not item),
+            None,
+        )
+        try:
+            item.result = analyse(
+                item.raw,
+                control=control,
+                preprocess_kwargs=self.preprocess_settings.to_kwargs(),
+                dg_fit=item.manual_fit,
+                db=self.db,
+                **self.analysis_settings.to_kwargs(),
+            )
+            item.processed = item.result.processed
+            item.diagnostics = item.result.diagnostics
+            item.from_manual_fit = True
+            item.error = ""
+            for warning in item.result.warnings:
+                self.log("warning", f"{item.name}: {warning}")
+        except (ValueError, RuntimeError) as exc:
+            item.error = str(exc)
+            self.log("error", f"{item.name}: {exc}")
+            return None
         return item
 
     def bootstrap_active(self, replicates: Optional[int] = None):
