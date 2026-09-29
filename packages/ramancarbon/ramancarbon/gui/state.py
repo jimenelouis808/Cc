@@ -222,6 +222,11 @@ class LoadedSpectrum:
     sample — unreacted selenium or sulfur, an iron oxide from the catalyst,
     a titania support."""
     manual_fit: Optional[FitResult] = None
+    manual_model: Optional[FitModel] = None
+    """The model that produced ``manual_fit``. Kept because the width
+    probe has to refit it with one bound lifted, and a result does not
+    carry enough to rebuild the model it came from without guessing the
+    background order."""
     from_manual_fit: bool = False
     """Whether ``result`` was built from ``manual_fit`` rather than from
     the model the comparison chose. Every number downstream -- the
@@ -726,6 +731,7 @@ class Session:
         try:
             model, notes = self.build_manual_model(specs, window, background)
             item.manual_fit = fit_model(target, model)
+            item.manual_model = model
         except ValueError as exc:
             item.error = str(exc)
             self.log("error", f"{item.name}: {exc}")
@@ -738,6 +744,35 @@ class Session:
         for warning in item.manual_fit.warnings:
             self.log("warning", f"{item.name}: {warning}")
         return item.manual_fit
+
+    def probe_width_ceilings(self) -> list[str]:
+        """Settle whether a width near its bound was pushing against it.
+
+        The acceptance audit raises the question and cannot answer it: a
+        band that is genuinely broad and a band that is mopping up for a
+        component the model does not have both come back as a number close
+        to a ceiling. The experiment that separates them is to lift the
+        ceiling and fit again, which needs the spectrum and the model, not
+        just the result -- so it lives here rather than in the audit.
+
+        Returns
+        -------
+        list[str]
+            One line per component that was near its ceiling. Empty when
+            none was, which is itself the answer.
+        """
+        from ..models.deconvolution import probe_width_ceilings
+
+        item = self.active
+        if item is None:
+            raise ValueError("no hay ningún espectro seleccionado")
+        fit = item.manual_fit
+        model = item.manual_model
+        if fit is None or model is None:
+            raise ValueError(
+                "ajusta un modelo en esta pestaña antes de probar sus límites"
+            )
+        return probe_width_ceilings(item.processed or item.raw, model, fit)
 
     def region_specs(self, n_d: int, n_g: int) -> list[PeakSpec]:
         """Starting components for a free-form ``n_d`` + ``n_g`` model."""

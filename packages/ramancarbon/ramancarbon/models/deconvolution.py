@@ -605,10 +605,13 @@ __all__ = [
     "PRESET_BANDS",
     "PRESET_LABELS",
     "PRESET_WINDOWS",
+    "PROBE_CEILING_FACTOR",
+    "PROBE_MOVED_FRACTION",
     "admit_edited_values",
     "build_model",
     "build_region_model",
     "compare_models",
+    "probe_width_ceilings",
 ]
 
 
@@ -876,5 +879,133 @@ def admit_edited_values(specs: Sequence[PeakSpec]) -> list[str]:
                 f"{side}, el límite publicado de la banda. Se ha ampliado el "
                 f"límite para admitirlo — manda tu número — pero el componente "
                 f"ya no es prueba de la banda {spec.band or spec.name}."
+            )
+    return notes
+
+
+#: Factor by which a suspect width ceiling is lifted when probing it.
+#:
+#: Two is enough to separate the two cases and small enough that the
+#: probe fit still converges from the same starting point.
+PROBE_CEILING_FACTOR = 2.0
+
+#: How far a width has to move when its ceiling is lifted, as a fraction
+#: of the original ceiling, before the original number counts as a
+#: measurement rather than a wall.
+#:
+#: Measured on the user's real 532 nm spectrum of carbon on FeSe, five
+#: bands: with the ceiling at 200 the D came back at 191.0, and with the
+#: ceiling at 400 it came back at 185.3. Five wavenumbers of movement for
+#: two hundred of extra room is a band that was never pushing. The D4 in
+#: the same fit went 250 -> 250, 300 -> 300, 400 -> 400: that one is a
+#: wall. The threshold sits between the two by an order of magnitude.
+PROBE_MOVED_FRACTION = 0.10
+
+
+def probe_width_ceilings(
+    spectrum: Spectrum,
+    model: FitModel,
+    result: FitResult,
+    near: float = 0.05,
+    factor: float = PROBE_CEILING_FACTOR,
+) -> list[str]:
+    """Decide which widths are really against their ceiling by lifting it.
+
+    `models.acceptance` can only look at the numbers a fit produced, so
+    the best it can do about a width near its bound is measure the
+    distance — and distance does not separate the two cases. A band that
+    is *pushing* against its ceiling and a band that merely *sits* near it
+    look identical in the result, and the difference is the whole point:
+    the first means the model is missing a component and nothing derived
+    from the fit should be quoted, the second means the band is that wide.
+
+    The test that does separate them is not a threshold, it is an
+    experiment: lift the ceiling and fit again. A width that was pushing
+    goes straight to the new ceiling. A width that was not stays where it
+    was.
+
+    Measured on the spectrum that prompted this, at five bands:
+
+    =========  ==============  ==============
+    ceiling    D came back at  D4 came back at
+    =========  ==============  ==============
+    200        191.0           250.0
+    300        188.5           300.0
+    400        185.3           400.0
+    =========  ==============  ==============
+
+    Both were inside five per cent of their ceiling and only one of them
+    was a wall. Reporting them the same way — which is what a distance
+    check has to do — calls a genuine 191 cm⁻¹ D band an artefact.
+
+    One extra fit per suspect component, so the cost is bounded by how
+    many components were near their bound in the first place.
+
+    Parameters
+    ----------
+    spectrum:
+        The spectrum the model was fitted to.
+    model:
+        The model as fitted. It is not modified; the probe works on
+        copies.
+    result:
+        The fit to be interrogated.
+    near:
+        How close to its ceiling a width has to be to be worth probing,
+        as a fraction of the ceiling.
+    factor:
+        How much room the probe gives it.
+
+    Returns
+    -------
+    list[str]
+        One message per component probed, in Spanish, saying which of the
+        two cases it turned out to be. Empty when no width was near its
+        ceiling.
+    """
+    import copy
+
+    bounds = getattr(result, "bounds", None) or {}
+    notes: list[str] = []
+    for peak in result.peaks:
+        limits = bounds.get(f"{peak.name}.fwhm")
+        if not limits:
+            continue
+        ceiling = float(limits[1])
+        if not np.isfinite(ceiling) or ceiling <= 0:
+            continue
+        if float(peak.fwhm) < ceiling * (1.0 - near):
+            continue
+        probe = copy.deepcopy(model)
+        for spec in probe.peaks:
+            if spec.name == peak.name and spec.fwhm_bounds is not None:
+                spec.fwhm_bounds = (spec.fwhm_bounds[0], ceiling * factor)
+        try:
+            lifted = fit_model(spectrum, probe)
+        except Exception:                          # noqa: BLE001, S112
+            # The probe is a diagnostic. If it will not converge, the fit
+            # it is diagnosing is still on screen and still readable.
+            continue
+        after = next(
+            (float(p.fwhm) for p in lifted.peaks if p.name == peak.name), None
+        )
+        if after is None:
+            continue
+        moved = abs(after - float(peak.fwhm))
+        if moved >= ceiling * PROBE_MOVED_FRACTION:
+            notes.append(
+                f"{peak.name}: con el techo de anchura en {ceiling:.0f} cm⁻¹ "
+                f"ajusta {peak.fwhm:.1f}; subiéndolo a {ceiling * factor:.0f} "
+                f"se va a {after:.1f}. Estaba EMPUJANDO contra el límite, así "
+                "que su anchura y su área son el borde, no una medida: al "
+                "modelo le falta un componente ahí."
+            )
+        else:
+            notes.append(
+                f"{peak.name}: con el techo de anchura en {ceiling:.0f} cm⁻¹ "
+                f"ajusta {peak.fwhm:.1f}, y subiéndolo a "
+                f"{ceiling * factor:.0f} se queda en {after:.1f}. No estaba "
+                "empujando: la banda es así de ancha, aunque el número quede "
+                "cerca del límite."
             )
     return notes
