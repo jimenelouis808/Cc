@@ -338,3 +338,71 @@ def vibration_modes(atoms: Atoms, model: TBModel, kT: float = 0.02, kmesh: int =
         rows.append((index, float(frequency), parts))
     return {"vibrations": vib, "rows": rows, "vdos": vibrational_dos(vib, sigma=sigma),
             "warnings": list(vib.warnings)}
+
+
+# --------------------------------------------------------------------------
+# Spectra: Raman, resonant Raman, IR
+# --------------------------------------------------------------------------
+
+def qe_phonons(atoms: Atoms, path: str, kind: str = "auto") -> tuple[np.ndarray, np.ndarray]:
+    """``(frequencies, L)`` from a dynmat.x/matdyn.x mode file, for ``atoms`` (same order)."""
+    from ..qe import modes_for_raman, read_qe_modes
+
+    modes = read_qe_modes(path)
+    return modes.frequencies, modes_for_raman(modes, atoms.get_masses(), kind)
+
+
+def _groups_rows(groups, key="activity"):
+    return [(float(g["frequency_cm1"]), int(g["degeneracy"]), float(g[key]),
+             float(g.get("depolarization", np.nan))) for g in groups]
+
+
+def raman_spectrum(atoms: Atoms, model: TBModel, phonons=None, laser_nm: float = 532.0,
+                   temperature_k: float = 300.0, fwhm: float = 8.0, kT: float = 0.01,
+                   kmesh: int = 12) -> dict:
+    """Non-resonant Raman: active sets and the broadened spectrum (cross-section factors)."""
+    from ..raman import raman, spectrum
+
+    result = raman(atoms, model, kmesh=kmesh, kT=kT, phonons=phonons)
+    grid = np.arange(0.0, max(float(result.frequencies.max()), 100.0) + 200.0, 0.5)
+    grid, intensity = spectrum(result, grid, fwhm, laser_nm, temperature_k)
+    return {"rows": _groups_rows(result.groups()), "grid": grid, "intensity": intensity,
+            "alpha": result.alpha, "method": result.method, "warnings": list(result.warnings)}
+
+
+def resonant_spectrum(atoms: Atoms, model: TBModel, lasers_ev, eta: float = 0.1, phonons=None,
+                      kT: float = 0.01, kmesh: int = 24) -> dict:
+    """Resonant Raman at each laser energy: activities per mode and laser."""
+    from ..resonance import resonant_raman
+
+    result = resonant_raman(atoms, model, np.asarray(lasers_ev, dtype=float), eta=eta,
+                            kmesh=kmesh, kT=kT, phonons=phonons)
+    strongest = result.activities.max() or 1.0
+    keep = [k for k in range(len(result.frequencies))
+            if result.activities[:, k].max() >= 1e-3 * strongest]
+    return {"result": result, "lasers": result.lasers, "frequencies": result.frequencies,
+            "activities": result.activities, "active": keep, "method": result.method,
+            "warnings": list(result.warnings)}
+
+
+def ir_spectrum_of(atoms: Atoms, model: TBModel, phonons=None, fwhm: float = 10.0,
+                   kT: float = 0.01) -> dict:
+    """IR intensities (km/mol) with the model's dipole, and the broadened absorption."""
+    from ..infrared import infrared, ir_spectrum
+
+    result = infrared(atoms, model, kT=kT, phonons=phonons)
+    grid, absorption = ir_spectrum(result, fwhm=fwhm)
+    rows = [(float(g["frequency_cm1"]), int(g["degeneracy"]), float(g["intensity_km_mol"]),
+             np.nan) for g in result.groups()]
+    return {"rows": rows, "grid": grid, "absorption": absorption,
+            "dipole_debye": float(np.linalg.norm(result.dipole) / 0.20819434),
+            "warnings": list(result.warnings)}
+
+
+def write_csv(path: str | Path, columns: dict[str, np.ndarray]) -> Path:
+    """A plain CSV (header + columns), for spectra and tables."""
+    path = Path(path)
+    names = list(columns)
+    data = np.column_stack([np.asarray(columns[n], dtype=float) for n in names])
+    np.savetxt(path, data, delimiter=",", header=",".join(names), comments="")
+    return path

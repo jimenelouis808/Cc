@@ -208,3 +208,47 @@ def test_runner_collects_garbage_only_in_the_gui_thread():
         runner.start("otra", lambda: 1)
         _wait(window)
     assert len(runner._finished) == 1
+
+
+def test_spectra_reuse_the_shared_modes():
+    model = actions.load_model("chn")
+    atoms = actions.relax_structure(molecule("C2H4"), model, fmax=0.005)["atoms"]
+    vib = actions.vibration_modes(atoms, model)["vibrations"]
+    phonons = (vib.frequencies, vib.modes)
+    raman = actions.raman_spectrum(atoms, model, phonons=phonons)
+    ir = actions.ir_spectrum_of(atoms, model, phonons=phonons)
+    # Ethylene is centrosymmetric: Raman and IR modes are mutually exclusive.
+    raman_freqs = {round(r[0]) for r in raman["rows"]}
+    ir_freqs = {round(r[0]) for r in ir["rows"] if r[2] > 1e-3 * max(x[2] for x in ir["rows"])}
+    assert raman_freqs and ir_freqs and not raman_freqs & ir_freqs
+    resonant = actions.resonant_spectrum(atoms, model, [2.0, 3.0], phonons=phonons)
+    assert resonant["activities"].shape == (2, len(vib.frequencies) - 6)
+
+
+def test_write_csv(tmp_path):
+    path = actions.write_csv(tmp_path / "s.csv", {"x": np.arange(3.0), "y": np.ones(3)})
+    assert path.read_text().splitlines()[0] == "x,y"
+
+
+def test_window_spectra_page():
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    window.set_atoms(molecule("CO2"), "CO2")
+    geometry, spectra = window.pages["Geometría y modos"], window.pages["Espectros"]
+    geometry.relax.click()
+    _wait(window)
+    geometry.modes_button.click()
+    _wait(window)
+    assert window.phonons is not None
+    spectra.raman_button.click()
+    _wait(window)
+    assert spectra.table.rowCount() >= 1
+    spectra.ir_button.click()
+    _wait(window)
+    assert "μ =" in spectra.summary.text()
+    spectra.lasers.setText("2.0 4.0")
+    spectra.resonant_button.click()
+    _wait(window)
+    spectra.table.selectRow(0)

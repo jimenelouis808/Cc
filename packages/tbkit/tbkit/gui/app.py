@@ -85,6 +85,8 @@ class MainWindow(QMainWindow):
         self.model = None
         self.model_name = None
         self.state: Optional[actions.GroundState] = None
+        #: Γ modes of the current structure, shared by the pages: (frequencies, L, source).
+        self.phonons = None
         self.runner = Runner(self)
         self.runner.message.connect(self.statusBar().showMessage)
         self.runner.busy.connect(self._busy)
@@ -115,7 +117,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Abre una estructura (xyz, extxyz, cif, POSCAR…).")
 
     def page_classes(self):
-        return [ElectronicPage, OrbitalPage, MagnetismPage, GeometryPage]
+        return [ElectronicPage, OrbitalPage, MagnetismPage, GeometryPage, SpectraPage]
 
     # --- left panel ---------------------------------------------------------------
 
@@ -241,6 +243,7 @@ class MainWindow(QMainWindow):
 
     def invalidate(self, *_):
         self.state = None
+        self.phonons = None
         for page in self.pages.values():
             page.invalidated()
 
@@ -760,6 +763,8 @@ class GeometryPage(Page):
 
     def show_modes(self, out):
         self.result = out
+        vib = out["vibrations"]
+        self.window.phonons = (vib.frequencies, vib.modes, f"modelo ({self.window.model.name})")
         fill(self.table, out["rows"])
         warnings = " ".join(out["warnings"])
         self.summary.setText(f"{len(out['rows'])} modos. Clic en uno para animarlo. {warnings}")
@@ -809,6 +814,233 @@ class GeometryPage(Page):
                 self.window.statusBar().showMessage(f"Guardado {path}")
             except FileExistsError as error:
                 self.window.error("No se sobrescribe", str(error))
+
+
+class SpectraPage(Page):
+    """Raman (non-resonant and resonant) and IR on the shared or imported modes."""
+
+    title = "Espectros"
+
+    def __init__(self, window):
+        super().__init__(window)
+        layout = QVBoxLayout(self)
+        source = QHBoxLayout()
+        source.addWidget(QLabel("Fonones:"))
+        self.source = QComboBox()
+        self.source.addItems(["los de «Geometría y modos», o calcularlos con el modelo",
+                              "archivo de Quantum ESPRESSO (dynmat/matdyn)…"])
+        self.source.activated.connect(self._source_chosen)
+        source.addWidget(self.source)
+        self.source_label = QLabel("")
+        source.addWidget(self.source_label)
+        layout.addLayout(source)
+        self.qe = None
+        form = QFormLayout()
+        self.laser = _spin(200, 2000, 532, 1, 0, " nm")
+        self.temperature = _spin(1, 2000, 300, 10, 0, " K")
+        self.fwhm = _spin(0.5, 100, 8, 0.5, 1, " cm⁻¹")
+        row = QHBoxLayout()
+        for label, widget in (("láser", self.laser), ("T", self.temperature),
+                              ("FWHM", self.fwhm)):
+            row.addWidget(QLabel(label))
+            row.addWidget(widget)
+        form.addRow("Raman / IR", row)
+        self.lasers = QLineEdit("1.96 2.33 2.54 3.5")
+        self.eta = _spin(0.01, 1.0, 0.1, 0.01, 2, " eV")
+        row = QHBoxLayout()
+        row.addWidget(self.lasers)
+        row.addWidget(QLabel("η"))
+        row.addWidget(self.eta)
+        form.addRow("Resonante (eV)", row)
+        layout.addLayout(form)
+        buttons = QHBoxLayout()
+        self.raman_button = QPushButton("Raman")
+        self.raman_button.clicked.connect(self.run_raman)
+        self.resonant_button = QPushButton("Raman resonante")
+        self.resonant_button.clicked.connect(self.run_resonant)
+        self.ir_button = QPushButton("IR")
+        self.ir_button.clicked.connect(self.run_ir)
+        self.export = QPushButton("Exportar CSV…")
+        self.export.clicked.connect(self.export_csv)
+        for b in (self.raman_button, self.resonant_button, self.ir_button, self.export):
+            buttons.addWidget(b)
+        layout.addLayout(buttons)
+        self.summary = QLabel("Raman no resonante: sistemas con gap y capa cerrada. Las "
+                              "energías de resonancia son las del modelo (gaps TB/KS pequeños), "
+                              "no energías ópticas.")
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+        tabs = QTabWidget()
+        self.plot = PlotPanel()
+        tabs.addTab(self.plot, "Espectro")
+        self.table = table(["ω (cm⁻¹)", "deg.", "actividad / intensidad", "ρ"])
+        self.table.itemSelectionChanged.connect(self.selected)
+        tabs.addTab(self.table, "Modos activos")
+        self.profile = PlotPanel()
+        tabs.addTab(self.profile, "Perfil de excitación")
+        self.tabs = tabs
+        layout.addWidget(tabs)
+        self.last = None
+        self.resonant = None
+
+    def invalidated(self):
+        self.qe = None
+        self.source.setCurrentIndex(0)
+        self.source_label.setText("")
+
+    def _source_chosen(self, index):
+        if index != 1:
+            self.qe = None
+            self.source_label.setText("")
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Modos de QE", "",
+                                              "Modos (*.modes *.out *.eig *.vec *);;Todos (*)")
+        if not path or self.window.atoms is None:
+            self.source.setCurrentIndex(0)
+            return
+        try:
+            self.qe = actions.qe_phonons(self.window.atoms, path)
+            self.source_label.setText(f"{Path(path).name}: {len(self.qe[0])} modos")
+        except Exception as error:
+            self.window.error("No se pudieron leer los modos de QE", str(error))
+            self.source.setCurrentIndex(0)
+
+    def phonons(self):
+        """QE modes, the window's shared modes, or None (the model computes them)."""
+        if self.qe is not None:
+            return self.qe
+        if self.window.phonons is not None:
+            return self.window.phonons[:2]
+        return None
+
+    def _ready(self):
+        if self.window.atoms is None or self.window.model is None:
+            self.window.error("Sin estructura o modelo", "Abre una estructura y elige un modelo.")
+            return False
+        problems = actions.check_model(self.window.atoms, self.window.model,
+                                       self.window.scc_choice())
+        if problems:
+            self.window.error("El modelo no sirve para esta estructura", " ".join(problems))
+            return False
+        return True
+
+    def run_raman(self):
+        if self._ready():
+            self.window.runner.start("Raman", actions.raman_spectrum, self.window.atoms,
+                                     self.window.model, phonons=self.phonons(),
+                                     laser_nm=self.laser.value(),
+                                     temperature_k=self.temperature.value(),
+                                     fwhm=self.fwhm.value(), on_done=self.show_raman,
+                                     on_error=self.window.error)
+
+    def show_raman(self, out):
+        self.last = ("raman", out)
+        self._table(out["rows"], "actividad (Å⁴/amu)")
+        ax = self.plot.axes()
+        ax.plot(out["grid"], out["intensity"], color="black", lw=1)
+        ax.set_xlabel("desplazamiento Raman (cm⁻¹)")
+        ax.set_ylabel(f"intensidad (láser {self.laser.value():.0f} nm, "
+                      f"{self.temperature.value():.0f} K)")
+        self.plot.draw()
+        alpha = float(np.trace(out["alpha"]) / 3)
+        self.summary.setText(f"{out['method']} · α medio {alpha:.2f} Å³ · "
+                             f"{len(out['rows'])} conjuntos activos. " + " ".join(out["warnings"]))
+
+    def run_resonant(self):
+        if not self._ready():
+            return
+        try:
+            lasers = [float(v) for v in self.lasers.text().replace(",", " ").split()]
+        except ValueError:
+            self.window.error("Energías de láser", "Escribe números en eV separados por espacios.")
+            return
+        self.window.runner.start("Raman resonante", actions.resonant_spectrum, self.window.atoms,
+                                 self.window.model, lasers, eta=self.eta.value(),
+                                 phonons=self.phonons(), on_done=self.show_resonant,
+                                 on_error=self.window.error)
+
+    def show_resonant(self, out):
+        self.last = ("resonant", out)
+        self.resonant = out
+        lasers = out["lasers"]
+        headers = ["ω (cm⁻¹)"] + [f"{e:.2f} eV" for e in lasers]
+        self.table.clear()
+        self.table.setColumnCount(len(headers))
+        self.table.setHorizontalHeaderLabels(headers)
+        rows = [(float(out["frequencies"][k]),) + tuple(float(a) for a in out["activities"][:, k])
+                for k in out["active"]]
+        fill(self.table, rows)
+        ax = self.plot.axes()
+        for i, energy in enumerate(lasers):
+            ax.vlines(out["frequencies"], 0, out["activities"][i], lw=1.2,
+                      color=f"C{i}", label=f"{energy:.2f} eV")
+        ax.set_yscale("log")
+        ax.set_xlabel("ω (cm⁻¹)")
+        ax.set_ylabel("actividad (Å⁴/amu)")
+        ax.legend(fontsize=8)
+        self.plot.draw()
+        self.summary.setText(f"{out['method']} · elige un modo en «Modos activos» para ver su "
+                             "perfil. " + " ".join(out["warnings"]))
+
+    def selected(self):
+        rows = self.table.selectionModel().selectedRows()
+        if not rows or self.last is None or self.last[0] != "resonant":
+            return
+        out = self.resonant
+        k = out["active"][rows[0].row()]
+        profile = out["result"].profile(float(out["frequencies"][k]))
+        ax = self.profile.axes()
+        ax.plot(out["lasers"], profile, "o-")
+        ax.set_xlabel("ħω_L (eV)")
+        ax.set_ylabel("actividad (Å⁴/amu)")
+        ax.set_title(f"{out['frequencies'][k]:.1f} cm⁻¹", fontsize=9)
+        self.profile.draw()
+        self.tabs.setCurrentWidget(self.profile)
+
+    def run_ir(self):
+        if self._ready():
+            self.window.runner.start("IR", actions.ir_spectrum_of, self.window.atoms,
+                                     self.window.model, phonons=self.phonons(),
+                                     fwhm=self.fwhm.value(), on_done=self.show_ir,
+                                     on_error=self.window.error)
+
+    def show_ir(self, out):
+        self.last = ("ir", out)
+        self._table(out["rows"], "intensidad (km/mol)")
+        ax = self.plot.axes()
+        ax.plot(out["grid"], out["absorption"], color="tab:red", lw=1)
+        ax.set_xlabel("ω (cm⁻¹)")
+        ax.set_ylabel("absorción (km/mol por cm⁻¹)")
+        ax.invert_xaxis()
+        self.plot.draw()
+        self.summary.setText(f"IR con el dipolo del modelo (cargas + dipolos intraatómicos) · "
+                             f"μ = {out['dipole_debye']:.2f} D · semicuantitativo (factor ~2 por "
+                             "modo frente a GPAW). " + " ".join(out["warnings"]))
+
+    def _table(self, rows, label):
+        self.table.clear()
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(["ω (cm⁻¹)", "deg.", label, "ρ"])
+        fill(self.table, rows)
+
+    def export_csv(self):
+        if self.last is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Exportar", "espectro.csv", "CSV (*.csv)")
+        if not path:
+            return
+        kind, out = self.last
+        if kind == "raman":
+            actions.write_csv(path, {"shift_cm1": out["grid"], "intensity": out["intensity"]})
+        elif kind == "ir":
+            actions.write_csv(path, {"wavenumber_cm1": out["grid"],
+                                     "absorption_km_mol_per_cm1": out["absorption"]})
+        else:
+            columns = {"frequency_cm1": out["frequencies"]}
+            for i, energy in enumerate(out["lasers"]):
+                columns[f"activity_{energy:.3f}eV"] = out["activities"][i]
+            actions.write_csv(path, columns)
+        self.window.statusBar().showMessage(f"Exportado {path}")
 
 
 def main(argv=None):
