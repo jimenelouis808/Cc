@@ -6,6 +6,25 @@ está la trampa.
 
 ---
 
+## tbkit · oxígeno (`--model chno`)
+
+`tbkit raman molecula.xyz --model chno` y `tbkit ir molecula.xyz --model chno`
+ya aceptan oxígeno: hidroxilos, epóxidos, carbonilos, carboxilos, éteres,
+furanos, nitro, y los motivos del óxido de grafeno. Es `xu_chn` más O,
+ajustado a GPAW con la misma receta.
+
+**Cuánto vale.** El epóxido basal sobre coroneno queda cerrado (C–C a 0,03 Å
+de GPAW, C–O a 0,10 Å); carboxilo, carbonilo, éter y nitro a 0,01–0,03 Å; la
+polarizabilidad a ±10 % de GPAW (±3 % en las moléculas de prueba).
+
+**La trampa.** Los anillos de tres miembros necesitan una corrección propia
+(cero para ángulos ≥ 80°, así que el carbono sp²/sp³ normal no cambia). El
+ciclopropano sigue con el C–C 0,19 Å largo y el biciclobutano se abre: no los
+uses con este modelo. Las energías solo son comparables dentro de una misma
+composición.
+
+---
+
 ## tbkit · infrarrojo
 
 `tbkit ir molecula.xyz --model chn` calcula las intensidades IR (km/mol) con el

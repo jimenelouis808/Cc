@@ -51,8 +51,10 @@ _ETA = {"sss": -1.40, "sps": 1.84, "pps": 3.24, "ppp": -0.81}
 #: Free-atom valence levels (eV), GPAW all-electron atom, PBE, spin-paired:
 #: starting guesses only, shifted so that C 2p lands on Xu's E_p.
 FREE_ATOM_LEVELS = {"H": {"s": -6.492}, "C": {"s": -13.738, "p": -5.289},
-                    "N": {"s": -18.4, "p": -7.095}, "O": {"s": -23.912, "p": -9.038}}
-VALENCE = {"H": 1.0, "C": 4.0, "N": 5.0, "O": 6.0}
+                    "N": {"s": -18.4, "p": -7.095}, "O": {"s": -23.912, "p": -9.038},
+                    "B": {"s": -9.438, "p": -3.609}, "P": {"s": -13.894, "p": -5.518},
+                    "S": {"s": -17.142, "p": -7.021}}
+VALENCE = {"H": 1.0, "C": 4.0, "N": 5.0, "O": 6.0, "B": 3.0, "P": 5.0, "S": 6.0}
 SP = ("s", "px", "py", "pz")
 
 
@@ -86,6 +88,11 @@ class XuFamily:
     #: Reference groups computed as training data but kept out of the fit
     #: (validated only), with the reason recorded in the parameter file.
     held_out: dict = field(default_factory=dict)
+    #: A shipped parameter set kept fixed (e.g. "xu_chno"): only the
+    #: heteroatoms and pairs listed here are fitted, on top of it, with its
+    #: level shift. Every pair between elements must then be defined
+    #: (checked): a missing hopping law would silently be zero.
+    base: Optional[str] = None
 
     def acute_term(self, coefficients=None):
         from ..repulsive import AcuteAngleTerm
@@ -98,6 +105,28 @@ class XuFamily:
     def __post_init__(self):
         for (a, b), spec in self.pairs.items():
             spec.setdefault("bonds", pair_bonds(a, b))
+        if self.base is not None:
+            known = {frozenset(key[:2]) for key in self.base_model().hopping}
+            known |= {frozenset(pair) for pair in self.pairs}
+            elements = self.elements()
+            missing = [f"{a}-{b}" for i, a in enumerate(elements) for b in elements[i:]
+                       if frozenset((a, b)) not in known and not a == b == "H"]
+            if missing:
+                raise ValueError(f"{self.name}: pares sin definir: {', '.join(missing)}")
+
+    def base_model(self):
+        """The fixed model underneath: Xu's carbon, or the ``base`` set."""
+        return _base_model(self.base or "xu_carbon")
+
+    def elements(self) -> list[str]:
+        base = self.base_model()
+        return list(dict.fromkeys(list(base.orbitals) + list(self.heteroatoms)))
+
+    def fixed_shift(self) -> Optional[float]:
+        """The base set's level shift (Xu zero vs GPAW vacuum), None without a base."""
+        if self.base is None:
+            return None
+        return float(read_parameter_file(self.base)["fit"]["level_shift_eV"])
 
     # --- parameters ---------------------------------------------------------
 
@@ -141,9 +170,9 @@ class XuFamily:
         return Tail(GSP(v0, r0, n, NC, XU_RC * scale, rm), XU_TAIL[0] * scale, rm)
 
     def build_model(self, x, repulsive: Optional[object] = None) -> TBModel:
-        base = model_from_dict(read_parameter_file("xu_carbon"))
+        base = self.base_model()
         x = list(map(float, x))
-        onsite = {"C": dict(base.onsite["C"])}
+        onsite = {el: dict(table) for el, table in base.onsite.items()}
         k = 0
         for element, shell in self.onsite_parameters:
             onsite.setdefault(element, {})[shell] = x[k]
@@ -155,17 +184,26 @@ class XuFamily:
             for (first, second, bond), v0 in zip(spec["bonds"], values, strict=True):
                 hopping[(first, second, bond)] = self._law(v0, n, spec["r0"])
             k += len(spec["bonds"]) + 1
-        xu = copy.copy(base.repulsive)
-        xu.others = "ignore"
         if repulsive is None:
-            repulsive = SumRepulsive((xu,))
-        elements = ("C",) + tuple(self.heteroatoms)
+            repulsive = SumRepulsive(self.base_terms())
+        elements = self.elements()
         return TBModel(name=self.name,
                        orbitals={el: ("s",) if el == "H" else SP for el in elements},
                        onsite=onsite, hopping=hopping,
                        valence={el: VALENCE[el] for el in elements},
-                       hubbard_u=dict(self.hubbard_u), repulsive=repulsive, scc=True,
-                       onsite_dipole=dict(self.onsite_dipole))
+                       hubbard_u={**base.hubbard_u, **self.hubbard_u}, repulsive=repulsive,
+                       scc=True, onsite_dipole={**base.onsite_dipole, **self.onsite_dipole},
+                       extra_polarizability=dict(base.extra_polarizability)
+                       if self.base else {})
+
+    def base_terms(self) -> tuple:
+        """Repulsive terms that stay fixed: Xu's embedded C-C, or all of the base's."""
+        base = self.base_model()
+        if self.base is not None:
+            return tuple(base.repulsive.terms)
+        xu = copy.copy(base.repulsive)
+        xu.others = "ignore"
+        return (xu,)
 
     def repulsion_from_coefficients(self, coefficients) -> SumRepulsive:
         from ..params import CutoffPolynomial
@@ -175,12 +213,20 @@ class XuFamily:
         for p, (pair, spec) in enumerate(self.pairs.items()):
             c = tuple(float(v) for v in coefficients[p * n:(p + 1) * n])
             laws[pair] = CutoffPolynomial(c, spec["rc_rep"], POWERS[0])
-        xu = self.build_model(self.initial_guess()).repulsive.terms[0]
-        terms = [xu, PairRepulsive(laws)]
+        terms = [*self.base_terms(), PairRepulsive(laws)]
         if self.acute:
             start = len(self.pairs) * n
             terms.append(self.acute_term([float(v) for v in coefficients[start:]]))
         return SumRepulsive(tuple(terms))
+
+
+_BASES: dict = {}
+
+
+def _base_model(name: str) -> TBModel:
+    if name not in _BASES:
+        _BASES[name] = model_from_dict(read_parameter_file(name))
+    return _BASES[name]
 
 
 # --------------------------------------------------------------------------
@@ -204,9 +250,10 @@ def model_levels(model: TBModel, ref: ReferenceStructure, kT: float = 0.01) -> n
     return np.sort(result.solution.energies[0, 0])
 
 
-def level_residuals(model: TBModel, refs: list[ReferenceStructure]
-                    ) -> tuple[np.ndarray, float, dict]:
-    """Weighted residuals after the best common shift, the shift, and per-label RMS."""
+def level_residuals(model: TBModel, refs: list[ReferenceStructure],
+                    shift: Optional[float] = None) -> tuple[np.ndarray, float, dict]:
+    """Weighted residuals after the best common shift (or the one given), the shift,
+    and per-label RMS."""
     differences, weights, labels = [], [], []
     for ref in refs:
         indices, w = selection(ref)
@@ -216,7 +263,8 @@ def level_residuals(model: TBModel, refs: list[ReferenceStructure]
         labels.append(ref.label)
     d = np.concatenate(differences)
     w = np.concatenate(weights)
-    shift = float(np.sum(w ** 2 * d) / np.sum(w ** 2))
+    if shift is None:
+        shift = float(np.sum(w ** 2 * d) / np.sum(w ** 2))
     rms = {label: float(np.sqrt(np.mean((diff - shift) ** 2)))
            for label, diff in zip(labels, differences, strict=True)}
     return w * (d - shift), shift, rms
@@ -225,10 +273,11 @@ def level_residuals(model: TBModel, refs: list[ReferenceStructure]
 def fit_levels(family: XuFamily, refs: list[ReferenceStructure],
                x0: Optional[np.ndarray] = None):
     x0 = family.initial_guess() if x0 is None else np.asarray(x0, dtype=float)
+    fixed = family.fixed_shift()
 
     def residuals(x):
         try:
-            return level_residuals(family.build_model(x), refs)[0]
+            return level_residuals(family.build_model(x), refs, fixed)[0]
         except (RuntimeError, np.linalg.LinAlgError, ValueError):
             return np.full(sum(r.n_occupied + 2 for r in refs), 10.0)
 
@@ -364,6 +413,7 @@ class JointObjective:
         self.refs = refs
         self.wl, self.wf, self.we = level_weight, force_weight, energy_weight
         self.ridge = ridge
+        self.fixed_shift = family.fixed_shift()
         self.design = repulsion_design(family, refs)
         self.groups: dict[str, list[int]] = {}
         for i, ref in enumerate(refs):
@@ -393,7 +443,8 @@ class JointObjective:
             differences.append(levels[indices] - ref.levels[indices])
             weights.append(w)
         d, w = np.concatenate(differences), np.concatenate(weights)
-        shift = float(np.sum(w ** 2 * d) / np.sum(w ** 2))
+        shift = self.fixed_shift if self.fixed_shift is not None else \
+            float(np.sum(w ** 2 * d) / np.sum(w ** 2))
         c, r_force, r_energy = solve_repulsion(self.refs, self.design, results, self.groups,
                                                self.wf, self.we, self.ridge)
         out = np.concatenate([self.wl * w * (d - shift), r_force, r_energy])
@@ -433,13 +484,19 @@ def fit_joint(family: XuFamily, refs, x0, workers: int = 4, max_nfev: int = 400,
 # Validation and the parameter file
 # --------------------------------------------------------------------------
 
-def bond_lengths(atoms, cutoff: float = 1.75) -> dict[tuple[int, int], float]:
-    """Bonded pairs (i < j): heavy-heavy within ``cutoff``, X-H within 1.3 Å."""
+def bond_lengths(atoms, factor: float = 1.2) -> dict[tuple[int, int], float]:
+    """Bonded pairs (i < j): closer than ``factor`` times the sum of the covalent
+    radii (Cordero et al. 2008, via ASE): C-C 1.82, C-H 1.28, O-H 1.16,
+    S-H 1.63, C-S 2.17, S-S 2.52, P-C 2.24 Å."""
+    from ase.data import covalent_radii
+
     symbols = atoms.get_chemical_symbols()
-    ii, jj, dd = neighbor_list("ijd", atoms, cutoff)
+    radii = covalent_radii[atoms.numbers]
+    ii, jj, dd = neighbor_list("ijd", atoms, factor * 2 * radii.max())
     out = {}
     for i, j, d in zip(ii, jj, dd, strict=True):
-        if i < j and (d < 1.3 or "H" not in (symbols[i], symbols[j])):
+        if i < j and d < factor * (radii[i] + radii[j]) and \
+                not symbols[i] == symbols[j] == "H":
             out[(int(i), int(j))] = float(d)
     return out
 
@@ -526,7 +583,11 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
                          f"Matter 4, 6047 (1992). {hetero}: " + source)
     data["system"] = family.system
     ranges = ", ".join(f"{k} {v[0]:.2f}-{v[1]:.2f} Å" for k, v in
-                       sorted(report.get("bond_ranges", {}).items()) if k != "C-C")
+                       sorted(report.get("bond_ranges", {}).items())
+                       if k != "C-C" and (family.base is None
+                                          or set(k.split("-")) & set(family.heteroatoms)))
+    if family.base is not None:
+        ranges += f"; el resto, como {family.base}"
     data["validity"] = ("sistemas finitos de capa cerrada (SCC sin Ewald); enlaces dentro de lo "
                         f"muestreado ({ranges}); energías relativas solo dentro de una misma "
                         "composición (no se ajustaron energías de atomización); C-C como en "
@@ -538,17 +599,38 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
                      "libre con GPAW (PBE), igual a DFTB mio.")
     xu_source = "Xu 1992 (idéntico a xu_carbon)"
     fit_source = f"ajustado ({source})"
+    base_elements = set()
+    if family.base is not None:
+        base_data = read_parameter_file(family.base)
+        base_elements = set(base_data["onsite"])
+        data["reference"] += f". Resto: {family.base} (fijo)"
+        data["notes"] = (f"Todo lo de {family.base} sin cambios; se ajustan solo "
+                         f"{hetero} y sus pares, con el desplazamiento de niveles de "
+                         f"{family.base} ({shift:.4f} eV). U de Hubbard y dipolos: átomo libre "
+                         "con GPAW (PBE).")
+
+    def origin(elements):
+        if set(elements) == {"C"}:
+            return xu_source
+        if set(elements) <= base_elements:
+            return f"{family.base} (fijo)"
+        return fit_source
+
     for element, table in data["onsite"].items():
         for shell, value in table.items():
-            table[shell] = {"value": value, "unit": "eV",
-                            "source": xu_source if element == "C" else fit_source}
+            table[shell] = {"value": value, "unit": "eV", "source": origin([element])}
     for entry in data["hopping"]:
         entry["unit"] = "eV"
-        entry["source"] = xu_source if entry["pair"] == ["C", "C"] else fit_source
+        entry["source"] = origin(entry["pair"])
     data["repulsive"]["unit"] = "eV"
     pairs = ", ".join(f"{a}-{b}" for a, b in family.pairs)
     data["repulsive"]["source"] = f"C-C: Xu 1992 (embebida); pares {pairs}: " + fit_source
-    for term in data["repulsive"]["terms"]:
+    fixed_terms = len(family.base_terms()) if family.base is not None else 0
+    if fixed_terms:
+        data["repulsive"]["terms"][:fixed_terms] = base_data["repulsive"]["terms"]
+        data["repulsive"]["source"] = (f"términos de {family.base} (fijos); pares {pairs}: "
+                                       + fit_source)
+    for term in data["repulsive"]["terms"][fixed_terms:]:
         if term["type"] == "acute_angle":
             term["unit"] = "eV"
             term["source"] = ("corrección de ángulos agudos (anillos de tres miembros), " +
@@ -569,11 +651,15 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
     if family.held_out:
         data["fit"]["held_out"] = dict(family.held_out)
     data["onsite_dipole"] = {el: {"value": d, "unit": "Å",
-                                  "source": "GPAW aeatom PBE, |⟨2s|r|2p⟩| del átomo libre"}
-                             for el, d in family.onsite_dipole.items()}
+                                  "source": "GPAW aeatom PBE, |⟨ns|r|np⟩| del átomo libre"}
+                             for el, d in model.onsite_dipole.items()}
     data["hubbard_u"] = {el: {"value": u, "unit": "eV",
                               "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"}
-                         for el, u in family.hubbard_u.items()}
+                         for el, u in model.hubbard_u.items()}
+    if family.base is not None and base_data.get("extra_polarizability"):
+        data["extra_polarizability"] = {
+            el: dict(v, source=f"de {family.base} (no reajustada)")
+            for el, v in base_data["extra_polarizability"].items()}
     return data
 
 
@@ -590,7 +676,7 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     train = [s for s in structures if s.role == "train"]
     result = fit_levels(family, train, x0)
     electronic = family.build_model(result.x)
-    _, shift, rms = level_residuals(electronic, train)
+    _, shift, rms = level_residuals(electronic, train, family.fixed_shift())
     if verbose:
         print(f"Niveles: {result.message}; desplazamiento {shift:.3f} eV", flush=True)
     joint, info, info0 = fit_joint(family, train, result.x, workers=workers, verbose=verbose)

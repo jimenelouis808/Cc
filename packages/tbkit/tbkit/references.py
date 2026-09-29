@@ -122,7 +122,7 @@ def gpaw_calculator(settings: dict, n_bands: int, txt=None):
 
 
 def _n_bands(atoms: Atoms, settings: dict) -> int:
-    valence = {"H": 1, "C": 4, "N": 5, "O": 6, "B": 3}
+    valence = {"H": 1, "C": 4, "N": 5, "O": 6, "B": 3, "P": 5, "S": 6}
     electrons = sum(valence[s] for s in atoms.get_chemical_symbols())
     return electrons // 2 + int(settings["extra_bands"])
 
@@ -245,21 +245,63 @@ def gpaw_polarizability(atoms: Atoms, settings: Optional[dict] = None) -> np.nda
     return 0.5 * (alpha + alpha.T)
 
 
-def gpaw_onsite_dipole(symbol: str, xc: str = "PBE") -> float:
-    """``d = (1/√3) ∫ R_2s R_2p r³ dr`` of the free atom (Å), with GPAW's atom.
+def _valence_shells(symbol: str) -> tuple[int, Optional[int]]:
+    """Principal quantum numbers of the valence s and p shells (p None for H, He)."""
+    from gpaw.atom.configurations import configurations
 
-    Radial functions of the valence s and p shells (spin-paired), each with
-    its outer lobe positive; the magnitude used by :mod:`tbkit.dipoles`.
-    """
-    from ase.units import Bohr
+    shells = configurations[symbol][1]
+    n_s = max(n for n, ell, f, _ in shells if ell == 0 and f > 0)
+    n_p = [n for n, ell, _, _ in shells if ell == 1 and n == n_s]
+    return n_s, (n_p[0] if n_p else None)
+
+
+def _gpaw_atom(symbol: str, xc: str = "PBE", extra: float = 0.0):
+    """GPAW's all-electron atom, spin-paired, with ``extra`` electrons in the
+    valence p shell (the s shell for H)."""
     from gpaw.atom.aeatom import AllElectronAtom
 
     atom = AllElectronAtom(symbol, xc=xc, spinpol=False, log=None)
+    if extra:
+        n_s, n_p = _valence_shells(symbol)
+        atom.add(*((n_p, 1) if n_p else (n_s, 0)), extra)
     atom.run()
+    return atom
+
+
+def gpaw_atom_levels(symbol: str, xc: str = "PBE", extra: float = 0.0) -> dict[str, float]:
+    """Valence levels ``{"s": ε_s, "p": ε_p}`` (eV) of the free atom, GPAW's atom."""
+    from ase.units import Hartree
+
+    atom = _gpaw_atom(symbol, xc, extra)
+    n_s, n_p = _valence_shells(symbol)
+    levels = {"s": float(atom.channels[0].e_n[n_s - 1] * Hartree)}
+    if n_p:
+        levels["p"] = float(atom.channels[1].e_n[n_p - 2] * Hartree)
+    return levels
+
+
+def gpaw_hubbard_u(symbol: str, xc: str = "PBE", delta: float = 0.05) -> float:
+    """Hubbard U (eV) = dε/dn of the valence level (p; s for H), central
+    differences of ±``delta`` electrons: the DFTB definition."""
+    shell = "p" if _valence_shells(symbol)[1] else "s"
+    plus = gpaw_atom_levels(symbol, xc, delta)[shell]
+    minus = gpaw_atom_levels(symbol, xc, -delta)[shell]
+    return (plus - minus) / (2 * delta)
+
+
+def gpaw_onsite_dipole(symbol: str, xc: str = "PBE") -> float:
+    """``d = (1/√3) ∫ R_ns R_np r³ dr`` of the free atom (Å), with GPAW's atom.
+
+    Radial functions of the valence s and p shells (2s/2p, 3s/3p; spin-paired),
+    each with its outer lobe positive; the magnitude used by :mod:`tbkit.dipoles`.
+    """
+    from ase.units import Bohr
+
+    atom = _gpaw_atom(symbol, xc)
     r = atom.rgd.r_g
-    n_s = {"H": 1, "He": 1}.get(symbol, 2)
+    n_s, n_p = _valence_shells(symbol)
     s = atom.channels[0].phi_ng[n_s - 1]
-    p = atom.channels[1].phi_ng[0]
+    p = atom.channels[1].phi_ng[n_p - 2]
     outer = np.searchsorted(r, 4.0)
     s, p = s * np.sign(s[outer]), p * np.sign(p[outer])
     return float(atom.rgd.integrate(s * p * r) / (4 * np.pi) / np.sqrt(3) * Bohr)

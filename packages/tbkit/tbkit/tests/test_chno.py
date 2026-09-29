@@ -116,3 +116,33 @@ def test_ring_opening_scans_are_in_the_training_data(shipped):
         for d in RING_CC:
             assert f"{name}/cc{d:.2f}" in labels
     assert not any(r.role == "train" for r in shipped[2] if r.group == "bicyclobutane")
+
+
+def test_polarizability_references_are_the_ones_fitted(shipped):
+    fit = shipped[0]["alpha_fit"]
+    assert fit["fitted_elements"] == ["O"]
+    for name, digest in zip(fit["references"], fit["references_sha256"], strict=True):
+        path = PARAMETER_DIR / "references" / name
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == digest
+
+
+def test_shares_the_optics_of_xu_chn(shipped):
+    chn = load_parameters("xu_chn")
+    for element in ("H", "C", "N"):
+        assert shipped[1].extra_polarizability[element] == chn.extra_polarizability[element]
+        if element != "H":
+            assert shipped[1].onsite_dipole[element] == chn.onsite_dipole[element]
+
+
+def test_formic_acid_alpha_tensor_against_gpaw(shipped):
+    from tbkit.hamiltonian import System
+    from tbkit.optics import polarizability_linear_response
+
+    _, model, refs = shipped
+    data = json.loads((PARAMETER_DIR / "references" / "gpaw_chno_alpha.json")
+                      .read_text(encoding="utf-8"))
+    gpaw = next(e for e in data["polarizabilities"] if e["group"] == "HCOOH")["alpha"]
+    atoms = next(r for r in refs if r.label == "HCOOH/eq").atoms
+    tb = polarizability_linear_response(System.build(atoms, model))
+    assert np.sort(np.linalg.eigvalsh(tb)) == pytest.approx(
+        np.sort(np.linalg.eigvalsh(gpaw)), rel=0.10)            # ≤ 3 % when fitted

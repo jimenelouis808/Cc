@@ -72,7 +72,7 @@ tbkit/
   synthetic files in the documented format.
 - SCC refuses periodic systems (no Ewald). Do not approximate silently.
 - `TBModel.scc` says which ground state the parameters were made for: True
-  for `.skf` sets and `xu_chn`, False for Xu and π. Calculators, tasks and
+  for `.skf` sets, `xu_chn` and `xu_chno`, False for Xu and π. Calculators, tasks and
   the linear-response α follow it unless told otherwise; a set fitted with
   SCC must not be run without it (and vice versa) by default.
 - `.skf` heteronuclear convention: `A-B.skf` Hsp0 = <s_A|H|p_B>, verified
@@ -82,6 +82,12 @@ tbkit/
   SHA-256 is stored in the parameter file). Refit by rerunning the recipe
   and saving a new file; never hand-edit fitted numbers. Hubbard U are
   computed (GPAW atom, dε/dn), not fitted.
+- `xu_chnob`/`xu_chnos`/`xu_chnop` (`recipes/xu_bsp.py`) are `xu_chno` held
+  fixed (`XuFamily.base`) plus one element: a structure without B, S or P
+  must give exactly the `xu_chno` energy (tested). Do not refit `xu_chno`
+  without refitting them. Every pair among a set's elements (H-H aside) must
+  have hopping laws: a missing law is silently zero, so the family refuses
+  to build without it.
 - Imported QE modes: L = e/√m with e normalised from the file's
   displacements (or eigenvectors), per degenerate set a real basis of the
   subspace; never take the real part of a complex Γ mode without fixing its
@@ -94,8 +100,9 @@ tbkit/
   solver of that functional is the test of the linear response.
 - With dipoles, α along σ bonds drops (hybrid centroids): that is physics,
   not a bug. Do not retune d or U to recover a number.
-- `extra_polarizability` is the only optical number fitted (3 values, to GPAW
-  FD tensors, `recipes/xu_chn_alpha.py`); extra dipoles never interact with
+- `extra_polarizability` is the only optical number fitted (one per element, to
+  GPAW FD tensors, `recipes/xu_chn_alpha.py`; xu_chno fits only O and keeps
+  H, C, N from xu_chn); extra dipoles never interact with
   their own atom. C60 and diamond are validation, never fit targets.
 - IR uses the same position operator as α (charges + intra-atomic dipoles,
   λ = 1): do not switch the default to "charges only" to improve static

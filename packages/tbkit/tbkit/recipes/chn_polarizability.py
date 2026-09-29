@@ -24,7 +24,16 @@ TEST = ("C3H8", "butadiene", "C4H4NH", "isobutene", "H2CCHCN")
 #: Oxygen set (geometries from gpaw_chno.json), for ``--set chno``.
 TRAINING_O = ("H2O", "CH3OH", "H2CO", "HCOOH", "CO2", "CO", "CH3OCH3", "C4H4O", "CH3COOH")
 TEST_O = ("CH3CH2OH", "CH3COCH3", "HCOOCH3")
-SETS = {"chn": (TRAINING, TEST, "gpaw_chn.json"), "chno": (TRAINING_O, TEST_O, "gpaw_chno.json")}
+#: Boron, sulfur, phosphorus (geometries from gpaw_b/s/p.json), ``--set b|s|p``.
+TRAINING_B = ("BH3", "BMe3", "B(OH)3", "MeB(OH)2", "borazine", "H3BNH3")
+TEST_B = ("PhB(OH)2", "B(OMe)3")
+TRAINING_S = ("H2S", "CH3SH", "CH3SCH3", "CH3SSCH3", "thiophene", "CS2", "DMSO", "SO2")
+TEST_S = ("CH3CH2SH", "Me2SO2", "CH3SO3H")
+TRAINING_P = ("PH3", "CH3PH2", "PMe3", "OPMe3", "H3PO4", "phosphinine")
+TEST_P = ("MePO3H2", "PhPH2")
+SETS = {"chn": (TRAINING, TEST, "gpaw_chn.json"), "chno": (TRAINING_O, TEST_O, "gpaw_chno.json"),
+        "b": (TRAINING_B, TEST_B, "gpaw_b.json"), "s": (TRAINING_S, TEST_S, "gpaw_s.json"),
+        "p": (TRAINING_P, TEST_P, "gpaw_p.json")}
 
 
 def _one(args):
