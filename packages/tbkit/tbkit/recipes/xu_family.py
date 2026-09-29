@@ -93,6 +93,12 @@ class XuFamily:
     #: level shift. Every pair between elements must then be defined
     #: (checked): a missing hopping law would silently be zero.
     base: Optional[str] = None
+    #: For pairs with H: hopping tail at ``r0 + h_tail`` (Å) and repulsion cutoff
+    #: at ``r0 + h_tail[1]``, instead of Xu's tail scaled by r0/r0_CC. The scaled
+    #: C-H tail (1.74-1.84 Å) sits where a hydroxyl H meets its carbon's
+    #: neighbour (1.85-2.2 Å): alcohols relaxed onto the tail's edge and got an
+    #: O-H mode at 4950 cm⁻¹ (GPAW 3618). None keeps the scaled tail (xu_chn).
+    h_tail: Optional[tuple] = None
 
     def acute_term(self, coefficients=None):
         from ..repulsive import AcuteAngleTerm
@@ -105,6 +111,10 @@ class XuFamily:
     def __post_init__(self):
         for (a, b), spec in self.pairs.items():
             spec.setdefault("bonds", pair_bonds(a, b))
+            if self.h_tail is not None and "H" in (a, b):
+                r1, rm = (round(spec["r0"] + d, 3) for d in self.h_tail)
+                spec.setdefault("tail", (r1, rm))
+                spec["rc_rep"] = min(spec["rc_rep"], rm)
         if self.base is not None:
             known = {frozenset(key[:2]) for key in self.base_model().hopping}
             known |= {frozenset(pair) for pair in self.pairs}
@@ -164,10 +174,10 @@ class XuFamily:
         return lower, upper
 
     @staticmethod
-    def _law(v0: float, n: float, r0: float):
+    def _law(v0: float, n: float, r0: float, tail: Optional[tuple] = None):
         scale = r0 / XU_R0
-        rm = XU_TAIL[1] * scale
-        return Tail(GSP(v0, r0, n, NC, XU_RC * scale, rm), XU_TAIL[0] * scale, rm)
+        r1, rm = tail if tail is not None else (XU_TAIL[0] * scale, XU_TAIL[1] * scale)
+        return Tail(GSP(v0, r0, n, NC, XU_RC * scale, rm), r1, rm)
 
     def build_model(self, x, repulsive: Optional[object] = None) -> TBModel:
         base = self.base_model()
@@ -182,7 +192,7 @@ class XuFamily:
             values = x[k:k + len(spec["bonds"])]
             n = x[k + len(spec["bonds"])]
             for (first, second, bond), v0 in zip(spec["bonds"], values, strict=True):
-                hopping[(first, second, bond)] = self._law(v0, n, spec["r0"])
+                hopping[(first, second, bond)] = self._law(v0, n, spec["r0"], spec.get("tail"))
             k += len(spec["bonds"]) + 1
         if repulsive is None:
             repulsive = SumRepulsive(self.base_terms())
@@ -660,6 +670,30 @@ def validate(family: XuFamily, model: TBModel, structures, shift: float,
     return report
 
 
+def tail_hits(model: TBModel, atoms, margin: float = 0.02) -> list[str]:
+    """Atom pairs whose distance lies inside a hopping law's switch-off window
+    (``Tail`` r1-rm, widened by ``margin``): a minimum there has a curvature the
+    switch, not the physics, decides."""
+    from ase.neighborlist import neighbor_list
+
+    windows = {}
+    for (a, b, _), law in model.hopping.items():
+        if isinstance(law, Tail):
+            windows[frozenset((a, b))] = (law.r1, law.rm)
+    if not windows:
+        return []
+    symbols = atoms.get_chemical_symbols()
+    reach = max(rm for _, rm in windows.values()) + margin
+    ii, jj, dd = neighbor_list("ijd", atoms, reach)
+    hits = []
+    for i, j, d in zip(ii, jj, dd, strict=True):
+        window = windows.get(frozenset((symbols[i], symbols[j])))
+        if i < j and window and window[0] - margin <= d <= window[1] + margin:
+            hits.append(f"{symbols[i]}{i}-{symbols[j]}{j} {d:.3f} Å "
+                        f"(cola {window[0]:.2f}-{window[1]:.2f})")
+    return hits
+
+
 def frequency_validation(model: TBModel, targets, fmax: float = 0.001) -> dict:
     """Model frequencies at its own minimum (relaxed from GPAW's) against GPAW's,
     per molecule: RMS over the internal modes and both lists (cm⁻¹)."""
@@ -677,7 +711,8 @@ def frequency_validation(model: TBModel, targets, fmax: float = 0.001) -> dict:
         rigid = 5 if _linear(target.atoms) else 6
         gpaw = np.sort(target.frequencies)[rigid:]
         tb = tb[rigid:]
-        out[target.name] = {"rms": float(np.sqrt(np.mean((tb - gpaw) ** 2))),
+        out[target.name] = {"tail_hits": tail_hits(model, atoms),
+                            "rms": float(np.sqrt(np.mean((tb - gpaw) ** 2))),
                             "max_error": float(np.max(np.abs(tb - gpaw))),
                             "gpaw": gpaw.round(1).tolist(), "tb": tb.round(1).tolist()}
     return out
@@ -854,7 +889,10 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
         report["hessian_weight"] = hessian_weight
         if verbose:
             for name, entry in report["frequencies"].items():
-                print(f"  {name:12s} RMS {entry['rms']:6.0f} cm⁻¹, máx {entry['max_error']:6.0f}")
+                hits = f"  ⚠ en cola: {'; '.join(entry['tail_hits'])}" if entry["tail_hits"] \
+                    else ""
+                print(f"  {name:12s} RMS {entry['rms']:6.0f} cm⁻¹, máx {entry['max_error']:6.0f}"
+                      f"{hits}")
     data = parameter_file(family, model, x, shift, report, references, settings)
     if hessians:
         data["fit"]["hessians"] = Path(hessians).name
