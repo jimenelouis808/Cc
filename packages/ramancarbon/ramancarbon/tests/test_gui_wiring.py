@@ -266,6 +266,18 @@ def test_the_two_raman_sections_share_one_session():
         # nothing, and the numbers on screen came from a model the user
         # had just replaced.
         ("app", "_reanalyse_with_manual"),
+        # XPS: the element set is editable, alpha can be set, the
+        # composition says which route it came from, and the region plot
+        # has a Y-scale control. Every one of these was a question the
+        # window could not answer or a thing it could not be told.
+        ("xps_app", "elements_table"),
+        ("xps_app", "_add_element"),
+        ("xps_app", "_remove_element"),
+        ("xps_app", "_reset_elements"),
+        ("xps_app", "_edit_asymmetry"),
+        ("xps_app", "composition_source_var"),
+        ("xps_app", "zero_base_var"),
+        ("xps_app", "_redraw_region"),
         ("xrd_app", "_identify"),
         ("xrd_app", "_auto_refine"),
         ("xrd_app", "_prepare_manual"),

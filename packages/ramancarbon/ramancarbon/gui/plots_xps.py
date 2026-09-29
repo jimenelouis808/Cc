@@ -83,13 +83,23 @@ def plot_survey(ax, spectrum: XPSSpectrum, palette: Palette,
 
 
 def plot_region(figure, result: XPSFitResult, palette: Palette,
-                show_residual: bool = True) -> None:
+                show_residual: bool = True,
+                baseline_zero: bool = False) -> None:
     """A fitted region: data, background, components, envelope, residual.
 
     The residual goes underneath **on the same intensity scale**. Putting it
     on its own rescaled axis looks tidier and destroys the only comparison
     the panel is for: whether what the model failed to describe is large
     compared with the peaks, or small.
+
+    ``baseline_zero`` starts the intensity axis at zero instead of at the
+    data. On a region whose background is most of the signal -- a C 1s on
+    a thick sample routinely sits on forty thousand counts with peaks of
+    ten -- an axis that starts at zero spends three quarters of its height
+    on background and squashes everything worth looking at into the top
+    strip. Off by default because the zero is where the absolute scale
+    is, and reading heights off an axis that does not show it is the
+    other way to be misled.
     """
     if show_residual:
         # subplots(), not add_gridspec() + add_subplot(): a gridspec that
@@ -117,6 +127,8 @@ def plot_region(figure, result: XPSFitResult, palette: Palette,
     ax.plot(energy, result.fitted, color=palette.fitted, linewidth=1.2,
             label="envolvente")
     ax.set_ylabel("Intensidad")
+    if baseline_zero:
+        ax.set_ylim(bottom=0.0)
     ax.legend(loc="upper left", frameon=False, fontsize=7, ncol=2)
     ax.set_title(
         f"{result.region_label}   χ²_red = {result.reduced_chi2:.2f}"

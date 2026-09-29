@@ -219,14 +219,58 @@ class XPSApp(SectionApp):
         info.pack(fill="both", expand=True)
         self.survey_table = table(info_body,
                                   ["elemento", "confianza", "líneas"], height=9)
+        # The identification's bar is deliberately high -- main line,
+        # strong doublet partner, and a peak nobody else explains -- and
+        # that is right for a claim the program makes. It is not right
+        # as the last word: the person who made the sample knows what
+        # went into it, and a line that was misassigned has to be
+        # removable. Declared and detected stay distinguishable, because
+        # they are not the same evidence.
+        elements_bar = ttk.Frame(info_body)
+        elements_bar.pack(fill="x", pady=(PAD["xs"], 0))
+        ttk.Label(elements_bar, text="Elemento:").pack(side="left")
+        self.element_var = self.tk.StringVar(value="")
+        ttk.Entry(elements_bar, textvariable=self.element_var,
+                  width=6).pack(side="left", padx=(PAD["xs"], PAD["xs"]))
+        ttk.Button(elements_bar, text="Añadir",
+                   command=self._add_element).pack(side="left",
+                                                   padx=(0, PAD["xs"]))
+        ttk.Button(elements_bar, text="Quitar el seleccionado",
+                   command=self._remove_element).pack(side="left",
+                                                      padx=(0, PAD["xs"]))
+        ttk.Button(elements_bar, text="Restablecer",
+                   command=self._reset_elements).pack(side="left")
+        self.elements_table = table(
+            info_body, ["elemento", "procedencia"], height=5)
+        hint(info_body,
+             "Un elemento AÑADIDO a mano no tiene en el espectro la "
+             "evidencia que el programa exige para afirmarlo, y su "
+             "composición se cuenta con esa salvedad. Uno RETIRADO deja "
+             "sus picos en el espectro: pasan a contar como sin explicar, "
+             "que es un resultado y no un resto.",
+             wrap=720)
 
     def _build_tab_region(self) -> None:
         ttk, tk = self.ttk, self.tk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Regiones  ")
 
-        controls, cbody = card(tab, "Qué ajustar")
-        controls.pack(fill="x")
+        # The controls go BESIDE the plot, the way the Raman
+        # deconvolution tab does it, and not above it. Stacked, "Qué
+        # ajustar" is about 450 px of combobox, state list, window row,
+        # two hints and two button rows, all packed with fill="x" before
+        # a plot that expands into what is left -- and on an ordinary
+        # window what is left is a strip. The plot is the thing being
+        # judged here: the whole decision an XPS fit comes down to is
+        # whether the difference curve still has structure in it, and
+        # that cannot be read in 120 px.
+        from .widgets import scrollable_column
+
+        controls_column, controls_host = scrollable_column(tab, width=380)
+        controls_column.pack(side="left", fill="y", padx=(0, PAD["md"]))
+
+        controls, cbody = card(controls_host, "Qué ajustar")
+        controls.pack(fill="both", expand=True)
         row = ttk.Frame(cbody)
         row.pack(fill="x")
         self.region_var = tk.StringVar(value="")
@@ -235,8 +279,8 @@ class XPSApp(SectionApp):
         self.region_box.pack(side="left")
         self.region_box.bind("<<ComboboxSelected>>", self._on_region_changed)
         self.count_var = tk.StringVar(value="3")
-        ttk.Label(row, text="  nº de componentes ").pack(side="left")
-        ttk.Spinbox(row, from_=1, to=8, width=4,
+        ttk.Label(row, text=" nº ").pack(side="left")
+        ttk.Spinbox(row, from_=1, to=8, width=3,
                     textvariable=self.count_var).pack(side="left")
         self.background_var = tk.StringVar(value=BACKGROUNDS[0][1])
         # Wrapped, not packed: the two checkbuttons came last in the row
@@ -259,16 +303,16 @@ class XPSApp(SectionApp):
         # afterwards. And section 28: the constraint is inspectable and
         # the user can switch it off.
         self.possible_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(row, text=" sólo estados posibles",
+        ttk.Checkbutton(cbody, text="sólo estados posibles",
                         variable=self.possible_var,
-                        command=self._on_possible_toggled).pack(side="left")
+                        command=self._on_possible_toggled).pack(anchor="w")
 
         picker = ttk.Frame(cbody)
         picker.pack(fill="x", pady=(PAD["sm"], 0))
         ttk.Label(picker, text="Estados químicos (ninguno = que los elija la "
                                "propia región):").pack(anchor="w")
         self.lbl_impossible = ttk.Label(
-            picker, text="", style="Muted.TLabel", wraplength=560,
+            picker, text="", style="Muted.TLabel", wraplength=340,
             font=self.fonts["small"])
         self.lbl_impossible.pack(anchor="w")
         self.state_list = tk.Listbox(
@@ -301,28 +345,45 @@ class XPSApp(SectionApp):
              "área del carbonilo varios por ciento. No es un defecto del "
              "método: es lo que significa «área de un pico sobre un fondo», y "
              "por eso los extremos van en el informe.",
-             wrap=820)
+             wrap=340)
 
-        buttons = ttk.Frame(cbody)
-        buttons.pack(fill="x", pady=(PAD["sm"], 0))
-        ttk.Button(buttons, text="Ajustar región", style="Accent.TButton",
-                   command=self._fit_region).pack(side="left")
-        ttk.Button(buttons, text="Ajustar todas",
-                   command=self._fit_all).pack(side="left", padx=(PAD["xs"], 0))
-        ttk.Button(buttons, text="¿Cuántas componentes?",
-                   command=self._compare_counts).pack(side="left",
-                                                      padx=(PAD["xs"], 0))
+        buttons = flow(cbody)
+        buttons.add(ttk.Button(buttons.frame, text="Ajustar región",
+                               style="Accent.TButton",
+                               command=self._fit_region), grow=True)
+        buttons.add(ttk.Button(buttons.frame, text="Ajustar todas",
+                               command=self._fit_all), grow=True)
+        buttons.add(ttk.Button(buttons.frame, text="¿Cuántas componentes?",
+                               command=self._compare_counts), grow=True)
         hint(cbody,
              "Un ajuste por mínimos cuadrados SIEMPRE devuelve tantos picos "
              "como se le den, y añadir uno siempre baja el residuo. Lo que "
              "decide es el χ² frente al ruido de conteo y si el residuo aún "
              "tiene estructura (Durbin-Watson lejos de 2).",
-             wrap=820)
+             wrap=340)
 
-        paned, (plot_pane, table_pane) = split_column(tab, (3, 2))
-        paned.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        main = ttk.Frame(tab)
+        main.pack(side="left", fill="both", expand=True)
+        paned, (plot_pane, table_pane) = split_column(main, (3, 2))
+        paned.pack(fill="both", expand=True)
         outer, body = card(plot_pane, None)
         outer.pack(fill="both", expand=True)
+        scale_row = ttk.Frame(body)
+        scale_row.pack(fill="x")
+        self.zero_base_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            scale_row, text="Eje Y desde cero",
+            variable=self.zero_base_var,
+            command=self._redraw_region).pack(side="left")
+        ttk.Label(
+            scale_row,
+            text=("  Un C 1s sobre muestra gruesa se apoya en decenas de "
+                  "miles de cuentas con picos de diez mil: desde cero, tres "
+                  "cuartos del alto son fondo. Desmarcado, el eje se ajusta "
+                  "a los datos y las componentes se ven; marcado, se lee la "
+                  "escala absoluta."),
+            style="Muted.TLabel", font=self.fonts["small"],
+            wraplength=620, justify="left").pack(side="left")
         self.make_canvas(body, "region", lambda f: f.add_subplot(111),
                          figsize=(8.2, 4.4))
         bottom = ttk.Frame(table_pane)
@@ -350,6 +411,7 @@ class XPSApp(SectionApp):
             ("Fijar posición", lambda: self._toggle_hold("centre")),
             ("Fijar anchura", lambda: self._toggle_hold("fwhm")),
             ("Forma…", self._change_profile),
+            ("Asimetría…", self._edit_asymmetry),
             ("Añadir…", self._add_component),
             ("Quitar", self._remove_component),
             ("Restablecer", self._reset_components),
@@ -478,11 +540,34 @@ class XPSApp(SectionApp):
         toolbar.pack(fill="x", pady=(0, PAD["sm"]))
         ttk.Button(toolbar, text="Cuantificar",
                    command=self._quantify).pack(side="left")
+        # Which numbers these are was not stated anywhere, and the two
+        # routes are not interchangeable: they disagree by 10-30 %
+        # routinely.
+        ttk.Label(toolbar, text="  a partir de:").pack(side="left")
+        self.composition_source_var = self.tk.StringVar(
+            value="las regiones ajustadas")
+        ttk.Combobox(toolbar, textvariable=self.composition_source_var,
+                     values=["las regiones ajustadas",
+                             "el survey (integrado)"],
+                     state="readonly", width=24).pack(side="left",
+                                                      padx=(PAD["xs"], 0))
         hint(toolbar,
              "  Es un porcentaje de LO DETECTADO: el hidrógeno no se ve, y un "
              "elemento sin ajustar no baja el de los demás, su parte se "
              "reparte. Que sume 100 % es la normalización.",
              wrap=720)
+        hint(tab,
+             "Las dos rutas NO son la misma medida. Ajustar la región separa "
+             "las componentes, coloca el fondo sobre un paso fino y aparta "
+             "los satélites; integrar una ventana del survey no hace nada de "
+             "eso: las líneas vecinas se solapan (la ventana del Se 3d lleva "
+             "dentro el Fe 3p), el paso es demasiado grueso para el fondo, y "
+             "un satélite cuenta como si fuera otra cosa. Discrepan un "
+             "10–30 % de forma rutinaria y la ajustada es la que vale. El "
+             "survey sirve para ver si el resultado está en el orden "
+             "correcto antes de ajustar cinco regiones, y para los elementos "
+             "de los que no se midió ninguna región.",
+             wrap=900)
         outer, body = card(tab, None)
         outer.pack(fill="both", expand=True)
         self.make_canvas(body, "composition",
@@ -570,6 +655,74 @@ class XPSApp(SectionApp):
             f"{name}: partida en {centre:.2f} eV, {fwhm:.2f} eV. "
             "Pulsa «Ajustar región» para aplicarlo."
         )
+
+    def _edit_asymmetry(self) -> None:
+        """Set, and optionally hold, the singularity index α.
+
+        α is the one parameter of an asymmetric line the data often
+        cannot pin down. Its lower bound is zero, and a narrow window
+        with a Shirley background parks it there — which turns the
+        asymmetric shape straight back into the symmetric one it was
+        chosen to avoid, and takes the component's area down with the
+        tail it can no longer carry. In a graphitic carbon that missing
+        area comes back as an extra sp³ component near 285.5 eV, which
+        the database calls the most common error in carbon XPS.
+
+        Groups that fit carbon routinely fix α at their own value for
+        exactly that reason, so it has to be settable rather than only
+        reported.
+        """
+        from tkinter import messagebox, simpledialog
+
+        label = self.region_var.get()
+        name = self._selected_component()
+        if not label or name is None:
+            return
+        result = self.session.fits.get(label)
+        component = next(
+            (c for c in getattr(result, "components", ())
+             if c.label == name or c.name == name), None)
+        if component is None or "asymmetry" not in (component.extra_names or ()):
+            self.warn(
+                "Forma simétrica",
+                "Esa componente no tiene índice de asimetría. Pulsa "
+                "«Forma…» y elige Doniach-Šunjić (ds o ds_gauss) antes.")
+            return
+        current = float(
+            component.extra[list(component.extra_names).index("asymmetry")])
+        alpha = simpledialog.askfloat(
+            "Índice de singularidad",
+            f"α de {name}:\n\n"
+            "0 es simétrica. El grafito y el grafeno están entre 0.05 y "
+            "0.15; por encima de 0.3 la forma deja de ser usable.\n"
+            "Ahora mismo vale "
+            f"{current:.3f}.",
+            initialvalue=round(current, 3), minvalue=0.0, maxvalue=0.5,
+            parent=self.root)
+        if alpha is None:
+            return
+        hold = messagebox.askyesno(
+            "¿Fijar α?",
+            "¿Mantener α fija en ese valor durante el ajuste?\n\n"
+            "Fijarla no es gratis: deja de contar como grado de libertad, "
+            "así que las demás incertidumbres salen más pequeñas. Pero si "
+            "α se va a cero por sí sola, el número libre tampoco era una "
+            "medida.",
+            parent=self.root)
+        edits = {"asymmetry": alpha}
+        if hold:
+            choice = self.session.choice_for(label)
+            internal = next(
+                (c.name for c in result.components
+                 if c.label == name or c.name == name), name)
+            held = set(choice.overrides.get(internal, {}).get("fixed", ()))
+            held.add("asymmetry")
+            edits["fixed"] = tuple(sorted(held))
+        self.session.set_component(label, name, **edits)
+        self.flush_messages(self.session.messages)
+        self.set_status(
+            f"{name}: α = {alpha:.3f}{' (fija)' if hold else ''}. "
+            "Pulsa «Ajustar región» para aplicarlo.")
 
     def _toggle_hold(self, parameter: str) -> None:
         label = self.region_var.get()
@@ -877,6 +1030,7 @@ class XPSApp(SectionApp):
             self.flush_messages(self.session.messages)
             fill_table(self.survey_table, ["elemento", "confianza", "líneas"],
                        self.session.survey_rows())
+            self._fill_elements()
             self.mark_dirty("survey")
             self.flush_dirty(self._visible())
             if self.session.survey:
@@ -957,6 +1111,9 @@ class XPSApp(SectionApp):
 
     def _quantify(self) -> None:
         self._settings_from_widgets()
+        source = ("survey"
+                  if self.composition_source_var.get().startswith("el survey")
+                  else "regiones")
 
         def done(result) -> None:
             self.flush_messages(self.session.messages)
@@ -972,9 +1129,48 @@ class XPSApp(SectionApp):
             )
             self.mark_dirty("composition")
             self.flush_dirty(self._visible())
-            self.set_status("Composición calculada.")
+            self.set_status(
+                "Composición calculada a partir de "
+                + ("las regiones ajustadas." if source == "regiones"
+                   else "el SURVEY INTEGRADO — orden de magnitud, no cifra "
+                        "para publicar."))
 
-        self.run_async(self.session.quantify, done, "Cuantificando…")
+        self.run_async(lambda: self.session.quantify(source=source), done,
+                       "Cuantificando…")
+
+    def _add_element(self) -> None:
+        symbol = self.element_var.get().strip()
+        if not symbol:
+            self.warn("Sin elemento", "Escribe el símbolo, por ejemplo «Si».")
+            return
+        if self.session.add_element(symbol):
+            self.element_var.set("")
+            self._fill_elements()
+        self.flush_messages(self.session.messages)
+
+    def _remove_element(self) -> None:
+        selection = self.elements_table.selection()
+        symbol = (self.elements_table.item(selection[0], "values")[0]
+                  if selection else self.element_var.get().strip())
+        if not symbol:
+            self.warn("Sin elemento",
+                      "Selecciona una fila de la tabla o escribe el símbolo.")
+            return
+        # `remove_element` drops a hand-declared symbol first and only
+        # then reports whether there was a detected one to retire, so a
+        # False here means it was never in the set either way.
+        self.session.remove_element(symbol)
+        self._fill_elements()
+        self.flush_messages(self.session.messages)
+
+    def _reset_elements(self) -> None:
+        self.session.reset_elements()
+        self._fill_elements()
+        self.set_status("Elementos: de vuelta a lo que dice la evidencia.")
+
+    def _fill_elements(self) -> None:
+        fill_table(self.elements_table, ["elemento", "procedencia"],
+                   self.session.element_rows())
 
     def _analyse(self) -> None:
         self._settings_from_widgets()
@@ -1099,6 +1295,10 @@ class XPSApp(SectionApp):
             return
         plot_survey(ax, surveys[0], self.figure_palette, self.session.survey)
 
+    def _redraw_region(self) -> None:
+        self.mark_dirty("region")
+        self.flush_dirty(self._visible())
+
     def _draw_region(self, figure) -> None:
         from .plots_xps import plot_region
 
@@ -1107,7 +1307,8 @@ class XPSApp(SectionApp):
             placeholder(figure.add_subplot(111),
                         "Elige una región y pulsa Ajustar", self.figure_palette)
             return
-        plot_region(figure, result, self.figure_palette)
+        plot_region(figure, result, self.figure_palette,
+                    baseline_zero=bool(self.zero_base_var.get()))
 
     def _draw_counts(self, figure) -> None:
         from .plots_xps import plot_count_comparison
