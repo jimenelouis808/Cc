@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, Optional, Sequence
 
 import numpy as np
@@ -80,6 +81,17 @@ SIZE_CEILING = 120.0
 
 #: A goodness of fit above this is a bad fit whatever the R factors say.
 GOF_LIMIT = 4.0
+
+
+class RefinementCancelled(RuntimeError):
+    """Raised inside the residual to unwind out of ``least_squares``.
+
+    SciPy has no stop hook, so the only way out of a running fit is to
+    raise from the function it is calling. This is caught immediately by
+    :func:`refine`, which then reports whatever the solver had reached --
+    losing the work would make stopping useless, and a user who cannot
+    stop a refinement will kill the window instead.
+    """
 
 #: Report progress every this many residual evaluations. Small enough that
 #: a slow refinement visibly moves, large enough that the reporting itself
@@ -161,6 +173,11 @@ class RietveldResult:
     r_expected: float = 0.0
     gof: float = 0.0
     converged: bool = False
+    cancelled: bool = False
+    """The user stopped it. The parameters are wherever the solver had
+    got to, which is a real intermediate state and not a failure -- but
+    the uncertainties are not meaningful, because they come from a
+    Jacobian at a minimum the fit had not reached."""
     message: str = ""
     n_evaluations: int = 0
     """Residual evaluations the least-squares solver used. A refinement
@@ -587,6 +604,7 @@ def refine(
     max_iterations: int = 200,
     instrument_fwhm: float = 0.06,
     callback: Optional[Callable[[str], None]] = None,
+    should_stop: Optional[Callable[[], bool]] = None,
 ) -> RietveldResult:
     """One refinement of whatever parameters are marked free.
 
@@ -653,21 +671,35 @@ def refine(
 
     evaluations = 0
     root_weights = np.sqrt(weights)
+    # The ceiling SciPy is given. Quoting the counter against it turns
+    # "iteración 2840" -- which says nothing about whether to keep
+    # waiting -- into a fraction of a known budget. With five phases and
+    # forty free parameters that budget is eight thousand evaluations,
+    # and a user who cannot see that will read a working fit as a hang.
+    budget = max_iterations * max(len(free), 1)
+    best = {"values": None, "rwp": float("inf")}
 
     def residual(values: np.ndarray) -> np.ndarray:
         nonlocal evaluations
         unpack(values)
         difference = (observed - model()) * root_weights
         evaluations += 1
+        current = math.sqrt(
+            float(np.sum(difference ** 2))
+            / max(float(np.sum(weights * observed ** 2)), 1e-30)
+        )
+        if current < best["rwp"]:
+            best["rwp"] = current
+            best["values"] = np.array(values, dtype=float)
         if callback and evaluations % PROGRESS_EVERY == 0:
             # Rwp from the residual already in hand, so reporting progress
             # costs no extra pattern calculation -- which would otherwise
             # be the single most expensive thing in the loop.
-            current = math.sqrt(
-                float(np.sum(difference ** 2))
-                / max(float(np.sum(weights * observed ** 2)), 1e-30)
-            )
-            callback(f"iteración {evaluations}: Rwp = {100 * current:.2f} %")
+            callback(f"iteración {evaluations} de {budget}: "
+                     f"Rwp = {100 * current:.2f} %")
+        if should_stop is not None and should_stop():
+            raise RefinementCancelled(
+                f"detenido en la iteración {evaluations}")
         return difference
 
     start = np.array([p.value for p in free], dtype=float)
@@ -675,18 +707,32 @@ def refine(
     upper = np.array([p.upper for p in free], dtype=float)
     start = np.clip(start, lower + 1e-12, upper - 1e-12)
 
-    outcome = least_squares(
-        residual,
-        start,
-        bounds=(lower, upper),
-        max_nfev=max_iterations * max(len(free), 1),
-        x_scale="jac",
-        xtol=1e-9,
-        ftol=1e-9,
-        gtol=1e-9,
-    )
-    unpack(outcome.x)
-    _estimate_errors(outcome, free, observed.size)
+    cancelled = False
+    stop_message = ""
+    try:
+        outcome = least_squares(
+            residual,
+            start,
+            bounds=(lower, upper),
+            max_nfev=budget,
+            x_scale="jac",
+            xtol=1e-9,
+            ftol=1e-9,
+            gtol=1e-9,
+        )
+    except RefinementCancelled as stopped:
+        # Keep the best point the solver actually reached rather than
+        # the half-step it was standing on when the stop arrived: a
+        # least-squares trial can be far worse than the last accepted
+        # one, and handing that back would make stopping destructive.
+        cancelled = True
+        stop_message = str(stopped)
+        unpack(best["values"] if best["values"] is not None else start)
+        for parameter in free:
+            parameter.error = None
+    else:
+        unpack(outcome.x)
+        _estimate_errors(outcome, free, observed.size)
 
     background, zero, displacement = _apply(parameters, models)
     calculated = model()
@@ -704,15 +750,24 @@ def refine(
         r_wp=r_wp,
         r_expected=r_expected,
         gof=gof,
-        converged=bool(outcome.success),
-        message=str(outcome.message),
+        converged=False if cancelled else bool(outcome.success),
+        cancelled=cancelled,
+        message=stop_message if cancelled else str(outcome.message),
         n_evaluations=evaluations,
     )
-    _check(result, instrument_fwhm)
+    if cancelled:
+        result.warnings.append(
+            "Refinamiento detenido por el usuario: los parámetros son los "
+            "del mejor punto alcanzado, y las incertidumbres NO se "
+            "calcularon porque salen del jacobiano en un mínimo al que el "
+            "ajuste no llegó.")
+    else:
+        _check(result, instrument_fwhm)
     if callback:
         callback(
             f"{evaluations} iteraciones: Rwp = {100 * r_wp:.2f} %, "
             f"GOF = {gof:.3f}, χ² = {gof ** 2:.3f}"
+            + (" (detenido)" if cancelled else "")
         )
     return result
 
@@ -749,6 +804,7 @@ def auto_refine(
     preferred_axis: Optional[Sequence[int]] = None,
     instrument_fwhm: float = 0.06,
     callback: Optional[Callable[[str], None]] = None,
+    should_stop: Optional[Callable[[], bool]] = None,
 ) -> RietveldResult:
     """The staged protocol: free parameters in a safe order.
 
@@ -790,8 +846,11 @@ def auto_refine(
         # The stage's own name goes in front of the inner counter, so a
         # long refinement says which stage it is in and how far into it,
         # rather than going quiet for twenty seconds.
-        inner = (lambda text, stage=label: callback(f"[{stage}] {text}")
-                 ) if callback else None
+        stage_number = len(done) + 1
+        inner = (
+            lambda text, stage=label, n=stage_number:
+            callback(f"[{n}/{len(stages)} {stage}] {text}")
+        ) if callback else None
         try:
             result = refine(
                 pattern,
@@ -800,6 +859,7 @@ def auto_refine(
                 background_order=background_order,
                 instrument_fwhm=instrument_fwhm,
                 callback=inner,
+                should_stop=should_stop,
             )
         except (RefinementError, ValueError) as exc:  # pragma: no cover - defensive
             if result is None:
@@ -809,9 +869,110 @@ def auto_refine(
         done.append(label)
         if callback:
             callback(f"[{label}] Rwp = {100 * result.r_wp:.2f} %, GOF = {result.gof:.3f}")
+        if result.cancelled:
+            # The stop was asked for inside this stage. Running the next
+            # one would free more parameters from a point the fit had not
+            # settled at, which is the one thing the staged order exists
+            # to prevent.
+            result.warnings.append(
+                f"se detuvo en la etapa «{label}»; quedaron sin correr: "
+                + ", ".join(name for name, _ in stages[len(done):]) + ".")
+            break
     assert result is not None
     result.stages = done
     return result
+
+
+#: Columns a refinement is plotted from, in the order every Rietveld
+#: figure in the literature draws them.
+FIT_COLUMNS = ("2theta", "observado", "calculado", "fondo", "diferencia",
+               "sigma")
+
+
+def fit_columns(result: RietveldResult) -> tuple[list[str], np.ndarray]:
+    """The arrays a Rietveld figure is drawn from.
+
+    A saved picture and a saved report answer "what happened"; neither
+    lets the work be redrawn beside someone else's data, put on a
+    journal's axes, or replotted at a different scale. These are the six
+    columns that do, and they are exactly what the window's own plot
+    uses -- not a recalculation that could drift from it.
+
+    ``sigma`` comes along because the weighting is part of the result:
+    the difference curve is usually shown divided by it, and without the
+    column that plot cannot be made.
+    """
+    pattern = result.pattern
+    return list(FIT_COLUMNS), np.column_stack([
+        np.asarray(pattern.two_theta, dtype=float),
+        np.asarray(pattern.intensity, dtype=float),
+        np.asarray(result.calculated, dtype=float),
+        np.asarray(result.background, dtype=float),
+        np.asarray(result.difference, dtype=float),
+        np.asarray(pattern.sigma, dtype=float),
+    ])
+
+
+def reflection_ticks(result: RietveldResult) -> dict[str, np.ndarray]:
+    """Allowed reflection positions per phase, in 2theta.
+
+    The zero shift is already applied, so these are where the ticks sit
+    on the measured axis rather than where an ideal cell would put them.
+    Without them the figure cannot be redrawn: the tick rows are how a
+    reader tells which phase owns which peak.
+    """
+    pattern = result.pattern
+    ticks: dict[str, np.ndarray] = {}
+    for phase in result.phases:
+        crystal = phase.current_crystal()
+        lines = reflections(crystal, wavelength=pattern.wavelength,
+                            two_theta_range=pattern.range)
+        ticks[crystal.name] = np.array(
+            [line.two_theta + result.zero for line in lines], dtype=float)
+    return ticks
+
+
+def write_fit(result: RietveldResult, path) -> list[Path]:
+    """Write the fit as text, and the tick marks beside it.
+
+    Two files rather than one, because they have different shapes: the
+    curves are one row per measured point and the ticks are one row per
+    allowed reflection. Forcing both into a single table would mean
+    padding one of them, and a column of blanks is a thing every plotting
+    program reads differently.
+
+    Returns the paths written, the curves first.
+    """
+    destination = Path(path)
+    names, table = fit_columns(result)
+    header = [
+        f"# {result.pattern.name}",
+        f"# lambda = {result.pattern.wavelength:.6f} A",
+        (f"# Rwp = {100 * result.r_wp:.3f} %  Rp = {100 * result.r_p:.3f} %  "
+         f"Rexp = {100 * result.r_expected:.3f} %  GOF = {result.gof:.4f}"),
+        (f"# desplazamiento cero = {result.zero:+.5f} deg, "
+         f"muestra = {result.displacement:+.5f}"),
+        f"# fases: {', '.join(p.current_crystal().name for p in result.phases)}",
+    ]
+    if result.cancelled:
+        header.append("# ATENCION: refinamiento DETENIDO antes de converger")
+    header.append("# " + "  ".join(f"{n:>14s}" for n in names).lstrip())
+    rows = ["  ".join(f"{value:14.6f}" for value in row) for row in table]
+    destination.write_text("\n".join(header + rows) + "\n", encoding="utf-8")
+
+    ticks = reflection_ticks(result)
+    companion = destination.with_name(destination.stem + "_reflexiones"
+                                      + (destination.suffix or ".txt"))
+    lines = [
+        "# posiciones de reflexion permitidas, 2theta en grados",
+        "# con el desplazamiento cero ya aplicado",
+        "# fase  2theta",
+    ]
+    for name, angles in ticks.items():
+        for angle in angles:
+            lines.append(f"{name}  {angle:.5f}")
+    companion.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return [destination, companion]
 
 
 def _check(result: RietveldResult, instrument_fwhm: float) -> None:
@@ -900,13 +1061,17 @@ __all__ = [
     "TEXTURE_LIMITS",
     "Parameter",
     "PhaseModel",
+    "RefinementCancelled",
     "RefinementError",
     "RietveldResult",
     "auto_refine",
     "build_parameters",
     "calculate_pattern",
     "chebyshev_background",
+    "fit_columns",
     "free_kinds",
     "r_factors",
     "refine",
+    "reflection_ticks",
+    "write_fit",
 ]

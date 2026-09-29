@@ -260,6 +260,15 @@ class XRDApp(SectionApp):
                                command=self._prepare_manual))
         toolbar.add(ttk.Button(toolbar.frame, text="Refinar los libres",
                                command=self._refine_once))
+        # A refinement with five phases and forty free parameters has a
+        # budget of thousands of residual evaluations. Without a way out
+        # the only way out is to kill the window, which loses the loaded
+        # patterns, the model and the library folders along with the fit.
+        # Stopping keeps the best point the solver reached.
+        self.stop_button = ttk.Button(toolbar.frame, text="Detener",
+                                      command=self._stop_refinement,
+                                      state="disabled")
+        toolbar.add(self.stop_button)
         toolbar.add(ttk.Label(toolbar.frame, text="Liberar grupo:"))
         self.group_var = self.tk.StringVar(value=PARAMETER_GROUPS[0][1])
         toolbar.add(ttk.Combobox(
@@ -307,24 +316,39 @@ class XRDApp(SectionApp):
         self.make_canvas(residual_body, "residual", lambda f: f.add_subplot(111),
                          figsize=(7.6, 2.4))
 
-        right = ttk.Frame(panes)
+        # A SPLIT, not a stack. The results card goes first and used to
+        # be packed with fill="x" above a parameter table that expanded
+        # into whatever was left -- which on an ordinary window was
+        # nothing: the results table, its long hint and the two report
+        # buttons take about 450 px, so a parameter table declared
+        # eighteen rows high got drawn three rows high. Reported as "el
+        # panel de parámetros quedó colapsado", and it was: the pixels
+        # were already spoken for.
+        #
+        # Packing cannot fix this, only re-lose it somewhere else, because
+        # both halves genuinely want the room. A draggable divider hands
+        # the choice to the person looking at the screen, which is where
+        # it belongs, and the weights make the parameters the larger half
+        # to start with -- they are what this tab is for.
+        right = ttk.Panedwindow(panes, orient="vertical")
         panes.add(right, weight=2)
 
-        # The results card goes FIRST and does not expand. It used to be
-        # packed after the parameter table, which does expand, so on any
-        # window shorter than about 1200 px the whole card -- the
-        # convergence flag, the evaluation count, the weight fractions
-        # and the two report buttons -- was pushed off the bottom edge
-        # and simply not drawn. The user reported all four as missing
-        # features; every one of them was already computed.
-        metrics, metrics_body = card(right, "Resultado del refinamiento")
-        metrics.pack(fill="x")
+        metrics_pane = ttk.Frame(right)
+        right.add(metrics_pane, weight=1)
+        metrics, metrics_body = card(metrics_pane, "Resultado del refinamiento")
+        metrics.pack(fill="both", expand=True)
         self.metrics_table = table(metrics_body, ["magnitud", "valor"], height=10)
         actions = flow(metrics_body)
         actions.add(ttk.Button(actions.frame, text="Ver informe completo…",
                                command=self._show_refinement_report), grow=True)
         actions.add(ttk.Button(actions.frame, text="Guardar informe…",
                                command=self._save_refinement_report), grow=True)
+        # A picture answers "what happened" and a report answers "how
+        # well"; neither lets the fit be redrawn on someone else's axes,
+        # beside another sample, or at a different scale. These are the
+        # columns that do.
+        actions.add(ttk.Button(actions.frame, text="Guardar datos del ajuste…",
+                               command=self._save_fit_data), grow=True)
 
         hint(metrics_body,
              "La χ² reducida y la GOF son la misma cosa: χ² = GOF². Se dan "
@@ -338,10 +362,12 @@ class XRDApp(SectionApp):
              "intensidad se reparte entre las demás. El amorfo no aparece.",
              wrap=380)
 
-        params, params_body = card(right, "Parámetros",
+        params_pane = ttk.Frame(right)
+        right.add(params_pane, weight=3)
+        params, params_body = card(params_pane, "Parámetros",
                                    "Doble clic para liberar o fijar; clic derecho "
                                    "para editar el valor.")
-        params.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
+        params.pack(fill="both", expand=True)
         self.parameter_table = table(
             params_body, ["parámetro", "libre", "valor", "error", "grupo"], height=18
         )
@@ -505,6 +531,7 @@ class XRDApp(SectionApp):
         self._settings_from_widgets()
 
         def done(result) -> None:
+            self._disarm_stop()
             self.flush_messages(self.session.messages)
             self._fill_parameters()
             self._redraw()
@@ -513,19 +540,51 @@ class XRDApp(SectionApp):
                     f"{result.n_evaluations} iteraciones — Rwp = "
                     f"{100 * result.r_wp:.2f} %, GOF = {result.gof:.3f}, "
                     f"χ² = {result.chi_squared:.3f}"
+                    + (" — DETENIDO por el usuario, sin incertidumbres"
+                       if result.cancelled else "")
                 )
 
         def work():
             # The worker thread never touches a widget. It queues the
             # progress lines and the main thread drains them, which is the
             # only safe way to show a counter from inside a fit.
-            return self.session.auto_refine_current(progress=self._queue_progress)
+            return self.session.auto_refine_current(
+                progress=self._queue_progress, should_stop=self._should_stop)
 
+        self._arm_stop()
         self.run_async(work, done, "Refinamiento por etapas…")
 
     def _queue_progress(self, text: str) -> None:
         """Called from the refinement thread; hands the line to Tk safely."""
         self.report_progress(text)
+
+    def _stop_refinement(self) -> None:
+        """Ask the running refinement to stop at its next evaluation."""
+        self._stop_requested = True
+        self.set_status("Deteniendo el refinamiento…")
+
+    def _should_stop(self) -> bool:
+        """Read by the refinement thread once per residual evaluation."""
+        return bool(getattr(self, "_stop_requested", False))
+
+    def _arm_stop(self) -> None:
+        self._stop_requested = False
+        self.stop_button.configure(state="normal")
+
+    def _disarm_stop(self) -> None:
+        self._stop_requested = False
+        self.stop_button.configure(state="disabled")
+
+    def show_error(self, exception, tb):
+        """Disarm the stop before handing the failure on.
+
+        ``run_async`` calls ``done`` only when the work succeeded, so a
+        refinement that raises would otherwise leave «Detener» enabled
+        with nothing running behind it -- a button that does nothing is
+        worse than no button.
+        """
+        self._disarm_stop()
+        return super().show_error(exception, tb)
 
     def _add_model_phase(self) -> None:
         name = self.model_phase_var.get().strip()
@@ -566,6 +625,34 @@ class XRDApp(SectionApp):
         Path(path).write_text(text, encoding="utf-8")
         self.set_status(f"Informe guardado en {path}")
 
+    def _save_fit_data(self) -> None:
+        """Write the fit's own columns, plus the reflection ticks.
+
+        Two files: the curves are one row per measured point and the
+        ticks one row per allowed reflection, so putting both in one
+        table would mean padding one of them with blanks -- which every
+        plotting program reads differently.
+        """
+        from tkinter import filedialog
+
+        from ..xrd.rietveld import write_fit
+
+        item = self.session.item
+        if item is None or item.refinement is None:
+            self.warn("Sin refinamiento", "Refina un difractograma primero.")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Guardar datos del ajuste", defaultextension=".txt",
+            initialfile="rietveld_ajuste.txt",
+            filetypes=[("Texto", "*.txt"), ("Todos", "*.*")],
+            parent=self.root)
+        if not path:
+            return
+        written = write_fit(item.refinement, path)
+        self.set_status(
+            "Datos del ajuste guardados en "
+            + " y ".join(Path(p).name for p in written))
+
     def _prepare_manual(self) -> None:
         self._settings_from_widgets()
         if self.session.prepare_manual() is None:
@@ -583,15 +670,24 @@ class XRDApp(SectionApp):
             return
 
         def done(result) -> None:
+            self._disarm_stop()
             self.flush_messages(self.session.messages)
             self._fill_parameters()
             self._redraw()
             if result is not None:
                 self.set_status(
-                    f"Rwp = {100 * result.r_wp:.2f} %, GOF = {result.gof:.3f}"
+                    f"{result.n_evaluations} iteraciones — Rwp = "
+                    f"{100 * result.r_wp:.2f} %, GOF = {result.gof:.3f}"
+                    + (" — DETENIDO por el usuario, sin incertidumbres"
+                       if result.cancelled else "")
                 )
 
-        self.run_async(self.session.refine_current, done, "Refinando…")
+        def work():
+            return self.session.refine_current(
+                progress=self._queue_progress, should_stop=self._should_stop)
+
+        self._arm_stop()
+        self.run_async(work, done, "Refinando…")
 
     def _free_group(self) -> None:
         label = self.group_var.get()

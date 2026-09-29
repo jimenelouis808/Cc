@@ -283,6 +283,15 @@ def test_the_two_raman_sections_share_one_session():
         ("xrd_app", "metrics_table"),
         ("xrd_app", "_queue_progress"),
         ("xrd_app", "_show_refinement_report"),
+        # A refinement must be stoppable and its numbers must leave the
+        # program. Without the first the only way out of a long fit was
+        # to kill the window, which loses the patterns, the model and the
+        # library folders with it; without the second the fit could be
+        # looked at but never redrawn.
+        ("xrd_app", "stop_button"),
+        ("xrd_app", "_stop_refinement"),
+        ("xrd_app", "_should_stop"),
+        ("xrd_app", "_save_fit_data"),
         ("echem_app", "_analyse"),
         ("echem_app", "mass_var"),
         ("echem_app", "reference_var"),
