@@ -287,13 +287,19 @@ def level_residuals(model: TBModel, refs: list[ReferenceStructure],
 
 
 def fit_levels(family: XuFamily, refs: list[ReferenceStructure],
-               x0: Optional[np.ndarray] = None):
+               x0: Optional[np.ndarray] = None, checkpoint: Optional[Path] = None):
     x0 = family.initial_guess() if x0 is None else np.asarray(x0, dtype=float)
     fixed = family.fixed_shift()
+    best = [np.inf]
 
     def residuals(x):
         try:
-            return level_residuals(family.build_model(x), refs, fixed)[0]
+            out = level_residuals(family.build_model(x), refs, fixed)[0]
+            cost = float(out @ out)
+            if cost < best[0]:
+                best[0] = cost
+                _save_checkpoint(checkpoint, "levels_partial", x, cost)
+            return out
         except (RuntimeError, np.linalg.LinAlgError, ValueError):
             return np.full(sum(r.n_occupied + 2 for r in refs), 10.0)
 
@@ -898,11 +904,13 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
             s.role = "test"
     train = [s for s in structures if s.role == "train"]
     saved = _load_checkpoint(checkpoint, len(family.parameter_names()))
-    if saved is not None:
+    if saved is not None and saved["stage"] != "levels_partial":
         start = np.array(saved["x"])
         stage1 = "retomado de " + checkpoint.name + f" ({saved['stage']})"
     else:
-        result = fit_levels(family, train, x0)
+        if saved is not None:              # the level fit was interrupted: go on from there
+            x0 = np.array(saved["x"])
+        result = fit_levels(family, train, x0, checkpoint)
         start, stage1 = result.x, str(result.message)
         _save_checkpoint(checkpoint, "levels", start, np.inf)
     electronic = family.build_model(start)
