@@ -179,7 +179,8 @@ energía.
 | Nanotubos: G | Tendencias y dirección de G⁻; posiciones ~+80 cm⁻¹; ΔG 2–5× pequeño; sin anomalía de Kohn |
 | Grafeno 2D (doble resonancia) | Dispersión 112 cm⁻¹/eV (exp. ~100); posiciones altas por los fonones PBE |
 | IR | Implementado (`infrared.py`); semicuantitativo frente a GPAW: factor típico ~2 por modo |
-| O, B, S, P | **Sin parámetros** |
+| Oxígeno (`xu_chno`) | Ajustado a GPAW; epóxido basal y carboxilo bien; anillos de tres miembros con corrección de ángulos agudos (ciclopropano +0,19 Å); α ±10 % |
+| B, S, P | **Sin parámetros** |
 
 ## 9. Propuesta (en este orden)
 
@@ -193,9 +194,9 @@ energía.
    tubos, DOS vibracional total y proyectada con ensanchamiento configurable,
    y separación masa / efecto químico (recalcular con la masa del C en el
    dopante y las mismas constantes de fuerza). Guardar siempre los modos.
-3. **IR**: intensidades |∂μ/∂Q|² con μ del estado fundamental (cargas SCC +
+3. ~~**IR**~~ hecho (`infrared.py`). Texto original: **IR**: intensidades |∂μ/∂Q|² con μ del estado fundamental (cargas SCC +
    dipolos intraatómicos) en moléculas y fragmentos finitos.
-4. **Oxígeno** (hidroxilo, epoxi, carbonilo, carboxilo, éter), con la misma
+4. ~~**Oxígeno**~~ hecho (`xu_chno`, README «Oxígeno»). Texto original: **Oxígeno** (hidroxilo, epoxi, carbonilo, carboxilo, éter), con la misma
    receta que el N: referencias GPAW, ajuste conjunto, validación.
 5. **B, S, P** después, con la misma receta y su propia validación.
 6. **Frecuencias en la función objetivo** del ajuste (L = w_E L_E + w_F L_F +

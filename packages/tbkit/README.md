@@ -37,6 +37,7 @@ uno ajustado) en ese mismo formato, y `load_parameters(ruta)` lo lee.
 | Raman no resonante y resonante (fase E) | `optics`, `raman`, `dipoles`, `resonance` |
 | Infrarrojo | `infrared` | μ del modelo (cargas + dipolos intraatómicos), cargas de Born, km/mol | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
 | C, H y N (fase E, paso 2) | `parameters/xu_chn.json`, `references`, `recipes` | C–C de Xu intacto; H y N ajustados a GPAW (PBE, LCAO dzp) en niveles, fuerzas y energías; U de H, C, N calculadas con el átomo de GPAW; SCC. Receta reproducible y referencias incluidas |
+| Oxígeno | `parameters/xu_chno.json`, `recipes/xu_chno.py` | `xu_chn` más O (hidroxilo, epóxido, carbonilo, carboxilo, éter, furano, nitro), C–O, O–H, N–O, O–O; corrección de ángulos agudos para anillos de tres miembros; α extra del O ajustada a GPAW |
 | Reproducibilidad | `record`, `tasks` | `tbkit run simulacion.json` guarda estructura, parámetros completos, versión, commit, fecha, ajustes y resultados; `record.replay` lo repite |
 
 Salidas (`analysis`): matriz densidad P = Σ f c c†, poblaciones Mulliken y
@@ -177,6 +178,56 @@ C₆₀ y el diamante no entran en el ajuste. GPAW-PBE ya sobreestima las α un
 4–7 % frente al experimento (CH₄ 2,71 frente a 2,59; benceno 10,98 frente a
 10,32). En cristales la polarizabilidad extra se suma por celda sin campos
 locales (no hay apantallamiento periódico todavía).
+
+## Oxígeno: `xu_chno` (carbono funcionalizado)
+
+`--model chno` (o `load_parameters("xu_chno")`) extiende `xu_chn` con oxígeno
+por la misma receta (`tbkit.recipes.xu_family`): C–C de Xu intacto; energías
+de sitio del O, saltos C–O, O–H, N–O y O–O (dos O de un carboxilo o de un nitro
+están a 2,2 Å, dentro del alcance), repulsiones de par, y H y N reajustados
+desde sus valores de `xu_chn`. U_O = 13,48 eV (= DFTB mio) y d_O = 0,355 Å se
+calculan con el átomo de GPAW, no se ajustan.
+
+Referencias (`chno_references`, 127 estructuras GPAW): agua, metanol,
+formaldehído, acetaldehído, ácidos fórmico y acético, CO, CO₂, dimetil éter,
+oxirano, furano, H₂O₂, nitrometano, acetamida, ciclopropano; de prueba etanol,
+acetona, formiato de metilo, glioxal y dos motivos de óxido de grafeno sobre
+coroneno (epóxido basal y 1,4-diol).
+
+**Anillos de tres miembros.** El C–C de Xu no cierra un epóxido: sin
+corrección, el C–C bajo el O del epóxido sobre coroneno se abría a 2,16 Å
+(GPAW 1,60). `repulsive.AcuteAngleTerm` añade un término de tres cuerpos que es
+exactamente cero para ángulos ≥ 80° (grafeno, diamante, nanotubos, fullerenos y
+aromáticos conservan los resultados de Xu; test) y se ajusta con la repulsión.
+Dos lecciones del ajuste: el biciclobutano, extremadamente tenso, se llevaba la
+mitad del error de fuerzas y queda fuera (`CHNO.held_out`, registrado en el
+archivo); y las distorsiones aleatorias solo muestrean el mínimo, así que sin
+**barridos de apertura del anillo** (C–C del anillo a 1,65, 1,80 y 1,95 Å en
+ciclopropano, oxirano y aziridina) el ajuste dejaba los anillos sin barrera
+(epóxido +0,57 Å).
+
+| | resultado |
+|---|---|
+| ajuste conjunto | niveles 1,02 eV, fuerzas 0,79 eV/Å, energías 0,23 eV |
+| epóxido basal sobre coroneno | C–C 0,03 Å, C–O 0,10 Å |
+| carboxilo, carbonilo, éter, furano, nitro | enlaces a 0,01–0,03 Å; C–C/C–O simples junto al heteroátomo ~0,08 Å |
+| 1,4-diol sobre coroneno | C–O 0,07 Å |
+| oxirano / aziridina | C–C del anillo 0,12 / 0,11 Å |
+| ciclopropano | C–C +0,19 Å, mínimo poco profundo (fuera del objetivo) |
+| biciclobutano (fuera del ajuste) | se abre |
+| α extra del O | 0,564 Å³ (`xu_chn_alpha --fit O`, H, C, N de `xu_chn`) |
+| α media, entrenamiento / prueba (vs GPAW FD) | −9 a +10 % / −3 a +3 % |
+
+Receta completa:
+
+```bash
+python -m tbkit.recipes.chno_references gpaw_chno.json
+python -m tbkit.recipes.xu_chno gpaw_chn.json gpaw_chno.json xu_chno_fit.json
+python -m tbkit.recipes.chn_polarizability gpaw_chno_alpha.json --set chno
+python -m tbkit.recipes.xu_chn_alpha gpaw_chno_alpha.json gpaw_chn_alpha.json \
+    xu_chno_fit.json xu_chno.json --fit O --fixed-from xu_chn.json \
+    --geometries gpaw_chn.json gpaw_chno.json
+```
 
 ## Raman resonante (primer orden)
 
@@ -327,7 +378,7 @@ no contra una instalación real de QE.
   doble resonancia) es el paso siguiente de la fase E, no este.
 
 - **Energías y fuerzas solo con modelos que tienen parte repulsiva**: el de Xu
-  (carbono puro), `xu_chn` (C, H, N) y los `.skf` con su spline. El modelo π no
+  (carbono puro), `xu_chn` (C, H, N), `xu_chno` (C, H, N, O) y los `.skf` con su spline. El modelo π no
   la tiene y lo dice.
 - **Campo medio no es correlación**: un copo con M = 0 y momentos locales es, en
   realidad, un singlete correlacionado; los momentos son el parámetro de orden

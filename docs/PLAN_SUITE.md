@@ -244,7 +244,9 @@ Pendiente de la fase E:
       227/d; G con desplazamiento y ΔG pequeño (sin anomalía de Kohn).
 - [x] Análisis de modos (`modes.py`).
 - [x] IR (paso 9): `infrared.py`; frente a GPAW, factor típico ~2 por modo.
-- [ ] Oxígeno (grupos funcionales) → B, S, P (auditoría, sección 9).
+- [x] Oxígeno: `xu_chno` (grupos funcionales, epóxido basal cerrado con la
+      corrección de ángulos agudos y barridos de apertura; α ±10 % frente a GPAW).
+- [ ] B, S, P (auditoría, sección 9).
 
 Ideas tomadas de la literatura del usuario (Papaconstantopoulos, Mehl, Chronis,
 Sigalas, "Tight-binding method in electronic structure", Encyclopedia of
