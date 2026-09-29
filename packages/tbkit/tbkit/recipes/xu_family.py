@@ -577,7 +577,11 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
                          f"Matter 4, 6047 (1992). {hetero}: " + source)
     data["system"] = family.system
     ranges = ", ".join(f"{k} {v[0]:.2f}-{v[1]:.2f} Å" for k, v in
-                       sorted(report.get("bond_ranges", {}).items()) if k != "C-C")
+                       sorted(report.get("bond_ranges", {}).items())
+                       if k != "C-C" and (family.base is None
+                                          or set(k.split("-")) & set(family.heteroatoms)))
+    if family.base is not None:
+        ranges += f"; el resto, como {family.base}"
     data["validity"] = ("sistemas finitos de capa cerrada (SCC sin Ewald); enlaces dentro de lo "
                         f"muestreado ({ranges}); energías relativas solo dentro de una misma "
                         "composición (no se ajustaron energías de atomización); C-C como en "

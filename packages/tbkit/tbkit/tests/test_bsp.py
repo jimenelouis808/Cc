@@ -70,3 +70,66 @@ def test_new_element_builds_a_hermitian_hamiltonian():
     model = family.build_model(family.initial_guess())
     solution = solve(System.build(molecule("CH3SH"), model))
     assert np.all(np.isfinite(solution.energies))
+
+
+def _shipped(element):
+    import json
+
+    from tbkit.params import PARAMETER_DIR
+    from tbkit.references import load_references
+
+    path = PARAMETER_DIR / f"xu_chno{element.lower()}.json"
+    if not path.exists():
+        pytest.skip(f"{path.name} todavía no instalado")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    names = data["fit"]["references"]
+    refs = []
+    for name in [names] if isinstance(names, str) else names:
+        refs += load_references(PARAMETER_DIR / "references" / name)[0]
+    return data, load_parameters(path.stem), refs
+
+
+@pytest.mark.parametrize("element", sorted(FAMILIES))
+def test_shipped_set_references_and_units(element):
+    import hashlib
+
+    from tbkit.params import PARAMETER_DIR
+
+    data, model, _ = _shipped(element)
+    names, shas = data["fit"]["references"], data["fit"]["references_sha256"]
+    for name, digest in zip([names] if isinstance(names, str) else names,
+                            [shas] if isinstance(shas, str) else shas, strict=True):
+        assert hashlib.sha256((PARAMETER_DIR / "references" / name).read_bytes()
+                              ).hexdigest() == digest
+    entries = [v for table in data["onsite"].values() for v in table.values()]
+    entries += data["hopping"] + list(data["hubbard_u"].values())
+    for entry in entries:
+        assert entry.get("unit") and entry.get("source"), entry
+    assert model.scc and element in model.orbitals
+    assert list(data["fit"]["parameters"]) == FAMILIES[element].parameter_names()
+
+
+@pytest.mark.parametrize("element", sorted(FAMILIES))
+def test_shipped_set_keeps_xu_chno(element):
+    _, model, _ = _shipped(element)
+    chno = load_parameters("xu_chno")
+    for el in chno.onsite:
+        assert model.onsite[el] == chno.onsite[el]
+    atoms = molecule("CH3COOH")
+    energies = []
+    for m in (chno, model):
+        a = atoms.copy()
+        a.calc = TBCalculator(m)
+        energies.append(a.get_potential_energy())
+    assert energies[0] == pytest.approx(energies[1], abs=1e-9)
+
+
+@pytest.mark.parametrize("element, label, limit", [
+    ("B", "coronene_BN/eq", 0.06), ("B", "borazine/eq", 0.03),
+    ("S", "coronene_SH/eq", 0.06), ("S", "CH3SO3H/eq", 0.08),
+    ("P", "coronene_PO3H2/eq", 0.08), ("P", "H3PO4/eq", 0.08)])
+def test_geometry_close_to_gpaw(element, label, limit):
+    _, model, refs = _shipped(element)
+    ref = next(r for r in refs if r.label == label)
+    errors = xu_family.relaxed_bond_errors(model, ref, fmax=0.02)
+    assert max(errors.values()) < limit, errors

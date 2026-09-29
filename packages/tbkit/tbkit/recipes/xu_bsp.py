@@ -46,6 +46,7 @@ FAMILIES = {
         pairs=_pairs("B", {"H": 1.19, "C": 1.57, "N": 1.44, "O": 1.37, "B": 1.70}),
         hubbard_u={"B": HUBBARD_U["B"]},
         onsite_dipole={"B": ONSITE_DIPOLE["B"]},
+        validity_notes="B junto con S o P en la misma estructura no está cubierto",
         system=("xu_chno más boro: boranos, ésteres y ácidos bóricos y borónicos, "
                 "amino-borano, borazina, B-N en grafeno"),
         base="xu_chno"),
@@ -56,6 +57,7 @@ FAMILIES = {
         pairs=_pairs("S", {"H": 1.34, "C": 1.82, "N": 1.65, "O": 1.45, "S": 2.05}),
         hubbard_u={"S": HUBBARD_U["S"]},
         onsite_dipole={"S": ONSITE_DIPOLE["S"]},
+        validity_notes="S junto con B o P en la misma estructura no está cubierto",
         system=("xu_chno más azufre: tioles, sulfuros, disulfuros, tiofeno, sulfóxidos, "
                 "sulfonas, ácidos sulfónicos, sulfonamidas"),
         base="xu_chno"),
@@ -66,6 +68,7 @@ FAMILIES = {
         pairs=_pairs("P", {"H": 1.42, "C": 1.85, "N": 1.70, "O": 1.60, "P": 2.22}),
         hubbard_u={"P": HUBBARD_U["P"]},
         onsite_dipole={"P": ONSITE_DIPOLE["P"]},
+        validity_notes="P junto con B o S en la misma estructura no está cubierto",
         system=("xu_chno más fósforo: fosfinas, óxidos de fosfina, ácidos fosfórico y "
                 "fosfónicos, fosfatos, fosfinina"),
         base="xu_chno"),
