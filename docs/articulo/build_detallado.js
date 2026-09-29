@@ -418,9 +418,145 @@ c.push(p("Cuáles cuatro se midió, no se supuso. Tomando un polihexágono toroi
 
 /* ============ 5 ============ */
 c.push(new Paragraph({ children: [new PageBreak()] }));
-c.push(h1("5. Validación"));
+c.push(h1("5. La ruta de rodillas: un censo exacto por construcción"));
 
-c.push(h2("5.1 Hibridación medida desde la geometría"));
+c.push(p("Las secciones 2 a 4 describen la ruta implícita: se muestrea un campo, se "
+  + "extrae una isosuperficie, se remalla y se toma el dual. Es general —teje cualquier "
+  + "superficie que se sepa escribir— y por eso mismo no controla dónde caen sus "
+  + "disclinaciones: el remallado coloca pentágonos y heptágonos donde le conviene a la "
+  + "malla, no donde los pide la curvatura. Medido sobre una unión Y, la ruta implícita "
+  + "devuelve cincuenta pentágonos y treinta y ocho heptágonos; Gauss-Bonnet exige seis "
+  + "heptágonos y ningún pentágono."));
+
+c.push(p("La ruta de rodillas ataca el problema por el otro extremo. En lugar de tejer una "
+  + "superficie y contar después lo que salió, ensambla la estructura a partir de piezas "
+  + "cuyo censo se conoce antes de existir: tramos rectos de tubo, todo hexágonos, unidos "
+  + "por codos a inglete. El censo no se comprueba al final —se fija al principio—, y la "
+  + "comprobación posterior sirve para detectar un error de programación, no para "
+  + "descubrir qué se construyó."));
+
+c.push(h2("5.1 El codo, y por qué lleva dos pares"));
+c.push(p("Un codo a inglete corta dos tramos de tubo en el plano bisector y los une. La "
+  + "unión es una identidad, no un promedio: los dos tramos son imágenes especulares a "
+  + "través de ese plano, así que una vez que sus bordes están en él coinciden punto por "
+  + "punto. Esa es la diferencia entre aristas de malla de 2.46 Å contra un objetivo de "
+  + "2.46 Å y aristas de 1.9 a 5.7 Å, que es lo que daba fundir los bordes crudos y de lo "
+  + "que ninguna relajación se recupera."));
+c.push(p("El codo es simétrico respecto del plano del toro, así que todo defecto que cree "
+  + "tiene pareja al otro lado: un codo a inglete es un codo de Dunlap DOBLE, y lleva dos "
+  + "pares pentágono-heptágono, no uno. No es una elección: buscando sobre número de "
+  + "codos, circunferencia, longitud de brazo, desfase de costura y fase azimutal, la "
+  + "familia de un solo par no aparece nunca."));
+c.push(p("De ahí sale el número de codos de un anillo sin más aritmética. Un par gira el "
+  + "eje 30°, un toro pide 360°, luego doce pares, luego seis codos — y doce pentágonos "
+  + "fuera y doce heptágonos dentro, que es exactamente Σ(6−n) = 0 para χ = 0."));
+c.push(cita("El desfase de la costura elige el codo, y es la única libertad real: girar un "
+  + "lado una posición da dos pentágonos fuera y dos heptágonos dentro; no girarlo da un "
+  + "CUADRADO fuera y un octógono dentro. Los dos cumplen Σ(6−n) = 0. El codo de "
+  + "pentágonos es el predeterminado porque un anillo de cuatro miembros es carbono sp2 "
+  + "pobre, no porque el otro esté mal."));
+
+c.push(h2("5.2 El presupuesto de un nodo, y una imposibilidad"));
+c.push(p("Un nodo de c brazos es topológicamente una esfera con c agujeros, así que "
+  + "χ = 2 − c y Σ(6−n) = 6(2 − c). Sumado sobre una red entera, Σ_v 6(2 − grado v) = "
+  + "12V − 12E = 12(V − E), que es el mismo número al que llega el otro camino, "
+  + "χ = 2(V − E). Dos derivaciones independientes, un solo número; el generador calcula "
+  + "las dos y compara en cada entrada del catálogo."));
+c.push(p("La condición para que un nodo salga LIMPIO —sólo hexágonos más los heptágonos "
+  + "que el presupuesto obliga— es que sus brazos sumen cero como vectores. Un nodo "
+  + "desequilibrado paga el presupuesto igual de exacto, pero lo paga en cuadrados, "
+  + "pentágonos o eneágonos."));
+c.push(cita("De ahí se sigue que NO EXISTE una jaula finita de rodillas. En un poliedro "
+  + "convexo todo vértice está en su envolvente, así que todas sus aristas apuntan hacia "
+  + "el mismo semiespacio de apoyo y no pueden sumar cero; y todo grafo finito tiene un "
+  + "vértice en su envolvente. Las jaulas de esta ruta son periódicas o tienen bordes; no "
+  + "hay una tercera posibilidad, y no es una carencia del programa."));
+c.push(p("Los brazos coplanares dejan además dos agujeros polares, uno arriba y otro "
+  + "abajo, con una arista por brazo: tres brazos coplanares dejan triángulos —que la "
+  + "malla ya cierra— y cuatro dejan cuadrados. Ésa es la razón real de que la X plana "
+  + "tenga χ = −4 en lugar de −2: es una esfera con SEIS agujeros, las cuatro bocas más "
+  + "los dos polos, no con cuatro."));
+
+c.push(h2("5.3 Qué formas cierran"));
+c.push(p("No toda terna (codos, circunferencia, filas de brazo) es exacta, porque la cuña "
+  + "que el inglete quita tiene que ser un número entero de pasos de red. Las filas de "
+  + "brazo han de ser impares, porque la reflexión del inglete manda la fila i a la fila "
+  + "«filas − 1 − i». Las que cierran se encuentran construyendo y contando, y el rechazo "
+  + "nombra las que sí lo hacen en vez de limitarse a negarse — que es la diferencia entre "
+  + "un parámetro y una adivinanza."));
+c.push(p("Cada tipo de nodo tiene su propia forma: un nodo Y cierra en circunferencia 14 y "
+  + "uno tetraédrico no cierra ahí en absoluto. No es un matiz: llevar la forma de otro "
+  + "tipo no es un error pequeño, o se niega de plano o construye una estructura distinta "
+  + "de la que se pidió."));
+
+c.push(h2("5.4 El catálogo medido"));
+c.push(p("Todas las filas de la tabla salen de ejecutar el verificador del paquete sobre "
+  + "esta misma versión, no de la documentación. «Ley» dice si el Σ(6−n) medido coincide "
+  + "con el presupuesto que el esqueleto fija ANTES de mallar nada; «colocación» es la "
+  + "fracción de disclinaciones que caen del lado de la curvatura que les toca, medida "
+  + "ajustando la superficie sobre cada anillo y no leída del tamaño del anillo."));
+c.push(table(
+  ["estructura", "átomos", "censo", "Σ(6−n)", "ley", "enlaces (Å)", "colocación"],
+  [
+    ["toroide, 6 codos", "1032", "5:12 6:492 7:12", "0", "sí", "1.398–1.453", "100 %"],
+    ["bobina, finita", "406", "5:14 6:167 7:14", "0", "—", "1.367–1.499", "100 %"],
+    ["bobina, celda periódica", "672", "5:12 6:312 7:12", "0", "sí", "1.376–1.495", "100 %"],
+    ["unión Y", "536", "6:240 7:6", "−6", "sí", "1.410–1.431", "100 %"],
+    ["unión X (plana)", "780", "5:4 6:328 7:16", "−12", "sí", "1.405–1.450", "100 %"],
+    ["unión, nodo de diamante", "756", "6:328 7:12", "−12", "sí", "1.415–1.428", "100 %"],
+    ["lámina, super-cuadrada", "180", "5:4 6:68 7:16", "−12", "sí", "1.374–1.505", "100 %"],
+    ["lámina, super-grafeno", "920", "6:432 7:24", "−24", "sí", "1.408–1.436", "100 %"],
+    ["celda de Schwarz P", "968", "6:456 7:24", "−24", "sí", "1.417–1.540", "—"],
+    ["celda de Schwarz D", "1440", "6:608 7:96", "−96", "sí", "1.353–1.452", "—"],
+    ["celda del giroide", "1744", "6:816 7:48", "−48", "sí", "1.395–1.508", "—"],
+  ],
+  [2100, 900, 2000, 800, 700, 1500, 1000]));
+c.push(spacer(120));
+c.push(p("Tres lecturas de esa tabla merecen texto propio."));
+c.push(bullet("Las superficies mínimas no tienen NI UN pentágono, que es lo que debe "
+  + "ocurrir: toda su curvatura es negativa. La ruta implícita devuelve treinta y tres "
+  + "pentágonos en una celda comparable."));
+c.push(bullet("Los pentágonos de la X plana y de la lámina super-cuadrada sí están bien: "
+  + "un cruce plano de cuatro brazos tiene una almohadilla arriba y otra abajo del punto "
+  + "de cruce que está genuinamente curvada en positivo. Son cuatro, y son los polos."));
+c.push(bullet("La celda periódica de la bobina es un TORO —el tubo se cierra sobre sí "
+  + "mismo a través de la celda—, así que su Σ(6−n) es 0 como el del anillo, con D/d = "
+  + "3.52, dentro de la banda 3.5–3.9 que Popović y Liu publican para bobinas monocapa."));
+
+if (hay("fig6_rodillas.png")) c.push(...figura(F("fig6_rodillas.png"),
+  "Figura 6. Nueve estructuras de la ruta de rodillas, renderizadas del paquete. Cada "
+  + "panel imprime el Σ(6−n) MEDIDO sobre la estructura que muestra, no el esperado: la "
+  + "figura y la tabla anterior salen del mismo cálculo y no pueden discrepar."));
+
+c.push(h2("5.5 Percibir los anillos de una superficie abierta"));
+c.push(p("Contar los anillos de una estructura terminada no es trivial y tiene un modo de "
+  + "fallo que no se anuncia. Sobre una superficie teselada, los anillos se obtienen "
+  + "trazando CARAS —recorriendo el borde de cada polígono— y no por caminos mínimos "
+  + "entre vecinos: el camino mínimo omite sistemáticamente los anillos grandes, porque un "
+  + "heptágono cuyas siete aristas lindan además con hexágonos nunca es el circuito más "
+  + "corto que cierra por ninguna de ellas."));
+c.push(cita("Medido: sobre la unión X, el camino mínimo devuelve {5: 4, 6: 328} y un "
+  + "Σ(6−n) de +4; el trazado de caras devuelve {5: 4, 6: 328, 7: 16} y −12. Los dieciséis "
+  + "heptágonos no se pierden con ruido, se pierden enteros, y el censo resultante sigue "
+  + "pareciendo un censo."));
+c.push(p("Qué estructuras admiten el trazado de caras se decide por una pregunta y no por "
+  + "una tolerancia: ningún átomo puede tener más de tres vecinos, y al menos uno debe "
+  + "tener tres. Grado uno o dos es borde, que una superficie abierta tiene con todo "
+  + "derecho; grado cuatro o más no tesela superficie ninguna. Un umbral porcentual sobre "
+  + "la trivalencia decide casos reales por su margen —la X plana se queda en 89.74 % y un "
+  + "nanocono en 89.36 %, los dos definidos por tener borde—, y un cono y una cinta caían "
+  + "al camino mínimo en silencio."));
+c.push(p("Queda un caso que no se puede resolver, y se informa en lugar de taparse: el "
+  + "trazado distingue una cara de un borde por TAMAÑO, lo cual es exacto sólo mientras el "
+  + "borde sea más largo que un anillo. En una cinta de seis por tres, los dos bordes miden "
+  + "seis átomos —el tamaño de un hexágono— y se cuentan como anillos. El informe lo dice y "
+  + "marca el resultado como no fiable, en vez de restar dos caras sin saber cuáles."));
+
+/* ============ 6 ============ */
+c.push(new Paragraph({ children: [new PageBreak()] }));
+c.push(h1("6. Validación"));
+
+c.push(h2("6.1 Hibridación medida desde la geometría"));
 c.push(p("La fracción sp3 se mide directamente de la suma de los tres ángulos de enlace de "
   + "cada carbono tricoordinado: 360° cuando es plano (sp2 ideal, como en grafeno) y 328.4° "
   + "cuando es tetraédrico (sp3 ideal, tres ángulos de 109.47° con el cuarto enlace fuera de "
@@ -440,7 +576,7 @@ c.push(p("De ahí se sigue algo que conviene decir explícitamente en el artícu
 c.push(p("Controles: una haeckelita plana, llena de pentágonos y heptágonos, mide exactamente "
   + "0.00 de carácter sp3; un tubo (5,5) prístino mide 3.390 ± 0.000."));
 
-c.push(h2("5.2 Un criterio de imposibilidad, no de calidad"));
+c.push(h2("6.2 Un criterio de imposibilidad, no de calidad"));
 c.push(p("Una suma angular por debajo de 328.4° está más allá de lo tetraédrico, que ningún "
   + "carbono alcanza. No es una estructura peor: es una que no puede existir. El constructor "
   + "no la devuelve, sino que la reconstruye sujetando la pared a su propia superficie o "
@@ -449,7 +585,7 @@ c.push(p("Una suma angular por debajo de 328.4° está más allá de lo tetraéd
 c.push(p("El campo implícito vale cero sobre la pared, de modo que |f(átomo)| es la desviación "
   + "exacta fuera de superficie, sin aproximación alguna, y sirve como métrica de calidad."));
 
-c.push(h2("5.3 Dos métricas, y por qué hay que reportar las dos"));
+c.push(h2("6.3 Dos métricas, y por qué hay que reportar las dos"));
 c.push(rich([{ t: "Esta sección corrige una versión anterior de este documento", b: true },
   { t: ", y la corrección es en sí misma el punto metodológico más útil que tiene." }]));
 c.push(p(
@@ -514,7 +650,7 @@ c.push(p(
   + "después y descarta toda variante que empeore ese número. El superfulereno pasa de "
   + "1.281–1.644 Å con 128 enlaces fuera a 1.306–1.538 Å con cero."));
 
-c.push(h2("5.4 Un censo correcto puede esconder dislocaciones"));
+c.push(h2("6.4 Un censo correcto puede esconder dislocaciones"));
 c.push(p(
   "El presupuesto de Euler fija la suma Σ(6−n), no cada anillo por separado, y un par "
   + "pentágono-heptágono aporta exactamente cero a esa suma. De ahí que una estructura pueda "
@@ -552,7 +688,7 @@ c.push(p(
   + "pares se cancelan. Es la diferencia entre una red que cumple su topología y una red "
   + "limpia.", { italics: true }));
 
-c.push(h2("5.5 Conjunto de pruebas"));
+c.push(h2("6.5 Conjunto de pruebas"));
 c.push(p("1476 pruebas automatizadas (1 omitida por ausencia de tkinter en un entorno sin "
   + "pantalla). No comprueban únicamente que el código corra: fijan los resultados medidos y, "
   + "en varios casos, fijan también los criterios que se ensayaron y no funcionan, para que no "
@@ -560,7 +696,7 @@ c.push(p("1476 pruebas automatizadas (1 omitida por ausencia de tkinter en un en
   + "versionados junto al código."));
 
 /* ============ 6 ============ */
-c.push(h1("6. Reproducibilidad"));
+c.push(h1("7. Reproducibilidad"));
 c.push(spacer(60));
 c.push(table(["Elemento", "Valor"],
   [["Paquete", "nanocarbon_lab v0.2.0"],
@@ -583,7 +719,7 @@ c.push(p("Declare la semilla en el artículo. Los constructores son determinista
   + "modifica la malla y, con ella, el censo de anillos.", { italics: true }));
 
 /* ============ 7 ============ */
-c.push(h1("7. Librerías utilizadas"));
+c.push(h1("8. Librerías utilizadas"));
 c.push(p("Todas son de código abierto y todas piden ser citadas en la bibliografía, no sólo en "
   + "los agradecimientos."));
 c.push(spacer(60));
@@ -604,8 +740,8 @@ c.push(p("Nota sobre bpy (Blender): está declarado como conflictivo en la raíz
   + "incluye figuras renderizadas con Blender, decláre­lo por separado.", { italics: true }));
 
 /* ============ 8 ============ */
-c.push(h1("8. Agradecimientos"));
-c.push(h2("8.1 Fuentes metodológicas"));
+c.push(h1("9. Agradecimientos"));
+c.push(h2("9.1 Fuentes metodológicas"));
 c.push(p("Deben acreditarse en el cuerpo del artículo, no sólo en los agradecimientos:"));
 c.push(bullet("Romo-Herrera, Terrones, Terrones, Dag y Meunier — Nano Letters 7 (2007) 570. "
   + "La jerarquía de superredes de nanotubos. La comprobación del censo de anillos reproduce "
@@ -625,15 +761,21 @@ c.push(bullet("Botsch, M. y Kobbelt, L. — esquema de remallado isotrópico (di
   + "voltear, suavizar, reproyectar)."));
 c.push(bullet("Lorensen, W. E. y Cline, H. E. — Computer Graphics 21 (1987) 163. Marching cubes."));
 c.push(bullet("Dunlap, B. I. — criterio de disclinaciones en carbonos toroidales; y, con "
-  + "Ihara, la ruta topológica a las bobinas."));
+  + "Ihara, la ruta topológica a las bobinas. El codo a inglete de la sección 5 es un codo "
+  + "de Dunlap doble, y el giro de 30° por par pentágono-heptágono es el ángulo del codo "
+  + "publicado: ésa es la comprobación de que la ley empleada es la correcta."));
+c.push(bullet("Lenosky, T.; Gonze, X.; Teter, M. y Elser, V. — Nature 355 (1992) 333. "
+  + "Carbono grafítico de curvatura negativa sobre la superficie D. La celda primitiva de "
+  + "D es la D216 de ese trabajo, de género 3; las celdas de la sección 5 son las "
+  + "convencionales cúbicas, que son cuatro primitivas de la misma superficie."));
 c.push(bullet("Stone, A. J. y Wales, D. J. — la rotación de enlace que genera pares 5-7."));
 
-c.push(h2("8.2 Software"));
+c.push(h2("9.2 Software"));
 c.push(p("Formulación sugerida: «Este trabajo se apoya en el ecosistema científico de Python. "
   + "Los autores agradecen a las comunidades de NumPy, SciPy, ASE, NetworkX, scikit-image y "
   + "Matplotlib, cuyo software libre hace posible este tipo de trabajo.»"));
 
-c.push(h2("8.3 Asistencia de inteligencia artificial"));
+c.push(h2("9.3 Asistencia de inteligencia artificial"));
 c.push(p("El desarrollo del generador se realizó con asistencia de Claude (Anthropic), "
   + "utilizado a través de Claude Code. Conviene declararlo, y en el lugar correcto."));
 c.push(rich([{ t: "Sobre la autoría. ", b: true },
@@ -657,7 +799,7 @@ c.push(p("Ajuste el alcance a lo que realmente ocurrió. Una declaración que ex
   { italics: true, color: "7F2704" }));
 
 /* ============ 9 ============ */
-c.push(h1("9. Qué conviene destacar"));
+c.push(h1("10. Qué conviene destacar"));
 c.push(p("Cuatro puntos son metodológicamente defendibles y distinguen al generador de una "
   + "colección de constructores:"));
 c.push(bullet("La estadística de anillos es derivada, no impuesta. Eso permite enunciar la "
