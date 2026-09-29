@@ -76,6 +76,13 @@ class XRDSession:
         self.selected_phases: list[str] = []
         """Names of reference phases the user pinned. Empty means "search
         the whole library"."""
+        self.overlay_phases: list[str] = []
+        """Names of phases to DRAW over the measured pattern, with no
+        verdict attached. A different thing from `selected_phases`: that
+        one narrows what the search will consider, this one narrows
+        nothing and asserts nothing. It exists for the case the search
+        is worst at -- it came back with nothing, and the question is
+        which candidate to go and look up."""
         self.anode: str = "Cu"
         self.wavelength: Optional[float] = None
         self.kalpha2_ratio: float = 0.5
@@ -200,6 +207,46 @@ class XRDSession:
 
     def library(self) -> list[LibraryEntry]:
         return load_library(self.cif_directories)
+
+    def overlay_crystals(self) -> list[Crystal]:
+        """The structures the user asked to see drawn on the pattern.
+
+        Separate from `selected_phases`, which narrows the SEARCH. This
+        narrows nothing and claims nothing: it answers "would this one
+        line up?", which is the question left when the identification
+        came back empty, and which the search cannot answer because its
+        job is to refuse.
+        """
+        out: list[Crystal] = []
+        by_name = {entry.crystal.name: entry for entry in self.library()}
+        for name in self.overlay_phases:
+            entry = by_name.get(name)
+            if entry is None:
+                self.log("aviso", f"«{name}» ya no está en la biblioteca")
+                continue
+            out.append(entry.crystal)
+        return out
+
+    def add_overlay(self, name: str) -> bool:
+        """Draw one more library phase over the measured pattern."""
+        if not name:
+            return False
+        if name in self.overlay_phases:
+            return True
+        if name not in {entry.crystal.name for entry in self.library()}:
+            self.log("error", f"«{name}» no está en la biblioteca")
+            return False
+        self.overlay_phases.append(name)
+        return True
+
+    def remove_overlay(self, name: str) -> bool:
+        if name not in self.overlay_phases:
+            return False
+        self.overlay_phases.remove(name)
+        return True
+
+    def clear_overlays(self) -> None:
+        self.overlay_phases.clear()
 
     def candidates(self) -> Optional[list[Crystal]]:
         """The structures to test, or ``None`` for the whole library."""

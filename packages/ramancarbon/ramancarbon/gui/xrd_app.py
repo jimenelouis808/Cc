@@ -226,6 +226,30 @@ class XRDApp(SectionApp):
         ttk = self.ttk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Fases  ")
+        # Identification answers "which of these does the program
+        # accept", and that is a decision with a bar: positions, enough
+        # of the phase's own calculated intensity accounted for, and no
+        # reflection it should have shown missing. The bar is right for
+        # a claim and useless for the question left when the search
+        # comes back empty -- "would THIS one line up?" -- which needs
+        # no verdict, only the lines on the same axis.
+        overlay_bar = flow(tab, style="TFrame")
+        overlay_bar.add(ttk.Label(overlay_bar.frame, text="Superponer fase:"))
+        self.overlay_var = self.tk.StringVar(value="")
+        self.overlay_box = ttk.Combobox(
+            overlay_bar.frame, textvariable=self.overlay_var, width=26,
+            state="readonly", values=[])
+        overlay_bar.add(self.overlay_box, grow=True)
+        overlay_bar.add(ttk.Button(overlay_bar.frame, text="Añadir",
+                                   command=self._add_overlay))
+        overlay_bar.add(ttk.Button(overlay_bar.frame, text="Quitar",
+                                   command=self._remove_overlay))
+        overlay_bar.add(ttk.Button(overlay_bar.frame, text="Limpiar",
+                                   command=self._clear_overlays))
+        self.overlay_label = ttk.Label(overlay_bar.frame, text="—",
+                                       style="Muted.TLabel")
+        overlay_bar.add(self.overlay_label, grow=True)
+
         panes = ttk.Panedwindow(tab, orient="vertical")
         panes.pack(fill="both", expand=True)
 
@@ -244,7 +268,13 @@ class XRDApp(SectionApp):
              "Las posiciones dependen solo de la red y son prueba fuerte. Las "
              "intensidades las estropea la orientación preferente en cualquier "
              "material laminar, así que un acuerdo de intensidades bajo suele "
-             "ser textura y no una fase equivocada.",
+             "ser textura y no una fase equivocada.   "
+             "Superponer una fase a mano NO la identifica ni la refina: sólo "
+             "dibuja dónde caerían sus reflexiones, sin ajustar el "
+             "desplazamiento de cero, para que puedas juzgar tú cuando la "
+             "búsqueda no propuso nada. Si encaja, márcala en Biblioteca con "
+             "«Usar solo las marcadas» y vuelve a identificar, o añádela al "
+             "modelo en Rietveld.",
              wrap=900)
 
     def _build_tab_refinement(self) -> None:
@@ -831,6 +861,12 @@ class XRDApp(SectionApp):
             ["fase", "fórmula", "grupo espacial", "confianza", "origen"],
             rows,
         )
+        # The overlay chooser lists the same library, so a CIF folder
+        # added on this tab has to reach the other one.
+        names = [row[0] for row in rows]
+        self.overlay_box.configure(values=names)
+        if names and not self.overlay_var.get():
+            self.overlay_var.set(names[0])
 
     def _on_library_select(self, _event=None) -> None:
         selection = self.library_table.selection()
@@ -910,14 +946,49 @@ class XRDApp(SectionApp):
         ax.set_title(item.name, fontsize=9)
 
     def _draw_sticks(self, figure) -> None:
-        from .plots_xrd import plot_phase_sticks
+        from .plots_xrd import plot_manual_sticks, plot_phase_sticks
 
         ax = figure.add_subplot(111)
         item = self.session.item
-        if item is None or item.result is None:
-            placeholder(ax, "Identifica las fases", self.figure_palette)
+        if item is None:
+            placeholder(ax, "Carga un difractograma", self.figure_palette)
+            return
+        # A manual overlay wins over the identification's own picture,
+        # because asking for one is asking to look at those phases
+        # rather than at the verdict.
+        if self.session.overlay_phases:
+            plot_manual_sticks(ax, item.pattern,
+                               self.session.overlay_crystals(),
+                               self.figure_palette)
+            return
+        if item.result is None:
+            placeholder(ax, "Identifica las fases, o superpón una a mano",
+                        self.figure_palette)
             return
         plot_phase_sticks(ax, item.result, self.figure_palette)
+
+    def _add_overlay(self) -> None:
+        if self.session.add_overlay(self.overlay_var.get().strip()):
+            self._after_overlay_change()
+        self.flush_messages(self.session.messages)
+
+    def _remove_overlay(self) -> None:
+        self.session.remove_overlay(self.overlay_var.get().strip())
+        self._after_overlay_change()
+
+    def _clear_overlays(self) -> None:
+        self.session.clear_overlays()
+        self._after_overlay_change()
+
+    def _after_overlay_change(self) -> None:
+        names = self.session.overlay_phases
+        self.overlay_label.config(
+            text=", ".join(names) if names else "—")
+        self.mark_dirty("sticks")
+        self.flush_dirty(self._visible())
+        self.set_status(
+            f"{len(names)} fase(s) superpuesta(s) a mano — sin veredicto."
+            if names else "Sin superposiciones; vuelve la vista identificada.")
 
     def _draw_rietveld(self, figure) -> None:
         from .plots_xrd import plot_rietveld

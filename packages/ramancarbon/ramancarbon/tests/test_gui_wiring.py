@@ -278,6 +278,14 @@ def test_the_two_raman_sections_share_one_session():
         ("xps_app", "composition_source_var"),
         ("xps_app", "zero_base_var"),
         ("xps_app", "_redraw_region"),
+        # When the search proposes nothing, the question left is "would
+        # THIS one line up?" -- which needs no verdict, only the lines
+        # drawn on the same axis.
+        ("xrd_app", "overlay_box"),
+        ("xrd_app", "overlay_var"),
+        ("xrd_app", "_add_overlay"),
+        ("xrd_app", "_remove_overlay"),
+        ("xrd_app", "_clear_overlays"),
         ("xrd_app", "_identify"),
         ("xrd_app", "_auto_refine"),
         ("xrd_app", "_prepare_manual"),
