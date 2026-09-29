@@ -1,20 +1,21 @@
 # nanocarbon
 
-Tres paquetes independientes para caracterización y simulación de
+Cuatro paquetes independientes para caracterización y simulación de
 nanomateriales de carbono, en un mismo espacio de trabajo.
 
 | Paquete | Para qué es |
 |---|---|
 | **`packages/ramancarbon`** | Analiza **medidas**: Raman (carbono y TMD), difracción de rayos X con Rietveld, fotoemisión (XPS) y electroquímica (CV, carga-descarga, impedancia, HER/OER). Lectores, ajuste, identificación de fases, motor de figuras y una aplicación gráfica. |
 | **`packages/carbonforge`** | Prepara **cálculos**: Quantum ESPRESSO, SIESTA, LAMMPS; campos de fuerza, celdas EDLC y lectura de resultados. |
-| **`packages/nanocarbon_lab`** | Genera **estructuras**: nanotubos, fulerenos, haeckelitas, schwarzitas, uniones, espumas, TMD, dopantes y defectos. |
+| **`packages/nanocarbon_lab`** | Genera **estructuras**: nanotubos, fulerenos, haeckelitas, esquarcitas, uniones, bobinas, espumas, TMD, dopantes y defectos. Incluye la **ruta de rodillas**, cuyo censo de anillos es el que Gauss-Bonnet pide y no otro. |
+| **`packages/tbkit`** | Tight binding parametrizable: modelos Slater-Koster π y sp³, `.skf` de DFTB, ajuste, cargas autoconsistentes, magnetismo de Hubbard de campo medio y puntos k. |
 
 La interfaz de usuario está en español; el código y los docstrings, en inglés.
 
 ## Empezar
 
 ```bash
-uv sync --all-packages --extra dev      # instala los tres
+uv sync --all-packages --extra dev      # instala los cuatro
 uv run ramancarbon-gui                  # la aplicación gráfica
 ```
 
@@ -34,7 +35,7 @@ OMP_NUM_THREADS=1 uv run python -m pytest ramancarbon/tests -q -n 4 --dist loads
 
 ## La regla que no se rompe
 
-**Los tres paquetes son independientes y siguen siéndolo.** Ninguno importa a
+**Los cuatro paquetes son independientes y siguen siéndolo.** Ninguno importa a
 otro. Cada uno tiene su `pyproject.toml`, su versión, sus pruebas y su script
 de consola, y cada uno debe poder instalarse y pasar el linter por separado.
 

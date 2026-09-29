@@ -2897,6 +2897,64 @@ and SP rings find 4; Schwarz P has 65 and SP rings find 10. Neither is
 C60 -- a cycle basis counts independent loops, which is a different
 question with a different right answer.
 
+### A rim is not evidence against a surface, and a threshold said it was
+
+`is_surface_net` gated face tracing on "**at least 90%** of bonded atoms
+have degree 3". That is a tolerance standing in for a question, and it
+was deciding real cases on its margin:
+
+| structure | degrees | trivalent | old verdict |
+|---|---|---|---|
+| planar X junction | `{2: 80, 3: 700}` | 89.74% | **fell back** |
+| tetrahedral node | `{2: 72, 3: 684}` | 90.48% | traced |
+| nanocone | `{2: 50, 3: 420}` | 89.36% | **fell back** |
+| nanoribbon 6x6 | `{2: 12, 3: 60}` | 83.33% | **fell back** |
+
+The tetrahedral node passing by 0.48 of a point was luck. A **nanocone
+and a nanoribbon are defined by having an edge**, and this file's own
+nanocone section says so ("the rim is open on purpose"). Falling back is
+not harmless: the X junction's census came out `{5: 4, 6: 328}` with
+`sum(6-n) = +4` where its true census is `{5: 4, 6: 328, 7: 16}` and
+`-12`. **All sixteen heptagons, silently** -- the exact failure mode two
+paragraphs up, met on a structure this package builds and whose census it
+already knows.
+
+The test is now the question that distinguishes a surface: **no atom may
+have more than three neighbours, and at least one must have three.**
+Degree 1 or 2 is a rim, which an open surface legitimately has; degree 4
+or more is a net that does not tile a surface at all. What must stay
+excluded still does -- a bulk MX2 reaches degree 15 by the bond list, and
+a carboxylated tube has degree-4 anchors so it still goes down the
+backbone branch.
+
+`trace_faces` needed no change: it always returned the orbits it
+discarded for being too long, and an open surface's rim is exactly one of
+those.
+
+#### But a rim can be short enough to pass as a ring
+
+`trace_faces` tells a face from the boundary by **size**, which is exact
+only while the rim is longer than a ring may be. A ribbon is periodic
+along its length, so it is an annulus -- `chi = 0`, therefore
+`faces = E - V`:
+
+| ribbon | V | E | E - V | faces | discarded |
+|---|---|---|---|---|---|
+| 6 wide, 3 long | 36 | 51 | 15 | **17** | **0** |
+| 6 wide, 6 long | 72 | 102 | 30 | 30 | 2 |
+| 8 by 8 | 128 | 184 | 56 | 56 | 2 |
+| 10 by 10 | 200 | 290 | 90 | 90 | 2 |
+
+Every row but the first discards its two rims and lands on Euler exactly.
+The 6-by-3 ribbon's rims come out **six atoms long** -- a hexagon's size
+-- so both are counted as rings and the census is two hexagons heavy.
+
+There is no way to tell them apart by size, so the report **says so**
+rather than guessing: a structure that has boundary atoms and discarded
+*nothing* gets a caveat and `reliable = False`, the same signal a
+collapsed cell gets. Nothing is subtracted, because which two of the
+faces are the rims is exactly what is not known.
+
 A cell so small that a pair of atoms is bonded through **more than one
 image** cannot be written as a simple graph at all, so no census on it
 describes it. That is detected and refused rather than answered.

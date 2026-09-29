@@ -193,18 +193,51 @@ def perceive_rings(atoms: Atoms,
     return rings
 
 
-def is_surface_net(atoms: Atoms, pairs: np.ndarray,
-                   min_trivalent: float = 0.9) -> bool:
+def is_surface_net(atoms: Atoms, pairs: np.ndarray) -> bool:
     """Whether the structure is a trivalent net, so faces can be traced.
 
     Graphene, every nanotube, every fullerene, every schwarzite and every
-    junction are: each atom has exactly three neighbours and the net
-    tiles a surface. A bulk crystal, an MX2 sandwich (six-coordinate
-    metal) and a molecule are not, and face tracing means nothing there.
+    junction are: each atom has three neighbours and the net tiles a
+    surface. A bulk crystal, an MX2 sandwich (six-coordinate metal), a
+    decorated net and a molecule are not, and face tracing means nothing
+    there.
 
-    A little slack, because a real file has edges: a graphene flake's rim
-    atoms have two neighbours, and refusing to trace faces on it over a
-    handful of boundary atoms would be pedantry.
+    **A rim atom is not evidence against a surface -- it is what a
+    boundary looks like.** So the test is that no atom has *more* than
+    three neighbours, and that at least one has three. Degree 1 or 2 is a
+    rim or a dangling end, which an open surface legitimately has;
+    degree 4 or more is a net that does not tile a surface at all.
+
+    This replaced a "at least 90% of bonded atoms have degree 3"
+    threshold, and the threshold was deciding real cases on its margin.
+    Measured:
+
+    ==================  ==================  ==========  ==========
+    structure           degrees             fraction    old verdict
+    ==================  ==================  ==========  ==========
+    planar X junction   {2: 80, 3: 700}     89.74%      **fell back**
+    tetrahedral node    {2: 72, 3: 684}     90.48%      traced
+    nanocone            {2: 50, 3: 420}     89.36%      **fell back**
+    nanoribbon          {2: 6, 3: 30}       83.33%      **fell back**
+    ==================  ==================  ==========  ==========
+
+    The tetrahedral node passing by 0.48 of a point was luck, and a
+    nanocone and a nanoribbon are *defined* by having an edge. Falling
+    back is not harmless: shortest-path rings systematically miss a
+    heptagon every one of whose bonds also borders a hexagon, so the X
+    junction's census came out ``{5: 4, 6: 328}`` with
+    ``sum(6-n) = +4`` where the structure's true census is
+    ``{5: 4, 6: 328, 7: 16}`` and ``-12``. All sixteen heptagons,
+    silently.
+
+    What must stay excluded still is: an MX2 sandwich (degrees up to 15
+    by the bond list), a bulk crystal, and a **decorated** net -- a
+    carboxylated tube has degree-4 anchors, so it still goes down the
+    backbone branch rather than being traced directly.
+
+    ``trace_faces`` was always ready for a boundary: it returns the
+    orbits it discarded as too large, and an open surface's outer
+    boundary is exactly one of those. Nothing there needed changing.
     """
     if not len(pairs):
         return False
@@ -212,7 +245,7 @@ def is_surface_net(atoms: Atoms, pairs: np.ndarray,
     bonded = degree[degree > 0]
     if not bonded.size:
         return False
-    return float(np.mean(bonded == 3)) >= min_trivalent
+    return bool(bonded.max() <= 3 and (bonded == 3).any())
 
 
 def trace_faces(atoms: Atoms, pairs: np.ndarray,
@@ -369,6 +402,51 @@ def _backbone_is_a_surface(atoms: Atoms, pairs: np.ndarray) -> bool:
     return is_surface_net(core, _reindexed(pairs, keep))
 
 
+def _short_boundary_caveat(atoms: Atoms, pairs: np.ndarray,
+                           discarded: int, max_size: int) -> str:
+    """Whether an open surface's rim was short enough to pass as a ring.
+
+    ``trace_faces`` tells a face from the outer boundary by **size**: a
+    boundary walk is an orbit like any other and is discarded for being
+    longer than ``max_size``. That is exact whenever the rim is longer
+    than a ring can be, and on a small enough cell it is not.
+
+    Measured on nanoribbons, which are periodic along their length and so
+    are annuli -- ``chi = 0``, therefore ``faces = E - V``:
+
+    ==============  ===  ===  =========  ==========  ==========
+    ribbon          V    E    E - V      faces       discarded
+    ==============  ===  ===  =========  ==========  ==========
+    6 wide, 3 long  36   51   15         **17**      **0**
+    6 wide, 6 long  72   102  30         30          2
+    8 wide, 8 long  128  184  56         56          2
+    10 by 10        200  290  90         90          2
+    ==============  ===  ===  =========  ==========  ==========
+
+    Every row but the first discards its two rims and lands on Euler
+    exactly. The 6-by-3 ribbon's rims are **six atoms long** -- a hexagon's
+    size -- so both were counted as rings and the census came out two
+    hexagons heavy.
+
+    There is no way to tell them apart by size, so this says so instead of
+    guessing: if the structure has boundary atoms at all and *nothing* was
+    discarded, the rim passed as a ring. Nothing is subtracted -- which
+    two of the faces are the rims is exactly what is not known.
+    """
+    degree = np.bincount(pairs.ravel(), minlength=len(atoms))
+    bonded = degree[degree > 0]
+    open_rim = bool(bonded.size and (bonded < 3).any())
+    if not open_rim or discarded:
+        return ""
+    return (
+        "This surface has a boundary and no traced orbit was discarded for "
+        f"being longer than {max_size} atoms, so the rim is short enough to "
+        "be indistinguishable from a ring and the census is likely to "
+        "count it as one. Lengthen the cell and the rim grows past a "
+        "ring's size."
+    )
+
+
 def ring_report(atoms: Atoms,
                 pairs: np.ndarray,
                 max_size: int = MAX_RING_SIZE) -> dict:
@@ -409,7 +487,7 @@ def ring_report(atoms: Atoms,
     if is_surface_net(atoms, pairs):
         method = "faces"
         rings, boundary = trace_faces(atoms, pairs, max_size)
-        caveat = ""
+        caveat = _short_boundary_caveat(atoms, pairs, boundary, max_size)
     elif _backbone_is_a_surface(atoms, pairs):
         # Strip the pendant groups and trace the faces of what is left.
         # A carboxylated nanotube is not a trivalent net, but its wall
@@ -445,6 +523,12 @@ def ring_report(atoms: Atoms,
     unringed = sum(1 for first, second in pairs
                    if frozenset((int(first), int(second))) not in in_a_ring)
 
+    # A rim short enough to pass as a ring is counted as one, and that is
+    # a census that is wrong rather than merely incomplete -- so it is
+    # reported unreliable, as a collapsed cell is. The caveat is set
+    # before this only when nothing was discarded, so the two cannot both
+    # fire.
+    short_rim = bool(caveat) and method == "faces" and not boundary
     if method == "faces" and boundary:
         caveat = (
             f"{boundary} traced walk(s) came out longer than {max_size} atoms "
@@ -460,7 +544,7 @@ def ring_report(atoms: Atoms,
         "n_unringed_bonds": int(unringed),
         "euler_deficit": int(sum(6 - len(ring) for ring in rings)),
         "collapsed_image_bonds": 0,
-        "reliable": True,
+        "reliable": not short_rim,
         "method": method,
         "n_boundary_walks": boundary,
         "max_size_searched": max_size,
