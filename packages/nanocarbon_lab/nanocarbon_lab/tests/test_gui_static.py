@@ -143,19 +143,16 @@ def _source() -> str:
 
 
 def _presets(source: str) -> dict:
-    """The PRESETS literal, parsed rather than imported."""
-    start = source.index("PRESETS: dict[str, dict[str, object]] = {")
-    start = source.index("{", start)
-    depth = 0
-    for i in range(start, len(source)):
-        if source[i] == "{":
-            depth += 1
-        elif source[i] == "}":
-            depth -= 1
-            if depth == 0:
-                end = i + 1
-                break
-    return ast.literal_eval(source[start:end])
+    """The preset catalogue.
+
+    It used to be parsed out of the widget module's source, because that
+    module needs a display to import. It now lives in
+    :mod:`nanocarbon_lab.presets`, which does not -- so it is imported,
+    and `source` is accepted and ignored to keep the call sites alike.
+    """
+    from nanocarbon_lab.presets import PRESETS
+
+    return PRESETS
 
 
 class TestThePresetsPointAtRealThings:
@@ -264,3 +261,79 @@ class TestEverySuperlatticeIsReachableFromAPreset:
         assert "wall_area(" in source and "build_cost_note(" in source, (
             "the supernetwork hint no longer prices the build, so an "
             "enormous net reads the same as a small one")
+
+
+#: Modes `current_job` does not name because something else answers for
+#: them: the dichalcogenides go through `_tmd_params`, and the capped
+#: tube is what the final `else` builds. Every other mode must appear in
+#: the method by name, or it reaches that `else` and is handed the
+#: capped tube's keywords.
+JOB_HANDLED_ELSEWHERE = {
+    "capped tube",
+    "TMD layers", "TMD bulk", "TMD ribbon", "TMD nanotube",
+    "TMD coil", "TMD schwarzite", "TMD junction",
+}
+
+
+def _current_job_source(source: str) -> str:
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "current_job":
+            return ast.get_source_segment(source, node) or ""
+    raise AssertionError("current_job is gone -- this test needs rewriting")
+
+
+def test_every_mode_reaches_a_branch_that_knows_its_builder():
+    """The bug this exists for.
+
+    ``toroid (knees)``, ``coil (knees)`` and ``coil (knees, periodic)``
+    were in the menu and in the preset catalogue but in **no** branch of
+    ``current_job``, so each fell through to the final ``else`` and was
+    handed ``n_body_rings``, ``freq`` and ``helix_radius`` -- keywords
+    ``build_knee_toroid`` has never heard of. Every one of them failed
+    from the window while building perfectly from the library, which is
+    the hardest kind of failure to place.
+
+    A mode may be absent only by being on the list above, which is read
+    as a claim that something else answers for it.
+    """
+    from nanocarbon_lab.jobs import MODES
+    from nanocarbon_lab.presets import KNEE_MODES
+
+    body = _current_job_source(_source())
+    named = {mode for mode in MODES if f'"{mode}"' in body}
+    # The knee modes are dispatched as a set rather than one by one.
+    assert "KNEE_MODES" in body
+    named |= set(KNEE_MODES)
+    unreached = set(MODES) - named - JOB_HANDLED_ELSEWHERE
+    assert not unreached, (
+        f"{sorted(unreached)} reach the capped-tube branch, which will "
+        "hand their builders keywords they do not take")
+    stale = JOB_HANDLED_ELSEWHERE - set(MODES)
+    assert not stale, f"{sorted(stale)} are no longer modes"
+
+
+def test_every_knee_mode_shows_a_panel():
+    """A mode with parameters and no panel cannot be varied at all.
+
+    The three that had no branch had no frame either, so the toroid's
+    knee count and both coils' radius, pitch and turn count were
+    unreachable: the preset was the only structure those modes could
+    make.
+    """
+    from nanocarbon_lab.presets import KNEE_MODES
+
+    source = _source()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_on_mode_change":
+            body = ast.get_source_segment(source, node) or ""
+            break
+    else:                                                # pragma: no cover
+        raise AssertionError("_on_mode_change is gone")
+    for mode in KNEE_MODES:
+        assert f'"{mode}"' in body, f"{mode} never shows a panel"
+    for frame in ("frame_knee", "frame_knee_toroid", "frame_knee_coil"):
+        assert f"self.{frame}.pack(" in body, f"{frame} is never shown"
+        assert f"self.{frame}," in body or f"self.{frame})" in body, (
+            f"{frame} is never hidden, so it will linger into other modes")

@@ -3428,3 +3428,33 @@ def describe_knee_toroid(atoms: Atoms) -> str:
         f"rings {census}, sum(6-n) = {info.get('ring_deficit', 0):+d}"
         f"{where}{clean}."
     )
+
+
+#: Which default-shape table belongs to each knee mode, and which
+#: builder argument names the kind. The GUI needs this to answer "the
+#: user picked a kind; what shape does it want?", and the tests need it
+#: to answer the same question without a display -- so it lives here
+#: rather than in the GUI, where it was a lookup no test could reach.
+KNEE_SHAPE_TABLES: dict[str, tuple[str, dict[str, tuple[int, int]]]] = {
+    "schwarzite (knees)": ("kind", DEFAULT_SCHWARZITE_SHAPE),
+    "junction (knees)": ("kind", DEFAULT_JUNCTION_SHAPE),
+    "supernetwork (knees)": ("net", DEFAULT_SUPERNET_SHAPE),
+}
+
+
+def default_knee_shape(mode: str, kind: str) -> tuple[int, int] | None:
+    """``(circumference, arm_rows)`` for one knee mode's kind.
+
+    The kinds do **not** share a shape, and that is geometry rather than
+    taste: a Y node closes at circumference 14 and a tetrahedral one does
+    not close there at all. Carrying the wrong kind's shape is therefore
+    not a near miss -- it either refuses outright or builds a different
+    structure from the one the caller asked for.
+
+    Returns ``None`` for a mode that has no such table (the toroid and
+    the coils size themselves from their own arguments).
+    """
+    table = KNEE_SHAPE_TABLES.get(mode)
+    if table is None:
+        return None
+    return table[1].get(kind)
