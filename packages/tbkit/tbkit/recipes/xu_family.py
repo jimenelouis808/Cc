@@ -99,6 +99,10 @@ class XuFamily:
     #: neighbour (1.85-2.2 Å): alcohols relaxed onto the tail's edge and got an
     #: O-H mode at 4950 cm⁻¹ (GPAW 3618). None keeps the scaled tail (xu_chn).
     h_tail: Optional[tuple] = None
+    #: The same for pairs of heavy atoms other than C-C (C-O, C-N, N-O, O-O...):
+    #: their scaled tails (2.2-2.5 Å) overlap second-neighbour distances (O...O
+    #: in CO2 or a carboxyl, C...O across a ring). None keeps the scaled tail.
+    heavy_tail: Optional[tuple] = None
 
     def acute_term(self, coefficients=None):
         from ..repulsive import AcuteAngleTerm
@@ -111,8 +115,10 @@ class XuFamily:
     def __post_init__(self):
         for (a, b), spec in self.pairs.items():
             spec.setdefault("bonds", pair_bonds(a, b))
-            if self.h_tail is not None and "H" in (a, b):
-                r1, rm = (round(spec["r0"] + d, 3) for d in self.h_tail)
+            offsets = self.h_tail if "H" in (a, b) else \
+                self.heavy_tail if (a, b) != ("C", "C") else None
+            if offsets is not None:
+                r1, rm = (round(spec["r0"] + d, 3) for d in offsets)
                 spec.setdefault("tail", (r1, rm))
                 spec["rc_rep"] = min(spec["rc_rep"], rm)
         if self.base is not None:

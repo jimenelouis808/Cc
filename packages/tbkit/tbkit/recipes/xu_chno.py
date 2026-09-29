@@ -22,6 +22,7 @@ Run (after :mod:`tbkit.recipes.chno_references`)::
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 from pathlib import Path
 
@@ -31,18 +32,20 @@ from . import xu_family
 from .xu_chn import EXPERIMENTAL_ALPHA, HUBBARD_U, ONSITE_DIPOLE
 from .xu_family import XuFamily
 
+_PAIRS = {("C", "H"): {"r0": 1.09, "rc_rep": 1.75},
+          ("N", "H"): {"r0": 1.01, "rc_rep": 1.65},
+          ("C", "N"): {"r0": 1.47, "rc_rep": 2.2},
+          ("N", "N"): {"r0": 1.45, "rc_rep": 2.1},
+          ("C", "O"): {"r0": 1.43, "rc_rep": 2.1},
+          ("O", "H"): {"r0": 0.97, "rc_rep": 1.6},
+          ("N", "O"): {"r0": 1.40, "rc_rep": 2.0},
+          ("O", "O"): {"r0": 1.47, "rc_rep": 1.9}}
+
 CHNO = XuFamily(
     name="C/H/N/O: Xu (C-C) + H, N, O ajustados a GPAW",
     recipe="tbkit.recipes.xu_chno",
     heteroatoms=("H", "N", "O"),
-    pairs={("C", "H"): {"r0": 1.09, "rc_rep": 1.75},
-           ("N", "H"): {"r0": 1.01, "rc_rep": 1.65},
-           ("C", "N"): {"r0": 1.47, "rc_rep": 2.2},
-           ("N", "N"): {"r0": 1.45, "rc_rep": 2.1},
-           ("C", "O"): {"r0": 1.43, "rc_rep": 2.1},
-           ("O", "H"): {"r0": 0.97, "rc_rep": 1.6},
-           ("N", "O"): {"r0": 1.40, "rc_rep": 2.0},
-           ("O", "O"): {"r0": 1.47, "rc_rep": 1.9}},
+    pairs=copy.deepcopy(_PAIRS),
     hubbard_u={**HUBBARD_U, "O": 13.4802},
     onsite_dipole={**ONSITE_DIPOLE, "O": 0.3550},
     system=("moléculas C/H/N/O de capa cerrada: las de xu_chn más alcoholes, éteres, "
@@ -82,8 +85,16 @@ def main(argv=None) -> None:
     parser.add_argument("--hessians", type=Path, default=None,
                         help="hessianas GPAW (frequency_references) para ajustar la curvatura")
     parser.add_argument("--hessian-weight", type=float, default=0.1)
+    parser.add_argument("--heavy-tail", type=float, nargs=2, default=None, metavar=("DR1", "DRM"),
+                        help="cola de los pares pesados (no C-C) en r0 + (DR1, DRM) Å")
     args = parser.parse_args(argv)
-    xu_family.run(CHNO, args.references, args.out, workers=args.workers, x0=warm_start(),
+    family = CHNO
+    if args.heavy_tail:
+        import dataclasses
+
+        family = dataclasses.replace(CHNO, pairs=copy.deepcopy(_PAIRS),
+                                     heavy_tail=tuple(args.heavy_tail))
+    xu_family.run(family, args.references, args.out, workers=args.workers, x0=warm_start(),
                   hessians=args.hessians, hessian_weight=args.hessian_weight)
 
 

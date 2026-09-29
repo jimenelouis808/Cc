@@ -146,3 +146,25 @@ def test_formic_acid_alpha_tensor_against_gpaw(shipped):
     tb = polarizability_linear_response(System.build(atoms, model))
     assert np.sort(np.linalg.eigvalsh(tb)) == pytest.approx(
         np.sort(np.linalg.eigvalsh(gpaw)), rel=0.10)            # ≤ 3 % when fitted
+
+
+def test_hessians_are_the_ones_fitted(shipped):
+    fit = shipped[0]["fit"]
+    if "hessians" not in fit:
+        pytest.skip("conjunto ajustado sin hessianas")
+    path = PARAMETER_DIR / "references" / fit["hessians"]
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == fit["hessians_sha256"]
+
+
+def test_methanol_frequencies_against_gpaw(shipped):
+    # The C-H hopping tail once sat where the hydroxyl H meets its carbon's
+    # neighbour: methanol relaxed onto its edge and got an O-H at 4950 cm⁻¹.
+    from tbkit.recipes.xu_family import frequency_validation, load_hessians
+
+    if "hessians" not in shipped[0]["fit"]:
+        pytest.skip("conjunto ajustado sin hessianas")
+    targets = [t for t in load_hessians(PARAMETER_DIR / "references" /
+                                        shipped[0]["fit"]["hessians"]) if t.name == "CH3OH"]
+    entry = frequency_validation(shipped[1], targets)["CH3OH"]
+    assert entry["rms"] < 160 and not entry["tail_hits"]          # 120 when fitted
+    assert abs(entry["tb"][-1] - entry["gpaw"][-1]) < 300        # the O-H stretch
