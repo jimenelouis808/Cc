@@ -597,6 +597,7 @@ def _comparison_verdict(
 
 __all__ = [
     "D_REGION_LADDER",
+    "EDITED_BOUND_MARGIN",
     "G_REGION_LADDER",
     "REGION_BOUNDS",
     "ModelComparison",
@@ -604,6 +605,7 @@ __all__ = [
     "PRESET_BANDS",
     "PRESET_LABELS",
     "PRESET_WINDOWS",
+    "admit_edited_values",
     "build_model",
     "build_region_model",
     "compare_models",
@@ -800,3 +802,79 @@ def _fill_gaps(
         positions.append(centre)
         edges.insert(index + 1, centre)
     return sorted(positions)
+
+
+#: Room left around a value the user typed when its published bound is
+#: widened to admit it, in cm-1.
+#:
+#: Not slack for the sake of it: a bound placed exactly on the value is a
+#: bound the parameter starts pinned against, and a pinned parameter is
+#: the one thing `models.acceptance` says is not a measurement. The
+#: number is a tenth of the narrowest published window in `bands.json`.
+EDITED_BOUND_MARGIN = 5.0
+
+
+def admit_edited_values(specs: Sequence[PeakSpec]) -> list[str]:
+    """Let a hand-typed centre or width beat its published bound.
+
+    The FWHM ranges and fit windows in ``bands.json`` are also the bounds
+    of the fit — that is the point of them, and narrowing them is a
+    documented way to bias every width in the package. But they are bounds
+    on the *automatic* model, and when the user opens the component table
+    and types a number, clipping it back to the published range is the
+    worst of both worlds: the fit returns the same curve it returned
+    before, the table still shows what was typed, and the application
+    looks like the «Ajustar» button does nothing. That is exactly what it
+    looked like.
+
+    So the rule is the one the photoemission section already applies to
+    its own edited components: *their number wins, and they are told*. The
+    bound is widened to admit the value with :data:`EDITED_BOUND_MARGIN`
+    to spare, and the component stops being evidence of the band whose
+    window it just left — which is the part that has to be said out loud,
+    because a D3 dragged to 1590 cm⁻¹ is a component at 1590 cm⁻¹, not a
+    measurement of the amorphous band.
+
+    Mutates ``specs`` in place.
+
+    Parameters
+    ----------
+    specs:
+        The components as the table has them, with the bounds they
+        inherited from the preset.
+
+    Returns
+    -------
+    list[str]
+        One message per bound that had to move, in Spanish, for the fit's
+        warning list. Empty when every value was already inside.
+    """
+    notes: list[str] = []
+    for spec in specs:
+        for attribute, label, unit in (
+            ("centre", "el centro", "cm⁻¹"),
+            ("fwhm", "la FWHM", "cm⁻¹"),
+        ):
+            bounds = getattr(spec, f"{attribute}_bounds")
+            value = float(getattr(spec, attribute))
+            if bounds is None:
+                continue
+            low, high = float(bounds[0]), float(bounds[1])
+            if low <= value <= high:
+                continue
+            if value < low:
+                new = (value - EDITED_BOUND_MARGIN, high)
+                side = f"por debajo de {low:g}"
+            else:
+                new = (low, value + EDITED_BOUND_MARGIN)
+                side = f"por encima de {high:g}"
+            if attribute == "fwhm":
+                new = (max(new[0], 1e-3), new[1])
+            setattr(spec, f"{attribute}_bounds", new)
+            notes.append(
+                f"{spec.name}: {label} que has escrito ({value:g} {unit}) queda "
+                f"{side}, el límite publicado de la banda. Se ha ampliado el "
+                f"límite para admitirlo — manda tu número — pero el componente "
+                f"ya no es prueba de la banda {spec.band or spec.name}."
+            )
+    return notes

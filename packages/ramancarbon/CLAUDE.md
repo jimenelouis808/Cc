@@ -551,6 +551,46 @@ contra σ, y se usaba una σ para todo el espectro.
   `PROBE_LAMBDA` es rígida a propósito, y `MAX_WIDEST_BAND_CM` acota el
   precio de serlo.
 
+## Un ancho que llega a su techo no es un ancho
+
+- **`PINNED_TOLERANCE` es literal a propósito, y en las anchuras eso
+  escondía el hallazgo.** Sobre el espectro real del usuario (carbono a
+  532 nm sobre FeSe) la D vuelve con 200.0 cm-1 de un techo de 200 en el
+  modelo de tres bandas, 195.7 en el de cuatro, 191.0 en el de cinco y
+  193.0 en el Sadezky sin D': el mismo muro cuatro veces, informado una,
+  porque las otras tres se quedan a un 2-5 % de él. Esos tres números
+  tampoco son medidas de una anchura; son donde el optimizador dejó de
+  empujar. `NO_ROOM_FRACTION` cierra ese hueco.
+- **Las dos mitades de la condición hacen falta.** La D ancha de un
+  carbono turbostrático es una medida, así que el aviso solo sube a
+  `grave` cuando la anchura está a la vez por encima de su rango habitual
+  Y pegada al límite que ESTE ajuste usó — no al de la literatura.
+- **Y el techo no se sube.** Que los cuatro preajustes del paquete
+  choquen contra él es el resultado: ninguno describe este espectro sin
+  llevar la D al borde, y eso hay que leerlo antes de citar un I_D/I_G,
+  no taparlo ensanchando el rango. Lo que sí puede el usuario es escribir
+  la anchura que quiera en la tabla de componentes, que es la regla de
+  abajo.
+
+## Su número gana, y se le dice — también en Raman
+
+- **Los rangos de `bands.json` son los límites del ajuste AUTOMÁTICO.**
+  Cuando el usuario abre la tabla de componentes y escribe un centro o
+  una anchura fuera de la ventana publicada, recortárselo es el peor de
+  los dos mundos: el ajuste devuelve la curva que ya tenía, la tabla
+  sigue enseñando lo que se escribió, y el botón «Ajustar» parece no
+  hacer nada. Eso es literalmente lo que parecía.
+- **`admit_edited_values` aplica aquí la regla que la sección de
+  fotoemisión ya tenía**: el límite se ensancha para admitir el valor,
+  con `EDITED_BOUND_MARGIN` de holgura para que el parámetro no arranque
+  pegado a él —un parámetro pegado a su límite es justo lo que
+  `models.acceptance` dice que no es una medida—, y el componente deja de
+  ser prueba de la banda cuya ventana acaba de abandonar.
+- **Y eso último se dice en voz alta, en los avisos del propio ajuste.**
+  Ensanchar el límite en silencio sería el mismo error mirando para el
+  otro lado: una D3 arrastrada a 1590 cm-1 es un componente en 1590, no
+  una medida de la banda amorfa.
+
 ## Modelos a medida
 
 - **Las componentes llevan nombre solo mientras la física se lo dé**: D, D3,

@@ -531,7 +531,7 @@ class Session:
             self.log("error", "analiza el espectro antes de estimar incertidumbres")
             return None
         target = item.processed or item.raw
-        model = self.build_manual_model(
+        model, _ = self.build_manual_model(
             [
                 PeakSpec(
                     name=p.name, profile=p.profile, centre=p.centre,
@@ -695,10 +695,24 @@ class Session:
     # -- manual deconvolution -------------------------------------------
     def build_manual_model(
         self, specs: Sequence[PeakSpec], window: tuple[float, float], background: str
-    ) -> FitModel:
-        """Assemble a user-edited model from the deconvolution table."""
-        return FitModel(
-            peaks=list(specs), window=window, background=background, name="manual"
+    ) -> tuple[FitModel, list[str]]:
+        """Assemble a user-edited model from the deconvolution table.
+
+        Returns the model and whatever
+        :func:`~ramancarbon.models.deconvolution.admit_edited_values` had
+        to say: the components arrive carrying the bounds the preset gave
+        them, so a value typed outside its band's published window would
+        otherwise be clipped straight back and the fit would return the
+        curve it already had. That is the bug this reported as «le pico en
+        ajustar y no pasa nada».
+        """
+        from ..models.deconvolution import admit_edited_values
+
+        peaks = list(specs)
+        notes = admit_edited_values(peaks)
+        return (
+            FitModel(peaks=peaks, window=window, background=background, name="manual"),
+            notes,
         )
 
     def fit_manual(
@@ -710,12 +724,17 @@ class Session:
             return None
         target = item.processed or item.raw
         try:
-            model = self.build_manual_model(specs, window, background)
+            model, notes = self.build_manual_model(specs, window, background)
             item.manual_fit = fit_model(target, model)
         except ValueError as exc:
             item.error = str(exc)
             self.log("error", f"{item.name}: {exc}")
             return None
+        # The widened bounds go into the result, not only into the log: a
+        # component that left its band's window has to travel with the
+        # numbers it produced, because that is what stops it being read as
+        # a measurement of that band.
+        item.manual_fit.warnings.extend(notes)
         for warning in item.manual_fit.warnings:
             self.log("warning", f"{item.name}: {warning}")
         return item.manual_fit
