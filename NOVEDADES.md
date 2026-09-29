@@ -6,6 +6,78 @@ está la trampa.
 
 ---
 
+## ramancarbon · una fracción en peso es una afirmación sobre el FONDO
+
+El Rietveld de un CVD real de carbono sobre FeSe daba **51 % de carbono en
+peso** con un 002 que apenas se ve, y el ajuste no tenía nada malo a la
+vista: Rwp 4.39 %, GOF 1.05, convergido, curva diferencia limpia. El número
+era el que había que desconfiar, y ahora el programa lo dice.
+
+Tres medidas nuevas, todas informadas y ninguna de las cuales cambia el
+ajuste:
+
+- **Cuánto del patrón es fondo** (`background_share`). En ese refinamiento,
+  el 96.8 %: las cinco fases explican el 3.2 % restante y todas las
+  fracciones salen de ahí.
+- **Qué parámetros no separa la medida.** La covarianza se calculaba entera
+  y se tiraba menos la diagonal. `cero` contra `desplazamiento` salía a
+  −1.0000 —un grado de libertad con dos nombres, con sus dos
+  incertidumbres calculadas como si fueran independientes.
+- **Peso frente a señal** (`phase_contributions`). El carbono era 52.4 %
+  del peso y 17.9 % de la intensidad difractada. No es incoherente (la
+  dispersión va como Z² y el carbono tiene Z = 6 contra 26 del hierro),
+  pero es el número que faltaba para poder juzgar el otro.
+
+Y un botón, **«Probar el fondo»**, que refina otra vez con varios órdenes
+de polinomio y compara. En ese patrón:
+
+| orden | Rwp % | C | Fe₃C |
+|---|---|---|---|
+| 2 | 5.34 | 25.9 % | 52.7 % |
+| 4 | 4.90 | 36.6 % | 32.3 % |
+| **6 (el defecto)** | 4.39 | **52.4 %** | 16.3 % |
+| 8 | 4.05 | 33.1 % | 37.7 % |
+| 10 | 4.00 | 33.1 % | 36.5 % |
+
+**La trampa.** La covarianza NO ve este efecto y suponer que sí fue el
+primer diseño de la comprobación: la escala del carbono correlaciona con
+los coeficientes del fondo a 0.33 como mucho. Dado un polinomio de orden
+seis, la escala está bien determinada; lo que no está determinado es el
+orden, y un orden es una elección discreta, no un parámetro con derivada.
+Por eso hace falta el barrido, y cuesta un refinamiento por orden.
+
+Además, la etapa de orientación preferente se saltaba **en silencio**
+cuando ninguna fase declara eje de textura, que es lo que pasa por
+defecto. Es la única etapa que toca las intensidades relativas, así que
+si las alturas no casan y las posiciones sí, ése es el sitio por donde
+empezar. Ahora lo dice.
+
+---
+
+## ramancarbon · un ancho cerca de su techo tiene dos lecturas
+
+Una banda genuinamente ancha y una que está tapando el hueco de una
+componente que falta se ven **exactamente igual** en el resultado: un
+número cerca de un límite. Significan cosas opuestas.
+
+El botón **«Probar el techo de anchura»** corre el único experimento que
+las separa —subir el techo y volver a ajustar— solo para las componentes
+que acabaron cerca del suyo. Sobre un espectro real, con los dos casos en
+el mismo ajuste de cinco bandas: la D volvía en 191.0 con el techo en 200
+y en 185.3 con el techo en 400 (nunca empujaba), mientras la D4 volvía en
+250.0, 300.0 y 400.0 (siempre en el borde).
+
+Y en la tabla de componentes, **tu número gana**: un centro o una anchura
+escritos fuera de la ventana publicada de la banda se admiten ensanchando
+el límite, en vez de recortarlos en silencio. Eso último era lo que hacía
+que «editar y picar Ajustar» pareciera no hacer nada.
+
+**La trampa.** Una componente que sale de la ventana de su banda deja de
+ser prueba de esa banda, y el aviso lo dice. Es tu muestra y tu número,
+pero ya no es una medida de la D3.
+
+---
+
 ## tbkit · la ventana (`tbkit-gui`)
 
 `uv run tbkit-gui molecula.xyz` abre todo tbkit en una ventana: estructura y

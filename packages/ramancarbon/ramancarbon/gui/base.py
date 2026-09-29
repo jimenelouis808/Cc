@@ -332,6 +332,11 @@ class SectionApp:
 
         messagebox.showwarning(title, message, parent=self.root)
 
+    def inform(self, title: str, message: str) -> None:
+        from tkinter import messagebox
+
+        messagebox.showinfo(title, message, parent=self.root)
+
     def canvas_limits(self, key: str) -> Optional[tuple[float, float]]:
         """The x-limits currently shown on one canvas, low first.
 

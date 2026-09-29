@@ -290,6 +290,13 @@ class XRDApp(SectionApp):
                                command=self._prepare_manual))
         toolbar.add(ttk.Button(toolbar.frame, text="Refinar los libres",
                                command=self._refine_once))
+        # The check a weight fraction cannot perform on itself: a broad
+        # reflection and a flexible polynomial describe the same shape,
+        # and a single refinement converges either way. On a real CVD
+        # pattern the turbostratic carbon read 25.9 % of the sample at
+        # background order 2, 52.4 % at 6 and 33.1 % at 8 and 10.
+        toolbar.add(ttk.Button(toolbar.frame, text="Probar el fondo",
+                               command=self._background_sensitivity))
         # A refinement with five phases and forty free parameters has a
         # budget of thousands of residual evaluations. Without a way out
         # the only way out is to kill the window, which loses the loaded
@@ -587,6 +594,42 @@ class XRDApp(SectionApp):
     def _queue_progress(self, text: str) -> None:
         """Called from the refinement thread; hands the line to Tk safely."""
         self.report_progress(text)
+
+    def _background_sensitivity(self) -> None:
+        """Refine again at several background orders and compare.
+
+        The one check a weight fraction cannot perform on itself. It goes
+        to a dialog rather than into the tab because the tab has no text
+        panel and adding one would put a third expanding widget into a
+        page that already has two — which is the packing failure this
+        section has been bitten by before.
+        """
+        if self.session.item is None:
+            self.warn("Sin datos", "Carga un difractograma primero.")
+            return
+        self._settings_from_widgets()
+
+        def done(scan) -> None:
+            self._disarm_stop()
+            self.flush_messages(self.session.messages)
+            if scan is None:
+                self.set_status("No se pudo probar el fondo; mira los avisos.")
+                return
+            self.inform("Sensibilidad al fondo", scan.summary())
+            worst = max(scan.spread().values(), default=0.0)
+            self.set_status(
+                f"El orden del fondo mueve alguna fracción {100 * worst:.0f} "
+                "puntos: esa fracción no la decide la medida."
+                if worst >= 0.10 else
+                "Las fracciones apenas se mueven con el orden del fondo."
+            )
+
+        def work():
+            return self.session.background_sensitivity(
+                progress=self._queue_progress, should_stop=self._should_stop)
+
+        self._arm_stop()
+        self.run_async(work, done, "Probando el fondo…")
 
     def _stop_refinement(self) -> None:
         """Ask the running refinement to stop at its next evaluation."""

@@ -471,6 +471,45 @@ class XRDSession:
             self.log("warning", warning)
         return outcome
 
+    def background_sensitivity(
+        self,
+        progress: Optional[Callable[[str], None]] = None,
+        should_stop: Optional[Callable[[], bool]] = None,
+    ):
+        """Refine the same phases against several background orders.
+
+        The check a weight fraction cannot perform on itself. A broad
+        reflection from a nanocrystalline phase and a flexible polynomial
+        describe the same shape, and no single refinement can tell which
+        of the two it just fitted: it converges either way, with plausible
+        R factors and a difference curve that looks fine.
+
+        Measured on a real CVD pattern of carbon on FeSe, the
+        turbostratic carbon came back at 25.9 % of the sample by weight
+        with a second-order background, 36.6 % at fourth, 52.4 % at sixth,
+        33.1 % at eighth and 33.1 % at tenth. The package default is
+        sixth, and sixth was the outlier.
+
+        Costs one full refinement per order, which is why it is a
+        separate button.
+        """
+        from ..xrd.rietveld import background_order_sensitivity
+
+        item = self.item
+        if item is None:
+            self.log("error", "carga un difractograma primero")
+            return None
+        if not item.models and self.prepare_manual() is None:
+            return None
+        return background_order_sensitivity(
+            item.pattern,
+            item.models,
+            preferred_axis=self.texture_axis,
+            instrument_fwhm=self.instrument_fwhm,
+            callback=progress,
+            should_stop=should_stop,
+        )
+
     # -- tables --------------------------------------------------------
     def phase_rows(self) -> list[tuple[str, ...]]:
         """Rows for the identified-phase table."""

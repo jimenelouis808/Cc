@@ -357,6 +357,65 @@ una tiene una prueba que la protege.
   celda y contenido a la vez) y posición de la reflexión más intensa frente a
   su ficha. Las dos están en las pruebas. Si añades una fase, añade las dos.
 
+## Una fracción en peso es una afirmación sobre el FONDO
+
+El caso que lo descubrió: un CVD real de carbono sobre FeSe, cinco fases
+(α-Fe, carbono turbostrático de 6 nm, cementita y dos seleniuros), que
+refinaba a Rwp 4.39 %, GOF 1.05, convergido, con una curva diferencia sin
+nada llamativo — y devolvía **51 % de carbono en peso** con un 002 que
+apenas se ve. El usuario desconfió del número y tenía razón.
+
+- **Una reflexión ancha y un polinomio flexible describen la MISMA forma,
+  y el refinamiento no protesta**: converge igual, con factores R
+  plausibles, tanto si la joroba la puso la fase como si la puso el
+  fondo. En este patrón el fondo es el **96.8 %** del difractograma
+  calculado: las cinco fases explican el 3.2 % restante, y las cinco
+  fracciones salen de ese resto. `RietveldResult.background_share` lo
+  informa, y por encima de `BACKGROUND_DOMINATES` va con aviso.
+- **Quitar la fase entera costaba 0.29 puntos de Rwp.** Media muestra,
+  según el propio ajuste, y su ausencia mueve el Rwp de 4.387 a 4.672.
+  Eso no es un ajuste que haya medido un 51 % de nada.
+- **Y el número se mueve con el ORDEN del polinomio**, que es una
+  elección de modelado y no una medida:
+
+  | orden | Rwp % | GOF | C | Fe₃C |
+  |---|---|---|---|---|
+  | 2 | 5.342 | 1.273 | 25.9 % | 52.7 % |
+  | 4 | 4.902 | 1.168 | 36.6 % | 32.3 % |
+  | 6 | 4.387 | 1.046 | **52.4 %** | 16.3 % |
+  | 8 | 4.053 | 0.966 | 33.1 % | 37.7 % |
+  | 10 | 4.001 | 0.954 | 33.1 % | 36.5 % |
+
+  El orden 6 es el DEFECTO del paquete y es el pico aislado. Con los dos
+  órdenes que ajustan mejor, el carbono se estabiliza en 33 %.
+  `background_order_sensitivity` corre el barrido; hay un botón, «Probar
+  el fondo», porque cuesta un refinamiento por orden.
+- **La covarianza NO ve este efecto, y suponer que sí fue el primer
+  diseño de la comprobación.** Medido: la escala del carbono correlaciona
+  con los coeficientes del fondo a 0.33 como mucho. Localmente, DADO un
+  polinomio de orden seis, la escala está perfectamente determinada. Lo
+  que no está determinado es el orden, y un orden es una elección
+  discreta, no un parámetro con derivada. Por eso hace falta el barrido y
+  no basta con mirar correlaciones.
+- **Pero las correlaciones sí valen para lo que sí cazan, y se guardaban
+  en la basura.** `_estimate_errors` calculaba la covarianza entera y se
+  quedaba solo con la diagonal. En este mismo refinamiento, `cero` contra
+  `desplazamiento` sale a **−1.0000** y los dos contra `a[Fe_alfa]` a
+  0.9999: un solo grado de libertad repartido entre tres nombres, con sus
+  tres incertidumbres calculadas como si fueran independientes. Ahora van
+  en `RietveldResult.correlations` y se informan por encima de
+  `SCALE_BACKGROUND_DEGENERATE`, que es el mismo 0.95 que usa el lado
+  Raman por la misma razón.
+- **Peso y señal son preguntas distintas y las dos hacen falta.** La
+  fracción en peso pregunta cuánto de la muestra; `phase_contributions`
+  pregunta cuánto de lo que se ve. El carbono aquí era 52.4 % del peso y
+  17.9 % de la intensidad difractada, y eso NO es incoherente —la
+  dispersión va como Z² y el carbono tiene Z = 6 contra los 26 del
+  hierro— pero es exactamente el número que hacía falta para poder juzgar
+  el otro. `WEIGHT_OVER_SIGNAL` está en 2.5 porque el caso medido da 2.93
+  y un primer intento con el umbral en 3 lo dejaba fuera por cuatro
+  centésimas.
+
 ## Patrones nanocristalinos: el caso CVD
 
 Tres errores que juntos hacían que un difractograma CVD real no
@@ -551,26 +610,34 @@ contra σ, y se usaba una σ para todo el espectro.
   `PROBE_LAMBDA` es rígida a propósito, y `MAX_WIDEST_BAND_CM` acota el
   precio de serlo.
 
-## Un ancho que llega a su techo no es un ancho
+## Un ancho cerca de su techo tiene DOS lecturas
 
-- **`PINNED_TOLERANCE` es literal a propósito, y en las anchuras eso
-  escondía el hallazgo.** Sobre el espectro real del usuario (carbono a
-  532 nm sobre FeSe) la D vuelve con 200.0 cm-1 de un techo de 200 en el
-  modelo de tres bandas, 195.7 en el de cuatro, 191.0 en el de cinco y
-  193.0 en el Sadezky sin D': el mismo muro cuatro veces, informado una,
-  porque las otras tres se quedan a un 2-5 % de él. Esos tres números
-  tampoco son medidas de una anchura; son donde el optimizador dejó de
-  empujar. `NO_ROOM_FRACTION` cierra ese hueco.
-- **Las dos mitades de la condición hacen falta.** La D ancha de un
-  carbono turbostrático es una medida, así que el aviso solo sube a
-  `grave` cuando la anchura está a la vez por encima de su rango habitual
-  Y pegada al límite que ESTE ajuste usó — no al de la literatura.
-- **Y el techo no se sube.** Que los cuatro preajustes del paquete
-  choquen contra él es el resultado: ninguno describe este espectro sin
-  llevar la D al borde, y eso hay que leerlo antes de citar un I_D/I_G,
-  no taparlo ensanchando el rango. Lo que sí puede el usuario es escribir
-  la anchura que quiera en la tabla de componentes, que es la regla de
-  abajo.
+- **Una banda genuinamente ancha y una que tapa el hueco de un componente
+  que falta se ven exactamente igual en el resultado**: un número cerca
+  de un límite. Y significan cosas opuestas — la primera es una medida,
+  la segunda dice que no se cite nada del ajuste. Un resultado, por sí
+  solo, NO puede separarlas, así que una comprobación de distancia tiene
+  que informar las dos igual, y eso convierte una banda D real de
+  191 cm-1 en un artefacto. Pasó: fue la primera versión de esto.
+- **El experimento que sí las separa no es un umbral: es subir el techo y
+  volver a ajustar.** Medido sobre el espectro real del usuario, con los
+  dos casos dentro del MISMO ajuste de cinco bandas:
+
+  | techo | la D vuelve en | la D4 vuelve en |
+  |---|---|---|
+  | 200 | 191.0 | 250.0 |
+  | 300 | 188.5 | 300.0 |
+  | 400 | 185.3 | 400.0 |
+
+  La D nunca empujaba: 5.7 cm-1 de movimiento por 200 de margen extra. La
+  D4 va a donde se le deje, siempre.
+- `NO_ROOM_FRACTION` marca la PREGUNTA (a qué distancia del techo vale la
+  pena preguntar) y `probe_width_ceilings` corre el experimento, solo
+  para las componentes que la disparan, y el auditor baja a «aviso» y NOMBRA el
+  experimento en vez de dictar un veredicto que no puede emitir.
+- **Y el techo no se sube por decreto.** Que un preajuste choque contra él
+  es un resultado. Lo que sí puede el usuario es escribir la anchura que
+  quiera en la tabla de componentes, que es la regla de «su número gana».
 
 ## Su número gana, y se le dice — también en Raman
 
