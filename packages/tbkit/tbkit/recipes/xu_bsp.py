@@ -49,6 +49,7 @@ FAMILIES = {
         validity_notes="B junto con S o P en la misma estructura no está cubierto",
         system=("xu_chno más boro: boranos, ésteres y ácidos bóricos y borónicos, "
                 "amino-borano, borazina, B-N en grafeno"),
+        h_tail=(0.40, 0.60),
         base="xu_chno"),
     "S": XuFamily(
         name="C/H/N/O/S: xu_chno + S ajustado a GPAW",
@@ -62,6 +63,7 @@ FAMILIES = {
                         "C-S aromático a menos de 0.04 Å)"),
         system=("xu_chno más azufre: tioles, sulfuros, disulfuros, tiofeno, sulfóxidos, "
                 "sulfonas, ácidos sulfónicos, sulfonamidas"),
+        h_tail=(0.40, 0.60),
         base="xu_chno"),
     "P": XuFamily(
         name="C/H/N/O/P: xu_chno + P ajustado a GPAW",
@@ -76,6 +78,7 @@ FAMILIES = {
                         "de 0.025 Å"),
         system=("xu_chno más fósforo: fosfinas, óxidos de fosfina, ácidos fosfórico y "
                 "fosfónicos, fosfatos, fosfinina"),
+        h_tail=(0.40, 0.60),
         base="xu_chno"),
 }
 
@@ -86,8 +89,12 @@ def main(argv=None) -> None:
     parser.add_argument("references", type=Path, nargs="+")
     parser.add_argument("out", type=Path)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--hessians", type=Path, default=None,
+                        help="hessianas GPAW (frequency_references) para ajustar la curvatura")
+    parser.add_argument("--hessian-weight", type=float, default=0.1)
     args = parser.parse_args(argv)
-    xu_family.run(FAMILIES[args.element], args.references, args.out, workers=args.workers)
+    xu_family.run(FAMILIES[args.element], args.references, args.out, workers=args.workers,
+                  hessians=args.hessians, hessian_weight=args.hessian_weight)
 
 
 if __name__ == "__main__":
