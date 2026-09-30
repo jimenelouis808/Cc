@@ -135,12 +135,12 @@ def _nanotube_n() -> Atoms:
     return atoms
 
 
-#: name -> (builder, parameter set, k mesh, index of the atom the checks follow).
-#: The index is the dopant (or the carbon under the adsorbate); None for none.
+#: name -> (builder, parameter set, k mesh, atom the geometry checks follow): the
+#: dopant's index (the O for an adsorbate), an element for all its atoms, or None.
 CRYSTALS: dict[str, tuple] = {
     "graphene": (_sheet, "xu_chno", (3, 3, 1), None),
     "graphene_N": (_substituted("N"), "xu_chn", (3, 3, 1), 0),
-    "graphene_N3V": (_pyridinic, "xu_chn", (3, 3, 1), None),
+    "graphene_N3V": (_pyridinic, "xu_chn", (3, 3, 1), "N"),
     "graphene_B": (_substituted("B"), "xu_chnob", (3, 3, 1), 0),
     "graphene_S": (_substituted("S", 0.8), "xu_chnos", (3, 3, 1), 0),
     "graphene_P": (_substituted("P", 0.8), "xu_chnop", (3, 3, 1), 0),
@@ -364,9 +364,14 @@ def lattice_minimum(points: list[dict], key: str) -> float | None:
     return float(-b / (2 * a)) if a > 0 else None
 
 
-def _local(atoms: Atoms, index: int | None) -> dict:
+def _local(atoms: Atoms, index: int | str | None) -> dict:
+    """Bonds (and height above the sheet) of the followed atom, or of every atom
+    of an element when ``index`` is a symbol."""
     if index is None:
         return {}
+    if isinstance(index, str):
+        return {f"{index}{i}": _local(atoms, i)
+                for i in (a.index for a in atoms if a.symbol == index)}
     bonds = sorted(float(atoms.get_distance(index, j, mic=True))
                    for j in _neighbours(atoms, index, 2.1))
     out = {"bonds": [round(b, 4) for b in bonds]}

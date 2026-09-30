@@ -21,8 +21,10 @@ def test_every_crystal_has_the_elements_of_its_set():
         assert atoms.pbc.any(), name
         assert set(atoms.get_chemical_symbols()) <= load_parameters(set_name).elements(), name
         assert len(kpts) == 3 and all(k == 1 for k, p in zip(kpts, atoms.pbc) if not p), name
-        if index is not None:
-            assert atoms[index].symbol != "C" or name.startswith("graphene_"), name
+        if isinstance(index, int):
+            assert atoms[index].symbol != "C", name
+        elif isinstance(index, str):
+            assert index in atoms.get_chemical_symbols(), name
 
 
 def test_pyridinic_vacancy_has_three_nitrogens_around_the_hole():
