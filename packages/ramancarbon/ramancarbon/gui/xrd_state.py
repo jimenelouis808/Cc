@@ -510,9 +510,15 @@ class XRDSession:
             instrument_fwhm=self.instrument_fwhm,
             callback=progress, should_stop=should_stop,
         )
+        # An axis the search ranked first is applied even when the
+        # margin says the pattern does not separate it from the next --
+        # that verdict is about how much to BELIEVE the axis, not about
+        # whether to try it, and a button that measures and then changes
+        # nothing is half a tool. What it never does is invent one where
+        # the gain says there is no texture at all.
         for phase, choice in zip(item.models, found, strict=True):
-            if choice.axis is not None:
-                phase.preferred_axis = choice.axis
+            phase.preferred_axis = choice.axis
+            phase.preferred_r = choice.r if choice.axis is not None else 1.0
         for choice in found:
             self.log("info", choice.describe())
         return found

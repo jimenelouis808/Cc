@@ -81,6 +81,17 @@ class TMDApp(SectionApp):
     # ==================================================================
     def _build(self) -> None:
         ttk = self.ttk
+        # The status bar FIRST, and from the bottom. It carries the
+        # progress line and the elapsed clock, and it was packed after a
+        # body with expand=True in the same parent -- so Tk gave the body
+        # everything and the bar what was left, which in a real window is
+        # nothing. The counter and the clock were computed, queued and
+        # drawn to a strip zero pixels tall: a refinement that reports its
+        # iteration every ten evaluations looked, from outside, exactly
+        # like one that had hung. It is the same packing rule this section
+        # has been bitten by before, arriving through the one widget that
+        # exists to say the program is alive.
+        self.build_status(self.container)
         body = ttk.Frame(self.container, padding=(PAD["md"], PAD["sm"]))
         body.pack(fill="both", expand=True)
 
@@ -100,7 +111,6 @@ class TMDApp(SectionApp):
         self._build_tab_phases()
         self._build_tab_batch()
         self._build_tab_library()
-        self.build_status(self.container)
         self.root.after(150, self.drain_queue)
 
     def _build_sidebar(self, parent) -> None:

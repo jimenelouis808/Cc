@@ -565,7 +565,8 @@ def build_parameters(
         parameters.append(
             Parameter(f"fondo_c{order}", value, kind="background")
         )
-    parameters.append(Parameter("cero", 0.0, lower=-1.0, upper=1.0, kind="zero"))
+    parameters.append(
+        Parameter("cero", 0.0, lower=-ZERO_LIMIT, upper=ZERO_LIMIT, kind="zero"))
     parameters.append(
         Parameter("desplazamiento", 0.0, lower=-1.0, upper=1.0, kind="displacement")
     )
@@ -613,6 +614,30 @@ def build_parameters(
                       phase=index, kind="u_iso")
         )
     return parameters
+
+
+def _seed_profile(pattern: Pattern) -> Profile:
+    """A starting peak shape measured off the pattern.
+
+    The same function the Le Bail side has had all along, and for the
+    same reason: the default Caglioti coefficients describe somebody
+    else's diffractometer, and a refinement started from them settles
+    into a wide-peak minimum it cannot leave. Two seconds of peak
+    finding, which is what a person does by eye before starting.
+
+    Falls back to the defaults when the pattern has no peak with a
+    measurable width — a flat or empty pattern must not raise here.
+    """
+    from .search import find_peaks
+
+    try:
+        widths = [p.fwhm for p in find_peaks(pattern) if p.fwhm]
+    except Exception:                          # noqa: BLE001
+        widths = []
+    if not widths:
+        return Profile()
+    width = float(np.median(widths))
+    return Profile(u=0.0, v=0.0, w=max(width ** 2, 1e-5), eta0=0.5)
 
 
 def free_kinds(parameters: Sequence[Parameter], kinds: Sequence[str]) -> None:
@@ -993,6 +1018,29 @@ def auto_refine(
             if phase.preferred_axis is None:
                 phase.preferred_axis = tuple(int(v) for v in preferred_axis)
 
+    # The peak SHAPE is measured off the pattern before anything is
+    # refined, exactly as `lebail._seed_profile` already does and for the
+    # same reason: the default Caglioti coefficients describe somebody
+    # else's diffractometer. That lesson was applied on one side of this
+    # module and not the other, and the cost was the complaint that
+    # brought it to light -- the calculated peaks not reaching the
+    # observed heights. Measured on a real five-phase pattern: the
+    # strongest reflection came back 0.83 degrees wide against an
+    # observed 0.65, and a peak of the same area and 28 % more width is
+    # 28 % shorter. Across the six strongest reflections the model
+    # reached 58 to 82 % of the observed height above background.
+    #
+    # It is a STARTING point: the width stage still refines it per phase,
+    # which is what lets a nanocrystalline carbon and a well-grown
+    # selenide end up with the widths they really have.
+    measured = _seed_profile(pattern)
+    for phase in models:
+        if phase.profile == Profile():
+            phase.profile = Profile(
+                u=measured.u, v=measured.v, w=measured.w,
+                eta0=measured.eta0,
+            )
+
     parameters = build_parameters(models, background_order)
     # A sensible background start: the low percentile of the data, so the
     # first stage does not have to climb from zero.
@@ -1223,6 +1271,7 @@ def _check(result: RietveldResult, instrument_fwhm: float) -> None:
                 "estructura: un λ equivocado escala TODA la celda por el "
                 "mismo factor y nada en el ajuste protesta"
             )
+    _warn_about_pinned_parameters(result)
     fractions = result.weight_fractions()
     if any(value is None for value in fractions.values()):
         result.warnings.append(
@@ -1239,6 +1288,39 @@ def _check(result: RietveldResult, instrument_fwhm: float) -> None:
         )
         _warn_about_the_background(result)
 
+
+#: Largest zero error, in degrees, a diffractometer is allowed to have.
+#:
+#: The bound used to be a degree, and a degree is not a zero error -- it
+#: is an instrument nobody has aligned. What made it matter is that the
+#: zero and the sample displacement describe almost the same thing (a
+#: constant against a cos-theta term), so with that much room they run
+#: away together: on a real pattern they came back at -0.4307 and
+#: +0.5168, correlated at -1.0000, nearly cancelling. Neither number
+#: could be quoted, and a reader who looked at the refined zero would
+#: rightly stop trusting everything under it.
+#:
+#: Capping it does not change the fit -- measured, Rwp 4.388 % against
+#: 4.386 %, and the peak heights identical to the tenth of a per cent --
+#: which is the point: two parameters that were trading a degree between
+#: them were describing nothing, and now they come back at +0.09 and
+#: +0.03, which is an aligned diffractometer with a slightly high sample.
+ZERO_LIMIT = 0.2
+
+#: How close to a bound counts as pinned, as a fraction of the bound's
+#: own span.
+#:
+#: The same number and the same reasoning as the Raman side's
+#: `models.acceptance.PINNED_TOLERANCE`: a parameter that stopped at its
+#: bound is not a measurement, it is the edge, and the fit is telling you
+#: it wanted to go further. Rietveld had no such check at all, and on a
+#: real five-phase pattern the state of the refinement was this:
+#: W[C_turbostratico] at its ceiling of 2.0, W[FeSe_hexagonal] at its
+#: floor of 1e-5, the mixing parameter eta at a bound on FOUR of the five
+#: phases, and U_iso[FeSe_tetragonal] at zero. None of it was reported,
+#: and the peak widths that came out of it are what made the calculated
+#: peaks fall short of the observed heights.
+PINNED_TOLERANCE = 0.01
 
 #: Above this share of the calculated pattern, the background is most of
 #: what was fitted and every weight fraction comes from the remainder.
@@ -1271,6 +1353,47 @@ SCALE_BACKGROUND_DEGENERATE = 0.95
 #: scattering power (alpha-Fe here was 20.8 % by weight and 29.3 % of the
 #: intensity, a ratio of 0.7).
 WEIGHT_OVER_SIGNAL = 2.5
+
+
+def _warn_about_pinned_parameters(result: RietveldResult) -> None:
+    """Name every refined parameter that finished against a bound.
+
+    A parameter at its limit is the edge of what it was allowed to be,
+    not a measurement of anything, and the fit is saying it wanted to go
+    further. The Raman and photoemission sides have said this for a long
+    time; diffraction did not, and on a real pattern it had four of five
+    phases with their peak-shape mixing pinned and two with their widths
+    pinned — which is exactly the kind of state that produces peaks too
+    wide and therefore too short.
+
+    Grouped into one message rather than one per parameter: a refinement
+    with six pinned parameters has one problem, not six, and six separate
+    warnings is how a reader learns to skip them.
+    """
+    pinned: list[str] = []
+    for parameter in result.parameters:
+        if not parameter.free:
+            continue
+        low, high = float(parameter.lower), float(parameter.upper)
+        span = high - low
+        if not np.isfinite(span) or span <= 0:
+            continue
+        value = float(parameter.value)
+        if abs(value - low) <= PINNED_TOLERANCE * span:
+            pinned.append(f"{parameter.name} en su mínimo ({low:g})")
+        elif abs(value - high) <= PINNED_TOLERANCE * span:
+            pinned.append(f"{parameter.name} en su máximo ({high:g})")
+    if not pinned:
+        return
+    result.warnings.append(
+        "parámetros que terminaron en su límite: " + ", ".join(pinned[:8])
+        + (f" y {len(pinned) - 8} más" if len(pinned) > 8 else "")
+        + ". Un parámetro pegado a su límite no es una medida: es el borde, "
+        "y el ajuste está diciendo que quería ir más allá. Si son anchuras "
+        "o mezcla de perfil, los picos calculados saldrán con la forma "
+        "equivocada —y por tanto con la altura equivocada— por mucho que "
+        "el Rwp parezca razonable"
+    )
 
 
 def _warn_about_the_background(result: RietveldResult) -> None:
@@ -1776,6 +1899,8 @@ def choose_texture_axes(
 
 __all__ = [
     "BACKGROUND_DOMINATES",
+    "PINNED_TOLERANCE",
+    "ZERO_LIMIT",
     "BackgroundSensitivity",
     "TEXTURE_ARM_ITERATIONS",
     "TEXTURE_AXIS_MARGIN",

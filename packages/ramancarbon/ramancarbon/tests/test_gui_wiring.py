@@ -1143,3 +1143,31 @@ def test_no_two_controls_share_a_variable(stem):
     assert not duplicates, (
         f"{stem}: estas variables se asignan en más de un sitio y puede que "
         f"sean dos controles distintos compartiendo nombre: {duplicates}")
+
+
+@pytest.mark.parametrize("stem", sorted(SECTION_MODULES))
+def test_the_status_bar_is_packed_before_the_body_that_expands(stem):
+    """The bar that says the program is alive got zero pixels.
+
+    `build_status` packs the progress line and the elapsed clock with
+    ``side="bottom"``, and every section packed it AFTER a body frame
+    with ``expand=True`` in the same parent. Tk gives each widget its
+    requested size and only then shares out the rest, so the body took
+    everything and the bar took what was left: nothing.
+
+    Nothing errored. The counter was computed, queued, and drawn into a
+    strip zero pixels tall, so a refinement reporting its iteration every
+    ten evaluations looked from outside exactly like one that had hung --
+    which is what the user reported, twice.
+    """
+    source_text = source(stem)
+    # The Raman section predates `SectionApp` and builds its own bar.
+    status = max(source_text.find("self.build_status(self.container)"),
+                 source_text.find("self._build_status()"))
+    body = source_text.find('body.pack(fill="both", expand=True)')
+    assert status != -1, f"{stem}: no llama a build_status"
+    assert body != -1, f"{stem}: no tiene un cuerpo que se expanda"
+    assert status < body, (
+        f"{stem}: la barra de estado se empaqueta después del cuerpo que "
+        "se expande, así que se queda sin altura"
+    )

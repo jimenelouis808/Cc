@@ -274,3 +274,88 @@ def test_the_texture_stage_says_when_it_did_not_run() -> None:
     with_axis = auto_refine(pattern, [crystal], preferred_axis=(0, 0, 1))
     assert not any("orientación preferente no se ha corrido" in w
                    for w in with_axis.warnings)
+
+
+def test_a_parameter_that_stopped_at_its_bound_is_named() -> None:
+    """Diffraction had no such check, and Raman and XPS have had one for ages.
+
+    Measured on the user's five-phase pattern: W[C_turbostratico] at its
+    ceiling of 2.0, W[FeSe_hexagonal] at its floor of 1e-5, the profile
+    mixing eta at a bound on four of the five phases, and
+    U_iso[FeSe_tetragonal] at zero. Nothing said so, and peak widths that
+    come out of pinned shape parameters are what make the calculated
+    peaks too wide and therefore too short — which is what the user
+    reported seeing.
+    """
+    from ramancarbon.xrd.rietveld import Parameter, _warn_about_pinned_parameters
+
+    class _R:
+        def __init__(self, parameters):
+            self.parameters = parameters
+            self.warnings: list[str] = []
+
+    result = _R([
+        Parameter("W[C]", 2.0, free=True, lower=1e-5, upper=2.0, kind="profile_w"),
+        Parameter("W[FeSe]", 1e-5, free=True, lower=1e-5, upper=2.0, kind="profile_w"),
+        Parameter("eta[Fe]", 1.0, free=True, lower=0.0, upper=1.0, kind="eta"),
+        Parameter("escala[Fe]", 0.3, free=True, lower=0.0, upper=np.inf, kind="scale"),
+    ])
+    _warn_about_pinned_parameters(result)
+    text = " ".join(result.warnings)
+    assert "W[C] en su máximo" in text
+    assert "W[FeSe] en su mínimo" in text
+    assert "eta[Fe] en su máximo" in text
+    assert "escala[Fe]" not in text          # unbounded above: nothing to pin to
+    assert "no es una medida" in text
+
+
+def test_a_fixed_parameter_at_a_bound_is_not_a_finding() -> None:
+    """Holding something at a limit on purpose is not the fit complaining."""
+    from ramancarbon.xrd.rietveld import Parameter, _warn_about_pinned_parameters
+
+    class _R:
+        def __init__(self, parameters):
+            self.parameters = parameters
+            self.warnings: list[str] = []
+
+    result = _R([Parameter("eta[Fe]", 1.0, free=False, lower=0.0, upper=1.0,
+                           kind="eta")])
+    _warn_about_pinned_parameters(result)
+    assert not result.warnings
+
+
+def test_pinned_parameters_are_reported_as_one_problem() -> None:
+    """Six pinned parameters is one sick refinement, not six warnings."""
+    from ramancarbon.xrd.rietveld import Parameter, _warn_about_pinned_parameters
+
+    class _R:
+        def __init__(self, parameters):
+            self.parameters = parameters
+            self.warnings: list[str] = []
+
+    result = _R([
+        Parameter(f"eta[{i}]", 1.0, free=True, lower=0.0, upper=1.0, kind="eta")
+        for i in range(6)
+    ])
+    _warn_about_pinned_parameters(result)
+    assert len(result.warnings) == 1
+
+
+def test_the_zero_cannot_absorb_half_a_degree() -> None:
+    """A degree of zero error is not a zero error, it is a misaligned machine.
+
+    And the bound mattered because the zero and the sample displacement
+    describe nearly the same thing — a constant against a cos-theta term
+    — so with a degree of room they ran away together. Measured on a real
+    pattern: -0.4307 and +0.5168, correlated at -1.0000, almost
+    cancelling. Capping the zero changed Rwp by two thousandths of a
+    percentage point and brought them back to +0.09 and +0.03.
+    """
+    from ramancarbon.xrd.rietveld import ZERO_LIMIT, PhaseModel, build_parameters
+    from ramancarbon.xrd.reference import load_library
+
+    assert ZERO_LIMIT <= 0.25, "un cero mayor que esto es un equipo sin alinear"
+    crystal = next(iter(load_library())).crystal
+    parameters = build_parameters([PhaseModel(crystal=crystal)], 6)
+    zero = next(p for p in parameters if p.kind == "zero")
+    assert (zero.lower, zero.upper) == (-ZERO_LIMIT, ZERO_LIMIT)

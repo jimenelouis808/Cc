@@ -67,6 +67,17 @@ class XRDApp(SectionApp):
     # ==================================================================
     def _build(self) -> None:
         ttk = self.ttk
+        # The status bar FIRST, and from the bottom. It carries the
+        # progress line and the elapsed clock, and it was packed after a
+        # body with expand=True in the same parent -- so Tk gave the body
+        # everything and the bar what was left, which in a real window is
+        # nothing. The counter and the clock were computed, queued and
+        # drawn to a strip zero pixels tall: a refinement that reports its
+        # iteration every ten evaluations looked, from outside, exactly
+        # like one that had hung. It is the same packing rule this section
+        # has been bitten by before, arriving through the one widget that
+        # exists to say the program is alive.
+        self.build_status(self.container)
         body = ttk.Frame(self.container, padding=(PAD["md"], PAD["sm"]))
         body.pack(fill="both", expand=True)
 
@@ -83,7 +94,6 @@ class XRDApp(SectionApp):
         self._build_tab_phases()
         self._build_tab_refinement()
         self._build_tab_library()
-        self.build_status(self.container)
         self.root.after(150, self.drain_queue)
 
     def _build_sidebar(self, parent) -> None:
@@ -641,13 +651,31 @@ class XRDApp(SectionApp):
             if scan is None:
                 self.set_status("No se pudo probar el fondo; mira los avisos.")
                 return
-            self.inform("Sensibilidad al fondo", scan.summary())
+            best = scan.best_order()
             worst = max(scan.spread().values(), default=0.0)
+            # Measuring and then making the user retype the answer is
+            # half a tool. The scan already knows which order fitted
+            # best; adopting it is one field and one refinement away, so
+            # it is offered here rather than left as homework.
+            adopt = self.ask_yes_no(
+                "Sensibilidad al fondo",
+                scan.summary()
+                + f"\n\n¿Poner el orden del fondo en {best} y refinar?",
+            )
+            if adopt:
+                self.background_var.set(str(best))
+                self._settings_from_widgets()
+                self.set_status(
+                    f"Orden del fondo puesto en {best}. Refinando…")
+                self._auto_refine()
+                return
             self.set_status(
-                f"El orden del fondo mueve alguna fracción {100 * worst:.0f} "
-                "puntos: esa fracción no la decide la medida."
+                f"Mejor orden: {best}. El fondo mueve alguna fracción "
+                f"{100 * worst:.0f} puntos, así que esa fracción no la "
+                "decide la medida."
                 if worst >= 0.10 else
-                "Las fracciones apenas se mueven con el orden del fondo."
+                f"Mejor orden: {best}. Las fracciones apenas se mueven con "
+                "el orden del fondo."
             )
 
         def work():
@@ -672,16 +700,25 @@ class XRDApp(SectionApp):
                 return
             self._fill_parameters()
             self._redraw()
-            self.inform("Eje de textura",
-                        "\n\n".join(c.describe() for c in found))
             named = sum(1 for c in found if c.axis is not None)
+            if not named:
+                self.inform("Eje de textura",
+                            "\n\n".join(c.describe() for c in found))
+                self.set_status(
+                    "Ninguna fase muestra textura: la muestra se comporta "
+                    "como un polvo al azar, y el modelo queda sin corregir.")
+                return
+            if self.ask_yes_no(
+                "Eje de textura",
+                "\n\n".join(c.describe() for c in found)
+                + f"\n\n¿Refinar de nuevo con {named} eje(s) puesto(s)?",
+            ):
+                self.set_status("Ejes puestos. Refinando…")
+                self._auto_refine()
+                return
             self.set_status(
-                f"{named} de {len(found)} fases con eje propuesto. "
-                "Vuelve a refinar para usarlo."
-                if named else
-                "Ninguna fase muestra textura: la muestra se comporta como "
-                "un polvo al azar."
-            )
+                f"{named} de {len(found)} fases con eje puesto en el modelo. "
+                "Refina cuando quieras usarlo.")
 
         def work():
             return self.session.find_texture_axes(
