@@ -1393,28 +1393,34 @@
   }
  },
  "extra_polarizability": {
+  "B": {
+   "value": 0.87264,
+   "unit": "Å^3",
+   "source": "ajustada a tensores α de GPAW (PBE, FD, h = 0.18 Å); receta tbkit.recipes.xu_chn_alpha",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
+  },
   "O": {
    "value": 0.56697,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   },
   "H": {
    "value": 0.42865,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   },
   "C": {
    "value": 0.95312,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   },
   "N": {
    "value": 0.73688,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   }
  },
@@ -2544,5 +2550,128 @@
   "hessian_weight": 0.1,
   "hessians": "gpaw_b_hessians.json",
   "hessians_sha256": "6577918dd53136662a5331239d94d4d3c8b7f0a3a52854a117937da67eba9699"
+ },
+ "alpha_fit": {
+  "references": "gpaw_b_alpha.json",
+  "references_sha256": "4adedd126269e5b1d0a62474e4485b23d19fde75b1f9b93fce07b9e16704ee57",
+  "fitted_elements": [
+   "B"
+  ],
+  "optimiser": "`ftol` termination condition is satisfied.",
+  "molecules": {
+   "BH3": {
+    "role": "train",
+    "gpaw": [
+     2.325371336392554,
+     3.108199156896191,
+     3.108469506711256
+    ],
+    "tb": [
+     2.621628582576866,
+     2.741295354664422,
+     2.7414191650819384
+    ],
+    "mean_error_percent": -5.124032405336132
+   },
+   "BMe3": {
+    "role": "train",
+    "gpaw": [
+     7.332038318172323,
+     9.414847136847444,
+     9.697904544980235
+    ],
+    "tb": [
+     7.746967080818526,
+     9.38052351120836,
+     9.606080385237378
+    ],
+    "mean_error_percent": 1.0920146360181793
+   },
+   "B(OH)3": {
+    "role": "train",
+    "gpaw": [
+     3.637608583568459,
+     5.118284714337055,
+     5.122456702094487
+    ],
+    "tb": [
+     3.3205436712249496,
+     5.617533094376294,
+     5.6288085620864
+    ],
+    "mean_error_percent": 4.961218932276834
+   },
+   "MeB(OH)2": {
+    "role": "train",
+    "gpaw": [
+     4.903206726371094,
+     6.103645277983199,
+     7.124157995645707
+    ],
+    "tb": [
+     4.884544636728543,
+     6.615970039567311,
+     7.244628292229509
+    ],
+    "mean_error_percent": 3.387196678648152
+   },
+   "borazine": {
+    "role": "train",
+    "gpaw": [
+     7.009406777752793,
+     11.647827372288363,
+     11.675705849958844
+    ],
+    "tb": [
+     6.4545703973048,
+     12.303042785197976,
+     12.34281629657589
+    ],
+    "mean_error_percent": 2.530217905282761
+   },
+   "H3BNH3": {
+    "role": "train",
+    "gpaw": [
+     5.118469349606323,
+     5.119829952682737,
+     5.467130697710938
+    ],
+    "tb": [
+     4.723634341441334,
+     4.723668359564691,
+     5.637103786437059
+    ],
+    "mean_error_percent": -3.9541961764620104
+   },
+   "PhB(OH)2": {
+    "role": "test",
+    "gpaw": [
+     9.046574433712653,
+     15.99160470525903,
+     18.931220861028326
+    ],
+    "tb": [
+     8.593591626814405,
+     17.004731725840355,
+     18.933273555747256
+    ],
+    "mean_error_percent": 1.2786094611298315
+   },
+   "B(OMe)3": {
+    "role": "test",
+    "gpaw": [
+     8.472598643233471,
+     11.626377623529962,
+     11.83838373323656
+    ],
+    "tb": [
+     8.79497755571405,
+     12.998414751268829,
+     13.199386194639992
+    ],
+    "mean_error_percent": 9.56691004398258
+   }
+  },
+  "checks": {}
  }
 }
