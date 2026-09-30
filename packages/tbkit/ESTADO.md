@@ -33,7 +33,9 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
    instalar, quitar la nota de ésteres de `validity_notes`, tests.
 2. (hecho) Se instalado; falta sección de Se en README.
 3. (hecho) Polarizabilidad extra: B 0.873, S 2.642, P 2.647, Se 3.496 Å³ (GPAW FD).
-4. Términos angulares generales + factores de escala (Witek 2004).
+4. Términos angulares: probado O-X-O solo (`--angular-ligands O`) en Se: activo pero no
+   arregla CH3SeO2H (deriva 0,87 -> 0,83 Å; SeO2 mejora, DMSeO empeora). Descartado; no se
+   extiende a P/B. La causa es la base sin d. Factores de escala (Witek 2004): en curso.
 5. (hecho) SCC periódico con Ewald (`ewald.py`): Madelung, caja grande = finito, fuerzas FD.
    Hecho también: validación en 13 cristales (arriba). Falta: α de respuesta lineal SCC periódica.
 6. TB dependiente del entorno (Tang 1996).

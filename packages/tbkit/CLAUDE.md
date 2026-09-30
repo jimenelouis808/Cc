@@ -112,7 +112,10 @@ tbkit/
   fed back to the fit. `CentredAngleTerm`/`CentredTorsionTerm` exist and are
   tested, but no shipped set uses them: on Se the all-ligand angle term broke
   divalent Se (H2Se 64 -> 289 cm⁻¹) and neither fixed the X-OH torsion of
-  seleninic/phosphonic acids, which stays a stated limit in `validity`.
+  seleninic/phosphonic acids, which stays a stated limit in `validity`. An O-X-O-only
+  angle term (`xu_bsp --angular-ligands O`, zero in H2Se) was fitted active
+  (~0.9 eV) and still left CH3SeO2H drifting 0.83 Å (0.87 without): the fault
+  is the missing d basis, not a missing empirical term. Do not retry variants.
 - Imported QE modes: L = e/√m with e normalised from the file's
   displacements (or eigenvectors), per degenerate set a real basis of the
   subspace; never take the real part of a complex Γ mode without fixing its
