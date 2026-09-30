@@ -122,7 +122,7 @@ def gpaw_calculator(settings: dict, n_bands: int, txt=None):
 
 
 def _n_bands(atoms: Atoms, settings: dict) -> int:
-    valence = {"H": 1, "C": 4, "N": 5, "O": 6, "B": 3, "P": 5, "S": 6}
+    valence = {"H": 1, "C": 4, "N": 5, "O": 6, "B": 3, "P": 5, "S": 6, "Se": 6}
     electrons = sum(valence[s] for s in atoms.get_chemical_symbols())
     return electrons // 2 + int(settings["extra_bands"])
 

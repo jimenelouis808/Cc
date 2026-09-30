@@ -53,8 +53,8 @@ _ETA = {"sss": -1.40, "sps": 1.84, "pps": 3.24, "ppp": -0.81}
 FREE_ATOM_LEVELS = {"H": {"s": -6.492}, "C": {"s": -13.738, "p": -5.289},
                     "N": {"s": -18.4, "p": -7.095}, "O": {"s": -23.912, "p": -9.038},
                     "B": {"s": -9.438, "p": -3.609}, "P": {"s": -13.894, "p": -5.518},
-                    "S": {"s": -17.142, "p": -7.021}}
-VALENCE = {"H": 1.0, "C": 4.0, "N": 5.0, "O": 6.0, "B": 3.0, "P": 5.0, "S": 6.0}
+                    "S": {"s": -17.142, "p": -7.021}, "Se": {"s": -16.718, "p": -6.548}}
+VALENCE = {"H": 1.0, "C": 4.0, "N": 5.0, "O": 6.0, "B": 3.0, "P": 5.0, "S": 6.0, "Se": 6.0}
 SP = ("s", "px", "py", "pz")
 
 
@@ -120,7 +120,8 @@ class XuFamily:
             if offsets is not None:
                 r1, rm = (round(spec["r0"] + d, 3) for d in offsets)
                 spec.setdefault("tail", (r1, rm))
-                spec["rc_rep"] = min(spec["rc_rep"], rm)
+                if not spec.get("keep_rc"):         # an explicit, longer repulsion stays
+                    spec["rc_rep"] = min(spec["rc_rep"], rm)
         if self.base is not None:
             known = {frozenset(key[:2]) for key in self.base_model().hopping}
             known |= {frozenset(pair) for pair in self.pairs}

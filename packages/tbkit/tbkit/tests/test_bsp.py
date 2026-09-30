@@ -61,8 +61,8 @@ def test_hubbard_u_equals_dftb():
     from ase.units import Hartree
 
     dftb = {"B": 0.2961, "P": 0.2894, "S": 0.3288}      # Ha, 3ob / matsci
-    for element, u in HUBBARD_U.items():
-        assert u / Hartree == pytest.approx(dftb[element], abs=2e-4)
+    for element, value in dftb.items():             # Se: no published DFTB value to compare
+        assert HUBBARD_U[element] / Hartree == pytest.approx(value, abs=2e-4)
 
 
 def test_new_element_builds_a_hermitian_hamiltonian():

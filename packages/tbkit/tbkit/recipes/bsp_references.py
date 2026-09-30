@@ -61,6 +61,12 @@ MOLECULES = {
            "phosphinine": "c1ccpcc1", "P2H4": "PP", "H2PNH2": "NP"},
           {"PhPH2": "Pc1ccccc1", "PEt3": "CCP(CC)CC",
            "coronene_PO3H2": "OP(O)(=O)" + CORONENE}),
+    "Se": ({"H2Se": "[SeH2]", "CH3SeH": "C[SeH]", "CH3SeCH3": "C[Se]C",
+            "CH3SeSeCH3": "C[Se][Se]C", "selenophene": "c1cc[se]c1", "CSe2": "[Se]=C=[Se]",
+            "OCSe": "O=C=[Se]", "H2CSe": "C=[Se]", "SeO2": "O=[Se]=O", "DMSeO": "C[Se](C)=O",
+            "CH3SeO2H": "C[Se](=O)O", "CH3SeNH2": "C[Se]N"},
+           {"CH3CH2SeH": "CC[SeH]", "PhSeH": "[SeH]c1ccccc1",
+            "coronene_SeH": "[SeH]" + CORONENE}),
 }
 
 
