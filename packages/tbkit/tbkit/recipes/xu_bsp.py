@@ -62,6 +62,9 @@ FAMILIES = {
         hubbard_u={"B": HUBBARD_U["B"]},
         onsite_dipole={"B": ONSITE_DIPOLE["B"]},
         validity_notes=('B junto con S o P en la misma estructura no está cubierto; enlaces de B a menos de 0.03 Å de GPAW; ésteres B(OCH3)n corregidos con active learning (antes colapsaban; RMS 949 -> 95 cm⁻¹), aunque al relajar giran sus metilos (desplazamiento ~1 Å, sin colapso); ácidos borónicos arílicos (PhB(OH)2): el OH gira al relajar (0,6 Å), úsense sus frecuencias O-H con cautela'),
+        crystal_notes=("B grafítico en grafeno: fuerzas 1,4 veces el error molecular, B-C "
+                       "+0,027 Å; h-BN: red 1,1 % larga (2,53 frente a 2,50 Å) y 10-15 % más "
+                       "blanda en distorsiones"),
         system=("xu_chno más boro: boranos, ésteres y ácidos bóricos y borónicos, "
                 "amino-borano, borazina, B-N en grafeno"),
         h_tail=(0.40, 0.60),
@@ -76,6 +79,8 @@ FAMILIES = {
         validity_notes=("S junto con B o P en la misma estructura no está cubierto; los C-S "
                         "simples con carbono sp3 se desvían 0.06-0.09 Å (S=O, S-S, S-H, S-N y "
                         "C-S aromático a menos de 0.04 Å)"),
+        crystal_notes=("S en grafeno: fuerzas 0,5-0,6 veces el error molecular, S-C +0,03 Å, "
+                       "S 0,06 Å más alto sobre la hoja"),
         system=("xu_chno más azufre: tioles, sulfuros, disulfuros, tiofeno, sulfóxidos, "
                 "sulfonas, ácidos sulfónicos, sulfonamidas"),
         h_tail=(0.40, 0.60),
@@ -90,6 +95,9 @@ FAMILIES = {
         hubbard_u={"P": HUBBARD_U["P"]},
         onsite_dipole={"P": ONSITE_DIPOLE["P"]},
         validity_notes=('P junto con B o S en la misma estructura no está cubierto; el C-P de P(V) (ácidos fosfónicos, óxidos de fosfina) sale 0.05-0.10 Å largo, el de P(III) 0.04-0.06 Å; P-O, P=O, P-P, P-N, P-H y C-P aromático a menos de 0.025 Å; ésteres P(OCH3)n corregidos con active learning (antes colapsaban); ácidos con P-OH (fosfórico, fosfónicos): el OH gira hacia el otro O al relajar, 0,4-0,9 Å (torsión X-O-H demasiado blanda en la base sp mínima; ni términos angulares ni de torsión ajustados a barridos GPAW lo corrigieron): úsense sus frecuencias O-H con cautela'),
+        crystal_notes=("P en grafeno: fuerzas 0,3-0,6 veces el error molecular, P-C exacto "
+                       "(0,001 Å) pero P 0,12 Å más bajo sobre la hoja: ángulos C-P-C "
+                       "demasiado abiertos"),
         system=("xu_chno más fósforo: fosfinas, óxidos de fosfina, ácidos fosfórico y "
                 "fosfónicos, fosfatos, fosfinina"),
         h_tail=(0.40, 0.60),
@@ -102,6 +110,8 @@ FAMILIES = {
         hubbard_u={"Se": HUBBARD_U["Se"]},
         onsite_dipole={"Se": ONSITE_DIPOLE["Se"]},
         validity_notes=('Se junto con B, S o P en la misma estructura no está cubierto; enlaces de Se a menos de 0.08 Å; ácidos seleníninicos (Se(=O)OH): el OH gira hacia el otro O al relajar, 0,4-0,9 Å (torsión X-O-H demasiado blanda en la base sp mínima; ni términos angulares ni de torsión ajustados a barridos GPAW lo corrigieron): úsense sus frecuencias O-H con cautela'),
+        crystal_notes=("Se en grafeno: fuerzas ~1 vez el error molecular, Se-C +0,06 Å, Se "
+                        "0,07 Å más alto sobre la hoja"),
         system=("xu_chno más selenio: selenoles, selenuros, diselenuros, selenofeno, "
                 "selenóxidos, ácidos selenínicos, Se-N"),
         h_tail=(0.40, 0.60),

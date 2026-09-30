@@ -58,6 +58,11 @@ CHNO = XuFamily(
                     "los C-C y C-N simples junto a un heteroátomo se desvían ~0.08 Å; "
                     "frecuencias frente a GPAW (hessianas en el ajuste): RMS 38-180 cm⁻¹ por "
                     "molécula, media 126 (agua 38, metanol 120, ácido fórmico 111)"),
+    crystal_notes=("epóxido y OH sobre grafeno: fuerzas 0,4-1,1 veces el error molecular; "
+                   "heredan los errores de las moléculas (epóxido C-O +0,09 Å; OH C-O "
+                   "-0,05 Å, el C bajo el OH 0,14 Å menos piramidal y el H gira, 0,24 Å); "
+                   "el C-O simple de los alcoholes sale 0,06-0,08 Å corto también en "
+                   "moléculas (metanol -0,08 Å)"),
     experimental_alpha=EXPERIMENTAL_ALPHA,
     acute={"powers": 2, "theta0_degrees": 80.0, "r1": 1.7, "rm": 2.0,
            "elements": ("C", "N", "O")},

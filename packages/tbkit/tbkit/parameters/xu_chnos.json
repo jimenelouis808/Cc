@@ -1799,7 +1799,7 @@
  },
  "reference": "C-C: C. H. Xu, C. Z. Wang, C. T. Chan, K. M. Ho, J. Phys.: Condens. Matter 4, 6047 (1992). S: ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_bsp. Resto: xu_chno (fijo)",
  "system": "xu_chno más azufre: tioles, sulfuros, disulfuros, tiofeno, sulfóxidos, sulfonas, ácidos sulfónicos, sulfonamidas",
- "validity": "sistemas finitos de capa cerrada (SCC sin Ewald); enlaces dentro de lo muestreado (C-S 1.40-1.94 Å, H-S 1.24-1.45 Å, N-S 1.62-1.79 Å, O-S 1.34-1.75 Å, S-S 1.96-2.17 Å; el resto, como xu_chno); energías relativas solo dentro de una misma composición (no se ajustaron energías de atomización); C-C como en xu_carbon; S junto con B o P en la misma estructura no está cubierto; los C-S simples con carbono sp3 se desvían 0.06-0.09 Å (S=O, S-S, S-H, S-N y C-S aromático a menos de 0.04 Å)",
+ "validity": "ajustado en moléculas de capa cerrada; cristales (SCC periódico): extrapolación comprobada contra GPAW (validation/crystals_tb_vs_gpaw.json): S en grafeno: fuerzas 0,5-0,6 veces el error molecular, S-C +0,03 Å, S 0,06 Å más alto sobre la hoja; enlaces dentro de lo muestreado (C-S 1.40-1.94 Å, H-S 1.24-1.45 Å, N-S 1.62-1.79 Å, O-S 1.34-1.75 Å, S-S 1.96-2.17 Å; el resto, como xu_chno); energías relativas solo dentro de una misma composición (no se ajustaron energías de atomización); C-C como en xu_carbon; S junto con B o P en la misma estructura no está cubierto; los C-S simples con carbono sp3 se desvían 0.06-0.09 Å (S=O, S-S, S-H, S-N y C-S aromático a menos de 0.04 Å)",
  "notes": "Todo lo de xu_chno sin cambios; se ajustan solo S y sus pares, con el desplazamiento de niveles de xu_chno (7.0723 eV). U de Hubbard y dipolos: átomo libre con GPAW (PBE).",
  "fit": {
   "references": "gpaw_s.json",

@@ -148,3 +148,21 @@ def test_a_strained_cell_keeps_the_grid_of_the_relaxed_one():
     assert list(fixed.wfs.gd.N_c) == list(reference.wfs.gd.N_c)
     # Without it the grid jumps (44 -> 40 along this cell), which is the bug.
     assert list(free.wfs.gd.N_c) != list(reference.wfs.gd.N_c)
+
+
+@pytest.mark.parametrize("name, module, family", [
+    ("xu_chn", "xu_chn", "CHN"), ("xu_chno", "xu_chno", "CHNO"),
+    ("xu_chnob", "xu_bsp", "B"), ("xu_chnos", "xu_bsp", "S"),
+    ("xu_chnop", "xu_bsp", "P"), ("xu_chnose", "xu_bsp", "Se")])
+def test_validity_of_each_set_is_what_its_recipe_writes(name, module, family):
+    """The crystal results live in the recipe, so a refit cannot drop them."""
+    import importlib
+
+    from tbkit.params import read_parameter_file
+    from tbkit.recipes.xu_family import validity_text
+
+    recipe = importlib.import_module(f"tbkit.recipes.{module}")
+    fam = recipe.FAMILIES[family] if module == "xu_bsp" else getattr(recipe, family)
+    data = read_parameter_file(name)
+    assert data["validity"] == validity_text(fam, data["fit"]["bond_ranges"])
+    assert fam.crystal_notes, f"{name}: sin resultado en cristales"

@@ -81,6 +81,9 @@ class XuFamily:
     onsite_dipole: dict                        # Å, elements with p
     system: str = ""
     validity_notes: str = ""
+    #: What the crystal comparison against GPAW measured for this set
+    #: (``recipes/crystal_validation.py``); empty = periodic use not checked.
+    crystal_notes: str = ""
     experimental_alpha: dict = field(default_factory=dict)
     #: Acute-angle correction (:class:`tbkit.repulsive.AcuteAngleTerm`): number
     #: of powers fitted, with its fixed shape; None = no correction (xu_chn).
@@ -828,6 +831,23 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def validity_text(family: XuFamily, sampled: dict) -> str:
+    """The ``validity`` of a set: fitted on molecules; crystals as measured, or unchecked."""
+    ranges = ", ".join(f"{k} {v[0]:.2f}-{v[1]:.2f} Å" for k, v in sorted(sampled.items())
+                       if k != "C-C" and (family.base is None
+                                          or set(k.split("-")) & set(family.heteroatoms)))
+    if family.base is not None:
+        ranges += f"; el resto, como {family.base}"
+    crystals = (f"cristales (SCC periódico): extrapolación comprobada contra GPAW "
+                f"(validation/crystals_tb_vs_gpaw.json): {family.crystal_notes}"
+                if family.crystal_notes else
+                "en cristales es una extrapolación sin comprobar")
+    return ("ajustado en moléculas de capa cerrada; " + crystals + "; enlaces dentro de lo "
+            f"muestreado ({ranges}); energías relativas solo dentro de una misma "
+            "composición (no se ajustaron energías de atomización); C-C como en "
+            "xu_carbon" + (f"; {family.validity_notes}" if family.validity_notes else ""))
+
+
 def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: dict,
                    references: Sequence[Path], settings: dict) -> dict:
     data = model_to_dict(model)
@@ -838,17 +858,7 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
     data["reference"] = ("C-C: C. H. Xu, C. Z. Wang, C. T. Chan, K. M. Ho, J. Phys.: Condens. "
                          f"Matter 4, 6047 (1992). {hetero}: " + source)
     data["system"] = family.system
-    ranges = ", ".join(f"{k} {v[0]:.2f}-{v[1]:.2f} Å" for k, v in
-                       sorted(report.get("bond_ranges", {}).items())
-                       if k != "C-C" and (family.base is None
-                                          or set(k.split("-")) & set(family.heteroatoms)))
-    if family.base is not None:
-        ranges += f"; el resto, como {family.base}"
-    data["validity"] = ("sistemas finitos de capa cerrada (SCC sin Ewald); enlaces dentro de lo "
-                        f"muestreado ({ranges}); energías relativas solo dentro de una misma "
-                        "composición (no se ajustaron energías de atomización); C-C como en "
-                        "xu_carbon" + (f"; {family.validity_notes}" if family.validity_notes
-                                       else ""))
+    data["validity"] = validity_text(family, report.get("bond_ranges", {}))
     data["notes"] = ("C-C idéntico a xu_carbon. Niveles: todos los ocupados, el LUMO y el "
                      f"LUMO+1, con un desplazamiento común de {shift:.4f} eV entre el cero de Xu "
                      "y el vacío de GPAW. Sin interacción H-H. U de Hubbard: dε/dn del átomo "
