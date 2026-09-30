@@ -169,9 +169,21 @@ class XRDApp(SectionApp):
 
         options, optionsbody = card(parent, "Análisis")
         options.pack(fill="x", pady=(PAD["sm"], 0))
-        self.texture_var = tk.StringVar(value="")
+        # "auto" is the default now. Typing an hkl here means already
+        # knowing the answer, and the axis is a DIRECTION rather than an
+        # observed reflection -- a carbon lying flat is textured along
+        # (001) while its pattern shows only the 002 -- so the field asked
+        # a question most people cannot answer about their own sample.
+        self.texture_var = tk.StringVar(value="auto")
         labelled(optionsbody, "Eje de textura", lambda p: ttk.Entry(
             p, textvariable=self.texture_var, width=10))
+        hint(optionsbody,
+             "«auto» busca el eje de cada fase entre las direcciones de sus "
+             "propias reflexiones y dice cuál encontró, con cuánto baja Rwp "
+             "y por cuánto gana al siguiente. Si dos ejes empatan lo dice en "
+             "vez de elegir: el patrón no siempre los separa. Escribe un hkl "
+             "(«001») para imponerlo, o déjalo vacío para no refinar textura.",
+             wrap=250)
         self.max_phases_var = tk.StringVar(value="4")
         labelled(optionsbody, "Máx. fases", lambda p: ttk.Spinbox(
             p, from_=1, to=8, textvariable=self.max_phases_var, width=6))
@@ -259,6 +271,13 @@ class XRDApp(SectionApp):
 
         results, resultsbody = card(panes, "Fases identificadas")
         panes.add(results, weight=2)
+        # Above the table, not below it: `table` packs with expand=True,
+        # and anything packed fill="x" after it in the same parent gets
+        # whatever is left over, which in a short window is nothing.
+        self.carbon_label = ttk.Label(
+            resultsbody, text="Carbono: (sin identificar todavía)",
+            style="Muted.TLabel")
+        self.carbon_label.pack(fill="x", pady=(0, PAD["xs"]))
         self.phase_table = table(
             resultsbody,
             ["fase", "fórmula", "veredicto", "FOM", "% peso", "D (nm)"],
@@ -477,6 +496,7 @@ class XRDApp(SectionApp):
         except ValueError:
             session.background_order = 6
         session.texture_axis = _parse_axis(self.texture_var.get())
+        session.find_texture = self.texture_var.get().strip().lower() == "auto"
         try:
             session.smooth_window = max(0, int(self.smooth_var.get()))
         except ValueError:
@@ -971,6 +991,26 @@ class XRDApp(SectionApp):
             ["fase", "fórmula", "veredicto", "FOM", "% peso", "D (nm)"],
             self.session.phase_rows(),
         )
+        self._fill_carbon()
+
+    def _fill_carbon(self) -> None:
+        """The line the user had seen once and could not find again.
+
+        d₀₀₂, the stack height, how many layers that is and the degree of
+        graphitisation were computed by the package and reachable only
+        from `ramancarbon micro`.
+        """
+        carbon = self.session.carbon_microstructure()
+        if carbon is None:
+            self.carbon_label.configure(
+                text="Carbono: (sin identificar todavía)")
+            return
+        text = f"Carbono: {carbon.describe()}"
+        if carbon.turbostratic:
+            text += "  ·  turbostrático"
+        if carbon.warnings:
+            text += f"  ·  {carbon.warnings[0]}"
+        self.carbon_label.configure(text=text)
 
     def _draw_pattern(self, figure) -> None:
         from .plots_xrd import plot_pattern

@@ -140,6 +140,72 @@ def march_dollase(
     return (r * r * cos2 + (1.0 - cos2) / r) ** (-1.5)
 
 
+#: How many of a phase's strongest reflections seed the texture-axis
+#: candidates.
+#:
+#: A texture axis is a direction the crystallites actually line up along,
+#: and a direction the powder pattern can say anything about is one that
+#: has a reflection in the measured range. Ten is enough to reach the
+#: second and third index families of everything in the library without
+#: turning the search into a survey of the whole reciprocal lattice.
+TEXTURE_CANDIDATE_REFLECTIONS = 10
+
+
+def candidate_axes(
+    crystal: Crystal,
+    wavelength: float = 1.540598,
+    two_theta_range: tuple[float, float] = (5.0, 90.0),
+    limit: int = TEXTURE_CANDIDATE_REFLECTIONS,
+) -> list[tuple[int, int, int]]:
+    """Plausible preferred-orientation axes for one structure.
+
+    A March–Dollase axis has to be given as an ``hkl``, and asking the
+    user for it is asking them to already know the answer. It is also
+    easy to get wrong for a reason that has nothing to do with the
+    crystallography: the axis is a **direction**, not an observed
+    reflection. For a graphitic carbon the plate normal is ``(0 0 1)``
+    even though ``(0 0 1)`` itself is systematically absent — what the
+    pattern shows is its second order, the 002. Someone reading their own
+    diffractogram sees 002 and no 001, and concludes, reasonably and
+    wrongly, that (001) cannot be the axis.
+
+    So the candidates are derived here instead, from the phase's own
+    strongest reflections, each reduced to its primitive direction: the
+    002 and the 004 of a carbon both reduce to (0 0 1) and are offered
+    once. Systematically absent directions arrive through their allowed
+    orders, which is exactly what makes the carbon case work without
+    anyone having to know the rule.
+
+    Returns
+    -------
+    list[tuple[int, int, int]]
+        Distinct axes, strongest reflection first. Never empty for a
+        structure with any reflection in range.
+    """
+    lines = reflections(
+        crystal,
+        wavelength=wavelength,
+        two_theta_range=two_theta_range,
+        normalise=True,
+    )
+    lines = sorted(lines, key=lambda r: -r.intensity)[:max(int(limit), 1)]
+    axes: list[tuple[int, int, int]] = []
+    for line in lines:
+        indices = tuple(int(v) for v in line.hkl)
+        divisor = math.gcd(math.gcd(abs(indices[0]), abs(indices[1])),
+                           abs(indices[2]))
+        if divisor == 0:
+            continue
+        axis = tuple(int(v) // divisor for v in indices)
+        # (0 0 -1) and (0 0 1) are the same axis: March-Dollase depends on
+        # cos^2 of the angle, so the sign cannot matter. Keeping both
+        # would double the search for nothing.
+        flipped = tuple(-v for v in axis)
+        if axis not in axes and flipped not in axes:
+            axes.append(axis)                            # type: ignore[arg-type]
+    return axes
+
+
 def reflections(
     crystal: Crystal,
     wavelength: float = 1.540598,
@@ -534,6 +600,8 @@ __all__ = [
     "Profile",
     "Reflection",
     "SimulatedPhase",
+    "TEXTURE_CANDIDATE_REFLECTIONS",
+    "candidate_axes",
     "instrumental_correction",
     "lorentz_polarisation",
     "march_dollase",

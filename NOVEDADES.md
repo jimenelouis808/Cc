@@ -6,6 +6,56 @@ está la trampa.
 
 ---
 
+## ramancarbon · el eje de textura lo busca el programa
+
+Antes había que escribirlo, y escribirlo es ya saber la respuesta. Peor:
+la pregunta se contesta mal por una razón que no es de la muestra. El eje
+es una **dirección**, no una reflexión observada: un carbono tumbado está
+texturado según (0 0 1) mientras su difractograma enseña solo la 002 —la
+(0 0 1) está sistemáticamente ausente— así que mirar el propio patrón
+lleva a descartar (001), que es justo el eje.
+
+Ahora el campo «Eje de textura» viene con **auto**. El programa saca los
+candidatos de las propias reflexiones de cada fase, reducidas a su
+dirección primitiva (la 002 se convierte en (0 0 1) sola), prueba cada
+uno y dice cuál encontró, cuánto baja Rwp y por cuánto gana al siguiente.
+
+**Y la textura no se había refinado nunca.** Con el eje verdadero
+declarado a mano, sobre un patrón sintético construido con r = 0.45, el
+refinamiento devolvía r = 1.000000 y un Rwp idéntico al del ajuste sin
+textura. Dos causas, las dos arregladas: el caché de reflexiones
+redondeaba a ocho decimales los parámetros que se refinan —y el paso de
+diferencias finitas es 1.5·10⁻⁸, así que esa columna del jacobiano salía
+exactamente cero— y, aun con eso arreglado, para cuando corre la etapa de
+textura las anchuras ya se la han comido. Por eso cada candidato se prueba
+desde un arranque fresco.
+
+**La trampa.** El veredicto tiene tres valores, no dos. Sobre un carbono
+turbostrático —cuatro reflexiones— el mejor eje era el verdadero siempre
+y ganaba al siguiente por un 0.1 %: eso no es «el eje», es «el más
+probable». Cuando pasa, lo dice con esas palabras y enseña el ranking.
+Zanjarlo pide una figura de polos o una segunda medida con la muestra
+girada.
+
+---
+
+## ramancarbon · cuántas capas tiene el carbono
+
+d₀₀₂, L_c, L_a, el **número de capas** y el grado de grafitización estaban
+calculados desde hacía versiones y solo se podían ver con `ramancarbon
+micro` en la línea de comandos. Ahora salen en la pestaña Fases.
+
+**La trampa.** La línea que los elegía era «el pico más cercano a 26.5°»,
+y eso siempre encuentra uno: sobre un patrón sin carbono devolvía una
+altura de apilamiento calculada con la reflexión del hierro. Ahora se
+busca en una ventana de espaciado y se dice que no cuando está vacía. Y
+la ventana de la 100 del carbono cae encima de las líneas fuertes del
+hierro y de la cementita: en el patrón real, sin filtrar, la línea de
+cementita de 43.89° daba L_a = 36.8 nm para un carbono cuyo apilamiento
+mide 6.7 nm. Los picos que otra fase ya explica no se usan para L_a.
+
+---
+
 ## ramancarbon · una fracción en peso es una afirmación sobre el FONDO
 
 El Rietveld de un CVD real de carbono sobre FeSe daba **51 % de carbono en

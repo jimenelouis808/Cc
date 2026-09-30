@@ -495,6 +495,146 @@ def carbon_microstructure(
     return result
 
 
+#: d-spacing window, in angstroms, that a carbon 002 has to fall in.
+#:
+#: The graphitic end is 3.354 and the turbostratic end 3.44; the window
+#: runs past both because a poorly ordered carbon reaches 3.6 and because
+#: a zero error moves the whole pattern. It is a WINDOW and not a nearest
+#: match on purpose: "the peak closest to 26.5 degrees" always finds one,
+#: and on a pattern with no carbon at all it returns an iron reflection
+#: and reports how many graphene layers it has.
+D002_WINDOW = (3.20, 3.70)
+
+#: Same, for the in-plane 100/101 pair that gives L_a.
+D100_WINDOW = (1.98, 2.20)
+
+#: How close, in degrees 2θ, a candidate has to be to a peak another
+#: phase explains before it counts as that same peak.
+#:
+#: Small on purpose. The positions handed in as explained come from the
+#: SAME peak list, so this is an identity test, not a proximity one — and
+#: a first attempt that used the candidate's own FWHM as the radius threw
+#: away exactly the peak it was meant to keep: a genuine carbon 100 is
+#: two degrees wide, so any explained line within two degrees of it, on
+#: either side, deleted it. Broad is what a carbon 100 IS.
+EXPLAINED_TOLERANCE = 0.05
+
+
+def _strongest_in(peaks: Sequence, low_d: float, high_d: float,
+                  wavelength: float) -> Optional[object]:
+    """The strongest measured peak whose d-spacing is inside a window.
+
+    Strongest rather than nearest-to-a-number because the carbon 002 of a
+    disordered material is a wide hump, and its apex can sit a degree
+    from where a table puts it while still being unmistakably the
+    largest thing in that stretch of the pattern.
+    """
+    inside = []
+    for peak in peaks:
+        angle = float(getattr(peak, "two_theta", float("nan")))
+        if not math.isfinite(angle) or not 0.0 < angle < 180.0:
+            continue
+        spacing = wavelength / (2.0 * math.sin(math.radians(angle) / 2.0))
+        if low_d <= spacing <= high_d:
+            inside.append(peak)
+    if not inside:
+        return None
+    # `height` on a measured XRDPeak, `intensity` on a calculated
+    # Reflection: this is called with both, and a missing attribute would
+    # silently make every candidate equal and pick the first.
+    def strength(peak) -> float:
+        for attribute in ("height", "intensity", "area", "prominence"):
+            value = getattr(peak, attribute, None)
+            if value is not None:
+                return float(value)
+        return 0.0
+
+    return max(inside, key=strength)
+
+
+def carbon_from_peaks(
+    peaks: Sequence,
+    wavelength: float = 1.540598,
+    instrument_fwhm: float = 0.0,
+    skip_for_la: Sequence[float] = (),
+) -> CarbonMicrostructure:
+    """d₀₀₂, L_c, L_a, the layer count and the graphitisation, from a peak list.
+
+    :func:`carbon_microstructure` takes four numbers the caller has
+    already picked out. Picking them out is where the mistake lives, and
+    it lived in the command line: "the peak closest to 26.5°" always
+    returns a peak, so a pattern with no carbon in it came back with a
+    stack height and a layer count computed from somebody else's
+    reflection. Here the two reflections are looked for in a d-spacing
+    WINDOW, and nothing outside it is used.
+
+    Parameters
+    ----------
+    peaks:
+        Measured peaks, each with ``two_theta``, ``fwhm`` and
+        ``intensity``.
+    wavelength:
+        Kα₁ in Å.
+    instrument_fwhm:
+        The diffractometer's own width, removed before Scherrer.
+    skip_for_la:
+        2θ positions another phase already explains. The in-plane window
+        of a carbon overlaps the strong reflections of iron carbide and
+        of α-iron, so on this kind of sample a peak there is more likely
+        to belong to the metal than to the carbon — and an L_a computed
+        from a cementite line is a number with a plausible magnitude and
+        no meaning. L_c is not filtered this way: the 002 window is
+        empty for everything else in the library.
+
+    Returns
+    -------
+    CarbonMicrostructure
+        With ``warnings`` naming whatever could not be measured and why.
+    """
+    result = CarbonMicrostructure()
+    peaks = list(peaks)
+    if not peaks:
+        result.warnings.append("no hay picos medidos")
+        return result
+
+    stacking = _strongest_in(peaks, *D002_WINDOW, wavelength)
+    if stacking is None:
+        result.warnings.append(
+            f"no hay ningún pico con espaciado entre {D002_WINDOW[0]:.2f} y "
+            f"{D002_WINDOW[1]:.2f} Å, que es donde cae la 002 de un carbono. "
+            "Sin ella no hay ni d₀₀₂ ni número de capas")
+        return result
+
+    plane = None
+    if skip_for_la is not None:
+        taken = [float(a) for a in skip_for_la]
+        candidates = [
+            p for p in peaks
+            if all(abs(float(p.two_theta) - a) > EXPLAINED_TOLERANCE
+                   for a in taken)
+        ]
+        plane = _strongest_in(candidates, *D100_WINDOW, wavelength)
+        if plane is None and _strongest_in(peaks, *D100_WINDOW, wavelength):
+            result.warnings.append(
+                "hay un pico en la ventana de la 100 del carbono, pero otra "
+                "fase ya lo explica: no se usa para L_a. En una muestra con "
+                "hierro o carburo ese solape es la norma, y un L_a sacado de "
+                "una línea de cementita tiene magnitud creíble y ningún "
+                "significado")
+
+    carbon = carbon_microstructure(
+        two_theta_002=float(stacking.two_theta),
+        fwhm_002=float(stacking.fwhm) if stacking.fwhm else None,
+        two_theta_100=float(plane.two_theta) if plane is not None else None,
+        fwhm_100=(float(plane.fwhm)
+                  if plane is not None and plane.fwhm else None),
+        wavelength=wavelength,
+        instrument_fwhm=instrument_fwhm,
+    )
+    carbon.warnings = result.warnings + carbon.warnings
+    return carbon
+
+
 def amorphous_fraction(
     crystalline_weights: dict[str, float],
     standard: str,
@@ -564,6 +704,10 @@ __all__ = [
     "SizeStrain",
     "agreement",
     "amorphous_fraction",
+    "D002_WINDOW",
+    "D100_WINDOW",
+    "EXPLAINED_TOLERANCE",
+    "carbon_from_peaks",
     "carbon_microstructure",
     "compare_methods",
     "halder_wagner",

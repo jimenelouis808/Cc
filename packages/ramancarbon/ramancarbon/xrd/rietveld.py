@@ -58,7 +58,14 @@ import numpy as np
 from scipy.optimize import least_squares
 
 from .pattern import Pattern
-from .powder import Profile, Reflection, pseudo_voigt, reflections, scherrer
+from .powder import (
+    Profile,
+    Reflection,
+    candidate_axes,
+    pseudo_voigt,
+    reflections,
+    scherrer,
+)
 from .structure import ATOMIC_WEIGHT, Crystal
 
 #: Default Chebyshev background order. Six terms describe air scatter and
@@ -449,13 +456,35 @@ def calculate_pattern(
     for index, phase in enumerate(phases):
         crystal = phase.current_crystal()
         for line_wavelength, weight in lines:
+            # The refinable parts of this key are NOT rounded, and that is
+            # a fix, not an oversight.
+            #
+            # SciPy's finite-difference step for a parameter of magnitude
+            # one is sqrt(machine epsilon), about 1.5e-8. Rounding the key
+            # to eight decimals therefore sent r and r + step to the SAME
+            # cache entry: the perturbed evaluation returned the unperturbed
+            # reflections, that column of the Jacobian came out exactly
+            # zero, and the optimiser concluded the parameter did nothing.
+            # Measured: `auto_refine` with a texture axis declared returned
+            # r = 1.000000 and a Rwp identical to the untextured fit, on a
+            # synthetic pattern built with r = 0.45. Preferred orientation
+            # had never once been refined. U_iso is worse: it sits around
+            # 0.005, so its step is 7e-11, four thousand times under the
+            # rounding.
+            #
+            # A cache MISS costs a recomputation. A cache HIT on the wrong
+            # entry costs a parameter. The rounding bought the first and
+            # paid with the second, and the stages where the cache earns
+            # its keep -- the ones that hold these fixed -- hit exactly as
+            # often without it, because an unchanged float is an unchanged
+            # float.
             key = (
                 index,
                 round(line_wavelength, 8),
                 phase.lattice_factors,
-                round(phase.u_iso, 8),
+                phase.u_iso,
                 phase.preferred_axis,
-                round(phase.preferred_r, 8),
+                phase.preferred_r,
             )
             computed: Optional[list[Reflection]] = (
                 reflection_cache.get(key) if reflection_cache is not None else None
@@ -880,12 +909,17 @@ def auto_refine(
     phases: Sequence[PhaseModel] | Sequence[Crystal],
     background_order: int = DEFAULT_BACKGROUND_ORDER,
     stages: Sequence[tuple[str, tuple[str, ...]]] = STAGES,
-    preferred_axis: Optional[Sequence[int]] = None,
+    preferred_axis: Optional[Sequence[int] | str] = None,
     instrument_fwhm: float = 0.06,
     callback: Optional[Callable[[str], None]] = None,
     should_stop: Optional[Callable[[], bool]] = None,
 ) -> RietveldResult:
     """The staged protocol: free parameters in a safe order.
+
+    ``preferred_axis="auto"`` looks the texture axis up for each phase
+    with :func:`choose_texture_axes` before the stages start, instead of
+    requiring it to be declared. It costs one cheap fit per candidate
+    axis per phase.
 
     Scale and background first, then the zero, the cell, the widths, the
     shape, the texture, and only at the end the displacement parameters —
@@ -900,6 +934,32 @@ def auto_refine(
     models = [
         p if isinstance(p, PhaseModel) else PhaseModel(crystal=p) for p in phases
     ]
+    texture_notes: list[str] = []
+    if isinstance(preferred_axis, str):
+        if preferred_axis != "auto":
+            raise ValueError(
+                f"preferred_axis debe ser un hkl o «auto», no {preferred_axis!r}")
+        # The search has to run BEFORE the staged protocol, not as part of
+        # it, and the reason is measured: by the time the width and shape
+        # stages have run they have absorbed the texture, and from inside
+        # that basin `least_squares` terminates on xtol with r still at
+        # exactly 1.000000. See `choose_texture_axes`.
+        # Paired by POSITION, not by name: `choose_texture_axes` returns
+        # one choice per phase in the order given, and two phases can
+        # share a name -- the same structure entered twice to model two
+        # populations with different widths is a normal thing to do, and
+        # looking the name up would give both of them the first one's
+        # axis.
+        found = choose_texture_axes(
+            pattern, models, background_order=background_order,
+            instrument_fwhm=instrument_fwhm, callback=callback,
+            should_stop=should_stop,
+        )
+        for phase, choice in zip(models, found, strict=True):
+            texture_notes.append(choice.describe())
+            if choice.axis is not None:
+                phase.preferred_axis = choice.axis
+        preferred_axis = None
     if preferred_axis is not None:
         for phase in models:
             if phase.preferred_axis is None:
@@ -961,6 +1021,7 @@ def auto_refine(
             break
     assert result is not None
     result.stages = done
+    result.warnings.extend(texture_notes)
     if skipped_texture and not result.cancelled:
         # It was being skipped in silence, and silence reads as "there was
         # nothing to do". There was: the texture stage is the only one
@@ -1429,11 +1490,230 @@ def background_order_sensitivity(
     return BackgroundSensitivity(chosen, r_wp, gof, fractions)
 
 
+#: Relative drop in Rwp a texture axis has to buy before the pattern is
+#: said to show texture at all.
+#:
+#: Measured on synthetic patterns of a turbostratic carbon built with a
+#: known March-Dollase axis and r, then read back by this function:
+#: genuine texture that the four reflections can see bought 2.6 to 3.4 %,
+#: and a pattern built with no texture at all bought 0.3 %. Two per cent
+#: sits between them.
+TEXTURE_MIN_GAIN = 0.02
+
+#: How much better than the runner-up the winning axis has to be, on the
+#: same relative scale, before the axis itself is called determined.
+#:
+#: This is the `.spe` rule arriving in another module: if two readings fit
+#: equally well, neither is the reading. What the measurement adds is how
+#: often that happens -- on a turbostratic carbon, which has four
+#: reflections in a laboratory pattern, the best axis beat the next by
+#: about 0.1 % every time, and the ranking was still CORRECT in all three
+#: textured cases. So a failure to clear this bar is not a failure to
+#: find the axis; it is the pattern saying it cannot separate them, and
+#: the ranking is reported either way.
+TEXTURE_AXIS_MARGIN = 0.01
+
+
+@dataclass
+class TextureChoice:
+    """What the search found for one phase."""
+
+    phase: str
+    axis: Optional[tuple[int, int, int]]
+    r: float
+    r_wp: float
+    """Rwp with this axis and its refined r."""
+    without: float
+    """Rwp of the same cheap protocol with no texture correction."""
+    verdict: str
+    """One of ``"textura"``, ``"eje ambiguo"``, ``"sin textura"``."""
+    reason: str
+    ranking: tuple[tuple[tuple[int, int, int], float, float], ...] = ()
+    """``(axis, r_wp, r)`` for every candidate, best first."""
+
+    @property
+    def accepted(self) -> bool:
+        """Whether the axis is determined well enough to be quoted."""
+        return self.verdict == "textura"
+
+    @property
+    def gain(self) -> float:
+        """Relative drop in Rwp the chosen axis bought."""
+        if self.without <= 0.0:
+            return 0.0
+        return (self.without - self.r_wp) / self.without
+
+    def describe(self) -> str:
+        if self.axis is None:
+            return f"{self.phase}: sin textura — {self.reason}"
+        shape = ("placas tumbadas (refuerza las reflexiones del eje)"
+                 if self.r < 1.0 else
+                 "agujas alineadas (debilita las reflexiones del eje)")
+        head = "eje" if self.verdict == "textura" else "eje PROBABLE"
+        return (f"{self.phase}: {head} {self.axis}, r = {self.r:.3f} — "
+                f"{shape}; Rwp {100 * self.without:.2f} → "
+                f"{100 * self.r_wp:.2f} %. {self.reason}")
+
+
+def choose_texture_axes(
+    pattern: Pattern,
+    phases: Sequence[PhaseModel] | Sequence[Crystal],
+    background_order: int = DEFAULT_BACKGROUND_ORDER,
+    instrument_fwhm: float = 0.06,
+    callback: Optional[Callable[[str], None]] = None,
+    should_stop: Optional[Callable[[], bool]] = None,
+) -> list[TextureChoice]:
+    """Find each phase's preferred-orientation axis instead of being told it.
+
+    `PhaseModel.preferred_axis` had to be declared before the texture
+    stage would run, and declaring it means already knowing the answer.
+    The question is also easy to get wrong for a reason that is not about
+    the sample: the axis is a **direction**, not an observed reflection. A
+    graphitic carbon lying flat is textured along ``(0 0 1)`` while its
+    pattern shows only the 002 -- ``(0 0 1)`` itself is systematically
+    absent -- so someone reading their own diffractogram concludes,
+    reasonably, that (001) cannot be it. `powder.candidate_axes` sidesteps
+    that by reducing the phase's own strongest reflections to their
+    primitive directions, which turns the 002 into (0 0 1) with nobody
+    needing to know the rule.
+
+    **Every arm starts from a fresh model, and that is the whole
+    method.** The obvious implementation -- refine the untextured pattern
+    first, then free r from there -- does not work, and does not fail
+    loudly: measured on a synthetic pattern built with r = 0.45, the
+    staged protocol reached Rwp 19.27 % with the early stages having
+    absorbed the texture into the widths and the scale, and from that
+    point `least_squares` terminated on `xtol` after twenty evaluations
+    with r still at exactly 1.000000. A fresh fit of the same pattern
+    reached 17.19 % with r = 0.31. The texture is not recoverable from
+    inside that basin, so each candidate gets its own start: scale,
+    background and (for a candidate) r, seeded the same way for all of
+    them, which is also what makes the arms comparable.
+
+    The verdict has three values rather than two, because the measurement
+    said so. On a turbostratic carbon -- four reflections in a laboratory
+    pattern -- the best axis was the true one in every textured case and
+    beat the runner-up by about 0.1 % each time. Reporting that as "no
+    texture" throws away a correct answer; reporting it as "the axis"
+    turns 0.1 % into a claim about how the sample sits in the holder. So
+    it is reported as a ranking with its margins.
+
+    Returns
+    -------
+    list[TextureChoice]
+        One per phase, in the order given.
+    """
+    import copy
+
+    models = [
+        p if isinstance(p, PhaseModel) else PhaseModel(crystal=p) for p in phases
+    ]
+    seed = float(np.percentile(pattern.intensity, 5))
+    choices: list[TextureChoice] = []
+
+    for index, phase in enumerate(models):
+        if should_stop is not None and should_stop():
+            raise RefinementCancelled("detenido buscando el eje de textura")
+        name = phase.crystal.name
+        axes = candidate_axes(
+            phase.current_crystal(),
+            wavelength=pattern.wavelength,
+            two_theta_range=pattern.range,
+        )
+
+        def arm(axis: Optional[tuple[int, int, int]],
+                index: int = index) -> tuple[float, float]:
+            # `index` is bound as a default rather than captured: the
+            # closure is only called inside this iteration today, and a
+            # late-binding capture is the kind of thing that stays correct
+            # until someone collects the arms and runs them afterwards.
+            # Share the Crystal, copy only what a refinement writes into.
+            # A deep copy would duplicate the closed symmetry group and
+            # the expanded-positions cache for every one of the fifty-odd
+            # arms this runs, and `ClosedGroup` exists precisely because
+            # rebuilding those was two thirds of a refinement's time.
+            trial = [
+                PhaseModel(
+                    crystal=m.crystal, scale=m.scale,
+                    profile=copy.copy(m.profile), u_iso=m.u_iso,
+                    preferred_axis=m.preferred_axis,
+                    preferred_r=m.preferred_r,
+                    lattice_factors=m.lattice_factors,
+                )
+                for m in models
+            ]
+            trial[index].preferred_axis = axis
+            trial[index].preferred_r = 1.0
+            settings = build_parameters(trial, background_order)
+            for parameter in settings:
+                if parameter.name == "fondo_c0":
+                    parameter.value = seed
+            kinds = ["scale", "background"]
+            if axis is not None:
+                kinds.append("preferred")
+            free_kinds(settings, kinds)
+            outcome = refine(
+                pattern, trial, parameters=settings,
+                background_order=background_order,
+                instrument_fwhm=instrument_fwhm,
+                should_stop=should_stop,
+            )
+            return outcome.r_wp, trial[index].preferred_r
+
+        without, _ = arm(None)
+        scored: list[tuple[float, tuple[int, int, int], float]] = []
+        for position, axis in enumerate(axes, start=1):
+            if callback:
+                callback(f"[textura {name} {position}/{len(axes)}] eje {axis}")
+            r_wp, r_value = arm(axis)
+            scored.append((r_wp, axis, r_value))
+        scored.sort(key=lambda row: row[0])
+        ranking = tuple((axis, r_wp, r) for r_wp, axis, r in scored)
+
+        if not scored:
+            choices.append(TextureChoice(
+                name, None, 1.0, without, without, "sin textura",
+                "la fase no tiene reflexiones en el intervalo medido"))
+            continue
+
+        best_wp, best_axis, best_r = scored[0]
+        gain = (without - best_wp) / without if without > 0 else 0.0
+        margin = ((scored[1][0] - best_wp) / without
+                  if len(scored) > 1 and without > 0 else float("inf"))
+
+        if gain < TEXTURE_MIN_GAIN:
+            choices.append(TextureChoice(
+                name, None, 1.0, without, without, "sin textura",
+                f"el mejor eje {best_axis} solo baja Rwp un {100 * gain:.1f} %, "
+                "y un parámetro libre más siempre baja algo. La muestra se "
+                "comporta como un polvo al azar", ranking))
+        elif margin < TEXTURE_AXIS_MARGIN:
+            choices.append(TextureChoice(
+                name, best_axis, best_r, best_wp, without, "eje ambiguo",
+                f"hay textura (baja Rwp un {100 * gain:.1f} %), pero "
+                f"{best_axis} solo gana a {scored[1][1]} por un "
+                f"{100 * margin:.1f} %: el patrón no separa los dos ejes. "
+                "Tómalo como el más probable, no como medido; zanjarlo pide "
+                "una figura de polos o una segunda medida con la muestra "
+                "girada", ranking))
+        else:
+            choices.append(TextureChoice(
+                name, best_axis, best_r, best_wp, without, "textura",
+                f"baja Rwp un {100 * gain:.1f} % y gana al siguiente eje por "
+                f"un {100 * margin:.1f} %", ranking))
+    return choices
+
+
+
 __all__ = [
     "BACKGROUND_DOMINATES",
     "BackgroundSensitivity",
+    "TEXTURE_AXIS_MARGIN",
+    "TEXTURE_MIN_GAIN",
+    "TextureChoice",
     "SENSITIVITY_ORDERS",
     "background_order_sensitivity",
+    "choose_texture_axes",
     "DEFAULT_BACKGROUND_ORDER",
     "GOF_LIMIT",
     "SCALE_BACKGROUND_DEGENERATE",

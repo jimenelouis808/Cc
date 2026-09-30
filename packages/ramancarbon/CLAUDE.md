@@ -357,6 +357,78 @@ una tiene una prueba que la protege.
   celda y contenido a la vez) y posición de la reflexión más intensa frente a
   su ficha. Las dos están en las pruebas. Si añades una fase, añade las dos.
 
+## El eje de textura es una DIRECCIÓN, no una reflexión
+
+- **Pedirlo era pedir la respuesta.** `preferred_axis` tenía que
+  declararse antes de que la etapa de orientación preferente corriera
+  siquiera, y la pregunta además se contesta mal por una razón que no
+  es de la muestra: un carbono grafítico tumbado está texturado según
+  `(0 0 1)` mientras su patrón enseña SOLO la 002 —la `(0 0 1)` está
+  sistemáticamente ausente— así que quien mira su propio difractograma
+  concluye, razonablemente, que (001) no puede ser. `candidate_axes`
+  reduce las reflexiones más fuertes de la fase a sus direcciones
+  primitivas, y la 002 se convierte en (0 0 1) sin que nadie tenga que
+  saber la regla.
+- **La textura nunca se había refinado, y nada lo decía.** Medido sobre
+  un patrón sintético construido con r = 0.45: `auto_refine` con el eje
+  verdadero DECLARADO devolvía r = 1.000000 y un Rwp idéntico al del
+  ajuste sin textura. Para cuando corre la etapa de textura, las
+  anchuras y la escala ya se han comido la textura, y desde esa cuenca
+  `least_squares` termina por `xtol` en veinte evaluaciones sin mover r.
+  Un ajuste fresco del mismo patrón llega a Rwp 17.19 % con r = 0.31.
+- **Por eso cada brazo de la comparación arranca FRESCO**, con escala,
+  fondo y (si hay candidato) r sembrados igual para todos. Eso es lo que
+  los hace comparables y lo que sale de la cuenca.
+- **Y el caché de reflexiones no puede redondear lo que se refina.** La
+  clave redondeaba `preferred_r` y `u_iso` a ocho decimales, y el paso de
+  diferencias finitas de SciPy para un parámetro de magnitud uno es
+  1.5·10⁻⁸: r y r+paso caían en la MISMA entrada, esa columna del
+  jacobiano salía exactamente cero y el optimizador concluía que el
+  parámetro no hacía nada. Con U_iso es peor: vale ~0.005, su paso es
+  7·10⁻¹¹, cuatro mil veces por debajo del redondeo. Un fallo de caché
+  cuesta un recálculo; un acierto de caché sobre la entrada equivocada
+  cuesta un parámetro.
+- **El veredicto tiene TRES valores porque la medida lo pidió.** Sobre
+  un carbono turbostrático —cuatro reflexiones en un patrón de
+  laboratorio— el mejor eje era el verdadero en todos los casos con
+  textura y ganaba al siguiente por un 0.1 %. Llamar a eso «sin
+  textura» tira una respuesta correcta; llamarlo «el eje» convierte un
+  0.1 % en una afirmación sobre cómo está montada la muestra. Se informa
+  el ranking con sus márgenes: `textura`, `eje ambiguo`, `sin textura`.
+- **Calibrado**: textura real que las reflexiones pueden ver compra un
+  2.6–3.4 % de Rwp; un patrón construido sin textura compra un 0.3 %.
+  `TEXTURE_MIN_GAIN` está en 0.02, entre las dos.
+
+## Cuántas capas tiene el carbono
+
+- **El cálculo existía y no se podía alcanzar desde la ventana.** d₀₀₂,
+  L_c, L_a, el número de capas y el grado de grafitización los daba
+  `carbon_microstructure` y solo los enseñaba `ramancarbon micro` en la
+  línea de comandos, así que quien lo había visto una vez no volvía a
+  encontrarlo. Ahora va en la pestaña Fases.
+- **«El pico más cercano a 26.5°» siempre encuentra uno.** Así lo
+  elegía la CLI, y sobre un patrón sin carbono eso es una altura de
+  apilamiento y un número de capas calculados con la reflexión de otro.
+  `carbon_from_peaks` busca en una VENTANA de espaciado y se niega
+  cuando está vacía.
+- **Y el más FUERTE de la ventana, no el más cercano al número.** La 002
+  de un carbono desordenado es una joroba ancha cuyo máximo se va un
+  grado de donde lo pone la tabla.
+- **La ventana de la 100 del carbono cae encima de las líneas fuertes
+  del hierro y de la cementita.** Medido sobre el patrón real: sin
+  filtrar, la línea de cementita en 43.89° —0.21° de ancha— daba
+  L_a = 36.8 nm para un carbono cuyo apilamiento mide 6.7 nm y cuya 002
+  mide 1.2° de ancha. Magnitud creíble, ningún significado. Los picos
+  que otra fase ya explica no se usan para L_a; L_c no se filtra así
+  porque la ventana de la 002 está vacía para todo lo demás de la
+  biblioteca.
+- **Y el radio de exclusión es FIJO y pequeño**, no la anchura del
+  propio pico. Las posiciones explicadas salen de la misma lista de
+  picos, así que es una prueba de identidad; usar la anchura del
+  candidato tiraba justo el pico que había que conservar, porque una
+  100 de carbono legítima mide dos grados y cualquier línea explicada a
+  menos de dos grados la borraba. Ancho es lo que una 100 de carbono ES.
+
 ## Una fracción en peso es una afirmación sobre el FONDO
 
 El caso que lo descubrió: un CVD real de carbono sobre FeSe, cinco fases
