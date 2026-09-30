@@ -45,7 +45,12 @@ uv run python -m tbkit.recipes.xu_bsp P $R/gpaw_p.json $R/gpaw_p_al.json /tmp/cl
   (GPAW +0,32 eV, TB −0,31 eV). Mismo patrón en MePO3H2 y H3PO4.
 - No lo arregla ni pesar ×30 las energías de active learning (destroza fuerzas)
   ni la repulsión Se-H larga (probado con la resolución lineal a parámetros fijos).
-- Hipótesis: O muy negativo junto a un heteroátomo muy positivo → la atracción
-  SCC O···H de Klopman-Ohno sobreliga el puente. Arreglo con base física:
-  amortiguamiento γʰ de DFTB3 para pares con H (Gaus 2011/2012), que obliga a
-  reajustar xu_chno y luego B, S, P, Se. Pendiente de decidir con el usuario.
+- Hipótesis SCC descartada (medido): el amortiguamiento γʰ de DFTB3 lo empeora
+  (−0,31 → −0,51 eV) y suavizar γ de pares con H no lo mueve. Las repulsiones de par
+  a esas distancias son cero.
+- Causa real: rigidez angular en el centro hipervalente. El modelo cierra O-Se-O de
+  109° a 94° y gira el OH (diedro 178° → 86°) hasta dejar H a 2,16 Å del otro O.
+  Base sp mínima sin orbitales d (el mismo problema que DFTB 3ob con P/S hipervalentes).
+- Arreglo: paso 4 del plan adelantado: términos angulares generales centrados en
+  el heteroátomo (extender AcuteAngleTerm a X-centrado, ajustado con datos), sin
+  tocar xu_chno. Luego reajustar B, P, Se (S si lo necesita).
