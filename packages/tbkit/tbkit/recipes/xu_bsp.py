@@ -20,6 +20,7 @@ Run (after :mod:`tbkit.recipes.bsp_references`)::
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from pathlib import Path
 
 from . import xu_family
@@ -119,6 +120,20 @@ FAMILIES = {
 }
 
 
+def angular_variant(family: XuFamily, element: str, ligands, powers: int = 3) -> XuFamily:
+    """``family`` plus angle stiffness at ``element`` between ``ligands`` only.
+
+    All-ligand stiffness (every X-Y-Z angle at the centre) was tried and broke
+    divalent Se (H2Se 64 -> 289 cm⁻¹): the angles the minimal basis gets wrong
+    are the O-X-O of hypervalent centres, so the term can be restricted to them.
+    Bonds count from 0.15 Å past the typical length, fading out by 0.40 Å.
+    """
+    bonds = {o: (round(R0[element][o] + 0.15, 2), round(R0[element][o] + 0.40, 2))
+             for o in ligands}
+    return dataclasses.replace(family, angular={"centre": element, "powers": powers,
+                                                "bonds": bonds})
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="Ajusta B, S o P a GPAW sobre xu_chno.")
     parser.add_argument("element", choices=sorted(FAMILIES))
@@ -128,8 +143,16 @@ def main(argv=None) -> None:
     parser.add_argument("--hessians", type=Path, default=None,
                         help="hessianas GPAW (frequency_references) para ajustar la curvatura")
     parser.add_argument("--hessian-weight", type=float, default=0.1)
+    parser.add_argument("--angular-ligands", nargs="+", default=None,
+                        help="añade rigidez angular en el heteroátomo solo entre estos "
+                             "ligandos (p. ej. O: ángulos O-X-O de centros hipervalentes)")
+    parser.add_argument("--angular-powers", type=int, default=3)
     args = parser.parse_args(argv)
-    xu_family.run(FAMILIES[args.element], args.references, args.out, workers=args.workers,
+    family = FAMILIES[args.element]
+    if args.angular_ligands:
+        family = angular_variant(family, args.element, args.angular_ligands,
+                                 args.angular_powers)
+    xu_family.run(family, args.references, args.out, workers=args.workers,
                   hessians=args.hessians, hessian_weight=args.hessian_weight)
 
 
