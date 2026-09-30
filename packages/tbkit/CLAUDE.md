@@ -83,12 +83,18 @@ tbkit/
   SHA-256 is stored in the parameter file). Refit by rerunning the recipe
   and saving a new file; never hand-edit fitted numbers. Hubbard U are
   computed (GPAW atom, dε/dn), not fitted.
-- `xu_chnob`/`xu_chnos`/`xu_chnop` (`recipes/xu_bsp.py`) are `xu_chno` held
+- `xu_chnob`/`xu_chnos`/`xu_chnop`/`xu_chnose` (`recipes/xu_bsp.py`) are `xu_chno` held
   fixed (`XuFamily.base`) plus one element: a structure without B, S or P
   must give exactly the `xu_chno` energy (tested). Do not refit `xu_chno`
   without refitting them. Every pair among a set's elements (H-H aside) must
   have hopping laws: a missing law is silently zero, so the family refuses
   to build without it.
+- Spurious minima are found with `recipes/active_learning.py` (relax from GPAW,
+  sample the path, GPAW single points; `--torsions X` adds rigid X-O-H scans) and
+  fed back to the fit. `CentredAngleTerm`/`CentredTorsionTerm` exist and are
+  tested, but no shipped set uses them: on Se the all-ligand angle term broke
+  divalent Se (H2Se 64 -> 289 cm⁻¹) and neither fixed the X-OH torsion of
+  seleninic/phosphonic acids, which stays a stated limit in `validity`.
 - Imported QE modes: L = e/√m with e normalised from the file's
   displacements (or eigenvectors), per degenerate set a real basis of the
   subspace; never take the real part of a complex Γ mode without fixing its

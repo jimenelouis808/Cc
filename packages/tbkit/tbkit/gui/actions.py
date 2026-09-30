@@ -33,6 +33,7 @@ MODELS = {
     "chnob": ("C/H/N/O + B (xu_chnob, SCC)", lambda: load_parameters("xu_chnob")),
     "chnos": ("C/H/N/O + S (xu_chnos, SCC)", lambda: load_parameters("xu_chnos")),
     "chnop": ("C/H/N/O + P (xu_chnop, SCC)", lambda: load_parameters("xu_chnop")),
+    "chnose": ("C/H/N/O + Se (xu_chnose, SCC)", lambda: load_parameters("xu_chnose")),
 }
 
 
@@ -49,7 +50,8 @@ def suggest_model(atoms: Atoms) -> str:
     for name, covers in (("sp3", {"C"}), ("chn", {"C", "H", "N"}),
                          ("chno", {"C", "H", "N", "O"}), ("chnob", {"C", "H", "N", "O", "B"}),
                          ("chnos", {"C", "H", "N", "O", "S"}),
-                         ("chnop", {"C", "H", "N", "O", "P"})):
+                         ("chnop", {"C", "H", "N", "O", "P"}),
+                         ("chnose", {"C", "H", "N", "O", "Se"})):
         if elements <= covers:
             return name
     return "pi"

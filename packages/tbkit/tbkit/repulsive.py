@@ -215,6 +215,10 @@ def repulsive_from_dict(data: dict):
         return CentredAngleTerm(tuple(float(c) for c in data["coefficients"]), data["centre"],
                                 {k: (float(v[0]), float(v[1])) for k, v in data["bonds"].items()},
                                 float(data.get("cos0", -1 / 3)))
+    if kind == "centred_torsion":
+        return CentredTorsionTerm(tuple(float(c) for c in data["coefficients"]), data["centre"],
+                                  {k: (float(v[0]), float(v[1])) for k, v in data["bonds"].items()},
+                                  tuple(float(v) for v in data.get("oh", (1.10, 1.30))))
     if kind == "embedded":
         phi = law_from_dict(data["phi"])
         if data.get("tail"):
@@ -393,3 +397,98 @@ class CentredAngleTerm:
         return {"type": "centred_angle", "coefficients": list(self.coefficients),
                 "centre": self.centre, "bonds": {k: list(v) for k, v in self.bonds.items()},
                 "cos0": self.cos0}
+
+
+def _dihedral_and_gradient(p0, p1, p2, p3):
+    """Dihedral φ of p0-p1-p2-p3 (radians) and ∂φ/∂p for the four points
+    (Blondel & Karplus 1996, J. Comput. Chem. 17, 1132)."""
+    f, g, h = p0 - p1, p1 - p2, p3 - p2
+    a, b = np.cross(f, g), np.cross(h, g)
+    aa, bb, gn = a @ a, b @ b, np.linalg.norm(g)
+    phi = np.arctan2(np.cross(b, a) @ g / gn, a @ b)
+    d0 = -gn / aa * a
+    d3 = gn / bb * b
+    d1 = -d0 + (f @ g) / (aa * gn) * a - (h @ g) / (bb * gn) * b
+    d2 = -d3 - (f @ g) / (aa * gn) * a + (h @ g) / (bb * gn) * b
+    return phi, (d0, d1, d2, d3)
+
+
+@dataclass
+class CentredTorsionTerm:
+    """Torsion of the hydroxyls on atoms of one element: Y-X-O-H dihedrals.
+
+    ``E = Σ s(φ) f(r_XY) f(r_XO) f(r_OH)`` over every X (``centre``), bonded O
+    carrying a bonded H, and other bonded neighbour Y of X, with
+    ``s(φ) = Σ_n c_n cos(nφ)`` (n = 1..N) and the switches of
+    :class:`CentredAngleTerm` (``bonds`` for X-Y and X-O, ``oh`` for O-H).
+
+    Seleninic and phosphonic acids turned their hydroxyl onto the other O:
+    GPAW's rigid torsion scans (``active_learning --torsions``) rise by up to
+    0.28 eV where the model rose half as much and dropped below the minimum at
+    240-300°. Neither pair nor angle terms see a torsion; this does, and is
+    zero in any structure without the centre element.
+    """
+
+    coefficients: tuple[float, ...]
+    centre: str
+    bonds: dict                               # neighbour element of X -> (r1, rm), Å
+    oh: tuple = (1.10, 1.30)
+
+    def cutoff(self) -> float:
+        return max([rm for _, rm in self.bonds.values()] + [self.oh[1]])
+
+    def basis(self, atoms: Atoms) -> tuple[np.ndarray, np.ndarray]:
+        """Energy (n,) and forces (n, N, 3) of each harmonic with unit coefficient."""
+        n_terms = len(self.coefficients)
+        energies = np.zeros(n_terms)
+        forces = np.zeros((n_terms, len(atoms), 3))
+        symbols = atoms.get_chemical_symbols()
+        if self.centre not in symbols or "O" not in self.bonds:
+            return energies, forces
+        ii, jj, dd, vv = neighbor_list("ijdD", atoms, self.cutoff())
+        switch = CentredAngleTerm._f
+        pos = atoms.get_positions()
+
+        def bonded(i, windows):
+            out = []
+            for a in np.flatnonzero(ii == i):
+                window = windows.get(symbols[jj[a]])
+                if window is not None and dd[a] < window[1]:
+                    out.append((jj[a], a, *switch(dd[a], *window)))
+            return out
+
+        for x in (i for i, s in enumerate(symbols) if s == self.centre):
+            around = bonded(x, self.bonds)
+            for o, a_xo, f_xo, df_xo in around:
+                if symbols[o] != "O":
+                    continue
+                for h, a_oh, f_oh, df_oh in bonded(o, {"H": self.oh}):
+                    for y, a_xy, f_xy, df_xy in around:
+                        if y == o:
+                            continue
+                        phi, grads = _dihedral_and_gradient(pos[y], pos[x], pos[o], pos[h])
+                        w = f_xy * f_xo * f_oh
+                        # ∂w/∂(bond vector) along each bond, bond vectors from the first atom
+                        dw = ((a_xy, x, y, df_xy * f_xo * f_oh), (a_xo, x, o, f_xy * df_xo * f_oh),
+                              (a_oh, o, h, f_xy * f_xo * df_oh))
+                        for n in range(n_terms):
+                            k = n + 1
+                            s, ds = np.cos(k * phi), -k * np.sin(k * phi)
+                            energies[n] += s * w
+                            for atom, g in zip((y, x, o, h), grads):
+                                forces[n, atom] -= ds * w * g
+                            for a, start, end, slope in dw:
+                                grad = s * slope * vv[a] / dd[a]
+                                forces[n, end] -= grad
+                                forces[n, start] += grad
+        return energies, forces
+
+    def energy_and_forces(self, atoms: Atoms) -> tuple[float, np.ndarray]:
+        energies, forces = self.basis(atoms)
+        c = np.asarray(self.coefficients, dtype=float)
+        return float(c @ energies), np.einsum("n,nax->ax", c, forces)
+
+    def to_dict(self) -> dict:
+        return {"type": "centred_torsion", "coefficients": list(self.coefficients),
+                "centre": self.centre, "bonds": {k: list(v) for k, v in self.bonds.items()},
+                "oh": list(self.oh)}

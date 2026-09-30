@@ -45,14 +45,6 @@ def _pairs(element: str, r0: dict, margin: float = 0.55, long_rc: dict | None = 
     return pairs
 
 
-def _angular(element: str, r0: dict, powers: int = 4) -> dict:
-    """Angle stiffness at ``element`` (:class:`tbkit.repulsive.CentredAngleTerm`):
-    bonded neighbours only, switched off between r0 + 0.15 and r0 + 0.40 Å (short
-    of any second neighbour)."""
-    return {"centre": element, "powers": powers,
-            "bonds": {other: (round(d + 0.15, 2), round(d + 0.40, 2)) for other, d in r0.items()}}
-
-
 R0 = {"B": {"H": 1.19, "C": 1.57, "N": 1.44, "O": 1.37, "B": 1.70},
       "S": {"H": 1.34, "C": 1.82, "N": 1.65, "O": 1.45, "S": 2.05},
       "P": {"H": 1.42, "C": 1.85, "N": 1.70, "O": 1.60, "P": 2.22},
@@ -68,8 +60,6 @@ FAMILIES = {
         pairs=_pairs("B", R0["B"],
                      long_rc={"H": 2.4}),
         hubbard_u={"B": HUBBARD_U["B"]},
-        # angles at hypervalent B too soft without d orbitals (acids turned their OH)
-        angular=_angular("B", R0["B"]),
         onsite_dipole={"B": ONSITE_DIPOLE["B"]},
         validity_notes=("B junto con S o P en la misma estructura no está cubierto"
                         "; ésteres alquílicos (B(OCH3)n) no válidos: los H de metilo colapsan sobre el O vecino (atracción de cargas SCC sin repulsión O···H a 1,6-2,4 Å, un defecto de la base xu_chno pendiente de corregir con más datos)"),
@@ -99,14 +89,8 @@ FAMILIES = {
         pairs=_pairs("P", R0["P"],
                      long_rc={"H": 2.4}),
         hubbard_u={"P": HUBBARD_U["P"]},
-        # angles at hypervalent P too soft without d orbitals (acids turned their OH)
-        angular=_angular("P", R0["P"]),
         onsite_dipole={"P": ONSITE_DIPOLE["P"]},
-        validity_notes=("P junto con B o S en la misma estructura no está cubierto; el C-P de "
-                        "P(V) (ácidos fosfónicos, óxidos de fosfina) sale 0.07-0.14 Å largo, el "
-                        "de P(III) 0.03-0.05 Å; P-O, P=O, P-P, P-N, P-H y C-P aromático a menos "
-                        "de 0.025 Å"
-                        "; ésteres alquílicos (P(OCH3)n) no válidos: los H de metilo colapsan sobre el O vecino (atracción de cargas SCC sin repulsión O···H a 1,6-2,4 Å, un defecto de la base xu_chno pendiente de corregir con más datos)"),
+        validity_notes=('P junto con B o S en la misma estructura no está cubierto; el C-P de P(V) (ácidos fosfónicos, óxidos de fosfina) sale 0.05-0.10 Å largo, el de P(III) 0.04-0.06 Å; P-O, P=O, P-P, P-N, P-H y C-P aromático a menos de 0.025 Å; ésteres P(OCH3)n corregidos con active learning (antes colapsaban); ácidos con P-OH (fosfórico, fosfónicos): el OH gira hacia el otro O al relajar, 0,4-0,9 Å (torsión X-O-H demasiado blanda en la base sp mínima; ni términos angulares ni de torsión ajustados a barridos GPAW lo corrigieron): úsense sus frecuencias O-H con cautela'),
         system=("xu_chno más fósforo: fosfinas, óxidos de fosfina, ácidos fosfórico y "
                 "fosfónicos, fosfatos, fosfinina"),
         h_tail=(0.40, 0.60),
@@ -117,10 +101,8 @@ FAMILIES = {
         heteroatoms=("Se",),
         pairs=_pairs("Se", R0["Se"]),
         hubbard_u={"Se": HUBBARD_U["Se"]},
-        # angles at hypervalent Se too soft without d orbitals (acids turned their OH)
-        angular=_angular("Se", R0["Se"]),
         onsite_dipole={"Se": ONSITE_DIPOLE["Se"]},
-        validity_notes="Se junto con B, S o P en la misma estructura no está cubierto",
+        validity_notes=('Se junto con B, S o P en la misma estructura no está cubierto; enlaces de Se a menos de 0.08 Å; ácidos seleníninicos (Se(=O)OH): el OH gira hacia el otro O al relajar, 0,4-0,9 Å (torsión X-O-H demasiado blanda en la base sp mínima; ni términos angulares ni de torsión ajustados a barridos GPAW lo corrigieron): úsense sus frecuencias O-H con cautela'),
         system=("xu_chno más selenio: selenoles, selenuros, diselenuros, selenofeno, "
                 "selenóxidos, ácidos selenínicos, Se-N"),
         h_tail=(0.40, 0.60),

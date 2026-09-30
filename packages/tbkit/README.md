@@ -69,7 +69,7 @@ uno ajustado) en ese mismo formato, y `load_parameters(ruta)` lo lee.
 | Infrarrojo | `infrared` | μ del modelo (cargas + dipolos intraatómicos), cargas de Born, km/mol | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
 | C, H y N (fase E, paso 2) | `parameters/xu_chn.json`, `references`, `recipes` | C–C de Xu intacto; H y N ajustados a GPAW (PBE, LCAO dzp) en niveles, fuerzas y energías; U de H, C, N calculadas con el átomo de GPAW; SCC. Receta reproducible y referencias incluidas |
 | Oxígeno | `parameters/xu_chno.json`, `recipes/xu_chno.py` | `xu_chn` más O (hidroxilo, epóxido, carbonilo, carboxilo, éter, furano, nitro), C–O, O–H, N–O, O–O; corrección de ángulos agudos para anillos de tres miembros; α extra del O ajustada a GPAW |
-| B, S, P | `parameters/xu_chnob.json`, `xu_chnos.json`, `xu_chnop.json`; `recipes/xu_bsp.py` | Un elemento más sobre `xu_chno` fijo: el resto da exactamente lo de `xu_chno`; todos los pares del elemento con H, C, N, O y consigo mismo |
+| B, S, P, Se | `parameters/xu_chnob.json`, `xu_chnos.json`, `xu_chnop.json`, `xu_chnose.json`; `recipes/xu_bsp.py` | Un elemento más sobre `xu_chno` fijo: el resto da exactamente lo de `xu_chno`; todos los pares del elemento con H, C, N, O y consigo mismo |
 | Reproducibilidad | `record`, `tasks` | `tbkit run simulacion.json` guarda estructura, parámetros completos, versión, commit, fecha, ajustes y resultados; `record.replay` lo repite |
 
 Salidas (`analysis`): matriz densidad P = Σ f c c†, poblaciones Mulliken y

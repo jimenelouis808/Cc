@@ -127,7 +127,10 @@ def test_shipped_set_keeps_xu_chno(element):
 @pytest.mark.parametrize("element, label, limit", [
     ("B", "coronene_BN/eq", 0.06), ("B", "borazine/eq", 0.03),
     ("S", "coronene_SH/eq", 0.06), ("S", "thiophene/eq", 0.06),
-    ("P", "coronene_PO3H2/eq", 0.13), ("P", "H3PO4/eq", 0.08)])
+    ("P", "coronene_PO3H2/eq", 0.10), ("P", "H3PO4/eq", 0.08),
+    # the ester collapsed (methyl H onto O) before active learning
+    ("P", "PO(OMe)3/eq", 0.10),
+    ("Se", "coronene_SeH/eq", 0.03), ("Se", "selenophene/eq", 0.06)])
 def test_geometry_close_to_gpaw(element, label, limit):
     _, model, refs = _shipped(element)
     ref = next(r for r in refs if r.label == label)
@@ -171,3 +174,29 @@ def test_centred_angle_is_zero_without_its_centre_and_round_trips():
     again = repulsive_from_dict(term.to_dict())
     atoms = molecule("PH3")
     assert again.energy_and_forces(atoms)[0] == pytest.approx(term.energy_and_forces(atoms)[0])
+
+
+def test_centred_torsion_forces_are_energy_derivatives():
+    from ase import Atoms
+
+    from tbkit.repulsive import CentredTorsionTerm, repulsive_from_dict
+
+    rng = np.random.default_rng(1)
+    atoms = Atoms("SeOOHC", positions=[[0, 0, 0], [1.8, 0, 0], [-0.6, 1.5, 0],
+                                       [2.1, 0.9, 0.3], [-0.5, -0.8, 1.6]])
+    atoms.positions += rng.normal(scale=0.05, size=atoms.positions.shape)
+    term = CentredTorsionTerm((0.3, -0.2, 0.15), "Se", {"O": (1.8, 2.05), "C": (2.1, 2.35)},
+                              (1.05, 1.25))
+    energy, forces = term.energy_and_forces(atoms)
+    assert energy != 0
+    delta, fd = 1e-5, np.zeros_like(forces)
+    for a in range(len(atoms)):
+        for k in range(3):
+            for sign in (1, -1):
+                moved = atoms.copy()
+                moved.positions[a, k] += sign * delta
+                fd[a, k] -= sign * term.energy_and_forces(moved)[0] / (2 * delta)
+    assert np.allclose(forces, fd, atol=1e-7)
+    assert np.allclose(forces.sum(axis=0), 0, atol=1e-10)
+    assert repulsive_from_dict(term.to_dict()).energy_and_forces(atoms)[0] == pytest.approx(energy)
+    assert term.energy_and_forces(molecule("CH3OH"))[0] == 0

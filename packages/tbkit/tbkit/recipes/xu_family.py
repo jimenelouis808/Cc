@@ -88,6 +88,9 @@ class XuFamily:
     #: Angle stiffness at the heteroatom (:class:`tbkit.repulsive.CentredAngleTerm`):
     #: {"centre": "Se", "powers": 4, "bonds": {element: (r1, rm)}}; None = none.
     angular: Optional[dict] = None
+    #: Hydroxyl torsion at the heteroatom (:class:`tbkit.repulsive.CentredTorsionTerm`):
+    #: {"centre": "Se", "powers": 3, "bonds": {element: (r1, rm)}}; None = none.
+    torsion: Optional[dict] = None
     #: Reference groups computed as training data but kept out of the fit
     #: (validated only), with the reason recorded in the parameter file.
     held_out: dict = field(default_factory=dict)
@@ -122,6 +125,14 @@ class XuFamily:
         c = tuple(coefficients) if coefficients is not None else (1.0,) * spec["powers"]
         return CentredAngleTerm(c, spec["centre"], dict(spec["bonds"]),
                                 spec.get("cos0", -1 / 3))
+
+    def torsion_term(self, coefficients=None):
+        from ..repulsive import CentredTorsionTerm
+
+        spec = self.torsion
+        c = tuple(coefficients) if coefficients is not None else (1.0,) * spec["powers"]
+        return CentredTorsionTerm(c, spec["centre"], dict(spec["bonds"]),
+                                  tuple(spec.get("oh", (1.10, 1.30))))
 
     def __post_init__(self):
         for (a, b), spec in self.pairs.items():
@@ -248,7 +259,11 @@ class XuFamily:
             terms.append(self.acute_term([float(v) for v in coefficients[start:start + k]]))
             start += k
         if self.angular:
-            terms.append(self.angular_term([float(v) for v in coefficients[start:]]))
+            k = self.angular["powers"]
+            terms.append(self.angular_term([float(v) for v in coefficients[start:start + k]]))
+            start += k
+        if self.torsion:
+            terms.append(self.torsion_term([float(v) for v in coefficients[start:]]))
         return SumRepulsive(tuple(terms))
 
 
@@ -357,7 +372,8 @@ def electronic_energy_and_forces(model: TBModel, ref: ReferenceStructure):
 def _extra_terms(family: XuFamily) -> list:
     """The fitted many-body terms, in coefficient order after the pairs."""
     return ([family.acute_term()] if family.acute else []) + \
-        ([family.angular_term()] if family.angular else [])
+        ([family.angular_term()] if family.angular else []) + \
+        ([family.torsion_term()] if family.torsion else [])
 
 
 def repulsion_design(family: XuFamily, refs):
@@ -878,6 +894,10 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
         if term["type"] == "centred_angle":
             term["unit"] = "eV"
             term["source"] = (f"rigidez angular en {term['centre']} (centros hipervalentes), "
+                              + fit_source)
+        if term["type"] == "centred_torsion":
+            term["unit"] = "eV"
+            term["source"] = (f"torsión de hidroxilos en {term['centre']} (barridos GPAW), "
                               + fit_source)
         if term["type"] == "pair":
             for entry in term["pairs"]:
