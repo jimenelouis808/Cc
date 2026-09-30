@@ -407,6 +407,21 @@ una tiene una prueba que la protege.
   corrección se aplica encima. El corte de `min_relative` ve entonces
   las intensidades sin texturar, que además es lo correcto: el conjunto
   de reflexiones modeladas no debe entrar y salir según se mueve r.
+- **Las escalas y el fondo se ajustan UNA vez y todos los brazos
+  arrancan de ahí.** Re-ajustarlos dentro de cada brazo —cuarenta veces
+  en un patrón de cinco fases— era el coste y además un error: desde
+  escala = 1 el brazo con textura no se asienta en ningún presupuesto
+  razonable y vuelve PEOR que el brazo sin ella. Medido sobre el patrón
+  real: 72 s por brazo y Rwp 6.222 % frente al 6.220 % sin textura, que
+  se lee como «la textura empeora» y es enteramente un artefacto de no
+  converger. Desde el arranque común el mismo brazo llega a 6.219 %, que
+  es la respuesta honrada: gana un 0.01 %, así que sigue siendo «sin
+  textura», pero por la razón correcta.
+- **Y la búsqueda es un BOTÓN, no el comportamiento por defecto del
+  refinamiento automático.** Un ajuste por eje candidato y por fase son
+  cuarenta ajustes y unos diez minutos con cinco fases, y una opción que
+  convierte un botón en diez minutos sin avisar es una trampa. El campo
+  acepta «auto» para quien lo quiera en línea.
 - **Los brazos son un CRIBADO y llevan su propio presupuesto**
   (`TEXTURE_ARM_ITERATIONS`). Lo que se compara es qué eje describe
   mejor el patrón, no a qué refina cada uno. Medido: el brazo sin
