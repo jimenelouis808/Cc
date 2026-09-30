@@ -14,7 +14,8 @@ tbkit/
 ├── kpoints.py        # Γ, meshes, band paths
 ├── solver.py         # eigenstates, Fermi level, Solution (spin-resolved)
 ├── analysis.py       # P, Mulliken/Löwdin, bond orders, DOS/PDOS, bands, cube files
-├── scc.py            # self-consistent charges (finite only)
+├── scc.py            # self-consistent charges (finite, or periodic through ewald.py)
+├── ewald.py          # periodic γ: Ewald for 1/r and 1/r³, short-range rest
 ├── hubbard.py        # mean-field Hubbard, magnetisation vs energy/field/doping
 ├── skf.py            # DFTB .skf reader (simple format)
 ├── fit.py            # least-squares fitting (with a before/after report), GPAW log reader
@@ -71,7 +72,14 @@ tbkit/
   overcount that the linear-response = sum-over-states test caught).
 - Published `.skf` sets are never bundled (their licences); tests generate
   synthetic files in the documented format.
-- SCC refuses periodic systems (no Ewald). Do not approximate silently.
+- Periodic SCC sums γ over images (`ewald.py`, Elstner 1998): Ewald for C/r,
+  a second Ewald for the Klopman-Ohno r⁻³ asymptote (its divergent G = 0
+  constant dropped, stated), the r⁻⁵ rest in real space with a smooth taper.
+  Checks: NaCl Madelung constant, a molecule in a large box equals the finite
+  result, forces against finite differences (h-BN). Summing the r⁻³ tail in
+  real space oscillated by 10⁻² eV: do not go back to it. Vacuum directions
+  are a supercell; the fitted sets were trained on molecules, so periodic
+  results inherit that validity. SCC linear-response α stays finite-only.
 - `TBModel.scc` says which ground state the parameters were made for: True
   for `.skf` sets, `xu_chn` and `xu_chno`, False for Xu and π. Calculators, tasks and
   the linear-response α follow it unless told otherwise; a set fitted with

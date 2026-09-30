@@ -18,12 +18,14 @@ class TestActions:
         assert actions.suggest_model(molecule("CH3SH")) == "chnos"
         assert actions.suggest_model(molecule("C60")) == "sp3"
 
-    def test_check_model_refuses_missing_elements_and_periodic_scc(self):
+    def test_check_model_refuses_missing_elements_and_cells_without_volume(self):
         assert actions.check_model(molecule("CH3SH"), actions.load_model("chno"))
         ribbon = graphene_nanoribbon(2, 1, type="zigzag", saturated=True, vacuum=5.0)
         chn = actions.load_model("chn")
-        assert any("Ewald" in p for p in actions.check_model(ribbon, chn))
-        assert not actions.check_model(ribbon, chn, scc=False)       # on purpose only
+        assert not actions.check_model(ribbon, chn)                  # Ewald, vacuum cell
+        flat = ribbon.copy()
+        flat.cell[0] = 0.0
+        assert any("Ewald" in p for p in actions.check_model(flat, chn))
         assert actions.check_model(ribbon, actions.load_model("sp3"))  # no H in Xu
 
     def test_ground_state_follows_the_model_and_levels_are_consistent(self):

@@ -67,10 +67,10 @@ def check_model(atoms: Atoms, model: TBModel, scc: Optional[bool] = None) -> lis
     missing = sorted(set(atoms.get_chemical_symbols()) - set(model.orbitals))
     if missing:
         problems.append(f"El modelo no tiene parámetros para: {', '.join(missing)}.")
-    if (model.scc if scc is None else scc) and any(atoms.get_pbc()):
-        problems.append("SCC y estructura periódica: SCC necesita un sistema finito (no hay "
-                        "suma de Ewald). Pon SCC en «no» a sabiendas (el modelo se ajustó "
-                        "con SCC) o usa un fragmento finito.")
+    if (model.scc if scc is None else scc) and any(atoms.get_pbc()) and \
+            abs(np.linalg.det(np.asarray(atoms.get_cell()))) < 1e-6:
+        problems.append("SCC periódico (Ewald) necesita una celda con volumen: da vacío a "
+                        "las direcciones no periódicas.")
     return problems
 
 

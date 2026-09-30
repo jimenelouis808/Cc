@@ -245,15 +245,17 @@ class TestShippedSet:
         for element, u in shipped[1].hubbard_u.items():
             assert u / Hartree == pytest.approx(mio[element], abs=2e-4)
 
-    def test_scc_by_default_and_finite_only(self, shipped):
+    def test_scc_by_default_and_periodic_through_ewald(self, shipped):
         from ase.build import bulk
 
         model = shipped[1]
         assert model.scc
         diamond = bulk("C", "diamond", a=3.56)
         diamond.calc = TBCalculator(model, kpts=2)
-        with pytest.raises(ValueError, match="Ewald"):
-            diamond.get_potential_energy()
+        scc = diamond.get_potential_energy()
+        # one element, equivalent sites: no charge moves, SCC changes nothing
+        diamond.calc = TBCalculator(model, kpts=2, scc=False)
+        assert scc == pytest.approx(diamond.get_potential_energy(), abs=1e-8)
 
     def test_pyridine_geometry_close_to_gpaw(self, shipped):
         _, model, refs, _ = shipped

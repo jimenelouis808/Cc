@@ -24,7 +24,8 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
 2. (hecho) Se instalado; falta sección de Se en README.
 3. (hecho) Polarizabilidad extra: B 0.873, S 2.642, P 2.647, Se 3.496 Å³ (GPAW FD).
 4. Términos angulares generales + factores de escala (Witek 2004).
-5. SCC periódico con Ewald (Elstner 1998).
+5. (hecho) SCC periódico con Ewald (`ewald.py`): Madelung, caja grande = finito, fuerzas FD.
+   Falta: α de respuesta lineal SCC periódica; validar grafeno/CNT dopados.
 6. TB dependiente del entorno (Tang 1996).
 7. ML: Δ-learning de repulsión (Stöhr 2020), fonones híbridos MACE con α/μ de TB,
    DeePTB; GFN2-xTB como motor de comparación opcional.
