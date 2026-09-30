@@ -62,6 +62,7 @@ from .powder import (
     Profile,
     Reflection,
     candidate_axes,
+    march_dollase,
     pseudo_voigt,
     reflections,
     scherrer,
@@ -456,35 +457,40 @@ def calculate_pattern(
     for index, phase in enumerate(phases):
         crystal = phase.current_crystal()
         for line_wavelength, weight in lines:
-            # The refinable parts of this key are NOT rounded, and that is
-            # a fix, not an oversight.
+            # The key holds everything the reflection list depends on
+            # EXCEPT the March-Dollase r, and neither of those halves is
+            # an accident.
             #
-            # SciPy's finite-difference step for a parameter of magnitude
-            # one is sqrt(machine epsilon), about 1.5e-8. Rounding the key
-            # to eight decimals therefore sent r and r + step to the SAME
-            # cache entry: the perturbed evaluation returned the unperturbed
-            # reflections, that column of the Jacobian came out exactly
-            # zero, and the optimiser concluded the parameter did nothing.
-            # Measured: `auto_refine` with a texture axis declared returned
-            # r = 1.000000 and a Rwp identical to the untextured fit, on a
-            # synthetic pattern built with r = 0.45. Preferred orientation
-            # had never once been refined. U_iso is worse: it sits around
-            # 0.005, so its step is 7e-11, four thousand times under the
-            # rounding.
+            # Not rounded, because SciPy's finite-difference step for a
+            # parameter of magnitude one is sqrt(machine epsilon), about
+            # 1.5e-8: rounding the key to eight decimals sent r and
+            # r + step to the same entry, so that column of the Jacobian
+            # came out exactly zero and the optimiser concluded the
+            # parameter did nothing. Measured: `auto_refine` with a
+            # texture axis declared returned r = 1.000000 and a Rwp
+            # identical to the untextured fit on a pattern built with
+            # r = 0.45. Preferred orientation had never been refined.
+            # U_iso is worse -- it sits near 0.005, so its step is 7e-11,
+            # four thousand times under the rounding.
             #
-            # A cache MISS costs a recomputation. A cache HIT on the wrong
-            # entry costs a parameter. The rounding bought the first and
-            # paid with the second, and the stages where the cache earns
-            # its keep -- the ones that hold these fixed -- hit exactly as
-            # often without it, because an unchanged float is an unchanged
-            # float.
+            # And r is left OUT of the key, because texture is a
+            # multiplicative correction on top of a reflection list that
+            # does not depend on it. Keeping r in the key was correct and
+            # unusable: every derivative step re-enumerated the hkl and
+            # recomputed the structure factors, and the axis search on a
+            # five-phase pattern did not finish one phase in half an
+            # hour. Cached untextured and corrected afterwards, the
+            # expensive part is computed once.
+            #
+            # The one behavioural difference is which intensities the
+            # `min_relative` cut sees: the untextured ones. That is the
+            # better of the two anyway -- the set of modelled reflections
+            # should not flicker in and out as r moves during a fit.
             key = (
                 index,
                 round(line_wavelength, 8),
                 phase.lattice_factors,
                 phase.u_iso,
-                phase.preferred_axis,
-                phase.preferred_r,
             )
             computed: Optional[list[Reflection]] = (
                 reflection_cache.get(key) if reflection_cache is not None else None
@@ -495,14 +501,18 @@ def calculate_pattern(
                     wavelength=line_wavelength,
                     two_theta_range=span,
                     u_override=phase.u_iso,
-                    preferred_axis=phase.preferred_axis,
-                    preferred_r=phase.preferred_r,
                     normalise=False,
                     min_relative=REFINE_MIN_RELATIVE,
                 )
                 if reflection_cache is not None:
                     reflection_cache[key] = computed
-            for reflection in computed:
+            texture = None
+            if phase.preferred_axis is not None and abs(phase.preferred_r - 1.0) > 1e-12:
+                texture = march_dollase(
+                    np.array([r.hkl for r in computed], dtype=float),
+                    phase.preferred_axis, crystal, phase.preferred_r,
+                )
+            for position, reflection in enumerate(computed):
                 centre = reflection.two_theta + _angle_shift(
                     reflection.two_theta, zero, displacement)
                 width = phase.profile.fwhm_at(centre)
@@ -513,9 +523,12 @@ def calculate_pattern(
                 )
                 if not window.any():
                     continue
+                strength = reflection.intensity
+                if texture is not None:
+                    strength = strength * float(texture[position])
                 total[window] += (
                     phase.scale
-                    * reflection.intensity
+                    * strength
                     * weight
                     * pseudo_voigt(angles[window], centre, width, mixing)
                 )
