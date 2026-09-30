@@ -65,21 +65,27 @@ NEGLIGIBLE_AREA_FRACTION = 0.02
 #: own span.
 PINNED_TOLERANCE = 0.01
 
-#: How close to its own ceiling a width has to get before the gap stops
-#: meaning anything, as a fraction of the ceiling.
+#: How close to its own ceiling a width has to get before it is worth
+#: asking whether it was pushing, as a fraction of the ceiling.
 #:
-#: `PINNED_TOLERANCE` is deliberately tight, because "this parameter
-#: stopped exactly on its bound" is a statement about the optimiser and
-#: has to be literal. A width is the one parameter where that tightness
-#: hides the finding: on a real disordered carbon the D band came back at
-#: 200.0 of 200 in the three-band model, 195.7 in the four-band and 191.0
-#: in the five-band -- the same wall in all three, and only the first was
-#: reported, because the other two are 2 % and 5 % short of it. Those two
-#: numbers are not measurements of a width either: they are where the
-#: optimiser stopped pushing. Five per cent of the ceiling is the gap
-#: below which the distinction is not worth making, and the check only
-#: fires when the width is ALSO above its usual range, so a band that is
-#: legitimately broad and nowhere near its bound says nothing.
+#: This marks a question, not an answer, and the distinction cost a
+#: correction. A width near its bound has two readings -- the band is
+#: that wide, or the model is missing a component and this one is
+#: mopping up -- and they matter in opposite directions: the first is a
+#: measurement, the second means nothing derived from the fit should be
+#: quoted. A result on its own CANNOT tell them apart, because both look
+#: like a number close to a bound.
+#:
+#: Measured on the user's real 532 nm spectrum of carbon on FeSe, where
+#: the two cases sat side by side in the same five-band fit: the D came
+#: back at 191.0 of a 200 ceiling and went to 185.3 when the ceiling was
+#: raised to 400 -- never pushing, genuinely that broad -- while the D4
+#: came back at 250.0 of 250, 300.0 of 300 and 400.0 of 400. Reporting
+#: them alike, which is all a distance check can do, calls a real
+#: 191 cm-1 D band an artefact.
+#:
+#: So this raises a WARNING that names the experiment, and
+#: `deconvolution.probe_width_ceilings` runs it.
 NO_ROOM_FRACTION = 0.05
 
 #: Correlation above which two parameters are not independently
@@ -199,15 +205,15 @@ def audit_fit(result, bounds: dict | None = None) -> Audit:
                 ceiling = _fwhm_ceiling(bounds, name)
                 if ceiling is not None and width >= ceiling * (1.0 - NO_ROOM_FRACTION):
                     findings.append(Finding(
-                        "anchura-sin-sitio", "grave", name,
-                        f"FWHM {width:.1f} cm⁻¹ contra un techo de "
-                        f"{ceiling:.0f}: el ajuste ha llevado la anchura "
-                        f"hasta donde se le deja, así que {width:.0f} cm⁻¹ no "
-                        "es una medida de la anchura sino el borde. Un "
-                        f"componente tan ancho como {key} está aquí se está "
-                        "comiendo intensidad que pertenece a otro: prueba un "
-                        "preajuste con más componentes antes de leer ningún "
-                        "cociente de este ajuste"))
+                        "anchura-cerca-del-techo", "aviso", name,
+                        f"FWHM {width:.1f} cm⁻¹ con el techo en "
+                        f"{ceiling:.0f}: desde aquí no se puede saber si la "
+                        "banda es así de ancha o si está empujando contra el "
+                        "límite, y la diferencia importa — lo segundo "
+                        "significa que al modelo le falta un componente. Para "
+                        "decidirlo hay que subir el techo y volver a ajustar "
+                        "(«probar el techo de anchura» en la pestaña de "
+                        "deconvolución)"))
                 else:
                     findings.append(Finding(
                         "fwhm-ancha", "aviso", name,

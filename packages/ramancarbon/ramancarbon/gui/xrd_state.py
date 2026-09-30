@@ -88,6 +88,10 @@ class XRDSession:
         self.kalpha2_ratio: float = 0.5
         self.counts: bool = True
         self.texture_axis: Optional[tuple[int, int, int]] = None
+        self.find_texture: bool = True
+        """Look the preferred-orientation axis up instead of being told it.
+        On by default: the field that took an hkl asked a question about
+        the sample that the sample itself can answer."""
         self.instrument_fwhm: float = 0.06
         self.background_order: int = 6
         self.max_phases: int = 4
@@ -460,7 +464,10 @@ class XRDSession:
             item.pattern,
             item.models,
             background_order=self.background_order,
-            preferred_axis=self.texture_axis,
+            preferred_axis=(
+                "auto" if self.find_texture and self.texture_axis is None
+                else self.texture_axis
+            ),
             instrument_fwhm=self.instrument_fwhm,
             callback=progress,
             should_stop=should_stop,
@@ -470,6 +477,83 @@ class XRDSession:
         for warning in outcome.warnings:
             self.log("warning", warning)
         return outcome
+
+    def background_sensitivity(
+        self,
+        progress: Optional[Callable[[str], None]] = None,
+        should_stop: Optional[Callable[[], bool]] = None,
+    ):
+        """Refine the same phases against several background orders.
+
+        The check a weight fraction cannot perform on itself. A broad
+        reflection from a nanocrystalline phase and a flexible polynomial
+        describe the same shape, and no single refinement can tell which
+        of the two it just fitted: it converges either way, with plausible
+        R factors and a difference curve that looks fine.
+
+        Measured on a real CVD pattern of carbon on FeSe, the
+        turbostratic carbon came back at 25.9 % of the sample by weight
+        with a second-order background, 36.6 % at fourth, 52.4 % at sixth,
+        33.1 % at eighth and 33.1 % at tenth. The package default is
+        sixth, and sixth was the outlier.
+
+        Costs one full refinement per order, which is why it is a
+        separate button.
+        """
+        from ..xrd.rietveld import background_order_sensitivity
+
+        item = self.item
+        if item is None:
+            self.log("error", "carga un difractograma primero")
+            return None
+        if not item.models and self.prepare_manual() is None:
+            return None
+        return background_order_sensitivity(
+            item.pattern,
+            item.models,
+            preferred_axis=self.texture_axis,
+            instrument_fwhm=self.instrument_fwhm,
+            callback=progress,
+            should_stop=should_stop,
+        )
+
+    def carbon_microstructure(self):
+        """d₀₀₂, L_c, L_a, the layer count and the graphitisation degree.
+
+        These were computed by the package and reachable only from
+        ``ramancarbon micro`` on the command line, which is why a user who
+        had once seen "how many layers" could not find it again.
+
+        The peaks another phase already explains are withheld from the
+        in-plane measurement, because the carbon 100 window sits on top
+        of the strong lines of alpha-iron and of cementite. Measured on a
+        real CVD pattern: without that filter the 43.89 degree cementite
+        line, 0.21 degrees wide, produced L_a = 36.8 nm for a carbon
+        whose stack is 6.7 nm and whose 002 is 1.2 degrees wide.
+
+        Returns ``None`` when no pattern is loaded; otherwise a
+        :class:`~ramancarbon.xrd.microstructure.CarbonMicrostructure`,
+        which says in its own warnings whatever it could not measure.
+        """
+        from ..xrd.microstructure import carbon_from_peaks
+
+        item = self.item
+        if item is None or item.result is None:
+            return None
+        # `matched` pairs each calculated reflection with the measured
+        # peak it landed on; it is the measured one that has to be kept
+        # away from the in-plane window.
+        explained = [
+            float(peak.two_theta)
+            for match in item.result.search.accepted
+            for _reflection, peak in match.matched
+        ]
+        return carbon_from_peaks(
+            item.result.search.peaks,
+            wavelength=item.pattern.wavelength,
+            instrument_fwhm=self.instrument_fwhm,
+            skip_for_la=explained,
+        )
 
     # -- tables --------------------------------------------------------
     def phase_rows(self) -> list[tuple[str, ...]]:

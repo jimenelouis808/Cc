@@ -142,6 +142,32 @@ def test_each_new_section_tab_lists_the_canvases_it_actually_builds(stem):
         )
 
 
+def _section_app_members() -> set[str]:
+    """Everything a section inherits from ``SectionApp``, read from it.
+
+    This was a hand-written list, and a hand-written list of another
+    class's members is a list that goes stale: adding one helper to
+    ``base.SectionApp`` and using it in a section failed this test with
+    "read but never assigned", which names the wrong file and the wrong
+    problem. Parsing the base class costs one more `ast.parse` and cannot
+    drift.
+    """
+    tree = ast.parse(source("base"))
+    node = next(
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.ClassDef) and n.name == "SectionApp"
+    )
+    members = {
+        n.name for n in node.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    for child in ast.walk(node):
+        if isinstance(child, ast.Attribute) and isinstance(child.value, ast.Name):
+            if child.value.id == "self" and isinstance(child.ctx, ast.Store):
+                members.add(child.attr)
+    return members
+
+
 @pytest.mark.parametrize("stem, name", sorted(SECTION_MODULES.items()))
 def test_every_self_attribute_used_is_assigned_somewhere(stem, name):
     """Catches the bug a linter misses: ``self.something`` read but never
@@ -162,14 +188,7 @@ def test_every_self_attribute_used_is_assigned_somewhere(stem, name):
             else:
                 read.add(child.attr)
     defined = {n.name for n in node.body if isinstance(n, ast.FunctionDef)}
-    inherited = {
-        "tk", "ttk", "root", "container", "palette", "figure_palette",
-        "fonts", "queue", "busy",
-        "status_var", "progress", "make_canvas", "with_style", "mark_dirty",
-        "flush_dirty", "run_async", "drain_queue", "build_status", "set_status",
-        "flush_messages", "warn", "show_error", "report_progress",
-        "show_text", "ask_yes_no", "canvas_limits",
-    }
+    inherited = _section_app_members()
     missing = read - assigned - defined - inherited
     assert not missing, f"{stem}: read but never assigned: {sorted(missing)}"
 

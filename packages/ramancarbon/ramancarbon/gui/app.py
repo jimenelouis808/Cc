@@ -644,6 +644,18 @@ class RamanCarbonApp:
                    "informe leen el ajuste, así que sin esto un ajuste hecho "
                    "a mano es un dibujo de un ajuste. Vuelve a «Analizar» "
                    "para regresar al modelo automático.", wrap=320)
+        # The audit can say "this width is near its ceiling" and cannot say
+        # which of the two meanings that has. The experiment that can needs
+        # a refit, so it is a button rather than part of the report.
+        ttk.Button(body, text="Probar el techo de anchura",
+                   command=self._probe_widths).pack(fill="x", pady=(PAD["sm"], 0))
+        hint(body, "Vuelve a ajustar con el techo de anchura al doble, solo "
+                   "para las componentes que acabaron cerca del suyo. Si la "
+                   "anchura se queda donde estaba, la banda es así de ancha; "
+                   "si se dispara, estaba empujando contra el límite y al "
+                   "modelo le falta una componente ahí. Es la única forma de "
+                   "distinguir los dos casos, que se leen igual en la tabla.",
+             wrap=320)
         ttk.Button(body, text="Exportar componentes y curvas…",
                    command=self._export_fit).pack(fill="x", pady=(PAD["sm"], 0))
         ttk.Button(body, text="Incertidumbres por remuestreo",
@@ -1607,6 +1619,32 @@ class RamanCarbonApp:
             # check itself fails, the numbers still get shown.
             return text
 
+    def _probe_widths(self) -> None:
+        """Lift the suspect width ceilings and refit, in the worker thread."""
+        if self.session.active is None or self.session.active.manual_fit is None:
+            self._warn("Sin ajuste",
+                       "Ajusta un modelo en esta pestaña antes de probar sus "
+                       "límites.")
+            return
+        self._run_async(self._probe_widths_job, self._after_probe_widths,
+                        "Probando los límites…")
+
+    def _probe_widths_job(self):
+        try:
+            return self.session.probe_width_ceilings()
+        except ValueError as exc:
+            return [str(exc)]
+
+    def _after_probe_widths(self, notes) -> None:
+        self._flush_messages()
+        if not notes:
+            self._info("Límites de anchura",
+                       "Ninguna componente acabó cerca de su techo de "
+                       "anchura, así que no hay nada que probar: las "
+                       "anchuras las decidieron los datos.")
+            return
+        self._info("Límites de anchura", "\n\n".join(notes))
+
     def _after_manual_fit(self, result) -> None:
         from .widgets import set_text
 
@@ -2078,6 +2116,11 @@ class RamanCarbonApp:
         from tkinter import messagebox
 
         messagebox.showwarning(title, message, parent=self.root)
+
+    def _info(self, title: str, message: str) -> None:
+        from tkinter import messagebox
+
+        messagebox.showinfo(title, message, parent=self.root)
 
     def _error(self, exc: Exception, tb: str) -> None:
         from tkinter import messagebox
