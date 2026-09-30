@@ -41,8 +41,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections.abc import Callable
+from itertools import pairwise
 from pathlib import Path
-from typing import Callable, Optional
 
 import numpy as np
 from ase import Atoms
@@ -176,7 +177,7 @@ def _write_atomic(path: Path, data: dict) -> None:
     temporary.replace(path)
 
 
-def _point(atoms: Atoms, label: str, extra: Optional[dict] = None) -> dict:
+def _point(atoms: Atoms, label: str, extra: dict | None = None) -> dict:
     data = {"label": label, "symbols": atoms.get_chemical_symbols(),
             "positions": atoms.get_positions().tolist(), "cell": atoms.cell.array.tolist(),
             "pbc": [bool(p) for p in atoms.pbc], "energy": float(atoms.get_potential_energy()),
@@ -233,10 +234,10 @@ def _relax(name: str, folder: Path, make_calc: Callable, log) -> dict:
             images = read(trajectory, index=":")
             # Each launch writes its starting image again: count moves, not images.
             steps_before = sum(not np.allclose(a.positions, b.positions)
-                               for a, b in zip(images, images[1:]))
+                               for a, b in pairwise(images))
             atoms.positions = images[-1].get_positions()
             log(f"{name}: relajación retomada en el paso {steps_before}")
-        except Exception as error:          # a trajectory cut mid-write
+        except (OSError, ValueError, EOFError) as error:    # cut mid-write
             log(f"{name}: trayectoria ilegible ({error}); se empieza de nuevo")
             trajectory.unlink()
             hessian.unlink(missing_ok=True)
@@ -256,7 +257,7 @@ def _relax(name: str, folder: Path, make_calc: Callable, log) -> dict:
     return result
 
 
-def run_crystal(name: str, workdir: Path, make_calc: Optional[Callable] = None,
+def run_crystal(name: str, workdir: Path, make_calc: Callable | None = None,
                 log=print) -> Path:
     """The GPAW stage for one crystal; returns its ``done`` marker. Idempotent."""
     folder = Path(workdir) / name
@@ -323,28 +324,47 @@ def _rms(x) -> float:
 
 
 def molecular_baseline(set_name: str) -> dict:
-    """Force error of a set on the random distortions of its own molecules."""
+    """Force errors of a set on its own molecules, measured as on the crystals.
+
+    Two numbers, because they answer different questions: at the GPAW
+    minima (``eq``: how far the model's minimum is from DFT's) and on the
+    random distortions (``rnd``: the shape of the energy surface around it).
+    Per structure, so the median is not ruled by one strained ring.
+    """
     from ..params import load_parameters
     from ..references import load_references
 
     root = Path(__file__).resolve().parents[1] / "parameters" / "references"
     refs, _ = load_references(root / MOLECULAR_BASELINE[set_name])
     model = load_parameters(set_name)
-    errors, scale = [], []
-    for ref in refs:
-        if "/rnd" not in ref.label:
-            continue
-        _, forces = _model_forces(ref.atoms, model, kT=0.02)
-        errors.append(forces - ref.forces)
-        scale.append(ref.forces)
-    errors, scale = np.concatenate(errors), np.concatenate(scale)
-    return {"file": MOLECULAR_BASELINE[set_name],
-            "structures": sum(1 for r in refs if "/rnd" in r.label),
-            "force_rmse": _rms(errors), "force_rms_dft": _rms(scale),
-            "force_relative": _rms(errors) / _rms(scale)}
+    out = {"file": MOLECULAR_BASELINE[set_name]}
+    for kind in ("eq", "rnd"):
+        chosen = [r for r in refs if r.label.split("/")[-1].startswith(kind)]
+        errors, scale, per = [], [], []
+        for ref in chosen:
+            _, forces = _model_forces(ref.atoms, model, kT=0.02)
+            errors.append(forces - ref.forces)
+            scale.append(ref.forces)
+            per.append(_rms(forces - ref.forces))
+        out[kind] = {"structures": len(chosen),
+                     "force_rmse": _rms(np.concatenate(errors)),
+                     "force_rmse_median": float(np.median(per)),
+                     "force_rms_dft": _rms(np.concatenate(scale)),
+                     "worst": chosen[int(np.argmax(per))].label, "worst_rmse": float(max(per))}
+    return out
 
 
-def _local(atoms: Atoms, index: Optional[int]) -> dict:
+def lattice_minimum(points: list[dict], key: str) -> float | None:
+    """Scale of the energy minimum from a parabola through x0.98, 1, x1.02."""
+    energy = {p["label"]: p[key] for p in points}
+    labels = ["x0.98", "relaxed", "x1.02"]
+    if not all(label in energy for label in labels):
+        return None
+    a, b, _ = np.polyfit([0.98, 1.0, 1.02], [energy[label] for label in labels], 2)
+    return float(-b / (2 * a)) if a > 0 else None
+
+
+def _local(atoms: Atoms, index: int | None) -> dict:
     if index is None:
         return {}
     bonds = sorted(float(atoms.get_distance(index, j, mic=True))
@@ -378,13 +398,19 @@ def compare_crystal(name: str, refs: list, kT: float = SETTINGS["smearing_ev"],
                        "force_rms_dft": _rms(ref.forces),
                        "dE_dft": ref.energy - base.energy, "dE_model": energy - e0})
     errors, scale = np.concatenate(errors), np.concatenate(scale)
-    distortion = [p for p in points if p["label"] != "relaxed"]
+    distortion = [p for p in points if p["label"].startswith("rnd")]
     result = {"crystal": name, "set": set_name, "kpts": list(kpts), "atoms": len(base.atoms),
               "formula": base.atoms.get_chemical_formula(), "points": points,
               "force_rmse": _rms(errors), "force_rms_dft": _rms(scale),
               "force_relative": _rms(errors) / _rms(scale),
+              "force_rmse_at_minimum": next(p["force_rmse"] for p in points
+                                            if p["label"] == "relaxed"),
+              "force_rmse_distorted_median": float(np.median([p["force_rmse"]
+                                                              for p in distortion])),
               "energy_mae": float(np.mean([abs(p["dE_model"] - p["dE_dft"])
                                            for p in distortion])),
+              "lattice_scale_dft": lattice_minimum(points, "dE_dft"),
+              "lattice_scale_model": lattice_minimum(points, "dE_model"),
               "gpaw_converged": base.extra.get("converged")}
     if relax:
         summary, relaxed = tb_relax(base.atoms, model, kmesh=tuple(kpts), kT=kT, fmax=0.01)
@@ -397,7 +423,7 @@ def compare_crystal(name: str, refs: list, kT: float = SETTINGS["smearing_ev"],
     return result
 
 
-def compare(reference_file: Path, crystals: Optional[list[str]] = None,
+def compare(reference_file: Path, crystals: list[str] | None = None,
             relax: bool = True) -> dict:
     from ..references import load_references
 
@@ -408,7 +434,10 @@ def compare(reference_file: Path, crystals: Optional[list[str]] = None,
                for n in names]
     baselines = {s: molecular_baseline(s) for s in sorted({r["set"] for r in results})}
     for r in results:
-        r["ratio_to_molecules"] = r["force_rmse"] / baselines[r["set"]]["force_rmse"]
+        base = baselines[r["set"]]
+        r["ratio_to_molecules"] = {
+            "at_minimum": r["force_rmse_at_minimum"] / base["eq"]["force_rmse_median"],
+            "distorted": r["force_rmse_distorted_median"] / base["rnd"]["force_rmse_median"]}
     return {"references": Path(reference_file).name, "settings": settings,
             "molecular_baseline": baselines, "crystals": results}
 
@@ -446,11 +475,13 @@ def main(argv=None) -> None:
         data = compare(args.references, args.systems)
         args.out.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
         for r in data["crystals"]:
-            print(f"{r['crystal']:18s} {r['set']:10s} F_rmse {r['force_rmse']:.3f} eV/Å "
-                  f"({100 * r['force_relative']:.0f} %, x{r['ratio_to_molecules']:.1f} "
-                  f"moléculas)  dE {r['energy_mae']:.3f} eV  "
-                  f"relax {r.get('relax', {}).get('max_displacement', float('nan')):.3f} Å")
-
+            ratio = r["ratio_to_molecules"]
+            print(f"{r['crystal']:17s} {r['set']:9s} F(min) {r['force_rmse_at_minimum']:.3f} "
+                  f"(x{ratio['at_minimum']:.2f} mol.)  F(rnd) {r['force_rmse_distorted_median']:.3f} "
+                  f"(x{ratio['distorted']:.2f} mol.)  dE(rnd) {r['energy_mae']:.3f} eV  "
+                  f"a/a0 DFT {r['lattice_scale_dft'] or float('nan'):.4f} "
+                  f"TB {r['lattice_scale_model'] or float('nan'):.4f}  relax "
+                  f"{r.get('relax', {}).get('max_displacement', float('nan')):.3f} Å")
 
 if __name__ == "__main__":
     main()
