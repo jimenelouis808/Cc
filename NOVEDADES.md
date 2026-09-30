@@ -15,10 +15,16 @@ texturado según (0 0 1) mientras su difractograma enseña solo la 002 —la
 (0 0 1) está sistemáticamente ausente— así que mirar el propio patrón
 lleva a descartar (001), que es justo el eje.
 
-Ahora el campo «Eje de textura» viene con **auto**. El programa saca los
-candidatos de las propias reflexiones de cada fase, reducidas a su
-dirección primitiva (la 002 se convierte en (0 0 1) sola), prueba cada
-uno y dice cuál encontró, cuánto baja Rwp y por cuánto gana al siguiente.
+Ahora hay un botón **«Buscar eje de textura»** en la pestaña Rietveld. El
+programa saca los candidatos de las propias reflexiones de cada fase,
+reducidas a su dirección primitiva (la 002 se convierte en (0 0 1) sola),
+prueba cada uno y dice cuál encontró, cuánto baja Rwp y por cuánto gana
+al siguiente. Los ejes que acepta quedan puestos en el modelo para el
+siguiente refinamiento.
+
+Es un botón y no el comportamiento por defecto porque cuesta un ajuste
+por eje candidato y por fase: unos diez minutos con cinco fases. Quien
+lo quiera en línea escribe «auto» en el campo «Eje de textura».
 
 **Y la textura no se había refinado nunca.** Con el eje verdadero
 declarado a mano, sobre un patrón sintético construido con r = 0.45, el

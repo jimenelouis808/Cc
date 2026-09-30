@@ -398,6 +398,52 @@ una tiene una prueba que la protege.
 - **Calibrado**: textura real que las reflexiones pueden ver compra un
   2.6–3.4 % de Rwp; un patrón construido sin textura compra un 0.3 %.
   `TEXTURE_MIN_GAIN` está en 0.02, entre las dos.
+- **Y el caché guarda las reflexiones SIN textura.** March-Dollase es un
+  factor multiplicativo sobre una lista que no depende de r, así que
+  meter r en la clave —correcto— hacía que cada paso de la derivada
+  re-enumerase los hkl y recalculara los factores de estructura: la
+  búsqueda sobre un patrón real de cinco fases no terminaba ni la
+  primera fase en media hora. La parte cara se calcula una vez y la
+  corrección se aplica encima. El corte de `min_relative` ve entonces
+  las intensidades sin texturar, que además es lo correcto: el conjunto
+  de reflexiones modeladas no debe entrar y salir según se mueve r.
+- **Las escalas y el fondo se ajustan UNA vez y todos los brazos
+  arrancan de ahí.** Re-ajustarlos dentro de cada brazo —cuarenta veces
+  en un patrón de cinco fases— era el coste y además un error: desde
+  escala = 1 el brazo con textura no se asienta en ningún presupuesto
+  razonable y vuelve PEOR que el brazo sin ella. Medido sobre el patrón
+  real: 72 s por brazo y Rwp 6.222 % frente al 6.220 % sin textura, que
+  se lee como «la textura empeora» y es enteramente un artefacto de no
+  converger. Desde el arranque común el mismo brazo llega a 6.219 %, que
+  es la respuesta honrada: gana un 0.01 %, así que sigue siendo «sin
+  textura», pero por la razón correcta.
+- **Y la búsqueda es un BOTÓN, no el comportamiento por defecto del
+  refinamiento automático.** Un ajuste por eje candidato y por fase son
+  cuarenta ajustes y unos diez minutos con cinco fases, y una opción que
+  convierte un botón en diez minutos sin avisar es una trampa. El campo
+  acepta «auto» para quien lo quiera en línea.
+- **Los brazos son un CRIBADO y llevan su propio presupuesto**
+  (`TEXTURE_ARM_ITERATIONS`). Lo que se compara es qué eje describe
+  mejor el patrón, no a qué refina cada uno. Medido: el brazo sin
+  textura convergía en 288 evaluaciones —24 por parámetro libre— y el
+  mismo brazo con un parámetro de textura más gastaba las 54 400 de su
+  presupuesto sin converger y volvía PEOR que el ajuste sin él. Cuarenta
+  por parámetro es casi el doble de lo que necesitó el brazo sin
+  textura, y con el presupuesto recortado el ranking sigue siendo
+  correcto en los casos sintéticos con verdad conocida (en uno el margen
+  mejoró del 0.0 % al 1.0 %).
+
+## Un ajuste que se queda sin presupuesto devuelve su MEJOR punto
+
+- **`refine` ya guardaba el mejor punto, y solo lo restauraba cuando el
+  usuario paraba el ajuste.** El mismo argumento que documenta esa rama
+  —«un intento de mínimos cuadrados puede ser mucho peor que el último
+  aceptado, y devolverlo haría que parar fuera destructivo»— vale igual
+  cuando lo que se agota es `max_nfev`. Medido sobre un patrón de cinco
+  fases con un parámetro de textura libre: el ajuste gastó sus 54 400
+  evaluaciones y volvió con Rwp 6.222 %, peor que el 6.220 % del mismo
+  modelo ajustado SIN ese parámetro. Un parámetro más no puede empeorar
+  un ajuste; lo que había empeorado era dónde paró el optimizador.
 
 ## Cuántas capas tiene el carbono
 

@@ -133,3 +133,75 @@ def test_the_search_does_not_write_into_the_phases_it_is_given(carbon) -> None:
     choose_texture_axes(_pattern(carbon, (0, 0, 1), 0.45), [phase])
     assert phase.preferred_axis is None
     assert phase.preferred_r == 1.0
+
+
+def test_a_screening_arm_is_given_a_screening_budget() -> None:
+    """The arms compare axes; they are not final refinements.
+
+    Measured on a five-phase pattern: the untextured arm converged in 288
+    evaluations, 24 per free parameter, while the same arm with one
+    texture parameter added spent its whole 54 400-evaluation budget
+    without converging -- six minutes for one of the forty arms a
+    five-phase search runs.
+    """
+    from ramancarbon.xrd.rietveld import TEXTURE_ARM_ITERATIONS
+
+    assert 24 < TEXTURE_ARM_ITERATIONS < 200
+
+
+def test_a_fit_out_of_budget_hands_back_its_best_point() -> None:
+    """Not wherever the optimiser happened to stop.
+
+    `refine` tracked the best point already and restored it only when the
+    USER stopped the fit. The same argument applies to running out of
+    evaluations, and the consequence was measurable: a five-phase fit
+    with one texture parameter free came back at Rwp 6.222 %, worse than
+    the same model fitted without that parameter at all. One more free
+    parameter cannot make a fit worse; where it stopped can.
+
+    The property under test is the one that makes a starved fit usable:
+    it may fail to improve, but it must not come back worse than the
+    point it started from.
+    """
+    import numpy as np
+
+    from ramancarbon.xrd.pattern import Pattern
+    from ramancarbon.xrd.reference import load_library
+    from ramancarbon.xrd.rietveld import (
+        PhaseModel,
+        build_parameters,
+        calculate_pattern,
+        free_kinds,
+        refine,
+    )
+
+    crystal = next(iter(load_library())).crystal
+    angles = np.linspace(20.0, 60.0, 900)
+    rng = np.random.default_rng(3)
+    counts = np.maximum(
+        rng.poisson(400.0 + 30.0 * np.sin(angles / 7.0)).astype(float), 1.0)
+    pattern = Pattern(two_theta=angles, intensity=counts, name="sintético")
+
+    def rwp_of(models, parameters) -> float:
+        background = [p.value for p in parameters if p.kind == "background"]
+        calculated = calculate_pattern(
+            angles, models, wavelength=pattern.wavelength,
+            kalpha2_ratio=pattern.kalpha2_ratio, background=background)
+        sigma = np.asarray(pattern.sigma, dtype=float)
+        weights = 1.0 / np.maximum(sigma, 1e-9) ** 2
+        return float(np.sqrt(
+            np.sum(weights * (counts - calculated) ** 2)
+            / np.sum(weights * counts ** 2)))
+
+    model = PhaseModel(crystal=crystal)
+    parameters = build_parameters([model], 6)
+    for parameter in parameters:
+        if parameter.name == "fondo_c0":
+            parameter.value = float(np.percentile(counts, 5))
+    free_kinds(parameters, ("scale", "background", "lattice", "profile_w"))
+    before = rwp_of([model], parameters)
+
+    starved = refine(pattern, [model], parameters=parameters,
+                     background_order=6, max_iterations=2)
+    assert np.isfinite(starved.r_wp)
+    assert starved.r_wp <= before + 1e-9

@@ -832,6 +832,21 @@ def refine(
     else:
         unpack(outcome.x)
         correlations = _estimate_errors(outcome, free, observed.size)
+        if not outcome.success and best["values"] is not None:
+            # Out of budget, not converged. The same argument the
+            # cancellation branch above makes applies unchanged: where the
+            # solver STOPPED is not where it did best, and handing back
+            # the stopping point makes running out of evaluations worse
+            # than useless. Measured on a five-phase pattern with one
+            # texture parameter free: the fit spent its entire budget of
+            # 54 400 evaluations and came back at Rwp 6.222 %, worse than
+            # the same model fitted without that parameter at all.
+            final = math.sqrt(
+                float(np.sum(weights * (observed - model()) ** 2))
+                / max(float(np.sum(weights * observed ** 2)), 1e-30)
+            )
+            if best["rwp"] < final:
+                unpack(best["values"])
 
     background, zero, displacement = _apply(parameters, models)
     calculated = model()
@@ -1526,6 +1541,21 @@ TEXTURE_MIN_GAIN = 0.02
 #: the ranking is reported either way.
 TEXTURE_AXIS_MARGIN = 0.01
 
+#: Evaluations per free parameter each arm of the axis search is given.
+#:
+#: The arms are a SCREENING fit — what is being compared is which axis
+#: describes the pattern better, not what any one of them refines to —
+#: and the package default of 200 is for a final refinement. Measured on
+#: a five-phase pattern: the untextured arm converged in 288 evaluations
+#: (24 per free parameter), while the same arm with one texture
+#: parameter added ran its whole 54 400-evaluation budget without
+#: converging and came back WORSE than the fit without it. Forty per
+#: parameter is nearly twice what the untextured arm needed and turns
+#: six minutes per arm into seconds; the best point reached is what gets
+#: reported either way, so an arm that runs out is compared at its best
+#: and not wherever it stopped.
+TEXTURE_ARM_ITERATIONS = 40
+
 
 @dataclass
 class TextureChoice:
@@ -1622,6 +1652,38 @@ def choose_texture_axes(
         p if isinstance(p, PhaseModel) else PhaseModel(crystal=p) for p in phases
     ]
     seed = float(np.percentile(pattern.intensity, 5))
+    # The scales and the background are fitted ONCE and every arm starts
+    # from that point. Re-fitting them inside each arm -- forty times on
+    # a five-phase pattern -- was both the cost and a correctness
+    # problem: from scale = 1 the arm with a texture parameter could not
+    # settle inside any reasonable budget, and came back WORSE than the
+    # arm without one. Measured on the real pattern: 72 s per arm and
+    # Rwp 6.222 % against the untextured 6.220 %, which reads as "texture
+    # hurts" and is entirely an artefact of not converging. From the
+    # common start the same arm reaches 6.219 %, which is the honest
+    # answer -- a gain of 0.01 %, so still no texture, but for the right
+    # reason.
+    common = build_parameters(models, background_order)
+    for parameter in common:
+        if parameter.name == "fondo_c0":
+            parameter.value = seed
+    free_kinds(common, ("scale", "background"))
+    settled = [
+        PhaseModel(
+            crystal=m.crystal, scale=m.scale, profile=copy.copy(m.profile),
+            u_iso=m.u_iso, preferred_axis=None, preferred_r=1.0,
+            lattice_factors=m.lattice_factors,
+        )
+        for m in models
+    ]
+    if callback:
+        callback("[textura] ajustando el punto de partida común")
+    baseline = refine(
+        pattern, settled, parameters=common,
+        background_order=background_order, instrument_fwhm=instrument_fwhm,
+        max_iterations=TEXTURE_ARM_ITERATIONS, should_stop=should_stop,
+    )
+    without_all = baseline.r_wp
     choices: list[TextureChoice] = []
 
     for index, phase in enumerate(models):
@@ -1649,31 +1711,25 @@ def choose_texture_axes(
                 PhaseModel(
                     crystal=m.crystal, scale=m.scale,
                     profile=copy.copy(m.profile), u_iso=m.u_iso,
-                    preferred_axis=m.preferred_axis,
-                    preferred_r=m.preferred_r,
+                    preferred_axis=None, preferred_r=1.0,
                     lattice_factors=m.lattice_factors,
                 )
-                for m in models
+                for m in settled
             ]
             trial[index].preferred_axis = axis
             trial[index].preferred_r = 1.0
-            settings = build_parameters(trial, background_order)
-            for parameter in settings:
-                if parameter.name == "fondo_c0":
-                    parameter.value = seed
-            kinds = ["scale", "background"]
-            if axis is not None:
-                kinds.append("preferred")
-            free_kinds(settings, kinds)
+            settings = copy.deepcopy(list(common))
+            free_kinds(settings, ("scale", "background", "preferred"))
             outcome = refine(
                 pattern, trial, parameters=settings,
                 background_order=background_order,
                 instrument_fwhm=instrument_fwhm,
+                max_iterations=TEXTURE_ARM_ITERATIONS,
                 should_stop=should_stop,
             )
             return outcome.r_wp, trial[index].preferred_r
 
-        without, _ = arm(None)
+        without = without_all
         scored: list[tuple[float, tuple[int, int, int], float]] = []
         for position, axis in enumerate(axes, start=1):
             if callback:
@@ -1721,6 +1777,7 @@ def choose_texture_axes(
 __all__ = [
     "BACKGROUND_DOMINATES",
     "BackgroundSensitivity",
+    "TEXTURE_ARM_ITERATIONS",
     "TEXTURE_AXIS_MARGIN",
     "TEXTURE_MIN_GAIN",
     "TextureChoice",

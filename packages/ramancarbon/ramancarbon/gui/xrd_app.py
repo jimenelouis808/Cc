@@ -174,15 +174,15 @@ class XRDApp(SectionApp):
         # observed reflection -- a carbon lying flat is textured along
         # (001) while its pattern shows only the 002 -- so the field asked
         # a question most people cannot answer about their own sample.
-        self.texture_var = tk.StringVar(value="auto")
+        self.texture_var = tk.StringVar(value="")
         labelled(optionsbody, "Eje de textura", lambda p: ttk.Entry(
             p, textvariable=self.texture_var, width=10))
         hint(optionsbody,
-             "«auto» busca el eje de cada fase entre las direcciones de sus "
-             "propias reflexiones y dice cuál encontró, con cuánto baja Rwp "
-             "y por cuánto gana al siguiente. Si dos ejes empatan lo dice en "
-             "vez de elegir: el patrón no siempre los separa. Escribe un hkl "
-             "(«001») para imponerlo, o déjalo vacío para no refinar textura.",
+             "Vacío: no se refina textura. Un hkl («001») lo impone. «auto» "
+             "busca el eje durante el refinamiento automático — cuesta un "
+             "ajuste por eje candidato y por fase, unos diez minutos con "
+             "cinco fases, así que normalmente es mejor el botón «Buscar eje "
+             "de textura» de la pestaña Rietveld, que enseña el ranking.",
              wrap=250)
         self.max_phases_var = tk.StringVar(value="4")
         labelled(optionsbody, "Máx. fases", lambda p: ttk.Spinbox(
@@ -316,6 +316,12 @@ class XRDApp(SectionApp):
         # background order 2, 52.4 % at 6 and 33.1 % at 8 and 10.
         toolbar.add(ttk.Button(toolbar.frame, text="Probar el fondo",
                                command=self._background_sensitivity))
+        # The axis is a DIRECTION, not an observed reflection: a carbon
+        # lying flat is textured along (001) while its pattern shows only
+        # the 002. Asking the user for an hkl asked a question about the
+        # sample that the sample can answer itself.
+        toolbar.add(ttk.Button(toolbar.frame, text="Buscar eje de textura",
+                               command=self._find_texture))
         # A refinement with five phases and forty free parameters has a
         # budget of thousands of residual evaluations. Without a way out
         # the only way out is to kill the window, which loses the loaded
@@ -650,6 +656,39 @@ class XRDApp(SectionApp):
 
         self._arm_stop()
         self.run_async(work, done, "Probando el fondo…")
+
+    def _find_texture(self) -> None:
+        """Look for each phase's preferred-orientation axis."""
+        if self.session.item is None:
+            self.warn("Sin datos", "Carga un difractograma primero.")
+            return
+        self._settings_from_widgets()
+
+        def done(found) -> None:
+            self._disarm_stop()
+            self.flush_messages(self.session.messages)
+            if not found:
+                self.set_status("No se pudo buscar el eje; mira los avisos.")
+                return
+            self._fill_parameters()
+            self._redraw()
+            self.inform("Eje de textura",
+                        "\n\n".join(c.describe() for c in found))
+            named = sum(1 for c in found if c.axis is not None)
+            self.set_status(
+                f"{named} de {len(found)} fases con eje propuesto. "
+                "Vuelve a refinar para usarlo."
+                if named else
+                "Ninguna fase muestra textura: la muestra se comporta como "
+                "un polvo al azar."
+            )
+
+        def work():
+            return self.session.find_texture_axes(
+                progress=self._queue_progress, should_stop=self._should_stop)
+
+        self._arm_stop()
+        self.run_async(work, done, "Buscando el eje de textura…")
 
     def _stop_refinement(self) -> None:
         """Ask the running refinement to stop at its next evaluation."""

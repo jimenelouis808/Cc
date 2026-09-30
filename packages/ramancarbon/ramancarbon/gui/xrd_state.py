@@ -88,10 +88,17 @@ class XRDSession:
         self.kalpha2_ratio: float = 0.5
         self.counts: bool = True
         self.texture_axis: Optional[tuple[int, int, int]] = None
-        self.find_texture: bool = True
-        """Look the preferred-orientation axis up instead of being told it.
-        On by default: the field that took an hkl asked a question about
-        the sample that the sample itself can answer."""
+        self.find_texture: bool = False
+        """Look the preferred-orientation axis up during the automatic
+        refinement, rather than in its own step.
+
+        OFF by default, and not because the search is unreliable — it is
+        because of what it costs. One fit per candidate axis per phase:
+        on a five-phase pattern that is forty fits and about ten minutes,
+        and an option that silently turns a button into ten minutes is a
+        trap. «Buscar eje de textura» runs it deliberately, with the
+        progress counter and the stop button. Typing «auto» in the field
+        still switches it on for the automatic refinement."""
         self.instrument_fwhm: float = 0.06
         self.background_order: int = 6
         self.max_phases: int = 4
@@ -477,6 +484,38 @@ class XRDSession:
         for warning in outcome.warnings:
             self.log("warning", warning)
         return outcome
+
+    def find_texture_axes(
+        self,
+        progress: Optional[Callable[[str], None]] = None,
+        should_stop: Optional[Callable[[], bool]] = None,
+    ):
+        """Look for each phase's preferred-orientation axis and report it.
+
+        Deliberate rather than automatic because of the cost: one fit per
+        candidate axis per phase. The axes found are written into the
+        model, so the next refinement uses them.
+        """
+        from ..xrd.rietveld import choose_texture_axes
+
+        item = self.item
+        if item is None:
+            self.log("error", "carga un difractograma primero")
+            return None
+        if not item.models and self.prepare_manual() is None:
+            return None
+        found = choose_texture_axes(
+            item.pattern, item.models,
+            background_order=self.background_order,
+            instrument_fwhm=self.instrument_fwhm,
+            callback=progress, should_stop=should_stop,
+        )
+        for phase, choice in zip(item.models, found, strict=True):
+            if choice.axis is not None:
+                phase.preferred_axis = choice.axis
+        for choice in found:
+            self.log("info", choice.describe())
+        return found
 
     def background_sensitivity(
         self,
