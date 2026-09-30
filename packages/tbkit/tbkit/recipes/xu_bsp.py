@@ -1,4 +1,4 @@
-"""B, S and P on top of ``xu_chno``: the ``xu_chnob``, ``xu_chnos`` and ``xu_chnop`` sets.
+"""B, S, P and Se on top of ``xu_chno``: ``xu_chnob``, ``xu_chnos``, ``xu_chnop``, ``xu_chnose``.
 
 Each adds one element to ``xu_chno`` -- kept fixed, numbers, repulsion and
 level shift included (:attr:`tbkit.recipes.xu_family.XuFamily.base`) -- so a
@@ -27,15 +27,22 @@ from .xu_family import XuFamily
 
 #: Free atom, GPAW aeatom PBE spin-paired (``tbkit.references.gpaw_hubbard_u``,
 #: ``gpaw_onsite_dipole``): U = dε_p/dn (eV), d = |⟨ns|r|np⟩| (Å).
-HUBBARD_U = {"B": 8.0573, "S": 8.9465, "P": 7.8736}
-ONSITE_DIPOLE = {"B": 0.6208, "S": 0.5491, "P": 0.6162}
+HUBBARD_U = {"B": 8.0573, "S": 8.9465, "P": 7.8736, "Se": 8.1685}
+ONSITE_DIPOLE = {"B": 0.6208, "S": 0.5491, "P": 0.6162, "Se": 0.5916}
 
 
-def _pairs(element: str, r0: dict, margin: float = 0.55) -> dict:
+def _pairs(element: str, r0: dict, margin: float = 0.55, long_rc: dict | None = None) -> dict:
     """Pairs of ``element`` with H, C, N, O and itself; repulsion cutoff r0 + margin
-    (beyond stretched bonds, short of second neighbours)."""
-    return {(other, element) if other != element else (element, element):
-            {"r0": d, "rc_rep": round(d + margin, 2)} for other, d in r0.items()}
+    (beyond stretched bonds, short of second neighbours), or ``long_rc[other]`` Å
+    kept as given (``keep_rc``) where data show the model needs repulsion further
+    out."""
+    pairs = {}
+    for other, d in r0.items():
+        key = (other, element) if other != element else (element, element)
+        pairs[key] = {"r0": d, "rc_rep": round(d + margin, 2)}
+        if long_rc and other in long_rc:
+            pairs[key].update(rc_rep=long_rc[other], keep_rc=True)
+    return pairs
 
 
 FAMILIES = {
@@ -43,10 +50,14 @@ FAMILIES = {
         name="C/H/N/O/B: xu_chno + B ajustado a GPAW",
         recipe="tbkit.recipes.xu_bsp",
         heteroatoms=("B",),
-        pairs=_pairs("B", {"H": 1.19, "C": 1.57, "N": 1.44, "O": 1.37, "B": 1.70}),
+        # B-H repulsion out to 2.4 Å: methyl H atoms of B(OCH3)3 collapsed onto the
+        # O atoms, 2.1 Å from B, with nothing repulsive there (active learning data)
+        pairs=_pairs("B", {"H": 1.19, "C": 1.57, "N": 1.44, "O": 1.37, "B": 1.70},
+                     long_rc={"H": 2.4}),
         hubbard_u={"B": HUBBARD_U["B"]},
         onsite_dipole={"B": ONSITE_DIPOLE["B"]},
-        validity_notes="B junto con S o P en la misma estructura no está cubierto",
+        validity_notes=("B junto con S o P en la misma estructura no está cubierto"
+                        "; ésteres alquílicos (B(OCH3)n) no válidos: los H de metilo colapsan sobre el O vecino (atracción de cargas SCC sin repulsión O···H a 1,6-2,4 Å, un defecto de la base xu_chno pendiente de corregir con más datos)"),
         system=("xu_chno más boro: boranos, ésteres y ácidos bóricos y borónicos, "
                 "amino-borano, borazina, B-N en grafeno"),
         h_tail=(0.40, 0.60),
@@ -69,15 +80,30 @@ FAMILIES = {
         name="C/H/N/O/P: xu_chno + P ajustado a GPAW",
         recipe="tbkit.recipes.xu_bsp",
         heteroatoms=("P",),
-        pairs=_pairs("P", {"H": 1.42, "C": 1.85, "N": 1.70, "O": 1.60, "P": 2.22}),
+        # P-H repulsion out to 2.4 Å, for the same collapse in PO(OCH3)3
+        pairs=_pairs("P", {"H": 1.42, "C": 1.85, "N": 1.70, "O": 1.60, "P": 2.22},
+                     long_rc={"H": 2.4}),
         hubbard_u={"P": HUBBARD_U["P"]},
         onsite_dipole={"P": ONSITE_DIPOLE["P"]},
         validity_notes=("P junto con B o S en la misma estructura no está cubierto; el C-P de "
                         "P(V) (ácidos fosfónicos, óxidos de fosfina) sale 0.07-0.14 Å largo, el "
                         "de P(III) 0.03-0.05 Å; P-O, P=O, P-P, P-N, P-H y C-P aromático a menos "
-                        "de 0.025 Å"),
+                        "de 0.025 Å"
+                        "; ésteres alquílicos (P(OCH3)n) no válidos: los H de metilo colapsan sobre el O vecino (atracción de cargas SCC sin repulsión O···H a 1,6-2,4 Å, un defecto de la base xu_chno pendiente de corregir con más datos)"),
         system=("xu_chno más fósforo: fosfinas, óxidos de fosfina, ácidos fosfórico y "
                 "fosfónicos, fosfatos, fosfinina"),
+        h_tail=(0.40, 0.60),
+        base="xu_chno"),
+    "Se": XuFamily(
+        name="C/H/N/O/Se: xu_chno + Se ajustado a GPAW",
+        recipe="tbkit.recipes.xu_bsp",
+        heteroatoms=("Se",),
+        pairs=_pairs("Se", {"H": 1.47, "C": 1.95, "N": 1.85, "O": 1.65, "Se": 2.33}),
+        hubbard_u={"Se": HUBBARD_U["Se"]},
+        onsite_dipole={"Se": ONSITE_DIPOLE["Se"]},
+        validity_notes="Se junto con B, S o P en la misma estructura no está cubierto",
+        system=("xu_chno más selenio: selenoles, selenuros, diselenuros, selenofeno, "
+                "selenóxidos, ácidos selenínicos, Se-N"),
         h_tail=(0.40, 0.60),
         base="xu_chno"),
 }

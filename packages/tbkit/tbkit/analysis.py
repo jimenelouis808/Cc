@@ -206,8 +206,9 @@ def bands(system, path, spin_potentials=None) -> np.ndarray:
 #: Single-zeta Slater exponents, 1/Bohr (Slater's rules; H uses 1.24, the
 #: value optimised for molecules by Hehre, Stewart and Pople 1969). Only for
 #: drawing orbitals: the model itself never evaluates a wavefunction.
-SLATER_ZETA = {"H": 1.24, "B": 1.30, "C": 1.625, "N": 1.95, "O": 2.275, "P": 1.60, "S": 1.817}
-_PRINCIPAL = {"H": 1, "B": 2, "C": 2, "N": 2, "O": 2, "P": 3, "S": 3}
+SLATER_ZETA = {"H": 1.24, "B": 1.30, "C": 1.625, "N": 1.95, "O": 2.275, "P": 1.60, "S": 1.817,
+               "Se": 1.878}
+_PRINCIPAL = {"H": 1, "B": 2, "C": 2, "N": 2, "O": 2, "P": 3, "S": 3, "Se": 4}
 
 
 def _sto(orbital: str, element: str, dx, dy, dz, r, normal=None) -> np.ndarray:
