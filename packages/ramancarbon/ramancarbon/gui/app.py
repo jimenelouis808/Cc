@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 import traceback
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -129,8 +130,14 @@ class RamanCarbonApp:
         }
 
         self._build_header()
-        self._build_body()
+        # The status bar BEFORE the body. It packs from the bottom, and
+        # the body packs with expand=True into the same parent, so Tk
+        # gave the body everything and the bar what was left -- nothing.
+        # Nothing errored: the progress line was computed, queued and
+        # drawn into a strip zero pixels tall, which from outside is
+        # indistinguishable from a program that has hung.
         self._build_status()
+        self._build_body()
         self._refresh_spectrum_list()
         self._set_status("Carga un espectro (.txt, .csv, .dat…) para empezar.")
         self.root.after(120, self._drain_queue)
@@ -315,6 +322,30 @@ class RamanCarbonApp:
                    command=self._analyse_current).pack(fill="x", pady=(PAD["sm"], PAD["xs"]))
         ttk.Button(body, text="Analizar todos", command=self._analyse_all).pack(fill="x")
 
+    def _clock(self, seconds: float) -> str:
+        minutes, rest = divmod(int(seconds), 60)
+        return f"{minutes}:{rest:02d}" if minutes else f"{rest} s"
+
+    def _tick_clock(self) -> None:
+        """Count up while the calculation runs."""
+        started = getattr(self, "_started", None)
+        if started is None:
+            return
+        self.elapsed_var.set(self._clock(time.monotonic() - started))
+        self._clock_job = self.root.after(250, self._tick_clock)
+
+    def _stop_clock(self) -> None:
+        job = getattr(self, "_clock_job", None)
+        if job is not None:
+            self.root.after_cancel(job)
+            self._clock_job = None
+        started = getattr(self, "_started", None)
+        if started is not None:
+            # The final time STAYS on screen: "that took four minutes" is
+            # what tells you whether to run it again on fifty files.
+            self.elapsed_var.set(self._clock(time.monotonic() - started))
+            self._started = None
+
     def _build_status(self) -> None:
         ttk = self.ttk
         bar = ttk.Frame(self.host, style="Toolbar.TFrame",
@@ -324,6 +355,14 @@ class RamanCarbonApp:
         ttk.Label(bar, textvariable=self.status_var, style="Status.TLabel").pack(side="left")
         self.progress = ttk.Progressbar(bar, mode="indeterminate", length=140)
         self.progress.pack(side="right")
+        # An indeterminate bar says "something is happening" and nothing
+        # more, which is exactly the doubt a long fit creates. The elapsed
+        # time says how long it has been happening, and that is what
+        # separates a slow calculation from a hung one. The other four
+        # sections had this; this one did not.
+        self.elapsed_var = self.tk.StringVar(value="")
+        ttk.Label(bar, textvariable=self.elapsed_var,
+                  style="Status.TLabel").pack(side="right", padx=(0, PAD["sm"]))
 
     # ==================================================================
     # tabs
@@ -1370,6 +1409,8 @@ class RamanCarbonApp:
         self.busy = True
         self.progress.start(12)
         self._set_status(message)
+        self._started = time.monotonic()
+        self._tick_clock()
 
         def target() -> None:
             try:
@@ -1386,6 +1427,7 @@ class RamanCarbonApp:
                 kind, done, payload = self.queue.get_nowait()
                 self.busy = False
                 self.progress.stop()
+                self._stop_clock()
                 if kind == "ok":
                     done(payload)
                 else:
