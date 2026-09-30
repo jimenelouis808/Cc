@@ -34,6 +34,7 @@ tbkit/
 ├── qe.py             # Quantum ESPRESSO Γ modes (dynmat/matdyn) for Raman with QE phonons
 ├── references.py     # DFT reference sets (JSON): GPAW levels, energies, forces, frequencies
 ├── recipes/          # reproducible fits: xu_family (machinery), xu_chn, xu_chno; GPAW references
+│                     #   crystal_validation + run_crystals.sh: the sets in crystals vs GPAW (resumable)
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 ├── cli.py            # `tbkit` console script
 └── gui/              # tbkit-gui (PySide6 + pyvista, extra `gui`): actions (no Qt), worker, viewer, app
