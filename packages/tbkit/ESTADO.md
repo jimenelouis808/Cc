@@ -13,20 +13,19 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
 - Familia Se definida en `recipes/xu_bsp.py` (U, d, pares); moléculas en
   `recipes/bsp_references.py`.
 
-## En curso (si el contenedor se reinició, relanzar: todo retoma de sus partes/checkpoints)
+## En curso (si el contenedor se reinició, relanzar: retoman de sus checkpoints)
+Reajustes con `CentredAngleTerm` (angular en B, P, Se) + active learning + torsiones:
 ```bash
-cd packages/tbkit
-# referencias GPAW de Se (falta coronene_SeH); partes en /tmp/claude-0/se/gpaw_se.parts
-uv run python -m tbkit.recipes.bsp_references Se /tmp/claude-0/se/gpaw_se.json --workers 4
-# reajustes B y P con active learning + repulsión X-H hasta 2,4 Å + hessianas
-R=tbkit/parameters/references
-uv run python -m tbkit.recipes.xu_bsp B $R/gpaw_b.json $R/gpaw_b_al.json /tmp/claude-0/fit/xu_chnob.json --hessians $R/gpaw_b_hessians.json
-uv run python -m tbkit.recipes.xu_bsp P $R/gpaw_p.json $R/gpaw_p_al.json /tmp/claude-0/fit/xu_chnop.json --hessians $R/gpaw_p_hessians.json
+cd packages/tbkit; export OMP_NUM_THREADS=1; R=tbkit/parameters/references
+uv run python -m tbkit.recipes.xu_bsp Se $R/gpaw_se.json $R/gpaw_se_al.json $R/gpaw_se_torsion.json /tmp/claude-0/fit/xu_chnose3.json --hessians $R/gpaw_se_hessians.json
+uv run python -m tbkit.recipes.xu_bsp P $R/gpaw_p.json $R/gpaw_p_al.json $R/gpaw_p_al2.json $R/gpaw_p_torsion.json /tmp/claude-0/fit/xu_chnop3.json --hessians $R/gpaw_p_hessians.json
+uv run python -m tbkit.recipes.xu_bsp B $R/gpaw_b.json $R/gpaw_b_al.json $R/gpaw_b_torsion.json /tmp/claude-0/fit/xu_chnob3.json --hessians $R/gpaw_b_hessians.json
 ```
-(con `OMP_NUM_THREADS=1`; las partes en /tmp se pierden al reiniciar el contenedor.)
+Criterio: `wandering` sin espurios (CH3SeO2H, MePO3H2, H3PO4, B(OMe)3), enlaces y
+frecuencias no peores que antes; entonces instalar en `parameters/`.
 
 ## Siguiente
-1. Comprobar B/P: relajar B(OMe)3 y PO(OMe)3 (sin colapso), RMS de frecuencias;
+1. Comprobar B/P/Se tras los reajustes de arriba: relajar B(OMe)3 y PO(OMe)3 (sin colapso), RMS de frecuencias;
    instalar, quitar la nota de ésteres de `validity_notes`, tests.
 2. Se: copiar `gpaw_se.json` a references, hessianas (`frequency_references`),
    ajuste `xu_chnose`, active learning, instalar; `chnose` en CLI y GUI; tests; README.
