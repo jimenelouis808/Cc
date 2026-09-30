@@ -1393,28 +1393,34 @@
   }
  },
  "extra_polarizability": {
+  "S": {
+   "value": 2.64186,
+   "unit": "Å^3",
+   "source": "ajustada a tensores α de GPAW (PBE, FD, h = 0.18 Å); receta tbkit.recipes.xu_chn_alpha",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
+  },
   "O": {
    "value": 0.56697,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   },
   "H": {
    "value": 0.42865,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   },
   "C": {
    "value": 0.95312,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   },
   "N": {
    "value": 0.73688,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   }
  },
@@ -2585,5 +2591,170 @@
   "hessian_weight": 0.1,
   "hessians": "gpaw_s_hessians.json",
   "hessians_sha256": "867732c4012cbd5d94bb71e4089164970ea9d8236a2a319ffe3beacca1fc1e78"
+ },
+ "alpha_fit": {
+  "references": "gpaw_s_alpha.json",
+  "references_sha256": "61b7f8c0c9fe99450ff332721409ed60e4157a0152796d10776d64faa47ed175",
+  "fitted_elements": [
+   "S"
+  ],
+  "optimiser": "`ftol` termination condition is satisfied.",
+  "molecules": {
+   "H2S": {
+    "role": "train",
+    "gpaw": [
+     3.9017099818181977,
+     3.9237100181818025,
+     4.06025
+    ],
+    "tb": [
+     3.1591314459720405,
+     3.83177149502202,
+     4.1559423039001
+    ],
+    "mean_error_percent": -6.216096821683914
+   },
+   "CH3SH": {
+    "role": "train",
+    "gpaw": [
+     5.409913984956576,
+     5.434804057552568,
+     6.8750219574908575
+    ],
+    "tb": [
+     4.959800864702921,
+     5.603627321772891,
+     6.8624901280122605
+    ],
+    "mean_error_percent": -1.658160252418639
+   },
+   "CH3SCH3": {
+    "role": "train",
+    "gpaw": [
+     6.839874586045983,
+     7.881245812959551,
+     9.209809600994461
+    ],
+    "tb": [
+     6.6249968400855765,
+     7.593762620254108,
+     9.379916363779211
+    ],
+    "mean_error_percent": -1.3883880646556546
+   },
+   "CH3SSCH3": {
+    "role": "train",
+    "gpaw": [
+     9.747686006603526,
+     10.260556585113294,
+     14.513707408283176
+    ],
+    "tb": [
+     9.386927363665203,
+     10.10894714269581,
+     15.20250106288138
+    ],
+    "mean_error_percent": 0.5110533131598816
+   },
+   "thiophene": {
+    "role": "train",
+    "gpaw": [
+     6.880863593513811,
+     11.338936357524117,
+     12.230630048962059
+    ],
+    "tb": [
+     6.4881999811149615,
+     11.718736517931674,
+     11.974365417826958
+    ],
+    "mean_error_percent": -0.8838235884563894
+   },
+   "CS2": {
+    "role": "train",
+    "gpaw": [
+     5.714219529651591,
+     5.71429,
+     14.564680470348408
+    ],
+    "tb": [
+     5.852462516151638,
+     5.852462516151643,
+     14.10787380638035
+    ],
+    "mean_error_percent": -0.6939939319351107
+   },
+   "DMSO": {
+    "role": "train",
+    "gpaw": [
+     7.493713759591344,
+     9.311479444680778,
+     9.526826795727878
+    ],
+    "tb": [
+     7.252894388152177,
+     9.563950351459384,
+     9.677638674157022
+    ],
+    "mean_error_percent": 0.6169804434623005
+   },
+   "SO2": {
+    "role": "train",
+    "gpaw": [
+     3.09662,
+     3.756938117592918,
+     5.6254518824070825
+    ],
+    "tb": [
+     3.80816875975238,
+     3.8313814483751423,
+     6.314344000288626
+    ],
+    "mean_error_percent": 11.818919997789479
+   },
+   "CH3CH2SH": {
+    "role": "test",
+    "gpaw": [
+     7.030765158505742,
+     7.503968454453839,
+     9.450366387040422
+    ],
+    "tb": [
+     6.83058284967733,
+     7.427738147167347,
+     8.905016305470042
+    ],
+    "mean_error_percent": -3.426138301217352
+   },
+   "Me2SO2": {
+    "role": "test",
+    "gpaw": [
+     8.425650409875336,
+     8.670049704634266,
+     9.309529885490393
+    ],
+    "tb": [
+     9.085856213356346,
+     9.222999426989684,
+     9.680188422994167
+    ],
+    "mean_error_percent": 5.998107433035793
+   },
+   "CH3SO3H": {
+    "role": "test",
+    "gpaw": [
+     7.044585016441619,
+     7.4158771876813905,
+     7.75887779587699
+    ],
+    "tb": [
+     7.6816065837822185,
+     7.951249343984066,
+     8.516075239958214
+    ],
+    "mean_error_percent": 8.684286606733128
+   }
+  },
+  "checks": {}
  }
 }
