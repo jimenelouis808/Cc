@@ -66,7 +66,7 @@ class _Killer:
     def __init__(self, limit=None):
         self.limit, self.made = limit, 0
 
-    def __call__(self):
+    def __call__(self, grid_of=None):
         self.made += 1
         if self.limit is not None and self.made > self.limit:
             raise KeyboardInterrupt("killed")
@@ -121,14 +121,30 @@ def test_a_relaxation_cut_mid_way_resumes_from_its_trajectory(tmp_path, monkeypa
 
     monkeypatch.setitem(cv.CRYSTALS, "graphene", (bent,) + cv.CRYSTALS["graphene"][1:])
     with pytest.raises(KeyboardInterrupt):
-        cv.run_crystal("graphene", tmp_path, lambda: _DiesAfter(4), log=lambda text: None)
+        cv.run_crystal("graphene", tmp_path, lambda **kw: _DiesAfter(4), log=lambda text: None)
     folder = tmp_path / "graphene"
     assert not (folder / "relaxed.json").exists()
     first = read(folder / "relax.traj", index=":")
     assert len(first) >= 3 and abs(first[-1].positions[0, 2] - first[0].positions[0, 2]) > 0.01
-    cv.run_crystal("graphene", tmp_path, lambda: _DiesAfter(10 ** 6), log=lambda text: None)
+    cv.run_crystal("graphene", tmp_path, lambda **kw: _DiesAfter(10 ** 6), log=lambda text: None)
     relaxed = json.loads((folder / "relaxed.json").read_text())
     assert relaxed["converged"]
     assert relaxed["steps"] >= len(first) - 1
     z = np.array(relaxed["positions"])[:, 2]
     assert abs(z[0] - np.median(z)) < 0.1          # the bump (0.3 Å) is gone
+
+
+def test_a_strained_cell_keeps_the_grid_of_the_relaxed_one():
+    pytest.importorskip("gpaw")
+    atoms = cv._sheet()
+    squeezed = cv.strained(atoms, 0.98)
+    make = cv.gpaw_factory((1, 1, 1))
+    free = make()
+    free.initialize(squeezed)
+    fixed = make(grid_of=atoms)
+    fixed.initialize(squeezed)
+    reference = make()
+    reference.initialize(atoms)
+    assert list(fixed.wfs.gd.N_c) == list(reference.wfs.gd.N_c)
+    # Without it the grid jumps (44 -> 40 along this cell), which is the bug.
+    assert list(free.wfs.gd.N_c) != list(reference.wfs.gd.N_c)

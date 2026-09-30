@@ -50,7 +50,9 @@ from ase import Atoms
 
 SETTINGS = {"code": "GPAW", "mode": "lcao", "basis": "dzp", "xc": "PBE", "h": 0.2,
             "smearing_ev": 0.1, "spin": "spin-paired", "fmax": 0.05, "max_steps": 80,
-            "sigma": 0.05, "n_random": 3, "strains": [0.98, 1.02], "seed": 7}
+            "sigma": 0.05, "n_random": 3, "strains": [0.98, 1.02], "seed": 7,
+            "strain_grid": "gpts of the relaxed cell (h scales with the strain)",
+            "energy": "GPAW's extrapolated to kT = 0 (get_potential_energy)"}
 
 A_GRAPHENE = 2.46
 A_HBN = 2.50
@@ -162,12 +164,24 @@ MOLECULAR_BASELINE = {"xu_chn": "gpaw_chn.json", "xu_chno": "gpaw_chno.json",
 # --------------------------------------------------------------------------- GPAW stage
 
 def gpaw_factory(kpts) -> Callable:
-    def make():
+    """GPAW calculators; ``grid_of`` fixes the real-space grid to that structure's.
+
+    GPAW rounds the number of grid points to a multiple of four, so a 2 % strain
+    can change it (44 -> 40 points along graphene's 4x4 cell): with h near 0.2 Å
+    that is an energy step of about 1 eV. Strained cells therefore keep the grid
+    of the relaxed one, and h scales with the cell instead.
+    """
+    def make(grid_of: Atoms | None = None):
         from gpaw import GPAW, FermiDirac
 
-        return GPAW(mode=SETTINGS["mode"], basis=SETTINGS["basis"], xc=SETTINGS["xc"],
-                    h=SETTINGS["h"], kpts=tuple(kpts), symmetry="off",
-                    occupations=FermiDirac(SETTINGS["smearing_ev"]), txt=None)
+        common = {"mode": SETTINGS["mode"], "basis": SETTINGS["basis"], "xc": SETTINGS["xc"],
+                  "kpts": tuple(kpts), "symmetry": "off",
+                  "occupations": FermiDirac(SETTINGS["smearing_ev"]), "txt": None}
+        if grid_of is None:
+            return GPAW(h=SETTINGS["h"], **common)
+        probe = GPAW(h=SETTINGS["h"], **common)
+        probe.initialize(grid_of)
+        return GPAW(gpts=tuple(int(n) for n in probe.wfs.gd.N_c), **common)
     return make
 
 
@@ -271,7 +285,9 @@ def run_crystal(name: str, workdir: Path, make_calc: Callable | None = None,
         path = folder / f"{label}.json"
         if path.exists():
             continue
-        atoms.calc = make_calc()
+        # A strain keeps the relaxed cell's grid (see gpaw_factory).
+        atoms.calc = make_calc(grid_of=_atoms_of(relaxed)) if label.startswith("x") \
+            else make_calc()
         _write_atomic(path, _point(atoms, label))
         log(f"{name}: {label} listo")
     marker.write_text("ok\n", encoding="utf-8")
