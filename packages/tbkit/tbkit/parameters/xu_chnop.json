@@ -1393,28 +1393,34 @@
   }
  },
  "extra_polarizability": {
+  "P": {
+   "value": 2.64711,
+   "unit": "Å^3",
+   "source": "ajustada a tensores α de GPAW (PBE, FD, h = 0.18 Å); receta tbkit.recipes.xu_chn_alpha",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
+  },
   "O": {
    "value": 0.56697,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   },
   "H": {
    "value": 0.42865,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   },
   "C": {
    "value": 0.95312,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   },
   "N": {
    "value": 0.73688,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   }
  },
@@ -2600,5 +2606,128 @@
   "hessian_weight": 0.1,
   "hessians": "gpaw_p_hessians.json",
   "hessians_sha256": "e8e10e41b32367c719129d8be83170cc6184202a8e7518a20fde61d1e1e13228"
+ },
+ "alpha_fit": {
+  "references": "gpaw_p_alpha.json",
+  "references_sha256": "50cda1d807e80a29de00b36424d64011f4915727a63058eb56c1721926255ad5",
+  "fitted_elements": [
+   "P"
+  ],
+  "optimiser": "`ftol` termination condition is satisfied.",
+  "molecules": {
+   "PH3": {
+    "role": "train",
+    "gpaw": [
+     4.7608258437839694,
+     4.761275060130551,
+     5.076399096085476
+    ],
+    "tb": [
+     4.233525799014706,
+     4.757086515466511,
+     4.757891607696342
+    ],
+    "mean_error_percent": -5.8224891449288325
+   },
+   "CH3PH2": {
+    "role": "train",
+    "gpaw": [
+     6.273198300080336,
+     6.459873647200534,
+     7.754768052719132
+    ],
+    "tb": [
+     5.90715378780179,
+     6.426953584091928,
+     7.411165684773137
+    ],
+    "mean_error_percent": -3.624427676773845
+   },
+   "PMe3": {
+    "role": "train",
+    "gpaw": [
+     10.33689340883702,
+     11.463469480163976,
+     11.466057110999008
+    ],
+    "tb": [
+     9.060908280181984,
+     11.197522370363473,
+     11.20157757332627
+    ],
+    "mean_error_percent": -5.430135782955503
+   },
+   "OPMe3": {
+    "role": "train",
+    "gpaw": [
+     10.366216749817966,
+     10.913849280341775,
+     10.920173969840263
+    ],
+    "tb": [
+     11.092299192641212,
+     11.229058494291206,
+     11.232845477165814
+    ],
+    "mean_error_percent": 4.204823206591701
+   },
+   "H3PO4": {
+    "role": "train",
+    "gpaw": [
+     6.20556343606974,
+     6.32125289704809,
+     6.702163666882165
+    ],
+    "tb": [
+     7.018821172832173,
+     7.4140751849494135,
+     7.852631655219722
+    ],
+    "mean_error_percent": 15.895528587586583
+   },
+   "phosphinine": {
+    "role": "train",
+    "gpaw": [
+     8.399232644957227,
+     14.775790371277424,
+     16.615656983765344
+    ],
+    "tb": [
+     7.829592966882991,
+     15.268514656719573,
+     16.410837244836948
+    ],
+    "mean_error_percent": -0.7080430180145036
+   },
+   "MePO3H2": {
+    "role": "test",
+    "gpaw": [
+     7.378628350401779,
+     7.880018543432015,
+     8.302763106166203
+    ],
+    "tb": [
+     8.31301817775888,
+     8.377787163221448,
+     9.38248985816551
+    ],
+    "mean_error_percent": 10.66101391701868
+   },
+   "PhPH2": {
+    "role": "test",
+    "gpaw": [
+     10.08622485722035,
+     16.02274284802659,
+     20.695322294753066
+    ],
+    "tb": [
+     9.753631202233585,
+     15.921749111324674,
+     20.171071517518996
+    ],
+    "mean_error_percent": -2.0464751605520526
+   }
+  },
+  "checks": {}
  }
 }
