@@ -18,22 +18,15 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
   AL; éster 1220 -> 86 cm⁻¹), `xu_chnose` (nuevo). Límite declarado: X-OH de ácidos
   fosfónicos/seleníninicos/borónicos arílicos gira al relajar.
 
-## En curso: ¿valen los conjuntos (ajustados en moléculas) en cristales?
-- Receta `recipes/crystal_validation.py`: 13 cristales (grafeno puro y con N grafítico,
-  N3V piridínico, B, S, P, Se, epóxido, OH; grafano; h-BN; CNT (8,0) con N; diamante con N),
-  cada uno con el conjunto mínimo que cubre sus elementos. GPAW (PBE, LCAO dzp, h 0.2,
-  kT 0.1 eV, misma malla k que TB): relajación + 3 distorsiones σ 0.05 Å + deformación ±2 %.
-  Métricas: RMS de error de fuerzas / RMS de fuerzas DFT, ΔE, relajación TB desde el mínimo
-  GPAW (desplazamientos, enlaces y altura del dopante) y cociente frente al error del mismo
-  conjunto en sus distorsiones moleculares (= tamaño de la extrapolación).
-- Checkpoints: cada punto es un archivo en `out/crystals/<cristal>/` (git lo ignora); la
-  relajación guarda trayectoria y hessiana BFGS en cada paso. `recipes/run_crystals.sh`
-  relanza cada cristal hasta su marca `done`; tras un reinicio del contenedor basta relanzarlo.
-- GPAW 26.7 en un venv aparte (sin MPI: `apt install libxc-dev libopenblas-dev g++`,
-  `CC=g++ uv pip install gpaw`); reproduce una referencia molecular de 25.7 a 0,04 eV,
-  por eso las referencias cristalinas se generan todas con la misma versión.
-- Al terminar: `collect` -> `parameters/references/gpaw_crystals.json`, `compare` ->
-  `validation/crystals_tb_vs_gpaw.json`; declarar el resultado en `validity` de cada conjunto.
+## Hecho: los conjuntos en cristales frente a GPAW (paso 5, validación)
+- 13 cristales (`recipes/crystal_validation.py`, `validation/crystals_tb_vs_gpaw.json`,
+  referencias `parameters/references/gpaw_crystals.json`, GPAW 26.7): la extrapolación
+  aguanta; fuerzas 0,3-1,4 veces el error molecular del mismo conjunto, enlaces dentro de
+  lo que cada `validity` ya declaraba. Nuevo: altura de S/P/Se sobre la hoja (0,06-0,12 Å),
+  red 0,5-1 % corta (h-BN +1,1 %). Cada `validity` lo dice (`crystal_notes` en la receta).
+- De paso: el C-O simple de alcoholes sale 0,06-0,08 Å corto en moléculas (en validity).
+- GPAW sin MPI en un venv aparte: `apt install libxc-dev libopenblas-dev g++`,
+  `CC=g++ uv pip install gpaw`. Checkpoints en `out/crystals/` (git lo ignora).
 
 ## Siguiente
 1. (hecho) B/P/Se instalados. Antes: relajar B(OMe)3 y PO(OMe)3 (sin colapso), RMS de frecuencias;
@@ -42,7 +35,7 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
 3. (hecho) Polarizabilidad extra: B 0.873, S 2.642, P 2.647, Se 3.496 Å³ (GPAW FD).
 4. Términos angulares generales + factores de escala (Witek 2004).
 5. (hecho) SCC periódico con Ewald (`ewald.py`): Madelung, caja grande = finito, fuerzas FD.
-   Falta: α de respuesta lineal SCC periódica; validar grafeno/CNT dopados (en curso, arriba).
+   Hecho también: validación en 13 cristales (arriba). Falta: α de respuesta lineal SCC periódica.
 6. TB dependiente del entorno (Tang 1996).
 7. ML: Δ-learning de repulsión (Stöhr 2020), fonones híbridos MACE con α/μ de TB,
    DeePTB; GFN2-xTB como motor de comparación opcional.

@@ -18,7 +18,7 @@
   "seed": 7,
   "strain_grid": "gpts of the relaxed cell (h scales with the strain)",
   "energy": "GPAW's extrapolated to kT = 0 (get_potential_energy)",
-  "gpaw_version": null,
+  "gpaw_version": "26.7.0",
   "ase_version": "3.29.0",
   "boundary": "periodic along pbc, zero elsewhere"
  },

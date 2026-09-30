@@ -79,8 +79,17 @@ tbkit/
   Checks: NaCl Madelung constant, a molecule in a large box equals the finite
   result, forces against finite differences (h-BN). Summing the r⁻³ tail in
   real space oscillated by 10⁻² eV: do not go back to it. Vacuum directions
-  are a supercell; the fitted sets were trained on molecules, so periodic
-  results inherit that validity. SCC linear-response α stays finite-only.
+  are a supercell. SCC linear-response α stays finite-only.
+- The sets were fitted on molecules; crystals are an extrapolation, measured in
+  `recipes/crystal_validation.py` (13 crystals, GPAW with the model's k mesh
+  and smearing; `validation/crystals_tb_vs_gpaw.json`) and stated in each set's
+  `validity` through the recipe's `crystal_notes` (a test compares file and
+  recipe: edit the recipe, never the JSON by hand). Scale errors by the set's
+  own molecular error measured the same way, not by a pooled RMS. Strained
+  GPAW cells keep the relaxed cell's grid (`gpaw_factory(grid_of=...)`):
+  GPAW rounds gpts to multiples of 4 and a 2 % strain changed them (~1 eV).
+  The GPAW stage is resumable (one file per point, BFGS trajectory and
+  Hessian); relaunch `run_crystals.sh` after a restart, never start over.
 - `TBModel.scc` says which ground state the parameters were made for: True
   for `.skf` sets, `xu_chn` and `xu_chno`, False for Xu and π. Calculators, tasks and
   the linear-response α follow it unless told otherwise; a set fitted with

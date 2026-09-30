@@ -166,3 +166,19 @@ def test_validity_of_each_set_is_what_its_recipe_writes(name, module, family):
     data = read_parameter_file(name)
     assert data["validity"] == validity_text(fam, data["fit"]["bond_ranges"])
     assert fam.crystal_notes, f"{name}: sin resultado en cristales"
+
+
+def test_the_recorded_crystal_comparison_is_what_the_model_gives():
+    """validation/crystals_tb_vs_gpaw.json against a fresh run on one crystal."""
+    from pathlib import Path
+
+    root = Path(cv.__file__).resolve().parents[2]
+    recorded = json.loads((root / "validation" / "crystals_tb_vs_gpaw.json").read_text())
+    refs, settings = load_references(
+        root / "tbkit" / "parameters" / "references" / "gpaw_crystals.json")
+    assert settings["gpaw_version"] and len({r.group for r in refs}) == len(cv.CRYSTALS)
+    old = next(c for c in recorded["crystals"] if c["crystal"] == "graphene_N")
+    new = cv.compare_crystal("graphene_N", [r for r in refs if r.group == "graphene_N"],
+                             relax=False)
+    assert new["force_rmse"] == pytest.approx(old["force_rmse"], rel=1e-6)
+    assert new["energy_mae"] == pytest.approx(old["energy_mae"], rel=1e-6)
