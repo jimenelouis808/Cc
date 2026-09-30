@@ -13,22 +13,20 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
 - Familia Se definida en `recipes/xu_bsp.py` (U, d, pares); moléculas en
   `recipes/bsp_references.py`.
 
-## En curso (si el contenedor se reinició, relanzar: retoman de sus checkpoints)
-Reajustes con `CentredAngleTerm` (angular en B, P, Se) + active learning + torsiones:
+## En curso
+- Instalados (51240a2): `xu_chnop` (2 rondas AL, éster corregido) y `xu_chnose`.
+- Reajuste de B sin término angular, con AL + torsiones (si se reinició, relanzar):
 ```bash
 cd packages/tbkit; export OMP_NUM_THREADS=1; R=tbkit/parameters/references
-uv run python -m tbkit.recipes.xu_bsp Se $R/gpaw_se.json $R/gpaw_se_al.json $R/gpaw_se_torsion.json /tmp/claude-0/fit/xu_chnose3.json --hessians $R/gpaw_se_hessians.json
-uv run python -m tbkit.recipes.xu_bsp P $R/gpaw_p.json $R/gpaw_p_al.json $R/gpaw_p_al2.json $R/gpaw_p_torsion.json /tmp/claude-0/fit/xu_chnop3.json --hessians $R/gpaw_p_hessians.json
-uv run python -m tbkit.recipes.xu_bsp B $R/gpaw_b.json $R/gpaw_b_al.json $R/gpaw_b_torsion.json /tmp/claude-0/fit/xu_chnob3.json --hessians $R/gpaw_b_hessians.json
+uv run python -m tbkit.recipes.xu_bsp B $R/gpaw_b.json $R/gpaw_b_al.json $R/gpaw_b_torsion.json /tmp/claude-0/fit/xu_chnob4.json --workers 4 --hessians $R/gpaw_b_hessians.json
 ```
-Criterio: `wandering` sin espurios (CH3SeO2H, MePO3H2, H3PO4, B(OMe)3), enlaces y
-frecuencias no peores que antes; entonces instalar en `parameters/`.
+Criterio: B(OMe)3 sin colapso (RMS < 150 cm⁻¹), resto no peor; instalar con nota de
+validez (B-OH como P-OH si gira) y quitar la nota de ésteres.
 
 ## Siguiente
-1. Comprobar B/P/Se tras los reajustes de arriba: relajar B(OMe)3 y PO(OMe)3 (sin colapso), RMS de frecuencias;
+1. Comprobar B tras el reajuste de arriba: relajar B(OMe)3 y PO(OMe)3 (sin colapso), RMS de frecuencias;
    instalar, quitar la nota de ésteres de `validity_notes`, tests.
-2. Se: copiar `gpaw_se.json` a references, hessianas (`frequency_references`),
-   ajuste `xu_chnose`, active learning, instalar; `chnose` en CLI y GUI; tests; README.
+2. (hecho) Se instalado; falta sección de Se en README.
 3. Polarizabilidad extra de B, S, P, Se (`chn_polarizability`, conjuntos b/s/p + Se).
 4. Términos angulares generales + factores de escala (Witek 2004).
 5. SCC periódico con Ewald (Elstner 1998).
