@@ -832,6 +832,21 @@ def refine(
     else:
         unpack(outcome.x)
         correlations = _estimate_errors(outcome, free, observed.size)
+        if not outcome.success and best["values"] is not None:
+            # Out of budget, not converged. The same argument the
+            # cancellation branch above makes applies unchanged: where the
+            # solver STOPPED is not where it did best, and handing back
+            # the stopping point makes running out of evaluations worse
+            # than useless. Measured on a five-phase pattern with one
+            # texture parameter free: the fit spent its entire budget of
+            # 54 400 evaluations and came back at Rwp 6.222 %, worse than
+            # the same model fitted without that parameter at all.
+            final = math.sqrt(
+                float(np.sum(weights * (observed - model()) ** 2))
+                / max(float(np.sum(weights * observed ** 2)), 1e-30)
+            )
+            if best["rwp"] < final:
+                unpack(best["values"])
 
     background, zero, displacement = _apply(parameters, models)
     calculated = model()
@@ -1526,6 +1541,21 @@ TEXTURE_MIN_GAIN = 0.02
 #: the ranking is reported either way.
 TEXTURE_AXIS_MARGIN = 0.01
 
+#: Evaluations per free parameter each arm of the axis search is given.
+#:
+#: The arms are a SCREENING fit — what is being compared is which axis
+#: describes the pattern better, not what any one of them refines to —
+#: and the package default of 200 is for a final refinement. Measured on
+#: a five-phase pattern: the untextured arm converged in 288 evaluations
+#: (24 per free parameter), while the same arm with one texture
+#: parameter added ran its whole 54 400-evaluation budget without
+#: converging and came back WORSE than the fit without it. Forty per
+#: parameter is nearly twice what the untextured arm needed and turns
+#: six minutes per arm into seconds; the best point reached is what gets
+#: reported either way, so an arm that runs out is compared at its best
+#: and not wherever it stopped.
+TEXTURE_ARM_ITERATIONS = 40
+
 
 @dataclass
 class TextureChoice:
@@ -1669,6 +1699,7 @@ def choose_texture_axes(
                 pattern, trial, parameters=settings,
                 background_order=background_order,
                 instrument_fwhm=instrument_fwhm,
+                max_iterations=TEXTURE_ARM_ITERATIONS,
                 should_stop=should_stop,
             )
             return outcome.r_wp, trial[index].preferred_r
@@ -1721,6 +1752,7 @@ def choose_texture_axes(
 __all__ = [
     "BACKGROUND_DOMINATES",
     "BackgroundSensitivity",
+    "TEXTURE_ARM_ITERATIONS",
     "TEXTURE_AXIS_MARGIN",
     "TEXTURE_MIN_GAIN",
     "TextureChoice",
