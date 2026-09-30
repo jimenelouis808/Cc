@@ -1393,28 +1393,34 @@
   }
  },
  "extra_polarizability": {
+  "Se": {
+   "value": 3.49626,
+   "unit": "Å^3",
+   "source": "ajustada a tensores α de GPAW (PBE, FD, h = 0.18 Å); receta tbkit.recipes.xu_chn_alpha",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
+  },
   "O": {
    "value": 0.56697,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   },
   "H": {
    "value": 0.42865,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   },
   "C": {
    "value": 0.95312,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   },
   "N": {
    "value": 0.73688,
    "unit": "Å^3",
-   "source": "de xu_chno (no reajustada)",
+   "source": "de xu_chno.json (no reajustada)",
    "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
   }
  },
@@ -2483,5 +2489,156 @@
   "hessian_weight": 0.1,
   "hessians": "gpaw_se_hessians.json",
   "hessians_sha256": "832ca5af0c85a9976442b918a8959d3a90627d790851475835554268f095e0fc"
+ },
+ "alpha_fit": {
+  "references": "gpaw_se_alpha.json",
+  "references_sha256": "fb6305e9709f8ff9a6fcd3bdca3d976600609f255a5ec91b3c8b8cac3e0d2be7",
+  "fitted_elements": [
+   "Se"
+  ],
+  "optimiser": "`ftol` termination condition is satisfied.",
+  "molecules": {
+   "H2Se": {
+    "role": "train",
+    "gpaw": [
+     4.898239608165594,
+     4.929120391834407,
+     5.16545
+    ],
+    "tb": [
+     3.9778854081339268,
+     4.906186263298206,
+     5.207877257246478
+    ],
+    "mean_error_percent": -6.008620607620507
+   },
+   "CH3SeH": {
+    "role": "train",
+    "gpaw": [
+     6.393061220554004,
+     6.518694634873142,
+     8.121264144572857
+    ],
+    "tb": [
+     5.724163104350288,
+     6.6334624532275175,
+     8.18046814862647
+    ],
+    "mean_error_percent": -2.353091918306205
+   },
+   "CH3SeCH3": {
+    "role": "train",
+    "gpaw": [
+     7.84934578541899,
+     9.053876635057113,
+     10.363147579523904
+    ],
+    "tb": [
+     7.355608363751846,
+     8.855530472255836,
+     10.671926034923487
+    ],
+    "mean_error_percent": -1.4057798271967625
+   },
+   "CH3SeSeCH3": {
+    "role": "train",
+    "gpaw": [
+     11.849998608629868,
+     12.485033170751187,
+     17.47095822061895
+    ],
+    "tb": [
+     11.310355961217688,
+     12.123077644220151,
+     18.33144785430171
+    ],
+    "mean_error_percent": -0.09833169902317973
+   },
+   "selenophene": {
+    "role": "train",
+    "gpaw": [
+     7.708386552094453,
+     12.196701030961023,
+     13.894102416944525
+    ],
+    "tb": [
+     7.24192848828643,
+     12.62245033489248,
+     13.53016288522642
+    ],
+    "mean_error_percent": -1.1972129852658497
+   },
+   "CSe2": {
+    "role": "train",
+    "gpaw": [
+     7.353034742408081,
+     7.37764,
+     19.39543525759192
+    ],
+    "tb": [
+     7.4872674746341525,
+     7.487510422364042,
+     18.63253326130846
+    ],
+    "mean_error_percent": -1.5202401964166223
+   },
+   "DMSeO": {
+    "role": "train",
+    "gpaw": [
+     8.30094352034832,
+     10.695344259611886,
+     10.823202220039795
+    ],
+    "tb": [
+     8.22609726528438,
+     10.926271059403376,
+     11.070192870271942
+    ],
+    "mean_error_percent": 1.351703851942787
+   },
+   "SeO2": {
+    "role": "train",
+    "gpaw": [
+     3.72236,
+     4.737842614045002,
+     7.090477385954998
+    ],
+    "tb": [
+     4.788711802024904,
+     4.960840788196291,
+     7.660909110347089
+    ],
+    "mean_error_percent": 11.959487948876092
+   },
+   "CH3CH2SeH": {
+    "role": "test",
+    "gpaw": [
+     7.985499874280443,
+     8.507463475733848,
+     10.939306649985712
+    ],
+    "tb": [
+     7.581954372756753,
+     8.385416689343696,
+     10.394980328212757
+    ],
+    "mean_error_percent": -3.9002190109925006
+   },
+   "PhSeH": {
+    "role": "test",
+    "gpaw": [
+     10.245932009086738,
+     16.040275784927907,
+     21.12510220598535
+    ],
+    "tb": [
+     10.020455946975268,
+     15.738970669851867,
+     21.194333210206455
+    ],
+    "mean_error_percent": -0.9650654516114354
+   }
+  },
+  "checks": {}
  }
 }

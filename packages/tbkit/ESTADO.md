@@ -22,7 +22,7 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
 1. (hecho) B/P/Se instalados. Antes: relajar B(OMe)3 y PO(OMe)3 (sin colapso), RMS de frecuencias;
    instalar, quitar la nota de ésteres de `validity_notes`, tests.
 2. (hecho) Se instalado; falta sección de Se en README.
-3. Polarizabilidad extra de B, S, P, Se (`chn_polarizability`, conjuntos b/s/p + Se).
+3. (hecho) Polarizabilidad extra: B 0.873, S 2.642, P 2.647, Se 3.496 Å³ (GPAW FD).
 4. Términos angulares generales + factores de escala (Witek 2004).
 5. SCC periódico con Ewald (Elstner 1998).
 6. TB dependiente del entorno (Tang 1996).
