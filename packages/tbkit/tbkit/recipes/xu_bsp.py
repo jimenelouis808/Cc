@@ -45,6 +45,19 @@ def _pairs(element: str, r0: dict, margin: float = 0.55, long_rc: dict | None = 
     return pairs
 
 
+def _angular(element: str, r0: dict, powers: int = 4) -> dict:
+    """Angle stiffness at ``element`` (:class:`tbkit.repulsive.CentredAngleTerm`):
+    bonded neighbours only, switched off between r0 + 0.15 and r0 + 0.40 Å (short
+    of any second neighbour)."""
+    return {"centre": element, "powers": powers,
+            "bonds": {other: (round(d + 0.15, 2), round(d + 0.40, 2)) for other, d in r0.items()}}
+
+
+R0 = {"B": {"H": 1.19, "C": 1.57, "N": 1.44, "O": 1.37, "B": 1.70},
+      "S": {"H": 1.34, "C": 1.82, "N": 1.65, "O": 1.45, "S": 2.05},
+      "P": {"H": 1.42, "C": 1.85, "N": 1.70, "O": 1.60, "P": 2.22},
+      "Se": {"H": 1.47, "C": 1.95, "N": 1.85, "O": 1.65, "Se": 2.33}}
+
 FAMILIES = {
     "B": XuFamily(
         name="C/H/N/O/B: xu_chno + B ajustado a GPAW",
@@ -52,9 +65,11 @@ FAMILIES = {
         heteroatoms=("B",),
         # B-H repulsion out to 2.4 Å: methyl H atoms of B(OCH3)3 collapsed onto the
         # O atoms, 2.1 Å from B, with nothing repulsive there (active learning data)
-        pairs=_pairs("B", {"H": 1.19, "C": 1.57, "N": 1.44, "O": 1.37, "B": 1.70},
+        pairs=_pairs("B", R0["B"],
                      long_rc={"H": 2.4}),
         hubbard_u={"B": HUBBARD_U["B"]},
+        # angles at hypervalent B too soft without d orbitals (acids turned their OH)
+        angular=_angular("B", R0["B"]),
         onsite_dipole={"B": ONSITE_DIPOLE["B"]},
         validity_notes=("B junto con S o P en la misma estructura no está cubierto"
                         "; ésteres alquílicos (B(OCH3)n) no válidos: los H de metilo colapsan sobre el O vecino (atracción de cargas SCC sin repulsión O···H a 1,6-2,4 Å, un defecto de la base xu_chno pendiente de corregir con más datos)"),
@@ -66,7 +81,7 @@ FAMILIES = {
         name="C/H/N/O/S: xu_chno + S ajustado a GPAW",
         recipe="tbkit.recipes.xu_bsp",
         heteroatoms=("S",),
-        pairs=_pairs("S", {"H": 1.34, "C": 1.82, "N": 1.65, "O": 1.45, "S": 2.05}),
+        pairs=_pairs("S", R0["S"]),
         hubbard_u={"S": HUBBARD_U["S"]},
         onsite_dipole={"S": ONSITE_DIPOLE["S"]},
         validity_notes=("S junto con B o P en la misma estructura no está cubierto; los C-S "
@@ -81,9 +96,11 @@ FAMILIES = {
         recipe="tbkit.recipes.xu_bsp",
         heteroatoms=("P",),
         # P-H repulsion out to 2.4 Å, for the same collapse in PO(OCH3)3
-        pairs=_pairs("P", {"H": 1.42, "C": 1.85, "N": 1.70, "O": 1.60, "P": 2.22},
+        pairs=_pairs("P", R0["P"],
                      long_rc={"H": 2.4}),
         hubbard_u={"P": HUBBARD_U["P"]},
+        # angles at hypervalent P too soft without d orbitals (acids turned their OH)
+        angular=_angular("P", R0["P"]),
         onsite_dipole={"P": ONSITE_DIPOLE["P"]},
         validity_notes=("P junto con B o S en la misma estructura no está cubierto; el C-P de "
                         "P(V) (ácidos fosfónicos, óxidos de fosfina) sale 0.07-0.14 Å largo, el "
@@ -98,8 +115,10 @@ FAMILIES = {
         name="C/H/N/O/Se: xu_chno + Se ajustado a GPAW",
         recipe="tbkit.recipes.xu_bsp",
         heteroatoms=("Se",),
-        pairs=_pairs("Se", {"H": 1.47, "C": 1.95, "N": 1.85, "O": 1.65, "Se": 2.33}),
+        pairs=_pairs("Se", R0["Se"]),
         hubbard_u={"Se": HUBBARD_U["Se"]},
+        # angles at hypervalent Se too soft without d orbitals (acids turned their OH)
+        angular=_angular("Se", R0["Se"]),
         onsite_dipole={"Se": ONSITE_DIPOLE["Se"]},
         validity_notes="Se junto con B, S o P en la misma estructura no está cubierto",
         system=("xu_chno más selenio: selenoles, selenuros, diselenuros, selenofeno, "

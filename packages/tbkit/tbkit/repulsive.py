@@ -211,6 +211,10 @@ def repulsive_from_dict(data: dict):
         return AcuteAngleTerm(tuple(float(c) for c in data["coefficients"]),
                               float(data.get("theta0_degrees", 80.0)), float(data.get("r1", 1.7)),
                               float(data.get("rm", 2.0)), tuple(data.get("elements", ("C", "N", "O"))))
+    if kind == "centred_angle":
+        return CentredAngleTerm(tuple(float(c) for c in data["coefficients"]), data["centre"],
+                                {k: (float(v[0]), float(v[1])) for k, v in data["bonds"].items()},
+                                float(data.get("cos0", -1 / 3)))
     if kind == "embedded":
         phi = law_from_dict(data["phi"])
         if data.get("tail"):
@@ -312,3 +316,80 @@ class AcuteAngleTerm:
         return {"type": "acute_angle", "coefficients": list(self.coefficients),
                 "theta0_degrees": self.theta0_degrees, "r1": self.r1, "rm": self.rm,
                 "elements": list(self.elements)}
+
+
+@dataclass
+class CentredAngleTerm:
+    """Bond-angle stiffness at the atoms of one element (``centre``).
+
+    ``E = Σ_{j-X-k} s(θ_jXk) f_j(r_Xj) f_k(r_Xk)`` over pairs of bonds of every
+    ``centre`` atom X, with ``s(θ) = Σ_n c_n (cos θ - cos0)^n`` (n = 1..N; cos0
+    tetrahedral by default) and ``f`` 1 below ``bonds[element][0]`` and a cubic
+    to zero (value and slope) at ``bonds[element][1]``: only bonded neighbours
+    count, never second neighbours.
+
+    It exists because a minimal sp basis has no d orbitals: at hypervalent
+    centres (Se(IV), P(V)) it leaves the angles too soft, and seleninic and
+    phosphonic acids closed O-X-O by 15° and turned the hydroxyl onto the other
+    O, a geometry GPAW puts 0.3 eV higher (the problem DFTB's 3ob set has with
+    hypervalent P and S). Linear in its coefficients, which are fitted with the
+    pair repulsion; zero in any structure without the centre element, so the
+    set it is added to is unchanged there. The polynomial is only determined
+    over the angles of the training data.
+    """
+
+    coefficients: tuple[float, ...]
+    centre: str
+    bonds: dict                               # neighbour element -> (r1, rm), Å
+    cos0: float = -1 / 3
+
+    def cutoff(self) -> float:
+        return max(rm for _, rm in self.bonds.values())
+
+    @staticmethod
+    def _f(r, r1, rm):
+        x = min(max((r - r1) / (rm - r1), 0.0), 1.0)
+        return 1 - 3 * x ** 2 + 2 * x ** 3, (-6 * x + 6 * x ** 2) / (rm - r1)
+
+    def basis(self, atoms: Atoms) -> tuple[np.ndarray, np.ndarray]:
+        """Energy (n,) and forces (n, N, 3) of each power with unit coefficient."""
+        n_terms = len(self.coefficients)
+        energies = np.zeros(n_terms)
+        forces = np.zeros((n_terms, len(atoms), 3))
+        symbols = atoms.get_chemical_symbols()
+        if self.centre not in symbols:
+            return energies, forces
+        ii, jj, dd, vv = neighbor_list("ijdD", atoms, self.cutoff())
+        for centre in {i for i, s in enumerate(symbols) if s == self.centre}:
+            mine = []
+            for a in np.flatnonzero(ii == centre):
+                window = self.bonds.get(symbols[jj[a]])
+                if window is not None and dd[a] < window[1]:
+                    mine.append((a, *self._f(dd[a], *window)))
+            for index, (a, fa, dfa) in enumerate(mine):
+                for b, fb, dfb in mine[index + 1:]:
+                    ra, rb, da, db = vv[a], vv[b], dd[a], dd[b]
+                    cos = float(ra @ rb / (da * db))
+                    dcos_a = rb / (da * db) - cos * ra / da ** 2
+                    dcos_b = ra / (da * db) - cos * rb / db ** 2
+                    u = cos - self.cos0
+                    for n in range(n_terms):
+                        p = n + 1
+                        s, ds = u ** p, p * u ** (p - 1)
+                        energies[n] += s * fa * fb
+                        grad_a = ds * dcos_a * fa * fb + s * dfa * fb * ra / da
+                        grad_b = ds * dcos_b * fa * fb + s * fa * dfb * rb / db
+                        forces[n, jj[a]] -= grad_a
+                        forces[n, jj[b]] -= grad_b
+                        forces[n, centre] += grad_a + grad_b
+        return energies, forces
+
+    def energy_and_forces(self, atoms: Atoms) -> tuple[float, np.ndarray]:
+        energies, forces = self.basis(atoms)
+        c = np.asarray(self.coefficients, dtype=float)
+        return float(c @ energies), np.einsum("n,nax->ax", c, forces)
+
+    def to_dict(self) -> dict:
+        return {"type": "centred_angle", "coefficients": list(self.coefficients),
+                "centre": self.centre, "bonds": {k: list(v) for k, v in self.bonds.items()},
+                "cos0": self.cos0}
