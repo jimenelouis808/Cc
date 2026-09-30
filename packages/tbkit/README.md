@@ -249,6 +249,7 @@ ciclopropano, oxirano y aziridina) el ajuste dejaba los anillos sin barrera
 | biciclobutano (fuera del ajuste) | se abre |
 | α extra del O | 0,564 Å³ (`xu_chn_alpha --fit O`, H, C, N de `xu_chn`) |
 | α media, entrenamiento / prueba (vs GPAW FD) | −9 a +10 % / −3 a +3 % |
+| frecuencias frente a GPAW (hessianas en el ajuste) | RMS 38-180 cm⁻¹, media 126 (antes 189; metanol 491 → 120) |
 
 Receta completa:
 
@@ -282,6 +283,13 @@ Referencias (`bsp_references`, geometrías de partida de RDKit guardadas en
 | B | BH₃, BMe₃, B(OH)₃, B(OMe)₃, MeB(OH)₂, H₃B·NH₃, borazina, vinilborano, B₂(OH)₄ | PhB(OH)₂, BEt₃, par B-N en el anillo central del coroneno | 0,54 eV / 0,38 eV/Å / 0,11 eV | ≤ 0,05 Å; B-N en coroneno 0,037 Å |
 | S | H₂S, CH₃SH, Me₂S, Me₂S₂, tiofeno, H₂CS, CS₂, OCS, DMSO, Me₂SO₂, SO₂, CH₃SO₃H, CH₃SO₂NH₂ | EtSH, PhSH, PhSO₃H, tiol en el borde del coroneno | 0,67 eV / 0,43 eV/Å / 0,11 eV | S=O, S-S, S-H, S-N y C-S aromático < 0,04 Å; C(sp³)-S simple 0,06-0,09 Å |
 | P | PH₃, CH₃PH₂, PMe₃, OPMe₃, H₃PO₄, MePO₃H₂, PO(OMe)₃, fosfinina, P₂H₄, H₂PNH₂ | PhPH₂, PEt₃, ácido fosfónico en el borde del coroneno | 0,73 eV / 0,46 eV/Å / 0,12 eV | P-O, P=O, P-P, P-N, P-H y C-P aromático < 0,025 Å; C-P de P(III) 0,03-0,05 Å, de P(V) 0,07-0,14 Å (0,10 en el coroneno) |
+
+Frecuencias frente a GPAW (hessianas de GPAW en el ajuste, colas de los pares
+con H antes de los segundos vecinos): RMS por molécula B 61-141, S 54-142,
+P 46-149 cm⁻¹. **Ésteres alquílicos de borato y fosfato (B/P–O–CH₃) no son
+válidos**: los H de metilo colapsan sobre el O vecino (atracción de las cargas
+SCC sin repulsión O···H a 1,6-2,4 Å; defecto de la base `xu_chno`, pendiente de
+corregir añadiendo esas geometrías a los datos).
 
 ```bash
 python -m tbkit.recipes.bsp_references S gpaw_s.json

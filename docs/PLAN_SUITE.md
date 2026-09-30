@@ -248,6 +248,15 @@ Pendiente de la fase E:
       corrección de ángulos agudos y barridos de apertura; α ±10 % frente a GPAW).
 - [x] B, S, P: `xu_chnob`, `xu_chnos`, `xu_chnop`, cada uno `xu_chno` fijo más un
       elemento (fuerzas 0,38 / 0,43 / 0,46 eV/Å). Falta su α extra.
+- [x] Frecuencias en el ajuste (adelantado): hessianas de GPAW en el ajuste
+      conjunto; colas de los pares con H antes de los segundos vecinos (el O–H
+      de los alcoholes salía a 4950 cm⁻¹). xu_chno media 126 cm⁻¹ (antes 189);
+      B/S/P 46-149 cm⁻¹. Checkpoints en el ajuste (reinicios del contenedor).
+- [ ] Ésteres B/P–O–CH₃ colapsan (H de metilo sobre el O vecino): añadir esas
+      geometrías calculadas con GPAW a los datos de xu_chno (aprendizaje activo)
+      y reajustar la familia.
+- [ ] Términos angulares generales (flexiones blandas) y factores de escala por
+      grupo; Ewald para SCC periódico (grafeno/CNT dopados periódicos).
 - [ ] α extra de B, S, P (GPAW FD, `chn_polarizability --set b|s|p`).
 - [ ] Validación en sistemas reales (copos y tubos dopados) antes de meter las
       frecuencias en el objetivo (orden acordado el 29-09-2026).
