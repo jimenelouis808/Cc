@@ -61,8 +61,7 @@ FAMILIES = {
                      long_rc={"H": 2.4}),
         hubbard_u={"B": HUBBARD_U["B"]},
         onsite_dipole={"B": ONSITE_DIPOLE["B"]},
-        validity_notes=("B junto con S o P en la misma estructura no está cubierto"
-                        "; ésteres alquílicos (B(OCH3)n) no válidos: los H de metilo colapsan sobre el O vecino (atracción de cargas SCC sin repulsión O···H a 1,6-2,4 Å, un defecto de la base xu_chno pendiente de corregir con más datos)"),
+        validity_notes=('B junto con S o P en la misma estructura no está cubierto; enlaces de B a menos de 0.03 Å de GPAW; ésteres B(OCH3)n corregidos con active learning (antes colapsaban; RMS 949 -> 95 cm⁻¹), aunque al relajar giran sus metilos (desplazamiento ~1 Å, sin colapso); ácidos borónicos arílicos (PhB(OH)2): el OH gira al relajar (0,6 Å), úsense sus frecuencias O-H con cautela'),
         system=("xu_chno más boro: boranos, ésteres y ácidos bóricos y borónicos, "
                 "amino-borano, borazina, B-N en grafeno"),
         h_tail=(0.40, 0.60),

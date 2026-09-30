@@ -13,18 +13,13 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
 - Familia Se definida en `recipes/xu_bsp.py` (U, d, pares); moléculas en
   `recipes/bsp_references.py`.
 
-## En curso
-- Instalados (51240a2): `xu_chnop` (2 rondas AL, éster corregido) y `xu_chnose`.
-- Reajuste de B sin término angular, con AL + torsiones (si se reinició, relanzar):
-```bash
-cd packages/tbkit; export OMP_NUM_THREADS=1; R=tbkit/parameters/references
-uv run python -m tbkit.recipes.xu_bsp B $R/gpaw_b.json $R/gpaw_b_al.json $R/gpaw_b_torsion.json /tmp/claude-0/fit/xu_chnob4.json --workers 4 --hessians $R/gpaw_b_hessians.json
-```
-Criterio: B(OMe)3 sin colapso (RMS < 150 cm⁻¹), resto no peor; instalar con nota de
-validez (B-OH como P-OH si gira) y quitar la nota de ésteres.
+## Hecho en esta etapa
+- Instalados: `xu_chnob` (AL + torsiones; éster 949 -> 95 cm⁻¹), `xu_chnop` (2 rondas
+  AL; éster 1220 -> 86 cm⁻¹), `xu_chnose` (nuevo). Límite declarado: X-OH de ácidos
+  fosfónicos/seleníninicos/borónicos arílicos gira al relajar.
 
 ## Siguiente
-1. Comprobar B tras el reajuste de arriba: relajar B(OMe)3 y PO(OMe)3 (sin colapso), RMS de frecuencias;
+1. (hecho) B/P/Se instalados. Antes: relajar B(OMe)3 y PO(OMe)3 (sin colapso), RMS de frecuencias;
    instalar, quitar la nota de ésteres de `validity_notes`, tests.
 2. (hecho) Se instalado; falta sección de Se en README.
 3. Polarizabilidad extra de B, S, P, Se (`chn_polarizability`, conjuntos b/s/p + Se).
