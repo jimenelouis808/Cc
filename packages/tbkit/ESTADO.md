@@ -38,3 +38,14 @@ uv run python -m tbkit.recipes.xu_bsp P $R/gpaw_p.json $R/gpaw_p_al.json /tmp/cl
    DeePTB; GFN2-xTB como motor de comparación opcional.
 8. Validación en sistemas reales; anomalía de Kohn (Piscanec 2004).
 9. Al final: documentación de métodos/validación y guía de usuario.
+
+## Diagnóstico abierto: H de OH que migra al O vecino (B, P, Se)
+- Se ajustado (`/tmp/claude-0/fit/xu_chnose2.json`): enlaces < 0,08 Å, frecuencias
+  64-124 cm⁻¹; único espurio CH3SeO2H: el H del OH forma puente con el O de Se=O
+  (GPAW +0,32 eV, TB −0,31 eV). Mismo patrón en MePO3H2 y H3PO4.
+- No lo arregla ni pesar ×30 las energías de active learning (destroza fuerzas)
+  ni la repulsión Se-H larga (probado con la resolución lineal a parámetros fijos).
+- Hipótesis: O muy negativo junto a un heteroátomo muy positivo → la atracción
+  SCC O···H de Klopman-Ohno sobreliga el puente. Arreglo con base física:
+  amortiguamiento γʰ de DFTB3 para pares con H (Gaus 2011/2012), que obliga a
+  reajustar xu_chno y luego B, S, P, Se. Pendiente de decidir con el usuario.
