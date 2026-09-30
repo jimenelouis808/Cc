@@ -34,6 +34,7 @@ tbkit/
 ├── qe.py             # Quantum ESPRESSO Γ modes (dynmat/matdyn) for Raman with QE phonons
 ├── references.py     # DFT reference sets (JSON): GPAW levels, energies, forces, frequencies
 ├── recipes/          # reproducible fits: xu_family (machinery), xu_chn, xu_chno; GPAW references
+│                     #   frequency_scaling: one scale factor per set against GPAW
 │                     #   crystal_validation + run_crystals.sh: the sets in crystals vs GPAW (resumable)
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 ├── cli.py            # `tbkit` console script
@@ -136,6 +137,10 @@ tbkit/
   λ = 1): do not switch the default to "charges only" to improve static
   dipoles without re-running the GPAW comparison. Born charges must sum to
   the total charge (tested).
+- Frequency scale factors (`frequency_scale` in each set, recipe
+  `recipes/frequency_scaling.py`, against GPAW, not experiment) are reported
+  beside the raw frequencies (`frequencies_scaled_cm1`); never apply them
+  silently to phonons, Raman or IR, and rerun the recipe after any refit.
 - Mode identification (RBM, G) is by symmetry and character, never by
   frequency window alone: zone folding puts other A modes nearby (M-point
   modes in zigzag tubes). DFT force constants get the acoustic sum rule on

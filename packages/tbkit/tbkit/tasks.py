@@ -123,8 +123,20 @@ def phonons(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.02,
 
     frequencies = np.where(np.abs(energies.imag) > np.abs(energies.real),
                            -np.abs(energies.imag), np.abs(energies.real)) / invcm
-    return {"frequencies_cm1": frequencies, "residual_force": residual,
-            "modes": modes}, atoms
+    out = {"frequencies_cm1": frequencies, "residual_force": residual, "modes": modes}
+    scale = frequency_scale(model)
+    if scale is not None:
+        # Against GPAW, from the set's own molecules (recipes/frequency_scaling.py);
+        # the raw frequencies stay what the model gives.
+        out["frequency_scale"] = scale
+        out["frequencies_scaled_cm1"] = scale * frequencies
+    return out, atoms
+
+
+def frequency_scale(model: TBModel) -> float | None:
+    """The set's frequency scale factor (``frequency_scale`` in its file), or None."""
+    entry = model.metadata.get("parameters", {}).get("frequency_scale")
+    return float(entry["value"]) if entry else None
 
 
 def raman_task(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.01,

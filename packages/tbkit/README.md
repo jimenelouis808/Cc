@@ -437,6 +437,29 @@ mismo orden de átomos, y con las mismas masas (las de ASE si no se cambian).
 El lector está comprobado con archivos escritos en el formato documentado; aún
 no contra una instalación real de QE.
 
+## Factores de escala de frecuencias
+
+Los conjuntos subestiman las frecuencias de GPAW de forma sistemática, ~3 %.
+`recipes/frequency_scaling.py` ajusta un factor por conjunto (mínimos
+cuadrados de Scott–Radom, como Witek y Morokuma 2004 para SCC-DFTB) sobre los
+modos internos de sus moléculas de validación, frente a GPAW PBE (no frente al
+experimento), y lo guarda en `frequency_scale` del archivo. `tasks.phonons`
+devuelve `frequencies_scaled_cm1` junto a las crudas; el modelo no cambia.
+
+| conjunto | λ | RMS antes → después (cm⁻¹) | dejando fuera cada molécula |
+|---|---|---|---|
+| xu_chn | 1,003 | 68 → 67 | 69 |
+| xu_chno | 1,037 | 120 → 99 | 100 |
+| xu_chnob | 1,030 | 97 → 82 | 84 |
+| xu_chnos | 1,031 | 91 → 75 | 76 |
+| xu_chnop | 1,025 | 82 → 71 | 71 |
+| xu_chnose | 1,034 | 84 → 60 | 61 |
+
+Un solo factor transfiere bien (dejar fuera la molécula apenas cambia el
+RMS). Dos factores (encima y debajo de 2000 cm⁻¹) solo ayudaban a xu_chno
+(99 → 88). `xu_chn` casi no tiene sesgo, y `xu_carbon` no lleva factor: el
+carbono puro se valida contra experimento (RBM, G, C60) sin escalar.
+
 ## Cristales frente a GPAW: cuánto se extrapola
 
 Los conjuntos `xu_ch*` se ajustaron en moléculas; en un cristal son una
