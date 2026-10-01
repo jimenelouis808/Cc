@@ -115,8 +115,12 @@ tbkit/
   divalent Se (H2Se 64 -> 289 cm⁻¹) and neither fixed the X-OH torsion of
   seleninic/phosphonic acids, which stays a stated limit in `validity`. An O-X-O-only
   angle term (`xu_bsp --angular-ligands O`, zero in H2Se) was fitted active
-  (~0.9 eV) and still left CH3SeO2H drifting 0.83 Å (0.87 without): the fault
-  is the missing d basis, not a missing empirical term. Do not retry variants.
+  (~0.9 eV) and still left CH3SeO2H drifting 0.83 Å (0.87 without). It is
+  not the missing d basis either: GPAW without d on Se keeps CH3SeO2H (0.05 Å);
+  on P, d matters in DFT (MePO3H2 without d turns its OH ~150°) but TB fails in
+  another direction. The boronic case is different again: B(OH)2 goes coplanar
+  with the ring (GPAW 23°), likely the missing H-H repulsion (ortho H to OH H
+  1.95 Å, GPAW 2.13). Test script: out-of-tree, recorded in ESTADO.md.
 - Imported QE modes: L = e/√m with e normalised from the file's
   displacements (or eigenvectors), per degenerate set a real basis of the
   subspace; never take the real part of a complex Γ mode without fixing its

@@ -35,7 +35,12 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
 3. (hecho) Polarizabilidad extra: B 0.873, S 2.642, P 2.647, Se 3.496 Å³ (GPAW FD).
 4. Términos angulares: probado O-X-O solo (`--angular-ligands O`) en Se: activo pero no
    arregla CH3SeO2H (deriva 0,87 -> 0,83 Å; SeO2 mejora, DMSeO empeora). Descartado; no se
-   extiende a P/B. La causa es la base sin d. Factores de escala (Witek 2004): hechos
+   extiende a P/B. ¿Son los orbitales d? Prueba con GPAW relajando desde el mínimo dzp con
+   la base sin d solo en el heteroátomo (`dz(dzp)`): CH3SeO2H no se mueve (0,05 Å; con d
+   0,07) -> en Se NO son los d; H3PO4 tampoco (0,13 frente a 0,06); MePO3H2 sí (los OH giran
+   ~150°, P-O +0,05 Å; con d 0,09 Å), pero TB gira en otra dirección. B: no es el OH sino el
+   B(OH)2 coplanar con el fenilo (GPAW 23°), probable falta de repulsión H-H (H···H 1,95 Å
+   frente a 2,13). Siguiente barato: repulsión H-H (afecta a todos los conjuntos: revalidar). Factores de escala (Witek 2004): hechos
    (λ 1,003-1,037 frente a GPAW, en cada archivo; `tasks.phonons` da las escaladas aparte).
 5. (hecho) SCC periódico con Ewald (`ewald.py`): Madelung, caja grande = finito, fuerzas FD.
    Hecho también: validación en 13 cristales (arriba). Falta: α de respuesta lineal SCC periódica.
