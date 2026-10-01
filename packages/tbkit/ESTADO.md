@@ -49,7 +49,17 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
 5. (hecho) SCC periódico con Ewald (`ewald.py`): Madelung, caja grande = finito, fuerzas FD.
    Hecho también: validación en 13 cristales (arriba) y α de respuesta lineal SCC periódica
    (campos locales de carga; los dipolares en cristales siguen sin Ewald).
-6. TB dependiente del entorno (Tang 1996).
+6. TB dependiente del entorno (Tang 1996): EN CURSO.
+   - Hecho: `environment.py` (ecs. 1-7: apantallamiento, distancias escaladas por g, on-site y
+     repulsión dependientes del entorno; cortes quínticos nuestros 4,2-5,0 / 5,0-6,0 Å) con fuerzas
+     analíticas probadas por diferencias finitas; reproduce las g del artículo a 1e-3.
+   - Parámetros publicados en `parameters/tang1996_published.json` (verificados contra el PDF; el
+     PDF NO se versiona, revista): NO dan el diamante del artículo con ningún corte (1os vecinos lo
+     comprimen; más vecinos, el Δe on-site casi sin apantallar lo expande). Solo para pruebas.
+   - Datos: `recipes/carbon_environments.py`, `references/gpaw_carbon_env.json` (9 entornos).
+     Error de fuerzas de Xu: cristales 5-15 %, defectos/C60 15-24 %, amorfos 21-50 %.
+   - Siguiente: ajustar los parámetros de Tang a esas referencias (partiendo de los publicados),
+     dejando fuera un amorfo y Stone-Wales para validar; luego exponerlo en GUI/CLI.
 7. ML: Δ-learning de repulsión (Stöhr 2020), fonones híbridos MACE con α/μ de TB,
    DeePTB; GFN2-xTB como motor de comparación opcional.
 8. Validación en sistemas reales; anomalía de Kohn (Piscanec 2004).

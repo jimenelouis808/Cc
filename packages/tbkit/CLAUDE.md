@@ -14,6 +14,7 @@ tbkit/
 ├── kpoints.py        # Γ, meshes, band paths
 ├── solver.py         # eigenstates, Fermi level, Solution (spin-resolved)
 ├── analysis.py       # P, Mulliken/Löwdin, bond orders, DOS/PDOS, bands, cube files
+├── environment.py    # environment-dependent TB (Tang 1996): screening, scaled distances
 ├── scc.py            # self-consistent charges (finite, or periodic through ewald.py)
 ├── ewald.py          # periodic γ: Ewald for 1/r and 1/r³, short-range rest
 ├── hubbard.py        # mean-field Hubbard, magnetisation vs energy/field/doping
@@ -96,6 +97,11 @@ tbkit/
   GPAW rounds gpts to multiples of 4 and a 2 % strain changed them (~1 eV).
   The GPAW stage is resumable (one file per point, BFGS trajectory and
   Hessian); relaunch `run_crystals.sh` after a restart, never start over.
+- Environment-dependent TB (`environment.py`, Tang et al. 1996): `TBModel.environment`
+  builds H, on-site and repulsion; forces carry the chain rule through screening atoms and
+  coordinations (tested against finite differences). The published parameters
+  (`tang1996_published.json`) do not give the paper's diamond with any cutoff tried: test
+  use only, never ship them as a usable set. The paper's PDF is not versioned (journal).
 - `TBModel.scc` says which ground state the parameters were made for: True
   for `.skf` sets, `xu_chn` and `xu_chno`, False for Xu and π. Calculators, tasks and
   the linear-response α follow it unless told otherwise; a set fitted with
