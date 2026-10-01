@@ -5,7 +5,8 @@
 # a relaunch -- by this loop, or by hand after a container restart -- only
 # repeats the SCF that was running.
 #
-#   PYTHON=/path/to/python JOBS=3 tbkit/recipes/run_crystals.sh WORKDIR [crystal ...]
+#   PYTHON=/path/to/python JOBS=3 [MODULE=tbkit.recipes.carbon_environments] \
+#       tbkit/recipes/run_crystals.sh WORKDIR [system ...]
 #
 # WORKDIR/supervisor.log gets one line per launch, death and finish;
 # WORKDIR/ALL_DONE appears at the end (a monitor waits for it).
@@ -15,13 +16,14 @@ shift
 PYTHON=${PYTHON:-python}
 JOBS=${JOBS:-3}
 MAX_RESTARTS=${MAX_RESTARTS:-20}
+MODULE=${MODULE:-tbkit.recipes.crystal_validation}
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 
 if [ $# -gt 0 ]; then
     CRYSTALS=("$@")
 else
     mapfile -t CRYSTALS < <("$PYTHON" -c \
-        "from tbkit.recipes.crystal_validation import CRYSTALS; print('\n'.join(CRYSTALS))")
+        "from ${MODULE} import CRYSTALS; print('\n'.join(CRYSTALS))")
 fi
 mkdir -p "$WORKDIR"
 LOG="$WORKDIR/supervisor.log"
@@ -37,7 +39,7 @@ worker() {   # one crystal, relaunched until its marker exists
         fi
         tries=$((tries + 1))
         say "$name: lanzado (intento $tries)"
-        "$PYTHON" -m tbkit.recipes.crystal_validation gpaw "$WORKDIR" --systems "$name" \
+        "$PYTHON" -m "$MODULE" gpaw "$WORKDIR" --systems "$name" \
             >> "$WORKDIR/$name.out" 2>&1
         status=$?
         [ -e "$WORKDIR/$name/done" ] || { say "$name: murió (código $status)"; sleep 5; }
