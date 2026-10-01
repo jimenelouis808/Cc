@@ -2777,13 +2777,13 @@
   "checks": {}
  },
  "frequency_scale": {
-  "value": 1.0242,
+  "value": 1.0247,
   "unit": "",
-  "modes": 219,
+  "modes": 218,
   "molecules": 10,
-  "rms_before_cm1": 80.5,
-  "rms_after_cm1": 69.5,
-  "rms_left_out_cm1": 69.7,
+  "rms_before_cm1": 82.0,
+  "rms_after_cm1": 70.8,
+  "rms_left_out_cm1": 71.0,
   "source": "mínimos cuadrados (Scott-Radom; Witek y Morokuma, J. Comput. Chem. 25, 1858 (2004)) frente a GPAW PBE, modos internos de las moléculas de validación; receta tbkit.recipes.frequency_scaling"
  }
 }

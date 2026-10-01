@@ -41,8 +41,8 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
    ~150°, P-O +0,05 Å; con d 0,09 Å), pero TB gira en otra dirección. B: no es el OH sino el
    B(OH)2 coplanar con el fenilo (GPAW 23°), probable falta de repulsión H-H (H···H 1,95 Å
    frente a 2,13). Hecho: `HHContactTerm` (pared H2···H2 de GPAW) instalado en los 6 conjuntos
-   sin reajuste: PhB(OH)2 0,61 -> 0,035 Å, coroneno-SH 1,08 -> 0,24, coroneno-SeH 1,18 -> 0,35;
-   PEt3 0,16 -> 0,19. OH de ácidos selenínicos/fosfónicos: causa medida = base mínima (en el
+   sin reajuste (corte quíntico 2,0-2,4 Å): PhB(OH)2 0,61 -> 0,07 Å, coroneno-SH 1,08 -> 0,14,
+   coroneno-SeH 1,18 -> 0,26, PEt3 0,16 -> 0,13. OH de ácidos selenínicos/fosfónicos: causa medida = base mínima (en el
    giro rígido la repulsión TB es plana y la parte electrónica hunde 240-300°; GPAW con base
    sz hace lo mismo). Sin arreglo dentro de una base sp mínima: limitación declarada. Factores de escala (Witek 2004): hechos
    (λ 1,003-1,037 frente a GPAW, en cada archivo; `tasks.phonons` da las escaladas aparte).

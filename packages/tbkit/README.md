@@ -455,11 +455,15 @@ Deriva al relajar desde el mínimo de GPAW (desplazamiento máximo):
 
 | molécula | sin él | con él |
 |---|---|---|
-| PhB(OH)2 | 0,61 Å | 0,035 Å (torsión 336° frente a 337° de GPAW) |
-| coroneno-SH | 1,08 Å | 0,24 Å |
-| coroneno-SeH | 1,18 Å | 0,35 Å |
-| CH3OH, etanol, aminas, MeB(OH)2 | — | 0,01-0,03 Å mejor |
-| PEt3 (el único peor) | 0,16 Å | 0,19 Å |
+| PhB(OH)2 | 0,61 Å | 0,07 Å (el B(OH)2 vuelve a torcerse, como en GPAW) |
+| coroneno-SH | 1,08 Å | 0,14 Å |
+| coroneno-SeH | 1,18 Å | 0,26 Å |
+| PEt3 | 0,16 Å | 0,13 Å |
+| C3H9N | 0,21 Å | 0,18 Å |
+
+El corte es de quinto grado entre 2,0 y 2,4 Å (valor, pendiente y curvatura
+nulos): con uno cúbico hasta 2,5 Å, los H orto del benceno (2,48 Å) caían en el
+salto de curvatura y las frecuencias por diferencias finitas partían su par E1u.
 
 De paso quedó medido que el OH que gira en los ácidos selenínicos y fosfónicos
 **no** es la falta de orbitales d: GPAW sin funciones d en el Se mantiene

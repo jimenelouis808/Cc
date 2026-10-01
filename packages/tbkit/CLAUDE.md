@@ -130,7 +130,9 @@ tbkit/
   fitted; zero between hydrogens of the same atom, through a smooth bond
   weight, and in H2). It sits second in every xu_ch* repulsion and is a fixed
   base term of any refit (`XuFamily.hh_contact`). Never scale it to hit a
-  geometry: ×3 already overshoots PhB(OH)2 (321° against GPAW's 337°).
+  geometry: ×3 already overshoots PhB(OH)2 (321° against GPAW's 337°). Its
+  cutoff must stay C2 (quintic, 2.0-2.4 Å): a cubic tail to 2.5 Å split
+  benzene's E1u (ortho H···H 2.48 Å) through finite-difference phonons.
 - Imported QE modes: L = e/√m with e normalised from the file's
   displacements (or eigenvectors), per degenerate set a real basis of the
   subspace; never take the real part of a complex Γ mode without fixing its
