@@ -80,7 +80,12 @@ tbkit/
   Checks: NaCl Madelung constant, a molecule in a large box equals the finite
   result, forces against finite differences (h-BN). Summing the r⁻³ tail in
   real space oscillated by 10⁻² eV: do not go back to it. Vacuum directions
-  are a supercell. SCC linear-response α stays finite-only.
+  are a supercell. SCC linear-response α of crystals
+  (`optics.polarizability_periodic_screened`, q → 0, charge local fields through
+  the Ewald γ without G = 0): a molecule in a box must give the finite α with its
+  Lorentz field, α/(1 - 4πα/3V), and pristine h-BN exactly the unscreened α
+  (C3 sites carry no induced charge; both tested). Dipole channels are not
+  screened in crystals yet. Raman of crystals uses it only with screening="scc".
 - The sets were fitted on molecules; crystals are an extrapolation, measured in
   `recipes/crystal_validation.py` (13 crystals, GPAW with the model's k mesh
   and smearing; `validation/crystals_tb_vs_gpaw.json`) and stated in each set's

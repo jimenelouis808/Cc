@@ -45,7 +45,8 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
    PEt3 0,16 -> 0,19. Abierto: el OH de ácidos selenínicos/fosfónicos (causa en TB, no los d). Factores de escala (Witek 2004): hechos
    (λ 1,003-1,037 frente a GPAW, en cada archivo; `tasks.phonons` da las escaladas aparte).
 5. (hecho) SCC periódico con Ewald (`ewald.py`): Madelung, caja grande = finito, fuerzas FD.
-   Hecho también: validación en 13 cristales (arriba). Falta: α de respuesta lineal SCC periódica.
+   Hecho también: validación en 13 cristales (arriba) y α de respuesta lineal SCC periódica
+   (campos locales de carga; los dipolares en cristales siguen sin Ewald).
 6. TB dependiente del entorno (Tang 1996).
 7. ML: Δ-learning de repulsión (Stöhr 2020), fonones híbridos MACE con α/μ de TB,
    DeePTB; GFN2-xTB como motor de comparación opcional.

@@ -125,6 +125,15 @@ def _alpha_function(system_of: Callable[[Atoms], System], atoms: Atoms, model: T
     if use_scc:
         return (lambda a: polarizability_linear_response(system_of(a), kT=kT),
                 "α apantallado (respuesta lineal SCC, finito)")
+    if not finite and screening == "scc":
+        # Crystals keep the independent-particle α under "auto" (their validated
+        # results); the local-field α is asked for by name.
+        from .optics import polarizability_periodic_screened
+
+        if omega:
+            raise ValueError("El α apantallado (SCC) es estático: usa omega = 0.")
+        return (lambda a: polarizability_periodic_screened(system_of(a), kmesh=kmesh, kT=kT),
+                "α apantallado (respuesta lineal SCC con campos locales, cristal)")
     kind = "suma sobre estados, partículas independientes"
     kind += "" if finite else ", cristal"
     return (lambda a: polarizability(system_of(a), kmesh=kmesh, kT=kT, omega=omega),

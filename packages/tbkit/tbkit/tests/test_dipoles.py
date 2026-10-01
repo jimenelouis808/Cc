@@ -191,3 +191,53 @@ class TestExtraPolarizability:
         b = np.sort(np.linalg.eigvalsh(polarizability_linear_response(
             System.build(atoms, extra))))
         assert np.all(b > a)
+
+
+def test_periodic_screened_alpha_is_the_molecule_with_its_lorentz_field():
+    """A molecule in a cubic box: the unscreened α is the molecule's exactly, and
+    the screened one is α / (1 - 4π α / 3V), the Lorentz field of its images
+    (Ewald drops G = 0, so the applied field is the macroscopic one)."""
+    from tbkit.optics import polarizability_linear_response, polarizability_periodic_screened
+
+    model = load_parameters("xu_chno")
+    mol = molecule("C6H6")
+    box = mol.copy()
+    box.set_cell([16.0] * 3)
+    box.center()
+    box.pbc = True
+    kw = {"onsite_dipoles": False, "extra_polarizability": False}
+    gamma_only = {"kpts": np.zeros((1, 3)), "weights": np.ones(1)}
+    for screened in (False, True):
+        finite = polarizability_linear_response(System.build(mol, model), screened=screened, **kw)
+        crystal = polarizability_periodic_screened(System.build(box, model), screened=screened,
+                                                   **gamma_only, **kw)
+        expected = finite[0, 0] / (1 - 4 * np.pi * finite[0, 0] / (3 * box.get_volume())) \
+            if screened else finite[0, 0]
+        assert crystal[0, 0] == pytest.approx(expected, rel=2e-3)
+        assert crystal[2, 2] == pytest.approx(finite[2, 2], abs=1e-6)
+
+
+def test_charge_local_fields_vanish_by_symmetry_and_appear_when_it_is_broken():
+    """In h-BN every atom sits on a C3 axis: a uniform in-plane field cannot put a
+    net charge on it, so the charge local fields are exactly zero. Displace one
+    atom and they appear, lowering α."""
+    from ase.build import graphene
+
+    from tbkit.optics import polarizability_periodic_screened
+
+    model = load_parameters("xu_chnob")
+    kw = {"kmesh": (8, 8, 1), "onsite_dipoles": False, "extra_polarizability": False}
+
+    def both(atoms):
+        system = System.build(atoms, model)
+        return (polarizability_periodic_screened(system, screened=False, **kw),
+                polarizability_periodic_screened(system, screened=True, **kw))
+
+    hbn = graphene("BN", a=2.50, vacuum=7.5)
+    bare, screened = both(hbn)
+    assert screened == pytest.approx(bare, abs=1e-8)
+    assert screened[0, 0] == pytest.approx(screened[1, 1], rel=1e-8)    # hexagonal
+    distorted = hbn.repeat((2, 2, 1))
+    distorted.positions[0] += [0.08, 0.03, 0.0]
+    bare, screened = both(distorted)
+    assert 0 < screened[0, 0] < bare[0, 0] - 1e-3
