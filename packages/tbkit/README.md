@@ -171,7 +171,8 @@ Resultado (todo frente a GPAW salvo α):
 
 Límites que el archivo declara en `validity`: ajustado en moléculas de capa
 cerrada (en cristales, lo medido frente a GPAW: ver «Cristales frente a GPAW»); energías comparables solo entre geometrías de la misma
-composición (no se ajustaron atomizaciones); sin interacción H–H; y el C–C de
+composición (no se ajustaron atomizaciones); entre H solo la repulsión de contacto
+(ver «Contacto H···H»); y el C–C de
 Xu falla en anillos tensos (aziridina, 0,22 Å), y los C–C y C–N simples junto
 a un heteroátomo (aminas, nitrilos) se desvían ~0,08 Å.
 
@@ -436,6 +437,34 @@ Lo que el usuario debe garantizar: la estructura es la del cálculo de QE, en el
 mismo orden de átomos, y con las mismas masas (las de ASE si no se cambian).
 El lector está comprobado con archivos escritos en el formato documentado; aún
 no contra una instalación real de QE.
+
+## Contacto H···H
+
+Los conjuntos no tenían ninguna interacción entre hidrógenos, y los de grupos
+distintos podían acercarse demasiado: el ácido fenilborónico quedaba plano
+(GPAW tuerce el B(OH)2 23°; H orto a H del OH 1,95 Å en el modelo, 2,13 en
+GPAW). `repulsive.HHContactTerm` añade la repulsión que da GPAW entre dos H2
+en contacto (`recipes/hh_contact.py`, curva en
+`parameters/references/gpaw_h2h2.json`; no ajustada), con un peso suave que la
+anula entre hidrógenos del mismo átomo (H–C–H, ya en los ángulos ajustados) y
+en el H2. En el equilibrio vale ≤ 4 meV por molécula (12 meV en PhB(OH)2), así
+que se instaló sobre los conjuntos sin reajustarlos (`hh_contact install`); los
+reajustes futuros lo llevan como término fijo.
+
+Deriva al relajar desde el mínimo de GPAW (desplazamiento máximo):
+
+| molécula | sin él | con él |
+|---|---|---|
+| PhB(OH)2 | 0,61 Å | 0,035 Å (torsión 336° frente a 337° de GPAW) |
+| coroneno-SH | 1,08 Å | 0,24 Å |
+| coroneno-SeH | 1,18 Å | 0,35 Å |
+| CH3OH, etanol, aminas, MeB(OH)2 | — | 0,01-0,03 Å mejor |
+| PEt3 (el único peor) | 0,16 Å | 0,19 Å |
+
+De paso quedó medido que el OH que gira en los ácidos selenínicos y fosfónicos
+**no** es la falta de orbitales d: GPAW sin funciones d en el Se mantiene
+CH3SeO2H (0,05 Å); en MePO3H2 los d sí importan en DFT, pero TB falla en otra
+dirección. Ese caso sigue abierto.
 
 ## Factores de escala de frecuencias
 

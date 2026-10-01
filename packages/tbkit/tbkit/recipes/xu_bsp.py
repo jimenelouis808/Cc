@@ -62,7 +62,7 @@ FAMILIES = {
                      long_rc={"H": 2.4}),
         hubbard_u={"B": HUBBARD_U["B"]},
         onsite_dipole={"B": ONSITE_DIPOLE["B"]},
-        validity_notes=('B junto con S o P en la misma estructura no está cubierto; enlaces de B a menos de 0.03 Å de GPAW; ésteres B(OCH3)n corregidos con active learning (antes colapsaban; RMS 949 -> 95 cm⁻¹), aunque al relajar giran sus metilos (desplazamiento ~1 Å, sin colapso); ácidos borónicos arílicos (PhB(OH)2): el grupo B(OH)2 queda coplanar con el anillo (GPAW lo tuerce 23°; los H se desplazan 0,6 Å); el giro B-O-H en sí está bien (barrido frente a GPAW, < 0,07 eV); probable causa: sin repulsión H-H, el H orto y el del OH quedan a 1,95 Å (GPAW 2,13)'),
+        validity_notes=('B junto con S o P en la misma estructura no está cubierto; enlaces de B a menos de 0.03 Å de GPAW; ésteres B(OCH3)n corregidos con active learning (antes colapsaban; RMS 949 -> 95 cm⁻¹), aunque al relajar giran sus metilos (desplazamiento ~1 Å, sin colapso); ácidos borónicos arílicos (PhB(OH)2): corregidos con el contacto H···H (torsión del B(OH)2 336° frente a 337° de GPAW; antes quedaba plano, 0,6 Å)'),
         crystal_notes=("B grafítico en grafeno: fuerzas 1,4 veces el error molecular, B-C "
                        "+0,027 Å; h-BN: red 1,1 % larga (2,53 frente a 2,50 Å) y 10-15 % más "
                        "blanda en distorsiones"),

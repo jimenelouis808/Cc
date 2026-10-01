@@ -7,9 +7,10 @@ Run (no GPAW needed; the frequencies are already in the files)::
 As Witek and Morokuma did for SCC-DFTB (J. Comput. Chem. 25, 1858 (2004)):
 λ = Σ ω_TB ω_ref / Σ ω_TB² over every internal mode of the set's validation
 molecules, here against GPAW (PBE) rather than experiment. The frequencies
-are those the fit already stored (``fit.frequencies``: the model at its own
-minimum against GPAW's Hessian); ``xu_chn`` stores none, so its five
-molecules are computed here. Each set gets ``frequency_scale`` with the factor,
+are recomputed from the set as it stands (the model at its own minimum against
+GPAW's Hessians, ``fit.hessians``; ``xu_chn``'s five molecules from
+``gpaw_chn_frequencies``), not taken from ``fit.frequencies``: a term added
+after the fit (the H···H contact) changes them. Each set gets ``frequency_scale`` with the factor,
 the RMS before and after, and the RMS with every molecule left out of its own
 factor (how well λ transfers). One factor per set: two (above and below
 2000 cm⁻¹) only helped xu_chno (99 -> 88 cm⁻¹) and is not worth a second number.
@@ -52,6 +53,18 @@ def xu_chn_frequencies() -> dict:
     return frequency_validation(load_parameters("xu_chn"), targets)
 
 
+def model_frequencies(name: str, data: dict) -> dict:
+    """The set as it is now (terms added after its fit included) against GPAW's Hessians."""
+    from ..params import load_parameters
+    from .xu_family import frequency_validation, load_hessians
+
+    hessians = data["fit"].get("hessians")
+    if not hessians:
+        return xu_chn_frequencies()
+    targets = load_hessians(ROOT / "references" / hessians)
+    return frequency_validation(load_parameters(name), targets)
+
+
 def scale_factor(frequencies: dict) -> dict:
     """λ and its errors from ``{molecule: {"tb": [...], "gpaw": [...]}}``."""
     pairs = {m: (np.asarray(v["tb"], float), np.asarray(v["gpaw"], float))
@@ -83,7 +96,7 @@ def main() -> None:
         path = ROOT / f"{name}.json"
         raw = path.read_text(encoding="utf-8")
         data = json.loads(raw)
-        frequencies = data["fit"].get("frequencies") or xu_chn_frequencies()
+        frequencies = model_frequencies(name, data)
         entry = scale_factor(frequencies)
         entry["source"] = ("mínimos cuadrados (Scott-Radom; Witek y Morokuma, J. Comput. "
                            "Chem. 25, 1858 (2004)) frente a GPAW PBE, modos internos de las "

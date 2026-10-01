@@ -118,9 +118,12 @@ tbkit/
   (~0.9 eV) and still left CH3SeO2H drifting 0.83 Å (0.87 without). It is
   not the missing d basis either: GPAW without d on Se keeps CH3SeO2H (0.05 Å);
   on P, d matters in DFT (MePO3H2 without d turns its OH ~150°) but TB fails in
-  another direction. The boronic case is different again: B(OH)2 goes coplanar
-  with the ring (GPAW 23°), likely the missing H-H repulsion (ortho H to OH H
-  1.95 Å, GPAW 2.13). Test script: out-of-tree, recorded in ESTADO.md.
+  another direction. The boronic case was the missing H-H repulsion, now
+  `repulsive.HHContactTerm` (`recipes/hh_contact.py`: GPAW H2···H2 wall, not
+  fitted; zero between hydrogens of the same atom, through a smooth bond
+  weight, and in H2). It sits second in every xu_ch* repulsion and is a fixed
+  base term of any refit (`XuFamily.hh_contact`). Never scale it to hit a
+  geometry: ×3 already overshoots PhB(OH)2 (321° against GPAW's 337°).
 - Imported QE modes: L = e/√m with e normalised from the file's
   displacements (or eigenvectors), per degenerate set a real basis of the
   subspace; never take the real part of a complex Γ mode without fixing its

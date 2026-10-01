@@ -40,7 +40,9 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
    0,07) -> en Se NO son los d; H3PO4 tampoco (0,13 frente a 0,06); MePO3H2 sí (los OH giran
    ~150°, P-O +0,05 Å; con d 0,09 Å), pero TB gira en otra dirección. B: no es el OH sino el
    B(OH)2 coplanar con el fenilo (GPAW 23°), probable falta de repulsión H-H (H···H 1,95 Å
-   frente a 2,13). Siguiente barato: repulsión H-H (afecta a todos los conjuntos: revalidar). Factores de escala (Witek 2004): hechos
+   frente a 2,13). Hecho: `HHContactTerm` (pared H2···H2 de GPAW) instalado en los 6 conjuntos
+   sin reajuste: PhB(OH)2 0,61 -> 0,035 Å, coroneno-SH 1,08 -> 0,24, coroneno-SeH 1,18 -> 0,35;
+   PEt3 0,16 -> 0,19. Abierto: el OH de ácidos selenínicos/fosfónicos (causa en TB, no los d). Factores de escala (Witek 2004): hechos
    (λ 1,003-1,037 frente a GPAW, en cada archivo; `tasks.phonons` da las escaladas aparte).
 5. (hecho) SCC periódico con Ewald (`ewald.py`): Madelung, caja grande = finito, fuerzas FD.
    Hecho también: validación en 13 cristales (arriba). Falta: α de respuesta lineal SCC periódica.
