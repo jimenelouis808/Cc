@@ -199,7 +199,7 @@ class HHContactTerm:
     """Exchange repulsion between hydrogens that are not bonded to the same atom.
 
     ``E = Σ_{H_i<H_j} V(r_ij) h(r_ij) Π_X [1 - b_X(r_iX) b_X(r_jX)]``, with
-    ``V = v0 exp(-(r - r0)/ρ)`` smoothly cut between ``tail``, ``h`` switching
+    ``V = v0 exp(-(r - r0)/ρ)`` cut to zero (C2) between ``tail``, ``h`` switching
     off the bonded H2 pair and ``b_X`` the smooth bond indicator of the H to a
     neighbour X (1 below ``bonds[X][0]``, a cubic to 0 at ``bonds[X][1]``).
     The product removes geminal pairs (H-X-H), whose interaction the fitted
@@ -214,16 +214,22 @@ class HHContactTerm:
     v0: float                                   # eV at r0
     r0: float                                   # Å
     rho: float                                  # Å, decay length
-    tail: tuple = (2.2, 2.5)                    # Å, smooth cutoff of V
+    tail: tuple = (2.0, 2.4)                    # Å, quintic cutoff of V
     bonds: dict = None                          # heavy element -> (r1, rm), Å
     h2: tuple = (0.9, 1.1)                      # Å, bonded H-H switched off
 
     def _v(self, r):
-        from .params import Exponential, Tail
-
-        law = Tail(Exponential(self.v0, self.r0, self.r0 / self.rho, self.tail[1] + 1.0),
-                   *self.tail)
-        return float(law(r)), float(derivative(law, r))
+        """V and dV/dr. The cutoff is quintic (value, slope and curvature go to zero):
+        with a cubic one the curvature jumped at the cutoff, and finite-difference
+        phonons of molecules with H pairs near it split degenerate modes (benzene's
+        E1u by 3 cm⁻¹, its ortho H···H being 2.48 Å)."""
+        r1, rm = self.tail
+        v = self.v0 * np.exp(-(r - self.r0) / self.rho)
+        dv = -v / self.rho
+        x = min(max((r - r1) / (rm - r1), 0.0), 1.0)
+        s = 1 - 10 * x ** 3 + 15 * x ** 4 - 6 * x ** 5
+        ds = (-30 * x ** 2 + 60 * x ** 3 - 30 * x ** 4) / (rm - r1)
+        return float(v * s), float(dv * s + v * ds)
 
     @staticmethod
     def _switch(r, r1, rm):
@@ -304,7 +310,7 @@ def repulsive_from_dict(data: dict):
         return SumRepulsive(tuple(terms))
     if kind == "hh_contact":
         return HHContactTerm(float(data["v0"]), float(data["r0"]), float(data["rho"]),
-                             tuple(float(v) for v in data.get("tail", (2.2, 2.5))),
+                             tuple(float(v) for v in data.get("tail", (2.0, 2.4))),
                              {k: (float(v[0]), float(v[1])) for k, v in data["bonds"].items()},
                              tuple(float(v) for v in data.get("h2", (0.9, 1.1))))
     if kind == "acute_angle":

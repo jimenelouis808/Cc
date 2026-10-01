@@ -61,7 +61,7 @@ def term_parameters(path: Path = REFERENCE) -> dict:
     curve = dict((round(d, 2), e) for d, e in json.loads(path.read_text())["curve"])
     rho = 0.2 / np.log(curve[1.5] / curve[1.7])
     return {"v0": round(float(curve[1.5]), 5), "r0": 1.5, "rho": round(float(rho), 5),
-            "tail": [2.2, 2.5], "h2": [0.9, 1.1],
+            "tail": [2.0, 2.4], "h2": [0.9, 1.1],
             "bonds": {x: [round(r + 0.15, 2), round(r + 0.35, 2)] for x, r in XH.items()}}
 
 
@@ -86,9 +86,13 @@ def install(reference: Path = REFERENCE) -> None:
         path = root / f"{name}.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         terms = data["repulsive"]["terms"]
-        if any(t["type"] == "hh_contact" for t in terms):
-            continue
-        terms.insert(1, entry)
+        present = [k for k, t in enumerate(terms) if t["type"] == "hh_contact"]
+        if present:
+            if terms[present[0]] == entry:
+                continue
+            terms[present[0]] = entry           # updated parameters, same place
+        else:
+            terms.insert(1, entry)
         path.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
         print(name, "instalado")
 
