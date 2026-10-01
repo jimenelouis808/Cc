@@ -82,6 +82,7 @@ from ..builders.capped_cnt import MIN_CAP_FREQ
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
 from ..builders.knee import (
+    COIL_SEARCH_SPAN,
     DEFAULT_SUPERNET_SHAPE,
     JUNCTION_AXES,
     MESH_EDGE,
@@ -1161,8 +1162,13 @@ class NanocarbonGUI:
         self.frame_knee_coil = ttk.LabelFrame(
             parent, text="Knee coil (exact census)", padding=8)
         self.frame_knee_coil.columnconfigure(0, weight=1)
+        # 0.05 Å and not 0.5: the periodic wrap closes in windows 0.45 to
+        # 1.05 Å wide, and measured at the shipped shape exactly ONE of
+        # the seventeen radii a 0.5 Å step reaches between 10 and 18 Å
+        # closes. A slider that cannot land in a window reads as a
+        # builder that has stopped working.
         self._param(self.frame_knee_coil, "Coil radius (Å)",
-                    self.var_kc_radius, 6.0, 40.0, 0, resolution=0.5,
+                    self.var_kc_radius, 6.0, 40.0, 0, resolution=0.05,
                     hard_lo=3.0, hard_hi=120.0,
                     command=self._update_knee_coil_hint)
         self._param(self.frame_knee_coil, "Pitch (Å)", self.var_kc_pitch,
@@ -1180,6 +1186,13 @@ class NanocarbonGUI:
             self.frame_knee_coil, "Turns", self.var_kc_turns, 1.0, 6.0, 8,
             integer=True, resolution=1.0, hard_lo=1.0, hard_hi=20.0,
             command=self._update_knee_coil_hint)
+        # Only the periodic mode needs it: the finite coil keeps its two
+        # rims and has no wrap to weld, so every radius builds.
+        self.btn_kc_search = ttk.Button(
+            self.frame_knee_coil, text="Find a radius that closes",
+            command=self.on_find_closing_radius)
+        self.btn_kc_search.grid(row=9, column=0, columnspan=2, sticky="ew",
+                                pady=(6, 0))
         self.lbl_knee_coil = ttk.Label(
             self.frame_knee_coil, text="", foreground=MUTED,
             font=("TkDefaultFont", 8), wraplength=230, justify="left")
@@ -2110,6 +2123,10 @@ class NanocarbonGUI:
                     widget.grid()
                 else:
                     widget.grid_remove()
+            if mode == "coil (knees, periodic)":
+                self.btn_kc_search.grid()
+            else:
+                self.btn_kc_search.grid_remove()
             self._update_knee_coil_hint()
             self.var_anneal.set(0)
         elif mode == "junction":
@@ -2834,11 +2851,96 @@ class NanocarbonGUI:
         colour = MUTED if 3.5 <= ratio <= 3.9 else WARN_AMBER
         band = "" if 3.5 <= ratio <= 3.9 else (
             " — outside the 3.5–3.9 band the single-wall coil papers report")
+        closes = ("Most radii do NOT close — the wrap has to land on a "
+                  "lattice step — so use the button rather than hunting "
+                  "with the slider. "
+                  if mode == "coil (knees, periodic)" else
+                  "Not every shape closes; the refusal names the ones "
+                  "that do. ")
         self.lbl_knee_coil.config(
             text=f"{what} Tube radius {tube:.2f} Å, pitch {pitch:.1f} Å, "
                  f"{sides} sides per turn. D/d = {ratio:.2f}{band}. "
-                 "Not every shape closes; the refusal names the ones that do.",
+                 + closes,
             foreground=colour)
+
+    def on_find_closing_radius(self) -> None:
+        """Search for a coil radius that welds through the cell, take it,
+        and rebuild.
+
+        The periodic wrap pairs up only where the frame's holonomy lands
+        near a whole lattice step, so closing is not continuous in the
+        radius: measured at the shipped shape, 19 of 161 radii between 10
+        and 18 Å close, in two windows 0.50 and 0.45 Å wide. Typing a
+        radius between windows gets a refusal however sensible the number
+        is, which is why this searches rather than leaving the user to
+        hunt. It **applies** what it finds and rebuilds -- a button that
+        only measured would be asking the user to copy a number back into
+        the box it came from.
+        """
+        from ..builders.knee import nearest_closing_coil
+
+        if self._busy:
+            self._set_status("A build is already running.")
+            return
+        try:
+            requested = float(self.var_kc_radius.get())
+            pitch = float(self.var_kc_pitch.get())
+            sides = int(self.var_kc_sides.get())
+            circumference = int(self.var_kc_k.get())
+        except (tk.TclError, ValueError) as exc:
+            self._show_error("Invalid parameters", str(exc))
+            return
+
+        started = time.monotonic()
+
+        def progress(tried, total, elapsed):
+            self.lbl_elapsed.config(
+                text=f"searching {tried}/{total} radii — {_clock(elapsed)}",
+                foreground=MUTED)
+            self._set_status(f"Looking for a radius that closes… {tried} of "
+                             f"{total} tried.")
+            self.root.update_idletasks()
+
+        self.btn_kc_search.config(state="disabled")
+        try:
+            found = nearest_closing_coil(
+                coil_radius=requested, pitch=pitch, sides_per_turn=sides,
+                circumference=circumference, callback=progress)
+        except Exception:  # noqa: BLE001 - shown, never fatal
+            self._show_error("The search failed", traceback.format_exc())
+            return
+        finally:
+            self.btn_kc_search.config(state="normal")
+            self.lbl_elapsed.config(
+                text=f"searched in {_clock(time.monotonic() - started)}",
+                foreground=MUTED)
+
+        if found is None:
+            self._set_status("No radius nearby closes.")
+            self.lbl_knee_coil.config(
+                text=f"No radius within {COIL_SEARCH_SPAN:.1f} Å of "
+                     f"{requested:.2f} Å welds through the cell at pitch "
+                     f"{pitch:.1f} Å with {sides} sides and circumference "
+                     f"{circumference}. The radius is not the only knob: "
+                     "change the pitch, the sides per turn or the "
+                     "circumference and search again.",
+                foreground=WARN_AMBER)
+            return
+
+        moved = found.coil_radius - requested
+        self.var_kc_radius.set(round(found.coil_radius, 2))
+        low, high = found.window
+        law = ("census is the law’s 2 pairs per knee" if found.census_exact
+               else "census is NOT the law’s, though sum(6-n) is still 0")
+        self.lbl_knee_coil.config(
+            text=f"{found.coil_radius:.2f} Å closes ({moved:+.2f} Å from "
+                 f"{requested:.2f}): {found.atoms} atoms, {law}. The window "
+                 f"is {low:.2f}–{high:.2f} Å, so that is how far this radius "
+                 f"can be nudged. {found.tried} radii tried.",
+            foreground=MUTED)
+        self._set_status(f"Found {found.coil_radius:.2f} Å — building "
+                         f"{found.atoms} atoms.")
+        self.on_build()
 
     def _update_sn_hint(self) -> None:
         """Say whether a tube survives between two vertices, and what the
@@ -3934,7 +4036,13 @@ class NanocarbonGUI:
                         )
                     else:
                         self._set_status("Build failed — see the message below.")
-                        self._show_error(text, tb)
+                        # The refusal's own sentence first, the traceback
+                        # under it. A builder that refuses on purpose --
+                        # a coil radius that does not close, a pitch that
+                        # does not clear the tube -- says what to do
+                        # instead, and leading with the traceback buries
+                        # that sentence on the last line of the panel.
+                        self._show_error(text, f"{text}\n\n{tb}")
         except Exception:  # noqa: BLE001 - the poll must never die
             self._set_status("Internal error while collecting the build.")
             self._show_error("Internal error", traceback.format_exc())

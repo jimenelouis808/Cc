@@ -1099,15 +1099,24 @@ class TestTheCleanCoilPresets:
 
         coils = {n: v for n, v in PRESETS.items() if "Nanocoil" in n}
         assert len(coils) >= 3
+        # The periodic routes are one turn by construction -- the cell IS
+        # the turn, closed on the z-torus -- so they take no turn count,
+        # and the two families spell theirs differently: the implicit
+        # route reads `coil_turns`, the knee route `kc_turns`. Asking
+        # every coil preset for `coil_turns` is what this test used to
+        # do, and it raised KeyError on the knee presets the moment a
+        # machine with Tkinter ran it.
+        periodic = ("coil (periodic, DFT)", "coil (knees, periodic)")
         for name, preset in coils.items():
-            if preset["mode_kind"] == "coil (periodic, DFT)":
-                # One period by construction: the turns are how many
-                # times the user repeats the cell, not a build parameter.
+            if preset["mode_kind"] in periodic:
                 assert "coil_turns" not in preset, name
+                assert "kc_turns" not in preset, name
                 continue
             # The same threshold the panel hint uses: under two turns
             # reads as a bent tube. Two is a full double loop and does.
-            assert preset["coil_turns"] >= 2.0, f"{name}: too few turns"
+            turns = preset.get("coil_turns", preset.get("kc_turns"))
+            assert turns is not None, f"{name}: no turn count"
+            assert turns >= 2.0, f"{name}: too few turns"
 
     def test_no_nanocoil_preset_goes_through_the_swept_route(self):
         """The correction, pinned.

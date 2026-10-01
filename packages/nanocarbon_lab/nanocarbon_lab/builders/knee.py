@@ -100,8 +100,10 @@ negotiable.
 
 from __future__ import annotations
 
+import time
 import warnings
 from collections import defaultdict
+from dataclasses import dataclass
 
 import numpy as np
 from ase import Atoms
@@ -3083,6 +3085,217 @@ def build_knee_coil(
 SOUND_PERIODIC_COIL = (6, 10, 15.0, 14.0)
 
 
+#: Radii tried either side of the asked-for one when the builder is
+#: searching for a shape that closes. Measured, the windows that close are
+#: 0.45-1.05 A wide and up to 3 A apart, so a span of 2 A finds one in
+#: every case tried while keeping the search under a few hundred meshes.
+COIL_SEARCH_SPAN = 2.0
+
+#: Step the search walks in. The narrowest window measured is a single
+#: 0.05 A sample wide (4 sides, k = 6, pitch 17), so a coarser step can
+#: step over a window entirely -- which is exactly what the 0.5 A slider
+#: used to do.
+COIL_SEARCH_STEP = 0.05
+
+
+@dataclass(frozen=True)
+class CoilWindow:
+    """A coil radius that closes, and the window of radii around it.
+
+    Attributes
+    ----------
+    coil_radius
+        The radius found (A).
+    requested
+        The radius asked for, so the caller can say how far it moved.
+    census_exact
+        Whether the census is the law's ``2 * sides_per_turn`` pairs. A
+        window can close with a different count and still be a sound
+        torus; see :func:`build_knee_periodic_coil`.
+    atoms
+        How many atoms the cell will have. The dual of the mesh has one
+        atom per triangle, so this is exact and costs no relaxation.
+    window
+        ``(low, high)`` radii, inclusive, that close either side of this
+        one -- what the caller can nudge within.
+    tried, elapsed
+        Meshes built and seconds spent, so a GUI can report both.
+    """
+
+    coil_radius: float
+    requested: float
+    census_exact: bool
+    atoms: int
+    window: tuple[float, float]
+    tried: int
+    elapsed: float
+
+
+def _periodic_coil_mesh(coil_radius: float, pitch: float, sides_per_turn: int,
+                        circumference: int, knee: str = "pentagon",
+                        bond: float = CC_BOND):
+    """``(closes, census_exact, atoms)`` for one shape, mesh only.
+
+    The cheap half of :func:`build_knee_periodic_coil`: it stops at the
+    mesh, so there is no dual, no relaxation and no geometry report. That
+    is what makes a search over hundreds of radii affordable, and it
+    decides the only two questions a search asks -- whether the wrap
+    welds at all, and whether the census is the law's.
+    """
+    spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
+    tube_radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / circumference))
+    if pitch <= 2.0 * tube_radius:
+        return False, False, 0
+    angle = 2.0 * np.pi * np.arange(sides_per_turn) / sides_per_turn
+    points = np.column_stack([coil_radius * np.cos(angle),
+                              coil_radius * np.sin(angle),
+                              pitch * angle / (2.0 * np.pi)])
+    shift = SEAM_SHIFT if knee == "pentagon" else 0
+    try:
+        vertices, tris, _ = knee_path_mesh(
+            points, circumference, tube_radius, spacing, seam_shift=shift,
+            period=np.array([0.0, 0.0, float(pitch)]))
+    except (ValueError, StopIteration, KeyError):
+        return False, False, 0
+    census, _, broken = mesh_census(vertices, tris)
+    deficit = sum((6 - size) * count for size, count in census.items())
+    if broken or set(census) - {5, 6, 7} or deficit != 0:
+        return False, False, 0
+    want = sides_per_turn * PAIRS_PER_KNEE
+    exact = census.get(5, 0) == census.get(7, 0) == want
+    return True, bool(exact), int(len(tris))
+
+
+def nearest_closing_coil(
+    coil_radius: float | None = None,
+    pitch: float | None = None,
+    sides_per_turn: int | None = None,
+    circumference: int | None = None,
+    knee: str = "pentagon",
+    bond: float = CC_BOND,
+    span: float = COIL_SEARCH_SPAN,
+    step: float = COIL_SEARCH_STEP,
+    prefer_exact: bool = True,
+    callback=None,
+    should_stop=None,
+) -> CoilWindow | None:
+    """The closest coil radius to ``coil_radius`` that actually closes.
+
+    **Why this exists.** The wrap knee pairs up only where the frame's
+    holonomy lands near a whole lattice step, so closing is not continuous
+    in the radius: at the shipped shape (6 sides, k = 10, pitch 15 A),
+    19 of 161 radii between 10 and 18 A close, in two windows 0.50 and
+    0.45 A wide. A slider stepping 0.5 A reaches 17 radii in that range
+    and **one** of them closes -- so moving the radius by hand looks like
+    the builder has stopped working, when what happened is that every
+    radius tried fell between windows. This searches the windows instead
+    of asking the user to find them.
+
+    The scan goes outwards from the asked-for radius, smaller side first
+    so a tie returns the cell with fewer atoms, and stops at the first
+    radius that welds with ``sum(6-n) = 0``. With ``prefer_exact`` it then
+    keeps looking inside that window for one whose census is the law's
+    ``2`` pairs per knee, and only falls back to the first hit if the
+    window has none.
+
+    Parameters
+    ----------
+    coil_radius, pitch, sides_per_turn, circumference
+        The shape asked for; left out, :data:`SOUND_PERIODIC_COIL`.
+    knee
+        As :func:`build_knee_periodic_coil`.
+    bond
+        C-C length (A).
+    span
+        How far either side of ``coil_radius`` to look (A).
+    step
+        Radius step (A). Do not raise it past
+        :data:`COIL_SEARCH_STEP` without measuring: the narrowest window
+        seen is one step wide.
+    prefer_exact
+        Prefer a law-exact census within the window that was found.
+    callback
+        Called as ``callback(tried, total, elapsed)`` every few meshes, so
+        a GUI can show progress and elapsed time.
+    should_stop
+        Called with no arguments; a true return abandons the search.
+
+    Returns
+    -------
+    CoilWindow or None
+        ``None`` when nothing in ``span`` closes, which is the honest
+        answer: with that pitch and circumference there may be no window
+        nearby, and :func:`clean_periodic_coils` searches the other knobs.
+    """
+    fallback = SOUND_PERIODIC_COIL
+    sides_per_turn = (fallback[0] if sides_per_turn is None
+                      else int(sides_per_turn))
+    circumference = (fallback[1] if circumference is None
+                     else int(circumference))
+    pitch = fallback[2] if pitch is None else float(pitch)
+    requested = fallback[3] if coil_radius is None else float(coil_radius)
+
+    steps = int(round(span / step))
+    offsets = [0.0]
+    for n in range(1, steps + 1):
+        offsets.extend((-n * step, n * step))
+
+    started = time.perf_counter()
+    tried = 0
+    hit: tuple[float, bool, int] | None = None
+    for offset in offsets:
+        if should_stop is not None and should_stop():
+            break
+        radius = requested + offset
+        if radius <= 0.0:
+            continue
+        tried += 1
+        closes, exact, atoms = _periodic_coil_mesh(
+            radius, pitch, sides_per_turn, circumference, knee, bond)
+        if callback is not None and tried % 5 == 0:
+            callback(tried, len(offsets), time.perf_counter() - started)
+        if closes:
+            hit = (radius, exact, atoms)
+            break
+    if hit is None:
+        if callback is not None:
+            callback(tried, len(offsets), time.perf_counter() - started)
+        return None
+
+    # Walk the window out from the hit, and while walking it prefer a
+    # radius whose census is the law's -- the window is where that choice
+    # exists, and it costs nothing extra to look while measuring it.
+    low = high = hit[0]
+    best = hit
+    for direction in (-1, 1):
+        radius = hit[0]
+        while True:
+            if should_stop is not None and should_stop():
+                break
+            radius += direction * step
+            if radius <= 0.0:
+                break
+            tried += 1
+            closes, exact, atoms = _periodic_coil_mesh(
+                radius, pitch, sides_per_turn, circumference, knee, bond)
+            if callback is not None and tried % 5 == 0:
+                callback(tried, len(offsets), time.perf_counter() - started)
+            if not closes:
+                break
+            low = min(low, radius)
+            high = max(high, radius)
+            if prefer_exact and exact and not best[1]:
+                best = (radius, exact, atoms)
+    elapsed = time.perf_counter() - started
+    if callback is not None:
+        callback(tried, len(offsets), elapsed)
+    return CoilWindow(coil_radius=round(float(best[0]), 4),
+                      requested=float(requested),
+                      census_exact=bool(best[1]), atoms=int(best[2]),
+                      window=(round(float(low), 4), round(float(high), 4)),
+                      tried=int(tried), elapsed=float(elapsed))
+
+
 def clean_periodic_coils(
     bond: float = CC_BOND,
     sides=(6, 8, 10, 12),
@@ -3101,6 +3314,14 @@ def clean_periodic_coils(
 
     Whether a shape closes at all is not continuous in the radius; see
     :func:`build_knee_periodic_coil` for why.
+
+    **This list under-reports, by construction.** The default radii step
+    0.5 A and the windows that close are 0.45 to 1.05 A wide, so the grid
+    steps over most of them -- the same arithmetic that made the GUI
+    slider look broken. It is a catalogue of shapes known to work, not a
+    census of the shapes that do. To find the window near a radius you
+    actually want, use :func:`nearest_closing_coil`, which steps
+    :data:`COIL_SEARCH_STEP`.
     """
     spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
     good: list[tuple[int, int, float, float]] = []

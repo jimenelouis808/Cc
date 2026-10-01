@@ -162,6 +162,25 @@ PRESETS: dict[str, dict[str, object]] = {
     "Nanocoil (knees, periodic, DFT-ready)": {
         "mode_kind": "coil (knees, periodic)", "kc_radius": 14.0,
         "kc_pitch": 15.0, "kc_sides": 6, "kc_k": 10, "anneal": 0},
+    # The same cell at a third the size, for calculations that pay per
+    # atom. 204 atoms, {5: 12, 6: 78, 7: 12} -- the law's two pairs per
+    # knee -- bonds 1.344-1.527 A and angles 105.9-127.9 deg, which is
+    # inside the sp2 band the rest of this package judges a wall by.
+    # Its D/d is 3.15 and the published single-wall coils sit at 3.5-3.9,
+    # so the builder warns: this is a tighter coil than those papers
+    # relaxed, not a broken one. Searched rather than guessed, and the
+    # smallest shape found that closes AND measures sound -- inside the
+    # 3.5-3.9 band the smallest is 300 atoms (10 sides, k = 7, R 11.05,
+    # pitch 7.75) and it comes out strained, 1.19-1.66 A bonds, which
+    # fails that same band. Fewer atoms is not the only axis.
+    # The window is 7.75-8.55 A, so the radius has room to be nudged,
+    # and it is worth nudging: the far end is 208 atoms at D/d 3.48,
+    # four atoms more for the edge of the published band. This end is
+    # the preset because its bonds keep more margin (1.344-1.527 A
+    # against 1.333-1.547) on the 1.30-1.55 band.
+    "Nanocoil (knees, periodic, smallest)": {
+        "mode_kind": "coil (knees, periodic)", "kc_radius": 7.75,
+        "kc_pitch": 15.0, "kc_sides": 6, "kc_k": 6, "anneal": 0},
     "Schwarz P (knees, no pentagons)": {
         "mode_kind": "schwarzite (knees)", "knee_cell": "primitive",
         "knee_k": 20, "knee_rows": 9, "anneal": 0},

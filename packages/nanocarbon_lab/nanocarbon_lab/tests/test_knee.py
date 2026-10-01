@@ -50,6 +50,7 @@ from nanocarbon_lab.builders.knee import (
     knee_path_mesh,
     knee_polygon_mesh,
     mesh_census,
+    nearest_closing_coil,
     net_cell_mesh,
     net_geometry,
     node_budget,
@@ -1238,3 +1239,151 @@ class TestAPeriodicCoilCellIsATorus:
         assert finite.info["builder"] == "knee_coil"
         assert finite.info["rim_atoms"]
         assert not all(finite.pbc)
+
+
+class TestTheSearchFindsTheWindowTheSliderMisses:
+    """The bug the user hit: the preset builds and nothing else does.
+
+    Closing is not continuous in the radius -- the wrap knee pairs up
+    only where the frame's holonomy lands near a whole lattice step --
+    and at the shipped shape the closing windows are 0.50 and 0.45 Å
+    wide. The radius slider used to step 0.5 Å, so of the seventeen radii
+    it could reach between 10 and 18 Å exactly one closed, and it was the
+    preset's. Moving any slider therefore looked like a builder that had
+    stopped working. These pin the search that finds the windows instead.
+    """
+
+    def test_a_radius_between_windows_is_walked_to_one_that_closes(self):
+        # 15.5 is what a 0.5 Å step lands on and it does not close.
+        with pytest.raises(ValueError):
+            build_knee_periodic_coil(coil_radius=15.5, pitch=15.0,
+                                     sides_per_turn=6, circumference=10,
+                                     relax=False)
+        found = nearest_closing_coil(coil_radius=15.5, pitch=15.0,
+                                     sides_per_turn=6, circumference=10)
+        assert found is not None
+        assert found.coil_radius == pytest.approx(15.35, abs=1e-6)
+        # And the radius it names really builds, at the size it predicted.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            atoms = build_knee_periodic_coil(
+                coil_radius=found.coil_radius, pitch=15.0, sides_per_turn=6,
+                circumference=10, relax=False)
+        assert len(atoms) == found.atoms
+        assert atoms.info["ring_deficit"] == 0
+
+    def test_the_window_it_reports_is_the_window_that_closes(self):
+        found = nearest_closing_coil(coil_radius=14.0, pitch=15.0,
+                                     sides_per_turn=6, circumference=10)
+        assert found is not None
+        low, high = found.window
+        assert (low, high) == pytest.approx((13.90, 14.35), abs=1e-6)
+        # Inside it every radius welds; a step outside, none does. The
+        # warnings are the point of a window rather than a point -- the
+        # census and the D/d move within it -- and are checked elsewhere.
+        for radius in np.arange(low, high + 1e-9, 0.05):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                build_knee_periodic_coil(coil_radius=float(radius),
+                                         pitch=15.0, sides_per_turn=6,
+                                         circumference=10, relax=False)
+        for radius in (low - 0.05, high + 0.05):
+            with pytest.raises(ValueError):
+                build_knee_periodic_coil(coil_radius=float(radius),
+                                         pitch=15.0, sides_per_turn=6,
+                                         circumference=10, relax=False)
+
+    def test_nothing_nearby_is_reported_as_nothing_and_not_as_a_guess(self):
+        # Narrow span on purpose: the honest answer is that the radius is
+        # not the knob to move here, not a radius that does not work.
+        assert nearest_closing_coil(coil_radius=12.0, pitch=17.0,
+                                    sides_per_turn=4, circumference=6,
+                                    span=0.5) is None
+
+    def test_it_reports_progress_and_can_be_stopped(self):
+        seen: list[tuple[int, int, float]] = []
+        found = nearest_closing_coil(coil_radius=15.5, pitch=15.0,
+                                     sides_per_turn=6, circumference=10,
+                                     callback=lambda *a: seen.append(a))
+        assert found is not None
+        assert seen and seen[-1][0] >= found.tried - 5
+        assert found.elapsed > 0.0
+        assert nearest_closing_coil(coil_radius=15.5, pitch=15.0,
+                                    sides_per_turn=6, circumference=10,
+                                    should_stop=lambda: True) is None
+
+    def test_the_search_agrees_with_the_builder_on_every_radius(self):
+        """The search reads the mesh only -- no dual, no relaxation -- so
+        it has to decide closure exactly as the builder does, or it would
+        hand the GUI radii that then refuse."""
+        for radius in np.arange(13.8, 14.45, 0.05):
+            window = nearest_closing_coil(
+                coil_radius=float(radius), pitch=15.0, sides_per_turn=6,
+                circumference=10, span=0.0)
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    build_knee_periodic_coil(
+                        coil_radius=float(radius), pitch=15.0,
+                        sides_per_turn=6, circumference=10, relax=False)
+            except ValueError:
+                assert window is None, radius
+            else:
+                assert window is not None, radius
+
+
+class TestTheSmallestPeriodicCoilIsStillSoundCarbon:
+    """What the preset claims, measured.
+
+    204 atoms is a third of the DFT-ready cell, and small enough that the
+    question is no longer the census -- it is whether the wall is still
+    sp2. Both are asserted here, because the smaller shapes that also
+    close are NOT sound: at 136 atoms the wall runs 0.8 Å from the axis,
+    and the smallest shape inside the published 3.5-3.9 D/d band comes
+    out with 1.19-1.66 Å bonds.
+    """
+
+    @pytest.fixture(scope="class")
+    def coil(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return build_knee_periodic_coil(coil_radius=7.75, pitch=15.0,
+                                            sides_per_turn=6,
+                                            circumference=6, relax=True)
+
+    def test_it_is_the_size_the_preset_promises(self, coil):
+        assert len(coil) == 204
+
+    def test_the_cell_is_a_torus_and_the_census_is_the_law(self, coil):
+        assert coil.info["ring_counts"] == {5: 12, 6: 78, 7: 12}
+        assert coil.info["ring_deficit"] == 0
+        assert coil.info["ring_counts"][5] == coil.info["pairs_expected"]
+
+    def test_the_wall_is_sp2_by_the_packages_own_report(self, coil):
+        geometry = coil.info["geometry"]
+        assert 1.30 <= geometry["bond_min"] <= geometry["bond_max"] <= 1.55
+        assert 100.0 <= geometry["angle_min"]
+        assert geometry["angle_max"] <= 135.0
+
+    def test_the_hole_is_open(self, coil):
+        """The 136-atom shapes close too, and their wall reaches to within
+        0.8 Å of the axis -- a shut hole, not a coil. The tube radius here
+        is 2.46 Å, so an open hole means the wall keeps clear of the axis
+        by about that much."""
+        positions = coil.get_positions()
+        radial = np.hypot(positions[:, 0] - positions[:, 0].mean(),
+                          positions[:, 1] - positions[:, 1].mean())
+        assert radial.min() > 2.0
+
+    def test_it_is_periodic_along_the_axis_only(self, coil):
+        assert tuple(coil.pbc) == (False, False, True)
+        assert coil.cell[2][2] == pytest.approx(15.0)
+
+    def test_the_builder_says_it_is_tighter_than_the_published_coils(self):
+        # D/d 3.15 against the published 3.5-3.9. It is a warning and not
+        # a refusal, and the user should see it: fewer atoms was bought
+        # with a tighter coil than those papers relaxed.
+        with pytest.warns(UserWarning, match="D/d"):
+            build_knee_periodic_coil(coil_radius=7.75, pitch=15.0,
+                                     sides_per_turn=6, circumference=6,
+                                     relax=False)

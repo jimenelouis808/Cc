@@ -40,6 +40,7 @@ KNEE_CENSUS = {
     "Carbon toroid (12 knees, exact)": (1032, {5: 12, 6: 492, 7: 12}, 0),
     "Nanocoil (knees, D/d 3.7)": (798, {5: 30, 6: 331, 7: 30}, None),
     "Nanocoil (knees, periodic, DFT-ready)": (672, {5: 12, 6: 312, 7: 12}, 0),
+    "Nanocoil (knees, periodic, smallest)": (204, {5: 12, 6: 78, 7: 12}, 0),
     "Schwarz P (knees, no pentagons)": (968, {6: 456, 7: 24}, -24),
     "Schwarz D (knees, no pentagons)": (1440, {6: 608, 7: 96}, -96),
     "Gyroid (knees, no pentagons)": (1744, {6: 816, 7: 48}, -48),
