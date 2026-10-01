@@ -84,6 +84,9 @@ class XuFamily:
     #: What the crystal comparison against GPAW measured for this set
     #: (``recipes/crystal_validation.py``); empty = periodic use not checked.
     crystal_notes: str = ""
+    #: H···H contact repulsion between hydrogens of different atoms
+    #: (``recipes/hh_contact.py``, from GPAW), held fixed under the fit.
+    hh_contact: bool = True
     experimental_alpha: dict = field(default_factory=dict)
     #: Acute-angle correction (:class:`tbkit.repulsive.AcuteAngleTerm`): number
     #: of powers fitted, with its fixed shape; None = no correction (xu_chn).
@@ -245,7 +248,11 @@ class XuFamily:
             return tuple(base.repulsive.terms)
         xu = copy.copy(base.repulsive)
         xu.others = "ignore"
-        return (xu,)
+        if not self.hh_contact:
+            return (xu,)
+        from .hh_contact import term
+
+        return (xu, term())                 # H···H contacts from GPAW, not fitted
 
     def repulsion_from_coefficients(self, coefficients) -> SumRepulsive:
         from ..params import CutoffPolynomial
@@ -861,7 +868,7 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
     data["validity"] = validity_text(family, report.get("bond_ranges", {}))
     data["notes"] = ("C-C idéntico a xu_carbon. Niveles: todos los ocupados, el LUMO y el "
                      f"LUMO+1, con un desplazamiento común de {shift:.4f} eV entre el cero de Xu "
-                     "y el vacío de GPAW. Sin interacción H-H. U de Hubbard: dε/dn del átomo "
+                     "y el vacío de GPAW. H-H: solo la repulsión de contacto de hh_contact. U de Hubbard: dε/dn del átomo "
                      "libre con GPAW (PBE), igual a DFTB mio.")
     xu_source = "Xu 1992 (idéntico a xu_carbon)"
     fit_source = f"ajustado ({source})"

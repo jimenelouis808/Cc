@@ -86,6 +86,8 @@ def band_forces(solution: Solution, energy_weighted: Optional[list] = None) -> n
         weighted.append(w)
     if energy_weighted is not None:
         weighted = energy_weighted
+    if system.env is not None:
+        return _environment_band_forces(solution, rho)
     phases_needed = system.periodic
     for bond in system.bonds:
         dh = _block_derivatives(system, bond, system.model.hopping)
@@ -108,6 +110,37 @@ def band_forces(solution: Solution, energy_weighted: Optional[list] = None) -> n
     return forces
 
 
+def _environment_band_forces(solution: Solution, rho: list) -> np.ndarray:
+    """Hellmann-Feynman forces of an environment-dependent (orthogonal) model."""
+    from .environment import HOPPINGS, sk_block_gradients
+
+    system = solution.system
+    env = system.env
+    n_pairs = len(system.bonds)
+    weights = {name: np.zeros(n_pairs) for name in HOPPINGS}
+    angular = np.zeros((n_pairs, 3))
+    for p, bond in enumerate(system.bonds):
+        ri, rj = system.basis.of_atom(bond.i), system.basis.of_atom(bond.j)
+        g = np.zeros((ri.stop - ri.start, rj.stop - rj.start))
+        for k, wk in enumerate(solution.weights):
+            phase = np.exp(2j * np.pi * float(solution.kpts[k] @ bond.shift)) \
+                if system.periodic else 1.0
+            g += wk * np.real(phase * rho[k][rj.start:rj.stop, ri.start:ri.stop]).T
+        values = [env.values[name][p] for name in HOPPINGS]
+        d_v, d_vec = sk_block_gradients(values, bond.vector / env.r[p], env.r[p])
+        for name, d_block in zip(HOPPINGS, d_v, strict=True):
+            weights[name][p] = float(np.sum(g * d_block))
+        angular[p] = [float(np.sum(g * d_block)) for d_block in d_vec]
+    # on-site: Σ_μ∈i ρ_μμ times ∂e_i/∂Δe (each directed pair feeds its first atom)
+    occupation = np.zeros(len(system.atoms))
+    for k, wk in enumerate(solution.weights):
+        diagonal = np.real(np.diag(rho[k])) * wk
+        for orbital, value in zip(system.basis.orbitals, diagonal, strict=True):
+            occupation[orbital.atom] += value
+    weights["onsite"] = occupation[env.i]
+    return -env.backward(weights, angular)
+
+
 def energy_and_forces(solution: Solution, need_forces: bool = True
                       ) -> tuple[float, Optional[np.ndarray], dict]:
     """Free energy, forces and the parts, for a non-SCC solution.
@@ -124,7 +157,10 @@ def energy_and_forces(solution: Solution, need_forces: bool = True
         raise ValueError("Fuerzas con Hubbard de campo medio: no implementadas.")
     e_band = solution.band_energy()
     ts = entropy_term(solution)
-    e_rep, f_rep = repulsive.energy_and_forces(system.atoms)
+    if system.env is not None:
+        e_rep, f_rep = repulsive.energy_and_forces(system.atoms, system.env)
+    else:
+        e_rep, f_rep = repulsive.energy_and_forces(system.atoms)
     parts = {"band": e_band, "entropy_TS": ts, "repulsive": e_rep}
     forces = band_forces(solution) + f_rep if need_forces else None
     return e_band - ts + e_rep, forces, parts

@@ -35,11 +35,31 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
 3. (hecho) Polarizabilidad extra: B 0.873, S 2.642, P 2.647, Se 3.496 Å³ (GPAW FD).
 4. Términos angulares: probado O-X-O solo (`--angular-ligands O`) en Se: activo pero no
    arregla CH3SeO2H (deriva 0,87 -> 0,83 Å; SeO2 mejora, DMSeO empeora). Descartado; no se
-   extiende a P/B. La causa es la base sin d. Factores de escala (Witek 2004): hechos
+   extiende a P/B. ¿Son los orbitales d? Prueba con GPAW relajando desde el mínimo dzp con
+   la base sin d solo en el heteroátomo (`dz(dzp)`): CH3SeO2H no se mueve (0,05 Å; con d
+   0,07) -> en Se NO son los d; H3PO4 tampoco (0,13 frente a 0,06); MePO3H2 sí (los OH giran
+   ~150°, P-O +0,05 Å; con d 0,09 Å), pero TB gira en otra dirección. B: no es el OH sino el
+   B(OH)2 coplanar con el fenilo (GPAW 23°), probable falta de repulsión H-H (H···H 1,95 Å
+   frente a 2,13). Hecho: `HHContactTerm` (pared H2···H2 de GPAW) instalado en los 6 conjuntos
+   sin reajuste (corte quíntico 2,0-2,4 Å): PhB(OH)2 0,61 -> 0,07 Å, coroneno-SH 1,08 -> 0,14,
+   coroneno-SeH 1,18 -> 0,26, PEt3 0,16 -> 0,13. OH de ácidos selenínicos/fosfónicos: causa medida = base mínima (en el
+   giro rígido la repulsión TB es plana y la parte electrónica hunde 240-300°; GPAW con base
+   sz hace lo mismo). Sin arreglo dentro de una base sp mínima: limitación declarada. Factores de escala (Witek 2004): hechos
    (λ 1,003-1,037 frente a GPAW, en cada archivo; `tasks.phonons` da las escaladas aparte).
 5. (hecho) SCC periódico con Ewald (`ewald.py`): Madelung, caja grande = finito, fuerzas FD.
-   Hecho también: validación en 13 cristales (arriba). Falta: α de respuesta lineal SCC periódica.
-6. TB dependiente del entorno (Tang 1996).
+   Hecho también: validación en 13 cristales (arriba) y α de respuesta lineal SCC periódica
+   (campos locales de carga; los dipolares en cristales siguen sin Ewald).
+6. TB dependiente del entorno (Tang 1996): EN CURSO.
+   - Hecho: `environment.py` (ecs. 1-7: apantallamiento, distancias escaladas por g, on-site y
+     repulsión dependientes del entorno; cortes quínticos nuestros 4,2-5,0 / 5,0-6,0 Å) con fuerzas
+     analíticas probadas por diferencias finitas; reproduce las g del artículo a 1e-3.
+   - Parámetros publicados en `parameters/tang1996_published.json` (verificados contra el PDF; el
+     PDF NO se versiona, revista): NO dan el diamante del artículo con ningún corte (1os vecinos lo
+     comprimen; más vecinos, el Δe on-site casi sin apantallar lo expande). Solo para pruebas.
+   - Datos: `recipes/carbon_environments.py`, `references/gpaw_carbon_env.json` (9 entornos).
+     Error de fuerzas de Xu: cristales 5-15 %, defectos/C60 15-24 %, amorfos 21-50 %.
+   - Siguiente: ajustar los parámetros de Tang a esas referencias (partiendo de los publicados),
+     dejando fuera un amorfo y Stone-Wales para validar; luego exponerlo en GUI/CLI.
 7. ML: Δ-learning de repulsión (Stöhr 2020), fonones híbridos MACE con α/μ de TB,
    DeePTB; GFN2-xTB como motor de comparación opcional.
 8. Validación en sistemas reales; anomalía de Kohn (Piscanec 2004).

@@ -24,9 +24,10 @@ crystal, ``ε∞ = 1 + 4π α / V_cell``.
 
 What it cannot do: metals and semimetals have no static polarizability
 (the intraband response diverges; graphene's interband one diverges as
-1/ω), so they are refused. Local-field and excitonic effects are absent
-(independent particles): TB polarizabilities of extended systems are
-indicative. With ħω close to the gap the expression diverges; that is the
+1/ω), so they are refused. Excitonic effects are absent. Local fields: the
+SCC linear response screens finite systems and, through Ewald,
+crystals (:func:`polarizability_periodic_screened`); the sum over states
+here is independent particles. With ħω close to the gap the expression diverges; that is the
 resonant regime, not described here.
 """
 
@@ -316,7 +317,10 @@ def polarizability_linear_response(system: System, kT: float = 0.01, U=None,
     from .scc import self_consistent
 
     if system.periodic:
-        raise ValueError("Respuesta lineal SCC: solo sistemas finitos (no implementada con Ewald).")
+        return polarizability_periodic_screened(system, kT=kT, U=U, screened=screened,
+                                                ground_scc=ground_scc,
+                                                onsite_dipoles=onsite_dipoles,
+                                                extra_polarizability=extra_polarizability)
     if ground_scc is None:
         ground_scc = system.model.scc
     reference = self_consistent(system, U=U, kT=kT, tol=1e-10) if ground_scc else None
@@ -337,6 +341,106 @@ def polarizability_linear_response(system: System, kT: float = 0.01, U=None,
     response = chi if kernel is None else np.linalg.solve(np.eye(len(chi)) - chi @ kernel, chi)
     alpha = -coupling.T @ response @ coupling
     return 0.5 * (alpha + alpha.T) * COULOMB
+
+
+def polarizability_periodic_screened(system: System, kmesh: int | tuple = 12,
+                                     kT: float = 0.01, U=None, screened: bool = True,
+                                     ground_scc: Optional[bool] = None,
+                                     onsite_dipoles: bool = True,
+                                     extra_polarizability: bool = True,
+                                     kpts: Optional[np.ndarray] = None,
+                                     weights: Optional[np.ndarray] = None) -> np.ndarray:
+    """α per unit cell (Å³) of a gapped crystal with the SCC local fields (q → 0).
+
+    A uniform field is not ``E·R_A`` in a crystal, so the field enters through
+    the interband position elements ``r_nm`` (as in :func:`polarizability_periodic`)
+    and the charges it moves are screened by the periodic γ (Ewald, its G = 0
+    term absent: the applied field is the macroscopic one). With the
+    independent-particle responses ``χ_XY = Σ_k w Σ_{n≠m} (f_n - f_m)/(E_n - E_m)
+    X_nm Y_mn`` between Mulliken transition charges ``q`` and ``r``,
+
+        α = -[χ_rr + χ_rq γ (1 - χ_qq γ)⁻¹ χ_qr]
+
+    which for a molecule in a large box is the finite
+    :func:`polarizability_linear_response` (tested). Intra-atomic dipoles
+    enter ``r`` but are not themselves screened in crystals (the dipole kernel
+    has no Ewald sum yet), and the extra atomic polarizabilities are added per
+    cell unscreened.
+
+    What that leaves: on an atom whose site has a C3 (or higher) axis a uniform
+    field induces no net charge, so in pristine h-BN or diamond the charge local
+    fields are exactly zero (tested) and this equals the independent-particle α;
+    in those crystals the local fields are dipolar and not included. They
+    appear where the symmetry is broken: dopants, functional groups, strain.
+    """
+    from .dipoles import dipole_matrices, has_dipoles
+    from .scc import gamma_matrix, self_consistent
+
+    if kpts is None:
+        kpts, weights = mesh(system.atoms, kmesh)
+    if ground_scc is None:
+        ground_scc = system.model.scc
+    atoms = system.basis.atoms
+    owner = np.array([atoms.index(o.atom) for o in system.basis.orbitals])
+    shift = np.zeros(system.basis.size)
+    if ground_scc:
+        result = self_consistent(system, U=U, kT=kT, tol=1e-10, kpts=kpts, weights=weights)
+        if not result.converged:
+            raise RuntimeError("SCC sin converger: " + result.summary())
+        shift = result.shift
+    onsite = dipole_matrices(system) if onsite_dipoles and has_dipoles(system.model) else None
+    states = []
+    for k in kpts:
+        h, s, dh, ds = _bloch_ii(system, k)
+        if s is None:
+            h = h + np.diag(shift)
+            e, c = eigh(h)
+        else:
+            h = h + 0.5 * s * (shift[:, None] + shift[None, :])
+            dh = [d + 0.5 * dsa * (shift[:, None] + shift[None, :]) for d, dsa in zip(dh, ds)]
+            e, c = eigh(h, s)
+        states.append((e, c, s, dh, ds))
+    energies = np.array([st[0] for st in states])[None]
+    mu = fermi_level(energies, weights, system.electrons, kT, 2.0)
+    occupations = 2.0 * _fermi_dirac(energies, mu, kT)[0]
+    fractional = (occupations > 0.04) & (occupations < 1.96)
+    if fractional.any():
+        raise ValueError("Sistema sin gap: un metal no tiene polarizabilidad estática.")
+    n_atoms = len(atoms)
+    chi_qq = np.zeros((n_atoms, n_atoms))
+    chi_qr = np.zeros((n_atoms, 3))
+    chi_rr = np.zeros((3, 3))
+    for (e, c, s, dh, ds), f, w in zip(states, occupations, weights, strict=True):
+        de = e[:, None] - e[None, :]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            weight = np.where(np.abs(de) > 1e-9, (f[:, None] - f[None, :]) / de, 0.0)
+        sc = c if s is None else s @ c
+        # q[A, n, m] = ½ Σ_{μ∈A} [c*_μn (Sc)_μm + (Sc)*_μn c_μm]
+        q = np.zeros((n_atoms, len(e), len(e)), dtype=complex)
+        pair = 0.5 * (c.conj()[:, :, None] * sc[:, None, :] + sc.conj()[:, :, None] * c[:, None, :])
+        np.add.at(q, owner, pair)
+        r = []
+        for a in range(3):
+            velocity = c.conj().T @ dh[a] @ c
+            if ds is not None:
+                velocity = velocity - (c.conj().T @ ds[a] @ c) * e[None, :]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                element = np.where(np.abs(de.T) > 1e-9, 1j * velocity / (e[None, :] - e[:, None]),
+                                   0.0)
+            if onsite is not None:
+                element = element + np.where(np.abs(de) > 1e-9, c.conj().T @ onsite[a] @ c, 0.0)
+            r.append(element)
+        r = np.array(r)
+        chi_qq += w * np.real(np.einsum("anm,nm,bnm->ab", q, weight, q.conj()))
+        chi_qr += w * np.real(np.einsum("anm,nm,bnm->ab", q, weight, r.conj()))
+        chi_rr += w * np.real(np.einsum("anm,nm,bnm->ab", r, weight, r.conj()))
+    alpha = -chi_rr
+    if screened:
+        gamma = gamma_matrix(system, U)
+        response = np.linalg.solve(np.eye(n_atoms) - chi_qq @ gamma, chi_qr)
+        alpha = alpha - chi_qr.T @ gamma @ response
+    alpha = 0.5 * (alpha + alpha.T) * COULOMB
+    return alpha + _extra_sum(system, extra_polarizability)
 
 
 def polarizability_screened(system: System, field: float = 0.01, kT: float = 0.01,
@@ -375,11 +479,13 @@ def polarizability_screened(system: System, field: float = 0.01, kT: float = 0.0
     return 0.5 * (alpha + alpha.T) * COULOMB
 
 
-def dielectric_constant(system: System, **kwargs) -> np.ndarray:
-    """ε∞ tensor of a 3D crystal, ``1 + 4π α / V`` (independent particles)."""
+def dielectric_constant(system: System, screened: bool = False, **kwargs) -> np.ndarray:
+    """ε∞ tensor of a 3D crystal, ``1 + 4π α / V``: independent particles, or with
+    the SCC local fields (``screened=True``, :func:`polarizability_periodic_screened`)."""
     if not system.atoms.get_pbc().all():
         raise ValueError("ε∞ solo para cristales 3D (pbc en los tres ejes).")
-    alpha = polarizability(system, **kwargs)
+    alpha = polarizability_periodic_screened(system, **kwargs) if screened \
+        else polarizability(system, **kwargs)
     return np.eye(3) + 4 * np.pi * alpha / system.atoms.get_volume()
 
 

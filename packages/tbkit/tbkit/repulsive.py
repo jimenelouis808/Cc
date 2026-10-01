@@ -194,6 +194,107 @@ def read_skf_spline(lines: list[str]) -> Optional[SkfSpline]:
     return SkfSpline(a, tuple(knots), float(cutoff))
 
 
+@dataclass
+class HHContactTerm:
+    """Exchange repulsion between hydrogens that are not bonded to the same atom.
+
+    ``E = Σ_{H_i<H_j} V(r_ij) h(r_ij) Π_X [1 - b_X(r_iX) b_X(r_jX)]``, with
+    ``V = v0 exp(-(r - r0)/ρ)`` cut to zero (C2) between ``tail``, ``h`` switching
+    off the bonded H2 pair and ``b_X`` the smooth bond indicator of the H to a
+    neighbour X (1 below ``bonds[X][0]``, a cubic to 0 at ``bonds[X][1]``).
+    The product removes geminal pairs (H-X-H), whose interaction the fitted
+    angles already hold; what is left is the contact between hydrogens of
+    different groups (an ortho H against the H of a B-OH, H···H 1.95 Å in the
+    model without it, 2.13 in GPAW).
+
+    Not fitted: v0 and ρ come from GPAW's H2···H2 repulsion (collinear dimer,
+    PBE, LCAO dzp; ``recipes/hh_contact.py``).
+    """
+
+    v0: float                                   # eV at r0
+    r0: float                                   # Å
+    rho: float                                  # Å, decay length
+    tail: tuple = (2.0, 2.4)                    # Å, quintic cutoff of V
+    bonds: dict = None                          # heavy element -> (r1, rm), Å
+    h2: tuple = (0.9, 1.1)                      # Å, bonded H-H switched off
+
+    def _v(self, r):
+        """V and dV/dr. The cutoff is quintic (value, slope and curvature go to zero):
+        with a cubic one the curvature jumped at the cutoff, and finite-difference
+        phonons of molecules with H pairs near it split degenerate modes (benzene's
+        E1u by 3 cm⁻¹, its ortho H···H being 2.48 Å)."""
+        r1, rm = self.tail
+        v = self.v0 * np.exp(-(r - self.r0) / self.rho)
+        dv = -v / self.rho
+        x = min(max((r - r1) / (rm - r1), 0.0), 1.0)
+        s = 1 - 10 * x ** 3 + 15 * x ** 4 - 6 * x ** 5
+        ds = (-30 * x ** 2 + 60 * x ** 3 - 30 * x ** 4) / (rm - r1)
+        return float(v * s), float(dv * s + v * ds)
+
+    @staticmethod
+    def _switch(r, r1, rm):
+        x = min(max((r - r1) / (rm - r1), 0.0), 1.0)
+        return 1 - 3 * x ** 2 + 2 * x ** 3, (-6 * x + 6 * x ** 2) / (rm - r1)
+
+    def cutoff(self) -> float:
+        return self.tail[1]
+
+    def energy_and_forces(self, atoms: Atoms) -> tuple[float, np.ndarray]:
+        symbols = atoms.get_chemical_symbols()
+        forces = np.zeros((len(atoms), 3))
+        hydrogens = [i for i, s in enumerate(symbols) if s == "H"]
+        if len(hydrogens) < 2:
+            return 0.0, forces
+        reach = max(rm for _, rm in self.bonds.values())
+        ii, jj, dd, vv = neighbor_list("ijdD", atoms, max(reach, self.tail[1]))
+        bonded = {h: [] for h in hydrogens}          # H -> [(X, b, db, unit vector H->X)]
+        pairs = []
+        for i, j, d, vec in zip(ii, jj, dd, vv, strict=True):
+            if symbols[i] != "H":
+                continue
+            if symbols[j] == "H":
+                if i < j and d < self.tail[1]:
+                    pairs.append((i, j, d, vec))
+            elif symbols[j] in self.bonds and d < self.bonds[symbols[j]][1]:
+                b, db = self._switch(d, *self.bonds[symbols[j]])
+                if b > 0:
+                    bonded[i].append((j, b, db, vec / d))
+        energy = 0.0
+        for i, j, r, vec in pairs:
+            v, dv = self._v(r)
+            h, dh = self._switch(r, *self.h2)
+            h, dh = 1 - h, -dh
+            common = []
+            for x, bi, dbi, ui in bonded[i]:
+                for y, bj, dbj, uj in bonded[j]:
+                    if x == y:
+                        common.append((x, bi, dbi, ui, bj, dbj, uj))
+            factors = [1 - c[1] * c[4] for c in common]
+            w = float(np.prod(factors)) if factors else 1.0
+            if v * h * w == 0.0 and not common:
+                continue
+            energy += v * h * w
+            unit = vec / r                         # from i to j
+            radial = (dv * h + v * dh) * w
+            forces[i] += radial * unit
+            forces[j] -= radial * unit
+            for k, (x, bi, dbi, ui, bj, dbj, uj) in enumerate(common):
+                others = float(np.prod([f for m, f in enumerate(factors) if m != k]))
+                # d(1 - bi bj): bi depends on r_ix, bj on r_jx
+                gi = -dbi * bj * v * h * others        # dE/dr_ix
+                gj = -dbj * bi * v * h * others        # dE/dr_jx
+                forces[i] += gi * ui
+                forces[x] -= gi * ui
+                forces[j] += gj * uj
+                forces[x] -= gj * uj
+        return energy, forces
+
+    def to_dict(self) -> dict:
+        return {"type": "hh_contact", "v0": self.v0, "r0": self.r0, "rho": self.rho,
+                "tail": list(self.tail), "h2": list(self.h2),
+                "bonds": {k: list(v) for k, v in self.bonds.items()}}
+
+
 def repulsive_from_dict(data: dict):
     """A repulsive term from a parameter file's ``repulsive`` entry."""
     from .params import Tail
@@ -207,6 +308,11 @@ def repulsive_from_dict(data: dict):
                 term.others = "ignore"
             terms.append(term)
         return SumRepulsive(tuple(terms))
+    if kind == "hh_contact":
+        return HHContactTerm(float(data["v0"]), float(data["r0"]), float(data["rho"]),
+                             tuple(float(v) for v in data.get("tail", (2.0, 2.4))),
+                             {k: (float(v[0]), float(v[1])) for k, v in data["bonds"].items()},
+                             tuple(float(v) for v in data.get("h2", (0.9, 1.1))))
     if kind == "acute_angle":
         return AcuteAngleTerm(tuple(float(c) for c in data["coefficients"]),
                               float(data.get("theta0_degrees", 80.0)), float(data.get("r1", 1.7)),

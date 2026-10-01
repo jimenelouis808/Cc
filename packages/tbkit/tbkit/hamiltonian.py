@@ -51,6 +51,8 @@ class System:
     h_blocks: list[np.ndarray]
     s_blocks: list[np.ndarray]
     onsite: np.ndarray
+    #: The environment of an environment-dependent model (its pairs are the bonds).
+    env: Optional[object] = None
 
     @property
     def periodic(self) -> bool:
@@ -75,6 +77,8 @@ class System:
         if problems:
             raise ValueError("Modelo incompleto:\n" + "\n".join(problems))
         basis = Basis.build(atoms, model)
+        if model.environment is not None:
+            return cls._build_environment(atoms, model, basis)
         symbols = atoms.get_chemical_symbols()
         cutoff = model.cutoff()
         bonds, h_blocks, s_blocks = [], [], []
@@ -94,6 +98,19 @@ class System:
                 s_blocks.append(sb)
         onsite = np.array([model.onsite[o.element][o.name[0]] for o in basis.orbitals])
         return cls(atoms, model, basis, bonds, h_blocks, s_blocks, onsite)
+
+    @classmethod
+    def _build_environment(cls, atoms: Atoms, model: TBModel, basis: Basis) -> "System":
+        spec = model.environment
+        if set(atoms.get_chemical_symbols()) != {spec.element}:
+            raise ValueError(f"El modelo '{model.name}' solo describe {spec.element}.")
+        env = spec.evaluate(atoms)
+        bonds = [Bond(int(i), int(j), np.asarray(v), np.asarray(s))
+                 for i, j, v, s in zip(env.i, env.j, env.vec, env.shift, strict=True)]
+        h_blocks = [env.block(p) for p in range(len(bonds))]
+        onsite = np.array([spec.e0[o.name[0]] + env.onsite_shift[o.atom]
+                           for o in basis.orbitals])
+        return cls(atoms, model, basis, bonds, h_blocks, [None] * len(bonds), onsite, env)
 
     def kpoint_cartesian(self, fractional) -> np.ndarray:
         """Fractional k (in units of the reciprocal vectors) to Cartesian 1/Å."""

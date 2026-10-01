@@ -171,7 +171,8 @@ Resultado (todo frente a GPAW salvo α):
 
 Límites que el archivo declara en `validity`: ajustado en moléculas de capa
 cerrada (en cristales, lo medido frente a GPAW: ver «Cristales frente a GPAW»); energías comparables solo entre geometrías de la misma
-composición (no se ajustaron atomizaciones); sin interacción H–H; y el C–C de
+composición (no se ajustaron atomizaciones); entre H solo la repulsión de contacto
+(ver «Contacto H···H»); y el C–C de
 Xu falla en anillos tensos (aziridina, 0,22 Å), y los C–C y C–N simples junto
 a un heteroátomo (aminas, nitrilos) se desvían ~0,08 Å.
 
@@ -436,6 +437,50 @@ Lo que el usuario debe garantizar: la estructura es la del cálculo de QE, en el
 mismo orden de átomos, y con las mismas masas (las de ASE si no se cambian).
 El lector está comprobado con archivos escritos en el formato documentado; aún
 no contra una instalación real de QE.
+
+## Contacto H···H
+
+Los conjuntos no tenían ninguna interacción entre hidrógenos, y los de grupos
+distintos podían acercarse demasiado: el ácido fenilborónico quedaba plano
+(GPAW tuerce el B(OH)2 23°; H orto a H del OH 1,95 Å en el modelo, 2,13 en
+GPAW). `repulsive.HHContactTerm` añade la repulsión que da GPAW entre dos H2
+en contacto (`recipes/hh_contact.py`, curva en
+`parameters/references/gpaw_h2h2.json`; no ajustada), con un peso suave que la
+anula entre hidrógenos del mismo átomo (H–C–H, ya en los ángulos ajustados) y
+en el H2. En el equilibrio vale ≤ 4 meV por molécula (12 meV en PhB(OH)2), así
+que se instaló sobre los conjuntos sin reajustarlos (`hh_contact install`); los
+reajustes futuros lo llevan como término fijo.
+
+Deriva al relajar desde el mínimo de GPAW (desplazamiento máximo):
+
+| molécula | sin él | con él |
+|---|---|---|
+| PhB(OH)2 | 0,61 Å | 0,07 Å (el B(OH)2 vuelve a torcerse, como en GPAW) |
+| coroneno-SH | 1,08 Å | 0,14 Å |
+| coroneno-SeH | 1,18 Å | 0,26 Å |
+| PEt3 | 0,16 Å | 0,13 Å |
+| C3H9N | 0,21 Å | 0,18 Å |
+
+El corte es de quinto grado entre 2,0 y 2,4 Å (valor, pendiente y curvatura
+nulos): con uno cúbico hasta 2,5 Å, los H orto del benceno (2,48 Å) caían en el
+salto de curvatura y las frecuencias por diferencias finitas partían su par E1u.
+
+De paso quedó medido que el OH que gira en los ácidos selenínicos y fosfónicos
+**no** es la falta de orbitales d: GPAW sin funciones d en el Se mantiene
+CH3SeO2H (0,05 Å); en MePO3H2 los d sí importan en DFT, pero TB falla en otra
+dirección. La causa es la base mínima: en el giro rígido del OH la repulsión
+de TB no cambia y la parte electrónica pone 240-300° 0,1 eV por debajo del
+mínimo; GPAW con base mínima (sz) en todos los átomos hace lo mismo (−0,06 eV;
+con dzp +0,03). Ningún término repulsivo o angular puede corregir un error
+electrónico de la base: queda como limitación declarada en `validity`.
+
+La α de respuesta lineal SCC vale también para cristales
+(`optics.polarizability_periodic_screened`, con `screening="scc"` en el Raman de
+cristales y `dielectric_constant(screened=True)`): campos locales de carga por
+Ewald. Una molécula en una caja da la α finita con su campo de Lorentz; en
+cristales con sitios de simetría C3 (h-BN, diamante prístinos) esos campos son
+cero por simetría y los dipolares aún no están; importan en cristales dopados,
+funcionalizados o deformados.
 
 ## Factores de escala de frecuencias
 

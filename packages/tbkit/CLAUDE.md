@@ -14,6 +14,7 @@ tbkit/
 ├── kpoints.py        # Γ, meshes, band paths
 ├── solver.py         # eigenstates, Fermi level, Solution (spin-resolved)
 ├── analysis.py       # P, Mulliken/Löwdin, bond orders, DOS/PDOS, bands, cube files
+├── environment.py    # environment-dependent TB (Tang 1996): screening, scaled distances
 ├── scc.py            # self-consistent charges (finite, or periodic through ewald.py)
 ├── ewald.py          # periodic γ: Ewald for 1/r and 1/r³, short-range rest
 ├── hubbard.py        # mean-field Hubbard, magnetisation vs energy/field/doping
@@ -80,7 +81,12 @@ tbkit/
   Checks: NaCl Madelung constant, a molecule in a large box equals the finite
   result, forces against finite differences (h-BN). Summing the r⁻³ tail in
   real space oscillated by 10⁻² eV: do not go back to it. Vacuum directions
-  are a supercell. SCC linear-response α stays finite-only.
+  are a supercell. SCC linear-response α of crystals
+  (`optics.polarizability_periodic_screened`, q → 0, charge local fields through
+  the Ewald γ without G = 0): a molecule in a box must give the finite α with its
+  Lorentz field, α/(1 - 4πα/3V), and pristine h-BN exactly the unscreened α
+  (C3 sites carry no induced charge; both tested). Dipole channels are not
+  screened in crystals yet. Raman of crystals uses it only with screening="scc".
 - The sets were fitted on molecules; crystals are an extrapolation, measured in
   `recipes/crystal_validation.py` (13 crystals, GPAW with the model's k mesh
   and smearing; `validation/crystals_tb_vs_gpaw.json`) and stated in each set's
@@ -91,6 +97,11 @@ tbkit/
   GPAW rounds gpts to multiples of 4 and a 2 % strain changed them (~1 eV).
   The GPAW stage is resumable (one file per point, BFGS trajectory and
   Hessian); relaunch `run_crystals.sh` after a restart, never start over.
+- Environment-dependent TB (`environment.py`, Tang et al. 1996): `TBModel.environment`
+  builds H, on-site and repulsion; forces carry the chain rule through screening atoms and
+  coordinations (tested against finite differences). The published parameters
+  (`tang1996_published.json`) do not give the paper's diamond with any cutoff tried: test
+  use only, never ship them as a usable set. The paper's PDF is not versioned (journal).
 - `TBModel.scc` says which ground state the parameters were made for: True
   for `.skf` sets, `xu_chn` and `xu_chno`, False for Xu and π. Calculators, tasks and
   the linear-response α follow it unless told otherwise; a set fitted with
@@ -115,8 +126,19 @@ tbkit/
   divalent Se (H2Se 64 -> 289 cm⁻¹) and neither fixed the X-OH torsion of
   seleninic/phosphonic acids, which stays a stated limit in `validity`. An O-X-O-only
   angle term (`xu_bsp --angular-ligands O`, zero in H2Se) was fitted active
-  (~0.9 eV) and still left CH3SeO2H drifting 0.83 Å (0.87 without): the fault
-  is the missing d basis, not a missing empirical term. Do not retry variants.
+  (~0.9 eV) and still left CH3SeO2H drifting 0.83 Å (0.87 without). Cause,
+  measured: the minimal basis. Along the rigid OH scan the TB repulsion is flat
+  and the electronic energy puts 240-300° 0.1 eV below the minimum; GPAW with
+  a minimal sz basis on every atom does the same (-0.06 eV; dzp +0.03), while
+  GPAW without d on Se alone does not. No repulsive or angle term can fix an
+  electronic, basis-set error: the fix is polarisation functions (out of scope). The boronic case was the missing H-H repulsion, now
+  `repulsive.HHContactTerm` (`recipes/hh_contact.py`: GPAW H2···H2 wall, not
+  fitted; zero between hydrogens of the same atom, through a smooth bond
+  weight, and in H2). It sits second in every xu_ch* repulsion and is a fixed
+  base term of any refit (`XuFamily.hh_contact`). Never scale it to hit a
+  geometry: ×3 already overshoots PhB(OH)2 (321° against GPAW's 337°). Its
+  cutoff must stay C2 (quintic, 2.0-2.4 Å): a cubic tail to 2.5 Å split
+  benzene's E1u (ortho H···H 2.48 Å) through finite-difference phonons.
 - Imported QE modes: L = e/√m with e normalised from the file's
   displacements (or eigenvectors), per degenerate set a real basis of the
   subspace; never take the real part of a complex Γ mode without fixing its
