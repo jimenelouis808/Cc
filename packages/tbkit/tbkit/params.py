@@ -293,6 +293,9 @@ class TBModel:
     scc: bool = False
     onsite_dipole: dict[str, float] = field(default_factory=dict)
     extra_polarizability: dict[str, float] = field(default_factory=dict)
+    #: Environment-dependent hoppings, on-site energies and repulsion
+    #: (:class:`tbkit.environment.TangSpec`); None for two-centre models.
+    environment: Optional[object] = None
 
     @property
     def orthogonal(self) -> bool:
@@ -313,6 +316,8 @@ class TBModel:
         return found
 
     def cutoff(self) -> float:
+        if self.environment is not None:
+            return self.environment.cutoff()
         laws = list(self.hopping.values()) + list(self.overlap.values())
         return max((law.cutoff for law in laws), default=0.0)
 
@@ -386,7 +391,13 @@ def model_from_dict(data: dict) -> TBModel:
         return out
 
     repulsive = None
-    if data.get("repulsive"):
+    environment = None
+    if data.get("environment"):
+        from .environment import TangRepulsive, TangSpec
+
+        environment = TangSpec.from_dict(data["environment"])
+        repulsive = TangRepulsive(environment)
+    elif data.get("repulsive"):
         from .repulsive import repulsive_from_dict
 
         repulsive = repulsive_from_dict(data["repulsive"])
@@ -410,6 +421,7 @@ def model_from_dict(data: dict) -> TBModel:
         onsite_dipole={el: float(_value(v)) for el, v in data.get("onsite_dipole", {}).items()},
         extra_polarizability={el: float(_value(v))
                               for el, v in data.get("extra_polarizability", {}).items()},
+        environment=environment,
     )
 
 

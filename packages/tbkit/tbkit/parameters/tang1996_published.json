@@ -1,0 +1,368 @@
+{
+ "name": "Carbono dependiente del entorno: parámetros publicados (Tang, Wang, Chan, Ho 1996)",
+ "reference": "M. S. Tang, C. Z. Wang, C. T. Chan, K. M. Ho, Phys. Rev. B 53, 979 (1996). Parámetros de las tablas I y II y del texto (ecs. 1-7); verificados contra el PDF (signos de α1 de V_ssσ y V_ppπ negativos).",
+ "system": "carbono puro: cadena, grafito, diamante y fases metálicas (sc, bcc, fcc) del ajuste original a LDA+GGA; aquí además validado frente a GPAW PBE en amorfos y defectos",
+ "validity": "SOLO para comprobar la implementación (coordinaciones efectivas, fuerzas). Con estos parámetros tal como están impresos y cualquier corte probado (2,3-5,0 Å) el diamante NO tiene el mínimo del artículo (a = 3,585 Å): con primeros vecinos se comprime, con más vecinos el Δe on-site lo expande sin mínimo. El artículo no publica cortes ni la referencia de energía. No usar para energías ni geometrías; punto de partida del ajuste a GPAW. solo carbono; sin SCC (ortogonal, sin cargas); parámetros del artículo sin cambios. Cortes suaves nuestros (el artículo no los da): pares 4,2-5,0 Å, átomos que apantallan 5,0-6,0 Å; con ellos las coordinaciones efectivas del artículo salen a 1e-3.",
+ "units": {
+  "energy": "eV",
+  "length": "Å"
+ },
+ "orbitals": {
+  "C": [
+   "s",
+   "px",
+   "py",
+   "pz"
+  ]
+ },
+ "onsite": {
+  "C": {
+   "s": {
+    "value": -6.041,
+    "unit": "eV",
+    "source": "Tang et al. 1996, texto tras ec. 6 (e_s,0)"
+   },
+   "p": {
+    "value": 1.024,
+    "unit": "eV",
+    "source": "Tang et al. 1996, texto tras ec. 6 (e_p,0)"
+   }
+  }
+ },
+ "valence": {
+  "C": {
+   "value": 4,
+   "unit": "e",
+   "source": "carbono, 2s2 2p2"
+  }
+ },
+ "hopping": [],
+ "scc": false,
+ "environment": {
+  "functions": {
+   "sss": {
+    "a1": {
+     "value": -8.9491,
+     "unit": "eV (φ: adimensional)",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "a2": {
+     "value": 0.891,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "a3": {
+     "value": 0.158,
+     "unit": "Å^-α4",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "a4": {
+     "value": 2.7008,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "b1": {
+     "value": 2.02,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "b2": {
+     "value": 0.2274,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "b3": {
+     "value": 4.794,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "delta": {
+     "value": 0.031,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    }
+   },
+   "sps": {
+    "a1": {
+     "value": 8.3183,
+     "unit": "eV (φ: adimensional)",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "a2": {
+     "value": 0.617,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "a3": {
+     "value": 0.1654,
+     "unit": "Å^-α4",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "a4": {
+     "value": 2.4692,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "b1": {
+     "value": 1.3,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "b2": {
+     "value": 0.2274,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "b3": {
+     "value": 4.794,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "delta": {
+     "value": 0.031,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    }
+   },
+   "pps": {
+    "a1": {
+     "value": 11.7955,
+     "unit": "eV (φ: adimensional)",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "a2": {
+     "value": 0.762,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "a3": {
+     "value": 0.1624,
+     "unit": "Å^-α4",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "a4": {
+     "value": 2.3509,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "b1": {
+     "value": 1.04,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "b2": {
+     "value": 0.2274,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "b3": {
+     "value": 4.794,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "delta": {
+     "value": 0.031,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    }
+   },
+   "ppp": {
+    "a1": {
+     "value": -5.486,
+     "unit": "eV (φ: adimensional)",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "a2": {
+     "value": 1.2785,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "a3": {
+     "value": 0.1383,
+     "unit": "Å^-α4",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "a4": {
+     "value": 3.449,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "b1": {
+     "value": 0.2,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "b2": {
+     "value": 8.5,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "b3": {
+     "value": 4.38,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "delta": {
+     "value": 0.031,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    }
+   },
+   "rep": {
+    "a1": {
+     "value": 30.0,
+     "unit": "eV (φ: adimensional)",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "a2": {
+     "value": 3.4905,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "a3": {
+     "value": 0.00423,
+     "unit": "Å^-α4",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "a4": {
+     "value": 6.127,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "b1": {
+     "value": 1.5035,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "b2": {
+     "value": 0.205325,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "b3": {
+     "value": 4.1625,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "delta": {
+     "value": 0.002168,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    }
+   },
+   "onsite": {
+    "a1": {
+     "value": 0.79881,
+     "unit": "eV (φ: adimensional)",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "a2": {
+     "value": 0.029681,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "a3": {
+     "value": 0.19667,
+     "unit": "Å^-α4",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "a4": {
+     "value": 2.2423,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "b1": {
+     "value": 0.055034,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "b2": {
+     "value": 0.10143,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "b3": {
+     "value": 3.09355,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "delta": {
+     "value": 0.272375,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    }
+   }
+  },
+  "g_screen": [
+   {
+    "value": 2.0,
+    "unit": "",
+    "source": "Tang et al. 1996, texto tras ec. 5 (β1)"
+   },
+   {
+    "value": 0.0478,
+    "unit": "",
+    "source": "Tang et al. 1996, texto tras ec. 5 (β2)"
+   },
+   {
+    "value": 7.16,
+    "unit": "",
+    "source": "Tang et al. 1996, texto tras ec. 5 (β3)"
+   }
+  ],
+  "g0": {
+   "value": 4.41022,
+   "unit": "",
+   "source": "Tang et al. 1996, texto tras ec. 5 (g del diamante, estructura de referencia)"
+  },
+  "e0": {
+   "s": {
+    "value": -6.041,
+    "unit": "eV",
+    "source": "Tang et al. 1996, texto tras ec. 6"
+   },
+   "p": {
+    "value": 1.024,
+    "unit": "eV",
+    "source": "Tang et al. 1996, texto tras ec. 6"
+   }
+  },
+  "poly": [
+   {
+    "value": 12.201499972,
+    "unit": "eV",
+    "source": "Tang et al. 1996, tabla II (c0)"
+   },
+   {
+    "value": 0.583770664,
+    "unit": "eV",
+    "source": "Tang et al. 1996, tabla II (c1)"
+   },
+   {
+    "value": 0.000336418901,
+    "unit": "eV",
+    "source": "Tang et al. 1996, tabla II (c2)"
+   },
+   {
+    "value": -5.334093735e-05,
+    "unit": "eV",
+    "source": "Tang et al. 1996, tabla II (c3)"
+   },
+   {
+    "value": 7.650717197e-07,
+    "unit": "eV",
+    "source": "Tang et al. 1996, tabla II (c4)"
+   }
+  ],
+  "pair_cut": [
+   4.2,
+   5.0
+  ],
+  "screen_cut": [
+   5.0,
+   6.0
+  ],
+  "cutoff_source": "tbkit (el artículo no publica cortes): conmutadores quínticos",
+  "element": "C"
+ }
+}
