@@ -444,7 +444,10 @@ Los conjuntos subestiman las frecuencias de GPAW de forma sistemática, ~3 %.
 cuadrados de Scott–Radom, como Witek y Morokuma 2004 para SCC-DFTB) sobre los
 modos internos de sus moléculas de validación, frente a GPAW PBE (no frente al
 experimento), y lo guarda en `frequency_scale` del archivo. `tasks.phonons`
-devuelve `frequencies_scaled_cm1` junto a las crudas; el modelo no cambia.
+devuelve `frequencies_scaled_cm1` junto a las crudas; el modelo no cambia. En la ventana,
+la casilla «Escalar frecuencias» (pestaña Espectros) lo aplica a Raman, Raman
+resonante e IR antes de ensanchar el espectro (los factores de sección eficaz
+dependen de ω); nunca a modos importados de Quantum ESPRESSO.
 
 | conjunto | λ | RMS antes → después (cm⁻¹) | dejando fuera cada molécula |
 |---|---|---|---|

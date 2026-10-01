@@ -361,44 +361,66 @@ def _groups_rows(groups, key="activity"):
 
 def raman_spectrum(atoms: Atoms, model: TBModel, phonons=None, laser_nm: float = 532.0,
                    temperature_k: float = 300.0, fwhm: float = 8.0, kT: float = 0.01,
-                   kmesh: int = 12) -> dict:
+                   kmesh: int = 12, scale: bool = False) -> dict:
     """Non-resonant Raman: active sets and the broadened spectrum (cross-section factors)."""
     from ..raman import raman, spectrum
 
-    result = raman(atoms, model, kmesh=kmesh, kT=kT, phonons=phonons)
+    result, factor = scaled(raman(atoms, model, kmesh=kmesh, kT=kT, phonons=phonons),
+                            model, scale)
     grid = np.arange(0.0, max(float(result.frequencies.max()), 100.0) + 200.0, 0.5)
     grid, intensity = spectrum(result, grid, fwhm, laser_nm, temperature_k)
     return {"rows": _groups_rows(result.groups()), "grid": grid, "intensity": intensity,
-            "alpha": result.alpha, "method": result.method, "warnings": list(result.warnings)}
+            "alpha": result.alpha, "method": result.method, "warnings": list(result.warnings),
+            "frequency_scale": factor}
+
+
+def scaled(result, model: TBModel, scale: bool):
+    """``(result, λ)``: frequencies times the set's scale factor when asked and the
+    set has one (``frequency_scale``, against GPAW); otherwise unchanged, λ None.
+
+    Applied before broadening, so the Raman cross-section factors (ω-dependent)
+    and the Bose factor use the scaled frequencies too. The factor belongs to
+    the model's own phonons: callers pass ``scale=False`` for imported ones (QE).
+    """
+    from dataclasses import replace
+
+    from ..tasks import frequency_scale
+
+    factor = frequency_scale(model) if scale else None
+    if factor is None:
+        return result, None
+    return replace(result, frequencies=factor * np.asarray(result.frequencies)), factor
 
 
 def resonant_spectrum(atoms: Atoms, model: TBModel, lasers_ev, eta: float = 0.1, phonons=None,
-                      kT: float = 0.01, kmesh: int = 24) -> dict:
+                      kT: float = 0.01, kmesh: int = 24, scale: bool = False) -> dict:
     """Resonant Raman at each laser energy: activities per mode and laser."""
     from ..resonance import resonant_raman
 
-    result = resonant_raman(atoms, model, np.asarray(lasers_ev, dtype=float), eta=eta,
-                            kmesh=kmesh, kT=kT, phonons=phonons)
+    result, factor = scaled(resonant_raman(atoms, model, np.asarray(lasers_ev, dtype=float),
+                                           eta=eta, kmesh=kmesh, kT=kT, phonons=phonons),
+                            model, scale)
     strongest = result.activities.max() or 1.0
     keep = [k for k in range(len(result.frequencies))
             if result.activities[:, k].max() >= 1e-3 * strongest]
     return {"result": result, "lasers": result.lasers, "frequencies": result.frequencies,
             "activities": result.activities, "active": keep, "method": result.method,
-            "warnings": list(result.warnings)}
+            "warnings": list(result.warnings), "frequency_scale": factor}
 
 
 def ir_spectrum_of(atoms: Atoms, model: TBModel, phonons=None, fwhm: float = 10.0,
-                   kT: float = 0.01) -> dict:
+                   kT: float = 0.01, scale: bool = False) -> dict:
     """IR intensities (km/mol) with the model's dipole, and the broadened absorption."""
     from ..infrared import infrared, ir_spectrum
 
-    result = infrared(atoms, model, kT=kT, phonons=phonons)
+    result, factor = scaled(infrared(atoms, model, kT=kT, phonons=phonons), model,
+                            scale)
     grid, absorption = ir_spectrum(result, fwhm=fwhm)
     rows = [(float(g["frequency_cm1"]), int(g["degeneracy"]), float(g["intensity_km_mol"]),
              np.nan) for g in result.groups()]
     return {"rows": rows, "grid": grid, "absorption": absorption,
             "dipole_debye": float(np.linalg.norm(result.dipole) / 0.20819434),
-            "warnings": list(result.warnings)}
+            "warnings": list(result.warnings), "frequency_scale": factor}
 
 
 def write_csv(path: str | Path, columns: dict[str, np.ndarray]) -> Path:
@@ -477,3 +499,96 @@ def open_record(path: str | Path) -> tuple[Atoms, TBModel, dict]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     atoms = read(io.StringIO(data["structure"]), format="extxyz")
     return atoms, model_from_dict(data["model"]), data
+
+
+# --------------------------------------------------------------------------
+# Help shown in the window: what each panel is for and what each control does.
+# Plain text here (no Qt) so a test can check that every control has one.
+# --------------------------------------------------------------------------
+
+PANEL_HELP = {
+    "Electrónica": "Estado fundamental del modelo: niveles, DOS/PDOS, bandas y cargas. "
+                   "Empieza aquí: «Calcular estado fundamental» es el paso que usan "
+                   "Orbitales, Magnetismo y los espectros.",
+    "Orbitales": "Orbitales moleculares (o de Bloch en Γ) como isosuperficies sobre la "
+                 "estructura; sirve para ver dónde vive el HOMO/LUMO o un estado de borde.",
+    "Magnetismo": "Hubbard de campo medio: momentos locales, m(E) y barridos de U, campo "
+                  "o dopaje. Los momentos son un parámetro de orden, no un estado "
+                  "correlacionado; el teorema de Lieb es la comprobación.",
+    "Geometría y modos": "Relaja las posiciones con las fuerzas del modelo y calcula los "
+                         "modos en Γ. Relaja antes de los modos: fuera del mínimo las "
+                         "frecuencias no son armónicas. Los modos calculados aquí los usa "
+                         "la pestaña Espectros.",
+    "Espectros": "Raman (no resonante y resonante) e IR con los fonones del modelo o de "
+                 "Quantum ESPRESSO. Raman solo en sistemas con gap y capa cerrada. "
+                 "«Escalar frecuencias» multiplica por el factor del conjunto (frente a "
+                 "GPAW, ~3 %); las crudas siguen siendo las del modelo.",
+    "Grafeno": "Bandas G, 2D y 2D′ del grafeno por doble resonancia, con fonones de GPAW "
+               "o de Xu; dispersión de la 2D con la energía del láser.",
+}
+
+HELP = {
+    # left column
+    "Estructura": "La estructura abierta: xyz, extxyz, cif, POSCAR… Periódica si el "
+                  "archivo trae celda.",
+    "Abrir…": "Abre una estructura. Al cambiarla se borran los resultados anteriores.",
+    "Modelo": "El conjunto de parámetros y cómo se resuelve (carga, SCC, temperatura).",
+    "Parámetros": "Conjunto de parámetros: π (solo bandas), Xu (carbono), xu_ch* "
+                  "(carbono con H, N, O, B, S, P, Se). Cada uno dice en su «validity» "
+                  "para qué sirve y qué error tiene.",
+    "Carga (e)": "Carga total del sistema en electrones (+1 = un electrón menos).",
+    "SCC": "Cargas autoconsistentes. Por defecto, lo que pide el conjunto: los xu_ch* "
+           "se ajustaron con SCC y no deben usarse sin ella.",
+    "kT": "Temperatura electrónica (eV): ensancha la ocupación cerca del nivel de Fermi. "
+          "Pequeña para moléculas; algo mayor ayuda a converger metales.",
+    "Colorear átomos": "Colorea los átomos por carga, momento magnético o elemento.",
+    "Cancelar cálculo": "Detiene el cálculo en curso.",
+    "Terminal": "Consola de Python con la estructura y el modelo cargados (atoms, model).",
+    # Electrónica / Orbitales
+    "Calcular estado fundamental": "Diagonaliza (con SCC si toca): niveles, gap, DOS y "
+                                   "cargas. Lo usan las demás pestañas.",
+    "Calcular bandas": "Bandas a lo largo del camino de puntos especiales de la celda.",
+    "Cargar niveles": "Superpone niveles de otro cálculo (p. ej. DFT) para comparar.",
+    "Quitar": "Quita los niveles superpuestos.",
+    # Magnetismo
+    "Hubbard U": "Repulsión en el sitio (eV) del Hubbard de campo medio.",
+    "Punto de partida": "Configuración inicial de espines; cambiarla puede llevar a otra "
+                        "solución (compáralas).",
+    "Campo (Zeeman)": "Campo magnético como desdoblamiento Zeeman (eV).",
+    "Malla k (periódicos)": "Puntos k por eje periódico; más puntos, más precisión y más "
+                            "tiempo.",
+    "Resolver": "Resuelve el Hubbard de campo medio desde el punto de partida elegido.",
+    "Comparar puntos de partida": "Resuelve desde varios puntos de partida y compara sus "
+                                  "energías: la menor es la solución.",
+    "Barrer": "Barre U, campo o dopaje y dibuja la magnetización.",
+    # Geometría y modos
+    "fmax": "Criterio de convergencia de la relajación: fuerza máxima (eV/Å).",
+    "pasos máx.": "Número máximo de pasos de la relajación.",
+    "malla k (periódicos)": "Puntos k por eje periódico para fuerzas y modos.",
+    "Relajar": "Relaja las posiciones (celda fija) con las fuerzas del modelo.",
+    "Volver a la original": "Recupera la estructura tal como se abrió.",
+    "Modos en Γ": "Frecuencias y vectores de los modos en Γ por diferencias finitas.",
+    "Guardar modos…": "Guarda los modos (frecuencias y vectores) para reutilizarlos.",
+    "Flechas": "Muestra los desplazamientos del modo seleccionado como flechas.",
+    "Parar": "Detiene la animación del modo.",
+    # Espectros
+    "Fonones": "De dónde salen los modos: los del modelo (Geometría y modos) o un archivo "
+               "de Quantum ESPRESSO; en Grafeno, GPAW o Xu.",
+    "Raman / IR": "Láser, temperatura (factor de Bose) y anchura de línea del espectro.",
+    "Resonante (eV)": "Energías de láser del Raman resonante y su amortiguamiento η. Las "
+                      "resonancias son las del modelo, no energías ópticas.",
+    "Escalar frecuencias": "Multiplica las frecuencias del modelo por el factor de su "
+                           "conjunto (ajustado frente a GPAW, ~3 %; ver README). No se "
+                           "aplica a modos importados de Quantum ESPRESSO.",
+    "Raman": "Raman no resonante: actividades, despolarización y espectro.",
+    "Raman resonante": "Actividades a cada energía de láser y perfiles de excitación.",
+    "IR": "Intensidades IR (km/mol) con el dipolo del modelo; semicuantitativas.",
+    "Exportar CSV…": "Guarda el espectro y la tabla mostrados como CSV.",
+    # Grafeno
+    "Láseres (eV)": "Energías de láser para G, 2D y 2D′.",
+    "γ electrónico": "Ensanchamiento electrónico (eV) de la doble resonancia.",
+    "malla dk": "Paso de la malla en k (y en q) de la doble resonancia: menor, más "
+                "preciso y más lento.",
+    "procesos": "Procesos en paralelo para el cálculo de doble resonancia.",
+    "Calcular G, 2D y 2D′": "Posiciones e intensidades de G, 2D y 2D′ para cada láser.",
+}

@@ -163,6 +163,9 @@ tbkit/
   worker destroyed Qt objects of the GUI thread and crashed the window at
   random places. Do not remove that; results come back through queued slots.
   PySide6/pyvista stay optional (the `gui` extra); GUI tests skip without them.
+  Help texts (`actions.HELP` per control label, `actions.PANEL_HELP` per tab)
+  are applied as tooltips and info boxes; a test fails if a new button, box
+  or form row in `app.py` has no text there.
 - Mean-field moments are an order parameter, not a correlated ground state;
   user-facing text must not imply otherwise. Lieb's theorem is the check.
 - Energies and forces require `model.repulsive`; the π model has none and
