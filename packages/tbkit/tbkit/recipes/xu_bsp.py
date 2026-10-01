@@ -95,7 +95,7 @@ FAMILIES = {
                      long_rc={"H": 2.4}),
         hubbard_u={"P": HUBBARD_U["P"]},
         onsite_dipole={"P": ONSITE_DIPOLE["P"]},
-        validity_notes=('P junto con B o S en la misma estructura no está cubierto; el C-P de P(V) (ácidos fosfónicos, óxidos de fosfina) sale 0.05-0.10 Å largo, el de P(III) 0.04-0.06 Å; P-O, P=O, P-P, P-N, P-H y C-P aromático a menos de 0.025 Å; ésteres P(OCH3)n corregidos con active learning (antes colapsaban); ácidos con P-OH (fosfórico, fosfónicos): el OH gira hacia el otro O al relajar, 0,4-0,9 Å; en MePO3H2 los orbitales d sí importan (GPAW sin d gira los OH ~150° y alarga P-O 0,05 Å) pero TB falla en otra dirección, así que añadir d no garantiza el arreglo; ni términos angulares ni de torsión lo corrigieron; úsense sus frecuencias O-H con cautela'),
+        validity_notes=('P junto con B o S en la misma estructura no está cubierto; el C-P de P(V) (ácidos fosfónicos, óxidos de fosfina) sale 0.05-0.10 Å largo, el de P(III) 0.04-0.06 Å; P-O, P=O, P-P, P-N, P-H y C-P aromático a menos de 0.025 Å; ésteres P(OCH3)n corregidos con active learning (antes colapsaban); ácidos con P-OH (fosfórico, fosfónicos): el OH gira hacia el otro O al relajar, 0,4-0,9 Å; causa: la base mínima (GPAW con base sz también hunde el giro del OH: -0,35 eV a 180° frente a -0,23 con dzp; en TB es todo electrónico); en MePO3H2 los d del P también importan en DFT; úsense sus frecuencias O-H con cautela'),
         crystal_notes=("P en grafeno: fuerzas 0,3-0,6 veces el error molecular, P-C exacto "
                        "(0,001 Å) pero P 0,12 Å más bajo sobre la hoja: ángulos C-P-C "
                        "demasiado abiertos"),
@@ -110,7 +110,7 @@ FAMILIES = {
         pairs=_pairs("Se", R0["Se"]),
         hubbard_u={"Se": HUBBARD_U["Se"]},
         onsite_dipole={"Se": ONSITE_DIPOLE["Se"]},
-        validity_notes=('Se junto con B, S o P en la misma estructura no está cubierto; enlaces de Se a menos de 0.08 Å; ácidos seleníninicos (Se(=O)OH): el OH gira hacia el otro O al relajar, 0,4-0,9 Å; no es la falta de orbitales d (GPAW sin d en el Se no gira: 0,05 Å) ni lo corrigen términos angulares (todos los ligandos u O-Se-O) o de torsión: causa en el modelo, sin determinar; úsense sus frecuencias O-H con cautela'),
+        validity_notes=('Se junto con B, S o P en la misma estructura no está cubierto; enlaces de Se a menos de 0.08 Å; ácidos seleníninicos (Se(=O)OH): el OH gira hacia el otro O al relajar, 0,4-0,9 Å; causa: la base mínima (en el giro rígido la repulsión no aporta y la parte electrónica pone 240-300° 0,1 eV bajo el mínimo; GPAW con base mínima sz hace lo mismo, -0,06 eV, y con dzp +0,03); no son los d del Se (GPAW sin ellos no gira); úsense sus frecuencias O-H con cautela'),
         crystal_notes=("Se en grafeno: fuerzas ~1 vez el error molecular, Se-C +0,06 Å, Se "
                         "0,07 Å más alto sobre la hoja"),
         system=("xu_chno más selenio: selenoles, selenuros, diselenuros, selenofeno, "

@@ -464,7 +464,19 @@ Deriva al relajar desde el mínimo de GPAW (desplazamiento máximo):
 De paso quedó medido que el OH que gira en los ácidos selenínicos y fosfónicos
 **no** es la falta de orbitales d: GPAW sin funciones d en el Se mantiene
 CH3SeO2H (0,05 Å); en MePO3H2 los d sí importan en DFT, pero TB falla en otra
-dirección. Ese caso sigue abierto.
+dirección. La causa es la base mínima: en el giro rígido del OH la repulsión
+de TB no cambia y la parte electrónica pone 240-300° 0,1 eV por debajo del
+mínimo; GPAW con base mínima (sz) en todos los átomos hace lo mismo (−0,06 eV;
+con dzp +0,03). Ningún término repulsivo o angular puede corregir un error
+electrónico de la base: queda como limitación declarada en `validity`.
+
+La α de respuesta lineal SCC vale también para cristales
+(`optics.polarizability_periodic_screened`, con `screening="scc"` en el Raman de
+cristales y `dielectric_constant(screened=True)`): campos locales de carga por
+Ewald. Una molécula en una caja da la α finita con su campo de Lorentz; en
+cristales con sitios de simetría C3 (h-BN, diamante prístinos) esos campos son
+cero por simetría y los dipolares aún no están; importan en cristales dopados,
+funcionalizados o deformados.
 
 ## Factores de escala de frecuencias
 

@@ -120,10 +120,12 @@ tbkit/
   divalent Se (H2Se 64 -> 289 cm⁻¹) and neither fixed the X-OH torsion of
   seleninic/phosphonic acids, which stays a stated limit in `validity`. An O-X-O-only
   angle term (`xu_bsp --angular-ligands O`, zero in H2Se) was fitted active
-  (~0.9 eV) and still left CH3SeO2H drifting 0.83 Å (0.87 without). It is
-  not the missing d basis either: GPAW without d on Se keeps CH3SeO2H (0.05 Å);
-  on P, d matters in DFT (MePO3H2 without d turns its OH ~150°) but TB fails in
-  another direction. The boronic case was the missing H-H repulsion, now
+  (~0.9 eV) and still left CH3SeO2H drifting 0.83 Å (0.87 without). Cause,
+  measured: the minimal basis. Along the rigid OH scan the TB repulsion is flat
+  and the electronic energy puts 240-300° 0.1 eV below the minimum; GPAW with
+  a minimal sz basis on every atom does the same (-0.06 eV; dzp +0.03), while
+  GPAW without d on Se alone does not. No repulsive or angle term can fix an
+  electronic, basis-set error: the fix is polarisation functions (out of scope). The boronic case was the missing H-H repulsion, now
   `repulsive.HHContactTerm` (`recipes/hh_contact.py`: GPAW H2···H2 wall, not
   fitted; zero between hydrogens of the same atom, through a smooth bond
   weight, and in H2). It sits second in every xu_ch* repulsion and is a fixed
