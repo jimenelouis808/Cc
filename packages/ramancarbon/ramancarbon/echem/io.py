@@ -298,6 +298,112 @@ def read_gcd(
     )
 
 
+#: How far, in degrees, the phase implied by a Nyquist export may sit
+#: from the phase a Bode export states before the two are refused as
+#: different measurements.
+#:
+#: They are the same quantity written twice, so they should agree to the
+#: precision of the export -- on the user's own pair the worst row
+#: differs by well under a degree. One degree leaves room for the four or
+#: five significant figures EC-Lab writes and is far tighter than any
+#: row misalignment would produce.
+PHASE_TOLERANCE_DEG = 1.0
+
+
+def read_eis_pair(
+    nyquist: str | Path,
+    bode: str | Path,
+    electrode: Optional[Electrode] = None,
+) -> Impedance:
+    """One impedance spectrum from the two files EC-Lab exports separately.
+
+    A Nyquist export is ``Re(Z)`` and ``-Im(Z)`` and carries NO frequency,
+    and a Bode export is frequency and phase and carries no magnitude.
+    Neither is an impedance spectrum on its own: everything downstream --
+    the circuit fits, the distribution of relaxation times, C(omega) --
+    is a function of omega, and :func:`read_eis` says so rather than
+    inventing one. But the pair together is complete, and pairing them is
+    what the user does by hand anyway.
+
+    The two files are matched ROW BY ROW, which is how EC-Lab writes
+    them, and the match is CHECKED rather than assumed: the phase implied
+    by the Nyquist columns has to agree with the phase the Bode file
+    states. If the rows were shuffled, or the two exports came from
+    different runs, the angles disagree and the pairing is refused --
+    because two files that merely have the same number of lines would
+    otherwise fuse into a spectrum that looks perfectly ordinary and
+    belongs to no experiment.
+
+    Parameters
+    ----------
+    nyquist:
+        The ``Re(Z)``/``-Im(Z)`` export.
+    bode:
+        The frequency/phase export of the SAME run.
+    electrode:
+        Carried through, as for :func:`read_eis`.
+
+    Returns
+    -------
+    Impedance
+        With ``Z''`` in the physical sign convention this package keeps
+        (negative where capacitive), and the agreement between the two
+        files recorded in the metadata.
+
+    Raises
+    ------
+    EchemIOError
+        If either file has fewer than two columns, if the two have
+        different numbers of rows, or if the phases disagree.
+    """
+    first, second = Path(nyquist), Path(bode)
+    _, left, left_meta = _read_table(first)
+    _, right, right_meta = _read_table(second)
+    for label, table in ((first.name, left), (second.name, right)):
+        if table.ndim != 2 or table.shape[1] < 2:
+            raise EchemIOError(
+                f"{label}: hacen falta dos columnas. El Nyquist son Re(Z) y "
+                "-Im(Z); el Bode, frecuencia y fase"
+            )
+    if left.shape[0] != right.shape[0]:
+        raise EchemIOError(
+            f"{first.name} tiene {left.shape[0]} filas y {second.name} "
+            f"{right.shape[0]}: no son la misma medida, o una exportación se "
+            "truncó. Emparejarlas de todos modos daría un espectro con las "
+            "frecuencias corridas"
+        )
+
+    real = np.asarray(left[:, 0], dtype=float)
+    # The Nyquist export writes -Im(Z), which is the drawing convention.
+    imaginary = -np.asarray(left[:, 1], dtype=float)
+    frequency = np.asarray(right[:, 0], dtype=float)
+    stated = np.asarray(right[:, 1], dtype=float)
+
+    implied = np.degrees(np.arctan2(imaginary, real))
+    usable = np.isfinite(implied) & np.isfinite(stated)
+    worst = float(np.max(np.abs(implied[usable] - stated[usable]))) if usable.any() else 0.0
+    if worst > PHASE_TOLERANCE_DEG:
+        raise EchemIOError(
+            f"las dos exportaciones no describen la misma medida: la fase "
+            f"que implican Re(Z) y -Im(Z) se aparta hasta {worst:.1f}° de la "
+            f"que declara {second.name}. Con filas emparejadas mal el "
+            "espectro resultante parece normal y no es de ningún "
+            "experimento, así que no se funden"
+        )
+
+    metadata = {**left_meta, **right_meta}
+    metadata["origen"] = f"{first.name} + {second.name}"
+    metadata["acuerdo_de_fase_grados"] = worst
+    metadata["imaginario_negado_al_leer"] = True
+    return Impedance(
+        frequency=frequency,
+        z=real + 1j * imaginary,
+        electrode=electrode,
+        name=first.stem,
+        metadata=metadata,
+    )
+
+
 def read_eis(
     path: str | Path,
     electrode: Optional[Electrode] = None,
@@ -406,7 +512,9 @@ __all__ = [
     "UNIT_SCALE",
     "EchemIOError",
     "read_cv",
+    "PHASE_TOLERANCE_DEG",
     "read_eis",
+    "read_eis_pair",
     "read_gcd",
     "write_cv",
     "write_eis",

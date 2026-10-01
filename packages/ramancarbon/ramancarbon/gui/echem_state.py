@@ -197,6 +197,29 @@ class EchemSession:
             return False
         return True
 
+    def load_eis_pair(self, nyquist: str | Path, bode: str | Path) -> bool:
+        """One spectrum from EC-Lab's two separate exports.
+
+        A Nyquist export has no frequency column and a Bode export has no
+        magnitude, so neither opens on its own — which is correct, and was
+        also a dead end for anyone who had exported exactly those two
+        files. Together they are a complete spectrum, and the pairing is
+        checked against the phase both of them describe.
+        """
+        from ..echem.io import read_eis_pair
+
+        try:
+            self.eis = read_eis_pair(nyquist, bode, electrode=self.electrode)
+        except (OSError, ValueError, EchemIOError) as exc:
+            self.log("error", str(exc))
+            return False
+        agreement = self.eis.metadata.get("acuerdo_de_fase_grados")
+        if agreement is not None:
+            self.log("info",
+                     f"Nyquist y Bode emparejados: la fase coincide dentro "
+                     f"de {agreement:.3f}°")
+        return True
+
     def load_lsv(self, path: str | Path, scan_rate: float = 0.005) -> bool:
         try:
             self.lsv = read_cv(path, scan_rate=scan_rate,
