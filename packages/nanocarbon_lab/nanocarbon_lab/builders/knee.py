@@ -3085,6 +3085,94 @@ def build_knee_coil(
 SOUND_PERIODIC_COIL = (6, 10, 15.0, 14.0)
 
 
+@dataclass(frozen=True)
+class MeasuredCoil:
+    """One periodic-coil shape that was built, relaxed and measured.
+
+    Every field is a measurement, not a target. ``atoms``, ``census`` and
+    ``aspect`` come from the build; ``bonds`` and ``angles`` from the
+    package's own sp2 report after relaxation; ``hole`` is how close the
+    wall comes to the axis, which is the failure the census cannot see.
+    ``sound`` is the verdict those three give together, and ``note`` says
+    what it turns on.
+    """
+
+    atoms: int
+    sides_per_turn: int
+    circumference: int
+    pitch: float
+    coil_radius: float
+    aspect: float
+    census: tuple[tuple[int, int], ...]
+    bonds: tuple[float, float]
+    angles: tuple[float, float]
+    hole: float
+    sound: bool
+    verdict: str
+    note: str
+
+    @property
+    def label(self) -> str:
+        """One line for a menu, and short enough to read in a narrow
+        panel: the size, the shape and the verdict in three words. The
+        numbers behind it go in the panel's own line, which wraps."""
+        return (f"{self.atoms} atoms · {self.sides_per_turn}×k"
+                f"{self.circumference} · p{self.pitch:g} R{self.coil_radius:g}"
+                f" · {self.verdict}")
+
+
+#: Periodic coils that have been built, relaxed and measured, smallest
+#: first. This is a **catalogue, not a limit**: every one of the four
+#: knobs stays free, and :func:`nearest_closing_coil` finds the window
+#: near whatever shape is asked for. What a catalogue adds is the half a
+#: search cannot answer cheaply -- whether the wall came out as carbon.
+#:
+#: Two entries are here precisely because they are *not* sound, and both
+#: fail in a way the census calls perfect: at 136 atoms the wall runs
+#: 0.80 Å from the axis, a shut hole rather than a coil, and the 300-atom
+#: shape -- the smallest found inside the published 3.5-3.9 D/d band --
+#: relaxes to 1.19-1.66 Å bonds. A list of shapes that close would have
+#: recommended both.
+#:
+#: The sp2 band the verdict uses is :data:`SP2_BOND_RANGE` with angles
+#: 100-135 deg, which is the bar the rest of this package judges a wall
+#: by, and ``hole > 2 A`` -- about one tube radius at k = 6.
+MEASURED_PERIODIC_COILS: tuple[MeasuredCoil, ...] = (
+    MeasuredCoil(136, 4, 6, 17.0, 4.25, 1.73, ((5, 8), (6, 52), (7, 8)),
+                 (1.310, 1.553), (105.4, 125.1), 0.80, False,
+                 "hole shut",
+                 "the wall reaches to within 0.8 Å of the axis"),
+    MeasuredCoil(204, 6, 6, 15.0, 7.75, 3.15, ((5, 12), (6, 78), (7, 12)),
+                 (1.344, 1.527), (105.9, 127.9), 2.31, True,
+                 "sound",
+                 "smallest sound cell; tighter than the published band"),
+    MeasuredCoil(208, 6, 6, 15.0, 8.55, 3.48, ((5, 12), (6, 80), (7, 12)),
+                 (1.333, 1.547), (105.3, 129.8), 2.34, True,
+                 "sound",
+                 "far end of the same window, at the edge of the band"),
+    MeasuredCoil(300, 10, 7, 7.75, 11.05, 3.90, ((5, 20), (6, 110), (7, 20)),
+                 (1.192, 1.661), (91.5, 137.9), 3.04, False,
+                 "strained",
+                 "smallest inside the published band, and it shows"),
+    MeasuredCoil(360, 6, 6, 15.0, 13.0, 5.29, ((5, 12), (6, 156), (7, 12)),
+                 (1.340, 1.505), (106.3, 125.4), 6.31, True,
+                 "sound",
+                 "open coil, well above the published band"),
+    MeasuredCoil(492, 6, 6, 15.0, 17.0, 6.91, ((5, 12), (6, 222), (7, 12)),
+                 (1.326, 1.534), (104.7, 127.5), 9.71, True,
+                 "sound",
+                 "a wide spring rather than a coil"),
+    MeasuredCoil(672, 6, 10, 15.0, 14.0, 3.52, ((5, 12), (6, 312), (7, 12)),
+                 (1.376, 1.495), (107.0, 123.5), 6.12, True,
+                 "sound",
+                 "the DFT-ready preset, inside the published band"),
+    MeasuredCoil(720, 6, 10, 15.0, 15.35, 3.86, ((5, 12), (6, 336), (7, 12)),
+                 (1.405, 1.446), (107.1, 122.0), 6.67, True,
+                 "sound",
+                 "the soundest wall measured, second window of the preset"),
+)
+
+
 #: Radii tried either side of the asked-for one when the builder is
 #: searching for a shape that closes. Measured, the windows that close are
 #: 0.45-1.05 A wide and up to 3 A apart, so a span of 2 A finds one in
@@ -3129,6 +3217,37 @@ class CoilWindow:
     window: tuple[float, float]
     tried: int
     elapsed: float
+
+
+def _check_turn_sides(sides_per_turn: int) -> None:
+    """Refuse a turn that cannot close, and say which rule it broke.
+
+    **An odd number of sides never closes.** The arms of a mitred knee
+    alternate handedness -- it is the same rule :data:`MIN_KNEES`
+    records for the ring -- so a turn with an odd count hands the wrap a
+    seam of the wrong chirality and the two sides cannot pair however the
+    radius moves. Measured over 3612 radii per count (circumferences 6, 8
+    and 10, pitches 9 to 18 A, radii 5 to 20 A in 0.05 A steps): 3, 5, 7,
+    9 and 11 sides close at **zero** radii, while 4, 6, 8, 10 and 12
+    close at 179, 618, 801, 918 and 983 of them. So this is a refusal and
+    not a narrow window, and saying so beats letting a search walk a
+    range where nothing can be found.
+    """
+    if sides_per_turn < MIN_KNEES:
+        raise ValueError(
+            f"a turn needs at least {MIN_KNEES} sides "
+            f"({sides_per_turn} given): below that the mitre planes cut "
+            "away more of each arm than they leave."
+        )
+    if sides_per_turn % 2:
+        raise ValueError(
+            f"{sides_per_turn} sides per turn is odd, and an odd turn "
+            "never closes: the arms alternate handedness, so the wrap "
+            "meets a seam of the wrong one at every radius. Measured, odd "
+            "counts close at zero radii out of 3612 tried and every even "
+            f"count closes at hundreds. Use {sides_per_turn - 1} or "
+            f"{sides_per_turn + 1}."
+        )
 
 
 def _periodic_coil_mesh(coil_radius: float, pitch: float, sides_per_turn: int,
@@ -3234,6 +3353,10 @@ def nearest_closing_coil(
                      else int(circumference))
     pitch = fallback[2] if pitch is None else float(pitch)
     requested = fallback[3] if coil_radius is None else float(coil_radius)
+    # A parameter that cannot work is not a search result: walking a
+    # range for it would spend seconds to report "nothing nearby", which
+    # reads as bad luck rather than the rule it is.
+    _check_turn_sides(sides_per_turn)
 
     steps = int(round(span / step))
     offsets = [0.0]
@@ -3438,10 +3561,7 @@ def build_knee_periodic_coil(
                      else int(circumference))
     pitch = fallback[2] if pitch is None else float(pitch)
     coil_radius = fallback[3] if coil_radius is None else float(coil_radius)
-    if sides_per_turn < 3:
-        raise ValueError(
-            f"a turn needs at least three sides ({sides_per_turn} given)."
-        )
+    _check_turn_sides(sides_per_turn)
     spacing = MESH_EDGE * bond * np.sqrt(3.0) / 2.0
     tube_radius = MESH_EDGE * bond / (2.0 * np.sin(np.pi / circumference))
     if pitch <= 2.0 * tube_radius:

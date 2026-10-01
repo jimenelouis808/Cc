@@ -19,11 +19,13 @@ from nanocarbon_lab.builders.knee import (
     DEFAULT_JUNCTION_SHAPE,
     DEFAULT_SUPERNET_SHAPE,
     JUNCTION_AXES,
+    MEASURED_PERIODIC_COILS,
     MESH_EDGE,
     MIN_KNEES,
     PAIRS_PER_KNEE,
     SOUND_PERIODIC_COIL,
     SOUND_SHAPE,
+    SP2_BOND_RANGE,
     TURN_PER_PAIR,
     build_knee_coil,
     build_knee_junction,
@@ -1387,3 +1389,143 @@ class TestTheSmallestPeriodicCoilIsStillSoundCarbon:
             build_knee_periodic_coil(coil_radius=7.75, pitch=15.0,
                                      sides_per_turn=6, circumference=6,
                                      relax=False)
+
+
+class TestAnOddTurnNeverCloses:
+    """Measured, not argued: over 3612 radii each (circumferences 6, 8 and
+    10, pitches 9-18 Å, radii 5-20 Å in 0.05 Å steps) the odd counts 3, 5,
+    7, 9 and 11 close at ZERO radii, and 4, 6, 8, 10 and 12 close at 179,
+    618, 801, 918 and 983. It is a rule, so it is a refusal."""
+
+    @pytest.mark.parametrize("sides", [5, 7, 9, 11])
+    def test_the_builder_refuses_it_and_names_the_rule(self, sides):
+        with pytest.raises(ValueError) as excinfo:
+            build_knee_periodic_coil(sides_per_turn=sides, relax=False)
+        assert "odd" in str(excinfo.value)
+        assert "handedness" in str(excinfo.value)
+        # And it offers the two counts that do work.
+        assert str(sides - 1) in str(excinfo.value)
+        assert str(sides + 1) in str(excinfo.value)
+
+    @pytest.mark.parametrize("sides", [5, 7, 9])
+    def test_the_search_refuses_it_rather_than_reporting_bad_luck(self,
+                                                                  sides):
+        # Returning None here would read as "no window near this radius",
+        # which is the one thing it is not.
+        with pytest.raises(ValueError, match="odd"):
+            nearest_closing_coil(coil_radius=14.0, pitch=15.0,
+                                 sides_per_turn=sides, circumference=10)
+
+    def test_a_turn_below_the_minimum_is_refused_for_its_own_reason(self):
+        with pytest.raises(ValueError) as excinfo:
+            build_knee_periodic_coil(sides_per_turn=2, relax=False)
+        assert "odd" not in str(excinfo.value)
+        assert str(MIN_KNEES) in str(excinfo.value)
+
+    @pytest.mark.parametrize("sides", [4, 6, 8, 10, 12])
+    def test_every_even_count_finds_a_window(self, sides):
+        """The other half of the rule, and the one that matters to a user:
+        the parity is the ONLY thing closed against them. From the same
+        start, every even count from 4 to 12 has a window within 6 Å --
+        at R 5.55, 8.00, 8.00, 9.10 and 10.45 respectively."""
+        found = nearest_closing_coil(coil_radius=8.0, pitch=15.0,
+                                     sides_per_turn=sides, circumference=6,
+                                     span=6.0)
+        assert found is not None, sides
+        assert found.atoms > 0
+
+    def test_every_catalogue_entry_has_an_even_turn(self):
+        assert all(c.sides_per_turn % 2 == 0
+                   for c in MEASURED_PERIODIC_COILS)
+
+
+class TestTheMeasuredCatalogueIsMeasured:
+    """A catalogue that drifts from the builder is worse than none: it is
+    a table of numbers that look checked. Every entry is rebuilt here."""
+
+    @pytest.mark.parametrize("coil", MEASURED_PERIODIC_COILS,
+                             ids=lambda c: f"{c.atoms}-atoms")
+    def test_the_shape_builds_to_the_size_and_census_it_claims(self, coil):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            atoms = build_knee_periodic_coil(
+                coil_radius=coil.coil_radius, pitch=coil.pitch,
+                sides_per_turn=coil.sides_per_turn,
+                circumference=coil.circumference, relax=False)
+        assert len(atoms) == coil.atoms
+        assert atoms.info["ring_counts"] == dict(coil.census)
+        assert atoms.info["ring_deficit"] == 0
+        assert atoms.info["coil_aspect"] == pytest.approx(coil.aspect,
+                                                          abs=0.01)
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize("coil", MEASURED_PERIODIC_COILS,
+                             ids=lambda c: f"{c.atoms}-atoms")
+    def test_the_relaxed_geometry_is_what_the_entry_records(self, coil):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            atoms = build_knee_periodic_coil(
+                coil_radius=coil.coil_radius, pitch=coil.pitch,
+                sides_per_turn=coil.sides_per_turn,
+                circumference=coil.circumference, relax=True)
+        geometry = atoms.info["geometry"]
+        assert geometry["bond_min"] == pytest.approx(coil.bonds[0], abs=0.01)
+        assert geometry["bond_max"] == pytest.approx(coil.bonds[1], abs=0.01)
+        assert geometry["angle_min"] == pytest.approx(coil.angles[0], abs=0.5)
+        assert geometry["angle_max"] == pytest.approx(coil.angles[1], abs=0.5)
+        positions = atoms.get_positions()
+        radial = np.hypot(positions[:, 0] - positions[:, 0].mean(),
+                          positions[:, 1] - positions[:, 1].mean())
+        assert radial.min() == pytest.approx(coil.hole, abs=0.05)
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize("coil", MEASURED_PERIODIC_COILS,
+                             ids=lambda c: f"{c.atoms}-atoms")
+    def test_the_verdict_follows_from_the_numbers(self, coil):
+        """`sound` is not an opinion typed beside the row: it is the
+        package's sp2 band, its angle band and an open hole, and it has to
+        agree with the three numbers recorded above it."""
+        low, high = SP2_BOND_RANGE
+        sp2 = (low <= coil.bonds[0] and coil.bonds[1] <= high
+               and 100.0 <= coil.angles[0] and coil.angles[1] <= 135.0)
+        assert coil.sound == bool(sp2 and coil.hole > 2.0)
+
+    def test_the_catalogue_is_smallest_first_and_says_why_each_is_there(self):
+        sizes = [c.atoms for c in MEASURED_PERIODIC_COILS]
+        assert sizes == sorted(sizes)
+        assert all(c.note for c in MEASURED_PERIODIC_COILS)
+        # The two that are NOT sound earn their place: without them the
+        # list reads as "smaller is free", and both fail in a way the
+        # census calls perfect -- so the smallest entry must be one of
+        # them, or the catalogue is recommending its own smallest row.
+        unsound = [c.atoms for c in MEASURED_PERIODIC_COILS if not c.sound]
+        assert unsound
+        assert sizes[0] in unsound
+
+    def test_the_short_verdict_agrees_with_the_boolean(self):
+        """The menu shows the word, the panel branches on the boolean.
+        If they ever disagreed the menu would read 'sound' on a shape the
+        panel marks in amber."""
+        for coil in MEASURED_PERIODIC_COILS:
+            assert (coil.verdict == "sound") == coil.sound, coil.atoms
+
+    def test_the_menu_label_stays_short_enough_for_a_narrow_panel(self):
+        # The parameter column is about 230 px; past ~45 characters the
+        # readonly combobox clips what it shows.
+        for coil in MEASURED_PERIODIC_COILS:
+            assert len(coil.label) <= 45, (coil.atoms, coil.label)
+            assert str(coil.atoms) in coil.label
+
+    def test_every_label_is_unique_because_it_is_the_menu_key(self):
+        labels = [c.label for c in MEASURED_PERIODIC_COILS]
+        assert len(set(labels)) == len(labels)
+
+    def test_the_preset_is_one_of_the_measured_shapes(self):
+        from nanocarbon_lab.presets import PRESETS
+
+        preset = PRESETS["Nanocoil (knees, periodic, smallest)"]
+        assert any(c.sides_per_turn == preset["kc_sides"]
+                   and c.circumference == preset["kc_k"]
+                   and c.pitch == preset["kc_pitch"]
+                   and c.coil_radius == preset["kc_radius"]
+                   for c in MEASURED_PERIODIC_COILS)

@@ -85,6 +85,7 @@ from ..builders.knee import (
     COIL_SEARCH_SPAN,
     DEFAULT_SUPERNET_SHAPE,
     JUNCTION_AXES,
+    MEASURED_PERIODIC_COILS,
     MESH_EDGE,
     SCHWARZITE_CELLS,
     default_knee_shape,
@@ -780,6 +781,11 @@ class NanocarbonGUI:
             "kc_k", tk.DoubleVar(value=KNEE_DEFAULTS["kc_k"]))
         self.var_kc_turns = self._var(
             "kc_turns", tk.DoubleVar(value=KNEE_DEFAULTS["kc_turns"]))
+        # Deliberately NOT registered: picking a measured shape sets the
+        # four real parameters and is then done with. Registering it would
+        # put a menu caption into saved settings and into presets, where
+        # it means nothing.
+        self.var_kc_pick = tk.StringVar(value="")
         self.var_j_radius = self._var("j_radius", tk.DoubleVar(value=6.0))
         self.var_j_arm = self._var("j_arm", tk.DoubleVar(value=22.0))
         self.var_j_blend = self._var("j_blend", tk.DoubleVar(value=4.0))
@@ -1186,6 +1192,23 @@ class NanocarbonGUI:
             self.frame_knee_coil, "Turns", self.var_kc_turns, 1.0, 6.0, 8,
             integer=True, resolution=1.0, hard_lo=1.0, hard_hi=20.0,
             command=self._update_knee_coil_hint)
+        # A catalogue, above the search and below the boxes, because it
+        # answers the half the search cannot: whether the wall came out
+        # as carbon. Picking one fills the four boxes and nothing else --
+        # they stay editable, and the mode's other settings are left
+        # alone. That is what separates this from a preset.
+        self.row_kc_measured = (
+            ttk.Label(self.frame_knee_coil, text="Measured shapes"),
+            ttk.Combobox(self.frame_knee_coil, textvariable=self.var_kc_pick,
+                         values=[c.label for c in MEASURED_PERIODIC_COILS],
+                         state="readonly"),
+        )
+        self.row_kc_measured[0].grid(row=10, column=0, columnspan=2,
+                                     sticky="w", pady=(6, 0))
+        self.row_kc_measured[1].grid(row=11, column=0, columnspan=2,
+                                     sticky="ew")
+        self.row_kc_measured[1].bind("<<ComboboxSelected>>",
+                                     self._apply_measured_coil)
         # Only the periodic mode needs it: the finite coil keeps its two
         # rims and has no wrap to weld, so every radius builds.
         self.btn_kc_search = ttk.Button(
@@ -1196,7 +1219,7 @@ class NanocarbonGUI:
         self.lbl_knee_coil = ttk.Label(
             self.frame_knee_coil, text="", foreground=MUTED,
             font=("TkDefaultFont", 8), wraplength=230, justify="left")
-        self.lbl_knee_coil.grid(row=10, column=0, columnspan=2, sticky="w")
+        self.lbl_knee_coil.grid(row=12, column=0, columnspan=2, sticky="w")
 
         # --- haeckelite
         self.frame_haeckelite = ttk.LabelFrame(
@@ -2123,10 +2146,11 @@ class NanocarbonGUI:
                     widget.grid()
                 else:
                     widget.grid_remove()
-            if mode == "coil (knees, periodic)":
-                self.btn_kc_search.grid()
-            else:
-                self.btn_kc_search.grid_remove()
+            for widget in (self.btn_kc_search, *self.row_kc_measured):
+                if mode == "coil (knees, periodic)":
+                    widget.grid()
+                else:
+                    widget.grid_remove()
             self._update_knee_coil_hint()
             self.var_anneal.set(0)
         elif mode == "junction":
@@ -2851,6 +2875,17 @@ class NanocarbonGUI:
         colour = MUTED if 3.5 <= ratio <= 3.9 else WARN_AMBER
         band = "" if 3.5 <= ratio <= 3.9 else (
             " — outside the 3.5–3.9 band the single-wall coil papers report")
+        if mode == "coil (knees, periodic)" and sides % 2:
+            # Not a narrow window: measured, an odd turn closes at zero
+            # radii out of 3612 tried. Saying it here beats a refusal
+            # after the build and a search that finds nothing.
+            self.lbl_knee_coil.config(
+                text=f"{sides} sides per turn is odd, and an odd turn never "
+                     "closes: the arms alternate handedness, so the wrap "
+                     "meets a seam of the wrong one at every radius. Use "
+                     f"{sides - 1} or {sides + 1}.",
+                foreground=WARN_AMBER)
+            return
         closes = ("Most radii do NOT close — the wrap has to land on a "
                   "lattice step — so use the button rather than hunting "
                   "with the slider. "
@@ -2862,6 +2897,43 @@ class NanocarbonGUI:
                  f"{sides} sides per turn. D/d = {ratio:.2f}{band}. "
                  + closes,
             foreground=colour)
+
+    def _apply_measured_coil(self, _event=None) -> None:
+        """Fill the four boxes from a shape that was built and measured.
+
+        It does **not** build, and it does not touch anything else. These
+        are starting points, not presets: the four parameters stay free,
+        every other setting is left alone, and the numbers it reports are
+        what that shape measured when it was relaxed -- which is the half
+        :func:`~nanocarbon_lab.builders.knee.nearest_closing_coil` cannot
+        answer, because a search can tell you a shape closes but not that
+        its wall came out as carbon.
+        """
+        label = self.var_kc_pick.get()
+        chosen = next((c for c in MEASURED_PERIODIC_COILS
+                       if c.label == label), None)
+        if chosen is None:
+            return
+        # The four together, before the label: each set fires the hint,
+        # and the hint describes whatever is in the boxes at the time.
+        self.var_kc_sides.set(chosen.sides_per_turn)
+        self.var_kc_k.set(chosen.circumference)
+        self.var_kc_pitch.set(chosen.pitch)
+        self.var_kc_radius.set(chosen.coil_radius)
+        low, high = chosen.bonds
+        narrow, wide = chosen.angles
+        verdict = "sp2 by this package’s own report" if chosen.sound else (
+            f"NOT sound: {chosen.note}")
+        self.lbl_knee_coil.config(
+            text=f"{chosen.atoms} atoms, census "
+                 f"{dict(chosen.census)}, D/d {chosen.aspect:.2f}. Relaxed: "
+                 f"bonds {low:.3f}–{high:.3f} Å, angles {narrow:.1f}–"
+                 f"{wide:.1f}°, wall {chosen.hole:.2f} Å from the axis — "
+                 f"{verdict}. The boxes are filled, not locked: change any "
+                 "of them and search again.",
+            foreground=MUTED if chosen.sound else WARN_AMBER)
+        self._set_status(f"Loaded a measured shape: {chosen.atoms} atoms. "
+                         "Press Build.")
 
     def on_find_closing_radius(self) -> None:
         """Search for a coil radius that welds through the cell, take it,
