@@ -198,6 +198,7 @@ class EchemApp(SectionApp):
             ("Cargar GCD…", lambda: self._load("gcd")),
             ("Añadir a la serie GCD…", lambda: self._load("gcd_series")),
             ("Cargar EIS…", lambda: self._load("eis")),
+            ("Cargar EIS de Nyquist + Bode…", self._load_eis_pair),
             ("Cargar polarización…", lambda: self._load("lsv")),
         ):
             ttk.Button(lbody, text=text, command=command).pack(
@@ -830,6 +831,30 @@ class EchemApp(SectionApp):
         if ok:
             self.set_status(f"Cargado {Path(path).name}")
         self._refresh_loaded()
+
+    def _load_eis_pair(self) -> None:
+        """Two EC-Lab text exports that are one spectrum between them.
+
+        Asked for in two steps rather than one multi-selection, because
+        which file is which matters and a multi-selection returns them in
+        whatever order the dialog felt like.
+        """
+        from tkinter import filedialog
+
+        nyquist = filedialog.askopenfilename(
+            title="Exportación Nyquist: Re(Z) y -Im(Z)",
+            filetypes=FILE_TYPES, parent=self.root)
+        if not nyquist:
+            return
+        bode = filedialog.askopenfilename(
+            title="Exportación Bode de la MISMA medida: frecuencia y fase",
+            filetypes=FILE_TYPES, parent=self.root)
+        if not bode:
+            return
+        self._settings_from_widgets()
+        if self.session.load_eis_pair(nyquist, bode):
+            self._redraw()
+        self.flush_messages(self.session.messages)
 
     def _load_demo(self) -> None:
         from ..examples.demo_data import (

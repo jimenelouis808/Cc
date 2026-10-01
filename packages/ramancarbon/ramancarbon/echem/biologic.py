@@ -66,6 +66,34 @@ MODULE_MAGIC = b"MODULE"
 #: version with a different header still reads. They are used to CHECK
 #: the computed offset, which closes a hole the arithmetic alone leaves:
 #: a file that over-claims its point count by a few simply eats into the
+#: Bytes before a module's payload in the layout this reader was first
+#: written against: shortname 10, longname 25, length 4, version 4,
+#: date 8.
+MODULE_HEADER_SHORT = 51
+
+#: And in the newer one, which inserts a marker and a reserved field:
+#: shortname 10, longname 25, marker 4, length 4, reserved 4, version 4,
+#: date 8.
+MODULE_HEADER_LONG = 59
+
+#: What stands where the length used to be in the newer layout.
+#:
+#: 0xFFFFFFFF, and it cannot be mistaken for a real length because no
+#: module is four gigabytes -- which is exactly how the two layouts are
+#: told apart without guessing a version number. Read with the old
+#: offsets, this value WAS taken for a length, so every module declared
+#: 4294967295 bytes and the file was refused as truncated.
+MODULE_LENGTH_MARKER = 0xFFFFFFFF
+
+#: Offsets inside the data module at which the column identifiers may
+#: start: straight after the column count, or one pad byte later.
+#:
+#: Which one a file uses is decided BY THE FILE -- both are tried and
+#: each has to produce known identifiers whose record width closes
+#: against the module length. Newer EC-Lab uses the second, and read at
+#: the first every identifier arrives multiplied by 256.
+ID_OFFSETS = (5, 6)
+
 #: header padding, the length still adds up, and the first rows come back
 #: as padding decoded as numbers. An offset that is not one of these is
 #: not refused — a version nobody here has seen is likely enough — but it
@@ -185,16 +213,44 @@ def _modules(raw: bytes) -> list[MPRModule]:
     position = raw.find(MODULE_MAGIC)
     while position >= 0:
         head = position + len(MODULE_MAGIC)
-        # shortname 10 | longname 25 | length 4 | version 4 | date 8
-        if head + 51 > len(raw):
+        if head + MODULE_HEADER_SHORT > len(raw):
             break
         short = raw[head:head + 10].split(b"\x00")[0].decode("latin-1").strip()
         long_name = raw[head + 10:head + 35].split(b"\x00")[0].decode(
             "latin-1").strip()
-        length = int(np.frombuffer(raw, "<u4", 1, head + 35)[0])
-        version = int(np.frombuffer(raw, "<u4", 1, head + 39)[0])
-        date = raw[head + 43:head + 51].split(b"\x00")[0].decode("latin-1")
-        start = head + 51
+        # Two header layouts, told apart by the file itself.
+        #
+        # The one this reader was written against is
+        #     shortname 10 | longname 25 | length 4 | version 4 | date 8
+        # and newer EC-Lab writes eight bytes more:
+        #     ... | 0xFFFFFFFF 4 | length 4 | reserved 4 | version 4 | date 8
+        #
+        # Reading the new layout with the old offsets takes the marker
+        # for the length, so every module claimed 4294967295 bytes and
+        # the file was refused as truncated. That is what the user's
+        # three real files did -- a CV, a GCPL and a PEIS, none of which
+        # would open.
+        #
+        # The marker is what distinguishes them, and it cannot be a
+        # length: no module is four gigabytes. The arithmetic still has
+        # to close against the file afterwards, which is the check this
+        # module exists to make, and on those three files it closes to
+        # the byte on every module.
+        marker = int(np.frombuffer(raw, "<u4", 1, head + 35)[0])
+        extended = marker == MODULE_LENGTH_MARKER
+        if extended:
+            if head + MODULE_HEADER_LONG > len(raw):
+                break
+            length = int(np.frombuffer(raw, "<u4", 1, head + 39)[0])
+            version = int(np.frombuffer(raw, "<u4", 1, head + 47)[0])
+            header = MODULE_HEADER_LONG
+        else:
+            length = marker
+            version = int(np.frombuffer(raw, "<u4", 1, head + 39)[0])
+            header = MODULE_HEADER_SHORT
+        date = raw[head + header - 8:head + header].split(
+            b"\x00")[0].decode("latin-1")
+        start = head + header
         end = start + length
         if length <= 0 or end > len(raw):
             raise BioLogicError(
@@ -221,23 +277,89 @@ def _decode_data(module: MPRModule) -> tuple[dict[str, np.ndarray], int, list[st
             f"la cabecera de datos declara {n_points} puntos y {n_columns} "
             "columnas"
         )
-    if 5 + 2 * n_columns > len(payload):
-        raise BioLogicError(
-            f"declara {n_columns} columnas pero no caben sus identificadores"
-        )
-    ids = np.frombuffer(payload, "<u2", n_columns, 5).tolist()
+    # Where the identifier list starts is READ OFF the file, not assumed.
+    #
+    # Newer EC-Lab writes the column count as a 16-bit field, so the
+    # identifiers begin one byte later than this reader looked. Read a
+    # byte early, every identifier comes back multiplied by 256 -- 1, 2,
+    # 3 arriving as 256, 512, 768 -- because each little-endian pair is
+    # split across two real ones. All three of the user's files did
+    # exactly that and were refused for "unknown identifiers" that were
+    # simply misread.
+    #
+    # Each candidate offset has to produce identifiers this reader knows.
+    # That is a separate question from whether the record then closes
+    # against the module length, and keeping them separate is what lets
+    # the two failures say different things: identifiers it cannot name,
+    # or a table whose arithmetic does not add up.
+    readable: list[tuple[int, list[int]]] = []
+    for id_offset in ID_OFFSETS:
+        if id_offset + 2 * n_columns > len(payload):
+            continue
+        candidate = np.frombuffer(payload, "<u2", n_columns, id_offset).tolist()
+        if all(int(i) in MPR_COLUMNS for i in candidate):
+            readable.append((id_offset, candidate))
 
-    unknown = [i for i in ids if int(i) not in MPR_COLUMNS]
-    if unknown:
-        raise BioLogicError(
-            "hay columnas con identificador desconocido: "
-            + ", ".join(str(i) for i in sorted(set(unknown)))
-            + ". No se puede saltar una columna sin desplazar todas las que "
-            "vienen detrás, y el resultado seguiría pareciendo datos, así "
-            "que el archivo se rechaza entero. Exporta el mismo experimento "
-            "como texto (.mpt) desde EC-Lab y mándame la cabecera si quieres "
-            "que se añada"
+    if not readable:
+        # Report the reading that got FURTHEST, not the first one tried:
+        # at the wrong offset every identifier comes back multiplied by
+        # 256, and a list of those blames the file for a misalignment
+        # that belongs to the reader.
+        best_offset, best_ids, best_score = ID_OFFSETS[0], [], -1
+        for id_offset in ID_OFFSETS:
+            if id_offset + 2 * n_columns > len(payload):
+                continue
+            probe = np.frombuffer(payload, "<u2", n_columns, id_offset).tolist()
+            score = sum(1 for i in probe if int(i) in MPR_COLUMNS)
+            if score > best_score:
+                best_offset, best_ids, best_score = id_offset, probe, score
+        unknown = sorted({int(i) for i in best_ids if int(i) not in MPR_COLUMNS})
+        width = sum(
+            np.dtype(MPR_COLUMNS[int(i)][1]).itemsize
+            for i in best_ids if int(i) in MPR_COLUMNS
         )
+        available = (
+            (len(payload) - best_offset - 2 * n_columns) / n_points
+            if n_points else 0.0
+        )
+        raise BioLogicError(
+            "columnas con identificador desconocido: "
+            + ", ".join(str(i) for i in unknown)
+            + f" ({best_score} de {n_columns} sí se reconocen). Las "
+            f"reconocidas ya ocupan {width} bytes por punto y el módulo sólo "
+            f"tiene {available:.1f}, así que ni siquiera se puede deducir "
+            "cuánto miden las que faltan: cualquier anchura que se les "
+            "suponga desplaza TODAS las columnas de detrás y el resultado "
+            "seguiría pareciendo datos. Por eso el archivo se rechaza entero "
+            "en vez de devolver números plausibles. Exporta el mismo "
+            "experimento como texto (.mpt) desde EC-Lab —esa ruta no depende "
+            "de ingeniería inversa— y mándame su cabecera si quieres que "
+            "estos identificadores se añadan"
+        )
+
+    if len(readable) > 1:
+        # Both offsets name columns this reader knows. Whichever record
+        # then closes against the module decides; if both do, neither is
+        # used, which is the rule the `.spe` reader applies to two equally
+        # plausible layouts and for the same reason.
+        closing = []
+        for id_offset, candidate in readable:
+            width = sum(
+                np.dtype(MPR_COLUMNS[int(i)][1]).itemsize for i in candidate)
+            body = n_points * width
+            if body > 0 and len(payload) - body >= id_offset + 2 * n_columns:
+                closing.append((id_offset, candidate))
+        if len(closing) > 1:
+            raise BioLogicError(
+                "los identificadores de columna encajan empezando en "
+                + " y en ".join(str(o) for o, _ in closing)
+                + ", y las dos lecturas cuadran igual de bien. Dos "
+                "disposiciones igual de plausibles no son una lectura: el "
+                "archivo se rechaza en vez de elegir una. Exporta el mismo "
+                "experimento como texto (.mpt) desde EC-Lab"
+            )
+        readable = closing or readable[:1]
+    id_offset, ids = readable[0]
 
     # Duplicate identifiers do occur (<I>/mA appears as both 11 and 76);
     # numpy needs unique field names.
@@ -262,7 +384,7 @@ def _decode_data(module: MPRModule) -> tuple[dict[str, np.ndarray], int, list[st
     # whether that arithmetic lands somewhere sensible is the check.
     body = n_points * record.itemsize
     offset = len(payload) - body
-    minimum = 5 + 2 * n_columns
+    minimum = id_offset + 2 * n_columns
     if body <= 0 or offset < minimum:
         raise BioLogicError(
             f"{n_points} puntos × {record.itemsize} bytes son {body} bytes y "
@@ -697,6 +819,7 @@ def read_eclab(
 __all__ = [
     "MPR_COLUMNS",
     "MPR_MAGIC",
+    "ID_OFFSETS",
     "MPR_DATA_OFFSETS",
     "MPS_TECHNIQUES",
     "BioLogicError",
