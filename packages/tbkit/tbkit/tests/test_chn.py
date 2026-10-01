@@ -49,7 +49,8 @@ KNOWN = {("C", "H"): (2.0, -1.0, 0.5, 0.0, 0.0), ("N", "H"): (3.0, -0.5, 0.0, 0.
 def true_model():
     laws = {pair: CutoffPolynomial(c, xu_chn.PAIRS[pair]["rc_rep"]) for pair, c in KNOWN.items()}
     electronic = xu_chn.build_model(xu_chn.initial_guess())
-    repulsive = SumRepulsive((electronic.repulsive.terms[0], PairRepulsive(laws)))
+    # Every fixed term of the family (Xu's C-C and the H···H contact), then the pairs.
+    repulsive = SumRepulsive((*electronic.repulsive.terms, PairRepulsive(laws)))
     return xu_chn.build_model(xu_chn.initial_guess(), repulsive)
 
 
@@ -146,7 +147,7 @@ class TestRecipe:
     def test_repulsion_fit_recovers_the_coefficients(self, synthetic_refs):
         electronic = xu_chn.build_model(xu_chn.initial_guess())
         repulsive, report = xu_chn.fit_repulsion(electronic, synthetic_refs, ridge=1e-12)
-        laws = repulsive.terms[1].laws
+        laws = next(t for t in repulsive.terms if isinstance(t, PairRepulsive)).laws
         # The five powers are nearly collinear over the sampled bond lengths:
         # what is determined is V(r) and its slope there, not each coefficient.
         for pair, r in ((("C", "H"), np.linspace(1.02, 1.16, 8)),
