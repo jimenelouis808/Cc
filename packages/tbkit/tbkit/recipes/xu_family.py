@@ -81,10 +81,19 @@ class XuFamily:
     onsite_dipole: dict                        # Å, elements with p
     system: str = ""
     validity_notes: str = ""
+    #: What the crystal comparison against GPAW measured for this set
+    #: (``recipes/crystal_validation.py``); empty = periodic use not checked.
+    crystal_notes: str = ""
     experimental_alpha: dict = field(default_factory=dict)
     #: Acute-angle correction (:class:`tbkit.repulsive.AcuteAngleTerm`): number
     #: of powers fitted, with its fixed shape; None = no correction (xu_chn).
     acute: Optional[dict] = None
+    #: Angle stiffness at the heteroatom (:class:`tbkit.repulsive.CentredAngleTerm`):
+    #: {"centre": "Se", "powers": 4, "bonds": {element: (r1, rm)}}; None = none.
+    angular: Optional[dict] = None
+    #: Hydroxyl torsion at the heteroatom (:class:`tbkit.repulsive.CentredTorsionTerm`):
+    #: {"centre": "Se", "powers": 3, "bonds": {element: (r1, rm)}}; None = none.
+    torsion: Optional[dict] = None
     #: Reference groups computed as training data but kept out of the fit
     #: (validated only), with the reason recorded in the parameter file.
     held_out: dict = field(default_factory=dict)
@@ -111,6 +120,22 @@ class XuFamily:
         c = tuple(coefficients) if coefficients is not None else (1.0,) * spec["powers"]
         return AcuteAngleTerm(c, spec.get("theta0_degrees", 80.0), spec.get("r1", 1.7),
                               spec.get("rm", 2.0), tuple(spec.get("elements", ("C", "N", "O"))))
+
+    def angular_term(self, coefficients=None):
+        from ..repulsive import CentredAngleTerm
+
+        spec = self.angular
+        c = tuple(coefficients) if coefficients is not None else (1.0,) * spec["powers"]
+        return CentredAngleTerm(c, spec["centre"], dict(spec["bonds"]),
+                                spec.get("cos0", -1 / 3))
+
+    def torsion_term(self, coefficients=None):
+        from ..repulsive import CentredTorsionTerm
+
+        spec = self.torsion
+        c = tuple(coefficients) if coefficients is not None else (1.0,) * spec["powers"]
+        return CentredTorsionTerm(c, spec["centre"], dict(spec["bonds"]),
+                                  tuple(spec.get("oh", (1.10, 1.30))))
 
     def __post_init__(self):
         for (a, b), spec in self.pairs.items():
@@ -231,9 +256,17 @@ class XuFamily:
             c = tuple(float(v) for v in coefficients[p * n:(p + 1) * n])
             laws[pair] = CutoffPolynomial(c, spec["rc_rep"], POWERS[0])
         terms = [*self.base_terms(), PairRepulsive(laws)]
+        start = len(self.pairs) * n
         if self.acute:
-            start = len(self.pairs) * n
-            terms.append(self.acute_term([float(v) for v in coefficients[start:]]))
+            k = self.acute["powers"]
+            terms.append(self.acute_term([float(v) for v in coefficients[start:start + k]]))
+            start += k
+        if self.angular:
+            k = self.angular["powers"]
+            terms.append(self.angular_term([float(v) for v in coefficients[start:start + k]]))
+            start += k
+        if self.torsion:
+            terms.append(self.torsion_term([float(v) for v in coefficients[start:]]))
         return SumRepulsive(tuple(terms))
 
 
@@ -339,6 +372,13 @@ def electronic_energy_and_forces(model: TBModel, ref: ReferenceStructure):
     return energy, forces
 
 
+def _extra_terms(family: XuFamily) -> list:
+    """The fitted many-body terms, in coefficient order after the pairs."""
+    return ([family.acute_term()] if family.acute else []) + \
+        ([family.angular_term()] if family.angular else []) + \
+        ([family.torsion_term()] if family.torsion else [])
+
+
 def repulsion_design(family: XuFamily, refs):
     """Per reference: the pair-repulsion basis energies (n,) and forces (n, N, 3)."""
     out = []
@@ -348,8 +388,8 @@ def repulsion_design(family: XuFamily, refs):
             e, f = pair_basis(ref.atoms, pair, spec["rc_rep"])
             blocks_e.append(e)
             blocks_f.append(f)
-        if family.acute:
-            e, f = family.acute_term().basis(ref.atoms)
+        for term in _extra_terms(family):
+            e, f = term.basis(ref.atoms)
             blocks_e.append(e)
             blocks_f.append(f)
         out.append((np.concatenate(blocks_e), np.concatenate(blocks_f)))
@@ -476,8 +516,8 @@ def basis_hessians(family: "XuFamily", atoms, delta: float = 1e-4) -> np.ndarray
         moved.set_positions(p)
         blocks = [pair_basis(moved, pair, spec["rc_rep"])[1]
                   for pair, spec in family.pairs.items()]
-        if family.acute:
-            blocks.append(family.acute_term().basis(moved)[1])
+        for term in _extra_terms(family):
+            blocks.append(term.basis(moved)[1])
         return np.concatenate(blocks).reshape(-1, 3 * n)
 
     size = len(basis_forces(positions))
@@ -791,6 +831,23 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def validity_text(family: XuFamily, sampled: dict) -> str:
+    """The ``validity`` of a set: fitted on molecules; crystals as measured, or unchecked."""
+    ranges = ", ".join(f"{k} {v[0]:.2f}-{v[1]:.2f} Å" for k, v in sorted(sampled.items())
+                       if k != "C-C" and (family.base is None
+                                          or set(k.split("-")) & set(family.heteroatoms)))
+    if family.base is not None:
+        ranges += f"; el resto, como {family.base}"
+    crystals = (f"cristales (SCC periódico): extrapolación comprobada contra GPAW "
+                f"(validation/crystals_tb_vs_gpaw.json): {family.crystal_notes}"
+                if family.crystal_notes else
+                "en cristales es una extrapolación sin comprobar")
+    return ("ajustado en moléculas de capa cerrada; " + crystals + "; enlaces dentro de lo "
+            f"muestreado ({ranges}); energías relativas solo dentro de una misma "
+            "composición (no se ajustaron energías de atomización); C-C como en "
+            "xu_carbon" + (f"; {family.validity_notes}" if family.validity_notes else ""))
+
+
 def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: dict,
                    references: Sequence[Path], settings: dict) -> dict:
     data = model_to_dict(model)
@@ -801,17 +858,7 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
     data["reference"] = ("C-C: C. H. Xu, C. Z. Wang, C. T. Chan, K. M. Ho, J. Phys.: Condens. "
                          f"Matter 4, 6047 (1992). {hetero}: " + source)
     data["system"] = family.system
-    ranges = ", ".join(f"{k} {v[0]:.2f}-{v[1]:.2f} Å" for k, v in
-                       sorted(report.get("bond_ranges", {}).items())
-                       if k != "C-C" and (family.base is None
-                                          or set(k.split("-")) & set(family.heteroatoms)))
-    if family.base is not None:
-        ranges += f"; el resto, como {family.base}"
-    data["validity"] = ("sistemas finitos de capa cerrada (SCC sin Ewald); enlaces dentro de lo "
-                        f"muestreado ({ranges}); energías relativas solo dentro de una misma "
-                        "composición (no se ajustaron energías de atomización); C-C como en "
-                        "xu_carbon" + (f"; {family.validity_notes}" if family.validity_notes
-                                       else ""))
+    data["validity"] = validity_text(family, report.get("bond_ranges", {}))
     data["notes"] = ("C-C idéntico a xu_carbon. Niveles: todos los ocupados, el LUMO y el "
                      f"LUMO+1, con un desplazamiento común de {shift:.4f} eV entre el cero de Xu "
                      "y el vacío de GPAW. Sin interacción H-H. U de Hubbard: dε/dn del átomo "
@@ -854,6 +901,14 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
             term["unit"] = "eV"
             term["source"] = ("corrección de ángulos agudos (anillos de tres miembros), " +
                               fit_source)
+        if term["type"] == "centred_angle":
+            term["unit"] = "eV"
+            term["source"] = (f"rigidez angular en {term['centre']} (centros hipervalentes), "
+                              + fit_source)
+        if term["type"] == "centred_torsion":
+            term["unit"] = "eV"
+            term["source"] = (f"torsión de hidroxilos en {term['centre']} (barridos GPAW), "
+                              + fit_source)
         if term["type"] == "pair":
             for entry in term["pairs"]:
                 entry["unit"] = "eV"

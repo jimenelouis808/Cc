@@ -1,0 +1,1374 @@
+{
+ "references": "gpaw_crystals.json",
+ "settings": {
+  "code": "GPAW",
+  "mode": "lcao",
+  "basis": "dzp",
+  "xc": "PBE",
+  "h": 0.2,
+  "smearing_ev": 0.1,
+  "spin": "spin-paired",
+  "fmax": 0.05,
+  "max_steps": 80,
+  "sigma": 0.05,
+  "n_random": 3,
+  "strains": [
+   0.98,
+   1.02
+  ],
+  "seed": 7,
+  "strain_grid": "gpts of the relaxed cell (h scales with the strain)",
+  "energy": "GPAW's extrapolated to kT = 0 (get_potential_energy)",
+  "gpaw_version": "26.7.0",
+  "ase_version": "3.29.0",
+  "boundary": "periodic along pbc, zero elsewhere"
+ },
+ "molecular_baseline": {
+  "xu_chn": {
+   "file": "gpaw_chn.json",
+   "eq": {
+    "structures": 22,
+    "force_rmse": 0.41180257656546465,
+    "force_rmse_median": 0.35609052153241716,
+    "force_rms_dft": 0.005980799445593342,
+    "worst": "CH2NHCH2/eq",
+    "worst_rmse": 0.9102230977188325
+   },
+   "rnd": {
+    "structures": 64,
+    "force_rmse": 0.45653282414547885,
+    "force_rmse_median": 0.3905684538488664,
+    "force_rms_dft": 2.015134652935403,
+    "worst": "CH2NHCH2/rnd3",
+    "worst_rmse": 0.9090751486214227
+   }
+  },
+  "xu_chno": {
+   "file": "gpaw_chno.json",
+   "eq": {
+    "structures": 22,
+    "force_rmse": 1.176640545237323,
+    "force_rmse_median": 0.543435645791419,
+    "force_rms_dft": 0.006377816314012251,
+    "worst": "bicyclobutane/eq",
+    "worst_rmse": 4.164111945701094
+   },
+   "rnd": {
+    "structures": 64,
+    "force_rmse": 1.6268021755457849,
+    "force_rmse_median": 0.5749714278315408,
+    "force_rms_dft": 1.754365380885851,
+    "worst": "bicyclobutane/rnd0",
+    "worst_rmse": 4.421867075343903
+   }
+  },
+  "xu_chnob": {
+   "file": "gpaw_b.json",
+   "eq": {
+    "structures": 12,
+    "force_rmse": 0.390043259842934,
+    "force_rmse_median": 0.25670241746706357,
+    "force_rms_dft": 0.006172734347662804,
+    "worst": "B(OMe)3/eq",
+    "worst_rmse": 0.6949552389997126
+   },
+   "rnd": {
+    "structures": 36,
+    "force_rmse": 0.42484962475142524,
+    "force_rmse_median": 0.30551174604895104,
+    "force_rms_dft": 1.7079628579121109,
+    "worst": "B(OMe)3/rnd0",
+    "worst_rmse": 0.837296138057048
+   }
+  },
+  "xu_chnop": {
+   "file": "gpaw_p.json",
+   "eq": {
+    "structures": 13,
+    "force_rmse": 0.45249999227495197,
+    "force_rmse_median": 0.41279502442001215,
+    "force_rms_dft": 0.00666391169093617,
+    "worst": "PO(OMe)3/eq",
+    "worst_rmse": 0.7397451529601187
+   },
+   "rnd": {
+    "structures": 40,
+    "force_rmse": 0.47247132921258983,
+    "force_rmse_median": 0.36060735915435127,
+    "force_rms_dft": 1.6650782577081402,
+    "worst": "PO(OMe)3/rnd1",
+    "worst_rmse": 0.8065390026460516
+   }
+  },
+  "xu_chnos": {
+   "file": "gpaw_s.json",
+   "eq": {
+    "structures": 17,
+    "force_rmse": 0.3999033585019252,
+    "force_rmse_median": 0.40560114168752925,
+    "force_rms_dft": 0.006802450060440404,
+    "worst": "SO2/eq",
+    "worst_rmse": 0.7435199082533733
+   },
+   "rnd": {
+    "structures": 52,
+    "force_rmse": 0.42638343593059963,
+    "force_rmse_median": 0.4142202307398872,
+    "force_rms_dft": 2.1250715490942715,
+    "worst": "SO2/rnd0",
+    "worst_rmse": 0.8095408496104546
+   }
+  },
+  "xu_chnose": {
+   "file": "gpaw_se.json",
+   "eq": {
+    "structures": 15,
+    "force_rmse": 0.3356923962221723,
+    "force_rmse_median": 0.2954712660924546,
+    "force_rms_dft": 0.006811718551236973,
+    "worst": "H2CSe/eq",
+    "worst_rmse": 0.48580783457231225
+   },
+   "rnd": {
+    "structures": 48,
+    "force_rmse": 0.3624142464991525,
+    "force_rmse_median": 0.28933843313486,
+    "force_rms_dft": 2.118555073544358,
+    "worst": "OCSe/rnd1",
+    "worst_rmse": 1.4950055817853107
+   }
+  }
+ },
+ "crystals": [
+  {
+   "crystal": "graphene",
+   "set": "xu_chno",
+   "kpts": [
+    3,
+    3,
+    1
+   ],
+   "atoms": 32,
+   "formula": "C32",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.009022851488514928,
+     "force_max_error": 0.01830455741972023,
+     "force_rms_dft": 0.009022837253875118,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.15553657706576093,
+     "force_max_error": 0.5759878319442511,
+     "force_rms_dft": 2.794228737235905,
+     "dE_dft": 4.049803958888219,
+     "dE_model": 4.201218981994771
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.20298063909729763,
+     "force_max_error": 0.6421333753010287,
+     "force_rms_dft": 3.1031551956513304,
+     "dE_dft": 4.943952204838297,
+     "dE_model": 5.216314994568052
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.20946627082173044,
+     "force_max_error": 0.6575323376057972,
+     "force_rms_dft": 3.5077268962950248,
+     "dE_dft": 6.633702058969504,
+     "dE_model": 6.853442501310383
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.008820728215197688,
+     "force_max_error": 0.017615083930525837,
+     "force_rms_dft": 0.008820696162883062,
+     "dE_dft": 1.4514664121809915,
+     "dE_model": 0.7924751974903756
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.009479862654172411,
+     "force_max_error": 0.019608376585113857,
+     "force_rms_dft": 0.009479861806506158,
+     "dE_dft": 0.39508399585645293,
+     "dE_model": 1.0006041454082606
+    }
+   ],
+   "force_rmse": 0.13510364549536,
+   "force_rms_dft": 2.2264202758141116,
+   "force_relative": 0.060682004634528434,
+   "force_rmse_at_minimum": 0.009022851488514928,
+   "force_rmse_distorted_median": 0.20298063909729763,
+   "energy_mae": 0.21450608505906152,
+   "lattice_scale_dft": 1.0057208425598694,
+   "lattice_scale_model": 0.9988392652631765,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 0,
+    "rms_displacement": 0.0,
+    "max_displacement": 0.0,
+    "local_dft": {},
+    "local_model": {}
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 0.016603348636386784,
+    "distorted": 0.3530273493116398
+   }
+  },
+  {
+   "crystal": "graphene_N",
+   "set": "xu_chn",
+   "kpts": [
+    3,
+    3,
+    1
+   ],
+   "atoms": 32,
+   "formula": "C31N",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.17478370678178223,
+     "force_max_error": 0.6151811961201379,
+     "force_rms_dft": 0.014222775653825634,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.23906590391886592,
+     "force_max_error": 0.9073419910602587,
+     "force_rms_dft": 2.7566572365574213,
+     "dE_dft": 3.9844922025243363,
+     "dE_model": 4.067548666897665
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.3304597024792882,
+     "force_max_error": 1.4641872891211165,
+     "force_rms_dft": 3.0194139756869722,
+     "dE_dft": 4.7694783100927225,
+     "dE_model": 4.991580611367226
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.2658742739032203,
+     "force_max_error": 0.9137286437575247,
+     "force_rms_dft": 3.4580433340286287,
+     "dE_dft": 6.559762155667727,
+     "dE_model": 6.635748711323686
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.18238878423615787,
+     "force_max_error": 0.6841328930787641,
+     "force_rms_dft": 0.03505412196288918,
+     "dE_dft": 1.236848843667019,
+     "dE_model": 0.7361461612540552
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.1692691553388467,
+     "force_max_error": 0.5310813610716706,
+     "force_rms_dft": 0.027934678912551903,
+     "dE_dft": 0.5988332390293749,
+     "dE_model": 1.087828902008141
+    }
+   ],
+   "force_rmse": 0.23434743104468458,
+   "force_rms_dft": 2.186179887442853,
+   "force_relative": 0.10719494419958177,
+   "force_rmse_at_minimum": 0.17478370678178223,
+   "force_rmse_distorted_median": 0.2658742739032203,
+   "energy_mae": 0.12704844043459693,
+   "lattice_scale_dft": 1.0034756323584106,
+   "lattice_scale_model": 0.9980718884384003,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 5,
+    "rms_displacement": 0.005592240563248862,
+    "max_displacement": 0.010413967618657649,
+    "local_dft": {
+     "bonds": [
+      1.4078,
+      1.4085,
+      1.4085
+     ],
+     "height": 0.0
+    },
+    "local_model": {
+     "bonds": [
+      1.406,
+      1.406,
+      1.406
+     ],
+     "height": 0.0
+    }
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 0.49084066048601793,
+    "distorted": 0.6807366833730574
+   }
+  },
+  {
+   "crystal": "graphene_N3V",
+   "set": "xu_chn",
+   "kpts": [
+    3,
+    3,
+    1
+   ],
+   "atoms": 31,
+   "formula": "C28N3",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.41934088925745183,
+     "force_max_error": 1.6191182786672857,
+     "force_rms_dft": 0.015843369150170834,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.4168385013189989,
+     "force_max_error": 1.6986140714294407,
+     "force_rms_dft": 2.434691333667863,
+     "dE_dft": 3.4553550340582433,
+     "dE_model": 3.548364265926921
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.4673024762313596,
+     "force_max_error": 1.7564678394936073,
+     "force_rms_dft": 2.8197434088292233,
+     "dE_dft": 4.196430541690404,
+     "dE_model": 4.530576994870103
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.687202346412712,
+     "force_max_error": 2.951238193845581,
+     "force_rms_dft": 3.8936686344548965,
+     "dE_dft": 6.766428819752548,
+     "dE_model": 7.484667837135362
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.5297789056470447,
+     "force_max_error": 2.1948779830893774,
+     "force_rms_dft": 0.20264085629915993,
+     "dE_dft": 1.0374624488657105,
+     "dE_model": 0.5955063578724094
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.2967084815767053,
+     "force_max_error": 0.9790768506960038,
+     "force_rms_dft": 0.19226819333230621,
+     "dE_dft": 0.6811345222923819,
+     "dE_model": 1.1078091908083252
+    }
+   ],
+   "force_rmse": 0.4845825348861862,
+   "force_rms_dft": 2.2029378718719412,
+   "force_relative": 0.21997104007041893,
+   "force_rmse_at_minimum": 0.41934088925745183,
+   "force_rmse_distorted_median": 0.4673024762313596,
+   "energy_mae": 0.38179823414373004,
+   "lattice_scale_dft": 1.0020733652656972,
+   "lattice_scale_model": 0.9969923198708943,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 7,
+    "rms_displacement": 0.01655376030518561,
+    "max_displacement": 0.03942371812095422,
+    "local_dft": {
+     "N0": {
+      "bonds": [
+       1.3474,
+       1.3489
+      ],
+      "height": 0.0
+     },
+     "N24": {
+      "bonds": [
+       1.3484,
+       1.3484
+      ],
+      "height": 0.0
+     },
+     "N30": {
+      "bonds": [
+       1.3474,
+       1.3489
+      ],
+      "height": 0.0
+     }
+    },
+    "local_model": {
+     "N0": {
+      "bonds": [
+       1.3582,
+       1.3582
+      ],
+      "height": 0.0
+     },
+     "N24": {
+      "bonds": [
+       1.3581,
+       1.3581
+      ],
+      "height": 0.0
+     },
+     "N30": {
+      "bonds": [
+       1.3582,
+       1.3582
+      ],
+      "height": 0.0
+     }
+    }
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 1.1776244069986475,
+    "distorted": 1.1964675375758484
+   }
+  },
+  {
+   "crystal": "graphene_B",
+   "set": "xu_chnob",
+   "kpts": [
+    3,
+    3,
+    1
+   ],
+   "atoms": 32,
+   "formula": "C31B",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.3541950654940216,
+     "force_max_error": 1.7847263510933737,
+     "force_rms_dft": 0.014389847119208411,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.4471621411818917,
+     "force_max_error": 2.4375933568129358,
+     "force_rms_dft": 2.86572108274746,
+     "dE_dft": 4.145401473552454,
+     "dE_model": 4.482163032366543
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.4503421281859441,
+     "force_max_error": 2.3579726463279327,
+     "force_rms_dft": 3.1442578344674526,
+     "dE_dft": 4.981752941169077,
+     "dE_model": 5.258312388933064
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.39641821235901925,
+     "force_max_error": 1.873737723865098,
+     "force_rms_dft": 3.554983793998398,
+     "dE_dft": 6.692198413887866,
+     "dE_model": 6.786470261339559
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.45991375864284034,
+     "force_max_error": 2.412321741271391,
+     "force_rms_dft": 0.05997829623300718,
+     "dE_dft": 1.9256853478113385,
+     "dE_model": 1.4179401360928523
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.26287725359420633,
+     "force_max_error": 1.1819430061695275,
+     "force_rms_dft": 0.05581131770019629,
+     "dE_dft": -0.05270420994139613,
+     "dE_model": 0.4561882698687896
+    }
+   ],
+   "force_rmse": 0.40124570034703005,
+   "force_rms_dft": 2.2636086159127657,
+   "force_relative": 0.17725930954951497,
+   "force_rmse_at_minimum": 0.3541950654940216,
+   "force_rmse_distorted_median": 0.4471621411818917,
+   "energy_mae": 0.23586428467658985,
+   "lattice_scale_dft": 1.0105627842040246,
+   "lattice_scale_model": 1.0051317287714363,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 5,
+    "rms_displacement": 0.011231251814614358,
+    "max_displacement": 0.027656505466187618,
+    "local_dft": {
+     "bonds": [
+      1.4795,
+      1.4797,
+      1.4797
+     ],
+     "height": 0.0
+    },
+    "local_model": {
+     "bonds": [
+      1.5073,
+      1.5073,
+      1.5073
+     ],
+     "height": 0.0
+    }
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 1.3797885855105625,
+    "distorted": 1.4636495878303957
+   }
+  },
+  {
+   "crystal": "graphene_S",
+   "set": "xu_chnos",
+   "kpts": [
+    3,
+    3,
+    1
+   ],
+   "atoms": 32,
+   "formula": "C31S",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.20081111651493075,
+     "force_max_error": 0.7523052584681381,
+     "force_rms_dft": 0.014389125395060067,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.2400230330595261,
+     "force_max_error": 0.8230415898594574,
+     "force_rms_dft": 2.856650672730337,
+     "dE_dft": 4.094587443475632,
+     "dE_model": 4.183047791645322
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.24826043598172048,
+     "force_max_error": 1.076791385365689,
+     "force_rms_dft": 3.0173403580899434,
+     "dE_dft": 4.761360325324688,
+     "dE_model": 4.937647938320993
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.256654656005597,
+     "force_max_error": 0.7372974154858888,
+     "force_rms_dft": 3.532168701772738,
+     "dE_dft": 6.596444554540824,
+     "dE_model": 6.676146956392472
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.17947966416226577,
+     "force_max_error": 0.6188452873643027,
+     "force_rms_dft": 0.1598598655455338,
+     "dE_dft": 1.6467820784816922,
+     "dE_model": 1.1646872928617995
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.20535963839378518,
+     "force_max_error": 0.7755634041138215,
+     "force_rms_dft": 0.13616513081396767,
+     "dE_dft": 0.1659600253188387,
+     "dE_model": 0.582797184998185
+    }
+   ],
+   "force_rmse": 0.2235421467968545,
+   "force_rms_dft": 2.2280527674310666,
+   "force_relative": 0.1003307237891845,
+   "force_rmse_at_minimum": 0.20081111651493075,
+   "force_rmse_distorted_median": 0.24826043598172048,
+   "energy_mae": 0.11481678767254759,
+   "lattice_scale_dft": 1.008168961542065,
+   "lattice_scale_model": 1.0033298728271167,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 18,
+    "rms_displacement": 0.02749077034967904,
+    "max_displacement": 0.059610511644826204,
+    "local_dft": {
+     "bonds": [
+      1.7541,
+      1.7553,
+      1.7553
+     ],
+     "height": 1.1302
+    },
+    "local_model": {
+     "bonds": [
+      1.7834,
+      1.7834,
+      1.7834
+     ],
+     "height": 1.1912
+    }
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 0.49509504751254735,
+    "distorted": 0.5993440627906403
+   }
+  },
+  {
+   "crystal": "graphene_P",
+   "set": "xu_chnop",
+   "kpts": [
+    3,
+    3,
+    1
+   ],
+   "atoms": 32,
+   "formula": "C31P",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.14109663697085967,
+     "force_max_error": 0.5931442171039357,
+     "force_rms_dft": 0.01092357167062825,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.20190557530554495,
+     "force_max_error": 0.6730816552327171,
+     "force_rms_dft": 2.850759903533983,
+     "dE_dft": 4.086982945256693,
+     "dE_model": 4.24409236419649
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.2837430839402171,
+     "force_max_error": 1.4643456731635929,
+     "force_rms_dft": 2.967430797734329,
+     "dE_dft": 4.674600340865936,
+     "dE_model": 4.8647373786863
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.22859167741572237,
+     "force_max_error": 0.7510847057221199,
+     "force_rms_dft": 3.5260761123758955,
+     "dE_dft": 6.566538398460523,
+     "dE_model": 6.732500692214558
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.13043735056694325,
+     "force_max_error": 0.509768776471463,
+     "force_rms_dft": 0.15270523827701135,
+     "dE_dft": 1.607657266860656,
+     "dE_model": 1.0049620133037251
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.1413409304946084,
+     "force_max_error": 0.5889027955956239,
+     "force_rms_dft": 0.1309255149896639,
+     "dE_dft": 0.18181547545566445,
+     "dE_model": 0.7230435516427178
+    }
+   ],
+   "force_rmse": 0.19597175648019358,
+   "force_rms_dft": 2.2138303917982585,
+   "force_relative": 0.08852157654273095,
+   "force_rmse_at_minimum": 0.14109663697085967,
+   "force_rmse_distorted_median": 0.22859167741572237,
+   "energy_mae": 0.17106958350473178,
+   "lattice_scale_dft": 1.0079679436165054,
+   "lattice_scale_model": 1.001631467324988,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 17,
+    "rms_displacement": 0.03847984927253946,
+    "max_displacement": 0.09842165548850004,
+    "local_dft": {
+     "bonds": [
+      1.7805,
+      1.7807,
+      1.7807
+     ],
+     "height": 1.3218
+    },
+    "local_model": {
+     "bonds": [
+      1.7798,
+      1.7798,
+      1.7798
+     ],
+     "height": 1.2055
+    }
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 0.3418079885267613,
+    "distorted": 0.6339074109629526
+   }
+  },
+  {
+   "crystal": "graphene_Se",
+   "set": "xu_chnose",
+   "kpts": [
+    3,
+    3,
+    1
+   ],
+   "atoms": 32,
+   "formula": "C31Se",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.276557352772335,
+     "force_max_error": 1.470069070938047,
+     "force_rms_dft": 0.013318826045559886,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.3012808765449251,
+     "force_max_error": 1.5416601368121445,
+     "force_rms_dft": 2.8584127468004055,
+     "dE_dft": 4.092352890332052,
+     "dE_model": 4.197647995292755
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.3019159923491505,
+     "force_max_error": 1.2724548614926905,
+     "force_rms_dft": 2.9812701363193397,
+     "dE_dft": 4.698939687229938,
+     "dE_model": 4.9329602577660125
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.31166460235971194,
+     "force_max_error": 1.377066445980762,
+     "force_rms_dft": 3.5153580902219788,
+     "dE_dft": 6.546065960808278,
+     "dE_model": 6.647153944393722
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.2575191236942922,
+     "force_max_error": 1.3908254923613186,
+     "force_rms_dft": 0.16070588545496092,
+     "dE_dft": 1.6430046739217232,
+     "dE_model": 1.1648988537771174
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.28263031789947685,
+     "force_max_error": 1.5278120966059294,
+     "force_rms_dft": 0.14648434175630942,
+     "dE_dft": 0.13718491357349194,
+     "dE_model": 0.5541916843009176
+    }
+   ],
+   "force_rmse": 0.2891764808349639,
+   "force_rms_dft": 2.215991087316484,
+   "force_relative": 0.13049532666900307,
+   "force_rmse_at_minimum": 0.276557352772335,
+   "force_rmse_distorted_median": 0.3019159923491505,
+   "energy_mae": 0.14680121969407386,
+   "lattice_scale_dft": 1.0084587606338433,
+   "lattice_scale_model": 1.0035525014881346,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 17,
+    "rms_displacement": 0.02856756268716918,
+    "max_displacement": 0.06528915279432343,
+    "local_dft": {
+     "bonds": [
+      1.8882,
+      1.8882,
+      1.8882
+     ],
+     "height": 1.434
+    },
+    "local_model": {
+     "bonds": [
+      1.9463,
+      1.9463,
+      1.9464
+     ],
+     "height": 1.5032
+    }
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 0.9359873006595459,
+    "distorted": 1.0434700605723821
+   }
+  },
+  {
+   "crystal": "graphene_epoxide",
+   "set": "xu_chno",
+   "kpts": [
+    3,
+    3,
+    1
+   ],
+   "atoms": 33,
+   "formula": "C32O",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.6071794170621898,
+     "force_max_error": 3.487572985731628,
+     "force_rms_dft": 0.010292925513595553,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.7334040826797578,
+     "force_max_error": 4.256926287526246,
+     "force_rms_dft": 2.8468673166644187,
+     "dE_dft": 4.28748958041956,
+     "dE_model": 4.706062762583997
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.391876215306276,
+     "force_max_error": 2.254977428828961,
+     "force_rms_dft": 2.9136108137301564,
+     "dE_dft": 4.670643417613178,
+     "dE_model": 4.123613991309071
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.5977802183546957,
+     "force_max_error": 3.2642230845173374,
+     "force_rms_dft": 3.394316421091009,
+     "dE_dft": 6.676497451532612,
+     "dE_model": 6.656020751574033
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.6310857026791578,
+     "force_max_error": 3.6180810621494572,
+     "force_rms_dft": 0.09034428568154126,
+     "dE_dft": 1.488284480472828,
+     "dE_model": 0.9907015885696637
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.5792330666177207,
+     "force_max_error": 3.3316082078564873,
+     "force_rms_dft": 0.08605244512017253,
+     "dE_dft": 0.3508308928853694,
+     "dE_model": 0.7817625053035044
+    }
+   ],
+   "force_rmse": 0.5987816324509422,
+   "force_rms_dft": 2.165288222410108,
+   "force_relative": 0.2765366874736237,
+   "force_rmse_at_minimum": 0.6071794170621898,
+   "force_rmse_distorted_median": 0.5977802183546957,
+   "energy_mae": 0.32869310280904074,
+   "lattice_scale_dft": 1.0061847864688902,
+   "lattice_scale_model": 1.0011788057314566,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 21,
+    "rms_displacement": 0.07795088986965382,
+    "max_displacement": 0.24433466374611243,
+    "local_dft": {
+     "bonds": [
+      1.4688,
+      1.4725
+     ],
+     "height": 1.7098
+    },
+    "local_model": {
+     "bonds": [
+      1.5622,
+      1.5623
+     ],
+     "height": 1.5415
+    }
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 1.1172977366582921,
+    "distorted": 1.0396694329823946
+   }
+  },
+  {
+   "crystal": "graphene_OH",
+   "set": "xu_chno",
+   "kpts": [
+    3,
+    3,
+    1
+   ],
+   "atoms": 34,
+   "formula": "C32HO",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.19570112182180546,
+     "force_max_error": 1.351736109138083,
+     "force_rms_dft": 0.012300060483298646,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.23264259289950484,
+     "force_max_error": 1.2546835658475362,
+     "force_rms_dft": 2.735138680230383,
+     "dE_dft": 4.1564025877176505,
+     "dE_model": 4.175526371842466
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.2631890073382923,
+     "force_max_error": 1.3446254324408504,
+     "force_rms_dft": 2.798055324760503,
+     "dE_dft": 4.61540830556504,
+     "dE_model": 4.707188857983283
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.2586250955395166,
+     "force_max_error": 1.366695028558413,
+     "force_rms_dft": 3.2616320328147568,
+     "dE_dft": 6.646231558338513,
+     "dE_model": 6.911942914722545
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.18585980359018542,
+     "force_max_error": 1.1473289792940802,
+     "force_rms_dft": 0.1496027167899657,
+     "dE_dft": 1.378175343214366,
+     "dE_model": 0.797426740740093
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.21191653369445695,
+     "force_max_error": 1.5763976058804694,
+     "force_rms_dft": 0.1282158470708271,
+     "dE_dft": 0.458844590483352,
+     "dE_model": 0.9753307721556439
+    }
+   ],
+   "force_rmse": 0.22657941307759108,
+   "force_rms_dft": 2.081158022423864,
+   "force_relative": 0.10887179668062912,
+   "force_rmse_at_minimum": 0.19570112182180546,
+   "force_rmse_distorted_median": 0.2586250955395166,
+   "energy_mae": 0.12553856430902974,
+   "lattice_scale_dft": 1.005004468029263,
+   "lattice_scale_model": 0.9989964559161544,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 32,
+    "rms_displacement": 0.05851988933220427,
+    "max_displacement": 0.2411960244529694,
+    "local_dft": {
+     "bonds": [
+      0.9892,
+      1.4921
+     ],
+     "height": 2.0747
+    },
+    "local_model": {
+     "bonds": [
+      0.9836,
+      1.4447
+     ],
+     "height": 1.8907
+    }
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 0.36011830165612524,
+    "distorted": 0.449805125995392
+   }
+  },
+  {
+   "crystal": "graphane",
+   "set": "xu_chn",
+   "kpts": [
+    6,
+    6,
+    1
+   ],
+   "atoms": 16,
+   "formula": "C8H8",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.17497812629860354,
+     "force_max_error": 0.3856870383101151,
+     "force_rms_dft": 0.012414605302499888,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.1644906842237006,
+     "force_max_error": 0.6078811051877846,
+     "force_rms_dft": 1.6336281123504885,
+     "dE_dft": 0.9957556191019279,
+     "dE_model": 1.0260483364379525
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.24343073004706706,
+     "force_max_error": 0.804326362065525,
+     "force_rms_dft": 1.57716426800419,
+     "dE_dft": 1.1292531306633151,
+     "dE_model": 1.0817067752054754
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.2216039373939107,
+     "force_max_error": 0.6963045170657008,
+     "force_rms_dft": 1.701955989071071,
+     "dE_dft": 1.2686983303423034,
+     "dE_model": 1.2488952009883008
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.16353526945619234,
+     "force_max_error": 0.3502301390844493,
+     "force_rms_dft": 0.09313310910689378,
+     "dE_dft": 0.04906192898960171,
+     "dE_model": 0.04724269356694322
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.18921629199760143,
+     "force_max_error": 0.4200619400399533,
+     "force_rms_dft": 0.07295340547858162,
+     "dE_dft": 0.2885917557064488,
+     "dE_model": 0.2486904483937451
+    }
+   ],
+   "force_rmse": 0.19518706616667106,
+   "force_rms_dft": 1.1595252063002306,
+   "force_relative": 0.16833361198715688,
+   "force_rmse_at_minimum": 0.17497812629860354,
+   "force_rmse_distorted_median": 0.2216039373939107,
+   "energy_mae": 0.03254740071595563,
+   "lattice_scale_dft": 0.9929060502647087,
+   "lattice_scale_model": 0.993192795051875,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 4,
+    "rms_displacement": 0.014002187598429878,
+    "max_displacement": 0.01639040953042381,
+    "local_dft": {},
+    "local_model": {}
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 0.4913866438949125,
+    "distorted": 0.5673882137948144
+   }
+  },
+  {
+   "crystal": "hBN",
+   "set": "xu_chnob",
+   "kpts": [
+    4,
+    4,
+    1
+   ],
+   "atoms": 18,
+   "formula": "B9N9",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.10038780994173259,
+     "force_max_error": 0.35078856348907944,
+     "force_rms_dft": 0.014303795514986185,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.3753620580270935,
+     "force_max_error": 1.1204516899011456,
+     "force_rms_dft": 2.1881820503682614,
+     "dE_dft": 1.7222622927412203,
+     "dE_model": 1.5564577014363294
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.33134855542119784,
+     "force_max_error": 0.824411281931947,
+     "force_rms_dft": 2.0303288837756166,
+     "dE_dft": 1.608657768580116,
+     "dE_model": 1.3885258705010983
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.6252472892405293,
+     "force_max_error": 3.102596626033674,
+     "force_rms_dft": 3.1384713786745766,
+     "dE_dft": 2.693389639524497,
+     "dE_model": 2.401638110254339
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.1384369487331664,
+     "force_max_error": 0.5089306436152918,
+     "force_rms_dft": 0.04217943945758475,
+     "dE_dft": 0.5076374951185016,
+     "dE_model": 0.8413411206125829
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.09458348972489773,
+     "force_max_error": 0.3302497208262854,
+     "force_rms_dft": 0.02015412756601054,
+     "dE_dft": 0.45355208678080317,
+     "dE_model": -0.05018244401640004
+    }
+   ],
+   "force_rmse": 0.3366034388259342,
+   "force_rms_dft": 1.7683687657058378,
+   "force_relative": 0.1903468582762375,
+   "force_rmse_at_minimum": 0.10038780994173259,
+   "force_rmse_distorted_median": 0.3753620580270935,
+   "energy_mae": 0.2258960062180222,
+   "lattice_scale_dft": 1.0005626924111128,
+   "lattice_scale_model": 1.0112685810192295,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 3,
+    "rms_displacement": 0.003392738849984072,
+    "max_displacement": 0.006855937292303351,
+    "local_dft": {},
+    "local_model": {}
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 0.39106686618801684,
+    "distorted": 1.2286338017489862
+   }
+  },
+  {
+   "crystal": "cnt80_N",
+   "set": "xu_chn",
+   "kpts": [
+    1,
+    1,
+    4
+   ],
+   "atoms": 64,
+   "formula": "C63N",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.27343727526228573,
+     "force_max_error": 1.0089303533350582,
+     "force_rms_dft": 0.011930309828393368,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.3229306264858261,
+     "force_max_error": 1.1285824803695552,
+     "force_rms_dft": 2.629012407799479,
+     "dE_dft": 7.873343225929261,
+     "dE_model": 8.070407454538326
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.34774969261058947,
+     "force_max_error": 1.3922788254350125,
+     "force_rms_dft": 2.7113381578890787,
+     "dE_dft": 8.963426445937102,
+     "dE_model": 9.282897481663667
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.3535384192693933,
+     "force_max_error": 1.9677626845198322,
+     "force_rms_dft": 2.7693626366904702,
+     "dE_dft": 8.845818506202363,
+     "dE_model": 9.096309478328521
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.336097748401082,
+     "force_max_error": 1.1907546958050705,
+     "force_rms_dft": 0.25954495531312516,
+     "dE_dft": 1.1353664591219967,
+     "dE_model": 0.30492832003892545
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.23066393522156936,
+     "force_max_error": 0.8732888399653561,
+     "force_rms_dft": 0.17358226559348464,
+     "dE_dft": 0.42263166113252737,
+     "dE_model": 1.1415756072201475
+    }
+   ],
+   "force_rmse": 0.31388398682948376,
+   "force_rms_dft": 1.916162266064464,
+   "force_relative": 0.1638086671407838,
+   "force_rmse_at_minimum": 0.27343727526228573,
+   "force_rmse_distorted_median": 0.34774969261058947,
+   "energy_mae": 0.25567541215392947,
+   "lattice_scale_dft": 1.0045746832985452,
+   "lattice_scale_model": 0.9942160731719059,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 19,
+    "rms_displacement": 0.03967894215187981,
+    "max_displacement": 0.08218121370002984,
+    "local_dft": {
+     "bonds": [
+      1.3875,
+      1.4327,
+      1.4327
+     ]
+    },
+    "local_model": {
+     "bonds": [
+      1.4046,
+      1.4252,
+      1.4252
+     ]
+    }
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 0.7678869802138022,
+    "distorted": 0.8903681011194877
+   }
+  },
+  {
+   "crystal": "diamond_N",
+   "set": "xu_chn",
+   "kpts": [
+    2,
+    2,
+    2
+   ],
+   "atoms": 64,
+   "formula": "C63N",
+   "points": [
+    {
+     "label": "relaxed",
+     "force_rmse": 0.48614451134877457,
+     "force_max_error": 3.3135278785447317,
+     "force_rms_dft": 0.008725269926619749,
+     "dE_dft": 0.0,
+     "dE_model": 0.0
+    },
+    {
+     "label": "rnd0",
+     "force_rmse": 0.6107822029369006,
+     "force_max_error": 4.460819206159198,
+     "force_rms_dft": 2.0175656045139023,
+     "dE_dft": 7.195509277492761,
+     "dE_model": 6.700295417224197
+    },
+    {
+     "label": "rnd1",
+     "force_rmse": 0.6749581100129162,
+     "force_max_error": 4.904456238146135,
+     "force_rms_dft": 2.5349700322210067,
+     "dE_dft": 10.38566929110732,
+     "dE_model": 10.193965797862347
+    },
+    {
+     "label": "rnd2",
+     "force_rmse": 0.8425215804846764,
+     "force_max_error": 6.646466829407269,
+     "force_rms_dft": 2.40120354541356,
+     "dE_dft": 9.477479733076166,
+     "dE_model": 9.0163812706503
+    },
+    {
+     "label": "x0.98",
+     "force_rmse": 0.3716833763514079,
+     "force_max_error": 2.4901239388411573,
+     "force_rms_dft": 0.05630770497470267,
+     "dE_dft": 2.504573876078325,
+     "dE_model": 0.9938066615357002
+    },
+    {
+     "label": "x1.02",
+     "force_rmse": 0.6441367941507682,
+     "force_max_error": 4.427247613773564,
+     "force_rms_dft": 0.05389133986985606,
+     "dE_dft": 1.1235449448568033,
+     "dE_model": 2.8540898523597207
+    }
+   ],
+   "force_rmse": 0.6228781570297153,
+   "force_rms_dft": 1.6466417068167636,
+   "force_relative": 0.3782718210349742,
+   "force_rmse_at_minimum": 0.48614451134877457,
+   "force_rmse_distorted_median": 0.6749581100129162,
+   "energy_mae": 0.3826719386464674,
+   "lattice_scale_dft": 1.0038064600399865,
+   "lattice_scale_model": 0.9951654542056748,
+   "gpaw_converged": true,
+   "relax": {
+    "converged": true,
+    "steps": 6,
+    "rms_displacement": 0.020912558768330165,
+    "max_displacement": 0.07817391431842115,
+    "local_dft": {
+     "bonds": [
+      1.6013,
+      1.6013,
+      1.6013,
+      1.6013
+     ]
+    },
+    "local_model": {
+     "bonds": [
+      1.5231,
+      1.5231,
+      1.5231,
+      1.5231
+     ]
+    }
+   },
+   "ratio_to_molecules": {
+    "at_minimum": 1.3652273283115675,
+    "distorted": 1.7281429244003834
+   }
+  }
+ ]
+}

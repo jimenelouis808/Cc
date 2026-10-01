@@ -1130,7 +1130,7 @@
  },
  "reference": "C-C: C. H. Xu, C. Z. Wang, C. T. Chan, K. M. Ho, J. Phys.: Condens. Matter 4, 6047 (1992). H, N, O: ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chno",
  "system": "moléculas C/H/N/O de capa cerrada: las de xu_chn más alcoholes, éteres, epóxidos, aldehídos, cetonas, ácidos carboxílicos, ésteres, amidas, furano, nitro; motivos de óxido de grafeno (epóxido e hidroxilos basales)",
- "validity": "sistemas finitos de capa cerrada (SCC sin Ewald); enlaces dentro de lo muestreado (C-H 0.97-1.26 Å, C-N 1.11-1.61 Å, C-O 1.10-1.58 Å, H-N 0.91-1.17 Å, H-O 0.89-1.09 Å, N-N 1.07-1.52 Å, N-O 1.14-1.31 Å, O-O 1.35-1.54 Å); energías relativas solo dentro de una misma composición (no se ajustaron energías de atomización); C-C como en xu_carbon; anillos de tres miembros con la corrección de ángulos agudos ajustada a barridos de apertura del anillo: epóxido basal sobre coroneno C-C 0.03 Å, C-O 0.10 Å; oxirano y aziridina C-C ~0.12 Å; ciclopropano C-C +0.19 Å con un mínimo poco profundo; el biciclobutano (excluido del ajuste) se abre; los C-C y C-N simples junto a un heteroátomo se desvían ~0.08 Å; frecuencias frente a GPAW (hessianas en el ajuste): RMS 38-180 cm⁻¹ por molécula, media 126 (agua 38, metanol 120, ácido fórmico 111)",
+ "validity": "ajustado en moléculas de capa cerrada; cristales (SCC periódico): extrapolación comprobada contra GPAW (validation/crystals_tb_vs_gpaw.json): epóxido y OH sobre grafeno: fuerzas 0,4-1,1 veces el error molecular; heredan los errores de las moléculas (epóxido C-O +0,09 Å; OH C-O -0,05 Å, el C bajo el OH 0,14 Å menos piramidal y el H gira, 0,24 Å); el C-O simple de los alcoholes sale 0,06-0,08 Å corto también en moléculas (metanol -0,08 Å); enlaces dentro de lo muestreado (C-H 0.97-1.26 Å, C-N 1.11-1.61 Å, C-O 1.10-1.58 Å, H-N 0.91-1.17 Å, H-O 0.89-1.09 Å, N-N 1.07-1.52 Å, N-O 1.14-1.31 Å, O-O 1.35-1.54 Å); energías relativas solo dentro de una misma composición (no se ajustaron energías de atomización); C-C como en xu_carbon; anillos de tres miembros con la corrección de ángulos agudos ajustada a barridos de apertura del anillo: epóxido basal sobre coroneno C-C 0.03 Å, C-O 0.10 Å; oxirano y aziridina C-C ~0.12 Å; ciclopropano C-C +0.19 Å con un mínimo poco profundo; el biciclobutano (excluido del ajuste) se abre; los C-C y C-N simples junto a un heteroátomo se desvían ~0.08 Å; frecuencias frente a GPAW (hessianas en el ajuste): RMS 38-180 cm⁻¹ por molécula, media 126 (agua 38, metanol 120, ácido fórmico 111)",
  "notes": "C-C idéntico a xu_carbon. Niveles: todos los ocupados, el LUMO y el LUMO+1, con un desplazamiento común de 7.0723 eV entre el cero de Xu y el vacío de GPAW. Sin interacción H-H. U de Hubbard: dε/dn del átomo libre con GPAW (PBE), igual a DFTB mio.",
  "fit": {
   "references": [
@@ -2638,5 +2638,15 @@
    }
   },
   "checks": {}
+ },
+ "frequency_scale": {
+  "value": 1.0368,
+  "unit": "",
+  "modes": 162,
+  "molecules": 14,
+  "rms_before_cm1": 119.7,
+  "rms_after_cm1": 99.3,
+  "rms_left_out_cm1": 100.1,
+  "source": "mínimos cuadrados (Scott-Radom; Witek y Morokuma, J. Comput. Chem. 25, 1858 (2004)) frente a GPAW PBE, modos internos de las moléculas de validación; receta tbkit.recipes.frequency_scaling"
  }
 }

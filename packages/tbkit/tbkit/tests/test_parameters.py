@@ -190,3 +190,24 @@ def test_read_gpaw_eigenvalues(tmp_path):
     path.write_text(GPAW_SPIN)
     spin = read_gpaw_eigenvalues(path)
     assert spin.energies.shape == (2, 2) and spin.n_occupied(0) == 2 and spin.n_occupied(1) == 1
+
+
+def test_frequency_scale_is_reported_next_to_the_raw_frequencies():
+    from ase.build import molecule
+
+    from tbkit.params import load_parameters, xu_carbon
+    from tbkit.recipes.frequency_scaling import SETS, scale_factor
+    from tbkit.tasks import frequency_scale, phonons
+
+    for name in SETS:
+        entry = load_parameters(name).metadata["parameters"]["frequency_scale"]
+        assert entry["source"] and entry["unit"] == ""
+        assert entry["rms_after_cm1"] <= entry["rms_before_cm1"]
+    # Scott-Radom on a model that is 5 % low everywhere gives back 1/0.95.
+    got = scale_factor({"m": {"tb": [950.0, 1900.0, 2850.0], "gpaw": [1000.0, 2000.0, 3000.0]}})
+    assert got["value"] == pytest.approx(1 / 0.95, abs=1e-4) and got["rms_after_cm1"] < 0.5
+    assert frequency_scale(xu_carbon()) is None
+    model = load_parameters("xu_chno")
+    result, _ = phonons(molecule("H2O"), model)
+    assert result["frequencies_scaled_cm1"] == pytest.approx(
+        frequency_scale(model) * result["frequencies_cm1"])

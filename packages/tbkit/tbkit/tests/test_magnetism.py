@@ -143,8 +143,9 @@ class TestSCC:
         screened = self_consistent(system).charges[n]
         assert bare < 0 and screened < 0 and abs(screened) < abs(bare)
 
-    def test_periodic_is_refused(self):
+    def test_periodic_graphene_moves_no_charge(self):
         sheet = graphene(a=2.46, vacuum=5.0)
         sheet.pbc = (True, True, False)
-        with pytest.raises(ValueError, match="Ewald"):
-            self_consistent(System.build(sheet, pi_model()))
+        result = self_consistent(System.build(sheet, pi_model()))
+        assert result.converged
+        assert max(abs(q) for q in result.charges.values()) < 1e-8

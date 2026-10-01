@@ -316,7 +316,7 @@ def polarizability_linear_response(system: System, kT: float = 0.01, U=None,
     from .scc import self_consistent
 
     if system.periodic:
-        raise ValueError("Respuesta lineal SCC: solo sistemas finitos (sin Ewald).")
+        raise ValueError("Respuesta lineal SCC: solo sistemas finitos (no implementada con Ewald).")
     if ground_scc is None:
         ground_scc = system.model.scc
     reference = self_consistent(system, U=U, kT=kT, tol=1e-10) if ground_scc else None
@@ -354,7 +354,7 @@ def polarizability_screened(system: System, field: float = 0.01, kT: float = 0.0
     from .scc import self_consistent
 
     if system.periodic:
-        raise ValueError("Polarizabilidad apantallada: solo sistemas finitos (sin Ewald).")
+        raise ValueError("Polarizabilidad apantallada: solo sistemas finitos (no implementada con Ewald).")
     reference = self_consistent(system, U=U, kT=kT, tol=1e-10)
     _check_gapped(reference.solution, 0.0)
     positions = system.atoms.get_positions()[system.basis.atoms]

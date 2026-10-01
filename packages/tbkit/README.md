@@ -69,7 +69,7 @@ uno ajustado) en ese mismo formato, y `load_parameters(ruta)` lo lee.
 | Infrarrojo | `infrared` | μ del modelo (cargas + dipolos intraatómicos), cargas de Born, km/mol | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
 | C, H y N (fase E, paso 2) | `parameters/xu_chn.json`, `references`, `recipes` | C–C de Xu intacto; H y N ajustados a GPAW (PBE, LCAO dzp) en niveles, fuerzas y energías; U de H, C, N calculadas con el átomo de GPAW; SCC. Receta reproducible y referencias incluidas |
 | Oxígeno | `parameters/xu_chno.json`, `recipes/xu_chno.py` | `xu_chn` más O (hidroxilo, epóxido, carbonilo, carboxilo, éter, furano, nitro), C–O, O–H, N–O, O–O; corrección de ángulos agudos para anillos de tres miembros; α extra del O ajustada a GPAW |
-| B, S, P | `parameters/xu_chnob.json`, `xu_chnos.json`, `xu_chnop.json`; `recipes/xu_bsp.py` | Un elemento más sobre `xu_chno` fijo: el resto da exactamente lo de `xu_chno`; todos los pares del elemento con H, C, N, O y consigo mismo |
+| B, S, P, Se | `parameters/xu_chnob.json`, `xu_chnos.json`, `xu_chnop.json`, `xu_chnose.json`; `recipes/xu_bsp.py` | Un elemento más sobre `xu_chno` fijo: el resto da exactamente lo de `xu_chno`; todos los pares del elemento con H, C, N, O y consigo mismo |
 | Reproducibilidad | `record`, `tasks` | `tbkit run simulacion.json` guarda estructura, parámetros completos, versión, commit, fecha, ajustes y resultados; `record.replay` lo repite |
 
 Salidas (`analysis`): matriz densidad P = Σ f c c†, poblaciones Mulliken y
@@ -169,8 +169,8 @@ Resultado (todo frente a GPAW salvo α):
 | Raman de la piridina | modos de anillo polarizados a 992 y 1028 cm⁻¹ (exp. 991 y 1030) |
 | α | con la polarizabilidad atómica extra, ±5 % de GPAW en entrenamiento y ±2 % en prueba, anisotropía incluida (ver abajo) |
 
-Límites que el archivo declara en `validity`: solo sistemas finitos de capa
-cerrada (SCC sin Ewald); energías comparables solo entre geometrías de la misma
+Límites que el archivo declara en `validity`: ajustado en moléculas de capa
+cerrada (en cristales, lo medido frente a GPAW: ver «Cristales frente a GPAW»); energías comparables solo entre geometrías de la misma
 composición (no se ajustaron atomizaciones); sin interacción H–H; y el C–C de
 Xu falla en anillos tensos (aziridina, 0,22 Å), y los C–C y C–N simples junto
 a un heteroátomo (aminas, nitrilos) se desvían ~0,08 Å.
@@ -437,6 +437,85 @@ mismo orden de átomos, y con las mismas masas (las de ASE si no se cambian).
 El lector está comprobado con archivos escritos en el formato documentado; aún
 no contra una instalación real de QE.
 
+## Factores de escala de frecuencias
+
+Los conjuntos subestiman las frecuencias de GPAW de forma sistemática, ~3 %.
+`recipes/frequency_scaling.py` ajusta un factor por conjunto (mínimos
+cuadrados de Scott–Radom, como Witek y Morokuma 2004 para SCC-DFTB) sobre los
+modos internos de sus moléculas de validación, frente a GPAW PBE (no frente al
+experimento), y lo guarda en `frequency_scale` del archivo. `tasks.phonons`
+devuelve `frequencies_scaled_cm1` junto a las crudas; el modelo no cambia. En la ventana,
+la casilla «Escalar frecuencias» (pestaña Espectros) lo aplica a Raman, Raman
+resonante e IR antes de ensanchar el espectro (los factores de sección eficaz
+dependen de ω); nunca a modos importados de Quantum ESPRESSO.
+
+| conjunto | λ | RMS antes → después (cm⁻¹) | dejando fuera cada molécula |
+|---|---|---|---|
+| xu_chn | 1,003 | 68 → 67 | 69 |
+| xu_chno | 1,037 | 120 → 99 | 100 |
+| xu_chnob | 1,030 | 97 → 82 | 84 |
+| xu_chnos | 1,031 | 91 → 75 | 76 |
+| xu_chnop | 1,025 | 82 → 71 | 71 |
+| xu_chnose | 1,034 | 84 → 60 | 61 |
+
+Un solo factor transfiere bien (dejar fuera la molécula apenas cambia el
+RMS). Dos factores (encima y debajo de 2000 cm⁻¹) solo ayudaban a xu_chno
+(99 → 88). `xu_chn` casi no tiene sesgo, y `xu_carbon` no lleva factor: el
+carbono puro se valida contra experimento (RBM, G, C60) sin escalar.
+
+## Cristales frente a GPAW: cuánto se extrapola
+
+Los conjuntos `xu_ch*` se ajustaron en moléculas; en un cristal son una
+extrapolación. `recipes/crystal_validation.py` la mide en 13 cristales, cada
+uno con el conjunto mínimo que cubre sus elementos, con GPAW (PBE, LCAO dzp,
+h 0,2 Å, espín apareado, Fermi–Dirac 0,1 eV) y TB en la misma celda, la misma
+malla k y el mismo smearing: relajación con GPAW, tres distorsiones aleatorias
+(σ = 0,05 Å) y ±2 % de deformación (con la rejilla de la celda relajada: GPAW
+redondea la rejilla a múltiplos de 4 y una deformación la cambiaba, con saltos
+de ~1 eV). Referencias en `parameters/references/gpaw_crystals.json`,
+resultados en `validation/crystals_tb_vs_gpaw.json`. La escala es el error
+del mismo conjunto en sus propias moléculas, medido igual (mediana por
+estructura): en el mínimo de GPAW 0,26-0,54 eV/Å según el conjunto, casi todo
+por el desplazamiento entre los mínimos de TB y GPAW.
+
+| cristal | conjunto | F en el mínimo (eV/Å) | × moléculas | F distorsiones | enlace del dopante TB − GPAW |
+|---|---|---|---|---|---|
+| grafeno | xu_chno | 0,01 | 0,02 | 0,20 | — |
+| grafeno + N grafítico | xu_chn | 0,18 | 0,49 | 0,27 | C–N −0,002 Å |
+| grafeno + N3V piridínico | xu_chn | 0,42 | 1,18 | 0,47 | C–N +0,010 Å |
+| grafeno + B | xu_chnob | 0,35 | 1,38 | 0,45 | B–C +0,027 Å |
+| grafeno + S | xu_chnos | 0,20 | 0,50 | 0,25 | S–C +0,03 Å, altura +0,06 Å |
+| grafeno + P | xu_chnop | 0,14 | 0,34 | 0,23 | P–C 0,00 Å, altura −0,12 Å |
+| grafeno + Se | xu_chnose | 0,28 | 0,94 | 0,30 | Se–C +0,06 Å, altura +0,07 Å |
+| grafeno + epóxido | xu_chno | 0,61 | 1,12 | 0,60 | C–O +0,09 Å |
+| grafeno + OH | xu_chno | 0,20 | 0,36 | 0,26 | C–O −0,05 Å; el H gira 0,24 Å |
+| grafano | xu_chn | 0,18 | 0,49 | 0,22 | — |
+| h-BN | xu_chnob | 0,10 | 0,39 | 0,38 | red +1,1 %, 10-15 % más blando |
+| CNT (8,0) + N | xu_chn | 0,27 | 0,77 | 0,35 | C–N ≤ 0,017 Å |
+| diamante + N | xu_chn | 0,49 | 1,37 | 0,68 | C–N −0,08 Å |
+
+- **La extrapolación aguanta**: el error de fuerzas en cristales va de 0,3 a
+  1,4 veces el molecular, y cada desviación de enlace está dentro de lo que el
+  conjunto ya declaraba para sus moléculas (epóxido C–O 0,10 Å, C–N simple
+  ~0,08 Å, enlaces de Se < 0,08 Å, de B < 0,03 Å).
+- **Lo nuevo en cristales**: la altura de S, P y Se sobre la hoja (0,06-0,12 Å;
+  el P queda bajo con su enlace exacto, es decir, ángulos C–P–C abiertos) y la
+  red, un 0,5-1 % más corta que la de GPAW-dzp en grafeno dopado (grafano
+  igual; h-BN al revés, +1,1 %, y más blando).
+- **Lo que se descubrió de paso en moléculas**: el C–O simple de alcoholes sale
+  0,06-0,08 Å corto (metanol −0,08 Å); ahora figura en `validity` de xu_chno.
+- Todo con espín apareado en ambos códigos: el N del diamante (centro P1) y el
+  OH sobre grafeno son de capa abierta en la realidad.
+
+Cada `validity` lo dice (campo `crystal_notes` de la receta; un test compara
+cada archivo con su receta). Reproducir:
+
+```bash
+tbkit/recipes/run_crystals.sh out/crystals        # GPAW, reanudable; horas en serie
+python -m tbkit.recipes.crystal_validation collect out/crystals gpaw_crystals.json
+python -m tbkit.recipes.crystal_validation compare gpaw_crystals.json out.json
+```
+
 ## Lo que no hace, y dónde está la trampa
 
 - **Raman solo no resonante y con gap**: metales, semimetales (el grafeno) y
@@ -450,8 +529,10 @@ no contra una instalación real de QE.
 - **Campo medio no es correlación**: un copo con M = 0 y momentos locales es, en
   realidad, un singlete correlacionado; los momentos son el parámetro de orden
   de la aproximación.
-- **SCC solo en sistemas finitos**: un sistema periódico necesitaría una suma de
-  Ewald; se rechaza en vez de aproximarlo.
+- **Cristales = extrapolación medida**: el SCC periódico va por sumas de Ewald,
+  pero los conjuntos se ajustaron en moléculas; lo que eso cuesta en 13
+  cristales está medido (sección anterior). Un cristal fuera de esa lista
+  (otras fases, dopajes altos, capa abierta) no está comprobado.
 - **Parámetros π de Hückel para heteroátomos**: buenos para tendencias, no para
   niveles cuantitativos. Ajústalos a tu DFT con `fit`.
 - **Convención `sp` de los `.skf` heteronucleares**: Hsp0 de `A-B.skf` es

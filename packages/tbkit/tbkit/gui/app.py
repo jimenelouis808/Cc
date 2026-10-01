@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -107,15 +108,17 @@ class MainWindow(QMainWindow):
         self.view = StructureView(self.plotter)
         self.tabs = QTabWidget()
         self.pages = {}
+        self.info_boxes = []
         for page in self.page_classes():
             widget = page(self)
             self.pages[widget.title] = widget
-            self.tabs.addTab(widget, widget.title)
+            self.tabs.addTab(self._with_info(widget), widget.title)
         splitter.addWidget(self.tabs)
         splitter.setSizes([430, 620, 600])
         self.setCentralWidget(splitter)
         self.last_record = None
         self._menu()
+        self._apply_help()
         self.statusBar().showMessage("Abre una estructura (xyz, extxyz, cif, POSCAR…).")
 
     def _menu(self):
@@ -131,6 +134,59 @@ class MainWindow(QMainWindow):
                 menu.addSeparator()
             else:
                 menu.addAction(text).triggered.connect(slot)
+        help_menu = self.menuBar().addMenu("Ayuda")
+        descriptions = help_menu.addAction("Mostrar descripciones de cada pestaña")
+        descriptions.setCheckable(True)
+        descriptions.setChecked(True)
+        descriptions.toggled.connect(self.show_descriptions)
+        help_menu.addAction("Pasa el ratón sobre un botón o campo para ver qué hace")\
+            .setEnabled(False)
+
+    def _with_info(self, page):
+        """The page under a short box that says what it is for (Ayuda > Descripciones)."""
+        text = actions.PANEL_HELP.get(page.title)
+        if not text:
+            return page
+        box = QWidget()
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(0, 0, 0, 0)
+        info = QLabel("ℹ " + text)
+        info.setWordWrap(True)
+        info.setStyleSheet("QLabel { background: palette(alternate-base); border: 1px solid "
+                           "palette(mid); border-radius: 4px; padding: 6px; }")
+        self.info_boxes.append(info)
+        layout.addWidget(info)
+        layout.addWidget(page)
+        return box
+
+    def _apply_help(self):
+        """Tooltips from actions.HELP on every button, check box, group and form row."""
+        def tip(widget, text):
+            if widget is not None and text and not widget.toolTip():
+                widget.setToolTip(text)
+
+        for kind in (QPushButton, QCheckBox):
+            for widget in self.findChildren(kind):
+                tip(widget, actions.HELP.get(widget.text()))
+        for group in self.findChildren(QGroupBox):
+            tip(group, actions.HELP.get(group.title()))
+        for form in self.findChildren(QFormLayout):
+            for row in range(form.rowCount()):
+                label = form.itemAt(row, QFormLayout.LabelRole)
+                field = form.itemAt(row, QFormLayout.FieldRole)
+                if label is None or label.widget() is None or field is None:
+                    continue
+                text = actions.HELP.get(label.widget().text())
+                tip(label.widget(), text)
+                if field.widget() is not None:
+                    tip(field.widget(), text)
+                elif field.layout() is not None:
+                    for k in range(field.layout().count()):
+                        tip(field.layout().itemAt(k).widget(), text)
+
+    def show_descriptions(self, visible: bool):
+        for info in self.info_boxes:
+            info.setVisible(visible)
 
     def remember(self, task: str, settings: dict, results: dict):
         """The last finished calculation, for «Guardar registro»."""
@@ -948,6 +1004,8 @@ class SpectraPage(Page):
             row.addWidget(QLabel(label))
             row.addWidget(widget)
         form.addRow("Raman / IR", row)
+        self.scale = QCheckBox("Escalar frecuencias")
+        form.addRow("", self.scale)
         self.lasers = QLineEdit("1.96 2.33 2.54 3.5")
         self.eta = _spin(0.01, 1.0, 0.1, 0.01, 2, " eV")
         row = QHBoxLayout()
@@ -1016,6 +1074,16 @@ class SpectraPage(Page):
             return self.window.phonons[:2]
         return None
 
+    def _scale(self) -> bool:
+        """Scale only the model's own frequencies, never imported QE modes."""
+        return self.scale.isChecked() and self.qe is None
+
+    @staticmethod
+    def _scale_note(out) -> str:
+        factor = out.get("frequency_scale")
+        return f"Frecuencias × {factor:.4f} (factor del conjunto frente a GPAW). " \
+            if factor else ""
+
     def _ready(self):
         if self.window.atoms is None or self.window.model is None:
             self.window.error("Sin estructura o modelo", "Abre una estructura y elige un modelo.")
@@ -1033,7 +1101,8 @@ class SpectraPage(Page):
                                      self.window.model, phonons=self.phonons(),
                                      laser_nm=self.laser.value(),
                                      temperature_k=self.temperature.value(),
-                                     fwhm=self.fwhm.value(), on_done=self.show_raman,
+                                     fwhm=self.fwhm.value(), scale=self._scale(),
+                                     on_done=self.show_raman,
                                      on_error=self.window.error)
 
     def show_raman(self, out):
@@ -1047,7 +1116,7 @@ class SpectraPage(Page):
                       f"{self.temperature.value():.0f} K)")
         self.plot.draw()
         alpha = float(np.trace(out["alpha"]) / 3)
-        self.summary.setText(f"{out['method']} · α medio {alpha:.2f} Å³ · "
+        self.summary.setText(self._scale_note(out) + f"{out['method']} · α medio {alpha:.2f} Å³ · "
                              f"{len(out['rows'])} conjuntos activos. " + " ".join(out["warnings"]))
 
     def run_resonant(self):
@@ -1060,7 +1129,8 @@ class SpectraPage(Page):
             return
         self.window.runner.start("Raman resonante", actions.resonant_spectrum, self.window.atoms,
                                  self.window.model, lasers, eta=self.eta.value(),
-                                 phonons=self.phonons(), on_done=self.show_resonant,
+                                 phonons=self.phonons(), scale=self._scale(),
+                                 on_done=self.show_resonant,
                                  on_error=self.window.error)
 
     def show_resonant(self, out):
@@ -1107,7 +1177,8 @@ class SpectraPage(Page):
         if self._ready():
             self.window.runner.start("IR", actions.ir_spectrum_of, self.window.atoms,
                                      self.window.model, phonons=self.phonons(),
-                                     fwhm=self.fwhm.value(), on_done=self.show_ir,
+                                     fwhm=self.fwhm.value(), scale=self._scale(),
+                                     on_done=self.show_ir,
                                      on_error=self.window.error)
 
     def show_ir(self, out):
@@ -1120,7 +1191,7 @@ class SpectraPage(Page):
         ax.set_ylabel("absorción (km/mol por cm⁻¹)")
         ax.invert_xaxis()
         self.plot.draw()
-        self.summary.setText(f"IR con el dipolo del modelo (cargas + dipolos intraatómicos) · "
+        self.summary.setText(self._scale_note(out) + f"IR con el dipolo del modelo (cargas + dipolos intraatómicos) · "
                              f"μ = {out['dipole_debye']:.2f} D · semicuantitativo (factor ~2 por "
                              "modo frente a GPAW). " + " ".join(out["warnings"]))
 

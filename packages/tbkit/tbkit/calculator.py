@@ -7,7 +7,7 @@
 Properties: ``energy`` and ``free_energy`` (both the Mermin free energy the
 forces derive from), ``forces``, and for finite systems ``dipole`` (from
 Mulliken charges, e·Å) and ``charges``. The model must have a repulsive
-term. With ``scc=True`` charges are self-consistent (finite systems only);
+term. With ``scc=True`` charges are self-consistent (periodic ones through Ewald);
 the default follows the model (``TBModel.scc``: True for DFTB-like sets).
 """
 
@@ -48,20 +48,18 @@ class TBCalculator(Calculator):
 
         system = System.build(self.atoms, self.model)
         need_forces = "forces" in properties
+        kpts, weights = mesh(self.atoms, self.kpts or 8) if system.periodic else gamma()
         if self.scc:
             # Forces need tightly converged charges (their error scales with it).
             result = scc_module.self_consistent(system, charge=self.charge, kT=self.kT,
-                                                tol=1e-10)
+                                                tol=1e-10, kpts=kpts if system.periodic else None,
+                                                weights=weights if system.periodic else None)
             if not result.converged:
                 raise RuntimeError("SCC sin converger: " + result.summary())
             energy, forces, parts = scc_module.energy_and_forces(result, need_forces)
             solution = result.solution
             charges_by_atom = result.charges
         else:
-            if system.periodic:
-                kpts, weights = mesh(self.atoms, self.kpts or 8)
-            else:
-                kpts, weights = gamma()
             solution = solve(system, kpts, weights, charge=self.charge, kT=self.kT)
             energy, forces, parts = band.energy_and_forces(solution, need_forces)
             charges_by_atom = atomic_charges(solution)

@@ -18,12 +18,14 @@ class TestActions:
         assert actions.suggest_model(molecule("CH3SH")) == "chnos"
         assert actions.suggest_model(molecule("C60")) == "sp3"
 
-    def test_check_model_refuses_missing_elements_and_periodic_scc(self):
+    def test_check_model_refuses_missing_elements_and_cells_without_volume(self):
         assert actions.check_model(molecule("CH3SH"), actions.load_model("chno"))
         ribbon = graphene_nanoribbon(2, 1, type="zigzag", saturated=True, vacuum=5.0)
         chn = actions.load_model("chn")
-        assert any("Ewald" in p for p in actions.check_model(ribbon, chn))
-        assert not actions.check_model(ribbon, chn, scc=False)       # on purpose only
+        assert not actions.check_model(ribbon, chn)                  # Ewald, vacuum cell
+        flat = ribbon.copy()
+        flat.cell[0] = 0.0
+        assert any("Ewald" in p for p in actions.check_model(flat, chn))
         assert actions.check_model(ribbon, actions.load_model("sp3"))  # no H in Xu
 
     def test_ground_state_follows_the_model_and_levels_are_consistent(self):
@@ -312,3 +314,46 @@ def test_window_terminal_shows_commands_output_and_errors(tmp_path):
     text = window.console.text()
     assert "✗ Relajación" in text and "Traceback" in text
     assert window.console.save(tmp_path / "t.log").read_text() == text
+
+
+def test_every_control_and_panel_of_the_window_has_help():
+    """No Qt needed: every label app.py gives a button, box or form row has a text."""
+    import re
+    from pathlib import Path
+
+    source = (Path(actions.__file__).parent / "app.py").read_text(encoding="utf-8")
+    labels = set(re.findall(r'Q(?:PushButton|CheckBox|GroupBox)\("([^"]+)"\)', source))
+    labels |= set(re.findall(r'addRow\("([^"]+)"', source))
+    assert labels and sorted(labels - set(actions.HELP)) == []
+    titles = set(re.findall(r'title = "([^"]+)"', source))
+    assert sorted(titles - set(actions.PANEL_HELP)) == []
+
+
+def test_scaled_spectra_multiply_the_model_frequencies_only_when_asked():
+    from tbkit.tasks import frequency_scale
+
+    model = actions.load_model("chno")
+    water = molecule("H2O")
+    raw = actions.ir_spectrum_of(water, model)
+    scaled = actions.ir_spectrum_of(water, model, scale=True)
+    factor = frequency_scale(model)
+    assert raw["frequency_scale"] is None and scaled["frequency_scale"] == factor
+    assert [r[0] for r in scaled["rows"]] == pytest.approx([factor * r[0] for r in raw["rows"]])
+    assert [r[2] for r in scaled["rows"]] == pytest.approx([r[2] for r in raw["rows"]])
+    # A set without a factor is left alone even when asked.
+    pi = actions.load_model("pi")
+    assert actions.scaled(type("R", (), {})(), pi, True)[1] is None
+
+
+def test_window_shows_panel_descriptions_and_tooltips():
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    assert len(window.info_boxes) == len(window.pages)
+    spectra = window.pages["Espectros"]
+    assert spectra.raman_button.toolTip() == actions.HELP["Raman"]
+    assert spectra.scale.toolTip() == actions.HELP["Escalar frecuencias"]
+    assert spectra.fwhm.toolTip() == actions.HELP["Raman / IR"]
+    window.show_descriptions(False)
+    assert all(not box.isVisibleTo(window) for box in window.info_boxes)

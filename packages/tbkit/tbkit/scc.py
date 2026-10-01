@@ -12,8 +12,10 @@ the same atom, bare Coulomb at long range. ``e²/(4πε0) = 14.3996 eV Å``.
 
 Without it a tight-binding model over-transfers charge to electronegative
 atoms (nothing pushes back); with it, dopant charges come out screened.
-Finite systems only: a periodic system would need an Ewald sum, which is
-not implemented, and is refused rather than approximated.
+Periodic systems sum γ over images (:mod:`tbkit.ewald`: Ewald for the 1/r
+part, a tapered real-space sum for the short-range rest) and solve on a k
+mesh; directions without periodicity are a supercell with the vacuum the
+cell gives them.
 """
 
 from __future__ import annotations
@@ -53,13 +55,32 @@ class SCCResult:
                 f"carga máxima {top[1]:+.4f} e en el átomo {top[0]}")
 
 
-def gamma_matrix(system: System, U=None) -> np.ndarray:
-    """γ between the atoms of the model (Klopman-Ohno), eV."""
-    atoms = system.basis.atoms
+def _u_atom(system: System, U=None) -> np.ndarray:
     u_orbital = _orbital_u(system, U)
-    u_atom = np.array([u_orbital[system.basis.first[a]] for a in atoms])
+    u_atom = np.array([u_orbital[system.basis.first[a]] for a in system.basis.atoms])
     if np.any(u_atom <= 0):
         raise ValueError("SCC necesita U > 0 en todos los elementos del modelo.")
+    return u_atom
+
+
+def _periodic_gamma(system: System, U=None):
+    from .ewald import periodic_gamma
+
+    cell = np.asarray(system.atoms.get_cell())
+    if abs(np.linalg.det(cell)) < 1e-6:
+        raise ValueError("SCC periódico necesita una celda con volumen (las direcciones no "
+                         "periódicas, con vacío suficiente).")
+    positions = system.atoms.get_positions()[system.basis.atoms]
+    return periodic_gamma(positions, cell, _u_atom(system, U))
+
+
+def gamma_matrix(system: System, U=None) -> np.ndarray:
+    """γ between the atoms of the model (Klopman-Ohno), eV; summed over images
+    (Ewald) for a periodic system."""
+    if system.periodic:
+        return _periodic_gamma(system, U)[0]
+    atoms = system.basis.atoms
+    u_atom = _u_atom(system, U)
     positions = system.atoms.get_positions()[atoms]
     r = np.linalg.norm(positions[:, None] - positions[None, :], axis=-1)
     ubar = 0.5 * (u_atom[:, None] + u_atom[None, :])
@@ -88,8 +109,9 @@ def anderson(inputs: list[np.ndarray], residuals: list[np.ndarray], mixing: floa
 def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.01,
                     mixing: float = 0.3, tol: float = 1e-9, max_iter: int = 500,
                     history_length: int = 6, field: Optional[np.ndarray] = None,
-                    initial_dq: Optional[np.ndarray] = None) -> SCCResult:
-    """Solve with self-consistent Mulliken charges (finite systems).
+                    initial_dq: Optional[np.ndarray] = None, kpts=None,
+                    weights=None) -> SCCResult:
+    """Solve with self-consistent Mulliken charges.
 
     Parameters
     ----------
@@ -109,10 +131,19 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
         (polarizability with local fields at the monopole level).
     initial_dq
         Starting Δq (e.g. the zero-field solution, for a small field).
+    kpts, weights
+        k points (fractional) and weights of a periodic system; default the
+        mesh of :func:`tbkit.kpoints.mesh`.
     """
     if system.periodic:
-        raise ValueError("SCC en sistemas periódicos necesita una suma de Ewald (no "
-                         "implementada). Usa un fragmento finito.")
+        if field is not None:
+            raise ValueError("Un campo uniforme no es periódico: usa un sistema finito.")
+        if kpts is None:
+            from .kpoints import mesh
+
+            kpts, weights = mesh(system.atoms)
+    else:
+        kpts, weights = None, None
     gamma = gamma_matrix(system, U)
     atoms = system.basis.atoms
     n0 = _neutral(system)
@@ -129,7 +160,8 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
     history: list[float] = []
     converged = False
     for iteration in range(1, max_iter + 1):
-        solution = _solve_shifted(system, (gamma @ dq_in + external)[owner], charge, kT)
+        solution = _solve_shifted(system, (gamma @ dq_in + external)[owner], charge, kT,
+                                  kpts, weights)
         pops = populations(solution).sum(axis=0)
         dq_out = np.array([pops[system.basis.of_atom(a).start:system.basis.of_atom(a).stop].sum()
                            for a in atoms]) - neutral_atom
@@ -174,15 +206,24 @@ def energy_and_forces(result: SCCResult, need_forces: bool = True):
     energy = result.energy - ts + e_rep
     if not need_forces:
         return energy, None, {"scc": result.energy, "entropy_TS": ts, "repulsive": e_rep}
-    c = solution.vectors[0, 0]
-    f = solution.occupations[0, 0]
-    rho = (c * f) @ c.T
-    weighted = (c * (f * solution.energies[0, 0])) @ c.T
-    if not system.model.orthogonal:
-        weighted = weighted - 0.5 * rho * (result.shift[:, None] + result.shift[None, :])
-    forces = band_forces(solution, energy_weighted=[weighted]) + f_rep
+    weighted = []
+    for k in range(len(solution.kpts)):
+        c = solution.vectors[0, k]
+        f = solution.occupations[0, k]
+        rho = (c * f) @ c.conj().T
+        w = (c * (f * solution.energies[0, k])) @ c.conj().T
+        if not system.model.orthogonal:
+            w = w - 0.5 * rho * (result.shift[:, None] + result.shift[None, :])
+        weighted.append(w)
+    forces = band_forces(solution, energy_weighted=weighted) + f_rep
     # Second-order term: γ depends on the distances between model atoms.
     atoms = system.basis.atoms
+    if system.periodic:
+        _, dgamma_periodic = _periodic_gamma(system)
+        gradient = np.einsum("a,b,abx->ax", result.dq, result.dq, dgamma_periodic)
+        for index, atom in enumerate(atoms):
+            forces[atom] -= gradient[index]
+        return energy, forces, {"scc": result.energy, "entropy_TS": ts, "repulsive": e_rep}
     positions = system.atoms.get_positions()[atoms]
     vectors = positions[:, None] - positions[None, :]
     r = np.linalg.norm(vectors, axis=-1)
@@ -197,10 +238,14 @@ def energy_and_forces(result: SCCResult, need_forces: bool = True):
     return energy, forces, {"scc": result.energy, "entropy_TS": ts, "repulsive": e_rep}
 
 
-def _solve_shifted(system: System, shift: np.ndarray, charge: float, kT: float) -> Solution:
-    """Solve at Γ with ``H_μν += ½ S_μν (V_μ + V_ν)`` (just the diagonal when S = 1)."""
+def _solve_shifted(system: System, shift: np.ndarray, charge: float, kT: float,
+                   kpts=None, weights=None) -> Solution:
+    """Solve with ``H_μν += ½ S_μν (V_μ + V_ν)`` (just the diagonal when S = 1): at Γ,
+    or on the k points given (periodic)."""
     from scipy.linalg import eigh
 
+    if kpts is not None:
+        return _solve_shifted_k(system, shift, charge, kT, kpts, weights)
     h, s = system.hamiltonian((0, 0, 0))
     if s is None:
         h = h + np.diag(shift)
@@ -209,6 +254,31 @@ def _solve_shifted(system: System, shift: np.ndarray, charge: float, kT: float) 
         h = h + 0.5 * s * (shift[:, None] + shift[None, :])
         e, c = eigh(h, s)
     return _package(system, e, c, s, charge, kT)
+
+
+def _solve_shifted_k(system, shift, charge, kT, kpts, weights) -> Solution:
+    from scipy.linalg import eigh
+
+    kpts = np.atleast_2d(np.asarray(kpts, dtype=float))
+    weights = np.full(len(kpts), 1.0 / len(kpts)) if weights is None else np.asarray(weights)
+    energies, vectors, overlaps = [], [], []
+    for k in kpts:
+        h, s = system.hamiltonian(k)
+        if s is None:
+            h = h + np.diag(shift)
+            e, c = eigh(h)
+        else:
+            h = h + 0.5 * s * (shift[:, None] + shift[None, :])
+            e, c = eigh(h, s)
+        energies.append(e)
+        vectors.append(c)
+        overlaps.append(s)
+    energies = np.array(energies)[None]
+    electrons = system.electrons - charge
+    mu = fermi_level(energies, weights, electrons, kT, 2.0)
+    occupations = 2.0 * _fermi_dirac(energies, mu, kT)
+    return Solution(system, kpts, weights, energies, np.array(vectors)[None], occupations,
+                    mu, electrons, kT, None if system.model.orthogonal else np.array(overlaps))
 
 
 def _package(system, e, c, s, charge, kT):

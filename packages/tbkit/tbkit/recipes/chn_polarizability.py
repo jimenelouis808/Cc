@@ -31,9 +31,14 @@ TRAINING_S = ("H2S", "CH3SH", "CH3SCH3", "CH3SSCH3", "thiophene", "CS2", "DMSO",
 TEST_S = ("CH3CH2SH", "Me2SO2", "CH3SO3H")
 TRAINING_P = ("PH3", "CH3PH2", "PMe3", "OPMe3", "H3PO4", "phosphinine")
 TEST_P = ("MePO3H2", "PhPH2")
+#: Selenium (geometries from gpaw_se.json), ``--set se``.
+TRAINING_SE = ("H2Se", "CH3SeH", "CH3SeCH3", "CH3SeSeCH3", "selenophene", "CSe2", "DMSeO",
+               "SeO2")
+TEST_SE = ("CH3CH2SeH", "PhSeH")
 SETS = {"chn": (TRAINING, TEST, "gpaw_chn.json"), "chno": (TRAINING_O, TEST_O, "gpaw_chno.json"),
         "b": (TRAINING_B, TEST_B, "gpaw_b.json"), "s": (TRAINING_S, TEST_S, "gpaw_s.json"),
-        "p": (TRAINING_P, TEST_P, "gpaw_p.json")}
+        "p": (TRAINING_P, TEST_P, "gpaw_p.json"),
+        "se": (TRAINING_SE, TEST_SE, "gpaw_se.json")}
 
 
 def _one(args):

@@ -60,6 +60,44 @@ def path(start, end, fractions=FRACTIONS) -> list:
     return out
 
 
+TORSIONS = (60.0, 120.0, 180.0, 240.0, 300.0)
+
+
+def hydroxyl_torsions(atoms, centre: str, steps=TORSIONS) -> list:
+    """The first X-O-H of ``atoms`` (X = ``centre``), with the H turned about the
+    X-O axis by each of ``steps`` degrees: a rigid torsion scan. Straight-line
+    paths to a wrong minimum cross compressed bonds and say nothing about the
+    torsion itself; seleninic and phosphonic acids turned their hydroxyl onto
+    the other O, which only a scan of the torsion shows the fit."""
+    from ase.neighborlist import neighbor_list
+
+    symbols = atoms.get_chemical_symbols()
+    ii, jj = neighbor_list("ij", atoms, {("O", "H"): 1.15, ("O", centre): 2.1,
+                                         (centre, "O"): 2.1, ("H", "O"): 1.15})
+    for o in (i for i, s in enumerate(symbols) if s == "O"):
+        neighbours = jj[ii == o]
+        xs = [j for j in neighbours if symbols[j] == centre]
+        hs = [j for j in neighbours if symbols[j] == "H"]
+        if xs and hs:
+            x, h = xs[0], hs[0]
+            out = []
+            for step in steps:
+                turned = atoms.copy()
+                turned.set_dihedral(x_other(atoms, x, o), x, o, h,
+                                    atoms.get_dihedral(x_other(atoms, x, o), x, o, h) + step,
+                                    indices=[h])
+                out.append((step, turned))
+            return out
+    return []
+
+
+def x_other(atoms, x: int, o: int) -> int:
+    """A neighbour of ``x`` other than ``o`` (the dihedral's first atom)."""
+    d = atoms.get_distances(x, range(len(atoms)))
+    order = [j for j in np.argsort(d) if j not in (x, o)]
+    return int(order[0])
+
+
 def _single(args):
     label, group, atoms, settings = args
     from tbkit.references import ReferenceStructure, gpaw_single_point
@@ -79,6 +117,8 @@ def main(argv=None) -> None:
     parser.add_argument("out", type=Path)
     parser.add_argument("--threshold", type=float, default=0.3)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--torsions", metavar="ELEMENT", default=None,
+                        help="añade barridos rígidos de la torsión X-O-H (X = ELEMENT)")
     args = parser.parse_args(argv)
     from tbkit.params import load_parameters
     from tbkit.references import GPAW_DEFAULTS, gpaw_settings_record, load_references
@@ -100,6 +140,9 @@ def main(argv=None) -> None:
         if result["spurious"]:
             for f, atoms in path(ref.atoms, result["atoms"]):
                 jobs.append((f"{ref.group}/al{f:.2f}", ref.group, atoms, settings))
+        if args.torsions:
+            for step, atoms in hydroxyl_torsions(ref.atoms, args.torsions):
+                jobs.append((f"{ref.group}/tor{step:.0f}", ref.group, atoms, settings))
     parts = args.out.with_suffix(".parts")
     parts.mkdir(parents=True, exist_ok=True)
     todo = [job for job in jobs if not (parts / (job[0].replace("/", "_") + ".json")).exists()]
@@ -114,6 +157,7 @@ def main(argv=None) -> None:
     args.out.write_text(json.dumps({"settings": gpaw_settings_record(settings),
                                     "active_learning": {"parameters": args.parameters.name,
                                                         "threshold": args.threshold,
+                                                        "torsions": args.torsions,
                                                         "report": report},
                                     "structures": structures}, indent=1, ensure_ascii=False),
                         encoding="utf-8")

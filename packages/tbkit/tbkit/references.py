@@ -51,16 +51,22 @@ class ReferenceStructure:
     extra: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        return {"label": self.label, "group": self.group, "role": self.role,
+        data = {"label": self.label, "group": self.group, "role": self.role,
                 "symbols": self.atoms.get_chemical_symbols(),
                 "positions": np.round(self.atoms.get_positions(), 8).tolist(),
                 "energy": self.energy, "forces": np.round(self.forces, 8).tolist(),
                 "levels": np.round(self.levels, 6).tolist(), "n_occupied": self.n_occupied,
                 "extra": self.extra}
+        if self.atoms.pbc.any():
+            # A crystal: without its cell the positions mean nothing.
+            data["cell"] = np.round(self.atoms.cell.array, 8).tolist()
+            data["pbc"] = [bool(p) for p in self.atoms.pbc]
+        return data
 
     @classmethod
     def from_dict(cls, data: dict) -> "ReferenceStructure":
-        atoms = Atoms(data["symbols"], positions=data["positions"])
+        atoms = Atoms(data["symbols"], positions=data["positions"],
+                      cell=data.get("cell"), pbc=data.get("pbc", False))
         return cls(data["label"], data["group"], atoms, float(data["energy"]),
                    np.array(data["forces"], dtype=float), np.array(data["levels"], dtype=float),
                    int(data["n_occupied"]), data.get("role", "train"), data.get("extra", {}))

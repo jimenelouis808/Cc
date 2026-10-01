@@ -14,7 +14,8 @@ tbkit/
 ├── kpoints.py        # Γ, meshes, band paths
 ├── solver.py         # eigenstates, Fermi level, Solution (spin-resolved)
 ├── analysis.py       # P, Mulliken/Löwdin, bond orders, DOS/PDOS, bands, cube files
-├── scc.py            # self-consistent charges (finite only)
+├── scc.py            # self-consistent charges (finite, or periodic through ewald.py)
+├── ewald.py          # periodic γ: Ewald for 1/r and 1/r³, short-range rest
 ├── hubbard.py        # mean-field Hubbard, magnetisation vs energy/field/doping
 ├── skf.py            # DFTB .skf reader (simple format)
 ├── fit.py            # least-squares fitting (with a before/after report), GPAW log reader
@@ -33,6 +34,8 @@ tbkit/
 ├── qe.py             # Quantum ESPRESSO Γ modes (dynmat/matdyn) for Raman with QE phonons
 ├── references.py     # DFT reference sets (JSON): GPAW levels, energies, forces, frequencies
 ├── recipes/          # reproducible fits: xu_family (machinery), xu_chn, xu_chno; GPAW references
+│                     #   frequency_scaling: one scale factor per set against GPAW
+│                     #   crystal_validation + run_crystals.sh: the sets in crystals vs GPAW (resumable)
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 ├── cli.py            # `tbkit` console script
 └── gui/              # tbkit-gui (PySide6 + pyvista, extra `gui`): actions (no Qt), worker, viewer, app
@@ -71,7 +74,23 @@ tbkit/
   overcount that the linear-response = sum-over-states test caught).
 - Published `.skf` sets are never bundled (their licences); tests generate
   synthetic files in the documented format.
-- SCC refuses periodic systems (no Ewald). Do not approximate silently.
+- Periodic SCC sums γ over images (`ewald.py`, Elstner 1998): Ewald for C/r,
+  a second Ewald for the Klopman-Ohno r⁻³ asymptote (its divergent G = 0
+  constant dropped, stated), the r⁻⁵ rest in real space with a smooth taper.
+  Checks: NaCl Madelung constant, a molecule in a large box equals the finite
+  result, forces against finite differences (h-BN). Summing the r⁻³ tail in
+  real space oscillated by 10⁻² eV: do not go back to it. Vacuum directions
+  are a supercell. SCC linear-response α stays finite-only.
+- The sets were fitted on molecules; crystals are an extrapolation, measured in
+  `recipes/crystal_validation.py` (13 crystals, GPAW with the model's k mesh
+  and smearing; `validation/crystals_tb_vs_gpaw.json`) and stated in each set's
+  `validity` through the recipe's `crystal_notes` (a test compares file and
+  recipe: edit the recipe, never the JSON by hand). Scale errors by the set's
+  own molecular error measured the same way, not by a pooled RMS. Strained
+  GPAW cells keep the relaxed cell's grid (`gpaw_factory(grid_of=...)`):
+  GPAW rounds gpts to multiples of 4 and a 2 % strain changed them (~1 eV).
+  The GPAW stage is resumable (one file per point, BFGS trajectory and
+  Hessian); relaunch `run_crystals.sh` after a restart, never start over.
 - `TBModel.scc` says which ground state the parameters were made for: True
   for `.skf` sets, `xu_chn` and `xu_chno`, False for Xu and π. Calculators, tasks and
   the linear-response α follow it unless told otherwise; a set fitted with
@@ -83,12 +102,21 @@ tbkit/
   SHA-256 is stored in the parameter file). Refit by rerunning the recipe
   and saving a new file; never hand-edit fitted numbers. Hubbard U are
   computed (GPAW atom, dε/dn), not fitted.
-- `xu_chnob`/`xu_chnos`/`xu_chnop` (`recipes/xu_bsp.py`) are `xu_chno` held
+- `xu_chnob`/`xu_chnos`/`xu_chnop`/`xu_chnose` (`recipes/xu_bsp.py`) are `xu_chno` held
   fixed (`XuFamily.base`) plus one element: a structure without B, S or P
   must give exactly the `xu_chno` energy (tested). Do not refit `xu_chno`
   without refitting them. Every pair among a set's elements (H-H aside) must
   have hopping laws: a missing law is silently zero, so the family refuses
   to build without it.
+- Spurious minima are found with `recipes/active_learning.py` (relax from GPAW,
+  sample the path, GPAW single points; `--torsions X` adds rigid X-O-H scans) and
+  fed back to the fit. `CentredAngleTerm`/`CentredTorsionTerm` exist and are
+  tested, but no shipped set uses them: on Se the all-ligand angle term broke
+  divalent Se (H2Se 64 -> 289 cm⁻¹) and neither fixed the X-OH torsion of
+  seleninic/phosphonic acids, which stays a stated limit in `validity`. An O-X-O-only
+  angle term (`xu_bsp --angular-ligands O`, zero in H2Se) was fitted active
+  (~0.9 eV) and still left CH3SeO2H drifting 0.83 Å (0.87 without): the fault
+  is the missing d basis, not a missing empirical term. Do not retry variants.
 - Imported QE modes: L = e/√m with e normalised from the file's
   displacements (or eigenvectors), per degenerate set a real basis of the
   subspace; never take the real part of a complex Γ mode without fixing its
@@ -109,6 +137,10 @@ tbkit/
   λ = 1): do not switch the default to "charges only" to improve static
   dipoles without re-running the GPAW comparison. Born charges must sum to
   the total charge (tested).
+- Frequency scale factors (`frequency_scale` in each set, recipe
+  `recipes/frequency_scaling.py`, against GPAW, not experiment) are reported
+  beside the raw frequencies (`frequencies_scaled_cm1`); never apply them
+  silently to phonons, Raman or IR, and rerun the recipe after any refit.
 - Mode identification (RBM, G) is by symmetry and character, never by
   frequency window alone: zone folding puts other A modes nearby (M-point
   modes in zigzag tubes). DFT force constants get the acoustic sum rule on
@@ -131,6 +163,9 @@ tbkit/
   worker destroyed Qt objects of the GUI thread and crashed the window at
   random places. Do not remove that; results come back through queued slots.
   PySide6/pyvista stay optional (the `gui` extra); GUI tests skip without them.
+  Help texts (`actions.HELP` per control label, `actions.PANEL_HELP` per tab)
+  are applied as tooltips and info boxes; a test fails if a new button, box
+  or form row in `app.py` has no text there.
 - Mean-field moments are an order parameter, not a correlated ground state;
   user-facing text must not imply otherwise. Lieb's theorem is the check.
 - Energies and forces require `model.repulsive`; the π model has none and

@@ -91,6 +91,13 @@ CHN = XuFamily(
             "aromáticos; aminas, iminas, nitrilos, N piridínico y pirrólico"),
     validity_notes=("falla en anillos tensos (aziridina); los C-C y C-N simples junto a un "
                     "heteroátomo se desvían ~0.08 Å"),
+    crystal_notes=("N grafítico y piridínico (N3V) en grafeno, grafano y CNT (8,0) con N: "
+                   "error de fuerzas en el mínimo de GPAW 0,5-1,2 veces el molecular, C-N "
+                   "a menos de 0,02 Å; N sustitucional en diamante: C-N -0,08 Å (1,52 "
+                   "frente a 1,60, como los C-N simples de las moléculas) y fuerzas 1,4-1,7 "
+                   "veces el molecular (ambos con espín apareado: el centro P1 real es de "
+                   "capa abierta); la red de TB sale 0,5-1 % más corta que la de GPAW-dzp "
+                   "(el grafano, igual)"),
     experimental_alpha=EXPERIMENTAL_ALPHA,
 )
 PAIRS = CHN.pairs
