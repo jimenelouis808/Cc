@@ -25,6 +25,7 @@ the double-resonance theory of the next step, not this.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 from dataclasses import dataclass, field
@@ -141,19 +142,38 @@ def _alpha_function(system_of: Callable[[Atoms], System], atoms: Atoms, model: T
 
 
 def _model_phonons(atoms: Atoms, model: TBModel, kmesh: int, kT: float, phonon_delta: float,
-                   warnings: list[str]) -> tuple[np.ndarray, np.ndarray]:
-    """Γ frequencies (cm⁻¹, imaginary as negative) and e/√m modes from the model."""
+                   warnings: list[str], scc: Optional[bool] = None,
+                   cache: Optional[str] = None) -> tuple[np.ndarray, np.ndarray]:
+    """Γ frequencies (cm⁻¹, imaginary as negative) and e/√m modes from the model.
+
+    ``scc`` overrides the model's own charge self-consistency, and it is
+    worth overriding. The force constants need ``6N`` displacements, and on
+    a pure-carbon cell the charge loop buys almost nothing for 22x the
+    time: measured on a 204-atom periodic coil, 217 s per energy+forces
+    with SCC against 10 s without -- the difference between 73 hours and
+    three. Leave it on where charge actually moves (dopants, C=O, -NH2).
+
+    ``cache`` is a directory kept between runs. Without it the
+    displacements go to a temporary directory deleted on exit, so a job
+    that dies at displacement 1200 of 1224 starts again from zero. With
+    it, ase.vibrations skips what it already has and the run resumes.
+    """
     from ase.units import invcm
     from ase.vibrations import Vibrations
 
     from .calculator import TBCalculator
 
-    atoms.calc = TBCalculator(model, kpts=kmesh, kT=kT)
+    atoms.calc = TBCalculator(model, kpts=kmesh, kT=kT, scc=scc)
     residual = float(np.linalg.norm(atoms.get_forces(), axis=1).max())
     if residual > 0.05:
         warnings.append(f"Fuerza residual {residual:.3f} eV/Å: la geometría no está relajada; "
                         "frecuencias y tensores no son los del mínimo.")
-    with tempfile.TemporaryDirectory() as directory:
+    with contextlib.ExitStack() as stack:
+        if cache is None:
+            directory = stack.enter_context(tempfile.TemporaryDirectory())
+        else:
+            directory = cache
+            os.makedirs(directory, exist_ok=True)
         vibrations = Vibrations(atoms, name=os.path.join(directory, "vib"), delta=phonon_delta)
         vibrations.run()
         energies, modes = vibrations.get_vibrations().get_energies_and_modes(all_atoms=True)
@@ -163,10 +183,12 @@ def _model_phonons(atoms: Atoms, model: TBModel, kmesh: int, kT: float, phonon_d
 
 
 def phonons_for(atoms: Atoms, model: TBModel, kmesh: int, kT: float, phonon_delta: float,
-                phonons: Optional[tuple], warnings: list[str]) -> tuple[np.ndarray, np.ndarray]:
+                phonons: Optional[tuple], warnings: list[str],
+                scc: Optional[bool] = None,
+                cache: Optional[str] = None) -> tuple[np.ndarray, np.ndarray]:
     """The model's Γ phonons, or the given ``(frequencies, L)`` after checking them."""
     if phonons is None:
-        return _model_phonons(atoms, model, kmesh, kT, phonon_delta, warnings)
+        return _model_phonons(atoms, model, kmesh, kT, phonon_delta, warnings, scc, cache)
     frequencies = np.asarray(phonons[0], dtype=float)
     modes = np.asarray(phonons[1], dtype=float)
     if modes.shape != (len(frequencies), len(atoms), 3):
@@ -198,7 +220,9 @@ def internal_modes(atoms: Atoms, frequencies: np.ndarray, warnings: list[str]) -
 def raman(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.01,
           delta: float = 0.01, omega: float = 0.0, screening: str = "auto",
           phonon_delta: float = 0.005,
-          phonons: Optional[tuple[np.ndarray, np.ndarray]] = None) -> RamanResult:
+          phonons: Optional[tuple[np.ndarray, np.ndarray]] = None,
+          scc: Optional[bool] = None,
+          cache: Optional[str] = None) -> RamanResult:
     """Non-resonant Raman activities of ``atoms`` (relaxed) under ``model``.
 
     Parameters
@@ -220,10 +244,17 @@ def raman(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.01,
         ``L`` the displacement per unit normal coordinate, ``(n, N, 3)``. The
         model then supplies only the polarizability and needs no repulsive
         term; ``atoms`` must be the geometry the phonons were computed at.
+    scc
+        Override the model's charge self-consistency for the force
+        constants; see :func:`_model_phonons`.
+    cache
+        Directory for the displacement cache, kept between runs so a long
+        job resumes instead of restarting. ``None`` uses a temporary one.
     """
     warnings: list[str] = []
     atoms = atoms.copy()
-    frequencies, modes = phonons_for(atoms, model, kmesh, kT, phonon_delta, phonons, warnings)
+    frequencies, modes = phonons_for(atoms, model, kmesh, kT, phonon_delta, phonons,
+                                     warnings, scc, cache)
     internal = internal_modes(atoms, frequencies, warnings)
 
     def system_of(a: Atoms) -> System:
