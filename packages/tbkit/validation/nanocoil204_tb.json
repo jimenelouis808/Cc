@@ -1,0 +1,151 @@
+{
+ "structure": "tbkit/recipes/data/coil204_knee.extxyz (nanocarbon_lab preset 'Nanocoil (knees, periodic, smallest)')",
+ "settings": {
+  "kmesh": [
+   1,
+   1,
+   4
+  ],
+  "kT_eV": 0.05,
+  "fmax_eV_A": 0.02,
+  "phonon_delta_A": 0.01
+ },
+ "gpaw_k_convergence": {
+  "1": {
+   "dE_per_atom_vs_k4": 0.00025488781122975544,
+   "dF_rms_vs_k4": 0.012216272362556414
+  },
+  "2": {
+   "dE_per_atom_vs_k4": -8.93157727535022e-06,
+   "dF_rms_vs_k4": 0.0006412542495058672
+  },
+  "4": {
+   "dE_per_atom_vs_k4": 0.0,
+   "dF_rms_vs_k4": 0.0
+  }
+ },
+ "gpaw_forces_at_tang_geometry_eV_A": {
+  "rms": 0.35,
+  "max": 1.24
+ },
+ "xu_carbon": {
+  "relax_converged": true,
+  "gap_eV": 0.0,
+  "bond_min_max": [
+   1.362846230696245,
+   1.5191683076481406
+  ],
+  "ring_census": {
+   "5": 12,
+   "6": 78,
+   "7": 12
+  },
+  "topology": "OK",
+  "modes": 612,
+  "imaginary_below_-20": 0,
+  "lowest_three": [
+   0.008234714266849748,
+   0.009412654816209317,
+   0.010422775079664626
+  ],
+  "raman": "gapless: non-resonant Raman does not apply (resonant only)",
+  "highest_modes": [
+   {
+    "frequency_cm1": 1766.9367249013867,
+    "participation": 0.08584600814095072,
+    "on_pentagons": 0.000308517319171808,
+    "on_heptagons": 0.9596926877535302
+   },
+   {
+    "frequency_cm1": 1766.0454448142034,
+    "participation": 0.07281180819707264,
+    "on_pentagons": 8.003708039426109e-05,
+    "on_heptagons": 0.94109538989192
+   },
+   {
+    "frequency_cm1": 1749.789365389858,
+    "participation": 0.08194716756431429,
+    "on_pentagons": 0.0007426516864048921,
+    "on_heptagons": 0.8935037867896255
+   },
+   {
+    "frequency_cm1": 1734.9933348100885,
+    "participation": 0.11684635667540061,
+    "on_pentagons": 0.0002912328944314425,
+    "on_heptagons": 0.9265817321774706
+   },
+   {
+    "frequency_cm1": 1732.9383211906556,
+    "participation": 0.11111089977757121,
+    "on_pentagons": 0.0005140565275349598,
+    "on_heptagons": 0.8803710831587346
+   }
+  ],
+  "most_pentagon_mode": {
+   "frequency_cm1": 1238.4299566134418,
+   "participation": 0.31620100422868125,
+   "on_pentagons": 0.5926705553503361,
+   "on_heptagons": 0.20666315233149204
+  }
+ },
+ "tang_carbon": {
+  "relax_converged": true,
+  "gap_eV": 0.0,
+  "bond_min_max": [
+   1.363015612967575,
+   1.5636869852804858
+  ],
+  "ring_census": {
+   "5": 12,
+   "6": 78,
+   "7": 12
+  },
+  "topology": "OK",
+  "modes": 612,
+  "imaginary_below_-20": 0,
+  "lowest_three": [
+   0.011750277719003548,
+   0.012462538107303875,
+   0.013181651682268059
+  ],
+  "raman": "gapless: non-resonant Raman does not apply (resonant only)",
+  "highest_modes": [
+   {
+    "frequency_cm1": 1760.3218910246057,
+    "participation": 0.08037892852313462,
+    "on_pentagons": 6.4009607036795e-05,
+    "on_heptagons": 0.8611597842563354
+   },
+   {
+    "frequency_cm1": 1758.9386931984993,
+    "participation": 0.07468127874272251,
+    "on_pentagons": 0.0003088824410799011,
+    "on_heptagons": 0.8905892412358078
+   },
+   {
+    "frequency_cm1": 1747.9466222888718,
+    "participation": 0.09905200884069414,
+    "on_pentagons": 0.000811379265177211,
+    "on_heptagons": 0.8215301445970008
+   },
+   {
+    "frequency_cm1": 1741.226903469013,
+    "participation": 0.11746380362449033,
+    "on_pentagons": 0.0007389605583867579,
+    "on_heptagons": 0.8228784427896808
+   },
+   {
+    "frequency_cm1": 1738.2202470071968,
+    "participation": 0.1289903301739997,
+    "on_pentagons": 0.002676260865612799,
+    "on_heptagons": 0.7767894742659607
+   }
+  ],
+  "most_pentagon_mode": {
+   "frequency_cm1": 1549.9034086361203,
+   "participation": 0.24006436178350782,
+   "on_pentagons": 0.5998803032096149,
+   "on_heptagons": 0.05411797193525434
+  }
+ }
+}
