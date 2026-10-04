@@ -34,6 +34,8 @@ MODELS = {
     "chnos": ("C/H/N/O + S (xu_chnos, SCC)", lambda: load_parameters("xu_chnos")),
     "chnop": ("C/H/N/O + P (xu_chnop, SCC)", lambda: load_parameters("xu_chnop")),
     "chnose": ("C/H/N/O + Se (xu_chnose, SCC)", lambda: load_parameters("xu_chnose")),
+    "tang": ("Carbono dependiente del entorno (Tang, ajustado a GPAW)",
+             lambda: load_parameters("tang_carbon")),
 }
 
 
@@ -534,8 +536,9 @@ HELP = {
     "Abrir…": "Abre una estructura. Al cambiarla se borran los resultados anteriores.",
     "Modelo": "El conjunto de parámetros y cómo se resuelve (carga, SCC, temperatura).",
     "Parámetros": "Conjunto de parámetros: π (solo bandas), Xu (carbono), xu_ch* "
-                  "(carbono con H, N, O, B, S, P, Se). Cada uno dice en su «validity» "
-                  "para qué sirve y qué error tiene.",
+                  "(carbono con H, N, O, B, S, P, Se), Tang (carbono con defectos, "
+                  "amorfo, curvatura 5-7: saltos que dependen del entorno). Cada uno "
+                  "dice en su «validity» para qué sirve y qué error tiene.",
     "Carga (e)": "Carga total del sistema en electrones (+1 = un electrón menos).",
     "SCC": "Cargas autoconsistentes. Por defecto, lo que pide el conjunto: los xu_ch* "
            "se ajustaron con SCC y no deben usarse sin ella.",

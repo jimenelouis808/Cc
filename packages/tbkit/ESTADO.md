@@ -49,17 +49,15 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
 5. (hecho) SCC periódico con Ewald (`ewald.py`): Madelung, caja grande = finito, fuerzas FD.
    Hecho también: validación en 13 cristales (arriba) y α de respuesta lineal SCC periódica
    (campos locales de carga; los dipolares en cristales siguen sin Ewald).
-6. TB dependiente del entorno (Tang 1996): EN CURSO.
-   - Hecho: `environment.py` (ecs. 1-7: apantallamiento, distancias escaladas por g, on-site y
-     repulsión dependientes del entorno; cortes quínticos nuestros 4,2-5,0 / 5,0-6,0 Å) con fuerzas
-     analíticas probadas por diferencias finitas; reproduce las g del artículo a 1e-3.
-   - Parámetros publicados en `parameters/tang1996_published.json` (verificados contra el PDF; el
-     PDF NO se versiona, revista): NO dan el diamante del artículo con ningún corte (1os vecinos lo
-     comprimen; más vecinos, el Δe on-site casi sin apantallar lo expande). Solo para pruebas.
-   - Datos: `recipes/carbon_environments.py`, `references/gpaw_carbon_env.json` (9 entornos).
-     Error de fuerzas de Xu: cristales 5-15 %, defectos/C60 15-24 %, amorfos 21-50 %.
-   - Siguiente: ajustar los parámetros de Tang a esas referencias (partiendo de los publicados),
-     dejando fuera un amorfo y Stone-Wales para validar; luego exponerlo en GUI/CLI.
+6. (hecho) TB dependiente del entorno: `environment.py` (Tang et al. 1996) y conjunto
+   `tang_carbon` (`recipes/tang_fit.py`): parte electrónica publicada; escala de Δe (×0,25), corte
+   (3,0-3,6 Å) y repulsión ajustados a GPAW (`gpaw_carbon_env.json`). Fuerzas frente a Xu (eV/Å):
+   Stone-Wales 0,93 -> 0,38 y amorfo 3,2 1,69 -> 0,98 (ambos fuera del ajuste), C60 0,82 -> 0,42,
+   vacante 0,79 -> 0,65; grafeno 0,12 -> 0,14. Diamante a = 3,515 Å; energías entre fases poco
+   fiables (diamante 0,37 eV/átomo). En GUI y CLI como «tang». Los parámetros publicados tal cual
+   no dan el diamante del artículo (`tang1996_published.json`, solo pruebas).
+   Planes nuevos: `docs/PLAN_NANOCOIL_RAMAN.md` (siguiente proyecto, usa tang_carbon) y
+   `docs/PLAN_XPS_FUTURO.md` (a futuro).
 7. ML: Δ-learning de repulsión (Stöhr 2020), fonones híbridos MACE con α/μ de TB,
    DeePTB; GFN2-xTB como motor de comparación opcional.
 8. Validación en sistemas reales; anomalía de Kohn (Piscanec 2004).

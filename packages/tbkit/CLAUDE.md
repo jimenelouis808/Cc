@@ -102,6 +102,9 @@ tbkit/
   coordinations (tested against finite differences). The published parameters
   (`tang1996_published.json`) do not give the paper's diamond with any cutoff tried: test
   use only, never ship them as a usable set. The paper's PDF is not versioned (journal).
+  The usable set is `tang_carbon` (`recipes/tang_fit.py`): published electronic part,
+  Δe scale, cutoff and repulsion fitted to `gpaw_carbon_env.json` with amorphous 3.2 and
+  Stone-Wales held out. Refit by rerunning the recipe; do not tune it to one structure.
 - `TBModel.scc` says which ground state the parameters were made for: True
   for `.skf` sets, `xu_chn` and `xu_chno`, False for Xu and π. Calculators, tasks and
   the linear-response α follow it unless told otherwise; a set fitted with
