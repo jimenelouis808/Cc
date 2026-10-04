@@ -6,6 +6,7 @@ Run (each stage resumable: every result is a file in WORKDIR)::
     python -m tbkit.recipes.nanocoil tb WORKDIR --model xu_carbon
     python -m tbkit.recipes.nanocoil gpaw-k WORKDIR                   # k convergence (GPAW)
     python -m tbkit.recipes.nanocoil gpaw-relax WORKDIR               # PBE relaxation (GPAW)
+    python -m tbkit.recipes.nanocoil gpaw-phase3 WORKDIR              # PBE gap, geometry, projected modes
 
 Input: ``recipes/data/coil204_knee.extxyz``, built by nanocarbon_lab
 (``build_knee_periodic_coil(coil_radius=7.75, pitch=15.0, sides_per_turn=6,
@@ -231,9 +232,105 @@ def stage_gpaw_relax(workdir: Path, kz: int = 2, vacuum: float = 6.0) -> dict:
     return report
 
 
+def _bond_lengths(atoms, bonds) -> np.ndarray:
+    return np.array([atoms.get_distance(a, b, mic=True) for a, b in bonds])
+
+
+def compare_geometry(reference, other) -> dict:
+    """Bond by bond on the input's bond graph, split by the rings a bond belongs to."""
+    bonds = sorted(bond_graph(coil()))
+    d = _bond_lengths(other, bonds) - _bond_lengths(reference, bonds)
+    faces = rings(reference)
+    kind = {}
+    for ring in faces:
+        members = set(ring)
+        for b in bonds:
+            if b[0] in members and b[1] in members:
+                kind.setdefault(b, set()).add(len(ring))
+    out = {"bond_rms_A": float(np.sqrt(np.mean(d ** 2))), "bond_max_abs_A": float(np.abs(d).max()),
+           "bond_mean_A": float(d.mean())}
+    for size in (5, 6, 7):
+        sel = np.array([size in kind.get(b, ()) for b in bonds])
+        out[f"bond_mean_in_{size}_rings_A"] = float(d[sel].mean())
+    return out
+
+
+def selected_modes(workdir: Path) -> list[dict]:
+    """Per TB set: the mode most on pentagons and the highest mode (on heptagons)."""
+    picks = []
+    for model in ("xu_carbon", "tang_carbon"):
+        folder = Path(workdir) / f"tb_{model}"
+        table = json.loads((folder / "modes.json").read_text())
+        data = np.load(folder / "modes.npz")
+        for label, index in (("most_pentagon", int(np.argmax([m["on_pentagons"] for m in table]))),
+                             ("highest", int(np.argmax(data["frequencies"])))):
+            picks.append({"model": model, "label": label, "index": index,
+                          "tb_frequency_cm1": float(data["frequencies"][index]),
+                          "vector": data["modes"][index].reshape(-1)})
+    return picks
+
+
+def _projected_frequency(f0, f1, vector, step: float) -> float:
+    """ω from k = -v·(F(x0 + s v) - F(x0))/s with |v| = 1 (all atoms carbon)."""
+    from ase.data import atomic_masses
+    from ase.units import _amu, _e, _hbar, invcm
+
+    k = -float(vector @ (f1 - f0).ravel()) / step
+    scale = _hbar * 1e10 / np.sqrt(_e * _amu)               # eV for k in eV/Å², m in amu
+    omega = scale * np.sqrt(abs(k) / atomic_masses[6]) / invcm
+    return float(np.sign(k) * omega)
+
+
+def stage_gpaw_phase3(workdir: Path, kz: int = 2, max_disp: float = 0.02) -> dict:
+    """PBE at the PBE geometry: gap (SCF + Γ–Z bands), geometry vs TB, projected frequencies."""
+    workdir = Path(workdir)
+    folder = workdir / "gpaw_phase3"
+    folder.mkdir(parents=True, exist_ok=True)
+    pbe = read(workdir / "gpaw_relax" / "relaxed.extxyz")
+    report = {"geometry_vs_pbe": {m: compare_geometry(pbe, read(workdir / f"tb_{m}" / "relaxed.extxyz"))
+                                  for m in ("xu_carbon", "tang_carbon")}}
+    ground = folder / "ground.json"
+    if not ground.exists():
+        atoms = pbe.copy()
+        atoms.calc = _gpaw((1, 1, kz))
+        energy = float(atoms.get_potential_energy())
+        forces = atoms.get_forces()
+        calc = atoms.calc
+        fermi = float(calc.get_fermi_level())
+        path = np.linspace(0, 0.5, 11)
+        bands = calc.fixed_density(kpts=[(0, 0, kzp) for kzp in path], symmetry="off", txt=None)
+        eps = np.array([bands.get_eigenvalues(kpt=i) for i in range(len(path))]) - fermi
+        gap = float(max(0.0, eps[eps > 0].min() - eps[eps <= 0].max()))
+        _write(ground, {"energy": energy, "forces": forces.tolist(), "fermi_eV": fermi,
+                        "kz_path": path.tolist(), "bands_near_fermi_eV":
+                        [sorted(row[np.abs(row) < 1.0].tolist()) for row in eps],
+                        "gap_eV": gap})
+    g = json.loads(ground.read_text())
+    report["pbe_gap_eV"] = g["gap_eV"]
+    report["pbe_bands_within_1eV_of_fermi"] = g["bands_near_fermi_eV"]
+    f0 = np.array(g["forces"])
+    modes = []
+    for pick in selected_modes(workdir):
+        vector = pick.pop("vector")
+        vector = vector / np.linalg.norm(vector)
+        step = max_disp / np.abs(vector.reshape(-1, 3)).sum(axis=1).max()
+        path = folder / f"{pick['model']}_{pick['label']}.json"
+        if not path.exists():
+            atoms = pbe.copy()
+            atoms.positions += step * vector.reshape(-1, 3)
+            atoms.calc = _gpaw((1, 1, kz))
+            _write(path, {"step": step, "forces": atoms.get_forces().tolist()})
+        disp = json.loads(path.read_text())
+        pick["pbe_projected_cm1"] = _projected_frequency(f0, np.array(disp["forces"]), vector, disp["step"])
+        modes.append(pick)
+    report["projected_modes"] = modes
+    _write(folder / "report.json", report)
+    return report
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("stage", choices=("tb", "gpaw-k", "gpaw-relax"))
+    parser.add_argument("stage", choices=("tb", "gpaw-k", "gpaw-relax", "gpaw-phase3"))
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--model", default="tang_carbon")
     parser.add_argument("--kz", type=int, default=2)
@@ -243,8 +340,10 @@ def main(argv=None) -> None:
                           if k not in ("bonds_made", "bonds_broken")}, indent=1))
     elif args.stage == "gpaw-k":
         print(json.dumps(stage_gpaw_k(args.workdir), indent=1))
-    else:
+    elif args.stage == "gpaw-relax":
         print(json.dumps(stage_gpaw_relax(args.workdir, args.kz), indent=1))
+    else:
+        print(json.dumps(stage_gpaw_phase3(args.workdir, args.kz), indent=1))
 
 
 if __name__ == "__main__":
