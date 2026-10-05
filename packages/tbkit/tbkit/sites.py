@@ -45,30 +45,43 @@ def bond_graph(atoms: Atoms, cutoff: Optional[float] = None, mult: float = 1.2) 
     return {(int(a), int(b)) for a, b in zip(i, j, strict=True) if a < b}
 
 
-def rings(atoms: Atoms, largest: int = 7, cutoff: Optional[float] = None) -> list[tuple]:
-    """Every simple cycle of at most ``largest`` atoms that closes in space, as sorted
-    index tuples. The lattice offsets are followed along the walk: a path that
-    returns to its first atom in another cell wraps the periodic boundary (a
-    3×3 graphene cell has such 6-cycles) and is not a ring."""
+def ring_cycles(atoms: Atoms, largest: int = 7, cutoff: Optional[float] = None
+                ) -> list[tuple[tuple, np.ndarray]]:
+    """Every simple cycle of at most ``largest`` atoms that closes in space, as
+    ``(atoms in path order, lattice offsets of each, (n, 3) integers)``.
+
+    Lattice offsets are followed along the walk: a path that returns to its first
+    atom in another cell wraps the boundary and is not a ring (a 3×3 graphene cell
+    has such 6-cycles). Two rings are the same only if their atoms *and* offsets
+    agree up to a lattice translation: in a √3×√3 graphene cell the three hexagons
+    are made of the same six atoms in different images."""
     i, j, shifts = _neighbours(atoms, cutoff, 1.2)
     adjacency = {k: [] for k in range(len(atoms))}
     for a, b, shift in zip(i, j, shifts, strict=True):
         adjacency[int(a)].append((int(b), tuple(int(x) for x in shift)))
-    found = set()
+    found = {}
 
-    def walk(path, offset):
-        u = path[-1]
+    def walk(path, offsets):
+        u, offset = path[-1], offsets[-1]
         for v, shift in adjacency[u]:
             total = (offset[0] + shift[0], offset[1] + shift[1], offset[2] + shift[2])
             if v == path[0] and len(path) >= 3:
                 if total == (0, 0, 0):
-                    found.add(tuple(sorted(path)))
-            elif v > path[0] and v not in path and len(path) < largest:
-                walk(path + [v], total)
+                    key = frozenset(zip(path, offsets))
+                    found.setdefault(key, (tuple(path), np.array(offsets)))
+            elif v > path[0] and len(path) < largest and \
+                    (v, total) not in set(zip(path, offsets)):
+                walk(path + [v], offsets + [total])
 
     for start in range(len(atoms)):
-        walk([start], (0, 0, 0))
-    return sorted(found)
+        walk([start], [(0, 0, 0)])
+    return sorted(found.values(), key=lambda c: (len(c[0]), sorted(c[0])))
+
+
+def rings(atoms: Atoms, largest: int = 7, cutoff: Optional[float] = None) -> list[tuple]:
+    """Every ring (see :func:`ring_cycles`) as a sorted tuple of atom indices; in a
+    small periodic cell two rings may share the same indices."""
+    return [tuple(sorted(path)) for path, _ in ring_cycles(atoms, largest, cutoff)]
 
 
 def ring_census(atoms: Atoms, largest: int = 7, cutoff: Optional[float] = None) -> dict:
@@ -147,3 +160,43 @@ def projected_frequency(atoms: Atoms, mode: np.ndarray, calculator: Callable[[],
     omega = scale * np.sqrt(abs(curvature) / inertia) / invcm
     return {"frequency_cm1": float(np.sign(curvature) * omega), "step_A": step,
             "force_calls": calls}
+
+
+def ring_breathing(atoms: Atoms, modes: np.ndarray, masses: Optional[np.ndarray] = None,
+                   largest: int = 7, cutoff: Optional[float] = None) -> dict:
+    """How much each mode is a breathing of the rings: the character of the D band.
+
+    For ring R and mode k, ``b_R = Σ_{i∈R} e_i·r̂_i / √n_R`` with e the mass-weighted
+    displacement and r̂_i the in-plane radial direction from the ring's centroid
+    (plane fitted to the ring, so curved nets work). The breathing character is
+    ``B_k = Σ_R b_R² / Σ_R Σ_{i∈R} |e_i|²``: 1 for one isolated ring breathing,
+    0 for a mode that translates every ring rigidly (graphene's G, E2g). The D band
+    of graphitic carbon comes from the K-point A1' mode, a Kekulé pattern of
+    breathing rings (Castiglioni, Tommasini et al.); in a structure without
+    translational order the modes that carry it are found by B, not by frequency.
+
+    Returns ``{"B": (n_modes,), "rings": [...], "amplitudes": (n_modes, n_rings)}``.
+    """
+    modes = np.asarray(modes, dtype=float)
+    masses = atoms.get_masses() if masses is None else np.asarray(masses, dtype=float)
+    e = modes * np.sqrt(masses)[None, :, None]                     # L = e/√m -> e
+    e /= np.linalg.norm(e.reshape(len(e), -1), axis=1)[:, None, None]
+    faces = ring_cycles(atoms, largest, cutoff)
+    positions = atoms.get_positions()
+    cell = np.asarray(atoms.get_cell())
+    amplitudes = np.zeros((len(e), len(faces)))
+    norm = np.zeros(len(e))
+    for r, (path, offsets) in enumerate(faces):
+        idx = list(path)
+        pts = positions[idx] + offsets @ cell
+        centre = pts.mean(axis=0)
+        _, _, vt = np.linalg.svd(pts - centre)
+        normal = vt[2]
+        radial = pts - centre
+        radial -= np.outer(radial @ normal, normal)
+        radial /= np.linalg.norm(radial, axis=1)[:, None]
+        amplitudes[:, r] = np.einsum("kij,ij->k", e[:, idx], radial) / np.sqrt(len(idx))
+        norm += np.sum(e[:, idx] ** 2, axis=(1, 2))
+    breathing = np.sum(amplitudes ** 2, axis=1) / np.where(norm > 0, norm, 1.0)
+    return {"B": breathing, "rings": [tuple(sorted(f[0])) for f in faces],
+            "amplitudes": amplitudes}

@@ -165,3 +165,22 @@ def test_structure_screening_ranks_isomers_and_refuses_mixed_compositions(tmp_pa
     write(tmp_path / "H2O.extxyz", molecule("H2O"))
     with pytest.raises(ValueError, match="Composiciones"):
         main([str(tmp_path / "w2"), str(tmp_path / "H2O.extxyz"), str(tmp_path / "CH3OCH3.extxyz")])
+
+
+def test_ring_breathing_finds_the_d_mode_of_graphene():
+    """√3×√3 graphene folds K onto Γ: its three hexagons share the same six atoms in
+    different images (three rings, not one), and only the A1' pair at K (the phonon
+    of the D band) breathes, B = 1/2 for each partner; G (E2g) has B = 0."""
+    from ase.build import graphene, make_supercell
+
+    from tbkit.sites import ring_breathing
+
+    sheet = graphene(a=2.46, vacuum=6.0)
+    sheet.pbc = [True, True, False]
+    r3 = make_supercell(sheet, [[2, 1, 0], [-1, 1, 0], [0, 0, 1]])
+    assert sites.ring_census(r3) == {6: 3}
+    vib = vibrations(r3, xu_carbon(), kmesh=12, kT=0.05)
+    b = ring_breathing(r3, vib.modes)["B"]
+    breathing = np.flatnonzero(b > 0.1)
+    assert len(breathing) == 2 and b[breathing] == pytest.approx([0.5, 0.5], abs=0.02)
+    assert b[-2:] == pytest.approx([0.0, 0.0], abs=0.02)             # G, the highest pair

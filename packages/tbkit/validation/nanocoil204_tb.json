@@ -458,5 +458,40 @@
    }
   },
   "conclusion": "Converged at kz = 4 (Lz = 15 A): the selected modes (highest, 5/7-weighted, strongest Raman, low ones) move < 0.1 cm-1 from 4 to 16 k; unlike graphene's G, no k-sampling softening here."
+ },
+ "d_band_ring_breathing": {
+  "method": "sites.ring_breathing: B_k = Σ_R b_R² / Σ_R Σ_i∈R |e_i|², b_R = Σ e_i·r̂_i/√n_R (in-plane radial direction of each ring); calibrated on √3×√3 graphene, where only the A1'(K) pair (the D-band phonon) breathes, B = 0.5 each, and G has B = 0 (test)",
+  "graphene_A1prime_K_cm1": {
+   "xu_carbon_k12": 1377,
+   "tang_carbon_k16": 1276,
+   "tang_carbon_k24": 1287
+  },
+  "coil_tang": {
+   "max_B": 0.262,
+   "modes_B_above_0.3": 0,
+   "most_breathing_modes_cm1": "939-1088 (B 0.20-0.26, mostly hexagons)",
+   "mean_B_all_modes": 0.056,
+   "intensity_weighted_B_532nm": {
+    "1240-1320": 0.083,
+    "1450-1500": 0.063,
+    "1560-1610": 0.031,
+    "700-760": 0.038
+   },
+   "breathing_share_of_intensity": {
+    "1.58": 0.064,
+    "1.96": 0.06,
+    "2.33": 0.055,
+    "2.41": 0.057,
+    "2.54": 0.054
+   },
+   "breathing_weighted_centroid_1100_1500_cm1": {
+    "1.58": 1274,
+    "1.96": 1300,
+    "2.33": 1306,
+    "2.41": 1320,
+    "2.54": 1320
+   }
+  },
+  "conclusion": "No distinct D band in this calculation: no coil mode is a strong ring breathing (B <= 0.26 against 0.5 per partner in graphene), and the Raman intensity carried by breathing (5.5-6.4 %) equals the average breathing of all modes (5.6 %): the resonance does not select breathing modes. The 1283 cm-1 band sits at Tang's graphene A1'(K) frequency (1287) but breathes little (B 0.08); G (1586) is non-breathing (0.03), as E2g should be. The breathing-weighted centroid moves 1274 -> 1320 cm-1 from 1.58 to 2.54 eV (~48 cm-1/eV, like the D band) but rests on relative heights that depend on η: an indication, not a result. A first-order Γ calculation of a 204-atom cell with independent-particle α cannot represent the k-space double resonance; it does not show that a real coil has no D band."
  }
 }
