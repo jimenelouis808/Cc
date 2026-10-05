@@ -147,5 +147,86 @@
    "on_pentagons": 0.5998803032096149,
    "on_heptagons": 0.05411797193525434
   }
+ },
+ "gpaw_phase3": {
+  "settings": {
+   "xc": "PBE",
+   "mode": "lcao dzp",
+   "h": 0.2,
+   "kpts": [
+    1,
+    1,
+    2
+   ],
+   "smearing_eV": 0.05,
+   "relax_fmax_eV_A": 0.05,
+   "vacuum_A": 6.0,
+   "relax_converged": true,
+   "relax_topology": "OK"
+  },
+  "pbe_gap_eV": 0.22269348111472276,
+  "pbe_gap_note": "min over 11 k points Γ–Z, non-SCF bands on the kz=2 density; TB (Xu, Tang) gapless",
+  "geometry_vs_pbe": {
+   "xu_carbon": {
+    "bond_rms_A": 0.016319772957219852,
+    "bond_max_abs_A": 0.04224313182615047,
+    "bond_mean_A": -0.01213715027343408,
+    "bond_mean_in_5_rings_A": 0.0014450177842010468,
+    "bond_mean_in_6_rings_A": -0.012755363837577789,
+    "bond_mean_in_7_rings_A": -0.01823050340873011
+   },
+   "tang_carbon": {
+    "bond_rms_A": 0.014795120330106841,
+    "bond_max_abs_A": 0.02833166987421354,
+    "bond_mean_A": -0.012301182877948135,
+    "bond_mean_in_5_rings_A": -0.012341731732706222,
+    "bond_mean_in_6_rings_A": -0.012310743445047416,
+    "bond_mean_in_7_rings_A": -0.004713707497809802
+   }
+  },
+  "projected_modes": [
+   {
+    "model": "xu_carbon",
+    "label": "most_pentagon",
+    "index": 419,
+    "tb_frequency_cm1": 1238.4299566134418,
+    "pbe_projected_cm1": 1209.2373333926223
+   },
+   {
+    "model": "xu_carbon",
+    "label": "highest",
+    "index": 611,
+    "tb_frequency_cm1": 1766.9367249013867,
+    "pbe_projected_cm1": 1670.3589326453307
+   },
+   {
+    "model": "tang_carbon",
+    "label": "most_pentagon",
+    "index": 557,
+    "tb_frequency_cm1": 1549.9034086361203,
+    "pbe_projected_cm1": 1465.0816994693596
+   },
+   {
+    "model": "tang_carbon",
+    "label": "highest",
+    "index": 611,
+    "tb_frequency_cm1": 1760.3218910246057,
+    "pbe_projected_cm1": 1681.0664249400027
+   }
+  ],
+  "projected_note": "Rayleigh quotient of the PBE force constants along the TB eigenvector (one-sided, max displacement 0.02 A): an upper bound of the PBE frequency of that character",
+  "counterparts": {
+   "xu_419_1238_in_tang": {
+    "mode": 425,
+    "cm1": 1258.7,
+    "overlap": 0.59
+   },
+   "tang_557_1550_in_xu": {
+    "mode": 558,
+    "cm1": 1536.7,
+    "overlap": 0.59
+   }
+  },
+  "conclusion": "Xu (1238) and Tang (1550) 'most pentagon' modes are different vibrations, each present in both models within 2 %: no disagreement between the sets, only the selection criterion. PBE puts them at 1209 and 1465 cm-1; the highest (heptagon) modes at 1670-1681. TB is 2-6 % above PBE for these modes. PBE opens a 0.22 eV gap the TB sets do not."
  }
 }
