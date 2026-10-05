@@ -175,6 +175,10 @@
    "tb": 0.484,
    "gpaw": 1.053
   },
-  "a048_h049": "running"
- }
+  "a048_h049": {
+   "tb": 2.14,
+   "gpaw": 2.63
+  }
+ },
+ "gpaw_conclusion": "GPAW (single points at TB geometries) keeps the TB order of the three checked candidates: a048_h059 (NH2 next to a heptagon, H on C59) is the most stable."
 }
