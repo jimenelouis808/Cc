@@ -69,6 +69,10 @@ tbkit/
 - Resonant Raman (`resonance.py`) needs η > 0; its static, below-gap limit
   must equal the non-resonant result (tested). Resonance energies are the
   model's (small TB/KS gaps): never present them as optical energies.
+- `resonant_raman(select=...)` differentiates α along each mode: same tensor as the
+  per-atom derivative (tested, benzene and diamond, δ = 0.002 Å). Its finite-difference
+  error is larger at the same δ (every atom of the mode moves): keep δ ≤ 0.005 Å.
+  The per-mode cache is tied to lasers, η, k mesh, kT and model; a mismatch refuses.
 - Raman is non-resonant: refuse gapless systems (any fractionally occupied
   state means no gap: `Solution.gap()`), open shells and lasers near the gap.
   Selection rules (diamond T2g, C60 2Ag+8Hg) are the first check of any

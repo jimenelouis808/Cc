@@ -324,6 +324,14 @@ los ópticos. Compara perfiles relativos, no energías absolutas. En semimetales
 (grafeno) la suma en k converge mal con diferencias finitas: el grafeno tiene
 su módulo perturbativo.
 
+Celdas grandes: `resonant_raman(..., select=[modos] | "all", cache_dir=...)`
+deriva α a lo largo de cada modo, (α(x + hL) − α(x − hL))/2h: el mismo tensor
+que Σ ∂α/∂x·L (comprobado en benceno y diamante), con 2 α por modo en lugar de
+6N, un archivo por modo (se reanuda) y repartible entre procesos. El paso mueve
+el átomo más desplazado `delta`; como mueve todos los átomos del modo a la vez,
+su error O(δ²) es mayor que el de la derivada átomo por átomo (4 % en diamante
+cerca de resonancia con 0,01 Å): usa 0,002–0,005 Å.
+
 ## Infrarrojo
 
 `tbkit ir molecula.xyz --model chn` (o `infrared.infrared`): el dipolo del

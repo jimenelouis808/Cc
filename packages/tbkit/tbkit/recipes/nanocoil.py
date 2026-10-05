@@ -7,6 +7,7 @@ Run (each stage resumable: every result is a file in WORKDIR)::
     python -m tbkit.recipes.nanocoil gpaw-k WORKDIR                   # k convergence (GPAW)
     python -m tbkit.recipes.nanocoil gpaw-relax WORKDIR               # PBE relaxation (GPAW)
     python -m tbkit.recipes.nanocoil gpaw-phase3 WORKDIR              # PBE gap, geometry, projected modes
+    python -m tbkit.recipes.nanocoil raman WORKDIR [--part r/n]       # resonant Raman, every mode
 
 Input: ``recipes/data/coil204_knee.extxyz``, built by nanocarbon_lab
 (``build_knee_periodic_coil(coil_radius=7.75, pitch=15.0, sides_per_turn=6,
@@ -300,18 +301,94 @@ def stage_gpaw_phase3(workdir: Path, kz: int = 2, max_disp: float = 0.02) -> dic
     return report
 
 
+LASERS_EV = (1.58, 1.96, 2.33, 2.41, 2.54)          # 785, 633, 532, 514, 488 nm
+
+
+def tb_vibrations(workdir: Path, model_name: str):
+    """The Γ modes of stage ``tb`` as a tbkit Vibrations (L = e/√m), from ase's cache."""
+    from ase.vibrations import Vibrations as AseVibrations
+
+    from ..modes import Vibrations
+
+    folder = Path(workdir) / f"tb_{model_name}"
+    atoms = read(folder / "relaxed.extxyz")
+    hessian = AseVibrations(atoms, name=str(folder / "vib"), delta=0.01).get_vibrations() \
+        .get_hessian_2d()
+    return Vibrations.from_hessian(atoms, hessian, source=model_name)
+
+
+def stage_raman(workdir: Path, model_name: str = "tang_carbon", part: tuple = (0, 1),
+                kmesh: int = 4, eta: float = 0.1, delta: float = 0.005) -> dict:
+    """Resonant Raman of every internal mode, α differentiated along each mode.
+
+    ``part=(r, n)`` computes the modes with index ≡ r (mod n): n processes share
+    the cache folder and the last call (n = 1) assembles. Independent-particle α
+    of the crystal (no local fields), interband only; the coil is gapless in TB,
+    so every laser is resonant: the activities are not comparable to a
+    non-resonant calculation."""
+    from ..params import load_parameters
+    from ..raman import RamanResult, internal_modes, spectrum
+    from ..resonance import resonant_raman
+
+    workdir = Path(workdir)
+    folder = workdir / f"raman_{model_name}"
+    vib = tb_vibrations(workdir, model_name)
+    atoms = vib.atoms
+    model = load_parameters(model_name)
+    modes = [int(k) for k in internal_modes(atoms, vib.frequencies, [])]
+    r, n = part
+    chosen = [k for k in modes if k % n == r]
+    result = resonant_raman(atoms, model, LASERS_EV, eta=eta, kmesh=kmesh, kT=KT,
+                            phonons=(vib.frequencies, vib.modes), select=chosen,
+                            cache_dir=folder / "tensors", delta=delta)
+    if n > 1:
+        return {"part": list(part), "modes": len(chosen)}
+    groups = ring_atoms(atoms, (5, 6, 7))
+    from ..modes import participation
+
+    shares = participation(vib, {f"en_{s}": groups[s] for s in (5, 6, 7)})
+    out = {"model": model_name, "lasers_eV": list(LASERS_EV), "eta_eV": eta, "kmesh": kmesh,
+           "delta_A": delta, "modes": len(chosen), "warnings": result.warnings,
+           "fraction_of_atoms": {s: len(groups[s]) / len(atoms) for s in (5, 6, 7)}}
+    spectra = {}
+    for li, laser in enumerate(LASERS_EV):
+        at = RamanResult(result.frequencies, result.activities[li], result.depolarization[li],
+                         None, None, "", result.frequencies)
+        grid, curve = spectrum(at, np.linspace(100, 1900, 3601), fwhm=10.0,
+                               laser_nm=1239.84193 / laser)
+        spectra[f"{laser:.2f}"] = curve
+        order = np.argsort(-result.activities[li])[:15]
+        out[f"strongest_{laser:.2f}eV"] = [
+            {"mode": int(result.mode_indices[j]), "frequency_cm1": float(result.frequencies[j]),
+             "activity": float(result.activities[li, j]),
+             "share_of_total": float(result.activities[li, j] / result.activities[li].sum()),
+             **{k: float(v[result.mode_indices[j]]) for k, v in shares.items()}}
+            for j in order]
+    np.savez(folder / "spectra.npz", grid=grid, **spectra, frequencies=result.frequencies,
+             activities=result.activities, mode_indices=result.mode_indices)
+    _write(folder / "report.json", out)
+    return out
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("stage", choices=("tb", "gpaw-k", "gpaw-relax", "gpaw-phase3"))
+    parser.add_argument("stage", choices=("tb", "gpaw-k", "gpaw-relax", "gpaw-phase3",
+                                                 "raman"))
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--model", default="tang_carbon")
     parser.add_argument("--kz", type=int, default=2)
+    parser.add_argument("--part", default="0/1", help="r/n: modos con índice ≡ r (mod n)")
     args = parser.parse_args(argv)
     if args.stage == "tb":
         print(json.dumps({k: v for k, v in stage_tb(args.workdir, args.model).items()
                           if k not in ("bonds_made", "bonds_broken")}, indent=1))
     elif args.stage == "gpaw-k":
         print(json.dumps(stage_gpaw_k(args.workdir), indent=1))
+    elif args.stage == "raman":
+        r, n = (int(x) for x in args.part.split("/"))
+        out = stage_raman(args.workdir, args.model, (r, n))
+        print(json.dumps({k: v for k, v in out.items() if not k.startswith("strongest")},
+                         indent=1))
     elif args.stage == "gpaw-relax":
         print(json.dumps(stage_gpaw_relax(args.workdir, args.kz), indent=1))
     else:
