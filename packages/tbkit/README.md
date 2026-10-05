@@ -30,10 +30,11 @@ animados). Derecha, una pestaña por capacidad:
 
 | Pestaña | Qué hace |
 |---|---|
-| Electrónica | estado fundamental (SCC si el modelo lo pide), gap, niveles, DOS/PDOS por elemento, átomo u orbital, bandas (periódicos), cargas |
+| Electrónica | estado fundamental (SCC si el modelo lo pide), gap, niveles, DOS/PDOS por elemento, átomo u orbital, bandas (periódicos), cargas; «Comparar SCC sí/no» (gap, HOMO, LUMO, E_F, cargas y Δq sobre la estructura) |
 | Orbitales | isosuperficie de cualquier nivel, isovalor ajustable |
 | Magnetismo | Hubbard de campo medio: momentos sobre la estructura, DOS de espín, m(E), comparación de puntos de partida, barridos en campo (T) y dopaje |
-| Geometría y modos | relajación con las fuerzas del modelo (con vuelta a la original), modos en Γ con participación, DOS vibracional, animación y flechas, `modes.npz` |
+| Geometría y modos | relajación con las fuerzas del modelo (con vuelta a la original), modos en Γ con participación, DOS vibracional, animación y flechas, `modes.npz`; modos ordenados por su peso en un sitio (anillos de 5, 6, 7, cada heteroátomo, C vecinos de heteroátomo, H) con su enriquecimiento; frecuencia de un modo con otro conjunto (cociente de Rayleigh, dos llamadas de fuerzas) |
+| Fonones (ZB) | phonopy con las fuerzas del modelo (extra `phonons`): dispersión por el camino de puntos especiales, DOS por elemento, representación irreducible de cada modo en Γ, F, S y Cv armónicos; carpeta opcional para reanudar |
 | Espectros | Raman (láser, T), Raman resonante (láseres, η, perfiles de excitación), IR en km/mol; fonones de la pestaña anterior, del modelo o de un archivo de QE; CSV |
 | Grafeno | G, 2D y 2D′ por láser con fonones GPAW, Xu o de archivo; dispersión de la 2D |
 
@@ -422,6 +423,36 @@ Xu o cualquier archivo de constantes de fuerza (`validation/graphene_2d_gpaw.jso
   y del sustrato (no incluido).
 - No incluye defectos (no hay banda D), excitones ni la renormalización
   electrón–electrón de v_F.
+
+## Sitios, modos por sitio y fonones en toda la zona (phonopy)
+
+`tbkit.sites` agrupa átomos sin depender del modelo: anillos (ciclos simples de
+hasta 7 átomos que cierran en el espacio; los que dan la vuelta a la celda
+periódica no cuentan), cada heteroátomo, los C unidos a uno, H.
+`modes.participation(vib, sites.site_groups(atoms))` dice qué parte de cada modo
+vive en cada grupo. `sites.projected_frequency(atoms, modo, calculadora)` da la
+frecuencia de un patrón de desplazamiento con cualquier calculadora de ASE
+(otro conjunto TB, GPAW): ω² = u·K·u / u·M·u con K·u de dos llamadas de fuerzas.
+Es el cociente de Rayleigh: exacto para un modo propio de esa calculadora
+(test: H2O, masas distintas, 0,5 %), cota superior si no.
+
+`tbkit.phonopy_bridge` (extra `phonons`: `pip install 'tbkit[phonons]'`) da
+las fuerzas del modelo a phonopy: supercelda (1 en los ejes no periódicos),
+desplazamientos independientes por simetría, constantes de fuerza, dispersión,
+DOS por elemento, termodinámica armónica y representación irreducible en Γ.
+La malla k de cada supercelda es la de la celda dividida por su tamaño (mismo
+muestreo electrónico). Comprobado: en diamante Γ coincide con los fonones
+directos de tbkit a 0,2 cm⁻¹ y el modo Raman sale T2g; en grafeno G sale E2g.
+En grafeno los dos caminos difieren unos cm⁻¹ en G: es la anomalía de Kohn
+(G en Γ pasa de 1572 a 1656 cm⁻¹ de 12 a 24 puntos k), no un error.
+
+`recipes/site_screening.py`: ¿dónde va un dopante sustitucional? Agrupa los C
+por entorno (anillos y huella de distancias), calcula un representante por
+clase sin relajar, relaja los K mejores (`--relax-top`) y escribe los
+primeros como extxyz para DFT. En la coil de 204 átomos hay 51 clases (simetría
+de orden 4); un punto con xu_chn tarda ~3 min, así que el cribado completo son
+~2,5 h y cada relajación ~1 h. Las energías son del modelo: el orden de los
+mejores se comprueba con DFT.
 
 ## Fonones de Quantum ESPRESSO con intensidades de tbkit
 

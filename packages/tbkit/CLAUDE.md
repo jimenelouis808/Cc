@@ -28,6 +28,8 @@ tbkit/
 ├── dipoles.py        # intra-atomic s-p dipoles: position operator, multipole screening
 ├── infrared.py       # IR: model dipole (SCC charges + intra-atomic dipoles), Born charges
 ├── modes.py          # mode analysis: participation, cylindrical character, symmetry, VDOS
+├── sites.py          # rings (closing in space), heteroatom groups, projected frequency of a mode
+├── phonopy_bridge.py # phonopy with the model's forces: dispersion, DOS, Γ irreps, thermodynamics
 ├── graphene.py       # graphene G / 2D / 2D' by (double) resonance, phonons in the whole BZ
 ├── raman.py          # non-resonant Raman on the model's own Γ phonons
 ├── resonance.py      # resonant Raman: ∂α(ω_L + iη)/∂Q, excitation profiles
@@ -37,6 +39,8 @@ tbkit/
 ├── recipes/          # reproducible fits: xu_family (machinery), xu_chn, xu_chno; GPAW references
 │                     #   frequency_scaling: one scale factor per set against GPAW
 │                     #   crystal_validation + run_crystals.sh: the sets in crystals vs GPAW (resumable)
+│                     #   nanocoil: the 204-atom 5-7 coil, TB and GPAW stages (resumable)
+│                     #   site_screening: substitutional dopant sites, TB ranking, top-N for DFT
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 ├── cli.py            # `tbkit` console script
 └── gui/              # tbkit-gui (PySide6 + pyvista, extra `gui`): actions (no Qt), worker, viewer, app
@@ -166,6 +170,14 @@ tbkit/
   `recipes/frequency_scaling.py`, against GPAW, not experiment) are reported
   beside the raw frequencies (`frequencies_scaled_cm1`); never apply them
   silently to phonons, Raman or IR, and rerun the recipe after any refit.
+- Rings (`sites.rings`) follow lattice offsets: a cycle that returns to its first
+  atom in another cell wraps the boundary and is not a face (3×3 graphene has
+  such 6-cycles). `projected_frequency` is a Rayleigh quotient: exact only for
+  an eigenvector of that calculator, an upper bound otherwise; say so wherever
+  it is reported. phonopy stays optional (extra `phonons`); its tests skip
+  without it. Its Γ must equal tbkit's direct Γ phonons in an insulator
+  (diamond, tested); graphene's G differs by a few cm⁻¹ through the Kohn
+  anomaly, which is physics, not a reason to loosen that test.
 - Mode identification (RBM, G) is by symmetry and character, never by
   frequency window alone: zone folding puts other A modes nearby (M-point
   modes in zigzag tubes). DFT force constants get the acoustic sum rule on

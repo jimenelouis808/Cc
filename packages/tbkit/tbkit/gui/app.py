@@ -238,8 +238,8 @@ class MainWindow(QMainWindow):
         self.set_atoms(atoms, Path(path).name)
 
     def page_classes(self):
-        return [ElectronicPage, OrbitalPage, MagnetismPage, GeometryPage, SpectraPage,
-                GraphenePage]
+        return [ElectronicPage, OrbitalPage, MagnetismPage, GeometryPage, PhononPage,
+                SpectraPage, GraphenePage]
 
     # --- left panel ---------------------------------------------------------------
 
@@ -480,6 +480,9 @@ class ElectronicPage(Page):
         self.sigma.setSuffix(" eV")
         self.sigma.valueChanged.connect(self.plot_dos)
         row.addWidget(self.sigma)
+        self.scc_button = QPushButton("Comparar SCC sí/no")
+        self.scc_button.clicked.connect(self.compare_scc)
+        row.addWidget(self.scc_button)
         layout.addLayout(row)
         self.summary = QLabel("—")
         layout.addWidget(self.summary)
@@ -504,6 +507,14 @@ class ElectronicPage(Page):
         tabs.addTab(bands, "Bandas")
         self.charges = table(["átomo", "elemento", "carga (e)"])
         tabs.addTab(self.charges, "Cargas")
+        scc = QWidget()
+        sl = QVBoxLayout(scc)
+        self.scc_summary = table(["magnitud", "sin SCC", "con SCC", "diferencia"])
+        sl.addWidget(self.scc_summary)
+        self.scc_charges = table(["átomo", "elemento", "q sin SCC", "q con SCC", "Δq"])
+        sl.addWidget(self.scc_charges)
+        tabs.addTab(scc, "SCC sí/no")
+        self.tabs = tabs
         layout.addWidget(tabs)
 
     def invalidated(self):
@@ -547,6 +558,25 @@ class ElectronicPage(Page):
         ax.set_ylabel("estados/eV")
         ax.legend(fontsize=8)
         self.dos_plot.draw()
+
+    def compare_scc(self):
+        if not self.window.require():
+            return
+        self.window.runner.start("SCC sí/no", actions.compare_scc, self.window.atoms,
+                                 self.window.model, charge=self.window.charge.value(),
+                                 kT=self.window.kT.value(), on_done=self.show_scc,
+                                 on_error=self.window.error)
+
+    def show_scc(self, out):
+        self.window.remember("SCC sí/no", {"charge": self.window.charge.value(),
+                                           "kT": self.window.kT.value()},
+                             {"rows": out["rows"], "charges": out["charges"],
+                              "iterations": out["iterations"]})
+        fill(self.scc_summary, out["rows"])
+        fill(self.scc_charges, out["charges"])
+        self.tabs.setCurrentIndex(self.tabs.count() - 1)
+        self.window.view.show(self.window.atoms, [c[4] for c in out["charges"]],
+                              "Δq (SCC − sin SCC)", cmap="coolwarm", keep_camera=True)
 
     def compute_bands(self):
         if not self.window.require():
@@ -826,6 +856,20 @@ class GeometryPage(Page):
         form.addRow("pasos máx.", self.steps)
         self.kmesh = _spin(1, 64, 8, 1, 0)
         form.addRow("malla k (periódicos)", self.kmesh)
+        self.site = QComboBox()
+        self.site.addItem("(frecuencia)")
+        self.site.currentIndexChanged.connect(self.sort_by_site)
+        form.addRow("Ordenar modos por sitio", self.site)
+        other = QHBoxLayout()
+        self.other_model = QComboBox()
+        for key, (label, _) in actions.MODELS.items():
+            if key != "pi":
+                self.other_model.addItem(label, key)
+        other.addWidget(self.other_model)
+        self.other_button = QPushButton("Frecuencia con el otro modelo")
+        self.other_button.clicked.connect(self.run_other)
+        other.addWidget(self.other_button)
+        form.addRow("Comparar el modo con", other)
         layout.addLayout(form)
         row = QHBoxLayout()
         self.relax = QPushButton("Relajar")
@@ -848,8 +892,9 @@ class GeometryPage(Page):
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
         tabs = QTabWidget()
-        self.table = table(["#", "ω (cm⁻¹)", "participación"])
+        self.table = table(["#", "ω (cm⁻¹)", "en el sitio", "enriquecimiento", "participación"])
         self.table.itemSelectionChanged.connect(self.selected)
+        self.row_modes = []
         tabs.addTab(self.table, "Modos")
         self.vdos_plot = PlotPanel()
         tabs.addTab(self.vdos_plot, "DOS vibracional")
@@ -873,7 +918,43 @@ class GeometryPage(Page):
     def invalidated(self):
         self.result = None
         self.table.setRowCount(0)
+        self.row_modes = []
         self.save.setEnabled(False)
+        self.site.blockSignals(True)
+        self.site.clear()
+        self.site.addItem("(frecuencia)")
+        self.site.blockSignals(False)
+
+    def sort_by_site(self, *_):
+        if self.result is None:
+            return
+        name = self.site.currentText() if self.site.currentIndex() > 0 else None
+        rows = actions.modes_by_site(self.result, name)
+        self.row_modes = [r[0] for r in rows]
+        fill(self.table, [(r[0], r[1], "" if np.isnan(r[2]) else f"{r[2]:.0%}",
+                           "" if np.isnan(r[3]) else f"×{r[3]:.1f}", r[4]) for r in rows])
+
+    def run_other(self):
+        if self.result is None:
+            self.window.error("Sin modos", "Calcula primero los modos en Γ.")
+            return
+        rows = self.table.selectionModel().selectedRows()
+        if not rows:
+            self.window.error("Elige un modo", "Selecciona un modo en la tabla.")
+            return
+        index = self.row_modes[rows[0].row()]
+        other = actions.load_model(self.other_model.currentData())
+        self.window.runner.start("Modo con otro modelo", actions.mode_with_other_model,
+                                 self.window.atoms, self.result["vibrations"], index, other,
+                                 kmesh=int(self.kmesh.value()), on_done=self.show_other,
+                                 on_error=self.window.error)
+
+    def show_other(self, out):
+        self.window.remember("modo con otro modelo", {"mode": out["index"]}, out)
+        self.summary.setText(
+            f"Modo {out['index']}: {out['frequency_cm1']:.1f} cm⁻¹ con el modelo actual; "
+            f"{out['other_cm1']:.1f} cm⁻¹ con «{out['other']}» (mismo patrón de desplazamiento: "
+            "cociente de Rayleigh, cota superior si el modo no es propio de ese modelo).")
 
     def run_relax(self):
         if not self.window.require():
@@ -924,7 +1005,13 @@ class GeometryPage(Page):
         self.window.remember("modos en Γ", {}, {"frequencies_cm1": vib.frequencies,
                                                 "modes": vib.modes, "rows": out["rows"],
                                                 "warnings": out["warnings"]})
-        fill(self.table, out["rows"])
+        self.site.blockSignals(True)
+        self.site.clear()
+        self.site.addItem("(frecuencia)")
+        for name in out["site_sizes"]:
+            self.site.addItem(name)
+        self.site.blockSignals(False)
+        self.sort_by_site()
         warnings = " ".join(out["warnings"])
         self.summary.setText(f"{len(out['rows'])} modos. Clic en uno para animarlo. {warnings}")
         vdos = out["vdos"]
@@ -943,7 +1030,7 @@ class GeometryPage(Page):
         rows = self.table.selectionModel().selectedRows()
         if not rows or self.result is None:
             return None
-        return self.result["vibrations"].modes[rows[0].row()]
+        return self.result["vibrations"].modes[self.row_modes[rows[0].row()]]
 
     def selected(self):
         mode = self._mode()
@@ -973,6 +1060,94 @@ class GeometryPage(Page):
                 self.window.statusBar().showMessage(f"Guardado {path}")
             except FileExistsError as error:
                 self.window.error("No se sobrescribe", str(error))
+
+
+class PhononPage(Page):
+    """Phonons in the whole Brillouin zone through phonopy: dispersion, DOS, Γ symmetry."""
+
+    title = "Fonones (ZB)"
+
+    def __init__(self, window):
+        super().__init__(window)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        cells = QHBoxLayout()
+        self.supercell = [_spin(1, 12, 4, 1, 0) for _ in range(3)]
+        for spin in self.supercell:
+            cells.addWidget(spin)
+        form.addRow("Supercelda", cells)
+        self.delta = _spin(0.001, 0.05, 0.01, 0.002, 3, " Å")
+        form.addRow("Desplazamiento", self.delta)
+        self.kmesh = _spin(1, 64, 12, 1, 0)
+        form.addRow("Malla k de la celda", self.kmesh)
+        self.temperature = _spin(1, 3000, 300, 50, 0, " K")
+        form.addRow("Temperatura", self.temperature)
+        self.cache = QLineEdit()
+        self.cache.setPlaceholderText("vacío: sin caché")
+        form.addRow("Carpeta (reanudable)", self.cache)
+        layout.addLayout(form)
+        self.run_button = QPushButton("Calcular fonones en la ZB")
+        self.run_button.clicked.connect(self.run)
+        layout.addWidget(self.run_button)
+        self.summary = QLabel("Relaja la estructura antes. Necesita phonopy "
+                              "(pip install 'tbkit[phonons]').")
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+        tabs = QTabWidget()
+        self.bands = PlotPanel()
+        tabs.addTab(self.bands, "Dispersión")
+        self.dos = PlotPanel()
+        tabs.addTab(self.dos, "DOS de fonones")
+        self.irreps = table(["ω (cm⁻¹)", "degeneración", "representación"])
+        tabs.addTab(self.irreps, "Simetrías en Γ")
+        layout.addWidget(tabs)
+
+    def run(self):
+        if not self.window.require():
+            return
+        if not actions.phonopy_available():
+            self.window.error("Falta phonopy", "Instálalo con pip install 'tbkit[phonons]'.")
+            return
+        self.window.runner.start("Fonones (phonopy)", actions.bz_phonons, self.window.atoms,
+                                 self.window.model,
+                                 supercell=tuple(int(s.value()) for s in self.supercell),
+                                 delta=self.delta.value(), kmesh=int(self.kmesh.value()),
+                                 scc=self.window.scc_choice(),
+                                 temperature=self.temperature.value(),
+                                 cache_dir=self.cache.text().strip() or None,
+                                 on_done=self.show, on_error=self.window.error)
+
+    def show(self, out):
+        self.window.remember("fonones en la ZB",
+                             {"supercell": out["supercell"], "delta": self.delta.value()}, out)
+        t = out["thermal"]
+        warnings = " ".join(out["warnings"])
+        self.summary.setText(
+            f"Supercelda {out['supercell']} · {out['displacements']} desplazamientos · grupo "
+            f"puntual {out['point_group']} · a {t['T_K']:.0f} K por celda: F = {t['F_eV']:.4f} eV, "
+            f"S = {t['S_meV_per_K']:.4f} meV/K, Cv = {t['Cv_meV_per_K']:.4f} meV/K. {warnings}")
+        d = out["dispersion"]
+        ax = self.bands.axes()
+        ax.plot(d["x"], d["frequencies"], color="black", lw=0.8)
+        for tick in d["ticks"]:
+            ax.axvline(tick, color="grey", lw=0.5)
+        ax.axhline(0, color="grey", lw=0.5)
+        ax.set_xticks(d["ticks"], d["labels"])
+        ax.set_xlim(d["x"][0], d["x"][-1])
+        ax.set_ylabel("ω (cm⁻¹)")
+        self.bands.draw()
+        dos = out["dos"]
+        ax = self.dos.axes()
+        ax.plot(dos["grid"], dos["total"], color="black", lw=1.2, label="total")
+        for name, values in dos.items():
+            if name not in ("grid", "total"):
+                ax.plot(dos["grid"], values, lw=0.9, label=name)
+        ax.set_xlabel("ω (cm⁻¹)")
+        ax.set_ylabel("estados/cm⁻¹ por celda")
+        ax.legend(fontsize=8)
+        self.dos.draw()
+        fill(self.irreps, [(r["frequency_cm1"], r["degeneracy"], r["irrep"])
+                           for r in out["irreps"]])
 
 
 class SpectraPage(Page):

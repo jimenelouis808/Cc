@@ -31,6 +31,8 @@ from pathlib import Path
 import numpy as np
 from ase.io import read, write
 
+from .. import sites
+
 INPUT = Path(__file__).with_name("data") / "coil204_knee.extxyz"
 KMESH = (1, 1, 4)
 KT = 0.05
@@ -42,49 +44,19 @@ def coil() -> Atoms:  # noqa: F821
 
 
 def bond_graph(atoms) -> set:
-    from ase.neighborlist import neighbor_list
-
-    i, j = neighbor_list("ij", atoms, BOND)
-    return {(int(a), int(b)) for a, b in zip(i, j, strict=True) if a < b}
+    return sites.bond_graph(atoms, BOND)
 
 
 def rings(atoms, largest: int = 7) -> list[tuple]:
-    """Every simple cycle of at most ``largest`` atoms. In an sp2 net whose faces
-    are 5-7 rings these are exactly the faces: two faces sharing a bond already
-    make a cycle of at least 8."""
-    edges = bond_graph(atoms)
-    adjacency = {k: [] for k in range(len(atoms))}
-    for a, b in edges:
-        adjacency[a].append(b)
-        adjacency[b].append(a)
-    found = set()
-
-    def walk(path):
-        u = path[-1]
-        for v in adjacency[u]:
-            if v == path[0] and len(path) >= 3:
-                found.add(tuple(sorted(path)))
-            elif v > path[0] and v not in path and len(path) < largest:
-                walk(path + [v])
-
-    for start in range(len(atoms)):
-        walk([start])
-    return sorted(found)
+    return sites.rings(atoms, largest, BOND)
 
 
 def ring_census(atoms) -> dict:
-    counts = {}
-    for ring in rings(atoms):
-        counts[len(ring)] = counts.get(len(ring), 0) + 1
-    return dict(sorted(counts.items()))
+    return sites.ring_census(atoms, cutoff=BOND)
 
 
 def ring_atoms(atoms, sizes=(5, 7)) -> dict:
-    out = {s: set() for s in sizes}
-    for ring in rings(atoms):
-        if len(ring) in out:
-            out[len(ring)].update(ring)
-    return {s: sorted(v) for s, v in out.items()}
+    return sites.ring_atoms(atoms, sizes, cutoff=BOND)
 
 
 def _write(path: Path, data) -> None:
