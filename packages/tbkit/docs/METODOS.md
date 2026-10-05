@@ -189,8 +189,10 @@ ambos quedan para cuando haya un potencial ajustado o muchos más datos DFT.
   términos repulsivos).
 - Conjuntos ajustados en moléculas: en cristales, extrapolación medida en 13
   casos; fuera de ellos, no comprobada.
-- Energías relativas solo dentro de una misma composición (no se ajustaron
-  energías de atomización); `tang_carbon` compara entre estructuras de carbono,
-  con poca fiabilidad entre fases muy distintas.
+- Energías relativas solo entre estructuras de la misma composición y los mismos
+  tipos de enlace (no se ajustaron energías de atomización): dimetil éter frente a
+  etanol sale −1,44 eV con xu_chno y +0,38 con GPAW. `tang_carbon` compara entre
+  estructuras de carbono, con poca fiabilidad entre fases muy distintas. Un
+  ranking de sitios o isómeros con TB se confirma con DFT.
 - Sin excitones; gaps del modelo (y de Kohn–Sham) menores que los ópticos.
 - Sin banda D de defectos; la anomalía de Kohn física no está en Xu (débil).

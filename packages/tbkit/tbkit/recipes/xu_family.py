@@ -850,8 +850,10 @@ def validity_text(family: XuFamily, sampled: dict) -> str:
                 if family.crystal_notes else
                 "en cristales es una extrapolación sin comprobar")
     return ("ajustado en moléculas de capa cerrada; " + crystals + "; enlaces dentro de lo "
-            f"muestreado ({ranges}); energías relativas solo dentro de una misma "
-            "composición (no se ajustaron energías de atomización); C-C como en "
+            f"muestreado ({ranges}); energías relativas solo entre estructuras de la "
+            "misma composición y los mismos tipos de enlace (no se ajustaron energías de "
+            "atomización; isómeros con enlaces distintos fallan: dimetil éter frente a "
+            "etanol -1,44 eV con xu_chno, GPAW +0,38); C-C como en "
             "xu_carbon" + (f"; {family.validity_notes}" if family.validity_notes else ""))
 
 

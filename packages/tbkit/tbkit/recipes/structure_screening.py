@@ -1,0 +1,112 @@
+"""Rank prebuilt structures of one composition by TB energy (functional groups, isomers).
+
+Run (resumable; one file per structure; ``--part r/n`` shares the work)::
+
+    python -m tbkit.recipes.structure_screening WORKDIR a.extxyz b.extxyz ... \\
+        --model chn --kmesh 4 --host-atoms 204 --free-radius 6
+
+The structures come in as files (built by nanocarbon_lab: the packages do not
+import each other) and must share one composition, so their energies compare
+directly. Each is relaxed with the model; with ``--free-radius R`` only the atoms
+within R Å of the added atoms (index ≥ ``--host-atoms``) and of the sites named
+in ``info["anchor"]``/``info["h_on"]`` move, which ranks local chemistry at a
+fraction of the cost of a full relaxation (the host is already relaxed). The
+ranking is the model's: confirm the order of the best ones with DFT.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+import numpy as np
+from ase.io import read, write
+
+
+def _free_mask(atoms, host_atoms: int | None, radius: float | None) -> np.ndarray | None:
+    if radius is None:
+        return None
+    centres = list(range(host_atoms, len(atoms))) if host_atoms is not None else []
+    for key in ("anchor", "h_on"):
+        if key in atoms.info:
+            centres.append(int(atoms.info[key]))
+    if not centres:
+        raise ValueError("--free-radius necesita átomos añadidos (--host-atoms) o info['anchor'].")
+    d = atoms.get_all_distances(mic=True)[centres].min(axis=0)
+    return d <= radius
+
+
+def relax_one(path: Path, model, workdir: Path, kmesh: int, kT: float, fmax: float,
+              host_atoms, radius) -> dict:
+    from ase.constraints import FixAtoms
+    from ase.optimize import BFGS
+
+    from ..calculator import TBCalculator
+
+    out = workdir / f"{path.stem}.json"
+    if out.exists():
+        return json.loads(out.read_text())
+    atoms = read(path)
+    free = _free_mask(atoms, host_atoms, radius)
+    if free is not None:
+        atoms.set_constraint(FixAtoms(mask=~free))
+    atoms.calc = TBCalculator(model, kpts=kmesh, kT=kT)
+    opt = BFGS(atoms, logfile=str(workdir / f"{path.stem}.log"),
+               trajectory=str(workdir / f"{path.stem}.traj"))
+    converged = bool(opt.run(fmax=fmax, steps=400))
+    energy = float(atoms.get_potential_energy())
+    atoms.calc = None
+    atoms.set_constraint()
+    write(workdir / f"{path.stem}_relaxed.extxyz", atoms)
+    row = {"name": path.stem, "energy_eV": energy, "converged": converged,
+           "steps": opt.get_number_of_steps(), "free_atoms": int(free.sum()) if free is not None
+           else len(atoms), "formula": atoms.get_chemical_formula(),
+           "info": {k: v for k, v in atoms.info.items() if isinstance(v, (int, float, str))}}
+    tmp = out.with_suffix(".tmp")
+    tmp.write_text(json.dumps(row, indent=1))
+    tmp.replace(out)
+    return row
+
+
+def main(argv=None) -> None:
+    from ..gui.actions import load_model
+
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("workdir", type=Path)
+    parser.add_argument("structures", nargs="+", type=Path)
+    parser.add_argument("--model", default="chn")
+    parser.add_argument("--kmesh", type=int, default=8)
+    parser.add_argument("--kT", type=float, default=0.05)
+    parser.add_argument("--fmax", type=float, default=0.05)
+    parser.add_argument("--host-atoms", type=int, default=None)
+    parser.add_argument("--free-radius", type=float, default=None)
+    parser.add_argument("--part", default="0/1")
+    args = parser.parse_args(argv)
+    args.workdir.mkdir(parents=True, exist_ok=True)
+    model = load_model(args.model)
+    r, n = (int(x) for x in args.part.split("/"))
+    paths = sorted(args.structures)
+    formulas = {read(p).get_chemical_formula() for p in paths}
+    if len(formulas) != 1:
+        raise ValueError(f"Composiciones distintas {sorted(formulas)}: sus energías no se comparan.")
+    rows = [relax_one(p, model, args.workdir, args.kmesh, args.kT, args.fmax, args.host_atoms,
+                      args.free_radius)
+            for k, p in enumerate(paths) if k % n == r]
+    if n > 1:
+        print(f"parte {r}/{n}: {len(rows)} estructuras")
+        return
+    lowest = min(row["energy_eV"] for row in rows)
+    for row in rows:
+        row["relative_eV"] = row["energy_eV"] - lowest
+    rows.sort(key=lambda row: row["energy_eV"])
+    report = {"model": model.name, "kmesh": args.kmesh, "free_radius": args.free_radius,
+              "formula": formulas.pop(), "structures": rows}
+    (args.workdir / "report.json").write_text(json.dumps(report, indent=1))
+    for row in rows:
+        print(f"{row['name']:16s} ΔE {row['relative_eV']:+.3f} eV  "
+              f"{'ok' if row['converged'] else 'SIN CONVERGER'}  {row['info']}")
+
+
+if __name__ == "__main__":
+    main()

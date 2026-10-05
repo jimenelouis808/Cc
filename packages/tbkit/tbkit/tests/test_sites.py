@@ -143,3 +143,25 @@ def test_external_vibrations_with_the_tb_calculator_equal_the_tb_modes():
     direct = vibrations(water, model)
     external = external_vibrations(water, lambda: TBCalculator(model))
     assert external.frequencies == pytest.approx(direct.frequencies, abs=0.5)
+
+
+def test_structure_screening_ranks_isomers_and_refuses_mixed_compositions(tmp_path):
+    """Ranks by energy and refuses two compositions. (xu_chno puts dimethyl ether 1.44 eV
+    below ethanol, GPAW 0.38 above: isomers with different bonds are outside what the
+    sets were fitted for, stated in their validity. Only the mechanics are tested here.)"""
+    from ase.io import write
+
+    from tbkit.recipes.structure_screening import main
+
+    for name in ("CH3CH2OH", "CH3OCH3"):
+        write(tmp_path / f"{name}.extxyz", molecule(name))
+    main([str(tmp_path / "w"), str(tmp_path / "CH3CH2OH.extxyz"), str(tmp_path / "CH3OCH3.extxyz"),
+          "--model", "chno", "--fmax", "0.05"])
+    import json
+
+    report = json.loads((tmp_path / "w" / "report.json").read_text())
+    energies = [row["energy_eV"] for row in report["structures"]]
+    assert energies == sorted(energies) and report["structures"][0]["relative_eV"] == 0.0
+    write(tmp_path / "H2O.extxyz", molecule("H2O"))
+    with pytest.raises(ValueError, match="Composiciones"):
+        main([str(tmp_path / "w2"), str(tmp_path / "H2O.extxyz"), str(tmp_path / "CH3OCH3.extxyz")])
