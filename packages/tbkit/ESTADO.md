@@ -58,9 +58,23 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
    no dan el diamante del artículo (`tang1996_published.json`, solo pruebas).
    Planes nuevos: `docs/PLAN_NANOCOIL_RAMAN.md` (siguiente proyecto, usa tang_carbon) y
    `docs/PLAN_XPS_FUTURO.md` (a futuro).
+   Nanocoil (204 átomos, `recipes/nanocoil.py`, `validation/nanocoil204_tb.json`): fases 2-3
+   hechas (TB Xu/Tang, relajación PBE, gap PBE 0,22 eV frente a TB sin gap, enlaces TB-PBE
+   RMS 0,015 Å, modos proyectados TB 2-6 % sobre PBE) y Raman resonante Tang (609 modos;
+   posiciones robustas, alturas relativas dependientes de η). Pendiente de consistencia:
+   los fonones TB de la coil usan 4 k en z en un sistema sin gap; no se ha comprobado su
+   convergencia en k (ver punto 8).
+   Herramientas generales: `sites.py` (anillos, grupos, frecuencia proyectada),
+   `phonopy_bridge.py` (pestaña «Fonones (ZB)»), SCC sí/no y modos por sitio en la GUI,
+   `recipes/site_screening.py`, `resonant_raman(select=..., cache_dir=...)`.
 7. ML: Δ-learning de repulsión (Stöhr 2020), fonones híbridos MACE con α/μ de TB,
    DeePTB; GFN2-xTB como motor de comparación opcional.
-8. Validación en sistemas reales; anomalía de Kohn (Piscanec 2004).
+8. Validación en sistemas reales; anomalía de Kohn (Piscanec 2004). Hecho: malla k de los
+   fonones sin gap (grafeno con Xu: G 1572 con 12 k -> 1674 convergida; casi sin
+   dependencia con kT una vez convergida: la anomalía de Xu es débil). Aviso automático en
+   `modes.vibrations`/`tasks.phonons`, `tasks.kmesh_convergence`, fonones Xu del grafeno a
+   6×6 × 8×8 k. Falta: pendiente de Kohn física (requiere DFT con k densa o GW), tubos
+   metálicos.
 9. Al final: documentación de métodos/validación y guía de usuario.
 
 ## Diagnóstico abierto: H de OH que migra al O vecino (B, P, Se)

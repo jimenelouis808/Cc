@@ -118,3 +118,25 @@ def test_describe(pyridine):
 def test_from_hessian_round_trip(pyridine):
     again = Vibrations.from_hessian(pyridine.atoms, pyridine.hessian)
     assert again.frequencies == pytest.approx(pyridine.frequencies)
+
+
+def test_gapless_crystals_warn_and_the_k_mesh_converges_the_g_mode():
+    """Graphene is gapless: a coarse mesh softens G (Kohn anomaly sampled badly), so
+    the modes carry a warning and kmesh_convergence finds the mesh that holds still.
+    Diamond has a gap and no warning."""
+    from ase.build import bulk, graphene
+
+    from tbkit.modes import GAPLESS_WARNING, vibrations
+    from tbkit.params import xu_carbon
+    from tbkit.tasks import kmesh_convergence
+
+    sheet = graphene(a=2.46, vacuum=6.0)
+    sheet.pbc = [True, True, False]
+    assert GAPLESS_WARNING in vibrations(sheet, xu_carbon(), kmesh=12, kT=0.05).warnings
+    diamond = bulk("C", "diamond", a=3.56)
+    assert GAPLESS_WARNING not in vibrations(diamond, xu_carbon(), kmesh=4, kT=0.05).warnings
+    out = kmesh_convergence(sheet, xu_carbon(), meshes=(24, 36, 48), kT=0.05, top=1,
+                            tolerance=5.0)
+    g = [row["highest_cm1"][-1] for row in out["rows"]]
+    assert g == sorted(g) and g[-1] - g[0] > 10          # softened on the coarse mesh
+    assert out["converged_kmesh"] == 36

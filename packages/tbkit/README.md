@@ -426,11 +426,38 @@ Xu o cualquier archivo de constantes de fuerza (`validation/graphene_2d_gpaw.jso
 - **Posiciones absolutas altas** (2D a 2,41 eV: 2872 frente a ~2680 medidos;
   G 1605 frente a 1582): son las de los fonones PBE, que subestiman la
   anomalía de Kohn del TO en K. Con los fonones de Xu la 2D sale aún más alta
-  (~2967 cm⁻¹).
+  (~2967 cm⁻¹, medida con la malla anterior de Xu, 6×6 con 4×4 k; la actual,
+  8×8 k, sube el modo de K 13,5 cm⁻¹: unos +27 en la 2D, no recalculado).
 - I(2D)/I(G) ~10 es del orden del grafeno suspendido; el valor depende de γ
   y del sustrato (no incluido).
 - No incluye defectos (no hay banda D), excitones ni la renormalización
   electrón–electrón de v_F.
+
+## Fonones de sistemas sin gap: la malla k
+
+En un metal o semimetal las frecuencias de los modos que acoplan con los
+estados en E_F (G del grafeno, modo de K de la 2D, tubos metálicos, coils sin
+gap) dependen mucho de la malla k: con una malla gruesa la superficie de Fermi
+está mal muestreada y el modo se ablanda de más. Medido en grafeno con Xu (G en Γ,
+celda primitiva):
+
+| k por eje | kT 0,10 eV | kT 0,05 | kT 0,025 |
+|---|---|---|---|
+| 12 | 1635 | 1572 | 1455 |
+| 24 | 1670 | 1656 | 1629 |
+| 48 | 1674 | 1672 | 1666 |
+| 72 | 1674 | 1674 | 1672 |
+
+Convergido, G casi no depende de kT: la anomalía de Kohn de Xu es débil (la
+física, con su pendiente fijada por el acoplamiento electrón–fonón, es de DFT o
+GW; Piscanec 2004). Lo que sí depende de kT es la malla necesaria. Por eso
+`modes.vibrations` y `tasks.phonons` avisan en cristales sin gap, y
+`tasks.kmesh_convergence` sube la malla hasta que los modos más altos se
+quedan quietos. Los fonones de Xu del grafeno (`graphene.load_phonons("xu")`)
+pasaron de 6×6 con 4×4 k a 8×8 k (G 1667 -> 1684,5; modo de K 1389 -> 1402,8; con
+12×12 k: 1686,2 y 1403,6). Los de GPAW guardados usan 3×3 k con 0,1 eV de
+ensanchamiento (18 k equivalentes): con esos ajustes Xu ya está convergido, pero
+el ensanchamiento grande suaviza la anomalía; queda anotado, no recalculado.
 
 ## Sitios, modos por sitio y fonones en toda la zona (phonopy)
 

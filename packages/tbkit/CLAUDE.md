@@ -182,6 +182,10 @@ tbkit/
   without it. Its Γ must equal tbkit's direct Γ phonons in an insulator
   (diamond, tested); graphene's G differs by a few cm⁻¹ through the Kohn
   anomaly, which is physics, not a reason to loosen that test.
+- Gapless crystals: phonons need a converged k mesh (graphene, Xu, kT 0.05 eV: G is
+  1572 cm⁻¹ with 12 k, 1656 with 24, 1674 with ≥ 48). `modes.vibrations` and
+  `tasks.phonons` warn (`GAPLESS_WARNING`); `tasks.kmesh_convergence` finds the mesh.
+  Never lower graphene's Xu phonon mesh below 6×6 supercell × 8×8 k to save time.
 - Mode identification (RBM, G) is by symmetry and character, never by
   frequency window alone: zone folding puts other A modes nearby (M-point
   modes in zigzag tubes). DFT force constants get the acoustic sum rule on

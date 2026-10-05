@@ -95,6 +95,21 @@ class Vibrations:
         return target
 
 
+#: Measured on graphene with Xu (Γ G mode, kT = 0.05 eV): 12 k per axis gives
+#: 1572 cm⁻¹, 24 -> 1656, 48 -> 1672, 72 -> 1674; at kT = 0.025 eV, 12 k gives 1455.
+GAPLESS_WARNING = (
+    "Sin gap: las frecuencias de los modos que acoplan con los estados en E_F (anomalías "
+    "de Kohn: G del grafeno, tubos metálicos) dependen mucho de la malla k. En grafeno con "
+    "Xu y kT = 0,05 eV, G vale 1572 cm⁻¹ con 12 k por eje, 1656 con 24 y 1674 convergida "
+    "(≥ 48). Converge la malla (tasks.kmesh_convergence) antes de usar estas frecuencias.")
+
+
+def gapless_periodic(atoms: Atoms) -> bool:
+    """True for a periodic structure whose last TB solution has no gap."""
+    solution = getattr(atoms.calc, "last_solution", None)
+    return bool(atoms.get_pbc().any() and solution is not None and solution.gap() <= 0)
+
+
 def vibrations(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.02,
                delta: float = 0.005, scc: Optional[bool] = None) -> Vibrations:
     """Γ modes of ``atoms`` (relax it first) under ``model``, keeping the Hessian."""
@@ -105,6 +120,7 @@ def vibrations(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.02,
     atoms = atoms.copy()
     atoms.calc = TBCalculator(model, kpts=kmesh, kT=kT, scc=scc)
     residual = float(np.linalg.norm(atoms.get_forces(), axis=1).max())
+    gapless = gapless_periodic(atoms)
     with tempfile.TemporaryDirectory() as directory:
         ase_vib = AseVibrations(atoms, name=os.path.join(directory, "vib"), delta=delta)
         ase_vib.run()
@@ -112,6 +128,8 @@ def vibrations(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.02,
     result = Vibrations.from_hessian(atoms, hessian, source=model.name)
     if residual > 0.05:
         result.warnings.append(f"Fuerza residual {residual:.3f} eV/Å: geometría sin relajar.")
+    if gapless:
+        result.warnings.append(GAPLESS_WARNING)
     return result
 
 
