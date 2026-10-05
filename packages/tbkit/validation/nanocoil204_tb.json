@@ -228,5 +228,63 @@
    }
   },
   "conclusion": "Xu (1238) and Tang (1550) 'most pentagon' modes are different vibrations, each present in both models within 2 %: no disagreement between the sets, only the selection criterion. PBE puts them at 1209 and 1465 cm-1; the highest (heptagon) modes at 1670-1681. TB is 2-6 % above PBE for these modes. PBE opens a 0.22 eV gap the TB sets do not."
+ },
+ "raman_resonant_tang": {
+  "method": "resonant_raman(select='all'): dα(ω_L+iη)/dQ along each Γ mode (tang_carbon modes and α), independent-particle interband α, no local fields; TB coil gapless so every laser is resonant",
+  "settings": {
+   "lasers_eV": [
+    1.58,
+    1.96,
+    2.33,
+    2.41,
+    2.54
+   ],
+   "eta_eV": 0.1,
+   "kmesh": 4,
+   "kT_eV": 0.05,
+   "delta_A": 0.005,
+   "modes": 609
+  },
+  "peaks_532nm_fwhm60_cm1": [
+   320,
+   427,
+   475,
+   732,
+   939,
+   1283,
+   1476,
+   1586,
+   1737
+  ],
+  "intensity_fraction_532nm": {
+   "below_1000": 0.43,
+   "1250_1450": 0.17,
+   "1500_1700": 0.21,
+   "above_1700": 0.03
+  },
+  "intensity_weighted_share": {
+   "pentagon_atoms": 0.27,
+   "heptagon_atoms": 0.37,
+   "atom_fraction_5": 0.235,
+   "atom_fraction_7": 0.412
+  },
+  "strongest_mode_share_of_total": 0.028,
+  "convergence_top20_modes": {
+   "kmesh_4_to_8_activity_ratio": [
+    0.96,
+    1.04
+   ],
+   "eta_0.1_to_0.2_activity_ratio": [
+    0.11,
+    0.71
+   ],
+   "eta_0.1_to_0.2_median": 0.31,
+   "note": "k converged; relative intensities depend on η by up to ×6 between modes (low-frequency modes fall most): positions are robust, relative heights are not"
+  },
+  "caveats": [
+   "first order at Γ only: the double-resonant D band of graphitic carbon is not this calculation",
+   "resonance energies are TB's, PBE opens 0.22 eV the TB does not",
+   "no local-field screening in the crystal α"
+  ]
  }
 }
