@@ -61,9 +61,8 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
    Nanocoil (204 átomos, `recipes/nanocoil.py`, `validation/nanocoil204_tb.json`): fases 2-3
    hechas (TB Xu/Tang, relajación PBE, gap PBE 0,22 eV frente a TB sin gap, enlaces TB-PBE
    RMS 0,015 Å, modos proyectados TB 2-6 % sobre PBE) y Raman resonante Tang (609 modos;
-   posiciones robustas, alturas relativas dependientes de η). Pendiente de consistencia:
-   los fonones TB de la coil usan 4 k en z en un sistema sin gap; no se ha comprobado su
-   convergencia en k (ver punto 8).
+   posiciones robustas, alturas relativas dependientes de η). Malla k de los fonones de
+   la coil comprobada: convergida con 4 k en z (< 0,1 cm⁻¹ hasta 16 k, Xu y Tang).
    Herramientas generales: `sites.py` (anillos, grupos, frecuencia proyectada),
    `phonopy_bridge.py` (pestaña «Fonones (ZB)»), SCC sí/no y modos por sitio en la GUI,
    `recipes/site_screening.py`, `resonant_raman(select=..., cache_dir=...)`.

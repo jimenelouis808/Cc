@@ -78,7 +78,10 @@ def _energy(atoms: Atoms, model, relax: bool, kmesh, kT: float, fmax: float):
 
 def screen(atoms: Atoms, dopant: str, model, workdir: Path, relax_top: int = 0, top: int = 3,
            kmesh=8, kT: float = 0.05, fmax: float = 0.05, radius: float = 4.0,
-           tolerance: float = 0.05, max_sites: int | None = None) -> dict:
+           tolerance: float = 0.05, max_sites: int | None = None,
+           part: tuple = (0, 1)) -> dict:
+    """``part=(r, n)``: compute only the classes ≡ r (mod n) and stop (n processes share
+    the folder); the call with n = 1 then reads every file and ranks."""
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
     classes = environment_classes(atoms, "C", radius, tolerance)
@@ -101,6 +104,18 @@ def screen(atoms: Atoms, dopant: str, model, workdir: Path, relax_top: int = 0, 
             tmp.replace(path)
         return json.loads(path.read_text())
 
+    if part[1] > 1:
+        for k, members in enumerate(ordered):
+            if k % part[1] == part[0]:
+                computed(members[0], members, False)
+        done = all((workdir / f"site_{m[0]:04d}.json").exists() for m in ordered)
+        if relax_top and done:                  # second pass: the relaxations, shared too
+            first = sorted((computed(m[0], m, False) for m in ordered),
+                           key=lambda r: r["energy_eV"])[:relax_top]
+            for k, r in enumerate(first):
+                if k % part[1] == part[0]:
+                    computed(r["site"], r["equivalent"], True)
+        return {"part": list(part)}
     rows = sorted((computed(m[0], m, False) for m in ordered), key=lambda r: r["energy_eV"])
     if relax_top:
         relaxed = [computed(r["site"], r["equivalent"], True) for r in rows[:relax_top]]
@@ -147,9 +162,15 @@ def main(argv=None) -> None:
     parser.add_argument("--top", type=int, default=3)
     parser.add_argument("--kmesh", type=int, default=8)
     parser.add_argument("--max-sites", type=int, default=None)
+    parser.add_argument("--part", default="0/1", help="r/n: solo las clases ≡ r (mod n)")
     args = parser.parse_args(argv)
+    r, n = (int(x) for x in args.part.split("/"))
     report = screen(read(args.structure), args.dopant, load_model(args.model), args.workdir,
+                    part=(r, n),
                     relax_top=args.relax_top, top=args.top, kmesh=args.kmesh, max_sites=args.max_sites)
+    if n > 1:
+        print(f"parte {r}/{n} hecha")
+        return
     print(f"{report['classes']} clases de sitio, {report['computed']} calculadas")
     for r in report["sites"]:
         tag = "relajado" if r["relaxed"] else "sin relajar"

@@ -370,20 +370,68 @@ def stage_raman(workdir: Path, model_name: str = "tang_carbon", part: tuple = (0
     return out
 
 
+def kconv_modes(workdir: Path, model_name: str, n_high: int = 8, n_raman: int = 8) -> list[int]:
+    """Modes worth checking: the highest, the most pentagon- and heptagon-weighted,
+    and (Tang) the strongest at 532 nm; a few low ones."""
+    table = json.loads((Path(workdir) / f"tb_{model_name}" / "modes.json").read_text())
+    freq = np.array([m["frequency_cm1"] for m in table])
+    picks = list(np.argsort(freq)[-n_high:])
+    picks.append(int(np.argmax([m["on_pentagons"] for m in table])))
+    picks.append(int(np.argmax([m["on_heptagons"] for m in table])))
+    picks += list(np.argsort(freq)[[10, 50, 150]])
+    raman = Path(workdir) / f"raman_{model_name}" / "spectra.npz"
+    if raman.exists():
+        d = np.load(raman)
+        picks += [int(d["mode_indices"][j]) for j in np.argsort(-d["activities"][2])[:n_raman]]
+    return sorted({int(k) for k in picks})
+
+
+def stage_kconv(workdir: Path, model_name: str, kz: int, part: tuple = (0, 1)) -> dict:
+    """Frequency of each chosen TB mode (from the kz = 4 Hessian) with the forces of a
+    kz-point mesh: Rayleigh quotient, 2 force calls per mode, one file per mode."""
+    from ..calculator import TBCalculator
+    from ..params import load_parameters
+    from ..sites import projected_frequency
+
+    workdir = Path(workdir)
+    vib = tb_vibrations(workdir, model_name)
+    model = load_parameters(model_name)
+    folder = workdir / f"kconv_{model_name}" / f"kz{kz}"
+    folder.mkdir(parents=True, exist_ok=True)
+    out = {}
+    for k in kconv_modes(workdir, model_name):
+        if k % part[1] != part[0]:
+            continue
+        path = folder / f"mode_{k:04d}.json"
+        if not path.exists():
+            r = projected_frequency(vib.atoms, vib.modes[k],
+                                    lambda: TBCalculator(model, kpts=(1, 1, kz), kT=KT),
+                                    max_disp=0.01)
+            _write(path, {"mode": k, "kz4_cm1": float(vib.frequencies[k]),
+                          "frequency_cm1": r["frequency_cm1"]})
+        out[k] = json.loads(path.read_text())
+    return out
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("stage", choices=("tb", "gpaw-k", "gpaw-relax", "gpaw-phase3",
-                                                 "raman"))
+                                                 "raman", "kconv"))
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--model", default="tang_carbon")
     parser.add_argument("--kz", type=int, default=2)
     parser.add_argument("--part", default="0/1", help="r/n: modos con índice ≡ r (mod n)")
+    parser.add_argument("--kz-check", type=int, default=8)
     args = parser.parse_args(argv)
     if args.stage == "tb":
         print(json.dumps({k: v for k, v in stage_tb(args.workdir, args.model).items()
                           if k not in ("bonds_made", "bonds_broken")}, indent=1))
     elif args.stage == "gpaw-k":
         print(json.dumps(stage_gpaw_k(args.workdir), indent=1))
+    elif args.stage == "kconv":
+        r, n = (int(x) for x in args.part.split("/"))
+        out = stage_kconv(args.workdir, args.model, args.kz_check, (r, n))
+        print(json.dumps(out, indent=1))
     elif args.stage == "raman":
         r, n = (int(x) for x in args.part.split("/"))
         out = stage_raman(args.workdir, args.model, (r, n))

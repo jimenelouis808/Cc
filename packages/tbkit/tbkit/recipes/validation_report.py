@@ -179,6 +179,11 @@ def _nanocoil() -> list[str]:
     rows = [(f"`{m['model']}`", m["label"], _f(m["tb_frequency_cm1"], 0),
              _f(m["pbe_projected_cm1"], 0)) for m in p3["projected_modes"]]
     out += _table(("conjunto", "modo", "TB (cm⁻¹)", "PBE (cm⁻¹)"), rows)
+    kconv = data.get("kmesh_convergence_phonons")
+    if kconv:
+        worst = max(v["max_abs_change_kz4_to_kz16_cm1"] for v in kconv["results"].values())
+        out += ["", f"Malla k de los fonones TB: de 4 a 16 k en z, los modos comprobados se mueven "
+                f"como máximo {_f(worst, 2)} cm⁻¹ (convergida con 4)."]
     raman = data.get("raman_resonant_tang")
     if raman:
         conv = raman["convergence_top20_modes"]

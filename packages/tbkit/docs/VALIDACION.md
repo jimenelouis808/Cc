@@ -137,6 +137,8 @@ Frecuencias de modos TB con las constantes de fuerza PBE (cociente de Rayleigh, 
 | `tang_carbon` | most_pentagon | 1550 | 1465 |
 | `tang_carbon` | highest | 1760 | 1681 |
 
+Malla k de los fonones TB: de 4 a 16 k en z, los modos comprobados se mueven como máximo 0,00 cm⁻¹ (convergida con 4).
+
 Raman resonante (Tang): picos a 532 nm (ensanchamiento 60 cm⁻¹): 320, 427, 475, 732, 939, 1283, 1476, 1586, 1737 cm⁻¹. Actividades de los 20 modos más intensos: ×0,96–1,04 al pasar de 4 a 8 k; ×0,11–0,71 al pasar η de 0,1 a 0,2 eV (posiciones robustas, alturas relativas no).
 
 ## Aprendizaje automático (paso 7): medido, no adoptado
