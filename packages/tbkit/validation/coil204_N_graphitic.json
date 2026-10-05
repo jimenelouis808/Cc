@@ -1,0 +1,36 @@
+{
+ "what": "Graphitic N on the 204-atom coil: TB (xu_chn, kz=4) site screening of 51 classes, 5 best + one 6-6-7 and one 6-6-6 relaxed; GPAW PBE LCAO dzp kz=2 single points at the TB geometries (spin-paired)",
+ "tb_screening": "unrelaxed spread 1.93 eV; relaxed: the three 5-5-6 classes (atoms shared by two pentagons) within 0.07 eV, every other category 0.67-0.87 eV above; topology intact, C-N 1.39-1.46 A",
+ "comparison": [
+  {
+   "site": 0,
+   "rings": "5-5-6",
+   "tb_relative_eV": 0.0,
+   "gpaw_relative_eV": 0.0,
+   "gpaw_fmax_at_tb_geometry": 1.23
+  },
+  {
+   "site": 3,
+   "rings": "5-6-6",
+   "tb_relative_eV": 0.668,
+   "gpaw_relative_eV": 0.434,
+   "gpaw_fmax_at_tb_geometry": 1.16
+  },
+  {
+   "site": 8,
+   "rings": "6-6-7",
+   "tb_relative_eV": 0.742,
+   "gpaw_relative_eV": 0.59,
+   "gpaw_fmax_at_tb_geometry": 1.49
+  },
+  {
+   "site": 50,
+   "rings": "6-6-6",
+   "tb_relative_eV": 0.872,
+   "gpaw_relative_eV": 0.401,
+   "gpaw_fmax_at_tb_geometry": 1.35
+  }
+ ],
+ "conclusion": "GPAW confirms the main TB result: N prefers the atom shared by two pentagons, by 0.40-0.59 eV (TB 0.67-0.87: TB overstates it by 0.2-0.5 eV). Among the other categories the order differs (all within 0.19 eV in GPAW): not resolved at this level. Single points at TB geometries (PBE forces up to 1.5 eV/A); differences below ~0.2 eV would need PBE relaxation.",
+ "note": "each GPAW job takes 3.4-4 GB; with 15 GB RAM at most 3 run at once (a fourth was killed silently twice)"
+}

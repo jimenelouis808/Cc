@@ -165,5 +165,16 @@
   }
  ],
  "checks": "all 13: C-N 1.41-1.44 A, no C-C bond made or broken, NH2 and H stay on their carbons",
- "reading": "which C-C pair is saturated decides the energy more than the anchor: same NH2 site (48), H on 59 / 47 / 49 gives 0 / +1.11 / +2.14 eV. TB energies, same bond types in every candidate; GPAW single points of a048_h059, a000_h200 and a048_h049 queued to check the order."
+ "reading": "which C-C pair is saturated decides the energy more than the anchor: same NH2 site (48), H on 59 / 47 / 49 gives 0 / +1.11 / +2.14 eV. TB energies, same bond types in every candidate; GPAW single points of a048_h059, a000_h200 and a048_h049 queued to check the order.",
+ "gpaw_check": {
+  "a048_h059": {
+   "tb": 0.0,
+   "gpaw": 0.0
+  },
+  "a000_h200": {
+   "tb": 0.484,
+   "gpaw": 1.053
+  },
+  "a048_h049": "running"
+ }
 }
