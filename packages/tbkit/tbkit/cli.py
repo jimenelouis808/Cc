@@ -19,7 +19,8 @@
 Structures: any file ASE reads (extxyz from carbonforge or nanocarbon_lab
 keeps the cell and periodicity). Models: ``--model pi`` (default), ``sp3``
 (Xu carbon), ``chn`` (Xu carbon plus H and N fitted to GPAW, SCC), ``chno`` (plus O),
-``chnob``/``chnos``/``chnop``/``chnose`` (``chno`` plus B, S, P or Se),
+``chnob``/``chnos``/``chnop``/``chnose`` (``chno`` plus B, S, P or Se), ``tang``
+(environment-dependent carbon, fitted to GPAW),
 ``--parameters FILE.json`` (any parameter file, e.g. your own fit), or
 ``--skf DIR --orbitals "C=s,px,py,pz H=s"``. Charges are self-consistent
 when the model is (chn, chno, .skf); ``--scc``/``--no-scc`` overrides.

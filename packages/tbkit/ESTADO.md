@@ -75,7 +75,10 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
    `modes.vibrations`/`tasks.phonons`, `tasks.kmesh_convergence`, fonones Xu del grafeno a
    6×6 × 8×8 k. Falta: pendiente de Kohn física (requiere DFT con k densa o GW), tubos
    metálicos.
-9. Al final: documentación de métodos/validación y guía de usuario.
+9. Hecho: `docs/GUIA_USUARIO.md`, `docs/METODOS.md` y `docs/VALIDACION.md` (este, generado
+   desde los datos por `recipes/validation_report.py`, con test). README corregido: tabla de
+   módulos (SCC periódico, Raman/IR, Tang, sitios/phonopy), límites (había GUI y Raman
+   resonante sin mencionar), I(2D)/I(G) a 2,80 eV 13,0 (no 13,1), regla ω > 100 cm⁻¹ del IR.
 
 ## Diagnóstico abierto: H de OH que migra al O vecino (B, P, Se)
 - Se ajustado (`/tmp/claude-0/fit/xu_chnose2.json`): enlaces < 0,08 Å, frecuencias

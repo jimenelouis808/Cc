@@ -19,8 +19,8 @@ A measured intensity also carries (ν_L - ν)⁴ and the Bose factor; they are
 applied by :func:`spectrum`, never stored.
 
 Scope: the non-resonant limit (laser well below the gap). Metals and
-graphene are refused: their Raman is resonant. Second-order bands (2D) need
-the double-resonance theory of the next step, not this.
+graphene are refused: their Raman is resonant (:mod:`tbkit.resonance`; the
+double-resonant G, 2D and 2D′ of graphene are in :mod:`tbkit.graphene`).
 """
 
 from __future__ import annotations

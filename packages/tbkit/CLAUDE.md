@@ -41,9 +41,11 @@ tbkit/
 │                     #   crystal_validation + run_crystals.sh: the sets in crystals vs GPAW (resumable)
 │                     #   nanocoil: the 204-atom 5-7 coil, TB and GPAW stages (resumable)
 │                     #   site_screening: substitutional dopant sites, TB ranking, top-N for DFT
+│                     #   validation_report: writes docs/VALIDACION.md from validation/ and parameters/
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 ├── cli.py            # `tbkit` console script
-└── gui/              # tbkit-gui (PySide6 + pyvista, extra `gui`): actions (no Qt), worker, viewer, app
+├── gui/              # tbkit-gui (PySide6 + pyvista, extra `gui`): actions (no Qt), worker, viewer, app
+docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit by hand)
 ```
 
 ## Guardrails (do not weaken)
@@ -215,6 +217,10 @@ tbkit/
   user-facing text must not imply otherwise. Lieb's theorem is the check.
 - Energies and forces require `model.repulsive`; the π model has none and
   must refuse (calculator, forces, relax).
+- `docs/VALIDACION.md` is generated (`recipes/validation_report.py`) and a test compares
+  it with the data: after changing a validation or parameter file, regenerate it. Numbers
+  in README/METODOS/GUIA must agree with it; when they disagree, the data file wins (the
+  README IR table once omitted its ω > 100 cm⁻¹ rule).
 - Tests compare with closed-form results (graphene, Hückel, Lieb). A new
   feature needs such a check, not only a regression number.
 
