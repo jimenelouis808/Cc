@@ -192,11 +192,14 @@ def resonant_raman(atoms: Atoms, model: TBModel, lasers_ev, eta: float = 0.1,
                             "converge despacio y las diferencias finitas mezclan simetrías. "
                             "Para el grafeno usa tbkit.graphene (perturbativo, analítico).")
 
+    scc_state: dict = {}                     # SCC charges carried between displacements
+
     def alpha_of(a: Atoms) -> np.ndarray:
         system = System.build(a, model)
         if finite:
             return dynamic_polarizability_finite(system, lasers, eta, kT=kT, screened=screened)
-        return dynamic_polarizability_periodic(system, lasers, eta, kmesh=kmesh, kT=kT)
+        return dynamic_polarizability_periodic(system, lasers, eta, kmesh=kmesh, kT=kT,
+                                               scc_state=scc_state)
 
     method = ("α(ω + iη) apantallado (cargas y dipolos), finito" if finite and screened
               else "α(ω + iη) de partículas independientes" + ("" if finite else ", cristal"))

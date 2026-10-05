@@ -141,3 +141,26 @@ def test_derivative_along_modes_equals_the_full_raman_tensor(case, tmp_path):
     assert np.array_equal(again.tensors, part.tensors)
     with pytest.raises(ValueError):
         resonant_raman(atoms, model, [2.0], select=chosen, cache_dir=tmp_path, **common)
+
+
+def test_periodic_dynamic_alpha_uses_the_scc_ground_state():
+    """A molecule in a large box treated as a crystal (Γ only) must give the finite,
+    unscreened α(ω + iη) of the same SCC ground state; without the charge shifts the
+    levels are those of a ground state the set was not fitted for."""
+    from tbkit.optics import dynamic_polarizability_finite, dynamic_polarizability_periodic
+    from tbkit.params import load_parameters
+
+    model = load_parameters("xu_chn")
+    atoms = molecule("C5H5N")
+    atoms.center(vacuum=8.0)
+    finite = dynamic_polarizability_finite(System.build(atoms, model), [1.0], eta=0.05,
+                                           screened=False, kT=0.01)[0]
+    box = atoms.copy()
+    box.pbc = True
+    k, w = np.zeros((1, 3)), np.ones(1)
+    periodic = dynamic_polarizability_periodic(System.build(box, model), [1.0], eta=0.05,
+                                               kpts=k, weights=w, kT=0.01)[0]
+    bare = dynamic_polarizability_periodic(System.build(box, model), [1.0], eta=0.05,
+                                           kpts=k, weights=w, kT=0.01, ground_scc=False)[0]
+    assert np.allclose(periodic, finite, atol=3e-3)
+    assert np.abs(bare - finite).max() > 10 * np.abs(periodic - finite).max()

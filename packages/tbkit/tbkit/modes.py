@@ -133,6 +133,71 @@ def vibrations(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.02,
     return result
 
 
+def hessian_rows(atoms: Atoms, make_calc, folder, indices=None, delta: float = 0.01,
+                 part: tuple = (0, 1)) -> np.ndarray | None:
+    """Finite-difference Hessian rows (eV/Å²) of ``indices`` (default: every atom), with
+    the forces of each ±δ displacement cached in ``folder`` (``d_A_C_S.npy``): a rerun
+    resumes and ``part=(r, n)`` lets n processes share the displacements. Returns the
+    (3·len(indices), 3N) rows once all are there (None from a part that stops early).
+    Rows are ``-∂F/∂x`` by central differences, not yet symmetrised."""
+    from pathlib import Path
+
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    indices = list(range(len(atoms))) if indices is None else [int(i) for i in indices]
+    jobs = [(a, c, s) for a in indices for c in range(3) for s in (1, -1)]
+    base = atoms.get_positions()
+    calc = None                      # one per process: an SCC calculator starts warm
+    for k, (a, c, sign) in enumerate(jobs):
+        if k % part[1] != part[0]:
+            continue
+        path = folder / f"d_{a:04d}_{c}_{'p' if sign > 0 else 'm'}.npy"
+        if path.exists():
+            continue
+        probe = atoms.copy()
+        positions = base.copy()
+        positions[a, c] += sign * delta
+        probe.set_positions(positions)
+        calc = calc or make_calc()
+        probe.calc = calc
+        tmp = path.with_suffix(".tmp.npy")
+        np.save(tmp, probe.get_forces())
+        tmp.replace(path)
+    rows = np.zeros((3 * len(indices), 3 * len(atoms)))
+    for r, a in enumerate(indices):
+        for c in range(3):
+            pair = [folder / f"d_{a:04d}_{c}_{t}.npy" for t in ("p", "m")]
+            if not all(x.exists() for x in pair):
+                return None
+            rows[3 * r + c] = -(np.load(pair[0]) - np.load(pair[1])).ravel() / (2 * delta)
+    return rows
+
+
+def embedded_hessian(reference: np.ndarray, n_host: int, n_atoms: int, region,
+                     region_rows: np.ndarray) -> np.ndarray:
+    """A Hessian for a locally modified structure: the reference (host) Hessian
+    everywhere except the rows and columns of ``region`` (which must contain every
+    atom ≥ ``n_host``), taken from ``region_rows`` (``hessian_rows`` of the new
+    structure). Pairs inside the region are averaged with their transpose.
+
+    The approximation is that force constants between atoms far from the change
+    stay as in the host; check it by the Rayleigh quotient of a few resulting modes
+    with the full model (``sites.projected_frequency``)."""
+    region = [int(i) for i in region]
+    missing = set(range(n_host, n_atoms)) - set(region)
+    if missing:
+        raise ValueError(f"Los átomos añadidos {sorted(missing)} deben estar en la región.")
+    hessian = np.zeros((3 * n_atoms, 3 * n_atoms))
+    hessian[:3 * n_host, :3 * n_host] = reference
+    cols = np.concatenate([np.arange(3 * a, 3 * a + 3) for a in region])
+    hessian[cols, :] = region_rows
+    hessian[:, cols] = region_rows.T
+    inner = np.ix_(cols, cols)
+    block = region_rows[:, cols]
+    hessian[inner] = 0.5 * (block + block.T)
+    return 0.5 * (hessian + hessian.T)
+
+
 # --------------------------------------------------------------------------
 # Describing a mode
 # --------------------------------------------------------------------------

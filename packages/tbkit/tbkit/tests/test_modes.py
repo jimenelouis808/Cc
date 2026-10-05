@@ -140,3 +140,30 @@ def test_gapless_crystals_warn_and_the_k_mesh_converges_the_g_mode():
     g = [row["highest_cm1"][-1] for row in out["rows"]]
     assert g == sorted(g) and g[-1] - g[0] > 10          # softened on the coarse mesh
     assert out["converged_kmesh"] == 36
+
+
+def test_cached_hessian_rows_and_embedding(tmp_path):
+    """hessian_rows gives the Hessian of modes.vibrations (same differences, cached and
+    shared by parts); embedding the rows of a region into a reference equal to the
+    same structure's Hessian returns that Hessian."""
+    from ase.build import molecule
+
+    from tbkit.calculator import TBCalculator
+    from tbkit.modes import embedded_hessian, hessian_rows, vibrations
+    from tbkit.params import load_parameters
+
+    model = load_parameters("xu_chno")
+    water = molecule("CH3OH")
+    vib = vibrations(water, model, delta=0.01)
+    make = lambda: TBCalculator(model)                    # noqa: E731
+    assert hessian_rows(water, make, tmp_path, part=(0, 2)) is None       # half done
+    full = hessian_rows(water, make, tmp_path, part=(1, 2))
+    assert np.allclose(0.5 * (full + full.T), vib.hessian, atol=1e-6)
+    sym = 0.5 * (full + full.T)
+    region = [0, 1, 4]
+    rows = hessian_rows(water, make, tmp_path, indices=region)
+    embedded = embedded_hessian(sym, len(water), len(water), region, rows)
+    # equal up to half the finite-difference asymmetry of the rows
+    assert np.abs(embedded - sym).max() <= 0.5 * np.abs(full - full.T).max() + 1e-12
+    with pytest.raises(ValueError):
+        embedded_hessian(sym[:-3, :-3], len(water) - 1, len(water), region, rows)
