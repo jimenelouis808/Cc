@@ -1,0 +1,169 @@
+{
+ "what": "-NH2 + H (1,2-addition, closed shell) on the 204-atom coil: candidates built by nanocarbon_lab (where='atoms:i', H placed first), xu_chn, kz=4, local relaxation within 6 A of the added atoms (tbkit.recipes.structure_screening)",
+ "selection": "per ring category (5-5-6, 5-6-6, 6-6-6, 6-6-7) the most and least pyramidalised class (POAV1), H on each of the three neighbours; 13 built, 11 sterically refused (recorded in the manifest)",
+ "refused": [
+  {
+   "anchor": 3,
+   "h_on": 2,
+   "refused": "amine refused (steric)"
+  },
+  {
+   "anchor": 1,
+   "h_on": 5,
+   "refused": "amine refused (steric)"
+  },
+  {
+   "anchor": 1,
+   "h_on": 203,
+   "refused": "amine refused (steric)"
+  },
+  {
+   "anchor": 15,
+   "h_on": 16,
+   "refused": "amine refused (steric)"
+  },
+  {
+   "anchor": 15,
+   "h_on": 4,
+   "refused": "amine refused (steric)"
+  },
+  {
+   "anchor": 10,
+   "h_on": 21,
+   "refused": "amine refused (steric)"
+  },
+  {
+   "anchor": 10,
+   "h_on": 9,
+   "refused": "amine refused (steric)"
+  },
+  {
+   "anchor": 10,
+   "h_on": 11,
+   "refused": "amine refused (steric)"
+  },
+  {
+   "anchor": 39,
+   "h_on": 40,
+   "refused": "amine refused (steric)"
+  },
+  {
+   "anchor": 39,
+   "h_on": 22,
+   "refused": "amine refused (steric)"
+  },
+  {
+   "anchor": 39,
+   "h_on": 50,
+   "refused": "amine refused (steric)"
+  }
+ ],
+ "ranking": [
+  {
+   "name": "a048_h059",
+   "relative_eV": 0.0,
+   "rings": "(6, 6, 7)",
+   "poav_deg": 14.13,
+   "anchor": null,
+   "h_on": null
+  },
+  {
+   "name": "a000_h200",
+   "relative_eV": 0.484,
+   "rings": "(5, 5, 6)",
+   "poav_deg": 17.91,
+   "anchor": null,
+   "h_on": null
+  },
+  {
+   "name": "a066_h070",
+   "relative_eV": 0.528,
+   "rings": "(5, 5, 6)",
+   "poav_deg": 17.36,
+   "anchor": null,
+   "h_on": null
+  },
+  {
+   "name": "a000_h004",
+   "relative_eV": 0.904,
+   "rings": "(5, 5, 6)",
+   "poav_deg": 17.91,
+   "anchor": null,
+   "h_on": null
+  },
+  {
+   "name": "a066_h065",
+   "relative_eV": 1.063,
+   "rings": "(5, 5, 6)",
+   "poav_deg": 17.36,
+   "anchor": null,
+   "h_on": null
+  },
+  {
+   "name": "a048_h047",
+   "relative_eV": 1.105,
+   "rings": "(6, 6, 7)",
+   "poav_deg": 14.13,
+   "anchor": null,
+   "h_on": null
+  },
+  {
+   "name": "a066_h067",
+   "relative_eV": 1.159,
+   "rings": "(5, 5, 6)",
+   "poav_deg": 17.36,
+   "anchor": null,
+   "h_on": null
+  },
+  {
+   "name": "a000_h001",
+   "relative_eV": 1.256,
+   "rings": "(5, 5, 6)",
+   "poav_deg": 17.91,
+   "anchor": null,
+   "h_on": null
+  },
+  {
+   "name": "a001_h000",
+   "relative_eV": 1.259,
+   "rings": "(5, 6, 6)",
+   "poav_deg": 9.9,
+   "anchor": null,
+   "h_on": null
+  },
+  {
+   "name": "a003_h004",
+   "relative_eV": 1.325,
+   "rings": "(5, 6, 6)",
+   "poav_deg": 14.87,
+   "anchor": null,
+   "h_on": null
+  },
+  {
+   "name": "a003_h201",
+   "relative_eV": 1.347,
+   "rings": "(5, 6, 6)",
+   "poav_deg": 14.87,
+   "anchor": null,
+   "h_on": null
+  },
+  {
+   "name": "a015_h014",
+   "relative_eV": 1.776,
+   "rings": "(6, 6, 6)",
+   "poav_deg": 10.48,
+   "anchor": null,
+   "h_on": null
+  },
+  {
+   "name": "a048_h049",
+   "relative_eV": 2.14,
+   "rings": "(6, 6, 7)",
+   "poav_deg": 14.13,
+   "anchor": null,
+   "h_on": null
+  }
+ ],
+ "checks": "all 13: C-N 1.41-1.44 A, no C-C bond made or broken, NH2 and H stay on their carbons",
+ "reading": "which C-C pair is saturated decides the energy more than the anchor: same NH2 site (48), H on 59 / 47 / 49 gives 0 / +1.11 / +2.14 eV. TB energies, same bond types in every candidate; GPAW single points of a048_h059, a000_h200 and a048_h049 queued to check the order."
+}
