@@ -532,6 +532,47 @@ def ir_spectrum_of(atoms: Atoms, model: TBModel, phonons=None, fwhm: float = 10.
             "warnings": list(result.warnings), "frequency_scale": factor}
 
 
+def load_spectrum(path: str | Path) -> dict:
+    """A spectrum computed earlier, to look at or compare: ``{"grid", "curves", "sticks",
+    "source"}``.
+
+    Reads what tbkit writes: the CSV of «Exportar CSV…» (first column the shift,
+    the rest curves) and ``.npz`` files with a ``grid`` and curves of its length
+    (e.g. ``raman_*/spectra.npz`` of ``recipes/nanocoil``), plus, when present,
+    ``frequencies`` and ``activities`` (one row per laser) as sticks."""
+    path = Path(path)
+    curves, sticks = {}, {}
+    if path.suffix.lower() == ".csv":
+        with path.open(encoding="utf-8") as handle:
+            header = handle.readline().strip().lstrip("#").split(",")
+        data = np.loadtxt(path, delimiter=",", skiprows=1, ndmin=2)
+        grid = data[:, 0]
+        for k, name in enumerate(header[1:], start=1):
+            curves[name.strip() or f"columna {k}"] = data[:, k]
+    elif path.suffix.lower() == ".npz":
+        data = np.load(path)
+        if "grid" not in data:
+            raise ValueError(f"{path.name} no tiene 'grid': no es un espectro de tbkit.")
+        grid = data["grid"]
+        for name in data.files:
+            values = data[name]
+            if name != "grid" and values.ndim == 1 and len(values) == len(grid):
+                label = f"{name} eV" if name.replace(".", "", 1).isdigit() else name
+                curves[label] = values
+        if "frequencies" in data.files and "activities" in data.files:
+            activities = np.atleast_2d(data["activities"])
+            labels = list(curves) if len(curves) == len(activities) else \
+                [f"serie {k + 1}" for k in range(len(activities))]
+            for label, row in zip(labels, activities, strict=True):
+                sticks[label] = (data["frequencies"], row)
+    else:
+        raise ValueError("Formatos: .csv (Exportar CSV) o .npz con 'grid'.")
+    if not curves:
+        raise ValueError(f"{path.name} no trae ninguna curva de la longitud de 'grid'.")
+    return {"grid": np.asarray(grid, dtype=float), "curves": curves, "sticks": sticks,
+            "source": path.name}
+
+
 def write_csv(path: str | Path, columns: dict[str, np.ndarray]) -> Path:
     """A plain CSV (header + columns), for spectra and tables."""
     path = Path(path)
@@ -725,6 +766,11 @@ HELP = {
     "Raman resonante": "Actividades a cada energía de láser y perfiles de excitación.",
     "IR": "Intensidades IR (km/mol) con el dipolo del modelo; semicuantitativas.",
     "Exportar CSV…": "Guarda el espectro y la tabla mostrados como CSV.",
+    "Abrir espectro guardado…": "Muestra un espectro calculado antes (CSV de «Exportar CSV…» o "
+                                "un .npz de las recetas, p. ej. raman_*/spectra.npz de la "
+                                "coil) sin recalcular. Cada curva se normaliza a su máximo; "
+                                "si hay un espectro calculado en la pestaña, se superpone para "
+                                "comparar.",
     # Grafeno
     "Láseres (eV)": "Energías de láser para G, 2D y 2D′.",
     "γ electrónico": "Ensanchamiento electrónico (eV) de la doble resonancia.",

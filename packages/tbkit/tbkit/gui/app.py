@@ -1198,7 +1198,10 @@ class SpectraPage(Page):
         self.ir_button.clicked.connect(self.run_ir)
         self.export = QPushButton("Exportar CSV…")
         self.export.clicked.connect(self.export_csv)
-        for b in (self.raman_button, self.resonant_button, self.ir_button, self.export):
+        self.open_saved = QPushButton("Abrir espectro guardado…")
+        self.open_saved.clicked.connect(self.open_spectrum)
+        for b in (self.raman_button, self.resonant_button, self.ir_button, self.export,
+                  self.open_saved):
             buttons.addWidget(b)
         layout.addLayout(buttons)
         self.summary = QLabel("Raman no resonante: sistemas con gap y capa cerrada. Las "
@@ -1218,6 +1221,7 @@ class SpectraPage(Page):
         layout.addWidget(tabs)
         self.last = None
         self.resonant = None
+        self.saved = None
 
     def invalidated(self):
         self.qe = None
@@ -1279,6 +1283,44 @@ class SpectraPage(Page):
                                      fwhm=self.fwhm.value(), scale=self._scale(),
                                      on_done=self.show_raman,
                                      on_error=self.window.error)
+
+    def open_spectrum(self, path=None):
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(self, "Espectro guardado", "",
+                                                  "Espectros (*.csv *.npz)")
+        if not path:
+            return
+        try:
+            self.show_saved(actions.load_spectrum(path))
+        except (OSError, ValueError) as error:
+            self.window.error("No se pudo abrir", str(error))
+
+    def show_saved(self, saved):
+        """Saved curves, each normalised to its maximum, over the current spectrum if any."""
+        self.saved = saved
+        ax = self.plot.axes()
+        for label, values in saved["curves"].items():
+            top = float(np.max(values)) or 1.0
+            ax.plot(saved["grid"], values / top, lw=1.1, label=label)
+        if self.last is not None and self.last[0] == "raman":
+            out = self.last[1]
+            top = float(np.max(out["intensity"])) or 1.0
+            ax.plot(out["grid"], out["intensity"] / top, color="black", lw=1.4, ls="--",
+                    label="calculado aquí")
+        ax.set_xlabel("desplazamiento Raman (cm⁻¹)")
+        ax.set_ylabel("intensidad (normalizada)")
+        ax.legend(fontsize=8)
+        self.plot.draw()
+        rows = []
+        if saved["sticks"]:
+            label, (freq, act) = next(iter(saved["sticks"].items()))
+            order = np.argsort(-np.asarray(act))[:40]
+            rows = [(float(freq[k]), 1, float(act[k]), "") for k in order]
+        fill(self.table, rows)
+        self.summary.setText(f"Abierto {saved['source']}: {len(saved['curves'])} curvas"
+                             + (f"; tabla: modos más activos de «{next(iter(saved['sticks']))}»"
+                                if saved["sticks"] else "") + ".")
+        self.tabs.setCurrentIndex(0)
 
     def show_raman(self, out):
         self.last = ("raman", out)

@@ -404,3 +404,25 @@ def test_window_shows_panel_descriptions_and_tooltips():
     assert spectra.fwhm.toolTip() == actions.HELP["Raman / IR"]
     window.show_descriptions(False)
     assert all(not box.isVisibleTo(window) for box in window.info_boxes)
+
+
+def test_saved_spectra_open_from_csv_and_npz(tmp_path):
+    grid = np.linspace(100, 1900, 50)
+    curve = np.exp(-((grid - 1580) / 40) ** 2)
+    csv = actions.write_csv(tmp_path / "s.csv", {"shift": grid, "intensity": curve})
+    saved = actions.load_spectrum(csv)
+    assert list(saved["curves"]) == ["intensity"] and np.allclose(saved["grid"], grid)
+    np.savez(tmp_path / "spectra.npz", grid=grid, **{"2.33": curve, "1.96": 2 * curve},
+             frequencies=np.array([1580.0, 1350.0]), activities=np.array([[1.0, 0.2], [0.5, 0.9]]))
+    saved = actions.load_spectrum(tmp_path / "spectra.npz")
+    assert set(saved["curves"]) == {"2.33 eV", "1.96 eV"}
+    assert len(saved["sticks"]) == 2
+    with pytest.raises(ValueError):
+        actions.load_spectrum(tmp_path / "s.txt")
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    page = window.pages["Espectros"]
+    page.open_spectrum(str(tmp_path / "spectra.npz"))
+    assert "2 curvas" in page.summary.text() and page.table.rowCount() == 2
