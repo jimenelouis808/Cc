@@ -138,3 +138,36 @@ Frecuencias de modos TB con las constantes de fuerza PBE (cociente de Rayleigh, 
 | `tang_carbon` | highest | 1760 | 1681 |
 
 Raman resonante (Tang): picos a 532 nm (ensanchamiento 60 cm⁻¹): 320, 427, 475, 732, 939, 1283, 1476, 1586, 1737 cm⁻¹. Actividades de los 20 modos más intensos: ×0,96–1,04 al pasar de 4 a 8 k; ×0,11–0,71 al pasar η de 0,1 a 0,2 eV (posiciones robustas, alturas relativas no).
+
+## Aprendizaje automático (paso 7): medido, no adoptado
+
+Fuentes: `validation/mace_mp_vs_gpaw.json`, `validation/delta_learning.json`.
+
+**MACE-MP-0 sin ajuste fino** frente a GPAW. Moléculas C/H/N/O (RMS por molécula, mediana): small 124,6, medium 116,9 cm⁻¹ (xu_chno, RMS conjunto 115,8). Coil de 204 átomos, modos TB proyectados con fuerzas PBE y MACE:
+
+| modo | PBE | MACE small | MACE medium |
+|---|---|---|---|
+| xu_most_pentagon | 1209 | 1069 | 997 |
+| xu_highest | 1670 | 1480 | 1381 |
+| tang_most_pentagon | 1465 | 1301 | 1224 |
+| tang_highest | 1681 | 1488 | 1381 |
+
+Enlaces frente a PBE (RMS): Tang 0,015, MACE small 0,021, medium 0,025 Å.
+
+**Δ-learning lineal (SOAP) sobre TB.** Errores de fuerza (eV/Å):
+
+| estructura (tang_carbon) |  | TB | TB + Δ |
+|---|---|---|---|
+| diamond | ajuste | 0,178 | 0,190 |
+| graphene | ajuste | 0,145 | 0,152 |
+| chain | ajuste | 0,225 | 0,227 |
+| c60 | ajuste | 0,424 | 0,348 |
+| vacancy | ajuste | 0,653 | 0,631 |
+| stone_wales | fuera | 0,375 | 0,370 |
+| amorphous_2.0 | ajuste | 0,865 | 0,839 |
+| amorphous_2.6 | ajuste | 0,938 | 0,872 |
+| amorphous_3.2 | fuera | 0,982 | 0,934 |
+
+xu_chno (23 moléculas, sin anillos tensos): TB 0,665; TB + Δ en validación cruzada (molécula no vista) 1,039.
+
+With the stored GPAW data the correction does not generalise: held-out carbon structures improve 1-5 %, and on unseen C/H/N/O molecules the cross-validated force error (1.04 eV/Å at best) is worse than TB alone (0.67). Not used by default and not installed; it needs far more DFT data (an active-learning campaign) before it can help.

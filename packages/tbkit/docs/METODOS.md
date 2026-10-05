@@ -166,7 +166,23 @@ guarda un archivo nuevo y reporta cada cambio. `xu_chn` conserva el C–C de Xu;
 (sin ese elemento dan exactamente lo de `xu_chno`; probado). Mínimos espurios:
 `recipes/active_learning.py`.
 
-## 10. Límites de fondo
+## 10. Aprendizaje automático (medido, no adoptado)
+
+`hybrid`: geometría y modos de cualquier calculadora de ASE (DFT, un potencial
+de aprendizaje automático) y α/μ de TB por la vía `phonons=(frecuencias, L)`
+que ya usan los modos de QE (probado: con la calculadora de tbkit da los modos
+de tbkit). `delta`: corrección lineal en SOAP sobre un conjunto TB,
+E = E_TB + Σ_i (w_Z · x_i + b_Z), ajustada por mínimos cuadrados con ridge
+(elegido por validación cruzada dejando fuera un grupo), con una medida de
+novedad por átomo (1 − similitud coseno máxima con el entrenamiento). Probado:
+fuerzas = −∇E y reproducción exacta de una corrección lineal.
+
+Medido frente a GPAW (`VALIDACION.md`): MACE-MP-0 sin ajuste fino no mejora a TB
+en moléculas y ablanda la coil un 11–18 %; la corrección Δ no generaliza con los
+datos guardados (en moléculas no vistas empeora). Ninguno se usa por defecto;
+ambos quedan para cuando haya un potencial ajustado o muchos más datos DFT.
+
+## 11. Límites de fondo
 
 - Base mínima s+p: sin d ni polarización (los OH de ácidos fosfónicos y
   selenínicos giran al relajar; medido como error de base, no corregible con

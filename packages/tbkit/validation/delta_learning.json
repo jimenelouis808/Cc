@@ -1,0 +1,75 @@
+{
+ "what": "Linear SOAP \u0394 correction on top of a TB set (tbkit.delta, recipes/delta_fit.py), ridge chosen by leave-one-group-out cross-validation on the training groups",
+ "tang_carbon_on_gpaw_carbon_env": {
+  "structures": 39,
+  "ridge": 0.01,
+  "cv_force_rmse": {
+   "1e-05": 0.6834512180868867,
+   "0.0001": 0.6938714144961726,
+   "0.001": 0.6813828206973604,
+   "0.01": 0.6777352282682984,
+   "0.1": 0.6848010372935546
+  },
+  "groups": {
+   "diamond": {
+    "held_out": false,
+    "tb_force_rmse": 0.178,
+    "tb_delta_force_rmse": 0.19
+   },
+   "graphene": {
+    "held_out": false,
+    "tb_force_rmse": 0.145,
+    "tb_delta_force_rmse": 0.152
+   },
+   "chain": {
+    "held_out": false,
+    "tb_force_rmse": 0.225,
+    "tb_delta_force_rmse": 0.227
+   },
+   "c60": {
+    "held_out": false,
+    "tb_force_rmse": 0.424,
+    "tb_delta_force_rmse": 0.348
+   },
+   "vacancy": {
+    "held_out": false,
+    "tb_force_rmse": 0.653,
+    "tb_delta_force_rmse": 0.631
+   },
+   "stone_wales": {
+    "held_out": true,
+    "tb_force_rmse": 0.375,
+    "tb_delta_force_rmse": 0.37
+   },
+   "amorphous_2.0": {
+    "held_out": false,
+    "tb_force_rmse": 0.865,
+    "tb_delta_force_rmse": 0.839
+   },
+   "amorphous_2.6": {
+    "held_out": false,
+    "tb_force_rmse": 0.938,
+    "tb_delta_force_rmse": 0.872
+   },
+   "amorphous_3.2": {
+    "held_out": true,
+    "tb_force_rmse": 0.982,
+    "tb_delta_force_rmse": 0.934
+   }
+  }
+ },
+ "xu_chno_on_gpaw_chno": {
+  "structures": 127,
+  "molecules": 23,
+  "tb_pooled_force_rmse": 1.511,
+  "tb_pooled_force_rmse_without_strained_rings": 0.665,
+  "cv_force_rmse_without_strained_rings": {
+   "1e-05": 9.45,
+   "0.0001": 7.284,
+   "0.001": 4.988,
+   "0.01": 2.516,
+   "0.1": 1.039
+  }
+ },
+ "conclusion": "With the stored GPAW data the correction does not generalise: held-out carbon structures improve 1-5 %, and on unseen C/H/N/O molecules the cross-validated force error (1.04 eV/\u00c5 at best) is worse than TB alone (0.67). Not used by default and not installed; it needs far more DFT data (an active-learning campaign) before it can help."
+}

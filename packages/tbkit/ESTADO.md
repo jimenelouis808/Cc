@@ -67,8 +67,12 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
    Herramientas generales: `sites.py` (anillos, grupos, frecuencia proyectada),
    `phonopy_bridge.py` (pestaña «Fonones (ZB)»), SCC sí/no y modos por sitio en la GUI,
    `recipes/site_screening.py`, `resonant_raman(select=..., cache_dir=...)`.
-7. ML: Δ-learning de repulsión (Stöhr 2020), fonones híbridos MACE con α/μ de TB,
-   DeePTB; GFN2-xTB como motor de comparación opcional.
+7. Hecho (medido, no adoptado): MACE-MP-0 sin ajuste fino (moléculas como xu_chno; coil
+   11-18 % blanda) y Δ-learning lineal SOAP (no generaliza con los datos guardados).
+   Infraestructura probada: `hybrid.py`, `delta.py`, `recipes/delta_fit.py`. No hechos, con
+   razón: DeePTB (otro modelo entero, no una mejora de estos conjuntos) y GFN2-xTB
+   (comparador; solo si hace falta un tercer método). Lo que sí ayudaría: más datos DFT
+   (campaña de active learning) o ajuste fino de MACE con nuestras referencias.
 8. Validación en sistemas reales; anomalía de Kohn (Piscanec 2004). Hecho: malla k de los
    fonones sin gap (grafeno con Xu: G 1572 con 12 k -> 1674 convergida; casi sin
    dependencia con kT una vez convergida: la anomalía de Xu es débil). Aviso automático en

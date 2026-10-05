@@ -131,3 +131,15 @@ def test_phonopy_dispersion_dos_and_cache(graphene_phonons, tmp_path):
     assert list(tmp_path.glob("forces_*.npy"))
     with pytest.raises(ValueError):
         pb.phonopy_phonons(sheet, xu_carbon(), supercell=(4, 4, 1), kmesh=6, cache_dir=tmp_path)
+
+
+def test_external_vibrations_with_the_tb_calculator_equal_the_tb_modes():
+    """tbkit.hybrid takes modes from any calculator: with tbkit's own, they are tbkit's."""
+    from tbkit.calculator import TBCalculator
+    from tbkit.hybrid import external_vibrations
+
+    model = actions.load_model("chno")
+    water = actions.relax_structure(molecule("H2O"), model, fmax=1e-3)["atoms"]
+    direct = vibrations(water, model)
+    external = external_vibrations(water, lambda: TBCalculator(model))
+    assert external.frequencies == pytest.approx(direct.frequencies, abs=0.5)

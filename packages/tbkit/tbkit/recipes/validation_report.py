@@ -192,12 +192,44 @@ def _nanocoil() -> list[str]:
     return out + [""]
 
 
+def _ml() -> list[str]:
+    mace = _load(VALIDATION / "mace_mp_vs_gpaw.json")
+    delta = _load(VALIDATION / "delta_learning.json")
+    coil = mace["nanocoil204"]
+    out = ["## Aprendizaje automático (paso 7): medido, no adoptado", "",
+           "Fuentes: `validation/mace_mp_vs_gpaw.json`, `validation/delta_learning.json`.", "",
+           "**MACE-MP-0 sin ajuste fino** frente a GPAW. Moléculas C/H/N/O (RMS por molécula, "
+           f"mediana): small {_f(mace['molecules_chno_hessians']['median_small'], 1)}, medium "
+           f"{_f(mace['molecules_chno_hessians']['median_medium'], 1)} cm⁻¹ (xu_chno, RMS "
+           f"conjunto {_f(mace['molecules_chno_hessians']['xu_chno_pooled_rms_before_scaling'], 1)}). "
+           "Coil de 204 átomos, modos TB proyectados con fuerzas PBE y MACE:", ""]
+    rows = []
+    for key, pbe in coil["pbe_projected_cm1"].items():
+        rows.append((key, pbe, coil["small"]["projected_cm1"][key],
+                     coil["medium"]["projected_cm1"][key]))
+    out += _table(("modo", "PBE", "MACE small", "MACE medium"), rows)
+    out += ["", f"Enlaces frente a PBE (RMS): Tang {_f(coil['tb_tang_bond_rms_vs_pbe_A'], 3)}, MACE "
+            f"small {_f(coil['small']['bond_rms_vs_pbe_A'], 3)}, medium "
+            f"{_f(coil['medium']['bond_rms_vs_pbe_A'], 3)} Å.", "",
+            "**Δ-learning lineal (SOAP) sobre TB.** Errores de fuerza (eV/Å):", ""]
+    t = delta["tang_carbon_on_gpaw_carbon_env"]
+    rows = [(g, "fuera" if v["held_out"] else "ajuste", _f(v["tb_force_rmse"], 3),
+             _f(v["tb_delta_force_rmse"], 3)) for g, v in t["groups"].items()]
+    out += _table(("estructura (tang_carbon)", "", "TB", "TB + Δ"), rows)
+    c = delta["xu_chno_on_gpaw_chno"]
+    best = min(c["cv_force_rmse_without_strained_rings"].values())
+    out += ["", f"xu_chno ({c['molecules']} moléculas, sin anillos tensos): TB "
+            f"{_f(c['tb_pooled_force_rmse_without_strained_rings'], 3)}; TB + Δ en validación "
+            f"cruzada (molécula no vista) {_f(best, 3)}.", "", delta["conclusion"]]
+    return out + [""]
+
+
 def render() -> str:
     lines = ["# Validación de tbkit", "",
              "Generado por `python -m tbkit.recipes.validation_report` a partir de los "
              "archivos de `validation/` y `tbkit/parameters/`. No editar a mano: un test "
              "comprueba que coincide con los datos.", ""]
-    for part in (_sets, _infrared, _crystals, _tang, _nanotubes, _graphene, _nanocoil):
+    for part in (_sets, _infrared, _crystals, _tang, _nanotubes, _graphene, _nanocoil, _ml):
         lines += part()
     return "\n".join(lines).rstrip() + "\n"
 

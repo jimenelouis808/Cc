@@ -496,6 +496,16 @@ de orden 4); un punto con xu_chn tarda ~3 min, así que el cribado completo son
 ~2,5 h y cada relajación ~1 h. Las energías son del modelo: el orden de los
 mejores se comprueba con DFT.
 
+## Aprendizaje automático: medido y no adoptado (paso 7)
+
+`tbkit.hybrid` acepta geometría y modos de cualquier calculadora (por ejemplo
+MACE, `pip install mace-torch`) con α/μ de TB; `tbkit.delta` y
+`recipes/delta_fit.py` ajustan una corrección lineal en SOAP sobre un conjunto
+(`pip install dscribe`). Frente a GPAW, con los datos guardados, ninguno mejora
+a los conjuntos TB: MACE-MP-0 sin ajuste fino iguala a xu_chno en moléculas y
+ablanda la coil 11–18 %; la corrección Δ empeora las moléculas no vistas. Los
+números, en `docs/VALIDACION.md`. No se usan por defecto.
+
 ## Fonones de Quantum ESPRESSO con intensidades de tbkit
 
 `tbkit raman estructura.xyz --model chn --modes dynmat.out` usa las

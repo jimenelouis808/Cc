@@ -30,6 +30,8 @@ tbkit/
 ├── modes.py          # mode analysis: participation, cylindrical character, symmetry, VDOS
 ├── sites.py          # rings (closing in space), heteroatom groups, projected frequency of a mode
 ├── phonopy_bridge.py # phonopy with the model's forces: dispersion, DOS, Γ irreps, thermodynamics
+├── hybrid.py         # geometry/modes from any ASE calculator (MACE, DFT), α/μ from TB
+├── delta.py          # linear SOAP Δ correction on a TB set (dscribe, optional): measured, not adopted
 ├── graphene.py       # graphene G / 2D / 2D' by (double) resonance, phonons in the whole BZ
 ├── raman.py          # non-resonant Raman on the model's own Γ phonons
 ├── resonance.py      # resonant Raman: ∂α(ω_L + iη)/∂Q, excitation profiles
@@ -41,6 +43,7 @@ tbkit/
 │                     #   crystal_validation + run_crystals.sh: the sets in crystals vs GPAW (resumable)
 │                     #   nanocoil: the 204-atom 5-7 coil, TB and GPAW stages (resumable)
 │                     #   site_screening: substitutional dopant sites, TB ranking, top-N for DFT
+│                     #   delta_fit: fit and cross-validate a Δ correction (writes to a workdir only)
 │                     #   validation_report: writes docs/VALIDACION.md from validation/ and parameters/
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 ├── cli.py            # `tbkit` console script
@@ -221,6 +224,12 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   it with the data: after changing a validation or parameter file, regenerate it. Numbers
   in README/METODOS/GUIA must agree with it; when they disagree, the data file wins (the
   README IR table once omitted its ω > 100 cm⁻¹ rule).
+- Machine learning (step 7) was measured, not adopted (`validation/mace_mp_vs_gpaw.json`,
+  `validation/delta_learning.json`): MACE-MP-0 without fine-tuning is no better than the TB
+  sets on molecules and 11-18 % soft on the 5-7 coil; the Δ correction does not generalise
+  with the stored data (worse on unseen molecules). Never make either a default, and never
+  judge a Δ fit by its training error: report the cross-validated one. MACE and dscribe
+  stay optional (not in the lockfile; tests skip without them).
 - Tests compare with closed-form results (graphene, Hückel, Lieb). A new
   feature needs such a check, not only a regression number.
 
