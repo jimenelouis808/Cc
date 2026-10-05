@@ -371,6 +371,14 @@ class TestSiteSelection:
         assert len(pentagons) == 60  # every C60 carbon is in one pentagon
         assert candidate_sites(cage, where="defect") == pentagons
 
+    def test_explicit_atoms_are_selected_and_a_full_atom_is_refused(self):
+        sheet = build_graphene().repeat((3, 3, 1))
+        assert candidate_sites(sheet, where="atoms:4,1") == [1, 4]
+        grafted = functionalize(sheet, "amine", count=1, where="atoms:4", seed=0)
+        assert grafted.info["functionalization"][-1]["sites"] == [4]
+        with pytest.raises(ValueError, match="cannot take a group"):
+            candidate_sites(grafted, where="atoms:4")
+
     def test_an_unknown_selection_is_refused(self):
         sheet = build_graphene().repeat((3, 3, 1))
         with pytest.raises(ValueError, match="Unknown site selection"):
