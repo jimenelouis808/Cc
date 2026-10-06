@@ -6,6 +6,7 @@ Run from packages/tbkit (each step resumable, files in out/doped_raman/<name>/):
     python -m tbkit.recipes.doped_raman hessian NAME [--part r/n]
     python -m tbkit.recipes.doped_raman check   NAME      # embedding vs full forces
     python -m tbkit.recipes.doped_raman raman   NAME [--part r/n]
+    python -m tbkit.recipes.doped_raman born    NAME [--part r/n]   # IR: Born charges
     python -m tbkit.recipes.doped_raman report
 
 NAME is ``pristine``, ``N`` or ``amine``. All three use ``xu_chn`` with SCC (on the
@@ -20,6 +21,17 @@ that by the Rayleigh quotient of the highest-weight modes on the change with the
 full model. Raman: α(ω_L + iη) with the SCC ground state, differentiated along each
 mode above ``MIN_CM1`` (the D/G region and the C-N, N-H stretches; the low modes,
 whose heights depend most on η, are left out).
+
+IR: Born charges of the same SCC ground state (``infrared.born_rows``), only the
+components across the coil axis (x, y): along the periodic axis the dipole needs
+the Berry phase, and the model is gapless there. Embedded like the Hessian (the
+region's rows for N and the amine, the pristine ones elsewhere), with the
+translational sum rule imposed and its residual reported. Every mode above
+``IR_MIN_CM1``.
+
+D band: the first-order Γ spectrum of this cell has no double resonance, so the D
+band is estimated by what it is made of: the Raman intensity of each mode weighted
+by its ring-breathing character B (``sites.ring_breathing``).
 """
 
 from __future__ import annotations
@@ -36,6 +48,8 @@ KZ, KT, DELTA = 4, 0.05, 0.01
 RADIUS = 6.0
 MIN_CM1 = 900.0
 LASERS_EV = (1.96, 2.33, 2.54)
+IR_MIN_CM1 = 50.0
+BORN_DELTA = 0.005
 STRUCTURES = {
     "pristine": {"start": "out/nanocoil/tb_xu_carbon/relaxed.extxyz", "centres": None},
     "N": {"start": "out/coil_N/site_0000_relaxed.extxyz", "centres": [0]},
@@ -148,12 +162,57 @@ def raman(name: str, part=(0, 1)):
                           cache_dir=folder(name) / "tensors", delta=0.005)
 
 
+def born(name: str, part=(0, 1)):
+    """Born charges (N, 3, 3), transverse columns only; None while incomplete."""
+    from ..infrared import born_rows
+
+    atoms = relaxed(name)
+    reg = region(name, atoms)
+    rows = born_rows(atoms, _calc, folder(name) / "born", reg, BORN_DELTA, part)
+    if rows is None or STRUCTURES[name]["centres"] is None:
+        return rows
+    reference = born("pristine")
+    if reference is None:
+        raise RuntimeError("Faltan las cargas de Born de la coil sin dopar.")
+    out = np.zeros((len(atoms), 3, 3))
+    out[:N_HOST] = reference
+    out[reg] = rows
+    return out
+
+
+def born_ready(name: str) -> bool:
+    """Every displacement of ``name`` (and of the pristine host) cached: ``report``
+    must never start computing them in one process."""
+    names = [name] if STRUCTURES[name]["centres"] is None else ["pristine", name]
+    for n in names:
+        atoms = relaxed(n)
+        if not all((folder(n) / "born" / f"z_{a:04d}_{c}_{t}.npy").exists()
+                   for a in region(n, atoms) for c in range(3) for t in ("p", "m")):
+            return False
+    return True
+
+
+def infrared(name: str) -> dict:
+    from ..infrared import mode_intensities
+
+    vib = vibrations(name)
+    z = born(name)
+    if z is None:
+        raise RuntimeError(f"{name}: cargas de Born incompletas.")
+    keep = np.flatnonzero(vib.frequencies > IR_MIN_CM1)
+    intensities, info = mode_intensities(z, vib.modes[keep])
+    return {"frequencies": vib.frequencies[keep], "intensities": intensities,
+            "mode_indices": keep, **info}
+
+
 def report() -> dict:
     from ..modes import participation
     from ..raman import RamanResult, spectrum
+    from ..sites import ring_breathing
 
     out = {"lasers_eV": list(LASERS_EV), "min_cm1": MIN_CM1, "radius_A": RADIUS}
     grid = np.linspace(900, 3700, 2801)
+    ir_grid = np.linspace(0, 3700, 3701)
     spectra = {}
     for name in STRUCTURES:
         vib = vibrations(name)
@@ -164,26 +223,48 @@ def report() -> dict:
         groups = {k: v for k, v in groups.items() if v}
         shares = participation(vib, groups) if groups else {}
         entry = {"atoms": len(atoms), "modes_computed": len(result.frequencies)}
+        breathing = ring_breathing(atoms, vib.modes[result.mode_indices])["B"]
+        entry["breathing_B"] = breathing.tolist()
+        entry["raman_frequencies_cm1"] = result.frequencies.tolist()
         for li, laser in enumerate(LASERS_EV):
             r = RamanResult(result.frequencies, result.activities[li], result.depolarization[li],
                             None, None, "", result.frequencies)
             _, curve = spectrum(r, grid, fwhm=10.0, laser_nm=1239.84193 / laser)
             spectra[f"{name}_{laser:.2f}"] = curve
+            rb = RamanResult(result.frequencies, result.activities[li] * breathing,
+                             result.depolarization[li], None, None, "", result.frequencies)
+            _, d_curve = spectrum(rb, grid, fwhm=10.0, laser_nm=1239.84193 / laser)
+            spectra[f"{name}_{laser:.2f}_breathing"] = d_curve
+            entry[f"activities_{laser:.2f}"] = result.activities[li].tolist()
             order = np.argsort(-result.activities[li])[:12]
             entry[f"strongest_{laser:.2f}"] = [
                 {"frequency_cm1": float(result.frequencies[j]),
                  "activity": float(result.activities[li, j]),
                  **{f"on_{g}": float(v[result.mode_indices[j]]) for g, v in shares.items()}}
                 for j in order]
+        if born_ready(name):
+            ir = infrared(name)
+            half = 5.0
+            shape = half / np.pi / ((ir_grid[:, None] - ir["frequencies"][None]) ** 2 + half ** 2)
+            spectra[f"{name}_ir"] = shape @ ir["intensities"]
+            order = np.argsort(-ir["intensities"])[:12]
+            entry["ir"] = {"axes": ir["axes"], "sum_rule_residual_e": ir["sum_rule_residual_e"],
+                           "frequencies_cm1": ir["frequencies"].tolist(),
+                           "intensities_km_mol": ir["intensities"].tolist(),
+                           "strongest": [{"frequency_cm1": float(ir["frequencies"][j]),
+                                          "intensity_km_mol": float(ir["intensities"][j]),
+                                          **{f"on_{g}": float(v[ir["mode_indices"][j]])
+                                             for g, v in shares.items()}} for j in order]}
         out[name] = entry
-    np.savez(WORK / "spectra.npz", grid=grid, **spectra)
+    np.savez(WORK / "spectra.npz", grid=grid, ir_grid=ir_grid, **spectra)
     (WORK / "report.json").write_text(json.dumps(out, indent=1))
     return out
 
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=("relax", "hessian", "check", "raman", "report"))
+    parser.add_argument("step", choices=("relax", "hessian", "check", "raman", "born",
+                                         "report"))
     parser.add_argument("name", nargs="?", choices=tuple(STRUCTURES))
     parser.add_argument("--part", default="0/1")
     args = parser.parse_args(argv)
@@ -195,6 +276,9 @@ def main(argv=None) -> None:
         print("hessiana completa" if done is not None else f"parte {args.part} hecha")
     elif args.step == "check":
         print(json.dumps(check(args.name), indent=1))
+    elif args.step == "born":
+        done = born(args.name, part)
+        print("cargas de Born completas" if done is not None else f"parte {args.part} hecha")
     elif args.step == "raman":
         raman(args.name, part)
         print(f"raman {args.name} parte {args.part} hecha")

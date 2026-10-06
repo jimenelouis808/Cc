@@ -98,3 +98,27 @@ def test_benzene_against_gpaw_on_gpaw_modes(chn):
     tb = np.sum(np.einsum("aij,mai->mj", z, modes) ** 2, axis=1) * DEBYE_PER_EA ** 2 * KM_PER_MOL
     strong = gpaw > 0.1 * gpaw.max()
     assert np.all(np.abs(np.log10(tb[strong] / gpaw[strong])) < np.log10(2.0))
+
+
+def test_wire_born_charges_match_the_molecule(tmp_path):
+    """A molecule in a cell periodic along z: the transverse Born charges of
+    ``born_rows`` are those of the finite molecule (to the weak coupling with its
+    images 24 Å away), the axial ones are left out, and they obey the sum rule."""
+    from tbkit.infrared import born_charges, born_rows, mode_intensities
+
+    model = load_parameters("xu_chn")
+    wire = molecule("CH3CN")
+    wire.center(vacuum=12.0)
+    wire.pbc = (False, False, True)
+    finite = wire.copy()
+    finite.pbc = False
+    z_wire = born_rows(wire, lambda: TBCalculator(model, kpts=(1, 1, 2), kT=0.05), tmp_path)
+    z_finite = born_charges(finite, model, delta=0.005, kT=0.05)
+    assert np.isnan(z_wire[:, :, 2]).all()
+    assert np.abs(z_wire[:, :, :2] - z_finite[:, :, :2]).max() < 1e-3
+    assert np.abs(z_wire[:, :, :2].sum(axis=0)).max() < 1e-4
+    rng = np.random.default_rng(0)
+    modes = rng.normal(size=(3, len(wire), 3))
+    intensities, info = mode_intensities(z_wire, modes)
+    assert info["axes"] == [0, 1] and intensities.shape == (3,)
+    assert born_rows(wire, None, tmp_path) is not None        # all cached: no calculator

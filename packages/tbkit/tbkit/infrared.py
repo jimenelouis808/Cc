@@ -160,3 +160,92 @@ def ir_spectrum(result: IRResult, grid: Optional[np.ndarray] = None, fwhm: float
     half = fwhm / 2
     shape = half / np.pi / ((grid[:, None] - result.frequencies[None, :]) ** 2 + half ** 2)
     return grid, shape @ result.intensities
+
+
+# --------------------------------------------------------------------------
+# Wires and slabs: the dipole along the open (non-periodic) directions
+# --------------------------------------------------------------------------
+
+def open_dipole(atoms: Atoms, calc) -> np.ndarray:
+    """μ (e·Å) along the non-periodic axes of a wire or slab, NaN along periodic ones.
+
+    ``calc`` is a :class:`tbkit.calculator.TBCalculator` that has just computed
+    ``atoms``: its Mulliken charges (self-consistent with an SCC model) and, if the
+    model has them, the intra-atomic s-p dipoles from the density summed over k.
+    Along an open axis the position is single-valued (no atom is wrapped there), so
+    ``Σ Q_A x_A`` is the dipole of the cell; along a periodic axis it is not (it
+    would need the Berry phase), and is left out. In a gapless model the axial
+    response is metallic anyway; the transverse one stays finite."""
+    from .dipoles import atomic_dipoles, has_dipoles
+
+    pbc = np.asarray(atoms.get_pbc(), bool)
+    charges = calc.results["charges"]
+    positions = atoms.get_positions()
+    mu = (charges[:, None] * (positions - positions.mean(axis=0))).sum(axis=0)
+    solution = calc.last_solution
+    if has_dipoles(calc.model):
+        density = np.zeros(solution.vectors.shape[2:3] * 2)
+        for s in range(solution.nspin):
+            for k, w in enumerate(solution.weights):
+                c = solution.vectors[s, k]
+                density = density + w * np.real((c * solution.occupations[s, k]) @ c.conj().T)
+        mu = mu - atomic_dipoles(solution.system, density).sum(axis=0)
+    return np.where(pbc, np.nan, mu)
+
+
+def born_rows(atoms: Atoms, make_calc, folder, indices=None, delta: float = 0.005,
+              part: tuple = (0, 1)) -> np.ndarray | None:
+    """Born charges ``Z*[a, i, j] = ∂μ_j/∂x_{a,i}`` (e) of ``indices`` for a periodic
+    or finite structure, j along the open axes (NaN along periodic ones), with the
+    dipole of each ±δ displacement cached in ``folder`` (``z_A_C_S.npy``): resumable,
+    and ``part=(r, n)`` shares the work as :func:`tbkit.modes.hessian_rows` does.
+    Returns (len(indices), 3, 3), or None from a part that stops early."""
+    from pathlib import Path
+
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    indices = list(range(len(atoms))) if indices is None else [int(i) for i in indices]
+    base = atoms.get_positions()
+    calc = None                      # one per process: the SCC starts from the last charges
+    jobs = [(a, c, s) for a in indices for c in range(3) for s in (1, -1)]
+    for k, (a, c, sign) in enumerate(jobs):
+        if k % part[1] != part[0]:
+            continue
+        path = folder / f"z_{a:04d}_{c}_{'p' if sign > 0 else 'm'}.npy"
+        if path.exists():
+            continue
+        probe = atoms.copy()
+        positions = base.copy()
+        positions[a, c] += sign * delta
+        probe.set_positions(positions)
+        calc = calc or make_calc()
+        probe.calc = calc
+        probe.get_potential_energy()
+        tmp = path.with_suffix(".tmp.npy")
+        np.save(tmp, np.concatenate([open_dipole(probe, calc), calc.results["charges"]]))
+        tmp.replace(path)
+    out = np.zeros((len(indices), 3, 3))
+    for r, a in enumerate(indices):
+        for c in range(3):
+            pair = [folder / f"z_{a:04d}_{c}_{t}.npy" for t in ("p", "m")]
+            if not all(x.exists() for x in pair):
+                return None
+            out[r, c] = (np.load(pair[0])[:3] - np.load(pair[1])[:3]) / (2 * delta)
+    return out
+
+
+def mode_intensities(born: np.ndarray, modes: np.ndarray, sum_rule: bool = True
+                     ) -> tuple[np.ndarray, dict]:
+    """IR intensities (km/mol) of ``modes`` (n, N, 3; L as in ``Vibrations.modes``)
+    from Born charges (N, 3, 3), summed over the axes where Z* is finite. With
+    ``sum_rule`` the residual ``Σ_a Z*_a`` (zero for a neutral cell: a rigid
+    translation does not change μ) is removed evenly from every atom first; its
+    size is returned as a check of the finite differences (or of an embedding)."""
+    axes = [j for j in range(3) if np.isfinite(born[:, :, j]).all()]
+    z = born[:, :, axes]
+    residual = z.sum(axis=0)
+    if sum_rule:
+        z = z - residual[None] / len(z)
+    derivatives = np.einsum("aij,mai->mj", z, modes)
+    intensities = np.sum(derivatives ** 2, axis=1) * DEBYE_PER_EA ** 2 * KM_PER_MOL
+    return intensities, {"axes": axes, "sum_rule_residual_e": float(np.abs(residual).max())}
