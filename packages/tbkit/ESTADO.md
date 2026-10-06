@@ -83,6 +83,20 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
    módulos (SCC periódico, Raman/IR, Tang, sitios/phonopy), límites (había GUI y Raman
    resonante sin mencionar), I(2D)/I(G) a 2,80 eV 13,0 (no 13,1), regla ω > 100 cm⁻¹ del IR.
 
+## En curso (6 oct 2026): coil dopada, Raman con xu_chn
+- Hecho: N grafítico (validation/coil204_N_graphitic.json; GPAW confirma el sitio 5-5-6 por
+  0,40-0,59 eV), amina -NH2+H (validation/coil204_amine_tb.json; GPAW confirma a048_h059),
+  banda D por respiración de anillos (sin banda D definida en primer orden en Γ),
+  α resonante de cristales con estado SCC (corregido), hessianas embebidas.
+- Corriendo: `out/doped_raman/run.sh` (receta `recipes/doped_raman.py`; reanudable, relanzar
+  con `nohup setsid out/doped_raman/run.sh &` desde packages/tbkit). Fases: relax (hecho) ->
+  hessiana pristine (2448 desplazamientos, ~4,7/min) -> N (264) -> amine (462) -> check del
+  embebido -> Raman de modos > 900 cm⁻¹ a 633/532/488 nm -> report. Log en
+  out/nanocoil/supervisor.log. Al terminar: check.json (embebido vs completo), report.json,
+  sección nueva en el reporte publicado (https://claude.ai/artifact/K3h3L45mfk1GtuqGfeZNBJ,
+  fuente en el scratchpad: report/head.html, body.html, script.js, coil_data.json).
+- Memoria: GPAW de la coil usa 3,4-4 GB; con 15 GB, máximo 3 a la vez.
+
 ## Diagnóstico abierto: H de OH que migra al O vecino (B, P, Se)
 - Se ajustado (`/tmp/claude-0/fit/xu_chnose2.json`): enlaces < 0,08 Å, frecuencias
   64-124 cm⁻¹; único espurio CH3SeO2H: el H del OH forma puente con el O de Se=O
