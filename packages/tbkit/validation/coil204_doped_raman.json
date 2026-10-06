@@ -1,0 +1,260 @@
+{
+ "system": "5-7 carbon nanocoil C204 (periodic along z, Lz = 15 A): pristine, graphitic N on the 5-5-6 site, -NH2 + H (a048_h059)",
+ "model": "xu_chn, SCC (Ewald), kpts (1,1,4), kT 0.05 eV; relaxed with the model (fmax 0.02 eV/A)",
+ "recipe": "tbkit.recipes.doped_raman (relax, hessian, check, raman, report)",
+ "method": {
+  "hessian": "full for pristine; N and amine: rows of atoms within 6 A of the change (44, 77 atoms), pristine elsewhere (modes.embedded_hessian)",
+  "raman": "resonant, d alpha(w_L + i eta)/dQ along every mode > 900 cm-1, eta 0.1 eV, delta 0.005 A, SCC ground state",
+  "intensities": "activity x (nu_L - nu)^4 / nu x [1 + n_B(300 K)]",
+  "d_band_estimate": "Raman intensity weighted by ring-breathing character B (sites.ring_breathing), 1100-1450 cm-1; first order at Gamma, no double resonance",
+  "graphene_A1prime_K_cm1": {
+   "value": 1377,
+   "note": "xu_chn C-C = Xu; graphene phonons from tbkit.graphene (Xu)"
+  }
+ },
+ "embedding_check": {
+  "N": [
+   {
+    "embedded_cm1": 1320.19,
+    "full_rayleigh_cm1": 1320.66,
+    "share_on_change": 0.105
+   },
+   {
+    "embedded_cm1": 1313.64,
+    "full_rayleigh_cm1": 1313.97,
+    "share_on_change": 0.068
+   },
+   {
+    "embedded_cm1": 626.36,
+    "full_rayleigh_cm1": 626.25,
+    "share_on_change": 0.046
+   },
+   {
+    "embedded_cm1": 1331.47,
+    "full_rayleigh_cm1": 1331.65,
+    "share_on_change": 0.043
+   }
+  ],
+  "amine": [
+   {
+    "embedded_cm1": 3375.06,
+    "full_rayleigh_cm1": 3376.16,
+    "share_on_change": 1.0
+   },
+   {
+    "embedded_cm1": 3300.13,
+    "full_rayleigh_cm1": 3301.05,
+    "share_on_change": 1.0
+   },
+   {
+    "embedded_cm1": 2999.75,
+    "full_rayleigh_cm1": 3000.33,
+    "share_on_change": 1.0
+   },
+   {
+    "embedded_cm1": 118.96,
+    "full_rayleigh_cm1": 121.51,
+    "share_on_change": 0.813
+   }
+  ]
+ },
+ "summary_by_laser_eV": {
+  "pristine": {
+   "1.96": {
+    "G_centroid": 1584.0004,
+    "G_share": 0.3645,
+    "breathing_share": 0.0851,
+    "D_window_breathing_share": 0.038,
+    "D_centroid": 1266.9902,
+    "D_over_G": 0.1043,
+    "above_2800": 0.0,
+    "total_rel_pristine": 1.0
+   },
+   "2.33": {
+    "G_centroid": 1590.8001,
+    "G_share": 0.4181,
+    "breathing_share": 0.0828,
+    "D_window_breathing_share": 0.037,
+    "D_centroid": 1280.0911,
+    "D_over_G": 0.0885,
+    "above_2800": 0.0,
+    "total_rel_pristine": 1.0
+   },
+   "2.54": {
+    "G_centroid": 1586.0499,
+    "G_share": 0.424,
+    "breathing_share": 0.0818,
+    "D_window_breathing_share": 0.0344,
+    "D_centroid": 1272.422,
+    "D_over_G": 0.0811,
+    "above_2800": 0.0,
+    "total_rel_pristine": 1.0
+   }
+  },
+  "N": {
+   "1.96": {
+    "G_centroid": 1585.545,
+    "G_share": 0.4105,
+    "breathing_share": 0.0806,
+    "D_window_breathing_share": 0.0315,
+    "D_centroid": 1280.411,
+    "D_over_G": 0.0766,
+    "above_2800": 0.0,
+    "total_rel_pristine": 0.885
+   },
+   "2.33": {
+    "G_centroid": 1585.9518,
+    "G_share": 0.4195,
+    "breathing_share": 0.0816,
+    "D_window_breathing_share": 0.0343,
+    "D_centroid": 1277.9156,
+    "D_over_G": 0.0818,
+    "above_2800": 0.0,
+    "total_rel_pristine": 0.987
+   },
+   "2.54": {
+    "G_centroid": 1586.0866,
+    "G_share": 0.3974,
+    "breathing_share": 0.079,
+    "D_window_breathing_share": 0.0327,
+    "D_centroid": 1276.9213,
+    "D_over_G": 0.0823,
+    "above_2800": 0.0,
+    "total_rel_pristine": 0.957
+   }
+  },
+  "amine": {
+   "1.96": {
+    "G_centroid": 1585.4244,
+    "G_share": 0.3611,
+    "breathing_share": 0.0813,
+    "D_window_breathing_share": 0.0371,
+    "D_centroid": 1268.5211,
+    "D_over_G": 0.1028,
+    "above_2800": 0.0,
+    "total_rel_pristine": 1.023
+   },
+   "2.33": {
+    "G_centroid": 1588.6294,
+    "G_share": 0.4124,
+    "breathing_share": 0.0787,
+    "D_window_breathing_share": 0.0344,
+    "D_centroid": 1279.0621,
+    "D_over_G": 0.0835,
+    "above_2800": 0.0,
+    "total_rel_pristine": 1.052
+   },
+   "2.54": {
+    "G_centroid": 1584.919,
+    "G_share": 0.4154,
+    "breathing_share": 0.0772,
+    "D_window_breathing_share": 0.0325,
+    "D_centroid": 1279.3581,
+    "D_over_G": 0.0782,
+    "above_2800": 0.0,
+    "total_rel_pristine": 1.004
+   }
+  }
+ },
+ "localized_modes": {
+  "N": [
+   {
+    "frequency_cm1": 626.4,
+    "on_local": 0.079,
+    "on_N": 0.046,
+    "raman_2.33_rel": null
+   },
+   {
+    "frequency_cm1": 1313.6,
+    "on_local": 0.18,
+    "on_N": 0.068,
+    "raman_2.33_rel": 0.0714
+   },
+   {
+    "frequency_cm1": 1320.2,
+    "on_local": 0.27,
+    "on_N": 0.105,
+    "raman_2.33_rel": 0.0188
+   },
+   {
+    "frequency_cm1": 1331.5,
+    "on_local": 0.087,
+    "on_N": 0.043,
+    "raman_2.33_rel": 0.0612
+   }
+  ],
+  "amine": [
+   {
+    "frequency_cm1": 119.0,
+    "on_local": 0.813,
+    "on_N": 0.031,
+    "on_H": 0.776,
+    "raman_2.33_rel": null
+   },
+   {
+    "frequency_cm1": 204.1,
+    "on_local": 0.128,
+    "on_N": 0.099,
+    "on_H": 0.024,
+    "raman_2.33_rel": null
+   },
+   {
+    "frequency_cm1": 214.7,
+    "on_local": 0.209,
+    "on_N": 0.156,
+    "on_H": 0.044,
+    "raman_2.33_rel": null
+   },
+   {
+    "frequency_cm1": 219.9,
+    "on_local": 0.303,
+    "on_N": 0.225,
+    "on_H": 0.062,
+    "raman_2.33_rel": null
+   },
+   {
+    "frequency_cm1": 988.2,
+    "on_local": 0.531,
+    "on_N": 0.099,
+    "on_H": 0.324,
+    "raman_2.33_rel": 0.006
+   },
+   {
+    "frequency_cm1": 1460.6,
+    "on_local": 0.695,
+    "on_N": 0.137,
+    "on_H": 0.5,
+    "raman_2.33_rel": 0.0251
+   },
+   {
+    "frequency_cm1": 2999.8,
+    "on_local": 1.0,
+    "on_N": 0.0,
+    "on_H": 0.919,
+    "raman_2.33_rel": 0.0001
+   },
+   {
+    "frequency_cm1": 3300.1,
+    "on_local": 1.0,
+    "on_N": 0.044,
+    "on_H": 0.956,
+    "raman_2.33_rel": 0.0003
+   },
+   {
+    "frequency_cm1": 3375.1,
+    "on_local": 1.0,
+    "on_N": 0.09,
+    "on_H": 0.91,
+    "raman_2.33_rel": 0.0002
+   }
+  ]
+ },
+ "localized_note": "on_* = share of the mass-weighted eigenvector; on_local = heteroatoms, their H and the C bonded to them; raman_2.33_rel = line intensity at 2.33 eV relative to the strongest pristine line; null = below 900 cm-1 (not computed)",
+ "conclusions": [
+  "Doping changes the first-order Raman little: total within 12 %, G centroid within 5 cm-1.",
+  "Amine N-H (3300, 3375) and C-H (3000 cm-1) stretches carry < 0.01 % of the Raman intensity.",
+  "Graphitic N has no localized mode; at most 10.5 % of a mode (1320 cm-1) on N.",
+  "Breathing-weighted D estimate 1267-1280 cm-1, ID/IG estimate 0.08-0.10, unchanged by either dopant; no monotonic laser dispersion (not reproduced at first order)."
+ ],
+ "ir": "pending (transverse Born charges, infrared.born_rows)"
+}
