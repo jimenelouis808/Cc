@@ -16,6 +16,11 @@ tbkit raman diamante.extxyz --model sp3 --kmesh 8 -o raman.csv
 tbkit run simulacion.json          # reproducible desde el archivo
 ```
 
+Documentación: [`docs/GUIA_USUARIO.md`](docs/GUIA_USUARIO.md) (cómo usarlo),
+[`docs/METODOS.md`](docs/METODOS.md) (qué calcula y con qué ecuaciones) y
+[`docs/VALIDACION.md`](docs/VALIDACION.md) (todos los números de validación,
+generado desde los datos).
+
 ## La ventana: `tbkit-gui`
 
 ```bash
@@ -30,10 +35,11 @@ animados). Derecha, una pestaña por capacidad:
 
 | Pestaña | Qué hace |
 |---|---|
-| Electrónica | estado fundamental (SCC si el modelo lo pide), gap, niveles, DOS/PDOS por elemento, átomo u orbital, bandas (periódicos), cargas |
+| Electrónica | estado fundamental (SCC si el modelo lo pide), gap, niveles, DOS/PDOS por elemento, átomo u orbital, bandas (periódicos), cargas; «Comparar SCC sí/no» (gap, HOMO, LUMO, E_F, cargas y Δq sobre la estructura) |
 | Orbitales | isosuperficie de cualquier nivel, isovalor ajustable |
 | Magnetismo | Hubbard de campo medio: momentos sobre la estructura, DOS de espín, m(E), comparación de puntos de partida, barridos en campo (T) y dopaje |
-| Geometría y modos | relajación con las fuerzas del modelo (con vuelta a la original), modos en Γ con participación, DOS vibracional, animación y flechas, `modes.npz` |
+| Geometría y modos | relajación con las fuerzas del modelo (con vuelta a la original), modos en Γ con participación, DOS vibracional, animación y flechas, `modes.npz`; modos ordenados por su peso en un sitio (anillos de 5, 6, 7, cada heteroátomo, C vecinos de heteroátomo, H) con su enriquecimiento; frecuencia de un modo con otro conjunto (cociente de Rayleigh, dos llamadas de fuerzas) |
+| Fonones (ZB) | phonopy con las fuerzas del modelo (extra `phonons`): dispersión por el camino de puntos especiales, DOS por elemento, representación irreducible de cada modo en Γ, F, S y Cv armónicos; carpeta opcional para reanudar |
 | Espectros | Raman (láser, T), Raman resonante (láseres, η, perfiles de excitación), IR en km/mol; fonones de la pestaña anterior, del modelo o de un archivo de QE; CSV |
 | Grafeno | G, 2D y 2D′ por láser con fonones GPAW, Xu o de archivo; dispersión de la 2D |
 
@@ -61,12 +67,14 @@ uno ajustado) en ese mismo formato, y `load_parameters(ruta)` lo lee.
 | 1. Modelo π | `params.pi_model` | Orbital π local (normal a la superficie), t = −2,7 eV, heteroátomos N, B, O con parámetros de Hückel (Streitwieser); opción de hopping con deformación, t·exp(−β(d/1,42 − 1)) |
 | 2. Slater–Koster sp³ | `params.xu_carbon`, `slater_koster` | ssσ, spσ, ppσ, ppπ con leyes constante, exponencial, Harrison, GSP o tabla; solapamiento opcional (H c = E S c). Carbono de Xu–Wang–Chan–Ho (1992) incluido |
 | 3. Parámetros | `skf`, `fit` | Lector de archivos `.skf` de DFTB (formato simple; no se incluye ningún conjunto publicado); ajuste por mínimos cuadrados a niveles de referencia, con lector de `gpaw.txt` |
-| 4. Cargas autoconsistentes | `scc` | DFTB2 con γ de Klopman–Ohno; solo sistemas finitos (sin Ewald) |
+| 4. Cargas autoconsistentes | `scc`, `ewald` | DFTB2 con γ de Klopman–Ohno; finitos y periódicos (Ewald para 1/r y para la cola r⁻³) |
 | 5. Espín | `hubbard` | Hubbard de campo medio; magnetización frente a la energía (m(E), dm/dE), frente al campo (M(h), χ) y frente al dopaje o el nivel de Fermi |
 | 6. Periódico | `hamiltonian`, `kpoints` | H(k) por suma de Bloch; mallas Γ-centradas y caminos de bandas de ASE |
 | 7. Parte repulsiva | `repulsive`, `forces`, `calculator` | Energía libre total (banda − TS + repulsión, + SCC), fuerzas de Hellmann–Feynman (ortogonal, no ortogonal, periódico, SCC), repulsión embebida de Xu y spline de los `.skf`; calculadora ASE para relajar y para fonones en Γ |
-| Raman no resonante y resonante (fase E) | `optics`, `raman`, `dipoles`, `resonance` |
-| Infrarrojo | `infrared` | μ del modelo (cargas + dipolos intraatómicos), cargas de Born, km/mol | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose |
+| Raman no resonante y resonante | `optics`, `raman`, `dipoles`, `resonance` | Polarizabilidad por suma sobre estados (finitos y cristales, ε∞) o por respuesta lineal SCC con apantallamiento (finitos y cristales); tensores Raman dα/dQ sobre los fonones del modelo, actividades, razón de despolarización y espectro con factores de láser y Bose; resonante con α(ω_L + iη), también derivada a lo largo de modos elegidos |
+| Infrarrojo | `infrared` | μ del modelo (cargas + dipolos intraatómicos), cargas de Born, km/mol |
+| Carbono dependiente del entorno | `environment`, `parameters/tang_carbon.json` | Forma de Tang et al. (1996): apantallamiento y distancias escaladas por la coordinación; repulsión, escala de Δe y corte ajustados a GPAW |
+| Sitios y fonones en toda la zona | `sites`, `phonopy_bridge`, `modes` | Anillos, grupos de heteroátomos, frecuencia de un modo con otra calculadora; phonopy (dispersión, DOS, simetrías en Γ, termodinámica); malla k de los fonones sin gap |
 | C, H y N (fase E, paso 2) | `parameters/xu_chn.json`, `references`, `recipes` | C–C de Xu intacto; H y N ajustados a GPAW (PBE, LCAO dzp) en niveles, fuerzas y energías; U de H, C, N calculadas con el átomo de GPAW; SCC. Receta reproducible y referencias incluidas |
 | Oxígeno | `parameters/xu_chno.json`, `recipes/xu_chno.py` | `xu_chn` más O (hidroxilo, epóxido, carbonilo, carboxilo, éter, furano, nitro), C–O, O–H, N–O, O–O; corrección de ángulos agudos para anillos de tres miembros; α extra del O ajustada a GPAW |
 | B, S, P, Se | `parameters/xu_chnob.json`, `xu_chnos.json`, `xu_chnop.json`, `xu_chnose.json`; `recipes/xu_bsp.py` | Un elemento más sobre `xu_chno` fijo: el resto da exactamente lo de `xu_chno`; todos los pares del elemento con H, C, N, O y consigo mismo |
@@ -323,6 +331,14 @@ los ópticos. Compara perfiles relativos, no energías absolutas. En semimetales
 (grafeno) la suma en k converge mal con diferencias finitas: el grafeno tiene
 su módulo perturbativo.
 
+Celdas grandes: `resonant_raman(..., select=[modos] | "all", cache_dir=...)`
+deriva α a lo largo de cada modo, (α(x + hL) − α(x − hL))/2h: el mismo tensor
+que Σ ∂α/∂x·L (comprobado en benceno y diamante), con 2 α por modo en lugar de
+6N, un archivo por modo (se reanuda) y repartible entre procesos. El paso mueve
+el átomo más desplazado `delta`; como mueve todos los átomos del modo a la vez,
+su error O(δ²) es mayor que el de la derivada átomo por átomo (4 % en diamante
+cerca de resonancia con 0,01 Å): usa 0,002–0,005 Å.
+
 ## Infrarrojo
 
 `tbkit ir molecula.xyz --model chn` (o `infrared.infrared`): el dipolo del
@@ -342,7 +358,7 @@ en `parameters/references/gpaw_chn_ir.json`):
 
 | | solo cargas | cargas + dipolos intraatómicos |
 |---|---|---|
-| log₁₀(TB/GPAW), modos > 5 % del más intenso: media | −0,38 | −0,24 |
+| log₁₀(TB/GPAW), modos internos (> 100 cm⁻¹) > 5 % del más intenso: media | −0,38 | −0,24 |
 | mediana de \|log₁₀\| (factor típico) | 0,41 (×2,6) | 0,32 (×2,1) |
 
 Con solo las cargas los **momentos dipolares** estáticos salen cerca del
@@ -410,18 +426,85 @@ Xu o cualquier archivo de constantes de fuerza (`validation/graphene_2d_gpaw.jso
 |---|---|---|---|---|
 | 1,96 | 1605 | 2819 | 3287 | 9,6 |
 | 2,41 | 1605 | 2872 | 3313 | 12,0 |
-| 2,80 | 1605 | 2913 | 3327 | 13,1 |
+| 2,80 | 1605 | 2913 | 3327 | 13,0 |
 
 - **Dispersión de la 2D: 112 cm⁻¹/eV** (medida: ~100). El mecanismo es el
   correcto: la 2D sale de la rama TO cerca de K, en |q − K| ≈ E_L/ħv_F.
 - **Posiciones absolutas altas** (2D a 2,41 eV: 2872 frente a ~2680 medidos;
   G 1605 frente a 1582): son las de los fonones PBE, que subestiman la
   anomalía de Kohn del TO en K. Con los fonones de Xu la 2D sale aún más alta
-  (~2967 cm⁻¹).
+  (~2967 cm⁻¹, medida con la malla anterior de Xu, 6×6 con 4×4 k; la actual,
+  8×8 k, sube el modo de K 13,5 cm⁻¹: unos +27 en la 2D, no recalculado).
 - I(2D)/I(G) ~10 es del orden del grafeno suspendido; el valor depende de γ
   y del sustrato (no incluido).
 - No incluye defectos (no hay banda D), excitones ni la renormalización
   electrón–electrón de v_F.
+
+## Fonones de sistemas sin gap: la malla k
+
+En un metal o semimetal las frecuencias de los modos que acoplan con los
+estados en E_F (G del grafeno, modo de K de la 2D, tubos metálicos, coils sin
+gap) dependen mucho de la malla k: con una malla gruesa la superficie de Fermi
+está mal muestreada y el modo se ablanda de más. Medido en grafeno con Xu (G en Γ,
+celda primitiva):
+
+| k por eje | kT 0,10 eV | kT 0,05 | kT 0,025 |
+|---|---|---|---|
+| 12 | 1635 | 1572 | 1455 |
+| 24 | 1670 | 1656 | 1629 |
+| 48 | 1674 | 1672 | 1666 |
+| 72 | 1674 | 1674 | 1672 |
+
+Convergido, G casi no depende de kT: la anomalía de Kohn de Xu es débil (la
+física, con su pendiente fijada por el acoplamiento electrón–fonón, es de DFT o
+GW; Piscanec 2004). Lo que sí depende de kT es la malla necesaria. Por eso
+`modes.vibrations` y `tasks.phonons` avisan en cristales sin gap, y
+`tasks.kmesh_convergence` sube la malla hasta que los modos más altos se
+quedan quietos. Los fonones de Xu del grafeno (`graphene.load_phonons("xu")`)
+pasaron de 6×6 con 4×4 k a 8×8 k (G 1667 -> 1684,5; modo de K 1389 -> 1402,8; con
+12×12 k: 1686,2 y 1403,6). Los de GPAW guardados usan 3×3 k con 0,1 eV de
+ensanchamiento (18 k equivalentes): con esos ajustes Xu ya está convergido, pero
+el ensanchamiento grande suaviza la anomalía; queda anotado, no recalculado.
+
+## Sitios, modos por sitio y fonones en toda la zona (phonopy)
+
+`tbkit.sites` agrupa átomos sin depender del modelo: anillos (ciclos simples de
+hasta 7 átomos que cierran en el espacio; los que dan la vuelta a la celda
+periódica no cuentan), cada heteroátomo, los C unidos a uno, H.
+`modes.participation(vib, sites.site_groups(atoms))` dice qué parte de cada modo
+vive en cada grupo. `sites.projected_frequency(atoms, modo, calculadora)` da la
+frecuencia de un patrón de desplazamiento con cualquier calculadora de ASE
+(otro conjunto TB, GPAW): ω² = u·K·u / u·M·u con K·u de dos llamadas de fuerzas.
+Es el cociente de Rayleigh: exacto para un modo propio de esa calculadora
+(test: H2O, masas distintas, 0,5 %), cota superior si no.
+
+`tbkit.phonopy_bridge` (extra `phonons`: `pip install 'tbkit[phonons]'`) da
+las fuerzas del modelo a phonopy: supercelda (1 en los ejes no periódicos),
+desplazamientos independientes por simetría, constantes de fuerza, dispersión,
+DOS por elemento, termodinámica armónica y representación irreducible en Γ.
+La malla k de cada supercelda es la de la celda dividida por su tamaño (mismo
+muestreo electrónico). Comprobado: en diamante Γ coincide con los fonones
+directos de tbkit a 0,2 cm⁻¹ y el modo Raman sale T2g; en grafeno G sale E2g.
+En grafeno los dos caminos difieren unos cm⁻¹ en G: es la anomalía de Kohn
+(G en Γ pasa de 1572 a 1656 cm⁻¹ de 12 a 24 puntos k), no un error.
+
+`recipes/site_screening.py`: ¿dónde va un dopante sustitucional? Agrupa los C
+por entorno (anillos y huella de distancias), calcula un representante por
+clase sin relajar, relaja los K mejores (`--relax-top`) y escribe los
+primeros como extxyz para DFT. En la coil de 204 átomos hay 51 clases (simetría
+de orden 4); un punto con xu_chn tarda ~3 min, así que el cribado completo son
+~2,5 h y cada relajación ~1 h. Las energías son del modelo: el orden de los
+mejores se comprueba con DFT.
+
+## Aprendizaje automático: medido y no adoptado (paso 7)
+
+`tbkit.hybrid` acepta geometría y modos de cualquier calculadora (por ejemplo
+MACE, `pip install mace-torch`) con α/μ de TB; `tbkit.delta` y
+`recipes/delta_fit.py` ajustan una corrección lineal en SOAP sobre un conjunto
+(`pip install dscribe`). Frente a GPAW, con los datos guardados, ninguno mejora
+a los conjuntos TB: MACE-MP-0 sin ajuste fino iguala a xu_chno en moléculas y
+ablanda la coil 11–18 %; la corrección Δ empeora las moléculas no vistas. Los
+números, en `docs/VALIDACION.md`. No se usan por defecto.
 
 ## Fonones de Quantum ESPRESSO con intensidades de tbkit
 
@@ -563,14 +646,17 @@ python -m tbkit.recipes.crystal_validation compare gpaw_crystals.json out.json
 
 ## Lo que no hace, y dónde está la trampa
 
-- **Raman solo no resonante y con gap**: metales, semimetales (el grafeno) y
-  sistemas de capa abierta se rechazan, y también un láser a menos del 20 % del
-  gap. El Raman del grafeno es siempre resonante; la banda 2D (segundo orden,
-  doble resonancia) es el paso siguiente de la fase E, no este.
-
-- **Energías y fuerzas solo con modelos que tienen parte repulsiva**: el de Xu
-  (carbono puro), `xu_chn` (C, H, N), `xu_chno` (C, H, N, O), `xu_chnob/s/p` y los `.skf` con su spline. El modelo π no
-  la tiene y lo dice.
+- **El Raman no resonante exige gap**: metales, semimetales y sistemas de capa
+  abierta se rechazan, y también un láser a menos del 20 % del gap. Para ellos
+  está el resonante (`resonance`, primer orden en Γ) y, para el grafeno, la doble
+  resonancia de `graphene` (G, 2D, 2D′). Ninguno da la banda D de defectos.
+- **Fonones de sistemas sin gap**: necesitan una malla k convergida (sección
+  «Fonones de sistemas sin gap»); el cálculo avisa, no la sube solo.
+- **Energías y fuerzas solo con modelos que tienen parte repulsiva**: Xu y
+  `tang_carbon` (carbono puro), `xu_chn` (C, H, N), `xu_chno` (C, H, N, O),
+  `xu_chnob/s/p/se` y los `.skf` con su spline. El modelo π no la tiene y lo dice.
+- **Base mínima s+p**: sin orbitales d ni de polarización. Los OH de ácidos
+  fosfónicos y selenínicos giran al relajar por eso (medido; ver `validity`).
 - **Campo medio no es correlación**: un copo con M = 0 y momentos locales es, en
   realidad, un singlete correlacionado; los momentos son el parámetro de orden
   de la aproximación.
@@ -587,6 +673,3 @@ python -m tbkit.recipes.crystal_validation compare gpaw_crystals.json out.json
 - **Ajuste alineado en mitad del gap**: las energías absolutas de DFT no tienen
   cero común con el modelo, así que las energías on-site quedan definidas salvo
   un desplazamiento y puede haber soluciones espejo; revisa el resultado.
-
-Sin interfaz gráfica todavía: el toolkit (PySide6 + pyvista es el candidato) se
-decide al empezarla (docs/PLAN_SUITE.md, decisión 3).

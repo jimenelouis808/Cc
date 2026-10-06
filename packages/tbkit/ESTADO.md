@@ -49,21 +49,53 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
 5. (hecho) SCC periódico con Ewald (`ewald.py`): Madelung, caja grande = finito, fuerzas FD.
    Hecho también: validación en 13 cristales (arriba) y α de respuesta lineal SCC periódica
    (campos locales de carga; los dipolares en cristales siguen sin Ewald).
-6. TB dependiente del entorno (Tang 1996): EN CURSO.
-   - Hecho: `environment.py` (ecs. 1-7: apantallamiento, distancias escaladas por g, on-site y
-     repulsión dependientes del entorno; cortes quínticos nuestros 4,2-5,0 / 5,0-6,0 Å) con fuerzas
-     analíticas probadas por diferencias finitas; reproduce las g del artículo a 1e-3.
-   - Parámetros publicados en `parameters/tang1996_published.json` (verificados contra el PDF; el
-     PDF NO se versiona, revista): NO dan el diamante del artículo con ningún corte (1os vecinos lo
-     comprimen; más vecinos, el Δe on-site casi sin apantallar lo expande). Solo para pruebas.
-   - Datos: `recipes/carbon_environments.py`, `references/gpaw_carbon_env.json` (9 entornos).
-     Error de fuerzas de Xu: cristales 5-15 %, defectos/C60 15-24 %, amorfos 21-50 %.
-   - Siguiente: ajustar los parámetros de Tang a esas referencias (partiendo de los publicados),
-     dejando fuera un amorfo y Stone-Wales para validar; luego exponerlo en GUI/CLI.
-7. ML: Δ-learning de repulsión (Stöhr 2020), fonones híbridos MACE con α/μ de TB,
-   DeePTB; GFN2-xTB como motor de comparación opcional.
-8. Validación en sistemas reales; anomalía de Kohn (Piscanec 2004).
-9. Al final: documentación de métodos/validación y guía de usuario.
+6. (hecho) TB dependiente del entorno: `environment.py` (Tang et al. 1996) y conjunto
+   `tang_carbon` (`recipes/tang_fit.py`): parte electrónica publicada; escala de Δe (×0,25), corte
+   (3,0-3,6 Å) y repulsión ajustados a GPAW (`gpaw_carbon_env.json`). Fuerzas frente a Xu (eV/Å):
+   Stone-Wales 0,93 -> 0,38 y amorfo 3,2 1,69 -> 0,98 (ambos fuera del ajuste), C60 0,82 -> 0,42,
+   vacante 0,79 -> 0,65; grafeno 0,12 -> 0,14. Diamante a = 3,515 Å; energías entre fases poco
+   fiables (diamante 0,37 eV/átomo). En GUI y CLI como «tang». Los parámetros publicados tal cual
+   no dan el diamante del artículo (`tang1996_published.json`, solo pruebas).
+   Planes nuevos: `docs/PLAN_NANOCOIL_RAMAN.md` (siguiente proyecto, usa tang_carbon) y
+   `docs/PLAN_XPS_FUTURO.md` (a futuro).
+   Nanocoil (204 átomos, `recipes/nanocoil.py`, `validation/nanocoil204_tb.json`): fases 2-3
+   hechas (TB Xu/Tang, relajación PBE, gap PBE 0,22 eV frente a TB sin gap, enlaces TB-PBE
+   RMS 0,015 Å, modos proyectados TB 2-6 % sobre PBE) y Raman resonante Tang (609 modos;
+   posiciones robustas, alturas relativas dependientes de η). Malla k de los fonones de
+   la coil comprobada: convergida con 4 k en z (< 0,1 cm⁻¹ hasta 16 k, Xu y Tang).
+   Herramientas generales: `sites.py` (anillos, grupos, frecuencia proyectada),
+   `phonopy_bridge.py` (pestaña «Fonones (ZB)»), SCC sí/no y modos por sitio en la GUI,
+   `recipes/site_screening.py`, `resonant_raman(select=..., cache_dir=...)`.
+7. Hecho (medido, no adoptado): MACE-MP-0 sin ajuste fino (moléculas como xu_chno; coil
+   11-18 % blanda) y Δ-learning lineal SOAP (no generaliza con los datos guardados).
+   Infraestructura probada: `hybrid.py`, `delta.py`, `recipes/delta_fit.py`. No hechos, con
+   razón: DeePTB (otro modelo entero, no una mejora de estos conjuntos) y GFN2-xTB
+   (comparador; solo si hace falta un tercer método). Lo que sí ayudaría: más datos DFT
+   (campaña de active learning) o ajuste fino de MACE con nuestras referencias.
+8. Validación en sistemas reales; anomalía de Kohn (Piscanec 2004). Hecho: malla k de los
+   fonones sin gap (grafeno con Xu: G 1572 con 12 k -> 1674 convergida; casi sin
+   dependencia con kT una vez convergida: la anomalía de Xu es débil). Aviso automático en
+   `modes.vibrations`/`tasks.phonons`, `tasks.kmesh_convergence`, fonones Xu del grafeno a
+   6×6 × 8×8 k. Falta: pendiente de Kohn física (requiere DFT con k densa o GW), tubos
+   metálicos.
+9. Hecho: `docs/GUIA_USUARIO.md`, `docs/METODOS.md` y `docs/VALIDACION.md` (este, generado
+   desde los datos por `recipes/validation_report.py`, con test). README corregido: tabla de
+   módulos (SCC periódico, Raman/IR, Tang, sitios/phonopy), límites (había GUI y Raman
+   resonante sin mencionar), I(2D)/I(G) a 2,80 eV 13,0 (no 13,1), regla ω > 100 cm⁻¹ del IR.
+
+## En curso (6 oct 2026): coil dopada, Raman con xu_chn
+- Hecho: N grafítico (validation/coil204_N_graphitic.json; GPAW confirma el sitio 5-5-6 por
+  0,40-0,59 eV), amina -NH2+H (validation/coil204_amine_tb.json; GPAW confirma a048_h059),
+  banda D por respiración de anillos (sin banda D definida en primer orden en Γ),
+  α resonante de cristales con estado SCC (corregido), hessianas embebidas.
+- Corriendo: `out/doped_raman/run.sh` (receta `recipes/doped_raman.py`; reanudable, relanzar
+  con `nohup setsid out/doped_raman/run.sh &` desde packages/tbkit). Fases: relax (hecho) ->
+  hessiana pristine (2448 desplazamientos, ~4,7/min) -> N (264) -> amine (462) -> check del
+  embebido -> Raman de modos > 900 cm⁻¹ a 633/532/488 nm -> report. Log en
+  out/nanocoil/supervisor.log. Al terminar: check.json (embebido vs completo), report.json,
+  sección nueva en el reporte publicado (https://claude.ai/artifact/K3h3L45mfk1GtuqGfeZNBJ,
+  fuente en el scratchpad: report/head.html, body.html, script.js, coil_data.json).
+- Memoria: GPAW de la coil usa 3,4-4 GB; con 15 GB, máximo 3 a la vez.
 
 ## Diagnóstico abierto: H de OH que migra al O vecino (B, P, Se)
 - Se ajustado (`/tmp/claude-0/fit/xu_chnose2.json`): enlaces < 0,08 Å, frecuencias

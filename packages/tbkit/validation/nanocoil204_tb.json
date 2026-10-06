@@ -1,0 +1,497 @@
+{
+ "structure": "tbkit/recipes/data/coil204_knee.extxyz (nanocarbon_lab preset 'Nanocoil (knees, periodic, smallest)')",
+ "settings": {
+  "kmesh": [
+   1,
+   1,
+   4
+  ],
+  "kT_eV": 0.05,
+  "fmax_eV_A": 0.02,
+  "phonon_delta_A": 0.01
+ },
+ "gpaw_k_convergence": {
+  "1": {
+   "dE_per_atom_vs_k4": 0.00025488781122975544,
+   "dF_rms_vs_k4": 0.012216272362556414
+  },
+  "2": {
+   "dE_per_atom_vs_k4": -8.93157727535022e-06,
+   "dF_rms_vs_k4": 0.0006412542495058672
+  },
+  "4": {
+   "dE_per_atom_vs_k4": 0.0,
+   "dF_rms_vs_k4": 0.0
+  }
+ },
+ "gpaw_forces_at_tang_geometry_eV_A": {
+  "rms": 0.35,
+  "max": 1.24
+ },
+ "xu_carbon": {
+  "relax_converged": true,
+  "gap_eV": 0.0,
+  "bond_min_max": [
+   1.362846230696245,
+   1.5191683076481406
+  ],
+  "ring_census": {
+   "5": 12,
+   "6": 78,
+   "7": 12
+  },
+  "topology": "OK",
+  "modes": 612,
+  "imaginary_below_-20": 0,
+  "lowest_three": [
+   0.008234714266849748,
+   0.009412654816209317,
+   0.010422775079664626
+  ],
+  "raman": "gapless: non-resonant Raman does not apply (resonant only)",
+  "highest_modes": [
+   {
+    "frequency_cm1": 1766.9367249013867,
+    "participation": 0.08584600814095072,
+    "on_pentagons": 0.000308517319171808,
+    "on_heptagons": 0.9596926877535302
+   },
+   {
+    "frequency_cm1": 1766.0454448142034,
+    "participation": 0.07281180819707264,
+    "on_pentagons": 8.003708039426109e-05,
+    "on_heptagons": 0.94109538989192
+   },
+   {
+    "frequency_cm1": 1749.789365389858,
+    "participation": 0.08194716756431429,
+    "on_pentagons": 0.0007426516864048921,
+    "on_heptagons": 0.8935037867896255
+   },
+   {
+    "frequency_cm1": 1734.9933348100885,
+    "participation": 0.11684635667540061,
+    "on_pentagons": 0.0002912328944314425,
+    "on_heptagons": 0.9265817321774706
+   },
+   {
+    "frequency_cm1": 1732.9383211906556,
+    "participation": 0.11111089977757121,
+    "on_pentagons": 0.0005140565275349598,
+    "on_heptagons": 0.8803710831587346
+   }
+  ],
+  "most_pentagon_mode": {
+   "frequency_cm1": 1238.4299566134418,
+   "participation": 0.31620100422868125,
+   "on_pentagons": 0.5926705553503361,
+   "on_heptagons": 0.20666315233149204
+  }
+ },
+ "tang_carbon": {
+  "relax_converged": true,
+  "gap_eV": 0.0,
+  "bond_min_max": [
+   1.363015612967575,
+   1.5636869852804858
+  ],
+  "ring_census": {
+   "5": 12,
+   "6": 78,
+   "7": 12
+  },
+  "topology": "OK",
+  "modes": 612,
+  "imaginary_below_-20": 0,
+  "lowest_three": [
+   0.011750277719003548,
+   0.012462538107303875,
+   0.013181651682268059
+  ],
+  "raman": "gapless: non-resonant Raman does not apply (resonant only)",
+  "highest_modes": [
+   {
+    "frequency_cm1": 1760.3218910246057,
+    "participation": 0.08037892852313462,
+    "on_pentagons": 6.4009607036795e-05,
+    "on_heptagons": 0.8611597842563354
+   },
+   {
+    "frequency_cm1": 1758.9386931984993,
+    "participation": 0.07468127874272251,
+    "on_pentagons": 0.0003088824410799011,
+    "on_heptagons": 0.8905892412358078
+   },
+   {
+    "frequency_cm1": 1747.9466222888718,
+    "participation": 0.09905200884069414,
+    "on_pentagons": 0.000811379265177211,
+    "on_heptagons": 0.8215301445970008
+   },
+   {
+    "frequency_cm1": 1741.226903469013,
+    "participation": 0.11746380362449033,
+    "on_pentagons": 0.0007389605583867579,
+    "on_heptagons": 0.8228784427896808
+   },
+   {
+    "frequency_cm1": 1738.2202470071968,
+    "participation": 0.1289903301739997,
+    "on_pentagons": 0.002676260865612799,
+    "on_heptagons": 0.7767894742659607
+   }
+  ],
+  "most_pentagon_mode": {
+   "frequency_cm1": 1549.9034086361203,
+   "participation": 0.24006436178350782,
+   "on_pentagons": 0.5998803032096149,
+   "on_heptagons": 0.05411797193525434
+  }
+ },
+ "gpaw_phase3": {
+  "settings": {
+   "xc": "PBE",
+   "mode": "lcao dzp",
+   "h": 0.2,
+   "kpts": [
+    1,
+    1,
+    2
+   ],
+   "smearing_eV": 0.05,
+   "relax_fmax_eV_A": 0.05,
+   "vacuum_A": 6.0,
+   "relax_converged": true,
+   "relax_topology": "OK"
+  },
+  "pbe_gap_eV": 0.22269348111472276,
+  "pbe_gap_note": "min over 11 k points Γ–Z, non-SCF bands on the kz=2 density; TB (Xu, Tang) gapless",
+  "geometry_vs_pbe": {
+   "xu_carbon": {
+    "bond_rms_A": 0.016319772957219852,
+    "bond_max_abs_A": 0.04224313182615047,
+    "bond_mean_A": -0.01213715027343408,
+    "bond_mean_in_5_rings_A": 0.0014450177842010468,
+    "bond_mean_in_6_rings_A": -0.012755363837577789,
+    "bond_mean_in_7_rings_A": -0.01823050340873011
+   },
+   "tang_carbon": {
+    "bond_rms_A": 0.014795120330106841,
+    "bond_max_abs_A": 0.02833166987421354,
+    "bond_mean_A": -0.012301182877948135,
+    "bond_mean_in_5_rings_A": -0.012341731732706222,
+    "bond_mean_in_6_rings_A": -0.012310743445047416,
+    "bond_mean_in_7_rings_A": -0.004713707497809802
+   }
+  },
+  "projected_modes": [
+   {
+    "model": "xu_carbon",
+    "label": "most_pentagon",
+    "index": 419,
+    "tb_frequency_cm1": 1238.4299566134418,
+    "pbe_projected_cm1": 1209.2373333926223
+   },
+   {
+    "model": "xu_carbon",
+    "label": "highest",
+    "index": 611,
+    "tb_frequency_cm1": 1766.9367249013867,
+    "pbe_projected_cm1": 1670.3589326453307
+   },
+   {
+    "model": "tang_carbon",
+    "label": "most_pentagon",
+    "index": 557,
+    "tb_frequency_cm1": 1549.9034086361203,
+    "pbe_projected_cm1": 1465.0816994693596
+   },
+   {
+    "model": "tang_carbon",
+    "label": "highest",
+    "index": 611,
+    "tb_frequency_cm1": 1760.3218910246057,
+    "pbe_projected_cm1": 1681.0664249400027
+   }
+  ],
+  "projected_note": "Rayleigh quotient of the PBE force constants along the TB eigenvector (one-sided, max displacement 0.02 A): an upper bound of the PBE frequency of that character",
+  "counterparts": {
+   "xu_419_1238_in_tang": {
+    "mode": 425,
+    "cm1": 1258.7,
+    "overlap": 0.59
+   },
+   "tang_557_1550_in_xu": {
+    "mode": 558,
+    "cm1": 1536.7,
+    "overlap": 0.59
+   }
+  },
+  "conclusion": "Xu (1238) and Tang (1550) 'most pentagon' modes are different vibrations, each present in both models within 2 %: no disagreement between the sets, only the selection criterion. PBE puts them at 1209 and 1465 cm-1; the highest (heptagon) modes at 1670-1681. TB is 2-6 % above PBE for these modes. PBE opens a 0.22 eV gap the TB sets do not."
+ },
+ "raman_resonant_tang": {
+  "method": "resonant_raman(select='all'): dα(ω_L+iη)/dQ along each Γ mode (tang_carbon modes and α), independent-particle interband α, no local fields; TB coil gapless so every laser is resonant",
+  "settings": {
+   "lasers_eV": [
+    1.58,
+    1.96,
+    2.33,
+    2.41,
+    2.54
+   ],
+   "eta_eV": 0.1,
+   "kmesh": 4,
+   "kT_eV": 0.05,
+   "delta_A": 0.005,
+   "modes": 609
+  },
+  "peaks_532nm_fwhm60_cm1": [
+   320,
+   427,
+   475,
+   732,
+   939,
+   1283,
+   1476,
+   1586,
+   1737
+  ],
+  "intensity_fraction_532nm": {
+   "below_1000": 0.43,
+   "1250_1450": 0.17,
+   "1500_1700": 0.21,
+   "above_1700": 0.03
+  },
+  "intensity_weighted_share": {
+   "pentagon_atoms": 0.27,
+   "heptagon_atoms": 0.37,
+   "atom_fraction_5": 0.235,
+   "atom_fraction_7": 0.412
+  },
+  "strongest_mode_share_of_total": 0.028,
+  "convergence_top20_modes": {
+   "kmesh_4_to_8_activity_ratio": [
+    0.96,
+    1.04
+   ],
+   "eta_0.1_to_0.2_activity_ratio": [
+    0.11,
+    0.71
+   ],
+   "eta_0.1_to_0.2_median": 0.31,
+   "note": "k converged; relative intensities depend on η by up to ×6 between modes (low-frequency modes fall most): positions are robust, relative heights are not"
+  },
+  "caveats": [
+   "first order at Γ only: the double-resonant D band of graphitic carbon is not this calculation",
+   "resonance energies are TB's, PBE opens 0.22 eV the TB does not",
+   "no local-field screening in the crystal α"
+  ]
+ },
+ "kmesh_convergence_phonons": {
+  "method": "Rayleigh quotient of each kz=4 TB eigenvector with the forces of a kz mesh (sites.projected_frequency, max displacement 0.01 A)",
+  "energy_per_cell_eV": {
+   "kz1": -1615.946205,
+   "kz2": -1615.983312,
+   "kz4": -1615.984519,
+   "kz16": -1615.984516
+  },
+  "results": {
+   "xu_carbon": {
+    "modes": {
+     "611": {
+      "kz4": 1767.46,
+      "kz8": 1767.46,
+      "kz16": 1767.46
+     },
+     "419": {
+      "kz4": 1238.57,
+      "kz8": 1238.57,
+      "kz16": 1238.57
+     },
+     "606": {
+      "kz4": 1716.77,
+      "kz8": 1716.77,
+      "kz16": 1716.77
+     },
+     "605": {
+      "kz4": 1704.82,
+      "kz8": 1704.82,
+      "kz16": 1704.82
+     },
+     "604": {
+      "kz4": 1702.4,
+      "kz8": 1702.4,
+      "kz16": 1702.4
+     },
+     "608": {
+      "kz4": 1735.88,
+      "kz8": 1735.88,
+      "kz16": 1735.88
+     },
+     "609": {
+      "kz4": 1750.3,
+      "kz8": 1750.3,
+      "kz16": 1750.3
+     },
+     "150": {
+      "kz4": 534.99,
+      "kz8": 534.99,
+      "kz16": 534.99
+     },
+     "607": {
+      "kz4": 1733.48,
+      "kz8": 1733.48,
+      "kz16": 1733.48
+     },
+     "50": {
+      "kz4": 293.85,
+      "kz8": 293.85,
+      "kz16": 293.85
+     },
+     "10": {
+      "kz4": 106.36,
+      "kz8": 106.36,
+      "kz16": 106.36
+     },
+     "610": {
+      "kz4": 1766.62,
+      "kz8": 1766.62,
+      "kz16": 1766.62
+     }
+    },
+    "max_abs_change_kz4_to_kz16_cm1": 0.0
+   },
+   "tang_carbon": {
+    "modes": {
+     "435": {
+      "kz4": 1281.37,
+      "kz8": 1281.37,
+      "kz16": 1281.37
+     },
+     "611": {
+      "kz4": 1760.7,
+      "kz8": 1760.7,
+      "kz16": 1760.7
+     },
+     "590": {
+      "kz4": 1629.83,
+      "kz8": 1629.83,
+      "kz16": 1629.83
+     },
+     "572": {
+      "kz4": 1583.64,
+      "kz8": 1583.64,
+      "kz16": 1583.64
+     },
+     "557": {
+      "kz4": 1550.06,
+      "kz8": 1550.06,
+      "kz16": 1550.06
+     },
+     "606": {
+      "kz4": 1735.62,
+      "kz8": 1735.62,
+      "kz16": 1735.62
+     },
+     "605": {
+      "kz4": 1702.39,
+      "kz8": 1702.39,
+      "kz16": 1702.39
+     },
+     "604": {
+      "kz4": 1692.3,
+      "kz8": 1692.3,
+      "kz16": 1692.3
+     },
+     "550": {
+      "kz4": 1536.48,
+      "kz8": 1536.48,
+      "kz16": 1536.48
+     },
+     "608": {
+      "kz4": 1741.56,
+      "kz8": 1741.56,
+      "kz16": 1741.56
+     },
+     "576": {
+      "kz4": 1589.94,
+      "kz8": 1589.94,
+      "kz16": 1589.94
+     },
+     "609": {
+      "kz4": 1748.35,
+      "kz8": 1748.35,
+      "kz16": 1748.35
+     },
+     "587": {
+      "kz4": 1628.12,
+      "kz8": 1628.12,
+      "kz16": 1628.12
+     },
+     "150": {
+      "kz4": 558.25,
+      "kz8": 558.25,
+      "kz16": 558.25
+     },
+     "607": {
+      "kz4": 1738.42,
+      "kz8": 1738.42,
+      "kz16": 1738.42
+     },
+     "50": {
+      "kz4": 312.8,
+      "kz8": 312.8,
+      "kz16": 312.8
+     },
+     "10": {
+      "kz4": 110.68,
+      "kz8": 110.68,
+      "kz16": 110.68
+     },
+     "610": {
+      "kz4": 1759.35,
+      "kz8": 1759.35,
+      "kz16": 1759.35
+     }
+    },
+    "max_abs_change_kz4_to_kz16_cm1": 0.0
+   }
+  },
+  "conclusion": "Converged at kz = 4 (Lz = 15 A): the selected modes (highest, 5/7-weighted, strongest Raman, low ones) move < 0.1 cm-1 from 4 to 16 k; unlike graphene's G, no k-sampling softening here."
+ },
+ "d_band_ring_breathing": {
+  "method": "sites.ring_breathing: B_k = Σ_R b_R² / Σ_R Σ_i∈R |e_i|², b_R = Σ e_i·r̂_i/√n_R (in-plane radial direction of each ring); calibrated on √3×√3 graphene, where only the A1'(K) pair (the D-band phonon) breathes, B = 0.5 each, and G has B = 0 (test)",
+  "graphene_A1prime_K_cm1": {
+   "xu_carbon_k12": 1377,
+   "tang_carbon_k16": 1276,
+   "tang_carbon_k24": 1287
+  },
+  "coil_tang": {
+   "max_B": 0.262,
+   "modes_B_above_0.3": 0,
+   "most_breathing_modes_cm1": "939-1088 (B 0.20-0.26, mostly hexagons)",
+   "mean_B_all_modes": 0.056,
+   "intensity_weighted_B_532nm": {
+    "1240-1320": 0.083,
+    "1450-1500": 0.063,
+    "1560-1610": 0.031,
+    "700-760": 0.038
+   },
+   "breathing_share_of_intensity": {
+    "1.58": 0.064,
+    "1.96": 0.06,
+    "2.33": 0.055,
+    "2.41": 0.057,
+    "2.54": 0.054
+   },
+   "breathing_weighted_centroid_1100_1500_cm1": {
+    "1.58": 1274,
+    "1.96": 1300,
+    "2.33": 1306,
+    "2.41": 1320,
+    "2.54": 1320
+   }
+  },
+  "conclusion": "No distinct D band in this calculation: no coil mode is a strong ring breathing (B <= 0.26 against 0.5 per partner in graphene), and the Raman intensity carried by breathing (5.5-6.4 %) equals the average breathing of all modes (5.6 %): the resonance does not select breathing modes. The 1283 cm-1 band sits at Tang's graphene A1'(K) frequency (1287) but breathes little (B 0.08); G (1586) is non-breathing (0.03), as E2g should be. The breathing-weighted centroid moves 1274 -> 1320 cm-1 from 1.58 to 2.54 eV (~48 cm-1/eV, like the D band) but rests on relative heights that depend on η: an indication, not a result. A first-order Γ calculation of a 204-atom cell with independent-particle α cannot represent the k-space double resonance; it does not show that a real coil has no D band."
+ }
+}

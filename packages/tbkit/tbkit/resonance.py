@@ -100,16 +100,77 @@ class ResonantRamanResult:
         return "\n".join(lines)
 
 
+def _projected(atoms, alpha_of, alpha0, frequencies, modes, internal, select, lasers, eta,
+               delta, method, warnings, cache_dir, progress, settings) -> ResonantRamanResult:
+    import json
+    from pathlib import Path
+
+    indices = np.arange(len(frequencies))[internal]
+    if not (isinstance(select, str) and select == "all"):
+        wanted = {int(k) for k in select}
+        indices = np.array([k for k in indices if k in wanted], dtype=int)
+    folder = None
+    if cache_dir is not None:
+        folder = Path(cache_dir)
+        folder.mkdir(parents=True, exist_ok=True)
+        tag = folder / "settings.json"
+        if tag.exists() and json.loads(tag.read_text()) != settings:
+            raise ValueError(f"{folder} tiene tensores de otros ajustes: usa otra carpeta.")
+        tag.write_text(json.dumps(settings, indent=1))
+    base = atoms.get_positions()
+    probe = atoms.copy()
+    probe.calc = None
+    tensors = np.zeros((len(lasers), len(indices), 3, 3), dtype=complex)
+    for j, k in enumerate(indices):
+        path = folder / f"mode_{k:04d}.npy" if folder is not None else None
+        if path is not None and path.exists():
+            tensors[:, j] = np.load(path)
+            continue
+        shape = modes[k]
+        h = delta / float(np.linalg.norm(shape, axis=1).max())
+        pair = []
+        for sign in (1, -1):
+            probe.set_positions(base + sign * h * shape)
+            pair.append(alpha_of(probe))
+        tensors[:, j] = (pair[0] - pair[1]) / (2 * h)
+        if path is not None:
+            tmp = path.with_suffix(".tmp.npy")
+            np.save(tmp, tensors[:, j])
+            tmp.replace(path)
+        if progress is not None:
+            progress(j + 1, len(indices))
+    activities = np.zeros(tensors.shape[:2])
+    ratios = np.zeros(tensors.shape[:2])
+    for li in range(len(lasers)):
+        for j in range(len(indices)):
+            activities[li, j], ratios[li, j] = _activity(tensors[li, j])
+    result = ResonantRamanResult(frequencies[indices], lasers, float(eta), tensors, activities,
+                                 ratios, alpha0, method + "; derivada a lo largo de cada modo",
+                                 warnings)
+    result.mode_indices = indices
+    return result
+
+
 def resonant_raman(atoms: Atoms, model: TBModel, lasers_ev, eta: float = 0.1,
                    kmesh: int = 24, kT: float = 0.01, delta: float = 0.01,
                    phonon_delta: float = 0.005, phonons: Optional[tuple] = None,
-                   screened: bool = True) -> ResonantRamanResult:
+                   screened: bool = True, select=None,
+                   cache_dir=None, progress=None) -> ResonantRamanResult:
     """Resonant Raman activities for each laser energy in ``lasers_ev`` (eV).
 
     Parameters as in :func:`tbkit.raman.raman`; ``eta`` is the broadening of
     the electronic excitations (eV, > 0). ``phonons=(frequencies, L)`` takes
     phonons from elsewhere (QE, or another model: graphene's G mode from Xu
     with the α of the π model, for instance).
+
+    ``select`` (mode indices into the phonons) switches to the derivative of α
+    along each chosen mode, (α(x + hL_k) - α(x - hL_k))/2h with the most
+    displaced atom moving ``delta``: the same tensor as Σ ∂α/∂x·L_k (linear),
+    for 2 α per mode instead of 6N. ``select="all"`` takes every internal mode
+    that way, worth it when the modes are fewer than 3N (a molecule's are not;
+    a large cell's spectrum is the same cost either way but can be resumed per
+    mode). ``cache_dir`` keeps each mode's tensor in a file (``mode_XXXX.npy``)
+    and a rerun resumes; it is tied to the laser energies, η and k mesh.
     """
     if eta <= 0:
         raise ValueError("η debe ser > 0 en resonancia (si no, α diverge en cada transición).")
@@ -131,15 +192,23 @@ def resonant_raman(atoms: Atoms, model: TBModel, lasers_ev, eta: float = 0.1,
                             "converge despacio y las diferencias finitas mezclan simetrías. "
                             "Para el grafeno usa tbkit.graphene (perturbativo, analítico).")
 
+    scc_state: dict = {}                     # SCC charges carried between displacements
+
     def alpha_of(a: Atoms) -> np.ndarray:
         system = System.build(a, model)
         if finite:
             return dynamic_polarizability_finite(system, lasers, eta, kT=kT, screened=screened)
-        return dynamic_polarizability_periodic(system, lasers, eta, kmesh=kmesh, kT=kT)
+        return dynamic_polarizability_periodic(system, lasers, eta, kmesh=kmesh, kT=kT,
+                                               scc_state=scc_state)
 
     method = ("α(ω + iη) apantallado (cargas y dipolos), finito" if finite and screened
               else "α(ω + iη) de partículas independientes" + ("" if finite else ", cristal"))
     alpha0 = alpha_of(atoms)
+    if select is not None:
+        return _projected(atoms, alpha_of, alpha0, frequencies, modes, internal, select, lasers,
+                          eta, delta, method, warnings, cache_dir, progress,
+                          {"lasers": lasers.tolist(), "eta": float(eta), "kmesh": kmesh,
+                           "kT": kT, "model": model.name, "screened": screened})
     base = atoms.get_positions()
     derivative = np.zeros((len(lasers), len(atoms), 3, 3, 3), dtype=complex)
     probe = atoms.copy()

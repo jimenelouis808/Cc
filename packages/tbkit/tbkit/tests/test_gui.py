@@ -186,6 +186,53 @@ def test_window_geometry_page():
     assert not page.undo.isEnabled()
 
 
+def test_window_sorts_modes_by_site_compares_scc_and_another_model():
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    window.set_atoms(molecule("C5H5N"), "piridina")
+    page = window.pages["Geometría y modos"]
+    page.modes_button.click()
+    _wait(window)
+    names = [page.site.itemText(k) for k in range(page.site.count())]
+    assert "N" in names and "anillos de 6" in names
+    page.site.setCurrentIndex(names.index("N"))
+    first = page.row_modes[0]
+    assert page.table.item(0, 0).text() == str(first)
+    page.table.selectRow(0)
+    page.other_model.setCurrentIndex(page.other_model.findData("chno"))
+    page.run_other()
+    _wait(window)
+    assert f"Modo {first}" in page.summary.text()
+    electronic = window.pages["Electrónica"]
+    electronic.scc_button.click()
+    _wait(window)
+    assert electronic.scc_summary.rowCount() == 5 and electronic.scc_charges.rowCount() == 11
+
+
+def test_window_phonopy_page():
+    _qt()
+    pytest.importorskip("phonopy")
+    from ase.build import graphene
+
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    sheet = graphene(a=2.46, vacuum=6.0)
+    sheet.pbc = [True, True, False]
+    window.set_atoms(sheet, "grafeno")
+    page = window.pages["Fonones (ZB)"]
+    page.supercell[0].setValue(3)
+    page.supercell[1].setValue(3)
+    page.kmesh.setValue(6)
+    page.run_button.click()
+    _wait(window)
+    assert "6/mmm" in page.summary.text()
+    labels = [page.irreps.item(r, 2).text() for r in range(page.irreps.rowCount())]
+    assert "E2g" in labels
+
+
 def test_runner_collects_garbage_only_in_the_gui_thread():
     # The cyclic collector running in the worker destroyed Qt objects of the
     # GUI thread and crashed the window at random places: it is paused while a
@@ -357,3 +404,25 @@ def test_window_shows_panel_descriptions_and_tooltips():
     assert spectra.fwhm.toolTip() == actions.HELP["Raman / IR"]
     window.show_descriptions(False)
     assert all(not box.isVisibleTo(window) for box in window.info_boxes)
+
+
+def test_saved_spectra_open_from_csv_and_npz(tmp_path):
+    grid = np.linspace(100, 1900, 50)
+    curve = np.exp(-((grid - 1580) / 40) ** 2)
+    csv = actions.write_csv(tmp_path / "s.csv", {"shift": grid, "intensity": curve})
+    saved = actions.load_spectrum(csv)
+    assert list(saved["curves"]) == ["intensity"] and np.allclose(saved["grid"], grid)
+    np.savez(tmp_path / "spectra.npz", grid=grid, **{"2.33": curve, "1.96": 2 * curve},
+             frequencies=np.array([1580.0, 1350.0]), activities=np.array([[1.0, 0.2], [0.5, 0.9]]))
+    saved = actions.load_spectrum(tmp_path / "spectra.npz")
+    assert set(saved["curves"]) == {"2.33 eV", "1.96 eV"}
+    assert len(saved["sticks"]) == 2
+    with pytest.raises(ValueError):
+        actions.load_spectrum(tmp_path / "s.txt")
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    page = window.pages["Espectros"]
+    page.open_spectrum(str(tmp_path / "spectra.npz"))
+    assert "2 curvas" in page.summary.text() and page.table.rowCount() == 2

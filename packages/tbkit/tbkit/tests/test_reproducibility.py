@@ -178,3 +178,12 @@ def test_skf_spline_repulsive(tmp_path):
     assert spline(1.0 * Bohr) == pytest.approx((np.exp(-1.0 + 2.0) - 0.5) * Hartree)
     assert spline(2.5 * Bohr) == pytest.approx((0.1 - 0.2 * 0.5 + 0.05 * 0.25) * Hartree)
     assert spline(4.5 * Bohr) == 0.0
+
+
+def test_validation_document_matches_the_stored_results():
+    """docs/VALIDACION.md is generated from validation/ and parameters/: a number
+    changed in a data file without regenerating the document (or edited by hand in
+    the document) fails here. Regenerate with python -m tbkit.recipes.validation_report."""
+    from tbkit.recipes.validation_report import TARGET, render
+
+    assert TARGET.read_text(encoding="utf-8") == render()

@@ -585,8 +585,19 @@ def dynamic_polarizability_periodic(system: System, energies, eta: float = 0.1,
                                     kpts: Optional[np.ndarray] = None,
                                     weights: Optional[np.ndarray] = None, kmesh: int = 24,
                                     kT: float = 0.01, onsite_dipoles: bool = True,
-                                    extra_polarizability: bool = True) -> np.ndarray:
+                                    extra_polarizability: bool = True,
+                                    ground_scc: Optional[bool] = None,
+                                    scc_state: Optional[dict] = None) -> np.ndarray:
     """Complex interband α(ω + iη) per unit cell (Å³), independent particles.
+
+    The states are those of the model's ground state: self-consistent charges when
+    ``ground_scc`` (default: the model's ``scc``), so a set fitted with SCC gets its
+    levels with the charge shifts it was fitted with (an N dopant's donor level,
+    the pentagon/heptagon charge transfer of a 5-7 net). The response itself has no
+    local fields (independent particles); that is what the SCC shift does not change.
+    ``scc_state`` (a dict the caller keeps) starts the SCC from the charges of the
+    previous call and stores the new ones: across the small displacements of a
+    Raman derivative that saves most of the iterations, not the result.
 
     ``α_ab(z) = Σ_k w_k Σ_{nm} (f_n - f_m) r^a_nm r^b_mn / (E_m - E_n - z)``
     with the interband position elements of :func:`polarizability_periodic`.
@@ -599,11 +610,31 @@ def dynamic_polarizability_periodic(system: System, energies, eta: float = 0.1,
 
     if kpts is None:
         kpts, weights = mesh(system.atoms, kmesh)
+    if ground_scc is None:
+        ground_scc = system.model.scc
+    shift = None
+    if ground_scc:
+        from .scc import self_consistent
+
+        guess = None if scc_state is None else scc_state.get("dq")
+        result = self_consistent(system, kT=kT, tol=1e-10, kpts=kpts, weights=weights,
+                                 initial_dq=guess)
+        if not result.converged:
+            raise RuntimeError("SCC sin converger: " + result.summary())
+        shift = result.shift
+        if scc_state is not None:
+            scc_state["dq"] = result.dq
     onsite = dipole_matrices(system) if onsite_dipoles and has_dipoles(system.model) else None
     zs = np.array([complex(e, eta) for e in np.atleast_1d(np.asarray(energies, float))])
     spectra, blocks = [], []
     for k in kpts:
         h, s, dh, ds = _bloch_ii(system, k)
+        if shift is not None and s is None:
+            h = h + np.diag(shift)
+        elif shift is not None:
+            h = h + 0.5 * s * (shift[:, None] + shift[None, :])
+            dh = np.array([d + 0.5 * dsa * (shift[:, None] + shift[None, :])
+                           for d, dsa in zip(dh, ds, strict=True)])
         e, c = eigh(h, s) if s is not None else eigh(h)
         spectra.append(e)
         blocks.append((c, dh, ds, e))

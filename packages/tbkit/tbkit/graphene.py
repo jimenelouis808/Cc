@@ -88,12 +88,15 @@ class GraphenePhonons:
     source: str
 
     @classmethod
-    def from_model(cls, model, n: int = 8, kmesh: int = 3, kT: float = 0.05,
+    def from_model(cls, model, n: int = 8, kmesh: int = 6, kT: float = 0.05,
                    delta: float = 0.01, a_cc: Optional[float] = None) -> "GraphenePhonons":
         """Force constants of ``model`` (a tbkit model with repulsion; Xu by default).
 
         ``a_cc`` defaults to the model's own equilibrium bond (found by
-        minimising the energy of the primitive cell).
+        minimising the energy of the primitive cell). ``n × kmesh`` is the
+        electron sampling per axis of the primitive cell: graphene is gapless and
+        its G and K modes need ≥ 48 at kT = 0.05 eV (Xu, 6×6: k 4 -> G 1667,
+        K 1389 cm⁻¹; k 8 -> 1684.5, 1402.8; k 12 -> 1686.2, 1403.6).
         """
         from .calculator import TBCalculator
 
@@ -571,7 +574,8 @@ def load_phonons(which: str = "gpaw") -> GraphenePhonons:
     from .params import PARAMETER_DIR, xu_carbon
 
     if which == "xu":
-        return GraphenePhonons.from_model(xu_carbon(), n=6, kmesh=4, kT=0.05)
+        # 6 × 8 = 48 k per axis: G and the K mode within 2 cm⁻¹ of 72 (k 4 was 19 low).
+        return GraphenePhonons.from_model(xu_carbon(), n=6, kmesh=8, kT=0.05)
     path = PARAMETER_DIR / "references" / "gpaw_graphene_phonons.json" if which == "gpaw" \
         else Path(which)
     phonons = GraphenePhonons.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))

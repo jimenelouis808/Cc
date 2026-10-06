@@ -41,6 +41,10 @@ dev = [
 plot = [
     "matplotlib>=3.7",
 ]
+# Phonons in the whole Brillouin zone (tbkit.phonopy_bridge, the GUI's «Fonones (ZB)»).
+phonons = [
+    "phonopy>=2.20",
+]
 # The window (tbkit-gui): Qt and VTK are heavy, so they stay optional.
 gui = [
     "matplotlib>=3.7",

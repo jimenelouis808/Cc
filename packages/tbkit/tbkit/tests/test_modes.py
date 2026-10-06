@@ -118,3 +118,52 @@ def test_describe(pyridine):
 def test_from_hessian_round_trip(pyridine):
     again = Vibrations.from_hessian(pyridine.atoms, pyridine.hessian)
     assert again.frequencies == pytest.approx(pyridine.frequencies)
+
+
+def test_gapless_crystals_warn_and_the_k_mesh_converges_the_g_mode():
+    """Graphene is gapless: a coarse mesh softens G (Kohn anomaly sampled badly), so
+    the modes carry a warning and kmesh_convergence finds the mesh that holds still.
+    Diamond has a gap and no warning."""
+    from ase.build import bulk, graphene
+
+    from tbkit.modes import GAPLESS_WARNING, vibrations
+    from tbkit.params import xu_carbon
+    from tbkit.tasks import kmesh_convergence
+
+    sheet = graphene(a=2.46, vacuum=6.0)
+    sheet.pbc = [True, True, False]
+    assert GAPLESS_WARNING in vibrations(sheet, xu_carbon(), kmesh=12, kT=0.05).warnings
+    diamond = bulk("C", "diamond", a=3.56)
+    assert GAPLESS_WARNING not in vibrations(diamond, xu_carbon(), kmesh=4, kT=0.05).warnings
+    out = kmesh_convergence(sheet, xu_carbon(), meshes=(24, 36, 48), kT=0.05, top=1,
+                            tolerance=5.0)
+    g = [row["highest_cm1"][-1] for row in out["rows"]]
+    assert g == sorted(g) and g[-1] - g[0] > 10          # softened on the coarse mesh
+    assert out["converged_kmesh"] == 36
+
+
+def test_cached_hessian_rows_and_embedding(tmp_path):
+    """hessian_rows gives the Hessian of modes.vibrations (same differences, cached and
+    shared by parts); embedding the rows of a region into a reference equal to the
+    same structure's Hessian returns that Hessian."""
+    from ase.build import molecule
+
+    from tbkit.calculator import TBCalculator
+    from tbkit.modes import embedded_hessian, hessian_rows, vibrations
+    from tbkit.params import load_parameters
+
+    model = load_parameters("xu_chno")
+    water = molecule("CH3OH")
+    vib = vibrations(water, model, delta=0.01)
+    make = lambda: TBCalculator(model)                    # noqa: E731
+    assert hessian_rows(water, make, tmp_path, part=(0, 2)) is None       # half done
+    full = hessian_rows(water, make, tmp_path, part=(1, 2))
+    assert np.allclose(0.5 * (full + full.T), vib.hessian, atol=1e-6)
+    sym = 0.5 * (full + full.T)
+    region = [0, 1, 4]
+    rows = hessian_rows(water, make, tmp_path, indices=region)
+    embedded = embedded_hessian(sym, len(water), len(water), region, rows)
+    # equal up to half the finite-difference asymmetry of the rows
+    assert np.abs(embedded - sym).max() <= 0.5 * np.abs(full - full.T).max() + 1e-12
+    with pytest.raises(ValueError):
+        embedded_hessian(sym[:-3, :-3], len(water) - 1, len(water), region, rows)

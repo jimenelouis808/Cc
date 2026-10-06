@@ -114,6 +114,9 @@ def phonons(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.02,
     atoms = atoms.copy()
     atoms.calc = TBCalculator(model, kpts=kmesh, kT=kT, scc=scc)
     residual = float(np.linalg.norm(atoms.get_forces(), axis=1).max())
+    from .modes import GAPLESS_WARNING, gapless_periodic
+
+    gapless = gapless_periodic(atoms)
     with tempfile.TemporaryDirectory() as directory:
         vibrations = Vibrations(atoms, name=os.path.join(directory, "vib"), delta=delta)
         vibrations.run()
@@ -123,7 +126,8 @@ def phonons(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.02,
 
     frequencies = np.where(np.abs(energies.imag) > np.abs(energies.real),
                            -np.abs(energies.imag), np.abs(energies.real)) / invcm
-    out = {"frequencies_cm1": frequencies, "residual_force": residual, "modes": modes}
+    out = {"frequencies_cm1": frequencies, "residual_force": residual, "modes": modes,
+           "warnings": [GAPLESS_WARNING] if gapless else []}
     scale = frequency_scale(model)
     if scale is not None:
         # Against GPAW, from the set's own molecules (recipes/frequency_scaling.py);
@@ -131,6 +135,28 @@ def phonons(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.02,
         out["frequency_scale"] = scale
         out["frequencies_scaled_cm1"] = scale * frequencies
     return out, atoms
+
+
+def kmesh_convergence(atoms: Atoms, model: TBModel, meshes=(12, 24, 36, 48), kT: float = 0.02,
+                      top: int = 6, tolerance: float = 2.0, scc: Optional[bool] = None) -> dict:
+    """Γ frequencies against the k mesh, densest last; stops once the ``top`` highest
+    modes move less than ``tolerance`` cm⁻¹ between two meshes.
+
+    Needed for gapless crystals (see ``modes.GAPLESS_WARNING``): a coarse mesh can
+    soften the modes that couple to the Fermi surface by over 100 cm⁻¹."""
+    from .modes import vibrations
+
+    rows, previous, converged = [], None, None
+    for n in meshes:
+        frequencies = np.sort(vibrations(atoms, model, kmesh=n, kT=kT, scc=scc).frequencies)
+        highest = frequencies[-top:]
+        change = None if previous is None else float(np.abs(highest - previous).max())
+        rows.append({"kmesh": n, "highest_cm1": highest.tolist(), "max_change_cm1": change})
+        if change is not None and change < tolerance:
+            converged = rows[-2]["kmesh"]
+            break
+        previous = highest
+    return {"rows": rows, "converged_kmesh": converged, "kT": kT, "tolerance_cm1": tolerance}
 
 
 def frequency_scale(model: TBModel) -> float | None:

@@ -34,6 +34,8 @@ MODELS = {
     "chnos": ("C/H/N/O + S (xu_chnos, SCC)", lambda: load_parameters("xu_chnos")),
     "chnop": ("C/H/N/O + P (xu_chnop, SCC)", lambda: load_parameters("xu_chnop")),
     "chnose": ("C/H/N/O + Se (xu_chnose, SCC)", lambda: load_parameters("xu_chnose")),
+    "tang": ("Carbono dependiente del entorno (Tang, ajustado a GPAW)",
+             lambda: load_parameters("tang_carbon")),
 }
 
 
@@ -331,15 +333,122 @@ def vibration_modes(atoms: Atoms, model: TBModel, kT: float = 0.02, kmesh: int =
     problems = check_model(atoms, model, scc)
     if problems:
         raise ValueError(" ".join(problems))
+    from ..sites import site_groups
+
     vib = vibrations(atoms, model, kmesh=kmesh, kT=kT, scc=scc)
     shares = participation(vib)
+    groups = site_groups(atoms)
+    on_sites = participation(vib, groups) if groups else {}
     rows = []
     for index, frequency in enumerate(vib.frequencies):
         parts = ", ".join(f"{name} {share[index]:.0%}" for name, share in shares.items()
                           if share[index] >= 0.05)
         rows.append((index, float(frequency), parts))
     return {"vibrations": vib, "rows": rows, "vdos": vibrational_dos(vib, sigma=sigma),
-            "warnings": list(vib.warnings)}
+            "warnings": list(vib.warnings), "site_weights": on_sites,
+            "site_sizes": {name: len(members) for name, members in groups.items()}}
+
+
+def modes_by_site(result: dict, site: Optional[str]) -> list[tuple]:
+    """Rows ``(mode, ω, share on the site, enrichment, participation)`` sorted by the share
+    on ``site`` (largest first); ``site=None`` keeps the frequency order.
+
+    The enrichment is the share over the site's fraction of atoms: 1 for a mode
+    spread evenly, N/N_site for a mode entirely on the site."""
+    vib = result["vibrations"]
+    rows = result["rows"]
+    if site is None:
+        return [(index, freq, float("nan"), float("nan"), parts) for index, freq, parts in rows]
+    share = result["site_weights"][site]
+    fraction = result["site_sizes"][site] / len(vib.atoms)
+    order = np.argsort(-share)
+    return [(int(k), float(vib.frequencies[k]), float(share[k]), float(share[k] / fraction),
+             rows[k][2]) for k in order]
+
+
+def mode_with_other_model(atoms: Atoms, vib, index: int, other: TBModel, kmesh: int = 8,
+                          kT: float = 0.02, scc: Optional[bool] = None) -> dict:
+    """Frequency of mode ``index`` (its displacement pattern) under ``other``: the
+    Rayleigh quotient of that model's force constants (``tbkit.sites``), two force
+    calls. Same pattern, another model's springs: a cross-check of a mode (e.g. Xu
+    against Tang on a 5-7 mode) without recomputing every mode."""
+    from ..calculator import TBCalculator
+    from ..sites import projected_frequency
+
+    _needs_repulsion(other)
+    problems = check_model(atoms, other, scc)
+    if problems:
+        raise ValueError(" ".join(problems))
+    out = projected_frequency(vib.atoms, vib.modes[index],
+                              lambda: TBCalculator(other, kpts=kmesh, kT=kT, scc=scc))
+    return {"index": int(index), "frequency_cm1": float(vib.frequencies[index]),
+            "other_cm1": out["frequency_cm1"], "other": other.name, "step_A": out["step_A"]}
+
+
+# --------------------------------------------------------------------------
+# SCC on / off
+# --------------------------------------------------------------------------
+
+def compare_scc(atoms: Atoms, model: TBModel, charge: float = 0.0, kT: float = 0.01,
+                kmesh: int = 24) -> dict:
+    """The ground state with and without self-consistent charges, side by side.
+
+    SCC lets charge transfer cost electrostatic energy (Hubbard U, γ), so it
+    reduces the charges a bare TB puts on polar bonds and moves levels with
+    them. For a set fitted with SCC the «con» column is the valid one; the
+    other shows how much the result leans on SCC."""
+    missing = sorted(set(atoms.get_chemical_symbols()) - set(model.hubbard_u or {}))
+    if missing:
+        raise ValueError(f"«{model.name}» no tiene U para {', '.join(missing)}: sin U no hay SCC "
+                         "(usa un conjunto xu_ch*).")
+    states = {flag: ground_state(atoms, model, charge=charge, kT=kT, kmesh=kmesh, scc=flag)
+              for flag in (False, True)}
+    rows = []
+    for key, label in (("gap", "gap (eV)"), ("homo", "HOMO (eV)"), ("lumo", "LUMO (eV)"),
+                       ("fermi", "E_F (eV)")):
+        off, on = states[False].info[key], states[True].info[key]
+        off = float(off) if off is not None else float("nan")
+        on = float(on) if on is not None else float("nan")
+        rows.append((label, off, on, on - off))
+    q = {flag: np.array([states[flag].charges[i] for i in range(len(atoms))]) for flag in states}
+    rows.append(("|q| máx. (e)", float(np.abs(q[False]).max()), float(np.abs(q[True]).max()),
+                 float(np.abs(q[True]).max() - np.abs(q[False]).max())))
+    symbols = atoms.get_chemical_symbols()
+    charges = [(i, symbols[i], float(q[False][i]), float(q[True][i]),
+                float(q[True][i] - q[False][i])) for i in range(len(atoms))]
+    return {"rows": rows, "charges": charges, "iterations": states[True].iterations,
+            "converged": states[True].converged, "states": states}
+
+
+# --------------------------------------------------------------------------
+# Phonons in the whole Brillouin zone (phonopy)
+# --------------------------------------------------------------------------
+
+def phonopy_available() -> bool:
+    try:
+        import phonopy  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def bz_phonons(atoms: Atoms, model: TBModel, supercell=(4, 4, 4), delta: float = 0.01,
+               kmesh: int = 12, kT: float = 0.02, scc: Optional[bool] = None,
+               temperature: float = 300.0, cache_dir: Optional[str] = None) -> dict:
+    """Dispersion, DOS per element, Γ symmetry labels and harmonic thermodynamics."""
+    from .. import phonopy_bridge as pb
+
+    _needs_repulsion(model)
+    problems = check_model(atoms, model, scc)
+    if problems:
+        raise ValueError(" ".join(problems))
+    result = pb.phonopy_phonons(atoms, model, supercell=supercell, delta=delta, kmesh=kmesh,
+                                kT=kT, scc=scc, cache_dir=cache_dir)
+    return {"dispersion": pb.dispersion(result, atoms), "dos": pb.phonon_dos(result, atoms),
+            "irreps": pb.gamma_irreps(result), "point_group": pb.point_group(result),
+            "thermal": pb.thermal(result, atoms, [temperature])[0],
+            "supercell": result.supercell, "displacements": result.displacements,
+            "warnings": result.warnings}
 
 
 # --------------------------------------------------------------------------
@@ -421,6 +530,47 @@ def ir_spectrum_of(atoms: Atoms, model: TBModel, phonons=None, fwhm: float = 10.
     return {"rows": rows, "grid": grid, "absorption": absorption,
             "dipole_debye": float(np.linalg.norm(result.dipole) / 0.20819434),
             "warnings": list(result.warnings), "frequency_scale": factor}
+
+
+def load_spectrum(path: str | Path) -> dict:
+    """A spectrum computed earlier, to look at or compare: ``{"grid", "curves", "sticks",
+    "source"}``.
+
+    Reads what tbkit writes: the CSV of «Exportar CSV…» (first column the shift,
+    the rest curves) and ``.npz`` files with a ``grid`` and curves of its length
+    (e.g. ``raman_*/spectra.npz`` of ``recipes/nanocoil``), plus, when present,
+    ``frequencies`` and ``activities`` (one row per laser) as sticks."""
+    path = Path(path)
+    curves, sticks = {}, {}
+    if path.suffix.lower() == ".csv":
+        with path.open(encoding="utf-8") as handle:
+            header = handle.readline().strip().lstrip("#").split(",")
+        data = np.loadtxt(path, delimiter=",", skiprows=1, ndmin=2)
+        grid = data[:, 0]
+        for k, name in enumerate(header[1:], start=1):
+            curves[name.strip() or f"columna {k}"] = data[:, k]
+    elif path.suffix.lower() == ".npz":
+        data = np.load(path)
+        if "grid" not in data:
+            raise ValueError(f"{path.name} no tiene 'grid': no es un espectro de tbkit.")
+        grid = data["grid"]
+        for name in data.files:
+            values = data[name]
+            if name != "grid" and values.ndim == 1 and len(values) == len(grid):
+                label = f"{name} eV" if name.replace(".", "", 1).isdigit() else name
+                curves[label] = values
+        if "frequencies" in data.files and "activities" in data.files:
+            activities = np.atleast_2d(data["activities"])
+            labels = list(curves) if len(curves) == len(activities) else \
+                [f"serie {k + 1}" for k in range(len(activities))]
+            for label, row in zip(labels, activities, strict=True):
+                sticks[label] = (data["frequencies"], row)
+    else:
+        raise ValueError("Formatos: .csv (Exportar CSV) o .npz con 'grid'.")
+    if not curves:
+        raise ValueError(f"{path.name} no trae ninguna curva de la longitud de 'grid'.")
+    return {"grid": np.asarray(grid, dtype=float), "curves": curves, "sticks": sticks,
+            "source": path.name}
 
 
 def write_csv(path: str | Path, columns: dict[str, np.ndarray]) -> Path:
@@ -519,6 +669,11 @@ PANEL_HELP = {
                          "modos en Γ. Relaja antes de los modos: fuera del mínimo las "
                          "frecuencias no son armónicas. Los modos calculados aquí los usa "
                          "la pestaña Espectros.",
+    "Fonones (ZB)": "Fonones en toda la zona de Brillouin con phonopy y las fuerzas del "
+                    "modelo: dispersión por el camino de puntos especiales, DOS por "
+                    "elemento, representación irreducible de cada modo en Γ (identifica "
+                    "modos por simetría, no por frecuencia) y F, S, Cv armónicos. Solo "
+                    "periódicos y relajados; los ejes no periódicos llevan supercelda 1.",
     "Espectros": "Raman (no resonante y resonante) e IR con los fonones del modelo o de "
                  "Quantum ESPRESSO. Raman solo en sistemas con gap y capa cerrada. "
                  "«Escalar frecuencias» multiplica por el factor del conjunto (frente a "
@@ -534,8 +689,9 @@ HELP = {
     "Abrir…": "Abre una estructura. Al cambiarla se borran los resultados anteriores.",
     "Modelo": "El conjunto de parámetros y cómo se resuelve (carga, SCC, temperatura).",
     "Parámetros": "Conjunto de parámetros: π (solo bandas), Xu (carbono), xu_ch* "
-                  "(carbono con H, N, O, B, S, P, Se). Cada uno dice en su «validity» "
-                  "para qué sirve y qué error tiene.",
+                  "(carbono con H, N, O, B, S, P, Se), Tang (carbono con defectos, "
+                  "amorfo, curvatura 5-7: saltos que dependen del entorno). Cada uno "
+                  "dice en su «validity» para qué sirve y qué error tiene.",
     "Carga (e)": "Carga total del sistema en electrones (+1 = un electrón menos).",
     "SCC": "Cargas autoconsistentes. Por defecto, lo que pide el conjunto: los xu_ch* "
            "se ajustaron con SCC y no deben usarse sin ella.",
@@ -547,6 +703,10 @@ HELP = {
     # Electrónica / Orbitales
     "Calcular estado fundamental": "Diagonaliza (con SCC si toca): niveles, gap, DOS y "
                                    "cargas. Lo usan las demás pestañas.",
+    "Comparar SCC sí/no": "Resuelve con y sin cargas autoconsistentes y compara gap, HOMO, "
+                          "LUMO, E_F y cargas; colorea Δq en la vista. La SCC cobra la "
+                          "transferencia de carga (U, γ) y suele reducir las cargas polares. "
+                          "Necesita U en el conjunto (xu_ch*).",
     "Calcular bandas": "Bandas a lo largo del camino de puntos especiales de la celda.",
     "Cargar niveles": "Superpone niveles de otro cálculo (p. ej. DFT) para comparar.",
     "Quitar": "Quita los niveles superpuestos.",
@@ -571,6 +731,28 @@ HELP = {
     "Guardar modos…": "Guarda los modos (frecuencias y vectores) para reutilizarlos.",
     "Flechas": "Muestra los desplazamientos del modo seleccionado como flechas.",
     "Parar": "Detiene la animación del modo.",
+    "Ordenar modos por sitio": "Ordena los modos por su peso en un grupo de átomos: anillos "
+                               "de 5, 6 o 7, cada heteroátomo, los C unidos a un heteroátomo, "
+                               "H. «Enriquecimiento» = peso / fracción de átomos del grupo "
+                               "(1: modo repartido; alto: localizado ahí).",
+    "Comparar el modo con": "Frecuencia del modo seleccionado (mismo patrón de "
+                            "desplazamiento) con otro conjunto de parámetros: cociente de "
+                            "Rayleigh con dos llamadas de fuerzas. Exacta si el modo también "
+                            "es propio del otro modelo; si no, cota superior.",
+    "Frecuencia con el otro modelo": "Calcula la frecuencia del modo seleccionado con el "
+                                     "modelo elegido (p. ej. Xu frente a Tang en un modo 5-7).",
+    # Fonones (ZB)
+    "Supercelda": "Repeticiones de la celda en x, y, z para las constantes de fuerza (1 en "
+                  "los ejes no periódicos). Más grande: dispersión más fiel lejos de Γ.",
+    "Desplazamiento": "Amplitud de los desplazamientos de phonopy (Å).",
+    "Malla k de la celda": "Puntos k por eje de la celda unidad; en la supercelda se divide "
+                           "por su tamaño (mismo muestreo electrónico).",
+    "Temperatura": "Temperatura de F, S y Cv armónicos.",
+    "Carpeta (reanudable)": "Si se da, cada supercelda desplazada guarda sus fuerzas ahí y un "
+                            "cálculo interrumpido se reanuda (no mezcla estructuras: lo "
+                            "comprueba).",
+    "Calcular fonones en la ZB": "Fuerzas en las superceldas desplazadas, constantes de "
+                                 "fuerza, dispersión, DOS, simetrías en Γ y termodinámica.",
     # Espectros
     "Fonones": "De dónde salen los modos: los del modelo (Geometría y modos) o un archivo "
                "de Quantum ESPRESSO; en Grafeno, GPAW o Xu.",
@@ -584,6 +766,11 @@ HELP = {
     "Raman resonante": "Actividades a cada energía de láser y perfiles de excitación.",
     "IR": "Intensidades IR (km/mol) con el dipolo del modelo; semicuantitativas.",
     "Exportar CSV…": "Guarda el espectro y la tabla mostrados como CSV.",
+    "Abrir espectro guardado…": "Muestra un espectro calculado antes (CSV de «Exportar CSV…» o "
+                                "un .npz de las recetas, p. ej. raman_*/spectra.npz de la "
+                                "coil) sin recalcular. Cada curva se normaliza a su máximo; "
+                                "si hay un espectro calculado en la pestaña, se superpone para "
+                                "comparar.",
     # Grafeno
     "Láseres (eV)": "Energías de láser para G, 2D y 2D′.",
     "γ electrónico": "Ensanchamiento electrónico (eV) de la doble resonancia.",

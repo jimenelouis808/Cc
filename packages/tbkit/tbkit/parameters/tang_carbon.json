@@ -1,0 +1,444 @@
+{
+ "name": "Carbono dependiente del entorno (forma de Tang et al. 1996, ajustado a GPAW)",
+ "reference": "M. S. Tang, C. Z. Wang, C. T. Chan, K. M. Ho, Phys. Rev. B 53, 979 (1996). Parámetros de las tablas I y II y del texto (ecs. 1-7); verificados contra el PDF (signos de α1 de V_ssσ y V_ppπ negativos).",
+ "system": "carbono puro: cadena, grafito, diamante y fases metálicas (sc, bcc, fcc) del ajuste original a LDA+GGA; aquí además validado frente a GPAW PBE en amorfos y defectos",
+ "validity": "solo carbono, sin SCC. Forma funcional y parte electrónica de Tang et al. 1996; repulsión, escala de Δe y corte ajustados a GPAW PBE. Error de fuerzas (RMS, eV/Å) frente a GPAW: diamond 0.18, graphene 0.14, chain 0.22, c60 0.42, vacancy 0.65, stone_wales 0.38, amorphous_2.0 0.87, amorphous_2.6 0.94, amorphous_3.2 0.98 (amorphous_3.2 y stone_wales fuera del ajuste). Energías comparables entre estructuras de carbono (una sola referencia por átomo). Diamante: mínimo en a = 3,515 Å (GPAW-PBE ~3,57; -1,5 %), B = 478 GPa. Energías entre fases muy distintas poco fiables (diamante 0,37 eV/átomo frente al resto); fuerzas y geometrías mejores que Xu en 8 de 9 entornos (grafeno 0,14 frente a 0,12 eV/Å).",
+ "units": {
+  "energy": "eV",
+  "length": "Å"
+ },
+ "orbitals": {
+  "C": [
+   "s",
+   "px",
+   "py",
+   "pz"
+  ]
+ },
+ "onsite": {
+  "C": {
+   "s": {
+    "value": -6.041,
+    "unit": "eV",
+    "source": "Tang et al. 1996, texto tras ec. 6 (e_s,0)"
+   },
+   "p": {
+    "value": 1.024,
+    "unit": "eV",
+    "source": "Tang et al. 1996, texto tras ec. 6 (e_p,0)"
+   }
+  }
+ },
+ "valence": {
+  "C": {
+   "value": 4,
+   "unit": "e",
+   "source": "carbono, 2s2 2p2"
+  }
+ },
+ "hopping": [],
+ "scc": false,
+ "environment": {
+  "functions": {
+   "sss": {
+    "a1": {
+     "value": -8.9491,
+     "unit": "eV (φ: adimensional)",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "a2": {
+     "value": 0.891,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "a3": {
+     "value": 0.158,
+     "unit": "Å^-α4",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "a4": {
+     "value": 2.7008,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "b1": {
+     "value": 2.02,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "b2": {
+     "value": 0.2274,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "b3": {
+     "value": 4.794,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    },
+    "delta": {
+     "value": 0.031,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sss"
+    }
+   },
+   "sps": {
+    "a1": {
+     "value": 8.3183,
+     "unit": "eV (φ: adimensional)",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "a2": {
+     "value": 0.617,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "a3": {
+     "value": 0.1654,
+     "unit": "Å^-α4",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "a4": {
+     "value": 2.4692,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "b1": {
+     "value": 1.3,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "b2": {
+     "value": 0.2274,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "b3": {
+     "value": 4.794,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    },
+    "delta": {
+     "value": 0.031,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila sps"
+    }
+   },
+   "pps": {
+    "a1": {
+     "value": 11.7955,
+     "unit": "eV (φ: adimensional)",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "a2": {
+     "value": 0.762,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "a3": {
+     "value": 0.1624,
+     "unit": "Å^-α4",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "a4": {
+     "value": 2.3509,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "b1": {
+     "value": 1.04,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "b2": {
+     "value": 0.2274,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "b3": {
+     "value": 4.794,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    },
+    "delta": {
+     "value": 0.031,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila pps"
+    }
+   },
+   "ppp": {
+    "a1": {
+     "value": -5.486,
+     "unit": "eV (φ: adimensional)",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "a2": {
+     "value": 1.2785,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "a3": {
+     "value": 0.1383,
+     "unit": "Å^-α4",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "a4": {
+     "value": 3.449,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "b1": {
+     "value": 0.2,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "b2": {
+     "value": 8.5,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "b3": {
+     "value": 4.38,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    },
+    "delta": {
+     "value": 0.031,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila ppp"
+    }
+   },
+   "rep": {
+    "a1": {
+     "value": 30.0,
+     "unit": "eV (φ: adimensional)",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "a2": {
+     "value": 3.4905,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "a3": {
+     "value": 0.00423,
+     "unit": "Å^-α4",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "a4": {
+     "value": 6.127,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "b1": {
+     "value": 1.5035,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "b2": {
+     "value": 0.205325,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "b3": {
+     "value": 4.1625,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    },
+    "delta": {
+     "value": 0.002168,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila rep"
+    }
+   },
+   "onsite": {
+    "a1": {
+     "value": 0.1997025,
+     "unit": "eV (φ: adimensional)",
+     "source": "Tang et al. 1996, tabla I, × 0.25 (ajustado a GPAW PBE (gpaw_carbon_env.json, sin amorphous_3.2 ni stone_wales); receta tbkit.recipes.tang_fit)"
+    },
+    "a2": {
+     "value": 0.029681,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "a3": {
+     "value": 0.19667,
+     "unit": "Å^-α4",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "a4": {
+     "value": 2.2423,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "b1": {
+     "value": 0.055034,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "b2": {
+     "value": 0.10143,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "b3": {
+     "value": 3.09355,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    },
+    "delta": {
+     "value": 0.272375,
+     "unit": "",
+     "source": "Tang et al. 1996, tabla I, fila onsite"
+    }
+   }
+  },
+  "g_screen": [
+   {
+    "value": 2.0,
+    "unit": "",
+    "source": "Tang et al. 1996, texto tras ec. 5 (β1)"
+   },
+   {
+    "value": 0.0478,
+    "unit": "",
+    "source": "Tang et al. 1996, texto tras ec. 5 (β2)"
+   },
+   {
+    "value": 7.16,
+    "unit": "",
+    "source": "Tang et al. 1996, texto tras ec. 5 (β3)"
+   }
+  ],
+  "g0": {
+   "value": 4.41022,
+   "unit": "",
+   "source": "Tang et al. 1996, texto tras ec. 5 (g del diamante, estructura de referencia)"
+  },
+  "e0": {
+   "s": {
+    "value": -6.041,
+    "unit": "eV",
+    "source": "Tang et al. 1996, texto tras ec. 6"
+   },
+   "p": {
+    "value": 1.024,
+    "unit": "eV",
+    "source": "Tang et al. 1996, texto tras ec. 6"
+   }
+  },
+  "poly": [
+   {
+    "value": 12.201499972,
+    "unit": "eV",
+    "source": "Tang et al. 1996, tabla II (c0)"
+   },
+   {
+    "value": 0.9652997681499619,
+    "unit": "eV",
+    "source": "ajustado a GPAW PBE (gpaw_carbon_env.json, sin amorphous_3.2 ni stone_wales); receta tbkit.recipes.tang_fit"
+   },
+   {
+    "value": -0.019854151553952166,
+    "unit": "eV",
+    "source": "ajustado a GPAW PBE (gpaw_carbon_env.json, sin amorphous_3.2 ni stone_wales); receta tbkit.recipes.tang_fit"
+   },
+   {
+    "value": 0.0004339396311958977,
+    "unit": "eV",
+    "source": "ajustado a GPAW PBE (gpaw_carbon_env.json, sin amorphous_3.2 ni stone_wales); receta tbkit.recipes.tang_fit"
+   },
+   {
+    "value": -3.6967319355265335e-06,
+    "unit": "eV",
+    "source": "ajustado a GPAW PBE (gpaw_carbon_env.json, sin amorphous_3.2 ni stone_wales); receta tbkit.recipes.tang_fit"
+   }
+  ],
+  "pair_cut": [
+   3.0,
+   3.6
+  ],
+  "screen_cut": [
+   5.0,
+   6.0
+  ],
+  "cutoff_source": "elegido en la rejilla de la receta tang_fit (ajustado a GPAW PBE (gpaw_carbon_env.json, sin amorphous_3.2 ni stone_wales); receta tbkit.recipes.tang_fit)",
+  "element": "C"
+ },
+ "fit": {
+  "grid": {
+   "scales": [
+    1.0,
+    0.5,
+    0.25,
+    0.0
+   ],
+   "cuts": [
+    [
+     3.0,
+     3.6
+    ],
+    [
+     4.2,
+     5.0
+    ]
+   ]
+  },
+  "held_out": [
+   "amorphous_3.2",
+   "stone_wales"
+  ],
+  "mu_eV_per_atom": -3.967728121921125,
+  "errors": {
+   "diamond": {
+    "force_rmse": 0.1776043785827183,
+    "force_rms_dft": 1.8500244017448766,
+    "energy_mae_per_atom": 0.36856121074722126
+   },
+   "graphene": {
+    "force_rmse": 0.14491198665907723,
+    "force_rms_dft": 2.25758653371982,
+    "energy_mae_per_atom": 0.058166415728072095
+   },
+   "chain": {
+    "force_rmse": 0.22488609754697883,
+    "force_rms_dft": 2.178768407275779,
+    "energy_mae_per_atom": 0.0812753560653489
+   },
+   "c60": {
+    "force_rmse": 0.42405909974507294,
+    "force_rms_dft": 4.4638043395208475,
+    "energy_mae_per_atom": 0.006175453017759007
+   },
+   "vacancy": {
+    "force_rmse": 0.6530618468965214,
+    "force_rms_dft": 5.139131793335199,
+    "energy_mae_per_atom": 0.10854173240270558
+   },
+   "stone_wales": {
+    "force_rmse": 0.37520555372184067,
+    "force_rms_dft": 3.961136581881557,
+    "energy_mae_per_atom": 0.10006966804140245
+   },
+   "amorphous_2.0": {
+    "force_rmse": 0.8652955143905818,
+    "force_rms_dft": 5.488508006886004,
+    "energy_mae_per_atom": 0.23547129718785312
+   },
+   "amorphous_2.6": {
+    "force_rmse": 0.9378993520442195,
+    "force_rms_dft": 3.3667393733715802,
+    "energy_mae_per_atom": 0.18955019734799153
+   },
+   "amorphous_3.2": {
+    "force_rmse": 0.9821141849185742,
+    "force_rms_dft": 3.3898268778242286,
+    "energy_mae_per_atom": 0.02100891198724379
+   }
+  },
+  "weights": {
+   "force": 1.0,
+   "energy_per_atom": 10.0
+  }
+ }
+}

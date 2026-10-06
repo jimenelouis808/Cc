@@ -386,7 +386,11 @@ def candidate_sites(atoms: Atoms,
                        distances -- the failure
                        :mod:`~nanocarbon_lab.builders.fullerene_mesh` exists
                        to prevent;
-        ``"ring:N"``   atoms in a ring of exactly ``N`` members.
+        ``"ring:N"``   atoms in a ring of exactly ``N`` members;
+        ``"atoms:i,j"`` exactly these atoms (for site-by-site screening),
+                       each still subject to the graftability checks: a
+                       requested atom that cannot take a group raises
+                       instead of being dropped silently.
     tolerance
         Bond-detection slack when no bond graph was recorded.
 
@@ -462,10 +466,17 @@ def candidate_sites(atoms: Atoms,
             wanted = [ring for ring in rings if len(ring) == size]
         members = {int(i) for ring in wanted for i in ring}
         chosen = [i for i in sorted(members) if graftable(i)]
+    elif where.startswith("atoms:"):
+        wanted = [int(i) for i in where.split(":", 1)[1].split(",") if i.strip()]
+        refused = [i for i in wanted if not 0 <= i < len(atoms) or not graftable(i)]
+        if refused:
+            raise ValueError(f"Atoms {refused} cannot take a group (absent, already "
+                             "grafted or at their coordination limit).")
+        chosen = sorted(set(wanted))
     else:
         raise ValueError(
-            f"Unknown site selection {where!r}. Use 'all', 'edge', 'defect' "
-            "or 'ring:N'."
+            f"Unknown site selection {where!r}. Use 'all', 'edge', 'defect', "
+            "'ring:N' or 'atoms:i,j'."
         )
     return chosen
 

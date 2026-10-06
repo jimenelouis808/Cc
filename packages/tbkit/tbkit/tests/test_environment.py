@@ -90,3 +90,15 @@ def test_without_screening_and_scaling_it_is_two_centre():
     t, _ = _switch(env.r, *spec.pair_cut)
     expected = f.a1 * env.r ** (-f.a2) * np.exp(-f.a3 * env.r ** f.a4) * t
     assert env.values["pps"] == pytest.approx(expected, rel=1e-12)
+
+
+def test_fitted_set_gives_diamond_a_minimum_near_gpaw():
+    """tang_carbon (refitted to GPAW) has the minimum the published set lacked."""
+    model = load_parameters("tang_carbon")
+    energies = []
+    for a in (3.40, 3.515, 3.65):
+        atoms = bulk("C", "diamond", a=a)
+        atoms.calc = TBCalculator(model, kpts=6, kT=0.02)
+        energies.append(atoms.get_potential_energy())
+    assert energies[1] < energies[0] and energies[1] < energies[2]
+    assert "fuera del ajuste" in model.metadata["validity"]

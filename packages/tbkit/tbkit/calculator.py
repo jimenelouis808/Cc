@@ -40,6 +40,7 @@ class TBCalculator(Calculator):
         self.charge = charge
         self.scc = model.scc if scc is None else bool(scc)
         self.last_solution = None
+        self._dq = None             # charges of the last call: the next SCC starts there
 
     def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
         super().calculate(atoms, properties, system_changes)
@@ -51,9 +52,15 @@ class TBCalculator(Calculator):
         kpts, weights = mesh(self.atoms, self.kpts or 8) if system.periodic else gamma()
         if self.scc:
             # Forces need tightly converged charges (their error scales with it).
+            # Start from the last call's charges (relaxation steps, finite
+            # differences): fewer iterations, same converged result.
+            guess = self._dq if self._dq is not None and len(self._dq) == len(self.atoms) \
+                else None
             result = scc_module.self_consistent(system, charge=self.charge, kT=self.kT,
                                                 tol=1e-10, kpts=kpts if system.periodic else None,
-                                                weights=weights if system.periodic else None)
+                                                weights=weights if system.periodic else None,
+                                                initial_dq=guess)
+            self._dq = result.dq
             if not result.converged:
                 raise RuntimeError("SCC sin converger: " + result.summary())
             energy, forces, parts = scc_module.energy_and_forces(result, need_forces)

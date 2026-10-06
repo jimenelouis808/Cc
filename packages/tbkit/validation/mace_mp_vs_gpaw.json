@@ -1,0 +1,71 @@
+{
+ "what": "MACE-MP-0 foundation model (mace-torch, CPU, float64), no fine-tuning, against the stored GPAW PBE references; TB numbers for comparison from the same references",
+ "molecules_chno_hessians": {
+  "note": "relaxed with MACE from the GPAW geometry; RMS over internal modes per molecule (cm-1)",
+  "small": {
+   "H2O": 127.9,
+   "CH3OH": 134.8,
+   "H2CO": 237.8,
+   "CH3CHO": 136.0,
+   "HCOOH": 121.3,
+   "CH3COOH": 115.8,
+   "CO": 106.0,
+   "CO2": 91.1,
+   "CH3OCH3": 160.2,
+   "CH2OCH2": 87.7,
+   "C4H4O": 93.9,
+   "H2O2": 161.1,
+   "CH3NO2": 139.1,
+   "CH3CONH2": 58.4
+  },
+  "medium": {
+   "H2O": 32.9,
+   "CH3OH": 220.8,
+   "H2CO": 316.1,
+   "CH3CHO": 158.8,
+   "HCOOH": 93.8,
+   "CH3COOH": 128.1,
+   "CO": 55.0,
+   "CO2": 89.1,
+   "CH3OCH3": 186.9,
+   "CH2OCH2": 105.7,
+   "C4H4O": 85.5,
+   "H2O2": 133.0,
+   "CH3NO2": 150.4,
+   "CH3CONH2": 95.9
+  },
+  "median_small": 124.6,
+  "median_medium": 116.9,
+  "xu_chno_pooled_rms_before_scaling": 115.8
+ },
+ "nanocoil204": {
+  "pbe_projected_cm1": {
+   "xu_most_pentagon": 1209,
+   "xu_highest": 1670,
+   "tang_most_pentagon": 1465,
+   "tang_highest": 1681
+  },
+  "small": {
+   "force_rms_at_pbe_geometry": 0.404,
+   "bond_rms_vs_pbe_A": 0.0209,
+   "projected_cm1": {
+    "xu_most_pentagon": 1069,
+    "xu_highest": 1480,
+    "tang_most_pentagon": 1301,
+    "tang_highest": 1488
+   }
+  },
+  "medium": {
+   "force_rms_at_pbe_geometry": 0.416,
+   "bond_rms_vs_pbe_A": 0.0245,
+   "projected_cm1": {
+    "xu_most_pentagon": 997,
+    "xu_highest": 1381,
+    "tang_most_pentagon": 1224,
+    "tang_highest": 1381
+   }
+  },
+  "tb_tang_bond_rms_vs_pbe_A": 0.015
+ },
+ "conclusion": "Without fine-tuning MACE-MP is not better than the TB sets: molecules at the level of xu_chno, and on the carbon coil 11-18 % soft (the systematic softening of universal potentials) with worse bonds than Tang. Not adopted for phonons; tbkit.hybrid keeps the route for any calculator (a fine-tuned potential or DFT)."
+}

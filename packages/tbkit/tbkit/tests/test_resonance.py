@@ -105,3 +105,62 @@ class TestResonantRaman:
     def test_needs_broadening(self, chn, butadiene):
         with pytest.raises(ValueError, match="η"):
             resonant_raman(butadiene, chn, [3.0], eta=0.0)
+
+
+@pytest.mark.parametrize("case", ["benzene", "diamond"])
+def test_derivative_along_modes_equals_the_full_raman_tensor(case, tmp_path):
+    """Σ ∂α/∂x·L_k (6N α) and (α(x + hL_k) - α(x - hL_k))/2h (2 α per mode) are the
+    same derivative: finite (screened) and periodic α, with the per-mode cache. Small
+    steps: the two differ at O(δ²), and moving every atom of a mode at once makes
+    that error larger (4 % in diamond at δ = 0.01 Å, near resonance)."""
+    from ase.build import bulk, molecule
+
+    from tbkit.modes import vibrations
+    from tbkit.params import load_parameters, xu_carbon
+    from tbkit.resonance import resonant_raman
+
+    if case == "benzene":
+        atoms, model, kmesh = molecule("C6H6"), load_parameters("xu_chn"), 1
+    else:
+        atoms, model, kmesh = bulk("C", "diamond", a=3.56), xu_carbon(), 4
+    vib = vibrations(atoms, model, kmesh=kmesh, kT=0.05)
+    phonons = (vib.frequencies, vib.modes)
+    lasers = [2.0, 2.5]
+    common = {"eta": 0.2, "kmesh": kmesh, "kT": 0.05, "phonons": phonons, "delta": 0.002}
+    full = resonant_raman(atoms, model, lasers, **common)
+    from tbkit.raman import internal_modes
+
+    order = list(internal_modes(atoms, vib.frequencies, []))        # full's mode order
+    chosen = [int(order[k]) for k in np.argsort(full.activities[1])[-3:]]
+    part = resonant_raman(atoms, model, lasers, select=chosen, cache_dir=tmp_path, **common)
+    for j, k in enumerate(part.mode_indices):
+        i = order.index(k)
+        assert np.allclose(part.tensors[:, j], full.tensors[:, i],
+                           atol=2e-3 * np.abs(full.tensors).max())
+    again = resonant_raman(atoms, model, lasers, select=chosen, cache_dir=tmp_path, **common)
+    assert np.array_equal(again.tensors, part.tensors)
+    with pytest.raises(ValueError):
+        resonant_raman(atoms, model, [2.0], select=chosen, cache_dir=tmp_path, **common)
+
+
+def test_periodic_dynamic_alpha_uses_the_scc_ground_state():
+    """A molecule in a large box treated as a crystal (Γ only) must give the finite,
+    unscreened α(ω + iη) of the same SCC ground state; without the charge shifts the
+    levels are those of a ground state the set was not fitted for."""
+    from tbkit.optics import dynamic_polarizability_finite, dynamic_polarizability_periodic
+    from tbkit.params import load_parameters
+
+    model = load_parameters("xu_chn")
+    atoms = molecule("C5H5N")
+    atoms.center(vacuum=8.0)
+    finite = dynamic_polarizability_finite(System.build(atoms, model), [1.0], eta=0.05,
+                                           screened=False, kT=0.01)[0]
+    box = atoms.copy()
+    box.pbc = True
+    k, w = np.zeros((1, 3)), np.ones(1)
+    periodic = dynamic_polarizability_periodic(System.build(box, model), [1.0], eta=0.05,
+                                               kpts=k, weights=w, kT=0.01)[0]
+    bare = dynamic_polarizability_periodic(System.build(box, model), [1.0], eta=0.05,
+                                           kpts=k, weights=w, kT=0.01, ground_scc=False)[0]
+    assert np.allclose(periodic, finite, atol=3e-3)
+    assert np.abs(bare - finite).max() > 10 * np.abs(periodic - finite).max()
