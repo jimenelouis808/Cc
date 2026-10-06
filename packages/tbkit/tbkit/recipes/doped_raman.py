@@ -24,9 +24,11 @@ whose heights depend most on η, are left out).
 
 IR: Born charges of the same SCC ground state (``infrared.born_rows``), only the
 components across the coil axis (x, y): along the periodic axis the dipole needs
-the Berry phase, and the model is gapless there. Embedded like the Hessian (the
-region's rows for N and the amine, the pristine ones elsewhere), with the
-translational sum rule imposed and its residual reported. Every mode above
+the Berry phase, and the model is gapless there. The amine's are embedded like the
+Hessian (checked against the full model along 9 modes: within 5 %); graphitic N's
+are computed in full, because its extra electron spreads over the gapless coil and
+the embedded ones were off by up to 26 %. The translational sum rule is imposed
+and its residual reported. Every mode above
 ``IR_MIN_CM1``.
 
 D band: the first-order Γ spectrum of this cell has no double resonance, so the D
@@ -52,7 +54,9 @@ IR_MIN_CM1 = 50.0
 BORN_DELTA = 0.005
 STRUCTURES = {
     "pristine": {"start": "out/nanocoil/tb_xu_carbon/relaxed.extxyz", "centres": None},
-    "N": {"start": "out/coil_N/site_0000_relaxed.extxyz", "centres": [0]},
+    # Born charges of N in full: its extra electron spreads over the gapless coil and the
+    # embedded ones missed the full-model IR by up to 26 % (out/doped_raman/N/ir_check_*).
+    "N": {"start": "out/coil_N/site_0000_relaxed.extxyz", "centres": [0], "born_full": True},
     "amine": {"start": "out/coil_NH2/screen/a048_h059_relaxed.extxyz", "centres": [48, 59]},
 }
 N_HOST = 204
@@ -162,14 +166,20 @@ def raman(name: str, part=(0, 1)):
                           cache_dir=folder(name) / "tensors", delta=0.005)
 
 
+def born_region(name: str, atoms) -> list[int]:
+    if STRUCTURES[name].get("born_full"):
+        return list(range(len(atoms)))
+    return region(name, atoms)
+
+
 def born(name: str, part=(0, 1)):
     """Born charges (N, 3, 3), transverse columns only; None while incomplete."""
     from ..infrared import born_rows
 
     atoms = relaxed(name)
-    reg = region(name, atoms)
+    reg = born_region(name, atoms)
     rows = born_rows(atoms, _calc, folder(name) / "born", reg, BORN_DELTA, part)
-    if rows is None or STRUCTURES[name]["centres"] is None:
+    if rows is None or len(reg) == len(atoms):
         return rows
     reference = born("pristine")
     if reference is None:
@@ -187,7 +197,7 @@ def born_ready(name: str) -> bool:
     for n in names:
         atoms = relaxed(n)
         if not all((folder(n) / "born" / f"z_{a:04d}_{c}_{t}.npy").exists()
-                   for a in region(n, atoms) for c in range(3) for t in ("p", "m")):
+                   for a in born_region(n, atoms) for c in range(3) for t in ("p", "m")):
             return False
     return True
 
