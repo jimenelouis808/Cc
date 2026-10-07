@@ -167,13 +167,22 @@ def relaxed(name: str):
     return atoms
 
 
-def modes(name: str, part=(0, 1)) -> None:
+def mode_jobs(name: str) -> list[Path]:
+    """The output file of every ± calculation of ``name``, in job order."""
+    picks = json.loads((folder(name) / "picks.json").read_text())
+    return [folder(name) / f"mode_{p['mode']:04d}_{t}.json" for p in picks for t in ("p", "m")]
+
+
+def modes(name: str, part=(0, 1), job: int | None = None) -> None:
+    """``job``: only that calculation. One GPAW per process is the safe way to run
+    them: a process that ran several grew to 6.5 GB (the calculators are not freed)
+    and was killed for memory with three running on 15 GB."""
     base = relaxed(name)
     vectors = np.load(folder(name) / "vectors.npy")
     picks = json.loads((folder(name) / "picks.json").read_text())
     jobs = [(j, s) for j in range(len(picks)) for s in (1, -1)]
     for n, (j, sign) in enumerate(jobs):
-        if n % part[1] != part[0]:
+        if (job is not None and n != job) or (job is None and n % part[1] != part[0]):
             continue
         path = folder(name) / f"mode_{picks[j]['mode']:04d}_{'p' if sign > 0 else 'm'}.json"
         if path.exists():
@@ -253,6 +262,7 @@ def main(argv=None) -> None:
     parser.add_argument("step", choices=("select", "relax", "modes", "report"))
     parser.add_argument("name", nargs="?", choices=NAMES)
     parser.add_argument("--part", default="0/1")
+    parser.add_argument("--job", type=int, default=None, help="modes: solo ese cálculo")
     args = parser.parse_args(argv)
     part = tuple(int(x) for x in args.part.split("/"))
     if args.step == "select":
@@ -261,7 +271,7 @@ def main(argv=None) -> None:
     elif args.step == "relax":
         relaxed(args.name)
     elif args.step == "modes":
-        modes(args.name, part)
+        modes(args.name, part, args.job)
     else:
         print(json.dumps({k: v.get("pbe_over_tb_mean") for k, v in report().items()
                           if isinstance(v, dict)}))
