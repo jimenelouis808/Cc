@@ -166,6 +166,26 @@ def raman(name: str, part=(0, 1)):
                           cache_dir=folder(name) / "tensors", delta=0.005)
 
 
+def strongest_modes(name: str, top: int = 40) -> list[int]:
+    """The ``top`` modes with the largest activity at any laser (η = 0.1 eV)."""
+    result = raman(name)
+    best = result.activities.max(axis=0)
+    order = np.argsort(-best)[:top]
+    return sorted(int(result.mode_indices[k]) for k in order)
+
+
+def raman_eta(name: str, eta: float, part=(0, 1), top: int = 40):
+    """The same resonant Raman with another η, on the ``top`` strongest modes: how much the
+    heights depend on the broadening (positions do not)."""
+    from ..resonance import resonant_raman
+
+    vib = vibrations(name)
+    chosen = [k for k in strongest_modes(name, top) if k % part[1] == part[0]]
+    return resonant_raman(vib.atoms, _model(), LASERS_EV, eta=eta, kmesh=KZ, kT=KT,
+                          phonons=(vib.frequencies, vib.modes), select=chosen,
+                          cache_dir=folder(name) / f"tensors_eta{eta:g}", delta=0.005)
+
+
 def born_region(name: str, atoms) -> list[int]:
     if STRUCTURES[name].get("born_full"):
         return list(range(len(atoms)))
@@ -274,7 +294,8 @@ def report() -> dict:
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("relax", "hessian", "check", "raman", "born",
-                                         "report"))
+                                         "eta", "report"))
+    parser.add_argument("--eta", type=float, default=0.05)
     parser.add_argument("name", nargs="?", choices=tuple(STRUCTURES))
     parser.add_argument("--part", default="0/1")
     args = parser.parse_args(argv)
@@ -286,6 +307,9 @@ def main(argv=None) -> None:
         print("hessiana completa" if done is not None else f"parte {args.part} hecha")
     elif args.step == "check":
         print(json.dumps(check(args.name), indent=1))
+    elif args.step == "eta":
+        raman_eta(args.name, args.eta, part)
+        print(f"raman η={args.eta:g} {args.name} parte {args.part} hecha")
     elif args.step == "born":
         done = born(args.name, part)
         print("cargas de Born completas" if done is not None else f"parte {args.part} hecha")

@@ -318,7 +318,8 @@ def tb_vibrations(workdir: Path, model_name: str):
 
 
 def stage_raman(workdir: Path, model_name: str = "tang_carbon", part: tuple = (0, 1),
-                kmesh: int = 4, eta: float = 0.1, delta: float = 0.005) -> dict:
+                kmesh: int = 4, eta: float = 0.1, delta: float = 0.005,
+                min_cm1: float | None = None) -> dict:
     """Resonant Raman of every internal mode, α differentiated along each mode.
 
     ``part=(r, n)`` computes the modes with index ≡ r (mod n): n processes share
@@ -336,6 +337,8 @@ def stage_raman(workdir: Path, model_name: str = "tang_carbon", part: tuple = (0
     atoms = vib.atoms
     model = load_parameters(model_name)
     modes = [int(k) for k in internal_modes(atoms, vib.frequencies, [])]
+    if min_cm1 is not None:                     # the D/G region only (model comparisons)
+        modes = [k for k in modes if vib.frequencies[k] > min_cm1]
     r, n = part
     chosen = [k for k in modes if k % n == r]
     result = resonant_raman(atoms, model, LASERS_EV, eta=eta, kmesh=kmesh, kT=KT,
@@ -422,6 +425,8 @@ def main(argv=None) -> None:
     parser.add_argument("--kz", type=int, default=2)
     parser.add_argument("--part", default="0/1", help="r/n: modos con índice ≡ r (mod n)")
     parser.add_argument("--kz-check", type=int, default=8)
+    parser.add_argument("--min-cm1", type=float, default=None,
+                        help="raman: solo modos por encima (comparación entre modelos)")
     args = parser.parse_args(argv)
     if args.stage == "tb":
         print(json.dumps({k: v for k, v in stage_tb(args.workdir, args.model).items()
@@ -434,7 +439,7 @@ def main(argv=None) -> None:
         print(json.dumps(out, indent=1))
     elif args.stage == "raman":
         r, n = (int(x) for x in args.part.split("/"))
-        out = stage_raman(args.workdir, args.model, (r, n))
+        out = stage_raman(args.workdir, args.model, (r, n), min_cm1=args.min_cm1)
         print(json.dumps({k: v for k, v in out.items() if not k.startswith("strongest")},
                          indent=1))
     elif args.stage == "gpaw-relax":
