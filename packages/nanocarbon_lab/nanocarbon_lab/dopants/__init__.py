@@ -4,6 +4,8 @@ The host is always carbon. These functions edit a finished structure;
 nothing here builds a different material, and every builder returns pure
 carbon unless a dopant is asked for.
 
+:mod:`.nitrogen` builds the pyridinic (N4V2) and pyrrolic (N–H at a monovacancy)
+motifs, closed shell; substitution alone gives graphitic N.
 :mod:`.chemistry` says which heteroatoms are supported and how much of
 each the sp2 lattice really tolerates; :mod:`.substitutional` places them
 at random or by coordination; :mod:`.rings` places them by ring size, so
@@ -20,6 +22,7 @@ from .chemistry import (
     get_chemistry,
 )
 from .codoping import AFFINITIES, describe_codoping
+from .nitrogen import pyridinic_divacancy, pyrrolic_vacancy
 from .rings import dope_rings, ring_sites, ring_size_census
 from .substitutional import (
     codope,
@@ -29,6 +32,8 @@ from .substitutional import (
 )
 
 __all__ = [
+    "pyridinic_divacancy",
+    "pyrrolic_vacancy",
     "AFFINITIES",
     "describe_codoping",
     "DOPANT_CHEMISTRY",
