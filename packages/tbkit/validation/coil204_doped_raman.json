@@ -348,6 +348,52 @@
       30.4
      ]
     ]
+   },
+   "N": {
+    "total_km_mol": 2244.5,
+    "sum_rule_residual_e": 0.00053,
+    "band_fractions": {
+     "50-900": 0.285,
+     "900-1450": 0.427,
+     "1450-1700": 0.28,
+     "1700-2800": 0.008,
+     "2800-3500": 0.0
+    },
+    "strongest_cm1_km_mol": [
+     [
+      1262.4,
+      48.7
+     ],
+     [
+      1123.0,
+      48.5
+     ],
+     [
+      1293.7,
+      47.7
+     ],
+     [
+      1469.9,
+      44.6
+     ],
+     [
+      1287.4,
+      42.9
+     ],
+     [
+      700.4,
+      39.1
+     ],
+     [
+      855.7,
+      36.3
+     ],
+     [
+      1559.0,
+      35.6
+     ]
+    ],
+    "born_charges": "full (1224 displacements); reproduce the full-model mode derivatives within 0.4 % on the 9 checked modes"
    }
   },
   "embedding_check_full_vs_embedded": {
@@ -513,6 +559,6 @@
    "3375.1": 1.215
   },
   "model_error_reference": "validation/ir_tb_vs_gpaw.json, H3CNH2: NH2 wag TB 218 vs GPAW 107 km/mol; C-H stretches TB 1-10 vs GPAW 25-82; N-H TB 35-38 vs GPAW 0.02-1.3",
-  "graphitic_N": "pending (full Born charges)"
+  "N_conclusion": "no IR band of its own: total +8 %, intensity spread over more lines (strongest 74 -> 49 km/mol), 1320 cm-1 N-weighted mode 24 km/mol, band fractions within 3 points"
  }
 }
