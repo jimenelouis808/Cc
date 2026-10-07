@@ -365,6 +365,21 @@ def cmd_gpaw_levels(args) -> int:
     return 0
 
 
+def cmd_report(args) -> int:
+    from .report import build
+
+    formats = tuple(f for f in args.figuras.split(",") if f) if args.figuras != "no" else ()
+    written = build(args.source, out=args.out, data=not args.sin_datos, figures=formats,
+                    width=args.ancho)
+    for kind, value in written.items():
+        if isinstance(value, list):
+            print(f"{kind}: {len(value)} archivos en {value[0].parent}" if value else
+                  f"{kind}: ninguno")
+        else:
+            print(f"{kind}: {value}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tbkit", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -465,6 +480,16 @@ def build_parser() -> argparse.ArgumentParser:
     rm.add_argument("--bare", action="store_true", help="Actividades sin láser ni Bose.")
     rm.add_argument("-o", "--out", default=None, help="CSV del espectro ensanchado.")
 
+    rp = sub.add_parser("report", help="Reporte HTML, datos CSV y figuras de revista de una "
+                                       "carpeta de resultados o un espectro.")
+    rp.add_argument("source", help="carpeta de una receta (doped_raman, doped_gpaw) o .npz/.csv")
+    rp.add_argument("-o", "--out", default=None, help="archivo .html (por omisión, junto a los datos)")
+    rp.add_argument("--figuras", default="pdf,svg,png",
+                    help="formatos separados por coma, o 'no' (necesita matplotlib)")
+    rp.add_argument("--ancho", choices=("simple", "doble"), default="simple",
+                    help="figuras a una columna (85 mm) o dos (178 mm)")
+    rp.add_argument("--sin-datos", action="store_true", help="no escribir la carpeta de CSV")
+    rp.set_defaults(func=cmd_report)
     rn = sub.add_parser("run", help="Ejecutar un archivo de simulación y guardar su registro.")
     rn.add_argument("config")
     rn.set_defaults(func=cmd_run)

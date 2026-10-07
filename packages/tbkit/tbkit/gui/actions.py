@@ -532,6 +532,17 @@ def ir_spectrum_of(atoms: Atoms, model: TBModel, phonons=None, fwhm: float = 10.
             "warnings": list(result.warnings), "frequency_scale": factor}
 
 
+def export_report(path: str | Path, width: str = "simple") -> dict:
+    """``tbkit report`` from the window: ``path`` is a recipe's ``report.json`` (its
+    folder is reported) or a spectrum (.npz/.csv). Writes the HTML page, the CSV folder
+    and the journal figures next to it; returns what was written."""
+    from ..report import build
+
+    path = Path(path)
+    source = path.parent if path.name == "report.json" else path
+    return build(source, width=width)
+
+
 def load_spectrum(path: str | Path) -> dict:
     """A spectrum computed earlier, to look at or compare: ``{"grid", "curves", "sticks",
     "source"}``.
@@ -766,6 +777,10 @@ HELP = {
     "Raman resonante": "Actividades a cada energía de láser y perfiles de excitación.",
     "IR": "Intensidades IR (km/mol) con el dipolo del modelo; semicuantitativas.",
     "Exportar CSV…": "Guarda el espectro y la tabla mostrados como CSV.",
+    "Exportar reporte…": "Escribe un reporte de una carpeta de resultados (elige su report.json) "
+                         "o de un espectro guardado (.npz/.csv): una página HTML que se abre sin "
+                         "internet, los datos de cada gráfica y tabla en CSV (Origin, Excel…) y "
+                         "las figuras para revista en PDF, SVG y PNG a 600 dpi, a una columna.",
     "Abrir espectro guardado…": "Muestra un espectro calculado antes (CSV de «Exportar CSV…» o "
                                 "un .npz de las recetas, p. ej. raman_*/spectra.npz de la "
                                 "coil) sin recalcular. Cada curva se normaliza a su máximo; "

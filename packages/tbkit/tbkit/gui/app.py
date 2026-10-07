@@ -1200,8 +1200,10 @@ class SpectraPage(Page):
         self.export.clicked.connect(self.export_csv)
         self.open_saved = QPushButton("Abrir espectro guardado…")
         self.open_saved.clicked.connect(self.open_spectrum)
+        self.report_button = QPushButton("Exportar reporte…")
+        self.report_button.clicked.connect(self.export_report)
         for b in (self.raman_button, self.resonant_button, self.ir_button, self.export,
-                  self.open_saved):
+                  self.open_saved, self.report_button):
             buttons.addWidget(b)
         layout.addLayout(buttons)
         self.summary = QLabel("Raman no resonante: sistemas con gap y capa cerrada. Las "
@@ -1294,6 +1296,23 @@ class SpectraPage(Page):
             self.show_saved(actions.load_spectrum(path))
         except (OSError, ValueError) as error:
             self.window.error("No se pudo abrir", str(error))
+
+    def export_report(self, path=None):
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Resultados para el reporte", "",
+                "Resultados (report.json *.npz *.csv)")
+        if not path:
+            return
+        try:
+            written = actions.export_report(path)
+        except (OSError, ValueError, KeyError) as error:
+            self.window.error("No se pudo escribir el reporte", str(error))
+            return
+        figures = written.get("figuras")
+        extra = f"; {len(figures)} figuras" if isinstance(figures, list) else \
+            (f"; {figures}" if figures else "")
+        self.summary.setText(f"Reporte: {written['html']} (datos en CSV{extra}).")
 
     def show_saved(self, saved):
         """Saved curves, each normalised to its maximum, over the current spectrum if any."""

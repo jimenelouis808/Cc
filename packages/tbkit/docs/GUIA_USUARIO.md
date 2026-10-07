@@ -9,6 +9,7 @@ Cuánto se equivoca: [`VALIDACION.md`](VALIDACION.md).
 uv sync --all-packages --extra dev               # núcleo y tests
 uv sync --all-packages --extra dev --extra gui   # + ventana (PySide6, pyvista)
 uv pip install 'tbkit[phonons]'                  # + phonopy (fonones en toda la zona)
+uv pip install 'tbkit[plot]'                     # + matplotlib (figuras de `tbkit report`)
 ```
 
 En Linux, la ventana necesita libEGL, libxkbcommon y las libxcb-* del sistema.
@@ -72,9 +73,30 @@ tbkit raman    piridina.xyz --model chn [--resonant 2.33 3.5 --eta 0.1] [--modes
 tbkit ir       piridina.xyz --model chn
 tbkit graphene-raman --laser 1.96 2.41 2.80
 tbkit run      simulacion.json                    # reproducible, guarda su registro
+tbkit report   out/doped_raman [--ancho doble] [--figuras pdf,png]   # reporte, CSV y figuras
 ```
 
 `tbkit <orden> --help` da todas las opciones.
+
+### Reportes, datos y figuras para publicar
+
+`tbkit report CARPETA_O_ESPECTRO` (en la ventana, «Exportar reporte…» en Espectros)
+lee lo que dejó una receta y escribe junto a ella:
+
+- `reporte_X.html`: una página que se abre sin internet, con gráficas interactivas,
+  tablas, el método y sus límites; cada gráfica y tabla tiene un botón CSV.
+- `reporte_X_datos/`: cada gráfica y tabla en CSV (UTF-8 con BOM, para que Excel lea
+  los acentos; Origin, Igor y gnuplot también lo leen) e `indice.json`.
+- `reporte_X_figuras/`: cada gráfica en PDF y SVG (vectoriales, fuentes incrustadas)
+  y PNG a 600 dpi, a una columna de revista (85 mm) o dos (`--ancho doble`, 178 mm),
+  fuente de 7 pt y paleta Okabe-Ito (legible con daltonismo y en gris). Necesita
+  el extra `plot`.
+
+Reconoce las carpetas de `doped_raman` y `doped_gpaw` y cualquier espectro de tbkit
+(`.npz` con `grid`, o el CSV de `--out` y de «Exportar CSV…»). Para otra receta se
+añade un adaptador en `tbkit/report.py` que convierta sus archivos en secciones,
+gráficas y tablas; la página, los CSV y las figuras salen de eso. Ningún número de
+un reporte se escribe a mano: todos se leen de los archivos.
 
 ## 5. Flujos de trabajo
 
@@ -121,6 +143,9 @@ cero tras un corte.
 | `cnt_validation` | Nanotubos prístinos (RBM, G) |
 | `nanocoil` | La coil periódica de 204 átomos: TB, GPAW, Raman resonante |
 | `site_screening` | Sitios de un dopante sustitucional |
+| `structure_screening` | Ordenar estructuras ya construidas de una composición (grupos funcionales) |
+| `doped_raman` | Raman resonante, banda D estimada e IR de la coil sin dopar, con N y con amina |
+| `doped_gpaw` | Esos resultados frente a GPAW en los modos clave (frecuencia e IR) |
 | `active_learning` | Buscar mínimos espurios de un conjunto con GPAW |
 | `validation_report` | Regenerar `docs/VALIDACION.md` desde los datos |
 
