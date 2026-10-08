@@ -15,9 +15,16 @@ versions in common use:
   and an H) and its other two neighbours are closed with H. −4 + 1 + 3 = 0.
 
 Both take explicit indices: which bond or ring atom is chosen is a question
-for whoever ranks the sites (an energy screening), not for the builder. Hydrogens
-are placed along the bond to the removed atom (C–H 1.09 Å, N–H 1.01 Å) and the
-result needs relaxing. Periodic cells are fine (minimum image).
+for whoever ranks the sites (an energy screening), not for the builder. The result
+needs relaxing. Periodic cells are fine (minimum image).
+
+**The three hydrogens of the pyrrolic motif cannot lie in the plane.** The three
+atoms around a monovacancy are 2.46 Å apart, so three caps aimed at the empty site
+along their bonds end 0.7-0.9 Å from each other -- an H3 cluster, which a relaxation
+in a tight-binding model kept rather than broke apart (measured on the 204-atom coil;
+GPAW then found 15-19 eV/Å forces). Each cap is therefore tilted out of the local
+plane by ``tilt`` (75°), on alternating sides, which puts them ≥ 1.8 Å apart before
+any relaxation; a test pins that.
 """
 
 from __future__ import annotations
@@ -73,9 +80,10 @@ def pyridinic_divacancy(atoms: Atoms, bond: tuple[int, int], cutoff: float = 1.8
 
 
 def pyrrolic_vacancy(atoms: Atoms, ring_atom: int, removed: int,
-                     cutoff: float = 1.80) -> Atoms:
+                     cutoff: float = 1.80, tilt: float = 75.0) -> Atoms:
     """Remove ``removed`` (bonded to ``ring_atom`` from outside its pentagon): ``ring_atom``
-    becomes N–H, the other two neighbours of ``removed`` become C–H."""
+    becomes N–H, the other two neighbours of ``removed`` become C–H, each H tilted
+    ``tilt`` degrees out of the local plane on alternating sides (see the module note)."""
     ring_atom, removed = int(ring_atom), int(removed)
     around = _neighbours(atoms, removed, cutoff)
     if ring_atom not in around:
@@ -84,7 +92,14 @@ def pyrrolic_vacancy(atoms: Atoms, ring_atom: int, removed: int,
     if len(others) != 2 or any(atoms[k].symbol != "C" for k in [ring_atom, *others]):
         raise ValueError("The removed atom must be a three-coordinated carbon bonded to "
                          "three carbons.")
-    caps = [(ring_atom, _vector(atoms, ring_atom, removed), N_H)]
-    caps += [(k, _vector(atoms, k, removed), C_H) for k in others]
+    rim = [ring_atom, *others]
+    vectors = [_vector(atoms, k, removed) for k in rim]          # rim atom -> vacancy
+    points = np.array([np.zeros(3)] + [-v for v in vectors])     # vacancy at the origin
+    normal = np.linalg.svd(points - points.mean(axis=0))[2][2]
+    angle = np.radians(tilt)
+    caps = []
+    for k, v, side, length in zip(rim, vectors, (1, -1, 1), (N_H, C_H, C_H), strict=True):
+        u = v / np.linalg.norm(v)
+        caps.append((k, np.cos(angle) * u + side * np.sin(angle) * normal, length))
     return _finish(atoms, [removed], [ring_atom], caps,
                    {"motif": "pyrrolic N-H at a monovacancy", "removed": [removed]})

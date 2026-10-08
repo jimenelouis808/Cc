@@ -49,6 +49,19 @@ def test_pyrrolic_vacancy_places_nh_and_two_ch():
     assert out.get_distance(n, hydrogens[0], mic=True) == pytest.approx(1.01)
 
 
+def test_pyrrolic_hydrogens_do_not_crowd_the_vacancy():
+    """Aimed in the plane the three caps end 0.7-0.9 Å apart; tilted they do not."""
+    sheet = _sheet()
+    removed = 10
+    ring_atom, *_ = (int(k) for k in _neighbours(sheet, removed))
+    out = pyrrolic_vacancy(sheet, ring_atom, removed)
+    hydrogens = [k for k, s in enumerate(out.get_chemical_symbols()) if s == "H"]
+    d = out.get_all_distances(mic=True)
+    assert min(d[i, j] for i in hydrogens for j in hydrogens if i < j) > 1.8
+    others = [k for k in range(len(out)) if k not in hydrogens]
+    assert min(d[h, k] for h in hydrogens for k in others) > 0.95   # bonded, nothing closer
+
+
 def test_refuses_bad_choices():
     sheet = _sheet()
     with pytest.raises(ValueError, match="not bonded"):
