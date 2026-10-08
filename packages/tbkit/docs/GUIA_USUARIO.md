@@ -92,7 +92,7 @@ lee lo que dejó una receta y escribe junto a ella:
   fuente de 7 pt y paleta Okabe-Ito (legible con daltonismo y en gris). Necesita
   el extra `plot`.
 
-Reconoce las carpetas de `doped_raman` y `doped_gpaw` y cualquier espectro de tbkit
+Reconoce las carpetas de `doped_raman`, `doped_gpaw` y `electronic_compare` y cualquier espectro de tbkit
 (`.npz` con `grid`, o el CSV de `--out` y de «Exportar CSV…»). Para otra receta se
 añade un adaptador en `tbkit/report.py` que convierta sus archivos en secciones,
 gráficas y tablas; la página, los CSV y las figuras salen de eso. Ningún número de
@@ -146,6 +146,7 @@ cero tras un corte.
 | `structure_screening` | Ordenar estructuras ya construidas de una composición (grupos funcionales) |
 | `doped_raman` | Raman resonante, banda D estimada e IR de la coil sin dopar, con N y con amina |
 | `doped_gpaw` | Esos resultados frente a GPAW en los modos clave (frecuencia e IR) |
+| `electronic_compare` | Bandas y DOS de la coil (sin dopar, N, amina), grafeno y niveles de moléculas: tbkit frente a GPAW en la misma geometría (`tbkit report out/electronic`) |
 | `active_learning` | Buscar mínimos espurios de un conjunto con GPAW |
 | `validation_report` | Regenerar `docs/VALIDACION.md` desde los datos |
 

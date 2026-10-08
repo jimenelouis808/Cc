@@ -15,7 +15,8 @@ writes, next to it or where ``--out`` says:
 
 What a folder holds is recognised by its files (:data:`ADAPTERS`): the doped-coil
 Raman/IR recipe (``report.json`` with ``pristine``), its GPAW check
-(``report.json`` with ``gpaw``), and any spectrum tbkit writes (``.npz`` with a
+(``report.json`` with ``gpaw``), the electronic comparison (``recipes/electronic_compare``),
+and any spectrum tbkit writes (``.npz`` with a
 ``grid``, or the CSV of ``tbkit raman/ir --out`` and the GUI's «Exportar CSV…»).
 A new recipe gets a report by adding an adapter that turns its files into a
 :class:`Report`; the page, the CSV and the figures come from that alone.
@@ -491,6 +492,118 @@ def spectrum_file(path: Path) -> Report:
     return rep
 
 
+def electronic(folder: Path) -> Report:
+    """``out/electronic`` (tbkit.recipes.electronic_compare): bands and DOS, tbkit vs GPAW."""
+    r = json.loads((folder / "report.json").read_text())
+    systems = r.get("systems", {})
+    rep = Report("Estructura electrónica: tbkit frente a GPAW",
+                 "tbkit (xu_chn, SCC) y GPAW (PBE, LCAO dzp) en la misma geometría; nada se "
+                 "ajustó a estos datos. Energías respecto al nivel de Fermi de cada método.",
+                 meta={"carpeta": str(folder), "ensanchamiento DOS (eV)": r.get("sigma_eV")})
+    dos = np.load(folder / "dos.npz") if (folder / "dos.npz").exists() else None
+    coils = [n for n in ("pristine", "N", "amine") if n in systems]
+    if coils:
+        sec = rep.section("Coil: densidad de estados y bandas")
+        rows = []
+        for n in coils:
+            e = systems[n]
+            rows.append([NAMES.get(n, n), e["gap_gpaw_eV"], e["gap_tb_eV"],
+                         e["dos_correlation_-2_+2"], e["dos_correlation_-6_+4"],
+                         e["states_within_1eV"]["gpaw"], e["states_within_1eV"]["tb"],
+                         e.get("delta_dos_correlation_-3_+3")])
+        sec.add(Table("resumen_coil", "Resumen por estructura",
+                      ["estructura", "gap GPAW (eV)", "gap tbkit (eV)", "r DOS ±2 eV",
+                       "r DOS −6…+4 eV", "estados ±1 eV GPAW", "estados ±1 eV tbkit",
+                       "r ΔDOS (dopado − sin dopar)"], rows,
+                      note="r: correlación de Pearson entre las dos curvas en esa ventana. "
+                           "Estados: integral de la DOS en ±1 eV del nivel de Fermi, por celda.",
+                      digits=[None, 3, 3, 2, 2, 1, 1, 2]))
+        if dos is not None:
+            grid = dos["grid"]
+            for n in coils:
+                sec.add(Figure(f"dos_{n}", f"DOS, {NAMES.get(n, n)}", "E − E_F (eV)",
+                               "estados / eV / celda",
+                               [Series("GPAW (PBE)", grid, dos[f"{n}_gpaw"]),
+                                Series("tbkit (xu_chn)", grid, dos[f"{n}_tb"])],
+                               marks=[(0.0, "E_F")]))
+            for n in ("N", "amine"):
+                if n in coils and "pristine" in coils:
+                    sec.add(Figure(f"delta_dos_{n}", f"ΔDOS: {NAMES.get(n, n)} − sin dopar",
+                                   "E − E_F (eV)", "estados / eV / celda",
+                                   [Series("GPAW (PBE)", grid, dos[f"{n}_gpaw"] - dos["pristine_gpaw"]),
+                                    Series("tbkit (xu_chn)", grid, dos[f"{n}_tb"] - dos["pristine_tb"])],
+                                   marks=[(0.0, "E_F")], xlim=(-3.0, 3.0),
+                                   caption="Los estados que añade el dopante, en cada método."))
+        for n in coils:
+            series = []
+            for label, key in (("GPAW (PBE)", "gpaw"), ("tbkit (xu_chn)", "tb")):
+                d = json.loads((folder / n / f"{key}.json").read_text())
+                kz = np.array([k[2] for k in d["kpts"]])
+                xs, ys = [], []
+                for x, row in zip(kz, d["bands_minus_fermi"]):
+                    for e in row:
+                        if abs(e) <= 3.0:
+                            xs.append(x)
+                            ys.append(e)
+                series.append(Series(label, np.array(xs), np.array(ys)))
+            sec.add(Figure(f"bandas_{n}", f"Bandas Γ–Z, {NAMES.get(n, n)}", "k_z (unidades de 2π/c)",
+                           "E − E_F (eV)", series, kind="points",
+                           caption="Bandas a ±3 eV del nivel de Fermi, de Γ (0) a Z (0.5)."))
+    if "graphene" in systems:
+        g = systems["graphene"]
+        sec = rep.section("Grafeno: la parte de carbono de todos los estados de la coil")
+        rows = [["π en M, debajo de E_F (eV)", g["gpaw"]["pi_M_below_eV"], g["tb"]["pi_M_below_eV"]],
+                ["π* en M, encima de E_F (eV)", g["gpaw"]["pi_M_above_eV"], g["tb"]["pi_M_above_eV"]],
+                ["ħv_F (eV·Å)", g["gpaw"]["fermi_velocity_eV_A"], g["tb"]["fermi_velocity_eV_A"]],
+                ["nivel más bajo en Γ (eV)", min(g["gpaw"]["gamma_eV"]), min(g["tb"]["gamma_eV"])]]
+        sec.add(Table("grafeno", "Puntos de alta simetría", ["magnitud", "GPAW", "tbkit"], rows,
+                      note="Niveles a −25…+12 eV del nivel de Fermi. ħv_F: cuerda de un paso del "
+                           "camino antes de K (subestima la pendiente en ambos por igual).",
+                      digits=[None, 2, 2]))
+        series = []
+        for label, key in (("GPAW (PBE)", "gpaw"), ("tbkit (xu_chn)", "tb")):
+            d = json.loads((folder / "graphene" / f"{key}.json").read_text())
+            xs, ys = [], []
+            for x, row in enumerate(d["bands_minus_fermi"]):
+                for e in row:
+                    if -12.0 <= e <= 8.0:
+                        xs.append(x)
+                        ys.append(e)
+            series.append(Series(label, np.array(xs, dtype=float), np.array(ys)))
+        sec.add(Figure("bandas_grafeno", "Bandas del grafeno, Γ–M–K–Γ", "punto del camino (Γ 0, M 30, K 47, Γ 89)",
+                       "E − E_F (eV)", series, kind="points"))
+    mol = r.get("molecules")
+    if mol:
+        sec = rep.section("Moléculas: niveles de Kohn-Sham")
+        summary = [[{"train": "en el ajuste", "test": "apartadas"}[k.split("_")[1]], v["n"],
+                    v["gap_mean_error_eV"], v["gap_rms_error_eV"], v["gap_correlation"],
+                    v["occupied_rms_vs_homo_median_eV"]]
+                   for k, v in mol.items() if k.startswith("summary_")]
+        sec.add(Table("moleculas_resumen", "Gap HOMO-LUMO y niveles ocupados",
+                      ["moléculas", "n", "error medio del gap (eV)", "RMS del gap (eV)",
+                       "r del gap", "RMS niveles ocupados vs HOMO (mediana, eV)"], summary,
+                      note="Los niveles de 16 de las 22 moléculas fueron objetivo del ajuste de "
+                           "xu_chn; las 6 apartadas son la prueba.",
+                      digits=[None, 0, 2, 2, 3, 2]))
+        rows = [[m["molecule"], "ajuste" if m["role"] == "train" else "apartada", m["gap_gpaw_eV"],
+                 m["gap_tb_eV"], m["occupied_rms_vs_homo_eV"]] for m in mol["molecules"]]
+        sec.add(Table("moleculas", "Por molécula", ["molécula", "papel", "gap GPAW (eV)",
+                                                    "gap tbkit (eV)", "RMS ocupados vs HOMO (eV)"],
+                      rows, digits=[None, None, 2, 2, 2]))
+        sec.add(Figure("paridad_gap", "Gap HOMO-LUMO: tbkit frente a GPAW", "GPAW (eV)", "tbkit (eV)",
+                       [Series(lbl, np.array([m["gap_gpaw_eV"] for m in mol["molecules"] if m["role"] == role]),
+                               np.array([m["gap_tb_eV"] for m in mol["molecules"] if m["role"] == role]))
+                        for role, lbl in (("train", "en el ajuste"), ("test", "apartadas"))],
+                       kind="scatter"))
+    rep.footer = "Generado por tbkit.report desde recipes/electronic_compare; ningún número se escribió a mano."
+    return rep
+
+
+def _is_electronic(p: Path) -> bool:
+    return p.is_dir() and (p / "report.json").exists() and \
+        "electronic_compare" in json.loads((p / "report.json").read_text()).get("what", "")
+
+
 def _is_doped_raman(p: Path) -> bool:
     if not (p.is_dir() and (p / "report.json").exists() and (p / "spectra.npz").exists()):
         return False
@@ -504,6 +617,7 @@ def _is_doped_gpaw(p: Path) -> bool:
 
 #: (test, builder): the first whose test passes makes the report.
 ADAPTERS = [
+    (_is_electronic, electronic),
     (_is_doped_raman, doped_raman),
     (_is_doped_gpaw, doped_gpaw),
     (lambda p: p.is_file() and p.suffix.lower() in (".npz", ".csv"), spectrum_file),
@@ -514,5 +628,5 @@ def recognise(source: Path) -> Report:
     for test, builder in ADAPTERS:
         if test(source):
             return builder(source)
-    raise ValueError(f"No reconozco {source}: carpeta de doped_raman o doped_gpaw, o un "
-                     f"espectro .npz/.csv de tbkit.")
+    raise ValueError(f"No reconozco {source}: carpeta de doped_raman, doped_gpaw o "
+                     f"electronic_compare, o un espectro .npz/.csv de tbkit.")
