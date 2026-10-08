@@ -31,6 +31,7 @@ is fitted here.
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 from pathlib import Path
 
@@ -94,8 +95,17 @@ def run_gpaw(name: str) -> Path:
     atoms.get_potential_energy()
     fermi = float(atoms.calc.get_fermi_level())
     k, _, _ = kpath(name, atoms)
-    bands = atoms.calc.fixed_density(kpts=k, symmetry="off", txt=None)
-    eps = np.array([bands.get_eigenvalues(kpt=i) for i in range(len(k))]) - fermi
+    # A few k points per non-SCF call and only the bands the window needs: all 21 at
+    # once with every band took 14 GB for the amine coil (killed twice).
+    nbands = int(atoms.calc.get_number_of_electrons() // 2) + 250
+    eps = []
+    for chunk in np.array_split(k, max(1, len(k) // 4)):
+        bands = atoms.calc.fixed_density(kpts=chunk, symmetry="off", txt=None,
+                                         nbands=min(nbands, atoms.calc.get_number_of_bands()))
+        eps += [bands.get_eigenvalues(kpt=i) for i in range(len(chunk))]
+        del bands
+        gc.collect()
+    eps = np.array(eps) - fermi
     _write(out, {"name": name, "fermi_eV": fermi, "kpts": k.tolist(), "bands_minus_fermi": _keep(eps),
                  "settings": f"GPAW LCAO dzp PBE h 0.2, FD 0.05 eV, SCF k {kpts}, "
                              f"bands non-SCF on {len(k)} k"})
