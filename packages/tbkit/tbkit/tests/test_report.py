@@ -126,3 +126,30 @@ def test_open_result_writes_outside_the_data(tmp_path):
     page = rp.open_result(path, browser=False)
     assert page.exists() and page.parent != tmp_path
     assert list(tmp_path.iterdir()) == [path]
+
+
+def test_double_resonance_folder_is_recognised(tmp_path):
+    import json
+
+    import numpy as np
+
+    from tbkit.report import recognise
+
+    lasers = {k: {"I_G": 1.0, "G_position_cm1": 1610.0, "D_position_cm1": 1294.0 + d,
+                  "I_D/I_G": 0.6, "2D_position_cm1": 2654.0 + 2 * d, "I_2D/I_G": 0.5,
+                  "top_dband": [{"q": 0.25, "phonon_cm1": 1294.0, "shift_cm1": 1294.0,
+                                 "share": 0.01}]}
+              for k, d in (("1.96", 0.0), ("2.33", 1.0))}
+    (tmp_path / "report.json").write_text(json.dumps(
+        {"model": "xu_carbon", "nk": 24, "gamma_eV": 0.1, "lasers": lasers,
+         "D_dispersion_cm1_per_eV": 2.7}))
+    grid1, grid2 = np.arange(1000.0, 1800.0), np.arange(2000.0, 3600.0)
+    np.savez(tmp_path / "spectra.npz", grid1=grid1, grid2=grid2,
+             **{f"G_{k}": np.exp(-((grid1 - 1610) / 20) ** 2) for k in lasers},
+             **{f"dband_{k}": 0.5 * np.exp(-((grid1 - 1294) / 20) ** 2) for k in lasers},
+             **{f"twod_{k}": 0.2 * np.exp(-((grid2 - 2654) / 30) ** 2) for k in lasers})
+    rep = recognise(tmp_path)
+    assert rep.title.startswith("Doble resonancia")
+    bands = next(t for t in rep.tables() if t.id == "bandas")
+    assert [row[2] for row in bands.rows] == [1294.0, 1295.0]
+    assert {f.id for f in rep.figures()} == {"espectro_grid1", "espectro_grid2"}

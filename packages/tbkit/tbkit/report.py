@@ -16,6 +16,7 @@ writes, next to it or where ``--out`` says:
 What a folder holds is recognised by its files (:data:`ADAPTERS`): the doped-coil
 Raman/IR recipe (``report.json`` with ``pristine``), its GPAW check
 (``report.json`` with ``gpaw``), the electronic comparison (``recipes/electronic_compare``),
+the coil's double resonance (``recipes/coil_double_resonance``),
 any JSON file (``validation/*.json`` and the like, laid out as tables), and any
 spectrum tbkit writes (``.npz`` with a
 ``grid``, or the CSV of ``tbkit raman/ir --out`` and the GUI's «Exportar CSV…»).
@@ -634,6 +635,71 @@ def electronic(folder: Path) -> Report:
     return rep
 
 
+def double_resonance(folder: Path) -> Report:
+    """``out/coil_dr`` (tbkit.recipes.coil_double_resonance): D, D′, 2D by double resonance."""
+    r = json.loads((folder / "report.json").read_text())
+    lasers = sorted(r["lasers"], key=float)
+    rep = Report("Doble resonancia de la coil: bandas D y 2D",
+                 f"Modelo {r['model']}; γ = {r['gamma_eV']} eV, {r['nk']} puntos k (y q) a lo "
+                 f"largo del eje. Las intensidades son del modelo, relativas a la G del mismo "
+                 f"cálculo; la D es por defecto y por celda.",
+                 meta={"carpeta": str(folder), "láseres (eV)": ", ".join(lasers)})
+    sec = rep.section("Posiciones e intensidades por láser")
+    rows = [[float(k), e.get("G_position_cm1"), e.get("D_position_cm1"),
+             e.get("D'_position_cm1"), e.get("2D_position_cm1"), e.get("2D'+2G_position_cm1"),
+             e.get("I_D/I_G"), e.get("I_D'/I_G"), e.get("I_2D/I_G")]
+            for k, e in ((k, r["lasers"][k]) for k in lasers)]
+    sec.add(Table("bandas", "Bandas por láser",
+                  ["láser (eV)", "G (cm⁻¹)", "D (cm⁻¹)", "D′ (cm⁻¹)", "2D (cm⁻¹)",
+                   "2D′+2G (cm⁻¹)", "I_D/I_G", "I_D′/I_G", "I_2D/I_G"], rows,
+                  note=r.get("intensity_note", "") + ". " + r.get("scaled_note", ""),
+                  digits=[2, 0, 0, 0, 0, 0, 3, 3, 3]))
+    slopes = [[name, r[f"{name}_dispersion_cm1_per_eV"]] for name in ("D", "2D")
+              if f"{name}_dispersion_cm1_per_eV" in r]
+    if slopes:
+        sec.add(Table("dispersion", "Dispersión con el láser (ajuste lineal)",
+                      ["banda", "pendiente (cm⁻¹/eV)"], slopes, digits=[None, 1]))
+    spectra = folder / "spectra.npz"
+    if spectra.exists():
+        data = np.load(spectra)
+        sec = rep.section("Espectros")
+        for grid_key, prefixes, title, lim in (
+                ("grid1", ("G", "dband"), "Primer orden: G y D (+D′)", (1100.0, 1800.0)),
+                ("grid2", ("twod",), "Segundo orden: 2D y 2D′+2G", (2400.0, 3500.0))):
+            series = []
+            for k in lasers:
+                g = data[f"G_{float(k):.2f}"] if f"G_{float(k):.2f}" in data.files else None
+                total = sum(data[f"{p}_{float(k):.2f}"] for p in prefixes
+                            if f"{p}_{float(k):.2f}" in data.files)
+                if g is not None and not np.isscalar(total):
+                    series.append(Series(f"{float(k):.2f} eV", data[grid_key], total / g.max()))
+            if series:
+                sec.add(Figure(f"espectro_{grid_key}", title, "desplazamiento Raman (cm⁻¹)",
+                               "intensidad / altura de la G", series, xlim=lim,
+                               caption="Lorentzianas de ancho fijo sobre las líneas calculadas; "
+                                       "cada láser normalizado a la altura de su propia G."))
+    for kind, label in (("dband", "D (un fonón + defecto)"), ("twod", "2D (pares de fonones)")):
+        rows = [[float(k), t["q"], t["phonon_cm1"], t["shift_cm1"], 100 * t["share"]]
+                for k in lasers for t in r["lasers"][k].get(f"top_{kind}", [])]
+        if rows:
+            rep.section(f"Contribuciones principales a la {label}").add(
+                Table(f"top_{kind}", "Las ocho mayores por láser",
+                      ["láser (eV)", "q", "fonón (cm⁻¹)", "desplazamiento (cm⁻¹)", "% del total"],
+                      rows, digits=[2, 3, 0, 0, 3],
+                      note="q: momento del fonón a lo largo del eje, en unidades de 2π/c "
+                           "(0 = Γ, 0.5 = borde de la zona)."))
+    rep.footer = ("Generado por tbkit.report desde recipes/coil_double_resonance; ningún número "
+                  "se escribió a mano.")
+    return rep
+
+
+def _is_double_resonance(p: Path) -> bool:
+    if not (p.is_dir() and (p / "report.json").exists()):
+        return False
+    data = json.loads((p / "report.json").read_text())
+    return "lasers" in data and "gamma_eV" in data and "nk" in data
+
+
 def _json_of(p: Path):
     """The JSON a source stands for (a folder's report.json, or the file), or None."""
     path = p / "report.json" if p.is_dir() else p
@@ -741,6 +807,7 @@ def _is_doped_gpaw(p: Path) -> bool:
 #: (test, builder): the first whose test passes makes the report.
 ADAPTERS = [
     (_is_electronic, electronic),
+    (_is_double_resonance, double_resonance),
     (_is_doped_raman, doped_raman),
     (_is_doped_gpaw, doped_gpaw),
     (lambda p: p.is_file() and p.suffix.lower() in (".npz", ".csv"), spectrum_file),

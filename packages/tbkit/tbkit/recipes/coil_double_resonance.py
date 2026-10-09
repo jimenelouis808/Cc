@@ -361,8 +361,8 @@ def _lorentz(grid, shifts, weights, fwhm=None):
 def report() -> dict:
     """Spectra, band positions, intensity ratios and their laser dispersion."""
     out = {"model": MODEL, "nk": NK, "gamma_eV": GAMMA, "fwhm_cm1": FWHM,
-           "intensity_note": "Σ over x, y, z polarisations; q-sums are means over the NK points "
-                             "(−q counted with q); the D band is per defect per cell",
+           "intensity_note": "Suma de las polarizaciones x, y, z; las sumas en q son medias sobre "
+                             "los NK puntos (−q contado con q); la D es por defecto y por celda",
            "lasers": {}}
     grid1, grid2 = np.arange(1000.0, 1800.0, 1.0), np.arange(2000.0, 3600.0, 1.0)
     spectra = {"grid1": grid1, "grid2": grid2}
