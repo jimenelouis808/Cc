@@ -375,15 +375,46 @@ class Coupling:
             dh = dh + ds * 0.5 * (self.shift[:, None] + self.shift[None, :])
         return dh, ds
 
+    def sparse(self, k_to, k_from, q, u: np.ndarray):
+        """:meth:`matrices` as sparse matrices (a bond list has few nonzero blocks; the
+        projection on the states then costs nnz·n_states instead of n_orb²·n_states)."""
+        from scipy.sparse import coo_matrix
+
+        system = self.system
+        n = system.basis.size
+        kt = system.kpoint_cartesian(k_to)
+        kf = system.kpoint_cartesian(k_from)
+        pos = system.atoms.positions
+        q = np.asarray(q, float)
+        rows, cols, h_values, s_values = [], [], [], []
+        for g in self.groups:
+            change = u[g["j"]] * np.exp(2j * np.pi * (g["shift"] @ q))[:, None] - u[g["i"]]
+            phase = np.exp(-1j * (pos[g["i"]] @ kt) + 1j * ((pos[g["i"]] + g["vector"]) @ kf))
+            rows.append(g["rows"].ravel())
+            cols.append(g["cols"].ravel())
+            h_values.append((np.einsum("pa,paxy->pxy", change, g["dh"])
+                             * phase[:, None, None]).ravel())
+            if g["ds"] is not None:
+                s_values.append((np.einsum("pa,paxy->pxy", change, g["ds"])
+                                 * phase[:, None, None]).ravel())
+        rows, cols = np.concatenate(rows), np.concatenate(cols)
+        dh = coo_matrix((np.concatenate(h_values), (rows, cols)), shape=(n, n)).tocsr()
+        ds = None
+        if s_values:
+            ds = coo_matrix((np.concatenate(s_values), (rows, cols)), shape=(n, n)).tocsr()
+            if self.shift is not None:
+                dh = dh + ds.multiply(0.5 * (self.shift[:, None] + self.shift[None, :])).tocsr()
+        return dh, ds
+
     def element(self, to: Bands, frm: Bands, q, u, block: str) -> np.ndarray:
         """g between the conduction ('cc') or valence ('vv') states of two k points."""
-        dh, ds = self.matrices(to.k, frm.k, q, u)
+        dh, ds = self.sparse(to.k, frm.k, q, u)
         a, ea = (to.cc, to.ec) if block == "cc" else (to.cv, to.ev)
         b, eb = (frm.cc, frm.ec) if block == "cc" else (frm.cv, frm.ev)
-        g = a.conj().T @ dh @ b
+        g = a.conj().T @ (dh @ b)
         if ds is not None:
-            g = g - 0.5 * (ea[:, None] + eb[None, :]) * (a.conj().T @ ds @ b)
-        return g
+            g = g - 0.5 * (ea[:, None] + eb[None, :]) * (a.conj().T @ (ds @ b))
+        return np.asarray(g)
 
 
 class PhononVertex:

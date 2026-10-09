@@ -252,6 +252,35 @@ def run_band(kind: str, laser: float, part: tuple[int, int]) -> Path:
     return out
 
 
+#: Branch windows for the two-phonon bands: every pair inside one window (the 2D region
+#: from the D-type branches, the 2D'/2G region from the G-type ones); pairs across the
+#: two windows (D + D'-type combinations near 2900 cm⁻¹) are left out.
+PAIR_WINDOWS = {"2D": (1150.0, 1480.0), "2G": (1480.0, 1750.0)}
+
+
+def run_pairs(laser: float, part: tuple[int, int]) -> Path:
+    """W[ν, ν'] of every pair (q, ν), (−q, ν') within each window, per q (one file each)."""
+    from ..double_resonance import phonon_pairs_q_fast
+
+    atoms, _, bands, coupling = _setup()
+    folder = WORK / f"pairs_{laser:.2f}"
+    folder.mkdir(parents=True, exist_ok=True)
+    jobs = [(m, name) for m in range(NK // 2 + 1) for name in PAIR_WINDOWS]
+    for n, (m, name) in enumerate(jobs):
+        path = folder / f"q{m:02d}_{name}.npz"
+        if n % part[1] != part[0] or path.exists():
+            continue
+        f, e = phonons_at(m)
+        lo, hi = PAIR_WINDOWS[name]
+        sel = np.flatnonzero((f >= lo) & (f <= hi))
+        w = phonon_pairs_q_fast(bands, (1, 1, NK), coupling, (0, 0, m), f[sel], e[sel],
+                                atoms.get_masses(), laser, GAMMA)
+        tmp = path.with_suffix(".tmp.npz")
+        np.savez(tmp, frequencies=f[sel], w=w, m=m)
+        tmp.replace(path)
+    return folder
+
+
 def g_band(laser: float) -> dict:
     """First-order Γ modes in BAND_RANGE (the G band and its neighbours), same units."""
     from ..double_resonance import PhononVertex, one_vertex
@@ -348,7 +377,7 @@ def report() -> dict:
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("fc", "check", "nshift", "twod", "dband", "gband",
-                                         "report"))
+                                         "pairs", "report"))
     parser.add_argument("laser", nargs="?", type=float)
     parser.add_argument("--part", default="0/1")
     args = parser.parse_args(argv)
@@ -359,6 +388,8 @@ def main(argv=None) -> None:
         print(json.dumps(check(), indent=1))
     elif args.step == "nshift":
         print(json.dumps(n_shift(), indent=1))
+    elif args.step == "pairs":
+        print(run_pairs(args.laser, part))
     elif args.step == "report":
         print(json.dumps(report(), indent=1, ensure_ascii=False)[:3000])
     elif args.step == "gband":
