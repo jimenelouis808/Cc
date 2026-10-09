@@ -314,6 +314,24 @@ def _load(kind: str, laser: float) -> list[dict]:
     return rows
 
 
+def _pairs_rows(laser: float) -> list[dict]:
+    """Two-phonon lines from ``run_pairs``: every ordered pair (q, ν), (−q, ν') over the
+    whole q mesh (q and −q both counted, all ordered pairs, as ``tbkit.graphene`` counts its
+    2D: the same convention, so I(2D)/I(G) compares with graphene's)."""
+    rows = []
+    for path in sorted((WORK / f"pairs_{laser:.2f}").glob("q*.npz")):
+        data = np.load(path)
+        f, w, m = data["frequencies"], data["w"], int(data["m"])
+        multiplicity = 1 if m in (0, NK // 2) else 2
+        shifts = f[:, None] + f[None, :]
+        for i in range(len(f)):
+            for j in range(len(f)):
+                rows.append({"q": m / NK, "frequency_cm1": float(0.5 * shifts[i, j]),
+                             "shift_cm1": float(shifts[i, j]), "intensity": float(w[i, j]),
+                             "multiplicity": multiplicity})
+    return rows
+
+
 def _lorentz(grid, shifts, weights, fwhm=FWHM):
     half = fwhm / 2
     return (weights[None, :] * half / np.pi / ((grid[:, None] - shifts[None, :]) ** 2
@@ -339,7 +357,7 @@ def report() -> dict:
                  "G_position_cm1": float(grid1[np.argmax(_lorentz(grid1, gf, gi))])}
         spectra[f"G_{laser:.2f}"] = _lorentz(grid1, gf, gi)
         for kind, grid in (("dband", grid1), ("twod", grid2)):
-            rows = _load(kind, laser)
+            rows = _load(kind, laser) if kind == "dband" else _pairs_rows(laser)
             if not rows:
                 continue
             shifts = np.array([r["shift_cm1"] for r in rows])
