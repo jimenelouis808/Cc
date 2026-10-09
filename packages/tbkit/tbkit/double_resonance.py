@@ -324,7 +324,8 @@ class Coupling:
 
     with k' = k + q (any representative). The bond derivatives are the ones the forces
     use (:func:`tbkit.forces._block_derivatives`); the overlap changes the same way, and
-    the fixed SCC shifts enter through ½ΔS(V_i + V_j)."""
+    the fixed SCC shifts enter through ½ΔS(V_i + V_j). Bonds are grouped by block shape
+    and summed with array operations (a coil has thousands)."""
 
     def __init__(self, system: System, shift: np.ndarray | None = None):
         from .forces import _block_derivatives
@@ -332,10 +333,25 @@ class Coupling:
         self.system = system
         self.shift = shift
         model = system.model
-        self.dh = [_block_derivatives(system, b, model.hopping) for b in system.bonds]
-        self.ds = (None if model.orthogonal else
-                   [_block_derivatives(system, b, model.overlap) for b in system.bonds])
-        self.slices = [system.basis.of_atom(a) for a in range(len(system.atoms))]
+        slices = [system.basis.of_atom(a) for a in range(len(system.atoms))]
+        groups: dict = {}
+        for b in system.bonds:
+            ri, rj = slices[b.i], slices[b.j]
+            groups.setdefault((len(ri), len(rj)), []).append(b)
+        self.groups = []
+        for (ni, nj), bonds in groups.items():
+            dh = np.array([_block_derivatives(system, b, model.hopping) for b in bonds])
+            ds = (None if model.orthogonal else
+                  np.array([_block_derivatives(system, b, model.overlap) for b in bonds]))
+            i = np.array([b.i for b in bonds])
+            j = np.array([b.j for b in bonds])
+            rows = np.array([slices[a].start for a in i])[:, None, None] + np.arange(ni)[None, :, None]
+            cols = np.array([slices[a].start for a in j])[:, None, None] + np.arange(nj)[None, None, :]
+            self.groups.append({"i": i, "j": j, "dh": dh, "ds": ds,
+                                "shift": np.array([b.shift for b in bonds], float),
+                                "vector": np.array([b.vector for b in bonds]),
+                                "rows": np.broadcast_to(rows, (len(bonds), ni, nj)),
+                                "cols": np.broadcast_to(cols, (len(bonds), ni, nj))})
 
     def matrices(self, k_to, k_from, q, u: np.ndarray):
         system = self.system
@@ -343,17 +359,18 @@ class Coupling:
         kt = system.kpoint_cartesian(k_to)
         kf = system.kpoint_cartesian(k_from)
         pos = system.atoms.positions
-        dh = np.zeros((n, n), dtype=complex)
-        ds = None if self.ds is None else np.zeros((n, n), dtype=complex)
         q = np.asarray(q, float)
-        for p, bond in enumerate(system.bonds):
-            i, j = bond.i, bond.j
-            change = u[j] * np.exp(2j * np.pi * float(q @ bond.shift)) - u[i]       # (3,)
-            phase = np.exp(-1j * float(kt @ pos[i])) * np.exp(1j * float(kf @ (pos[i] + bond.vector)))
-            ri, rj = self.slices[i], self.slices[j]
-            dh[ri.start:ri.stop, rj.start:rj.stop] += np.tensordot(change, self.dh[p], axes=1) * phase
-            if ds is not None:
-                ds[ri.start:ri.stop, rj.start:rj.stop] += np.tensordot(change, self.ds[p], axes=1) * phase
+        dh = np.zeros((n, n), dtype=complex)
+        ds = None
+        for g in self.groups:
+            change = u[g["j"]] * np.exp(2j * np.pi * (g["shift"] @ q))[:, None] - u[g["i"]]
+            phase = np.exp(-1j * (pos[g["i"]] @ kt) + 1j * ((pos[g["i"]] + g["vector"]) @ kf))
+            blocks = np.einsum("pa,paxy->pxy", change, g["dh"]) * phase[:, None, None]
+            np.add.at(dh, (g["rows"], g["cols"]), blocks)
+            if g["ds"] is not None:
+                ds = np.zeros((n, n), dtype=complex) if ds is None else ds
+                blocks = np.einsum("pa,paxy->pxy", change, g["ds"]) * phase[:, None, None]
+                np.add.at(ds, (g["rows"], g["cols"]), blocks)
         if ds is not None and self.shift is not None:
             dh = dh + ds * 0.5 * (self.shift[:, None] + self.shift[None, :])
         return dh, ds
@@ -484,3 +501,21 @@ def overtone_q(bands: list[Bands], mesh: tuple[int, int, int], coupling: Couplin
     first = PhononVertex(coupling, e_q, masses, frequency)
     second = PhononVertex(coupling, e_q, masses, frequency, conjugate=True)
     return two_vertices_q(bands, mesh, q_index, first, second, laser_ev, gamma)
+
+
+def one_vertex(bands: list[Bands], vertex, laser_ev: float, gamma: float = 0.1) -> np.ndarray:
+    """First-order amplitude A[s, i] of a q = 0 scattering on the mesh ``bands`` (mean):
+    the Γ phonon's Raman tensor of :func:`first_order`, from the vertex objects."""
+    npol = bands[0].velocity.shape[0]
+    out = np.zeros((npol, npol), dtype=complex)
+    zero = np.zeros(3)
+    for k in bands:
+        d0 = laser_ev - (k.ec[:, None] - k.ev[None, :]) + 1j * gamma
+        d1 = d0 - vertex.energy
+        g_cc, g_vv = vertex(k, k, zero, "cc"), vertex(k, k, zero, "vv")
+        for i in range(npol):
+            x = k.velocity[i] / d0
+            y = (g_cc @ x - x @ g_vv) / d1
+            for s in range(npol):
+                out[s, i] += np.sum(np.conj(k.velocity[s]) * y)
+    return out / len(bands)

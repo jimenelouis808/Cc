@@ -164,3 +164,25 @@ def test_defect_vertex_is_the_local_potential_between_bloch_states():
     one = dr.two_vertices_q(bands, (5, 5, 1), q, phonon, vertex, 2.0)
     double = dr.DefectVertex(system, {(0, 0, (0, 0, 0)): (np.array([[2 * v0]]), None)})
     assert np.allclose(dr.two_vertices_q(bands, (5, 5, 1), q, phonon, double, 2.0), 2 * one)
+
+
+def test_one_vertex_equals_first_order(phonons):
+    from tbkit.hamiltonian import System
+
+    atoms = gr.graphene_cell(A_CC)
+    model = pi_model(strain_beta=3.37)
+    f, v = phonons.modes(np.zeros(3))
+    optical = [i for i in gr._in_plane(v) if f[i] > 500]
+    modes = dr.real_modes(f[optical], v[optical])
+    n = 7
+    k = np.array([[i / n, j / n, 0.0] for i in range(n) for j in range(n)])
+    data = dr.electron_phonon(atoms, model, modes, k, np.full(len(k), 1 / len(k)),
+                              window_ev=10.0, step=0.0005)
+    reference = dr.first_order(data, modes, 2.0, 0.1)
+    system = System.build(atoms, model)
+    bands, _ = dr.mesh_bands(system, (n, n, 1), 10.0, gr._POLARIZATIONS)
+    coupling = dr.Coupling(system)
+    for mu, mode in enumerate(modes):
+        ours = dr.one_vertex(bands, dr.PhononVertex(coupling, mode.vector, atoms.get_masses(),
+                                                    mode.frequency), 2.0, 0.1)
+        assert np.allclose(np.abs(ours), np.abs(reference[mu]), rtol=1e-4, atol=1e-9)
