@@ -216,6 +216,12 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   Help texts (`actions.HELP` per control label, `actions.PANEL_HELP` per tab)
   are applied as tooltips and info boxes; a test fails if a new button, box
   or form row in `app.py` has no text there.
+- Recipes: every recipe with a `main(argv)` must build its argparse parser before doing any work.
+  The window's Recetas tab reads the options by calling `main([])` with `parse_args` patched to
+  stop there (`actions.recipe_usage`); a `main()` without argv is never called (it would run).
+  Numbers a recipe uses go either in `PARAMS` (`tbkit.settings`) or in an option with `help`; a
+  cached result that depends on an adjustable number must record it and be recomputed when it
+  differs (`tang_fit.grid_point`, `crystal_validation._settings_used`).
 - Mean-field moments are an order parameter, not a correlated ground state;
   user-facing text must not imply otherwise. Lieb's theorem is the check.
 - Energies and forces require `model.repulsive`; the π model has none and

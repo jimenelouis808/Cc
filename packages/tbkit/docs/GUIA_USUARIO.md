@@ -54,7 +54,7 @@ pestaña un recuadro que explica para qué sirve (menú Ayuda para ocultarlos).
 | Fonones (ZB) | phonopy: dispersión, DOS, simetría de cada modo en Γ, F/S/Cv; carpeta para reanudar |
 | Espectros | Raman (no resonante, resonante), IR; fonones del modelo o de QE; escalar frecuencias (aparte); exportar CSV |
 | Grafeno | G, 2D y 2D′ por doble resonancia y dispersión de la 2D con el láser |
-| Recetas | Elegir receta y paso → editar sus ajustes en la tabla (valor, unidad; el porqué al pasar el ratón) → partes, hilos, MPI → «Lanzar» → el avance con tiempo restante se actualiza cada 10 s. Corre fuera de la ventana (cerrarla no lo detiene); es lo mismo que `tbkit lanzar … --ajustes` |
+| Recetas | Las 30 recetas. Elegir receta y paso → dos tablas editables (doble clic): «Ajustes de la receta» (números internos con unidad; el porqué al pasar el ratón) y «Opciones del paso» (cada argumento de la receta con su valor por omisión, valores posibles y qué es; los obligatorios marcados) → partes, hilos, MPI → «Lanzar» → el avance con tiempo restante se actualiza cada 10 s. Corre fuera de la ventana (cerrarla no lo detiene); es lo mismo que `tbkit lanzar …` con `--ajustes` |
 
 Archivo → «Guardar registro del último cálculo» escribe un registro
 reproducible (versión, commit, parámetros completos, ajustes, resultados).
@@ -109,6 +109,8 @@ y cualquiera se cambia al correrla, sin tocar el código:
     python -m tbkit.recipes.coil_double_resonance pairs 2.33 --ajuste NK=32 --ajuste GAMMA=0.05
     python -m tbkit.recipes.doped_gpaw relax N --ajuste 'GPAW_SETTINGS={"basis": "tzp"}'
     python -m tbkit.recipes.doped_raman raman N --ajustes mis_ajustes.json --ver-ajustes
+
+Además de estos ajustes internos, cada receta tiene opciones de línea de comandos (`--help` las explica todas): puntos k, kT, fmax, pasos máximos, procesos GPAW (`--workers`), los pesos y el límite de evaluaciones de los ajustes de parámetros (`--energy-weight`, `--ridge`, `--max-evaluations`), el radio y la tolerancia de las clases de sitio… La pestaña Recetas las muestra en una tabla.
 
 Un nombre que la receta no tiene, o un valor del tipo equivocado, se rechaza. Los valores
 usados en cada ejecución quedan en `ajustes_usados.json` en la carpeta de la receta.
