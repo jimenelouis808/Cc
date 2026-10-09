@@ -186,3 +186,85 @@ def test_one_vertex_equals_first_order(phonons):
         ours = dr.one_vertex(bands, dr.PhononVertex(coupling, mode.vector, atoms.get_masses(),
                                                     mode.frequency), 2.0, 0.1)
         assert np.allclose(np.abs(ours), np.abs(reference[mu]), rtol=1e-4, atol=1e-9)
+
+
+def test_phonon_pairs_diagonal_is_the_overtone(phonons):
+    from tbkit.hamiltonian import System
+
+    atoms = gr.graphene_cell(A_CC)
+    system = System.build(atoms, pi_model(strain_beta=3.37))
+    n = 7
+    bands, _ = dr.mesh_bands(system, (n, n, 1), 10.0, gr._POLARIZATIONS)
+    coupling = dr.Coupling(system)
+    qi = (5, 2, 0)
+    qc = np.array(qi, float) / n @ atoms.cell.reciprocal() * 2 * np.pi
+    f, v = phonons.modes(qc)
+    keep = [i for i in gr._in_plane(v) if f[i] > 1000]
+    vectors = np.array([v[i] * np.exp(1j * (atoms.positions @ qc))[:, None] for i in keep])
+    masses = atoms.get_masses()
+    w = dr.phonon_pairs_q(bands, (n, n, 1), coupling, qi, f[keep], vectors, masses, 2.0)
+    for a, nu in enumerate(keep):
+        single = dr.overtone_q(bands, (n, n, 1), coupling, qi, f[nu], vectors[a], masses, 2.0)
+        assert w[a, a] == pytest.approx(np.sum(np.abs(single) ** 2), rel=1e-8)
+    assert w.shape == (len(keep), len(keep)) and np.all(w >= 0)
+
+
+def test_fast_pairs_match_the_exact_ones(phonons):
+    """Many bands (a 2×1 supercell: 4 π bands) so that every index of the chain is
+    exercised with unequal sizes, and branches spread over ~200 cm⁻¹."""
+    from tbkit.hamiltonian import System
+
+    primitive = gr.graphene_cell(A_CC)
+    atoms = primitive.repeat((2, 1, 1))
+    system = System.build(atoms, pi_model(strain_beta=3.37))
+    n = 5
+    bands, _ = dr.mesh_bands(system, (n, n, 1), 3.0, gr._POLARIZATIONS, fermi=0.8)
+    assert any(len(b.ec) != len(b.ev) for b in bands)
+    coupling = dr.Coupling(system)
+    qi = (2, 1, 0)
+    qc = np.array(qi, float) / n @ atoms.cell.reciprocal() * 2 * np.pi
+    f, v = phonons.modes(qc)
+    keep = [i for i in gr._in_plane(v) if f[i] > 500]
+    # primitive modes placed on both cells of the supercell (a valid q of the supercell)
+    vectors = np.array([np.concatenate([v[i], v[i] * np.exp(1j * qc @ primitive.cell[0])])
+                        * np.exp(1j * (atoms.positions @ qc))[:, None] / np.sqrt(2)
+                        for i in keep])
+    args = (bands, (n, n, 1), coupling, qi, f[keep], vectors, atoms.get_masses(), 2.0)
+    assert np.allclose(dr.phonon_pairs_q_fast(*args), dr.phonon_pairs_q(*args), rtol=1e-3)
+
+
+def test_fast_chain_algebra_with_random_states():
+    """The factorised chain equals the direct one for random states and couplings with
+    different numbers of bands at k, k+q and k−q (catches any transposed index)."""
+    rng = np.random.default_rng(5)
+
+    def bands(nv, nc):
+        return dr.Bands(np.zeros(3), np.sort(rng.uniform(-3, -0.1, nv)),
+                        np.sort(rng.uniform(0.1, 3, nc)), None, None,
+                        rng.normal(size=(2, nc, nv)) + 1j * rng.normal(size=(2, nc, nv)))
+
+    k, a, b = bands(3, 4), bands(5, 2), bands(2, 6)
+    sizes = {id(k): (len(k.ec), len(k.ev)), id(a): (len(a.ec), len(a.ev)),
+             id(b): (len(b.ec), len(b.ev))}
+
+    class Random:
+        energy = 0.0
+
+        def __init__(self, seed):
+            self.cache, self.seed = {}, seed
+
+        def __call__(self, to, frm, q, block):
+            key = (id(to), id(frm), block)
+            if key not in self.cache:
+                r = np.random.default_rng(hash((self.seed,) + key) % 2 ** 32)
+                i = 0 if block == "cc" else 1
+                shape = (sizes[id(to)][i], sizes[id(frm)][i])
+                self.cache[key] = r.normal(size=shape) + 1j * r.normal(size=shape)
+            return self.cache[key]
+
+    first = [Random(s) for s in range(3)]
+    second = [Random(10 + s) for s in range(3)]
+    w = np.array([0.155, 0.16, 0.168])
+    direct = dr._pairs_ordered(k, a, b, np.zeros(3), first, second, w, 2.0, 0.1)
+    fast = dr._pairs_ordered_fast(k, a, b, np.zeros(3), first, second, w, 2.0, 0.1, order=9)
+    assert np.allclose(fast, direct, rtol=1e-6, atol=1e-9 * np.abs(direct).max())

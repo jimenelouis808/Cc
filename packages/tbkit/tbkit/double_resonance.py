@@ -519,3 +519,146 @@ def one_vertex(bands: list[Bands], vertex, laser_ev: float, gamma: float = 0.1) 
             for s in range(npol):
                 out[s, i] += np.sum(np.conj(k.velocity[s]) * y)
     return out / len(bands)
+
+
+def phonon_pairs_q(bands: list[Bands], mesh: tuple[int, int, int], coupling: Coupling,
+                   q_index, frequencies: np.ndarray, vectors: np.ndarray, masses: np.ndarray,
+                   laser_ev: float, gamma: float = 0.1) -> np.ndarray:
+    """Σ_si |A|² for every pair of phonons (q, ν), (−q, ν') of the given branches.
+
+    In a crystal with many atoms per cell one band of graphene (its TO at K, the 2D
+    mode) spreads over many branches, so the two phonons of a second-order process
+    need not belong to the same branch: this returns the matrix W[ν, ν'] of all pairs,
+    each amplitude with both time orders (the first at +q, the second at −q, then the
+    reverse), so W[ν, ν] is :func:`overtone_q`. The first-vertex half of the chain is
+    computed once per branch and contracted with every second branch at once."""
+    n1, n2, n3 = mesh
+    q = np.array(q_index, float) / np.array(mesh, float)
+    vertices = [PhononVertex(coupling, e, masses, f) for f, e in zip(frequencies, vectors, strict=True)]
+    conj = [PhononVertex(coupling, e, masses, f, conjugate=True)
+            for f, e in zip(frequencies, vectors, strict=True)]
+    w = np.asarray(frequencies, float) * CM1_TO_EV
+
+    def index(i, j, l):
+        return ((i % n1) * n2 + (j % n2)) * n3 + (l % n3)
+
+    total = None
+    for i in range(n1):
+        for j in range(n2):
+            for l in range(n3):
+                k = bands[index(i, j, l)]
+                kp = bands[index(i + q_index[0], j + q_index[1], l + q_index[2])]
+                km = bands[index(i - q_index[0], j - q_index[1], l - q_index[2])]
+                amp = _pairs_ordered(k, kp, km, q, vertices, conj, w, laser_ev, gamma)
+                amp += np.transpose(_pairs_ordered(k, km, kp, -q, conj, vertices, w, laser_ev,
+                                                   gamma), (1, 0, 2, 3))
+                total = amp if total is None else total + amp
+    return np.sum(np.abs(total / len(bands)) ** 2, axis=(2, 3))
+
+
+def _pairs_ordered(k, a, b, q, first, second, w, laser, gamma):
+    """A[ν, ν', s, i] of one time order: ``first[ν]`` transfers +q, then ``second[ν']`` −q."""
+    def pairs(bc, bv, omega):
+        return laser - np.asarray(omega)[..., None, None] - (bc.ec[:, None] - bv.ev[None, :]) \
+            + 1j * gamma
+
+    g1_e = np.array([v(a, k, q, "cc") for v in first])
+    g1_h = np.array([v(k, b, q, "vv") for v in first])
+    g2_e_back = np.array([v(k, a, -q, "cc") for v in second])
+    g2_h_fwd = np.array([v(k, a, -q, "vv") for v in second])
+    g2_e_fwd = np.array([v(b, k, -q, "cc") for v in second])
+    g2_h_back = np.array([v(b, k, -q, "vv") for v in second])
+    total_w = w[:, None] + w[None, :]
+    d_same, d_eh, d_he = pairs(k, k, total_w), pairs(a, a, total_w), pairs(b, b, total_w)
+    npol = k.velocity.shape[0]
+    n = len(w)
+    out = np.zeros((n, n, npol, npol), dtype=complex)
+    for ii in range(npol):
+        x = k.velocity[ii] / (laser - (k.ec[:, None] - k.ev[None, :]) + 1j * gamma)
+        xe = np.einsum("ncd,dv->ncv", g1_e, x) / pairs(a, k, w)            # (ν, c_{k+q}, v_k)
+        xh = -np.einsum("cv,nvu->ncu", x, g1_h) / pairs(k, b, w)           # (ν, c_k, v_{k-q})
+        same = (np.einsum("mcd,ndv->nmcv", g2_e_back, xe)
+                - np.einsum("ncv,mvu->nmcu", xh, g2_h_back)) / d_same
+        eh = -np.einsum("ncv,mvu->nmcu", xe, g2_h_fwd) / d_eh
+        he = np.einsum("mcd,ndv->nmcv", g2_e_fwd, xh) / d_he
+        for s in range(npol):
+            out[:, :, s, ii] = (np.einsum("cv,nmcv->nm", np.conj(k.velocity[s]), same)
+                                + np.einsum("cv,nmcv->nm", np.conj(a.velocity[s]), eh)
+                                + np.einsum("cv,nmcv->nm", np.conj(b.velocity[s]), he))
+    return out
+
+
+def _pairs_ordered_fast(k, a, b, q, first, second, w, laser, gamma, order: int = 7):
+    """:func:`_pairs_ordered` with the last denominator expanded about the mean pair
+    energy: 1/(D₀ − δ) = Σ_p δ^p / D₀^{p+1}, δ = (ω_ν − ω̄) + (ω_ν' − ω̄). Each power
+    factorises into a branch-by-branch product, so the cost is linear in the number of
+    pairs instead of quadratic in the chain; with |δ| ≤ 0.03 eV and |D₀| ≥ γ = 0.1 eV,
+    seven terms leave ~1e-4 relative error (tested against the exact form)."""
+    from math import comb
+
+    def pairs(bc, bv, omega):
+        return laser - np.asarray(omega)[..., None, None] - (bc.ec[:, None] - bv.ev[None, :]) \
+            + 1j * gamma
+
+    g1_e = np.array([v(a, k, q, "cc") for v in first])
+    g1_h = np.array([v(k, b, q, "vv") for v in first])
+    g2_e_back = np.array([v(k, a, -q, "cc") for v in second])
+    g2_h_fwd = np.array([v(k, a, -q, "vv") for v in second])
+    g2_e_fwd = np.array([v(b, k, -q, "cc") for v in second])
+    g2_h_back = np.array([v(b, k, -q, "vv") for v in second])
+    mean = float(np.mean(w))
+    dw = w - mean
+    d0 = {key: pairs(x, x, 2 * mean) for key, x in (("k", k), ("a", a), ("b", b))}
+    npol = k.velocity.shape[0]
+    n = len(w)
+    out = np.zeros((n, n, npol, npol), dtype=complex)
+    powers = np.array([dw ** p for p in range(order)])                 # (p, n)
+    for ii in range(npol):
+        x = k.velocity[ii] / (laser - (k.ec[:, None] - k.ev[None, :]) + 1j * gamma)
+        xe = np.einsum("ncd,dv->ncv", g1_e, x) / pairs(a, k, w)            # (n, c_{k+q}, v_k)
+        xh = -np.einsum("cv,nvu->ncu", x, g1_h) / pairs(k, b, w)           # (n, c_k, v_{k-q})
+        for s in range(npol):
+            terms = np.zeros((order, order, n, n), dtype=complex)        # [a, b]: δ_n^a δ_m^b
+            for p in range(order):
+                yk = np.conj(k.velocity[s]) / d0["k"] ** (p + 1)
+                ya = np.conj(a.velocity[s]) / d0["a"] ** (p + 1)
+                yb = np.conj(b.velocity[s]) / d0["b"] ** (p + 1)
+                # same: Σ yk ∘ (G2eb[m] xe[n] − xh[n] G2hb[m])
+                t = np.einsum("ndv,mdv->nm", xe, np.einsum("cv,mcd->mdv", yk, g2_e_back))
+                t -= np.einsum("ncu,mcu->nm", xh, np.einsum("cv,muv->mcu", yk, g2_h_back))
+                # eh: −Σ ya ∘ (xe[n] G2hf[m]);  he: Σ yb ∘ (G2ef[m] xh[n])
+                t -= np.einsum("ncv,mcv->nm", xe, np.einsum("cu,mvu->mcv", ya, g2_h_fwd))
+                t += np.einsum("ndv,mdv->nm", xh, np.einsum("cv,mcd->mdv", yb, g2_e_fwd))
+                for a_pow in range(p + 1):
+                    terms[a_pow, p - a_pow] += comb(p, a_pow) * t
+            out[:, :, s, ii] = np.einsum("an,bm,abnm->nm", powers, powers, terms)
+    return out
+
+
+def phonon_pairs_q_fast(bands: list[Bands], mesh: tuple[int, int, int], coupling: Coupling,
+                        q_index, frequencies: np.ndarray, vectors: np.ndarray,
+                        masses: np.ndarray, laser_ev: float, gamma: float = 0.1,
+                        order: int = 7) -> np.ndarray:
+    """:func:`phonon_pairs_q` with the factorised last denominator (for many branches)."""
+    n1, n2, n3 = mesh
+    q = np.array(q_index, float) / np.array(mesh, float)
+    vertices = [PhononVertex(coupling, e, masses, f) for f, e in zip(frequencies, vectors, strict=True)]
+    conj = [PhononVertex(coupling, e, masses, f, conjugate=True)
+            for f, e in zip(frequencies, vectors, strict=True)]
+    w = np.asarray(frequencies, float) * CM1_TO_EV
+
+    def index(i, j, l):
+        return ((i % n1) * n2 + (j % n2)) * n3 + (l % n3)
+
+    total = None
+    for i in range(n1):
+        for j in range(n2):
+            for l in range(n3):
+                k = bands[index(i, j, l)]
+                kp = bands[index(i + q_index[0], j + q_index[1], l + q_index[2])]
+                km = bands[index(i - q_index[0], j - q_index[1], l - q_index[2])]
+                amp = _pairs_ordered_fast(k, kp, km, q, vertices, conj, w, laser_ev, gamma, order)
+                amp += np.transpose(_pairs_ordered_fast(k, km, kp, -q, conj, vertices, w,
+                                                        laser_ev, gamma, order), (1, 0, 2, 3))
+                total = amp if total is None else total + amp
+    return np.sum(np.abs(total / len(bands)) ** 2, axis=(2, 3))
