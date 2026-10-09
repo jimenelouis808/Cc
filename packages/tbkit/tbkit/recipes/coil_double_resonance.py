@@ -269,9 +269,86 @@ def g_band(laser: float) -> dict:
     return rows
 
 
+LASERS = (1.96, 2.33, 2.54)
+FWHM = 30.0                                  # cm⁻¹, Lorentzian width of the drawn spectra
+#: PBE/xu_carbon frequency ratio on the coil (recipes/doped_gpaw, xu_chn = Xu's C-C):
+#: 0.950 for the G modes, 0.960 ± 0.020 for the lattice 1000-1800 cm⁻¹.
+SCALE_G, SCALE_LATTICE = 0.950, 0.960
+WINDOWS = {"G": (1500, 1700), "D": (1200, 1460), "D'": (1560, 1720),
+           "2D": (2400, 2920), "2D'+2G": (3000, 3480)}
+
+
+def _load(kind: str, laser: float) -> list[dict]:
+    rows = []
+    for path in sorted((WORK / f"{kind}_{laser:.2f}").glob("part*.json")):
+        rows += list(json.loads(path.read_text()).values())
+    return rows
+
+
+def _lorentz(grid, shifts, weights, fwhm=FWHM):
+    half = fwhm / 2
+    return (weights[None, :] * half / np.pi / ((grid[:, None] - shifts[None, :]) ** 2
+                                                + half ** 2)).sum(axis=1)
+
+
+def report() -> dict:
+    """Spectra, band positions, intensity ratios and their laser dispersion."""
+    out = {"model": MODEL, "nk": NK, "gamma_eV": GAMMA, "fwhm_cm1": FWHM,
+           "intensity_note": "Σ over x, y, z polarisations; q-sums are means over the NK points "
+                             "(−q counted with q); the D band is per defect per cell",
+           "lasers": {}}
+    grid1, grid2 = np.arange(1000.0, 1800.0, 1.0), np.arange(2000.0, 3600.0, 1.0)
+    spectra = {"grid1": grid1, "grid2": grid2}
+    for laser in LASERS:
+        path = WORK / f"gband_{laser:.2f}.json"
+        if not path.exists():
+            continue
+        g = list(json.loads(path.read_text()).values())
+        gf = np.array([r["frequency_cm1"] for r in g])
+        gi = np.array([r["intensity"] for r in g])
+        entry = {"I_G": float(gi[(gf >= WINDOWS["G"][0]) & (gf <= WINDOWS["G"][1])].sum()),
+                 "G_position_cm1": float(grid1[np.argmax(_lorentz(grid1, gf, gi))])}
+        spectra[f"G_{laser:.2f}"] = _lorentz(grid1, gf, gi)
+        for kind, grid in (("dband", grid1), ("twod", grid2)):
+            rows = _load(kind, laser)
+            if not rows:
+                continue
+            shifts = np.array([r["shift_cm1"] for r in rows])
+            weights = np.array([r["intensity"] * r["multiplicity"] for r in rows]) / NK
+            curve = _lorentz(grid, shifts, weights)
+            spectra[f"{kind}_{laser:.2f}"] = curve
+            names = ("D", "D'") if kind == "dband" else ("2D", "2D'+2G")
+            for name in names:
+                lo, hi = WINDOWS[name]
+                mask = (shifts >= lo) & (shifts <= hi)
+                gm = (grid >= lo) & (grid <= hi)
+                entry[f"I_{name}"] = float(weights[mask].sum())
+                entry[f"{name}_position_cm1"] = float(grid[gm][np.argmax(curve[gm])])
+                entry[f"I_{name}/I_G"] = float(weights[mask].sum() / entry["I_G"])
+            top = np.argsort(weights)[::-1][:8]
+            entry[f"top_{kind}"] = [{"q": rows[i]["q"], "phonon_cm1": rows[i]["frequency_cm1"],
+                                     "shift_cm1": rows[i]["shift_cm1"],
+                                     "share": float(weights[i] / weights.sum())} for i in top]
+        out["lasers"][f"{laser:.2f}"] = entry
+    done = [float(k) for k, e in out["lasers"].items() if "D_position_cm1" in e]
+    for name in ("D", "2D"):
+        pts = [(float(k), e[f"{name}_position_cm1"]) for k, e in out["lasers"].items()
+               if f"{name}_position_cm1" in e]
+        if len(pts) >= 2:
+            x, y = np.array(pts).T
+            out[f"{name}_dispersion_cm1_per_eV"] = float(np.polyfit(x, y, 1)[0])
+    out["scaled_note"] = (f"posiciones crudas de {MODEL}; escaladas a PBE: G ×{SCALE_G}, resto "
+                          f"×{SCALE_LATTICE} (recipes/doped_gpaw)")
+    out["lasers_with_d"] = done
+    (WORK / "report.json").write_text(json.dumps(out, indent=1, ensure_ascii=False))
+    np.savez(WORK / "spectra.npz", **spectra)
+    return out
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=("fc", "check", "nshift", "twod", "dband", "gband"))
+    parser.add_argument("step", choices=("fc", "check", "nshift", "twod", "dband", "gband",
+                                         "report"))
     parser.add_argument("laser", nargs="?", type=float)
     parser.add_argument("--part", default="0/1")
     args = parser.parse_args(argv)
@@ -282,6 +359,8 @@ def main(argv=None) -> None:
         print(json.dumps(check(), indent=1))
     elif args.step == "nshift":
         print(json.dumps(n_shift(), indent=1))
+    elif args.step == "report":
+        print(json.dumps(report(), indent=1, ensure_ascii=False)[:3000])
     elif args.step == "gband":
         print(len(g_band(args.laser)))
     else:
