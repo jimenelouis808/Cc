@@ -34,13 +34,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 from ase.io import read, write
 
+from ..settings import Param, add_arguments, apply
+
 WORK = Path("out/doped_gpaw")
 KZ, KT, VACUUM, MAX_DISP = 2, 0.05, 6.0, 0.01
+GPAW_SETTINGS = {"mode": "lcao", "basis": "dzp", "xc": "PBE", "h": 0.2}
+FMAX, MAX_STEPS = 0.05, 300
 PRISTINE_PBE = Path("out/nanocoil/gpaw_relax/relaxed.extxyz")
 NAMES = ("pristine", "N", "amine")
 
@@ -60,8 +65,11 @@ def _write(path: Path, data) -> None:
 def _gpaw():
     from gpaw import GPAW, FermiDirac
 
-    return GPAW(mode="lcao", basis="dzp", xc="PBE", h=0.2, kpts=(1, 1, KZ), symmetry="off",
-                occupations=FermiDirac(KT), txt=None)
+    from ..progress import watch_gpaw_scf
+
+    calc = GPAW(**GPAW_SETTINGS, kpts=(1, 1, KZ), symmetry="off", occupations=FermiDirac(KT), txt=None)
+    watch_gpaw_scf(calc, "GPAW SCF (coil)")
+    return calc
 
 
 # ---------------------------------------------------------------- tbkit side
@@ -160,10 +168,10 @@ def relaxed(name: str):
         opt = BFGS(atoms, restart=str(folder(name) / "relax_bfgs.json"),
                    logfile=str(folder(name) / "relax.log"))
         opt.attach(t.write, interval=1)
-        converged = bool(opt.run(fmax=0.05, steps=300))
+        converged = bool(opt.run(fmax=FMAX, steps=MAX_STEPS))
     atoms.calc = None
     write(path, atoms)
-    _write(folder(name) / "relax.json", {"converged": converged, "fmax": 0.05})
+    _write(folder(name) / "relax.json", {"converged": converged, "fmax": FMAX})
     return atoms
 
 
@@ -257,13 +265,32 @@ def _geometry(tb_atoms, pbe_atoms) -> dict:
                               "tb_minus_pbe_A": float(d[k])} for k in hetero]}
 
 
+#: Adjustable with --ajuste NOMBRE=VALOR (tbkit recetas doped_gpaw).
+PARAMS = [
+    Param("GPAW_SETTINGS", "ajustes de GPAW: modo, base, funcional, malla h (Å)", "",
+          "LCAO dzp PBE h 0.2: la referencia de todo tbkit; sz no sirve (es la base mínima "
+          "de tbkit y reproduce sus errores)", "cálculo"),
+    Param("KZ", "puntos k a lo largo del eje", "",
+          "2: PBE tiene gap de 0.22 eV y las fuerzas con 2 y 4 k difieren 6e-4 eV/Å", "convergencia"),
+    Param("KT", "ensanchamiento de Fermi-Dirac", "eV", "", "convergencia"),
+    Param("VACUUM", "vacío transversal", "Å", "", "convergencia"),
+    Param("MAX_DISP", "desplazamiento del átomo que más se mueve a lo largo de cada modo",
+          "Å", "", "convergencia"),
+    Param("FMAX", "fuerza máxima al relajar con GPAW", "eV/Å", "", "convergencia"),
+    Param("MAX_STEPS", "pasos máximos de la relajación GPAW", "", "", "convergencia"),
+    Param("PRISTINE_PBE", "geometría PBE de la coil sin dopar", "", "", "rutas"),
+]
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("select", "relax", "modes", "report"))
     parser.add_argument("name", nargs="?", choices=NAMES)
     parser.add_argument("--part", default="0/1")
     parser.add_argument("--job", type=int, default=None, help="modes: solo ese cálculo")
+    add_arguments(parser)
     args = parser.parse_args(argv)
+    apply(sys.modules[__name__], args, record=WORK)
     part = tuple(int(x) for x in args.part.split("/"))
     if args.step == "select":
         for row in select(args.name):

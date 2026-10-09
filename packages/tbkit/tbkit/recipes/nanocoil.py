@@ -27,16 +27,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 from ase.io import read, write
 
 from .. import sites
+from ..settings import Param, add_arguments, apply
 
 INPUT = Path(__file__).with_name("data") / "coil204_knee.extxyz"
 KMESH = (1, 1, 4)
 KT = 0.05
+PHONON_DELTA = 0.01
+GPAW_SETTINGS = {"mode": "lcao", "basis": "dzp", "xc": "PBE", "h": 0.2}
 BOND = 1.85
 
 
@@ -119,7 +123,7 @@ def stage_tb(workdir: Path, model_name: str) -> dict:
               "bonds_made": sorted(made), "bonds_broken": sorted(broken)}
     _write(folder / "report.json", report)
     # Γ modes: ase.vibrations caches every displacement in its directory (resumable)
-    vib = Vibrations(atoms, name=str(folder / "vib"), delta=0.01)
+    vib = Vibrations(atoms, name=str(folder / "vib"), delta=PHONON_DELTA)
     vib.run()
     data = vib.get_vibrations()
     energies, modes = data.get_energies_and_modes(all_atoms=True)
@@ -162,8 +166,12 @@ def _trimmed(atoms, vacuum: float):
 def _gpaw(kpts):
     from gpaw import GPAW, FermiDirac
 
-    return GPAW(mode="lcao", basis="dzp", xc="PBE", h=0.2, kpts=kpts, symmetry="off",
-                occupations=FermiDirac(KT), txt=None)
+    from ..progress import watch_gpaw_scf
+
+    calc = GPAW(**GPAW_SETTINGS, kpts=kpts, symmetry="off", occupations=FermiDirac(KT),
+                txt=None)
+    watch_gpaw_scf(calc, "GPAW SCF (coil)")
+    return calc
 
 
 def stage_gpaw_k(workdir: Path, vacuum: float = 6.0) -> dict:
@@ -312,7 +320,7 @@ def tb_vibrations(workdir: Path, model_name: str):
 
     folder = Path(workdir) / f"tb_{model_name}"
     atoms = read(folder / "relaxed.extxyz")
-    hessian = AseVibrations(atoms, name=str(folder / "vib"), delta=0.01).get_vibrations() \
+    hessian = AseVibrations(atoms, name=str(folder / "vib"), delta=PHONON_DELTA).get_vibrations() \
         .get_hessian_2d()
     return Vibrations.from_hessian(atoms, hessian, source=model_name)
 
@@ -421,6 +429,22 @@ def stage_kconv(workdir: Path, model_name: str, kz: int, part: tuple = (0, 1)) -
     return out
 
 
+#: Adjustable with --ajuste NOMBRE=VALOR (tbkit recetas nanocoil).
+PARAMS = [
+    Param("INPUT", "estructura de la coil (de nanocarbon_lab)", "", "", "rutas"),
+    Param("KMESH", "malla k de tbkit (a lo largo del eje)", "",
+          "4: de 4 a 16 k los modos se mueven ≤ 0.01 cm⁻¹", "convergencia"),
+    Param("KT", "ensanchamiento de Fermi-Dirac (tbkit y GPAW)", "eV", "", "convergencia"),
+    Param("BOND", "distancia máxima de enlace para la topología", "Å", "", "cálculo"),
+    Param("PHONON_DELTA", "desplazamiento de las diferencias finitas de los fonones", "Å", "",
+          "convergencia"),
+    Param("GPAW_SETTINGS", "ajustes de GPAW: modo, base, funcional, malla h (Å)", "",
+          "LCAO dzp PBE h 0.2, la referencia de tbkit", "cálculo"),
+    Param("LASERS_EV", "energías de láser del Raman resonante", "eV",
+          "785, 633, 532, 514, 488 nm", "cálculo"),
+]
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("stage", choices=("tb", "gpaw-k", "gpaw-relax", "gpaw-phase3",
@@ -432,7 +456,9 @@ def main(argv=None) -> None:
     parser.add_argument("--kz-check", type=int, default=8)
     parser.add_argument("--min-cm1", type=float, default=None,
                         help="raman: solo modos por encima (comparación entre modelos)")
+    add_arguments(parser)
     args = parser.parse_args(argv)
+    apply(sys.modules[__name__], args, record=Path("out/nanocoil"))
     if args.stage == "tb":
         print(json.dumps({k: v for k, v in stage_tb(args.workdir, args.model).items()
                           if k not in ("bonds_made", "bonds_broken")}, indent=1))

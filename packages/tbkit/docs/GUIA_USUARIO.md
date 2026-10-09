@@ -95,6 +95,34 @@ deja además un `progreso*.json` en su carpeta, y `tbkit estado out` los lista t
 su hora estimada de fin; uno que lleva más de tres pasos (y 5 min) sin actualizarse sale
 como «detenido?», que es lo que se ve de un proceso que murió sin avisar.
 
+### Ajustar las recetas: cada número, a la vista
+
+Cada receta declara sus números (malla k, ensanchamientos, ventanas de energía,
+láseres, desplazamientos, ajustes de GPAW, rutas…) con su unidad y el porqué de su valor:
+
+    tbkit recetas                          # las recetas y cuántos ajustes tiene cada una
+    tbkit recetas coil_double_resonance    # todos sus ajustes, explicados
+
+y cualquiera se cambia al correrla, sin tocar el código:
+
+    python -m tbkit.recipes.coil_double_resonance pairs 2.33 --ajuste NK=32 --ajuste GAMMA=0.05
+    python -m tbkit.recipes.doped_gpaw relax N --ajuste 'GPAW_SETTINGS={"basis": "tzp"}'
+    python -m tbkit.recipes.doped_raman raman N --ajustes mis_ajustes.json --ver-ajustes
+
+Un nombre que la receta no tiene, o un valor del tipo equivocado, se rechaza. Los valores
+usados en cada ejecución quedan en `ajustes_usados.json` en la carpeta de la receta.
+
+### Núcleos y procesos
+
+    tbkit lanzar coil_double_resonance pairs 2.33 --partes 4 --hilos 1 --carpeta out/coil_dr
+    tbkit lanzar doped_gpaw relax N --mpi 4          # GPAW con 4 procesos MPI
+
+`--partes N` corre N procesos (cada uno con su `--part r/N`), `--hilos M` los hilos de
+álgebra lineal de cada uno (partes × hilos ≤ núcleos: más hilos que núcleos frena todo),
+`--mpi K` corre GPAW con K procesos MPI. Reintenta una vez la parte que falla, deja un
+registro por parte en `out/registros/` y, con `--carpeta`, muestra el avance de cada parte.
+Con GPAW, la memoria manda: en 15 GB caben 2 cálculos de la coil a la vez.
+
 ### Abrir resultados y validaciones
 
 `tbkit abrir RUTA` (en la ventana, «Abrir resultado…» en Espectros) muestra en el

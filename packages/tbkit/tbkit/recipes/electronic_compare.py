@@ -33,15 +33,22 @@ from __future__ import annotations
 import argparse
 import gc
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 from ase import Atoms
 from ase.io import read
 
+from ..settings import Param, add_arguments, apply
+
 WORK = Path("out/electronic")
 COILS = ("pristine", "N", "amine")
 NK, SIGMA, KT_TB, KZ_TB = 21, 0.1, 0.05, 4
+MODEL = "xu_chn"
+GPAW_SETTINGS = {"mode": "lcao", "basis": "dzp", "xc": "PBE", "h": 0.2}
+GPAW_KZ, GPAW_KT, K_PER_CALL, EXTRA_BANDS = 2, 0.05, 4, 250
+GRAPHENE_KMESH = (24, 48)                   # GPAW, tbkit
 GRAPHENE_A = 2.467
 WINDOW = (-25.0, 12.0)            # eV around the Fermi level kept in the files
 
@@ -88,18 +95,21 @@ def run_gpaw(name: str) -> Path:
     if out.exists():
         return out
     atoms = geometry(name)
-    kpts = (24, 24, 1) if name == "graphene" else (1, 1, 2)
-    atoms.calc = GPAW(mode="lcao", basis="dzp", xc="PBE", h=0.2, kpts=kpts, symmetry="off",
-                      occupations=FermiDirac(0.05), txt=str(WORK / name / "gpaw_scf.txt"))
+    from ..progress import watch_gpaw_scf
+
+    kpts = (GRAPHENE_KMESH[0],) * 2 + (1,) if name == "graphene" else (1, 1, GPAW_KZ)
+    atoms.calc = GPAW(**GPAW_SETTINGS, kpts=kpts, symmetry="off",
+                      occupations=FermiDirac(GPAW_KT), txt=str(WORK / name / "gpaw_scf.txt"))
+    watch_gpaw_scf(atoms.calc, f"GPAW SCF ({name})")
     (WORK / name).mkdir(parents=True, exist_ok=True)
     atoms.get_potential_energy()
     fermi = float(atoms.calc.get_fermi_level())
     k, _, _ = kpath(name, atoms)
     # A few k points per non-SCF call and only the bands the window needs: all 21 at
     # once with every band took 14 GB for the amine coil (killed twice).
-    nbands = int(atoms.calc.get_number_of_electrons() // 2) + 250
+    nbands = int(atoms.calc.get_number_of_electrons() // 2) + EXTRA_BANDS
     eps = []
-    for chunk in np.array_split(k, max(1, len(k) // 4)):
+    for chunk in np.array_split(k, max(1, len(k) // K_PER_CALL)):
         bands = atoms.calc.fixed_density(kpts=chunk, symmetry="off", txt=None,
                                          nbands=min(nbands, atoms.calc.get_number_of_bands()))
         eps += [bands.get_eigenvalues(kpt=i) for i in range(len(chunk))]
@@ -123,9 +133,9 @@ def run_tb(name: str) -> Path:
     if out.exists():
         return out
     atoms = geometry(name)
-    system = System.build(atoms, load_parameters("xu_chn"))
+    system = System.build(atoms, load_parameters(MODEL))
     if name == "graphene":
-        k0, w0 = mesh(atoms, 48)
+        k0, w0 = mesh(atoms, GRAPHENE_KMESH[1])
     else:
         k0 = np.array([[0.0, 0.0, (i + 0.5) / KZ_TB - 0.5] for i in range(KZ_TB)])
         w0 = np.full(KZ_TB, 1.0 / KZ_TB)
@@ -141,8 +151,9 @@ def run_tb(name: str) -> Path:
 
 
 # ---------------------------------------------------------------- comparison
-def dos(bands: list, grid: np.ndarray, sigma: float = SIGMA) -> np.ndarray:
+def dos(bands: list, grid: np.ndarray, sigma: float | None = None) -> np.ndarray:
     """States per eV per cell (spin included), trapezoid weights along the path."""
+    sigma = SIGMA if sigma is None else sigma
     n = len(bands)
     w = np.full(n, 1.0 / (n - 1))
     w[0] = w[-1] = 0.5 / (n - 1)
@@ -185,7 +196,7 @@ def molecules() -> dict:
     from ..tasks import levels
 
     refs, _ = load_references(Path(__file__).parents[1] / "parameters" / "references" / "gpaw_chn.json")
-    model = load_parameters("xu_chn")
+    model = load_parameters(MODEL)
     rows = []
     for ref in refs:
         if not ref.label.endswith("/eq"):
@@ -272,11 +283,35 @@ def report() -> dict:
     return out
 
 
+#: Adjustable with --ajuste NOMBRE=VALOR (tbkit recetas electronic_compare).
+PARAMS = [
+    Param("GPAW_SETTINGS", "ajustes de GPAW: modo, base, funcional, malla h (Å)", "",
+          "los de doped_gpaw, para comparar con las mismas geometrías", "cálculo"),
+    Param("GPAW_KZ", "puntos k del SCF de GPAW en la coil", "", "", "convergencia"),
+    Param("GPAW_KT", "ensanchamiento de Fermi-Dirac de GPAW", "eV", "", "convergencia"),
+    Param("NK", "puntos k del camino Γ–Z de las bandas", "", "", "convergencia"),
+    Param("K_PER_CALL", "puntos k por llamada no autoconsistente de GPAW", "",
+          "4: los 21 a la vez con todas las bandas usaron 14 GB (la amina se cayó dos veces)",
+          "recursos"),
+    Param("EXTRA_BANDS", "bandas vacías calculadas por encima de las ocupadas", "",
+          "250 cubren la ventana del reporte", "convergencia"),
+    Param("MODEL", "modelo de TB", "", "", "cálculo"),
+    Param("KZ_TB", "puntos k del SCC de tbkit", "", "4, como el trabajo de la coil", "convergencia"),
+    Param("KT_TB", "ensanchamiento de Fermi-Dirac de tbkit", "eV", "", "convergencia"),
+    Param("GRAPHENE_A", "constante de red del grafeno", "Å", "", "cálculo"),
+    Param("GRAPHENE_KMESH", "malla k del SCF del grafeno (GPAW y tbkit)", "", "", "convergencia"),
+    Param("SIGMA", "ensanchamiento gaussiano de la DOS", "eV", "", "salida"),
+    Param("WINDOW", "niveles guardados alrededor del nivel de Fermi", "eV", "", "salida"),
+]
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("gpaw", "tb", "report"))
     parser.add_argument("name", nargs="?", choices=(*COILS, "graphene"))
+    add_arguments(parser)
     args = parser.parse_args(argv)
+    apply(sys.modules[__name__], args, record=WORK)
     if args.step == "report":
         print(json.dumps(report()["systems"], indent=1, ensure_ascii=False))
     elif args.step == "gpaw":

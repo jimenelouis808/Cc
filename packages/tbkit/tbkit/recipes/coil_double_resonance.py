@@ -35,12 +35,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 from ase.io import read
 
 from ..progress import Progress
+from ..settings import Param, add_arguments, apply
 
 WORK = Path("out/coil_dr")
 #: xu_carbon (Xu's sp³ carbon, no SCC): a 612-atom supercell force call takes ~14 min
@@ -350,8 +352,8 @@ def _pairs_rows(laser: float) -> list[dict]:
     return rows
 
 
-def _lorentz(grid, shifts, weights, fwhm=FWHM):
-    half = fwhm / 2
+def _lorentz(grid, shifts, weights, fwhm=None):
+    half = (FWHM if fwhm is None else fwhm) / 2
     return (weights[None, :] * half / np.pi / ((grid[:, None] - shifts[None, :]) ** 2
                                                 + half ** 2)).sum(axis=1)
 
@@ -410,13 +412,49 @@ def report() -> dict:
     return out
 
 
+#: Adjustable with --ajuste NOMBRE=VALOR (tbkit recetas coil_double_resonance).
+PARAMS = [
+    Param("MODEL", "modelo de TB para electrones y fonones", "",
+          "xu_carbon: la coil sin dopar es solo carbono y su fuerza cuesta 38 s en la supercelda "
+          "frente a ~14 min con las cargas autoconsistentes de xu_chn", "cálculo"),
+    Param("SOURCE", "geometría de partida (relajada con MODEL)", "", "", "rutas"),
+    Param("REPEAT", "periodos de la supercelda para las constantes de fuerza", "",
+          "3: Φ(R) a ±1 celda; D(q=0) reproduce los modos Γ a 0.013 cm⁻¹", "convergencia"),
+    Param("KZ", "puntos k a lo largo del eje en la supercelda de fuerzas", "",
+          "2 en 3 periodos equivale a 6 en la celda: los modos Γ convergen con 4", "convergencia"),
+    Param("KT", "ensanchamiento de Fermi-Dirac", "eV", "el de todo el trabajo de la coil",
+          "convergencia"),
+    Param("DELTA", "desplazamiento de las diferencias finitas de las fuerzas", "Å", "",
+          "convergencia"),
+    Param("NK", "puntos k (y q) a lo largo del eje en la doble resonancia", "",
+          "24: paso de 0.017 Å⁻¹, la energía cambia menos que γ entre puntos", "convergencia"),
+    Param("WINDOW", "estados a ± esta energía del nivel de Fermi", "eV",
+          "cubre el láser más alto (2.54 eV) con margen", "convergencia"),
+    Param("GAMMA", "ancho de los estados intermedios (γ)", "eV",
+          "0.1, como el η del Raman resonante; las alturas dependen de él", "cálculo"),
+    Param("BAND_RANGE", "fonones que entran en D (un fonón)", "cm⁻¹", "", "cálculo"),
+    Param("PAIR_WINDOWS", "ventanas de ramas para los pares de dos fonones (2D, 2G)", "cm⁻¹",
+          "los pares entre ventanas (D+D') se dejan fuera", "cálculo"),
+    Param("POLARISATIONS", "polarizaciones de luz sumadas", "",
+          "x, y, z: muestra de coils orientadas al azar, aproximadamente", "cálculo"),
+    Param("LASERS", "energías de láser del reporte", "eV", "633, 532, 488 nm", "salida"),
+    Param("FWHM", "ancho lorentziano de los espectros dibujados", "cm⁻¹", "", "salida"),
+    Param("SCALE_G", "factor PBE/TB para la banda G", "", "medido en recipes/doped_gpaw",
+          "salida"),
+    Param("SCALE_LATTICE", "factor PBE/TB para el resto de la red", "",
+          "0.960 ± 0.020 medido en recipes/doped_gpaw", "salida"),
+]
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("fc", "check", "nshift", "twod", "dband", "gband",
                                          "pairs", "report"))
     parser.add_argument("laser", nargs="?", type=float)
     parser.add_argument("--part", default="0/1")
+    add_arguments(parser)
     args = parser.parse_args(argv)
+    apply(sys.modules[__name__], args, record=WORK)
     part = tuple(int(x) for x in args.part.split("/"))
     if args.step == "fc":
         fc(part)

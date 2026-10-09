@@ -26,6 +26,8 @@ from pathlib import Path
 import numpy as np
 from ase.io import read, write
 
+MAX_STEPS = 400                   # BFGS steps per relaxation (--max-steps)
+
 
 def _free_mask(atoms, host_atoms: int | None, radius: float | None) -> np.ndarray | None:
     if radius is None:
@@ -57,7 +59,12 @@ def relax_one(path: Path, model, workdir: Path, kmesh: int, kT: float, fmax: flo
     atoms.calc = TBCalculator(model, kpts=kmesh, kT=kT)
     opt = BFGS(atoms, logfile=str(workdir / f"{path.stem}.log"),
                trajectory=str(workdir / f"{path.stem}.traj"))
-    converged = bool(opt.run(fmax=fmax, steps=400))
+    from ..progress import Progress, watch_optimizer
+
+    with Progress(None, f"relajando {path.stem}",
+                  status=workdir / f"progreso_{path.stem}.json") as bar:
+        watch_optimizer(opt, bar)
+        converged = bool(opt.run(fmax=fmax, steps=MAX_STEPS))
     energy = float(atoms.get_potential_energy())
     atoms.calc = None
     atoms.set_constraint()
@@ -100,9 +107,12 @@ def main(argv=None) -> None:
     parser.add_argument("--host-atoms", type=int, default=None)
     parser.add_argument("--free-radius", type=float, default=None)
     parser.add_argument("--part", default="0/1")
+    parser.add_argument("--max-steps", type=int, default=400, help="pasos máximos de BFGS")
     parser.add_argument("--prefilter", type=int, default=None,
                         help="un punto simple por estructura y relajar solo las K más bajas")
     args = parser.parse_args(argv)
+    global MAX_STEPS
+    MAX_STEPS = args.max_steps
     args.workdir.mkdir(parents=True, exist_ok=True)
     model = load_model(args.model)
     r, n = (int(x) for x in args.part.split("/"))
@@ -121,9 +131,17 @@ def main(argv=None) -> None:
                     for p in paths}
         best = sorted(paths, key=lambda p: energies[p.stem])[:args.prefilter]
         paths = sorted(best)
-    rows = [relax_one(p, model, args.workdir, args.kmesh, args.kT, args.fmax, args.host_atoms,
-                      args.free_radius)
-            for k, p in enumerate(paths) if k % n == r]
+    from ..progress import Progress
+
+    mine = [p for k, p in enumerate(paths) if k % n == r]
+    bar = Progress(len(mine), f"cribado parte {r + 1}/{n} (estructuras relajadas)",
+                   status=args.workdir / f"progreso_cribado_{r}.json")
+    rows = []
+    for p in mine:
+        rows.append(relax_one(p, model, args.workdir, args.kmesh, args.kT, args.fmax,
+                              args.host_atoms, args.free_radius))
+        bar.step(note=p.stem)
+    bar.close()
     if n > 1:
         print(f"parte {r}/{n}: {len(rows)} estructuras")
         return

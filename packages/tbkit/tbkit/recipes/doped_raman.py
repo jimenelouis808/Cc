@@ -40,10 +40,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 from ase.io import read, write
+
+from ..settings import Param, add_arguments, apply
 
 WORK = Path("out/doped_raman")
 KZ, KT, DELTA = 4, 0.05, 0.01
@@ -52,6 +55,9 @@ MIN_CM1 = 900.0
 LASERS_EV = (1.96, 2.33, 2.54)
 IR_MIN_CM1 = 50.0
 BORN_DELTA = 0.005
+MODEL = "xu_chn"
+ETA = 0.1
+RAMAN_DELTA = 0.005
 STRUCTURES = {
     "pristine": {"start": "out/nanocoil/tb_xu_carbon/relaxed.extxyz", "centres": None},
     # Born charges of N in full: its extra electron spreads over the gapless coil and the
@@ -65,7 +71,7 @@ N_HOST = 204
 def _model():
     from ..params import load_parameters
 
-    return load_parameters("xu_chn")
+    return load_parameters(MODEL)
 
 
 def _calc():
@@ -164,9 +170,9 @@ def raman(name: str, part=(0, 1)):
     chosen = [k for k in chosen if k % part[1] == part[0]]
     with Progress(len(chosen), f"Raman {name}, parte {part[0] + 1}/{part[1]}",
                   status=folder(name) / f"progreso_raman_{part[0]}.json") as bar:
-        return resonant_raman(vib.atoms, _model(), LASERS_EV, eta=0.1, kmesh=KZ, kT=KT,
+        return resonant_raman(vib.atoms, _model(), LASERS_EV, eta=ETA, kmesh=KZ, kT=KT,
                               phonons=(vib.frequencies, vib.modes), select=chosen,
-                              cache_dir=folder(name) / "tensors", delta=0.005,
+                              cache_dir=folder(name) / "tensors", delta=RAMAN_DELTA,
                               progress=bar.callback())
 
 
@@ -190,7 +196,7 @@ def raman_eta(name: str, eta: float, part=(0, 1), top: int = 40):
                   status=folder(name) / f"progreso_eta{eta:g}_{part[0]}.json") as bar:
         return resonant_raman(vib.atoms, _model(), LASERS_EV, eta=eta, kmesh=KZ, kT=KT,
                               phonons=(vib.frequencies, vib.modes), select=chosen,
-                              cache_dir=folder(name) / f"tensors_eta{eta:g}", delta=0.005,
+                              cache_dir=folder(name) / f"tensors_eta{eta:g}", delta=RAMAN_DELTA,
                               progress=bar.callback())
 
 
@@ -299,6 +305,30 @@ def report() -> dict:
     return out
 
 
+#: Adjustable with --ajuste NOMBRE=VALOR (tbkit recetas doped_raman).
+PARAMS = [
+    Param("MODEL", "modelo de TB", "", "xu_chn: C, H y N; el C–C es el de Xu", "cálculo"),
+    Param("KZ", "puntos k a lo largo del eje", "", "los modos convergen con 4 (de 4 a 16 k "
+          "se mueven ≤ 0.01 cm⁻¹)", "convergencia"),
+    Param("KT", "ensanchamiento de Fermi-Dirac", "eV", "", "convergencia"),
+    Param("DELTA", "desplazamiento de la Hessiana", "Å", "", "convergencia"),
+    Param("RADIUS", "radio alrededor del dopante cuyas filas de la Hessiana se recalculan", "Å",
+          "el resto se toma de la coil sin dopar (Hessiana embebida; comprobada en 4 modos)",
+          "convergencia"),
+    Param("MIN_CM1", "solo modos por encima de esta frecuencia en el Raman", "cm⁻¹",
+          "D, G y grupos funcionales están por encima de 900", "cálculo"),
+    Param("LASERS_EV", "energías de láser", "eV", "633, 532, 488 nm", "cálculo"),
+    Param("ETA", "ancho η de los estados en el Raman resonante", "eV",
+          "0.1; las alturas relativas cambian ×1.15–1.60 entre 0.05 y 0.2", "cálculo"),
+    Param("RAMAN_DELTA", "desplazamiento a lo largo de cada modo para ∂α/∂Q", "Å",
+          "≤ 0.005 (CLAUDE.md: el error crece con δ)", "convergencia"),
+    Param("IR_MIN_CM1", "frecuencia mínima del IR", "cm⁻¹", "", "cálculo"),
+    Param("BORN_DELTA", "desplazamiento para las cargas de Born", "Å", "", "convergencia"),
+    Param("STRUCTURES", "estructuras: geometría inicial, centros del dopante, Born completas",
+          "", "", "rutas"),
+]
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("relax", "hessian", "check", "raman", "born",
@@ -306,7 +336,9 @@ def main(argv=None) -> None:
     parser.add_argument("--eta", type=float, default=0.05)
     parser.add_argument("name", nargs="?", choices=tuple(STRUCTURES))
     parser.add_argument("--part", default="0/1")
+    add_arguments(parser)
     args = parser.parse_args(argv)
+    apply(sys.modules[__name__], args, record=WORK)
     part = tuple(int(x) for x in args.part.split("/"))
     if args.step == "relax":
         relaxed(args.name)

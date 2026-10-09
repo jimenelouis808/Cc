@@ -399,6 +399,84 @@ def cmd_status(args) -> int:
     return 0
 
 
+def cmd_recipes(args) -> int:
+    """The recipes' adjustable settings: every number, its unit and why it has that value."""
+    import importlib
+
+    from .settings import RECIPES, describe
+
+    names = [args.name] if args.name else list(RECIPES)
+    for name in names:
+        module = importlib.import_module(f"tbkit.recipes.{name}")
+        if args.name:
+            print(describe(module))
+            print("\nCámbialos con --ajuste NOMBRE=VALOR (o --ajustes archivo.json) al correr "
+                  f"python -m tbkit.recipes.{name} …; los usados quedan en ajustes_usados.json.")
+        else:
+            doc = (module.__doc__ or "").strip().splitlines()[0]
+            print(f"{name:24s} {len(getattr(module, 'PARAMS', []))} ajustes · {doc}")
+    if not args.name:
+        print("\ntbkit recetas NOMBRE muestra los ajustes de una.")
+    return 0
+
+
+def cmd_launch(args) -> int:
+    """Run a recipe step in N parallel parts (--part r/N), each with M threads."""
+    import os
+    import subprocess
+    import sys
+    import time
+
+    from .progress import status_files
+
+    rest = [a for a in args.args if a != "--"]
+    log_dir = Path(args.registros)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    env = {**os.environ, "OMP_NUM_THREADS": str(args.hilos),
+           "OPENBLAS_NUM_THREADS": str(args.hilos), "MKL_NUM_THREADS": str(args.hilos)}
+    command = [sys.executable, "-m", f"tbkit.recipes.{args.receta}", *rest]
+    if args.mpi > 1:
+        import shutil
+
+        mpiexec = shutil.which("mpiexec") or shutil.which("mpirun")
+        if mpiexec is None:
+            raise SystemExit("--mpi necesita mpiexec (OpenMPI) en el PATH.")
+        command = [mpiexec, "-n", str(args.mpi), *command]
+    procs = []
+    for r in range(args.partes):
+        part = ["--part", f"{r}/{args.partes}"] if args.partes > 1 else []
+        log = open(log_dir / f"{args.receta}_{stamp}_{r}.log", "w")  # noqa: SIM115
+        procs.append((r, subprocess.Popen(command + part, env=env, stdout=log,
+                                          stderr=subprocess.STDOUT), log, 0))
+    print(f"{args.partes} parte(s) × {args.hilos} hilo(s){f' × {args.mpi} MPI' if args.mpi > 1 else ''}"
+          f": {' '.join(command)}\nregistros en {log_dir}/{args.receta}_{stamp}_*.log")
+    failed = []
+    while procs:
+        time.sleep(args.cada)
+        alive = []
+        for r, proc, log, tries in procs:
+            code = proc.poll()
+            if code is None:
+                alive.append((r, proc, log, tries))
+            elif code != 0 and tries < args.reintentos:
+                print(f"parte {r} terminó con código {code}: reintento {tries + 1}")
+                part = ["--part", f"{r}/{args.partes}"] if args.partes > 1 else []
+                alive.append((r, subprocess.Popen(command + part, env=env, stdout=log,
+                                                  stderr=subprocess.STDOUT), log, tries + 1))
+            else:
+                log.close()
+                if code != 0:
+                    failed.append(r)
+        procs = alive
+        if args.carpeta:
+            for row in status_files(args.carpeta):
+                if not row["finished"]:
+                    print(row["line"])
+    print("terminado" + (f"; partes con error: {failed}" if failed else ""))
+    return 1 if failed else 0
+
+
 def cmd_open(args) -> int:
     """Lay out a result (a recipe's folder, a validation .json, a spectrum) and open it."""
     from .report import open_result
@@ -523,6 +601,24 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("folder", nargs="?", default="out", help="carpeta donde buscar (out/)")
     st.add_argument("--todos", action="store_true", help="incluir los terminados")
     st.set_defaults(func=cmd_status)
+    rc = sub.add_parser("recetas", help="Las recetas y todos sus ajustes (con unidad y por qué).")
+    rc.add_argument("name", nargs="?", help="nombre de la receta (sin tbkit.recipes.)")
+    rc.set_defaults(func=cmd_recipes)
+    la = sub.add_parser("lanzar", help="Correr un paso de receta en N partes paralelas, cada una "
+                                       "con M hilos (o M procesos MPI para GPAW).")
+    la.add_argument("receta", help="p. ej. coil_double_resonance")
+    la.add_argument("args", nargs=argparse.REMAINDER,
+                    help="los argumentos de la receta (paso, nombre, --ajuste …)")
+    la.add_argument("--partes", type=int, default=1, help="procesos en paralelo (--part r/N)")
+    la.add_argument("--hilos", type=int, default=1,
+                    help="hilos de BLAS por proceso (OMP_NUM_THREADS); partes × hilos ≤ núcleos")
+    la.add_argument("--mpi", type=int, default=1, help="procesos MPI por parte (GPAW)")
+    la.add_argument("--reintentos", type=int, default=1, help="reintentos de una parte que falla")
+    la.add_argument("--carpeta", default=None,
+                    help="carpeta con los progreso*.json de la receta, para mostrar el avance")
+    la.add_argument("--cada", type=float, default=60.0, help="segundos entre informes")
+    la.add_argument("--registros", default="out/registros", help="carpeta de los registros")
+    la.set_defaults(func=cmd_launch)
     ab = sub.add_parser("abrir", help="Abrir en el navegador un resultado o una validación "
                                       "(carpeta de receta, .json de validation/, .npz/.csv).")
     ab.add_argument("source", help="carpeta de resultados, archivo .json, .npz o .csv")

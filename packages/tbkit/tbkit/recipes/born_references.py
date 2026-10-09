@@ -28,15 +28,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 from ase import Atoms
 from ase.io import read, write
 
+from ..settings import Param, add_arguments, apply
+
 WORK = Path("out/born_references")
 DELTA = 0.01
 RADIUS = 5.0
+GPAW_SETTINGS: dict = {}           # on top of references.GPAW_DEFAULTS
 BOND = {"C": 1.09, "N": 1.01, "O": 0.97}
 
 
@@ -53,11 +57,12 @@ def molecules() -> dict[str, Atoms]:
     return out
 
 
-def cut_out(periodic: Atoms, centre: int, radius: float = RADIUS) -> Atoms:
+def cut_out(periodic: Atoms, centre: int, radius: float | None = None) -> Atoms:
     """Atoms within ``radius`` of ``centre`` (minimum image), cut bonds closed with H.
     An atom bonded to two or more kept atoms is kept too, so no two caps crowd."""
     from ase.neighborlist import natural_cutoffs, neighbor_list
 
+    radius = RADIUS if radius is None else radius
     i, j, D = neighbor_list("ijD", periodic, natural_cutoffs(periodic, mult=1.2))
     bonded: dict[int, list[tuple[int, np.ndarray]]] = {}
     for a, b, v in zip(i, j, D, strict=True):
@@ -120,19 +125,24 @@ def structures() -> dict[str, Atoms]:
 
 
 def run(name: str) -> Path:
+    from ..progress import Progress
     from ..references import GPAW_DEFAULTS, _n_bands, gpaw_calculator
 
+    settings = {**GPAW_DEFAULTS, **GPAW_SETTINGS}
     path = WORK / f"{name}.json"
     if path.exists():
         return path
     atoms = structures()[name].copy()
     atoms.pbc = False
     if name not in ("coil_57", "coil_N", "coil_NH2"):
-        atoms.center(vacuum=GPAW_DEFAULTS["vacuum"])
+        atoms.center(vacuum=settings["vacuum"])
     parts = WORK / f"{name}.parts"
     parts.mkdir(parents=True, exist_ok=True)
-    calc = gpaw_calculator(GPAW_DEFAULTS, _n_bands(atoms, GPAW_DEFAULTS))
+    calc = gpaw_calculator(settings, _n_bands(atoms, settings))
     base = atoms.get_positions()
+    bar = Progress(6 * len(atoms), f"cargas de Born GPAW {name}",
+                   status=WORK / f"progreso_{name}.json",
+                   done=len(list(parts.glob("*.npy"))))
     probe = atoms.copy()
     probe.calc = calc
     for a in range(len(atoms)):
@@ -145,6 +155,7 @@ def run(name: str) -> Path:
                 pos[a, i] += sign * DELTA
                 probe.set_positions(pos)
                 np.save(file, np.array(probe.get_dipole_moment()))
+                bar.step()
     z = np.zeros((len(atoms), 3, 3))
     for a in range(len(atoms)):
         for i in range(3):
@@ -162,11 +173,26 @@ def run(name: str) -> Path:
     return path
 
 
+#: Adjustable with --ajuste NOMBRE=VALOR (tbkit recetas born_references).
+PARAMS = [
+    Param("GPAW_SETTINGS", "ajustes de GPAW: modo, base, funcional, malla h (Å)", "",
+          "LCAO dzp PBE h 0.2: la referencia de todo tbkit; sz no sirve (es la base mínima "
+          "de tbkit y reproduce sus errores)", "cálculo"),
+    Param("DELTA", "desplazamiento de cada átomo para la derivada del dipolo", "Å", "",
+          "convergencia"),
+    Param("RADIUS", "radio de los recortes de la coil alrededor de su centro", "Å",
+          "5: el recorte tiene ~45 átomos más los H de cierre", "cálculo"),
+    Param("BOND", "longitud del enlace de los H de cierre de los recortes", "Å", "", "cálculo"),
+]
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("fragments", "list", "run"))
     parser.add_argument("name", nargs="?")
+    add_arguments(parser)
     args = parser.parse_args(argv)
+    apply(sys.modules[__name__], args, record=WORK)
     WORK.mkdir(parents=True, exist_ok=True)
     if args.step == "fragments":
         for name, atoms in fragments().items():

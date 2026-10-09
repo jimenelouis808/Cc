@@ -28,15 +28,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 from ase import Atoms
 
+from ..settings import Param, add_arguments, apply
+
 REFS = Path("out/born_references")
 WORK = Path("out/ir_charge_fit")
 SETS = {"chn": ("xu_chn", {"C", "H", "N"}), "chno": ("xu_chno", {"C", "H", "N", "O"})}
 KT = 0.01
+RIDGES = (1e-6, 1e-5, 1e-4, 1e-3, 1e-2)
+PHONON_KMESH, PHONON_DELTA = 12, 0.005
 
 
 def rows_for(set_name: str) -> list[dict]:
@@ -68,7 +73,7 @@ def _modes(atoms: Atoms, model, cache: Path):
         data = np.load(cache)
         return data["f"], data["L"]
     warnings: list[str] = []
-    f, L = phonons_for(atoms, model, 12, KT, 0.005, None, warnings)
+    f, L = phonons_for(atoms, model, PHONON_KMESH, KT, PHONON_DELTA, None, warnings)
     keep = internal_modes(atoms, f, warnings)
     np.savez(cache, f=f[keep], L=L[keep])
     return f[keep], L[keep]
@@ -158,13 +163,27 @@ def coil_scores(corrections: dict) -> dict:
             "modes": rows}
 
 
+#: Adjustable with --ajuste NOMBRE=VALOR (tbkit recetas ir_charge_fit).
+PARAMS = [
+    Param("KT", "ensanchamiento de Fermi-Dirac de las cargas de Born de tbkit", "eV", "",
+          "convergencia"),
+    Param("RIDGES", "valores de ridge probados (se elige por validación cruzada)", "", "",
+          "cálculo"),
+    Param("PHONON_KMESH", "malla k de los fonones de las moléculas", "", "", "convergencia"),
+    Param("PHONON_DELTA", "desplazamiento de esos fonones", "Å", "", "convergencia"),
+    Param("REFS", "carpeta de las cargas de Born de GPAW", "", "", "rutas"),
+]
+
+
 def main(argv=None) -> None:
     from .. import charge_model as cm
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("set", choices=tuple(SETS))
     parser.add_argument("--no-ml", action="store_true", help="sin el modelo SOAP")
+    add_arguments(parser)
     args = parser.parse_args(argv)
+    apply(sys.modules[__name__], args, record=WORK)
     rows = rows_for(args.set)
     elements = sorted(set().union(*(set(r["atoms"].get_chemical_symbols()) for r in rows)))
     candidates = {"bond_flux": cm.BondFlux.for_elements(elements)}
@@ -177,7 +196,7 @@ def main(argv=None) -> None:
     out.mkdir(parents=True, exist_ok=True)
     fits, corrections = {}, {}
     for name, model in candidates.items():
-        record = cm.fit(rows, model, keep_cv=True)
+        record = cm.fit(rows, model, ridges=RIDGES, keep_cv=True)
         corrections[name] = (model, record.pop("cv_theta"))
         fits[name] = record
         cm.save(model, out / f"{name}.json")

@@ -27,12 +27,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
 from ase import Atoms
 from ase.neighborlist import neighbor_list
+
+from ..settings import Param, add_arguments, apply
 
 A_CC, D_CH, D_NH = 1.40, 1.09, 1.01
 
@@ -211,12 +214,24 @@ def _one(args):
     return [item.to_dict() for item in items]
 
 
+#: Adjustable with --ajuste NOMBRE=VALOR (tbkit recetas n_references).
+PARAMS = [
+    Param("TRAINING", "moléculas que entran al ajuste", "", "una por tipo de N", "cálculo"),
+    Param("TEST", "moléculas apartadas para la prueba", "", "", "cálculo"),
+    Param("A_CC", "C–C inicial de los polígonos (GPAW relaja)", "Å", "", "cálculo"),
+    Param("D_CH", "C–H inicial", "Å", "", "cálculo"),
+    Param("D_NH", "N–H inicial", "Å", "", "cálculo"),
+]
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("out", type=Path)
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--only", nargs="*")
+    add_arguments(parser)
     args = parser.parse_args(argv)
+    apply(sys.modules[__name__], args, record=None)
     from tbkit.references import GPAW_DEFAULTS, gpaw_settings_record
 
     settings = dict(GPAW_DEFAULTS)
