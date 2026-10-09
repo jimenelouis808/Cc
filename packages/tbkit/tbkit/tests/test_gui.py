@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -426,3 +428,48 @@ def test_saved_spectra_open_from_csv_and_npz(tmp_path):
     page = window.pages["Espectros"]
     page.open_spectrum(str(tmp_path / "spectra.npz"))
     assert "2 curvas" in page.summary.text() and page.table.rowCount() == 2
+
+
+def test_recipe_settings_overrides_and_command(tmp_path):
+    recipes = {r["name"] for r in actions.recipe_list()}
+    assert "coil_double_resonance" in recipes
+    usage = actions.recipe_usage("coil_double_resonance")
+    assert "pairs" in usage["steps"] and usage["parts"]
+    rows = {r["name"]: r for r in actions.recipe_settings("coil_double_resonance")}
+    edited = {name: row["value"] for name, row in rows.items()}
+    assert actions.recipe_overrides("coil_double_resonance", edited) == {}
+    edited["NK"] = "32"
+    edited["GAMMA"] = "0.05"
+    assert actions.recipe_overrides("coil_double_resonance", edited) == {"NK": 32, "GAMMA": 0.05}
+    with pytest.raises(ValueError, match="NK"):
+        actions.recipe_overrides("coil_double_resonance", {**edited, "NK": "2.5"})
+    command = actions.launch_command("coil_double_resonance", "pairs 2.54", {"NK": 32},
+                                     parts=4, workdir=tmp_path)
+    assert command[3:5] == ["lanzar", "--partes"] and command[-4:-2] == ["pairs", "2.54"]
+    saved = Path(command[-1])
+    assert command[-2] == "--ajustes" and json.loads(saved.read_text()) == {"NK": 32}
+    assert actions.launch_warnings(4, 1, 1, can_split=False)
+    assert actions.launch_warnings(actions.cores() + 1, 1) and not actions.launch_warnings(1, 1)
+
+
+def test_recipe_status_lines(tmp_path):
+    from tbkit.progress import Progress
+
+    with Progress(4, "prueba", status=tmp_path / "a" / "progreso.json", quiet=True) as bar:
+        bar.step()
+    assert "prueba: 1/4" in actions.recipe_status(tmp_path)[0]
+    bar.step(3)
+    assert actions.recipe_status(tmp_path) == [] and actions.recipe_status(tmp_path, True)
+
+
+def test_recipes_page_builds_a_launch_command():
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    page = window.pages["Recetas"]
+    page.recipe.setCurrentIndex(page.recipe.findData("coil_double_resonance"))
+    page.step.setCurrentText("pairs")
+    page.arguments.setText("2.54")
+    assert "pairs" in page.command() and "2.54" in page.command()
+    assert page.settings.rowCount() == len(actions.recipe_settings("coil_double_resonance"))

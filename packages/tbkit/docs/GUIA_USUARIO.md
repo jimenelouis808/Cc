@@ -54,6 +54,7 @@ pestaña un recuadro que explica para qué sirve (menú Ayuda para ocultarlos).
 | Fonones (ZB) | phonopy: dispersión, DOS, simetría de cada modo en Γ, F/S/Cv; carpeta para reanudar |
 | Espectros | Raman (no resonante, resonante), IR; fonones del modelo o de QE; escalar frecuencias (aparte); exportar CSV |
 | Grafeno | G, 2D y 2D′ por doble resonancia y dispersión de la 2D con el láser |
+| Recetas | Elegir receta y paso → editar sus ajustes en la tabla (valor, unidad; el porqué al pasar el ratón) → partes, hilos, MPI → «Lanzar» → el avance con tiempo restante se actualiza cada 10 s. Corre fuera de la ventana (cerrarla no lo detiene); es lo mismo que `tbkit lanzar … --ajustes` |
 
 Archivo → «Guardar registro del último cálculo» escribe un registro
 reproducible (versión, commit, parámetros completos, ajustes, resultados).

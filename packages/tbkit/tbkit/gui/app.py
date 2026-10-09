@@ -239,7 +239,7 @@ class MainWindow(QMainWindow):
 
     def page_classes(self):
         return [ElectronicPage, OrbitalPage, MagnetismPage, GeometryPage, PhononPage,
-                SpectraPage, GraphenePage]
+                SpectraPage, GraphenePage, RecipesPage]
 
     # --- left panel ---------------------------------------------------------------
 
@@ -1564,6 +1564,172 @@ class GraphenePage(Page):
             else "un solo láser: sin dispersión"
         self.summary.setText(f"{text}. Posiciones altas por los fonones PBE; energías de "
                              "resonancia del modelo π.")
+
+
+class RecipesPage(Page):
+    """The recipes (coil, doped Raman, GPAW references…): settings, cores, launch, progress.
+
+    Nothing runs in the window: a launch starts ``tbkit lanzar`` in its own session, so
+    closing the window leaves it running, and the progress comes from the recipes'
+    ``progreso*.json`` (as ``tbkit estado``)."""
+
+    title = "Recetas"
+
+    def __init__(self, window):
+        super().__init__(window)
+        self.recipes = actions.recipe_list()
+        self.usage = {}
+        self.process = None
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.recipe = QComboBox()
+        for r in self.recipes:
+            self.recipe.addItem(f"{r['name']}  ({r['count']} ajustes)", r["name"])
+        self.recipe.currentIndexChanged.connect(self.choose)
+        form.addRow("Receta", self.recipe)
+        self.step = QComboBox()
+        form.addRow("Paso", self.step)
+        self.arguments = QLineEdit()
+        self.arguments.setPlaceholderText("p. ej. 2.54 (láser) o N_graphitic (estructura)")
+        form.addRow("Argumentos", self.arguments)
+        self.workdir = QLineEdit(str(Path.cwd()))
+        form.addRow("Carpeta de trabajo", self.workdir)
+        layout.addLayout(form)
+        self.summary = QLabel("")
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+
+        self.settings = table(["ajuste", "valor", "unidad", "grupo", "qué es"])
+        self.settings.setEditTriggers(QAbstractItemView.DoubleClicked
+                                      | QAbstractItemView.EditKeyPressed
+                                      | QAbstractItemView.AnyKeyPressed)
+        layout.addWidget(self.settings, stretch=2)
+        row = QHBoxLayout()
+        reset = QPushButton("Restaurar valores")
+        reset.clicked.connect(self.choose)
+        row.addWidget(reset)
+        usage = QPushButton("Ayuda de la receta")
+        usage.clicked.connect(self.show_usage)
+        row.addWidget(usage)
+        layout.addLayout(row)
+
+        resources = QGroupBox("Recursos")
+        rform = QFormLayout(resources)
+        self.parts = _spin(1, 256, 1, 1, 0)
+        rform.addRow("Partes en paralelo", self.parts)
+        self.threads = _spin(1, 256, 1, 1, 0)
+        rform.addRow("Hilos por parte", self.threads)
+        self.mpi = _spin(1, 256, 1, 1, 0)
+        rform.addRow("Procesos MPI por parte", self.mpi)
+        self.retries = _spin(0, 10, 1, 1, 0)
+        rform.addRow("Reintentos", self.retries)
+        self.cores_label = QLabel(f"{actions.cores()} núcleos disponibles")
+        rform.addRow(self.cores_label)
+        for box in (self.parts, self.threads, self.mpi):
+            box.valueChanged.connect(self.check_resources)
+        layout.addWidget(resources)
+        self.launch_button = QPushButton("Lanzar")
+        self.launch_button.clicked.connect(self.launch)
+        layout.addWidget(self.launch_button)
+
+        progress = QGroupBox("Avance")
+        playout = QVBoxLayout(progress)
+        self.show_finished = QCheckBox("Mostrar terminados")
+        self.show_finished.toggled.connect(self.refresh)
+        refresh = QPushButton("Actualizar avance")
+        refresh.clicked.connect(self.refresh)
+        top = QHBoxLayout()
+        top.addWidget(self.show_finished)
+        top.addWidget(refresh)
+        playout.addLayout(top)
+        self.status = QLabel("—")
+        self.status.setWordWrap(True)
+        self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.status.setStyleSheet("QLabel { font-family: monospace; }")
+        playout.addWidget(self.status)
+        layout.addWidget(progress, stretch=1)
+        self.poll = QTimer(self)
+        self.poll.timeout.connect(self.refresh)
+        self.poll.start(10000)
+        self.choose()
+
+    def name(self) -> str:
+        return self.recipe.currentData()
+
+    def choose(self, *_):
+        name = self.name()
+        if name is None:
+            return
+        if name not in self.usage:
+            self.usage[name] = actions.recipe_usage(name)
+        info = self.usage[name]
+        self.step.clear()
+        self.step.addItems(info["steps"])
+        summary = next(r["summary"] for r in self.recipes if r["name"] == name)
+        self.summary.setText(summary + ("" if info["parts"] else
+                                        " · Esta receta corre en una sola parte."))
+        rows = actions.recipe_settings(name)
+        self.settings.setRowCount(len(rows))
+        for r, row in enumerate(rows):
+            for c, key in enumerate(("name", "value", "unit", "group", "description")):
+                item = QTableWidgetItem(row[key])
+                if key != "value":
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                if row["why"]:
+                    item.setToolTip("por qué: " + row["why"])
+                self.settings.setItem(r, c, item)
+        self.settings.resizeColumnsToContents()
+        self.check_resources()
+
+    def edited(self) -> dict:
+        return {self.settings.item(r, 0).text(): self.settings.item(r, 1).text()
+                for r in range(self.settings.rowCount())}
+
+    def check_resources(self, *_):
+        info = self.usage.get(self.name(), {"parts": True})
+        warnings = actions.launch_warnings(int(self.parts.value()), int(self.threads.value()),
+                                           int(self.mpi.value()), info["parts"])
+        self.cores_label.setText(f"{actions.cores()} núcleos disponibles"
+                                 + "".join(f"\n⚠ {w}" for w in warnings))
+        return warnings
+
+    def show_usage(self):
+        QMessageBox.information(self, f"tbkit.recipes.{self.name()}",
+                                self.usage.get(self.name(), {}).get("help", ""))
+
+    def command(self) -> list[str]:
+        overrides = actions.recipe_overrides(self.name(), self.edited())
+        arguments = " ".join(x for x in (self.step.currentText(), self.arguments.text()) if x)
+        return actions.launch_command(self.name(), arguments, overrides,
+                                      parts=int(self.parts.value()),
+                                      threads=int(self.threads.value()),
+                                      mpi=int(self.mpi.value()),
+                                      retries=int(self.retries.value()),
+                                      workdir=self.workdir.text().strip() or ".")
+
+    def launch(self):
+        try:
+            command = self.command()
+        except ValueError as error:
+            self.window.error("Ajuste no válido", str(error))
+            return
+        info = self.usage.get(self.name(), {"parts": True})
+        if int(self.parts.value()) > 1 and not info["parts"]:
+            self.window.error("No se divide en partes", "Esta receta no tiene --part: usa 1 parte.")
+            return
+        workdir = self.workdir.text().strip() or "."
+        self.process = actions.launch_recipe(command, workdir)
+        self.window.statusBar().showMessage(
+            f"Lanzado (PID {self.process.pid}): {' '.join(command[2:])} · registro en "
+            f"{Path(workdir) / 'out' / 'registros'}")
+        self.refresh()
+
+    def refresh(self, *_):
+        folder = Path(self.workdir.text().strip() or ".") / "out"
+        lines = actions.recipe_status(folder, self.show_finished.isChecked()) \
+            if folder.exists() else []
+        self.status.setText("\n".join(lines) or "Ningún cálculo con contador en marcha en "
+                            f"{folder}.")
 
 
 def main(argv=None):

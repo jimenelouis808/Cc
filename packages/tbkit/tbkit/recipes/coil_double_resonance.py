@@ -1,4 +1,4 @@
-"""Double-resonance Raman (D, 2D) of the 204-atom 5-7 coil with xu_chn.
+"""Double-resonance Raman (D, 2D) of the 204-atom 5-7 coil (Xu carbon; N-like defect for D).
 
 Run from packages/tbkit (resumable; files in out/coil_dr/)::
 

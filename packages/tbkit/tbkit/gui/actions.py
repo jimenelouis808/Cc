@@ -635,6 +635,153 @@ def graphene_spectra(lasers_ev, phonons: str = "gpaw", gamma: float = 0.1, dk: f
 
 
 # --------------------------------------------------------------------------
+# Recipes: choose one, edit its settings, launch it in parts, watch its progress
+# --------------------------------------------------------------------------
+
+def recipe_list() -> list[dict]:
+    """The recipes that declare settings: name, first line of their note, how many."""
+    import importlib
+
+    from ..settings import RECIPES
+
+    out = []
+    for name in RECIPES:
+        module = importlib.import_module(f"tbkit.recipes.{name}")
+        out.append({"name": name, "summary": (module.__doc__ or "").strip().splitlines()[0],
+                    "count": len(getattr(module, "PARAMS", []))})
+    return out
+
+
+def recipe_usage(name: str) -> dict:
+    """The recipe's own ``--help``, its steps (the choices of its first argument) and
+    whether it can be split in parts (``--part r/N``)."""
+    import contextlib
+    import importlib
+    import io
+    import re
+
+    module = importlib.import_module(f"tbkit.recipes.{name}")
+    text = io.StringIO()
+    with contextlib.redirect_stdout(text), contextlib.suppress(SystemExit):
+        module.main(["-h"])
+    usage = text.getvalue()
+    head = usage.split("\n\n")[0]
+    match = re.search(r"\{([^}]+)\}", head)
+    return {"help": usage, "steps": match.group(1).split(",") if match else [],
+            "parts": "--part" in usage}
+
+
+def recipe_settings(name: str) -> list[dict]:
+    """Every declared setting with its current value as JSON text (what the table edits)."""
+    import importlib
+    import json
+
+    from ..settings import _jsonable
+
+    module = importlib.import_module(f"tbkit.recipes.{name}")
+    return [{"name": p.name, "value": json.dumps(_jsonable(getattr(module, p.name)),
+                                                 ensure_ascii=False),
+             "unit": p.unit, "description": p.description, "why": p.why, "group": p.group}
+            for p in getattr(module, "PARAMS", [])]
+
+
+def recipe_overrides(name: str, edited: dict[str, str]) -> dict:
+    """The edited values that differ from the recipe's, parsed and checked against the
+    type of each default; a bad value raises ``ValueError`` naming the setting."""
+    import importlib
+    import json
+
+    from ..settings import _convert, _jsonable
+
+    module = importlib.import_module(f"tbkit.recipes.{name}")
+    defaults = {row["name"]: row["value"] for row in recipe_settings(name)}
+    out = {}
+    for key, text in edited.items():
+        if key not in defaults:
+            raise ValueError(f"'{key}' no es un ajuste de {name}")
+        if text.strip() == defaults[key]:
+            continue
+        try:
+            value = _convert(text.strip(), getattr(module, key))
+        except ValueError as error:
+            raise ValueError(f"{key}: {error}") from error
+        if json.dumps(_jsonable(value), ensure_ascii=False) != defaults[key]:
+            out[key] = _jsonable(value)
+    return out
+
+
+def cores() -> int:
+    """Processors this process may use (the affinity mask, not the machine's total)."""
+    import os
+
+    try:
+        return len(os.sched_getaffinity(0))
+    except AttributeError:                      # Windows, macOS
+        return os.cpu_count() or 1
+
+
+def launch_warnings(parts: int, threads: int, mpi: int = 1, can_split: bool = True) -> list[str]:
+    """What is wrong or wasteful in a choice of parts × threads × MPI processes."""
+    out = []
+    used = parts * threads * mpi
+    if parts > 1 and not can_split:
+        out.append("esta receta no se divide en partes (no tiene --part): usa 1 parte")
+    if used > cores():
+        out.append(f"{parts} partes × {threads} hilos × {mpi} MPI = {used} > {cores()} "
+                   "núcleos: los procesos se estorban y todo va más lento")
+    if threads > 1 and parts > 1:
+        out.append("con matrices pequeñas rinden más partes de 1 hilo que pocas de muchos")
+    return out
+
+
+def launch_command(name: str, arguments: str, overrides: dict, parts: int = 1,
+                   threads: int = 1, mpi: int = 1, retries: int = 1,
+                   workdir: str | Path = ".", logs: str = "out/registros") -> list[str]:
+    """The ``tbkit lanzar`` command for a recipe step, with the edited settings written
+    to a JSON next to the logs (``--ajustes``), so the run records them."""
+    import json
+    import shlex
+    import sys
+    import time
+
+    command = [sys.executable, "-m", "tbkit.cli", "lanzar", "--partes", str(parts),
+               "--hilos", str(threads), "--mpi", str(mpi), "--reintentos", str(retries),
+               "--registros", logs, "--carpeta", "out", name, *shlex.split(arguments)]
+    if overrides:
+        folder = Path(workdir) / logs
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{name}_ajustes_{time.strftime('%Y%m%d_%H%M%S')}.json"
+        path.write_text(json.dumps(overrides, indent=1, ensure_ascii=False), encoding="utf-8")
+        command += ["--ajustes", str(path.resolve())]
+    return command
+
+
+def launch_recipe(command: list[str], workdir: str | Path = ".", log: str | Path | None = None):
+    """Start ``command`` in its own session (closing the window does not stop it); its
+    output goes to ``log``. Returns the process."""
+    import subprocess
+
+    workdir = Path(workdir)
+    log = Path(log) if log else workdir / "out" / "registros" / "lanzador.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with open(log, "a", encoding="utf-8") as handle:
+        return subprocess.Popen(command, cwd=workdir, stdout=handle, stderr=subprocess.STDOUT,
+                                start_new_session=True)
+
+
+def recipe_status(folder: str | Path, finished: bool = False) -> list[str]:
+    """One line per calculation with a counter under ``folder`` (``tbkit estado``)."""
+    from ..progress import status_files
+
+    def where(path):
+        parent = Path(path).parent
+        return parent.relative_to(folder) if parent.is_relative_to(folder) else parent
+
+    return [f"{row['line']}   [{where(row['path'])}]"
+            for row in status_files(folder) if finished or not row["finished"]]
+
+
+# --------------------------------------------------------------------------
 # Reproducible records
 # --------------------------------------------------------------------------
 
@@ -707,6 +854,12 @@ PANEL_HELP = {
                  "GPAW, ~3 %); las crudas siguen siendo las del modelo.",
     "Grafeno": "Bandas G, 2D y 2D′ del grafeno por doble resonancia, con fonones de GPAW "
                "o de Xu; dispersión de la 2D con la energía del láser.",
+    "Recetas": "Los cálculos largos de las recetas (doble resonancia de la coil, Raman de "
+               "los dopados, referencias GPAW…) con todos sus números a la vista y "
+               "editables: valor, unidad y por qué tiene ese valor (pasa el ratón). Elige "
+               "partes en paralelo e hilos, lanza, y sigue el avance con el tiempo "
+               "restante. El cálculo corre fuera de la ventana: cerrarla no lo detiene. Los "
+               "ajustes usados quedan en ajustes_usados.json junto a los resultados.",
 }
 
 HELP = {
@@ -814,4 +967,32 @@ HELP = {
                 "preciso y más lento.",
     "procesos": "Procesos en paralelo para el cálculo de doble resonancia.",
     "Calcular G, 2D y 2D′": "Posiciones e intensidades de G, 2D y 2D′ para cada láser.",
+    # Recetas
+    "Receta": "La receta a correr; entre paréntesis, cuántos ajustes declara.",
+    "Paso": "La etapa de la receta (p. ej. fc, dband, pairs, report en la doble "
+            "resonancia; relax, hessian, raman en los dopados). «Ayuda de la receta» "
+            "explica cada una.",
+    "Argumentos": "Lo que el paso necesita además: un láser (2.54), una estructura "
+                  "(N_graphitic)… Separados por espacios, como en la terminal.",
+    "Carpeta de trabajo": "Donde se corre la receta: sus resultados van a out/ dentro de "
+                          "ella y el avance se lee de ahí.",
+    "Restaurar valores": "Vuelve a los valores de la receta (deshace lo editado en la tabla).",
+    "Ayuda de la receta": "El --help de la receta: pasos, argumentos y opciones.",
+    "Recursos": "Cuántos procesos y núcleos usa el cálculo. Partes × hilos × MPI no debe "
+                "pasar de los núcleos disponibles.",
+    "Partes en paralelo": "Procesos independientes que se reparten el trabajo (--part r/N); "
+                          "con matrices pequeñas es lo que más acelera. Solo en recetas "
+                          "que lo admiten.",
+    "Hilos por parte": "Hilos de álgebra lineal (OMP_NUM_THREADS) de cada parte. Con las "
+                       "matrices de tbkit, 1 suele ser lo mejor: los hilos compiten entre sí.",
+    "Procesos MPI por parte": "Para los pasos de GPAW: procesos MPI de cada parte (necesita "
+                              "mpiexec). 1 = sin MPI.",
+    "Reintentos": "Veces que se relanza una parte que termina con error (las recetas "
+                  "retoman donde quedaron).",
+    "Lanzar": "Escribe los ajustes editados en un JSON (--ajustes) y lanza tbkit lanzar "
+              "fuera de la ventana; el registro queda en out/registros/.",
+    "Avance": "Los cálculos con contador bajo out/ de la carpeta de trabajo: hechos/total, "
+              "tiempo transcurrido, restante y hora estimada de fin (se actualiza cada 10 s).",
+    "Mostrar terminados": "Incluye los cálculos que ya terminaron.",
+    "Actualizar avance": "Vuelve a leer los contadores ahora.",
 }
