@@ -454,9 +454,11 @@ def test_recipe_settings_overrides_and_command(tmp_path):
 
 def test_recipe_options_are_read_from_the_parser_without_running_it():
     names = {r["name"] for r in actions.recipe_list()}
-    assert {"site_screening", "crystal_validation", "frequency_scaling"} <= names
-    usage = actions.recipe_usage("frequency_scaling")       # main() without argv: not called
+    assert {"site_screening", "crystal_validation", "validation_report"} <= names
+    usage = actions.recipe_usage("validation_report")       # main() without argv: not called
     assert usage["options"] == {"": []} and not usage["steps"]
+    scaling = {r["dest"]: r for r in actions.recipe_usage("frequency_scaling")["options"][""]}
+    assert scaling["solo_mostrar"]["boolean"] and scaling["min_cm1"]["default"] == "50.0"
     site = actions.recipe_usage("site_screening")
     rows = {r["dest"]: r for r in site["options"][""]}
     assert site["parts"] and rows["structure"]["required"] and rows["kmesh"]["default"] == "8"

@@ -98,6 +98,7 @@ def main(argv=None) -> None:
                         help="peso de las Hessianas GPAW frente a energías y fuerzas en el ajuste")
     parser.add_argument("--heavy-tail", type=float, nargs=2, default=None, metavar=("DR1", "DRM"),
                         help="cola de los pares pesados (no C-C) en r0 + (DR1, DRM) Å")
+    xu_family.add_fit_arguments(parser)
     args = parser.parse_args(argv)
     family = CHNO
     if args.heavy_tail:
@@ -106,7 +107,8 @@ def main(argv=None) -> None:
         family = dataclasses.replace(CHNO, pairs=copy.deepcopy(_PAIRS),
                                      heavy_tail=tuple(args.heavy_tail))
     xu_family.run(family, args.references, args.out, workers=args.workers, x0=warm_start(),
-                  hessians=args.hessians, hessian_weight=args.hessian_weight)
+                  hessians=args.hessians, hessian_weight=args.hessian_weight,
+                  fit=xu_family.fit_options(args))
 
 
 if __name__ == "__main__":

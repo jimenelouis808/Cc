@@ -138,8 +138,9 @@ def validate(model, structures, shift: float, relax: bool = True) -> dict:
     return xu_family.validate(CHN, model, structures, shift, relax)
 
 
-def run(references: Path, out: Path, verbose: bool = True, workers: int = 4) -> dict:
-    return xu_family.run(CHN, [Path(references)], out, verbose, workers)
+def run(references: Path, out: Path, verbose: bool = True, workers: int = 4,
+        fit: dict | None = None) -> dict:
+    return xu_family.run(CHN, [Path(references)], out, verbose, workers, fit=fit)
 
 
 def main(argv=None) -> None:
@@ -150,8 +151,9 @@ def main(argv=None) -> None:
                         help="archivo de parámetros que se escribe (nunca sobre uno incluido)")
     parser.add_argument("--workers", type=int, default=4,
                         help="procesos en paralelo para evaluar las referencias")
+    xu_family.add_fit_arguments(parser)
     args = parser.parse_args(argv)
-    run(args.references, args.out, workers=args.workers)
+    run(args.references, args.out, workers=args.workers, fit=xu_family.fit_options(args))
 
 
 if __name__ == "__main__":

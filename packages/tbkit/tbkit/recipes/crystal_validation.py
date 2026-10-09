@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections.abc import Callable
 from itertools import pairwise
 from pathlib import Path
@@ -48,11 +49,33 @@ from pathlib import Path
 import numpy as np
 from ase import Atoms
 
+from ..settings import Param, add_arguments, apply
+
 SETTINGS = {"code": "GPAW", "mode": "lcao", "basis": "dzp", "xc": "PBE", "h": 0.2,
             "smearing_ev": 0.1, "spin": "spin-paired", "fmax": 0.05, "max_steps": 80,
             "sigma": 0.05, "n_random": 3, "strains": [0.98, 1.02], "seed": 7,
             "strain_grid": "gpts of the relaxed cell (h scales with the strain)",
             "energy": "GPAW's extrapolated to kT = 0 (get_potential_energy)"}
+
+PARAMS = [
+    Param("SETTINGS", "GPAW y puntos de cada cristal: modo, base, funcional, rejilla h (Å), "
+          "ensanchamiento (eV), fmax (eV/Å) y pasos de la relajación, σ (Å) y número de "
+          "distorsiones aleatorias, deformaciones de la red, semilla",
+          why="los mismos que las referencias moleculares (PBE, LCAO dzp, h 0.2 Å), para "
+              "comparar el error en cristales con el de moléculas medido igual. Se fijan en el "
+              "paso gpaw y collect los relee de WORKDIR/ajustes_usados.json",
+          group="cálculo"),
+]
+
+
+def _settings_used(workdir: Path) -> None:
+    """The SETTINGS the gpaw stage ran with (its ajustes_usados.json), so that collect
+    rebuilds the same distortions and records the true settings."""
+    path = Path(workdir) / "ajustes_usados.json"
+    if path.exists():
+        used = json.loads(path.read_text(encoding="utf-8"))[-1]["values"].get("SETTINGS")
+        if used:
+            SETTINGS.update(used)
 
 A_GRAPHENE = 2.46
 A_HBN = 2.50
@@ -257,12 +280,18 @@ def _relax(name: str, folder: Path, make_calc: Callable, log) -> dict:
             hessian.unlink(missing_ok=True)
             steps_before = 0
     atoms.calc = make_calc()
-    with Trajectory(str(trajectory), "a", atoms) as traj:
+    from ..progress import Progress, watch_optimizer
+
+    with Trajectory(str(trajectory), "a", atoms) as traj, \
+            Progress(None, f"{name}: relajación GPAW",
+                     status=folder.parent / f"progreso_{name}_relax.json",
+                     done=steps_before) as bar:
         optimizer = BFGS(atoms, restart=str(hessian), logfile=None)
         optimizer.attach(traj.write, interval=1)
         optimizer.attach(lambda: log(f"{name}: paso {steps_before + optimizer.nsteps} "
                                      f"fmax {np.linalg.norm(atoms.get_forces(), axis=1).max():.3f}"),
                          interval=1)
+        watch_optimizer(optimizer, bar)
         converged = bool(optimizer.run(fmax=SETTINGS["fmax"],
                                        steps=max(SETTINGS["max_steps"] - steps_before, 0)))
     result = _point(atoms, "relaxed", {"converged": converged,
@@ -281,15 +310,21 @@ def run_crystal(name: str, workdir: Path, make_calc: Callable | None = None,
         return marker
     make_calc = make_calc or gpaw_factory(CRYSTALS[name][2])
     relaxed = _relax(name, folder, make_calc, log)
-    for label, atoms in distorted(_atoms_of(relaxed)):
+    from ..progress import Progress
+
+    points = distorted(_atoms_of(relaxed))
+    left = [(label, atoms) for label, atoms in points if not (folder / f"{label}.json").exists()]
+    bar = Progress(len(points), f"{name}: puntos GPAW",
+                   status=folder.parent / f"progreso_{name}.json", done=len(points) - len(left))
+    for label, atoms in left:
         path = folder / f"{label}.json"
-        if path.exists():
-            continue
         # A strain keeps the relaxed cell's grid (see gpaw_factory).
         atoms.calc = make_calc(grid_of=_atoms_of(relaxed)) if label.startswith("x") \
             else make_calc()
         _write_atomic(path, _point(atoms, label))
         log(f"{name}: {label} listo")
+        bar.step(note=label)
+    bar.close()
     marker.write_text("ok\n", encoding="utf-8")
     return marker
 
@@ -300,6 +335,7 @@ def collect(workdir: Path, out: Path) -> Path:
 
     from ..references import ReferenceStructure, save_references
 
+    _settings_used(workdir)
     structures = []
     for name, (_, model, kpts, _) in CRYSTALS.items():
         folder = Path(workdir) / name
@@ -471,6 +507,7 @@ def main(argv=None) -> None:
                    help="carpeta de los cálculos GPAW (uno por cristal y punto, reanudable)")
     g.add_argument("--systems", nargs="*", default=list(CRYSTALS),
                    help="cristales a usar (por omisión, todos)")
+    add_arguments(g)
     c = sub.add_parser("collect")
     c.add_argument("workdir", type=Path,
                    help="carpeta de los cálculos GPAW (uno por cristal y punto, reanudable)")
@@ -488,15 +525,23 @@ def main(argv=None) -> None:
     if args.stage == "gpaw":
         log_path = args.workdir / "progress.log"
         args.workdir.mkdir(parents=True, exist_ok=True)
+        apply(sys.modules[__name__], args, record=args.workdir)
 
         def log(text):
             with log_path.open("a", encoding="utf-8") as handle:
                 handle.write(f"[{os.getpid()}] {text}\n")
             print(text, flush=True)
 
-        for name in args.systems:
+        from ..progress import Progress
+
+        pending = [n for n in args.systems if not (args.workdir / n / "done").exists()]
+        bar = Progress(len(args.systems), "cristales GPAW", status=args.workdir / "progreso.json",
+                       done=len(args.systems) - len(pending))
+        for name in pending:
             run_crystal(name, args.workdir, log=log)
             log(f"{name}: terminado")
+            bar.step(note=name)
+        bar.close()
     elif args.stage == "collect":
         print(collect(args.workdir, args.out))
     else:

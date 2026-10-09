@@ -27,9 +27,12 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
+
+from ..settings import Param, add_arguments, apply
 
 ROOT = Path(__file__).resolve().parents[1] / "parameters"
 HELD_OUT = ("amorphous_3.2", "stone_wales")
@@ -37,6 +40,21 @@ SCALES = (1.0, 0.5, 0.25, 0.0)
 CUTS = ((3.0, 3.6), (4.2, 5.0))
 FORCE_WEIGHT = 1.0          # eV/Å residuals
 ENERGY_WEIGHT = 10.0        # eV/atom residuals, × this
+
+PARAMS = [
+    Param("HELD_OUT", "grupos de gpaw_carbon_env.json fuera del ajuste (solo se miden)",
+          why="amorfo 3.2 y Stone-Wales miden si el modelo generaliza a lo que no vio"),
+    Param("SCALES", "factores de la escala Δe del término de entorno que se prueban",
+          why="1 = la del artículo; 0 = sin dependencia del entorno en el sitio"),
+    Param("CUTS", "pares (inicio, fin) del corte suave de los saltos que se prueban", "Å",
+          why="corto (3.0-3.6 Å: hasta terceros vecinos del grafeno, 2.84 Å) o largo "
+              "(4.2-5.0 Å)"),
+    Param("FORCE_WEIGHT", "peso de los residuos de fuerza", "por eV/Å"),
+    Param("ENERGY_WEIGHT", "peso de los residuos de energía por átomo", "por eV/átomo"),
+]
+
+
+_DEFAULTS = {"held_out": list(HELD_OUT), "weights": [FORCE_WEIGHT, ENERGY_WEIGHT]}
 
 
 def _model(scale: float, cut: tuple):
@@ -104,8 +122,12 @@ def grid_point(scale: float, cut: tuple, workdir: Path) -> dict:
     from ..references import load_references
 
     path = Path(workdir) / f"s{scale:.2f}_c{cut[0]:.1f}-{cut[1]:.1f}.json"
+    used = {"held_out": list(HELD_OUT), "weights": [FORCE_WEIGHT, ENERGY_WEIGHT]}
     if path.exists():
-        return json.loads(path.read_text())
+        cached = json.loads(path.read_text())
+        # files from before these were recorded used the defaults
+        if all(cached.get(k, _DEFAULTS[k]) == v for k, v in used.items()):
+            return cached
     refs, _ = load_references(ROOT / "references" / "gpaw_carbon_env.json")
     _, model = _model(scale, cut)
     rows = []
@@ -119,7 +141,7 @@ def grid_point(scale: float, cut: tuple, workdir: Path) -> dict:
     result = {"scale": scale, "cut": list(cut), "c": c.tolist(), "mu": float(mu),
               "train_force_rmse": float(np.sqrt(np.mean([errors[g]["force_rmse"] ** 2 for g in errors
                                                          if g not in HELD_OUT]))),
-              "errors": errors}
+              "errors": errors, **used}
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(result, indent=1))
     tmp.replace(path)
@@ -156,15 +178,22 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("workdir", type=Path,
                         help="carpeta de trabajo (un archivo por punto de la malla, reanudable)")
+    add_arguments(parser)
     parser.add_argument("--install", action="store_true",
                         help="escribir el mejor punto como parameters/tang_carbon.json")
     args = parser.parse_args(argv)
     args.workdir.mkdir(parents=True, exist_ok=True)
+    apply(sys.modules[__name__], args, record=args.workdir)
+    from ..progress import Progress
+
     results = []
+    bar = Progress(len(CUTS) * len(SCALES), "malla de Tang (escala × corte)",
+                   status=args.workdir / "progreso.json")
     for cut in CUTS:
         for scale in SCALES:
             r = grid_point(scale, cut, args.workdir)
             results.append(r)
+            bar.step(note=f"Δe×{scale:.2f} corte {cut}")
             held = {g: round(r["errors"][g]["force_rmse"], 2) for g in HELD_OUT}
             print(f"Δe×{scale:.2f} corte {cut}: F_rmse entreno {r['train_force_rmse']:.3f} eV/Å, "
                   f"fuera {held}", flush=True)

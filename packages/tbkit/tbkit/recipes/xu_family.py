@@ -328,10 +328,15 @@ def level_residuals(model: TBModel, refs: list[ReferenceStructure],
 
 
 def fit_levels(family: XuFamily, refs: list[ReferenceStructure],
-               x0: Optional[np.ndarray] = None, checkpoint: Optional[Path] = None):
+               x0: Optional[np.ndarray] = None, checkpoint: Optional[Path] = None,
+               status: Path | None = None):
+    from ..progress import Progress
+
     x0 = family.initial_guess() if x0 is None else np.asarray(x0, dtype=float)
     fixed = family.fixed_shift()
     best = [np.inf]
+    # open-ended: least squares does not know how many evaluations it will need
+    bar = Progress(None, "ajuste de niveles (evaluaciones)", status=status)
 
     def residuals(x):
         try:
@@ -340,11 +345,14 @@ def fit_levels(family: XuFamily, refs: list[ReferenceStructure],
             if cost < best[0]:
                 best[0] = cost
                 _save_checkpoint(checkpoint, "levels_partial", x, cost)
+            bar.step(note=f"costo mínimo {best[0]:.4g}")
             return out
         except (RuntimeError, np.linalg.LinAlgError, ValueError):
             return np.full(sum(r.n_occupied + 2 for r in refs), 10.0)
 
-    return least_squares(residuals, x0, bounds=family.bounds(), x_scale="jac")
+    result = least_squares(residuals, x0, bounds=family.bounds(), x_scale="jac")
+    bar.close()
+    return result
 
 
 # --------------------------------------------------------------------------
@@ -615,6 +623,7 @@ class JointObjective:
         self.pool = ProcessPoolExecutor(workers, initializer=_init_worker,
                                         initargs=(family, refs, self.hessians))
         self.size = None
+        self.bar = None                    # a tbkit.progress.Progress, one step per evaluation
 
     def close(self):
         self.pool.shutdown()
@@ -654,6 +663,8 @@ class JointObjective:
         if cost < self.best:
             self.best = cost
             _save_checkpoint(self.checkpoint, "joint", x, cost)
+        if self.bar is not None:
+            self.bar.step(note=f"costo mínimo {self.best:.4g}")
         if full:
             return out, {"shift": shift, "coefficients": c,
                          "level_rms": float(np.sqrt(np.mean((d - shift) ** 2))),
@@ -665,9 +676,14 @@ class JointObjective:
 
 
 def fit_joint(family: XuFamily, refs, x0, workers: int = 4, max_nfev: int = 400,
-              verbose: bool = True, **weights):
-    """Least squares over the electronic parameters on levels + forces + energies."""
+              verbose: bool = True, status: Path | None = None, **weights):
+    """Least squares over the electronic parameters on levels + forces + energies.
+    ``max_nfev`` bounds the optimiser's steps; each step costs one evaluation per
+    parameter (its Jacobian) besides its own, so the counter is open-ended."""
+    from ..progress import Progress
+
     objective = JointObjective(family, refs, workers=workers, **weights)
+    objective.bar = Progress(None, "ajuste conjunto (evaluaciones)", status=status)
     lower, upper = family.bounds()
     try:
         _, info0 = objective.residuals(x0, full=True)
@@ -682,6 +698,7 @@ def fit_joint(family: XuFamily, refs, x0, workers: int = 4, max_nfev: int = 400,
         _, info = objective.residuals(result.x, full=True)
     finally:
         objective.close()
+        objective.bar.close()
     if verbose:
         extra = f", hessiana {info['hessian_rms']:.2f} eV/Å²" \
             if info.get("hessian_rms") is not None else ""
@@ -946,9 +963,40 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
     return data
 
 
+#: Settings of the joint fit a recipe can change (``add_fit_arguments``): defaults of
+#: :class:`JointObjective` and :func:`fit_joint`.
+FIT_DEFAULTS = {"level_weight": 1.0, "force_weight": 1.0, "energy_weight": 3.0,
+                "ridge": 1e-6, "max_nfev": 400}
+
+
+def add_fit_arguments(parser) -> None:
+    """The joint fit's weights, regularisation and evaluation limit as options."""
+    group = parser.add_argument_group("ajuste conjunto")
+    group.add_argument("--level-weight", type=float, default=FIT_DEFAULTS["level_weight"],
+                       help="peso de los niveles electrónicos (por eV de error)")
+    group.add_argument("--force-weight", type=float, default=FIT_DEFAULTS["force_weight"],
+                       help="peso de las fuerzas (por eV/Å de error)")
+    group.add_argument("--energy-weight", type=float, default=FIT_DEFAULTS["energy_weight"],
+                       help="peso de las energías relativas (por eV de error): más alto, "
+                            "mejores energías de reacción a costa de las fuerzas")
+    group.add_argument("--ridge", type=float, default=FIT_DEFAULTS["ridge"],
+                       help="regularización de los coeficientes de repulsión (evita "
+                            "polinomios que se disparan fuera de los datos)")
+    group.add_argument("--max-evaluations", type=int, default=FIT_DEFAULTS["max_nfev"],
+                       help="pasos máximos del optimizador (max_nfev de least_squares)")
+
+
+def fit_options(args) -> dict:
+    """``run(fit=...)`` from the options of :func:`add_fit_arguments`."""
+    return {"level_weight": args.level_weight, "force_weight": args.force_weight,
+            "energy_weight": args.energy_weight, "ridge": args.ridge,
+            "max_nfev": args.max_evaluations}
+
+
 def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool = True,
         workers: int = 4, x0: Optional[np.ndarray] = None, hessians: Optional[Path] = None,
-        hessian_weight: float = 0.1, checkpoint: Optional[Path] = None) -> dict:
+        hessian_weight: float = 0.1, checkpoint: Optional[Path] = None,
+        fit: dict | None = None) -> dict:
     """Fit ``family`` to the references (one or several files) and write the set.
 
     ``hessians``: a file of :mod:`tbkit.recipes.frequency_references`; its
@@ -957,7 +1005,12 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
 
     Progress is saved to ``checkpoint`` (default ``OUT.checkpoint.json``): the
     level fit when it ends and the best joint parameters at every evaluation,
-    so a run killed by a restart resumes where it was; removed on success."""
+    so a run killed by a restart resumes where it was; removed on success. The
+    evaluations are counted in ``OUT.progreso.json`` (``tbkit estado``).
+
+    ``fit``: weights, ridge and ``max_nfev`` of the joint fit (``FIT_DEFAULTS``)."""
+    fit = {**FIT_DEFAULTS, **(fit or {})}
+    status = Path(out).with_suffix(".progreso.json")
     checkpoint = Path(checkpoint) if checkpoint else Path(out).with_suffix(".checkpoint.json")
     targets = load_hessians(hessians) if hessians else []
     structures, settings = [], {}
@@ -975,16 +1028,18 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     else:
         if saved is not None:              # the level fit was interrupted: go on from there
             x0 = np.array(saved["x"])
-        result = fit_levels(family, train, x0, checkpoint)
+        result = fit_levels(family, train, x0, checkpoint, status=status)
         start, stage1 = result.x, str(result.message)
         _save_checkpoint(checkpoint, "levels", start, np.inf)
     electronic = family.build_model(start)
     _, shift, rms = level_residuals(electronic, train, family.fixed_shift())
     if verbose:
         print(f"Niveles: {stage1}; desplazamiento {shift:.3f} eV", flush=True)
-    joint, info, info0 = fit_joint(family, train, start, workers=workers, verbose=verbose,
+    weights = {k: v for k, v in fit.items() if k != "max_nfev"}
+    joint, info, info0 = fit_joint(family, train, start, workers=workers,
+                                   max_nfev=fit["max_nfev"], verbose=verbose, status=status,
                                    hessians=targets, hessian_weight=hessian_weight,
-                                   checkpoint=checkpoint)
+                                   checkpoint=checkpoint, **weights)
     x = joint.x
     shift = info["shift"]
     model = family.build_model(x, family.repulsion_from_coefficients(info["coefficients"]))
@@ -992,7 +1047,7 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
               "joint_start": {k: info0[k] for k in ("level_rms", "force_rms", "energy_rms")},
               "level_rms_train": info["level_rms"], "force_rms": info["force_rms"],
               "energy_rms": info["energy_rms"], "optimiser": str(joint.message),
-              "hessian_rms": info.get("hessian_rms"),
+              "hessian_rms": info.get("hessian_rms"), "fit_settings": fit,
               "bond_ranges": bond_ranges(train)}
     if verbose:
         for name, before, after in zip(family.parameter_names(), start, x, strict=True):
