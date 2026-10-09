@@ -179,5 +179,8 @@ def raman_progress(cache: Path, n_atoms: int) -> Optional[str]:
     cache = Path(cache)
     if not cache.exists():
         return None
-    done = len(list(cache.glob("alpha.*.json")))
-    return f"raman: {done}/{displacement_count(n_atoms)} polarizabilidades"
+    from ...utils.eta import from_files
+
+    files = list(cache.glob("alpha.*.json"))
+    total = displacement_count(n_atoms)
+    return f"raman: {len(files)}/{total} polarizabilidades" + from_files(files, total)

@@ -106,13 +106,26 @@ class VibspecAdapter(Adapter):
         if status == "relaxing":
             log = directory / "relax.log"
             lines = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
-            return f"relajando: paso {max(0, len(lines) - 1)}"
+            steps = max(0, len(lines) - 1)
+            # A relaxation has no known number of steps: the time per step is what
+            # can be said (from the log's own age and length).
+            if steps >= 2 and log.exists():
+                from ..utils.eta import duration
+
+                started = (directory / "record.json").stat().st_mtime \
+                    if (directory / "record.json").exists() else log.stat().st_ctime
+                per = (log.stat().st_mtime - started) / steps
+                if per >= 1.0:                    # below a second it is not a run
+                    return f"relajando: paso {steps} · ~{duration(per)} por paso"
+            return f"relajando: paso {steps}"
         if status == "vibrations":
             per_atom = 6 if int(record.spec.get("nfree", 2)) == 2 else 12
             total = per_atom * record.n_atoms + 1
+            from ..utils.eta import from_files
+
             cache = directory / "ir"
-            done = len(list(cache.glob("cache.*.json"))) if cache.exists() else 0
-            return f"vibraciones: {done}/{total} desplazamientos"
+            files = list(cache.glob("cache.*.json")) if cache.exists() else []
+            return f"vibraciones: {len(files)}/{total} desplazamientos" + from_files(files, total)
         if status == "raman":
             from ..vibspec.core.raman import raman_progress
 
