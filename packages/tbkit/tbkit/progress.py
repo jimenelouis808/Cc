@@ -56,10 +56,10 @@ def duration(seconds: float) -> str:
 class Progress:
     """Counter with an estimated time left. See the module note."""
 
-    def __init__(self, total: int, label: str = "", status: str | Path | None = None,
+    def __init__(self, total: int | None, label: str = "", status: str | Path | None = None,
                  stream=None, every: float = 30.0, window: int = 20, done: int = 0,
                  quiet: bool = False):
-        self.total = int(total)
+        self.total = None if total is None else int(total)
         self.label = label
         self.status = Path(status) if status else None
         self.stream = sys.stderr if stream is None else stream
@@ -82,9 +82,17 @@ class Progress:
     @property
     def remaining_seconds(self) -> float | None:
         rate = self.seconds_per_step
-        return None if rate is None else rate * max(0, self.total - self.done)
+        if rate is None or self.total is None:
+            return None
+        return rate * max(0, self.total - self.done)
 
     def line(self) -> str:
+        if self.total is None:             # open-ended: a relaxation, an SCF cycle
+            text = f"{self.label + ': ' if self.label else ''}{self.done} pasos"
+            text += f" · {duration(time.time() - self.started)}"
+            if self.seconds_per_step is not None:
+                text += f" · ~{duration(self.seconds_per_step)} por paso"
+            return text + (f" · {self.note}" if self.note else "")
         fraction = f" ({100 * self.done / self.total:.0f} %)" if self.total else ""
         text = f"{self.label + ': ' if self.label else ''}{self.done}/{self.total}{fraction}"
         text += f" · {duration(time.time() - self.started)}"
@@ -124,7 +132,8 @@ class Progress:
         if self._tty:
             self.stream.write("\r" + self.line() + "\033[K")
             self.stream.flush()
-        elif now - self._printed >= self.every or self.done >= self.total:
+        elif now - self._printed >= self.every or (self.total is not None
+                                                   and self.done >= self.total):
             self.stream.write(self.line() + "\n")
             self.stream.flush()
             self._printed = now
@@ -153,6 +162,14 @@ def read_status(path: str | Path) -> dict:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     now = time.time()
     rate = data.get("seconds_per_step")
+    if data["total"] is None:
+        stale = rate is not None and now - data["updated"] > max(3 * rate, 300)
+        text = f"{data['label']}: {data['done']} pasos · {duration(now - data['started'])}"
+        text += f" · detenido? (sin noticias hace {duration(now - data['updated'])})" if stale \
+            else (f" · ~{duration(rate)} por paso" if rate else "")
+        if data.get("note"):
+            text += f" · {data['note']}"
+        return {**data, "line": text, "stale": stale, "finished": False, "path": str(path)}
     finished = data["done"] >= data["total"]
     stale = (not finished and rate is not None
              and now - data["updated"] > max(3 * rate, 300))
@@ -184,3 +201,49 @@ def status_files(folder: str | Path, pattern: str = "*progreso*.json") -> list[d
         except (OSError, ValueError, KeyError):
             continue
     return sorted(out, key=lambda d: -d["updated"])
+
+
+# --------------------------------------------------------------------------
+# Hooks: count what a calculator, an optimiser or GPAW's SCF does
+# --------------------------------------------------------------------------
+
+def count_calculations(calc, bar: Progress, note=None):
+    """Make every ``calc.calculate`` call a step of ``bar`` (finite differences:
+    ``ase.vibrations`` gives no hook, but each displacement is one calculation).
+    ``note``: optional callable giving a text for the line. Returns ``calc``."""
+    original = calc.calculate
+
+    def calculate(*args, **kwargs):
+        result = original(*args, **kwargs)
+        bar.step(note=note() if note else "")
+        return result
+
+    calc.calculate = calculate
+    return calc
+
+
+def watch_optimizer(optimizer, bar: Progress):
+    """One step of ``bar`` per optimiser step, with the current largest force."""
+    import numpy as np
+
+    def report():
+        atoms = getattr(optimizer, "atoms", None)
+        atoms = getattr(atoms, "atoms", atoms)           # ase 3.23+: OptimizableAtoms wraps them
+        forces = atoms.get_forces()
+        bar.step(note=f"|F|máx {float(np.linalg.norm(forces, axis=1).max()):.3f} eV/Å")
+
+    optimizer.attach(report, interval=1)
+    return optimizer
+
+
+def watch_gpaw_scf(calc, label: str = "GPAW SCF", status: str | Path | None = None,
+                   every: float = 60.0):
+    """A line per minute while GPAW converges its density: SCF iterations done and the
+    time per iteration (the number of iterations is not known in advance). Uses GPAW's
+    observer interface; does nothing if the calculator has none."""
+    bar = Progress(None, label, status=status, every=every)
+    try:
+        calc.attach(lambda: bar.step(), 1)
+    except (AttributeError, TypeError):
+        return None
+    return bar

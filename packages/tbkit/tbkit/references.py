@@ -135,8 +135,11 @@ def _n_bands(atoms: Atoms, settings: dict) -> int:
 
 def gpaw_single_point(atoms: Atoms, settings: dict) -> tuple[float, np.ndarray, np.ndarray, int]:
     """``(energy, forces, levels, n_occupied)`` of a closed-shell molecule with GPAW."""
+    from .progress import watch_gpaw_scf
+
     atoms = atoms.copy()
     atoms.calc = gpaw_calculator(settings, _n_bands(atoms, settings))
+    watch_gpaw_scf(atoms.calc, f"GPAW SCF ({atoms.get_chemical_formula()})")
     energy = float(atoms.get_potential_energy())
     forces = np.array(atoms.get_forces())
     levels = np.sort(np.array(atoms.calc.get_eigenvalues()))
@@ -150,9 +153,14 @@ def gpaw_relax(atoms: Atoms, settings: dict, log: Optional[str] = None) -> Atoms
     """Relax a molecule with GPAW (BFGS to ``settings['fmax']``)."""
     from ase.optimize import BFGS
 
+    from .progress import Progress, watch_optimizer
+
     atoms = atoms.copy()
     atoms.calc = gpaw_calculator(settings, _n_bands(atoms, settings))
-    BFGS(atoms, logfile=log).run(fmax=settings["fmax"], steps=200)
+    optimizer = BFGS(atoms, logfile=log)
+    with Progress(None, f"GPAW relajación ({atoms.get_chemical_formula()})") as bar:
+        watch_optimizer(optimizer, bar)
+        optimizer.run(fmax=settings["fmax"], steps=200)
     relaxed = atoms.copy()
     relaxed.calc = None
     return relaxed
@@ -168,19 +176,25 @@ def generate_gpaw(molecules: dict[str, Atoms], settings: Optional[dict] = None,
     ``n_random=0`` and ``scales=()`` keep only the relaxed geometry (a test
     set). Molecules must be closed-shell and finite.
     """
+    from .progress import Progress
+
     settings = {**GPAW_DEFAULTS, **(settings or {})}
     out = []
+    bar = Progress(len(molecules) * (2 + n_random + len(scales)),
+                   "referencias GPAW (relajación + geometrías por molécula)")
     for index, (name, atoms) in enumerate(molecules.items()):
         atoms = atoms.copy()
         atoms.pbc = False
         atoms.center(vacuum=settings["vacuum"])
         relaxed = gpaw_relax(atoms, settings)
+        bar.step(note=f"{name} relajada")
         geometries = [("eq", relaxed)] + distortions(relaxed, n_random, sigma, scales,
                                                       seed + index)
         for tag, geometry in geometries:
             energy, forces, levels, n_occ = gpaw_single_point(geometry, settings)
             out.append(ReferenceStructure(f"{name}/{tag}", name, geometry, energy, forces,
                                           levels, n_occ, role))
+            bar.step(note=f"{name}/{tag}")
             if progress:
                 progress(f"{name}/{tag}: E = {energy:.4f} eV, |F|max = "
                          f"{np.abs(forces).max():.3f} eV/Å")
@@ -206,10 +220,15 @@ def gpaw_hessian(atoms: Atoms, settings: Optional[dict] = None,
     atoms = atoms.copy()
     atoms.pbc = False
     atoms.center(vacuum=settings["vacuum"])      # a translation: frequencies unchanged
+    from .progress import Progress, count_calculations
+
     atoms.calc = gpaw_calculator(settings, _n_bands(atoms, settings))
+    bar = Progress(6 * len(atoms) + 1, f"GPAW Hessiana ({atoms.get_chemical_formula()})")
+    count_calculations(atoms.calc, bar)
     with tempfile.TemporaryDirectory() as directory:
         vibrations = Vibrations(atoms, name=os.path.join(directory, "vib"), delta=delta)
         vibrations.run()
+        bar.close()
         data = vibrations.get_vibrations()
         hessian = data.get_hessian_2d()
         energies = data.get_energies()

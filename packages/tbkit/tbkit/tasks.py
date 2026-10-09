@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import tempfile
-
 from typing import Optional
 
 import numpy as np
@@ -88,11 +87,14 @@ def relax(atoms: Atoms, model: TBModel, kmesh: int = 8, kT: float = 0.02, fmax: 
     from ase.optimize import BFGS
 
     from .calculator import TBCalculator
+    from .progress import Progress, watch_optimizer
 
     atoms = atoms.copy()
     atoms.calc = TBCalculator(model, kpts=kmesh, kT=kT, scc=scc)
     optimizer = BFGS(atoms, logfile=None)
-    converged = bool(optimizer.run(fmax=fmax, steps=steps))
+    with Progress(None, f"relajación (hasta {fmax} eV/Å, máx. {steps} pasos)") as bar:
+        watch_optimizer(optimizer, bar)
+        converged = bool(optimizer.run(fmax=fmax, steps=steps))
     forces = atoms.get_forces()
     return {"converged": converged, "steps": optimizer.get_number_of_steps(),
             "energy": atoms.get_potential_energy(),
@@ -110,16 +112,20 @@ def phonons(atoms: Atoms, model: TBModel, kmesh: int = 12, kT: float = 0.02,
     from ase.vibrations import Vibrations
 
     from .calculator import TBCalculator
+    from .progress import Progress, count_calculations
 
     atoms = atoms.copy()
     atoms.calc = TBCalculator(model, kpts=kmesh, kT=kT, scc=scc)
     residual = float(np.linalg.norm(atoms.get_forces(), axis=1).max())
+    bar = Progress(6 * len(atoms), "fonones (desplazamientos ±δ por átomo y eje)")
+    count_calculations(atoms.calc, bar)
     from .modes import GAPLESS_WARNING, gapless_periodic
 
     gapless = gapless_periodic(atoms)
     with tempfile.TemporaryDirectory() as directory:
         vibrations = Vibrations(atoms, name=os.path.join(directory, "vib"), delta=delta)
         vibrations.run()
+        bar.close()
         data = vibrations.get_vibrations()
         energies, modes = data.get_energies_and_modes(all_atoms=True)
     from ase.units import invcm
