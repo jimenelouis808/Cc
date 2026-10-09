@@ -1,0 +1,319 @@
+{
+ "what": "Electronic structure, tbkit xu_chn against GPAW PBE dzp at the same geometry (recipes/electronic_compare)",
+ "sigma_eV": 0.1,
+ "systems": {
+  "pristine": {
+   "gap_gpaw_eV": 0.22269348111472276,
+   "gap_tb_eV": 0.18623775512724094,
+   "settings": {
+    "gpaw": "GPAW LCAO dzp PBE h 0.2, FD 0.05 eV, SCF k (1, 1, 2), bands non-SCF on 21 k",
+    "tb": "xu_chn SCC, kT 0.05 eV, SCF k 1x1x4"
+   },
+   "dos_correlation_-2_+2": 0.8200810801858225,
+   "dos_correlation_-6_+4": -0.0007017779452263124,
+   "states_within_1eV": {
+    "gpaw": 43.66002646213317,
+    "tb": 47.17990110122502
+   }
+  },
+  "N": {
+   "gap_gpaw_eV": 0.2029679845115906,
+   "gap_tb_eV": 0.0,
+   "settings": {
+    "gpaw": "GPAW LCAO dzp PBE h 0.2, FD 0.05 eV, SCF k (1, 1, 2), bands non-SCF on 21 k",
+    "tb": "xu_chn SCC, kT 0.05 eV, SCF k 1x1x4"
+   },
+   "dos_correlation_-2_+2": 0.8602864628976409,
+   "dos_correlation_-6_+4": 0.0020384099978031102,
+   "states_within_1eV": {
+    "gpaw": 43.3156465690525,
+    "tb": 46.912628990027926
+   },
+   "delta_dos_correlation_-3_+3": 0.4207191636202064
+  },
+  "amine": {
+   "gap_gpaw_eV": 0.22813235816312716,
+   "gap_tb_eV": 0.18441301967305357,
+   "settings": {
+    "gpaw": "GPAW LCAO dzp PBE h 0.2, FD 0.05 eV, SCF k (1, 1, 2), bands non-SCF on 21 k",
+    "tb": "xu_chn SCC, kT 0.05 eV, SCF k 1x1x4"
+   },
+   "dos_correlation_-2_+2": 0.7959370126147233,
+   "dos_correlation_-6_+4": -0.01148794770813919,
+   "states_within_1eV": {
+    "gpaw": 43.60400831920626,
+    "tb": 47.20378005097681
+   },
+   "delta_dos_correlation_-3_+3": 0.345742076551624
+  },
+  "graphene": {
+   "gap_gpaw_eV": 0.0,
+   "gap_tb_eV": 0.0,
+   "settings": {
+    "gpaw": "GPAW LCAO dzp PBE h 0.2, FD 0.05 eV, SCF k (24, 24, 1), bands non-SCF on 90 k",
+    "tb": "xu_chn SCC, kT 0.05 eV, SCF k 48x48"
+   },
+   "gpaw": {
+    "gamma_eV": [
+     -19.592120896918548,
+     -7.565862641521797,
+     -3.147717768423963,
+     -3.1455342899404046,
+     8.348348994993138,
+     8.350984939598217,
+     11.441496334094044
+    ],
+    "M_eV": [
+     -14.385469666299205,
+     -13.309109287908,
+     -6.45596168500326,
+     -2.364122886278203,
+     1.747813399215857,
+     7.461335848140989
+    ],
+    "pi_M_below_eV": -2.364122886278203,
+    "pi_M_above_eV": 1.747813399215857,
+    "fermi_velocity_eV_A": 5.3316847504814655
+   },
+   "tb": {
+    "gamma_eV": [
+     -7.428224561646072,
+     -7.428224561646072,
+     -5.935679043113694,
+     5.784924698276434,
+     7.506093108834893,
+     7.506093108834895
+    ],
+    "M_eV": [
+     -18.612046588043434,
+     -15.6832042965732,
+     -11.344280629495863,
+     -1.9617916526946662,
+     1.9450762611020433,
+     8.794949556915487,
+     11.403772868578553,
+     11.9128338442146
+    ],
+    "pi_M_below_eV": -1.9617916526946662,
+    "pi_M_above_eV": 1.9450762611020433,
+    "fermi_velocity_eV_A": 4.099733314644191
+   }
+  }
+ },
+ "molecules": {
+  "molecules": [
+   {
+    "molecule": "coronene_N",
+    "role": "test",
+    "gap_tb_eV": 2.114423356851246,
+    "gap_gpaw_eV": 2.7247969999999997,
+    "occupied_rms_vs_homo_eV": 2.7529420403794354,
+    "occupied_width_tb_eV": 23.282324817135652,
+    "occupied_width_gpaw_eV": 18.124434
+   },
+   {
+    "molecule": "C3H9N",
+    "role": "test",
+    "gap_tb_eV": 6.37274764962905,
+    "gap_gpaw_eV": 6.197055000000001,
+    "occupied_rms_vs_homo_eV": 1.3889366581433313,
+    "occupied_width_tb_eV": 15.508283990134538,
+    "occupied_width_gpaw_eV": 18.041361000000002
+   },
+   {
+    "molecule": "C6H6",
+    "role": "train",
+    "gap_tb_eV": 4.026403816328127,
+    "gap_gpaw_eV": 5.1168890000000005,
+    "occupied_rms_vs_homo_eV": 2.7390770769291484,
+    "occupied_width_tb_eV": 20.42072492380688,
+    "occupied_width_gpaw_eV": 14.863636999999999
+   },
+   {
+    "molecule": "isobutene",
+    "role": "test",
+    "gap_tb_eV": 4.163354668773481,
+    "gap_gpaw_eV": 5.428736000000001,
+    "occupied_rms_vs_homo_eV": 1.6567682156973838,
+    "occupied_width_tb_eV": 18.435608787906528,
+    "occupied_width_gpaw_eV": 14.040420000000001
+   },
+   {
+    "molecule": "C5H5N",
+    "role": "train",
+    "gap_tb_eV": 3.851745972957879,
+    "gap_gpaw_eV": 4.10356,
+    "occupied_rms_vs_homo_eV": 1.3082364379487519,
+    "occupied_width_tb_eV": 19.87414790561341,
+    "occupied_width_gpaw_eV": 17.505115
+   },
+   {
+    "molecule": "C3H8",
+    "role": "test",
+    "gap_tb_eV": 10.096205792357972,
+    "gap_gpaw_eV": 9.401925,
+    "occupied_rms_vs_homo_eV": 0.8456981220465525,
+    "occupied_width_tb_eV": 12.421822902906383,
+    "occupied_width_gpaw_eV": 11.516090000000002
+   },
+   {
+    "molecule": "butadiene",
+    "role": "train",
+    "gap_tb_eV": 3.0076162163533944,
+    "gap_gpaw_eV": 3.9185770000000004,
+    "occupied_rms_vs_homo_eV": 2.4228513611585063,
+    "occupied_width_tb_eV": 19.192666997875104,
+    "occupied_width_gpaw_eV": 14.20493
+   },
+   {
+    "molecule": "C4H4NH",
+    "role": "train",
+    "gap_tb_eV": 3.987472589634974,
+    "gap_gpaw_eV": 5.119645,
+    "occupied_rms_vs_homo_eV": 1.43800103021431,
+    "occupied_width_tb_eV": 21.488832713503975,
+    "occupied_width_gpaw_eV": 19.163691
+   },
+   {
+    "molecule": "CH3CH2NH2",
+    "role": "test",
+    "gap_tb_eV": 7.151497377031111,
+    "gap_gpaw_eV": 6.723871,
+    "occupied_rms_vs_homo_eV": 0.8516688122994511,
+    "occupied_width_tb_eV": 15.25495147265744,
+    "occupied_width_gpaw_eV": 16.359938
+   },
+   {
+    "molecule": "C2H6",
+    "role": "train",
+    "gap_tb_eV": 10.720820238556708,
+    "gap_gpaw_eV": 9.988757,
+    "occupied_rms_vs_homo_eV": 0.8774933993256308,
+    "occupied_width_tb_eV": 10.68631712125553,
+    "occupied_width_gpaw_eV": 10.415879
+   },
+   {
+    "molecule": "CH2NHCH2",
+    "role": "train",
+    "gap_tb_eV": 6.530150481727693,
+    "gap_gpaw_eV": 6.989461,
+    "occupied_rms_vs_homo_eV": 0.9117255897832818,
+    "occupied_width_tb_eV": 18.275302659444364,
+    "occupied_width_gpaw_eV": 17.932221000000002
+   },
+   {
+    "molecule": "H3CNH2",
+    "role": "train",
+    "gap_tb_eV": 7.194581416974268,
+    "gap_gpaw_eV": 6.747064,
+    "occupied_rms_vs_homo_eV": 1.0222390563820287,
+    "occupied_width_tb_eV": 14.845515825160208,
+    "occupied_width_gpaw_eV": 16.286332
+   },
+   {
+    "molecule": "H2CCHCN",
+    "role": "test",
+    "gap_tb_eV": 3.7342893115888955,
+    "gap_gpaw_eV": 4.493111000000001,
+    "occupied_rms_vs_homo_eV": 1.5643939745150026,
+    "occupied_width_tb_eV": 18.089823037497403,
+    "occupied_width_gpaw_eV": 15.412162000000002
+   },
+   {
+    "molecule": "C2H4",
+    "role": "train",
+    "gap_tb_eV": 4.577433625198587,
+    "gap_gpaw_eV": 5.8061609999999995,
+    "occupied_rms_vs_homo_eV": 2.327618685224154,
+    "occupied_width_tb_eV": 16.892562416399098,
+    "occupied_width_gpaw_eV": 12.119538000000002
+   },
+   {
+    "molecule": "N2H4",
+    "role": "train",
+    "gap_tb_eV": 6.851103291148892,
+    "gap_gpaw_eV": 6.708131,
+    "occupied_rms_vs_homo_eV": 0.24509113250798154,
+    "occupied_width_tb_eV": 17.717879223415153,
+    "occupied_width_gpaw_eV": 17.84237
+   },
+   {
+    "molecule": "CH3CN",
+    "role": "train",
+    "gap_tb_eV": 6.466391875805829,
+    "gap_gpaw_eV": 7.646775,
+    "occupied_rms_vs_homo_eV": 0.6599890766600733,
+    "occupied_width_tb_eV": 14.383396432162861,
+    "occupied_width_gpaw_eV": 14.494487
+   },
+   {
+    "molecule": "CH4",
+    "role": "train",
+    "gap_tb_eV": 12.016516267416755,
+    "gap_gpaw_eV": 11.528528,
+    "occupied_rms_vs_homo_eV": 0.6501917035374118,
+    "occupied_width_tb_eV": 6.307682592925177,
+    "occupied_width_gpaw_eV": 7.608066000000001
+   },
+   {
+    "molecule": "C2H2",
+    "role": "train",
+    "gap_tb_eV": 5.7234445150324085,
+    "gap_gpaw_eV": 6.916022000000001,
+    "occupied_rms_vs_homo_eV": 3.52114193921814,
+    "occupied_width_tb_eV": 19.33315463812754,
+    "occupied_width_gpaw_eV": 11.526895
+   },
+   {
+    "molecule": "NH3",
+    "role": "train",
+    "gap_tb_eV": 8.412651821522065,
+    "gap_gpaw_eV": 7.290851,
+    "occupied_rms_vs_homo_eV": 0.4701650842614961,
+    "occupied_width_tb_eV": 14.473017083955016,
+    "occupied_width_gpaw_eV": 14.969419000000002
+   },
+   {
+    "molecule": "NCCN",
+    "role": "train",
+    "gap_tb_eV": 4.987731099369704,
+    "gap_gpaw_eV": 5.412673999999999,
+    "occupied_rms_vs_homo_eV": 1.027762072207251,
+    "occupied_width_tb_eV": 15.619665263306988,
+    "occupied_width_gpaw_eV": 15.246119
+   },
+   {
+    "molecule": "HCN",
+    "role": "train",
+    "gap_tb_eV": 6.8531823590984935,
+    "gap_gpaw_eV": 7.938121000000001,
+    "occupied_rms_vs_homo_eV": 0.9125421085682524,
+    "occupied_width_tb_eV": 13.604966668860357,
+    "occupied_width_gpaw_eV": 14.093623000000001
+   },
+   {
+    "molecule": "N2",
+    "role": "train",
+    "gap_tb_eV": 7.665266397132466,
+    "gap_gpaw_eV": 7.879189,
+    "occupied_rms_vs_homo_eV": 0.3291942314524673,
+    "occupied_width_tb_eV": 18.149501673717307,
+    "occupied_width_gpaw_eV": 18.086266000000002
+   }
+  ],
+  "summary_train": {
+   "n": 16,
+   "gap_mean_error_eV": -0.38986831348385975,
+   "gap_rms_error_eV": 0.8498950296540131,
+   "gap_correlation": 0.9615499300635012,
+   "occupied_rms_vs_homo_median_eV": 0.9673905824751405
+  },
+  "summary_test": {
+   "n": 6,
+   "gap_mean_error_eV": -0.2228294739613744,
+   "gap_rms_error_eV": 0.7354493293869181,
+   "gap_correlation": 0.9832811634137723,
+   "occupied_rms_vs_homo_median_eV": 1.476665316329167
+  }
+ }
+}

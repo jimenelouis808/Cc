@@ -536,19 +536,21 @@ def electronic(folder: Path) -> Report:
                                    caption="Los estados que añade el dopante, en cada método."))
         for n in coils:
             series = []
-            for label, key in (("GPAW (PBE)", "gpaw"), ("tbkit (xu_chn)", "tb")):
+            for (label, key), offset in zip((("GPAW (PBE)", "gpaw"), ("tbkit (xu_chn)", "tb")),
+                                            (-0.005, 0.005)):
                 d = json.loads((folder / n / f"{key}.json").read_text())
-                kz = np.array([k[2] for k in d["kpts"]])
+                kz = np.array([k[2] for k in d["kpts"]]) + offset
                 xs, ys = [], []
                 for x, row in zip(kz, d["bands_minus_fermi"]):
                     for e in row:
-                        if abs(e) <= 3.0:
+                        if abs(e) <= 1.0:
                             xs.append(x)
                             ys.append(e)
                 series.append(Series(label, np.array(xs), np.array(ys)))
             sec.add(Figure(f"bandas_{n}", f"Bandas Γ–Z, {NAMES.get(n, n)}", "k_z (unidades de 2π/c)",
                            "E − E_F (eV)", series, kind="points",
-                           caption="Bandas a ±3 eV del nivel de Fermi, de Γ (0) a Z (0.5)."))
+                           caption="Niveles a ±1 eV del nivel de Fermi en cada k, de Γ (0) a Z (0.5); "
+                                   "GPAW un poco a la izquierda y tbkit a la derecha de cada k."))
     if "graphene" in systems:
         g = systems["graphene"]
         sec = rep.section("Grafeno: la parte de carbono de todos los estados de la coil")
