@@ -543,6 +543,17 @@ def export_report(path: str | Path, width: str = "simple") -> dict:
     return build(source, width=width)
 
 
+def open_result(path: str | Path) -> Path:
+    """«Abrir resultado…»: a recipe's ``report.json`` (its folder is shown), a validation
+    ``.json`` or a spectrum, laid out as a page in a temporary folder and opened in the
+    browser; nothing is written next to the data."""
+    from ..report import open_result as _open
+
+    path = Path(path)
+    source = path.parent if path.name == "report.json" else path
+    return _open(source)
+
+
 def load_spectrum(path: str | Path) -> dict:
     """A spectrum computed earlier, to look at or compare: ``{"grid", "curves", "sticks",
     "source"}``.
@@ -781,6 +792,11 @@ HELP = {
                          "o de un espectro guardado (.npz/.csv): una página HTML que se abre sin "
                          "internet, los datos de cada gráfica y tabla en CSV (Origin, Excel…) y "
                          "las figuras para revista en PDF, SVG y PNG a 600 dpi, a una columna.",
+    "Abrir resultado…": "Abre en el navegador cualquier resultado o validación: el report.json "
+                        "de una receta (Raman de la coil, comparación con GPAW, estructura "
+                        "electrónica…), un .json de la carpeta validation/ o un espectro "
+                        "(.npz/.csv). Las tablas y gráficas se ven sin internet; para "
+                        "CSV y figuras de revista, «Exportar reporte…».",
     "Abrir espectro guardado…": "Muestra un espectro calculado antes (CSV de «Exportar CSV…» o "
                                 "un .npz de las recetas, p. ej. raman_*/spectra.npz de la "
                                 "coil) sin recalcular. Cada curva se normaliza a su máximo; "

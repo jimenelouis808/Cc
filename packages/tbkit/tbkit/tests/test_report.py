@@ -103,3 +103,26 @@ def test_gui_action_reports_the_folder_of_report_json(tmp_path):
     written = export_report(tmp_path / "s.npz")
     assert written["html"].exists() and written["datos"].is_dir()
     assert "Exportar reporte…" in HELP
+
+
+def test_any_json_opens_as_tables_and_curves(tmp_path):
+    data = {"settings": {"code": "GPAW", "h": 0.2},
+            "systems": {"a": {"gap": 0.2, "r": 0.8}, "b": {"gap": 0.0, "r": 0.9}},
+            "molecules": [{"name": "CH4", "gap": 9.1}, {"name": "C6H6", "gap": 5.1}],
+            "curve": list(range(10))}
+    path = tmp_path / "v.json"
+    path.write_text(json.dumps(data))
+    rep = rp.recognise(path)
+    tables = {t.id: t for t in rep.tables()}
+    assert tables["settings"].rows == [["code", "GPAW"], ["h", 0.2]]
+    assert tables["systems_tabla"].rows == [["a", 0.2, 0.8], ["b", 0.0, 0.9]]
+    assert tables["molecules"].columns == ["name", "gap"]
+    assert rep.figures()[0].series[0].y[-1] == 9.0
+
+
+def test_open_result_writes_outside_the_data(tmp_path):
+    path = tmp_path / "v.json"
+    path.write_text(json.dumps({"x": 1}))
+    page = rp.open_result(path, browser=False)
+    assert page.exists() and page.parent != tmp_path
+    assert list(tmp_path.iterdir()) == [path]

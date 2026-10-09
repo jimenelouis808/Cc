@@ -74,9 +74,21 @@ tbkit ir       piridina.xyz --model chn
 tbkit graphene-raman --laser 1.96 2.41 2.80
 tbkit run      simulacion.json                    # reproducible, guarda su registro
 tbkit report   out/doped_raman [--ancho doble] [--figuras pdf,png]   # reporte, CSV y figuras
+tbkit abrir    validation/coil204_doped_gpaw.json # ver un resultado o validación en el navegador
 ```
 
 `tbkit <orden> --help` da todas las opciones.
+
+### Abrir resultados y validaciones
+
+`tbkit abrir RUTA` (en la ventana, «Abrir resultado…» en Espectros) muestra en el
+navegador cualquier resultado: la carpeta (o el `report.json`) de una receta, un
+espectro `.npz`/`.csv` o cualquier `.json`, incluidos todos los de `validation/`. Las
+recetas conocidas salen con sus gráficas (Raman de la coil, comparación con GPAW,
+estructura electrónica); cualquier otro JSON, como tablas: cada parte del archivo en su
+tabla, sin cambiar un número. La página se escribe en una carpeta temporal, así que
+abrir un archivo de `validation/` no deja nada junto a él. Para los CSV y las figuras
+de revista, `tbkit report`.
 
 ### Reportes, datos y figuras para publicar
 

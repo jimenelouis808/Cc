@@ -16,7 +16,8 @@ writes, next to it or where ``--out`` says:
 What a folder holds is recognised by its files (:data:`ADAPTERS`): the doped-coil
 Raman/IR recipe (``report.json`` with ``pristine``), its GPAW check
 (``report.json`` with ``gpaw``), the electronic comparison (``recipes/electronic_compare``),
-and any spectrum tbkit writes (``.npz`` with a
+any JSON file (``validation/*.json`` and the like, laid out as tables), and any
+spectrum tbkit writes (``.npz`` with a
 ``grid``, or the CSV of ``tbkit raman/ir --out`` and the GUI's «Exportar CSV…»).
 A new recipe gets a report by adding an adapter that turns its files into a
 :class:`Report`; the page, the CSV and the figures come from that alone.
@@ -310,6 +311,23 @@ def build(source: str | Path, out: str | Path | None = None, data: bool = True,
     return written
 
 
+def open_result(source: str | Path, out: str | Path | None = None, browser: bool = True) -> Path:
+    """The page for ``source`` (anything :func:`recognise` takes), written to ``out`` or to
+    a fresh temporary folder, so opening a file under ``validation/`` never writes there;
+    then shown in the default browser. No CSV or figures: that is :func:`build`."""
+    import tempfile
+    import webbrowser
+
+    source = Path(source)
+    if out is None:
+        out = Path(tempfile.mkdtemp(prefix="tbkit_")) / \
+            f"{_slug(source.stem if source.is_file() else source.name)}.html"
+    path = write_html(recognise(source), out)
+    if browser:
+        webbrowser.open(path.resolve().as_uri())
+    return path
+
+
 # --------------------------------------------------------------------------
 # Adapters: files of a recipe -> Report
 # --------------------------------------------------------------------------
@@ -494,7 +512,8 @@ def spectrum_file(path: Path) -> Report:
 
 def electronic(folder: Path) -> Report:
     """``out/electronic`` (tbkit.recipes.electronic_compare): bands and DOS, tbkit vs GPAW."""
-    r = json.loads((folder / "report.json").read_text())
+    r = json.loads((folder / "report.json" if folder.is_dir() else folder).read_text())
+    folder = folder if folder.is_dir() else folder.parent
     systems = r.get("systems", {})
     rep = Report("Estructura electrónica: tbkit frente a GPAW",
                  "tbkit (xu_chn, SCC) y GPAW (PBE, LCAO dzp) en la misma geometría; nada se "
@@ -545,7 +564,7 @@ def electronic(folder: Path) -> Report:
                                     Series("tbkit (xu_chn)", grid, dos[f"{n}_tb"] - dos["pristine_tb"])],
                                    marks=[(0.0, "E_F")], xlim=(-3.0, 3.0),
                                    caption="Los estados que añade el dopante, en cada método."))
-        for n in coils:
+        for n in (c for c in coils if (folder / c / "gpaw.json").exists()):
             series = []
             for (label, key), offset in zip((("GPAW (PBE)", "gpaw"), ("tbkit (xu_chn)", "tb")),
                                             (-0.005, 0.005)):
@@ -575,6 +594,8 @@ def electronic(folder: Path) -> Report:
                       digits=[None, 2, 2]))
         series = []
         for label, key in (("GPAW (PBE)", "gpaw"), ("tbkit (xu_chn)", "tb")):
+            if not (folder / "graphene" / f"{key}.json").exists():
+                continue
             d = json.loads((folder / "graphene" / f"{key}.json").read_text())
             xs, ys = [], []
             for x, row in enumerate(d["bands_minus_fermi"]):
@@ -583,8 +604,9 @@ def electronic(folder: Path) -> Report:
                         xs.append(x)
                         ys.append(e)
             series.append(Series(label, np.array(xs, dtype=float), np.array(ys)))
-        sec.add(Figure("bandas_grafeno", "Bandas del grafeno, Γ–M–K–Γ", "punto del camino (Γ 0, M 30, K 47, Γ 89)",
-                       "E − E_F (eV)", series, kind="points"))
+        if series:
+            sec.add(Figure("bandas_grafeno", "Bandas del grafeno, Γ–M–K–Γ", "punto del camino (Γ 0, M 30, K 47, Γ 89)",
+                           "E − E_F (eV)", series, kind="points"))
     mol = r.get("molecules")
     if mol:
         sec = rep.section("Moléculas: niveles de Kohn-Sham")
@@ -612,9 +634,97 @@ def electronic(folder: Path) -> Report:
     return rep
 
 
+def _json_of(p: Path):
+    """The JSON a source stands for (a folder's report.json, or the file), or None."""
+    path = p / "report.json" if p.is_dir() else p
+    if path.suffix.lower() != ".json" or not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def _is_electronic(p: Path) -> bool:
-    return p.is_dir() and (p / "report.json").exists() and \
-        "electronic_compare" in json.loads((p / "report.json").read_text()).get("what", "")
+    data = _json_of(p)
+    return isinstance(data, dict) and "electronic_compare" in str(data.get("what", ""))
+
+
+# --------------------------------------------------------------------------
+# Any JSON: the validation files and whatever a recipe leaves, as tables
+# --------------------------------------------------------------------------
+
+def _scalar(value) -> bool:
+    return value is None or isinstance(value, (bool, int, float, str))
+
+
+def _cell(value):
+    if _scalar(value):
+        return value
+    if isinstance(value, list) and len(value) <= 6 and all(_scalar(v) for v in value):
+        return ", ".join(f"{v:.4g}" if isinstance(v, float) else str(v) for v in value)
+    text = json.dumps(value, ensure_ascii=False)
+    return text if len(text) <= 80 else text[:77] + "…"
+
+
+def _records_table(tid: str, title: str, rows: list[dict]) -> Table:
+    columns: list[str] = []
+    for row in rows:
+        columns += [k for k in row if k not in columns]
+    return Table(tid, title, columns, [[_cell(row.get(c)) for c in columns] for row in rows])
+
+
+def _json_into(rep: Report, value, path: list[str], depth: int = 0) -> None:
+    """Scalars of a dict -> one key/value table; a list of dicts or a dict of flat dicts
+    -> one table (a row each); a long list of numbers -> a curve; anything deeper -> its
+    own section (to four levels)."""
+    title = " › ".join(path) if path else "Contenido"
+    tid = _slug("_".join(path) or "contenido")
+    if isinstance(value, list):
+        if value and all(isinstance(v, dict) for v in value):
+            rep.section(title).add(_records_table(tid, title, value))
+        elif len(value) > 6 and all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                                    for v in value):
+            rep.section(title).add(Figure(tid, title, "índice", path[-1] if path else "valor",
+                                          [Series(path[-1] if path else "valor",
+                                                  np.arange(len(value), dtype=float),
+                                                  np.array(value, dtype=float))]))
+        else:
+            rep.section(title).text(str(_cell(value)))
+        return
+    if not isinstance(value, dict):
+        rep.section(title).text(str(_cell(value)))
+        return
+    flat = {k: v for k, v in value.items() if _scalar(v) or (isinstance(v, list) and len(v) <= 6
+                                                             and all(_scalar(x) for x in v))}
+    nested = {k: v for k, v in value.items() if k not in flat}
+    sec = None
+    if flat:
+        sec = rep.section(title)
+        sec.add(Table(tid, title, ["clave", "valor"], [[k, _cell(v)] for k, v in flat.items()]))
+    flat_children = {k: v for k, v in nested.items() if isinstance(v, dict) and v and
+                     all(_scalar(x) or isinstance(x, list) and len(x) <= 6 for x in v.values())}
+    if len(flat_children) >= 2:
+        sec = sec or rep.section(title)
+        sec.add(_records_table(tid + "_tabla", title,
+                               [{"": k, **v} for k, v in flat_children.items()]))
+        nested = {k: v for k, v in nested.items() if k not in flat_children}
+    for key, child in nested.items():
+        if depth >= 4:
+            (sec or rep.section(title)).text(f"{key}: {_cell(child)}")
+            continue
+        _json_into(rep, child, [*path, str(key)], depth + 1)
+
+
+def json_file(path: Path) -> Report:
+    """Any JSON file tbkit or a recipe writes (``validation/*.json``, a ``report.json``…),
+    laid out as tables and curves; a recognised recipe gets its own adapter instead."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    rep = Report(path.stem, "Contenido del archivo, tal como está guardado.",
+                 meta={"archivo": str(path)}, eyebrow="Archivo · tbkit")
+    _json_into(rep, data, [])
+    rep.footer = "Vista genérica de tbkit.report: cada tabla es una parte del JSON, sin cambiar números."
+    return rep
 
 
 def _is_doped_raman(p: Path) -> bool:
@@ -634,6 +744,7 @@ ADAPTERS = [
     (_is_doped_raman, doped_raman),
     (_is_doped_gpaw, doped_gpaw),
     (lambda p: p.is_file() and p.suffix.lower() in (".npz", ".csv"), spectrum_file),
+    (lambda p: p.is_file() and p.suffix.lower() == ".json", json_file),
 ]
 
 
@@ -642,4 +753,4 @@ def recognise(source: Path) -> Report:
         if test(source):
             return builder(source)
     raise ValueError(f"No reconozco {source}: carpeta de doped_raman, doped_gpaw o "
-                     f"electronic_compare, o un espectro .npz/.csv de tbkit.")
+                     f"electronic_compare, un archivo .json, o un espectro .npz/.csv de tbkit.")

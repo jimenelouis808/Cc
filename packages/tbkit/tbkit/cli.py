@@ -380,6 +380,14 @@ def cmd_report(args) -> int:
     return 0
 
 
+def cmd_open(args) -> int:
+    """Lay out a result (a recipe's folder, a validation .json, a spectrum) and open it."""
+    from .report import open_result
+
+    print(open_result(args.source, out=args.out, browser=not args.sin_navegador))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tbkit", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -482,7 +490,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     rp = sub.add_parser("report", help="Reporte HTML, datos CSV y figuras de revista de una "
                                        "carpeta de resultados o un espectro.")
-    rp.add_argument("source", help="carpeta de una receta (doped_raman, doped_gpaw) o .npz/.csv")
+    rp.add_argument("source", help="carpeta de una receta (doped_raman, doped_gpaw, electronic), "
+                                   "un .json o un .npz/.csv")
     rp.add_argument("-o", "--out", default=None, help="archivo .html (por omisión, junto a los datos)")
     rp.add_argument("--figuras", default="pdf,svg,png",
                     help="formatos separados por coma, o 'no' (necesita matplotlib)")
@@ -490,6 +499,13 @@ def build_parser() -> argparse.ArgumentParser:
                     help="figuras a una columna (85 mm) o dos (178 mm)")
     rp.add_argument("--sin-datos", action="store_true", help="no escribir la carpeta de CSV")
     rp.set_defaults(func=cmd_report)
+    ab = sub.add_parser("abrir", help="Abrir en el navegador un resultado o una validación "
+                                      "(carpeta de receta, .json de validation/, .npz/.csv).")
+    ab.add_argument("source", help="carpeta de resultados, archivo .json, .npz o .csv")
+    ab.add_argument("-o", "--out", default=None,
+                    help="archivo .html (por omisión, una carpeta temporal: no toca los datos)")
+    ab.add_argument("--sin-navegador", action="store_true", help="solo escribir la página")
+    ab.set_defaults(func=cmd_open)
     rn = sub.add_parser("run", help="Ejecutar un archivo de simulación y guardar su registro.")
     rn.add_argument("config")
     rn.set_defaults(func=cmd_run)

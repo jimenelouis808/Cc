@@ -1202,8 +1202,10 @@ class SpectraPage(Page):
         self.open_saved.clicked.connect(self.open_spectrum)
         self.report_button = QPushButton("Exportar reporte…")
         self.report_button.clicked.connect(self.export_report)
+        self.open_result_button = QPushButton("Abrir resultado…")
+        self.open_result_button.clicked.connect(self.open_result)
         for b in (self.raman_button, self.resonant_button, self.ir_button, self.export,
-                  self.open_saved, self.report_button):
+                  self.open_saved, self.report_button, self.open_result_button):
             buttons.addWidget(b)
         layout.addLayout(buttons)
         self.summary = QLabel("Raman no resonante: sistemas con gap y capa cerrada. Las "
@@ -1313,6 +1315,20 @@ class SpectraPage(Page):
         extra = f"; {len(figures)} figuras" if isinstance(figures, list) else \
             (f"; {figures}" if figures else "")
         self.summary.setText(f"Reporte: {written['html']} (datos en CSV{extra}).")
+
+    def open_result(self, path=None):
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Resultado o validación", "",
+                "Resultados (*.json *.npz *.csv)")
+        if not path:
+            return
+        try:
+            page = actions.open_result(path)
+        except (OSError, ValueError, KeyError) as error:
+            self.window.error("No se pudo abrir", str(error))
+            return
+        self.summary.setText(f"Abierto en el navegador: {page}")
 
     def show_saved(self, saved):
         """Saved curves, each normalised to its maximum, over the current spectrum if any."""
