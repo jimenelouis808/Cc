@@ -103,6 +103,22 @@ frente a tensores de GPAW).
 posición que α; cargas de Born por diferencias centrales; intensidades
 |∂μ/∂Q|² en km/mol. Las cargas de Born de una molécula neutra suman cero.
 
+**Corrección de cargas para el IR** (`charge_model`, receta `recipes/ir_charge_fit.py`,
+medida, no adoptada por defecto). Se suma a las cargas de Born de TB una corrección
+de clase IV: `BondFlux`, de tipo CM3, con 2 parámetros por par de elementos (6 en C/H/N y
+12 con O); `EnvironmentFlux`, lineal en SOAP (aprendizaje automático); o ambas. Las tres
+son neutras por construcción y nulas en carbono puro. Se ajustan con ridge a las cargas
+de Born de GPAW de 44 moléculas y 3 recortes de la coil (`recipes/born_references.py`),
+validando con exclusión de una estructura a la vez. Medido
+(`validation/ir_charge_models_{chn,chno}.json`): `BondFlux` baja el error de las cargas
+de Born de 0,098 a 0,084 e (C/H/N) y de 0,100 a 0,083 e (con O); el IR de las
+estructuras apartadas pasa del 46 % al 52–54 % de modos dentro de un factor 2, y en los
+modos de la coil comparados con GPAW la mediana de |log₁₀ I/I_GPAW| pasa de 0,225 a
+0,202, con la misma fracción dentro de ×2 (65 %). El modelo SOAP se sobreajusta: queda
+peor que TB sin corregir en validación cruzada (0,104–0,116 e). La mejora de `BondFlux`
+es real pero pequeña; el IR por defecto sigue sin corrección y su incertidumbre medida
+(por banda, ±40 % en la coil) es la que se declara.
+
 ## 7. Raman
 
 **No resonante** (`raman`). Tensor dα/dQ_k = Σ (∂α/∂x_ai) L_k[a,i], actividad
