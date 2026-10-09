@@ -137,3 +137,30 @@ def test_overtone_at_any_q_matches_the_four_processes(phonons, electrons):
     e_lattice = v[nu] * np.exp(1j * (atoms.positions @ qc))[:, None]
     ours = dr.overtone_q(bands, (n, n, 1), coupling, qi, f[nu], e_lattice, masses, laser, gamma)
     assert np.allclose(ours, reference, rtol=1e-6, atol=1e-12 * np.abs(reference).max())
+
+
+def test_defect_vertex_is_the_local_potential_between_bloch_states():
+    from tbkit.hamiltonian import System
+
+    atoms = gr.graphene_cell(A_CC)
+    system = System.build(atoms, pi_model(strain_beta=3.37))
+    bands, _ = dr.mesh_bands(system, (5, 5, 1), 10.0, gr._POLARIZATIONS)
+    v0 = 0.7
+    vertex = dr.DefectVertex(system, {(0, 0, (0, 0, 0)): (np.array([[v0]]), None)})
+    to, frm = bands[7], bands[3]
+    kt, kf = (system.kpoint_cartesian(b.k) for b in (to, frm))
+    expected = v0 * np.exp(-1j * (kt - kf) @ atoms.positions[0]) * \
+        np.conj(to.cc[0])[:, None] * frm.cc[0][None, :]
+    assert np.allclose(vertex(to, frm, None, "cc"), expected)
+    # a defect-activated amplitude is linear in the defect potential
+    coupling = dr.Coupling(system)
+    phonons = gr.load_phonons("gpaw")
+    q = (2, 1, 0)
+    qc = np.array(q, float) / 5 @ atoms.cell.reciprocal() * 2 * np.pi
+    f, v = phonons.modes(qc)
+    nu = int(np.argmax(f))
+    e_lattice = v[nu] * np.exp(1j * (atoms.positions @ qc))[:, None]
+    phonon = dr.PhononVertex(coupling, e_lattice, atoms.get_masses(), f[nu])
+    one = dr.two_vertices_q(bands, (5, 5, 1), q, phonon, vertex, 2.0)
+    double = dr.DefectVertex(system, {(0, 0, (0, 0, 0)): (np.array([[2 * v0]]), None)})
+    assert np.allclose(dr.two_vertices_q(bands, (5, 5, 1), q, phonon, double, 2.0), 2 * one)

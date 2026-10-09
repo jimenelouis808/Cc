@@ -369,18 +369,66 @@ class Coupling:
         return g
 
 
-def overtone_q(bands: list[Bands], mesh: tuple[int, int, int], coupling: Coupling,
-               q_index: tuple[int, int, int], frequency: float, e_q: np.ndarray,
-               masses: np.ndarray, laser_ev: float, gamma: float = 0.1) -> np.ndarray:
-    """Amplitude tensor A[s, i] of emitting the phonons (q, ν) and (−q, ν), both orders,
-    summed over the k mesh (mean): graphene's ``_four_processes`` for any band structure.
+class PhononVertex:
+    """One quantum of the mode with eigenvector ``e_q`` (lattice convention) at +q."""
 
-    ``e_q`` is the lattice-convention eigenvector of D(q) (n_atoms, 3); the mode −q is
-    its complex conjugate. ``q_index`` is q in mesh steps."""
+    def __init__(self, coupling: Coupling, e_q: np.ndarray, masses: np.ndarray,
+                 frequency: float, conjugate: bool = False):
+        u = e_q / np.sqrt(masses)[:, None] * float(zero_point(frequency))
+        self.u = np.conj(u) if conjugate else u
+        self.coupling = coupling
+        self.energy = frequency * CM1_TO_EV
+
+    def __call__(self, to: Bands, frm: Bands, q, block: str) -> np.ndarray:
+        return self.coupling.element(to, frm, q, self.u, block)
+
+
+class DefectVertex:
+    """Elastic scattering by one defect in an otherwise periodic crystal: ΔH (and ΔS)
+    between the cell with the defect and the pristine one, as real-space blocks
+    ``{(i, j, shift): (dH, dS)}`` on the pristine atoms. Its matrix element between
+    Bloch states is ``Σ e^{-ik'·r_i} ΔH e^{ik·(r_j+R)}`` (per defect; the intensity of a
+    defect-activated band scales with the defect density)."""
+
+    energy = 0.0
+
+    def __init__(self, system: System, blocks: dict):
+        self.system = system
+        self.blocks = blocks
+        self.slices = [system.basis.of_atom(a) for a in range(len(system.atoms))]
+
+    def __call__(self, to: Bands, frm: Bands, q, block: str) -> np.ndarray:
+        system = self.system
+        n = system.basis.size
+        kt, kf = system.kpoint_cartesian(to.k), system.kpoint_cartesian(frm.k)
+        pos, cell = system.atoms.positions, system.atoms.cell.array
+        dh = np.zeros((n, n), dtype=complex)
+        ds = None
+        for (i, j, shift), (bh, bs) in self.blocks.items():
+            rj = pos[j] + np.asarray(shift, float) @ cell
+            phase = np.exp(-1j * float(kt @ pos[i]) + 1j * float(kf @ rj))
+            si, sj = self.slices[i], self.slices[j]
+            dh[si.start:si.stop, sj.start:sj.stop] += bh * phase
+            if bs is not None:
+                ds = np.zeros((n, n), dtype=complex) if ds is None else ds
+                ds[si.start:si.stop, sj.start:sj.stop] += bs * phase
+        a, ea = (to.cc, to.ec) if block == "cc" else (to.cv, to.ev)
+        b, eb = (frm.cc, frm.ec) if block == "cc" else (frm.cv, frm.ev)
+        g = a.conj().T @ dh @ b
+        if ds is not None:
+            g = g - 0.5 * (ea[:, None] + eb[None, :]) * (a.conj().T @ ds @ b)
+        return g
+
+
+def two_vertices_q(bands: list[Bands], mesh: tuple[int, int, int], q_index, first, second,
+                   laser_ev: float, gamma: float = 0.1) -> np.ndarray:
+    """Amplitude A[s, i] of two scatterings, ``first`` transferring +q and ``second`` −q,
+    in both time orders, summed over the k mesh (mean). Each vertex is called as
+    ``vertex(to, from, q, block)`` and has an ``energy`` (eV) it leaves behind (a phonon's,
+    or 0 for a defect). Two phonons (q, ν), (−q, ν) give the 2D-type overtone; a phonon and
+    a defect give the defect-activated D-type band."""
     n1, n2, n3 = mesh
     q = np.array(q_index, float) / np.array(mesh, float)
-    w = frequency * CM1_TO_EV
-    u = e_q / np.sqrt(masses)[:, None] * float(zero_point(frequency))
 
     def index(i, j, l):
         return ((i % n1) * n2 + (j % n2)) * n3 + (l % n3)
@@ -390,46 +438,49 @@ def overtone_q(bands: list[Bands], mesh: tuple[int, int, int], coupling: Couplin
     for i in range(n1):
         for j in range(n2):
             for l in range(n3):
-                total += _overtone_at(bands, index, (i, j, l), q_index, q, u, w, coupling,
-                                      laser_ev, gamma)
+                k = bands[index(i, j, l)]
+                kp = bands[index(i + q_index[0], j + q_index[1], l + q_index[2])]
+                km = bands[index(i - q_index[0], j - q_index[1], l - q_index[2])]
+                total += _ordered(k, kp, km, q, first, second, laser_ev, gamma)
+                total += _ordered(k, km, kp, -q, second, first, laser_ev, gamma)
     return total / len(bands)
 
 
-def _overtone_at(bands, index, ijl, qi, q, u, w, coupling, laser, gamma):
-    i, j, l = ijl
-    k = bands[index(i, j, l)]
-    kp = bands[index(i + qi[0], j + qi[1], l + qi[2])]
-    km = bands[index(i - qi[0], j - qi[1], l - qi[2])]
-
-    def pairs(b, omega):
-        return laser - omega - (b.ec[:, None] - b.ev[None, :]) + 1j * gamma
-
-    def pairs2(bc, bv, omega):
+def _ordered(k, a, b, q, v1, v2, laser, gamma):
+    """One time order: v1 transfers +q (k -> a = k+q for electrons), then v2 transfers −q."""
+    def pairs(bc, bv, omega):
         return laser - omega - (bc.ec[:, None] - bv.ev[None, :]) + 1j * gamma
 
+    w1, w12 = v1.energy, v1.energy + v2.energy
+    g1_e = v1(a, k, q, "cc")              # c: k -> k+q
+    g1_h = v1(k, b, q, "vv")              # v: k-q -> k
+    g2_e_back = v2(k, a, -q, "cc")        # c: k+q -> k
+    g2_h_fwd = v2(k, a, -q, "vv")         # v: k+q -> k
+    g2_e_fwd = v2(b, k, -q, "cc")         # c: k -> k-q
+    g2_h_back = v2(b, k, -q, "vv")        # v: k -> k-q
     npol = k.velocity.shape[0]
     out = np.zeros((npol, npol), dtype=complex)
-    uc = np.conj(u)
-    for first, second in ((u, uc, ), (uc, u)):
-        sign = 1.0 if first is u else -1.0
-        qq = sign * q
-        a, b = (kp, km) if sign > 0 else (km, kp)        # k + qq, k − qq
-        # first vertex: transfer +qq; second: −qq
-        g1_e = coupling.element(a, k, qq, first, "cc")          # c: k -> k+qq
-        g1_h = coupling.element(k, b, qq, first, "vv")          # v: k-qq -> k
-        g2_e_back = coupling.element(k, a, -qq, second, "cc")   # c: k+qq -> k
-        g2_h_fwd = coupling.element(k, a, -qq, second, "vv")    # v: k+qq -> k
-        g2_e_fwd = coupling.element(b, k, -qq, second, "cc")    # c: k -> k-qq
-        g2_h_back = coupling.element(b, k, -qq, second, "vv")   # v: k -> k-qq
-        for ii in range(npol):
-            x = k.velocity[ii] / pairs(k, 0.0)                        # (c_k, v_k)
-            xe = (g1_e @ x) / pairs2(a, k, w)                         # (c_{k+q}, v_k)
-            xh = -(x @ g1_h) / pairs2(k, b, w)                        # (c_k, v_{k-q})
-            same = (g2_e_back @ xe - xh @ g2_h_back) / pairs(k, 2 * w)        # ee + hh
-            eh = -(xe @ g2_h_fwd) / pairs(a, 2 * w)                    # (c_{k+q}, v_{k+q})
-            he = (g2_e_fwd @ xh) / pairs(b, 2 * w)                     # (c_{k-q}, v_{k-q})
-            for s in range(npol):
-                out[s, ii] += (np.sum(np.conj(k.velocity[s]) * same)
-                               + np.sum(np.conj(a.velocity[s]) * eh)
-                               + np.sum(np.conj(b.velocity[s]) * he))
+    for ii in range(npol):
+        x = k.velocity[ii] / pairs(k, k, 0.0)
+        xe = (g1_e @ x) / pairs(a, k, w1)                     # (c_{k+q}, v_k)
+        xh = -(x @ g1_h) / pairs(k, b, w1)                    # (c_k, v_{k-q})
+        same = (g2_e_back @ xe - xh @ g2_h_back) / pairs(k, k, w12)       # ee + hh
+        eh = -(xe @ g2_h_fwd) / pairs(a, a, w12)              # (c_{k+q}, v_{k+q})
+        he = (g2_e_fwd @ xh) / pairs(b, b, w12)               # (c_{k-q}, v_{k-q})
+        for s in range(npol):
+            out[s, ii] += (np.sum(np.conj(k.velocity[s]) * same)
+                           + np.sum(np.conj(a.velocity[s]) * eh)
+                           + np.sum(np.conj(b.velocity[s]) * he))
     return out
+
+
+def overtone_q(bands: list[Bands], mesh: tuple[int, int, int], coupling: Coupling,
+               q_index: tuple[int, int, int], frequency: float, e_q: np.ndarray,
+               masses: np.ndarray, laser_ev: float, gamma: float = 0.1) -> np.ndarray:
+    """Amplitude tensor A[s, i] of emitting the phonons (q, ν) and (−q, ν), both orders,
+    summed over the k mesh (mean): graphene's ``_four_processes`` for any band structure.
+    ``e_q`` is the lattice-convention eigenvector of D(q) (n_atoms, 3); the mode −q is its
+    complex conjugate. ``q_index`` is q in mesh steps."""
+    first = PhononVertex(coupling, e_q, masses, frequency)
+    second = PhononVertex(coupling, e_q, masses, frequency, conjugate=True)
+    return two_vertices_q(bands, mesh, q_index, first, second, laser_ev, gamma)
