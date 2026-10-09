@@ -504,11 +504,16 @@ def scaled(result, model: TBModel, scale: bool):
 def resonant_spectrum(atoms: Atoms, model: TBModel, lasers_ev, eta: float = 0.1, phonons=None,
                       kT: float = 0.01, kmesh: int = 24, scale: bool = False) -> dict:
     """Resonant Raman at each laser energy: activities per mode and laser."""
+    from ..progress import Progress
     from ..resonance import resonant_raman
 
-    result, factor = scaled(resonant_raman(atoms, model, np.asarray(lasers_ev, dtype=float),
-                                           eta=eta, kmesh=kmesh, kT=kT, phonons=phonons),
-                            model, scale)
+    # The window's terminal receives the job's stderr: one line every 30 s with the
+    # count of modes done and the time left.
+    with Progress(0, "Raman resonante (tensores por modo)") as bar:
+        result, factor = scaled(resonant_raman(atoms, model, np.asarray(lasers_ev, dtype=float),
+                                               eta=eta, kmesh=kmesh, kT=kT, phonons=phonons,
+                                               progress=bar.callback()),
+                                model, scale)
     strongest = result.activities.max() or 1.0
     keep = [k for k in range(len(result.frequencies))
             if result.activities[:, k].max() >= 1e-3 * strongest]

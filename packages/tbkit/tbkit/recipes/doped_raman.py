@@ -156,14 +156,18 @@ def check(name: str) -> dict:
 
 
 def raman(name: str, part=(0, 1)):
+    from ..progress import Progress
     from ..resonance import resonant_raman
 
     vib = vibrations(name)
     chosen = [int(k) for k in np.flatnonzero(vib.frequencies > MIN_CM1)]
     chosen = [k for k in chosen if k % part[1] == part[0]]
-    return resonant_raman(vib.atoms, _model(), LASERS_EV, eta=0.1, kmesh=KZ, kT=KT,
-                          phonons=(vib.frequencies, vib.modes), select=chosen,
-                          cache_dir=folder(name) / "tensors", delta=0.005)
+    with Progress(len(chosen), f"Raman {name}, parte {part[0] + 1}/{part[1]}",
+                  status=folder(name) / f"progreso_raman_{part[0]}.json") as bar:
+        return resonant_raman(vib.atoms, _model(), LASERS_EV, eta=0.1, kmesh=KZ, kT=KT,
+                              phonons=(vib.frequencies, vib.modes), select=chosen,
+                              cache_dir=folder(name) / "tensors", delta=0.005,
+                              progress=bar.callback())
 
 
 def strongest_modes(name: str, top: int = 40) -> list[int]:
@@ -177,13 +181,17 @@ def strongest_modes(name: str, top: int = 40) -> list[int]:
 def raman_eta(name: str, eta: float, part=(0, 1), top: int = 40):
     """The same resonant Raman with another η, on the ``top`` strongest modes: how much the
     heights depend on the broadening (positions do not)."""
+    from ..progress import Progress
     from ..resonance import resonant_raman
 
     vib = vibrations(name)
     chosen = [k for k in strongest_modes(name, top) if k % part[1] == part[0]]
-    return resonant_raman(vib.atoms, _model(), LASERS_EV, eta=eta, kmesh=KZ, kT=KT,
-                          phonons=(vib.frequencies, vib.modes), select=chosen,
-                          cache_dir=folder(name) / f"tensors_eta{eta:g}", delta=0.005)
+    with Progress(len(chosen), f"Raman {name} η = {eta:g}, parte {part[0] + 1}/{part[1]}",
+                  status=folder(name) / f"progreso_eta{eta:g}_{part[0]}.json") as bar:
+        return resonant_raman(vib.atoms, _model(), LASERS_EV, eta=eta, kmesh=KZ, kT=KT,
+                              phonons=(vib.frequencies, vib.modes), select=chosen,
+                              cache_dir=folder(name) / f"tensors_eta{eta:g}", delta=0.005,
+                              progress=bar.callback())
 
 
 def born_region(name: str, atoms) -> list[int]:

@@ -75,9 +75,25 @@ tbkit graphene-raman --laser 1.96 2.41 2.80
 tbkit run      simulacion.json                    # reproducible, guarda su registro
 tbkit report   out/doped_raman [--ancho doble] [--figuras pdf,png]   # reporte, CSV y figuras
 tbkit abrir    validation/coil204_doped_gpaw.json # ver un resultado o validación en el navegador
+tbkit estado   out                                # avance y tiempo restante de lo que corre
 ```
 
 `tbkit <orden> --help` da todas las opciones.
+
+### Cuánto falta: el contador de tiempo
+
+Los cálculos largos llevan un contador (`tbkit.progress`): el Raman resonante (terminal y
+ventana), las recetas de la coil (Hessiana, Raman, doble resonancia) y las referencias.
+En la terminal reescriben una línea; en un registro o en la terminal de la ventana,
+escriben una cada 30 s:
+
+    pares 2.33 eV, parte 1/4: 3/7 (43 %) · 38 min · quedan ~44 min (≈ 10:52)
+
+El tiempo restante es lo que falta por el tiempo medio de los últimos 20 pasos (si los
+pasos se aceleran o se frenan a medio camino, la estimación los sigue). Cada receta
+deja además un `progreso*.json` en su carpeta, y `tbkit estado out` los lista todos con
+su hora estimada de fin; uno que lleva más de tres pasos (y 5 min) sin actualizarse sale
+como «detenido?», que es lo que se ve de un proceso que murió sin avisar.
 
 ### Abrir resultados y validaciones
 

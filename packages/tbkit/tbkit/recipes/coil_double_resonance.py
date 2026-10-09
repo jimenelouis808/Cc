@@ -40,6 +40,8 @@ from pathlib import Path
 import numpy as np
 from ase.io import read
 
+from ..progress import Progress
+
 WORK = Path("out/coil_dr")
 #: xu_carbon (Xu's sp³ carbon, no SCC): a 612-atom supercell force call takes ~14 min
 #: with xu_chn's self-consistent charges and ~1-2 with xu_carbon; for the undoped coil
@@ -78,9 +80,11 @@ def fc(part: tuple[int, int] = (0, 1)) -> None:
     centre = n * (REPEAT // 2)                    # atoms of cell 1 (of 0, 1, 2)
     calc = _calculator()
     r, total = part
-    for a in range(n):
-        if a % total != r:
-            continue
+    mine = [a for a in range(n) if a % total == r]
+    bar = Progress(len(mine), f"constantes de fuerza, parte {r + 1}/{total}",
+                   status=folder / f"progreso_{r}.json",
+                   done=sum((folder / f"a{a:03d}.npy").exists() for a in mine))
+    for a in mine:
         path = folder / f"a{a:03d}.npy"
         if path.exists():
             continue
@@ -95,6 +99,8 @@ def fc(part: tuple[int, int] = (0, 1)) -> None:
         tmp = path.with_suffix(".tmp.npy")
         np.save(tmp, forces)
         tmp.replace(path)
+        bar.step()
+    bar.close()
 
 
 def force_constants() -> np.ndarray:
@@ -232,9 +238,13 @@ def run_band(kind: str, laser: float, part: tuple[int, int]) -> Path:
     out = WORK / f"{kind}_{laser:.2f}" / f"part{part[0]}of{part[1]}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     done = json.loads(out.read_text()) if out.exists() else {}
-    for n, (m, nu) in enumerate(_jobs()):
+    mine = [(m, nu) for n, (m, nu) in enumerate(_jobs()) if n % part[1] == part[0]]
+    bar = Progress(len(mine), f"{kind} {laser:.2f} eV, parte {part[0] + 1}/{part[1]}",
+                   status=out.parent / f"progreso_{part[0]}.json",
+                   done=sum(f"{m}:{nu}" in done for m, nu in mine))
+    for m, nu in mine:
         key = f"{m}:{nu}"
-        if n % part[1] != part[0] or key in done:
+        if key in done:
             continue
         f, e = phonons_at(m)
         first = PhononVertex(coupling, e[nu], masses, f[nu])
@@ -249,6 +259,8 @@ def run_band(kind: str, laser: float, part: tuple[int, int]) -> Path:
         tmp = out.with_suffix(".tmp")
         tmp.write_text(json.dumps(done))
         tmp.replace(out)
+        bar.step()
+    bar.close()
     return out
 
 
@@ -266,9 +278,13 @@ def run_pairs(laser: float, part: tuple[int, int]) -> Path:
     folder = WORK / f"pairs_{laser:.2f}"
     folder.mkdir(parents=True, exist_ok=True)
     jobs = [(m, name) for m in range(NK // 2 + 1) for name in PAIR_WINDOWS]
-    for n, (m, name) in enumerate(jobs):
+    mine = [(m, name) for n, (m, name) in enumerate(jobs) if n % part[1] == part[0]]
+    done = sum((folder / f"q{m:02d}_{name}.npz").exists() for m, name in mine)
+    bar = Progress(len(mine), f"pares {laser:.2f} eV, parte {part[0] + 1}/{part[1]}",
+                   status=folder / f"progreso_{part[0]}.json", done=done)
+    for m, name in mine:
         path = folder / f"q{m:02d}_{name}.npz"
-        if n % part[1] != part[0] or path.exists():
+        if path.exists():
             continue
         f, e = phonons_at(m)
         lo, hi = PAIR_WINDOWS[name]
@@ -278,6 +294,8 @@ def run_pairs(laser: float, part: tuple[int, int]) -> Path:
         tmp = path.with_suffix(".tmp.npz")
         np.savez(tmp, frequencies=f[sel], w=w, m=m)
         tmp.replace(path)
+        bar.step(note=f"q = {m}/{NK}, {name}")
+    bar.close()
     return folder
 
 

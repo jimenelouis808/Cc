@@ -277,9 +277,12 @@ def cmd_raman(args) -> int:
             modes = read_qe_modes(args.modes)
             phonons = (modes.frequencies,
                        modes_for_raman(modes, atoms.get_masses(), args.modes_kind))
-        resonant = resonant_raman(atoms, model, args.resonant, eta=args.eta,
-                                  kmesh=args.kmesh, kT=args.kT, delta=args.delta,
-                                  phonons=phonons)
+        from .progress import Progress
+
+        with Progress(0, "Raman resonante (tensores por modo)") as bar:
+            resonant = resonant_raman(atoms, model, args.resonant, eta=args.eta,
+                                      kmesh=args.kmesh, kT=args.kT, delta=args.delta,
+                                      phonons=phonons, progress=bar.callback())
         print(resonant.summary())
         result = resonant.at(args.resonant[0])
         if args.out:
@@ -377,6 +380,22 @@ def cmd_report(args) -> int:
                   f"{kind}: ninguno")
         else:
             print(f"{kind}: {value}")
+    return 0
+
+
+def cmd_status(args) -> int:
+    """Every calculation under a folder that reports its progress, with the time left."""
+    from .progress import status_files
+
+    rows = status_files(args.folder)
+    if not rows:
+        print(f"Ningún cálculo con contador en {args.folder} (archivos *progreso*.json).")
+        return 0
+    for row in rows:
+        if args.todos or not row["finished"]:
+            print(row["line"] + f"   [{Path(row['path']).parent}]")
+    if not args.todos and all(r["finished"] for r in rows):
+        print("Todos terminados (--todos para verlos).")
     return 0
 
 
@@ -499,6 +518,11 @@ def build_parser() -> argparse.ArgumentParser:
                     help="figuras a una columna (85 mm) o dos (178 mm)")
     rp.add_argument("--sin-datos", action="store_true", help="no escribir la carpeta de CSV")
     rp.set_defaults(func=cmd_report)
+    st = sub.add_parser("estado", help="Avance y tiempo restante de los cálculos que llevan "
+                                       "contador (recetas, Raman resonante, doble resonancia).")
+    st.add_argument("folder", nargs="?", default="out", help="carpeta donde buscar (out/)")
+    st.add_argument("--todos", action="store_true", help="incluir los terminados")
+    st.set_defaults(func=cmd_status)
     ab = sub.add_parser("abrir", help="Abrir en el navegador un resultado o una validación "
                                       "(carpeta de receta, .json de validation/, .npz/.csv).")
     ab.add_argument("source", help="carpeta de resultados, archivo .json, .npz o .csv")

@@ -341,9 +341,14 @@ def stage_raman(workdir: Path, model_name: str = "tang_carbon", part: tuple = (0
         modes = [k for k in modes if vib.frequencies[k] > min_cm1]
     r, n = part
     chosen = [k for k in modes if k % n == r]
-    result = resonant_raman(atoms, model, LASERS_EV, eta=eta, kmesh=kmesh, kT=KT,
-                            phonons=(vib.frequencies, vib.modes), select=chosen,
-                            cache_dir=folder / "tensors", delta=delta)
+    from ..progress import Progress
+
+    with Progress(len(chosen), f"Raman de la coil, parte {r + 1}/{n}",
+                  status=folder / f"progreso_{r}.json") as bar:
+        result = resonant_raman(atoms, model, LASERS_EV, eta=eta, kmesh=kmesh, kT=KT,
+                                phonons=(vib.frequencies, vib.modes), select=chosen,
+                                cache_dir=folder / "tensors", delta=delta,
+                                progress=bar.callback())
     if n > 1:
         return {"part": list(part), "modes": len(chosen)}
     groups = ring_atoms(atoms, (5, 6, 7))
