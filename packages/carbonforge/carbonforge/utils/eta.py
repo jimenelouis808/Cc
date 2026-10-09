@@ -76,3 +76,21 @@ def from_files(paths, total: int, now: float | None = None) -> str:
         except OSError:
             continue
     return suffix(times, total, now)
+
+
+def gpaw_scf_note(txt: Path, tail_bytes: int = 20000) -> str:
+    """' · SCF iteración 12' from the end of a GPAW text log, or ''. GPAW does not know
+    in advance how many iterations a density takes; the current one says it is alive."""
+    import re
+
+    path = Path(txt)
+    if not path.exists():
+        return ""
+    try:
+        with path.open("rb") as handle:
+            handle.seek(max(0, path.stat().st_size - tail_bytes))
+            text = handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+    hits = re.findall(r"^iter:\s+(\d+)", text, flags=re.MULTILINE)
+    return f" · SCF iteración {hits[-1]}" if hits else ""

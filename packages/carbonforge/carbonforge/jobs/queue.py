@@ -103,6 +103,9 @@ class VibspecAdapter(Adapter):
         except (FileNotFoundError, ValueError):
             return "sin record.json"
         status = record.status
+        from ..utils.eta import gpaw_scf_note
+
+        scf = gpaw_scf_note(directory / "gpaw.txt")
         if status == "relaxing":
             log = directory / "relax.log"
             lines = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
@@ -116,8 +119,8 @@ class VibspecAdapter(Adapter):
                     if (directory / "record.json").exists() else log.stat().st_ctime
                 per = (log.stat().st_mtime - started) / steps
                 if per >= 1.0:                    # below a second it is not a run
-                    return f"relajando: paso {steps} · ~{duration(per)} por paso"
-            return f"relajando: paso {steps}"
+                    return f"relajando: paso {steps} · ~{duration(per)} por paso{scf}"
+            return f"relajando: paso {steps}{scf}"
         if status == "vibrations":
             per_atom = 6 if int(record.spec.get("nfree", 2)) == 2 else 12
             total = per_atom * record.n_atoms + 1
@@ -125,7 +128,8 @@ class VibspecAdapter(Adapter):
 
             cache = directory / "ir"
             files = list(cache.glob("cache.*.json")) if cache.exists() else []
-            return f"vibraciones: {len(files)}/{total} desplazamientos" + from_files(files, total)
+            return f"vibraciones: {len(files)}/{total} desplazamientos" + from_files(files, total) \
+                + scf
         if status == "raman":
             from ..vibspec.core.raman import raman_progress
 

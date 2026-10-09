@@ -37,3 +37,10 @@ def test_from_files_reads_modification_times(tmp_path):
 def test_durations():
     assert eta.duration(45) == "45 s"
     assert eta.duration(3 * 3600 + 5 * 60) == "3 h 05 min"
+
+
+def test_gpaw_scf_note(tmp_path):
+    log = tmp_path / "gpaw.txt"
+    log.write_text("header\niter:   1  10:00:01  -100.0\niter:   2  10:00:05  -101.0\n")
+    assert eta.gpaw_scf_note(log) == " · SCF iteración 2"
+    assert eta.gpaw_scf_note(tmp_path / "missing.txt") == ""
