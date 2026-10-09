@@ -140,6 +140,21 @@ electrones del modelo π, luz en el gauge de velocidad, acoplamiento
 electrón–fonón analítico (t′(a) = −βt/a, comprobado contra una suma explícita
 de ΔH) y fonones interpolados en toda la zona (GPAW guardados, o Xu).
 
+**Cualquier modelo periódico** (`double_resonance`, receta
+`coil_double_resonance`). El mismo esquema para un Hamiltoniano de tbkit
+cualquiera. El vértice electrón–fonón ⟨k+q|∂H|k⟩ sale de las derivadas de los
+saltos por enlace, en el gauge de posiciones fijas: con las posiciones
+desplazadas en la fase de Bloch aparece un término espurio ∝ k. Un elemento se
+comprobó contra el valor analítico del grafeno. Los fonones en q vienen de
+Φ(R) en una supercelda (D(0) reproduce los modos Γ); el defecto de la D es un
+vértice de un sitio. La 2D suma todos los pares de ramas (q,ν), (−q,ν′): con
+solo las diagonales salía unas 100 veces más débil en celdas grandes. El
+último denominador se factoriza con una serie de Taylor de orden 7 en
+ω_ν + ω_ν′ − 2ω̄. La misma maquinaria en grafeno da I_2D/I_G = 12 a 2.33 eV.
+En la coil (xu_carbon, γ 0.1 eV) la D y la 2D dispersan solo unos 10 cm⁻¹/eV,
+frente a ~50 y ~100 en grafeno. Las intensidades dependen de γ y las energías
+de resonancia son las del modelo.
+
 **Modos de otras fuentes** (`qe`): modos de Quantum ESPRESSO en q = 0
 (dynmat/matdyn), con la fase de cada modo fijada y bases reales de los
 subespacios degenerados; el modelo solo da α.
