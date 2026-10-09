@@ -154,8 +154,10 @@ def install(best: dict) -> Path:
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("workdir", type=Path)
-    parser.add_argument("--install", action="store_true")
+    parser.add_argument("workdir", type=Path,
+                        help="carpeta de trabajo (un archivo por punto de la malla, reanudable)")
+    parser.add_argument("--install", action="store_true",
+                        help="escribir el mejor punto como parameters/tang_carbon.json")
     args = parser.parse_args(argv)
     args.workdir.mkdir(parents=True, exist_ok=True)
     results = []

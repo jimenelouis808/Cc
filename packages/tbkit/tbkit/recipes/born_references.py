@@ -189,7 +189,8 @@ PARAMS = [
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("fragments", "list", "run"))
-    parser.add_argument("name", nargs="?")
+    parser.add_argument("name", nargs="?",
+                        help="molécula o estructura de referencia (vacío: todas)")
     add_arguments(parser)
     args = parser.parse_args(argv)
     apply(sys.modules[__name__], args, record=WORK)

@@ -226,9 +226,13 @@ PARAMS = [
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("out", type=Path)
-    parser.add_argument("--workers", type=int, default=1)
-    parser.add_argument("--only", nargs="*")
+    parser.add_argument("out", type=Path,
+                        help="archivo JSON de referencias que se escribe (los cálculos parciales "
+                             "van a ARCHIVO.parts/, reanudable)")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="procesos GPAW en paralelo (cada uno, un cálculo; vigila la memoria)")
+    parser.add_argument("--only", nargs="*",
+                        help="solo estas moléculas (nombres separados por espacios)")
     add_arguments(parser)
     args = parser.parse_args(argv)
     apply(sys.modules[__name__], args, record=None)
@@ -243,10 +247,15 @@ def main(argv=None) -> None:
     parts = args.out.with_suffix(".parts")
     parts.mkdir(parents=True, exist_ok=True)
     todo = [job for job in jobs if not (parts / f"{job[0]}.json").exists()]
+    from ..progress import Progress
+
+    bar = Progress(len(jobs), "referencias GPAW de N", status=parts / "progreso.json",
+                   done=len(jobs) - len(todo))
     with ProcessPoolExecutor(args.workers) as pool:
         for job, result in zip(todo, pool.map(_one, todo), strict=True):
             (parts / f"{job[0]}.json").write_text(json.dumps(result))
             print(f"{job[0]}: {len(result)} estructuras", flush=True)
+            bar.step()
     structures = []
     for job in jobs:
         structures += json.loads((parts / f"{job[0]}.json").read_text())

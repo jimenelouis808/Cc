@@ -137,16 +137,21 @@ def angular_variant(family: XuFamily, element: str, ligands, powers: int = 3) ->
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="Ajusta B, S o P a GPAW sobre xu_chno.")
     parser.add_argument("element", choices=sorted(FAMILIES))
-    parser.add_argument("references", type=Path, nargs="+")
-    parser.add_argument("out", type=Path)
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("references", type=Path, nargs="+",
+                        help="archivo(s) JSON de referencias GPAW")
+    parser.add_argument("out", type=Path,
+                        help="archivo de parámetros que se escribe (nunca sobre uno incluido)")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="procesos en paralelo para evaluar las referencias")
     parser.add_argument("--hessians", type=Path, default=None,
                         help="hessianas GPAW (frequency_references) para ajustar la curvatura")
-    parser.add_argument("--hessian-weight", type=float, default=0.1)
+    parser.add_argument("--hessian-weight", type=float, default=0.1,
+                        help="peso de las Hessianas GPAW frente a energías y fuerzas en el ajuste")
     parser.add_argument("--angular-ligands", nargs="+", default=None,
                         help="añade rigidez angular en el heteroátomo solo entre estos "
                              "ligandos (p. ej. O: ángulos O-X-O de centros hipervalentes)")
-    parser.add_argument("--angular-powers", type=int, default=3)
+    parser.add_argument("--angular-powers", type=int, default=3,
+                        help="potencias del término angular de --angular-ligands")
     args = parser.parse_args(argv)
     family = FAMILIES[args.element]
     if args.angular_ligands:

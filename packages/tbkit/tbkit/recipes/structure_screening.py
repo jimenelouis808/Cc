@@ -98,14 +98,22 @@ def main(argv=None) -> None:
     from ..gui.actions import load_model
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("workdir", type=Path)
-    parser.add_argument("structures", nargs="+", type=Path)
-    parser.add_argument("--model", default="chn")
-    parser.add_argument("--kmesh", type=int, default=8)
-    parser.add_argument("--kT", type=float, default=0.05)
-    parser.add_argument("--fmax", type=float, default=0.05)
-    parser.add_argument("--host-atoms", type=int, default=None)
-    parser.add_argument("--free-radius", type=float, default=None)
+    parser.add_argument("workdir", type=Path,
+                        help="carpeta de trabajo (un archivo por estructura, reanudable)")
+    parser.add_argument("structures", nargs="+", type=Path,
+                        help="estructuras a comparar (misma composición)")
+    parser.add_argument("--model", default="chn",
+                        help="conjunto TB (nombre o archivo)")
+    parser.add_argument("--kmesh", type=int, default=8,
+                        help="puntos k por eje periódico")
+    parser.add_argument("--kT", type=float, default=0.05,
+                        help="temperatura electrónica (eV)")
+    parser.add_argument("--fmax", type=float, default=0.05,
+                        help="criterio de convergencia: fuerza máxima (eV/Å)")
+    parser.add_argument("--host-atoms", type=int, default=None,
+                        help="átomos del anfitrión: los añadidos después son el grupo")
+    parser.add_argument("--free-radius", type=float, default=None,
+                        help="relajar solo los átomos a menos de R Å del grupo (vacío: todos)")
     parser.add_argument("--part", default="0/1")
     parser.add_argument("--max-steps", type=int, default=400, help="pasos máximos de BFGS")
     parser.add_argument("--prefilter", type=int, default=None,

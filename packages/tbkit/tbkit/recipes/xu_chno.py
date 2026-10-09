@@ -86,12 +86,16 @@ def warm_start() -> np.ndarray:
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="Ajusta H, N y O a GPAW sobre el C de Xu.")
-    parser.add_argument("references", type=Path, nargs="+")
-    parser.add_argument("out", type=Path)
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("references", type=Path, nargs="+",
+                        help="archivo(s) JSON de referencias GPAW")
+    parser.add_argument("out", type=Path,
+                        help="archivo de parámetros que se escribe (nunca sobre uno incluido)")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="procesos en paralelo para evaluar las referencias")
     parser.add_argument("--hessians", type=Path, default=None,
                         help="hessianas GPAW (frequency_references) para ajustar la curvatura")
-    parser.add_argument("--hessian-weight", type=float, default=0.1)
+    parser.add_argument("--hessian-weight", type=float, default=0.1,
+                        help="peso de las Hessianas GPAW frente a energías y fuerzas en el ajuste")
     parser.add_argument("--heavy-tail", type=float, nargs=2, default=None, metavar=("DR1", "DRM"),
                         help="cola de los pares pesados (no C-C) en r0 + (DR1, DRM) Å")
     args = parser.parse_args(argv)

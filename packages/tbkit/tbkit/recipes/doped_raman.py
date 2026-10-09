@@ -333,8 +333,10 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("relax", "hessian", "check", "raman", "born",
                                          "eta", "report"))
-    parser.add_argument("--eta", type=float, default=0.05)
-    parser.add_argument("name", nargs="?", choices=tuple(STRUCTURES))
+    parser.add_argument("--eta", type=float, default=0.05,
+                        help="ensanchamiento η (eV) del paso eta (barrido de η)")
+    parser.add_argument("name", nargs="?", choices=tuple(STRUCTURES),
+                        help="estructura: pristine, N o amine")
     parser.add_argument("--part", default="0/1")
     add_arguments(parser)
     args = parser.parse_args(argv)

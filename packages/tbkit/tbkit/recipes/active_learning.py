@@ -113,10 +113,17 @@ def _single(args):
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("parameters", type=Path, help="el conjunto a poner a prueba")
-    parser.add_argument("references", type=Path)
-    parser.add_argument("out", type=Path)
-    parser.add_argument("--threshold", type=float, default=0.3)
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("references", type=Path,
+                        help="archivo(s) JSON de referencias GPAW de partida (geometrías GPAW "
+                             "relajadas)")
+    parser.add_argument("out", type=Path,
+                        help="archivo JSON de referencias que se escribe (los cálculos parciales "
+                             "van a ARCHIVO.parts/, reanudable)")
+    parser.add_argument("--threshold", type=float, default=0.3,
+                        help="desplazamiento máximo (Å) al relajar con TB desde la geometría GPAW "
+                             "por encima del cual el mínimo se considera espurio")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="procesos GPAW en paralelo (cada uno, un cálculo; vigila la memoria)")
     parser.add_argument("--torsions", metavar="ELEMENT", default=None,
                         help="añade barridos rígidos de la torsión X-O-H (X = ELEMENT)")
     args = parser.parse_args(argv)
@@ -146,12 +153,17 @@ def main(argv=None) -> None:
     parts = args.out.with_suffix(".parts")
     parts.mkdir(parents=True, exist_ok=True)
     todo = [job for job in jobs if not (parts / (job[0].replace("/", "_") + ".json")).exists()]
+    from ..progress import Progress
+
+    bar = Progress(len(jobs), "GPAW de aprendizaje activo", status=parts / "progreso.json",
+                   done=len(jobs) - len(todo))
     with ProcessPoolExecutor(args.workers) as pool:
         futures = [pool.submit(_single, job) for job in todo]
         for future in as_completed(futures):
             entry = future.result()
             (parts / (entry["label"].replace("/", "_") + ".json")).write_text(json.dumps(entry))
             print(f"{entry['label']}: GPAW listo", flush=True)
+            bar.step()
     structures = [json.loads((parts / (job[0].replace("/", "_") + ".json")).read_text())
                   for job in jobs]
     args.out.write_text(json.dumps({"settings": gpaw_settings_record(settings),

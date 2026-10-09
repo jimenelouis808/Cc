@@ -42,10 +42,15 @@ def _one(args):
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("references", type=Path, nargs="+")
-    parser.add_argument("out", type=Path)
-    parser.add_argument("--molecules", nargs="+", required=True)
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("references", type=Path, nargs="+",
+                        help="archivo(s) JSON de referencias GPAW con las geometrías relajadas")
+    parser.add_argument("out", type=Path,
+                        help="archivo JSON de referencias que se escribe (los cálculos parciales "
+                             "van a ARCHIVO.parts/, reanudable)")
+    parser.add_argument("--molecules", nargs="+", required=True,
+                        help="moléculas cuya Hessiana se calcula")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="procesos GPAW en paralelo (cada uno, un cálculo; vigila la memoria)")
     args = parser.parse_args(argv)
     from tbkit.references import GPAW_DEFAULTS, gpaw_settings_record, load_references
 
@@ -57,6 +62,10 @@ def main(argv=None) -> None:
     parts = args.out.with_suffix(".parts")
     parts.mkdir(parents=True, exist_ok=True)
     todo = [n for n in args.molecules if not (parts / f"{n}.json").exists()]
+    from ..progress import Progress
+
+    bar = Progress(len(args.molecules), "Hessianas GPAW", status=parts / "progreso.json",
+                   done=len(args.molecules) - len(todo))
     with ProcessPoolExecutor(args.workers) as pool:
         futures = [pool.submit(_one, (n, [str(p) for p in args.references], settings))
                    for n in todo]
@@ -64,6 +73,7 @@ def main(argv=None) -> None:
             name, values = future.result()
             (parts / f"{name}.json").write_text(json.dumps(values))
             print(f"{name}: {len(values['frequencies'])} frecuencias", flush=True)
+            bar.step()
     entries = {n: json.loads((parts / f"{n}.json").read_text()) for n in args.molecules}
     if args.out.exists():
         raise SystemExit(f"{args.out} ya existe: no se sobrescribe.")

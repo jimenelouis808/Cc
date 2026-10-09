@@ -144,9 +144,12 @@ def run(references: Path, out: Path, verbose: bool = True, workers: int = 4) -> 
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="Ajusta H y N a GPAW sobre el C de Xu.")
-    parser.add_argument("references", type=Path)
-    parser.add_argument("out", type=Path)
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("references", type=Path,
+                        help="archivo(s) JSON de referencias GPAW")
+    parser.add_argument("out", type=Path,
+                        help="archivo de parámetros que se escribe (nunca sobre uno incluido)")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="procesos en paralelo para evaluar las referencias")
     args = parser.parse_args(argv)
     run(args.references, args.out, workers=args.workers)
 

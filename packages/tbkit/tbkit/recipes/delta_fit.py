@@ -99,11 +99,16 @@ def main(argv=None) -> None:
     from ..params import PARAMETER_DIR
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("model")
-    parser.add_argument("references")
-    parser.add_argument("workdir", type=Path)
-    parser.add_argument("--held-out", nargs="*", default=())
-    parser.add_argument("--kT", type=float, default=0.1)
+    parser.add_argument("model",
+                        help="conjunto TB base sobre el que se ajusta la corrección Δ")
+    parser.add_argument("references",
+                        help="archivo(s) JSON de referencias GPAW")
+    parser.add_argument("workdir", type=Path,
+                        help="carpeta de trabajo (la corrección se escribe solo aquí)")
+    parser.add_argument("--held-out", nargs="*", default=(),
+                        help="grupos fuera del ajuste, para medir la generalización")
+    parser.add_argument("--kT", type=float, default=0.1,
+                        help="temperatura electrónica (eV) de los puntos TB")
     args = parser.parse_args(argv)
     args.workdir.mkdir(parents=True, exist_ok=True)
     references = Path(args.references)

@@ -308,7 +308,9 @@ PARAMS = [
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("gpaw", "tb", "report"))
-    parser.add_argument("name", nargs="?", choices=(*COILS, "graphene"))
+    parser.add_argument("name", nargs="?", choices=(*COILS, "graphene"),
+                        help="sistema del paso gpaw/tb (coil, coil_amine, graphene, molecules…); "
+                             "vacío en report")
     add_arguments(parser)
     args = parser.parse_args(argv)
     apply(sys.modules[__name__], args, record=WORK)

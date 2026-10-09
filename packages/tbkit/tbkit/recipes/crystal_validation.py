@@ -467,15 +467,22 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="stage", required=True)
     g = sub.add_parser("gpaw")
-    g.add_argument("workdir", type=Path)
-    g.add_argument("--systems", nargs="*", default=list(CRYSTALS))
+    g.add_argument("workdir", type=Path,
+                   help="carpeta de los cálculos GPAW (uno por cristal y punto, reanudable)")
+    g.add_argument("--systems", nargs="*", default=list(CRYSTALS),
+                   help="cristales a usar (por omisión, todos)")
     c = sub.add_parser("collect")
-    c.add_argument("workdir", type=Path)
-    c.add_argument("out", type=Path)
+    c.add_argument("workdir", type=Path,
+                   help="carpeta de los cálculos GPAW (uno por cristal y punto, reanudable)")
+    c.add_argument("out", type=Path,
+                   help="archivo JSON que se escribe")
     m = sub.add_parser("compare")
-    m.add_argument("references", type=Path)
-    m.add_argument("out", type=Path)
-    m.add_argument("--systems", nargs="*")
+    m.add_argument("references", type=Path,
+                   help="archivo de referencias de cristales (paso collect)")
+    m.add_argument("out", type=Path,
+                   help="archivo JSON que se escribe")
+    m.add_argument("--systems", nargs="*",
+                   help="cristales a usar (por omisión, todos)")
     args = parser.parse_args(argv)
 
     if args.stage == "gpaw":

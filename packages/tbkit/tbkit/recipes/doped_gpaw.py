@@ -285,7 +285,8 @@ PARAMS = [
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("select", "relax", "modes", "report"))
-    parser.add_argument("name", nargs="?", choices=NAMES)
+    parser.add_argument("name", nargs="?", choices=NAMES,
+                        help="estructura a comprobar con GPAW: pristine, N o amine")
     parser.add_argument("--part", default="0/1")
     parser.add_argument("--job", type=int, default=None, help="modes: solo ese cálculo")
     add_arguments(parser)

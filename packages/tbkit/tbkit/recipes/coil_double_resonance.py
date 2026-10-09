@@ -450,7 +450,9 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("fc", "check", "nshift", "twod", "dband", "gband",
                                          "pairs", "report"))
-    parser.add_argument("laser", nargs="?", type=float)
+    parser.add_argument("laser", nargs="?", type=float,
+                        help="energía del láser (eV) en twod, dband, gband, pairs; vacío en fc, "
+                             "check, report")
     parser.add_argument("--part", default="0/1")
     add_arguments(parser)
     args = parser.parse_args(argv)

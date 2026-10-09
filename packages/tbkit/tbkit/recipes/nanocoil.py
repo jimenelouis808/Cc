@@ -449,11 +449,15 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("stage", choices=("tb", "gpaw-k", "gpaw-relax", "gpaw-phase3",
                                                  "raman", "kconv"))
-    parser.add_argument("workdir", type=Path)
-    parser.add_argument("--model", default="tang_carbon")
-    parser.add_argument("--kz", type=int, default=2)
+    parser.add_argument("workdir", type=Path,
+                        help="carpeta de trabajo de la coil (reanudable)")
+    parser.add_argument("--model", default="tang_carbon",
+                        help="conjunto de parámetros TB (nombre o archivo)")
+    parser.add_argument("--kz", type=int, default=2,
+                        help="puntos k a lo largo del eje de la coil para TB/GPAW")
     parser.add_argument("--part", default="0/1", help="r/n: modos con índice ≡ r (mod n)")
-    parser.add_argument("--kz-check", type=int, default=8)
+    parser.add_argument("--kz-check", type=int, default=8,
+                        help="malla k densa con la que se comprueban las frecuencias (paso kconv)")
     parser.add_argument("--min-cm1", type=float, default=None,
                         help="raman: solo modos por encima (comparación entre modelos)")
     add_arguments(parser)
