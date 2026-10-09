@@ -260,3 +260,176 @@ def two_phonon_intensity(amplitudes: np.ndarray, pairs: list[tuple[int, int]]) -
     |2_μ⟩, whose matrix element is A/√2 (both orders are the same path counted twice)."""
     power = np.sum(np.abs(amplitudes) ** 2, axis=(1, 2))
     return np.array([power[p] / 2 if a == b else power[p] for p, (a, b) in enumerate(pairs)])
+
+
+# --------------------------------------------------------------------------
+# Phonons of any momentum q (not only Γ of a supercell)
+# --------------------------------------------------------------------------
+
+@dataclass
+class Bands:
+    """States of one k point of a regular mesh, with the optical elements."""
+
+    k: np.ndarray                      # fractional
+    ev: np.ndarray
+    ec: np.ndarray
+    cv: np.ndarray                     # (n_orb, n_v) coefficients, positions gauge
+    cc: np.ndarray                     # (n_orb, n_c)
+    velocity: np.ndarray               # (n_pol, n_c, n_v)
+
+
+def _orbital_positions(system: System) -> np.ndarray:
+    atom = np.concatenate([[a] * len(system.basis.of_atom(a)) for a in range(len(system.atoms))])
+    return system.atoms.positions[atom]
+
+
+def mesh_bands(system: System, mesh: tuple[int, int, int], window_ev: float,
+               polarizations, shift: np.ndarray | None = None,
+               fermi: float | None = None) -> tuple[list[Bands], float]:
+    """States inside ``window_ev`` of E_F on a Γ-centred ``mesh`` (index order i, j, l)."""
+    n1, n2, n3 = mesh
+    kpts = np.array([[i / n1, j / n2, l / n3] for i in range(n1) for j in range(n2)
+                     for l in range(n3)])
+    base = [_hk(system, k, shift) for k in kpts]
+    states = [eigh(h, s) if s is not None else eigh(h) for h, s, _, _ in base]
+    electrons = round(system.electrons)
+    if electrons % 2:
+        raise ValueError(f"{electrons} electrones por celda: una banda semillena.")
+    n_occ = electrons // 2
+    if fermi is None:
+        fermi = 0.5 * (max(e[n_occ - 1] for e, _ in states) + min(e[n_occ] for e, _ in states))
+    pols = np.asarray(polarizations, dtype=float)
+    out = []
+    for k, (h, s, dh, ds), (e, c) in zip(kpts, base, states, strict=True):
+        index = np.arange(len(e))
+        v_idx = np.flatnonzero((index < n_occ) & (e > fermi - window_ev))
+        c_idx = np.flatnonzero((index >= n_occ) & (e < fermi + window_ev))
+        cv, cc = c[:, v_idx], c[:, c_idx]
+        vel = []
+        for p in pols:
+            d = np.tensordot(p, dh, axes=1)
+            m = cc.conj().T @ d @ cv
+            if ds is not None:
+                m = m - (cc.conj().T @ np.tensordot(p, ds, axes=1) @ cv) * e[v_idx][None, :]
+            vel.append(m)
+        out.append(Bands(k, e[v_idx], e[c_idx], cv, cc, np.array(vel)))
+    return out, float(fermi)
+
+
+class Coupling:
+    """⟨k'| ∂H |k⟩ for a displacement field ``u_a e^{2πi q·R}`` (lattice convention: atom a
+    of cell R moves by u_a times the phase), in the positions gauge of the Bloch states:
+
+        ΔH_ij(k', k) = Σ_bonds e^{-ik'·r_i} [∂h/∂d · (u_j e^{2πi q·R} − u_i)] e^{ik·(r_j+R)}
+
+    with k' = k + q (any representative). The bond derivatives are the ones the forces
+    use (:func:`tbkit.forces._block_derivatives`); the overlap changes the same way, and
+    the fixed SCC shifts enter through ½ΔS(V_i + V_j)."""
+
+    def __init__(self, system: System, shift: np.ndarray | None = None):
+        from .forces import _block_derivatives
+
+        self.system = system
+        self.shift = shift
+        model = system.model
+        self.dh = [_block_derivatives(system, b, model.hopping) for b in system.bonds]
+        self.ds = (None if model.orthogonal else
+                   [_block_derivatives(system, b, model.overlap) for b in system.bonds])
+        self.slices = [system.basis.of_atom(a) for a in range(len(system.atoms))]
+
+    def matrices(self, k_to, k_from, q, u: np.ndarray):
+        system = self.system
+        n = system.basis.size
+        kt = system.kpoint_cartesian(k_to)
+        kf = system.kpoint_cartesian(k_from)
+        pos = system.atoms.positions
+        dh = np.zeros((n, n), dtype=complex)
+        ds = None if self.ds is None else np.zeros((n, n), dtype=complex)
+        q = np.asarray(q, float)
+        for p, bond in enumerate(system.bonds):
+            i, j = bond.i, bond.j
+            change = u[j] * np.exp(2j * np.pi * float(q @ bond.shift)) - u[i]       # (3,)
+            phase = np.exp(-1j * float(kt @ pos[i])) * np.exp(1j * float(kf @ (pos[i] + bond.vector)))
+            ri, rj = self.slices[i], self.slices[j]
+            dh[ri.start:ri.stop, rj.start:rj.stop] += np.tensordot(change, self.dh[p], axes=1) * phase
+            if ds is not None:
+                ds[ri.start:ri.stop, rj.start:rj.stop] += np.tensordot(change, self.ds[p], axes=1) * phase
+        if ds is not None and self.shift is not None:
+            dh = dh + ds * 0.5 * (self.shift[:, None] + self.shift[None, :])
+        return dh, ds
+
+    def element(self, to: Bands, frm: Bands, q, u, block: str) -> np.ndarray:
+        """g between the conduction ('cc') or valence ('vv') states of two k points."""
+        dh, ds = self.matrices(to.k, frm.k, q, u)
+        a, ea = (to.cc, to.ec) if block == "cc" else (to.cv, to.ev)
+        b, eb = (frm.cc, frm.ec) if block == "cc" else (frm.cv, frm.ev)
+        g = a.conj().T @ dh @ b
+        if ds is not None:
+            g = g - 0.5 * (ea[:, None] + eb[None, :]) * (a.conj().T @ ds @ b)
+        return g
+
+
+def overtone_q(bands: list[Bands], mesh: tuple[int, int, int], coupling: Coupling,
+               q_index: tuple[int, int, int], frequency: float, e_q: np.ndarray,
+               masses: np.ndarray, laser_ev: float, gamma: float = 0.1) -> np.ndarray:
+    """Amplitude tensor A[s, i] of emitting the phonons (q, ν) and (−q, ν), both orders,
+    summed over the k mesh (mean): graphene's ``_four_processes`` for any band structure.
+
+    ``e_q`` is the lattice-convention eigenvector of D(q) (n_atoms, 3); the mode −q is
+    its complex conjugate. ``q_index`` is q in mesh steps."""
+    n1, n2, n3 = mesh
+    q = np.array(q_index, float) / np.array(mesh, float)
+    w = frequency * CM1_TO_EV
+    u = e_q / np.sqrt(masses)[:, None] * float(zero_point(frequency))
+
+    def index(i, j, l):
+        return ((i % n1) * n2 + (j % n2)) * n3 + (l % n3)
+
+    npol = bands[0].velocity.shape[0]
+    total = np.zeros((npol, npol), dtype=complex)
+    for i in range(n1):
+        for j in range(n2):
+            for l in range(n3):
+                total += _overtone_at(bands, index, (i, j, l), q_index, q, u, w, coupling,
+                                      laser_ev, gamma)
+    return total / len(bands)
+
+
+def _overtone_at(bands, index, ijl, qi, q, u, w, coupling, laser, gamma):
+    i, j, l = ijl
+    k = bands[index(i, j, l)]
+    kp = bands[index(i + qi[0], j + qi[1], l + qi[2])]
+    km = bands[index(i - qi[0], j - qi[1], l - qi[2])]
+
+    def pairs(b, omega):
+        return laser - omega - (b.ec[:, None] - b.ev[None, :]) + 1j * gamma
+
+    def pairs2(bc, bv, omega):
+        return laser - omega - (bc.ec[:, None] - bv.ev[None, :]) + 1j * gamma
+
+    npol = k.velocity.shape[0]
+    out = np.zeros((npol, npol), dtype=complex)
+    uc = np.conj(u)
+    for first, second in ((u, uc, ), (uc, u)):
+        sign = 1.0 if first is u else -1.0
+        qq = sign * q
+        a, b = (kp, km) if sign > 0 else (km, kp)        # k + qq, k − qq
+        # first vertex: transfer +qq; second: −qq
+        g1_e = coupling.element(a, k, qq, first, "cc")          # c: k -> k+qq
+        g1_h = coupling.element(k, b, qq, first, "vv")          # v: k-qq -> k
+        g2_e_back = coupling.element(k, a, -qq, second, "cc")   # c: k+qq -> k
+        g2_h_fwd = coupling.element(k, a, -qq, second, "vv")    # v: k+qq -> k
+        g2_e_fwd = coupling.element(b, k, -qq, second, "cc")    # c: k -> k-qq
+        g2_h_back = coupling.element(b, k, -qq, second, "vv")   # v: k -> k-qq
+        for ii in range(npol):
+            x = k.velocity[ii] / pairs(k, 0.0)                        # (c_k, v_k)
+            xe = (g1_e @ x) / pairs2(a, k, w)                         # (c_{k+q}, v_k)
+            xh = -(x @ g1_h) / pairs2(k, b, w)                        # (c_k, v_{k-q})
+            same = (g2_e_back @ xe - xh @ g2_h_back) / pairs(k, 2 * w)        # ee + hh
+            eh = -(xe @ g2_h_fwd) / pairs(a, 2 * w)                    # (c_{k+q}, v_{k+q})
+            he = (g2_e_fwd @ xh) / pairs(b, 2 * w)                     # (c_{k-q}, v_{k-q})
+            for s in range(npol):
+                out[s, ii] += (np.sum(np.conj(k.velocity[s]) * same)
+                               + np.sum(np.conj(a.velocity[s]) * eh)
+                               + np.sum(np.conj(b.velocity[s]) * he))
+    return out

@@ -107,3 +107,33 @@ def test_real_modes_span_the_degenerate_set():
     basis = np.array([m.vector.ravel() for m in modes])
     assert np.allclose(basis @ basis.T, np.eye(2))
     assert np.allclose(basis.T @ (basis @ z.real.ravel()), z.real.ravel())
+
+
+def test_overtone_at_any_q_matches_the_four_processes(phonons, electrons):
+    """General q (no supercell): q one mesh step off K, on a 13×13 mesh that avoids K."""
+    from tbkit.hamiltonian import System
+
+    laser, gamma, n = 2.0, 0.1, 13
+    atoms = gr.graphene_cell(A_CC)
+    system = System.build(atoms, pi_model(strain_beta=3.37))
+    bands, _ = dr.mesh_bands(system, (n, n, 1), 10.0, gr._POLARIZATIONS)
+    coupling = dr.Coupling(system)
+    qi = (9, 4, 0)                                    # (2/3, 1/3) ≈ (8.67, 4.33)/13
+    qc = np.array(qi, float) / n @ atoms.cell.reciprocal() * 2 * np.pi
+    k_frac = np.array([[i / n, j / n, 0] for i in range(n) for j in range(n)])
+    kc = k_frac @ atoms.cell.reciprocal() * 2 * np.pi
+    e_k, _ = electrons.states(kc)
+    optics = gr._optical(electrons, kc, gr._POLARIZATIONS)
+    f, v = phonons.modes(qc)
+    masses = atoms.get_masses()
+    nu = max(gr._in_plane(v), key=lambda i: f[i])             # the TO branch
+    u1 = v[nu] / np.sqrt(masses)[:, None] * gr.zero_point(f[nu])
+    reference = np.zeros((2, 2), complex)
+    for sign in (1.0, -1.0):
+        first, second = (u1, np.conj(u1)) if sign > 0 else (np.conj(u1), u1)
+        w = f[nu] * gr.CM1_TO_EV
+        reference += gr._four_processes(electrons, kc, e_k, optics, sign * qc, first, second,
+                                        w, w, laser, gamma) / len(kc)
+    e_lattice = v[nu] * np.exp(1j * (atoms.positions @ qc))[:, None]
+    ours = dr.overtone_q(bands, (n, n, 1), coupling, qi, f[nu], e_lattice, masses, laser, gamma)
+    assert np.allclose(ours, reference, rtol=1e-6, atol=1e-12 * np.abs(reference).max())
