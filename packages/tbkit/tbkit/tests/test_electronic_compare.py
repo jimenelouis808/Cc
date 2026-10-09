@@ -54,3 +54,8 @@ def test_report_adapter_reads_the_recipe_files(tmp_path):
     assert [t.id for t in rep.tables()] == ["resumen_coil"]
     assert {f.id for f in rep.figures()} == {"dos_pristine", "dos_N", "delta_dos_N",
                                              "bandas_pristine", "bandas_N"}
+
+
+def test_half_filled_band_is_the_one_at_the_fermi_level():
+    bands = [[-0.3, 0.02, 0.2], [-0.3, -0.01, 0.2], [-0.3, 0.04, 0.2]]
+    assert ec.half_filled_band(bands) == [-0.01, 0.04]

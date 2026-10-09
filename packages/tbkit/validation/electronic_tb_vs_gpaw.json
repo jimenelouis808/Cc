@@ -3,6 +3,7 @@
  "sigma_eV": 0.1,
  "systems": {
   "pristine": {
+   "electrons_per_cell": 816,
    "gap_gpaw_eV": 0.22269348111472276,
    "gap_tb_eV": 0.18623775512724094,
    "settings": {
@@ -17,12 +18,21 @@
    }
   },
   "N": {
-   "gap_gpaw_eV": 0.2029679845115906,
+   "electrons_per_cell": 817,
+   "gap_gpaw_eV": 0.0,
    "gap_tb_eV": 0.0,
    "settings": {
     "gpaw": "GPAW LCAO dzp PBE h 0.2, FD 0.05 eV, SCF k (1, 1, 2), bands non-SCF on 21 k",
     "tb": "xu_chn SCC, kT 0.05 eV, SCF k 1x1x4"
    },
+   "half_filled_band_gpaw_eV": [
+    0.020076453240308823,
+    0.042627099444668026
+   ],
+   "half_filled_band_tb_eV": [
+    -0.041080587715520256,
+    0.04227431156736072
+   ],
    "dos_correlation_-2_+2": 0.8602864628976409,
    "dos_correlation_-6_+4": 0.0020384099978031102,
    "states_within_1eV": {
@@ -32,6 +42,7 @@
    "delta_dos_correlation_-3_+3": 0.4207191636202064
   },
   "amine": {
+   "electrons_per_cell": 824,
    "gap_gpaw_eV": 0.22813235816312716,
    "gap_tb_eV": 0.18441301967305357,
    "settings": {
@@ -47,6 +58,7 @@
    "delta_dos_correlation_-3_+3": 0.345742076551624
   },
   "graphene": {
+   "electrons_per_cell": 8,
    "gap_gpaw_eV": 0.0,
    "gap_tb_eV": 0.0,
    "settings": {

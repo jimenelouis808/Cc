@@ -511,6 +511,17 @@ def electronic(folder: Path) -> Report:
                          e["dos_correlation_-2_+2"], e["dos_correlation_-6_+4"],
                          e["states_within_1eV"]["gpaw"], e["states_within_1eV"]["tb"],
                          e.get("delta_dos_correlation_-3_+3")])
+        metals = [[NAMES.get(n, n), systems[n]["electrons_per_cell"],
+                   *systems[n]["half_filled_band_gpaw_eV"], *systems[n]["half_filled_band_tb_eV"]]
+                  for n in coils if "half_filled_band_gpaw_eV" in systems[n]]
+        if metals:
+            sec.add(Table("banda_semillena", "Banda semillena (número impar de electrones)",
+                          ["estructura", "electrones por celda", "GPAW mín. (eV)", "GPAW máx. (eV)",
+                           "tbkit mín. (eV)", "tbkit máx. (eV)"], metals,
+                          note="Con un número impar de electrones por celda una banda queda con "
+                               "un solo electrón: los dos métodos dan un metal. Lo que los distingue "
+                               "es el ancho y la posición de esa banda (respecto a E_F).",
+                          digits=[None, 0, 3, 3, 3, 3]))
         sec.add(Table("resumen_coil", "Resumen por estructura",
                       ["estructura", "gap GPAW (eV)", "gap tbkit (eV)", "r DOS ±2 eV",
                        "r DOS −6…+4 eV", "estados ±1 eV GPAW", "estados ±1 eV tbkit",

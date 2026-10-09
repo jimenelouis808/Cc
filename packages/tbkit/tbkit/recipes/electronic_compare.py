@@ -212,6 +212,16 @@ def molecules() -> dict:
     return out
 
 
+VALENCE = {"H": 1, "C": 4, "N": 5, "O": 6}
+
+
+def half_filled_band(bands: list) -> list[float]:
+    """Energy range of the band at the Fermi level when the cell has an odd electron
+    count: per k, the level nearest E_F (spin-paired, that band holds one electron)."""
+    nearest = [min(row, key=abs) for row in bands]
+    return [float(min(nearest)), float(max(nearest))]
+
+
 def report() -> dict:
     grid = np.linspace(-8.0, 6.0, 1401)
     out = {"what": "Electronic structure, tbkit xu_chn against GPAW PBE dzp at the same geometry "
@@ -224,8 +234,16 @@ def report() -> dict:
         g, t = json.loads(g.read_text()), json.loads(t.read_text())
         dg, dt = dos(g["bands_minus_fermi"], grid), dos(t["bands_minus_fermi"], grid)
         curves[name] = (dg, dt)
-        entry = {"gap_gpaw_eV": gap(g["bands_minus_fermi"]), "gap_tb_eV": gap(t["bands_minus_fermi"]),
+        electrons = sum(VALENCE[s] for s in geometry(name).get_chemical_symbols())
+        entry = {"electrons_per_cell": electrons,
+                 "gap_gpaw_eV": gap(g["bands_minus_fermi"]), "gap_tb_eV": gap(t["bands_minus_fermi"]),
                  "settings": {"gpaw": g["settings"], "tb": t["settings"]}}
+        if electrons % 2:
+            # One band holds a single electron: a metal in both methods, whatever the
+            # level spacing on the path says. Its width is what tells them apart.
+            entry["gap_gpaw_eV"] = entry["gap_tb_eV"] = 0.0
+            entry["half_filled_band_gpaw_eV"] = half_filled_band(g["bands_minus_fermi"])
+            entry["half_filled_band_tb_eV"] = half_filled_band(t["bands_minus_fermi"])
         if name == "graphene":
             atoms = geometry(name)
             _, x, labels = kpath(name, atoms)
