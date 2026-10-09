@@ -646,20 +646,27 @@ def _pairs_ordered_fast(k, a, b, q, first, second, w, laser, gamma, order: int =
     powers = np.array([dw ** p for p in range(order)])                 # (p, n)
     for ii in range(npol):
         x = k.velocity[ii] / (laser - (k.ec[:, None] - k.ev[None, :]) + 1j * gamma)
-        xe = np.einsum("ncd,dv->ncv", g1_e, x) / pairs(a, k, w)            # (n, c_{k+q}, v_k)
-        xh = -np.einsum("cv,nvu->ncu", x, g1_h) / pairs(k, b, w)           # (n, c_k, v_{k-q})
+        xe = np.matmul(g1_e, x) / pairs(a, k, w)                          # (n, c_{k+q}, v_k)
+        xh = -np.matmul(x, g1_h) / pairs(k, b, w)                         # (n, c_k, v_{k-q})
+        xe_flat, xh_flat = xe.reshape(n, -1), xh.reshape(n, -1)
         for s in range(npol):
             terms = np.zeros((order, order, n, n), dtype=complex)        # [a, b]: δ_n^a δ_m^b
             for p in range(order):
                 yk = np.conj(k.velocity[s]) / d0["k"] ** (p + 1)
                 ya = np.conj(a.velocity[s]) / d0["a"] ** (p + 1)
                 yb = np.conj(b.velocity[s]) / d0["b"] ** (p + 1)
+                # Each term is Σ_{cv} y ∘ (chain), contracted first with the second vertex
+                # (one tensordot per term) and then with the first-vertex half (one GEMM).
                 # same: Σ yk ∘ (G2eb[m] xe[n] − xh[n] G2hb[m])
-                t = np.einsum("ndv,mdv->nm", xe, np.einsum("cv,mcd->mdv", yk, g2_e_back))
-                t -= np.einsum("ncu,mcu->nm", xh, np.einsum("cv,muv->mcu", yk, g2_h_back))
+                z = np.tensordot(yk, g2_e_back, axes=([0], [1])).transpose(1, 2, 0)   # (m,d,v)
+                t = xe_flat @ z.reshape(z.shape[0], -1).T
+                z = np.tensordot(yk, g2_h_back, axes=([1], [2])).transpose(1, 0, 2)   # (m,c,u)
+                t -= xh_flat @ z.reshape(z.shape[0], -1).T
                 # eh: −Σ ya ∘ (xe[n] G2hf[m]);  he: Σ yb ∘ (G2ef[m] xh[n])
-                t -= np.einsum("ncv,mcv->nm", xe, np.einsum("cu,mvu->mcv", ya, g2_h_fwd))
-                t += np.einsum("ndv,mdv->nm", xh, np.einsum("cv,mcd->mdv", yb, g2_e_fwd))
+                z = np.tensordot(ya, g2_h_fwd, axes=([1], [2])).transpose(1, 0, 2)    # (m,c,v)
+                t -= xe_flat @ z.reshape(z.shape[0], -1).T
+                z = np.tensordot(yb, g2_e_fwd, axes=([0], [1])).transpose(1, 2, 0)    # (m,d,v)
+                t += xh_flat @ z.reshape(z.shape[0], -1).T
                 for a_pow in range(p + 1):
                     terms[a_pow, p - a_pow] += comb(p, a_pow) * t
             out[:, :, s, ii] = np.einsum("an,bm,abnm->nm", powers, powers, terms)
