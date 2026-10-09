@@ -1584,14 +1584,16 @@ class RecipesPage(Page):
         form = QFormLayout()
         self.recipe = QComboBox()
         for r in self.recipes:
-            self.recipe.addItem(f"{r['name']}  ({r['count']} ajustes)", r["name"])
+            self.recipe.addItem(f"{r['name']}  ({r['count']} ajustes, {r['options']} opciones)",
+                                r["name"])
         self.recipe.currentIndexChanged.connect(self.choose)
         form.addRow("Receta", self.recipe)
         self.step = QComboBox()
+        self.step.currentIndexChanged.connect(self.choose_step)
         form.addRow("Paso", self.step)
         self.arguments = QLineEdit()
-        self.arguments.setPlaceholderText("p. ej. 2.54 (láser) o N_graphitic (estructura)")
-        form.addRow("Argumentos", self.arguments)
+        self.arguments.setPlaceholderText("vacío casi siempre: las opciones van en su tabla")
+        form.addRow("Otros argumentos", self.arguments)
         self.workdir = QLineEdit(str(Path.cwd()))
         form.addRow("Carpeta de trabajo", self.workdir)
         layout.addLayout(form)
@@ -1599,11 +1601,17 @@ class RecipesPage(Page):
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
 
+        editable = (QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed
+                    | QAbstractItemView.AnyKeyPressed)
         self.settings = table(["ajuste", "valor", "unidad", "grupo", "qué es"])
-        self.settings.setEditTriggers(QAbstractItemView.DoubleClicked
-                                      | QAbstractItemView.EditKeyPressed
-                                      | QAbstractItemView.AnyKeyPressed)
-        layout.addWidget(self.settings, stretch=2)
+        self.settings.setEditTriggers(editable)
+        self.options = table(["opción", "valor", "valores posibles", "qué es"])
+        self.options.setEditTriggers(editable)
+        self.option_rows = []
+        self.tables = QTabWidget()
+        self.tables.addTab(self.settings, "Ajustes de la receta")
+        self.tables.addTab(self.options, "Opciones del paso")
+        layout.addWidget(self.tables, stretch=2)
         row = QHBoxLayout()
         reset = QPushButton("Restaurar valores")
         reset.clicked.connect(self.choose)
@@ -1663,8 +1671,10 @@ class RecipesPage(Page):
         if name not in self.usage:
             self.usage[name] = actions.recipe_usage(name)
         info = self.usage[name]
+        self.step.blockSignals(True)
         self.step.clear()
         self.step.addItems(info["steps"])
+        self.step.blockSignals(False)
         summary = next(r["summary"] for r in self.recipes if r["name"] == name)
         self.summary.setText(summary + ("" if info["parts"] else
                                         " · Esta receta corre en una sola parte."))
@@ -1679,7 +1689,29 @@ class RecipesPage(Page):
                     item.setToolTip("por qué: " + row["why"])
                 self.settings.setItem(r, c, item)
         self.settings.resizeColumnsToContents()
+        self.tables.setTabText(0, f"Ajustes de la receta ({len(rows)})")
+        self.choose_step()
         self.check_resources()
+
+    def choose_step(self, *_):
+        """The options of the recipe, plus those of the chosen step if it has its own."""
+        info = self.usage.get(self.name())
+        if info is None:
+            return
+        step = self.step.currentText()
+        self.option_rows = info["options"].get("", []) + \
+            (info["options"].get(step, []) if step else [])
+        self.options.setRowCount(len(self.option_rows))
+        for r, row in enumerate(self.option_rows):
+            label = row["flag"] or row["dest"] + (" (obligatorio)" if row["required"] else "")
+            possible = " | ".join(row["choices"]) or ("sí | no" if row["boolean"] else "")
+            for c, text in enumerate((label, row["default"], possible, row["help"])):
+                item = QTableWidgetItem(text)
+                if c != 1:
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                self.options.setItem(r, c, item)
+        self.options.resizeColumnsToContents()
+        self.tables.setTabText(1, f"Opciones del paso ({len(self.option_rows)})")
 
     def edited(self) -> dict:
         return {self.settings.item(r, 0).text(): self.settings.item(r, 1).text()
@@ -1698,8 +1730,15 @@ class RecipesPage(Page):
                                 self.usage.get(self.name(), {}).get("help", ""))
 
     def command(self) -> list[str]:
+        import shlex
+
         overrides = actions.recipe_overrides(self.name(), self.edited())
-        arguments = " ".join(x for x in (self.step.currentText(), self.arguments.text()) if x)
+        values = {row["dest"]: self.options.item(r, 1).text()
+                  for r, row in enumerate(self.option_rows)}
+        words = [self.step.currentText()] if self.step.currentText() else []
+        words += actions.recipe_arguments(self.option_rows, values)
+        arguments = shlex.join(words) + (" " + self.arguments.text() if self.arguments.text()
+                                         else "")
         return actions.launch_command(self.name(), arguments, overrides,
                                       parts=int(self.parts.value()),
                                       threads=int(self.threads.value()),

@@ -452,6 +452,31 @@ def test_recipe_settings_overrides_and_command(tmp_path):
     assert actions.launch_warnings(actions.cores() + 1, 1) and not actions.launch_warnings(1, 1)
 
 
+def test_recipe_options_are_read_from_the_parser_without_running_it():
+    names = {r["name"] for r in actions.recipe_list()}
+    assert {"site_screening", "crystal_validation", "frequency_scaling"} <= names
+    usage = actions.recipe_usage("frequency_scaling")       # main() without argv: not called
+    assert usage["options"] == {"": []} and not usage["steps"]
+    site = actions.recipe_usage("site_screening")
+    rows = {r["dest"]: r for r in site["options"][""]}
+    assert site["parts"] and rows["structure"]["required"] and rows["kmesh"]["default"] == "8"
+    with pytest.raises(ValueError, match="structure"):
+        actions.recipe_arguments(site["options"][""], {})
+    words = actions.recipe_arguments(site["options"][""],
+                                     {"structure": "coil.extxyz", "dopant": "N",
+                                      "workdir": "out/sitios", "kmesh": "4", "top": "3"})
+    assert words == ["coil.extxyz", "N", "out/sitios", "--kmesh", "4"]
+    crystals = actions.recipe_usage("crystal_validation")
+    assert crystals["steps"] == ["gpaw", "collect", "compare"]
+    systems = {r["dest"]: r for r in crystals["options"]["gpaw"]}["systems"]
+    assert actions.recipe_arguments([systems], {"systems": "graphene hBN"}) == \
+        ["--systems", "graphene", "hBN"]
+    raman = actions.recipe_usage("doped_raman")
+    assert raman["step_dest"] == "step" and "raman" in raman["steps"]
+    with pytest.raises(ValueError, match="no es una de"):
+        actions.recipe_arguments(raman["options"][""], {"name": "boro"})
+
+
 def test_recipe_status_lines(tmp_path):
     from tbkit.progress import Progress
 
@@ -470,6 +495,12 @@ def test_recipes_page_builds_a_launch_command():
     page = window.pages["Recetas"]
     page.recipe.setCurrentIndex(page.recipe.findData("coil_double_resonance"))
     page.step.setCurrentText("pairs")
-    page.arguments.setText("2.54")
-    assert "pairs" in page.command() and "2.54" in page.command()
+    page.options.item(0, 1).setText("2.54")                  # the laser
+    assert page.command()[-2:] == ["pairs", "2.54"]
     assert page.settings.rowCount() == len(actions.recipe_settings("coil_double_resonance"))
+    page.recipe.setCurrentIndex(page.recipe.findData("site_screening"))     # no steps
+    assert page.options.rowCount() == len(actions.recipe_usage("site_screening")["options"][""])
+    page.recipe.setCurrentIndex(page.recipe.findData("crystal_validation"))
+    page.step.setCurrentText("compare")
+    assert [page.options.item(r, 0).text() for r in range(page.options.rowCount())] == \
+        ["references (obligatorio)", "out (obligatorio)", "--systems"]

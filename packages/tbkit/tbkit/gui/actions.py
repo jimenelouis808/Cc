@@ -639,36 +639,158 @@ def graphene_spectra(lasers_ev, phonons: str = "gpaw", gamma: float = 0.1, dk: f
 # --------------------------------------------------------------------------
 
 def recipe_list() -> list[dict]:
-    """The recipes that declare settings: name, first line of their note, how many."""
+    """Every recipe with a command line: name, first line of its note, and how many
+    settings (declared ``PARAMS``) and command-line options it has."""
     import importlib
+    import pkgutil
 
-    from ..settings import RECIPES
+    from .. import recipes
 
     out = []
-    for name in RECIPES:
-        module = importlib.import_module(f"tbkit.recipes.{name}")
-        out.append({"name": name, "summary": (module.__doc__ or "").strip().splitlines()[0],
-                    "count": len(getattr(module, "PARAMS", []))})
-    return out
+    for info in pkgutil.iter_modules(recipes.__path__):
+        module = importlib.import_module(f"tbkit.recipes.{info.name}")
+        if not hasattr(module, "main"):
+            continue
+        usage = recipe_usage(info.name)
+        options = {o["dest"] for opts in usage["options"].values() for o in opts}
+        out.append({"name": info.name,
+                    "summary": (module.__doc__ or "").strip().splitlines()[0],
+                    "count": len(getattr(module, "PARAMS", [])), "options": len(options)})
+    return sorted(out, key=lambda r: (-r["count"], r["name"]))
+
+
+class _Parsed(Exception):
+    """Raised in place of parsing, once the recipe has built its parser."""
+
+
+#: Options the window handles itself (the settings table, tbkit lanzar) or never shows.
+_HANDLED = {"help", "part", "ajuste", "ajustes", "ver_ajustes"}
+
+
+def _option_rows(parser) -> list[dict]:
+    import argparse
+    import json
+
+    rows = []
+    for action in parser._actions:
+        if action.dest in _HANDLED or isinstance(action, argparse._SubParsersAction):
+            continue
+        flag = next((o for o in action.option_strings if o.startswith("--")),
+                    action.option_strings[0] if action.option_strings else None)
+        boolean = isinstance(action, (argparse._StoreTrueAction, argparse._StoreFalseAction,
+                                      argparse.BooleanOptionalAction))
+        default = action.default
+        if default is None or default is argparse.SUPPRESS:
+            text = ""
+        elif boolean:
+            text = "sí" if default else "no"
+        elif isinstance(default, (list, tuple)):
+            text = " ".join(str(v) for v in default)
+        elif isinstance(default, (int, float, str, Path)):
+            text = str(default)
+        else:
+            text = json.dumps(default, default=str)
+        rows.append({"dest": action.dest, "flag": flag, "default": text,
+                     "help": (action.help or "") % {"default": default}
+                     if action.help and "%(" in action.help else (action.help or ""),
+                     "choices": [str(c) for c in action.choices] if action.choices else [],
+                     "nargs": action.nargs, "boolean": boolean,
+                     "negative": isinstance(action, argparse._StoreFalseAction),
+                     "required": flag is None and action.nargs not in ("?", "*")})
+    return rows
 
 
 def recipe_usage(name: str) -> dict:
-    """The recipe's own ``--help``, its steps (the choices of its first argument) and
-    whether it can be split in parts (``--part r/N``)."""
+    """What the recipe's own command line accepts, read from its argument parser:
+    ``steps`` (sub-commands, or the choices of its first argument), ``options`` per step
+    ("" for the ones every step takes), whether it splits in parts (``--part r/N``) and
+    its ``--help`` text."""
+    import argparse
     import contextlib
     import importlib
+    import inspect
     import io
-    import re
 
     module = importlib.import_module(f"tbkit.recipes.{name}")
-    text = io.StringIO()
-    with contextlib.redirect_stdout(text), contextlib.suppress(SystemExit):
-        module.main(["-h"])
-    usage = text.getvalue()
-    head = usage.split("\n\n")[0]
-    match = re.search(r"\{([^}]+)\}", head)
-    return {"help": usage, "steps": match.group(1).split(",") if match else [],
-            "parts": "--part" in usage}
+    captured = []
+    original = argparse.ArgumentParser.parse_args
+
+    def grab(self, *args, **kwargs):
+        captured.append(self)
+        raise _Parsed
+
+    # A main() that takes no argv has no command line: calling it would run the recipe.
+    if inspect.signature(module.main).parameters:
+        argparse.ArgumentParser.parse_args = grab
+        try:
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.suppress(_Parsed, SystemExit):
+                module.main([])
+        finally:
+            argparse.ArgumentParser.parse_args = original
+    if not captured:
+        return {"steps": [], "step_dest": None, "options": {"": []}, "parts": False,
+                "help": (module.__doc__ or "").strip()}
+    parser = captured[0]
+    help_text = parser.format_help()
+    options = {"": _option_rows(parser)}
+    steps, step_dest = [], None
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            steps = list(action.choices)
+            for step, sub in action.choices.items():
+                options[step] = _option_rows(sub)
+                help_text += f"\n\n── {step} ──\n" + sub.format_help()
+            break
+    else:
+        first = next((r for r in options[""] if r["flag"] is None and r["choices"]), None)
+        if first is not None and options[""][0] is first:
+            steps, step_dest = first["choices"], first["dest"]
+            options[""] = options[""][1:]
+    parts = any("--part" in a.option_strings for a in parser._actions) or any(
+        "--part" in a.option_strings for opts in captured[1:] for a in opts._actions)
+    if not parts:
+        parts = "--part" in help_text
+    return {"steps": steps, "step_dest": step_dest, "options": options, "parts": parts,
+            "help": help_text}
+
+
+def recipe_arguments(rows: list[dict], values: dict[str, str]) -> list[str]:
+    """Command-line words for the options whose value (text, as edited) is not the
+    default: positionals in order, then ``--flag value``. A required positional left
+    empty raises ``ValueError``."""
+    import shlex
+
+    words, flags = [], []
+    for row in rows:
+        text = values.get(row["dest"], row["default"]).strip()
+        many = row["nargs"] in ("*", "+") or isinstance(row["nargs"], int)
+        if row["choices"] and text and text != row["default"] and \
+                any(w not in row["choices"] for w in (shlex.split(text) if many else [text])):
+            raise ValueError(f"{row['flag'] or row['dest']}: «{text}» no es una de "
+                             f"{row['choices']}")
+        if row["flag"] is None:
+            if not text:
+                if row["required"]:
+                    raise ValueError(f"falta «{row['dest']}»")
+                continue
+            words += shlex.split(text) if many else [text]
+            continue
+        if text == row["default"]:
+            continue
+        if row["boolean"]:
+            on = text.lower() in ("sí", "si", "true", "1", "yes")
+            if row["negative"]:
+                on = not on
+            if on:
+                flags.append(row["flag"])
+            elif row["flag"].startswith("--") and not row["negative"]:
+                flags.append("--no-" + row["flag"][2:])
+            continue
+        if not text:
+            continue
+        flags += [row["flag"], *(shlex.split(text) if many else [text])]
+    return words + flags
 
 
 def recipe_settings(name: str) -> list[dict]:
@@ -968,12 +1090,15 @@ HELP = {
     "procesos": "Procesos en paralelo para el cálculo de doble resonancia.",
     "Calcular G, 2D y 2D′": "Posiciones e intensidades de G, 2D y 2D′ para cada láser.",
     # Recetas
-    "Receta": "La receta a correr; entre paréntesis, cuántos ajustes declara.",
+    "Receta": "La receta a correr; entre paréntesis, cuántos ajustes internos declara "
+              "(tabla «Ajustes de la receta») y cuántas opciones de línea de comandos "
+              "tiene (tabla «Opciones del paso»). Ambas tablas se editan con doble clic.",
     "Paso": "La etapa de la receta (p. ej. fc, dband, pairs, report en la doble "
             "resonancia; relax, hessian, raman en los dopados). «Ayuda de la receta» "
             "explica cada una.",
-    "Argumentos": "Lo que el paso necesita además: un láser (2.54), una estructura "
-                  "(N_graphitic)… Separados por espacios, como en la terminal.",
+    "Otros argumentos": "Texto que se añade tal cual al final del comando (como en la "
+                        "terminal). Casi nunca hace falta: cada opción de la receta está en "
+                        "la tabla «Opciones del paso», con sus valores posibles.",
     "Carpeta de trabajo": "Donde se corre la receta: sus resultados van a out/ dentro de "
                           "ella y el avance se lee de ahí.",
     "Restaurar valores": "Vuelve a los valores de la receta (deshace lo editado en la tabla).",
