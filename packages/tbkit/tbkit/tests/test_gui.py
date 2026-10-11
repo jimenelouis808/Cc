@@ -681,3 +681,37 @@ def test_project_saves_and_reopens_the_session(tmp_path):
     page = other.pages["Recetas"]
     assert page.name() == "coil_double_resonance" and page.step.currentText() == "pairs"
     assert page.options.item(0, 1).text() == "2.54"
+
+
+def test_dft_request_from_the_window_runs_through_carbonforge(tmp_path):
+    import importlib.util
+
+    if importlib.util.find_spec("carbonforge") is None:
+        pytest.skip("carbonforge no está instalado en este entorno")
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    benzene = molecule("C6H6")
+    benzene.center(vacuum=5.0)
+    window.set_atoms(benzene, "benceno")
+    window.set_model("chn")
+    geometry = window.pages["Geometría y modos"]
+    geometry.run_modes()
+    _wait(window)
+    vib = geometry.result["vibrations"]
+    folder = actions.dft_request(tmp_path / "dft", window.atoms, "emt", relax=True,
+                                 vibrations=vib, modes=[29, 33])
+    request = json.loads((Path(folder) / "solicitud.json").read_text())
+    assert [t["tipo"] for t in request["tareas"]] == ["relajar", "punto_simple",
+                                                       "desplazamientos"]
+    assert request["tareas"][2]["sobre"] == "relax"
+    process = window.launch_dft(folder, 1)
+    assert process is not None and process.wait(timeout=300) == 0
+    out = actions.dft_summary(folder, window.model, kmesh=1)
+    assert out["summary"]["terminado"] and out["relaxed"] is not None
+    lines = actions.dft_summary_lines(out["summary"])
+    assert any("modo 29" in line for line in lines)
+    geometry.show_dft(folder)
+    _wait(window)
+    assert "relajada (DFT)" in window.geometries[-1][0]

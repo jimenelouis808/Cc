@@ -16,7 +16,10 @@ keeps its own `pyproject.toml`, its own version, its own tests and its own
 console script, and each must remain installable and lintable on its own.
 
 The workspace exists so they share a lockfile, a licence and CI — not so they
-share code. Extracting a common core, splitting a package or merging two of
+share code. When one package needs another's work it goes through files: structures
+as extxyz, and DFT requests as `nanocarbon-dft/1` folders (`docs/INTERCAMBIO_DFT.md`:
+tbkit writes them with `dft_exchange`, carbonforge prepares and runs them with
+`exchange/`, each with its own reader, writer and tests). Extracting a common core, splitting a package or merging two of
 them are separate decisions, none of which has been taken. Until one is, code
 does not move between packages.
 

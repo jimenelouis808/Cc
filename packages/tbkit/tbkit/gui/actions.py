@@ -11,6 +11,7 @@ solution, self-consistent when the model says so (``TBModel.scc``).
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -1001,6 +1002,90 @@ def recipe_status(folder: str | Path, finished: bool = False) -> list[str]:
 
 
 # --------------------------------------------------------------------------
+# DFT checks through carbonforge (nanocarbon-dft/1, files only)
+# --------------------------------------------------------------------------
+
+DFT_CODES = {"gpaw": "GPAW (PBE, LCAO dzp)", "qe": "Quantum ESPRESSO (pw.x)",
+             "dftb+": "DFTB+ (.skf propios)"}
+
+
+def dft_request(folder: str | Path, atoms: Atoms, code: str = "gpaw", relax: bool = False,
+                single_point: bool = True, dos: bool = False, vibrations=None,
+                modes=(), mpi: int = 1, settings: dict | None = None) -> str:
+    """Write a DFT request for the active geometry (``tbkit.dft_exchange``); with ``modes``
+    (indices of ``vibrations``), ± along each mode pattern as well. Returns the folder."""
+    from .. import dft_exchange as dx
+
+    tasks = []
+    source = "entrada"
+    if relax:
+        tasks.append({"id": "relax", "tipo": "relajar", "fmax": 0.05, "pasos": 300})
+        source = "relax"
+    if single_point or not tasks:
+        tasks.append({"id": "sp", "tipo": "punto_simple", "sobre": source})
+    if dos:
+        tasks.append({"id": "dos", "tipo": "dos", "sobre": source, "sigma_ev": 0.1})
+    resources = {"mpi": int(mpi), "hilos": 1}
+    if modes:
+        folder = dx.mode_check_request(folder, vibrations, list(modes), code, relax_first=False,
+                                       settings=settings, resources=resources)
+        # the request's own tasks were written by mode_check_request: add ours around them
+        request_path = Path(folder) / "solicitud.json"
+        request = json.loads(request_path.read_text(encoding="utf-8"))
+        displacements = [t for t in request["tareas"] if t["tipo"] == "desplazamientos"]
+        for t in displacements:
+            t["sobre"] = source
+        request["tareas"] = tasks + displacements
+        request_path.write_text(json.dumps(request, indent=1, ensure_ascii=False),
+                                encoding="utf-8")
+        return str(folder)
+    return str(dx.write_request(folder, atoms, tasks, code, settings=settings,
+                                resources=resources, why="comprobar con DFT"))
+
+
+def dft_summary(folder: str | Path, model: TBModel, kmesh: int = 4, kT: float = 0.05) -> dict:
+    """The DFT result of a request folder against the model (``dft_exchange.summary``), with
+    the DFT-relaxed structure if there is one (``relaxed``: Atoms or None)."""
+    from ase.io import read
+
+    from .. import dft_exchange as dx
+
+    out = dx.summary(folder, model, kmesh=kmesh, kT=kT)
+    result = dx.read_result(folder)
+    relaxed = next((read(Path(folder) / t["estructura"]) for t in result["tareas"].values()
+                    if isinstance(t, dict) and "estructura" in t), None)
+    return {"summary": out, "relaxed": relaxed}
+
+
+def dft_summary_lines(summary: dict) -> list[str]:
+    """The summary as short lines (terminal and dialog)."""
+    lines = [f"{summary['codigo']} {summary.get('version_codigo') or ''}".strip()
+             + ("" if summary["terminado"] else " · SIN TERMINAR")]
+    for task_id, t in summary["tareas"].items():
+        if t.get("estado") == "pendiente":
+            lines.append(f"{task_id}: pendiente")
+            continue
+        if "fuerzas_tbkit_vs_dft" in t:
+            f = t["fuerzas_tbkit_vs_dft"]
+            text = (f"{task_id}: fuerzas tbkit − DFT RMS {f['rms_eV_A']:.3f} eV/Å (máx. "
+                    f"{f['max_eV_A']:.3f} en el átomo {f['max_atom']}; DFT RMS "
+                    f"{f['rms_dft_eV_A']:.3f})")
+            if t["tipo"] == "relajar":
+                text += (f" · relajación {'convergida' if t.get('convergida') else 'SIN converger'}"
+                         f", el DFT movió hasta {t['desplazamiento_max_A']:.3f} Å")
+            lines.append(text)
+        for m in t.get("modos", []):
+            ir = f", IR {m['dft_ir_km_mol']:.3g} km/mol" if m["dft_ir_km_mol"] is not None else ""
+            lines.append(f"  modo {m['mode']}: tbkit {m['tb_cm1']:.0f} · DFT {m['dft_cm1']:.0f} "
+                         f"cm⁻¹ (×{m['dft_over_tb']:.3f}){ir}")
+        if t.get("tipo") == "dos":
+            gap = t.get("gap_eV")
+            lines.append(f"{task_id}: gap DFT {gap:.3f} eV" if gap is not None
+                         else f"{task_id}: sin gap (metálico)")
+    return lines
+
+
+# --------------------------------------------------------------------------
 # Reproducible records
 # --------------------------------------------------------------------------
 
@@ -1187,6 +1272,28 @@ HELP = {
     "Relajar": "Relaja las posiciones (celda fija) con las fuerzas del modelo.",
     "Volver a la original": "Recupera la estructura tal como se abrió.",
     "Modos en Γ": "Frecuencias y vectores de los modos en Γ por diferencias finitas.",
+    "Validar con DFT…": "Escribe una solicitud DFT (formato nanocarbon-dft/1) para la geometría "
+                        "activa: fuerzas, relajación, DOS y la frecuencia de los modos "
+                        "seleccionados en la tabla. carbonforge la corre (aquí, en la cola, o en "
+                        "un clúster con trabajo.slurm); nada se calcula en la ventana.",
+    "Ver resultado DFT…": "Lee el resultado de una solicitud DFT y lo compara con el modelo: "
+                          "fuerzas tbkit − DFT, frecuencia DFT de cada modo de tbkit (cociente "
+                          "de Rayleigh) e IR, gap. Una geometría relajada por DFT se añade a la "
+                          "lista «Geometría».",
+    "Carpeta de la solicitud": "Carpeta nueva donde se escribe la solicitud (y donde quedará el "
+                               "resultado). Una carpeta con solicitud no se reutiliza.",
+    "Código DFT": "GPAW (con los ajustes de las referencias de tbkit), Quantum ESPRESSO (pw.x, "
+                  "necesita pseudopotenciales) o DFTB+ (necesita .skf).",
+    "Relajar con DFT primero": "El DFT relaja las posiciones (celda fija) y las demás tareas "
+                               "parten de esa geometría.",
+    "Fuerzas en la geometría": "Un punto simple: energía y fuerzas, comparadas con las del "
+                               "modelo en la misma geometría.",
+    "DOS y gap": "La DOS y el gap del DFT en esa geometría.",
+    "Procesos MPI": "Procesos MPI del DFT (en la laptop, 4 = los núcleos físicos).",
+    "Ajustes del código (JSON)": "Ajustes extra del código en JSON: QE necesita pseudos y "
+                                 "pseudo_dir; DFTB+, skf_dir; GPAW acepta modo, base, h, kpts…",
+    "Correrla ahora con carbonforge": "Lanza «carbonforge dft correr» en segundo plano (se ve "
+                                      "en Procesos). Sin marcar, solo escribe la carpeta.",
     "Abrir modos…": "Abre modos calculados antes, sin recalcular: un modes.npz (de «Guardar "
                     "modos…») o una hessiana hessian.npy con su estructura al lado (como las de "
                     "resultados/coil204/modos). Su estructura queda como geometría activa.",

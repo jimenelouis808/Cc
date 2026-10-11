@@ -8,6 +8,8 @@ depends on what kind of directory it is; an :class:`Adapter` answers that:
 * :class:`StepsAdapter` -- QE / SIESTA / LAMMPS export directories
   (``job.json``), run by :mod:`carbonforge.jobs.run`, finished when the
   manifest says ``done``.
+* :class:`ExchangeAdapter` -- DFT requests from other packages
+  (``nanocarbon-dft/1``: ``solicitud.json`` + ``run_dft.py``).
 
 Jobs are subprocesses, never threads: a thread cannot be cancelled, and a DFT
 run must be. A job's state comes from the process AND the directory's record:
@@ -185,7 +187,59 @@ class StepsAdapter(Adapter):
                        f"instalado: python -m carbonforge.jobs.run {directory}")
 
 
-ADAPTERS: tuple[Adapter, ...] = (VibspecAdapter(), StepsAdapter())
+class ExchangeAdapter(Adapter):
+    """A ``nanocarbon-dft/1`` request (docs/INTERCAMBIO_DFT.md): ``solicitud.json`` and the
+    driver ``run_dft.py`` copied by :func:`carbonforge.exchange.prepare`. Finished when
+    ``resultado.json`` says ``terminado``; progress from its ``progreso.json``."""
+
+    engine = "dft"
+
+    def matches(self, directory: Path) -> bool:
+        return (directory / "solicitud.json").exists() and (directory / "run_dft.py").exists()
+
+    def check(self, directory: Path) -> None:
+        from ..exchange import read_request
+
+        read_request(directory)
+
+    def command(self, directory: Path, nprocs: int) -> list[str]:
+        script = str(Path(directory) / "run_dft.py")
+        if nprocs > 1:
+            mpiexec = shutil.which("mpiexec") or shutil.which("mpirun")
+            if mpiexec is None:
+                raise RuntimeError("No se encontró mpiexec: instala OpenMPI o usa 1 proceso.")
+            return [mpiexec, "-n", str(nprocs), sys.executable, script]
+        return [sys.executable, script]
+
+    def succeeded(self, directory: Path) -> bool:
+        from ..exchange import status
+
+        return status(directory)["state"] == "terminado"
+
+    def progress(self, directory: Path) -> str:
+        from ..exchange import status
+
+        info = status(directory)
+        return info["line"] or info["state"]
+
+    def available(self, directory: Path) -> tuple[bool, str]:
+        import importlib.util
+
+        from ..exchange import read_request
+
+        code = read_request(directory)["codigo"]
+        if code == "gpaw" and importlib.util.find_spec("gpaw") is None:
+            return False, "GPAW no está instalado en este Python (pip install gpaw)."
+        if code == "qe" and shutil.which("pw.x") is None and \
+                not os.environ.get("ASE_ESPRESSO_COMMAND"):
+            return False, "No se encuentra pw.x (o ASE_ESPRESSO_COMMAND)."
+        if code == "dftb+" and shutil.which("dftb+") is None and \
+                not os.environ.get("ASE_DFTB_COMMAND"):
+            return False, "No se encuentra dftb+ (o ASE_DFTB_COMMAND)."
+        return True, ""
+
+
+ADAPTERS: tuple[Adapter, ...] = (VibspecAdapter(), StepsAdapter(), ExchangeAdapter())
 
 
 def adapter_for(directory: Path) -> Adapter:
@@ -195,8 +249,8 @@ def adapter_for(directory: Path) -> Adapter:
         if adapter.matches(directory):
             return adapter
     raise FileNotFoundError(
-        f"{directory.name}: no es un directorio de cálculo (falta record.json de vibspec "
-        f"o {MANIFEST} de una exportación)."
+        f"{directory.name}: no es un directorio de cálculo (falta record.json de vibspec, "
+        f"{MANIFEST} de una exportación o solicitud.json + run_dft.py)."
     )
 
 
@@ -205,6 +259,10 @@ def engine_of(directory: Path) -> str:
     adapter = adapter_for(directory)
     if isinstance(adapter, StepsAdapter):
         return JobManifest.load(directory).engine
+    if isinstance(adapter, ExchangeAdapter):
+        import json
+
+        return json.loads((Path(directory) / "solicitud.json").read_text())["codigo"]
     return adapter.engine
 
 

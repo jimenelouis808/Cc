@@ -663,6 +663,40 @@ class MainWindow(QMainWindow):
 
     # --- geometries of the session ---------------------------------------------------------
 
+    def launch_dft(self, folder: str, mpi: int = 1):
+        """Run a DFT request with carbonforge (``carbonforge dft correr``) in the background;
+        it shows in Procesos with its log."""
+        import shutil
+        import subprocess
+        import sys
+        import time
+
+        command = [shutil.which("carbonforge")] if shutil.which("carbonforge") else None
+        if command is None:
+            try:
+                import importlib.util
+
+                if importlib.util.find_spec("carbonforge") is not None:
+                    command = [sys.executable, "-m", "carbonforge.cli.main"]
+            except (ImportError, ValueError):
+                command = None
+        if command is None:
+            self.error("carbonforge no está instalado aquí",
+                       f"La solicitud está en {folder}: córrela donde esté carbonforge "
+                       "(carbonforge dft correr CARPETA) o en un clúster (trabajo.slurm).")
+            return None
+        log = Path(folder) / "registro.log"
+        with open(log, "a", encoding="utf-8") as handle:
+            process = subprocess.Popen(command + ["dft", "correr", str(folder), "--mpi", str(mpi)],
+                                       cwd=folder, stdout=handle, stderr=subprocess.STDOUT,
+                                       start_new_session=True)
+        self.launched.append({"popen": process, "name": f"DFT {Path(folder).name}",
+                              "cores": mpi, "log": log, "started": time.time(),
+                              "command": "carbonforge dft correr"})
+        self.console.line(f"DFT lanzado con carbonforge (PID {process.pid}, {mpi} MPI); "
+                          "avance en la pestaña Procesos")
+        return process
+
     def choose_geometry(self, index: int):
         if 0 <= index < len(self.geometries):
             name, atoms = self.geometries[index]
@@ -1348,6 +1382,14 @@ class GeometryPage(Page):
         load.clicked.connect(self.open_modes)
         row.addWidget(load)
         layout.addLayout(row)
+        row = QHBoxLayout()
+        dft = QPushButton("Validar con DFT…")
+        dft.clicked.connect(self.validate_dft)
+        row.addWidget(dft)
+        dft_result = QPushButton("Ver resultado DFT…")
+        dft_result.clicked.connect(self.show_dft)
+        row.addWidget(dft_result)
+        layout.addLayout(row)
         self.summary = QLabel("Relaja antes de calcular modos: fuera del mínimo las "
                               "frecuencias no son las armónicas.")
         self.summary.setWordWrap(True)
@@ -1513,6 +1555,51 @@ class GeometryPage(Page):
     def stop(self):
         self.window.view.stop_animation()
         self.window.view.show(self.window.atoms, keep_camera=True)
+
+    def selected_modes(self) -> list[int]:
+        if self.result is None:
+            return []
+        return sorted({self.row_modes[r.row()]
+                       for r in self.table.selectionModel().selectedRows()})
+
+    def validate_dft(self):
+        """A DFT request for the active geometry (and the selected modes), run by carbonforge."""
+        if not self.window.require():
+            return
+        dialog = DftDialog(self.window, self.selected_modes(), self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            folder = dialog.write()
+        except (ValueError, FileExistsError) as error:
+            self.window.error("No se pudo escribir la solicitud", str(error))
+            return
+        self.window.console.line(f"solicitud DFT escrita en {folder}")
+        if dialog.run_now.isChecked():
+            self.window.launch_dft(folder, int(dialog.mpi.value()))
+        else:
+            self.window.console.line(f"córrela con: carbonforge dft correr {folder} "
+                                     f"(o copia la carpeta a un clúster: trabajo.slurm)")
+
+    def show_dft(self, folder: str | None = None):
+        if not folder:
+            folder = QFileDialog.getExistingDirectory(self, "Carpeta de la solicitud DFT")
+        if not folder:
+            return
+        if self.window.model is None:
+            self.window.error("Sin modelo", "Elige el modelo con el que comparar.")
+            return
+
+        def shown(out):
+            lines = actions.dft_summary_lines(out["summary"])
+            for line in lines:
+                self.window.console.line(line)
+            self.summary.setText("DFT: " + " · ".join(lines[:3]))
+            if out["relaxed"] is not None:
+                self.window.add_geometry(f"{Path(folder).name} relajada (DFT)", out["relaxed"])
+
+        self.window.runner.start("Resultado DFT", actions.dft_summary, folder,
+                                 self.window.model, on_done=shown, on_error=self.window.error)
 
     def open_modes(self, path: str | None = None):
         """Modes computed before (modes.npz, or hessian.npy + its structure): their structure
@@ -2487,6 +2574,70 @@ class NewRecipeDialog(QDialog):
         _, atoms = self.window.geometries[self.geometry.currentIndex()]
         return pipeline.write(Path(workdir) / "recetas" / f"{name}.json", name, atoms,
                               self.model.currentData(), steps)
+
+
+class DftDialog(QDialog):
+    """What to ask the DFT (through carbonforge) about the active geometry."""
+
+    def __init__(self, window, modes, parent=None):
+        super().__init__(parent)
+        self.window, self.modes = window, modes
+        self.setWindowTitle("Validar con DFT")
+        form = QFormLayout(self)
+        default = Path(window.pages["Recetas"].workdir.text().strip() or ".") / "dft"
+        name = window.geometries[window.geometry_combo.currentIndex()][0] \
+            if window.geometries else "estructura"
+        import re
+
+        safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", Path(name).stem).strip("_") or "estructura"
+        self.folder = QLineEdit(str(default / safe))
+        form.addRow("Carpeta de la solicitud", self.folder)
+        self.code = QComboBox()
+        for key, label in actions.DFT_CODES.items():
+            self.code.addItem(label, key)
+        form.addRow("Código DFT", self.code)
+        self.relax = QCheckBox("Relajar con DFT primero")
+        self.single = QCheckBox("Fuerzas en la geometría")
+        self.single.setChecked(True)
+        self.dos = QCheckBox("DOS y gap")
+        self.use_modes = QCheckBox(f"Frecuencia de los {len(modes)} modos seleccionados")
+        self.use_modes.setChecked(bool(modes))
+        self.use_modes.setEnabled(bool(modes))
+        for box in (self.relax, self.single, self.dos, self.use_modes):
+            form.addRow(box)
+        self.mpi = _spin(1, 256, min(4, actions.cores()), 1, 0)
+        form.addRow("Procesos MPI", self.mpi)
+        self.extra = QLineEdit()
+        self.extra.setPlaceholderText('QE: {"pseudos": {"C": "C.pbe-n-kjpaw_psl.1.0.0.UPF"}, '
+                                      '"pseudo_dir": "…"} · DFTB+: {"skf_dir": "…"}')
+        form.addRow("Ajustes del código (JSON)", self.extra)
+        self.run_now = QCheckBox("Correrla ahora con carbonforge")
+        self.run_now.setChecked(True)
+        form.addRow(self.run_now)
+        note = QLabel("GPAW usa los ajustes de todas las referencias de tbkit (PBE, LCAO dzp, "
+                      "h 0.2 Å, Fermi-Dirac 0.05 eV) y una malla k de ≥ 30 Å por eje periódico. "
+                      "La carpeta se puede copiar a otra máquina o a un clúster (trabajo.slurm).")
+        note.setWordWrap(True)
+        form.addRow(note)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def write(self) -> str:
+        import json
+
+        settings = json.loads(self.extra.text()) if self.extra.text().strip() else None
+        modes = self.modes if self.use_modes.isChecked() else []
+        geometry = self.window.pages["Geometría y modos"]
+        vibrations = geometry.result["vibrations"] if modes else None
+        if vibrations is not None and len(vibrations.atoms) != len(self.window.atoms):
+            raise ValueError("Los modos son de otra geometría: calcúlalos para la activa.")
+        return actions.dft_request(self.folder.text().strip(), self.window.atoms,
+                                   self.code.currentData(), relax=self.relax.isChecked(),
+                                   single_point=self.single.isChecked(), dos=self.dos.isChecked(),
+                                   vibrations=vibrations, modes=modes,
+                                   mpi=int(self.mpi.value()), settings=settings)
 
 
 class ProcessesPage(Page):

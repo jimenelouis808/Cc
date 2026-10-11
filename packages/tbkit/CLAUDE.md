@@ -49,6 +49,7 @@ tbkit/
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 ├── cli.py            # `tbkit` console script
 ├── structure_io.py   # reading/writing structures: .xtl, periodic axes from bonds, cells by hand
+├── dft_exchange.py   # DFT requests/results (nanocarbon-dft/1) run by carbonforge; tbkit vs DFT
 ├── gui/              # tbkit-gui (PySide6 + pyvista, extra `gui`): actions (no Qt), jobs (child
 │                     #   process, no Qt), resources (CPU/RAM/GPU), worker, viewer, app
 docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit by hand)
