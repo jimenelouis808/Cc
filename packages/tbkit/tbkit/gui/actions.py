@@ -404,6 +404,15 @@ def modes_from_file(path: str | Path, sigma: float = 10.0) -> dict:
     return _modes_result(Vibrations.load(path), sigma)
 
 
+def modes_from_hessian(atoms: Atoms, hessian, masses=None, source: str = "",
+                       sigma: float = 10.0) -> dict:
+    """Modes from a Hessian in memory (a reopened project), as :func:`vibration_modes`."""
+    from ..modes import Vibrations
+
+    return _modes_result(Vibrations.from_hessian(atoms, np.asarray(hessian), masses, source),
+                         sigma)
+
+
 def _modes_result(vib, sigma: float = 10.0) -> dict:
     from ..modes import participation, vibrational_dos
     from ..sites import site_groups

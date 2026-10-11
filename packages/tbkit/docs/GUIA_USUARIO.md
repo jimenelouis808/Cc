@@ -64,6 +64,7 @@ Ayuda para ocultarlos).
   que pasa el límite se detiene (antes de que el sistema mate procesos). La barra inferior
   muestra el avance del cálculo y el uso de CPU, RAM (y GPU NVIDIA) de la máquina; la
   terminal, una línea de avance cada 5 s. Al relajar, la estructura se mueve en la vista.
+- **Proyectos.** Archivo → «Guardar proyecto» (Ctrl+S) guarda la sesión en un `.tbkproj`: todas las geometrías, el modelo completo (también un archivo de parámetros propio), los ajustes de cada pestaña y de Recetas, los modos calculados (se reabren sin recalcular fuerzas), el último registro y la terminal. «Abrir proyecto…» (Ctrl+O) la recupera; el estado fundamental, la DOS y los espectros se rehacen con un clic (sus ajustes sí se guardan). Al cerrar, la sesión se guarda sola en `~/.tbkit/ultima_sesion.tbkproj`.
 - **Procesos.** Todo lo que corre (el cálculo de la ventana y su cola, las recetas
   lanzadas, cualquier receta con contador en la carpeta de trabajo) con CPU, RAM, núcleos y
   avance; el final de su registro; «Detener seleccionado».

@@ -145,7 +145,11 @@ class MainWindow(QMainWindow):
 
     def _menu(self):
         menu = self.menuBar().addMenu("Archivo")
-        for text, slot in (("Abrir estructura…", self.open_dialog),
+        for text, slot in (("Abrir proyecto…", self.open_project),
+                           ("Guardar proyecto", self.save_project),
+                           ("Guardar proyecto como…", self.save_project_as),
+                           (None, None),
+                           ("Abrir estructura…", self.open_dialog),
                            ("Guardar estructura…", self.save_structure),
                            ("Guardar imagen de la vista…", self.save_image),
                            (None, None),
@@ -156,7 +160,12 @@ class MainWindow(QMainWindow):
             if text is None:
                 menu.addSeparator()
             else:
-                menu.addAction(text).triggered.connect(slot)
+                action = menu.addAction(text)
+                action.triggered.connect(lambda _=False, slot=slot: slot())
+                if text == "Guardar proyecto":
+                    action.setShortcut("Ctrl+S")
+                elif text == "Abrir proyecto…":
+                    action.setShortcut("Ctrl+O")
         help_menu = self.menuBar().addMenu("Ayuda")
         descriptions = help_menu.addAction("Mostrar descripciones de cada pestaña")
         descriptions.setCheckable(True)
@@ -515,7 +524,142 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         self.runner.shutdown()
+        if self.atoms is not None:                 # never lose a session: autosave on close
+            try:
+                path = self.save_project(self.autosave_path(), quiet=True)
+                print(f"tbkit: sesión guardada en {path}")
+            except Exception as error:  # noqa: BLE001  (closing must not fail)
+                print(f"tbkit: no se pudo autoguardar: {error}")
         event.accept()
+
+    # --- projects: a snapshot of the session -------------------------------------------
+
+    @staticmethod
+    def autosave_path() -> Path:
+        return Path.home() / ".tbkit" / "ultima_sesion.tbkproj"
+
+    def project_state(self):
+        """The session as a :class:`project.Project`."""
+        from ..params import model_to_dict
+        from .project import Project
+
+        window = {"model_name": self.model_name, "charge": self.charge.value(),
+                  "scc": self.scc.currentIndex(), "kT": self.kT.value(),
+                  "colour": self.colour.currentIndex(), "cores": self.cores_box.value(),
+                  "ram_gb": self.ram_box.value(), "repeat": [b.value() for b in self.repeat],
+                  "view_repeat": list(self.view.repeat), "tab": self.tabs.currentIndex()}
+        pages = {}
+        for title, page in self.pages.items():
+            values = widget_values(page)
+            if hasattr(page, "extra_state"):
+                values["__extra__"] = page.extra_state()
+            pages[title] = values
+        modes = None
+        geometry = self.pages["Geometría y modos"]
+        if geometry.result is not None:
+            vib = geometry.result["vibrations"]
+            modes = {"hessian": vib.hessian, "masses": vib.masses, "atoms": vib.atoms,
+                     "source": vib.source}
+        record = None
+        if self.last_record is not None:
+            atoms, model, task, settings, results = self.last_record
+            record = actions.record(atoms, model, task, settings, results)
+        elif getattr(self, "loaded_record", None):
+            record = self.loaded_record
+        return Project(list(self.geometries), max(self.geometry_combo.currentIndex(), 0),
+                       window, pages, model_to_dict(self.model) if self.model else None,
+                       modes, record, self.console.text())
+
+    def save_project(self, path=None, quiet: bool = False):
+        """Save the session; the first time (or «como…»), asks where."""
+        from . import project
+
+        path = path or getattr(self, "project_path", None)
+        if not path:
+            return self.save_project_as()
+        if self.runner.running and not quiet:
+            self.statusBar().showMessage("Se guarda el estado; el cálculo en marcha no se "
+                                         "guarda (al terminar, guarda otra vez).")
+        written = project.save(path, self.project_state())
+        if not quiet:
+            self.project_path = written
+            self.setWindowTitle(f"tbkit — {written.name}")
+            self.console.line(f"proyecto guardado: {written}")
+            self.statusBar().showMessage(f"Proyecto guardado en {written}")
+        return written
+
+    def save_project_as(self):
+        from .project import SUFFIX
+
+        path, _ = QFileDialog.getSaveFileName(self, "Guardar proyecto", f"proyecto{SUFFIX}",
+                                              f"Proyecto de tbkit (*{SUFFIX})")
+        if path:
+            self.project_path = None
+            return self.save_project(path)
+        return None
+
+    def open_project(self, path=None):
+        from . import project
+
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(self, "Abrir proyecto", "",
+                                                  f"Proyecto de tbkit (*{project.SUFFIX})")
+        if not path:
+            return
+        try:
+            state = project.load(path)
+        except Exception as error:  # noqa: BLE001  (a bad file is reported, not raised)
+            self.error("No se pudo abrir el proyecto", str(error))
+            return
+        self.restore_project(state)
+        self.project_path = Path(path)
+        self.setWindowTitle(f"tbkit — {Path(path).name}")
+        self.console.line(f"proyecto abierto: {path} (guardado {state.saved}, "
+                          f"tbkit {state.tbkit})")
+
+    def restore_project(self, state):
+        from ..params import model_from_dict
+
+        if state.console:
+            self.console.write(state.console.rstrip("\n") + "\n── proyecto reabierto ──\n")
+        self.geometries = []
+        self.geometry_combo.clear()
+        for name, atoms in state.geometries:
+            self.set_atoms(atoms, name)
+        if state.geometries:
+            self.choose_geometry(min(state.active, len(state.geometries) - 1))
+        w = state.window
+        name = w.get("model_name")
+        if state.model is not None:
+            builtin = name in actions.MODELS if isinstance(name, str) else False
+            self.set_model(name, None if builtin else model_from_dict(state.model))
+        for box, key in ((self.charge, "charge"), (self.kT, "kT"), (self.cores_box, "cores"),
+                         (self.ram_box, "ram_gb")):
+            if key in w:
+                box.setValue(w[key])
+        for combo, key in ((self.scc, "scc"), (self.colour, "colour")):
+            if key in w:
+                combo.setCurrentIndex(int(w[key]))
+        for box, n in zip(self.repeat, w.get("repeat", []), strict=False):
+            box.setValue(int(n))
+        self.view.set_repeat(w.get("view_repeat", (1, 1, 1)))
+        for title, values in state.pages.items():
+            page = self.pages.get(title)
+            if page is None:
+                continue
+            extra = values.pop("__extra__", None)
+            set_widget_values(page, values)
+            if extra is not None and hasattr(page, "restore_extra"):
+                page.restore_extra(extra)
+        if "tab" in w:
+            self.tabs.setCurrentIndex(int(w["tab"]))
+        self.loaded_record = state.record
+        if state.modes is not None:
+            m = state.modes
+            page = self.pages["Geometría y modos"]
+            self.runner.start("Modos del proyecto", actions.modes_from_hessian, m["atoms"],
+                              m["hessian"], m["masses"], m["source"],
+                              on_done=page.show_modes, on_error=self.error)
 
     # --- geometries of the session ---------------------------------------------------------
 
@@ -636,9 +780,11 @@ class MainWindow(QMainWindow):
         else:
             self.set_model(name)
 
-    def set_model(self, name_or_path: str):
+    def set_model(self, name_or_path: str, model=None):
+        """Use a built-in set (its name) or a parameter file; ``model``: an already built
+        TBModel (a project's own parameters), shown under ``name_or_path``."""
         try:
-            self.model = actions.load_model(name_or_path)
+            self.model = model if model is not None else actions.load_model(name_or_path)
         except Exception as error:
             self.error("No se pudo cargar el modelo", str(error))
             return
@@ -2061,6 +2207,21 @@ class RecipesPage(Page):
         return {self.settings.item(r, 0).text(): self.settings.item(r, 1).text()
                 for r in range(self.settings.rowCount())}
 
+    def extra_state(self) -> dict:
+        """The edited tables (a project keeps them)."""
+        return {"settings": self.edited(),
+                "options": {row["dest"]: self.options.item(r, 1).text()
+                            for r, row in enumerate(self.option_rows)}}
+
+    def restore_extra(self, extra: dict) -> None:
+        for r in range(self.settings.rowCount()):
+            key = self.settings.item(r, 0).text()
+            if key in extra.get("settings", {}):
+                self.settings.item(r, 1).setText(extra["settings"][key])
+        for r, row in enumerate(self.option_rows):
+            if row["dest"] in extra.get("options", {}):
+                self.options.item(r, 1).setText(extra["options"][row["dest"]])
+
     def check_resources(self, *_):
         info = self.usage.get(self.name(), {"parts": True, "parallel_steps": None})
         splits = actions.step_splits(info, self.step.currentText())
@@ -2467,6 +2628,78 @@ class ProcessesPage(Page):
             pids = terminate(entry["pid"])
             self.window.console.line(f"detenido {entry['name']}: procesos {pids}")
         self.refresh()
+
+
+# --------------------------------------------------------------------------- snapshots
+
+#: Controls a project does not restore by value: the geometry and model lists are restored
+#: from the project itself, the mode-site list depends on the modes.
+_NOT_SAVED = {"geometry_combo", "model_combo", "site", "other_model"}
+
+
+def _value(widget):
+    if isinstance(widget, QCheckBox):
+        return widget.isChecked()
+    if isinstance(widget, (QDoubleSpinBox, QSpinBox)):
+        return widget.value()
+    if isinstance(widget, QComboBox):
+        data = widget.currentData()
+        return {"text": widget.currentText(),
+                "data": data if isinstance(data, (str, int, float)) else None}
+    if isinstance(widget, QLineEdit):
+        return widget.text()
+    return None
+
+
+def widget_values(owner) -> dict:
+    """Every check box, spin box, combo box and text field that is an attribute of
+    ``owner`` (lists of them too), by attribute name."""
+    out = {}
+    for name, widget in vars(owner).items():
+        if name.startswith("_") or name in _NOT_SAVED:
+            continue
+        value = _value(widget)
+        if value is not None:
+            out[name] = value
+        elif isinstance(widget, list) and widget and all(_value(w) is not None
+                                                         for w in widget):
+            out[name] = [_value(w) for w in widget]
+    return out
+
+
+def _set(widget, value):
+    if isinstance(widget, QCheckBox):
+        widget.setChecked(bool(value))
+    elif isinstance(widget, QSpinBox):
+        widget.setValue(int(value))
+    elif isinstance(widget, QDoubleSpinBox):
+        widget.setValue(float(value))
+    elif isinstance(widget, QComboBox):
+        index = widget.findData(value.get("data")) if value.get("data") is not None else -1
+        if index < 0:
+            index = widget.findText(value.get("text", ""))
+        if index >= 0:
+            widget.setCurrentIndex(index)
+        elif widget.isEditable():
+            widget.setEditText(value.get("text", ""))
+    elif isinstance(widget, QLineEdit):
+        widget.setText(str(value))
+
+
+def set_widget_values(owner, values: dict) -> None:
+    """The inverse of :func:`widget_values`; a control that no longer exists is skipped."""
+    for name, value in values.items():
+        widget = getattr(owner, name, None)
+        if widget is None or name in _NOT_SAVED:
+            continue
+        try:
+            if isinstance(widget, list):
+                for w, v in zip(widget, value, strict=False):
+                    _set(w, v)
+            else:
+                _set(widget, value)
+        except (TypeError, ValueError, AttributeError):
+            continue
 
 
 def main(argv=None):

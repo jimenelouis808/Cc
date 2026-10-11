@@ -652,3 +652,32 @@ def test_recipes_serial_steps_cores_and_new_recipe(tmp_path):
     processes = window.pages["Procesos"]
     processes.refresh()
     assert "Núcleos:" in processes.summary.text()
+
+
+def test_project_saves_and_reopens_the_session(tmp_path):
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    window.set_atoms(molecule("C6H6"), "benceno")
+    window.set_model("chn")
+    window.kT.setValue(0.037)
+    geometry = window.pages["Geometría y modos"]
+    geometry.fmax.setValue(0.033)
+    geometry.run_modes()
+    _wait(window)
+    recipes = window.pages["Recetas"]
+    recipes.recipe.setCurrentIndex(recipes.recipe.findData("coil_double_resonance"))
+    recipes.step.setCurrentText("pairs")
+    recipes.options.item(0, 1).setText("2.54")
+    path = window.save_project(tmp_path / "sesion.tbkproj")
+    other = MainWindow(interactive=False)
+    other.open_project(str(path))
+    _wait(other)
+    assert [n for n, _ in other.geometries] == ["benceno"] and len(other.atoms) == 12
+    assert other.model.name == window.model.name and other.kT.value() == pytest.approx(0.037)
+    assert other.pages["Geometría y modos"].fmax.value() == pytest.approx(0.033)
+    assert other.pages["Geometría y modos"].result is not None           # modes are back
+    page = other.pages["Recetas"]
+    assert page.name() == "coil_double_resonance" and page.step.currentText() == "pairs"
+    assert page.options.item(0, 1).text() == "2.54"
