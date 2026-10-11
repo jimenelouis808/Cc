@@ -175,6 +175,29 @@ Bandas y DOS de los tres sistemas en la geometría PBE, más grafeno y molécula
 3. **Construcción del pirrólico**: la primera versión tenía los tres H encimados (error del
    constructor) y se rehízo.
 
+## Figuras con incertidumbre (`incertidumbre/`)
+
+Una segunda versión de las figuras de Raman, con barras y bandas de incertidumbre. Las
+primeras versiones siguen sin tocar en `paginas/`. No se recalculó nada: todo sale de lo que
+ya estaba en caché.
+
+```bash
+cd packages/tbkit
+uv run python resultados/coil204/incertidumbre/hacer_figuras.py datos     # necesita out/
+uv run python resultados/coil204/incertidumbre/hacer_figuras.py figuras   # solo datos/
+```
+
+| Figura (`incertidumbre/figuras/`, PDF y PNG 600 dpi) | Qué incertidumbre muestra |
+|---|---|
+| `raman_banda_eta_1_96`, `_2_33`, `_2_54` | Espectro con η = 0.1 eV (línea) y la banda η 0.05–0.2 eV. Tres estructuras; cada curva va normalizada a su máximo de G. |
+| `centroide_G_eta`, `centroide_D_eta`, `id_ig_eta` | Valor con η = 0.1 eV y barra sobre η 0.05–0.2 eV, por láser y estructura. |
+| `modelos_sin_dopar` | Coil sin dopar con los tres modelos (xu_chn, Xu carbono, Tang): la dispersión entre modelos. |
+| `cociente_pbe_tbkit` | Cociente de frecuencias PBE/tbkit de los modos verificados con GPAW, con la línea de la mediana. Su dispersión es la incertidumbre de cualquier posición escalada. |
+
+- **Base de los espectros con η**: solo los 40 modos más fuertes de cada estructura, que son los
+  que tienen tensores con η 0.05 y 0.2.
+- **Datos**: CSV y JSON en `incertidumbre/datos/`.
+
 ## Lo que no está aquí
 
 - **Cálculos de GPAW**: archivos `.gpw`, trayectorias y cachés de desplazamientos. Pesan cientos
