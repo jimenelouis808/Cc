@@ -203,7 +203,7 @@ uv run python resultados/coil204/incertidumbre/hacer_figuras.py figuras   # solo
   - I_D/I_G del N grafítico queda en ~0.01 con cualquier η.
   - El modelo pesa más que η en I_D/I_G sin dopar: Tang da 0.10–0.13; xu_chn, 0.08–0.10.
   - PBE/tbkit: mediana 0.951, intervalo 0.941–1.023 (34 modos). Una posición escalada con 0.95
-    arrastra una incertidumbre de −1 % / +7 %.
+    arrastra una incertidumbre de −1 % / +8 %.
 
 ## Lo que no está aquí
 
