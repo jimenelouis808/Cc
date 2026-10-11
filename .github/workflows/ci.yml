@@ -32,6 +32,8 @@ jobs:
       # tests get a virtual display (xvfb-run). TBKIT_GUI_REQUIRED turns a
       # missing GUI dependency into a failure instead of a skip.
       UV_PYTHON_PREFERENCE: only-managed
+      # Pinned: the newest managed Python can run ahead of the VTK wheels.
+      UV_PYTHON: "3.12"
       QT_QPA_PLATFORM: offscreen
       TBKIT_GUI_REQUIRED: "1"
     steps:
