@@ -1009,6 +1009,9 @@ class GuidePage(Page):
                     font = self.steps.item(r, c).font()
                     font.setBold(True)
                     self.steps.item(r, c).setFont(font)
+        self.steps.setColumnWidth(0, 28)
+        self.steps.setColumnWidth(1, 240)
+        self.steps.resizeRowsToContents()
         nxt = next((s for s in out["steps"] if s["status"] == "siguiente"), None)
         atoms = self.window.atoms
         what = (f"{atoms.get_chemical_formula()} · {len(atoms)} átomos · periódica en "
