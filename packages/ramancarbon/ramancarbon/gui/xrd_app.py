@@ -27,6 +27,7 @@ from .widgets import (
     scrollable_column,
     scrolled_text,
     set_text,
+    split_column,
     table,
 )
 from .xrd_state import PARAMETER_GROUPS, XRDSession
@@ -380,10 +381,16 @@ class XRDApp(SectionApp):
 
         left = ttk.Frame(panes)
         panes.add(left, weight=3)
-        plot_card, plot_body = card(left, None)
+        # The pattern and its difference curve in a split, not two packed
+        # cards that both expand: the main figure asks for its whole
+        # figsize first, so in a short window the residual card -- toolbar
+        # included -- was left with nothing and was never mapped.
+        figures, (plot_pane, residual_pane) = split_column(left, (3, 1))
+        figures.pack(fill="both", expand=True)
+        plot_card, plot_body = card(plot_pane, None)
         plot_card.pack(fill="both", expand=True)
         self.make_canvas(plot_body, "rietveld", lambda f: f.add_subplot(111))
-        residual_card, residual_body = card(left, None)
+        residual_card, residual_body = card(residual_pane, None)
         residual_card.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
         self.make_canvas(residual_body, "residual", lambda f: f.add_subplot(111),
                          figsize=(7.6, 2.4))

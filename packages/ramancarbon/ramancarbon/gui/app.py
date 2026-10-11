@@ -869,7 +869,11 @@ class RamanCarbonApp:
                    "otra si ambos se midieron con el mismo láser y con la misma "
                    "base (áreas o alturas). La columna «laser_nm» está ahí "
                    "precisamente para que se vea.", wrap=900)
-        self.batch_table = table(body, ["nombre"], height=10)
+        # Six rows and six lines below, not ten and twelve: the three panes'
+        # requested heights are what the paned window starts from, and in a
+        # 1100x740 window those asked for more than the page had, leaving the
+        # statistics card one pixel tall. The sashes still drag them open.
+        self.batch_table = table(body, ["nombre"], height=6)
 
         from .widgets import scrolled_text
 
@@ -879,7 +883,7 @@ class RamanCarbonApp:
                                  "mueve mucho la media y casi nada la mediana.")
         stats.pack(fill="both", expand=True)
         self.batch_text = scrolled_text(stats_body, self.palette,
-                                        self.fonts["mono"], height=12)
+                                        self.fonts["mono"], height=6)
 
         plot_area, plot_body = card(bottom, None)
         plot_area.pack(fill="both", expand=True)

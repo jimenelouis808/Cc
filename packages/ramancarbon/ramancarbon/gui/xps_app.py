@@ -363,12 +363,16 @@ class XPSApp(SectionApp):
         ttk.Label(window_row, text="–").pack(side="left", padx=2)
         ttk.Entry(window_row, textvariable=self.window_high_var, width=9).pack(
             side="left")
-        ttk.Button(window_row, text="Tomar del zoom",
-                   command=self._window_from_zoom).pack(
-                       side="left", padx=(PAD["xs"], 0))
-        ttk.Button(window_row, text="Toda la región",
-                   command=self._window_whole_region).pack(side="left",
-                                                           padx=(PAD["xs"], 0))
+        # The two buttons wrap under the entries rather than sharing their
+        # row: packed beside them in a narrow column, "Toda la región" was
+        # left 2 px of the 118 it needs.
+        window_buttons = flow(cbody)
+        window_buttons.add(ttk.Button(window_buttons.frame,
+                                      text="Tomar del zoom",
+                                      command=self._window_from_zoom))
+        window_buttons.add(ttk.Button(window_buttons.frame,
+                                      text="Toda la región",
+                                      command=self._window_whole_region))
         hint(cbody,
              "Los extremos de la ventana SON un parámetro. Mover el límite de "
              "alta energía de enlace de un C 1s un electronvoltio mueve el "
@@ -405,15 +409,14 @@ class XPSApp(SectionApp):
             scale_row, text="Eje Y desde cero",
             variable=self.zero_base_var,
             command=self._redraw_region).pack(side="left")
-        ttk.Label(
-            scale_row,
-            text=("  Un C 1s sobre muestra gruesa se apoya en decenas de "
-                  "miles de cuentas con picos de diez mil: desde cero, tres "
-                  "cuartos del alto son fondo. Desmarcado, el eje se ajusta "
-                  "a los datos y las componentes se ven; marcado, se lee la "
-                  "escala absoluta."),
-            style="Muted.TLabel", font=self.fonts["small"],
-            wraplength=620, justify="left").pack(side="left")
+        # Under the checkbox, wrapped to the pane: beside it, at a fixed
+        # 620 px, it was cut to 134 px in a 1100 px window.
+        hint(body,
+             "Un C 1s sobre muestra gruesa se apoya en decenas de miles de "
+             "cuentas con picos de diez mil: desde cero, tres cuartos del "
+             "alto son fondo. Desmarcado, el eje se ajusta a los datos y las "
+             "componentes se ven; marcado, se lee la escala absoluta.",
+             wrap=620)
         self.make_canvas(body, "region", lambda f: f.add_subplot(111),
                          figsize=(8.2, 4.4))
         bottom = ttk.Frame(table_pane)
@@ -434,8 +437,9 @@ class XPSApp(SectionApp):
             height=8,
         )
         self.components_table.bind("<Double-1>", self._edit_component)
-        component_buttons = ttk.Frame(left_body)
-        component_buttons.pack(fill="x", pady=(PAD["xs"], 0))
+        # A wrapping row: eight buttons packed in one line did not fit half
+        # the table's width, and "Fijar anchura" and "Restablecer" were cut.
+        component_buttons = flow(left_body)
         for text, command in (
             ("Editar…", self._edit_component),
             ("Fijar posición", lambda: self._toggle_hold("centre")),
@@ -446,8 +450,8 @@ class XPSApp(SectionApp):
             ("Quitar", self._remove_component),
             ("Restablecer", self._reset_components),
         ):
-            ttk.Button(component_buttons, text=text, command=command).pack(
-                side="left", padx=(0, PAD["xs"]))
+            component_buttons.add(ttk.Button(component_buttons.frame,
+                                              text=text, command=command))
         hint(left_body,
              "Doble clic edita la posición y la anchura de PARTIDA de una "
              "componente. Fijar un parámetro no es gratis: deja de contar "
