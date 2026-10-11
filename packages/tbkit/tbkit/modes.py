@@ -63,7 +63,7 @@ class Vibrations:
                    vectors.T.reshape(len(omega2), len(atoms), 3), source)
 
     @classmethod
-    def load(cls, path: str | Path) -> "Vibrations":
+    def load(cls, path: str | Path) -> Vibrations:
         """Modes saved before, without recomputing forces: a ``modes.npz`` of :meth:`save`, or a
         ``hessian.npy`` (eV/Å², 3N × 3N) with its structure next to it (``structure.extxyz``,
         ``relaxed.extxyz`` or the only ``*.extxyz`` there), or a folder holding either. The

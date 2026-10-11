@@ -1368,7 +1368,7 @@ class GeometryPage(Page):
         self.window.view.stop_animation()
         self.window.view.show(self.window.atoms, keep_camera=True)
 
-    def open_modes(self, path: Optional[str] = None):
+    def open_modes(self, path: str | None = None):
         """Modes computed before (modes.npz, or hessian.npy + its structure): their structure
         becomes the active geometry and the modes are shown, without recomputing."""
         if not path:

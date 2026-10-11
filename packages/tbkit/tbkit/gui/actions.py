@@ -384,13 +384,12 @@ def relax_structure(atoms: Atoms, model: TBModel, fmax: float = 0.02, steps: int
 def vibration_modes(atoms: Atoms, model: TBModel, kT: float = 0.02, kmesh: int = 12,
                     scc: Optional[bool] = None, sigma: float = 10.0) -> dict:
     """Γ modes with the Hessian (``tbkit.modes``), a table and the vibrational DOS."""
-    from ..modes import participation, vibrational_dos, vibrations
+    from ..modes import vibrations
 
     _needs_repulsion(model)
     problems = check_model(atoms, model, scc)
     if problems:
         raise ValueError(" ".join(problems))
-    from ..sites import site_groups
 
     vib = vibrations(atoms, model, kmesh=kmesh, kT=kT, scc=scc)
     return _modes_result(vib, sigma)
