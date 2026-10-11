@@ -75,6 +75,8 @@ def _qt():
 
         import pyvista  # noqa: F401
     except ImportError as error:
+        if os.environ.get("TBKIT_GUI_REQUIRED"):         # CI: the window must be tested
+            raise
         pytest.skip(f"GUI sin dependencias: {error}")
     return QApplication.instance() or QApplication([])
 
