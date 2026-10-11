@@ -1158,8 +1158,11 @@ class TestThePeriodicCoilInTheWindow:
         self._select(app)
         job = app.current_job()
         assert job.mode == "coil (periodic, DFT)"
+        # place_curvature and wall_anchor reach every meshed mode, this one
+        # included (test_place_curvature_wiring.py checks the same seven).
         assert set(job.params) == {"coil_radius", "pitch", "tube_radius",
-                                   "sides", "bond", "handedness"}
+                                   "sides", "bond", "handedness",
+                                   "place_curvature", "wall_anchor"}
         # 0 on the slider means the smooth helix, and the builder spells
         # that None rather than a side count it would have to special-case.
         assert job.params["sides"] is None

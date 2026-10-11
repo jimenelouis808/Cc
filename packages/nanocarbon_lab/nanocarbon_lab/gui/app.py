@@ -4329,7 +4329,12 @@ class NanocarbonGUI:
         # Include the drawn edge-bond stubs. They reach up to a cell
         # beyond the atoms, and framing only the atoms cropped them off
         # the view on any structure where they are a large share.
+        # Only the stubs drawn for THIS structure: one assigned without a
+        # redraw would otherwise be framed by the previous one's stubs,
+        # frozen at its size whatever was repeated or replaced.
         extra = getattr(self, "_drawn_extent", None)
+        if getattr(self, "_drawn_extent_of", None) is not self.atoms:
+            extra = None
         if extra is not None and len(extra):
             corners = np.vstack([corners, extra])
         scale = getattr(self, "_zoom_scale", 1.0)
@@ -4701,6 +4706,7 @@ class NanocarbonGUI:
                          if s in self.var_ring_filter else True
                          for s in ring_of])
         self.ax.clear()
+        self._drawn_extent = None              # set again only if stubs are drawn
 
         note = ""
         if self.var_ring_faces.get():
@@ -4754,6 +4760,7 @@ class NanocarbonGUI:
             self._drawn_extent = (
                 np.array([p for seg in segs for p in seg])
                 if segs else None)
+            self._drawn_extent_of = self.atoms
             if segs:
                 self.ax.add_collection3d(
                     Line3DCollection(segs, colors="#9aa3ad", linewidths=0.7)
