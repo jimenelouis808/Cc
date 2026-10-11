@@ -278,9 +278,15 @@ class VibspecApp:
             if current is None:
                 self.current_button.configure(text="Estructura actual (nada aún)",
                                               state="disabled")
+                adopt = getattr(self, "adopt_button", None)
+                if adopt is not None:
+                    adopt.configure(state="disabled")
             return
         self.current_button.configure(text=f"Estructura actual: {current.describe()}",
                                       state="normal")
+        adopt = getattr(self, "adopt_button", None)
+        if adopt is not None:
+            adopt.configure(state="normal")
 
     #: How a vibspec model is named in the window's session.
     MODEL_ORIGIN = "Modelo finito (IR)"
@@ -339,7 +345,7 @@ class VibspecApp:
         from tkinter import filedialog
 
         if self.model is None:
-            self._status("Primero construye un modelo.")
+            self._status(self._no_model_message())
             return
         path = filedialog.asksaveasfilename(defaultextension=".xyz",
                                             filetypes=[("extxyz", "*.xyz")])
@@ -378,6 +384,13 @@ class VibspecApp:
         self._advanced: dict[str, dict[str, Any]] = {}
         ttk.Button(left, text="Parámetros avanzados de GPAW…",
                    command=self._on_advanced).pack(fill="x", pady=(0, 4))
+        # El modelo se armaba solo en la pestana Modelo, y aqui no quedaba
+        # mas que un "primero construye un modelo" que no decia que la
+        # estructura ya estaba a un clic.
+        self.adopt_button = ttk.Button(
+            buttons, text="Usar la estructura actual",
+            command=self._on_adopt_current, state="disabled")
+        self.adopt_button.pack(side="left", padx=(0, 6))
         ttk.Button(buttons, text="Comprobar", command=self._on_check).pack(side="left")
         ttk.Button(buttons, text="Preparar", command=lambda: self._on_prepare(False)
                    ).pack(side="left", padx=4)
@@ -448,9 +461,39 @@ class VibspecApp:
             text += "\n\n(Sin modelo: solo se comprobaron los parámetros.)"
         self._set_text(self.calc_report, text)
 
+    def _on_adopt_current(self) -> None:
+        """Toma la estructura de la ventana y arma el modelo con ella.
+
+        Es lo mismo que elegir «Estructura actual» en Modelo y pulsar
+        Construir, pero sin irse de esta pestaña. Pasa por las mismas
+        comprobaciones: un IR por diferencias finitas del dipolo necesita un
+        modelo FINITO, y una estructura periódica se rechaza aquí igual que
+        se rechazaría allí.
+        """
+        current = self.session.current if self.session is not None else None
+        if current is None:
+            self._status("No hay estructura actual: constrúyela o impórtala "
+                         "en otra página.")
+            return
+        self.source_mode.set("session")
+        self._on_build()
+        if self.model is not None:
+            self._status(f"Modelo tomado de «{current.origin}»: "
+                         f"{len(self.model.atoms)} átomos.")
+
+    def _no_model_message(self) -> str:
+        """Por qué no hay modelo, y qué hacer, según lo que haya a mano."""
+        current = self.session.current if self.session is not None else None
+        if current is not None and current.origin != self.MODEL_ORIGIN:
+            return (f"Todavía no hay modelo, pero la ventana tiene una "
+                    f"estructura ({current.describe()}): pulsa «Usar la "
+                    "estructura actual».")
+        return ("Primero construye un modelo en la pestaña Modelo, o trae "
+                "una estructura desde Construir o Importar.")
+
     def _on_prepare(self, and_run: bool) -> None:
         if self.model is None:
-            self._status("Primero construye un modelo en la pestaña Modelo.")
+            self._status(self._no_model_message())
             return
         try:
             spec = self._spec()

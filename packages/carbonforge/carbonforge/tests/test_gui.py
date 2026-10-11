@@ -12,6 +12,7 @@ from carbonforge.gui.params import (
     FUNCTIONALIZATION_PARAMS,
     MODIFIER_PARAMS,
     apply_functionalization,
+    IMPORTED_KIND,
     STRUCTURES,
     apply_modifiers,
     build_structure,
@@ -79,7 +80,10 @@ class TestCoerceValue:
 
 
 class TestBuildStructure:
-    @pytest.mark.parametrize("kind", list(STRUCTURES))
+    # "importada" no genera geometria a proposito: toma la que ya hay. Su
+    # negativa se prueba aparte, en TestElTipoImportado.
+    @pytest.mark.parametrize(
+        "kind", [k for k in STRUCTURES if k != IMPORTED_KIND])
     def test_every_structure_builds_with_defaults(self, kind):
         """Every default shown in the GUI must produce a valid structure."""
         atoms = build_structure(kind, _defaults(STRUCTURES[kind].params))
@@ -281,3 +285,23 @@ class TestFunctionalizationPanel:
 
         for spec in FUNCTIONALIZATION_PARAMS:
             coerce_value(spec, spec.default)
+
+
+class TestElTipoImportado:
+    """No construye: usa lo que ya hay. Es lo que permite dopar y
+    funcionalizar una estructura traida de un archivo en vez de que el
+    preset seleccionado la sobrescriba."""
+
+    def test_no_inventa_geometria(self):
+        with pytest.raises(ValueError, match="no genera geometría"):
+            build_structure(IMPORTED_KIND, {})
+
+    def test_el_mensaje_dice_de_donde_sacarla(self):
+        with pytest.raises(ValueError, match="Traer la estructura actual"):
+            build_structure(IMPORTED_KIND, {})
+
+    def test_no_pide_parametros_de_geometria(self):
+        assert STRUCTURES[IMPORTED_KIND].params == ()
+
+    def test_pero_admite_dopaje_y_grupos(self):
+        assert STRUCTURES[IMPORTED_KIND].supports_modifiers

@@ -102,6 +102,22 @@ _VACUUM_2D = ParamSpec(
 )
 
 
+#: Clave del tipo que NO construye geometría: la toma de donde ya está
+#: (un archivo importado, un modelo de otra página) y sólo le aplica el
+#: dopaje, los defectos y los grupos. Sin ella, elegir un preset y pulsar
+#: "Construir" sobre una estructura importada la sobrescribía con un
+#: nanotubo, y no había manera de decorar lo que uno acababa de importar.
+IMPORTED_KIND = "importada"
+
+
+def _no_geometry_to_invent(**_kwargs) -> Atoms:
+    """El constructor del tipo importado, que a propósito no construye."""
+    raise ValueError(
+        "«Personalizada / importada» no genera geometría: trae una estructura "
+        "con «Traer la estructura actual», o impórtala en la página Importar."
+    )
+
+
 STRUCTURES: dict[str, StructureSpec] = {
     "cnt": StructureSpec(
         key="cnt",
@@ -203,6 +219,19 @@ STRUCTURES: dict[str, StructureSpec] = {
                       help="Misma semilla = misma estructura, siempre."),
         ),
         supports_modifiers=False,
+    ),
+    IMPORTED_KIND: StructureSpec(
+        key=IMPORTED_KIND,
+        label="Personalizada / importada",
+        description=(
+            "Usa la estructura que ya tienes -- importada de un archivo o "
+            "hecha en otra página -- sin volver a generarla. Los parámetros "
+            "de geometría desaparecen porque no hay nada que generar; el "
+            "dopaje, los defectos y los grupos sí se aplican, y siempre "
+            "sobre la estructura original, no sobre el resultado anterior."
+        ),
+        builder=_no_geometry_to_invent,
+        params=(),
     ),
 }
 

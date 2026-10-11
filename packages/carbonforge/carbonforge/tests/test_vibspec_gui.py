@@ -357,3 +357,62 @@ def test_unified_window_shares_the_structure(tmp_path):
         assert app._current_page() == "Frente al experimento"
     finally:
         root.destroy()
+
+
+@pytest.mark.skipif(not _display_available(), reason="sin Tk o sin pantalla")
+class TestLaNegativaSinModeloDiceQueHacer:
+    """Antes decía «primero construye un modelo» y se quedaba ahí, aunque la
+    ventana ya tuviera una estructura a un clic de distancia."""
+
+    @pytest.fixture()
+    def app(self, tmp_path):
+        import tkinter
+
+        from carbonforge.gui.session import Session
+        from carbonforge.vibspec.gui.app import VibspecApp
+
+        root = tkinter.Tk()
+        root.withdraw()
+        try:
+            yield VibspecApp(root, tmp_path / "calculos", session=Session())
+        finally:
+            root.destroy()
+
+    def _with_structure(self, app):
+        from ase.build import molecule
+
+        atoms = molecule("C6H6")
+        atoms.center(vacuum=8.0)
+        app.session.publish(atoms, origin="Construir")
+        return atoms
+
+    def test_sin_nada_dice_donde_conseguir_una(self, app):
+        assert "pestaña Modelo" in app._no_model_message()
+
+    def test_con_una_estructura_a_mano_lo_dice(self, app):
+        self._with_structure(app)
+        message = app._no_model_message()
+        assert "Usar la estructura actual" in message
+        assert "C6H6" in message
+
+    def test_preparar_sin_modelo_usa_ese_mensaje(self, app):
+        self._with_structure(app)
+        app.model = None
+        app._on_prepare(False)
+        assert "Usar la estructura actual" in app.status_var.get()
+
+    def test_el_boton_se_enciende_con_la_estructura(self, app):
+        assert str(app.adopt_button["state"]) == "disabled"
+        self._with_structure(app)
+        assert str(app.adopt_button["state"]) == "normal"
+
+    def test_adoptar_sin_estructura_lo_dice(self, app):
+        app.session.clear()
+        app._on_adopt_current()
+        assert "No hay estructura actual" in app.status_var.get()
+
+    def test_adoptar_arma_el_modelo(self, app):
+        atoms = self._with_structure(app)
+        app._on_adopt_current()
+        assert app.model is not None
+        assert len(app.model.atoms) == len(atoms)

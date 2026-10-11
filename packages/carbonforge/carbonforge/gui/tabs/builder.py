@@ -13,14 +13,16 @@ import traceback
 
 from ase import Atoms
 
+from ...validation.checks import run_basic_checks
 from ..params import (
-    check_parameter_constraints,
     FUNCTIONALIZATION_PARAMS,
-    apply_functionalization,
+    IMPORTED_KIND,
     MODIFIER_PARAMS,
     STRUCTURES,
+    apply_functionalization,
     apply_modifiers,
     build_structure,
+    check_parameter_constraints,
     describe_structure,
     validate_calculation,
 )
@@ -50,6 +52,10 @@ class BuilderTab:
 
     def _build_builder_tab(self, parent) -> None:
         tk, ttk = self.tk, self.ttk
+
+        # La estructura traida tal cual, intacta: cada construccion parte de
+        # ella y no del resultado de la anterior.
+        self._imported_base = None
 
         outer = ttk.Frame(parent, padding=8)
         outer.pack(fill="both", expand=True)
@@ -120,6 +126,15 @@ class BuilderTab:
             command=self._on_take_current,
         ).pack(fill="x", pady=(4, 0))
 
+        # La geometria se podia mandar a Preparar, pero no sacarla a un
+        # archivo desde aqui: para abrirla en otro programa habia que
+        # exportar un calculo entero.
+        self.save_button = ttk.Button(
+            actions, text="Guardar estructura…", command=self._on_save_structure,
+            state="disabled",
+        )
+        self.save_button.pack(fill="x", pady=(4, 0))
+
         self.png_button = ttk.Button(
             actions, text="Guardar imagen PNG…", command=self._on_save_png,
             state="disabled",
@@ -167,6 +182,10 @@ class BuilderTab:
         self._discard_current_structure()
 
         spec = STRUCTURES[self._current_structure_key()]
+        if spec.key != IMPORTED_KIND:
+            # Elegir un preset es decir "genera esto": la base importada deja
+            # de aplicar y guardarla solo serviria para resucitarla sola.
+            self._imported_base = None
         self.description_label.configure(text=spec.description)
 
         geometry = ttk.LabelFrame(
@@ -236,8 +255,18 @@ class BuilderTab:
         if current is getattr(self, "_published", None):
             self.status_var.set("La estructura actual ya es la de esta página.")
             return
-        self._on_built(session.take(), origin=current.origin)
-        self.status_var.set(f"Traída de «{current.origin}»: {len(self.atoms)} átomos.")
+        atoms = session.take()
+        # Cambiar de tipo descarta lo construido, asi que el tipo va PRIMERO
+        # y la base despues: al reves, _rebuild_param_fields borraria lo que
+        # acabamos de traer.
+        self.structure_var.set(STRUCTURES[IMPORTED_KIND].label)
+        self._rebuild_param_fields()
+        self._imported_base = atoms.copy()
+        self._on_built(atoms, origin=current.origin)
+        self.status_var.set(
+            f"Traída de «{current.origin}»: {len(self.atoms)} átomos. "
+            "El tipo pasó a «Personalizada / importada», así que construir "
+            "le aplica dopaje y grupos en vez de generar otra cosa.")
 
     def _discard_current_structure(self) -> None:
         """Drop the built structure and disable the actions that consume it."""
@@ -260,6 +289,11 @@ class BuilderTab:
             session.clear()
         self.atoms = None
         self.png_button.configure(state="disabled")
+        # Puede no existir todavia: descartar corre tambien mientras se
+        # construye la pestana, antes de que esten todos los botones.
+        save = getattr(self, "save_button", None)
+        if save is not None:
+            save.configure(state="disabled")
         self.axes.clear()
         self.axes.set_title("Pulsa «Construir y previsualizar»")
         self.canvas.draw_idle()
@@ -305,12 +339,22 @@ class BuilderTab:
         raw_mods = self._read_raw(self._modifier_vars)
         raw_groups = self._read_raw(self._functionalization_vars)
         supports_mods = STRUCTURES[kind].supports_modifiers
+        if kind == IMPORTED_KIND and self._imported_base is None:
+            self.status_var.set(
+                "No hay estructura que personalizar: impórtala en la página "
+                "Importar, o pulsa «Traer la estructura actual».")
+            return
 
         self._set_busy(True, "Construyendo… (puede tardar en estructuras grandes)")
 
+        base = self._imported_base
+
         def worker() -> None:
             try:
-                atoms = build_structure(kind, raw_params)
+                # Siempre desde la base original: construir dos veces no debe
+                # dopar sobre lo ya dopado.
+                atoms = base.copy() if kind == IMPORTED_KIND \
+                    else build_structure(kind, raw_params)
                 if supports_mods:
                     atoms = apply_modifiers(atoms, raw_mods)
                     # Groups go on after doping and defects: attaching first
@@ -331,6 +375,9 @@ class BuilderTab:
             self._published = session.publish(atoms, origin)
         self._set_busy(False, f"Estructura lista: {len(atoms)} átomos.")
         self.png_button.configure(state="normal")
+        save = getattr(self, "save_button", None)
+        if save is not None:
+            save.configure(state="normal")
         self._render(atoms)
         summary = describe_structure(atoms)
         # The structure can be geometrically perfect and still be a hopeless
@@ -342,6 +389,46 @@ class BuilderTab:
         self._set_info(f"{summary}\n\n--- Cálculo solicitado (Preparar → Cálculo) ---\n"
                        f"{physics}")
         self._refresh_fixes(atoms)
+
+    def _on_save_structure(self) -> None:
+        """Escribe la geometría a un archivo, en el formato de la extensión.
+
+        Se dice lo que la validación opina, pero no se impide guardar: un
+        archivo de geometría es del usuario, y negarse a escribir lo que
+        tiene en pantalla sólo le obliga a sacarlo por otro lado. Lo que sí
+        pasa por validación es exportar un cálculo, que es otra cosa.
+        """
+        from tkinter import filedialog
+
+        if self.atoms is None:
+            self.status_var.set("No hay estructura que guardar: constrúyela "
+                                "o tráela primero.")
+            return
+        path = filedialog.asksaveasfilename(
+            defaultextension=".xyz",
+            filetypes=[("extxyz", "*.xyz"), ("CIF", "*.cif"),
+                       ("VASP POSCAR", "*.vasp"), ("PDB", "*.pdb"),
+                       ("Todos", "*.*")])
+        if not path:
+            return
+        try:
+            clean = self.atoms.copy()
+            # El info de los constructores lleva anillos y enlaces enteros, y
+            # un extxyz con eso dentro no se vuelve a leer.
+            clean.info = {}
+            clean.write(path)
+        except Exception as exc:                      # noqa: BLE001
+            self.status_var.set(f"No se pudo guardar: {exc}")
+            return
+        note = ""
+        try:
+            report = run_basic_checks(self.atoms)
+            if getattr(report, "errors", None):
+                note = (f"  Ojo: la validación ve {len(report.errors)} "
+                        "problema(s); míralos antes de calcular con ella.")
+        except Exception:                             # noqa: BLE001
+            pass
+        self.status_var.set(f"Estructura guardada en {path}.{note}")
 
     def _set_info(self, text: str) -> None:
         self.info_text.configure(state="normal")

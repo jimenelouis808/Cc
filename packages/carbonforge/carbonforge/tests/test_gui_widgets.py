@@ -406,3 +406,125 @@ class TestPreparePage:
 
     def test_fix_panels_show_the_same_list(self, app):
         assert len(app._fix_frames) == 2
+
+
+class TestLaEstructuraImportadaSeDejaModificar:
+    """El fallo: importabas, ibas a Construir, y el preset seleccionado
+    sobrescribía lo importado con un nanotubo. No había forma de dopar ni
+    funcionalizar lo que acababas de traer."""
+
+    def _bring(self, app):
+        from ase.build import molecule
+
+        from carbonforge.gui.params import STRUCTURES
+
+        atoms = molecule("C6H6")
+        atoms.center(vacuum=6.0)
+        app.session.publish(atoms, origin="Importar")
+        app._on_take_current()
+        return atoms, STRUCTURES
+
+    def test_traerla_cambia_el_tipo_a_personalizada(self, app):
+        from carbonforge.gui.params import IMPORTED_KIND
+
+        self._bring(app)
+        assert app._current_structure_key() == IMPORTED_KIND
+        assert app.atoms is not None
+
+    def test_el_tipo_importado_no_pide_geometria(self, app):
+        self._bring(app)
+        assert app._param_vars == {}
+
+    def test_pero_si_deja_dopar_y_funcionalizar(self, app):
+        self._bring(app)
+        assert app._modifier_vars
+
+    def test_construir_no_la_sobrescribe_con_un_nanotubo(self, app):
+        """El corazón del fallo."""
+        atoms, _ = self._bring(app)
+        app._on_build()
+        app._drain_queue() if hasattr(app, "_drain_queue") else None
+        kind, payload = app._queue.get(timeout=5)
+        assert kind == "built"
+        assert payload.get_chemical_formula() == atoms.get_chemical_formula()
+
+    def test_construir_dos_veces_parte_siempre_del_original(self, app):
+        """Si la base fuera el resultado anterior, cada pulsación doparía
+        encima de lo ya dopado."""
+        atoms, _ = self._bring(app)
+        app._on_build()
+        first = app._queue.get(timeout=5)[1]
+        app._on_built(first)
+        app._on_build()
+        second = app._queue.get(timeout=5)[1]
+        assert len(second) == len(atoms)
+
+    def test_elegir_un_preset_olvida_la_base(self, app):
+        from carbonforge.gui.params import STRUCTURES
+
+        self._bring(app)
+        app.structure_var.set(STRUCTURES["cnt"].label)
+        app._rebuild_param_fields()
+        assert app._imported_base is None
+
+    def test_sin_base_lo_dice_en_vez_de_reventar(self, app):
+        from carbonforge.gui.params import IMPORTED_KIND, STRUCTURES
+
+        app.structure_var.set(STRUCTURES[IMPORTED_KIND].label)
+        app._rebuild_param_fields()
+        app._on_build()
+        assert "No hay estructura que personalizar" in app.status_var.get()
+
+    def test_el_catalogo_se_niega_a_inventar_geometria(self):
+        import pytest as _pytest
+
+        from carbonforge.gui.params import IMPORTED_KIND, build_structure
+
+        with _pytest.raises(ValueError, match="no genera geometría"):
+            build_structure(IMPORTED_KIND, {})
+
+
+class TestGuardarLaEstructuraDesdeConstruir:
+    def test_el_boton_empieza_apagado(self, app):
+        assert app.save_button.kwargs.get("state") == "disabled"
+
+    def test_se_enciende_al_construir(self, app):
+        from carbonforge.gui.params import STRUCTURES, build_structure
+
+        values = {s.key: s.default for s in STRUCTURES["cnt"].params}
+        app._on_built(build_structure("cnt", values))
+        assert app.save_button.kwargs.get("state") == "normal"
+
+    def test_se_apaga_al_descartar(self, app):
+        from carbonforge.gui.params import STRUCTURES, build_structure
+
+        values = {s.key: s.default for s in STRUCTURES["cnt"].params}
+        app._on_built(build_structure("cnt", values))
+        app._discard_current_structure()
+        assert app.save_button.kwargs.get("state") == "disabled"
+
+    def test_sin_estructura_lo_dice(self, app):
+        app.atoms = None
+        app._on_save_structure()
+        assert "No hay estructura que guardar" in app.status_var.get()
+
+    def test_escribe_un_archivo_que_se_vuelve_a_leer(self, app, tmp_path,
+                                                     monkeypatch):
+        from ase.io import read
+
+        from carbonforge.gui.params import STRUCTURES, build_structure
+
+        values = {s.key: s.default for s in STRUCTURES["cnt"].params}
+        atoms = build_structure("cnt", values)
+        # El info de los constructores rompe el extxyz al releerlo.
+        atoms.info = {"rings": [[0, 1, 2]] * 20}
+        app._on_built(atoms)
+
+        target = tmp_path / "salida.xyz"
+        import tkinter.filedialog as dialog
+
+        monkeypatch.setattr(dialog, "asksaveasfilename",
+                            lambda **_k: str(target), raising=False)
+        app._on_save_structure()
+        assert target.exists()
+        assert len(read(str(target))) == len(atoms)
