@@ -393,6 +393,23 @@ def vibration_modes(atoms: Atoms, model: TBModel, kT: float = 0.02, kmesh: int =
     from ..sites import site_groups
 
     vib = vibrations(atoms, model, kmesh=kmesh, kT=kT, scc=scc)
+    return _modes_result(vib, sigma)
+
+
+def modes_from_file(path: str | Path, sigma: float = 10.0) -> dict:
+    """Modes saved before (``modes.npz``, or a ``hessian.npy`` with its structure, or their
+    folder), as :func:`vibration_modes` returns them: nothing is recomputed but the
+    diagonalisation."""
+    from ..modes import Vibrations
+
+    return _modes_result(Vibrations.load(path), sigma)
+
+
+def _modes_result(vib, sigma: float = 10.0) -> dict:
+    from ..modes import participation, vibrational_dos
+    from ..sites import site_groups
+
+    atoms = vib.atoms
     shares = participation(vib)
     groups = site_groups(atoms)
     on_sites = participation(vib, groups) if groups else {}
@@ -1162,6 +1179,9 @@ HELP = {
     "Relajar": "Relaja las posiciones (celda fija) con las fuerzas del modelo.",
     "Volver a la original": "Recupera la estructura tal como se abrió.",
     "Modos en Γ": "Frecuencias y vectores de los modos en Γ por diferencias finitas.",
+    "Abrir modos…": "Abre modos calculados antes, sin recalcular: un modes.npz (de «Guardar "
+                    "modos…») o una hessiana hessian.npy con su estructura al lado (como las de "
+                    "resultados/coil204/modos). Su estructura queda como geometría activa.",
     "Guardar modos…": "Guarda los modos (frecuencias y vectores) para reutilizarlos.",
     "Flechas": "Muestra los desplazamientos del modo seleccionado como flechas.",
     "Parar": "Detiene la animación del modo.",

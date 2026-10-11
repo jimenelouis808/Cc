@@ -1,0 +1,35 @@
+{
+ "model": "xu_carbon",
+ "atoms": 204,
+ "relax_converged": true,
+ "energy_eV": -1615.9845190107599,
+ "gap_eV": 0.0,
+ "bond_min_max": [
+  1.362846230696245,
+  1.5191683076481406
+ ],
+ "ring_census": {
+  "5": 12,
+  "6": 78,
+  "7": 12
+ },
+ "topology": "OK",
+ "bonds_made": [],
+ "bonds_broken": [],
+ "modes": 612,
+ "imaginary_below_-20": 0,
+ "lowest_three": [
+  0.008234714266849748,
+  0.009412654816209317,
+  0.010422775079664626
+ ],
+ "ring_atoms": {
+  "5": 48,
+  "7": 84
+ },
+ "share_of_atoms_on_5_and_7": [
+  0.23529411764705882,
+  0.4117647058823529
+ ],
+ "raman": "gapless: non-resonant Raman does not apply (resonant only)"
+}

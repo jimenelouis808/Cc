@@ -1,0 +1,56 @@
+{
+ "reporte": "tbkit frente a GPAW en los modos clave",
+ "archivos": [
+  {
+   "archivo": "figura_paridad_frecuencias.csv",
+   "titulo": "GPAW frente a tbkit",
+   "tipo": "figura",
+   "columnas": [
+    "sin dopar | tbkit (cm⁻¹)",
+    "sin dopar | GPAW (cm⁻¹)",
+    "N grafítico | tbkit (cm⁻¹)",
+    "N grafítico | GPAW (cm⁻¹)",
+    "–NH₂ + H | tbkit (cm⁻¹)",
+    "–NH₂ + H | GPAW (cm⁻¹)"
+   ]
+  },
+  {
+   "archivo": "figura_paridad_ir.csv",
+   "titulo": "IR: GPAW frente a tbkit",
+   "tipo": "figura",
+   "columnas": [
+    "sin dopar | tbkit (km/mol)",
+    "sin dopar | GPAW (km/mol)",
+    "N grafítico | tbkit (km/mol)",
+    "N grafítico | GPAW (km/mol)",
+    "–NH₂ + H | tbkit (km/mol)",
+    "–NH₂ + H | GPAW (km/mol)"
+   ]
+  },
+  {
+   "archivo": "tabla_modos.csv",
+   "titulo": "Modo por modo",
+   "tipo": "tabla",
+   "columnas": [
+    "estructura",
+    "tbkit (cm⁻¹)",
+    "GPAW (cm⁻¹)",
+    "GPAW/tbkit",
+    "IR tbkit (km/mol)",
+    "IR GPAW (km/mol)",
+    "por qué se eligió"
+   ]
+  },
+  {
+   "archivo": "tabla_geometria.csv",
+   "titulo": "Enlaces tbkit − PBE",
+   "tipo": "tabla",
+   "columnas": [
+    "estructura",
+    "RMS (Å)",
+    "media (Å)",
+    "máx. |Δ| (Å)"
+   ]
+  }
+ ]
+}

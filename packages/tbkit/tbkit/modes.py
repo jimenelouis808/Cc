@@ -62,6 +62,39 @@ class Vibrations:
         return cls(atoms.copy(), hessian, masses, energies / invcm,
                    vectors.T.reshape(len(omega2), len(atoms), 3), source)
 
+    @classmethod
+    def load(cls, path: str | Path) -> "Vibrations":
+        """Modes saved before, without recomputing forces: a ``modes.npz`` of :meth:`save`, or a
+        ``hessian.npy`` (eV/Å², 3N × 3N) with its structure next to it (``structure.extxyz``,
+        ``relaxed.extxyz`` or the only ``*.extxyz`` there), or a folder holding either. The
+        frequencies come from diagonalising the stored Hessian (seconds, not hours)."""
+        from ase.io import read
+
+        path = Path(path)
+        folder = path if path.is_dir() else path.parent
+        if path.is_dir():
+            path = next((folder / n for n in ("modes.npz", "hessian.npy")
+                         if (folder / n).exists()), None)
+            if path is None:
+                raise FileNotFoundError(f"{folder}: no hay modes.npz ni hessian.npy.")
+        structures = [folder / n for n in ("structure.extxyz", "relaxed.extxyz")
+                      if (folder / n).exists()] or sorted(folder.glob("*.extxyz"))
+        if not structures:
+            raise FileNotFoundError(f"{folder}: falta la estructura (structure.extxyz o "
+                                    "relaxed.extxyz) junto a los modos.")
+        atoms = read(structures[0])
+        if path.suffix == ".npz":
+            data = np.load(path)
+            hessian, masses = data["hessian_ev_per_a2"], data["masses_amu"]
+            source = str(data["source"]) if "source" in data.files else str(path)
+        else:
+            hessian, masses = np.load(path), None
+            source = f"hessiana guardada ({path})"
+        if hessian.shape != (3 * len(atoms), 3 * len(atoms)):
+            raise ValueError(f"La hessiana {hessian.shape} no corresponde a {len(atoms)} átomos "
+                             f"de {structures[0].name}.")
+        return cls.from_hessian(atoms, hessian, masses, source)
+
     @property
     def modes(self) -> np.ndarray:
         """L = e/√m (Å per unit normal coordinate), (3N, N, 3)."""

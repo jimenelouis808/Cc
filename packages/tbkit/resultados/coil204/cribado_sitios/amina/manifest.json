@@ -1,0 +1,213 @@
+[
+ {
+  "name": "a000_h004",
+  "anchor": 0,
+  "h_on": 4,
+  "rings": [
+   5,
+   5,
+   6
+  ],
+  "poav_deg": 17.91,
+  "multiplicity": 4
+ },
+ {
+  "name": "a000_h200",
+  "anchor": 0,
+  "h_on": 200,
+  "rings": [
+   5,
+   5,
+   6
+  ],
+  "poav_deg": 17.91,
+  "multiplicity": 4
+ },
+ {
+  "name": "a000_h001",
+  "anchor": 0,
+  "h_on": 1,
+  "rings": [
+   5,
+   5,
+   6
+  ],
+  "poav_deg": 17.91,
+  "multiplicity": 4
+ },
+ {
+  "name": "a066_h065",
+  "anchor": 66,
+  "h_on": 65,
+  "rings": [
+   5,
+   5,
+   6
+  ],
+  "poav_deg": 17.36,
+  "multiplicity": 4
+ },
+ {
+  "name": "a066_h070",
+  "anchor": 66,
+  "h_on": 70,
+  "rings": [
+   5,
+   5,
+   6
+  ],
+  "poav_deg": 17.36,
+  "multiplicity": 4
+ },
+ {
+  "name": "a066_h067",
+  "anchor": 66,
+  "h_on": 67,
+  "rings": [
+   5,
+   5,
+   6
+  ],
+  "poav_deg": 17.36,
+  "multiplicity": 4
+ },
+ {
+  "name": "a003_h201",
+  "anchor": 3,
+  "h_on": 201,
+  "rings": [
+   5,
+   6,
+   6
+  ],
+  "poav_deg": 14.87,
+  "multiplicity": 4
+ },
+ {
+  "name": "a003_h004",
+  "anchor": 3,
+  "h_on": 4,
+  "rings": [
+   5,
+   6,
+   6
+  ],
+  "poav_deg": 14.87,
+  "multiplicity": 4
+ },
+ {
+  "anchor": 3,
+  "h_on": 2,
+  "refused": "amine refused (steric)"
+ },
+ {
+  "name": "a001_h000",
+  "anchor": 1,
+  "h_on": 0,
+  "rings": [
+   5,
+   6,
+   6
+  ],
+  "poav_deg": 9.9,
+  "multiplicity": 4
+ },
+ {
+  "anchor": 1,
+  "h_on": 5,
+  "refused": "amine refused (steric)"
+ },
+ {
+  "anchor": 1,
+  "h_on": 203,
+  "refused": "amine refused (steric)"
+ },
+ {
+  "name": "a015_h014",
+  "anchor": 15,
+  "h_on": 14,
+  "rings": [
+   6,
+   6,
+   6
+  ],
+  "poav_deg": 10.48,
+  "multiplicity": 4
+ },
+ {
+  "anchor": 15,
+  "h_on": 16,
+  "refused": "amine refused (steric)"
+ },
+ {
+  "anchor": 15,
+  "h_on": 4,
+  "refused": "amine refused (steric)"
+ },
+ {
+  "anchor": 10,
+  "h_on": 21,
+  "refused": "amine refused (steric)"
+ },
+ {
+  "anchor": 10,
+  "h_on": 9,
+  "refused": "amine refused (steric)"
+ },
+ {
+  "anchor": 10,
+  "h_on": 11,
+  "refused": "amine refused (steric)"
+ },
+ {
+  "name": "a048_h049",
+  "anchor": 48,
+  "h_on": 49,
+  "rings": [
+   6,
+   6,
+   7
+  ],
+  "poav_deg": 14.13,
+  "multiplicity": 4
+ },
+ {
+  "name": "a048_h047",
+  "anchor": 48,
+  "h_on": 47,
+  "rings": [
+   6,
+   6,
+   7
+  ],
+  "poav_deg": 14.13,
+  "multiplicity": 4
+ },
+ {
+  "name": "a048_h059",
+  "anchor": 48,
+  "h_on": 59,
+  "rings": [
+   6,
+   6,
+   7
+  ],
+  "poav_deg": 14.13,
+  "multiplicity": 4
+ },
+ {
+  "anchor": 39,
+  "h_on": 40,
+  "refused": "amine refused (steric)"
+ },
+ {
+  "anchor": 39,
+  "h_on": 22,
+  "refused": "amine refused (steric)"
+ },
+ {
+  "anchor": 39,
+  "h_on": 50,
+  "refused": "amine refused (steric)"
+ }
+]

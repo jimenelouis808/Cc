@@ -167,3 +167,26 @@ def test_cached_hessian_rows_and_embedding(tmp_path):
     assert np.abs(embedded - sym).max() <= 0.5 * np.abs(full - full.T).max() + 1e-12
     with pytest.raises(ValueError):
         embedded_hessian(sym[:-3, :-3], len(water) - 1, len(water), region, rows)
+
+
+def test_saved_hessian_loads_back_without_recomputing(tmp_path):
+    from ase.build import molecule
+
+    from tbkit.modes import Vibrations
+
+    atoms = molecule("H2O")
+    rng = np.random.default_rng(1)
+    a = rng.normal(size=(9, 9))
+    hessian = a @ a.T                                  # symmetric, positive
+    original = Vibrations.from_hessian(atoms, hessian)
+    original.save(tmp_path / "npz")
+    (tmp_path / "raw").mkdir()                        # a recipe's folder: Hessian + structure
+    atoms.write(tmp_path / "raw" / "relaxed.extxyz")
+    np.save(tmp_path / "raw" / "hessian.npy", hessian)
+    for source in (tmp_path / "npz" / "modes.npz", tmp_path / "npz", tmp_path / "raw",
+                   tmp_path / "raw" / "hessian.npy"):
+        loaded = Vibrations.load(source)
+        assert np.allclose(loaded.frequencies, original.frequencies)
+    np.save(tmp_path / "raw" / "hessian.npy", hessian[:6, :6])
+    with pytest.raises(ValueError, match="no corresponde"):
+        Vibrations.load(tmp_path / "raw")

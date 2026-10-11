@@ -1198,6 +1198,9 @@ class GeometryPage(Page):
         self.save.setEnabled(False)
         self.save.clicked.connect(self.save_modes)
         row.addWidget(self.save)
+        load = QPushButton("Abrir modos…")
+        load.clicked.connect(self.open_modes)
+        row.addWidget(load)
         layout.addLayout(row)
         self.summary = QLabel("Relaja antes de calcular modos: fuera del mínimo las "
                               "frecuencias no son las armónicas.")
@@ -1315,7 +1318,8 @@ class GeometryPage(Page):
     def show_modes(self, out):
         self.result = out
         vib = out["vibrations"]
-        self.window.phonons = (vib.frequencies, vib.modes, f"modelo ({self.window.model.name})")
+        self.window.phonons = (vib.frequencies, vib.modes,
+                               vib.source or f"modelo ({self.window.model.name})")
         self.window.remember("modos en Γ", {}, {"frequencies_cm1": vib.frequencies,
                                                 "modes": vib.modes, "rows": out["rows"],
                                                 "warnings": out["warnings"]})
@@ -1363,6 +1367,23 @@ class GeometryPage(Page):
     def stop(self):
         self.window.view.stop_animation()
         self.window.view.show(self.window.atoms, keep_camera=True)
+
+    def open_modes(self, path: Optional[str] = None):
+        """Modes computed before (modes.npz, or hessian.npy + its structure): their structure
+        becomes the active geometry and the modes are shown, without recomputing."""
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Abrir modos", "", "Modos (modes.npz hessian.npy);;Todos (*)")
+        if not path:
+            return
+
+        def loaded(out):
+            name = f"{Path(path).parent.name} (modos guardados)"
+            self.window.add_geometry(name, out["vibrations"].atoms)
+            self.show_modes(out)
+
+        self.window.runner.start("Abrir modos", actions.modes_from_file, path,
+                                 on_done=loaded, on_error=self.window.error)
 
     def save_modes(self):
         if self.result is None:
