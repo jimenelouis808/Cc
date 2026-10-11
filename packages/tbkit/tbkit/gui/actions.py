@@ -106,9 +106,13 @@ def ground_state(atoms: Atoms, model: TBModel, charge: float = 0.0, kT: float = 
     system = System.build(atoms, model)
     use_scc = model.scc if scc is None else scc
     if use_scc:
+        from ..progress import Progress
         from ..scc import self_consistent
 
-        result = self_consistent(system, charge=charge, kT=kT)
+        with Progress(None, f"SCC ({system.basis.size} orbitales)") as bar:
+            result = self_consistent(
+                system, charge=charge, kT=kT,
+                on_iteration=lambda n, change: bar.step(note=f"máx |Δq| {change:.1e} e"))
         state = GroundState(result.solution, result.charges, True, result.iterations,
                             result.converged)
     else:
@@ -173,6 +177,26 @@ def orbital_grid(state: GroundState, band: int, spacing: float = 0.25) -> dict:
             "energy": float(state.solution.energies[0, 0, band])}
 
 
+def bonds_with_images(atoms: Atoms, factor: float = 1.2):
+    """Bonds as ``(i, j, offset)``: j in the cell ``offset`` (integers along the cell
+    vectors) from i. A bond with a non-zero offset crosses the cell boundary and must be
+    drawn to the image of j, not across the cell to j itself."""
+    from ase.data import covalent_radii
+    from ase.neighborlist import neighbor_list
+
+    radii = covalent_radii[atoms.numbers]
+    ii, jj, dd, ss = neighbor_list("ijdS", atoms, factor * 2 * radii.max(),
+                                   self_interaction=False)
+    out = []
+    for i, j, d, shift in zip(ii, jj, dd, ss, strict=True):
+        if d >= factor * (radii[i] + radii[j]):
+            continue
+        # each bond appears twice (i→j with S, j→i with -S): keep one
+        if i < j or (i == j and tuple(shift) > (0, 0, 0)):
+            out.append((int(i), int(j), tuple(int(x) for x in shift)))
+    return out
+
+
 def bonds_of(atoms: Atoms, factor: float = 1.2) -> list[tuple[int, int]]:
     """Bonds to draw: closer than ``factor`` times the covalent radii."""
     from ase.data import covalent_radii
@@ -188,13 +212,44 @@ def bond_order_table(state: GroundState, threshold: float = 0.1):
     return sorted(bond_orders(state.solution, threshold).items())
 
 
-def read_structure(path: str | Path) -> Atoms:
-    from ase.io import read
+#: Set in the window's job process: called with the current positions while a relaxation
+#: runs (``tbkit.gui.jobs``), so the window can draw them. None elsewhere.
+FRAME_SINK = None
 
-    atoms = read(str(path))
-    if not any(atoms.get_pbc()) and atoms.cell.rank == 0:
-        atoms.pbc = False
-    return atoms
+
+def orbital_count(atoms: Atoms, model: TBModel) -> int:
+    """Orbitals of the model on this structure (the size of H)."""
+    return sum(len(model.orbitals.get(s, ())) for s in atoms.get_chemical_symbols())
+
+
+def memory_estimate_gb(atoms: Atoms, model: TBModel) -> float:
+    """Peak memory of one dense diagonalisation, GB: H, S, the eigenvectors and LAPACK's
+    workspace, complex (k ≠ 0), about six n × n matrices of 16 bytes. Forces, SCC and
+    phonons keep a few more; this is the floor, not a ceiling."""
+    n = orbital_count(atoms, model)
+    return 6 * 16 * n * n / 1e9
+
+
+def supercell(atoms: Atoms, repeat) -> Atoms:
+    """The structure repeated ``(n1, n2, n3)`` times along its cell vectors (only along
+    periodic axes: a non-periodic axis has no neighbour cell to repeat into)."""
+    repeat = tuple(int(n) for n in repeat)
+    if any(n < 1 for n in repeat):
+        raise ValueError("Las repeticiones deben ser ≥ 1.")
+    for axis, n in enumerate(repeat):
+        if n > 1 and not atoms.pbc[axis]:
+            raise ValueError(f"El eje {'abc'[axis]} no es periódico: no se puede repetir.")
+    out = atoms.repeat(repeat)
+    out.info.pop("periodicity", None)
+    return out
+
+
+def read_structure(path: str | Path) -> Atoms:
+    """Any structure file (.xtl included); periodic axes deduced when a cell is declared
+    non-periodic but bonds cross it (``tbkit.structure_io``)."""
+    from ..structure_io import read_structure as read
+
+    return read(path)
 
 
 # --------------------------------------------------------------------------
@@ -313,6 +368,8 @@ def relax_structure(atoms: Atoms, model: TBModel, fmax: float = 0.02, steps: int
     trajectory = [start]
     optimizer = BFGS(moved, logfile="-")            # steps to stdout: the window's terminal
     optimizer.attach(lambda: trajectory.append(float(moved.get_potential_energy())))
+    if FRAME_SINK is not None:                      # the window draws the geometry as it moves
+        optimizer.attach(lambda: FRAME_SINK(moved.get_positions()))
     converged = bool(optimizer.run(fmax=fmax, steps=steps))
     forces = moved.get_forces()
     result = moved.copy()
@@ -730,7 +787,7 @@ def recipe_usage(name: str) -> dict:
             argparse.ArgumentParser.parse_args = original
     if not captured:
         return {"steps": [], "step_dest": None, "options": {"": []}, "parts": False,
-                "help": (module.__doc__ or "").strip()}
+                "parallel_steps": (), "help": (module.__doc__ or "").strip()}
     parser = captured[0]
     help_text = parser.format_help()
     options = {"": _option_rows(parser)}
@@ -751,8 +808,23 @@ def recipe_usage(name: str) -> dict:
         "--part" in a.option_strings for opts in captured[1:] for a in opts._actions)
     if not parts:
         parts = "--part" in help_text
+    # Which steps split in parts: the recipe says (PARALLEL_STEPS); without the list, every
+    # step of a recipe with --part does (site_screening, structure_screening: no steps).
+    parallel = getattr(module, "PARALLEL_STEPS", None)
+    if not parts:
+        parallel = ()
+    elif parallel is None:
+        parallel = tuple(steps) if steps else None
     return {"steps": steps, "step_dest": step_dest, "options": options, "parts": parts,
-            "help": help_text}
+            "parallel_steps": parallel, "help": help_text}
+
+
+def step_splits(usage: dict, step: str) -> bool:
+    """Whether ``step`` of a recipe (its :func:`recipe_usage`) can run in several parts."""
+    if not usage["parts"]:
+        return False
+    parallel = usage.get("parallel_steps")
+    return parallel is None or not step or step in parallel
 
 
 def recipe_arguments(rows: list[dict], values: dict[str, str]) -> list[str]:
@@ -954,17 +1026,20 @@ def open_record(path: str | Path) -> tuple[Atoms, TBModel, dict]:
 
 PANEL_HELP = {
     "Electrónica": "Estado fundamental del modelo: niveles, DOS/PDOS, bandas y cargas. "
-                   "Empieza aquí: «Calcular estado fundamental» es el paso que usan "
-                   "Orbitales, Magnetismo y los espectros.",
+                   "«Calcular estado fundamental» es el paso que usan Orbitales, Magnetismo "
+                   "y los espectros; se hace sobre la geometría activa (relájala antes en "
+                   "«Geometría y modos»).",
     "Orbitales": "Orbitales moleculares (o de Bloch en Γ) como isosuperficies sobre la "
                  "estructura; sirve para ver dónde vive el HOMO/LUMO o un estado de borde.",
     "Magnetismo": "Hubbard de campo medio: momentos locales, m(E) y barridos de U, campo "
                   "o dopaje. Los momentos son un parámetro de orden, no un estado "
                   "correlacionado; el teorema de Lieb es la comprobación.",
-    "Geometría y modos": "Relaja las posiciones con las fuerzas del modelo y calcula los "
-                         "modos en Γ. Relaja antes de los modos: fuera del mínimo las "
-                         "frecuencias no son armónicas. Los modos calculados aquí los usa "
-                         "la pestaña Espectros.",
+    "Geometría y modos": "El primer paso: relaja las posiciones con las fuerzas del modelo "
+                         "(la geometría se mueve en la vista mientras tanto) y calcula los "
+                         "modos en Γ. La geometría relajada se añade a la lista «Geometría» "
+                         "del panel izquierdo y queda activa: las demás pestañas calculan "
+                         "sobre ella. Relaja antes de los modos: fuera del mínimo las "
+                         "frecuencias no son armónicas.",
     "Fonones (ZB)": "Fonones en toda la zona de Brillouin con phonopy y las fuerzas del "
                     "modelo: dispersión por el camino de puntos especiales, DOS por "
                     "elemento, representación irreducible de cada modo en Γ (identifica "
@@ -976,6 +1051,10 @@ PANEL_HELP = {
                  "GPAW, ~3 %); las crudas siguen siendo las del modelo.",
     "Grafeno": "Bandas G, 2D y 2D′ del grafeno por doble resonancia, con fonones de GPAW "
                "o de Xu; dispersión de la 2D con la energía del láser.",
+    "Procesos": "Todo lo que corre: el cálculo de la ventana (y su cola), las recetas lanzadas "
+                "desde aquí y cualquier receta con contador en la carpeta de trabajo, con su "
+                "CPU, RAM, núcleos y avance. Selecciona una fila para ver el final de su "
+                "registro; «Detener seleccionado» la mata con sus procesos hijos.",
     "Recetas": "Los cálculos largos de las recetas (doble resonancia de la coil, Raman de "
                "los dopados, referencias GPAW…) con todos sus números a la vista y "
                "editables: valor, unidad y por qué tiene ese valor (pasa el ratón). Elige "
@@ -1000,8 +1079,61 @@ HELP = {
     "kT": "Temperatura electrónica (eV): ensancha la ocupación cerca del nivel de Fermi. "
           "Pequeña para moléculas; algo mayor ayuda a converger metales.",
     "Colorear átomos": "Colorea los átomos por carga, momento magnético o elemento.",
-    "Cancelar cálculo": "Detiene el cálculo en curso.",
-    "Terminal": "Consola de Python con la estructura y el modelo cargados (atoms, model).",
+    "Cancelar cálculo": "Detiene el cálculo en curso al instante: su proceso se mata (nada "
+                        "sigue calculando) y se vacía la cola.",
+    "Terminal": "Lo que hace cada cálculo mientras corre: el comando, lo que imprime y su "
+                "avance (una línea cada 5 s), y cuánto tardó.",
+    "Guardar…": "Guarda la geometría activa: extxyz (o .xyz, que aquí se escribe como "
+                "extxyz y conserva la celda), .xtl, CIF o POSCAR.",
+    "Celda…": "Fija la celda (longitudes y ángulos) y los ejes periódicos de la geometría "
+              "activa, para un archivo que no los trae. «Detectar por enlaces» marca los "
+              "ejes por los que hay enlaces que cruzan la celda.",
+    "Geometría": "Las geometrías de la sesión: la abierta, las relajadas, con celda editada, "
+                 "las supercelda… La elegida es la que usan todas las pestañas.",
+    "Repetir": "Copias de la celda a lo largo de a, b, c (solo ejes periódicos). «Ver» "
+                     "las dibuja sin cambiar el cálculo; «Crear» hace una supercelda nueva "
+                     "(p. ej. 1×1×4) y la deja activa.",
+    "Ver": "Dibuja las copias de la celda; el cálculo sigue con la celda original.",
+    "Crear": "Crea la supercelda como geometría nueva y la deja activa para calcular.",
+    "Recursos del cálculo": "Núcleos y memoria de los cálculos de la ventana. Cada cálculo "
+                            "corre en su propio proceso: se puede detener al instante y se "
+                            "detiene solo si pasa el límite de RAM.",
+    "Núcleos": "Procesadores para los cálculos de la ventana (afinidad e hilos de álgebra "
+               "lineal). Deja libres los que usen las recetas lanzadas.",
+    "RAM máx.": "Si el cálculo pasa de esta memoria se detiene (antes de que el sistema mate "
+                "procesos por falta de RAM). Antes de empezar se estima la memoria de una "
+                "diagonalización y se avisa si no cabe.",
+    "Longitudes a, b, c": "Longitudes de los vectores de celda (Å).",
+    "Ángulos α, β, γ": "Ángulos entre los vectores de celda (grados).",
+    "Periódica en": "Ejes que se repiten. Una molécula en una caja no tiene ninguno; un tubo, "
+                    "uno; una lámina, dos.",
+    "eje a": "Periódica a lo largo del vector a.",
+    "eje b": "Periódica a lo largo del vector b.",
+    "eje c": "Periódica a lo largo del vector c.",
+    "Escalar las posiciones con la celda": "Si se marca, los átomos se mueven con la celda "
+                                           "(mismas coordenadas fraccionarias); si no, "
+                                           "conservan sus posiciones en Å.",
+    "Detectar por enlaces": "Marca como periódicos los ejes por los que hay enlaces que "
+                            "cruzan la celda escrita arriba.",
+    "Exportar geometría…": "Guarda la geometría activa (la relajada, tras relajar).",
+    "Usar geometría activa": "Guarda la geometría activa en geometrias/ de la carpeta de "
+                             "trabajo y pone su ruta en la fila seleccionada (una opción como "
+                             "«structure» o un ajuste como SOURCE).",
+    "Nueva receta…": "Una receta propia: una geometría de la sesión, un modelo y pasos en "
+                     "orden (relajar, niveles, DOS, bandas, modos, Raman, Hubbard). Se escribe "
+                     "en recetas/ y se corre con «Lanzar», con contador y un registro "
+                     "reproducible por paso.",
+    "Nombre": "Nombre de la receta (también el de su carpeta de resultados).",
+    "Geometría de partida": "La geometría de la sesión de la que parte la receta.",
+    "Modelo de la receta": "Conjunto de parámetros de la receta.",
+    "Pasos, en este orden": "Tareas que se hacen una tras otra; la relajación pasa su "
+                            "geometría a las siguientes.",
+    "Malla k de la receta": "Puntos k por eje periódico en todos los pasos.",
+    "kT de la receta": "Temperatura electrónica (eV) en todos los pasos.",
+    "fmax de la relajación": "Criterio de convergencia de la relajación (eV/Å).",
+    "Detener seleccionado": "Detiene el proceso elegido y sus hijos (las partes de una "
+                            "receta). En el cálculo de la ventana equivale a «Cancelar».",
+    "Actualizar lista": "Vuelve a leer los procesos ahora (se actualiza solo cada 2 s).",
     # Electrónica / Orbitales
     "Calcular estado fundamental": "Diagonaliza (con SCC si toca): niveles, gap, DOS y "
                                    "cargas. Lo usan las demás pestañas.",

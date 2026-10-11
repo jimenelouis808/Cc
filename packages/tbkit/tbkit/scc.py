@@ -110,7 +110,7 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
                     mixing: float = 0.3, tol: float = 1e-9, max_iter: int = 500,
                     history_length: int = 6, field: Optional[np.ndarray] = None,
                     initial_dq: Optional[np.ndarray] = None, kpts=None,
-                    weights=None) -> SCCResult:
+                    weights=None, on_iteration=None) -> SCCResult:
     """Solve with self-consistent Mulliken charges.
 
     Parameters
@@ -168,6 +168,8 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
         residual = dq_out - dq_in
         change = float(np.abs(residual).max())
         history.append(change)
+        if on_iteration is not None:          # a progress counter: (iteration, max |Δq| change)
+            on_iteration(iteration, change)
         if change < tol:
             converged = True
             break

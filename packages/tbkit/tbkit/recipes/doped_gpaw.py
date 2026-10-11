@@ -282,6 +282,10 @@ PARAMS = [
 ]
 
 
+#: Steps that split in parts (--part r/N); the others run as one process.
+PARALLEL_STEPS = ('modes',)
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("select", "relax", "modes", "report"))

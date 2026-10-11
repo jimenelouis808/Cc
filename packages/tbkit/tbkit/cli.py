@@ -61,9 +61,8 @@ def _model(args):
 
 
 def _system(args):
-    from ase.io import read
-
     from .hamiltonian import System
+    from .structure_io import read
 
     atoms = read(args.structure)
     return System.build(atoms, _model(args))
@@ -227,8 +226,9 @@ def cmd_run(args) -> int:
 
 
 def cmd_relax(args) -> int:
-    from ase.io import read, write
+    from ase.io import write
 
+    from .structure_io import read
     from .tasks import relax
 
     atoms = read(args.structure)
@@ -243,8 +243,7 @@ def cmd_relax(args) -> int:
 
 
 def cmd_phonons(args) -> int:
-    from ase.io import read
-
+    from .structure_io import read
     from .tasks import phonons
 
     results, _ = phonons(read(args.structure), _model(args), kmesh=args.kmesh, kT=args.kT,
@@ -262,9 +261,8 @@ def cmd_phonons(args) -> int:
 
 
 def cmd_raman(args) -> int:
-    from ase.io import read
-
     from .raman import raman, raman_from_qe, spectrum
+    from .structure_io import read
 
     if args.resonant:
         from .qe import modes_for_raman, read_qe_modes
@@ -310,9 +308,8 @@ def cmd_raman(args) -> int:
 
 
 def cmd_ir(args) -> int:
-    from ase.io import read
-
     from .infrared import infrared, ir_spectrum
+    from .structure_io import read
 
     atoms = read(args.structure)
     phonons = None

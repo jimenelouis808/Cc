@@ -45,9 +45,12 @@ tbkit/
 │                     #   site_screening: substitutional dopant sites, TB ranking, top-N for DFT
 │                     #   delta_fit: fit and cross-validate a Δ correction (writes to a workdir only)
 │                     #   validation_report: writes docs/VALIDACION.md from validation/ and parameters/
+│                     #   pipeline: a recipe of one's own (structure + model + tasks), from «Nueva receta…»
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 ├── cli.py            # `tbkit` console script
-├── gui/              # tbkit-gui (PySide6 + pyvista, extra `gui`): actions (no Qt), worker, viewer, app
+├── structure_io.py   # reading/writing structures: .xtl, periodic axes from bonds, cells by hand
+├── gui/              # tbkit-gui (PySide6 + pyvista, extra `gui`): actions (no Qt), jobs (child
+│                     #   process, no Qt), resources (CPU/RAM/GPU), worker, viewer, app
 docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit by hand)
 ```
 
@@ -208,14 +211,25 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   check V(r) and its slope in that range, not the coefficients, and state
   the range in `validity`.
 - GUI: calculations live in `gui/actions.py` (no Qt, tested like the rest);
-  `app.py` only lays out and draws. The worker pauses Python's cyclic GC while
-  a job runs and collects in the GUI thread: the collector running in the
-  worker destroyed Qt objects of the GUI thread and crashed the window at
-  random places. Do not remove that; results come back through queued slots.
+  `app.py` only lays out and draws. Every calculation of the window runs in a child
+  process (`gui/jobs.py`, `spawn`), polled from a GUI-thread timer (`gui/worker.py`):
+  «Cancelar» kills it, the RAM limit kills it, cores are its affinity + BLAS threads.
+  Never run a calculation in the GUI process or a thread of it: a thread cannot be
+  stopped, and the old thread runner had to pause the cyclic GC (the collector in the
+  worker destroyed Qt objects of the GUI thread and crashed the window). Job functions
+  and their arguments and results must pickle (module-level functions of `actions`);
+  any `__main__` that can start the window keeps its `if __name__ == "__main__"`
+  guard, or each spawned child opens a window of its own. Progress inside a job reaches
+  the window through `tbkit.progress.SINK`; a relaxation's frames through
+  `actions.FRAME_SINK`.
   PySide6/pyvista stay optional (the `gui` extra); GUI tests skip without them.
   Help texts (`actions.HELP` per control label, `actions.PANEL_HELP` per tab)
   are applied as tooltips and info boxes; a test fails if a new button, box
   or form row in `app.py` has no text there.
+- Structures are read through `tbkit.structure_io` (window and command line): `.xtl`
+  too, and a cell declared non-periodic becomes periodic only along axes where closing
+  the cell makes bonds (molecules in boxes stay molecules). A cell is never invented;
+  «Celda…» sets one by hand. `.xyz` is written as extended XYZ so the cell survives.
 - Recipes: every recipe with a `main(argv)` must build its argparse parser before doing any work.
   The window's Recetas tab reads the options by calling `main([])` with `parse_args` patched to
   stop there (`actions.recipe_usage`); a `main()` without argv is never called (it would run).

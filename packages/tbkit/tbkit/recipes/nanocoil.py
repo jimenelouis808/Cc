@@ -445,6 +445,10 @@ PARAMS = [
 ]
 
 
+#: Steps that split in parts (--part r/N); the others run as one process.
+PARALLEL_STEPS = ('kconv', 'raman')
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("stage", choices=("tb", "gpaw-k", "gpaw-relax", "gpaw-phase3",

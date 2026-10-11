@@ -37,6 +37,12 @@ from collections import deque
 from pathlib import Path
 from typing import Self
 
+#: Seconds between printed lines when the stream is not a terminal (a log, the window).
+EVERY = 30.0
+#: Called with every update (a dict with ``line``), if set: the window's job process uses it
+#: to send the progress of whatever runs inside it to the window.
+SINK = None
+
 
 def duration(seconds: float) -> str:
     """'45 s', '12 min', '3 h 05 min', '2 d 4 h'."""
@@ -57,13 +63,13 @@ class Progress:
     """Counter with an estimated time left. See the module note."""
 
     def __init__(self, total: int | None, label: str = "", status: str | Path | None = None,
-                 stream=None, every: float = 30.0, window: int = 20, done: int = 0,
+                 stream=None, every: float | None = None, window: int = 20, done: int = 0,
                  quiet: bool = False):
         self.total = None if total is None else int(total)
         self.label = label
         self.status = Path(status) if status else None
         self.stream = sys.stderr if stream is None else stream
-        self.every = every
+        self.every = EVERY if every is None else every
         self.done = int(done)
         self.quiet = quiet
         self.started = time.time()
@@ -118,6 +124,10 @@ class Progress:
 
     def _write(self) -> None:
         now = time.time()
+        if SINK is not None:
+            SINK({"label": self.label, "done": self.done, "total": self.total,
+                  "remaining_seconds": self.remaining_seconds, "note": self.note,
+                  "line": self.line()})
         if self.status is not None:
             data = {"label": self.label, "done": self.done, "total": self.total,
                     "started": self.started, "updated": now, "pid": os.getpid(),

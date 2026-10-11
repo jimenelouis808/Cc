@@ -41,20 +41,44 @@ Electrónica) muestra cuánto depende tu resultado de la SCC.
 uv run tbkit-gui estructura.extxyz
 ```
 
-Izquierda: estructura y modelo (carga, SCC, kT). Centro: vista 3D. Derecha,
-una pestaña por tarea; cada control tiene una ayuda (pasa el ratón) y cada
-pestaña un recuadro que explica para qué sirve (menú Ayuda para ocultarlos).
+Izquierda: estructura, modelo (carga, SCC, kT) y recursos. Centro: vista 3D. Derecha,
+una pestaña por tarea, en el orden del trabajo (primero la geometría); cada control tiene
+una ayuda (pasa el ratón) y cada pestaña un recuadro que explica para qué sirve (menú
+Ayuda para ocultarlos).
+
+- **Archivos.** xyz, extxyz, `.xtl` (Materials Studio), cif, POSCAR… Si un `.xyz` trae
+  celda pero se declara no periódico, los ejes por los que hay enlaces que cruzan la celda
+  se marcan periódicos (la terminal lo dice). Si no trae celda, «Celda…» la fija a mano
+  (longitudes, ángulos y ejes periódicos; «Detectar por enlaces» marca los ejes). «Guardar…»
+  escribe la geometría activa; un `.xyz` se escribe como extxyz para no perder la celda.
+- **Geometrías de la sesión.** La lista «Geometría» guarda la abierta, las relajadas, las
+  de celda editada y las superceldas; la elegida es la que usan todas las pestañas.
+  «Repetir» n₁ n₂ n₃: «Ver» dibuja las copias sin cambiar el cálculo; «Crear» hace la
+  supercelda (p. ej. 1×1×4) y la deja activa. Los enlaces que cruzan la celda se dibujan
+  hasta la imagen del vecino (un muñón en el borde), nunca de un lado al otro de la celda.
+  Un clic en un átomo da su índice y posición; dos clics seguidos, la distancia.
+- **Cálculos y recursos.** Cada cálculo corre en un proceso aparte: «Cancelar cálculo» lo
+  mata al instante y un cálculo pedido mientras otro corre espera en cola. «Núcleos» y
+  «RAM máx.» (Recursos del cálculo) fijan los procesadores y el límite de memoria; antes de
+  empezar se estima la memoria de una diagonalización y se avisa si no cabe, y un cálculo
+  que pasa el límite se detiene (antes de que el sistema mate procesos). La barra inferior
+  muestra el avance del cálculo y el uso de CPU, RAM (y GPU NVIDIA) de la máquina; la
+  terminal, una línea de avance cada 5 s. Al relajar, la estructura se mueve en la vista.
+- **Procesos.** Todo lo que corre (el cálculo de la ventana y su cola, las recetas
+  lanzadas, cualquier receta con contador en la carpeta de trabajo) con CPU, RAM, núcleos y
+  avance; el final de su registro; «Detener seleccionado».
 
 | Pestaña | Flujo típico |
 |---|---|
-| Electrónica | «Calcular estado fundamental» primero (lo usan las demás): niveles, gap, DOS/PDOS, bandas, cargas; «Comparar SCC sí/no» |
+| Geometría y modos | Primero: «Relajar» (la relajada se añade a la lista y queda activa; «Exportar geometría…») → «Modos en Γ» → ordenar por sitio (anillos 5/6/7, heteroátomo, C vecinos) → animar o ver flechas → frecuencia del modo con otro conjunto |
+| Electrónica | «Calcular estado fundamental» (lo usan las demás): niveles, gap, DOS/PDOS, bandas, cargas; «Comparar SCC sí/no» |
 | Orbitales | Isosuperficie de un nivel (HOMO, LUMO, estados de borde) |
 | Magnetismo | Hubbard de campo medio: momentos, m(E), puntos de partida, barridos de campo o dopaje |
-| Geometría y modos | «Relajar» → «Modos en Γ» → ordenar por sitio (anillos 5/6/7, heteroátomo, C vecinos) → animar o ver flechas → frecuencia del modo con otro conjunto |
 | Fonones (ZB) | phonopy: dispersión, DOS, simetría de cada modo en Γ, F/S/Cv; carpeta para reanudar |
 | Espectros | Raman (no resonante, resonante), IR; fonones del modelo o de QE; escalar frecuencias (aparte); exportar CSV |
 | Grafeno | G, 2D y 2D′ por doble resonancia y dispersión de la 2D con el láser |
-| Recetas | Las 30 recetas. Elegir receta y paso → dos tablas editables (doble clic): «Ajustes de la receta» (números internos con unidad; el porqué al pasar el ratón) y «Opciones del paso» (cada argumento de la receta con su valor por omisión, valores posibles y qué es; los obligatorios marcados) → partes, hilos, MPI → «Lanzar» → el avance con tiempo restante se actualiza cada 10 s. Corre fuera de la ventana (cerrarla no lo detiene); es lo mismo que `tbkit lanzar …` con `--ajustes` |
+| Recetas | Las 30 recetas. Elegir receta y paso → dos tablas editables (doble clic): «Ajustes de la receta» (números internos con unidad; el porqué al pasar el ratón) y «Opciones del paso» (cada argumento de la receta con su valor por omisión, valores posibles y qué es; los obligatorios marcados) → partes, hilos, MPI → «Lanzar» → el avance con tiempo restante se actualiza cada 10 s. Corre fuera de la ventana (cerrarla no lo detiene); es lo mismo que `tbkit lanzar …` con `--ajustes`. Los pasos que no se dividen en partes lo dicen («corre en serie»), y el contador dice cuántos núcleos quedan libres. «Usar geometría activa» pone la ruta de la geometría elegida en la fila seleccionada; «Nueva receta…» arma una receta propia (geometría, modelo y pasos: relajar, niveles, DOS, bandas, modos, Raman, Hubbard) que se corre con «Lanzar» |
+| Procesos | Lo que corre, con CPU, RAM, núcleos, avance y registro; detener |
 
 Archivo → «Guardar registro del último cálculo» escribe un registro
 reproducible (versión, commit, parámetros completos, ajustes, resultados).
