@@ -129,7 +129,7 @@ def fig_raman_eta() -> None:
             ax.text(0.02, 0.86, label, transform=ax.transAxes, fontsize=6.5)
         axes[0].legend(loc="upper right", fontsize=6)
         axes[1].set_ylabel("Intensidad / máx. de G")
-        axes[-1].set_xlabel("Desplazamiento Raman (cm⁻¹)")
+        axes[-1].set_xlabel("Desplazamiento Raman (cm$^{-1}$)")
         axes[-1].set_xlim(900, 1800)
         fig.subplots_adjust(hspace=0.08)
         _save(fig, f"raman_banda_eta_{laser:.2f}".replace(".", "_"))
@@ -152,8 +152,8 @@ def fig_centroids() -> None:
 
     u = json.loads((DATA / "centroides_eta_modelo.json").read_text())["eta"]
     lasers = ("1.96", "2.33", "2.54")
-    for key, label, name in (("G_centroid", "Centroide de G (cm⁻¹)", "centroide_G_eta"),
-                             ("D_centroid", "D estimada (cm⁻¹)", "centroide_D_eta"),
+    for key, label, name in (("G_centroid", "Centroide de G (cm$^{-1}$)", "centroide_G_eta"),
+                             ("D_centroid", "D estimada (cm$^{-1}$)", "centroide_D_eta"),
                              ("ID_IG", "I_D/I_G (estimación de primer orden)", "id_ig_eta")):
         plt = _style()
         fig, ax = plt.subplots()
@@ -166,7 +166,7 @@ def fig_centroids() -> None:
             err = np.vstack([mid - values.min(axis=1), values.max(axis=1) - mid])
             ax.errorbar(x, mid, yerr=err, fmt="o", ms=4, color=color, capsize=2, lw=0.8,
                         label=sys_label)
-        ax.set_xlabel("ħω_L (eV)")
+        ax.set_xlabel(r"$\hbar\omega_L$ (eV)")
         ax.set_ylabel(_label(label))
         ax.set_xticks([1.96, 2.33, 2.54])
         ax.legend(fontsize=6)
@@ -187,15 +187,15 @@ def fig_models() -> None:
     lasers = ("1.96", "2.33", "2.54")
     plt = _style("doble", height=2.0)
     fig, axes = plt.subplots(1, 3)
-    for ax, (key, label) in zip(axes, (("G_centroid", "Centroide de G (cm⁻¹)"),
-                                      ("D_centroid", "D estimada (cm⁻¹)"),
+    for ax, (key, label) in zip(axes, (("G_centroid", "Centroide de G (cm$^{-1}$)"),
+                                      ("D_centroid", "D estimada (cm$^{-1}$)"),
                                       ("ID_IG", "I_D/I_G")), strict=True):
         for k, ((model, model_label), color) in enumerate(zip(names.items(), OKABE_ITO,
                                                              strict=False)):
             x = np.array([float(l) for l in lasers]) + (k - 1) * 0.025
             ax.plot(x, [m[model][l][key] for l in lasers], "o", ms=4, color=color,
                     label=model_label)
-        ax.set_xlabel("ħω_L (eV)")
+        ax.set_xlabel(r"$\hbar\omega_L$ (eV)")
         ax.set_ylabel(_label(label))
         ax.set_xticks([1.96, 2.33, 2.54])
     axes[0].legend(fontsize=6)
@@ -216,12 +216,12 @@ def fig_scale() -> None:
     median = float(np.median(ratios))
     ax.axhline(1.0, color="0.6", lw=0.6)
     ax.axhline(median, color="0.25", lw=0.8, ls="--")
-    ax.text(700, median - 0.006, f"mediana {median:.3f}", fontsize=6, va="top")
+    ax.text(2300, median + 0.002, f"mediana {median:.3f}", fontsize=6, va="bottom")
     for (key, label), color in zip(SYSTEMS.items(), OKABE_ITO, strict=False):
         mine = [r for r in rows if r["sistema"] == key]
         ax.plot([r["tb_cm1"] for r in mine], [r["pbe_sobre_tb"] for r in mine], "o", ms=4,
                 color=color, label=label)
-    ax.set_xlabel("Frecuencia tbkit (cm⁻¹)")
+    ax.set_xlabel("Frecuencia tbkit (cm$^{-1}$)")
     ax.set_ylabel("PBE / tbkit")
     ax.legend(fontsize=6)
     _save(fig, "cociente_pbe_tbkit")

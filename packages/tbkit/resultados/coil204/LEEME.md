@@ -197,6 +197,13 @@ uv run python resultados/coil204/incertidumbre/hacer_figuras.py figuras   # solo
 - **Base de los espectros con η**: solo los 40 modos más fuertes de cada estructura, que son los
   que tienen tensores con η 0.05 y 0.2.
 - **Datos**: CSV y JSON en `incertidumbre/datos/`.
+- **Qué muestran**:
+  - η mueve sobre todo las alturas relativas. La posición de G cambia pocos cm⁻¹, salvo la coil
+    sin dopar a 1.96 eV: ~1567–1590 cm⁻¹.
+  - I_D/I_G del N grafítico queda en ~0.01 con cualquier η.
+  - El modelo pesa más que η en I_D/I_G sin dopar: Tang da 0.10–0.13; xu_chn, 0.08–0.10.
+  - PBE/tbkit: mediana 0.951, intervalo 0.941–1.023 (34 modos). Una posición escalada con 0.95
+    arrastra una incertidumbre de −1 % / +7 %.
 
 ## Lo que no está aquí
 
