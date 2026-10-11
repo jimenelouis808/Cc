@@ -1,0 +1,52 @@
+51 clases de sitio, 51 calculadas
+  sitio    0  ΔE +0.000 eV (relajado)  anillos [5, 5, 6]  ×4
+  sitio   37  ΔE +0.037 eV (relajado)  anillos [5, 5, 6]  ×4
+  sitio   66  ΔE +0.072 eV (relajado)  anillos [5, 5, 6]  ×4
+  sitio    3  ΔE +0.668 eV (relajado)  anillos [5, 6, 6]  ×4
+  sitio    4  ΔE +0.867 eV (relajado)  anillos [5, 6, 6]  ×4
+  sitio   36  ΔE +0.000 eV (sin relajar)  anillos [5, 6, 6]  ×4
+  sitio   38  ΔE +0.000 eV (sin relajar)  anillos [5, 6, 6]  ×4
+  sitio   65  ΔE +0.017 eV (sin relajar)  anillos [5, 6, 6]  ×4
+  sitio   31  ΔE +0.026 eV (sin relajar)  anillos [5, 6, 6]  ×4
+  sitio   64  ΔE +0.037 eV (sin relajar)  anillos [5, 6, 6]  ×4
+  sitio    1  ΔE +0.054 eV (sin relajar)  anillos [5, 6, 6]  ×4
+  sitio   67  ΔE +0.080 eV (sin relajar)  anillos [5, 6, 6]  ×4
+  sitio    8  ΔE +0.090 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   59  ΔE +0.093 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   50  ΔE +0.094 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio    9  ΔE +0.158 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   61  ΔE +0.165 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   15  ΔE +0.179 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   48  ΔE +0.188 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   49  ΔE +0.195 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   60  ΔE +0.221 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   51  ΔE +0.226 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   10  ΔE +0.274 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   40  ΔE +0.291 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   14  ΔE +0.326 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   39  ΔE +0.341 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   54  ΔE +0.354 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   45  ΔE +0.393 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   44  ΔE +0.410 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   12  ΔE +0.412 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   62  ΔE +0.418 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   43  ΔE +0.441 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   42  ΔE +0.445 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   55  ΔE +0.456 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   52  ΔE +0.476 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio    5  ΔE +0.484 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   13  ΔE +0.489 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   56  ΔE +0.527 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   53  ΔE +0.548 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio    6  ΔE +0.558 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   11  ΔE +0.578 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   47  ΔE +0.587 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   16  ΔE +0.603 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   41  ΔE +0.609 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   57  ΔE +0.693 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio   58  ΔE +0.706 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   46  ΔE +0.724 eV (sin relajar)  anillos [6, 6, 6]  ×4
+  sitio    2  ΔE +0.857 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio    7  ΔE +0.953 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   63  ΔE +1.073 eV (sin relajar)  anillos [6, 6, 7]  ×4
+  sitio   30  ΔE +1.128 eV (sin relajar)  anillos [6, 6, 7]  ×4

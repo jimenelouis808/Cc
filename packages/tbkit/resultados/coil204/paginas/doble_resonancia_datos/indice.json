@@ -1,0 +1,76 @@
+{
+ "reporte": "Doble resonancia de la coil: bandas D y 2D",
+ "archivos": [
+  {
+   "archivo": "figura_espectro_grid1.csv",
+   "titulo": "Primer orden: G y D (+D′)",
+   "tipo": "figura",
+   "columnas": [
+    "desplazamiento Raman (cm⁻¹)",
+    "1.96 eV",
+    "2.33 eV",
+    "2.54 eV"
+   ]
+  },
+  {
+   "archivo": "figura_espectro_grid2.csv",
+   "titulo": "Segundo orden: 2D y 2D′+2G",
+   "tipo": "figura",
+   "columnas": [
+    "desplazamiento Raman (cm⁻¹)",
+    "1.96 eV",
+    "2.33 eV",
+    "2.54 eV"
+   ]
+  },
+  {
+   "archivo": "tabla_bandas.csv",
+   "titulo": "Bandas por láser",
+   "tipo": "tabla",
+   "columnas": [
+    "láser (eV)",
+    "G (cm⁻¹)",
+    "D (cm⁻¹)",
+    "D′ (cm⁻¹)",
+    "2D (cm⁻¹)",
+    "2D′+2G (cm⁻¹)",
+    "I_D/I_G",
+    "I_D′/I_G",
+    "I_2D/I_G"
+   ]
+  },
+  {
+   "archivo": "tabla_dispersion.csv",
+   "titulo": "Dispersión con el láser (ajuste lineal)",
+   "tipo": "tabla",
+   "columnas": [
+    "banda",
+    "pendiente (cm⁻¹/eV)"
+   ]
+  },
+  {
+   "archivo": "tabla_top_dband.csv",
+   "titulo": "Las ocho mayores por láser",
+   "tipo": "tabla",
+   "columnas": [
+    "láser (eV)",
+    "q",
+    "fonón (cm⁻¹)",
+    "desplazamiento (cm⁻¹)",
+    "% del total"
+   ]
+  },
+  {
+   "archivo": "tabla_top_twod.csv",
+   "titulo": "Las ocho mayores por láser",
+   "tipo": "tabla",
+   "columnas": [
+    "láser (eV)",
+    "q",
+    "fonón (cm⁻¹)",
+    "desplazamiento (cm⁻¹)",
+    "% del total"
+   ]
+  }
+ ]
+}

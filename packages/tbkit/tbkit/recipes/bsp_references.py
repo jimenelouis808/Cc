@@ -133,8 +133,11 @@ def _one(args):
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("element", choices=sorted(MOLECULES))
-    parser.add_argument("out", type=Path)
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("out", type=Path,
+                        help="archivo JSON de referencias que se escribe (los cálculos parciales "
+                             "van a ARCHIVO.parts/, reanudable)")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="procesos GPAW en paralelo (cada uno, un cálculo; vigila la memoria)")
     args = parser.parse_args(argv)
     from tbkit.references import GPAW_DEFAULTS, gpaw_settings_record
 
@@ -146,12 +149,17 @@ def main(argv=None) -> None:
     parts = args.out.with_suffix(".parts")
     parts.mkdir(parents=True, exist_ok=True)
     todo = [job for job in jobs if not (parts / f"{job[0]}.json").exists()]
+    from ..progress import Progress
+
+    bar = Progress(len(jobs), "referencias GPAW B/S/P", status=parts / "progreso.json",
+                   done=len(jobs) - len(todo))
     with ProcessPoolExecutor(args.workers) as pool:
         futures = [pool.submit(_one, job) for job in todo]
         for future in as_completed(futures):
             name, result = future.result()
             (parts / f"{name}.json").write_text(json.dumps(result))
             print(f"{name}: {len(result)} estructuras", flush=True)
+            bar.step()
     structures = []
     for job in jobs:
         structures += json.loads((parts / f"{job[0]}.json").read_text())

@@ -86,8 +86,11 @@ def _frequencies(args):
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("out", type=Path)
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("out", type=Path,
+                        help="archivo JSON de referencias que se escribe (los cálculos parciales "
+                             "van a ARCHIVO.parts/, reanudable)")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="procesos GPAW en paralelo (cada uno, un cálculo; vigila la memoria)")
     parser.add_argument("--only", nargs="*", help="solo estas moléculas")
     parser.add_argument("--frequencies", action="store_true",
                         help="añade las frecuencias armónicas GPAW de " + ", ".join(FREQUENCIES))
@@ -104,17 +107,26 @@ def main(argv=None) -> None:
     parts = args.out.with_suffix(".parts")
     parts.mkdir(parents=True, exist_ok=True)
     todo = [job for job in jobs if not (parts / f"{job[0]}.json").exists()]
+    from ..progress import Progress
+
+    bar = Progress(len(jobs), "referencias GPAW C/H/N", status=parts / "progreso.json",
+                   done=len(jobs) - len(todo))
     with ProcessPoolExecutor(args.workers) as pool:
         for job, result in zip(todo, pool.map(_one, todo), strict=True):
             (parts / f"{job[0]}.json").write_text(json.dumps(result))
             print(f"{job[0]}: {len(result)} estructuras", flush=True)
+            bar.step()
     if args.frequencies:
         todo = [n for n in FREQUENCIES if not (parts / f"{n}.freq.json").exists()]
+        bar = Progress(len(FREQUENCIES), "frecuencias GPAW C/H/N",
+                       status=parts / "progreso_frecuencias.json",
+                       done=len(FREQUENCIES) - len(todo))
         with ProcessPoolExecutor(args.workers) as pool:
             for name, values in zip(todo, pool.map(_frequencies, [(n, parts, settings)
                                                                for n in todo]), strict=True):
                 (parts / f"{name}.freq.json").write_text(json.dumps(values))
                 print(f"{name}: frecuencias", flush=True)
+                bar.step()
     structures = []
     for job in jobs:
         structures += json.loads((parts / f"{job[0]}.json").read_text())

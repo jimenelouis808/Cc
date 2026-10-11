@@ -225,14 +225,20 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="stage", required=True)
     g = sub.add_parser("gpaw")
-    g.add_argument("workdir", type=Path)
-    g.add_argument("--systems", nargs="*", default=list(SYSTEMS))
+    g.add_argument("workdir", type=Path,
+                   help="carpeta de los cálculos GPAW (uno por sistema, reanudable)")
+    g.add_argument("--systems", nargs="*", default=list(SYSTEMS),
+                   help="sistemas a calcular (por omisión, todos)")
     c = sub.add_parser("collect")
-    c.add_argument("workdir", type=Path)
-    c.add_argument("out", type=Path)
+    c.add_argument("workdir", type=Path,
+                   help="carpeta de los cálculos GPAW (uno por sistema, reanudable)")
+    c.add_argument("out", type=Path,
+                   help="archivo JSON de referencias que se escribe")
     b = sub.add_parser("baseline")
-    b.add_argument("reference", type=Path)
-    b.add_argument("--model", default="xu_carbon")
+    b.add_argument("reference", type=Path,
+                   help="archivo de referencias reunido (paso collect)")
+    b.add_argument("--model", default="xu_carbon",
+                   help="conjunto TB con que se compara")
     args = parser.parse_args(argv)
     if args.stage == "gpaw":
         for name in args.systems:

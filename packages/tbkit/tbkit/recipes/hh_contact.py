@@ -100,8 +100,12 @@ def install(reference: Path = REFERENCE) -> None:
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="stage", required=True)
-    sub.add_parser("references").add_argument("out", type=Path)
-    sub.add_parser("term").add_argument("reference", type=Path, nargs="?", default=REFERENCE)
+    sub.add_parser("references").add_argument("out", type=Path,
+                                              help="archivo JSON de referencias H2···H2 que se "
+                                                   "escribe")
+    sub.add_parser("term").add_argument("reference", type=Path, nargs="?", default=REFERENCE,
+                                        help="referencias H2···H2 de las que se obtiene el término "
+                                             "(por omisión, las incluidas)")
     sub.add_parser("install")
     args = parser.parse_args(argv)
     if args.stage == "references":

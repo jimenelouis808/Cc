@@ -872,7 +872,62 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_vibspec_parser(sub)
 
+    dft = sub.add_parser("dft", help="Solicitudes DFT de otros paquetes (nanocarbon-dft/1): "
+                                     "preparar, correr, ver el estado.")
+    dsub = dft.add_subparsers(dest="dft_command", required=True)
+    pp = dsub.add_parser("preparar", help="Revisa la solicitud y copia run_dft.py (y un script "
+                                          "de SLURM con --slurm).")
+    pp.add_argument("folder", help="carpeta con solicitud.json")
+    pp.add_argument("--slurm", action="store_true", help="escribe trabajo.slurm")
+    pp.add_argument("--particion", default=None, help="partición de SLURM")
+    pp.add_argument("--horas", type=int, default=24, help="tiempo máximo en SLURM (h)")
+    pp.set_defaults(func=_cmd_dft_prepare)
+    pr_ = dsub.add_parser("correr", help="Prepara (si hace falta) y corre aquí, en primer plano.")
+    pr_.add_argument("folder")
+    pr_.add_argument("--mpi", type=int, default=None,
+                     help="procesos MPI (por omisión, los de la solicitud)")
+    pr_.set_defaults(func=_cmd_dft_run)
+    ps_ = dsub.add_parser("estado", help="Avance o resultado de una carpeta.")
+    ps_.add_argument("folder")
+    ps_.set_defaults(func=_cmd_dft_status)
+
     return parser
+
+
+def _cmd_dft_prepare(args) -> int:
+    from ..exchange import prepare
+
+    path = prepare(args.folder, slurm=args.slurm, partition=args.particion, hours=args.horas)
+    print(f"listo: {path}" + ("  (y trabajo.slurm)" if args.slurm else ""))
+    return 0
+
+
+def _cmd_dft_run(args) -> int:
+    import json
+    import subprocess
+
+    from ..exchange import prepare
+    from ..jobs.queue import ExchangeAdapter
+
+    folder = Path(args.folder)
+    prepare(folder)
+    adapter = ExchangeAdapter()
+    ok, why = adapter.available(folder)
+    if not ok:
+        print(why)
+        return 1
+    request = json.loads((folder / "solicitud.json").read_text(encoding="utf-8"))
+    nprocs = args.mpi or int(request.get("recursos", {}).get("mpi", 1))
+    return subprocess.call(adapter.command(folder, nprocs), cwd=folder)
+
+
+def _cmd_dft_status(args) -> int:
+    from ..exchange import status
+
+    info = status(args.folder)
+    print(f"{info['state']}" + (f" · {info['line']}" if info["line"] else "")
+          + (f" · tareas hechas: {', '.join(info['tasks_done'])}" if info["tasks_done"] else ""))
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

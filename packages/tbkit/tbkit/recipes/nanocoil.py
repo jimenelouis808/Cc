@@ -27,16 +27,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 from ase.io import read, write
 
 from .. import sites
+from ..settings import Param, add_arguments, apply
 
 INPUT = Path(__file__).with_name("data") / "coil204_knee.extxyz"
 KMESH = (1, 1, 4)
 KT = 0.05
+PHONON_DELTA = 0.01
+GPAW_SETTINGS = {"mode": "lcao", "basis": "dzp", "xc": "PBE", "h": 0.2}
 BOND = 1.85
 
 
@@ -119,7 +123,7 @@ def stage_tb(workdir: Path, model_name: str) -> dict:
               "bonds_made": sorted(made), "bonds_broken": sorted(broken)}
     _write(folder / "report.json", report)
     # Γ modes: ase.vibrations caches every displacement in its directory (resumable)
-    vib = Vibrations(atoms, name=str(folder / "vib"), delta=0.01)
+    vib = Vibrations(atoms, name=str(folder / "vib"), delta=PHONON_DELTA)
     vib.run()
     data = vib.get_vibrations()
     energies, modes = data.get_energies_and_modes(all_atoms=True)
@@ -162,8 +166,12 @@ def _trimmed(atoms, vacuum: float):
 def _gpaw(kpts):
     from gpaw import GPAW, FermiDirac
 
-    return GPAW(mode="lcao", basis="dzp", xc="PBE", h=0.2, kpts=kpts, symmetry="off",
-                occupations=FermiDirac(KT), txt=None)
+    from ..progress import watch_gpaw_scf
+
+    calc = GPAW(**GPAW_SETTINGS, kpts=kpts, symmetry="off", occupations=FermiDirac(KT),
+                txt=None)
+    watch_gpaw_scf(calc, "GPAW SCF (coil)")
+    return calc
 
 
 def stage_gpaw_k(workdir: Path, vacuum: float = 6.0) -> dict:
@@ -312,13 +320,14 @@ def tb_vibrations(workdir: Path, model_name: str):
 
     folder = Path(workdir) / f"tb_{model_name}"
     atoms = read(folder / "relaxed.extxyz")
-    hessian = AseVibrations(atoms, name=str(folder / "vib"), delta=0.01).get_vibrations() \
+    hessian = AseVibrations(atoms, name=str(folder / "vib"), delta=PHONON_DELTA).get_vibrations() \
         .get_hessian_2d()
     return Vibrations.from_hessian(atoms, hessian, source=model_name)
 
 
 def stage_raman(workdir: Path, model_name: str = "tang_carbon", part: tuple = (0, 1),
-                kmesh: int = 4, eta: float = 0.1, delta: float = 0.005) -> dict:
+                kmesh: int = 4, eta: float = 0.1, delta: float = 0.005,
+                min_cm1: float | None = None) -> dict:
     """Resonant Raman of every internal mode, α differentiated along each mode.
 
     ``part=(r, n)`` computes the modes with index ≡ r (mod n): n processes share
@@ -336,11 +345,18 @@ def stage_raman(workdir: Path, model_name: str = "tang_carbon", part: tuple = (0
     atoms = vib.atoms
     model = load_parameters(model_name)
     modes = [int(k) for k in internal_modes(atoms, vib.frequencies, [])]
+    if min_cm1 is not None:                     # the D/G region only (model comparisons)
+        modes = [k for k in modes if vib.frequencies[k] > min_cm1]
     r, n = part
     chosen = [k for k in modes if k % n == r]
-    result = resonant_raman(atoms, model, LASERS_EV, eta=eta, kmesh=kmesh, kT=KT,
-                            phonons=(vib.frequencies, vib.modes), select=chosen,
-                            cache_dir=folder / "tensors", delta=delta)
+    from ..progress import Progress
+
+    with Progress(len(chosen), f"Raman de la coil, parte {r + 1}/{n}",
+                  status=folder / f"progreso_{r}.json") as bar:
+        result = resonant_raman(atoms, model, LASERS_EV, eta=eta, kmesh=kmesh, kT=KT,
+                                phonons=(vib.frequencies, vib.modes), select=chosen,
+                                cache_dir=folder / "tensors", delta=delta,
+                                progress=bar.callback())
     if n > 1:
         return {"part": list(part), "modes": len(chosen)}
     groups = ring_atoms(atoms, (5, 6, 7))
@@ -413,16 +429,44 @@ def stage_kconv(workdir: Path, model_name: str, kz: int, part: tuple = (0, 1)) -
     return out
 
 
+#: Adjustable with --ajuste NOMBRE=VALOR (tbkit recetas nanocoil).
+PARAMS = [
+    Param("INPUT", "estructura de la coil (de nanocarbon_lab)", "", "", "rutas"),
+    Param("KMESH", "malla k de tbkit (a lo largo del eje)", "",
+          "4: de 4 a 16 k los modos se mueven ≤ 0.01 cm⁻¹", "convergencia"),
+    Param("KT", "ensanchamiento de Fermi-Dirac (tbkit y GPAW)", "eV", "", "convergencia"),
+    Param("BOND", "distancia máxima de enlace para la topología", "Å", "", "cálculo"),
+    Param("PHONON_DELTA", "desplazamiento de las diferencias finitas de los fonones", "Å", "",
+          "convergencia"),
+    Param("GPAW_SETTINGS", "ajustes de GPAW: modo, base, funcional, malla h (Å)", "",
+          "LCAO dzp PBE h 0.2, la referencia de tbkit", "cálculo"),
+    Param("LASERS_EV", "energías de láser del Raman resonante", "eV",
+          "785, 633, 532, 514, 488 nm", "cálculo"),
+]
+
+
+#: Steps that split in parts (--part r/N); the others run as one process.
+PARALLEL_STEPS = ('kconv', 'raman')
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("stage", choices=("tb", "gpaw-k", "gpaw-relax", "gpaw-phase3",
                                                  "raman", "kconv"))
-    parser.add_argument("workdir", type=Path)
-    parser.add_argument("--model", default="tang_carbon")
-    parser.add_argument("--kz", type=int, default=2)
+    parser.add_argument("workdir", type=Path,
+                        help="carpeta de trabajo de la coil (reanudable)")
+    parser.add_argument("--model", default="tang_carbon",
+                        help="conjunto de parámetros TB (nombre o archivo)")
+    parser.add_argument("--kz", type=int, default=2,
+                        help="puntos k a lo largo del eje de la coil para TB/GPAW")
     parser.add_argument("--part", default="0/1", help="r/n: modos con índice ≡ r (mod n)")
-    parser.add_argument("--kz-check", type=int, default=8)
+    parser.add_argument("--kz-check", type=int, default=8,
+                        help="malla k densa con la que se comprueban las frecuencias (paso kconv)")
+    parser.add_argument("--min-cm1", type=float, default=None,
+                        help="raman: solo modos por encima (comparación entre modelos)")
+    add_arguments(parser)
     args = parser.parse_args(argv)
+    apply(sys.modules[__name__], args, record=Path("out/nanocoil"))
     if args.stage == "tb":
         print(json.dumps({k: v for k, v in stage_tb(args.workdir, args.model).items()
                           if k not in ("bonds_made", "bonds_broken")}, indent=1))
@@ -434,7 +478,7 @@ def main(argv=None) -> None:
         print(json.dumps(out, indent=1))
     elif args.stage == "raman":
         r, n = (int(x) for x in args.part.split("/"))
-        out = stage_raman(args.workdir, args.model, (r, n))
+        out = stage_raman(args.workdir, args.model, (r, n), min_cm1=args.min_cm1)
         print(json.dumps({k: v for k, v in out.items() if not k.startswith("strongest")},
                          indent=1))
     elif args.stage == "gpaw-relax":

@@ -97,7 +97,17 @@ class JobManifest:
         total = len(self.steps)
         if self.status == "running":
             step = self.next_step
-            return f"paso {done + 1}/{total}: {step.program if step else ''}"
+            text = f"paso {done + 1}/{total}: {step.program if step else ''}"
+            # pw.x, ph.x or LAMMPS cannot tell how far they are; how long the current
+            # step has been running can be said (since the last state change).
+            if self.history:
+                from datetime import datetime, timezone
+
+                from ..utils.eta import duration
+
+                since = datetime.fromisoformat(self.history[-1]["time"])
+                text += f" · lleva {duration((datetime.now(timezone.utc) - since).total_seconds())}"
+            return text
         if self.status == "error":
             message = self.history[-1]["message"] if self.history else ""
             return f"error: {message}"

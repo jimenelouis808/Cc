@@ -10,7 +10,7 @@ from ase import Atoms
 from ase.data import atomic_numbers, covalent_radii
 from ase.data.colors import jmol_colors
 
-from .actions import bonds_of
+from .actions import bonds_with_images
 
 
 def element_color(symbol: str):
@@ -26,6 +26,13 @@ class StructureView:
     def __init__(self, plotter):
         self.plotter = plotter
         self.atoms: Optional[Atoms] = None
+        #: Copies of the cell drawn along each periodic axis (the view only: the
+        #: calculation keeps the structure as it is).
+        self.repeat = (1, 1, 1)
+        self.show_cell = True
+        self._scalars = None
+        self._label = ""
+        self._cmap = "coolwarm"
         self._timer = None
         self._mode = None
         self._phase = 0.0
@@ -39,10 +46,11 @@ class StructureView:
         self.stop_animation()
         camera = self.plotter.camera_position if keep_camera and self.atoms is not None else None
         self.atoms = atoms
+        self._scalars, self._label, self._cmap = scalars, label, cmap
         self.plotter.clear()
         self._draw(atoms.get_positions(), scalars, label, cmap)
         cell = atoms.cell
-        if atoms.get_pbc().any() and cell.rank == 3:
+        if self.show_cell and atoms.get_pbc().any() and cell.rank == 3:
             self._draw_cell(np.array(cell))
         if camera is not None:
             self.plotter.camera_position = camera
@@ -58,8 +66,38 @@ class StructureView:
             self.plotter.view_vector(vt[-1], viewup=vt[0])
         self.plotter.reset_camera()
 
+    def set_repeat(self, repeat):
+        """Draw ``(n1, n2, n3)`` copies of the cell (periodic axes only) and redraw."""
+        self.repeat = tuple(max(1, int(n)) for n in repeat)
+        if self.atoms is not None:
+            self.show(self.atoms, self._scalars, self._label, self._cmap, keep_camera=False)
+
+    def _images(self, atoms):
+        """Lattice offsets of the copies drawn (only along periodic axes)."""
+        ranges = [range(n if atoms.pbc[k] else 1) for k, n in enumerate(self.repeat)]
+        return [(a, b, c) for a in ranges[0] for b in ranges[1] for c in ranges[2]]
+
+    def update_positions(self, positions):
+        """Move the atoms (a relaxation step) keeping the camera and the colours."""
+        if self.atoms is None or len(positions) != len(self.atoms) or self._mode is not None:
+            return
+        self.atoms = self.atoms.copy()
+        self.atoms.positions = np.asarray(positions)
+        for actor in [n for n in self.plotter.actors if n.startswith("atoms")]:
+            self.plotter.remove_actor(actor)
+        self._draw(self.atoms.get_positions(), self._scalars, self._label, self._cmap)
+        self.plotter.render()
+
     def _draw(self, positions, scalars=None, label="", cmap="coolwarm", name="atoms"):
-        atoms = self.atoms
+        base = self.atoms
+        cell = np.array(base.cell)
+        images = self._images(base) if base.pbc.any() else [(0, 0, 0)]
+        offsets = [np.array(img) @ cell for img in images]
+        # the atoms of every copy, in copy order
+        positions = np.concatenate([positions + o for o in offsets])
+        atoms = Atoms(list(base.numbers) * len(images), positions=positions)
+        if scalars is not None:
+            scalars = np.tile(np.asarray(scalars, dtype=float), len(images))
         symbols = atoms.get_chemical_symbols()
         radii = 0.35 * covalent_radii[atoms.numbers] + 0.15
         for element in sorted(set(symbols)) if scalars is None else [None]:
@@ -78,12 +116,63 @@ class StructureView:
                 self.plotter.add_mesh(glyphs, scalars=label or "valor", cmap=cmap,
                                       clim=(-limit, limit), smooth_shading=True, name=name,
                                       scalar_bar_args={"title": label or "valor"})
-        bonds = bonds_of(atoms)
-        if bonds:
-            lines = np.hstack([[2, i, j] for i, j in bonds])
-            mesh = pv.PolyData(positions, lines=lines)
+        self._drawn = positions
+        # Bonds of the original cell, with the lattice offset of the far atom. A bond to an
+        # atom in a copy that is drawn joins the two atoms; a bond that leaves the drawn
+        # copies stops halfway at the boundary (a stub), never across the cell.
+        probe = base.copy()
+        probe.positions = positions[:len(base)]
+        n = len(base)
+        index = {img: k for k, img in enumerate(images)}
+        full, stubs = set(), []
+        for i, j, shift in bonds_with_images(probe):
+            for a_atom, b_atom, step in ((i, j, shift), (j, i, tuple(-x for x in shift))):
+                vector = probe.positions[b_atom] + np.array(step) @ cell - probe.positions[a_atom]
+                for k, img in enumerate(images):
+                    target = tuple(np.add(img, step))
+                    a = k * n + a_atom
+                    if target in index:
+                        b = index[target] * n + b_atom
+                        full.add((min(a, b), max(a, b)))
+                    else:
+                        stubs.append((a, positions[a] + 0.5 * vector))
+        if full or stubs:
+            points = list(positions) + [mid for _, mid in stubs]
+            lines = []
+            for a, b in sorted(full):
+                lines += [2, a, b]
+            for k, (a, _) in enumerate(stubs):
+                lines += [2, a, len(positions) + k]
+            mesh = pv.PolyData(np.array(points), lines=np.array(lines))
             self.plotter.add_mesh(mesh.tube(radius=0.09), color=(0.55, 0.55, 0.55),
                                   smooth_shading=True, name=f"{name}-bonds")
+
+    def atom_at(self, point) -> int | None:
+        """The atom (index in the structure) drawn nearest to a picked point, within 1.5 Å."""
+        drawn = getattr(self, "_drawn", None)
+        if drawn is None or self.atoms is None or point is None:
+            return None
+        distance = np.linalg.norm(drawn - np.asarray(point), axis=1)
+        k = int(np.argmin(distance))
+        return k % len(self.atoms) if distance[k] < 1.5 else None
+
+    def enable_picking(self, callback) -> bool:
+        """Call ``callback(atom_index)`` when an atom is clicked (interactive window only)."""
+        def picked(point, *_):
+            index = self.atom_at(point)
+            if index is not None:
+                callback(index)
+        try:
+            self.plotter.enable_point_picking(callback=picked, show_message=False,
+                                              show_point=False, use_picker=True,
+                                              left_clicking=True)
+            return True
+        except (TypeError, AttributeError):
+            try:
+                self.plotter.enable_point_picking(callback=picked, show_message=False)
+                return True
+            except Exception:  # noqa: BLE001  (an old pyvista, or no interactor)
+                return False
 
     def _draw_cell(self, cell):
         corners = np.array([[i, j, k] for i in (0, 1) for j in (0, 1) for k in (0, 1)]) @ cell

@@ -9,6 +9,7 @@ Cuánto se equivoca: [`VALIDACION.md`](VALIDACION.md).
 uv sync --all-packages --extra dev               # núcleo y tests
 uv sync --all-packages --extra dev --extra gui   # + ventana (PySide6, pyvista)
 uv pip install 'tbkit[phonons]'                  # + phonopy (fonones en toda la zona)
+uv pip install 'tbkit[plot]'                     # + matplotlib (figuras de `tbkit report`)
 ```
 
 En Linux, la ventana necesita libEGL, libxkbcommon y las libxcb-* del sistema.
@@ -40,19 +41,48 @@ Electrónica) muestra cuánto depende tu resultado de la SCC.
 uv run tbkit-gui estructura.extxyz
 ```
 
-Izquierda: estructura y modelo (carga, SCC, kT). Centro: vista 3D. Derecha,
-una pestaña por tarea; cada control tiene una ayuda (pasa el ratón) y cada
-pestaña un recuadro que explica para qué sirve (menú Ayuda para ocultarlos).
+Izquierda: estructura, modelo (carga, SCC, kT) y recursos. Centro: vista 3D. Derecha,
+una pestaña por tarea, en el orden del trabajo (primero la geometría); cada control tiene
+una ayuda (pasa el ratón) y cada pestaña un recuadro que explica para qué sirve (menú
+Ayuda para ocultarlos).
+
+- **Guía.** La primera pestaña dice dónde va el trabajo con la geometría activa: estructura, celda, modelo, relajar, estado fundamental, modos, espectros, validación DFT y proyecto, marcando el siguiente paso. Doble clic o «Ir al paso siguiente» lleva a él. Debajo, lo que aplica a ese sistema con ese modelo, según lo que tbkit midió: qué Raman e IR aplican, tamaño y memoria, tipos de N y qué tan validados están, y la validez del conjunto de parámetros.
+- **Archivos.** xyz, extxyz, `.xtl` (Materials Studio), cif, POSCAR… Si un `.xyz` trae
+  celda pero se declara no periódico, los ejes por los que hay enlaces que cruzan la celda
+  se marcan periódicos (la terminal lo dice). Si no trae celda, «Celda…» la fija a mano
+  (longitudes, ángulos y ejes periódicos; «Detectar por enlaces» marca los ejes). «Guardar…»
+  escribe la geometría activa; un `.xyz` se escribe como extxyz para no perder la celda.
+- **Geometrías de la sesión.** La lista «Geometría» guarda la abierta, las relajadas, las
+  de celda editada y las superceldas; la elegida es la que usan todas las pestañas.
+  «Repetir» n₁ n₂ n₃: «Ver» dibuja las copias sin cambiar el cálculo; «Crear» hace la
+  supercelda (p. ej. 1×1×4) y la deja activa. Los enlaces que cruzan la celda se dibujan
+  hasta la imagen del vecino (un muñón en el borde), nunca de un lado al otro de la celda.
+  Un clic en un átomo da su índice y posición; dos clics seguidos, la distancia.
+- **Cálculos y recursos.** Cada cálculo corre en un proceso aparte: «Cancelar cálculo» lo
+  mata al instante y un cálculo pedido mientras otro corre espera en cola. «Núcleos» y
+  «RAM máx.» (Recursos del cálculo) fijan los procesadores y el límite de memoria; antes de
+  empezar se estima la memoria de una diagonalización y se avisa si no cabe, y un cálculo
+  que pasa el límite se detiene (antes de que el sistema mate procesos). La barra inferior
+  muestra el avance del cálculo y el uso de CPU, RAM (y GPU NVIDIA) de la máquina; la
+  terminal, una línea de avance cada 5 s. Al relajar, la estructura se mueve en la vista.
+- **Estudios (muchos sistemas).** «Nuevo estudio…» (Recetas) arma un estudio con las geometrías de la sesión: una base y sus cambios (dopantes, grupos funcionales), de cualquier dimensión. Los átomos cambiados se detectan solos; la base debe ir primero y en su orden. «Lanzar» con el paso «todo» hace relajación, modos (los de cada cambio solo cerca del cambio, comprobados contra el modelo completo), Raman resonante, IR e informe («Abrir resultado…» en `estudios/NOMBRE/out`…). El paso «dft» escribe la solicitud DFT de los modos que importan. A mano: `python -m tbkit.recipes.study ESTUDIO.json todo`.
+- **Validar con DFT.** En «Geometría y modos», «Validar con DFT…» escribe una solicitud para la geometría activa: fuerzas, relajación DFT, DOS y la frecuencia de los modos que selecciones en la tabla. La corre carbonforge (`carbonforge dft correr CARPETA`), en segundo plano y visible en Procesos, o en un clúster con su `trabajo.slurm`, porque la carpeta se copia tal cual. Códigos: GPAW (con los ajustes de las referencias de tbkit), Quantum ESPRESSO (pseudopotenciales tuyos) o DFTB+ (tus `.skf`). «Ver resultado DFT…» compara: fuerzas tbkit − DFT, frecuencia DFT de cada modo de tbkit (cociente de Rayleigh, exacto si el patrón también es modo del DFT y cota superior si no) e IR, y gap. La geometría relajada por DFT se añade a la lista. El formato está en `docs/INTERCAMBIO_DFT.md` de la raíz.
+- **Proyectos.** Archivo → «Guardar proyecto» (Ctrl+S) guarda la sesión en un `.tbkproj`: todas las geometrías, el modelo completo (también un archivo de parámetros propio), los ajustes de cada pestaña y de Recetas, los modos calculados (se reabren sin recalcular fuerzas), el último registro y la terminal. «Abrir proyecto…» (Ctrl+O) la recupera; el estado fundamental, la DOS y los espectros se rehacen con un clic (sus ajustes sí se guardan). Al cerrar, la sesión se guarda sola en `~/.tbkit/ultima_sesion.tbkproj`.
+- **Procesos.** Todo lo que corre (el cálculo de la ventana y su cola, las recetas
+  lanzadas, cualquier receta con contador en la carpeta de trabajo) con CPU, RAM, núcleos y
+  avance; el final de su registro; «Detener seleccionado».
 
 | Pestaña | Flujo típico |
 |---|---|
-| Electrónica | «Calcular estado fundamental» primero (lo usan las demás): niveles, gap, DOS/PDOS, bandas, cargas; «Comparar SCC sí/no» |
+| Geometría y modos | Primero: «Relajar» (la relajada se añade a la lista y queda activa; «Exportar geometría…») → «Modos en Γ» → ordenar por sitio (anillos 5/6/7, heteroátomo, C vecinos) → animar o ver flechas → frecuencia del modo con otro conjunto |
+| Electrónica | «Calcular estado fundamental» (lo usan las demás): niveles, gap, DOS/PDOS, bandas, cargas; «Comparar SCC sí/no» |
 | Orbitales | Isosuperficie de un nivel (HOMO, LUMO, estados de borde) |
 | Magnetismo | Hubbard de campo medio: momentos, m(E), puntos de partida, barridos de campo o dopaje |
-| Geometría y modos | «Relajar» → «Modos en Γ» → ordenar por sitio (anillos 5/6/7, heteroátomo, C vecinos) → animar o ver flechas → frecuencia del modo con otro conjunto |
 | Fonones (ZB) | phonopy: dispersión, DOS, simetría de cada modo en Γ, F/S/Cv; carpeta para reanudar |
 | Espectros | Raman (no resonante, resonante), IR; fonones del modelo o de QE; escalar frecuencias (aparte); exportar CSV |
 | Grafeno | G, 2D y 2D′ por doble resonancia y dispersión de la 2D con el láser |
+| Recetas | Las 30 recetas. Elegir receta y paso → dos tablas editables (doble clic): «Ajustes de la receta» (números internos con unidad; el porqué al pasar el ratón) y «Opciones del paso» (cada argumento de la receta con su valor por omisión, valores posibles y qué es; los obligatorios marcados) → partes, hilos, MPI → «Lanzar» → el avance con tiempo restante se actualiza cada 10 s. Corre fuera de la ventana (cerrarla no lo detiene); es lo mismo que `tbkit lanzar …` con `--ajustes`. Los pasos que no se dividen en partes lo dicen («corre en serie»), y el contador dice cuántos núcleos quedan libres. «Usar geometría activa» pone la ruta de la geometría elegida en la fila seleccionada; «Nueva receta…» arma una receta propia (geometría, modelo y pasos: relajar, niveles, DOS, bandas, modos, Raman, Hubbard) que se corre con «Lanzar» |
+| Procesos | Lo que corre, con CPU, RAM, núcleos, avance y registro; detener |
 
 Archivo → «Guardar registro del último cálculo» escribe un registro
 reproducible (versión, commit, parámetros completos, ajustes, resultados).
@@ -72,9 +102,88 @@ tbkit raman    piridina.xyz --model chn [--resonant 2.33 3.5 --eta 0.1] [--modes
 tbkit ir       piridina.xyz --model chn
 tbkit graphene-raman --laser 1.96 2.41 2.80
 tbkit run      simulacion.json                    # reproducible, guarda su registro
+tbkit report   out/doped_raman [--ancho doble] [--figuras pdf,png]   # reporte, CSV y figuras
+tbkit abrir    validation/coil204_doped_gpaw.json # ver un resultado o validación en el navegador
+tbkit estado   out                                # avance y tiempo restante de lo que corre
 ```
 
 `tbkit <orden> --help` da todas las opciones.
+
+### Cuánto falta: el contador de tiempo
+
+Los cálculos largos llevan un contador (`tbkit.progress`): el Raman resonante (terminal y
+ventana), las recetas de la coil (Hessiana, Raman, doble resonancia) y las referencias.
+En la terminal reescriben una línea; en un registro o en la terminal de la ventana,
+escriben una cada 30 s:
+
+    pares 2.33 eV, parte 1/4: 3/7 (43 %) · 38 min · quedan ~44 min (≈ 10:52)
+
+El tiempo restante es lo que falta por el tiempo medio de los últimos 20 pasos (si los
+pasos se aceleran o se frenan a medio camino, la estimación los sigue). Cada receta
+deja además un `progreso*.json` en su carpeta, y `tbkit estado out` los lista todos con
+su hora estimada de fin; uno que lleva más de tres pasos (y 5 min) sin actualizarse sale
+como «detenido?», que es lo que se ve de un proceso que murió sin avisar.
+
+### Ajustar las recetas: cada número, a la vista
+
+Cada receta declara sus números (malla k, ensanchamientos, ventanas de energía,
+láseres, desplazamientos, ajustes de GPAW, rutas…) con su unidad y el porqué de su valor:
+
+    tbkit recetas                          # las recetas y cuántos ajustes tiene cada una
+    tbkit recetas coil_double_resonance    # todos sus ajustes, explicados
+
+y cualquiera se cambia al correrla, sin tocar el código:
+
+    python -m tbkit.recipes.coil_double_resonance pairs 2.33 --ajuste NK=32 --ajuste GAMMA=0.05
+    python -m tbkit.recipes.doped_gpaw relax N --ajuste 'GPAW_SETTINGS={"basis": "tzp"}'
+    python -m tbkit.recipes.doped_raman raman N --ajustes mis_ajustes.json --ver-ajustes
+
+Además de estos ajustes internos, cada receta tiene opciones de línea de comandos (`--help` las explica todas): puntos k, kT, fmax, pasos máximos, procesos GPAW (`--workers`), los pesos y el límite de evaluaciones de los ajustes de parámetros (`--energy-weight`, `--ridge`, `--max-evaluations`), el radio y la tolerancia de las clases de sitio… La pestaña Recetas las muestra en una tabla.
+
+Un nombre que la receta no tiene, o un valor del tipo equivocado, se rechaza. Los valores
+usados en cada ejecución quedan en `ajustes_usados.json` en la carpeta de la receta.
+
+### Núcleos y procesos
+
+    tbkit lanzar coil_double_resonance pairs 2.33 --partes 4 --hilos 1 --carpeta out/coil_dr
+    tbkit lanzar doped_gpaw relax N --mpi 4          # GPAW con 4 procesos MPI
+
+`--partes N` corre N procesos (cada uno con su `--part r/N`), `--hilos M` los hilos de
+álgebra lineal de cada uno (partes × hilos ≤ núcleos: más hilos que núcleos frena todo),
+`--mpi K` corre GPAW con K procesos MPI. Reintenta una vez la parte que falla, deja un
+registro por parte en `out/registros/` y, con `--carpeta`, muestra el avance de cada parte.
+Con GPAW, la memoria manda: en 15 GB caben 2 cálculos de la coil a la vez.
+
+### Abrir resultados y validaciones
+
+`tbkit abrir RUTA` (en la ventana, «Abrir resultado…» en Espectros) muestra en el
+navegador cualquier resultado: la carpeta (o el `report.json`) de una receta, un
+espectro `.npz`/`.csv` o cualquier `.json`, incluidos todos los de `validation/`. Las
+recetas conocidas salen con sus gráficas (Raman de la coil, comparación con GPAW,
+estructura electrónica); cualquier otro JSON, como tablas: cada parte del archivo en su
+tabla, sin cambiar un número. La página se escribe en una carpeta temporal, así que
+abrir un archivo de `validation/` no deja nada junto a él. Para los CSV y las figuras
+de revista, `tbkit report`.
+
+### Reportes, datos y figuras para publicar
+
+`tbkit report CARPETA_O_ESPECTRO` (en la ventana, «Exportar reporte…» en Espectros)
+lee lo que dejó una receta y escribe junto a ella:
+
+- `reporte_X.html`: una página que se abre sin internet, con gráficas interactivas,
+  tablas, el método y sus límites; cada gráfica y tabla tiene un botón CSV.
+- `reporte_X_datos/`: cada gráfica y tabla en CSV (UTF-8 con BOM, para que Excel lea
+  los acentos; Origin, Igor y gnuplot también lo leen) e `indice.json`.
+- `reporte_X_figuras/`: cada gráfica en PDF y SVG (vectoriales, fuentes incrustadas)
+  y PNG a 600 dpi, a una columna de revista (85 mm) o dos (`--ancho doble`, 178 mm),
+  fuente de 7 pt y paleta Okabe-Ito (legible con daltonismo y en gris). Necesita
+  el extra `plot`.
+
+Reconoce las carpetas de `doped_raman`, `doped_gpaw` y `electronic_compare` y cualquier espectro de tbkit
+(`.npz` con `grid`, o el CSV de `--out` y de «Exportar CSV…»). Para otra receta se
+añade un adaptador en `tbkit/report.py` que convierta sus archivos en secciones,
+gráficas y tablas; la página, los CSV y las figuras salen de eso. Ningún número de
+un reporte se escribe a mano: todos se leen de los archivos.
 
 ## 5. Flujos de trabajo
 
@@ -121,6 +230,10 @@ cero tras un corte.
 | `cnt_validation` | Nanotubos prístinos (RBM, G) |
 | `nanocoil` | La coil periódica de 204 átomos: TB, GPAW, Raman resonante |
 | `site_screening` | Sitios de un dopante sustitucional |
+| `structure_screening` | Ordenar estructuras ya construidas de una composición (grupos funcionales) |
+| `doped_raman` | Raman resonante, banda D estimada e IR de la coil sin dopar, con N y con amina |
+| `doped_gpaw` | Esos resultados frente a GPAW en los modos clave (frecuencia e IR) |
+| `electronic_compare` | Bandas y DOS de la coil (sin dopar, N, amina), grafeno y niveles de moléculas: tbkit frente a GPAW en la misma geometría (`tbkit report out/electronic`) |
 | `active_learning` | Buscar mínimos espurios de un conjunto con GPAW |
 | `validation_report` | Regenerar `docs/VALIDACION.md` desde los datos |
 

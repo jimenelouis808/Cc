@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -24,8 +26,12 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
+    QProgressBar,
     QPushButton,
+    QScrollArea,
     QSlider,
+    QSpinBox,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -81,8 +87,16 @@ class MainWindow(QMainWindow):
     def __init__(self, interactive: bool = True):
         super().__init__()
         self.setWindowTitle("tbkit")
-        self.resize(1500, 900)
+        self.resize(1600, 950)
         self.atoms = None
+        #: Every geometry of this session (opened, relaxed, with a cell, a supercell…), as
+        #: (name, Atoms); the active one is self.atoms and every tab computes on it.
+        self.geometries: list[tuple[str, object]] = []
+        #: Recipes launched from this window: dicts with popen, name, cores, log, started.
+        self.launched: list[dict] = []
+        #: What was done on each geometry, by id (the Guía tab): «relajada», «raman», «dft»…
+        self.done_tasks: dict[int, set] = {}
+        self._picked = None
         self.model = None
         self.model_name = None
         self.state: Optional[actions.GroundState] = None
@@ -91,7 +105,9 @@ class MainWindow(QMainWindow):
         self.runner = Runner(self)
         self.runner.message.connect(self.statusBar().showMessage)
         self.runner.busy.connect(self._busy)
+        self.runner.progress.connect(self._job_progress)
         self.timer = QTimer(self)
+        self._status_widgets()
 
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(self._left_panel())
@@ -106,6 +122,9 @@ class MainWindow(QMainWindow):
             self.plotter = pv.Plotter(off_screen=True)
             splitter.addWidget(QLabel("(vista 3D fuera de pantalla)"))
         self.view = StructureView(self.plotter)
+        self.runner.frame.connect(self.view.update_positions)
+        if interactive:
+            self.view.enable_picking(self.atom_clicked)
         self.tabs = QTabWidget()
         self.pages = {}
         self.info_boxes = []
@@ -114,7 +133,15 @@ class MainWindow(QMainWindow):
             self.pages[widget.title] = widget
             self.tabs.addTab(self._with_info(widget), widget.title)
         splitter.addWidget(self.tabs)
-        splitter.setSizes([430, 620, 600])
+        self.tabs.currentChanged.connect(
+            lambda _: self.pages["Guía"].update_view()
+            if self.tabs.currentIndex() == list(self.pages).index("Guía") else None)
+        # left column narrow, the 3D view the widest: it is where the structure is read
+        splitter.setSizes([320, 680, 600])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setStretchFactor(2, 1)
+        self.splitter = splitter
         self.setCentralWidget(splitter)
         self.last_record = None
         self._menu()
@@ -123,8 +150,13 @@ class MainWindow(QMainWindow):
 
     def _menu(self):
         menu = self.menuBar().addMenu("Archivo")
-        for text, slot in (("Abrir estructura…", self.open_dialog),
+        for text, slot in (("Abrir proyecto…", self.open_project),
+                           ("Guardar proyecto", self.save_project),
+                           ("Guardar proyecto como…", self.save_project_as),
+                           (None, None),
+                           ("Abrir estructura…", self.open_dialog),
                            ("Guardar estructura…", self.save_structure),
+                           ("Guardar imagen de la vista…", self.save_image),
                            (None, None),
                            ("Guardar registro del último cálculo…", self.save_record),
                            ("Abrir registro…", self.load_record),
@@ -133,7 +165,12 @@ class MainWindow(QMainWindow):
             if text is None:
                 menu.addSeparator()
             else:
-                menu.addAction(text).triggered.connect(slot)
+                action = menu.addAction(text)
+                action.triggered.connect(lambda _=False, slot=slot: slot())
+                if text == "Guardar proyecto":
+                    action.setShortcut("Ctrl+S")
+                elif text == "Abrir proyecto…":
+                    action.setShortcut("Ctrl+O")
         help_menu = self.menuBar().addMenu("Ayuda")
         descriptions = help_menu.addAction("Mostrar descripciones de cada pestaña")
         descriptions.setCheckable(True)
@@ -157,7 +194,13 @@ class MainWindow(QMainWindow):
         self.info_boxes.append(info)
         layout.addWidget(info)
         layout.addWidget(page)
-        return box
+        # In a scroll area: a page's buttons no longer set the tab column's minimum width,
+        # so the 3D view keeps its share of the window (a scroll bar appears instead).
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setWidget(box)
+        return scroll
 
     def _apply_help(self):
         """Tooltips from actions.HELP on every button, check box, group and form row."""
@@ -189,20 +232,44 @@ class MainWindow(QMainWindow):
             info.setVisible(visible)
 
     def remember(self, task: str, settings: dict, results: dict):
-        """The last finished calculation, for «Guardar registro»."""
+        """The last finished calculation, for «Guardar registro»; the Guía tab keeps what was
+        done on each geometry."""
         if self.atoms is not None and self.model is not None:
             self.last_record = (self.atoms.copy(), self.model, task, dict(settings), results)
+        self.mark_done(task)
+
+    def mark_done(self, task: str, atoms=None):
+        """Remember that ``task`` was done on a geometry (the active one by default)."""
+        atoms = self.atoms if atoms is None else atoms
+        if atoms is not None:
+            self.done_tasks.setdefault(id(atoms), set()).add(task)
+
+    def done(self, task: str) -> bool:
+        return self.atoms is not None and task in self.done_tasks.get(id(self.atoms), set())
 
     def save_structure(self):
+        """The active geometry to a file (extxyz keeps cell and periodic axes)."""
         if self.atoms is None:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Guardar estructura", "estructura.extxyz",
-                                              "extxyz (*.extxyz);;xyz (*.xyz);;Todos (*)")
-        if path:
-            from ase.io import write
+        import re
 
-            write(path, self.atoms)
+        name = self.geometries[self.geometry_combo.currentIndex()][0] if self.geometries \
+            else "estructura"
+        stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", Path(name).stem).strip("_") or "estructura"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar geometría", f"{stem}.extxyz",
+            "extxyz (*.extxyz);;xyz (con celda) (*.xyz);;Materials Studio (*.xtl);;"
+            "CIF (*.cif);;VASP (POSCAR*);;Todos (*)")
+        if path:
+            from ..structure_io import write_structure
+
+            try:
+                write_structure(self.atoms, path)
+            except ValueError as error:
+                self.error("No se pudo guardar", str(error))
+                return
             self.statusBar().showMessage(f"Guardada {path}")
+            self.console.line(f"geometría «{name}» guardada en {path}")
 
     def save_record(self, path: Optional[str] = None):
         if self.last_record is None:
@@ -238,8 +305,10 @@ class MainWindow(QMainWindow):
         self.set_atoms(atoms, Path(path).name)
 
     def page_classes(self):
-        return [ElectronicPage, OrbitalPage, MagnetismPage, GeometryPage, PhononPage,
-                SpectraPage, GraphenePage]
+        # The guide first, then in the order of the work: geometry (relax), then what is
+        # computed on it.
+        return [GuidePage, GeometryPage, ElectronicPage, OrbitalPage, MagnetismPage, PhononPage,
+                SpectraPage, GraphenePage, RecipesPage, ProcessesPage]
 
     # --- left panel ---------------------------------------------------------------
 
@@ -251,11 +320,32 @@ class MainWindow(QMainWindow):
 
         structure = QGroupBox("Estructura")
         form = QFormLayout(structure)
-        open_button = QPushButton("Abrir…")
-        open_button.clicked.connect(self.open_dialog)
+        buttons = QHBoxLayout()
+        for text, slot in (("Abrir…", self.open_dialog), ("Guardar…", self.save_structure),
+                           ("Celda…", self.cell_dialog)):
+            button = QPushButton(text)
+            button.clicked.connect(slot)
+            buttons.addWidget(button)
+        form.addRow(buttons)
+        self.geometry_combo = QComboBox()
+        self.geometry_combo.activated.connect(self.choose_geometry)
+        form.addRow("Geometría", self.geometry_combo)
+        repeat = QHBoxLayout()
+        self.repeat = []
+        for _ in range(3):
+            box = QSpinBox()
+            box.setRange(1, 20)
+            self.repeat.append(box)
+            repeat.addWidget(box)
+        see = QPushButton("Ver")
+        see.clicked.connect(lambda: self.view.set_repeat([b.value() for b in self.repeat]))
+        repeat.addWidget(see)
+        make = QPushButton("Crear")
+        make.clicked.connect(self.make_supercell)
+        repeat.addWidget(make)
+        form.addRow("Repetir", repeat)
         self.structure_label = QLabel("—")
         self.structure_label.setWordWrap(True)
-        form.addRow(open_button)
         form.addRow(self.structure_label)
         layout.addWidget(structure)
 
@@ -296,6 +386,32 @@ class MainWindow(QMainWindow):
         form.addRow(self.colour)
         layout.addWidget(colour)
 
+        resources = QGroupBox("Recursos del cálculo")
+        form = QFormLayout(resources)
+        from .resources import cores as available_cores
+
+        self.cores_box = QSpinBox()
+        self.cores_box.setRange(1, available_cores())
+        self.cores_box.setValue(available_cores())
+        self.cores_box.setSuffix(f" de {available_cores()}")
+        self.cores_box.valueChanged.connect(self._resources_changed)
+        form.addRow("Núcleos", self.cores_box)
+        machine = self.monitor.machine()
+        total = machine["ram_total_gb"] or 8.0
+        self.ram_box = QDoubleSpinBox()
+        self.ram_box.setRange(0.2, total)
+        self.ram_box.setDecimals(1)
+        self.ram_box.setSingleStep(0.5)
+        self.ram_box.setValue(round(0.8 * total, 1))
+        self.ram_box.setSuffix(f" GB de {total:.1f}")
+        self.ram_box.valueChanged.connect(self._resources_changed)
+        form.addRow("RAM máx.", self.ram_box)
+        self.memory_label = QLabel("—")
+        self.memory_label.setWordWrap(True)
+        form.addRow(self.memory_label)
+        layout.addWidget(resources)
+        self._resources_changed()
+
         self.cancel_button = QPushButton("Cancelar cálculo")
         self.cancel_button.setEnabled(False)
         self.cancel_button.clicked.connect(self.runner.cancel)
@@ -311,6 +427,11 @@ class MainWindow(QMainWindow):
         self.runner.log_line.connect(self.console.line)
         self.runner.output.connect(self.console.write)
         layout.addStretch(1)
+        panel.setMaximumWidth(380)
+        terminal.setMaximumWidth(380)
+        for combo in (self.model_combo, self.geometry_combo, self.scc, self.colour):
+            combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(10)
         column.addWidget(panel)
         column.addWidget(terminal)
         column.setStretchFactor(0, 0)
@@ -319,13 +440,344 @@ class MainWindow(QMainWindow):
 
     def _busy(self, busy: bool):
         self.cancel_button.setEnabled(busy)
+        self.job_bar.setVisible(busy)
+        if not busy:
+            self.job_label.setText("")
+
+    # --- status bar: the running job's progress and the machine's resources -----------
+
+    def _status_widgets(self):
+        from .resources import Monitor
+
+        self.monitor = Monitor()
+        bar = self.statusBar()
+        self.job_label = QLabel("")
+        self.job_bar = QProgressBar()
+        self.job_bar.setMaximumWidth(160)
+        self.job_bar.setMaximumHeight(14)
+        self.job_bar.setVisible(False)
+        self.usage_label = QLabel("")
+        bar.addPermanentWidget(self.job_label)
+        bar.addPermanentWidget(self.job_bar)
+        bar.addPermanentWidget(self.usage_label)
+        self.usage_timer = QTimer(self)
+        self.usage_timer.timeout.connect(self.update_usage)
+        self.usage_timer.start(1500)
+
+    def _job_progress(self, data: dict):
+        self.job_label.setText(data.get("line", "")[:90])
+        if data.get("total"):
+            self.job_bar.setRange(0, int(data["total"]))
+            self.job_bar.setValue(int(data["done"]))
+        else:
+            self.job_bar.setRange(0, 0)                # open-ended: a moving bar
+
+    def update_usage(self):
+        """CPU, RAM (and GPU) of the machine, and what the running job uses."""
+        from .resources import gb
+
+        m = self.monitor.machine()
+        parts = []
+        if m["cpu_percent"] is not None:
+            parts.append(f"CPU {m['cpu_percent']:.0f} %")
+        if m["ram_total_gb"]:
+            parts.append(f"RAM {m['ram_used_gb']:.1f}/{m['ram_total_gb']:.1f} GB")
+        for g in m["gpus"]:
+            parts.append(f"GPU {g['percent']:.0f} % {g['memory_used_gb']:.1f}/"
+                         f"{g['memory_total_gb']:.1f} GB")
+        job = self.runner.last_usage
+        if job:
+            cpu = f", {job['cpu_percent']:.0f} % CPU" if job.get("cpu_percent") is not None \
+                else ""
+            parts.append(f"cálculo {gb(job['rss_gb'])}{cpu}")
+        self.usage_label.setText(" · ".join(parts) or "(sin datos de recursos)")
+        tight = m["ram_total_gb"] and m["ram_used_gb"] / m["ram_total_gb"] > 0.85
+        self.usage_label.setStyleSheet("QLabel { color: #b00020; font-weight: bold; }"
+                                       if tight else "")
+        self.machine_usage = m
+
+    def _resources_changed(self, *_):
+        from .resources import cores as available_cores
+
+        cores = int(self.cores_box.value())
+        self.runner.cores = None if cores >= available_cores() else cores
+        self.runner.memory_limit_gb = float(self.ram_box.value())
+        self._memory_note()
+
+    def _memory_note(self):
+        if not hasattr(self, "memory_label"):
+            return
+        if self.atoms is None or self.model is None:
+            self.memory_label.setText("—")
+            return
+        need = actions.memory_estimate_gb(self.atoms, self.model)
+        n = actions.orbital_count(self.atoms, self.model)
+        from .resources import gb
+
+        text = f"{n} orbitales: ≈ {gb(need)} por diagonalización"
+        if need > self.ram_box.value():
+            text = "⚠ " + text + " (más que el límite)"
+        self.memory_label.setText(text)
+
+    def allocated_cores(self) -> int:
+        """Cores given to what runs now from this window: the window's job and the recipes
+        launched from the Recetas tab that are still alive."""
+        from .resources import cores as available_cores
+
+        used = (self.runner.cores or available_cores()) if self.runner.running else 0
+        for entry in self.launched:
+            if entry["popen"].poll() is None:
+                used += entry["cores"]
+        return used
+
+    def closeEvent(self, event):
+        alive = [e for e in self.launched if e["popen"].poll() is None]
+        if self.runner.running:
+            answer = QMessageBox.question(self, "tbkit", "Hay un cálculo en marcha. ¿Detenerlo y "
+                                          "cerrar? (Las recetas lanzadas siguen corriendo.)"
+                                          if alive else "Hay un cálculo en marcha. ¿Detenerlo "
+                                          "y cerrar?")
+            if answer != QMessageBox.Yes:
+                event.ignore()
+                return
+        self.runner.shutdown()
+        if self.atoms is not None:                 # never lose a session: autosave on close
+            try:
+                path = self.save_project(self.autosave_path(), quiet=True)
+                print(f"tbkit: sesión guardada en {path}")
+            except Exception as error:  # noqa: BLE001  (closing must not fail)
+                print(f"tbkit: no se pudo autoguardar: {error}")
+        event.accept()
+
+    # --- projects: a snapshot of the session -------------------------------------------
+
+    @staticmethod
+    def autosave_path() -> Path:
+        return Path.home() / ".tbkit" / "ultima_sesion.tbkproj"
+
+    def project_state(self):
+        """The session as a :class:`project.Project`."""
+        from ..params import model_to_dict
+        from .project import Project
+
+        window = {"model_name": self.model_name, "charge": self.charge.value(),
+                  "scc": self.scc.currentIndex(), "kT": self.kT.value(),
+                  "colour": self.colour.currentIndex(), "cores": self.cores_box.value(),
+                  "ram_gb": self.ram_box.value(), "repeat": [b.value() for b in self.repeat],
+                  "view_repeat": list(self.view.repeat), "tab": self.tabs.currentIndex()}
+        pages = {}
+        for title, page in self.pages.items():
+            values = widget_values(page)
+            if hasattr(page, "extra_state"):
+                values["__extra__"] = page.extra_state()
+            pages[title] = values
+        modes = None
+        geometry = self.pages["Geometría y modos"]
+        if geometry.result is not None:
+            vib = geometry.result["vibrations"]
+            modes = {"hessian": vib.hessian, "masses": vib.masses, "atoms": vib.atoms,
+                     "source": vib.source}
+        record = None
+        if self.last_record is not None:
+            atoms, model, task, settings, results = self.last_record
+            record = actions.record(atoms, model, task, settings, results)
+        elif getattr(self, "loaded_record", None):
+            record = self.loaded_record
+        return Project(list(self.geometries), max(self.geometry_combo.currentIndex(), 0),
+                       window, pages, model_to_dict(self.model) if self.model else None,
+                       modes, record, self.console.text())
+
+    def save_project(self, path=None, quiet: bool = False):
+        """Save the session; the first time (or «como…»), asks where."""
+        from . import project
+
+        path = path or getattr(self, "project_path", None)
+        if not path:
+            return self.save_project_as()
+        if self.runner.running and not quiet:
+            self.statusBar().showMessage("Se guarda el estado; el cálculo en marcha no se "
+                                         "guarda (al terminar, guarda otra vez).")
+        written = project.save(path, self.project_state())
+        if not quiet:
+            self.project_path = written
+            self.setWindowTitle(f"tbkit — {written.name}")
+            self.console.line(f"proyecto guardado: {written}")
+            self.statusBar().showMessage(f"Proyecto guardado en {written}")
+        return written
+
+    def save_project_as(self):
+        from .project import SUFFIX
+
+        path, _ = QFileDialog.getSaveFileName(self, "Guardar proyecto", f"proyecto{SUFFIX}",
+                                              f"Proyecto de tbkit (*{SUFFIX})")
+        if path:
+            self.project_path = None
+            return self.save_project(path)
+        return None
+
+    def open_project(self, path=None):
+        from . import project
+
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(self, "Abrir proyecto", "",
+                                                  f"Proyecto de tbkit (*{project.SUFFIX})")
+        if not path:
+            return
+        try:
+            state = project.load(path)
+        except Exception as error:  # noqa: BLE001  (a bad file is reported, not raised)
+            self.error("No se pudo abrir el proyecto", str(error))
+            return
+        self.restore_project(state)
+        self.project_path = Path(path)
+        self.setWindowTitle(f"tbkit — {Path(path).name}")
+        self.console.line(f"proyecto abierto: {path} (guardado {state.saved}, "
+                          f"tbkit {state.tbkit})")
+
+    def restore_project(self, state):
+        from ..params import model_from_dict
+
+        if state.console:
+            self.console.write(state.console.rstrip("\n") + "\n── proyecto reabierto ──\n")
+        self.geometries = []
+        self.geometry_combo.clear()
+        for name, atoms in state.geometries:
+            self.set_atoms(atoms, name)
+        if state.geometries:
+            self.choose_geometry(min(state.active, len(state.geometries) - 1))
+        w = state.window
+        name = w.get("model_name")
+        if state.model is not None:
+            builtin = name in actions.MODELS if isinstance(name, str) else False
+            self.set_model(name, None if builtin else model_from_dict(state.model))
+        for box, key in ((self.charge, "charge"), (self.kT, "kT"), (self.cores_box, "cores"),
+                         (self.ram_box, "ram_gb")):
+            if key in w:
+                box.setValue(w[key])
+        for combo, key in ((self.scc, "scc"), (self.colour, "colour")):
+            if key in w:
+                combo.setCurrentIndex(int(w[key]))
+        for box, n in zip(self.repeat, w.get("repeat", []), strict=False):
+            box.setValue(int(n))
+        self.view.set_repeat(w.get("view_repeat", (1, 1, 1)))
+        for title, values in state.pages.items():
+            page = self.pages.get(title)
+            if page is None:
+                continue
+            extra = values.pop("__extra__", None)
+            set_widget_values(page, values)
+            if extra is not None and hasattr(page, "restore_extra"):
+                page.restore_extra(extra)
+        if "tab" in w:
+            self.tabs.setCurrentIndex(int(w["tab"]))
+        self.loaded_record = state.record
+        if state.modes is not None:
+            m = state.modes
+            page = self.pages["Geometría y modos"]
+            self.runner.start("Modos del proyecto", actions.modes_from_hessian, m["atoms"],
+                              m["hessian"], m["masses"], m["source"],
+                              on_done=page.show_modes, on_error=self.error)
+
+    # --- geometries of the session ---------------------------------------------------------
+
+    def launch_dft(self, folder: str, mpi: int = 1):
+        """Run a DFT request with carbonforge (``carbonforge dft correr``) in the background;
+        it shows in Procesos with its log."""
+        import shutil
+        import subprocess
+        import sys
+        import time
+
+        command = [shutil.which("carbonforge")] if shutil.which("carbonforge") else None
+        if command is None:
+            try:
+                import importlib.util
+
+                if importlib.util.find_spec("carbonforge") is not None:
+                    command = [sys.executable, "-m", "carbonforge.cli.main"]
+            except (ImportError, ValueError):
+                command = None
+        if command is None:
+            self.error("carbonforge no está instalado aquí",
+                       f"La solicitud está en {folder}: córrela donde esté carbonforge "
+                       "(carbonforge dft correr CARPETA) o en un clúster (trabajo.slurm).")
+            return None
+        log = Path(folder) / "registro.log"
+        with open(log, "a", encoding="utf-8") as handle:
+            process = subprocess.Popen(command + ["dft", "correr", str(folder), "--mpi", str(mpi)],
+                                       cwd=folder, stdout=handle, stderr=subprocess.STDOUT,
+                                       start_new_session=True)
+        self.launched.append({"popen": process, "name": f"DFT {Path(folder).name}",
+                              "cores": mpi, "log": log, "started": time.time(),
+                              "command": "carbonforge dft correr"})
+        self.console.line(f"DFT lanzado con carbonforge (PID {process.pid}, {mpi} MPI); "
+                          "avance en la pestaña Procesos")
+        return process
+
+    def choose_geometry(self, index: int):
+        if 0 <= index < len(self.geometries):
+            name, atoms = self.geometries[index]
+            self.set_atoms(atoms, name)
+
+    def add_geometry(self, name: str, atoms):
+        """A new geometry of the session, made the active one."""
+        self.set_atoms(atoms, name)
+
+    def make_supercell(self):
+        if self.atoms is None:
+            return
+        repeat = [b.value() for b in self.repeat]
+        try:
+            bigger = actions.supercell(self.atoms, repeat)
+        except ValueError as error:
+            self.error("No se puede repetir", str(error))
+            return
+        name = self.geometries[self.geometry_combo.currentIndex()][0] \
+            if self.geometries else "estructura"
+        self.view.set_repeat((1, 1, 1))
+        self.add_geometry(f"{name} {'x'.join(map(str, repeat))}", bigger)
+
+    def cell_dialog(self):
+        if self.atoms is None:
+            self.error("Sin estructura", "Abre primero una estructura.")
+            return
+        dialog = CellDialog(self.atoms, self)
+        if dialog.exec() == QDialog.Accepted:
+            try:
+                atoms = dialog.result_atoms()
+            except ValueError as error:
+                self.error("Celda no válida", str(error))
+                return
+            name = self.geometries[self.geometry_combo.currentIndex()][0] \
+                if self.geometries else "estructura"
+            self.add_geometry(f"{name} (celda editada)", atoms)
+
+    def atom_clicked(self, index: int):
+        """The clicked atom in the status bar; two clicks in a row give their distance."""
+        atom = self.atoms[index]
+        x, y, z = atom.position
+        text = f"átomo {index} {atom.symbol} ({x:.3f}, {y:.3f}, {z:.3f}) Å"
+        if self._picked is not None and self._picked != index:
+            d = self.atoms.get_distance(self._picked, index, mic=bool(self.atoms.pbc.any()))
+            text += f" · d({self._picked}–{index}) = {d:.3f} Å"
+        self._picked = index
+        self.statusBar().showMessage(text)
+        self.console.line(text)
+
+    def save_image(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Guardar imagen", "estructura.png",
+                                              "PNG (*.png)")
+        if path:
+            self.view.screenshot(path)
+            self.statusBar().showMessage(f"Imagen guardada en {path}")
 
     # --- structure and model ------------------------------------------------------------
 
     def open_dialog(self):
         path, _ = QFileDialog.getOpenFileName(self, "Abrir estructura", "",
-                                              "Estructuras (*.xyz *.extxyz *.cif *.vasp "
-                                              "POSCAR* *.pdb *.json *.traj);;Todos (*)")
+                                              "Estructuras (*.xyz *.extxyz *.xtl *.cif *.vasp "
+                                              "POSCAR* CONTCAR* *.pdb *.json *.traj *.in "
+                                              "*.gen);;Todos (*)")
         if path:
             self.open_structure(path)
 
@@ -335,9 +787,28 @@ class MainWindow(QMainWindow):
         except Exception as error:
             self.error(f"No se pudo leer {path}", str(error))
             return
+        self.geometries = []
+        self.geometry_combo.clear()
+        self.view.set_repeat((1, 1, 1))
         self.set_atoms(atoms, Path(path).name)
+        if atoms.info.get("periodicity"):
+            self.console.line(atoms.info["periodicity"])
+        elif not atoms.pbc.any():
+            self.console.line("sin ejes periódicos: si la estructura lo es, «Celda…» fija la "
+                              "celda y los ejes")
 
     def set_atoms(self, atoms, name: str = ""):
+        """Make ``atoms`` the active geometry (adding it to the session's list if new)."""
+        for k, (_, known) in enumerate(self.geometries):
+            if known is atoms:
+                break
+        else:
+            name = name or f"geometría {len(self.geometries) + 1}"
+            self.geometries.append((name, atoms))
+            self.geometry_combo.addItem(name)
+            k = len(self.geometries) - 1
+        self.geometry_combo.setCurrentIndex(k)
+        self._picked = None
         self.atoms = atoms
         info = actions.structure_summary(atoms)
         self.console.line(f"estructura: {name or '—'} · {info['formula']} · {info['atoms']} "
@@ -348,6 +819,7 @@ class MainWindow(QMainWindow):
         if self.model is None or actions.check_model(atoms, self.model):
             self.set_model(suggested)
         self.invalidate()
+        self._memory_note()
         self.view.show(atoms)
 
     def _model_chosen(self, index):
@@ -359,9 +831,11 @@ class MainWindow(QMainWindow):
         else:
             self.set_model(name)
 
-    def set_model(self, name_or_path: str):
+    def set_model(self, name_or_path: str, model=None):
+        """Use a built-in set (its name) or a parameter file; ``model``: an already built
+        TBModel (a project's own parameters), shown under ``name_or_path``."""
         try:
-            self.model = actions.load_model(name_or_path)
+            self.model = model if model is not None else actions.load_model(name_or_path)
         except Exception as error:
             self.error("No se pudo cargar el modelo", str(error))
             return
@@ -378,6 +852,7 @@ class MainWindow(QMainWindow):
                 text += "\n⚠ " + " ".join(problems)
         self.model_label.setText(text)
         self.invalidate()
+        self._memory_note()
 
     def scc_choice(self) -> Optional[bool]:
         return {0: None, 1: True, 2: False}[self.scc.currentIndex()]
@@ -409,6 +884,16 @@ class MainWindow(QMainWindow):
         problems = actions.check_model(self.atoms, self.model, self.scc_choice())
         if problems:
             self.error("El modelo no sirve para esta estructura", " ".join(problems))
+            return False
+        need = actions.memory_estimate_gb(self.atoms, self.model)
+        free = getattr(self, "machine_usage", {}).get("ram_available_gb")
+        if need > self.ram_box.value() or (free and need > 0.9 * free):
+            limit = f"límite {self.ram_box.value():.1f} GB" + (f", libres {free:.1f} GB"
+                                                                 if free else "")
+            self.error("No cabe en memoria",
+                       f"Una diagonalización de esta estructura necesita ≈ {need:.1f} GB "
+                       f"({limit}). Sube «RAM máx.» si la máquina la tiene, o usa una "
+                       "estructura más pequeña o el modelo π (un orbital por átomo).")
             return False
         return True
 
@@ -456,6 +941,113 @@ class Page(QWidget):
 
     def ground_state_ready(self, state):
         pass
+
+
+class GuidePage(Page):
+    """Where the work on the active geometry stands, what to do next and what applies to this
+    system with this model (from what tbkit measured)."""
+
+    title = "Guía"
+
+    def __init__(self, window):
+        super().__init__(window)
+        layout = QVBoxLayout(self)
+        self.header = QLabel("—")
+        self.header.setWordWrap(True)
+        layout.addWidget(self.header)
+        self.steps = table(["", "paso", "para qué"])
+        self.steps.cellDoubleClicked.connect(self.go)
+        layout.addWidget(self.steps, stretch=2)
+        row = QHBoxLayout()
+        self.next_button = QPushButton("Ir al paso siguiente")
+        self.next_button.clicked.connect(self.go_next)
+        row.addWidget(self.next_button)
+        many = QPushButton("Muchos sistemas: nuevo estudio")
+        many.clicked.connect(self.study)
+        row.addWidget(many)
+        layout.addLayout(row)
+        self.caveats = QLabel("—")
+        self.caveats.setWordWrap(True)
+        self.caveats.setTextFormat(Qt.RichText)
+        layout.addWidget(self.caveats, stretch=1)
+        self.validity = QLabel("")
+        self.validity.setWordWrap(True)
+        self.validity.setStyleSheet("QLabel { color: palette(mid); }")
+        layout.addWidget(self.validity)
+        self.current = []
+        self.poll = QTimer(self)
+        self.poll.timeout.connect(self.refresh)
+        self.poll.start(2000)
+
+    def info(self) -> dict:
+        w = self.window
+        geometry = w.pages["Geometría y modos"]
+        modes = geometry.result is not None and w.atoms is not None and \
+            len(geometry.result["vibrations"].atoms) == len(w.atoms)
+        return {"atoms": w.atoms, "model": w.model,
+                "model_problems": actions.check_model(w.atoms, w.model)
+                if w.atoms is not None and w.model is not None else ["sin modelo"],
+                "relaxed": w.done("relajada"), "state": w.state,
+                "modes": modes or w.done("modos en Γ"),
+                "spectra": any(w.done(t) for t in ("raman", "raman resonante", "ir")),
+                "dft_checked": w.done("dft"),
+                "project_saved": getattr(w, "project_path", None) is not None}
+
+    def refresh(self, *_):
+        """From the timer: only while the tab is seen (the first time, always)."""
+        if self.isVisible() or not self.current:
+            self.update_view()
+
+    def update_view(self):
+        out = actions.guide(self.info())
+        self.current = out["steps"]
+        marks = {"hecho": "✓", "siguiente": "➜", "pendiente": "·"}
+        fill(self.steps, [(marks[s["status"]], s["title"], s["why"]) for s in out["steps"]])
+        for r, step in enumerate(out["steps"]):
+            if step["status"] == "siguiente":
+                for c in range(3):
+                    font = self.steps.item(r, c).font()
+                    font.setBold(True)
+                    self.steps.item(r, c).setFont(font)
+        self.steps.setColumnWidth(0, 28)
+        self.steps.setColumnWidth(1, 240)
+        self.steps.resizeRowsToContents()
+        nxt = next((s for s in out["steps"] if s["status"] == "siguiente"), None)
+        atoms = self.window.atoms
+        what = (f"{atoms.get_chemical_formula()} · {len(atoms)} átomos · periódica en "
+                f"{int(atoms.pbc.sum())} eje(s)") if atoms is not None else "sin estructura"
+        self.header.setText(f"<b>{what}</b>" + (f" — siguiente: {nxt['title']}" if nxt
+                                                 else " — todos los pasos hechos"))
+        self.next_button.setEnabled(nxt is not None)
+        items = "".join(f"<li>{c}</li>" for c in out["caveats"])
+        self.caveats.setText(f"<b>Para este sistema</b><ul>{items}</ul>" if items
+                             else "<b>Para este sistema</b>: nada que advertir todavía.")
+        validity = out["validity"]
+        self.validity.setText(f"Validez del modelo (de su archivo): {validity[:600]}"
+                              + ("…" if len(validity) > 600 else "") if validity else "")
+
+    def go(self, row: int, *_):
+        if not 0 <= row < len(self.current):
+            return
+        step = self.current[row]
+        if step["key"] == "estructura":
+            self.window.open_dialog()
+        elif step["key"] == "celda":
+            self.window.cell_dialog()
+        elif step["key"] == "proyecto":
+            self.window.save_project()
+        elif step["tab"]:
+            self.window.tabs.setCurrentIndex(list(self.window.pages).index(step["tab"]))
+
+    def go_next(self):
+        for r, step in enumerate(self.current):
+            if step["status"] == "siguiente":
+                self.go(r)
+                return
+
+    def study(self):
+        self.window.tabs.setCurrentIndex(list(self.window.pages).index("Recetas"))
+        self.window.pages["Recetas"].new_study()
 
 
 class ElectronicPage(Page):
@@ -516,6 +1108,8 @@ class ElectronicPage(Page):
         tabs.addTab(scc, "SCC sí/no")
         self.tabs = tabs
         layout.addWidget(tabs)
+        self._dos_running = False
+        self._dos_again = False
 
     def invalidated(self):
         self.summary.setText("—")
@@ -542,13 +1136,32 @@ class ElectronicPage(Page):
         self.plot_dos()
 
     def plot_dos(self, *_):
+        """DOS/PDOS in the job process (a PDOS by orbital of a large structure takes a while
+        and froze the window when computed here); asked again while one runs, it runs once
+        more when that one ends, with the latest choice."""
         state = self.window.state
         if state is None:
+            return
+        if self._dos_running:
+            self._dos_again = True
             return
         by = {0: "element", 1: "atom", 2: "orbital", 3: None}[self.projection.currentIndex()]
         if by == "atom" and len(self.window.atoms) > 30:
             by = "element"
-        curves = actions.dos_curves(state, self.sigma.value(), by)
+        self._dos_running = True
+        self.window.runner.start("DOS/PDOS", actions.dos_curves, state, self.sigma.value(), by,
+                                 on_done=self.draw_dos, on_error=self._dos_failed)
+
+    def _dos_failed(self, text, trace=""):
+        self._dos_running = False
+        self.window.error("DOS/PDOS", trace or text)
+
+    def draw_dos(self, curves):
+        self._dos_running = False
+        if self._dos_again:
+            self._dos_again = False
+            self.plot_dos()
+            return
         ax = self.dos_plot.axes()
         ax.plot(curves["energy"], curves["total"], color="black", lw=1.2, label="total")
         for label, values in curves["projected"].items():
@@ -879,6 +1492,9 @@ class GeometryPage(Page):
         self.undo.setEnabled(False)
         self.undo.clicked.connect(self.restore)
         row.addWidget(self.undo)
+        export = QPushButton("Exportar geometría…")
+        export.clicked.connect(self.window.save_structure)
+        row.addWidget(export)
         self.modes_button = QPushButton("Modos en Γ")
         self.modes_button.clicked.connect(self.run_modes)
         row.addWidget(self.modes_button)
@@ -886,6 +1502,17 @@ class GeometryPage(Page):
         self.save.setEnabled(False)
         self.save.clicked.connect(self.save_modes)
         row.addWidget(self.save)
+        load = QPushButton("Abrir modos…")
+        load.clicked.connect(self.open_modes)
+        row.addWidget(load)
+        layout.addLayout(row)
+        row = QHBoxLayout()
+        dft = QPushButton("Validar con DFT…")
+        dft.clicked.connect(self.validate_dft)
+        row.addWidget(dft)
+        dft_result = QPushButton("Ver resultado DFT…")
+        dft_result.clicked.connect(self.show_dft)
+        row.addWidget(dft_result)
         layout.addLayout(row)
         self.summary = QLabel("Relaja antes de calcular modos: fuera del mínimo las "
                               "frecuencias no son las armónicas.")
@@ -968,8 +1595,6 @@ class GeometryPage(Page):
     def relaxed(self, out):
         self.window.remember("relajación", {"fmax": self.fmax.value(),
                                             "steps": int(self.steps.value())}, out)
-        if self.original is None:
-            self.original = self.window.atoms.copy()
         state = "convergida" if out["converged"] else "SIN CONVERGER"
         self.summary.setText(
             f"Relajación {state} en {out['steps']} pasos · ΔE = "
@@ -981,12 +1606,17 @@ class GeometryPage(Page):
         ax.set_ylabel("E − E_final (eV)")
         ax.set_yscale("symlog", linthresh=1e-3)
         self.relax_plot.draw()
-        self.window.set_atoms(out["atoms"], "relajada")
+        name = self.window.geometries[self.window.geometry_combo.currentIndex()][0] \
+            if self.window.geometries else "estructura"
+        self.original = self.window.atoms
+        self.window.add_geometry(f"{name} relajada (fmax {self.fmax.value():g})", out["atoms"])
+        self.window.mark_done("relajada")
         self.undo.setEnabled(True)
 
     def restore(self):
+        """Back to the geometry the relaxation started from (it stays in the list)."""
         if self.original is not None:
-            self.window.set_atoms(self.original, "original")
+            self.window.set_atoms(self.original)
             self.original = None
             self.undo.setEnabled(False)
 
@@ -1001,7 +1631,8 @@ class GeometryPage(Page):
     def show_modes(self, out):
         self.result = out
         vib = out["vibrations"]
-        self.window.phonons = (vib.frequencies, vib.modes, f"modelo ({self.window.model.name})")
+        self.window.phonons = (vib.frequencies, vib.modes,
+                               vib.source or f"modelo ({self.window.model.name})")
         self.window.remember("modos en Γ", {}, {"frequencies_cm1": vib.frequencies,
                                                 "modes": vib.modes, "rows": out["rows"],
                                                 "warnings": out["warnings"]})
@@ -1049,6 +1680,69 @@ class GeometryPage(Page):
     def stop(self):
         self.window.view.stop_animation()
         self.window.view.show(self.window.atoms, keep_camera=True)
+
+    def selected_modes(self) -> list[int]:
+        if self.result is None:
+            return []
+        return sorted({self.row_modes[r.row()]
+                       for r in self.table.selectionModel().selectedRows()})
+
+    def validate_dft(self):
+        """A DFT request for the active geometry (and the selected modes), run by carbonforge."""
+        if not self.window.require():
+            return
+        dialog = DftDialog(self.window, self.selected_modes(), self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            folder = dialog.write()
+        except (ValueError, FileExistsError) as error:
+            self.window.error("No se pudo escribir la solicitud", str(error))
+            return
+        self.window.console.line(f"solicitud DFT escrita en {folder}")
+        if dialog.run_now.isChecked():
+            self.window.launch_dft(folder, int(dialog.mpi.value()))
+        else:
+            self.window.console.line(f"córrela con: carbonforge dft correr {folder} "
+                                     f"(o copia la carpeta a un clúster: trabajo.slurm)")
+
+    def show_dft(self, folder: str | None = None):
+        if not folder:
+            folder = QFileDialog.getExistingDirectory(self, "Carpeta de la solicitud DFT")
+        if not folder:
+            return
+        if self.window.model is None:
+            self.window.error("Sin modelo", "Elige el modelo con el que comparar.")
+            return
+
+        def shown(out):
+            lines = actions.dft_summary_lines(out["summary"])
+            for line in lines:
+                self.window.console.line(line)
+            self.summary.setText("DFT: " + " · ".join(lines[:3]))
+            self.window.mark_done("dft")
+            if out["relaxed"] is not None:
+                self.window.add_geometry(f"{Path(folder).name} relajada (DFT)", out["relaxed"])
+
+        self.window.runner.start("Resultado DFT", actions.dft_summary, folder,
+                                 self.window.model, on_done=shown, on_error=self.window.error)
+
+    def open_modes(self, path: str | None = None):
+        """Modes computed before (modes.npz, or hessian.npy + its structure): their structure
+        becomes the active geometry and the modes are shown, without recomputing."""
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Abrir modos", "", "Modos (modes.npz hessian.npy);;Todos (*)")
+        if not path:
+            return
+
+        def loaded(out):
+            name = f"{Path(path).parent.name} (modos guardados)"
+            self.window.add_geometry(name, out["vibrations"].atoms)
+            self.show_modes(out)
+
+        self.window.runner.start("Abrir modos", actions.modes_from_file, path,
+                                 on_done=loaded, on_error=self.window.error)
 
     def save_modes(self):
         if self.result is None:
@@ -1200,8 +1894,12 @@ class SpectraPage(Page):
         self.export.clicked.connect(self.export_csv)
         self.open_saved = QPushButton("Abrir espectro guardado…")
         self.open_saved.clicked.connect(self.open_spectrum)
+        self.report_button = QPushButton("Exportar reporte…")
+        self.report_button.clicked.connect(self.export_report)
+        self.open_result_button = QPushButton("Abrir resultado…")
+        self.open_result_button.clicked.connect(self.open_result)
         for b in (self.raman_button, self.resonant_button, self.ir_button, self.export,
-                  self.open_saved):
+                  self.open_saved, self.report_button, self.open_result_button):
             buttons.addWidget(b)
         layout.addLayout(buttons)
         self.summary = QLabel("Raman no resonante: sistemas con gap y capa cerrada. Las "
@@ -1294,6 +1992,37 @@ class SpectraPage(Page):
             self.show_saved(actions.load_spectrum(path))
         except (OSError, ValueError) as error:
             self.window.error("No se pudo abrir", str(error))
+
+    def export_report(self, path=None):
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Resultados para el reporte", "",
+                "Resultados (report.json *.npz *.csv)")
+        if not path:
+            return
+        try:
+            written = actions.export_report(path)
+        except (OSError, ValueError, KeyError) as error:
+            self.window.error("No se pudo escribir el reporte", str(error))
+            return
+        figures = written.get("figuras")
+        extra = f"; {len(figures)} figuras" if isinstance(figures, list) else \
+            (f"; {figures}" if figures else "")
+        self.summary.setText(f"Reporte: {written['html']} (datos en CSV{extra}).")
+
+    def open_result(self, path=None):
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Resultado o validación", "",
+                "Resultados (*.json *.npz *.csv)")
+        if not path:
+            return
+        try:
+            page = actions.open_result(path)
+        except (OSError, ValueError, KeyError) as error:
+            self.window.error("No se pudo abrir", str(error))
+            return
+        self.summary.setText(f"Abierto en el navegador: {page}")
 
     def show_saved(self, saved):
         """Saved curves, each normalised to its maximum, over the current spectrum if any."""
@@ -1529,6 +2258,803 @@ class GraphenePage(Page):
             else "un solo láser: sin dispersión"
         self.summary.setText(f"{text}. Posiciones altas por los fonones PBE; energías de "
                              "resonancia del modelo π.")
+
+
+class RecipesPage(Page):
+    """The recipes (coil, doped Raman, GPAW references…): settings, cores, launch, progress.
+
+    Nothing runs in the window: a launch starts ``tbkit lanzar`` in its own session, so
+    closing the window leaves it running, and the progress comes from the recipes'
+    ``progreso*.json`` (as ``tbkit estado``)."""
+
+    title = "Recetas"
+
+    def __init__(self, window):
+        super().__init__(window)
+        self.recipes = actions.recipe_list()
+        self.usage = {}
+        self.process = None
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.recipe = QComboBox()
+        for r in self.recipes:
+            self.recipe.addItem(f"{r['name']}  ({r['count']} ajustes, {r['options']} opciones)",
+                                r["name"])
+        self.recipe.currentIndexChanged.connect(self.choose)
+        form.addRow("Receta", self.recipe)
+        self.step = QComboBox()
+        self.step.currentIndexChanged.connect(self.choose_step)
+        form.addRow("Paso", self.step)
+        self.arguments = QLineEdit()
+        self.arguments.setPlaceholderText("vacío casi siempre: las opciones van en su tabla")
+        form.addRow("Otros argumentos", self.arguments)
+        self.workdir = QLineEdit(str(Path.cwd()))
+        form.addRow("Carpeta de trabajo", self.workdir)
+        layout.addLayout(form)
+        self.summary = QLabel("")
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+
+        editable = (QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed
+                    | QAbstractItemView.AnyKeyPressed)
+        self.settings = table(["ajuste", "valor", "unidad", "grupo", "qué es"])
+        self.settings.setEditTriggers(editable)
+        self.options = table(["opción", "valor", "valores posibles", "qué es"])
+        self.options.setEditTriggers(editable)
+        self.option_rows = []
+        self.tables = QTabWidget()
+        self.tables.addTab(self.settings, "Ajustes de la receta")
+        self.tables.addTab(self.options, "Opciones del paso")
+        layout.addWidget(self.tables, stretch=2)
+        row = QHBoxLayout()
+        reset = QPushButton("Restaurar valores")
+        reset.clicked.connect(self.choose)
+        row.addWidget(reset)
+        usage = QPushButton("Ayuda de la receta")
+        usage.clicked.connect(self.show_usage)
+        row.addWidget(usage)
+        layout.addLayout(row)
+        row = QHBoxLayout()
+        geometry = QPushButton("Usar geometría activa")
+        geometry.clicked.connect(self.use_geometry)
+        row.addWidget(geometry)
+        new = QPushButton("Nueva receta…")
+        new.clicked.connect(self.new_recipe)
+        row.addWidget(new)
+        study = QPushButton("Nuevo estudio…")
+        study.clicked.connect(self.new_study)
+        row.addWidget(study)
+        layout.addLayout(row)
+
+        resources = QGroupBox("Recursos")
+        rform = QFormLayout(resources)
+        self.parts = _spin(1, 256, 1, 1, 0)
+        rform.addRow("Partes en paralelo", self.parts)
+        self.threads = _spin(1, 256, 1, 1, 0)
+        rform.addRow("Hilos por parte", self.threads)
+        self.mpi = _spin(1, 256, 1, 1, 0)
+        rform.addRow("Procesos MPI por parte", self.mpi)
+        self.retries = _spin(0, 10, 1, 1, 0)
+        rform.addRow("Reintentos", self.retries)
+        self.cores_label = QLabel(f"{actions.cores()} núcleos disponibles")
+        rform.addRow(self.cores_label)
+        for box in (self.parts, self.threads, self.mpi):
+            box.valueChanged.connect(self.check_resources)
+        layout.addWidget(resources)
+        self.launch_button = QPushButton("Lanzar")
+        self.launch_button.clicked.connect(self.launch)
+        layout.addWidget(self.launch_button)
+
+        progress = QGroupBox("Avance")
+        playout = QVBoxLayout(progress)
+        self.show_finished = QCheckBox("Mostrar terminados")
+        self.show_finished.toggled.connect(self.refresh)
+        refresh = QPushButton("Actualizar avance")
+        refresh.clicked.connect(self.refresh)
+        top = QHBoxLayout()
+        top.addWidget(self.show_finished)
+        top.addWidget(refresh)
+        playout.addLayout(top)
+        self.status = QLabel("—")
+        self.status.setWordWrap(True)
+        self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.status.setStyleSheet("QLabel { font-family: monospace; }")
+        playout.addWidget(self.status)
+        layout.addWidget(progress, stretch=1)
+        self.poll = QTimer(self)
+        self.poll.timeout.connect(self.refresh)
+        self.poll.start(10000)
+        self.choose()
+
+    def name(self) -> str:
+        return self.recipe.currentData()
+
+    def choose(self, *_):
+        name = self.name()
+        if name is None:
+            return
+        if name not in self.usage:
+            self.usage[name] = actions.recipe_usage(name)
+        info = self.usage[name]
+        self.step.blockSignals(True)
+        self.step.clear()
+        self.step.addItems(info["steps"])
+        self.step.blockSignals(False)
+        summary = next(r["summary"] for r in self.recipes if r["name"] == name)
+        self.summary.setText(summary + ("" if info["parts"] else
+                                        " · Esta receta corre en una sola parte."))
+        rows = actions.recipe_settings(name)
+        self.settings.setRowCount(len(rows))
+        for r, row in enumerate(rows):
+            for c, key in enumerate(("name", "value", "unit", "group", "description")):
+                item = QTableWidgetItem(row[key])
+                if key != "value":
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                if row["why"]:
+                    item.setToolTip("por qué: " + row["why"])
+                self.settings.setItem(r, c, item)
+        self.settings.resizeColumnsToContents()
+        self.tables.setTabText(0, f"Ajustes de la receta ({len(rows)})")
+        self.choose_step()
+        self.check_resources()
+
+    def choose_step(self, *_):
+        """The options of the recipe, plus those of the chosen step if it has its own."""
+        info = self.usage.get(self.name())
+        if info is None:
+            return
+        step = self.step.currentText()
+        self.option_rows = info["options"].get("", []) + \
+            (info["options"].get(step, []) if step else [])
+        self.options.setRowCount(len(self.option_rows))
+        for r, row in enumerate(self.option_rows):
+            label = row["flag"] or row["dest"] + (" (obligatorio)" if row["required"] else "")
+            possible = " | ".join(row["choices"]) or ("sí | no" if row["boolean"] else "")
+            for c, text in enumerate((label, row["default"], possible, row["help"])):
+                item = QTableWidgetItem(text)
+                if c != 1:
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                self.options.setItem(r, c, item)
+        self.options.resizeColumnsToContents()
+        self.tables.setTabText(1, f"Opciones del paso ({len(self.option_rows)})")
+        self.check_resources()
+
+    def edited(self) -> dict:
+        return {self.settings.item(r, 0).text(): self.settings.item(r, 1).text()
+                for r in range(self.settings.rowCount())}
+
+    def extra_state(self) -> dict:
+        """The edited tables (a project keeps them)."""
+        return {"settings": self.edited(),
+                "options": {row["dest"]: self.options.item(r, 1).text()
+                            for r, row in enumerate(self.option_rows)}}
+
+    def restore_extra(self, extra: dict) -> None:
+        for r in range(self.settings.rowCount()):
+            key = self.settings.item(r, 0).text()
+            if key in extra.get("settings", {}):
+                self.settings.item(r, 1).setText(extra["settings"][key])
+        for r, row in enumerate(self.option_rows):
+            if row["dest"] in extra.get("options", {}):
+                self.options.item(r, 1).setText(extra["options"][row["dest"]])
+
+    def check_resources(self, *_):
+        info = self.usage.get(self.name(), {"parts": True, "parallel_steps": None})
+        splits = actions.step_splits(info, self.step.currentText())
+        if not splits and self.parts.value() != 1:
+            self.parts.setValue(1)
+        self.parts.setEnabled(splits)
+        parts, threads, mpi = (int(b.value()) for b in (self.parts, self.threads, self.mpi))
+        warnings = actions.launch_warnings(parts, threads, mpi, splits)
+        total = actions.cores()
+        busy = self.window.allocated_cores()
+        mine = parts * threads * mpi
+        left = total - busy - mine
+        serial = "" if splits else ("Este paso corre en serie (un proceso): usa «Hilos por "
+                                    "parte» para darle núcleos.\n")
+        text = (f"{serial}Esta receta: {parts} × {threads} × {mpi} = {mine} núcleos · ya en "
+                f"uso desde la ventana: {busy} · quedan {max(left, 0)} de {total}")
+        if left < 0:
+            text += f"\n⚠ faltan {-left} núcleos: lo que corre a la vez se estorbará"
+        self.cores_label.setText(text + "".join(f"\n⚠ {w}" for w in warnings))
+        return warnings
+
+    def show_usage(self):
+        QMessageBox.information(self, f"tbkit.recipes.{self.name()}",
+                                self.usage.get(self.name(), {}).get("help", ""))
+
+    def command(self) -> list[str]:
+        import shlex
+
+        overrides = actions.recipe_overrides(self.name(), self.edited())
+        values = {row["dest"]: self.options.item(r, 1).text()
+                  for r, row in enumerate(self.option_rows)}
+        words = [self.step.currentText()] if self.step.currentText() else []
+        words += actions.recipe_arguments(self.option_rows, values)
+        arguments = shlex.join(words) + (" " + self.arguments.text() if self.arguments.text()
+                                         else "")
+        return actions.launch_command(self.name(), arguments, overrides,
+                                      parts=int(self.parts.value()),
+                                      threads=int(self.threads.value()),
+                                      mpi=int(self.mpi.value()),
+                                      retries=int(self.retries.value()),
+                                      workdir=self.workdir.text().strip() or ".")
+
+    def launch(self):
+        try:
+            command = self.command()
+        except ValueError as error:
+            self.window.error("Ajuste no válido", str(error))
+            return
+        info = self.usage.get(self.name(), {"parts": True})
+        if int(self.parts.value()) > 1 and not info["parts"]:
+            self.window.error("No se divide en partes", "Esta receta no tiene --part: usa 1 parte.")
+            return
+        workdir = self.workdir.text().strip() or "."
+        import time
+
+        log = Path(workdir) / "out" / "registros" / \
+            f"{self.name()}_{time.strftime('%Y%m%d_%H%M%S')}_lanzador.log"
+        self.process = actions.launch_recipe(command, workdir, log)
+        cores = int(self.parts.value() * self.threads.value() * self.mpi.value())
+        self.window.launched.append({"popen": self.process, "name": f"{self.name()} "
+                                     f"{self.step.currentText()}".strip(), "cores": cores,
+                                     "log": log, "started": time.time(),
+                                     "command": " ".join(command[2:])})
+        self.window.statusBar().showMessage(
+            f"Lanzado (PID {self.process.pid}): {' '.join(command[2:])} · registro en {log}")
+        self.check_resources()
+        self.refresh()
+
+    def use_geometry(self):
+        """Save the active geometry as a file and put its path in the selected row (an
+        option such as «structure», or a setting such as SOURCE)."""
+        if self.window.atoms is None:
+            self.window.error("Sin estructura", "Abre o crea primero una geometría.")
+            return
+        import re
+
+        name = self.window.geometries[self.window.geometry_combo.currentIndex()][0]
+        safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("_") or "geometria"
+        folder = Path(self.workdir.text().strip() or ".") / "geometrias"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = (folder / f"{safe}.extxyz").resolve()
+        self.window.atoms.write(path, format="extxyz")
+        table_ = self.options if self.tables.currentIndex() == 1 else self.settings
+        row = table_.currentRow()
+        if row < 0:                       # nothing selected: the first structure-like option
+            names = [table_.item(r, 0).text().lower() for r in range(table_.rowCount())]
+            row = next((r for r, n in enumerate(names)
+                        if any(k in n for k in ("structure", "source", "estructura"))), -1)
+        if row < 0:
+            self.window.statusBar().showMessage(f"Geometría guardada en {path} (elige la fila "
+                                                "donde va y vuelve a pulsar)")
+            return
+        value = str(path) if table_ is self.options else f'"{path}"'
+        table_.item(row, 1).setText(value)
+        self.window.statusBar().showMessage(f"{table_.item(row, 0).text()} = {path}")
+
+    def new_study(self):
+        """A study (recipes/study.py) from geometries of the session: one base and its
+        changes (dopants, groups), each embedded in the base."""
+        if len(self.window.geometries) < 1:
+            self.window.error("Sin geometrías", "Abre la base y las estructuras cambiadas.")
+            return
+        dialog = NewStudyDialog(self.window, self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            path = dialog.write(Path(self.workdir.text().strip() or "."))
+        except ValueError as error:
+            self.window.error("Estudio no válido", str(error))
+            return
+        self.recipe.setCurrentIndex(self.recipe.findData("study"))
+        self.choose()
+        self.step.setCurrentText("todo")
+        for r, row in enumerate(self.option_rows):
+            if row["dest"] == "estudio":
+                self.options.item(r, 1).setText(str(path))
+        self.window.statusBar().showMessage(f"Estudio escrito en {path}: «Lanzar» lo corre "
+                                            "(paso «todo», o paso a paso)")
+
+    def new_recipe(self):
+        if self.window.atoms is None:
+            self.window.error("Sin estructura", "La receta parte de una geometría: abre una.")
+            return
+        dialog = NewRecipeDialog(self.window, self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            path = dialog.write(Path(self.workdir.text().strip() or "."))
+        except ValueError as error:
+            self.window.error("Receta no válida", str(error))
+            return
+        index = self.recipe.findData("pipeline")
+        self.recipe.setCurrentIndex(index)
+        self.choose()
+        for r, row in enumerate(self.option_rows):
+            if row["dest"] == "receta":
+                self.options.item(r, 1).setText(str(path))
+        self.window.statusBar().showMessage(f"Receta escrita en {path}: «Lanzar» la corre")
+
+    def refresh(self, *_):
+        folder = Path(self.workdir.text().strip() or ".") / "out"
+        lines = actions.recipe_status(folder, self.show_finished.isChecked()) \
+            if folder.exists() else []
+        self.status.setText("\n".join(lines) or "Ningún cálculo con contador en marcha en "
+                            f"{folder}.")
+        self.check_resources()
+
+
+class CellDialog(QDialog):
+    """Cell lengths and angles and the periodic axes of the active geometry."""
+
+    def __init__(self, atoms, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Celda y ejes periódicos")
+        self.atoms = atoms
+        form = QFormLayout(self)
+        lengths, angles = QHBoxLayout(), QHBoxLayout()
+        par = atoms.cell.cellpar() if atoms.cell.rank == 3 else [0, 0, 0, 90, 90, 90]
+        if atoms.cell.rank < 3:              # no cell: suggest the box around the atoms + vacuum
+            span = atoms.positions.max(axis=0) - atoms.positions.min(axis=0)
+            par = [*(span + 10.0), 90, 90, 90]
+        self.lengths = [_spin(0.0, 1000.0, float(v), 0.1, 4, " Å") for v in par[:3]]
+        self.angles = [_spin(1.0, 179.0, float(v), 1.0, 3, "°") for v in par[3:]]
+        for box in self.lengths:
+            lengths.addWidget(box)
+        for box in self.angles:
+            angles.addWidget(box)
+        form.addRow("Longitudes a, b, c", lengths)
+        form.addRow("Ángulos α, β, γ", angles)
+        axes = QHBoxLayout()
+        self.pbc = []
+        for k, text in enumerate(("eje a", "eje b", "eje c")):
+            box = QCheckBox(text)
+            box.setChecked(bool(atoms.pbc[k]))
+            self.pbc.append(box)
+            axes.addWidget(box)
+        detect = QPushButton("Detectar por enlaces")
+        detect.clicked.connect(self.detect)
+        axes.addWidget(detect)
+        form.addRow("Periódica en", axes)
+        self.keep = QCheckBox("Escalar las posiciones con la celda")
+        form.addRow(self.keep)
+        self.note = QLabel("La celda no se adivina: escríbela si el archivo no la trae. "
+                           "«Detectar» marca los ejes por los que hay enlaces que cruzan.")
+        self.note.setWordWrap(True)
+        form.addRow(self.note)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def cellpar(self):
+        return [b.value() for b in self.lengths] + [b.value() for b in self.angles]
+
+    def detect(self):
+        from ..structure_io import periodic_axes, with_cell
+
+        try:
+            probe = with_cell(self.atoms, self.cellpar(), [False] * 3,
+                              scale_atoms=self.keep.isChecked())
+        except ValueError as error:
+            self.note.setText(f"⚠ {error}")
+            return
+        axes = periodic_axes(probe)
+        for box, on in zip(self.pbc, axes, strict=True):
+            box.setChecked(on)
+        self.note.setText("Ejes con enlaces que cruzan la celda: "
+                          + (", ".join("abc"[k] for k, on in enumerate(axes) if on) or "ninguno"))
+
+    def result_atoms(self):
+        from ..structure_io import with_cell
+
+        return with_cell(self.atoms, self.cellpar(), [b.isChecked() for b in self.pbc],
+                         scale_atoms=self.keep.isChecked())
+
+
+#: Tasks a new recipe can chain (``tbkit.tasks.TASKS``), with a short description.
+RECIPE_TASKS = {"relax": "relajar", "levels": "niveles y gap", "dos": "DOS",
+                "bands": "bandas", "phonons": "modos en Γ", "raman": "Raman",
+                "hubbard": "Hubbard (magnetismo)"}
+
+
+class NewRecipeDialog(QDialog):
+    """A recipe of one's own: a geometry of the session, a model and tasks in order."""
+
+    def __init__(self, window, parent=None):
+        super().__init__(parent)
+        self.window = window
+        self.setWindowTitle("Nueva receta")
+        form = QFormLayout(self)
+        self.name = QLineEdit("mi_receta")
+        form.addRow("Nombre", self.name)
+        self.geometry = QComboBox()
+        for name, _ in window.geometries:
+            self.geometry.addItem(name)
+        self.geometry.setCurrentIndex(window.geometry_combo.currentIndex())
+        form.addRow("Geometría de partida", self.geometry)
+        self.model = QComboBox()
+        for key, (label, _) in actions.MODELS.items():
+            self.model.addItem(label, key)
+        index = self.model.findData(window.model_name)
+        if index >= 0:
+            self.model.setCurrentIndex(index)
+        form.addRow("Modelo de la receta", self.model)
+        self.checks = {}
+        tasks_row = QHBoxLayout()
+        for key, label in RECIPE_TASKS.items():
+            box = QCheckBox(label)
+            box.setChecked(key in ("relax", "levels", "dos"))
+            self.checks[key] = box
+            tasks_row.addWidget(box)
+        form.addRow("Pasos, en este orden", tasks_row)
+        self.kmesh = _spin(1, 64, 4, 1, 0)
+        form.addRow("Malla k de la receta", self.kmesh)
+        self.kT = _spin(0.001, 1.0, window.kT.value(), 0.005, 3, " eV")
+        form.addRow("kT de la receta", self.kT)
+        self.fmax = _spin(0.001, 1.0, 0.02, 0.005, 3, " eV/Å")
+        form.addRow("fmax de la relajación", self.fmax)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def steps(self) -> list[dict]:
+        common = {"kmesh": int(self.kmesh.value()), "kT": float(self.kT.value())}
+        out = []
+        for key, box in self.checks.items():
+            if not box.isChecked():
+                continue
+            # bands takes a path, not a mesh or a temperature (tbkit.tasks.band_structure)
+            settings = {} if key == "bands" else dict(common)
+            if key == "relax":
+                settings["fmax"] = float(self.fmax.value())
+            out.append({"task": key, "settings": settings})
+        return out
+
+    def write(self, workdir: Path) -> Path:
+        import re
+
+        from ..recipes import pipeline
+
+        steps = self.steps()
+        if not steps:
+            raise ValueError("Elige al menos un paso.")
+        name = re.sub(r"[^A-Za-z0-9_.-]+", "_", self.name.text().strip()) or "mi_receta"
+        _, atoms = self.window.geometries[self.geometry.currentIndex()]
+        return pipeline.write(Path(workdir) / "recetas" / f"{name}.json", name, atoms,
+                              self.model.currentData(), steps)
+
+
+class DftDialog(QDialog):
+    """What to ask the DFT (through carbonforge) about the active geometry."""
+
+    def __init__(self, window, modes, parent=None):
+        super().__init__(parent)
+        self.window, self.modes = window, modes
+        self.setWindowTitle("Validar con DFT")
+        form = QFormLayout(self)
+        default = Path(window.pages["Recetas"].workdir.text().strip() or ".") / "dft"
+        name = window.geometries[window.geometry_combo.currentIndex()][0] \
+            if window.geometries else "estructura"
+        import re
+
+        safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", Path(name).stem).strip("_") or "estructura"
+        self.folder = QLineEdit(str(default / safe))
+        form.addRow("Carpeta de la solicitud", self.folder)
+        self.code = QComboBox()
+        for key, label in actions.DFT_CODES.items():
+            self.code.addItem(label, key)
+        form.addRow("Código DFT", self.code)
+        self.relax = QCheckBox("Relajar con DFT primero")
+        self.single = QCheckBox("Fuerzas en la geometría")
+        self.single.setChecked(True)
+        self.dos = QCheckBox("DOS y gap")
+        self.use_modes = QCheckBox(f"Frecuencia de los {len(modes)} modos seleccionados")
+        self.use_modes.setChecked(bool(modes))
+        self.use_modes.setEnabled(bool(modes))
+        for box in (self.relax, self.single, self.dos, self.use_modes):
+            form.addRow(box)
+        self.mpi = _spin(1, 256, min(4, actions.cores()), 1, 0)
+        form.addRow("Procesos MPI", self.mpi)
+        self.extra = QLineEdit()
+        self.extra.setPlaceholderText('QE: {"pseudos": {"C": "C.pbe-n-kjpaw_psl.1.0.0.UPF"}, '
+                                      '"pseudo_dir": "…"} · DFTB+: {"skf_dir": "…"}')
+        form.addRow("Ajustes del código (JSON)", self.extra)
+        self.run_now = QCheckBox("Correrla ahora con carbonforge")
+        self.run_now.setChecked(True)
+        form.addRow(self.run_now)
+        note = QLabel("GPAW usa los ajustes de todas las referencias de tbkit (PBE, LCAO dzp, "
+                      "h 0.2 Å, Fermi-Dirac 0.05 eV) y una malla k de ≥ 30 Å por eje periódico. "
+                      "La carpeta se puede copiar a otra máquina o a un clúster (trabajo.slurm).")
+        note.setWordWrap(True)
+        form.addRow(note)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def write(self) -> str:
+        import json
+
+        settings = json.loads(self.extra.text()) if self.extra.text().strip() else None
+        modes = self.modes if self.use_modes.isChecked() else []
+        geometry = self.window.pages["Geometría y modos"]
+        vibrations = geometry.result["vibrations"] if modes else None
+        if vibrations is not None and len(vibrations.atoms) != len(self.window.atoms):
+            raise ValueError("Los modos son de otra geometría: calcúlalos para la activa.")
+        return actions.dft_request(self.folder.text().strip(), self.window.atoms,
+                                   self.code.currentData(), relax=self.relax.isChecked(),
+                                   single_point=self.single.isChecked(), dos=self.dos.isChecked(),
+                                   vibrations=vibrations, modes=modes,
+                                   mpi=int(self.mpi.value()), settings=settings)
+
+
+class NewStudyDialog(QDialog):
+    """Base and changes for a study, among the session's geometries."""
+
+    def __init__(self, window, parent=None):
+        super().__init__(parent)
+        self.window = window
+        self.setWindowTitle("Nuevo estudio")
+        form = QFormLayout(self)
+        self.name = QLineEdit("mi_estudio")
+        form.addRow("Nombre del estudio", self.name)
+        self.base = QComboBox()
+        for name, _ in window.geometries:
+            self.base.addItem(name)
+        form.addRow("Sistema base", self.base)
+        self.changes = []
+        box = QVBoxLayout()
+        for name, _ in window.geometries:
+            check = QCheckBox(name)
+            self.changes.append(check)
+            box.addWidget(check)
+        form.addRow("Cambios sobre la base", box)
+        self.model = QComboBox()
+        for key, (label, _) in actions.MODELS.items():
+            self.model.addItem(label, key)
+        index = self.model.findData(window.model_name)
+        self.model.setCurrentIndex(index if index >= 0 else self.model.findData("chn"))
+        form.addRow("Modelo del estudio", self.model)
+        self.radius = _spin(2.0, 20.0, 6.0, 0.5, 1, " Å")
+        form.addRow("Radio del cambio", self.radius)
+        note = QLabel("Cada cambio debe tener los átomos de la base primero y en su orden "
+                      "(sustituir conserva el índice; los añadidos van al final): así sus "
+                      "modos se calculan solo cerca del cambio. Los átomos cambiados se "
+                      "detectan solos.")
+        note.setWordWrap(True)
+        form.addRow(note)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def write(self, workdir: Path) -> Path:
+        import re
+
+        base = self.window.geometries[self.base.currentIndex()]
+        changes = [self.window.geometries[k] for k, c in enumerate(self.changes)
+                   if c.isChecked() and k != self.base.currentIndex()]
+        name = re.sub(r"[^A-Za-z0-9_.-]+", "_", self.name.text().strip()) or "estudio"
+        return actions.write_study(Path(workdir) / "estudios" / name, name, base, changes,
+                                   model=self.model.currentData(),
+                                   radius=float(self.radius.value()))
+
+
+class ProcessesPage(Page):
+    """Everything running: the window's calculation, the recipes launched from here and
+    any recipe with a counter under the work folder; CPU and RAM of each, a stop button and
+    the end of its log."""
+
+    title = "Procesos"
+
+    def __init__(self, window):
+        super().__init__(window)
+        layout = QVBoxLayout(self)
+        self.summary = QLabel("—")
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+        self.table = table(["origen", "nombre", "PID", "estado", "tiempo", "CPU", "RAM",
+                            "núcleos", "avance"])
+        self.table.itemSelectionChanged.connect(self.show_log)
+        layout.addWidget(self.table, stretch=2)
+        row = QHBoxLayout()
+        stop = QPushButton("Detener seleccionado")
+        stop.clicked.connect(self.stop_selected)
+        row.addWidget(stop)
+        refresh = QPushButton("Actualizar lista")
+        refresh.clicked.connect(self.refresh)
+        row.addWidget(refresh)
+        layout.addLayout(row)
+        self.log = QPlainTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setMaximumBlockCount(400)
+        self.log.setStyleSheet("QPlainTextEdit { background: #1e1f22; color: #d7dae0; "
+                               "font-family: monospace; }")
+        layout.addWidget(self.log, stretch=1)
+        self.rows: list[dict] = []
+        self.poll = QTimer(self)
+        self.poll.timeout.connect(self.refresh)
+        self.poll.start(2000)
+
+    def entries(self) -> list[dict]:
+        """One dict per process: origin, name, pid, state, seconds, cores, progress, log."""
+        import time
+
+        from .resources import alive
+
+        out = []
+        runner = self.window.runner
+        if runner.running:
+            out.append({"origin": "ventana", "name": runner.label, "pid": runner.pid,
+                        "state": "calculando", "seconds": runner.last_usage.get("seconds"),
+                        "cores": runner.cores or actions.cores(),
+                        "progress": self.window.job_label.text(), "kind": "runner"})
+        for label, *_ in runner.queue:
+            out.append({"origin": "ventana", "name": label, "pid": None, "state": "en cola",
+                        "kind": "queued"})
+        pids = set()
+        for entry in self.window.launched:
+            code = entry["popen"].poll()
+            pids.add(entry["popen"].pid)
+            out.append({"origin": "receta", "name": entry["name"], "pid": entry["popen"].pid,
+                        "state": "corriendo" if code is None else f"terminó ({code})",
+                        "seconds": time.time() - entry["started"] if code is None else None,
+                        "cores": entry["cores"], "log": entry["log"], "kind": "launched"})
+        folder = Path(self.window.pages["Recetas"].workdir.text().strip() or ".") / "out"
+        if folder.exists():
+            from ..progress import status_files
+
+            for row in status_files(folder):
+                pid = row.get("pid")
+                if row["finished"] or not pid or not alive(pid) or pid in pids:
+                    continue
+                out.append({"origin": "contador", "name": row["label"], "pid": pid,
+                            "state": "¿detenido?" if row["stale"] else "corriendo",
+                            "seconds": time.time() - row["started"], "progress": row["line"],
+                            "kind": "status"})
+        return out
+
+    def refresh(self, *_):
+        from .resources import cores as available_cores
+        from .resources import gb
+
+        self.rows = self.entries()
+        monitor = self.window.monitor
+        rows = []
+        for e in self.rows:
+            usage = monitor.process(e["pid"]) if e.get("pid") else None
+            cpu = f"{usage['cpu_percent']:.0f} %" if usage and usage["cpu_percent"] is not None \
+                else "—"
+            ram = gb(usage["rss_gb"]) if usage else "—"
+            seconds = e.get("seconds")
+            from ..progress import duration
+
+            rows.append((e["origin"], e["name"], e.get("pid") or "—", e["state"],
+                         duration(seconds) if seconds else "—", cpu, ram, e.get("cores") or "—",
+                         e.get("progress") or ""))
+        selected = self.table.currentRow()
+        fill(self.table, rows)
+        if 0 <= selected < len(rows):
+            self.table.selectRow(selected)
+        busy = self.window.allocated_cores()
+        total = available_cores()
+        m = getattr(self.window, "machine_usage", {}) or {}
+        ram = (f" · RAM {m['ram_used_gb']:.1f} de {m['ram_total_gb']:.1f} GB "
+               f"({m['ram_available_gb']:.1f} libres)") if m.get("ram_total_gb") else ""
+        self.summary.setText(f"Núcleos: {total} · asignados desde la ventana: {busy} · libres: "
+                             f"{max(total - busy, 0)}{ram}")
+
+    def show_log(self):
+        row = self.table.currentRow()
+        if not 0 <= row < len(self.rows):
+            return
+        entry = self.rows[row]
+        if entry["kind"] == "runner":
+            text = "".join(self.window.runner.output_text)[-20000:]
+        elif entry.get("log") and Path(entry["log"]).exists():
+            data = Path(entry["log"]).read_bytes()[-20000:]
+            text = data.decode("utf-8", errors="replace")
+        else:
+            text = entry.get("progress") or "(sin registro: solo su contador)"
+        self.log.setPlainText(text)
+        self.log.moveCursor(self.log.textCursor().MoveOperation.End)
+
+    def stop_selected(self):
+        row = self.table.currentRow()
+        if not 0 <= row < len(self.rows):
+            return
+        entry = self.rows[row]
+        if entry["kind"] == "runner":
+            self.window.runner.cancel()
+        elif entry["kind"] == "queued":
+            self.window.runner.queue = [q for q in self.window.runner.queue
+                                        if q[0] != entry["name"]]
+        elif entry.get("pid"):
+            answer = QMessageBox.question(self, "tbkit", f"¿Detener {entry['name']} "
+                                          f"(PID {entry['pid']}) y sus procesos hijos?")
+            if answer != QMessageBox.Yes:
+                return
+            from .resources import terminate
+
+            pids = terminate(entry["pid"])
+            self.window.console.line(f"detenido {entry['name']}: procesos {pids}")
+        self.refresh()
+
+
+# --------------------------------------------------------------------------- snapshots
+
+#: Controls a project does not restore by value: the geometry and model lists are restored
+#: from the project itself, the mode-site list depends on the modes.
+_NOT_SAVED = {"geometry_combo", "model_combo", "site", "other_model"}
+
+
+def _value(widget):
+    if isinstance(widget, QCheckBox):
+        return widget.isChecked()
+    if isinstance(widget, (QDoubleSpinBox, QSpinBox)):
+        return widget.value()
+    if isinstance(widget, QComboBox):
+        data = widget.currentData()
+        return {"text": widget.currentText(),
+                "data": data if isinstance(data, (str, int, float)) else None}
+    if isinstance(widget, QLineEdit):
+        return widget.text()
+    return None
+
+
+def widget_values(owner) -> dict:
+    """Every check box, spin box, combo box and text field that is an attribute of
+    ``owner`` (lists of them too), by attribute name."""
+    out = {}
+    for name, widget in vars(owner).items():
+        if name.startswith("_") or name in _NOT_SAVED:
+            continue
+        value = _value(widget)
+        if value is not None:
+            out[name] = value
+        elif isinstance(widget, list) and widget and all(_value(w) is not None
+                                                         for w in widget):
+            out[name] = [_value(w) for w in widget]
+    return out
+
+
+def _set(widget, value):
+    if isinstance(widget, QCheckBox):
+        widget.setChecked(bool(value))
+    elif isinstance(widget, QSpinBox):
+        widget.setValue(int(value))
+    elif isinstance(widget, QDoubleSpinBox):
+        widget.setValue(float(value))
+    elif isinstance(widget, QComboBox):
+        index = widget.findData(value.get("data")) if value.get("data") is not None else -1
+        if index < 0:
+            index = widget.findText(value.get("text", ""))
+        if index >= 0:
+            widget.setCurrentIndex(index)
+        elif widget.isEditable():
+            widget.setEditText(value.get("text", ""))
+    elif isinstance(widget, QLineEdit):
+        widget.setText(str(value))
+
+
+def set_widget_values(owner, values: dict) -> None:
+    """The inverse of :func:`widget_values`; a control that no longer exists is skipped."""
+    for name, value in values.items():
+        widget = getattr(owner, name, None)
+        if widget is None or name in _NOT_SAVED:
+            continue
+        try:
+            if isinstance(widget, list):
+                for w, v in zip(widget, value, strict=False):
+                    _set(w, v)
+            else:
+                _set(widget, value)
+        except (TypeError, ValueError, AttributeError):
+            continue
 
 
 def main(argv=None):

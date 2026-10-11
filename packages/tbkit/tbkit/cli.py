@@ -61,9 +61,8 @@ def _model(args):
 
 
 def _system(args):
-    from ase.io import read
-
     from .hamiltonian import System
+    from .structure_io import read
 
     atoms = read(args.structure)
     return System.build(atoms, _model(args))
@@ -227,8 +226,9 @@ def cmd_run(args) -> int:
 
 
 def cmd_relax(args) -> int:
-    from ase.io import read, write
+    from ase.io import write
 
+    from .structure_io import read
     from .tasks import relax
 
     atoms = read(args.structure)
@@ -243,8 +243,7 @@ def cmd_relax(args) -> int:
 
 
 def cmd_phonons(args) -> int:
-    from ase.io import read
-
+    from .structure_io import read
     from .tasks import phonons
 
     results, _ = phonons(read(args.structure), _model(args), kmesh=args.kmesh, kT=args.kT,
@@ -262,9 +261,8 @@ def cmd_phonons(args) -> int:
 
 
 def cmd_raman(args) -> int:
-    from ase.io import read
-
     from .raman import raman, raman_from_qe, spectrum
+    from .structure_io import read
 
     if args.resonant:
         from .qe import modes_for_raman, read_qe_modes
@@ -277,9 +275,12 @@ def cmd_raman(args) -> int:
             modes = read_qe_modes(args.modes)
             phonons = (modes.frequencies,
                        modes_for_raman(modes, atoms.get_masses(), args.modes_kind))
-        resonant = resonant_raman(atoms, model, args.resonant, eta=args.eta,
-                                  kmesh=args.kmesh, kT=args.kT, delta=args.delta,
-                                  phonons=phonons)
+        from .progress import Progress
+
+        with Progress(0, "Raman resonante (tensores por modo)") as bar:
+            resonant = resonant_raman(atoms, model, args.resonant, eta=args.eta,
+                                      kmesh=args.kmesh, kT=args.kT, delta=args.delta,
+                                      phonons=phonons, progress=bar.callback())
         print(resonant.summary())
         result = resonant.at(args.resonant[0])
         if args.out:
@@ -307,9 +308,8 @@ def cmd_raman(args) -> int:
 
 
 def cmd_ir(args) -> int:
-    from ase.io import read
-
     from .infrared import infrared, ir_spectrum
+    from .structure_io import read
 
     atoms = read(args.structure)
     phonons = None
@@ -362,6 +362,123 @@ def cmd_gpaw_levels(args) -> int:
               f"LUMO {e[n]:.4f} eV")
     if levels.fermi is not None:
         print(f"E_F {levels.fermi:.4f} eV")
+    return 0
+
+
+def cmd_report(args) -> int:
+    from .report import build
+
+    formats = tuple(f for f in args.figuras.split(",") if f) if args.figuras != "no" else ()
+    written = build(args.source, out=args.out, data=not args.sin_datos, figures=formats,
+                    width=args.ancho)
+    for kind, value in written.items():
+        if isinstance(value, list):
+            print(f"{kind}: {len(value)} archivos en {value[0].parent}" if value else
+                  f"{kind}: ninguno")
+        else:
+            print(f"{kind}: {value}")
+    return 0
+
+
+def cmd_status(args) -> int:
+    """Every calculation under a folder that reports its progress, with the time left."""
+    from .progress import status_files
+
+    rows = status_files(args.folder)
+    if not rows:
+        print(f"Ningún cálculo con contador en {args.folder} (archivos *progreso*.json).")
+        return 0
+    for row in rows:
+        if args.todos or not row["finished"]:
+            print(row["line"] + f"   [{Path(row['path']).parent}]")
+    if not args.todos and all(r["finished"] for r in rows):
+        print("Todos terminados (--todos para verlos).")
+    return 0
+
+
+def cmd_recipes(args) -> int:
+    """The recipes' adjustable settings: every number, its unit and why it has that value."""
+    import importlib
+
+    from .settings import RECIPES, describe
+
+    names = [args.name] if args.name else list(RECIPES)
+    for name in names:
+        module = importlib.import_module(f"tbkit.recipes.{name}")
+        if args.name:
+            print(describe(module))
+            print("\nCámbialos con --ajuste NOMBRE=VALOR (o --ajustes archivo.json) al correr "
+                  f"python -m tbkit.recipes.{name} …; los usados quedan en ajustes_usados.json.")
+        else:
+            doc = (module.__doc__ or "").strip().splitlines()[0]
+            print(f"{name:24s} {len(getattr(module, 'PARAMS', []))} ajustes · {doc}")
+    if not args.name:
+        print("\ntbkit recetas NOMBRE muestra los ajustes de una.")
+    return 0
+
+
+def cmd_launch(args) -> int:
+    """Run a recipe step in N parallel parts (--part r/N), each with M threads."""
+    import os
+    import subprocess
+    import sys
+    import time
+
+    from .progress import status_files
+
+    rest = [a for a in args.args if a != "--"]
+    log_dir = Path(args.registros)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    env = {**os.environ, "OMP_NUM_THREADS": str(args.hilos),
+           "OPENBLAS_NUM_THREADS": str(args.hilos), "MKL_NUM_THREADS": str(args.hilos)}
+    command = [sys.executable, "-m", f"tbkit.recipes.{args.receta}", *rest]
+    if args.mpi > 1:
+        import shutil
+
+        mpiexec = shutil.which("mpiexec") or shutil.which("mpirun")
+        if mpiexec is None:
+            raise SystemExit("--mpi necesita mpiexec (OpenMPI) en el PATH.")
+        command = [mpiexec, "-n", str(args.mpi), *command]
+    procs = []
+    for r in range(args.partes):
+        part = ["--part", f"{r}/{args.partes}"] if args.partes > 1 else []
+        log = open(log_dir / f"{args.receta}_{stamp}_{r}.log", "w")  # noqa: SIM115
+        procs.append((r, subprocess.Popen(command + part, env=env, stdout=log,
+                                          stderr=subprocess.STDOUT), log, 0))
+    print(f"{args.partes} parte(s) × {args.hilos} hilo(s){f' × {args.mpi} MPI' if args.mpi > 1 else ''}"
+          f": {' '.join(command)}\nregistros en {log_dir}/{args.receta}_{stamp}_*.log")
+    failed = []
+    while procs:
+        time.sleep(args.cada)
+        alive = []
+        for r, proc, log, tries in procs:
+            code = proc.poll()
+            if code is None:
+                alive.append((r, proc, log, tries))
+            elif code != 0 and tries < args.reintentos:
+                print(f"parte {r} terminó con código {code}: reintento {tries + 1}")
+                part = ["--part", f"{r}/{args.partes}"] if args.partes > 1 else []
+                alive.append((r, subprocess.Popen(command + part, env=env, stdout=log,
+                                                  stderr=subprocess.STDOUT), log, tries + 1))
+            else:
+                log.close()
+                if code != 0:
+                    failed.append(r)
+        procs = alive
+        if args.carpeta:
+            for row in status_files(args.carpeta):
+                if not row["finished"]:
+                    print(row["line"])
+    print("terminado" + (f"; partes con error: {failed}" if failed else ""))
+    return 1 if failed else 0
+
+
+def cmd_open(args) -> int:
+    """Lay out a result (a recipe's folder, a validation .json, a spectrum) and open it."""
+    from .report import open_result
+
+    print(open_result(args.source, out=args.out, browser=not args.sin_navegador))
     return 0
 
 
@@ -465,6 +582,47 @@ def build_parser() -> argparse.ArgumentParser:
     rm.add_argument("--bare", action="store_true", help="Actividades sin láser ni Bose.")
     rm.add_argument("-o", "--out", default=None, help="CSV del espectro ensanchado.")
 
+    rp = sub.add_parser("report", help="Reporte HTML, datos CSV y figuras de revista de una "
+                                       "carpeta de resultados o un espectro.")
+    rp.add_argument("source", help="carpeta de una receta (doped_raman, doped_gpaw, electronic), "
+                                   "un .json o un .npz/.csv")
+    rp.add_argument("-o", "--out", default=None, help="archivo .html (por omisión, junto a los datos)")
+    rp.add_argument("--figuras", default="pdf,svg,png",
+                    help="formatos separados por coma, o 'no' (necesita matplotlib)")
+    rp.add_argument("--ancho", choices=("simple", "doble"), default="simple",
+                    help="figuras a una columna (85 mm) o dos (178 mm)")
+    rp.add_argument("--sin-datos", action="store_true", help="no escribir la carpeta de CSV")
+    rp.set_defaults(func=cmd_report)
+    st = sub.add_parser("estado", help="Avance y tiempo restante de los cálculos que llevan "
+                                       "contador (recetas, Raman resonante, doble resonancia).")
+    st.add_argument("folder", nargs="?", default="out", help="carpeta donde buscar (out/)")
+    st.add_argument("--todos", action="store_true", help="incluir los terminados")
+    st.set_defaults(func=cmd_status)
+    rc = sub.add_parser("recetas", help="Las recetas y todos sus ajustes (con unidad y por qué).")
+    rc.add_argument("name", nargs="?", help="nombre de la receta (sin tbkit.recipes.)")
+    rc.set_defaults(func=cmd_recipes)
+    la = sub.add_parser("lanzar", help="Correr un paso de receta en N partes paralelas, cada una "
+                                       "con M hilos (o M procesos MPI para GPAW).")
+    la.add_argument("receta", help="p. ej. coil_double_resonance")
+    la.add_argument("args", nargs=argparse.REMAINDER,
+                    help="los argumentos de la receta (paso, nombre, --ajuste …)")
+    la.add_argument("--partes", type=int, default=1, help="procesos en paralelo (--part r/N)")
+    la.add_argument("--hilos", type=int, default=1,
+                    help="hilos de BLAS por proceso (OMP_NUM_THREADS); partes × hilos ≤ núcleos")
+    la.add_argument("--mpi", type=int, default=1, help="procesos MPI por parte (GPAW)")
+    la.add_argument("--reintentos", type=int, default=1, help="reintentos de una parte que falla")
+    la.add_argument("--carpeta", default=None,
+                    help="carpeta con los progreso*.json de la receta, para mostrar el avance")
+    la.add_argument("--cada", type=float, default=60.0, help="segundos entre informes")
+    la.add_argument("--registros", default="out/registros", help="carpeta de los registros")
+    la.set_defaults(func=cmd_launch)
+    ab = sub.add_parser("abrir", help="Abrir en el navegador un resultado o una validación "
+                                      "(carpeta de receta, .json de validation/, .npz/.csv).")
+    ab.add_argument("source", help="carpeta de resultados, archivo .json, .npz o .csv")
+    ab.add_argument("-o", "--out", default=None,
+                    help="archivo .html (por omisión, una carpeta temporal: no toca los datos)")
+    ab.add_argument("--sin-navegador", action="store_true", help="solo escribir la página")
+    ab.set_defaults(func=cmd_open)
     rn = sub.add_parser("run", help="Ejecutar un archivo de simulación y guardar su registro.")
     rn.add_argument("config")
     rn.set_defaults(func=cmd_run)

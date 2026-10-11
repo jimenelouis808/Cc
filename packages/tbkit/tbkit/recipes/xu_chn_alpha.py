@@ -183,9 +183,12 @@ def run(alpha_refs, parameters: Path, out: Path, verbose: bool = True,
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("alpha_refs", type=Path, nargs="+")
-    parser.add_argument("parameters", type=Path)
-    parser.add_argument("out", type=Path)
+    parser.add_argument("alpha_refs", type=Path, nargs="+",
+                        help="polarizabilidades GPAW de referencia (chn_polarizability)")
+    parser.add_argument("parameters", type=Path,
+                        help="conjunto al que se añaden las polarizabilidades extra")
+    parser.add_argument("out", type=Path,
+                        help="archivo de parámetros que se escribe")
     parser.add_argument("--fit", nargs="+", default=list(ELEMENTS),
                         help="elementos cuya α extra se ajusta (por defecto H C N)")
     parser.add_argument("--fixed-from", type=Path, default=None,

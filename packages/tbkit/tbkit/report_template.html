@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>__TITLE__</title>
+<style>
+/* Una columna de lectura (~70ch); las gráficas se abren a una medida más ancha; las tablas
+   se desplazan dentro de su caja. Sin fuentes externas: el archivo se abre sin internet. */
+:root{
+  --bg:#f6f7f8; --surface:#fdfdfd; --ink:#14171a; --ink-2:#4b5258; --ink-3:#7c848b;
+  --rule:#dde1e5; --grid:#e8ebee; --accent:#2a78d6;
+  --s1:#0072b2; --s2:#d55e00; --s3:#009e73; --s4:#cc79a7; --s5:#e69f00; --s6:#56b4e9;
+  --good:#0ca30c; --warn:#b37800;
+  --display:"IBM Plex Sans Condensed","Arial Narrow","Roboto Condensed",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111315; --surface:#1a1d20; --ink:#f2f4f5; --ink-2:#c1c7cc; --ink-3:#8a9298;
+  --rule:#2e3337; --grid:#262a2e; --accent:#3987e5;
+  --s1:#3b9be0; --s2:#f07a2d; --s3:#2fc396; --s4:#e09ac3; --s5:#f2b733; --s6:#7fcaf2;
+  --good:#3cc23c; --warn:#e0a01a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111315; --surface:#1a1d20; --ink:#f2f4f5; --ink-2:#c1c7cc; --ink-3:#8a9298;
+  --rule:#2e3337; --grid:#262a2e; --accent:#3987e5;
+  --s1:#3b9be0; --s2:#f07a2d; --s3:#2fc396; --s4:#e09ac3; --s5:#f2b733; --s6:#7fcaf2;
+  --good:#3cc23c; --warn:#e0a01a; color-scheme:dark}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.6 var(--body)}
+.wrap{max-width:62rem;margin:0 auto;padding-inline:clamp(16px,4vw,40px);padding-block:2.5rem 4rem;display:flex;flex-direction:column;gap:2.5rem}
+header{display:flex;flex-direction:column;gap:.6rem;border-bottom:1px solid var(--rule);padding-bottom:1.5rem}
+.eyebrow{font:500 .75rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+h1{font:600 clamp(1.8rem,4.2vw,2.6rem)/1.1 var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h2{font:600 1.4rem/1.2 var(--display);margin:0;text-wrap:balance}
+h3{font:600 1rem/1.3 var(--body);margin:0}
+.lede{max-width:68ch;color:var(--ink-2);margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:.4rem 1.4rem;font:.8rem/1.4 var(--mono);color:var(--ink-3)}
+section{display:flex;flex-direction:column;gap:1rem;min-width:0}
+section>p,section li{max-width:70ch}
+p{margin:0}
+ul{margin:0;padding-left:1.15rem;display:flex;flex-direction:column;gap:.4rem}
+figure{margin:0;background:var(--surface);border:1px solid var(--rule);padding:1rem 1rem .8rem;display:flex;flex-direction:column;gap:.6rem;min-width:0}
+figcaption{font-size:.85rem;color:var(--ink-2);max-width:75ch}
+.bar{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:space-between}
+.chart{position:relative;width:100%}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.axis text,.lbl{fill:var(--ink-3);font:11px var(--mono)}
+.axis line{stroke:var(--rule)}
+.gridline{stroke:var(--grid)}
+.ttl{fill:var(--ink-2);font:500 11px var(--mono)}
+.tip{position:absolute;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--rule);font:12px/1.45 var(--mono);padding:.4rem .55rem;border-radius:4px;box-shadow:0 2px 10px rgb(0 0 0/.12);white-space:nowrap;z-index:2}
+.legend{display:flex;flex-wrap:wrap;gap:.35rem 1.1rem;font:.8rem var(--mono);color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:.4rem}
+.sw{width:14px;height:3px;border-radius:2px;display:inline-block}
+.sw.pt{width:9px;height:9px;border-radius:50%}
+button.csv{font:500 .75rem var(--mono);background:transparent;color:var(--accent);border:1px solid var(--rule);border-radius:4px;padding:.25rem .6rem;cursor:pointer}
+button.csv:hover{border-color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tbl{overflow-x:auto;border:1px solid var(--rule);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.88rem;font-variant-numeric:tabular-nums}
+th,td{padding:.45rem .75rem;text-align:right;border-bottom:1px solid var(--grid);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font:500 .74rem/1.3 var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);background:var(--bg)}
+tr:last-child td{border-bottom:0}
+.note{font-size:.85rem;color:var(--ink-3)}
+code{font:.85em var(--mono)}
+footer{font:.78rem/1.5 var(--mono);color:var(--ink-3);border-top:1px solid var(--rule);padding-top:1rem}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap" id="root"></div>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const R = JSON.parse(document.getElementById('data').textContent);
+const NS = 'http://www.w3.org/2000/svg';
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SER = ['--s1','--s2','--s3','--s4','--s5','--s6'];
+const fmt = (v, d) => (v == null || Number.isNaN(v)) ? '—' : (typeof v === 'number'
+  ? v.toLocaleString('es-ES', {minimumFractionDigits: d ?? 0, maximumFractionDigits: d ?? 3}) : String(v));
+function el(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function h(tag, attrs = {}, text) { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
+function ticks(a, b, n) { const step = Math.pow(10, Math.floor(Math.log10((b - a) / n))); const m = [1, 2, 2.5, 5, 10].find(k => (b - a) / (k * step) <= n) * step; const t = []; for (let v = Math.ceil(a / m) * m; v <= b + 1e-9 * Math.abs(b); v += m) t.push(+v.toPrecision(10)); return t; }
+function csvDownload(name, header, rows) {
+  const text = [header.join(','), ...rows.map(r => r.map(v => v == null ? '' : (typeof v === 'string' && /[,"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v)).join(','))].join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type: 'text/csv'}));
+  a.download = name + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+}
+function drawFigure(host, f) {
+  host.innerHTML = '';
+  const W = 860, H = f.height || 300, m = {l: 58, r: 16, t: 14, b: 42};
+  const xs = f.series.flatMap(s => s.x), ys = f.series.flatMap(s => s.y).filter(Number.isFinite);
+  const xr = f.xlim || [Math.min(...xs), Math.max(...xs)];
+  let yr = f.ylim; if (!yr) { const lo = Math.min(0, ...ys), hi = Math.max(...ys); const pad = (hi - lo) * 0.06 || 1; yr = [lo < 0 ? lo - pad : lo, hi + pad]; }
+  if (f.kind === 'scatter') { const lo = Math.min(xr[0], yr[0]), hi = Math.max(xr[1], yr[1]); const p = (hi - lo) * 0.05; xr[0] = yr[0] = lo - p; xr[1] = yr[1] = hi + p; }
+  const svg = el('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': f.title}); host.appendChild(svg);
+  const X = v => m.l + (v - xr[0]) / (xr[1] - xr[0]) * (W - m.l - m.r), Y = v => H - m.b - (v - yr[0]) / (yr[1] - yr[0]) * (H - m.t - m.b);
+  const g = el('g', {class: 'axis'}, svg);
+  for (const v of ticks(yr[0], yr[1], 4)) { el('line', {x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), class: 'gridline'}, g); const t = el('text', {x: m.l - 8, y: Y(v) + 4, 'text-anchor': 'end'}, g); t.textContent = fmt(v, Math.abs(v) < 10 && v % 1 ? 2 : 0); }
+  for (const v of ticks(xr[0], xr[1], 8)) { el('line', {x1: X(v), x2: X(v), y1: H - m.b, y2: H - m.b + 5}, g); const t = el('text', {x: X(v), y: H - m.b + 18, 'text-anchor': 'middle'}, g); t.textContent = fmt(v, 0); }
+  el('line', {x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b}, g);
+  const tx = el('text', {x: (m.l + W - m.r) / 2, y: H - 4, 'text-anchor': 'middle', class: 'ttl'}, svg); tx.textContent = f.xlabel || '';
+  const ty = el('text', {x: 12, y: (m.t + H - m.b) / 2, transform: `rotate(-90 12 ${(m.t + H - m.b) / 2})`, 'text-anchor': 'middle', class: 'ttl'}, svg); ty.textContent = f.ylabel || '';
+  if (f.kind === 'scatter') el('line', {x1: X(xr[0]), y1: Y(xr[0]), x2: X(xr[1]), y2: Y(xr[1]), stroke: css('--ink-3'), 'stroke-dasharray': '4 4', 'stroke-width': 1}, svg);
+  for (const p of (f.marks || [])) { el('line', {x1: X(p.x), x2: X(p.x), y1: m.t, y2: H - m.b, stroke: css('--ink-3'), 'stroke-dasharray': '2 4', 'stroke-width': 1}, svg); const t = el('text', {x: X(p.x), y: m.t + 2, 'text-anchor': 'middle', class: 'lbl'}, svg); t.textContent = p.label || p.x; }
+  const colors = f.series.map((s, i) => css(SER[i % SER.length]));
+  f.series.forEach((s, i) => {
+    if (f.kind === 'scatter' || f.kind === 'points') s.x.forEach((x, k) => el('circle', {cx: X(x), cy: Y(s.y[k]), r: 4, fill: colors[i], stroke: css('--surface'), 'stroke-width': 1.5}, svg));
+    else if (f.kind === 'sticks') s.x.forEach((x, k) => el('line', {x1: X(x), x2: X(x), y1: Y(Math.max(yr[0], 0)), y2: Y(s.y[k]), stroke: colors[i], 'stroke-width': 1.6}, svg));
+    else el('path', {d: s.x.map((x, k) => `${k ? 'L' : 'M'}${X(x).toFixed(1)},${Y(s.y[k]).toFixed(1)}`).join(''), fill: 'none', stroke: colors[i], 'stroke-width': 1.8, 'stroke-linejoin': 'round'}, svg);
+  });
+  const tip = h('div', {class: 'tip'}); tip.hidden = true; host.appendChild(tip);
+  const hit = el('rect', {x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: 'transparent'}, svg);
+  hit.addEventListener('pointermove', e => {
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const xv = xr[0] + (p.x - m.l) / (W - m.l - m.r) * (xr[1] - xr[0]);
+    const lines = []; f.series.forEach(s => { let k = 0, b = Infinity; s.x.forEach((x, j) => { const d = Math.abs(x - xv); if (d < b) { b = d; k = j; } }); lines.push(`${s.name}: ${fmt(s.x[k], 1)} → ${fmt(s.y[k], 3)}`); });
+    tip.innerHTML = lines.join('<br>'); tip.hidden = false;
+    const r = svg.getBoundingClientRect(), sc = r.width / W; let x = p.x * sc + 12; if (x + tip.offsetWidth > r.width) x = p.x * sc - tip.offsetWidth - 12; tip.style.left = x + 'px'; tip.style.top = Math.max(0, p.y * sc - 10) + 'px';
+  });
+  hit.addEventListener('pointerleave', () => tip.hidden = true);
+  return colors;
+}
+function render() {
+  const root = document.getElementById('root'); root.innerHTML = '';
+  const head = h('header'); head.append(h('span', {class: 'eyebrow'}, R.eyebrow || 'Reporte · tbkit'), h('h1', {}, R.title));
+  if (R.subtitle) head.append(h('p', {class: 'lede'}, R.subtitle));
+  const meta = h('div', {class: 'meta'}); for (const [k, v] of Object.entries(R.meta || {})) meta.append(h('span', {}, `${k}: ${v}`)); head.append(meta); root.append(head);
+  for (const sec of R.sections) {
+    const s = h('section'); s.append(h('h2', {}, sec.title)); root.append(s);
+    for (const b of sec.blocks) {
+      if (b.type === 'text') s.append(h('p', {}, b.text));
+      else if (b.type === 'list') { const u = h('ul'); b.items.forEach(t => u.append(h('li', {}, t))); s.append(u); }
+      else if (b.type === 'note') s.append(h('p', {class: 'note'}, b.text));
+      else if (b.type === 'figure') {
+        const fig = h('figure'); const bar = h('div', {class: 'bar'}); const lg = h('div', {class: 'legend'});
+        const btn = h('button', {class: 'csv', type: 'button'}, 'CSV'); bar.append(h('h3', {}, b.title), btn); fig.append(bar, lg);
+        const host = h('div', {class: 'chart'}); fig.append(host); if (b.caption) fig.append(h('figcaption', {}, b.caption)); s.append(fig);
+        const colors = drawFigure(host, b); lg.innerHTML = '';
+        b.series.forEach((ser, i) => { const sp = h('span'); const sw = h('i', {class: 'sw' + (b.kind === 'scatter' || b.kind === 'points' ? ' pt' : '')}); sw.style.background = colors[i]; sp.append(sw, document.createTextNode(ser.name)); lg.append(sp); });
+        btn.addEventListener('click', () => { const header = [], cols = []; b.series.forEach(ser => { header.push(`${ser.name} ${b.xlabel}`, `${ser.name} ${b.ylabel}`); cols.push(ser.x, ser.y); }); const n = Math.max(...cols.map(c => c.length)); csvDownload(b.id, header, Array.from({length: n}, (_, k) => cols.map(c => c[k]))); });
+      } else if (b.type === 'table') {
+        const bar = h('div', {class: 'bar'}); const btn = h('button', {class: 'csv', type: 'button'}, 'CSV'); bar.append(h('h3', {}, b.title || ''), btn); s.append(bar);
+        const box = h('div', {class: 'tbl'}); const t = h('table'); const tr = h('tr'); b.columns.forEach(c => tr.append(h('th', {}, c))); const th = h('thead'); th.append(tr); t.append(th);
+        const tb = h('tbody'); b.rows.forEach(r => { const row = h('tr'); r.forEach((v, i) => row.append(h('td', {}, typeof v === 'number' ? fmt(v, (b.digits || [])[i]) : (v ?? '—')))); tb.append(row); }); t.append(tb); box.append(t); s.append(box);
+        if (b.note) s.append(h('p', {class: 'note'}, b.note));
+        btn.addEventListener('click', () => csvDownload(b.id, b.columns, b.rows));
+      }
+    }
+  }
+  const foot = h('footer', {}, R.footer || ''); root.append(foot);
+}
+render();
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', render);
+new MutationObserver(render).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+</script>
+</body>
+</html>

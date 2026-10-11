@@ -31,6 +31,7 @@ carbonforge/
 ├── utils/         # constants, geometry helpers
 ├── codes/         # per-code parameter catalogues + manual importers (QE, SIESTA, GPAW)
 ├── jobs/          # job.json manifests, step runner, the one subprocess queue for all engines
+├── exchange/      # DFT requests of other packages (nanocarbon-dft/1): check, prepare (run_dft.py, SLURM)
 ├── cli/           # command line interface
 ├── tests/         # pytest unit tests
 └── examples/      # runnable example scripts
@@ -82,6 +83,12 @@ carbonforge/
   wherever its result is shown. A finite model exported to QE gets
   asr='zero-dim'. A measured Raman spectrum is an intensity: never convert it
   to absorbance.
+- DFT requests of other packages (`exchange/`, docs/INTERCAMBIO_DFT.md of the workspace):
+  `exchange/driver.py` is copied into the request folder as `run_dft.py` and must import only
+  ASE, numpy and the engine (it runs on clusters without carbonforge). Every calculation is a
+  file under `tareas/` and is skipped when it exists; a request changed after starting is
+  refused; under MPI only rank 0 writes. The EMT code is for tests only, never offered as a
+  method. DFTB+'s Fermi filling is left at DFTB+'s default until checked against a real run.
 - vibspec compares computed IR with FTIR in ABSORBANCE (converted from %T),
   both normalised on ONE y axis. Stored frequencies are never scaled in
   place; the scale factor is applied at analysis time. Band matches are a

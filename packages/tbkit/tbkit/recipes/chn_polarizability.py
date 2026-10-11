@@ -54,9 +54,13 @@ def _one(args):
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("out", type=Path)
-    parser.add_argument("--workers", type=int, default=4)
-    parser.add_argument("--set", choices=sorted(SETS), default="chn")
+    parser.add_argument("out", type=Path,
+                        help="archivo JSON de referencias que se escribe (los cálculos parciales "
+                             "van a ARCHIVO.parts/, reanudable)")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="procesos GPAW en paralelo (cada uno, un cálculo; vigila la memoria)")
+    parser.add_argument("--set", choices=sorted(SETS), default="chn",
+                        help="conjunto de moléculas: chn o chno")
     parser.add_argument("--geometries", type=Path, default=None,
                         help="archivo de referencias con las geometrías (por defecto, el del "
                              "paquete para el conjunto elegido)")
@@ -73,6 +77,10 @@ def main(argv=None) -> None:
     parts = args.out.with_suffix(".parts")
     parts.mkdir(parents=True, exist_ok=True)
     todo = [job for job in jobs if not (parts / f"{job[0]}.json").exists()]
+    from ..progress import Progress
+
+    bar = Progress(len(jobs), "α de referencia GPAW", status=parts / "progreso.json",
+                   done=len(jobs) - len(todo))
     with ProcessPoolExecutor(args.workers) as pool:
         futures = {pool.submit(_one, job): job for job in todo}
         from concurrent.futures import as_completed
@@ -80,6 +88,7 @@ def main(argv=None) -> None:
         for future in as_completed(futures):
             result = future.result()
             (parts / f"{result['group']}.json").write_text(json.dumps(result))
+            bar.step(note=result['group'])
             print(f"{result['group']}: α medio "
                   f"{sum(result['alpha'][i][i] for i in range(3)) / 3:.3f} Å³", flush=True)
     entries = [json.loads((parts / f"{n}.json").read_text()) for n, _, _, _ in jobs]

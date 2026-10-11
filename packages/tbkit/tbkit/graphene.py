@@ -134,13 +134,23 @@ class GraphenePhonons:
         supercell = primitive.repeat((n, n, 1))
         jobs = [(supercell, s, alpha, sign * delta, make_calculator)
                 for s in range(2) for alpha in range(3) for sign in (1, -1)]
+        from .progress import Progress
+
+        bar = Progress(len(jobs), f"superceldas {n}x{n} desplazadas (fuerzas)")
         if workers > 1:
             from concurrent.futures import ProcessPoolExecutor
 
             with ProcessPoolExecutor(workers) as pool:
-                results = list(pool.map(_displaced_forces, jobs))
+                results = []
+                for f in pool.map(_displaced_forces, jobs):
+                    results.append(f)
+                    bar.step()
         else:
-            results = [_displaced_forces(job) for job in jobs]
+            results = []
+            for job in jobs:
+                results.append(_displaced_forces(job))
+                bar.step()
+        bar.close()
         forces = np.zeros((2, 3, len(supercell), 3))
         for (_, s, alpha, step, _), f in zip(jobs, results, strict=True):
             forces[s, alpha] += f * np.sign(step) / (2 * delta)
@@ -433,7 +443,7 @@ def _dirac_points(phonons: GraphenePhonons) -> list[np.ndarray]:
 def double_resonance(electrons: PiElectrons, phonons: GraphenePhonons, laser_ev: float,
                      gamma: float = 0.1, dk: float = 0.006, dq: float = 0.02,
                      window_ev: float = 1.5, q_radius: float = 0.7,
-                     workers: int = 1) -> dict:
+                     workers: int = 1, progress=None) -> dict:
     """Second-order (two-phonon) Raman intensities by double resonance.
 
     Returns ``{"shifts": ω_ν(q) + ω_ν(q) per term (cm⁻¹), "weights": |A|²,
@@ -442,6 +452,7 @@ def double_resonance(electrons: PiElectrons, phonons: GraphenePhonons, laser_ev:
     near Γ (the 2D' band, intravalley), within ``q_radius`` (1/Å) on a grid of
     step ``dq``. Electron momenta k run over annuli around K and K' where the
     pair energy is within ``window_ev`` of the laser, step ``dk`` (1/Å).
+    ``progress``: called with no argument after each block of q.
     """
     dirac = _dirac_points(phonons)
     kmax = (laser_ev + window_ev) / (3 * abs(electrons.t) * electrons.a_cc)
@@ -462,14 +473,20 @@ def double_resonance(electrons: PiElectrons, phonons: GraphenePhonons, laser_ev:
     q_all = np.concatenate([centre + q_offsets for centre in [np.zeros(3)] + dirac])
     q_weight = dq ** 2 * area / (2 * np.pi) ** 2
     args = [(electrons, phonons, laser_ev, gamma, k_all, k_weight, chunk)
-            for chunk in np.array_split(q_all, max(1, workers * 4))]
+            for chunk in np.array_split(q_all, _blocks(workers))]
+    step = progress or (lambda: None)
+    parts = []
     if workers > 1:
         from concurrent.futures import ProcessPoolExecutor
 
         with ProcessPoolExecutor(workers) as pool:
-            parts = list(pool.map(_double_resonance_chunk, args))
+            for part in pool.map(_double_resonance_chunk, args):
+                parts.append(part)
+                step()
     else:
-        parts = [_double_resonance_chunk(a) for a in args]
+        for a in args:
+            parts.append(_double_resonance_chunk(a))
+            step()
     shifts = np.concatenate([p[0] for p in parts])
     weights = np.concatenate([p[1] for p in parts]) * q_weight
     qs = np.concatenate([p[2] for p in parts])
@@ -584,9 +601,15 @@ def load_phonons(which: str = "gpaw") -> GraphenePhonons:
     return phonons.with_acoustic_sum_rule()
 
 
+def _blocks(workers: int) -> int:
+    """Blocks of q for the double-resonance sum: enough to share among the workers
+    and for a progress counter to move (the sum does not depend on it)."""
+    return max(8, workers * 4)
+
+
 def graphene_raman(lasers_ev, phonons: Optional[GraphenePhonons] = None, gamma: float = 0.1,
                    dk: float = 0.01, dq: float = 0.03, workers: int = 1,
-                   fwhm: float = 10.0) -> list[dict]:
+                   fwhm: float = 10.0, status=None) -> list[dict]:
     """G, 2D and 2D' of pristine graphene at each laser energy.
 
     Per laser: the G frequency and intensity, the 2D and 2D' peak positions
@@ -597,10 +620,15 @@ def graphene_raman(lasers_ev, phonons: Optional[GraphenePhonons] = None, gamma: 
     a_cc = float(np.linalg.norm(phonons.atoms.positions[1] - phonons.atoms.positions[0]))
     electrons = PiElectrons.from_parameters(a_cc=a_cc)
     results = []
-    for laser in np.atleast_1d(np.asarray(lasers_ev, dtype=float)):
+    lasers = np.atleast_1d(np.asarray(lasers_ev, dtype=float))
+    from .progress import Progress
+
+    bar = Progress(len(lasers) * _blocks(workers), "grafeno: doble resonancia", status=status)
+    for laser in lasers:
         g = g_band(electrons, phonons, laser, gamma=gamma)
         dr = double_resonance(electrons, phonons, laser, gamma=gamma, dk=dk, dq=dq,
-                              workers=workers)
+                              workers=workers,
+                              progress=lambda laser=laser: bar.step(note=f"{laser:.2f} eV"))
         grid, intensity = second_order_spectrum(dr, np.arange(2000.0, 3700.0, 1.0), fwhm)
         entry = {"laser_ev": float(laser), "g_frequency": g["frequency"],
                  "g_intensity": g["intensity"], "grid": grid, "spectrum": intensity}

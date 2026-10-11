@@ -56,20 +56,28 @@ def _one(name):
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("out", type=Path)
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("out", type=Path,
+                        help="archivo JSON de referencias que se escribe (los cálculos parciales "
+                             "van a ARCHIVO.parts/, reanudable)")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="procesos GPAW en paralelo (cada uno, un cálculo; vigila la memoria)")
     args = parser.parse_args(argv)
     from tbkit.references import GPAW_DEFAULTS, gpaw_settings_record
 
     parts = args.out.with_suffix(".parts")
     parts.mkdir(parents=True, exist_ok=True)
     todo = [m for m in MOLECULES if not (parts / f"{m}.json").exists()]
+    from ..progress import Progress
+
+    bar = Progress(len(MOLECULES), "IR de referencia GPAW", status=parts / "progreso.json",
+                   done=len(MOLECULES) - len(todo))
     with ProcessPoolExecutor(args.workers) as pool:
         futures = {pool.submit(_one, m): m for m in todo}
         for future in as_completed(futures):
             result = future.result()
             (parts / f"{result['group']}.json").write_text(json.dumps(result))
             print(f"{result['group']}: listo", flush=True)
+            bar.step()
     entries = [json.loads((parts / f"{m}.json").read_text()) for m in MOLECULES]
     args.out.write_text(json.dumps({"settings": gpaw_settings_record(dict(GPAW_DEFAULTS)),
                                     "infrared": entries}, indent=1, ensure_ascii=False),

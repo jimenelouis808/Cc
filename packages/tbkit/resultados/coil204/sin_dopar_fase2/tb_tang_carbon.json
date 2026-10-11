@@ -1,0 +1,35 @@
+{
+ "model": "tang_carbon",
+ "atoms": 204,
+ "relax_converged": true,
+ "energy_eV": -897.6200449143616,
+ "gap_eV": 0.0,
+ "bond_min_max": [
+  1.363015612967575,
+  1.5636869852804858
+ ],
+ "ring_census": {
+  "5": 12,
+  "6": 78,
+  "7": 12
+ },
+ "topology": "OK",
+ "bonds_made": [],
+ "bonds_broken": [],
+ "modes": 612,
+ "imaginary_below_-20": 0,
+ "lowest_three": [
+  0.011750277719003548,
+  0.012462538107303875,
+  0.013181651682268059
+ ],
+ "ring_atoms": {
+  "5": 48,
+  "7": 84
+ },
+ "share_of_atoms_on_5_and_7": [
+  0.23529411764705882,
+  0.4117647058823529
+ ],
+ "raman": "gapless: non-resonant Raman does not apply (resonant only)"
+}

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -77,14 +79,20 @@ def _qt():
     return QApplication.instance() or QApplication([])
 
 
-def _wait(window):
+def _wait(window, seconds: float = 120.0):
+    """Until the window's job and its queue are done (jobs run in another process)."""
+    import time
+
     from PySide6.QtCore import QEventLoop, QTimer
 
     loop = QEventLoop()
     timer = QTimer()
-    timer.timeout.connect(lambda: None if window.runner.running else loop.quit())
+    end = time.monotonic() + seconds
+    timer.timeout.connect(lambda: None if (window.runner.running or window.runner.queue)
+                          and time.monotonic() < end else loop.quit())
     timer.start(20)
     loop.exec()
+    assert not window.runner.running, "el cálculo no terminó a tiempo"
 
 
 def test_window_computes_levels_and_draws_an_orbital(tmp_path):
@@ -233,30 +241,67 @@ def test_window_phonopy_page():
     assert "E2g" in labels
 
 
-def test_runner_collects_garbage_only_in_the_gui_thread():
-    # The cyclic collector running in the worker destroyed Qt objects of the
-    # GUI thread and crashed the window at random places: it is paused while a
-    # job runs and resumed (with a collection) in the GUI thread afterwards.
-    import gc
+def test_runner_runs_in_another_process_and_cancel_kills_it():
+    # A thread cannot be stopped: «Cancelar» used to let the calculation run to the end.
+    # Jobs now run in a child process, killed at once; the next job gets a new one.
+    import time
 
     _qt()
+    from tbkit.gui import jobs
+    from tbkit.gui.resources import alive
     from tbkit.gui.worker import Runner
-
-    runner = Runner()
-    seen = []
-    runner.start("prueba", lambda: gc.isenabled(), on_done=seen.append)
 
     class _Window:
         pass
 
     window = _Window()
-    window.runner = runner
+    window.runner = runner = Runner()
+    seen, lines, progress = [], [], []
+    runner.output.connect(lines.append)
+    runner.progress.connect(progress.append)
+    runner.start("probe", jobs.probe, 0.2, steps=4, on_done=seen.append)
+    runner.start("en cola", jobs.probe, 0.0, on_done=seen.append)       # waits its turn
+    assert len(runner.queue) == 1
     _wait(window)
-    assert seen == [False] and gc.isenabled()
-    for _ in range(3):                       # consecutive jobs, old threads released
-        runner.start("otra", lambda: 1)
+    assert [r["pid"] for r in seen] == [runner.pid] * 2 and runner.pid != os.getpid()
+    assert "probe: empieza" in "".join(lines) and progress[-1]["done"] == 4
+    runner.start("largo", jobs.probe, 60.0, on_done=seen.append)
+    time.sleep(1.0)
+    pid = runner.pid
+    runner.cancel()
+    assert not runner.running and len(seen) == 2
+    time.sleep(0.2)
+    assert not alive(pid) and runner.pid != pid                        # killed, replaced
+    runner.shutdown()
+
+
+def test_runner_stops_a_job_past_the_memory_limit_and_limits_cores():
+    _qt()
+    from tbkit.gui import jobs
+    from tbkit.gui.worker import Runner
+
+    class _Window:
+        pass
+
+    window = _Window()
+    window.runner = runner = Runner()
+    errors, seen = [], []
+    runner.memory_limit_gb = 0.25
+    runner.start("memoria", jobs.probe, 20.0, size=500,
+                 on_error=lambda text, trace: errors.append(text))
+    _wait(window, 30)
+    assert errors and "límite de RAM" in errors[0]
+    runner.memory_limit_gb = None
+    if hasattr(os, "sched_getaffinity"):
+        runner.cores = 1
+        runner.start("un núcleo", jobs.probe, on_done=seen.append)
         _wait(window)
-    assert len(runner._finished) == 1
+        runner.cores = None
+        runner.start("todos", jobs.probe, on_done=seen.append)
+        _wait(window)
+        assert len(seen[0]["affinity"]) == 1
+        assert len(seen[1]["affinity"]) == len(os.sched_getaffinity(0))
+    runner.shutdown()
 
 
 def test_spectra_reuse_the_shared_modes():
@@ -426,3 +471,274 @@ def test_saved_spectra_open_from_csv_and_npz(tmp_path):
     page = window.pages["Espectros"]
     page.open_spectrum(str(tmp_path / "spectra.npz"))
     assert "2 curvas" in page.summary.text() and page.table.rowCount() == 2
+
+
+def test_recipe_settings_overrides_and_command(tmp_path):
+    recipes = {r["name"] for r in actions.recipe_list()}
+    assert "coil_double_resonance" in recipes
+    usage = actions.recipe_usage("coil_double_resonance")
+    assert "pairs" in usage["steps"] and usage["parts"]
+    rows = {r["name"]: r for r in actions.recipe_settings("coil_double_resonance")}
+    edited = {name: row["value"] for name, row in rows.items()}
+    assert actions.recipe_overrides("coil_double_resonance", edited) == {}
+    edited["NK"] = "32"
+    edited["GAMMA"] = "0.05"
+    assert actions.recipe_overrides("coil_double_resonance", edited) == {"NK": 32, "GAMMA": 0.05}
+    with pytest.raises(ValueError, match="NK"):
+        actions.recipe_overrides("coil_double_resonance", {**edited, "NK": "2.5"})
+    command = actions.launch_command("coil_double_resonance", "pairs 2.54", {"NK": 32},
+                                     parts=4, workdir=tmp_path)
+    assert command[3:5] == ["lanzar", "--partes"] and command[-4:-2] == ["pairs", "2.54"]
+    saved = Path(command[-1])
+    assert command[-2] == "--ajustes" and json.loads(saved.read_text()) == {"NK": 32}
+    assert actions.launch_warnings(4, 1, 1, can_split=False)
+    assert actions.launch_warnings(actions.cores() + 1, 1) and not actions.launch_warnings(1, 1)
+
+
+def test_recipe_options_are_read_from_the_parser_without_running_it():
+    names = {r["name"] for r in actions.recipe_list()}
+    assert {"site_screening", "crystal_validation", "validation_report"} <= names
+    usage = actions.recipe_usage("validation_report")       # main() without argv: not called
+    assert usage["options"] == {"": []} and not usage["steps"]
+    scaling = {r["dest"]: r for r in actions.recipe_usage("frequency_scaling")["options"][""]}
+    assert scaling["solo_mostrar"]["boolean"] and scaling["min_cm1"]["default"] == "50.0"
+    site = actions.recipe_usage("site_screening")
+    rows = {r["dest"]: r for r in site["options"][""]}
+    assert site["parts"] and rows["structure"]["required"] and rows["kmesh"]["default"] == "8"
+    with pytest.raises(ValueError, match="structure"):
+        actions.recipe_arguments(site["options"][""], {})
+    words = actions.recipe_arguments(site["options"][""],
+                                     {"structure": "coil.extxyz", "dopant": "N",
+                                      "workdir": "out/sitios", "kmesh": "4", "top": "3"})
+    assert words == ["coil.extxyz", "N", "out/sitios", "--kmesh", "4"]
+    crystals = actions.recipe_usage("crystal_validation")
+    assert crystals["steps"] == ["gpaw", "collect", "compare"]
+    systems = {r["dest"]: r for r in crystals["options"]["gpaw"]}["systems"]
+    assert actions.recipe_arguments([systems], {"systems": "graphene hBN"}) == \
+        ["--systems", "graphene", "hBN"]
+    raman = actions.recipe_usage("doped_raman")
+    assert raman["step_dest"] == "step" and "raman" in raman["steps"]
+    with pytest.raises(ValueError, match="no es una de"):
+        actions.recipe_arguments(raman["options"][""], {"name": "boro"})
+
+
+def test_recipe_status_lines(tmp_path):
+    from tbkit.progress import Progress
+
+    with Progress(4, "prueba", status=tmp_path / "a" / "progreso.json", quiet=True) as bar:
+        bar.step()
+    assert "prueba: 1/4" in actions.recipe_status(tmp_path)[0]
+    bar.step(3)
+    assert actions.recipe_status(tmp_path) == [] and actions.recipe_status(tmp_path, True)
+
+
+def test_recipes_page_builds_a_launch_command():
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    page = window.pages["Recetas"]
+    page.recipe.setCurrentIndex(page.recipe.findData("coil_double_resonance"))
+    page.step.setCurrentText("pairs")
+    page.options.item(0, 1).setText("2.54")                  # the laser
+    assert page.command()[-2:] == ["pairs", "2.54"]
+    assert page.settings.rowCount() == len(actions.recipe_settings("coil_double_resonance"))
+    page.recipe.setCurrentIndex(page.recipe.findData("site_screening"))     # no steps
+    assert page.options.rowCount() == len(actions.recipe_usage("site_screening")["options"][""])
+    page.recipe.setCurrentIndex(page.recipe.findData("crystal_validation"))
+    page.step.setCurrentText("compare")
+    assert [page.options.item(r, 0).text() for r in range(page.options.rowCount())] == \
+        ["references (obligatorio)", "out (obligatorio)", "--systems"]
+
+
+def test_bonds_across_the_cell_are_drawn_to_the_image():
+    from ase.build import graphene
+
+    sheet = graphene(vacuum=6.0)
+    bonds = actions.bonds_with_images(sheet)
+    assert len(bonds) == 3                          # three bonds per pair of atoms
+    assert sum(1 for *_, s in bonds if s != (0, 0, 0)) == 2   # two cross the cell
+    big = actions.supercell(sheet, (3, 3, 1))
+    assert len(big) == 18 and len(actions.bonds_with_images(big)) == 27
+    with pytest.raises(ValueError, match="no es periódico"):
+        actions.supercell(sheet, (1, 1, 2))
+    model = actions.load_model("xu_carbon")
+    assert actions.orbital_count(big, model) == 72
+    assert actions.memory_estimate_gb(big, model) == pytest.approx(6 * 16 * 72 ** 2 / 1e9)
+
+
+def test_window_geometries_cell_supercell_and_order(tmp_path):
+    _qt()
+    from ase.build import graphene
+
+    from tbkit.gui.app import CellDialog, MainWindow
+
+    window = MainWindow(interactive=False)
+    assert list(window.pages)[:2] == ["Guía", "Geometría y modos"]
+    sheet = graphene(vacuum=6.0)
+    sheet.pbc = False                               # as a .xyz with pbc="F F F" gives it
+    path = tmp_path / "g.xyz"
+    sheet.write(path, format="extxyz")
+    window.open_structure(str(path))
+    assert list(window.atoms.pbc) == [True, True, False]
+    window.view.set_repeat((2, 2, 1))               # the view only
+    assert len(window.atoms) == 2
+    for box, n in zip(window.repeat, (1, 1, 4), strict=True):
+        box.setValue(n)
+    window.make_supercell()                         # c is not periodic: refused
+    assert len(window.geometries) == 1
+    window.repeat[0].setValue(3)
+    window.repeat[2].setValue(1)
+    window.make_supercell()
+    assert len(window.atoms) == 6 and window.geometry_combo.count() == 2
+    window.choose_geometry(0)
+    assert len(window.atoms) == 2
+    dialog = CellDialog(window.atoms)
+    dialog.pbc[2].setChecked(True)
+    dialog.lengths[2].setValue(10.0)
+    atoms = dialog.result_atoms()
+    assert atoms.pbc.all() and atoms.cell.lengths()[2] == pytest.approx(10.0)
+    dialog.detect()
+    assert [b.isChecked() for b in dialog.pbc] == [True, True, False]
+
+
+def test_relaxation_adds_a_geometry_and_dos_runs_as_a_job(tmp_path):
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    window.set_atoms(molecule("C6H6"), "benceno")
+    window.set_model("chn")
+    page = window.pages["Geometría y modos"]
+    page.fmax.setValue(0.05)
+    page.run_relax()
+    _wait(window)
+    assert window.geometry_combo.count() == 2 and "relajada" in window.geometries[1][0]
+    assert window.atoms is window.geometries[1][1]
+    page.restore()
+    assert window.atoms is window.geometries[0][1]
+    electronic = window.pages["Electrónica"]
+    window.with_ground_state(electronic.show_state)
+    _wait(window)
+    assert electronic.dos_plot.figure.axes and not electronic._dos_running
+
+
+def test_recipes_serial_steps_cores_and_new_recipe(tmp_path):
+    _qt()
+    from tbkit.gui.app import MainWindow, NewRecipeDialog
+
+    window = MainWindow(interactive=False)
+    page = window.pages["Recetas"]
+    page.workdir.setText(str(tmp_path))
+    page.recipe.setCurrentIndex(page.recipe.findData("coil_double_resonance"))
+    page.step.setCurrentText("pairs")
+    page.parts.setValue(4)
+    assert page.parts.isEnabled() and "4 × 1 × 1 = 4" in page.cores_label.text()
+    page.step.setCurrentText("report")              # runs as one process
+    assert not page.parts.isEnabled() and page.parts.value() == 1
+    assert "en serie" in page.cores_label.text()
+    window.set_atoms(molecule("C6H6"), "benceno")
+    window.set_model("chn")
+    dialog = NewRecipeDialog(window)
+    dialog.name.setText("benceno prueba")
+    path = dialog.write(tmp_path)
+    data = json.loads(path.read_text())
+    assert [s["task"] for s in data["steps"]] == ["relax", "levels", "dos"]
+    assert (path.parent / data["structure"]).exists()
+    page.recipe.setCurrentIndex(page.recipe.findData("pipeline"))
+    page.choose()
+    page.options.item(0, 1).setText(str(path))
+    assert page.command()[-1] == str(path)
+    processes = window.pages["Procesos"]
+    processes.refresh()
+    assert "Núcleos:" in processes.summary.text()
+
+
+def test_project_saves_and_reopens_the_session(tmp_path):
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    window.set_atoms(molecule("C6H6"), "benceno")
+    window.set_model("chn")
+    window.kT.setValue(0.037)
+    geometry = window.pages["Geometría y modos"]
+    geometry.fmax.setValue(0.033)
+    geometry.run_modes()
+    _wait(window)
+    recipes = window.pages["Recetas"]
+    recipes.recipe.setCurrentIndex(recipes.recipe.findData("coil_double_resonance"))
+    recipes.step.setCurrentText("pairs")
+    recipes.options.item(0, 1).setText("2.54")
+    path = window.save_project(tmp_path / "sesion.tbkproj")
+    other = MainWindow(interactive=False)
+    other.open_project(str(path))
+    _wait(other)
+    assert [n for n, _ in other.geometries] == ["benceno"] and len(other.atoms) == 12
+    assert other.model.name == window.model.name and other.kT.value() == pytest.approx(0.037)
+    assert other.pages["Geometría y modos"].fmax.value() == pytest.approx(0.033)
+    assert other.pages["Geometría y modos"].result is not None           # modes are back
+    page = other.pages["Recetas"]
+    assert page.name() == "coil_double_resonance" and page.step.currentText() == "pairs"
+    assert page.options.item(0, 1).text() == "2.54"
+
+
+def test_dft_request_from_the_window_runs_through_carbonforge(tmp_path):
+    import importlib.util
+
+    if importlib.util.find_spec("carbonforge") is None:
+        pytest.skip("carbonforge no está instalado en este entorno")
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    benzene = molecule("C6H6")
+    benzene.center(vacuum=5.0)
+    window.set_atoms(benzene, "benceno")
+    window.set_model("chn")
+    geometry = window.pages["Geometría y modos"]
+    geometry.run_modes()
+    _wait(window)
+    vib = geometry.result["vibrations"]
+    folder = actions.dft_request(tmp_path / "dft", window.atoms, "emt", relax=True,
+                                 vibrations=vib, modes=[29, 33])
+    request = json.loads((Path(folder) / "solicitud.json").read_text())
+    assert [t["tipo"] for t in request["tareas"]] == ["relajar", "punto_simple",
+                                                       "desplazamientos"]
+    assert request["tareas"][2]["sobre"] == "relax"
+    process = window.launch_dft(folder, 1)
+    assert process is not None and process.wait(timeout=300) == 0
+    out = actions.dft_summary(folder, window.model, kmesh=1)
+    assert out["summary"]["terminado"] and out["relaxed"] is not None
+    lines = actions.dft_summary_lines(out["summary"])
+    assert any("modo 29" in line for line in lines)
+    geometry.show_dft(folder)
+    _wait(window)
+    assert "relajada (DFT)" in window.geometries[-1][0]
+
+
+def test_guide_follows_the_work_on_each_geometry(tmp_path):
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    guide = window.pages["Guía"]
+    guide.update_view()
+    assert guide.current[0]["status"] == "siguiente"           # open a structure first
+    window.set_atoms(molecule("C5H5N"), "piridina")
+    window.set_model("chn")
+    guide.update_view()
+    status = {s["key"]: s["status"] for s in guide.current}
+    assert status["estructura"] == status["modelo"] == "hecho" and status["relajar"] == "siguiente"
+    assert "piridínico" in guide.caveats.text()
+    geometry = window.pages["Geometría y modos"]
+    geometry.fmax.setValue(0.05)
+    geometry.run_relax()
+    _wait(window)
+    guide.update_view()
+    assert {s["key"]: s["status"] for s in guide.current}["relajar"] == "hecho"
+    window.choose_geometry(0)                         # back to the unrelaxed one
+    guide.update_view()
+    assert {s["key"]: s["status"] for s in guide.current}["relajar"] == "siguiente"
+    guide.go_next()
+    assert window.tabs.currentIndex() == list(window.pages).index("Geometría y modos")

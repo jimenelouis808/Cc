@@ -107,15 +107,18 @@ def classify(vib, order: int):
     return rbm, g_axial, g_circ, character
 
 
-def run(tubes, model_name: str = "xu_carbon", kmesh: int = 16, kT: float = 0.03) -> list[dict]:
+def run(tubes, model_name: str = "xu_carbon", kmesh: int = 16, kT: float = 0.03,
+        fmax: float = 0.005) -> list[dict]:
     from ..modes import vibrations
     from ..params import load_parameters
+    from ..progress import Progress
 
     model = load_parameters(model_name)
     rows = []
+    bar = Progress(len(tubes), "nanotubos (relajar + modos en Γ)")
     for spec in tubes:
         n, m = (int(x) for x in spec.split(","))
-        tube, scale = relax_tube(build(n, m), model, kmesh, kT)
+        tube, scale = relax_tube(build(n, m), model, kmesh, kT, fmax)
         vib = vibrations(tube, model, kmesh=kmesh, kT=kT)
         rbm, g_axial, g_circ, character = classify(vib, int(np.gcd(n, m)))
         radius = np.mean(np.linalg.norm(tube.positions[:, :2] - tube.positions[:, :2].mean(0),
@@ -139,6 +142,8 @@ def run(tubes, model_name: str = "xu_carbon", kmesh: int = 16, kT: float = 0.03)
               f"(227/d {row['rbm_araujo']:.0f}, 248/d {row['rbm_jorio']:.0f})  "
               f"G+ {row['g_plus']:.0f}  G- {row['g_minus']:.0f} ({row['g_minus_is']}) "
               f"ΔG {row['g_split']:.0f} (ref {row['g_split_reference']:.0f})", flush=True)
+        bar.step(note=row["tube"])
+    bar.close()
     return rows
 
 
@@ -158,12 +163,21 @@ def table(rows: list[dict]) -> str:
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("out", type=Path)
-    parser.add_argument("--model", default="xu_carbon")
-    parser.add_argument("--tubes", nargs="*", default=list(DEFAULT_TUBES))
-    parser.add_argument("--kmesh", type=int, default=16)
+    parser.add_argument("out", type=Path,
+                        help="archivo JSON de resultados (la tabla se imprime)")
+    parser.add_argument("--model", default="xu_carbon",
+                        help="conjunto TB (nombre o archivo)")
+    parser.add_argument("--tubes", nargs="*", default=list(DEFAULT_TUBES),
+                        help="quiralidades n,m separadas por espacios (p. ej. 8,0 5,5)")
+    parser.add_argument("--kmesh", type=int, default=16,
+                        help="puntos k a lo largo del tubo (metálicos necesitan más)")
+    parser.add_argument("--kT", type=float, default=0.03,
+                        help="temperatura electrónica (eV): los tubos metálicos la necesitan")
+    parser.add_argument("--fmax", type=float, default=0.005,
+                        help="fuerza máxima (eV/Å) de la relajación; estricta porque siguen "
+                             "las frecuencias")
     args = parser.parse_args(argv)
-    rows = run(args.tubes, args.model, args.kmesh)
+    rows = run(args.tubes, args.model, args.kmesh, args.kT, args.fmax)
     args.out.write_text(json.dumps(rows, indent=1, ensure_ascii=False), encoding="utf-8")
     print(table(rows))
 

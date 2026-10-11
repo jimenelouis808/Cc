@@ -2,7 +2,7 @@
 
 Run (no GPAW needed; the frequencies are already in the files)::
 
-    python -m tbkit.recipes.frequency_scaling
+    python -m tbkit.recipes.frequency_scaling [--sets xu_chn xu_chno] [--solo-mostrar]
 
 As Witek and Morokuma did for SCC-DFTB (J. Comput. Chem. 25, 1858 (2004)):
 λ = Σ ω_TB ω_ref / Σ ω_TB² over every internal mode of the set's validation
@@ -91,8 +91,21 @@ def scale_factor(frequencies: dict) -> dict:
                                  else None)}
 
 
-def main() -> None:
-    for name in SETS:
+def main(argv=None) -> None:
+    import argparse
+
+    global MIN_CM1
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--sets", nargs="+", choices=SETS, default=list(SETS),
+                        help="conjuntos a los que se calcula el factor (por omisión, todos)")
+    parser.add_argument("--min-cm1", type=float, default=MIN_CM1,
+                        help="frecuencias por debajo (cm⁻¹) no cuentan: restos de rotación y "
+                             "traslación, no vibraciones")
+    parser.add_argument("--solo-mostrar", action="store_true",
+                        help="calcular e imprimir sin escribir frequency_scale en los archivos")
+    args = parser.parse_args(argv)
+    MIN_CM1 = args.min_cm1
+    for name in args.sets:
         path = ROOT / f"{name}.json"
         raw = path.read_text(encoding="utf-8")
         data = json.loads(raw)
@@ -102,7 +115,8 @@ def main() -> None:
                            "Chem. 25, 1858 (2004)) frente a GPAW PBE, modos internos de las "
                            "moléculas de validación; receta tbkit.recipes.frequency_scaling")
         data["frequency_scale"] = entry
-        path.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
+        if not args.solo_mostrar:
+            path.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
         print(f"{name:10s} λ = {entry['value']:.4f}  RMS {entry['rms_before_cm1']:.0f} -> "
               f"{entry['rms_after_cm1']:.0f} cm⁻¹ (dejando fuera cada molécula: "
               f"{entry['rms_left_out_cm1']:.0f})")

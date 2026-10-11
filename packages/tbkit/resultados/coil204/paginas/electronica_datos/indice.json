@@ -1,0 +1,173 @@
+{
+ "reporte": "Estructura electrónica: tbkit frente a GPAW",
+ "archivos": [
+  {
+   "archivo": "figura_dos_pristine.csv",
+   "titulo": "DOS, sin dopar",
+   "tipo": "figura",
+   "columnas": [
+    "E − E_F (eV)",
+    "GPAW (PBE)",
+    "tbkit (xu_chn)"
+   ]
+  },
+  {
+   "archivo": "figura_dos_n.csv",
+   "titulo": "DOS, N grafítico",
+   "tipo": "figura",
+   "columnas": [
+    "E − E_F (eV)",
+    "GPAW (PBE)",
+    "tbkit (xu_chn)"
+   ]
+  },
+  {
+   "archivo": "figura_dos_amine.csv",
+   "titulo": "DOS, –NH₂ + H",
+   "tipo": "figura",
+   "columnas": [
+    "E − E_F (eV)",
+    "GPAW (PBE)",
+    "tbkit (xu_chn)"
+   ]
+  },
+  {
+   "archivo": "figura_delta_dos_n.csv",
+   "titulo": "ΔDOS: N grafítico − sin dopar",
+   "tipo": "figura",
+   "columnas": [
+    "E − E_F (eV)",
+    "GPAW (PBE)",
+    "tbkit (xu_chn)"
+   ]
+  },
+  {
+   "archivo": "figura_delta_dos_amine.csv",
+   "titulo": "ΔDOS: –NH₂ + H − sin dopar",
+   "tipo": "figura",
+   "columnas": [
+    "E − E_F (eV)",
+    "GPAW (PBE)",
+    "tbkit (xu_chn)"
+   ]
+  },
+  {
+   "archivo": "figura_bandas_pristine.csv",
+   "titulo": "Bandas Γ–Z, sin dopar",
+   "tipo": "figura",
+   "columnas": [
+    "GPAW (PBE) | k_z (unidades de 2π/c)",
+    "GPAW (PBE) | E − E_F (eV)",
+    "tbkit (xu_chn) | k_z (unidades de 2π/c)",
+    "tbkit (xu_chn) | E − E_F (eV)"
+   ]
+  },
+  {
+   "archivo": "figura_bandas_n.csv",
+   "titulo": "Bandas Γ–Z, N grafítico",
+   "tipo": "figura",
+   "columnas": [
+    "GPAW (PBE) | k_z (unidades de 2π/c)",
+    "GPAW (PBE) | E − E_F (eV)",
+    "tbkit (xu_chn) | k_z (unidades de 2π/c)",
+    "tbkit (xu_chn) | E − E_F (eV)"
+   ]
+  },
+  {
+   "archivo": "figura_bandas_amine.csv",
+   "titulo": "Bandas Γ–Z, –NH₂ + H",
+   "tipo": "figura",
+   "columnas": [
+    "GPAW (PBE) | k_z (unidades de 2π/c)",
+    "GPAW (PBE) | E − E_F (eV)",
+    "tbkit (xu_chn) | k_z (unidades de 2π/c)",
+    "tbkit (xu_chn) | E − E_F (eV)"
+   ]
+  },
+  {
+   "archivo": "figura_bandas_grafeno.csv",
+   "titulo": "Bandas del grafeno, Γ–M–K–Γ",
+   "tipo": "figura",
+   "columnas": [
+    "GPAW (PBE) | punto del camino (Γ 0, M 30, K 47, Γ 89)",
+    "GPAW (PBE) | E − E_F (eV)",
+    "tbkit (xu_chn) | punto del camino (Γ 0, M 30, K 47, Γ 89)",
+    "tbkit (xu_chn) | E − E_F (eV)"
+   ]
+  },
+  {
+   "archivo": "figura_paridad_gap.csv",
+   "titulo": "Gap HOMO-LUMO: tbkit frente a GPAW",
+   "tipo": "figura",
+   "columnas": [
+    "en el ajuste | GPAW (eV)",
+    "en el ajuste | tbkit (eV)",
+    "apartadas | GPAW (eV)",
+    "apartadas | tbkit (eV)"
+   ]
+  },
+  {
+   "archivo": "tabla_banda_semillena.csv",
+   "titulo": "Banda semillena (número impar de electrones)",
+   "tipo": "tabla",
+   "columnas": [
+    "estructura",
+    "electrones por celda",
+    "GPAW mín. (eV)",
+    "GPAW máx. (eV)",
+    "tbkit mín. (eV)",
+    "tbkit máx. (eV)"
+   ]
+  },
+  {
+   "archivo": "tabla_resumen_coil.csv",
+   "titulo": "Resumen por estructura",
+   "tipo": "tabla",
+   "columnas": [
+    "estructura",
+    "gap GPAW (eV)",
+    "gap tbkit (eV)",
+    "r DOS ±2 eV",
+    "r DOS −6…+4 eV",
+    "estados ±1 eV GPAW",
+    "estados ±1 eV tbkit",
+    "r ΔDOS (dopado − sin dopar)"
+   ]
+  },
+  {
+   "archivo": "tabla_grafeno.csv",
+   "titulo": "Puntos de alta simetría",
+   "tipo": "tabla",
+   "columnas": [
+    "magnitud",
+    "GPAW",
+    "tbkit"
+   ]
+  },
+  {
+   "archivo": "tabla_moleculas_resumen.csv",
+   "titulo": "Gap HOMO-LUMO y niveles ocupados",
+   "tipo": "tabla",
+   "columnas": [
+    "moléculas",
+    "n",
+    "error medio del gap (eV)",
+    "RMS del gap (eV)",
+    "r del gap",
+    "RMS niveles ocupados vs HOMO (mediana, eV)"
+   ]
+  },
+  {
+   "archivo": "tabla_moleculas.csv",
+   "titulo": "Por molécula",
+   "tipo": "tabla",
+   "columnas": [
+    "molécula",
+    "papel",
+    "gap GPAW (eV)",
+    "gap tbkit (eV)",
+    "RMS ocupados vs HOMO (eV)"
+   ]
+  }
+ ]
+}
