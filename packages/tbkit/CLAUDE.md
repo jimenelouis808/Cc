@@ -46,6 +46,8 @@ tbkit/
 │                     #   delta_fit: fit and cross-validate a Δ correction (writes to a workdir only)
 │                     #   validation_report: writes docs/VALIDACION.md from validation/ and parameters/
 │                     #   pipeline: a recipe of one's own (structure + model + tasks), from «Nueva receta…»
+│                     #   study: any set of systems (0D-3D), changes embedded in their host: modes,
+│                     #     resonant Raman, IR, report, DFT request of the modes that matter
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 ├── cli.py            # `tbkit` console script
 ├── structure_io.py   # reading/writing structures: .xtl, periodic axes from bonds, cells by hand
@@ -237,6 +239,12 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   Numbers a recipe uses go either in `PARAMS` (`tbkit.settings`) or in an option with `help`; a
   cached result that depends on an adjustable number must record it and be recomputed when it
   differs (`tang_fit.grid_point`, `crystal_validation._settings_used`).
+- Studies (`recipes/study.py`) embed a change in its host only when the host's atoms come
+  first and in order (`Study.check_mapping`, `actions.change_centres`: no index more than
+  0.5 Å from its pair outside the changed atoms); never relax that check to let a reordered
+  structure through, the embedded Hessian would pair the wrong atoms silently. The coil's
+  own recipes (`doped_raman`, `doped_gpaw`, `coil_double_resonance`) stay as they are: they
+  are the record of the published numbers; new systems go through `study`.
 - Mean-field moments are an order parameter, not a correlated ground state;
   user-facing text must not imply otherwise. Lieb's theorem is the check.
 - Energies and forces require `model.repulsive`; the π model has none and

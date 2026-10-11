@@ -1002,6 +1002,68 @@ def recipe_status(folder: str | Path, finished: bool = False) -> list[str]:
 
 
 # --------------------------------------------------------------------------
+# Studies (tbkit.recipes.study): any set of systems, changes embedded in their host
+# --------------------------------------------------------------------------
+
+def change_centres(base: Atoms, changed: Atoms, tolerance: float = 0.5) -> list[int]:
+    """The atoms of ``changed`` that are not ``base``: a different element at the same index
+    (substitution) or atoms beyond the base's count (added). ``ValueError`` if the base's
+    atoms are not first and in order (an index far from its pair in the base)."""
+    n = len(base)
+    if len(changed) < n:
+        raise ValueError("La estructura cambiada tiene menos átomos que la base: no es una "
+                         "sustitución ni una adición sobre ella.")
+    probe = changed[:n].copy()
+    probe.positions -= base.positions
+    if changed.pbc.any() and changed.cell.rank == 3:
+        frac = (probe.cell.scaled_positions(probe.positions) + 0.5) % 1.0 - 0.5
+        shift = np.linalg.norm(probe.cell.cartesian_positions(frac), axis=1)
+    else:
+        shift = np.linalg.norm(probe.positions, axis=1)
+    substituted = [i for i in range(n) if base[i].symbol != changed[i].symbol]
+    lost = [i for i in range(n) if shift[i] > tolerance and i not in substituted]
+    if lost:
+        raise ValueError(f"Los átomos {lost[:8]} están a más de {tolerance} Å de su par en la "
+                         "base: la base debe ir primero y en su orden (sustituir conserva el "
+                         "índice; los átomos añadidos van al final).")
+    return substituted + list(range(n, len(changed)))
+
+
+def write_study(folder: str | Path, name: str, base: tuple[str, Atoms],
+                changes: list[tuple[str, Atoms]], model: str = "xu_chn",
+                lasers=(1.96, 2.33, 2.54), radius: float = 6.0) -> Path:
+    """A study file (``tbkit.recipes.study``) with its structures, from geometries of the
+    session; the changed atoms of each change are found by :func:`change_centres`."""
+    import re
+
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+
+    def safe(text):
+        return re.sub(r"[^A-Za-z0-9_.-]+", "_", text).strip("_") or "sistema"
+
+    systems = {}
+    base_key = safe(base[0])
+    base[1].write(folder / f"{base_key}.extxyz", format="extxyz")
+    systems[base_key] = {"estructura": f"{base_key}.extxyz"}
+    for label, atoms in changes:
+        key = safe(label)
+        if key in systems:
+            key = f"{key}_{len(systems)}"
+        atoms.write(folder / f"{key}.extxyz", format="extxyz")
+        systems[key] = {"estructura": f"{key}.extxyz", "sobre": base_key,
+                        "centros": change_centres(base[1], atoms)}
+    path = folder / "estudio.json"
+    path.write_text(json.dumps({"nombre": safe(name), "modelo": model, "kpts": "auto",
+                                "kT": 0.05, "sistemas": systems,
+                                "hessiana": {"delta": 0.01, "radio": radius},
+                                "raman": {"laseres_ev": list(lasers), "eta": 0.1,
+                                          "min_cm1": 900.0, "delta": 0.005}},
+                               indent=1, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+# --------------------------------------------------------------------------
 # DFT checks through carbonforge (nanocarbon-dft/1, files only)
 # --------------------------------------------------------------------------
 
@@ -1233,6 +1295,17 @@ HELP = {
                      "orden (relajar, niveles, DOS, bandas, modos, Raman, Hubbard). Se escribe "
                      "en recetas/ y se corre con «Lanzar», con contador y un registro "
                      "reproducible por paso.",
+    "Nuevo estudio…": "Un estudio (receta study) con geometrías de la sesión: una base y sus "
+                      "cambios (dopantes, grupos). Relaja, calcula modos (los de los cambios solo "
+                      "cerca del cambio), Raman resonante e IR, y escribe la solicitud DFT de "
+                      "los modos que importan. Sirve para cualquier sistema 0D–3D.",
+    "Nombre del estudio": "Nombre del estudio y de su carpeta (estudios/NOMBRE).",
+    "Sistema base": "La estructura sin cambiar; sus modos se calculan completos.",
+    "Cambios sobre la base": "Estructuras con un dopante o grupo sobre la base: los átomos de la "
+                             "base primero y en su orden.",
+    "Modelo del estudio": "Conjunto de parámetros de todo el estudio (xu_chn para C, H, N).",
+    "Radio del cambio": "Las filas de la hessiana y las cargas de Born se recalculan a menos de "
+                        "este radio de los átomos cambiados; el resto se toma de la base.",
     "Nombre": "Nombre de la receta (también el de su carpeta de resultados).",
     "Geometría de partida": "La geometría de la sesión de la que parte la receta.",
     "Modelo de la receta": "Conjunto de parámetros de la receta.",

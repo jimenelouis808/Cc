@@ -343,16 +343,18 @@ def _cross_section(activity, w, laser_ev, temperature=300.0):
 
 
 def doped_raman(folder: Path) -> Report:
-    """``out/doped_raman`` (tbkit.recipes.doped_raman): Raman, D estimate, IR."""
+    """``out/doped_raman`` (tbkit.recipes.doped_raman) or a study (tbkit.recipes.study):
+    Raman, D estimate, IR, for whatever systems the report lists."""
     r = json.loads((folder / "report.json").read_text())
     spectra = np.load(folder / "spectra.npz")
-    names = [n for n in ("pristine", "N", "amine") if n in r]
+    names = r.get("sistemas") or [n for n in ("pristine", "N", "amine") if n in r]
     lasers = r["lasers_eV"]
-    rep = Report("Coil dopada: Raman, banda D e IR",
+    rep = Report(r.get("titulo", "Coil dopada: Raman, banda D e IR"),
                  "Raman resonante de primer orden en Γ, estimación de la banda D por el carácter "
                  "de respiración de anillos e IR perpendicular al eje, con un solo modelo para "
                  "todas las estructuras.",
-                 meta={"carpeta": str(folder), "receta": "tbkit.recipes.doped_raman",
+                 meta={"carpeta": str(folder), "receta": r.get("receta",
+                                                               "tbkit.recipes.doped_raman"),
                        "láseres (eV)": ", ".join(f"{x:g}" for x in lasers)})
 
     sec = rep.section("Raman")
@@ -381,12 +383,16 @@ def doped_raman(folder: Path) -> Report:
             g, d = (w > 1500) & (w < 1700), (w > 1100) & (w < 1450)
             total = float(a.sum())
             base = base or total
-            rows.append([f"{laser:g}", NAMES.get(n, n), float((a * w)[g].sum() / a[g].sum()),
-                         float((a * b * w)[d].sum() / (a * b)[d].sum()),
-                         float((a * b)[d].sum() / a[g].sum()), total / base])
+            def ratio(top, bottom):          # a window without modes has no value
+                return float(top / bottom) if bottom > 0 else None
+
+            rows.append([f"{laser:g}", NAMES.get(n, n), ratio((a * w)[g].sum(), a[g].sum()),
+                         ratio((a * b * w)[d].sum(), (a * b)[d].sum()),
+                         ratio((a * b)[d].sum(), a[g].sum()), total / base])
     sec.add(Table("raman_resumen", "Bandas por estructura y láser",
                   ["láser (eV)", "estructura", "centroide G (cm⁻¹)", "D estimada (cm⁻¹)",
-                   "I_D/I_G estimado", "intensidad total / sin dopar"], rows,
+                   "I_D/I_G estimado", f"intensidad total / {NAMES.get(names[0], names[0])}"],
+                  rows,
                   note="G: centroide de la intensidad en 1500–1700 cm⁻¹. D estimada: centroide "
                        "de la intensidad pesada por el carácter de respiración B en 1100–1450 "
                        "cm⁻¹; no incluye la doble resonancia.", digits=[None, None, 1, 0, 3, 2]))
@@ -796,7 +802,8 @@ def json_file(path: Path) -> Report:
 def _is_doped_raman(p: Path) -> bool:
     if not (p.is_dir() and (p / "report.json").exists() and (p / "spectra.npz").exists()):
         return False
-    return "pristine" in json.loads((p / "report.json").read_text())
+    data = json.loads((p / "report.json").read_text())
+    return "pristine" in data or data.get("receta") == "tbkit.recipes.study"
 
 
 def _is_doped_gpaw(p: Path) -> bool:

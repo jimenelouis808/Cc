@@ -2195,6 +2195,9 @@ class RecipesPage(Page):
         new = QPushButton("Nueva receta…")
         new.clicked.connect(self.new_recipe)
         row.addWidget(new)
+        study = QPushButton("Nuevo estudio…")
+        study.clicked.connect(self.new_study)
+        row.addWidget(study)
         layout.addLayout(row)
 
         resources = QGroupBox("Recursos")
@@ -2404,6 +2407,29 @@ class RecipesPage(Page):
         value = str(path) if table_ is self.options else f'"{path}"'
         table_.item(row, 1).setText(value)
         self.window.statusBar().showMessage(f"{table_.item(row, 0).text()} = {path}")
+
+    def new_study(self):
+        """A study (recipes/study.py) from geometries of the session: one base and its
+        changes (dopants, groups), each embedded in the base."""
+        if len(self.window.geometries) < 1:
+            self.window.error("Sin geometrías", "Abre la base y las estructuras cambiadas.")
+            return
+        dialog = NewStudyDialog(self.window, self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            path = dialog.write(Path(self.workdir.text().strip() or "."))
+        except ValueError as error:
+            self.window.error("Estudio no válido", str(error))
+            return
+        self.recipe.setCurrentIndex(self.recipe.findData("study"))
+        self.choose()
+        self.step.setCurrentText("todo")
+        for r, row in enumerate(self.option_rows):
+            if row["dest"] == "estudio":
+                self.options.item(r, 1).setText(str(path))
+        self.window.statusBar().showMessage(f"Estudio escrito en {path}: «Lanzar» lo corre "
+                                            "(paso «todo», o paso a paso)")
 
     def new_recipe(self):
         if self.window.atoms is None:
@@ -2638,6 +2664,58 @@ class DftDialog(QDialog):
                                    single_point=self.single.isChecked(), dos=self.dos.isChecked(),
                                    vibrations=vibrations, modes=modes,
                                    mpi=int(self.mpi.value()), settings=settings)
+
+
+class NewStudyDialog(QDialog):
+    """Base and changes for a study, among the session's geometries."""
+
+    def __init__(self, window, parent=None):
+        super().__init__(parent)
+        self.window = window
+        self.setWindowTitle("Nuevo estudio")
+        form = QFormLayout(self)
+        self.name = QLineEdit("mi_estudio")
+        form.addRow("Nombre del estudio", self.name)
+        self.base = QComboBox()
+        for name, _ in window.geometries:
+            self.base.addItem(name)
+        form.addRow("Sistema base", self.base)
+        self.changes = []
+        box = QVBoxLayout()
+        for name, _ in window.geometries:
+            check = QCheckBox(name)
+            self.changes.append(check)
+            box.addWidget(check)
+        form.addRow("Cambios sobre la base", box)
+        self.model = QComboBox()
+        for key, (label, _) in actions.MODELS.items():
+            self.model.addItem(label, key)
+        index = self.model.findData(window.model_name)
+        self.model.setCurrentIndex(index if index >= 0 else self.model.findData("chn"))
+        form.addRow("Modelo del estudio", self.model)
+        self.radius = _spin(2.0, 20.0, 6.0, 0.5, 1, " Å")
+        form.addRow("Radio del cambio", self.radius)
+        note = QLabel("Cada cambio debe tener los átomos de la base primero y en su orden "
+                      "(sustituir conserva el índice; los añadidos van al final): así sus "
+                      "modos se calculan solo cerca del cambio. Los átomos cambiados se "
+                      "detectan solos.")
+        note.setWordWrap(True)
+        form.addRow(note)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def write(self, workdir: Path) -> Path:
+        import re
+
+        base = self.window.geometries[self.base.currentIndex()]
+        changes = [self.window.geometries[k] for k, c in enumerate(self.changes)
+                   if c.isChecked() and k != self.base.currentIndex()]
+        name = re.sub(r"[^A-Za-z0-9_.-]+", "_", self.name.text().strip()) or "estudio"
+        return actions.write_study(Path(workdir) / "estudios" / name, name, base, changes,
+                                   model=self.model.currentData(),
+                                   radius=float(self.radius.value()))
 
 
 class ProcessesPage(Page):
