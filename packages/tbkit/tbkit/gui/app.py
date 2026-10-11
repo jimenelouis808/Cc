@@ -94,6 +94,8 @@ class MainWindow(QMainWindow):
         self.geometries: list[tuple[str, object]] = []
         #: Recipes launched from this window: dicts with popen, name, cores, log, started.
         self.launched: list[dict] = []
+        #: What was done on each geometry, by id (the Guía tab): «relajada», «raman», «dft»…
+        self.done_tasks: dict[int, set] = {}
         self._picked = None
         self.model = None
         self.model_name = None
@@ -131,6 +133,9 @@ class MainWindow(QMainWindow):
             self.pages[widget.title] = widget
             self.tabs.addTab(self._with_info(widget), widget.title)
         splitter.addWidget(self.tabs)
+        self.tabs.currentChanged.connect(
+            lambda _: self.pages["Guía"].update_view()
+            if self.tabs.currentIndex() == list(self.pages).index("Guía") else None)
         # left column narrow, the 3D view the widest: it is where the structure is read
         splitter.setSizes([320, 680, 600])
         splitter.setStretchFactor(0, 0)
@@ -227,9 +232,20 @@ class MainWindow(QMainWindow):
             info.setVisible(visible)
 
     def remember(self, task: str, settings: dict, results: dict):
-        """The last finished calculation, for «Guardar registro»."""
+        """The last finished calculation, for «Guardar registro»; the Guía tab keeps what was
+        done on each geometry."""
         if self.atoms is not None and self.model is not None:
             self.last_record = (self.atoms.copy(), self.model, task, dict(settings), results)
+        self.mark_done(task)
+
+    def mark_done(self, task: str, atoms=None):
+        """Remember that ``task`` was done on a geometry (the active one by default)."""
+        atoms = self.atoms if atoms is None else atoms
+        if atoms is not None:
+            self.done_tasks.setdefault(id(atoms), set()).add(task)
+
+    def done(self, task: str) -> bool:
+        return self.atoms is not None and task in self.done_tasks.get(id(self.atoms), set())
 
     def save_structure(self):
         """The active geometry to a file (extxyz keeps cell and periodic axes)."""
@@ -289,8 +305,9 @@ class MainWindow(QMainWindow):
         self.set_atoms(atoms, Path(path).name)
 
     def page_classes(self):
-        # In the order of the work: geometry first (relax), then what is computed on it.
-        return [GeometryPage, ElectronicPage, OrbitalPage, MagnetismPage, PhononPage,
+        # The guide first, then in the order of the work: geometry (relax), then what is
+        # computed on it.
+        return [GuidePage, GeometryPage, ElectronicPage, OrbitalPage, MagnetismPage, PhononPage,
                 SpectraPage, GraphenePage, RecipesPage, ProcessesPage]
 
     # --- left panel ---------------------------------------------------------------
@@ -926,6 +943,110 @@ class Page(QWidget):
         pass
 
 
+class GuidePage(Page):
+    """Where the work on the active geometry stands, what to do next and what applies to this
+    system with this model (from what tbkit measured)."""
+
+    title = "Guía"
+
+    def __init__(self, window):
+        super().__init__(window)
+        layout = QVBoxLayout(self)
+        self.header = QLabel("—")
+        self.header.setWordWrap(True)
+        layout.addWidget(self.header)
+        self.steps = table(["", "paso", "para qué"])
+        self.steps.cellDoubleClicked.connect(self.go)
+        layout.addWidget(self.steps, stretch=2)
+        row = QHBoxLayout()
+        self.next_button = QPushButton("Ir al paso siguiente")
+        self.next_button.clicked.connect(self.go_next)
+        row.addWidget(self.next_button)
+        many = QPushButton("Muchos sistemas: nuevo estudio")
+        many.clicked.connect(self.study)
+        row.addWidget(many)
+        layout.addLayout(row)
+        self.caveats = QLabel("—")
+        self.caveats.setWordWrap(True)
+        self.caveats.setTextFormat(Qt.RichText)
+        layout.addWidget(self.caveats, stretch=1)
+        self.validity = QLabel("")
+        self.validity.setWordWrap(True)
+        self.validity.setStyleSheet("QLabel { color: palette(mid); }")
+        layout.addWidget(self.validity)
+        self.current = []
+        self.poll = QTimer(self)
+        self.poll.timeout.connect(self.refresh)
+        self.poll.start(2000)
+
+    def info(self) -> dict:
+        w = self.window
+        geometry = w.pages["Geometría y modos"]
+        modes = geometry.result is not None and w.atoms is not None and \
+            len(geometry.result["vibrations"].atoms) == len(w.atoms)
+        return {"atoms": w.atoms, "model": w.model,
+                "model_problems": actions.check_model(w.atoms, w.model)
+                if w.atoms is not None and w.model is not None else ["sin modelo"],
+                "relaxed": w.done("relajada"), "state": w.state,
+                "modes": modes or w.done("modos en Γ"),
+                "spectra": any(w.done(t) for t in ("raman", "raman resonante", "ir")),
+                "dft_checked": w.done("dft"),
+                "project_saved": getattr(w, "project_path", None) is not None}
+
+    def refresh(self, *_):
+        """From the timer: only while the tab is seen (the first time, always)."""
+        if self.isVisible() or not self.current:
+            self.update_view()
+
+    def update_view(self):
+        out = actions.guide(self.info())
+        self.current = out["steps"]
+        marks = {"hecho": "✓", "siguiente": "➜", "pendiente": "·"}
+        fill(self.steps, [(marks[s["status"]], s["title"], s["why"]) for s in out["steps"]])
+        for r, step in enumerate(out["steps"]):
+            if step["status"] == "siguiente":
+                for c in range(3):
+                    font = self.steps.item(r, c).font()
+                    font.setBold(True)
+                    self.steps.item(r, c).setFont(font)
+        nxt = next((s for s in out["steps"] if s["status"] == "siguiente"), None)
+        atoms = self.window.atoms
+        what = (f"{atoms.get_chemical_formula()} · {len(atoms)} átomos · periódica en "
+                f"{int(atoms.pbc.sum())} eje(s)") if atoms is not None else "sin estructura"
+        self.header.setText(f"<b>{what}</b>" + (f" — siguiente: {nxt['title']}" if nxt
+                                                 else " — todos los pasos hechos"))
+        self.next_button.setEnabled(nxt is not None)
+        items = "".join(f"<li>{c}</li>" for c in out["caveats"])
+        self.caveats.setText(f"<b>Para este sistema</b><ul>{items}</ul>" if items
+                             else "<b>Para este sistema</b>: nada que advertir todavía.")
+        validity = out["validity"]
+        self.validity.setText(f"Validez del modelo (de su archivo): {validity[:600]}"
+                              + ("…" if len(validity) > 600 else "") if validity else "")
+
+    def go(self, row: int, *_):
+        if not 0 <= row < len(self.current):
+            return
+        step = self.current[row]
+        if step["key"] == "estructura":
+            self.window.open_dialog()
+        elif step["key"] == "celda":
+            self.window.cell_dialog()
+        elif step["key"] == "proyecto":
+            self.window.save_project()
+        elif step["tab"]:
+            self.window.tabs.setCurrentIndex(list(self.window.pages).index(step["tab"]))
+
+    def go_next(self):
+        for r, step in enumerate(self.current):
+            if step["status"] == "siguiente":
+                self.go(r)
+                return
+
+    def study(self):
+        self.window.tabs.setCurrentIndex(list(self.window.pages).index("Recetas"))
+        self.window.pages["Recetas"].new_study()
+
+
 class ElectronicPage(Page):
     title = "Electrónica"
 
@@ -1486,6 +1607,7 @@ class GeometryPage(Page):
             if self.window.geometries else "estructura"
         self.original = self.window.atoms
         self.window.add_geometry(f"{name} relajada (fmax {self.fmax.value():g})", out["atoms"])
+        self.window.mark_done("relajada")
         self.undo.setEnabled(True)
 
     def restore(self):
@@ -1595,6 +1717,7 @@ class GeometryPage(Page):
             for line in lines:
                 self.window.console.line(line)
             self.summary.setText("DFT: " + " · ".join(lines[:3]))
+            self.window.mark_done("dft")
             if out["relaxed"] is not None:
                 self.window.add_geometry(f"{Path(folder).name} relajada (DFT)", out["relaxed"])
 

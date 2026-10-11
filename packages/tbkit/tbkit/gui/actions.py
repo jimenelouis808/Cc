@@ -1002,6 +1002,130 @@ def recipe_status(folder: str | Path, finished: bool = False) -> list[str]:
 
 
 # --------------------------------------------------------------------------
+# The Guía tab: where the work stands and what applies to this system
+# --------------------------------------------------------------------------
+
+def nitrogen_kinds(atoms: Atoms) -> dict[str, int]:
+    """Count N by environment: graphitic (3 C), pyridinic (2 C, no H), pyrrolic (2 C + H in a
+    5-ring) and amine (N with 2 H), by bonds within 1.2 × the covalent radii."""
+    symbols = atoms.get_chemical_symbols()
+    if "N" not in symbols:
+        return {}
+    neighbours: dict[int, list[int]] = {i: [] for i in range(len(atoms))}
+    for i, j, _ in bonds_with_images(atoms):
+        neighbours[i].append(j)
+        neighbours[j].append(i)
+    from ..sites import rings
+
+    in_five = {a for ring in rings(atoms) if len(ring) == 5 for a in ring}
+    out: dict[str, int] = {}
+    for i, s in enumerate(symbols):
+        if s != "N":
+            continue
+        carbons = sum(symbols[j] == "C" for j in neighbours[i])
+        hydrogens = sum(symbols[j] == "H" for j in neighbours[i])
+        if hydrogens >= 2:
+            kind = "amina"
+        elif carbons == 3:
+            kind = "grafítico"
+        elif carbons == 2 and hydrogens == 1 and i in in_five:
+            kind = "pirrólico"
+        elif carbons == 2 and hydrogens == 0:
+            kind = "piridínico"
+        else:
+            kind = "otro"
+        out[kind] = out.get(kind, 0) + 1
+    return out
+
+
+def system_caveats(atoms: Atoms, model: TBModel | None, state=None) -> list[str]:
+    """What applies to this structure with this model, from what tbkit measured (the coil's
+    GPAW checks, the validation files): short sentences, worst first."""
+    out = []
+    if model is not None:
+        out += check_model(atoms, model)
+    n = len(atoms)
+    periodic = int(atoms.pbc.sum())
+    if not periodic and atoms.cell.rank == 3:
+        out.append("Tiene celda pero ningún eje periódico: si es periódica, «Celda…» marca "
+                   "los ejes.")
+    if model is not None:
+        need = memory_estimate_gb(atoms, model)
+        if n > 2000:
+            out.append(f"{n} átomos: una diagonalización necesita ≈ {need:.1f} GB y relajar "
+                       "todo es lento; para barrer sitios usa el modelo π o un recorte "
+                       "alrededor del sitio.")
+    electrons = None
+    if state is not None:
+        electrons = state.info.get("electrons")
+        gap = state.info.get("gap")
+        if not gap:
+            out.append("Sin gap: el Raman no resonante no aplica (usa el resonante) y los "
+                       "fonones dependen de la malla k (convérgela).")
+    if electrons is not None and round(electrons) % 2 == 1 and not periodic:
+        out.append("Número impar de electrones: capa abierta; el Raman no resonante no aplica "
+                   "y el magnetismo (Hubbard) puede importar.")
+    kinds = nitrogen_kinds(atoms)
+    if kinds.get("piridínico") or kinds.get("pirrólico"):
+        out.append("N piridínico o pirrólico: lo menos validado de tbkit (en la coil, las "
+                   "fuerzas PBE en las geometrías de tbkit fueron de 2.6–7.9 eV/Å y el orden de "
+                   "sitios no se confirmó): valida con DFT antes de usarlo.")
+    if kinds.get("grafítico"):
+        out.append("N grafítico: GPAW confirmó el mejor sitio de tbkit en la coil; su banda en "
+                   "el nivel de Fermi sale 3.6 veces más ancha que en PBE (el N menos "
+                   "localizado).")
+    if periodic:
+        out.append(f"Periódica en {periodic} eje(s): el IR solo usa los ejes no periódicos (a lo "
+                   "largo de uno periódico el dipolo necesita la fase de Berry).")
+    if model is not None and model.repulsive is not None:
+        out.append("Frecuencias del modelo sin escalar: en la coil, los modos de G salen ~5 % "
+                   "altos frente a PBE (cociente PBE/tbkit 0.95).")
+    return out
+
+
+def guide(info: dict) -> dict:
+    """The steps of the work with their state. ``info``: atoms, model, model_problems,
+    relaxed, state, modes, dft_checked, project_saved (what the window knows)."""
+    atoms, model = info.get("atoms"), info.get("model")
+    steps = [
+        ("estructura", "Abrir la estructura (o un proyecto)", atoms is not None,
+         "xyz, extxyz, xtl, cif, POSCAR…; Archivo → «Abrir proyecto…» retoma una sesión.",
+         None),
+        ("celda", "Revisar la celda y los ejes periódicos",
+         atoms is not None and (bool(atoms.pbc.any()) or atoms.cell.rank < 3),
+         "Una estructura periódica sin ejes marcados se calcula como molécula: «Celda…».",
+         None),
+        ("modelo", "Elegir el modelo", model is not None and not info.get("model_problems"),
+         "El que cubre los elementos (se sugiere solo); los xu_ch* van con SCC.", None),
+        ("relajar", "Relajar la geometría", bool(info.get("relaxed")),
+         "Fuera del mínimo las frecuencias no son armónicas.", "Geometría y modos"),
+        ("estado", "Estado fundamental: gap, DOS, cargas", info.get("state") is not None,
+         "Dice si hay gap (qué Raman aplica) y dónde están los estados.", "Electrónica"),
+        ("modos", "Modos en Γ", bool(info.get("modes")),
+         "Frecuencias y patrones; base de los espectros.", "Geometría y modos"),
+        ("espectros", "Raman e IR", bool(info.get("spectra")),
+         "Con gap: no resonante; sin gap: resonante. IR: ejes no periódicos.", "Espectros"),
+        ("dft", "Validar con DFT los modos que importan", bool(info.get("dft_checked")),
+         ("Selecciona los modos en la tabla y «Validar con DFT…»: antes de publicar un "
+          "número."), "Geometría y modos"),
+        ("proyecto", "Guardar el proyecto", bool(info.get("project_saved")),
+         "Ctrl+S: geometrías, ajustes y modos para seguir otro día.", None),
+    ]
+    out, next_set = [], False
+    for key, title, done, why, tab in steps:
+        if done:
+            status = "hecho"
+        elif not next_set:
+            status, next_set = "siguiente", True
+        else:
+            status = "pendiente"
+        out.append({"key": key, "title": title, "status": status, "why": why, "tab": tab})
+    caveats = system_caveats(atoms, model, info.get("state")) if atoms is not None else []
+    validity = (model.metadata.get("validity") or "") if model is not None else ""
+    return {"steps": out, "caveats": caveats, "validity": str(validity)}
+
+
+# --------------------------------------------------------------------------
 # Studies (tbkit.recipes.study): any set of systems, changes embedded in their host
 # --------------------------------------------------------------------------
 
@@ -1197,6 +1321,10 @@ def open_record(path: str | Path) -> tuple[Atoms, TBModel, dict]:
 # --------------------------------------------------------------------------
 
 PANEL_HELP = {
+    "Guía": "Dónde va el trabajo con la geometría activa y qué sigue (doble clic en un paso, o "
+            "«Ir al paso siguiente»), y lo que aplica a este sistema con este modelo según lo "
+            "que tbkit midió: qué Raman e IR aplican, tamaño y memoria, tipos de N y qué tan "
+            "validados están, cuánto se desvían las frecuencias.",
     "Electrónica": "Estado fundamental del modelo: niveles, DOS/PDOS, bandas y cargas. "
                    "«Calcular estado fundamental» es el paso que usan Orbitales, Magnetismo "
                    "y los espectros; se hace sobre la geometría activa (relájala antes en "
@@ -1295,6 +1423,9 @@ HELP = {
                      "orden (relajar, niveles, DOS, bandas, modos, Raman, Hubbard). Se escribe "
                      "en recetas/ y se corre con «Lanzar», con contador y un registro "
                      "reproducible por paso.",
+    "Ir al paso siguiente": "Lleva a la pestaña o al diálogo del siguiente paso pendiente.",
+    "Muchos sistemas: nuevo estudio": "Para varias estructuras (una base y sus dopantes o "
+                                      "grupos): arma un estudio en Recetas.",
     "Nuevo estudio…": "Un estudio (receta study) con geometrías de la sesión: una base y sus "
                       "cambios (dopantes, grupos). Relaja, calcula modos (los de los cambios solo "
                       "cerca del cambio), Raman resonante e IR, y escribe la solicitud DFT de "

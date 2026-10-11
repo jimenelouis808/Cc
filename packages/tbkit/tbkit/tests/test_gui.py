@@ -574,7 +574,7 @@ def test_window_geometries_cell_supercell_and_order(tmp_path):
     from tbkit.gui.app import CellDialog, MainWindow
 
     window = MainWindow(interactive=False)
-    assert next(iter(window.pages)) == "Geometría y modos"
+    assert list(window.pages)[:2] == ["Guía", "Geometría y modos"]
     sheet = graphene(vacuum=6.0)
     sheet.pbc = False                               # as a .xyz with pbc="F F F" gives it
     path = tmp_path / "g.xyz"
@@ -715,3 +715,30 @@ def test_dft_request_from_the_window_runs_through_carbonforge(tmp_path):
     geometry.show_dft(folder)
     _wait(window)
     assert "relajada (DFT)" in window.geometries[-1][0]
+
+
+def test_guide_follows_the_work_on_each_geometry(tmp_path):
+    _qt()
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    guide = window.pages["Guía"]
+    guide.update_view()
+    assert guide.current[0]["status"] == "siguiente"           # open a structure first
+    window.set_atoms(molecule("C5H5N"), "piridina")
+    window.set_model("chn")
+    guide.update_view()
+    status = {s["key"]: s["status"] for s in guide.current}
+    assert status["estructura"] == status["modelo"] == "hecho" and status["relajar"] == "siguiente"
+    assert "piridínico" in guide.caveats.text()
+    geometry = window.pages["Geometría y modos"]
+    geometry.fmax.setValue(0.05)
+    geometry.run_relax()
+    _wait(window)
+    guide.update_view()
+    assert {s["key"]: s["status"] for s in guide.current}["relajar"] == "hecho"
+    window.choose_geometry(0)                         # back to the unrelaxed one
+    guide.update_view()
+    assert {s["key"]: s["status"] for s in guide.current}["relajar"] == "siguiente"
+    guide.go_next()
+    assert window.tabs.currentIndex() == list(window.pages).index("Geometría y modos")

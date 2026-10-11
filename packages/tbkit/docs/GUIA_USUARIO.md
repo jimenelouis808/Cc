@@ -46,6 +46,7 @@ una pestaña por tarea, en el orden del trabajo (primero la geometría); cada co
 una ayuda (pasa el ratón) y cada pestaña un recuadro que explica para qué sirve (menú
 Ayuda para ocultarlos).
 
+- **Guía.** La primera pestaña dice dónde va el trabajo con la geometría activa: estructura, celda, modelo, relajar, estado fundamental, modos, espectros, validación DFT y proyecto, marcando el siguiente paso. Doble clic o «Ir al paso siguiente» lleva a él. Debajo, lo que aplica a ese sistema con ese modelo, según lo que tbkit midió: qué Raman e IR aplican, tamaño y memoria, tipos de N y qué tan validados están, y la validez del conjunto de parámetros.
 - **Archivos.** xyz, extxyz, `.xtl` (Materials Studio), cif, POSCAR… Si un `.xyz` trae
   celda pero se declara no periódico, los ejes por los que hay enlaces que cruzan la celda
   se marcan periódicos (la terminal lo dice). Si no trae celda, «Celda…» la fija a mano
