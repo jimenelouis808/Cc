@@ -1,5 +1,7 @@
 """Figura: la jerarquía de superredes, cada arista un nanotubo."""
-import sys, time, warnings
+import sys
+import time
+import warnings
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 warnings.simplefilter("ignore")

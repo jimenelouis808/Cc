@@ -286,10 +286,10 @@ def _orbital_positions(system: System) -> np.ndarray:
 def mesh_bands(system: System, mesh: tuple[int, int, int], window_ev: float,
                polarizations, shift: np.ndarray | None = None,
                fermi: float | None = None) -> tuple[list[Bands], float]:
-    """States inside ``window_ev`` of E_F on a Γ-centred ``mesh`` (index order i, j, l)."""
+    """States inside ``window_ev`` of E_F on a Γ-centred ``mesh`` (index order i, j, m)."""
     n1, n2, n3 = mesh
-    kpts = np.array([[i / n1, j / n2, l / n3] for i in range(n1) for j in range(n2)
-                     for l in range(n3)])
+    kpts = np.array([[i / n1, j / n2, m / n3] for i in range(n1) for j in range(n2)
+                     for m in range(n3)])
     base = [_hk(system, k, shift) for k in kpts]
     states = [eigh(h, s) if s is not None else eigh(h) for h, s, _, _ in base]
     electrons = round(system.electrons)
@@ -478,17 +478,17 @@ def two_vertices_q(bands: list[Bands], mesh: tuple[int, int, int], q_index, firs
     n1, n2, n3 = mesh
     q = np.array(q_index, float) / np.array(mesh, float)
 
-    def index(i, j, l):
-        return ((i % n1) * n2 + (j % n2)) * n3 + (l % n3)
+    def index(i, j, m):
+        return ((i % n1) * n2 + (j % n2)) * n3 + (m % n3)
 
     npol = bands[0].velocity.shape[0]
     total = np.zeros((npol, npol), dtype=complex)
     for i in range(n1):
         for j in range(n2):
-            for l in range(n3):
-                k = bands[index(i, j, l)]
-                kp = bands[index(i + q_index[0], j + q_index[1], l + q_index[2])]
-                km = bands[index(i - q_index[0], j - q_index[1], l - q_index[2])]
+            for m in range(n3):
+                k = bands[index(i, j, m)]
+                kp = bands[index(i + q_index[0], j + q_index[1], m + q_index[2])]
+                km = bands[index(i - q_index[0], j - q_index[1], m - q_index[2])]
                 total += _ordered(k, kp, km, q, first, second, laser_ev, gamma)
                 total += _ordered(k, km, kp, -q, second, first, laser_ev, gamma)
     return total / len(bands)
@@ -570,16 +570,16 @@ def phonon_pairs_q(bands: list[Bands], mesh: tuple[int, int, int], coupling: Cou
             for f, e in zip(frequencies, vectors, strict=True)]
     w = np.asarray(frequencies, float) * CM1_TO_EV
 
-    def index(i, j, l):
-        return ((i % n1) * n2 + (j % n2)) * n3 + (l % n3)
+    def index(i, j, m):
+        return ((i % n1) * n2 + (j % n2)) * n3 + (m % n3)
 
     total = None
     for i in range(n1):
         for j in range(n2):
-            for l in range(n3):
-                k = bands[index(i, j, l)]
-                kp = bands[index(i + q_index[0], j + q_index[1], l + q_index[2])]
-                km = bands[index(i - q_index[0], j - q_index[1], l - q_index[2])]
+            for m in range(n3):
+                k = bands[index(i, j, m)]
+                kp = bands[index(i + q_index[0], j + q_index[1], m + q_index[2])]
+                km = bands[index(i - q_index[0], j - q_index[1], m - q_index[2])]
                 amp = _pairs_ordered(k, kp, km, q, vertices, conj, w, laser_ev, gamma)
                 amp += np.transpose(_pairs_ordered(k, km, kp, -q, conj, vertices, w, laser_ev,
                                                    gamma), (1, 0, 2, 3))
@@ -685,16 +685,16 @@ def phonon_pairs_q_fast(bands: list[Bands], mesh: tuple[int, int, int], coupling
             for f, e in zip(frequencies, vectors, strict=True)]
     w = np.asarray(frequencies, float) * CM1_TO_EV
 
-    def index(i, j, l):
-        return ((i % n1) * n2 + (j % n2)) * n3 + (l % n3)
+    def index(i, j, m):
+        return ((i % n1) * n2 + (j % n2)) * n3 + (m % n3)
 
     total = None
     for i in range(n1):
         for j in range(n2):
-            for l in range(n3):
-                k = bands[index(i, j, l)]
-                kp = bands[index(i + q_index[0], j + q_index[1], l + q_index[2])]
-                km = bands[index(i - q_index[0], j - q_index[1], l - q_index[2])]
+            for m in range(n3):
+                k = bands[index(i, j, m)]
+                kp = bands[index(i + q_index[0], j + q_index[1], m + q_index[2])]
+                km = bands[index(i - q_index[0], j - q_index[1], m - q_index[2])]
                 amp = _pairs_ordered_fast(k, kp, km, q, vertices, conj, w, laser_ev, gamma, order)
                 amp += np.transpose(_pairs_ordered_fast(k, km, kp, -q, conj, vertices, w,
                                                         laser_ev, gamma, order), (1, 0, 2, 3))

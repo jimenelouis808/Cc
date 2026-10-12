@@ -181,7 +181,7 @@ class RamanCarbonApp:
         body = ttk.Frame(self.host, padding=(PAD["lg"], 0, PAD["lg"], PAD["sm"]))
         body.pack(fill="both", expand=True)
 
-        from .widgets import flow, scrollable_column
+        from .widgets import scrollable_column
 
         # Scrollable: this column's cards add up to more than any
         # window is tall, and a fixed frame simply clips them.

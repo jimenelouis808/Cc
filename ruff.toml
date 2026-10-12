@@ -7,3 +7,9 @@
 
 line-length = 100
 target-version = "py311"
+
+[lint.per-file-ignores]
+# The article's figure scripts must put their own folder on sys.path and
+# choose matplotlib's Agg backend before importing anything that draws, so
+# their imports cannot all sit at the top.
+"docs/articulo/*.py" = ["E402"]

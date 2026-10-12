@@ -4,7 +4,8 @@ Campo implícito -> marching cubes -> remallado isotrópico -> dual.
 Los cuatro paneles son el mismo objeto en cuatro momentos del mismo
 cálculo, no cuatro dibujos.
 """
-import sys, warnings
+import sys
+import warnings
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 warnings.simplefilter("ignore")
@@ -13,7 +14,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from mpl_toolkits.mplot3d.art3d import Line3DCollection, Poly3DCollection
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 import figuras as F
 from nanocarbon_lab.builders import implicit as im

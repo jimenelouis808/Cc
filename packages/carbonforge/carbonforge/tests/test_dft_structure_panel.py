@@ -11,7 +11,7 @@ from ase.build import molecule
 
 tk = pytest.importorskip("tkinter", reason="sin Tk")
 
-from carbonforge.dft.structure_panel import StructurePanel
+from carbonforge.dft.structure_panel import StructurePanel  # noqa: E402 (after importorskip)
 
 
 @pytest.fixture

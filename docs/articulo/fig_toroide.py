@@ -7,7 +7,8 @@ pentagonos van fuera y los heptagonos dentro, y no hay otro sitio.
 
 Nadie coloca ninguno: salen del remallado.
 """
-import sys, warnings
+import sys
+import warnings
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 warnings.simplefilter("ignore")

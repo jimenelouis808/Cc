@@ -1,5 +1,6 @@
 """Figura: las familias que se construyen por red directa, no por campo."""
-import sys, time, warnings
+import sys
+import warnings
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 warnings.simplefilter("ignore")
@@ -9,7 +10,6 @@ from nanocarbon_lab.builders.fullerene import build_fullerene, build_nano_onion
 from nanocarbon_lab.builders.nanocone import build_nanocone
 from nanocarbon_lab.builders.haeckelite import build_haeckelite
 from nanocarbon_lab.builders.toroid import build_polyhex_toroid
-from nanocarbon_lab.builders.graphene import build_graphene_supercell
 
 paneles = []
 def add(titulo, atoms, **kw):

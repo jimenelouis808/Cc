@@ -159,10 +159,10 @@ def fig_centroids() -> None:
         fig, ax = plt.subplots()
         for k, ((sys_key, sys_label), color) in enumerate(zip(SYSTEMS.items(), OKABE_ITO,
                                                              strict=False)):
-            x = np.array([float(l) for l in lasers]) + (k - 1) * 0.025
-            mid = np.array([u[sys_key]["0.1"][l][key] for l in lasers])
-            values = np.array([[u[sys_key][e][l][key] for e in ("0.05", "0.1", "0.2")]
-                               for l in lasers])
+            x = np.array([float(las) for las in lasers]) + (k - 1) * 0.025
+            mid = np.array([u[sys_key]["0.1"][las][key] for las in lasers])
+            values = np.array([[u[sys_key][e][las][key] for e in ("0.05", "0.1", "0.2")]
+                               for las in lasers])
             err = np.vstack([mid - values.min(axis=1), values.max(axis=1) - mid])
             ax.errorbar(x, mid, yerr=err, fmt="o", ms=4, color=color, capsize=2, lw=0.8,
                         label=sys_label)
@@ -192,8 +192,8 @@ def fig_models() -> None:
                                       ("ID_IG", "I_D/I_G")), strict=True):
         for k, ((model, model_label), color) in enumerate(zip(names.items(), OKABE_ITO,
                                                              strict=False)):
-            x = np.array([float(l) for l in lasers]) + (k - 1) * 0.025
-            ax.plot(x, [m[model][l][key] for l in lasers], "o", ms=4, color=color,
+            x = np.array([float(las) for las in lasers]) + (k - 1) * 0.025
+            ax.plot(x, [m[model][las][key] for las in lasers], "o", ms=4, color=color,
                     label=model_label)
         ax.set_xlabel(r"$\hbar\omega_L$ (eV)")
         ax.set_ylabel(_label(label))

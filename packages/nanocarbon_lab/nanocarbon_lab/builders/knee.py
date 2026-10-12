@@ -1829,10 +1829,15 @@ DEFAULT_JUNCTION_SHAPE: dict[str, tuple[int, int]] = {
 }
 
 
+#: Default scan ranges of the clean_* searches, built once at import so the
+#: defaults are plain tuples rather than calls in a signature.
+JUNCTION_CIRCUMFERENCES = tuple(range(8, 25))
+
+
 def clean_junction_shapes(
     kind: str = "y",
     bond: float = CC_BOND,
-    circumferences=tuple(range(8, 25)),
+    circumferences=JUNCTION_CIRCUMFERENCES,
     rows_candidates=(7, 9, 11, 13),
 ) -> list[tuple[int, int]]:
     """``(arm_rows, circumference)`` pairs giving the exact junction census.
@@ -2472,9 +2477,12 @@ def schwarzite_budget(kind: str) -> int:
     return nodes * node_budget(arms)
 
 
+SCHWARZITE_CIRCUMFERENCES = tuple(range(12, 29))
+
+
 def clean_schwarzite_shapes(
     bond: float = CC_BOND,
-    circumferences=tuple(range(12, 29)),
+    circumferences=SCHWARZITE_CIRCUMFERENCES,
     rows_candidates=(7, 9, 11, 13, 15),
     kind: str = "primitive",
 ) -> list[tuple[int, int]]:
@@ -3419,12 +3427,16 @@ def nearest_closing_coil(
                       tried=int(tried), elapsed=float(elapsed))
 
 
+COIL_PITCHES = tuple(float(x) for x in range(8, 19))
+COIL_RADII = tuple(float(x) / 2.0 for x in range(16, 65))
+
+
 def clean_periodic_coils(
     bond: float = CC_BOND,
     sides=(6, 8, 10, 12),
     circumferences=(8, 10, 12),
-    pitches=tuple(float(x) for x in range(8, 19)),
-    radii=tuple(float(x) / 2.0 for x in range(16, 65)),
+    pitches=COIL_PITCHES,
+    radii=COIL_RADII,
 ) -> list[tuple[int, int, float, float]]:
     """Periodic-coil shapes whose census is exactly the law's.
 

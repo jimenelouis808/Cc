@@ -7,7 +7,9 @@ lado correcto y muchísimas más de las necesarias. Aquí el nodo se arma
 de brazos rectos y paga su curvatura en anillos COLOCADOS POR LA
 CONSTRUCCIÓN, así que sale exactamente el presupuesto y ni uno más.
 """
-import sys, time, warnings
+import sys
+import time
+import warnings
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 warnings.simplefilter("ignore")

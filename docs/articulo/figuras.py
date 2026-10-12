@@ -9,9 +9,6 @@ Uso:  OMP_NUM_THREADS=1 uv run python docs/articulo/figuras.py [nombre ...]
 """
 from __future__ import annotations
 
-import sys
-import time
-import warnings
 from pathlib import Path
 
 import matplotlib
@@ -126,6 +123,7 @@ def panel(ax, atoms, *, caras=False, elev=22.0, azim=-60.0, corte=2.2,
     if segs:
         ax.add_collection3d(Line3DCollection(
             segs, colors=COLOR_ENLACE, linewidths=grosor, alpha=0.85))
+    todo = np.vstack([pos + d for d in desplaz])
     if atomos:
         ax.scatter(todo[:, 0], todo[:, 1], todo[:, 2], s=1.6,
                    c="#2b2b2b", depthshade=False, linewidths=0)
@@ -135,7 +133,6 @@ def panel(ax, atoms, *, caras=False, elev=22.0, azim=-60.0, corte=2.2,
     # marco en blanco. Los límites son la extensión real de cada eje y la
     # relación de la caja es esa misma extensión, de modo que la figura
     # llena el marco SIN deformar la geometría.
-    todo = np.vstack([pos + d for d in desplaz])
     minimo, maximo = todo.min(axis=0), todo.max(axis=0)
     centro = 0.5 * (minimo + maximo)
     extension = np.maximum(maximo - minimo, 1e-6)

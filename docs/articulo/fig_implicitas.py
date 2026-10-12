@@ -3,13 +3,14 @@
 Ninguna se arma pegando fragmentos. Se define f(x), se malla su nivel
 cero y el censo de anillos sale de la curvatura.
 """
-import sys, time, warnings
+import sys
+import time
+import warnings
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 warnings.simplefilter("ignore")
 import figuras as F
 from nanocarbon_lab.builders.junction import build_junction, build_schwarzite
-from nanocarbon_lab.builders.nanocoil import build_nanocoil
 from nanocarbon_lab.builders.network import build_nanotube_network
 
 paneles = []
