@@ -547,6 +547,7 @@ class MainWindow(QMainWindow):
                 print(f"tbkit: sesión guardada en {path}")
             except Exception as error:  # noqa: BLE001  (closing must not fail)
                 print(f"tbkit: no se pudo autoguardar: {error}")
+        self.plotter.close()                       # its VTK render window and GL context
         event.accept()
 
     # --- projects: a snapshot of the session -------------------------------------------

@@ -81,6 +81,35 @@ def _qt():
     return QApplication.instance() or QApplication([])
 
 
+@pytest.fixture(autouse=True)
+def _close_windows(monkeypatch):
+    """Release every window a test opened: its job process and its VTK plotter.
+
+    Each window holds an off-screen render window with its own GL context. Left
+    open, some twenty piled up in one xdist worker, and creating the next one
+    segfaulted inside pyvista in CI (test_window_changing_charge_drops_the_ground_state,
+    one run in four). Closing them is what the real window does in closeEvent.
+    """
+    try:
+        from tbkit.gui import app
+    except ImportError:                                # no GUI extra: nothing to close
+        yield
+        return
+    opened = []
+    original = app.MainWindow.__init__
+
+    def init(self, *args, **kwargs):
+        original(self, *args, **kwargs)
+        opened.append(self)
+
+    monkeypatch.setattr(app.MainWindow, "__init__", init)
+    yield
+    for window in opened:
+        window.runner.shutdown()
+        window.plotter.close()
+        window.deleteLater()
+
+
 def _wait(window, seconds: float = 120.0):
     """Until the window's job and its queue are done (jobs run in another process)."""
     import time

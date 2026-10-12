@@ -8,6 +8,10 @@
 line-length = 100
 target-version = "py311"
 
+[lint]
+# Explicit, as in the packages: ruff 0.16 widened its default selection.
+select = ["E4", "E7", "E9", "F"]
+
 [lint.per-file-ignores]
 # The article's figure scripts must put their own folder on sys.path and
 # choose matplotlib's Agg backend before importing anything that draws, so
