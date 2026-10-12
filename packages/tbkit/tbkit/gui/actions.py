@@ -1499,8 +1499,8 @@ HELP = {
     "Correrla ahora con carbonforge": "Lanza «carbonforge dft correr» en segundo plano (se ve "
                                       "en Procesos). Sin marcar, solo escribe la carpeta.",
     "Abrir modos…": "Abre modos calculados antes, sin recalcular: un modes.npz (de «Guardar "
-                    "modos…») o una hessiana hessian.npy con su estructura al lado (como las de "
-                    "resultados/coil204/modos). Su estructura queda como geometría activa.",
+                    "modos…») o una hessiana hessian.npy con su estructura al lado. Su estructura "
+                    "queda como geometría activa.",
     "Guardar modos…": "Guarda los modos (frecuencias y vectores) para reutilizarlos.",
     "Flechas": "Muestra los desplazamientos del modo seleccionado como flechas.",
     "Parar": "Detiene la animación del modo.",
