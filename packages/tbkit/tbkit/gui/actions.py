@@ -88,6 +88,26 @@ def structure_summary(atoms: Atoms) -> dict:
 # Ground state
 # --------------------------------------------------------------------------
 
+def kmesh_note(atoms: Atoms, model: TBModel, kmesh) -> str:
+    """One line for the job's log: the mesh, how many points, what their vectors weigh.
+
+    The k count is per periodic AXIS, so a 3D cell at 24 is 24³ = 13 824 points; printed
+    first, it is what the Procesos log shows while those points are diagonalised.
+    """
+    from ..solver import k_memory_bytes
+
+    pbc = atoms.get_pbc()
+    if not pbc.any():
+        return "malla k: solo Γ (estructura finita)"
+    counts = [kmesh if p else 1 for p in pbc]
+    nk = int(np.prod(counts))
+    norb = sum(len(model.orbitals[el]) for el in atoms.get_chemical_symbols()
+               if el in model.orbitals)
+    need = k_memory_bytes(nk, norb, not model.orthogonal)
+    return (f"malla k: {'×'.join(map(str, counts))} = {nk} puntos · {norb} orbitales · "
+            f"~{need / 1e9:.2f} GB en autovectores")
+
+
 @dataclass
 class GroundState:
     solution: Solution
@@ -106,18 +126,23 @@ def ground_state(atoms: Atoms, model: TBModel, charge: float = 0.0, kT: float = 
         raise ValueError(" ".join(problems))
     system = System.build(atoms, model)
     use_scc = model.scc if scc is None else scc
+    print(kmesh_note(atoms, model, kmesh), flush=True)
+    kpts = mesh(atoms, kmesh) if system.periodic else gamma()
     if use_scc:
         from ..progress import Progress
         from ..scc import self_consistent
 
+        # The window's k mesh, not the SCC default: it used to be left out here, so a
+        # periodic SCC ran on 12 points per axis whatever the control said.
         with Progress(None, f"SCC ({system.basis.size} orbitales)") as bar:
             result = self_consistent(
                 system, charge=charge, kT=kT,
+                kpts=kpts[0] if system.periodic else None,
+                weights=kpts[1] if system.periodic else None,
                 on_iteration=lambda n, change: bar.step(note=f"máx |Δq| {change:.1e} e"))
         state = GroundState(result.solution, result.charges, True, result.iterations,
                             result.converged)
     else:
-        kpts = mesh(atoms, kmesh) if system.periodic else gamma()
         solution = solve(system, *kpts, charge=charge, kT=kT)
         state = GroundState(solution, atomic_charges(solution), False)
     solution = state.solution
@@ -363,6 +388,9 @@ def relax_structure(atoms: Atoms, model: TBModel, fmax: float = 0.02, steps: int
     problems = check_model(atoms, model, scc)
     if problems:
         raise ValueError(" ".join(problems))
+    from ..progress import Progress
+
+    print(kmesh_note(atoms, model, kmesh), flush=True)
     moved = atoms.copy()
     moved.calc = TBCalculator(model, kpts=kmesh, kT=kT, scc=scc)
     start = float(moved.get_potential_energy())
@@ -371,7 +399,17 @@ def relax_structure(atoms: Atoms, model: TBModel, fmax: float = 0.02, steps: int
     optimizer.attach(lambda: trajectory.append(float(moved.get_potential_energy())))
     if FRAME_SINK is not None:                      # the window draws the geometry as it moves
         optimizer.attach(lambda: FRAME_SINK(moved.get_positions()))
-    converged = bool(optimizer.run(fmax=fmax, steps=steps))
+    # A counter per BFGS step, so Procesos shows the step, the time per step and the force
+    # left (the step limit is a ceiling, not an estimate: it converges sooner or not at all).
+    bar = Progress(steps, "relajación")
+
+    def report():
+        force = float(np.linalg.norm(moved.get_forces(), axis=1).max())
+        bar.step(note=f"E {trajectory[-1]:.4f} eV · Fmáx {force:.3f} eV/Å (meta {fmax:g})")
+
+    optimizer.attach(report)
+    with bar:
+        converged = bool(optimizer.run(fmax=fmax, steps=steps))
     forces = moved.get_forces()
     result = moved.copy()
     result.calc = None

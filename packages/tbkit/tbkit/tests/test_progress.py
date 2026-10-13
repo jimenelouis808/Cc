@@ -53,3 +53,115 @@ def test_durations():
     assert pg.duration(12 * 60) == "12 min"
     assert pg.duration(3 * 3600 + 5 * 60) == "3 h 05 min"
     assert pg.duration(50 * 3600) == "2 d 2 h"
+
+
+# --- what a long k-point calculation reports, and how it fails ---------------------------
+
+def _chain(model_name: str = "pi"):
+    from ase.build import graphene_nanoribbon
+
+    from tbkit.gui import actions
+
+    ribbon = graphene_nanoribbon(2, 1, type="armchair", saturated=False, vacuum=5.0)
+    return ribbon, actions.load_model(model_name)
+
+
+def test_a_large_mesh_reports_its_diagonalisation(monkeypatch):
+    """From PROGRESS_FROM_K points the k loop sends a counter (what Procesos shows)."""
+    from tbkit.hamiltonian import System
+    from tbkit.kpoints import mesh
+    from tbkit.solver import PROGRESS_FROM_K, diagonalise
+
+    seen = []
+    monkeypatch.setattr(pg, "SINK", seen.append)
+    ribbon, model = _chain()
+    kpts, _ = mesh(ribbon, PROGRESS_FROM_K)
+    diagonalise(System.build(ribbon, model), kpts)
+    lines = [m["line"] for m in seen if "diagonalización" in m["label"]]
+    assert lines and f"{PROGRESS_FROM_K}/{PROGRESS_FROM_K}" in lines[-1]
+
+
+def test_a_mesh_that_does_not_fit_fails_at_once_with_its_size(monkeypatch):
+    """The arrays are allocated after the FIRST point: an hour of diagonalising before a
+    64 GB allocation failed is what this replaced."""
+    import numpy as np
+
+    from tbkit.hamiltonian import System
+    from tbkit.kpoints import mesh
+    from tbkit.solver import diagonalise
+
+    ribbon, model = _chain()
+    system = System.build(ribbon, model)
+    kpts, _ = mesh(ribbon, 40)
+    calls = []
+    real_eigh = __import__("tbkit.solver", fromlist=["eigh"]).eigh
+
+    def counting_eigh(*args, **kwargs):
+        calls.append(1)
+        return real_eigh(*args, **kwargs)
+
+    def no_room(shape, dtype=float):
+        if np.prod(shape) > 1000:
+            raise MemoryError
+        return np.zeros(shape, dtype)
+
+    monkeypatch.setattr("tbkit.solver.eigh", counting_eigh)
+    monkeypatch.setattr(np, "empty", no_room)
+    with pytest.raises(MemoryError, match="40 puntos k"):
+        diagonalise(system, kpts)
+    assert len(calls) == 1
+
+
+def test_mixed_gamma_and_complex_points_keep_their_imaginary_part():
+    """Γ comes first and is real; the stored vectors must still be complex."""
+    import numpy as np
+
+    from tbkit.hamiltonian import System
+    from tbkit.kpoints import mesh
+    from tbkit.solver import diagonalise
+
+    ribbon, model = _chain()
+    system = System.build(ribbon, model)
+    kpts, _ = mesh(ribbon, 6)
+    _, vectors, _ = diagonalise(system, kpts)
+    assert np.iscomplexobj(vectors) and np.abs(vectors[1:].imag).max() > 1e-6
+    h, _ = system.hamiltonian(kpts[1])
+    e1 = np.linalg.eigvalsh(h)
+    e, _, _ = diagonalise(system, kpts[1:2])
+    assert np.allclose(e[0], e1)
+
+
+def test_kmesh_note_counts_points_per_periodic_axis():
+    from ase.build import bulk
+
+    from tbkit.gui import actions
+
+    diamond = bulk("C", "diamond", a=3.567)
+    note = actions.kmesh_note(diamond, actions.load_model("sp3"), 24)
+    assert "24×24×24 = 13824 puntos" in note and "GB" in note
+    ribbon, model = _chain()
+    assert "1×1×24 = 24 puntos" in actions.kmesh_note(ribbon, model, 24)
+
+
+def test_scc_ground_state_uses_the_window_mesh():
+    """The SCC branch ignored the control and ran on 12 points per axis."""
+    from ase.build import graphene_nanoribbon
+
+    from tbkit.gui import actions
+
+    ribbon = graphene_nanoribbon(2, 1, type="armchair", saturated=True, vacuum=5.0)
+    state = actions.ground_state(ribbon, actions.load_model("xu_chn"), kmesh=5, scc=True)
+    assert len(state.solution.kpts) == 5
+
+
+def test_relaxation_reports_every_step(monkeypatch):
+    from ase.build import molecule
+
+    from tbkit.gui import actions
+
+    seen = []
+    monkeypatch.setattr(pg, "SINK", seen.append)
+    out = actions.relax_structure(molecule("CH4"), actions.load_model("xu_chn"), steps=5,
+                                  fmax=1e-6)
+    steps = [m for m in seen if m["label"] == "relajación"]
+    assert steps and steps[-1]["done"] >= out["steps"] and "Fmáx" in steps[-1]["note"]

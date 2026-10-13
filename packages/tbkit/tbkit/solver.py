@@ -88,25 +88,75 @@ def fermi_level(energies: np.ndarray, weights: np.ndarray, electrons: float, kT:
     return brentq(count, low, high, xtol=1e-12)
 
 
+#: From this many k points a diagonalisation reports its progress (the window's Procesos
+#: tab and its job line): a 3D mesh of 24 per axis is 13 824 points and ran for an hour
+#: with nothing on screen.
+PROGRESS_FROM_K = 64
+
+
+def k_memory_bytes(nk: int, norb: int, overlaps: bool, itemsize: int = 16) -> int:
+    """Bytes the eigenvectors (and overlaps) of ``nk`` points keep: ``nk·norb²`` each."""
+    return int(nk) * int(norb) ** 2 * itemsize * (2 if overlaps else 1)
+
+
 def diagonalise(system: System, kpts: np.ndarray,
                 extra_onsite: Optional[np.ndarray] = None):
-    """Eigenvalues, eigenvectors and overlaps at every k; one spin channel."""
-    energies, vectors, overlaps = [], [], []
-    for k in kpts:
-        h, s = system.hamiltonian(k, extra_onsite)
-        if s is not None:
-            smallest = float(np.linalg.eigvalsh(s).min())
-            if smallest <= 1e-8:
-                raise ValueError(
-                    f"S(k={tuple(np.round(k, 4))}) no es definida positiva (autovalor mínimo "
-                    f"{smallest:.2e}): átomos demasiado cerca o solapamientos fuera del rango "
-                    "de validez de los parámetros.")
-        e, c = eigh(h, s) if s is not None else eigh(h)
-        energies.append(e)
-        vectors.append(c)
-        overlaps.append(s)
-    return (np.array(energies), np.array(vectors),
-            None if system.model.orthogonal else np.array(overlaps))
+    """Eigenvalues, eigenvectors and overlaps at every k; one spin channel.
+
+    The result arrays are allocated after the first k point, not stacked at the end: a
+    mesh too large for the memory then fails in seconds with its size, instead of after
+    diagonalising every point (the stacking also doubled the peak: list plus copy).
+    """
+    from .progress import SINK, Progress
+
+    kpts = np.atleast_2d(np.asarray(kpts, dtype=float))
+    nk = len(kpts)
+    keep_s = not system.model.orthogonal
+    bar = (Progress(nk, f"diagonalización ({system.basis.size} orbitales, {nk} puntos k)",
+                    quiet=SINK is None) if nk >= PROGRESS_FROM_K else None)
+    energies = vectors = overlaps = None
+    try:
+        for i, k in enumerate(kpts):
+            h, s = system.hamiltonian(k, extra_onsite)
+            if s is not None:
+                smallest = float(np.linalg.eigvalsh(s).min())
+                if smallest <= 1e-8:
+                    raise ValueError(
+                        f"S(k={tuple(np.round(k, 4))}) no es definida positiva (autovalor "
+                        f"mínimo {smallest:.2e}): átomos demasiado cerca o solapamientos fuera "
+                        "del rango de validez de los parámetros.")
+            e, c = eigh(h, s) if s is not None else eigh(h)
+            if vectors is None:
+                n = c.shape[0]
+                # Γ is real and any other k complex: the type comes from the whole mesh,
+                # not from its first point (Γ first truncated every later k to its real part).
+                dtype = np.result_type(c, s) if s is not None else c.dtype
+                if np.any(kpts != 0.0):
+                    dtype = np.result_type(dtype, np.complex128)
+                try:
+                    energies = np.empty((nk, len(e)))
+                    vectors = np.empty((nk, *c.shape), dtype=dtype)
+                    if keep_s:
+                        overlaps = np.empty((nk, n, n), dtype=dtype)
+                except MemoryError:
+                    need = k_memory_bytes(nk, n, keep_s, np.dtype(dtype).itemsize)
+                    raise MemoryError(
+                        f"{nk} puntos k con {n} orbitales necesitan ~{need / 1e9:.1f} GB solo "
+                        "para guardar los autovectores" + (" y los solapamientos" if keep_s
+                                                         else "") +
+                        ", y no caben en la memoria. Baja la malla k: cuenta puntos por eje "
+                        "periódico, así que en 3D se eleva al cubo, y una celda grande "
+                        "necesita pocos.") from None
+            energies[i] = e
+            vectors[i] = c
+            if keep_s:
+                overlaps[i] = s
+            if bar is not None:
+                bar.step()
+    finally:
+        if bar is not None:
+            bar.close()
+    return energies, vectors, overlaps
 
 
 def solve(system: System, kpts=None, weights=None, charge: float = 0.0, kT: float = 0.01,

@@ -2948,8 +2948,11 @@ class ProcessesPage(Page):
                f"({m['ram_available_gb']:.1f} libres)") if m.get("ram_total_gb") else ""
         self.summary.setText(f"Núcleos: {total} · asignados desde la ventana: {busy} · libres: "
                              f"{max(total - busy, 0)}{ram}")
+        self.show_log(follow=True)
 
-    def show_log(self):
+    def show_log(self, *_, follow: bool = False):
+        """The selected process's log; on every refresh too (``follow``), so it keeps up
+        with a running job instead of freezing at the moment the row was clicked."""
         row = self.table.currentRow()
         if not 0 <= row < len(self.rows):
             return
@@ -2961,6 +2964,15 @@ class ProcessesPage(Page):
             text = data.decode("utf-8", errors="replace")
         else:
             text = entry.get("progress") or "(sin registro: solo su contador)"
+        if follow and text == self.log.toPlainText():
+            return
+        bar = self.log.verticalScrollBar()
+        at_end = bar.value() >= bar.maximum() - 2
+        if follow and not at_end:                  # the user scrolled up to read: stay there
+            position = bar.value()
+            self.log.setPlainText(text)
+            bar.setValue(position)
+            return
         self.log.setPlainText(text)
         self.log.moveCursor(self.log.textCursor().MoveOperation.End)
 
