@@ -122,3 +122,54 @@ def test_wire_born_charges_match_the_molecule(tmp_path):
     intensities, info = mode_intensities(z_wire, modes)
     assert info["axes"] == [0, 1] and intensities.shape == (3,)
     assert born_rows(wire, None, tmp_path) is not None        # all cached: no calculator
+
+
+def load_model(name):
+    from tbkit.gui.actions import load_model as load
+
+    return load(name)
+
+
+def _n_ribbon():
+    from ase.build import graphene_nanoribbon
+
+    ribbon = graphene_nanoribbon(2, 1, type="armchair", saturated=True, vacuum=6.0)
+    carbons = [a.index for a in ribbon if a.symbol == "C"]
+    ribbon[carbons[2]].symbol = "N"
+    return ribbon
+
+
+def test_born_by_field_is_born_by_displacement(tmp_path):
+    """∂F/∂E (2 SCC solutions per open axis) against ∂μ/∂x (6 per atom), same functional:
+    the difference is the displacement's own O(δ²) error, a molecule and a periodic wire."""
+    from tbkit.calculator import TBCalculator
+    from tbkit.infrared import born_by_field, born_rows
+
+    model = load_model("xu_chn")
+    for atoms, k in ((molecule("C5H5N"), None), (_n_ribbon(), 4)):
+        by_field = born_by_field(atoms, model, kmesh=k or 4, kT=0.05, field=0.002,
+                                 folder=tmp_path / f"f{len(atoms)}")
+        by_move = born_rows(atoms, lambda: TBCalculator(model, kpts=k, kT=0.05),
+                            tmp_path / f"d{len(atoms)}", delta=0.0025)
+        open_axes = [j for j in range(3) if not atoms.pbc[j]]
+        assert np.abs(by_field[:, :, open_axes] - by_move[:, :, open_axes]).max() < 3e-4
+        assert np.abs(by_field[:, :, open_axes].sum(axis=0)).max() < 1e-8   # sum rule
+        if any(atoms.pbc):
+            assert np.isnan(by_field[:, :, 2]).all()          # along the wire: Berry phase
+        # Reused from the folder, not recomputed.
+        again = born_by_field(atoms, model, kmesh=k or 4, kT=0.05, field=0.002,
+                              folder=tmp_path / f"f{len(atoms)}")
+        assert np.array_equal(again[:, :, open_axes], by_field[:, :, open_axes])
+
+
+def test_born_by_field_refusals():
+    from tbkit.infrared import born_by_field
+    from tbkit.scc import self_consistent
+
+    with pytest.raises(ValueError, match="SCC"):
+        born_by_field(molecule("C6H6"), load_model("sp3"))
+    from tbkit.hamiltonian import System
+
+    with pytest.raises(ValueError, match="ejes abiertos"):
+        self_consistent(System.build(_n_ribbon(), load_model("xu_chn")),
+                        field=np.array([0.0, 0.0, 0.01]))

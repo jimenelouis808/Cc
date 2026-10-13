@@ -177,6 +177,12 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   GPAW FD tensors, `recipes/xu_chn_alpha.py`; xu_chno fits only O and keeps
   H, C, N from xu_chn); extra dipoles never interact with
   their own atom. C60 and diamond are validation, never fit targets.
+- Born charges by field (`infrared.born_by_field`, study `"ir": {"born": "campo"}`):
+  ∂F/∂E with the field coupled to the same position operator (charges + intra-atomic
+  dipoles) and the ground-state SCC as the only screening, plus the explicit ``Q_A E``.
+  Two SCC solutions per open axis instead of six per atom; it equals `born_rows` to the
+  displacements' own O(δ²) error (tested on pyridine and an N-doped ribbon). The SCC
+  takes a field on a periodic system only across its periodic axes.
 - IR uses the same position operator as α (charges + intra-atomic dipoles,
   λ = 1): do not switch the default to "charges only" to improve static
   dipoles without re-running the GPAW comparison. Born charges must sum to

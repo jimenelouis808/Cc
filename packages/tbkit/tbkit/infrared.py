@@ -234,6 +234,86 @@ def born_rows(atoms: Atoms, make_calc, folder, indices=None, delta: float = 0.00
     return out
 
 
+def born_by_field(atoms: Atoms, model: TBModel, kmesh: int = 4, kT: float = 0.05,
+                  field: float = 0.002, folder=None, U=None,
+                  tol: float = 1e-10) -> np.ndarray:
+    """Born charges ``Z*[a, i, j] = ∂F_{a,i}/∂E_j`` from ±E along each open axis j: the
+    same tensor as :func:`born_rows` (``∂μ_j/∂x_{a,i}``, by the Maxwell relation of the
+    energy in a field) at the cost of 2 SCC solutions per open axis instead of 6 per atom.
+
+    The field couples to the position operator ``μ`` is built from (charges, and the
+    intra-atomic dipoles when the model has them): ``e E·(R_A - R_c)`` on the atom's
+    orbitals and ``e E·⟨μ|r - R_A|ν⟩`` within it, with the SCC of the ground state as the
+    only screening -- exactly the functional whose displaced dipoles :func:`born_rows`
+    differentiates. The forces at fixed density then take the field's explicit term
+    ``Q_A E`` (``D`` is atom-fixed and carries none). An SCC model and a neutral structure
+    are required; j along a periodic axis is NaN, as in :func:`born_rows`.
+
+    ``kmesh``: points per periodic axis (``tbkit.kpoints.mesh`` of the System, as the
+    calculator uses). ``folder``: each ±E force set is saved there
+    (``force_<axis>_<p|m>.npy``) and reused.
+    Returns (n_atoms, 3, 3); atoms outside the model's basis get zeros.
+    """
+    from pathlib import Path
+
+    from .dipoles import atom_projector, dipole_matrices, has_dipoles
+    from .kpoints import mesh
+    from .scc import energy_and_forces, self_consistent
+
+    if not model.scc:
+        raise ValueError("born_by_field necesita un modelo SCC (cargas autoconsistentes).")
+    system = System.build(atoms, model)
+    if abs(system.electrons - round(system.electrons)) > 1e-9:
+        raise ValueError("born_by_field: estructura con carga fraccionaria.")
+    pbc = np.asarray(atoms.get_pbc(), dtype=bool)
+    kpts, weights = mesh(system, kmesh) if system.periodic else (None, None)
+    d = dipole_matrices(system) if has_dipoles(model) else None
+    projector = atom_projector(system)
+    model_atoms = system.basis.atoms
+    cell = np.asarray(atoms.cell)
+    folder = Path(folder) if folder is not None else None
+    if folder is not None:
+        folder.mkdir(parents=True, exist_ok=True)
+    born = np.full((len(atoms), 3, 3), np.nan)
+    dq_start = None
+    for axis in range(3):
+        if pbc[axis]:
+            continue
+        direction = np.zeros(3)
+        direction[axis] = 1.0
+        if system.periodic and any(abs(float(direction @ cell[a])) > 1e-9
+                                   for a in range(3) if pbc[a]):
+            raise ValueError(f"El eje abierto {'xyz'[axis]} no es perpendicular a los "
+                             "periódicos: alinea el eje periódico con un eje cartesiano.")
+        forces = []
+        for sign, tag in ((1.0, "p"), (-1.0, "m")):
+            path = folder / f"force_{axis}_{tag}.npy" if folder is not None else None
+            if path is not None and path.exists():
+                forces.append(np.load(path))
+                continue
+            e_field = sign * field * direction
+            onsite = None if d is None else \
+                np.einsum("am,x,xmn->mn", projector, e_field, d)
+            result = self_consistent(system, U=U, kT=kT, tol=tol, field=e_field,
+                                     kpts=kpts, weights=weights, initial_dq=dq_start,
+                                     onsite_matrix=onsite)
+            if not result.converged:
+                raise RuntimeError(f"SCC sin converger con E {'xyz'[axis]} {tag}.")
+            dq_start = result.dq
+            _, f, _ = energy_and_forces(result)
+            f = np.array(f)
+            charges = -result.dq                       # net charge, + = electrons lost
+            for index, atom in enumerate(model_atoms):
+                f[atom] += charges[index] * e_field    # the field's own pull, Q_A E
+            if path is not None:
+                tmp = path.with_suffix(".tmp.npy")
+                np.save(tmp, f)
+                tmp.replace(path)
+            forces.append(f)
+        born[:, :, axis] = (forces[0] - forces[1]) / (2.0 * field)
+    return born
+
+
 def mode_intensities(born: np.ndarray, modes: np.ndarray, sum_rule: bool = True
                      ) -> tuple[np.ndarray, dict]:
     """IR intensities (km/mol) of ``modes`` (n, N, 3; L as in ``Vibrations.modes``)

@@ -20,6 +20,11 @@ What ``doped_raman`` did for the 5-7 coil (pristine, graphitic N, amine), for an
       "ir":       {"min_cm1": 50, "delta": 0.005}
     }
 
+``"ir": {"born": "campo", "modelo": "xu_chn"}`` takes the Born charges as ∂F/∂E (two SCC
+solutions per open axis, :func:`tbkit.infrared.born_by_field`) instead of six displacements
+per atom: the same tensor, and the only affordable route for hundreds of atoms. ``modelo``
+there is the SCC set of the charges when the study's own model has no SCC.
+
 A system ``sobre`` another (its host) is a local change of it: the host's atoms come first,
 in the host's order (a substituted atom keeps its index; added atoms go at the end), and
 ``centros`` are the changed atoms. Only the Hessian rows (and Born charges) of atoms within
@@ -289,10 +294,29 @@ class Study:
             return list(range(len(atoms)))
         return self.region(key, atoms)
 
+    def born_model(self):
+        """The model of the Born charges: ``ir.modelo`` if given (an SCC set for the field
+        route), else the study's."""
+        name = self.config["ir"].get("modelo")
+        if not name:
+            return self.model()
+        from ..gui.actions import load_model
+
+        return load_model(name)
+
     def born(self, key: str, part=(0, 1)):
-        from ..infrared import born_rows
+        from ..infrared import born_by_field, born_rows
 
         atoms = self.relaxed(key)
+        if self.config["ir"].get("born") == "campo":
+            # ∂F/∂E: 2 SCC solutions per open axis for every atom at once (the same tensor
+            # as the displacements, tests/test_infrared.py), so nothing is embedded or split.
+            if part[0] != 0:
+                return None
+            return born_by_field(atoms, self.born_model(), kmesh=max(self.kpts(atoms)),
+                                 kT=float(self.config["kT"]),
+                                 field=float(self.config["ir"].get("campo", 0.002)),
+                                 folder=self.folder(key) / "born_campo")
         reg = self.born_region(key, atoms)
         rows = born_rows(atoms, self.calc_factory(atoms), self.folder(key) / "born", reg,
                          float(self.config["ir"]["delta"]), part)
@@ -307,6 +331,10 @@ class Study:
         return out
 
     def born_ready(self, key: str) -> bool:
+        if self.config["ir"].get("born") == "campo":
+            atoms = self.relaxed(key)
+            return all((self.folder(key) / "born_campo" / f"force_{a}_{t}.npy").exists()
+                       for a in range(3) if not atoms.pbc[a] for t in ("p", "m"))
         keys = [key] + ([self.systems[key]["sobre"]] if self.systems[key].get("sobre") else [])
         for k in keys:
             atoms = self.relaxed(k)

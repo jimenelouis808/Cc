@@ -110,7 +110,8 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
                     mixing: float = 0.3, tol: float = 1e-9, max_iter: int = 500,
                     history_length: int = 6, field: Optional[np.ndarray] = None,
                     initial_dq: Optional[np.ndarray] = None, kpts=None,
-                    weights=None, on_iteration=None) -> SCCResult:
+                    weights=None, on_iteration=None,
+                    onsite_matrix: Optional[np.ndarray] = None) -> SCCResult:
     """Solve with self-consistent Mulliken charges.
 
     Parameters
@@ -134,10 +135,21 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
     kpts, weights
         k points (fractional) and weights of a periodic system; default the
         mesh of :func:`tbkit.kpoints.mesh`.
+    onsite_matrix
+        A k-independent matrix added to H (orbitals × orbitals): the intra-atomic part of
+        a field's coupling, ``e E·⟨μ|r - R_A|ν⟩`` (:func:`tbkit.infrared.born_by_field`).
+
+    A periodic system takes a ``field`` only across its periodic axes (a wire's or a
+    slab's open directions): along a lattice vector ``E·r`` is not periodic.
     """
     if system.periodic:
         if field is not None:
-            raise ValueError("Un campo uniforme no es periódico: usa un sistema finito.")
+            cell = np.asarray(system.atoms.cell)
+            along = [abs(float(np.dot(field, cell[a]))) for a in range(3)
+                     if system.atoms.pbc[a]]
+            if max(along) > 1e-12 * (1.0 + float(np.abs(field).max())):
+                raise ValueError("Un campo uniforme no es periódico: en un sistema periódico "
+                                 "solo puede ir a lo largo de los ejes abiertos.")
         if kpts is None:
             from .kpoints import mesh
 
@@ -161,7 +173,7 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
     converged = False
     for iteration in range(1, max_iter + 1):
         solution = _solve_shifted(system, (gamma @ dq_in + external)[owner], charge, kT,
-                                  kpts, weights)
+                                  kpts, weights, onsite_matrix)
         pops = populations(solution).sum(axis=0)
         dq_out = np.array([pops[system.basis.of_atom(a).start:system.basis.of_atom(a).stop].sum()
                            for a in atoms]) - neutral_atom
@@ -241,14 +253,16 @@ def energy_and_forces(result: SCCResult, need_forces: bool = True):
 
 
 def _solve_shifted(system: System, shift: np.ndarray, charge: float, kT: float,
-                   kpts=None, weights=None) -> Solution:
-    """Solve with ``H_μν += ½ S_μν (V_μ + V_ν)`` (just the diagonal when S = 1): at Γ,
-    or on the k points given (periodic)."""
+                   kpts=None, weights=None, onsite_matrix=None) -> Solution:
+    """Solve with ``H_μν += ½ S_μν (V_μ + V_ν)`` (just the diagonal when S = 1) and an
+    optional k-independent ``onsite_matrix``: at Γ, or on the k points given (periodic)."""
     from scipy.linalg import eigh
 
     if kpts is not None:
-        return _solve_shifted_k(system, shift, charge, kT, kpts, weights)
+        return _solve_shifted_k(system, shift, charge, kT, kpts, weights, onsite_matrix)
     h, s = system.hamiltonian((0, 0, 0))
+    if onsite_matrix is not None:
+        h = h + onsite_matrix
     if s is None:
         h = h + np.diag(shift)
         e, c = eigh(h)
@@ -258,7 +272,7 @@ def _solve_shifted(system: System, shift: np.ndarray, charge: float, kT: float,
     return _package(system, e, c, s, charge, kT)
 
 
-def _solve_shifted_k(system, shift, charge, kT, kpts, weights) -> Solution:
+def _solve_shifted_k(system, shift, charge, kT, kpts, weights, onsite_matrix=None) -> Solution:
     from scipy.linalg import eigh
 
     kpts = np.atleast_2d(np.asarray(kpts, dtype=float))
@@ -266,6 +280,8 @@ def _solve_shifted_k(system, shift, charge, kT, kpts, weights) -> Solution:
     energies, vectors, overlaps = [], [], []
     for k in kpts:
         h, s = system.hamiltonian(k)
+        if onsite_matrix is not None:
+            h = h + onsite_matrix
         if s is None:
             h = h + np.diag(shift)
             e, c = eigh(h)
