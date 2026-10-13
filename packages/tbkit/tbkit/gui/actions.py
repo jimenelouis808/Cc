@@ -88,6 +88,123 @@ def structure_summary(atoms: Atoms) -> dict:
 # Ground state
 # --------------------------------------------------------------------------
 
+#: Below this many Å of k-sampled length (points × period) along an axis the mesh is
+#: almost surely not converged; an insulator usually wants 30-60 Å, a metal more.
+K_LENGTH_MIN = 20.0
+#: Vacuum (Å) a periodic SCC needs along its non-periodic axes: the Ewald sum treats them
+#: as a supercell, so charged or polar images closer than this interact.
+SCC_VACUUM_MIN = 8.0
+#: Atoms (or an atom and an image of another) closer than this (Å) are on top of each other.
+OVERLAP = 0.5
+
+
+def _available_ram_gb() -> float | None:
+    try:
+        import psutil
+
+        return psutil.virtual_memory().available / 1e9
+    except ImportError:
+        pass
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemAvailable:"):
+                return float(line.split()[1]) * 1024 / 1e9
+    except OSError:
+        pass
+    return None
+
+
+def calculation_checks(atoms: Atoms, model: Optional[TBModel] = None, kmesh=None,
+                       scc: Optional[bool] = None,
+                       strict: bool = True) -> list[tuple[str, str]]:
+    """What can go wrong with this calculation before it runs: ``(level, text)`` pairs,
+    level ``"error"`` (it would be wrong or would not fit), ``"aviso"`` (it runs, but check)
+    or ``"nota"``. ``kmesh``: points per periodic axis, or None when the job has no mesh.
+    ``strict=False`` leaves out the model's coverage (a π model ignores H by design: bands).
+
+    Each check is a fault met in practice: a box declared periodic around a tube (13 824 k
+    points and 62 GB for a 1D coil), a cell too small for its atoms, a bond cut by an axis
+    left non-periodic, an SCC whose images sit a few Å apart, a 1D mesh of four points
+    along a 4 Å period.
+    """
+    from ..structure_io import crossing_axes, vacuum_gaps
+
+    out: list[tuple[str, str]] = []
+    pbc = [bool(p) for p in atoms.get_pbc()]
+    if model is not None and strict:
+        problems = check_model(atoms, model, scc)
+        out += [("error", text) for text in problems]
+        if problems:
+            model = None                       # nothing below can be built with it
+    if len(atoms) > 1:
+        from ase.neighborlist import neighbor_list
+
+        i, j, d = neighbor_list("ijd", atoms, OVERLAP)
+        if len(d):
+            a, b = int(i[np.argmin(d)]), int(j[np.argmin(d)])
+            where = "consigo mismo en la celda vecina" if a == b else f"y {b}"
+            out.append(("error", f"Átomos encimados: {a} {where} a {d.min():.2f} Å. "
+                        + ("La celda es demasiado pequeña a lo largo de un eje periódico, o "
+                           "sobra un eje periódico." if any(pbc) else "")))
+    if atoms.cell.rank == 3:
+        crossing = crossing_axes(atoms)
+        gaps = vacuum_gaps(atoms)
+        for axis in range(3):
+            name = "abc"[axis]
+            if crossing[axis] and not pbc[axis]:
+                out.append(("aviso", f"Hay enlaces que cruzan la celda por {name} pero ese eje "
+                            "no es periódico: los átomos del borde quedan con enlaces cortados "
+                            "(estados de borde). Si es periódica en {name}, márcalo."))
+            if pbc[axis] and not crossing[axis] and gaps[axis] is not None and \
+                    gaps[axis] >= 5.0:
+                out.append(("nota", f"{name} es periódico pero es vacío ({gaps[axis]:.1f} Å): "
+                            "un solo punto k ahí, exacto; el SCC y la vista ven las imágenes."))
+        use_scc = (model.scc if scc is None else scc) if model is not None else False
+        if use_scc and any(pbc):
+            for axis in range(3):
+                if not pbc[axis] and gaps[axis] is not None and gaps[axis] < SCC_VACUUM_MIN:
+                    out.append(("aviso", f"SCC periódico con solo {gaps[axis]:.1f} Å de vacío "
+                                f"en {'abc'[axis]}: Ewald trata ese eje como una supercelda y "
+                                f"las imágenes interactúan; deja ≥ {SCC_VACUUM_MIN:.0f} Å."))
+    if model is not None and kmesh and any(pbc):
+        from ..solver import k_memory_bytes
+
+        system = System.build(atoms, model)
+        axes = system.k_axes
+        cell = np.asarray(atoms.cell)
+        for axis in range(3):
+            length = float(np.linalg.norm(cell[axis]))
+            if axes[axis] and kmesh * length < K_LENGTH_MIN:
+                out.append(("aviso", f"Pocos puntos k en {'abc'[axis]}: {kmesh} × "
+                            f"{length:.2f} Å = {kmesh * length:.0f} Å muestreados. Un aislante "
+                            "suele pedir 30–60 Å y un metal más: converge la malla (o sube "
+                            f"a ≥ {int(np.ceil(K_LENGTH_MIN / length))})."))
+        nk = int(np.prod([kmesh if a else 1 for a in axes]))
+        norb = system.basis.size
+        need = (k_memory_bytes(nk, norb, not model.orthogonal)
+                + memory_estimate_gb(atoms, model) * 1e9) / 1e9
+        free = _available_ram_gb()
+        if free is not None and need > 0.9 * free:
+            out.append(("error", f"{nk} puntos k × {norb} orbitales necesitan ~{need:.1f} GB y "
+                        f"hay {free:.1f} GB libres. Baja la malla k (o usa un modelo con menos "
+                        "orbitales)."))
+        elif free is not None and need > 0.5 * free:
+            out.append(("aviso", f"~{need:.1f} GB de {free:.1f} GB libres: va justo."))
+    return out
+
+
+def preflight(atoms: Atoms, model: TBModel, kmesh=None, scc: Optional[bool] = None,
+              strict: bool = True) -> None:
+    """Print the checks to the job's log and stop on an error, before any work."""
+    checks = calculation_checks(atoms, model, kmesh, scc, strict)
+    for level, text in checks:
+        print(f"{'✗' if level == 'error' else '⚠' if level == 'aviso' else '·'} {text}",
+              flush=True)
+    errors = [text for level, text in checks if level == "error"]
+    if errors:
+        raise ValueError(" ".join(errors))
+
+
 def kmesh_note(atoms: Atoms, model: TBModel, kmesh) -> str:
     """One line for the job's log: the mesh, how many points, what their vectors weigh.
 
@@ -128,6 +245,7 @@ def ground_state(atoms: Atoms, model: TBModel, charge: float = 0.0, kT: float = 
     problems = check_model(atoms, model, scc)
     if problems:
         raise ValueError(" ".join(problems))
+    preflight(atoms, model, kmesh, scc)
     system = System.build(atoms, model)
     use_scc = model.scc if scc is None else scc
     print(kmesh_note(atoms, model, kmesh), flush=True)
@@ -189,10 +307,18 @@ def band_curves(atoms: Atoms, model: TBModel, path: Optional[str] = None,
     """Bands along a path of a periodic structure, relative to E_F of a mesh."""
     from ..analysis import bands
 
+    preflight(atoms, model, kmesh, scc=False, strict=False)
     system = System.build(atoms, model)
     if not system.periodic:
         raise ValueError("Las bandas necesitan una estructura periódica.")
-    bandpath = band_path(atoms, path, npoints)
+    if not any(system.k_axes):
+        raise ValueError("Ningún enlace cruza la celda: las bandas son planas (es una "
+                         "estructura finita en una caja). Mira los niveles en su lugar.")
+    # The path runs along the axes bonds cross: a vacuum axis declared periodic would add
+    # flat segments and, in 3D, a path through the whole Brillouin zone of a box.
+    probe = atoms.copy()
+    probe.pbc = system.k_axes
+    bandpath = band_path(probe, path, npoints)
     energies = bands(system, bandpath)
     fermi = solve(system, *mesh(system, kmesh), kT=kT).fermi
     x, xticks, labels = bandpath.get_linear_kpoint_axis()
@@ -274,6 +400,44 @@ def supercell(atoms: Atoms, repeat) -> Atoms:
     return out
 
 
+def periodicity_info(atoms: Atoms, model: Optional[TBModel] = None) -> dict:
+    """What the window shows about the periodic axes: ``mode`` ("auto"/"manual"),
+    ``pbc``, ``auto`` (what the automatic rule gives), ``reasons`` per axis,
+    ``dimensionality``, ``has_cell`` and the k-independent ``checks``."""
+    from ..structure_io import auto_periodicity, dimensionality
+
+    declared = atoms.info.get("pbc_file")
+    declared = [c == "T" for c in declared] if declared else [bool(p) for p in atoms.pbc]
+    auto, reasons = auto_periodicity(atoms, declared)
+    pbc = [bool(p) for p in atoms.pbc]
+    mode = atoms.info.get("periodicity_mode") or ("auto" if pbc == auto else "manual")
+    return {"mode": mode, "pbc": pbc, "auto": auto, "reasons": reasons,
+            "dimensionality": dimensionality(pbc), "has_cell": bool(atoms.cell.rank == 3),
+            "checks": calculation_checks(atoms, model)}
+
+
+def set_periodicity(atoms: Atoms, mode: str, pbc=None) -> list[bool]:
+    """Change the periodic axes in place: ``mode="auto"`` applies the automatic rule (bonds
+    that cross the cell; vacuum is not periodic), ``"manual"`` takes ``pbc`` as given.
+    Refuses a periodic axis without a cell vector. Returns the new ``pbc``."""
+    from ..structure_io import auto_periodicity
+
+    if mode == "auto":
+        declared = atoms.info.get("pbc_file")
+        declared = [c == "T" for c in declared] if declared else None
+        pbc, _ = auto_periodicity(atoms, declared)
+    elif mode != "manual" or pbc is None:
+        raise ValueError("Periodicidad: «auto», o «manual» con los tres ejes.")
+    pbc = [bool(p) for p in pbc]
+    if any(pbc) and atoms.cell.rank < 3:
+        raise ValueError("Un eje periódico necesita una celda: defínela con «Celda…».")
+    if "pbc_file" not in atoms.info:
+        atoms.info["pbc_file"] = "".join("TF"[not p] for p in atoms.pbc)
+    atoms.pbc = pbc
+    atoms.info["periodicity_mode"] = mode
+    return pbc
+
+
 def read_structure(path: str | Path) -> Atoms:
     """Any structure file (.xtl included); periodic axes deduced when a cell is declared
     non-periodic but bonds cross it (``tbkit.structure_io``)."""
@@ -291,6 +455,7 @@ GUESSES = {"antiferro": "antiferro (subredes)", "ferro": "ferro", "random": "ale
 
 
 def _hubbard_system(atoms, model, kmesh):
+    preflight(atoms, model, kmesh, scc=False)
     system = System.build(atoms, model)
     kpts, weights = mesh(system, kmesh) if system.periodic else gamma()
     return system, kpts, weights
@@ -394,6 +559,7 @@ def relax_structure(atoms: Atoms, model: TBModel, fmax: float = 0.02, steps: int
         raise ValueError(" ".join(problems))
     from ..progress import Progress
 
+    preflight(atoms, model, kmesh, scc)
     print(kmesh_note(atoms, model, kmesh), flush=True)
     moved = atoms.copy()
     moved.calc = TBCalculator(model, kpts=kmesh, kT=kT, scc=scc)
@@ -434,6 +600,7 @@ def vibration_modes(atoms: Atoms, model: TBModel, kT: float = 0.02, kmesh: int =
     if problems:
         raise ValueError(" ".join(problems))
 
+    preflight(atoms, model, kmesh, scc)
     vib = vibrations(atoms, model, kmesh=kmesh, kT=kT, scc=scc)
     return _modes_result(vib, sigma)
 
@@ -1427,6 +1594,11 @@ HELP = {
                 "avance (una línea cada 5 s), y cuánto tardó.",
     "Guardar…": "Guarda la geometría activa: extxyz (o .xyz, que aquí se escribe como "
                 "extxyz y conserva la celda), .xtl, CIF o POSCAR.",
+    "Periodicidad": "Qué ejes de la celda son periódicos (0D finita, 1D tubo o cinta, 2D "
+                    "lámina, 3D cristal). «Automática»: periódico donde hay enlaces que cruzan "
+                    "la celda; un eje con ≥ 5 Å de vacío no lo es aunque el archivo lo declare. "
+                    "«Manual»: marca tú los ejes a, b, c. Un eje periódico que solo es vacío no "
+                    "cuesta puntos k (uno basta, exacto), pero el SCC ve sus imágenes.",
     "Celda…": "Fija la celda (longitudes y ángulos) y los ejes periódicos de la geometría "
               "activa, para un archivo que no los trae. «Detectar por enlaces» marca los "
               "ejes por los que hay enlaces que cruzan la celda.",

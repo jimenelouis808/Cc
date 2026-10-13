@@ -196,7 +196,8 @@ def bands(system, path, spin_potentials=None) -> np.ndarray:
 
     kpts = path.kpts if hasattr(path, "kpts") else np.asarray(path)
     channels = [None] if spin_potentials is None else list(spin_potentials)
-    return np.array([diagonalise(system, kpts, extra)[0] for extra in channels])
+    return np.array([diagonalise(system, kpts, extra, vectors_too=False)[0]
+                     for extra in channels])
 
 
 # --------------------------------------------------------------------------

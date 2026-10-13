@@ -773,3 +773,27 @@ def test_guide_follows_the_work_on_each_geometry(tmp_path):
     assert {s["key"]: s["status"] for s in guide.current}["relajar"] == "siguiente"
     guide.go_next()
     assert window.tabs.currentIndex() == list(window.pages).index("Geometría y modos")
+
+
+def test_window_periodicity_is_automatic_and_editable():
+    _qt()
+    from ase.build import graphene_nanoribbon as ribbon_of
+
+    from tbkit.gui.app import MainWindow
+
+    window = MainWindow(interactive=False)
+    boxed = ribbon_of(2, 1, type="armchair", saturated=True, vacuum=6.0)
+    boxed.pbc = True
+    actions.set_periodicity(boxed, "auto")
+    window.set_atoms(boxed, "cinta")
+    assert window.pbc_mode.currentData() == "auto"
+    assert [b.isChecked() for b in window.pbc_boxes] == [False, False, True]
+    assert not any(b.isEnabled() for b in window.pbc_boxes)
+    assert "1D (c)" in window.pbc_label.text()
+    window.pbc_mode.setCurrentIndex(1)                       # manual
+    assert all(b.isEnabled() for b in window.pbc_boxes)
+    window.pbc_boxes[0].setChecked(True)
+    assert list(window.atoms.pbc) == [True, False, True]
+    assert "automática daría 1D (c)" in window.pbc_label.text()
+    window.pbc_mode.setCurrentIndex(0)                       # back to automatic
+    assert list(window.atoms.pbc) == [False, False, True]

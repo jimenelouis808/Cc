@@ -100,8 +100,11 @@ def k_memory_bytes(nk: int, norb: int, overlaps: bool, itemsize: int = 16) -> in
 
 
 def diagonalise(system: System, kpts: np.ndarray,
-                extra_onsite: Optional[np.ndarray] = None):
+                extra_onsite: Optional[np.ndarray] = None, vectors_too: bool = True):
     """Eigenvalues, eigenvectors and overlaps at every k; one spin channel.
+
+    ``vectors_too=False`` keeps only the eigenvalues (a band path: ``(energies, None,
+    None)``), which for 200 path points of a 500-orbital cell is ~1 GB not kept.
 
     The result arrays are allocated after the first k point, not stacked at the end: a
     mesh too large for the memory then fails in seconds with its size, instead of after
@@ -125,6 +128,15 @@ def diagonalise(system: System, kpts: np.ndarray,
                         f"S(k={tuple(np.round(k, 4))}) no es definida positiva (autovalor "
                         f"mínimo {smallest:.2e}): átomos demasiado cerca o solapamientos fuera "
                         "del rango de validez de los parámetros.")
+            if not vectors_too:
+                e = eigh(h, s, eigvals_only=True) if s is not None else \
+                    eigh(h, eigvals_only=True)
+                if energies is None:
+                    energies = np.empty((nk, len(e)))
+                energies[i] = e
+                if bar is not None:
+                    bar.step()
+                continue
             e, c = eigh(h, s) if s is not None else eigh(h)
             if vectors is None:
                 n = c.shape[0]

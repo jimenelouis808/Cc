@@ -21,6 +21,11 @@ from ase.data import atomic_numbers, covalent_radii
 
 #: Bonded when closer than this times the sum of covalent radii (as the viewer draws them).
 BOND_FACTOR = 1.2
+#: An axis declared periodic whose largest atom-free slab is at least this wide (Å) is
+#: vacuum, not a lattice direction: a tube or a sheet in a box. Below it the declaration
+#: stands -- graphite's 3.35 Å interlayer gap and a molecular crystal's contacts are real
+#: periodicity that no covalent bond crosses.
+VACUUM_GAP = 5.0
 
 
 def _element(label: str) -> str:
@@ -95,6 +100,13 @@ def periodic_axes(atoms: Atoms, factor: float = BOND_FACTOR) -> list[bool]:
     no cell, or one already periodic, returns its own ``pbc``."""
     if atoms.cell.rank < 3 or len(atoms) < 2:
         return [bool(p) for p in atoms.get_pbc()]
+    return crossing_axes(atoms, factor)
+
+
+def crossing_axes(atoms: Atoms, factor: float = BOND_FACTOR) -> list[bool]:
+    """Axes along which bonds cross the cell, whatever ``pbc`` declares (needs a cell)."""
+    if atoms.cell.rank < 3 or len(atoms) < 2:
+        return [False] * 3
     from ase.neighborlist import neighbor_list
 
     def bonds(pbc):
@@ -115,6 +127,66 @@ def periodic_axes(atoms: Atoms, factor: float = BOND_FACTOR) -> list[bool]:
     return out
 
 
+def vacuum_gaps(atoms: Atoms) -> list[float | None]:
+    """Per cell axis, the widest slab with no atom in it (Å, measured perpendicular to the
+    other two vectors, across the boundary too). ``None`` without a cell."""
+    if atoms.cell.rank < 3:
+        return [None] * 3
+    cell = np.asarray(atoms.cell)
+    volume = abs(np.linalg.det(cell))
+    fractions = np.mod(atoms.get_scaled_positions(wrap=False), 1.0)
+    out = []
+    for axis in range(3):
+        others = [cell[k] for k in range(3) if k != axis]
+        spacing = volume / np.linalg.norm(np.cross(*others))     # distance between planes
+        f = np.sort(fractions[:, axis])
+        steps = np.diff(np.append(f, f[0] + 1.0)) if len(f) else np.array([1.0])
+        out.append(float(steps.max() * spacing))
+    return out
+
+
+def auto_periodicity(atoms: Atoms, declared=None) -> tuple[list[bool], list[str]]:
+    """The periodic axes a structure has, and why, axis by axis.
+
+    Periodic when bonds cross the cell along it. An axis no bond crosses keeps what the
+    file ``declared`` (default: the current ``pbc``) unless it is vacuum -- a free slab of
+    :data:`VACUUM_GAP` or more -- since a box around a tube or a sheet is not a lattice.
+    No cell, no periodic axis: a cell is never invented.
+    """
+    declared = [bool(p) for p in (atoms.get_pbc() if declared is None else declared)]
+    if atoms.cell.rank < 3:
+        return [False] * 3, ["sin celda"] * 3
+    crossing = crossing_axes(atoms)
+    gaps = vacuum_gaps(atoms)
+    axes, reasons = [], []
+    for axis in range(3):
+        if crossing[axis]:
+            axes.append(True)
+            reasons.append("enlaces que cruzan la celda")
+        elif gaps[axis] >= VACUUM_GAP:
+            axes.append(False)
+            reasons.append(f"{gaps[axis]:.1f} Å de vacío"
+                           + (" (el archivo lo declaraba periódico)" if declared[axis] else ""))
+        elif declared[axis]:
+            axes.append(True)
+            reasons.append(f"declarado periódico; sin enlaces que crucen, {gaps[axis]:.1f} Å "
+                           "entre imágenes")
+        else:
+            axes.append(False)
+            reasons.append(f"declarado no periódico; solo {gaps[axis]:.1f} Å hasta la imagen")
+    return axes, reasons
+
+
+def dimensionality(pbc) -> str:
+    """'0D (finita)', '1D (c)', '2D (a, b)', '3D'."""
+    axes = [k for k in range(3) if pbc[k]]
+    if not axes:
+        return "0D (finita)"
+    if len(axes) == 3:
+        return "3D"
+    return f"{len(axes)}D ({', '.join('abc'[k] for k in axes)})"
+
+
 def read_structure(path: str | Path, guess_periodic: bool = True) -> Atoms:
     """``Atoms`` from a file. With ``guess_periodic``, a structure that has a cell but is
     declared non-periodic gets the axes :func:`periodic_axes` finds, and says so in
@@ -128,14 +200,17 @@ def read_structure(path: str | Path, guess_periodic: bool = True) -> Atoms:
         atoms = read(str(path))
     if isinstance(atoms, list):
         atoms = atoms[-1]
-    if guess_periodic and not atoms.get_pbc().any() and atoms.cell.rank == 3:
-        axes = periodic_axes(atoms)
-        if any(axes):
+    if guess_periodic and atoms.cell.rank == 3:
+        declared = [bool(p) for p in atoms.get_pbc()]
+        axes, reasons = auto_periodicity(atoms, declared)
+        atoms.info["pbc_file"] = "".join("TF"[not p] for p in declared)
+        atoms.info["periodicity_mode"] = "auto"
+        if axes != declared:
             atoms.pbc = axes
             atoms.info["periodicity"] = (
-                "periodicidad deducida de los enlaces que cruzan la celda: "
-                + "".join("xyz"[k] for k, on in enumerate(axes) if on)
-                + " (el archivo la declaraba no periódica)")
+                f"periodicidad automática: {dimensionality(axes)} (el archivo declaraba "
+                f"{dimensionality(declared)}) · "
+                + "; ".join(f"{'abc'[k]}: {r}" for k, r in enumerate(reasons)))
     return atoms
 
 

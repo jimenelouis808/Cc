@@ -347,6 +347,25 @@ class MainWindow(QMainWindow):
         self.structure_label = QLabel("—")
         self.structure_label.setWordWrap(True)
         form.addRow(self.structure_label)
+        # Periodicity: automatic by default (bonds that cross the cell; vacuum is not a
+        # lattice direction), editable axis by axis. 0D to 3D systems go through the same
+        # window, and a box declared periodic around a tube cost 13 824 k points once.
+        periodic = QHBoxLayout()
+        self.pbc_mode = QComboBox()
+        self.pbc_mode.addItem("Automática", "auto")
+        self.pbc_mode.addItem("Manual", "manual")
+        self.pbc_mode.currentIndexChanged.connect(self.periodicity_mode_changed)
+        periodic.addWidget(self.pbc_mode)
+        self.pbc_boxes = []
+        for axis in "abc":
+            box = QCheckBox(axis)
+            box.toggled.connect(self.periodicity_edited)
+            self.pbc_boxes.append(box)
+            periodic.addWidget(box)
+        form.addRow("Periodicidad", periodic)
+        self.pbc_label = QLabel("—")
+        self.pbc_label.setWordWrap(True)
+        form.addRow(self.pbc_label)
         layout.addWidget(structure)
 
         model = QGroupBox("Modelo")
@@ -751,6 +770,7 @@ class MainWindow(QMainWindow):
                 return
             name = self.geometries[self.geometry_combo.currentIndex()][0] \
                 if self.geometries else "estructura"
+            atoms.info["periodicity_mode"] = "manual"       # the axes the dialog was given
             self.add_geometry(f"{name} (celda editada)", atoms)
 
     def atom_clicked(self, index: int):
@@ -798,6 +818,80 @@ class MainWindow(QMainWindow):
             self.console.line("sin ejes periódicos: si la estructura lo es, «Celda…» fija la "
                               "celda y los ejes")
 
+    # --- periodicity ----------------------------------------------------------------
+
+    def show_periodicity(self):
+        """The mode, the axes, the dimensionality, why, and what to check before a run."""
+        if not hasattr(self, "pbc_mode"):
+            return
+        widgets = [self.pbc_mode, *self.pbc_boxes]
+        for widget in widgets:
+            widget.blockSignals(True)
+        try:
+            if self.atoms is None:
+                self.pbc_label.setText("—")
+                return
+            info = actions.periodicity_info(self.atoms, self.model)
+            self.pbc_mode.setCurrentIndex(0 if info["mode"] == "auto" else 1)
+            manual = bool(info["mode"] == "manual" and info["has_cell"])
+            for box, on in zip(self.pbc_boxes, info["pbc"], strict=True):
+                box.setChecked(on)
+                box.setEnabled(manual)
+            lines = [f"<b>{info['dimensionality']}</b>"]
+            if info["has_cell"]:
+                lines += [f"{'abc'[k]}: {r}" for k, r in enumerate(info["reasons"])]
+                if info["mode"] == "manual" and info["pbc"] != info["auto"]:
+                    from ..structure_io import dimensionality
+
+                    lines.append(f"(la automática daría {dimensionality(info['auto'])})")
+            else:
+                lines.append("sin celda: define una con «Celda…» para hacerla periódica")
+            marks = {"error": "✗", "aviso": "⚠", "nota": "·"}
+            lines += [f"{marks[level]} {text}" for level, text in info["checks"]]
+            self.pbc_label.setText("<br>".join(lines))
+        finally:
+            for widget in widgets:
+                widget.blockSignals(False)
+
+    def periodicity_mode_changed(self, *_):
+        if self.atoms is None:
+            return
+        mode = self.pbc_mode.currentData()
+        try:
+            actions.set_periodicity(self.atoms, mode, [b.isChecked() for b in self.pbc_boxes])
+        except ValueError as error:
+            self.error("Periodicidad", str(error))
+        self._periodicity_changed()
+
+    def periodicity_edited(self, *_):
+        if self.atoms is None or self.pbc_mode.currentData() != "manual":
+            return
+        try:
+            actions.set_periodicity(self.atoms, "manual", [b.isChecked() for b in self.pbc_boxes])
+        except ValueError as error:
+            self.error("Periodicidad", str(error))
+        self._periodicity_changed()
+
+    def _periodicity_changed(self):
+        """Every result of the old axes is stale: k points, SCC images, bands, modes."""
+        from ..structure_io import dimensionality
+
+        self.invalidate()
+        self.console.line(f"periodicidad: {dimensionality(self.atoms.pbc)} "
+                          f"({self.pbc_mode.currentText().lower()})")
+        self._structure_text()
+        self.show_periodicity()
+        self.view.show(self.atoms, keep_camera=True)
+
+    def _structure_text(self):
+        from ..structure_io import dimensionality
+
+        info = actions.structure_summary(self.atoms)
+        name = self.geometries[self.geometry_combo.currentIndex()][0] if self.geometries \
+            else ""
+        self.structure_label.setText(f"{name}\n{info['formula']} · {info['atoms']} átomos · "
+                                     f"{dimensionality(self.atoms.pbc)}")
+
     def set_atoms(self, atoms, name: str = ""):
         """Make ``atoms`` the active geometry (adding it to the session's list if new)."""
         for k, (_, known) in enumerate(self.geometries):
@@ -814,13 +908,15 @@ class MainWindow(QMainWindow):
         info = actions.structure_summary(atoms)
         self.console.line(f"estructura: {name or '—'} · {info['formula']} · {info['atoms']} "
                           f"átomos · periódica: {info['periodic']}")
-        self.structure_label.setText(f"{name}\n{info['formula']} · {info['atoms']} átomos · "
-                                     f"periódica: {info['periodic']}")
+        if atoms.info.get("periodicity"):
+            self.console.line(atoms.info["periodicity"])
+        self._structure_text()
         suggested = actions.suggest_model(atoms)
         if self.model is None or actions.check_model(atoms, self.model):
             self.set_model(suggested)
         self.invalidate()
         self._memory_note()
+        self.show_periodicity()
         self.view.show(atoms)
 
     def _model_chosen(self, index):
@@ -852,6 +948,7 @@ class MainWindow(QMainWindow):
             if problems:
                 text += "\n⚠ " + " ".join(problems)
         self.model_label.setText(text)
+        self.show_periodicity()                        # the SCC checks depend on the model
         self.invalidate()
         self._memory_note()
 

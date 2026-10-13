@@ -230,9 +230,16 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   are applied as tooltips and info boxes; a test fails if a new button, box
   or form row in `app.py` has no text there.
 - Structures are read through `tbkit.structure_io` (window and command line): `.xtl`
-  too, and a cell declared non-periodic becomes periodic only along axes where closing
-  the cell makes bonds (molecules in boxes stay molecules). A cell is never invented;
-  «Celda…» sets one by hand. `.xyz` is written as extended XYZ so the cell survives.
+  too. The window's periodicity is automatic by default (`auto_periodicity`): an axis is
+  periodic where bonds cross the cell, and an axis declared periodic with ≥ `VACUUM_GAP`
+  (5 Å) of empty slab is not (a tube in a box declared 3D cost 13 824 k points once);
+  below that the declaration stands (graphite's 3.35 Å is a lattice no bond crosses).
+  What the file declared is kept in `info["pbc_file"]`; «Periodicidad → Manual» edits the
+  axes. A cell is never invented; «Celda…» sets one by hand. k is sampled only along
+  axes some bond crosses (`System.k_axes`, exact). Every calculation of the window runs
+  `actions.preflight` first (overlapping images, bonds cut by a non-periodic axis, SCC
+  vacuum, k length per axis, memory): errors stop it before any work.
+  `.xyz` is written as extended XYZ so the cell survives.
 - Recipes: every recipe with a `main(argv)` must build its argparse parser before doing any work.
   The window's Recetas tab reads the options by calling `main([])` with `parse_args` patched to
   stop there (`actions.recipe_usage`); a `main()` without argv is never called (it would run).

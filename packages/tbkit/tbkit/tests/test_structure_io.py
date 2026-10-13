@@ -26,7 +26,10 @@ def test_xtl_p1_and_space_group(tmp_path):
     path = tmp_path / "g.xtl"
     path.write_text(GRAPHENE_XTL)
     atoms = sio.read_structure(path)
-    assert atoms.get_chemical_symbols() == ["C", "C"] and atoms.pbc.all()
+    # An .xtl is periodic in all three axes by format; c is 15 Å of vacuum, so the
+    # automatic periodicity makes the sheet 2D and keeps what the file declared.
+    assert atoms.get_chemical_symbols() == ["C", "C"] and list(atoms.pbc) == [True, True, False]
+    assert atoms.info["pbc_file"] == "TTT" and "2D (a, b)" in atoms.info["periodicity"]
     d = atoms.get_distance(0, 1, mic=True)
     assert d == pytest.approx(2.46 / np.sqrt(3), abs=1e-3)       # the C-C bond
     # Diamond from its space group (227, origin choice 1): 8 atoms in the cubic cell.
@@ -51,7 +54,8 @@ def test_periodicity_from_bonds_across_the_cell(tmp_path):
     path = tmp_path / "g.xyz"
     sheet.write(path, format="extxyz")
     atoms = sio.read_structure(path)
-    assert list(atoms.pbc) == [True, True, False] and "deducida" in atoms.info["periodicity"]
+    assert list(atoms.pbc) == [True, True, False]
+    assert "enlaces que cruzan" in atoms.info["periodicity"]
     box = molecule("C6H6", vacuum=5.0)      # a molecule in a box stays a molecule
     box.pbc = False
     box.write(tmp_path / "b.xyz", format="extxyz")
