@@ -1150,6 +1150,26 @@ al otro.
   empieza en 37102 s, justo donde acaba este archivo— así que esta no
   está contrastada valor a valor, y la nota lo dice.
 
+## En galvanostático no hay columna de corriente MEDIDA
+
+- **La corriente es la magnitud que se CONTROLA**, así que EC-Lab no
+  guarda una columna de corriente: la guarda en `control/V/mA`, cuya
+  unidad depende del modo —voltios cuando se controla el potencial,
+  miliamperios cuando se controla la corriente. El GCPL del usuario es
+  exactamente eso: quince columnas, `Ewe/V` entre ellas, y nada que
+  `to_curve` reconociera como corriente, así que el archivo se
+  descodificaba limpio y luego volvía con «faltan columnas de potencial o
+  de corriente».
+- **Y lo que se toma es la CONSIGNA, no una medida.** El signo —que es lo
+  único que separa carga de descarga— es correcto y es para lo que la
+  curva la necesita; la magnitud es lo que se pidió, no lo que el equipo
+  entregó, y el aviso lo dice. Un valor consignado leído como medido
+  esconde justo lo que el potenciostato no pudo dar.
+- **El modo decide, no el nombre de la columna.** Leer `control/V/mA`
+  como miliamperios en un experimento potenciostático es un factor de mil
+  sobre algo que ni siquiera es una corriente, así que solo se toma con
+  `mode` galvanostático en todo el registro.
+
 ## El `.mpt`: la ruta reproducible, de verdad leída
 
 El módulo decía que la ruta reproducible era el `.mpt` y no lo leía. Los

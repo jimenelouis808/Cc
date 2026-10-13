@@ -969,6 +969,13 @@ def _potential(data: ECLabData) -> Optional[np.ndarray]:
     return data.first("Ewe/V", "<Ewe>/V", "|Ewe|/V", "control/V")
 
 
+#: What the ``mode`` flag means. Read off the user's own pair of files:
+#: his voltammogram is 2 throughout and his galvanostatic cycling is 1
+#: throughout, which is the community reading as well.
+MPR_MODE_GALVANOSTATIC = 1
+MPR_MODE_POTENTIOSTATIC = 2
+
+
 def _current_a(data: ECLabData) -> Optional[np.ndarray]:
     """Current in AMPS. EC-Lab writes milliamps; the package uses SI."""
     for name in ("I/mA", "<I>/mA", "<I>/mA (2)", "control/mA"):
@@ -976,6 +983,32 @@ def _current_a(data: ECLabData) -> Optional[np.ndarray]:
             return data.columns[name] * 1e-3
     if "|I|/A" in data.columns:
         return data.columns["|I|/A"]
+    # A galvanostatic file may hold NO measured current column at all:
+    # the current is the quantity being controlled, so EC-Lab keeps it in
+    # `control/V/mA`, whose unit depends on the mode — volts when the
+    # potential is controlled, milliamps when the current is. The user's
+    # GCPL .mpr is exactly that: fifteen columns, Ewe/V among them, and
+    # nothing `to_curve` would call a current, so the file decoded
+    # cleanly and then came back «faltan columnas de potencial o de
+    # corriente».
+    #
+    # Taking it is right for a charge-discharge curve and it is NOT a
+    # measurement: it is the setpoint. The sign is what separates the
+    # branches, which is what the curve needs it for, and the note says
+    # where it came from, because a setpoint read as a measurement hides
+    # whatever the instrument could not deliver.
+    control = data.columns.get("control/V/mA")
+    mode = data.columns.get("mode")
+    if control is not None and mode is not None and mode.size:
+        if np.all(np.asarray(mode, dtype=int) == MPR_MODE_GALVANOSTATIC):
+            data.warnings.append(
+                "este archivo no trae columna de corriente medida: la "
+                "corriente sale de «control/V/mA», que en modo "
+                "galvanostático son los miliamperios CONSIGNADOS. El signo "
+                "—que es lo que separa carga de descarga— es correcto; la "
+                "magnitud es la consigna, no lo que el equipo entregó"
+            )
+            return control * 1e-3
     return None
 
 
@@ -1150,6 +1183,9 @@ __all__ = [
     "MPR_MAGIC",
     "ID_OFFSETS",
     "MPR_DATA_OFFSETS",
+    "MPR_FLAG_COLUMNS",
+    "MPR_MODE_GALVANOSTATIC",
+    "MPR_MODE_POTENTIOSTATIC",
     "MPS_TECHNIQUES",
     "BioLogicError",
     "ECLabData",

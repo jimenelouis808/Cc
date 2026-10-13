@@ -566,3 +566,53 @@ def test_the_detector_names_the_technique_the_header_declares(tmp_path):
              technique="Galvanostatic Cycling with Potential Limitation"),
         encoding="latin-1")
     assert detect(gcpl).kind == "gcd"
+
+
+def test_a_galvanostatic_file_with_no_measured_current_still_reads(tmp_path):
+    """The current is the quantity being CONTROLLED, so there is no
+    measured current column at all: EC-Lab keeps it in `control/V/mA`,
+    whose unit depends on the mode. The user's GCPL .mpr is exactly that
+    — fifteen columns, Ewe/V among them, nothing `to_curve` would call a
+    current — so it decoded cleanly and then came back «faltan columnas
+    de potencial o de corriente».
+
+    What is taken is the SETPOINT, and the note has to say so: its sign
+    separates charge from discharge, which is what the curve needs, but
+    its magnitude is what was asked for and not what was delivered.
+    """
+    n = 120
+    time = np.linspace(0.0, 600.0, n)
+    potential = np.concatenate([np.linspace(0.0, 1.2, n // 2),
+                               np.linspace(1.2, 0.0, n - n // 2)])
+    setpoint = np.concatenate([np.full(n // 2, 0.05),
+                               np.full(n - n // 2, -0.05)])     # mA
+    path = tmp_path / "gcpl.mpr"
+    path.write_bytes(_mpr(
+        {4: time, 6: potential.astype("f4"), 5: setpoint.astype("f4")},
+        settings=b"Galvanostatic Cycling with Potential Limitation\x00",
+        flags={1: np.ones(n, dtype=int)},               # galvanostatic
+    ))
+
+    curve, notes = read_eclab(path)
+    assert isinstance(curve, ChargeDischarge)
+    assert curve.current == pytest.approx(setpoint * 1e-3)
+    assert np.any(curve.current > 0) and np.any(curve.current < 0), (
+        "el signo es lo que separa carga de descarga")
+    assert any("consigna" in note for note in notes)
+
+
+def test_the_control_column_is_not_taken_as_current_when_the_mode_says_volts(
+        tmp_path):
+    """`control/V/mA` is volts when the potential is the controlled
+    quantity, and reading those as milliamps would be a silent factor of
+    a thousand on something that is not even a current."""
+    n = 80
+    time = np.linspace(0.0, 60.0, n)
+    potential = np.linspace(0.0, 0.6, n)
+    path = tmp_path / "potenciostatico.mpr"
+    path.write_bytes(_mpr(
+        {4: time, 6: potential.astype("f4"), 5: potential.astype("f4")},
+        flags={1: np.full(n, 2)},                       # potentiostatic
+    ))
+    with pytest.raises(BioLogicError, match="corriente"):
+        read_eclab(path)
