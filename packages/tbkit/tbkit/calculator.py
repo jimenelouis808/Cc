@@ -49,7 +49,7 @@ class TBCalculator(Calculator):
 
         system = System.build(self.atoms, self.model)
         need_forces = "forces" in properties
-        kpts, weights = mesh(self.atoms, self.kpts or 8) if system.periodic else gamma()
+        kpts, weights = mesh(system, self.kpts or 8) if system.periodic else gamma()
         if self.scc:
             # Forces need tightly converged charges (their error scales with it).
             # Start from the last call's charges (relaxation steps, finite

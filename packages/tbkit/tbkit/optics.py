@@ -201,7 +201,7 @@ def polarizability(system: System, kmesh: int = 12, kT: float = 0.01, omega: flo
     """α (Å³): per molecule for a finite system, per unit cell for a periodic one."""
     if system.periodic:
         if kpts is None:
-            kpts, weights = mesh(system.atoms, kmesh)
+            kpts, weights = mesh(system, kmesh)
         return polarizability_periodic(system, kpts, weights, kT, omega, charge,
                                        onsite_dipoles, extra_polarizability)[0]
     solution = solve(system, *gamma(), charge=charge, kT=kT)
@@ -377,7 +377,7 @@ def polarizability_periodic_screened(system: System, kmesh: int | tuple = 12,
     from .scc import gamma_matrix, self_consistent
 
     if kpts is None:
-        kpts, weights = mesh(system.atoms, kmesh)
+        kpts, weights = mesh(system, kmesh)
     if ground_scc is None:
         ground_scc = system.model.scc
     atoms = system.basis.atoms
@@ -609,7 +609,7 @@ def dynamic_polarizability_periodic(system: System, energies, eta: float = 0.1,
     from .dipoles import dipole_matrices, has_dipoles
 
     if kpts is None:
-        kpts, weights = mesh(system.atoms, kmesh)
+        kpts, weights = mesh(system, kmesh)
     if ground_scc is None:
         ground_scc = system.model.scc
     shift = None

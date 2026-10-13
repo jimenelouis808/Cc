@@ -99,13 +99,17 @@ def kmesh_note(atoms: Atoms, model: TBModel, kmesh) -> str:
     pbc = atoms.get_pbc()
     if not pbc.any():
         return "malla k: solo Γ (estructura finita)"
-    counts = [kmesh if p else 1 for p in pbc]
+    axes = System.build(atoms, model).k_axes
+    counts = [kmesh if a else 1 for a in axes]
     nk = int(np.prod(counts))
     norb = sum(len(model.orbitals[el]) for el in atoms.get_chemical_symbols()
                if el in model.orbitals)
     need = k_memory_bytes(nk, norb, not model.orthogonal)
+    vacuum = [ax for ax, p, a in zip("xyz", pbc, axes, strict=True) if p and not a]
+    note = (f" · {', '.join(vacuum)} periódico{'s' if len(vacuum) > 1 else ''} pero sin "
+            "enlaces que crucen la celda: un solo punto k ahí (exacto)") if vacuum else ""
     return (f"malla k: {'×'.join(map(str, counts))} = {nk} puntos · {norb} orbitales · "
-            f"~{need / 1e9:.2f} GB en autovectores")
+            f"~{need / 1e9:.2f} GB en autovectores{note}")
 
 
 @dataclass
@@ -127,7 +131,7 @@ def ground_state(atoms: Atoms, model: TBModel, charge: float = 0.0, kT: float = 
     system = System.build(atoms, model)
     use_scc = model.scc if scc is None else scc
     print(kmesh_note(atoms, model, kmesh), flush=True)
-    kpts = mesh(atoms, kmesh) if system.periodic else gamma()
+    kpts = mesh(system, kmesh) if system.periodic else gamma()
     if use_scc:
         from ..progress import Progress
         from ..scc import self_consistent
@@ -190,7 +194,7 @@ def band_curves(atoms: Atoms, model: TBModel, path: Optional[str] = None,
         raise ValueError("Las bandas necesitan una estructura periódica.")
     bandpath = band_path(atoms, path, npoints)
     energies = bands(system, bandpath)
-    fermi = solve(system, *mesh(atoms, kmesh), kT=kT).fermi
+    fermi = solve(system, *mesh(system, kmesh), kT=kT).fermi
     x, xticks, labels = bandpath.get_linear_kpoint_axis()
     return {"x": x, "energies": energies[0] - fermi, "ticks": xticks, "labels": list(labels)}
 
@@ -288,7 +292,7 @@ GUESSES = {"antiferro": "antiferro (subredes)", "ferro": "ferro", "random": "ale
 
 def _hubbard_system(atoms, model, kmesh):
     system = System.build(atoms, model)
-    kpts, weights = mesh(atoms, kmesh) if system.periodic else gamma()
+    kpts, weights = mesh(system, kmesh) if system.periodic else gamma()
     return system, kpts, weights
 
 

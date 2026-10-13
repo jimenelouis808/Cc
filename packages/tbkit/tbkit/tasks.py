@@ -23,7 +23,7 @@ from .solver import solve
 
 
 def _kpts(system: System, kmesh: int):
-    return mesh(system.atoms, kmesh) if system.periodic else gamma()
+    return mesh(system, kmesh) if system.periodic else gamma()
 
 
 def levels(atoms: Atoms, model: TBModel, kmesh: int = 24, kT: float = 0.01,

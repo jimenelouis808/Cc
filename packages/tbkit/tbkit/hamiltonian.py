@@ -59,6 +59,20 @@ class System:
         return bool(self.atoms.get_pbc().any())
 
     @property
+    def k_axes(self) -> tuple[bool, bool, bool]:
+        """Periodic axes some bond actually crosses: the ones H(k) and S(k) depend on.
+
+        A declared periodic axis that is only vacuum (a molecule or a tube in a box
+        written with ``pbc`` on all three axes) has no bond with a lattice shift along
+        it, so k along it changes nothing.
+        """
+        pbc = self.atoms.get_pbc()
+        crossed = np.zeros(3, dtype=bool)
+        for bond in self.bonds:
+            crossed |= np.asarray(bond.shift) != 0
+        return tuple(bool(p and c) for p, c in zip(pbc, crossed, strict=True))
+
+    @property
     def electrons(self) -> float:
         """Neutral electron count of the orbitals in the model."""
         coordination = self.coordination()

@@ -165,3 +165,31 @@ def test_relaxation_reports_every_step(monkeypatch):
                                   fmax=1e-6)
     steps = [m for m in seen if m["label"] == "relajación"]
     assert steps and steps[-1]["done"] >= out["steps"] and "Fmáx" in steps[-1]["note"]
+
+
+def test_vacuum_axes_declared_periodic_get_one_k_point_exactly():
+    """A 1D structure in a box written with pbc on x, y and z (an .xtl, a unit cell from
+    another package): k only along the axis bonds cross, with identical results. The
+    user's 132-atom coil at 24 per axis was 13 824 points and 62 GB instead of 24."""
+    import numpy as np
+    from ase.build import graphene_nanoribbon
+
+    from tbkit.gui import actions
+    from tbkit.hamiltonian import System
+    from tbkit.kpoints import mesh
+
+    ribbon = graphene_nanoribbon(2, 1, type="armchair", saturated=True, vacuum=5.0)
+    boxed = ribbon.copy()
+    boxed.pbc = True
+    model = actions.load_model("xu_chn")
+    assert System.build(boxed, model).k_axes == (False, False, True)
+    assert len(mesh(System.build(boxed, model), 6)[0]) == 6
+    assert len(mesh(boxed, 6)[0]) == 216                  # the Atoms form is unchanged
+    for scc in (False, True):
+        a = actions.ground_state(ribbon, model, kmesh=6, scc=scc)
+        b = actions.ground_state(boxed, model, kmesh=6, scc=scc)
+        assert len(b.solution.kpts) == 6
+        assert np.allclose(np.sort(a.solution.energies.ravel()),
+                           np.sort(b.solution.energies.ravel()), atol=1e-6)
+    note = actions.kmesh_note(boxed, model, 24)
+    assert "1×1×24 = 24 puntos" in note and "x, y periódicos" in note

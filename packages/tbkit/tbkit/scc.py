@@ -141,7 +141,7 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
         if kpts is None:
             from .kpoints import mesh
 
-            kpts, weights = mesh(system.atoms)
+            kpts, weights = mesh(system)
     else:
         kpts, weights = None, None
     gamma = gamma_matrix(system, U)

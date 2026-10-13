@@ -71,7 +71,7 @@ def _system(args):
 def _kpoints(system, n):
     from .kpoints import gamma, mesh
 
-    return mesh(system.atoms, n) if system.periodic else gamma()
+    return mesh(system, n) if system.periodic else gamma()
 
 
 def _write_table(path: Optional[str], header: list[str], columns: list[np.ndarray]) -> None:

@@ -183,7 +183,7 @@ def solve(system: System, kpts=None, weights=None, charge: float = 0.0, kT: floa
         count (grand canonical: magnetisation against Fermi level).
     """
     if kpts is None:
-        kpts, weights = mesh(system.atoms) if system.periodic else gamma()
+        kpts, weights = mesh(system) if system.periodic else gamma()
     kpts = np.atleast_2d(np.asarray(kpts, dtype=float))
     weights = np.full(len(kpts), 1.0 / len(kpts)) if weights is None else np.asarray(weights)
     channels = [None] if spin_potentials is None else list(spin_potentials)
