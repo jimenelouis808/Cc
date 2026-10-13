@@ -270,6 +270,43 @@ def detect(path: str | Path) -> Detection:
             reasons=["cabecera SOFH de PHI MultiPak"],
         )
 
+    # An EC-Lab .mpt is the ASCII export, and it is decided HERE rather
+    # than left to the generic text reader for two reasons. Its header is
+    # dozens of lines of technique parameters, so the shape-based
+    # detection downstream reads the table without them — on the user's
+    # own files one came back «desconocido» and the other as a Raman MAP.
+    # And the header is where the scan rate is: the one number a
+    # voltammogram cannot be analysed without and that this package
+    # refuses to guess.
+    # Imported here and not at the top: `dataio` sits ABOVE the
+    # instrument readers, and the detector is the one place in it that
+    # has to know their markers.
+    from ..echem.biologic import MPS_TECHNIQUES, MPT_IDENTIFIER
+
+    if MPT_IDENTIFIER.encode("ascii") in sample[:200].upper():
+        # The technique is DECLARED in the header, so the kind does not
+        # have to be inferred from the shape of the columns — which is
+        # what the generic detection would do, and what read a
+        # galvanostatic file as a Raman map.
+        technique = ""
+        name = ""
+        for line in sample[:4000].decode("latin-1", "replace").splitlines()[2:8]:
+            if line.strip().lower() in MPS_TECHNIQUES:
+                name = line.strip()
+                technique = MPS_TECHNIQUES[name.lower()]
+                break
+        reasons = ["cabecera «EC-LAB ASCII FILE» de EC-Lab"]
+        if name:
+            reasons.append(f"técnica declarada: {name}")
+        else:
+            reasons.append("la técnica no se reconoce en la cabecera; se lee "
+                           "por las columnas")
+        return Detection(
+            kind=technique if technique in ("cv", "gcd", "eis", "lsv")
+            else "echem",
+            fmt="mpt", confidence="alta", reasons=reasons,
+        )
+
     # An .mps holds no measurement at all, so "no numeric table found" is
     # true and unhelpful: what it needs is the name of the file that does.
     if b"EC-LAB SETTING FILE" in sample[:400].upper():

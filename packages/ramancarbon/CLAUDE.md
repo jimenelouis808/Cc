@@ -1121,6 +1121,76 @@ El módulo `echem/io.py` dice que los formatos binarios se rechazan, y
   rechazos— y explícitamente no prueba lo único que no se puede probar sin
   la especificación de Bio-Logic.
 
+## Seis columnas que son UN byte
+
+Los tres archivos `.mpr` del usuario se rechazaban por «identificadores
+de columna desconocidos» y el motivo eran dos errores tapándose el uno
+al otro.
+
+- **`mode`, `ox/red`, `error`, `control changes`, `Ns changes` y
+  `counter inc.` no son seis columnas: son BITS de un solo byte** al
+  principio de cada registro (`MPR_FLAG_COLUMNS`, con su máscara y su
+  desplazamiento). Contadas como un byte cada una, el registro salía
+  cinco bytes de más, la aritmética no cerraba por ningún lado — y como
+  tres de las seis además faltaban en la tabla, el archivo se rechazaba
+  por lo segundo mientras lo que estaba mal era lo primero.
+- **Se estableció contra la exportación ASCII del MISMO experimento**, que
+  es el flujo que este módulo recomienda desde el principio: el
+  `CV_multpit_01_CV_C01` del usuario en `.mpr` y en `.mpt`. Con el
+  registro en 39 bytes y la tabla en el byte 1007 del módulo, las doce
+  columnas comunes coinciden con una discrepancia máxima de 1.3·10⁻⁸ —
+  que es la precisión con la que EC-Lab imprime un float32 — y las seis
+  banderas salen EXACTAMENTE iguales. Eso no es una suposición
+  verificada a medias: es la medida.
+- **Y el `half cycle` (468) se dedujo con menos.** Con las banderas
+  empaquetadas el registro del GCPL cierra en 49 bytes solo con cuatro
+  más, la tabla cae en el mismo byte 1007, y la columna vuelve como un
+  contador que sube 0, 0, 0, 1, 1, 1… hasta 2001. El `.mpt` que tiene el
+  usuario de esa secuencia es la técnica SIGUIENTE —su eje de tiempo
+  empieza en 37102 s, justo donde acaba este archivo— así que esta no
+  está contrastada valor a valor, y la nota lo dice.
+
+## El `.mpt`: la ruta reproducible, de verdad leída
+
+El módulo decía que la ruta reproducible era el `.mpt` y no lo leía. Los
+archivos del usuario caían al lector de texto genérico, que no ve una
+cabecera de cincuenta y ocho líneas: uno volvía como «desconocido» y el
+otro **como un mapa Raman**.
+
+- **La cabecera declara su propia longitud** (`Nb header lines : 58`) y
+  eso es la comprobación, el mismo listón que el `.mpr` y el `.spe`: ese
+  número tiene que caer EXACTAMENTE en la fila de nombres de columna, con
+  una tabla numérica debajo. Una línea de más lee los nombres como datos
+  y una de menos lee la primera medida como un nombre, y las dos cosas
+  parecen datos después.
+- **La técnica va DECLARADA en la cabecera**, así que el detector no
+  tiene que adivinarla por la forma de las columnas — que es justo lo que
+  convirtió un galvanostático en un mapa.
+- **Y la velocidad de barrido también.** La cabecera de un `.mpt` es la
+  misma tabla de parámetros que un `.mps`, así que se lee con el mismo
+  código: de ahí salen la velocidad, la corriente, la ventana, la masa y
+  el área. Un `.mpt` no necesita compañero y no hace falta deducir
+  |dE/dt| de nada.
+- **Una columna desconocida aquí cuesta solo ella misma**, y esa
+  asimetría con el `.mpr` no es una incoherencia: en el binario las
+  columnas son posicionales y una desconocida desplaza todas las de
+  detrás, así que el archivo entero se rechaza; en el texto van nombradas
+  y delimitadas, así que se guarda con su nombre y se informa.
+- **La marca decimal puede ser la coma.** El delimitador es un tabulador,
+  así que una coma dentro de un campo no puede ser otra cosa. Eso vale
+  AQUÍ y no en una exportación separada por comas.
+- **Y los nombres se dejan como los escribe EC-Lab**, unidad incluida.
+  Solo se normaliza lo que el código busca por nombre (`Ewe/V`, `I/mA`,
+  `time/s`), donde un factor de mil viajaría callado hasta cualquier
+  capacitancia. Las columnas de carga vienen en culombios en una técnica
+  y en mA·h en otra, nadie aguas abajo las lee, y convertir una haría que
+  el mismo experimento llegara con otro nombre según cuál de sus dos
+  archivos se abriera.
+- **`load()` no tenía lector para «echem»**, así que un `.mpr`
+  reconocido correctamente moría en «no hay lector para echem» — que se
+  lee como «este programa no abre mis archivos». Ahora los dos formatos
+  entran por `read_eclab`, que decide cuál es por el contenido.
+
 ## Entrada y salida
 
 - **El tipo de archivo se decide por los NÚMEROS, no por la extensión.**

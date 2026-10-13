@@ -43,7 +43,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 import numpy as np
 
@@ -98,7 +98,35 @@ ID_OFFSETS = (5, 6)
 #: as padding decoded as numbers. An offset that is not one of these is
 #: not refused — a version nobody here has seen is likely enough — but it
 #: is said out loud.
-MPR_DATA_OFFSETS: tuple[int, ...] = (0x195, 0x196)
+MPR_DATA_OFFSETS: tuple[int, ...] = (0x195, 0x196, 0x3EF)
+
+#: Identifiers that are BIT FIELDS of one shared byte, as
+#: ``(name, mask, shift)``.
+#:
+#: This is not a detail, it is what made the user's own files unreadable.
+#: Six of the columns EC-Lab lists — the mode, the sweep direction, the
+#: error flag and the three counters — are not six columns: they are bits
+#: of a single byte at the front of each record. Counted as a byte each,
+#: the record came out five bytes too wide, the arithmetic did not close,
+#: and because three of the six were missing from the table as well the
+#: file was refused for «unknown identifiers» — two wrongs hiding each
+#: other.
+#:
+#: Established against the ASCII export of the SAME run, which is the
+#: flow this module has recommended from the start: the user's
+#: ``CV_multpit_01_CV_C01`` as ``.mpr`` and as ``.mpt``. With the record
+#: at 39 bytes and the table at byte 1007 of the module, every one of
+#: these six comes back EQUAL to its column in the text file, and
+#: ``time/s``, ``control/V``, ``Ewe/V``, ``<I>/mA``, ``cycle number``,
+#: ``(Q-Qo)/C`` and ``I Range`` match theirs to float precision.
+MPR_FLAG_COLUMNS: dict[int, tuple[str, int, int]] = {
+    1: ("mode", 0x03, 0),
+    2: ("ox/red", 0x04, 2),
+    3: ("error", 0x08, 3),
+    21: ("control changes", 0x10, 4),
+    31: ("Ns changes", 0x20, 5),
+    65: ("counter inc.", 0x80, 7),
+}
 
 #: Column identifier → ``(name, numpy dtype)``.
 #:
@@ -112,9 +140,6 @@ MPR_DATA_OFFSETS: tuple[int, ...] = (0x195, 0x196)
 #: against the file length, and the file is refused — which is the
 #: failure mode to want.
 MPR_COLUMNS: dict[int, tuple[str, str]] = {
-    1: ("mode", "u1"),
-    2: ("ox/red", "u1"),
-    3: ("error", "u1"),
     4: ("time/s", "<f8"),
     5: ("control/V/mA", "<f4"),
     6: ("Ewe/V", "<f4"),
@@ -153,6 +178,16 @@ MPR_COLUMNS: dict[int, tuple[str, str]] = {
     125: ("Capacitance charge/uF", "<f8"),
     126: ("Capacitance discharge/uF", "<f8"),
     131: ("Ns", "<u2"),
+    # Read off the user's GCPL file: with the six flags packed into one
+    # byte the record closes at 49 bytes only with four more, the table
+    # lands at the same byte 1007 as the CV file, and the column comes
+    # back as a counter that rises 0, 0, 0, 1, 1, 1, … to 2001 — which is
+    # what a half cycle is, and it is also where the ASCII export of that
+    # sequence puts «half cycle» in the column order. Not compared value
+    # by value against a text export, because the one the user has is the
+    # NEXT technique of the same sequence: its time axis starts at 37102 s,
+    # exactly where this file's ends.
+    468: ("half cycle", "<u4"),
     163: ("|Estack|/V", "<f4"),
     168: ("Rcmp/Ohm", "<f4"),
     169: ("Cs/uF", "<f4"),
@@ -265,6 +300,55 @@ def _modules(raw: bytes) -> list[MPRModule]:
     return modules
 
 
+#: Field name the shared flag byte is decoded under before being
+#: unpacked. Not a column: it never reaches the caller.
+_FLAG_FIELD = "_flags"
+
+
+def _known_id(identifier: int) -> bool:
+    """Whether this column identifier has a name here, flags included."""
+    return identifier in MPR_COLUMNS or identifier in MPR_FLAG_COLUMNS
+
+
+def _record_fields(ids: Sequence[int]) -> tuple[list[str], list[str], list[int]]:
+    """``(names, formats, flag ids)`` for one record.
+
+    The flag identifiers share ONE byte, so the first of them to appear
+    reserves it and the rest add nothing to the record's width. Counting
+    them as a byte each is what made the record five bytes too wide on
+    the user's files.
+
+    Duplicate identifiers do occur (``<I>/mA`` appears as both 11 and
+    76); numpy needs unique field names.
+    """
+    names: list[str] = []
+    formats: list[str] = []
+    flags: list[int] = []
+    used: dict[str, int] = {}
+    for identifier in (int(i) for i in ids):
+        if identifier in MPR_FLAG_COLUMNS:
+            if not flags:
+                names.append(_FLAG_FIELD)
+                formats.append("u1")
+            flags.append(identifier)
+            continue
+        name, dtype = MPR_COLUMNS[identifier]
+        if name in used:
+            used[name] += 1
+            name = f"{name} ({used[name]})"
+        else:
+            used[name] = 1
+        names.append(name)
+        formats.append(dtype)
+    return names, formats, flags
+
+
+def _record_width(ids: Sequence[int]) -> int:
+    """Bytes per point, with the flag byte counted once."""
+    _, formats, _ = _record_fields([i for i in ids if _known_id(int(i))])
+    return sum(np.dtype(fmt).itemsize for fmt in formats)
+
+
 def _decode_data(module: MPRModule) -> tuple[dict[str, np.ndarray], int, list[str]]:
     """Decode the ``VMP data`` module into named columns."""
     payload = module.payload
@@ -297,7 +381,7 @@ def _decode_data(module: MPRModule) -> tuple[dict[str, np.ndarray], int, list[st
         if id_offset + 2 * n_columns > len(payload):
             continue
         candidate = np.frombuffer(payload, "<u2", n_columns, id_offset).tolist()
-        if all(int(i) in MPR_COLUMNS for i in candidate):
+        if all(_known_id(int(i)) for i in candidate):
             readable.append((id_offset, candidate))
 
     if not readable:
@@ -310,14 +394,11 @@ def _decode_data(module: MPRModule) -> tuple[dict[str, np.ndarray], int, list[st
             if id_offset + 2 * n_columns > len(payload):
                 continue
             probe = np.frombuffer(payload, "<u2", n_columns, id_offset).tolist()
-            score = sum(1 for i in probe if int(i) in MPR_COLUMNS)
+            score = sum(1 for i in probe if _known_id(int(i)))
             if score > best_score:
                 best_offset, best_ids, best_score = id_offset, probe, score
-        unknown = sorted({int(i) for i in best_ids if int(i) not in MPR_COLUMNS})
-        width = sum(
-            np.dtype(MPR_COLUMNS[int(i)][1]).itemsize
-            for i in best_ids if int(i) in MPR_COLUMNS
-        )
+        unknown = sorted({int(i) for i in best_ids if not _known_id(int(i))})
+        width = _record_width(best_ids)
         available = (
             (len(payload) - best_offset - 2 * n_columns) / n_points
             if n_points else 0.0
@@ -344,9 +425,7 @@ def _decode_data(module: MPRModule) -> tuple[dict[str, np.ndarray], int, list[st
         # plausible layouts and for the same reason.
         closing = []
         for id_offset, candidate in readable:
-            width = sum(
-                np.dtype(MPR_COLUMNS[int(i)][1]).itemsize for i in candidate)
-            body = n_points * width
+            body = n_points * _record_width(candidate)
             if body > 0 and len(payload) - body >= id_offset + 2 * n_columns:
                 closing.append((id_offset, candidate))
         if len(closing) > 1:
@@ -361,21 +440,7 @@ def _decode_data(module: MPRModule) -> tuple[dict[str, np.ndarray], int, list[st
         readable = closing or readable[:1]
     id_offset, ids = readable[0]
 
-    # Duplicate identifiers do occur (<I>/mA appears as both 11 and 76);
-    # numpy needs unique field names.
-    names: list[str] = []
-    used: dict[str, int] = {}
-    formats: list[str] = []
-    for identifier in ids:
-        name, dtype = MPR_COLUMNS[int(identifier)]
-        if name in used:
-            used[name] += 1
-            name = f"{name} ({used[name]})"
-        else:
-            used[name] = 1
-        names.append(name)
-        formats.append(dtype)
-
+    names, formats, flags = _record_fields(ids)
     record = np.dtype({"names": names, "formats": formats})
     # The offset is COMPUTED, not assumed. It differs between format
     # versions, and hardcoding one of them is exactly the kind of guess
@@ -395,7 +460,13 @@ def _decode_data(module: MPRModule) -> tuple[dict[str, np.ndarray], int, list[st
         )
 
     table = np.frombuffer(payload, record, n_points, offset)
-    columns = {name: np.asarray(table[name], dtype=float) for name in names}
+    columns = {name: np.asarray(table[name], dtype=float)
+               for name in names if name != _FLAG_FIELD}
+    if flags:
+        packed = np.asarray(table[_FLAG_FIELD], dtype=np.uint8)
+        for identifier in flags:
+            name, mask, shift = MPR_FLAG_COLUMNS[identifier]
+            columns[name] = np.asarray((packed & mask) >> shift, dtype=float)
 
     notes: list[str] = []
     if offset not in MPR_DATA_OFFSETS:
@@ -591,7 +662,18 @@ def read_mps(path: str | Path) -> ECLabSettings:
             f"{path.name}: no lleva la cabecera «EC-LAB SETTING FILE», así "
             "que no es un .mps de EC-Lab"
         )
+    return _settings_from_lines(lines)
 
+
+def _settings_from_lines(lines: Sequence[str]) -> ECLabSettings:
+    """The technique and the parameter table, from either file.
+
+    An ``.mpt``'s header is the same thing an ``.mps`` is — the technique
+    name and then one row per parameter — so it is read with the same
+    code. That is the whole reason the ``.mpt`` route needs nothing
+    guessed: the scan rate, the current, the window and the electrode
+    travel inside the data file itself.
+    """
     settings = ECLabSettings()
     for index, line in enumerate(lines):
         stripped = line.strip()
@@ -646,6 +728,222 @@ def read_mps(path: str | Path) -> ECLabSettings:
             "leído igual y están en `parameters`"
         )
     return settings
+
+
+#: What the first line of an EC-Lab text export says.
+MPT_IDENTIFIER = "EC-LAB ASCII FILE"
+
+#: How many header lines the file declares. This is the self-check, and
+#: it is the same bar the ``.mpr`` and the PHI ``.spe`` are held to: the
+#: file states one number more than it needs to, so if the declared count
+#: does not land on the column-name row then the fields are not where the
+#: reader thinks and going on would read numbers from the wrong columns.
+_MPT_HEADER_COUNT = re.compile(r"nb\s+header\s+lines\s*:\s*(\d+)", re.I)
+
+#: Columns whose unit is not the one the rest of this module READS,
+#: mapped to the name it reads and the factor that gets there.
+#:
+#: Only those. EC-Lab's own spelling is kept for everything else —
+#: including the charge columns, which come in coulombs on one technique
+#: and in milliamp-hours on another — because the unit is inside the
+#: name, nothing downstream reads them, and converting one of them would
+#: make the same experiment arrive under a different name depending on
+#: which of its two files was opened. What is normalised is exactly what
+#: :func:`_potential`, :func:`_current_a` and :func:`to_curve` look up by
+#: name, where a factor of a thousand would travel silently into every
+#: capacitance.
+MPT_UNIT_ALIASES: dict[str, tuple[str, float]] = {
+    "i/a": ("I/mA", 1e3),
+    "<i>/a": ("<I>/mA", 1e3),
+    "i/\u00b5a": ("I/mA", 1e-3),
+    "i/ua": ("I/mA", 1e-3),
+    "<i>/\u00b5a": ("<I>/mA", 1e-3),
+    "<i>/ua": ("<I>/mA", 1e-3),
+    "ewe/mv": ("Ewe/V", 1e-3),
+    "time/ms": ("time/s", 1e-3),
+    "time/h": ("time/s", 3600.0),
+}
+
+
+#: Column names this module knows, for the «unknown column» note. The
+#: binary table's own names plus the ones only the text export writes.
+_MPT_KNOWN: frozenset[str] = frozenset(
+    [name.lower() for name, _ in MPR_COLUMNS.values()]
+    + [name.lower() for name, _ in MPT_UNIT_ALIASES.values()]
+    + list(MPT_UNIT_ALIASES)
+    + [
+        "mode", "ox/red", "error", "control changes", "counter inc.",
+        "ns changes", "ns", "time/s", "ewe/v", "ece/v", "<ewe>/v", "<ece>/v",
+        "i/ma", "<i>/ma", "control/v", "control/ma", "control/v/ma",
+        "dq/ma.h", "(q-qo)/ma.h", "i range", "half cycle", "cycle number",
+        "q charge/discharge/ma.h", "q discharge/ma.h", "q charge/ma.h",
+        "capacity/ma.h", "efficiency/%", "energy charge/w.h",
+        "energy discharge/w.h", "capacitance charge/\u00b5f",
+        "capacitance discharge/\u00b5f", "x", "p/w", "pwe/w", "rwe/ohm",
+        "r/ohm", "freq/hz", "re(z)/ohm", "-im(z)/ohm", "|z|/ohm",
+        "phase(z)/deg", "|ewe|/v", "|i|/a", "cs/\u00b5f", "cp/\u00b5f",
+        "analog in 1/v", "analog in 2/v", "step time/s", "dqm/ma.h/g",
+        "q-qo/c", "nb cycle",
+    ]
+)
+
+
+def read_mpt(path: str | Path) -> ECLabData:
+    """Read an EC-Lab ``.mpt`` — the ASCII export, header and all.
+
+    This is the route this module has recommended from the start and the
+    only one that depends on nothing reverse-engineered: the columns are
+    delimited and NAMED, with their unit inside the name, and the header
+    is the same technique-plus-parameter-table an ``.mps`` holds. So the
+    scan rate, the current, the window, the mass and the electrode area
+    come out of the data file itself, and nothing has to be typed in or
+    deduced from |dE/dt|.
+
+    Two things are checked rather than assumed:
+
+    * **The declared header length.** ``Nb header lines : 58`` has to land
+      exactly on the row of column names, with a numeric table under it.
+      If it does not, the file is refused: a header length that is wrong
+      by one reads the column names as data or the first measurement as a
+      name, and both look like data afterwards.
+    * **The row width.** Every data row has to have as many fields as
+      there are names. A short row is a truncated file and a long one is
+      a delimiter inside a value.
+
+    One thing is deliberately NOT fatal here, unlike in the ``.mpr``: a
+    column whose name this module does not know is kept under its own
+    name and reported. In the binary the columns are positional, so an
+    unknown identifier shifts everything behind it and the whole file has
+    to be refused; in the text they are named and delimited, so an
+    unknown one costs exactly itself.
+
+    Returns
+    -------
+    ECLabData
+        The same object :func:`read_mpr` returns, with the header's
+        settings under ``settings["ajustes"]``.
+    """
+    path = Path(path)
+    try:
+        text = path.read_text(encoding="latin-1")
+    except OSError as error:
+        raise BioLogicError(f"{path.name}: {error}") from None
+    lines = [line.rstrip("\r\n") for line in text.splitlines()]
+    if not lines or MPT_IDENTIFIER not in lines[0].upper():
+        first = (lines[0][:40] if lines else "")
+        raise BioLogicError(
+            f"{path.name}: la primera línea no es «{MPT_IDENTIFIER}» "
+            f"({first!r}), así que no es una exportación de texto de EC-Lab. "
+            "En EC-Lab: «Export as text» sobre el experimento"
+        )
+    declared = None
+    for line in lines[:10]:
+        match = _MPT_HEADER_COUNT.search(line)
+        if match:
+            declared = int(match.group(1))
+            break
+    if declared is None:
+        raise BioLogicError(
+            f"{path.name}: no declara «Nb header lines», que es lo único que "
+            "dice dónde empieza la tabla. Vuelve a exportarlo desde EC-Lab"
+        )
+    if declared < 1 or declared > len(lines):
+        raise BioLogicError(
+            f"{path.name}: declara {declared} líneas de cabecera y el archivo "
+            f"tiene {len(lines)}"
+        )
+
+    names = [cell.strip() for cell in lines[declared - 1].split("\t")]
+    while names and not names[-1]:
+        names.pop()
+    if len(names) < 2 or any(_looks_numeric(name) for name in names):
+        raise BioLogicError(
+            f"{path.name}: la línea {declared} tendría que ser la de los "
+            f"nombres de columna y es {lines[declared - 1][:60]!r}. El "
+            "archivo declara una cabecera de otra longitud que la que tiene, "
+            "y leer la tabla desde donde dice daría números de otras columnas"
+        )
+    rows, width = _mpt_rows(lines[declared:], len(names), path.name)
+
+    original = list(names)
+    columns: dict[str, np.ndarray] = {}
+    unknown: list[str] = []
+    for index, name in enumerate(names[:width]):
+        canonical, factor = MPT_UNIT_ALIASES.get(name.lower(), (name, 1.0))
+        values = rows[:, index] * factor
+        if canonical in columns:
+            # EC-Lab repeats a name when a sequence has several steps.
+            canonical = f"{canonical} (2)"
+        columns[canonical] = values
+        if canonical == name and name.lower() not in _MPT_KNOWN:
+            unknown.append(name)
+
+    settings = _settings_from_lines(lines[:declared - 1])
+    warnings = [
+        "leído del .mpt, la exportación de texto: las columnas vienen "
+        "nombradas y con su unidad, así que aquí no hay nada deducido por "
+        "ingeniería inversa. Es la ruta reproducible"
+    ]
+    if unknown:
+        warnings.append(
+            "columnas que este módulo no conoce, guardadas con su nombre tal "
+            "cual y sin usar: " + ", ".join(unknown)
+            + ". En un .mpt eso no desplaza nada, porque las columnas van "
+              "nombradas y delimitadas"
+        )
+    return ECLabData(columns=columns, n_points=int(rows.shape[0]),
+                     settings={"ajustes": settings,
+                               "columnas_originales": original,
+                               "lineas_cabecera": declared},
+                     modules=[settings.technique_name or "mpt"],
+                     warnings=warnings)
+
+
+def _looks_numeric(text: str) -> bool:
+    try:
+        float(text.replace(",", "."))
+    except ValueError:
+        return False
+    return True
+
+
+def _mpt_rows(lines: Sequence[str], columns: int, name: str
+              ) -> tuple[np.ndarray, int]:
+    """The numeric table under the column names, width checked.
+
+    The decimal mark is whatever the machine that exported it used: the
+    delimiter is a tab, so a comma inside a field cannot be anything but
+    a decimal mark and reading it as one is unambiguous. That is not true
+    of a comma-delimited export, which is why this is safe here and
+    nowhere else.
+    """
+    rows: list[list[float]] = []
+    for number, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        cells = [cell.strip() for cell in line.split("\t")]
+        while cells and not cells[-1]:
+            cells.pop()
+        if len(cells) < columns:
+            raise BioLogicError(
+                f"{name}: la fila {number} de la tabla tiene {len(cells)} "
+                f"campos y la cabecera declara {columns} nombres. Un archivo "
+                "truncado se lee igual de bien que uno entero y da otros "
+                "números"
+            )
+        try:
+            rows.append([float(cell.replace(",", ".")) for cell in cells[:columns]])
+        except ValueError:
+            raise BioLogicError(
+                f"{name}: la fila {number} de la tabla no es numérica "
+                f"({line[:60]!r}). Comprueba «Nb header lines»: si no cae "
+                "exactamente en la fila de nombres, lo que sigue no es la "
+                "tabla"
+            ) from None
+    if len(rows) < 2:
+        raise BioLogicError(
+            f"{name}: debajo de la cabecera hay {len(rows)} fila(s) de datos")
+    return np.asarray(rows, dtype=float), columns
 
 
 def settings_beside(path: str | Path) -> Optional[ECLabSettings]:
@@ -782,20 +1080,51 @@ def to_curve(
                            metadata=metadata)
 
 
+def is_eclab_text(path: str | Path) -> bool:
+    """Whether this is an EC-Lab ``.mpt``, by its first line.
+
+    By content and not by extension, the same rule the rest of the
+    package follows.
+    """
+    try:
+        with Path(path).open("rb") as handle:
+            first = handle.readline(200).decode("latin-1", "replace")
+    except OSError:
+        return False
+    return MPT_IDENTIFIER in first.upper()
+
+
 def read_eclab(
     path: str | Path,
     kind: str = "",
     electrode: Optional[Electrode] = None,
     scan_rate: Optional[float] = None,
 ):
-    """Read an ``.mpr`` and return the curve it holds.
+    """Read an ``.mpr`` or an ``.mpt`` and return the curve it holds.
 
-    The ``.mps`` of the same name is read too when it is there, because
-    EC-Lab writes them as a pair and it carries the scan rate.
+    Which of the two is decided by the content. For an ``.mpr`` the
+    ``.mps`` of the same name is read too when it is there, because
+    EC-Lab writes them as a pair and it carries the scan rate; an
+    ``.mpt`` needs no companion, because its own header holds the same
+    parameter table.
 
     Returns ``(curve, warnings)``.
     """
     path = Path(path)
+    if is_eclab_text(path):
+        data = read_mpt(path)
+        settings = data.settings.get("ajustes")
+        curve = to_curve(data, kind=kind, electrode=electrode,
+                         scan_rate=scan_rate, settings=settings)
+        curve.metadata["origen"] = "EC-Lab .mpt"
+        warnings = list(data.warnings)
+        if settings is not None:
+            warnings.extend(settings.warnings)
+            curve.metadata["ajustes"] = settings.describe()
+        note = curve.metadata.get("aviso_velocidad")
+        if note:
+            warnings.append(note)
+        return curve, warnings
     data = read_mpr(path)
     settings = settings_beside(path)
     curve = to_curve(data, kind=kind, electrode=electrode,
@@ -825,8 +1154,12 @@ __all__ = [
     "BioLogicError",
     "ECLabData",
     "ECLabSettings",
+    "MPT_IDENTIFIER",
+    "MPT_UNIT_ALIASES",
+    "is_eclab_text",
     "read_eclab",
     "read_mpr",
+    "read_mpt",
     "read_mps",
     "settings_beside",
     "to_curve",

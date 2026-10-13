@@ -110,6 +110,7 @@ def load(
 _ACCEPTED: dict[str, frozenset[str]] = {
     "_load_raman": frozenset({"laser_nm", "intensity_column", "encoding"}),
     "_load_xrd": frozenset({"anode", "wavelength", "line"}),
+    "_load_echem": frozenset({"scan_rate", "electrode", "kind"}),
     "_load_xps": frozenset({"photon_energy", "pass_energy", "axis",
                             "work_function", "dwell_s", "sweeps", "region"}),
     "_load_cv": frozenset({"scan_rate", "electrode", "potential_scale",
@@ -236,6 +237,32 @@ def _load_eis(path: Path, found: Detection, options: dict[str, Any]):
     return read_eis(path, **options)
 
 
+def _load_echem(path: Path, found: Detection, options: dict[str, Any]):
+    """An EC-Lab file whose technique the detector did not pin down.
+
+    Both EC-Lab formats declare what they are — the ``.mpt`` in its
+    header, the ``.mpr`` in its modules and columns — so the reader
+    decides, and it decides from the file rather than from the
+    extension. Without this entry an ``.mpr`` detected as «echem» and
+    nothing more specific came back as «no hay lector para echem»,
+    which reads as «this program does not open my files».
+    """
+    from ..echem.biologic import BioLogicError, read_eclab
+    from ..echem.io import EchemIOError, read_cv
+
+    try:
+        curve, notes = read_eclab(path, **options)
+    except BioLogicError as error:
+        # Not an EC-Lab file after all: fall back to the text route,
+        # whose message is about columns and is the useful one then.
+        try:
+            return read_cv(path, **options)
+        except EchemIOError:
+            raise LoadError(f"{path.name}: {error}") from None
+    curve.metadata.setdefault("avisos", notes)
+    return curve
+
+
 def _load_xps(path: Path, found: Detection, options: dict[str, Any]):
     """Photoelectron spectra. Returns the list, because a file holds many.
 
@@ -256,6 +283,7 @@ _READERS = {
     "cv": _load_cv,
     "gcd": _load_gcd,
     "eis": _load_eis,
+    "echem": _load_echem,
 }
 
 

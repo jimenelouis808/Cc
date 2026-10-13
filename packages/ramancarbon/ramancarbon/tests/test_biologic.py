@@ -23,10 +23,12 @@ import pytest
 
 from ramancarbon.echem.biologic import (
     MPR_COLUMNS,
+    MPR_FLAG_COLUMNS,
     BioLogicError,
     read_eclab,
     read_mpr,
     read_mps,
+    read_mpt,
 )
 from ramancarbon.echem.curve import ChargeDischarge, Electrode, Impedance, Voltammogram
 
@@ -46,17 +48,30 @@ def _module(short: str, long_name: str, payload: bytes, version: int = 2) -> byt
 
 
 def _data_module(columns: dict[int, np.ndarray],
-                 header: int = 0x195) -> bytes:
-    """Pack named columns into a ``VMP data`` payload."""
-    ids = list(columns)
-    n_points = len(next(iter(columns.values())))
-    record = np.dtype({
-        "names": [f"c{i}" for i in ids],
-        "formats": [MPR_COLUMNS[i][1] for i in ids],
-    })
+                 header: int = 0x195,
+                 flags: dict[int, np.ndarray] | None = None) -> bytes:
+    """Pack named columns into a ``VMP data`` payload.
+
+    ``flags`` are the identifiers that live as BITS of one shared byte,
+    which is what the real files do and what the reader has to
+    reproduce: counted as a byte each the record comes out too wide and
+    nothing closes.
+    """
+    flags = flags or {}
+    ids = list(flags) + list(columns)
+    n_points = len(next(iter((flags or columns).values())))
+    names = (["_flags"] if flags else []) + [f"c{i}" for i in columns]
+    formats = (["u1"] if flags else []) + [MPR_COLUMNS[i][1] for i in columns]
+    record = np.dtype({"names": names, "formats": formats})
     table = np.zeros(n_points, dtype=record)
     for identifier, values in columns.items():
         table[f"c{identifier}"] = values
+    if flags:
+        packed = np.zeros(n_points, dtype=np.uint8)
+        for identifier, values in flags.items():
+            _, mask, shift = MPR_FLAG_COLUMNS[identifier]
+            packed |= ((np.asarray(values, dtype=np.uint8) << shift) & mask)
+        table["_flags"] = packed
     head = struct.pack("<I", n_points) + bytes([len(ids)])
     head += b"".join(struct.pack("<H", i) for i in ids)
     head += b"\x00" * max(0, header - len(head))
@@ -64,12 +79,32 @@ def _data_module(columns: dict[int, np.ndarray],
 
 
 def _mpr(columns: dict[int, np.ndarray], header: int = 0x195,
-         settings: bytes = b"Cyclic Voltammetry\x00") -> bytes:
+         settings: bytes = b"Cyclic Voltammetry\x00",
+         flags: dict[int, np.ndarray] | None = None) -> bytes:
     return (
         b"BIO-LOGIC MODULAR FILE\x1a".ljust(52, b"\x00")
         + _module("VMP Set", "VMP settings", settings)
-        + _module("VMP data", "VMP data", _data_module(columns, header))
+        + _module("VMP data", "VMP data",
+                  _data_module(columns, header, flags))
     )
+
+
+#: An EC-Lab text export, as the instrument writes it: the identifier,
+#: the declared header length, the technique, the parameter table, the
+#: column names and the tab-separated numbers.
+def _mpt(rows: list[list[str]], names: list[str],
+         technique: str = "Cyclic Voltammetry",
+         parameters: tuple[tuple[str, str], ...] = (("dE/dt", "50.000"),
+                                                    ("dE/dt unit", "mV/s")),
+         declared: int | None = None,
+         identifier: str = "EC-Lab ASCII FILE") -> str:
+    header = [identifier, "Nb header lines : {count}", "", technique, ""]
+    header += [f"{name:<20}{value:<20}" for name, value in parameters]
+    header.append("")
+    count = declared if declared is not None else len(header) + 1
+    header[1] = header[1].format(count=count)
+    body = ["\t".join(names)] + ["\t".join(row) for row in rows]
+    return "\r\n".join(header + body) + "\r\n"
 
 
 def _cv_columns(n: int = 400):
@@ -347,3 +382,187 @@ def test_the_detector_knows_both_ec_lab_files(tmp_path):
     settings = detect(tmp_path / "x.mps")
     assert settings.kind == "ajustes" and settings.fmt == "mps"
     assert ".mpr" in (settings.advice or "")
+
+
+# -- the flag byte, which is six columns in one -------------------------
+
+def test_six_of_the_columns_are_bits_of_one_byte(tmp_path):
+    """The thing that made the user's own files unreadable.
+
+    Mode, sweep direction, error and the three counters are not six
+    columns, they are bits of a single byte. Counted as a byte each the
+    record came out five bytes too wide, the arithmetic did not close,
+    and because three of the six were missing from the table as well the
+    file was refused for «unknown identifiers» — two wrongs hiding each
+    other. Established against the ASCII export of the same run.
+    """
+    n = 60
+    flags = {
+        1: np.full(n, 2),                       # mode, two bits wide
+        2: np.tile([0, 1], n // 2),             # ox/red
+        3: np.zeros(n, dtype=int),              # error
+        21: np.concatenate([[1], np.zeros(n - 1, dtype=int)]),
+        65: np.zeros(n, dtype=int),
+    }
+    columns = _cv_columns(n)
+    path = tmp_path / "banderas.mpr"
+    path.write_bytes(_mpr(columns, flags=flags))
+
+    data = read_mpr(path)
+    assert data.n_points == n
+    for identifier, values in flags.items():
+        name = MPR_FLAG_COLUMNS[identifier][0]
+        assert name in data.columns, f"falta la bandera {name}"
+        assert data.columns[name] == pytest.approx(values)
+    # And the real columns are still where they belong, which is the
+    # point: a flag counted as a whole byte shifts every one of them.
+    assert data.columns["time/s"] == pytest.approx(columns[4])
+    assert data.columns["Ewe/V"] == pytest.approx(columns[6], abs=1e-6)
+
+
+def test_the_flag_byte_counts_once_towards_the_record(tmp_path):
+    from ramancarbon.echem.biologic import _record_width
+
+    assert _record_width([1, 2, 3, 21, 65]) == 1
+    assert _record_width([1, 2, 3, 21, 65, 4]) == 9
+    assert _record_width([4, 6]) == 12
+
+
+# -- the .mpt, which is the reproducible route --------------------------
+
+_MPT_NAMES = ["mode", "ox/red", "error", "time/s", "Ewe/V", "<I>/mA",
+              "(Q-Qo)/C"]
+
+
+def _mpt_rows(n: int = 40) -> list[list[str]]:
+    rows = []
+    for index in range(n):
+        time = 0.02 * index
+        potential = -0.2 + 0.001 * index
+        rows.append(["2", "1", "0", f"{time:.6E}", f"{potential:.6E}",
+                     f"{1e-3 * index:.6E}", f"{1e-4 * index:.6E}"])
+    return rows
+
+
+def test_an_mpt_is_read_with_nothing_reverse_engineered(tmp_path):
+    """Named, delimited columns with the unit inside the name.
+
+    This is the route the module has recommended from the start, and the
+    reason it matters is in the header: the scan rate is DECLARED, so a
+    voltammogram does not need it typed in and nothing is deduced from
+    |dE/dt|.
+    """
+    path = tmp_path / "medida.mpt"
+    path.write_text(_mpt(_mpt_rows(), _MPT_NAMES), encoding="latin-1")
+
+    data = read_mpt(path)
+    assert data.n_points == 40
+    assert data.columns["Ewe/V"][0] == pytest.approx(-0.2)
+    assert data.columns["time/s"][-1] == pytest.approx(0.78)
+    # The charge column keeps EC-Lab's own name, unit included: nothing
+    # downstream reads it, and converting it would make the same
+    # experiment arrive differently from its own .mpr.
+    assert data.columns["(Q-Qo)/C"][10] == pytest.approx(1e-3)
+    settings = data.settings["ajustes"]
+    assert settings.technique == "cv"
+    assert settings.scan_rate_v_per_s == pytest.approx(0.05)
+    assert any("reproducible" in w for w in data.warnings)
+
+    curve, notes = read_eclab(path)
+    assert isinstance(curve, Voltammogram)
+    assert curve.scan_rate == pytest.approx(0.05)
+    assert "aviso_velocidad" not in curve.metadata, (
+        "con la velocidad declarada en la cabecera no hay nada que deducir")
+    assert notes
+
+
+def test_a_declared_header_length_that_is_wrong_is_refused(tmp_path):
+    """One line off reads the column names as data, or the first
+    measurement as a name, and both look like data afterwards.
+
+    The right count is found from the file the fixture writes rather than
+    written down here, so the test keeps testing the off-by-one and not
+    the fixture's own shape.
+    """
+    rows = _mpt_rows()
+    text = _mpt(rows, _MPT_NAMES)
+    lines = text.splitlines()
+    correct = lines.index("\t".join(_MPT_NAMES)) + 1
+
+    good = tmp_path / "bien.mpt"
+    good.write_text(_mpt(rows, _MPT_NAMES, declared=correct),
+                    encoding="latin-1")
+    assert read_mpt(good).n_points == len(rows)
+
+    for wrong in (correct - 1, correct + 1, 999):
+        path = tmp_path / f"mal{wrong}.mpt"
+        path.write_text(_mpt(rows, _MPT_NAMES, declared=wrong),
+                        encoding="latin-1")
+        with pytest.raises(BioLogicError):
+            read_mpt(path)
+
+
+def test_a_truncated_row_is_refused_by_its_number(tmp_path):
+    rows = _mpt_rows()
+    rows[7] = rows[7][:4]
+    path = tmp_path / "truncada.mpt"
+    path.write_text(_mpt(rows, _MPT_NAMES), encoding="latin-1")
+    with pytest.raises(BioLogicError, match="campos"):
+        read_mpt(path)
+
+
+def test_a_column_this_module_does_not_know_costs_only_itself(tmp_path):
+    """The asymmetry with the .mpr, and it is not an inconsistency.
+
+    In the binary the columns are positional, so an unknown identifier
+    shifts everything behind it and the file has to be refused. In the
+    text they are named and delimited, so an unknown one is kept under
+    its own name, reported, and nothing moves.
+    """
+    names = _MPT_NAMES + ["Quelonio/parsec"]
+    rows = [row + ["1.0"] for row in _mpt_rows()]
+    path = tmp_path / "rara.mpt"
+    path.write_text(_mpt(rows, names), encoding="latin-1")
+
+    data = read_mpt(path)
+    assert data.columns["Ewe/V"][0] == pytest.approx(-0.2)
+    assert "Quelonio/parsec" in data.columns
+    assert any("Quelonio/parsec" in w for w in data.warnings)
+
+
+def test_a_comma_decimal_mark_is_read(tmp_path):
+    """The delimiter is a tab, so a comma inside a field cannot be
+    anything but a decimal mark. That is not true of a comma-delimited
+    export, which is why this is safe here and nowhere else."""
+    rows = [[cell.replace(".", ",") for cell in row] for row in _mpt_rows()]
+    path = tmp_path / "coma.mpt"
+    path.write_text(_mpt(rows, _MPT_NAMES), encoding="latin-1")
+    data = read_mpt(path)
+    assert data.columns["Ewe/V"][0] == pytest.approx(-0.2)
+
+
+def test_something_that_is_not_an_mpt_says_so(tmp_path):
+    path = tmp_path / "otra.mpt"
+    path.write_text("tiempo\tpotencial\n0\t0\n1\t1\n", encoding="latin-1")
+    with pytest.raises(BioLogicError, match="EC-LAB ASCII FILE"):
+        read_mpt(path)
+
+
+def test_the_detector_names_the_technique_the_header_declares(tmp_path):
+    """The header says what it is, so the kind is not inferred from the
+    shape of the columns — which read the user's galvanostatic file as a
+    Raman MAP and his voltammogram as «desconocido»."""
+    from ramancarbon.dataio.detect import detect
+
+    path = tmp_path / "cv.mpt"
+    path.write_text(_mpt(_mpt_rows(), _MPT_NAMES), encoding="latin-1")
+    found = detect(path)
+    assert found.kind == "cv" and found.fmt == "mpt"
+    assert found.confidence == "alta"
+
+    gcpl = tmp_path / "gcpl.mpt"
+    gcpl.write_text(
+        _mpt(_mpt_rows(), _MPT_NAMES,
+             technique="Galvanostatic Cycling with Potential Limitation"),
+        encoding="latin-1")
+    assert detect(gcpl).kind == "gcd"

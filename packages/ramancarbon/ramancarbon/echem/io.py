@@ -151,8 +151,15 @@ def _is_eclab_binary(path: Path) -> bool:
         return False
 
 
+def _is_eclab(path: Path) -> bool:
+    """Either EC-Lab file — the binary or its text export — by content."""
+    from .biologic import is_eclab_text
+
+    return _is_eclab_binary(path) or is_eclab_text(path)
+
+
 def _eclab(path: Path, kind: str, electrode, **options):
-    """Read an ``.mpr`` and translate its errors into this module's."""
+    """Read an EC-Lab file and translate its errors into this module's."""
     from .biologic import BioLogicError, read_eclab
 
     try:
@@ -182,7 +189,7 @@ def read_cv(
         plausibly amps or milliamps.
     """
     location = Path(path)
-    if _is_eclab_binary(location):
+    if _is_eclab(location):
         curve, notes = _eclab(location, "cv", electrode, scan_rate=scan_rate)
         curve.metadata.setdefault("avisos", notes)
         return curve
@@ -261,7 +268,7 @@ def read_gcd(
     charge. When a current column exists it is used instead.
     """
     location = Path(path)
-    if _is_eclab_binary(location):
+    if _is_eclab(location):
         curve, notes = _eclab(location, "gcd", electrode)
         curve.metadata.setdefault("avisos", notes)
         return curve
@@ -420,7 +427,7 @@ def read_eis(
     one taken — and the choice is recorded in the metadata.
     """
     location = Path(path)
-    if _is_eclab_binary(location):
+    if _is_eclab(location):
         spectrum, notes = _eclab(location, "eis", electrode)
         spectrum.metadata.setdefault("avisos", notes)
         return spectrum
