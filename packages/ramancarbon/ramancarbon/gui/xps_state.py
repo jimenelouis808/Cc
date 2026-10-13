@@ -26,12 +26,27 @@ import numpy as np
 from ..xps.calibrate import Calibration, calibrate, calibrate_to_state
 from ..xps.elements import XPSDatabase, load_xps_database
 from ..xps.fitting import XPSFitResult, fit_region, resolution_floor
+from ..xps.background import remove_from
 from ..xps.io import read_xps, write_vamas
 from ..xps.presets import compare_counts, count_model, free_model, state_model
 from ..xps.quantify import Quantification, areas_from_fits, quantify
 from ..xps.spectrum import XPSError, XPSSpectrum
 from ..xps.survey import SurveyResult, add_region_evidence, identify
-from ..xps.tables import read_components, write_fit
+from ..xps.tables import BACKGROUND_EXPORT, read_components, write_fit
+
+#: ``(what the menu says, column separator, decimal mark)``.
+#:
+#: The pair is one choice, not two, because the only combination that
+#: cannot work is the one somebody would otherwise assemble by hand: the
+#: comma as both. A spreadsheet in a locale whose decimal mark is the
+#: comma reads ``1.5`` as text and drops the whole row into one cell,
+#: which is what a table that «sale mal acomodada» is.
+NUMBER_FORMATS: tuple[tuple[str, str, str], ...] = (
+    ("1.5 · coma", ",", "."),
+    ("1,5 · punto y coma", ";", ","),
+    ("1.5 · tabulador", "\t", "."),
+    ("1,5 · tabulador", "\t", ","),
+)
 
 #: Background choices offered in the section, in the order they are usually
 #: tried.
@@ -149,6 +164,17 @@ class XPSSession:
     able to say which is which."""
     removed_elements: set[str] = field(default_factory=set)
     calibration: Optional[Calibration] = None
+    export_background: str = "incluido"
+    """Which baseline the exports use, one of
+    :data:`~ramancarbon.xps.tables.BACKGROUND_EXPORT`. It applies to the
+    tables AND to the VAMAS, because the complaint it answers was that the
+    two did not agree: the data came out with the background on it and the
+    fits came out without."""
+    export_separator: str = ","
+    """Column delimiter for the tables. ``";"`` for a spreadsheet whose
+    locale reads the comma as the decimal mark."""
+    export_decimal: str = "."
+    """Decimal mark for the tables."""
     messages: list[tuple[str, str]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -895,19 +921,84 @@ class XPSSession:
         return survey_areas(spectrum, elements, database=self.database)
 
     # -- output --------------------------------------------------------
+    def set_export_background(self, choice: str) -> bool:
+        """Choose the baseline of every export. ``False`` if refused."""
+        if choice not in BACKGROUND_EXPORT:
+            self.log("error",
+                     f"el fondo se exporta {' o '.join(BACKGROUND_EXPORT)}, "
+                     f"no {choice!r}")
+            return False
+        self.export_background = choice
+        return True
+
+    def set_export_format(self, separator: str, decimal: str) -> bool:
+        """Choose the delimiter and the decimal mark of the tables.
+
+        Refuses the one combination that cannot work — both of them the
+        comma — rather than writing a file whose every number is two
+        columns.
+        """
+        if decimal not in (".", ","):
+            self.log("error", f"la marca decimal es «.» o «,», no {decimal!r}")
+            return False
+        if separator == decimal:
+            self.log("error",
+                     "el separador de columnas y la marca decimal no pueden "
+                     "ser los dos la coma: cada número partiría en dos "
+                     "columnas. Usa punto y coma como separador")
+            return False
+        self.export_separator = separator
+        self.export_decimal = decimal
+        return True
+
     def export_tables(self, directory: str | Path) -> list[Path]:
         """Write every fitted region as a pair of tables."""
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
         written: list[Path] = []
+        # A tab-delimited file called .csv is a file the spreadsheet
+        # opens as one column, which is the complaint being answered.
+        suffix = ".tsv" if self.export_separator == "\t" else ".csv"
         for label, result in self.fits.items():
             stem = label.replace(" ", "").replace("/", "")
-            written.extend(write_fit(result, directory / f"{stem}.csv"))
+            written.extend(write_fit(
+                result, directory / f"{stem}{suffix}",
+                background=self.export_background,
+                separator=self.export_separator,
+                decimal=self.export_decimal,
+            ))
         return written
 
     def export_vamas(self, path: str | Path) -> Path:
-        """Write the referenced spectra in the format other programs read."""
-        return write_vamas(path, self.shifted or self.spectra)
+        """Write the referenced spectra in the format other programs read.
+
+        With ``export_background == "restado"`` a region that has a fit is
+        written over the FITTED window with its background taken off, and
+        the block says so in its comment. A region with no fit has no
+        background to take off, so it goes out as measured and that is
+        said out loud: silently mixing the two is the thing being fixed.
+        """
+        spectra = self.shifted or self.spectra
+        if self.export_background == "incluido":
+            return write_vamas(path, spectra)
+        prepared: list[XPSSpectrum] = []
+        untouched: list[str] = []
+        for spectrum in spectra:
+            result = self.fits.get(self.region_label(spectrum))
+            if result is None:
+                prepared.append(spectrum)
+                untouched.append(spectrum.region or spectrum.name)
+                continue
+            try:
+                prepared.append(remove_from(spectrum, result.background))
+            except XPSError as error:
+                prepared.append(spectrum)
+                untouched.append(f"{spectrum.region}: {error}")
+        if untouched:
+            self.log("aviso",
+                     "sin ajuste y por tanto sin fondo que restar, salen tal "
+                     "cual: " + ", ".join(untouched))
+        return write_vamas(path, prepared)
 
     def import_model(self, path: str | Path) -> Optional[str]:
         """Load a components table as the model for its region."""

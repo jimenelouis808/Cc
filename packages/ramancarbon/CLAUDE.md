@@ -1411,6 +1411,56 @@ El módulo `echem/io.py` dice que los formatos binarios se rechazan, y
   eje, y mandar el original con una frase sobre el desplazamiento es como
   ese desplazamiento se aplica dos veces. Por eso se exporta VAMAS.
 
+## Lo que se exporta tiene que ABRIRSE
+
+Tres cosas que estaban calculadas bien y salían en archivos que el
+programa de destino no podía usar. Ninguna es cosmética.
+
+- **El VAMAS se escribió campo por campo contra el archivo del propio
+  equipo del usuario**, un `.vms` que su PHI Quantera exportó y que
+  CasaXPS abre. Lo que faltaba: **CRLF** (el formato es posicional y se
+  lee línea a línea; con solo LF el archivo es UNA línea), **ASCII** (un
+  comentario con «región» o «energía» es mojibake o una lectura
+  detenida), los **nombres de unidad del estándar** —ISO 14976 los fija y
+  «cuentas» no es uno: la ordenada va en `d` y la unidad de verdad viaja
+  en el comentario del bloque—, **`Binding Energy` con mayúsculas**,
+  porque la etiqueta de la abscisa es lo que el lector casa para decidir
+  en qué sentido va el eje, y un **número de barridos de al menos uno**,
+  que es lo que un `.spe` sin `sweeps` no daba.
+- **Y un cero no vale como «no hay valor».** Una energía de paso de cero
+  o una función de trabajo de cero son afirmaciones, y el programa que
+  divide por ellas da un resultado en vez de un error. `VAMAS_UNSET` es
+  el `1e+037` del propio PHI, elegido por la única razón que cuenta: el
+  lector que tiene que aceptar este archivo ya lo acepta. Al volver se
+  lee como ausente (`VAMAS_UNSET_ABOVE`), porque 10³⁷ eV se parece
+  demasiado a una medida.
+- **Las notas van DEBAJO de los números.** Son parte del resultado y
+  siguen saliendo, pero nueve líneas de prosa encima de la cabecera es un
+  archivo que toda hoja de cálculo importa como una sola columna de
+  texto. Con `notes_position="final"` la fila 1 son los nombres de
+  columna y la 2 las unidades, que es donde los busca todo.
+- **La marca decimal es una ELECCIÓN, no una constante.** Una hoja de
+  cálculo cuya configuración regional espera la coma lee `1.5` como el
+  texto «1.5» y mete la fila entera en una celda: eso es exactamente una
+  tabla «mal acomodada». Y la conversión se hace donde el valor todavía
+  es un número, nunca sobre la línea terminada, porque si no el `C-C_sp2`
+  de una columna de texto también cambiaría. La única combinación
+  imposible —coma como separador Y como marca decimal— se rechaza en vez
+  de escribirse.
+- **Una sola línea base para todo el archivo.** La medida salía CON el
+  fondo y las componentes SIN él, así que las curvas de un mismo archivo
+  no se podían dibujar juntas y las columnas no sumaban nada. Hay dos
+  exportaciones consistentes y solo dos (`BACKGROUND_EXPORT`): con el
+  fondo **incluido** la medida se deja intacta y cada componente SUBE
+  sobre el fondo —sumarlas cuenta el fondo una vez de más por
+  componente—, y con el fondo **restado** baja la medida y la envolvente
+  es la suma exacta de las componentes. Cada tabla dice cuál de las dos
+  identidades cumple, y hay una prueba de las dos.
+- **Y la elección vale también para el VAMAS.** Un bloque restado se
+  escribe sobre la ventana AJUSTADA, que es donde el fondo existe; una
+  región sin ajuste no tiene fondo que restar, sale tal cual y eso se
+  dice en voz alta. Mezclarlas en silencio es el problema, movido.
+
 ## Una energía de enlace NO es un grupo funcional
 
 - **«O de red (óxido metálico)» a 530 eV y una quinona C=O a 531 están a

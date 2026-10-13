@@ -91,6 +91,39 @@ class Background:
         return text
 
 
+def remove_from(spectrum: "XPSSpectrum", estimate: Background) -> "XPSSpectrum":
+    """The spectrum over the background's window, with it subtracted.
+
+    What leaves a program is not what came in, and this is the sharpest
+    case of it: the measured counts carry the background and a fitted
+    component does not, so a file holding both describes two different
+    baselines and nothing that reads it can tell. Exporting the
+    subtracted spectrum is the other consistent choice — everything on
+    the same zero — and it is a choice, which is why it is a function
+    somebody calls rather than something the writer does.
+
+    The window is the background's, because that is the only stretch over
+    which the background exists. Points outside it are not kept: a
+    spectrum that is subtracted in the middle and raw at the edges is the
+    problem this fixes, moved.
+    """
+    axis, counts = spectrum.region_of(*estimate.window)
+    if axis.size != estimate.values.size:
+        raise XPSError(
+            f"el fondo tiene {estimate.values.size} puntos y la ventana "
+            f"{estimate.window[0]:.2f}–{estimate.window[1]:.2f} eV del "
+            f"espectro tiene {axis.size}: no son del mismo espectro"
+        )
+    out = spectrum.with_counts(
+        estimate.subtract(counts),
+        f"fondo {estimate.kind} restado sobre "
+        f"{estimate.window[0]:.2f}–{estimate.window[1]:.2f} eV",
+        energy=axis,
+    )
+    out.metadata["fondo_restado"] = estimate.kind
+    return out
+
+
 def _endpoints(counts: np.ndarray, points: int,
                envelope: Optional[np.ndarray] = None) -> tuple[float, float]:
     """The background's value at each end of the window.
@@ -409,6 +442,7 @@ __all__ = [
     "TOUGAARD_C",
     "TOUGAARD_MIN_SPAN",
     "estimate_background",
+    "remove_from",
     "linear_background",
     "shirley_background",
     "tougaard_background",

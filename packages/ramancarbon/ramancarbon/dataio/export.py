@@ -73,7 +73,18 @@ def with_uncertainty(value: float, sigma: Optional[float]) -> str:
     return f"{value:.{decimals}f} ± {sigma:.{decimals}f}"
 
 
-def _cell(value: Any, digits: int) -> str:
+def _cell(value: Any, digits: int, decimal: str = ".") -> str:
+    """One cell as text.
+
+    ``decimal`` applies to the cells this function MAKES from numbers, and
+    to nothing else. A spreadsheet in a locale whose decimal mark is the
+    comma reads ``1.5`` as the text «1.5» and puts the whole row in one
+    cell; the same sheet reads ``1,5`` as a number. But converting every
+    dot in the table would rewrite the text columns too — a state key like
+    ``C-C_sp2`` survives, a note like «0.8 eV» does not — so the
+    substitution happens here, where the value is still a number, and
+    never over the finished line.
+    """
     if value is None:
         return ""
     if isinstance(value, bool):
@@ -81,7 +92,8 @@ def _cell(value: Any, digits: int) -> str:
     if isinstance(value, (int, np.integer)):
         return str(int(value))
     if isinstance(value, (float, np.floating)):
-        return significant(float(value), digits)
+        text = significant(float(value), digits)
+        return text.replace(".", decimal) if decimal != "." else text
     return str(value)
 
 
@@ -99,29 +111,70 @@ class Table:
     in every format that has them, because a warning left behind in the
     program is a warning that did not happen."""
     digits: int = 4
+    separator: str = ","
+    """Column separator the CSV writer uses when it is not given one."""
+    decimal: str = "."
+    """Decimal mark for the numbers. ``","`` for a spreadsheet in a locale
+    that expects it, and then the separator has to be something else."""
+    notes_position: str = "final"
+    """``"final"`` puts the title and the notes AFTER the data, which
+    leaves the column names on row 1 where every spreadsheet, plotting
+    program and ``read_csv`` looks for them. ``"inicio"`` is the old
+    layout, kept for whoever was reading it."""
 
     def __post_init__(self) -> None:
         if self.units is not None and len(self.units) != len(self.columns):
             raise ValueError(
                 f"hay {len(self.columns)} columnas y {len(self.units)} unidades"
             )
+        if self.decimal not in (".", ","):
+            raise ValueError(
+                f"la marca decimal es «.» o «,», no {self.decimal!r}")
+        if self.notes_position not in ("inicio", "final"):
+            raise ValueError(
+                "las notas van al «inicio» o al «final», no a "
+                f"{self.notes_position!r}")
+        if self.separator == self.decimal:
+            raise ValueError(
+                f"el separador de columnas y la marca decimal son los dos "
+                f"{self.separator!r}: cada número partiría en dos columnas")
 
     @property
     def text_rows(self) -> list[list[str]]:
-        return [[_cell(v, self.digits) for v in row] for row in self.rows]
+        return [[_cell(v, self.digits, self.decimal) for v in row]
+                for row in self.rows]
 
     # -- writers -------------------------------------------------------
-    def to_csv(self, separator: str = ",") -> str:
+    def to_csv(self, separator: Optional[str] = None,
+               notes_position: Optional[str] = None) -> str:
+        """Delimited text, header first by default.
+
+        The notes are comments either way — a caveat dropped on the way
+        out is a caveat that did not happen — but WHERE they go decides
+        whether the file opens as a table. Nine lines of prose above the
+        column names is a file every spreadsheet imports as one column of
+        text, and that is what ``notes_position="final"`` fixes.
+        """
+        separator = self.separator if separator is None else separator
+        where = self.notes_position if notes_position is None else notes_position
+        if separator == self.decimal:
+            raise ValueError(
+                f"el separador {separator!r} es también la marca decimal: "
+                "cada número partiría en dos columnas")
         buffer = io.StringIO()
         writer = csv.writer(buffer, delimiter=separator, lineterminator="\n")
-        if self.title:
-            writer.writerow([f"# {self.title}"])
-        for note in self.notes:
-            writer.writerow([f"# {note}"])
+        comments = ([f"# {self.title}"] if self.title else []) + [
+            f"# {note}" for note in self.notes]
+        if where == "inicio":
+            for comment in comments:
+                writer.writerow([comment])
         writer.writerow(self.columns)
         if self.units:
             writer.writerow(self.units)
         writer.writerows(self.text_rows)
+        if where == "final":
+            for comment in comments:
+                writer.writerow([comment])
         return buffer.getvalue()
 
     def to_tsv(self) -> str:

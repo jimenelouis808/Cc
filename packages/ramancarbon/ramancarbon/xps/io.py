@@ -687,6 +687,21 @@ def _vamas_lines(text: str) -> list[str]:
     return [line.rstrip("\r") for line in text.split("\n")]
 
 
+#: Anything this large in a numeric field is the writer saying «no value».
+#: PHI writes ``1e+037`` there and so does this package; read back as a
+#: number it would be a pass energy of 10^37 eV, which is worse than a
+#: missing one because it looks like a measurement.
+VAMAS_UNSET_ABOVE = 1e30
+
+
+def _vamas_known(value: float) -> Optional[float]:
+    """The value, or ``None`` when the field says it has none."""
+    number = float(value)
+    if not np.isfinite(number) or abs(number) >= VAMAS_UNSET_ABOVE:
+        return None
+    return number
+
+
 class _Cursor:
     """A position in a VAMAS file, so a misparse says where it happened."""
 
@@ -976,11 +991,13 @@ def _read_vamas_block(
     return XPSSpectrum(
         binding_energy=binding,
         counts=counts,
-        photon_energy=photon_energy if photon_energy > 0 else None,
-        pass_energy=pass_energy if pass_energy > 0 else None,
-        dwell_s=dwell if dwell > 0 else None,
+        photon_energy=(_vamas_known(photon_energy)
+                       if photon_energy > 0 else None),
+        pass_energy=_vamas_known(pass_energy) if pass_energy > 0 else None,
+        dwell_s=_vamas_known(dwell) if dwell > 0 else None,
         sweeps=scans if scans > 0 else None,
-        work_function=work_function if work_function else DEFAULT_WORK_FUNCTION,
+        work_function=(_vamas_known(work_function) or DEFAULT_WORK_FUNCTION
+                       if work_function else DEFAULT_WORK_FUNCTION),
         monochromated=(True if "mono" in source_label.lower()
                        else _DECLARED_UNMONOCHROMATED(source_label)),
         region=region,
@@ -995,6 +1012,52 @@ def _read_vamas_block(
 VAMAS_IDENTIFIER = (
     "VAMAS Surface Chemical Analysis Standard Data Transfer Format 1988 May 4"
 )
+
+
+#: What a VAMAS block writes where it has no value. It is PHI's own
+#: convention —the float maximum— and it is used here for the one reason
+#: that matters: a file written by the instrument with ``1e+037`` in these
+#: fields opens in CasaXPS, so the reader that has to accept this file
+#: already accepts that. Writing ``0`` instead is not neutral: a work
+#: function of zero or a pass energy of zero are claims, and a program
+#: that divides by either gets an answer rather than an error.
+VAMAS_UNSET = "1e+037"
+
+#: The ordinate units of a VAMAS block, which are NOT free text: ISO 14976
+#: fixes the names, and ``d`` is its dimensionless. «cuentas» is not one of
+#: them, and a unit a reader does not know is how a block stops being read.
+#: The real unit travels in the block comment, where it is prose.
+VAMAS_ORDINATE_UNIT = "d"
+
+
+def _vamas_text(text: str) -> str:
+    """Free text with the accents folded away.
+
+    Every string in a VAMAS file is a field that some other program has to
+    read, and the file is latin-1 at best: a comment holding «región» or
+    «energía» is a comment that arrives as mojibake or stops the parse.
+    The information is in the words, not in the accents.
+    """
+    table = str.maketrans({
+        "á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ñ": "n",
+        "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U", "Ñ": "N",
+        "ü": "u", "Ü": "U", "º": "o", "ª": "a", "°": " grados",
+        "«": '"', "»": '"', "—": "-", "–": "-", "×": "x", "·": ".",
+        "Š": "S", "š": "s", "²": "2", "³": "3",
+    })
+    folded = str(text).translate(table)
+    return "".join(character if ord(character) < 128 else "?"
+                   for character in folded).replace("\n", " ").replace("\r", " ")
+
+
+def _vamas_number(value: Optional[float], digits: int = 4) -> str:
+    """One numeric field, or :data:`VAMAS_UNSET` when there is no value."""
+    if value is None:
+        return VAMAS_UNSET
+    number = float(value)
+    if not np.isfinite(number):
+        return VAMAS_UNSET
+    return f"{number:.{digits}f}"
 
 
 def write_vamas(
@@ -1015,6 +1078,23 @@ def write_vamas(
     The axis is written as binding energy, which is how it is held in
     memory; the block records the photon energy and work function that were
     used, so the kinetic scale can be rebuilt exactly.
+
+    What makes it open in CasaXPS, as opposed to merely being valid, was
+    established by comparing field for field against a VAMAS file the
+    user's own PHI Quantera exported and CasaXPS reads:
+
+    * **CRLF line endings.** The format is positional and read line by
+      line, and a LF-only file is one line to a reader that splits on
+      CRLF.
+    * **ASCII.** Accented text in a field is either mojibake or a stopped
+      parse; the words survive the folding, the accents do not.
+    * **Unit names from the standard**, not from the program: the ordinate
+      unit is ``d`` and the intensity's real unit goes in the comment.
+    * **``Binding Energy``, capitalised**, because the abscissa label is
+      what the reader matches to decide which way the axis runs.
+    * **A scan count of at least one.** Zero is not a number of scans, and
+      it is what a ``.spe`` that does not record them used to produce.
+    * **No zero standing in for an unknown** — see :data:`VAMAS_UNSET`.
     """
     path = Path(path)
     if isinstance(spectra, XPSSpectrum):
@@ -1022,14 +1102,15 @@ def write_vamas(
     if not spectra:
         raise XPSError("no hay ningún espectro que escribir")
 
+    comment = ("escrito por ramancarbon; el eje es energia de enlace en eV")
     lines: list[str] = [
         VAMAS_IDENTIFIER,
-        institution,
-        str(spectra[0].metadata.get("instrumento", "desconocido")),
-        "",                                    # operator
-        experiment,
+        _vamas_text(institution),
+        _vamas_text(spectra[0].metadata.get("instrumento", "Not Specified")),
+        "Not Specified",                       # operator
+        _vamas_text(experiment),
         "1",
-        "escrito por ramancarbon; el eje es energía de enlace",
+        _vamas_text(comment),
         "NORM",
         "REGULAR",
         str(len(spectra)),                     # number of spectral regions
@@ -1043,7 +1124,8 @@ def write_vamas(
     for index, spectrum in enumerate(spectra):
         lines.extend(_vamas_block_lines(spectrum, index))
     lines.append("end of experiment")
-    path.write_text("\n".join(lines) + "\n", encoding="latin-1")
+    # CRLF, and written as bytes so no platform rewrites them again.
+    path.write_bytes(("\r\n".join(lines) + "\r\n").encode("latin-1"))
     return path
 
 
@@ -1070,44 +1152,47 @@ def _vamas_block_lines(spectrum: XPSSpectrum, index: int) -> list[str]:
     step = float(energy[1] - energy[0]) if energy.size > 1 else 1.0
     species, _, transition = (spectrum.region or "").partition(" ")
     shift = spectrum.metadata.get("charge_shift_ev")
-    comment = [f"región {spectrum.region or spectrum.name}"]
+    comment = [f"region {_vamas_text(spectrum.region or spectrum.name)}",
+               f"intensidad en {_vamas_text(spectrum.intensity_unit)}"]
     if shift:
-        comment.append(f"eje desplazado {float(shift):+.3f} eV al referenciar la carga")
+        comment.append(
+            f"eje desplazado {float(shift):+.3f} eV al referenciar la carga")
     if spectrum.history:
-        comment.append("historia: " + "; ".join(spectrum.history))
+        comment.append(
+            _vamas_text("historia: " + "; ".join(spectrum.history)))
     return [
-        spectrum.name or f"bloque {index + 1}",
-        str(spectrum.metadata.get("muestra", "")),
+        _vamas_text(spectrum.name or f"bloque {index + 1}"),
+        _vamas_text(spectrum.metadata.get("muestra", "") or "Not Specified"),
         "0", "0", "0", "0", "0", "0", "0",     # date, time, GMT offset
         str(len(comment)), *comment,
         "XPS",
-        _source_label(spectrum),
-        f"{spectrum.photon_energy if spectrum.photon_energy else 0.0:.4f}",
-        "0",                                   # source strength
-        "0", "0",                              # beam width x, y
-        "0", "0",                              # source polar angle, azimuth
+        _vamas_text(_source_label(spectrum)),
+        _vamas_number(spectrum.photon_energy),
+        VAMAS_UNSET,                           # source strength
+        VAMAS_UNSET, VAMAS_UNSET,              # beam width x, y
+        VAMAS_UNSET, VAMAS_UNSET,              # source polar angle, azimuth
         "FAT",
-        f"{spectrum.pass_energy if spectrum.pass_energy else 0.0:.4f}",
-        "0",                                   # magnification
-        f"{spectrum.work_function:.4f}",
-        "0",                                   # target bias
-        "0", "0",                              # analysis width x, y
-        "0", "0",                              # take-off polar angle, azimuth
-        species or (spectrum.region or "?"),
-        transition,
+        _vamas_number(spectrum.pass_energy),
+        VAMAS_UNSET,                           # magnification
+        _vamas_number(spectrum.work_function),
+        VAMAS_UNSET,                           # target bias
+        VAMAS_UNSET, VAMAS_UNSET,              # analysis width x, y
+        VAMAS_UNSET, VAMAS_UNSET,              # take-off polar angle, azimuth
+        _vamas_text(species or (spectrum.region or "?")),
+        _vamas_text(transition),
         "-1",                                  # charge of the detected particle
-        "binding energy",
+        "Binding Energy",
         "eV",
         f"{float(energy[0]):.6f}",
         f"{step:.6f}",
         "1",                                   # corresponding variables
         "Intensity",
-        spectrum.intensity_unit,
+        VAMAS_ORDINATE_UNIT,
         "pulse counting",
-        f"{spectrum.dwell_s if spectrum.dwell_s else 0.0:.4f}",
-        str(int(spectrum.sweeps or 0)),
-        "0",                                   # signal time correction
-        "0", "0", "0",                         # sample tilt polar, azimuth, rotation
+        _vamas_number(spectrum.dwell_s),
+        str(max(1, int(spectrum.sweeps or 1))),
+        VAMAS_UNSET,                           # signal time correction
+        VAMAS_UNSET, VAMAS_UNSET, VAMAS_UNSET,  # sample tilt polar, azimuth, rotation
         "0",                                   # additional numerical parameters
         str(spectrum.counts.size),
         f"{float(spectrum.counts.min()):.6f}",

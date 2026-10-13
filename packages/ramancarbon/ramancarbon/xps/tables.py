@@ -93,24 +93,70 @@ def reference_table(
                  title=f"Catálogo de estados químicos — {region}")
 
 
-def fit_table(result: XPSFitResult, digits: int = 6) -> Table:
+#: The two consistent ways of exporting a fit, and there are only two.
+#: ``"incluido"`` leaves the measured counts as measured and RAISES every
+#: component onto the background, so every curve in the file shares the
+#: measured baseline and the file plots straight over the data.
+#: ``"restado"`` lowers the data instead: counts minus background, and the
+#: components as they were fitted, so the envelope is exactly their sum.
+#: What is not allowed is the mixture — raw data beside subtracted
+#: components — because then the file holds two baselines and nothing that
+#: reads it can tell which curve is on which.
+BACKGROUND_EXPORT = ("incluido", "restado")
+
+
+def _check_background_choice(choice: str) -> str:
+    if choice not in BACKGROUND_EXPORT:
+        raise XPSError(
+            f"el fondo se exporta «incluido» o «restado», no {choice!r}")
+    return choice
+
+
+def fit_table(result: XPSFitResult, digits: int = 6,
+              background: str = "incluido",
+              separator: str = ",", decimal: str = ".") -> Table:
     """The fitted curves, one column per component.
 
-    The numbers are the ones **drawn**: the background is the one that was
-    subtracted and each component column is that component as fitted,
-    spin–orbit partner included, on top of nothing. Adding every component
-    column to the background column reproduces the envelope exactly, which
-    is the property that makes the table checkable by whoever receives it.
+    Parameters
+    ----------
+    background:
+        One of :data:`BACKGROUND_EXPORT`. This is the fix for the one
+        thing that made the old export unusable without editing it by
+        hand: the data came out WITH the background and the components
+        came out without it, so the two could not be drawn on the same
+        axes and the columns did not add up to anything.
+    separator, decimal:
+        The delimiter and the decimal mark. A spreadsheet whose locale
+        expects the comma as the decimal mark puts a comma-delimited file
+        of dotted numbers in a single column — which is what «mal
+        acomodadas» looks like — so both are a choice here.
+
+    Notes
+    -----
+    Either way the table closes on itself, and which identity holds is
+    stated in the notes: with the background included, ``envolvente``
+    equals any one component column plus the others minus the background
+    counted once per extra component; with it subtracted, ``envolvente``
+    is the plain sum of the component columns.
     """
+    _check_background_choice(background)
+    unit = result_unit(result)
+    floor = result.background.values
+    subtract = background == "restado"
     columns = ["energia_enlace_eV", "cuentas", "fondo", "envolvente", "residuo"]
-    units = ["eV", result_unit(result), result_unit(result),
-             result_unit(result), result_unit(result)]
-    data = [result.energy, result.counts, result.background.values,
-            result.fitted, result.residual]
+    units = ["eV", unit, unit, unit, unit]
+    data = [
+        result.energy,
+        result.counts - floor if subtract else result.counts,
+        floor,
+        result.fitted - floor if subtract else result.fitted,
+        result.residual,
+    ]
     for component in result.components:
         columns.append(component.name)
-        units.append(result_unit(result))
-        data.append(component.curve(result.energy))
+        units.append(unit)
+        curve = component.curve(result.energy)
+        data.append(curve if subtract else curve + floor)
 
     rows = [[float(column[index]) for column in data]
             for index in range(result.energy.size)]
@@ -120,15 +166,29 @@ def fit_table(result: XPSFitResult, digits: int = 6) -> Table:
         result.background.describe(),
         f"R² = {result.r_squared:.5f}, χ²_red = {result.reduced_chi2:.3f}"
         + (f", DW = {result.durbin_watson:.2f}" if result.durbin_watson else ""),
-        "la envolvente es fondo + todas las componentes; cada columna de "
-        "componente incluye su pareja de espín-órbita",
     ]
+    if subtract:
+        notes.append(
+            "fondo RESTADO: «cuentas» y «envolvente» son la medida y el "
+            "ajuste menos el fondo, y cada componente es ella sola, así que "
+            "la envolvente es la suma exacta de las columnas de componente. "
+            "La columna «fondo» se deja para poder deshacerlo"
+        )
+    else:
+        notes.append(
+            "fondo INCLUIDO: «cuentas» es la medida tal cual y cada columna "
+            "de componente va SOBRE el fondo, para que todas las curvas se "
+            "dibujen en la misma línea base. Sumarlas cuenta el fondo una "
+            "vez de más por cada componente"
+        )
+    notes.append(
+        "cada columna de componente incluye su pareja de espín-órbita")
     if result.links:
         notes.append("ligaduras: " + "; ".join(result.links))
     notes.extend(result.warnings)
     return Table(columns=columns, rows=rows, units=units,
                  title=f"Ajuste XPS {result.region_label}", notes=notes,
-                 digits=digits)
+                 digits=digits, separator=separator, decimal=decimal)
 
 
 def result_unit(result: XPSFitResult) -> str:
@@ -136,7 +196,8 @@ def result_unit(result: XPSFitResult) -> str:
     return str(result.acquisition.get("unidad", "cuentas"))
 
 
-def components_table(result: XPSFitResult, digits: int = 5) -> Table:
+def components_table(result: XPSFitResult, digits: int = 5,
+                     separator: str = ",", decimal: str = ".") -> Table:
     """One row per component: what it is, where it is, and how much of it.
 
     The literature window each component was held in travels with it. That
@@ -176,27 +237,36 @@ def components_table(result: XPSFitResult, digits: int = 5) -> Table:
         "las áreas son de la ventana ajustada y con ESE fondo: cambiar los "
         "extremos las cambia",
         "el porcentaje es del total ajustado en esta región, no de la muestra",
+        "las áreas son por encima del fondo, se exporte éste incluido o "
+        "restado: restarlo mueve las curvas, no las áreas",
     ]
     if result.links:
         notes.append("ligaduras: " + "; ".join(result.links))
     notes.extend(result.warnings)
     return Table(columns=columns, rows=rows, units=units,
                  title=f"Componentes XPS {result.region_label}", notes=notes,
-                 digits=digits)
+                 digits=digits, separator=separator, decimal=decimal)
 
 
 def write_fit(result: XPSFitResult, path: str | Path,
-              digits: int = 6) -> tuple[Path, Path]:
+              digits: int = 6, background: str = "incluido",
+              separator: str = ",", decimal: str = ".") -> tuple[Path, Path]:
     """Write both tables beside each other.
 
     ``path`` names the curve table; the component table gets
     ``_componentes`` before the extension. Two files rather than one
     because they have different shapes, and a single file holding both is
     a file no spreadsheet opens correctly.
+
+    ``background``, ``separator`` and ``decimal`` go to both tables, so a
+    pair of files written together cannot disagree about either the
+    baseline or the number format.
     """
     path = Path(path)
-    curves = fit_table(result, digits=digits)
-    parameters = components_table(result)
+    curves = fit_table(result, digits=digits, background=background,
+                       separator=separator, decimal=decimal)
+    parameters = components_table(result, separator=separator,
+                                  decimal=decimal)
     second = path.with_name(f"{path.stem}_componentes{path.suffix}")
     curves.save(path)
     parameters.save(second)
@@ -325,6 +395,7 @@ def heights_from(spectrum, components: Sequence[XPSComponent],
 
 
 __all__ = [
+    "BACKGROUND_EXPORT",
     "reference_table",
     "components_table",
     "fit_table",

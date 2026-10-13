@@ -40,7 +40,14 @@ from .widgets import (
     split_column,
     table,
 )
-from .xps_state import BACKGROUNDS, PROFILES, REFERENCES, XPSSession
+from .xps_state import (
+    BACKGROUND_EXPORT,
+    BACKGROUNDS,
+    NUMBER_FORMATS,
+    PROFILES,
+    REFERENCES,
+    XPSSession,
+)
 
 FILE_TYPES = (
     ("Espectros XPS", "*.spe *.vms *.npl *.txt *.csv *.dat *.asc"),
@@ -176,6 +183,26 @@ class XPSApp(SectionApp):
         hint(obody,
              "T ∝ KE^n es una propiedad de TU analizador. Entre un C 1s y un "
              "Fe 2p con aluminio, ignorarla es un 30 %.",
+             wrap=280)
+
+        export, ebody = card(parent, "Exportación")
+        export.pack(fill="x", pady=(PAD["sm"], 0))
+        self.export_background_var = tk.StringVar(value="incluido")
+        labelled(ebody, "Fondo", lambda p: ttk.Combobox(
+            p, textvariable=self.export_background_var, width=12,
+            state="readonly", values=list(BACKGROUND_EXPORT)))
+        self.export_format_var = tk.StringVar(value=NUMBER_FORMATS[0][0])
+        labelled(ebody, "Números", lambda p: ttk.Combobox(
+            p, textvariable=self.export_format_var, width=16,
+            state="readonly", values=[name for name, _, _ in NUMBER_FORMATS]))
+        hint(ebody,
+             "«incluido» deja la medida tal cual y sube cada componente "
+             "sobre el fondo, así que todo se dibuja en la misma línea "
+             "base; «restado» baja la medida y deja las componentes solas, "
+             "y entonces la envolvente es su suma exacta. Vale para las "
+             "tablas y para el VAMAS. El formato de números es para la hoja "
+             "de cálculo: con la coma como marca decimal el separador de "
+             "columnas tiene que ser el punto y coma.",
              wrap=280)
 
         actions = ttk.Frame(parent)
@@ -1282,9 +1309,29 @@ class XPSApp(SectionApp):
         Path(path).write_text(self.session.report(), encoding="utf-8")
         self.set_status(f"Informe guardado en {path}")
 
+    def _apply_export_options(self) -> bool:
+        """Push the two export choices into the session before writing.
+
+        Read here rather than on every keystroke because they are only
+        ever needed at the moment something is written, and because a
+        refusal (the comma as both separator and decimal mark) has to
+        stop that write rather than be discovered in the file.
+        """
+        chosen = self.export_format_var.get()
+        separator, decimal = next(
+            (sep, dec) for name, sep, dec in NUMBER_FORMATS
+            if name == chosen)
+        ok = self.session.set_export_background(
+            self.export_background_var.get())
+        ok = self.session.set_export_format(separator, decimal) and ok
+        self.flush_messages()
+        return ok
+
     def _export_tables(self) -> None:
         from tkinter import filedialog
 
+        if not self._apply_export_options():
+            return
         if not self.session.fits:
             self.warn("Sin ajustes", "Ajusta al menos una región.")
             return
@@ -1293,11 +1340,16 @@ class XPSApp(SectionApp):
         if not directory:
             return
         written = self.session.export_tables(directory)
-        self.set_status(f"{len(written)} tablas escritas en {directory}")
+        self.flush_messages()
+        self.set_status(
+            f"{len(written)} tablas escritas en {directory} con el fondo "
+            f"{self.session.export_background}")
 
     def _export_vamas(self) -> None:
         from tkinter import filedialog
 
+        if not self._apply_export_options():
+            return
         if not self.session.spectra:
             self.warn("Sin datos", "Carga espectros primero.")
             return
@@ -1308,8 +1360,10 @@ class XPSApp(SectionApp):
         if not path:
             return
         self.session.export_vamas(path)
+        self.flush_messages()
         self.set_status(
-            f"Espectros guardados en {path} con el eje ya referenciado"
+            f"Espectros guardados en {path} con el eje ya referenciado y el "
+            f"fondo {self.session.export_background}"
         )
 
     # ==================================================================

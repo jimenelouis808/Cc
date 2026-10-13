@@ -460,6 +460,48 @@ def test_a_vamas_round_trip_keeps_the_numbers_and_the_settings(tmp_path):
     assert back.monochromated is True
 
 
+def test_a_vamas_block_is_written_the_way_casaxps_reads_one(tmp_path):
+    """Every item here was taken from a VAMAS file the user's own PHI
+    exported and CasaXPS opens. None of them is cosmetic: the format is
+    positional and read line by line, so LF-only endings make the file
+    one line; the unit names are fixed by ISO 14976 and «cuentas» is not
+    one of them; and a scan count of zero — which is what a ``.spe``
+    without sweeps used to produce — is not a number of scans."""
+    axis = np.linspace(280.0, 300.0, 51)
+    counts = 1000 + 5000 * gl(axis, 284.8, 1, 1.0, 0.3)
+    spectrum = XPSSpectrum(axis, counts, photon_energy=1486.6,
+                           pass_energy=23.5, region="C 1s", name="muestra")
+    raw = write_vamas(tmp_path / "casa.vms", spectrum).read_bytes()
+
+    assert b"\r\n" in raw and raw.count(b"\n") == raw.count(b"\r\n")
+    assert raw.decode("latin-1").isascii()
+    lines = raw.decode("latin-1").split("\r\n")
+    assert "Binding Energy" in lines and "eV" in lines
+    # The ordinate unit is the standard's dimensionless; the real unit is
+    # prose, so it travels in the comment where prose belongs.
+    assert "d" in lines and "cuentas" not in lines
+    assert any("intensidad en cuentas" in line for line in lines)
+    # No sweeps in the spectrum, so the field has to be the smallest legal
+    # count rather than zero.
+    assert spectrum.sweeps is None
+    assert lines[lines.index("pulse counting") + 2] == "1"
+
+
+def test_a_field_with_no_value_is_not_written_as_zero(tmp_path):
+    """A pass energy of zero is a claim, and a program that divides by it
+    gets an answer. The unset marker is PHI's own, so a reader that opens
+    an instrument file already accepts it — and it has to come back as
+    «no value», not as 10^37 eV."""
+    axis = np.linspace(280.0, 300.0, 31)
+    spectrum = XPSSpectrum(axis, np.full(axis.size, 500.0),
+                           photon_energy=1486.6, region="C 1s")
+    path = write_vamas(tmp_path / "sinajustes.vms", spectrum)
+    assert "1e+037" in path.read_text(encoding="latin-1")
+    back = read_vamas(path)[0]
+    assert back.pass_energy is None and back.dwell_s is None
+    assert back.photon_energy == pytest.approx(1486.6)
+
+
 def test_a_spe_header_that_disagrees_with_itself_is_refused(tmp_path):
     """The header gives endpoints, point count AND step — one number more
     than is needed. If they disagree, the fields were not where the reader
@@ -529,18 +571,105 @@ def test_a_text_axis_defaults_to_binding_energy_and_says_so(tmp_path):
 # ----------------------------------------------------------------------
 # tables
 # ----------------------------------------------------------------------
+def _fit_columns(table):
+    values = np.array([[float(cell) for cell in row] for row in table.rows])
+    return {name: values[:, index]
+            for index, name in enumerate(table.columns)}
+
+
 def test_a_fit_table_adds_back_up_to_its_envelope(demo):
+    """Both exports close on themselves, each with its own identity.
+
+    This is the property that makes the file checkable by whoever
+    receives it, and it is the reason the baseline is ONE choice for the
+    whole table: with the background included every component sits on it,
+    so summing them counts it once per extra component; with it
+    subtracted the envelope is their plain sum. A table that mixed the
+    two would satisfy neither.
+    """
     region = next(item for item in demo if item.region == "Se 3d5/2")
     result = fit_region(region, state_model(region, "Se 3d5/2",
                                             ["selenide", "Se0", "SeOx"]))
-    table = fit_table(result)
-    values = np.array([[float(cell) for cell in row] for row in table.rows])
-    columns = table.columns
-    envelope = values[:, columns.index("envolvente")]
-    total = values[:, columns.index("fondo")]
-    for component in result.components:
-        total = total + values[:, columns.index(component.name)]
-    assert np.allclose(envelope, total, atol=1e-6)
+    names = [component.name for component in result.components]
+
+    raised = _fit_columns(fit_table(result, background="incluido"))
+    floor = raised["fondo"]
+    total = sum(raised[name] for name in names) - (len(names) - 1) * floor
+    assert np.allclose(raised["envolvente"], total, atol=1e-6)
+    # And the measured column really is the measurement, untouched.
+    assert np.allclose(raised["cuentas"], result.counts, rtol=1e-9)
+
+    lowered = _fit_columns(fit_table(result, background="restado"))
+    assert np.allclose(lowered["envolvente"],
+                       sum(lowered[name] for name in names), atol=1e-6)
+    assert np.allclose(lowered["cuentas"], result.counts - floor, atol=1e-6)
+
+
+def test_the_two_background_choices_are_the_only_two(demo):
+    region = next(item for item in demo if item.region == "Se 3d5/2")
+    result = fit_region(region, state_model(region, "Se 3d5/2", ["Se0"]))
+    with pytest.raises(XPSError, match="incluido"):
+        fit_table(result, background="sin")
+
+
+def test_a_table_opens_as_a_table(demo):
+    """The column names on row 1 and the units on row 2.
+
+    Nine lines of prose above the header is a file every spreadsheet
+    imports as one column of text, and that is what «mal acomodadas»
+    was. The notes still travel — a caveat dropped on the way out is a
+    caveat that did not happen — they just travel below the numbers.
+    """
+    region = next(item for item in demo if item.region == "Se 3d5/2")
+    result = fit_region(region, state_model(region, "Se 3d5/2",
+                                            ["selenide", "Se0"]))
+    for table in (fit_table(result), components_table(result)):
+        lines = table.to_csv().splitlines()
+        assert not lines[0].startswith("#")
+        assert lines[0].split(",") == table.columns
+        assert lines[1].split(",") == table.units
+        assert any(line.startswith("#") for line in lines[2:])
+        assert any(result.background.kind.lower() in line.lower()
+                   for line in lines if line.startswith('"#') or
+                   line.startswith("#"))
+
+
+def test_a_spreadsheet_that_wants_commas_gets_commas(demo):
+    """With the comma as the decimal mark the delimiter cannot also be a
+    comma, and the table refuses that pair instead of writing a file whose
+    every number is two columns."""
+    region = next(item for item in demo if item.region == "Se 3d5/2")
+    result = fit_region(region, state_model(region, "Se 3d5/2", ["Se0"]))
+    table = fit_table(result, separator=";", decimal=",")
+    lines = table.to_csv().splitlines()
+    assert lines[0].split(";") == table.columns
+    cells = lines[2].split(";")
+    assert len(cells) == len(table.columns)
+    # A whole number has no mark at all, so what is checked is that no
+    # cell kept the dot and that the ones with a fraction took the comma.
+    assert not any("." in cell for cell in cells)
+    assert any("," in cell for cell in cells)
+    with pytest.raises(ValueError, match="decimal"):
+        fit_table(result, separator=",", decimal=",")
+
+
+def test_the_subtracted_spectrum_is_the_window_and_nothing_else(demo):
+    """A spectrum subtracted in the middle and raw at the edges is the
+    problem this fixes, moved: the background exists over the fitted
+    window and nowhere else."""
+    from ramancarbon.xps.background import remove_from
+
+    region = next(item for item in demo if item.region == "Se 3d5/2")
+    result = fit_region(region, state_model(region, "Se 3d5/2", ["Se0"]))
+    bare = remove_from(region, result.background)
+    low, high = result.background.window
+    assert bare.binding_energy.min() >= low - 1e-9
+    assert bare.binding_energy.max() <= high + 1e-9
+    assert np.allclose(bare.counts, result.counts - result.background.values,
+                       atol=1e-9)
+    assert any("restado" in step for step in bare.history)
+    with pytest.raises(XPSError, match="mismo espectro"):
+        remove_from(region.crop(low + 2.0, high), result.background)
 
 
 def test_a_components_table_carries_the_window_each_component_was_held_in(demo):
