@@ -63,6 +63,9 @@ carbonforge = "carbonforge.cli.main:main"
 # gui-script hides stdout, so a missing-Tkinter message would vanish. The
 # console window is a small price for seeing errors.
 carbonforge-gui = "carbonforge.gui:main"
+# El frente general de GPAW: estructura, receta y resultados. Por la
+# misma razon, consola y no gui-script.
+carbonforge-dft = "carbonforge.dft.app:main"
 
 [tool.setuptools.packages.find]
 include = ["carbonforge*"]
