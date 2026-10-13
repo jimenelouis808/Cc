@@ -191,6 +191,47 @@ def dimensionality(pbc) -> str:
     return f"{len(axes)}D ({', '.join('abc'[k] for k in axes)})"
 
 
+def align_wire(atoms: Atoms, vacuum: float = 7.0) -> Atoms:
+    """A 1D structure (one periodic axis) turned so the periodic vector lies on z, in an
+    orthorhombic box with ``vacuum`` Å on each open side; a finite one boxed the same way.
+
+    The open axes then are x and y, perpendicular to the lattice vector: what a field
+    across the wire needs (:func:`tbkit.infrared.born_by_field`), and what a code with zero
+    boundary conditions along open axes (GPAW) needs. A tilted cell -- the user's helix came
+    with its c axis 0.5° off z -- is otherwise refused there. Bonds are checked to be the
+    same before and after. A structure periodic in 2 or 3 axes is returned unchanged.
+    """
+    pbc = [bool(p) for p in atoms.get_pbc()]
+    if sum(pbc) > 1:
+        return atoms.copy()
+    from .neighbors import neighbor_list
+
+    out = atoms.copy()
+    before = len(neighbor_list("i", out, 1.85)) if len(out) > 1 else 0
+    if sum(pbc) == 1:
+        axis = pbc.index(True)
+        vector = np.array(out.cell[axis])
+        length = float(np.linalg.norm(vector))
+        out.rotate(vector, (0.0, 0.0, 1.0), rotate_cell=True)
+        positions = out.get_positions()
+        span = positions[:, :2].max(axis=0) - positions[:, :2].min(axis=0)
+        out.set_cell(np.diag([span[0] + 2 * vacuum, span[1] + 2 * vacuum, length]),
+                     scale_atoms=False)
+        out.pbc = [False, False, True]
+        out.translate([vacuum - positions[:, 0].min(), vacuum - positions[:, 1].min(), 0.0])
+        out.wrap()
+    else:
+        out.pbc = False
+        out.center(vacuum=vacuum)
+    after = len(neighbor_list("i", out, 1.85)) if len(out) > 1 else 0
+    if after != before:
+        raise ValueError(f"Al alinear cambió el número de enlaces ({before // 2} → "
+                         f"{after // 2}): revisa la celda y la periodicidad.")
+    for key in ("periodicity", "periodicity_mode", "pbc_file"):
+        out.info.pop(key, None)
+    return out
+
+
 def read_structure(path: str | Path, guess_periodic: bool = True) -> Atoms:
     """``Atoms`` from a file. With ``guess_periodic``, a structure that has a cell but is
     declared non-periodic gets the axes :func:`periodic_axes` finds, and says so in

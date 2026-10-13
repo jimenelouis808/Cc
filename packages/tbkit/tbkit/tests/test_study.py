@@ -114,3 +114,50 @@ def test_change_centres_and_study_file(tmp_path):
     assert data["sistemas"]["tolueno"] == {"estructura": "tolueno.extxyz", "sobre": "benceno",
                                            "centros": [6, 12, 13, 14]}
     assert st.Study(path).order() == ["benceno", "tolueno"]
+
+
+def _tube_file(tmp_path):
+    from ase.build import nanotube
+    from ase.io import write
+
+    tube = nanotube(6, 0, length=1, vacuum=6.0)
+    tube.pbc = True                                    # declared 3D, as an .xtl would be
+    path = tmp_path / "tubo.xyz"
+    write(path, tube, format="extxyz")
+    return path
+
+
+def test_coil_study_prepares_a_wire_and_picks_its_models(tmp_path, monkeypatch):
+    import json
+
+    from ase.io import read
+
+    from tbkit.recipes import coil_study
+
+    monkeypatch.chdir(tmp_path)
+    path = _tube_file(tmp_path)
+    parser_args = type("A", (), {"vacio": 7.0, "kpts": "auto", "kT": 0.05, "fmax": 0.02,
+                                 "laseres": [2.33], "eta": 0.1, "min_raman": 900.0})()
+    study = coil_study.prepare(path, coil_study._work("t"), parser_args)
+    config = json.loads(study.read_text())
+    atoms = read(tmp_path / "out/estudios/t/estructura.extxyz")
+    assert list(atoms.pbc) == [False, False, True]           # vacuum axes dropped
+    assert config["modelo"] == "sp3" and config["ir"]["modelo"] == "xu_chn"
+    assert config["ir"]["born"] == "campo"
+    assert coil_study._models(molecule("CH3CN"))[0] == "chn"
+
+
+@pytest.mark.slow
+def test_coil_study_runs_end_to_end(tmp_path, monkeypatch):
+    """The whole chain on a (6,0) tube: about a minute."""
+    import json
+
+    from tbkit.recipes import coil_study
+
+    monkeypatch.chdir(tmp_path)
+    coil_study.main([str(_tube_file(tmp_path)), "--nombre", "t", "--nucleos", "2",
+                     "--laseres", "2.33", "--min-raman", "1200"])
+    report = json.loads((tmp_path / "out/estudios/t/report.json").read_text())
+    entry = report["sistema"]
+    assert entry["strongest_2.33"] and entry["ir"]["strongest"]
+    assert abs(entry["ir"]["sum_rule_residual_e"]) < 1e-6

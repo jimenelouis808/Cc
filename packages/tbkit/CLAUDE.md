@@ -48,6 +48,8 @@ tbkit/
 │                     #   pipeline: a recipe of one's own (structure + model + tasks), from «Nueva receta…»
 │                     #   study: any set of systems (0D-3D), changes embedded in their host: modes,
 │                     #     resonant Raman, IR, report, DFT request of the modes that matter
+│                     #   coil_study: one file → study in one command (prepare/align the wire,
+│                     #     relax, electronic, Born by field, Hessian and Raman in N processes)
 ├── parameters/       # built-in parameter sets (JSON, every number with unit and source)
 ├── cli.py            # `tbkit` console script
 ├── structure_io.py   # reading/writing structures: .xtl, periodic axes from bonds, cells by hand

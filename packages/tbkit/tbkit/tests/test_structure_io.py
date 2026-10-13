@@ -101,3 +101,22 @@ def test_xtl_as_materials_studio_writes_it(tmp_path):
     atoms = sio.read_structure(path)
     assert len(atoms) == 2 and atoms.cell.lengths() == pytest.approx([2.46, 2.46, 15.0])
     assert atoms.get_distance(0, 1, mic=True) == pytest.approx(2.46 / np.sqrt(3), abs=1e-3)
+
+
+def test_align_wire_puts_the_period_on_z_and_keeps_every_bond():
+    from ase.build import graphene_nanoribbon
+
+    from tbkit.neighbors import neighbor_list
+
+    ribbon = graphene_nanoribbon(2, 1, type="armchair", saturated=True, vacuum=6.0)
+    tilted = ribbon.copy()
+    tilted.rotate(7.0, "x", rotate_cell=True)            # c no longer along z
+    tilted.translate([20.0, -3.0, 0.0])
+    out = sio.align_wire(tilted, vacuum=7.0)
+    assert list(out.pbc) == [False, False, True]
+    assert np.allclose(out.cell[2, :2], 0.0) and np.allclose(out.cell[0, 1:], 0.0)
+    assert out.cell[2, 2] == pytest.approx(np.linalg.norm(ribbon.cell[2]))
+    assert len(neighbor_list("i", out, 1.85)) == len(neighbor_list("i", ribbon, 1.85))
+    assert min(sio.vacuum_gaps(out)[:2]) == pytest.approx(14.0, abs=1e-6)
+    box = sio.align_wire(molecule("C6H6"), vacuum=5.0)
+    assert not box.pbc.any() and box.cell.rank == 3
