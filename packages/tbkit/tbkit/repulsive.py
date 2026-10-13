@@ -24,9 +24,9 @@ from typing import Optional
 
 import numpy as np
 from ase import Atoms
-from ase.neighborlist import neighbor_list
 from ase.units import Bohr, Hartree
 
+from .neighbors import neighbor_list
 from .params import derivative, law_from_dict, law_to_dict
 
 

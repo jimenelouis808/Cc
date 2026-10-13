@@ -32,7 +32,9 @@ RING_SIZES = (3, 4, 5, 6, 7, 8)
 
 
 def _neighbours(atoms: Atoms, cutoff: Optional[float], mult: float):
-    from ase.neighborlist import natural_cutoffs, neighbor_list
+    from ase.neighborlist import natural_cutoffs
+
+    from .neighbors import neighbor_list
 
     radius = float(cutoff) if cutoff is not None else natural_cutoffs(atoms, mult=mult)
     return neighbor_list("ijS", atoms, radius)

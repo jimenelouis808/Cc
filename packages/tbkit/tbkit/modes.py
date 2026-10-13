@@ -318,7 +318,7 @@ def optical_character(vib: Vibrations, cutoff: float = 1.8) -> np.ndarray:
     the G modes of tubes come), about 0 or negative for zone-boundary and
     acoustic-like patterns.
     """
-    from ase.neighborlist import neighbor_list
+    from .neighbors import neighbor_list
 
     i, j = neighbor_list("ij", vib.atoms, cutoff)
     keep = i < j

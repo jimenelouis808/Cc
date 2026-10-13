@@ -143,10 +143,22 @@ class Study:
 
         source = self.path.parent / self.systems[key]["estructura"]
         atoms = read_structure(source)
+        trajectory = self.folder(key) / "relax.traj"
+        if trajectory.exists() and trajectory.stat().st_size > 0:
+            # Resume where a stopped run was: a 480-atom relaxation is hours, and starting
+            # over from the file threw them away (the BFGS Hessian is rebuilt, the steps
+            # already taken are kept).
+            try:
+                last = read(trajectory, index=-1)
+                if len(last) == len(atoms):
+                    atoms.set_positions(last.get_positions())
+                    print(f"{key}: reanudando desde el último paso de {trajectory.name}")
+            except Exception as error:  # noqa: BLE001  (a truncated file: start over)
+                print(f"{key}: no se pudo leer {trajectory.name} ({error}); desde el inicio")
         atoms.calc = self.calc_factory(atoms)()
         settings = self.config["relajar"]
         optimizer = BFGS(atoms, logfile=str(self.folder(key) / "relax.log"),
-                         trajectory=str(self.folder(key) / "relax.traj"))
+                         trajectory=str(trajectory), append_trajectory=True)
         with Progress(None, f"{self.name}: relajando {key}",
                       status=self.folder(key) / "progreso_relax.json") as bar:
             watch_optimizer(optimizer, bar)

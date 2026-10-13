@@ -35,7 +35,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from ase import Atoms
-from ase.neighborlist import neighbor_list
+
+from .neighbors import neighbor_list
 
 HOPPINGS = ("sss", "sps", "pps", "ppp")
 FUNCTIONS = HOPPINGS + ("rep", "onsite")

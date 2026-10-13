@@ -61,6 +61,10 @@ def read_xtl(path: str | Path) -> Atoms:
         key = line.split()[0].upper()
         if key == "EOF":
             break
+        if key == "CELL" and len(line.split()) >= 7:    # Materials Studio: values inline
+            cell = [float(x) for x in line.split()[1:7]]
+            section = None
+            continue
         if key in ("TITLE", "DIMENSION", "SYMMETRY", "CELL", "ATOMS", "ATOM"):
             section = key if key != "ATOM" else "ATOMS"
             if key == "SYMMETRY" and line.upper().split()[1:2] == ["NUMBER"]:
@@ -107,7 +111,7 @@ def crossing_axes(atoms: Atoms, factor: float = BOND_FACTOR) -> list[bool]:
     """Axes along which bonds cross the cell, whatever ``pbc`` declares (needs a cell)."""
     if atoms.cell.rank < 3 or len(atoms) < 2:
         return [False] * 3
-    from ase.neighborlist import neighbor_list
+    from .neighbors import neighbor_list
 
     def bonds(pbc):
         probe = atoms.copy()

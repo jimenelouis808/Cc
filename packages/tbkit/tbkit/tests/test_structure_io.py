@@ -83,3 +83,21 @@ def test_written_files_read_back_with_cell_and_axes(tmp_path):
                            atol=1e-6)
         if name == "g.xyz":
             assert list(back.pbc) == [True, True, False]
+
+
+def test_xtl_as_materials_studio_writes_it(tmp_path):
+    """CELL with its numbers on the same line, SYM MAT, and CHARGE/TEMP/OCCUP/SCAT columns:
+    the user's HELICAL.xtl was refused as «falta CELL o ATOMS»."""
+    path = tmp_path / "ms.xtl"
+    path.write_text(
+        "TITLE HELICAL\nDIMENSION 3\n"
+        "CELL   2.46000   2.46000  15.00000   90.00000   90.00000  120.00000\n"
+        "SYMMETRY  NUMBER 1  LABEL P1\n"
+        "SYM MAT  1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0\n\nATOMS\n"
+        "NAME       X          Y          Z     CHARGE   TEMP    OCCUP   SCAT\n"
+        "  C     0.33333    0.66667    0.50000  0.0000  0.0000  1.0000   C \n"
+        "  C     0.66667    0.33333    0.50000  0.0000  0.0000  1.0000   C \n"
+        "EOF\n")
+    atoms = sio.read_structure(path)
+    assert len(atoms) == 2 and atoms.cell.lengths() == pytest.approx([2.46, 2.46, 15.0])
+    assert atoms.get_distance(0, 1, mic=True) == pytest.approx(2.46 / np.sqrt(3), abs=1e-3)

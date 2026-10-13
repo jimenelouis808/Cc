@@ -53,7 +53,7 @@ def _switch(r, r_on, r_off):
 
 def _pairs(atoms: Atoms):
     """Bonded pairs (i, j, vector r_j − r_i with the minimum image, distance)."""
-    from ase.neighborlist import neighbor_list
+    from .neighbors import neighbor_list
 
     numbers = atoms.get_atomic_numbers()
     cut = R_OFF * covalent_radii[numbers]

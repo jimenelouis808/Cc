@@ -13,9 +13,9 @@ from typing import Optional
 
 import numpy as np
 from ase import Atoms
-from ase.neighborlist import neighbor_list
 
 from .basis import Basis
+from .neighbors import neighbor_list
 from .params import TBModel
 from .slater_koster import block
 
@@ -80,10 +80,15 @@ class System:
                          for a in self.basis.atoms))
 
     def coordination(self) -> dict[int, int]:
-        """Neighbours of each atom within 1.8 Å (all elements, H included)."""
-        i, _ = neighbor_list("ij", self.atoms, 1.8, self_interaction=False)
-        counts = np.bincount(i, minlength=len(self.atoms))
-        return {a: int(counts[a]) for a in range(len(self.atoms))}
+        """Neighbours of each atom within 1.8 Å (all elements, H included). Computed once:
+        ``electrons`` asks for it on every solve, twice per force evaluation."""
+        cached = self.__dict__.get("_coordination")
+        if cached is None:
+            i, _ = neighbor_list("ij", self.atoms, 1.8, self_interaction=False)
+            counts = np.bincount(i, minlength=len(self.atoms))
+            cached = {a: int(counts[a]) for a in range(len(self.atoms))}
+            self.__dict__["_coordination"] = cached
+        return cached
 
     @classmethod
     def build(cls, atoms: Atoms, model: TBModel) -> "System":

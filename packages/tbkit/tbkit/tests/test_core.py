@@ -209,3 +209,22 @@ class TestAnalysis:
         path = write_cube(tmp_path / "homo.cube", benzene, origin, steps, values)
         header = path.read_text().splitlines()
         assert int(header[2].split()[0]) == len(benzene)
+
+
+def test_fast_neighbour_list_matches_ase_with_vacuum_axes():
+    """tbkit.neighbors runs ASE's search with every axis periodic and drops the pairs that
+    cross a non-periodic axis: the same pairs as ASE's own (slow) search, even when the
+    vacuum is thinner than the cutoff."""
+    from ase.build import graphene_nanoribbon
+    from ase.neighborlist import neighbor_list as ase_list
+
+    from tbkit.neighbors import neighbor_list
+
+    for vacuum in (6.0, 0.8):                          # 0.8: images within the cutoff
+        ribbon = graphene_nanoribbon(2, 1, type="armchair", saturated=True, vacuum=vacuum)
+        ribbon.positions[:, 0] += 3.0                  # atoms outside the box along x too
+        for atoms in (ribbon, ribbon[[a.index for a in ribbon if a.symbol == "C"]]):
+            ours = neighbor_list("ijdDS", atoms, 2.6)
+            theirs = ase_list("ijdDS", atoms, 2.6)
+            key = lambda o: sorted(zip(o[0], o[1], np.round(o[2], 9), map(tuple, o[4])))  # noqa: E731
+            assert key(ours) == key(theirs)

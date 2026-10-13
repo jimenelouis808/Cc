@@ -137,7 +137,7 @@ def calculation_checks(atoms: Atoms, model: Optional[TBModel] = None, kmesh=None
         if problems:
             model = None                       # nothing below can be built with it
     if len(atoms) > 1:
-        from ase.neighborlist import neighbor_list
+        from ..neighbors import neighbor_list
 
         i, j, d = neighbor_list("ijd", atoms, OVERLAP)
         if len(d):
@@ -338,7 +338,7 @@ def bonds_with_images(atoms: Atoms, factor: float = 1.2):
     vectors) from i. A bond with a non-zero offset crosses the cell boundary and must be
     drawn to the image of j, not across the cell to j itself."""
     from ase.data import covalent_radii
-    from ase.neighborlist import neighbor_list
+    from ..neighbors import neighbor_list
 
     radii = covalent_radii[atoms.numbers]
     ii, jj, dd, ss = neighbor_list("ijdS", atoms, factor * 2 * radii.max(),
@@ -356,7 +356,7 @@ def bonds_with_images(atoms: Atoms, factor: float = 1.2):
 def bonds_of(atoms: Atoms, factor: float = 1.2) -> list[tuple[int, int]]:
     """Bonds to draw: closer than ``factor`` times the covalent radii."""
     from ase.data import covalent_radii
-    from ase.neighborlist import neighbor_list
+    from ..neighbors import neighbor_list
 
     radii = covalent_radii[atoms.numbers]
     ii, jj, dd = neighbor_list("ijd", atoms, factor * 2 * radii.max(), self_interaction=False)

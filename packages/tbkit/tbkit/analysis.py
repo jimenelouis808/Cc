@@ -243,7 +243,7 @@ def local_normals(atoms: Atoms, cutoff: float = 1.8) -> np.ndarray:
     than two neighbours, z. Signs are made consistent: +z for a flat sheet,
     outward from the centroid for a curved one.
     """
-    from ase.neighborlist import neighbor_list
+    from .neighbors import neighbor_list
 
     i, d = neighbor_list("iD", atoms, cutoff)
     positions = atoms.get_positions()
