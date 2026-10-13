@@ -219,6 +219,13 @@ class Kind:
             message = parameter.check(values[parameter.name])
             if message:
                 problems.append(message)
+        if problems:
+            # Las comprobaciones cruzadas dan por hecho que los valores ya
+            # son del tipo que dicen ser: pasarles un "mucho" donde iba un
+            # numero las hace reventar, y aunque no reventaran estarian
+            # juzgando basura. Primero se arregla el valor; lo demas se
+            # dice en la siguiente pasada, que corre al teclear.
+            return problems
 
         mode = values.get("mode")
         if mode == "pw" and atoms is not None and not all(atoms.pbc):

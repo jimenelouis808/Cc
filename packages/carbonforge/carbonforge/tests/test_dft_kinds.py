@@ -174,3 +174,25 @@ class TestLosParametrosSeValidanSolos:
         shared = {p.name for p in BASE_PARAMETERS}
         for name in kind_names():
             assert shared <= {p.name for p in kind(name).parameters}, name
+
+
+class TestUnValorIlegibleNoArrastraAlResto:
+    """Las comprobaciones cruzadas dan por hecho que los valores ya son del
+    tipo que dicen. Con un valor sin convertir reventaban en vez de
+    nombrarlo, que es lo que ve quien teclea en el panel."""
+
+    def test_un_numero_que_no_lo_es_se_nombra(self, finite):
+        values = kind("relax").defaults() | {"fmax": "mucho"}
+        problems = kind("relax").check(values, finite)
+        assert any("Fuerza máxima" in p for p in problems)
+
+    def test_y_no_se_intenta_juzgar_lo_que_no_se_pudo_leer(self, finite):
+        values = kind("scf").defaults() | {"h": "fina", "kpts": "8,8,8"}
+        problems = kind("scf").check(values, finite)
+        assert any("Espaciado de malla" in p for p in problems)
+        assert not any("periódico" in p for p in problems)
+
+    def test_con_todo_bien_las_cruzadas_si_corren(self, finite):
+        values = kind("scf").defaults() | {"kpts": "8,8,8"}
+        assert any("periódico" in p
+                   for p in kind("scf").check(values, finite))
