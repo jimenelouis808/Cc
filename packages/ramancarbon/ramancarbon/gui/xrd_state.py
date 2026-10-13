@@ -562,6 +562,28 @@ class XRDSession:
             should_stop=should_stop,
         )
 
+    def height_agreement(self):
+        """Why the calculated peaks look short, peak by peak.
+
+        Costs a peak search and a moving average, so unlike the
+        background sweep it does not need its own refinement — but it
+        does need one to have happened. Returns ``None`` with a reason
+        logged when there is no refinement to judge.
+        """
+        from ..xrd.heights import height_agreement
+
+        item = self.item
+        if item is None:
+            self.log("error", "carga un difractograma primero")
+            return None
+        if item.refinement is None:
+            self.log("error",
+                     "refina primero: esta comparación es entre el patrón "
+                     "calculado y el medido, y sin refinamiento no hay "
+                     "patrón calculado")
+            return None
+        return height_agreement(item.refinement)
+
     def carbon_microstructure(self):
         """d₀₀₂, L_c, L_a, the layer count and the graphitisation degree.
 

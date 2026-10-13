@@ -327,6 +327,13 @@ class XRDApp(SectionApp):
         # background order 2, 52.4 % at 6 and 33.1 % at 8 and 10.
         toolbar.add(ttk.Button(toolbar.frame, text="Probar el fondo",
                                command=self._background_sensitivity))
+        # The one thing somebody reads off the plot that no R factor
+        # reports, and it has three causes with opposite meanings: the
+        # comparison itself (a smooth curve against the top of the
+        # scatter), a profile that is too wide (the area agrees), or
+        # intensity that is genuinely missing (it does not).
+        toolbar.add(ttk.Button(toolbar.frame, text="Comparar alturas",
+                               command=self._compare_heights))
         # The axis is a DIRECTION, not an observed reflection: a carbon
         # lying flat is textured along (001) while its pattern shows only
         # the 002. Asking the user for an hkl asked a question about the
@@ -691,6 +698,32 @@ class XRDApp(SectionApp):
 
         self._arm_stop()
         self.run_async(work, done, "Probando el fondo…")
+
+    def _compare_heights(self) -> None:
+        """Why the calculated peaks look short of the measured ones.
+
+        Cheap — a peak search and a moving average — so it runs in place
+        instead of going through the worker, and like the background
+        sweep it goes to a dialog: this page already has its two
+        expanding widgets.
+        """
+        if self.session.item is None:
+            self.warn("Sin datos", "Carga un difractograma primero.")
+            return
+        agreement = self.session.height_agreement()
+        self.flush_messages(self.session.messages)
+        if agreement is None:
+            self.set_status("No hay refinamiento que comparar.")
+            return
+        self.show_text("Alturas calculadas frente a observadas",
+                       agreement.describe())
+        envelope = agreement.median_height_ratio
+        self.set_status(
+            f"Alturas: {100 * envelope:.0f} % de la envolvente observada — "
+            f"{agreement.verdict}"
+            if envelope is not None else
+            "Ningún pico tiene altura que comparar sobre este patrón."
+        )
 
     def _find_texture(self) -> None:
         """Look for each phase's preferred-orientation axis."""

@@ -1213,6 +1213,7 @@ def write_fit(result: RietveldResult, path) -> list[Path]:
 
 def _check(result: RietveldResult, instrument_fwhm: float) -> None:
     """Say what the numbers mean, including when they mean nothing."""
+    _warn_about_the_heights(result)
     if result.gof > GOF_LIMIT:
         result.warnings.append(
             f"la bondad del ajuste es {result.gof:.2f}, muy por encima de 1. "
@@ -1394,6 +1395,65 @@ def _warn_about_pinned_parameters(result: RietveldResult) -> None:
         "equivocada —y por tanto con la altura equivocada— por mucho que "
         "el Rwp parezca razonable"
     )
+
+
+def _warn_about_the_heights(result: RietveldResult) -> None:
+    """The one thing about a Rietveld plot that no R factor reports.
+
+    «Los picos calculados no alcanzan la altura del patrón experimental»
+    is what somebody reads off the figure, and it has three different
+    causes with opposite meanings. The warning says which one this is,
+    and it is here rather than in a button because the comparison costs
+    a peak search and a moving average, while mistaking one cause for
+    another costs a wrong weight fraction. See
+    :mod:`ramancarbon.xrd.heights`.
+    """
+    from .heights import height_agreement
+
+    try:
+        agreement = height_agreement(result)
+    except Exception:                           # pragma: no cover - defensive
+        return
+    if not agreement.peaks or agreement.verdict == "de acuerdo":
+        return
+    envelope = agreement.median_height_ratio
+    raw = agreement.median_raw_height_ratio
+    if envelope is None or raw is None:
+        if agreement.verdict == "ruido":
+            result.warnings.append(
+                "las alturas de los picos no se pueden juzgar sobre este "
+                "patrón: el máximo del propio ruido sobre una ventana del "
+                "tamaño de un pico es comparable al pico. Eso NO invalida "
+                "las posiciones ni las fracciones, que salen del área"
+            )
+        return
+    result.warnings.append(
+        f"los picos calculados llegan al {100 * raw:.0f} % de la altura "
+        f"MEDIDA y al {100 * envelope:.0f} % de la envolvente (la curva "
+        "calculada es suave y pasa por el centro del ruido, así que "
+        "comparar con el punto más alto está sesgado al alza). "
+        + _HEIGHT_VERDICTS.get(agreement.verdict, "")
+    )
+
+
+#: Short forms of :data:`ramancarbon.xrd.heights._VERDICTS`, for the
+#: warning. The full text, peak by peak, is in the report.
+_HEIGHT_VERDICTS = {
+    "perfil": (
+        "Las ÁREAS concuerdan, así que lo que sobra es anchura: mira U, V, W "
+        "y la mezcla, no las fracciones en peso"),
+    "escala": (
+        "Las áreas también se quedan cortas, así que falta intensidad: una "
+        "fase con poca escala, o una fase que no está en el modelo"),
+    "sobra": (
+        "El modelo pone MÁS intensidad de la que hay: alguna fase va con "
+        "demasiada escala, o sobra una fase"),
+    "mezclado": (
+        "Unos picos son de anchura y otros de intensidad: mira el informe de "
+        "alturas pico a pico, porque son dos arreglos distintos"),
+    "ruido": (
+        "Casi ningún pico tiene altura que comparar sobre este patrón"),
+}
 
 
 def _warn_about_the_background(result: RietveldResult) -> None:

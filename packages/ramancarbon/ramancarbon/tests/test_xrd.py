@@ -895,3 +895,123 @@ def test_data_that_are_not_counting_statistics_get_a_flat_sigma_and_say_so():
     assert pattern.sigma_origin == "flat"
     assert "desmarcar" in pattern.metadata["sigma_note"]
     assert np.allclose(pattern.sigma, pattern.sigma[0])
+
+
+# ----------------------------------------------------------------------
+# calculated heights against observed ones
+# ----------------------------------------------------------------------
+def _height_case(calculated_peaks, seed=17, background_level=500.0,
+                 height=2000.0, width=0.25):
+    """A closed case: a known truth, Poisson noise, and a chosen model.
+
+    ``calculated_peaks`` is ``(height factor, width factor)`` for the
+    model, so the three things that make a calculated peak look short can
+    each be built on purpose: the right model (1, 1), one that is too
+    wide at the right area (1/1.4, 1.4) and one that is simply small
+    (0.6, 1).
+    """
+    from ramancarbon.xrd.rietveld import RietveldResult
+
+    two_theta = np.arange(20.0, 60.0, 0.01)
+    centres = (27.5, 35.0, 44.0, 52.0)
+
+    def peaks(scale, broaden):
+        out = np.zeros_like(two_theta)
+        for centre in centres:
+            sigma = width * broaden / 2.3548
+            out += scale * height * np.exp(
+                -0.5 * ((two_theta - centre) / sigma) ** 2)
+        return out
+
+    background = np.full_like(two_theta, background_level)
+    truth = background + peaks(1.0, 1.0)
+    noisy = np.random.default_rng(seed).poisson(truth).astype(float)
+    pattern = Pattern(two_theta=two_theta, intensity=noisy, counts=True)
+    model = background + peaks(*calculated_peaks)
+    return RietveldResult(pattern=pattern, phases=[], calculated=model,
+                          background=background, parameters=[])
+
+
+def test_a_noisy_maximum_sits_above_the_envelope_it_is_compared_with():
+    """The bias that produces most of the apparent deficit.
+
+    The model here IS the truth, so any shortfall is the comparison. The
+    envelope ratio has to come back at one and the raw-maximum ratio
+    below it: that gap is what somebody reads off the figure.
+    """
+    from ramancarbon.xrd.heights import height_agreement
+
+    agreement = height_agreement(_height_case((1.0, 1.0)))
+    assert agreement.comparable, "las cuatro bandas tenían que ser juzgables"
+    assert agreement.verdict == "de acuerdo"
+    assert agreement.median_height_ratio == pytest.approx(1.0, abs=0.08)
+    assert agreement.median_raw_height_ratio < agreement.median_height_ratio
+    assert agreement.bias_origin == "residuo"
+
+
+def test_an_area_that_agrees_with_a_height_that_does_not_is_the_profile():
+    from ramancarbon.xrd.heights import height_agreement
+
+    agreement = height_agreement(_height_case((1.0 / 1.4, 1.4)))
+    assert agreement.verdict == "perfil"
+    assert agreement.median_area_ratio == pytest.approx(1.0, abs=0.1)
+    assert agreement.median_height_ratio < 0.85
+    assert any("más ancho" in peak.note for peak in agreement.comparable)
+
+
+def test_an_area_that_is_short_too_is_missing_intensity():
+    from ramancarbon.xrd.heights import height_agreement
+
+    agreement = height_agreement(_height_case((0.6, 1.0)))
+    assert agreement.verdict == "escala"
+    assert agreement.median_area_ratio == pytest.approx(0.6, abs=0.1)
+    assert any("falta intensidad" in peak.note for peak in agreement.comparable)
+
+
+def test_a_peak_the_size_of_its_own_noise_has_no_height_to_compare():
+    """Not a weak answer — an absent question.
+
+    On the user's real pattern seven of nine peaks are in this state, and
+    saying «the calculated reaches 55 %» about one of them would be
+    reporting the noise.
+    """
+    from ramancarbon.xrd.heights import height_agreement
+
+    quiet = _height_case((1.0, 1.0), height=60.0, background_level=500.0)
+    agreement = height_agreement(quiet)
+    assert all(peak.verdict == "ruido" for peak in agreement.peaks)
+    assert agreement.verdict == "ruido"
+
+
+def test_the_expected_maximum_of_the_noise_matches_a_simulation():
+    """The closed form against the thing it approximates, seeded."""
+    from ramancarbon.xrd.heights import expected_max_excess
+
+    rng = np.random.default_rng(5)
+    for points in (5, 10, 30, 100):
+        drawn = rng.standard_normal((8000, points)).max(axis=1).mean()
+        assert expected_max_excess(points) == pytest.approx(drawn, abs=0.05)
+
+
+def test_the_height_check_rides_along_with_the_refinement_warnings():
+    """A refinement whose peaks come out short says so.
+
+    No R factor reports this, which is the whole reason it is a warning
+    and not a button: on the measured pattern Rwp was 4.39 % with GOF
+    1.045 while the peaks reached 75 % of the observed heights.
+    """
+    from ramancarbon.xrd.rietveld import _warn_about_the_heights
+
+    result = _height_case((0.6, 1.0))
+    _warn_about_the_heights(result)
+    assert result.warnings, "tenía que avisar de las alturas"
+    text = " ".join(result.warnings)
+    assert "envolvente" in text and "falta intensidad" in text
+
+
+def test_a_refinement_whose_heights_agree_says_nothing_about_them():
+    from ramancarbon.xrd.rietveld import _warn_about_the_heights
+
+    result = _height_case((1.0, 1.0))
+    _warn_about_the_heights(result)
+    assert not result.warnings

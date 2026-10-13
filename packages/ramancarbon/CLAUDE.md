@@ -534,6 +534,67 @@ apenas se ve. El usuario desconfió del número y tenía razón.
   y un primer intento con el umbral en 3 lo dejaba fuera por cuatro
   centésimas.
 
+## «Los picos calculados no alcanzan la altura del patrón»
+
+Es lo que se lee de una figura de Rietveld y es lo único que ningún
+factor R informa. En el patrón donde se midió —carbono CVD sobre FeSe,
+picos de 60 a 480 cuentas sobre un fondo de 545— el Rwp era 4.39 % con
+GOF 1.045, la curva diferencia estaba tranquila, y las alturas
+calculadas salían al **75 %** de las medidas. Una apariencia, tres
+causas distintas con significados opuestos, y la figura no las separa.
+
+- **La comparación misma está sesgada.** La curva calculada es suave y
+  pasa por el CENTRO del ruido; el ojo la compara contra el punto más
+  alto del pico, y el máximo de *n* puntos ruidosos está
+  sistemáticamente por encima de la envolvente. Medido sobre ese patrón:
+  contra el máximo, 75 %; contra la envolvente, 86 %. Más de la mitad
+  del déficit aparente era esto.
+- **Y en los picos débiles es TODO.** Siete de los nueve picos no llegan
+  a tres veces el máximo esperado del ruido sobre su propia ventana: de
+  su altura no se puede decir nada, y «el calculado llega al 55 %» sobre
+  uno de ellos es informar el ruido. Eso no invalida posiciones ni
+  fracciones, que salen del área.
+- **Si el ÁREA concuerda y la altura no, es el perfil.** Altura es área
+  entre anchura. Medido: en el pico más intenso las áreas coincidían al
+  100 % con la altura al 94 %, y la curva calculada quedaba POR ENCIMA
+  de la medida en los dos flancos — la intensidad está, está repartida
+  de otra manera. Eso son U, V, W y la mezcla, no las fracciones en peso.
+- **Si el área también se queda corta, falta intensidad.** En 43.89°,
+  donde el grupo de la cementita solapa con la 110 del hierro alfa,
+  área 74 % y altura 77 %: eso es escala de fase, o una fase que no está
+  en el modelo.
+- **El máximo esperado del ruido se MIDE, no se supone.** Sale del
+  residuo del propio ajuste sobre ventanas sin picos del mismo tamaño
+  que la del pico. Así no hace falta suponer nada sobre σ ni sobre
+  independencia, y esto último importa: un patrón con paso de 0.01° y
+  anchura instrumental de 0.06° está sobremuestreado cuatro veces, sus
+  puntos vecinos están correlacionados, y √N (32 cuentas por punto aquí)
+  no describe cuánto viaja el máximo de una ventana (la dispersión punto
+  a punto daba 16). La fórmula es solo el respaldo, y es la de Blom: la
+  asintótica √(2 ln n) se queda 0.12–0.21 corta entre n = 5 y 1000, y
+  corta es la dirección mala —llamaría déficit al ruido.
+- **La envolvente NO se estima suavizando.** La primera versión lo hacía
+  y estaba sesgada al otro lado: promediar sobre un tercio de la anchura
+  le rebaja la punta al pico, y con un modelo que ERA la verdad el
+  cociente salía al 105 %. Un suavizado no puede ser la referencia de
+  una altura porque su sesgo depende de la anchura que se está midiendo.
+  Se usa «máximo observado − máximo esperado del ruido», que no necesita
+  suavizar y es conservador: el máximo se espera sobre la anchura
+  completa cuando solo los puntos de la punta pueden darlo, así que la
+  corrección es si acaso un poco grande.
+- **Un pico dentro de la ventana de un vecino más intenso se informa,
+  no se juzga.** Medido: un caso sintético construido para ser puro
+  problema de anchura informaba sus cuatro picos como «perfil» y un
+  quinto, a 0.34° sobre el flanco de uno de ellos, como «sobra» con un
+  cociente de área de 2.25 — y el veredicto global pasaba de «perfil» a
+  «mezclado». Y no se descarta por distancia: en el patrón real un grupo
+  de cementita de 1.4° de ancho está legítimamente a 0.9° de la 110 del
+  hierro.
+- **Va de aviso, no de botón** (`_warn_about_the_heights`), porque la
+  comparación cuesta una búsqueda de picos y confundir una causa con
+  otra cuesta una fracción en peso equivocada. El detalle pico a pico
+  está en «Comparar alturas».
+
 ## Patrones nanocristalinos: el caso CVD
 
 Tres errores que juntos hacían que un difractograma CVD real no
