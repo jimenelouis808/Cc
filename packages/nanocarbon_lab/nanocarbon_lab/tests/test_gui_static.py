@@ -229,9 +229,19 @@ class TestEverySuperlatticeIsReachableFromAPreset:
 
     def test_no_preset_asks_for_one_of_the_large_nets(self):
         """A preset is a shelf of structures worth knowing, so none of
-        them should be the eight-times-bigger version of another."""
+        them should be the eight-times-bigger version of another.
+
+        The limit is `PRESET_MAX_AREA` and not `LARGE_AREA`, which is a
+        distinction this test learned the hard way: it was pinned to
+        `LARGE_AREA` when nothing on the shelf exceeded it, and then four
+        Archimedean cages did -- while building in 101 to 165 s, against
+        the superfullerene's 79 s at 24_090 Å². `LARGE_AREA` still asks
+        "is this one of the big ones" and the hint should keep answering
+        yes for them; what this asks is whether the shelf has something
+        out of proportion on it.
+        """
         from nanocarbon_lab.builders.supernetwork import (
-            LARGE_AREA,
+            PRESET_MAX_AREA,
             named_graph,
         )
 
@@ -239,7 +249,7 @@ class TestEverySuperlatticeIsReachableFromAPreset:
             scale = float(preset["sn_scale"])
             graph = named_graph(str(preset["sn_graph"]), scale)
             area = graph.wall_area(scale, float(preset["sn_radius"]))
-            assert area < LARGE_AREA, (
+            assert area < PRESET_MAX_AREA, (
                 f"preset {name!r} asks for {area:,.0f} Å² of wall")
 
     def test_every_preset_leaves_room_for_a_tube_between_the_vertices(self):

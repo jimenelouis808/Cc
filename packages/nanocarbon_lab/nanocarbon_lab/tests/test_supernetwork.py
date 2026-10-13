@@ -16,10 +16,13 @@ import numpy as np
 import pytest
 
 from nanocarbon_lab.builders.supernetwork import (
+    ARCHIMEDEAN_VERTICES,
     CAGES,
     PLATONIC_VERTICES,
     SUPERLATTICES,
+    SUPERTUBE_INDICES,
     SuperGraph,
+    archimedean_cage,
     build_supernetwork,
     hypercube_cage,
     icosahedral_cage,
@@ -228,12 +231,49 @@ class TestTheCagesAreReachable:
     """
 
     def test_the_cages_are_registered(self):
-        assert set(CAGES) == {"super-icosahedron", "superfullerene-C60",
-                              "super-hypercube", "supertube-(4,4)",
-                              "supertube-(6,6)",
-                              # The other four Platonic solids.
-                              "super-tetrahedron", "super-cube",
-                              "super-octahedron", "super-dodecahedron"}
+        assert set(CAGES) == {
+            "super-icosahedron", "superfullerene-C60", "super-hypercube",
+            # The other four Platonic solids.
+            "super-tetrahedron", "super-cube", "super-octahedron",
+            "super-dodecahedron",
+            # The six Archimedean ones.
+            "super-truncated-tetrahedron", "super-cuboctahedron",
+            "super-truncated-cube", "super-truncated-octahedron",
+            "super-rhombicuboctahedron", "super-icosidodecahedron",
+            # Rolled super-graphene, armchair and zigzag.
+            *(f"supertube-({n},{m})" for n, m in SUPERTUBE_INDICES),
+        }
+
+    def test_no_cage_is_in_the_catalogue_twice(self):
+        """A C20 fullerene's cage is twelve pentagons and no hexagon, so
+        its skeleton IS the dodecahedron -- 20 vertices, 30 edges, the
+        same budget. A `superfullerene-C20` entry beside
+        `super-dodecahedron` would have been one cage under two names,
+        and it was written before it was noticed.
+
+        The check is on the skeleton rather than on the name, so a future
+        entry that duplicates an existing cage fails here whatever it is
+        called -- and the invariant has to be the **adjacency spectrum**,
+        not the (V, E, degree) signature. That was the first version and
+        it fails on two cages that are genuinely different: the
+        truncated cube and the truncated octahedron are both 24 vertices,
+        36 edges and 3-regular. What separates them is their faces --
+        triangles and octagons against squares and hexagons -- which the
+        spectrum sees and the counts do not.
+        """
+        seen: dict[tuple[float, ...], str] = {}
+        for name in CAGES:
+            graph = named_graph(name, 24.0)
+            count = len(graph.nodes)
+            adjacency = np.zeros((count, count))
+            for i, j, _ in graph.edges:
+                adjacency[i, j] = adjacency[j, i] = 1.0
+            key = tuple(np.round(np.sort(np.linalg.eigvalsh(adjacency)), 6))
+            assert key not in seen, (
+                f"{name} and {seen[key]} are the same skeleton: "
+                f"{count} vertices, {len(graph.edges)} edges and the same "
+                "adjacency spectrum")
+            seen[key] = name
 
     @pytest.mark.parametrize("name", ["super-icosahedron",
                                       "superfullerene-C60",
@@ -457,3 +497,155 @@ class TestTheFivePlatonicCages:
                 arms = vertices[partners] - vertices[i]
                 arms = arms / np.linalg.norm(arms, axis=1)[:, None]
                 assert np.linalg.norm(arms.sum(axis=0)) > 0.5, solid
+
+
+class TestTheArchimedeanCages:
+    """Six more skeletons, audited as GRAPHS before any was meshed.
+
+    What they add over the five Platonic ones is the arrangement and the
+    density rather than a new node: the tetrahedron, the cube and the
+    dodecahedron all give the same three-arm node, and these put three-
+    and four-arm nodes on a sphere at six different densities. The node
+    count and the arm count are what decide how much of a cage's wall is
+    curved, which is the axis that matters for chemisorption -- and a
+    graph's vertex count, edge count and degree are facts about it, so
+    all of that is checkable in milliseconds.
+    """
+
+    #: ``(V, E, degree, budget)`` per solid, from the audit.
+    EXPECTED = {
+        "truncated tetrahedron": (12, 18, 3, -72),
+        "cuboctahedron": (12, 24, 4, -144),
+        "truncated cube": (24, 36, 3, -144),
+        "truncated octahedron": (24, 36, 3, -144),
+        "rhombicuboctahedron": (24, 48, 4, -288),
+        "icosidodecahedron": (30, 60, 4, -360),
+    }
+
+    def test_the_six_are_the_solids_they_claim(self):
+        assert set(ARCHIMEDEAN_VERTICES) == set(self.EXPECTED)
+        for solid, (vertices, edges, degree, budget) in self.EXPECTED.items():
+            cage = archimedean_cage(solid, 24.0)
+            assert len(cage.nodes) == vertices, solid
+            assert len(cage.edges) == edges, solid
+            assert cage.coordination == degree, solid
+            assert cage.ring_budget == budget, solid
+
+    def test_every_strut_is_the_requested_length(self):
+        """An Archimedean solid is vertex-transitive but NOT
+        edge-transitive in general, so this is a real check rather than a
+        restatement: the rescale divides by the shortest vertex-vertex
+        distance, and if any edge were longer than that one the struts
+        would come out uneven and the cage would be two tube lengths.
+        """
+        for solid in self.EXPECTED:
+            for strut in (24.0, 30.0):
+                lengths = archimedean_cage(solid, strut).strut_lengths(strut)
+                assert lengths.min() == pytest.approx(strut, rel=1e-6), solid
+                assert lengths.max() == pytest.approx(strut, rel=1e-6), solid
+
+    def test_the_truncated_tetrahedron_is_built_by_truncation(self):
+        """Not from "permutations of (0, 1, 3) with an even number of
+        minus signs", which is the usual statement and is ambiguous: the
+        sign of a zero is not a sign, and the ambiguous reading gives 24
+        vertices of degree 2 instead of 12 of degree 3. That was the
+        first version here, and the vertex count is what caught it.
+        """
+        cage = archimedean_cage("truncated tetrahedron", 24.0)
+        assert len(cage.nodes) == 12
+        assert cage.coordination == 3
+
+    def test_no_vertex_balances_so_the_wall_must_be_amorphous(self):
+        """The same fact the Platonic cages are held to, and the reason
+        none of these can be a knee cage: a node's census comes out clean
+        only when its arms sum to zero, and a convex polyhedron's vertex
+        lies on its own hull, so every edge at it points into the
+        supporting half-space. Measured, the imbalance runs 1.00 to 2.00
+        against machine zero for every periodic net.
+        """
+        for solid in self.EXPECTED:
+            cage = archimedean_cage(solid, 24.0)
+            nodes = np.asarray(cage.nodes, dtype=float)
+            arms: dict[int, list[np.ndarray]] = {}
+            for i, j, _ in cage.edges:
+                for a, b in ((i, j), (j, i)):
+                    direction = nodes[b] - nodes[a]
+                    arms.setdefault(a, []).append(
+                        direction / np.linalg.norm(direction))
+            worst = max(float(np.linalg.norm(np.sum(v, axis=0)))
+                        for v in arms.values())
+            assert worst > 0.5, solid
+
+    def test_an_unknown_solid_names_both_families(self):
+        with pytest.raises(ValueError, match="cuboctahedron"):
+            archimedean_cage("rhombicosidodecahedron", 24.0)
+
+
+class TestTheSupertubeFamily:
+    """Armchair and zigzag rolls of super-graphene.
+
+    ``(n, n)`` is an armchair roll and ``(n, 0)`` a zigzag one -- the
+    same distinction a real nanotube's indices make, one level of scale
+    up, because the super-graphene net *is* a honeycomb. The catalogue
+    held two armchairs and no zigzag.
+    """
+
+    @pytest.mark.parametrize("n,m", SUPERTUBE_INDICES)
+    def test_every_registered_roll_is_a_sound_honeycomb(self, n, m):
+        graph = supertube_graph(n, m, periods=2, strut=20.0)
+        assert graph.coordination == 3, "a honeycomb is three-coordinate"
+        assert graph.ring_budget == 12 * (len(graph.nodes) - len(graph.edges))
+        lengths = graph.strut_lengths(20.0)
+        # A rolled skeleton replaces each arc by its CHORD, so its struts
+        # come out short -- never long, which is the sharp half of this
+        # check -- by an amount that goes as 1/n^2. Measured at a 20 A
+        # strut: 2.02% at (3,3), 1.15% at (4,4), 0.75% at (5,5), 0.50% at
+        # (6,6) and 0.30% at (8,8), which is 18.3/n^2 per cent; the
+        # zigzag rolls give 30/n^2 (0.85% at (6,0) down to 0.20% at
+        # (12,0)), the circumference in units of the strut differing
+        # between the two by sqrt(3). A flat 2% tolerance was the first
+        # version and the (3,3) failed it by two hundredths of a point,
+        # which is the law rather than a defect.
+        assert lengths.max() <= 20.0 + 1e-9, "a chord is never longer"
+        assert lengths.min() == pytest.approx(20.0, rel=0.35 / n ** 2)
+
+    def test_a_zigzag_roll_is_not_the_armchair_one_renamed(self):
+        """They share their vertex and strut counts, so the thing that
+        separates them is the CELL: at the same strut the (6,0)'s axial
+        period is 1.73 times the (6,6)'s. A test on the counts alone
+        would pass with one of them deleted and the other aliased.
+        """
+        armchair = supertube_graph(6, 6, periods=2, strut=20.0)
+        zigzag = supertube_graph(6, 0, periods=2, strut=20.0)
+        assert len(armchair.nodes) == len(zigzag.nodes) == 48
+        assert len(armchair.edges) == len(zigzag.edges) == 72
+        ratio = zigzag.shape[2] / armchair.shape[2]
+        assert ratio == pytest.approx(3.0 ** 0.5, rel=0.01)
+
+    def test_the_narrowest_roll_is_out_on_geometry(self):
+        """(3,3) builds and comes back BROKEN -- 2940 atoms, budget -144
+        met exactly, no close contact, bonds 1.292-1.570 Å -- at the same
+        shape where the (6,0) is merely strained. Rolling replaces each
+        arc by its chord, and the shortening goes as 1/n^2, so three
+        super-hexagons around is where it stops being small: 2.02 %
+        against the (6,6)'s 0.50 %. The narrow roll is the distorted one,
+        which is the opposite of the usual worry about size.
+        """
+        assert (3, 3) not in SUPERTUBE_INDICES
+        narrow = supertube_graph(3, 3, periods=2, strut=20.0)
+        assert narrow.coordination == 3
+        shortfall = 1.0 - narrow.strut_lengths(20.0).min() / 20.0
+        assert shortfall > 0.02
+        widest = supertube_graph(8, 8, periods=2, strut=20.0)
+        assert 1.0 - widest.strut_lengths(20.0).min() / 20.0 < shortfall / 4.0
+
+    def test_a_chiral_roll_works_and_is_out_of_the_catalogue_on_cost(self):
+        """It is not in `SUPERTUBE_INDICES` because of what it costs, not
+        because of any doubt that it builds -- so the test is that it
+        builds AND that it is as big as the note says. (6,3) needs 168
+        vertices over two periods against the (6,6)'s 48.
+        """
+        chiral = supertube_graph(6, 3, periods=2, strut=20.0)
+        assert chiral.coordination == 3
+        assert len(chiral.nodes) == 168
+        assert (6, 3) not in SUPERTUBE_INDICES

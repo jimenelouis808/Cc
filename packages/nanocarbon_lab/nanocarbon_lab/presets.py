@@ -350,6 +350,69 @@ PRESETS: dict[str, dict[str, object]] = {
     "Superfullerene (C60 of tubes)": {
         "mode_kind": "supernetwork", "sn_graph": "superfullerene-C60",
         "sn_scale": 14.2, "sn_radius": 3.0, "sn_blend": 2.0, "anneal": 0},
+    # The six Archimedean cages. A Platonic cage gives one node geometry
+    # per solid -- and the tetrahedron, cube and dodecahedron all give
+    # the SAME one, three arms -- so what these add is the arrangement
+    # and the density: the truncated tetrahedron is the smallest
+    # three-arm cage after the tetrahedron itself, and the
+    # icosidodecahedron puts thirty four-arm nodes on one shell. That
+    # node count and arm count are what decide how much of a cage's wall
+    # is curved, which is the axis that matters for putting hydrogen on
+    # one (`analyse/curvature.py`, `analyse/hybridisation.py`).
+    #
+    # Every number here is measured. All six meet 12(V-E) EXACTLY with
+    # zero close contacts at 30/4.0/3.0:
+    #
+    #   cage                       atoms   budget   bonds (Å)      time
+    #   truncated tetrahedron       4344     -72    1.326-1.535     37 s
+    #   cuboctahedron               5250    -144    1.338-1.523     57 s
+    #   truncated cube              8684    -144    1.328-1.548    162 s
+    #   truncated octahedron        8940    -144    1.332-1.526    113 s
+    #   rhombicuboctahedron        10608    -288    1.332-1.530    101 s
+    #   icosidodecahedron          13108    -360    1.335-1.540    165 s
+    #
+    # The strut is 30 and not the Platonic presets' 24 for a measured
+    # reason: at 24/3.0/2.0 the cuboctahedron comes back BROKEN
+    # (1.311-1.589 Å, census {5:117, 6:1181, 7:214, 8:19, 9:3}) while
+    # meeting its budget and reporting no contact. Four arms at a vertex
+    # on a sphere is a tighter node than four on a cube's diagonal, and
+    # it is the cage with the worst vertex imbalance here (2.00 against
+    # the truncated octahedron's 1.00). The truncated tetrahedron does
+    # build at 24/3/2 -- 2564 atoms, strained, budget exact -- and takes
+    # the roomier shape anyway so the family reads as one family.
+    "Truncated-tetrahedral cage of tubes": {
+        "mode_kind": "supernetwork",
+        "sn_graph": "super-truncated-tetrahedron",
+        "sn_scale": 30.0, "sn_radius": 4.0, "sn_blend": 3.0, "anneal": 0},
+    "Cuboctahedral cage of tubes": {
+        "mode_kind": "supernetwork", "sn_graph": "super-cuboctahedron",
+        "sn_scale": 30.0, "sn_radius": 4.0, "sn_blend": 3.0, "anneal": 0},
+    "Truncated-cubic cage of tubes": {
+        "mode_kind": "supernetwork", "sn_graph": "super-truncated-cube",
+        "sn_scale": 30.0, "sn_radius": 4.0, "sn_blend": 3.0, "anneal": 0},
+    "Truncated-octahedral cage of tubes": {
+        "mode_kind": "supernetwork", "sn_graph": "super-truncated-octahedron",
+        "sn_scale": 30.0, "sn_radius": 4.0, "sn_blend": 3.0, "anneal": 0},
+    "Rhombicuboctahedral cage of tubes": {
+        "mode_kind": "supernetwork", "sn_graph": "super-rhombicuboctahedron",
+        "sn_scale": 30.0, "sn_radius": 4.0, "sn_blend": 3.0, "anneal": 0},
+    "Icosidodecahedral cage of tubes": {
+        "mode_kind": "supernetwork", "sn_graph": "super-icosidodecahedron",
+        "sn_scale": 30.0, "sn_radius": 4.0, "sn_blend": 3.0, "anneal": 0},
+    # Rolled super-graphene, zigzag. `(n,n)` is an ARMCHAIR roll and
+    # `(n,0)` a zigzag one -- the same distinction a real nanotube's
+    # indices make, one level of scale up, because the super-graphene net
+    # IS a honeycomb. They are two structures and not two names for one:
+    # the (6,6) and the (6,0) share 48 vertices and 72 struts and have
+    # axial periods of 69.3 and 120.0 Å at a 20 Å strut.
+    #
+    # A chiral roll is reachable from `supertube_graph` and is not in the
+    # catalogue, on cost rather than doubt: (6,3) needs 168 vertices over
+    # two periods in a 317 Å cell and (9,3) 312 in 433 Å, against 48 for
+    # the (6,6), which is already minutes.
+    "Supertube (6,0) of super-graphene": {
+        "mode_kind": "supernetwork", "sn_graph": "supertube-(6,0)",
+        "sn_scale": 14.0, "sn_radius": 3.0, "sn_blend": 2.0, "anneal": 0},
     # The three periodic nets that had no preset. Without one the Net
     # box is the only way to reach them, and picking a net there leaves
     # the cell, radius and blend at whatever the LAST preset set -- which

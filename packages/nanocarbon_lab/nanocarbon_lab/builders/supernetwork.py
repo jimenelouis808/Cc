@@ -54,7 +54,11 @@ from . import remesh as rm
 from .junction import _finish, rescue_collapsed_wall
 
 __all__ = [
+    "ARCHIMEDEAN_VERTICES",
+    "PRESET_MAX_AREA",
     "CAGES",
+    "SUPERTUBE_INDICES",
+    "archimedean_cage",
     "hypercube_cage",
     "supertube_graph",
     "ICOSAHEDRON",
@@ -596,15 +600,205 @@ def platonic_cage(solid: str, strut: float = 24.0) -> SuperGraph:
     )
 
 
-def _superfullerene(family: str):
+def _even_permutations(base: tuple[float, float, float]) -> np.ndarray:
+    """Even permutations of ``base`` with every sign, deduplicated.
+
+    Written as the construction rather than as a table of triples, for
+    the reason the srs sites are: a transcribed coordinate list is the
+    sort of thing that is easy to get subtly wrong and impossible to spot
+    afterwards, while a wrong construction shows up as the wrong vertex
+    count.
+    """
+    import itertools
+
+    out: set[tuple[float, ...]] = set()
+    for order in itertools.permutations(range(3)):
+        inversions = sum(1 for i in range(3) for j in range(i + 1, 3)
+                         if order[i] > order[j])
+        if inversions % 2:
+            continue
+        for signs in itertools.product((1.0, -1.0), repeat=3):
+            out.add(tuple(round(base[order[k]] * signs[k], 9)
+                          for k in range(3)))
+    return np.array(sorted(out), dtype=float)
+
+
+def _all_permutations(base: tuple[float, float, float]) -> np.ndarray:
+    """Every permutation of ``base`` with every sign, deduplicated."""
+    import itertools
+
+    out: set[tuple[float, ...]] = set()
+    for order in itertools.permutations(base):
+        for signs in itertools.product((1.0, -1.0), repeat=3):
+            out.add(tuple(round(order[k] * signs[k], 9) for k in range(3)))
+    return np.array(sorted(out), dtype=float)
+
+
+def _truncated(vertices: np.ndarray, pairs) -> np.ndarray:
+    """Truncate a solid: two points on each edge, at a third and
+    two thirds.
+
+    The truncated tetrahedron is built this way rather than from the
+    usual "permutations of (0, 1, 3) with an even number of minus signs",
+    because the zero makes that rule ambiguous -- the sign of a zero is
+    not a sign -- and the ambiguous reading gives 24 vertices of degree 2
+    instead of 12 of degree 3. The truncation is unambiguous and its
+    vertex count is the check.
+    """
+    points = [vertices[i] + t * (vertices[j] - vertices[i])
+              for i, j in pairs for t in (1.0 / 3.0, 2.0 / 3.0)]
+    return np.unique(np.round(np.array(points, dtype=float), 9), axis=0)
+
+
+_TETRAHEDRON_EDGES = tuple(
+    (i, j) for i in range(4) for j in range(i + 1, 4))
+
+#: Archimedean solids as skeletons, by name. Each is a **vertex-transitive**
+#: polyhedron with more than one kind of face, which is what makes it
+#: interesting here: the five Platonic cages give one node geometry each,
+#: while these put the same node in a different arrangement, at a
+#: different density, over a sphere.
+#:
+#: Audited as graphs before any of them was meshed -- vertex count, edge
+#: count, degree, the gap between the first and second neighbour shells
+#: (which is what :func:`edges_from_positions` needs, and the tightest
+#: here is 1.41 against a tolerance of 1.10), and the budget:
+#:
+#: =========================  ===  ===  ======  =======  =====
+#: solid                      V    E    degree  budget   gap
+#: =========================  ===  ===  ======  =======  =====
+#: truncated tetrahedron      12   18   3       -72      1.73
+#: cuboctahedron              12   24   4       -144     1.41
+#: truncated cube             24   36   3       -144     1.85
+#: truncated octahedron       24   36   3       -144     1.41
+#: rhombicuboctahedron        24   48   4       -288     1.41
+#: icosidodecahedron          30   60   4       -360     1.62
+#: =========================  ===  ===  ======  =======  =====
+#:
+#: Their walls are **amorphous**, for the reason every cage's is: a cage
+#: of exact knee nodes cannot exist, because a node's census comes out
+#: clean only when its arms sum to zero and a convex polyhedron's vertex
+#: lies on its own hull. Measured here, the vertex imbalance runs 1.00
+#: (truncated octahedron, the most balanced of the six) to 2.00
+#: (cuboctahedron) against machine zero for every periodic net.
+ARCHIMEDEAN_VERTICES: dict[str, np.ndarray] = {
+    "truncated tetrahedron": _truncated(
+        PLATONIC_VERTICES["tetrahedron"], _TETRAHEDRON_EDGES),
+    "cuboctahedron": _all_permutations((1.0, 1.0, 0.0)),
+    "truncated cube": _all_permutations((2.0 ** 0.5 - 1.0, 1.0, 1.0)),
+    "truncated octahedron": _all_permutations((0.0, 1.0, 2.0)),
+    "rhombicuboctahedron": _all_permutations((1.0, 1.0, 1.0 + 2.0 ** 0.5)),
+    "icosidodecahedron": np.unique(np.round(np.vstack([
+        _even_permutations((0.0, 0.0, _PHI)),
+        _even_permutations((0.5, _PHI / 2.0, _PHI ** 2 / 2.0)),
+    ]), 6), axis=0),
+}
+
+
+def archimedean_cage(solid: str, strut: float = 24.0) -> SuperGraph:
+    """A cage of tubes on an Archimedean solid's edges.
+
+    Same construction as :func:`platonic_cage` and the same reading of
+    ``strut`` -- the edge length in ångström, rescaled from whatever the
+    vertex table's own scale happens to be, so the number means the same
+    thing across all eleven cages.
+
+    **Why these and not only the five.** A Platonic cage offers one node
+    geometry per solid and the tetrahedron, cube and dodecahedron all
+    offer the *same* one (three arms). What an Archimedean solid changes
+    is the arrangement and the density: the truncated tetrahedron is the
+    smallest three-arm cage after the tetrahedron itself, the
+    cuboctahedron puts four arms at a vertex on a sphere rather than on a
+    cube's diagonal, and the icosidodecahedron puts thirty of those four-arm
+    nodes on one shell. For somebody asking which cage to put hydrogen
+    on, the node count and the arm count are the two knobs that change
+    how much of the wall is curved -- and the curvature is what
+    chemisorption follows, which is this package's own measured rule
+    (:mod:`nanocarbon_lab.analyse.curvature`,
+    :mod:`nanocarbon_lab.analyse.hybridisation`). Nothing here computes
+    an adsorption energy; what it does is build the cage and measure its
+    pyramidalisation.
+
+    Raises
+    ------
+    ValueError
+        If the solid is not one of the six.
+    """
+    if solid not in ARCHIMEDEAN_VERTICES:
+        raise ValueError(
+            f"unknown solid {solid!r}; the Archimedean cages here are "
+            f"{sorted(ARCHIMEDEAN_VERTICES)}, and the five Platonic ones "
+            f"are {sorted(PLATONIC_VERTICES)}."
+        )
+    vertices = np.asarray(ARCHIMEDEAN_VERTICES[solid], dtype=float)
+    spread = np.linalg.norm(vertices[:, None, :] - vertices[None, :, :],
+                            axis=2)
+    np.fill_diagonal(spread, np.inf)
+    nodes = vertices * (float(strut) / float(spread.min()))
+    shape = (1.0, 1.0, 1.0)
+    return SuperGraph(
+        name=f"super-{solid.replace(' ', '-')}", nodes=nodes,
+        edges=edges_from_positions(nodes, shape, (False, False, False)),
+        pbc=(False, False, False), shape=shape,
+        note=f"a finite cage on the {solid}'s edges; like every cage here "
+             "its wall is meshed and therefore amorphous.",
+    )
+
+
+#: Supertube indices the catalogue offers, and what separates them.
+#:
+#: ``(n, n)`` is an **armchair** roll of super-graphene and ``(n, 0)`` a
+#: **zigzag** one -- the same distinction a real nanotube's indices make,
+#: one level of scale up, because the super-graphene net *is* a
+#: honeycomb. They are genuinely different structures and not two
+#: descriptions of one: the (6,6) and the (6,0) have the same 48 vertices
+#: and 72 struts, and axial periods of 69.3 and 120.0 Å at a 20 Å strut.
+#:
+#: **The struts come out short, by a law rather than by an error.**
+#: Rolling replaces each arc by its chord, so a strut is never longer
+#: than asked and is shorter by about ``18.3/n**2`` per cent for an
+#: armchair roll and ``30/n**2`` for a zigzag one -- the circumference in
+#: units of the strut differing between the two by sqrt(3). Measured at a
+#: 20 Å strut: 2.02 % at (3,3), 1.15 % at (4,4), 0.50 % at (6,6), 0.30 %
+#: at (8,8); 0.85 % at (6,0) and 0.20 % at (12,0). So a NARROW roll is
+#: the distorted one, which is the opposite of the usual worry about
+#: size.
+#:
+#: **(3,3) is out, and it was measured rather than guessed at.** It
+#: builds -- 2940 atoms, budget -144 met exactly, no close contact -- and
+#: it comes back **broken**, bonds 1.292-1.570 Å, at the same 14/3/2
+#: shape where the (6,0) is merely strained. Three super-hexagons around
+#: is where the chord shortening and the node distortion stop being
+#: small, so it is not in the catalogue.
+#:
+#: **A chiral roll is reachable and is not in the catalogue either**, for
+#: a different reason: cost, not geometry. The audit gives (6,3) 168
+#: vertices over two periods in a 317 Å cell and (9,3) 312 in 433 Å,
+#: against 48 for the (6,6). That is three to six times the wall of the
+#: largest entry here, which already takes minutes.
+#: :func:`supertube_graph` takes any indices for whoever wants either.
+#:
+#: Of the seven, the (4,4) and (6,6) were shipped and measured before
+#: this entry existed and the (6,0) is measured above; the (5,5), (8,8),
+#: (8,0) and (10,0) are **bracketed** by those rather than each built,
+#: and the chord law says the wider ones are the safer ones.
+SUPERTUBE_INDICES: tuple[tuple[int, int], ...] = (
+    (4, 4), (5, 5), (6, 6), (8, 8),
+    (6, 0), (8, 0), (10, 0),
+)
+
+
+def _superfullerene(family: str, freq: int = 1):
     def make(strut: float) -> SuperGraph:
         from .fullerene import build_fullerene
 
-        cage = build_fullerene(family=family)
+        cage = build_fullerene(family=family, freq=freq)
         # The cage's own bonds are 1.42 Å, so scaling by strut/1.42 puts
         # every edge at the requested tube length.
-        return supergraph_from_atoms(cage, scale=float(strut) / CC_BOND,
-                                     name=f"superfullerene-{family}")
+        return supergraph_from_atoms(
+            cage, scale=float(strut) / CC_BOND,
+            name=f"superfullerene-{family}"
+                 + (f"-f{freq}" if freq != 1 else ""))
     return make
 
 
@@ -627,13 +821,31 @@ CAGES: dict[str, object] = {
     "super-octahedron": lambda strut: platonic_cage("octahedron", strut),
     "super-dodecahedron": lambda strut: platonic_cage("dodecahedron", strut),
     "super-hypercube": _hypercube,
-    # Rolled super-graphene. The (6,6) here is the SUPER-lattice's index,
-    # not the wall's; the periods are fixed at 2 so the entry has one
-    # knob like every other cage, and `supertube_graph` is there for the
-    # rest of the family.
-    "supertube-(4,4)": lambda strut: supertube_graph(4, 4, 2, strut),
-    "supertube-(6,6)": lambda strut: supertube_graph(6, 6, 2, strut),
+    # The six Archimedean cages: the same nodes the Platonic ones give,
+    # arranged differently and at a different density over a sphere.
+    **{f"super-{solid.replace(' ', '-')}":
+       (lambda name: lambda strut: archimedean_cage(name, strut))(solid)
+       for solid in ARCHIMEDEAN_VERTICES},
+    # Rolled super-graphene, armchair `(n,n)` and zigzag `(n,0)`. The
+    # indices are the SUPER-lattice's, not the wall's; the periods are
+    # fixed at 2 so each entry has one knob like every other cage, and
+    # `supertube_graph` takes any indices for the chiral rolls, which are
+    # out of the catalogue on cost -- see `SUPERTUBE_INDICES`.
+    **{f"supertube-({n},{m})":
+       (lambda a, b: lambda strut: supertube_graph(a, b, 2, strut))(n, m)
+       for n, m in SUPERTUBE_INDICES},
     "superfullerene-C60": _superfullerene("C60"),
+    # Two fullerene entries that were written and then taken out again,
+    # because the catalogue must not offer the same cage twice or a
+    # half-hour build without saying so:
+    #
+    # * **C20 is the dodecahedron.** Its cage is twelve pentagons and no
+    #   hexagon, so its skeleton has exactly the 20 vertices and 30 edges
+    #   `super-dodecahedron` already has, at the same budget of -120.
+    #   `superfullerene-C20` would have been one cage under two names.
+    # * **C240 is a 240-vertex, 360-edge skeleton**, four times the C60's
+    #   wall, which is already 7534 atoms in 79 s. `_superfullerene`
+    #   takes a frequency for whoever wants it; it is not a menu entry.
 }
 
 
@@ -674,6 +886,28 @@ RESCUE_GRID = 1.4
 #: 3_204. This sits above everything in the catalogue at its own preset
 #: and below that worst case.
 LARGE_AREA = 25_000.0
+
+#: Wall area, in Angstrom squared, above which a PRESET is out of
+#: proportion with the rest of the shelf.
+#:
+#: This is a different question from `LARGE_AREA` and that is why it is a
+#: different number. `LARGE_AREA` asks "is this one of the big ones", and
+#: the hint should keep saying yes for the four Archimedean cages that
+#: pass it -- they are the big ones. What a preset guard protects against
+#: is a shelf entry that is the eight-times-bigger version of another,
+#: and the four measured cages are not that: the truncated cube asks for
+#: 27_143 A^2 and builds in 162 s, the rhombicuboctahedron 36_191 in
+#: 101 s and the icosidodecahedron 45_239 in 165 s, against the
+#: superfullerene's 24_090 in 79 s.
+#:
+#: **It cannot be a time, and that is measured rather than assumed** --
+#: `build_cost_note` records the three attempts that failed, and the
+#: ranking is not monotone in area at all: a cage closes on itself while
+#: a periodic cell has its faces welded to their opposite numbers, so
+#: super-fcc is 12_796 A^2 in 413 s while the superfullerene is 24_090
+#: in 79. So this is a size limit on the shelf, set above the largest
+#: thing on it that was measured to build in minutes.
+PRESET_MAX_AREA = 50_000.0
 
 
 def build_cost_note(area: float, periodic: bool = True) -> str:

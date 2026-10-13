@@ -2417,6 +2417,155 @@ of them -- at 2% rather than machine precision, because a *rolled*
 skeleton's struts genuinely vary by about 1%, exactly as a real
 nanotube's bonds do.
 
+## Eleven cages, and the three that were written and taken out again
+
+`platonic_cage` gave the five Platonic solids and `archimedean_cage`
+gives six more. **What they add is not a new node**: the tetrahedron,
+the cube and the dodecahedron all give the SAME three-arm node, so what
+changes across a catalogue of cages is the arrangement and the density --
+how many nodes sit on one shell and how many arms meet at each. That is
+the axis that decides how much of a cage's wall is curved, and curvature
+is what chemisorption follows (`analyse/curvature.py`,
+`analyse/hybridisation.py`). Nothing here computes an adsorption energy;
+what it does is build the cage and measure its pyramidalisation.
+
+Audited as **graphs** before any was meshed -- vertex and edge counts,
+degree, the first-to-second neighbour shell gap that
+`edges_from_positions` needs (tightest 1.41 against a tolerance of
+1.10), and the budget `12(V-E)`:
+
+| solid | V | E | degree | budget | gap |
+|---|---|---|---|---|---|
+| truncated tetrahedron | 12 | 18 | 3 | -72 | 1.73 |
+| cuboctahedron | 12 | 24 | 4 | -144 | 1.41 |
+| truncated cube | 24 | 36 | 3 | -144 | 1.85 |
+| truncated octahedron | 24 | 36 | 3 | -144 | 1.41 |
+| rhombicuboctahedron | 24 | 48 | 4 | -288 | 1.41 |
+| icosidodecahedron | 30 | 60 | 4 | -360 | 1.62 |
+
+And built, at strut 30 / tube 4.0 / blend 3.0. **All six meet their
+budget EXACTLY with zero close contacts**, bonds inside 1.31-1.55 Å,
+verdict `strained` -- which is the honest reading of a meshed wall, a
+regular heptagon's interior angle being 128.6° before any strain:
+
+| cage | atoms | bonds (Å) | time |
+|---|---|---|---|
+| truncated tetrahedron | 4344 | 1.326-1.535 | 37 s |
+| cuboctahedron | 5250 | 1.338-1.523 | 57 s |
+| truncated cube | 8684 | 1.328-1.548 | 162 s |
+| truncated octahedron | 8940 | 1.332-1.526 | 113 s |
+| rhombicuboctahedron | 10608 | 1.332-1.530 | 101 s |
+| icosidodecahedron | 13108 | 1.335-1.540 | 165 s |
+
+- **The strut is 30 and not the Platonic presets' 24, and that was
+  measured.** At 24/3.0/2.0 the cuboctahedron comes back **broken** --
+  1.311-1.589 Å, census `{5:117, 6:1181, 7:214, 8:19, 9:3}` -- while
+  meeting its budget exactly and reporting no contact. Four arms at a
+  vertex **on a sphere** is a tighter node than four on a cube's
+  diagonal, and it is the cage with the worst vertex imbalance here, 2.00
+  against the truncated octahedron's 1.00.
+- **Their walls are amorphous and that is not a choice**, for the reason
+  the Platonic cages' are: a cage of exact knee nodes cannot exist,
+  because a node's census comes out clean only when its arms sum to zero
+  and a convex polyhedron's vertex lies on its own hull. Measured, the
+  imbalance runs 1.00 to 2.00 against **machine zero** for every periodic
+  net, and a test asserts it on all six.
+- **The truncated tetrahedron is built by truncation**, not from
+  "permutations of (0, 1, 3) with an even number of minus signs". That is
+  the usual statement and it is ambiguous -- the sign of a zero is not a
+  sign -- and the ambiguous reading gives **24 vertices of degree 2**
+  instead of 12 of degree 3. The vertex count is what caught it.
+- **Two fullerene entries were written and taken out.**
+  `superfullerene-C20` would have been one cage under two names: a C20
+  cage is twelve pentagons and no hexagon, so its skeleton has exactly
+  the dodecahedron's 20 vertices and 30 edges at the same budget.
+  `superfullerene-C240` is four times the C60's wall, which is already
+  7534 atoms. The duplicate test is on the **adjacency spectrum** and
+  not on (V, E, degree), which was the first version and fails on two
+  cages that are genuinely different -- the truncated cube and the
+  truncated octahedron are both 24 vertices, 36 edges and 3-regular, and
+  what separates them is their faces.
+
+### `LARGE_AREA` and `PRESET_MAX_AREA` answer different questions
+
+The static preset guard was pinned to `LARGE_AREA` when nothing on the
+shelf exceeded it, and four of these cages do -- while building in 101 to
+165 s against the superfullerene's 79 s at 24_090 Å². `LARGE_AREA` still
+asks "is this one of the big ones", and the hint should keep answering
+yes for them; what a preset guard protects against is a shelf entry out
+of proportion with the rest. So they are two constants now, and the
+limit **cannot** be a time: `build_cost_note` already records the three
+attempts that failed, and the ranking is not monotone in area -- a cage
+closes on itself while a periodic cell has its faces welded to their
+opposite numbers, so super-fcc is 12_796 Å² in 413 s while the
+superfullerene is 24_090 in 79.
+
+## A supertube is armchair or zigzag, and the narrow one is the bad one
+
+`(n,n)` is an **armchair** roll of super-graphene and `(n,0)` a
+**zigzag** one -- the same distinction a real nanotube's indices make,
+one level of scale up, because the super-graphene net *is* a honeycomb.
+The catalogue held two armchairs and no zigzag at all.
+
+- **They are two structures, not two names for one.** The (6,6) and the
+  (6,0) share 48 vertices and 72 struts and have axial periods of 69.3
+  and 120.0 Å at a 20 Å strut. Built: `supertube-(6,0)` gives 5916
+  atoms, budget -288 met exactly, bonds 1.311-1.549 Å, zero contacts,
+  strained, 215 s -- beside the (6,6)'s 5936 atoms.
+- **The struts come out short by a law, not by an error.** Rolling
+  replaces each arc by its chord, so a strut is **never longer** than
+  asked and is shorter by about `18.3/n²` per cent for an armchair roll
+  and `30/n²` for a zigzag one, the circumference in units of the strut
+  differing between the two by √3. Measured at a 20 Å strut: 2.02 % at
+  (3,3), 1.15 % at (4,4), 0.50 % at (6,6), 0.30 % at (8,8); 0.85 % at
+  (6,0) and 0.20 % at (12,0). The test asserts the law rather than a flat
+  tolerance -- a flat 2 % was the first version and the (3,3) failed it
+  by two hundredths of a point, which is the law and not a defect.
+- **So the NARROW roll is the distorted one**, which is the opposite of
+  the usual worry about size. `(3,3)` is out of the catalogue and it was
+  measured rather than guessed at: it builds -- 2940 atoms, budget -144
+  met exactly, no close contact -- and comes back **broken**, bonds
+  1.292-1.570 Å, at the same 14/3/2 shape where the (6,0) is merely
+  strained.
+- **A chiral roll is out for the other reason: cost, not geometry.**
+  (6,3) needs 168 vertices over two periods in a 317 Å cell and (9,3) 312
+  in 433 Å, against 48 for the (6,6), which is already minutes.
+  `supertube_graph` takes any indices for whoever wants one.
+- Of the seven registered, the (4,4) and (6,6) were shipped and measured
+  before, the (6,0) is measured above, and the (5,5), (8,8), (8,0) and
+  (10,0) are **bracketed** by those rather than each built -- the chord
+  law saying the wider ones are the safer ones. The docstring says which
+  are which.
+
+### The sheet has no armchair/zigzag choice, and the supertube is why
+
+Asked for super-graphene "in armchair instead of zigzag", the answer is
+that **a 2D periodic net has no such choice**: the honeycomb's
+rectangular cell is `a` by `a√3`, so rotating it 90° gives `a√3` by `a`
+-- the same cell with its axes exchanged, and the same net. Adding a
+second catalogue entry for it would be a false distinction of exactly
+the kind the C20 duplicate was.
+
+Where the distinction is real is anywhere the net has an **edge or a
+roll**: that is the supertube's `(n,n)` against `(n,0)`, which is now in
+the catalogue both ways. A finite **super-ribbon** -- a strip of
+super-graphene with open armchair or zigzag edges -- would be the other
+real case and is **not** built: it is a new builder, not an orientation
+flag, and half of one would be worse than none.
+
+### Knees on a superstructure already exist, and are a separate mode
+
+`build_knee_supernetwork` hangs the exact **knee node** on every vertex
+of a net instead of hanging a meshed tube on every edge, so the rings are
+placed by the construction rather than chosen by a remesher. It is a
+separate entry point from `build_supernetwork`, with its own GUI modes
+and its own shape defaults, and neither route touches the other. It
+covers the two nets whose cells have an aperiodic axis -- `super-graphene`
+(`{6: N, 7: 24}`, bonds 1.408-1.436 Å, the tightest geometry in this
+package after C60) and `super-square` (`{5: 4, 6: 68, 7: 16}`) -- and it
+is the meshed route, not this one, that reaches the cages, because no
+finite cage of knee nodes exists at all.
+
 ## `build` asks the signature; it does not assume a seed
 
 `jobs.build` appended `seed=job.seed` to every carbon builder. An
