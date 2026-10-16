@@ -36,10 +36,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
 
+from .casa import casa_comment
 from .spectrum import DEFAULT_WORK_FUNCTION, XPSError, XPSSpectrum, source_energy
 
 #: What to tell somebody whose file cannot be read.
@@ -1044,6 +1045,14 @@ def _vamas_text(text: str) -> str:
         "ü": "u", "Ü": "U", "º": "o", "ª": "a", "°": " grados",
         "«": '"', "»": '"', "—": "-", "–": "-", "×": "x", "·": ".",
         "Š": "S", "š": "s", "²": "2", "³": "3",
+        # Superscripts and Greek letters earn their place here because
+        # they are in the state names a fit carries -- «Se²⁻», «π–π*» --
+        # and a state name that arrives as «Se2?» is a label somebody has
+        # to decode in the program they opened the file in.
+        "⁰": "0", "¹": "1", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7",
+        "⁸": "8", "⁹": "9", "⁺": "+", "⁻": "-",
+        "α": "alfa", "β": "beta", "γ": "gamma", "δ": "delta",
+        "π": "pi", "σ": "sigma", "Δ": "delta", "Σ": "suma", "θ": "theta",
     })
     folded = str(text).translate(table)
     return "".join(character if ord(character) < 128 else "?"
@@ -1065,6 +1074,8 @@ def write_vamas(
     spectra: "XPSSpectrum | list[XPSSpectrum]",
     institution: str = "ramancarbon",
     experiment: str = "ramancarbon",
+    fits: Optional[Mapping[str, Any]] = None,
+    database: Optional[Any] = None,
 ) -> Path:
     """Write spectra as a VAMAS (ISO 14976) file, one block each.
 
@@ -1095,6 +1106,26 @@ def write_vamas(
     * **A scan count of at least one.** Zero is not a number of scans, and
       it is what a ``.spe`` that does not record them used to produce.
     * **No zero standing in for an unknown** — see :data:`VAMAS_UNSET`.
+
+    Parameters
+    ----------
+    fits:
+        Fitted regions, keyed by region label, written into each block's
+        comment as the CasaXPS annotation CasaXPS itself reads — see
+        :mod:`ramancarbon.xps.casa`. Without it the file carries the
+        spectra and no deconvolution, which is a perfectly good VAMAS and
+        an empty-looking CasaXPS window.
+
+        The fit it describes sits on top of the background, because that
+        is where CasaXPS puts its own. Passing fits for spectra that have
+        already been background-subtracted writes an annotation that will
+        be subtracted twice; the GUI exporter refuses that pairing rather
+        than letting it through.
+    database:
+        Used only for the sensitivity factors the annotation carries. With
+        no database they go out as zero, which CasaXPS reads as "not set"
+        and which stops it quantifying — the areas and the fit are
+        unaffected.
     """
     path = Path(path)
     if isinstance(spectra, XPSSpectrum):
@@ -1122,7 +1153,8 @@ def write_vamas(
         str(len(spectra)),
     ]
     for index, spectrum in enumerate(spectra):
-        lines.extend(_vamas_block_lines(spectrum, index))
+        lines.extend(_vamas_block_lines(
+            spectrum, index, _fits_for(spectrum, fits), database))
     lines.append("end of experiment")
     # CRLF, and written as bytes so no platform rewrites them again.
     path.write_bytes(("\r\n".join(lines) + "\r\n").encode("latin-1"))
@@ -1146,14 +1178,38 @@ def _source_label(spectrum: XPSSpectrum) -> str:
     return label
 
 
-def _vamas_block_lines(spectrum: XPSSpectrum, index: int) -> list[str]:
+def _fits_for(spectrum: XPSSpectrum,
+              fits: Optional[Mapping[str, Any]]) -> list[Any]:
+    """The fits belonging to one spectrum.
+
+    Looked up by region first and by name second, because the two are the
+    same string for a file the instrument wrote and are not for a spectrum
+    the user renamed. A key that matches neither is not an error here: a
+    session commonly holds fits for three of its eight regions.
+    """
+    if not fits:
+        return []
+    for key in (spectrum.region, spectrum.name):
+        if key and key in fits:
+            found = fits[key]
+            return list(found) if isinstance(found, (list, tuple)) else [found]
+    return []
+
+
+def _vamas_block_lines(spectrum: XPSSpectrum, index: int,
+                       fits: Sequence[Any] = (),
+                       database: Optional[Any] = None) -> list[str]:
     """One block, in the same field order :func:`read_vamas` expects."""
     energy = spectrum.binding_energy
     step = float(energy[1] - energy[0]) if energy.size > 1 else 1.0
     species, _, transition = (spectrum.region or "").partition(" ")
     shift = spectrum.metadata.get("charge_shift_ev")
-    comment = [f"region {_vamas_text(spectrum.region or spectrum.name)}",
-               f"intensidad en {_vamas_text(spectrum.intensity_unit)}"]
+    # The CasaXPS annotation goes FIRST and unfolded: its four count lines
+    # are found by looking for the first four lines that are nothing but
+    # digits, so a line of ours in front of them would be read as a count.
+    comment = [_vamas_text(line) for line in casa_comment(fits, database)]
+    comment += [f"region {_vamas_text(spectrum.region or spectrum.name)}",
+                f"intensidad en {_vamas_text(spectrum.intensity_unit)}"]
     if shift:
         comment.append(
             f"eje desplazado {float(shift):+.3f} eV al referenciar la carga")

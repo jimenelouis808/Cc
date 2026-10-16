@@ -6,6 +6,50 @@ está la trampa.
 
 ---
 
+## ramancarbon · el VAMAS sale con la deconvolución dentro
+
+El archivo ya abría en CasaXPS, pero abría **limpio**: la medida y nada
+más. No era un fallo del archivo. Un VAMAS no tiene ningún campo para
+decir «esta región se ajustó con cinco componentes», así que el ajuste se
+quedaba donde estaba, en el programa. CasaXPS resuelve eso metiendo su
+propia gramática en el comentario del bloque, y todo lo que lee archivos
+de CasaXPS lee **eso**.
+
+Ahora se escribe. Con **Fondo: incluido**, cada bloque con ajuste sale con
+su región (la ventana y el tipo de fondo) y una componente por pico, con
+posición, anchura **medida**, área y los límites que usó el ajuste. La
+forma de línea no hay que traducirla: `gl` y `sgl` se escribieron desde el
+principio como el `GL(p)` y el `SGL(p)` de CasaXPS, con `mixing` igual a
+`p/100`.
+
+**Un doblete sale como dos picos.** Aquí es una componente —la separación
+espín-órbita y la razón de áreas las fija la degeneración, no el ajuste—
+pero CasaXPS no tiene esa idea y dibuja lo que le den: con el área de los
+dos puesta en el 2p3/2 pintaría un pico donde el espectro tiene dos. El
+par se parte al escribirlo, con el mismo cociente que lo ataba, y el
+factor de sensibilidad va entero en las dos mitades, que es lo que hace
+que la cuantificación de CasaXPS salga bien.
+
+**Lo que NO hace.** No escribe las restricciones como restricciones de
+CasaXPS. Salen los números del ajuste; las ligaduras entre componentes,
+no. Es deliberado: una restricción mal codificada no parece mal, parece
+un ajuste bien dibujado que se va a otro sitio en cuanto alguien pulse
+*Fit*. Unos números sueltos se vuelven a atar a mano; unos atados al
+hermano equivocado no se notan.
+
+**La trampa.** La deconvolución solo cabe en la exportación con **fondo
+incluido**. Las áreas se apoyan en un fondo que CasaXPS calcula por su
+cuenta, así que sobre un espectro que este programa ya restó lo restaría
+una segunda vez y encogería todos los picos. Con «fondo restado» el
+archivo sale sin anotación y el registro lo dice.
+
+Y una sola cosa conviene mirar a ojo al abrirlo: las componentes
+**metálicas**. El Doniach-Šunjić de CasaXPS lleva un segundo parámetro
+propio que no es la anchura gaussiana de aquí, y la asimetría es lo único
+que pasa tal cual.
+
+---
+
 ## ramancarbon · el eje de textura lo busca el programa
 
 Antes había que escribirlo, y escribirlo es ya saber la respuesta. Peor:

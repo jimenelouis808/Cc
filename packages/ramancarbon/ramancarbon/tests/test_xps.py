@@ -1619,3 +1619,149 @@ def test_the_command_line_prints_the_table(capsys):
     assert "pyridinic" in printed and "BE_min" in printed
     assert main(["xps", "--tabla", "lista"]) == 0
     assert "modelo por defecto" in capsys.readouterr().out
+
+
+# ----------------------------------------------------------------------
+# the deconvolution inside the VAMAS
+# ----------------------------------------------------------------------
+def _casa_lines(path):
+    """The CasaXPS annotation of the first block, as written."""
+    lines = path.read_bytes().decode("latin-1").split("\r\n")
+    start = next(index for index, line in enumerate(lines)
+                 if line.startswith("Casa Info Follows"))
+    declared = int(lines[start - 1])
+    return lines[start:start - 1 + declared + 1]
+
+
+def test_the_exported_vamas_carries_the_deconvolution(demo):
+    """A VAMAS has no field for a fit, so a file written without the
+    CasaXPS annotation opens as a bare spectrum however good the fit
+    was. The annotation IS the deconvolution as far as every program
+    downstream is concerned."""
+    import tempfile
+    from pathlib import Path
+
+    region = next(item for item in demo if item.region == "Se 3d5/2")
+    result = fit_region(region, state_model(region, "Se 3d5/2",
+                                            ["selenide", "Se0"]))
+    with tempfile.TemporaryDirectory() as folder:
+        path = write_vamas(Path(folder) / "ajuste.vms", region,
+                           fits={"Se 3d5/2": result},
+                           database=load_xps_database())
+        casa = _casa_lines(path)
+        # The counts are read as the first four digit-only lines, so the
+        # annotation has to come before any prose of ours.
+        counts = [line for line in casa if line.isdigit()][:4]
+        assert counts[:2] == ["0", "0"], casa
+        regions = [line for line in casa if line.startswith("CASA region")]
+        components = [line for line in casa if line.startswith("CASA comp")]
+        assert counts[2] == str(len(regions)) == "1"
+        assert counts[3] == str(len(components))
+        # And the reader stops at the declared length: the lines it is
+        # told to look at are the first ones, ours come after.
+        declared = 5 + len(regions) + len(components)
+        assert casa[:declared] == (casa[:5] + regions + components)
+        assert all(not line.startswith("CASA") for line in casa[declared:])
+        assert "(*Shirley*)" in regions[0]
+        # The sensitivity factor is the line's, not zero: CasaXPS needs it
+        # to quantify, and "Se 3d5/2" is the region while the factor is
+        # tabulated for "Se 3d".
+        assert " RSF 2.2500 " in components[0], components[0]
+        # The file is still a VAMAS, which is the half that was already
+        # working and is easy to break from the comment.
+        assert read_vamas(path)[0].counts.size == region.counts.size
+
+
+def test_a_doublet_goes_out_as_the_two_peaks_casaxps_draws(demo):
+    """One component here, two peaks on the screen. CasaXPS has no notion
+    of a component that carries its own spin–orbit partner: handed the
+    pair's whole area at the 2p3/2 position it would draw one peak where
+    the spectrum has two and leave the other as residual."""
+    import tempfile
+    from pathlib import Path
+
+    region = next(item for item in demo if item.region == "Fe 2p3/2")
+    result = fit_region(region, state_model(region, "Fe 2p3/2", ["Fe2+"]))
+    fitted = next(item for item in result.components if item.doublet)
+    with tempfile.TemporaryDirectory() as folder:
+        path = write_vamas(Path(folder) / "fe.vms", region,
+                           fits={"Fe 2p3/2": result})
+        components = [line for line in _casa_lines(path)
+                      if line.startswith("CASA comp")]
+
+    def field(line, keyword):
+        tokens = line.split()
+        return float(tokens[tokens.index(keyword) + 1])
+
+    pair = [line for line in components if "2p3/2*)" in line or "2p1/2*)" in line]
+    assert len(pair) == 2, components
+    low, high = sorted(pair, key=lambda line: field(line, "Position"))
+    splitting = field(high, "Position") - field(low, "Position")
+    assert splitting == pytest.approx(fitted.doublet.splitting_ev, abs=1e-3)
+    # The areas divide by the ratio that tied them, and they still add up
+    # to the one area the fit reported.
+    total = field(low, "Area") + field(high, "Area")
+    assert total == pytest.approx(fitted.area, rel=1e-6)
+    assert (field(high, "Area") / field(low, "Area")
+            == pytest.approx(fitted.doublet.ratio, rel=1e-6))
+
+
+def test_the_fitted_width_is_inside_the_limits_written_with_it(demo):
+    """CasaXPS redraws a parameter that falls outside its own limits, and
+    the width written is the MEASURED one while the limits were limits on
+    the width parameter — for a GL product the two are a few per cent
+    apart, which is enough to land outside."""
+    import tempfile
+    from pathlib import Path
+
+    region = next(item for item in demo if item.region == "C 1s")
+    result = fit_region(region, state_model(region, "C 1s",
+                                            ["C-C sp2", "C-O"]))
+    with tempfile.TemporaryDirectory() as folder:
+        path = write_vamas(Path(folder) / "c.vms", region,
+                           fits={"C 1s": result})
+        components = [line for line in _casa_lines(path)
+                      if line.startswith("CASA comp")]
+    for line in components:
+        tokens = line.split()
+        at = tokens.index("MFWHM")
+        value, low, high = (float(tokens[at + 1]), float(tokens[at + 2]),
+                            float(tokens[at + 3]))
+        assert low <= value <= high, line
+
+
+def test_casaxps_lineshape_names_are_casaxps_own():
+    """``mixing`` was defined as CasaXPS's p/100 and the two ends of the
+    family are the plain Gaussian and the plain Lorentzian, so none of
+    these needs a conversion — only a name CasaXPS resolves. A name it
+    does not resolve is a component it does not draw."""
+    from ramancarbon.xps.casa import casa_lineshape
+
+    assert casa_lineshape("gl", (0.3,)) == "GL(30)"
+    assert casa_lineshape("sgl", (0.5,)) == "SGL(50)"
+    assert casa_lineshape("gaussian") == "GL(0)"
+    assert casa_lineshape("lorentzian") == "GL(100)"
+    assert casa_lineshape("ds", (0.12,)).startswith("DS(0.120")
+
+
+def test_the_subtracted_export_does_not_claim_a_fit(tmp_path, demo):
+    """The one place the two export options are not independent: the
+    component areas sit on top of a background CasaXPS computes for
+    itself, so over already-subtracted data it subtracts a second one.
+    Writing the annotation anyway would shrink every peak silently."""
+    from ramancarbon.gui.xps_state import XPSSession
+
+    region = next(item for item in demo if item.region == "Se 3d5/2")
+    session = XPSSession()
+    session.spectra = [region]
+    session.fits = {"Se 3d5/2": fit_region(
+        region, state_model(region, "Se 3d5/2", ["selenide", "Se0"]))}
+
+    included = session.export_vamas(tmp_path / "con.vms")
+    assert "Casa Info Follows" in included.read_text(encoding="latin-1")
+
+    session.set_export_background("restado")
+    subtracted = session.export_vamas(tmp_path / "sin.vms")
+    text = subtracted.read_text(encoding="latin-1")
+    assert "Casa Info Follows" not in text and "CASA comp" not in text
+    assert any("deconvolucion" in message for _, message in session.messages)

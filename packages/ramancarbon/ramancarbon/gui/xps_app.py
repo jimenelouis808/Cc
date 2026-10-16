@@ -200,7 +200,10 @@ class XPSApp(SectionApp):
              "sobre el fondo, así que todo se dibuja en la misma línea "
              "base; «restado» baja la medida y deja las componentes solas, "
              "y entonces la envolvente es su suma exacta. Vale para las "
-             "tablas y para el VAMAS. El formato de números es para la hoja "
+             "tablas y para el VAMAS, y la deconvolución solo cabe en el "
+             "VAMAS «incluido»: CasaXPS calcula su propio fondo y sobre un "
+             "espectro ya restado lo restaría otra vez. El formato de "
+             "números es para la hoja "
              "de cálculo: con la coma como marca decimal el separador de "
              "columnas tiene que ser el punto y coma.",
              wrap=280)

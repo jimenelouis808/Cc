@@ -972,15 +972,39 @@ class XPSSession:
     def export_vamas(self, path: str | Path) -> Path:
         """Write the referenced spectra in the format other programs read.
 
+        With ``export_background == "incluido"`` the blocks also carry the
+        **deconvolution**: every fitted region goes out as the CasaXPS
+        annotation of :mod:`ramancarbon.xps.casa`, so the file opens with
+        the regions and components drawn rather than as a bare spectrum.
+
         With ``export_background == "restado"`` a region that has a fit is
         written over the FITTED window with its background taken off, and
         the block says so in its comment. A region with no fit has no
         background to take off, so it goes out as measured and that is
         said out loud: silently mixing the two is the thing being fixed.
+
+        The deconvolution does **not** go into the subtracted export, and
+        this is the one place the two options are not independent: the
+        component areas CasaXPS would read sit on top of a background it
+        computes for itself, so over data this package has already
+        background-subtracted it would subtract a second one and shrink
+        every peak. The export says so instead of writing it.
         """
         spectra = self.shifted or self.spectra
         if self.export_background == "incluido":
-            return write_vamas(path, spectra)
+            fits = {label: result for label, result in self.fits.items()}
+            for spectrum in spectra:
+                result = self.fits.get(self.region_label(spectrum))
+                if result is not None:
+                    fits[spectrum.region or spectrum.name] = result
+            return write_vamas(path, spectra, fits=fits,
+                               database=self.database)
+        if self.fits:
+            self.log("aviso",
+                     "con el fondo restado no se escribe la deconvolucion: "
+                     "CasaXPS calcula su propio fondo y lo restaria una "
+                     "segunda vez. Exporta con «fondo incluido» si quieres "
+                     "las regiones y las componentes dentro del .vms")
         prepared: list[XPSSpectrum] = []
         untouched: list[str] = []
         for spectrum in spectra:

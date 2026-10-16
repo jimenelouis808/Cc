@@ -1611,6 +1611,39 @@ programa de destino no podía usar. Ninguna es cosmética.
   escribe sobre la ventana AJUSTADA, que es donde el fondo existe; una
   región sin ajuste no tiene fondo que restar, sale tal cual y eso se
   dice en voz alta. Mezclarlas en silencio es el problema, movido.
+- **El VAMAS abría vacío porque el ajuste no estaba escrito en ninguna
+  parte.** El formato no tiene campo para «esta región se ajustó con
+  cinco componentes»: CasaXPS mete su propia gramática en el comentario
+  del bloque, y todo lo demás lee ESO (`xps/casa.py`). Sin esas líneas el
+  archivo abre bien y enseña la medida pelada, que es exactamente lo que
+  es. Tres cosas que no se negocian, y las tres hacen que el archivo se
+  lea como vacío: los cuatro contadores son **las primeras cuatro líneas
+  que son solo dígitos**, así que la anotación va DELANTE de la prosa
+  nuestra; el lector mira exactamente `5 + procesos + 2·anotaciones +
+  regiones + componentes` líneas y para; y cada nombre va envuelto en
+  `(*...*)`, que puede llevar espacios pero nunca la secuencia `*)`.
+- **Se escribe el ajuste, no una invitación a reajustar.** Las
+  restricciones NO salen como restricciones de CasaXPS: el compañero
+  espín-órbita sale como componente propia con sus números, y una anchura
+  compartida sale como dos anchuras iguales. Una restricción mal
+  codificada no parece mal: parece un ajuste, dibujado donde toca, que se
+  va a otro sitio en cuanto alguien pulsa *Fit*. Unos números sueltos se
+  vuelven a atar a mano en un minuto; unos atados al hermano equivocado
+  no se notan.
+- **Un doblete son DOS picos en la pantalla.** Aquí es una componente,
+  porque su separación y su razón de ramificación las fija la degeneración
+  y ajustarlas por separado inventa dos parámetros libres que no existen.
+  CasaXPS no tiene eso: dibuja lo que le den. Con el área de los dos en la
+  posición del 2p3/2 dibujaría un pico donde el espectro tiene dos y
+  dejaría el otro como residuo, así que el par se parte al final, donde
+  partirlo no cuesta nada. El RSF va entero en las dos mitades, que es lo
+  que hace bien la cuantificación de CasaXPS: suma área/RSF sobre las
+  componentes.
+- **Y la anotación solo tiene sentido con el fondo dentro.** Las áreas y
+  la región se apoyan en un fondo que CasaXPS calcula por su cuenta, así
+  que sobre un espectro ya restado restaría un segundo. El exportador no
+  la escribe en ese caso y lo dice, en vez de encoger todos los picos en
+  silencio.
 
 ## Una energía de enlace NO es un grupo funcional
 
