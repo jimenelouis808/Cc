@@ -2679,6 +2679,102 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Also write the full report as JSON, for scripting.")
     an.set_defaults(func=_cmd_analyse)
 
+    np_ = sub.add_parser(
+        "nanoparticle",
+        help="Cut a nanoparticle out of an imported .cif and optionally "
+             "wrap it in graphitic carbon.",
+    )
+    np_.add_argument("--cif", default=None,
+                     help="The crystal to cut: a .cif, or anything else ASE "
+                          "reads. It has to describe a PERIODIC crystal -- a "
+                          "molecule has no lattice to repeat.")
+    np_.add_argument("--shape", default="sphere",
+                     help="Which shape to cut to. --list-shapes prints all "
+                          "of them with their parameters.")
+    np_.add_argument("--size", type=float, nargs="*", metavar="VALUE",
+                     help="Size values in the shape's own parameter order "
+                          "(see --list-shapes). Semi-axes and half-lengths "
+                          "measured from the centre, in A, never diameters.")
+    np_.add_argument("--set", action="append", metavar="NAME=VALUE",
+                     help="Set one shape parameter by name, for when the "
+                          "positional order is not obvious.")
+    np_.add_argument("--hollow", type=float, default=0.0, metavar="THICKNESS",
+                     help="Make the shape a hollow cage with this wall "
+                          "thickness (A). Every habit has a hollow version "
+                          "-- a cage, a box, a rattle -- and they are made "
+                          "the same way.")
+    np_.add_argument("--list-shapes", action="store_true",
+                     help="Print the shape catalogue and exit.")
+    np_.add_argument("--centre", default="cell",
+                     help="Where the shape's origin lands in the lattice: "
+                          "'cell' (on a lattice point), 'void' (the cell's "
+                          "body centre) or 'atom:X' (on an atom of element "
+                          "X). None is more correct than the others, and for "
+                          "a compound this is what decides whether the "
+                          "particle is cation- or anion-rich and therefore "
+                          "its CHARGE.")
+    np_.add_argument("--stoichiometric", action="store_true",
+                     help="Trim the over-represented elements back to the "
+                          "crystal's ratios, least-coordinated atoms first. "
+                          "Off by default because it removes atoms the shape "
+                          "asked for. It is the usual recipe and it is a "
+                          "heuristic: least bound by neighbour count is not "
+                          "least bound by energy.")
+    np_.add_argument("--keep-loose", action="store_true",
+                     help="Keep atoms the cut left with one bond or none. "
+                          "They are artefacts of the cut -- no counterpart "
+                          "on a real particle, and they dominate any later "
+                          "relaxation -- so they are trimmed by default.")
+    np_.add_argument("--max-block-atoms", type=int, default=4_000_000,
+                     help="Guard on the crystal block built before cutting.")
+    np_.add_argument("--shells", type=int, default=0,
+                     help="Graphitic shells to wrap the particle in. 0 "
+                          "leaves the bare core; more than one is a "
+                          "nano-onion, which is what arc-discharge "
+                          "encapsulation produces.")
+    np_.add_argument("--gap", type=float, default=3.35,
+                     help="Distance from the nearest core atom to the first "
+                          "shell (A). 3.35 is graphite's interlayer spacing "
+                          "and a van der Waals contact; the carbide formers "
+                          "(Fe, Co, Ni, Ti, W...) chemisorb at about 2.1, "
+                          "which is a different interface with a different "
+                          "electronic answer.")
+    np_.add_argument("--interlayer", type=float, default=3.35,
+                     help="Spacing between consecutive shells (A).")
+    np_.add_argument("--wall-anchor", type=float, default=0.7,
+                     help="Stiffness holding each shell on its envelope. "
+                          "0.7 is the stiffest value whose bonds stay inside "
+                          "the sp2 window; free relaxation gives better "
+                          "carbon sitting inside the metal.")
+    np_.add_argument("--bond", type=float, default=1.42,
+                     help="Target C-C bond length in the shell (A).")
+    np_.add_argument("--grid", type=int, default=80,
+                     help="Minimum marching-cubes grid points per axis.")
+    np_.add_argument("--remesh-iterations", type=int, default=25)
+    np_.add_argument("--vacuum", type=float, default=12.0,
+                     help="Padding around the finished structure (A).")
+    np_.add_argument("--out", default=None,
+                     help="Output path without extension.")
+    _add_surface_flags(np_, anneal=False)
+    np_.set_defaults(func=_cmd_nanoparticle)
+
+    ci = sub.add_parser(
+        "crystal-info",
+        help="Read a crystal file and report what is in it, without "
+             "building anything.",
+    )
+    ci.add_argument("path", help="The .cif (or other ASE-readable file).")
+    ci.add_argument("--family", action="append", metavar="H,K,L",
+                    help="Also print the symmetry-equivalent faces of this "
+                         "Miller family and its interplanar spacing. The "
+                         "normals come from the RECIPROCAL lattice, so for "
+                         "anything but a cubic cell they are not parallel to "
+                         "the indices: in a calcite-like rhombohedral cell "
+                         "the (104) normal is 15.5 deg away from what its "
+                         "indices would suggest read as Cartesian "
+                         "components. Repeatable.")
+    ci.set_defaults(func=_cmd_crystal_info)
+
     vl = sub.add_parser("validate",
                         help="Validate an existing structure file (CIF, XYZ, POSCAR…).")
     vl.add_argument("path", help="Path to a structure file readable by ASE.")
@@ -2744,6 +2840,170 @@ def build_parser() -> argparse.ArgumentParser:
     gp.set_defaults(func=_cmd_groups)
 
     return parser
+
+
+
+# ----------------------------------------------------------------------
+# nanoparticles: a crystal from somebody else's file, cut to a shape
+# ----------------------------------------------------------------------
+def _shape_request(args) -> tuple[str, dict]:
+    """Read the shape name and its parameters from ``--size`` and ``--set``.
+
+    Two ways in, because the shapes do not share a parameter list. A
+    sphere takes one number and a dumbbell takes four, so positional
+    ``--size`` values are filled into the catalogue's own order --
+    discoverable with ``--list-shapes``, which prints that order -- and
+    ``--set name=value`` names them when the order is not obvious or only
+    one of them is being changed.
+    """
+    from ..nanoparticle import shapes as shape_module
+
+    spec = shape_module.SHAPES.get(args.shape)
+    if spec is None:
+        raise SystemExit(
+            f"unknown shape {args.shape!r}; run with --list-shapes to see "
+            f"the {len(shape_module.SHAPES)} there are."
+        )
+    order = list(spec["params"])
+    params: dict = {}
+    for name, value in zip(order, args.size or [], strict=False):
+        params[name] = int(value) if name == "sides" else value
+    for item in args.set or []:
+        if "=" not in item:
+            raise SystemExit(f"--set wants name=value, got {item!r}.")
+        name, _, raw = item.partition("=")
+        name = name.strip()
+        if name not in order:
+            raise SystemExit(
+                f"shape {args.shape!r} has no parameter {name!r}; it takes "
+                f"{', '.join(order)}."
+            )
+        text = raw.strip()
+        if name == "sides":
+            params[name] = int(text)
+        elif name == "directions":
+            params[name] = text
+        else:
+            params[name] = float(text)
+    if len(args.size or []) > len(order):
+        raise SystemExit(
+            f"shape {args.shape!r} takes {len(order)} size value(s) "
+            f"({', '.join(order)}); {len(args.size)} were given."
+        )
+    return args.shape, params
+
+
+def _print_shape_catalogue() -> int:
+    """Every shape, grouped, with its parameters in positional order."""
+    from ..nanoparticle import shapes as shape_module
+
+    titles = {
+        "round": "Round cuts -- a shape in the laboratory frame, so the cut "
+                 "exposes whatever facets it happens to",
+        "block": "Blocks and prisms",
+        "facetted": "Facetted habits -- the faces are lattice planes",
+        "five-fold": "Five-fold envelopes -- a real particle of these is "
+                     "TWINNED, and a single-crystal cut reproduces the "
+                     "outline only",
+        "composite": "Compositions -- unions and differences of the rest",
+    }
+    for group, names in shape_module.SHAPE_GROUPS.items():
+        print(f"\n{titles[group]}:")
+        for name in names:
+            params = shape_module.SHAPES[name]["params"]
+            listing = ", ".join(f"{key}={value!r}"
+                                for key, value in params.items())
+            print(f"  {name:22s} {listing}")
+    print("\nSizes are semi-axes or half-lengths from the centre, in A, "
+          "never diameters.")
+    print("--size fills the parameters in the order shown; --set name=value "
+          "names one.")
+    print("--hollow THICKNESS turns any of them into a cage with that wall.")
+    return 0
+
+
+def _report_particle(atoms, carve_report, coat_report, xyz_path, json_path):
+    """Summary printer for a carved particle, coated or not.
+
+    Deliberately NOT ``_report_structure``: that one prints a ring
+    census, a bond-angle window and an sp2 verdict, and a gold particle
+    has none of those. The carbon numbers appear here only when there is
+    carbon, and they describe the shell.
+    """
+    from ..nanoparticle.quality import particle_quality
+
+    _remember(atoms)
+    print(f"Wrote {xyz_path} and {json_path}")
+    print(carve_report.summary())
+    verdict, why = particle_quality(carve_report)
+    print(f"  particle verdict = {verdict.upper()}: {why}")
+    if coat_report is not None:
+        print(coat_report.summary())
+    print(f"  n_atoms     = {len(atoms)}")
+    return 0
+
+
+def _cmd_crystal_info(args):
+    """Read a crystal file and say what is in it, without building."""
+    from ..nanoparticle.crystal import (
+        interplanar_spacing,
+        miller_family,
+        read_crystal,
+    )
+
+    crystal, report = read_crystal(args.path)
+    print(report.summary())
+    if args.family:
+        print()
+        for key in args.family:
+            indices = tuple(int(value) for value in key.split(","))
+            normals = miller_family(crystal.cell.array, indices)
+            spacing = interplanar_spacing(crystal.cell.array, indices)
+            print(f"  {{{' '.join(str(i) for i in indices)}}}: "
+                  f"{len(normals)} symmetry-equivalent face(s), "
+                  f"d = {spacing:.4f} A")
+            for normal in normals:
+                print("      n = ("
+                      + " ".join(f"{value:+.4f}" for value in normal) + ")")
+    return 0
+
+
+def _cmd_nanoparticle(args):
+    """Carve a nanoparticle out of an imported crystal, and coat it."""
+    if args.list_shapes:
+        return _print_shape_catalogue()
+    if not args.cif:
+        raise SystemExit("--cif is required (or use --list-shapes).")
+    if not args.out:
+        raise SystemExit("--out is required.")
+
+    from ..nanoparticle.build import build_nanoparticle
+
+    name, params = _shape_request(args)
+    atoms, crystal_report, carve_report, coat_report = build_nanoparticle(
+        args.cif, shape=name, shape_params=params, hollow=args.hollow,
+        centre=args.centre, trim_loose=not args.keep_loose,
+        stoichiometric=args.stoichiometric, shells=args.shells,
+        gap=args.gap, interlayer=args.interlayer, dopant=args.dopant,
+        dopant_conc=args.dopant_conc, dopant_site=args.dopant_site,
+        graft=args.graft, graft_coverage=args.graft_coverage,
+        graft_where=args.graft_where, seed=args.seed, vacuum=args.vacuum,
+        max_atoms=args.max_block_atoms, bond=args.bond,
+        grid_resolution=args.grid,
+        remesh_iterations=args.remesh_iterations,
+        wall_anchor=args.wall_anchor, roughness=args.roughness,
+    )
+    print(crystal_report.summary())
+    print()
+    if args.shells == 0 and (args.dopant or args.graft):
+        print("! --dopant and --graft apply to the graphitic shell, and "
+              "--shells is 0, so there is nothing to apply them to. The core "
+              "is never substituted: a nitrogen in place of a metal atom is "
+              "a different compound, not a dopant.")
+
+    xyz_path, json_path = write_render_bundle(atoms, Path(args.out))
+    return _report_particle(atoms, carve_report, coat_report,
+                            xyz_path, json_path)
 
 
 def main(argv: list[str] | None = None) -> int:

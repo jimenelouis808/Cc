@@ -151,13 +151,25 @@ HETERO_MODES = (
     "vdW stack",
 )
 
+#: A particle cut out of an imported crystal, optionally wrapped in
+#: carbon. A fourth family because it is the only one whose input is a
+#: FILE: the others are built from indices and lengths, and this one
+#: starts from somebody's .cif, so its controls (a path, a shape, a
+#: centring) belong to none of the other panels. Whether the particle is
+#: coated is a parameter rather than a second mode -- the pipeline is the
+#: same four steps either way, and `shells = 0` is the bare core.
+NANOPARTICLE_MODES = (
+    "nanoparticle",
+)
+
 FAMILIES = {
     "carbon": CARBON_MODES,
     "dichalcogenide": TMD_MODES,
     "heterostructure": HETERO_MODES,
+    "nanoparticle": NANOPARTICLE_MODES,
 }
 
-MODES = CARBON_MODES + TMD_MODES + HETERO_MODES
+MODES = CARBON_MODES + TMD_MODES + HETERO_MODES + NANOPARTICLE_MODES
 
 
 def family_of(mode: str) -> str:
@@ -311,6 +323,14 @@ def builder_for(mode: str):
     signature before building anything. Imports lazily, like
     :func:`build`, so merely describing a job stays cheap.
     """
+    if mode in NANOPARTICLE_MODES:
+        # Its own import, and not in the table below: the nanoparticle
+        # builder is not under `builders/` (what comes out of it is gold
+        # or magnetite, not nanocarbon), and importing the table would
+        # pull in every mesh builder to answer a question about a .cif.
+        from .nanoparticle.build import build_nanoparticle
+
+        return build_nanoparticle
     from .builders import (
         build_bundle,
         build_capped_cnt,
@@ -416,6 +436,21 @@ def build(job: Job):
     cannot be buildable and un-sweepable at the same time.
     """
     builder = builder_for(job.mode)
+
+    if job.mode in NANOPARTICLE_MODES:
+        # The chemistry is part of the build here rather than a step
+        # after it, and that is not a shortcut: the dopant and the graft
+        # go on the SHELL, and the shell does not exist until the coating
+        # has run. Routing them through `apply_doping` afterwards would
+        # substitute heteroatoms into the metal core, which is not doping
+        # -- it is a different compound.
+        atoms, _, _, _ = builder(
+            **job.params, dopant=job.dopant, dopant_conc=job.dopant_conc,
+            dopant_site=job.dopant_site, graft=job.graft,
+            graft_coverage=job.graft_coverage, graft_where=job.graft_where,
+            seed=job.seed,
+        )
+        return atoms
 
     if job.mode in HETERO_MODES:
         # Commensurate stacking is exact crystallography, no randomness.
@@ -564,6 +599,24 @@ def _divacancy_atoms(params: Mapping[str, object]) -> int:
     )
 
 
+def _estimate_nanoparticle_atoms(params: Mapping[str, Any]) -> int:
+    """Core from the crystal's density, shells from their area."""
+    from .nanoparticle.build import estimate_nanoparticle_atoms
+
+    path = params.get("cif")
+    if not path:
+        return 0
+    return estimate_nanoparticle_atoms(
+        path,
+        shape=str(params.get("shape", "sphere")),
+        shape_params=params.get("shape_params") or {},
+        hollow=float(params.get("hollow", 0.0) or 0.0),
+        shells=int(params.get("shells", 0) or 0),
+        gap=float(params.get("gap", 3.35) or 3.35),
+        interlayer=float(params.get("interlayer", 3.35) or 3.35),
+    )
+
+
 def estimate_atoms(job: Job) -> int:
     """Predict the atom count without building anything.
 
@@ -576,6 +629,9 @@ def estimate_atoms(job: Job) -> int:
     """
     p = job.params
     mode = job.mode
+
+    if mode in NANOPARTICLE_MODES:
+        return _estimate_nanoparticle_atoms(p)
 
     if mode == "coil (periodic, DFT)":
         # One turn of tube, and a tube of radius r and length L carries
@@ -943,6 +999,22 @@ def estimate_cost(job: Job) -> tuple[str, str]:
     second.
     """
     n = estimate_atoms(job)
+    if job.mode in NANOPARTICLE_MODES:
+        shells = int(job.params.get("shells", 0) or 0)
+        if not shells:
+            # Selecting atoms out of a block. No meshing, no relaxation,
+            # and no builder in this framework is faster -- the cost is
+            # the block, which is why the carver guards its size rather
+            # than the particle's.
+            return ("slow" if n > 50000 else "fast",
+                    f"~{n} atoms, selected from the lattice — no meshing "
+                    "and no relaxation")
+        # Each shell is a full mesh-and-relax, and the shells get bigger
+        # outward, so the cost is super-linear in the shell count.
+        return ("very slow" if n > 4000 or shells > 2 else "slow",
+                f"~{n} atoms, {shells} shell(s) meshed and relaxed — "
+                "about ten seconds a shell at this size, and each shell "
+                "outward is bigger than the last")
     if job.mode in HETERO_MODES:
         # Exact lattice placement, so only the drawing costs anything --
         # but a small twist angle makes a very large cell, and that is
@@ -1313,6 +1385,49 @@ def _graft_flags(job: Job) -> list[str]:
     return parts
 
 
+def _nanoparticle_cli(job: Job, out: str) -> str:
+    """The ``nanocarbon nanoparticle`` line for a nanoparticle job.
+
+    Written out here rather than through ``_CLI_MAP`` because the shape's
+    parameters are a nested dict whose keys depend on which shape it is,
+    and the flat ``{param: flag}`` table that serves every other mode
+    cannot express that. The sizes go out as ``--set name=value`` rather
+    than as positional ``--size`` values: both work, and the named form
+    does not silently mean something else if the catalogue's parameter
+    order ever changes.
+    """
+    params = job.params
+    parts = ["nanocarbon", "nanoparticle",
+             "--cif", str(params.get("cif", "crystal.cif")),
+             "--shape", str(params.get("shape", "sphere"))]
+    for key, value in (params.get("shape_params") or {}).items():
+        text = f"{value:g}" if isinstance(value, float) else str(value)
+        parts += ["--set", f"{key}={text}"]
+    if params.get("hollow"):
+        parts += ["--hollow", f"{float(params['hollow']):g}"]
+    parts += ["--centre", str(params.get("centre", "cell"))]
+    if params.get("stoichiometric"):
+        parts.append("--stoichiometric")
+    if params.get("trim_loose") is False:
+        parts.append("--keep-loose")
+    shells = int(params.get("shells", 0) or 0)
+    parts += ["--shells", str(shells)]
+    if shells:
+        parts += ["--gap", f"{float(params.get('gap', 3.35)):g}"]
+        if shells > 1:
+            parts += ["--interlayer",
+                      f"{float(params.get('interlayer', 3.35)):g}"]
+        if job.dopant and job.dopant_conc > 0:
+            parts += ["--dopant", job.dopant,
+                      "--dopant-conc", f"{job.dopant_conc:g}",
+                      "--dopant-site", job.dopant_site]
+        if job.graft:
+            parts += _graft_flags(job)
+        parts += ["--seed", str(job.seed)]
+    parts += ["--out", out]
+    return " ".join(parts)
+
+
 def to_cli(job: Job, out: str = "out/structure") -> str:
     """The ``nanocarbon`` command line equivalent to this job.
 
@@ -1325,6 +1440,8 @@ def to_cli(job: Job, out: str = "out/structure") -> str:
     the CLI takes ``right``/``left`` -- so it is translated rather than
     printed as a number that the CLI would reject.
     """
+    if job.mode in NANOPARTICLE_MODES:
+        return _nanoparticle_cli(job, out)
     subcommand, flags = _CLI_MAP[job.mode]
     parts = ["nanocarbon", subcommand]
 
@@ -1415,6 +1532,7 @@ __all__ = [
     "parse_codope_spec",
     "IMPLICIT_MODES",
     "MODES",
+    "NANOPARTICLE_MODES",
     "TMD_EDITS",
     "Job",
     "parse_swaps",

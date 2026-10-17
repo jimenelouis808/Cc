@@ -20,6 +20,10 @@ Four modules, in the order a build uses them:
 * :mod:`~nanocarbon_lab.nanoparticle.coat` wraps the result in
   graphitic carbon -- pure, doped or functionalised -- through the same
   implicit route the junctions and schwarzites use.
+* :mod:`~nanocarbon_lab.nanoparticle.quality` turns those measurements
+  into the one-line verdict the rest of this framework prints. It is
+  separate from the sp2 one because a gold particle's nearest contact is
+  2.88 Å and has no business being compared to a bond length.
 
 **This is deliberately not under** ``builders/``. A builder there returns
 nanocarbon; what comes out of here is gold, or magnetite, or iron
@@ -44,6 +48,7 @@ from .crystal import (
     repeats_for,
     supercell_for,
 )
+from .quality import particle_quality
 from .shapes import (
     SHAPE_GROUPS,
     SHAPES,
@@ -78,6 +83,7 @@ __all__ = [
     "miller_family",
     "miller_normal",
     "offset",
+    "particle_quality",
     "read_crystal",
     "repeats_for",
     "smooth_union",

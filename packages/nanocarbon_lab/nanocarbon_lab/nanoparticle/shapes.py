@@ -273,9 +273,19 @@ def hollow(shape: Shape, thickness: float, label: str = "") -> Shape:
     the solid shape again, which is reported rather than refused because
     it is the honest limit of the family.
     """
-    return difference(shape, offset(shape, -abs(thickness)),
-                      label=label or f"hollow {shape.label} "
-                                     f"({thickness:.1f} A wall)")
+    shell = difference(shape, offset(shape, -abs(thickness)),
+                       label=label or f"hollow {shape.label} "
+                                      f"({thickness:.1f} A wall)")
+    # Marked explicitly, not inferred. A hollow particle is almost all
+    # surface, and that is what a nanocage IS -- so the quality verdict
+    # has to be able to tell it from a solid particle cut too small,
+    # which looks identical in every number except intent. Guessing from
+    # `operation == "difference"` would also catch the concave cube,
+    # which is solid.
+    return Shape(shell.field, extent=shell.extent, label=shell.label,
+                 exact_outside=False,
+                 info={**dict(shell.info), "hollow": True,
+                       "wall_thickness": abs(float(thickness))})
 
 
 def translated(shape: Shape, vector: Sequence[float],

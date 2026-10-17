@@ -162,6 +162,11 @@ class CarveReport:
         Atoms removed by each of the two trims.
     centre
         Which centring was used.
+    hollow
+        Whether the shape was a deliberately hollow one. A nanocage is
+        almost all surface by construction, so the verdict has to tell it
+        from a solid particle cut too small -- the two look identical in
+        every number except the intent.
     warnings
         Everything worth saying before this particle is used.
     """
@@ -186,6 +191,7 @@ class CarveReport:
     trimmed_loose: int = 0
     trimmed_stoichiometry: int = 0
     centre: str = "cell"
+    hollow: bool = False
     warnings: list[str] = dataclass_field(default_factory=list)
 
     def summary(self) -> str:
@@ -337,12 +343,14 @@ def carve_nanoparticle(
     if stoichiometric and len(unit_ratio) > 1:
         particle, trimmed_stoichiometry = _trim_to_stoichiometry(
             particle, unit_ratio)
-        warnings.append(
-            f"stoichiometry was enforced by removing {trimmed_stoichiometry} "
-            "of the least-coordinated atoms of the over-represented "
-            "element(s). That is the usual recipe and it is a heuristic: "
-            "least bound by neighbour count is not least bound by energy."
-        )
+        if trimmed_stoichiometry:
+            warnings.append(
+                f"stoichiometry was enforced by removing "
+                f"{trimmed_stoichiometry} of the least-coordinated atoms of "
+                "the over-represented element(s). That is the usual recipe "
+                "and it is a heuristic: least bound by neighbour count is "
+                "not least bound by energy."
+            )
         if trim_loose:
             particle, extra = _trim_loose(particle)
             trimmed_loose += extra
@@ -575,7 +583,7 @@ def _measure(particle: Atoms, shape: Shape, unit: Atoms,
             "which a plane-wave code will neutralise behind your back; pass "
             "stoichiometric=True, or change `centre`, or accept it knowingly."
         )
-    if surface.sum() > 0.6 * len(particle):
+    if surface.sum() > 0.6 * len(particle) and not shape.info.get("hollow"):
         warnings.append(
             f"{100 * surface.sum() / len(particle):.0f} % of the atoms are on "
             "the surface. That is a real property of a small particle rather "
@@ -627,6 +635,7 @@ def _measure(particle: Atoms, shape: Shape, unit: Atoms,
         trimmed_loose=trimmed_loose,
         trimmed_stoichiometry=trimmed_stoichiometry,
         centre=centre_label,
+        hollow=bool(shape.info.get("hollow", False)),
         warnings=warnings,
     )
 
@@ -706,6 +715,7 @@ def _report_as_dict(report: CarveReport) -> dict[str, Any]:
         "trimmed_loose": report.trimmed_loose,
         "trimmed_stoichiometry": report.trimmed_stoichiometry,
         "centre": report.centre,
+        "hollow": report.hollow,
         "warnings": list(report.warnings),
     }
 
