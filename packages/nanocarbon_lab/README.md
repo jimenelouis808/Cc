@@ -36,6 +36,7 @@ validation pass before writing.
 | `tmd`           | **Transition-metal dichalcogenides** (MoS2, WS2, …): monolayers, stacks, bulk crystals, ribbons, rolled nanotubes, helical coils, **schwarzites** and **L/T/Y/X junctions**; Janus layers, alloys, vacancies and antisites |
 | `builders/knee` | **The exact-census route**: straight all-hexagon tube joined by mitred knees. The ring census is fixed by the skeleton *before* anything is meshed rather than counted afterwards — toroids, coils (finite and periodic), Y/X/tetrahedral junctions, super-graphene and super-square sheets, and the Schwarz P, D and gyroid cells, every one of them landing on `sum(6-n) = 6*chi` with its disclinations on the correct side of the curvature |
 | `hetero`        | **Twisted bilayers and van der Waals stacks**: commensurate moiré cells (including the 1.08° magic angle), graphene/hBN/MX2 in any combination |
+| `nanoparticle`  | **Import a `.cif` and cut a nanoparticle out of it** — 23 shapes (sphere, rod, cube, disc, cone, torus, prism, bipyramid, octahedron, cuboctahedron, truncated octahedron, tetrahedron, rhombic dodecahedron, decahedron, icosahedron, star, tetrapod, dumbbell, concave cube, …), any of them **hollow** as a nanocage, plus the **Wulff construction** from your own surface energies. Then **wrap it in graphitic carbon**: one shell or a nano-onion, pure, doped or functionalised |
 
 ## Installation
 
@@ -87,6 +88,37 @@ nanocarbon nanocoil --n 6 --m 6 --coil-radius 25 --pitch 12 --turns 1.5 --out ou
 
 # 3D carbon foam, LAMMPS only (relaxation recommended before DFT)
 nanocarbon foam --box 30 --flakes 25 --radius 4 --seed 0 --out out/foam --format lammps
+
+# What is in a .cif, and the faces of a Miller family (normals from the
+# reciprocal lattice, so for anything but a cubic cell they are NOT
+# parallel to the indices)
+nanocarbon crystal-info Fe3C.cif --family 1,0,0 --family 1,1,1
+
+# Every shape there is, with its parameters in positional order
+nanocarbon nanoparticle --list-shapes
+
+# A 3 nm gold rod, cut from an imported crystal, centred on a gold atom
+nanocarbon nanoparticle --cif Au.cif --shape rod --size 7 12 \
+    --centre atom:Au --out out/au_rod
+
+# A truncated-octahedral Fe3C core inside two graphitic shells, the shells
+# N-doped on their pentagons and carboxylated on the outside. The dopant
+# and the groups go on the SHELL -- the core is never substituted
+nanocarbon nanoparticle --cif Fe3C.cif --shape "truncated octahedron" \
+    --size 8 --centre atom:Fe --shells 2 --gap 3.35 \
+    --dopant N --dopant-conc 0.03 --dopant-site pentagon \
+    --graft carboxyl --graft-coverage 0.03 --out out/fe3c_onion
+
+# A hollow MgO nanocage, trimmed to stoichiometry so the cluster is neutral
+nanocarbon nanoparticle --cif MgO.cif --shape cube --size 20 --hollow 5 \
+    --centre atom:Mg --stoichiometric --out out/mgo_cage
+
+# The same crystal in six habits, in one command: the shape is a swept
+# parameter like any other. Each takes the catalogue's default size,
+# since a per-shape size is a dict and the CLI's --set passes scalars;
+# from Python, vary shape_params instead for a size series
+nanocarbon sweep --mode nanoparticle --set cif=Au.cif --set centre=atom:Au \
+    --vary shape=sphere,cube,octahedron,rod,disc,icosahedron --dry-run
 
 # Validate any ASE-readable structure file
 nanocarbon validate out/cnt/qe/pw.in

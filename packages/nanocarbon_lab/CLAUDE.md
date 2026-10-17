@@ -3016,6 +3016,244 @@ Adding a material means adding its metal to `COVALENT_RADII`,
 falls **below** that material's lattice constant -- above it, every metal
 bonds to its six in-plane neighbours and reads as 12-coordinate.
 
+## Nanoparticles: the one input that is somebody else's file
+
+`nanoparticle/` cuts a particle out of an imported crystal and optionally
+wraps it in graphitic carbon. It is **not** under `builders/`, for the
+same reason `tmd/` is not: what comes out is gold, or magnetite, or iron
+carbide, and the carbon machinery does not transfer -- there are no rings
+to count on a metal core and the sp2 windows mean nothing there. What *is*
+reused is everything about surfaces rather than about carbon: the
+signed-distance fields, marching cubes, the isotropic remesher and the
+valence force field. That reuse is why the coating is a few hundred lines
+and not a few thousand.
+
+Four modules and one entry point: `crystal.py` reads the file,
+`shapes.py` is the catalogue and the algebra that composes it, `carve.py`
+does the cut, `coat.py` wraps the result, `quality.py` gives the verdict
+and `build.py` is the single call all three consumers go through (the
+CLI, the window and `jobs.Job`).
+
+### A shape is a signed distance, and the algebra is the point
+
+Twenty-three shapes, in four groups that mean different things. The
+**round** ones are cuts in the laboratory frame, so the cut exposes
+whatever facets it happens to -- a real particle (quenched, milled,
+ablated) and not a facetted one. The **facetted** habits' faces are
+lattice planes and need the crystal to construct. The **five-fold**
+envelopes (decahedron, icosahedron) belong to particles that are really
+*twinned*, and a single-crystal cut reproduces the outline and not the
+twin boundaries; both say so in their docstrings and in `info`. The
+**compositions** are unions and differences of the rest.
+
+Because a shape is a function and not a class hierarchy, a shape nobody
+anticipated is a composition rather than new code: `hollow` is a
+difference, a star is a smooth union, a nanocage is `hollowed(name, ...)`
+for *any* of the twenty-three rather than a catalogue entry per habit.
+
+* **A polyhedron's extent comes from its vertices, enumerated.** Not from
+  sampled directions: a regular tetrahedron with faces at 16 Å reaches
+  48 Å (a regular tetrahedron's circumradius is three times its
+  inradius), and sampling 512 directions returned 44.4 -- *short of the
+  solid*, so the sampling box would have cut the four corners off and
+  nothing downstream could have told. A sharp vertex is exactly what
+  sampling misses, and a facetted particle is nothing but sharp vertices.
+  `polyhedron_vertices` solves every triple of faces, which is thousands
+  of 3x3 solves and runs once per shape.
+* **`exact_outside` is recorded, not assumed.** A convex polyhedron's
+  field is `max_i(n_i.r - d_i)`: the sign is exact everywhere, the
+  *distance* only away from the edges. That matters because the coater
+  offsets the field, and offsetting an under-estimate rounds the edges
+  with radius equal to the offset. **That is the answer, not an
+  approximation to apologise for**: a graphitic sheet cannot fold along a
+  zero-radius crease, and a real encapsulated cube is round at the
+  corners in every micrograph of one.
+* **A half-space has infinite extent and says so.** A finite number there
+  would quietly clip whatever it was intersected with. `intersection`
+  takes the minimum, so it costs nothing once it meets something closed.
+
+### Miller indices are not Cartesian components
+
+`crystal.py` converts `(hkl)` through the **reciprocal** lattice,
+`n = h b1 + k b2 + l b3`. For a cubic cell that comes out parallel to
+`(h, k, l)` and for nothing else: in a calcite-like rhombohedral cell the
+(104) normal -- the cleavage plane every calcite rhomb is bounded by --
+is **15.5 degrees** away from what its indices would point if read as
+Cartesian components, and a 15-degree error in a facet normal is a
+different facet.
+
+The symmetry-equivalent set comes from the **lattice's point group**,
+found by brute force over integer matrices preserving the metric tensor.
+Both halves are exact statements -- an operation maps the lattice onto
+itself iff it is an integer matrix in the cell's basis, and it is a
+rotation or reflection iff it preserves the metric -- so no spglib and no
+tolerance on the symmetry itself. Verified: cubic 48, **fcc primitive 48**
+(it looks rhombohedral and is cubic, which is the case that makes
+deriving it from the metric rather than the cell's shape worth doing),
+hexagonal 24, rhombohedral 12, tetragonal 16, orthorhombic 8, triclinic 2.
+
+What that gives is the **holohedry**, which may be higher than the
+crystal's own point group -- any ordered alloy, wurtzite's polar axis, a
+Jahn-Teller distortion. Then a "family" contains faces that are
+crystallographically different and may have different surface energies.
+The report says which group was found and how large, so the assumption is
+visible rather than buried.
+
+`wulff()` ships **no table of surface energies** and will not. They
+depend on the termination, on adsorbates and on the method, and a builder
+that supplied its own would be making the construction's most important
+decision for the user. Pass `family_normals_for(cell)` with it or a Wulff
+polyhedron on a hexagonal cell comes out cubic-shaped: measured, the same
+energies give 8 faces with the lattice's families and 12 with the cubic
+fallback.
+
+### The cut decides four things, and the caller did not
+
+The selection is one line. Everything else in `carve.py` is about what
+that line leaves open:
+
+* **Where the centre is.** A sphere cut around a lattice point and the
+  same sphere cut around the hole between four of them are different
+  particles: different composition, different surface, and for a
+  compound different *charge*. In rock salt, centred on the cation the
+  cube comes out cation-rich and centred on the anion, anion-rich. There
+  is no neutral default; `"cell"` is merely the one needing no extra
+  information.
+* **What the cut leaves hanging.** A singly-coordinated surface atom is
+  not a facet, it is an artefact: no counterpart on a real particle, and
+  it dominates any later relaxation. Trimmed by default, **iteratively**,
+  because removing one lowers its neighbour's count and on a thin plate
+  that cascades.
+* **Stoichiometry, and therefore charge.** Always measured;
+  `stoichiometric=True` additionally trims. That trim is the standard
+  recipe and it is a *heuristic* -- least bound by neighbour count is not
+  least bound by energy -- and it says so.
+* **Whether a facet landed on a lattice plane.** This one is a trap, not
+  a choice. A 4a cube of fcc gold centred on a lattice point has its six
+  faces exactly on planes of atoms, and changing the edge by **one part
+  in a million** moves the count between **171, 256 and 365 atoms** -- a
+  factor of 2.1. Three different terminations, all real; what would be
+  wrong is not saying so. Offset the cut so the faces fall *between* the
+  planes and the count is the lattice's own: exactly `4n^3` for an
+  n x n x n cube of fcc, for every n tried. `TIE_TOLERANCE` counts the
+  atoms on the surface and the report warns. **It does not move the
+  cut**: which plane terminates a facet is a statement about the
+  particle, and nudging it silently would answer a chemical question
+  with a numerical convenience.
+
+**The surface is measured against the bulk, not against a threshold**, so
+"surface fraction" means the same thing for a metal, an oxide and a
+layered sulfide with no per-material tuning.
+
+**And the neighbour cutoff is derived from the crystal, not looked up.**
+ASE's `natural_cutoffs` are covalent radii, and in MgO the Mg-Mg distance
+(2.978 Å) falls inside any usable slack on two magnesium covalent radii,
+so a radius-based cutoff reports magnesium as **18**-coordinate in rock
+salt -- twelve magnesiums alongside the six oxygens. An ionic crystal has
+no covalent radii to speak of and a metal has no bonds in that sense at
+all. `NEIGHBOUR_SLACK * d_min` reproduces the textbook number for every
+structure tried: fcc 12, rock salt 6 and 6, rutile 6 and 3, diamond 4.
+bcc comes out **14 rather than 8**, because bcc's second shell is only
+15% beyond its first and no single slack separates them -- which is why
+bcc is described as 8+6 anyway. The crystal's cutoff is then used for the
+particle too: two coordination numbers measured with different cutoffs
+are not comparable, and the whole surface test is that comparison.
+
+### The coating is the existing implicit route, with three measured defaults
+
+A graphitic shell is a closed carbon surface, so it goes through exactly
+the junction/schwarzite pipeline and shares `junction._finish` rather
+than copying it. Nothing about the census is placed: the field's topology
+fixes it and the Euler check inside that function verifies it. Measured
+`sum(6-n) = +12` exactly on all six shapes tried (sphere, cube, rod,
+octahedron, disc, hexagonal prism), because an envelope is sphere-like
+whatever it wraps.
+
+**The field is the core's own van der Waals envelope**,
+`min_i |r - r_i| - gap`, not the shape it was carved to. So it works for
+a core from anywhere (a relaxed particle, an imported cluster, something
+this framework did not build), it follows the *atoms* rather than the
+ideal shape, and it rounds every edge at radius `gap` automatically.
+
+Three defaults, each from a measurement, and two of them are the
+**opposite** of the junction's:
+
+1. **`place_curvature=True` here, `False` for a junction.** A junction
+   saddles: negative curvature everywhere, pentagons do not belong on it,
+   and a spread-out population of 5-7 pairs is how the net covers it. An
+   envelope is the offset of a solid, so it is **convex everywhere**:
+   pentagons wanted, heptagons pure defects. Placement takes the census
+   from 39/25/1 to **17/5/0** -- deficit 12 either way, 22 disclinations
+   instead of 65 -- and the wall comes out smoother and better bonded. It
+   costs about twice the remesh time.
+2. **`anneal_sweeps=0`.** Annealing *does* cut the stray-pair count and
+   makes the wall worse at every anchor tried (1.620 Å bonds against
+   1.546). The same lesson the junction records, reached from the other
+   side: annealing optimises the **census**, and the census is not what a
+   wall is judged by.
+3. **`wall_anchor=0.7`**, on here and off for a junction. A junction's
+   wall has nothing behind it; a coated particle's has the core in the
+   way, so a free relaxation that lets the wall move inward is relaxing
+   it through solid matter -- measured, free relaxation gives excellent
+   carbon (1.335-1.494 Å) with an atom **0.87 Å** from a gold one. It is
+   a monotone trade and 0.7 is the stiffest setting whose bonds stay
+   inside the sp2 window (0.7: 1.90 Å clearance, 1.335-1.550 Å; 1.5:
+   2.13 Å, 1.322-1.582). `relax_iterations` past 3000 changes none of
+   these to three decimals.
+
+**There is no setting that makes a coated wall as good as a free cage's,
+and there should not be.** A shell conforming to a facetted core is
+strained, and "strained" is the honest verdict rather than a failure.
+What would be a failure is carbon inside the metal.
+
+**What is NOT there, and was built to find out:** a one-sided constraint
+cannot set the radius. The obvious scheme -- relax freely, push back the
+atoms that entered the core, anchor only those, repeat -- oscillates:
+pushing one atom out pulls its neighbours in, and asked to hold the whole
+wall at 0.8 of a 3.35 Å gap it ended with 133 of 594 atoms still
+violating, a 1.36 Å closest approach and 1.70 Å bonds -- worse on every
+count than doing nothing. At a stiff anchor it has nothing to do and at a
+soft one it destroys what the anchor achieved. A closed network's radius
+is already fixed by its ring count; a repair loop cannot renegotiate it.
+
+**Report the tails, not just the extremes.** The gap goes out as three
+numbers (mean, 5th percentile, minimum) and the bonds as two (p95 and
+max), because the extreme over a thousand bonds is a tail statistic. A
+wall with p95 1.48 Å and max 1.58 Å is a good wall with a strained
+corner, and judged on its maximum alone it reads as a failure.
+
+**3.35 Å is a van der Waals contact, not a bond.** The carbide formers
+(Fe, Co, Ni, Ti, W...) chemisorb near 2.1 Å, which is a different
+interface with a different electronic answer. Both are offered, the
+warning fires either way, and nothing here computes which one a given
+system prefers.
+
+### The chemistry goes on the shell, never on the core
+
+Substituting a nitrogen for an iron is not doping, it is a different
+compound, and `dopants/` is about what an sp2 carbon lattice tolerates.
+So the dopant and the graft are applied **inside** the build rather than
+after it -- the shell does not exist until the coating has run -- and
+`jobs.build` has its own branch for that rather than routing them through
+`apply_doping`. Groups go on the **outermost** shell's outer face: the
+3.35 Å between two shells holds nothing, and a hydroxyl pointing into a
+gold particle is not a structure.
+
+Co-doping goes the same way, and it is wired because the window shows the
+control: a control that is visible and silently ignored is worse than one
+that is absent. `dopant` and `codope_spec` are refused together, for the
+reason `Job` already gives -- running one substitution after another makes
+the second fraction a fraction of what the first left.
+
+### A cage is judged as a cage
+
+A hollow particle is almost all surface **by design**. Judging one by the
+solid thresholds is the mistake `sp2_quality` made when its hexagonal
+window called every sound haeckelite BROKEN: the window was right and the
+family was wrong. `hollow()` marks itself in `info` rather than being
+inferred -- guessing from `operation == "difference"` would also catch the
+concave cube, which is solid.
+
 ## Analysing a file: keep what was recorded apart from what was guessed
 
 `analyse/` describes a structure the framework did not build. Its whole

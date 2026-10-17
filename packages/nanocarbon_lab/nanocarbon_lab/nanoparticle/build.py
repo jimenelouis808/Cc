@@ -16,7 +16,7 @@ never heard of this package.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +49,8 @@ def build_nanoparticle(
     dopant: str | None = None,
     dopant_conc: float = 0.0,
     dopant_site: str = "random",
+    codope_spec: Sequence[tuple[str, float]] = (),
+    codope_affinity: str = "random",
     graft: str | None = None,
     graft_coverage: float = 0.0,
     graft_where: str = "all",
@@ -74,6 +76,9 @@ def build_nanoparticle(
     centre, trim_loose, stoichiometric, max_atoms
         Passed to
         :func:`~nanocarbon_lab.nanoparticle.carve.carve_nanoparticle`.
+    codope_spec, codope_affinity
+        Several heteroatoms in the shell at once; see
+        :func:`~nanocarbon_lab.nanoparticle.coat.encapsulate`.
     shells
         ``0`` returns the bare core. More than that wraps it; see
         :func:`~nanocarbon_lab.nanoparticle.coat.encapsulate`.
@@ -113,6 +118,7 @@ def build_nanoparticle(
         atoms, coat_report = encapsulate(
             core, gap=gap, shells=shells, interlayer=interlayer,
             dopant=dopant, dopant_conc=dopant_conc, dopant_site=dopant_site,
+            codope_spec=codope_spec, codope_affinity=codope_affinity,
             graft=graft, graft_coverage=graft_coverage,
             graft_where=graft_where, seed=seed, vacuum=vacuum,
             **coat_options,

@@ -88,7 +88,7 @@ from scipy.spatial import cKDTree
 
 from ..builders import remesh as rm
 from ..builders.junction import MAX_GRID_RESOLUTION, _finish
-from ..dopants import dope_random, dope_rings
+from ..dopants import codope, dope_random, dope_rings
 from ..functionalize import functionalize
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D
 from ..utils.rng import make_rng
@@ -612,6 +612,8 @@ def encapsulate(
     dopant: str | None = None,
     dopant_conc: float = 0.0,
     dopant_site: str = "random",
+    codope_spec: Sequence[tuple[str, float]] = (),
+    codope_affinity: str = "random",
     graft: str | None = None,
     graft_coverage: float = 0.0,
     graft_where: str = "all",
@@ -638,6 +640,13 @@ def encapsulate(
         size -- ``"pentagon"`` is the interesting one on a shell, because
         the twelve pentagons Euler demands are where a closed cage
         carries its curvature and its reactivity.
+    codope_spec, codope_affinity
+        Several heteroatoms in the shell at once, as
+        ``[("N", 0.05), ("B", 0.05)]``, each fraction against the
+        **same** denominator. Mutually exclusive with ``dopant`` for the
+        reason :class:`~nanocarbon_lab.jobs.Job` gives: running one
+        substitution after another makes the second fraction a fraction
+        of what the first left.
     graft, graft_coverage, graft_where
         A functional group on the shell's **outer** face. Inner-face
         grafting is refused: the inside of the shell is where the core
@@ -666,7 +675,20 @@ def encapsulate(
         core, gap=gap, shells=shells, interlayer=interlayer,
         vacuum=vacuum, seed=seed, **coat_options)
 
-    if dopant and dopant_conc > 0:
+    if dopant and codope_spec:
+        raise ValueError(
+            "pass either `dopant` or `codope_spec`, not both: they both "
+            "substitute carbons, so running one after the other would make "
+            "the second one's fraction a fraction of what the first left."
+        )
+    if codope_spec:
+        shell_list = [codope(shell, list(codope_spec),
+                             affinity=codope_affinity, seed=seed)
+                      for shell in shell_list]
+        report.dopant = "+".join(element for element, _ in codope_spec)
+        report.dopant_fraction = float(sum(fraction
+                                           for _, fraction in codope_spec))
+    elif dopant and dopant_conc > 0:
         shell_list = [_dope_shell(shell, dopant, dopant_conc, dopant_site,
                                   seed) for shell in shell_list]
         report.dopant = dopant

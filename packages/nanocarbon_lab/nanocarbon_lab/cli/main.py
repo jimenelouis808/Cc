@@ -109,6 +109,7 @@ from ..jobs import (
     apply_doping,
     apply_grafting,
     apply_tmd_chemistry,
+    parse_codope_spec,
 )
 from ..tmd import (
     MATERIALS,
@@ -2986,6 +2987,8 @@ def _cmd_nanoparticle(args):
         stoichiometric=args.stoichiometric, shells=args.shells,
         gap=args.gap, interlayer=args.interlayer, dopant=args.dopant,
         dopant_conc=args.dopant_conc, dopant_site=args.dopant_site,
+        codope_spec=(parse_codope_spec(args.codope) if args.codope else ()),
+        codope_affinity=args.codope_affinity,
         graft=args.graft, graft_coverage=args.graft_coverage,
         graft_where=args.graft_where, seed=args.seed, vacuum=args.vacuum,
         max_atoms=args.max_block_atoms, bond=args.bond,
@@ -2995,11 +2998,11 @@ def _cmd_nanoparticle(args):
     )
     print(crystal_report.summary())
     print()
-    if args.shells == 0 and (args.dopant or args.graft):
-        print("! --dopant and --graft apply to the graphitic shell, and "
-              "--shells is 0, so there is nothing to apply them to. The core "
-              "is never substituted: a nitrogen in place of a metal atom is "
-              "a different compound, not a dopant.")
+    if args.shells == 0 and (args.dopant or args.codope or args.graft):
+        print("! --dopant, --codope and --graft apply to the graphitic "
+              "shell, and --shells is 0, so there is nothing to apply them "
+              "to. The core is never substituted: a nitrogen in place of a "
+              "metal atom is a different compound, not a dopant.")
 
     xyz_path, json_path = write_render_bundle(atoms, Path(args.out))
     return _report_particle(atoms, carve_report, coat_report,

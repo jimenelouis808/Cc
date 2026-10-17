@@ -18,6 +18,7 @@ import pytest
 from nanocarbon_lab.jobs import (
     IMPLICIT_MODES,
     MODES,
+    NANOPARTICLE_MODES,
     Job,
     build,
     estimate_atoms,
@@ -152,11 +153,40 @@ SAMPLES: dict[str, Job] = {
     "TMD junction": Job("TMD junction",
                         {"material": "MoS2", "kind": "L", "tube_radius": 10.0,
                          "arm_length": 20.0, "parity": "split"}),
+    # The only sample whose input is a FILE. The path is a placeholder:
+    # this entry exists so the mode is covered by the catalogue, the
+    # pickling test and the parameter-name check, none of which read the
+    # crystal. The builds that do read one are in
+    # `test_nanoparticle.py`, which writes its own .cif.
+    "nanoparticle": Job(
+        mode="nanoparticle",
+        params={"cif": "crystal.cif", "shape": "sphere",
+                "shape_params": {"radius": 12.0}, "centre": "cell",
+                "shells": 0},
+    ),
 }
 
 
 def test_every_mode_has_a_sample():
     assert set(SAMPLES) == set(MODES)
+
+
+def test_every_sample_names_parameters_its_builder_takes():
+    """A sweep checks parameter names against the real signature before
+    building anything, and that check is only as good as the names.
+
+    This is the cheap half of it, run over every mode at once: a
+    parameter the builder has never heard of is a TypeError at build
+    time, from the window, after the user has waited for it.
+    """
+    from nanocarbon_lab.jobs import parameter_names
+
+    for mode, job in SAMPLES.items():
+        accepted = set(parameter_names(mode))
+        if not accepted:                        # pragma: no cover - **kwargs
+            continue
+        unknown = set(job.params) - accepted
+        assert not unknown, f"{mode}: {sorted(unknown)}"
 
 
 class TestJob:
@@ -293,9 +323,35 @@ class TestEstimates:
             severity, _ = estimate_cost(SAMPLES[mode])
             assert severity in ("slow", "very slow"), mode
 
-    def test_estimates_are_positive_everywhere(self):
+    def test_estimates_are_positive_for_every_buildable_sample(self):
+        """Every mode whose job is self-contained estimates something.
+
+        The nanoparticle is excluded because its sample points at a
+        placeholder path, and a job that cannot be read cannot be built
+        either -- so it is not an exception to the invariant, it is
+        outside it. The next test pins the behaviour that makes it
+        outside.
+        """
         for mode, job in SAMPLES.items():
+            if mode in NANOPARTICLE_MODES:
+                continue
             assert estimate_atoms(job) > 0, mode
+
+    def test_a_nanoparticle_estimate_reads_the_crystal(self, tmp_path):
+        """Zero for an unreadable path, deliberately: the window shows an
+        estimate while the path is still being typed, and a traceback
+        every keystroke is not an estimate. With a real file it is a real
+        number."""
+        from ase.build import bulk
+        from ase.io import write
+
+        job = SAMPLES["nanoparticle"]
+        assert estimate_atoms(job) == 0
+
+        path = tmp_path / "au.cif"
+        write(path, bulk("Au", "fcc", a=4.078, cubic=True))
+        real = job.with_params(cif=str(path))
+        assert estimate_atoms(real) > 100
 
 
 class TestCommandLine:

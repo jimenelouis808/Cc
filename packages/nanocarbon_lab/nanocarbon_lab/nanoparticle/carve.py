@@ -77,17 +77,40 @@ from typing import Any
 
 import numpy as np
 from ase import Atoms
-from ase.neighborlist import NeighborList, natural_cutoffs
+from ase.neighborlist import NeighborList
 
 from ..utils import DEFAULT_VACUUM_1D
 from .crystal import supercell_for
 from .shapes import Shape
 
-#: Multiplies ASE's covalent-radius cutoffs when deciding what is bonded.
-#: 1.2 is the usual slack for a crystal: it has to admit a stretched
-#: surface bond and refuse a second-neighbour contact, and those are a
-#: long way apart in every structure tried here.
-BOND_SLACK = 1.2
+#: Multiplies the crystal's **own** shortest contact to give the cutoff
+#: that decides what counts as a neighbour.
+#:
+#: Derived from the structure rather than from a table of radii, and that
+#: is not a stylistic preference -- the radii get it wrong. ASE's
+#: ``natural_cutoffs`` are covalent radii, and in MgO the Mg-Mg distance
+#: (2.978 Å) is *shorter* than the sum of two magnesium covalent radii
+#: with any usable slack, so a cutoff built that way counts twelve
+#: magnesium neighbours alongside the six oxygens and reports magnesium
+#: as 18-coordinate in rock salt. An ionic crystal has no covalent radii
+#: to speak of, and a metal has no bonds at all in that sense.
+#:
+#: ``1.25 * d_min`` reproduces the textbook coordination of every
+#: structure tried: fcc gold 12, rock-salt MgO 6 and 6, rutile TiO2 6 for
+#: the titanium and 3 for the oxygen, diamond carbon 4.
+#:
+#: Two honest limits. **bcc comes out 14, not 8**, because bcc's second
+#: shell sits only 15 % beyond its first (``a`` against ``a*sqrt(3)/2``)
+#: and no single slack separates them -- which is why bcc is usually
+#: described as 8+6 in the first place, and 14 is that description. And a
+#: structure with two genuinely different bond lengths gets only the
+#: shorter one, which is the right answer for a layered material, whose
+#: long contact is van der Waals rather than a bond.
+#:
+#: Neither limit affects what this number is *for*: a surface atom is one
+#: with fewer neighbours than its own element has in the bulk, and both
+#: sides of that comparison are measured with the same cutoff.
+NEIGHBOUR_SLACK = 1.25
 
 #: An atom with this many neighbours or fewer is a leftover of the cut
 #: rather than a surface site, and is trimmed.
@@ -306,7 +329,11 @@ def carve_nanoparticle(
         raise ValueError("the imported crystal has no atoms.")
     unit = crystal.copy()
     unit.pbc = True
-    bulk_coordination = _bulk_coordination(unit)
+    # Derived from the CRYSTAL and then used for the particle too, so the
+    # two coordination numbers the surface test compares are measured the
+    # same way.
+    cutoff = neighbour_cutoff(unit)
+    bulk_coordination = _bulk_coordination(unit, cutoff)
     unit_ratio = _ratios(_composition(unit))
 
     shifted, centre_label = _apply_centring(unit, centre)
@@ -331,7 +358,7 @@ def carve_nanoparticle(
     warnings: list[str] = []
     trimmed_loose = 0
     if trim_loose:
-        particle, trimmed_loose = _trim_loose(particle)
+        particle, trimmed_loose = _trim_loose(particle, cutoff)
         if len(particle) == 0:
             raise ValueError(
                 f"every atom in this cut was left with "
@@ -342,7 +369,7 @@ def carve_nanoparticle(
     trimmed_stoichiometry = 0
     if stoichiometric and len(unit_ratio) > 1:
         particle, trimmed_stoichiometry = _trim_to_stoichiometry(
-            particle, unit_ratio)
+            particle, unit_ratio, cutoff)
         if trimmed_stoichiometry:
             warnings.append(
                 f"stoichiometry was enforced by removing "
@@ -352,12 +379,12 @@ def carve_nanoparticle(
                 "not least bound by energy."
             )
         if trim_loose:
-            particle, extra = _trim_loose(particle)
+            particle, extra = _trim_loose(particle, cutoff)
             trimmed_loose += extra
 
     report = _measure(particle, shape, unit, unit_ratio, bulk_coordination,
-                      centre_label, trimmed_loose, trimmed_stoichiometry,
-                      on_the_cut, warnings)
+                      cutoff, centre_label, trimmed_loose,
+                      trimmed_stoichiometry, on_the_cut, warnings)
 
     particle.info.update({
         "structure_type": "nanoparticle",
@@ -423,29 +450,59 @@ def _apply_centring(unit: Atoms, centre: CentreChoice) -> tuple[Atoms, str]:
 # ----------------------------------------------------------------------
 # coordination
 # ----------------------------------------------------------------------
-def coordination(atoms: Atoms, slack: float = BOND_SLACK) -> np.ndarray:
-    """Neighbour count per atom, from covalent radii.
+def neighbour_cutoff(atoms: Atoms,
+                     slack: float = NEIGHBOUR_SLACK) -> float:
+    """The first-neighbour cutoff for a structure, from its own spacing.
 
-    Uses ASE's ``natural_cutoffs`` scaled by ``slack``, and honours
-    ``pbc``, so the same function gives the bulk reference on a periodic
-    cell and the particle's own counts on a finite one. That identity is
-    the point: a surface is defined here as *fewer neighbours than the
-    bulk*, and the two numbers have to be measured the same way or the
-    comparison means nothing.
+    ``slack`` times the shortest contact, under the minimum image when
+    the cell is periodic. See :data:`NEIGHBOUR_SLACK` for why this is
+    measured rather than looked up.
+    """
+    if len(atoms) < 2:
+        return 0.0
+    if any(atoms.pbc):
+        probe = atoms.repeat((2, 2, 2))
+    else:
+        probe = atoms
+    positions = probe.get_positions()
+    from scipy.spatial import cKDTree
+    distances, _ = cKDTree(positions).query(positions, k=2)
+    return float(slack * distances[:, 1].min())
+
+
+def coordination(atoms: Atoms, cutoff: float | None = None) -> np.ndarray:
+    """Neighbour count per atom, within ``cutoff`` Å.
+
+    ``cutoff`` ``None`` derives it from this structure with
+    :func:`neighbour_cutoff`. Honours ``pbc``, so the same function gives
+    the bulk reference on a periodic cell and the particle's own counts
+    on a finite one -- and the caller **passes the crystal's cutoff** for
+    the particle rather than letting it re-derive its own. That identity
+    is the point: a surface is defined here as *fewer neighbours than the
+    bulk*, and two numbers measured with different cutoffs are not
+    comparable.
     """
     if len(atoms) == 0:
         return np.zeros(0, dtype=int)
-    cutoffs = [slack * value for value in natural_cutoffs(atoms)]
-    neighbours = NeighborList(cutoffs, self_interaction=False, bothways=True,
+    if cutoff is None:
+        cutoff = neighbour_cutoff(atoms)
+    if cutoff <= 0:                             # pragma: no cover - 1 atom
+        return np.zeros(len(atoms), dtype=int)
+    # One radius for every species, because the cutoff is a property of
+    # the structure and not of the pair: `NeighborList` adds the two
+    # atoms' radii, so half the cutoff each gives the cutoff.
+    radii = [0.5 * cutoff] * len(atoms)
+    neighbours = NeighborList(radii, self_interaction=False, bothways=True,
                               skin=0.0)
     neighbours.update(atoms)
     return np.asarray([len(neighbours.get_neighbors(index)[0])
                        for index in range(len(atoms))], dtype=int)
 
 
-def _bulk_coordination(unit: Atoms) -> dict[str, float]:
+def _bulk_coordination(unit: Atoms,
+                       cutoff: float) -> dict[str, float]:
     """Mean coordination of each element in the periodic crystal."""
-    counts = coordination(unit)
+    counts = coordination(unit, cutoff)
     out: dict[str, float] = {}
     symbols = np.asarray(unit.get_chemical_symbols())
     for element in sorted(set(symbols)):
@@ -453,7 +510,7 @@ def _bulk_coordination(unit: Atoms) -> dict[str, float]:
     return out
 
 
-def _trim_loose(atoms: Atoms) -> tuple[Atoms, int]:
+def _trim_loose(atoms: Atoms, cutoff: float) -> tuple[Atoms, int]:
     """Iteratively drop atoms with too few neighbours.
 
     Iterative because the trim creates its own candidates: removing a
@@ -465,7 +522,7 @@ def _trim_loose(atoms: Atoms) -> tuple[Atoms, int]:
     removed = 0
     current = atoms
     while len(current):
-        counts = coordination(current)
+        counts = coordination(current, cutoff)
         keep = counts > LOOSE_COORDINATION
         if keep.all():
             break
@@ -507,8 +564,8 @@ def _stoichiometry_targets(composition: Mapping[str, int],
 
 
 def _trim_to_stoichiometry(atoms: Atoms,
-                           unit_ratio: Mapping[str, float]
-                           ) -> tuple[Atoms, int]:
+                           unit_ratio: Mapping[str, float],
+                           cutoff: float) -> tuple[Atoms, int]:
     """Remove the least-coordinated excess atoms until the ratios match."""
     composition = _composition(atoms)
     missing = [element for element in unit_ratio if element not in composition]
@@ -520,7 +577,7 @@ def _trim_to_stoichiometry(atoms: Atoms,
             "between the sublattices."
         )
     targets = _stoichiometry_targets(composition, unit_ratio)
-    counts = coordination(atoms)
+    counts = coordination(atoms, cutoff)
     symbols = np.asarray(atoms.get_chemical_symbols())
     drop: list[int] = []
     for element, target in targets.items():
@@ -545,12 +602,12 @@ def _trim_to_stoichiometry(atoms: Atoms,
 # ----------------------------------------------------------------------
 def _measure(particle: Atoms, shape: Shape, unit: Atoms,
              unit_ratio: Mapping[str, float],
-             bulk_coordination: Mapping[str, float],
+             bulk_coordination: Mapping[str, float], cutoff: float,
              centre_label: str, trimmed_loose: int,
              trimmed_stoichiometry: int, on_the_cut: int,
              warnings: list[str]) -> CarveReport:
     composition = _composition(particle)
-    counts = coordination(particle)
+    counts = coordination(particle, cutoff)
     symbols = np.asarray(particle.get_chemical_symbols())
     surface = np.zeros(len(particle), dtype=bool)
     for element, bulk in bulk_coordination.items():
@@ -721,11 +778,12 @@ def _report_as_dict(report: CarveReport) -> dict[str, Any]:
 
 
 __all__ = [
-    "BOND_SLACK",
+    "NEIGHBOUR_SLACK",
     "LOOSE_COORDINATION",
     "STOICHIOMETRY_TOLERANCE",
     "TIE_TOLERANCE",
     "CarveReport",
     "carve_nanoparticle",
     "coordination",
+    "neighbour_cutoff",
 ]

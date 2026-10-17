@@ -505,8 +505,9 @@ def plate(radius: float, half_thickness: float, sides: int = 0) -> Shape:
     return Shape(shape.field, extent=shape.extent,
                  label=f"{name} r={radius:.1f} t={2 * half_thickness:.1f} A",
                  exact_outside=shape.exact_outside,
-                 info={"shape": "plate", "radius": radius,
-                       "half_thickness": half_thickness, "sides": sides})
+                 info={**dict(shape.info), "shape": "plate",
+                       "radius": radius, "half_thickness": half_thickness,
+                       "sides": sides})
 
 
 def cone(radius: float, half_height: float, tip_radius: float = 0.0) -> Shape:
@@ -760,7 +761,8 @@ def prism(radius: float, half_height: float, sides: int = 6) -> Shape:
                  label=f"{sides}-gon prism r={radius:.1f} "
                        f"h={2 * half_height:.1f} A",
                  exact_outside=False,
-                 info={"shape": "prism", "radius": radius, "sides": sides,
+                 info={**dict(shape.info), "shape": "prism",
+                       "radius": radius, "sides": sides,
                        "half_height": half_height})
 
 
@@ -801,7 +803,8 @@ def bipyramid(radius: float, half_height: float, sides: int = 6) -> Shape:
                  label=f"{sides}-gon bipyramid r={radius:.1f} "
                        f"h={2 * half_height:.1f} A",
                  exact_outside=False,
-                 info={"shape": "bipyramid", "radius": radius, "sides": sides,
+                 info={**dict(shape.info), "shape": "bipyramid",
+                       "radius": radius, "sides": sides,
                        "half_height": half_height})
 
 
@@ -914,7 +917,7 @@ def tetrahedron(face_distance: float) -> Shape:
     return Shape(shape.field, extent=shape.extent,
                  label=f"tetrahedron d={face_distance:.1f} A",
                  exact_outside=False,
-                 info={"shape": "tetrahedron",
+                 info={**dict(shape.info), "shape": "tetrahedron",
                        "face_distance": face_distance})
 
 
@@ -942,8 +945,8 @@ def _cubic_solid(families: Mapping[str, float], name: str) -> Shape:
     shape = polyhedron(normals, distances, label=name)
     return Shape(shape.field, extent=shape.extent, label=name,
                  exact_outside=False,
-                 info={"shape": name, "families": dict(families),
-                       "inactive_faces": shape.info["inactive_faces"]})
+                 info={**dict(shape.info), "shape": name,
+                       "families": dict(families)})
 
 
 def wulff(energies: Mapping[str, float], scale: float,
@@ -1004,9 +1007,8 @@ def wulff(energies: Mapping[str, float], scale: float,
     shape = polyhedron(collected, distances, label="Wulff polyhedron")
     return Shape(shape.field, extent=shape.extent,
                  label="Wulff polyhedron", exact_outside=False,
-                 info={"shape": "wulff", "energies": dict(energies),
-                       "scale": scale, "n_faces": shape.info["n_faces"],
-                       "inactive_faces": shape.info["inactive_faces"]})
+                 info={**dict(shape.info), "shape": "wulff",
+                       "energies": dict(energies), "scale": scale})
 
 
 def _parse_indices(key: str) -> tuple[int, int, int]:
@@ -1063,7 +1065,8 @@ def decahedron(radius: float) -> Shape:
     shape = polyhedron(normals, [radius] * len(normals))
     return Shape(shape.field, extent=shape.extent,
                  label=f"decahedron d={radius:.1f} A", exact_outside=False,
-                 info={"shape": "decahedron", "face_distance": radius,
+                 info={**dict(shape.info), "shape": "decahedron",
+                       "face_distance": radius,
                        "twinned": False,
                        "note": "single-crystal cut to a decahedral envelope; "
                                "the five twin boundaries are not present"})
@@ -1091,7 +1094,8 @@ def icosahedron(radius: float) -> Shape:
     shape = polyhedron(directions, [radius] * len(directions))
     return Shape(shape.field, extent=shape.extent,
                  label=f"icosahedron d={radius:.1f} A", exact_outside=False,
-                 info={"shape": "icosahedron", "face_distance": radius,
+                 info={**dict(shape.info), "shape": "icosahedron",
+                       "face_distance": radius,
                        "twinned": False,
                        "note": "single-crystal cut to an icosahedral "
                                "envelope; the twin boundaries of a Mackay "

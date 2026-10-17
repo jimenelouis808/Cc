@@ -114,6 +114,7 @@ from ..jobs import (
     DOPANT_SITES,
     FAMILIES,
     MODES,
+    NANOPARTICLE_MODES,
     TMD_EDITS,
     Job,
     estimate_atoms,
@@ -1391,6 +1392,8 @@ class NanocarbonGUI:
         self.lbl_sn.grid(row=7, column=0, columnspan=2, sticky="w")
         self.var_sn_graph.trace_add("write", lambda *_: self._update_sn_hint())
 
+        self._build_nanoparticle_panel(parent)
+
         self.frame_network = ttk.LabelFrame(parent, text="Nanotube network",
                                             padding=8)
         self.frame_network.columnconfigure(0, weight=1)
@@ -2077,8 +2080,26 @@ class NanocarbonGUI:
                       self.frame_tmd_coil, self.frame_tmd_sw,
                       self.frame_het, self.frame_twist, self.frame_stack,
                       self.frame_tmd_j, self.frame_tmd_chem,
+                      self.frame_np,
                       self.frame_surface, self.frame_chem, self.frame_graft):
             frame.pack_forget()
+
+        if mode in NANOPARTICLE_MODES:
+            # None of the carbon panels apply to the core -- it is not
+            # carbon. The chemistry and graft panels DO, because they act
+            # on the graphitic shell, and the hint under them says so;
+            # the surface panel does not, its annealing and roughness
+            # being arguments the coating sets itself from the
+            # measurements in `coat.py`.
+            self.frame_np.pack(fill="x")
+            self._update_np_centres()
+            self._update_np_hint()
+            self.frame_chem.pack(fill="x", pady=(8, 0))
+            self.frame_graft.pack(fill="x", pady=(8, 0))
+            self._update_dopant_hint()
+            self._update_graft_hint()
+            self._schedule_estimate()
+            return
 
         if mode in ("twisted bilayer", "vdW stack"):
             # A stack is neither carbon nor dichalcogenide: none of the
@@ -3628,6 +3649,14 @@ class NanocarbonGUI:
             tmd_edit_amount=float(self.var_tmd_edit_amount.get()),
         )
 
+        if mode in NANOPARTICLE_MODES:
+            # The dopant and the graft travel with the job as usual, but
+            # they are applied INSIDE the build rather than after it:
+            # they go on the shell, and the shell does not exist until
+            # the coating has run. `jobs.build` knows that; see its
+            # nanoparticle branch.
+            return Job(mode=mode, params=self._np_params(), **common)
+
         if mode.startswith("TMD"):
             # The dichalcogenide builders take no seed and no dopant: the
             # placement is exact crystallography with nothing random in
@@ -3637,6 +3666,23 @@ class NanocarbonGUI:
             return Job(mode=mode, params=self._tmd_params(mode),
                        seed=int(self.var_seed.get()), **tmd_chemistry,
                        **self._graft_fields())
+
+        if mode in NANOPARTICLE_MODES:
+            # None of the carbon panels apply to the core -- it is not
+            # carbon. The chemistry and graft panels DO, because they act
+            # on the graphitic shell, and the hint under them says so;
+            # the surface panel does not, its annealing and roughness
+            # being arguments the coating sets itself from the
+            # measurements in `coat.py`.
+            self.frame_np.pack(fill="x")
+            self._update_np_centres()
+            self._update_np_hint()
+            self.frame_chem.pack(fill="x", pady=(8, 0))
+            self.frame_graft.pack(fill="x", pady=(8, 0))
+            self._update_dopant_hint()
+            self._update_graft_hint()
+            self._schedule_estimate()
+            return
 
         if mode in ("twisted bilayer", "vdW stack"):
             # Commensurate stacking is exact too, for the same reason.
@@ -4468,6 +4514,259 @@ class NanocarbonGUI:
             return
         self._set_status(f"Saved {Path(path).name}")
 
+
+    #: How many size rows the nanoparticle panel offers. The widest shape
+    #: in the catalogue (the dumbbell, the star) takes five parameters,
+    #: and the rows re-label themselves from the catalogue rather than
+    #: being written out per shape -- so a shape added to `SHAPES`
+    #: appears here with its own labels and needs no GUI edit at all.
+    NP_SIZE_ROWS = 5
+
+    def _build_nanoparticle_panel(self, parent) -> None:
+        """Controls for a particle cut out of an imported crystal.
+
+        The one panel in this window whose first input is a **file**, and
+        the reason the nanoparticle family exists separately: a path, a
+        shape and a centring belong to none of the other panels.
+
+        The size rows are generic on purpose. A sphere takes one number
+        and a dumbbell takes four, with different names, so rather than
+        twenty-three panels there are five rows that read their labels,
+        their defaults and their count out of
+        :data:`~nanocarbon_lab.nanoparticle.shapes.SHAPES`. Adding a
+        shape to that catalogue makes it appear here, correctly labelled,
+        with no change to this file.
+        """
+        from ..nanoparticle.shapes import SHAPE_GROUPS, SHAPES
+
+        self.frame_np = ttk.LabelFrame(parent, text="Nanoparticle",
+                                       padding=8)
+        self.frame_np.columnconfigure(0, weight=1)
+
+        ttk.Label(self.frame_np, text="Crystal file (.cif)").grid(
+            row=0, column=0, columnspan=2, sticky="w")
+        self.var_np_cif = self._var("np_cif", tk.StringVar(value=""))
+        entry = ttk.Entry(self.frame_np, textvariable=self.var_np_cif,
+                          width=24)
+        entry.grid(row=1, column=0, sticky="we")
+        ttk.Button(self.frame_np, text="…", width=3,
+                   command=self._choose_np_cif).grid(row=1, column=1,
+                                                     sticky="e")
+        self.var_np_cif.trace_add("write",
+                                  lambda *_: self._on_np_cif_change())
+
+        ttk.Label(self.frame_np, text="Shape").grid(row=2, column=0,
+                                                    sticky="w",
+                                                    pady=(6, 0))
+        # Grouped in the dropdown, because the groups mean different
+        # things: a round cut exposes whatever facets it happens to, a
+        # facetted habit's faces are lattice planes, and a five-fold
+        # envelope belongs to a particle that is really twinned.
+        ordered = [name for names in SHAPE_GROUPS.values() for name in names]
+        self.var_np_shape = self._var("np_shape",
+                                      tk.StringVar(value="sphere"))
+        ttk.Combobox(self.frame_np, textvariable=self.var_np_shape,
+                     values=ordered, state="readonly", width=20).grid(
+            row=2, column=1, sticky="e", pady=(6, 0))
+        self.var_np_shape.trace_add("write",
+                                    lambda *_: self._on_np_shape_change())
+
+        self._np_size_rows = []
+        self._np_size_vars = []
+        for index in range(self.NP_SIZE_ROWS):
+            var = self._var(f"np_size{index}", tk.DoubleVar(value=0.0))
+            widgets = self._param(self.frame_np, f"size {index}", var,
+                                  1.0, 60.0, 3 + 2 * index,
+                                  resolution=0.5, hard_lo=0.1, hard_hi=400.0,
+                                  command=self._update_np_hint)
+            self._np_size_vars.append(var)
+            self._np_size_rows.append(widgets)
+
+        base = 3 + 2 * self.NP_SIZE_ROWS
+        self.var_np_hollow = self._var("np_hollow", tk.DoubleVar(value=0.0))
+        self._param(self.frame_np, "Hollow wall (Å, 0=solid)",
+                    self.var_np_hollow, 0.0, 15.0, base, resolution=0.5,
+                    hard_lo=0.0, hard_hi=60.0, command=self._update_np_hint)
+
+        ttk.Label(self.frame_np, text="Centre on").grid(row=base + 2,
+                                                         column=0, sticky="w")
+        self.var_np_centre = self._var("np_centre",
+                                       tk.StringVar(value="cell"))
+        self.cmb_np_centre = ttk.Combobox(
+            self.frame_np, textvariable=self.var_np_centre,
+            values=["cell", "void"], state="readonly", width=12)
+        self.cmb_np_centre.grid(row=base + 2, column=1, sticky="e")
+        self.var_np_centre.trace_add("write",
+                                     lambda *_: self._update_np_hint())
+
+        self.var_np_stoich = self._var("np_stoichiometric",
+                                       tk.BooleanVar(value=False))
+        ttk.Checkbutton(self.frame_np,
+                        text="Trim to stoichiometry",
+                        variable=self.var_np_stoich,
+                        command=self._update_np_hint).grid(
+            row=base + 3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        self.var_np_shells = self._var("np_shells", tk.IntVar(value=0))
+        self._param(self.frame_np, "Graphitic shells", self.var_np_shells,
+                    0, 4, base + 4, integer=True, hard_lo=0, hard_hi=8,
+                    command=self._update_np_hint)
+        self.var_np_gap = self._var("np_gap", tk.DoubleVar(value=3.35))
+        self._param(self.frame_np, "Core–shell gap (Å)", self.var_np_gap,
+                    2.0, 5.0, base + 6, resolution=0.05, hard_lo=1.8,
+                    hard_hi=10.0, command=self._update_np_hint)
+        self.var_np_interlayer = self._var("np_interlayer",
+                                           tk.DoubleVar(value=3.35))
+        self._param(self.frame_np, "Shell spacing (Å)",
+                    self.var_np_interlayer, 3.0, 4.0, base + 8,
+                    resolution=0.05, hard_lo=2.0, hard_hi=10.0,
+                    command=self._update_np_hint)
+
+        self.lbl_np = ttk.Label(self.frame_np, text="", foreground=MUTED,
+                                font=("TkDefaultFont", 8), wraplength=230,
+                                justify="left")
+        self.lbl_np.grid(row=base + 10, column=0, columnspan=2, sticky="w",
+                         pady=(4, 0))
+        self._np_shape_catalogue = SHAPES
+        self._apply_np_shape_defaults()
+
+    def _choose_np_cif(self) -> None:
+        """Pick the crystal file."""
+        path = filedialog.askopenfilename(
+            title="Crystal to cut a nanoparticle out of",
+            filetypes=[("Crystal files", "*.cif *.cell *.vasp *.xsf *.pdb"),
+                       ("CIF", "*.cif"), ("All files", "*.*")])
+        if path:
+            self.var_np_cif.set(path)
+
+    def _on_np_cif_change(self) -> None:
+        """Read the chosen crystal and offer its elements as centres."""
+        self._update_np_centres()
+        self._update_np_hint()
+        self._schedule_estimate()
+
+    def _update_np_centres(self) -> None:
+        """Offer ``atom:X`` for every element the chosen crystal holds.
+
+        Which element the particle is centred on decides, for a compound,
+        whether it comes out cation- or anion-rich and therefore whether
+        it is charged. Reading the elements out of the file means the
+        choice is offered rather than having to be typed.
+        """
+        choices = ["cell", "void"]
+        path = self.var_np_cif.get().strip()
+        if path:
+            try:
+                from ..nanoparticle.crystal import read_crystal
+
+                crystal, _ = read_crystal(path)
+                choices += [f"atom:{symbol}" for symbol
+                            in sorted(set(crystal.get_chemical_symbols()))]
+            except Exception:                   # noqa: BLE001 - a hint
+                pass
+        self.cmb_np_centre.configure(values=choices)
+        if self.var_np_centre.get() not in choices:
+            self.var_np_centre.set("cell")
+
+    def _on_np_shape_change(self) -> None:
+        """Re-label the size rows for the newly chosen shape."""
+        self._apply_np_shape_defaults()
+        self._update_np_hint()
+        self._schedule_estimate()
+
+    def _apply_np_shape_defaults(self) -> None:
+        """Label, default and show exactly the rows this shape needs.
+
+        ``sides`` and ``directions`` are skipped rather than shown: the
+        first is an integer count and the second a Miller family written
+        as text, and neither belongs on a length slider. They keep their
+        catalogue defaults, which the command line can override.
+        """
+        spec = self._np_shape_catalogue.get(self.var_np_shape.get())
+        params = dict(spec["params"]) if spec else {}
+        numeric = [(name, value) for name, value in params.items()
+                   if isinstance(value, (int, float))
+                   and not isinstance(value, bool) and name != "sides"]
+        self._applying_values = True
+        try:
+            for index, (caption, _entry, scale) in enumerate(
+                    self._np_size_rows):
+                if index < len(numeric):
+                    name, value = numeric[index]
+                    caption.configure(
+                        text=name.replace("_", " ").capitalize() + " (Å)")
+                    self._np_size_vars[index].set(float(value))
+                    caption.grid()
+                    _entry.grid()
+                    scale.grid()
+                else:
+                    caption.grid_remove()
+                    _entry.grid_remove()
+                    scale.grid_remove()
+        finally:
+            self._applying_values = False
+        self._np_numeric_names = [name for name, _ in numeric]
+
+    def _np_shape_params(self) -> dict:
+        """The shape parameters the visible rows describe."""
+        return {name: float(self._np_size_vars[index].get())
+                for index, name in enumerate(
+                    getattr(self, "_np_numeric_names", []))}
+
+    def _np_params(self) -> dict:
+        """Builder arguments for the nanoparticle mode."""
+        return dict(
+            cif=self.var_np_cif.get().strip(),
+            shape=self.var_np_shape.get(),
+            shape_params=self._np_shape_params(),
+            hollow=float(self.var_np_hollow.get()),
+            centre=self.var_np_centre.get(),
+            stoichiometric=bool(self.var_np_stoich.get()),
+            shells=int(self.var_np_shells.get()),
+            gap=float(self.var_np_gap.get()),
+            interlayer=float(self.var_np_interlayer.get()),
+        )
+
+    def _update_np_hint(self) -> None:
+        """Say what the current settings will and will not give."""
+        if not hasattr(self, "lbl_np"):          # pragma: no cover - startup
+            return
+        path = self.var_np_cif.get().strip()
+        if not path:
+            self.lbl_np.configure(
+                text="Pick a .cif to cut. It has to be a periodic crystal: "
+                     "a molecule has no lattice to repeat.")
+            return
+        lines = []
+        try:
+            from ..nanoparticle.crystal import read_crystal
+
+            _, report = read_crystal(path)
+            lines.append(f"{report.formula}, {report.lattice_system}, "
+                         f"rho {report.density:.2f} g/cm³.")
+            if report.warnings:
+                lines.append("! " + report.warnings[0])
+        except Exception as error:               # noqa: BLE001 - a hint
+            self.lbl_np.configure(text=f"Cannot read that file: {error}")
+            return
+        shells = int(self.var_np_shells.get())
+        if shells:
+            gap = float(self.var_np_gap.get())
+            lines.append(
+                f"{shells} graphitic shell(s) at {gap:.2f} Å. 3.35 Å is "
+                "graphite's spacing and a van der Waals contact; Fe, Co, "
+                "Ni and the other carbide formers chemisorb near 2.1 Å, "
+                "which is a different interface.")
+            lines.append("The dopant and the groups go on the SHELL. The "
+                         "core is never substituted.")
+        else:
+            lines.append("No shells: the bare core. The dopant and graft "
+                         "controls have nothing to act on.")
+        if float(self.var_np_hollow.get()) > 0:
+            lines.append("Hollow: a cage, so almost all surface by design.")
+        self.lbl_np.configure(text=" ".join(lines))
+
+
     def _build_preview(self, parent: ttk.Frame) -> None:
         self.figure = Figure(figsize=(6, 5), dpi=100)
         self.ax = self.figure.add_subplot(111, projection="3d")
@@ -5023,6 +5322,10 @@ class NanocarbonGUI:
         if a.info.get("structure_type") in ("twisted_bilayer", "vdw_stack"):
             self._update_stack_info(a)
             return
+        if a.info.get("structure_type") in ("nanoparticle",
+                                            "encapsulated nanoparticle"):
+            self._update_particle_info(a)
+            return
         # Not every structure carries these: a file read from another
         # code has no ring census, and a builder that places atoms on an
         # exact lattice has no measured geometry to report. Missing
@@ -5247,6 +5550,110 @@ class NanocarbonGUI:
         for message in report.errors[:3]:
             lines.append(f"  {message}")
 
+        self.txt_info.configure(state="normal")
+        self.txt_info.delete("1.0", "end")
+        self.txt_info.insert("1.0", "\n".join(lines))
+        self.txt_info.configure(state="disabled")
+
+
+    def _update_particle_info(self, a) -> None:
+        """Readout for a particle cut out of an imported crystal.
+
+        Its own, for the same reason the dichalcogenide has its own:
+        there is no ring census on a metal core and no sp2 window that
+        means anything there. What matters instead is the composition,
+        the surface fraction, the coordination against the bulk's, and --
+        when there is a shell -- the shell's census and how far off the
+        core it ended up.
+
+        The numbers are read out of the reports the build recorded, never
+        recomputed here. A panel that re-derives what it displays is a
+        second implementation that can disagree with the first.
+        """
+        info = a.info
+        particle = info.get("nanoparticle", {})
+        crystal = info.get("crystal", {})
+        lines = [
+            f"atoms        {len(a):>6d}",
+            f"formula      {a.get_chemical_formula(mode='hill'):>9s}",
+        ]
+        if crystal:
+            lines += [
+                f"crystal      {crystal.get('formula', '?'):>9s}",
+                f"lattice      {crystal.get('lattice_system', '?')}",
+                f"density      {crystal.get('density', 0.0):>6.3f} g/cm³",
+            ]
+        if particle:
+            lines += [
+                "",
+                f"shape        {particle.get('shape_label', '?')}",
+                f"centred on   {particle.get('centre', '?')}",
+                f"core atoms   {particle.get('n_atoms', 0):>6d}",
+                f"d (equiv.)   {particle.get('equivalent_diameter', 0.0):>6.1f} Å",
+                f"surface      {particle.get('surface_atoms', 0):>6d} "
+                f"({particle.get('surface_fraction', 0.0):>4.0%})",
+                f"coordination {particle.get('mean_coordination', 0.0):>6.2f}"
+                f"  (bulk " + ", ".join(
+                    f"{element} {value:.1f}" for element, value
+                    in sorted(particle.get('bulk_coordination', {}).items())
+                ) + ")",
+                f"closest      {particle.get('min_distance', 0.0):>6.3f} Å",
+            ]
+            if len(particle.get("composition", {})) > 1:
+                lines.append(
+                    f"stoichiometry off by "
+                    f"{particle.get('stoichiometry_deviation', 0.0):>4.1%}")
+            if particle.get("trimmed_loose"):
+                lines.append(
+                    f"trimmed      {particle['trimmed_loose']:>6d} loose")
+            if particle.get("atoms_on_the_cut"):
+                lines.append(
+                    f"on the cut   {particle['atoms_on_the_cut']:>6d} atoms")
+            if particle.get("facets"):
+                lines.append("facets       " + ", ".join(
+                    f"{face} {count}" for face, count
+                    in sorted(particle["facets"].items())))
+        coating = info.get("coating")
+        if coating:
+            lines += [
+                "",
+                f"shells       {coating['n_shells']:>6d} "
+                f"({', '.join(str(n) for n in coating['shell_atoms'])} C)",
+                f"gap          {coating['achieved_gap_mean']:>6.2f} Å mean, "
+                f"{coating['achieved_gap_p5']:.2f} p5, "
+                f"{coating['achieved_gap_min']:.2f} min "
+                f"(asked {coating['requested_gap']:.2f})",
+            ]
+            for index, counts in enumerate(coating["ring_counts"]):
+                deficit, expected = coating["ring_budget"][index]
+                flag = "ok" if deficit == expected else "MISMATCH"
+                lines.append(
+                    f"  shell {index + 1}   rings " + ", ".join(
+                        f"{size}:{count}" for size, count
+                        in sorted(counts.items()))
+                    + f"; sum(6-n) {deficit} (6·χ = {expected}) {flag}")
+                if coating.get("bond_p95"):
+                    lines.append(
+                        f"             bonds p95 "
+                        f"{coating['bond_p95'][index]:.3f} / max "
+                        f"{coating['bond_max'][index]:.3f} Å")
+            if coating.get("dopant"):
+                lines.append(
+                    f"dopant       {coating['dopant']} at "
+                    f"{coating['dopant_fraction']:.1%} of the shell")
+            if coating.get("graft"):
+                lines.append(
+                    f"graft        {coating['graft_count']} × "
+                    f"{coating['graft']} on the outer face")
+
+        verdict = info.get("particle_verdict", "")
+        if verdict:
+            lines += ["", f"verdict      {verdict.upper()}",
+                      f"  {info.get('particle_verdict_why', '')}"]
+        for text in (list(crystal.get("warnings", []))
+                     + list(particle.get("warnings", []))
+                     + list((coating or {}).get("warnings", []))):
+            lines += ["", f"! {text}"]
         self.txt_info.configure(state="normal")
         self.txt_info.delete("1.0", "end")
         self.txt_info.insert("1.0", "\n".join(lines))

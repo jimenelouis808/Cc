@@ -446,7 +446,9 @@ def build(job: Job):
         # -- it is a different compound.
         atoms, _, _, _ = builder(
             **job.params, dopant=job.dopant, dopant_conc=job.dopant_conc,
-            dopant_site=job.dopant_site, graft=job.graft,
+            dopant_site=job.dopant_site,
+            codope_spec=parse_codope_spec(job.codope) if job.codope else (),
+            codope_affinity=job.codope_affinity, graft=job.graft,
             graft_coverage=job.graft_coverage, graft_where=job.graft_where,
             seed=job.seed,
         )
@@ -1417,7 +1419,10 @@ def _nanoparticle_cli(job: Job, out: str) -> str:
         if shells > 1:
             parts += ["--interlayer",
                       f"{float(params.get('interlayer', 3.35)):g}"]
-        if job.dopant and job.dopant_conc > 0:
+        if job.codope:
+            parts += ["--codope", job.codope,
+                      "--codope-affinity", job.codope_affinity]
+        elif job.dopant and job.dopant_conc > 0:
             parts += ["--dopant", job.dopant,
                       "--dopant-conc", f"{job.dopant_conc:g}",
                       "--dopant-site", job.dopant_site]

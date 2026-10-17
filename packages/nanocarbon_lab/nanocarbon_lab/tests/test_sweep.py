@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from nanocarbon_lab.jobs import MODES, parameter_names
+from nanocarbon_lab.jobs import MODES, NANOPARTICLE_MODES, parameter_names
 from nanocarbon_lab.workflows import describe_sweep, expand, sweep_jobs, sweep_name
 
 
@@ -154,9 +154,46 @@ class TestEveryModeIsSweepable:
 
     @pytest.mark.parametrize("mode", list(MODES))
     def test_a_mode_can_be_described_without_building(self, mode):
+        """Described with no parameters at all, every mode costs itself.
+
+        Every mode but one: the nanoparticle's input is a FILE, and there
+        is no default crystal. Inventing one -- gold, say -- would make
+        this assertion pass by describing a structure nobody asked for,
+        so the mode is described with a real file instead, in the test
+        below. The size still has to be counted, which is the property
+        this test is actually for.
+        """
+        if mode in NANOPARTICLE_MODES:
+            pytest.skip("needs a crystal file; see the next test")
         summary = describe_sweep(mode, {}, {})
         assert summary["n_structures"] == 1
         assert summary["atoms_total"] > 0
+
+    def test_the_nanoparticle_is_sweepable_once_it_has_a_crystal(self,
+                                                                 tmp_path):
+        """Same property, with the one input it cannot default.
+
+        And the sweep is over the SHAPE as readily as over a size, which
+        is the thing worth having: one command for a size series, or for
+        the same size in six habits.
+        """
+        from ase.build import bulk
+        from ase.io import write
+
+        path = tmp_path / "au.cif"
+        write(path, bulk("Au", "fcc", a=4.078, cubic=True))
+        fixed = {"cif": str(path), "centre": "atom:Au", "shells": 0}
+
+        summary = describe_sweep("nanoparticle", fixed, {})
+        assert summary["n_structures"] == 1
+        assert summary["atoms_total"] > 0
+
+        series = describe_sweep(
+            "nanoparticle", fixed,
+            {"shape_params": [{"radius": 8.0}, {"radius": 12.0},
+                              {"radius": 16.0}]})
+        assert series["n_structures"] == 3
+        assert series["atoms_total"] > summary["atoms_total"]
 
     @pytest.mark.parametrize("mode", list(MODES))
     def test_a_mode_exposes_its_parameters(self, mode):

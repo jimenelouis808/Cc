@@ -307,14 +307,19 @@ def test_every_mode_reaches_a_branch_that_knows_its_builder():
     A mode may be absent only by being on the list above, which is read
     as a claim that something else answers for it.
     """
-    from nanocarbon_lab.jobs import MODES
+    from nanocarbon_lab.jobs import MODES, NANOPARTICLE_MODES
     from nanocarbon_lab.presets import KNEE_MODES
 
     body = _current_job_source(_source())
     named = {mode for mode in MODES if f'"{mode}"' in body}
-    # The knee modes are dispatched as a set rather than one by one.
+    # Two families are dispatched as a set rather than mode by mode. The
+    # constant has to be the one the branch actually tests, or this
+    # concession would let a mode through that nothing handles: naming
+    # `KNEE_MODES` while branching on something else would pass.
     assert "KNEE_MODES" in body
     named |= set(KNEE_MODES)
+    assert "NANOPARTICLE_MODES" in body
+    named |= set(NANOPARTICLE_MODES)
     unreached = set(MODES) - named - JOB_HANDLED_ELSEWHERE
     assert not unreached, (
         f"{sorted(unreached)} reach the capped-tube branch, which will "

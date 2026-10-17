@@ -6,6 +6,93 @@ está la trampa.
 
 ---
 
+## nanocarbon_lab · importa un .cif y corta nanopartículas
+
+Pestaña nueva en la ventana —**familia «nanoparticle»**— y dos subcomandos
+nuevos. Abres un `.cif` (el tuyo, o uno de una base de datos), eliges una
+forma, y sale la nanopartícula cortada de ese cristal. Después, si quieres,
+la recubres de carbono grafítico.
+
+**Las formas: 23, en cuatro grupos que significan cosas distintas.**
+
+- **Redondas** — esfera, elipsoide, barra (de puntas redondas o cortadas),
+  disco, cono o tronco de cono, toro. Son cortes *en el marco del
+  laboratorio*: el corte expone las facetas que le toquen, que es lo que
+  tiene una partícula templada o molida y no una facetada.
+- **Bloques y prismas** — cubo, caja, prisma de n lados, plaquetas,
+  bipirámides.
+- **Hábitos facetados** — octaedro, cuboctaedro, octaedro truncado
+  (el sólido de Kelvin), tetraedro, dodecaedro rómbico. Aquí las caras
+  **son planos de red**, y para construirlas hace falta el cristal.
+- **Envolventes de cinco pliegues** — decaedro e icosaedro. Aviso honesto
+  y en el docstring: una partícula decaédrica real son cinco cristales
+  *maclados*, y lo que corta esto es la silueta, no las fronteras de macla.
+- **Composiciones** — estrella, tetrápodo, pesa, cubo cóncavo.
+
+Y cualquiera de las 23 puede ser **hueca** (`--hollow 5`): una nanocaja,
+una jaula, un cascarón. No son 23 entradas más del catálogo: una forma es
+una función de distancia con signo, así que hueco es una diferencia y una
+estrella es una unión suave. Está también la **construcción de Wulff** con
+*tus* energías superficiales — no trae tabla propia y no la va a traer,
+porque dependen de la terminación, de los adsorbatos y del método, y
+ponerla sería tomar la decisión más importante de la construcción por ti.
+
+**El recubrimiento grafítico.** Una o varias cortezas (una nano-cebolla,
+que es lo que da el arco eléctrico), a 3.35 Å del átomo más cercano del
+núcleo. Pasa por la misma tubería que las uniones y las schwarzitas, así
+que el censo de anillos no se coloca: lo fija la topología del campo y el
+chequeo de Euler lo verifica. Medido `suma(6-n) = +12` exacto en las seis
+formas probadas. Y luego se dopa (N, B, P, S… donde quieras, incluso sobre
+los pentágonos) y se funcionaliza (–OH, –COOH, =O, –NH2, –F…).
+
+**El dopado va en la CORTEZA, nunca en el núcleo.** Poner un nitrógeno
+donde había un hierro no es dopar: es otro compuesto.
+
+**Tres cosas que conviene saber antes de usarlo.**
+
+1. **Dónde cae el centro decide la composición de un compuesto, y por
+   tanto su carga.** En sal de roca, centrado en el catión el cubo sale
+   rico en catión y centrado en el anión, rico en anión. No hay opción
+   neutra; `--centre cell` es solo la que no pide información extra. Con
+   `--stoichiometric` se recorta, y el recorte es la receta habitual y es
+   una heurística, y lo dice.
+
+2. **Si una faceta aterriza sobre un plano de red, el conteo depende del
+   último dígito del tamaño.** Un cubo de arista 4a de oro fcc centrado en
+   un punto de red lee **171, 256 o 365 átomos** según un cambio de una
+   parte en un millón — factor 2.1. Son tres terminaciones distintas y las
+   tres son reales; lo que estaría mal es no decirlo, así que se avisa. Y
+   desplazando el corte para que las caras caigan *entre* los planos, el
+   número es exactamente el de la red (4n³ para todo n probado). El
+   programa **no mueve el corte por su cuenta**: qué plano termina una
+   faceta es una afirmación sobre la partícula.
+
+3. **Una pared recubierta nunca sale tan buena como una jaula libre, y no
+   debería.** Una corteza que se ajusta a un núcleo facetado está tensa, y
+   «tensa» es el veredicto honesto. Lo que sí sería un fallo es carbono
+   dentro del metal, y eso es lo que evita el anclaje. Se informa del hueco
+   en tres números (media, percentil 5, mínimo) y de los enlaces en dos
+   (p95 y máximo), porque el extremo sobre mil enlaces es cola: una pared
+   con p95 1.48 Å y máximo 1.58 Å es una pared buena con una esquina tensa.
+
+**Y 3.35 Å es un contacto de van der Waals, no un enlace.** Fe, Co, Ni, Ti
+y los demás formadores de carburo quimisorben hacia 2.1 Å, que es otra
+interfaz con otra respuesta electrónica. Se ofrecen las dos, el aviso sale
+en los dos casos, y nada aquí calcula cuál prefiere tu sistema.
+
+**Comprobado contra algo de fuera del framework**: el octaedro cortado
+reproduce exactamente el conteo de `ase.cluster.Octahedron` en cinco
+tamaños (44, 85, 146, 231 y 489 átomos), lo que fija toda la cadena —
+familia de Miller, poliedro de semiespacios, supercelda, corte — sin que
+el paquete se corrija a sí mismo.
+
+**Pendiente de que lo pruebes tú**: el panel de la ventana está escrito y
+pasa las comprobaciones estáticas, pero este contenedor no tiene tkinter,
+así que **no he podido abrirlo**. La biblioteca y la línea de comandos sí
+están corridas de punta a punta.
+
+---
+
 ## ramancarbon · el VAMAS sale con la deconvolución dentro
 
 El archivo ya abría en CasaXPS, pero abría **limpio**: la medida y nada
