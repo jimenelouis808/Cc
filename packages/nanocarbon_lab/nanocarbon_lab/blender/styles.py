@@ -444,7 +444,170 @@ def resolve_colour_by(requested: str | None, style: Style) -> str:
     return mode
 
 
-def materials_for(style: Style, colour_by: str, keys) -> list[MaterialSpec]:
+# ----------------------------------------------------------------------
+# finishes
+# ----------------------------------------------------------------------
+#: A **finish** replaces a material's character while keeping its colour,
+#: so it is a third axis beside the style and the colour mode: "element
+#: colours, in glass, on the cosmos backdrop" is one render rather than a
+#: style nobody wrote.
+#:
+#: ``"style"`` means "leave it alone", which is the default: a style's
+#: author chose its character and a finish overrides that choice, so it
+#: has to be asked for.
+FINISHES = ("style", "glass", "crystal", "glow", "neon", "metal", "gold",
+            "brushed", "chrome", "plastic", "ceramic", "clay", "matte",
+            "wax", "iridescent", "toon")
+
+#: How much of a material's own colour a glass finish keeps. 0 is clear
+#: glass with no tint at all and 1 is the colour at full strength, which
+#: on anything dark comes out black -- see :func:`apply_finish`.
+GLASS_TINT = 0.25
+
+
+def apply_finish(spec: MaterialSpec, finish: str) -> MaterialSpec:
+    """The same material with a different surface character.
+
+    The **colour survives and everything else is replaced**, which is
+    what makes a finish composable with a colour mode: colouring by
+    element and then asking for glass gives a glass carbon and a glass
+    oxygen, each still its own colour, rather than one grey glass
+    object.
+
+    Transmission is done on the Principled BSDF rather than with the
+    Glass shader, for two reasons that matter here: Principled keeps the
+    base colour tinting the transmitted light (a Glass node's colour
+    multiplies differently and washes out), and EEVEE renders Principled
+    transmission while its handling of a raw Glass node is poorer. The
+    ``glass_cryo`` style still uses the Glass node directly, which is a
+    legitimate second look rather than a duplicate.
+    """
+    if finish in ("style", "", None):
+        return spec
+    if finish not in FINISHES:
+        raise ValueError(
+            f"unknown finish {finish!r}; known: {', '.join(FINISHES)}")
+    colour = spec.base_color
+    rgb = colour[:3]
+    # Transmitted light is multiplied by the base colour at every
+    # bounce, so a glass version of a dark material is not clear glass:
+    # carbon's element grey (0.35) through a cage's near and far walls
+    # comes out nearly black, which reads as soot rather than as glass.
+    # Lifting the tint toward white keeps *which* element an atom is
+    # while letting the light through, which is what "in glass" means.
+    tint = tuple(1.0 - GLASS_TINT * (1.0 - channel) for channel in rgb)
+
+    if finish == "glass":
+        return replace(spec, base_color=(*tint, colour[3]),
+                       metallic=0.0, roughness=0.04,
+                       transmission=1.0, ior=1.52, clearcoat=0.0,
+                       emission_strength=0.0, shader="principled",
+                       anisotropy=0.0, thin_film=0.0)
+    if finish == "crystal":
+        # A higher index bends light more, so facets and edges catch
+        # colour the way a cut stone does. 2.4 is diamond.
+        return replace(spec, base_color=(*tint, colour[3]),
+                       metallic=0.0, roughness=0.015,
+                       transmission=1.0, ior=2.4, clearcoat=0.0,
+                       emission_strength=0.0, shader="principled",
+                       anisotropy=0.0, thin_film=0.0)
+    if finish == "glow":
+        # A surface that also emits: it still catches light and still
+        # has a silhouette, which pure emission does not.
+        return replace(spec, metallic=0.0, roughness=0.3,
+                       emission_color=rgb, emission_strength=3.0,
+                       transmission=0.0, shader="principled",
+                       clearcoat=0.2)
+    if finish == "neon":
+        # Pure light, no surface response. Reads as a tube sign.
+        return replace(spec, emission_color=rgb, emission_strength=8.0,
+                       shader="emission")
+    if finish == "metal":
+        return replace(spec, metallic=1.0, roughness=0.25,
+                       transmission=0.0, emission_strength=0.0,
+                       clearcoat=0.0, shader="principled",
+                       specular_tint=rgb, anisotropy=0.0)
+    if finish == "gold":
+        # The colour is overridden here on purpose: "gold" is a
+        # material, not a hue to apply to someone else's colour, and a
+        # blue gold is a contradiction.
+        return replace(spec, base_color=(0.86, 0.66, 0.24, colour[3]),
+                       metallic=1.0, roughness=0.20, clearcoat=0.35,
+                       coat_tint=(1.0, 0.92, 0.75),
+                       specular_tint=(1.0, 0.88, 0.62),
+                       transmission=0.0, emission_strength=0.0,
+                       shader="principled")
+    if finish == "brushed":
+        return replace(spec, metallic=1.0, roughness=0.35,
+                       anisotropy=0.85, anisotropy_rotation=0.25,
+                       transmission=0.0, emission_strength=0.0,
+                       shader="principled")
+    if finish == "chrome":
+        return replace(spec, metallic=1.0, roughness=0.02,
+                       transmission=0.0, emission_strength=0.0,
+                       clearcoat=0.0, shader="principled")
+    if finish == "plastic":
+        return replace(spec, metallic=0.0, roughness=0.25,
+                       clearcoat=0.6, coat_roughness=0.05,
+                       transmission=0.0, emission_strength=0.0,
+                       shader="principled")
+    if finish == "ceramic":
+        return replace(spec, metallic=0.0, roughness=0.12,
+                       clearcoat=0.8, coat_roughness=0.02,
+                       subsurface=0.15, subsurface_color=rgb,
+                       transmission=0.0, emission_strength=0.0,
+                       shader="principled")
+    if finish == "clay":
+        return replace(spec, roughness=0.75, shader="clay",
+                       metallic=0.0, transmission=0.0,
+                       emission_strength=0.0)
+    if finish == "matte":
+        return replace(spec, metallic=0.0, roughness=0.9, sheen=0.25,
+                       clearcoat=0.0, transmission=0.0,
+                       emission_strength=0.0, shader="principled")
+    if finish == "wax":
+        # Light travelling a short way inside before coming back out is
+        # what separates wax, jade and skin from painted plastic.
+        return replace(spec, metallic=0.0, roughness=0.35,
+                       subsurface=0.7, subsurface_color=rgb,
+                       transmission=0.0, emission_strength=0.0,
+                       shader="principled")
+    if finish == "iridescent":
+        return replace(spec, metallic=1.0, roughness=0.10,
+                       thin_film=430.0, thin_film_ior=1.45,
+                       transmission=0.0, emission_strength=0.0,
+                       shader="principled")
+    if finish == "toon":
+        return replace(spec, shader="toon", metallic=0.0,
+                       transmission=0.0, emission_strength=0.0)
+    raise AssertionError(f"finish {finish!r} is in FINISHES with no rule.")
+
+
+def describe_finishes() -> str:
+    """One line per finish, for ``--list-finishes``."""
+    notes = {
+        "style": "leave the style's own character alone (the default)",
+        "glass": "refractive, colour tinting the light through it",
+        "crystal": "glass at diamond's index -- edges catch colour",
+        "glow": "a surface that also emits: still lit, still a silhouette",
+        "neon": "pure light, no surface response, like a tube sign",
+        "metal": "polished, with the highlight taking the base colour",
+        "gold": "polished gold under a tinted clear coat (sets the colour)",
+        "brushed": "anisotropic metal: the highlight stretches",
+        "chrome": "a mirror",
+        "plastic": "coloured body under a glossy clear coat",
+        "ceramic": "glazed, with a little light scattering under it",
+        "clay": "purely diffuse, no specular at all",
+        "matte": "rough with a velvet rim",
+        "wax": "subsurface scattering -- wax, jade, skin",
+        "iridescent": "thin-film interference, colour shifts with angle",
+        "toon": "flat banded shading",
+    }
+    return "\n".join(f"{name:11s} {notes[name]}" for name in FINISHES)
+
+
+def materials_for(style: Style, colour_by: str, keys,
+                  finish: str = "style") -> list[MaterialSpec]:
     """The material list for a colour mode, one entry per key.
 
     Parameters
@@ -457,6 +620,10 @@ def materials_for(style: Style, colour_by: str, keys) -> list[MaterialSpec]:
         What the materials are indexed by: ring sizes for ``"ring"``,
         element symbols for ``"element"``, item indices for
         ``"structure"``, ignored for ``"uniform"``.
+    finish
+        One of :data:`FINISHES`. ``"style"`` leaves each material's
+        character alone, which is the default; anything else replaces
+        the character and keeps the colour.
 
     Returns
     -------
@@ -473,16 +640,18 @@ def materials_for(style: Style, colour_by: str, keys) -> list[MaterialSpec]:
     like that style rather than like a default.
     """
     if colour_by == "ring":
-        return [style.ring_material(int(key)) for key in keys]
-    if colour_by == "element":
-        return [style.hexagon.with_colour(element_colour(str(key)))
-                for key in keys]
-    if colour_by == "structure":
-        return [style.hexagon.with_colour(structure_colour(int(key)))
-                for key in keys]
-    if colour_by == "uniform":
-        return [style.hexagon]
-    raise ValueError(f"unknown colour mode {colour_by!r}.")
+        specs = [style.ring_material(int(key)) for key in keys]
+    elif colour_by == "element":
+        specs = [style.hexagon.with_colour(element_colour(str(key)))
+                 for key in keys]
+    elif colour_by == "structure":
+        specs = [style.hexagon.with_colour(structure_colour(int(key)))
+                 for key in keys]
+    elif colour_by == "uniform":
+        specs = [style.hexagon]
+    else:
+        raise ValueError(f"unknown colour mode {colour_by!r}.")
+    return [apply_finish(spec, finish) for spec in specs]
 
 
 # ----------------------------------------------------------------------
@@ -1095,6 +1264,7 @@ __all__ = [
     "DEFAULT_ELEMENT_RADIUS",
     "ELEMENT_COLOURS",
     "ELEMENT_RADII",
+    "FINISHES",
     "SHADERS",
     "SPLIT_BONDS",
     "STRUCTURE_PALETTE",
@@ -1104,6 +1274,8 @@ __all__ = [
     "LightSpec",
     "MaterialSpec",
     "Style",
+    "apply_finish",
+    "describe_finishes",
     "element_colour",
     "element_radius",
     "get_style",

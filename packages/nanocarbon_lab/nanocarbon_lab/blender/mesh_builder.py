@@ -60,6 +60,7 @@ def build_ball_and_stick(
     bond_radius: float = 0.12,
     sphere_subdiv: int = 2,
     bond_segments: int = 8,
+    finish: str = "style",
 ) -> list[bpy.types.Object]:
     """Merged sphere + cylinder meshes, coloured by ``colour_by``.
 
@@ -70,7 +71,7 @@ def build_ball_and_stick(
     positions = bundle["positions"]
     bonds = bundle["bonds"]
     keys, slot_per_atom = colour_keys(bundle, colour_by)
-    specs = style_defs.materials_for(style, colour_by, keys)
+    specs = style_defs.materials_for(style, colour_by, keys, finish)
     materials = [material_from_spec(f"mat_{colour_by}_{key}", spec)
                  for key, spec in zip(keys, specs, strict=True)]
     radii = atom_radii(bundle, colour_by, atom_scale)
@@ -141,8 +142,8 @@ def build_ball_and_stick(
         for material in materials:
             bonds_mesh.materials.append(material)
     else:
-        bonds_mesh.materials.append(
-            material_from_spec("mat_bond", style.bond))
+        bonds_mesh.materials.append(material_from_spec(
+            "mat_bond", style_defs.apply_finish(style.bond, finish)))
     bonds_obj = bpy.data.objects.new("Bonds", bonds_mesh)
     bpy.context.collection.objects.link(bonds_obj)
 
@@ -175,6 +176,7 @@ def build_smooth_surface(
     style,
     skin_radius: float = 1.6,
     subsurf_levels: int = 2,
+    finish: str = "style",
 ) -> bpy.types.Object:
     """One continuous glossy tube (Skin + Subdivision modifiers).
 
@@ -201,5 +203,6 @@ def build_smooth_surface(
     subsurf.levels = subsurf_levels
     subsurf.render_levels = subsurf_levels
 
-    obj.data.materials.append(material_from_spec("mat_surface", style.hexagon))
+    obj.data.materials.append(material_from_spec(
+        "mat_surface", style_defs.apply_finish(style.hexagon, finish)))
     return obj

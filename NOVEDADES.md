@@ -6,6 +6,91 @@ está la trampa.
 
 ---
 
+## nanocarbon_lab · acabados, motor a elegir, y el .blend editable
+
+### Dos respuestas primero
+
+**Sí, los renders que te enseñé eran modo `ring`** — los cinco estilos de
+portada traen `default_colour_by="ring"`. Y hay una razón por la que no
+usé elemento para enseñarlos: un C240 o un nanotubo **coloreado por
+elemento es de un solo color**, correctamente, porque todos sus átomos
+son carbono. El modo elemento luce en una estructura dopada,
+funcionalizada o encapsulada. El ejemplo de abajo es una jaula al 8 % N,
+8 % B con hidroxilos: cinco elementos, y se lee de un vistazo.
+
+**No, no era EEVEE: era Cycles**, y siempre lo ha sido — los diecisiete
+estilos declaran `engine="CYCLES"`. Lo que faltaba era poder *elegir*, y
+eso ya está.
+
+### Acabados: un cuarto eje
+
+`--style` es el carácter de la superficie, `--colour-by` es lo que
+significa el color, `--background` es el fondo, y ahora `--finish`
+**sustituye el carácter conservando el color**:
+
+```bash
+nanocarbon render jaula.xyz --colour-by element --finish glass
+nanocarbon render jaula.xyz --style cosmos --finish iridescent
+nanocarbon render --list-finishes
+```
+
+Dieciséis: `glass`, `crystal`, `glow`, `neon`, `metal`, `gold`,
+`brushed`, `chrome`, `plastic`, `ceramic`, `clay`, `matte`, `wax`,
+`iridescent`, `toon`, y `style` (dejar el del estilo, que es lo que hace
+por defecto).
+
+Lo importante: colorear por elemento y pedir cristal da **un carbono de
+cristal y un oxígeno de cristal, cada uno con su color**. Ése es el punto
+de mantener los ejes separados.
+
+Un número ahí no es gusto sino medida: el cristal **aclara un color
+oscuro** hacia el blanco. La luz transmitida se multiplica por el color
+base en cada rebote, así que cristal sobre el gris del carbono,
+atravesando la pared cercana y la lejana de una jaula, sale casi negro
+— hollín, no cristal.
+
+### Cycles o EEVEE, a elegir
+
+```bash
+nanocarbon render jaula.xyz --engine eevee    # segundos, para comprobar
+nanocarbon render jaula.xyz                   # Cycles, para el final
+```
+
+Tres cosas que costó averiguar y que conviene no volver a descubrir:
+
+- **Cycles es un add-on**, así que en un `bpy` de PyPI no aparece en la
+  lista de motores — esa lista se construye antes de que los add-ons se
+  registren. Asignarlo funciona igual. No concluyas de la lista que no
+  está.
+- **El identificador de EEVEE se movió**: `BLENDER_EEVEE_NEXT` en la 4.x
+  y `BLENDER_EEVEE` en la 5. Se prueban los dos.
+- **EEVEE es un rasterizador y necesita contexto de GPU.** Sin EGL no da
+  error: **aborta el proceso** con SIGABRT tras imprimir una línea sobre
+  `libEGL.so.1`, y eso no se puede capturar desde Python. Ahora se
+  comprueba antes y se cae a Cycles avisando. Comprueba **EGL en
+  concreto**: la primera versión aceptaba EGL, GL u OpenGL, y este
+  contenedor tiene `libGL.so.1` y no tiene libEGL, así que pasaba la
+  comprobación directo al abort que existía para evitar.
+
+### El .blend con todo desmontado
+
+`--save-blend` / `--open` ya existían; lo que no estaba claro es qué cae
+dentro. Guardé uno y lo volví a abrir para comprobarlo:
+
+```
+engine   : CYCLES | samples: 320
+objects  : ['Atoms', 'Bonds', 'Camera', 'Light0', 'Light1']
+materials: mat_element_B, mat_element_C, mat_element_H, mat_element_N, mat_element_O
+world    : Background, Output, TexCoord, TexVoronoi, ColorRamp, MixRGB, TexNoise, ...
+```
+
+Un material por elemento (o por tamaño de anillo, o por pieza) con su
+árbol de nodos, las luces en sus posiciones escaladas, la cámara en el
+ángulo elegido y el grafo entero del campo de estrellas en el mundo.
+Todo datos normales de Blender para desmontar.
+
+---
+
 ## nanocarbon_lab · Blender para portada de revista
 
 ### La cámara ya busca el mejor ángulo

@@ -263,6 +263,12 @@ RENDER_VIEWS = ["auto", *sorted(_CAMERA_DEFS.NAMED_VIEWS)]
 #: Scene effects, in the order the catalogue lists them.
 RENDER_EFFECTS = list(_EFFECT_DEFS.EFFECTS)
 RENDER_COLOUR_MODES = [STYLE_DEFAULT_LABEL, *_STYLE_DEFS.COLOUR_MODES]
+#: Surface finishes. "style" is first because leaving a style's own
+#: character alone is the default and the common case.
+RENDER_FINISHES = list(_STYLE_DEFS.FINISHES)
+#: Renderers. Cycles is every style's own; EEVEE is the fast preview and
+#: needs a GPU context, which the render script checks for.
+RENDER_ENGINES = ["cycles", "eevee"]
 RENDER_BACKGROUNDS = [STYLE_DEFAULT_LABEL, *_STYLE_DEFS.BACKGROUNDS]
 #: What a colour mode means, for the hint under the menu.
 COLOUR_MODE_HELP = {
@@ -5232,6 +5238,19 @@ class NanocarbonGUI:
         ttk.Checkbutton(ren, text="Floor plane (ground + contact shadow)",
                         variable=self.var_floor).pack(anchor="w")
 
+        row_fin = ttk.Frame(ren)
+        row_fin.pack(fill="x", pady=(0, 6))
+        ttk.Label(row_fin, text="Finish").pack(side="left")
+        self.var_finish = tk.StringVar(value="style")
+        ttk.Combobox(row_fin, textvariable=self.var_finish,
+                     values=RENDER_FINISHES, state="readonly",
+                     width=10).pack(side="left", padx=(4, 0))
+        ttk.Label(row_fin, text="Engine").pack(side="left", padx=(8, 0))
+        self.var_engine = tk.StringVar(value="cycles")
+        ttk.Combobox(row_fin, textvariable=self.var_engine,
+                     values=RENDER_ENGINES, state="readonly",
+                     width=7).pack(side="left", padx=(4, 0))
+
         row_view = ttk.Frame(ren)
         row_view.pack(fill="x", pady=(0, 6))
         ttk.Label(row_view, text="Angle").pack(side="left")
@@ -6330,6 +6349,8 @@ class NanocarbonGUI:
                 blender=self.blender_exe or None,
                 interactive=interactive,
                 view=self.var_view.get(),
+                finish=self.var_finish.get(),
+                engine=self.var_engine.get(),
                 effects=effects,
                 style_effects=bool(self.var_style_effects.get()),
             )

@@ -403,6 +403,96 @@ class TestGlare:
         assert blurred[20, 20] < 0.5
 
 
+class TestFinishes:
+    """A finish is a third axis beside the style and the colour mode:
+    "element colours, in glass, on the cosmos backdrop" has to be one
+    render rather than a style nobody wrote."""
+
+    def test_the_colour_survives_and_the_character_does_not(self, styles):
+        base = styles.MaterialSpec(base_color=(0.2, 0.6, 0.9, 1.0),
+                                   metallic=1.0, roughness=0.9)
+        glass = styles.apply_finish(base, "glass")
+        assert glass.transmission == 1.0
+        assert glass.metallic == 0.0
+        # Still recognisably blue: a glass version of an element must
+        # still say which element it is.
+        assert glass.base_color[2] > glass.base_color[0]
+
+    def test_style_is_a_no_op(self, styles):
+        base = styles.get_style("gold_nanotech").hexagon
+        assert styles.apply_finish(base, "style") is base
+
+    def test_glass_lifts_a_dark_colour_or_it_reads_as_soot(self, styles):
+        """Transmitted light is multiplied by the base colour at every
+        bounce, so carbon's grey through a cage's near and far walls
+        comes out nearly black."""
+        dark = styles.MaterialSpec(base_color=(0.1, 0.1, 0.1, 1.0))
+        glass = styles.apply_finish(dark, "glass")
+        assert min(glass.base_color[:3]) > 0.5
+
+    def test_every_finish_produces_a_valid_material(self, styles):
+        base = styles.MaterialSpec(base_color=(0.4, 0.5, 0.6, 1.0))
+        for name in styles.FINISHES:
+            spec = styles.apply_finish(base, name)
+            assert spec.shader in styles.SHADERS
+            assert 0.0 <= spec.roughness <= 1.0
+            assert 0.0 <= spec.metallic <= 1.0
+
+    def test_gold_sets_its_own_colour(self, styles):
+        """"Gold" is a material, not a hue to apply to someone else's
+        colour, and a blue gold is a contradiction."""
+        blue = styles.MaterialSpec(base_color=(0.0, 0.0, 1.0, 1.0))
+        gold = styles.apply_finish(blue, "gold")
+        assert gold.base_color[0] > gold.base_color[2]
+
+    def test_an_unknown_finish_names_the_ones_that_exist(self, styles):
+        with pytest.raises(ValueError, match="glass"):
+            styles.apply_finish(styles.MaterialSpec(base_color=(1, 1, 1, 1)),
+                                "velvet")
+
+    def test_it_composes_with_every_colour_mode(self, styles):
+        """The point of the axis being separate."""
+        style = styles.get_style("cosmos")
+        for mode, keys in (("ring", [6, 5]), ("element", ["C", "N"]),
+                           ("structure", [0, 1]), ("uniform", [0])):
+            specs = styles.materials_for(style, mode, keys, finish="glass")
+            assert len(specs) == len(keys)
+            assert all(spec.transmission == 1.0 for spec in specs)
+
+    def test_describe_covers_every_finish(self, styles):
+        """A finish with no description is one nobody can choose."""
+        text = styles.describe_finishes()
+        for name in styles.FINISHES:
+            assert name in text
+
+
+class TestEngine:
+    def test_every_style_asks_for_cycles(self, styles):
+        """Cycles is the default throughout, and --engine is the
+        override. This pins which way round that is -- the question
+        "is this EEVEE?" has a definite answer."""
+        assert {styles.get_style(n).engine
+                for n in styles.list_styles()} == {"CYCLES"}
+
+    def test_the_render_script_maps_both_engine_names(self):
+        """EEVEE's identifier changed across Blender versions
+        (BLENDER_EEVEE_NEXT through 4.x), so both are tried."""
+        source = (BLENDER_DIR / "render_cnt.py").read_text()
+        assert "BLENDER_EEVEE_NEXT" in source
+        assert "BLENDER_EEVEE" in source
+        assert '"CYCLES"' in source
+
+    def test_eevee_is_ruled_out_before_it_can_abort(self):
+        """EEVEE is a rasteriser: with no GPU context it does not raise,
+        it kills the process with SIGABRT after one line about libEGL,
+        which cannot be caught from Python once it starts. So it is
+        checked for beforehand -- and specifically for EGL, since libGL
+        is present on headless boxes and finding it proves nothing."""
+        source = (BLENDER_DIR / "render_cnt.py").read_text()
+        assert "_can_rasterise" in source
+        assert 'find_library("EGL")' in source
+
+
 class TestStylesCarryEffects:
     def test_the_cover_styles_bring_their_own(self, styles):
         """A style that is *about* a laser should arrive with the laser

@@ -45,6 +45,7 @@ scene inside an interactive Blender session.
 from __future__ import annotations
 
 import argparse
+import ctypes.util
 import math
 import sys
 from pathlib import Path
@@ -73,6 +74,22 @@ def _parse_args() -> argparse.Namespace:
         choices=list(style_defs.COLOUR_MODES),
         help="What an atom's colour means. Default: the style's own.",
     )
+    p.add_argument(
+        "--finish", default="style", choices=list(style_defs.FINISHES),
+        help="Replace every material's character, keeping its colour: "
+             "glass, glow, metal, brushed, wax... 'style' leaves the "
+             "style's own alone. --list-finishes describes them.",
+    )
+    p.add_argument(
+        "--engine", default=None, choices=["cycles", "eevee"],
+        help="Renderer. Cycles (the default for every style) is a path "
+             "tracer: real refraction, caustics and soft shadows, and "
+             "slow. EEVEE is rasterised and takes seconds, for checking "
+             "a composition before committing to the final render.",
+    )
+    p.add_argument("--list-finishes", action="store_true",
+                   dest="list_finishes",
+                   help="Describe the finishes and exit.")
     p.add_argument(
         "--background", default=None, choices=list(style_defs.BACKGROUNDS),
         help="Override the style's backdrop.",
@@ -550,9 +567,71 @@ def _object_corners(objects):
     return corners or [(0.0, 0.0, 0.0)]
 
 
+#: What ``--engine`` names map to. Blender's own identifiers change
+#: between versions (EEVEE was ``BLENDER_EEVEE_NEXT`` through 4.x), so
+#: the aliases are tried in order and the first the running Blender
+#: accepts wins.
+ENGINE_IDS = {
+    "cycles": ("CYCLES",),
+    "eevee": ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"),
+}
+
+
+def _can_rasterise() -> bool:
+    """Is there a GPU context for EEVEE to draw into?
+
+    EEVEE is a **rasteriser**: it needs OpenGL, which headless Blender
+    reaches through EGL. On a machine without it -- a container, a CI
+    runner, a server with no GPU -- requesting EEVEE does not raise or
+    return an error, it **aborts the process** with SIGABRT after
+    printing one line about ``libEGL.so.1``. That cannot be caught from
+    Python once it starts, so it has to be ruled out before.
+
+    Cycles has no such requirement: it path-traces on the CPU when there
+    is no GPU, which is why it is the default here and why this falls
+    back to it rather than refusing.
+    """
+    if sys.platform.startswith("win") or sys.platform == "darwin":
+        return True
+    # EGL specifically, not "any GL library". libGL is present on most
+    # Linux boxes without a display and finding it proves nothing: this
+    # container has libGL.so.1 and no libEGL, and the first version of
+    # this check passed it straight through to the abort it exists to
+    # prevent.
+    return ctypes.util.find_library("EGL") is not None
+
+
+def _set_engine(scene, wanted: str) -> str:
+    """Set the render engine, and say which one actually took.
+
+    Cycles is an **add-on**, so in a stock ``bpy`` wheel it is missing
+    from ``render.engine``'s enum listing until it registers -- the
+    listing is built before add-ons load. Assigning ``"CYCLES"`` works
+    anyway and that is what these styles have always done; this falls
+    back rather than assuming, so a build genuinely without Cycles
+    renders in EEVEE and says so instead of dying.
+    """
+    if wanted == "eevee" and not _can_rasterise():
+        print("note: EEVEE needs a GPU context (libEGL) and there is "
+              "none here, so it would abort rather than fail; rendering "
+              "with Cycles instead.", file=sys.stderr)
+        wanted = "cycles"
+    for identifier in ENGINE_IDS.get(wanted, (wanted,)):
+        try:
+            scene.render.engine = identifier
+            return identifier
+        except (TypeError, ValueError):
+            continue
+    print(f"note: {wanted} is not available in this Blender; "
+          f"rendering with {scene.render.engine}.", file=sys.stderr)
+    return scene.render.engine
+
+
 def _setup_render(style, args) -> None:
     scene = bpy.context.scene
-    scene.render.engine = style.engine
+    wanted = args.engine or ("cycles" if style.engine == "CYCLES"
+                             else "eevee")
+    engine = _set_engine(scene, wanted)
     scene.render.resolution_x, scene.render.resolution_y = args.resolution
     # Either the flag or the style's own backdrop opens the alpha. The
     # flag is kept because it predates ``Background`` and a caller may
@@ -560,12 +639,19 @@ def _setup_render(style, args) -> None:
     scene.render.film_transparent = (
         args.transparent_background or style.background.is_transparent
     )
-    if style.engine == "CYCLES":
-        scene.cycles.samples = args.samples or style.samples
+    samples = args.samples or style.samples
+    if engine == "CYCLES":
+        scene.cycles.samples = samples
         try:
             scene.cycles.device = "GPU"
         except Exception:
             pass
+    elif hasattr(scene, "eevee"):
+        # EEVEE's samples are temporal anti-aliasing passes rather than
+        # light paths, so the same number means something different and
+        # far fewer are needed; capped so a Cycles-tuned 512 does not
+        # make the "fast preview" slow.
+        scene.eevee.taa_render_samples = max(16, min(128, samples))
     scene.render.filepath = str(Path(args.out).resolve())
     scene.render.image_settings.file_format = "PNG"
     # RGBA, or a transparent film is composited onto black on write and
@@ -579,6 +665,9 @@ def main() -> int:
     args = _parse_args()
     if args.list_effects:
         print(fx.describe_effects())
+        return 0
+    if args.list_finishes:
+        print(style_defs.describe_finishes())
         return 0
     if args.list_styles:
         for name in style_defs.list_styles():
@@ -605,9 +694,11 @@ def main() -> int:
             bundle, style, colour_by=colour_by,
             atom_scale=args.atom_scale,
             bond_radius=0.12 * args.bond_scale,
+            finish=args.finish,
         )
     if args.mode in ("surface", "both"):
-        objects.append(mesh_builder.build_smooth_surface(bundle, style))
+        objects.append(mesh_builder.build_smooth_surface(
+            bundle, style, finish=args.finish))
 
     # The light rig and the camera both need the subject's size, so it is
     # measured once here rather than twice with a risk of disagreeing --

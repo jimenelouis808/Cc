@@ -3007,6 +3007,68 @@ sits on a pentagon, so the picture said "all pentagons" about twelve
 pentagons and twenty hexagons. That is the same fact the preview's
 ring-fill view exists for, met from the renderer's side.
 
+**And element colouring says nothing on a pure-carbon structure**, which
+is the other half of the same point: a C240 cage or a bare nanotube
+coloured by element is one colour throughout, correctly. Element mode
+earns its keep on a doped, functionalised or encapsulated structure --
+the showcase is a cage at 8 % N, 8 % B with hydroxyls, which is five
+elements and reads instantly. Neither mode is the right default for
+everything, which is why `default_colour_by` is per style.
+
+### A finish is a third axis, and it keeps the colour
+
+`--style` is the character, `--colour-by` is what the hue means, and
+`--background` is the backdrop. A **finish** is the fourth: it replaces
+every material's character while keeping its colour, so "element
+colours, in glass, on the cosmos backdrop" is one render rather than a
+style nobody wrote. `FINISHES` has sixteen entries and `"style"` -- the
+default -- leaves a style's own character alone, because its author
+chose it.
+
+Two things in `apply_finish` are measured rather than tasteful:
+
+* **Glass lifts a dark colour toward white** (`GLASS_TINT = 0.25`).
+  Transmitted light is multiplied by the base colour at every bounce, so
+  a glass version of carbon's element grey, through a cage's near wall
+  and its far wall, comes out nearly black: it reads as soot, not as
+  glass. Lifting the tint keeps *which element* an atom is while letting
+  the light through.
+* **Transmission goes on the Principled BSDF, not the Glass node.**
+  Principled keeps the base colour tinting the transmitted light and
+  EEVEE renders it properly; a raw Glass node does neither as well. The
+  `glass_cryo` style still uses the Glass node directly, which is a
+  second look rather than a duplicate.
+
+`gold` is the one finish that **sets** the colour instead of keeping it,
+because gold is a material and not a hue to apply to someone else's
+colour -- a blue gold is a contradiction.
+
+### Cycles is the default and EEVEE will abort if you let it
+
+Every style declares `engine="CYCLES"` and always has; `--engine` is an
+override, not a correction. Three facts about that worth not
+rediscovering:
+
+* **Cycles is an add-on**, so in a stock `bpy` wheel it is missing from
+  `render.engine`'s enum listing -- the listing is built before add-ons
+  register. Assigning `"CYCLES"` works anyway, and `addon_utils.check
+  ("cycles")` returns `(True, True)`. Do not conclude from the enum that
+  Cycles is unavailable.
+* **EEVEE's identifier moved.** It was `BLENDER_EEVEE_NEXT` through 4.x
+  and is `BLENDER_EEVEE` in 5. Both are tried in order.
+* **EEVEE is a rasteriser and needs a GPU context.** Without EGL it does
+  not raise and does not return an error: it **aborts the process** with
+  SIGABRT after printing one line about `libEGL.so.1`, which cannot be
+  caught from Python once it starts. `_can_rasterise` rules it out
+  beforehand and falls back to Cycles with a note. It checks for **EGL
+  specifically** -- the first version accepted any of EGL/GL/OpenGL, and
+  this container has `libGL.so.1` and no libEGL, so it passed the check
+  straight through to the abort it exists to prevent.
+
+EEVEE's `samples` are temporal anti-aliasing passes rather than light
+paths, so the number means something different and is clamped to
+16-128: a Cycles-tuned 512 would make the fast preview slow.
+
 ### A shader is not a parameter, and a floor is not decoration
 
 Four of the five entries in `styles.SHADERS` cannot be expressed by

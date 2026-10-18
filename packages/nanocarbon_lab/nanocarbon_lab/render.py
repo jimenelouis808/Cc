@@ -153,6 +153,8 @@ def render_command(
     mode: str = "ballstick",
     colour_by: str | None = None,
     background: str | None = None,
+    finish: str | None = None,
+    engine: str | None = None,
     floor: bool | None = None,
     resolution: tuple[int, int] | None = None,
     samples: int | None = None,
@@ -215,6 +217,10 @@ def render_command(
         cmd += ["--colour-by", colour_by]
     if background is not None:
         cmd += ["--background", background]
+    if finish is not None and finish != "style":
+        cmd += ["--finish", finish]
+    if engine is not None:
+        cmd += ["--engine", engine]
     if floor is not None:
         cmd += ["--floor"] if floor else ["--no-floor"]
     if resolution is not None:

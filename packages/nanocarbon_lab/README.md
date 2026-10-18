@@ -1242,6 +1242,53 @@ dependency, so they are editable and testable outside Blender -- as is
   catcher). Drop `--samples` to use the style's own default.
 * `--atom-scale` and `--bond-scale` multiply the radii.
 
+### Finishes: glass, glow, metal, wax — on any style, any colour mode
+
+A **finish** replaces every material's character and keeps its colour,
+so it composes with the style and the colour mode rather than replacing
+them:
+
+```bash
+nanocarbon render cage.xyz --colour-by element --finish glass
+nanocarbon render cage.xyz --style cosmos --finish iridescent
+nanocarbon render --list-finishes
+```
+
+| finish | what it is |
+|---|---|
+| `style` | leave the style's own character alone — the default |
+| `glass` / `crystal` | refractive; crystal at diamond's index, so edges catch colour |
+| `glow` / `neon` | a surface that also emits, or pure light with no surface |
+| `metal` / `gold` / `brushed` / `chrome` | polished, gold under a tinted coat, anisotropic, mirror |
+| `plastic` / `ceramic` / `clay` / `matte` | coated body, glazed, purely diffuse, velvet rim |
+| `wax` | subsurface scattering — wax, jade, skin |
+| `iridescent` | thin-film interference, colour shifts with the angle |
+| `toon` | flat banded shading |
+
+Colouring by element and then asking for glass gives a **glass carbon
+and a glass oxygen, each still its own colour** — which is the point of
+keeping the axes separate.
+
+One number in there is not taste: a glass finish lifts a dark colour
+toward white (`GLASS_TINT`). Transmitted light is multiplied by the base
+colour at every bounce, so glass over carbon's element grey, through a
+cage's near wall and far wall, comes out nearly black — soot, not glass.
+
+### Cycles or EEVEE
+
+**Every style renders in Cycles and always has** — a path tracer, with
+real refraction, caustics and soft shadows. `--engine` is an override,
+not a correction:
+
+```bash
+nanocarbon render cage.xyz --engine eevee     # seconds, for checking
+nanocarbon render cage.xyz                    # Cycles, for the final
+```
+
+EEVEE is a rasteriser, so it needs a GPU context. Without one it does
+not fail politely — it aborts the process — so the render script checks
+for EGL first and falls back to Cycles with a note rather than dying.
+
 ### Cover art: angles, effects, space and iridescence
 
 Five of the seventeen styles are built for a cover rather than a figure,
@@ -1314,6 +1361,21 @@ hands the session over, because no number of presets replaces moving a
 camera by hand. The GUI's **"Open scene in Blender…"** button is the same
 thing, and it saves the `.blend` beside the bundle first so the session
 can be reopened.
+
+What lands in that `.blend` is every preset, unpacked and editable —
+verified by saving one and reopening it:
+
+```
+engine   : CYCLES | samples: 320
+objects  : ['Atoms', 'Bonds', 'Camera', 'Light0', 'Light1']
+materials: mat_element_B, mat_element_C, mat_element_H, mat_element_N, mat_element_O
+world    : Background, Output, TexCoord, TexVoronoi, ColorRamp, MixRGB, TexNoise, ...
+```
+
+One material per element (or per ring size, or per item) with its own
+node tree, the lights at their scaled positions, the camera at the angle
+that was chosen, and the starfield's full node graph in the world — all
+of it ordinary Blender data to pull apart.
 
 This one needs the Blender **application**: the `bpy` wheel is a full
 Blender inside your interpreter and has no window, so asking it for one

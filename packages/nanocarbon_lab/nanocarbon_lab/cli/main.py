@@ -1761,6 +1761,9 @@ def _cmd_render(args):
     if args.list_effects:
         print(render_support.effect_catalogue().describe_effects())
         return 0
+    if args.list_finishes:
+        print(render_support.style_catalogue().describe_finishes())
+        return 0
     if args.list_styles or args.list_colour_modes:
         # styles.py is package data rather than a subpackage -- its
         # siblings import bpy -- so it is reached by path. It imports no
@@ -1809,7 +1812,8 @@ def _cmd_render(args):
         cmd = render_support.render_command(
             xyz, out, json_path=sidecar, style=args.style, mode=args.mode,
             colour_by=args.colour_by, background=args.background,
-            floor=args.floor, resolution=tuple(args.resolution),
+            finish=args.finish, engine=args.engine, floor=args.floor,
+            resolution=tuple(args.resolution),
             samples=args.samples, atom_scale=args.atom_scale,
             bond_scale=args.bond_scale,
             transparent=args.transparent_background,
@@ -3068,6 +3072,23 @@ def build_parser() -> argparse.ArgumentParser:
                     default=None, help="Add a ground plane.")
     rn.add_argument("--no-floor", dest="floor", action="store_false",
                     help="Remove the plane a studio background adds.")
+    rn.add_argument("--finish", default=None,
+                    help="Replace every material's character while "
+                         "keeping its colour: glass, crystal, glow, neon, "
+                         "metal, gold, brushed, chrome, plastic, ceramic, "
+                         "clay, matte, wax, iridescent, toon. Works with "
+                         "any style and any --colour-by. "
+                         "--list-finishes describes them.")
+    rn.add_argument("--engine", default=None, choices=["cycles", "eevee"],
+                    help="Cycles (the default for every style) path "
+                         "traces: real refraction and soft shadows, and "
+                         "slow. EEVEE rasterises in seconds, for checking "
+                         "a composition -- it needs a GPU context, and "
+                         "without one the render falls back to Cycles and "
+                         "says so.")
+    rn.add_argument("--list-finishes", action="store_true",
+                    dest="list_finishes",
+                    help="Describe the finishes, and exit.")
     rn.add_argument("--view", default=None,
                     help="Which way to look from: 'auto' (measured -- the "
                          "angle whose silhouette shows the most "
