@@ -77,6 +77,19 @@ de para qué es la figura.
   blanca sobre blanco — los agujeros desaparecieron. Un material traslúcido
   iluminado por detrás **necesita algo oscuro detrás**. El fondo es tinta por
   eso, no por gusto.
+- **`membrane` otra vez, y esta era de verdad:** el modelo `surface` tenía el
+  radio de la piel fijo en **1.6 Å**, y ningún preset podía tocarlo. El
+  circunradio de un hexágono de grafeno es **1.42 Å**, así que una piel de
+  1.6 Å sobre cada varilla es más ancha que el anillo que tiene que dejar
+  abierto: en cualquier red de carbono **todos los poros se cierran**,
+  necesariamente y a cualquier tamaño. El modelo solo podía devolver un
+  sólido, y el preset prometía "la forma y los agujeros a través de ella".
+  Ahora `Style.skin_radius` es por preset (1.6 por defecto, así que nada de
+  lo anterior cambia) y `membrane` usa 0.55.
+
+  **Un valor fijo que nadie puede alcanzar no es un valor por defecto, es un
+  límite** — y este no se veía porque el resultado parecía deliberado.
+
 - **`catalyst_stage`:** el suelo era casi un espejo (rugosidad 0.10,
   metálico 0.7) y reflejaba las dos lámparas de área como dos rectángulos
   brillantes; el polvo, a 180 motas, se leía como un campo de estrellas. Entre

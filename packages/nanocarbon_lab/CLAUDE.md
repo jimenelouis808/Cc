@@ -3046,6 +3046,44 @@ census, `cell.supercell` for repetition, `scene` for compositions, and
 now the renderer. Anything that uses a recorded bond pair **as a pair of
 positions** needs the shift.
 
+### The surface model could not make a hole, by construction
+
+`build_smooth_surface` hardcoded `skin_radius` at **1.6 A** and no style
+could reach it. A graphene hexagon's circumradius is **1.42 A**, so a
+1.6 A skin on every strut is wider than the ring it has to leave open:
+on any carbon net every pore welds shut, necessarily and at every size.
+The model could only ever return a solid, and `membrane` -- whose
+description promises "the shape and the holes through it" -- rendered
+with no holes at all, contradicting itself.
+
+`Style.skin_radius` defaults to 1.6, so every style that existed before
+renders exactly as it did; `membrane` sets 0.55. The test measures the
+constraint that makes an open pore possible (under half a hexagon's
+circumradius) rather than pinning the value that happened to be chosen.
+
+**A hardcoded value no caller can reach is not a default, it is a
+limit.** This one was invisible because the model's output looked
+deliberate.
+
+### Style colours are LINEAR; the frame is written as sRGB
+
+A `MaterialSpec` or `Background` colour goes to Blender as a linear
+value and the PNG is encoded sRGB, so a linear **0.09 displays near
+0.33**. An "ink" backdrop set at `(0.03, 0.06, 0.10)` comes out mid
+blue-grey on screen -- correctly, and it reads as a bug.
+
+That cost a cycle here: the mid-grey backdrop was diagnosed as the glare
+pass blooming an overexposed subject across the frame. It is not.
+Measured on a synthetic bright blob over an ink field, `glare_image`
+leaves a far corner at **0.0633 before and 0.0633 after** for subjects
+at 0.6, 1.0, 2.0 and 4.0 -- the blur is local and cannot reach that far
+-- and a render with `--no-style-effects` shows the same backdrop. Both
+the bloom theory and the "wrong colour" reading were wrong; the only
+real fault was exposure.
+
+So judge a colour by what the encoded frame shows, and set it for that.
+Do not re-investigate the glare pass over a lifted background.
+
 ### Depth is the colour mode a superstructure has
 
 On an all-carbon net, `element` is one hue and `ring` is nearly all
