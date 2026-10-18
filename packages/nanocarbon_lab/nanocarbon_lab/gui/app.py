@@ -275,6 +275,16 @@ RENDER_BOND_COLOURS = list(_STYLE_DEFS.BOND_COLOURS)
 #: matters because a model-kit look is ball-and-stick by definition and
 #: a metal product shot is space-filling.
 RENDER_MODELS = ["style", *_STYLE_DEFS.MODELS]
+#: Mesh resolution. "auto" follows the atom count, which is the right
+#: answer far more often than any fixed level.
+RENDER_DETAILS = ["auto", *_STYLE_DEFS.DETAIL_LEVELS]
+#: One line of help per choice, so the window can say what a control
+#: does instead of making the user guess from its name.
+HELP_LINES = {
+    **{f"model:{k}": v for k, v in _STYLE_DEFS.MODEL_HELP.items()},
+    **{f"colour:{k}": v for k, v in _STYLE_DEFS.COLOUR_HELP.items()},
+    **{f"background:{k}": v for k, v in _STYLE_DEFS.BACKGROUND_HELP.items()},
+}
 #: Resolution and samples as one choice; "custom" uses the boxes below.
 RENDER_QUALITIES = ["custom", *_STYLE_DEFS.QUALITY_PRESETS]
 RENDER_BACKGROUNDS = [STYLE_DEFAULT_LABEL, *_STYLE_DEFS.BACKGROUNDS]
@@ -5217,10 +5227,15 @@ class NanocarbonGUI:
                                  values=BLENDER_STYLES, state="readonly")
         cmb_style.pack(fill="x", pady=(0, 2))
         cmb_style.bind("<<ComboboxSelected>>", self._on_style_change)
-        self.lbl_style = ttk.Label(ren, text="", foreground=MUTED,
-                                   font=("TkDefaultFont", 8), wraplength=260,
-                                   justify="left")
-        self.lbl_style.pack(anchor="w", pady=(0, 6))
+        # A preset is a bundle of a dozen choices and a name does not
+        # say which, so the window prints them: backdrop, colour mode,
+        # model, lens, samples and what effects it brings.
+        self.txt_style = tk.Text(ren, height=11, width=34, wrap="word",
+                                 font=("TkDefaultFont", 8), relief="flat",
+                                 background=ren.winfo_toplevel().cget("bg"),
+                                 foreground=MUTED, borderwidth=0)
+        self.txt_style.pack(fill="x", pady=(0, 6))
+        self.txt_style.configure(state="disabled")
 
         # Three independent axes, and keeping them apart is the point: a
         # style is the surfaces' character, the colour mode is what the
@@ -5250,9 +5265,16 @@ class NanocarbonGUI:
         row_model.pack(fill="x", pady=(0, 2))
         ttk.Label(row_model, text="Model").pack(side="left")
         self.var_model = tk.StringVar(value="style")
-        ttk.Combobox(row_model, textvariable=self.var_model,
-                     values=RENDER_MODELS, state="readonly",
-                     width=10).pack(side="left", padx=(4, 0))
+        cmb_model = ttk.Combobox(row_model, textvariable=self.var_model,
+                                 values=RENDER_MODELS, state="readonly",
+                                 width=10)
+        cmb_model.pack(side="left", padx=(4, 0))
+        cmb_model.bind("<<ComboboxSelected>>", self._on_style_change)
+        ttk.Label(row_model, text="Detail").pack(side="left", padx=(8, 0))
+        self.var_detail = tk.StringVar(value="auto")
+        ttk.Combobox(row_model, textvariable=self.var_detail,
+                     values=RENDER_DETAILS, state="readonly",
+                     width=7).pack(side="left", padx=(4, 0))
         ttk.Label(ren, text="auto = space-filling for metals and "
                             "ball-and-stick for everything else, in one "
                             "picture: a carbon-coated metal particle is a "
@@ -5373,16 +5395,26 @@ class NanocarbonGUI:
         ttk.Label(row_samp, text="0 = the style's own").pack(side="left",
                                                              padx=(4, 0))
 
-        ttk.Button(ren, text="Render with Blender…",
-                   command=self.on_render).pack(fill="x", ipady=3)
-        ttk.Button(ren, text="Open scene in Blender…",
-                   command=self.on_open_in_blender).pack(fill="x",
-                                                         pady=(4, 0), ipady=3)
-        ttk.Label(ren, text="“Open scene” assembles the lights, camera, "
-                            "materials and background and hands the live "
-                            "Blender window over, so the render itself is "
-                            "yours. It needs the Blender application; the "
-                            "bpy module has no window.",
+        # Two ways out, side by side rather than one above the other,
+        # because they are a choice and not a sequence: render here, or
+        # go and finish it by hand.
+        row_go = ttk.Frame(ren)
+        row_go.pack(fill="x", pady=(2, 0))
+        ttk.Button(row_go, text="Render here →",
+                   command=self.on_render).pack(side="left", expand=True,
+                                                fill="x", ipady=4)
+        ttk.Button(row_go, text="Open in Blender →",
+                   command=self.on_open_in_blender).pack(
+                       side="left", expand=True, fill="x", padx=(4, 0),
+                       ipady=4)
+        ttk.Label(ren, text="Render here: everything above is applied and "
+                            "the image is written, with no Blender window.  "
+                            "Open in Blender: the same scene is assembled — "
+                            "lights, camera, materials, background, effects "
+                            "— the .blend is saved beside the bundle, and "
+                            "the live window is handed to you to adjust and "
+                            "render yourself. That one needs the Blender "
+                            "application; the bpy module has no window.",
                   foreground=MUTED, font=("TkDefaultFont", 8), wraplength=260,
                   justify="left").pack(anchor="w", pady=(4, 0))
         ttk.Button(ren, text="Locate Blender…",
@@ -6290,10 +6322,27 @@ class NanocarbonGUI:
         style = self._effective_style()
         colour_by = self._effective_colour_by()
         self.var_floor.set(bool(style.background.has_floor))
-        note = COLOUR_MODE_HELP.get(colour_by, "")
-        self.lbl_style.config(
-            text=f"{style.description}\n\nBackdrop: "
-                 f"{style.background.kind}. Colour: {colour_by} — {note}")
+
+        summary = _STYLE_DEFS.style_summary(style)
+        chosen = []
+        if self.var_colour_by.get() != STYLE_DEFAULT_LABEL:
+            chosen.append(f"colour by {colour_by} -- "
+                          + HELP_LINES.get(f"colour:{colour_by}", ""))
+        model = self.var_model.get()
+        if model != "style":
+            chosen.append(f"model {model} -- "
+                          + HELP_LINES.get(f"model:{model}", ""))
+        background = self.var_background.get()
+        if background != STYLE_DEFAULT_LABEL:
+            chosen.append(f"backdrop {background} -- "
+                          + HELP_LINES.get(f"background:{background}", ""))
+        if chosen:
+            summary += "\n\nYou have overridden:\n  " + "\n  ".join(chosen)
+
+        self.txt_style.configure(state="normal")
+        self.txt_style.delete("1.0", "end")
+        self.txt_style.insert("1.0", summary)
+        self.txt_style.configure(state="disabled")
 
     def on_render(self) -> None:
         stem = self._render_bundle()
@@ -6403,6 +6452,8 @@ class NanocarbonGUI:
                 view=self.var_view.get(),
                 finish=self.var_finish.get(),
                 model=self.var_model.get(),
+                detail=(None if self.var_detail.get() == "auto"
+                        else self.var_detail.get()),
                 bond_finish=self.var_bond_finish.get(),
                 bond_colour=self.var_bond_colour.get(),
                 engine=self.var_engine.get(),

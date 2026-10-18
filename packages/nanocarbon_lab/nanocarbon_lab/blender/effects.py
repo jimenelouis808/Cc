@@ -134,6 +134,26 @@ EFFECT_DEFAULTS: dict[str, dict] = {
     "fog": {
         "color": "white", "strength": 0.0025, "anisotropy": 0.3,
     },
+    # Motes drifting in the light. The commonest thing in a studio
+    # render that is doing nothing except making the air look real --
+    # which is most of why a CG object stops reading as a cut-out.
+    "dust": {
+        "color": "white", "strength": 3.0, "count": 220,
+        "size": 0.010, "reach": 2.4, "vary": 0.8, "light": 0.0, "seed": 0,
+    },
+    # A glowing floor grid under the subject. Reads as a technical
+    # stage, and gives a dark frame something to measure depth against.
+    "grid": {
+        "color": "cyan", "strength": 1.6, "lines": 16, "reach": 6.0,
+        "width": 0.004, "drop": 1.35, "light": 0.0, "seed": 0,
+    },
+    # A ring standing around the subject, edge-on to nothing: an
+    # expanding wavefront, a field boundary, an interface.
+    "wave": {
+        "color": "cyan", "strength": 5.0, "count": 1, "reach": 1.9,
+        "width": 0.03, "segments": 128, "tilt": 90.0, "thickness": 0.12,
+        "light": 0.0, "seed": 0,
+    },
     # Out-of-focus points of light behind the subject. Real geometry,
     # genuinely behind the focal plane, so the camera's own aperture
     # blurs them into discs -- which is why this needs a style with a
@@ -839,6 +859,122 @@ def _build_halo(spec: EffectSpec, centre, radius: float) -> list:
     return [obj]
 
 
+def _build_dust(spec: EffectSpec, centre, radius: float) -> list:
+    """Motes in the air around the subject.
+
+    One merged mesh of small emissive spheres rather than hundreds of
+    objects: two hundred separate objects is two hundred entries in the
+    outliner for somebody to scroll past after ``--save-blend``, and
+    Blender is slower per object than per face by a wide margin.
+
+    They contribute no light. A field of motes bright enough to light
+    anything is a field of motes nobody would believe.
+    """
+    import bmesh
+    import bpy
+    from mathutils import Matrix
+
+    rng = np.random.default_rng(int(spec.get("seed")))
+    count = max(1, int(spec.get("count")))
+    reach = float(spec.get("reach")) * radius
+    size = float(spec.get("size")) * radius
+    vary = float(spec.get("vary"))
+    centre = np.asarray(centre, dtype=float)
+
+    bm = bmesh.new()
+    for _ in range(count):
+        # Shell-biased rather than uniform in the volume: motes inside
+        # the structure are hidden by it, so putting them there spends
+        # geometry on nothing.
+        direction = rng.normal(size=3)
+        direction /= max(np.linalg.norm(direction), 1e-9)
+        distance = reach * (0.35 + 0.65 * rng.random() ** 0.4)
+        position = centre + direction * distance
+        bmesh.ops.create_icosphere(
+            bm, subdivisions=1,
+            radius=size * (1.0 - vary * rng.random()),
+            matrix=Matrix.Translation(tuple(position)), calc_uvs=False)
+    mesh = bpy.data.meshes.new("fx_dust")
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.materials.append(_emissive("fx_dust_mat", spec.colour(),
+                                    float(spec.get("strength"))))
+    obj = bpy.data.objects.new("fx_dust", mesh)
+    bpy.context.collection.objects.link(obj)
+    _set_light_contribution(obj, bool(spec.get("light")))
+    return [obj]
+
+
+def _build_grid(spec: EffectSpec, centre, radius: float) -> list:
+    """A glowing grid on the floor plane under the subject.
+
+    Drawn as lines rather than as a textured plane so it needs no UVs
+    and no image, and so it fades at the edges the way a line does when
+    it goes out of frame.
+    """
+    lines = max(2, int(spec.get("lines")))
+    reach = float(spec.get("reach")) * radius
+    drop = float(spec.get("drop")) * radius
+    centre = np.asarray(centre, dtype=float)
+    z = centre[2] - drop
+
+    paths = []
+    for index in range(lines + 1):
+        t = -reach + 2.0 * reach * index / lines
+        paths.append(np.array([[centre[0] + t, centre[1] - reach, z],
+                               [centre[0] + t, centre[1] + reach, z]]))
+        paths.append(np.array([[centre[0] - reach, centre[1] + t, z],
+                               [centre[0] + reach, centre[1] + t, z]]))
+    material = _emissive("fx_grid", spec.colour(),
+                         float(spec.get("strength")))
+    obj = _polyline_object("fx_grid", paths,
+                           float(spec.get("width")) * radius, material)
+    _set_light_contribution(obj, bool(spec.get("light")))
+    return [obj]
+
+
+def _build_wave(spec: EffectSpec, centre, radius: float) -> list:
+    """A ring standing around the subject: a wavefront or an interface.
+
+    A torus rather than a curve, because a wavefront has thickness and
+    a curve's round bevel reads as a wire. ``thickness`` is the minor
+    radius as a fraction of the major one.
+    """
+    import bmesh
+    import bpy
+    from mathutils import Matrix
+
+    count = max(1, int(spec.get("count")))
+    reach = float(spec.get("reach")) * radius
+    tilt = math.radians(float(spec.get("tilt")))
+    thickness = float(spec.get("thickness"))
+    segments = max(8, int(spec.get("segments")))
+    centre = np.asarray(centre, dtype=float)
+
+    objects = []
+    for index in range(count):
+        major = reach * (1.0 + 0.22 * index)
+        bm = bmesh.new()
+        bmesh.ops.create_cone(
+            bm, cap_ends=False, segments=segments,
+            radius1=major, radius2=major,
+            depth=major * thickness * 2.0,
+            matrix=Matrix.Rotation(tilt, 4, "X"))
+        mesh = bpy.data.meshes.new(f"fx_wave{index}")
+        bm.to_mesh(mesh)
+        bm.free()
+        mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
+        mesh.materials.append(_emissive(
+            f"fx_wave_mat{index}", spec.colour(),
+            float(spec.get("strength")) * (0.6 ** index)))
+        obj = bpy.data.objects.new(f"fx_wave{index}", mesh)
+        obj.location = tuple(centre)
+        bpy.context.collection.objects.link(obj)
+        _set_light_contribution(obj, bool(spec.get("light")))
+        objects.append(obj)
+    return objects
+
+
 def _build_bokeh(spec: EffectSpec, centre, radius: float) -> list:
     """Scattered points of light behind the subject.
 
@@ -1028,6 +1164,9 @@ _BUILDERS = {
     "orbit": _build_orbit,
     "halo": _build_halo,
     "bokeh": _build_bokeh,
+    "dust": _build_dust,
+    "grid": _build_grid,
+    "wave": _build_wave,
     "fog": _build_fog,
     "glare": _build_glare,
 }

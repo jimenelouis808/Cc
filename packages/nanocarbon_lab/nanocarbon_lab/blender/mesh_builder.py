@@ -58,8 +58,9 @@ def build_ball_and_stick(
     colour_by: str = "ring",
     atom_scale: float = 1.0,
     bond_radius: float = 0.12,
-    sphere_subdiv: int = 2,
-    bond_segments: int = 8,
+    sphere_subdiv: int | None = None,
+    bond_segments: int | None = None,
+    detail: str | None = None,
     finish: str = "style",
     bond_finish: str | None = None,
     bond_colour: str = "auto",
@@ -79,6 +80,14 @@ def build_ball_and_stick(
                  for key, spec in zip(keys, specs, strict=True)]
     radii = atom_radii(bundle, colour_by, atom_scale, model)
     symbols = bundle["symbols"]
+    # Resolution follows the atom count unless the caller insists. An
+    # icosphere at subdivision 2 -- the old fixed value -- is 320
+    # triangles and visibly faceted on anything that fills the frame.
+    chosen = style_defs.detail_for(len(positions), detail)
+    if sphere_subdiv is None:
+        sphere_subdiv = chosen["sphere_subdiv"]
+    if bond_segments is None:
+        bond_segments = chosen["bond_segments"]
 
     # --- atoms -------------------------------------------------------
     bm = bmesh.new()

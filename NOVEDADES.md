@@ -6,6 +6,97 @@ está la trampa.
 
 ---
 
+## nanocarbon_lab · esferas sin facetas, presets de superestructura, y la ventana que se explica
+
+### Las bolas facetadas: era 80 triángulos, no un ajuste de gusto
+
+`sphere_subdiv` estaba fijo en 2. Una icoesfera a subdivisión 2 son **80
+triángulos** — no 320, que es la 3; la cuenta es `20·4ⁿ` — y eso se ve facetado
+en cuanto un átomo ocupa más de un pequeño porcentaje del cuadro, que es
+siempre el caso en un primer plano.
+
+No se puede simplemente subir: el coste es lineal en el número de átomos, y
+2000 átomos a subdivisión 5 son diez millones de triángulos antes de dibujar un
+solo enlace. Ahora hay cuatro niveles y **se elige por el número de átomos**:
+
+| nivel | caras por átomo | lados del enlace |
+|---|---|---|
+| `low` | 80 | 8 |
+| `normal` | 320 | 12 |
+| `high` | 1280 | 20 |
+| `ultra` | 5120 | 32 |
+
+Una jaula de 60 átomos recibe `ultra`, una red de 1200 `normal`, una de 7500
+`low`. `--detail` manda si quieres fijarlo.
+
+### Cuatro presets para superestructuras (900–2000 átomos)
+
+A ese tamaño el sujeto es una **red**, no un objeto, y tres valores tienen que
+cambiar a la vez — por eso son presets y no una nota diciéndote que muevas tres
+controles:
+
+- **Los átomos tienen que encoger.** Todo lo que engorda un átomo cierra los
+  huecos por los que el ojo lee profundidad, y la imagen se vuelve un muro de
+  esferas.
+- **La profundidad de campo tiene que abrirse.** Una red fotografiada a f/2 es
+  un borrón con una franja nítida: se lee como un error, no como una decisión.
+- **El color no puede venir del elemento.** Una red de puro carbono coloreada
+  por elemento es una masa gris; lo que varía es la curvatura.
+
+| estilo | qué es |
+|---|---|
+| `lattice_dark` | iluminada por detrás contra negro, los puentes se separan por su borde |
+| `lattice_depth` | neblina en el aire: el fondo se desvanece — la perspectiva atmosférica es la única pista de profundidad que sobrevive a la repetición |
+| `lattice_blueprint` | **sin esferas** (licorice) sobre rejilla luminosa: para una figura sobre conectividad |
+| `lattice_studio` | luz plana sobre blanco, sin acento ni bloom |
+
+### Tres FX más, y todos opcionales
+
+`dust` (motas en el aire — lo más común en un render de estudio para que el
+aire parezca aire y el objeto deje de leerse como un recorte), `grid` (rejilla
+luminosa en el suelo) y `wave` (un anillo alrededor del sujeto: un frente de
+onda, una intercara). Con los de antes son **diez**: laser, arc, resonance,
+orbit, halo, bokeh, dust, grid, wave, fog, glare.
+
+Todos siguen siendo opcionales: cada uno tiene su casilla en la ventana,
+`--no-style-effects` quita los que trae un estilo, y ninguno ilumina la escena
+por defecto — un objeto emisivo es una lámpara en Cycles, y un campo de motas
+lo bastante brillante como para iluminar algo es un campo que nadie se creería.
+
+### La ventana dice qué hace cada preset
+
+Un preset es un paquete de una docena de decisiones y su nombre no dice
+ninguna. Ahora, debajo del menú de estilo, la ventana imprime las que cambian
+lo que ves:
+
+```
+backdrop   gradient
+colour by  ring -- tamaño de anillo: dónde están la curvatura y los defectos...
+model      licorice -- sólo varillas, para una red densa cuyos átomos taparían
+           la topología
+camera     42 mm, sin profundidad de campo
+render     Cycles a 320 muestras
+scale      atoms x1, bonds x0.75
+effects    grid, glare  (las casillas pueden quitarlos)
+```
+
+Y debajo, **qué has sobrescrito tú**. Cada opción de modelo, de modo de color y
+de fondo tiene su línea de ayuda; hay un test que falla si alguna se queda sin
+ella, porque un control cuyas opciones no se explican es un control que nadie
+usa.
+
+### Y la elección de dónde renderizar, explícita
+
+Dos botones lado a lado, porque son una elección y no una secuencia:
+
+- **Render here →** aplica todo lo de arriba y escribe la imagen, sin abrir
+  Blender.
+- **Open in Blender →** monta la misma escena —luces, cámara, materiales,
+  fondo, efectos—, guarda el `.blend` al lado del bundle y te entrega la
+  ventana viva para que ajustes y renderices tú.
+
+---
+
 ## nanocarbon_lab · ball-and-stick o space-filling (o los dos a la vez)
 
 ### El control que pedías, y el caso mixto es el importante

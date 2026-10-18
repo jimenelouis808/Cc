@@ -1242,6 +1242,44 @@ dependency, so they are editable and testable outside Blender -- as is
   catcher). Drop `--samples` to use the style's own default.
 * `--atom-scale` and `--bond-scale` multiply the radii.
 
+### Mesh detail, and why the spheres were faceted
+
+`sphere_subdiv` was fixed at 2 — **80 triangles per atom**, visibly
+faceted on anything that fills the frame:
+
+```bash
+nanocarbon render cage.xyz --detail ultra    # 5120 faces/atom
+nanocarbon render net.xyz                    # chosen from the atom count
+```
+
+| level | faces per atom | bond sides |
+|---|---|---|
+| `low` | 80 | 8 |
+| `normal` | 320 | 12 |
+| `high` | 1280 | 20 |
+| `ultra` | 5120 | 32 |
+
+Left out, it follows the atom count: a 60-atom cage gets `ultra`, a
+1200-atom net `normal`, a 7500-atom one `low`. That is not a compromise
+— it is the right answer. 2000 atoms at subdivision 5 is ten million
+triangles before a single bond is drawn, and an atom three pixels across
+looks identical at every level.
+
+### For superstructures (900–2000 atoms)
+
+Four presets, because at that size three defaults have to change
+together: the atoms shrink (or the picture becomes a wall of spheres),
+the depth of field opens (a lattice at f/2 is a blur with a sharp band
+through it), and the colour comes from curvature rather than the
+element (an all-carbon net by element is one grey mass).
+
+| style | what it is |
+|---|---|
+| `lattice_dark` | rim-lit against black, so the struts separate by their edges |
+| `lattice_depth` | haze in the air, so the far side fades — atmospheric perspective is the only depth cue that survives repetition |
+| `lattice_blueprint` | **no spheres at all** (licorice) on a glowing grid: for a figure about connectivity |
+| `lattice_studio` | flat even light on white, no accent, no bloom |
+
 ### Ball-and-stick, space-filling — or both at once
 
 ```bash

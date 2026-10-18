@@ -75,6 +75,13 @@ def _parse_args() -> argparse.Namespace:
         help="What an atom's colour means. Default: the style's own.",
     )
     p.add_argument(
+        "--detail", default=None, choices=list(style_defs.DETAIL_LEVELS),
+        help="Mesh resolution per atom. Chosen from the atom count when "
+             "left out: a 60-atom cage gets every triangle, a "
+             "2000-atom network gets the level where an atom is three "
+             "pixels across and more would be invisible.",
+    )
+    p.add_argument(
         "--model", default="ballstick", choices=list(style_defs.MODELS),
         help="How the structure is drawn: ballstick, spacefill (van der "
              "Waals spheres, no sticks), auto (space-filling for metals "
@@ -783,6 +790,7 @@ def main() -> int:
             bond_radius=0.12 * args.bond_scale * style.bond_scale,
             finish=args.finish, bond_finish=args.bond_finish,
             bond_colour=args.bond_colour, model=model,
+            detail=args.detail,
         )
     if args.mode in ("surface", "both"):
         objects.append(mesh_builder.build_smooth_surface(

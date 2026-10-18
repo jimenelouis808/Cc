@@ -1812,7 +1812,8 @@ def _cmd_render(args):
         cmd = render_support.render_command(
             xyz, out, json_path=sidecar, style=args.style, mode=args.mode,
             colour_by=args.colour_by, background=args.background,
-            finish=args.finish, model=args.model, engine=args.engine,
+            finish=args.finish, model=args.model, detail=args.detail,
+            engine=args.engine,
             floor=args.floor,
             resolution=tuple(args.resolution), quality=args.quality,
             bond_finish=args.bond_finish, bond_colour=args.bond_colour,
@@ -3084,6 +3085,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "one picture -- metals solid, everything else "
                          "open, which is what a carbon-coated metal "
                          "particle actually is.")
+    rn.add_argument("--detail", default=None,
+                    choices=["low", "normal", "high", "ultra"],
+                    help="Mesh resolution per atom. Chosen from the atom "
+                         "count when left out -- an icosphere is 80 "
+                         "triangles at the lowest level and 5120 at the "
+                         "highest, so a small molecule gets every one and "
+                         "a 2000-atom net gets the level where an atom is "
+                         "a few pixels across.")
     rn.add_argument("--quality", default=None,
                     choices=["draft", "preview", "print", "cover"],
                     help="Resolution and samples together: draft, "

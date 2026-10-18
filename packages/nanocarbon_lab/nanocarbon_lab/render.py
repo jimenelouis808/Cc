@@ -155,6 +155,7 @@ def render_command(
     background: str | None = None,
     finish: str | None = None,
     model: str | None = None,
+    detail: str | None = None,
     engine: str | None = None,
     floor: bool | None = None,
     resolution: tuple[int, int] | None = None,
@@ -225,6 +226,8 @@ def render_command(
         cmd += ["--finish", finish]
     if model is not None and model != "style":
         cmd += ["--model", model]
+    if detail is not None and detail != "auto":
+        cmd += ["--detail", detail]
     if engine is not None:
         cmd += ["--engine", engine]
     if floor is not None:

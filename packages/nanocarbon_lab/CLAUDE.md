@@ -3015,6 +3015,46 @@ the showcase is a cage at 8 % N, 8 % B with hydroxyls, which is five
 elements and reads instantly. Neither mode is the right default for
 everything, which is why `default_colour_by` is per style.
 
+### The spheres were eighty triangles, at every size
+
+`sphere_subdiv` was fixed at 2. An icosphere at subdivision 2 is
+**80 triangles** -- not 320, which is subdivision 3; the count is
+`20 * 4^n` -- and that is visibly faceted the moment an atom is more
+than a few per cent of the frame, which a close-up of a small molecule
+always is.
+
+It cannot simply be turned up: the cost is linear in the atom count, and
+2000 atoms at subdivision 5 is ten million triangles before a single
+bond is drawn. `DETAIL_LEVELS` holds the four steps (80 / 320 / 1280 /
+5120 faces) and `detail_for` picks from the atom count, because the
+right answer genuinely depends on the subject -- a 60-atom cage fills
+the frame with twenty-pixel spheres and needs every triangle, while in a
+2000-atom supernetwork an atom is three pixels across and subdivision 5
+is invisible. `--detail` overrides it.
+
+### Superstructures are a different problem from objects
+
+At 900-2000 atoms the subject is a **lattice** rather than a thing, and
+three defaults have to change together -- which is why
+`lattice_dark`, `lattice_depth`, `lattice_blueprint` and
+`lattice_studio` exist instead of a note telling the user to adjust
+three sliders:
+
+* **The atoms have to shrink** (`atom_scale` around 0.75). Anything that
+  fattens an atom closes the holes the eye reads depth through, and the
+  picture becomes a wall of spheres.
+* **The depth of field has to open** (f/5.6 or deeper, or off). A
+  lattice photographed at f/2 is a blur with a sharp band through it,
+  which reads as a mistake rather than as a choice.
+* **The colour cannot come from the element.** An all-carbon net
+  coloured by element is one grey mass; curvature is what varies.
+
+`lattice_blueprint` goes further and drops the spheres entirely
+(`licorice`), because at that size the atoms are what hide the topology
+and the topology is the result. `lattice_depth` carries haze, which is
+the only depth cue that still works when a structure is mostly its own
+repetition.
+
 ### A finish is a third axis, and it keeps the colour
 
 `--style` is the character, `--colour-by` is what the hue means, and
@@ -3108,6 +3148,19 @@ mixing would dim the body to pay for the edge.
 
 It is on in the dark cover styles and off in the figure styles, where a
 glow is decoration on something a reviewer has to measure.
+
+### The window says what a preset decides
+
+A preset is a bundle of a dozen choices and its name says none of them.
+`style_summary` prints the ones that change what you see -- backdrop,
+colour mode, model, lens, samples, atom and bond scale, and which
+effects it brings -- and the window shows it under the style menu,
+followed by whatever the user has overridden. `MODEL_HELP`,
+`COLOUR_HELP` and `BACKGROUND_HELP` are one line per option, so a
+control explains itself rather than being guessed at from its name.
+
+A test asserts every option of every one of those three has a help line.
+A control whose choices are not explained is a control nobody uses.
 
 ### An effect is light, and light is not a line
 

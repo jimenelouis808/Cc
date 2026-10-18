@@ -537,6 +537,167 @@ class TestRepresentation:
         assert styles.model_radius("Uup", "spacefill") > 0
 
 
+class TestMeshDetail:
+    """The faceting. An icosphere at subdivision 2 is EIGHTY triangles,
+    which is what the pipeline drew for every atom at every size, and it
+    is visibly faceted the moment an atom is more than a few per cent of
+    the frame."""
+
+    def test_the_levels_really_do_rise(self, styles):
+        order = ["low", "normal", "high", "ultra"]
+        subdivs = [styles.DETAIL_LEVELS[name]["sphere_subdiv"]
+                   for name in order]
+        segments = [styles.DETAIL_LEVELS[name]["bond_segments"]
+                    for name in order]
+        assert subdivs == sorted(subdivs) and len(set(subdivs)) == 4
+        assert segments == sorted(segments)
+
+    def test_the_old_fixed_value_is_now_the_floor(self, styles):
+        """2 was the only level there was. It is the cheapest one now,
+        for structures where an atom is a few pixels across."""
+        assert styles.DETAIL_LEVELS["low"]["sphere_subdiv"] == 2
+        assert styles.DETAIL_LEVELS["normal"]["sphere_subdiv"] > 2
+
+    def test_a_small_molecule_gets_the_most(self, styles):
+        """It fills the frame with big spheres; every triangle shows."""
+        assert styles.detail_for(60)["sphere_subdiv"] >= 4
+
+    def test_a_superstructure_gets_less(self, styles):
+        """2000 atoms at subdivision 5 is ten million triangles before a
+        single bond, and nobody can see them."""
+        small = styles.detail_for(60)["sphere_subdiv"]
+        large = styles.detail_for(1500)["sphere_subdiv"]
+        huge = styles.detail_for(9000)["sphere_subdiv"]
+        assert small > large > huge
+
+    def test_it_is_monotone_in_the_atom_count(self, styles):
+        previous = 99
+        for count in (10, 100, 500, 1000, 2500, 5000, 20000):
+            level = styles.detail_for(count)["sphere_subdiv"]
+            assert level <= previous
+            previous = level
+
+    def test_an_explicit_level_wins(self, styles):
+        assert styles.detail_for(60, "low")["sphere_subdiv"] == 2
+        assert styles.detail_for(50000, "ultra")["sphere_subdiv"] == 5
+
+    def test_an_unknown_level_names_the_real_ones(self, styles):
+        with pytest.raises(ValueError, match="ultra"):
+            styles.detail_for(100, "insane")
+
+
+class TestSuperstructureStyles:
+    """900-2000 atoms is a different problem: the subject is a lattice
+    rather than an object, so the atoms have to shrink, the depth of
+    field has to open and the colour has to come from curvature."""
+
+    NAMES = ("lattice_dark", "lattice_depth", "lattice_blueprint",
+             "lattice_studio")
+
+    def test_they_shrink_the_atoms(self, styles):
+        """Anything that fattens an atom closes the holes the eye reads
+        depth through."""
+        for name in self.NAMES:
+            style = styles.get_style(name)
+            if style.default_model != "licorice":
+                assert style.atom_scale < 1.0
+
+    def test_they_do_not_blur_two_thirds_of_the_structure(self, styles):
+        """A lattice photographed at f/2 is a blur with a sharp band
+        through it, which reads as a mistake rather than a choice."""
+        for name in self.NAMES:
+            stop = styles.get_style(name).camera_dof_fstop
+            assert stop is None or stop >= 5.0
+
+    def test_none_of_them_colours_by_element(self, styles):
+        """An all-carbon net coloured by element is one grey mass."""
+        for name in self.NAMES:
+            assert styles.get_style(name).default_colour_by != "element"
+
+    def test_the_blueprint_drops_the_spheres(self, styles):
+        """At this size the atoms are what hide the topology, and the
+        topology is the result."""
+        assert styles.get_style("lattice_blueprint").default_model == \
+            "licorice"
+
+    def test_the_hazy_one_actually_carries_haze(self, styles):
+        """Atmospheric perspective is the only depth cue that still
+        works when a structure is mostly its own repetition."""
+        style = styles.get_style("lattice_depth")
+        assert any(spec.kind == "fog" for spec in style.effects)
+
+
+class TestStyleSummary:
+    """The window prints what a preset decides. A name plus a sentence
+    of mood does not say which of a dozen choices it made."""
+
+    def test_it_names_the_choices_that_change_the_picture(self, styles):
+        text = styles.style_summary(styles.get_style("lattice_blueprint"))
+        for field in ("backdrop", "colour by", "model", "camera", "render"):
+            assert field in text
+        assert "licorice" in text
+
+    def test_it_lists_the_effects_a_style_brings(self, styles):
+        assert "grid" in styles.style_summary(
+            styles.get_style("lattice_blueprint"))
+        assert "none" in styles.style_summary(
+            styles.get_style("matter_section"))
+
+    def test_every_style_can_describe_itself(self, styles):
+        for name in styles.list_styles():
+            text = styles.style_summary(styles.get_style(name))
+            assert len(text) > 120
+            assert "\n" in text
+
+    def test_every_choice_has_a_help_line(self, styles):
+        """A control whose options are not explained is a control the
+        user has to guess at."""
+        for model in styles.MODELS:
+            assert styles.MODEL_HELP[model]
+        for mode in styles.COLOUR_MODES:
+            assert styles.COLOUR_HELP[mode]
+        for kind in styles.BACKGROUNDS:
+            assert styles.BACKGROUND_HELP[kind]
+
+
+class TestNewEffects:
+    def test_dust_grid_and_wave_exist_with_defaults(self, effects):
+        for name in ("dust", "grid", "wave"):
+            assert name in effects.EFFECTS
+            spec = effects.EffectSpec(kind=name)
+            assert spec.get("color") is not None
+
+    def test_dust_is_one_merged_mesh(self):
+        """Two hundred separate objects is two hundred outliner entries
+        for somebody to scroll past after --save-blend."""
+        source = (BLENDER_DIR / "effects.py").read_text()
+        start = source.index("def _build_dust")
+        body = source[start:source.index("def _build_grid")]
+        assert body.count("bpy.data.objects.new") == 1
+        assert "create_icosphere" in body
+
+    def test_the_wave_is_a_torus_not_a_curve(self):
+        """A wavefront has thickness; a curve's round bevel reads as a
+        wire."""
+        source = (BLENDER_DIR / "effects.py").read_text()
+        body = source[source.index("def _build_wave"):
+                      source.index("def _build_bokeh")]
+        assert "create_cone" in body
+        assert '"thickness"' in body
+
+    def test_every_effect_has_a_builder(self, effects):
+        source = (BLENDER_DIR / "effects.py").read_text()
+        for name in effects.EFFECTS:
+            assert f'"{name}": _build_' in source or name == "glare"
+
+    def test_none_of_them_lights_the_scene_by_default(self, effects):
+        """An emissive object is a light source in Cycles, and a field
+        of motes bright enough to light anything is a field nobody would
+        believe."""
+        for name in ("dust", "grid", "wave", "bokeh", "arc", "resonance"):
+            assert effects.EFFECT_DEFAULTS[name]["light"] == 0.0
+
+
 class TestBondMaterials:
     """The bonds are decided separately from the atoms. They were not:
     whenever the colour belonged to the atom the bonds simply reused the

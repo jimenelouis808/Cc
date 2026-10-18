@@ -427,6 +427,54 @@ SPACEFILL_ELEMENTS = frozenset({
     "Ta", "W", "Re", "Pt", "Au", "Pb", "Bi",
 })
 
+#: Mesh resolution per atom and per bond. Measured, not estimated: an
+#: icosphere is **80** triangles at subdivision 2, 320 at 3, 1280 at 4
+#: and 5120 at 5. The pipeline was fixed at 2 -- eighty triangles --
+#: which is visibly faceted as soon as an atom is more than a few per
+#: cent of the frame, and a close-up of a small molecule is exactly
+#: that.
+#:
+#: The cost is linear in the atom count, so this cannot simply be set
+#: high: 2000 atoms at subdivision 5 is ten million triangles before a
+#: single bond is drawn. :func:`detail_for` picks from the atom count
+#: when the caller does not say.
+DETAIL_LEVELS: dict[str, dict[str, int]] = {
+    "low":    {"sphere_subdiv": 2, "bond_segments": 8},
+    "normal": {"sphere_subdiv": 3, "bond_segments": 12},
+    "high":   {"sphere_subdiv": 4, "bond_segments": 20},
+    "ultra":  {"sphere_subdiv": 5, "bond_segments": 32},
+}
+
+#: Atom counts at or below which each level is chosen automatically.
+#: Above the last one, "low" is the only affordable answer -- and at
+#: that density an atom is a few pixels across, where subdivision 2 is
+#: indistinguishable from 5.
+DETAIL_THRESHOLDS = ((120, "ultra"), (600, "high"), (3000, "normal"))
+
+
+def detail_for(n_atoms: int, requested: str | None = None
+               ) -> dict[str, int]:
+    """Mesh resolution for a structure of this size.
+
+    Automatic by default, because the right answer genuinely depends on
+    the subject: a 60-atom cage fills the frame with twenty-pixel
+    spheres and needs every triangle, while in a 2000-atom supernetwork
+    an atom is three pixels across and subdivision 5 would be ten
+    million triangles that nobody can see.
+    """
+    if requested:
+        try:
+            return dict(DETAIL_LEVELS[requested])
+        except KeyError:
+            raise ValueError(
+                f"unknown detail {requested!r}; known: "
+                f"{', '.join(DETAIL_LEVELS)}") from None
+    for limit, level in DETAIL_THRESHOLDS:
+        if n_atoms <= limit:
+            return dict(DETAIL_LEVELS[level])
+    return dict(DETAIL_LEVELS["low"])
+
+
 #: How the structure is drawn.
 #:
 #: ``ballstick``  -- spheres at display radii joined by sticks. The right
@@ -783,6 +831,75 @@ def bond_materials(style: Style, colour_by: str, keys,
         return [apply_finish(style.bond.with_colour(NEUTRAL_BOND),
                              finish)], False
     return [apply_finish(style.bond, finish)], False
+
+
+#: One line per model, for the window's help panel.
+MODEL_HELP = {
+    "ballstick": "spheres joined by sticks -- for a lattice, where the "
+                 "connectivity is the subject",
+    "spacefill": "spheres at their van der Waals radii, no sticks -- the "
+                 "shape the structure actually occupies",
+    "auto": "space-filling for metals, ball-and-stick for everything "
+            "else: a coated metal particle as a solid core in an open cage",
+    "licorice": "sticks only -- for a dense net whose atoms would hide "
+                "the topology",
+    "wireframe": "thin sticks only",
+}
+
+#: One line per colour mode.
+COLOUR_HELP = {
+    "ring": "ring size: where the curvature and the defects are. Says "
+            "nothing about chemistry, and on a closed cage every atom "
+            "is on a pentagon",
+    "element": "the chemical element. What a doped, functionalised or "
+               "encapsulated structure needs; one colour on pure carbon",
+    "structure": "which item of a composition an atom came from",
+    "uniform": "one colour throughout, for a silhouette",
+}
+
+#: One line per background.
+BACKGROUND_HELP = {
+    "gradient": "a vertical ramp between two colours",
+    "solid": "one flat colour -- what a figure wants, since a gradient "
+             "behind a figure reads as decoration",
+    "transparent": "no background: alpha straight through, for "
+                   "compositing into a layout",
+    "studio": "a gradient plus a floor to sit on and cast onto",
+    "space": "a procedural starfield",
+    "nebula": "the starfield plus drifting coloured cloud",
+}
+
+
+def style_summary(style: Style) -> str:
+    """Everything a style decides, as a few lines of plain text.
+
+    The window shows this under the style menu. A preset is a bundle of
+    a dozen choices, and a name plus a sentence of mood does not say
+    which ones -- so the ones that change what you see are listed.
+    """
+    lines = [style.description, ""]
+    lines.append(f"backdrop   {style.background.kind}"
+                 + (", with a floor" if style.background.has_floor else ""))
+    lines.append(f"colour by  {style.default_colour_by} -- "
+                 + COLOUR_HELP.get(style.default_colour_by, ""))
+    lines.append(f"model      {style.default_model} -- "
+                 + MODEL_HELP.get(style.default_model, ""))
+    lines.append(f"camera     {style.camera_lens_mm:.0f} mm, "
+                 + ("no depth of field"
+                    if style.camera_dof_fstop is None
+                    else f"f/{style.camera_dof_fstop:g}"))
+    lines.append(f"render     {style.engine.title()} at {style.samples} "
+                 "samples")
+    if style.atom_scale != 1.0 or style.bond_scale != 1.0:
+        lines.append(f"scale      atoms x{style.atom_scale:g}, "
+                     f"bonds x{style.bond_scale:g}")
+    if style.effects:
+        lines.append("effects    "
+                     + ", ".join(spec.kind for spec in style.effects)
+                     + "  (the checkboxes can drop them)")
+    else:
+        lines.append("effects    none")
+    return "\n".join(lines)
 
 
 def describe_finishes() -> str:
@@ -1847,6 +1964,183 @@ STYLES: dict[str, Style] = {
         bond_scale=1.6,
         effects=(),
     ),
+
+    # ------------------------------------------------------------------
+    # Superstructures: 900-2000 atoms, where the subject is a LATTICE
+    # rather than an object. Three things change at that size and all
+    # three are in these presets rather than left to the caller:
+    # the atoms have to shrink or the picture becomes a wall of spheres;
+    # the depth of field has to open or two thirds of the structure is
+    # a blur; and the colour has to come from position or curvature,
+    # because an all-carbon net coloured by element is one grey mass.
+    # ------------------------------------------------------------------
+    "lattice_dark": Style(
+        name="lattice_dark",
+        description=(
+            "A large periodic network against black, lit from behind so "
+            "the struts separate by their rims rather than by their "
+            "colour. Small atoms, thin bonds, deep focus: at a thousand "
+            "atoms the subject is the ARCHITECTURE, and anything that "
+            "fattens an atom closes the holes the eye reads depth "
+            "through."
+        ),
+        background=Background(
+            kind="gradient", top=(0.015, 0.018, 0.030),
+            bottom=(0.0, 0.0, 0.005), strength=1.0,
+        ),
+        hexagon=MaterialSpec(base_color=(0.07, 0.08, 0.10, 1.0),
+                             metallic=0.5, roughness=0.32, clearcoat=0.3,
+                             rim=2.6, rim_color=(0.30, 0.70, 1.00),
+                             rim_power=2.8),
+        pentagon=_accent((1.00, 0.55, 0.15, 1.0), (1.00, 0.50, 0.10), 3.0),
+        heptagon=_accent((0.20, 0.90, 1.00, 1.0), (0.15, 0.85, 1.00), 3.0),
+        octagon=_accent((0.90, 0.30, 1.00, 1.0), (0.85, 0.25, 1.00), 3.4),
+        bond=MaterialSpec(base_color=(0.09, 0.10, 0.13, 1.0),
+                          metallic=0.5, roughness=0.34,
+                          rim=1.8, rim_color=(0.25, 0.65, 1.00)),
+        lights=[
+            LightSpec("AREA", 2000.0, (0.70, 0.85, 1.00), (-6.0, 8.0, 7.0),
+                      size=5.0),
+            LightSpec("AREA", 400.0, (1.00, 0.75, 0.55), (8.0, -6.0, -2.0),
+                      size=10.0),
+        ],
+        camera_lens_mm=50.0,
+        # Deep: a lattice photographed at f/2 is a blur with a sharp
+        # band through it, which looks like a mistake rather than a
+        # choice.
+        camera_dof_fstop=8.0,
+        samples=448,
+        default_colour_by="ring",
+        default_model="ballstick",
+        atom_scale=0.72,
+        bond_scale=0.85,
+        effects=(EffectSpec("glare", {"strength": 0.35}),),
+    ),
+
+    "lattice_depth": Style(
+        name="lattice_depth",
+        description=(
+            "The same large net, but photographed INTO rather than at: "
+            "haze in the air so the far side fades, a warm key at the "
+            "front and a cold fill behind, and just enough depth of "
+            "field to say which end is near. Atmospheric perspective is "
+            "the only cue that still works when a structure is mostly "
+            "its own repetition."
+        ),
+        background=Background(
+            kind="gradient", top=(0.10, 0.14, 0.22),
+            bottom=(0.02, 0.03, 0.06), strength=1.0,
+        ),
+        hexagon=MaterialSpec(base_color=(0.30, 0.36, 0.46, 1.0),
+                             metallic=0.3, roughness=0.38, clearcoat=0.25,
+                             rim=1.0, rim_color=(0.70, 0.85, 1.00)),
+        pentagon=_accent((1.00, 0.60, 0.25, 1.0), (1.00, 0.55, 0.20), 1.6),
+        heptagon=_accent((0.35, 0.85, 1.00, 1.0), (0.30, 0.80, 1.00), 1.6),
+        octagon=_accent((1.00, 0.35, 0.55, 1.0), (1.00, 0.30, 0.50), 1.8),
+        bond=MaterialSpec(base_color=(0.26, 0.31, 0.40, 1.0),
+                          metallic=0.3, roughness=0.4),
+        lights=[
+            LightSpec("AREA", 2400.0, (1.00, 0.90, 0.78), (5.0, -9.0, 5.0),
+                      size=8.0),
+            LightSpec("AREA", 1100.0, (0.45, 0.70, 1.00), (-6.0, 8.0, 3.0),
+                      size=12.0),
+        ],
+        camera_lens_mm=38.0,
+        camera_dof_fstop=5.6,
+        samples=512,
+        default_colour_by="ring",
+        default_model="ballstick",
+        atom_scale=0.78,
+        bond_scale=0.9,
+        # The haze IS the style: it is what turns repetition into depth.
+        effects=(
+            EffectSpec("fog", {"strength": 0.0045, "color": "white"}),
+            EffectSpec("glare", {"strength": 0.3}),
+        ),
+    ),
+
+    "lattice_blueprint": Style(
+        name="lattice_blueprint",
+        description=(
+            "A superstructure as a technical drawing: thin emissive "
+            "struts on a dark grid, no spheres at all. LICORICE by "
+            "default -- at this size the atoms are what hide the "
+            "topology, and the topology is the result. For a figure "
+            "about connectivity rather than about matter."
+        ),
+        background=Background(
+            kind="gradient", top=(0.02, 0.04, 0.09),
+            bottom=(0.0, 0.01, 0.03), strength=1.0,
+        ),
+        hexagon=_accent((0.30, 0.75, 1.00, 1.0), (0.25, 0.70, 1.00), 2.2,
+                        roughness=0.3),
+        pentagon=_accent((1.00, 0.65, 0.20, 1.0), (1.00, 0.60, 0.15), 3.2,
+                         roughness=0.3),
+        heptagon=_accent((1.00, 0.30, 0.55, 1.0), (1.00, 0.25, 0.50), 3.2,
+                         roughness=0.3),
+        octagon=_accent((0.70, 1.00, 0.40, 1.0), (0.65, 1.00, 0.35), 3.4,
+                        roughness=0.3),
+        bond=_accent((0.30, 0.75, 1.00, 1.0), (0.25, 0.70, 1.00), 2.2,
+                     roughness=0.3),
+        lights=[
+            LightSpec("AREA", 600.0, (0.60, 0.80, 1.00), (6.0, -7.0, 6.0),
+                      size=10.0),
+        ],
+        camera_lens_mm=42.0,
+        camera_dof_fstop=None,
+        samples=320,
+        default_colour_by="ring",
+        default_model="licorice",
+        atom_scale=1.0,
+        bond_scale=0.75,
+        effects=(
+            EffectSpec("grid", {"color": "cyan", "strength": 0.9,
+                                "lines": 20}),
+            EffectSpec("glare", {"strength": 0.45, "threshold": 0.6}),
+        ),
+    ),
+
+    "lattice_studio": Style(
+        name="lattice_studio",
+        description=(
+            "A large net as a white-background object photograph: even "
+            "soft light from four sides, a faint contact shadow, no "
+            "accent and no bloom. The one to put in a paper when the "
+            "structure is big and the caption has to carry the meaning."
+        ),
+        background=Background(
+            kind="solid", top=(0.97, 0.97, 0.98), bottom=(0.97, 0.97, 0.98),
+            strength=1.05, floor=True, floor_color=(0.95, 0.95, 0.96),
+            floor_roughness=0.6, floor_is_shadow_catcher=False,
+        ),
+        hexagon=MaterialSpec(base_color=(0.34, 0.36, 0.40, 1.0),
+                             roughness=0.42, clearcoat=0.2),
+        pentagon=MaterialSpec(base_color=(0.84, 0.36, 0.26, 1.0),
+                              roughness=0.4),
+        heptagon=MaterialSpec(base_color=(0.24, 0.48, 0.80, 1.0),
+                              roughness=0.4),
+        octagon=MaterialSpec(base_color=(0.92, 0.72, 0.20, 1.0),
+                             roughness=0.4),
+        bond=MaterialSpec(base_color=(0.52, 0.54, 0.58, 1.0), roughness=0.45),
+        lights=[
+            LightSpec("AREA", 1700.0, (1.0, 1.0, 1.0), (7.0, -8.0, 8.0),
+                      size=18.0),
+            LightSpec("AREA", 1300.0, (1.0, 1.0, 1.0), (-8.0, -6.0, 6.0),
+                      size=18.0),
+            LightSpec("AREA", 900.0, (1.0, 1.0, 1.0), (0.0, 9.0, 5.0),
+                      size=16.0),
+            LightSpec("AREA", 600.0, (1.0, 1.0, 1.0), (0.0, 0.0, -10.0),
+                      size=16.0),
+        ],
+        camera_lens_mm=55.0,
+        camera_dof_fstop=None,
+        samples=256,
+        default_colour_by="ring",
+        default_model="ballstick",
+        atom_scale=0.8,
+        bond_scale=0.9,
+        effects=(),
+    ),
 }
 
 
@@ -1919,6 +2213,7 @@ __all__ = [
     "ELEMENT_COLOURS",
     "ELEMENT_RADII",
     "BOND_COLOURS",
+    "DETAIL_LEVELS",
     "MODELS",
     "QUALITY_PRESETS",
     "SPACEFILL_ELEMENTS",
@@ -1934,10 +2229,12 @@ __all__ = [
     "MaterialSpec",
     "Style",
     "apply_finish",
+    "style_summary",
     "bond_materials",
     "describe_finishes",
     "element_colour",
     "bond_is_drawn",
+    "detail_for",
     "draws_bonds",
     "element_radius",
     "is_spacefill_element",
