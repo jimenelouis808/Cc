@@ -3046,6 +3046,37 @@ census, `cell.supercell` for repetition, `scene` for compositions, and
 now the renderer. Anything that uses a recorded bond pair **as a pair of
 positions** needs the shift.
 
+### Depth colouring cannot read through a hollow subject
+
+Two separate faults were found asking for `--colour-by depth` on a C240
+cage, and the first one hides the second.
+
+**A round subject has no longest axis.** The ratio of the first two
+singular values is **1.0000** for the cage and **1.0123** for a coated
+spherical nanoparticle, against 1.73 for a sheet, 3.01 for a row of
+three structures and 6.29 for a long net. At 1.0 the principal axis is
+decided by rounding, so the gradient runs along a direction a tiny
+perturbation rotates. `--depth-axis view|x|y|z` fixes that, and
+`depth_axis_quality` reports it (`DEGENERATE_AXIS`).
+
+**And fixing it does not make the picture readable.** Graded along the
+view direction with a monotone ramp, the cage comes out with its
+silhouette at mid-ramp and its centre carrying the two ends at once --
+which is correct, and unreadable. A hollow shell projects its near wall
+and its far wall **onto the same place on screen**, so every band
+appears at the middle of the disc and only the silhouette sits at an
+unambiguous depth. No choice of axis changes that; it is what seeing
+through something means.
+
+So `depth` is a mode for an **extended or porous** subject -- a sheet, a
+net, a composition -- where the structure's own thickness is spread
+across the frame. For a closed cage, `ring` and `element` are the modes
+that say something, and the note the renderer prints says so rather than
+recommending the axis flag as a cure.
+
+An earlier version of that note did recommend it as a cure, which
+overclaimed: the axis was measured and the legibility was assumed.
+
 ### Haze does not sit behind a gradient, it replaces it
 
 `porous_depth` read as a grey wash rather than as depth colouring, and

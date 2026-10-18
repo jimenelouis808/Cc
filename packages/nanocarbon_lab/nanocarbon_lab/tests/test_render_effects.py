@@ -1339,3 +1339,16 @@ class TestDepthAxis:
         source = (BLENDER_DIR / "render_cnt.py").read_text()
         assert "--depth-axis" in source
         assert '"view"' in source or "'view'" in source
+
+    def test_the_note_does_not_oversell_the_axis(self):
+        """An axis fixes reproducibility, not legibility.
+
+        A hollow shell projects its near and far walls onto the same
+        place on screen, so depth colouring reads only at the
+        silhouette whatever axis is chosen. The first version of this
+        note recommended --depth-axis view as the cure, which measured
+        the axis and assumed the picture.
+        """
+        source = (BLENDER_DIR / "render_cnt.py").read_text()
+        assert "HOLLOW" in source
+        assert "superimpose" in source

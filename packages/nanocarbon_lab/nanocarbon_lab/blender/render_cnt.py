@@ -84,7 +84,8 @@ def _parse_args() -> argparse.Namespace:
              "equal to four decimals, so the gradient runs along a "
              "direction set by floating-point noise. view grades from "
              "the camera, which is what depth means to the eye and is "
-             "reproducible. Default: auto.",
+             "reproducible. Neither fixes a HOLLOW subject, whose "
+             "near and far walls superimpose on screen. Default: auto.",
     )
     p.add_argument(
         "--seams", default="stub", choices=["stub", "drop", "keep"],
@@ -779,7 +780,12 @@ def _depth_axis(args, bundle, colour_by):
               f"(first two principal axes differ by {quality:.4f}x), so "
               f"--colour-by depth is grading it along a direction set by "
               f"rounding. --depth-axis view grades from the camera "
-              f"instead, which is reproducible.")
+              f"instead, which is reproducible -- but on a HOLLOW "
+              f"subject it still will not read as a gradient: the near "
+              f"and far walls both project onto the middle of the "
+              f"picture and superimpose, leaving only the silhouette at "
+              f"an unambiguous depth. For a closed cage, --colour-by "
+              f"ring or element is the mode that says something.")
     return None
 
 
