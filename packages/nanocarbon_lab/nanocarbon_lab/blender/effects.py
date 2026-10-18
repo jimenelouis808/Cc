@@ -37,7 +37,8 @@ RGB = tuple[float, float, float]
 __all__ = ["EFFECTS", "EFFECT_DEFAULTS", "EffectSpec", "NAMED_COLOURS",
            "apply_glare", "arc_polyline", "build_effects",
            "describe_effects", "glare_image", "parse_effect",
-           "parse_colour", "surface_along"]
+           "fractal_offsets", "parse_colour", "surface_along",
+           "taper_profile"]
 
 #: Colours worth having a name for, so a command line is readable.
 NAMED_COLOURS: dict[str, RGB] = {
@@ -97,13 +98,14 @@ EFFECT_DEFAULTS: dict[str, dict] = {
         "color": "laser-green", "strength": 55.0, "width": 0.016,
         "reach": 7.0, "azimuth": 135.0, "elevation": 22.0,
         "count": 1, "spread": 0.0, "spot": 0.10, "stop": 0.85,
-        "light": 1.0, "seed": 0,
+        "sheath": 4.0, "sparks": 10.0, "light": 1.0, "seed": 0,
     },
     # Lightning: jagged emissive filaments arcing around the subject.
     "arc": {
         "color": "electric", "strength": 9.0, "width": 0.0030,
-        "count": 6, "reach": 1.12, "jitter": 0.16, "segments": 26,
-        "branch": 0.30, "span": 55.0, "light": 0.0, "seed": 0,
+        "count": 6, "reach": 1.12, "jitter": 0.30, "segments": 64,
+        "branch": 0.45, "span": 55.0, "sheath": 3.2, "spread": 0.55,
+        "light": 0.0, "seed": 0,
     },
     # Standing-wave shells: concentric rings around the structure, each
     # fainter than the last, for a vibrational or plasmonic resonance.
@@ -119,9 +121,12 @@ EFFECT_DEFAULTS: dict[str, dict] = {
         "light": 0.0, "seed": 0,
     },
     # A soft shell of light around the subject.
+    # A VOLUME, not a shell: a surface has a silhouette and reads as a
+    # disc however it is tuned. `density` is how much of it there is to
+    # look through and `strength` how brightly it emits.
     "halo": {
-        "color": "electric", "strength": 0.35, "reach": 1.22,
-        "alpha": 0.05, "light": 0.0, "seed": 0,
+        "color": "electric", "strength": 0.26, "reach": 1.6,
+        "density": 0.008, "light": 0.0, "seed": 0,
     },
     # World volume scatter: haze, so beams and lights become visible as
     # shafts rather than only lighting what they hit. Easy to overdo --
@@ -206,6 +211,53 @@ def describe_effects() -> str:
 # ----------------------------------------------------------------------
 # geometry that needs no Blender
 # ----------------------------------------------------------------------
+def fractal_offsets(count: int, rng, roughness: float = 0.62
+                    ) -> np.ndarray:
+    """Self-similar 2D displacements for ``count`` points, ends at zero.
+
+    **Midpoint displacement**, the standard way lightning is generated:
+    set the midpoint of a segment to the mean of its ends plus a random
+    kick, halve the kick, and recurse. What comes out has large bends
+    with smaller kinks on them and smaller ones on those -- the
+    self-similar structure a discharge actually has.
+
+    The first version used a **random walk** instead, and the difference
+    is not subtle: a walk's displacement is the sum of its steps, so it
+    drifts slowly and smoothly and the result is a meander. Drawn as a
+    filament it reads as a wire someone bent, which is exactly what the
+    arcs looked like.
+
+    ``roughness`` below 0.5 gives a nearly straight line with fine fuzz,
+    above 0.75 a tangle that crosses itself. The ends are pinned to zero
+    so an arc stays attached to whatever it is striking.
+    """
+    count = max(2, int(count))
+    # Midpoint displacement needs 2^k + 1 points; the result is sampled
+    # back down to the length asked for.
+    levels = max(1, math.ceil(math.log2(max(2, count - 1))))
+    size = 2 ** levels + 1
+    out = np.zeros((size, 2))
+    step = size - 1
+    scale = 1.0
+    while step > 1:
+        half = step // 2
+        for start in range(0, size - 1, step):
+            middle = start + half
+            out[middle] = (0.5 * (out[start] + out[start + step])
+                           + rng.normal(0.0, scale, size=2))
+        step = half
+        scale *= roughness
+    if size != count:
+        source = np.linspace(0.0, 1.0, size)
+        target = np.linspace(0.0, 1.0, count)
+        out = np.column_stack([np.interp(target, source, out[:, axis])
+                               for axis in (0, 1)])
+    # Normalised, so `jitter` means the same thing at every segment
+    # count -- otherwise a finer arc is also a wilder one.
+    peak = float(np.abs(out).max())
+    return out / peak if peak > 1e-12 else out
+
+
 def arc_polyline(start: np.ndarray, end: np.ndarray, segments: int,
                  jitter: float, scale: float, rng) -> np.ndarray:
     """A jagged path from ``start`` to ``end``, as lightning draws it.
@@ -215,10 +267,8 @@ def arc_polyline(start: np.ndarray, end: np.ndarray, segments: int,
     arc whose ends drift is an arc that has come off the thing it is
     supposed to be striking.
 
-    The taper is ``sin(pi t)``, which is zero at both ends and widest in
-    the middle, and the offsets are a random walk rather than independent
-    noise: independent noise per vertex gives a fuzzy line, while a walk
-    gives the long excursions that read as a discharge.
+    The shape of the wander is :func:`fractal_offsets`; see there for
+    why it is not a random walk.
     """
     start = np.asarray(start, dtype=float)
     end = np.asarray(end, dtype=float)
@@ -234,12 +284,9 @@ def arc_polyline(start: np.ndarray, end: np.ndarray, segments: int,
     u /= np.linalg.norm(u)
     v = np.cross(axis, u)
 
-    steps = rng.normal(0.0, 1.0, size=(segments + 1, 2))
-    walk = np.cumsum(steps, axis=0)
-    walk -= np.linspace(0.0, 1.0, segments + 1)[:, None] * walk[-1]
     t = np.linspace(0.0, 1.0, segments + 1)
     taper = np.sin(math.pi * t)[:, None]
-    offset = (walk * taper) * jitter * scale
+    offset = fractal_offsets(segments + 1, rng) * taper * jitter * scale
     spine = start + np.outer(t, direction)
     return spine + offset[:, 0:1] * u + offset[:, 1:2] * v
 
@@ -340,32 +387,101 @@ def _set_light_contribution(obj, lights: bool) -> None:
             setattr(obj, flag, bool(lights))
 
 
-def _polyline_object(name: str, paths, radius: float, material):
+def taper_profile(count: int, kind: str = "none") -> np.ndarray:
+    """Per-point radius multipliers along a path.
+
+    A filament of constant width is the single thing that makes an
+    effect read as a drawn line rather than as light. Real discharges
+    and beams are thickest somewhere and thin out, so every stroke here
+    carries a profile:
+
+    ``none``    flat -- for a ring, where constant width is correct.
+    ``ends``    thin at both ends, fat in the middle: an arc that
+                detaches from its anchors instead of butting into them.
+    ``taper``   fat at the start, thin at the end: a branch, a spark.
+    ``beam``    nearly flat with a slight waist, for a laser core.
+    """
+    t = np.linspace(0.0, 1.0, max(2, count))
+    if kind == "ends":
+        # sin is zero at both ends; the floor keeps the stroke from
+        # vanishing entirely, which would leave visible gaps.
+        return 0.18 + 0.82 * np.sin(math.pi * t)
+    if kind == "taper":
+        return 1.0 - 0.9 * t
+    if kind == "beam":
+        return 0.85 + 0.15 * np.cos(2.0 * math.pi * t)
+    return np.ones_like(t)
+
+
+def _polyline_object(name: str, paths, radius: float, material,
+                     taper: str = "none", weights=None):
     """One mesh of thin tubes following each path in ``paths``.
 
     Built as a curve with a bevel rather than as thousands of cylinders:
     a 26-segment arc times ten arcs is 260 joints, and a curve carries
     them as one object with round caps for free.
+
+    The bevel is modulated per point through the spline's **radius**
+    channel, which is what ``taper`` and ``weights`` drive -- a curve
+    whose width varies is the difference between a filament and a wire.
+    ``weights`` scales each whole path, so a population of arcs can vary
+    in brightness-by-thickness rather than being identical strokes.
     """
     import bpy
 
     curve = bpy.data.curves.new(name, type="CURVE")
     curve.dimensions = "3D"
     curve.bevel_depth = float(radius)
-    curve.bevel_resolution = 2
+    curve.bevel_resolution = 3
     curve.use_fill_caps = True
-    for path in paths:
+    for index, path in enumerate(paths):
         points = np.asarray(path, dtype=float)
         if len(points) < 2:
             continue
         spline = curve.splines.new("POLY")
         spline.points.add(len(points) - 1)
-        for index, point in enumerate(points):
-            spline.points[index].co = (*point, 1.0)
+        profile = taper_profile(len(points), taper)
+        scale = 1.0 if weights is None else float(weights[index])
+        for position, point, width in zip(
+                range(len(points)), points, profile, strict=True):
+            spline.points[position].co = (*point, 1.0)
+            spline.points[position].radius = float(width * scale)
     curve.materials.append(material)
     obj = bpy.data.objects.new(name, curve)
     bpy.context.collection.objects.link(obj)
     return obj
+
+
+def _glow_pair(name: str, paths, radius: float, colour: RGB,
+               strength: float, taper: str = "none", weights=None,
+               sheath: float = 3.2, sheath_alpha: float = 0.13) -> list:
+    """A bright core inside a wide, faint sheath.
+
+    One emissive tube is a glowing wire. What makes a discharge or a
+    beam look like *light* is that it has a hot thin core and a soft
+    halo around it that the eye reads as air lit up -- two objects, not
+    one, because a single material cannot be both opaque at the centre
+    and nearly transparent at the edge.
+
+    The sheath is mostly transparent and its emission is scaled down in
+    proportion, so widening it spreads the glow rather than adding more
+    total light.
+    """
+    # The core is brighter than the halo but must keep the hue: lifting
+    # it most of the way to white, which was the first version, turned
+    # every coloured filament into a white wire and threw away the one
+    # thing the colour parameter controls.
+    core_colour = tuple(min(1.0, channel * 0.75 + 0.25) for channel in colour)
+    core = _polyline_object(
+        f"{name}_core", paths, radius,
+        _emissive(f"{name}_core_mat", core_colour, strength),
+        taper, weights)
+    halo = _polyline_object(
+        f"{name}_glow", paths, radius * sheath,
+        _emissive(f"{name}_glow_mat", colour, strength * 0.5,
+                  alpha=sheath_alpha),
+        taper, weights)
+    return [core, halo]
 
 
 def _ico(name: str, centre, radius: float, material, subdivisions: int = 3):
@@ -440,7 +556,6 @@ def _build_laser(spec: EffectSpec, centre, radius: float,
     reach = float(spec.get("reach")) * radius
     count = max(1, int(spec.get("count")))
     spread = float(spec.get("spread"))
-    material = _emissive("fx_laser", colour, strength)
 
     base = direction_from_angles(float(spec.get("azimuth")),
                                  float(spec.get("elevation")))
@@ -472,16 +587,42 @@ def _build_laser(spec: EffectSpec, centre, radius: float,
                   + rng.normal(0.0, 0.10 * radius, size=3) * (count > 1))
         paths.append(np.vstack([target + direction * reach, target]))
         targets.append(target)
-    objects = [_polyline_object("fx_laser", paths, width, material)]
+    # A hot white core inside a coloured halo, with a slight waist: one
+    # flat emissive cylinder is a drawn line, and this is the difference
+    # between that and a beam.
+    objects = _glow_pair("fx_laser", paths, width, colour, strength,
+                         taper="beam", sheath=float(spec.get("sheath")))
     lights = bool(spec.get("light"))
 
     spot = float(spec.get("spot"))
     if spot > 0:
-        hot = _emissive("fx_laser_spot", colour, strength * 1.5)
+        hot = _emissive("fx_laser_spot", (1.0, 1.0, 1.0), strength * 2.0)
+        bloomy = _emissive("fx_laser_flash", colour, strength * 0.6,
+                           alpha=0.10)
         for index, target in enumerate(targets):
             objects.append(
                 _ico(f"fx_laser_spot{index}", target, spot * radius * 0.5,
                      hot, subdivisions=2))
+            # A flash around the impact, which is what sells it as
+            # something landing rather than a dot pasted on.
+            objects.append(
+                _ico(f"fx_laser_flash{index}", target, spot * radius * 1.8,
+                     bloomy, subdivisions=3))
+
+    # Sparks thrown off the impact point: short tapered filaments, so
+    # the beam has a consequence instead of simply ending.
+    count_sparks = int(spec.get("sparks"))
+    if count_sparks > 0 and targets:
+        spark_paths = []
+        for target in targets:
+            for direction in sphere_points(count_sparks, 1.0, rng):
+                length = float(rng.uniform(0.10, 0.34)) * radius
+                tip = target + direction * length
+                spark_paths.append(arc_polyline(target, tip, 5, 0.25,
+                                                radius * 0.4, rng))
+        objects += _glow_pair("fx_spark", spark_paths, width * 0.45,
+                              colour, strength * 0.7, taper="taper",
+                              sheath=2.4)
     for obj in objects:
         _set_light_contribution(obj, lights)
     return objects
@@ -528,11 +669,18 @@ def _build_arc(spec: EffectSpec, centre, radius: float) -> list:
             tip = path[cut] + rng.normal(0.0, 0.5 * radius, size=3)
             paths.append(arc_polyline(path[cut], tip, max(4, segments // 3),
                                       jitter * 1.4, radius, rng))
-    material = _emissive("fx_arc", spec.colour(), float(spec.get("strength")))
-    obj = _polyline_object("fx_arc", paths,
-                           float(spec.get("width")) * radius, material)
-    _set_light_contribution(obj, bool(spec.get("light")))
-    return [obj]
+    # Filaments differ in brightness and thickness; a population of
+    # identical strokes reads as a pattern, which is the opposite of a
+    # discharge. `spread` is how much they are allowed to vary.
+    vary = float(spec.get("spread"))
+    weights = 1.0 - vary * rng.random(len(paths))
+    objects = _glow_pair(
+        "fx_arc", paths, float(spec.get("width")) * radius, spec.colour(),
+        float(spec.get("strength")), taper="ends", weights=weights,
+        sheath=float(spec.get("sheath")))
+    for obj in objects:
+        _set_light_contribution(obj, bool(spec.get("light")))
+    return objects
 
 
 def _build_resonance(spec: EffectSpec, centre, radius: float) -> list:
@@ -549,13 +697,13 @@ def _build_resonance(spec: EffectSpec, centre, radius: float) -> list:
     for index in range(count):
         # Fainter outward: a standing wave loses amplitude with distance,
         # and rings of equal brightness read as a stack of hoops.
-        material = _emissive(f"fx_res{index}", spec.colour(),
-                             strength * (falloff ** index))
         path = _ring_path(centre, reach + index * spacing, normal, segments)
-        obj = _polyline_object(f"fx_res{index}", [path],
-                               float(spec.get("width")) * radius, material)
-        _set_light_contribution(obj, bool(spec.get("light")))
-        objects.append(obj)
+        made = _glow_pair(f"fx_res{index}", [path],
+                          float(spec.get("width")) * radius, spec.colour(),
+                          strength * (falloff ** index), sheath=3.0)
+        for obj in made:
+            _set_light_contribution(obj, bool(spec.get("light")))
+        objects.extend(made)
     return objects
 
 
@@ -563,8 +711,6 @@ def _build_orbit(spec: EffectSpec, centre, radius: float) -> list:
     """Rings at even angles about the subject, like a textbook atom."""
     count = max(1, int(spec.get("count")))
     tilt = math.radians(float(spec.get("tilt")))
-    material = _emissive("fx_orbit", spec.colour(),
-                         float(spec.get("strength")))
     paths = []
     for index in range(count):
         spin = math.pi * index / count
@@ -573,20 +719,109 @@ def _build_orbit(spec: EffectSpec, centre, radius: float) -> list:
                            math.cos(tilt)])
         paths.append(_ring_path(centre, float(spec.get("reach")) * radius,
                                 normal, int(spec.get("segments"))))
-    obj = _polyline_object("fx_orbit", paths,
-                           float(spec.get("width")) * radius, material)
-    _set_light_contribution(obj, bool(spec.get("light")))
-    return [obj]
+    objects = _glow_pair("fx_orbit", paths,
+                         float(spec.get("width")) * radius, spec.colour(),
+                         float(spec.get("strength")), sheath=2.8)
+    for obj in objects:
+        _set_light_contribution(obj, bool(spec.get("light")))
+    return objects
+
+
+def _fresnel_shell(name: str, colour: RGB, strength: float,
+                   power: float = 3.0):
+    """A material that glows only where the surface turns edge-on.
+
+    A uniformly emissive sphere around a structure does not read as a
+    halo: it reads as a frosted ball with something inside it, because
+    its brightness is the same in the middle of the silhouette as at the
+    rim. An atmosphere is the other way round -- you look through more
+    of it near the limb, so it brightens toward the edge and disappears
+    face-on.
+
+    ``LayerWeight.Facing`` is exactly that quantity, so driving both the
+    emission strength and the transparency mix with it turns the shell
+    into a limb glow with no disc at all.
+    """
+    import bpy
+
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    out = _fresh_tree(nodes)
+
+    weight = nodes.new("ShaderNodeLayerWeight")
+    weight.inputs["Blend"].default_value = 0.5
+    curve = nodes.new("ShaderNodeMath")
+    curve.operation = "POWER"
+    curve.inputs[1].default_value = float(power)
+    gain = nodes.new("ShaderNodeMath")
+    gain.operation = "MULTIPLY"
+    gain.inputs[1].default_value = float(strength)
+
+    emission = nodes.new("ShaderNodeEmission")
+    emission.inputs["Color"].default_value = (*colour, 1.0)
+    transparent = nodes.new("ShaderNodeBsdfTransparent")
+    mix = nodes.new("ShaderNodeMixShader")
+
+    links.new(weight.outputs["Facing"], curve.inputs[0])
+    links.new(curve.outputs[0], gain.inputs[0])
+    links.new(gain.outputs[0], emission.inputs["Strength"])
+    # The same curve mixes away the surface face-on, so the shell is
+    # invisible where it is not glowing rather than merely dim.
+    links.new(curve.outputs[0], mix.inputs["Fac"])
+    links.new(transparent.outputs[0], mix.inputs[1])
+    links.new(emission.outputs[0], mix.inputs[2])
+    links.new(mix.outputs[0], out.inputs["Surface"])
+    return material
+
+
+def _volume_glow(name: str, colour: RGB, density: float, strength: float):
+    """A material that is light in the air, with no surface at all.
+
+    The honest tool for a halo. A **surface** shell -- emissive, or
+    Fresnel-driven at its limb -- always keeps the sphere's silhouette,
+    so it reads as a disc or a ring drawn around the structure however
+    it is tuned; that was tried both ways and neither stopped being a
+    hard edge. A volume has no silhouette: there is nothing to see edge
+    on, only more or less of it to look through, which is what a glow
+    is.
+
+    The surface output is left empty on purpose, so the shell is
+    invisible to the camera except through what its volume emits.
+    """
+    import bpy
+
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    out = _fresh_tree(nodes)
+
+    volume = nodes.new("ShaderNodeVolumePrincipled")
+    volume.inputs["Density"].default_value = float(density)
+    volume.inputs["Color"].default_value = (*colour, 1.0)
+    if "Emission Color" in volume.inputs:
+        volume.inputs["Emission Color"].default_value = (*colour, 1.0)
+    if "Emission Strength" in volume.inputs:
+        volume.inputs["Emission Strength"].default_value = float(strength)
+    links.new(volume.outputs[0], out.inputs["Volume"])
+    return material
 
 
 def _build_halo(spec: EffectSpec, centre, radius: float) -> list:
-    """A soft shell of light the structure sits inside."""
-    # Small alpha on purpose: the shell is a glow around the subject,
-    # and at anything much above a few per cent it stops being a glow
-    # and becomes a frosted ball with the structure hidden inside it.
-    material = _emissive("fx_halo", spec.colour(),
-                         float(spec.get("strength")),
-                         alpha=float(spec.get("alpha")))
+    """A soft ball of light the structure sits inside."""
+    # Volume emission accumulates along the ray, so a shell twice as
+    # wide glows twice as brightly for the same setting -- which breaks
+    # the rule that an effect means the same thing at every size, and
+    # broke it spectacularly: the first try came back a white frame with
+    # the structure a ghost inside it. Dividing by the path length makes
+    # `strength` the glow across the whole shell rather than per unit.
+    reach = float(spec.get("reach")) * radius
+    material = _volume_glow("fx_halo", spec.colour(),
+                            float(spec.get("density")),
+                            float(spec.get("strength"))
+                            / max(2.0 * reach, 1e-6))
     obj = _ico("fx_halo", centre, float(spec.get("reach")) * radius,
                material, subdivisions=4)
     # A glowing shell that casts a shadow on the floor is a glowing

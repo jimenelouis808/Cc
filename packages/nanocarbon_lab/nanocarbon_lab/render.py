@@ -157,7 +157,10 @@ def render_command(
     engine: str | None = None,
     floor: bool | None = None,
     resolution: tuple[int, int] | None = None,
+    quality: str | None = None,
     samples: int | None = None,
+    bond_finish: str | None = None,
+    bond_colour: str | None = None,
     atom_scale: float = 1.0,
     bond_scale: float = 1.0,
     view: str | None = None,
@@ -225,8 +228,14 @@ def render_command(
         cmd += ["--floor"] if floor else ["--no-floor"]
     if resolution is not None:
         cmd += ["--resolution", str(int(resolution[0])), str(int(resolution[1]))]
+    if quality is not None:
+        cmd += ["--quality", quality]
     if samples is not None:
         cmd += ["--samples", str(int(samples))]
+    if bond_finish is not None and bond_finish != "style":
+        cmd += ["--bond-finish", bond_finish]
+    if bond_colour is not None and bond_colour != "auto":
+        cmd += ["--bond-colour", bond_colour]
     if atom_scale != 1.0:
         cmd += ["--atom-scale", f"{atom_scale:g}"]
     if bond_scale != 1.0:

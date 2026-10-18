@@ -61,6 +61,8 @@ def build_ball_and_stick(
     sphere_subdiv: int = 2,
     bond_segments: int = 8,
     finish: str = "style",
+    bond_finish: str | None = None,
+    bond_colour: str = "auto",
 ) -> list[bpy.types.Object]:
     """Merged sphere + cylinder meshes, coloured by ``colour_by``.
 
@@ -97,7 +99,10 @@ def build_ball_and_stick(
     bpy.context.collection.objects.link(atoms_obj)
 
     # --- bonds -------------------------------------------------------
-    split = style_defs.SPLIT_BONDS.get(colour_by, False)
+    # Decided separately from the atoms: see styles.bond_materials.
+    bond_specs, split = style_defs.bond_materials(
+        style, colour_by, keys, bond_colour,
+        finish if bond_finish is None else bond_finish)
     bm2 = bmesh.new()
     for i, j in bonds:
         if i >= len(positions) or j >= len(positions):
@@ -137,13 +142,16 @@ def build_ball_and_stick(
     bm2.to_mesh(bonds_mesh)
     bm2.free()
     if split:
-        # The bonds take the atoms' own material list, so each half is
-        # the colour of the atom it belongs to.
-        for material in materials:
-            bonds_mesh.materials.append(material)
+        # One material per atom slot, so each half takes the colour of
+        # the atom it belongs to. Built fresh rather than reusing the
+        # atoms' materials: the bonds may carry a different finish, and
+        # sharing the datablock would silently apply it to the atoms too.
+        for key, spec in zip(keys, bond_specs, strict=True):
+            bonds_mesh.materials.append(
+                material_from_spec(f"mat_bond_{key}", spec))
     else:
-        bonds_mesh.materials.append(material_from_spec(
-            "mat_bond", style_defs.apply_finish(style.bond, finish)))
+        bonds_mesh.materials.append(
+            material_from_spec("mat_bond", bond_specs[0]))
     bonds_obj = bpy.data.objects.new("Bonds", bonds_mesh)
     bpy.context.collection.objects.link(bonds_obj)
 

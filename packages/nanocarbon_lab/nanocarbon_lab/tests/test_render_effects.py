@@ -466,6 +466,209 @@ class TestFinishes:
             assert name in text
 
 
+class TestBondMaterials:
+    """The bonds are decided separately from the atoms. They were not:
+    whenever the colour belonged to the atom the bonds simply reused the
+    atoms' material list, so glass atoms meant glass bonds and there was
+    no way to say otherwise."""
+
+    def test_auto_keeps_the_old_behaviour(self, styles):
+        style = styles.get_style("paper_figure")
+        _, split = styles.bond_materials(style, "element", ["C", "O"])
+        assert split is True
+        _, split = styles.bond_materials(style, "ring", [6, 5])
+        assert split is False
+
+    def test_atoms_gives_one_material_per_atom_slot(self, styles):
+        style = styles.get_style("paper_figure")
+        specs, split = styles.bond_materials(style, "element",
+                                             ["C", "N", "O"], "atoms")
+        assert split is True and len(specs) == 3
+
+    def test_style_and_neutral_give_exactly_one(self, styles):
+        style = styles.get_style("paper_figure")
+        for mode in ("style", "neutral"):
+            specs, split = styles.bond_materials(style, "element",
+                                                 ["C", "O"], mode)
+            assert split is False and len(specs) == 1
+
+    def test_neutral_is_grey_whatever_the_style(self, styles):
+        for name in ("cosmos", "paper_figure", "neon_cyber"):
+            specs, _ = styles.bond_materials(styles.get_style(name),
+                                             "element", ["C"], "neutral")
+            red, green, blue = specs[0].base_color[:3]
+            assert abs(red - green) < 0.05 and abs(green - blue) < 0.05
+
+    def test_atoms_falls_back_where_there_are_no_halves(self, styles):
+        """Ring colouring has no per-atom colour to halve: an atom on a
+        pentagon and a hexagon has two, and picking one would be
+        arbitrary."""
+        specs, split = styles.bond_materials(styles.get_style("cosmos"),
+                                             "ring", [6, 5], "atoms")
+        assert split is False and len(specs) == 1
+
+    def test_the_bonds_can_take_their_own_finish(self, styles):
+        """Glass atoms on metal bonds is two decisions, not one."""
+        style = styles.get_style("paper_figure")
+        specs, _ = styles.bond_materials(style, "element", ["C"],
+                                         "style", finish="metal")
+        assert specs[0].metallic == 1.0
+
+    def test_an_unknown_bond_colour_is_refused(self, styles):
+        with pytest.raises(ValueError, match="neutral"):
+            styles.bond_materials(styles.get_style("cosmos"), "element",
+                                  ["C"], "rainbow")
+
+
+class TestRimLight:
+    """Emission only where the surface turns away from the camera. It is
+    the one cover-render trick a *lamp* cannot do: a rim light draws a
+    bright edge on one side, while this draws one on every silhouette
+    the viewer can see, including the far wall of a cage seen through
+    the near one."""
+
+    def test_it_is_off_by_default(self, styles):
+        assert styles.MaterialSpec(base_color=(1, 1, 1, 1)).rim == 0.0
+
+    def test_the_dark_cover_styles_use_it(self, styles):
+        assert styles.get_style("nature_nano").hexagon.rim > 0
+
+    def test_the_figure_styles_do_not(self, styles):
+        """A rim glow on a manuscript figure is decoration on something
+        a reviewer has to measure."""
+        for name in ("matter_section", "paper_figure"):
+            assert styles.get_style(name).hexagon.rim == 0.0
+
+    def test_the_render_script_wires_it_by_fresnel(self):
+        source = (BLENDER_DIR / "render_cnt.py").read_text()
+        assert "ShaderNodeLayerWeight" in source
+        # Added, not mixed: a rim is light arriving on top of the
+        # material, and mixing would dim the body to pay for the edge.
+        assert "ShaderNodeAddShader" in source
+
+    def test_a_finish_does_not_silently_drop_it(self, styles):
+        base = styles.MaterialSpec(base_color=(0.3, 0.3, 0.3, 1.0), rim=2.0)
+        assert styles.apply_finish(base, "metal").rim == 2.0
+
+
+class TestStrokeShape:
+    """A filament of constant width is the single thing that makes an
+    effect read as a drawn line rather than as light."""
+
+    def test_the_ends_profile_is_thin_at_both_ends(self, effects):
+        profile = effects.taper_profile(21, "ends")
+        assert profile[0] < 0.3 and profile[-1] < 0.3
+        assert profile[10] > 0.9
+
+    def test_the_taper_profile_only_thins_one_end(self, effects):
+        profile = effects.taper_profile(21, "taper")
+        assert profile[0] > 0.9 and profile[-1] < 0.2
+
+    def test_none_is_flat(self, effects):
+        assert np.allclose(effects.taper_profile(9, "none"), 1.0)
+
+    def test_no_profile_ever_reaches_zero(self, effects):
+        """A stroke of zero radius leaves a visible gap in the curve."""
+        for kind in ("none", "ends", "taper", "beam"):
+            assert effects.taper_profile(33, kind).min() > 0.0
+
+
+class TestFractalArcs:
+    """Midpoint displacement, not a random walk. A walk's displacement
+    is the sum of its steps, so it drifts slowly and smoothly and the
+    result is a meander -- drawn as a filament it reads as a wire
+    somebody bent, which is exactly what the arcs looked like."""
+
+    def test_the_ends_are_pinned(self, effects):
+        rng = np.random.default_rng(7)
+        offsets = effects.fractal_offsets(65, rng)
+        assert np.allclose(offsets[0], 0.0)
+        assert np.allclose(offsets[-1], 0.0)
+
+    def test_it_is_normalised_so_jitter_means_one_thing(self, effects):
+        """Otherwise a finer arc is also a wilder one."""
+        rng = np.random.default_rng(8)
+        for count in (17, 33, 65, 129):
+            assert np.abs(effects.fractal_offsets(count, rng)).max() == \
+                pytest.approx(1.0)
+
+    def test_it_has_detail_at_more_than_one_scale(self, effects):
+        """The property a random walk lacks: compare the roughness of
+        the whole path with that of a small window of it. A walk is
+        smooth locally; a fractal is not."""
+        rng = np.random.default_rng(9)
+        offsets = effects.fractal_offsets(257, rng)[:, 0]
+        fine = np.abs(np.diff(offsets)).mean()
+        coarse = np.abs(np.diff(offsets[::16])).mean()
+        # Detail survives at the fine scale rather than averaging out.
+        assert fine > coarse / 16.0
+
+    def test_roughness_controls_how_wild_it_is(self, effects):
+        rng = np.random.default_rng(10)
+        calm = np.abs(np.diff(
+            effects.fractal_offsets(129, rng, roughness=0.35)[:, 0])).mean()
+        rng = np.random.default_rng(10)
+        wild = np.abs(np.diff(
+            effects.fractal_offsets(129, rng, roughness=0.85)[:, 0])).mean()
+        assert wild > calm
+
+    def test_an_arc_still_meets_its_anchors(self, effects):
+        rng = np.random.default_rng(11)
+        start, end = np.zeros(3), np.array([10.0, 0.0, 0.0])
+        path = effects.arc_polyline(start, end, 64, 0.4, 5.0, rng)
+        assert np.allclose(path[0], start, atol=1e-9)
+        assert np.allclose(path[-1], end, atol=1e-9)
+
+
+class TestHaloIsAVolume:
+    def test_it_is_built_as_a_volume_not_a_surface(self):
+        """A surface shell -- emissive, or Fresnel-driven at its limb --
+        always keeps the sphere's silhouette, so it reads as a disc or a
+        ring drawn around the structure however it is tuned. Both were
+        tried; neither stopped being a hard edge."""
+        source = (BLENDER_DIR / "effects.py").read_text()
+        assert "ShaderNodeVolumePrincipled" in source
+        assert 'out.inputs["Volume"]' in source
+
+    def test_its_brightness_is_divided_by_the_path_length(self):
+        """Volume emission accumulates along the ray, so a shell twice
+        as wide glows twice as brightly for the same setting. The first
+        try came back a white frame with the structure a ghost in it."""
+        source = (BLENDER_DIR / "effects.py").read_text()
+        assert "2.0 * reach" in source
+
+    def test_halo_has_a_density(self, effects):
+        assert "density" in effects.EFFECT_DEFAULTS["halo"]
+
+
+class TestQualityPresets:
+    """Lives in ``styles`` rather than in the render script so it can be
+    imported rather than scraped: the first version of this test parsed
+    the dict out of the source text and broke on its own brace."""
+
+    def test_resolution_and_samples_rise_together(self, styles):
+        """One decision, not two: a 6000 px frame at 64 samples is a big
+        noisy picture and a 600 px one at 1024 is a slow thumbnail."""
+        presets = styles.QUALITY_PRESETS
+        order = ["draft", "preview", "print", "cover"]
+        sides = [presets[name]["long_side"] for name in order]
+        samples = [presets[name]["samples"] for name in order]
+        assert sides == sorted(sides)
+        assert samples == sorted(samples)
+
+    def test_print_is_300_dpi_across_a_journal_column(self, styles):
+        """8.5 cm at 300 dpi is about 1000 px; the preset leaves room to
+        crop, so it must be comfortably above that and below a page."""
+        presets = styles.QUALITY_PRESETS
+        assert 1600 <= presets["print"]["long_side"] <= 3000
+        assert presets["cover"]["long_side"] >= 4000
+
+    def test_the_script_keeps_the_aspect_ratio(self):
+        """A cover asked for at 2000x2400 must stay 5:6, not go square."""
+        source = (BLENDER_DIR / "render_cnt.py").read_text()
+        assert "max(width, height)" in source
+
+
 class TestEngine:
     def test_every_style_asks_for_cycles(self, styles):
         """Cycles is the default throughout, and --engine is the

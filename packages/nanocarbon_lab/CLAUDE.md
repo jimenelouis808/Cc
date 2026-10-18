@@ -3043,6 +3043,72 @@ Two things in `apply_finish` are measured rather than tasteful:
 because gold is a material and not a hue to apply to someone else's
 colour -- a blue gold is a contradiction.
 
+### The bonds are decided separately from the atoms
+
+They were not. Whenever the colour belonged to the atom, the bonds
+simply reused the atoms' material list, so asking for glass atoms gave
+glass bonds and there was no way to say otherwise -- and a figure often
+wants the opposite, element-coloured atoms on a neutral frame. That is
+two decisions, so `bond_materials` makes them two: `--bond-finish` and
+`--bond-colour` (`atoms` / `style` / `neutral` / `auto`).
+
+`auto` reproduces the old behaviour and is the default. `atoms` on a
+ring-coloured render **falls through to the style's bond** rather than
+inventing a rule: an atom on a pentagon and a hexagon has two ring
+colours and picking one would be arbitrary.
+
+The split-bond materials are built fresh rather than reusing the atoms'
+datablocks, because the bonds may carry a different finish and sharing
+the datablock would silently apply it to the atoms too.
+
+### Rim light is the one thing a lamp cannot do
+
+`MaterialSpec.rim` adds emission where the surface turns away from the
+camera, through `LayerWeight.Facing`. A rim *lamp* draws a bright edge
+on one side; this draws one on **every silhouette the viewer can see**,
+including the far wall of a cage seen through its near one, which is
+what makes a dark cover read at thumbnail size. Wired as an **Add
+Shader**, not a Mix: a rim is light arriving on top of the material, and
+mixing would dim the body to pay for the edge.
+
+It is on in the dark cover styles and off in the figure styles, where a
+glow is decoration on something a reviewer has to measure.
+
+### An effect is light, and light is not a line
+
+Three rewrites, each because the effect "looked basic", and each the
+same underlying mistake -- drawing a shape where there should be light.
+
+* **A constant-width stroke reads as a wire.** Every filament now
+  carries a `taper_profile`: thin at both ends for an arc, thin at one
+  for a spark, a slight waist for a beam. Blender's spline *radius*
+  channel does it, so it is still one curve object.
+* **One emissive tube is a glowing wire, not a glow.** `_glow_pair`
+  builds a hot thin core inside a wide, nearly transparent sheath,
+  because a single material cannot be both opaque at the centre and
+  faint at the edge. The core keeps the hue -- lifting it most of the
+  way to white, which was the first version, turned every coloured
+  filament into a white wire and threw away what the colour parameter
+  controls.
+* **A random walk is not lightning.** `fractal_offsets` is midpoint
+  displacement: set a segment's midpoint to the mean of its ends plus a
+  random kick, halve the kick, recurse. That gives large bends with
+  smaller kinks on them and smaller ones on those. A walk's
+  displacement is the *sum* of its steps, so it drifts smoothly and the
+  result is a meander -- which is precisely what the arcs looked like.
+  The offsets are normalised, so `jitter` means the same thing at every
+  segment count; otherwise a finer arc is also a wilder one.
+
+**And the halo has to be a volume.** A surface shell keeps the sphere's
+silhouette however it is tuned: uniform emission gives a frosted disc,
+and Fresnel at the limb gives a hard ring -- a circle somebody drew
+round the structure. Both were built and both were rejected on sight. A
+volume has no silhouette. One catch, which cost a white frame with the
+structure a ghost inside it: **volume emission accumulates along the
+ray**, so a shell twice as wide glows twice as brightly for the same
+setting. The brightness is divided by the path length, which restores
+the rule that an effect means the same thing at every size.
+
 ### Cycles is the default and EEVEE will abort if you let it
 
 Every style declares `engine="CYCLES"` and always has; `--engine` is an
@@ -3068,6 +3134,29 @@ rediscovering:
 EEVEE's `samples` are temporal anti-aliasing passes rather than light
 paths, so the number means something different and is clamped to
 16-128: a Cycles-tuned 512 would make the fast preview slow.
+
+### Resolution and samples are one decision
+
+`QUALITY_PRESETS` sets both, because a 6000 px frame at 64 samples is a
+big noisy picture and a 600 px one at 1024 is a slow thumbnail. `print`
+is 300 dpi across a single journal column with room to crop; `cover` is
+300 dpi across a full page. The preset scales the **longer** side and
+carries the aspect ratio, so a cover asked for at 2000x2400 stays 5:6
+rather than going square.
+
+It lives in `styles.py`, not in the render script, so it can be
+imported rather than scraped -- the first test of it parsed the dict out
+of the source text and broke on its own closing brace.
+
+### The pipeline renders anything with a bundle, not just carbon
+
+Worth stating because it keeps being asked: the renderer reads a
+**render bundle**, not a structure type. Nanoparticles, compositions,
+dichalcogenides and anything else a builder writes go through the same
+path, and `--colour-by element` is where a nanoparticle earns its keep
+-- an Au490 core inside an N-doped graphitic shell is three elements and
+reads instantly, where the same mode on a pure-carbon cage is one
+colour.
 
 ### A shader is not a parameter, and a floor is not decoration
 

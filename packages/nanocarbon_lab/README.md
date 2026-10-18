@@ -1242,6 +1242,54 @@ dependency, so they are editable and testable outside Blender -- as is
   catcher). Drop `--samples` to use the style's own default.
 * `--atom-scale` and `--bond-scale` multiply the radii.
 
+### It renders anything with a bundle, not just carbon
+
+The pipeline reads a **render bundle**, not a structure type — so
+nanoparticles, compositions, dichalcogenides and anything else a builder
+writes all go through the same path:
+
+```bash
+nanocarbon render np.xyz    --style cosmos  --colour-by element
+nanocarbon render trio.xyz  --style plasmon --colour-by structure
+```
+
+A nanoparticle is where `--colour-by element` earns its keep: an Au₄₉₀
+core inside an N-doped graphitic shell is three elements and reads
+instantly, where the same mode on a pure-carbon cage is one colour.
+
+### Atoms and bonds are separate materials
+
+They were not — whenever the colour belonged to the atom, the bonds
+reused the atoms' materials, so glass atoms meant glass bonds:
+
+```bash
+nanocarbon render cage.xyz --colour-by element \
+  --finish glass --bond-finish metal --bond-colour neutral
+```
+
+| `--bond-colour` | what the bonds do |
+|---|---|
+| `auto` | split where the colour belongs to the atom, the style's bond where it does not — the old behaviour, and the default |
+| `atoms` | each half takes its own atom's colour |
+| `style` | the style's single bond material throughout |
+| `neutral` | one grey, so the atoms carry all the colour |
+
+`--bond-finish` is independent of `--finish`.
+
+### Quality: resolution and samples as one choice
+
+```bash
+nanocarbon render cage.xyz --quality print   # 2400 px, 512 samples
+nanocarbon render cage.xyz --quality cover   # 4096 px, 1024 samples
+```
+
+`print` is 300 dpi across a single journal column with room to crop;
+`cover` is 300 dpi across a full page. The preset scales the **longer**
+side and keeps `--resolution`'s aspect ratio, so a cover asked for at
+2000×2400 stays 5:6. They move together because a 6000 px frame at 64
+samples is a big noisy picture and a 600 px one at 1024 is a slow
+thumbnail.
+
 ### Finishes: glass, glow, metal, wax — on any style, any colour mode
 
 A **finish** replaces every material's character and keeps its colour,
@@ -1297,6 +1345,11 @@ laser should arrive with the laser:
 
 | style | what it is |
 |---|---|
+| `science_cover` | high-key, single subject, shallow depth of field on a pale graded ground — reads at thumbnail size under a masthead |
+| `nature_nano` | near-black, one hard key from behind, body dark enough that the **rim light** is the drawing |
+| `advanced_materials` | saturated, glossy, crowded with colour; element colouring, because these covers are usually about a composition |
+| `acs_nano_studio` | the product shot: brushed metal on a seamless sweep, no accent colour, geometry carries the picture |
+| `matter_section` | an inside-page figure: flat light, white ground, neutral bonds, no bloom or depth of field — for when a reviewer counts atoms |
 | `cosmos` | the structure alone in deep space -- procedural starfield and nebula, polished gold with a tinted clear coat, bloom |
 | `plasmon` | brushed **anisotropic** metal with standing-wave shells around it: for when the point is that something is *ringing* |
 | `laser_probe` | a beam striking the structure in a hazy dark room, the shaft visible in the air |
@@ -1315,7 +1368,17 @@ nanocarbon render --list-effects       # every effect and every parameter
 
 Seven effects -- `laser`, `arc`, `resonance`, `orbit`, `halo`, `fog`,
 `glare` -- each with its own parameters, written
-`name:key=value,key=value`. Colours take a name, a `#rrggbb` or
+`name:key=value,key=value`.
+
+They are built as **light, not as lines**, which took three rewrites:
+every filament tapers (Blender's spline radius channel), every one is a
+hot thin core inside a wide faint sheath, and the arcs are **midpoint
+displacement** — the way lightning is actually generated, with large
+bends carrying smaller kinks. The first version used a random walk,
+whose displacement is the sum of its steps, so it drifted smoothly and
+read as a wire someone had bent. The halo is a **volume**: a surface
+shell keeps the sphere's silhouette however it is tuned, so it reads as
+a disc or a ring drawn round the structure. Colours take a name, a `#rrggbb` or
 `r/g/b` with slashes (commas already separate parameters).
 
 **Every distance is in subject radii, never Ångström**, so an effect

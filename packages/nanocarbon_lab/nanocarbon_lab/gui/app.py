@@ -269,6 +269,10 @@ RENDER_FINISHES = list(_STYLE_DEFS.FINISHES)
 #: Renderers. Cycles is every style's own; EEVEE is the fast preview and
 #: needs a GPU context, which the render script checks for.
 RENDER_ENGINES = ["cycles", "eevee"]
+#: Bond colouring, independent of the atoms'.
+RENDER_BOND_COLOURS = list(_STYLE_DEFS.BOND_COLOURS)
+#: Resolution and samples as one choice; "custom" uses the boxes below.
+RENDER_QUALITIES = ["custom", *_STYLE_DEFS.QUALITY_PRESETS]
 RENDER_BACKGROUNDS = [STYLE_DEFAULT_LABEL, *_STYLE_DEFS.BACKGROUNDS]
 #: What a colour mode means, for the hint under the menu.
 COLOUR_MODE_HELP = {
@@ -5251,6 +5255,24 @@ class NanocarbonGUI:
                      values=RENDER_ENGINES, state="readonly",
                      width=7).pack(side="left", padx=(4, 0))
 
+        row_bond = ttk.Frame(ren)
+        row_bond.pack(fill="x", pady=(0, 6))
+        ttk.Label(row_bond, text="Bonds").pack(side="left")
+        self.var_bond_finish = tk.StringVar(value="style")
+        ttk.Combobox(row_bond, textvariable=self.var_bond_finish,
+                     values=RENDER_FINISHES, state="readonly",
+                     width=10).pack(side="left", padx=(4, 0))
+        self.var_bond_colour = tk.StringVar(value="auto")
+        ttk.Combobox(row_bond, textvariable=self.var_bond_colour,
+                     values=RENDER_BOND_COLOURS, state="readonly",
+                     width=8).pack(side="left", padx=(4, 0))
+        ttk.Label(ren, text="The bonds' finish and colour are separate "
+                            "from the atoms': glass atoms on a neutral "
+                            "metal frame is two decisions.",
+                  foreground=MUTED, font=("TkDefaultFont", 8),
+                  wraplength=260, justify="left").pack(anchor="w",
+                                                       pady=(0, 6))
+
         row_view = ttk.Frame(ren)
         row_view.pack(fill="x", pady=(0, 6))
         ttk.Label(row_view, text="Angle").pack(side="left")
@@ -5295,6 +5317,17 @@ class NanocarbonGUI:
         ttk.Combobox(ren, textvariable=self.var_render_mode,
                      values=["ballstick", "surface", "both"],
                      state="readonly").pack(fill="x", pady=(0, 6))
+
+        row_q = ttk.Frame(ren)
+        row_q.pack(fill="x", pady=(0, 4))
+        ttk.Label(row_q, text="Quality").pack(side="left")
+        self.var_quality = tk.StringVar(value="custom")
+        ttk.Combobox(row_q, textvariable=self.var_quality,
+                     values=RENDER_QUALITIES, state="readonly",
+                     width=9).pack(side="left", padx=(4, 0))
+        ttk.Label(row_q, text="print = 300 dpi / column",
+                  foreground=MUTED,
+                  font=("TkDefaultFont", 8)).pack(side="left", padx=(6, 0))
 
         row_res = ttk.Frame(ren)
         row_res.pack(fill="x", pady=(0, 6))
@@ -6350,7 +6383,11 @@ class NanocarbonGUI:
                 interactive=interactive,
                 view=self.var_view.get(),
                 finish=self.var_finish.get(),
+                bond_finish=self.var_bond_finish.get(),
+                bond_colour=self.var_bond_colour.get(),
                 engine=self.var_engine.get(),
+                quality=(None if self.var_quality.get() == "custom"
+                         else self.var_quality.get()),
                 effects=effects,
                 style_effects=bool(self.var_style_effects.get()),
             )

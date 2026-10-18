@@ -1813,7 +1813,8 @@ def _cmd_render(args):
             xyz, out, json_path=sidecar, style=args.style, mode=args.mode,
             colour_by=args.colour_by, background=args.background,
             finish=args.finish, engine=args.engine, floor=args.floor,
-            resolution=tuple(args.resolution),
+            resolution=tuple(args.resolution), quality=args.quality,
+            bond_finish=args.bond_finish, bond_colour=args.bond_colour,
             samples=args.samples, atom_scale=args.atom_scale,
             bond_scale=args.bond_scale,
             transparent=args.transparent_background,
@@ -3072,6 +3073,19 @@ def build_parser() -> argparse.ArgumentParser:
                     default=None, help="Add a ground plane.")
     rn.add_argument("--no-floor", dest="floor", action="store_false",
                     help="Remove the plane a studio background adds.")
+    rn.add_argument("--quality", default=None,
+                    choices=["draft", "preview", "print", "cover"],
+                    help="Resolution and samples together: draft, "
+                         "preview, print (2400 px, 300 dpi across a "
+                         "journal column) or cover (4096 px, across a "
+                         "page). Keeps --resolution's aspect ratio.")
+    rn.add_argument("--bond-finish", default=None, dest="bond_finish",
+                    help="A separate finish for the bonds; default is "
+                         "the same as --finish.")
+    rn.add_argument("--bond-colour", "--bond-color", default=None,
+                    dest="bond_colour",
+                    help="atoms | style | neutral | auto. Decides the "
+                         "bonds' colour independently of the atoms'.")
     rn.add_argument("--finish", default=None,
                     help="Replace every material's character while "
                          "keeping its colour: glass, crystal, glow, neon, "

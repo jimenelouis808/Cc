@@ -6,6 +6,112 @@ está la trampa.
 
 ---
 
+## nanocarbon_lab · materiales separados, efectos que son luz, y presets de revista
+
+### Primero: sirve para todo, no sólo carbono
+
+El renderizador lee un **bundle**, no un tipo de estructura. Nanopartículas,
+composiciones, dicalcogenuros — todo pasa por el mismo camino. Lo comprobé
+renderizando un núcleo de Au₄₉₀ dentro de una corteza grafítica dopada con N,
+y una composición de tres piezas:
+
+```bash
+nanocarbon render np.xyz   --style cosmos  --colour-by element
+nanocarbon render trio.xyz --style plasmon --colour-by structure
+```
+
+Y una nanopartícula es justo donde `--colour-by element` se gana el sueldo:
+oro, carbono y nitrógeno se leen de un vistazo, donde en una jaula de carbono
+puro ese modo da un solo color.
+
+### Átomos y enlaces ya son materiales separados
+
+No lo eran: cuando el color pertenecía al átomo, los enlaces **reutilizaban la
+lista de materiales de los átomos**, así que pedir átomos de cristal daba
+enlaces de cristal y no había forma de decir otra cosa.
+
+```bash
+nanocarbon render jaula.xyz --colour-by element \
+  --finish glass --bond-finish metal --bond-colour neutral
+```
+
+| `--bond-colour` | qué hacen los enlaces |
+|---|---|
+| `auto` | partidos donde el color es del átomo, el del estilo donde no — el comportamiento de antes, y el de por defecto |
+| `atoms` | cada mitad toma el color de su átomo |
+| `style` | el material de enlace del estilo |
+| `neutral` | un gris, para que el color lo lleven sólo los átomos |
+
+### Los efectos ahora son luz, no líneas
+
+Tenías razón en que se veían básicos. Tres reescrituras, y las tres eran el
+mismo error de fondo: dibujar una forma donde debería haber luz.
+
+- **Un trazo de ancho constante parece alambre.** Ahora cada filamento lleva
+  perfil: fino en los dos extremos para un arco, fino en uno para una chispa,
+  con cintura para un haz.
+- **Un solo tubo emisivo es un alambre que brilla, no un brillo.** Ahora cada
+  trazo es un **núcleo caliente fino dentro de una vaina ancha casi
+  transparente**, porque un solo material no puede ser opaco en el centro y
+  tenue en el borde. El núcleo **conserva el tono**: subirlo casi a blanco,
+  que fue la primera versión, convertía cada filamento de color en un alambre
+  blanco.
+- **Un paseo aleatorio no es un rayo.** Ahora es **desplazamiento fractal del
+  punto medio** — el método con el que se genera un relámpago: curvas grandes
+  con quiebros pequeños encima y quiebros más pequeños sobre ésos. El
+  desplazamiento de un paseo es la *suma* de sus pasos, así que deriva suave
+  y el resultado es un meandro: exactamente lo que parecían los arcos.
+
+El láser además **se detiene en la superficie**, suelta **chispas** y deja un
+destello en el impacto.
+
+**Y el halo tiene que ser un volumen.** Un casquete de superficie conserva la
+silueta de la esfera por mucho que lo afines: emisión uniforme da un disco
+esmerilado, y Fresnel en el limbo da un anillo duro — un círculo dibujado
+alrededor. Construí los dos y los dos se descartaron al verlos. Un volumen no
+tiene silueta. Con una trampa que costó un fotograma en blanco con la
+estructura de fantasma dentro: **la emisión volumétrica se acumula a lo largo
+del rayo**, así que un casquete el doble de ancho brilla el doble. Ahora se
+divide por la longitud del camino.
+
+### Luz de borde por Fresnel
+
+`rim` añade emisión **sólo donde la superficie se gira respecto a la cámara**.
+Es lo único de una portada que una lámpara no puede hacer: una lámpara de
+contorno dibuja un borde brillante de *un* lado, y esto lo dibuja en **todas
+las siluetas que el espectador ve**, incluida la pared lejana de una jaula a
+través de la cercana. Es lo que hace que una portada oscura se lea en
+miniatura. Encendido en los estilos oscuros, apagado en los de figura.
+
+### Cinco presets de revista más (veintidós en total)
+
+Cada uno es una **respuesta distinta** a qué premia la dirección de arte de esa
+revista, no cinco maneras de decir «oscuro y brillante»:
+
+| estilo | qué es |
+|---|---|
+| `science_cover` | clave alta, sujeto único, poca profundidad de campo sobre fondo claro degradado — se lee en miniatura y bajo una cabecera |
+| `nature_nano` | casi negro, una luz dura desde atrás, cuerpo tan oscuro que **el borde es el dibujo** |
+| `advanced_materials` | saturado, brillante, lleno de color; colorea por elemento, porque esas portadas suelen ir de una composición |
+| `acs_nano_studio` | la foto de producto: metal cepillado sobre ciclorama, sin color de acento, manda la geometría |
+| `matter_section` | figura de página interior: luz plana, fondo blanco, enlaces neutros, sin bloom ni desenfoque — para cuando un revisor cuenta átomos |
+
+### Resolución y muestras, una sola decisión
+
+```bash
+nanocarbon render jaula.xyz --quality print   # 2400 px, 512 muestras
+nanocarbon render jaula.xyz --quality cover   # 4096 px, 1024 muestras
+```
+
+`print` son 300 dpi a lo ancho de una columna de revista con margen para
+recortar; `cover`, 300 dpi a lo ancho de una página. Escala el lado **largo**
+y conserva la proporción de `--resolution`, así que una portada pedida a
+2000×2400 sigue siendo 5:6. Van juntas porque un fotograma de 6000 px a 64
+muestras es una imagen grande con ruido, y uno de 600 px a 1024 es una
+miniatura lenta.
+
+---
+
 ## nanocarbon_lab · acabados, motor a elegir, y el .blend editable
 
 ### Dos respuestas primero

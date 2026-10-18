@@ -87,6 +87,19 @@ def _parse_args() -> argparse.Namespace:
              "slow. EEVEE is rasterised and takes seconds, for checking "
              "a composition before committing to the final render.",
     )
+    p.add_argument(
+        "--bond-finish", default=None, dest="bond_finish",
+        choices=list(style_defs.FINISHES),
+        help="A separate finish for the bonds. Default: the same as "
+             "--finish. Glass atoms on metal bonds is two decisions.",
+    )
+    p.add_argument(
+        "--bond-colour", "--bond-color", default="auto", dest="bond_colour",
+        choices=list(style_defs.BOND_COLOURS),
+        help="atoms: each half takes its own atom's colour. style: the "
+             "style's single bond material. neutral: one grey, so the "
+             "atoms carry all the colour. auto follows the colour mode.",
+    )
     p.add_argument("--list-finishes", action="store_true",
                    dest="list_finishes",
                    help="Describe the finishes and exit.")
@@ -119,6 +132,15 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--bond-scale", type=float, default=1.0,
                    help="Multiplies the bond cylinder radius.")
     p.add_argument("--out", default="render.png", help="Output image path.")
+    p.add_argument(
+        "--quality", default=None,
+        choices=list(style_defs.QUALITY_PRESETS),
+        help="Resolution and samples together: draft (640 px, 48), "
+             "preview (1280, 128), print (2400, 512 -- 300 dpi across a "
+             "journal column), cover (4096, 1024 -- 300 dpi across a "
+             "page). Keeps the aspect ratio of --resolution. An explicit "
+             "--samples still wins.",
+    )
     p.add_argument("--resolution", type=int, nargs=2, default=[1920, 1920])
     p.add_argument("--samples", type=int, default=None, help="Overrides the style's default.")
     p.add_argument("--transparent-background", action="store_true")
@@ -212,7 +234,43 @@ def material_from_spec(name: str, spec) -> bpy.types.Material:
     # without it rather than failing.
     set_input(["Thin Film Thickness"], spec.thin_film)
     set_input(["Thin Film IOR"], spec.thin_film_ior)
+    if spec.rim > 0:
+        _add_rim(nodes, links, bsdf, spec)
     return mat
+
+
+def _add_rim(nodes, links, bsdf, spec) -> None:
+    """Add Fresnel-driven emission on top of a Principled surface.
+
+    ``LayerWeight.Facing`` is 0 where the surface points at the camera
+    and 1 where it turns away, so raising it to a power and driving an
+    Emission with it lights exactly the silhouette -- every silhouette,
+    including the far wall of a cage seen through the near one, which is
+    what no amount of rim *lamps* can do.
+
+    Wired as an Add Shader rather than a Mix, because a rim is light
+    arriving on top of the material and not a replacement for it: mixing
+    would dim the body to pay for the edge.
+    """
+    out = fx._output_node(nodes)
+    weight = nodes.new("ShaderNodeLayerWeight")
+    weight.inputs["Blend"].default_value = 0.5
+    power = nodes.new("ShaderNodeMath")
+    power.operation = "POWER"
+    power.inputs[1].default_value = float(spec.rim_power)
+    scale = nodes.new("ShaderNodeMath")
+    scale.operation = "MULTIPLY"
+    scale.inputs[1].default_value = float(spec.rim)
+    emission = nodes.new("ShaderNodeEmission")
+    emission.inputs["Color"].default_value = (*spec.rim_color, 1.0)
+    add = nodes.new("ShaderNodeAddShader")
+
+    links.new(weight.outputs["Facing"], power.inputs[0])
+    links.new(power.outputs[0], scale.inputs[0])
+    links.new(scale.outputs[0], emission.inputs["Strength"])
+    links.new(bsdf.outputs[0], add.inputs[0])
+    links.new(emission.outputs[0], add.inputs[1])
+    links.new(add.outputs[0], out.inputs["Surface"])
 
 
 def _shader_node(nodes, spec):
@@ -680,6 +738,18 @@ def main() -> int:
         print("error: --xyz is required (unless --list-styles).", file=sys.stderr)
         return 2
 
+    if args.quality:
+        preset = style_defs.QUALITY_PRESETS[args.quality]
+        width, height = args.resolution
+        # Scale the longer side to the preset and carry the aspect, so a
+        # cover asked for at 2000x2400 stays 5:6 rather than becoming
+        # square.
+        factor = preset["long_side"] / max(width, height)
+        args.resolution = [max(16, round(width * factor)),
+                           max(16, round(height * factor))]
+        if args.samples is None:
+            args.samples = preset["samples"]
+
     bpy.ops.wm.read_factory_settings(use_empty=True)
     style = style_defs.get_style(args.style)
     if args.background is not None:
@@ -694,7 +764,8 @@ def main() -> int:
             bundle, style, colour_by=colour_by,
             atom_scale=args.atom_scale,
             bond_radius=0.12 * args.bond_scale,
-            finish=args.finish,
+            finish=args.finish, bond_finish=args.bond_finish,
+            bond_colour=args.bond_colour,
         )
     if args.mode in ("surface", "both"):
         objects.append(mesh_builder.build_smooth_surface(

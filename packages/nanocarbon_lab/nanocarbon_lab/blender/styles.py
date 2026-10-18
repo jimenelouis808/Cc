@@ -100,6 +100,17 @@ class MaterialSpec:
     #: Colour of the specular highlight, which on a real metal is not
     #: white -- gold reflects gold.
     specular_tint: RGB = (1.0, 1.0, 1.0)
+    #: **Rim light.** Emission added only where the surface turns away
+    #: from the camera, by Fresnel. This is the single most recognisable
+    #: thing about a cover render and it cannot be done with a light: a
+    #: rim lamp draws a bright edge on *one* side, while this draws one
+    #: on every silhouette the viewer can see, including the inside of a
+    #: cage seen through its own far wall. 0 is off.
+    rim: float = 0.0
+    rim_color: RGB = (1.0, 1.0, 1.0)
+    #: How sharply the rim falls off. Higher is a thinner, harder edge;
+    #: 1.0 is a soft wrap that reads as haze rather than as an edge.
+    rim_power: float = 3.0
 
     def __post_init__(self) -> None:
         if self.shader not in SHADERS:
@@ -447,6 +458,42 @@ def resolve_colour_by(requested: str | None, style: Style) -> str:
 # ----------------------------------------------------------------------
 # finishes
 # ----------------------------------------------------------------------
+#: Resolution and sampling as one choice, because they are one
+#: decision: a 6000 px frame at 64 samples is a big noisy picture and a
+#: 600 px one at 1024 is a slow thumbnail. The long side is given; the
+#: short side keeps whatever aspect ``--resolution`` implies.
+#:
+#: "print" is 300 dpi across a single journal column (~8.5 cm) with room
+#: to crop; "cover" is 300 dpi across a full page.
+QUALITY_PRESETS: dict[str, dict[str, int]] = {
+    "draft":   {"long_side": 640,  "samples": 48},
+    "preview": {"long_side": 1280, "samples": 128},
+    "print":   {"long_side": 2400, "samples": 512},
+    "cover":   {"long_side": 4096, "samples": 1024},
+}
+
+
+
+#: How the bonds are coloured, independently of the atoms.
+#:
+#: ``atoms``   -- each half takes its own atom's colour, which is what
+#:               every molecular viewer does and what makes a C-O bond
+#:               stop claiming the oxygen is carbon. Only meaningful
+#:               when the colour belongs to the atom; with ring
+#:               colouring there are no halves to take.
+#: ``style``   -- the style's own single bond material throughout. A
+#:               lattice of one element reads better as a frame of one
+#:               colour than as a thousand identical halves.
+#: ``neutral`` -- one grey, whatever the style and whatever the atoms,
+#:               for when the atoms carry all the colour and the bonds
+#:               should stay out of the way.
+BOND_COLOURS = ("auto", "atoms", "style", "neutral")
+
+#: The grey ``"neutral"`` uses. Mid-tone on purpose: it reads as a frame
+#: on a light background and on a dark one.
+NEUTRAL_BOND = (0.45, 0.45, 0.47)
+
+
 #: A **finish** replaces a material's character while keeping its colour,
 #: so it is a third axis beside the style and the colour mode: "element
 #: colours, in glass, on the cosmos backdrop" is one render rather than a
@@ -581,6 +628,48 @@ def apply_finish(spec: MaterialSpec, finish: str) -> MaterialSpec:
         return replace(spec, shader="toon", metallic=0.0,
                        transmission=0.0, emission_strength=0.0)
     raise AssertionError(f"finish {finish!r} is in FINISHES with no rule.")
+
+
+def bond_materials(style: Style, colour_by: str, keys,
+                   bond_colour: str = "auto",
+                   finish: str = "style") -> tuple[list[MaterialSpec], bool]:
+    """The bond materials, and whether they are split per atom.
+
+    Returns ``(specs, split)``. When ``split`` is true the list matches
+    the atoms' own material list one for one, so each half-bond takes
+    its atom's slot; when false the list holds exactly one material for
+    every bond.
+
+    **The bonds are decided separately from the atoms on purpose.** They
+    were not: whenever the colour belonged to the atom the bonds simply
+    reused the atoms' material list, so asking for glass atoms gave
+    glass bonds and there was no way to say otherwise. A figure often
+    wants the opposite -- element-coloured atoms on a neutral frame, or
+    glass atoms on metal bonds -- and that is two decisions, not one.
+
+    ``"auto"`` keeps the old behaviour, which is the right default: split
+    where the colour belongs to the atom, the style's own bond material
+    where it does not.
+    """
+    if bond_colour not in BOND_COLOURS:
+        raise ValueError(
+            f"unknown bond colour {bond_colour!r}; known: "
+            f"{', '.join(BOND_COLOURS)}")
+    if bond_colour == "auto":
+        bond_colour = "atoms" if SPLIT_BONDS.get(colour_by, False) else "style"
+
+    if bond_colour == "atoms":
+        if not SPLIT_BONDS.get(colour_by, False):
+            # Ring colouring has no per-atom colour to halve: an atom on
+            # a pentagon and a hexagon has two, and picking one would be
+            # arbitrary. Fall through to the style's bond rather than
+            # inventing a rule.
+            return [apply_finish(style.bond, finish)], False
+        return materials_for(style, colour_by, keys, finish), True
+    if bond_colour == "neutral":
+        return [apply_finish(style.bond.with_colour(NEUTRAL_BOND),
+                             finish)], False
+    return [apply_finish(style.bond, finish)], False
 
 
 def describe_finishes() -> str:
@@ -1130,10 +1219,12 @@ STYLES: dict[str, Style] = {
             bottom=(0.005, 0.008, 0.015), strength=1.0,
         ),
         hexagon=MaterialSpec(base_color=(0.12, 0.13, 0.16, 1.0),
-                             metallic=0.6, roughness=0.35, clearcoat=0.3),
-        pentagon=_accent((0.40, 0.80, 1.00, 1.0), (0.35, 0.75, 1.00), 5.0),
-        heptagon=_accent((0.85, 0.45, 1.00, 1.0), (0.80, 0.40, 1.00), 5.0),
-        octagon=_accent((1.00, 0.90, 0.40, 1.0), (1.00, 0.85, 0.35), 5.5),
+                             metallic=0.6, roughness=0.35, clearcoat=0.3,
+                             rim=1.6, rim_color=(0.45, 0.75, 1.00),
+                             rim_power=4.0),
+        pentagon=_accent((0.40, 0.80, 1.00, 1.0), (0.35, 0.75, 1.00), 1.8),
+        heptagon=_accent((0.85, 0.45, 1.00, 1.0), (0.80, 0.40, 1.00), 1.8),
+        octagon=_accent((1.00, 0.90, 0.40, 1.0), (1.00, 0.85, 0.35), 2.2),
         bond=MaterialSpec(base_color=(0.18, 0.20, 0.24, 1.0), metallic=0.6,
                           roughness=0.4),
         lights=[
@@ -1192,6 +1283,215 @@ STYLES: dict[str, Style] = {
         samples=320,
         default_colour_by="ring",
         effects=(EffectSpec("glare", {"strength": 0.25}),),
+    ),
+
+    # ------------------------------------------------------------------
+    # Journal looks. Each is a different ANSWER to the same question --
+    # what does this journal's art direction reward -- rather than five
+    # restatements of "dark and glossy". They differ in backdrop, in
+    # lighting rig, in lens, in how much of the frame the subject takes
+    # and in whether the colour means chemistry or curvature.
+    # ------------------------------------------------------------------
+    "science_cover": Style(
+        name="science_cover",
+        description=(
+            "High-key, single subject, shallow depth of field on a pale "
+            "graded ground: the look Science and Science Advances "
+            "reward, where the cover has to read at thumbnail size and "
+            "survive a masthead across the top. Long lens, tight crop, "
+            "nothing in the frame but the structure and its shadow."
+        ),
+        background=Background(
+            kind="gradient", top=(0.93, 0.94, 0.96),
+            bottom=(0.62, 0.66, 0.72), strength=1.0,
+            floor=True, floor_color=(0.86, 0.88, 0.91),
+            floor_roughness=0.35,
+        ),
+        hexagon=MaterialSpec(base_color=(0.22, 0.25, 0.30, 1.0),
+                             roughness=0.26, clearcoat=0.55,
+                             coat_roughness=0.04, specular_tint=(1, 1, 1)),
+        pentagon=MaterialSpec(base_color=(0.90, 0.32, 0.20, 1.0),
+                              roughness=0.22, clearcoat=0.5),
+        heptagon=MaterialSpec(base_color=(0.16, 0.45, 0.80, 1.0),
+                              roughness=0.22, clearcoat=0.5),
+        octagon=MaterialSpec(base_color=(0.95, 0.72, 0.12, 1.0),
+                             roughness=0.22, clearcoat=0.5),
+        bond=MaterialSpec(base_color=(0.38, 0.41, 0.46, 1.0),
+                          roughness=0.3, clearcoat=0.4),
+        lights=[
+            LightSpec("AREA", 2600.0, (1.00, 0.99, 0.97), (6.0, -8.0, 9.0),
+                      size=12.0),
+            LightSpec("AREA", 1100.0, (0.94, 0.96, 1.00), (-9.0, -2.0, 3.0),
+                      size=12.0),
+            LightSpec("AREA", 700.0, (1.0, 1.0, 1.0), (0.0, 9.0, -2.0),
+                      size=10.0),
+        ],
+        camera_lens_mm=95.0,
+        camera_dof_fstop=2.4,
+        samples=384,
+        default_colour_by="ring",
+        effects=(EffectSpec("glare", {"strength": 0.18,
+                                      "threshold": 0.88}),),
+    ),
+
+    "nature_nano": Style(
+        name="nature_nano",
+        description=(
+            "Nature Nanotechnology's house mood taken seriously: a near-"
+            "black field, one hard key from high and behind for a rim, a "
+            "cold fill, and a body dark enough that the rim IS the "
+            "drawing. The structure is a silhouette with its edges lit, "
+            "which is what survives being printed small."
+        ),
+        background=Background(
+            kind="gradient", top=(0.015, 0.02, 0.035),
+            bottom=(0.0, 0.0, 0.006), strength=1.0,
+        ),
+        hexagon=MaterialSpec(base_color=(0.045, 0.05, 0.065, 1.0),
+                             metallic=0.35, roughness=0.30, clearcoat=0.45,
+                             rim=2.2, rim_color=(0.35, 0.72, 1.00),
+                             rim_power=3.2),
+        pentagon=_accent((0.95, 0.52, 0.18, 1.0), (1.00, 0.45, 0.10), 2.2,
+                         roughness=0.3),
+        heptagon=_accent((0.25, 0.70, 1.00, 1.0), (0.20, 0.65, 1.00), 2.2,
+                         roughness=0.3),
+        octagon=_accent((0.80, 0.35, 1.00, 1.0), (0.75, 0.30, 1.00), 2.6,
+                        roughness=0.3),
+        bond=MaterialSpec(base_color=(0.07, 0.08, 0.10, 1.0),
+                          metallic=0.35, roughness=0.36,
+                          rim=1.1, rim_color=(0.30, 0.62, 1.00)),
+        lights=[
+            LightSpec("AREA", 1800.0, (0.80, 0.90, 1.00), (-7.0, 7.0, 8.0),
+                      size=4.0),
+            LightSpec("AREA", 320.0, (1.00, 0.80, 0.60), (8.0, -6.0, -2.0),
+                      size=10.0),
+        ],
+        camera_lens_mm=85.0,
+        camera_dof_fstop=2.8,
+        samples=384,
+        default_colour_by="ring",
+        effects=(EffectSpec("glare", {"strength": 0.4,
+                                      "threshold": 0.7}),),
+    ),
+
+    "advanced_materials": Style(
+        name="advanced_materials",
+        description=(
+            "Saturated, glossy and crowded with colour, which is what "
+            "Advanced Materials and Small actually print: a warm-to-cool "
+            "gradient, a wet clear coat over strong hues, and element "
+            "colouring, because these covers are usually about a "
+            "composition rather than about curvature."
+        ),
+        background=Background(
+            kind="gradient", top=(0.16, 0.07, 0.30),
+            bottom=(0.03, 0.10, 0.26), strength=1.0,
+        ),
+        hexagon=MaterialSpec(base_color=(0.30, 0.34, 0.42, 1.0),
+                             roughness=0.16, clearcoat=0.9,
+                             coat_roughness=0.02,
+                             rim=0.8, rim_color=(0.55, 0.80, 1.00)),
+        pentagon=_accent((1.00, 0.30, 0.45, 1.0), (1.00, 0.25, 0.40), 2.0,
+                         roughness=0.15, clearcoat=0.9),
+        heptagon=_accent((0.20, 0.95, 0.85, 1.0), (0.15, 0.90, 0.80), 2.0,
+                         roughness=0.15, clearcoat=0.9),
+        octagon=_accent((1.00, 0.85, 0.20, 1.0), (1.00, 0.80, 0.15), 2.4,
+                        roughness=0.15, clearcoat=0.9),
+        bond=MaterialSpec(base_color=(0.45, 0.48, 0.56, 1.0),
+                          roughness=0.2, clearcoat=0.8),
+        lights=[
+            LightSpec("AREA", 2200.0, (1.00, 0.92, 0.85), (7.0, -8.0, 6.0),
+                      size=7.0),
+            LightSpec("AREA", 1400.0, (0.45, 0.70, 1.00), (-8.0, 3.0, 5.0),
+                      size=9.0),
+            LightSpec("AREA", 600.0, (1.00, 0.40, 0.75), (0.0, 8.0, -4.0),
+                      size=8.0),
+        ],
+        camera_lens_mm=70.0,
+        camera_dof_fstop=3.0,
+        samples=320,
+        default_colour_by="element",
+        effects=(EffectSpec("glare", {"strength": 0.35}),),
+    ),
+
+    "acs_nano_studio": Style(
+        name="acs_nano_studio",
+        description=(
+            "ACS Nano's other register -- not the saturated gradient but "
+            "the product shot: one object on a seamless mid-grey sweep, "
+            "lit like a watch. Brushed metal, a floor it sits on, and no "
+            "accent colour at all, so the geometry carries the picture."
+        ),
+        background=Background(
+            kind="studio", top=(0.30, 0.31, 0.34), bottom=(0.10, 0.10, 0.12),
+            strength=1.0, floor=True, floor_color=(0.17, 0.17, 0.19),
+            floor_roughness=0.18,
+        ),
+        hexagon=MaterialSpec(base_color=(0.66, 0.68, 0.72, 1.0),
+                             metallic=1.0, roughness=0.28,
+                             anisotropy=0.7, anisotropy_rotation=0.15,
+                             specular_tint=(0.95, 0.97, 1.0)),
+        pentagon=MaterialSpec(base_color=(0.80, 0.80, 0.84, 1.0),
+                              metallic=1.0, roughness=0.18, anisotropy=0.7),
+        heptagon=MaterialSpec(base_color=(0.52, 0.54, 0.58, 1.0),
+                              metallic=1.0, roughness=0.34, anisotropy=0.7),
+        octagon=MaterialSpec(base_color=(0.88, 0.86, 0.78, 1.0),
+                             metallic=1.0, roughness=0.22, anisotropy=0.7),
+        bond=MaterialSpec(base_color=(0.58, 0.60, 0.64, 1.0), metallic=1.0,
+                          roughness=0.32, anisotropy=0.6),
+        lights=[
+            LightSpec("AREA", 2400.0, (1.0, 1.0, 1.0), (6.0, -7.0, 8.0),
+                      size=14.0),
+            LightSpec("AREA", 1200.0, (1.0, 1.0, 1.0), (-8.0, -4.0, 5.0),
+                      size=14.0),
+            LightSpec("AREA", 800.0, (1.0, 1.0, 1.0), (0.0, 8.0, 2.0),
+                      size=12.0),
+        ],
+        camera_lens_mm=90.0,
+        camera_dof_fstop=5.0,
+        samples=448,
+        default_colour_by="uniform",
+        effects=(),
+    ),
+
+    "matter_section": Style(
+        name="matter_section",
+        description=(
+            "A journal's inside-page figure rather than its cover: flat "
+            "even light, white ground, element colours, a neutral bond "
+            "frame and no bloom, depth of field or accent. Everything "
+            "that would be decoration on a cover is a distraction here, "
+            "so it is all off -- this is the one to use when a reviewer "
+            "has to count atoms."
+        ),
+        background=Background(
+            kind="solid", top=(1.0, 1.0, 1.0), bottom=(1.0, 1.0, 1.0),
+            strength=1.05,
+        ),
+        hexagon=MaterialSpec(base_color=(0.38, 0.40, 0.44, 1.0),
+                             roughness=0.46, clearcoat=0.12),
+        pentagon=MaterialSpec(base_color=(0.86, 0.33, 0.25, 1.0),
+                              roughness=0.46),
+        heptagon=MaterialSpec(base_color=(0.22, 0.46, 0.82, 1.0),
+                              roughness=0.46),
+        octagon=MaterialSpec(base_color=(0.94, 0.72, 0.16, 1.0),
+                             roughness=0.46),
+        bond=MaterialSpec(base_color=(0.55, 0.57, 0.60, 1.0), roughness=0.5),
+        lights=[
+            LightSpec("AREA", 1500.0, (1.0, 1.0, 1.0), (6.0, -7.0, 8.0),
+                      size=16.0),
+            LightSpec("AREA", 1200.0, (1.0, 1.0, 1.0), (-7.0, -5.0, 6.0),
+                      size=16.0),
+            LightSpec("AREA", 900.0, (1.0, 1.0, 1.0), (0.0, 8.0, 4.0),
+                      size=16.0),
+            LightSpec("AREA", 600.0, (1.0, 1.0, 1.0), (0.0, 0.0, -9.0),
+                      size=16.0),
+        ],
+        camera_lens_mm=65.0,
+        camera_dof_fstop=None,
+        samples=192,
+        default_colour_by="element",
+        effects=(),
     ),
 }
 
@@ -1264,6 +1564,8 @@ __all__ = [
     "DEFAULT_ELEMENT_RADIUS",
     "ELEMENT_COLOURS",
     "ELEMENT_RADII",
+    "BOND_COLOURS",
+    "QUALITY_PRESETS",
     "FINISHES",
     "SHADERS",
     "SPLIT_BONDS",
@@ -1275,6 +1577,7 @@ __all__ = [
     "MaterialSpec",
     "Style",
     "apply_finish",
+    "bond_materials",
     "describe_finishes",
     "element_colour",
     "element_radius",
