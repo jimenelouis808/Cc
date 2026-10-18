@@ -6,6 +6,166 @@ está la trampa.
 
 ---
 
+## nanocarbon_lab · Blender para portada de revista
+
+### La cámara ya busca el mejor ángulo
+
+Antes miraba siempre desde el mismo vector fijo `(1, -1.4, 0.6)`: un buen
+tres cuartos para un objeto compacto y un ángulo arbitrario para todo lo
+demás. Miraba **a lo largo** de una fila de estructuras y veía un
+nanotubo **de punta**.
+
+`--view auto` (lo que hace por defecto) lo **mide**: proyecta los átomos
+en cada dirección candidata y se queda con la que da la silueta de mayor
+área, que es la que enseña más estructura. Los ángulos con nombre
+(`iso`, `hero`, `front`, `top`…) siguen estando para cuando quieras uno
+concreto.
+
+Y el encuadre se hacía con la **esfera envolvente**. Para una jaula da
+igual; para una composición es un desastre: una fila de 77 Å de largo y
+12 Å de fondo tiene una esfera de radio 39 Å, así que la cámara se
+alejaba lo suficiente para que cupiera una bola de 78 Å y el sujeto
+ocupaba **0,56 del ancho del cuadro frente al 0,86 pedido**. Ahora se
+encuadra la **caja proyectada**, por separado en horizontal y en
+vertical, y se suma el fondo del objeto porque su cara cercana está más
+cerca que su centro.
+
+### Efectos: láser, descargas, resonancias, halos, niebla y bloom
+
+Siete, cada uno con sus parámetros, escritos
+`nombre:clave=valor,clave=valor`:
+
+| efecto | qué es |
+|---|---|
+| `laser` | un haz que llega a la estructura, con el punto donde incide |
+| `arc` | filamentos dentados tipo descarga alrededor del objeto |
+| `resonance` | capas concéntricas, cada una más tenue, para un modo que *suena* |
+| `orbit` | anillos a distintos ángulos, como un átomo de libro de texto |
+| `halo` | una cáscara suave de luz |
+| `fog` | neblina, para que los haces se vean en el aire |
+| `glare` | bloom sobre la imagen terminada |
+
+```bash
+nanocarbon render jaula.xyz --style nature_dark \
+  --effect "laser:color=laser-green,azimuth=150" \
+  --effect "arc:count=9" --effect resonance --effect glare
+nanocarbon render --list-effects     # todos los parámetros de todos
+```
+
+**Todas las distancias van en radios del sujeto, nunca en Å**, así que un
+efecto significa lo mismo en una jaula de 3 Å y en una red de 90 Å — la
+misma propiedad que ya tenían las luces y por la misma razón.
+
+Cuatro cosas salieron mal primero y cada una es ahora una regla:
+
+- **Un objeto emisivo es una lámpara.** Doce arcos brillantes no sólo
+  *parecen* un rayo: **iluminan todo**, y con algo de niebla en el aire
+  lavan el cuadro entero. Ahora se les apagan los rayos difusos y
+  especulares, así que brillan sin iluminar. El láser es la excepción:
+  tiene que iluminar lo que golpea.
+- **Dos puntos al azar en una esfera son antipodales de media**, así que
+  cada arco salía tan largo como ancha es la estructura — en una
+  composición, un zigzag que cruzaba toda la imagen. Ahora un parámetro
+  `span` limita el ángulo entre los dos extremos y el arco se pega a la
+  superficie, que es además lo que hace una descarga real.
+- **Un haz apuntado al centro atraviesa la estructura** y sale por el
+  otro lado, que se lee como una raya pintada encima. Ahora para en la
+  **superficie**.
+- **Los efectos se escalan con lo que la cámara ENCUADRA**, no con la
+  esfera envolvente. Escritos como «1,1 radios» salían más grandes que
+  el cuadro en una composición.
+
+### Fondos: el universo
+
+`space` y `nebula`, generados **proceduralmente** — ni hay que
+distribuir un HDRI ni que encontrarlo al renderizar, y una portada de
+6000 px sigue teniendo estrellas que son puntos y no manchas. Las
+estrellas son un campo de **Voronoi** recortado justo por encima de
+cero, no ruido: el ruido da borrones que se leen como polvo, y Voronoi
+tiene un mínimo nítido por celda, así que el corte deja una dispersión
+de puntos de brillos distintos.
+
+### Materiales de verdad, y cinco estilos de portada
+
+El Principled BSDF de Blender 4.3+ trae cosas que no estaban
+aprovechadas, y ahora sí: **anisotropía** (metal cepillado, cuyo brillo
+se estira en vez de ser un punto redondo — ninguna rugosidad sola hace
+eso), **interferencia de película fina** (iridiscencia real que *cambia
+con el ángulo de vista*, porque se calcula como interferencia y no se
+pinta con una rampa de color), tinte del barniz y tinte del brillo
+especular (el oro refleja oro).
+
+Cinco estilos nuevos, y cada uno **trae sus propios efectos**, porque un
+estilo que trata de un láser debería llegar con el láser puesto:
+
+| estilo | qué es |
+|---|---|
+| `cosmos` | la estructura sola en el espacio profundo: estrellas, nebulosa, oro pulido con barniz tintado |
+| `plasmon` | metal cepillado anisótropo con capas de onda estacionaria alrededor |
+| `laser_probe` | un haz incidiendo en una sala oscura con neblina, el rayo visible en el aire |
+| `electric_storm` | descarga: filamentos sobre la estructura contra negro, con halo |
+| `iridescent` | película fina — pompa de jabón o titanio anodizado |
+
+Diecisiete estilos en total. `--no-style-effects` quita los que trae el
+estilo.
+
+### El bloom se hace sobre la imagen, y eso está medido
+
+Blender 5 movió el compositor a `scene.compositing_node_group`, y
+asignarle uno en un `bpy` sin interfaz **devuelve un fotograma negro**:
+0,0003 de media frente a 0,2125 para la misma escena sin él,
+reproducido sobre una esfera emisiva sola en la escena. Una función que
+deja el render en negro en silencio es peor que no tenerla.
+
+Así que el bloom es un paso sobre la imagen terminada: umbral, desenfoque
+y suma. Funciona en cualquier Blender, no cuesta ni una muestra más, y
+—al revés que un grafo de nodos— se puede probar en un Python normal.
+Dos detalles que importan: el paso de brillos tiene **techo** además de
+suelo, porque un filamento emisivo es muchas veces más brillante que el
+blanco en luz lineal y sin tope su resplandor se come el cuadro; y el
+resplandor **conserva el color** de lo que brilla, porque un halo blanco
+alrededor de un láser verde es el reflejo de otra fotografía.
+
+### Toda la suite dentro de Blender
+
+Blender ejecuta Python, así que puede ejecutar este paquete: construir y
+renderizar **en un solo proceso** en vez de pasar archivos entre dos.
+
+```bash
+blender -b -P nanocarbon_lab/blender/nanocarbon_blender.py -- --check
+blender -b -P nanocarbon_lab/blender/nanocarbon_blender.py -- \
+  --build "fullerene:freq=2" --style cosmos --out portada.png
+```
+
+**Renderizar un bundle ya construido no necesita nada más que Blender**
+— ese camino es sólo numpy a propósito, y numpy es lo que Blender trae.
+*Construir* necesita `ase`, `scipy`, `networkx` y `scikit-image` dentro
+del Python de Blender, y `--check` dice cuáles faltan e imprime la orden
+`pip install` exacta con la ruta de **ese** intérprete ya puesta. Existe
+porque si no, el fallo es un ImportError desde dentro de una aplicación
+3D, sin ninguna pista de que la solución es un install en un intérprete
+que no sabías que estabas usando.
+
+### Y el bug de los enlaces en la costura, arreglado de verdad
+
+Antes se tiraban y ya. Ahora hay tres respuestas honestas y la de por
+defecto es la útil:
+
+- **`stub`** (por defecto) dibuja un **medio enlace** apuntando hacia
+  donde la estructura continúa, que es verdad y es lo que hace un visor
+  cristalográfico en una cara de celda: el tubo termina en enlaces que
+  van a alguna parte, no en un anillo de átomos pelados.
+- **`drop`** los quita, para una pieza que de verdad es finita y cuya
+  periodicidad sólo era una comodidad para la celda DFT.
+- **`Item.repeat`** convierte la costura en **interior** repitiendo la
+  pieza: un tubo (5,5) con `repeat=(1,1,3)` pasa de 150 enlaces con 14
+  en la costura a **436 enlaces con 14 en la costura**, todos de
+  1,410–1,419 Å.
+
+El informe dice cuántos en cualquier caso.
+
+---
+
 ## nanocarbon_lab · composición de varias estructuras, y un Blender de verdad
 
 ### Juntar 2, 3 o más estructuras en una figura

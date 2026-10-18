@@ -2825,13 +2825,139 @@ window's button.
 | `nanocarbon_lab/render.py` | no | where Blender is, which script, what argv |
 | `blender/styles.py` | no | styles, materials, backgrounds, palettes |
 | `blender/bundle.py` | no | reading a bundle, and which slot each atom takes |
+| `blender/camera.py` | no | which way to look from, and how far back |
+| `blender/effects.py` | no* | effect specs, arc geometry, the glare pass |
 | `blender/mesh_builder.py` | **yes** | spheres and cylinders |
 | `blender/render_cnt.py` | **yes** | world, floor, lights, camera, render |
+| `blender/nanocarbon_blender.py` | **yes** | build *and* render inside Blender |
 
-`render.py` is the only one of the five an ordinary import reaches;
-`styles` and `bundle` are loaded by path, which is what
-`render.style_catalogue()` does once and caches. Everything that is not
-geometry belongs on the left-hand side of that table.
+\* `effects.py` imports `bpy` **inside its builders**, never at module
+level, so the specs, the parser, the arc geometry and the bloom are all
+importable and testable outside Blender while the object creation is
+not. That is the pattern to follow for anything new here: if a thing can
+be decided without Blender, decide it where it can be tested.
+
+`render.py` is the only one an ordinary import reaches; the rest are
+loaded by path, which is what `render.style_catalogue()`,
+`effect_catalogue()` and `camera_module()` do once each and cache.
+Everything that is not geometry belongs on the left-hand side of that
+table.
+
+**A module loaded by path must make its own sibling imports work.**
+`styles.py` imports `effects` and `bundle.py` imports `styles`, and
+neither is a package, so both insert their own directory on `sys.path`
+at the top. Without it they import fine inside Blender -- where
+`render_cnt` has already done it -- and fail everywhere else, which is
+exactly backwards from where the tests run.
+
+**Blender's own Python has numpy and nothing else of ours.** No scipy,
+no ase, no networkx, no scikit-image. So anything in the render path
+that reaches for scipy is a bug: `camera.convex_hull_area` is a
+monotone chain written out by hand and `effects._gaussian_blur` is three
+box passes, both for that reason and not for speed.
+`nanocarbon_blender.py --check` reports what the running Blender is
+missing and prints the `pip install` line with **its own** interpreter
+path filled in, because the failure is otherwise an ImportError from
+inside a 3D application with no hint that the fix is one install.
+
+### The camera measures the best angle, and frames the box not the sphere
+
+Two separate faults, and the first made the second hard to see.
+
+**Framing used the bounding sphere.** Right for a cage and badly wrong
+for a composition: a row of structures 77 Å long and 12 Å deep has a
+bounding sphere of radius 39 Å, so the camera backed off far enough to
+fit a 78 Å ball and the subject came out filling **0.56 of the frame
+width against the 0.86 asked for**. `camera.frame_camera` frames the
+**projected bounding box**, horizontally and vertically against their
+own half-angles, and adds the depth half-extent because the near face of
+a subject is closer than its centre.
+
+**The direction was the constant `(1, -1.4, 0.6)`** -- a decent
+three-quarter view of a compact object and an arbitrary one of anything
+else. It looked down the length of a row and at the end of a tube.
+`camera.best_view` projects the atoms along each candidate and keeps the
+largest **silhouette area**, which is the direction that shows the most
+structure. Measured: a row along x is viewed from mostly +z, a tube
+along z from perpendicular to it, and a sphere from a three-quarter
+angle.
+
+Three restrictions on the search, each about what a figure wants rather
+than what scores highest: only from above, never from straight overhead
+(a pole view flattens anything that is not a sheet), and **the named
+views are not in the candidate set**. That last one matters -- an exact
+elevation is an exact optimum, and no tie-break bonus pulls away from
+one. They stay reachable as `--view front`, `top`, `iso`, `hero`.
+
+### Effects are decoration, and they are measured in subject radii
+
+`effects.py` is the part of a cover that is **not** the structure:
+`laser`, `arc`, `resonance`, `orbit`, `halo`, `fog`, `glare`. None of it
+is chemistry, none of it is measured from the structure, and it must
+never be confused with the structure's own geometry.
+
+Every distance is in **subject radii**, never Ångström, so an effect
+means the same thing on a 3 Å cage and a 90 Å network -- the property
+the light rig already has, for the same reason.
+
+Four things were wrong first and each is a rule now:
+
+* **Scale effects by what the camera FRAMES, not by the bounding
+  sphere.** On a row the sphere is the half-diagonal while the camera
+  frames the much tighter projected box, so rings written as "1.1 radii"
+  came out larger than the frame and cut across the picture. The camera
+  is set up first and returns the framed half-extent for exactly this.
+* **An emissive object is a light source.** A dozen bright arcs do not
+  only look like lightning, they *light everything*, and with any haze
+  in the air they wash the frame out. `_set_light_contribution` turns
+  off their diffuse, glossy and scatter rays, so an arc is drawn *over*
+  the picture while a laser -- which should illuminate what it hits --
+  keeps `light=1`.
+* **Random pairs on a sphere are antipodal on average.** Arcs joining
+  them were as long as the structure is wide, which on a composition is
+  a zigzag right across the frame. `span` caps the angle between an
+  arc's two ends so it hugs the surface, which is also what a corona
+  discharge does.
+* **A beam aimed at the centre goes straight through.** `stop` lands it
+  on the surface, which is the difference between something striking the
+  structure and a line drawn over the picture.
+
+### The bloom is an array pass, because the compositor returns black
+
+Blender 5 moved compositing to `scene.compositing_node_group`. Assigning
+one in a headless `bpy` build returns a **black frame** -- 0.0003 mean
+against 0.2125 for the same scene without it, reproduced on a bare
+emissive sphere with nothing else in the scene. A feature that silently
+turns a render black is worse than no feature.
+
+So `effects.glare_image` does it over the finished image: threshold,
+blur, add back. It works in every Blender, costs nothing in sample
+count, and -- unlike a node graph -- is testable in an ordinary
+interpreter. Two details are load-bearing: the bright pass is **capped**
+as well as floored (`maximum`), because an emissive filament is many
+times brighter than white in linear light and without a ceiling its glow
+swamps the frame; and the glow keeps the **hue** of what is glowing, a
+white bloom around a green laser being a lens flare from a different
+photograph.
+
+### Stars are Voronoi, not noise
+
+`space` and `nebula` are procedural, so nothing has to be shipped or
+found at render time and a 6000 px cover still has stars that are
+points. The stars are a **Voronoi** field thresholded just above zero:
+noise gives soft blobs that read as dust, while Voronoi has one sharp
+minimum per cell, so the cut leaves a scatter of points of genuinely
+different brightness.
+
+### Two bpy traps worth not meeting twice
+
+* **`nodes.remove()` can leave other node references dangling.** Taking
+  the output node *before* deleting the rest and then using it gives
+  `KeyError: 'Surface'` on a node that plainly has a Surface input.
+  `_fresh_tree` clears the tree and makes a new output instead.
+* **`foreach_set` wants float32.** A float64 array raises
+  `TypeError: incorrect sequence item type: d`, which names neither the
+  array nor the dtype.
 
 **Nothing may keep its own copy of the style names.** The window did, as
 a hardcoded list of five, and it had been wrong since the sixth style was
@@ -2934,17 +3060,35 @@ report's first warning says exactly that, every time.
   composition must not claim. `Atoms.set_tags` carries the item index per
   atom, which is all `--colour-by structure` reads, and a test asserts no
   bond and no ring spans two tags.
-* **A bond that left its item's periodic cell is dropped.** This was
-  found by a test and it is the same trap as "a minimum-image bond list
-  names the pair, not the cell", met where there is no cell to shift by:
-  a composition is finite, so the image such a bond reaches into is not
-  in the scene. Measured on a (5,5) tube whose every real bond is 1.42 Å,
-  drawing them from the raw coordinates gave a **12.4 Å** line -- and the
-  span alone cannot identify them, a (6,0) tube's axial period being
-  4.26 Å. So `_crossing_pairs` uses `bond_shifts`, and the count is
-  reported with the remedy (repeat the item before composing it). Rings
-  straddling the seam go for the same reason the preview leaves them
-  unfilled.
+* **A bond that left its item's periodic cell cannot be drawn as a
+  bond.** Same trap as "a minimum-image bond list names the pair, not
+  the cell", met where there is no cell to shift by: a composition is
+  finite, so the atom at the far end is not in the scene. Measured on a
+  (5,5) tube whose every real bond is 1.42 Å, drawing them from the raw
+  coordinates gave a **12.4 Å** line -- and the span alone cannot
+  identify them, a (6,0) tube's axial period being 4.26 Å, so
+  `_crossing_pairs` uses `bond_shifts`.
+
+  There are three honest answers and the default is the useful one.
+  `seams="stub"` draws a **half-bond** pointing the way the structure
+  continues, which is both true and what a crystallographic viewer does
+  at a cell face -- the tube ends in bonds going somewhere rather than
+  in a ring of bare atoms. `seams="drop"` leaves them out, for an item
+  that really is finite and whose periodicity was only ever a
+  convenience for the DFT cell. And `Item.repeat` makes the seam
+  **interior** by repeating the item through `cell.supercell`, which
+  re-indexes bonds copy by copy: a (5,5) tube at `repeat=(1,1,3)` goes
+  from 150 bonds with 14 at the seam to 436 bonds with 14 at the seam,
+  all of them 1.410-1.419 Å. The report names the count either way.
+
+  The stubs are stored as `info["seam_stubs"]`, one entry per *end* --
+  `[atom, dx, dy, dz]`, a single index and an offset rather than a pair
+  -- so anything that reads a bond as two indices is right to ignore
+  them. The offset is in the **placed** frame: returning it in the
+  source frame was the first version, and it put every stub on a rotated
+  item pointing the wrong way, which looks like a rendering fault rather
+  than a missing rotation. Rings straddling the seam are dropped for the
+  reason the preview leaves them unfilled.
 * **Spacing is by the item's *oriented* bounding box.** The first version
   measured bounding-sphere radii and ignored each item's rotation: a
   requested 8 Å gap came out at **17.9 Å** in a row and **23.3 Å** in a

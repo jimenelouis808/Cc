@@ -255,6 +255,13 @@ DEFAULT_BLENDER_STYLE = "nature_dark"
 #: a concrete value because that is what it happened to display would
 #: override every style's own choice without anybody asking it to.
 STYLE_DEFAULT_LABEL = "(style default)"
+_EFFECT_DEFS = render_support.effect_catalogue()
+_CAMERA_DEFS = render_support.camera_module()
+#: Camera angles. "auto" is measured rather than tabulated: the
+#: direction whose silhouette shows the most structure.
+RENDER_VIEWS = ["auto", *sorted(_CAMERA_DEFS.NAMED_VIEWS)]
+#: Scene effects, in the order the catalogue lists them.
+RENDER_EFFECTS = list(_EFFECT_DEFS.EFFECTS)
 RENDER_COLOUR_MODES = [STYLE_DEFAULT_LABEL, *_STYLE_DEFS.COLOUR_MODES]
 RENDER_BACKGROUNDS = [STYLE_DEFAULT_LABEL, *_STYLE_DEFS.BACKGROUNDS]
 #: What a colour mode means, for the hint under the menu.
@@ -5225,6 +5232,45 @@ class NanocarbonGUI:
         ttk.Checkbutton(ren, text="Floor plane (ground + contact shadow)",
                         variable=self.var_floor).pack(anchor="w")
 
+        row_view = ttk.Frame(ren)
+        row_view.pack(fill="x", pady=(0, 6))
+        ttk.Label(row_view, text="Angle").pack(side="left")
+        self.var_view = tk.StringVar(value="auto")
+        ttk.Combobox(row_view, textvariable=self.var_view,
+                     values=RENDER_VIEWS, state="readonly",
+                     width=8).pack(side="left", padx=(4, 0))
+        ttk.Label(row_view, text="auto = the angle that shows most",
+                  foreground=MUTED,
+                  font=("TkDefaultFont", 8)).pack(side="left", padx=(6, 0))
+
+        # Effects are checkboxes at their defaults plus a free-text line
+        # for parameters, rather than a panel of spinboxes per effect:
+        # seven effects times ten parameters is seventy widgets, and the
+        # catalogue is meant to grow.
+        ttk.Label(ren, text="Effects").pack(anchor="w")
+        self.var_effects = {}
+        grid_fx = ttk.Frame(ren)
+        grid_fx.pack(fill="x")
+        for index, name in enumerate(RENDER_EFFECTS):
+            var = tk.BooleanVar(value=False)
+            self.var_effects[name] = var
+            ttk.Checkbutton(grid_fx, text=name, variable=var).grid(
+                row=index // 2, column=index % 2, sticky="w")
+        self.var_effect_extra = tk.StringVar(value="")
+        ttk.Entry(ren, textvariable=self.var_effect_extra).pack(
+            fill="x", pady=(2, 0))
+        ttk.Label(ren, text="Extra effects, one per line's worth: "
+                            "laser:color=cyan,strength=80 — separate "
+                            "several with a semicolon. “nanocarbon render "
+                            "--list-effects” prints every parameter.",
+                  foreground=MUTED, font=("TkDefaultFont", 8),
+                  wraplength=260, justify="left").pack(anchor="w",
+                                                       pady=(2, 6))
+        self.var_style_effects = tk.BooleanVar(value=True)
+        ttk.Checkbutton(ren, text="Also use the style's own effects",
+                        variable=self.var_style_effects).pack(anchor="w",
+                                                              pady=(0, 6))
+
         ttk.Label(ren, text="Representation").pack(anchor="w")
         self.var_render_mode = tk.StringVar(value="ballstick")
         ttk.Combobox(ren, textvariable=self.var_render_mode,
@@ -6262,6 +6308,11 @@ class NanocarbonGUI:
         background = (None if self.var_background.get() == STYLE_DEFAULT_LABEL
                       else self.var_background.get())
         samples = int(self.var_samples.get() or 0)
+        effects = [name for name, var in self.var_effects.items()
+                   if var.get()]
+        extra = self.var_effect_extra.get().strip()
+        effects += [chunk.strip() for chunk in extra.split(";")
+                    if chunk.strip()]
         try:
             return render_support.render_command(
                 stem.with_suffix(".xyz"), out_png,
@@ -6278,6 +6329,9 @@ class NanocarbonGUI:
                 render=render,
                 blender=self.blender_exe or None,
                 interactive=interactive,
+                view=self.var_view.get(),
+                effects=effects,
+                style_effects=bool(self.var_style_effects.get()),
             )
         except RuntimeError as exc:
             self._show_error(

@@ -45,14 +45,18 @@ scene inside an interactive Blender session.
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
 import bpy
+import numpy as np
 from mathutils import Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import camera
+import effects as fx
 import mesh_builder
 import styles as style_defs
 
@@ -80,6 +84,19 @@ def _parse_args() -> argparse.Namespace:
                    help="Add a ground plane whatever the background says.")
     p.add_argument("--no-floor", dest="floor", action="store_false",
                    help="Remove the ground plane a studio background adds.")
+    p.add_argument(
+        "--view", default="auto",
+        choices=["auto", *sorted(camera.NAMED_VIEWS)],
+        help="Which way to look from. 'auto' measures it: the direction "
+             "whose silhouette shows the most structure, which is what "
+             "stops a row of structures being photographed end-on.",
+    )
+    p.add_argument("--camera-fill", type=float, default=FRAME_FILL,
+                   dest="camera_fill",
+                   help="Fraction of the frame the subject fills along "
+                        "whichever axis binds first.")
+    p.add_argument("--lens", type=float, default=None,
+                   help="Focal length in mm, overriding the style's.")
     p.add_argument("--atom-scale", type=float, default=1.0,
                    help="Multiplies every atom radius.")
     p.add_argument("--bond-scale", type=float, default=1.0,
@@ -92,6 +109,19 @@ def _parse_args() -> argparse.Namespace:
                    help="Write the assembled scene to this .blend file.")
     p.add_argument("--no-render", dest="render", action="store_false",
                    help="Assemble the scene but do not render it.")
+    p.add_argument(
+        "--effect", action="append", default=None, dest="effects",
+        metavar="NAME:K=V,...",
+        help="Add a scene effect. Repeatable. "
+             f"One of: {', '.join(fx.EFFECTS)}. --list-effects prints "
+             "every parameter.",
+    )
+    p.add_argument("--no-style-effects", dest="style_effects",
+                   action="store_false",
+                   help="Drop the effects the style brings of its own.")
+    p.add_argument("--list-effects", action="store_true",
+                   dest="list_effects",
+                   help="Print the effects and their parameters, then exit.")
     p.add_argument("--list-styles", action="store_true", help="Print style descriptions and exit.")
     return p.parse_args(argv)
 
@@ -126,17 +156,16 @@ def material_from_spec(name: str, spec) -> bpy.types.Material:
         # unlinked: an orphan node is harmless but it makes the material
         # confusing to adjust by hand after --save-blend, which is one of
         # the things this script is for.
-        out = nodes.get("Material Output")
-        for node in list(nodes):
-            if node is not out:
-                nodes.remove(node)
-        if out is None:
-            out = nodes.new("ShaderNodeOutputMaterial")
+        out = fx._fresh_tree(nodes)
         shader = _shader_node(nodes, spec)
         links.new(shader.outputs[0], out.inputs["Surface"])
         return mat
 
-    bsdf = nodes.get("Principled BSDF")
+    bsdf = next((node for node in nodes
+                 if node.bl_idname == "ShaderNodeBsdfPrincipled"), None)
+    if bsdf is None:                            # pragma: no cover - rare
+        bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+        links.new(bsdf.outputs[0], fx._output_node(nodes).inputs["Surface"])
 
     def set_input(aliases: list[str], value) -> None:
         for alias in aliases:
@@ -155,6 +184,17 @@ def material_from_spec(name: str, spec) -> bpy.types.Material:
     set_input(["Subsurface Weight", "Subsurface"], spec.subsurface)
     set_input(["Subsurface Radius"], tuple(spec.subsurface_color))
     set_input(["Sheen Weight", "Sheen"], spec.sheen)
+    set_input(["Anisotropic"], spec.anisotropy)
+    set_input(["Anisotropic Rotation"], spec.anisotropy_rotation)
+    set_input(["Coat Roughness"], spec.coat_roughness)
+    set_input(["Coat Tint"], (*spec.coat_tint, 1.0))
+    set_input(["Specular Tint"], (*spec.specular_tint, 1.0))
+    # Thin-film interference arrived on the Principled BSDF in Blender
+    # 4.3. On an older build the two sockets are simply absent and
+    # set_input skips them, so a style that asks for iridescence renders
+    # without it rather than failing.
+    set_input(["Thin Film Thickness"], spec.thin_film)
+    set_input(["Thin Film IOR"], spec.thin_film_ior)
     return mat
 
 
@@ -228,6 +268,10 @@ def _setup_world(background) -> None:
         bg.inputs["Color"].default_value = (*background.top, 1.0)
         return
 
+    if background.has_stars:
+        links.new(_starfield(nodes, links, background), bg.inputs["Color"])
+        return
+
     coord = nodes.new("ShaderNodeTexCoord")
     gradient = nodes.new("ShaderNodeTexGradient")
     gradient.gradient_type = "LINEAR"
@@ -237,6 +281,70 @@ def _setup_world(background) -> None:
     links.new(coord.outputs["Generated"], gradient.inputs["Vector"])
     links.new(gradient.outputs["Color"], ramp.inputs["Fac"])
     links.new(ramp.outputs["Color"], bg.inputs["Color"])
+
+
+def _starfield(nodes, links, background):
+    """A procedural night sky, and optionally a nebula behind it.
+
+    Generated rather than loaded from an HDRI, which matters for three
+    reasons: it needs no texture file, so nothing has to be shipped or
+    found at render time; it is resolution independent, so a 6000 px
+    cover has stars that are still points; and it is parametrised, so
+    the density and brightness are dials rather than a fixed photograph.
+
+    Stars are a **Voronoi** field, not noise. Noise gives soft blobs
+    that read as dust; Voronoi has one sharp minimum per cell, so
+    thresholding its distance just above zero leaves a scatter of points
+    of genuinely different brightness -- which is what a sky looks like.
+
+    Returns the socket carrying the finished colour.
+    """
+    coord = nodes.new("ShaderNodeTexCoord")
+    voronoi = nodes.new("ShaderNodeTexVoronoi")
+    voronoi.feature = "F1"
+    voronoi.inputs["Scale"].default_value = float(background.star_density)
+    links.new(coord.outputs["Generated"], voronoi.inputs["Vector"])
+
+    ramp = nodes.new("ShaderNodeValToRGB")
+    # A very tight ramp just above zero: only the cell centres survive,
+    # and `star_amount` is how far up the distance field the cut is
+    # made. Widen it and the sky fills with overlapping discs.
+    ramp.color_ramp.elements[0].position = 0.0
+    ramp.color_ramp.elements[0].color = (1.0, 1.0, 1.0, 1.0)
+    ramp.color_ramp.elements[1].position = max(1e-4,
+                                               float(background.star_amount))
+    ramp.color_ramp.elements[1].color = (0.0, 0.0, 0.0, 1.0)
+    links.new(voronoi.outputs["Distance"], ramp.inputs["Fac"])
+
+    bright = nodes.new("ShaderNodeMixRGB")
+    bright.blend_type = "MULTIPLY"
+    bright.inputs["Fac"].default_value = 1.0
+    bright.inputs[2].default_value = (
+        *(3 * [float(background.star_brightness)]), 1.0)
+    links.new(ramp.outputs["Color"], bright.inputs[1])
+    stars = bright.outputs["Color"]
+
+    if background.kind != "nebula":
+        return stars
+
+    noise = nodes.new("ShaderNodeTexNoise")
+    noise.inputs["Scale"].default_value = float(background.nebula_scale)
+    noise.inputs["Detail"].default_value = 8.0
+    links.new(coord.outputs["Generated"], noise.inputs["Vector"])
+    cloud = nodes.new("ShaderNodeValToRGB")
+    cloud.color_ramp.elements[0].position = 0.42
+    cloud.color_ramp.elements[0].color = (0.0, 0.0, 0.0, 1.0)
+    cloud.color_ramp.elements[1].position = 0.70
+    cloud.color_ramp.elements[1].color = (
+        *background.nebula_colors[0], 1.0)
+    links.new(noise.outputs["Fac"], cloud.inputs["Fac"])
+
+    tint = nodes.new("ShaderNodeMixRGB")
+    tint.blend_type = "ADD"
+    tint.inputs["Fac"].default_value = float(background.nebula_strength)
+    links.new(stars, tint.inputs[1])
+    links.new(cloud.outputs["Color"], tint.inputs[2])
+    return tint.outputs["Color"]
 
 
 #: How far below the subject the floor sits, as a fraction of its radius.
@@ -345,49 +453,77 @@ def _bounding_sphere(objects) -> tuple[Vector, float]:
     return center, max(radius, 1.0)
 
 
-#: Fraction of the frame the subject should fill along its tightest axis.
-#: Below 1.0 leaves a margin; cover art wants the subject to breathe.
-FRAME_FILL = 0.82
+#: Fraction of the frame the subject should fill along whichever axis
+#: binds first. Below 1.0 leaves a margin; cover art wants the subject to
+#: breathe, and a structure touching the frame edge reads as cropped even
+#: when it is not.
+FRAME_FILL = 0.86
 
 
 def _framing_distance(cam_data, radius: float, resolution) -> float:
-    """How far the camera must sit to fit a sphere of ``radius`` in frame.
+    """Distance that fits a sphere of ``radius`` in frame.
 
-    This used to be ``radius * 3.2``, a constant, and that is only
-    correct for one lens. The half-angle a camera sees is
-    ``atan(sensor / 2f)``, so fitting a sphere needs ``radius / sin(that)``
-    -- 2.95 R at 50 mm but 4.83 R at 85 mm and 5.10 R at 90 mm. Four of
-    the five styles use a longer lens than 50 mm, so four of five cropped
-    the subject off the edges of the frame.
+    Kept because the *sphere* case is still the right question for the
+    light rig and for anything round, and because it is the arithmetic
+    that replaced a hardcoded ``3.2 * radius`` -- a constant that is only
+    correct at 50 mm, while the styles use 50 to 90 mm, so most of them
+    cropped the subject off the frame edge.
 
-    The aspect ratio matters too. Blender's automatic sensor fit maps the
-    sensor width onto the **longer** image axis, so the shorter axis sees
-    a narrower angle and is the one that clips. A 2000x2400 cover crops
-    vertically long before it crops horizontally.
+    :func:`camera.frame_camera` is what actually places the camera now;
+    it frames the **projected bounding box** instead, which is the same
+    answer for a sphere and a much better one for a row of structures.
     """
-    import math
-
     sensor = cam_data.sensor_width
     width, height = resolution
     half_width = math.atan(0.5 * sensor / cam_data.lens)
-    # The narrower of the two half-angles governs what fits.
     aspect = min(width, height) / max(width, height)
     half_fov = math.atan(math.tan(half_width) * aspect)
     return radius / math.sin(half_fov) / FRAME_FILL
 
 
-def _setup_camera(style, objects, lens_mm: float, resolution) -> None:
-    center, radius = _bounding_sphere(objects)
+def _setup_camera(style, objects, lens_mm: float, resolution,
+                  view: str = "auto", fill: float = FRAME_FILL,
+                  points=None) -> tuple:
+    """Place the camera, choosing the angle when asked to.
+
+    ``view`` is ``"auto"`` -- measured, see :func:`camera.best_view` --
+    or any name in :data:`camera.NAMED_VIEWS`. The framing is always done
+    on the projected bounding box rather than the bounding sphere.
+
+    ``points`` are the atom positions when the caller has them, which is
+    the honest input: an object's ``bound_box`` is an axis-aligned box
+    around a whole merged mesh, so for a diagonal row it is mostly empty
+    space and the silhouette measured from it is the box's, not the
+    structure's. Falling back to the corners keeps this working for a
+    skinned surface, which has no atom list of its own.
+
+    Returns ``(centre, framed_radius)``: the subject's centre and the
+    larger of its two **in-frame** half-extents. That is the scale
+    anything decorative should be measured against -- see
+    :func:`effects.build_effects`.
+    """
+    if points is None or len(points) < 3:
+        points = _object_corners(objects)
+    points = np.asarray(points, dtype=float)
+
+    if view == "auto":
+        direction = camera.best_view(points)
+    else:
+        direction = camera.named_direction(view)
+
     cam_data = bpy.data.cameras.new("Camera")
     cam_data.lens = lens_mm
     cam_obj = bpy.data.objects.new("Camera", cam_data)
     bpy.context.collection.objects.link(cam_obj)
     bpy.context.scene.camera = cam_obj
 
-    distance = _framing_distance(cam_data, radius, resolution)
-    direction = Vector((1.0, -1.4, 0.6)).normalized()
-    cam_obj.location = center + direction * distance
-    look = center - cam_obj.location
+    location, target, distance = camera.frame_camera(
+        points, direction, lens_mm, cam_data.sensor_width, resolution,
+        fill=fill,
+    )
+    half, _ = camera.projected_extent(points, direction)
+    cam_obj.location = Vector(tuple(location))
+    look = Vector(tuple(target)) - cam_obj.location
     cam_obj.rotation_euler = look.to_track_quat("-Z", "Y").to_euler()
 
     if style.camera_dof_fstop is not None:
@@ -396,12 +532,22 @@ def _setup_camera(style, objects, lens_mm: float, resolution) -> None:
         # The f-stop is set after the focus distance because the depth of
         # field it produces has to be judged against the subject. A fixed
         # f-number blurs a 3 Å cage and a 45 Å network by wildly
-        # different amounts; scaling the aperture with the focal length
-        # and the subject keeps the *relative* depth of field constant,
-        # which is what the style is actually asking for.
+        # different amounts; scaling the aperture with the subject keeps
+        # the *relative* depth of field constant, which is what the style
+        # is actually asking for.
         cam_data.dof.aperture_fstop = style.camera_dof_fstop * max(
             1.0, distance / (10.0 * FRAME_FILL)
         )
+    return np.asarray(target, dtype=float), float(max(half[0], half[1]))
+
+
+def _object_corners(objects):
+    """Bounding-box corners of every object, in world coordinates."""
+    corners = []
+    for obj in objects:
+        for corner in obj.bound_box:
+            corners.append(tuple(obj.matrix_world @ Vector(corner)))
+    return corners or [(0.0, 0.0, 0.0)]
 
 
 def _setup_render(style, args) -> None:
@@ -431,6 +577,9 @@ def _setup_render(style, args) -> None:
 
 def main() -> int:
     args = _parse_args()
+    if args.list_effects:
+        print(fx.describe_effects())
+        return 0
     if args.list_styles:
         for name in style_defs.list_styles():
             style = style_defs.get_style(name)
@@ -464,13 +613,37 @@ def main() -> int:
     # measured once here rather than twice with a risk of disagreeing --
     # and before the floor exists, since a plane two dozen radii across
     # would otherwise be what the camera frames.
+    # The light rig and the floor are placed against the subject's
+    # bounding sphere, which is what "how big is this thing" means for
+    # them. Effects use the camera's framed extent instead; see below.
     center, radius = _bounding_sphere(objects)
     _setup_world(style.background)
     floor = style.background.has_floor if args.floor is None else args.floor
     if floor:
         _add_floor(style.background, center, radius)
     _setup_lights(style, center, radius)
-    _setup_camera(style, objects, style.camera_lens_mm, args.resolution)
+
+    # The camera goes before the effects, and returns the scale they are
+    # measured against. The bounding sphere is the wrong one for them: on
+    # a row of three structures it is the row's half-diagonal, while the
+    # camera frames the much tighter projected box, so arcs and
+    # resonance rings written as "1.1 radii" came out larger than the
+    # frame and cut across the picture. The framed half-extent makes
+    # "just outside the subject" mean just outside what is on screen.
+    centre, framed = _setup_camera(
+        style, objects, args.lens or style.camera_lens_mm, args.resolution,
+        view=args.view, fill=args.camera_fill, points=bundle["positions"])
+
+    # Effect objects are deliberately not fed back into the framing: a
+    # beam seven radii long would otherwise set the frame and leave the
+    # structure a dot in the middle of it.
+    specs = list(style.effects) if args.style_effects else []
+    try:
+        specs += [fx.parse_effect(text) for text in (args.effects or [])]
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    fx.build_effects(specs, centre, framed, bundle["positions"])
     _setup_render(style, args)
 
     if args.save_blend:
@@ -485,6 +658,11 @@ def main() -> int:
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.render.render(write_still=True)
+    # Post passes run over the finished file. Only `glare` is one, and
+    # it is why the effect appears in the catalogue but adds no objects.
+    for spec in specs:
+        if spec.kind == "glare":
+            fx.apply_glare(args.out, spec)
     print(f"Wrote {args.out}")
     return 0
 

@@ -33,7 +33,18 @@ visual template, their covers being commissioned art.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# These modules are package *data*, loaded by path rather than imported
+# as a package, so a sibling import has to be made to work rather than
+# assumed: inside Blender this directory is on the path because
+# ``render_cnt`` put it there, and outside it nothing has.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from dataclasses import dataclass, field, replace
+
+from effects import EffectSpec
 
 RGB = tuple[float, float, float]
 RGBA = tuple[float, float, float, float]
@@ -70,6 +81,25 @@ class MaterialSpec:
     #: A soft velvet rim. Small amounts stop a matte material reading
     #: as flat grey at its silhouette.
     sheen: float = 0.0
+    #: Brushed rather than polished: a metal whose highlight is
+    #: stretched along the surface instead of being a round spot. This
+    #: is what separates a machined part from a chrome ball, and no
+    #: amount of roughness alone produces it.
+    anisotropy: float = 0.0
+    anisotropy_rotation: float = 0.0
+    #: Thin-film interference, in nanometres of film. 0 is off; 200-600
+    #: is the soap-bubble and anodised-titanium range, where the colour
+    #: changes with viewing angle because the film's two reflections
+    #: interfere. Real, angle-dependent iridescence -- not a colour ramp
+    #: faking it, which cannot change with the view.
+    thin_film: float = 0.0
+    thin_film_ior: float = 1.33
+    #: Tint of the clear coat, for a lacquer over a metal.
+    coat_tint: RGB = (1.0, 1.0, 1.0)
+    coat_roughness: float = 0.03
+    #: Colour of the specular highlight, which on a real metal is not
+    #: white -- gold reflects gold.
+    specular_tint: RGB = (1.0, 1.0, 1.0)
 
     def __post_init__(self) -> None:
         if self.shader not in SHADERS:
@@ -117,7 +147,14 @@ class LightSpec:
 #:                    compositing into a layout.
 #: ``studio``      -- a gradient *plus* a floor plane, so the subject
 #:                    has a surface to cast onto and sit on.
-BACKGROUNDS = ("gradient", "solid", "transparent", "studio")
+#: ``space``       -- a starfield: a dark field with distant stars,
+#:                    generated procedurally rather than from an image,
+#:                    so it needs no texture file and is resolution
+#:                    independent.
+#: ``nebula``      -- the starfield plus drifting coloured cloud, for
+#:                    the deep-field look.
+BACKGROUNDS = ("gradient", "solid", "transparent", "studio", "space",
+               "nebula")
 
 
 @dataclass(frozen=True)
@@ -140,6 +177,23 @@ class Background:
     #: A floor that catches shadow but is itself invisible, so the
     #: subject keeps its contact shadow over a transparent background.
     floor_is_shadow_catcher: bool = False
+    # -- starfield, for "space" and "nebula" ---------------------------
+    #: How many stars, as a texture scale. Higher is more and smaller.
+    star_density: float = 220.0
+    #: Fraction of cells that light up. Small: a sky that is mostly
+    #: stars reads as noise, not as space.
+    star_amount: float = 0.04
+    #: Brightness of the brightest stars.
+    star_brightness: float = 18.0
+    #: The two cloud colours of a ``nebula``, mixed by a noise field.
+    nebula_colors: tuple[RGB, RGB] = ((0.08, 0.02, 0.18),
+                                      (0.00, 0.10, 0.20))
+    nebula_scale: float = 1.6
+    nebula_strength: float = 0.9
+
+    @property
+    def has_stars(self) -> bool:
+        return self.kind in ("space", "nebula")
 
     def __post_init__(self) -> None:
         if self.kind not in BACKGROUNDS:
@@ -178,6 +232,14 @@ class Style:
     #: not say. A cover style defaults to ring colouring because that is
     #: what it was tuned for; a figure style defaults to element.
     default_colour_by: str = "ring"
+    #: Scene effects the style brings of its own, as
+    #: :class:`effects.EffectSpec`. A cover style that is *about* a laser
+    #: should arrive with the laser rather than needing it typed in;
+    #: ``--no-style-effects`` drops them. Held as a tuple because a
+    #: mutable default on a frozen dataclass is shared between every
+    #: instance, and a style that accumulated effects across renders
+    #: would be very hard to diagnose.
+    effects: tuple = ()
 
     # -- compatibility: the three fields these replaced ----------------
     # Read-only, and delegating rather than duplicated, so there is one
@@ -769,6 +831,199 @@ STYLES: dict[str, Style] = {
         samples=160,
         default_colour_by="element",
     ),
+
+    # ------------------------------------------------------------------
+    # Cover art. These bring their own effects, because a style that is
+    # *about* a laser should arrive with the laser rather than needing it
+    # typed in beside the style name. --no-style-effects drops them.
+    # ------------------------------------------------------------------
+    "cosmos": Style(
+        name="cosmos",
+        description=(
+            "The structure alone in deep space: a procedural starfield "
+            "with a nebula behind it, polished gold with a tinted clear "
+            "coat, and bloom. The scale joke a nanoscience cover is "
+            "usually making -- an object a nanometre across photographed "
+            "as though it were an astronomical one."
+        ),
+        background=Background(
+            kind="nebula", top=(0.01, 0.01, 0.03), bottom=(0.0, 0.0, 0.01),
+            strength=1.0, star_density=260.0, star_amount=0.035,
+            star_brightness=22.0,
+            nebula_colors=((0.10, 0.02, 0.20), (0.00, 0.08, 0.18)),
+            nebula_strength=0.8,
+        ),
+        hexagon=MaterialSpec(base_color=(0.86, 0.66, 0.24, 1.0),
+                             metallic=1.0, roughness=0.22, clearcoat=0.4,
+                             coat_tint=(1.0, 0.92, 0.75),
+                             specular_tint=(1.0, 0.88, 0.62)),
+        pentagon=_accent((1.0, 0.45, 0.15, 1.0), (1.0, 0.45, 0.10), 2.5,
+                         metallic=0.9, roughness=0.25),
+        heptagon=_accent((0.35, 0.65, 1.0, 1.0), (0.25, 0.60, 1.0), 2.5,
+                         metallic=0.9, roughness=0.25),
+        octagon=_accent((1.0, 0.25, 0.55, 1.0), (1.0, 0.20, 0.50), 3.0,
+                        metallic=0.9, roughness=0.25),
+        bond=MaterialSpec(base_color=(0.70, 0.54, 0.20, 1.0), metallic=1.0,
+                          roughness=0.28, specular_tint=(1.0, 0.88, 0.62)),
+        lights=[
+            LightSpec("AREA", 2200.0, (1.00, 0.95, 0.88), (8.0, -9.0, 7.0),
+                      size=6.0),
+            LightSpec("AREA", 700.0, (0.55, 0.70, 1.00), (-9.0, 4.0, -3.0),
+                      size=9.0),
+        ],
+        camera_lens_mm=85.0,
+        camera_dof_fstop=3.2,
+        samples=320,
+        default_colour_by="ring",
+        effects=(EffectSpec("glare", {"strength": 0.45, "threshold": 0.7}),),
+    ),
+
+    "plasmon": Style(
+        name="plasmon",
+        description=(
+            "Resonance made visible: brushed anisotropic metal under a "
+            "cold rim light, with standing-wave shells around the "
+            "structure and bloom. For a paper about an optical or "
+            "vibrational mode, where the point of the picture is that "
+            "something is RINGING rather than merely sitting there."
+        ),
+        background=Background(
+            kind="gradient", top=(0.02, 0.03, 0.06),
+            bottom=(0.00, 0.00, 0.01), strength=1.0,
+        ),
+        hexagon=MaterialSpec(base_color=(0.72, 0.75, 0.80, 1.0),
+                             metallic=1.0, roughness=0.30,
+                             anisotropy=0.75, anisotropy_rotation=0.25),
+        pentagon=_accent((0.20, 0.95, 1.00, 1.0), (0.15, 0.90, 1.00), 4.0),
+        heptagon=_accent((1.00, 0.30, 0.60, 1.0), (1.00, 0.25, 0.55), 4.0),
+        octagon=_accent((1.00, 0.80, 0.20, 1.0), (1.00, 0.75, 0.15), 4.5),
+        bond=MaterialSpec(base_color=(0.55, 0.58, 0.64, 1.0), metallic=1.0,
+                          roughness=0.35, anisotropy=0.6),
+        lights=[
+            LightSpec("AREA", 1500.0, (0.80, 0.90, 1.00), (7.0, -8.0, 6.0),
+                      size=5.0),
+            LightSpec("AREA", 900.0, (0.30, 0.60, 1.00), (-8.0, 5.0, 2.0),
+                      size=8.0),
+        ],
+        camera_lens_mm=80.0,
+        camera_dof_fstop=3.5,
+        samples=288,
+        default_colour_by="ring",
+        effects=(
+            EffectSpec("resonance", {"count": 5, "color": "cyan"}),
+            EffectSpec("glare", {"strength": 0.4}),
+        ),
+    ),
+
+    "laser_probe": Style(
+        name="laser_probe",
+        description=(
+            "A beam striking the structure in a hazy dark room, with the "
+            "shaft visible in the air. For spectroscopy, ablation, "
+            "photocatalysis -- anything where light is being DONE to the "
+            "sample rather than merely used to see it."
+        ),
+        background=Background(
+            kind="gradient", top=(0.02, 0.02, 0.03),
+            bottom=(0.00, 0.00, 0.00), strength=0.8,
+        ),
+        hexagon=MaterialSpec(base_color=(0.10, 0.10, 0.11, 1.0),
+                             roughness=0.42, clearcoat=0.25),
+        pentagon=_accent((1.00, 0.45, 0.10, 1.0), (1.00, 0.40, 0.08), 3.0),
+        heptagon=_accent((0.20, 0.80, 1.00, 1.0), (0.15, 0.75, 1.00), 3.0),
+        octagon=_accent((0.85, 0.30, 1.00, 1.0), (0.80, 0.25, 1.00), 3.5),
+        bond=MaterialSpec(base_color=(0.16, 0.16, 0.18, 1.0), roughness=0.5),
+        lights=[
+            LightSpec("AREA", 600.0, (0.85, 0.90, 1.00), (6.0, -7.0, 5.0),
+                      size=5.0),
+        ],
+        camera_lens_mm=75.0,
+        camera_dof_fstop=2.8,
+        samples=384,
+        default_colour_by="ring",
+        effects=(
+            EffectSpec("laser", {"color": "laser-green", "azimuth": 150.0}),
+            EffectSpec("fog", {"strength": 0.004}),
+            EffectSpec("glare", {"strength": 0.5, "threshold": 0.65}),
+        ),
+    ),
+
+    "electric_storm": Style(
+        name="electric_storm",
+        description=(
+            "Discharge: filaments arcing over the structure against "
+            "black, with a faint halo. For conductivity, field emission, "
+            "dielectric breakdown, or any cover that wants the subject "
+            "to look energetic rather than inert."
+        ),
+        background=Background(
+            kind="solid", top=(0.005, 0.008, 0.015),
+            bottom=(0.005, 0.008, 0.015), strength=1.0,
+        ),
+        hexagon=MaterialSpec(base_color=(0.12, 0.13, 0.16, 1.0),
+                             metallic=0.6, roughness=0.35, clearcoat=0.3),
+        pentagon=_accent((0.40, 0.80, 1.00, 1.0), (0.35, 0.75, 1.00), 5.0),
+        heptagon=_accent((0.85, 0.45, 1.00, 1.0), (0.80, 0.40, 1.00), 5.0),
+        octagon=_accent((1.00, 0.90, 0.40, 1.0), (1.00, 0.85, 0.35), 5.5),
+        bond=MaterialSpec(base_color=(0.18, 0.20, 0.24, 1.0), metallic=0.6,
+                          roughness=0.4),
+        lights=[
+            LightSpec("AREA", 500.0, (0.60, 0.80, 1.00), (6.0, -7.0, 4.0),
+                      size=6.0),
+        ],
+        camera_lens_mm=70.0,
+        camera_dof_fstop=3.0,
+        samples=288,
+        default_colour_by="ring",
+        effects=(
+            EffectSpec("arc", {"count": 9, "color": "electric"}),
+            EffectSpec("halo", {"strength": 0.6, "color": "electric"}),
+            EffectSpec("glare", {"strength": 0.5, "threshold": 0.6}),
+        ),
+    ),
+
+    "iridescent": Style(
+        name="iridescent",
+        description=(
+            "Thin-film interference: a soap-bubble or anodised-titanium "
+            "sheen whose colour CHANGES WITH THE VIEWING ANGLE, because "
+            "it is computed as interference rather than painted on with "
+            "a colour ramp. Needs Blender 4.3 or newer for the thin-film "
+            "sockets; on an older build it renders as plain lacquer."
+        ),
+        background=Background(
+            kind="studio", top=(0.10, 0.11, 0.14), bottom=(0.03, 0.03, 0.05),
+            strength=0.9, floor=True, floor_color=(0.07, 0.07, 0.09),
+            floor_roughness=0.25,
+        ),
+        hexagon=MaterialSpec(base_color=(0.05, 0.05, 0.06, 1.0),
+                             metallic=1.0, roughness=0.12,
+                             thin_film=430.0, thin_film_ior=1.45),
+        pentagon=MaterialSpec(base_color=(0.05, 0.05, 0.06, 1.0),
+                              metallic=1.0, roughness=0.10,
+                              thin_film=620.0, thin_film_ior=1.45),
+        heptagon=MaterialSpec(base_color=(0.05, 0.05, 0.06, 1.0),
+                              metallic=1.0, roughness=0.10,
+                              thin_film=280.0, thin_film_ior=1.45),
+        octagon=MaterialSpec(base_color=(0.05, 0.05, 0.06, 1.0),
+                             metallic=1.0, roughness=0.10,
+                             thin_film=520.0, thin_film_ior=1.45),
+        bond=MaterialSpec(base_color=(0.05, 0.05, 0.06, 1.0), metallic=1.0,
+                          roughness=0.18, thin_film=380.0),
+        lights=[
+            LightSpec("AREA", 1800.0, (1.0, 1.0, 1.0), (7.0, -8.0, 7.0),
+                      size=9.0),
+            LightSpec("AREA", 900.0, (0.9, 0.95, 1.0), (-8.0, -3.0, 4.0),
+                      size=9.0),
+            LightSpec("AREA", 600.0, (1.0, 0.95, 0.9), (0.0, 9.0, 3.0),
+                      size=9.0),
+        ],
+        camera_lens_mm=85.0,
+        camera_dof_fstop=4.0,
+        samples=320,
+        default_colour_by="ring",
+        effects=(EffectSpec("glare", {"strength": 0.25}),),
+    ),
 }
 
 
@@ -815,6 +1070,14 @@ def with_background(style: Style, kind: str) -> Style:
                                 floor=True,
                                 floor_color=current.floor_color,
                                 floor_roughness=current.floor_roughness)
+    elif kind in ("space", "nebula"):
+        # A starfield keeps the style's own darkness: `nature_dark` in
+        # space should still be nearly black behind the stars, and
+        # `small_minimal` in space is a contradiction the caller is
+        # entitled to ask for and see.
+        background = Background(kind=kind, top=current.top,
+                                bottom=current.bottom,
+                                strength=current.strength)
     elif kind == "gradient":
         background = Background(kind="gradient", top=current.top,
                                 bottom=current.bottom,

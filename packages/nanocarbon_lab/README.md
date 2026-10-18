@@ -1242,6 +1242,66 @@ dependency, so they are editable and testable outside Blender -- as is
   catcher). Drop `--samples` to use the style's own default.
 * `--atom-scale` and `--bond-scale` multiply the radii.
 
+### Cover art: angles, effects, space and iridescence
+
+Five of the seventeen styles are built for a cover rather than a figure,
+and each **brings its own effects**, because a style that is about a
+laser should arrive with the laser:
+
+| style | what it is |
+|---|---|
+| `cosmos` | the structure alone in deep space -- procedural starfield and nebula, polished gold with a tinted clear coat, bloom |
+| `plasmon` | brushed **anisotropic** metal with standing-wave shells around it: for when the point is that something is *ringing* |
+| `laser_probe` | a beam striking the structure in a hazy dark room, the shaft visible in the air |
+| `electric_storm` | discharge -- filaments arcing over the structure against black, with a faint halo |
+| `iridescent` | **thin-film interference**, so the colour changes with the viewing angle because it is computed as interference, not painted on |
+
+`--no-style-effects` drops what a style brings; `--effect` adds more.
+
+```bash
+nanocarbon render cage.xyz --style cosmos --out cover.png
+nanocarbon render cage.xyz --style nature_dark \
+  --effect "laser:color=laser-green,azimuth=150" \
+  --effect "arc:count=9" --effect resonance --effect glare
+nanocarbon render --list-effects       # every effect and every parameter
+```
+
+Seven effects -- `laser`, `arc`, `resonance`, `orbit`, `halo`, `fog`,
+`glare` -- each with its own parameters, written
+`name:key=value,key=value`. Colours take a name, a `#rrggbb` or
+`r/g/b` with slashes (commas already separate parameters).
+
+**Every distance is in subject radii, never Ångström**, so an effect
+means the same thing on a 3 Å cage and a 90 Å network -- the property
+the light rig already has, for the same reason. And most effects glow
+without *lighting* the scene: an emissive object is a light source in
+Cycles, so a dozen bright arcs do not only look like lightning, they
+light everything. An arc is drawn over the picture; a laser, which
+should illuminate what it hits, keeps `light=1`.
+
+Backgrounds now include `space` and `nebula`, generated procedurally, so
+nothing has to be shipped or found at render time and a 6000 px cover
+still has stars that are points rather than blurs.
+
+### The camera finds the angle, and frames the subject rather than a sphere
+
+```bash
+nanocarbon render fig.xyz --view auto      # the default
+nanocarbon render fig.xyz --view hero --camera-fill 0.9 --lens 85
+```
+
+`--view auto` **measures** it: each candidate direction projects the
+atoms and the one with the largest silhouette wins, which is the
+direction that shows the most structure. A row of three structures is no
+longer photographed down its own length and a nanotube is no longer seen
+end-on. Named angles (`iso`, `hero`, `front`, `top`, …) remain for when
+you want a specific one.
+
+Framing is done on the **projected bounding box**, not the bounding
+sphere. For a cage the two agree; for a 77 Å row the sphere is the
+diagonal and backing off to fit it left the subject covering 0.56 of the
+frame width against the 0.86 asked for.
+
 ### Finishing the scene in Blender yourself
 
 ```bash
@@ -1258,6 +1318,38 @@ can be reopened.
 This one needs the Blender **application**: the `bpy` wheel is a full
 Blender inside your interpreter and has no window, so asking it for one
 says why rather than rendering headless and reporting success.
+
+### Running the whole suite inside Blender
+
+Blender runs Python, so it can run this package -- building and
+rendering in one process rather than passing files between two:
+
+```bash
+blender -b -P nanocarbon_lab/blender/nanocarbon_blender.py -- --check
+blender -b -P nanocarbon_lab/blender/nanocarbon_blender.py -- \
+  --build "fullerene:freq=2" --style cosmos --out cover.png
+blender -b -P nanocarbon_lab/blender/nanocarbon_blender.py -- \
+  --scene a.xyz b.xyz --layout row --style plasmon --out figure.png
+```
+
+**Rendering an existing bundle needs nothing but Blender** -- that path
+is numpy-only by design, and numpy is what Blender ships. *Building*
+needs `ase`, `scipy`, `networkx` and `scikit-image` inside Blender's own
+Python, and `--check` says which are missing and prints the exact
+`pip install` line with that interpreter's path filled in:
+
+```
+Blender      : 5.0.1
+Python       : 3.11.17 at /path/to/blender/python/bin/python3.11
+  numpy    yes
+  ase      NO
+  render   ready
+  build    needs ase, scipy, networkx, skimage
+```
+
+That check exists because the failure is otherwise an ImportError from
+inside a 3D application, with nothing to suggest the fix is one install
+into an interpreter you did not know you were using.
 
 #### The framing and the lighting follow the subject
 

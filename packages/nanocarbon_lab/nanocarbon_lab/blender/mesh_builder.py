@@ -114,6 +114,24 @@ def build_ball_and_stick(
                 _cylinder(bm2, start, end, bond_radius, bond_segments, slot)
         else:
             _cylinder(bm2, a, b, bond_radius, bond_segments, 0)
+
+    # --- seam stubs --------------------------------------------------
+    # Half-bonds where a periodic item's cell face cut the structure.
+    # The neighbour is genuinely not in the scene, so there is no second
+    # atom and no second colour: the stub takes its own atom's slot,
+    # which is also what makes a split-bond render look continuous
+    # across the seam rather than changing colour at it.
+    for stub in bundle.get("seam_stubs", []):
+        index = int(stub[0])
+        if index >= len(positions):
+            continue
+        start = Vector(positions[index])
+        end = start + Vector(tuple(stub[1:4]))
+        if (end - start).length < 1e-6:
+            continue
+        _cylinder(bm2, start, end, bond_radius, bond_segments,
+                  slot_per_atom[index] if split else 0)
+
     bonds_mesh = bpy.data.meshes.new("BondsMesh")
     bm2.to_mesh(bonds_mesh)
     bm2.free()

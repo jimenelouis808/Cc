@@ -53,6 +53,8 @@ from pathlib import Path
 import numpy as np
 from ase import Atoms
 
+from .utils.geometry import bond_shifts
+
 #: Closest approach, in Å, below which two items are reported as touching
 #: rather than merely close. A van der Waals contact between two separate
 #: objects is about 3.4 Å; below 2 Å their atoms are interpenetrating,
@@ -86,6 +88,15 @@ class Item:
         Uniform scale. ``1.0`` leaves the structure alone; anything else
         changes every bond length in it and is recorded as such. See the
         module docstring.
+    repeat
+        Whole copies of a **periodic** item along its own lattice
+        vectors, taken before anything else. This is the honest way to
+        make a longer tube or a wider sheet for a figure: every seam but
+        the last becomes an ordinary interior bond, because
+        :func:`nanocarbon_lab.cell.supercell` re-indexes the bonds copy
+        by copy rather than re-guessing them. Ignored, with a warning,
+        on an item that is not periodic along that axis -- the copies
+        would sit inside each other.
     """
 
     atoms: Atoms
@@ -93,6 +104,38 @@ class Item:
     translation: tuple[float, float, float] = (0.0, 0.0, 0.0)
     rotation: tuple[float, float, float] = (0.0, 0.0, 0.0)
     scale: float = 1.0
+    repeat: tuple[int, int, int] = (1, 1, 1)
+
+    def source(self) -> Atoms:
+        """The item's atoms after :attr:`repeat`, before any placement.
+
+        Everything else measures and places *this*, so the repeat cannot
+        be applied in one code path and forgotten in another -- which is
+        exactly how a supercell ends up carrying one cell's bond list.
+        """
+        counts = tuple(max(1, int(value)) for value in self.repeat)
+        if counts == (1, 1, 1):
+            return self.atoms
+        live = [axis for axis, periodic in enumerate(self.atoms.get_pbc())
+                if periodic]
+        wanted = [axis for axis in range(3) if counts[axis] > 1]
+        if not set(wanted) <= set(live):
+            # Repeating an aperiodic direction puts the copies inside
+            # each other. `cell.supercell` raises on it; a figure should
+            # not die of it, so the request is trimmed and reported.
+            counts = tuple(count if axis in live else 1
+                           for axis, count in enumerate(counts))
+            if counts == (1, 1, 1):
+                return self.atoms
+        from .cell import supercell
+
+        return supercell(self.atoms, counts)
+
+    def refused_repeat(self) -> tuple[int, ...]:
+        """Axes where :attr:`repeat` was asked for and cannot be done."""
+        live = self.atoms.get_pbc()
+        return tuple(axis for axis in range(3)
+                     if int(self.repeat[axis]) > 1 and not live[axis])
 
     def placed(self) -> Atoms:
         """A copy of the structure, rotated, scaled and moved.
@@ -103,7 +146,7 @@ class Item:
         rotation sliders behave -- about the origin, turning an item that
         sits 100 Å out swings it across the scene.
         """
-        copy = self.atoms.copy()
+        copy = self.source().copy()
         copy.set_positions(self.oriented()
                            + np.asarray(self.translation, dtype=float))
         # A composition has no lattice: the items were placed by hand and
@@ -123,7 +166,7 @@ class Item:
         structure would space a rod laid along the layout axis as though
         it were still standing up.
         """
-        positions = np.asarray(self.atoms.get_positions(), dtype=float)
+        positions = np.asarray(self.source().get_positions(), dtype=float)
         if len(positions) == 0:                 # pragma: no cover - empty
             return positions
         centre = positions.mean(axis=0)
@@ -192,6 +235,11 @@ class SceneReport:
         How many of each were carried over. A structure with no recorded
         bonds contributes none, and the report says so rather than the
         renderer silently guessing.
+    seam_bonds, seam_mode
+        How many bonds left a periodic item's own cell, and what was
+        done with them -- drawn as half-bonds (``"stub"``) or left out
+        (``"drop"``). Never counted in ``bonds``: a stub has one atom,
+        not two.
     warnings
         Everything worth saying before this is used for anything but a
         picture.
@@ -206,6 +254,8 @@ class SceneReport:
     scaled: list[tuple[str, float]] = dataclass_field(default_factory=list)
     bonds: int = 0
     rings: int = 0
+    seam_bonds: int = 0
+    seam_mode: str = "stub"
     warnings: list[str] = dataclass_field(default_factory=list)
 
     def summary(self) -> str:
@@ -219,6 +269,10 @@ class SceneReport:
             f"{self.spans[2]:.1f} A",
             f"  carried {self.bonds} bonds and {self.rings} rings",
         ]
+        if self.seam_bonds:
+            lines.append(
+                f"  {self.seam_bonds} bonds left a periodic cell "
+                f"({self.seam_mode})")
         if self.clearances:
             worst = self.clearances[0]
             lines.append(
@@ -231,8 +285,17 @@ class SceneReport:
         return "\n".join(lines)
 
 
+#: How much of a seam bond's true length a stub is drawn at. Half puts
+#: the cut exactly where the cell face is, which is where the structure
+#: really does stop, and is what a crystallographic viewer draws.
+SEAM_STUB_FRACTION = 0.5
+
+#: What to do with a bond that leaves its item's own periodic cell.
+SEAM_MODES = ("stub", "drop")
+
+
 def compose(items: Sequence[Item], vacuum: float = 10.0,
-            ) -> tuple[Atoms, SceneReport]:
+            seams: str = "stub") -> tuple[Atoms, SceneReport]:
     """Put the items into one :class:`ase.Atoms`, and measure the result.
 
     Parameters
@@ -244,6 +307,22 @@ def compose(items: Sequence[Item], vacuum: float = 10.0,
         The cell exists so a viewer that insists on one has something
         sensible; it is a bounding box and not a lattice, and ``pbc``
         stays off.
+    seams
+        What to do with a bond that leaves a periodic item's own cell.
+        A composition is finite, so the atom at the far end of such a
+        bond is **not in the scene** -- drawn between the two indices it
+        records, the bond is a straight line as long as that item's cell.
+
+        ``"stub"`` (the default) draws it as a half-bond pointing the
+        way the structure continues, which is both true and what a
+        crystallographic viewer does at a cell face: the tube ends in
+        bonds going somewhere rather than in a ring of bare atoms.
+        ``"drop"`` leaves it out entirely, which is the right answer when
+        the item really is finite and the periodicity was only ever a
+        convenience for the DFT cell.
+
+        Either way the count is reported. To make the seam *interior*
+        instead, repeat the item: see :attr:`Item.repeat`.
 
     Returns
     -------
@@ -257,6 +336,9 @@ def compose(items: Sequence[Item], vacuum: float = 10.0,
     ValueError
         If there is nothing to compose, or an item has no atoms.
     """
+    if seams not in SEAM_MODES:
+        raise ValueError(
+            f"unknown seam mode {seams!r}; known: {', '.join(SEAM_MODES)}")
     if not items:
         raise ValueError("a composition needs at least one structure.")
     for index, item in enumerate(items):
@@ -272,8 +354,9 @@ def compose(items: Sequence[Item], vacuum: float = 10.0,
     tags: list[int] = []
     bonds: list[list[int]] = []
     rings: list[list[int]] = []
-    dropped_bonds = [0] * len(items)
+    seam_bonds = [0] * len(items)
     dropped_rings = [0] * len(items)
+    stubs: list[list[float]] = []
     offset = 0
     offsets: list[int] = []
     for index, (item, piece) in enumerate(zip(items, placed, strict=True)):
@@ -284,14 +367,17 @@ def compose(items: Sequence[Item], vacuum: float = 10.0,
         # whole scene would invent bonds between items that merely sit
         # close together, which is the one thing a composition must not
         # claim.
-        crossing = _crossing_pairs(item.atoms)
-        for bond in item.atoms.info.get("bonds", []) or []:
+        source = item.source()
+        crossing = _crossing_pairs(source)
+        for bond in source.info.get("bonds", []) or []:
             i, j = int(bond[0]), int(bond[1])
             if frozenset((i, j)) in crossing:
-                dropped_bonds[index] += 1
+                seam_bonds[index] += 1
+                if seams == "stub":
+                    stubs.extend(_seam_stubs(source, i, j, item, offset))
                 continue
             bonds.append([i + offset, j + offset])
-        for ring in item.atoms.info.get("rings", []) or []:
+        for ring in source.info.get("rings", []) or []:
             members = [int(atom) for atom in ring]
             if crossing and any(
                     frozenset(pair) in crossing
@@ -314,7 +400,7 @@ def compose(items: Sequence[Item], vacuum: float = 10.0,
               for index, item in enumerate(items)
               if abs(item.scale - 1.0) > 1e-9]
     warnings = _warnings(items, labels, placed, clearances, scaled,
-                         dropped_bonds, dropped_rings)
+                         seam_bonds, dropped_rings, seams)
 
     combined.info.update({
         "structure_type": "composition",
@@ -324,6 +410,11 @@ def compose(items: Sequence[Item], vacuum: float = 10.0,
         "is_illustration": True,
         "quality_family": None,
         "bonds": bonds,
+        # Half-bonds at a periodic seam: ``[atom, dx, dy, dz]``, the
+        # offset being where the cylinder ends. Separate from "bonds"
+        # because they have only one atom, so anything that treats a
+        # bond as a pair of indices is right to ignore them.
+        "seam_stubs": stubs,
         "rings": rings,
         "ring_counts": _ring_counts(rings),
         "scene": {
@@ -351,6 +442,8 @@ def compose(items: Sequence[Item], vacuum: float = 10.0,
         scaled=scaled,
         bonds=len(bonds),
         rings=len(rings),
+        seam_bonds=sum(seam_bonds),
+        seam_mode=seams,
         warnings=warnings,
     )
     return combined, report
@@ -402,20 +495,49 @@ def _crossing_pairs(atoms: Atoms) -> set[frozenset[int]]:
     recorded = atoms.info.get("bonds") or []
     if len(recorded) == 0:
         return set()
-    from .utils.geometry import bond_shifts
-
     shifts = bond_shifts(atoms, recorded)
     return {frozenset((int(bond[0]), int(bond[1])))
             for bond, shift in zip(recorded, shifts, strict=True)
             if np.any(np.asarray(shift) != 0)}
 
 
+def _seam_stubs(source: Atoms, i: int, j: int, item: Item,
+                offset: int) -> list[list[float]]:
+    """Half-bonds standing in for one bond that left the cell.
+
+    Two of them, one at each end, because both atoms are in the scene
+    and both have a neighbour outside it. Each runs from its atom toward
+    where that neighbour actually is -- the minimum-image direction,
+    which is the information the raw index pair has thrown away -- and
+    stops at :data:`SEAM_STUB_FRACTION` of the true bond length, which
+    is the cell face.
+
+    The offsets are returned in the **placed** frame, so the item's
+    rotation and scale apply to them exactly as to the atoms. Returning
+    them in the source frame was the first version and it put every stub
+    on a rotated item pointing the wrong way, which looks like a
+    rendering fault rather than a missing rotation.
+    """
+    cell = np.asarray(source.get_cell(), dtype=float)
+    positions = np.asarray(source.get_positions(), dtype=float)
+    shift = np.asarray(
+        bond_shifts(source, [[i, j]])[0], dtype=float)
+    # positions[j] - shift @ cell - positions[i] is the short vector;
+    # that is the definition `bond_shifts` is written against.
+    short = positions[j] - shift @ cell - positions[i]
+    turn = euler_matrix(item.rotation).T
+    reach = short * float(item.scale) * SEAM_STUB_FRACTION @ turn
+    return [[float(i + offset), *(+reach)],
+            [float(j + offset), *(-reach)]]
+
+
 def _warnings(items: Sequence[Item], labels: Sequence[str],
               placed: Sequence[Atoms],
               clearances: Sequence[tuple[int, int, float]],
               scaled: Sequence[tuple[str, float]],
-              dropped_bonds: Sequence[int] = (),
-              dropped_rings: Sequence[int] = ()) -> list[str]:
+              seam_bonds: Sequence[int] = (),
+              dropped_rings: Sequence[int] = (),
+              seams: str = "stub") -> list[str]:
     out = [
         "this is an ILLUSTRATION, not a structure: the items were placed "
         "by hand, there is no relaxed interface between any two of them, "
@@ -444,8 +566,19 @@ def _warnings(items: Sequence[Item], labels: Sequence[str],
                 "there -- the connectivity of each item is carried "
                 "separately and nothing is drawn between them."
             )
+    refused = [(labels[index], item.refused_repeat())
+               for index, item in enumerate(items)
+               if item.refused_repeat()]
+    if refused:
+        out.append(
+            "repeat ignored along aperiodic axes: "
+            + ", ".join(f"{label} ({''.join('xyz'[a] for a in axes)})"
+                        for label, axes in refused)
+            + ". Those copies would sit inside each other; the item was "
+            "placed once along those directions."
+        )
     missing = [labels[index] for index, item in enumerate(items)
-               if not item.atoms.info.get("bonds")]
+               if not item.source().info.get("bonds")]
     if missing:
         out.append(
             "no recorded bonds for: " + ", ".join(missing)
@@ -454,15 +587,17 @@ def _warnings(items: Sequence[Item], labels: Sequence[str],
             "over a composition invents bonds between items."
         )
     crossed = [(labels[index], count)
-               for index, count in enumerate(dropped_bonds) if count]
+               for index, count in enumerate(seam_bonds) if count]
     if crossed:
+        verb = ("drawn as half-bonds" if seams == "stub" else "left out")
         out.append(
-            "dropped bonds that left a periodic cell: "
+            f"bonds that left a periodic cell, {verb}: "
             + ", ".join(f"{label} ({count})" for label, count in crossed)
-            + ". A composition is finite, so the image those bonds reached "
-            "into is not in the scene; drawn anyway each one is a line as "
-            "long as the item's own cell. Repeat a periodic item before "
-            "composing it if you want its seam filled in."
+            + ". A composition is finite, so the atom at the far end of "
+            "each is not in the scene; drawn between the two indices it "
+            "records, one is a line as long as the item's own cell. Set "
+            "repeat=(n, ...) on the item to make those seams interior "
+            "bonds instead."
         )
     ringless = [(labels[index], count)
                 for index, count in enumerate(dropped_rings) if count]

@@ -1756,8 +1756,11 @@ def _cmd_render(args):
     script that built the structure, and a style is worth comparing
     across several structures in a loop.
     """
-    from ..render import render_command
+    from .. import render as render_support
 
+    if args.list_effects:
+        print(render_support.effect_catalogue().describe_effects())
+        return 0
     if args.list_styles or args.list_colour_modes:
         # styles.py is package data rather than a subpackage -- its
         # siblings import bpy -- so it is reached by path. It imports no
@@ -1771,9 +1774,11 @@ def _cmd_render(args):
                 style = style_defs.get_style(name)
                 print(f"{name}")
                 print(f"    {style.description}")
+                carried = ", ".join(spec.kind for spec in style.effects)
                 print(f"    background {style.background.kind}, "
                       f"colours by {style.default_colour_by}, "
-                      f"{style.engine} at {style.samples} samples")
+                      f"{style.engine} at {style.samples} samples"
+                      + (f", effects: {carried}" if carried else ""))
         if args.list_colour_modes:
             print("Colour modes (--colour-by):")
             for mode in style_defs.COLOUR_MODES:
@@ -1801,7 +1806,7 @@ def _cmd_render(args):
 
     out = Path(args.out) if args.out else xyz.with_suffix(".png")
     try:
-        cmd = render_command(
+        cmd = render_support.render_command(
             xyz, out, json_path=sidecar, style=args.style, mode=args.mode,
             colour_by=args.colour_by, background=args.background,
             floor=args.floor, resolution=tuple(args.resolution),
@@ -1810,6 +1815,8 @@ def _cmd_render(args):
             transparent=args.transparent_background,
             save_blend=args.save_blend, render=args.render,
             blender=args.blender, interactive=args.open,
+            view=args.view, camera_fill=args.camera_fill, lens=args.lens,
+            effects=args.effects, style_effects=args.style_effects,
         )
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from None
@@ -3061,6 +3068,27 @@ def build_parser() -> argparse.ArgumentParser:
                     default=None, help="Add a ground plane.")
     rn.add_argument("--no-floor", dest="floor", action="store_false",
                     help="Remove the plane a studio background adds.")
+    rn.add_argument("--view", default=None,
+                    help="Which way to look from: 'auto' (measured -- the "
+                         "angle whose silhouette shows the most "
+                         "structure), or iso/hero/front/back/left/right/"
+                         "top/bottom. Default: auto.")
+    rn.add_argument("--camera-fill", type=float, default=None,
+                    dest="camera_fill",
+                    help="Fraction of the frame the subject fills.")
+    rn.add_argument("--lens", type=float, default=None,
+                    help="Focal length in mm, overriding the style's.")
+    rn.add_argument("--effect", action="append", default=None,
+                    dest="effects", metavar="NAME:K=V,...",
+                    help="Add a scene effect: laser, arc, resonance, "
+                         "orbit, halo, fog or glare. Repeatable. "
+                         "--list-effects prints every parameter.")
+    rn.add_argument("--no-style-effects", dest="style_effects",
+                    action="store_false",
+                    help="Drop the effects a cover style brings of its own.")
+    rn.add_argument("--list-effects", action="store_true",
+                    dest="list_effects",
+                    help="Print the effects and their parameters, and exit.")
     rn.add_argument("--atom-scale", type=float, default=1.0,
                     dest="atom_scale")
     rn.add_argument("--bond-scale", type=float, default=1.0,

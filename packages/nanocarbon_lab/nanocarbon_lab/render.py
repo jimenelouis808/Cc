@@ -38,7 +38,8 @@ import sys
 from pathlib import Path
 
 __all__ = ["BLENDER_HELP", "find_blender", "has_bpy", "render_command",
-           "script_path", "style_catalogue"]
+           "camera_module", "effect_catalogue", "script_path",
+           "style_catalogue"]
 
 #: What to tell a user who has neither. Shared, so the GUI dialog and
 #: the CLI's refusal cannot drift apart.
@@ -157,6 +158,11 @@ def render_command(
     samples: int | None = None,
     atom_scale: float = 1.0,
     bond_scale: float = 1.0,
+    view: str | None = None,
+    camera_fill: float | None = None,
+    lens: float | None = None,
+    effects: list[str] | None = None,
+    style_effects: bool = True,
     transparent: bool = False,
     save_blend: str | os.PathLike[str] | None = None,
     render: bool = True,
@@ -219,6 +225,16 @@ def render_command(
         cmd += ["--atom-scale", f"{atom_scale:g}"]
     if bond_scale != 1.0:
         cmd += ["--bond-scale", f"{bond_scale:g}"]
+    if view is not None:
+        cmd += ["--view", view]
+    if camera_fill is not None:
+        cmd += ["--camera-fill", f"{camera_fill:g}"]
+    if lens is not None:
+        cmd += ["--lens", f"{lens:g}"]
+    for effect in effects or []:
+        cmd += ["--effect", str(effect)]
+    if not style_effects:
+        cmd += ["--no-style-effects"]
     if transparent:
         cmd += ["--transparent-background"]
     if save_blend is not None:
@@ -229,6 +245,40 @@ def render_command(
 
 
 _STYLES = None
+_EFFECTS = None
+_CAMERA = None
+
+
+def effect_catalogue():
+    """Import ``blender/effects.py`` and return it as a module.
+
+    Same reason as :func:`style_catalogue`: it imports no ``bpy`` at
+    module level, so the catalogue, the parameter defaults and the spec
+    parser are all reachable from the window and the command line
+    without Blender installed.
+    """
+    global _EFFECTS
+    if _EFFECTS is None:
+        spec = importlib.util.spec_from_file_location(
+            "nanocarbon_effects", script_path("effects"))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules.setdefault("nanocarbon_effects", module)
+        spec.loader.exec_module(module)
+        _EFFECTS = module
+    return _EFFECTS
+
+
+def camera_module():
+    """Import ``blender/camera.py``: the view choice, without Blender."""
+    global _CAMERA
+    if _CAMERA is None:
+        spec = importlib.util.spec_from_file_location(
+            "nanocarbon_camera", script_path("camera"))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules.setdefault("nanocarbon_camera", module)
+        spec.loader.exec_module(module)
+        _CAMERA = module
+    return _CAMERA
 
 
 def style_catalogue():

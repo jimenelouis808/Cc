@@ -16,7 +16,12 @@ cannot be imported without Blender.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+# Loaded by path rather than imported as a package, so the sibling
+# import has to be made to work rather than assumed.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import styles as style_defs
 
@@ -41,9 +46,9 @@ def load_bundle(xyz_path: str, json_path: str | None = None):
     -------
     dict
         ``positions``, ``symbols``, ``bonds``, ``ring_sizes_per_atom``,
-        ``item_per_atom`` and ``labels``. A dict rather than a tuple
-        because this grew from three fields to six and a positional
-        return had already been unpacked in two places.
+        ``item_per_atom``, ``labels`` and ``seam_stubs``. A dict rather
+        than a tuple because this grew from three fields to seven and a
+        positional return had already been unpacked in two places.
     """
     lines = Path(xyz_path).read_text().splitlines()
     n = int(lines[0])
@@ -58,6 +63,7 @@ def load_bundle(xyz_path: str, json_path: str | None = None):
     ring_sizes_per_atom: list[list[int]] = [[] for _ in range(n)]
     item_per_atom = [0] * n
     labels: list[str] = []
+    seam_stubs: list[list[float]] = []
     if json_path and Path(json_path).exists():
         bundle = json.loads(Path(json_path).read_text())
         bonds = [tuple(bond) for bond in bundle.get("bonds", [])]
@@ -68,6 +74,7 @@ def load_bundle(xyz_path: str, json_path: str | None = None):
         if items and len(items) == n:
             item_per_atom = [int(value) for value in items]
         labels = list(bundle.get("scene", {}).get("labels", []))
+        seam_stubs = [list(stub) for stub in bundle.get("seam_stubs", [])]
     if not bonds:
         bonds = _bonds_from_distance(positions)
     return {
@@ -77,6 +84,11 @@ def load_bundle(xyz_path: str, json_path: str | None = None):
         "ring_sizes_per_atom": ring_sizes_per_atom,
         "item_per_atom": item_per_atom,
         "labels": labels,
+        # Half-bonds at a periodic seam: ``[atom, dx, dy, dz]``. One atom
+        # each, not two, so they are kept apart from "bonds" -- anything
+        # that reads a bond as a pair of indices would otherwise have to
+        # learn about them.
+        "seam_stubs": seam_stubs,
     }
 
 
