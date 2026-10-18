@@ -15,10 +15,31 @@ and ``-P`` to run a script). ``--xyz``/``--json`` are produced by
 ``nanocarbon cnt-cap ...`` (see the CLI) or directly by
 :func:`nanocarbon_lab.exports.xyz.write_render_bundle`.
 
-Pick ``--style`` from ``styles.STYLES`` in the sibling ``styles.py``
-(``nature_dark``, ``acs_nano_vivid``, ``small_minimal``,
-``blueprint_technical``, ``gold_nanotech``) -- run with ``--list-styles``
-to print descriptions without rendering anything.
+Pick ``--style`` from ``styles.STYLES`` in the sibling ``styles.py`` --
+run with ``--list-styles`` to print every style with its description,
+rather than keeping a copy of the list here that drifts from it.
+
+Three axes are independent, and keeping them so is the point:
+
+``--style``
+    The *character* of the surfaces: metallic, roughness, clearcoat,
+    which shader, what lights, what lens.
+``--colour-by``
+    What the hue *means*: ``ring`` (ring size, as this pipeline
+    originally did and nothing else), ``element``, ``structure`` (which
+    item of a composition an atom came from) or ``uniform``. Left out,
+    each style's own ``default_colour_by`` decides, so a cover style
+    keeps ring colouring and a figure style takes element.
+``--background``
+    The backdrop: ``gradient``, ``solid``, ``transparent`` or
+    ``studio`` (a gradient plus a floor to sit on). Overrides the
+    style's own.
+
+``--save-blend out/scene.blend`` writes the assembled scene instead of
+(or as well as) rendering it, which is how a scene gets opened in
+Blender for adjusting by hand; ``--no-render`` skips the render
+entirely. Run *without* ``-b`` and with ``--no-render`` to build the
+scene inside an interactive Blender session.
 """
 
 from __future__ import annotations
@@ -43,28 +64,79 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--json", default=None, help="Path to the .json sidecar (rings/bonds).")
     p.add_argument("--style", default="nature_dark", choices=style_defs.list_styles())
     p.add_argument("--mode", default="ballstick", choices=["ballstick", "surface", "both"])
+    p.add_argument(
+        "--colour-by", "--color-by", dest="colour_by", default=None,
+        choices=list(style_defs.COLOUR_MODES),
+        help="What an atom's colour means. Default: the style's own.",
+    )
+    p.add_argument(
+        "--background", default=None, choices=list(style_defs.BACKGROUNDS),
+        help="Override the style's backdrop.",
+    )
+    # Not BooleanOptionalAction: the default has to be None ("whatever the
+    # style says") and not False, so --no-floor is a real third state
+    # rather than the same as leaving it out.
+    p.add_argument("--floor", dest="floor", action="store_true", default=None,
+                   help="Add a ground plane whatever the background says.")
+    p.add_argument("--no-floor", dest="floor", action="store_false",
+                   help="Remove the ground plane a studio background adds.")
+    p.add_argument("--atom-scale", type=float, default=1.0,
+                   help="Multiplies every atom radius.")
+    p.add_argument("--bond-scale", type=float, default=1.0,
+                   help="Multiplies the bond cylinder radius.")
     p.add_argument("--out", default="render.png", help="Output image path.")
     p.add_argument("--resolution", type=int, nargs=2, default=[1920, 1920])
     p.add_argument("--samples", type=int, default=None, help="Overrides the style's default.")
     p.add_argument("--transparent-background", action="store_true")
+    p.add_argument("--save-blend", default=None,
+                   help="Write the assembled scene to this .blend file.")
+    p.add_argument("--no-render", dest="render", action="store_false",
+                   help="Assemble the scene but do not render it.")
     p.add_argument("--list-styles", action="store_true", help="Print style descriptions and exit.")
     return p.parse_args(argv)
 
 
 def material_from_spec(name: str, spec) -> bpy.types.Material:
-    """Build a Principled-BSDF material from a :class:`styles.MaterialSpec`.
+    """Build a material from a :class:`styles.MaterialSpec`.
 
-    Input socket names on the Principled BSDF node changed between
-    Blender 3.x and 4.x (e.g. plain ``"Emission"`` became
-    ``"Emission Color"`` + a separate ``"Emission Strength"``, and
-    ``"Specular"`` became ``"Specular IOR Level"``). This sets whichever
-    of a small set of known aliases exists on the running Blender's node,
-    so the same :class:`styles.MaterialSpec` renders correctly across
-    versions instead of raising a ``KeyError``.
+    ``spec.shader`` picks the surface node, because four of the five
+    looks :data:`styles.SHADERS` offers cannot be expressed by
+    Principled parameters at all: glass needs refraction through a
+    closed surface, toon needs banded rather than smooth falloff,
+    emission needs no surface response, and clay needs the specular
+    lobe *gone* rather than merely rough. The remaining one, which is
+    most styles, is Principled and takes every parameter.
+
+    Input socket names on the Principled BSDF changed between Blender
+    3.x and 4.x (plain ``"Emission"`` became ``"Emission Color"`` plus a
+    separate ``"Emission Strength"``, ``"Specular"`` became
+    ``"Specular IOR Level"``, ``"Subsurface"`` became
+    ``"Subsurface Weight"``). This sets whichever of a small set of
+    known aliases exists on the running Blender's node, so one
+    :class:`styles.MaterialSpec` renders across versions instead of
+    raising a ``KeyError``.
     """
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
-    bsdf = mat.node_tree.nodes.get("Principled BSDF")
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+
+    if spec.shader != "principled":
+        # Replace the default Principled node rather than leaving it
+        # unlinked: an orphan node is harmless but it makes the material
+        # confusing to adjust by hand after --save-blend, which is one of
+        # the things this script is for.
+        out = nodes.get("Material Output")
+        for node in list(nodes):
+            if node is not out:
+                nodes.remove(node)
+        if out is None:
+            out = nodes.new("ShaderNodeOutputMaterial")
+        shader = _shader_node(nodes, spec)
+        links.new(shader.outputs[0], out.inputs["Surface"])
+        return mat
+
+    bsdf = nodes.get("Principled BSDF")
 
     def set_input(aliases: list[str], value) -> None:
         for alias in aliases:
@@ -80,10 +152,61 @@ def material_from_spec(name: str, spec) -> bpy.types.Material:
     set_input(["Coat Weight", "Clearcoat"], spec.clearcoat)
     set_input(["Emission Color", "Emission"], (*spec.emission_color, 1.0))
     set_input(["Emission Strength"], spec.emission_strength)
+    set_input(["Subsurface Weight", "Subsurface"], spec.subsurface)
+    set_input(["Subsurface Radius"], tuple(spec.subsurface_color))
+    set_input(["Sheen Weight", "Sheen"], spec.sheen)
     return mat
 
 
-def _setup_world(style) -> None:
+def _shader_node(nodes, spec):
+    """The surface node for a non-Principled shader.
+
+    Each is built from the same :class:`styles.MaterialSpec`, so a style
+    can be re-coloured (``--colour-by element`` inside ``glass_cryo``)
+    without knowing which shader it uses.
+    """
+    colour = spec.base_color
+    if spec.shader == "glass":
+        node = nodes.new("ShaderNodeBsdfGlass")
+        node.inputs["Color"].default_value = colour
+        node.inputs["Roughness"].default_value = spec.roughness
+        node.inputs["IOR"].default_value = spec.ior
+        return node
+    if spec.shader == "toon":
+        node = nodes.new("ShaderNodeBsdfToon")
+        node.inputs["Color"].default_value = colour
+        # Size is the width of the lit band and Smooth the softness of
+        # its edge; a schematic wants a wide band and a hard edge.
+        node.inputs["Size"].default_value = 0.6
+        node.inputs["Smooth"].default_value = 0.05
+        return node
+    if spec.shader == "emission":
+        node = nodes.new("ShaderNodeEmission")
+        node.inputs["Color"].default_value = (
+            *(spec.emission_color or colour[:3]), 1.0
+        )
+        node.inputs["Strength"].default_value = max(
+            spec.emission_strength, 1.0
+        )
+        return node
+    if spec.shader == "clay":
+        node = nodes.new("ShaderNodeBsdfDiffuse")
+        node.inputs["Color"].default_value = colour
+        node.inputs["Roughness"].default_value = spec.roughness
+        return node
+    raise ValueError(f"no node setup for shader {spec.shader!r}.")
+
+
+def _setup_world(background) -> None:
+    """Build the world from a :class:`styles.Background`.
+
+    All four kinds go through one node tree so they cannot diverge:
+    ``solid`` is the gradient with both stops equal, and ``transparent``
+    is a black world with the film alpha opened in
+    :func:`_setup_render` -- the world still has to be *dark* rather than
+    merely invisible, or it lights the subject from every direction and
+    the alpha comes back over a washed-out render.
+    """
     world = bpy.data.worlds.new("NanocarbonWorld")
     bpy.context.scene.world = world
     world.use_nodes = True
@@ -91,20 +214,80 @@ def _setup_world(style) -> None:
     links = world.node_tree.links
     nodes.clear()
 
+    bg = nodes.new("ShaderNodeBackground")
+    out = nodes.new("ShaderNodeOutputWorld")
+    links.new(bg.outputs["Background"], out.inputs["Surface"])
+
+    if background.kind == "transparent":
+        bg.inputs["Color"].default_value = (0.05, 0.05, 0.05, 1.0)
+        bg.inputs["Strength"].default_value = 0.2
+        return
+
+    bg.inputs["Strength"].default_value = background.strength
+    if background.kind == "solid":
+        bg.inputs["Color"].default_value = (*background.top, 1.0)
+        return
+
     coord = nodes.new("ShaderNodeTexCoord")
     gradient = nodes.new("ShaderNodeTexGradient")
     gradient.gradient_type = "LINEAR"
     ramp = nodes.new("ShaderNodeValToRGB")
-    ramp.color_ramp.elements[0].color = (*style.world_color_bottom, 1.0)
-    ramp.color_ramp.elements[1].color = (*style.world_color_top, 1.0)
-    bg = nodes.new("ShaderNodeBackground")
-    bg.inputs["Strength"].default_value = style.world_strength
-    out = nodes.new("ShaderNodeOutputWorld")
-
+    ramp.color_ramp.elements[0].color = (*background.bottom, 1.0)
+    ramp.color_ramp.elements[1].color = (*background.top, 1.0)
     links.new(coord.outputs["Generated"], gradient.inputs["Vector"])
     links.new(gradient.outputs["Color"], ramp.inputs["Fac"])
     links.new(ramp.outputs["Color"], bg.inputs["Color"])
-    links.new(bg.outputs["Background"], out.inputs["Surface"])
+
+
+#: How far below the subject the floor sits, as a fraction of its radius.
+#: Exactly 1.0 would put the plane through the lowest atom of a sphere;
+#: a little under 1.05 reads as contact rather than as levitation.
+FLOOR_DROP = 1.04
+
+#: Floor extent, in subject radii. Large enough that its edge is outside
+#: frame at every lens the styles use, since a visible edge reads as a
+#: table rather than as a backdrop.
+FLOOR_EXTENT = 24.0
+
+
+def _add_floor(background, center: Vector, radius: float):
+    """A ground plane for the subject to sit and cast onto.
+
+    Returned so the caller can keep it *out* of the framing measurement:
+    a plane 24 radii across would otherwise set the camera distance and
+    the subject would be a speck in the middle of it.
+
+    A shadow catcher is invisible itself but still receives shadow, so a
+    transparent background keeps the contact shadow that makes a subject
+    look placed rather than pasted.
+    """
+    mesh = bpy.data.meshes.new("Floor")
+    plane = bpy.data.objects.new("Floor", mesh)
+    bpy.context.collection.objects.link(plane)
+
+    size = radius * FLOOR_EXTENT
+    z = center.z - radius * FLOOR_DROP
+    verts = [(center.x - size, center.y - size, z),
+             (center.x + size, center.y - size, z),
+             (center.x + size, center.y + size, z),
+             (center.x - size, center.y + size, z)]
+    mesh.from_pydata(verts, [], [(0, 1, 2, 3)])
+    mesh.update()
+
+    mat = material_from_spec(
+        "mat_floor",
+        style_defs.MaterialSpec(base_color=(*background.floor_color, 1.0),
+                                roughness=background.floor_roughness),
+    )
+    mesh.materials.append(mat)
+    if background.floor_is_shadow_catcher:
+        # Cycles-only, and only from 3.0; a style asking for one on an
+        # older build should still render rather than abort.
+        try:
+            plane.is_shadow_catcher = True
+        except AttributeError:
+            pass
+    return plane
 
 
 #: Subject radius the light rigs in ``styles.py`` are written against.
@@ -225,7 +408,12 @@ def _setup_render(style, args) -> None:
     scene = bpy.context.scene
     scene.render.engine = style.engine
     scene.render.resolution_x, scene.render.resolution_y = args.resolution
-    scene.render.film_transparent = args.transparent_background
+    # Either the flag or the style's own backdrop opens the alpha. The
+    # flag is kept because it predates ``Background`` and a caller may
+    # want any style cut out, not only the one built for it.
+    scene.render.film_transparent = (
+        args.transparent_background or style.background.is_transparent
+    )
     if style.engine == "CYCLES":
         scene.cycles.samples = args.samples or style.samples
         try:
@@ -234,13 +422,21 @@ def _setup_render(style, args) -> None:
             pass
     scene.render.filepath = str(Path(args.out).resolve())
     scene.render.image_settings.file_format = "PNG"
+    # RGBA, or a transparent film is composited onto black on write and
+    # the alpha this was all for never reaches the file.
+    scene.render.image_settings.color_mode = (
+        "RGBA" if scene.render.film_transparent else "RGB"
+    )
 
 
 def main() -> int:
     args = _parse_args()
     if args.list_styles:
         for name in style_defs.list_styles():
-            print(f"{name}: {style_defs.get_style(name).description}")
+            style = style_defs.get_style(name)
+            print(f"{name} [{style.background.kind}, "
+                  f"colour by {style.default_colour_by}]: "
+                  f"{style.description}")
         return 0
     if not args.xyz:
         print("error: --xyz is required (unless --list-styles).", file=sys.stderr)
@@ -248,24 +444,44 @@ def main() -> int:
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     style = style_defs.get_style(args.style)
+    if args.background is not None:
+        style = style_defs.with_background(style, args.background)
+    colour_by = style_defs.resolve_colour_by(args.colour_by, style)
 
-    positions, bonds, ring_sizes_per_atom = mesh_builder.load_bundle(args.xyz, args.json)
+    bundle = mesh_builder.load_bundle(args.xyz, args.json)
 
     objects: list[bpy.types.Object] = []
     if args.mode in ("ballstick", "both"):
         objects += mesh_builder.build_ball_and_stick(
-            positions, bonds, ring_sizes_per_atom, style
+            bundle, style, colour_by=colour_by,
+            atom_scale=args.atom_scale,
+            bond_radius=0.12 * args.bond_scale,
         )
     if args.mode in ("surface", "both"):
-        objects.append(mesh_builder.build_smooth_surface(positions, bonds, style))
+        objects.append(mesh_builder.build_smooth_surface(bundle, style))
 
     # The light rig and the camera both need the subject's size, so it is
-    # measured once here rather than twice with a risk of disagreeing.
+    # measured once here rather than twice with a risk of disagreeing --
+    # and before the floor exists, since a plane two dozen radii across
+    # would otherwise be what the camera frames.
     center, radius = _bounding_sphere(objects)
-    _setup_world(style)
+    _setup_world(style.background)
+    floor = style.background.has_floor if args.floor is None else args.floor
+    if floor:
+        _add_floor(style.background, center, radius)
     _setup_lights(style, center, radius)
     _setup_camera(style, objects, style.camera_lens_mm, args.resolution)
     _setup_render(style, args)
+
+    if args.save_blend:
+        path = Path(args.save_blend).resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        bpy.ops.wm.save_as_mainfile(filepath=str(path))
+        print(f"Wrote {path}")
+
+    if not args.render:
+        print(f"Assembled {len(objects)} objects; not rendering.")
+        return 0
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.render.render(write_still=True)

@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import subprocess
 import sys
 from pathlib import Path
 
@@ -1630,6 +1631,209 @@ def _cmd_analyse(args):
     return 0 if result["validation"]["ok"] else 1
 
 
+def _item_for(items, token: str):
+    """Resolve ``--translate``'s item selector to an :class:`scene.Item`.
+
+    Either a label or a 1-based position on the command line, because
+    both are what a person has in front of them -- the labels they just
+    typed and the order they typed the files in. The *stored* item index
+    is 0-based, since that is what ``--colour-by structure`` uses and
+    what the sidecar records; the off-by-one is converted here rather
+    than exposed, and the error message says which indices exist.
+    """
+    for item in items:
+        if item.label == token:
+            return item
+    try:
+        position = int(token)
+    except ValueError:
+        labels = ", ".join(item.label for item in items) or "(none)"
+        raise SystemExit(
+            f"--translate/--rotate/--scale: no item {token!r}. "
+            f"Labels: {labels}; or a position 1-{len(items)}."
+        ) from None
+    if not 1 <= position <= len(items):
+        raise SystemExit(
+            f"--translate/--rotate/--scale: item {position} is out of range "
+            f"1-{len(items)}."
+        )
+    return items[position - 1]
+
+
+def _parse_item_spec(spec: str, count: int) -> tuple[str, list[float]]:
+    """Split ``ITEM:V1,V2,...`` into its selector and its numbers."""
+    if ":" not in spec:
+        raise SystemExit(
+            f"expected ITEM:{','.join('V' * 1 for _ in range(count))} "
+            f"(e.g. 2:10,0,0), got {spec!r}."
+        )
+    token, _, values = spec.partition(":")
+    try:
+        numbers = [float(value) for value in values.split(",")]
+    except ValueError:
+        raise SystemExit(f"non-numeric value in {spec!r}.") from None
+    if len(numbers) != count:
+        raise SystemExit(
+            f"{spec!r}: expected {count} number(s) after the colon, "
+            f"got {len(numbers)}."
+        )
+    return token, numbers
+
+
+def _cmd_scene(args):
+    """Compose several finished structures into one illustration.
+
+    Deliberately not a builder. What comes out is an **illustration, not
+    a structure**: the items are placed where they look right, not where
+    anything relaxed them to, so it is marked ``is_illustration`` and no
+    validation, export or unit cell is offered for it. The bonds and
+    rings are the items' own, re-indexed -- never re-guessed, which on
+    two structures sitting 4 Å apart would invent bonds between them.
+    """
+    from .. import scene as scene_mod
+
+    if args.list_layouts:
+        for name, description in scene_mod.describe_layouts().items():
+            print(f"{name:10s} {description}")
+        return 0
+    if not args.paths:
+        raise SystemExit("scene: give at least one structure file.")
+    if args.label and len(args.label) != len(args.paths):
+        raise SystemExit(
+            f"scene: {len(args.label)} --label(s) for {len(args.paths)} "
+            "file(s); give one per file or none at all."
+        )
+
+    try:
+        items = scene_mod.items_from_files(args.paths, labels=args.label)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(str(exc)) from None
+
+    if args.layout != "none":
+        items = scene_mod.arrange(items, layout=args.layout, gap=args.gap,
+                                  axis=args.axis, columns=args.columns)
+
+    # Applied after the layout, so a nudge is relative to the arrangement
+    # rather than fighting it.
+    for spec in args.translate or []:
+        token, (dx, dy, dz) = _parse_item_spec(spec, 3)
+        item = _item_for(items, token)
+        tx, ty, tz = item.translation
+        item.translation = (tx + dx, ty + dy, tz + dz)
+    for spec in args.rotate or []:
+        token, angles = _parse_item_spec(spec, 3)
+        _item_for(items, token).rotation = tuple(angles)
+    for spec in args.scale or []:
+        token, (factor,) = _parse_item_spec(spec, 1)
+        _item_for(items, token).scale = factor
+
+    if not args.out:
+        raise SystemExit("scene: --out is required (a path without an "
+                         "extension).")
+    atoms, report = scene_mod.compose(items, vacuum=args.vacuum)
+    paths = scene_mod.write_scene(atoms, Path(args.out), report)
+    for path in paths.values():
+        print(f"Wrote {path}")
+    print(f"  items       = {len(items)}")
+    print(f"  n_atoms     = {len(atoms)}")
+    print(f"  bonds/rings = {report.bonds} / {report.rings}")
+    for a, b, distance in report.clearances:
+        label_a = items[a].label or f"item {a + 1}"
+        label_b = items[b].label or f"item {b + 1}"
+        print(f"  clearance   = {distance:6.2f} A   {label_a} - {label_b}")
+    for warning in report.warnings:
+        print(f"  ! {warning}")
+    # No _remember: a composition is not a structure, so --unit-cell on
+    # one would write a cell around an arrangement nobody relaxed.
+    return 0
+
+
+def _cmd_render(args):
+    """Hand a render bundle to Blender.
+
+    The pipeline was reachable only from the GUI's button, which is the
+    wrong place for it to live: a figure is usually wanted from the same
+    script that built the structure, and a style is worth comparing
+    across several structures in a loop.
+    """
+    from ..render import render_command
+
+    if args.list_styles or args.list_colour_modes:
+        # styles.py is package data rather than a subpackage -- its
+        # siblings import bpy -- so it is reached by path. It imports no
+        # bpy itself, which is what makes printing the catalogue possible
+        # without Blender installed at all.
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "blender"))
+        import styles as style_defs
+
+        if args.list_styles:
+            for name in style_defs.list_styles():
+                style = style_defs.get_style(name)
+                print(f"{name}")
+                print(f"    {style.description}")
+                print(f"    background {style.background.kind}, "
+                      f"colours by {style.default_colour_by}, "
+                      f"{style.engine} at {style.samples} samples")
+        if args.list_colour_modes:
+            print("Colour modes (--colour-by):")
+            for mode in style_defs.COLOUR_MODES:
+                print(f"    {mode}")
+            print("Backgrounds (--background):")
+            for kind in style_defs.BACKGROUNDS:
+                print(f"    {kind}")
+        return 0
+
+    if not args.xyz:
+        raise SystemExit("render: give the .xyz of a render bundle.")
+    xyz = Path(args.xyz)
+    if not xyz.exists():
+        raise SystemExit(f"render: {xyz} does not exist.")
+    # The sidecar carries the real bonds, the ring sizes and, for a
+    # composition, which item each atom came from. Without it bonds are
+    # guessed from a distance cutoff, which on a composition would draw
+    # bonds between separate structures -- so it is looked for beside the
+    # .xyz rather than left to the caller to remember.
+    sidecar = Path(args.json) if args.json else xyz.with_suffix(".json")
+    if not sidecar.exists():
+        print(f"note: no sidecar at {sidecar}; bonds will be guessed from "
+              "distance and ring/structure colouring will be unavailable.")
+        sidecar = None
+
+    out = Path(args.out) if args.out else xyz.with_suffix(".png")
+    try:
+        cmd = render_command(
+            xyz, out, json_path=sidecar, style=args.style, mode=args.mode,
+            colour_by=args.colour_by, background=args.background,
+            floor=args.floor, resolution=tuple(args.resolution),
+            samples=args.samples, atom_scale=args.atom_scale,
+            bond_scale=args.bond_scale,
+            transparent=args.transparent_background,
+            save_blend=args.save_blend, render=args.render,
+            blender=args.blender, interactive=args.open,
+        )
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from None
+
+    if args.print_command:
+        print(" ".join(cmd))
+        return 0
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Running: {' '.join(cmd)}")
+    # No timeout: a Cycles render at 512 samples legitimately takes
+    # longer than any number that could be guessed here, and killing a
+    # nearly-finished one would be the worst available outcome.
+    completed = subprocess.run(cmd, check=False)
+    if completed.returncode != 0:
+        print("Blender exited non-zero; see its output above.",
+              file=sys.stderr)
+        return completed.returncode
+    if args.render and not out.exists():
+        print(f"Blender succeeded but {out} was not written.", file=sys.stderr)
+        return 1
+    return 0
+
+
 def _cmd_validate(args):
     atoms = ase_io.read(args.path)
     report = run_basic_checks(atoms)
@@ -2775,6 +2979,123 @@ def build_parser() -> argparse.ArgumentParser:
                          "indices would suggest read as Cartesian "
                          "components. Repeatable.")
     ci.set_defaults(func=_cmd_crystal_info)
+
+    sc = sub.add_parser(
+        "scene",
+        help="Compose two or more finished structures into one file for "
+             "VESTA or Blender. An ILLUSTRATION, not a structure: the "
+             "items are placed where they look right, and the bonds and "
+             "rings are the items' own, re-indexed rather than "
+             "re-guessed.",
+    )
+    sc.add_argument("paths", nargs="*",
+                    help="Structure files, in the order they are laid out. "
+                         "Anything ASE reads; a .xyz with its .json sidecar "
+                         "beside it keeps the recorded bonds and rings.")
+    sc.add_argument("--label", action="append", metavar="NAME",
+                    help="A name for the next file, used in the clearance "
+                         "report and in the sidecar. One per file or none; "
+                         "left out, the filename stem is used.")
+    sc.add_argument("--layout", default="row",
+                    choices=("row", "stack", "grid", "circle", "none"),
+                    help="How to space the items. 'none' leaves every item "
+                         "at the origin, for placing them all by hand.")
+    sc.add_argument("--gap", type=float, default=8.0,
+                    help="Free space between neighbouring items (A), "
+                         "measured between their bounding boxes rather than "
+                         "their centres, so items of different sizes are "
+                         "spaced the same.")
+    sc.add_argument("--axis", default="x", choices=("x", "y", "z"),
+                    help="Which way a row or a stack runs.")
+    sc.add_argument("--columns", type=int, default=0,
+                    help="Columns in a grid layout. 0 picks a near-square "
+                         "arrangement.")
+    sc.add_argument("--translate", action="append", metavar="ITEM:X,Y,Z",
+                    help="Nudge one item, in A, on top of the layout. ITEM "
+                         "is its label or its 1-based position. Repeatable.")
+    sc.add_argument("--rotate", action="append", metavar="ITEM:RX,RY,RZ",
+                    help="Rotate one item about its own centre, in degrees. "
+                         "Repeatable.")
+    sc.add_argument("--scale", action="append", metavar="ITEM:S",
+                    help="Scale one item about its own centre. For "
+                         "illustration only -- it changes every bond "
+                         "length, so a scaled item is recorded as scaled "
+                         "and warned about. Repeatable.")
+    sc.add_argument("--vacuum", type=float, default=10.0,
+                    help="Padding around the whole composition (A).")
+    sc.add_argument("--out", default=None,
+                    help="Output path without extension. Writes .xyz, "
+                         ".json, .cif and a .txt of the report.")
+    sc.add_argument("--list-layouts", action="store_true",
+                    help="Describe the layouts and exit.")
+    sc.set_defaults(func=_cmd_scene)
+
+    rn = sub.add_parser(
+        "render",
+        help="Render a bundle (or a scene) through Blender. What the "
+             "colour MEANS is --colour-by, independently of --style: ring "
+             "size, element, which structure of a composition, or "
+             "uniform.",
+    )
+    rn.add_argument("xyz", nargs="?", help="The .xyz of a render bundle.")
+    rn.add_argument("--json", default=None,
+                    help="The .json sidecar. Default: the .xyz's own name. "
+                         "It carries the real bonds, so without it they are "
+                         "guessed from distance -- which on a composition "
+                         "invents bonds between separate structures.")
+    rn.add_argument("--style", default="nature_dark",
+                    help="A style from styles.py; --list-styles prints them "
+                         "with their backgrounds and default colouring.")
+    rn.add_argument("--mode", default="ballstick",
+                    choices=("ballstick", "surface", "both"))
+    rn.add_argument("--colour-by", "--color-by", dest="colour_by",
+                    default=None,
+                    help="ring | element | structure | uniform. Left out, "
+                         "each style's own default applies -- a cover style "
+                         "keeps ring colouring, a figure style takes "
+                         "element.")
+    rn.add_argument("--background", default=None,
+                    help="gradient | solid | transparent | studio. "
+                         "Overrides the style's own.")
+    rn.add_argument("--floor", dest="floor", action="store_true",
+                    default=None, help="Add a ground plane.")
+    rn.add_argument("--no-floor", dest="floor", action="store_false",
+                    help="Remove the plane a studio background adds.")
+    rn.add_argument("--atom-scale", type=float, default=1.0,
+                    dest="atom_scale")
+    rn.add_argument("--bond-scale", type=float, default=1.0,
+                    dest="bond_scale")
+    rn.add_argument("--resolution", type=int, nargs=2, default=[1920, 1920])
+    rn.add_argument("--samples", type=int, default=None,
+                    help="Cycles samples; overrides the style's own.")
+    rn.add_argument("--transparent-background", action="store_true",
+                    dest="transparent_background")
+    rn.add_argument("--out", default=None,
+                    help="Output image. Default: the .xyz's name with .png.")
+    rn.add_argument("--save-blend", default=None, dest="save_blend",
+                    help="Also write the assembled scene to this .blend, so "
+                         "it can be opened and adjusted by hand.")
+    rn.add_argument("--no-render", dest="render", action="store_false",
+                    help="Assemble the scene without rendering it. With "
+                         "--save-blend or --open, that is the whole point.")
+    rn.add_argument("--open", action="store_true",
+                    help="Open Blender with the scene assembled instead of "
+                         "rendering headless, to adjust it and render from "
+                         "there. Needs the Blender application; the bpy "
+                         "module has no window.")
+    rn.add_argument("--blender", default=None,
+                    help="Path to the Blender executable, overriding the "
+                         "search (the BLENDER environment variable does the "
+                         "same thing for every invocation).")
+    rn.add_argument("--print-command", action="store_true",
+                    dest="print_command",
+                    help="Print the Blender command line and exit, without "
+                         "running it.")
+    rn.add_argument("--list-styles", action="store_true", dest="list_styles")
+    rn.add_argument("--list-colour-modes", "--list-color-modes",
+                    action="store_true", dest="list_colour_modes",
+                    help="Print the colour modes and backgrounds and exit.")
+    rn.set_defaults(func=_cmd_render)
 
     vl = sub.add_parser("validate",
                         help="Validate an existing structure file (CIF, XYZ, POSCAR…).")

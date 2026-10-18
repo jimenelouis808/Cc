@@ -6,6 +6,153 @@ está la trampa.
 
 ---
 
+## nanocarbon_lab · composición de varias estructuras, y un Blender de verdad
+
+### Juntar 2, 3 o más estructuras en una figura
+
+Panel nuevo en la columna derecha de la ventana —**«Composition (several
+structures)»**— y el subcomando `nanocarbon scene`. Metes lo que ya tengas
+construido (lo que esté en la vista previa, o archivos del disco: carbono,
+nanopartículas, TMD, lo que sea), lo colocas en el espacio, y sale **un
+solo archivo** que abres en VESTA o en Blender.
+
+```bash
+nanocarbon scene c60.xyz tubo.xyz nanoparticula.xyz \
+    --label cage --label tube --label NP \
+    --layout row --gap 8 --rotate tube:0,90,0 --out figura
+```
+
+Cuatro disposiciones (`row`, `stack`, `grid`, `circle`) y después ajustas
+cada pieza a mano: **mover** en Å y **girar** en grados, por su propio
+centro. En la ventana es lo mismo con dos filas de casillas y el botón
+«Apply to selected item».
+
+**Lo que NO es.** Esto es una **ILUSTRACIÓN, no una estructura.** Las
+piezas están donde se ven bien, no donde las dejó una relajación; no hay
+intercara relajada entre ninguna de ellas y **las distancias no son
+física**. El informe lo dice en su primer aviso, siempre, y el archivo
+lleva la marca `is_illustration`. No la cuantifiques, no la relajes y no
+la metas en un código DFT.
+
+**Lo que sí hace bien, y es el punto delicado.** Los enlaces y los anillos
+**se arrastran y se renumeran, no se vuelven a adivinar.** Si se
+recalcularan por distancia, dos estructuras que simplemente están a 4 Å
+una de otra saldrían **enlazadas entre sí**, que es lo único que una
+composición no puede afirmar. Hay un test que comprueba que ningún enlace
+y ningún anillo cruza de una pieza a otra.
+
+Tres trampas que aparecieron midiendo, no pensando:
+
+- **Un hueco de 8 Å son 8 Å.** La primera versión espaciaba por el radio
+  de la esfera que envuelve cada pieza y no miraba su rotación: un hueco
+  pedido de 8 salía a **17,9 Å** en fila y **23,3 Å** en rejilla. Ahora se
+  mide con la caja envolvente **ya girada**, y `row`, `stack` y `grid`
+  aciertan a una décima de Å. `circle` reparte en un anillo, así que ahí
+  el hueco es un mínimo y no un objetivo.
+- **Los enlaces que salían por la cara de una celda periódica se tiran.**
+  Una composición es finita: la imagen a la que llegaba ese enlace no
+  está en la escena. Dibujado tal cual, un tubo (5,5) daba una raya de
+  **12,4 Å** teniendo todos sus enlaces reales a 1,42. Se detectan con la
+  traslación exacta, no por longitud (un (6,0) repite cada 4,26 Å), y el
+  informe dice cuántos y qué hacer: repetir la pieza antes de componerla.
+- **Escalar una pieza cambia todas sus distancias de enlace.** Es una
+  decisión legítima para una figura y deja de ser una estructura; queda
+  registrado y avisado.
+
+Componer sustituye la vista previa, así que los botones de exportar y de
+renderizar valen ya para la composición sin tocar nada más.
+
+### Los anillos ya son opcionales: colorea por elemento, por pieza o plano
+
+El render tenía los anillos metidos en el estilo, así que **no se podía
+apagar**. Ahora son **tres ejes independientes**:
+
+| eje | qué decide | opciones |
+|---|---|---|
+| `--style` | el *carácter* de la superficie: metálico, rugosidad, barniz, shader, luces, objetivo | 12 estilos |
+| `--colour-by` | **qué significa el color** | `ring`, `element`, `structure`, `uniform` |
+| `--background` | el fondo | `gradient`, `solid`, `transparent`, `studio` |
+
+Si no dices nada, manda el estilo: uno de portada sigue coloreando por
+anillo y uno de figura colorea por **elemento**. Y un estilo no se pierde
+al recolorear — por elemento dentro de `gold_nanotech` sale un oxígeno con
+acabado de oro, no un primario plano.
+
+Dos cosas salen de ahí y ninguna es estética:
+
+- **El enlace se parte en dos mitades cuando el color es del átomo.** Un
+  enlace C–O pintado del gris del carbono dice que el oxígeno es carbono.
+  Por elemento y por pieza se dibujan dos medios cilindros; por anillo se
+  mantiene uno, porque un anillo no es de ninguno de los dos extremos.
+- **El radio sigue al elemento cuando el color lo hace.** Esferas iguales
+  están bien en una red de carbono y mal en cuanto hay un hidrógeno y un
+  átomo de oro en la misma imagen.
+
+Y la razón de todo esto: **colorear por anillo dice poco en una jaula
+cerrada y nada en una dopada.** Los 60 átomos del C60 están en un
+pentágono, así que la imagen decía «todo pentágonos» de algo que son doce
+pentágonos y veinte hexágonos.
+
+### Doce estilos, fondos y shaders especializados
+
+Los cinco de revista siguen ahí. Siete nuevos, y cuatro de ellos usan un
+**shader que un Principled no puede expresar con parámetros**:
+
+- **`paper_figure`** — blanco plano, colores de elemento, luz suave, sin
+  desenfoque. Una figura de manuscrito, no una portada.
+- **`electron_micrograph`** — gris, luz rasante. Por defecto colorea
+  **uniforme**: una micrografía que codifica sus defectos en color vuelve
+  a ser un dibujo.
+- **`glass_cryo`** — vidrio **refractivo**, se ve el otro lado de la jaula
+  a través del cercano. 512 muestras, que es lo que piden las cáusticas.
+- **`clay_studio`** — barro mate sobre un **suelo** de estudio. Puramente
+  difuso: la forma sin que el material distraiga.
+- **`neon_cyber`** — el cuerpo y los enlaces **son** la luz.
+- **`toon_schematic`** — sombreado en bandas, para una diapositiva.
+- **`transparent_overlay`** — **sin fondo**, alfa directo, con un suelo
+  que **recoge la sombra sin verse**, para montarlo en una maqueta. Sin
+  eso el objeto queda pegado y no apoyado.
+
+El **suelo** es tri-estado y no un simple sí/no: algunos estilos lo traen
+y la mayoría no, así que la casilla de la ventana **se rellena desde el
+estilo** cada vez que cambias de estilo o de fondo. Dejada en «no» le
+quitaría a `clay_studio` el suelo que es su razón de existir.
+
+### Abrir Blender y terminar la escena a mano
+
+Botón nuevo: **«Open scene in Blender…»**, y `--open` en la línea de
+órdenes. No renderiza: monta las luces, la cámara, los materiales y el
+fondo, guarda el `.blend` al lado del archivo y **te entrega la ventana de
+Blender viva**. Ningún preajuste sustituye mover una cámara a mano, y aquí
+es donde el programa deja de adivinar.
+
+Necesita la **aplicación** Blender: el paquete `bpy` de PyPI es un Blender
+entero dentro de Python pero **no tiene ventana**, así que pedirle una
+dice por qué no puede en vez de renderizar en silencio y decir que ha
+ido bien. También hay `--save-blend` y `--no-render` sueltos, por si lo
+quieres montar sin abrir nada.
+
+### Y renderizar ya no es solo un botón de la ventana
+
+`nanocarbon render` existe. Antes el pipeline estaba encerrado detrás de
+un módulo que necesita tkinter, lo cual es el sitio equivocado: una
+figura normalmente se quiere desde el mismo script que construyó la
+estructura, y un estilo se compara en un bucle sobre varias estructuras.
+
+```bash
+nanocarbon render figura.xyz --style paper_figure \
+    --colour-by structure --background studio --out figura.png
+nanocarbon render --list-styles          # los doce, con su fondo y su color
+```
+
+De paso: **el menú de estilos de la ventana era una lista escrita a mano
+de cinco nombres**, y llevaba equivocada desde que se escribió el sexto.
+Ofrecía la mitad del catálogo sin nada que indicara que existía el resto.
+Ahora lee el catálogo, y hay un test que falla si alguien vuelve a copiar
+un nombre de estilo dentro de la ventana.
+
+---
+
 ## nanocarbon_lab · importa un .cif y corta nanopartículas
 
 Pestaña nueva en la ventana —**familia «nanoparticle»**— y dos subcomandos

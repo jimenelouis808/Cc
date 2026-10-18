@@ -30,6 +30,8 @@ validation pass before writing.
 | `haeckelite`    | **2D carbon allotropes you design**: Stone-Wales rotations patterned into graphene. A catalogue entry (`r57`) is a solved tiling with **no hexagons at all**; the generative rules reach ~67%. `sum(6-n) = 0` exact either way |
 | `network`       | **Periodic 3D networks of interconnected nanotubes** — cubic and diamond nets, topology derived not prescribed |
 | `cell`          | **Any structure → a DFT-ready periodic unit cell**, with the vacuum measured rather than assumed |
+| `scene`         | **Several finished structures → one illustration** for VESTA or Blender: placed in 3D, bonds and rings carried rather than re-guessed |
+| `render`        | Where Blender is, which script, what argv — the importable half of the render pipeline, shared by the GUI and `nanocarbon render` |
 | `swept`         | Coils and arbitrary curved tubes whose ring topology is **derived from the curvature** |
 | `fullerene`     | Closed cages (C60, C240, C540, C20, C80, …) and carbon nano-onions |
 | `assemblies`    | Multi-wall nanotubes and hexagonally packed bundles, at the van der Waals gap |
@@ -1087,6 +1089,56 @@ This writes `demo.xyz` (plain XYZ, readable by any molecular viewer) and
 consumed by the Blender pipeline below to colour pentagons/heptagons/
 octagons differently).
 
+### Composing several structures into one figure
+
+`nanocarbon scene` arranges finished structures -- anything this package
+built, or any file ASE reads -- into one file for VESTA or Blender:
+
+```bash
+nanocarbon scene c60.xyz tube.xyz particle.xyz \
+  --label cage --label tube --label NP \
+  --layout row --gap 8 --rotate tube:0,90,0 --out out/figure
+```
+
+It writes `figure.xyz`, `figure.json`, `figure.cif` and a `figure.txt`
+report. Four layouts (`row`, `stack`, `grid`, `circle`), then per-item
+`--translate ITEM:X,Y,Z`, `--rotate ITEM:RX,RY,RZ` and `--scale ITEM:S`
+on top, where `ITEM` is a label or its position on the command line. The
+GUI has the same thing as a panel: collect the structure in the preview
+or files from disk, nudge and turn whichever row is selected, then
+**Compose → preview**, which makes it the current structure so Export and
+Render apply to it.
+
+**What comes out is an illustration, not a structure.** The items are
+placed where they look right, there is no relaxed interface between any
+two of them, and nothing about the gaps is physics -- so it is marked
+`is_illustration`, the report says so in its first line every time, and
+it must not be quantified, relaxed or handed to a DFT code.
+
+What it does get right is the connectivity: each item's recorded bonds
+and rings are **carried and re-indexed, never re-guessed**. Re-running a
+bond search over the whole scene would invent bonds between structures
+that merely sit 4 Å apart, which is the one thing a composition must not
+claim. Each atom keeps its item index as an ASE tag, which is what
+`--colour-by structure` reads.
+
+Three things the report tells you about, each of which was a measured
+failure rather than a worry:
+
+* **The gap you ask for is the gap you get**, to about a tenth of an
+  Ångström for `row`, `stack` and `grid`. Spacing is measured between the
+  items' *oriented* bounding boxes; the first version used bounding-sphere
+  radii and ignored rotation, and a requested 8 Å came out at 17.9 Å in a
+  row and 23.3 Å in a grid. `circle` spreads items round a ring, so there
+  the gap is a floor rather than a target.
+* **Bonds that left a periodic cell are dropped, and counted.** A
+  composition is finite, so the image such a bond reached into is not in
+  the scene; drawn from the raw coordinates one of them was a 12.4 Å line
+  across a (5,5) tube whose every real bond is 1.42 Å. Repeat a periodic
+  item before composing it if you want its seam filled in.
+* **A scaled item has non-physical bond lengths**, which is a legitimate
+  choice for a figure and is recorded as one.
+
 ### Rendering in Blender
 
 `nanocarbon_lab/blender/` is a small, self-contained Blender Python
@@ -1116,27 +1168,96 @@ blender -b -P nanocarbon_lab/blender/render_cnt.py -- \
   glossy tube (Blender's Skin + Subdivision modifiers -- good for wide
   macro shots where the tube's silhouette is the hero); `--mode both`
   does both.
-* `--style` selects a full look (materials + world background + lighting
-  rig + camera lens/DOF) from `nanocarbon_lab/blender/styles.py`. Five presets ship out
-  of the box -- run `blender -b -P nanocarbon_lab/blender/render_cnt.py -- --list-styles`
-  to print their descriptions:
+Or, without remembering any of that, through the CLI -- which finds
+Blender (or the `bpy` module) itself:
 
-  | style | mood |
-  |---|---|
-  | `nature_dark` | matte-black void, single dramatic key + cool rim light, near-black graphite body, glowing defect accents |
-  | `acs_nano_vivid` | saturated blue-magenta gradient backdrop, glossy clear-coated colour, punchy 3-point lighting |
-  | `small_minimal` | clean white seamless backdrop, large soft studio lights, matte pastel body |
-  | `blueprint_technical` | deep navy void, thin glowing emissive bonds/defects, circuit-diagram mood |
-  | `gold_nanotech` | warm near-black backdrop, polished gold/bronze metal, 3-point studio rig |
+```bash
+nanocarbon render out/cnt_cap/demo.xyz --style paper_figure \
+  --colour-by element --background solid --out out/figure.png
+nanocarbon render --list-styles          # all twelve, with their defaults
+```
 
-  All five colour pentagons/heptagons/octagons with a style-appropriate
-  accent so curvature and defects are visually legible against the
-  hexagonal body -- edit `blender/styles.py` (plain dataclasses, no
-  Blender dependency, so it's editable/testable outside Blender) to add
-  your own or tweak an existing one.
-* Pass `--transparent-background` for a PNG you can composite over other
-  art; drop `--samples` to use the style's own default (Cycles path
-  tracing, GPU device selected automatically when available).
+* `--mode ballstick` builds coloured spheres + cylinders (good for
+  close-ups where the lattice/defects should read clearly);
+  `--mode surface` instead skins the bond graph into one continuous
+  glossy tube; `--mode both` does both.
+
+### Style, colour and background are three independent choices
+
+They used to be one: a style carried its colouring, so ring colouring
+could not be turned off, and it carried its backdrop, so "this look on
+white for the paper" needed a second style.
+
+| option | what it decides |
+|---|---|
+| `--style` | the *character* of the surfaces: metallic, roughness, clearcoat, which shader, the lights, the lens |
+| `--colour-by` | what the colour **means**: `ring`, `element`, `structure`, `uniform` |
+| `--background` | the backdrop: `gradient`, `solid`, `transparent`, `studio` |
+
+Leave `--colour-by` out and each style's own default applies -- a cover
+style keeps ring colouring, a figure style takes element -- and a style
+survives a recolour: element colours inside `gold_nanotech` give a
+gold-finish oxygen rather than a flat primary.
+
+`--colour-by ring` is what this pipeline always did, and it is the right
+answer for a defected tube and a poor one almost everywhere else. On a
+closed C60 every atom sits on a pentagon, so the picture said "all
+pentagons" about twelve pentagons and twenty hexagons; on a doped shell
+or a composition of three structures it said nothing at all. Two things
+follow from the choice automatically: bonds are drawn as two half
+cylinders when the colour belongs to the atom (a C–O bond in carbon's
+grey says the oxygen is carbon), and atom radii follow the element when
+the colour does.
+
+### Twelve styles
+
+Run `nanocarbon render --list-styles` for the current list with each
+one's backdrop and default colouring. The five journal looks are
+unchanged; seven are new, and four of those use a shader a Principled
+BSDF cannot express by parameter alone.
+
+| style | mood |
+|---|---|
+| `nature_dark` | matte-black void, single dramatic key + cool rim light, near-black graphite body, glowing defect accents |
+| `acs_nano_vivid` | saturated blue-magenta gradient backdrop, glossy clear-coated colour, punchy 3-point lighting |
+| `small_minimal` | clean white seamless backdrop, large soft studio lights, matte pastel body |
+| `blueprint_technical` | deep navy void, thin glowing emissive bonds/defects, circuit-diagram mood |
+| `gold_nanotech` | warm near-black backdrop, polished gold/bronze metal, 3-point studio rig |
+| `paper_figure` | flat white, element colours, soft even light, no depth of field -- a manuscript figure, not a cover |
+| `electron_micrograph` | greyscale, hard raking light; defaults to **uniform** colour, a micrograph that colour-codes its defects being a drawing again |
+| `glass_cryo` | **refractive glass**, so the far side of a cage shows through the near one; 512 samples, which is what caustics need |
+| `clay_studio` | matte **clay** on a studio sweep with a floor to sit on; purely diffuse, no specular at all |
+| `neon_cyber` | black field, the body and bonds are themselves **emissive** |
+| `toon_schematic` | flat banded **toon** shading, for a slide or a thumbnail |
+| `transparent_overlay` | no background at all, with a **shadow-catching** floor so the subject keeps its contact shadow when composited |
+
+Styles are plain dataclasses in `blender/styles.py` with no Blender
+dependency, so they are editable and testable outside Blender -- as is
+`blender/bundle.py`, which decides which colour each atom gets.
+
+* `--floor` / `--no-floor` add or remove the ground plane. Left out, the
+  style decides; a `studio` background brings one.
+* `--transparent-background` gives a PNG you can composite over other
+  art (`--background transparent` does the same and adds the shadow
+  catcher). Drop `--samples` to use the style's own default.
+* `--atom-scale` and `--bond-scale` multiply the radii.
+
+### Finishing the scene in Blender yourself
+
+```bash
+nanocarbon render figure.xyz --open              # a live Blender window
+nanocarbon render figure.xyz --save-blend figure.blend --no-render
+```
+
+`--open` builds the lights, camera, materials and background and then
+hands the session over, because no number of presets replaces moving a
+camera by hand. The GUI's **"Open scene in Blender…"** button is the same
+thing, and it saves the `.blend` beside the bundle first so the session
+can be reopened.
+
+This one needs the Blender **application**: the `bpy` wheel is a full
+Blender inside your interpreter and has no window, so asking it for one
+says why rather than rendering headless and reporting success.
 
 #### The framing and the lighting follow the subject
 
@@ -1146,8 +1267,8 @@ sizes, which is the worst way for a renderer to be wrong.
 **The camera cropped.** The distance was a hardcoded `3.2 × radius`.
 A camera's half-angle is `atan(sensor / 2f)`, so fitting a sphere needs
 `radius / sin(that)` — 2.95 R at 50 mm, but 4.83 R at 85 mm and 5.10 R
-at 90 mm. Four of the five styles use a longer lens than 50 mm, so four
-of five cut the structure off at the frame edge. The distance is now
+at 90 mm. All but one of the styles use a longer lens than 50 mm, so all
+but one cut the structure off at the frame edge. The distance is now
 computed from the lens and the aspect ratio (Blender maps the sensor
 onto the longer image axis, so a 2000×2400 cover clips vertically first).
 

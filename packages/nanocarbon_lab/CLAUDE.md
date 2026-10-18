@@ -54,14 +54,21 @@ nanocarbon_lab/
 │                  #   (dimensionality measured, not read off pbc),
 │                  #   report.py (recorded vs measured vs inferred)
 ├── cell.py        # any structure -> a DFT-ready periodic unit cell
+├── scene.py       # several finished structures -> one ILLUSTRATION for
+│                  #   VESTA or Blender. Not a builder, and not a
+│                  #   structure: see "A composition is an illustration"
+├── render.py      # where Blender is, which script, what argv. The only
+│                  #   part of the render pipeline an import can reach
 ├── utils/         # constants, geometry helpers
 ├── cli/           # command line interface
 ├── gui/           # tkinter desktop app (build / preview / export / render)
 ├── tests/         # pytest unit tests
 └── examples/      # runnable example scripts
 
-nanocarbon_lab/blender/   # bpy-based rendering pipeline, shipped as package
-                   #   *data* (it imports bpy, so it must not be a subpackage).
+nanocarbon_lab/blender/   # the rendering pipeline, shipped as package
+                   #   *data* (mesh_builder and render_cnt import bpy, so
+                   #   it must not be a subpackage). styles.py and
+                   #   bundle.py import no bpy and are the testable half.
                    #   Run through a Blender app (`blender -b -P ...`) or
                    #   directly, when the `bpy` wheel is installed.
 ```
@@ -2798,11 +2805,170 @@ engulfed its own lighting and rendered at 0.04 luminance against a black
 background. **A SUN is exempt** -- it is directional and infinitely
 distant, so its irradiance does not fall off and scaling it over-lights.
 
-`gui.has_bpy()` lets the GUI render through the `bpy` module when no
-Blender application is installed, which removes the pipeline's single
-most common failure. Check it with `find_spec`, never by importing:
-importing Blender costs hundreds of megabytes, and it runs while drawing
-a label.
+`render.has_bpy()` lets the pipeline render through the `bpy` module when
+no Blender application is installed, which removes its single most common
+failure. Check it with `find_spec`, never by importing: importing Blender
+costs hundreds of megabytes, and it runs while drawing a label.
+
+## The render pipeline has four files, and three of them must not import bpy
+
+`nanocarbon_lab/blender/` is package data rather than a subpackage
+because `bpy` only exists inside Blender. That is a reason to keep the
+*unimportable* part as small as possible, and it had grown too large:
+the colour decision, the style catalogue, Blender discovery and the
+command line were all behind that wall, so none of it could be tested on
+an ordinary machine and the whole pipeline was reachable only from the
+window's button.
+
+| file | imports bpy | what it owns |
+|---|---|---|
+| `nanocarbon_lab/render.py` | no | where Blender is, which script, what argv |
+| `blender/styles.py` | no | styles, materials, backgrounds, palettes |
+| `blender/bundle.py` | no | reading a bundle, and which slot each atom takes |
+| `blender/mesh_builder.py` | **yes** | spheres and cylinders |
+| `blender/render_cnt.py` | **yes** | world, floor, lights, camera, render |
+
+`render.py` is the only one of the five an ordinary import reaches;
+`styles` and `bundle` are loaded by path, which is what
+`render.style_catalogue()` does once and caches. Everything that is not
+geometry belongs on the left-hand side of that table.
+
+**Nothing may keep its own copy of the style names.** The window did, as
+a hardcoded list of five, and it had been wrong since the sixth style was
+written -- a menu silently offering half the catalogue, with nothing to
+show the rest existed. `BLENDER_STYLES` reads `styles.py`, and a test
+asserts the window's source contains no style name.
+
+### Three axes, and fusing them was the bug
+
+A style used to be the whole look: character, colouring and backdrop in
+one object, and ring colouring was therefore not optional.
+
+* **`--style`** is the *character* of the surfaces -- metallic,
+  roughness, clearcoat, which shader, the lights, the lens.
+* **`--colour-by`** is what the hue *means*: `ring`, `element`,
+  `structure` or `uniform`. Left out, each style's own
+  `default_colour_by` decides, so a cover style keeps ring colouring and
+  a figure style takes element. **Do not send a concrete value because
+  that is what a menu happened to display** -- it overrides every style's
+  own choice without anybody asking it to, which is why
+  `render_command` leaves a `None` off the command line entirely rather
+  than passing a default.
+* **`--background`** is the backdrop, and it is its own object so that
+  "this style on white for the paper" and "this style on black for the
+  cover" are two uses of one style rather than two styles.
+
+`MaterialSpec.with_colour` is what makes the split work: a style's
+character survives a recolour, so element colouring inside
+`gold_nanotech` gives a gold-finish oxygen rather than a flat primary. An
+emissive material's *glow* is recoloured with it -- a red-hot accent that
+glows blue is not a colour choice.
+
+Two consequences follow from the colour mode and neither is cosmetic:
+
+* **Bonds split in half when the colour belongs to the atom.** A C-O bond
+  drawn in carbon's grey says the oxygen is carbon. `element` and
+  `structure` therefore draw two half-cylinders per bond; `ring` keeps
+  one, a ring being a property of neither end. `styles.SPLIT_BONDS` holds
+  the rule and a test pins that its keys are exactly `COLOUR_MODES`.
+* **Atom radii follow the element when the colour does.** Equal spheres
+  are right for an all-carbon lattice and wrong the moment a hydrogen and
+  a gold atom are in the same picture.
+
+**Ring colouring says little on a closed cage and nothing on a doped
+one**, which is the reason this was asked for: every one of C60's atoms
+sits on a pentagon, so the picture said "all pentagons" about twelve
+pentagons and twenty hexagons. That is the same fact the preview's
+ring-fill view exists for, met from the renderer's side.
+
+### A shader is not a parameter, and a floor is not decoration
+
+Four of the five entries in `styles.SHADERS` cannot be expressed by
+Principled parameters at all -- glass needs refraction through a closed
+surface, toon needs banded rather than smooth falloff, emission needs no
+surface response, and clay needs the specular lobe *gone* rather than
+merely rough -- so `render_cnt._shader_node` builds each as its own node
+and a test asserts every shader a style asks for has a setup there. A
+missing one raises at render time, which is after the slow part.
+
+The floor is a tri-state question pretending to be a checkbox: some
+styles ship one and most do not. The window therefore *initialises* the
+checkbox from the style whenever the style or the background changes,
+rather than defaulting to off -- left off it would silently strip
+`clay_studio` of the floor the style exists for. A **shadow catcher** is
+invisible but still receives shadow, which is what keeps a transparent
+background's contact shadow; without it a composited subject reads as
+pasted rather than placed. The plane is added *after* the subject's size
+is measured, or a plane two dozen radii across would be what the camera
+frames.
+
+### Opening Blender is a different operation from rendering
+
+`--save-blend` writes the assembled scene and `--no-render` skips the
+render, so `--open` (no `-b`) hands a live Blender window over with the
+lights, camera, materials and background already built. No amount of
+style presets replaces moving a camera by hand, and this is the point
+where the pipeline stops guessing.
+
+It needs the **Blender application**: the `bpy` wheel is a full Blender
+build in this interpreter and has no window, so asking for one through it
+must say why rather than rendering headless and reporting success. The
+window launches it with `Popen` rather than `run` -- an interactive
+session lives as long as the user wants it to, and waiting for it in a
+thread would leave the GUI reporting a render that is not happening.
+
+## A composition is an illustration, not a structure
+
+`scene.py` arranges several finished structures into one file for VESTA
+or Blender. It is **not** a builder and it is deliberately an action in
+the window's right-hand column beside export and render, not a build mode
+on the left: nothing here builds anything, and what comes out is marked
+`info["is_illustration"] = True` so every consumer can branch on it. The
+items are placed where they look right, there is no relaxed interface
+between any two of them, and nothing about the gaps is physics. The
+report's first warning says exactly that, every time.
+
+* **Bonds and rings are carried and re-indexed, never re-guessed.** A
+  bond search over the whole scene would invent bonds between two
+  structures that merely sit 4 Å apart, which is the one thing a
+  composition must not claim. `Atoms.set_tags` carries the item index per
+  atom, which is all `--colour-by structure` reads, and a test asserts no
+  bond and no ring spans two tags.
+* **A bond that left its item's periodic cell is dropped.** This was
+  found by a test and it is the same trap as "a minimum-image bond list
+  names the pair, not the cell", met where there is no cell to shift by:
+  a composition is finite, so the image such a bond reaches into is not
+  in the scene. Measured on a (5,5) tube whose every real bond is 1.42 Å,
+  drawing them from the raw coordinates gave a **12.4 Å** line -- and the
+  span alone cannot identify them, a (6,0) tube's axial period being
+  4.26 Å. So `_crossing_pairs` uses `bond_shifts`, and the count is
+  reported with the remedy (repeat the item before composing it). Rings
+  straddling the seam go for the same reason the preview leaves them
+  unfilled.
+* **Spacing is by the item's *oriented* bounding box.** The first version
+  measured bounding-sphere radii and ignored each item's rotation: a
+  requested 8 Å gap came out at **17.9 Å** in a row and **23.3 Å** in a
+  grid. `row`, `stack` and `grid` are per-axis and hit the request to
+  about a tenth of an Ångström; `circle` is a radius rather than a pitch,
+  so for it the gap is a floor and not a target.
+* **`Item.oriented()` returns the item centred on the origin**, so
+  `translation` is where its centre goes rather than an offset from
+  wherever the builder happened to leave it, and `rotation` is about the
+  item's own centre -- about the scene origin it would also *move* the
+  item, and the layout has just placed it.
+* **A scaled item is recorded as scaled and warned about.** Scaling
+  changes every bond length. That is a legitimate choice for a figure and
+  it is not a structure any more.
+* **`items_from_files` reads the `.json` sidecar beside each file**, and
+  that is not a convenience: an `.xyz` carries no connectivity, so
+  without it a composition has no bonds at all and the renderer falls
+  back to guessing -- the thing this module exists not to do. The
+  sidecar's atom count is checked first, a bond list indexed for a
+  different structure being worse than none.
+
+Composing replaces the window's preview, so Export and Render then apply
+to the composition with no further wiring, and the sidecar carries
+`item_per_atom`.
 
 ## Doping: the host is carbon, and the elements are not interchangeable
 

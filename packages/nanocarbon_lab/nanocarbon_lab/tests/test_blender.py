@@ -76,12 +76,27 @@ class TestPackaging:
         distributions, and a packaging test has no business being
         skipped on a machine that merely lacks a widget toolkit.
         """
+        # The resolution now lives in ``nanocarbon_lab.render``, which is
+        # importable without tkinter -- that is what let the CLI reach the
+        # pipeline at all -- so it is checked there. Read as source rather
+        # than imported for the same reason as before: a packaging test
+        # has no business depending on a widget toolkit.
+        source = (BLENDER_DIR.parent / "render.py").read_text()
+        assert 'parent / "blender"' in source
+        assert "parents[2]" not in source
+        assert "render_cnt" in source
+
+        # The GUI must not have kept its own copy of any of it.
         app_source = (BLENDER_DIR.parent / "gui" / "app.py").read_text()
-        assert 'parent.parent / "blender" / "render_cnt.py"' in app_source
-        assert 'parents[2] / "blender"' not in app_source
+        assert 'parent.parent / "blender" / "render_cnt.py"' not in app_source
+        assert "render_support" in app_source
 
         # And the path that expression builds really does hold the script.
         assert (BLENDER_DIR / "render_cnt.py").exists()
+        from nanocarbon_lab.render import script_path
+
+        assert script_path().exists()
+        assert script_path("styles").exists()
 
 
 class TestStyles:
@@ -145,11 +160,25 @@ class TestCameraFraming:
         assert tall > square
 
     def test_the_styles_use_lenses_the_old_code_could_not_fit(self):
-        """Not a hypothetical: four of five styles cropped."""
+        """Not a hypothetical: most styles cropped under the constant.
+
+        Asserted as a property rather than as a count. The first version
+        of this test said "four of five", which was the census of the
+        catalogue on the day it was written and failed the moment a
+        sixth style was added -- a test that has to be edited to add a
+        style is a test nobody will keep.
+        """
         styles = _load("styles")
-        lenses = [styles.get_style(n).camera_lens_mm for n in styles.list_styles()]
+        lenses = [styles.get_style(n).camera_lens_mm
+                  for n in styles.list_styles()]
         cropped = [lens for lens in lenses if self._needed(lens) > 3.2]
-        assert len(cropped) == 4
+        # The point is that the long lenses are the normal case here, not
+        # the exception the constant could be excused for missing.
+        assert len(cropped) >= 4
+        assert len(cropped) > len(lenses) - len(cropped)
+        # And the one lens the constant did fit is the one it was written
+        # against, which is why the bug went unnoticed.
+        assert self._needed(50.0) < 3.2
 
 
 class TestLightScaling:

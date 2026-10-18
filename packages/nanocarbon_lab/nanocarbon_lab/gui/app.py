@@ -37,15 +37,11 @@ python3-tk``, ``dnf install python3-tkinter``).
 
 from __future__ import annotations
 
-import glob
-import importlib.util
 import json
 import math
 import multiprocessing
 import os
-import shutil
 import subprocess
-import sys
 import threading
 import time
 import traceback
@@ -77,6 +73,8 @@ from matplotlib.backends.backend_tkagg import (
 from matplotlib.figure import Figure
 
 from .. import __version__
+from .. import render as render_support
+from .. import scene as scene_mod
 from ..builders import fullerene_mesh as fm
 from ..builders.capped_cnt import MIN_CAP_FREQ
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
@@ -242,13 +240,34 @@ TMD_STACKINGS = ["2H", "3R", "AA"]
 TMD_EDGES = ["zigzag", "armchair"]
 TMD_TERMINATIONS = ["mixed", "metal", "chalcogen"]
 
-BLENDER_STYLES = [
-    "nature_dark",
-    "acs_nano_vivid",
-    "small_minimal",
-    "blueprint_technical",
-    "gold_nanotech",
-]
+# Read from blender/styles.py rather than written out here. This was a
+# hardcoded list of five names, and it had been wrong since the sixth
+# style was added: the window silently offered half the catalogue, with
+# nothing to show that the rest existed. The styles module imports no
+# bpy, so reading it costs nothing on a machine with no Blender.
+_STYLE_DEFS = render_support.style_catalogue()
+BLENDER_STYLES = _STYLE_DEFS.list_styles()
+#: Which style a fresh window starts on. Named rather than "the first
+#: one", the list being alphabetical.
+DEFAULT_BLENDER_STYLE = "nature_dark"
+#: Shown in the colour-by menu for "whatever this style says". A figure
+#: style defaults to element and a cover style to ring; a menu that sent
+#: a concrete value because that is what it happened to display would
+#: override every style's own choice without anybody asking it to.
+STYLE_DEFAULT_LABEL = "(style default)"
+RENDER_COLOUR_MODES = [STYLE_DEFAULT_LABEL, *_STYLE_DEFS.COLOUR_MODES]
+RENDER_BACKGROUNDS = [STYLE_DEFAULT_LABEL, *_STYLE_DEFS.BACKGROUNDS]
+#: What a colour mode means, for the hint under the menu.
+COLOUR_MODE_HELP = {
+    "ring": "ring size — where the curvature and the defects are. Says "
+            "nothing about chemistry, and on a closed cage every atom is "
+            "on a pentagon, so it says little there either.",
+    "element": "the chemical element — what a doped shell, a "
+               "functionalised surface or a metal core needs.",
+    "structure": "which item of a composition the atom came from. "
+                 "Meaningless for a single structure.",
+    "uniform": "one colour throughout, for a silhouette.",
+}
 
 OK_GREEN = "#2e7d32"
 WARN_AMBER = "#b26a00"
@@ -270,86 +289,14 @@ ACTION_COLUMN_WIDTH = 330
 
 
 
-def has_bpy() -> bool:
-    """Is Blender available as a Python module in this interpreter?
-
-    ``bpy`` on PyPI is a full Blender build importable from an ordinary
-    interpreter, so `pip install bpy` makes the render pipeline work with
-    no Blender application installed at all. That removes the pipeline's
-    single most common failure -- "Blender not found" on a machine where
-    the user has no intention of installing a 3D suite by hand.
-
-    Checked with ``find_spec`` rather than an import: importing Blender
-    costs hundreds of megabytes of process memory, and this runs while
-    merely drawing a label.
-    """
-    try:
-        return importlib.util.find_spec("bpy") is not None
-    except (ImportError, ValueError):
-        return False
-
-
-def find_blender() -> str | None:
-    """Locate a Blender executable across platforms.
-
-    ``PATH`` alone is not enough: the Windows installer does not add
-    Blender to ``PATH``, and the macOS build lives inside an ``.app``
-    bundle, so on both platforms ``shutil.which`` finds nothing even
-    though Blender is installed. Standard install locations are therefore
-    searched too, newest version first.
-
-    Set the ``BLENDER`` environment variable to override the search
-    entirely (useful for portable, Steam or Flatpak installations).
-
-    Returns
-    -------
-    str or None
-        Path to the executable, or ``None`` if nothing was found -- in
-        which case the GUI offers a file picker instead.
-    """
-    override = os.environ.get("BLENDER")
-    if override and os.path.exists(override):
-        return override
-
-    for name in ("blender", "blender.exe"):
-        found = shutil.which(name)
-        if found:
-            return found
-
-    # Built with os.path.join, not pathlib: these are glob patterns (plain
-    # strings), and pathlib would refuse to model a Windows path on POSIX,
-    # which would also make this function untestable off-Windows.
-    patterns: list[str] = []
-    if os.name == "nt":
-        for root in (
-            os.environ.get("ProgramFiles", r"C:\Program Files"),
-            os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
-        ):
-            patterns.append(os.path.join(root, "Blender Foundation", "Blender*", "blender.exe"))
-            patterns.append(os.path.join(root, "Blender*", "blender.exe"))
-    elif sys.platform == "darwin":
-        patterns += [
-            "/Applications/Blender.app/Contents/MacOS/Blender",
-            "/Applications/Blender/Blender.app/Contents/MacOS/Blender",
-            os.path.expanduser("~/Applications/Blender.app/Contents/MacOS/Blender"),
-        ]
-    else:
-        patterns += [
-            "/usr/bin/blender",
-            "/usr/local/bin/blender",
-            "/snap/bin/blender",
-            "/var/lib/flatpak/exports/bin/org.blender.Blender",
-            os.path.expanduser("~/.local/share/flatpak/exports/bin/org.blender.Blender"),
-        ]
-
-    candidates: list[str] = []
-    for pattern in patterns:
-        candidates.extend(glob.glob(pattern))
-    if not candidates:
-        return None
-    # Newest-looking install first ("Blender 4.2" sorts above "Blender 3.6").
-    candidates.sort(reverse=True)
-    return candidates[0]
+# Blender discovery and the render command line live in
+# :mod:`nanocarbon_lab.render`, not here. They are not widgets, and while
+# they sat in this module the whole render pipeline was GUI-only: this
+# file needs tkinter, so ``nanocarbon render`` could not reach any of it
+# and none of the command construction was testable headless. Re-exported
+# under their old names because that is how they are imported elsewhere.
+has_bpy = render_support.has_bpy
+find_blender = render_support.find_blender
 
 
 class ScrollableColumn(ttk.Frame):
@@ -5239,19 +5186,88 @@ class NanocarbonGUI:
                                      justify="left")
         self.lbl_analyse.pack(anchor="w", pady=(4, 0))
 
+        self._build_scene_panel(parent)
+
         ren = ttk.LabelFrame(parent, text="Blender render", padding=8)
         ren.pack(fill="x", pady=(8, 0))
         ttk.Label(ren, text="Style").pack(anchor="w")
-        self.var_style = tk.StringVar(value=BLENDER_STYLES[0])
-        ttk.Combobox(ren, textvariable=self.var_style, values=BLENDER_STYLES,
-                     state="readonly").pack(fill="x", pady=(0, 6))
+        self.var_style = tk.StringVar(value=DEFAULT_BLENDER_STYLE)
+        cmb_style = ttk.Combobox(ren, textvariable=self.var_style,
+                                 values=BLENDER_STYLES, state="readonly")
+        cmb_style.pack(fill="x", pady=(0, 2))
+        cmb_style.bind("<<ComboboxSelected>>", self._on_style_change)
+        self.lbl_style = ttk.Label(ren, text="", foreground=MUTED,
+                                   font=("TkDefaultFont", 8), wraplength=260,
+                                   justify="left")
+        self.lbl_style.pack(anchor="w", pady=(0, 6))
+
+        # Three independent axes, and keeping them apart is the point: a
+        # style is the surfaces' character, the colour mode is what the
+        # hue means, and the background is the backdrop. The pipeline
+        # used to fuse all three into "a style", so ring colouring was
+        # not optional and there was one backdrop per look.
+        ttk.Label(ren, text="Colour by").pack(anchor="w")
+        self.var_colour_by = tk.StringVar(value=STYLE_DEFAULT_LABEL)
+        cmb_colour = ttk.Combobox(ren, textvariable=self.var_colour_by,
+                                  values=RENDER_COLOUR_MODES,
+                                  state="readonly")
+        cmb_colour.pack(fill="x", pady=(0, 2))
+        cmb_colour.bind("<<ComboboxSelected>>", self._on_style_change)
+
+        ttk.Label(ren, text="Background").pack(anchor="w")
+        self.var_background = tk.StringVar(value=STYLE_DEFAULT_LABEL)
+        cmb_bg = ttk.Combobox(ren, textvariable=self.var_background,
+                              values=RENDER_BACKGROUNDS, state="readonly")
+        cmb_bg.pack(fill="x", pady=(0, 6))
+        cmb_bg.bind("<<ComboboxSelected>>", self._on_style_change)
+
+        self.var_floor = tk.BooleanVar(value=False)
+        ttk.Checkbutton(ren, text="Floor plane (ground + contact shadow)",
+                        variable=self.var_floor).pack(anchor="w")
+
         ttk.Label(ren, text="Representation").pack(anchor="w")
         self.var_render_mode = tk.StringVar(value="ballstick")
         ttk.Combobox(ren, textvariable=self.var_render_mode,
                      values=["ballstick", "surface", "both"],
                      state="readonly").pack(fill="x", pady=(0, 6))
+
+        row_res = ttk.Frame(ren)
+        row_res.pack(fill="x", pady=(0, 6))
+        ttk.Label(row_res, text="Pixels").pack(side="left")
+        self.var_res_x = tk.IntVar(value=1920)
+        self.var_res_y = tk.IntVar(value=1920)
+        ttk.Spinbox(row_res, from_=256, to=8192, increment=128, width=6,
+                    textvariable=self.var_res_x).pack(side="left", padx=(4, 2))
+        ttk.Label(row_res, text="x").pack(side="left")
+        ttk.Spinbox(row_res, from_=256, to=8192, increment=128, width=6,
+                    textvariable=self.var_res_y).pack(side="left", padx=(2, 0))
+
+        row_samp = ttk.Frame(ren)
+        row_samp.pack(fill="x", pady=(0, 6))
+        ttk.Label(row_samp, text="Samples").pack(side="left")
+        # 0 means "the style's own", which differs by style for a reason
+        # -- glass_cryo needs 512 for its caustics and toon_schematic is
+        # done at 96 -- so a number typed here is an override, not a
+        # setting that has to be right.
+        self.var_samples = tk.IntVar(value=0)
+        ttk.Spinbox(row_samp, from_=0, to=4096, increment=32, width=6,
+                    textvariable=self.var_samples).pack(side="left",
+                                                        padx=(4, 0))
+        ttk.Label(row_samp, text="0 = the style's own").pack(side="left",
+                                                             padx=(4, 0))
+
         ttk.Button(ren, text="Render with Blender…",
                    command=self.on_render).pack(fill="x", ipady=3)
+        ttk.Button(ren, text="Open scene in Blender…",
+                   command=self.on_open_in_blender).pack(fill="x",
+                                                         pady=(4, 0), ipady=3)
+        ttk.Label(ren, text="“Open scene” assembles the lights, camera, "
+                            "materials and background and hands the live "
+                            "Blender window over, so the render itself is "
+                            "yours. It needs the Blender application; the "
+                            "bpy module has no window.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=260,
+                  justify="left").pack(anchor="w", pady=(4, 0))
         ttk.Button(ren, text="Locate Blender…",
                    command=self.on_locate_blender).pack(fill="x", pady=(4, 0))
         self.lbl_blender = ttk.Label(ren, text="", foreground=MUTED,
@@ -5259,6 +5275,7 @@ class NanocarbonGUI:
                                      justify="left")
         self.lbl_blender.pack(anchor="w", pady=(4, 0))
         self._check_blender()
+        self._on_style_change()
 
         self.status = ttk.Label(parent, text="Ready", foreground="#555",
                                 wraplength=280, justify="left")
@@ -5274,6 +5291,242 @@ class NanocarbonGUI:
         self.txt_error.pack(fill="both", expand=True)
         ttk.Button(self.frame_error, text="Dismiss",
                    command=self._clear_error).pack(fill="x", pady=(4, 0))
+
+    # --------------------------------------------------------- composition
+    def _build_scene_panel(self, parent: ttk.Frame) -> None:
+        """Collect several finished structures into one illustration.
+
+        Deliberately an *action*, in the right-hand column beside export
+        and render, rather than a build mode on the left. Nothing here
+        builds anything: it arranges results that already exist, and what
+        comes out is an illustration rather than a structure -- no
+        relaxed interface between any two items, so nothing about the
+        gaps is physics. Composing replaces the preview, so the existing
+        export and render buttons then apply to the composition without
+        any of them needing to know it is one.
+        """
+        self.scene_items: list = []
+
+        sc = ttk.LabelFrame(parent, text="Composition (several structures)",
+                            padding=8)
+        sc.pack(fill="x", pady=(8, 0))
+
+        self.lst_scene = tk.Listbox(sc, height=5, exportselection=False,
+                                    font=("TkFixedFont", 8))
+        self.lst_scene.pack(fill="x")
+        self.lst_scene.bind("<<ListboxSelect>>", self._on_scene_select)
+
+        row = ttk.Frame(sc)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Button(row, text="Add current",
+                   command=self.on_scene_add_current).pack(
+                       side="left", expand=True, fill="x")
+        ttk.Button(row, text="Add file…",
+                   command=self.on_scene_add_file).pack(
+                       side="left", expand=True, fill="x", padx=(4, 0))
+        row2 = ttk.Frame(sc)
+        row2.pack(fill="x", pady=(4, 0))
+        ttk.Button(row2, text="Remove",
+                   command=self.on_scene_remove).pack(
+                       side="left", expand=True, fill="x")
+        ttk.Button(row2, text="Clear",
+                   command=self.on_scene_clear).pack(
+                       side="left", expand=True, fill="x", padx=(4, 0))
+
+        # Per item, and applied to whichever row is selected. The
+        # rotation is about the item's own centre, which is the only
+        # useful origin for a figure -- about the scene origin it would
+        # also move the item, and the layout has just placed it.
+        grid = ttk.Frame(sc)
+        grid.pack(fill="x", pady=(6, 0))
+        self.var_scene_pos = []
+        self.var_scene_rot = []
+        ttk.Label(grid, text="", width=6).grid(row=0, column=0)
+        for column, axis in enumerate("xyz"):
+            ttk.Label(grid, text=axis, width=6, anchor="center").grid(
+                row=0, column=column + 1)
+        ttk.Label(grid, text="Move Å").grid(row=1, column=0, sticky="w")
+        ttk.Label(grid, text="Turn °").grid(row=2, column=0, sticky="w")
+        for column in range(3):
+            pos = tk.DoubleVar(value=0.0)
+            rot = tk.DoubleVar(value=0.0)
+            self.var_scene_pos.append(pos)
+            self.var_scene_rot.append(rot)
+            ttk.Spinbox(grid, from_=-500, to=500, increment=1.0, width=6,
+                        textvariable=pos).grid(row=1, column=column + 1,
+                                               padx=1)
+            ttk.Spinbox(grid, from_=-360, to=360, increment=5.0, width=6,
+                        textvariable=rot).grid(row=2, column=column + 1,
+                                               padx=1)
+        ttk.Button(sc, text="Apply to selected item",
+                   command=self.on_scene_apply_transform).pack(fill="x",
+                                                               pady=(4, 0))
+
+        row3 = ttk.Frame(sc)
+        row3.pack(fill="x", pady=(6, 0))
+        ttk.Label(row3, text="Layout").pack(side="left")
+        self.var_scene_layout = tk.StringVar(value="row")
+        ttk.Combobox(row3, textvariable=self.var_scene_layout,
+                     values=list(scene_mod.describe_layouts()),
+                     state="readonly", width=8).pack(side="left", padx=(4, 0))
+        ttk.Label(row3, text="gap Å").pack(side="left", padx=(6, 0))
+        self.var_scene_gap = tk.DoubleVar(value=8.0)
+        ttk.Spinbox(row3, from_=0.0, to=200.0, increment=1.0, width=5,
+                    textvariable=self.var_scene_gap).pack(side="left",
+                                                          padx=(4, 0))
+        ttk.Button(sc, text="Arrange",
+                   command=self.on_scene_arrange).pack(fill="x", pady=(4, 0))
+        ttk.Button(sc, text="Compose → preview",
+                   command=self.on_scene_compose).pack(fill="x", pady=(4, 0),
+                                                       ipady=3)
+        self.lbl_scene = ttk.Label(sc, text="", foreground=MUTED,
+                                   font=("TkDefaultFont", 8), wraplength=260,
+                                   justify="left")
+        self.lbl_scene.pack(anchor="w", pady=(4, 0))
+        self._update_scene_hint()
+
+    def _refresh_scene_list(self) -> None:
+        selection = self.lst_scene.curselection()
+        self.lst_scene.delete(0, "end")
+        for index, item in enumerate(self.scene_items, start=1):
+            offset = item.translation
+            self.lst_scene.insert(
+                "end",
+                f"{index}. {item.label[:14]:<14s} {len(item.atoms):>5d} at "
+                f"({offset[0]:.0f}, {offset[1]:.0f}, {offset[2]:.0f})")
+        if selection and selection[0] < len(self.scene_items):
+            self.lst_scene.selection_set(selection[0])
+        self._update_scene_hint()
+
+    def _selected_scene_item(self):
+        selection = self.lst_scene.curselection()
+        if not selection:
+            return None
+        return self.scene_items[selection[0]]
+
+    def _on_scene_select(self, event=None) -> None:
+        """Load the selected item's own placement into the spinboxes.
+
+        Without this the boxes read whatever the last item was set to,
+        so clicking a row and pressing Apply would move it to somebody
+        else's position -- silently, since both are legitimate numbers.
+        """
+        del event
+        item = self._selected_scene_item()
+        if item is None:
+            return
+        for var, value in zip(self.var_scene_pos, item.translation,
+                              strict=True):
+            var.set(round(float(value), 2))
+        for var, value in zip(self.var_scene_rot, item.rotation, strict=True):
+            var.set(round(float(value), 2))
+
+    def on_scene_add_current(self) -> None:
+        if self.atoms is None:
+            self._show_error("Nothing to add", "Build a structure first.")
+            return
+        label = str(self.atoms.info.get("structure_type", "structure"))
+        # A copy, because the preview's atoms keep being replaced by the
+        # next build and an item holding a live reference would silently
+        # change under the composition.
+        self.scene_items.append(
+            scene_mod.Item(atoms=self.atoms.copy(),
+                           label=f"{label}-{len(self.scene_items) + 1}"))
+        self._refresh_scene_list()
+        self._set_status(f"Added {label} to the composition "
+                         f"({len(self.scene_items)} items).")
+
+    def on_scene_add_file(self) -> None:
+        paths = filedialog.askopenfilenames(
+            title="Add structures to the composition",
+            filetypes=[("Structure files", "*.xyz *.cif *.extxyz *.pdb *.vasp"),
+                       ("All files", "*.*")])
+        if not paths:
+            return
+        try:
+            self.scene_items.extend(scene_mod.items_from_files(paths))
+        except (OSError, ValueError) as exc:
+            self._show_error("Could not read a file", str(exc))
+            return
+        self._refresh_scene_list()
+        self._set_status(f"Composition now has {len(self.scene_items)} items.")
+
+    def on_scene_remove(self) -> None:
+        selection = self.lst_scene.curselection()
+        if not selection:
+            return
+        del self.scene_items[selection[0]]
+        self._refresh_scene_list()
+
+    def on_scene_clear(self) -> None:
+        self.scene_items = []
+        self._refresh_scene_list()
+
+    def on_scene_apply_transform(self) -> None:
+        item = self._selected_scene_item()
+        if item is None:
+            self._show_error("Nothing selected",
+                             "Pick an item in the list first.")
+            return
+        item.translation = tuple(float(var.get())
+                                 for var in self.var_scene_pos)
+        item.rotation = tuple(float(var.get()) for var in self.var_scene_rot)
+        self._refresh_scene_list()
+
+    def on_scene_arrange(self) -> None:
+        if not self.scene_items:
+            return
+        self.scene_items = scene_mod.arrange(
+            self.scene_items, layout=self.var_scene_layout.get(),
+            gap=float(self.var_scene_gap.get()))
+        self._refresh_scene_list()
+        self._on_scene_select()
+
+    def on_scene_compose(self) -> None:
+        """Build the composition and put it in the preview.
+
+        It becomes the current structure, so Export and Render apply to
+        it with no further wiring -- and the sidecar then carries
+        ``item_per_atom``, which is what ``--colour-by structure``
+        reads. It is marked an illustration, so the readout says so
+        rather than quoting a geometry nobody relaxed.
+        """
+        if len(self.scene_items) < 1:
+            self._show_error("Nothing to compose",
+                             "Add at least one structure first.")
+            return
+        try:
+            atoms, report = scene_mod.compose(self.scene_items)
+        except ValueError as exc:
+            self._show_error("Could not compose", str(exc))
+            return
+        self.atoms = atoms
+        self.last_saved_stem = None
+        self._redraw()
+        self._update_info()
+        self._refresh_scene_list()
+        worst = (f", closest approach {report.clearances[0][2]:.2f} Å"
+                 if report.clearances else "")
+        self._set_status(f"Composed {len(self.scene_items)} items, "
+                         f"{len(atoms)} atoms{worst}.")
+
+    def _update_scene_hint(self) -> None:
+        if not self.scene_items:
+            self.lbl_scene.config(
+                text="Add structures — the one in the preview, or files from "
+                     "disk — then arrange and compose. The result is an "
+                     "ILLUSTRATION for VESTA or Blender: the items are "
+                     "placed where they look right, there is no relaxed "
+                     "interface between any two of them, and nothing about "
+                     "the gaps is physics. Colour it by “structure” to give "
+                     "each item its own hue.")
+            return
+        total = sum(len(item.atoms) for item in self.scene_items)
+        self.lbl_scene.config(
+            text=f"{len(self.scene_items)} items, {total} atoms. Arrange "
+                 f"spaces them by bounding box, so items of different sizes "
+                 f"get the same gap; Move and Turn then adjust one item on "
+                 f"top of that, about its own centre.")
 
     def _mark_preview_stale(self) -> None:
         """Say that what is on screen is NOT what was just asked for.
@@ -5886,28 +6139,47 @@ class NanocarbonGUI:
         self.lbl_blender.config(text=f"Using: {path}")
         self._set_status("Blender location set for this session.")
 
-    def on_render(self) -> None:
-        if self.atoms is None:
-            self._show_error("Nothing to render", "Build a structure first.")
-            return
-        self._check_blender()
-        if not self.blender_exe and not has_bpy():
-            self._show_error(
-                "Blender not found",
-                "Could not find Blender automatically.\n\n"
-                "Easiest fix: `pip install bpy`, which installs Blender as "
-                "a Python module and needs no separate application.\n\n"
-                "Click “Locate Blender…” and point at the executable (on "
-                "Windows, usually\n"
-                r"C:\Program Files\Blender Foundation\Blender 4.x\blender.exe)"
-                ",\n\nor export the bundle and run it yourself:\n"
-                "  blender -b -P nanocarbon_lab/blender/render_cnt.py -- "
-                "--xyz <file>.xyz "
-                "--json <file>.json --style <style> --out <image>.png",
-            )
-            return
+    # ------------------------------------------------------------ render
+    def _effective_style(self):
+        """The style as it will actually be used, backdrop included.
 
-        stem = self.last_saved_stem or self.on_export()
+        A background chosen here replaces the style's own, and that
+        changes what the floor checkbox should read -- so the three
+        controls are resolved together rather than each assuming the
+        others are at their defaults.
+        """
+        style = _STYLE_DEFS.get_style(self.var_style.get())
+        background = self.var_background.get()
+        if background != STYLE_DEFAULT_LABEL:
+            style = _STYLE_DEFS.with_background(style, background)
+        return style
+
+    def _effective_colour_by(self) -> str:
+        chosen = self.var_colour_by.get()
+        if chosen == STYLE_DEFAULT_LABEL:
+            return self._effective_style().default_colour_by
+        return chosen
+
+    def _on_style_change(self, event=None) -> None:
+        """Describe the chosen combination, and re-sync the floor.
+
+        The floor is a checkbox over a tri-state question -- some styles
+        ship one and most do not -- so it is *initialised from the
+        style* every time the style or the background changes rather
+        than defaulting to off. Left at off it would silently strip
+        ``clay_studio`` of the floor the style exists for.
+        """
+        del event
+        style = self._effective_style()
+        colour_by = self._effective_colour_by()
+        self.var_floor.set(bool(style.background.has_floor))
+        note = COLOUR_MODE_HELP.get(colour_by, "")
+        self.lbl_style.config(
+            text=f"{style.description}\n\nBackdrop: "
+                 f"{style.background.kind}. Colour: {colour_by} — {note}")
+
+    def on_render(self) -> None:
+        stem = self._render_bundle()
         if stem is None:
             return
         out_png = filedialog.asksaveasfilename(
@@ -5918,35 +6190,9 @@ class NanocarbonGUI:
         )
         if not out_png:
             return
-
-        # Inside the package, so it is found whether the GUI is running
-        # from a checkout or from a pip install. It used to be resolved
-        # against the repository root, which does not exist once
-        # installed -- the button was dead for every installed copy.
-        script = Path(__file__).resolve().parent.parent / "blender" / "render_cnt.py"
-        if not script.exists():
-            self._show_error(
-                "Render script missing",
-                f"Could not find {script}. Run the GUI from a full checkout of "
-                "the project, or invoke Blender manually.",
-            )
+        cmd = self._render_command(stem, out_png)
+        if cmd is None:
             return
-
-        # Two ways to reach the same script. A Blender application takes
-        # it with -b -P; the `bpy` PyPI module *is* Blender inside this
-        # interpreter, so the script runs directly. Preferring the
-        # application when both exist keeps the GUI honest about which
-        # Blender produced the image.
-        launcher = ([self.blender_exe, "-b", "-P", str(script)]
-                    if self.blender_exe else [sys.executable, str(script)])
-        cmd = [
-            *launcher, "--",
-            "--xyz", str(stem.with_suffix(".xyz")),
-            "--json", str(stem.with_suffix(".json")),
-            "--style", self.var_style.get(),
-            "--mode", self.var_render_mode.get(),
-            "--out", out_png,
-        ]
         self._set_status("Rendering in Blender (this can take a while)…")
         self.root.update_idletasks()
 
@@ -5960,6 +6206,90 @@ class NanocarbonGUI:
                 self._queue_render_result(False, str(exc), out_png)
 
         threading.Thread(target=render_worker, daemon=True).start()
+
+    def on_open_in_blender(self) -> None:
+        """Assemble the scene and hand the live Blender window over.
+
+        Not a render: the lights, camera, materials and background are
+        built from the style and then the session is the user's, which is
+        what adjusting a figure actually needs -- no amount of style
+        presets replaces moving the camera by hand. The ``.blend`` is
+        saved beside the bundle first, so the session can be reopened
+        after it is closed.
+
+        Launched with ``Popen`` rather than ``run``: an interactive
+        Blender lives as long as the user wants it to, and waiting for it
+        in a thread would leave the GUI reporting a render that is not
+        happening.
+        """
+        stem = self._render_bundle()
+        if stem is None:
+            return
+        blend = stem.with_suffix(".blend")
+        cmd = self._render_command(stem, stem.with_suffix(".png"),
+                                   interactive=True, render=False,
+                                   save_blend=blend)
+        if cmd is None:
+            return
+        try:
+            subprocess.Popen(cmd)
+        except OSError as exc:
+            self._show_error("Could not start Blender", str(exc))
+            return
+        self._set_status(f"Opened Blender; the scene is saved at "
+                         f"{blend.name}.")
+
+    def _render_bundle(self) -> Path | None:
+        """Make sure there is a bundle on disk to render, and return it."""
+        if self.atoms is None:
+            self._show_error("Nothing to render", "Build a structure first.")
+            return None
+        stem = self.last_saved_stem or self.on_export()
+        return stem
+
+    def _render_command(self, stem: Path, out_png, *, interactive: bool = False,
+                        render: bool = True, save_blend=None):
+        """Build the Blender command line, or report why it cannot be.
+
+        The construction itself is :func:`nanocarbon_lab.render.render_command`
+        -- shared with the CLI, so the window and ``nanocarbon render``
+        cannot drift -- and this is only the part that needs a window:
+        which Blender was located, and how to say so if none was.
+        """
+        self._check_blender()
+        colour_by = (None if self.var_colour_by.get() == STYLE_DEFAULT_LABEL
+                     else self.var_colour_by.get())
+        background = (None if self.var_background.get() == STYLE_DEFAULT_LABEL
+                      else self.var_background.get())
+        samples = int(self.var_samples.get() or 0)
+        try:
+            return render_support.render_command(
+                stem.with_suffix(".xyz"), out_png,
+                json_path=stem.with_suffix(".json"),
+                style=self.var_style.get(),
+                mode=self.var_render_mode.get(),
+                colour_by=colour_by,
+                background=background,
+                floor=bool(self.var_floor.get()),
+                resolution=(int(self.var_res_x.get()),
+                            int(self.var_res_y.get())),
+                samples=samples or None,
+                save_blend=save_blend,
+                render=render,
+                blender=self.blender_exe or None,
+                interactive=interactive,
+            )
+        except RuntimeError as exc:
+            self._show_error(
+                "Blender not found" if not interactive
+                else "Cannot open Blender",
+                f"{exc}\n\nOr export the bundle and run it yourself:\n"
+                f"  blender -b -P nanocarbon_lab/blender/render_cnt.py -- "
+                f"--xyz {stem.with_suffix('.xyz')} "
+                f"--json {stem.with_suffix('.json')} "
+                f"--style {self.var_style.get()} --out <image>.png",
+            )
+            return None
 
     def _queue_render_result(self, ok: bool, log: str, out_png: str) -> None:
         def report():
