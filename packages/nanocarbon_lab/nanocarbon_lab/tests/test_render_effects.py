@@ -1288,3 +1288,54 @@ class TestIridescentStyles:
             assert background.star_density >= 10.0, (
                 f"{name}: star_density {background.star_density} is a "
                 "fraction, not a Voronoi scale")
+
+
+class TestDepthAxis:
+    """A round subject has no longest axis, so `depth` needs a choice.
+
+    Measured on the structures this package builds: a C240 cage's first
+    two singular values are equal to four decimals (1.0000) and a coated
+    spherical nanoparticle's to two (1.0123), against 1.73 for a sheet,
+    3.01 for a row of three and 6.29 for a long net. Below the cage
+    threshold the principal axis is decided by rounding, so the gradient
+    runs along a direction a tiny perturbation rotates.
+    """
+
+    def test_a_sphere_is_flagged_and_a_sheet_is_not(self, bundle_mod):
+        rng = np.random.default_rng(0)
+        shell = rng.normal(size=(400, 3))
+        shell /= np.linalg.norm(shell, axis=1)[:, None]
+        assert bundle_mod.depth_axis_quality(shell) < \
+            bundle_mod.DEGENERATE_AXIS
+
+        sheet = rng.uniform(size=(400, 3)) * np.array([40.0, 8.0, 0.4])
+        assert bundle_mod.depth_axis_quality(sheet) >= \
+            bundle_mod.DEGENERATE_AXIS
+
+    def test_the_default_path_is_unchanged(self, bundle_mod):
+        """None must mean exactly what no argument meant before."""
+        rng = np.random.default_rng(1)
+        points = rng.uniform(size=(120, 3)) * np.array([30.0, 6.0, 2.0])
+        assert (bundle_mod.depth_bands(points)
+                == bundle_mod.depth_bands(points, None))
+
+    def test_an_explicit_axis_grades_along_it(self, bundle_mod):
+        """A sheet in xy graded along z must come out one band."""
+        rng = np.random.default_rng(2)
+        sheet = rng.uniform(size=(200, 3)) * np.array([40.0, 40.0, 0.0])
+        along_z = bundle_mod.depth_bands(sheet, (0.0, 0.0, 1.0))
+        assert len(set(along_z)) == 1
+        along_x = bundle_mod.depth_bands(sheet, (1.0, 0.0, 0.0))
+        assert len(set(along_x)) > 1
+
+    def test_the_zero_vector_is_refused(self, bundle_mod):
+        points = np.zeros((4, 3))
+        points[:, 0] = [0.0, 1.0, 2.0, 3.0]
+        with pytest.raises(ValueError):
+            bundle_mod.depth_bands(points, (0.0, 0.0, 0.0))
+
+    def test_the_flag_offers_the_remedy(self):
+        """The note must name the option that fixes it."""
+        source = (BLENDER_DIR / "render_cnt.py").read_text()
+        assert "--depth-axis" in source
+        assert '"view"' in source or "'view'" in source

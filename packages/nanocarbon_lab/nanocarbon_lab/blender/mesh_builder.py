@@ -65,6 +65,7 @@ def build_ball_and_stick(
     bond_finish: str | None = None,
     bond_colour: str = "auto",
     model: str = "ballstick",
+    depth_axis=None,
 ) -> list[bpy.types.Object]:
     """Merged sphere + cylinder meshes, coloured by ``colour_by``.
 
@@ -74,15 +75,16 @@ def build_ball_and_stick(
 
     positions = bundle["positions"]
     bonds = bundle["bonds"]
-    keys, slot_per_atom = colour_keys(bundle, colour_by)
+    keys, slot_per_atom = colour_keys(bundle, colour_by, depth_axis)
     specs = style_defs.materials_for(style, colour_by, keys, finish)
     materials = [material_from_spec(f"mat_{colour_by}_{key}", spec)
                  for key, spec in zip(keys, specs, strict=True)]
     radii = atom_radii(bundle, colour_by, atom_scale, model)
     symbols = bundle["symbols"]
     # Resolution follows the atom count unless the caller insists. An
-    # icosphere at subdivision 2 -- the old fixed value -- is 320
-    # triangles and visibly faceted on anything that fills the frame.
+    # icosphere at subdivision 2 -- the old fixed value -- is 80
+    # triangles (the count is 20*4^n; 320 is subdivision 3) and visibly
+    # faceted on anything that fills the frame.
     chosen = style_defs.detail_for(len(positions), detail)
     if sphere_subdiv is None:
         sphere_subdiv = chosen["sphere_subdiv"]

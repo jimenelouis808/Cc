@@ -56,6 +56,7 @@ from mathutils import Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import bundle as bundle_defs
 import camera
 import effects as fx
 import mesh_builder
@@ -73,6 +74,17 @@ def _parse_args() -> argparse.Namespace:
         "--colour-by", "--color-by", dest="colour_by", default=None,
         choices=list(style_defs.COLOUR_MODES),
         help="What an atom's colour means. Default: the style's own.",
+    )
+    p.add_argument(
+        "--depth-axis", dest="depth_axis", default="auto",
+        choices=["auto", "view", "x", "y", "z"],
+        help="Which direction --colour-by depth grades along. auto is "
+             "the structure's own longest axis, which a round subject "
+             "does not have: a C240 cage's first two principal axes are "
+             "equal to four decimals, so the gradient runs along a "
+             "direction set by floating-point noise. view grades from "
+             "the camera, which is what depth means to the eye and is "
+             "reproducible. Default: auto.",
     )
     p.add_argument(
         "--seams", default="stub", choices=["stub", "drop", "keep"],
@@ -742,6 +754,35 @@ def _setup_render(style, args) -> None:
     )
 
 
+def _depth_axis(args, bundle, colour_by):
+    """The direction ``--colour-by depth`` grades along, or ``None``.
+
+    ``None`` means the structure's own principal axis, which is the
+    default and what every earlier render used. It is also meaningless
+    on a round subject, so when it is asked for and the structure has no
+    longest axis the user is told, with the remedy, rather than being
+    handed a gradient along a numerically arbitrary direction.
+    """
+    if colour_by != "depth":
+        return None
+    choice = getattr(args, "depth_axis", "auto")
+    if choice == "view":
+        return camera.best_view(np.asarray(bundle["positions"],
+                                                dtype=float))
+    if choice in ("x", "y", "z"):
+        return {"x": (1.0, 0.0, 0.0),
+                "y": (0.0, 1.0, 0.0),
+                "z": (0.0, 0.0, 1.0)}[choice]
+    quality = bundle_defs.depth_axis_quality(bundle["positions"])
+    if quality < bundle_defs.DEGENERATE_AXIS:
+        print(f"note: this structure has no longest axis "
+              f"(first two principal axes differ by {quality:.4f}x), so "
+              f"--colour-by depth is grading it along a direction set by "
+              f"rounding. --depth-axis view grades from the camera "
+              f"instead, which is reproducible.")
+    return None
+
+
 def main() -> int:
     args = _parse_args()
     if args.list_effects:
@@ -786,6 +827,12 @@ def main() -> int:
 
     bundle = mesh_builder.load_bundle(args.xyz, args.json, args.seams)
 
+    # Resolved before any mesh is built, because the depth bands are
+    # decided inside the mesh builder. `best_view` is a pure function of
+    # the positions, so asking it here costs nothing and does not
+    # commit the camera to anything.
+    depth_axis = _depth_axis(args, bundle, colour_by)
+
     objects: list[bpy.types.Object] = []
     # `--model surface` and the older `--mode surface` are the same
     # request; the model is the control that holds every other
@@ -801,7 +848,7 @@ def main() -> int:
             bond_radius=0.12 * args.bond_scale * style.bond_scale,
             finish=args.finish, bond_finish=args.bond_finish,
             bond_colour=args.bond_colour, model=model,
-            detail=args.detail,
+            detail=args.detail, depth_axis=depth_axis,
         )
     if mode in ("surface", "both"):
         objects.append(mesh_builder.build_smooth_surface(

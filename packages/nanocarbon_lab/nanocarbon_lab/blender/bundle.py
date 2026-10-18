@@ -213,7 +213,34 @@ def _dominant_ring(ring_sizes) -> int:
     return 6
 
 
-def depth_bands(positions) -> list[int]:
+#: Below this ratio of the first two singular values, a structure has
+#: no longest axis to speak of and the principal one is decided by
+#: floating-point noise. Measured: a C240 cage reads **1.0000** and a
+#: coated spherical nanoparticle 1.0123, against 1.73 for a sheet, 3.01
+#: for a row of three structures and 6.29 for a long net.
+DEGENERATE_AXIS = 1.05
+
+
+def depth_axis_quality(positions) -> float:
+    """How well defined the structure's longest axis is.
+
+    The ratio of the first two singular values. At 1.0 the two
+    directions are equally long, so which one comes out first is
+    numerical noise: a sphere has no longest axis, and grading a cage
+    along "its own" one grades it along an arbitrary direction that a
+    tiny perturbation rotates. Compare against :data:`DEGENERATE_AXIS`.
+    """
+    points = np.asarray(positions, dtype=float)
+    if len(points) < 3:                         # pragma: no cover - tiny
+        return 1.0
+    centred = points - points.mean(axis=0)
+    values = np.linalg.svd(centred, full_matrices=False)[1]
+    if len(values) < 2 or values[1] <= 1e-12:   # pragma: no cover - flat
+        return float("inf")
+    return float(values[0] / values[1])
+
+
+def depth_bands(positions, axis=None) -> list[int]:
     """Which depth band each atom falls in, along the longest axis.
 
     The structure's **own** longest axis rather than a fixed one: a
@@ -223,14 +250,28 @@ def depth_bands(positions) -> list[int]:
 
     Measured by principal axis rather than by bounding box, so a
     structure lying on a diagonal is still graded along its length.
+
+    ``axis`` overrides that with an explicit direction, which is the
+    answer for a round subject: a cage or a spherical particle has no
+    longest axis (see :func:`depth_axis_quality`), so the principal one
+    is arbitrary there and grading along the view direction -- which is
+    what "depth" means to the eye anyway -- is both meaningful and
+    reproducible. Left ``None`` the behaviour is unchanged.
     """
     points = np.asarray(positions, dtype=float)
     if len(points) < 2:                         # pragma: no cover - tiny
         return [0] * len(points)
     centred = points - points.mean(axis=0)
-    # The first principal component is the direction of most extent.
-    _, _, axes = np.linalg.svd(centred, full_matrices=False)
-    along = centred @ axes[0]
+    if axis is not None:
+        direction = np.asarray(axis, dtype=float)
+        norm = float(np.linalg.norm(direction))
+        if norm < 1e-9:
+            raise ValueError("depth axis must not be the zero vector.")
+        along = centred @ (direction / norm)
+    else:
+        # The first principal component is the direction of most extent.
+        _, _, axes = np.linalg.svd(centred, full_matrices=False)
+        along = centred @ axes[0]
     low, high = float(along.min()), float(along.max())
     span = max(high - low, 1e-9)
     bands = style_defs.DEPTH_BANDS
@@ -238,7 +279,8 @@ def depth_bands(positions) -> list[int]:
     return [int(round(value)) for value in scaled]
 
 
-def colour_keys(bundle: dict, colour_by: str) -> tuple[list, list[int]]:
+def colour_keys(bundle: dict, colour_by: str,
+                depth_axis=None) -> tuple[list, list[int]]:
     """The material keys for a colour mode, and one index per atom.
 
     Returns ``(keys, index_per_atom)`` where ``keys`` is the ordered list
@@ -266,7 +308,7 @@ def colour_keys(bundle: dict, colour_by: str) -> tuple[list, list[int]]:
         per_atom = list(bundle["item_per_atom"])
         keys = sorted(set(per_atom))
     elif colour_by == "depth":
-        per_atom = depth_bands(bundle["positions"])
+        per_atom = depth_bands(bundle["positions"], depth_axis)
         # Every band, not only the occupied ones, so the ramp means the
         # same thing on a structure with a gap in it as on one without.
         keys = list(range(style_defs.DEPTH_BANDS))
