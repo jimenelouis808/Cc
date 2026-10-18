@@ -2345,8 +2345,8 @@ STYLES: dict[str, Style] = {
             # Motes, not stars: at count 180 / strength 2.2 / the default
             # 0.010 size they scattered across the backdrop as a
             # starfield and the stage became outer space.
-            EffectSpec("dust", {"count": 70, "strength": 0.8,
-                                "size": 0.006, "reach": 1.5,
+            EffectSpec("dust", {"count": 45, "strength": 0.7,
+                                "size": 0.005, "reach": 1.05,
                                 "color": "#ffe8c8"}),
             EffectSpec("glare", {"strength": 0.4}),
         ),
