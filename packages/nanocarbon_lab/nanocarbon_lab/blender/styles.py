@@ -2358,7 +2358,9 @@ STYLES: dict[str, Style] = {
         background=Background(
             kind="space", top=(0.004, 0.010, 0.020),
             bottom=(0.0, 0.002, 0.008), strength=1.0,
-            star_density=0.22,
+            # star_density is the Voronoi SCALE, not a fraction: at 0.22
+            # one cell covers the whole sky and the field is starless.
+            star_density=300.0, star_amount=0.030,
         ),
         hexagon=MaterialSpec(base_color=(0.25, 0.70, 0.55, 1.0),
                              metallic=0.1, roughness=0.3,

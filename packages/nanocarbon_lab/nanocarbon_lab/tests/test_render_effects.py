@@ -1271,3 +1271,20 @@ class TestIridescentStyles:
         fogs = [spec for spec in styles.get_style("porous_depth").effects
                 if spec.kind == "fog"]
         assert fogs and fogs[0].get("strength") <= 0.001
+
+    def test_a_space_background_actually_has_stars(self, styles):
+        """star_density is a Voronoi SCALE, not a fraction.
+
+        aurora_net was written with 0.22, read as "22 per cent". At that
+        scale one Voronoi cell covers the whole sky and the field comes
+        out starless -- while the style's description promises far
+        stars. The floor here is well below any working value (the two
+        shipped space styles use 260 and 300) and well above a fraction.
+        """
+        for name in styles.list_styles():
+            background = styles.get_style(name).background
+            if background.kind not in ("space", "nebula"):
+                continue
+            assert background.star_density >= 10.0, (
+                f"{name}: star_density {background.star_density} is a "
+                "fraction, not a Voronoi scale")
