@@ -1242,6 +1242,32 @@ dependency, so they are editable and testable outside Blender -- as is
   catcher). Drop `--samples` to use the style's own default.
 * `--atom-scale` and `--bond-scale` multiply the radii.
 
+### Ball-and-stick, space-filling — or both at once
+
+```bash
+nanocarbon render cage.xyz --model ballstick    # a lattice
+nanocarbon render np.xyz   --model spacefill    # a metal particle
+nanocarbon render np.xyz   --model auto         # both, in one picture
+```
+
+| model | what it draws |
+|---|---|
+| `ballstick` | spheres at display radii joined by sticks — right for a lattice, where the connectivity *is* the subject |
+| `spacefill` | spheres at their real **van der Waals** radii, no sticks — the shape the structure actually occupies |
+| `auto` | **space-filling for metals, ball-and-stick for everything else** |
+| `licorice` / `wireframe` | sticks only, thick or thin |
+
+`auto` is the one that matters. A carbon-coated gold particle comes out
+as a **solid metal core inside an open carbon cage**, which is what it
+is — and `auto` draws no stick into a space-filling atom, because it
+would start inside a sphere of its own radius and come out the far side,
+and between two metals it is an invention anyway: a gold cluster's atoms
+are packed, not bonded in pairs.
+
+The radii are the real ones (Bondi; Alvarez 2013 for the metals), not
+display radii scaled for taste — a space-filling model is *defined* by
+atoms touching at their vdW contact.
+
 ### It renders anything with a bundle, not just carbon
 
 The pipeline reads a **render bundle**, not a structure type — so
@@ -1345,6 +1371,11 @@ laser should arrive with the laser:
 
 | style | what it is |
 |---|---|
+| `model_kit` | a physical ball-and-stick kit on a bench: glossy moulded spheres, **matte white rods**, background thrown far out of focus |
+| `clusters_on_sheet` | metal clusters on a lattice — warm gold packed spheres against a cold blue sheet on a glossy floor; defaults to `--model auto` |
+| `clear_glass` | translucent blue-grey glass on a pale warm ground, the lattice receding into blur |
+| `neon_violet` | deep blue-violet, magenta rim, a reflective grid and **real out-of-focus bokeh** behind |
+| `teal_lab` | saturated red and cyan enamel on flat teal — the bright TOC-graphic register |
 | `science_cover` | high-key, single subject, shallow depth of field on a pale graded ground — reads at thumbnail size under a masthead |
 | `nature_nano` | near-black, one hard key from behind, body dark enough that the **rim light** is the drawing |
 | `advanced_materials` | saturated, glossy, crowded with colour; element colouring, because these covers are usually about a composition |

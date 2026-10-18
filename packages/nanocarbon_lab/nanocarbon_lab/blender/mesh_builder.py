@@ -63,6 +63,7 @@ def build_ball_and_stick(
     finish: str = "style",
     bond_finish: str | None = None,
     bond_colour: str = "auto",
+    model: str = "ballstick",
 ) -> list[bpy.types.Object]:
     """Merged sphere + cylinder meshes, coloured by ``colour_by``.
 
@@ -76,11 +77,15 @@ def build_ball_and_stick(
     specs = style_defs.materials_for(style, colour_by, keys, finish)
     materials = [material_from_spec(f"mat_{colour_by}_{key}", spec)
                  for key, spec in zip(keys, specs, strict=True)]
-    radii = atom_radii(bundle, colour_by, atom_scale)
+    radii = atom_radii(bundle, colour_by, atom_scale, model)
+    symbols = bundle["symbols"]
 
     # --- atoms -------------------------------------------------------
     bm = bmesh.new()
     for index, position in enumerate(positions):
+        if radii[index] <= 0.0:
+            # licorice and wireframe draw no spheres at all.
+            continue
         before = len(bm.faces)
         bmesh.ops.create_icosphere(
             bm, subdivisions=sphere_subdiv, radius=radii[index],
@@ -104,11 +109,20 @@ def build_ball_and_stick(
         style, colour_by, keys, bond_colour,
         finish if bond_finish is None else bond_finish)
     bm2 = bmesh.new()
+    draw_any = style_defs.draws_bonds(model)
     for i, j in bonds:
+        if not draw_any:
+            break
         if i >= len(positions) or j >= len(positions):
             # A sidecar whose bonds outrun its atoms. Skip rather than
             # raise: an index error here aborts a render that is minutes
             # in, and the structure is still worth seeing.
+            continue
+        if not style_defs.bond_is_drawn(model, symbols[i], symbols[j]):
+            # Under `auto`, a bond with a space-filling atom at either
+            # end would start inside a sphere of its own radius and come
+            # out the far side -- and between two metals it is an
+            # invention anyway.
             continue
         a, b = Vector(positions[i]), Vector(positions[j])
         if (b - a).length < 1e-6:
@@ -129,7 +143,10 @@ def build_ball_and_stick(
     # across the seam rather than changing colour at it.
     for stub in bundle.get("seam_stubs", []):
         index = int(stub[0])
-        if index >= len(positions):
+        if index >= len(positions) or not draw_any:
+            continue
+        if not style_defs.bond_is_drawn(model, symbols[index],
+                                        symbols[index]):
             continue
         start = Vector(positions[index])
         end = start + Vector(tuple(stub[1:4]))

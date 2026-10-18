@@ -155,18 +155,28 @@ def colour_keys(bundle: dict, colour_by: str) -> tuple[list, list[int]]:
     return keys, [lookup[value] for value in per_atom]
 
 
-def atom_radii(bundle: dict, colour_by: str, scale: float = 1.0
-               ) -> list[float]:
-    """One display radius per atom, in Å.
+def atom_radii(bundle: dict, colour_by: str, scale: float = 1.0,
+               model: str = "ballstick") -> list[float]:
+    """One drawn radius per atom, in Angstrom.
 
-    Element radii when the colouring is by element -- a hydrogen and a
-    gold atom drawn the same size is a picture that misleads about which
-    is which -- and one radius throughout otherwise, which is right for
-    an all-carbon lattice and keeps a ring-coloured render reading as a
-    lattice rather than as a chemistry diagram.
+    The **model** decides first: a space-filling atom is drawn at its van
+    der Waals radius whatever the colour mode, because that is what a
+    space-filling model *is*. ``auto`` asks per atom, so a gold core
+    comes out solid inside an open carbon shell.
+
+    Within ball-and-stick the colour mode still matters: element radii
+    when colouring by element -- a hydrogen and a gold atom drawn the
+    same size is a picture that misleads about which is which -- and one
+    radius throughout otherwise, which is right for an all-carbon
+    lattice and keeps a ring-coloured render reading as a lattice rather
+    than as a chemistry diagram.
     """
+    symbols = bundle["symbols"]
+    if model != "ballstick":
+        return [style_defs.model_radius(symbol, model, scale)
+                for symbol in symbols]
     if colour_by == "element":
         return [style_defs.element_radius(symbol) * scale
-                for symbol in bundle["symbols"]]
+                for symbol in symbols]
     return [style_defs.DEFAULT_ELEMENT_RADIUS * scale
             for _ in bundle["positions"]]

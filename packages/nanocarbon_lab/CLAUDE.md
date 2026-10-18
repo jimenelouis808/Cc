@@ -3043,6 +3043,41 @@ Two things in `apply_finish` are measured rather than tasteful:
 because gold is a material and not a hue to apply to someone else's
 colour -- a blue gold is a contradiction.
 
+### Ball-and-stick or space-filling, and the mixed case is the point
+
+`--model` is a fifth axis. `ballstick` draws spheres at **display**
+radii joined by sticks, which is right for a lattice where the
+connectivity *is* the subject. `spacefill` draws them at their **van der
+Waals** radii with no sticks at all, which is right for a metal
+particle. `licorice` and `wireframe` drop the spheres.
+
+**`auto` is why this exists.** It asks per *atom*: metals come out
+space-filling and everything else ball-and-stick, in the same picture.
+A carbon-coated gold particle is then a solid metal core inside an open
+carbon cage -- which is what it is, and which neither pure model gets
+right about more than half of the structure.
+
+Three rules behind it:
+
+* **The vdW radii are the real ones** (Bondi, Alvarez 2013 for the
+  metals), not display radii scaled for taste. A space-filling model is
+  *defined* by atoms touching at their vdW contact, so tuning them would
+  stop it being one. `SPACEFILL_SCALE` is 0.98, which is only to stop
+  z-fighting where a lattice puts two spheres in exact contact.
+* **`auto` draws no stick into a space-filling atom.** It would start
+  inside a sphere of its own radius and come out the far side -- and
+  between two metals it is an invention anyway: a gold cluster's atoms
+  are packed, not bonded in pairs. That is what makes clusters on a
+  sheet read correctly: solid clusters, open lattice, nothing joining
+  them.
+* **`SPACEFILL_ELEMENTS` is the metals only.** Carbon, the dopants and
+  the graft elements stay ball-and-stick whatever else is in the
+  structure, because the lattice is the subject.
+
+A style may declare a `default_model` -- a model-kit look is
+ball-and-stick by definition, a supported-catalyst look is mixed -- and
+an explicit `--model` still wins.
+
 ### The bonds are decided separately from the atoms
 
 They were not. Whenever the colour belonged to the atom, the bonds
@@ -3108,6 +3143,32 @@ structure a ghost inside it: **volume emission accumulates along the
 ray**, so a shell twice as wide glows twice as brightly for the same
 setting. The brightness is divided by the path length, which restores
 the rule that an effect means the same thing at every size.
+
+### Five looks worked back from references, not invented
+
+`model_kit`, `clusters_on_sheet`, `clear_glass`, `neon_violet` and
+`teal_lab` each copy a specific kind of picture, and each description
+says which -- a preset whose provenance is "it looked nice" cannot be
+corrected later. What they add beyond colour:
+
+* **A floor that reflects** (`Background.floor_metallic`). A product
+  shot stands its subject on a mirror; a shadow catcher is not the same
+  thing.
+* **Bokeh as geometry**, not as a texture. `_build_bokeh` puts real
+  emissive spheres behind the focal plane so the camera's own aperture
+  blurs them -- painted discs stay the same size and shape wherever the
+  camera goes, while these grow, shift and overlap when the lens or the
+  f-stop changes. The style that ships them also ships a wide aperture,
+  because bokeh with everything in focus is a field of dots.
+* **Matte rods under glossy balls** (`model_kit`). A kit's spheres are
+  injection-moulded gloss and its sticks are matte white plastic, and
+  getting that wrong is most of why a render reads as a diagram rather
+  than as a photograph of an object. This is the case the separate bond
+  material exists for.
+
+`clear_glass` carries 640 samples because glass is the slowest thing
+here: every sphere refracts twice and what is *behind* it is the
+picture.
 
 ### Cycles is the default and EEVEE will abort if you let it
 

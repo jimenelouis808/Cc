@@ -185,6 +185,9 @@ class Background:
     floor: bool = False
     floor_color: RGB = (0.5, 0.5, 0.52)
     floor_roughness: float = 0.4
+    #: A floor that reflects. At 1.0 with a low roughness it is a
+    #: mirror, which is what a product shot stands its subject on.
+    floor_metallic: float = 0.0
     #: A floor that catches shadow but is itself invisible, so the
     #: subject keeps its contact shadow over a transparent background.
     floor_is_shadow_catcher: bool = False
@@ -243,6 +246,17 @@ class Style:
     #: not say. A cover style defaults to ring colouring because that is
     #: what it was tuned for; a figure style defaults to element.
     default_colour_by: str = "ring"
+    #: How fat the atoms and the sticks are drawn, as multipliers.
+    #: A model kit's balls are nowhere near scale -- that is most of
+    #: what makes a kit read as a kit rather than as a diagram -- while
+    #: a dense lattice needs them small or the picture becomes a wall.
+    #: ``--atom-scale`` and ``--bond-scale`` still multiply these.
+    atom_scale: float = 1.0
+    bond_scale: float = 1.0
+    #: The representation this style was tuned for. A model-kit look is
+    #: ball-and-stick by definition and a metal product shot is
+    #: space-filling; ``--model`` still overrides it.
+    default_model: str = "ballstick"
     #: Scene effects the style brings of its own, as
     #: :class:`effects.EffectSpec`. A cover style that is *about* a laser
     #: should arrive with the laser rather than needing it typed in;
@@ -386,6 +400,105 @@ ELEMENT_RADII: dict[str, float] = {
 
 #: Radius for an element with no entry in :data:`ELEMENT_RADII`.
 DEFAULT_ELEMENT_RADIUS = 0.35
+
+#: **Van der Waals radii, in Angstrom.** These are the real ones (Bondi,
+#: and Alvarez 2013 for the metals), not display radii: a space-filling
+#: model is defined by atoms touching at their vdW contact, so scaling
+#: them for taste would stop it being a space-filling model.
+VDW_RADII: dict[str, float] = {
+    "H": 1.20, "B": 1.92, "C": 1.70, "N": 1.55, "O": 1.52, "F": 1.47,
+    "Na": 2.27, "Mg": 1.73, "Al": 1.84, "Si": 2.10, "P": 1.80, "S": 1.80,
+    "Cl": 1.75, "K": 2.75, "Ca": 2.31, "Ti": 2.15, "V": 2.05, "Cr": 2.05,
+    "Mn": 2.05, "Fe": 2.04, "Co": 2.00, "Ni": 1.97, "Cu": 1.96, "Zn": 2.01,
+    "Ge": 2.11, "Se": 1.90, "Zr": 2.23, "Nb": 2.18, "Mo": 2.17, "Ru": 2.13,
+    "Rh": 2.10, "Pd": 2.10, "Ag": 2.11, "Sn": 2.17, "Te": 2.06, "Hf": 2.23,
+    "Ta": 2.22, "W": 2.18, "Re": 2.16, "Pt": 2.13, "Au": 2.14, "Pb": 2.02,
+    "Bi": 2.07,
+}
+DEFAULT_VDW_RADIUS = 1.80
+
+#: Elements drawn space-filling by ``--model auto``. A metal has no
+#: directional bonds to draw -- a gold cluster's atoms are packed, not
+#: bonded in pairs -- so sticks between them would be an invention,
+#: while a carbon lattice's bonds are the whole point of the picture.
+SPACEFILL_ELEMENTS = frozenset({
+    "Na", "Mg", "Al", "K", "Ca", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni",
+    "Cu", "Zn", "Zr", "Nb", "Mo", "Ru", "Rh", "Pd", "Ag", "Sn", "Hf",
+    "Ta", "W", "Re", "Pt", "Au", "Pb", "Bi",
+})
+
+#: How the structure is drawn.
+#:
+#: ``ballstick``  -- spheres at display radii joined by sticks. The right
+#:                   model for a lattice, where the connectivity *is* the
+#:                   subject.
+#: ``spacefill``  -- spheres at their van der Waals radii and no sticks:
+#:                   the shape the molecule actually occupies. The right
+#:                   model for a metal particle, which has no pair bonds
+#:                   to draw.
+#: ``auto``       -- space-filling for metals, ball-and-stick for
+#:                   everything else, in the same picture. A carbon-
+#:                   coated gold particle is then a solid metal core
+#:                   inside an open carbon cage, which is what it is.
+#: ``licorice``   -- sticks only, no spheres, for a dense lattice whose
+#:                   atoms would otherwise merge into a wall.
+#: ``wireframe``  -- thin sticks only.
+MODELS = ("ballstick", "spacefill", "auto", "licorice", "wireframe")
+
+#: Fraction of the van der Waals radius a space-filling sphere is drawn
+#: at. 1.0 is the strict definition; a hair under keeps neighbouring
+#: spheres from z-fighting where a lattice puts them exactly in contact.
+SPACEFILL_SCALE = 0.98
+
+
+def vdw_radius(symbol: str) -> float:
+    """Van der Waals radius in Angstrom, with a fallback."""
+    return VDW_RADII.get(str(symbol), DEFAULT_VDW_RADIUS)
+
+
+def is_spacefill_element(symbol: str) -> bool:
+    """Would ``--model auto`` draw this element space-filling?"""
+    return str(symbol) in SPACEFILL_ELEMENTS
+
+
+def model_radius(symbol: str, model: str, scale: float = 1.0) -> float:
+    """The drawn radius of one atom under a representation.
+
+    ``auto`` is the interesting one and the reason this is per atom
+    rather than per render: it asks the element, so a metal core comes
+    out solid and the carbon shell around it stays open, in one picture.
+    """
+    if model not in MODELS:
+        raise ValueError(
+            f"unknown model {model!r}; known: {', '.join(MODELS)}")
+    if model in ("licorice", "wireframe"):
+        return 0.0
+    if model == "spacefill" or (model == "auto"
+                                and is_spacefill_element(symbol)):
+        return vdw_radius(symbol) * SPACEFILL_SCALE * scale
+    return element_radius(symbol) * scale
+
+
+def draws_bonds(model: str) -> bool:
+    """Does this representation draw sticks at all?"""
+    return model != "spacefill"
+
+
+def bond_is_drawn(model: str, symbol_a: str, symbol_b: str) -> bool:
+    """Is the bond between these two atoms drawn?
+
+    Under ``auto`` a bond with a space-filling atom at either end is
+    **not**: it would start inside a sphere of its own radius and come
+    out the other side, and for a metal it is an invention anyway. That
+    is what makes a gold cluster on a graphene sheet read correctly --
+    solid clusters, open lattice, and nothing joining the two.
+    """
+    if model == "spacefill":
+        return False
+    if model != "auto":
+        return True
+    return not (is_spacefill_element(symbol_a)
+                or is_spacefill_element(symbol_b))
 
 #: Whether a colour mode wants the bonds split in half, each half taking
 #: its own atom's colour.
@@ -1493,6 +1606,247 @@ STYLES: dict[str, Style] = {
         default_colour_by="element",
         effects=(),
     ),
+
+    # ------------------------------------------------------------------
+    # Looks worked back from reference photographs and stock renders
+    # rather than invented. Each names what it is copying, because a
+    # preset whose provenance is "it looked nice" cannot be corrected.
+    # ------------------------------------------------------------------
+    "model_kit": Style(
+        name="model_kit",
+        description=(
+            "A physical ball-and-stick model kit photographed on a bench: "
+            "thick glossy injection-moulded spheres in CPK colours, matte "
+            "white rods, a bright softbox overhead and a background thrown "
+            "far out of focus. Ball-and-stick by definition, element "
+            "colours, and fat atoms -- a kit's balls are nowhere near "
+            "scale and that is what makes it read as a kit. Meant for a "
+            "SMALL subject: a kit models a molecule or a fragment, and "
+            "a 240-atom cage at these radii is a dense ball of spheres "
+            "whatever the lighting does."
+        ),
+        background=Background(
+            kind="gradient", top=(0.88, 0.87, 0.85), bottom=(0.55, 0.53, 0.52),
+            strength=1.0, floor=True, floor_color=(0.90, 0.90, 0.91),
+            floor_roughness=0.22, floor_metallic=0.0,
+        ),
+        hexagon=MaterialSpec(base_color=(0.05, 0.05, 0.06, 1.0),
+                             roughness=0.08, clearcoat=1.0,
+                             coat_roughness=0.02),
+        pentagon=MaterialSpec(base_color=(0.85, 0.08, 0.08, 1.0),
+                              roughness=0.08, clearcoat=1.0),
+        heptagon=MaterialSpec(base_color=(0.10, 0.60, 0.90, 1.0),
+                              roughness=0.08, clearcoat=1.0),
+        octagon=MaterialSpec(base_color=(0.95, 0.80, 0.05, 1.0),
+                             roughness=0.08, clearcoat=1.0),
+        # The rods are matte white plastic, nothing like the balls.
+        bond=MaterialSpec(base_color=(0.93, 0.93, 0.94, 1.0),
+                          roughness=0.55, clearcoat=0.1),
+        lights=[
+            LightSpec("AREA", 3000.0, (1.00, 0.98, 0.95), (3.0, -6.0, 11.0),
+                      size=16.0),
+            LightSpec("AREA", 900.0, (0.95, 0.97, 1.00), (-9.0, -3.0, 3.0),
+                      size=12.0),
+            LightSpec("AREA", 500.0, (1.0, 1.0, 1.0), (7.0, 6.0, 1.0),
+                      size=10.0),
+        ],
+        camera_lens_mm=100.0,
+        # Wide open: the blurred bench behind is half of what makes it a
+        # photograph of an object rather than a diagram.
+        camera_dof_fstop=1.6,
+        # A kit's balls are deliberately out of scale and its rods are
+        # thick dowels. Drawn at chemical radii the same scene reads as
+        # a lattice diagram, which is the thing this style is not --
+        # but there is a ceiling: a real kit's ball is about half a bond
+        # long across, and past that the spheres merge into a blob with
+        # no rods visible between them, which is a space-filling model
+        # by accident.
+        atom_scale=1.9,
+        bond_scale=2.6,
+        samples=384,
+        default_colour_by="element",
+        default_model="ballstick",
+        effects=(),
+    ),
+
+    "clusters_on_sheet": Style(
+        name="clusters_on_sheet",
+        description=(
+            "Metal clusters sitting on a lattice, the way the stock "
+            "libraries draw a supported catalyst: warm gold packed "
+            "spheres against a cold blue sheet, a dark glossy floor "
+            "underneath, strong rim. Defaults to the AUTO model -- the "
+            "metal solid, the carbon open -- which is the whole point of "
+            "the picture."
+        ),
+        background=Background(
+            kind="gradient", top=(0.04, 0.20, 0.38), bottom=(0.01, 0.05, 0.12),
+            strength=1.0, floor=True, floor_color=(0.02, 0.05, 0.09),
+            floor_roughness=0.08, floor_metallic=0.8,
+        ),
+        hexagon=MaterialSpec(base_color=(0.10, 0.34, 0.55, 1.0),
+                             metallic=0.75, roughness=0.22, clearcoat=0.4,
+                             rim=1.4, rim_color=(0.40, 0.80, 1.00),
+                             rim_power=3.0),
+        pentagon=_accent((0.95, 0.70, 0.25, 1.0), (1.00, 0.65, 0.20), 1.6),
+        heptagon=_accent((0.30, 0.75, 1.00, 1.0), (0.25, 0.70, 1.00), 1.6),
+        octagon=_accent((1.00, 0.45, 0.20, 1.0), (1.00, 0.40, 0.15), 1.8),
+        bond=MaterialSpec(base_color=(0.14, 0.40, 0.62, 1.0),
+                          metallic=0.7, roughness=0.26,
+                          rim=0.9, rim_color=(0.35, 0.75, 1.00)),
+        lights=[
+            LightSpec("AREA", 2400.0, (1.00, 0.88, 0.66), (7.0, -7.0, 8.0),
+                      size=7.0),
+            LightSpec("AREA", 1000.0, (0.35, 0.65, 1.00), (-8.0, 4.0, 4.0),
+                      size=10.0),
+            LightSpec("AREA", 500.0, (1.00, 0.75, 0.45), (0.0, 7.0, -3.0),
+                      size=8.0),
+        ],
+        camera_lens_mm=55.0,
+        camera_dof_fstop=2.2,
+        samples=384,
+        default_colour_by="element",
+        default_model="auto",
+        effects=(EffectSpec("glare", {"strength": 0.3}),),
+    ),
+
+    "clear_glass": Style(
+        name="clear_glass",
+        description=(
+            "Translucent blue-grey glass on a pale warm ground, with the "
+            "lattice receding into a soft blur: the clean, airy look used "
+            "for abstract molecular stock art. Everything is transmissive, "
+            "so the far side of the structure shows through the near side "
+            "-- which is why it wants a long lens and a wide aperture."
+        ),
+        # Darker at the bottom than the reference's print would suggest:
+        # a transmissive structure on an evenly pale ground has nothing
+        # to refract and disappears. The gradient is the contrast.
+        background=Background(
+            kind="gradient", top=(0.95, 0.94, 0.92), bottom=(0.34, 0.45, 0.60),
+            strength=1.1,
+        ),
+        hexagon=MaterialSpec(base_color=(0.82, 0.88, 0.95, 1.0),
+                             metallic=0.0, roughness=0.03,
+                             transmission=1.0, ior=1.48, clearcoat=0.3),
+        pentagon=MaterialSpec(base_color=(0.95, 0.80, 0.78, 1.0),
+                              roughness=0.03, transmission=1.0, ior=1.48),
+        heptagon=MaterialSpec(base_color=(0.76, 0.86, 0.98, 1.0),
+                              roughness=0.03, transmission=1.0, ior=1.48),
+        octagon=MaterialSpec(base_color=(0.95, 0.92, 0.78, 1.0),
+                             roughness=0.03, transmission=1.0, ior=1.48),
+        # Solid metal rods through glass balls: the frame is what gives
+        # the eye something to hold on to when everything else is
+        # transparent.
+        bond=MaterialSpec(base_color=(0.42, 0.48, 0.58, 1.0),
+                          metallic=1.0, roughness=0.15),
+        lights=[
+            LightSpec("AREA", 2800.0, (1.00, 0.99, 0.97), (5.0, -8.0, 9.0),
+                      size=18.0),
+            LightSpec("AREA", 1600.0, (0.96, 0.98, 1.00), (-8.0, -5.0, 4.0),
+                      size=18.0),
+            LightSpec("AREA", 900.0, (1.0, 1.0, 1.0), (0.0, 9.0, 2.0),
+                      size=14.0),
+        ],
+        camera_lens_mm=105.0,
+        camera_dof_fstop=1.8,
+        # Glass is the slowest thing here: every sphere refracts twice
+        # and the rays behind it are the picture.
+        samples=640,
+        default_colour_by="ring",
+        default_model="ballstick",
+        atom_scale=1.7,
+        bond_scale=0.8,
+        effects=(EffectSpec("glare", {"strength": 0.2,
+                                      "threshold": 0.9}),),
+    ),
+
+    "neon_violet": Style(
+        name="neon_violet",
+        description=(
+            "Deep blue-violet, glossy dark spheres with a magenta rim, a "
+            "faint grid under them and coloured bokeh behind: the "
+            "nightclub register of molecular stock art. The bokeh is an "
+            "effect, not a texture, so it is really out of focus -- which "
+            "is why the style ships a wide aperture with it."
+        ),
+        background=Background(
+            kind="gradient", top=(0.10, 0.04, 0.32), bottom=(0.02, 0.01, 0.10),
+            strength=1.0, floor=True, floor_color=(0.05, 0.02, 0.16),
+            floor_roughness=0.12, floor_metallic=0.6,
+        ),
+        hexagon=MaterialSpec(base_color=(0.16, 0.12, 0.42, 1.0),
+                             metallic=0.6, roughness=0.10, clearcoat=0.9,
+                             rim=2.4, rim_color=(1.00, 0.30, 0.85),
+                             rim_power=2.6),
+        pentagon=_accent((0.45, 0.35, 1.00, 1.0), (0.40, 0.30, 1.00), 2.0),
+        heptagon=_accent((1.00, 0.25, 0.75, 1.0), (1.00, 0.20, 0.70), 2.0),
+        octagon=_accent((0.25, 0.85, 1.00, 1.0), (0.20, 0.80, 1.00), 2.4),
+        bond=MaterialSpec(base_color=(0.20, 0.16, 0.50, 1.0),
+                          metallic=0.6, roughness=0.14,
+                          rim=1.4, rim_color=(0.70, 0.35, 1.00)),
+        lights=[
+            LightSpec("AREA", 1400.0, (0.50, 0.35, 1.00), (-7.0, -6.0, 6.0),
+                      size=8.0),
+            LightSpec("AREA", 900.0, (1.00, 0.25, 0.70), (8.0, 3.0, 3.0),
+                      size=8.0),
+        ],
+        camera_lens_mm=85.0,
+        camera_dof_fstop=1.4,
+        samples=416,
+        default_colour_by="ring",
+        default_model="ballstick",
+        effects=(
+            EffectSpec("bokeh", {"count": 34, "color": "magenta"}),
+            EffectSpec("glare", {"strength": 0.45, "threshold": 0.65}),
+        ),
+    ),
+
+    "teal_lab": Style(
+        name="teal_lab",
+        description=(
+            "Saturated red and cyan enamel on a flat teal ground with a "
+            "softly reflective floor: the bright, friendly register that "
+            "press releases and journal TOC graphics use. Everything is "
+            "glossy and nothing is metallic, so the colour stays the "
+            "colour instead of turning into a reflection."
+        ),
+        background=Background(
+            kind="gradient", top=(0.62, 0.84, 0.86), bottom=(0.38, 0.68, 0.72),
+            strength=1.1, floor=True, floor_color=(0.55, 0.78, 0.80),
+            floor_roughness=0.14, floor_metallic=0.25,
+        ),
+        hexagon=MaterialSpec(base_color=(0.78, 0.22, 0.14, 1.0),
+                             roughness=0.10, clearcoat=1.0,
+                             coat_roughness=0.02),
+        pentagon=MaterialSpec(base_color=(0.14, 0.70, 0.78, 1.0),
+                              roughness=0.10, clearcoat=1.0),
+        heptagon=MaterialSpec(base_color=(0.95, 0.95, 0.96, 1.0),
+                              roughness=0.12, clearcoat=1.0),
+        octagon=MaterialSpec(base_color=(0.96, 0.72, 0.18, 1.0),
+                             roughness=0.10, clearcoat=1.0),
+        bond=MaterialSpec(base_color=(0.80, 0.84, 0.86, 1.0),
+                          metallic=0.7, roughness=0.22),
+        lights=[
+            LightSpec("AREA", 2600.0, (1.0, 1.0, 1.0), (5.0, -7.0, 10.0),
+                      size=16.0),
+            LightSpec("AREA", 1300.0, (0.92, 0.98, 1.00), (-8.0, -4.0, 4.0),
+                      size=14.0),
+            LightSpec("AREA", 700.0, (1.0, 1.0, 1.0), (2.0, 8.0, 1.0),
+                      size=12.0),
+        ],
+        camera_lens_mm=75.0,
+        camera_dof_fstop=2.6,
+        samples=320,
+        # RING, not element: the red-and-cyan enamel IS this style, and
+        # element colouring would replace it with CPK and leave nothing
+        # of the look behind.
+        default_colour_by="ring",
+        default_model="ballstick",
+        atom_scale=1.5,
+        bond_scale=1.6,
+        effects=(),
+    ),
 }
 
 
@@ -1565,7 +1919,10 @@ __all__ = [
     "ELEMENT_COLOURS",
     "ELEMENT_RADII",
     "BOND_COLOURS",
+    "MODELS",
     "QUALITY_PRESETS",
+    "SPACEFILL_ELEMENTS",
+    "VDW_RADII",
     "FINISHES",
     "SHADERS",
     "SPLIT_BONDS",
@@ -1580,11 +1937,16 @@ __all__ = [
     "bond_materials",
     "describe_finishes",
     "element_colour",
+    "bond_is_drawn",
+    "draws_bonds",
     "element_radius",
+    "is_spacefill_element",
+    "model_radius",
     "get_style",
     "list_styles",
     "materials_for",
     "resolve_colour_by",
     "structure_colour",
+    "vdw_radius",
     "with_background",
 ]

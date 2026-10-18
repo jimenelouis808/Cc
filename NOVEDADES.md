@@ -6,6 +6,86 @@ está la trampa.
 
 ---
 
+## nanocarbon_lab · ball-and-stick o space-filling (o los dos a la vez)
+
+### El control que pedías, y el caso mixto es el importante
+
+```bash
+nanocarbon render jaula.xyz --model ballstick   # una red
+nanocarbon render np.xyz    --model spacefill   # una partícula metálica
+nanocarbon render np.xyz    --model auto        # los dos, en una imagen
+```
+
+| modelo | qué dibuja |
+|---|---|
+| `ballstick` | esferas a radios de dibujo unidas por varillas — lo correcto para una red, donde la conectividad **es** el tema |
+| `spacefill` | esferas a su radio de **van der Waals** real, sin varillas — la forma que la estructura ocupa de verdad |
+| `auto` | **space-filling para los metales, ball-and-stick para el resto** |
+| `licorice` / `wireframe` | sólo varillas, gruesas o finas |
+
+**`auto` es el que importa**, y es justo tu segunda imagen de referencia: una
+partícula de oro recubierta de carbono sale como **núcleo metálico sólido
+dentro de una jaula de carbono abierta**, que es lo que es. Ni el modelo puro
+de bolas ni el puro de esferas acierta en más de la mitad de esa estructura.
+
+Tres reglas detrás:
+
+- **Los radios de vdW son los reales** (Bondi; Alvarez 2013 para los metales),
+  no radios de dibujo escalados a gusto. Un modelo space-filling se **define**
+  por átomos que se tocan en su contacto de vdW, así que ajustarlos a ojo
+  dejaría de serlo.
+- **`auto` no dibuja ninguna varilla hacia un átomo space-filling.** Empezaría
+  dentro de una esfera de su propio radio y saldría por el otro lado — y entre
+  dos metales es una invención: los átomos de un cúmulo de oro están
+  empaquetados, no enlazados por pares.
+- **Sólo los metales** van a space-filling. El carbono, los dopantes y los
+  grupos siguen en ball-and-stick, porque la red es el tema.
+
+Un estilo puede declarar su modelo preferido (`clusters_on_sheet` trae `auto`),
+y `--model` manda por encima.
+
+### Cinco presets sacados de tus referencias
+
+Cada uno copia **una** clase de imagen concreta, y su descripción dice cuál —
+un preset cuya procedencia es «quedaba bonito» no se puede corregir después.
+
+| estilo | qué copia |
+|---|---|
+| `model_kit` | un kit físico de bolas y varillas sobre una mesa: esferas moldeadas brillantes, **varillas blancas mates**, fondo muy desenfocado |
+| `clusters_on_sheet` | cúmulos metálicos sobre una red: oro cálido empaquetado contra lámina azul fría, suelo brillante. Trae `--model auto` |
+| `clear_glass` | cristal azul-gris translúcido sobre fondo claro cálido, la red perdiéndose en desenfoque |
+| `neon_violet` | azul-violeta profundo, borde magenta, suelo reflectante y **bokeh real** detrás |
+| `teal_lab` | esmalte rojo y cian sobre turquesa plano — el registro de gráfico de portada de índice |
+
+Lo que añaden además del color:
+
+- **Un suelo que refleja** (`floor_metallic`). Una foto de producto apoya el
+  sujeto en un espejo; un recolector de sombras no es lo mismo.
+- **Bokeh como geometría, no como textura.** Son esferas emisivas de verdad
+  detrás del plano de enfoque, así que las desenfoca la apertura de la propia
+  cámara. Unos discos pintados tendrían el mismo tamaño y forma mirara donde
+  mirara la cámara; éstos crecen, se mueven y se solapan al cambiar el objetivo
+  o el diafragma. El estilo que los trae trae también una apertura abierta,
+  porque bokeh con todo enfocado es un campo de puntos.
+- **Varillas mates bajo bolas brillantes** (`model_kit`). Las bolas de un kit
+  son plástico inyectado brillante y las varillas plástico blanco mate, y
+  equivocarse en eso es la mayor parte de por qué un render se lee como
+  diagrama y no como fotografía de un objeto. Éste es el caso para el que
+  existe el material de enlace separado.
+- **`atom_scale` / `bond_scale` por estilo.** Las bolas de un kit están
+  deliberadamente fuera de escala; eso es lo que lo hace un kit. Con un tope:
+  una bola de kit real mide alrededor de medio enlace de ancho, y pasado eso
+  las esferas se fusionan en un bulto sin varillas visibles — un modelo
+  space-filling por accidente. Lo medí subiendo demasiado y bajándolo.
+
+Dos cosas honestas: `model_kit` está pensado para un **sujeto pequeño** —un
+kit modela una molécula o un fragmento, y una jaula de 240 átomos a esos
+radios es una bola densa de esferas haga lo que haga la luz—, y `clear_glass`
+lleva 640 muestras porque el cristal es lo más lento de aquí: cada esfera
+refracta dos veces y lo que hay **detrás** es la imagen.
+
+---
+
 ## nanocarbon_lab · materiales separados, efectos que son luz, y presets de revista
 
 ### Primero: sirve para todo, no sólo carbono

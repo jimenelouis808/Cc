@@ -134,6 +134,15 @@ EFFECT_DEFAULTS: dict[str, dict] = {
     "fog": {
         "color": "white", "strength": 0.0025, "anisotropy": 0.3,
     },
+    # Out-of-focus points of light behind the subject. Real geometry,
+    # genuinely behind the focal plane, so the camera's own aperture
+    # blurs them into discs -- which is why this needs a style with a
+    # wide aperture to show at all.
+    "bokeh": {
+        "color": "magenta", "strength": 22.0, "count": 30,
+        "size": 0.10, "depth": 2.6, "spread": 2.2, "vary": 0.75,
+        "light": 0.0, "seed": 0,
+    },
     # Post-processing bloom, run over the finished image rather than in
     # the scene, which is why it costs nothing in sample count. `size`
     # is a fraction of the image's short side.
@@ -830,6 +839,50 @@ def _build_halo(spec: EffectSpec, centre, radius: float) -> list:
     return [obj]
 
 
+def _build_bokeh(spec: EffectSpec, centre, radius: float) -> list:
+    """Scattered points of light behind the subject.
+
+    Built as **real spheres behind the focal plane** rather than painted
+    on, so the camera's own depth of field turns them into discs. That
+    is the whole reason to do it in the scene: a painted disc stays the
+    same size and shape wherever the camera goes, while these grow,
+    shift and overlap the way they should when the lens or the aperture
+    changes.
+
+    They are emissive and contribute no light, so a field of thirty does
+    not quietly become the key light.
+    """
+    rng = np.random.default_rng(int(spec.get("seed")))
+    count = max(1, int(spec.get("count")))
+    colour = spec.colour()
+    strength = float(spec.get("strength"))
+    spread = float(spec.get("spread")) * radius
+    depth = float(spec.get("depth")) * radius
+    size = float(spec.get("size")) * radius
+    vary = float(spec.get("vary"))
+    centre = np.asarray(centre, dtype=float)
+
+    objects = []
+    for index in range(count):
+        # Behind the subject in the scene's own depth direction, spread
+        # across the frame. Varying both the distance and the size is
+        # what stops them reading as a regular field of dots.
+        offset = np.array([
+            float(rng.uniform(-spread, spread)),
+            depth * float(rng.uniform(0.6, 1.8)),
+            float(rng.uniform(-spread, spread)),
+        ])
+        shade = 1.0 - vary * float(rng.random())
+        hue = tuple(min(1.0, channel * (0.6 + 0.8 * rng.random()))
+                    for channel in colour)
+        material = _emissive(f"fx_bokeh{index}", hue, strength * shade)
+        obj = _ico(f"fx_bokeh{index}", centre + offset,
+                   size * (0.5 + rng.random()), material, subdivisions=2)
+        _set_light_contribution(obj, bool(spec.get("light")))
+        objects.append(obj)
+    return objects
+
+
 def _build_fog(spec: EffectSpec, centre, radius: float) -> list:
     """World volume scatter, so beams and lights become visible shafts."""
     import bpy
@@ -974,6 +1027,7 @@ _BUILDERS = {
     "resonance": _build_resonance,
     "orbit": _build_orbit,
     "halo": _build_halo,
+    "bokeh": _build_bokeh,
     "fog": _build_fog,
     "glare": _build_glare,
 }

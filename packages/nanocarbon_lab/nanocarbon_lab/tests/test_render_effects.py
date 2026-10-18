@@ -466,6 +466,77 @@ class TestFinishes:
             assert name in text
 
 
+class TestRepresentation:
+    """Ball-and-stick or space-filling, and the mixed case -- which is
+    the one that matters: a carbon-coated metal particle is a solid core
+    inside an open cage, and drawing it either way alone is wrong about
+    half of it."""
+
+    def test_spacefill_uses_real_van_der_waals_radii(self, styles):
+        """Not display radii scaled for taste: a space-filling model is
+        *defined* by atoms touching at their vdW contact."""
+        assert styles.vdw_radius("C") == pytest.approx(1.70, abs=0.01)
+        assert styles.vdw_radius("Au") == pytest.approx(2.14, abs=0.01)
+        drawn = styles.model_radius("C", "spacefill")
+        assert drawn == pytest.approx(1.70 * styles.SPACEFILL_SCALE, rel=1e-6)
+
+    def test_spacefill_is_much_bigger_than_ballstick(self, styles):
+        assert (styles.model_radius("C", "spacefill")
+                > 4 * styles.model_radius("C", "ballstick"))
+
+    def test_auto_splits_metals_from_the_rest(self, styles):
+        """The whole point. Gold solid, carbon open, in one picture."""
+        assert styles.model_radius("Au", "auto") == \
+            pytest.approx(styles.model_radius("Au", "spacefill"))
+        assert styles.model_radius("C", "auto") == \
+            pytest.approx(styles.model_radius("C", "ballstick"))
+
+    def test_auto_draws_no_stick_into_a_metal(self, styles):
+        """It would start inside a sphere of its own radius and come out
+        the far side -- and between two metals it is an invention: a
+        gold cluster's atoms are packed, not bonded in pairs."""
+        assert styles.bond_is_drawn("auto", "C", "C") is True
+        assert styles.bond_is_drawn("auto", "C", "Au") is False
+        assert styles.bond_is_drawn("auto", "Au", "Au") is False
+
+    def test_ballstick_draws_every_bond(self, styles):
+        for pair in (("C", "C"), ("C", "Au"), ("Au", "Au")):
+            assert styles.bond_is_drawn("ballstick", *pair) is True
+
+    def test_spacefill_draws_none(self, styles):
+        assert styles.draws_bonds("spacefill") is False
+        assert styles.bond_is_drawn("spacefill", "C", "C") is False
+
+    def test_licorice_drops_the_spheres_not_the_sticks(self, styles):
+        assert styles.model_radius("C", "licorice") == 0.0
+        assert styles.draws_bonds("licorice") is True
+
+    def test_the_non_metals_of_this_package_stay_ball_and_stick(self,
+                                                                styles):
+        """Carbon, the dopants and the graft elements are what the
+        lattice is made of, and the lattice is the subject."""
+        for symbol in ("C", "N", "B", "O", "H", "S", "P", "Se"):
+            assert not styles.is_spacefill_element(symbol)
+        for symbol in ("Au", "Ag", "Pt", "Fe", "Ni", "Cu", "Mo", "W"):
+            assert styles.is_spacefill_element(symbol)
+
+    def test_an_unknown_model_names_the_real_ones(self, styles):
+        with pytest.raises(ValueError, match="spacefill"):
+            styles.model_radius("C", "sausage")
+
+    def test_a_style_can_prefer_a_model(self, styles):
+        """A model-kit look is ball-and-stick by definition and a
+        supported-catalyst look is mixed."""
+        assert styles.get_style("clusters_on_sheet").default_model == "auto"
+        assert styles.get_style("model_kit").default_model == "ballstick"
+        for name in styles.list_styles():
+            assert styles.get_style(name).default_model in styles.MODELS
+
+    def test_an_unknown_element_still_gets_a_radius(self, styles):
+        assert styles.vdw_radius("Uup") == styles.DEFAULT_VDW_RADIUS
+        assert styles.model_radius("Uup", "spacefill") > 0
+
+
 class TestBondMaterials:
     """The bonds are decided separately from the atoms. They were not:
     whenever the colour belonged to the atom the bonds simply reused the
@@ -694,6 +765,65 @@ class TestEngine:
         source = (BLENDER_DIR / "render_cnt.py").read_text()
         assert "_can_rasterise" in source
         assert 'find_library("EGL")' in source
+
+
+class TestBokeh:
+    def test_it_is_a_real_effect_with_parameters(self, effects):
+        assert "bokeh" in effects.EFFECTS
+        spec = effects.parse_effect("bokeh:count=12,color=cyan")
+        assert spec.get("count") == 12.0
+
+    def test_it_is_geometry_behind_the_subject(self):
+        """Painted discs stay the same size and shape wherever the
+        camera goes; real spheres behind the focal plane grow, shift and
+        overlap when the lens or the aperture changes."""
+        source = (BLENDER_DIR / "effects.py").read_text()
+        assert "_build_bokeh" in source
+        assert '"depth"' in source
+
+    def test_the_style_that_uses_it_opens_the_aperture(self, styles):
+        """Bokeh with everything in focus is a field of dots."""
+        style = styles.get_style("neon_violet")
+        assert any(spec.kind == "bokeh" for spec in style.effects)
+        assert style.camera_dof_fstop is not None
+        assert style.camera_dof_fstop < 2.0
+
+
+class TestReferenceStyles:
+    """The five worked back from photographs and stock renders. Each
+    test is the one claim its description makes."""
+
+    def test_the_model_kit_is_glossy_plastic_on_matte_rods(self, styles):
+        style = styles.get_style("model_kit")
+        assert style.hexagon.clearcoat > 0.8      # injection-moulded gloss
+        assert style.hexagon.metallic == 0.0
+        assert style.bond.roughness > 0.4         # matte white rod
+        assert style.camera_dof_fstop < 2.0       # blurred bench behind
+
+    def test_clear_glass_transmits(self, styles):
+        style = styles.get_style("clear_glass")
+        assert style.hexagon.transmission == 1.0
+        # Glass is the slowest thing here: every sphere refracts twice.
+        assert style.samples >= 512
+
+    def test_neon_violet_rims_in_magenta(self, styles):
+        rim = styles.get_style("neon_violet").hexagon
+        assert rim.rim > 1.0
+        assert rim.rim_color[0] > rim.rim_color[1]
+
+    def test_teal_lab_keeps_colour_rather_than_reflection(self, styles):
+        """Everything glossy and nothing metallic, or the enamel turns
+        into a mirror and the colour goes."""
+        style = styles.get_style("teal_lab")
+        assert style.hexagon.metallic == 0.0
+        assert style.hexagon.clearcoat > 0.8
+
+    def test_the_glossy_floors_reflect(self, styles):
+        for name in ("clusters_on_sheet", "neon_violet"):
+            background = styles.get_style(name).background
+            assert background.has_floor
+            assert background.floor_metallic > 0.0
+            assert background.floor_roughness < 0.2
 
 
 class TestStylesCarryEffects:

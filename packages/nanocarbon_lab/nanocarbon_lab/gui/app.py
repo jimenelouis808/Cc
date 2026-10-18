@@ -271,6 +271,10 @@ RENDER_FINISHES = list(_STYLE_DEFS.FINISHES)
 RENDER_ENGINES = ["cycles", "eevee"]
 #: Bond colouring, independent of the atoms'.
 RENDER_BOND_COLOURS = list(_STYLE_DEFS.BOND_COLOURS)
+#: Representations. "style" leaves the style's own default alone, which
+#: matters because a model-kit look is ball-and-stick by definition and
+#: a metal product shot is space-filling.
+RENDER_MODELS = ["style", *_STYLE_DEFS.MODELS]
 #: Resolution and samples as one choice; "custom" uses the boxes below.
 RENDER_QUALITIES = ["custom", *_STYLE_DEFS.QUALITY_PRESETS]
 RENDER_BACKGROUNDS = [STYLE_DEFAULT_LABEL, *_STYLE_DEFS.BACKGROUNDS]
@@ -5242,6 +5246,21 @@ class NanocarbonGUI:
         ttk.Checkbutton(ren, text="Floor plane (ground + contact shadow)",
                         variable=self.var_floor).pack(anchor="w")
 
+        row_model = ttk.Frame(ren)
+        row_model.pack(fill="x", pady=(0, 2))
+        ttk.Label(row_model, text="Model").pack(side="left")
+        self.var_model = tk.StringVar(value="style")
+        ttk.Combobox(row_model, textvariable=self.var_model,
+                     values=RENDER_MODELS, state="readonly",
+                     width=10).pack(side="left", padx=(4, 0))
+        ttk.Label(ren, text="auto = space-filling for metals and "
+                            "ball-and-stick for everything else, in one "
+                            "picture: a carbon-coated metal particle is a "
+                            "solid core inside an open cage.",
+                  foreground=MUTED, font=("TkDefaultFont", 8),
+                  wraplength=260, justify="left").pack(anchor="w",
+                                                       pady=(0, 6))
+
         row_fin = ttk.Frame(ren)
         row_fin.pack(fill="x", pady=(0, 6))
         ttk.Label(row_fin, text="Finish").pack(side="left")
@@ -6383,6 +6402,7 @@ class NanocarbonGUI:
                 interactive=interactive,
                 view=self.var_view.get(),
                 finish=self.var_finish.get(),
+                model=self.var_model.get(),
                 bond_finish=self.var_bond_finish.get(),
                 bond_colour=self.var_bond_colour.get(),
                 engine=self.var_engine.get(),

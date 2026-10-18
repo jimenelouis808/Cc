@@ -1812,7 +1812,8 @@ def _cmd_render(args):
         cmd = render_support.render_command(
             xyz, out, json_path=sidecar, style=args.style, mode=args.mode,
             colour_by=args.colour_by, background=args.background,
-            finish=args.finish, engine=args.engine, floor=args.floor,
+            finish=args.finish, model=args.model, engine=args.engine,
+            floor=args.floor,
             resolution=tuple(args.resolution), quality=args.quality,
             bond_finish=args.bond_finish, bond_colour=args.bond_colour,
             samples=args.samples, atom_scale=args.atom_scale,
@@ -3073,6 +3074,16 @@ def build_parser() -> argparse.ArgumentParser:
                     default=None, help="Add a ground plane.")
     rn.add_argument("--no-floor", dest="floor", action="store_false",
                     help="Remove the plane a studio background adds.")
+    rn.add_argument("--model", default=None,
+                    choices=["ballstick", "spacefill", "auto", "licorice",
+                             "wireframe"],
+                    help="How the structure is drawn. ballstick for a "
+                         "lattice, where the connectivity is the "
+                         "subject; spacefill for a metal particle, which "
+                         "has no pair bonds to draw; AUTO for both in "
+                         "one picture -- metals solid, everything else "
+                         "open, which is what a carbon-coated metal "
+                         "particle actually is.")
     rn.add_argument("--quality", default=None,
                     choices=["draft", "preview", "print", "cover"],
                     help="Resolution and samples together: draft, "

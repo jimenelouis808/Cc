@@ -75,6 +75,14 @@ def _parse_args() -> argparse.Namespace:
         help="What an atom's colour means. Default: the style's own.",
     )
     p.add_argument(
+        "--model", default="ballstick", choices=list(style_defs.MODELS),
+        help="How the structure is drawn: ballstick, spacefill (van der "
+             "Waals spheres, no sticks), auto (space-filling for metals "
+             "and ball-and-stick for everything else, in one picture), "
+             "licorice or wireframe. A style's own default is used when "
+             "this is left out.",
+    )
+    p.add_argument(
         "--finish", default="style", choices=list(style_defs.FINISHES),
         help="Replace every material's character, keeping its colour: "
              "glass, glow, metal, brushed, wax... 'style' leaves the "
@@ -460,7 +468,8 @@ def _add_floor(background, center: Vector, radius: float):
     mat = material_from_spec(
         "mat_floor",
         style_defs.MaterialSpec(base_color=(*background.floor_color, 1.0),
-                                roughness=background.floor_roughness),
+                                roughness=background.floor_roughness,
+                                metallic=background.floor_metallic),
     )
     mesh.materials.append(mat)
     if background.floor_is_shadow_catcher:
@@ -755,6 +764,11 @@ def main() -> int:
     if args.background is not None:
         style = style_defs.with_background(style, args.background)
     colour_by = style_defs.resolve_colour_by(args.colour_by, style)
+    # A style may prefer a representation -- a model-kit look is
+    # ball-and-stick by definition, a metal product shot space-filling.
+    # An explicit --model still wins.
+    model = (args.model if args.model != "ballstick"
+             else style.default_model)
 
     bundle = mesh_builder.load_bundle(args.xyz, args.json)
 
@@ -762,10 +776,13 @@ def main() -> int:
     if args.mode in ("ballstick", "both"):
         objects += mesh_builder.build_ball_and_stick(
             bundle, style, colour_by=colour_by,
-            atom_scale=args.atom_scale,
-            bond_radius=0.12 * args.bond_scale,
+            # The style's own scales multiply the command line's, so a
+            # kit stays fat and a dense lattice stays fine without the
+            # caller having to know which is which.
+            atom_scale=args.atom_scale * style.atom_scale,
+            bond_radius=0.12 * args.bond_scale * style.bond_scale,
             finish=args.finish, bond_finish=args.bond_finish,
-            bond_colour=args.bond_colour,
+            bond_colour=args.bond_colour, model=model,
         )
     if args.mode in ("surface", "both"):
         objects.append(mesh_builder.build_smooth_surface(
