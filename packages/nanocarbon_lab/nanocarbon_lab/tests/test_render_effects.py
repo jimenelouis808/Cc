@@ -1205,3 +1205,69 @@ class TestSkinRadius:
         membrane = styles.get_style("membrane")
         assert membrane.default_model == "surface"
         assert membrane.skin_radius < 1.42 / 2
+
+
+class TestIridescentStyles:
+    """Depth ramps are per style, and the trade is stated.
+
+    The viridis default is monotone in brightness so a greyscale print
+    keeps its ordering. A hue-cycling ramp is the better cover and the
+    worse data, which is why it is opt-in per style rather than a
+    global change to the depth mode.
+    """
+
+    IRIDESCENT = ("oil_film", "aurora_net", "plasma_depth")
+
+    def test_the_three_styles_exist_and_colour_by_depth(self, styles):
+        for name in self.IRIDESCENT:
+            style = styles.get_style(name)
+            assert style.default_colour_by == "depth", name
+            assert style.depth_ramp, name
+
+    def test_default_ramp_is_unchanged(self, styles):
+        """A style that sets no ramp must render exactly as before."""
+        assert styles.Style.depth_ramp == ()
+        assert styles.depth_colour(0.5) == styles.depth_colour(
+            0.5, styles.DEPTH_RAMP)
+
+    def test_an_override_actually_changes_the_colour(self, styles):
+        assert (styles.depth_colour(0.5, styles.IRIDESCENT_RAMP)
+                != styles.depth_colour(0.5, styles.DEPTH_RAMP))
+
+    def test_ramps_stay_inside_the_unit_cube(self, styles):
+        for ramp in (styles.IRIDESCENT_RAMP, styles.AURORA_RAMP,
+                     styles.PLASMA_RAMP):
+            for entry in ramp:
+                assert len(entry) == 3
+                assert all(0.0 <= channel <= 1.0 for channel in entry)
+
+    def test_plasma_is_the_one_that_survives_greyscale(self, styles):
+        """Its description claims that, so measure it.
+
+        Rec. 709 luma, which is what a greyscale conversion uses.
+        """
+        def luma(rgb):
+            return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+
+        greys = [luma(entry) for entry in styles.PLASMA_RAMP]
+        assert greys == sorted(greys)
+
+    def test_the_cycling_ramps_do_not_claim_to(self, styles):
+        """The honest half: these are covers, not measurements."""
+        def luma(rgb):
+            return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+
+        for ramp in (styles.IRIDESCENT_RAMP, styles.AURORA_RAMP):
+            greys = [luma(entry) for entry in ramp]
+            assert greys != sorted(greys)
+
+    def test_the_gradient_is_not_drowned_in_haze(self, styles):
+        """porous_depth read as a grey wash at fog 0.0035.
+
+        A fog volume scatters the key light across the whole frame, so
+        past a trace of it the backdrop lifts and the gradient loses the
+        contrast it is made of.
+        """
+        fogs = [spec for spec in styles.get_style("porous_depth").effects
+                if spec.kind == "fog"]
+        assert fogs and fogs[0].get("strength") <= 0.001

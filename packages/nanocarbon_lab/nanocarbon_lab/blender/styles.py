@@ -263,6 +263,11 @@ class Style:
     #: solid wide shot and wrong for a porous net, whose holes are the
     #: subject. A style whose point is the holes sets it well under 1.0.
     skin_radius: float = 1.6
+    #: Overrides :data:`DEPTH_RAMP` for ``--colour-by depth``. Left
+    #: empty the viridis ramp is used, which is monotone in brightness
+    #: and survives a greyscale print; a hue-cycling ramp does not, so
+    #: a style that sets one is a cover style and says so.
+    depth_ramp: tuple = ()
     #: Scene effects the style brings of its own, as
     #: :class:`effects.EffectSpec`. A cover style that is *about* a laser
     #: should arrive with the laser rather than needing it typed in;
@@ -341,16 +346,50 @@ DEPTH_RAMP: tuple[RGB, ...] = (
 )
 
 
-def depth_colour(fraction: float) -> RGB:
-    """A colour from :data:`DEPTH_RAMP`, interpolated."""
+def depth_colour(fraction: float, ramp: tuple = ()) -> RGB:
+    """A colour from a depth ramp, interpolated.
+
+    ``ramp`` defaults to :data:`DEPTH_RAMP`, which is viridis-like and
+    monotone in brightness so a greyscale print keeps its ordering. A
+    style may override it (:attr:`Style.depth_ramp`) when the figure is
+    a cover rather than a measurement -- an iridescent ramp cycles in
+    hue and is the better picture, and the worse data.
+    """
+    ramp = ramp or DEPTH_RAMP
     fraction = min(1.0, max(0.0, float(fraction)))
-    position = fraction * (len(DEPTH_RAMP) - 1)
+    position = fraction * (len(ramp) - 1)
     low = int(position)
-    high = min(low + 1, len(DEPTH_RAMP) - 1)
+    high = min(low + 1, len(ramp) - 1)
     weight = position - low
-    return tuple(DEPTH_RAMP[low][channel] * (1.0 - weight)
-                 + DEPTH_RAMP[high][channel] * weight
+    return tuple(ramp[low][channel] * (1.0 - weight)
+                 + ramp[high][channel] * weight
                  for channel in range(3))      # type: ignore[return-value]
+
+
+#: Oil-on-water: the hue cycles rather than climbing, which is what
+#: makes it read as interference instead of as a scale.
+IRIDESCENT_RAMP: tuple[RGB, ...] = (
+    (0.286, 0.098, 0.502), (0.180, 0.247, 0.733), (0.098, 0.482, 0.800),
+    (0.125, 0.698, 0.694), (0.263, 0.804, 0.459), (0.631, 0.847, 0.278),
+    (0.953, 0.776, 0.251), (0.976, 0.514, 0.306), (0.898, 0.278, 0.482),
+    (0.667, 0.208, 0.639), (0.400, 0.157, 0.627),
+)
+
+#: Aurora: green through teal into magenta, on a dark sky.
+AURORA_RAMP: tuple[RGB, ...] = (
+    (0.043, 0.220, 0.247), (0.047, 0.420, 0.392), (0.110, 0.655, 0.471),
+    (0.306, 0.839, 0.502), (0.569, 0.922, 0.616), (0.745, 0.890, 0.812),
+    (0.733, 0.714, 0.918), (0.667, 0.478, 0.890), (0.624, 0.282, 0.776),
+    (0.510, 0.157, 0.580), (0.329, 0.090, 0.396),
+)
+
+#: Hot metal: a thermal scale, deep violet through red into white.
+PLASMA_RAMP: tuple[RGB, ...] = (
+    (0.051, 0.030, 0.165), (0.247, 0.012, 0.420), (0.447, 0.004, 0.471),
+    (0.627, 0.090, 0.412), (0.780, 0.216, 0.318), (0.890, 0.357, 0.220),
+    (0.961, 0.514, 0.129), (0.988, 0.682, 0.078), (0.969, 0.839, 0.157),
+    (0.941, 0.925, 0.400), (0.976, 0.976, 0.749),
+)
 
 #: Element colours, CPK/Jmol-like.
 #:
@@ -1019,8 +1058,9 @@ def materials_for(style: Style, colour_by: str, keys,
         specs = [style.hexagon.with_colour(structure_colour(int(key)))
                  for key in keys]
     elif colour_by == "depth":
+        ramp = getattr(style, "depth_ramp", ())
         specs = [style.hexagon.with_colour(
-                     depth_colour(int(key) / max(1, DEPTH_BANDS - 1)))
+                     depth_colour(int(key) / max(1, DEPTH_BANDS - 1), ramp))
                  for key in keys]
     elif colour_by == "uniform":
         specs = [style.hexagon]
@@ -2229,9 +2269,9 @@ STYLES: dict[str, Style] = {
                           metallic=0.25, roughness=0.36,
                           rim=1.0, rim_color=(0.55, 0.90, 1.00)),
         lights=[
-            LightSpec("AREA", 2600.0, (0.85, 0.95, 1.00), (-5.0, 9.0, 6.0),
+            LightSpec("AREA", 1250.0, (0.85, 0.95, 1.00), (-5.0, 9.0, 6.0),
                       size=9.0),
-            LightSpec("AREA", 700.0, (1.00, 0.80, 0.60), (7.0, -7.0, 2.0),
+            LightSpec("AREA", 380.0, (1.00, 0.80, 0.60), (7.0, -7.0, 2.0),
                       size=11.0),
         ],
         camera_lens_mm=45.0,
@@ -2241,10 +2281,157 @@ STYLES: dict[str, Style] = {
         default_model="ballstick",
         atom_scale=0.7,
         bond_scale=0.8,
+        # The haze is what drowned this. A fog volume scatters the key
+        # light across the whole frame, so at 0.0035 with a 2600 W key
+        # the backdrop lifted to grey and took the gradient's contrast
+        # with it -- the colours were still there and nothing could be
+        # read off them. A trace of fog separates the layers; a visible
+        # amount replaces them.
         effects=(
-            EffectSpec("fog", {"strength": 0.0035}),
-            EffectSpec("glare", {"strength": 0.3}),
+            EffectSpec("fog", {"strength": 0.0008}),
+            EffectSpec("glare", {"strength": 0.22, "threshold": 0.85}),
         ),
+    ),
+
+    # ------------------------------------------------------------------
+    # The iridescent family. All three colour by DEPTH on a hue-cycling
+    # ramp, against a dark field with no haze: the gradient IS the
+    # picture, so nothing may be allowed to wash it out. They are cover
+    # styles and the docstrings say so -- a cycling ramp does not
+    # survive a greyscale print, which is the price of the look.
+    # ------------------------------------------------------------------
+
+    "oil_film": Style(
+        name="oil_film",
+        description=(
+            "Oil on water: the depth gradient runs through a hue that "
+            "CYCLES rather than climbing, over a thin-film interference "
+            "coat, so the colour also shifts with the viewing angle. "
+            "The most literally iridescent thing here, and the closest "
+            "to what an Advanced Materials cover does with a film."
+        ),
+        background=Background(
+            kind="gradient", top=(0.010, 0.012, 0.028),
+            bottom=(0.002, 0.004, 0.012), strength=1.0,
+        ),
+        hexagon=MaterialSpec(base_color=(0.40, 0.55, 0.70, 1.0),
+                             metallic=0.55, roughness=0.14, clearcoat=0.6,
+                             thin_film=430.0, thin_film_ior=1.45,
+                             rim=1.3, rim_color=(0.70, 0.90, 1.00),
+                             rim_power=2.6),
+        pentagon=_accent((1.00, 0.55, 0.25, 1.0), (1.00, 0.50, 0.20), 2.0),
+        heptagon=_accent((0.35, 0.90, 1.00, 1.0), (0.30, 0.85, 1.00), 2.0),
+        octagon=_accent((0.95, 0.35, 0.75, 1.0), (0.90, 0.30, 0.70), 2.2),
+        bond=MaterialSpec(base_color=(0.34, 0.48, 0.62, 1.0),
+                          metallic=0.55, roughness=0.18,
+                          thin_film=380.0, thin_film_ior=1.45,
+                          rim=0.9, rim_color=(0.65, 0.88, 1.00)),
+        lights=[
+            LightSpec("AREA", 1100.0, (0.88, 0.95, 1.00), (-5.0, 8.0, 6.0),
+                      size=10.0),
+            LightSpec("AREA", 420.0, (1.00, 0.78, 0.62), (7.0, -6.0, 3.0),
+                      size=12.0),
+            LightSpec("AREA", 520.0, (0.70, 0.85, 1.00), (0.0, -3.0, -9.0),
+                      size=14.0),
+        ],
+        camera_lens_mm=48.0,
+        camera_dof_fstop=7.1,
+        samples=512,
+        default_colour_by="depth",
+        default_model="ballstick",
+        depth_ramp=IRIDESCENT_RAMP,
+        atom_scale=0.72,
+        bond_scale=0.8,
+        effects=(EffectSpec("glare", {"strength": 0.24,
+                                      "threshold": 0.82}),),
+    ),
+
+    "aurora_net": Style(
+        name="aurora_net",
+        description=(
+            "An aurora read through the lattice: green through teal "
+            "into magenta along the structure's own depth, over a cold "
+            "sky with far stars. Emissive rather than lit, so the net "
+            "glows of itself and the backdrop stays black -- which is "
+            "what makes it read at thumbnail size on a cover."
+        ),
+        background=Background(
+            kind="space", top=(0.004, 0.010, 0.020),
+            bottom=(0.0, 0.002, 0.008), strength=1.0,
+            star_density=0.22,
+        ),
+        hexagon=MaterialSpec(base_color=(0.25, 0.70, 0.55, 1.0),
+                             metallic=0.1, roughness=0.3,
+                             emission_strength=0.55,
+                             rim=2.2, rim_color=(0.45, 1.00, 0.80),
+                             rim_power=2.4),
+        pentagon=_accent((1.00, 0.50, 0.85, 1.0), (1.00, 0.45, 0.80), 2.8),
+        heptagon=_accent((0.40, 1.00, 0.85, 1.0), (0.35, 1.00, 0.80), 2.8),
+        octagon=_accent((0.80, 0.45, 1.00, 1.0), (0.75, 0.40, 1.00), 3.0),
+        bond=MaterialSpec(base_color=(0.22, 0.60, 0.50, 1.0),
+                          metallic=0.1, roughness=0.34,
+                          emission_strength=0.35,
+                          rim=1.4, rim_color=(0.45, 1.00, 0.80)),
+        lights=[
+            LightSpec("AREA", 700.0, (0.70, 1.00, 0.88), (-5.0, 8.0, 5.0),
+                      size=12.0),
+            LightSpec("AREA", 300.0, (0.85, 0.70, 1.00), (7.0, -6.0, 2.0),
+                      size=12.0),
+        ],
+        camera_lens_mm=52.0,
+        camera_dof_fstop=8.0,
+        samples=512,
+        default_colour_by="depth",
+        default_model="ballstick",
+        depth_ramp=AURORA_RAMP,
+        atom_scale=0.68,
+        bond_scale=0.78,
+        effects=(EffectSpec("glare", {"strength": 0.34,
+                                      "threshold": 0.70}),),
+    ),
+
+    "plasma_depth": Style(
+        name="plasma_depth",
+        description=(
+            "The thermal reading: deep violet at the far face through "
+            "red and orange to white at the near one, on a black field. "
+            "The hottest-looking of the three and the one that survives "
+            "a greyscale print, its ramp climbing in brightness the "
+            "whole way -- so it is the one to pick when the figure has "
+            "to work inside the paper as well as on the cover."
+        ),
+        background=Background(
+            kind="gradient", top=(0.020, 0.008, 0.030),
+            bottom=(0.004, 0.001, 0.010), strength=1.0,
+        ),
+        hexagon=MaterialSpec(base_color=(0.60, 0.30, 0.45, 1.0),
+                             metallic=0.3, roughness=0.26, clearcoat=0.4,
+                             emission_strength=0.3,
+                             rim=1.8, rim_color=(1.00, 0.70, 0.45),
+                             rim_power=2.8),
+        pentagon=_accent((1.00, 0.90, 0.60, 1.0), (1.00, 0.85, 0.55), 2.4),
+        heptagon=_accent((0.65, 0.20, 0.80, 1.0), (0.60, 0.15, 0.75), 2.4),
+        octagon=_accent((1.00, 0.45, 0.25, 1.0), (1.00, 0.40, 0.20), 2.6),
+        bond=MaterialSpec(base_color=(0.52, 0.26, 0.40, 1.0),
+                          metallic=0.3, roughness=0.3,
+                          emission_strength=0.2,
+                          rim=1.1, rim_color=(1.00, 0.65, 0.40)),
+        lights=[
+            LightSpec("AREA", 1300.0, (1.00, 0.88, 0.78), (-5.0, 8.0, 6.0),
+                      size=9.0),
+            LightSpec("AREA", 450.0, (0.75, 0.60, 1.00), (7.0, -6.0, 3.0),
+                      size=11.0),
+        ],
+        camera_lens_mm=45.0,
+        camera_dof_fstop=6.3,
+        samples=512,
+        default_colour_by="depth",
+        default_model="ballstick",
+        depth_ramp=PLASMA_RAMP,
+        atom_scale=0.72,
+        bond_scale=0.8,
+        effects=(EffectSpec("glare", {"strength": 0.28,
+                                      "threshold": 0.78}),),
     ),
 
     "membrane": Style(
@@ -2440,6 +2627,9 @@ __all__ = [
     "BOND_COLOURS",
     "DEPTH_BANDS",
     "DEPTH_RAMP",
+    "AURORA_RAMP",
+    "IRIDESCENT_RAMP",
+    "PLASMA_RAMP",
     "DETAIL_LEVELS",
     "MODELS",
     "QUALITY_PRESETS",
