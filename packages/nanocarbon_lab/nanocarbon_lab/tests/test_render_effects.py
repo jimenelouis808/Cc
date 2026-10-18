@@ -1175,3 +1175,33 @@ class TestStylesCarryEffects:
         """A manuscript figure with a laser in it is not a figure."""
         assert styles.get_style("paper_figure").effects == ()
         assert styles.get_style("electron_micrograph").effects == ()
+
+
+class TestSkinRadius:
+    """The surface model's skin is a style property, not a constant.
+
+    At the old hardcoded 1.6 A a skin is wider than a graphene
+    hexagon's circumradius (1.42), so adjacent struts merge and the
+    pores weld shut -- which is right for a solid wide shot and wrong
+    for a style whose subject is the holes.
+    """
+
+    def test_every_style_has_a_skin_radius(self, styles):
+        for name in styles.list_styles():
+            style = styles.get_style(name)
+            assert style.skin_radius > 0.0, name
+
+    def test_default_is_the_old_constant(self, styles):
+        """Existing styles must render exactly as they did."""
+        assert styles.Style.skin_radius == 1.6
+
+    def test_membrane_keeps_its_pores_open(self, styles):
+        """Its description promises holes through it, so measure that.
+
+        A graphene hexagon's circumradius is 1.42 A, and a strut skinned
+        at radius r closes the ring when r approaches that. Half of it
+        leaves a clear pore.
+        """
+        membrane = styles.get_style("membrane")
+        assert membrane.default_model == "surface"
+        assert membrane.skin_radius < 1.42 / 2

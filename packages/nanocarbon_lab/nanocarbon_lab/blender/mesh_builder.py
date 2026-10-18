@@ -208,7 +208,7 @@ def _cylinder(bm, start: Vector, end: Vector, radius: float, segments: int,
 def build_smooth_surface(
     bundle: dict,
     style,
-    skin_radius: float = 1.6,
+    skin_radius: float | None = None,
     subsurf_levels: int = 2,
     finish: str = "style",
 ) -> bpy.types.Object:
@@ -222,6 +222,9 @@ def build_smooth_surface(
     size, so it uses the style's bulk material and says so.
     """
     from render_cnt import material_from_spec
+
+    if skin_radius is None:
+        skin_radius = getattr(style, "skin_radius", 1.6)
 
     mesh = bpy.data.meshes.new("SurfaceMesh")
     mesh.from_pydata(bundle["positions"], bundle["bonds"], [])

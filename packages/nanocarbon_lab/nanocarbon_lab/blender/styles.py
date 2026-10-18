@@ -257,6 +257,12 @@ class Style:
     #: ball-and-stick by definition and a metal product shot is
     #: space-filling; ``--model`` still overrides it.
     default_model: str = "ballstick"
+    #: Skin radius for the ``surface`` model, in Angstrom. The default
+    #: 1.6 is wider than a graphene hexagon's circumradius (1.42), so
+    #: adjacent struts merge and every pore closes over -- right for a
+    #: solid wide shot and wrong for a porous net, whose holes are the
+    #: subject. A style whose point is the holes sets it well under 1.0.
+    skin_radius: float = 1.6
     #: Scene effects the style brings of its own, as
     #: :class:`effects.EffectSpec`. A cover style that is *about* a laser
     #: should arrive with the laser rather than needing it typed in;
@@ -2297,6 +2303,9 @@ STYLES: dict[str, Style] = {
         samples=640,
         default_colour_by="uniform",
         default_model="surface",
+        # The holes ARE the subject here, so the skin has to stay well
+        # inside a hexagon's circumradius or it welds the pores shut.
+        skin_radius=0.55,
         effects=(EffectSpec("glare", {"strength": 0.18,
                                       "threshold": 0.88}),),
     ),
