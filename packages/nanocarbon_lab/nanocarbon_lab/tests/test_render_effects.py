@@ -49,6 +49,12 @@ def styles():
 
 
 @pytest.fixture(scope="module")
+def bundle_mod():
+    """The pure bundle reader: colour keys, depth bands, seam bonds."""
+    return _load("bundle")
+
+
+@pytest.fixture(scope="module")
 def camera():
     return _load("camera")
 
@@ -537,6 +543,81 @@ class TestRepresentation:
         assert styles.model_radius("Uup", "spacefill") > 0
 
 
+class TestPeriodicSeams:
+    """The worst-looking defect the pipeline had on a periodic
+    structure, and it was not a rendering fault: a minimum-image bond
+    list records the pair and throws away which image the far end was
+    in, so a bond across a cell face is drawn as a line as long as the
+    cell."""
+
+    @pytest.fixture
+    def periodic(self, bundle_mod):
+        """A small cubic cell with one bond that leaves it."""
+        positions = [(0.0, 0.0, 0.0), (1.4, 0.0, 0.0), (9.0, 0.0, 0.0)]
+        cell = [[10.0, 0, 0], [0, 10.0, 0], [0, 0, 10.0]]
+        # (0, 2) is 9.0 A apart in raw coordinates and 1.0 A through the
+        # face: the one the old code drew as a 9 A girder.
+        bonds = [(0, 1), (0, 2)]
+        return bundle_mod, positions, bonds, cell
+
+    def test_an_interior_bond_survives(self, periodic):
+        mod, positions, bonds, cell = periodic
+        interior, _ = mod.split_seam_bonds(positions, bonds, cell)
+        assert [0, 1] in interior
+
+    def test_the_crossing_bond_is_taken_out(self, periodic):
+        mod, positions, bonds, cell = periodic
+        interior, stubs = mod.split_seam_bonds(positions, bonds, cell)
+        assert [0, 2] not in interior
+        assert len(stubs) == 2          # one at each end
+
+    def test_the_stub_points_the_way_the_structure_continues(self, periodic):
+        mod, positions, bonds, cell = periodic
+        _, stubs = mod.split_seam_bonds(positions, bonds, cell)
+        lengths = [float(np.linalg.norm(stub[1:])) for stub in stubs]
+        # Half of the TRUE 1.0 A bond, not half of the 9 A raw one.
+        assert all(abs(length - 0.5) < 1e-6 for length in lengths)
+
+    def test_drop_leaves_nothing_behind(self, periodic):
+        mod, positions, bonds, cell = periodic
+        interior, stubs = mod.split_seam_bonds(positions, bonds, cell,
+                                               "drop")
+        assert interior == [[0, 1]] and stubs == []
+
+    def test_keep_reproduces_the_defect(self, periodic):
+        """Kept only so the bug can be reproduced on purpose."""
+        mod, positions, bonds, cell = periodic
+        interior, stubs = mod.split_seam_bonds(positions, bonds, cell,
+                                               "keep")
+        assert len(interior) == 2 and stubs == []
+
+    def test_an_aperiodic_structure_loses_nothing(self, bundle_mod):
+        positions = [(0.0, 0, 0), (1.4, 0, 0), (2.8, 0, 0)]
+        bonds = [(0, 1), (1, 2)]
+        interior, stubs = bundle_mod.split_seam_bonds(positions, bonds, None)
+        assert len(interior) == 2 and stubs == []
+
+    def test_a_cell_with_no_live_axis_is_left_alone(self, bundle_mod):
+        """An all-zero cell is what a finite structure carries."""
+        positions = [(0.0, 0, 0), (1.4, 0, 0)]
+        interior, stubs = bundle_mod.split_seam_bonds(
+            positions, [(0, 1)], [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+        assert len(interior) == 1 and stubs == []
+
+    def test_it_works_on_a_sheared_cell(self, bundle_mod):
+        """Rounding the fractional coordinate is right for an
+        orthogonal cell and can be off by one for a sheared one, which
+        is why the shift is a candidate scan."""
+        cell = [[10.0, 0, 0], [4.0, 9.0, 0], [0, 0, 10.0]]
+        positions = [(0.0, 0.0, 0.0), (3.6, 8.5, 0.0)]
+        interior, stubs = bundle_mod.split_seam_bonds(positions, [(0, 1)],
+                                                      cell)
+        # The short vector goes through the sheared face, so this is a
+        # seam bond and the stub must be short.
+        assert interior == []
+        assert float(np.linalg.norm(stubs[0][1:])) < 1.5
+
+
 class TestMeshDetail:
     """The faceting. An icosphere at subdivision 2 is EIGHTY triangles,
     which is what the pipeline drew for every atom at every size, and it
@@ -584,6 +665,87 @@ class TestMeshDetail:
     def test_an_unknown_level_names_the_real_ones(self, styles):
         with pytest.raises(ValueError, match="ultra"):
             styles.detail_for(100, "insane")
+
+
+class TestDepthColouring:
+    """The one colour mode that says anything on an all-carbon net,
+    where element is a single hue and the rings are nearly all
+    hexagons."""
+
+    def test_it_is_a_real_colour_mode(self, styles):
+        assert "depth" in styles.COLOUR_MODES
+        assert "depth" in styles.SPLIT_BONDS
+        assert styles.COLOUR_HELP["depth"]
+
+    def test_the_ramp_runs_from_one_end_to_the_other(self, styles):
+        low = styles.depth_colour(0.0)
+        high = styles.depth_colour(1.0)
+        assert low != high
+        assert sum(high) > sum(low)       # ends light, as viridis does
+
+    def test_the_ramp_is_monotone_in_brightness(self, styles):
+        """So it survives being printed in black and white, which a
+        rainbow does not: a figure must not lose its ordering."""
+        greys = [sum(styles.depth_colour(i / 20.0)) for i in range(21)]
+        assert greys == sorted(greys)
+
+    def test_it_clamps_rather_than_raising(self, styles):
+        assert styles.depth_colour(-5.0) == styles.depth_colour(0.0)
+        assert styles.depth_colour(5.0) == styles.depth_colour(1.0)
+
+    def test_the_bands_follow_the_structures_own_long_axis(self,
+                                                           bundle_mod):
+        """A sheet lying in xy and a tube standing in z should both get
+        a gradient across the whole thing; picking z for both would
+        give the sheet one colour."""
+        flat = [(x, 0.0, 0.0) for x in np.linspace(0, 20, 40)]
+        bands = bundle_mod.depth_bands(flat)
+        assert min(bands) == 0
+        assert max(bands) > 0
+
+    def test_a_diagonal_structure_is_still_graded(self, bundle_mod):
+        """Measured by principal axis, not by bounding box."""
+        diagonal = [(t, t, t) for t in np.linspace(0, 20, 40)]
+        bands = bundle_mod.depth_bands(diagonal)
+        assert max(bands) - min(bands) > 10
+
+    def test_materials_cover_every_band(self, styles):
+        keys = list(range(styles.DEPTH_BANDS))
+        specs = styles.materials_for(styles.get_style("lattice_dark"),
+                                     "depth", keys)
+        assert len(specs) == styles.DEPTH_BANDS
+        assert specs[0].base_color != specs[-1].base_color
+
+
+class TestSurfaceModel:
+    def test_it_is_one_of_the_models(self, styles):
+        assert "surface" in styles.MODELS
+        assert styles.MODEL_HELP["surface"]
+
+    def test_it_draws_neither_spheres_nor_sticks(self, styles):
+        assert styles.model_radius("C", "surface") == 0.0
+        assert styles.draws_bonds("surface") is False
+
+    def test_the_style_built_on_it_uses_it(self, styles):
+        assert styles.get_style("membrane").default_model == "surface"
+
+
+class TestElaborateStyles:
+    def test_they_use_the_new_machinery_rather_than_restyling(self,
+                                                              styles):
+        assert styles.get_style("porous_depth").default_colour_by == "depth"
+        assert styles.get_style("membrane").default_model == "surface"
+        assert styles.get_style("catalyst_stage").default_model == "auto"
+
+    def test_the_catalyst_stage_is_built_for_a_mixed_phase(self, styles):
+        """auto, so a metal phase comes out solid against the open
+        support -- the picture a catalysis abstract wants."""
+        style = styles.get_style("catalyst_stage")
+        assert style.default_model == "auto"
+        assert style.background.floor_metallic > 0
+
+    def test_the_transmissive_one_pays_for_it_in_samples(self, styles):
+        assert styles.get_style("membrane").samples >= 512
 
 
 class TestSuperstructureStyles:

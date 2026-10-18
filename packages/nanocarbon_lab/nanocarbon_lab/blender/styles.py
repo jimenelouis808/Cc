@@ -311,7 +311,40 @@ class Style:
 #:                  Meaningless for a single structure, and the only
 #:                  useful colouring for a figure of three of them.
 #: ``uniform``   -- one colour throughout, for a silhouette.
-COLOUR_MODES = ("ring", "element", "structure", "uniform")
+#: ``depth``     -- position along the structure's own longest axis,
+#:                  as a gradient. The one mode that says anything on an
+#:                  all-carbon superstructure, where element is a single
+#:                  colour and ring is nearly all hexagons -- and the
+#:                  standard way a journal figure shows the inside of a
+#:                  porous solid.
+COLOUR_MODES = ("ring", "element", "structure", "uniform", "depth")
+
+#: How many bands a depth gradient is quantised into. Material slots are
+#: discrete, so this is a real limit rather than a setting: 24 bands is
+#: past where the eye sees stepping on a smooth ramp.
+DEPTH_BANDS = 24
+
+#: The ramp a depth gradient runs along. Viridis-like: perceptually
+#: even and legible in greyscale, which a rainbow is not -- a figure
+#: printed in black and white must not lose its ordering.
+DEPTH_RAMP: tuple[RGB, ...] = (
+    (0.267, 0.005, 0.329), (0.283, 0.141, 0.458), (0.254, 0.265, 0.530),
+    (0.207, 0.372, 0.553), (0.164, 0.471, 0.558), (0.128, 0.567, 0.551),
+    (0.135, 0.659, 0.518), (0.267, 0.749, 0.441), (0.478, 0.821, 0.318),
+    (0.741, 0.873, 0.150), (0.993, 0.906, 0.144),
+)
+
+
+def depth_colour(fraction: float) -> RGB:
+    """A colour from :data:`DEPTH_RAMP`, interpolated."""
+    fraction = min(1.0, max(0.0, float(fraction)))
+    position = fraction * (len(DEPTH_RAMP) - 1)
+    low = int(position)
+    high = min(low + 1, len(DEPTH_RAMP) - 1)
+    weight = position - low
+    return tuple(DEPTH_RAMP[low][channel] * (1.0 - weight)
+                 + DEPTH_RAMP[high][channel] * weight
+                 for channel in range(3))      # type: ignore[return-value]
 
 #: Element colours, CPK/Jmol-like.
 #:
@@ -491,7 +524,12 @@ def detail_for(n_atoms: int, requested: str | None = None
 #: ``licorice``   -- sticks only, no spheres, for a dense lattice whose
 #:                   atoms would otherwise merge into a wall.
 #: ``wireframe``  -- thin sticks only.
-MODELS = ("ballstick", "spacefill", "auto", "licorice", "wireframe")
+#: ``surface``    -- one continuous skinned surface over the bond graph,
+#:                   no atoms and no sticks. At a thousand atoms a
+#:                   ball-and-stick picture is a thicket and the shape
+#:                   is what is left to say; this says it.
+MODELS = ("ballstick", "spacefill", "auto", "licorice", "wireframe",
+          "surface")
 
 #: Fraction of the van der Waals radius a space-filling sphere is drawn
 #: at. 1.0 is the strict definition; a hair under keeps neighbouring
@@ -519,7 +557,7 @@ def model_radius(symbol: str, model: str, scale: float = 1.0) -> float:
     if model not in MODELS:
         raise ValueError(
             f"unknown model {model!r}; known: {', '.join(MODELS)}")
-    if model in ("licorice", "wireframe"):
+    if model in ("licorice", "wireframe", "surface"):
         return 0.0
     if model == "spacefill" or (model == "auto"
                                 and is_spacefill_element(symbol)):
@@ -529,7 +567,7 @@ def model_radius(symbol: str, model: str, scale: float = 1.0) -> float:
 
 def draws_bonds(model: str) -> bool:
     """Does this representation draw sticks at all?"""
-    return model != "spacefill"
+    return model not in ("spacefill", "surface")
 
 
 def bond_is_drawn(model: str, symbol_a: str, symbol_b: str) -> bool:
@@ -541,7 +579,7 @@ def bond_is_drawn(model: str, symbol_a: str, symbol_b: str) -> bool:
     is what makes a gold cluster on a graphene sheet read correctly --
     solid clusters, open lattice, and nothing joining the two.
     """
-    if model == "spacefill":
+    if model in ("spacefill", "surface"):
         return False
     if model != "auto":
         return True
@@ -559,6 +597,7 @@ def bond_is_drawn(model: str, symbol_a: str, symbol_b: str) -> bool:
 #: split. This is what every molecular viewer does, and it costs one
 #: extra cylinder per bond.
 SPLIT_BONDS = {"ring": False, "element": True, "structure": True,
+               "depth": True,
                "uniform": False}
 
 #: Colours for per-structure colouring, in order of use.
@@ -844,6 +883,9 @@ MODEL_HELP = {
     "licorice": "sticks only -- for a dense net whose atoms would hide "
                 "the topology",
     "wireframe": "thin sticks only",
+    "surface": "one continuous skin over the bond graph -- at a thousand "
+               "atoms the thicket of sticks hides the shape, and the "
+               "shape is what is left to say",
 }
 
 #: One line per colour mode.
@@ -855,6 +897,10 @@ COLOUR_HELP = {
                "encapsulated structure needs; one colour on pure carbon",
     "structure": "which item of a composition an atom came from",
     "uniform": "one colour throughout, for a silhouette",
+    "depth": "position along the structure's longest axis, as a "
+             "gradient: the one mode that says anything on an "
+             "all-carbon net, and how a figure shows inside a porous "
+             "solid",
 }
 
 #: One line per background.
@@ -965,6 +1011,10 @@ def materials_for(style: Style, colour_by: str, keys,
                  for key in keys]
     elif colour_by == "structure":
         specs = [style.hexagon.with_colour(structure_colour(int(key)))
+                 for key in keys]
+    elif colour_by == "depth":
+        specs = [style.hexagon.with_colour(
+                     depth_colour(int(key) / max(1, DEPTH_BANDS - 1)))
                  for key in keys]
     elif colour_by == "uniform":
         specs = [style.hexagon]
@@ -2141,6 +2191,166 @@ STYLES: dict[str, Style] = {
         bond_scale=0.9,
         effects=(),
     ),
+
+    # ------------------------------------------------------------------
+    # The elaborate end: these combine the surface model, depth
+    # colouring and the lighting rigs rather than only restyling a
+    # ball-and-stick picture. Each is built around one idea about what
+    # a large porous structure is FOR.
+    # ------------------------------------------------------------------
+    "porous_depth": Style(
+        name="porous_depth",
+        description=(
+            "A porous solid graded through its own thickness: depth "
+            "colouring on a viridis ramp, back-lit so the far wall glows "
+            "through the near one, and haze to separate the layers. The "
+            "point is that you can see INTO it -- which on an all-carbon "
+            "net is the only thing colour can say, since element gives "
+            "one hue and the rings are nearly all hexagons."
+        ),
+        background=Background(
+            kind="gradient", top=(0.03, 0.04, 0.07),
+            bottom=(0.0, 0.005, 0.015), strength=1.0,
+        ),
+        hexagon=MaterialSpec(base_color=(0.30, 0.50, 0.60, 1.0),
+                             metallic=0.25, roughness=0.34, clearcoat=0.35,
+                             rim=1.5, rim_color=(0.60, 0.95, 1.00),
+                             rim_power=3.0),
+        pentagon=_accent((1.00, 0.55, 0.20, 1.0), (1.00, 0.50, 0.15), 2.0),
+        heptagon=_accent((0.30, 0.90, 1.00, 1.0), (0.25, 0.85, 1.00), 2.0),
+        octagon=_accent((0.95, 0.35, 0.70, 1.0), (0.90, 0.30, 0.65), 2.2),
+        bond=MaterialSpec(base_color=(0.28, 0.46, 0.56, 1.0),
+                          metallic=0.25, roughness=0.36,
+                          rim=1.0, rim_color=(0.55, 0.90, 1.00)),
+        lights=[
+            LightSpec("AREA", 2600.0, (0.85, 0.95, 1.00), (-5.0, 9.0, 6.0),
+                      size=9.0),
+            LightSpec("AREA", 700.0, (1.00, 0.80, 0.60), (7.0, -7.0, 2.0),
+                      size=11.0),
+        ],
+        camera_lens_mm=45.0,
+        camera_dof_fstop=6.3,
+        samples=512,
+        default_colour_by="depth",
+        default_model="ballstick",
+        atom_scale=0.7,
+        bond_scale=0.8,
+        effects=(
+            EffectSpec("fog", {"strength": 0.0035}),
+            EffectSpec("glare", {"strength": 0.3}),
+        ),
+    ),
+
+    "membrane": Style(
+        name="membrane",
+        description=(
+            "The net as one continuous SURFACE rather than as atoms: a "
+            "pale translucent skin over the bond graph, lit from behind, "
+            "so what reads is the shape and the holes through it. For a "
+            "paper about transport, sieving or surface area, where the "
+            "lattice is a container and not a list of atoms."
+        ),
+        # A pale translucent skin needs something dark BEHIND it. On the
+        # light-blue gradient this style first had, the membrane rendered
+        # as a white shape on a white field and its holes disappeared:
+        # back-lighting only reads against a darker backdrop.
+        background=Background(
+            kind="gradient", top=(0.03, 0.06, 0.10),
+            bottom=(0.09, 0.17, 0.23), strength=1.0,
+        ),
+        hexagon=MaterialSpec(base_color=(0.50, 0.80, 0.92, 1.0),
+                             metallic=0.0, roughness=0.10,
+                             transmission=0.72, ior=1.42, clearcoat=0.5,
+                             rim=1.15, rim_color=(0.55, 0.92, 1.00),
+                             rim_power=2.2),
+        pentagon=MaterialSpec(base_color=(0.95, 0.62, 0.42, 1.0),
+                              roughness=0.14, transmission=0.55,
+                              rim=0.8, rim_color=(1.00, 0.72, 0.50)),
+        heptagon=MaterialSpec(base_color=(0.42, 0.72, 0.98, 1.0),
+                              roughness=0.14, transmission=0.55,
+                              rim=0.8, rim_color=(0.55, 0.85, 1.00)),
+        octagon=MaterialSpec(base_color=(0.96, 0.86, 0.48, 1.0),
+                             roughness=0.14, transmission=0.55,
+                             rim=0.8, rim_color=(1.00, 0.92, 0.60)),
+        bond=MaterialSpec(base_color=(0.46, 0.76, 0.90, 1.0),
+                          roughness=0.16, transmission=0.65,
+                          rim=0.6, rim_color=(0.55, 0.92, 1.00)),
+        lights=[
+            LightSpec("AREA", 2200.0, (1.00, 0.99, 0.96), (-4.0, 9.0, 7.0),
+                      size=16.0),
+            LightSpec("AREA", 900.0, (0.92, 0.96, 1.00), (7.0, -7.0, 4.0),
+                      size=16.0),
+            # The back light is the one that matters here: it is what
+            # pushes light THROUGH the skin and makes the holes visible.
+            LightSpec("AREA", 2600.0, (0.80, 0.94, 1.00), (0.0, -2.0, -11.0),
+                      size=18.0),
+        ],
+        camera_lens_mm=50.0,
+        camera_dof_fstop=7.1,
+        # Transmission through a skinned surface is as slow as glass.
+        samples=640,
+        default_colour_by="uniform",
+        default_model="surface",
+        effects=(EffectSpec("glare", {"strength": 0.30,
+                                      "threshold": 0.72}),),
+    ),
+
+    "catalyst_stage": Style(
+        name="catalyst_stage",
+        description=(
+            "A supported catalyst on a lit stage: the net in dark metal, "
+            "a glowing floor grid under it, motes in the air and a cold "
+            "rim. Built for the AUTO model, so a metal phase in the "
+            "structure comes out solid against the open support -- the "
+            "picture a catalysis paper's graphical abstract wants."
+        ),
+        # A near-mirror floor (roughness 0.10, metallic 0.7) reflects the
+        # area lamps as two bright rectangles -- the stage reads as deep
+        # space with two glowing panels in it. Roughened, the floor
+        # returns a soft pool of light instead of the lamps' shape, and
+        # the backdrop is lifted off pure black so there is a stage
+        # behind the subject rather than a void.
+        background=Background(
+            kind="gradient", top=(0.05, 0.07, 0.10),
+            bottom=(0.02, 0.04, 0.06), strength=1.0,
+            floor=True, floor_color=(0.03, 0.05, 0.08),
+            floor_roughness=0.38, floor_metallic=0.35,
+        ),
+        hexagon=MaterialSpec(base_color=(0.12, 0.14, 0.17, 1.0),
+                             metallic=0.8, roughness=0.26, clearcoat=0.3,
+                             rim=2.0, rim_color=(0.35, 0.80, 1.00),
+                             rim_power=3.2),
+        pentagon=_accent((1.00, 0.60, 0.20, 1.0), (1.00, 0.55, 0.15), 2.6),
+        heptagon=_accent((0.25, 0.85, 1.00, 1.0), (0.20, 0.80, 1.00), 2.6),
+        octagon=_accent((1.00, 0.30, 0.60, 1.0), (1.00, 0.25, 0.55), 3.0),
+        bond=MaterialSpec(base_color=(0.14, 0.16, 0.20, 1.0),
+                          metallic=0.8, roughness=0.3,
+                          rim=1.3, rim_color=(0.30, 0.70, 1.00)),
+        lights=[
+            LightSpec("AREA", 2200.0, (0.75, 0.88, 1.00), (-6.0, 8.0, 7.0),
+                      size=7.0),
+            LightSpec("AREA", 600.0, (1.00, 0.72, 0.45), (8.0, -5.0, 1.0),
+                      size=9.0),
+        ],
+        camera_lens_mm=48.0,
+        camera_dof_fstop=5.6,
+        samples=512,
+        default_colour_by="ring",
+        default_model="auto",
+        atom_scale=0.8,
+        bond_scale=0.85,
+        effects=(
+            EffectSpec("grid", {"color": "cyan", "strength": 0.7,
+                                "lines": 22}),
+            # Motes, not stars: at count 180 / strength 2.2 / the default
+            # 0.010 size they scattered across the backdrop as a
+            # starfield and the stage became outer space.
+            EffectSpec("dust", {"count": 70, "strength": 0.8,
+                                "size": 0.006, "reach": 1.5,
+                                "color": "#ffe8c8"}),
+            EffectSpec("glare", {"strength": 0.4}),
+        ),
+    ),
 }
 
 
@@ -2213,6 +2423,8 @@ __all__ = [
     "ELEMENT_COLOURS",
     "ELEMENT_RADII",
     "BOND_COLOURS",
+    "DEPTH_BANDS",
+    "DEPTH_RAMP",
     "DETAIL_LEVELS",
     "MODELS",
     "QUALITY_PRESETS",
@@ -2234,6 +2446,7 @@ __all__ = [
     "describe_finishes",
     "element_colour",
     "bond_is_drawn",
+    "depth_colour",
     "detail_for",
     "draws_bonds",
     "element_radius",

@@ -1813,6 +1813,7 @@ def _cmd_render(args):
             xyz, out, json_path=sidecar, style=args.style, mode=args.mode,
             colour_by=args.colour_by, background=args.background,
             finish=args.finish, model=args.model, detail=args.detail,
+            seams=args.seams,
             engine=args.engine,
             floor=args.floor,
             resolution=tuple(args.resolution), quality=args.quality,
@@ -3085,6 +3086,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "one picture -- metals solid, everything else "
                          "open, which is what a carbon-coated metal "
                          "particle actually is.")
+    rn.add_argument("--seams", default=None,
+                    choices=["stub", "drop", "keep"],
+                    help="A periodic structure's bond list records the "
+                         "pair and not the image, so a bond across a "
+                         "cell face is drawn as a line as long as the "
+                         "cell. stub draws a half-bond pointing the way "
+                         "the structure continues (the default), drop "
+                         "leaves them out, keep reproduces the defect.")
     rn.add_argument("--detail", default=None,
                     choices=["low", "normal", "high", "ultra"],
                     help="Mesh resolution per atom. Chosen from the atom "

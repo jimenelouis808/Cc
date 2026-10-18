@@ -1242,6 +1242,39 @@ dependency, so they are editable and testable outside Blender -- as is
   catcher). Drop `--samples` to use the style's own default.
 * `--atom-scale` and `--bond-scale` multiply the radii.
 
+### Periodic structures: the bonds that cross the cell
+
+A bond list records the pair `(i, j)` and not which *image* `j` was in,
+so drawn from the raw coordinates a bond across a cell face is a line as
+long as the cell. On a 920-atom super-graphene cell that was **70 of its
+1380 bonds, up to 41.1 Å** against a real bond of 1.41 — five per cent
+of the bonds drawn as girders across the picture.
+
+```bash
+nanocarbon render net.xyz                 # --seams stub, the default
+nanocarbon render net.xyz --seams drop    # leave them out entirely
+```
+
+`stub` draws a half-bond pointing the way the structure continues, which
+is what a crystallographic viewer draws at a cell face. The sidecar
+carries the cell, so the image is recovered rather than guessed.
+
+### Colour by depth, and the surface model
+
+```bash
+nanocarbon render net.xyz --colour-by depth
+nanocarbon render net.xyz --model surface
+```
+
+On an all-carbon net `element` is one hue and `ring` is nearly all
+hexagons. `depth` grades each atom along the structure's **own** longest
+axis (by principal component, so a diagonal structure is still graded
+along its length), on a viridis ramp that is monotone in brightness —
+so the figure keeps its ordering when it is printed in black and white.
+
+`surface` is now one of the models rather than a separate flag: at a
+thousand atoms the thicket of sticks hides the shape.
+
 ### Mesh detail, and why the spheres were faceted
 
 `sphere_subdiv` was fixed at 2 — **80 triangles per atom**, visibly
@@ -1279,6 +1312,9 @@ element (an all-carbon net by element is one grey mass).
 | `lattice_depth` | haze in the air, so the far side fades — atmospheric perspective is the only depth cue that survives repetition |
 | `lattice_blueprint` | **no spheres at all** (licorice) on a glowing grid: for a figure about connectivity |
 | `lattice_studio` | flat even light on white, no accent, no bloom |
+| `porous_depth` | graded through its own thickness, back-lit with haze — you can see *into* it |
+| `membrane` | the net as one translucent **surface**, lit from behind: for transport, sieving, surface area |
+| `catalyst_stage` | dark metal on a lit stage with a floor grid and motes; built for `--model auto`, so a metal phase is solid against the open support |
 
 ### Ball-and-stick, space-filling — or both at once
 

@@ -6,6 +6,86 @@ está la trampa.
 
 ---
 
+## nanocarbon_lab · los enlaces de la periodicidad, color por profundidad, y la red como superficie
+
+### El bug: una celda periódica dibuja sus propios enlaces de borde a borde
+
+En las superestructuras se veían enlaces larguísimos cruzando la imagen de un
+lado al otro. No era un fallo del render: **la lista de enlaces guarda el par
+de átomos, no la celda**. Dos átomos vecinos a través del borde periódico son
+vecinos de verdad — pero sus coordenadas están en extremos opuestos de la
+celda, así que la barra que los une atraviesa toda la estructura.
+
+Medido en la celda de super-grafeno de 920 átomos que uso de prueba:
+
+```
+bonds: 1380, length 1.41-41.09 A; longer than 1.8 A: 70 (5.1%)
+```
+
+**70 enlaces de hasta 41 Å**, contra una longitud real de 1.41. Ese 5% era todo
+el enrejado que saturaba la imagen.
+
+Ahora hay `--seams`, con tres modos:
+
+| modo | qué hace | cuándo |
+|---|---|---|
+| `stub` (por defecto) | corta el enlace en dos muñones que apuntan hacia fuera | lo normal: se ve que la red continúa, sin la barra |
+| `drop` | lo quita entero | cuando quieres un trozo limpio y aislado |
+| `keep` | lo deja | para diagnosticar, o si tu celda no es periódica y quieres verlo todo |
+
+El muñón es la opción por defecto a propósito: `drop` deja los átomos del borde
+con menos enlaces de los que tienen, y eso también miente, solo que de forma
+más discreta.
+
+Esta misma confusión (el par no es la celda) ya había mordido en el censo, en
+la repetición de celda y en las composiciones. Es la cuarta vez; ahora está
+arreglada también en el render.
+
+### Color por profundidad, y la red como superficie
+
+Dos peticiones, las dos sobre lo mismo: por anillos no es la única forma de
+leer una superestructura.
+
+- **`--colour-by depth`.** Colorea por la posición a lo largo del eje más largo
+  de la estructura, con una rampa tipo viridis de 24 bandas. La rampa es
+  **monótona en brillo**: si la revista imprime en blanco y negro, el orden se
+  conserva y la imagen sigue diciendo lo mismo.
+- **`--model surface`.** La red deja de ser átomos y enlaces y pasa a ser una
+  piel continua. Para un artículo sobre transporte, tamizado o área superficial,
+  donde el sujeto es el hueco y no el átomo.
+
+`--colour-by element` y `--colour-by structure` ya estaban; ahora los cinco
+modos (`ring`, `element`, `structure`, `uniform`, `depth`) funcionan con los
+seis modelos.
+
+### Tres presets más, construidos sobre la iluminación que ya funcionaba
+
+No son re-pintados: cada uno combina modelo, color y luz alrededor de una idea
+de para qué es la figura.
+
+- **`porous_depth`** — contraluz, niebla y color por profundidad, con los
+  átomos encogidos a 0.7. Para que se lea el grosor de una red porosa.
+- **`membrane`** — la piel continua, traslúcida, iluminada **desde detrás**
+  sobre un fondo de tinta. Lo que se ve son los agujeros.
+- **`catalyst_stage`** — el catalizador soportado sobre un plató: suelo
+  metálico, rejilla, polvo en el aire y destello. Modelo `auto`, así que el
+  carbono sale en bolas y varillas y el metal en esferas de van der Waals.
+
+**Dos trampas, las dos encontradas mirando el render y no leyendo el código:**
+
+- **`membrane`:** la primera versión tenía fondo azul claro y la piel salió
+  blanca sobre blanco — los agujeros desaparecieron. Un material traslúcido
+  iluminado por detrás **necesita algo oscuro detrás**. El fondo es tinta por
+  eso, no por gusto.
+- **`catalyst_stage`:** el suelo era casi un espejo (rugosidad 0.10,
+  metálico 0.7) y reflejaba las dos lámparas de área como dos rectángulos
+  brillantes; el polvo, a 180 motas, se leía como un campo de estrellas. Entre
+  las dos cosas el "plató" parecía espacio exterior. Suelo más rugoso (0.38 /
+  0.35) para que devuelva un charco de luz y no la forma de la lámpara, menos
+  polvo y más pequeño, y el fondo levantado del negro puro.
+
+---
+
 ## nanocarbon_lab · esferas sin facetas, presets de superestructura, y la ventana que se explica
 
 ### Las bolas facetadas: era 80 triángulos, no un ajuste de gusto

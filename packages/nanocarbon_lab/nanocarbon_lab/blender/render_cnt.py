@@ -75,6 +75,13 @@ def _parse_args() -> argparse.Namespace:
         help="What an atom's colour means. Default: the style's own.",
     )
     p.add_argument(
+        "--seams", default="stub", choices=["stub", "drop", "keep"],
+        help="What to do with a bond that leaves a periodic cell. stub "
+             "draws a half-bond pointing the way the structure "
+             "continues; drop leaves it out; keep draws it as recorded, "
+             "which on a periodic cell is a line as long as the cell.",
+    )
+    p.add_argument(
         "--detail", default=None, choices=list(style_defs.DETAIL_LEVELS),
         help="Mesh resolution per atom. Chosen from the atom count when "
              "left out: a 60-atom cage gets every triangle, a "
@@ -777,10 +784,14 @@ def main() -> int:
     model = (args.model if args.model != "ballstick"
              else style.default_model)
 
-    bundle = mesh_builder.load_bundle(args.xyz, args.json)
+    bundle = mesh_builder.load_bundle(args.xyz, args.json, args.seams)
 
     objects: list[bpy.types.Object] = []
-    if args.mode in ("ballstick", "both"):
+    # `--model surface` and the older `--mode surface` are the same
+    # request; the model is the control that holds every other
+    # representation, so it wins and the mode follows it.
+    mode = "surface" if model == "surface" else args.mode
+    if mode in ("ballstick", "both"):
         objects += mesh_builder.build_ball_and_stick(
             bundle, style, colour_by=colour_by,
             # The style's own scales multiply the command line's, so a
@@ -792,7 +803,7 @@ def main() -> int:
             bond_colour=args.bond_colour, model=model,
             detail=args.detail,
         )
-    if args.mode in ("surface", "both"):
+    if mode in ("surface", "both"):
         objects.append(mesh_builder.build_smooth_surface(
             bundle, style, finish=args.finish))
 

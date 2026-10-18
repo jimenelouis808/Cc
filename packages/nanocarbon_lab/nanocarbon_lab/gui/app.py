@@ -278,6 +278,10 @@ RENDER_MODELS = ["style", *_STYLE_DEFS.MODELS]
 #: Mesh resolution. "auto" follows the atom count, which is the right
 #: answer far more often than any fixed level.
 RENDER_DETAILS = ["auto", *_STYLE_DEFS.DETAIL_LEVELS]
+#: What to do with a bond that leaves a periodic cell. Drawn as
+#: recorded it is a line as long as the cell, which on a superstructure
+#: is most of what ends up on screen.
+RENDER_SEAMS = ["stub", "drop", "keep"]
 #: One line of help per choice, so the window can say what a control
 #: does instead of making the user guess from its name.
 HELP_LINES = {
@@ -5270,6 +5274,11 @@ class NanocarbonGUI:
                                  width=10)
         cmb_model.pack(side="left", padx=(4, 0))
         cmb_model.bind("<<ComboboxSelected>>", self._on_style_change)
+        ttk.Label(row_model, text="Seams").pack(side="left", padx=(8, 0))
+        self.var_seams = tk.StringVar(value="stub")
+        ttk.Combobox(row_model, textvariable=self.var_seams,
+                     values=RENDER_SEAMS, state="readonly",
+                     width=6).pack(side="left", padx=(4, 0))
         ttk.Label(row_model, text="Detail").pack(side="left", padx=(8, 0))
         self.var_detail = tk.StringVar(value="auto")
         ttk.Combobox(row_model, textvariable=self.var_detail,
@@ -6454,6 +6463,7 @@ class NanocarbonGUI:
                 model=self.var_model.get(),
                 detail=(None if self.var_detail.get() == "auto"
                         else self.var_detail.get()),
+                seams=self.var_seams.get(),
                 bond_finish=self.var_bond_finish.get(),
                 bond_colour=self.var_bond_colour.get(),
                 engine=self.var_engine.get(),

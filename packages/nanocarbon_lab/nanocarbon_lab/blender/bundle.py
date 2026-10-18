@@ -19,14 +19,100 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
+
 # Loaded by path rather than imported as a package, so the sibling
 # import has to be made to work rather than assumed.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import styles as style_defs
 
+#: How long a bond may be, in Angstrom, before it is treated as one
+#: that left the cell. Above any real chemical bond and far below a
+#: cell edge, so the test never has to be close.
+MAX_REAL_BOND = 3.4
 
-def load_bundle(xyz_path: str, json_path: str | None = None):
+#: Fraction of a seam bond's true length the stub is drawn at. Half
+#: puts the cut where the cell face is, which is where the structure
+#: really does stop.
+SEAM_STUB_FRACTION = 0.5
+
+
+def split_seam_bonds(positions, bonds, cell, mode: str = "stub"):
+    """Separate the bonds that leave the cell from the ones that do not.
+
+    **This is the single worst-looking defect the pipeline had on a
+    periodic structure, and it is not a rendering fault.** A bond list
+    built under the minimum-image convention records the pair ``(i, j)``
+    and throws away *which image* j was in, so drawn from the raw
+    coordinates a bond across a cell face is a straight line as long as
+    the cell. Measured on a 920-atom super-graphene cell: **70 of its
+    1380 bonds, up to 41.1 A**, against a real bond length of 1.41 --
+    five per cent of the bonds, drawn as girders across the whole
+    picture. That is what "saturated with bonds" looks like.
+
+    The cell is in the sidecar, so the image each bond reaches into can
+    be recovered here: for each one, find the integer combination of
+    lattice vectors that makes it shortest. Zero means an ordinary
+    interior bond and anything else means it crossed a face.
+
+    ``mode`` is ``"stub"`` (draw a half-bond pointing the way the
+    structure continues, which is what a crystallographic viewer does at
+    a cell face), ``"drop"`` (leave them out) or ``"keep"`` (draw them
+    as they are -- the old behaviour, kept only so the defect can be
+    reproduced).
+
+    Returns ``(interior, stubs)``, the stubs as ``[atom, dx, dy, dz]``
+    with a single index and an offset.
+    """
+    if cell is None or len(bonds) == 0:
+        return list(bonds), []
+    lattice = np.asarray(cell, dtype=float)
+    if lattice.shape != (3, 3):                 # pragma: no cover - guard
+        return list(bonds), []
+    live = [axis for axis in range(3)
+            if float(np.linalg.norm(lattice[axis])) > 1e-6]
+    if not live:
+        return list(bonds), []
+
+    points = np.asarray(positions, dtype=float)
+    pairs = np.asarray(bonds, dtype=int)
+    raw = points[pairs[:, 1]] - points[pairs[:, 0]]
+
+    # Every shift of -1, 0 or +1 along each live axis. One cell is
+    # always enough: a bond longer than that is not a bond.
+    offsets = [np.zeros(3)]
+    for axis in live:
+        offsets = [existing + sign * lattice[axis]
+                   for existing in offsets for sign in (-1, 0, 1)]
+    candidates = np.stack(offsets)                     # (k, 3)
+    deltas = raw[:, None, :] - candidates[None, :, :]  # (n, k, 3)
+    best = np.argmin(np.linalg.norm(deltas, axis=2), axis=1)
+    short = deltas[np.arange(len(pairs)), best]
+    crossed = np.linalg.norm(candidates[best], axis=1) > 1e-6
+
+    if mode == "keep":
+        return [list(map(int, pair)) for pair in pairs], []
+    interior = [list(map(int, pair))
+                for pair, is_seam in zip(pairs, crossed, strict=True)
+                if not is_seam]
+    if mode == "drop":
+        return interior, []
+
+    stubs: list[list[float]] = []
+    for pair, is_seam, vector in zip(pairs, crossed, short, strict=True):
+        if not is_seam:
+            continue
+        reach = vector * SEAM_STUB_FRACTION
+        # Both ends are in the picture and both have a neighbour that is
+        # not, so both get a stub.
+        stubs.append([float(pair[0]), *(+reach)])
+        stubs.append([float(pair[1]), *(-reach)])
+    return interior, stubs
+
+
+def load_bundle(xyz_path: str, json_path: str | None = None,
+                seams: str = "stub"):
     """Read the structure and whatever metadata came with it.
 
     Parameters
@@ -64,6 +150,7 @@ def load_bundle(xyz_path: str, json_path: str | None = None):
     item_per_atom = [0] * n
     labels: list[str] = []
     seam_stubs: list[list[float]] = []
+    cell = None
     if json_path and Path(json_path).exists():
         bundle = json.loads(Path(json_path).read_text())
         bonds = [tuple(bond) for bond in bundle.get("bonds", [])]
@@ -75,8 +162,14 @@ def load_bundle(xyz_path: str, json_path: str | None = None):
             item_per_atom = [int(value) for value in items]
         labels = list(bundle.get("scene", {}).get("labels", []))
         seam_stubs = [list(stub) for stub in bundle.get("seam_stubs", [])]
+        cell = bundle.get("cell")
     if not bonds:
         bonds = _bonds_from_distance(positions)
+    elif not seam_stubs:
+        # A periodic structure's own bonds cross its cell faces, and the
+        # sidecar carries the cell, so they can be found and dealt with
+        # here rather than drawn as girders across the picture.
+        bonds, seam_stubs = split_seam_bonds(positions, bonds, cell, seams)
     return {
         "positions": positions,
         "symbols": symbols,
@@ -120,6 +213,31 @@ def _dominant_ring(ring_sizes) -> int:
     return 6
 
 
+def depth_bands(positions) -> list[int]:
+    """Which depth band each atom falls in, along the longest axis.
+
+    The structure's **own** longest axis rather than a fixed one: a
+    sheet lying in xy and a tube standing in z should both get a
+    gradient that runs across the whole thing, and picking z for both
+    would give the sheet a single colour.
+
+    Measured by principal axis rather than by bounding box, so a
+    structure lying on a diagonal is still graded along its length.
+    """
+    points = np.asarray(positions, dtype=float)
+    if len(points) < 2:                         # pragma: no cover - tiny
+        return [0] * len(points)
+    centred = points - points.mean(axis=0)
+    # The first principal component is the direction of most extent.
+    _, _, axes = np.linalg.svd(centred, full_matrices=False)
+    along = centred @ axes[0]
+    low, high = float(along.min()), float(along.max())
+    span = max(high - low, 1e-9)
+    bands = style_defs.DEPTH_BANDS
+    scaled = (along - low) / span * (bands - 1)
+    return [int(round(value)) for value in scaled]
+
+
 def colour_keys(bundle: dict, colour_by: str) -> tuple[list, list[int]]:
     """The material keys for a colour mode, and one index per atom.
 
@@ -147,6 +265,11 @@ def colour_keys(bundle: dict, colour_by: str) -> tuple[list, list[int]]:
     elif colour_by == "structure":
         per_atom = list(bundle["item_per_atom"])
         keys = sorted(set(per_atom))
+    elif colour_by == "depth":
+        per_atom = depth_bands(bundle["positions"])
+        # Every band, not only the occupied ones, so the ramp means the
+        # same thing on a structure with a gap in it as on one without.
+        keys = list(range(style_defs.DEPTH_BANDS))
     elif colour_by == "uniform":
         return [0], [0] * n
     else:

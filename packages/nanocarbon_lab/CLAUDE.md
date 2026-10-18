@@ -3015,6 +3015,57 @@ the showcase is a cage at 8 % N, 8 % B with hydroxyls, which is five
 elements and reads instantly. Neither mode is the right default for
 everything, which is why `default_colour_by` is per style.
 
+### A periodic structure's own bonds cross its cell, and the renderer drew them
+
+The same trap as "a minimum-image bond list names the pair, not the
+cell", met a third time -- and this time in the **renderer**, on a
+single structure, with nothing to do with compositions. A bond list
+records `(i, j)` and throws away which image `j` was in, so drawn from
+the raw coordinates a bond across a cell face is a straight line as long
+as the cell. Measured on a 920-atom super-graphene cell: **70 of its
+1380 bonds, up to 41.1 Å** against a real bond of 1.41 -- five per cent
+of the bonds drawn as girders across the whole picture. That is what
+"saturated with bonds" looks like, and it was the worst-looking defect
+the pipeline had.
+
+The sidecar carries the **cell**, so `bundle.split_seam_bonds` can
+recover the image: for each bond, the integer combination of lattice
+vectors that makes it shortest. Zero is an interior bond; anything else
+crossed a face. `--seams` then chooses `stub` (a half-bond pointing the
+way the structure continues, which is what a crystallographic viewer
+draws at a cell face -- the default), `drop`, or `keep`, which
+reproduces the defect on purpose.
+
+The shift is a **candidate scan** over {-1, 0, +1} per live axis, not a
+rounding of the fractional coordinate: rounding is right for an
+orthogonal cell and off by one for a sheared one. One cell is always
+enough -- a bond longer than that is not a bond.
+
+This is the third place the same fact has bitten: `analyse` for the
+census, `cell.supercell` for repetition, `scene` for compositions, and
+now the renderer. Anything that uses a recorded bond pair **as a pair of
+positions** needs the shift.
+
+### Depth is the colour mode a superstructure has
+
+On an all-carbon net, `element` is one hue and `ring` is nearly all
+hexagons -- neither says anything. `depth` grades each atom by its
+position along the structure's **own longest axis**, found by principal
+component rather than by bounding box, so a sheet lying in xy and a tube
+standing in z both get a gradient across their length and a diagonal
+structure is still graded along it.
+
+The ramp is viridis-like and **monotone in brightness**, which a rainbow
+is not: a figure printed in black and white must not lose its ordering,
+and a test pins that the greys are sorted. It is quantised into
+`DEPTH_BANDS` = 24, which is a real limit rather than a setting --
+material slots are discrete -- and 24 is past where the eye sees
+stepping.
+
+`surface` also became a **model** rather than a separate `--mode`, so
+every representation is one control: at a thousand atoms the thicket of
+sticks hides the shape, and the shape is what is left to say.
+
 ### The spheres were eighty triangles, at every size
 
 `sphere_subdiv` was fixed at 2. An icosphere at subdivision 2 is
