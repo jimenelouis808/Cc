@@ -3046,6 +3046,42 @@ census, `cell.supercell` for repetition, `scene` for compositions, and
 now the renderer. Anything that uses a recorded bond pair **as a pair of
 positions** needs the shift.
 
+### Haze does not sit behind a gradient, it replaces it
+
+`porous_depth` read as a grey wash rather than as depth colouring, and
+the lights were not the cause. A fog volume **scatters the key light
+across the whole frame**, so at `fog` 0.0035 under a 2600 W key the
+backdrop lifts and the gradient loses the contrast it is made of. Every
+colour was still present and none of them could be read.
+
+A trace (0.0008) separates layers, which is what the style is for. Past
+that, haze is not a depth cue behind the subject -- it is a veil in
+front of it. Judge a fog strength against the backdrop's brightness in
+the finished frame, not against how misty the scene looks in isolation.
+
+### A depth ramp that cycles in hue is a cover, not a measurement
+
+`DEPTH_RAMP` is viridis-like and **monotone in brightness**, so a figure
+printed in greyscale keeps its ordering. `Style.depth_ramp` overrides it
+per style and defaults to empty.
+
+The three cover ramps are not interchangeable with it and the tests say
+so in Rec. 709 luma rather than in prose: `PLASMA_RAMP` climbs the whole
+way and is asserted **sorted**; `IRIDESCENT_RAMP` and `AURORA_RAMP`
+cycle and are asserted **not** sorted. Keep that second half -- it is
+what stops a cover ramp being quietly recommended for a figure that has
+to survive a black-and-white print.
+
+### `star_density` is a Voronoi scale, not a fraction
+
+Written as 0.22, read as "22 per cent", one Voronoi cell covers the
+whole sky and a `space` background renders **starless** while its style
+promises far stars. The shipped values are 220-300. Nothing raises, the
+frame simply looks like a plain black backdrop, and the only way to
+catch it is to read the style's own description against its render --
+so a test now walks every `space` and `nebula` background and refuses a
+`star_density` under 10.
+
 ### The surface model could not make a hole, by construction
 
 `build_smooth_surface` hardcoded `skin_radius` at **1.6 A** and no style

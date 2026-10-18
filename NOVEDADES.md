@@ -6,6 +6,56 @@ está la trampa.
 
 ---
 
+## nanocarbon_lab · la familia iridiscente, y la niebla que ahogaba el degradado
+
+### `porous_depth` estaba saturado de luz, y la culpa era la niebla
+
+No eran las lámparas. Un volumen de niebla **dispersa la luz principal por
+todo el cuadro**, así que con `fog` a 0.0035 bajo una luz de 2600 W el fondo
+sube a gris y el degradado pierde el contraste del que está hecho. Los
+colores seguían todos ahí y no se podía leer nada en ellos.
+
+Niebla **0.0008**, luz principal 1250, relleno 380, glare 0.22. Queda un
+rastro de niebla para separar capas — que es lo que la descripción promete —
+porque una cantidad visible no las separa, las sustituye.
+
+### La rampa de profundidad es ahora del preset
+
+`Style.depth_ramp`, vacía por defecto, así que **ningún preset anterior
+cambia**. Sin esto los tres presets nuevos habrían sido el mismo degradado
+bajo tres iluminaciones distintas.
+
+| preset | rampa | para qué |
+|---|---|---|
+| `oil_film` | violeta→cian→verde→ámbar→rosa, **cíclica** | aceite sobre agua, sobre interferencia de película fina: el tono también cambia con el ángulo |
+| `aurora_net` | verde→turquesa→lila | aurora leída a través de la red, emisiva sobre cielo con estrellas |
+| `plasma_depth` | violeta→rojo→naranja→blanco | lectura térmica |
+
+Los tres sobre fondo oscuro y **sin niebla**: el degradado es la imagen.
+
+**El compromiso está medido, no afirmado.** La rampa viridis por defecto es
+monótona en brillo, así que sobrevive una impresión en blanco y negro. Una
+rampa que **cicla en tono no**, y ése es el precio del efecto. `plasma_depth`
+sube en brillo de principio a fin, así que es el único de los tres que sirve
+dentro del artículo además de en la portada. Los tests lo comprueban con luma
+Rec. 709: plasma ordenado, y las dos cíclicas afirmadas explícitamente como
+**no** ordenadas — el lado honesto de la misma medida.
+
+### `star_density` es una escala, no una fracción
+
+`aurora_net` salió con el fondo negro liso mientras su descripción prometía
+estrellas lejanas. Escribí `star_density=0.22` leyendo el nombre como «22 por
+ciento»; es la **escala del Voronoi**, y los otros presets espaciales usan
+220 y 260. A 0.22 una sola celda cubre todo el cielo y no hay ni una estrella.
+
+Es el tipo de fallo que no avisa: no rompe nada, no da error, y un fondo
+negro parece una decisión de diseño. Solo se ve comparando el render con lo
+que el preset dice de sí mismo. Ahora hay un test que recorre todos los
+fondos `space` y `nebula` y falla si alguno lleva una fracción donde va una
+escala.
+
+---
+
 ## nanocarbon_lab · los enlaces de la periodicidad, color por profundidad, y la red como superficie
 
 ### El bug: una celda periódica dibuja sus propios enlaces de borde a borde
