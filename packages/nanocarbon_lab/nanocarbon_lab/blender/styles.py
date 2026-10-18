@@ -2254,13 +2254,19 @@ STYLES: dict[str, Style] = {
         # light-blue gradient this style first had, the membrane rendered
         # as a white shape on a white field and its holes disappeared:
         # back-lighting only reads against a darker backdrop.
+        # These are LINEAR values and the frame is written as sRGB, so
+        # a linear 0.09 displays near 0.33: the first dark backdrop here
+        # came out mid blue-grey on screen. Set for the sRGB result.
         background=Background(
-            kind="gradient", top=(0.03, 0.06, 0.10),
-            bottom=(0.09, 0.17, 0.23), strength=1.0,
+            kind="gradient", top=(0.006, 0.012, 0.020),
+            bottom=(0.020, 0.045, 0.065), strength=1.0,
         ),
-        hexagon=MaterialSpec(base_color=(0.50, 0.80, 0.92, 1.0),
+        # A pale base plus 0.72 transmission plus a hot key blew the skin
+        # out to white and the holes with it. The tint is deeper so the
+        # transmitted light carries colour instead of saturating.
+        hexagon=MaterialSpec(base_color=(0.20, 0.55, 0.72, 1.0),
                              metallic=0.0, roughness=0.10,
-                             transmission=0.72, ior=1.42, clearcoat=0.5,
+                             transmission=0.76, ior=1.42, clearcoat=0.5,
                              rim=1.15, rim_color=(0.55, 0.92, 1.00),
                              rim_power=2.2),
         pentagon=MaterialSpec(base_color=(0.95, 0.62, 0.42, 1.0),
@@ -2276,13 +2282,13 @@ STYLES: dict[str, Style] = {
                           roughness=0.16, transmission=0.65,
                           rim=0.6, rim_color=(0.55, 0.92, 1.00)),
         lights=[
-            LightSpec("AREA", 2200.0, (1.00, 0.99, 0.96), (-4.0, 9.0, 7.0),
+            LightSpec("AREA", 1400.0, (1.00, 0.99, 0.96), (-4.0, 9.0, 7.0),
                       size=16.0),
-            LightSpec("AREA", 900.0, (0.92, 0.96, 1.00), (7.0, -7.0, 4.0),
+            LightSpec("AREA", 600.0, (0.92, 0.96, 1.00), (7.0, -7.0, 4.0),
                       size=16.0),
             # The back light is the one that matters here: it is what
             # pushes light THROUGH the skin and makes the holes visible.
-            LightSpec("AREA", 2600.0, (0.80, 0.94, 1.00), (0.0, -2.0, -11.0),
+            LightSpec("AREA", 2000.0, (0.80, 0.94, 1.00), (0.0, -2.0, -11.0),
                       size=18.0),
         ],
         camera_lens_mm=50.0,
@@ -2291,8 +2297,8 @@ STYLES: dict[str, Style] = {
         samples=640,
         default_colour_by="uniform",
         default_model="surface",
-        effects=(EffectSpec("glare", {"strength": 0.30,
-                                      "threshold": 0.72}),),
+        effects=(EffectSpec("glare", {"strength": 0.18,
+                                      "threshold": 0.88}),),
     ),
 
     "catalyst_stage": Style(
