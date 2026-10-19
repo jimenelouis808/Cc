@@ -12,6 +12,7 @@ import pytest
 from nanocarbon_lab.builders import implicit as im
 from nanocarbon_lab.builders.beads import (
     BEAD_LAYOUTS,
+    MAX_ZIGZAG_ANGLE,
     MIN_SPACING_FRACTION,
     bead_graph,
     build_bead_chain,
@@ -141,3 +142,95 @@ class TestBuiltStructures:
         measured = sum((6 - size) * n for size, n in census.items())
         assert measured == atoms.info["ring_budget"] == 0
         assert atoms.info["euler"] == 0
+
+
+class TestTheZigzagLayout:
+    """A bead chain may corner where a swept tube may not, and the
+    reason is the representation rather than a looser limit: this is an
+    implicit field, so a corner is a smooth union of two necks instead
+    of a bent lattice with strain to pay. What limits it is instead the
+    beads either side of a corner meeting -- the same intersection the
+    straight chain's spacing floor is about, reached without the spacing
+    having changed at all."""
+
+    def test_it_is_a_layout(self):
+        assert "zigzag" in BEAD_LAYOUTS
+
+    def test_every_edge_keeps_the_full_spacing(self):
+        """The step keeps its length through the turn, so the neck
+        geometry is the same on every edge as in a straight chain. If a
+        corner shortened an edge, the neck there would be a dimple and
+        the spacing guard would be checking the wrong number."""
+        vertices, edges = bead_graph("zigzag", 10, 16.8,
+                                     zigzag_angle=45.0, zigzag_leg=3)
+        lengths = np.linalg.norm(
+            vertices[[a for a, _ in edges]] - vertices[[b for _, b in edges]],
+            axis=1)
+        assert np.allclose(lengths, 16.8)
+
+    def test_it_is_a_tree_so_the_budget_is_still_twelve(self):
+        vertices, edges = bead_graph("zigzag", 7, 16.8)
+        assert 12 * (len(vertices) - len(edges)) == 12
+
+    def test_the_legs_turn_where_asked(self):
+        vertices, _ = bead_graph("zigzag", 9, 16.8, zigzag_angle=45.0,
+                                 zigzag_leg=2)
+        lateral = vertices[:, 0]
+        turns = int((np.diff(np.sign(np.diff(lateral))) != 0).sum())
+        # Eight steps at two per leg is four legs, so three turns.
+        assert turns == 3
+
+    def test_the_across_corner_distance_is_what_the_geometry_says(self):
+        """A turn swings the direction by twice the leg angle, so the
+        beads either side of a corner sit 2 * spacing * cos(angle)
+        apart -- the closed form the builder's guard uses."""
+        for angle in (30.0, 45.0, 60.0):
+            vertices, edges = bead_graph("zigzag", 9, 16.8,
+                                         zigzag_angle=angle, zigzag_leg=2)
+            distances = np.linalg.norm(vertices[:, None] - vertices[None, :],
+                                       axis=-1)
+            np.fill_diagonal(distances, np.inf)
+            for first, second in edges:
+                distances[first, second] = np.inf
+                distances[second, first] = np.inf
+            expected = 2.0 * 16.8 * np.cos(np.radians(angle))
+            assert distances.min() == pytest.approx(expected, rel=1e-6)
+
+    def test_a_sharp_turn_is_refused_before_anything_is_meshed(self):
+        with pytest.raises(ValueError, match="either side of a corner"):
+            build_bead_chain(layout="zigzag", count=4, bead_radius=7.0,
+                             neck_radius=3.0, zigzag_angle=80.0)
+
+    def test_a_degenerate_angle_is_refused_by_the_graph(self):
+        for angle in (0.0, MAX_ZIGZAG_ANGLE, 90.0):
+            with pytest.raises(ValueError, match="zigzag_angle"):
+                bead_graph("zigzag", 5, 16.8, zigzag_angle=angle)
+
+    def test_a_zero_length_leg_is_refused(self):
+        with pytest.raises(ValueError, match="zigzag_leg"):
+            bead_graph("zigzag", 5, 16.8, zigzag_leg=0)
+
+    def test_a_straight_chain_is_asked_for_by_name(self):
+        """Angle 0 is a straight chain, and the message says so rather
+        than returning one under the zigzag's name."""
+        with pytest.raises(ValueError, match="chain"):
+            bead_graph("zigzag", 5, 16.8, zigzag_angle=0.0)
+
+    @pytest.mark.slow
+    def test_a_zigzag_chain_folds_far_harder_than_a_swept_tube_can(self):
+        """The claim the Z path rests on, measured against its
+        alternative. A capped tube swept onto a Z path is capped by the
+        strain budget at a few per cent of its length; this is a field,
+        so it corners for free."""
+        atoms = build_bead_chain(layout="zigzag", count=5, bead_radius=6.0,
+                                 neck_radius=2.6, zigzag_angle=45.0,
+                                 zigzag_leg=1, seed=0)
+        census = atoms.info["ring_counts"]
+        measured = sum((6 - size) * n for size, n in census.items())
+        assert measured == atoms.info["ring_budget"] == 12
+        assert atoms.info["geometry"]["n_close_contacts"] == 0
+        positions = atoms.get_positions()
+        across = float(np.ptp(positions[:, 0]) / np.ptp(positions[:, 2]))
+        # Measured 0.43. A swept tube at the default budget reaches 0.08
+        # at one period and 0.018 at two, so the margin is not marginal.
+        assert across > 0.25

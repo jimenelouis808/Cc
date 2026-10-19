@@ -28,7 +28,7 @@ from .knee import (
 )
 from .nanocoil import build_nanocoil
 from .nanocone import build_nanocone, describe_nanocone
-from .nanoribbon import build_nanoribbon
+from .nanoribbon import BEND_PLANES, build_nanoribbon
 from .network import build_nanotube_network
 from .periodic_coil import build_periodic_coil
 from .supernetwork import SUPERLATTICES, build_supernetwork, icosahedral_cage, supergraph_from_atoms
@@ -55,6 +55,7 @@ __all__ = [
     "build_multiwall_cnt",
     "build_nano_onion",
     "build_nanocoil",
+    "BEND_PLANES",
     "build_nanoribbon",
     "build_nanotube_network",
     "SUPERLATTICES",

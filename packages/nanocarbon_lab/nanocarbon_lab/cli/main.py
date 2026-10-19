@@ -46,6 +46,7 @@ from pathlib import Path
 from ase import io as ase_io
 
 from ..builders import (
+    BEND_PLANES,
     build_bundle,
     build_capped_cnt,
     build_carbon_foam,
@@ -426,7 +427,11 @@ def _cmd_ribbon(args):
                              edge=args.edge, bond=args.bond,
                              vacuum=args.vacuum, passivate=args.passivate,
                              defects=_parse_defect_specs(args.defect),
-                             roughness=args.roughness, seed=args.seed)
+                             roughness=args.roughness,
+                             shape=args.shape, shape_turns=args.shape_turns,
+                             waviness=args.waviness,
+                             bend_plane=args.bend_plane,
+                             max_strain=args.max_strain, seed=args.seed)
     atoms = _apply_post(atoms, args)
     _export(atoms, Path(args.out), args.format, args.calculation, args.force)
     return 0
@@ -1337,6 +1342,7 @@ def _cmd_beads(args):
     atoms = build_bead_chain(
         layout=args.layout, count=args.count, bead_radius=args.bead_radius,
         neck_radius=args.neck_radius, spacing=args.spacing, arms=args.arms,
+        zigzag_angle=args.zigzag_angle, zigzag_leg=args.zigzag_leg,
         blend=args.blend, bond=args.bond, roughness=args.roughness,
         seed=args.seed,
     )
@@ -2019,6 +2025,35 @@ def build_parser() -> argparse.ArgumentParser:
     rb.add_argument("--length", type=int, required=True)
     rb.add_argument("--edge", choices=["armchair", "zigzag"], default="zigzag")
     rb.add_argument("--passivate", action="store_true")
+    rb.add_argument("--shape", default="straight",
+                    choices=["straight", "arc", "s_curve", "zigzag", "helix",
+                             "random"],
+                    help="Sweep the ribbon onto a centreline. Anything but "
+                         "'straight' makes it FINITE: a bent ribbon has no "
+                         "translational period, so the periodicity is "
+                         "dropped and the bonds recomputed rather than "
+                         "carried across a seam that no longer exists.")
+    rb.add_argument("--shape-turns", dest="shape_turns", type=float,
+                    default=1.0,
+                    help="Periods of a repeating shape ('zigzag', 'helix').")
+    rb.add_argument("--waviness", type=float, default=1.0,
+                    help="0-1 scale on the excursion.")
+    rb.add_argument("--bend-plane", dest="bend_plane",
+                    default="out_of_plane", choices=list(BEND_PLANES),
+                    help="'out_of_plane' curls the sheet like paper, which "
+                         "is an ISOMETRY: measured, bonds stay "
+                         "1.4197-1.4200 A and no strain budget is applied "
+                         "(that last 2 parts in 10,000 is the frame "
+                         "interpolation, not strain), so the "
+                         "fold is limited only by the sheet meeting itself "
+                         "(3.4 A, the graphitic contact). 'in_plane' bends "
+                         "it the hard way and is trimmed to --max-strain. "
+                         "Same ribbon, same path: 15.6 A of Z out of plane "
+                         "against 2.5 A in it.")
+    rb.add_argument("--max-strain", dest="max_strain", type=float,
+                    default=0.08,
+                    help="Outer-edge strain budget, used only by "
+                         "'in_plane'.")
     _add_lattice_edit_arguments(rb)
     _add_common(rb)
     rb.set_defaults(func=_cmd_ribbon)
@@ -2069,8 +2104,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "cap: a long thin tube takes 150 deg, a short fat one "
                          "tears before 57.")
     cc.add_argument("--shape", default="straight",
-                    choices=["straight", "arc", "s_curve", "helix", "random"],
-                    help="Centreline the tube is swept along (default straight).")
+                    choices=["straight", "arc", "s_curve", "zigzag", "helix",
+                             "random"],
+                    help="Centreline the tube is swept along (default "
+                         "straight). 'zigzag' is a Z path, with "
+                         "--helix-turns giving its periods; it is gentle by "
+                         "necessity -- the strain budget caps a swept tube's "
+                         "Z at a few per cent of its length, measured 8.2% "
+                         "at one period and 1.8% at two.")
     cc.add_argument("--waviness", type=float, default=0.7,
                     help="0-1: how far the centreline wanders before the strain "
                          "budget trims it (default 0.7).")
@@ -2872,6 +2913,18 @@ def build_parser() -> argparse.ArgumentParser:
                          "intersect and there is no waist to neck.")
     bd.add_argument("--arms", type=int, default=4,
                     help="Arms for the 'cross' layout.")
+    bd.add_argument("--zigzag-angle", dest="zigzag_angle", type=float,
+                    default=45.0,
+                    help="For the 'zigzag' layout: the angle each leg makes "
+                         "with the axis (deg). Free in a way a swept tube's "
+                         "is not -- a bead chain is an implicit field, so a "
+                         "corner is a smooth union rather than a bent "
+                         "lattice and costs no strain. A sharp turn is "
+                         "refused only when the beads either side of a "
+                         "corner would intersect.")
+    bd.add_argument("--zigzag-leg", dest="zigzag_leg", type=int, default=3,
+                    help="Beads per leg before the path turns; 1 turns at "
+                         "every bead.")
     bd.add_argument("--blend", type=float, default=3.0,
                     help="Smooth-union radius where a neck meets a bead "
                          "(Å): a flare rather than a crease, a crease "

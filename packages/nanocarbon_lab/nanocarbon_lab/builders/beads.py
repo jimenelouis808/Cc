@@ -48,13 +48,14 @@ from . import remesh as rm
 from .junction import MAX_GRID_RESOLUTION, _finish
 
 __all__ = ["BEAD_LAYOUTS", "DEFAULT_SPACING_FRACTION",
-           "MIN_SPACING_FRACTION", "bead_graph",
+           "MAX_ZIGZAG_ANGLE", "MIN_SPACING_FRACTION", "bead_graph",
            "build_bead_chain"]
 
 #: How the beads are arranged. ``chain`` is a tree (budget +12, sphere-
 #: like); ``ring`` closes it (budget 0, a torus); ``cross`` is a central
-#: bead with arms, still a tree.
-BEAD_LAYOUTS = ("chain", "ring", "cross")
+#: bead with arms, still a tree; ``zigzag`` is a chain folded onto a Z
+#: path, which is a tree as well and so carries the same +12.
+BEAD_LAYOUTS = ("chain", "ring", "cross", "zigzag")
 
 #: A neck wider than this fraction of the bead stops being a neck: the
 #: smooth union returns one lozenge rather than two spheres joined.
@@ -72,9 +73,18 @@ MIN_SPACING_FRACTION = 2.0
 #: Far enough that the waist is a real neck rather than a dimple.
 DEFAULT_SPACING_FRACTION = 2.4
 
+#: Hard ceiling on a ``zigzag`` leg's angle off the axis. At 90 deg the
+#: path folds back on itself and the bead two places along lands on top
+#: of the first; the real limit is tighter and depends on the spacing, so
+#: :func:`build_bead_chain` computes it. This is only the degenerate
+#: case, refused before any arithmetic is trusted.
+MAX_ZIGZAG_ANGLE = 85.0
+
 
 def bead_graph(layout: str, count: int, spacing: float,
-               arms: int = 4) -> tuple[np.ndarray, list[tuple[int, int]]]:
+               arms: int = 4, zigzag_angle: float = 45.0,
+               zigzag_leg: int = 3,
+               ) -> tuple[np.ndarray, list[tuple[int, int]]]:
     """Vertex positions and edges for a bead arrangement.
 
     Returns ``(vertices, edges)`` in Å, centred on the origin. The graph
@@ -92,6 +102,17 @@ def bead_graph(layout: str, count: int, spacing: float,
         Centre-to-centre distance between neighbouring beads, in Å.
     arms
         Arms for the ``cross`` layout, spread evenly in the xy plane.
+    zigzag_angle
+        For ``zigzag``, the angle each leg makes with the z axis, in
+        degrees. **This is free here in a way it is not for a swept
+        tube**: a bead chain is an implicit field, so a corner is a
+        smooth union of two necks rather than a bent lattice, and there
+        is no strain budget to trim it. A tube swept onto a Z path bends
+        by a few percent of its length (see
+        :func:`centerline.shape_control_points`); a bead chain can turn
+        through 90 degrees at every corner.
+    zigzag_leg
+        Beads per leg before the path turns. ``1`` turns at every bead.
     """
     if count < 2:
         raise ValueError("A bead structure needs at least 2 beads.")
@@ -113,6 +134,27 @@ def bead_graph(layout: str, count: int, spacing: float,
             [radius * np.cos(angle), radius * np.sin(angle),
              np.zeros(count)], axis=1)
         edges = [(i, (i + 1) % count) for i in range(count)]
+    elif layout == "zigzag":
+        if zigzag_leg < 1:
+            raise ValueError("zigzag_leg must be at least 1 bead.")
+        if not 0.0 < zigzag_angle < MAX_ZIGZAG_ANGLE:
+            raise ValueError(
+                f"zigzag_angle must be in (0, {MAX_ZIGZAG_ANGLE}) deg; got "
+                f"{zigzag_angle}. At 0 the path is a straight chain -- use "
+                "the `chain` layout -- and at 90 it folds back onto itself.")
+        theta = np.radians(zigzag_angle)
+        step = spacing * np.array([np.sin(theta), 0.0, np.cos(theta)])
+        # Walk the path, flipping the lateral component every leg. The
+        # step keeps its full length through the turn, so the neck
+        # geometry -- and with it the spacing guard -- is the same on
+        # every edge as it is in a straight chain.
+        vertices = [np.zeros(3)]
+        for index in range(1, count):
+            sign = 1.0 if ((index - 1) // zigzag_leg) % 2 == 0 else -1.0
+            vertices.append(vertices[-1] + step * np.array([sign, 1.0, 1.0]))
+        vertices = np.stack(vertices)
+        vertices -= vertices.mean(axis=0)
+        edges = [(i, i + 1) for i in range(count - 1)]
     elif layout == "cross":
         if arms < 2:
             raise ValueError("A cross needs at least 2 arms.")
@@ -142,6 +184,8 @@ def build_bead_chain(
     neck_radius: float = 3.0,
     spacing: float | None = None,
     arms: int = 4,
+    zigzag_angle: float = 45.0,
+    zigzag_leg: int = 3,
     blend: float = 3.0,
     bond: float = CC_BOND,
     grid_resolution: int = 72,
@@ -159,9 +203,9 @@ def build_bead_chain(
     Parameters
     ----------
     layout
-        One of :data:`BEAD_LAYOUTS`. ``chain`` and ``cross`` are trees and
-        come out sphere-like (budget +12); ``ring`` closes and comes out
-        toroidal (budget 0).
+        One of :data:`BEAD_LAYOUTS`. ``chain``, ``cross`` and ``zigzag``
+        are trees and come out sphere-like (budget +12); ``ring`` closes
+        and comes out toroidal (budget 0).
     count
         Beads, or arm length in beads for ``cross``.
     bead_radius
@@ -175,6 +219,12 @@ def build_bead_chain(
         ``1.7 * bead_radius``, which leaves a visible waist at the
         default proportions. It is refused below ``1.25 * bead_radius``,
         where the two spheres merge before the neck does any work.
+    zigzag_angle, zigzag_leg
+        For the ``zigzag`` layout: the angle each leg makes with the z
+        axis in degrees, and how many beads a leg runs before turning.
+        A sharp turn is refused for the same reason a tight spacing is
+        -- see below -- and not because of any strain budget: a bead
+        chain is a field, so unlike a swept tube it may corner freely.
     blend
         Smooth-union radius (Å) where a neck meets a bead. This is what
         makes the join a flare rather than a crease, and a crease is not
@@ -220,7 +270,29 @@ def build_bead_chain(
             "each other, so there is no waist for a neck to be, and what "
             "comes out is a bumpy tube under a bead chain's name.")
 
-    vertices, edges = bead_graph(layout, count, spacing, arms=arms)
+    # A turn brings the beads either side of a corner together: the
+    # direction swings by 2 * zigzag_angle, so they sit
+    # 2 * spacing * cos(angle) apart however long the legs are. That
+    # distance has to clear the same floor a straight chain's spacing
+    # does, because it is the same two spheres intersecting -- the
+    # corner is simply where a bead chain can breach it without the
+    # spacing having changed at all.
+    if layout == "zigzag":
+        across = 2.0 * spacing * np.cos(np.radians(zigzag_angle))
+        if across < MIN_SPACING_FRACTION * bead_radius:
+            raise ValueError(
+                f"A {zigzag_angle:.0f} deg leg turns the path through "
+                f"{2 * zigzag_angle:.0f} deg, which leaves the beads either "
+                f"side of a corner {across:.2f} A apart -- under "
+                f"{MIN_SPACING_FRACTION} * bead_radius "
+                f"({MIN_SPACING_FRACTION * bead_radius:.2f} A), so they "
+                "INTERSECT across the corner and the Z comes out as a bent "
+                "lozenge. Open the angle, widen the spacing or use a "
+                "smaller bead.")
+
+    vertices, edges = bead_graph(layout, count, spacing, arms=arms,
+                                 zigzag_angle=zigzag_angle,
+                                 zigzag_leg=zigzag_leg)
     budget = 12 * (len(vertices) - len(edges))
 
     # A ring only has a hole if its beads leave one. Measured at bead 7,
@@ -290,6 +362,8 @@ def build_bead_chain(
             "bead_radius": bead_radius,
             "neck_radius": neck_radius,
             "spacing": spacing,
+            "zigzag_angle": zigzag_angle if layout == "zigzag" else None,
+            "zigzag_leg": zigzag_leg if layout == "zigzag" else None,
             "blend": blend,
             "bond": bond,
             "anneal_sweeps": anneal_sweeps,

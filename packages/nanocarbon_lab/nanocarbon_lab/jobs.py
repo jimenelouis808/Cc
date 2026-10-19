@@ -1124,6 +1124,9 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "width": "--width", "length": "--length", "edge": "--edge",
         "bond": "--bond", "vacuum": "--vacuum", "passivate": "--passivate",
         "defects": "--defect", "roughness": "--roughness",
+        "shape": "--shape", "shape_turns": "--shape-turns",
+        "waviness": "--waviness", "bend_plane": "--bend-plane",
+        "max_strain": "--max-strain",
     }),
     "nanocoil": ("nanocoil", {
         "n": "--n", "m": "--m", "coil_radius": "--coil-radius",
@@ -1249,6 +1252,7 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "layout": "--layout", "count": "--count",
         "bead_radius": "--bead-radius", "neck_radius": "--neck-radius",
         "spacing": "--spacing", "arms": "--arms", "blend": "--blend",
+        "zigzag_angle": "--zigzag-angle", "zigzag_leg": "--zigzag-leg",
         "bond": "--bond", "roughness": "--roughness",
     }),
     "supernetwork": ("supernetwork", {

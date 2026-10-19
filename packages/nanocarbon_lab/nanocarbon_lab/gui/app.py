@@ -90,6 +90,7 @@ from ..builders.knee import (
     SCHWARZITE_CELLS,
     default_knee_shape,
 )
+from ..builders.nanoribbon import BEND_PLANES
 from ..builders.supernetwork import CAGES as supercages
 from ..builders.supernetwork import SUPERLATTICES as superlattices
 from ..cell import (
@@ -189,7 +190,7 @@ def _clock(seconds: float) -> str:
     return f"{minutes}:{rest:02d}"
 
 
-SHAPES = ["straight", "arc", "s_curve", "helix", "random"]
+SHAPES = ["straight", "arc", "s_curve", "zigzag", "helix", "random"]
 #: "none" first and selected by default: the host is carbon, and a
 #: structure is pure carbon unless the user says otherwise.
 DOPANTS = ["none", *DOPANT_ELEMENTS]
@@ -655,6 +656,8 @@ class NanocarbonGUI:
         self.var_rib_edge = self._var("rib_edge", tk.StringVar(value="zigzag"))
         self.var_rib_passivate = self._var("rib_passivate", tk.BooleanVar(value=False))
         self.var_rib_vacuum = self._var("rib_vacuum", tk.DoubleVar(value=15.0))
+        self.var_rib_bend = self._var("rib_bend",
+                                      tk.StringVar(value="out_of_plane"))
         self.var_rings = self._var("rings", tk.IntVar(value=8))
         self.var_freq = self._var("freq", tk.IntVar(value=3))
         self.var_bond = self._var("bond", tk.DoubleVar(value=1.42))
@@ -817,6 +820,9 @@ class NanocarbonGUI:
         self.var_bd_spacing = self._var("bd_spacing",
                                         tk.DoubleVar(value=0.0))
         self.var_bd_arms = self._var("bd_arms", tk.IntVar(value=4))
+        self.var_bd_zig_angle = self._var("bd_zig_angle",
+                                          tk.DoubleVar(value=45.0))
+        self.var_bd_zig_leg = self._var("bd_zig_leg", tk.IntVar(value=3))
         self.var_sn_graph = self._var("sn_graph",
                                       tk.StringVar(value="super-graphene"))
         self.var_sn_scale = self._var("sn_scale", tk.DoubleVar(value=40.0))
@@ -962,10 +968,26 @@ class NanocarbonGUI:
                         variable=self.var_rib_passivate,
                         command=self._update_ribbon_hint).grid(
             row=7, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        ttk.Label(rbox, text="Bend").grid(row=8, column=0, sticky="w",
+                                          pady=(4, 0))
+        ttk.Combobox(rbox, textvariable=self.var_rib_bend,
+                     values=list(BEND_PLANES), state="readonly",
+                     width=13).grid(row=8, column=1, sticky="e", pady=(4, 0))
+        ttk.Label(rbox, foreground=MUTED, wraplength=PARAM_COLUMN_WIDTH - 22,
+                  justify="left", font=("TkDefaultFont", 8),
+                  text="Out of plane curls the sheet like paper: an "
+                       "isometry, so bonds stay 1.4197–1.4200 Å and the "
+                       "strain budget does nothing. In plane bends it the "
+                       "hard way and is trimmed to the budget — measured "
+                       "on the same ribbon and path, 15.6 Å of Z out of "
+                       "plane against 2.5 Å in it. Any shape but "
+                       "«straight» makes the ribbon finite.").grid(
+                           row=9, column=0, columnspan=2, sticky="w",
+                           pady=(2, 0))
         self.lbl_ribbon = ttk.Label(rbox, text="", foreground=MUTED,
                                     wraplength=PARAM_COLUMN_WIDTH - 22,
                                     justify="left")
-        self.lbl_ribbon.grid(row=8, column=0, columnspan=2, sticky="w",
+        self.lbl_ribbon.grid(row=10, column=0, columnspan=2, sticky="w",
                              pady=(6, 0))
         rbox.pack_forget()
 
@@ -981,6 +1003,10 @@ class NanocarbonGUI:
                                                       pady=(0, 6))
         self._param(sbox, "Waviness", self.var_waviness, 0.0, 1.0, 1,
                     resolution=0.05)
+        # Periods of a repeating shape. The same box the helix uses, so
+        # «zigzag» does not need a second one that means the same thing.
+        self._param(sbox, "Turns / periods", self.var_coil_turns, 0.5, 6.0, 2,
+                    resolution=0.5, hard_hi=20.0)
         self._param(sbox, "Control points", self.var_shape_points, 4, 20, 3,
                     integer=True, hard_hi=60)
         self._param(sbox, "Strain budget", self.var_max_strain, 0.02, 0.25, 5,
@@ -1440,6 +1466,16 @@ class NanocarbonGUI:
         ttk.Spinbox(self.frame_bd, from_=2, to=8, increment=1, width=6,
                     textvariable=self.var_bd_arms).grid(row=5, column=1,
                                                         sticky="w")
+        ttk.Label(self.frame_bd, text="Z angle (°)").grid(row=6, column=0,
+                                                           sticky="w")
+        ttk.Spinbox(self.frame_bd, from_=5.0, to=84.0, increment=5.0,
+                    width=6, textvariable=self.var_bd_zig_angle).grid(
+                        row=6, column=1, sticky="w")
+        ttk.Label(self.frame_bd, text="Beads per leg").grid(row=7, column=0,
+                                                            sticky="w")
+        ttk.Spinbox(self.frame_bd, from_=1, to=8, increment=1, width=6,
+                    textvariable=self.var_bd_zig_leg).grid(row=7, column=1,
+                                                           sticky="w")
         ttk.Label(self.frame_bd, foreground=MUTED, wraplength=250,
                   justify="left", font=("TkDefaultFont", 8),
                   text="Spacing 0 takes the default (2.4 x the bead). "
@@ -1447,7 +1483,10 @@ class NanocarbonGUI:
                        "there is no neck. A chain or a cross is a tree, "
                        "so it carries the fullerene's twelve pentagons "
                        "however long it is; a ring closes and is a "
-                       "torus, budget zero.").grid(row=6, column=0,
+                       "torus, budget zero. A Z path may corner sharply here, "
+                       "unlike a swept tube: this is a field, so a corner "
+                       "costs no strain -- what limits it is the beads "
+                       "either side of a corner meeting.").grid(row=8, column=0,
                                                    columnspan=2,
                                                    sticky="w", pady=(4, 0))
 
@@ -2379,6 +2418,9 @@ class NanocarbonGUI:
             self._update_nanocoil_hint()
         elif mode == "nanoribbon":
             self.frame_ribbon.pack(fill="x")
+            # The ribbon sweeps onto the same centrelines a tube does, so
+            # it gets the same panel rather than a second copy of it.
+            self.frame_centreline.pack(fill="x", pady=(8, 0))
             self.frame_defects.pack(fill="x", pady=(8, 0))
             self._update_ribbon_hint()
         elif mode == "multi-wall":
@@ -3874,6 +3916,8 @@ class NanocarbonGUI:
                 neck_radius=float(self.var_bd_neck.get()),
                 spacing=spacing if spacing > 0.0 else None,
                 arms=int(self.var_bd_arms.get()),
+                zigzag_angle=float(self.var_bd_zig_angle.get()),
+                zigzag_leg=int(self.var_bd_zig_leg.get()),
                 anneal_sweeps=int(self.var_anneal.get()),
                 place_curvature=bool(self.var_place.get()),
                 wall_anchor=1.0 if self.var_anchor.get() else 0.0,
@@ -3983,6 +4027,11 @@ class NanocarbonGUI:
                 passivate=bool(self.var_rib_passivate.get()),
                 roughness=float(self.var_roughness.get()),
                 defects=self._current_defects(),
+                shape=self.var_shape.get(),
+                shape_turns=float(self.var_coil_turns.get()),
+                waviness=float(self.var_waviness.get()),
+                bend_plane=self.var_rib_bend.get(),
+                max_strain=float(self.var_max_strain.get()),
             )
         elif mode == "bundle":
             params = dict(

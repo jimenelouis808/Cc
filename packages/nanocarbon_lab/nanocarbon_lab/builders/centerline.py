@@ -34,7 +34,14 @@ from typing import Literal
 
 import numpy as np
 
-Shape = Literal["straight", "arc", "random", "helix", "s_curve"]
+Shape = Literal["straight", "arc", "random", "helix", "s_curve", "zigzag"]
+
+#: Samples per period of a :data:`Shape` that repeats. A triangle wave
+#: needs its corners to land ON control points or the spline rounds them
+#: into a sine, and 4 per period is the smallest count that puts a point
+#: at each corner and each axis crossing. Higher is finer but buys
+#: nothing: the strain budget, not the sampling, sets the amplitude.
+ZIGZAG_SAMPLES_PER_PERIOD = 4
 
 # Outer-wall strain (r_tube * kappa) that still relaxes to clean sp2
 # geometry. Measured, not guessed -- see the module docstring.
@@ -206,6 +213,42 @@ def shape_control_points(
     ``straight`` -- a line (no sweep). ``arc`` -- a single planar bend.
     ``s_curve`` -- two opposing bends. ``helix`` -- a coil of ``turns``
     turns. ``random`` -- a seeded meander via :func:`random_control_points`.
+
+    ``zigzag`` is the repeating one -- a Z path rather than a single
+    bend -- and ``turns`` is how many full periods it carries, rounded to
+    the nearest half period so the path starts and ends on the axis. Its
+    control points sit on a **triangle wave**, which is exactly linear
+    between its corners, so the spline runs straight along each leg and
+    spends curvature only where the path turns. ``n_points`` is
+    recomputed from ``turns`` (see :data:`ZIGZAG_SAMPLES_PER_PERIOD`) and
+    the argument is ignored for this shape.
+
+    **A swept zigzag is gentle, and that is physics rather than a
+    conservative default.** The budget caps curvature at
+    ``max_strain / r_tube``; for the default 8% on a 5.9 Å tube that is a
+    74 Å radius of curvature, and a corner cannot be tighter than the
+    tube is allowed to bend. Measured, the achieved amplitude-to-length
+    ratio lands near **2.5%** whatever ``turns`` and ``n_points`` ask for
+    -- a 254 Å tube zigzags by 6.2 Å, with bonds 1.33-1.51 Å. A longer
+    tube, fewer periods or a thinner tube buys amplitude; the request
+    does not. Past the budget :func:`build_capped_cnt` refuses rather
+    than returning torn bonds.
+
+    There is no ``square_wave``, and the reason is worth recording
+    because the name is the one people reach for. Its control points do
+    not start and end on the axis, so the straight line the strain fit
+    interpolates **toward** is itself a diagonal: trimming a square wave
+    does not flatten it into a straight tube, it flattens it into a
+    slanted one. Measured, ``square_wave`` returned a monotonic ramp --
+    an arc wearing the name of a zigzag -- at a raw strain of 194-950%.
+    A square wave asks for a right angle, and a swept lattice has
+    nothing to pay for one with.
+
+    Neither is a Dunlap-style **knee**: a swept lattice carries its bend
+    as elastic strain with no disclination to relieve it, which is the
+    distinction "Curved tubes: swept vs implicit" draws. A zigzag tube
+    is a bent crystal, not a chain of mitred segments.
+
     All are returned unit-scaled; amplitude is trimmed later to respect
     the strain budget.
     """
@@ -223,6 +266,31 @@ def shape_control_points(
         radius = amplitude * n_points * 0.12
         return np.stack([radius * np.cos(angle), radius * np.sin(angle),
                          t * n_points], axis=1)
+    if shape == "zigzag":
+        periods = max(0.5, round(float(turns) * 2.0) / 2.0)
+        # Resample so every corner and every axis crossing lands on a
+        # control point. Half-integer periods at an arbitrary point
+        # count alias into a SKEWED sawtooth -- measured, 17 points over
+        # 1.5 periods gives legs of unequal slope -- and the spline then
+        # carries that skew into the lattice.
+        per_period = ZIGZAG_SAMPLES_PER_PERIOD
+        while per_period * periods % 1.0:
+            per_period *= 2
+        count = int(round(per_period * periods)) + 1
+        while count < 5:
+            # A cubic spline needs four points. Half a period at four
+            # samples per period gives three, so refine rather than hand
+            # the sampler a path it cannot fit.
+            per_period *= 2
+            count = int(round(per_period * periods)) + 1
+        t = np.linspace(0.0, 1.0, count)
+        phase = 2.0 * np.pi * periods * t
+        # A triangle wave: 2/pi * arcsin(sin x) is exactly linear between
+        # its corners, so the spline through these points runs straight
+        # along each leg and spends curvature only at the corners.
+        across = (2.0 / np.pi) * np.arcsin(np.sin(phase))
+        return np.stack([amplitude * across * count * 0.12,
+                         np.zeros_like(t), t * count], axis=1)
     if shape == "random":
         return random_control_points(n_points, amplitude, rng)
     raise ValueError(f"Unknown shape {shape!r}.")

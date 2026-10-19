@@ -6,6 +6,112 @@ está la trampa.
 
 ---
 
+## nanocarbon_lab · el camino en Z, y por qué cuesta tres cosas distintas
+
+`zigzag` es una **forma de línea central**, igual que la S que ya existía, y
+está disponible para **tubos, cintas y las esferas grafíticas**. Un nombre,
+tres representaciones — y lo que cuesta una esquina depende de la
+representación, no de con cuánta fuerza se pida:
+
+| ruta | qué cuesta una esquina | Z medido / longitud |
+|---|---|---|
+| tubo barrido sobre el camino | deformación elástica, recortada al presupuesto | 8,2% a 1 periodo, **1,8%** a 2 |
+| cinta plegada **fuera** de su plano | nada — es una isometría | **25%** (15,6 Å sobre 63,4) |
+| cinta doblada **dentro** de su plano | deformación, el mismo presupuesto del tubo | 2,5 Å frente a los 15,6 del pliegue |
+| cadena de esferas | nada — es la unión suave de dos cuellos | **43%** |
+
+### El Z de un tubo es suave, y eso es física
+
+El presupuesto limita la **curvatura**, no la amplitud:
+`max_strain / r_tube` es un radio de curvatura — 74 Å para el 8% por
+defecto sobre un tubo de 5,9 Å — y una esquina no puede ser más cerrada de
+lo que el tubo tiene permitido doblarse. Así que **pedir más periodos da
+menos Z**: al partir el periodo por dos, la amplitud se divide por cuatro.
+Lo que compra amplitud es alargar el tubo o usar menos periodos. Subir
+`waviness` no, el presupuesto lo devuelve.
+
+### Doblar una cinta fuera de su plano es gratis; dentro de su plano no
+
+El ancho viaja sobre la **binormal** del marco, que un marco de rotación
+mínima no gira, así que cada sección transversal se mueve como un sólido
+rígido: enlaces de **1,4197–1,4200 Å sin aplicar presupuesto alguno**. Las
+últimas 2 partes en 10 000 son la interpolación entre marcos, no
+deformación — se reducen subiendo `frame_samples`, cosa que una
+deformación no haría.
+
+Por eso `out_of_plane` es el valor por defecto, y su límite **no es la
+deformación sino que la hoja se toque a sí misma**, a los 3,4 Å del
+contacto grafítico. Eso se comprueba, porque no hay otra cosa que lo
+impida: a 2 periodos y amplitud máxima la cinta se cruzaba a 0,07 Å de sí
+misma y ahora se rechaza. `in_plane` es el problema del tubo con la
+semianchura en lugar del radio, y pasa por el mismo presupuesto.
+
+**Barrer una cinta la vuelve finita.** Una cinta recta es periódica a lo
+largo y su lista de enlaces nombra pares que cruzan esa costura; una
+doblada no tiene periodo. Se quita la periodicidad y se recalculan los
+enlaces. Es la **sexta** vez en este paquete que una lista de enlaces de
+imagen mínima nombra el par y no la celda.
+
+### No hay `square_wave`, y la ausencia es a propósito
+
+Sus puntos de control sí eran una onda cuadrada; la forma que devolvía era
+una **diagonal recta**. El ajuste de deformación interpola hacia la línea
+que une los **extremos** del camino, y una onda cuadrada no termina sobre
+el eje — así que recortarla no la aplana hacia un tubo recto, la aplana
+hacia uno inclinado. Medido: una rampa monótona con un 194–950% de
+deformación en bruto, un arco con nombre de zigzag. Un test construye esos
+puntos a mano y fija el colapso, para que el nombre no pueda volver por
+descuido.
+
+Por lo mismo, `zigzag` calcula **su propio muestreo**: cuatro muestras por
+periodo ponen un punto en cada esquina y en cada cruce del eje, y un número
+de periodos que no sea múltiplo de medio se convierte en un diente de
+sierra torcido, así que se redondea en vez de obedecerse. `n_points` se
+ignora para esta forma, y hay un test que lo dice.
+
+### Bambú y esferas grafíticas ya son presets
+
+Eran modos, no presets — ahora son las dos cosas, y **todos sus parámetros
+siguen editables** en su panel:
+
+| preset | qué es | medido |
+|---|---|---|
+| Graphitic beads on a string | cadena de 3, R 7,0 / cuello 3,0 | 664 átomos, +12 (un árbol es esférico a cualquier longitud) |
+| Graphitic beads, Z path | la misma cadena doblada en Z, 45°, 1 esfera por tramo | 830 átomos, +12, enlaces 1,362–1,480 Å, Z del 43% |
+| Graphitic beads, closed ring | anillo de 6 | 1354 átomos, **budget 0**: es un toro |
+| Bamboo nanotube (16,16) | 3 compartimentos de 20 Å | 1840 átomos, `{5: 3, 6: 890}` — un pentágono por tapa |
+| Bamboo nanotube (20,20, alternating) | 4 compartimentos, tapas alternadas | 3000 átomos, `{5: 4, 6: 1440}` |
+
+Los enlaces del bambú son 1,391–1,420 Å **en imagen mínima**: el tubo sigue
+periódico a lo largo del eje y su lista de enlaces nombra pares que cruzan
+esa costura. Medido sin imagen mínima salen "enlaces" de 61 Å, que es la
+costura y no un defecto.
+
+La longitud de compartimento pedida y la conseguida **no son la misma**: la
+red cuantiza el periodo axial, así que 18,0 Å pedidos salen 18,45 Å. Se
+informa de la conseguida.
+
+### La esquina de una cadena de esferas tiene su propio límite
+
+Un giro balancea la dirección el doble del ángulo del tramo, así que las
+esferas a cada lado de una esquina quedan a `2 * spacing * cos(ángulo)` —
+una fórmula cerrada, comprobada a 30°, 45° y 60° — y esa distancia tiene
+que superar el mismo suelo que el espaciado, porque son las mismas dos
+esferas intersecándose. A 80° son 5,83 Å contra un suelo de 14,00 y se
+rechaza antes de mallar nada.
+
+### Dónde está
+
+- Interfaz: la forma `zigzag` está en el panel **Línea central**, que ahora
+  también sale para las cintas y trae una casilla **Turns / periodos**. Las
+  cintas tienen **Bend** (`out_of_plane` / `in_plane`); las esferas,
+  **Z angle** y **Beads per leg**.
+- Consola: `--shape zigzag` en `cnt-cap` y en `ribbon` (con `--shape-turns`,
+  `--waviness`, `--bend-plane`, `--max-strain`), y `--zigzag-angle` /
+  `--zigzag-leg` en `beads`.
+
+---
+
 ## nanocarbon_lab · la familia iridiscente, y la niebla que ahogaba el degradado
 
 ### `porous_depth` estaba saturado de luz, y la culpa era la niebla

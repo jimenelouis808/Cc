@@ -322,6 +322,69 @@ Two properties of that route must not be re-broken:
    that the surface merges adjacent turns into one solid and the result
    is not a tube at all.
 
+## The Z path, and why the same request means three different things
+
+`zigzag` is a centreline shape (`builders/centerline.py`), offered to
+tubes, ribbons and bead chains. It is one name over three
+representations, and **what it costs differs by representation, not by
+how hard you ask**:
+
+| Route | What a corner costs | Measured Z / length |
+|---|---|---|
+| Capped tube swept onto the path | elastic strain, trimmed to the budget | 8.2% at 1 period, **1.8%** at 2 |
+| Ribbon folded out of its plane | nothing — an isometry | **25%** (15.6 Å over 63.4), limited by self-contact |
+| Ribbon bent in its plane | strain, same budget as a tube | 2.5 Å against the fold's 15.6 |
+| Bead chain | nothing — a smooth union of two necks | **43%** |
+
+Three things follow and none is a preference.
+
+**A swept tube's Z is gentle because the budget caps curvature, not
+amplitude.** `max_strain / r_tube` is a radius of curvature — 74 Å for
+the default 8% on a 5.9 Å tube — and a corner cannot be tighter than the
+tube may bend. Halving the period therefore quarters the amplitude: more
+periods gets you *less* Z. Lengthen the tube or use fewer periods;
+raising `waviness` does nothing the budget will not take back.
+
+**Bending a ribbon out of its own plane is free, and in its own plane is
+not.** (Free does not mean unbounded: searched over `waviness` and
+`turns`, a 6×30 ribbon tops out at 25% of its length, because the path's
+arc length is normalised to the ribbon's span — a bigger swing shortens
+the end-to-end distance it is measured against. What it is *not* bounded
+by is strain.) The width rides the frame's binormal, which a
+rotation-minimizing frame does not rotate, so every cross-section moves
+rigidly: bonds come out 1.4197–1.4200 Å with no budget applied, and the
+last 2 parts in 10⁴ is the frame interpolation rather than strain (it
+shrinks with `frame_samples`). So `out_of_plane` is the default, and its
+limit is the sheet **meeting itself** at the 3.4 Å graphitic contact —
+which is checked, because nothing else would stop it. `in_plane` is the
+tube's problem with the half-width in place of the tube radius, and goes
+through the same `fit_to_strain_budget`.
+
+**Sweeping a ribbon makes it finite.** A straight ribbon is periodic
+along its length and its bond list names pairs across that seam; a bent
+one has no translational period. The periodicity is dropped and the
+bonds recomputed. This is the **sixth** place in this package where a
+minimum-image bond list named the pair and not the cell — after the
+census, `cell.supercell`, `scene`, the renderer and the bamboo
+assembly. Assume it is the seventh next time.
+
+**There is no `square_wave`, and the absence is deliberate.** Its
+control points really are a square wave; the shape it returned was a
+straight diagonal. `fit_to_strain_budget` interpolates toward the line
+joining the path's **endpoints**, and a square wave does not end on the
+axis — so trimming it does not flatten it toward a straight tube, it
+flattens it toward a slanted one. Measured: a monotonic ramp at a raw
+strain of 194–950%, an arc wearing a zigzag's name. A test builds those
+control points by hand and pins the collapse, so the name cannot come
+back by accident. For the same reason `zigzag` computes its **own**
+sampling: four samples per period puts a control point on every corner
+and every axis crossing, and a period count that is not a multiple of a
+half aliases into a skewed sawtooth, so it is snapped rather than
+honoured. `n_points` is ignored for this shape, and a test says so.
+
+Neither is a Dunlap **knee**. A swept lattice carries its bend as
+strain with no disclination to relieve it — see the table above.
+
 ## Nanocoils: two ways to break, with opposite cures
 
 `builders/nanocoil.py` winds a finished `(n, m)` lattice along a helix,
@@ -757,6 +820,29 @@ knee nodes reach that elsewhere in this file.
 `nanoparticle/coat.py` gives: a bead is convex, so pentagons belong on
 it and stray heptagons are pure defects. A junction saddles and wants
 the opposite.
+
+### The zigzag layout: the same intersection, reached at a corner
+
+A `zigzag` chain is a chain folded onto a Z path, so it is still a tree
+and still carries +12 (measured at 5 beads: `{5: 37, 6: 357, 7: 21,
+8: 2}`, 37 − 21 − 4 = 12). The step keeps its full length through a
+turn, so every neck is the straight chain's neck and the spacing guard
+goes on meaning what it meant.
+
+What a turn does change is **which pairs are close**. The direction
+swings by twice the leg angle, so the beads either side of a corner sit
+`2 * spacing * cos(angle)` apart however long the legs are — a closed
+form, tested at 30°, 45° and 60° — and that distance has to clear the
+same `MIN_SPACING_FRACTION * bead_radius` floor the spacing does,
+because it is the same two spheres intersecting. At 80° it is 5.83 Å
+against a 14.00 Å floor and the build is refused before anything is
+meshed.
+
+**This is where a bead chain beats a swept tube and it is not a looser
+limit, it is a different representation.** A corner here is a smooth
+union of two necks, not a bent lattice, so there is no strain to pay:
+measured, a 5-bead Z swings 43% of its length where a swept tube
+reaches 8.2% at one period. See "The Z path" above for the table.
 
 ### Two spheres closer than twice their radius have no waist
 

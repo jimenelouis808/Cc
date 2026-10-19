@@ -462,6 +462,57 @@ PRESETS: dict[str, dict[str, object]] = {
         "mode_kind": "TMD coil", "tmd_material": "MoS2", "tmd_n": 30,
         "tmd_m": 0, "tmd_coil_radius": 220.0, "tmd_coil_pitch": 90.0,
         "tmd_coil_turns": 0.25, "tmd_coil_hand": "right"},
+    # --- graphitic spheres joined by necks, and bamboo tubes
+    # Measured, all three, because a bead chain's whole claim is its ring
+    # budget and the budget comes from the GRAPH rather than from the
+    # mesh: chi = 2(V - E), so sum(6 - n) = 12(V - E).
+    # 664 atoms, {5: 27, 6: 293, 7: 13, 8: 1}: 27 - 13 - 2 = +12, the
+    # fullerene's twelve pentagons. A tree of beads is still sphere-like
+    # however many beads it has, which is the point of stating the
+    # budget as a graph identity.
+    "Graphitic beads on a string": {
+        "mode_kind": "bead chain", "bd_layout": "chain", "bd_count": 3,
+        "bd_bead": 7.0, "bd_neck": 3.0, "bd_spacing": 0.0},
+    # The same tree folded onto a Z path, and the reason it may fold
+    # sharply where a swept tube may not: a bead chain is an implicit
+    # field, so a corner is a smooth union of two necks, not a bent
+    # lattice with strain to pay. 830 atoms, 37 - 21 - 4 = +12, bonds
+    # 1.362-1.480 A, and the Z swings 21.8 A across a 50.3 A length --
+    # 43%, against the few per cent a swept tube can manage.
+    "Graphitic beads, Z path": {
+        "mode_kind": "bead chain", "bd_layout": "zigzag", "bd_count": 5,
+        "bd_bead": 6.0, "bd_neck": 2.6, "bd_spacing": 0.0,
+        "bd_zig_angle": 45.0, "bd_zig_leg": 1},
+    # Closing the chain closes the surface: V = E, budget 0, a TORUS.
+    # 1354 atoms, 39 - 29 - 10 = 0. The same statement the knee toroid
+    # makes, arrived at from the other direction. The hole is checked up
+    # front, because beads too close together close the middle and the
+    # surface comes out a SPHERE -- sound carbon, correct bonds, not the
+    # ring that was asked for.
+    "Graphitic beads, closed ring": {
+        "mode_kind": "bead chain", "bd_layout": "ring", "bd_count": 6,
+        "bd_bead": 7.0, "bd_neck": 3.0, "bd_spacing": 0.0},
+    # Bamboo: the cups are SEPARATE graphitic pieces, held against the
+    # wall by van der Waals. Not a modelling shortcut -- a sealed septum
+    # is not a manifold surface, so no closed carbon network has one.
+    # 1840 atoms, {5: 3, 6: 890}: three pentagons for three cups, one
+    # apex disclination each, and the tube itself all hexagons. Bonds
+    # 1.391-1.420 A under minimum image, because the tube stays periodic
+    # along its axis and its bond list names pairs across that seam.
+    # (16,16) is the default because a bamboo tube has to be WIDE: a
+    # (10,10) leaves 3.38 A inside a 3.40 A graphitic clearance and
+    # cannot hold a cup at all.
+    "Bamboo nanotube (16,16)": {
+        "mode_kind": "bamboo tube", "bam_n": 16, "bam_m": 16,
+        "bam_comp": 3, "bam_len": 20.0, "bam_orient": "up"},
+    # Wider, four compartments, and the cups alternating -- which some
+    # samples show where growth reversed. 3000 atoms, {5: 4, 6: 1440}.
+    # The achieved compartment length is 18.45 A against the 18.0
+    # requested: the lattice quantises the axial period, so that number
+    # is an OUTPUT and is reported as such.
+    "Bamboo nanotube (20,20, alternating)": {
+        "mode_kind": "bamboo tube", "bam_n": 20, "bam_m": 20,
+        "bam_comp": 4, "bam_len": 18.0, "bam_orient": "alternate"},
     # --- heterostructures
     # A quarter turn keeps the MX2 coil near 11k atoms. A full turn at a
     # radius loose enough to be unstrained runs to six figures, which is
