@@ -123,6 +123,7 @@ CARBON_MODES = (
     # are tubes is the same construction as a cubic lattice of them.
     "supernetwork",
     "bead chain",
+    "bamboo tube",
     "multi-wall",
     "bundle",
 )
@@ -359,6 +360,7 @@ def builder_for(mode: str):
         build_schwarzite,
         build_toroid,
     )
+    from .builders.bamboo import build_bamboo_cnt
     from .builders.beads import build_bead_chain
     from .builders.supernetwork import build_supernetwork
     from .hetero import build_twisted_bilayer, build_vdw_stack
@@ -407,6 +409,7 @@ def builder_for(mode: str):
         "network": build_nanotube_network,
         "supernetwork": build_supernetwork,
         "bead chain": build_bead_chain,
+        "bamboo tube": build_bamboo_cnt,
         "multi-wall": build_multiwall_cnt,
         "bundle": build_bundle,
     }
@@ -808,6 +811,23 @@ def estimate_atoms(job: Job) -> int:
         # Exact: the Klein quartic has 56 vertices and there is nothing
         # to estimate. The next member up is 84.
         return 56
+
+    if mode == "bamboo tube":
+        # Exact on both counts: the tube is a rolled lattice and each
+        # cup a sector cut, so nothing is meshed and nothing estimated.
+        # Atoms per unit area of graphene times the two areas.
+        compartments = int(p.get("n_compartments", 3))
+        length = float(p.get("compartment_length", 20.0)) * compartments
+        index_n = int(p.get("n", 16))
+        index_m = int(p.get("m", 16))
+        radius = (2.46 * math.sqrt(index_n ** 2 + index_n * index_m
+                                   + index_m ** 2) / (2.0 * math.pi))
+        wall = 2.0 * math.pi * radius * length
+        rim = max(0.0, radius - float(p.get("cup_clearance", 3.4)))
+        # A cone of rim r and the clean apex has slant r / (5/6), and
+        # lateral area pi * r * slant.
+        cup = math.pi * rim * (rim / (1.0 - 1.0 / 6.0))
+        return int(ATOMS_PER_RING * (wall + compartments * cup) / RING_AREA)
 
     if mode == "bead chain":
         # Spheres plus necks, with the same overlap correction the
@@ -1216,6 +1236,14 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     }),
     "heptanene": ("heptanene", {
         "bond": "--bond", "strict": "--no-strict",
+    }),
+    "bamboo tube": ("bamboo", {
+        "n": "--n", "m": "--m",
+        "n_compartments": "--compartments",
+        "compartment_length": "--compartment-length",
+        "cup_pentagons": "--cup-pentagons",
+        "orientation": "--orientation",
+        "cup_clearance": "--cup-clearance", "bond": "--bond",
     }),
     "bead chain": ("beads", {
         "layout": "--layout", "count": "--count",

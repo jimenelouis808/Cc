@@ -75,6 +75,7 @@ from ..builders import (
     build_supernetwork,
     build_toroid,
 )
+from ..builders.bamboo import CUP_ORIENTATIONS, build_bamboo_cnt
 from ..builders.beads import (
     BEAD_LAYOUTS,
     DEFAULT_SPACING_FRACTION,
@@ -1307,6 +1308,28 @@ def _cmd_heptanene(args):
     print(f"  cocycle     = {atoms.info['cocycle']}, cell "
           f"{atoms.info['cell']:.2f} A, genus {atoms.info['genus']}")
     print(f"  sp2         = {atoms.info['sp2']}")
+    return 0
+
+
+def _cmd_bamboo(args):
+    atoms = build_bamboo_cnt(
+        n=args.n, m=args.m, n_compartments=args.compartments,
+        compartment_length=args.compartment_length,
+        cup_pentagons=args.cup_pentagons, orientation=args.orientation,
+        cup_clearance=args.cup_clearance, bond=args.bond, seed=args.seed,
+    )
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    print(f"  tube        = ({info['n']},{info['m']}), R "
+          f"{info['tube_radius']:.2f} A, axial period "
+          f"{info['axial_period']:.2f} A")
+    # The lattice quantises the period, so the compartment is an output.
+    print(f"  compartment = {info['compartment_length']:.2f} A achieved "
+          f"for {info['compartment_length_requested']:.2f} asked "
+          f"({info['n_compartments']} per cell)")
+    print(f"  cups        = {info['n_cups']}, rim R "
+          f"{info['cup_rim_radius']:.2f} A, {info['cup_orientation']}, "
+          f"held at a van der Waals contact and NOT bonded to the wall")
     return 0
 
 
@@ -2785,6 +2808,44 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Output path without extension; only used when "
                          "the build is not refused.")
     hp.set_defaults(func=_cmd_heptanene)
+
+    bam = sub.add_parser(
+        "bamboo",
+        help="A nanotube divided into compartments by graphitic cups "
+             "held inside it at a van der Waals contact.",
+    )
+    bam.add_argument("--n", type=int, default=16,
+                     help="Chiral index n of the outer tube. A bamboo "
+                          "tube has to be WIDE: a (10,10) leaves 3.38 A "
+                          "inside a 3.40 A clearance and holds no cup.")
+    bam.add_argument("--m", type=int, default=16, help="Chiral index m.")
+    bam.add_argument("--compartments", type=int, default=3,
+                     help="Compartments in the periodic cell, which "
+                          "carries that many cups: the divider at the "
+                          "far face is the one at the near face.")
+    bam.add_argument("--compartment-length", dest="compartment_length",
+                     type=float, default=20.0,
+                     help="TARGET axial length of a compartment (Å). The "
+                          "lattice quantises the period, so the achieved "
+                          "value is reported beside the request.")
+    bam.add_argument("--cup-pentagons", dest="cup_pentagons", type=int,
+                     default=1,
+                     help="Apex disclinations per cup. Only 1 is clean; "
+                          "2 and 3 put a square or a triangle at the "
+                          "apex and are refused.")
+    bam.add_argument("--orientation", default="up",
+                     choices=list(CUP_ORIENTATIONS),
+                     help="Which way the cups point.")
+    bam.add_argument("--cup-clearance", dest="cup_clearance", type=float,
+                     default=3.4,
+                     help="Van der Waals gap (Å) between a cup's rim and "
+                          "the wall. This is a contact, not a bond.")
+    bam.add_argument("--bond", type=float, default=1.42,
+                     help="Target C-C bond length (Å).")
+    bam.add_argument("--seed", type=int, default=0, help="Random seed.")
+    bam.add_argument("--out", default="out/bamboo",
+                     help="Output path without extension.")
+    bam.set_defaults(func=_cmd_bamboo)
 
     bd = sub.add_parser(
         "beads",

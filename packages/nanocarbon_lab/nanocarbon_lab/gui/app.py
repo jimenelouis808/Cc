@@ -76,6 +76,7 @@ from .. import __version__
 from .. import render as render_support
 from .. import scene as scene_mod
 from ..builders import fullerene_mesh as fm
+from ..builders.bamboo import CUP_ORIENTATIONS
 from ..builders.beads import BEAD_LAYOUTS
 from ..builders.capped_cnt import MIN_CAP_FREQ
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
@@ -802,6 +803,12 @@ class NanocarbonGUI:
         self.var_ht_nx = self._var("ht_nx", tk.IntVar(value=12))
         self.var_ht_ny = self._var("ht_ny", tk.IntVar(value=4))
         self.var_ht_roll = self._var("ht_roll", tk.StringVar(value="a"))
+        self.var_bam_n = self._var("bam_n", tk.IntVar(value=16))
+        self.var_bam_m = self._var("bam_m", tk.IntVar(value=16))
+        self.var_bam_comp = self._var("bam_comp", tk.IntVar(value=3))
+        self.var_bam_len = self._var("bam_len", tk.DoubleVar(value=20.0))
+        self.var_bam_orient = self._var("bam_orient",
+                                        tk.StringVar(value="up"))
         self.var_bd_layout = self._var("bd_layout",
                                        tk.StringVar(value="chain"))
         self.var_bd_count = self._var("bd_count", tk.IntVar(value=3))
@@ -1359,6 +1366,45 @@ class NanocarbonGUI:
         self.lbl_ht.grid(row=6, column=0, columnspan=2, sticky="w")
         for _var in (self.var_ht_pattern, self.var_ht_roll):
             _var.trace_add("write", lambda *_: self._update_ht_hint())
+
+        # --- bamboo
+        self.frame_bam = ttk.LabelFrame(
+            parent, text="Bamboo tube (cups inside a nanotube)", padding=8)
+        self.frame_bam.columnconfigure(1, weight=1)
+        ttk.Label(self.frame_bam, text="n, m").grid(row=0, column=0,
+                                                    sticky="w")
+        nm = ttk.Frame(self.frame_bam)
+        nm.grid(row=0, column=1, sticky="w")
+        ttk.Spinbox(nm, from_=6, to=40, increment=1, width=4,
+                    textvariable=self.var_bam_n).pack(side="left")
+        ttk.Spinbox(nm, from_=0, to=40, increment=1, width=4,
+                    textvariable=self.var_bam_m).pack(side="left", padx=2)
+        ttk.Label(self.frame_bam, text="Compartments").grid(row=1, column=0,
+                                                            sticky="w")
+        ttk.Spinbox(self.frame_bam, from_=1, to=12, increment=1, width=6,
+                    textvariable=self.var_bam_comp).grid(row=1, column=1,
+                                                         sticky="w")
+        ttk.Label(self.frame_bam, text="Length (Å)").grid(row=2, column=0,
+                                                          sticky="w")
+        ttk.Spinbox(self.frame_bam, from_=5.0, to=80.0, increment=1.0,
+                    width=6, textvariable=self.var_bam_len).grid(
+                        row=2, column=1, sticky="w")
+        ttk.Label(self.frame_bam, text="Cups point").grid(row=3, column=0,
+                                                          sticky="w")
+        ttk.Combobox(self.frame_bam, textvariable=self.var_bam_orient,
+                     values=list(CUP_ORIENTATIONS), state="readonly",
+                     width=9).grid(row=3, column=1, sticky="w")
+        ttk.Label(self.frame_bam, foreground=MUTED, wraplength=250,
+                  justify="left", font=("TkDefaultFont", 8),
+                  text="The cups are separate graphitic pieces held by "
+                       "van der Waals, not bonded to the wall: a sealed "
+                       "septum is not a manifold surface, so no closed "
+                       "carbon network has one. The tube must be WIDE -- "
+                       "a (10,10) holds no cup at all. Compartment "
+                       "length is a target; the lattice quantises the "
+                       "period and the achieved value is "
+                       "reported.").grid(row=4, column=0, columnspan=2,
+                                         sticky="w", pady=(4, 0))
 
         # --- bead chain
         self.frame_bd = ttk.LabelFrame(
@@ -2245,6 +2291,8 @@ class NanocarbonGUI:
             self._update_tp_hint()
         elif mode == "heptanene":
             self.frame_hp.pack(fill="x")
+        elif mode == "bamboo tube":
+            self.frame_bam.pack(fill="x")
         elif mode == "bead chain":
             self.frame_bd.pack(fill="x")
             # A bead is convex, so pentagons belong on it and the
@@ -3806,6 +3854,14 @@ class NanocarbonGUI:
             )
         elif mode == "heptanene":
             params = dict(strict=bool(self.var_hp_strict.get()))
+        elif mode == "bamboo tube":
+            params = dict(
+                n=int(self.var_bam_n.get()),
+                m=int(self.var_bam_m.get()),
+                n_compartments=int(self.var_bam_comp.get()),
+                compartment_length=float(self.var_bam_len.get()),
+                orientation=self.var_bam_orient.get(),
+            )
         elif mode == "bead chain":
             # A spacing of 0 in the box means "use the default", which
             # the builder spells as None; passing 0.0 through would be

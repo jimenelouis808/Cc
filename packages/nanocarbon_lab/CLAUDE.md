@@ -671,6 +671,57 @@ icosahedron at scale 9 passes the length test and then relaxes into
 something the quality gate throws out. Scale the cage until there is real
 tube left.
 
+## Bamboo: a sealed septum is not a manifold surface
+
+`builders/bamboo.py` divides a tube into compartments, and the one
+structural decision is **what the dividers are**. They are not part of
+the tube's carbon network, and that is geometry rather than a modelling
+convenience.
+
+**Where a septum meets the wall, three sheets meet** -- the wall above
+it, the wall below it, and the septum -- so a point on that rim has
+three half-planes glued along a line for a neighbourhood, which is not
+a disc. Marching cubes returns the boundary of a solid, and a boundary
+is a manifold by construction, so **the implicit route cannot produce a
+sealed septum at any resolution or blend**. Said in carbon: an atom on
+that junction line would need four neighbours, and everything this
+package meshes is a trivalent sp2 net.
+
+Which is what the samples show anyway. A CVD-grown bamboo tube's
+compartment walls are **separate graphitic cups** held against the wall
+by van der Waals, not a covalent continuation of it. So this is an
+**assembly**, as `assemblies.py` is for multi-wall tubes -- and it costs
+nothing, because both pieces come from exact-lattice builders. The tube
+is a rolled lattice and each cup a sector cut, so measured at
+(16,16) with three compartments: **1840 atoms, `{5: 3, 6: 890}`, bonds
+1.391-1.420 A**. One pentagon per cup and nothing else: no amorphous
+wall anywhere, and the whole build is under a second because nothing is
+meshed or relaxed.
+
+**A bamboo tube has to be wide**, and that is the nanocoil's lesson
+again rather than a default to taste. The cup must fit inside the wall
+at a graphitic contact, so a **(10,10) tube -- radius 6.78 A -- leaves
+3.38 A against a 3.40 A clearance and holds no cup at all**. Rim room
+measured: (12,12) 4.74 A, (14,14) 6.09, **(16,16) 7.45** (the default),
+(20,20) 10.16. Real bamboo tubes are multi-wall and tens of nm across,
+which is the same answer from the sample's side.
+
+**It stays periodic along its axis, and that is a bug fix rather than a
+preference.** `build_cnt` returns a tube periodic in z whose bond list
+records pairs across that seam. Assembled as a finite structure those
+drew as lines the length of the cell -- measured, a **61.5 A "bond"**
+against a real 1.42. That is the fifth place in this package the same
+fact has bitten (the census, `cell.supercell`, `scene`, the renderer,
+and now an assembly), so the cell keeps the lattice's own period and
+the seam bonds stay true. A periodic cell of n compartments therefore
+carries **n cups, not n - 1**: the divider at the far face is the one at
+the near face.
+
+And the compartment length is an **output**: the lattice quantises the
+period, so 20.0 A asked comes back as 20.496 achieved, and both are
+recorded. Neither is a prediction -- what sets it in a real sample is
+the catalyst's feeding cycle, which nothing here models.
+
 ## Beads: a sphere is a capsule of zero length
 
 `builders/beads.py` joins graphitic spheres with necks into **one**

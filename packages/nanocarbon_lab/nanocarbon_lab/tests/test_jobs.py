@@ -121,6 +121,9 @@ SAMPLES: dict[str, Job] = {
     "heptanene": Job("heptanene", {"strict": False}),
     # The cheapest supernetwork: super-square is one node and two struts
     # per cell, and 2D, so it meshes on a smaller grid than any 3D net.
+    "bamboo tube": Job("bamboo tube", {"n": 16, "m": 16,
+                                       "n_compartments": 2,
+                                       "compartment_length": 20.0}),
     "bead chain": Job("bead chain", {"layout": "chain", "count": 3,
                                      "bead_radius": 7.0,
                                      "neck_radius": 3.0}),
