@@ -75,6 +75,12 @@ from ..builders import (
     build_supernetwork,
     build_toroid,
 )
+from ..builders.beads import (
+    BEAD_LAYOUTS,
+    DEFAULT_SPACING_FRACTION,
+    MIN_SPACING_FRACTION,
+    build_bead_chain,
+)
 from ..builders.haeckelite import PATTERNS as HAECKELITE_PATTERNS
 from ..builders.knee import (
     DEFAULT_SUPERNET_SHAPE,
@@ -1301,6 +1307,26 @@ def _cmd_heptanene(args):
     print(f"  cocycle     = {atoms.info['cocycle']}, cell "
           f"{atoms.info['cell']:.2f} A, genus {atoms.info['genus']}")
     print(f"  sp2         = {atoms.info['sp2']}")
+    return 0
+
+
+def _cmd_beads(args):
+    atoms = build_bead_chain(
+        layout=args.layout, count=args.count, bead_radius=args.bead_radius,
+        neck_radius=args.neck_radius, spacing=args.spacing, arms=args.arms,
+        blend=args.blend, bond=args.bond, roughness=args.roughness,
+        seed=args.seed,
+    )
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    info = atoms.info
+    print(f"  beads       = {info['bead_count']} of R "
+          f"{info['bead_radius']:.1f} A, {info['neck_count']} neck(s) of R "
+          f"{info['neck_radius']:.1f} A at {info['spacing']:.1f} A spacing")
+    # The graph fixes the budget before anything is meshed, so printing
+    # both is printing a prediction beside its test.
+    print(f"  rings       = sum(6-n) = {info['euler'] * 6:+d} measured "
+          f"against {info['ring_budget']:+d} from the graph's topology "
+          f"({'a tree, so sphere-like' if info['ring_budget'] else 'closed, so toroidal'})")
     return 0
 
 
@@ -2759,6 +2785,44 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Output path without extension; only used when "
                          "the build is not refused.")
     hp.set_defaults(func=_cmd_heptanene)
+
+    bd = sub.add_parser(
+        "beads",
+        help="Graphitic spheres joined by necks into one closed surface: "
+             "a chain, a closed ring or a cross of them.",
+    )
+    bd.add_argument("--layout", default="chain", choices=list(BEAD_LAYOUTS),
+                    help="'chain' and 'cross' are trees, so the surface is "
+                         "sphere-like and carries the fullerene's twelve "
+                         "pentagons however many beads it has; 'ring' "
+                         "closes, so it is a torus and its budget is zero.")
+    bd.add_argument("--count", type=int, default=3,
+                    help="Beads, or arm length in beads for 'cross'.")
+    bd.add_argument("--bead-radius", dest="bead_radius", type=float,
+                    default=7.0, help="Sphere radius (Å).")
+    bd.add_argument("--neck-radius", dest="neck_radius", type=float,
+                    default=3.0,
+                    help="Neck radius (Å). Must stay well under the bead "
+                         "or the union returns one lozenge.")
+    bd.add_argument("--spacing", type=float, default=None,
+                    help="Centre-to-centre distance (Å). Default is "
+                         f"{DEFAULT_SPACING_FRACTION} x the bead radius; "
+                         f"under {MIN_SPACING_FRACTION} x it the spheres "
+                         "intersect and there is no waist to neck.")
+    bd.add_argument("--arms", type=int, default=4,
+                    help="Arms for the 'cross' layout.")
+    bd.add_argument("--blend", type=float, default=3.0,
+                    help="Smooth-union radius where a neck meets a bead "
+                         "(Å): a flare rather than a crease, a crease "
+                         "being untileable by a hexagonal net.")
+    bd.add_argument("--bond", type=float, default=1.42,
+                    help="Target C-C bond length (Å).")
+    bd.add_argument("--roughness", type=float, default=0.0,
+                    help="RMS out-of-plane corrugation (Å) after relaxing.")
+    bd.add_argument("--seed", type=int, default=0, help="Random seed.")
+    bd.add_argument("--out", default="out/beads",
+                    help="Output path without extension.")
+    bd.set_defaults(func=_cmd_beads)
 
     sn = sub.add_parser(
         "supernetwork",

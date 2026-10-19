@@ -76,6 +76,7 @@ from .. import __version__
 from .. import render as render_support
 from .. import scene as scene_mod
 from ..builders import fullerene_mesh as fm
+from ..builders.beads import BEAD_LAYOUTS
 from ..builders.capped_cnt import MIN_CAP_FREQ
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
@@ -801,6 +802,14 @@ class NanocarbonGUI:
         self.var_ht_nx = self._var("ht_nx", tk.IntVar(value=12))
         self.var_ht_ny = self._var("ht_ny", tk.IntVar(value=4))
         self.var_ht_roll = self._var("ht_roll", tk.StringVar(value="a"))
+        self.var_bd_layout = self._var("bd_layout",
+                                       tk.StringVar(value="chain"))
+        self.var_bd_count = self._var("bd_count", tk.IntVar(value=3))
+        self.var_bd_bead = self._var("bd_bead", tk.DoubleVar(value=7.0))
+        self.var_bd_neck = self._var("bd_neck", tk.DoubleVar(value=3.0))
+        self.var_bd_spacing = self._var("bd_spacing",
+                                        tk.DoubleVar(value=0.0))
+        self.var_bd_arms = self._var("bd_arms", tk.IntVar(value=4))
         self.var_sn_graph = self._var("sn_graph",
                                       tk.StringVar(value="super-graphene"))
         self.var_sn_scale = self._var("sn_scale", tk.DoubleVar(value=40.0))
@@ -1350,6 +1359,51 @@ class NanocarbonGUI:
         self.lbl_ht.grid(row=6, column=0, columnspan=2, sticky="w")
         for _var in (self.var_ht_pattern, self.var_ht_roll):
             _var.trace_add("write", lambda *_: self._update_ht_hint())
+
+        # --- bead chain
+        self.frame_bd = ttk.LabelFrame(
+            parent, text="Graphitic spheres joined by necks", padding=8)
+        self.frame_bd.columnconfigure(1, weight=1)
+        ttk.Label(self.frame_bd, text="Layout").grid(row=0, column=0,
+                                                     sticky="w")
+        ttk.Combobox(self.frame_bd, textvariable=self.var_bd_layout,
+                     values=list(BEAD_LAYOUTS), state="readonly",
+                     width=8).grid(row=0, column=1, sticky="w")
+        ttk.Label(self.frame_bd, text="Beads").grid(row=1, column=0,
+                                                    sticky="w")
+        ttk.Spinbox(self.frame_bd, from_=2, to=24, increment=1, width=6,
+                    textvariable=self.var_bd_count).grid(row=1, column=1,
+                                                         sticky="w")
+        ttk.Label(self.frame_bd, text="Bead R (Å)").grid(row=2, column=0,
+                                                         sticky="w")
+        ttk.Spinbox(self.frame_bd, from_=3.0, to=25.0, increment=0.5,
+                    width=6, textvariable=self.var_bd_bead).grid(
+                        row=2, column=1, sticky="w")
+        ttk.Label(self.frame_bd, text="Neck R (Å)").grid(row=3, column=0,
+                                                         sticky="w")
+        ttk.Spinbox(self.frame_bd, from_=1.5, to=15.0, increment=0.5,
+                    width=6, textvariable=self.var_bd_neck).grid(
+                        row=3, column=1, sticky="w")
+        ttk.Label(self.frame_bd, text="Spacing (Å)").grid(row=4, column=0,
+                                                          sticky="w")
+        ttk.Spinbox(self.frame_bd, from_=0.0, to=120.0, increment=0.5,
+                    width=6, textvariable=self.var_bd_spacing).grid(
+                        row=4, column=1, sticky="w")
+        ttk.Label(self.frame_bd, text="Arms (cross)").grid(row=5, column=0,
+                                                           sticky="w")
+        ttk.Spinbox(self.frame_bd, from_=2, to=8, increment=1, width=6,
+                    textvariable=self.var_bd_arms).grid(row=5, column=1,
+                                                        sticky="w")
+        ttk.Label(self.frame_bd, foreground=MUTED, wraplength=250,
+                  justify="left", font=("TkDefaultFont", 8),
+                  text="Spacing 0 takes the default (2.4 x the bead). "
+                       "Under 2 x the bead the spheres intersect and "
+                       "there is no neck. A chain or a cross is a tree, "
+                       "so it carries the fullerene's twelve pentagons "
+                       "however long it is; a ring closes and is a "
+                       "torus, budget zero.").grid(row=6, column=0,
+                                                   columnspan=2,
+                                                   sticky="w", pady=(4, 0))
 
         # --- supernetwork
         self.frame_sn = ttk.LabelFrame(parent, text="Supernetwork of tubes",
@@ -2191,6 +2245,14 @@ class NanocarbonGUI:
             self._update_tp_hint()
         elif mode == "heptanene":
             self.frame_hp.pack(fill="x")
+        elif mode == "bead chain":
+            self.frame_bd.pack(fill="x")
+            # A bead is convex, so pentagons belong on it and the
+            # remesher's stray heptagons are pure defects -- the same
+            # reason the coated particle places its curvature and the
+            # junction does not.
+            self.var_place.set(True)
+            self.var_anneal.set(0)
         elif mode == "supernetwork":
             self.frame_sn.pack(fill="x")
             # Same reason as the network and the schwarzite: at a vertex
@@ -3744,6 +3806,23 @@ class NanocarbonGUI:
             )
         elif mode == "heptanene":
             params = dict(strict=bool(self.var_hp_strict.get()))
+        elif mode == "bead chain":
+            # A spacing of 0 in the box means "use the default", which
+            # the builder spells as None; passing 0.0 through would be
+            # refused as under the intersect floor.
+            spacing = float(self.var_bd_spacing.get())
+            params = dict(
+                layout=self.var_bd_layout.get(),
+                count=int(self.var_bd_count.get()),
+                bead_radius=float(self.var_bd_bead.get()),
+                neck_radius=float(self.var_bd_neck.get()),
+                spacing=spacing if spacing > 0.0 else None,
+                arms=int(self.var_bd_arms.get()),
+                anneal_sweeps=int(self.var_anneal.get()),
+                place_curvature=bool(self.var_place.get()),
+                wall_anchor=1.0 if self.var_anchor.get() else 0.0,
+                roughness=float(self.var_roughness.get()),
+            )
         elif mode == "supernetwork":
             params = dict(
                 graph=self.var_sn_graph.get(),

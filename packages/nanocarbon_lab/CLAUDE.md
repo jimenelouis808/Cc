@@ -671,6 +671,62 @@ icosahedron at scale 9 passes the length test and then relaxes into
 something the quality gate throws out. Scale the cage until there is real
 tube left.
 
+## Beads: a sphere is a capsule of zero length
+
+`builders/beads.py` joins graphitic spheres with necks into **one**
+closed surface -- the beads-on-a-string / interconnected-cage
+morphology, which is neither a nano-onion (concentric shells of one
+centre) nor a supernetwork (a *tube* on every edge, no sphere anywhere).
+
+**It is one field, not two primitives unioned**, and that is what made
+it small. A zero-length capsule is exactly a sphere, so a bead and a
+neck are both segments handed to `implicit.graph_field` with different
+radii, and the smooth union that already blends struts at a
+supernetwork node is what flares the neck into the bead instead of
+meeting it at a crease -- a crease being untileable by a hexagonal net,
+which is why that union is smooth in the first place. `graph_field`
+therefore takes **one radius per segment** now; the scalar path every
+supernetwork and cage goes through is asserted **bit-identical**
+(`np.array_equal`, not a tolerance), and the degenerate length is
+clamped because the projection divides by it.
+
+**The graph fixes the budget before anything is meshed**, by the
+identity `supernetwork.py` already uses: `chi = 2*(V - E)`, so
+`sum(6-n) = 12*(V - E)`. A chain is a **tree** -- `V - E = 1` -- so its
+budget is **+12 at every length**: a sausage is still sphere-like, and
+a test pins that at 2, 3, 5 and 9 beads. A ring closes, `V = E`, budget
+**0**, a torus. Measured: chain of 3 gives `{5: 27, 6: 293, 7: 13,
+8: 1}` summing to +12 against +12, ring of 6 gives +0 against +0, both
+with zero contacts, and the chain scores **100% disclination
+placement** -- all 41 on the correct side of the curvature, pentagons
+mean sign +1.00 and heptagons -1.00. Only the periodic coil and the
+knee nodes reach that elsewhere in this file.
+
+`place_curvature` is **on** here and off for a junction, for the reason
+`nanoparticle/coat.py` gives: a bead is convex, so pentagons belong on
+it and stray heptagons are pure defects. A junction saddles and wants
+the opposite.
+
+### Two spheres closer than twice their radius have no waist
+
+The first version defaulted to `1.7 * bead_radius` and refused only
+below `1.25`. Both are under `2.0`, where two spheres **intersect**, so
+there is no waist for a neck to be -- and the render showed exactly
+that: a sausage with dents, sound carbon, correct census, not a bead
+chain. `MIN_SPACING_FRACTION` is 2.0 and the default 2.4.
+
+**The dangerous case is the ring, and it is silent.** Measured at bead
+7, neck 3, blend 3: a hole of **+4.9 A** closes as a torus, **+2.0 A**
+is refused by `_finish`'s quality gate for features finer than a carbon
+ring, and **+1.4 A closes as a SPHERE** -- every bond in range, zero
+contacts, `chi = 2` and `sum(6-n) = +12` against a budget of 0. A sound
+structure that is not the ring asked for. So there are two defences:
+a geometric guard up front (the hole must clear the blend, a threshold
+that sits inside the measured bracket), and an **independent census
+check** after the build. `_finish` already tests the census against the
+**mesh's** own Euler characteristic, which catches a torn mesh and
+cannot catch a sound mesh that closed around the wrong graph.
+
 ## Haeckelite tubes: a cylinder is developable, so nothing is re-derived
 
 `builders/haeckelite_tube.py` rolls a finished haeckelite sheet. It is

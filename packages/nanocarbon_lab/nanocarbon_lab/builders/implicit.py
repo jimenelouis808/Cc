@@ -406,10 +406,15 @@ def graph_field(
     segments: np.ndarray,
     box: np.ndarray,
     pbc: tuple[bool, bool, bool],
-    tube_radius: float = 6.0,
+    tube_radius=6.0,
     blend: float = 5.0,
 ) -> Field:
     """Field for tubes on the edges of an arbitrary graph.
+
+    ``tube_radius`` is one value for every segment, or an array holding
+    one per segment. The per-segment form is what lets a structure carry
+    two thicknesses at once -- a fat bead on a thin neck -- with no
+    second field to union in, and a zero-length segment is a sphere.
 
     :func:`network_field` with the net's identity taken out of it: the
     caller hands over the edges it wants as capsules and which of the
@@ -425,7 +430,12 @@ def graph_field(
     * and the point-by-strut array is chunked, because a 72³ grid against
       a few hundred struts wants gigabytes for the offsets alone.
     """
-    if tube_radius <= 0 or blend <= 0:
+    radii = np.atleast_1d(np.asarray(tube_radius, dtype=float))
+    if radii.size not in (1, len(segments)):
+        raise ValueError(
+            f"tube_radius must be one value or one per segment: got "
+            f"{radii.size} for {len(segments)} segments.")
+    if np.any(radii <= 0) or blend <= 0:
         raise ValueError("tube_radius and blend must be positive.")
     box = np.asarray(box, dtype=float)
     images = [range(-1, 2) if repeat else (0,) for repeat in pbc]
@@ -434,10 +444,19 @@ def graph_field(
                       dtype=float) * box
     segments = (np.asarray(segments, float)[None, :, :, :]
                 + shifts[:, None, None, :]).reshape(-1, 2, 3)
+    # The radii tile with the images, in the order the segments do.
+    per_segment = (np.full(len(segments), radii[0]) if radii.size == 1
+                   else np.tile(radii, len(shifts)))
 
     starts = segments[:, 0, :]
     directions = segments[:, 1, :] - starts
     lengths_squared = np.einsum("ij,ij->i", directions, directions)
+    # A zero-length segment is a SPHERE, which is how a bead sits on a
+    # vertex with no second primitive to union in. The projection below
+    # divides by this, so the degenerate case is clamped and its t is
+    # then pinned to 0 by the clip that follows. Without the guard a
+    # bead comes out nan and takes the whole field with it.
+    lengths_squared = np.maximum(lengths_squared, 1e-12)
     n_blend = min(8, segments.shape[0])
     chunk = max(1024, int(256e6 / (max(1, segments.shape[0]) * 64)))
 
@@ -450,7 +469,8 @@ def graph_field(
             t = np.einsum("psi,si->ps", offset, directions) / lengths_squared
             np.clip(t, 0.0, 1.0, out=t)
             closest = offset - t[:, :, None] * directions[None, :, :]
-            distance = np.linalg.norm(closest, axis=-1) - tube_radius
+            distance = (np.linalg.norm(closest, axis=-1)
+                        - per_segment[None, :])
             nearest = np.partition(distance, n_blend - 1, axis=1)[:, :n_blend]
             nearest.sort(axis=1)
             result = nearest[:, 0]

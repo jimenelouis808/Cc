@@ -122,6 +122,7 @@ CARBON_MODES = (
     # covers the 3D nets and the finite cages alike -- a C60 whose bonds
     # are tubes is the same construction as a cubic lattice of them.
     "supernetwork",
+    "bead chain",
     "multi-wall",
     "bundle",
 )
@@ -358,6 +359,7 @@ def builder_for(mode: str):
         build_schwarzite,
         build_toroid,
     )
+    from .builders.beads import build_bead_chain
     from .builders.supernetwork import build_supernetwork
     from .hetero import build_twisted_bilayer, build_vdw_stack
     from .tmd import (
@@ -404,6 +406,7 @@ def builder_for(mode: str):
         "schwarzite": build_schwarzite,
         "network": build_nanotube_network,
         "supernetwork": build_supernetwork,
+        "bead chain": build_bead_chain,
         "multi-wall": build_multiwall_cnt,
         "bundle": build_bundle,
     }
@@ -806,6 +809,27 @@ def estimate_atoms(job: Job) -> int:
         # to estimate. The next member up is 84.
         return 56
 
+    if mode == "bead chain":
+        # Spheres plus necks, with the same overlap correction the
+        # supernetwork uses and for the same reason: a neck buries part
+        # of the bead it joins, so summing the two areas counts the
+        # join twice. Coordination here is 2 along a chain, so the
+        # correction is mild.
+        from .builders.beads import bead_graph
+
+        bead_r = float(p.get("bead_radius", 7.0))
+        neck_r = float(p.get("neck_radius", 3.0))
+        spacing = p.get("spacing") or 1.7 * bead_r
+        vertices, edges = bead_graph(
+            str(p.get("layout", "chain")), int(p.get("count", 3)),
+            float(spacing), arms=int(p.get("arms", 4)))
+        area = len(vertices) * 4.0 * math.pi * bead_r ** 2
+        for first, second in edges:
+            step = vertices[second] - vertices[first]
+            length = float(sum(value * value for value in step) ** 0.5)
+            area += 2.0 * math.pi * neck_r * length
+        return int(ATOMS_PER_RING * 0.85 * area / RING_AREA)
+
     if mode == "supernetwork":
         # Struts as cylinders, with the same measured overlap correction
         # the `network` mode uses -- tubes bury each other at a node, so
@@ -1192,6 +1216,12 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     }),
     "heptanene": ("heptanene", {
         "bond": "--bond", "strict": "--no-strict",
+    }),
+    "bead chain": ("beads", {
+        "layout": "--layout", "count": "--count",
+        "bead_radius": "--bead-radius", "neck_radius": "--neck-radius",
+        "spacing": "--spacing", "arms": "--arms", "blend": "--blend",
+        "bond": "--bond", "roughness": "--roughness",
     }),
     "supernetwork": ("supernetwork", {
         "graph": "--graph", "scale": "--scale",
