@@ -3046,6 +3046,42 @@ census, `cell.supercell` for repetition, `scene` for compositions, and
 now the renderer. Anything that uses a recorded bond pair **as a pair of
 positions** needs the shift.
 
+### A draft is the cover with more noise, and that is measured
+
+A 4096 px cover at 1024 samples is **874x the sampling work of a
+draft**, which is too much to spend on a picture nobody has seen yet.
+`--estimate` prints the resolution, the samples and that ratio and
+renders nothing, so the cover is a decision rather than a click.
+
+It states **work and ratios, never seconds**, for the reason "Size can
+be stated before a build; time cannot" gives: the render path has the
+same two-term shape, where building the scene does not depend on the
+resolution at all (measured: **291 s of a 348 s** draft render of a
+1532-atom particle) and only sampling scales. A single number would
+hide that 874x the sampling is nowhere near 874x the wall clock. The
+ratios are against the DRAFT and not against whatever was asked for --
+compared to the request, every cheaper preset prints `0.00x` at cover,
+which tells nobody anything.
+
+**Iterating at draft is only worth anything if the draft predicts the
+cover**, so that was measured rather than argued. The same scene at
+`draft` (640 px, 48 samples) and `preview` (1280, 128), the second
+box-downscaled to the first:
+
+```
+mean |diff| 0.0072   p99 0.0951   max 0.2882
+draft         silhouette bbox x 50-568 y 85-524  centroid (330.5, 311.5)
+preview-down  silhouette bbox x 26-568 y 84-524  centroid (325.7, 314.0)
+```
+
+The centroid moves 5 px in 640 and the subject's extent is the same, so
+what changes is the noise. That holds by construction and each piece is
+a rule worth keeping: the glare radius is a **fraction of the short
+side**, sphere detail follows the **atom count**, every effect is
+measured in **subject radii**, and `--quality` scales the **long** side
+carrying the aspect. Anything added here that is sized in pixels would
+break the guarantee and make cheap iteration meaningless.
+
 ### Depth colouring cannot read through a hollow subject
 
 Two separate faults were found asking for `--colour-by depth` on a C240
