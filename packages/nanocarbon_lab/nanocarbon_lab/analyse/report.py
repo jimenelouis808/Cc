@@ -69,6 +69,8 @@ def read_structure(path: str | Path, index: int = -1) -> Atoms:
     path = Path(path)
     if not path.exists():
         raise ValueError(f"No such file: {path}")
+    if path.suffix.lower() == ".xtl":
+        return read_xtl(path)
     try:
         atoms = io.read(str(path), index=index)
     except Exception as exc:
@@ -80,6 +82,112 @@ def read_structure(path: str | Path, index: int = -1) -> Atoms:
     if isinstance(atoms, list):
         atoms = atoms[index]
     return atoms
+
+
+def read_xtl(path: str | Path) -> Atoms:
+    """Materials Studio ``.xtl``: ``CELL`` (a b c alpha beta gamma, on its own
+    line or inline), ``SYMMETRY NUMBER`` and fractional ``ATOMS``.
+
+    ASE has no reader for it, and it is the format Materials Studio writes, so
+    a coil drawn there arrives here with its lattice instead of as a cut
+    ``.xyz``. Space groups other than P1 are expanded with ASE's tables in
+    the standard setting; the file lists no operations, so a non-standard
+    setting cannot be recovered.
+    """
+    from ase.data import chemical_symbols
+
+    cell = None
+    number = 1
+    labels: list[str] = []
+    fractions: list[list[float]] = []
+    section = None
+    columns: list[str] = []
+    for raw in Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        parts = line.split()
+        key = parts[0].upper()
+        if key == "EOF":
+            break
+        if key == "CELL" and len(parts) >= 7:
+            cell = [float(x) for x in parts[1:7]]
+            section = None
+            continue
+        if key in ("TITLE", "DIMENSION", "SYMMETRY", "CELL", "ATOMS", "ATOM"):
+            section = "ATOMS" if key == "ATOM" else key
+            if key == "SYMMETRY" and len(parts) > 2 and parts[1].upper() == "NUMBER":
+                number = int(parts[2])
+            if key == "DIMENSION" and len(parts) > 1 and int(parts[1]) != 3:
+                raise ValueError(f"{Path(path).name}: only 3-D .xtl files are read.")
+            continue
+        if section == "CELL":
+            cell = [float(x) for x in parts[:6]]
+            section = None
+        elif section == "ATOMS":
+            if key == "NAME":
+                columns = line.upper().split()
+                continue
+            ix, iy, iz = ((columns.index(c) for c in ("X", "Y", "Z"))
+                          if columns else (1, 2, 3))
+            labels.append(parts[0])
+            fractions.append([float(parts[ix]), float(parts[iy]), float(parts[iz])])
+    if cell is None or len(cell) != 6 or not labels:
+        raise ValueError(f"{Path(path).name}: no CELL or no ATOMS; is it an .xtl?")
+    symbols = []
+    for label in labels:
+        letters = "".join(ch for ch in label if ch.isalpha())
+        two = letters[:2].capitalize()
+        symbols.append(two if two in chemical_symbols else letters[:1].upper())
+    if number > 1:
+        from ase.spacegroup import crystal
+
+        atoms = crystal(symbols, fractions, spacegroup=number, cellpar=cell)
+    else:
+        atoms = Atoms(symbols, scaled_positions=fractions, cell=cell, pbc=True)
+    atoms.info["source_format"] = f"xtl (space group {number})"
+    return atoms
+
+
+#: A dangling bond this close to either end of a cell-less structure, along
+#: one axis, is where a periodic bond was cut.
+CUT_EDGE = 1.6
+
+
+def cut_periodic_edges(atoms: Atoms, pairs: np.ndarray) -> dict | None:
+    """Is this a periodic structure saved without its cell?
+
+    A plain ``.xyz`` keeps no lattice, so a tube or coil exported from a
+    periodic cell arrives with every bond that crossed the boundary cut. Its
+    ring census then counts those cuts: the 480-atom coil read as ``.xyz``
+    gave 17 pentagons and 17 heptagons instead of 20 and 20. The signature is
+    specific: every under-coordinated carbon sits at one of the two ends of
+    one axis, and both ends have them. A real tip, edge or flake rim does
+    not look like that (a ribbon's edges run along its length, not at its
+    ends), so the test does not fire on finite structures built here.
+
+    Returns ``None`` when the structure has a cell or the pattern is absent,
+    else the axis and how many atoms sit at each end.
+    """
+    if atoms.cell.rank == 3 and any(atoms.get_pbc()):
+        return None
+    symbols = np.array(atoms.get_chemical_symbols())
+    count = np.bincount(np.asarray(pairs, dtype=int).ravel(), minlength=len(atoms)) \
+        if len(pairs) else np.zeros(len(atoms), dtype=int)
+    open_ = np.flatnonzero((symbols == "C") & (count < 3))
+    if not len(open_) or len(open_) > 0.25 * len(atoms):
+        return None
+    positions = atoms.get_positions()
+    for axis in range(3):
+        values = positions[:, axis]
+        low, high = values.min(), values.max()
+        if high - low < 4 * CUT_EDGE:
+            continue
+        at_low = values[open_] < low + CUT_EDGE
+        at_high = values[open_] > high - CUT_EDGE
+        if np.all(at_low | at_high) and at_low.any() and at_high.any():
+            return {"axis": "xyz"[axis], "low": int(at_low.sum()), "high": int(at_high.sum())}
+    return None
 
 
 def composition(atoms: Atoms) -> dict[str, Any]:
@@ -259,6 +367,17 @@ def analyse(atoms: Atoms, tolerance: float = 0.30,
                         max_ring_size if max_ring_size else MAX_RING_SIZE)
     components = connected_components(atoms, tolerance=tolerance)
     validation = run_basic_checks(atoms)
+    cut = cut_periodic_edges(atoms, pairs)
+    if cut:
+        warning = (
+            f"{cut['low'] + cut['high']} carbons have fewer than three neighbours "
+            f"and all of them sit at the two ends along {cut['axis']} "
+            f"({cut['low']} and {cut['high']}): this looks like a periodic cell "
+            "saved without its cell (a plain .xyz keeps no lattice). The census "
+            "counts the cut bonds and is wrong; open the file that keeps the "
+            "cell (.extxyz, .xtl, .cif, POSCAR) or set the cell and periodicity.")
+        rings = dict(rings, reliable=False, cut_cell=cut,
+                     caveat=(warning + " " + rings.get("caveat", "")).strip())
 
     cell = np.asarray(atoms.cell)
     volume = float(abs(np.linalg.det(cell))) if cell.any() else 0.0

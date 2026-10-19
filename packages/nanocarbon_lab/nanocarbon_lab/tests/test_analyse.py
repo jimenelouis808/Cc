@@ -513,3 +513,48 @@ class TestSmallMolecules:
         text = format_report(analyse(grafted))
         assert "faces of the backbone surface" in text
         assert "shortest-path rings]" not in text
+
+
+# --- periodic cells that arrive without their cell, and .xtl ---------------
+
+def _tube_xyz(tmp_path):
+    tube = build_cnt(8, 0, length=17.04)
+    path = tmp_path / "tube.xyz"
+    path.write_text(f"{len(tube)}\n\n" + "".join(
+        f"C {x:.6f} {y:.6f} {z:.6f}\n" for x, y, z in tube.get_positions()))
+    return tube, path
+
+
+def test_a_periodic_tube_saved_as_plain_xyz_is_flagged(tmp_path):
+    """The cut bonds sit at both ends of the axis: the census must not be trusted."""
+    tube, path = _tube_xyz(tmp_path)
+    rings = analyse(read_structure(path))["inferred"]["rings"]
+    assert rings["reliable"] is False and rings["cut_cell"]["axis"] == "z"
+    assert "without its cell" in rings["caveat"]
+    whole = analyse(tube)["inferred"]["rings"]
+    assert whole["counts"] == {6: len(tube) // 2} and "cut_cell" not in whole
+
+
+def test_finite_structures_are_not_taken_for_cut_cells():
+    for atoms in (build_capped_cnt(), build_fullerene()):
+        rings = analyse(atoms)["inferred"]["rings"]
+        assert "cut_cell" not in rings
+
+
+def test_xtl_keeps_the_cell_and_the_census(tmp_path):
+    """Materials Studio .xtl, CELL inline as it writes it: the tube comes back periodic and
+    whole, with the same hexagons as the built one."""
+    tube = build_cnt(8, 0, length=17.04)
+    a, b, c, alpha, beta, gamma = tube.cell.cellpar()
+    lines = ["TITLE tube", "DIMENSION 3",
+             f"CELL {a:.5f} {b:.5f} {c:.5f} {alpha:.3f} {beta:.3f} {gamma:.3f}",
+             "SYMMETRY  NUMBER 1  LABEL P1", "", "ATOMS",
+             "NAME       X          Y          Z     CHARGE   TEMP    OCCUP   SCAT"]
+    lines += [f"  C   {x:.6f} {y:.6f} {z:.6f}  0.0000  0.0000  1.0000   C"
+              for x, y, z in tube.get_scaled_positions()]
+    path = tmp_path / "tube.xtl"
+    path.write_text("\n".join(lines + ["EOF"]) + "\n")
+    read = read_structure(path)
+    assert all(read.pbc) and np.allclose(read.cell.cellpar(), tube.cell.cellpar(), atol=1e-3)
+    rings = analyse(read)["inferred"]["rings"]
+    assert rings["counts"] == {6: len(tube) // 2} and rings["reliable"]

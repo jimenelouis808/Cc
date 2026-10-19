@@ -5222,7 +5222,7 @@ class NanocarbonGUI:
 
         path = filedialog.askopenfilename(
             title="Open a structure file",
-            filetypes=[("Structures", "*.xyz *.extxyz *.cif *.pdb *.vasp "
+            filetypes=[("Structures", "*.xyz *.extxyz *.cif *.xtl *.pdb *.vasp "
                                       "*.traj *.cube *.gen *.json"),
                        ("All files", "*.*")])
         if not path:
