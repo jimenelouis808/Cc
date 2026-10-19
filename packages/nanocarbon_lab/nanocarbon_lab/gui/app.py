@@ -5516,6 +5516,24 @@ class NanocarbonGUI:
             ttk.Spinbox(grid, from_=-360, to=360, increment=5.0, width=6,
                         textvariable=rot).grid(row=2, column=column + 1,
                                                padx=1)
+        # scale and repeat are Item fields and were reachable only from
+        # Python, so the window could place an item and not resize or
+        # tile it -- a control that exists and cannot be clicked.
+        extra = ttk.Frame(sc)
+        extra.pack(fill="x", pady=(4, 0))
+        ttk.Label(extra, text="Scale").pack(side="left")
+        self.var_scene_scale = tk.DoubleVar(value=1.0)
+        ttk.Spinbox(extra, from_=0.1, to=10.0, increment=0.1, width=5,
+                    textvariable=self.var_scene_scale).pack(side="left",
+                                                            padx=(4, 0))
+        ttk.Label(extra, text="Repeat").pack(side="left", padx=(8, 0))
+        self.var_scene_repeat = []
+        for _ in range(3):
+            times = tk.IntVar(value=1)
+            self.var_scene_repeat.append(times)
+            ttk.Spinbox(extra, from_=1, to=20, increment=1, width=3,
+                        textvariable=times).pack(side="left", padx=1)
+
         ttk.Button(sc, text="Apply to selected item",
                    command=self.on_scene_apply_transform).pack(fill="x",
                                                                pady=(4, 0))
@@ -5629,6 +5647,19 @@ class NanocarbonGUI:
         item.translation = tuple(float(var.get())
                                  for var in self.var_scene_pos)
         item.rotation = tuple(float(var.get()) for var in self.var_scene_rot)
+        item.scale = float(self.var_scene_scale.get())
+        # Repeating an aperiodic direction raises rather than obeying --
+        # the copies would sit inside each other -- so the refusal is
+        # reported where the user clicked rather than as a traceback.
+        wanted = tuple(max(1, int(var.get()))
+                       for var in self.var_scene_repeat)
+        if wanted != tuple(item.repeat):
+            try:
+                item.repeat = wanted
+                item.source()
+            except Exception as exc:                # noqa: BLE001
+                item.repeat = (1, 1, 1)
+                self._show_error("Cannot repeat that item", str(exc))
         self._refresh_scene_list()
 
     def on_scene_arrange(self) -> None:
