@@ -76,6 +76,14 @@ def _parse_args() -> argparse.Namespace:
         help="What an atom's colour means. Default: the style's own.",
     )
     p.add_argument(
+        "--estimate", action="store_true",
+        help="Say what the render would cost and stop, without building "
+             "or rendering anything. Prints the resolution, the samples "
+             "and the sampling work relative to every quality preset, "
+             "so a 4096 px cover is a decision taken with the number in "
+             "hand rather than a click that takes half an hour.",
+    )
+    p.add_argument(
         "--depth-axis", dest="depth_axis", default="auto",
         choices=["auto", "view", "x", "y", "z"],
         help="Which direction --colour-by depth grades along. auto is "
@@ -789,6 +797,39 @@ def _depth_axis(args, bundle, colour_by):
     return None
 
 
+def _print_estimate(args) -> None:
+    """Say what a render would cost, and render nothing.
+
+    The point is the two-stage way of working this pipeline rewards:
+    settle the composition at `--quality draft`, which costs almost
+    nothing, and spend the cover's sampling only once there is nothing
+    left to decide. Everything that decides the PICTURE -- the camera,
+    the framing, the materials, the effect sizes -- is resolution
+    independent, so a draft is the cover with more noise in it, not a
+    different photograph.
+    """
+    samples = args.samples
+    if samples is None:
+        samples = style_defs.get_style(args.style).samples
+    cost = style_defs.render_cost(args.resolution, samples)
+    print(f"{args.style}: {cost['width']}x{cost['height']} px, "
+          f"{cost['samples']} samples "
+          f"({cost['pixel_samples'] / 1e6:.1f} Mpixel-samples)")
+    # Against the DRAFT, not against whatever was asked for: at cover
+    # every cheaper preset rounds to 0.00x, which tells nobody
+    # anything. "cover is 1365x draft" is the number being decided on.
+    base = cost["pixel_samples"] * cost["ratios"]["draft"]
+    for name in style_defs.QUALITY_PRESETS:
+        work = cost["pixel_samples"] * cost["ratios"][name]
+        mark = "  <- asked for" if args.quality == name else ""
+        print(f"    --quality {name:<8} {work / 1e6:9.1f} Mpixel-samples"
+              f"  = {work / base:8.1f}x draft{mark}")
+    print("Scene construction does not depend on the resolution, so "
+          "these are sampling ratios and not wall-clock ones.")
+    print("Nothing was rendered. Settle the picture at --quality draft "
+          "first: it is the same photograph with more noise.")
+
+
 def main() -> int:
     args = _parse_args()
     if args.list_effects:
@@ -819,6 +860,10 @@ def main() -> int:
                            max(16, round(height * factor))]
         if args.samples is None:
             args.samples = preset["samples"]
+
+    if args.estimate:
+        _print_estimate(args)
+        return 0
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     style = style_defs.get_style(args.style)

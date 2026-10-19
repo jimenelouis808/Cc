@@ -719,6 +719,42 @@ QUALITY_PRESETS: dict[str, dict[str, int]] = {
 
 
 
+def render_cost(resolution, samples: int) -> dict:
+    """What a render will COST, stated as work rather than as time.
+
+    Returns the pixel count, the sample count and their product --
+    "pixel-samples", the unit the sampling stage actually does -- plus
+    the ratio against every quality preset at the same aspect.
+
+    **No seconds.** This module's own history says why: three attempts
+    to turn a size into a predicted build time all failed and are pinned
+    by tests so they are not tried again, and the render path has the
+    same shape. Its time is two terms -- building the scene, which does
+    not depend on the resolution at all (measured: 291 s of a 348 s
+    draft render of a 1532-atom particle), and sampling, which scales
+    with pixel-samples. A single number would hide that a 136x rise in
+    pixel-samples is not a 136x rise in wall time.
+
+    What the ratio IS good for is knowing what is being committed to
+    before committing to it: cover against draft is 136x the sampling
+    work, so a composition settled at draft costs almost nothing and a
+    composition settled at cover costs that.
+    """
+    width, height = (int(resolution[0]), int(resolution[1]))
+    pixels = width * height
+    samples = int(samples)
+    work = pixels * samples
+    ratios = {}
+    for name, preset in QUALITY_PRESETS.items():
+        factor = preset["long_side"] / max(width, height)
+        other = (max(16, round(width * factor))
+                 * max(16, round(height * factor))
+                 * preset["samples"])
+        ratios[name] = other / work if work else float("inf")
+    return {"width": width, "height": height, "pixels": pixels,
+            "samples": samples, "pixel_samples": work, "ratios": ratios}
+
+
 #: How the bonds are coloured, independently of the atoms.
 #:
 #: ``atoms``   -- each half takes its own atom's colour, which is what
@@ -2635,6 +2671,7 @@ __all__ = [
     "DETAIL_LEVELS",
     "MODELS",
     "QUALITY_PRESETS",
+    "render_cost",
     "SPACEFILL_ELEMENTS",
     "VDW_RADII",
     "FINISHES",

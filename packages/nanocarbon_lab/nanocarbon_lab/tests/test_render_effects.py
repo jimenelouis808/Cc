@@ -1352,3 +1352,47 @@ class TestDepthAxis:
         source = (BLENDER_DIR / "render_cnt.py").read_text()
         assert "HOLLOW" in source
         assert "superimpose" in source
+
+
+class TestRenderCost:
+    """A cover is opt-in, and its cost is stated before it is paid.
+
+    A 4096 px frame at 1024 samples is not a click to take on trust:
+    it is hundreds of times the sampling work of a draft. --estimate
+    says so and renders nothing.
+    """
+
+    def test_pixel_samples_is_the_product(self, styles):
+        cost = styles.render_cost((640, 480), 48)
+        assert cost["pixels"] == 640 * 480
+        assert cost["pixel_samples"] == 640 * 480 * 48
+
+    def test_cover_is_hundreds_of_times_a_draft(self, styles):
+        """The number the decision turns on, squared in both axes."""
+        cost = styles.render_cost((640, 640), 48)
+        assert cost["ratios"]["draft"] == pytest.approx(1.0)
+        assert cost["ratios"]["cover"] > 100.0
+
+    def test_the_aspect_is_carried(self, styles):
+        """A 5:6 frame must stay 5:6 at every preset, or the ratio is
+        comparing two different pictures."""
+        cost = styles.render_cost((2000, 2400), 512)
+        # cover scales the LONG side to 4096, so 3413x4096.
+        expected = (round(2000 * 4096 / 2400) * 4096 * 1024
+                    / (2000 * 2400 * 512))
+        assert cost["ratios"]["cover"] == pytest.approx(expected, rel=1e-3)
+
+    def test_no_seconds_are_claimed(self, styles):
+        """This repo has three pinned failures at predicting a build
+        time from a size. The render path has the same two-term shape,
+        so the cost is work and ratios, never wall clock."""
+        cost = styles.render_cost((640, 640), 48)
+        assert "seconds" not in cost
+        assert "time" not in cost
+
+    def test_estimate_renders_nothing(self):
+        """It must return before the scene is even reset."""
+        source = (BLENDER_DIR / "render_cnt.py").read_text()
+        estimate = source.index("if args.estimate:")
+        reset = source.index("bpy.ops.wm.read_factory_settings")
+        assert estimate < reset
