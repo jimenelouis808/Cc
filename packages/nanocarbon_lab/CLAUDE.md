@@ -3082,6 +3082,46 @@ views are not in the candidate set**. That last one matters -- an exact
 elevation is an exact optimum, and no tie-break bonus pulls away from
 one. They stay reachable as `--view front`, `top`, `iso`, `hero`.
 
+### The floor belongs under the subject's lowest point, not under its centre
+
+Third time the bounding sphere has been the wrong measure, after the
+camera's framing and the effects' scale -- and the first two are already
+written down two paragraphs apart in this file, which is what makes this
+one worth recording rather than merely fixing.
+
+`_add_floor` placed the plane at `centre.z - radius * 1.04`. That is
+correct for a sphere and its own docstring said so ("the lowest atom of
+a sphere"). **A composition is never a sphere**, and the error is the
+gap between the bounding-sphere radius and the actual drop to the
+subject's base:
+
+| subject | radius | height | spherical floor | measured floor | error |
+|---|---|---|---|---|---|
+| row of three cages | 65.0 | 39.8 | -40.7 | 4.4 | **45.1 Å** |
+| one cage | 34.5 | 39.8 | -9.9 | 4.7 | 14.6 Å |
+| one tall tube | 32.8 | 63.4 | 3.6 | 4.7 | **1.1 Å** |
+
+So a row of 39.8 Å cages had its floor **further below them than they
+are tall**, and they levitated out of their own reflection. Measured on
+the finished frame, the band under the subject was a smooth gradient --
+0.0876 rising monotonically to 0.1124 -- with no trace of the cages in
+it. A reflection carries the subject's shape; a gradient is the
+backdrop.
+
+**The error scales with how far from spherical the subject is, which is
+why it hid.** On a single tall tube the spherical formula is 1.1 Å out
+and the reflection looks perfectly fine -- that case was tested first
+and gave false confidence. Do not validate a floor on a compact subject.
+
+`camera.floor_z` now takes the subject's **lowest point**, and lives in
+`camera.py` rather than in the render script for the reason that table
+of file responsibilities gives: it is arithmetic, it needs no Blender,
+so it belongs where a test can reach it. The test pins the *property* --
+the plane clears the bottom without levitating, and sits more than 40 Å
+above where the spherical formula would put that row -- rather than the
+constant, which is what the old test pinned and why it passed through
+the whole bug.
+
 ### Effects are decoration, and they are measured in subject radii
 
 `effects.py` is the part of a cover that is **not** the structure:

@@ -592,16 +592,47 @@ class TestRenderCommand:
 class TestFloorGeometry:
     """Arithmetic from ``render_cnt`` that needs no Blender."""
 
-    def test_the_floor_sits_below_the_subject_but_touching(self):
+    def test_the_floor_clears_the_subject_without_levitating_it(self):
+        from nanocarbon_lab.render import camera_module
+
+        camera = camera_module()
+        # A small positive clearance: zero puts the plane through the
+        # bottom atom, and a large one levitates the subject.
+        assert 0.0 < camera.FLOOR_CLEARANCE < 0.15
+        assert camera.floor_z(10.0, 20.0) < 10.0
+
+    def test_the_floor_is_measured_from_the_bottom_not_the_centre(self):
+        """The regression that cost a cover render.
+
+        Placing the floor at ``centre - radius`` assumes the subject is
+        a SPHERE. A composition never is, and the error scales with how
+        far from spherical it gets: measured on a row of three cages
+        39.8 A tall with a 65.0 A bounding-sphere radius, the spherical
+        formula lands 45.1 A too low -- further below the subject than
+        the subject is tall -- so it levitates out of its own
+        reflection. On a single tall tube the same formula is 1.1 A out
+        and looks perfectly fine, which is why this hid.
+        """
+        from nanocarbon_lab.render import camera_module
+
+        camera = camera_module()
+        # The wide row: centre 24.3, radius 65.0, lowest point 4.5.
+        bottom, radius, centre = 4.5, 65.0, 24.3
+        spherical = centre - radius
+        measured = camera.floor_z(bottom, radius)
+        assert measured > spherical
+        assert measured - spherical > 40.0
+        # And it stays just under the subject rather than inside it.
+        assert bottom - measured < 0.15 * radius
+        assert measured < bottom
+
+    def test_the_plane_edge_stays_outside_frame(self):
         source = (BLENDER_DIR / "render_cnt.py").read_text()
         namespace: dict = {}
         for line in source.splitlines():
-            if line.startswith(("FLOOR_DROP", "FLOOR_EXTENT", "FRAME_FILL")):
+            if line.startswith(("FLOOR_EXTENT", "FRAME_FILL")):
                 exec(line, namespace)  # noqa: S102 - our own constants
-        # Exactly 1.0 puts the plane through the lowest atom of a sphere;
-        # much more and the subject levitates.
-        assert 1.0 < namespace["FLOOR_DROP"] < 1.15
-        # And the plane's own edge must be outside frame at every lens the
+        # The plane's own edge must be outside frame at every lens the
         # styles use, or it reads as a table rather than as a backdrop.
         assert namespace["FLOOR_EXTENT"] > 2.0 / math.sin(
             math.atan(0.5 * 36.0 / 90.0))

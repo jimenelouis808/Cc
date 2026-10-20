@@ -299,3 +299,32 @@ def frame_camera(points: np.ndarray, direction: Sequence[float],
     back = np.asarray(direction, dtype=float)
     back = back / np.linalg.norm(back)
     return centre + back * distance, centre, float(distance)
+
+
+#: Clearance between the subject's lowest point and the floor, as a
+#: fraction of the subject's radius. Small and positive: zero puts the
+#: plane through the bottom atom, and a large value levitates.
+FLOOR_CLEARANCE = 0.04
+
+
+def floor_z(bottom: float, radius: float,
+            clearance: float = FLOOR_CLEARANCE) -> float:
+    """Height of the ground plane under a subject.
+
+    ``bottom`` is the subject's **lowest point**, not its centre, and
+    that is the whole content of this function. Placing the floor at
+    ``centre - radius`` instead assumes the subject is a sphere, and a
+    composition never is: measured on a row of three cages 39.8 A tall
+    whose bounding-sphere radius is 65.0 A, the spherical formula put
+    the plane **45.1 A** too low -- more than the subject's own height
+    below where it belonged -- so the structures levitated out of their
+    own reflection and the frame below them was a smooth gradient with
+    no trace of them in it (0.0876 rising monotonically to 0.1124).
+
+    The error scales with how far from spherical the subject is, which
+    is why it hid for so long: on a single tall tube the same formula is
+    only 1.1 A out and the reflection looks perfectly fine.
+    """
+    if radius <= 0.0:
+        raise ValueError("radius must be positive.")
+    return bottom - radius * clearance

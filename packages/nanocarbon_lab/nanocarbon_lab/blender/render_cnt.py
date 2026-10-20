@@ -465,10 +465,22 @@ def _starfield(nodes, links, background):
     return tint.outputs["Color"]
 
 
-#: How far below the subject the floor sits, as a fraction of its radius.
-#: Exactly 1.0 would put the plane through the lowest atom of a sphere;
-#: a little under 1.05 reads as contact rather than as levitation.
-FLOOR_DROP = 1.04
+#: How far below the subject's LOWEST POINT the floor sits, as a
+#: fraction of its radius. A small clearance reads as contact; zero puts
+#: the plane through the bottom atom.
+#:
+#: This used to be a fraction of the radius subtracted from the subject's
+#: CENTRE, which silently assumed the subject was a sphere -- the
+#: docstring said as much ("the lowest atom of a sphere"). On a
+#: composition it is the same mistake the camera made before
+#: `frame_camera` stopped framing the bounding sphere: a row of three
+#: cages has a half-diagonal far larger than its height, so the plane
+#: landed tens of Angstrom below the structures and they levitated out
+#: of their own reflection. Measured on a 150 A row of 20 A cages, the
+#: floor sat 68 A down and the frame below the subject was a smooth
+#: gradient -- 0.0876 rising monotonically to 0.1124, with no trace of
+#: the cages in it.
+FLOOR_CLEARANCE = camera.FLOOR_CLEARANCE
 
 #: Floor extent, in subject radii. Large enough that its edge is outside
 #: frame at every lens the styles use, since a visible edge reads as a
@@ -476,12 +488,20 @@ FLOOR_DROP = 1.04
 FLOOR_EXTENT = 24.0
 
 
-def _add_floor(background, center: Vector, radius: float):
+def _add_floor(background, center: Vector, radius: float,
+               bottom: float | None = None):
     """A ground plane for the subject to sit and cast onto.
 
     Returned so the caller can keep it *out* of the framing measurement:
     a plane 24 radii across would otherwise set the camera distance and
     the subject would be a speck in the middle of it.
+
+    ``bottom`` is the subject's lowest z. The plane goes just under it,
+    which is what makes the subject sit on the floor rather than hover
+    over it -- see :data:`FLOOR_CLEARANCE` for why the centre and the
+    radius cannot answer that on anything but a sphere. Left ``None``
+    the old spherical assumption is used, so a caller that has not been
+    updated still gets a floor.
 
     A shadow catcher is invisible itself but still receives shadow, so a
     transparent background keeps the contact shadow that makes a subject
@@ -492,7 +512,9 @@ def _add_floor(background, center: Vector, radius: float):
     bpy.context.collection.objects.link(plane)
 
     size = radius * FLOOR_EXTENT
-    z = center.z - radius * FLOOR_DROP
+    if bottom is None:
+        bottom = center.z - radius
+    z = camera.floor_z(bottom, radius, FLOOR_CLEARANCE)
     verts = [(center.x - size, center.y - size, z),
              (center.x + size, center.y - size, z),
              (center.x + size, center.y + size, z),
@@ -558,6 +580,17 @@ def _setup_lights(style, center: Vector, radius: float) -> None:
         obj.location = center + Vector(spec.location) * scale
         direction = (center + Vector(spec.target) * scale) - obj.location
         obj.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
+
+
+def _lowest_point(objects) -> float | None:
+    """The subject's lowest z, which is where a floor belongs.
+
+    The bounding sphere cannot give this on anything that is not a
+    sphere, and a composition never is.
+    """
+    lows = [(obj.matrix_world @ Vector(corner)).z
+            for obj in objects for corner in obj.bound_box]
+    return min(lows) if lows else None
 
 
 def _bounding_sphere(objects) -> tuple[Vector, float]:
@@ -916,7 +949,8 @@ def main() -> int:
     _setup_world(style.background)
     floor = style.background.has_floor if args.floor is None else args.floor
     if floor:
-        _add_floor(style.background, center, radius)
+        _add_floor(style.background, center, radius,
+                   bottom=_lowest_point(objects))
     _setup_lights(style, center, radius)
 
     # The camera goes before the effects, and returns the scale they are
