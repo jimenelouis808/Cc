@@ -48,7 +48,12 @@ from ..utils.geometry import center_in_cell, guess_bonds
 from ..utils.rng import make_rng
 from . import centerline as cl
 from .assemblies import GRAPHITIC_GAP
-from .lattice_edits import apply_lattice_edits, periodic_box, ring_census
+from .lattice_edits import (
+    apply_lattice_edits,
+    periodic_box,
+    ring_census,
+    ring_faces,
+)
 
 EdgeType = Literal["armchair", "zigzag"]
 
@@ -188,6 +193,11 @@ def build_nanoribbon(
             "euler_expected": 0,
             "ring_counts": ring_census(atoms.get_positions(), bonds,
                                        periodic_box(atoms)),
+            # The census counted these and dropped the indices; the
+            # window's ring colouring needs them, and without them a
+            # ribbon came out one flat colour.
+            "rings": ring_faces(atoms.get_positions(), bonds,
+                                periodic_box(atoms)),
         }
     )
     atoms = apply_lattice_edits(atoms, defects=defects, roughness=roughness,
@@ -304,6 +314,8 @@ def _sweep_ribbon(
         "euler_expected": 1,
         "ring_counts": ring_census(bent.get_positions(), bonds,
                                    periodic_box(bent)),
+        "rings": ring_faces(bent.get_positions(), bonds,
+                            periodic_box(bent)),
     })
     bent.info.update(info)
     return bent

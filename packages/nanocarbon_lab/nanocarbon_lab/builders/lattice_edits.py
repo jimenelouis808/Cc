@@ -132,6 +132,11 @@ def ring_census(
 ) -> dict[int, int]:
     """Ring-size histogram of an sp2 net, by tracing the faces of its graph.
 
+    A thin histogram over :func:`ring_faces`, which does the tracing and
+    returns the rings themselves. Anything that needs to know *which*
+    atoms are in a ring -- ring colouring in the window, ring-selected
+    doping -- wants that one instead: this throws the indices away.
+
     Not "the shortest cycle through each bond", which is the obvious
     approach and quietly wrong here: every bond of a 5-8-5 divacancy is
     shared with one of its two pentagons, so the shortest cycle through it
@@ -161,6 +166,33 @@ def ring_census(
         and were being reported as rings the structure does not have.
         Counting coordination instead does not separate them, because
         that rim alternates two- and three-coordinated atoms.
+    """
+    return dict(Counter(len(ring) for ring in
+                        ring_faces(positions, bonds, box, max_size)))
+
+
+def ring_faces(
+    positions: np.ndarray,
+    bonds: list[tuple[int, int]],
+    box: np.ndarray | None = None,
+    max_size: int = 9,
+) -> list[list[int]]:
+    """The rings themselves, as lists of atom indices.
+
+    Same trace :func:`ring_census` counts, kept separate because the
+    indices are what a consumer usually wants and the histogram threw
+    them away. This is **face tracing**, not cycle perception: each
+    directed bond has exactly one successor round the local surface
+    normal, so the walks are the orbits of a permutation. Do not replace
+    it with a shortest-cycle or `cycle_basis` search -- that is the
+    failure `fullerene_mesh` exists to prevent, and on a tiled surface
+    it misses every heptagon whose bonds all border a hexagon.
+
+    One limit worth knowing, and it is the open-surface one
+    `analyse/rings.py` already records: an open structure's **rim**
+    traces as one long cycle and is discarded by ``max_size``, but a rim
+    short enough to pass for a ring is kept. A 6-wide, 3-long ribbon's
+    two rims are six atoms each, so they come back as hexagons.
     """
     n_atoms = int(max((max(pair) for pair in bonds), default=-1)) + 1
     table = _neighbours(bonds, n_atoms)
@@ -207,7 +239,7 @@ def ring_census(
                 break
         else:
             continue
-    return dict(Counter(len(r) for r in rings if len(r) <= max_size))
+    return [ring for ring in rings if len(ring) <= max_size]
 
 
 def _neighbours(bonds: list[tuple[int, int]], n_atoms: int) -> list[set[int]]:

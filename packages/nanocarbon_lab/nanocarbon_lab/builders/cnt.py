@@ -20,7 +20,7 @@ from ase.build import nanotube
 
 from ..utils.constants import CC_BOND, DEFAULT_VACUUM_1D
 from ..utils.geometry import center_in_cell, guess_bonds
-from .lattice_edits import apply_lattice_edits
+from .lattice_edits import apply_lattice_edits, periodic_box, ring_faces
 
 Chirality = Literal["armchair", "zigzag", "chiral"]
 
@@ -133,6 +133,7 @@ def build_cnt(
 
     center_in_cell(atoms, axes=other)
 
+    _bonds = [[int(i), int(j)] for i, j, _ in guess_bonds(atoms)]
     atoms.info.update(
         {
             "structure_type": "CNT",
@@ -156,7 +157,17 @@ def build_cnt(
             # cage owes. Without saying so, a perfect tube reads as a
             # structure that has lost twelve pentagons.
             "euler_expected": 0,
-            "bonds": [[int(i), int(j)] for i, j, _ in guess_bonds(atoms)],
+            "bonds": _bonds,
+            # The ring COUNT above is exact; these are the rings
+            # themselves, which the count cannot give. Without them the
+            # window's ring colouring has nothing to read and paints
+            # every atom the hexagon colour -- a tube is all hexagons,
+            # so it looks right, and on a defected one it is wrong.
+            # Traced, not perceived: `ring_faces` walks the faces of the
+            # graph, which is what the census already did.
+            "rings": ring_faces(atoms.get_positions(),
+                                [(int(i), int(j)) for i, j in _bonds],
+                                periodic_box(atoms)),
         }
     )
     # Pristine unless asked otherwise, and then the edits refresh the ring

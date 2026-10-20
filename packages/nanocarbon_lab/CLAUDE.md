@@ -4406,6 +4406,47 @@ Writing this package found three bugs elsewhere, which is what it is for:
   looked right. Grafted atoms are excluded, and so is any atom already at
   its element's coordination limit.
 
+## A ring count cannot colour an atom
+
+`ring_census` traced the faces of the graph and returned a **histogram**,
+throwing the indices away. `build_cnt` and `build_nanoribbon` recorded
+that count and nothing else, so `info["rings"]` was absent on both -- and
+the window's `_ring_of_atom` falls back to 6 for every atom it finds in
+no ring, so ring colouring painted the whole structure the hexagon
+colour. On a pristine tube that looks right, which is why it survived;
+on a defected one it is wrong and still looks deliberate.
+
+`ring_faces` is the same trace with the indices kept, and `ring_census`
+is now a histogram over it. Both builders record `rings` beside their
+count, and a test asserts the two **agree** -- a census that contradicts
+the rings beside it is only noticed after it has been plotted.
+
+**This is face tracing, not ring perception.** Each directed bond has
+exactly one successor round the local surface normal, so the walks are
+the orbits of a permutation; it is what `analyse/rings.py` does and what
+the census already did. It is *not* the distance / `networkx.cycle_basis`
+route `fullerene_mesh` exists to prevent. The check that it is sound is
+external rather than self-referential: a periodic tube's census is
+**exact** -- Euler on the torus gives `F = E - V = N/2` -- and the trace
+returns exactly that (60 faces for a 120-atom (6,6)).
+
+### The refusal moved, and the new one is better
+
+A test asserted that a plain tube raises "no ring metadata" when asked
+to dope its pentagons. That refusal was right about the outcome and
+wrong about the reason, and the reason is what a user acts on: a tube
+does not lack ring information, it lacks pentagons. With the rings
+recorded, `ring_sites` returns **empty** -- deliberate, and its docstring
+already said so -- and `jobs.apply_doping` raises the useful form,
+`"This structure has no 5-membered rings to dope. It has 6-rings: 96
+sites."` The old message is still reachable and still tested: a plain
+`build_graphene` sheet records no rings at all.
+
+**Check which layer refuses before concluding a guard is gone.** The
+first reading of this was that the change had removed a refusal, because
+`ring_sites` returned quietly where it used to raise. The build still
+refuses; it refuses one layer up, with a better message.
+
 ## Removing an atom renumbers every atom after it
 
 `utils/metadata.py` exists because two deletion paths -- carbon

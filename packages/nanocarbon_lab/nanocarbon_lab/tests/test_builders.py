@@ -214,3 +214,60 @@ class TestASweptRibbon:
         # An open sheet with two free edges and no period: a disc, so
         # chi is 1 where the straight ribbon's cylinder gives 0.
         assert atoms.info["euler_expected"] == 1
+
+
+class TestRingIndicesAreRecorded:
+    """A ring COUNT cannot colour an atom; the indices can.
+
+    `_ring_of_atom` in the window reads `info["rings"]` and falls back
+    to 6 for every atom that is in none. A builder that records only
+    `ring_counts` therefore paints the whole structure the hexagon
+    colour -- which on a pristine tube looks correct, and on a defected
+    one is wrong while still looking deliberate. The tube and the ribbon
+    were the two that recorded only the count.
+    """
+
+    @staticmethod
+    def _census(atoms) -> dict[int, int]:
+        from collections import Counter
+
+        return dict(Counter(len(ring) for ring in atoms.info["rings"]))
+
+    def test_a_tube_records_its_rings(self):
+        atoms = build_cnt(6, 6, length=10)
+        assert atoms.info["rings"], "a tube with no ring indices cannot be ring-coloured"
+        # The census here is EXACT -- Euler on the torus gives N/2 -- so
+        # the trace agreeing with it checks the trace against arithmetic
+        # rather than against itself.
+        assert self._census(atoms) == {6: len(atoms) // 2}
+
+    def test_a_ribbon_records_its_rings(self):
+        atoms = build_nanoribbon(width=6, length=6)
+        assert atoms.info["rings"]
+        assert self._census(atoms) == {
+            int(k): int(v) for k, v in atoms.info["ring_counts"].items()}
+
+    def test_the_indices_agree_with_the_count_they_came_from(self):
+        """Whatever the census says, the indices must say the same. A
+        census that contradicts the rings beside it is only noticed
+        after it has been plotted."""
+        for atoms in (build_cnt(6, 6, length=10),
+                      build_cnt(10, 0, length=10),
+                      build_nanoribbon(width=6, length=6),
+                      build_nanoribbon(width=4, length=8, edge="armchair")):
+            assert self._census(atoms) == {
+                int(k): int(v) for k, v in atoms.info["ring_counts"].items()}
+
+    def test_every_ring_names_atoms_that_exist(self):
+        for atoms in (build_cnt(6, 6, length=10),
+                      build_nanoribbon(width=6, length=6)):
+            for ring in atoms.info["rings"]:
+                assert len(set(ring)) == len(ring), "an atom twice in one ring"
+                assert all(0 <= a < len(atoms) for a in ring)
+
+    def test_a_swept_ribbon_records_its_rings_too(self):
+        atoms = build_nanoribbon(width=6, length=30, shape="zigzag",
+                                 shape_turns=1.0, waviness=1.0)
+        assert atoms.info["rings"]
+        assert self._census(atoms) == {
+            int(k): int(v) for k, v in atoms.info["ring_counts"].items()}

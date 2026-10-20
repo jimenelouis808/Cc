@@ -129,12 +129,47 @@ class TestRingSites:
         assert census[5] == 60
         assert census[6] == len(capped)
 
-    def test_a_plain_tube_has_no_ring_metadata_and_says_so(self):
-        """`build_cnt` does not go through the dual, so it records no
-        rings -- and re-deriving them from coordinates is the thing the
-        mesh machinery exists to avoid."""
+    def test_a_plain_tube_is_all_hexagons_so_pentagons_are_refused(self):
+        """`build_cnt` records its rings now, and they are all hexagons.
+
+        It used to record none, and this test asserted the "no ring
+        metadata" refusal. That refusal was right about the *outcome*
+        and wrong about the reason, and the reason is what a user acts
+        on: a tube does not lack ring information, it lacks pentagons.
+        The rings are traced as **faces** of the graph -- each directed
+        bond has one successor round the local normal -- which is the
+        method `analyse/rings.py` uses and reproduces the builders' own
+        recorded rings exactly. It is not the distance / `cycle_basis`
+        perception `fullerene_mesh` exists to prevent, and the check is
+        that the trace agrees with the tube's EXACT Euler count.
+        """
+        tube = build_cnt(n=6, m=6, length=8)
+        assert tube.info["rings"], "a tube records its rings"
+        # Empty rather than raising is deliberate at this level: having
+        # no pentagons is a fact about the structure. `ring_sites` says
+        # so in its own docstring.
+        assert len(ring_sites(tube, 5)) == 0
+        assert len(ring_sites(tube, 6)) == len(tube)
+
+    def test_the_refusal_names_the_rings_the_structure_does_have(self):
+        """The policy layer is where it refuses, and the message is the
+        useful one: what you asked for is absent, and here is what is
+        there instead."""
+        from nanocarbon_lab import jobs
+
+        job = jobs.Job(mode="nanotube (open)",
+                       params={"n": 6, "m": 6, "length": 8},
+                       dopant="N", dopant_conc=0.1, dopant_site="pentagon")
+        with pytest.raises(ValueError, match="no 5-membered rings"):
+            jobs.build(job)
+
+    def test_a_structure_with_no_rings_at_all_still_says_so(self):
+        """The old refusal is not gone, only no longer reached by a
+        tube: a plain graphene sheet still records none."""
+        from nanocarbon_lab.builders.graphene import build_graphene
+
         with pytest.raises(ValueError, match="no ring metadata"):
-            ring_sites(build_cnt(n=6, m=6, length=8), 5)
+            ring_sites(build_graphene(2, 2), 5)
 
 
 class TestDopeRings:
