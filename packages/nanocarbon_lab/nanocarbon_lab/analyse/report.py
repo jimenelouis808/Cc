@@ -251,6 +251,40 @@ def coordination_census(atoms: Atoms, tolerance: float = 0.30) -> dict:
     }
 
 
+def attach_inferred_graph(atoms: Atoms, tolerance: float = 0.3) -> Atoms:
+    """Write the bonds and rings this module INFERS into ``atoms.info``.
+
+    An imported file carries coordinates and nothing else: no `.json`
+    sidecar, so no bond list and no ring list. :func:`analyse` computes
+    both for its report and then discards the indices, which left every
+    consumer that reads `info` -- the preview's bonds and ring colouring,
+    the render bundle, ring-selected doping -- with nothing, while the
+    panel beside them showed a full census. The report was right and the
+    structure was empty.
+
+    **The provenance flag is the whole point.** This module's discipline
+    is that *recorded* (what a builder did) and *inferred* (a rule with
+    thresholds behind it) must never be blurred, and writing a guessed
+    bond list under the same key a builder uses would do exactly that.
+    So ``info["graph_inferred"]`` is set, `_recorded` reports it, and
+    re-analysing an annotated structure still says the graph was
+    inferred rather than claiming the file supplied it.
+
+    Returns the same ``atoms``, modified in place.
+    """
+    from .rings import MAX_RING_SIZE
+
+    pairs = bond_pairs(atoms, tolerance=tolerance)
+    rings = ring_report(atoms, pairs, max_size=MAX_RING_SIZE)
+    atoms.info["bonds"] = [[int(i), int(j)] for i, j in pairs]
+    atoms.info["rings"] = [[int(a) for a in ring]
+                           for ring in rings.get("rings", [])]
+    atoms.info["ring_counts"] = {int(k): int(v)
+                                 for k, v in rings.get("counts", {}).items()}
+    atoms.info["graph_inferred"] = True
+    return atoms
+
+
 def _recorded(atoms: Atoms) -> dict[str, Any]:
     """What the file itself claims, as opposed to what we measured."""
     interesting = (
@@ -260,8 +294,14 @@ def _recorded(atoms: Atoms) -> dict[str, Any]:
         "doping_mode", "functionalization", "defect_log", "twist_angle",
     )
     present = {key: atoms.info[key] for key in interesting if key in atoms.info}
-    present["has_bond_graph"] = "bonds" in atoms.info
-    present["has_ring_list"] = "rings" in atoms.info
+    # An inferred graph is not a recorded one. `attach_inferred_graph`
+    # writes under the same keys so every consumer works, so the flag is
+    # what keeps the provenance honest here.
+    inferred = bool(atoms.info.get("graph_inferred"))
+    present["has_bond_graph"] = "bonds" in atoms.info and not inferred
+    present["has_ring_list"] = "rings" in atoms.info and not inferred
+    if inferred:
+        present["graph_inferred"] = True
     return present
 
 
@@ -387,7 +427,8 @@ def analyse(atoms: Atoms, tolerance: float = 0.30,
         # so a density computed from it describes the padding.
         density = round(float(sum(atoms.get_masses()) / volume * 1.66053907), 4)
 
-    rings_from_file = "rings" in atoms.info
+    rings_from_file = ("rings" in atoms.info
+                       and not atoms.info.get("graph_inferred"))
     return {
         "recorded": _recorded(atoms),
         "measured": {

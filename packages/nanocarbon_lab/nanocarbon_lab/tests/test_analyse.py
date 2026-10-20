@@ -558,3 +558,87 @@ def test_xtl_keeps_the_cell_and_the_census(tmp_path):
     assert all(read.pbc) and np.allclose(read.cell.cellpar(), tube.cell.cellpar(), atol=1e-3)
     rings = analyse(read)["inferred"]["rings"]
     assert rings["counts"] == {6: len(tube) // 2} and rings["reliable"]
+
+
+class TestAnImportedFileGetsItsGraph:
+    """A file from another code carries coordinates and nothing else.
+
+    `analyse` computed the bonds and the rings for its report and then
+    discarded the indices, so `info` stayed empty: the preview drew a
+    point cloud and ring colouring had nothing to read, while the panel
+    beside them showed a full census. The report was right and the
+    structure was empty.
+    """
+
+    @staticmethod
+    def _bare():
+        """Coordinates only, as a .extxyz from another code arrives."""
+        from ase import Atoms
+
+        from nanocarbon_lab.builders.cnt import build_cnt
+
+        source = build_cnt(6, 6, length=12)
+        return Atoms(symbols=source.get_chemical_symbols(),
+                     positions=source.get_positions(),
+                     cell=source.cell, pbc=source.pbc)
+
+    def test_a_bare_structure_starts_with_no_graph(self):
+        bare = self._bare()
+        assert not bare.info.get("bonds")
+        assert not bare.info.get("rings")
+
+    def test_attaching_gives_it_bonds_and_rings(self):
+        from nanocarbon_lab.analyse import attach_inferred_graph
+
+        bare = attach_inferred_graph(self._bare())
+        assert len(bare.info["bonds"]) == 180
+        assert len(bare.info["rings"]) == 60
+        assert bare.info["ring_counts"] == {6: 60}
+
+    def test_the_attached_graph_agrees_with_the_report(self):
+        """The two must not disagree: the whole fault was the panel
+        showing one thing and the structure holding another."""
+        from nanocarbon_lab.analyse import analyse, attach_inferred_graph
+
+        bare = self._bare()
+        reported = analyse(bare)["inferred"]["rings"]["counts"]
+        attach_inferred_graph(bare)
+        assert {int(k): int(v) for k, v in reported.items()} == \
+            bare.info["ring_counts"]
+
+    def test_the_bonds_are_carbon_bonds(self):
+        import numpy as np
+
+        from nanocarbon_lab.analyse import attach_inferred_graph
+
+        bare = attach_inferred_graph(self._bare())
+        positions = bare.get_positions()
+        pairs = np.asarray(bare.info["bonds"])
+        lengths = np.linalg.norm(
+            positions[pairs[:, 0]] - positions[pairs[:, 1]], axis=1)
+        # A periodic tube's axial seam is a minimum-image pair, so the
+        # raw span of those is a cell length; the median is the bond.
+        assert 1.30 < float(np.median(lengths)) < 1.55
+
+    def test_an_inferred_graph_is_never_reported_as_recorded(self):
+        """The provenance split is this module's whole discipline, and
+        writing a guessed bond list under a builder's key would blur it.
+        The flag is what keeps a re-analysis honest."""
+        from nanocarbon_lab.analyse import analyse, attach_inferred_graph
+
+        bare = attach_inferred_graph(self._bare())
+        recorded = analyse(bare)["recorded"]
+        assert recorded["has_bond_graph"] is False
+        assert recorded["has_ring_list"] is False
+        assert recorded["graph_inferred"] is True
+        assert analyse(bare)["inferred"]["rings_are_recorded"] is False
+
+    def test_a_builder_structure_still_reports_its_graph_as_recorded(self):
+        """The control: nothing about this changes a real builder."""
+        from nanocarbon_lab.analyse import analyse
+        from nanocarbon_lab.builders.cnt import build_cnt
+
+        recorded = analyse(build_cnt(6, 6, length=12))["recorded"]
+        assert recorded["has_bond_graph"] is True
+        assert recorded["has_ring_list"] is True
+        assert "graph_inferred" not in recorded

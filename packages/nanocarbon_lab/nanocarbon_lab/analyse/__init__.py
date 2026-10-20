@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from .report import (
     analyse,
+    attach_inferred_graph,
     bond_statistics,
     composition,
     coordination_census,
@@ -32,6 +33,7 @@ from .shape import describe_shape, periodic_axes, vacuum_axes
 __all__ = [
     "MAX_RING_SIZE",
     "analyse",
+    "attach_inferred_graph",
     "bond_statistics",
     "composition",
     "coordination_census",

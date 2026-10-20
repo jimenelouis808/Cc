@@ -4955,7 +4955,17 @@ class NanocarbonGUI:
         # pristine tube is all hexagons, so it painted every atom the one
         # hexagon colour and the viewer looked broken -- and a doped tube
         # gave no hint that the dopant was there at all.
-        self.var_colour_by = tk.StringVar(value="element")
+        # NOT `var_colour_by`: the render panel owns that name, is built
+        # after this one, and its assignment silently replaced this
+        # object. The combobox below kept its reference to the StringVar
+        # created here, so clicking it still updated *something* -- while
+        # `_atom_colours` read the render panel's variable, whose value is
+        # "(style default)". That is neither "ring" nor "element", so
+        # every atom fell through to PLAIN_ATOM_COLOUR, which is the same
+        # hex as RING_COLOURS[6]. The picture therefore looked exactly
+        # like correct ring colouring on an all-hexagon structure, and the
+        # control did nothing at all.
+        self.var_preview_colour = tk.StringVar(value="element")
         ttk.Checkbutton(bar, text="Bonds", variable=self.var_show_bonds,
                         command=self._redraw).pack(side="left")
         # A bond that leaves through one face and returns through the
@@ -4976,10 +4986,10 @@ class NanocarbonGUI:
         ttk.Checkbutton(bar, text="ring faces", variable=self.var_ring_faces,
                         command=self._redraw).pack(side="left")
         ttk.Label(bar, text="  colour:").pack(side="left")
-        ttk.Combobox(bar, textvariable=self.var_colour_by, width=8,
+        ttk.Combobox(bar, textvariable=self.var_preview_colour, width=8,
                      state="readonly", values=["element", "ring", "plain"]
                      ).pack(side="left", padx=(2, 0))
-        self.var_colour_by.trace_add("write", lambda *_: self._redraw())
+        self.var_preview_colour.trace_add("write", lambda *_: self._redraw())
 
         # Ring filters. Hiding the hexagons is the fastest way to see where
         # the curvature actually went -- on a junction or a coil the 5s and
@@ -5016,7 +5026,7 @@ class NanocarbonGUI:
         raises. Neither subsumes the other, so both are offered rather
         than one being picked for the user.
         """
-        mode = self.var_colour_by.get()
+        mode = self.var_preview_colour.get()
         if mode == "ring":
             return [RING_COLOURS.get(s, RING_COLOURS[6]) for s in ring_of]
         if mode == "element" and self.atoms is not None:
@@ -5267,7 +5277,12 @@ class NanocarbonGUI:
         applies to it as it would to something built here. A file from
         another code is a first-class structure, not a read-only guest.
         """
-        from ..analyse import analyse, format_report, read_structure
+        from ..analyse import (
+            analyse,
+            attach_inferred_graph,
+            format_report,
+            read_structure,
+        )
 
         path = filedialog.askopenfilename(
             title="Open a structure file",
@@ -5279,7 +5294,16 @@ class NanocarbonGUI:
 
         try:
             atoms = read_structure(path)
+            # Analyse FIRST, then annotate: `_recorded` reads `info`, so
+            # attaching the inferred graph beforehand would make the
+            # report claim the file supplied it.
             result = analyse(atoms)
+            # An imported file has no sidecar, so no bonds and no rings.
+            # Without this the preview draws a point cloud and ring
+            # colouring has nothing to read, while the panel beside it
+            # shows a full census -- the report right, the structure
+            # empty. Flagged as inferred, never as recorded.
+            attach_inferred_graph(atoms)
         except ValueError as exc:
             self._show_error("Could not read that file", str(exc))
             self.lbl_analyse.config(text=str(exc), foreground=BAD_RED)

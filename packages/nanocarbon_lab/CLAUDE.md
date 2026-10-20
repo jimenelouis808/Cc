@@ -4447,6 +4447,67 @@ first reading of this was that the change had removed a refusal, because
 `ring_sites` returned quietly where it used to raise. The build still
 refuses; it refuses one layer up, with a better message.
 
+## Two panels, one attribute name, and a control that did nothing
+
+The preview's colour box stopped working and nothing raised. The cause
+is not in the colour code at all:
+
+```python
+self.var_colour_by = tk.StringVar(value="element")          # preview bar
+...
+self.var_colour_by = tk.StringVar(value=STYLE_DEFAULT_LABEL)  # render panel
+```
+
+The render panel is built **after** the preview, so its assignment
+replaces the attribute. The preview's combobox holds its own reference
+to the first `StringVar`, so clicking it still updated that object and
+still fired `_redraw` -- while `_atom_colours` read
+`self.var_colour_by`, which by then was the render panel's, whose value
+is `"(style default)"`. Neither `"ring"` nor `"element"`, so every atom
+fell through to the final `return [PLAIN_ATOM_COLOUR] * n`.
+
+**And `PLAIN_ATOM_COLOUR` is `#5b6472`, which is exactly
+`RING_COLOURS[6]`.** So the frame was indistinguishable from correct
+ring colouring of an all-hexagon structure. Element colouring was
+equally dead and nobody noticed, because an all-carbon structure is one
+colour either way. A control that is visible and silently ignored is
+worse than one that is absent -- the same rule the nanoparticle section
+states for co-doping.
+
+`test_every_attribute_read_is_assigned` cannot catch this: the
+attribute **is** assigned, twice. The new test asks a different
+question -- how many *methods* create a given `var_*` -- and an AST scan
+of the whole window found exactly one clash, so the fault was bounded.
+The preview's is `var_preview_colour` now. They answer different
+questions anyway: the preview offers element/ring/plain and the render
+panel the renderer's modes plus "(style default)".
+
+## An imported file arrives with coordinates and nothing else
+
+`analyse` computed the bond pairs and traced the rings for its report,
+then returned the ring **summary** and dropped the indices
+(`{k: v for k, v in rings.items() if k != "rings"}`). Nothing was
+written back to `atoms.info`. So after opening somebody else's
+`.extxyz` the panel showed 720 bonds and a full census while the
+structure held neither: the preview drew a point cloud, ring colouring
+and ring faces had nothing to read, and the render bundle would have
+exported no connectivity. **The report was right and the structure was
+empty**, which is why it reads as two unrelated faults.
+
+`attach_inferred_graph` writes them under the keys every consumer
+already reads, and the **provenance flag is the point**. This package's
+discipline is that *recorded* and *inferred* must never be blurred, and
+a guessed bond list under a builder's key would blur it exactly. So it
+sets `info["graph_inferred"]`, `_recorded` reports `has_bond_graph` and
+`has_ring_list` as **False** when that flag is present, and
+`rings_are_recorded` stays False on a re-analysis. A test pins both
+halves, with a builder-made tube as the control that nothing moved for
+structures that really do record their graph.
+
+Order matters and the call site says so: **analyse first, annotate
+after**. `_recorded` reads `info`, so attaching beforehand would make
+the report claim the file supplied what this module had just guessed.
+
 ## Removing an atom renumbers every atom after it
 
 `utils/metadata.py` exists because two deletion paths -- carbon

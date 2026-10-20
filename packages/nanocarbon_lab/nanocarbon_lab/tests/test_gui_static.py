@@ -352,3 +352,51 @@ def test_every_knee_mode_shows_a_panel():
         assert f"self.{frame}.pack(" in body, f"{frame} is never shown"
         assert f"self.{frame}," in body or f"self.{frame})" in body, (
             f"{frame} is never hidden, so it will linger into other modes")
+
+
+def test_no_gui_variable_is_assigned_in_two_panels():
+    """Two panels naming one attribute is a silent, total breakage.
+
+    `self.var_colour_by` was created in the preview bar and created
+    AGAIN in the render panel, which is built afterwards. The preview's
+    combobox kept its reference to the first StringVar -- so clicking it
+    still updated something and still fired the redraw -- while
+    `_atom_colours` read the render panel's, whose value is
+    "(style default)". That is neither "ring" nor "element", so every
+    atom fell through to PLAIN_ATOM_COLOUR, which is the SAME hex as
+    RING_COLOURS[6]. The picture was therefore indistinguishable from
+    correct ring colouring of an all-hexagon structure, and the control
+    did nothing at all.
+
+    `test_every_attribute_read_is_assigned` cannot catch this: the
+    attribute is assigned, twice. The question is how many methods
+    assign it.
+    """
+    import ast
+    from collections import defaultdict
+
+    tree = ast.parse(_source())
+    owners: dict[str, set[str]] = defaultdict(set)
+    for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
+        for fn in (n for n in cls.body if isinstance(n, ast.FunctionDef)):
+            for node in ast.walk(fn):
+                if not isinstance(node, ast.Assign):
+                    continue
+                for target in node.targets:
+                    if (isinstance(target, ast.Attribute)
+                            and isinstance(target.value, ast.Name)
+                            and target.value.id == "self"
+                            and target.attr.startswith("var_")):
+                        owners[target.attr].add(fn.name)
+    clashes = {name: sorted(where)
+               for name, where in owners.items() if len(where) > 1}
+    assert not clashes, f"a Tk variable is created in two methods: {clashes}"
+
+
+def test_the_preview_and_the_render_panel_keep_separate_colour_modes():
+    """They answer different questions and must not share a name: the
+    preview offers element/ring/plain, the render panel offers the
+    renderer's modes plus "(style default)"."""
+    source = _source()
+    assert "self.var_preview_colour" in source
+    assert "self.var_colour_by" in source
