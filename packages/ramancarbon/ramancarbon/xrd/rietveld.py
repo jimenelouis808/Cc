@@ -307,6 +307,13 @@ class RietveldResult:
     Jacobian to take them from."""
     stages: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    excluded: tuple[tuple[float, float], ...] = ()
+    """2θ windows left out of the fit. Empty for an ordinary refinement.
+
+    Carried on the result because every number beside it is conditional
+    on it: the R factors were computed over the rest of the pattern and
+    are not comparable with a whole-pattern figure, and a phase whose
+    reflections all live inside a window has no fraction worth reading."""
 
     @property
     def difference(self) -> np.ndarray:
@@ -928,6 +935,7 @@ def refine(
     background_order: int = DEFAULT_BACKGROUND_ORDER,
     max_iterations: int = 200,
     instrument_fwhm: float = 0.06,
+    excluded: Optional[Sequence[tuple[float, float]]] = None,
     callback: Optional[Callable[[str], None]] = None,
     should_stop: Optional[Callable[[], bool]] = None,
 ) -> RietveldResult:
@@ -951,6 +959,26 @@ def refine(
         The parameter list. Defaults to everything fixed except the scales
         and the background, which is the only combination that is always
         safe to start from.
+    excluded:
+        ``(low, high)`` windows in 2θ to leave out of the fit entirely.
+        The points are kept in the pattern and plotted, but they do not
+        enter the residual, the R factors or the uncertainties.
+
+        For the case where the model cannot produce the shape that is
+        there and pretending otherwise corrupts everything else: a
+        fluorescence artefact, a peak from the sample holder, or a
+        diffuse band. The measured case is the second: a turbostratic
+        carbon's 002 is 2.26° wide where the profile can reach 1.53°, and
+        with the band in the fit the iron phases were driven to the width
+        ceiling to help fill it — cementite and the selenide both came
+        back as 5 nm humps. Excluding the band is an honest statement
+        that this part of the pattern is not being modelled; leaving it
+        in and letting other phases absorb it is not.
+
+        The cost is real and is reported rather than hidden: an R factor
+        computed over part of a pattern is **not comparable** with one
+        computed over all of it, and no phase whose reflections fall
+        inside a window can be quantified at all.
 
     Returns
     -------
@@ -968,6 +996,15 @@ def refine(
     observed = np.asarray(pattern.intensity, dtype=float)
     sigma = np.asarray(pattern.sigma, dtype=float)
     weights = 1.0 / np.maximum(sigma, 1e-9) ** 2
+    windows = tuple((float(low), float(high)) for low, high in (excluded or ()))
+    included = np.ones(observed.shape, dtype=bool)
+    for low, high in windows:
+        included &= ~((pattern.two_theta >= low) & (pattern.two_theta <= high))
+    if windows and int(included.sum()) < 5 * max(1, len(parameters or ())):
+        raise RefinementError(
+            f"las regiones excluidas dejan {int(included.sum())} puntos para "
+            f"{len(parameters or ())} parámetros: no queda patrón que ajustar"
+        )
     cache: dict = {}
 
     free = [p for p in parameters if p.free]
@@ -1007,11 +1044,11 @@ def refine(
     def residual(values: np.ndarray) -> np.ndarray:
         nonlocal evaluations
         unpack(values)
-        difference = (observed - model()) * root_weights
+        difference = ((observed - model()) * root_weights)[included]
         evaluations += 1
         current = math.sqrt(
             float(np.sum(difference ** 2))
-            / max(float(np.sum(weights * observed ** 2)), 1e-30)
+            / max(float(np.sum((weights * observed ** 2)[included])), 1e-30)
         )
         if current < best["rwp"]:
             best["rwp"] = current
@@ -1058,7 +1095,7 @@ def refine(
             parameter.error = None
     else:
         unpack(outcome.x)
-        correlations = _estimate_errors(outcome, free, observed.size)
+        correlations = _estimate_errors(outcome, free, int(included.sum()))
         if not outcome.success and best["values"] is not None:
             # Out of budget, not converged. The same argument the
             # cancellation branch above makes applies unchanged: where the
@@ -1069,15 +1106,16 @@ def refine(
             # 54 400 evaluations and came back at Rwp 6.222 %, worse than
             # the same model fitted without that parameter at all.
             final = math.sqrt(
-                float(np.sum(weights * (observed - model()) ** 2))
-                / max(float(np.sum(weights * observed ** 2)), 1e-30)
+                float(np.sum((weights * (observed - model()) ** 2)[included]))
+                / max(float(np.sum((weights * observed ** 2)[included])), 1e-30)
             )
             if best["rwp"] < final:
                 unpack(best["values"])
 
     background, zero, displacement = _apply(parameters, models)
     calculated = model()
-    r_p, r_wp, r_expected, gof = r_factors(observed, calculated, weights, len(free))
+    r_p, r_wp, r_expected, gof = r_factors(
+        observed[included], calculated[included], weights[included], len(free))
 
     result = RietveldResult(
         pattern=pattern,
@@ -1096,7 +1134,38 @@ def refine(
         message=stop_message if cancelled else str(outcome.message),
         n_evaluations=evaluations,
         correlations=correlations,
+        excluded=windows,
     )
+    if windows:
+        # Stated every time, without an option to turn it off, because an
+        # excluded region is invisible in every number the result
+        # carries: the Rwp looks like any other Rwp, and the fraction of
+        # a phase whose lines were inside the window looks like any other
+        # fraction. The one place it shows is a figure, and only if
+        # whoever drew it knew to shade the window.
+        inside = []
+        for phase in models:
+            angles = [r.two_theta for r in reflections(
+                phase.current_crystal(), wavelength=pattern.wavelength,
+                two_theta_range=pattern.range)]
+            covered = sum(1 for a in angles
+                          if any(low <= a <= high for low, high in windows))
+            if angles and covered == len(angles):
+                inside.append(phase.crystal.name)
+        note = (
+            "se han EXCLUIDO del ajuste "
+            + ", ".join(f"{low:.2f}–{high:.2f}°" for low, high in windows)
+            + f" ({int((~included).sum())} de {observed.size} puntos). Los "
+            "factores R de arriba están calculados sobre el resto del "
+            "patrón y NO son comparables con los de un ajuste completo"
+        )
+        if inside:
+            note += (
+                ". Y todas las reflexiones de " + ", ".join(inside)
+                + " caen dentro de lo excluido: esa(s) fase(s) no están "
+                "cuantificadas en absoluto, su fracción no significa nada"
+            )
+        result.warnings.append(note)
     if cancelled:
         result.warnings.append(
             "Refinamiento detenido por el usuario: los parámetros son los "
@@ -1311,6 +1380,7 @@ def auto_refine(
     stages: Sequence[tuple[str, tuple[str, ...]]] = STAGES,
     preferred_axis: Optional[Sequence[int] | str] = None,
     instrument_fwhm: float = 0.06,
+    excluded: Optional[Sequence[tuple[float, float]]] = None,
     callback: Optional[Callable[[str], None]] = None,
     should_stop: Optional[Callable[[], bool]] = None,
 ) -> RietveldResult:
@@ -1444,6 +1514,7 @@ def auto_refine(
                 parameters=parameters,
                 background_order=background_order,
                 instrument_fwhm=instrument_fwhm,
+                excluded=excluded,
                 callback=inner,
                 should_stop=should_stop,
             )

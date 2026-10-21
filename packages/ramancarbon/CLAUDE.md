@@ -678,6 +678,43 @@ Con los dos arreglos, las alturas calculadas en ese patrón pasan del
   turbostrática** —asimétrica, Warren— y no una gaussiana estirada. Está
   sin hacer y es una decisión aparte.
 
+## Dejar fuera un trozo del patrón
+
+`refine(..., excluded=[(low, high)])`. Los puntos siguen en el patrón y
+se dibujan; simplemente no entran en el residuo, ni en los factores R,
+ni en las incertidumbres.
+
+- **Para cuando el modelo NO puede producir la forma que hay**, y
+  fingir que sí corrompe todo lo demás: un artefacto de fluorescencia,
+  un pico del portamuestras, o una banda difusa. El caso medido es el
+  tercero. La 002 de un carbono turbostrático mide 2.26° donde el perfil
+  llega a 1.53°, y con la banda dentro del ajuste **las fases de hierro
+  se iban al techo de anchura para ayudar a rellenarla**: la cementita y
+  el seleniuro volvían las dos como jorobas de 5 nm. Excluir la banda es
+  decir que esa parte del patrón no se está modelando; dejarla dentro y
+  que se la repartan otras fases, no.
+- **El coste es real y se informa SIEMPRE, sin opción de callarlo.** Una
+  región excluida es invisible en todos los números del resultado: el
+  Rwp parece un Rwp cualquiera y la fracción de una fase cuyas líneas
+  estaban dentro de la ventana parece una fracción cualquiera. El único
+  sitio donde se ve es una figura, y solo si quien la dibujó sabía
+  sombrear la ventana. Por eso el aviso dice cuántos puntos se quitaron
+  y que los factores R **no son comparables** con los de un ajuste
+  completo.
+- **Y si TODAS las reflexiones de una fase caen dentro, se la nombra.**
+  Esa fase no está cuantificada en absoluto y su fracción no significa
+  nada. Comprobarlo cuesta una lista de reflexiones por fase y evita el
+  peor resultado posible: un número con aspecto de medida detrás del
+  cual no hay ni un pico.
+- **No es recortar.** `Pattern.trim` quita los extremos y cambia el
+  patrón; esto quita una ventana interior y no lo cambia. La prueba que
+  lo fija comprueba que el patrón conserva todos sus puntos, para que la
+  figura siga pudiendo dibujar lo que se dejó fuera.
+- **Medido**: sobre un patrón sintético con una joroba inventada de 4000
+  cuentas en 33°, el ajuste que pasa POR ella devuelve una celda más
+  lejos de la verdadera que el que la rodea. El fit no deja la región
+  donde está: arrastra las fases hacia ella.
+
 ## «Los picos calculados no alcanzan la altura del patrón»
 
 Es lo que se lee de una figura de Rietveld y es lo único que ningún

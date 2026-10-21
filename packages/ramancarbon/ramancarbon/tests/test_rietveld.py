@@ -640,3 +640,99 @@ class TestTheCoordinateStage:
         result = auto_refine(pattern, [PhaseModel(crystal=crystal)])
         assert result.phases[0].site_shifts
         assert result.phases[0].site_shifts[0] == pytest.approx(truth, abs=0.006)
+
+
+# -- excluded regions --------------------------------------------------
+
+
+class TestExcludedRegions:
+    """Leaving part of the pattern out, and saying so."""
+
+    @staticmethod
+    def _spoiled(pattern):
+        """The same pattern with a big invented hump over 30-36 deg."""
+        import copy
+        spoiled = copy.deepcopy(pattern)
+        centre, width = 33.0, 2.0
+        bump = 4000.0 * np.exp(
+            -0.5 * ((spoiled.two_theta - centre) / width) ** 2)
+        spoiled.intensity = spoiled.intensity + bump
+        spoiled.sigma = np.sqrt(np.maximum(spoiled.intensity, 1.0))
+        return spoiled
+
+    def test_excluding_the_spoiled_window_recovers_the_right_cell(self, two_phase):
+        """The case the feature is for, as a measurement.
+
+        A region the model cannot produce does not stay where it is: the
+        fit drags the phases towards it. Here an invented hump at 33 deg
+        is put into a pattern whose true answer is known, and the cell
+        refined through it is compared with the cell refined around it.
+        """
+        crystals = [find_phase("FeSe_tetragonal"), find_phase("grafito_2H")]
+        truth = auto_refine(two_phase, crystals)
+        spoiled = self._spoiled(two_phase)
+        through = auto_refine(spoiled, crystals)
+        around = auto_refine(spoiled, crystals, excluded=[(29.0, 37.0)])
+
+        def cell(result):
+            return np.array(result.phases[0].lattice_factors)
+
+        assert np.linalg.norm(cell(around) - cell(truth)) < \
+            np.linalg.norm(cell(through) - cell(truth))
+
+    def test_the_excluded_points_do_not_enter_the_r_factors(self, two_phase):
+        spoiled = self._spoiled(two_phase)
+        crystals = [find_phase("FeSe_tetragonal"), find_phase("grafito_2H")]
+        around = auto_refine(spoiled, crystals, excluded=[(29.0, 37.0)])
+        through = auto_refine(spoiled, crystals)
+        # The hump is four thousand counts of pattern no model explains,
+        # so a fit that is not scored on it has to come out better.
+        assert around.r_wp < through.r_wp
+
+    def test_the_pattern_keeps_its_points_so_the_figure_still_draws(self, two_phase):
+        """Excluded, not deleted: the reader has to see what was left out."""
+        crystals = [find_phase("FeSe_tetragonal")]
+        result = auto_refine(two_phase, crystals, excluded=[(29.0, 37.0)])
+        assert result.pattern.two_theta.size == two_phase.two_theta.size
+        assert result.calculated.size == two_phase.two_theta.size
+        assert result.excluded == ((29.0, 37.0),)
+
+    def test_an_exclusion_is_always_reported(self, two_phase):
+        crystals = [find_phase("FeSe_tetragonal")]
+        result = auto_refine(two_phase, crystals, excluded=[(29.0, 37.0)])
+        said = " ".join(result.warnings)
+        assert "EXCLUIDO" in said
+        assert "NO son comparables" in said
+
+    def test_a_phase_buried_entirely_inside_a_window_is_named(self):
+        """Its fraction would otherwise look like any other fraction.
+
+        Needs a narrow pattern, because over 15-72 deg graphite has the
+        002 and the whole 10l group, and a window wide enough to bury all
+        of them leaves no pattern to refine -- which the guard refuses,
+        correctly. Over 20-33 deg the 002 is its only line.
+        """
+        narrow = simulate(
+            [find_phase("grafito_2H")], two_theta_range=(20.0, 33.0),
+            step=0.02, profile=Profile(u=0.01, v=-0.003, w=0.008, eta0=0.6),
+            background=300.0, counts_at_max=12000.0, seed=5, name="estrecho",
+        )
+        result = auto_refine(narrow, [find_phase("grafito_2H")],
+                             excluded=[(24.5, 28.5)])
+        said = " ".join(result.warnings)
+        assert "no están cuantificadas" in said
+        assert "grafito_2H" in said
+
+    def test_excluding_almost_everything_is_refused(self, two_phase):
+        with pytest.raises(RefinementError):
+            auto_refine(two_phase, [find_phase("FeSe_tetragonal")],
+                        excluded=[(15.0, 71.9)])
+
+    def test_no_exclusion_changes_nothing(self, two_phase, refined):
+        """The feature has to be free when it is not used."""
+        plain = auto_refine(
+            two_phase,
+            [find_phase("FeSe_tetragonal"), find_phase("grafito_2H")],
+            excluded=[])
+        assert plain.excluded == ()
+        assert plain.r_wp == pytest.approx(refined.r_wp, abs=1e-9)
