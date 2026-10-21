@@ -10,13 +10,29 @@ def load(sample):
         return json.load(handle)
 
 
-def fraction(row):
-    weight, sigma = row["weight"], row["weight_sigma"]
+#: Above this spread over the background-order scan, in percentage
+#: points, the package calls a fraction undetermined.
+UNDETERMINED = 10.0
+
+
+def fraction(row, spread):
+    """The fraction with the uncertainty that actually dominates it.
+
+    Not the refinement's own standard error: that is conditional on the
+    background model being right, which is the thing in question, and on
+    these patterns it comes out ten times too small. The half-spread over
+    the background-order scan is the honest figure, and where the spread
+    is large enough that the package refuses the number, the number is
+    not printed at all.
+    """
+    weight = row["weight"]
     if weight is None:
         return "n/d"
-    if sigma:
-        return f"{100 * weight:.1f} ± {100 * sigma:.1f}"
-    return f"{100 * weight:.1f}"
+    if spread is None:
+        return f"{100 * weight:.1f}"
+    if 100 * spread > UNDETERMINED:
+        return f"**no determinada** ({100 * spread:.0f} pts de dispersión)"
+    return f"{100 * weight:.1f} ± {100 * spread / 2:.1f}"
 
 
 def table_phases(summaries):
@@ -36,7 +52,8 @@ def table_phases(summaries):
                 % (label if index == 0 else "",
                    row["pretty"].split(" (")[0],
                    row["pretty"].split("(")[-1].rstrip(")") if "(" in row["pretty"] else "—",
-                   fraction(row),
+                   fraction(row, (summary.get("background_spread")
+                                  or {}).get(row["phase"])),
                    100 * row["share"],
                    "—" if size is None else f"{size:.1f}",
                    row["a"], row["c"])

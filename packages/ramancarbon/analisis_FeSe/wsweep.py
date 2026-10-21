@@ -13,13 +13,13 @@ names = (["FeSe_tetragonal", "FeSe_hexagonal", "Fe3C_cementita", "Fe_alfa",
          ["C_turbostratico_3.44", "Fe3C_cementita", "Fe_alfa",
           "FeSe_tetragonal"])
 carbon = "C_turbostratico_3.44"
-print("W_max  Rwp%    GOF    fondo%  C_peso%  C_señal%  W_C     FWHM_C  L_C(nm) clavado")
+print("fondo de orden 12\nW_max  Rwp%    GOF    fondo%  C_peso%  C_señal%  W_C     FWHM_C  L_C(nm) clavado")
 for cap in (2.0, 4.0, 6.0, 8.0, 12.0, 25.0):
     R.PROFILE_W_LIMIT = cap
     R.PROFILE_U_LIMIT = cap
     R.PROFILE_V_LIMIT = cap / 2.5
     models = [PhaseModel(crystal=lib[n]) for n in names]
-    res = auto_refine(p, models)
+    res = auto_refine(p, models, background_order=12)
     ph = next(x for x in res.phases if x.crystal.name == carbon)
     w = res.weight_fractions()[carbon]
     sh = res.phase_contributions()[carbon]

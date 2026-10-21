@@ -44,12 +44,17 @@ PRETTY = {
 }
 
 sample = sys.argv[1]
+# The package default of 6 cannot follow the fluorescence hump these
+# patterns sit on: at order 6 the S2 refinement returns 99 % carbon with
+# GOF 2.44. The order is passed in, and the sweep below is what justifies
+# whichever one was chosen.
+ORDER = int(sys.argv[3]) if len(sys.argv) > 3 else 12
 lib = library_map()
 pattern = load(sample)
 models = [PhaseModel(crystal=lib[n]) for n in PHASES[sample]]
 
 start = time.perf_counter()
-result = auto_refine(pattern, models,
+result = auto_refine(pattern, models, background_order=ORDER,
                      callback=lambda s: print("  .", s, flush=True))
 elapsed = time.perf_counter() - start
 print(f"\n### {sample}: {elapsed:.0f} s", flush=True)
@@ -98,7 +103,8 @@ print(agreement.describe(), flush=True)
 
 print("\n--- barrido del orden del fondo ---", flush=True)
 sweep = background_order_sensitivity(
-    pattern, [PhaseModel(crystal=lib[n]) for n in PHASES[sample]])
+    pattern, [PhaseModel(crystal=lib[n]) for n in PHASES[sample]],
+    orders=(8, 10, 12, 14, 16, 20))
 print(sweep.summary(), flush=True)
 
 columns, table = fit_columns(result)
@@ -109,6 +115,7 @@ np.savez(f"{OUT}/{sample}_ticks.npz", **ticks)
 
 summary = {
     "sample": sample,
+    "background_order": ORDER,
     "seconds": elapsed,
     "r_wp": result.r_wp, "r_p": result.r_p,
     "r_expected": result.r_expected, "gof": result.gof,
