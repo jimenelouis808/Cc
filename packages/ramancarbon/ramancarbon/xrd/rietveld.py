@@ -87,6 +87,52 @@ REFINE_MIN_RELATIVE = 1e-3
 #: Crystallite size above which a line width carries no information, nm.
 SIZE_CEILING = 120.0
 
+#: Below this crystallite size, in nm, a refined width is reported as a
+#: hump and not as a domain.
+#:
+#: A graphitic stack of two or three sheets a nanometre across is not a
+#: crystallite with a slightly broader Bragg peak; it is a material whose
+#: scattering is a diffuse band, and the right model for it is a fitted
+#: hump or a structure built for it, not a Gaussian pushed wider. The
+#: refinement still fits it — the point of the limit is to say what the
+#: number means when it comes back this small.
+SIZE_FLOOR = 1.5
+
+#: Caglioti ceilings: W and U as FWHM² in deg², V as its coefficient.
+#:
+#: These are the values the package was calibrated with, and they are
+#: left alone on purpose even though a measurement says they are too
+#: tight. Named constants rather than literals buried in
+#: :func:`build_parameters` so that raising them is a decision somebody
+#: makes once, in one place, knowing what it costs.
+#:
+#: **What is measured.** The resulting FWHM cannot exceed 1.53° anywhere
+#: near the carbon 002, while the 002 band of the 1020 °C sample is
+#: **2.26° wide** — which needs W ≈ 4.8. So every refinement of these
+#: samples ends with W and U pinned at 2.000, and the width the model
+#: cannot produce goes into the background instead, which is exactly
+#: where a carbon's weight fraction comes from.
+#:
+#: **And why raising them is not the fix.** Tried at 25: Rwp fell from
+#: 4.33 to 4.16 % and the carbon's weight fraction went from 54 % to
+#: **85 %**, with W, U and V all pinned at the new ceiling and a second
+#: phase's cell driven to its own lower bound. The parameter is not
+#: short of room; it is degenerate with the background, so a looser
+#: ceiling moves the pin and changes the answer rather than measuring
+#: it. A broad reflection and a flexible polynomial describe the same
+#: shape — the limit is what makes the number finite at all, not a
+#: detail of the solver.
+#:
+#: The honest limit is on the resulting FWHM, which is a nonlinear
+#: constraint the solver's box bounds cannot express. Until there is a
+#: model with a turbostratic band's actual shape — asymmetric, Warren,
+#: not a Gaussian pushed wider — the ceiling stays where the
+#: calibration put it and :func:`_warn_about_pinned_widths` says what
+#: hitting it means.
+PROFILE_W_LIMIT = 2.0
+PROFILE_U_LIMIT = 2.0
+PROFILE_V_LIMIT = 1.0
+
 #: A goodness of fit above this is a bad fit whatever the R factors say.
 GOF_LIMIT = 4.0
 
@@ -108,6 +154,44 @@ PROGRESS_EVERY = 10
 
 #: March–Dollase r outside this range is severe texture.
 TEXTURE_LIMITS = (0.7, 1.4)
+
+#: Largest displacement of an atomic coordinate, in fractional units.
+#:
+#: 0.05 of a cell edge is about a quarter of an ångström in these
+#: structures — enough to cover the spread the literature reports for a
+#: coordinate like FeSe's selenium z (0.26–0.28), and far short of the
+#: distance at which the structure would become a different one. A
+#: Rietveld refinement that needs to move an atom further than this is
+#: not refining a coordinate, it is choosing a phase, and the honest
+#: answer there is a different CIF.
+SITE_SHIFT_LIMIT = 0.05
+
+#: A site needs at least this share of its cell's scattering power before
+#: its own coordinates are freed.
+#:
+#: X-rays see electrons, so a site's weight in the structure factor goes
+#: as Z², and the light atom of a heavy compound is nearly invisible.
+#: Cementite is the case this was measured on: 3 Fe and 1 C per formula
+#: give the carbon 36 of 2064, or 1.7 %, and its x ran straight to the
+#: ±0.05 bound and stopped there — the solver had moved it a quarter of
+#: an ångström from its published position to buy a fit improvement the
+#: carbon cannot physically produce. A coordinate pinned at a bound is
+#: worse than one left alone: it is not merely undetermined, it is a
+#: structure that has been changed. Fixing the light atoms of a heavy
+#: phase is also what a crystallographer does by hand.
+SITE_MIN_SCATTERING = 0.05
+
+#: A phase needs at least this share of the calculated intensity above
+#: background before its coordinates are freed.
+#:
+#: Atomic coordinates are the parameters that will produce a beautiful
+#: Rwp out of a wrong structure, because there are enough of them to
+#: absorb anything. Freeing them for a phase that contributes a
+#: thousandth of the visible signal is not a measurement of that phase;
+#: it is letting seven numbers chase noise. Judged against the intensity
+#: the phases actually explain — not the raw counts — because that is the
+#: part a coordinate can be fitted to.
+SITE_MIN_SHARE = 0.05
 
 
 class RefinementError(ValueError):
@@ -144,14 +228,39 @@ class PhaseModel:
     preferred_axis: Optional[tuple[int, int, int]] = None
     preferred_r: float = 1.0
     lattice_factors: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    site_shifts: tuple[float, ...] = ()
+    """Displacement of each symmetry-allowed atomic coordinate, in
+    fractional units, in the order ``Crystal.site_freedoms`` enumerates
+    them. Empty means the published coordinates, unmoved.
+
+    These are the parameters that set the relative intensities *within* a
+    phase, and without them a refinement cannot correct one. The scale
+    moves a phase's whole pattern up and down together; the widths move
+    intensity between the top of a peak and its flanks; the March–Dollase
+    r tilts one direction's reflections against the rest. None of them can
+    change the ratio of the 001 to the 101, because that ratio is a
+    structure factor and a structure factor is the atoms' positions.
+    Measured on the bundled tetragonal FeSe, over this parameter's own
+    bounds: the 001 goes from 100 to 44 to 15 relative to the 101 as the
+    selenium z moves from 0.2172 to 0.2672 to 0.3172. The CIF's own note
+    says that z is the coordinate the intensities turn on and to refine
+    it; until now nothing could."""
 
     def current_crystal(self) -> Crystal:
-        """The structure at the current lattice factors."""
+        """The structure at the current lattice factors and coordinates."""
+        crystal = self.crystal
+        if any(shift != 0.0 for shift in self.site_shifts):
+            crystal = crystal.displaced(self.site_shifts)
         if self.lattice_factors == (1.0, 1.0, 1.0):
-            return self.crystal
-        return self.crystal.with_lattice(
-            self.crystal.lattice.scaled(self.lattice_factors)
+            return crystal
+        return crystal.with_lattice(
+            crystal.lattice.scaled(self.lattice_factors)
         )
+
+    @property
+    def free_coordinates(self) -> int:
+        """How many positional parameters this phase's symmetry allows."""
+        return self.crystal.free_coordinates
 
     @property
     def cell_mass(self) -> Optional[float]:
@@ -473,6 +582,13 @@ def calculate_pattern(
             # U_iso is worse -- it sits near 0.005, so its step is 7e-11,
             # four thousand times under the rounding.
             #
+            # The site shifts ARE in the key, and that is the line that
+            # separates them from r below: moving an atom changes the
+            # structure factors themselves, so a cached reflection list
+            # computed at other coordinates is simply the wrong list.
+            # There is no multiplicative shortcut for a parameter that
+            # acts inside |F|.
+            #
             # And r is left OUT of the key, because texture is a
             # multiplicative correction on top of a reflection list that
             # does not depend on it. Keeping r in the key was correct and
@@ -491,6 +607,7 @@ def calculate_pattern(
                 round(line_wavelength, 8),
                 phase.lattice_factors,
                 phase.u_iso,
+                phase.site_shifts,
             )
             computed: Optional[list[Reflection]] = (
                 reflection_cache.get(key) if reflection_cache is not None else None
@@ -550,6 +667,9 @@ STAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
                  "eta", "preferred")),
     ("desplazamiento y U", ("scale", "background", "zero", "displacement", "lattice",
                             "profile_w", "profile_uv", "eta", "preferred", "u_iso")),
+    ("coordenadas", ("scale", "background", "zero", "displacement", "lattice",
+                     "profile_w", "profile_uv", "eta", "preferred", "u_iso",
+                     "site")),
 )
 
 
@@ -590,16 +710,16 @@ def build_parameters(
                 )
             )
         parameters.append(
-            Parameter(f"W[{tag}]", phase.profile.w, lower=1e-5, upper=2.0,
-                      phase=index, kind="profile_w")
+            Parameter(f"W[{tag}]", phase.profile.w, lower=1e-5,
+                      upper=PROFILE_W_LIMIT, phase=index, kind="profile_w")
         )
         parameters.append(
-            Parameter(f"U[{tag}]", phase.profile.u, lower=-0.5, upper=2.0,
-                      phase=index, kind="profile_uv")
+            Parameter(f"U[{tag}]", phase.profile.u, lower=-0.5,
+                      upper=PROFILE_U_LIMIT, phase=index, kind="profile_uv")
         )
         parameters.append(
-            Parameter(f"V[{tag}]", phase.profile.v, lower=-1.0, upper=1.0,
-                      phase=index, kind="profile_uv")
+            Parameter(f"V[{tag}]", phase.profile.v, lower=-PROFILE_V_LIMIT,
+                      upper=PROFILE_V_LIMIT, phase=index, kind="profile_uv")
         )
         parameters.append(
             Parameter(f"eta[{tag}]", phase.profile.eta0, lower=0.0, upper=1.0,
@@ -613,7 +733,79 @@ def build_parameters(
             Parameter(f"U_iso[{tag}]", phase.u_iso, lower=0.0, upper=0.15,
                       phase=index, kind="u_iso")
         )
+        shifts = list(phase.site_shifts) or [0.0] * phase.free_coordinates
+        for name, bound, value in zip(
+            _site_parameter_names(phase.crystal),
+            _site_bounds(phase.crystal),
+            shifts,
+            strict=True,
+        ):
+            parameters.append(
+                Parameter(f"{name}[{tag}]", value, lower=-bound, upper=bound,
+                          phase=index, kind="site")
+            )
     return parameters
+
+
+#: Direction letters, for naming a coordinate the way a crystallographer
+#: would read it.
+_AXIS_LETTERS = ("x", "y", "z")
+
+
+def _site_parameter_names(crystal: Crystal) -> list[str]:
+    """One readable name per free coordinate, in enumeration order.
+
+    ``Se1.z`` when the allowed direction is an axis of the cell, which is
+    the common case and the one a reader can check against the CIF, and
+    ``Se1.d0`` when it is an oblique combination that no single letter
+    describes.
+    """
+    names: list[str] = []
+    for site, basis in zip(crystal.sites, crystal.site_freedoms()):
+        label = site.label or site.element
+        for column in range(basis.shape[1]):
+            direction = basis[:, column]
+            axes = np.flatnonzero(np.abs(direction) > 1e-8)
+            if axes.size == 1:
+                names.append(f"{label}.{_AXIS_LETTERS[int(axes[0])]}")
+            else:
+                names.append(f"{label}.d{column}")
+    return names
+
+
+def _site_bounds(crystal: Crystal) -> list[float]:
+    """The largest safe displacement for each free coordinate.
+
+    :data:`SITE_SHIFT_LIMIT` unless moving that far would change how many
+    atoms the symmetry generates, in which case it is shrunk until it
+    does not. A site sliding onto a higher-symmetry position merges with
+    its own images, and :meth:`Crystal.expanded` merges coincident images
+    — correctly, since otherwise an atom at a cubic origin would scatter
+    twenty-four times over. The consequence here is that the phase would
+    silently lose half its scattering power in the middle of a
+    refinement, which reads as a collapsing scale factor and not as what
+    it is. The bundled structures all keep the full limit; this is for the
+    CIF somebody drops in whose atom sits a hundredth from a mirror.
+    """
+    total = crystal.free_coordinates
+    if total == 0:
+        return []
+    reference = crystal.atoms_per_cell
+    bounds: list[float] = []
+    for position in range(total):
+        bound = SITE_SHIFT_LIMIT
+        while bound > 1e-4:
+            if all(
+                crystal.displaced(
+                    [sign * bound if i == position else 0.0
+                     for i in range(total)]
+                ).atoms_per_cell == reference
+                for sign in (-1.0, 1.0)
+            ):
+                break
+            bound /= 2.0
+        bounds.append(bound)
+    return bounds
 
 
 def _seed_profile(pattern: Pattern) -> Profile:
@@ -654,6 +846,11 @@ def _apply(parameters: Sequence[Parameter], phases: Sequence[PhaseModel]) -> tup
     background: list[float] = []
     zero = displacement = 0.0
     lattice: dict[int, list[float]] = {i: list(p.lattice_factors) for i, p in enumerate(phases)}
+    # Collected in encounter order rather than looked up by name, the way
+    # the background coefficients are: `build_parameters` emits one per
+    # free coordinate in `site_freedoms` order, so position carries the
+    # meaning and nothing has to parse a label back into a site.
+    shifts: dict[int, list[float]] = {i: [] for i in range(len(phases))}
     for parameter in parameters:
         if parameter.kind == "background":
             background.append(parameter.value)
@@ -685,8 +882,13 @@ def _apply(parameters: Sequence[Parameter], phases: Sequence[PhaseModel]) -> tup
                 phase.preferred_r = parameter.value
             elif parameter.kind == "u_iso":
                 phase.u_iso = parameter.value
+            elif parameter.kind == "site":
+                shifts[parameter.phase].append(parameter.value)
     for index, factors in lattice.items():
         phases[index].lattice_factors = tuple(factors)
+    for index, values in shifts.items():
+        if values:
+            phases[index].site_shifts = tuple(values)
     return background, zero, displacement
 
 
@@ -957,6 +1159,151 @@ def _estimate_errors(
     return correlations
 
 
+def _site_scattering_shares(crystal: Crystal) -> list[float]:
+    """Each site's share of the cell's Z²-weighted scattering power.
+
+    Weighted by how many atoms the symmetry actually generates from the
+    site and by its occupancy, so a site on a general position counts for
+    its whole orbit. Z² rather than Z because the structure factor is a
+    sum of form factors and the intensity is its square; the form factor
+    at zero angle is the electron count.
+    """
+    from .scattering import atomic_number
+    from .symmetry import orbit
+
+    weights: list[float] = []
+    for site in crystal.sites:
+        # Z from the form-factor tables, which is the same number the
+        # structure factor uses at s = 0 by construction, rather than a
+        # second copy of the periodic table to keep in step.
+        try:
+            number = float(atomic_number(site.element))
+        except (KeyError, ValueError):  # pragma: no cover - unknown element
+            number = 0.0
+        images = len(orbit(site.fract, crystal.operations))
+        weights.append(images * site.occupancy * number ** 2)
+    total = sum(weights)
+    if total <= 0.0:  # pragma: no cover - an all-unknown-element cell
+        return [0.0] * len(weights)
+    return [weight / total for weight in weights]
+
+
+def _sites_worth_refining(
+    result: Optional[RietveldResult],
+    models: Sequence[PhaseModel],
+) -> tuple[dict[int, set[int]], list[str]]:
+    """Which coordinates the data can carry, and why not the rest.
+
+    Three things disqualify a phase, and each is reported rather than
+    applied in silence — a coordinate stage that quietly refines nothing
+    reads exactly like one that refined everything and found nothing to
+    change.
+
+    The first is symmetry: a phase whose atoms all sit on fully fixed
+    special positions has no positional parameter to refine. α-iron,
+    graphite and the hexagonal NiAs-type selenide are all in that
+    position, so for them this stage is a no-op by construction and not a
+    judgement about the data.
+
+    The second is signal: :data:`SITE_MIN_SHARE` of the intensity the
+    model explains above background. Below that there is not enough of
+    the phase on the detector to locate its atoms with, however good the
+    R factor looks afterwards.
+
+    The third is that the refinement has not run yet, which happens only
+    if the stage order is rearranged to put coordinates first. Then
+    nothing is freed, because there is no fit to judge the shares from —
+    and freeing coordinates before the widths and the scale have settled
+    is the specific mistake the staged protocol exists to prevent.
+    """
+    eligible = {
+        index for index, phase in enumerate(models) if phase.free_coordinates
+    }
+    notes: list[str] = []
+    fixed = [
+        phase.crystal.name for phase in models if not phase.free_coordinates
+    ]
+    if fixed:
+        notes.append(
+            "sin coordenadas que refinar porque la simetría las fija todas: "
+            + ", ".join(sorted(set(fixed)))
+            + ". En estas fases las intensidades relativas salen de la celda "
+            "y del factor de temperatura, y no hay nada más que ajustar"
+        )
+    if not eligible:
+        return {}, notes
+    if result is None:  # pragma: no cover - only if STAGES is reordered
+        notes.append(
+            "la etapa de coordenadas se ha saltado porque es la primera y no "
+            "hay ningún ajuste previo del que juzgar qué fase tiene señal "
+            "suficiente. Las coordenadas van al final por eso"
+        )
+        return {}, notes
+    shares = result.phase_contributions()
+    carried: dict[int, set[int]] = {}
+    for index in sorted(eligible):
+        phase = models[index]
+        crystal = phase.crystal
+        name = crystal.name
+        share = shares.get(name, 0.0)
+        if share < SITE_MIN_SHARE:
+            notes.append(
+                f"{name}: sus {phase.free_coordinates} coordenadas "
+                f"libres NO se han refinado, porque la fase explica el "
+                f"{100 * share:.1f} % de la intensidad difractada y el mínimo "
+                f"es {100 * SITE_MIN_SHARE:.0f} %. Con esa señal, mover sus "
+                "átomos baja el Rwp ajustando ruido"
+            )
+            continue
+        # Which COORDINATES, not which phase: a site too light to be seen
+        # inside a phase that is plainly there is a different situation
+        # from a phase that is barely there at all, and the two need
+        # different answers.
+        weights = _site_scattering_shares(crystal)
+        positions: set[int] = set()
+        cursor = 0
+        light: list[str] = []
+        for site, basis, weight in zip(crystal.sites, crystal.site_freedoms(),
+                                       weights, strict=True):
+            count = basis.shape[1]
+            if count == 0:
+                continue
+            if weight >= SITE_MIN_SCATTERING:
+                positions.update(range(cursor, cursor + count))
+            else:
+                light.append(
+                    f"{site.label or site.element} ({count}, "
+                    f"{100 * weight:.1f} % de la potencia dispersora)"
+                )
+            cursor += count
+        if light:
+            notes.append(
+                f"{name}: coordenadas dejadas fijas por tratarse de átomos "
+                "demasiado ligeros para verse en esta fase: "
+                + "; ".join(light)
+                + f". El mínimo es {100 * SITE_MIN_SCATTERING:.0f} % y la "
+                "dispersión va como Z², así que un átomo ligero junto a uno "
+                "pesado no fija su propia posición: la suelta corre hasta la "
+                "cota y deja la estructura movida"
+            )
+        if positions:
+            carried[index] = positions
+    if carried:
+        moved = ", ".join(
+            f"{models[i].crystal.name} ({len(positions)})"
+            for i, positions in sorted(carried.items())
+        )
+        notes.append(
+            "coordenadas atómicas refinadas en: " + moved + ". Son los "
+            "parámetros que fijan las intensidades RELATIVAS dentro de cada "
+            "fase, y también los que pueden dar un Rwp bonito con una "
+            "estructura equivocada: compara las coordenadas con las del CIF "
+            "de partida antes de citarlas, y mira que la curva diferencia "
+            "haya mejorado donde están los picos de esa fase y no en el fondo"
+        )
+    return carried, notes
+
+
 def auto_refine(
     pattern: Pattern,
     phases: Sequence[PhaseModel] | Sequence[Crystal],
@@ -1054,12 +1401,34 @@ def auto_refine(
     result: Optional[RietveldResult] = None
     done: list[str] = []
     skipped_texture = False
+    site_notes: list[str] = []
     for label, kinds in stages:
         active = list(kinds)
         if any(p.preferred_axis is None for p in models) and "preferred" in active:
             active = [k for k in active if k != "preferred"]
             skipped_texture = True
         free_kinds(parameters, active)
+        if "site" in active:
+            # Freed phase by phase rather than all at once, because the
+            # question "do the data carry seven coordinates for this
+            # phase" has a different answer for the cementite that owns a
+            # third of the visible signal and for the selenide that owns
+            # a twentieth of it. `free_kinds` has just turned all of them
+            # on; this turns back off the ones that have not earned it.
+            carried, note = _sites_worth_refining(result, models)
+            site_notes.extend(note)
+            seen: dict[int, int] = {}
+            for parameter in parameters:
+                if parameter.kind != "site":
+                    continue
+                phase_index = parameter.phase
+                position = seen.get(phase_index, 0)
+                seen[phase_index] = position + 1
+                if position not in carried.get(phase_index, ()):
+                    parameter.free = False
+            if not carried:
+                done.append(f"{label} (ninguna fase la sostiene)")
+                continue
         # The stage's own name goes in front of the inner counter, so a
         # long refinement says which stage it is in and how far into it,
         # rather than going quiet for twenty seconds.
@@ -1098,23 +1467,36 @@ def auto_refine(
     assert result is not None
     result.stages = done
     result.warnings.extend(texture_notes)
+    result.warnings.extend(site_notes)
     if skipped_texture and not result.cancelled:
         # It was being skipped in silence, and silence reads as "there was
-        # nothing to do". There was: the texture stage is the only one
-        # that touches relative intensities, and a laminar material on a
-        # flat plate is where preferred orientation actually bites -- a
-        # turbostratic carbon lying flat shows its 00l and hides its hk0.
-        # A user looking at a difference curve whose peak HEIGHTS do not
-        # match has no way to learn from the program that the one stage
-        # for that never ran.
+        # nothing to do". There was: a laminar material on a flat plate is
+        # where preferred orientation actually bites -- a turbostratic
+        # carbon lying flat shows its 00l and hides its hk0. A user
+        # looking at a difference curve whose peak HEIGHTS do not match
+        # has no way to learn from the program that the stage for that
+        # never ran.
+        #
+        # It used to say this was the ONLY stage touching relative
+        # intensities, which was true when it was written and is not any
+        # more: the coordinate stage does too, and the two are different
+        # physics. Texture reweights one DIRECTION's reflections against
+        # the rest and is a property of how the powder sits in the
+        # holder; a coordinate changes the structure factors themselves
+        # and is a property of the phase. Which one is missing is worth
+        # knowing, so neither claims the other's ground.
         result.warnings.append(
             "la etapa de orientación preferente no se ha corrido, porque "
-            "ninguna fase declara un eje de textura. Es la única etapa que "
-            "toca las intensidades RELATIVAS: si las alturas de los picos "
-            "calculados no casan con las medidas mientras las posiciones sí, "
-            "empieza por ahí. En un material laminar —un carbono "
-            "turbostrático montado en plano es el caso de libro— la "
-            "orientación preferente es grande y no es opcional"
+            "ninguna fase declara un eje de textura. Junto con la de "
+            "coordenadas, es una de las dos etapas que tocan las "
+            "intensidades RELATIVAS: si las alturas de los picos calculados "
+            "no casan con las medidas mientras las posiciones sí, empieza "
+            "por aquí, porque la textura reparte intensidad entre "
+            "DIRECCIONES y eso es cómo está montada la muestra, mientras "
+            "que una coordenada cambia el factor de estructura y eso es la "
+            "fase. En un material laminar —un carbono turbostrático montado "
+            "en plano es el caso de libro— la orientación preferente es "
+            "grande y no es opcional"
         )
     return result
 
@@ -1211,9 +1593,71 @@ def write_fit(result: RietveldResult, path) -> list[Path]:
     return [destination, companion]
 
 
+def _warn_about_pinned_widths(result: RietveldResult, instrument_fwhm: float) -> None:
+    """Say when a phase wanted to be broader than the model allows.
+
+    The generic pinned-parameter list already names ``W[phase]`` at its
+    maximum. What it cannot say is why that one matters more than the
+    others: a width stuck at its ceiling means the calculated band is
+    narrower than the measured one, and the intensity the band does not
+    carry does not vanish — the background polynomial takes it. Since a
+    phase's weight fraction is its share of what the phases explain, the
+    fraction of exactly that phase is biased, and in the direction the
+    fit cannot report.
+
+    Reported with the widest FWHM the model can reach at the phase's own
+    strongest reflection, so the number can be compared against the band
+    on the plot rather than taken on faith.
+
+    :data:`SIZE_FLOOR` is the other half: with the default ceiling the
+    implied domain cannot get that small, so that branch fires only once
+    somebody has raised the ceiling — which is the point at which it is
+    needed, because a Gaussian stretched that far is fitting a diffuse
+    band and not a Bragg peak.
+    """
+    for phase in result.phases:
+        name = phase.crystal.name
+        at_ceiling = [
+            parameter.name for parameter in result.parameters
+            if parameter.free and parameter.name.endswith(f"[{name}]")
+            and parameter.kind in ("profile_w", "profile_uv")
+            and abs(parameter.value - parameter.upper) < 1e-6 * max(
+                1.0, abs(parameter.upper))
+        ]
+        if at_ceiling:
+            widest = max(
+                phase.profile.fwhm_at(angle)
+                for angle in (result.pattern.two_theta[0],
+                              result.pattern.two_theta[-1])
+            )
+            result.warnings.append(
+                f"{name}: la anchura terminó en su techo "
+                f"({', '.join(at_ceiling)}). El perfil más ancho que el "
+                f"modelo alcanza es {widest:.2f}° de FWHM, así que si la "
+                "banda medida es más ancha que eso, la intensidad que el "
+                "pico calculado no lleva se la queda el POLINOMIO DE FONDO "
+                f"— y la fracción en peso de {name} sale sesgada por ahí, "
+                "en la dirección que el ajuste no puede informar. Mídele la "
+                "anchura a media altura en la figura y compárala con esa "
+                "cifra antes de citar su fracción"
+            )
+    for name, size in result.crystallite_sizes(instrument_fwhm).items():
+        if size is not None and size < SIZE_FLOOR:
+            result.warnings.append(
+                f"{name}: la anchura refinada da un dominio de "
+                f"{size:.1f} nm, por debajo de {SIZE_FLOOR:.1f} nm. A ese "
+                "tamaño lo que se ajusta ya no es un pico de Bragg "
+                "ensanchado sino una banda difusa, y una banda ancha y un "
+                "polinomio de fondo flexible describen la MISMA forma: la "
+                "fracción de esta fase es una elección de modelado antes "
+                "que una medida"
+            )
+
+
 def _check(result: RietveldResult, instrument_fwhm: float) -> None:
     """Say what the numbers mean, including when they mean nothing."""
     _warn_about_the_heights(result)
+    _warn_about_pinned_widths(result, instrument_fwhm)
     if result.gof > GOF_LIMIT:
         result.warnings.append(
             f"la bondad del ajuste es {result.gof:.2f}, muy por encima de 1. "

@@ -20,7 +20,7 @@ says which of its entries have coordinates worth trusting.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional, Sequence
 
 import numpy as np
@@ -29,6 +29,19 @@ from .symmetry import ClosedGroup, SymmetryOperation, close_group, orbit, parse_
 
 #: Avogadro's number, for the density.
 AVOGADRO = 6.02214076e23
+
+#: How close an operation has to come to map a site onto itself, in
+#: fractional units, for :meth:`Crystal.site_freedoms`.
+#:
+#: Loose on purpose. A CIF writes 1/3 as 0.3333, so the three-fold at
+#: (0.3333, 0.6667, 1/4) misses the site by 1e-4 and a tolerance tighter
+#: than the file's own rounding drops it from the stabiliser. The cost of
+#: that is not a missing warning: the site then looks free along the
+#: basal direction the three-fold forbids, and graphite's second carbon
+#: gets a refinable coordinate that pulls the honeycomb apart. Too loose
+#: in the other direction would have to confuse two distinct sites a
+#: thousandth of a cell apart, which no real structure has.
+SITE_SYMMETRY_TOLERANCE = 1e-3
 
 #: Standard atomic weights, u. Only what the reference library and ordinary
 #: nanomaterial chemistry need; unknown elements fall back to 0 and the
@@ -345,23 +358,136 @@ class Crystal:
             mass += weight * number
         return mass / (AVOGADRO * self.lattice.volume * 1e-24)
 
+    def site_freedoms(self) -> tuple[np.ndarray, ...]:
+        """Per site, the displacement directions symmetry actually allows.
+
+        Returns one ``(3, n)`` array per site whose columns are a basis of
+        the fractional displacements invariant under that site's
+        stabiliser — the operations mapping the site onto itself. ``n`` is
+        0 for an atom on a fully fixed special position and 3 for one in a
+        general position.
+
+        These are the only coordinates a refinement may touch, and the
+        reason is that they are the only ones that keep the structure in
+        its space group. A displacement outside this subspace does not
+        move one atom; it moves the whole symmetry orbit incoherently, so
+        the result is not the same phase with a slightly different
+        geometry but a structure with a lower symmetry than the one
+        declared. Confining the shift to the basis makes the space group
+        an invariant of the refinement rather than something to check
+        afterwards.
+
+        The condition is ``(R - I) d = 0`` for every stabiliser operation,
+        so the basis is the null space of those stacked matrices. It is
+        read off the operations, exactly as :meth:`lattice_constraint`
+        is, and not off a Wyckoff letter — a letter depends on the
+        setting and on the origin choice, an operation that maps the site
+        onto itself does not.
+
+        Not computed through the averaged projector ``(1/|S|) Σ R``: that
+        matrix is a projector but it is not symmetric in a fractional
+        basis, and symmetrising it to use ``eigh`` invents an eigenvector
+        of eigenvalue 1 for the hexagonal 2c site, which is in fact
+        completely fixed.
+        """
+        cached = getattr(self, "_freedom_cache", None)
+        if cached is not None:
+            return cached
+        identity = np.eye(3)
+        bases: list[np.ndarray] = []
+        for site in self.sites:
+            fract = np.asarray(site.fract, dtype=float)
+            stabiliser = [
+                operation.R for operation in self.operations
+                if np.all(np.abs(
+                    np.mod(operation.R @ fract + operation.t - fract + 0.5, 1.0)
+                    - 0.5) < SITE_SYMMETRY_TOLERANCE)
+            ]
+            if not stabiliser:  # pragma: no cover - the identity is always in
+                bases.append(identity.copy())
+                continue
+            stack = np.vstack([rotation - identity for rotation in stabiliser])
+            _, singular, right = np.linalg.svd(stack)
+            singular = np.concatenate([singular, np.zeros(3 - singular.size)])
+            null = right[singular < 1e-8]
+            bases.append(null.T if null.size else np.zeros((3, 0)))
+        result = tuple(bases)
+        object.__setattr__(self, "_freedom_cache", result)
+        return result
+
+    @property
+    def free_coordinates(self) -> int:
+        """How many positional parameters symmetry leaves refinable."""
+        return sum(basis.shape[1] for basis in self.site_freedoms())
+
+    def displaced(self, shifts: Sequence[float]) -> "Crystal":
+        """A copy with the free coordinates moved by ``shifts``.
+
+        ``shifts`` is one number per free coordinate, in the order
+        :meth:`site_freedoms` enumerates them — site by site, and within
+        a site column by column. Each one is a displacement along its
+        basis direction in fractional units.
+
+        The expanded atom list is deliberately **not** carried over: this
+        is the one copy that does move the atoms.
+        """
+        bases = self.site_freedoms()
+        values = np.asarray(shifts, dtype=float)
+        if values.size != self.free_coordinates:
+            raise StructureError(
+                f"{self.name}: {values.size} desplazamientos para "
+                f"{self.free_coordinates} coordenadas libres"
+            )
+        moved: list[Site] = []
+        cursor = 0
+        for site, basis in zip(self.sites, bases):
+            count = basis.shape[1]
+            if count == 0:
+                moved.append(site)
+                continue
+            delta = basis @ values[cursor:cursor + count]
+            cursor += count
+            moved.append(
+                Site(
+                    element=site.element,
+                    fract=tuple(float(v) for v in np.asarray(site.fract) + delta),
+                    occupancy=site.occupancy,
+                    u_iso=site.u_iso,
+                    label=site.label,
+                )
+            )
+        clone = replace(self, sites=moved)
+        constraint = getattr(self, "_constraint_cache", None)
+        if constraint is not None:
+            object.__setattr__(clone, "_constraint_cache", constraint)
+        # The freedoms are a property of the symmetry and of which
+        # Wyckoff orbit each site sits on, and a shift along an allowed
+        # direction keeps the site on its own orbit. So they carry over,
+        # which also means the enumeration order cannot drift between a
+        # structure and its displaced copy.
+        object.__setattr__(clone, "_freedom_cache", bases)
+        return clone
+
     def with_lattice(self, lattice: Lattice) -> "Crystal":
         """A copy with a different cell, sharing the symmetry and atoms.
 
         The expanded atom list is carried over rather than recomputed:
         changing the cell moves nothing in fractional coordinates.
+
+        Built with :func:`dataclasses.replace` rather than by naming the
+        fields, and that is not a tidying-up. The hand-written version
+        listed nine fields and ``stacking`` was added later, so every
+        copy made here silently came back ``"ordered"`` — and
+        ``PhaseModel.current_crystal`` calls this as soon as the cell
+        stage frees a lattice parameter. A turbostratic carbon therefore
+        turned into graphite one stage into every refinement: measured on
+        the bundled 3.44 Å carbon, 5 reflections became 11 and it
+        acquired a 101 at 44.37° with 15 % relative intensity — an
+        invented second-strongest line, sitting on top of α-Fe's 110 at
+        44.67°, which is the strongest peak of the real pattern this was
+        found on. ``replace`` carries whatever fields the class has.
         """
-        clone = Crystal(
-            name=self.name,
-            lattice=lattice,
-            sites=list(self.sites),
-            operations=self.operations,
-            space_group=self.space_group,
-            formula=self.formula,
-            source=self.source,
-            confidence=self.confidence,
-            notes=self.notes,
-        )
+        clone = replace(self, lattice=lattice, sites=list(self.sites))
         cached = getattr(self, "_expanded_cache", None)
         if cached is not None:
             object.__setattr__(clone, "_expanded_cache", cached)
@@ -393,6 +519,7 @@ class Crystal:
 __all__ = [
     "ATOMIC_WEIGHT",
     "AVOGADRO",
+    "SITE_SYMMETRY_TOLERANCE",
     "Crystal",
     "Lattice",
     "Site",

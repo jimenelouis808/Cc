@@ -534,6 +534,150 @@ apenas se ve. El usuario desconfió del número y tenía razón.
   y un primer intento con el umbral en 3 lo dejaba fuera por cuatro
   centésimas.
 
+## Las intensidades relativas: dos fallos, uno de ellos de una línea
+
+El síntoma era el de siempre —las alturas calculadas no casan con las
+medidas mientras las posiciones sí— y el diagnóstico ya estaba escrito
+arriba. Lo que no estaba era que hubiera dos causas, y que ninguna de
+las dos fuera la textura.
+
+Medido sobre el patrón real de 900 °C (T-FeSe, H-FeSe, Fe₃C, α-Fe y
+carbono), el cociente observado/calculado de los trece picos modelados
+iba de **0.64 a 1.30**, repartido. Eso no es escala: un déficit de escala
+baja todos los picos por el mismo factor. Es un error RELATIVO, y hay
+que buscarlo en lo que cambia unas reflexiones frente a otras.
+
+- **`with_lattice` perdía `stacking`, y una fase se convertía en otra a
+  mitad del refinamiento.** Estaba escrito nombrando nueve campos;
+  `stacking` se añadió a `Crystal` después y se quedó fuera. Como
+  `PhaseModel.current_crystal` llama a `with_lattice` en cuanto la etapa
+  de celda suelta un parámetro de red, **un carbono turbostrático pasaba
+  a ser grafito en la segunda etapa de todos los refinamientos**: de 5
+  reflexiones a 11, y entre las nuevas una **101 a 44.37° con el 15 % de
+  intensidad relativa** —una segunda línea más intensa, inventada,
+  encima de la 110 del α-Fe a 44.67°, que es el pico más alto del
+  patrón. El arreglo es `dataclasses.replace`, que arrastra los campos
+  que la clase tenga. La prueba que existía comprobaba las reflexiones
+  del cristal original y nunca hacía una copia; la nueva compara el
+  juego de campos entero, para que el siguiente campo que se añada no
+  pueda repetirlo.
+- **No había NINGÚN parámetro posicional, así que las intensidades
+  relativas dentro de cada fase estaban congeladas.** La escala mueve
+  todo el patrón de una fase a la vez, las anchuras mueven intensidad
+  entre la cima de un pico y sus flancos, y la r de March-Dollase
+  inclina una dirección contra las demás. Ninguna puede cambiar el
+  cociente entre la 001 y la 101, porque ese cociente es un factor de
+  estructura y un factor de estructura son las posiciones de los átomos.
+  La nota del propio CIF del FeSe tetragonal lo decía —«la z del selenio
+  es el parámetro que más afecta a las intensidades relativas: si
+  refinas, refínalo»— y no se podía refinar. Medido sobre sus propias
+  cotas: la 001 pasa de 100 a 44 a 15 frente a la 101 al mover esa z de
+  0.2172 a 0.2672 a 0.3172.
+
+### Qué coordenadas, y por qué no todas
+
+- **Solo las que la simetría permite, leídas de las OPERACIONES.** Un
+  desplazamiento fuera del subespacio invariante del estabilizador del
+  sitio no mueve un átomo: mueve la órbita entera de forma incoherente, y
+  el resultado no es la misma fase con otra geometría sino una estructura
+  de simetría más baja que la declarada. Confinando el corrimiento a la
+  base, el grupo espacial es un invariante del refinamiento y no algo que
+  comprobar después. Es la condición `(R − I) d = 0` sobre el
+  estabilizador, o sea el espacio nulo de esas matrices apiladas — el
+  mismo criterio que `lattice_constraint`, y por la misma razón: una
+  letra de Wyckoff depende del asentamiento y del origen, una operación
+  que manda el sitio a sí mismo no.
+- **NO por el proyector promediado `(1/|S|) Σ R`.** Es un proyector, pero
+  no es simétrico en base fraccionaria, y simetrizarlo para usar `eigh`
+  **inventa** un autovector de autovalor 1 para el sitio 2c hexagonal,
+  que en realidad está completamente fijo. Me pasó al escribirlo.
+- **Y la tolerancia del estabilizador es FLOJA a propósito**
+  (`SITE_SYMMETRY_TOLERANCE` = 1e-3). Un CIF escribe 1/3 como 0.3333, así
+  que el ternario en (0.3333, 0.6667, 1/4) falla el sitio por 1e-4, y una
+  tolerancia más fina que el redondeo del propio archivo lo saca del
+  estabilizador. El coste no es un aviso de menos: el sitio aparece
+  entonces libre en la dirección basal que ese mismo ternario prohíbe, y
+  el segundo carbono del grafito recibe una coordenada refinable que
+  desarma el panal. Con 1e-6 esa fase declaraba una coordenada libre; con
+  1e-3, cero, que es la respuesta de libro.
+- **Resultado sobre las fases de estas muestras**: T-FeSe 1 (la z del Se),
+  Fe₃C 7, y H-FeSe, α-Fe y el grafito **0** —sus átomos están todos en
+  posiciones especiales fijas. Para esas tres la etapa es un no-op por
+  construcción, y eso se informa como tal y no como un juicio sobre los
+  datos.
+- **Un átomo ligero al lado de uno pesado no fija su propia posición.**
+  Los rayos X ven electrones, el peso de un sitio va como Z², y el
+  carbono de la cementita se lleva 36 de 2064: el **1.7 %**. Su x se fue
+  derecha a la cota de ±0.05 y se quedó ahí —el solver había movido el
+  carbono un cuarto de ångström de su posición publicada para comprar una
+  mejora que el carbono no puede producir físicamente. **Una coordenada
+  clavada en su cota es peor que una sin refinar**: no es que no esté
+  determinada, es que la estructura está movida. `SITE_MIN_SCATTERING`
+  está en el 5 % y deja fijos los ligeros, que es además lo que hace a
+  mano cualquier cristalógrafo. De las siete de la cementita se refinan
+  cinco.
+- **Y la fase entera tiene que tener señal.** `SITE_MIN_SHARE` = 5 % de
+  la intensidad que el modelo explica por encima del fondo. Las
+  coordenadas son los parámetros que sacan un Rwp bonito de una
+  estructura equivocada, porque hay bastantes para absorber cualquier
+  cosa; soltarlas para una fase que aporta una milésima de lo que se ve
+  no mide esa fase.
+- **La etapa va ÚLTIMA, y nada se salta en silencio.** Una etapa de
+  coordenadas que no refina nada se lee exactamente igual que una que lo
+  refinó todo y no encontró nada que cambiar, así que cada motivo
+  —simetría, átomo ligero, fase sin señal— se informa con su número.
+- **Los corrimientos SÍ van en la clave del caché**, al contrario que la
+  r de textura. Mover un átomo cambia los propios factores de estructura,
+  así que una lista de reflexiones calculada en otras coordenadas es
+  simplemente la lista equivocada: no hay atajo multiplicativo para un
+  parámetro que actúa dentro de |F|.
+
+Con los dos arreglos, las alturas calculadas en ese patrón pasan del
+75 % al 81 % del máximo medido y del 86 % al 93 % de la envolvente.
+
+### Y un tercero que NO se arregla subiendo la cota
+
+- **El techo de Caglioti es demasiado estrecho para un carbono
+  nanoestructurado, y subirlo empeora el resultado.** Con `W ≤ 2` la
+  FWHM que el modelo alcanza cerca de la 002 no pasa de **1.53°**, y la
+  banda 002 medida de la muestra de 1020 °C mide **2.26°** —necesita
+  W ≈ 4.8. Así que todos estos refinamientos acaban con W y U clavados
+  en 2.000, y la anchura que el modelo no puede producir se la queda el
+  fondo, que es justo de donde sale la fracción del carbono.
+- **Barrido del techo, seis valores sobre la muestra de 900 °C:**
+
+  | W máx | Rwp % | GOF | fondo % | C en peso % | W del C | FWHM del C | L (nm) |
+  |---|---|---|---|---|---|---|---|
+  | 2 | 4.344 | 1.036 | 96.8 | 58.8 | **2.000** | 1.51 | 5.6 |
+  | 4 | 4.292 | 1.023 | 96.6 | 65.4 | **4.000** | 2.14 | 3.9 |
+  | 6 | 4.265 | 1.017 | 96.5 | 69.3 | **6.000** | 2.62 | 3.2 |
+  | 8 | 4.240 | 1.011 | 96.3 | 71.2 | **8.000** | 3.03 | 2.7 |
+  | 12 | 4.207 | 1.003 | 96.1 | 77.7 | **12.000** | 3.71 | 2.2 |
+  | 25 | 4.161 | 0.992 | 95.7 | 83.6 | **25.000** | 5.35 | 1.5 |
+
+  **W del carbono es igual al techo en los seis.** No hay meseta, no hay
+  mínimo, no hay un valor «correcto»: el Rwp baja monótonamente y la
+  fracción del carbono sube monótonamente del 59 % al 84 % sobre un
+  factor doce en la cota. Al parámetro no le falta sitio —es
+  **degenerado con el fondo**— así que una cota más floja mueve el clavo
+  y cambia la respuesta en vez de medirla.
+- **El corolario, y es el número que hay que no citar**: en un patrón
+  así la fracción en peso del carbono **no es una medida**, es una
+  función monótona de una cota arbitraria. Lo honrado es normalizar
+  entre las fases cuyas fracciones sí están determinadas e informar del
+  carbono como presente y no cuantificable por Rietveld, igual que se
+  hace con el amorfo.
+- Por eso las cotas se quedan donde las dejó la calibración, pasan a ser
+  constantes nombradas (`PROFILE_W_LIMIT` y compañía) para que subirlas
+  sea una decisión en un sitio, y `_warn_about_pinned_widths` dice lo que
+  significa llegar al techo: la fracción de esa fase sale sesgada por el
+  fondo, en la dirección que el ajuste no puede informar. Da además la
+  FWHM más ancha que el modelo alcanza, para poder compararla con la
+  banda de la figura.
+- **El arreglo de verdad es un perfil con la forma que tiene una banda
+  turbostrática** —asimétrica, Warren— y no una gaussiana estirada. Está
+  sin hacer y es una decisión aparte.
+
 ## «Los picos calculados no alcanzan la altura del patrón»
 
 Es lo que se lee de una figura de Rietveld y es lo único que ningún

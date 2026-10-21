@@ -560,6 +560,45 @@ def test_turbostratic_carbon_has_no_three_dimensional_reflections():
     assert mixed, "graphite should keep its 3D reflections"
 
 
+def test_a_copy_of_a_turbostratic_carbon_is_still_turbostratic():
+    """The bug the test above could not see, because it never made a copy.
+
+    ``PhaseModel.current_crystal`` calls ``with_lattice`` as soon as the
+    cell stage frees a lattice parameter, and ``with_lattice`` used to
+    rebuild the ``Crystal`` by naming nine fields. ``stacking`` was added
+    to the class afterwards and so was left behind: one stage into every
+    refinement, a turbostratic carbon became graphite. Measured on the
+    bundled 3.44 Å carbon, 5 reflections became 11, and among the new
+    ones was a 101 at 44.37° carrying 15 % relative intensity -- an
+    invented second-strongest line, landing on top of alpha-iron's 110 at
+    44.67°, which is the strongest peak of the real CVD patterns this
+    package is for.
+
+    Checked by comparing the whole field set rather than ``stacking``
+    alone, so the next field added to ``Crystal`` cannot repeat it.
+    """
+    import dataclasses
+
+    from ramancarbon.xrd.powder import reflections
+    from ramancarbon.xrd.reference import library_crystals
+
+    carbon = {c.name: c for c in library_crystals()}["C_turbostratico_3.44"]
+    moved = carbon.with_lattice(carbon.lattice.scaled((1.002, 1.002, 1.002)))
+
+    assert moved.stacking == "turbostratic"
+    for reflection in reflections(moved, two_theta_range=(10.0, 90.0)):
+        h, k, ell = reflection.hkl
+        assert ell == 0 or (h == 0 and k == 0), reflection.hkl
+
+    carried = {field.name for field in dataclasses.fields(carbon)}
+    for name in carried - {"lattice", "sites"}:
+        assert getattr(moved, name) == getattr(carbon, name), name
+
+    # And the same for the copy that moves the atoms.
+    displaced = carbon.displaced([0.0] * carbon.free_coordinates)
+    assert displaced.stacking == "turbostratic"
+
+
 def test_a_cvd_pattern_identifies_its_carbon_and_its_catalyst():
     """The end-to-end case: the three fixes together on a realistic
     pattern. Before them this identified nothing and reported twenty-one

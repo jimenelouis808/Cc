@@ -6,21 +6,27 @@ import numpy as np
 import pytest
 
 from ramancarbon.examples.demo_data import make_xrd_demo
-from ramancarbon.xrd.powder import Profile, simulate
+from ramancarbon.xrd.powder import Profile, reflections, simulate
 from ramancarbon.xrd.reference import find_phase
 from ramancarbon.xrd.report import analyse_pattern, theoretical_pattern
 from ramancarbon.xrd.rietveld import (
     GOF_LIMIT,
+    SITE_MIN_SCATTERING,
+    SITE_SHIFT_LIMIT,
     STAGES,
     PhaseModel,
     RefinementError,
+    _site_scattering_shares,
+    _sites_worth_refining,
     auto_refine,
     build_parameters,
+    calculate_pattern,
     chebyshev_background,
     free_kinds,
     r_factors,
     refine,
 )
+from ramancarbon.xrd.structure import SITE_SYMMETRY_TOLERANCE, StructureError
 
 
 @pytest.fixture(scope="module")
@@ -131,13 +137,18 @@ def test_manual_and_automatic_reach_the_same_place(two_phase):
     reach as low an Rwp. That is arithmetic, not a bug in either path.
     """
     crystals = [find_phase("FeSe_tetragonal"), find_phase("grafito_2H")]
-    staged = auto_refine(two_phase, crystals)
+    # Stopped before the coordinate stage, so that both sides free the
+    # same parameters. Texture is excluded on both sides too, because
+    # auto_refine skips it when no axis is given. Coordinates are
+    # excluded for a stronger reason: the two routes genuinely do NOT
+    # reach the same place once those are in, which is the staged
+    # protocol's whole thesis and is measured in the test below rather
+    # than being a defect in either path.
+    staged = auto_refine(two_phase, crystals, stages=STAGES[:-1])
 
-    # Every group the schedule ever frees, minus texture: auto_refine skips
-    # that one when no axis is given, and this comparison only means
-    # anything if both sides free the same parameters.
     every_group = tuple(
-        kind for _, kinds in STAGES for kind in kinds if kind != "preferred"
+        kind for _, kinds in STAGES for kind in kinds
+        if kind not in ("preferred", "site")
     )
     phases = [PhaseModel(crystal=c) for c in crystals]
     parameters = build_parameters(phases)
@@ -149,6 +160,43 @@ def test_manual_and_automatic_reach_the_same_place(two_phase):
 
     assert manual.free_parameters == staged.free_parameters
     assert manual.r_wp == pytest.approx(staged.r_wp, abs=0.005)
+
+
+def test_freeing_coordinates_from_scratch_lands_somewhere_worse(two_phase):
+    """Why the coordinate stage goes last, with the same parameters freed.
+
+    This is the staged protocol's claim made sharp. Up to the widths and
+    the shape, the two routes agree to one part in ten thousand -- the
+    test above asserts exactly that. Add the atomic coordinates to the
+    set and freeing them all at once from the starting structure reaches
+    **Rwp 10.55 %** against the staged **4.87 %**, on the same pattern,
+    with the same twenty-five free parameters. The all-at-once fit is not
+    short of degrees of freedom; it is in a different and worse basin,
+    and coordinates are the parameters that dig one, because there are
+    enough of them to absorb anything the earlier stages have not yet
+    settled.
+    """
+    crystals = [find_phase("FeSe_tetragonal"), find_phase("grafito_2H")]
+    staged = auto_refine(two_phase, crystals)
+
+    every_group = tuple(
+        kind for _, kinds in STAGES for kind in kinds if kind != "preferred"
+    )
+    phases = [PhaseModel(crystal=c) for c in crystals]
+    parameters = build_parameters(phases)
+    for parameter in parameters:
+        if parameter.name == "fondo_c0":
+            parameter.value = float(np.percentile(two_phase.intensity, 5))
+    free_kinds(parameters, every_group)
+    at_once = refine(two_phase, phases, parameters=parameters)
+
+    assert at_once.free_parameters == staged.free_parameters
+    assert at_once.r_wp > 1.5 * staged.r_wp
+
+    # And the staged route's answer for the coordinate is the right one:
+    # this pattern was built at the published z, so the refined shift
+    # should come back at zero rather than at something that merely fits.
+    assert staged.phases[0].site_shifts[0] == pytest.approx(0.0, abs=0.002)
 
 
 def test_a_partial_parameter_set_cannot_beat_the_full_one(two_phase):
@@ -363,3 +411,232 @@ def test_the_metrics_table_carries_the_numbers_and_the_fractions():
         assert key in rows, rows
     fractions = [v for k, v in rows.items() if "% peso" in v]
     assert fractions, rows
+
+
+# -- atomic coordinates: the relative intensities inside a phase -------
+
+
+class TestSiteFreedoms:
+    """Which coordinates symmetry leaves free, read off the operations."""
+
+    @pytest.mark.parametrize(
+        "name, expected",
+        [
+            # Se on 2c of P4/nmm: z free, and the one coordinate the
+            # bundled CIF's own note says the intensities turn on.
+            ("FeSe_tetragonal", 1),
+            # NiAs type: both sites are fully fixed special positions.
+            ("FeSe_hexagonal", 0),
+            # Pnma cementite: Fe1 and C1 on the mirror (x, z), Fe2 general.
+            ("Fe3C_cementita", 7),
+            # Body-centred cubic iron: one atom at the origin.
+            ("Fe_alfa", 0),
+            # Graphite is fixed by a and c alone, which is why no Rietveld
+            # of a graphitic carbon has ever had a coordinate to refine.
+            ("grafito_2H", 0),
+        ],
+    )
+    def test_the_count_matches_the_wyckoff_position(self, name, expected):
+        assert find_phase(name).free_coordinates == expected
+
+    def test_the_free_direction_of_tetragonal_fese_is_z(self):
+        basis = find_phase("FeSe_tetragonal").site_freedoms()[1]
+        assert basis.shape == (3, 1)
+        assert np.allclose(np.abs(basis[:, 0]), [0.0, 0.0, 1.0])
+
+    def test_a_tolerance_finer_than_the_cif_rounding_invents_a_freedom(self):
+        """The reason :data:`SITE_SYMMETRY_TOLERANCE` is loose.
+
+        A CIF writes 1/3 as 0.3333, so the three-fold at (1/3, 2/3, 1/4)
+        misses the site by 1e-4. Demanding 1e-6 drops it from the
+        stabiliser and graphite's second carbon comes back free along the
+        basal direction that very three-fold forbids.
+        """
+        crystal = find_phase("grafito_2H")
+        site = crystal.sites[1]
+        fract = np.asarray(site.fract, dtype=float)
+        strict = [
+            operation for operation in crystal.operations
+            if np.all(np.abs(
+                np.mod(operation.R @ fract + operation.t - fract + 0.5, 1.0)
+                - 0.5) < 1e-6)
+        ]
+        loose = [
+            operation for operation in crystal.operations
+            if np.all(np.abs(
+                np.mod(operation.R @ fract + operation.t - fract + 0.5, 1.0)
+                - 0.5) < SITE_SYMMETRY_TOLERANCE)
+        ]
+        assert len(strict) < len(loose)
+        # And the structure really is at 1/3, not at 0.3333: with exact
+        # thirds the strict test keeps the whole stabiliser.
+        exact = np.array([1.0 / 3.0, 2.0 / 3.0, 0.25])
+        recovered = [
+            operation for operation in crystal.operations
+            if np.all(np.abs(
+                np.mod(operation.R @ exact + operation.t - exact + 0.5, 1.0)
+                - 0.5) < 1e-6)
+        ]
+        assert len(recovered) == len(loose)
+
+    def test_displacing_keeps_the_atom_count_over_the_whole_bound(self):
+        """A site that merges with its own images loses half its scattering."""
+        for name in ("FeSe_tetragonal", "Fe3C_cementita"):
+            crystal = find_phase(name)
+            total = crystal.free_coordinates
+            reference = crystal.atoms_per_cell
+            for position in range(total):
+                for sign in (-1.0, 1.0):
+                    shifts = [0.0] * total
+                    shifts[position] = sign * SITE_SHIFT_LIMIT
+                    assert crystal.displaced(shifts).atoms_per_cell == reference
+
+    def test_a_shift_of_the_wrong_length_is_refused(self):
+        with pytest.raises(StructureError):
+            find_phase("FeSe_tetragonal").displaced([0.01, 0.02])
+
+    def test_a_fixed_structure_takes_an_empty_shift_and_nothing_else(self):
+        crystal = find_phase("Fe_alfa")
+        assert crystal.displaced([]).sites == crystal.sites
+        with pytest.raises(StructureError):
+            crystal.displaced([0.01])
+
+
+class TestCoordinatesMoveTheRelativeIntensities:
+    """The point of the whole exercise, stated as a measurement."""
+
+    def test_the_selenium_z_rewrites_the_001_against_the_101(self):
+        crystal = find_phase("FeSe_tetragonal")
+        ratios = []
+        for shift in (-SITE_SHIFT_LIMIT, 0.0, SITE_SHIFT_LIMIT):
+            lines = {
+                tuple(sorted(map(abs, r.hkl), reverse=True)): r.intensity
+                for r in reflections(crystal.displaced([shift]),
+                                     wavelength=1.540593,
+                                     two_theta_range=(10.0, 90.0))
+            }
+            ratios.append(lines[(1, 0, 0)] / lines[(1, 1, 0)])
+        # Monotonic and by more than a factor of five end to end: this is
+        # not a correction, it is the dominant control on the pattern.
+        assert ratios[0] > ratios[1] > ratios[2]
+        assert ratios[0] / ratios[2] > 5.0
+
+    def test_scale_and_width_cannot_do_it(self):
+        """Why a coordinate parameter was needed and no other would do.
+
+        The scale multiplies every reflection of a phase by the same
+        number and the width moves intensity between a peak's top and its
+        flanks; neither can change the ratio of two integrated
+        intensities. Only the structure factor can, and the structure
+        factor is where the atoms are.
+        """
+        crystal = find_phase("FeSe_tetragonal")
+        def ratio(c):
+            lines = {
+                tuple(sorted(map(abs, r.hkl), reverse=True)): r.intensity
+                for r in reflections(c, wavelength=1.540593,
+                                     two_theta_range=(10.0, 90.0))
+            }
+            return lines[(1, 0, 0)] / lines[(1, 1, 0)]
+        # A different cell, a different scale: the ratio barely moves.
+        stretched = crystal.with_lattice(crystal.lattice.scaled((1.0, 1.0, 1.01)))
+        assert ratio(stretched) == pytest.approx(ratio(crystal), rel=0.25)
+        # The coordinate moves it by a factor of several.
+        assert ratio(crystal.displaced([SITE_SHIFT_LIMIT])) < 0.5 * ratio(crystal)
+
+
+class TestTheCoordinateStage:
+    """It runs last, and it does not run for everything."""
+
+    def test_the_stage_exists_and_is_the_last_one(self):
+        assert STAGES[-1][0] == "coordenadas"
+        assert "site" in STAGES[-1][1]
+        # And in no earlier one: coordinates are the parameters that will
+        # absorb anything, so nothing else may be settling while they move.
+        assert not any("site" in kinds for _, kinds in STAGES[:-1])
+
+    def test_a_phase_with_fixed_symmetry_gets_no_site_parameter(self):
+        parameters = build_parameters([PhaseModel(crystal=find_phase("Fe_alfa"))])
+        assert not [p for p in parameters if p.kind == "site"]
+
+    def test_the_parameters_are_named_the_way_the_cif_reads(self):
+        parameters = build_parameters(
+            [PhaseModel(crystal=find_phase("FeSe_tetragonal"))])
+        sites = [p.name for p in parameters if p.kind == "site"]
+        assert sites == ["Se1.z[FeSe_tetragonal]"]
+
+    def test_the_cache_key_separates_two_sets_of_coordinates(self):
+        """A reflection list computed at other coordinates is the wrong list.
+
+        Unlike the March-Dollase r, which is a multiplicative correction
+        on a list that does not depend on it, a site shift acts inside
+        |F|. If it were left out of the key the second pattern would come
+        back identical to the first and the Jacobian column would be zero.
+        """
+        crystal = find_phase("FeSe_tetragonal")
+        angles = np.linspace(14.0, 60.0, 600)
+        cache: dict = {}
+        plain = calculate_pattern(
+            angles, [PhaseModel(crystal=crystal)], wavelength=1.540593,
+            reflection_cache=cache)
+        moved = calculate_pattern(
+            angles,
+            [PhaseModel(crystal=crystal, site_shifts=(SITE_SHIFT_LIMIT,))],
+            wavelength=1.540593, reflection_cache=cache)
+        assert not np.allclose(plain, moved)
+
+    def test_a_light_atom_beside_a_heavy_one_is_held_fixed(self):
+        """Cementite's carbon carries 1.7 % of the scattering power."""
+        shares = _site_scattering_shares(find_phase("Fe3C_cementita"))
+        carbon = shares[2]
+        assert carbon < SITE_MIN_SCATTERING
+        assert carbon == pytest.approx(0.017, abs=0.005)
+        # Its two coordinates are the two the stage must leave alone, so
+        # of cementite's seven only five may be freed.
+        assert find_phase("Fe3C_cementita").free_coordinates == 7
+
+    def test_a_phase_too_faint_to_see_keeps_its_published_coordinates(self):
+        """The gate is the share of the intensity the model explains."""
+        models = [
+            PhaseModel(crystal=find_phase("FeSe_tetragonal"), scale=1.0),
+            PhaseModel(crystal=find_phase("Fe3C_cementita"), scale=1e-9),
+        ]
+        class _Result:
+            phases = models
+            @staticmethod
+            def phase_contributions():
+                return {"FeSe_tetragonal": 0.999, "Fe3C_cementita": 0.001}
+        carried, notes = _sites_worth_refining(_Result(), models)
+        assert 0 in carried and 1 not in carried
+        assert any("0.1 %" in note and "Fe3C" in note for note in notes)
+
+    def test_nothing_is_skipped_in_silence(self):
+        """Every reason a coordinate was not refined is reported."""
+        models = [
+            PhaseModel(crystal=find_phase("Fe_alfa")),
+            PhaseModel(crystal=find_phase("Fe3C_cementita")),
+        ]
+        class _Result:
+            phases = models
+            @staticmethod
+            def phase_contributions():
+                return {"Fe_alfa": 0.5, "Fe3C_cementita": 0.5}
+        _, notes = _sites_worth_refining(_Result(), models)
+        joined = " ".join(notes)
+        assert "Fe_alfa" in joined and "simetría las fija" in joined
+        assert "C1" in joined and "ligeros" in joined
+
+    def test_the_refinement_recovers_a_coordinate_it_was_given(self):
+        """The round trip: build a pattern at a moved z, get the z back."""
+        crystal = find_phase("FeSe_tetragonal")
+        truth = 0.03
+        pattern = simulate(
+            [crystal.displaced([truth])],
+            two_theta_range=(14.0, 75.0), step=0.02,
+            profile=Profile(u=0.004, v=-0.001, w=0.010, eta0=0.5),
+            background=50.0, counts_at_max=200000.0, seed=11,
+            name="z_movida",
+        )
+        result = auto_refine(pattern, [PhaseModel(crystal=crystal)])
+        assert result.phases[0].site_shifts
+        assert result.phases[0].site_shifts[0] == pytest.approx(truth, abs=0.006)
