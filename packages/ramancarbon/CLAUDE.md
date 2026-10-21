@@ -635,48 +635,57 @@ que buscarlo en lo que cambia unas reflexiones frente a otras.
 Con los dos arreglos, las alturas calculadas en ese patrón pasan del
 75 % al 81 % del máximo medido y del 86 % al 93 % de la envolvente.
 
-### Y un tercero que NO se arregla subiendo la cota
+### Y un tercero: el techo del perfil, y cómo lo leí mal
 
-- **El techo de Caglioti es demasiado estrecho para un carbono
-  nanoestructurado, y subirlo empeora el resultado.** Con `W ≤ 2` la
-  FWHM que el modelo alcanza cerca de la 002 no pasa de **1.53°**, y la
-  banda 002 medida de la muestra de 1020 °C mide **2.26°** —necesita
-  W ≈ 4.8. Así que todos estos refinamientos acaban con W y U clavados
-  en 2.000, y la anchura que el modelo no puede producir se la queda el
-  fondo, que es justo de donde sale la fracción del carbono.
-- **Barrido del techo, seis valores sobre la muestra de 900 °C:**
+- **El techo de Caglioti de 2.0 era demasiado estrecho.** La banda 002
+  del carbono de la muestra de 1020 °C mide **2.26°** y con `W ≤ 2` el
+  perfil no pasa de 1.53° cerca de ella, así que W se clava y la anchura
+  que el modelo no puede producir se la queda el fondo —que es de donde
+  sale la fracción de esa fase. Suelto a 4 o más, **W converge a 4.4–4.8**
+  sobre el patrón real (FWHM ≈ 2.05°, dominio de 4.1 nm) y deja de
+  clavarse. Está en 8.0.
 
-  | W máx | Rwp % | GOF | fondo % | C en peso % | W del C | FWHM del C | L (nm) |
-  |---|---|---|---|---|---|---|---|
-  | 2 | 4.344 | 1.036 | 96.8 | 58.8 | **2.000** | 1.51 | 5.6 |
-  | 4 | 4.292 | 1.023 | 96.6 | 65.4 | **4.000** | 2.14 | 3.9 |
-  | 6 | 4.265 | 1.017 | 96.5 | 69.3 | **6.000** | 2.62 | 3.2 |
-  | 8 | 4.240 | 1.011 | 96.3 | 71.2 | **8.000** | 3.03 | 2.7 |
-  | 12 | 4.207 | 1.003 | 96.1 | 77.7 | **12.000** | 3.71 | 2.2 |
-  | 25 | 4.161 | 0.992 | 95.7 | 83.6 | **25.000** | 5.35 | 1.5 |
+- **Y la lectura equivocada, que queda escrita porque el error fue de
+  método.** El primer barrido del techo (2, 4, 6, 8, 12, 25) parecía
+  mostrar W igual al techo en los seis, con la fracción del carbono
+  subiendo monótonamente del 59 % al 84 %, y de ahí salió la conclusión
+  de que el parámetro era degenerado con el fondo y la fracción no era
+  una medida en absoluto. **Ese barrido estaba corrido con el orden de
+  fondo por defecto, 6**, que sobre una muestra que fluoresce no puede
+  seguir la joroba del fondo: la fase de carbono se lo estaba comiendo y
+  aceptaba cualquier anchura que se le diera. Repetido con orden 12 la
+  degeneración desaparece:
 
-  **W del carbono es igual al techo en los seis.** No hay meseta, no hay
-  mínimo, no hay un valor «correcto»: el Rwp baja monótonamente y la
-  fracción del carbono sube monótonamente del 59 % al 84 % sobre un
-  factor doce en la cota. Al parámetro no le falta sitio —es
-  **degenerado con el fondo**— así que una cota más floja mueve el clavo
-  y cambia la respuesta en vez de medirla.
-- **El corolario, y es el número que hay que no citar**: en un patrón
-  así la fracción en peso del carbono **no es una medida**, es una
-  función monótona de una cota arbitraria. Lo honrado es normalizar
-  entre las fases cuyas fracciones sí están determinadas e informar del
-  carbono como presente y no cuantificable por Rietveld, igual que se
-  hace con el amorfo.
-- Por eso las cotas se quedan donde las dejó la calibración, pasan a ser
-  constantes nombradas (`PROFILE_W_LIMIT` y compañía) para que subirlas
-  sea una decisión en un sitio, y `_warn_about_pinned_widths` dice lo que
-  significa llegar al techo: la fracción de esa fase sale sesgada por el
-  fondo, en la dirección que el ajuste no puede informar. Da además la
-  FWHM más ancha que el modelo alcanza, para poder compararla con la
-  banda de la figura.
-- **El arreglo de verdad es un perfil con la forma que tiene una banda
-  turbostrática** —asimétrica, Warren— y no una gaussiana estirada. Está
-  sin hacer y es una decisión aparte.
+  | W máx | Rwp % | C en peso % | W del C | FWHM | L (nm) | clavados |
+  |---|---|---|---|---|---|---|
+  | 2 | 3.953 | 29.1 | **2.000** | 1.51° | 5.6 | 3 |
+  | 4 | 3.951 | 34.7 | 3.942 | 2.05° | 4.1 | 0 |
+  | 6 | 3.950 | 34.0 | **4.780** | 2.10° | 4.0 | 0 |
+  | 8 | 3.950 | 33.2 | 4.798 | 2.01° | 4.2 | 2 |
+  | 12 | 3.948 | 30.9 | 4.372 | 1.80° | 4.7 | 0 |
+  | 25 | 3.947 | 32.7 | 6.548 | 2.05° | 4.1 | 4 |
+
+  El Rwp se mueve 3.953 → 3.947 en todo el barrido y la fracción se queda
+  en **33 ± 3 %** sobre un factor doce en la cota.
+
+- **La lección es el ORDEN de las operaciones.** El modelo de fondo tiene
+  que ser adecuado ANTES de que el comportamiento de cualquier otro
+  parámetro signifique nada. Un barrido de sensibilidad corrido sobre un
+  fondo que no llega no mide la sensibilidad a lo que se barre: mide la
+  inadecuación del fondo, repartida por el parámetro que se esté moviendo.
+
+- **Más alto no es mejor**: a 25 algunos parámetros de perfil se vuelven a
+  clavar, y una reflexión ancha y un polinomio flexible siguen
+  describiendo la misma forma.
+
+- **Y el defecto del paquete, orden 6, es inadecuado para una muestra que
+  fluoresce**, que es justo el caso para el que está hecho esto. En la
+  muestra de 1020 °C, con orden 6 el refinamiento devuelve 99.1 % de
+  carbono y 0.1 % de cementita con GOF 2.44; con orden 10, 74.4 % y
+  25.1 % con GOF 1.22. Cambiar el defecto movería todos los números que
+  el paquete haya informado, así que es una decisión aparte y no se ha
+  tomado; mientras tanto, pásale el orden a mano y justifícalo con el
+  barrido.
 
 ## Dejar fuera un trozo del patrón
 

@@ -100,38 +100,37 @@ SIZE_FLOOR = 1.5
 
 #: Caglioti ceilings: W and U as FWHM² in deg², V as its coefficient.
 #:
-#: These are the values the package was calibrated with, and they are
-#: left alone on purpose even though a measurement says they are too
-#: tight. Named constants rather than literals buried in
-#: :func:`build_parameters` so that raising them is a decision somebody
-#: makes once, in one place, knowing what it costs.
+#: 2.0 was too tight and the evidence took two attempts to read, so the
+#: wrong reading is written down here next to the right one.
 #:
-#: **What is measured.** The resulting FWHM cannot exceed 1.53° anywhere
-#: near the carbon 002, while the 002 band of the 1020 °C sample is
-#: **2.26° wide** — which needs W ≈ 4.8. So every refinement of these
-#: samples ends with W and U pinned at 2.000, and the width the model
-#: cannot produce goes into the background instead, which is exactly
-#: where a carbon's weight fraction comes from.
+#: **What is measured.** A turbostratic carbon's 002 band in the 1020 °C
+#: sample is 2.26° wide; with W capped at 2.0 the profile cannot exceed
+#: 1.53° anywhere near it, so W pins and the width the model cannot
+#: produce goes into the background — which is where that phase's weight
+#: fraction comes from. Freed to 4 or more, W converges to **4.4–4.8**
+#: on the real pattern (FWHM ≈ 2.05°, a 4.1 nm domain) and stops pinning.
 #:
-#: **And why raising them is not the fix.** Tried at 25: Rwp fell from
-#: 4.33 to 4.16 % and the carbon's weight fraction went from 54 % to
-#: **85 %**, with W, U and V all pinned at the new ceiling and a second
-#: phase's cell driven to its own lower bound. The parameter is not
-#: short of room; it is degenerate with the background, so a looser
-#: ceiling moves the pin and changes the answer rather than measuring
-#: it. A broad reflection and a flexible polynomial describe the same
-#: shape — the limit is what makes the number finite at all, not a
-#: detail of the solver.
+#: **The wrong reading.** Sweeping the ceiling over 2, 4, 6, 8, 12 and 25
+#: first appeared to show W equal to the ceiling at every one of them,
+#: with the carbon's weight fraction climbing monotonically from 59 % to
+#: 84 % — from which the conclusion was that the parameter is degenerate
+#: with the background and the fraction is not a measurement at all. That
+#: sweep had been run at the package's default background order of **6**,
+#: which on a fluorescing sample cannot follow the background hump, so
+#: the carbon phase was absorbing the background and would take any width
+#: it was allowed. Repeated at order 12 the degeneracy is gone: Rwp moves
+#: 3.953 → 3.947 across the whole ceiling sweep, W settles at 4.4–4.8,
+#: and the fraction stays at **33 ± 3 %** over a factor of twelve in the
+#: bound. The lesson is the order of operations — the background model
+#: has to be adequate before any other parameter's behaviour means
+#: anything.
 #:
-#: The honest limit is on the resulting FWHM, which is a nonlinear
-#: constraint the solver's box bounds cannot express. Until there is a
-#: model with a turbostratic band's actual shape — asymmetric, Warren,
-#: not a Gaussian pushed wider — the ceiling stays where the
-#: calibration put it and :func:`_warn_about_pinned_widths` says what
-#: hitting it means.
-PROFILE_W_LIMIT = 2.0
-PROFILE_U_LIMIT = 2.0
-PROFILE_V_LIMIT = 1.0
+#: 8.0 covers the measured 4.8 with margin. Higher is not better: at 25
+#: some profile parameters pin again, and a broad reflection and a
+#: flexible polynomial still describe the same shape.
+PROFILE_W_LIMIT = 8.0
+PROFILE_U_LIMIT = 8.0
+PROFILE_V_LIMIT = 4.0
 
 #: A goodness of fit above this is a bad fit whatever the R factors say.
 GOF_LIMIT = 4.0
