@@ -1,0 +1,317 @@
+{
+  "sample": "S2_1020",
+  "seconds": 48.29156825900009,
+  "r_wp": 0.10431372454114805,
+  "r_p": 0.08362884395043423,
+  "r_expected": 0.042821966776796075,
+  "gof": 2.435986303124977,
+  "chi2": 5.934029269012492,
+  "converged": true,
+  "background_share": 0.8721550056373587,
+  "free_parameters": 40,
+  "n_points": 8001,
+  "stages": [
+    "escala y fondo",
+    "cero",
+    "celda",
+    "anchura",
+    "perfil",
+    "textura",
+    "desplazamiento y U",
+    "coordenadas (ninguna fase la sostiene)"
+  ],
+  "zero": -0.1924025287118052,
+  "displacement": -0.012942443472609562,
+  "wavelength": 1.540593,
+  "phases": [
+    {
+      "phase": "C_turbostratico_3.44",
+      "pretty": "C turbostrático d₀₀₂=3.44 Å",
+      "weight": 0.9907744581546285,
+      "weight_sigma": 0.041335172609683085,
+      "share": 0.9360257960248501,
+      "size_nm": 5.5490054017153145,
+      "scale": 0.3849416703570602,
+      "a": 2.4193627057391245,
+      "b": 2.4193627057391245,
+      "c": 6.809006917642517,
+      "lattice_factors": [
+        0.9818842149915279,
+        0.9818842149915279,
+        0.9896812380294356
+      ],
+      "site_shifts": [],
+      "free_coordinates": 0,
+      "profile": [
+        1.9999999999999996,
+        0.9999999999999999,
+        1.9999999999999998,
+        0.9999999999999999
+      ],
+      "sites": [
+        {
+          "label": "C1",
+          "element": "C",
+          "fract": [
+            0.0,
+            0.0,
+            0.25
+          ],
+          "published": [
+            0.0,
+            0.0,
+            0.25
+          ]
+        },
+        {
+          "label": "C2",
+          "element": "C",
+          "fract": [
+            0.333333,
+            0.666667,
+            0.25
+          ],
+          "published": [
+            0.333333,
+            0.666667,
+            0.25
+          ]
+        }
+      ]
+    },
+    {
+      "phase": "Fe3C_cementita",
+      "pretty": "Fe₃C cementita (Pnma)",
+      "weight": 0.0005926197309015754,
+      "weight_sigma": 0.0009047318499535403,
+      "share": 0.0043282337585835075,
+      "size_nm": null,
+      "scale": 3.971401600886224e-06,
+      "a": 4.860484913402303,
+      "b": 6.4071414239740285,
+      "c": 4.2986127107615175,
+      "lattice_factors": [
+        0.954983675220509,
+        0.950008366172031,
+        0.950011649301962
+      ],
+      "site_shifts": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "free_coordinates": 7,
+      "profile": [
+        -0.017130791616526798,
+        0.0017655423874978866,
+        0.014868315023837796,
+        0.7013654188512788
+      ],
+      "sites": [
+        {
+          "label": "Fe1",
+          "element": "Fe",
+          "fract": [
+            0.036,
+            0.25,
+            0.852
+          ],
+          "published": [
+            0.036,
+            0.25,
+            0.852
+          ]
+        },
+        {
+          "label": "Fe2",
+          "element": "Fe",
+          "fract": [
+            0.186,
+            0.063,
+            0.328
+          ],
+          "published": [
+            0.186,
+            0.063,
+            0.328
+          ]
+        },
+        {
+          "label": "C1",
+          "element": "C",
+          "fract": [
+            0.877,
+            0.25,
+            0.444
+          ],
+          "published": [
+            0.877,
+            0.25,
+            0.444
+          ]
+        }
+      ]
+    },
+    {
+      "phase": "Fe_alfa",
+      "pretty": "α-Fe (Im-3m)",
+      "weight": 0.008480598572322034,
+      "weight_sigma": 0.002056454099397061,
+      "share": 0.05825361566309295,
+      "size_nm": 5.377162672032795,
+      "scale": 0.0020437286791979196,
+      "a": 2.881961732455283,
+      "b": 2.881961732455283,
+      "c": 2.881961732455283,
+      "lattice_factors": [
+        1.0053939412019128,
+        1.0053939412019128,
+        1.0053939412019128
+      ],
+      "site_shifts": [],
+      "free_coordinates": 0,
+      "profile": [
+        1.9999999999999996,
+        0.9999999999999996,
+        1.9999999999999984,
+        0.6443062631772839
+      ],
+      "sites": [
+        {
+          "label": "Fe1",
+          "element": "Fe",
+          "fract": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "published": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "phase": "FeSe_tetragonal",
+      "pretty": "FeSe tetragonal (T-FeSe, P4/nmm)",
+      "weight": 0.00015232354214795088,
+      "weight_sigma": 0.00021441861756677449,
+      "share": 0.0013923545534733298,
+      "size_nm": null,
+      "scale": 4.3384857295100064e-06,
+      "a": 3.8026820809126565,
+      "b": 3.8026820809126565,
+      "c": 5.801670245285385,
+      "lattice_factors": [
+        1.0077601316883067,
+        1.0077601316883067,
+        1.049924037295122
+      ],
+      "site_shifts": [
+        0.0
+      ],
+      "free_coordinates": 1,
+      "profile": [
+        0.15433857304051318,
+        -0.14080765565637532,
+        0.028214899616969658,
+        0.19095893855608367
+      ],
+      "sites": [
+        {
+          "label": "Fe1",
+          "element": "Fe",
+          "fract": [
+            0.75,
+            0.25,
+            0.0
+          ],
+          "published": [
+            0.75,
+            0.25,
+            0.0
+          ]
+        },
+        {
+          "label": "Se1",
+          "element": "Se",
+          "fract": [
+            0.25,
+            0.25,
+            0.2672
+          ],
+          "published": [
+            0.25,
+            0.25,
+            0.2672
+          ]
+        }
+      ]
+    }
+  ],
+  "height_raw": 0.8190141519541168,
+  "height_envelope": 0.9122981005663546,
+  "height_area": 0.7551775037915448,
+  "height_verdict": "mezclado",
+  "background_spread": {
+    "C_turbostratico_3.44": 0.2530255296014975,
+    "Fe3C_cementita": 0.25070944889578417,
+    "Fe_alfa": 0.01439967453059604,
+    "FeSe_tetragonal": 0.005234944852594062
+  },
+  "background_fractions": {
+    "4": {
+      "C_turbostratico_3.44": 0.9970481769256462,
+      "Fe3C_cementita": 6.35884698828111e-37,
+      "Fe_alfa": 0.0029188641468806532,
+      "FeSe_tetragonal": 3.295892747309944e-05
+    },
+    "6": {
+      "C_turbostratico_3.44": 0.9907744581546285,
+      "Fe3C_cementita": 0.0005926197309015754,
+      "Fe_alfa": 0.008480598572322034,
+      "FeSe_tetragonal": 0.00015232354214795088
+    },
+    "8": {
+      "C_turbostratico_3.44": 0.8511309553440939,
+      "Fe3C_cementita": 0.1295556432077611,
+      "Fe_alfa": 0.01439967453059604,
+      "FeSe_tetragonal": 0.00491372691754897
+    },
+    "10": {
+      "C_turbostratico_3.44": 0.7440226473241487,
+      "Fe3C_cementita": 0.25070944889578417,
+      "Fe_alfa": 3.9621358396533065e-37,
+      "FeSe_tetragonal": 0.005267903780067162
+    }
+  },
+  "background_rwp": {
+    "4": 0.12415167606638441,
+    "6": 0.10431372454114805,
+    "8": 0.062065836060926485,
+    "10": 0.05221903815069251
+  },
+  "background_best_order": 10,
+  "warnings": [
+    "los picos calculados llegan al 82 % de la altura MEDIDA y al 91 % de la envolvente (la curva calculada es suave y pasa por el centro del ruido, así que comparar con el punto más alto está sesgado al alza). Unos picos son de anchura y otros de intensidad: mira el informe de alturas pico a pico, porque son dos arreglos distintos",
+    "C_turbostratico_3.44: la anchura terminó en su techo (W[C_turbostratico_3.44], U[C_turbostratico_3.44], V[C_turbostratico_3.44]). El perfil más ancho que el modelo alcanza es 2.24° de FWHM, así que si la banda medida es más ancha que eso, la intensidad que el pico calculado no lleva se la queda el POLINOMIO DE FONDO — y la fracción en peso de C_turbostratico_3.44 sale sesgada por ahí, en la dirección que el ajuste no puede informar. Mídele la anchura a media altura en la figura y compárala con esa cifra antes de citar su fracción",
+    "Fe_alfa: la anchura terminó en su techo (W[Fe_alfa], U[Fe_alfa], V[Fe_alfa]). El perfil más ancho que el modelo alcanza es 2.24° de FWHM, así que si la banda medida es más ancha que eso, la intensidad que el pico calculado no lleva se la queda el POLINOMIO DE FONDO — y la fracción en peso de Fe_alfa sale sesgada por ahí, en la dirección que el ajuste no puede informar. Mídele la anchura a media altura en la figura y compárala con esa cifra antes de citar su fracción",
+    "C_turbostratico_3.44: U_iso = 0.071 Å² es enorme (lo normal es 0.005–0.02). Es el parámetro que se traga los errores de los demás: comprueba el fondo y la orientación preferente antes de creerte esta cifra",
+    "Fe3C_cementita: U_iso ha caído a cero. Suele indicar que algo más está absorbiendo intensidad —el fondo, la absorción, o una fase que falta— y no que los átomos no vibren",
+    "Fe3C_cementita: la celda se ha movido más de un 2 % respecto a la referencia. O es otra fase, o la longitud de onda que has declarado no es la del equipo. Comprueba λ antes que la estructura: un λ equivocado escala TODA la celda por el mismo factor y nada en el ajuste protesta",
+    "FeSe_tetragonal: la celda se ha movido más de un 2 % respecto a la referencia. O es otra fase, o la longitud de onda que has declarado no es la del equipo. Comprueba λ antes que la estructura: un λ equivocado escala TODA la celda por el mismo factor y nada en el ajuste protesta",
+    "parámetros que terminaron en su límite: W[C_turbostratico_3.44] en su máximo (2), U[C_turbostratico_3.44] en su máximo (2), V[C_turbostratico_3.44] en su máximo (1), eta[C_turbostratico_3.44] en su máximo (1), b[Fe3C_cementita] en su mínimo (0.95), c[Fe3C_cementita] en su mínimo (0.95), W[Fe3C_cementita] en su mínimo (1e-05), U_iso[Fe3C_cementita] en su mínimo (0) y 4 más. Un parámetro pegado a su límite no es una medida: es el borde, y el ajuste está diciendo que quería ir más allá. Si son anchuras o mezcla de perfil, los picos calculados saldrán con la forma equivocada —y por tanto con la altura equivocada— por mucho que el Rwp parezca razonable",
+    "las fracciones en peso son de la parte CRISTALINA E IDENTIFICADA de la muestra. Una fase que no hayas modelado no baja el total de 100 %: su intensidad se reparte entre las que sí están. Y el material amorfo no aparece en absoluto. Para cuantificar amorfo hace falta un patrón interno",
+    "parámetros que los datos NO separan: cero–desplazamiento (-1.000), a[FeSe_tetragonal]–c[FeSe_tetragonal] (+1.000), W[FeSe_tetragonal]–V[FeSe_tetragonal] (-0.999), c[C_turbostratico_3.44]–a[FeSe_tetragonal] (+0.999). Cada uno de esos pares es un solo grado de libertad repartido entre dos nombres: sus valores individuales no se pueden citar, y sus incertidumbres son las de un ajuste que cree tener más información de la que tiene",
+    "sin coordenadas que refinar porque la simetría las fija todas: C_turbostratico_3.44, Fe_alfa. En estas fases las intensidades relativas salen de la celda y del factor de temperatura, y no hay nada más que ajustar",
+    "Fe3C_cementita: sus 7 coordenadas libres NO se han refinado, porque la fase explica el 0.4 % de la intensidad difractada y el mínimo es 5 %. Con esa señal, mover sus átomos baja el Rwp ajustando ruido",
+    "FeSe_tetragonal: sus 1 coordenadas libres NO se han refinado, porque la fase explica el 0.1 % de la intensidad difractada y el mínimo es 5 %. Con esa señal, mover sus átomos baja el Rwp ajustando ruido",
+    "la etapa de orientación preferente no se ha corrido, porque ninguna fase declara un eje de textura. Junto con la de coordenadas, es una de las dos etapas que tocan las intensidades RELATIVAS: si las alturas de los picos calculados no casan con las medidas mientras las posiciones sí, empieza por aquí, porque la textura reparte intensidad entre DIRECCIONES y eso es cómo está montada la muestra, mientras que una coordenada cambia el factor de estructura y eso es la fase. En un material laminar —un carbono turbostrático montado en plano es el caso de libro— la orientación preferente es grande y no es opcional"
+  ]
+}
