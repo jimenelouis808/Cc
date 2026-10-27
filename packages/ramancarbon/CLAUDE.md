@@ -1110,6 +1110,99 @@ contra σ, y se usaba una σ para todo el espectro.
   del diagrama de Nyquist es convenio de dibujo; guardarlo negado es una
   fuente permanente de errores de signo en los ajustes.
 
+## La capacitancia efectiva de un CPE: la fórmula estaba mal
+
+- **`cpe_to_capacitance` dividía por R una vez de más.** Calculaba
+  `(Q·R^(1−n))^(1/n) / R`, que es la expresión correcta con una división
+  de sobra, así que **toda capacitancia efectiva que el paquete haya
+  producido salía pequeña por un factor exactamente igual a R**. Sobre un
+  arco de 47 Ω informaba 1.0 µF donde hay 49 µF. La prueba que lo cubría
+  exigía solo `0 < C < Q`, que el valor equivocado cumple tan
+  cómodamente como el bueno.
+- **Y se llamaba Brug siendo Hsu-Mansfeld.** No es lo mismo:
+
+  | relación | fórmula | distribución | qué R usa |
+  |---|---|---|---|
+  | Hsu-Mansfeld | `C = T^(1/P) · R^((1−P)/P)` | NORMAL a la superficie (espesor de película) | la R en paralelo |
+  | Brug bloqueante | `C = T^(1/P) · R_s^((1−P)/P)` | A LO LARGO de la superficie | la de la disolución |
+  | Brug faradaico | `C = T^(1/P) · (1/R_s + 1/R_ct)^((P−1)/P)` | A LO LARGO | R_s ∥ R_ct |
+
+  Las dos se aplican indistintamente en la literatura y no dan lo mismo;
+  como `R_s ∥ R_ct < R_ct`, Brug devuelve siempre menos que
+  Hsu-Mansfeld. Cada función dice qué supone, y `EffectiveCapacitance`
+  lleva los pasos aritméticos para que el número se pueda comprobar.
+- **La forma de Hsu-Mansfeld se DERIVA aquí, no se cita.** Para R en
+  paralelo con un CPE, `Z = R/(1 + R T (jω)^P)`, cuyo ápex está donde
+  `|R T (jω)^P| = 1`, o sea `ω_pico = (R T)^(−1/P)`; definiendo C por la
+  relación ideal `ω_pico = 1/(R C)` sale exactamente esa expresión.
+- **Y la derivación es además la prueba que caza el fallo.** Un ZARC
+  `R/(1+(jωτ)^γ)` tiene `T = τ^γ/R`, así que su capacitancia efectiva
+  tiene que salir `τ/R` — un número conocido de antemano, no una
+  tolerancia. Con la división de más salía `τ/R²`.
+- **T y P son Q y n.** Los mismos dos parámetros: `T`/`P` en ZView y en
+  casi todo el software comercial, `Q`/`n` o `α` en la literatura. El
+  informe los nombra de las dos formas porque quien compara contra ZView
+  no debería tener que adivinarlo.
+
+## El ZARC: el mismo circuito en los parámetros que significan algo
+
+`Za` es `Z = R/(1 + (jωτ)^γ)`, **algebraicamente idéntico a R|Q** con
+`Q = τ^γ/R`. No hay ninguna impedancia que un ZARC pueda hacer y R|Q no.
+Lo que cambia es lo que el ajuste devuelve, y por tres razones:
+
+- **La capacitancia efectiva es exacta y gratis**: `C = τ/R`, por
+  definición, sin relación de Brug y sin conversión. Toda la sección de
+  arriba desaparece si el arco se escribe así.
+- **Es lo que un pico de DRT ya mide.** Un pico de γ(τ) da una constante
+  de tiempo y, como área bajo él, una resistencia — que son dos de los
+  tres parámetros. Construir el circuito desde la DRT pasa a ser una
+  traducción en vez de una conjetura.
+- **Está mejor condicionado.** En R|Q los dos parámetros van atados por
+  `Q = τ^γ/R`, así que R y Q vuelven muy correlacionados y sus
+  incertidumbres individuales dicen menos de lo que la tabla sugiere.
+- **Y NO es un modelo físico distinto.** Si R|Q describía mal el
+  electrodo, esto también. Eso va en la plantilla.
+
+Viene de `impedance.py`, igual que `La` —inductancia no ideal `(jωL)^α`,
+para un cableado largo o con electrodo de referencia, donde una `L` ideal
+forzada desplaza la resistencia en serie para absorber el desajuste y eso
+acaba en R_u y en toda corrección iR hecha con ella.
+
+Y el orden del `_TOKEN` importa: los símbolos de dos letras van PRIMERO,
+porque la alternación es ordenada y un `[RCLQWGT]` delante se comería la
+`L` de `La` dejando una `a` que no parsea.
+
+## La DRT dice qué buscar, y con qué experimento confirmarlo
+
+- **El circuito se adivinaba mirando el Nyquist, que es justo lo que
+  esconde los arcos solapados.** Dos procesos a un factor cinco en τ se
+  ven como un semicírculo ligeramente deprimido. La DRT los separa sin
+  modelo, así que se lee ANTES. `circuit_from_drt` escribe
+  `R0-Za1-Za2-…`, un ZARC por pico resuelto, con sus valores de partida.
+- **Es una TRADUCCIÓN, no un ajuste**, y por eso el ajuste posterior
+  arranca en la cuenca correcta en vez de en la que caigan las semillas
+  por defecto.
+- **La asignación de cada pico es una PISTA y lleva su experimento.** Una
+  constante de tiempo es un número y los procesos se solapan en él: un
+  electrodo con película gruesa y uno con intercalación rápida ponen el
+  pico en la misma τ. Lo que asigna un pico es variar algo y ver cómo se
+  mueve —el potencial mueve la transferencia de carga, la temperatura
+  mueve todo lo que tenga energía de activación, la concentración mueve
+  el transporte— y nada de un solo espectro lo sustituye. Por eso cada
+  entrada de `DRT_PROCESSES` lleva la comprobación concreta: una pista
+  con su prueba es útil, una sin ella es una conjetura con cita.
+- **La capacitancia `τ/R` identifica el proceso mejor que τ.** Decenas de
+  µF/cm² es doble capa, mF es pseudocapacitancia o película gruesa, y por
+  encima es almacenamiento en volumen.
+- **Dos picos a menos de un factor de tres se funden**, la misma regla
+  que ya aplicaba el buscador: a esa distancia el reparto lo decide λ y
+  no los datos, y dos ZARC ahí son dos nombres para un arco.
+- **La DRT no da elementos de difusión.** Un Warburg, un Gerischer y una
+  línea de transmisión son distribuciones continuas, no picos: la DRT los
+  reparte en una joroba ancha que esta traducción trocearía en arcos. Si
+  el Bode tiene un tramo a 45°, la cadena es el modelo equivocado ahí, y
+  la nota lo dice.
+
 ## Microestructura y ajuste de patrón completo
 
 - **Un solo pico NO separa tamaño de deformación.** Scherrer sobre una

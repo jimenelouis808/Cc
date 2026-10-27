@@ -214,6 +214,31 @@ TEMPLATES: tuple[CircuitTemplate, ...] = (
         "acorta y trenza los cables.",
     ),
     CircuitTemplate(
+        "zarc", "R0-Za1",
+        "Un arco deprimido escrito en (R, τ, γ) en vez de en (R, Q, n). "
+        "Es el MISMO circuito que R0-(R1|Q1) y devuelve otros números: la "
+        "capacitancia efectiva es τ/R exacta, sin Brug y sin conversión.",
+        "No es un modelo físico distinto. Si R|Q describía mal el "
+        "electrodo, esto también.",
+    ),
+    CircuitTemplate(
+        "dos_zarc", "R0-Za1-Za2",
+        "Dos procesos con constantes de tiempo distintas —película y "
+        "transferencia de carga, o dos poblaciones de poro—, uno por "
+        "arco. Es el circuito al que traduce un DRT de dos picos.",
+        "Dos τ a menos de un factor de tres son UN proceso: a esa "
+        "distancia el reparto lo decide el punto de partida y no los "
+        "datos. Mira la DRT antes de usarlo.",
+    ),
+    CircuitTemplate(
+        "cables_no_ideales", "La0-R0-(R1|Q1)",
+        "Como «con_inductancia» pero con la inductancia del montaje "
+        "no ideal, (jωL)^α. El caso de un cableado largo o con "
+        "electrodo de referencia.",
+        "Si α baja de 0.8 esto ya no está describiendo una inductancia; "
+        "mira qué más hay en el extremo alto antes de citar L.",
+    ),
+    CircuitTemplate(
         "supercondensador_completo", "L0-R0-(R1|Q1)-T1",
         "Un supercondensador de carbono medido de MHz a mHz, con los "
         "cables, la interfase y el poro.",
@@ -384,6 +409,57 @@ def _z_g(omega: np.ndarray, z0: float, k: float) -> np.ndarray:
     return z0 / np.sqrt(max(k, 1e-12) + 1j * omega)
 
 
+def _z_za(omega: np.ndarray, r: float, tau: float, gamma: float) -> np.ndarray:
+    """ZARC (Cole-Cole) arc: ``Z = R / (1 + (jωτ)^γ)``.
+
+    **The same shape as R|Q, written in the parameters the measurement
+    speaks in**, and that is the whole reason it exists. A ZARC and a
+    resistance in parallel with a CPE are algebraically identical, with
+    ``Q = τ^γ / R``; there is no impedance a ZARC can make that R|Q
+    cannot. What changes is what the fit hands back.
+
+    Three things follow from the parameterisation, and all three matter:
+
+    * **The effective capacitance is exact and free.** ``C = τ / R``, by
+      definition, with no Brug relation and no conversion. The CPE's
+      ``Q`` is not a capacitance and turning it into one needs the
+      resistance it is in parallel with plus an assumption about what
+      causes the dispersion; the ZARC never leaves the units.
+    * **It is what a DRT peak already measures.** A peak of γ(τ) gives a
+      time constant and, as the area under it, a resistance — which are
+      two of these three parameters. Building the circuit from the DRT is
+      then a translation rather than a guess, which is what
+      :func:`circuit_from_drt` does.
+    * **It is better conditioned.** In R|Q the two parameters are tied
+      together through ``Q = τ^γ/R``, so R and Q come back strongly
+      correlated and their individual uncertainties mean less than the
+      table suggests. R and τ are close to independent.
+
+    What it is NOT is a different physical model. If R|Q was the wrong
+    description of the electrode, so is this.
+    """
+    return max(r, 1e-12) / (1.0 + (1j * omega * max(tau, 1e-18)) ** gamma)
+
+
+def _z_la(omega: np.ndarray, inductance: float, alpha: float) -> np.ndarray:
+    """Non-ideal inductance, ``Z = (jωL)^α``.
+
+    Cable and current-collector inductance is what lifts Z″ positive at
+    the top of a spectrum, and a pure inductor describes it only when the
+    wiring is a single clean loop. With a cell in a glovebox, a long
+    harness and a reference electrode, the high-frequency end comes back
+    at a phase that is neither 90° nor constant, and an ideal ``L``
+    forced through it shifts the series resistance to absorb the
+    mismatch — which lands in R_u and from there in every iR correction
+    made with it.
+
+    α is fitted and bounded near 1: below about 0.8 this is no longer
+    describing inductance and the right question is what else is up
+    there.
+    """
+    return (1j * omega * max(inductance, 1e-18)) ** alpha
+
+
 def _z_t(omega: np.ndarray, r_ion: float, q: float, n: float) -> np.ndarray:
     """Blocking porous electrode: the De Levie / Bisquert transmission line.
 
@@ -433,9 +509,26 @@ ELEMENTS: dict[str, tuple] = {
         ((1e-6, 1e-15, 0.3), (1e9, 10.0, 1.0)),
         (True, True, False),
     ),
+    "Za": (
+        _z_za,
+        ("R", "tau", "gamma"),
+        (10.0, 1e-3, 0.85),
+        ((1e-6, 1e-9, 0.3), (1e9, 1e6, 1.0)),
+        (True, True, False),
+    ),
+    "La": (
+        _z_la,
+        ("L", "alpha"),
+        (1e-6, 1.0),
+        ((1e-12, 0.5), (1.0, 1.0)),
+        (True, False),
+    ),
 }
 
-_TOKEN = re.compile(r"(Ws|Wo|[RCLQWGT])(\d*)")
+# Two-letter symbols FIRST: the alternation is ordered, so a leading
+# ``[RCLQWGT]`` would match the ``L`` of ``La`` and leave an ``a`` that
+# parses as nothing.
+_TOKEN = re.compile(r"(Ws|Wo|Za|La|[RCLQWGT])(\d*)")
 
 
 @dataclass
@@ -608,23 +701,214 @@ def _unit(symbol: str, parameter: str) -> str:
         ("Wo", "R"): "Ω", ("Wo", "tau"): "s",
         ("G", "Z0"): "Ω·s^-½", ("G", "k"): "s⁻¹",
         ("T", "Ri"): "Ω", ("T", "Q"): "S·sⁿ", ("T", "n"): "",
+        ("Za", "R"): "Ω", ("Za", "tau"): "s", ("Za", "gamma"): "",
+        ("La", "L"): "H", ("La", "alpha"): "",
     }
     return units.get((symbol, parameter), "")
 
 
-def cpe_to_capacitance(q: float, n: float, resistance: float) -> float:
-    """Effective capacitance of a CPE in parallel with a resistance.
+@dataclass
+class EffectiveCapacitance:
+    """A CPE turned into farads, with the arithmetic that did it.
 
-    Brug's relation, ``C = (Q · R^(1−n))^(1/n) / R``. The parameter ``Q`` of
-    a constant-phase element has units of S·sⁿ and **is not** a
-    capacitance; quoting it as one is wrong by orders of magnitude when n
-    is far from 1. The conversion needs the resistance the CPE is in
-    parallel with, which is why it is a separate call rather than something
-    done silently.
+    The number alone is not reportable. Two accepted relations give
+    different answers from the same CPE, they rest on different physics,
+    and the literature applies them interchangeably — which is exactly
+    the confusion this class exists to stop. So it carries the method,
+    the inputs under both naming conventions, and every step.
     """
-    if not 0.0 < n <= 1.0 or resistance <= 0.0 or q <= 0.0:
-        raise CircuitError("parámetros fuera de rango para convertir un CPE")
-    return float((q * resistance ** (1.0 - n)) ** (1.0 / n) / resistance)
+
+    farads: float
+    method: str
+    """``"Brug"`` or ``"Hsu-Mansfeld"``."""
+    t: float
+    """The CPE's magnitude. ``T`` in ZView and in most commercial
+    software, ``Q`` in the electrochemical literature and in this
+    package's element table. The same number."""
+    p: float
+    """The CPE's exponent. ``P`` in ZView, ``n`` or ``α`` elsewhere."""
+    resistances: dict[str, float] = field(default_factory=dict)
+    steps: list[str] = field(default_factory=list)
+    caution: str = ""
+
+    def describe(self) -> str:
+        lines = [
+            f"CAPACITANCIA EFECTIVA DEL CPE — {self.method}",
+            "─" * 46,
+            f"  T (= Q) = {self.t:.6g} S·s^P",
+            f"  P (= n) = {self.p:.4f}",
+        ]
+        for label, value in self.resistances.items():
+            lines.append(f"  {label} = {value:.6g} Ω")
+        lines.append("")
+        lines.extend(f"  {step}" for step in self.steps)
+        lines.append("")
+        lines.append(f"  C = {self.farads:.6g} F")
+        if self.caution:
+            lines.append("")
+            lines.append(f"  ⚠ {self.caution}")
+        return "\n".join(lines)
+
+
+def _check_cpe(t: float, p: float) -> None:
+    if not 0.0 < p <= 1.0 or t <= 0.0:
+        raise CircuitError(
+            f"parámetros fuera de rango para convertir un CPE: T = {t:.6g}, "
+            f"P = {p:.4f}. P tiene que estar en (0, 1] y T ser positivo"
+        )
+
+
+def hsu_mansfeld_capacitance(
+    t: float, p: float, resistance: float
+) -> EffectiveCapacitance:
+    """Effective capacitance from the arc's own apex.
+
+    ``C = (T · R^(1−P))^(1/P) = T^(1/P) · R^((1−P)/P)``, where ``R`` is
+    the resistance the CPE is in parallel with.
+
+    **It is the characteristic capacitance, derived and not quoted.**
+    For ``R`` in parallel with a CPE, ``Z = R / (1 + R T (jω)^P)``, whose
+    apex sits where ``|R T (jω)^P| = 1``, so ``ω_peak = (R T)^(−1/P)``.
+    Defining ``C`` by the ideal relation ``ω_peak = 1/(R C)`` gives
+    exactly the expression above. That derivation is also the check: a
+    ZARC written as ``R/(1 + (jωτ)^γ)`` has ``T = τ^γ/R``, and
+    substituting gives ``C = τ/R`` — which is what ``τ`` and ``R`` mean.
+
+    Hsu and Mansfeld's relation describes a distribution of time
+    constants **normal** to the surface (through the thickness of a
+    film). For a distribution ALONG the surface, which is what roughness
+    and non-uniform current give, the right one is
+    :func:`brug_capacitance`, and the two do not agree.
+    """
+    _check_cpe(t, p)
+    if resistance <= 0.0:
+        raise CircuitError("hace falta una resistencia positiva en paralelo")
+    farads = float(t ** (1.0 / p) * resistance ** ((1.0 - p) / p))
+    return EffectiveCapacitance(
+        farads=farads,
+        method="Hsu-Mansfeld",
+        t=t, p=p,
+        resistances={"R (en paralelo con el CPE)": resistance},
+        steps=[
+            "C = (T · R^(1−P))^(1/P) = T^(1/P) · R^((1−P)/P)",
+            f"T^(1/P) = {t:.6g}^(1/{p:.4f}) = {t ** (1.0 / p):.6g}",
+            f"R^((1−P)/P) = {resistance:.6g}^({(1.0 - p) / p:.4f}) "
+            f"= {resistance ** ((1.0 - p) / p):.6g}",
+            f"C = {t ** (1.0 / p):.6g} × "
+            f"{resistance ** ((1.0 - p) / p):.6g} = {farads:.6g} F",
+        ],
+        caution=(
+            "vale para una distribución de constantes de tiempo NORMAL a la "
+            "superficie (a través del espesor de una película). Si la "
+            "dispersión viene de rugosidad o de corriente no uniforme, la "
+            "distribución es a lo largo de la superficie y toca Brug"
+        ),
+    )
+
+
+def brug_capacitance(
+    t: float,
+    p: float,
+    r_series: float,
+    r_charge_transfer: Optional[float] = None,
+) -> EffectiveCapacitance:
+    """Effective capacitance for a distribution ALONG the surface.
+
+    Blocking electrode (no faradaic path)::
+
+        C = T^(1/P) · R_s^((1−P)/P)
+
+    Faradaic electrode::
+
+        C = T^(1/P) · (1/R_s + 1/R_ct)^((P−1)/P)
+
+    The second reduces to the first as ``R_ct → ∞``, which is what
+    "blocking" means, so they are one relation.
+
+    **The solution resistance is in it, and that is the whole
+    difference.** Brug's derivation puts the dispersion of time constants
+    along the electrode surface — roughness, non-uniform current
+    distribution, a polycrystalline face — so the current reaching each
+    patch has gone through the electrolyte, and ``R_s`` sets the coupling
+    between patches. Hsu and Mansfeld's puts the dispersion through the
+    film's thickness, where it does not. Using one where the other
+    belongs is a documented and common error in this literature, so both
+    are offered and each says what it assumes.
+
+    Since ``R_s ∥ R_ct < R_ct``, Brug always returns a **smaller**
+    capacitance than Hsu–Mansfeld on the same CPE.
+    """
+    _check_cpe(t, p)
+    if r_series <= 0.0:
+        raise CircuitError(
+            "la relación de Brug necesita la resistencia en SERIE (la de la "
+            "disolución), que es la que acopla los parches de la superficie. "
+            "Sin ella, lo que se puede calcular es Hsu-Mansfeld"
+        )
+    resistances = {"R_s (disolución, en serie)": r_series}
+    if r_charge_transfer is not None and r_charge_transfer > 0.0:
+        conductance = 1.0 / r_series + 1.0 / r_charge_transfer
+        resistances["R_ct (transferencia de carga)"] = r_charge_transfer
+        effective = 1.0 / conductance
+        kind = "faradaico"
+        label = "(R_s ∥ R_ct)"
+        steps = [
+            "C = T^(1/P) · (1/R_s + 1/R_ct)^((P−1)/P)",
+            f"1/R_s + 1/R_ct = 1/{r_series:.6g} + "
+            f"1/{r_charge_transfer:.6g} = {conductance:.6g} S",
+            f"  (equivale a R_s ∥ R_ct = {effective:.6g} Ω)",
+        ]
+    else:
+        conductance = 1.0 / r_series
+        effective = r_series
+        kind = "bloqueante"
+        label = "R_s"
+        steps = [
+            "C = T^(1/P) · R_s^((1−P)/P)      (electrodo bloqueante)",
+        ]
+    farads = float(t ** (1.0 / p) * conductance ** ((p - 1.0) / p))
+    steps.extend([
+        f"T^(1/P) = {t:.6g}^(1/{p:.4f}) = {t ** (1.0 / p):.6g}",
+        f"{label}^((1−P)/P) = {effective:.6g}^({(1.0 - p) / p:.4f}) "
+        f"= {effective ** ((1.0 - p) / p):.6g}",
+        f"C = {farads:.6g} F",
+    ])
+    return EffectiveCapacitance(
+        farads=farads,
+        method=f"Brug ({kind})",
+        t=t, p=p,
+        resistances=resistances,
+        steps=steps,
+        caution=(
+            "vale para una distribución de constantes de tiempo A LO LARGO "
+            "de la superficie (rugosidad, corriente no uniforme). Si la "
+            "dispersión es a través del espesor de una película, toca "
+            "Hsu-Mansfeld. Los dos se aplican indistintamente en la "
+            "literatura y no dan lo mismo"
+        ),
+    )
+
+
+def cpe_to_capacitance(q: float, n: float, resistance: float) -> float:
+    """Effective capacitance of a CPE in parallel with a resistance, in F.
+
+    The Hsu–Mansfeld relation, ``C = (Q · R^(1−n))^(1/n)``. Kept as the
+    short form; :func:`hsu_mansfeld_capacitance` returns the same number
+    with its arithmetic, and :func:`brug_capacitance` is the other
+    relation, which needs the solution resistance as well.
+
+    **This function used to divide that expression by R once more**, and
+    the docstring that described it said "Brug's relation" for a formula
+    that is Hsu and Mansfeld's. The result was a capacitance too small by
+    a factor of exactly R — on a 47 Ω arc, 1.0 µF reported for 49 µF —
+    and it reached every effective capacitance the package produced. The
+    test that covered it asserted only ``0 < C < Q``, which both the
+    right and the wrong value satisfy.
+
+    ``Q`` and ``n`` are ``T`` and ``P`` in ZView and in most commercial
+    software. Same parameters, different letters.
+    """
+    return hsu_mansfeld_capacitance(q, n, resistance).farads
 
 
 def uncompensated_resistance(spectrum: Impedance) -> tuple[float, str]:
@@ -902,6 +1186,7 @@ def _seed(elements: Sequence[Element], spectrum: Impedance) -> None:
 
     resistors = [e for e in elements if e.symbol == "R"]
     capacitive = [e for e in elements if e.symbol in ("C", "Q")]
+    arcs = [e for e in elements if e.symbol == "Za"]
     for index, element in enumerate(resistors):
         element.values = [
             series if index == 0
@@ -912,6 +1197,17 @@ def _seed(elements: Sequence[Element], spectrum: Impedance) -> None:
         # one in series is the storage tail (slow, much larger).
         value = capacitance if index == 0 else max(tail, capacitance * 10.0)
         element.values = [value] if element.symbol == "C" else [value, 0.9]
+    # Several ZARCs in series are several processes, so they are spread
+    # over the measured decades rather than stacked on one apex: started
+    # identical they are a degenerate pair and the fit has no gradient
+    # telling it which way to separate them.
+    if len(arcs) > 1:
+        slowest = 1.0 / max(float(spectrum.omega[-1]), 1e-12)
+        fastest = 1.0 / max(float(spectrum.omega[0]), 1e-12)
+        spread = np.geomspace(fastest, slowest, len(arcs) + 2)[1:-1]
+        for element, tau in zip(arcs, spread):
+            element.values = [polarisation / len(arcs), float(tau), 0.85]
+
     for element in elements:
         if element.symbol == "W":
             element.values = [polarisation]
@@ -919,6 +1215,14 @@ def _seed(elements: Sequence[Element], spectrum: Impedance) -> None:
             element.values = [polarisation, 1.0 / omega_peak]
         elif element.symbol == "L":
             element.values = [1e-6]
+        elif element.symbol == "La":
+            element.values = [1e-6, 1.0]
+        elif element.symbol == "Za":
+            # The two parameters the apex already measured: the arc's
+            # diameter and 1/omega at its top. Seeding a ZARC is the one
+            # case where the seed is the measurement, which is the same
+            # reason `circuit_from_drt` can build the circuit outright.
+            element.values = [polarisation, 1.0 / omega_peak, 0.85]
         elif element.symbol == "G":
             element.values = [polarisation * math.sqrt(omega_peak), omega_peak]
         elif element.symbol == "T":
@@ -1294,7 +1598,11 @@ def analyse_eis(
 __all__ = [
     "DRT_PER_DECADE",
     "DRTResult",
+    "DRT_PROCESSES",
+    "circuit_from_drt",
+    "describe_drt_peak",
     "drt",
+    "drt_starting_values",
     "ELEMENTS",
     "KK_LIMIT",
     "KK_PER_DECADE",
@@ -1310,7 +1618,10 @@ __all__ = [
     "analyse_eis",
     "circuit_for",
     "circuit_templates",
+    "EffectiveCapacitance",
+    "brug_capacitance",
     "cpe_to_capacitance",
+    "hsu_mansfeld_capacitance",
     "delete_user_circuit",
     "fit_circuit",
     "kramers_kronig",
@@ -1363,6 +1674,225 @@ class DRTResult:
             for tau, resistance in zip(self.peaks_s, self.peak_resistances))
         return (f"DRT: {len(self.peaks_s)} procesos — {parts}; R_s = "
                 f"{self.ohmic:.3g} Ω, residuo {100 * self.residual:.2f} %")
+
+    def interpret(self) -> str:
+        """The peaks, what each one is likely to be, and the test for it.
+
+        The table a DRT is read from: τ, the resistance under the peak,
+        the capacitance τ/R that identifies the process better than τ
+        does, the share of the total polarisation resistance, and the
+        experiment that would turn the guess into a measurement.
+        """
+        lines = [
+            "DISTRIBUCIÓN DE CONSTANTES DE TIEMPO",
+            "─" * 46,
+            f"  R óhmica          {self.ohmic:.4g} Ω",
+            f"  regularización λ  {self.regularisation:.4g}",
+            f"  residuo           {100 * self.residual:.2f} %",
+            f"  τ medidas         {self.measured_s[0]:.3g} – "
+            f"{self.measured_s[1]:.3g} s",
+            "",
+        ]
+        if not self.peaks_s:
+            lines.append("  Sin picos separados dentro del intervalo medido.")
+            lines.append("  Eso NO es «no hay procesos»: puede ser que λ esté")
+            lines.append("  alto y los haya fundido, o que no estén resueltos.")
+            return "\n".join(lines)
+        total = sum(self.peak_resistances) or 1.0
+        lines.append(
+            "   τ (s)        R (Ω)     C = τ/R      % de R_p   proceso probable")
+        for tau, resistance in zip(self.peaks_s, self.peak_resistances):
+            process, _, capacitance = describe_drt_peak(tau, resistance)
+            lines.append(
+                f"  {tau:10.3g} {resistance:10.3g} {capacitance:11.3g} "
+                f"{100 * resistance / total:9.1f}   {process}")
+        lines.append("")
+        lines.append("  Cómo confirmarlo —ninguna de estas asignaciones sale")
+        lines.append("  de un solo espectro:")
+        for tau, resistance in zip(self.peaks_s, self.peak_resistances):
+            _, test, _ = describe_drt_peak(tau, resistance)
+            if test:
+                lines.append(f"   τ = {tau:.3g} s: {test}")
+        for warning in self.warnings:
+            lines.append(f"  ⚠ {warning}")
+        return "\n".join(lines)
+
+
+#: What a relaxation time of a given size usually is, in a carbon or
+#: oxide electrode in aqueous or organic electrolyte.
+#:
+#: **Read as a prompt, never as an identification.** A time constant is
+#: a number and the processes below overlap in it: an electrode with
+#: thick films and one with fast intercalation can put a peak at the same
+#: τ. What assigns a peak is varying something and watching it move —
+#: potential moves charge transfer, temperature moves everything with an
+#: activation energy, electrolyte concentration moves transport, film
+#: thickness moves the film arc — and nothing in a single spectrum can
+#: substitute for that. Each entry therefore carries the experiment that
+#: would confirm it, because a prompt whose test is named is useful and
+#: one without is a guess with a citation.
+DRT_PROCESSES: tuple[tuple[float, float, str, str], ...] = (
+    (0.0, 1e-6,
+     "inductancia del montaje o artefacto de alta frecuencia",
+     "por debajo de un microsegundo no suele haber electroquímica: acorta "
+     "y trenza los cables y mira si se mueve"),
+    (1e-6, 1e-4,
+     "transporte en el electrolito, contacto, o resistencia del "
+     "colector de corriente",
+     "cambia la concentración del electrolito: el transporte iónico se "
+     "mueve, un contacto no"),
+    (1e-4, 1e-2,
+     "transferencia de carga en la interfase, o la película superficial "
+     "(SEI, óxido nativo)",
+     "cambia el potencial: la transferencia de carga se mueve con él de "
+     "forma exponencial, una película apenas"),
+    (1e-2, 1.0,
+     "transferencia de carga lenta, o difusión dentro del poro",
+     "cambia la temperatura y saca la energía de activación; y mira el "
+     "Bode: una difusión en poro trae su recta de 45°"),
+    (1.0, 100.0,
+     "difusión en estado sólido o intercalación",
+     "cambia el estado de carga: un proceso de intercalación cambia su "
+     "resistencia con él, una difusión en el electrolito no"),
+    (100.0, float("inf"),
+     "acumulación, relajación muy lenta, o la cola de difusión sin medir",
+     "mide a frecuencias más bajas: si el pico se mueve al bajar el "
+     "extremo, era la cola y no un proceso"),
+)
+
+
+def describe_drt_peak(tau: float, resistance: float) -> tuple[str, str, float]:
+    """What a peak at this time constant is likely to be.
+
+    Returns ``(process, the experiment that would confirm it, C = τ/R)``.
+    The capacitance is the useful half of the answer and it is exact
+    rather than suggested: a peak of γ(τ) IS an arc of resistance ``R``
+    and time constant ``τ``, so its capacitance is ``τ/R`` with no
+    conversion and no Brug relation — the same identity that makes a
+    ZARC's parameters readable. Its ORDER OF MAGNITUDE is what identifies
+    the process, far more reliably than τ alone: tens of µF/cm² is a
+    double layer, mF is pseudocapacitance or a thick film, and anything
+    above that is bulk storage.
+    """
+    capacitance = tau / resistance if resistance > 0 else float("nan")
+    for low, high, process, test in DRT_PROCESSES:
+        if low <= tau < high:
+            return process, test, capacitance
+    return "fuera de los intervalos tabulados", "", capacitance
+
+
+def circuit_from_drt(result: "DRTResult", max_arcs: int = 4) -> tuple[str, list[str]]:
+    """Build an equivalent circuit from the DRT, and say what it assumes.
+
+    One ZARC per resolved peak, in series behind the ohmic resistance:
+    ``R0-Za1-Za2-…``. This is a **translation, not a fit**. A peak of
+    γ(τ) already measures a time constant and, as the area under it, a
+    resistance — which are two of a ZARC's three parameters — so the
+    circuit and its starting values come out of the DRT together, and
+    the fit afterwards starts in the right basin instead of in whichever
+    one the default seeds land in.
+
+    That is the reason this exists. The usual route is to guess a circuit
+    from the shape of the Nyquist plot, and the shape of a Nyquist plot
+    is exactly what hides overlapping arcs — two processes a factor of
+    five apart in τ look like one slightly depressed semicircle. The DRT
+    separates them without a model, which is why it has to be read first.
+
+    What it does NOT do:
+
+    * **It cannot see a process the frequencies did not reach.** Only
+      peaks inside the measured range are used, for the same reason the
+      peak finder is limited to it.
+    * **It gives no diffusion element.** A Warburg, a Gerischer and a
+      porous transmission line are continuous distributions, not peaks;
+      the DRT spreads them over a broad hump that this will chop into
+      arcs. If the Bode plot has a 45° stretch, the chain below is the
+      wrong model there and the note says so.
+    * **It does not know what the processes ARE.**
+      :func:`describe_drt_peak` offers a prompt and an experiment, and
+      that is as far as one spectrum goes.
+
+    Returns ``(circuit string, notes)``.
+    """
+    notes: list[str] = []
+    peaks = list(zip(result.peaks_s, result.peak_resistances))
+    if not peaks:
+        return "R0-Q1", [
+            "la DRT no resolvió ningún pico dentro del intervalo medido, "
+            "así que no hay nada que traducir: lo que se propone es el "
+            "circuito más simple que no afirma procesos que no se ven"
+        ]
+    peaks.sort(key=lambda item: item[0])
+    if len(peaks) > max_arcs:
+        notes.append(
+            f"la DRT dio {len(peaks)} picos y se usan los {max_arcs} de "
+            "mayor resistencia: un arco por pico más allá de eso es un "
+            "circuito con más parámetros que regiones de frecuencia"
+        )
+        peaks = sorted(sorted(peaks, key=lambda item: -item[1])[:max_arcs],
+                       key=lambda item: item[0])
+
+    # Peaks closer than a factor of three in tau are ONE process. The same
+    # threshold the module already applies when reporting them: at that
+    # separation the split is decided by the regularisation and not by the
+    # data, and two ZARCs there are two names for one arc.
+    merged: list[tuple[float, float]] = []
+    for tau, resistance in peaks:
+        if merged and tau / merged[-1][0] < 3.0:
+            previous_tau, previous_r = merged[-1]
+            total = previous_r + resistance
+            notes.append(
+                f"los picos en τ = {previous_tau:.3g} s y {tau:.3g} s están a "
+                f"un factor {tau / previous_tau:.1f}, por debajo de tres: se "
+                "funden en uno. A esa distancia el reparto lo decide λ y no "
+                "los datos"
+            )
+            merged[-1] = (math.sqrt(previous_tau * tau), total)
+        else:
+            merged.append((tau, resistance))
+
+    circuit = "R0-" + "-".join(f"Za{index + 1}" for index in range(len(merged)))
+    for index, (tau, resistance) in enumerate(merged, start=1):
+        process, test, capacitance = describe_drt_peak(tau, resistance)
+        notes.append(
+            f"Za{index}: τ = {tau:.3g} s, R = {resistance:.3g} Ω, "
+            f"C = τ/R = {capacitance:.3g} F — {process}. "
+            f"Para comprobarlo: {test}" if test else
+            f"Za{index}: τ = {tau:.3g} s, R = {resistance:.3g} Ω, "
+            f"C = τ/R = {capacitance:.3g} F — {process}"
+        )
+    notes.append(
+        "es una TRADUCCIÓN de la DRT, no un ajuste: γ(τ) ya midió cada τ y "
+        "cada R, así que el circuito y sus valores de partida salen juntos. "
+        "Ajústalo después para obtener las incertidumbres"
+    )
+    notes.append(
+        "y si el Bode tiene un tramo a 45°, ahí hay difusión —Warburg, "
+        "Gerischer o línea de transmisión— que es una distribución continua "
+        "y no un pico: esta cadena la trocearía en arcos. Cámbiale el "
+        "último arco por el elemento que corresponda"
+    )
+    return circuit, notes
+
+
+def drt_starting_values(result: "DRTResult", circuit: str) -> dict[str, float]:
+    """Starting values for the ZARCs of a circuit built from a DRT.
+
+    Pairs the ZARCs in the circuit with the DRT's peaks in order of
+    increasing τ, which is the order :func:`circuit_from_drt` writes them
+    in. ``R0`` gets the DRT's own ohmic term.
+    """
+    elements = [e for e in parse_circuit(circuit).elements() if e.symbol == "Za"]
+    peaks = sorted(zip(result.peaks_s, result.peak_resistances))
+    values: dict[str, float] = {}
+    resistors = [e for e in parse_circuit(circuit).elements() if e.symbol == "R"]
+    if resistors and result.ohmic > 0:
+        values[f"{resistors[0].name}.R"] = float(result.ohmic)
+    for element, (tau, resistance) in zip(elements, peaks):
+        values[f"{element.name}.R"] = float(resistance)
+        values[f"{element.name}.tau"] = float(tau)
+        values[f"{element.name}.gamma"] = 0.85
+    return values
 
 
 def drt(

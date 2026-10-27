@@ -1026,3 +1026,205 @@ def test_an_impossible_current_density_is_called_out():
     result = analyse_catalysis(curve, reaction="HER")
     assert max(result.curve_j) > ABSURD_CURRENT_DENSITY
     assert any("A/cm²" in w and "unidades" in w for w in result.warnings)
+
+
+# -- ZARC, and the capacitance a CPE is not ---------------------------
+
+
+class TestTheZarc:
+    """Same circuit as R|Q, written in the parameters that mean something."""
+
+    R, TAU, GAMMA = 47.0, 2.3e-3, 0.82
+
+    @property
+    def q(self) -> float:
+        return self.TAU ** self.GAMMA / self.R
+
+    def test_it_is_exactly_a_resistance_in_parallel_with_a_cpe(self):
+        from ramancarbon.echem.eis import parse_circuit
+
+        omega = np.geomspace(1e-2, 1e6, 300)
+        arc = parse_circuit("Za1")
+        arc.elements()[0].values = [self.R, self.TAU, self.GAMMA]
+        pair = parse_circuit("(R1|Q1)")
+        by_name = {e.name: e for e in pair.elements()}
+        by_name["R1"].values = [self.R]
+        by_name["Q1"].values = [self.q, self.GAMMA]
+        assert np.allclose(arc.impedance(omega), pair.impedance(omega),
+                           rtol=1e-12, atol=0.0)
+
+    def test_its_capacitance_is_tau_over_r_with_no_conversion(self):
+        """The identity that makes the parameterisation worth having."""
+        from ramancarbon.echem.eis import hsu_mansfeld_capacitance
+
+        direct = self.TAU / self.R
+        converted = hsu_mansfeld_capacitance(self.q, self.GAMMA, self.R).farads
+        assert converted == pytest.approx(direct, rel=1e-10)
+
+    def test_a_non_ideal_inductance_reduces_to_an_ideal_one(self):
+        from ramancarbon.echem.eis import parse_circuit
+
+        omega = np.geomspace(1e-2, 1e6, 100)
+        modified = parse_circuit("La1")
+        modified.elements()[0].values = [3e-7, 1.0]
+        ideal = parse_circuit("L1")
+        ideal.elements()[0].values = [3e-7]
+        assert np.allclose(modified.impedance(omega), ideal.impedance(omega))
+
+    def test_the_two_letter_symbols_parse_before_the_one_letter_ones(self):
+        """``La`` must not be read as ``L`` followed by a stray ``a``."""
+        from ramancarbon.echem.eis import parse_circuit
+
+        names = [e.name for e in parse_circuit("La0-R0-Za1-Za2").elements()]
+        assert names == ["La0", "R0", "Za1", "Za2"]
+
+
+class TestEffectiveCapacitance:
+    """Which relation, with which resistance, and what it assumes."""
+
+    def test_hsu_mansfeld_is_not_divided_by_the_resistance(self):
+        """The bug this replaced, pinned by an identity rather than a number.
+
+        ``cpe_to_capacitance`` computed ``(Q·R^(1−n))^(1/n) / R``: the
+        right expression with one spurious division, so every effective
+        capacitance the package produced was too small by a factor of
+        exactly R. The old test asserted only ``0 < C < Q``, which the
+        wrong value satisfies as comfortably as the right one.
+
+        A ZARC's capacitance is τ/R by construction, so converting its
+        equivalent CPE has one correct answer and the factor of R shows
+        up immediately.
+        """
+        from ramancarbon.echem.eis import cpe_to_capacitance
+
+        resistance, tau, gamma = 47.0, 2.3e-3, 0.82
+        q = tau ** gamma / resistance
+        value = cpe_to_capacitance(q, gamma, resistance)
+        assert value == pytest.approx(tau / resistance, rel=1e-10)
+        assert value == pytest.approx(4.89362e-05, rel=1e-4)
+
+    def test_brug_needs_the_series_resistance_and_says_so(self):
+        from ramancarbon.echem.eis import CircuitError, brug_capacitance
+
+        with pytest.raises(CircuitError, match="SERIE"):
+            brug_capacitance(2e-4, 0.88, r_series=0.0)
+
+    def test_brug_is_smaller_than_hsu_mansfeld(self):
+        """Because it uses R_s ∥ R_ct, which is smaller than R_ct."""
+        from ramancarbon.echem.eis import (
+            brug_capacitance, hsu_mansfeld_capacitance)
+
+        t, p, r_s, r_ct = 2e-4, 0.88, 5.0, 40.0
+        brug = brug_capacitance(t, p, r_s, r_ct).farads
+        hsu = hsu_mansfeld_capacitance(t, p, r_ct).farads
+        assert 0.0 < brug < hsu
+
+    def test_blocking_is_the_limit_of_faradaic_as_rct_grows(self):
+        """The two Brug cases are one relation, so they have to meet."""
+        from ramancarbon.echem.eis import brug_capacitance
+
+        t, p, r_s = 2e-4, 0.88, 5.0
+        blocking = brug_capacitance(t, p, r_s).farads
+        huge = brug_capacitance(t, p, r_s, r_charge_transfer=1e12).farads
+        assert huge == pytest.approx(blocking, rel=1e-6)
+
+    def test_the_report_shows_the_arithmetic_and_names_t_and_p(self):
+        from ramancarbon.echem.eis import brug_capacitance
+
+        text = brug_capacitance(2e-4, 0.88, 5.0, 40.0).describe()
+        assert "T (= Q)" in text and "P (= n)" in text
+        assert "1/R_s + 1/R_ct" in text
+        assert "R_s ∥ R_ct" in text
+        # And what it assumes, because the two relations are applied
+        # interchangeably in the literature and do not agree.
+        assert "A LO LARGO" in text
+
+
+class TestReadingTheDRT:
+    """Each peak, what it is likely to be, and the circuit it translates to."""
+
+    @staticmethod
+    @pytest.fixture(scope="class")
+    def two_processes():
+        from ramancarbon.echem.eis import drt
+
+        return drt(make_eis_demo("R0-(R1|Q1)-(R2|Q2)", seed=5))
+
+    def test_a_peak_reports_its_capacitance_as_tau_over_r(self):
+        from ramancarbon.echem.eis import describe_drt_peak
+
+        _, _, capacitance = describe_drt_peak(1e-3, 50.0)
+        assert capacitance == pytest.approx(2e-5)
+
+    def test_every_time_constant_lands_in_exactly_one_band(self):
+        from ramancarbon.echem.eis import DRT_PROCESSES, describe_drt_peak
+
+        for tau in (1e-9, 1e-5, 1e-3, 0.1, 10.0, 1e4):
+            process, _, _ = describe_drt_peak(tau, 10.0)
+            assert process != "fuera de los intervalos tabulados"
+        # The bands tile the line without gaps or overlaps.
+        edges = [(low, high) for low, high, _, _ in DRT_PROCESSES]
+        for (_, high), (low, _) in zip(edges, edges[1:]):
+            assert high == low
+
+    def test_the_interpretation_names_the_confirming_experiment(self, two_processes):
+        """A prompt without a test is a guess with a citation."""
+        text = two_processes.interpret()
+        assert "C = τ/R" in text
+        assert "cambia el potencial" in text or "cambia la temperatura" in text
+        assert "ninguna de estas asignaciones sale" in text
+
+    def test_two_processes_translate_into_two_arcs(self, two_processes):
+        from ramancarbon.echem.eis import circuit_from_drt
+
+        circuit, notes = circuit_from_drt(two_processes)
+        assert circuit == "R0-Za1-Za2"
+        assert any("TRADUCCIÓN" in note for note in notes)
+        assert any("45°" in note for note in notes)
+
+    def test_peaks_closer_than_a_factor_of_three_are_merged(self):
+        from ramancarbon.echem.eis import DRTResult, circuit_from_drt
+
+        close = DRTResult(
+            tau_s=np.array([1.0]), gamma=np.array([1.0]), regularisation=1.0,
+            fitted=np.array([1.0 + 0j]), residual=0.0,
+            peaks_s=[1e-3, 2e-3], peak_resistances=[10.0, 12.0],
+        )
+        circuit, notes = circuit_from_drt(close)
+        assert circuit == "R0-Za1"
+        assert any("se funden en uno" in note for note in notes)
+        assert any("λ y no" in note for note in notes)
+
+    def test_no_resolved_peak_proposes_the_circuit_that_claims_least(self):
+        from ramancarbon.echem.eis import DRTResult, circuit_from_drt
+
+        empty = DRTResult(
+            tau_s=np.array([1.0]), gamma=np.array([1.0]), regularisation=1.0,
+            fitted=np.array([1.0 + 0j]), residual=0.0,
+        )
+        circuit, notes = circuit_from_drt(empty)
+        assert circuit == "R0-Q1"
+        assert any("no hay nada que traducir" in note for note in notes)
+
+    def test_the_translated_circuit_fits_as_well_as_the_one_it_came_from(self):
+        """The end-to-end claim: DRT to circuit to numbers.
+
+        ``R0-Za1-Za2`` and ``R0-(R1|Q1)-(R2|Q2)`` are the same circuit, so
+        the test is not that the ZARC chain fits better — it cannot — but
+        that reading the DRT first lands the fit in the right basin
+        without anyone guessing a circuit off the Nyquist plot.
+        """
+        from ramancarbon.echem.eis import (
+            circuit_from_drt, drt, drt_starting_values, fit_circuit)
+
+        spectrum = make_eis_demo("R0-(R1|Q1)-(R2|Q2)", seed=5)
+        distribution = drt(spectrum)
+        circuit, _ = circuit_from_drt(distribution)
+        seeded = fit_circuit(
+            spectrum, circuit,
+            initial=drt_starting_values(distribution, circuit))
+        reference = fit_circuit(spectrum, "R0-(R1|Q1)-(R2|Q2)")
+        assert seeded.chi_squared == pytest.approx(
+            reference.chi_squared, rel=0.5)
+        values = seeded.values()
+        assert values["Za1.tau"] < values["Za2.tau"]
