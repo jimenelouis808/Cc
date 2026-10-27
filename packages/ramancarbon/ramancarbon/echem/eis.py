@@ -34,7 +34,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 import numpy as np
 from scipy.optimize import least_squares
@@ -200,11 +200,22 @@ TEMPLATES: tuple[CircuitTemplate, ...] = (
         "separa es el diagrama de Bode a alta frecuencia.",
     ),
     CircuitTemplate(
-        "adsorcion_inductiva", "R0-(R1|Q1|R2-L1)",
+        # Los paréntesis de (R2-L1) NO son decorativos. En esta notación
+        # «|» liga MÁS fuerte que «-», así que «R1|Q1|R2-L1» se lee como
+        # «(R1|Q1|R2)-L1»: una inductancia en SERIE. Medido sobre esta
+        # misma plantilla antes de arreglarla, con R0=5, R1=40, Q1=2e-4
+        # n=0.9, R2=25 y L1=8 H: cero puntos de lazo inductivo y un Z''
+        # máximo de +8·10⁵ a 16 kHz, que es la reactancia del inductor en
+        # serie disparándose arriba. Con los paréntesis, 252 puntos de
+        # lazo y Z'' máximo de +11 a 1.2 Hz, que es el lazo de libro.
+        "adsorcion_inductiva", "R0-(R1|Q1|(R2-L1))",
         "El lazo inductivo a baja frecuencia de un intermedio adsorbido: "
         "HER y OER lo dan casi siempre.",
         "Un lazo inductivo también lo produce la deriva del electrodo "
-        "durante la medida. Repite el barrido antes de interpretarlo.",
+        "durante la medida. Repite el barrido antes de interpretarlo. Y "
+        "fíjate en los paréntesis de (R2-L1): sin ellos «|» liga antes "
+        "que «-» y lo que queda es una inductancia en serie, que sube "
+        "Z″ arriba en vez de dar un lazo abajo. Dibuja el circuito.",
     ),
     CircuitTemplate(
         "con_inductancia", "L0-R0-(R1|Q1)",
@@ -571,11 +582,116 @@ class _Node:
         return [e for child in self.children for e in child.elements()]
 
 
+#: How each element is drawn in a schematic, and what it is.
+_GLYPHS: dict[str, tuple[str, str]] = {
+    "R": ("─[ {name} ]─", "resistencia"),
+    "C": ("─┤├─ {name} ", "condensador"),
+    "L": ("─(((─ {name} ", "inductancia"),
+    "La": ("─(((─ {name} ", "inductancia no ideal (jωL)^α"),
+    "Q": ("─[/{name}/]─", "CPE"),
+    "Za": ("─(∩ {name} ∩)─", "ZARC: R‖CPE en (R, τ, γ)"),
+    "W": ("─[W {name} ]─", "Warburg semiinfinito"),
+    "Ws": ("─[W {name} ]─", "Warburg finito transmisivo"),
+    "Wo": ("─[W {name} ]─", "Warburg finito reflectante"),
+    "G": ("─[G {name} ]─", "Gerischer"),
+    "T": ("─[T {name} ]─", "electrodo poroso (línea de transmisión)"),
+}
+
+
+def draw_circuit(circuit: str, values: Optional[dict[str, float]] = None) -> str:
+    """The circuit as a schematic, with a legend of what each element is.
+
+    A circuit string is written left to right and read as a shape, and
+    the two stop agreeing as soon as there is nesting:
+    ``L0-R0-(R1|Q1|R2-L1)-T1`` is six elements in three levels, and
+    whether that last ``L1`` is inside the parallel branch or after it is
+    the difference between an adsorbed intermediate and a wiring
+    artefact. Typing it and seeing it are not the same check.
+
+    Parallel branches are stacked vertically between ``┬`` and ``┴``
+    rails, which is how a circuit diagram is drawn and is why the shape
+    is readable at a glance when the string is not.
+
+    With ``values``, each element carries its fitted number, so the
+    drawing doubles as the parameter table in the order the current
+    actually goes through them.
+    """
+    tree = parse_circuit(circuit)
+
+    def render(node: _Node) -> list[str]:
+        if node.kind == "element":
+            element = node.children[0]
+            shape, _ = _GLYPHS.get(element.symbol, ("─[ {name} ]─", ""))
+            return [shape.format(name=element.name)]
+        if node.kind == "series":
+            blocks = [render(child) for child in node.children]
+            height = max(len(block) for block in blocks)
+            padded = []
+            for block in blocks:
+                width = max(len(line) for line in block)
+                middle = len(block) // 2
+                top = (height - len(block)) // 2
+                rows = [" " * width] * top + [line.ljust(width) for line in block]
+                rows += [" " * width] * (height - len(rows))
+                # The through-line of a series block is the row the
+                # connectors meet at, which is the middle of the child.
+                padded.append((rows, top + middle))
+            spine = padded[0][1]
+            out = []
+            for index in range(height):
+                out.append("".join(
+                    rows[index] if index < len(rows) else ""
+                    for rows, _ in padded))
+            del spine
+            return out
+        # Parallel: stack the branches and bracket them with rails.
+        blocks = [render(child) for child in node.children]
+        width = max(len(line) for block in blocks for line in block)
+        lines: list[str] = []
+        for position, block in enumerate(blocks):
+            for row, line in enumerate(block):
+                centre = len(block) // 2
+                left = "┬" if (position == 0 and row == centre) else (
+                    "┴" if (position == len(blocks) - 1 and row == centre)
+                    else "│")
+                right = left
+                lines.append(f"{left}{line.center(width)}{right}")
+        return lines
+
+    drawing = render(tree)
+    # The rails have to be one continuous pair of columns, so a parallel
+    # block taller than one line gets its verticals filled in.
+    lines = ["  " + line for line in drawing]
+    used = {e.symbol for e in tree.elements()}
+    legend = ["", "  " + "─" * 44]
+    for symbol in sorted(used):
+        _, what = _GLYPHS.get(symbol, ("", ""))
+        names = [e.name for e in tree.elements() if e.symbol == symbol]
+        legend.append(f"  {', '.join(names):<10s} {what}")
+    if values:
+        legend.append("  " + "─" * 44)
+        for element in tree.elements():
+            for label, parameter in zip(element.labels, element.parameters):
+                if label in values:
+                    unit = _unit(element.symbol, parameter)
+                    legend.append(f"  {label:<12s} {values[label]:12.6g} {unit}")
+    return "\n".join([f"  {circuit}", ""] + lines + legend)
+
+
 def parse_circuit(text: str) -> _Node:
     """Parse a circuit string into a tree.
 
     ``-`` is series, ``|`` is parallel, parentheses group, and an element
     is a symbol plus an optional index: ``R0-(R1|Q1)-Wo1``.
+
+    **``|`` binds tighter than ``-``**, so ``R1|Q1|R2-L1`` is
+    ``(R1|Q1|R2)-L1`` and not ``R1|Q1|(R2-L1)``. That is the usual
+    precedence and it is also a trap, because the second is what somebody
+    writing an adsorption loop means: the bundled template for one
+    shipped without the parentheses and produced a series inductor —
+    nothing inductive at low frequency at all. Parenthesise a branch
+    that is itself a series, and use :func:`draw_circuit` to check, since
+    the string and the shape stop agreeing exactly where it matters.
     """
     cleaned = text.replace(" ", "")
     if not cleaned:
@@ -1151,6 +1267,242 @@ def fit_circuit(
     return fit
 
 
+#: Relative uncertainty above which a fitted parameter is not a
+#: measurement.
+#:
+#: The package's own rule for whether an extra element earned its place,
+#: made into a number: a circuit with more elements always fits at least
+#: as well, so a lower residual proves nothing — what decides is whether
+#: the new parameter comes back with a usable uncertainty. Fifty per cent
+#: is generous, deliberately: it is the threshold for "this number means
+#: nothing", not for "this number is good".
+PARAMETER_DETERMINED = 0.5
+
+
+@dataclass
+class CircuitCandidate:
+    """One circuit tried against one spectrum."""
+
+    circuit: str
+    name: str = ""
+    fit: Optional[CircuitFit] = None
+    concerns: list[str] = field(default_factory=list)
+    """Why this circuit may not describe an electrode at all, from
+    :func:`circuit_concerns`. Reported, not used to exclude: a candidate
+    the user asked about is answered, not dropped."""
+    free_parameters: int = 0
+    determined: int = 0
+    """How many free parameters came back with a usable uncertainty."""
+    bic: float = float("nan")
+    error: str = ""
+    """Set when the circuit could not be fitted at all."""
+
+    @property
+    def undetermined(self) -> int:
+        return max(self.free_parameters - self.determined, 0)
+
+
+def circuit_concerns(circuit: str) -> list[str]:
+    """Reasons a circuit may not be able to describe an electrode.
+
+    Structural checks only — they look at the circuit, never at the data,
+    so they cost nothing and can be run before any fit. Adapted from
+    AutoEIS's post-filters, which exist there to prune a generated
+    search space; here nothing is pruned, because a circuit somebody
+    asked about deserves an answer rather than a silent disappearance.
+
+    What is NOT checked: whether the circuit is appropriate for the
+    material. No structural rule can tell that, and
+    :class:`CircuitTemplate` carries it in prose instead.
+    """
+    concerns: list[str] = []
+    try:
+        elements = parse_circuit(circuit).elements()
+    except CircuitError as exc:
+        return [f"no se puede leer: {exc}"]
+    symbols = [element.symbol for element in elements]
+
+    # An arc needs a parallel branch OR an element that already is one.
+    # Checking the string for a "|" alone was wrong on the elements this
+    # module adds: a ZARC IS a resistance in parallel with a CPE written
+    # as one symbol, and the distributed elements trace curves of their
+    # own. The first version of this flagged `R0-Za1` — the circuit the
+    # DRT translation produces — as unable to make a semicircle.
+    CURVED = {"Za", "T", "G", "W", "Ws", "Wo"}
+    if "|" not in circuit and not CURVED.intersection(symbols):
+        concerns.append(
+            "no tiene ninguna rama en PARALELO ni ningún elemento que sea "
+            "un arco por sí mismo, así que no puede producir un "
+            "semicírculo: una cadena de R, C, L y Q en serie sólo da "
+            "rectas. Si el Nyquist tiene un arco, este circuito no es el "
+            "que lo hace"
+        )
+    if "R" not in symbols:
+        concerns.append(
+            "no tiene ninguna resistencia, así que no puede reproducir el "
+            "corte con el eje real a alta frecuencia"
+        )
+    if "C" in symbols:
+        concerns.append(
+            "lleva un condensador IDEAL. Ningún electrodo poroso real lo "
+            "es: la dispersión de constantes de tiempo pide un CPE, y un "
+            "condensador ahí ajusta peor y además desplaza las "
+            "resistencias vecinas para compensar"
+        )
+    return concerns
+
+
+@dataclass
+class CircuitComparison:
+    """Several circuits fitted to the same spectrum, and what separates them."""
+
+    candidates: list[CircuitCandidate]
+    points: int = 0
+
+    def ranked(self) -> list[CircuitCandidate]:
+        """Best first, by BIC among the ones that fitted."""
+        fitted = [c for c in self.candidates if c.fit is not None]
+        return sorted(fitted, key=lambda c: c.bic)
+
+    def best(self) -> Optional[CircuitCandidate]:
+        order = self.ranked()
+        return order[0] if order else None
+
+    def describe(self) -> str:
+        lines = [
+            "COMPARACIÓN DE CIRCUITOS",
+            "─" * 46,
+            "",
+            "  circuito                    χ²        libres  determinados"
+            "      BIC",
+        ]
+        for candidate in self.ranked():
+            fit = candidate.fit
+            assert fit is not None
+            lines.append(
+                f"  {candidate.circuit:<24s} {fit.chi_squared:10.4g} "
+                f"{candidate.free_parameters:7d} {candidate.determined:12d} "
+                f"{candidate.bic:10.1f}"
+            )
+        for candidate in self.candidates:
+            if candidate.error:
+                lines.append(f"  {candidate.circuit:<24s} — {candidate.error}")
+        lines.append("")
+        lines.append(
+            "  El BIC penaliza parámetros, y hace falta porque un circuito "
+            "con más\n  elementos ajusta SIEMPRE al menos igual de bien: "
+            "que baje el χ² al\n  añadir uno no prueba nada por sí solo."
+        )
+        lines.append(
+            "  Pero el BIC tampoco decide solo. La columna que decide es "
+            "«determinados»:\n  un parámetro que vuelve con una "
+            f"incertidumbre por encima del "
+            f"{100 * PARAMETER_DETERMINED:.0f} %\n  no es una medida, y un "
+            "circuito que gana por BIC con la mitad de sus\n  parámetros "
+            "indeterminados ha ajustado la forma sin medir nada."
+        )
+        best = self.best()
+        if best is not None:
+            lines.append("")
+            lines.append(f"  Mejor por BIC: {best.circuit}")
+            if best.undetermined:
+                lines.append(
+                    f"  ⚠ pero {best.undetermined} de sus "
+                    f"{best.free_parameters} parámetros libres no están "
+                    "determinados. Mira si un circuito más simple de la "
+                    "lista los tiene todos."
+                )
+        for candidate in self.candidates:
+            for concern in candidate.concerns:
+                lines.append(f"  ⚠ {candidate.circuit}: {concern}")
+        lines.append("")
+        lines.append(
+            "  Y nada de esto dice si el circuito es el APROPIADO para el "
+            "material.\n  Ninguna regla estructural puede: un CPE donde va "
+            "un condensador sigue\n  ajustando, y entonces su Q no son "
+            "faradios."
+        )
+        return "\n".join(lines)
+
+
+def compare_circuits(
+    spectrum: Impedance,
+    circuits: Optional[Sequence[str]] = None,
+    initial: Optional[dict[str, dict[str, float]]] = None,
+    callback: Optional[Callable[[str], None]] = None,
+) -> CircuitComparison:
+    """Fit several circuits to one spectrum and rank them honestly.
+
+    ``circuits`` are names from :data:`LIBRARY` or circuit strings;
+    without them a short ladder of increasing complexity is used, which
+    is the order to try them in anyway.
+
+    **The ranking is by BIC and the ranking is not the answer.** A
+    circuit with more elements always fits at least as well, so the
+    criterion has to penalise parameters or it is just a complexity
+    contest — but a penalised criterion still only measures description,
+    and an equivalent circuit is a claim about mechanism. What the
+    comparison adds to the BIC column is the count of parameters that
+    came back with a usable uncertainty, because that is the package's
+    existing rule for whether an element earned its place, and a circuit
+    that wins on BIC with half its parameters undetermined has fitted the
+    shape without measuring anything.
+
+    This is deliberately not what AutoEIS does. There the circuits are
+    GENERATED by an evolutionary search and ranked by Bayesian model
+    evidence, which needs MCMC and a Julia dependency; here the
+    candidates are a handful somebody chose, the question is which of
+    those few to report, and the honest answer fits in a table.
+    """
+    names = list(circuits) if circuits else [
+        "R0-Q1", "R0-(R1|Q1)", "R0-Za1", "R0-(R1|Q1)-Q2",
+        "R0-Za1-Za2", "R0-(R1|Q1)-T1",
+    ]
+    by_circuit = {t.circuit: t.name for t in TEMPLATES}
+    candidates: list[CircuitCandidate] = []
+    for entry in names:
+        text = LIBRARY.get(entry, entry)
+        candidate = CircuitCandidate(
+            circuit=text,
+            name=by_circuit.get(text, entry if entry in LIBRARY else ""),
+            concerns=circuit_concerns(text),
+        )
+        if callback:
+            callback(f"ajustando {text}")
+        try:
+            fit = fit_circuit(
+                spectrum, text,
+                initial=(initial or {}).get(text) or (initial or {}).get(entry),
+            )
+        except (CircuitError, ValueError) as exc:
+            candidate.error = str(exc)
+            candidates.append(candidate)
+            continue
+        candidate.fit = fit
+        labels = [label for element in fit.elements for label in element.labels]
+        free = [label for label in labels if label not in fit.fixed]
+        candidate.free_parameters = len(free)
+        values = fit.values()
+        candidate.determined = sum(
+            1 for label in free
+            if (error := fit.errors.get(label)) is not None
+            and values[label] != 0.0
+            and abs(error / values[label]) <= PARAMETER_DETERMINED
+        )
+        # BIC on the modulus-weighted residual, over the real and
+        # imaginary parts as separate points, which is what the fit
+        # minimises. Same form the Raman side uses to choose between
+        # band shapes.
+        points = 2 * spectrum.n
+        if fit.chi_squared > 0.0:
+            candidate.bic = float(
+                points * math.log(fit.chi_squared / points)
+                + candidate.free_parameters * math.log(points)
+            )
+        candidates.append(candidate)
+    return CircuitComparison(candidates=candidates, points=2 * spectrum.n)
+
+
 def _seed(elements: Sequence[Element], spectrum: Impedance) -> None:
     """Sensible starting values read off the spectrum.
 
@@ -1616,7 +1968,13 @@ __all__ = [
     "Element",
     "KKResult",
     "analyse_eis",
+    "CircuitCandidate",
+    "CircuitComparison",
+    "PARAMETER_DETERMINED",
+    "circuit_concerns",
     "circuit_for",
+    "compare_circuits",
+    "draw_circuit",
     "circuit_templates",
     "EffectiveCapacitance",
     "brug_capacitance",

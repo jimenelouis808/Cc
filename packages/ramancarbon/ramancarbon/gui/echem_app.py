@@ -377,6 +377,17 @@ class EchemApp(SectionApp):
                           width=28), grow=True)
         bar.add(ttk.Button(bar.frame, text="Aplicar",
                            command=self._apply_circuit))
+        # Applying a circuit used to update the tables and then do
+        # nothing: the fit only happened when the whole analysis was
+        # re-run from the sidebar, which also redid the CV, the GCD, Dunn
+        # and the catalysis. Choosing a circuit is a loop — write one,
+        # look at the residual, write another — and it costs one fit.
+        bar.add(ttk.Button(bar.frame, text="Ajustar",
+                           command=self._refit_circuit))
+        bar.add(ttk.Button(bar.frame, text="Dibujar",
+                           command=self._draw_circuit))
+        bar.add(ttk.Button(bar.frame, text="Comparar…",
+                           command=self._compare_circuits))
         bar.add(ttk.Button(bar.frame, text="Guardar como…",
                            command=self._save_circuit))
         bar.add(ttk.Button(bar.frame, text="Borrar el mío",
@@ -387,11 +398,19 @@ class EchemApp(SectionApp):
         self.circuit_note.pack(fill="x", pady=(PAD["xs"], 0))
         hint(editor_body,
              "- serie, | paralelo, paréntesis agrupan. Elementos: R "
-             "resistencia, C condensador, L inductancia, Q CPE, W Warburg "
+             "resistencia, C condensador, L inductancia, La inductancia "
+             "no ideal, Q CPE, Za ZARC (R‖CPE en R, τ y γ), W Warburg "
              "semiinfinito, Ws finito transmisivo, Wo finito reflectante, "
              "G Gerischer, T electrodo poroso (línea de transmisión). "
-             "Ejemplo: R0-(R1|Q1)-T1.",
+             "Ejemplo: R0-(R1|Q1)-T1.  OJO: «|» liga MÁS fuerte que «-», "
+             "así que R1|Q1|R2-L1 es (R1|Q1|R2)-L1 y no R1|Q1|(R2-L1). "
+             "Para una rama que sea ella misma una serie, ponle "
+             "paréntesis — y púlsale a «Dibujar», que es donde se ve.",
              wrap=900)
+        self.circuit_drawing = self.tk.Text(
+            editor_body, height=7, wrap="none", font=("TkFixedFont", 9))
+        self.circuit_drawing.pack(fill="x", pady=(PAD["xs"], 0))
+        self.circuit_drawing.configure(state="disabled")
 
         setup, setup_body = card(controls, "Valores de partida y parámetros fijos")
         setup.pack(fill="x", pady=(PAD["sm"], 0))
@@ -420,6 +439,13 @@ class EchemApp(SectionApp):
         self.circuit_table = table(
             info_body, ["parámetro", "valor", "incertidumbre", "fijo"],
             height=7)
+        exports = ttk.Frame(info_body)
+        exports.pack(fill="x", pady=(PAD["xs"], 0))
+        ttk.Button(exports, text="Exportar la curva ajustada…",
+                   command=self._export_fit_curve).pack(side="left")
+        ttk.Button(exports, text="Capacitancia efectiva…",
+                   command=self._effective_capacitance).pack(
+                       side="left", padx=(PAD["xs"], 0))
         hint(info_body,
              "Kramers-Kronig va ANTES que el circuito: un ajuste a datos que "
              "han derivado da parámetros sin significado y el χ² no lo delata. "
@@ -706,7 +732,89 @@ class EchemApp(SectionApp):
         self.circuit_text_var.set(self.session.circuit_text())
         self._show_circuit_note()
         self._fill_circuit_setup()
+        self._draw_circuit()
         self.set_status(f"circuito: {self.session.circuit_text()}")
+
+    def _refit_circuit(self) -> None:
+        """Apply whatever is in the box and fit it, in one press.
+
+        Applying and fitting were two steps and the second one lived on
+        the other side of the window, so changing a circuit appeared to
+        do nothing until the whole analysis was run again. Runs in a
+        worker because a six-parameter circuit with a transmission line
+        takes a few seconds, and a frozen window during those seconds is
+        indistinguishable from a crash.
+        """
+        if not self.session.set_circuit(self.circuit_text_var.get()):
+            self.flush_messages(self.session.messages)
+            return
+        self.circuit_text_var.set(self.session.circuit_text())
+        self._show_circuit_note()
+        self._fill_circuit_setup()
+        self.run_async(self.session.refit_circuit, self._after_refit,
+                       f"Ajustando {self.session.circuit_text()}…")
+
+    def _after_refit(self, ok: bool) -> None:
+        self.flush_messages(self.session.messages)
+        if not ok:
+            return
+        self._fill_tables()
+        self._draw_circuit()
+        self._redraw()
+        eis = getattr(self.session.result, "eis", None)
+        fit = eis.fit if eis is not None else None
+        if fit is not None:
+            self.set_status(
+                f"{self.session.circuit_text()}: χ² = {fit.chi_squared:.4g}, "
+                f"residuo {fit.residual_pct:.3f} %")
+
+    def _draw_circuit(self) -> None:
+        """Show the circuit as a schematic rather than as a string."""
+        set_text(self.circuit_drawing, self.session.circuit_drawing())
+
+    def _compare_circuits(self) -> None:
+        """Fit a ladder of circuits and show what separates them."""
+        if self.session.eis is None:
+            self.warn("Sin espectro",
+                      "Carga primero un espectro de impedancia.")
+            return
+        self.run_async(self.session.compare_circuits, self._after_compare,
+                       "Ajustando los circuitos candidatos…")
+
+    def _after_compare(self, text: str) -> None:
+        self.flush_messages(self.session.messages)
+        self.show_text("Comparación de circuitos", text)
+
+    def _export_fit_curve(self) -> None:
+        from tkinter import filedialog
+
+        if not self.session.fit_curve_rows():
+            self.warn("Sin ajuste",
+                      "Ajusta primero un circuito: la curva que se exporta "
+                      "es la suya.")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Guardar la curva ajustada",
+            defaultextension=".csv",
+            filetypes=[("CSV", "*.csv"), ("Todos", "*.*")],
+            parent=self.root,
+        )
+        if not path:
+            return
+        self.session.save_fit_curve(path)
+        self.flush_messages(self.session.messages)
+
+    def _effective_capacitance(self) -> None:
+        """The CPE's capacitance, by both relations, with the arithmetic."""
+        text = self.session.effective_capacitance_report()
+        if not text:
+            self.warn(
+                "Sin CPE ajustado",
+                "Hace falta un circuito ajustado que lleve un CPE (Q) o un "
+                "ZARC (Za). Un ZARC no necesita conversión: su capacitancia "
+                "es τ/R.")
+            return
+        self.show_text("Capacitancia efectiva", text)
 
     def _save_circuit(self) -> None:
         from tkinter import simpledialog

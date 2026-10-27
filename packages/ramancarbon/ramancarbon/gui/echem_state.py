@@ -14,13 +14,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
+
 from ..echem.curve import ChargeDischarge, Electrode, Impedance, Voltammogram
 from ..echem.eis import (
     CircuitError,
     CircuitTemplate,
+    analyse_eis,
+    brug_capacitance,
     circuit_for,
     circuit_templates,
+    compare_circuits,
     delete_user_circuit,
+    draw_circuit,
+    hsu_mansfeld_capacitance,
     parse_circuit,
     save_user_circuit,
 )
@@ -696,6 +703,205 @@ class EchemSession:
         """Back to values read off the spectrum, nothing held."""
         self.circuit_initial.clear()
         self.circuit_fixed.clear()
+
+    def refit_circuit(self) -> bool:
+        """Fit the CURRENT circuit against the loaded spectrum, and only that.
+
+        The circuit editor could change the circuit and not act on it:
+        applying a new one updated the tables and then nothing happened
+        until the user went back to the sidebar and re-ran the whole
+        analysis — CV, GCD, Dunn, catalysis and all — to see what the
+        change did. That is seconds of work to answer a question that
+        costs one fit, and it is the loop a circuit is chosen in: write
+        one, look at the residual, write another.
+
+        Only the impedance part of the result is replaced. Everything
+        else in `self.result` stays as it was, because nothing else
+        depends on the circuit.
+        """
+        if self.eis is None:
+            self.log("error", "no hay ningún espectro de impedancia cargado")
+            return False
+        if self.result is None:
+            return self.analyse() is not None
+        try:
+            self.result.eis = analyse_eis(
+                self.eis,
+                circuit=circuit_for(self.circuit),
+                initial=dict(self.circuit_initial) or None,
+                fixed=sorted(self.circuit_fixed) or None,
+            )
+        except (CircuitError, ValueError) as exc:
+            self.log("error", f"el ajuste falló: {exc}")
+            return False
+        for warning in self.result.eis.warnings:
+            self.log("warning", warning)
+        return True
+
+    def circuit_drawing(self) -> str:
+        """The current circuit as a schematic, with fitted values if any.
+
+        Answers the question the string cannot: a circuit is written left
+        to right and read as a shape, and the two stop agreeing as soon
+        as there is nesting. The bundled adsorption-loop template shipped
+        with its branch unparenthesised for exactly that reason.
+        """
+        values = None
+        eis = getattr(self.result, "eis", None) if self.result else None
+        if eis is not None and eis.fit is not None:
+            values = eis.fit.values()
+        try:
+            return draw_circuit(circuit_for(self.circuit), values)
+        except CircuitError as exc:
+            return f"no se puede dibujar: {exc}"
+
+    def fit_curve_rows(self) -> list[tuple[str, ...]]:
+        """The fitted curve as columns, for export.
+
+        A figure and a report answer "what happened"; neither lets the
+        fit be redrawn on a journal's axes or beside somebody else's
+        data. These are the columns that do, and the residual is in them
+        because it is the part that says where the model fails — the
+        same argument as the Rietveld difference curve.
+        """
+        eis = getattr(self.result, "eis", None) if self.result else None
+        if eis is None or eis.fit is None or eis.fit.fitted is None:
+            return []
+        spectrum = eis.spectrum
+        model = np.asarray(eis.fit.fitted)
+        rows = []
+        for index in range(spectrum.n):
+            observed = spectrum.z[index]
+            calculated = model[index]
+            rows.append((
+                f"{spectrum.frequency[index]:.6g}",
+                f"{observed.real:.6g}",
+                f"{observed.imag:.6g}",
+                f"{calculated.real:.6g}",
+                f"{calculated.imag:.6g}",
+                f"{observed.real - calculated.real:.6g}",
+                f"{observed.imag - calculated.imag:.6g}",
+                f"{abs(observed):.6g}",
+                f"{np.degrees(np.angle(observed)):.6g}",
+            ))
+        return rows
+
+    #: Column names for :meth:`fit_curve_rows`. Z″ carries its PHYSICAL
+    #: sign here, as everywhere in this package; the −Z″ of a Nyquist plot
+    #: is a drawing convention and exporting it negated is how a sign
+    #: error travels into somebody else's plotting script.
+    FIT_CURVE_COLUMNS = (
+        "f (Hz)", "Zr_obs (ohm)", "Zi_obs (ohm)",
+        "Zr_calc (ohm)", "Zi_calc (ohm)",
+        "res_r (ohm)", "res_i (ohm)", "|Z| (ohm)", "fase (grados)",
+    )
+
+    def save_fit_curve(self, path: str | Path) -> bool:
+        """Write the fitted curve as a CSV next to the figure."""
+        rows = self.fit_curve_rows()
+        if not rows:
+            self.log("error", "no hay ninguna curva ajustada que exportar")
+            return False
+        eis = self.result.eis  # type: ignore[union-attr]
+        destination = Path(path)
+        header = [
+            f"# {self.name}",
+            f"# circuito: {circuit_for(self.circuit)}",
+        ]
+        if eis.fit is not None:
+            header.append(
+                f"# chi2 = {eis.fit.chi_squared:.6g}  residuo medio "
+                f"{eis.fit.residual_pct:.4f} %")
+            header.append(
+                "# " + "  ".join(
+                    f"{label}={value:.6g}"
+                    for label, value in eis.fit.values().items()))
+        header.append("# Z'' va con su signo FÍSICO (negativo si capacitivo)")
+        header.append(",".join(self.FIT_CURVE_COLUMNS))
+        body = [",".join(row) for row in rows]
+        destination.write_text("\n".join(header + body) + "\n",
+                               encoding="utf-8")
+        self.log("info", f"curva ajustada escrita en {destination}")
+        return True
+
+    def compare_circuits(self) -> str:
+        """Fit a ladder of candidate circuits and return the comparison."""
+        if self.eis is None:
+            self.log("error", "no hay ningún espectro de impedancia cargado")
+            return ""
+        comparison = compare_circuits(self.eis)
+        return comparison.describe()
+
+    def effective_capacitance_report(self) -> str:
+        """The CPE's capacitance by both relations, with the arithmetic.
+
+        A ZARC needs none of it — its capacitance is ``τ/R`` by
+        construction — and saying so is more useful than running a
+        conversion that would return the same number by a longer route.
+        """
+        eis = getattr(self.result, "eis", None) if self.result else None
+        if eis is None or eis.fit is None:
+            return ""
+        fit = eis.fit
+        values = fit.values()
+        blocks: list[str] = []
+
+        for element in fit.elements:
+            if element.symbol == "Za":
+                r, tau, gamma = element.values
+                blocks.append(
+                    f"{element.name} (ZARC) — sin conversión\n"
+                    + "─" * 46 + "\n"
+                    f"  R     = {r:.6g} Ω\n"
+                    f"  τ     = {tau:.6g} s\n"
+                    f"  γ     = {gamma:.4f}\n\n"
+                    f"  C = τ/R = {tau / r:.6g} F\n\n"
+                    "  Exacta por construcción: un ZARC está escrito en "
+                    "(R, τ, γ),\n  así que su capacitancia efectiva no "
+                    "necesita ni Brug ni\n  Hsu-Mansfeld. Es la razón de "
+                    "escribir el arco así."
+                )
+
+        resistances = [v for label, v in values.items() if label.endswith(".R")]
+        series = resistances[0] if resistances else None
+        charge_transfer = eis.charge_transfer_resistance
+        converted = False
+        for element in fit.elements:
+            if element.symbol != "Q":
+                continue
+            converted = True
+            t, p_exponent = element.values
+            if charge_transfer:
+                blocks.append(
+                    hsu_mansfeld_capacitance(
+                        t, p_exponent, charge_transfer).describe())
+            if series:
+                blocks.append(
+                    brug_capacitance(t, p_exponent, series,
+                                     charge_transfer).describe())
+        if not blocks:
+            return ""
+        # Only when there is actually a conversion to compare. With a
+        # circuit of ZARCs alone there is no Brug and no Hsu-Mansfeld,
+        # and a note explaining the difference between two relations
+        # that were not used reads as though one of them had been.
+        if not converted:
+            return "\n\n".join(blocks)
+        blocks.append(
+            "LAS DOS NO SON LA MISMA MEDIDA\n" + "─" * 46 + "\n"
+            "  Hsu-Mansfeld supone una distribución de constantes de "
+            "tiempo\n  NORMAL a la superficie (a través del espesor de "
+            "una película)\n  y usa la R en paralelo con el CPE.\n\n"
+            "  Brug supone una distribución A LO LARGO de la superficie\n"
+            "  —rugosidad, corriente no uniforme— y usa la resistencia de "
+            "la\n  disolución, que es la que acopla los parches entre "
+            "sí.\n\n"
+            "  Como R_s ∥ R_ct < R_ct, Brug devuelve SIEMPRE menos. La "
+            "literatura\n  las aplica indistintamente; cuál te toca "
+            "depende de dónde esté\n  la dispersión, y eso no sale del "
+            "espectro."
+        )
+        return "\n\n".join(blocks)
 
     def save_circuit(self, name: str, circuit: Optional[str] = None) -> bool:
         """Store the current circuit under a name of the user's own."""

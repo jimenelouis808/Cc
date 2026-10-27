@@ -1203,6 +1203,86 @@ porque la alternación es ordenada y un `[RCLQWGT]` delante se comería la
   el Bode tiene un tramo a 45°, la cadena es el modelo equivocado ahí, y
   la nota lo dice.
 
+## Dibujar el circuito, y lo que el dibujo cazó
+
+- **Un circuito se escribe de izquierda a derecha y se lee como una
+  forma, y las dos dejan de coincidir en cuanto hay anidamiento.**
+  `draw_circuit` lo dibuja con las ramas en paralelo apiladas entre
+  raíles `┬`/`┴`, que es como se dibuja un circuito y es por lo que la
+  forma se lee de un vistazo cuando la cadena no.
+- **Y la primera vez que se dibujó el catálogo, salió un fallo del
+  propio paquete.** La plantilla `adsorcion_inductiva` venía como
+  `R0-(R1|Q1|R2-L1)` y en esta notación **`|` liga MÁS fuerte que
+  `-`**, así que eso es `R0-((R1|Q1|R2)-L1)`: una inductancia en SERIE.
+  Medido con R0=5, R1=40, Q1=2e-4 n=0.9, R2=25 y L1=8 H sobre
+  10⁻³–10⁵ rad/s:
+
+  | circuito | puntos en lazo | Z″ máx | dónde |
+  |---|---|---|---|
+  | `R0-(R1\|Q1\|R2-L1)` (la que venía) | **0** | +8·10⁵ | 16 kHz |
+  | `R0-(R1\|Q1\|(R2-L1))` | **252** | +11 | 1.2 Hz |
+
+  Lo primero es la reactancia del inductor en serie disparándose arriba;
+  lo segundo es el lazo de libro. La plantilla decía describir «el lazo
+  inductivo a baja frecuencia de un intermedio adsorbido: HER y OER lo
+  dan casi siempre», y no lo hacía. Quien ajustara un espectro de HER
+  con ella obtenía un L1 sin ningún significado.
+- **Y un lazo inductivo NO es «Z″ > 0»**, que también lo da una
+  inductancia en serie. Es Z″ > 0 **mientras Z′ retrocede**, que es lo
+  que significa un lazo en el plano de Nyquist y es lo que afirma la
+  prueba. El primer discriminador que escribí miraba solo el signo y
+  daba las dos por buenas.
+
+## Comparar circuitos: el BIC rankea y no decide
+
+- **Un circuito con más elementos ajusta SIEMPRE al menos igual de
+  bien**, así que el criterio tiene que penalizar parámetros o es un
+  concurso de complejidad. `compare_circuits` rankea por BIC sobre el
+  residuo ponderado por módulo, la misma forma que usa el lado Raman
+  para elegir entre formas de banda.
+- **Pero un criterio penalizado sigue midiendo DESCRIPCIÓN, y un
+  circuito equivalente es una afirmación sobre mecanismo.** Lo que la
+  tabla añade al BIC es la columna «determinados»: cuántos parámetros
+  libres vuelven con una incertidumbre usable
+  (`PARAMETER_DETERMINED` = 50 %, generoso a propósito — es el umbral de
+  «esto no significa nada», no el de «esto está bien»). Un circuito que
+  gana por BIC con la mitad de sus parámetros indeterminados ha
+  ajustado la forma sin medir nada. Es la regla que este paquete ya
+  tenía escrita en prosa, convertida en una columna.
+- **Los filtros de plausibilidad son estructurales y van ANTES del
+  ajuste**, adaptados de los post-filtros de AutoEIS: sin rama en
+  paralelo no hay semicírculo, sin resistencia no hay corte con el eje
+  real, y un condensador ideal donde va un CPE ajusta peor y además
+  desplaza las resistencias vecinas para compensar. Allí existen para
+  podar un espacio generado; aquí **no se poda nada**, porque un
+  circuito por el que alguien pregunta merece una respuesta y no una
+  desaparición silenciosa.
+- **Y la comprobación de «rama en paralelo» no puede mirar la cadena.**
+  Buscar un `|` en el texto marcaba `R0-Za1` —el circuito que produce la
+  traducción de la DRT— como incapaz de hacer un arco, cuando un ZARC
+  ES un RC en paralelo escrito en un símbolo. Cuentan también los
+  elementos distribuidos, que trazan curvas propias.
+- **Lo que NO se hace es lo de AutoEIS.** Allí los circuitos se GENERAN
+  por búsqueda evolutiva y se rankean por evidencia bayesiana, lo que
+  pide MCMC y una dependencia de Julia; aquí los candidatos son un
+  puñado que alguien eligió y la pregunta es cuál de esos informar, que
+  cabe en una tabla.
+
+## El editor de circuito tenía «Aplicar» y no tenía «Ajustar»
+
+- **Aplicar un circuito actualizaba las tablas y después no pasaba
+  nada**: el ajuste solo ocurría volviendo a la barra lateral y
+  relanzando el análisis entero —CV, GCD, Dunn y catálisis incluidos—
+  para ver qué había hecho el cambio. Elegir un circuito es un bucle
+  (escribe uno, mira el residuo, escribe otro) y cuesta UN ajuste.
+  `refit_circuit` sustituye solo la parte de impedancia del resultado,
+  porque nada más depende del circuito.
+- **Y la curva ajustada se exporta con su residuo**, por el mismo
+  argumento que la curva diferencia de Rietveld: es la parte que dice
+  dónde falla el modelo. Z″ sale con su signo FÍSICO, no con el −Z″ del
+  Nyquist, que es convenio de dibujo; exportarlo negado es como un error
+  de signo viaja al guion de otro.
+
 ## Microestructura y ajuste de patrón completo
 
 - **Un solo pico NO separa tamaño de deformación.** Scherrer sobre una

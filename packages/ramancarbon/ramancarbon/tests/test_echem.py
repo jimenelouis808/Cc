@@ -1228,3 +1228,230 @@ class TestReadingTheDRT:
             reference.chi_squared, rel=0.5)
         values = seeded.values()
         assert values["Za1.tau"] < values["Za2.tau"]
+
+
+# -- choosing a circuit, and seeing the one you chose -----------------
+
+
+class TestDrawingACircuit:
+    """The string and the shape stop agreeing where it matters."""
+
+    def test_a_parallel_branch_is_drawn_stacked(self):
+        from ramancarbon.echem.eis import draw_circuit
+
+        drawing = draw_circuit("R0-(R1|Q1)")
+        assert "┬" in drawing and "┴" in drawing
+        assert "R1" in drawing and "Q1" in drawing
+        # And a legend saying what each symbol is, because a reader who
+        # has to decode the glyphs has gained nothing over the string.
+        assert "CPE" in drawing and "resistencia" in drawing
+
+    def test_the_inductive_loop_template_really_makes_one(self):
+        """The bug the drawing found, pinned by the physics.
+
+        ``adsorcion_inductiva`` shipped as ``R0-(R1|Q1|R2-L1)``. In this
+        notation ``|`` binds tighter than ``-``, so that is
+        ``R0-((R1|Q1|R2)-L1)``: an inductor in SERIES, which lifts Z″ at
+        the top of the spectrum and produces no low-frequency loop at
+        all. Measured on the template's own description of itself — HER
+        and OER give an adsorption loop almost always — it gave zero
+        points of inductive loop and a Z″ maximum of +8·10⁵ at 16 kHz,
+        which is the series reactance running away.
+
+        An inductive loop is not "Z″ > 0": a series inductor does that
+        too. It is Z″ > 0 **while Z′ recedes**, which is what a loop in
+        the Nyquist plane means and what this asserts.
+        """
+        from ramancarbon.echem.eis import LIBRARY, parse_circuit
+
+        values = {"R0": [5.0], "R1": [40.0], "Q1": [2e-4, 0.9],
+                  "R2": [25.0], "L1": [8.0]}
+        omega = np.geomspace(1e-3, 1e5, 600)
+        tree = parse_circuit(LIBRARY["adsorcion_inductiva"])
+        for element in tree.elements():
+            element.values = list(values[element.name])
+        z = tree.impedance(omega)
+        # Walk from high frequency to low, as a sweep does.
+        real, imaginary = z.real[::-1], z.imag[::-1]
+        looping = (imaginary[1:] > 1e-9) & (np.diff(real) < 0.0)
+        assert looping.sum() > 50
+        # And the loop is at LOW frequency, not at the top of the sweep.
+        peak = int(np.argmax(imaginary))
+        assert omega[::-1][peak] < 100.0
+
+    def test_parallel_binds_tighter_than_series(self):
+        """The precedence that made the template wrong, stated as a test."""
+        from ramancarbon.echem.eis import parse_circuit
+
+        implicit = parse_circuit("R1|Q1|R2-L1")
+        explicit = parse_circuit("(R1|Q1|R2)-L1")
+        assert implicit.kind == explicit.kind == "series"
+        assert len(implicit.children) == len(explicit.children) == 2
+
+
+class TestComparingCircuits:
+    """Rank them, and say why the ranking is not the answer."""
+
+    @staticmethod
+    @pytest.fixture(scope="class")
+    def comparison():
+        from ramancarbon.echem.eis import compare_circuits
+
+        return compare_circuits(
+            make_eis_demo("R0-(R1|Q1)-(R2|Q2)", seed=5),
+            circuits=["R0-Q1", "R0-(R1|Q1)", "R0-Za1-Za2"],
+        )
+
+    def test_the_too_simple_circuit_ranks_last(self, comparison):
+        order = comparison.ranked()
+        assert order[-1].circuit == "R0-Q1"
+        assert comparison.best().circuit == "R0-Za1-Za2"
+
+    def test_equivalent_circuits_score_the_same(self, comparison):
+        """R0-Za1 and R0-(R1|Q1) are one circuit, so they cannot differ."""
+        from ramancarbon.echem.eis import compare_circuits
+
+        spectrum = make_eis_demo("R0-(R1|Q1)", seed=2)
+        both = compare_circuits(spectrum, circuits=["R0-Za1", "R0-(R1|Q1)"])
+        first, second = both.candidates
+        assert first.fit is not None and second.fit is not None
+        assert first.fit.chi_squared == pytest.approx(
+            second.fit.chi_squared, rel=1e-6)
+        assert first.free_parameters == second.free_parameters
+
+    def test_it_counts_the_parameters_that_came_back_determined(self, comparison):
+        """The column that decides, because BIC alone cannot."""
+        for candidate in comparison.ranked():
+            assert 0 <= candidate.determined <= candidate.free_parameters
+
+    def test_the_report_refuses_to_let_the_bic_decide_alone(self, comparison):
+        text = comparison.describe()
+        assert "determinados" in text
+        assert "ajusta SIEMPRE al menos igual de bien" in text
+        assert "APROPIADO para el material" in text
+
+
+class TestCircuitConcerns:
+    """Structural checks, run before any fit."""
+
+    def test_a_series_chain_cannot_make_a_semicircle(self):
+        from ramancarbon.echem.eis import circuit_concerns
+
+        assert any("PARALELO" in c for c in circuit_concerns("R0-Q1"))
+
+    def test_an_element_that_is_itself_an_arc_counts(self):
+        """The false positive the first version had on its own new element.
+
+        A ZARC IS a resistance in parallel with a CPE, written as one
+        symbol, so looking for a ``|`` in the string flagged ``R0-Za1``
+        — the circuit the DRT translation produces — as unable to make
+        an arc.
+        """
+        from ramancarbon.echem.eis import circuit_concerns
+
+        assert not any("PARALELO" in c for c in circuit_concerns("R0-Za1"))
+        assert not any("PARALELO" in c for c in circuit_concerns("R0-T1"))
+
+    def test_an_ideal_capacitor_is_flagged_but_not_refused(self):
+        from ramancarbon.echem.eis import circuit_concerns
+
+        concerns = circuit_concerns("R0-(R1|C1)")
+        assert any("IDEAL" in c for c in concerns)
+
+    def test_a_circuit_without_a_resistance_cannot_set_the_intercept(self):
+        from ramancarbon.echem.eis import circuit_concerns
+
+        assert any("resistencia" in c for c in circuit_concerns("Q1|C1"))
+
+    def test_an_unreadable_circuit_says_so_instead_of_raising(self):
+        from ramancarbon.echem.eis import circuit_concerns
+
+        assert circuit_concerns("R0-(R1|Q1")[0].startswith("no se puede leer")
+
+
+class TestTheCircuitEditorFlow:
+    """DRT to circuit to numbers to a file, through the session."""
+
+    @staticmethod
+    def _session():
+        from ramancarbon.gui.echem_state import EchemSession
+
+        session = EchemSession()
+        session.eis = make_eis_demo("R0-(R1|Q1)-(R2|Q2)", seed=5)
+        session.analyse()
+        return session
+
+    def test_refitting_replaces_only_the_impedance_part(self):
+        """Choosing a circuit costs one fit, not the whole analysis."""
+        session = self._session()
+        before = session.result
+        assert session.set_circuit("R0-Za1-Za2")
+        assert session.refit_circuit()
+        # Same result object, new impedance fit: nothing else depends on
+        # the circuit, so nothing else is recomputed.
+        assert session.result is before
+        assert session.result.eis is not None
+        assert session.result.eis.fit is not None
+        assert session.result.eis.fit.circuit == "R0-Za1-Za2"
+
+    def test_refitting_without_a_spectrum_says_so(self):
+        from ramancarbon.gui.echem_state import EchemSession
+
+        session = EchemSession()
+        assert not session.refit_circuit()
+        assert any("impedancia" in text for _, text in session.messages)
+
+    def test_the_drawing_carries_the_fitted_values(self):
+        session = self._session()
+        session.set_circuit("R0-Za1-Za2")
+        session.refit_circuit()
+        drawing = session.circuit_drawing()
+        assert "Za1" in drawing and "Za2" in drawing
+        assert "Za1.tau" in drawing
+
+    def test_a_zarc_needs_no_conversion_and_the_report_says_so(self):
+        session = self._session()
+        session.set_circuit("R0-Za1-Za2")
+        session.refit_circuit()
+        text = session.effective_capacitance_report()
+        assert "sin conversión" in text
+        assert "C = τ/R" in text
+        # And no note about two relations, because neither was used.
+        assert "LAS DOS NO SON LA MISMA MEDIDA" not in text
+
+    def test_a_cpe_gets_both_relations_and_the_warning(self):
+        session = self._session()
+        session.set_circuit("R0-(R1|Q1)")
+        session.refit_circuit()
+        text = session.effective_capacitance_report()
+        assert "Hsu-Mansfeld" in text and "Brug" in text
+        assert "LAS DOS NO SON LA MISMA MEDIDA" in text
+
+    def test_the_exported_curve_keeps_the_physical_sign_of_z_imaginary(self):
+        """The -Z'' of a Nyquist plot is a drawing convention."""
+        session = self._session()
+        session.set_circuit("R0-(R1|Q1)")
+        session.refit_circuit()
+        rows = session.fit_curve_rows()
+        assert len(rows) == session.eis.n
+        assert len(rows[0]) == len(session.FIT_CURVE_COLUMNS)
+        # Capacitive, so Z'' is negative as stored.
+        assert float(rows[len(rows) // 2][2]) < 0.0
+
+    def test_exporting_writes_the_circuit_and_the_sign_convention(self, tmp_path):
+        session = self._session()
+        session.set_circuit("R0-(R1|Q1)")
+        session.refit_circuit()
+        destination = tmp_path / "ajuste.csv"
+        assert session.save_fit_curve(destination)
+        text = destination.read_text(encoding="utf-8")
+        assert "# circuito: R0-(R1|Q1)" in text
+        assert "signo FÍSICO" in text
+        assert "f (Hz),Zr_obs" in text
+
+    def test_exporting_without_a_fit_refuses_with_a_reason(self, tmp_path):
+        from ramancarbon.gui.echem_state import EchemSession
+
+        session = EchemSession()
+        assert not session.save_fit_curve(tmp_path / "nada.csv")
+        assert any("curva ajustada" in text for _, text in session.messages)
