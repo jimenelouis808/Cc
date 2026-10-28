@@ -694,6 +694,9 @@ class RateStudy:
     leakage: Optional["LeakageFit"] = None
     """The constant parasitic current the series implies, when three or
     more rates make it fittable."""
+    current_laws: list["CurrentLaw"] = field(default_factory=list)
+    """Which law for ``i(ν)`` actually wins at each potential. Read this
+    before the b-values above: they assume one of the three."""
     warnings: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
@@ -717,6 +720,13 @@ class RateStudy:
                     f"{self.drift.fade_percent:+.1f} % medidos en la "
                     f"repetición a {1e3 * self.drift.rate:g} mV/s"
                 )
+        if self.current_laws:
+            lines.append("")
+            lines.append(
+                "¿Qué ley describe i(ν)?  (tres modelos de dos parámetros, "
+                "residuos comparables)"
+            )
+            lines.extend("  " + str(law) for law in self.current_laws)
         if self.b_values:
             lines.append("")
             lines.append("Análisis de b (i = a·ν^b):")
@@ -928,6 +938,176 @@ def reversible_capacitance(curve: Voltammogram) -> Capacitance:
         specific_f_per_cm3=electrode.specific(value, "volume"),
         note=note,
     )
+
+
+#: Models for ``i(ν)`` at a fixed potential, each with two parameters so
+#: that their residuals can be compared without penalising any of them.
+#:
+#: The first two are the ones everybody fits. The third is the one almost
+#: nobody fits, and on the user's files it fits exactly as well as the
+#: other two — which is the whole reason it is here.
+CURRENT_LAWS: tuple[tuple[str, str], ...] = (
+    ("potencia", "i = a·ν^b"),
+    ("dunn", "i = k₁·ν + k₂·√ν"),
+    ("fuga", "i = k_cap·ν + i_par"),
+)
+
+
+@dataclass
+class CurrentLaw:
+    """Which of :data:`CURRENT_LAWS` describes ``i(ν)`` at one potential.
+
+    The b-value and the Dunn separation are both answers to the question
+    "how does the current scale with scan rate", and both assume the
+    answer is a sum of a term in ν and a term in √ν. A constant current —
+    corrosion, carbon oxidation, electrolyte breakdown near the positive
+    limit, anything that does not care how fast the potential is moving —
+    is neither. Over a factor of ten in ν, though, a constant and a
+    ``k₂√ν`` are nearly the same function, so fitting the constant
+    explicitly is the only way to find out whether it is there.
+
+    **The usual answer is that the series cannot tell.** On the user's
+    four rates all three laws come back at R² between 0.989 and 0.998 at
+    every potential in the window, and the differences between them are
+    far smaller than what four points and two parameters can resolve.
+    That is a result and not a failure: a decade of scan rates is the
+    minimum for a b-value to mean anything, and it is still not enough to
+    choose the LAW the b-value belongs to.
+
+    So the tie is broken from outside this fit, and on these files it
+    breaks against diffusion. The parasitic current is not inferred here,
+    it is measured independently — :func:`coulombic_efficiency` is 0.48 at
+    5 mV/s, and :class:`LeakageFit` gives ⟨i_par⟩ = 0.41 µA at R² = 0.996
+    with an intercept of −9 µC against charges of 10–150 µC. The leak law
+    then returns, at each potential, a capacitance that barely varies
+    across the window (128 µF at −0.40 V, 95 µF at −0.20 V) and a
+    constant that climbs monotonically towards the positive limit
+    (0.30 → 2.30 µA): the right magnitude, and the right shape for an
+    irreversible oxidation. Diffusion control is *permitted* by the
+    scan-rate fit and nothing else in the data asks for it, while the
+    leak is measured three different ways.
+
+    Which matters because b falls from 0.96 at −0.30 V to 0.46 at
+    +0.30 V across that same window, and 0.46 is read off as
+    "diffusion-controlled, battery-like, report in mAh/g". The data do
+    not support that reading, and they do support the leak.
+    """
+
+    potential: float
+    residuals: dict[str, float] = field(default_factory=dict)
+    """Sum of squared residuals in A², per law key. Comparable: every law
+    here has two parameters."""
+    b: float = 0.0
+    """Exponent of the power law, for continuity with :class:`BValue`."""
+    capacitance_f: float = 0.0
+    """``k_cap`` of the leak law, in F."""
+    leakage_a: float = 0.0
+    """``i_par`` of the leak law, in A."""
+    r_squared: dict[str, float] = field(default_factory=dict)
+
+    @property
+    def best(self) -> str:
+        """Key of the law with the smallest residual."""
+        if not self.residuals:
+            return ""
+        return min(self.residuals, key=lambda key: self.residuals[key])
+
+    @property
+    def decisive(self) -> bool:
+        """Whether the winner beats the runner-up by more than a third.
+
+        Four points and two parameters leave two degrees of freedom, so a
+        small difference in residual is not a result.
+        """
+        ordered = sorted(self.residuals.values())
+        if len(ordered) < 2 or ordered[1] <= 0.0:
+            return False
+        return ordered[0] < 0.67 * ordered[1]
+
+    def __str__(self) -> str:
+        names = dict(CURRENT_LAWS)
+        text = (
+            f"E = {self.potential:+.3f} V:  b = {self.b:.3f}   "
+            + "  ".join(
+                f"R²({key}) = {self.r_squared.get(key, float('nan')):.5f}"
+                for key, _ in CURRENT_LAWS
+            )
+        )
+        if self.decisive:
+            text += f"  →  gana «{names.get(self.best, self.best)}»"
+        else:
+            text += "  →  EMPATE: la serie no distingue las tres leyes"
+        text += (
+            f"; la de fuga pide C = {1e6 * self.capacitance_f:.0f} µF más "
+            f"{1e6 * self.leakage_a:+.2f} µA constantes"
+        )
+        return text
+
+
+def compare_current_laws(
+    curves: Sequence[Voltammogram],
+    potentials: Optional[Sequence[float]] = None,
+    sweep: str = "media",
+) -> list[CurrentLaw]:
+    """Fit all of :data:`CURRENT_LAWS` at each potential and rank them.
+
+    Run this before quoting a b-value or a Dunn percentage. Both of those
+    presuppose that the current is a sum of a surface term and a
+    diffusion term; this says whether that presupposition survives
+    contact with the data, and on an electrode with a parasitic current
+    it does not.
+    """
+    usable = [c for c in curves if c.scan_rate > 0.0]
+    if len(usable) < 4:
+        return []
+    ordered = sorted(usable, key=lambda c: c.scan_rate)
+    rates = np.array([c.scan_rate for c in ordered], dtype=float)
+
+    if potentials is None:
+        low = max(c.window[0] for c in ordered)
+        high = min(c.window[1] for c in ordered)
+        if high <= low:
+            return []
+        potentials = list(np.linspace(low + 0.1 * (high - low),
+                                      high - 0.1 * (high - low), 9))
+
+    out: list[CurrentLaw] = []
+    for potential in potentials:
+        sampled = [_current_at(c, float(potential), sweep) for c in ordered]
+        if any(value is None for value in sampled):
+            continue
+        current = np.array([abs(value) for value in sampled], dtype=float)
+        if np.any(current <= 0.0):
+            continue
+        total = float(((current - current.mean()) ** 2).sum())
+        if total <= 0.0:
+            continue
+
+        law = CurrentLaw(potential=float(potential))
+        designs = {
+            "dunn": np.vstack([rates, np.sqrt(rates)]).T,
+            "fuga": np.vstack([rates, np.ones_like(rates)]).T,
+        }
+        for key, design in designs.items():
+            coefficients, *_ = np.linalg.lstsq(design, current, rcond=None)
+            residual = float(((current - design @ coefficients) ** 2).sum())
+            law.residuals[key] = residual
+            law.r_squared[key] = 1.0 - residual / total
+            if key == "fuga":
+                law.capacitance_f = float(coefficients[0])
+                law.leakage_a = float(coefficients[1])
+
+        # The power law is fitted in logarithms, as it always is, but its
+        # residual is measured on the current itself so that it can be
+        # compared with the other two.
+        slope, intercept, _, _ = _fit_line(np.log10(rates), np.log10(current))
+        law.b = slope
+        predicted = 10.0**intercept * rates**slope
+        residual = float(((current - predicted) ** 2).sum())
+        law.residuals["potencia"] = residual
+        law.r_squared["potencia"] = 1.0 - residual / total
+        out.append(law)
+    return out
 
 
 @dataclass
@@ -1232,13 +1412,32 @@ def analyse_rate_study(
     _trasatti(study)
     _double_layer(study, ordered, ecsa_material, non_faradaic)
     study.leakage = leakage_from_rates(ordered)
+    study.current_laws = compare_current_laws(ordered)
+    undecided = [law for law in study.current_laws if not law.decisive]
+    if undecided and study.leakage is not None:
+        worst = max(undecided, key=lambda law: abs(law.leakage_a))
+        study.warnings.append(
+            f"en {len(undecided)} de los {len(study.current_laws)} potenciales "
+            f"examinados las TRES leyes de i(ν) ajustan igual de bien: "
+            f"«i = a·ν^b», la de Dunn y «i = k_cap·ν + i_par». Con cuatro "
+            f"velocidades y dos parámetros no hay con qué elegir, así que el "
+            f"b y el reparto de Dunn de arriba no son prueba de difusión — "
+            f"son compatibles con ella y también con una corriente constante. "
+            f"Y la corriente constante aquí no es una hipótesis: está medida "
+            f"aparte, ⟨i_par⟩ = {1e6 * study.leakage.leakage_a:.2f} µA con "
+            f"R² = {study.leakage.r_squared:.3f} a partir de ΔQ, y la ley de "
+            f"fuga pide {1e6 * worst.leakage_a:.2f} µA en "
+            f"{worst.potential:+.3f} V, del mismo orden. Una clasificación de "
+            f"mecanismo que se apoye en el b dirá «tipo batería» por un "
+            f"proceso irreversible y no por almacenamiento"
+        )
     if study.leakage is not None and study.leakage.leakage_a > 0.0:
         efficiencies = [coulombic_efficiency(c) for c in ordered]
         worst = min((e for e in efficiencies if e is not None), default=None)
         if worst is not None and worst < 1.0 - BALANCE_TOLERANCE:
             study.warnings.append(
                 f"la eficiencia coulómbica baja a {worst:.2f} en esta serie, y "
-                f"el ajuste Q_ox = Q_rev + i_fuga·t da i_fuga = "
+                f"el ajuste ΔQ = Q_ox − Q_red = ⟨i_par⟩·t da ⟨i_par⟩ = "
                 f"{1e6 * study.leakage.leakage_a:.2g} µA con R² = "
                 f"{study.leakage.r_squared:.3f}. Una corriente parásita "
                 f"constante aporta más carga cuanto más dura el ciclo, así "

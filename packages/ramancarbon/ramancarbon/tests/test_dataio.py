@@ -406,9 +406,30 @@ def test_every_measurement_survives_a_project_round_trip(tmp_path, measurements)
         rebuilt = dataset.to_object()
         for attribute in ("shift", "intensity", "two_theta", "potential",
                           "current", "time", "frequency", "z"):
-            if hasattr(original, attribute):
-                assert np.allclose(getattr(rebuilt, attribute),
-                                   getattr(original, attribute)), attribute
+            if not hasattr(original, attribute):
+                continue
+            before, after = getattr(original, attribute), getattr(rebuilt, attribute)
+            if before is None:
+                assert after is None, attribute
+                continue
+            assert np.allclose(after, before), attribute
+
+
+def test_a_voltammogram_keeps_the_instrument_clock_across_a_project(tmp_path):
+    """Without it the charge is integrated against a reconstructed
+    ∫|dE|/ν, which is wrong across every join in the record."""
+    from ramancarbon.echem.curve import Voltammogram
+
+    demo = make_cv_demo("condensador", seed=1)
+    clock = np.linspace(0.0, 120.0, demo.n)
+    curve = Voltammogram(potential=demo.potential, current=demo.current,
+                         scan_rate=demo.scan_rate, electrode=demo.electrode,
+                         cycle=demo.cycle, time=clock, name="con reloj")
+    project = Project()
+    project.add(curve)
+    back = Project.load(project.save(tmp_path / "s")).datasets[0].to_object()
+    assert back.time is not None
+    assert np.allclose(back.time, clock)
 
 
 def test_the_numbers_needed_to_analyse_are_stored_with_the_numbers(tmp_path, measurements):

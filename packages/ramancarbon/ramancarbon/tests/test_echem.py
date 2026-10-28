@@ -261,6 +261,51 @@ def test_a_one_sided_leak_fools_the_loop_convention_not_the_reduction():
     assert coulombic_efficiency(curves[0]) < coulombic_efficiency(curves[1])
 
 
+def test_a_leak_withdraws_the_b_value_as_evidence_of_diffusion():
+    """b = 0.53 classified a leaky capacitor as a battery electrode and
+    told the user to report it in mAh/g. A constant current dilutes a
+    capacitive one by more the slower the scan, which bends b downwards
+    with no diffusion anywhere."""
+    from ramancarbon.echem.cv import analyse_rate_study
+
+    leak = 5e-4
+    series = []
+    for rate in (0.005, 0.01, 0.02, 0.05):
+        curve = make_cv_demo("condensador", capacitance=0.05,
+                             scan_rate=rate, seed=1).cycles()[-1]
+        rising = np.gradient(curve.potential) > 0
+        curve.current = curve.current + leak * rising
+        series.append(curve)
+
+    study = analyse_rate_study(series)
+    assert study.b_values
+    assert min(b.b for b in study.b_values) < 0.8, (
+        "la fuga tiene que doblar el b hacia abajo, que es la premisa"
+    )
+    verdict = classify_storage(rates=study)
+    assert verdict.mechanism != "battery"
+    assert any("no cuenta como difusión" in text for text in verdict.against)
+
+
+def test_the_three_laws_for_the_current_are_compared_on_equal_terms():
+    from ramancarbon.echem.cv import compare_current_laws
+
+    series = [
+        make_cv_demo("condensador", capacitance=0.05, scan_rate=rate,
+                     seed=1).cycles()[-1]
+        for rate in (0.005, 0.01, 0.02, 0.05)
+    ]
+    laws = compare_current_laws(series)
+    assert laws
+    for law in laws:
+        assert set(law.residuals) == {"potencia", "dunn", "fuga"}
+        # A clean capacitor: the leak law must find no leak worth having.
+        assert abs(law.leakage_a) < 0.02 * law.capacitance_f * 0.05
+    assert compare_current_laws(series[:3]) == [], (
+        "tres velocidades no bastan para tres leyes de dos parámetros"
+    )
+
+
 def test_a_repeat_at_the_same_rate_is_used_as_a_drift_control():
     from ramancarbon.echem.cv import analyse_rate_study, drift_check
 

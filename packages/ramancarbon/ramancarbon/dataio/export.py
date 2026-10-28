@@ -359,6 +359,12 @@ def series_table(obj: Any, digits: int = 6) -> Table:
         columns, units = ["potencial", "corriente"], ["V", "A"]
         extra = ([("ciclo", "", obj.cycle)]
                  if getattr(obj, "cycle", None) is not None else [])
+        # The instrument's clock, when the record carries one. Dropping it
+        # is not cosmetic: without it the charge is integrated against a
+        # reconstructed ∫|dE|/ν, which is wrong across every join in the
+        # record. A curve saved and reopened has to come back the same.
+        if getattr(obj, "time", None) is not None:
+            extra = [("tiempo", "s", obj.time)] + extra
         return _stack(
             obj, [("potencial", "V", obj.potential),
                   ("corriente", "A", obj.current)] + extra,

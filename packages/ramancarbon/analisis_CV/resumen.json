@@ -1,0 +1,388 @@
+{
+  "electrodo": {
+    "descripcion_del_usuario": "carbono vítreo, 3 mm de diámetro, 20 µg de material depositado",
+    "area_geometrica_cm2": 0.07068583470577035,
+    "masa_activa_mg": 0.02,
+    "referencia_declarada_en_el_mpr": "SCE (calomelanos saturado)"
+  },
+  "orden_de_medida": [
+    "01",
+    "02",
+    "03",
+    "04",
+    "05"
+  ],
+  "por_archivo": [
+    {
+      "archivo": "CV_01",
+      "mv_s": 49.99376959733759,
+      "ciclos": 10,
+      "ciclos_completos": 9,
+      "ciclo_informado": "CV_01 [ciclo 9.0]",
+      "ventana_v": 1.0003269910812378,
+      "eficiencia_coulombica": 0.8412638785111192,
+      "c_lazo_f_g": 7.167624020144228,
+      "c_rama_f_g": 7.403627374610009,
+      "c_reduccion_f_g": 6.549700185040131,
+      "c_reduccion_mf_cm2": 1.8531860626116239
+    },
+    {
+      "archivo": "CV_02",
+      "mv_s": 4.999522154834901,
+      "ciclos": 4,
+      "ciclos_completos": 4,
+      "ciclo_informado": "CV_02 [ciclo 4.0]",
+      "ventana_v": 1.000346064567566,
+      "eficiencia_coulombica": 0.48365641654155916,
+      "c_lazo_f_g": 11.332594266257086,
+      "c_rama_f_g": 12.491936219245316,
+      "c_reduccion_f_g": 7.388613525109626,
+      "c_reduccion_mf_cm2": 2.0905499824299216
+    },
+    {
+      "archivo": "CV_03",
+      "mv_s": 10.000741946872838,
+      "ciclos": 4,
+      "ciclos_completos": 4,
+      "ciclo_informado": "CV_03 [ciclo 4.0]",
+      "ventana_v": 1.000346064567566,
+      "eficiencia_coulombica": 0.6868165102606326,
+      "c_lazo_f_g": 9.231856771830751,
+      "c_rama_f_g": 9.743083604610959,
+      "c_reduccion_f_g": 7.5178202402999865,
+      "c_reduccion_mf_cm2": 2.127108004480077
+    },
+    {
+      "archivo": "CV_04",
+      "mv_s": 19.997545091959307,
+      "ciclos": 4,
+      "ciclos_completos": 4,
+      "ciclo_informado": "CV_04 [ciclo 4.0]",
+      "ventana_v": 1.0004989206790924,
+      "eficiencia_coulombica": 0.8170163276897461,
+      "c_lazo_f_g": 7.530700834150568,
+      "c_rama_f_g": 7.736698645517014,
+      "c_reduccion_f_g": 6.772317283764522,
+      "c_reduccion_mf_cm2": 1.916173816707203
+    },
+    {
+      "archivo": "CV_05",
+      "mv_s": 49.99376959733759,
+      "ciclos": 4,
+      "ciclos_completos": 4,
+      "ciclo_informado": "CV_05 [ciclo 4.0]",
+      "ventana_v": 1.000307857990265,
+      "eficiencia_coulombica": 0.9044557802828468,
+      "c_lazo_f_g": 5.812965153912572,
+      "c_rama_f_g": 5.871508334794595,
+      "c_reduccion_f_g": 5.521335794163882,
+      "c_reduccion_mf_cm2": 1.5622184606424843
+    }
+  ],
+  "fuga": {
+    "i_par_a": 4.106920794487851e-07,
+    "ordenada_c": -8.887022666532982e-06,
+    "r2": 0.9962176769167486,
+    "c_sin_fuga_f": 0.00013600151516706348,
+    "c_sin_fuga_f_g": 6.800075758353174,
+    "fraccion_de_q_ox": {
+      "5": 0.5376401457183861,
+      "10": 0.3750639155621805,
+      "20": 0.24768780139095156,
+      "50": 0.13453962853220336
+    }
+  },
+  "deriva": {
+    "mv_s": 49.99376959733759,
+    "primera_f": 0.00014335248040288457,
+    "ultima_f": 0.00011625930307825145,
+    "perdida_pct": 18.899692037758385,
+    "archivos": [
+      "CV_01",
+      "CV_05"
+    ]
+  },
+  "leyes_de_i_nu": [
+    {
+      "e_v": -0.500504094362259,
+      "b": 0.8672845797889623,
+      "r2": {
+        "dunn": 0.9898844946073315,
+        "fuga": 0.9802921978174761,
+        "potencia": 0.974927227551928
+      },
+      "empate": false,
+      "gana": "dunn",
+      "c_fuga_f": 0.00011057384470914919,
+      "i_par_a": 5.910798149180019e-07
+    },
+    {
+      "e_v": -0.40048668384552005,
+      "b": 0.9304510983076126,
+      "r2": {
+        "dunn": 0.9940802434087699,
+        "fuga": 0.9896355179836225,
+        "potencia": 0.9828031499952661
+      },
+      "empate": false,
+      "gana": "dunn",
+      "c_fuga_f": 0.00012790908493797714,
+      "i_par_a": 4.1844947771113345e-07
+    },
+    {
+      "e_v": -0.30046927332878115,
+      "b": 0.9563200476783533,
+      "r2": {
+        "dunn": 0.9957460436296433,
+        "fuga": 0.9929695595804213,
+        "potencia": 0.9868729158757896
+      },
+      "empate": false,
+      "gana": "dunn",
+      "c_fuga_f": 0.0001223088334783493,
+      "i_par_a": 2.9650891682627475e-07
+    },
+    {
+      "e_v": -0.20045186281204225,
+      "b": 0.8049877487667678,
+      "r2": {
+        "dunn": 0.9970209407427675,
+        "fuga": 0.9913696794228022,
+        "potencia": 0.9954967879797749
+      },
+      "empate": false,
+      "gana": "dunn",
+      "c_fuga_f": 9.535511458831941e-05,
+      "i_par_a": 5.379199549371225e-07
+    },
+    {
+      "e_v": -0.10043445229530334,
+      "b": 0.7834426690952863,
+      "r2": {
+        "dunn": 0.9967494887066162,
+        "fuga": 0.9906282331116507,
+        "potencia": 0.9955296175494929
+      },
+      "empate": true,
+      "gana": "dunn",
+      "c_fuga_f": 9.663182404960361e-05,
+      "i_par_a": 6.050068680844437e-07
+    },
+    {
+      "e_v": -0.00041704177856449753,
+      "b": 0.7248758506668306,
+      "r2": {
+        "dunn": 0.997054188593833,
+        "fuga": 0.9900141455188786,
+        "potencia": 0.996873328975246
+      },
+      "empate": true,
+      "gana": "dunn",
+      "c_fuga_f": 9.376502880817893e-05,
+      "i_par_a": 7.45561194395027e-07
+    },
+    {
+      "e_v": 0.09960036873817446,
+      "b": 0.6786430741773856,
+      "r2": {
+        "dunn": 0.9974582668635786,
+        "fuga": 0.9895938494638535,
+        "potencia": 0.9975045497368108
+      },
+      "empate": true,
+      "gana": "potencia",
+      "c_fuga_f": 9.349776812434281e-05,
+      "i_par_a": 8.915547319220619e-07
+    },
+    {
+      "e_v": 0.19961777925491342,
+      "b": 0.5839490037986323,
+      "r2": {
+        "dunn": 0.9984360655143357,
+        "fuga": 0.9888916562120422,
+        "potencia": 0.9980083632223686
+      },
+      "empate": true,
+      "gana": "dunn",
+      "c_fuga_f": 9.595101686647111e-05,
+      "i_par_a": 1.3165375276382816e-06
+    },
+    {
+      "e_v": 0.2996351897716522,
+      "b": 0.45821501712447493,
+      "r2": {
+        "dunn": 0.9943239509246325,
+        "fuga": 0.9923233237671139,
+        "potencia": 0.9932596076418697
+      },
+      "empate": true,
+      "gana": "dunn",
+      "c_fuga_f": 0.00010605752843423424,
+      "i_par_a": 2.3022401829230487e-06
+    }
+  ],
+  "b": [
+    {
+      "e_v": -0.4504953891038895,
+      "b": 0.8915603092303188,
+      "error": 0.06277819140059962,
+      "r2": 0.9901811461522096,
+      "lectura": "mixto, con predominio capacitivo"
+    },
+    {
+      "e_v": -0.2754649206995964,
+      "b": 0.876137094936882,
+      "error": 0.02570557502988782,
+      "r2": 0.9982813262138642,
+      "lectura": "mixto, con predominio capacitivo"
+    },
+    {
+      "e_v": -0.10043445229530334,
+      "b": 0.7834426690952863,
+      "error": 0.04907923584884021,
+      "r2": 0.9922121837926314,
+      "lectura": "mixto, con predominio capacitivo"
+    },
+    {
+      "e_v": 0.07459601610898975,
+      "b": 0.6904423785637034,
+      "error": 0.03636237666229848,
+      "r2": 0.9944833282336315,
+      "lectura": "mixto"
+    },
+    {
+      "e_v": 0.2496264845132828,
+      "b": 0.5262663971386545,
+      "error": 0.017079536645571974,
+      "r2": 0.9978978825156426,
+      "lectura": "controlado por difusión (tipo batería)"
+    }
+  ],
+  "dunn": {
+    "fraccion_capacitiva": {
+      "5": 0.2841924235394959,
+      "10": 0.34031410774431425,
+      "20": 0.43858780156405636,
+      "50": 0.5850276462739354
+    },
+    "potenciales_con_r2_bajo": 46,
+    "potenciales": 60,
+    "avisos": [
+      "7 coeficientes salen negativos de verdad (más de un 5 % de su propia escala) y ninguna de las dos contribuciones puede serlo: ahí el modelo de dos términos no describe la corriente. Suele ser un pico que se desplaza con la velocidad, y entonces a la velocidad más alta ese potencial ya no está sobre el pico"
+    ]
+  },
+  "trasatti": {
+    "total_f": 0.0003781607929555049,
+    "externa_f": 6.820969077816902e-05
+  },
+  "mecanismo": {
+    "veredicto": "pseudocapacitive",
+    "etiqueta": "Pseudocapacitivo",
+    "confianza": "media",
+    "informar_como": "capacitancia (F/g), con reservas",
+    "a_favor": [
+      "hay picos redox, pero anchos y poco separados: la firma pseudocapacitiva"
+    ],
+    "en_contra": [
+      "el b baja a 0.53, pero no cuenta como difusión: en esta serie las tres leyes de i(ν) ajustan igual de bien y hay 0.41 µA de corriente parásita medidos aparte, suficientes para explicar por sí solos que b se aparte de 1. Para decidirlo hace falta quitar la fuga —ventana más estrecha, electrolito desoxigenado— y repetir"
+    ]
+  },
+  "avisos_de_la_serie": [
+    "repetición a 49.9938 mV/s: 0.1434 → 0.1163 mF (+18.9 %) — el electrodo CAMBIÓ durante la serie. Las velocidades se midieron en orden, así que el tiempo y ν van juntos y esta pérdida entra en la dependencia con ν: el b, el reparto de Dunn y la retención la llevan dentro sin decirlo. Lo que la serie mide es cinética MÁS degradación, y sólo esta repetición las separa",
+    "de las 5 curvas, 1 repetían una velocidad ya medida; para la cinética se usa la ÚLTIMA de cada velocidad y la repetición queda como control de deriva",
+    "10.0007 mV/s: los 4 ciclos completos del archivo dan 0.1995 → 0.1906 → 0.1875 → 0.1846 mF, +2.54 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice",
+    "19.9975 mV/s: los 4 ciclos completos del archivo dan 0.1565 → 0.1531 → 0.152 → 0.1506 mF, +1.26 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice",
+    "49.9938 mV/s: los 4 ciclos completos del archivo dan 0.1185 → 0.1174 → 0.1167 → 0.1163 mF, +0.62 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice",
+    "el C_dl y el ECSA se han calculado sin que se haya declarado que la ventana esté libre de corriente faradaica. Elige una región donde no pase nada (típicamente ±50 mV alrededor del potencial de circuito abierto) y vuelve a medir, o estos dos números incluyen reacción",
+    "el ECSA se ha calculado con Cs = 40 µF/cm², pero la literatura da entre 20 y 60 para el mismo tipo de material. Ese factor de tres pasa entero al área y de ahí a cualquier actividad que normalices por ella: es la magnitud peor determinada de toda la electrocatálisis. Compara ECSA entre TUS muestras, no contra las de un artículo",
+    "en 5 de los 9 potenciales examinados las TRES leyes de i(ν) ajustan igual de bien: «i = a·ν^b», la de Dunn y «i = k_cap·ν + i_par». Con cuatro velocidades y dos parámetros no hay con qué elegir, así que el b y el reparto de Dunn de arriba no son prueba de difusión — son compatibles con ella y también con una corriente constante. Y la corriente constante aquí no es una hipótesis: está medida aparte, ⟨i_par⟩ = 0.41 µA con R² = 0.996 a partir de ΔQ, y la ley de fuga pide 2.30 µA en +0.300 V, del mismo orden. Una clasificación de mecanismo que se apoye en el b dirá «tipo batería» por un proceso irreversible y no por almacenamiento",
+    "la eficiencia coulómbica baja a 0.48 en esta serie, y el ajuste ΔQ = Q_ox − Q_red = ⟨i_par⟩·t da ⟨i_par⟩ = 0.41 µA con R² = 0.996. Una corriente parásita constante aporta más carga cuanto más dura el ciclo, así que imita una dependencia con ν: la retención de arriba la lleva dentro. Cita la capacitancia de la carga de REDUCCIÓN (reversible_capacitance), que la fuga anódica no contamina"
+  ],
+  "metadatos_de_los_archivos": [
+    {
+      "archivo": "CV_multpit_01",
+      "comentarios_del_mpr": {
+        "tecnica": "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
+        "texto": [
+          "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
+          "Au/Pd",
+          "NaCl (0.2M)",
+          "SCE Saturated Calomel Electrode"
+        ]
+      },
+      "avisos_del_lector": [
+        "la disposición binaria del .mpr es ingeniería inversa de la comunidad, no una especificación publicada. La aritmética cuadra, que descarta que una columna tenga la ANCHURA equivocada, pero no que tenga el NOMBRE equivocado. Comprueba una medida contra la exportación ASCII (.mpt) de EC-Lab la primera vez; para lo que se publica, exporta .mpt",
+        "no hay un .mps junto al .mpr, así que los ajustes del experimento (velocidad, corriente, ventana) no se han podido leer. Cópialos juntos: EC-Lab los escribe en pareja",
+        "la velocidad de barrido (49.99 mV/s) está MEDIDA de |dE/dt|, no declarada: no había .mps al lado. La dispersión sobre el barrido es del 2.8 %"
+      ]
+    },
+    {
+      "archivo": "CV_multpit_02",
+      "comentarios_del_mpr": {
+        "tecnica": "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
+        "texto": [
+          "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
+          "Au/Pd",
+          "NaCl (0.2M)",
+          "SCE Saturated Calomel Electrode"
+        ]
+      },
+      "avisos_del_lector": [
+        "la disposición binaria del .mpr es ingeniería inversa de la comunidad, no una especificación publicada. La aritmética cuadra, que descarta que una columna tenga la ANCHURA equivocada, pero no que tenga el NOMBRE equivocado. Comprueba una medida contra la exportación ASCII (.mpt) de EC-Lab la primera vez; para lo que se publica, exporta .mpt",
+        "no hay un .mps junto al .mpr, así que los ajustes del experimento (velocidad, corriente, ventana) no se han podido leer. Cópialos juntos: EC-Lab los escribe en pareja",
+        "la velocidad de barrido (5 mV/s) está MEDIDA de |dE/dt|, no declarada: no había .mps al lado. La dispersión sobre el barrido es del 2.9 %"
+      ]
+    },
+    {
+      "archivo": "CV_multpit_03",
+      "comentarios_del_mpr": {
+        "tecnica": "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
+        "texto": [
+          "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
+          "Au/Pd",
+          "NaCl (0.2M)",
+          "SCE Saturated Calomel Electrode"
+        ]
+      },
+      "avisos_del_lector": [
+        "la disposición binaria del .mpr es ingeniería inversa de la comunidad, no una especificación publicada. La aritmética cuadra, que descarta que una columna tenga la ANCHURA equivocada, pero no que tenga el NOMBRE equivocado. Comprueba una medida contra la exportación ASCII (.mpt) de EC-Lab la primera vez; para lo que se publica, exporta .mpt",
+        "no hay un .mps junto al .mpr, así que los ajustes del experimento (velocidad, corriente, ventana) no se han podido leer. Cópialos juntos: EC-Lab los escribe en pareja",
+        "la velocidad de barrido (10 mV/s) está MEDIDA de |dE/dt|, no declarada: no había .mps al lado. La dispersión sobre el barrido es del 2.8 %"
+      ]
+    },
+    {
+      "archivo": "CV_multpit_04",
+      "comentarios_del_mpr": {
+        "tecnica": "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
+        "texto": [
+          "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
+          "Au/Pd",
+          "NaCl (0.2M)",
+          "SCE Saturated Calomel Electrode"
+        ]
+      },
+      "avisos_del_lector": [
+        "la disposición binaria del .mpr es ingeniería inversa de la comunidad, no una especificación publicada. La aritmética cuadra, que descarta que una columna tenga la ANCHURA equivocada, pero no que tenga el NOMBRE equivocado. Comprueba una medida contra la exportación ASCII (.mpt) de EC-Lab la primera vez; para lo que se publica, exporta .mpt",
+        "no hay un .mps junto al .mpr, así que los ajustes del experimento (velocidad, corriente, ventana) no se han podido leer. Cópialos juntos: EC-Lab los escribe en pareja",
+        "la velocidad de barrido (20 mV/s) está MEDIDA de |dE/dt|, no declarada: no había .mps al lado. La dispersión sobre el barrido es del 2.5 %"
+      ]
+    },
+    {
+      "archivo": "CV_multpit_05",
+      "comentarios_del_mpr": {
+        "tecnica": "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
+        "texto": [
+          "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
+          "Au/Pd",
+          "NaCl (0.2M)",
+          "SCE Saturated Calomel Electrode"
+        ]
+      },
+      "avisos_del_lector": [
+        "la disposición binaria del .mpr es ingeniería inversa de la comunidad, no una especificación publicada. La aritmética cuadra, que descarta que una columna tenga la ANCHURA equivocada, pero no que tenga el NOMBRE equivocado. Comprueba una medida contra la exportación ASCII (.mpt) de EC-Lab la primera vez; para lo que se publica, exporta .mpt",
+        "no hay un .mps junto al .mpr, así que los ajustes del experimento (velocidad, corriente, ventana) no se han podido leer. Cópialos juntos: EC-Lab los escribe en pareja",
+        "la velocidad de barrido (49.99 mV/s) está MEDIDA de |dE/dt|, no declarada: no había .mps al lado. La dispersión sobre el barrido es del 3.0 %"
+      ]
+    }
+  ]
+}

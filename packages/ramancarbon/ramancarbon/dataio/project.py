@@ -373,6 +373,7 @@ def _rebuild(dataset: Dataset):
                             scan_rate=float(options.get("scan_rate", 0.0)) or 0.05,
                             electrode=_electrode(options),
                             cycle=_column(dataset, "ciclo"),
+                            time=_column(dataset, "tiempo"),
                             name=dataset.name or dataset.identifier)
     if dataset.kind == "gcd":
         from ..echem.curve import ChargeDischarge

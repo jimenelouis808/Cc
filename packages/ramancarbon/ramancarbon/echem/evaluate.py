@@ -205,7 +205,54 @@ def classify_storage(
                 f"la descarga es casi lineal pero curvada (R² = {linearity:.5f})"
             )
 
-    if rates is not None and rates.b_values:
+    # A b-value below 1 is only evidence of diffusion if diffusion is
+    # what put it there. A constant parasitic current — corrosion, carbon
+    # oxidation, electrolyte breakdown at the positive limit — dilutes a
+    # capacitive current by more the slower the scan, and over the decade
+    # of scan rates anyone actually measures that is indistinguishable
+    # from a sqrt(nu) term. So when the rate study found the three laws
+    # tied AND measured a leak independently from the charge balance, the
+    # b-value is withdrawn as evidence rather than being believed.
+    #
+    # On the user's files this is the difference between the right answer
+    # and the wrong one: b = 0.53 at the positive limit, a coulombic
+    # efficiency of 0.48, and a measured 0.41 uA of leak. Believing the b
+    # classified a leaky capacitor as a battery electrode and told the
+    # user to report it in mAh/g.
+    caveats: list[str] = []
+    leaky = False
+    if rates is not None and rates.current_laws and rates.leakage is not None:
+        # The leak law has to be at least as good as the other two — it
+        # either wins or ties — at half the potentials or more, and the
+        # leak itself has to be measured and worth something.
+        standing = [
+            law for law in rates.current_laws
+            if law.best == "fuga" or not law.decisive
+        ]
+        share = max(rates.leakage.shares.values(), default=0.0)
+        leaky = (
+            len(standing) >= 0.5 * len(rates.current_laws)
+            and rates.leakage.leakage_a > 0.0
+            and rates.leakage.r_squared > 0.9
+            and share > 0.1
+        )
+    if leaky:
+        evidence["battery"] = [
+            text for text in evidence["battery"] if not text.startswith("b = ")
+        ]
+
+    if rates is not None and rates.b_values and leaky:
+        sources += 1
+        b = float(min(value.b for value in rates.b_values))
+        caveats.append(
+            f"el b baja a {b:.2f}, pero no cuenta como difusión: en esta "
+            f"serie las tres leyes de i(ν) ajustan igual de bien y hay "
+            f"{1e6 * rates.leakage.leakage_a:.2f} µA de corriente parásita "
+            f"medidos aparte, suficientes para explicar por sí solos que b "
+            f"se aparte de 1. Para decidirlo hace falta quitar la fuga "
+            f"—ventana más estrecha, electrolito desoxigenado— y repetir"
+        )
+    elif rates is not None and rates.b_values:
         sources += 1
         # The b that matters is the one at the peak, not the median over
         # the window. A battery electrode is diffusion-limited only where
@@ -266,7 +313,7 @@ def classify_storage(
         if key != best
         for text in texts
         if text not in chosen
-    ]
+    ] + caveats
     return StorageVerdict(
         mechanism=best,
         label=data[best]["label"],

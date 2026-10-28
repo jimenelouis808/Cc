@@ -2338,6 +2338,138 @@ programa de destino no podía usar. Ninguna es cosmética.
   k₁ y k₂ conocidos —k₂ concentrada en un pico redox— devuelven k₁ = 0.002
   frente a 2e-3 y k₂ = 0.00797 frente a 8e-3, con R² = 1.
 
+## La carga se integra contra el RELOJ, no contra `∫|dE|/ν`
+
+- Un voltamperograma se maneja como `i(E)` y la carga se recupera como
+  `q = ∫ i dE / ν`. Esa identidad vale para un barrido ininterrumpido y
+  **para nada más**: cualquier subconjunto —una rama, una ventana
+  recortada, un ciclo cuyo contador arrancó a mitad de barrido— son dos o
+  más tramos disjuntos, y el escalón entre dos tramos es un potencial que
+  el electrodo nunca barrió. `cumsum` lo cuenta como barrido.
+- Medido en una rama anódica real de los `.mpr` del usuario: una
+  discontinuidad de 0.9998 V, una duración reconstruida de 39.99 s en vez
+  de 20.00, y los dos convenios de capacitancia —que tienen que
+  coincidir— devolviendo 5.6 y 11.1 F/g de la misma curva.
+- `Voltammogram` lleva ahora `time`, que el lector de EC-Lab rellena.
+  `elapsed_time()` da el reloj si está y lo reconstruye si no, y en los
+  dos casos **aplana los empalmes**: un hueco mucho mayor que el muestreo
+  pasa a durar cero, así que el trapecio sobre él no aporta nada.
+
+## Un ciclo completo no es un ciclo que llegue a los dos extremos
+
+- Un registro parado a tres cuartos de la vuelta tiene la ventana entera
+  y tres cuartos de la carga. El ciclo 10 del archivo de 50 mV/s abarca
+  1.0003 V de una ventana de 1.0003 V —pasa cualquier prueba de vano— y
+  recorre 1.65 V en vez de 2.00. Devolvía 5.87 F/g frente a los 7.17 del
+  ciclo anterior.
+- `complete_cycles()` exige las dos cosas: el vano Y el recorrido
+  (`Voltammogram.traversed`, que es `Σ|ΔE|` y vale `2·vano` en una vuelta
+  entera).
+
+## El recorte de vértices era un sesgo por muestra
+
+- Recortar un 2 % de la ventana en cada extremo presupone el transitorio
+  de conmutación del potenciostato. Con 2000 puntos por ciclo y corriente
+  promediada no lo hay: en estos archivos la corriente pasa lisa por el
+  vértice y **baja** justo después.
+- El recorte se llevaba el 7.5 % de la capacitancia a 5 mV/s y el 2.9 % a
+  50, y cuánto se lleva depende de cómo reparta cada muestra su corriente
+  en la ventana. Eso es un sesgo por muestra, no una corrección.
+- `VERTEX_TRIM` es cero y `vertex_transients()` lo mide: se descarta un
+  punto si destaca más de tres veces sobre **su propio entorno** —con sus
+  vecinos inmediatos excluidos del entorno— y está junto a un punto de
+  retorno. Una primera versión comparaba con la mediana del ciclo entero
+  y descartó 62 puntos buenos: a velocidad lenta la corriente de la
+  muestra es máxima justo en los extremos de la ventana, que es donde
+  arranca la oxidación. **Lo que distingue un transitorio de un flanco no
+  es que sea grande, es que esté aislado.**
+
+## Antes de citar un F/g, mirar la eficiencia coulómbica
+
+- Un condensador devuelve lo que toma. `coulombic_efficiency()` da
+  `Q_red/Q_ox` por el SIGNO de la corriente, no por la rama: una
+  corriente que sigue siendo anódica pasado el vértice es oxidación,
+  vaya el potencial donde vaya.
+- En los archivos del usuario vale 0.48 a 5 mV/s, 0.69 a 10, 0.82 a 20 y
+  0.90 a 50. **A 5 mV/s más de la mitad de lo que la integral llama
+  capacitancia no se almacena, se gasta.**
+- Es también el origen del desacuerdo entre los dos convenios de
+  `capacitance()`, que se achacaba a un fallo numérico. Los dos están
+  calculados sobre un lazo que no cierra, y ningún convenio lo arregla.
+
+## `ΔQ = Q_ox − Q_red = ⟨i_par⟩·t` mide la corriente parásita
+
+- La carga neta de un ciclo es `∫ i dt` sobre el lazo, o sea, por
+  definición, lo que pasó y no volvió. Una carga almacenada no aporta
+  nada, sea cual sea el mecanismo; sólo un proceso irreversible aporta.
+- Contra la duración del ciclo, la pendiente es la corriente parásita
+  promediada sobre el ciclo. En estos archivos: **0.41 µA, R² = 0.996,
+  ordenada −8.9 µC sobre cargas de 10 a 150 µC** — la ordenada tiene que
+  ser cero y lo es, que es la comprobación del modelo.
+- Una fuga constante **imita una dependencia con ν**, porque aporta más
+  carga cuanto más dura el ciclo. Es el 54 % de Q_ox a 5 mV/s y el 13 % a
+  50, y por eso el convenio del lazo daba una «retención del 51 %» que no
+  es una limitación de transporte.
+- `reversible_capacitance()` cita la carga de REDUCCIÓN ÷ ΔV, que una
+  fuga anódica no contamina. En estos archivos: 7.39 → 5.52 F/g en vez de
+  11.33 → 5.81.
+
+## Tres leyes para `i(ν)`, y en una década ninguna gana
+
+- El b y el reparto de Dunn son dos respuestas a la misma pregunta —cómo
+  escala la corriente con ν— y las dos presuponen que la respuesta es una
+  suma de un término en ν y otro en √ν. Una corriente constante no es ni
+  una cosa ni otra, y **sobre una década de ν una constante y un `k₂√ν`
+  son casi la misma función**, así que se la traga el término difusivo y
+  vuelve a salir como difusión que no está.
+- `compare_current_laws()` ajusta las tres —`a·ν^b`, `k₁ν + k₂√ν`,
+  `k_cap·ν + i_par`— con dos parámetros cada una y residuos por tanto
+  comparables. En estos archivos las tres dan R² entre 0.975 y 0.998 en
+  todos los potenciales: **ninguna gana**, que con cuatro puntos y dos
+  parámetros es lo que se espera, y es un resultado y no un fallo.
+- El empate se rompe desde fuera del ajuste: la constante está medida
+  aparte (eficiencia coulómbica y `ΔQ` contra `t`), y la ley de fuga pide
+  en cada potencial una capacitancia que apenas varía en la ventana
+  (128 µF en −0.40 V, 95 µF en −0.20 V) y una corriente que sube monótona
+  hacia el límite positivo (0.30 → 2.30 µA). La difusión está permitida
+  por el ajuste y no la pide nada más.
+- Por eso `classify_storage` **retira el b como prueba** cuando la serie
+  da ese empate y hay fuga medida. Con el b retirado, estos archivos
+  pasan de «tipo batería, informar en mAh/g» a «pseudocapacitivo, F/g con
+  reservas», que es lo que las curvas parecen.
+
+## Una repetición es lo único que separa cinética de degradación
+
+- Las velocidades de una serie se miden en orden, así que el tiempo y ν
+  van juntos. Si el electrodo cambia durante la serie, el cambio entra en
+  la dependencia con ν y sale como un b, como un reparto de Dunn y como
+  una retención, sin que nada lo diga.
+- `drift_check()` busca una velocidad medida dos veces. En estos
+  archivos, las dos a 50 mV/s —el primer experimento y el último— dan
+  6.55 y 5.52 F/g de `C_red`: **16 % perdido en 22 ciclos**.
+- `analyse_rate_study` toma el orden en que se le pasan las curvas como
+  el orden de medida, usa la ÚLTIMA de cada velocidad para la cinética, y
+  deja la repetición como control.
+- `within_file_fade()` hace lo barato: la caída entre los ciclos
+  completos de un mismo archivo. Si es monótona, el ciclo que se informa
+  está sobre una pendiente y el valor citado depende de cuál se cite.
+- Dentro de un mismo archivo las dos capacitancias pueden decir cosas
+  distintas, y eso también es información: en los diez ciclos del primero,
+  la `C_red` baja de 6.61 a 6.55 F/g mientras la `C_lazo` cae de 7.82 a
+  7.17. Lo que se va en esos diez ciclos es la fuga, no lo almacenado.
+
+## El bloque de comentarios de un `.mpr` se arrastra
+
+- Los cinco archivos del usuario declaran en sus comentarios
+  `Fe(CN)63-/Fe(CN)64- 5.10-3 M`, `Au/Pd`, `NaCl (0.2M)` y `SCE`, y el
+  experimento era carbono vítreo con 20 µg de material. EC-Lab arrastra
+  el bloque de un experimento al siguiente y nadie lo actualiza.
+- No se puede resolver por el texto, pero sí por los datos: un
+  ferricianuro 5 mM sobre carbono vítreo daría dos picos separados unos
+  70 mV en torno a +0.2 V, y no hay ninguno. **Se informa la
+  contradicción y se usa lo que dijo el usuario**, porque la masa y el
+  área salen de ahí y con ellas todos los F/g.
+
 ## Controles de ajuste y de sesión
 
 - **Ligar no es fijar, y no es un atajo.** Un parámetro que los datos no
