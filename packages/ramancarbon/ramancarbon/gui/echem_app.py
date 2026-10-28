@@ -14,13 +14,18 @@ for the material.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
-from ..echem.curve import Electrode
+import numpy as np
+
+from ..echem.curve import POTENTIAL_SCALES, Electrode
 from ..echem.cv import SWEEP_CHOICES
 from .base import SectionApp, placeholder
-from .echem_state import CURRENT_UNITS, POTENTIAL_UNITS, EchemSession
+from .echem_state import (CURRENT_UNITS, DEFAULT_DISC_MM,
+                          DEFAULT_REFERENCE, POTENTIAL_UNITS,
+                          EchemSession, _default_electrode)
 from .theme import PAD
 from .widgets import (
     flow,
@@ -130,20 +135,36 @@ class EchemApp(SectionApp):
         self.mass_var = tk.StringVar(value="")
         labelled(ebody, "Masa activa (mg)", lambda p: ttk.Entry(
             p, textvariable=self.mass_var, width=10))
-        self.area_var = tk.StringVar(value="1.0")
+        self.diameter_var = tk.StringVar(value=f"{DEFAULT_DISC_MM:g}")
+        labelled(ebody, "Disco ⌀ (mm)", lambda p: ttk.Entry(
+            p, textvariable=self.diameter_var, width=10))
+        self.area_var = tk.StringVar(
+            value=f"{_default_electrode().area_cm2:.5g}")
         labelled(ebody, "Área (cm²)", lambda p: ttk.Entry(
             p, textvariable=self.area_var, width=10))
+        # The diameter is what is written on the electrode; the area is
+        # what the normalisation needs. Typing one fills the other, and
+        # the area stays editable for anything that is not a disc.
+        self.diameter_var.trace_add("write", lambda *_: self._area_from_disc())
         self.volume_var = tk.StringVar(value="")
         labelled(ebody, "Volumen (cm³)", lambda p: ttk.Entry(
             p, textvariable=self.volume_var, width=10))
-        self.electrolyte_var = tk.StringVar(value="")
-        labelled(ebody, "Electrolito", lambda p: ttk.Entry(
-            p, textvariable=self.electrolyte_var, width=14))
-        self.reference_var = tk.StringVar(value="Ag/AgCl_3M")
+        self.electrolyte_var = tk.StringVar(
+            value=_default_electrode().electrolyte)
+        labelled(ebody, "Electrolito", lambda p: ttk.Combobox(
+            p, textvariable=self.electrolyte_var, width=14,
+            values=_electrolyte_labels()))
+        # Picking one fills the pH, which is the only reason the table
+        # exists: without a pH there is no RHE scale and no
+        # overpotential, and a pH typed from memory is 59 mV per unit of
+        # error in everything downstream. The field stays free text for
+        # an electrolyte that is not in the table.
+        self.electrolyte_var.trace_add("write", lambda *_: self._ph_from_electrolyte())
+        self.reference_var = tk.StringVar(value=DEFAULT_REFERENCE)
         labelled(ebody, "Referencia", lambda p: ttk.Combobox(
             p, textvariable=self.reference_var, width=14, state="readonly",
             values=_reference_keys()))
-        self.ph_var = tk.StringVar(value="")
+        self.ph_var = tk.StringVar(value=f"{_default_electrode().ph:g}")
         labelled(ebody, "pH", lambda p: ttk.Entry(p, textvariable=self.ph_var,
                                                   width=10))
         self.resistance_var = tk.StringVar(value="")
@@ -247,6 +268,67 @@ class EchemApp(SectionApp):
                     "la capacitancia se integra entonces sobre toda la "
                     "ventana en vez de descontarlos.", wrap=420)
 
+        self.scale_var = tk.StringVar(value=POTENTIAL_SCALES[0][1])
+        labelled(obody, "Eje de potencial", lambda p: ttk.Combobox(
+            p, textvariable=self.scale_var, width=22, state="readonly",
+            values=[label for _, label in POTENTIAL_SCALES]))
+        hint(obody,
+             "El eje se dibuja y se exporta COMO SE MIDIÓ salvo que elijas "
+             "otra cosa. Una conversión es una afirmación —a RHE son 59 mV "
+             "por unidad de pH, y entre dos referencias acuosas es el relleno "
+             "que de verdad tuviera la tuya— y lo medido no afirma nada. Lo "
+             "que se haya convertido va escrito en la etiqueta del eje. El "
+             "Tafel es la excepción: un sobrepotencial se define frente a "
+             "RHE, así que esa figura convierte siempre.",
+             wrap=420)
+
+        self.dunn_nonneg_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(obody, text="Dunn: coeficientes ≥ 0",
+                        variable=self.dunn_nonneg_var).pack(
+            anchor="w", pady=(PAD["xs"], 0))
+        hint(obody,
+             "Ninguna de las dos contribuciones puede restar. Sin la "
+             "restricción, una k₁ negativa dibuja la curva capacitiva al "
+             "otro lado del lazo. Quítala sólo para ver el ajuste libre.",
+             wrap=420)
+        self.dunn_points_var = tk.StringVar(value="60")
+        labelled(obody, "Dunn: nº de potenciales", lambda p: ttk.Entry(
+            p, textvariable=self.dunn_points_var, width=10))
+        self.dunn_low_var = tk.StringVar(value="")
+        labelled(obody, "Dunn: E mínimo (V)", lambda p: ttk.Entry(
+            p, textvariable=self.dunn_low_var, width=10))
+        self.dunn_high_var = tk.StringVar(value="")
+        labelled(obody, "Dunn: E máximo (V)", lambda p: ttk.Entry(
+            p, textvariable=self.dunn_high_var, width=10))
+        hint(obody,
+             "Vacíos, Dunn usa la ventana común a todas las curvas, que es "
+             "el único defecto honrado: un potencial que una de ellas no "
+             "alcanzó no puede entrar en un ajuste entre curvas.", wrap=420)
+
+        self.cap_low_var = tk.StringVar(value="")
+        labelled(obody, "C: ventana mínima (V)", lambda p: ttk.Entry(
+            p, textvariable=self.cap_low_var, width=10))
+        self.cap_high_var = tk.StringVar(value="")
+        labelled(obody, "C: ventana máxima (V)", lambda p: ttk.Entry(
+            p, textvariable=self.cap_high_var, width=10))
+        hint(obody,
+             "Cambia el DIVISOR de la capacitancia, no la región que se "
+             "integra: sirve para citar un valor sobre una ventana "
+             "declarada, no para dejar fuera un trozo del barrido.",
+             wrap=420)
+
+        self.subtract_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(obody, text="Restar la corriente parásita",
+                        variable=self.subtract_var).pack(
+            anchor="w", pady=(PAD["xs"], 0))
+        hint(obody,
+             "Quita de la serie de velocidades la corriente constante que "
+             "mide el BALANCE DE CARGA (ΔQ contra la duración del ciclo), "
+             "que no mira cómo escala i con ν y por eso no es circular. "
+             "Sirve para ver si el b vuelve a 1 sin la fuga. Apagado por "
+             "defecto: una corrección encendida por defecto deja de verse.",
+             wrap=420)
+
         actions = ttk.Frame(parent)
         actions.pack(fill="x", pady=(PAD["sm"], 0))
         ttk.Button(actions, text="Analizar", style="Accent.TButton",
@@ -254,7 +336,10 @@ class EchemApp(SectionApp):
         ttk.Button(actions, text="Demo", command=self._load_demo).pack(
             fill="x", pady=(0, PAD["xs"]))
         ttk.Button(actions, text="Guardar informe…",
-                   command=self._save_report).pack(fill="x")
+                   command=self._save_report).pack(fill="x",
+                                                   pady=(0, PAD["xs"]))
+        ttk.Button(actions, text="Exportar tablas…",
+                   command=self._export_tables).pack(fill="x")
 
     def _build_tab_summary(self) -> None:
         ttk = self.ttk
@@ -924,7 +1009,57 @@ class EchemApp(SectionApp):
             self.session.set_circuit(self.circuit_var.get())
         self.session.non_faradaic = bool(self.non_faradaic_var.get())
         self.session.cycle_choice = self._cycle_from_widget()
+        labels = {label: key for key, label in POTENTIAL_SCALES}
+        self.session.potential_scale_choice = labels.get(
+            self.scale_var.get(), "medido")
+        self.session.dunn_nonnegative = bool(self.dunn_nonneg_var.get())
+        self.session.dunn_points = int(
+            _number(self.dunn_points_var.get()) or 60)
+        self.session.dunn_window = self._window_from(
+            self.dunn_low_var, self.dunn_high_var)
+        self.session.capacitance_window = self._window_from(
+            self.cap_low_var, self.cap_high_var)
+        self.session.subtract_parasitic = bool(self.subtract_var.get())
         self.session.retag_electrode()
+
+    def _area_from_disc(self) -> None:
+        diameter = _number(self.diameter_var.get())
+        if diameter and diameter > 0:
+            self.area_var.set(f"{Electrode().use_disc(diameter):.5g}")
+
+    def _ph_from_electrolyte(self) -> None:
+        """Fill the pH from the table when the name matches an entry."""
+        chosen = self.electrolyte_var.get().strip()
+        for key, entry in Electrode.electrolytes().items():
+            if chosen in (key, entry["label"]):
+                self.ph_var.set(f"{entry['ph']:g}")
+                self.set_status(
+                    f"{entry['label']}: pH {entry['ph']:g} "
+                    f"(confianza {entry['confidence']}) — nominal, no medido"
+                )
+                return
+
+    def _window_from(self, low_var, high_var) -> Optional[tuple[float, float]]:
+        low, high = _number(low_var.get()), _number(high_var.get())
+        if low is None or high is None or high <= low:
+            return None
+        return (low, high)
+
+    def _export_tables(self) -> None:
+        from tkinter import filedialog
+
+        if not self.session.has_data:
+            self.warn("No hay nada que exportar", "Carga una medida primero.")
+            return
+        folder = filedialog.askdirectory(
+            title="Carpeta para las tablas", parent=self.root)
+        if not folder:
+            return
+        self._settings_from_widgets()
+        written = self.session.save_tables(folder)
+        self.flush_messages(self.session.messages)
+        if written:
+            self.set_status(f"Escritos {len(written)} archivos en {folder}")
 
     def _cycle_from_widget(self) -> Optional[int]:
         label = self.cycle_var.get()
@@ -1162,11 +1297,23 @@ class EchemApp(SectionApp):
             placeholder(ax, "Carga un voltamperograma", self.figure_palette)
             return
         result = self.session.result
+        drawn, label, why = [], "", ""
+        for curve in curves:
+            values, label, why = self.session.potential_axis(curve)
+            if np.allclose(values, curve.potential):
+                drawn.append(curve)
+                continue
+            shifted = replace(curve, potential=values)
+            drawn.append(shifted)
         plot_cv(
-            ax, curves, self.figure_palette,
+            ax, drawn, self.figure_palette,
             peaks=result.cv.peaks if result and result.cv else None,
             normalise_by_rate=bool(self.normalise_var.get()),
         )
+        if label:
+            ax.set_xlabel(label)
+        if why and "no se ha podido" in why:
+            self.session.log("warning", why)
 
     def _draw_rates(self, figure) -> None:
         from .plots_echem import plot_b_values, plot_dunn, plot_rate_capacitance
@@ -1314,6 +1461,16 @@ def _number(text: str) -> Optional[float]:
         return float(text)
     except (TypeError, ValueError):
         return None
+
+
+def _electrolyte_labels() -> list[str]:
+    """Names for the electrolyte box, in the table's own order.
+
+    Not sorted: the table is written with the common ones first, and an
+    alphabetical list puts H2SO4 above KOH for no reason anybody cares
+    about.
+    """
+    return [entry["label"] for entry in Electrode.electrolytes().values()]
 
 
 def _reference_keys() -> list[str]:

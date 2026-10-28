@@ -64,6 +64,26 @@ def _finite(name: str, values: np.ndarray) -> np.ndarray:
     return array
 
 
+#: Scales a potential axis can be drawn or exported on.
+#:
+#: **The measured one is first and is the default**, and that ordering is
+#: a decision. A conversion is a claim: to RHE it carries 59 mV per pH
+#: unit from a pH that is usually assumed rather than measured, and
+#: between two aqueous references it carries whatever the filling
+#: solution really was. What the instrument recorded carries nothing. So
+#: the axis says "vs Ag/AgCl" until somebody asks for something else, and
+#: when they do, the conversion goes in the label.
+POTENTIAL_SCALES: tuple[tuple[str, str], ...] = (
+    ("medido", "Como se midió (frente a la referencia)"),
+    ("RHE", "Frente a RHE (necesita el pH)"),
+    ("SHE", "Frente a SHE"),
+    ("Ag/AgCl_sat", "Frente a Ag/AgCl (KCl saturado)"),
+    ("Ag/AgCl_3M", "Frente a Ag/AgCl (KCl 3 M)"),
+    ("SCE", "Frente a calomelanos saturado"),
+    ("Hg/HgO_1M", "Frente a Hg/HgO (NaOH 1 M)"),
+)
+
+
 @dataclass
 class Electrode:
     """What the current has to be normalised by, and against what reference."""
@@ -94,6 +114,42 @@ class Electrode:
     possible at all — 1.0 V in a neutral aqueous electrolyte is ordinary,
     2.0 V is water splitting."""
     label: str = ""
+
+    @staticmethod
+    def electrolytes() -> dict[str, dict]:
+        """The table of common electrolytes, from ``echem.json``."""
+        return load_echem_database()["electrolytes"]
+
+    def use_electrolyte(self, key: str) -> str:
+        """Set :attr:`electrolyte` and :attr:`ph` from the table.
+
+        Returns what it did, including the caveat on that entry. The pH
+        is filled in rather than left blank because without it there is
+        no RHE scale and no overpotential, and it is **nominal**: a value
+        for a freshly made solution of that nominal concentration. For an
+        unbuffered salt it is barely even that, and the entry says so.
+        """
+        entry = self.electrolytes().get(key)
+        if entry is None:
+            self.electrolyte = key
+            return (f"«{key}» no está en la tabla de electrolitos, así que se "
+                    "guarda el texto y el pH se queda como esté")
+        self.electrolyte = entry["label"]
+        self.ph = float(entry["ph"])
+        return (f"{entry['label']}, pH {entry['ph']:g} ({entry['confidence']}). "
+                + entry.get("note", ""))
+
+    def use_disc(self, diameter_mm: float) -> float:
+        """Set :attr:`area_cm2` from a disc electrode's diameter.
+
+        The diameter is what is written on the electrode and what gets
+        measured; the area is what the normalisation needs, and squaring
+        a radius in the wrong unit is a factor of 100. A 3 mm glassy
+        carbon disc is 0.0707 cm².
+        """
+        radius = 0.1 * float(diameter_mm) / 2.0
+        self.area_cm2 = float(np.pi * radius ** 2)
+        return self.area_cm2
 
     def specific(self, value: float, basis: str = "mass") -> Optional[float]:
         """Normalise a quantity, or ``None`` if that basis is unknown."""
@@ -141,6 +197,43 @@ class Electrode:
             f"E(RHE) = E({entry['label']}) + {entry['vs_she']:.3f} + "
             f"{slope:.5f}·{self.ph:g} = E + {offset:.4f} V",
         )
+
+    def on_scale(
+        self, potential, scale: str = "medido"
+    ) -> tuple[np.ndarray, str, str]:
+        """``(valores, etiqueta del eje, explicación)`` on the chosen scale.
+
+        The one entry point a figure or an export should use, and the
+        reason it exists is that a refused conversion must not take the
+        figure with it. :meth:`to_rhe` and :meth:`to_reference` return
+        ``None`` when they cannot do the job — correctly, because a
+        guessed pH is 59 mV per unit of error — and a caller that forgets
+        to check draws nothing. This one **always returns usable
+        numbers**: on a refusal it falls back to the measured scale, says
+        so in the explanation, and labels the axis with what it actually
+        drew. A figure whose axis says one thing and whose numbers are
+        another is worse than a figure that was not converted.
+        """
+        values = np.asarray(potential, dtype=float)
+        data = load_echem_database()
+        table = data["reference_electrodes"]
+        # The SHORT name, not the catalogue label: an axis that reads
+        # "E / V vs Electrodo reversible de hidrógeno" is an axis nobody
+        # can fit on a figure, and everyone writes "vs RHE".
+        own = table.get(self.reference, {}).get("axis", self.reference)
+        measured = (values, f"E / V vs {own}", "los potenciales son los medidos")
+        if scale in ("", "medido", self.reference):
+            return measured
+        if scale == "RHE":
+            converted, why = self.to_rhe(values)
+        else:
+            converted, why = self.to_reference(values, scale)
+        if converted is None:
+            return (values, f"E / V vs {own}",
+                    f"no se ha podido pasar a {scale}: {why}. El eje se deja "
+                    "como se midió, que es lo único que no afirma nada")
+        label = table.get(scale, {}).get("axis", scale)
+        return converted, f"E / V vs {label}", why
 
     def to_reference(
         self, potential, target: str

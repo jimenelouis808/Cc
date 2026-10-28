@@ -170,13 +170,42 @@ contaminadas, las de 50 mV/s, donde la fuga es el 13 % de Q_ox:
 
 ## En el programa
 
-- La masa y el área se escriben en la tarjeta **Electrodo** de la barra
-  lateral y se aplican al cargar; la barra de estado dice ahora con qué
-  masa y qué área ha quedado el archivo, para que una masa en blanco se
-  vea al cargar y no tres pestañas después.
-- **Ciclo a analizar** es un desplegable nuevo al lado de la velocidad:
-  por defecto el último completo, y la lista marca los incompletos. La
-  elección se guarda con el proyecto.
+Todo lo de este informe se hace ahora desde la ventana, sin tocar código.
+
+**Entrada — tarjeta Electrodo.** Arranca en lo de este laboratorio:
+disco de carbono vítreo de 3 mm, Ag/AgCl de KCl saturado y KOH 0.5 M.
+
+- **Disco ⌀ (mm)** rellena el área; el área sigue editable para lo que no
+  sea un disco.
+- **Electrolito** es un desplegable (KOH 0.5/1/6 M, H₂SO₄ 0.5/1 M,
+  Na₂SO₄, tampón fosfato) que rellena el **pH** con el valor de
+  actividad, no con −log c. Sigue admitiendo texto libre, y entonces no
+  inventa ningún pH.
+- La **masa** no tiene valor por defecto a propósito, y la barra de
+  estado dice al cargar con qué masa y qué área ha quedado el archivo.
+- **Ciclo a analizar**: por defecto el último completo; la lista marca
+  los incompletos. Se guarda con el proyecto.
+
+**Ajustes — tarjeta Opciones.**
+
+- **Eje de potencial**: lo medido es la primera opción y el defecto.
+  RHE, SHE y cualquier otra referencia están debajo, y lo que se
+  convierta va escrito en la etiqueta del eje. (El Tafel convierte
+  siempre: un sobrepotencial se define frente a RHE.)
+- **Dunn: coeficientes ≥ 0**, **nº de potenciales**, y **E mínimo/máximo**.
+- **C: ventana mínima/máxima** — cambia el divisor de la capacitancia,
+  para citarla sobre una ventana declarada.
+- **Restar la corriente parásita** — quita de la serie la corriente que
+  mide el balance de carga, que es la prueba no circular de si el b
+  vuelve a 1.
+
+**Salida — botón «Exportar tablas…»**, que escribe en una carpeta
+`ciclos.csv` (ciclo a ciclo: duración, recorrido, Q_ox, Q_red, los tres
+convenios), `velocidades.csv`, `leyes.csv` (las tres leyes de i(ν) con
+sus R²), `dunn.csv` (k₁, k₂, las corrientes capacitivas de cada rama y
+dónde la separación no está definida) e `informe.txt`. Cada tabla lleva
+el potencial en la escala elegida, para que lo exportado y lo dibujado
+sean el mismo eje.
 
 ## Los archivos
 

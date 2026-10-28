@@ -2564,6 +2564,101 @@ programa de destino no podía usar. Ninguna es cosmética.
 - Se guarda en el proyecto (`ciclo_elegido`), por la misma razón que la
   masa: sin él la medida se reabre y ya no da el mismo número.
 
+## El eje de potencial es una ELECCIÓN, y el defecto es lo medido
+
+- `POTENTIAL_SCALES` empieza por «como se midió» y eso es una decisión,
+  no un orden alfabético. **Una conversión es una afirmación**: a RHE
+  carga 59 mV por unidad de pH de un pH que casi siempre se supone en
+  vez de medirse, y entre dos referencias acuosas carga el relleno que
+  de verdad tuviera la tuya. Lo que registró el equipo no afirma nada.
+- `Electrode.on_scale()` es la única puerta que deben usar una figura o
+  una exportación, y existe porque una conversión RECHAZADA no puede
+  llevarse la figura por delante. `to_rhe` y `to_reference` devuelven
+  `None` cuando no pueden —correctamente— y quien se olvide de
+  comprobarlo no dibuja nada. `on_scale` devuelve siempre números
+  usables: ante un rechazo cae a lo medido, lo dice, y **rotula el eje
+  con lo que de verdad dibujó**. Un eje que dice una cosa y unos números
+  que son otra es peor que no convertir.
+- La etiqueta usa el nombre CORTO (`axis` en `echem.json`), no el del
+  catálogo: «E / V vs Electrodo reversible de hidrógeno» no cabe en una
+  figura y nadie lo escribe así.
+- **El Tafel es la excepción y convierte siempre.** Un sobrepotencial se
+  define frente a RHE; ahí no hay elección que ofrecer.
+
+## Los electrolitos están en la tabla, con su pH y su reserva
+
+- `echem.json` lleva `electrolytes` y `Electrode.use_electrolyte()` lo
+  aplica. Rellena el pH porque sin él no hay escala RHE ni
+  sobrepotencial, y lo rellena **nominal**: el de una disolución recién
+  hecha de esa concentración nominal.
+- **El pH de un alcalino o un ácido concentrado sale de la ACTIVIDAD.**
+  KOH 0.5 M no es pH 13.70 sino 13.56 (γ± ≈ 0.73); H₂SO₄ 0.5 M no es
+  pH 0.0 sino ≈ 0.3, porque el primer protón está disociado del todo y
+  el segundo sólo en parte (Ka₂ = 0.012), así que [H⁺] = 0.51 M.
+- **Una sal neutra sin tamponar apenas tiene pH que citar.** El Na₂SO₄
+  se mueve durante la medida con cualquier reacción que consuma o libere
+  protones y con el CO₂ del aire, y su entrada lo dice con confianza
+  `low`. Un sobrepotencial frente a RHE calculado con ese pH supuesto no
+  significa nada.
+- Y el campo sigue siendo texto libre: un electrolito que no esté en la
+  tabla se guarda por su nombre y **no inventa un pH**.
+
+## Los defectos del electrodo son los de este laboratorio
+
+- Disco de carbono vítreo de 3 mm (0.0707 cm²), Ag/AgCl de KCl saturado
+  —no el de 3 M: están a 13 mV y el saturado es el que hay en el
+  banco— y KOH 0.5 M. Todos editables.
+- **El diámetro es lo que se mide; el área es lo que hace falta.**
+  `use_disc()` convierte, y elevar al cuadrado un radio en la unidad
+  equivocada es un factor de 100. El campo del área sigue editable para
+  lo que no sea un disco.
+- **La masa NO tiene defecto, a propósito.** No hay valor sensato, uno
+  equivocado es invisible, y uno en blanco hace desaparecer los F/g —
+  que es el modo de fallo que sí se ve. Y al cargar, la barra de estado
+  dice con qué masa y qué área ha quedado el archivo, porque antes eso
+  se descubría tres pestañas después.
+
+## Los ajustes del análisis son argumentos, no constantes
+
+- `analyse_sample` recibe `dunn_sweep`, `dunn_nonnegative`,
+  `dunn_points`, `dunn_window`, `capacitance_window` y
+  `subtract_parasitic`. Los seis cambian el número que sale sin cambiar
+  la medida, así que son decisiones — y van todos al texto del resultado,
+  porque **una decisión que nadie puede ver es indistinguible de un
+  fallo**.
+- `capacitance_window` cambia el DIVISOR, no la región que se integra.
+  Sirve para citar un valor sobre una ventana declarada; no es una forma
+  de dejar fuera un trozo del barrido.
+- `subtract_parasitic` quita de la serie la corriente que mide el
+  balance de carga, y sólo esa. **Restar la que ajusta
+  `compare_current_laws` sería circular**: se ajustó a i(ν), así que
+  Dunn después devuelve 100 % capacitivo por construcción, habiéndoselo
+  dicho. Va apagado por defecto: una corrección encendida por defecto
+  deja de verse.
+
+## Una velocidad repetida entra UNA vez en cada ajuste
+
+- `analyse_rate_study` deduplicaba y `dunn_analysis` no, así que la
+  repetición que hace de control de deriva —la que toda serie cuidadosa
+  tiene— entraba dos veces en Dunn y doblaba en silencio el peso de esa
+  velocidad. `unique_rates()` es ahora la misma función para los dos.
+- Se queda la ÚLTIMA de cada velocidad porque el orden de entrada es el
+  de medida: la última de una repetida es la que se midió DENTRO de la
+  serie, no antes. Su información está en `drift_check`, no en el ajuste.
+
+## Lo que se ve en pantalla tiene que poder salir en CSV
+
+- `save_tables()` escribe `ciclos.csv`, `velocidades.csv`, `leyes.csv`,
+  `dunn.csv` y el informe, en una sola llamada. **Una tabla que se lee
+  en pantalla y no se puede llevar a otro programa es medio resultado**,
+  y van juntas porque son un solo resultado: una capacitancia sin su
+  balance de carga es justo el número que este paquete demostró que no
+  es una capacitancia.
+- Las columnas están en `TABLE_COLUMNS`, fuera de la clase, para que la
+  cabecera del CSV y los valores no puedan separarse. Y la columna
+  `e_eje_v` lleva el potencial en la escala elegida, para que lo que se
+  exporta y lo que se dibuja sean el mismo eje.
+
 ## Controles de ajuste y de sesión
 
 - **Ligar no es fijar, y no es un atajo.** Un parámetro que los datos no

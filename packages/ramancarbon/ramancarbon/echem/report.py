@@ -23,7 +23,9 @@ from .capacitance import (
     specific,
 )
 from .curve import ChargeDischarge, Impedance, Voltammogram
-from .cv import CVResult, DunnAnalysis, RateStudy, analyse_cv, analyse_rate_study, dunn_analysis
+from .cv import (CVResult, DunnAnalysis, RateStudy, analyse_cv,
+                 analyse_rate_study, dunn_analysis, unique_rates,
+                 without_parasitic)
 from .eis import DRTResult, EISResult, analyse_eis, drt
 from .evaluate import CatalysisResult, StorageVerdict, analyse_catalysis, classify_storage
 from .curve import CurveError
@@ -47,6 +49,9 @@ class EchemResult:
     material quoting potentials against Ag/AgCl saturated and Ag/AgCl 3 M
     differ by 13 mV before anything physical happens."""
     dunn: Optional[DunnAnalysis] = None
+    parasitic_note: str = ""
+    """What was subtracted from the rate series, when anything was. Empty
+    means the series is as measured."""
     capacitance: Optional[CapacitanceComparison] = None
     """The same capacitance by every method that was measured. It is the
     disagreement between them that is informative, not any one of them."""
@@ -128,6 +133,11 @@ def analyse_sample(
     circuit_fixed: Optional[Sequence[str]] = None,
     non_faradaic: bool = False,
     dunn_sweep: str = "media",
+    dunn_nonnegative: bool = True,
+    dunn_points: int = 60,
+    dunn_window: Optional[tuple[float, float]] = None,
+    capacitance_window: Optional[tuple[float, float]] = None,
+    subtract_parasitic: bool = False,
     drt_regularisation: Optional[float] = None,
 ) -> EchemResult:
     """Analyse whatever measurements are available for one electrode.
@@ -136,6 +146,22 @@ def analyse_sample(
     of the three storage measurements were given and says how confident
     that makes it. Passing more raises the confidence rather than changing
     the criteria.
+
+    Parameters that are CHOICES rather than data
+    --------------------------------------------
+    ``dunn_sweep``, ``dunn_nonnegative``, ``dunn_points``, ``dunn_window``,
+    ``capacitance_window`` and ``subtract_parasitic`` all change the number
+    that comes out without changing the measurement. They are arguments
+    rather than constants because they are decisions, and they are
+    reported — every one of them ends up in the result's text — because a
+    decision nobody can see is indistinguishable from a bug.
+
+    ``subtract_parasitic`` removes, from the rate series only, the constant
+    anodic current that the CHARGE BALANCE measures. It exists to answer
+    "does b come back to 1 once the leak is gone?", and it only answers
+    that because the current comes from ``ΔQ`` against cycle duration,
+    which never looks at how ``i`` scales with ν. See
+    :func:`~ramancarbon.echem.cv.without_parasitic`.
     """
     result = EchemResult(name=name)
     for measurement in (cv, gcd, eis, catalysis_curve,
@@ -144,11 +170,29 @@ def analyse_sample(
             result.electrode = measurement.electrode
             break
     if cv is not None:
-        result.cv = analyse_cv(cv)
+        result.cv = analyse_cv(cv, window=capacitance_window)
         result.warnings.extend(f"CV: {w}" for w in result.cv.warnings)
     if rate_series:
         result.rates = analyse_rate_study(rate_series, non_faradaic=non_faradaic)
         result.warnings.extend(f"velocidades: {w}" for w in result.rates.warnings)
+        if subtract_parasitic:
+            leak = result.rates.leakage
+            if leak is None or leak.leakage_a <= 0.0:
+                result.warnings.append(
+                    "se pidió restar la corriente parásita y el balance de "
+                    "carga no encuentra ninguna (hacen falta tres velocidades "
+                    "y una fuga positiva), así que no se ha restado nada"
+                )
+            else:
+                rate_series, result.parasitic_note = without_parasitic(
+                    rate_series, leak.leakage_a)
+                result.rates = analyse_rate_study(
+                    rate_series, non_faradaic=non_faradaic)
+                result.warnings.append(
+                    "SERIE CORREGIDA: " + result.parasitic_note
+                    + ". Todo lo que sigue —retención, b, Dunn— es de la serie "
+                    "corregida, no de la medida"
+                )
     if gcd is not None:
         result.gcd = analyse_gcd(gcd)
         result.warnings.extend(f"GCD: {w}" for w in result.gcd.warnings)
@@ -179,9 +223,15 @@ def analyse_sample(
         )
         result.warnings.extend(f"{reaction}: {w}" for w in result.catalysis.warnings)
 
+    # The same de-duplication the rate study does. Without it a repeated
+    # scan rate — the drift control that every careful series has — goes
+    # into Dunn twice and silently doubles that rate's weight.
+    rate_series = unique_rates(rate_series) if rate_series else rate_series
     if rate_series and len(rate_series) >= 3:
         try:
-            result.dunn = dunn_analysis(rate_series, sweep=dunn_sweep)
+            result.dunn = dunn_analysis(
+                rate_series, sweep=dunn_sweep, points=dunn_points,
+                window=dunn_window, nonnegative=dunn_nonnegative)
             result.warnings.extend(f"Dunn: {w}" for w in result.dunn.warnings)
         except CurveError as error:
             result.warnings.append(f"Dunn: {error}")

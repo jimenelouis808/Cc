@@ -405,6 +405,161 @@ def test_a_leak_correction_has_to_come_from_outside_the_rate_fit():
     assert leakage_from_rates(fixed).leakage_a == pytest.approx(0.0, abs=0.05 * leak)
 
 
+def test_an_electrolyte_preset_fills_the_ph_it_needs():
+    """Without a pH there is no RHE scale and no overpotential, and a pH
+    typed from memory is 59 mV per unit of error downstream."""
+    electrode = Electrode(reference="Ag/AgCl_sat")
+    note = electrode.use_electrolyte("KOH_0.5M")
+    assert electrode.electrolyte == "KOH 0.5 M"
+    assert electrode.ph == pytest.approx(13.56)
+    assert "nominal" in note.lower()
+
+    acid = Electrode()
+    acid.use_electrolyte("H2SO4_0.5M")
+    assert acid.ph == pytest.approx(0.3)
+
+    unknown = Electrode(ph=7.0)
+    unknown.use_electrolyte("mi mezcla rara")
+    assert unknown.electrolyte == "mi mezcla rara"
+    assert unknown.ph == 7.0, "un electrolito desconocido no inventa un pH"
+
+
+def test_a_disc_diameter_gives_its_area():
+    electrode = Electrode()
+    assert electrode.use_disc(3.0) == pytest.approx(0.070686, rel=1e-4)
+    assert electrode.area_cm2 == pytest.approx(0.070686, rel=1e-4)
+
+
+def test_the_potential_axis_defaults_to_what_was_measured():
+    electrode = Electrode(reference="Ag/AgCl_sat", ph=13.56)
+    measured = np.array([-0.6, 0.4])
+
+    values, label, _ = electrode.on_scale(measured)
+    assert np.allclose(values, measured)
+    assert "Ag/AgCl" in label
+
+    values, label, why = electrode.on_scale(measured, "RHE")
+    assert values == pytest.approx(measured + 0.9992, abs=1e-3)
+    assert label == "E / V vs RHE"
+    assert "0.9992" in why
+
+
+def test_a_refused_conversion_still_returns_a_usable_axis():
+    """to_rhe correctly returns None without a pH, and a figure that
+    forgets to check draws nothing. This one falls back and says so."""
+    electrode = Electrode(reference="Ag/AgCl_sat", ph=None)
+    measured = np.array([-0.6, 0.4])
+    values, label, why = electrode.on_scale(measured, "RHE")
+    assert np.allclose(values, measured)
+    assert "Ag/AgCl" in label, "la etiqueta tiene que decir lo que se dibujó"
+    assert "no se ha podido" in why
+
+
+def test_a_repeated_rate_enters_a_fit_once():
+    from ramancarbon.echem.cv import unique_rates
+
+    series = [
+        make_cv_demo("condensador", capacitance=0.05, scan_rate=rate,
+                     seed=1).cycles()[-1]
+        for rate in (0.05, 0.005, 0.01, 0.02, 0.05)
+    ]
+    kept = unique_rates(series)
+    assert len(kept) == 4
+    assert kept[0] is series[-1], "se queda la ÚLTIMA de cada velocidad"
+
+
+def test_the_analysis_choices_reach_the_result():
+    from ramancarbon.echem.report import analyse_sample
+    from ramancarbon.examples.demo_data import cv_rate_series
+
+    series = cv_rate_series("hibrido", seed=2)
+    coarse = analyse_sample(rate_series=series, dunn_points=12)
+    assert coarse.dunn.potentials.size == 12
+
+    free = analyse_sample(rate_series=series, dunn_nonnegative=False)
+    constrained = analyse_sample(rate_series=series)
+    assert np.all(constrained.dunn.k1_anodic >= 0.0)
+    assert free.dunn.k1.shape == constrained.dunn.k1.shape
+
+
+def test_subtracting_the_parasitic_current_is_announced():
+    from ramancarbon.echem.report import analyse_sample
+
+    leak = 5e-4
+    series = []
+    for rate in (0.005, 0.01, 0.02, 0.05):
+        curve = make_cv_demo("condensador", capacitance=0.05,
+                             scan_rate=rate, seed=1).cycles()[-1]
+        rising = np.gradient(curve.potential) > 0
+        curve.current = curve.current + leak * rising
+        series.append(curve)
+
+    plain = analyse_sample(rate_series=series)
+    assert plain.parasitic_note == ""
+    fixed = analyse_sample(rate_series=series, subtract_parasitic=True)
+    assert "balance de carga" in fixed.parasitic_note
+    assert any("SERIE CORREGIDA" in w for w in fixed.warnings)
+    # The corrected series must be flatter in rate than the measured one:
+    # that is the whole point of being able to ask.
+    before = plain.rates.capacitances
+    after = fixed.rates.capacitances
+    assert after[-1] / after[0] > before[-1] / before[0]
+
+
+def test_the_session_starts_on_the_electrode_most_runs_use():
+    """Defaults so the common case needs no typing — and the mass is
+    deliberately NOT one of them: there is no sensible value, a wrong one
+    is invisible, and a blank one makes the F/g disappear, which is the
+    failure that can be seen."""
+    from ramancarbon.gui.echem_state import EchemSession
+
+    electrode = EchemSession().electrode
+    assert electrode.reference == "Ag/AgCl_sat"
+    assert electrode.area_cm2 == pytest.approx(0.070686, rel=1e-4)
+    assert electrode.electrolyte == "KOH 0.5 M"
+    assert electrode.ph == pytest.approx(13.56)
+    assert electrode.mass_mg is None
+
+
+def test_the_session_exports_every_table_it_shows(tmp_path):
+    from ramancarbon.gui.echem_state import TABLE_COLUMNS, EchemSession
+    from ramancarbon.examples.demo_data import cv_rate_series
+
+    session = EchemSession()
+    session.electrode.mass_mg = 1.0
+    session.rate_series = list(cv_rate_series("hibrido", seed=2))
+    session.cv = session.rate_series[-1]
+    session.retag_electrode()
+    session.analyse()
+
+    written = session.save_tables(tmp_path)
+    assert "informe.txt" in written
+    for name, columns in TABLE_COLUMNS.items():
+        path = tmp_path / f"{name}.csv"
+        assert path.exists(), name
+        lines = path.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == ",".join(columns)
+        assert len(lines) > 1
+        assert all(len(row.split(",")) == len(columns) for row in lines[1:])
+
+
+def test_the_session_draws_the_axis_the_user_chose():
+    from ramancarbon.gui.echem_state import EchemSession
+
+    session = EchemSession()
+    session.cv = make_cv_demo("condensador", seed=1)
+    session.retag_electrode()
+
+    values, label, _ = session.potential_axis(session.cv)
+    assert np.allclose(values, session.cv.potential)
+    assert "Ag/AgCl" in label
+
+    session.potential_scale_choice = "RHE"
+    values, label, _ = session.potential_axis(session.cv)
+    assert label == "E / V vs RHE"
+    assert np.all(values > session.cv.potential)
+
+
 def test_a_repeat_at_the_same_rate_is_used_as_a_drift_control():
     from ramancarbon.echem.cv import analyse_rate_study, drift_check
 

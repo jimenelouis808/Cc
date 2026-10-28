@@ -1318,6 +1318,29 @@ def without_parasitic(
     )
 
 
+def unique_rates(curves: Sequence[Voltammogram]) -> list[Voltammogram]:
+    """One curve per scan rate, keeping the LAST of each.
+
+    The input order is the measurement order, so the last of a repeated
+    rate is the one measured inside the series rather than before it.
+    Keeping both would put the same rate twice into a fit whose whole job
+    is to describe how things change WITH the rate: the repeat adds no
+    information to the line it is collinear with, and it quietly doubles
+    that rate's weight. Its information is in :func:`drift_check`.
+    """
+    kept: list[Voltammogram] = []
+    for curve in curves:
+        for index, existing in enumerate(kept):
+            if existing.scan_rate > 0.0 and abs(
+                curve.scan_rate / existing.scan_rate - 1.0
+            ) <= SAME_RATE_TOLERANCE:
+                kept[index] = curve
+                break
+        else:
+            kept.append(curve)
+    return kept
+
+
 def drift_check(curves: Sequence[Voltammogram]) -> Optional[DriftCheck]:
     """The repeat in a rate series, if there is one.
 
@@ -1385,19 +1408,7 @@ def analyse_rate_study(
     # order; everything after this works on the rate-sorted series.
     drift = drift_check(curves)
 
-    unique: list[Voltammogram] = []
-    for curve in curves:
-        replaced = False
-        for index, kept in enumerate(unique):
-            if kept.scan_rate > 0.0 and abs(
-                curve.scan_rate / kept.scan_rate - 1.0
-            ) <= SAME_RATE_TOLERANCE:
-                unique[index] = curve
-                replaced = True
-                break
-        if not replaced:
-            unique.append(curve)
-
+    unique = unique_rates(curves)
     ordered = sorted(unique, key=lambda c: c.scan_rate)
     study = RateStudy(rates=[c.scan_rate for c in ordered], drift=drift)
     if drift is not None:

@@ -85,12 +85,60 @@ def _typical_current(curve: ChargeDischarge) -> float:
     return float(np.median(magnitude)) if magnitude.size else 0.0
 
 
+#: Diameter in mm of the disc electrode most measurements here are made
+#: on. It is a default, not an assumption: the field is editable and the
+#: area it produces is shown.
+DEFAULT_DISC_MM = 3.0
+
+#: Electrolyte the electrode card starts on, as a key of the table in
+#: ``echem.json``.
+DEFAULT_ELECTROLYTE = "KOH_0.5M"
+
+#: Reference the electrode card starts on. Saturated KCl rather than
+#: 3 M: they are 13 mV apart and the saturated one is what is usually on
+#: the bench.
+DEFAULT_REFERENCE = "Ag/AgCl_sat"
+
+
+#: Columns of the tables :meth:`save_tables` writes, in order. Kept
+#: here rather than built inline so the CSV header and the values
+#: cannot drift apart.
+TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "ciclos": ("archivo", "mv_s", "ciclo", "completo", "puntos",
+               "duracion_s", "ventana_v", "recorrido_v", "q_ox_c",
+               "q_red_c", "eficiencia", "c_lazo_f", "c_lazo_f_g",
+               "c_rama_f", "c_red_f", "c_red_f_g", "c_red_mf_cm2"),
+    "velocidades": ("mv_s", "c_lazo_f", "c_lazo_f_g", "c_red_f",
+                    "c_red_f_g", "eficiencia", "duracion_ciclo_s",
+                    "q_ox_c", "q_red_c", "delta_q_c"),
+    "leyes": ("e_v", "e_eje_v", "b", "r2_potencia", "r2_dunn", "r2_fuga",
+              "k_cap_f", "i_par_a", "empate"),
+    "dunn": ("e_v", "e_eje_v", "k1_a_por_vs", "k2_a_por_sqrtvs", "r2",
+             "i_cap_anodica_a", "i_cap_catodica_a", "no_definida"),
+}
+
+
+def _default_electrode() -> Electrode:
+    """A glassy carbon disc in the electrolyte most of these runs use.
+
+    Defaults exist so that the common case needs no typing, and every one
+    of these is editable in the sidebar. The mass is deliberately NOT
+    defaulted: there is no sensible value for it, a wrong one is
+    invisible, and a blank one makes the F/g disappear, which is the
+    failure that can be seen.
+    """
+    electrode = Electrode(reference=DEFAULT_REFERENCE)
+    electrode.use_disc(DEFAULT_DISC_MM)
+    electrode.use_electrolyte(DEFAULT_ELECTROLYTE)
+    return electrode
+
+
 @dataclass
 class EchemSession:
     """Everything the electrochemistry section knows."""
 
     name: str = "muestra"
-    electrode: Electrode = field(default_factory=Electrode)
+    electrode: Electrode = field(default_factory=lambda: _default_electrode())
     cv: Optional[Voltammogram] = None
     rate_series: list[Voltammogram] = field(default_factory=list)
     gcd: Optional[ChargeDischarge] = None
@@ -144,6 +192,28 @@ class EchemSession:
     number. The choice is pushed onto the curves themselves, so it
     survives into every capacitance the package computes and into a saved
     project."""
+    potential_scale_choice: str = "medido"
+    """Which scale the potential axes are drawn and exported on. The
+    MEASURED one by default: a conversion is a claim and the measured
+    numbers are not."""
+    dunn_nonnegative: bool = True
+    """Hold the Dunn coefficients at or above zero, which is what the
+    method means. Off only to see the unconstrained fit."""
+    dunn_points: int = 60
+    """How many potentials the Dunn separation is run at."""
+    dunn_window: Optional[tuple[float, float]] = None
+    """Potential range for Dunn. ``None`` is the range common to every
+    curve, which is the only honest default."""
+    capacitance_window: Optional[tuple[float, float]] = None
+    """Window the CV capacitance is divided by. ``None`` is the measured
+    one. Setting it narrower than the sweep does NOT re-integrate over
+    the narrower window — it changes the divisor — so it is for quoting a
+    capacitance over a stated window, not for excluding a region."""
+    subtract_parasitic: bool = False
+    """Remove the constant anodic current the charge balance measures
+    from the rate series before b and Dunn. Off by default because it is
+    a correction, and a correction that is on by default stops being
+    visible."""
     non_faradaic: bool = False
     """Whether the rate study's window was chosen free of faradaic current.
     It is off by default because most windows are not, and claiming
@@ -368,6 +438,11 @@ class EchemSession:
             drt_regularisation=self.drt_regularisation,
             non_faradaic=self.non_faradaic,
             dunn_sweep=self.dunn_sweep,
+            dunn_nonnegative=self.dunn_nonnegative,
+            dunn_points=self.dunn_points,
+            dunn_window=self.dunn_window,
+            capacitance_window=self.capacitance_window,
+            subtract_parasitic=self.subtract_parasitic,
         )
         for warning in self.result.warnings:
             self.log("warning", warning)
@@ -975,6 +1050,131 @@ class EchemSession:
             "borran: guárdate uno con el mismo nombre para sustituirlo",
         )
         return False
+
+    def potential_axis(self, curve) -> tuple[np.ndarray, str, str]:
+        """``(valores, etiqueta, explicación)`` on the chosen scale."""
+        return curve.electrode.on_scale(curve.potential,
+                                        self.potential_scale_choice)
+
+    def table_rows(self, which: str) -> list[list]:
+        """One of :attr:`TABLE_COLUMNS` as rows, or ``[]``.
+
+        Everything the voltammetry tabs show, as numbers rather than as
+        formatted strings: a table you can read on screen and cannot take
+        to a plotting program is half a result.
+        """
+        from ..echem.cv import (capacitance, compare_current_laws,
+                                coulombic_efficiency, elapsed_time,
+                                integrate_charge, reversible_capacitance)
+
+        curves = [c for c in ([self.cv] + list(self.rate_series))
+                  if c is not None]
+        if not curves:
+            return []
+        shift = 0.0
+        if curves:
+            values, _, _ = self.potential_axis(curves[0])
+            shift = float(values[0] - curves[0].potential[0])
+
+        rows: list[list] = []
+        if which == "ciclos":
+            for curve in curves:
+                complete = {c.name for c in curve.complete_cycles()}
+                for index, cycle in enumerate(curve.cycles(), start=1):
+                    try:
+                        time, _ = elapsed_time(cycle)
+                        oxidation, absolute, span = integrate_charge(cycle)
+                        loop, branch = capacitance(cycle)
+                        reduction = reversible_capacitance(cycle)
+                    except CurveError:
+                        continue
+                    rows.append([
+                        curve.name, 1e3 * curve.scan_rate, index,
+                        cycle.name in complete, cycle.n, float(time[-1]),
+                        cycle.span, cycle.traversed, oxidation,
+                        absolute - oxidation,
+                        (absolute - oxidation) / oxidation if oxidation else None,
+                        loop.farads, loop.specific_f_per_g, branch.farads,
+                        reduction.farads, reduction.specific_f_per_g,
+                        None if reduction.specific_f_per_cm2 is None
+                        else 1e3 * reduction.specific_f_per_cm2,
+                    ])
+        elif which == "velocidades":
+            for curve in sorted(curves, key=lambda c: c.scan_rate):
+                try:
+                    cycle, _ = curve.reporting_cycle()
+                    time, _ = elapsed_time(cycle)
+                    oxidation, absolute, _ = integrate_charge(cycle)
+                    loop, _ = capacitance(curve)
+                    reduction = reversible_capacitance(curve)
+                except CurveError:
+                    continue
+                rows.append([
+                    1e3 * curve.scan_rate, loop.farads, loop.specific_f_per_g,
+                    reduction.farads, reduction.specific_f_per_g,
+                    coulombic_efficiency(curve), float(time[-1]), oxidation,
+                    absolute - oxidation, 2.0 * oxidation - absolute,
+                ])
+        elif which == "leyes":
+            for law in compare_current_laws(self.rate_series or curves):
+                rows.append([
+                    law.potential, law.potential + shift, law.b,
+                    law.r_squared.get("potencia"), law.r_squared.get("dunn"),
+                    law.r_squared.get("fuga"), law.capacitance_f,
+                    law.leakage_a, not law.decisive,
+                ])
+        elif which == "dunn":
+            analysis = self.result.dunn if self.result else None
+            if analysis is None:
+                return []
+            fastest = max(self.rate_series or curves, key=lambda c: c.scan_rate)
+            try:
+                cycle, _ = fastest.reporting_cycle()
+                anodic, cathodic, exceeded = analysis.capacitive_inside(cycle)
+            except CurveError:
+                return []
+            for index, potential in enumerate(analysis.potentials):
+                rows.append([
+                    float(potential), float(potential) + shift,
+                    float(analysis.k1[index]), float(analysis.k2[index]),
+                    float(analysis.r_squared[index]), float(anodic[index]),
+                    float(cathodic[index]), bool(exceeded[index]),
+                ])
+        return rows
+
+    def save_tables(self, folder: str | Path) -> list[str]:
+        """Write every voltammetry table as CSV, plus the report.
+
+        Returns the names written. One call rather than four buttons
+        because the four tables are one result: a capacitance without its
+        charge balance is the number this package spent a week showing is
+        not a capacitance.
+        """
+        target = Path(folder)
+        target.mkdir(parents=True, exist_ok=True)
+        written: list[str] = []
+        for which, columns in TABLE_COLUMNS.items():
+            rows = self.table_rows(which)
+            if not rows:
+                continue
+            path = target / f"{which}.csv"
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(",".join(columns) + "\n")
+                for row in rows:
+                    handle.write(",".join(
+                        "" if value is None else
+                        (f"{value:.6g}" if isinstance(value, float) else str(value))
+                        for value in row) + "\n")
+            written.append(path.name)
+        text = self.report()
+        if text:
+            (target / "informe.txt").write_text(text, encoding="utf-8")
+            written.append("informe.txt")
+        if not written:
+            self.log("error", "no hay nada que exportar: carga una medida")
+        else:
+            self.log("info", f"escritos en {target}: " + ", ".join(written))
+        return written
 
     def report(self) -> str:
         if self.result is None:
