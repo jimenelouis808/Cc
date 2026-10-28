@@ -34,18 +34,56 @@ from scipy.signal import find_peaks as _scipy_find_peaks
 from scipy.signal import peak_widths as _peak_widths
 
 from ..core.compat import trapezoid
-from .curve import CurveError, Voltammogram, load_echem_database
+from .curve import CurveError, Electrode, Voltammogram, load_echem_database
 
 #: Minimum span in scan rate, as a ratio, for a b-value to mean anything.
 MIN_RATE_SPAN = 8.0
 
 #: Fraction of the potential window trimmed at each end before integrating.
-#: The switching transient at a vertex is instrument response, not sample
-#: current, and including it inflates the capacitance of a fast scan.
-VERTEX_TRIM = 0.02
+#:
+#: **Zero, and deliberately.** The received advice is to trim the vertices
+#: because the potentiostat reverses in a finite time and the spike there
+#: is instrument response. That is true of a slow acquisition; it is not
+#: true of a modern averaged record, and trimming one costs real charge.
+#: Measured on the user's files — 2000 points per cycle, ``<I>`` averaged
+#: — there is no spike at all: the current is smooth through the vertex
+#: and *falls* just after it, so a 2 % trim removed 7.5 % of the
+#: capacitance at 5 mV/s and 2.9 % at 50 mV/s. The size of that loss
+#: depends on how the sample's own current is distributed across the
+#: window, which makes it a per-sample bias, not a correction.
+#:
+#: What replaces it is a measurement: :func:`vertex_transients` marks the
+#: points that really are instrument response and nothing else is
+#: discarded. Pass ``trim=`` explicitly to integrate a trimmed window
+#: anyway.
+VERTEX_TRIM = 0.0
+
+#: A point is a switching transient if its |i| exceeds this multiple of
+#: the median |i| of its own neighbourhood. A real vertex on these files
+#: scores about 1.0; the charging spike left by stepping out of the
+#: previous experiment scored 30.
+TRANSIENT_FACTOR = 3.0
+
+#: Size of that neighbourhood, and how close to a turning point a
+#: transient has to be, as a fraction of the record. Away from a vertex a
+#: large current is a redox peak.
+TRANSIENT_REACH = 0.01
 
 #: Minimum prominence of a redox peak, relative to the mean |current|.
 PEAK_PROMINENCE = 0.08
+
+#: How far ``|q_cat|/q_an`` may stray from 1 before the two capacitance
+#: conventions are reported as disagreeing for a physical reason.
+BALANCE_TOLERANCE = 0.02
+
+#: Two voltammograms count as being at the same scan rate when their
+#: rates agree within this fraction. EC-Lab writes 49.99 mV/s for a
+#: 50 mV/s setting, so an exact comparison finds no repeats at all.
+SAME_RATE_TOLERANCE = 0.02
+
+#: A repeat at the same scan rate that differs by more than this fraction
+#: is the electrode changing, not scatter.
+DRIFT_TOLERANCE = 0.05
 
 
 @dataclass
@@ -176,40 +214,201 @@ class CVResult:
         return "\n".join(lines)
 
 
+#: A gap bigger than this many sampling steps is a join between
+#: disjoint runs, not sweeping, so it takes no time and carries no
+#: charge. The measured case is a thousand steps wide, so the exact
+#: value is not a judgement call.
+JOIN_STEPS = 10.0
+
+
+def elapsed_time(curve: Voltammogram) -> tuple[np.ndarray, str]:
+    """``(t, origen)``: the time axis to integrate against, in s.
+
+    The instrument's own clock when the file carries one, and
+    ``∫|dE|/ν`` only when it does not. That identity holds for a single
+    uninterrupted sweep and for nothing else: any subset of a
+    voltammogram — one branch, a trimmed window, a cycle whose counter
+    started mid-sweep — is two or more disjoint runs, and the step
+    between two runs is a potential the electrode never swept.
+
+    Either axis is then **flattened at its joins**: a gap far larger than
+    the sampling interval is set to zero duration, so the trapezoid
+    across it contributes nothing. Measured on a real 50 mV/s cycle, the
+    anodic branch held one 0.9998 V discontinuity and came back as
+    39.99 s of sweeping instead of 20.00 — which is why the two
+    capacitance conventions, which have to agree, were returning 5.6 and
+    11.1 F/g for the same curve.
+    """
+    if curve.time is not None and curve.time.size == curve.n:
+        axis = np.asarray(curve.time, dtype=float)
+        axis = axis - float(axis[0])
+        origin = "reloj del instrumento"
+    else:
+        axis = np.concatenate(
+            ([0.0], np.cumsum(np.abs(np.diff(curve.potential))))
+        ) / curve.scan_rate
+        origin = "reconstruido de ∫|dE|/ν"
+
+    gap = np.diff(axis)
+    typical = float(np.median(gap)) if gap.size else 0.0
+    if typical > 0.0:
+        joins = gap > JOIN_STEPS * typical
+        if joins.any():
+            axis = np.concatenate(([0.0], np.cumsum(np.where(joins, 0.0, gap))))
+            origin += f", {int(joins.sum())} empalme(s) descontado(s)"
+    return axis, origin
+
+
+def vertex_transients(curve: Voltammogram) -> tuple[np.ndarray, str]:
+    """``(máscara, motivo)``: the points that are instrument response.
+
+    A switching transient is a **discontinuity** in the current next to a
+    turning point: the potentiostat reverses, the double layer is
+    recharged in a few milliseconds, and the current falls back by a
+    large factor within one or two samples. Both halves of that sentence
+    are needed, and the first one is the one that is easy to get wrong.
+
+    Testing only "is |i| large here" fails, because at a slow scan the
+    sample's own current is largest exactly at the ends of the window —
+    that is where the oxidation sets in. On the user's 5 mV/s file the
+    current near the vertices reaches 6 times the cycle's median while
+    rising perfectly smoothly, and a magnitude test discarded 62 real
+    points and 8.7 % of the capacitance with them. What separates the two
+    is the shape: a transient stands apart from the points on either side
+    of it, a rising edge does not.
+
+    So each candidate is compared with the median of its own
+    neighbourhood, with its immediate neighbours left out so that a
+    one-to-three-point spike cannot defend itself. A smooth edge scores
+    about 1 and is kept; the charging spike left by stepping out of the
+    previous experiment scored 30 and is dropped.
+
+    The mask is ``True`` where a point is to be discarded. On the user's
+    reporting cycles it is empty, and the reason says so.
+    """
+    size = curve.n
+    magnitude = np.abs(curve.current)
+    if float(np.median(magnitude)) <= 0.0:
+        return np.zeros(size, dtype=bool), "corriente nula"
+
+    direction = np.sign(np.diff(curve.potential))
+    direction[direction == 0] = 1
+    turns = np.flatnonzero(np.diff(direction) != 0) + 1
+    edges = np.concatenate(([0], turns, [size - 1]))
+    reach = max(3, int(round(TRANSIENT_REACH * size)))
+
+    candidates: set[int] = set()
+    for edge in edges:
+        candidates.update(range(max(0, edge - reach), min(size, edge + reach + 1)))
+
+    mask = np.zeros(size, dtype=bool)
+    worst = 0.0
+    for index in sorted(candidates):
+        before = magnitude[max(0, index - reach):max(0, index - 1)]
+        after = magnitude[index + 2:index + 2 + reach]
+        neighbourhood = np.concatenate([before, after])
+        if neighbourhood.size < 3:
+            continue
+        reference = float(np.median(neighbourhood))
+        if reference <= 0.0:
+            continue
+        ratio = float(magnitude[index]) / reference
+        worst = max(worst, ratio)
+        if ratio > TRANSIENT_FACTOR:
+            mask[index] = True
+
+    if not mask.any():
+        return mask, (
+            f"sin transitorio de conmutación: en los vértices el |i| más "
+            f"destacado es {worst:.2f} veces la mediana de su propio "
+            f"entorno, por debajo del umbral de {TRANSIENT_FACTOR:g}, así "
+            f"que no se recorta nada"
+        )
+    return mask, (
+        f"{int(mask.sum())} punto(s) descartados junto a un vértice por "
+        f"destacar más de {TRANSIENT_FACTOR:g} veces sobre su entorno "
+        f"(máximo {worst:.1f} veces): respuesta del instrumento, no de la "
+        f"muestra"
+    )
+
+
 def integrate_charge(
-    curve: Voltammogram, trim: float = VERTEX_TRIM
+    curve: Voltammogram, trim: float = VERTEX_TRIM, whole_file: bool = False
 ) -> tuple[float, float, float]:
     """``(anodic charge, absolute loop charge, integrated span)`` in C and V.
 
-    ``q = ∫ i dt = ∫ i dE / ν``. The ends of the window are trimmed by
-    ``trim`` of the span: at a vertex the potentiostat reverses in a finite
-    time and the current spike there is instrument response, not sample
-    current, and it inflates the capacitance of a fast scan by several per
-    cent.
+    ``q = ∫ i dt``, against the clock of :func:`elapsed_time`. Points that
+    :func:`vertex_transients` identifies as instrument response are
+    dropped; ``trim`` additionally removes that fraction of the window at
+    each vertex and defaults to nothing — :data:`VERTEX_TRIM` says why.
+
+    **One cycle, not the file.** A multi-cycle record is integrated over
+    its reporting cycle (:meth:`Voltammogram.reporting_cycle`). Before
+    this, the charge was accumulated over every cycle in the array and
+    divided by ONE window, so the capacitance came out multiplied by the
+    number of cycles — measured on a real four-cycle file at 50 mV/s,
+    22.77 F/g against the 5.65–5.71 F/g its individual cycles give, a
+    factor of 4.03. Nothing in the result said how many cycles the file
+    held, so the number looked like any other number.
+
+    ``whole_file=True`` restores the old behaviour, for the caller who
+    really does want the charge passed over the whole record. It is not
+    a capacitance.
     """
-    low, high = curve.window
-    margin = trim * (high - low)
-    inside = (curve.potential >= low + margin) & (curve.potential <= high - margin)
-    if inside.sum() < 10:
-        inside = np.ones(curve.n, dtype=bool)
+    if not whole_file:
+        curve, _ = curve.reporting_cycle()
+    keep = ~vertex_transients(curve)[0]
+    if trim > 0.0:
+        low, high = curve.window
+        margin = trim * (high - low)
+        keep &= (curve.potential >= low + margin) & (curve.potential <= high - margin)
+    if keep.sum() < 10:
+        keep = np.ones(curve.n, dtype=bool)
+    curve = curve._subset(keep, "integrado")
 
-    potential = curve.potential[inside]
-    current = curve.current[inside]
-    time = np.abs(np.concatenate(([0.0], np.cumsum(np.abs(np.diff(potential))))))
-    time = time / curve.scan_rate
-
+    time, _ = elapsed_time(curve)
+    current = curve.current
     anodic = np.where(current > 0.0, current, 0.0)
     # The span actually integrated, which is what the charge must be
     # divided by. Trimming the vertices and then dividing by the FULL
     # window makes every capacitance 2 x trim too small — 4 % with the
-    # default, a systematic error that looks like a real difference
+    # old default, a systematic error that looks like a real difference
     # between samples measured with different vertex settings.
-    span = float(potential.max() - potential.min())
+    span = float(curve.potential.max() - curve.potential.min())
     return (
         float(trapezoid(anodic, time)),
         float(trapezoid(np.abs(current), time)),
         span,
     )
+
+
+def coulombic_efficiency(curve: Voltammogram) -> Optional[float]:
+    """``Q_red / Q_ox`` over the reporting cycle, or ``None``.
+
+    Total reduction charge against total oxidation charge, by the sign of
+    the current and not by which sweep it was on — a current that stays
+    anodic past the vertex is oxidation, whichever direction the potential
+    is going.
+
+    This is the first number to look at before quoting a capacitance,
+    because a capacitor returns what it takes: 1.00 is the ideal, and
+    whatever is missing was spent on something irreversible. On the user's
+    rate series it runs 0.48 at 5 mV/s, 0.69 at 10, 0.82 at 20 and
+    0.84–0.90 at 50 — at the slow end **half the charge does not come
+    back**, so half of what the integral calls capacitance is an
+    irreversible reaction and the F/g figure describes that reaction as
+    much as the double layer.
+
+    It also explains, without being equal to it, the gap between the two
+    conventions of :func:`capacitance`: both are computed from an
+    unbalanced loop, and neither convention can repair it.
+    """
+    curve, _ = curve.reporting_cycle()
+    anodic, absolute, _ = integrate_charge(curve)
+    cathodic = absolute - anodic
+    if anodic <= 0.0:
+        return None
+    return cathodic / anodic
 
 
 def capacitance(
@@ -221,7 +420,11 @@ def capacitance(
     separately so that a mismatch — which happens when the loop is not
     closed, or when one branch has a faradaic contribution the other lacks
     — is visible instead of averaged away.
+
+    Computed over ONE cycle, the last complete one, and which one is on
+    the result's ``note``. See :func:`integrate_charge`.
     """
+    curve, cycle_note = curve.reporting_cycle()
     _, absolute, integrated_span = integrate_charge(curve)
     if window is not None:
         low, high = window
@@ -239,6 +442,25 @@ def capacitance(
     except CurveError:
         sweep_value = loop_value
 
+    # The two conventions agree only on a charge-balanced loop. When they
+    # do not, the gap IS the imbalance, and saying so is the whole point
+    # of computing both: it is a property of the sample, not a numerical
+    # disagreement to be split.
+    efficiency = coulombic_efficiency(curve)
+    if efficiency is not None and abs(1.0 - efficiency) > BALANCE_TOLERANCE:
+        gap = 100.0 * (sweep_value / loop_value - 1.0) if loop_value else 0.0
+        note = (
+            f"eficiencia coulómbica Q_red/Q_ox = {efficiency:.3f}: el lazo NO "
+            f"está equilibrado. Un condensador devuelve lo que toma, así que "
+            f"el {100.0 * (1.0 - efficiency):.0f} % que falta se gastó en algo "
+            f"irreversible y entra en esta integral igual que la doble capa: "
+            f"la cifra en F/g describe esa reacción tanto como el "
+            f"almacenamiento. Es también el origen del {gap:+.1f} % que "
+            f"separa los dos convenios, y ningún convenio lo arregla. El del "
+            f"lazo cerrado, que promedia las dos ramas, es el conservador"
+        )
+        cycle_note = f"{cycle_note}. {note}" if cycle_note else note
+
     electrode = curve.electrode
     results = []
     for value, convention in (
@@ -252,6 +474,7 @@ def capacitance(
                 specific_f_per_g=electrode.specific(value, "mass"),
                 specific_f_per_cm2=electrode.specific(value, "area"),
                 specific_f_per_cm3=electrode.specific(value, "volume"),
+                note=cycle_note,
             )
         )
     return results[0], results[1]
@@ -466,6 +689,11 @@ class RateStudy:
     ecsa_range_cm2: Optional[tuple[float, float]] = None
     trasatti_total: Optional[float] = None
     trasatti_outer: Optional[float] = None
+    drift: Optional["DriftCheck"] = None
+    """The repeat at an already-measured rate, when the series has one."""
+    leakage: Optional["LeakageFit"] = None
+    """The constant parasitic current the series implies, when three or
+    more rates make it fittable."""
     warnings: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
@@ -483,6 +711,12 @@ class RateStudy:
             lines.append(
                 f"  Retención de la más lenta a la más rápida: {retention:.1f} %"
             )
+            if self.drift is not None and self.drift.degraded:
+                lines.append(
+                    f"  ⚠ esa retención incluye la degradación: "
+                    f"{self.drift.fade_percent:+.1f} % medidos en la "
+                    f"repetición a {1e3 * self.drift.rate:g} mV/s"
+                )
         if self.b_values:
             lines.append("")
             lines.append("Análisis de b (i = a·ν^b):")
@@ -508,6 +742,9 @@ class RateStudy:
                     f"  accesible sólo despacio    : "
                     f"{100 * (1 - self.trasatti_outer / self.trasatti_total):.1f} %"
                 )
+        if self.leakage is not None:
+            lines.append("")
+            lines.append(str(self.leakage))
         if self.cdl_farads is not None:
             lines.append("")
             lines.append(f"C_dl = {1e6 * self.cdl_farads:.4g} µF")
@@ -547,6 +784,339 @@ def _fit_line(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float, float]
     return slope, intercept, error, r_squared
 
 
+@dataclass
+class DriftCheck:
+    """What a repeat at an already-measured scan rate says.
+
+    A rate series is run in order, and the order is almost always from
+    slow to fast or fast to slow — which means elapsed time and scan rate
+    move together. If the electrode changes during the series, the change
+    enters the rate dependence and comes back out as kinetics: a b-value,
+    a capacitive fraction, a retention figure. Nothing in those numbers
+    says it happened.
+
+    One repeat at a rate already measured separates the two, and it is the
+    only thing in the series that can. Measured on the user's files, the
+    two 50 mV/s records — the first experiment of the session and the
+    last — give 7.17 and 5.81 F/g: the electrode lost 19 % of its
+    capacitance over the 22 cycles between them, so a good part of the
+    apparent rate dependence of that series is fade.
+    """
+
+    rate: float
+    """V/s, the repeated rate."""
+    first: float
+    last: float
+    """Capacitance in F at the first and last measurement of that rate."""
+    names: tuple[str, str] = ("", "")
+
+    @property
+    def fade_percent(self) -> float:
+        """Positive when the electrode lost capacitance."""
+        if self.first <= 0.0:
+            return 0.0
+        return 100.0 * (1.0 - self.last / self.first)
+
+    @property
+    def degraded(self) -> bool:
+        return abs(self.fade_percent) > 100.0 * DRIFT_TOLERANCE
+
+    def __str__(self) -> str:
+        head = (
+            f"repetición a {1e3 * self.rate:g} mV/s: "
+            f"{1e3 * self.first:.4g} → {1e3 * self.last:.4g} mF "
+            f"({self.fade_percent:+.1f} %)"
+        )
+        if not self.degraded:
+            return (
+                head + f" — dentro del {100 * DRIFT_TOLERANCE:g} %, el "
+                "electrodo no cambió durante la serie y la dependencia con "
+                "ν es cinética"
+            )
+        return (
+            head + " — el electrodo CAMBIÓ durante la serie. Las velocidades "
+            "se midieron en orden, así que el tiempo y ν van juntos y esta "
+            "pérdida entra en la dependencia con ν: el b, el reparto de Dunn "
+            "y la retención la llevan dentro sin decirlo. Lo que la serie "
+            "mide es cinética MÁS degradación, y sólo esta repetición las "
+            "separa"
+        )
+
+
+def within_file_fade(curve: Voltammogram) -> Optional[tuple[float, str]]:
+    """``(fade % per cycle, texto)`` across the complete cycles of one file.
+
+    Cheaper than a repeat and available on every multi-cycle record: if
+    the capacitance of a file's own cycles falls monotonically, the
+    reporting cycle is a point on a slope and not a steady state. On the
+    user's 5 mV/s file it falls 12.20 → 11.33 F/g over four cycles, 2.4 %
+    per cycle, so the quoted value depends on which cycle is quoted.
+    """
+    complete = curve.complete_cycles()
+    if len(complete) < 3:
+        return None
+    values = []
+    for cycle in complete:
+        try:
+            values.append(capacitance(cycle)[0].farads)
+        except CurveError:
+            return None
+    array = np.array(values, dtype=float)
+    if array[0] <= 0.0:
+        return None
+    per_cycle = 100.0 * (1.0 - (array[-1] / array[0]) ** (1.0 / (array.size - 1)))
+    monotone = bool(np.all(np.diff(array) < 0.0) or np.all(np.diff(array) > 0.0))
+    text = (
+        f"los {array.size} ciclos completos del archivo dan "
+        + " → ".join(f"{1e3 * v:.4g}" for v in array)
+        + f" mF, {per_cycle:+.2f} % por ciclo"
+    )
+    if monotone and abs(per_cycle) > 0.5:
+        text += (
+            ". La caída es MONÓTONA: el ciclo que se informa está sobre una "
+            "pendiente, no en estado estacionario, y el valor citado depende "
+            "de cuál se cite. Para una cifra publicable hace falta ciclar "
+            "hasta que se estabilice"
+        )
+    return per_cycle, text
+
+
+def reversible_capacitance(curve: Voltammogram) -> Capacitance:
+    """Capacitance from the REDUCTION charge alone, ``Q_red / ΔV``.
+
+    The usual conventions integrate the oxidation charge, or both halves
+    averaged. Either is the wrong thing to integrate when the electrode
+    carries a parasitic *anodic* current — corrosion, carbon oxidation,
+    electrolyte oxidation at the positive limit — because that current
+    enters the integral and grows with how long the cycle takes, so the
+    slow scans come out larger and the result looks like a capacitance
+    with a rate dependence.
+
+    Reduction is the half that parasitic current does not contribute to,
+    and what comes back out is by definition what was stored. On the
+    user's files this is the difference between a plausible number and a
+    misleading one: the loop convention gives 11.33 F/g at 5 mV/s falling
+    to 5.81 at 50, a 51 % retention that looks like a transport
+    limitation, while the reduction charge gives 7.39 → 5.52, with the
+    whole of the remaining difference accounted for by the 16 % the
+    electrode itself lost between the two measurements.
+
+    Use it together with :func:`coulombic_efficiency`: when that is 1.00
+    this agrees with the other two conventions and adds nothing, and when
+    it is not, this is the one to quote.
+    """
+    curve, cycle_note = curve.reporting_cycle()
+    anodic, absolute, span = integrate_charge(curve)
+    if span <= 0.0:
+        raise CurveError("la ventana de potencial es nula")
+    reduction = absolute - anodic
+    value = reduction / span
+    electrode = curve.electrode
+    efficiency = coulombic_efficiency(curve)
+    note = cycle_note
+    if efficiency is not None:
+        extra = (
+            f"Q_red = {reduction:.4g} C sobre ΔV = {span:.4g} V, con "
+            f"Q_red/Q_ox = {efficiency:.3f}"
+        )
+        note = f"{note}. {extra}" if note else extra
+    return Capacitance(
+        farads=value,
+        convention="carga de reducción ÷ ΔV",
+        specific_f_per_g=electrode.specific(value, "mass"),
+        specific_f_per_cm2=electrode.specific(value, "area"),
+        specific_f_per_cm3=electrode.specific(value, "volume"),
+        note=note,
+    )
+
+
+@dataclass
+class LeakageFit:
+    """``ΔQ = Q_ox − Q_red = ⟨i_par⟩ · t`` across a series of scan rates.
+
+    The net charge of a cycle — oxidation minus reduction — is
+    ``∫ i dt`` over the loop, and that is *by definition* the charge the
+    electrode passed and did not give back. A stored charge contributes
+    nothing to it, whatever the storage mechanism; only an irreversible
+    process does. So the slope of the net charge against the cycle's
+    duration is the parasitic current, **averaged over the cycle**: if
+    the reaction only runs near the positive limit, this is its average
+    and not its instantaneous value, which is the right quantity to quote
+    anyway, because it is what the electrode loses per second of
+    operation.
+
+    Fitting it is worth the trouble because the leak and the storage are
+    not separable from any single voltammogram, and because a one-sided
+    leak is what makes a capacitance look rate-dependent when it is not:
+    it adds to ``Q_ox`` without adding to ``Q_red``, and the longer the
+    cycle, the more it adds. On the user's four rates the fit gives
+    ⟨i_par⟩ = 0.41 µA at R² = 0.998 with an intercept of −5 µC against
+    charges of 10–150 µC, so the model holds; and 65 % of the oxidation
+    charge at 5 mV/s is that leak rather than storage.
+    """
+
+    leakage_a: float
+    """⟨i_par⟩ in A, the cycle-averaged irreversible current."""
+    offset_c: float
+    """Intercept of the fit in C. The model says zero, so this is the
+    check on it rather than a result."""
+    r_squared: float
+    reduction_charges: tuple[float, ...] = ()
+    """``Q_red`` per rate, the charge that did come back out."""
+    oxidation_charges: tuple[float, ...] = ()
+    rates: tuple[float, ...] = ()
+    durations: tuple[float, ...] = ()
+    span_v: float = 0.0
+    electrode: Optional["Electrode"] = None
+
+    @property
+    def reversible_charge_c(self) -> float:
+        """Mean ``Q_red``, which is what the electrode actually stores.
+
+        Its spread across the series is not fitting error: it is the
+        electrode changing while the series was measured. Read it with
+        :class:`DriftCheck`.
+        """
+        if not self.reduction_charges:
+            return 0.0
+        return float(np.mean(self.reduction_charges))
+
+    @property
+    def capacitance_farads(self) -> Optional[float]:
+        """The leakage-free capacitance, ``⟨Q_red⟩ / ΔV``."""
+        if self.span_v <= 0.0:
+            return None
+        return self.reversible_charge_c / self.span_v
+
+    @property
+    def shares(self) -> dict[float, float]:
+        """Scan rate → fraction of ``Q_ox`` that was the leak."""
+        out: dict[float, float] = {}
+        for rate, duration, oxidation in zip(
+            self.rates, self.durations, self.oxidation_charges
+        ):
+            if oxidation > 0.0:
+                out[rate] = self.leakage_a * duration / oxidation
+        return out
+
+    def __str__(self) -> str:
+        lines = [
+            "Corriente parásita (ΔQ = Q_ox − Q_red = ⟨i_par⟩·t):",
+            f"  ⟨i_par⟩ = {1e6 * self.leakage_a:.3g} µA",
+            f"  ordenada = {1e6 * self.offset_c:.3g} µC "
+            f"(el modelo dice cero)",
+            f"  R²      = {self.r_squared:.4f}",
+        ]
+        value = self.capacitance_farads
+        if value is not None:
+            spread = (
+                float(np.std(self.reduction_charges)) / self.span_v
+                if len(self.reduction_charges) > 1 else 0.0
+            )
+            text = f"  C sin fuga = {1e3 * value:.4g} ± {1e3 * spread:.3g} mF"
+            if self.electrode is not None:
+                specific = self.electrode.specific(value, "mass")
+                error = self.electrode.specific(spread, "mass")
+                if specific is not None:
+                    text += f" = {specific:.3g}"
+                    if error:
+                        text += f" ± {error:.2g}"
+                    text += " F/g"
+            lines.append(text)
+            lines.append(
+                "  (de ⟨Q_red⟩; la dispersión es el electrodo cambiando "
+                "durante la serie, no error de ajuste)"
+            )
+        for rate, share in sorted(self.shares.items()):
+            lines.append(
+                f"  {1e3 * rate:7.1f} mV/s   la fuga es el {100 * share:4.0f} % "
+                f"de Q_ox"
+            )
+        if self.r_squared < 0.95:
+            lines.append(
+                "  ⚠ R² < 0.95: la corriente parásita no es constante en el "
+                "tiempo, así que este reparto no la describe. Mide una "
+                "cronoamperometría al potencial del límite positivo para "
+                "verla directamente"
+            )
+        return "\n".join(lines)
+
+
+def leakage_from_rates(curves: Sequence[Voltammogram]) -> Optional[LeakageFit]:
+    """Fit :class:`LeakageFit` over a rate series.
+
+    ``None`` with fewer than three usable rates: two points fit a line
+    exactly and say nothing about whether it is a line, and the intercept
+    is the whole check.
+    """
+    durations: list[float] = []
+    net: list[float] = []
+    oxidation_charges: list[float] = []
+    reduction_charges: list[float] = []
+    rates: list[float] = []
+    spans: list[float] = []
+    electrode: Optional[Electrode] = None
+    for curve in curves:
+        cycle, _ = curve.reporting_cycle()
+        time, _ = elapsed_time(cycle)
+        if time.size < 2 or time[-1] <= 0.0:
+            continue
+        oxidation, absolute, span = integrate_charge(cycle)
+        if span <= 0.0:
+            continue
+        reduction = absolute - oxidation
+        durations.append(float(time[-1]))
+        net.append(float(oxidation - reduction))
+        oxidation_charges.append(float(oxidation))
+        reduction_charges.append(reduction)
+        rates.append(float(curve.scan_rate))
+        spans.append(span)
+        electrode = curve.electrode
+    if len(durations) < 3:
+        return None
+    slope, intercept, _, r_squared = _fit_line(
+        np.array(durations), np.array(net)
+    )
+    return LeakageFit(
+        leakage_a=slope,
+        offset_c=intercept,
+        r_squared=r_squared,
+        reduction_charges=tuple(reduction_charges),
+        oxidation_charges=tuple(oxidation_charges),
+        rates=tuple(rates),
+        durations=tuple(durations),
+        span_v=float(np.mean(spans)),
+        electrode=electrode,
+    )
+
+
+def drift_check(curves: Sequence[Voltammogram]) -> Optional[DriftCheck]:
+    """The repeat in a rate series, if there is one.
+
+    ``None`` when every rate appears once, which is the usual case and the
+    reason the series cannot be checked.
+    """
+    ordered = list(curves)
+    for index, first in enumerate(ordered):
+        for second in ordered[index + 1:]:
+            if first.scan_rate <= 0.0:
+                continue
+            if abs(second.scan_rate / first.scan_rate - 1.0) > SAME_RATE_TOLERANCE:
+                continue
+            try:
+                early = capacitance(first)[0].farads
+                late = capacitance(second)[0].farads
+            except CurveError:
+                continue
+            return DriftCheck(
+                rate=first.scan_rate,
+                first=early,
+                last=late,
+                names=(first.name, second.name),
+            )
+    return None
+
+
 def analyse_rate_study(
     curves: Sequence[Voltammogram],
     b_potentials: Optional[Sequence[float]] = None,
@@ -559,7 +1129,12 @@ def analyse_rate_study(
     ----------
     curves:
         Two or more voltammograms of the same electrode, differing only in
-        scan rate.
+        scan rate. **The order they are given in is taken as the order they
+        were measured in**, which is what makes :func:`drift_check` and the
+        de-duplication below mean anything. When two of them share a scan
+        rate, the later one is the one used for the kinetics and the pair
+        becomes the drift check: a repeat is worth more as a control than
+        as a second point on a line it is collinear with anyway.
     b_potentials:
         Potentials at which to fit ``i = a ν^b``. Defaults to five points
         spread across the common window.
@@ -577,12 +1152,42 @@ def analyse_rate_study(
     """
     if len(curves) < 2:
         raise CurveError("hacen falta al menos dos velocidades de barrido")
-    ordered = sorted(curves, key=lambda c: c.scan_rate)
-    study = RateStudy(rates=[c.scan_rate for c in ordered])
+
+    # The repeat is found on the order given, which is the measurement
+    # order; everything after this works on the rate-sorted series.
+    drift = drift_check(curves)
+
+    unique: list[Voltammogram] = []
+    for curve in curves:
+        replaced = False
+        for index, kept in enumerate(unique):
+            if kept.scan_rate > 0.0 and abs(
+                curve.scan_rate / kept.scan_rate - 1.0
+            ) <= SAME_RATE_TOLERANCE:
+                unique[index] = curve
+                replaced = True
+                break
+        if not replaced:
+            unique.append(curve)
+
+    ordered = sorted(unique, key=lambda c: c.scan_rate)
+    study = RateStudy(rates=[c.scan_rate for c in ordered], drift=drift)
+    if drift is not None:
+        study.warnings.append(str(drift))
+    if len(unique) < len(curves):
+        study.warnings.append(
+            f"de las {len(curves)} curvas, {len(curves) - len(unique)} "
+            "repetían una velocidad ya medida; para la cinética se usa la "
+            "ÚLTIMA de cada velocidad y la repetición queda como control de "
+            "deriva"
+        )
 
     for curve in ordered:
         loop, _ = capacitance(curve)
         study.capacitances.append(loop.farads)
+        fade = within_file_fade(curve)
+        if fade is not None and abs(fade[0]) > 0.5:
+            study.warnings.append(f"{1e3 * curve.scan_rate:g} mV/s: {fade[1]}")
 
     span = max(study.rates) / min(study.rates)
     if span < MIN_RATE_SPAN:
@@ -626,6 +1231,22 @@ def analyse_rate_study(
 
     _trasatti(study)
     _double_layer(study, ordered, ecsa_material, non_faradaic)
+    study.leakage = leakage_from_rates(ordered)
+    if study.leakage is not None and study.leakage.leakage_a > 0.0:
+        efficiencies = [coulombic_efficiency(c) for c in ordered]
+        worst = min((e for e in efficiencies if e is not None), default=None)
+        if worst is not None and worst < 1.0 - BALANCE_TOLERANCE:
+            study.warnings.append(
+                f"la eficiencia coulómbica baja a {worst:.2f} en esta serie, y "
+                f"el ajuste Q_ox = Q_rev + i_fuga·t da i_fuga = "
+                f"{1e6 * study.leakage.leakage_a:.2g} µA con R² = "
+                f"{study.leakage.r_squared:.3f}. Una corriente parásita "
+                f"constante aporta más carga cuanto más dura el ciclo, así "
+                f"que imita una dependencia con ν: la retención de arriba la "
+                f"lleva dentro. Cita la capacitancia de la carga de "
+                f"REDUCCIÓN (reversible_capacitance), que la fuga anódica no "
+                f"contamina"
+            )
     return study
 
 

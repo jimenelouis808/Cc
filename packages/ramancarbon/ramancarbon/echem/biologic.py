@@ -1012,6 +1012,103 @@ def _current_a(data: ECLabData) -> Optional[np.ndarray]:
     return None
 
 
+#: Fraction of the potential span a swing has to cover to count as a
+#: reversal, for :func:`technique_from_data`.
+#:
+#: The same threshold and the same reason as the generic format
+#: detector: without one, a clean galvanostatic curve has "several
+#: hundred reversals" because every noise wiggle reverses the sign of
+#: the first difference.
+REVERSAL_FRACTION = 0.05
+
+
+def technique_from_data(data: ECLabData) -> tuple[str, str]:
+    """Which technique an ``.mpr`` holds, read off the file itself.
+
+    Returns ``(kind, why)``.
+
+    This exists because the `.mps` is not always there. EC-Lab writes the
+    pair and people copy one of them, and when the settings file is
+    missing the technique was not deduced — it defaulted to ``gcd``. The
+    user's five cyclic voltammograms therefore came back as
+    charge–discharge curves, which puts every CV analysis out of reach:
+    no capacitance by either convention, no Dunn, no storage mechanism.
+    Defaulting is the wrong move when the file says so itself, and this
+    one says so three times over.
+
+    In order of how strongly each says it:
+
+    1. **The ``mode`` flag.** EC-Lab writes 1 for galvanostatic and 2 for
+       potentiostatic in every record. It is the instrument's own
+       statement of which variable it controlled, and it is not a guess.
+    2. **Which control column exists.** ``control/V`` is volts and
+       ``control/V/mA`` carries a unit that depends on the mode; a file
+       with the first is controlling potential.
+    3. **The shape**, which is the package's standing rule for deciding a
+       format — a voltammogram sweeps back over itself and nothing else
+       does. Used to separate a cyclic sweep from a linear one, and as
+       the answer when the flags are missing or mixed.
+    """
+    mode = data.columns.get("mode")
+    reversals = _count_reversals(data.columns.get("Ewe/V"))
+    cyclic = reversals >= 2
+
+    if mode is not None and mode.size:
+        values = np.unique(np.asarray(mode, dtype=int))
+        if values.size == 1 and values[0] == MPR_MODE_POTENTIOSTATIC:
+            kind = "cv" if cyclic else "lsv"
+            return kind, (
+                f"la bandera «mode» vale {MPR_MODE_POTENTIOSTATIC} "
+                "(potenciostático) en todo el registro, así que lo "
+                f"controlado es el potencial; y el barrido tiene "
+                f"{reversals} inversion(es), así que es "
+                + ("cíclico" if cyclic else "lineal")
+            )
+        if values.size == 1 and values[0] == MPR_MODE_GALVANOSTATIC:
+            return "gcd", (
+                "la bandera «mode» vale 1 (galvanostático) en todo el "
+                "registro: lo controlado es la corriente"
+            )
+
+    if "control/V" in data.columns and "control/V/mA" not in data.columns:
+        return ("cv" if cyclic else "lsv"), (
+            "la columna de control es «control/V», en voltios, así que lo "
+            f"controlado es el potencial ({reversals} inversion(es))"
+        )
+
+    if cyclic:
+        return "cv", (
+            f"el potencial vuelve sobre sí mismo {reversals} veces, que es "
+            "lo que hace un voltamperograma y no hace ninguna otra medida"
+        )
+    return "gcd", "nada en el archivo declara la técnica; se supone GCD"
+
+
+def _count_reversals(potential: Optional[np.ndarray]) -> int:
+    """How many times the potential turns round, ignoring noise."""
+    if potential is None or potential.size < 3:
+        return 0
+    values = np.asarray(potential, dtype=float)
+    span = float(values.max() - values.min())
+    if span <= 0.0:
+        return 0
+    # Walk the series keeping only moves bigger than the threshold, so a
+    # reversal is a real turn and not a wiggle.
+    step = REVERSAL_FRACTION * span
+    direction = 0
+    anchor = values[0]
+    turns = 0
+    for value in values[1:]:
+        if abs(value - anchor) < step:
+            continue
+        way = 1 if value > anchor else -1
+        if direction and way != direction:
+            turns += 1
+        direction = way
+        anchor = value
+    return turns
+
+
 def to_curve(
     data: ECLabData,
     kind: str = "",
@@ -1027,19 +1124,28 @@ def to_curve(
     """
     electrode = electrode or Electrode()
     settings = settings or ECLabSettings()
+    deduced = ""
     if not kind:
         if data.has("freq/Hz") and (data.has("Re(Z)/Ohm") or data.has("|Z|/Ohm")):
             kind = "eis"
-        elif settings.technique in ("cv", "lsv"):
-            kind = settings.technique
         elif settings.technique:
             kind = settings.technique
         else:
-            kind = "gcd"
+            # No .mps, so nothing DECLARED the technique. Reading it off
+            # the file beats defaulting to gcd, which silently turned
+            # every voltammogram measured without its settings file into
+            # a charge-discharge curve.
+            kind, deduced = technique_from_data(data)
 
     metadata = {"origen": "EC-Lab .mpr", "modulos": list(data.modules)}
     if settings.technique_name:
         metadata["tecnica"] = settings.technique_name
+    if deduced:
+        # Said out loud: a technique the program worked out is a
+        # different kind of fact from one the settings file declared,
+        # and which of the two it was decides how much to trust what
+        # comes after.
+        metadata["tecnica_deducida"] = f"{kind} — {deduced}"
 
     if kind == "eis":
         frequency = data.columns.get("freq/Hz")
@@ -1078,20 +1184,47 @@ def to_curve(
     if kind in ("cv", "lsv"):
         rate = scan_rate or settings.scan_rate_v_per_s
         if not rate and time is not None and time.size > 4:
-            # Last resort, and it is recorded as such: the sweep rate is
-            # |dE/dt| where the sweep is actually sweeping. A rate taken
-            # from the data rather than from the settings is right only
-            # if the file holds one technique at one rate.
+            # |dE/dt| where the sweep is actually sweeping. This is a
+            # MEASUREMENT, not the guess the package refuses to make: a
+            # supposed scan rate gives a capacitance wrong in exactly
+            # that proportion, but one read off the potential and the
+            # clock is as good as the instrument's own clock, and it
+            # comes with its own quality check.
+            #
+            # Filtered against the MEDIAN and not against the maximum.
+            # The maximum is set by whatever single point is steepest —
+            # in the user's 5 mV/s file the first three records carry
+            # the 155 uA charging transient from the step out of the
+            # previous experiment, and `0.2 * max` then discards the
+            # entire real sweep and keeps the artefact.
             slope = np.abs(np.gradient(potential, time))
-            moving = slope[slope > 0.2 * np.nanmax(slope)]
+            slope = slope[np.isfinite(slope) & (slope > 0)]
+            if slope.size:
+                middle = float(np.median(slope))
+                moving = slope[(slope > 0.3 * middle) & (slope < 3.0 * middle)]
+            else:
+                moving = slope
             if moving.size:
                 rate = float(np.median(moving))
-                metadata["aviso_velocidad"] = (
-                    f"la velocidad de barrido ({1e3 * rate:.4g} mV/s) se ha "
-                    "deducido de |dE/dt| porque no había .mps al lado. "
-                    "Compruébala: una velocidad equivocada da una "
-                    "capacitancia equivocada en esa misma proporción"
+                spread = (100.0 * float(np.std(moving)) / rate
+                          if rate else float("inf"))
+                metadata["velocidad_medida_mv_s"] = 1e3 * rate
+                metadata["velocidad_dispersion_pct"] = spread
+                note = (
+                    f"la velocidad de barrido ({1e3 * rate:.4g} mV/s) está "
+                    "MEDIDA de |dE/dt|, no declarada: no había .mps al lado. "
+                    f"La dispersión sobre el barrido es del {spread:.1f} %"
                 )
+                # A rate is one rate only if it holds. Above this the
+                # file is more than one segment, and a single median is
+                # then the average of two experiments.
+                if spread > 25.0:
+                    note += (
+                        ". Eso es mucho: el archivo probablemente lleva más "
+                        "de un segmento o más de una velocidad, y una sola "
+                        "mediana es entonces el promedio de dos experimentos"
+                    )
+                metadata["aviso_velocidad"] = note
         if not rate:
             raise BioLogicError(
                 "no hay velocidad de barrido: ni en el .mps ni deducible del "
@@ -1099,8 +1232,17 @@ def to_curve(
                 "sale mal exactamente en esa proporción y nada aguas abajo "
                 "lo delata"
             )
+        # The cycle column is in the file and was being dropped, so
+        # `Voltammogram.cycles()` fell back to counting sweep reversals —
+        # a heuristic, where the instrument's own counter was sitting in
+        # column 24. It matters beyond tidiness: the reversal detector
+        # returns the trailing partial cycle as if it were a cycle, and
+        # a partial cycle integrated over a third of the window is a
+        # capacitance of nothing.
+        cycle = data.columns.get("cycle number")
         return Voltammogram(potential=potential, current=current,
                             scan_rate=float(rate), electrode=electrode,
+                            cycle=cycle, time=time,
                             name=f"{kind.upper()} (EC-Lab)", metadata=metadata)
 
     if time is None:

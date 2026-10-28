@@ -261,6 +261,17 @@ class Voltammogram:
     common single error in this whole analysis, so it is checked."""
     electrode: Electrode = field(default_factory=Electrode)
     cycle: Optional[np.ndarray] = None
+    time: Optional[np.ndarray] = None
+    """s, the instrument's own clock, when the file carries one.
+
+    A voltammogram is usually handled as ``i(E)``, and the charge is then
+    recovered as ``q = ∫ i dE / ν``. That identity holds for a single
+    uninterrupted sweep and for nothing else: any subset — one branch, a
+    trimmed window, a cycle whose counter started mid-sweep — is two or
+    more disjoint runs, and ``∫|dE|`` across the join counts a step the
+    electrode never swept. Keeping the measured clock removes the
+    reconstruction, and with it a whole family of silent factor errors.
+    """
     name: str = "CV"
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -295,6 +306,12 @@ class Voltammogram:
             self.cycle = np.asarray(self.cycle)
             if self.cycle.size != self.potential.size:
                 raise CurveError("el vector de ciclos no coincide con los datos")
+        if self.time is not None:
+            self.time = _finite("el tiempo", self.time)
+            if self.time.size != self.potential.size:
+                raise CurveError("el vector de tiempo no coincide con los datos")
+            if np.any(np.diff(self.time) < 0.0):
+                raise CurveError("el tiempo no es monótono creciente")
 
     @property
     def window(self) -> tuple[float, float]:
@@ -308,6 +325,18 @@ class Voltammogram:
     @property
     def n(self) -> int:
         return int(self.potential.size)
+
+    @property
+    def traversed(self) -> float:
+        """Total path swept in volts, ``Σ|ΔE|``.
+
+        A complete cycle traverses twice its window: up once and down
+        once. Anything less and the record stops mid-loop, whatever its
+        extremes say.
+        """
+        if self.potential.size < 2:
+            return 0.0
+        return float(np.abs(np.diff(self.potential)).sum())
 
     def cycles(self) -> list["Voltammogram"]:
         """Split into individual cycles.
@@ -337,6 +366,73 @@ class Voltammogram:
                 out.append(self._subset(mask, f"ciclo {index + 1}"))
         return out or [self]
 
+    def complete_cycles(self, fraction: float = 0.9) -> list["Voltammogram"]:
+        """The cycles that cover (nearly) the whole potential window.
+
+        A sweep that was cut short — the last one in a file the operator
+        stopped, or the first if acquisition began mid-sweep — is a cycle
+        by the counter and not by the physics: its charge is integrated
+        over part of the window, so a capacitance from it is small by
+        however much was missing. Measured on a real 50 mV/s file with
+        four cycles, the trailing partial one spans 0.331 V of a 0.96 V
+        window and returns half the capacitance of its neighbours.
+
+        **Reaching both extremes is not enough.** A cycle is complete when
+        it has traversed twice its window, not when its highest and lowest
+        points are far apart: a record stopped three quarters of the way
+        back down has the full span and three quarters of the charge. On
+        the user's ten-cycle 50 mV/s file the trailing cycle spans
+        1.0003 V of a 1.0003 V window — it passes any span test — and
+        traverses 1.65 V instead of 2.00, which is why it returned
+        5.87 F/g against the 7.17 F/g of the cycle before it. Both tests
+        are applied.
+
+        ``fraction`` is of the whole curve's span. Cycles are compared
+        with the parent and not with each other so that a file of only
+        partial cycles comes back empty rather than declaring its least
+        bad one complete.
+        """
+        whole = self.span
+        if whole <= 0.0:
+            return []
+        return [cycle for cycle in self.cycles()
+                if cycle.span >= fraction * whole
+                and cycle.traversed >= fraction * 2.0 * cycle.span]
+
+    def reporting_cycle(self) -> tuple["Voltammogram", str]:
+        """The cycle to quote, and why that one.
+
+        The last complete one. The first cycle of any electrode includes
+        whatever only happens once — irreversible formation, SEI growth,
+        oxide conditioning — so it is not the steady state the number is
+        meant to describe, and averaging it in moves the answer without
+        anybody seeing it. Measured on the user's 50 mV/s file: cycle 1
+        gives 4.75 F/g against 5.65–5.71 for cycles 2 to 4.
+
+        Returns the curve itself when there is only one cycle, which is
+        the ordinary case and needs no explanation.
+        """
+        complete = self.complete_cycles()
+        if len(complete) <= 1:
+            total = len(self.cycles())
+            if total > 1 and not complete:
+                return self, (
+                    f"ninguno de los {total} ciclos cubre el 90 % de la "
+                    "ventana: se integra la curva entera, que suma la carga "
+                    "de todos ellos y da una capacitancia multiplicada por "
+                    "ese número. Comprueba el archivo"
+                )
+            return self, ""
+        chosen = complete[-1]
+        return chosen, (
+            f"de los {len(self.cycles())} ciclos del archivo "
+            f"({len(complete)} completos) se informa el ÚLTIMO completo, "
+            f"«{chosen.name.split('[')[-1].rstrip(']')}». El primero lleva "
+            "lo que solo pasa una vez —formación irreversible, SEI, "
+            "acondicionamiento de óxido— y no es el estado estacionario "
+            "que el número describe"
+        )
+
     def sweeps(self) -> tuple["Voltammogram", "Voltammogram"]:
         """``(anodic, cathodic)``: the forward and reverse halves."""
         direction = np.sign(np.gradient(self.potential))
@@ -356,6 +452,7 @@ class Voltammogram:
             scan_rate=self.scan_rate,
             electrode=self.electrode,
             cycle=None if self.cycle is None else self.cycle[mask],
+            time=None if self.time is None else self.time[mask],
             name=f"{self.name} [{suffix}]",
             metadata=dict(self.metadata),
         )

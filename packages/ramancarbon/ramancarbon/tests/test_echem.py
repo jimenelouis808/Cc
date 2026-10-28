@@ -98,15 +98,188 @@ def test_capacitance_round_trips_the_value_it_was_generated_from():
     assert sweep.farads == pytest.approx(0.05, rel=0.03)
 
 
-def test_the_vertex_trim_does_not_bias_the_result():
+def test_a_trimmed_window_is_divided_by_the_span_it_integrated():
     """Trimming the vertices and then dividing by the FULL window made
     every capacitance 4 % too small."""
     from ramancarbon.echem.cv import integrate_charge
 
     curve = make_cv_demo("condensador", capacitance=0.05, seed=1).cycles()[-1]
-    _, _, span = integrate_charge(curve)
-    assert span < curve.span
+    _, _, span = integrate_charge(curve, trim=0.05)
+    assert span < curve.span, "un recorte explícito tiene que reducir el vano"
     assert capacitance(curve)[0].farads == pytest.approx(0.05, rel=0.03)
+
+
+def test_nothing_is_trimmed_when_there_is_no_transient():
+    """The 2 % trim used to be unconditional, and on a record with no
+    switching transient it threw away up to 8 % of the charge."""
+    from ramancarbon.echem.cv import integrate_charge, vertex_transients
+
+    curve = make_cv_demo("condensador", capacitance=0.05, seed=1).cycles()[-1]
+    mask, reason = vertex_transients(curve)
+    assert not mask.any()
+    assert "sin transitorio" in reason
+    _, _, span = integrate_charge(curve)
+    assert span == pytest.approx(curve.span)
+
+
+def test_a_planted_switching_transient_is_found():
+    """And the detector has to earn its keep: a real spike must go."""
+    from ramancarbon.echem.cv import vertex_transients
+
+    curve = make_cv_demo("condensador", capacitance=0.05, seed=1).cycles()[-1]
+    vertex = int(np.argmax(curve.potential))
+    curve.current[vertex] *= 40.0
+    mask, reason = vertex_transients(curve)
+    assert mask[vertex], reason
+    assert mask.sum() == 1, "sólo el punto plantado"
+
+
+def test_a_cycle_that_reaches_both_limits_can_still_be_incomplete():
+    """A record stopped three quarters of the way back down has the full
+    span and three quarters of the charge. Measured on the user's
+    ten-cycle file, the trailing cycle spanned 1.0003 of a 1.0003 V
+    window and returned 5.87 F/g against 7.17 for the one before it."""
+    curve = make_cv_demo("condensador", capacitance=0.05, cycles=3, seed=1)
+    cut = int(0.90 * curve.n)
+    truncated = Voltammogram(
+        potential=curve.potential[:cut],
+        current=curve.current[:cut],
+        scan_rate=curve.scan_rate,
+        electrode=curve.electrode,
+        cycle=None if curve.cycle is None else curve.cycle[:cut],
+    )
+    last = truncated.cycles()[-1]
+    assert last.span == pytest.approx(truncated.span, rel=0.02), (
+        "el ciclo truncado alcanza los dos extremos, que es lo que hace "
+        "que una prueba de vano sola lo acepte"
+    )
+    assert last.traversed < 1.8 * last.span
+    complete = [c.name for c in truncated.complete_cycles()]
+    assert last.name not in complete
+
+
+def test_the_real_clock_is_preferred_over_the_reconstructed_one():
+    from ramancarbon.echem.cv import elapsed_time
+
+    curve = make_cv_demo("condensador", capacitance=0.05, seed=1).cycles()[-1]
+    axis, origin = elapsed_time(curve)
+    assert "reconstruido" in origin
+    with_clock = Voltammogram(
+        potential=curve.potential,
+        current=curve.current,
+        scan_rate=curve.scan_rate,
+        electrode=curve.electrode,
+        time=axis,
+    )
+    measured, origin = elapsed_time(with_clock)
+    assert "reloj" in origin
+    assert measured == pytest.approx(axis)
+
+
+def test_a_join_is_not_counted_as_sweeping():
+    """A branch of a voltammogram is generally two disjoint runs, and
+    ``cumsum(|dE|)`` across the join counted a potential the electrode
+    never swept: measured, 39.99 s of sweeping instead of 20.00."""
+    from ramancarbon.echem.cv import elapsed_time
+
+    curve = make_cv_demo("condensador", capacitance=0.05, seed=1).cycles()[-1]
+    whole, _ = elapsed_time(curve)
+    half = curve.n // 2
+    keep = np.ones(curve.n, dtype=bool)
+    keep[half:half + 50] = False
+    gapped = curve._subset(keep, "con hueco")
+    spliced, origin = elapsed_time(gapped)
+    assert "empalme" in origin
+    assert spliced[-1] < whole[-1]
+
+
+def test_the_two_conventions_agree_on_a_balanced_loop():
+    from ramancarbon.echem.cv import coulombic_efficiency
+
+    curve = make_cv_demo("condensador", capacitance=0.05, seed=1).cycles()[-1]
+    assert coulombic_efficiency(curve) == pytest.approx(1.0, abs=0.02)
+    loop, sweep = capacitance(curve)
+    assert sweep.farads == pytest.approx(loop.farads, rel=0.03)
+
+
+def test_the_net_charge_measures_the_parasitic_current():
+    """``Q_ox − Q_red = ∫i dt`` is the charge that did not come back, so
+    its slope against the cycle's duration is the leak — exactly, with
+    an intercept of zero as the check on the model."""
+    from ramancarbon.echem.cv import leakage_from_rates
+
+    leak = 2e-6
+    curves = []
+    for rate in (0.005, 0.01, 0.02, 0.05):
+        curve = make_cv_demo("condensador", capacitance=0.05,
+                             scan_rate=rate, seed=1).cycles()[-1]
+        curve.current = curve.current + leak
+        curves.append(curve)
+
+    fit = leakage_from_rates(curves)
+    assert fit is not None
+    assert fit.leakage_a == pytest.approx(leak, rel=0.05)
+    assert fit.r_squared > 0.999
+    assert abs(fit.offset_c) < 0.02 * max(fit.oxidation_charges)
+
+
+def test_two_rates_are_not_enough_to_fit_a_leak():
+    from ramancarbon.echem.cv import leakage_from_rates
+
+    curves = [
+        make_cv_demo("condensador", capacitance=0.05, scan_rate=rate,
+                     seed=1).cycles()[-1]
+        for rate in (0.005, 0.05)
+    ]
+    assert leakage_from_rates(curves) is None
+
+
+def test_a_one_sided_leak_fools_the_loop_convention_not_the_reduction():
+    """This is the real case: a current that only flows while the
+    potential goes up adds to Q_ox and not to Q_red, so it inflates the
+    loop convention by more the slower the scan — the user's 11.33 F/g at
+    5 mV/s against 5.81 at 50, which reads as a transport limitation and
+    is not one."""
+    from ramancarbon.echem.cv import coulombic_efficiency, reversible_capacitance
+
+    # Twice the capacitive current of the slow scan, which is the regime
+    # the real files are in: at 5 mV/s a 0.11 mF electrode draws 0.55 µA
+    # and leaks 0.41 µA.
+    leak = 5e-4
+    curves = []
+    for rate in (0.005, 0.05):
+        curve = make_cv_demo("condensador", capacitance=0.05,
+                             scan_rate=rate, seed=1).cycles()[-1]
+        rising = np.gradient(curve.potential) > 0
+        curve.current = curve.current + leak * rising
+        curves.append(curve)
+
+    slow, fast = (capacitance(c)[0].farads for c in curves)
+    assert slow > 1.5 * fast, "el convenio del lazo tiene que dejarse engañar"
+    honest = [reversible_capacitance(c).farads for c in curves]
+    assert honest[0] == pytest.approx(honest[1], rel=0.05)
+    assert coulombic_efficiency(curves[0]) < coulombic_efficiency(curves[1])
+
+
+def test_a_repeat_at_the_same_rate_is_used_as_a_drift_control():
+    from ramancarbon.echem.cv import analyse_rate_study, drift_check
+
+    series = [
+        make_cv_demo("condensador", capacitance=0.05, scan_rate=rate,
+                     seed=1).cycles()[-1]
+        for rate in (0.05, 0.005, 0.01, 0.02, 0.05)
+    ]
+    series[-1].current = series[-1].current * 0.8  # 20 % lost
+    check = drift_check(series)
+    assert check is not None
+    assert check.rate == pytest.approx(0.05)
+    assert check.fade_percent == pytest.approx(20.0, abs=2.0)
+    assert check.degraded
+
+    study = analyse_rate_study(series)
+    assert len(study.rates) == 4, "la velocidad repetida no entra dos veces"
+    assert study.drift is check or study.drift is not None
+    assert any("CAMBIÓ" in w for w in study.warnings)
 
 
 def test_both_capacitance_conventions_are_reported():
