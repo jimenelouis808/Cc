@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -558,6 +560,94 @@ def test_the_session_draws_the_axis_the_user_chose():
     values, label, _ = session.potential_axis(session.cv)
     assert label == "E / V vs RHE"
     assert np.all(values > session.cv.potential)
+
+
+def _series_with_three_terms(rates, capacitance_f, diffusive, parasitic):
+    """Voltammograms whose current obeys k_cap·ν + k_diff·√ν + i_par.
+
+    Built by hand rather than from ``make_cv_demo``: that one has a
+    series resistance, so its current at a fixed potential is not
+    exactly ``C·ν`` near the vertices, and the fit then absorbs the
+    difference into the constant — which is the term under test.
+    """
+    series = []
+    for rate in rates:
+        up = np.linspace(0.0, 0.6, 300)
+        potential = np.concatenate([up, up[::-1]])
+        surface = capacitance_f * rate + diffusive * math.sqrt(rate)
+        current = np.concatenate([
+            np.full(up.size, surface), np.full(up.size, -surface)
+        ]) + parasitic
+        series.append(Voltammogram(potential=potential, current=current,
+                                   scan_rate=rate,
+                                   name=f"{1e3 * rate:g} mV/s"))
+    return series
+
+
+def test_the_three_terms_separate_when_the_series_is_wide_enough():
+    from ramancarbon.echem.cv import fit_full_current
+
+    series = _series_with_three_terms(
+        (0.005, 0.01, 0.02, 0.05, 0.1), 50e-6, 10e-6, 0.4e-6)
+    models = fit_full_current(series)
+    assert models
+    middle = models[len(models) // 2]
+    assert middle.capacitance_f == pytest.approx(50e-6, rel=0.15)
+    assert middle.diffusive == pytest.approx(10e-6, rel=0.2)
+    assert middle.leakage_a == pytest.approx(0.4e-6, abs=0.15e-6)
+    assert all(middle.determined().values()), middle
+
+
+def test_a_parasitic_current_may_be_cathodic():
+    """At the negative end of this window the electrode sits in the
+    oxygen-reduction region, so the constant is NEGATIVE. Forcing it
+    positive made the fit put 11 µF of capacitance where there are 90
+    and call the rest a leak."""
+    from ramancarbon.echem.cv import fit_full_current
+
+    series = _series_with_three_terms(
+        (0.005, 0.01, 0.02, 0.05, 0.1), 50e-6, 10e-6, -0.8e-6)
+    middle = fit_full_current(series)[4]
+    assert middle.leakage_a < 0.0
+    assert middle.leakage_a == pytest.approx(-0.8e-6, abs=0.2e-6)
+    assert middle.determined()["i_par"]
+
+
+def test_three_parameters_need_more_than_three_rates():
+    from ramancarbon.echem.cv import fit_full_current
+
+    series = _series_with_three_terms((0.005, 0.02, 0.1), 50e-6, 10e-6, 0.4e-6)
+    assert fit_full_current(series) == [], (
+        "tres puntos y tres parámetros no dejan ningún grado de libertad, "
+        "y un error típico de cero grados de libertad no es un error típico"
+    )
+
+
+def test_a_dunn_coefficient_is_judged_against_its_own_uncertainty():
+    """On an ideal capacitor the diffusive term is zero by construction,
+    so 'negative by more than 5 % of its own scale' compares noise with
+    noise: it fired on 7 of 120 coefficients. The test is now against
+    each coefficient's own error, with the level divided by how many
+    coefficients are tested."""
+    from ramancarbon.echem.cv import dunn_analysis
+    from ramancarbon.examples.demo_data import cv_rate_series
+
+    for seed in (0, 1, 2, 3):
+        analysis = dunn_analysis(cv_rate_series("condensador", seed=seed))
+        assert not [w for w in analysis.warnings if "quedado en CERO" in w], seed
+
+
+def test_the_current_is_read_off_the_reporting_cycle():
+    """It was read off the whole file, so the b-value and the Dunn
+    separation came from a different cycle than the capacitance quoted
+    beside them."""
+    from ramancarbon.echem.cv import _current_at
+
+    curve = make_cv_demo("condensador", capacitance=0.05, cycles=4, seed=1)
+    last = curve.cycles()[-1]
+    potential = float(np.median(curve.potential))
+    assert _current_at(curve, potential) == pytest.approx(
+        _current_at(last, potential))
 
 
 def test_a_repeat_at_the_same_rate_is_used_as_a_drift_control():

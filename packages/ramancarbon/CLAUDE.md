@@ -2438,6 +2438,63 @@ programa de destino no podía usar. Ninguna es cosmética.
   pasan de «tipo batería, informar en mAh/g» a «pseudocapacitivo, F/g con
   reservas», que es lo que las curvas parecen.
 
+## Los tres términos a la vez, cuando la serie da para ello
+
+- `compare_current_laws` pregunta cuál de TRES leyes de dos parámetros
+  describe `i(ν)`, y eso es un cribado: obliga a elegir dos de los tres
+  efectos cuando un electrodo real puede tener los tres a la vez.
+  `fit_full_current` ajusta `k_cap·ν + k_diff·√ν + i_par` y dice cuáles
+  **determina**, que es tanto resultado como los valores.
+- **El brazo de palanca es lo que decide.** Con las cuatro velocidades de
+  5 a 50 mV/s (factor 10) las tres leyes de dos términos empataban en
+  todos los potenciales; con cinco de 5 a 100 (factor 20) la de Dunn gana
+  en 7 de 9, y el ajuste de tres términos sale determinado en casi toda
+  la ventana con R² ≥ 0.9996. Un punto más, al doble de velocidad, pasó
+  «no se puede saber» a «los tres están».
+- **`i_par` NO puede forzarse positiva.** Una corriente parásita tiene el
+  signo de su reacción, y en esta ventana cambia: el límite negativo
+  (0.40 V vs RHE) está en la región de reducción de oxígeno y el positivo
+  (1.40 V) está 169 mV por encima del equilibrio del O₂. Medida, va de
+  −1.48 µA en 0.60 V vs RHE a +1.16 en 1.30, y cruza cero en 1.03 V. Con
+  la cota en cero el ajuste devolvía 11 µF de capacitancia donde hay 50 y
+  llamaba fuga al resto. Hay una prueba con una parásita catódica
+  plantada.
+- Y la corriente se ajusta **con signo**, con la dirección de la rama
+  aplicada a los datos y los coeficientes devueltos al final. Tomar `|i|`
+  parece equivalente y no lo es: donde la parásita es grande y de signo
+  contrario al barrido, el valor absoluto pliega la suma sobre cero. Con
+  una constante de −0.8 µA plantada, volvía como −8.0.
+- **Los errores del ajuste son optimistas y hay con qué verlo.** Añadir
+  el punto de 100 mV/s —medido el último— baja `k_cap` un 23 % mientras
+  el ajuste declara ±8 %. Eso es la degradación entrando en la serie.
+  `k_diff` e `i_par` apenas se mueven entre las dos series: lo que el
+  electrodo pierde es almacenamiento.
+
+## `_current_at` leía el archivo entero, no el ciclo informado
+
+- `sweeps()` sobre un archivo de cuatro ciclos parte el registro
+  concatenado, así que una rama tiene cuatro valores en cada potencial y
+  la interpolación cae sobre el que el orden puso primero. No es una
+  catástrofe —los ciclos de un archivo se parecen— pero significaba que
+  **el b y el reparto de Dunn se leían de un ciclo distinto del de la
+  capacitancia que se cita al lado**, y en un archivo que se desvanece un
+  2.5 % por ciclo la diferencia es sistemática y no se ve.
+
+## Un coeficiente negativo se juzga contra SU PROPIA incertidumbre
+
+- «Negativo en más de un 5 % de su propia escala» compara ruido con ruido
+  cuando el coeficiente es de verdad cero: en un condensador ideal el
+  término difusivo ES cero, así que la escala es ella misma una
+  excursión del ruido. Leer un ciclo en vez de cuatro lo dejó a la vista:
+  19 de 120 coeficientes «negativos de verdad» en un condensador
+  sintético limpio.
+- Ahora se compara con el error típico del ajuste SIN restringir, y
+  **con el nivel dividido por el número de coeficientes que se
+  contrastan** (`NEGATIVE_LEVEL`), que es la misma corrección por número
+  de pruebas que hace el buscador de picos Raman. Sin ella, un contraste
+  a 2σ aplicado 120 veces seguía dando 7. Calibrado sobre los tres
+  mecanismos sintéticos y cuatro semillas: cero falsos positivos.
+
 ## Una repetición es lo único que separa cinética de degradación
 
 - Las velocidades de una serie se miden en orden, así que el tiempo y ν

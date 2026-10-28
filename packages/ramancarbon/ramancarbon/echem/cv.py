@@ -31,6 +31,7 @@ from typing import Optional, Sequence
 
 import numpy as np
 from scipy.optimize import lsq_linear as _lsq_linear
+from scipy.stats import t as _student_t
 from scipy.signal import find_peaks as _scipy_find_peaks
 from scipy.signal import peak_widths as _peak_widths
 
@@ -72,6 +73,14 @@ TRANSIENT_REACH = 0.01
 
 #: Minimum prominence of a redox peak, relative to the mean |current|.
 PEAK_PROMINENCE = 0.08
+
+#: Level of the test that calls a Dunn coefficient genuinely negative,
+#: BEFORE dividing by how many coefficients are tested. A negative
+#: coefficient is the two-term model failing, and the question is whether
+#: it is negative by more than its own uncertainty — not by more than a
+#: fixed fraction of its own scale, which on a coefficient that is truly
+#: zero compares noise with noise.
+NEGATIVE_LEVEL = 0.05
 
 #: How far ``|q_cat|/q_an`` may stray from 1 before the two capacitance
 #: conventions are reported as disagreeing for a physical reason.
@@ -698,6 +707,10 @@ class RateStudy:
     current_laws: list["CurrentLaw"] = field(default_factory=list)
     """Which law for ``i(ν)`` actually wins at each potential. Read this
     before the b-values above: they assume one of the three."""
+    full_model: list["FullCurrentModel"] = field(default_factory=list)
+    """``k_cap·ν + k_diff·√ν + i_par`` at each potential, when there are
+    four rates or more. The two-term laws make you pick two of the
+    three; this one does not, and says which terms the series resolves."""
     warnings: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
@@ -753,6 +766,13 @@ class RateStudy:
                     f"  accesible sólo despacio    : "
                     f"{100 * (1 - self.trasatti_outer / self.trasatti_total):.1f} %"
                 )
+        if self.full_model:
+            lines.append("")
+            lines.append(
+                "Las tres contribuciones a la vez "
+                "(i = k_cap·ν + k_diff·√ν + i_par):"
+            )
+            lines.extend("  " + str(model) for model in self.full_model)
         if self.leakage is not None:
             lines.append("")
             lines.append(str(self.leakage))
@@ -1108,6 +1128,170 @@ def compare_current_laws(
         law.residuals["potencia"] = residual
         law.r_squared["potencia"] = 1.0 - residual / total
         out.append(law)
+    return out
+
+
+@dataclass
+class FullCurrentModel:
+    """``i = k_cap·ν + k_diff·√ν + i_par`` at one potential: all three.
+
+    :func:`compare_current_laws` asks which of three two-parameter laws
+    describes the current, and over a single decade of scan rate the
+    answer is usually "cannot tell". That comparison is a screening, and
+    it is the wrong question once the series is wide enough: a real
+    electrode can perfectly well have a double layer AND a diffusive
+    process AND a parasitic current at the same time, and the two-term
+    laws make you pick two of the three.
+
+    This fits all three. It needs a wider series to be worth anything —
+    four rates and three parameters leave one degree of freedom, which
+    is not a fit — and what it returns is as much about which
+    coefficients are DETERMINED as about their values. A term whose
+    standard error is as large as itself is a term the series cannot
+    see, and saying so is the result.
+
+    Measured on the user's 5–100 mV/s series, where the two-term
+    screening says the Dunn form beats a constant at 7 of 9 potentials:
+    the three-term fit keeps all three terms, with the parasitic current
+    landing on the 0.40 µA the charge balance measured independently.
+    On the earlier 5–50 mV/s series, a factor of ten, the same fit
+    returns errors larger than the coefficients.
+    """
+
+    potential: float
+    capacitance_f: float
+    """``k_cap`` in F: the surface-controlled term."""
+    diffusive: float
+    """``k_diff`` in A/(V/s)^½."""
+    leakage_a: float
+    """``i_par`` in A: the term that does not care about ν."""
+    errors: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    """Standard errors of the three, in their own units."""
+    r_squared: float = 0.0
+    degrees_of_freedom: int = 0
+    at_bound: tuple[bool, bool, bool] = (False, False, False)
+    """Which coefficients the non-negativity constraint is holding at
+    zero. One of these is the fit saying that term is not there."""
+
+    def determined(self) -> dict[str, bool]:
+        """Which terms the series actually resolves.
+
+        A coefficient counts as determined when it is not sitting on its
+        bound and is at least twice its own standard error in magnitude.
+        Two sigma is a low bar on purpose: this is the threshold of
+        "this number means nothing", not of "this number is good". The
+        magnitude, not the value, because ``i_par`` is legitimately
+        negative wherever the parasitic reaction is a reduction.
+        """
+        values = (self.capacitance_f, self.diffusive, self.leakage_a)
+        names = ("k_cap", "k_diff", "i_par")
+        return {
+            name: bool(not bound and error > 0.0 and abs(value) > 2.0 * error)
+            for name, value, error, bound
+            in zip(names, values, self.errors, self.at_bound)
+        }
+
+    def __str__(self) -> str:
+        found = self.determined()
+        parts = []
+        for name, value, error, scale in (
+            ("k_cap", self.capacitance_f, self.errors[0], 1e6),
+            ("k_diff", self.diffusive, self.errors[1], 1e6),
+            ("i_par", self.leakage_a, self.errors[2], 1e6),
+        ):
+            mark = "" if found[name] else "  (no determinado)"
+            parts.append(f"{name} = {scale * value:.3g} ± {scale * error:.2g}{mark}")
+        return (f"E = {self.potential:+.3f} V  (R² = {self.r_squared:.5f}, "
+                f"{self.degrees_of_freedom} gl):  " + ";  ".join(parts))
+
+
+def fit_full_current(
+    curves: Sequence[Voltammogram],
+    potentials: Optional[Sequence[float]] = None,
+    sweep: str = "media",
+) -> list[FullCurrentModel]:
+    """Fit :class:`FullCurrentModel` at each potential.
+
+    Returns ``[]`` with fewer than four scan rates: three parameters and
+    four points leave one degree of freedom, and a standard error from
+    one degree of freedom is not a standard error. Five rates over a
+    factor of twenty is the smallest series this has been seen to work
+    on.
+    """
+    usable = [c for c in curves if c.scan_rate > 0.0]
+    ordered = sorted(unique_rates(usable), key=lambda c: c.scan_rate)
+    if len(ordered) < 4:
+        return []
+    rates = np.array([c.scan_rate for c in ordered], dtype=float)
+    design = np.vstack([rates, np.sqrt(rates), np.ones_like(rates)]).T
+    dof = len(ordered) - 3
+
+    if potentials is None:
+        low = max(c.window[0] for c in ordered)
+        high = min(c.window[1] for c in ordered)
+        if high <= low:
+            return []
+        potentials = list(np.linspace(low + 0.1 * (high - low),
+                                      high - 0.1 * (high - low), 9))
+
+    out: list[FullCurrentModel] = []
+    for potential in potentials:
+        sampled = [_current_at(c, float(potential), sweep) for c in ordered]
+        if any(value is None for value in sampled):
+            continue
+        signed = np.array(sampled, dtype=float)
+        if not np.any(signed):
+            continue
+        # The branch's own direction, applied to the DATA, with the
+        # coefficients turned back at the end. Taking |i| instead looks
+        # equivalent and is not: where the parasitic current is large
+        # and opposite to the sweep, |i| folds the sum about zero and
+        # the three-term model stops holding. On a synthetic series with
+        # a −0.8 µA constant it came back as −8.0.
+        direction = float(np.sign(np.median(signed))) or 1.0
+        current = direction * signed
+        # k_cap and k_diff are magnitudes of a capacitive and a
+        # diffusive response and cannot be negative. **i_par can.** A
+        # parasitic current has whatever sign its reaction has, and on
+        # this window it changes: at the negative limit the electrode
+        # sits in the oxygen-reduction region and the constant is
+        # CATHODIC, at the positive limit it is evolving oxygen and the
+        # constant is anodic. Measured on the user's 5–100 mV/s series,
+        # it runs −1.5 µA at −0.40 V to +1.2 µA at +0.30 V and crosses
+        # zero near +0.05 V. Forcing it positive made the fit put 11 µF
+        # of capacitance where there are 90 and called the rest a leak.
+        solution = _lsq_linear(design, current,
+                               bounds=([0.0, 0.0, -np.inf],
+                                       [np.inf, np.inf, np.inf]))
+        coefficients = solution.x
+        residual = current - design @ coefficients
+        spread = float(((current - current.mean()) ** 2).sum())
+        r_squared = (1.0 - float((residual**2).sum()) / spread
+                     if spread > 0 else 1.0)
+        # Errors from the UNCONSTRAINED covariance. Where the constraint
+        # binds the error is not meaningful anyway, and `at_bound` says
+        # where that is, so an approximate error beside a flag is more
+        # honest than an exact one nobody can interpret.
+        variance = float((residual**2).sum()) / dof if dof > 0 else 0.0
+        try:
+            covariance = variance * np.linalg.inv(design.T @ design)
+            errors = tuple(float(np.sqrt(max(covariance[i, i], 0.0)))
+                           for i in range(3))
+        except np.linalg.LinAlgError:
+            errors = (float("inf"),) * 3
+        out.append(FullCurrentModel(
+            potential=float(potential),
+            capacitance_f=direction * float(coefficients[0]),
+            diffusive=direction * float(coefficients[1]),
+            leakage_a=direction * float(coefficients[2]),
+            errors=errors,
+            r_squared=r_squared,
+            degrees_of_freedom=dof,
+            # Only the two that HAVE a bound can sit on one.
+            at_bound=(bool(np.isclose(coefficients[0], 0.0)),
+                      bool(np.isclose(coefficients[1], 0.0)),
+                      False),
+        ))
     return out
 
 
@@ -1472,24 +1656,41 @@ def analyse_rate_study(
     _double_layer(study, ordered, ecsa_material, non_faradaic)
     study.leakage = leakage_from_rates(ordered)
     study.current_laws = compare_current_laws(ordered)
+    study.full_model = fit_full_current(ordered)
     undecided = [law for law in study.current_laws if not law.decisive]
     if undecided and study.leakage is not None:
         worst = max(undecided, key=lambda law: abs(law.leakage_a))
-        study.warnings.append(
-            f"en {len(undecided)} de los {len(study.current_laws)} potenciales "
-            f"examinados las TRES leyes de i(ν) ajustan igual de bien: "
-            f"«i = a·ν^b», la de Dunn y «i = k_cap·ν + i_par». Con cuatro "
-            f"velocidades y dos parámetros no hay con qué elegir, así que el "
-            f"b y el reparto de Dunn de arriba no son prueba de difusión — "
-            f"son compatibles con ella y también con una corriente constante. "
-            f"Y la corriente constante aquí no es una hipótesis: está medida "
-            f"aparte, ⟨i_par⟩ = {1e6 * study.leakage.leakage_a:.2f} µA con "
-            f"R² = {study.leakage.r_squared:.3f} a partir de ΔQ, y la ley de "
-            f"fuga pide {1e6 * worst.leakage_a:.2f} µA en "
-            f"{worst.potential:+.3f} V, del mismo orden. Una clasificación de "
-            f"mecanismo que se apoye en el b dirá «tipo batería» por un "
-            f"proceso irreversible y no por almacenamiento"
+        total = len(study.current_laws)
+        head = (
+            f"en {len(undecided)} de los {total} potenciales examinados las "
+            f"TRES leyes de i(ν) ajustan igual de bien: «i = a·ν^b», la de "
+            f"Dunn y «i = k_cap·ν + i_par». Con {len(ordered)} velocidades "
+            f"sobre un factor {span:.0f} y dos parámetros no hay con qué "
+            f"elegir ahí, así que en esos potenciales el b no es prueba de "
+            f"difusión: es compatible con ella y también con una corriente "
+            f"constante, que aquí no es una hipótesis — está medida aparte, "
+            f"⟨i_par⟩ = {1e6 * study.leakage.leakage_a:.2f} µA con R² = "
+            f"{study.leakage.r_squared:.3f} a partir de ΔQ, y la ley de fuga "
+            f"pide {1e6 * worst.leakage_a:.2f} µA en {worst.potential:+.3f} V"
         )
+        if len(undecided) >= 0.5 * total:
+            head += (
+                ". Al ser la mitad o más de la ventana, una clasificación de "
+                "mecanismo que se apoye en el b dirá «tipo batería» por un "
+                "proceso irreversible y no por almacenamiento"
+            )
+        elif study.full_model:
+            resolved = sum(
+                1 for model in study.full_model if model.determined()["k_diff"]
+            )
+            head += (
+                f". En el resto la serie SÍ distingue, y entonces la pregunta "
+                f"correcta no es cuál de las tres sino las tres a la vez: el "
+                f"ajuste de {len(ordered)} velocidades a "
+                f"«k_cap·ν + k_diff·√ν + i_par» determina el término difusivo "
+                f"en {resolved} de los {len(study.full_model)} potenciales"
+            )
+        study.warnings.append(head)
     if study.leakage is not None and study.leakage.leakage_a > 0.0:
         efficiencies = [coulombic_efficiency(c) for c in ordered]
         worst = min((e for e in efficiencies if e is not None), default=None)
@@ -1527,8 +1728,20 @@ SWEEP_CHOICES: tuple[tuple[str, str], ...] = (
 
 def _current_at(curve: Voltammogram, potential: float,
                 sweep: str = "media") -> Optional[float]:
-    """Current at one potential, interpolated on the chosen branch."""
+    """Current at one potential, interpolated on the chosen branch.
+
+    Of the REPORTING CYCLE, like every capacitance in this module. On a
+    multi-cycle file ``sweeps()`` splits the whole concatenated record,
+    so a branch holds one value per cycle at each potential and the
+    interpolation lands on whichever the sort put first. That is not a
+    catastrophe — the cycles of one file are similar — but it means the
+    b-value and the Dunn separation were read off a different cycle from
+    the capacitance they are quoted beside, and on a file whose cycles
+    fade (2.5 % per cycle at 10 mV/s on the user's) the difference is
+    systematic and invisible.
+    """
     try:
+        curve, _ = curve.reporting_cycle()
         anodic, cathodic = curve.sweeps()
     except CurveError:
         return None
@@ -1793,6 +2006,7 @@ def dunn_analysis(
         one = np.zeros(potentials.size)
         two = np.zeros(potentials.size)
         free = np.zeros((2, potentials.size))
+        uncertainty = np.full((2, potentials.size), np.inf)
         fit_quality = np.full(potentials.size, np.nan)
         measured = np.zeros((len(ordered), potentials.size))
         for column, potential in enumerate(potentials):
@@ -1835,8 +2049,31 @@ def dunn_analysis(
                 # diffusive term is genuinely zero and half the
                 # potentials land on the bound, which is the right
                 # answer and nothing to complain about.
-                loose, offset, _, _ = _fit_line(root, magnitude / root)
-                free[:, column] = (loose, offset)
+                # ...with the standard errors of the UNCONSTRAINED fit,
+                # because "negative by more than 5 % of its own scale"
+                # compares noise with noise when the coefficient is
+                # genuinely zero: on an ideal capacitor the diffusive
+                # term IS zero, so the scale is itself a noise
+                # excursion and a fixed fraction of it is met by chance.
+                # Reading one cycle instead of four made that visible —
+                # 19 of 120 coefficients on a clean synthetic capacitor.
+                # What a coefficient has to beat is its own uncertainty.
+                shape = np.vstack([root, np.ones_like(root)]).T
+                target = magnitude / root
+                loose, *_ = np.linalg.lstsq(shape, target, rcond=None)
+                spare = shape.shape[0] - 2
+                leftover = target - shape @ loose
+                if spare > 0:
+                    scatter = float((leftover**2).sum()) / spare
+                    try:
+                        spread = scatter * np.linalg.inv(shape.T @ shape)
+                        sigma = np.sqrt(np.maximum(np.diag(spread), 0.0))
+                    except np.linalg.LinAlgError:
+                        sigma = np.full(2, np.inf)
+                else:
+                    sigma = np.full(2, np.inf)
+                free[:, column] = loose
+                uncertainty[:, column] = sigma
                 predicted = (slope * rates + intercept * root) * direction
                 total_variation = float(
                     ((magnitude - magnitude.mean()) ** 2).sum()
@@ -1858,23 +2095,32 @@ def dunn_analysis(
                 r2 = 1.0 - residual / spread if spread > 0 else 1.0
             one[column], two[column], fit_quality[column] = slope, intercept, r2
             measured[:, column] = observed
-        return one, two, fit_quality, measured, free
+        return one, two, fit_quality, measured, free, uncertainty
 
     # Both branches, always. The `sweep` choice decides which one the
     # headline fractions report, but the FIGURE everybody publishes needs
     # both: it fills the surface-controlled region between the cathodic
     # and anodic capacitive curves, and the diffusive part is what is left
     # between each of those and the measured trace.
-    k1_anodic, k2_anodic, _, _, _ = separate("media")
-    k1_cathodic, k2_cathodic, _, _, _ = separate("catodica")
-    k1, k2, quality, total, unrestricted = separate(sweep)
+    k1_anodic, k2_anodic, *_ = separate("media")
+    k1_cathodic, k2_cathodic, *_ = separate("catodica")
+    k1, k2, quality, total, unrestricted, spread = separate(sweep)
     pinned = 0
     if nonnegative:
-        for coefficients in unrestricted:
-            scale = (float(np.max(np.abs(coefficients)))
-                     if coefficients.size else 0.0)
-            if scale > 0:
-                pinned += int(np.count_nonzero(coefficients < -0.05 * scale))
+        # A one-sided test at each of 2 x points coefficients, with the
+        # level divided by how many tests are being made. Without that
+        # correction the warning fires on noise: a 2-sigma rule applied
+        # 120 times on a synthetic capacitor, where the diffusive term
+        # is zero by construction, reported 7 "genuinely negative"
+        # coefficients. It is the same correction the Raman peak finder
+        # makes, for the same reason.
+        tests = max(1, 2 * potentials.size)
+        spare = max(1, len(ordered) - 2)
+        threshold = float(_student_t.ppf(1.0 - NEGATIVE_LEVEL / tests, spare))
+        for coefficients, sigma in zip(unrestricted, spread):
+            usable = np.isfinite(sigma) & (sigma > 0.0)
+            pinned += int(np.count_nonzero(
+                usable & (coefficients < -threshold * sigma)))
     for index in range(len(ordered)):
         capacitive[index] = k1 * rates[index]
 
@@ -1924,9 +2170,8 @@ def dunn_analysis(
             warnings.append(
                 f"{pinned} de los {2 * potentials.size} coeficientes se han "
                 "quedado en CERO porque el ajuste SIN restringir los quería "
-                "negativos de verdad —más de un 5 % de su propia escala, que "
-                "es el mismo listón de siempre— y ninguna de las dos "
-                "contribuciones puede serlo: en esos potenciales el "
+                "negativos POR MÁS DE DOS VECES SU PROPIA INCERTIDUMBRE, y "
+                "ninguna de las dos contribuciones puede serlo: en esos "
                 "modelo no describe la corriente. Suele ser un pico que se "
                 "desplaza con la velocidad —a la velocidad más alta ese "
                 "potencial ya no está sobre el pico— o una corriente que no "
