@@ -1,9 +1,24 @@
 {
-  "electrodo": {
-    "descripcion_del_usuario": "carbono vítreo, 3 mm de diámetro, 20 µg de material depositado",
-    "area_geometrica_cm2": 0.07068583470577035,
+  "condiciones": {
+    "electrodo_de_trabajo": "carbono vítreo, 3 mm de diámetro",
+    "material": "S1, FeSe/C tratado a 900 °C",
     "masa_activa_mg": 0.02,
-    "referencia_declarada_en_el_mpr": "SCE (calomelanos saturado)"
+    "area_geometrica_cm2": 0.07068583470577035,
+    "electrolito": "KOH 0.5 M",
+    "referencia": "Ag/AgCl, KCl saturado",
+    "contraelectrodo": "alambre de Pt",
+    "ph": 13.56,
+    "conversion_a_rhe": "E(RHE) = E(Ag/AgCl (KCl saturado)) + 0.197 + 0.05916·13.56 = E + 0.9992 V",
+    "ventana_v_vs_referencia": [
+      -0.6005024313926697,
+      0.3998245596885681
+    ],
+    "ventana_v_vs_rhe": [
+      0.39870716860733024,
+      1.399034159688568
+    ],
+    "sobrepotencial_oer_en_el_limite_positivo_v": 0.16903415968856805,
+    "nota": "nada de esto sale de los .mpr: su bloque de comentarios lo arrastra EC-Lab de un experimento al siguiente y no se lee"
   },
   "orden_de_medida": [
     "01",
@@ -260,15 +275,16 @@
   ],
   "dunn": {
     "fraccion_capacitiva": {
-      "5": 0.2841924235394959,
-      "10": 0.34031410774431425,
-      "20": 0.43858780156405636,
-      "50": 0.5850276462739354
+      "5": 0.2646659420008257,
+      "10": 0.31693158030232266,
+      "20": 0.40845301998309613,
+      "50": 0.5448311787104991
     },
-    "potenciales_con_r2_bajo": 46,
+    "potenciales_con_r2_bajo": 5,
     "potenciales": 60,
     "avisos": [
-      "7 coeficientes salen negativos de verdad (más de un 5 % de su propia escala) y ninguna de las dos contribuciones puede serlo: ahí el modelo de dos términos no describe la corriente. Suele ser un pico que se desplaza con la velocidad, y entonces a la velocidad más alta ese potencial ya no está sobre el pico"
+      "en 13 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (+0.095 a +0.298 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo",
+      "6 de los 120 coeficientes se han quedado en CERO porque el ajuste SIN restringir los quería negativos de verdad —más de un 5 % de su propia escala, que es el mismo listón de siempre— y ninguna de las dos contribuciones puede serlo: en esos potenciales el modelo no describe la corriente. Suele ser un pico que se desplaza con la velocidad —a la velocidad más alta ese potencial ya no está sobre el pico— o una corriente que no escala ni con ν ni con √ν, como una parásita constante"
     ]
   },
   "trasatti": {
@@ -287,6 +303,43 @@
       "el b baja a 0.53, pero no cuenta como difusión: en esta serie las tres leyes de i(ν) ajustan igual de bien y hay 0.41 µA de corriente parásita medidos aparte, suficientes para explicar por sí solos que b se aparte de 1. Para decidirlo hace falta quitar la fuga —ventana más estrecha, electrolito desoxigenado— y repetir"
     ]
   },
+  "sin_la_fuga": {
+    "que_se_hizo": "restada una corriente anódica constante de 0.41 µA, medida del balance de carga (ΔQ contra la duración del ciclo) y por tanto independiente de cómo escala i con ν",
+    "b": [
+      {
+        "e_v": -0.4504953891038895,
+        "b": 1.1444445973184803,
+        "error": 0.15042002932978005
+      },
+      {
+        "e_v": -0.2754649206995964,
+        "b": 1.1395390352711616,
+        "error": 0.1055205342868235
+      },
+      {
+        "e_v": -0.10043445229530334,
+        "b": 1.0200961025656117,
+        "error": 0.12248183101962241
+      },
+      {
+        "e_v": 0.07459601610898975,
+        "b": 0.8575728304129794,
+        "error": 0.07610054779012794
+      },
+      {
+        "e_v": 0.2496264845132828,
+        "b": 0.5997744180732003,
+        "error": 0.01608141007206411
+      }
+    ],
+    "dunn": {
+      "5": 0.4208378095948833,
+      "10": 0.42335324732975593,
+      "20": 0.502856877719389,
+      "50": 0.6290723137841416
+    },
+    "lectura": "restar una constante única sobrecorrige en el extremo negativo (b pasa de 1, que es imposible) y se queda corta en el positivo. Los dos errores son mayores que el efecto que se quiere medir: con estos datos el b y el reparto de Dunn no se pueden obtener"
+  },
   "avisos_de_la_serie": [
     "repetición a 49.9938 mV/s: 0.1434 → 0.1163 mF (+18.9 %) — el electrodo CAMBIÓ durante la serie. Las velocidades se midieron en orden, así que el tiempo y ν van juntos y esta pérdida entra en la dependencia con ν: el b, el reparto de Dunn y la retención la llevan dentro sin decirlo. Lo que la serie mide es cinética MÁS degradación, y sólo esta repetición las separa",
     "de las 5 curvas, 1 repetían una velocidad ya medida; para la cinética se usa la ÚLTIMA de cada velocidad y la repetición queda como control de deriva",
@@ -301,15 +354,7 @@
   "metadatos_de_los_archivos": [
     {
       "archivo": "CV_multpit_01",
-      "comentarios_del_mpr": {
-        "tecnica": "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
-        "texto": [
-          "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
-          "Au/Pd",
-          "NaCl (0.2M)",
-          "SCE Saturated Calomel Electrode"
-        ]
-      },
+      "puntos": 19635,
       "avisos_del_lector": [
         "la disposición binaria del .mpr es ingeniería inversa de la comunidad, no una especificación publicada. La aritmética cuadra, que descarta que una columna tenga la ANCHURA equivocada, pero no que tenga el NOMBRE equivocado. Comprueba una medida contra la exportación ASCII (.mpt) de EC-Lab la primera vez; para lo que se publica, exporta .mpt",
         "no hay un .mps junto al .mpr, así que los ajustes del experimento (velocidad, corriente, ventana) no se han podido leer. Cópialos juntos: EC-Lab los escribe en pareja",
@@ -318,15 +363,7 @@
     },
     {
       "archivo": "CV_multpit_02",
-      "comentarios_del_mpr": {
-        "tecnica": "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
-        "texto": [
-          "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
-          "Au/Pd",
-          "NaCl (0.2M)",
-          "SCE Saturated Calomel Electrode"
-        ]
-      },
+      "puntos": 8016,
       "avisos_del_lector": [
         "la disposición binaria del .mpr es ingeniería inversa de la comunidad, no una especificación publicada. La aritmética cuadra, que descarta que una columna tenga la ANCHURA equivocada, pero no que tenga el NOMBRE equivocado. Comprueba una medida contra la exportación ASCII (.mpt) de EC-Lab la primera vez; para lo que se publica, exporta .mpt",
         "no hay un .mps junto al .mpr, así que los ajustes del experimento (velocidad, corriente, ventana) no se han podido leer. Cópialos juntos: EC-Lab los escribe en pareja",
@@ -335,15 +372,7 @@
     },
     {
       "archivo": "CV_multpit_03",
-      "comentarios_del_mpr": {
-        "tecnica": "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
-        "texto": [
-          "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
-          "Au/Pd",
-          "NaCl (0.2M)",
-          "SCE Saturated Calomel Electrode"
-        ]
-      },
+      "puntos": 8017,
       "avisos_del_lector": [
         "la disposición binaria del .mpr es ingeniería inversa de la comunidad, no una especificación publicada. La aritmética cuadra, que descarta que una columna tenga la ANCHURA equivocada, pero no que tenga el NOMBRE equivocado. Comprueba una medida contra la exportación ASCII (.mpt) de EC-Lab la primera vez; para lo que se publica, exporta .mpt",
         "no hay un .mps junto al .mpr, así que los ajustes del experimento (velocidad, corriente, ventana) no se han podido leer. Cópialos juntos: EC-Lab los escribe en pareja",
@@ -352,15 +381,7 @@
     },
     {
       "archivo": "CV_multpit_04",
-      "comentarios_del_mpr": {
-        "tecnica": "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
-        "texto": [
-          "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
-          "Au/Pd",
-          "NaCl (0.2M)",
-          "SCE Saturated Calomel Electrode"
-        ]
-      },
+      "puntos": 8017,
       "avisos_del_lector": [
         "la disposición binaria del .mpr es ingeniería inversa de la comunidad, no una especificación publicada. La aritmética cuadra, que descarta que una columna tenga la ANCHURA equivocada, pero no que tenga el NOMBRE equivocado. Comprueba una medida contra la exportación ASCII (.mpt) de EC-Lab la primera vez; para lo que se publica, exporta .mpt",
         "no hay un .mps junto al .mpr, así que los ajustes del experimento (velocidad, corriente, ventana) no se han podido leer. Cópialos juntos: EC-Lab los escribe en pareja",
@@ -369,15 +390,7 @@
     },
     {
       "archivo": "CV_multpit_05",
-      "comentarios_del_mpr": {
-        "tecnica": "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
-        "texto": [
-          "Fe(CN)63-/Fe(CN)64- 5.10-3 M",
-          "Au/Pd",
-          "NaCl (0.2M)",
-          "SCE Saturated Calomel Electrode"
-        ]
-      },
+      "puntos": 7993,
       "avisos_del_lector": [
         "la disposición binaria del .mpr es ingeniería inversa de la comunidad, no una especificación publicada. La aritmética cuadra, que descarta que una columna tenga la ANCHURA equivocada, pero no que tenga el NOMBRE equivocado. Comprueba una medida contra la exportación ASCII (.mpt) de EC-Lab la primera vez; para lo que se publica, exporta .mpt",
         "no hay un .mps junto al .mpr, así que los ajustes del experimento (velocidad, corriente, ventana) no se han podido leer. Cópialos juntos: EC-Lab los escribe en pareja",

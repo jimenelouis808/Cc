@@ -16,7 +16,8 @@ from typing import Optional
 
 import numpy as np
 
-from ..echem.curve import ChargeDischarge, Electrode, Impedance, Voltammogram
+from ..echem.curve import (ChargeDischarge, CurveError, Electrode, Impedance,
+                           Voltammogram)
 from ..echem.eis import (
     CircuitError,
     CircuitTemplate,
@@ -134,6 +135,15 @@ class EchemSession:
     by the L-curve. Whichever it is, it is reported: a DRT is an
     ill-posed inversion and λ is a choice about how much structure to
     believe, so a DRT without its λ is not a measurement."""
+    cycle_choice: Optional[int] = None
+    """Which cycle of every loaded voltammogram to report, 1-based.
+
+    ``None`` is the last COMPLETE one, which is the right default and is
+    still a default: it is not the cycle to quote when the later ones
+    drifted, nor when several files have to be compared at the same cycle
+    number. The choice is pushed onto the curves themselves, so it
+    survives into every capacitance the package computes and into a saved
+    project."""
     non_faradaic: bool = False
     """Whether the rate study's window was chosen free of faradaic current.
     It is off by default because most windows are not, and claiming
@@ -250,14 +260,53 @@ class EchemSession:
         self.retag_electrode()
 
     def retag_electrode(self) -> None:
-        """Push the current electrode onto every loaded curve.
+        """Push the current electrode and cycle choice onto every curve.
 
         Editing the mass after loading is the normal order of events, and
         without this the curves keep the electrode they were read with and
-        the specific capacitances silently stay wrong.
+        the specific capacitances silently stay wrong. The same goes for
+        the cycle: it is read by :meth:`Voltammogram.reporting_cycle`,
+        which every capacitance goes through.
         """
         for curve in self.all_curves():
             curve.electrode = self.electrode
+            if hasattr(curve, "preferred_cycle"):
+                curve.preferred_cycle = self.cycle_choice
+
+    def cycle_choices(self) -> list[tuple[Optional[int], str]]:
+        """``(número, etiqueta)`` for the cycle selector.
+
+        Built from the voltammogram that has the most cycles, so a rate
+        series whose files differ in length still offers every number
+        that exists somewhere. Each label says whether that cycle is
+        complete, because an incomplete one integrated over part of its
+        own path gives a capacitance low by that fraction and nothing
+        downstream says so.
+        """
+        curves = [c for c in ([self.cv] + list(self.rate_series)) if c is not None]
+        if not curves:
+            return [(None, "último completo")]
+        reference = max(curves, key=lambda c: len(c.cycles()))
+        every = reference.cycles()
+        complete = {cycle.name for cycle in reference.complete_cycles()}
+        out: list[tuple[Optional[int], str]] = [
+            (None, f"último completo (de {len(every)})")
+        ]
+        for index, cycle in enumerate(every, start=1):
+            mark = "" if cycle.name in complete else "  — INCOMPLETO"
+            out.append((index, f"ciclo {index}{mark}"))
+        return out
+
+    def reporting_cycle_note(self) -> str:
+        """What the analysis will actually integrate, in one line."""
+        curve = self.cv or (self.rate_series[0] if self.rate_series else None)
+        if curve is None:
+            return ""
+        try:
+            chosen, why = curve.reporting_cycle()
+        except CurveError as exc:
+            return str(exc)
+        return why or f"{curve.name}: un solo ciclo, {chosen.n} puntos"
 
     def all_curves(self) -> list:
         out = [c for c in (self.cv, self.gcd, self.eis, self.lsv) if c is not None]

@@ -2458,17 +2458,111 @@ programa de destino no podía usar. Ninguna es cosmética.
   la `C_red` baja de 6.61 a 6.55 F/g mientras la `C_lazo` cae de 7.82 a
   7.17. Lo que se va en esos diez ciclos es la fuga, no lo almacenado.
 
-## El bloque de comentarios de un `.mpr` se arrastra
+## El bloque de comentarios de un `.mpr` NO se lee
 
-- Los cinco archivos del usuario declaran en sus comentarios
-  `Fe(CN)63-/Fe(CN)64- 5.10-3 M`, `Au/Pd`, `NaCl (0.2M)` y `SCE`, y el
-  experimento era carbono vítreo con 20 µg de material. EC-Lab arrastra
-  el bloque de un experimento al siguiente y nadie lo actualiza.
-- No se puede resolver por el texto, pero sí por los datos: un
-  ferricianuro 5 mM sobre carbono vítreo daría dos picos separados unos
-  70 mV en torno a +0.2 V, y no hay ninguno. **Se informa la
-  contradicción y se usa lo que dijo el usuario**, porque la masa y el
-  área salen de ahí y con ellas todos los F/g.
+- EC-Lab arrastra el bloque de comentarios de un experimento al
+  siguiente y el usuario no lo edita nunca. Los cinco archivos de la
+  serie de CV declaran `Fe(CN)63-/Fe(CN)64- 5.10-3 M`, `Au/Pd`,
+  `NaCl (0.2M)` y `SCE`; la medida era carbono vítreo con 20 µg de FeSe/C
+  en KOH 0.5 M frente a Ag/AgCl saturado. **No es información con la que
+  haya que hacer nada**: ni se usa, ni se contrasta, ni se informa como
+  contradicción. Se ignora.
+- Lo que sí se lee de un archivo de EC-Lab son los PARÁMETROS de la
+  técnica —velocidad, corriente, ventana, ciclos, y en un `.mps`/`.mpt`
+  también masa y área— que el programa escribe él mismo y que por tanto
+  describen esta medida. Esa distinción es la regla: campos que escribe
+  el instrumento, sí; texto que escribe una persona una vez y copia
+  cien, no.
+- La masa y el área las pone el usuario en la tarjeta **Electrodo** de la
+  barra lateral y se aplican al cargar. La barra de estado dice con qué
+  masa y qué área ha quedado el archivo: una masa en blanco se veía
+  antes tres pestañas después, cuando una capacitancia volvía sin sus
+  F/g.
+
+## Una ventana de potencial es una afirmación sobre la escala RHE
+
+- La ventana de la serie de CV es −0.600 a +0.400 V frente a Ag/AgCl
+  saturado, y en KOH 0.5 M eso son **+0.399 a +1.399 V vs RHE**: el
+  límite positivo queda **169 mV por encima del equilibrio del oxígeno**.
+  Sobre una muestra con α-Fe, Fe₃C y FeSe en álcali —un catalizador de
+  OER— la «corriente parásita» de 0.41 µA tiene nombre, y los 2.3 µA que
+  la ley de fuga pide en el límite positivo son 33 µA cm⁻² a η = 169 mV,
+  que es lo que da un catalizador de hierro razonable a ese
+  sobrepotencial.
+- **El pH de KOH 0.5 M no es 13.70.** El coeficiente de actividad medio
+  ronda 0.73 a esa concentración, así que a(OH⁻) ≈ 0.37, pOH = 0.44 y
+  pH = 13.56. Son 8 mV en la conversión, que no cambia la conclusión
+  aquí y sí cambia un sobrepotencial citado con tres cifras.
+- Por el otro lado, +0.399 V vs RHE está dentro de la región de ORR. Sin
+  purga de N₂ o Ar, la corriente catódica del límite negativo lleva
+  oxígeno disuelto dentro, y entonces la `C_red` —que es la cifra que se
+  cita por estar libre de la fuga ANÓDICA— también está inflada.
+- **Y un Ag/AgCl en KOH deriva**: el cloruro se fuga y el potencial se
+  mueve. La base de datos ya lo dice en la ficha del Hg/HgO. Parte de
+  una degradación medida en álcali con esa referencia puede ser la
+  referencia.
+
+## Un coeficiente de Dunn no puede ser negativo, y la figura lo delata
+
+- El ajuste era por mínimos cuadrados sin restricción, así que k₁ salía
+  negativo en 7 de 60 potenciales de un patrón real. Una k₁ negativa
+  dibuja la curva capacitiva **al otro lado del lazo**, y eso es lo
+  primero que se ve en la figura y lo último que admiten los
+  porcentajes. El usuario lo informó mirando el dibujo.
+- Se ajusta con `lsq_linear` y cota inferior cero, **sobre |i|**, con el
+  signo de la rama puesto después. Restringir la corriente CON SIGNO
+  haría ilegal la rama catódica entera: el signo de una corriente
+  capacitiva es el del barrido, no una propiedad del coeficiente.
+- **Y la cota superior que parecía obvia está mal.** El modelo también
+  implica `k₁ν ≤ |i_ν|` en cada velocidad, pero el mínimo de unos pocos
+  `|i_ν|/ν` ruidosos cae por debajo de la k₁ verdadera, así que la cota
+  liga sobre el ruido y recorta k₁ hacia abajo: sobre el
+  pseudocondensador sintético, que es 100 % capacitivo por
+  construcción, devolvía 91 %. Hay una prueba que lo fija.
+- Mantener la banda dentro del lazo es trabajo de la FIGURA, no del
+  ajuste: `DunnAnalysis.capacitive_inside` recorta y devuelve además la
+  máscara de dónde hubo que recortar, así que el exceso se enseña en vez
+  de absorberse.
+- **Y donde la corriente de una rama cambia de signo entre una velocidad
+  y otra, la separación no está definida.** k₁ν es una fracción de una
+  corriente que no tiene un signo. En estos archivos pasa cerca del
+  límite positivo, donde la rama catódica lleva corriente anódica, y es
+  el grueso de lo que la máscara marca.
+- **El R² se mide sobre la CORRIENTE, no sobre i/√ν.** La variable
+  transformada tiene mucha menos varianza que explicar, y su R² se lee
+  como un ajuste mucho peor del que el mismo modelo tiene: 46 de 60
+  potenciales por debajo de 0.95 contra 4 de 60.
+
+## Quitar una fuga para medir el b es circular si la fuga salió de i(ν)
+
+- `without_parasitic` existe para responder «¿el b se aparta de 1 por
+  difusión o por la fuga?», y sólo responde si la corriente que se resta
+  se midió SIN mirar cómo escala i con ν. La de `LeakageFit` vale: sale
+  del balance de carga, `ΔQ` contra la duración del ciclo. La de
+  `compare_current_laws` **no vale**: se ajustó a i(ν), así que restarla
+  y volver a ajustar devuelve 100 % capacitivo por construcción.
+- Hecho de la forma legítima sobre estos archivos, la respuesta es que
+  el b **no se puede medir aquí**: restar la constante única de 0.41 µA
+  sobrecorrige en el extremo negativo —b pasa de 1, que es imposible— y
+  se queda corta en el positivo, donde la fuga vale cinco veces su
+  propia media. Los dos errores son mayores que el efecto.
+- Lo que sí lo mediría es una cronoamperometría en el límite positivo:
+  da `i_par` directamente, sin suponer nada sobre i(ν).
+
+## El ciclo que se informa se puede elegir
+
+- `Voltammogram.preferred_cycle`, 1-based, y `None` es el último
+  completo. Va en la curva y no en un argumento porque lo lee
+  `reporting_cycle()`, por donde pasa TODA capacitancia del paquete: un
+  argumento habría que repetirlo en cada llamada y se perdería en la
+  primera que se olvidara.
+- Un número fuera de rango se rechaza en vez de caer al defecto. Un
+  número que puso una persona es una afirmación, e informar
+  calladamente otro ciclo es justo lo que nadie nota.
+- Elegir uno incompleto se permite y se dice: su carga se integra sobre
+  parte del recorrido y la capacitancia sale baja en esa proporción.
+- Se guarda en el proyecto (`ciclo_elegido`), por la misma razón que la
+  masa: sin él la medida se reabre y ya no da el mismo número.
 
 ## Controles de ajuste y de sesión
 

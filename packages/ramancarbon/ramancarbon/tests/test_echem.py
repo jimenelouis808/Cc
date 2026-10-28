@@ -11,7 +11,8 @@ from ramancarbon.echem.curve import (
     Impedance,
     Voltammogram,
 )
-from ramancarbon.echem.cv import analyse_cv, analyse_rate_study, capacitance
+from ramancarbon.echem.cv import (_current_at, analyse_cv,
+                                  analyse_rate_study, capacitance)
 from ramancarbon.echem.eis import (
     CircuitError,
     cpe_to_capacitance,
@@ -304,6 +305,104 @@ def test_the_three_laws_for_the_current_are_compared_on_equal_terms():
     assert compare_current_laws(series[:3]) == [], (
         "tres velocidades no bastan para tres leyes de dos parámetros"
     )
+
+
+def test_the_cycle_to_report_can_be_chosen_by_hand():
+    curve = make_cv_demo("condensador", capacitance=0.05, cycles=4, seed=1)
+    default, why = curve.reporting_cycle()
+    assert "ÚLTIMO completo" in why
+
+    curve.preferred_cycle = 2
+    chosen, why = curve.reporting_cycle()
+    assert "elegido a mano" in why
+    assert chosen.name == curve.cycles()[1].name
+    # And it reaches the capacitance, which is the point of putting it on
+    # the curve rather than in a function argument.
+    assert capacitance(curve)[0].note.startswith("ciclo 2")
+
+    curve.preferred_cycle = 99
+    with pytest.raises(CurveError, match="se ha pedido el ciclo 99"):
+        curve.reporting_cycle()
+
+
+def test_choosing_an_incomplete_cycle_says_so():
+    curve = make_cv_demo("condensador", capacitance=0.05, cycles=3, seed=1)
+    cut = int(0.90 * curve.n)
+    truncated = Voltammogram(
+        potential=curve.potential[:cut], current=curve.current[:cut],
+        scan_rate=curve.scan_rate, electrode=curve.electrode,
+        cycle=None if curve.cycle is None else curve.cycle[:cut],
+    )
+    truncated.preferred_cycle = len(truncated.cycles())
+    _, why = truncated.reporting_cycle()
+    assert "no está completo" in why
+
+
+def test_the_dunn_coefficients_cannot_be_negative():
+    """A capacitive current that subtracts from the measured one is not a
+    capacitive current, and drawn unclipped it shades a region outside
+    the voltammogram — which is the first thing anyone notices about the
+    figure and the last thing the percentages admit."""
+    from ramancarbon.echem.cv import dunn_analysis
+    from ramancarbon.examples.demo_data import cv_rate_series
+
+    series = cv_rate_series("hibrido", seed=2)
+    constrained = dunn_analysis(series)
+    assert np.all(constrained.k1_anodic >= 0.0)
+    assert np.all(constrained.k2_anodic >= 0.0)
+
+    free = dunn_analysis(series, nonnegative=False)
+    assert free.k1.shape == constrained.k1.shape
+
+
+def test_the_capacitive_band_is_drawn_inside_the_loop():
+    from ramancarbon.echem.cv import dunn_analysis
+    from ramancarbon.examples.demo_data import cv_rate_series
+
+    series = cv_rate_series("hibrido", seed=2)
+    analysis = dunn_analysis(series)
+    fastest = max(series, key=lambda c: c.scan_rate)
+    anodic, cathodic = analysis.capacitive_inside(fastest)[:2]
+    for branch, side in ((anodic, "media"), (cathodic, "catodica")):
+        measured = np.array(
+            [_current_at(fastest, float(p), side) for p in analysis.potentials],
+            dtype=float)
+        good = np.isfinite(measured)
+        assert np.all(np.abs(branch[good]) <= np.abs(measured[good]) + 1e-15)
+
+
+def test_a_pure_pseudocapacitor_is_still_fully_capacitive():
+    """The constraint must not buy a readable figure with a biased
+    number: clipping k₁ at min(|i|/ν) looked right and returned 91 % on
+    an electrode that is 100 % capacitive by construction."""
+    from ramancarbon.echem.cv import dunn_analysis
+    from ramancarbon.examples.demo_data import cv_rate_series
+
+    analysis = dunn_analysis(cv_rate_series("pseudocondensador", seed=2))
+    assert min(analysis.fractions.values()) > 0.95
+
+
+def test_a_leak_correction_has_to_come_from_outside_the_rate_fit():
+    from ramancarbon.echem.cv import leakage_from_rates, without_parasitic
+
+    leak = 2e-6
+    series = []
+    for rate in (0.005, 0.01, 0.02, 0.05):
+        curve = make_cv_demo("condensador", capacitance=0.05,
+                             scan_rate=rate, seed=1).cycles()[-1]
+        curve.current = curve.current + leak
+        series.append(curve)
+
+    measured = leakage_from_rates(series)
+    fixed, note = without_parasitic(series, measured.leakage_a)
+    assert "balance de carga" in note
+    assert fixed[0].current == pytest.approx(
+        series[0].current - measured.leakage_a, abs=1e-12)
+    assert fixed[0].metadata["corriente_parasita_restada_a"] == pytest.approx(
+        measured.leakage_a)
+    # The corrected series must balance, which is what says the leak was
+    # the whole of the imbalance.
+    assert leakage_from_rates(fixed).leakage_a == pytest.approx(0.0, abs=0.05 * leak)
 
 
 def test_a_repeat_at_the_same_rate_is_used_as_a_drift_control():

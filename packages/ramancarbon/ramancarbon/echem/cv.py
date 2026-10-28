@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
 import numpy as np
+from scipy.optimize import lsq_linear as _lsq_linear
 from scipy.signal import find_peaks as _scipy_find_peaks
 from scipy.signal import peak_widths as _peak_widths
 
@@ -1270,6 +1271,53 @@ def leakage_from_rates(curves: Sequence[Voltammogram]) -> Optional[LeakageFit]:
     )
 
 
+def without_parasitic(
+    curves: Sequence[Voltammogram], current: float
+) -> tuple[list[Voltammogram], str]:
+    """Subtract a constant anodic current from every curve.
+
+    ``current`` in A, **measured independently of ``i(ν)``**. That
+    requirement is the whole point and it is easy to miss: the b-value
+    and the Dunn separation are fits of ``i(ν)``, so correcting them with
+    a parasitic current that was itself fitted to ``i(ν)`` assumes the
+    answer. Subtract ``k_cap·ν + i_par``'s own ``i_par`` and Dunn
+    afterwards returns 100 % capacitive by construction, having been
+    told so.
+
+    Two measurements qualify. :class:`LeakageFit` gets the current from
+    the CHARGE balance, ``ΔQ`` against cycle duration, which never looks
+    at how the current scales with ν — that is the one used below. A
+    chronoamperometry held at the positive limit measures it even more
+    directly, and is what to do when the question matters.
+
+    What comes back is a copy of each curve with the constant removed,
+    and a sentence saying what was done, for the figure caption. Run the
+    rate study again on it: if b climbs to 1 and the Dunn fractions go
+    with it, the departure was the leak; if it does not, something else
+    is going on and the measurement can say so.
+    """
+    corrected = []
+    for curve in curves:
+        clone = Voltammogram(
+            potential=curve.potential,
+            current=curve.current - float(current),
+            scan_rate=curve.scan_rate,
+            electrode=curve.electrode,
+            cycle=curve.cycle,
+            time=curve.time,
+            name=f"{curve.name} [sin fuga]",
+            metadata=dict(curve.metadata),
+        )
+        clone.metadata["corriente_parasita_restada_a"] = float(current)
+        corrected.append(clone)
+    return corrected, (
+        f"restada una corriente anódica constante de "
+        f"{1e6 * current:.2f} µA, medida del balance de carga (ΔQ contra "
+        f"la duración del ciclo) y por tanto independiente de cómo escala "
+        f"i con ν"
+    )
+
+
 def drift_check(curves: Sequence[Voltammogram]) -> Optional[DriftCheck]:
     """The repeat in a rate series, if there is one.
 
@@ -1561,6 +1609,50 @@ class DunnAnalysis:
     rates: tuple[float, ...] = ()
     warnings: list[str] = field(default_factory=list)
 
+    def capacitive_inside(
+        self, curve: Voltammogram
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """``(anódica, catódica, excedida)`` for the published figure.
+
+        The capacitive curves of both branches at this curve's scan rate,
+        each clipped to the current actually measured there, plus the
+        mask of where the clipping had to happen.
+
+        The clipping is not cosmetic and it is not a correction. The
+        separation says the measured current is the sum of two
+        non-negative parts, so a capacitive part larger than the whole is
+        the model failing at that potential; drawn unclipped it shades a
+        region outside the voltammogram, which is the first thing anyone
+        notices about the figure and the last thing the percentages
+        admit. Clipped and masked, the figure stays readable and still
+        says where the separation did not hold.
+
+        On the user's files the mask is almost entirely the potentials
+        where the branch's own current changes sign between one scan rate
+        and the next — the cathodic sweep carries anodic current near the
+        positive limit — and there the separation is undefined rather
+        than wrong.
+        """
+        anodic, cathodic = self.branch_currents(curve.scan_rate)
+        if anodic is None or cathodic is None:
+            empty = np.zeros(self.potentials.size, dtype=bool)
+            return self.capacitive_current(curve.scan_rate), None, empty
+        exceeded = np.zeros(self.potentials.size, dtype=bool)
+        out = []
+        for capacitive, branch in ((anodic, "media"), (cathodic, "catodica")):
+            measured = np.array(
+                [_current_at(curve, float(potential), branch)
+                 for potential in self.potentials], dtype=float
+            )
+            with np.errstate(invalid="ignore"):
+                over = ~(np.abs(capacitive) <= np.abs(measured))
+                over |= np.sign(capacitive) != np.sign(measured)
+            over &= np.isfinite(measured)
+            exceeded |= over
+            clipped = np.where(over, measured, capacitive)
+            out.append(np.where(np.isfinite(clipped), clipped, capacitive))
+        return out[0], out[1], exceeded
+
     def capacitive_current(self, scan_rate: float) -> np.ndarray:
         """The capacitive part of the voltammogram at one scan rate, in A.
 
@@ -1623,6 +1715,7 @@ def dunn_analysis(
     window: Optional[tuple[float, float]] = None,
     points: int = 60,
     sweep: str = "media",
+    nonnegative: bool = True,
 ) -> DunnAnalysis:
     """Separate capacitive from diffusive current, Dunn's way.
 
@@ -1640,6 +1733,15 @@ def dunn_analysis(
         How many potentials to separate at.
     sweep:
         Which branch to read the current from; see :data:`SWEEP_CHOICES`.
+    nonnegative:
+        Hold both coefficients at or above zero, which is the default and
+        what the method means. Neither contribution can be negative — a
+        capacitive current that subtracts from the measured one is not a
+        capacitive current — and an unconstrained fit that returns one
+        draws a shaded band OUTSIDE the voltammogram it is supposed to sit
+        inside. That is what the published figure makes obvious and the
+        percentages hide. Set it false only to see the unconstrained
+        coefficients.
 
     Returns
     -------
@@ -1673,10 +1775,13 @@ def dunn_analysis(
     capacitive = np.zeros((len(ordered), potentials.size))
     total = np.zeros_like(capacitive)
 
+    crossings: list[float] = []
+
     def separate(branch: str):
-        """``(k₁, k₂, R²)`` against potential for one branch."""
+        """``(k₁, k₂, R², medidas, k₁ y k₂ sin restringir)``."""
         one = np.zeros(potentials.size)
         two = np.zeros(potentials.size)
+        free = np.zeros((2, potentials.size))
         fit_quality = np.full(potentials.size, np.nan)
         measured = np.zeros((len(ordered), potentials.size))
         for column, potential in enumerate(potentials):
@@ -1686,19 +1791,79 @@ def dunn_analysis(
             observed = np.array(currents, dtype=float)
             # i/√ν = k₁√ν + k₂ — a straight line in √ν, which is the form
             # that keeps the fit linear and the two coefficients separable.
-            slope, intercept, _, r2 = _fit_line(root, observed / root)
+            if nonnegative:
+                # The fit is on |i| and the branch's own sign is put back
+                # afterwards. Constraining the SIGNED current would make
+                # the whole cathodic branch illegal, and the sign of a
+                # capacitive current is the sign of the sweep, not a
+                # property of the coefficient.
+                direction = float(np.sign(np.median(observed))) or 1.0
+                if np.any(np.sign(observed) != direction):
+                    crossings.append(float(potential))
+                magnitude = np.abs(observed)
+                design = np.vstack([root, np.ones_like(root)]).T
+                # Non-negativity, and nothing else. The model also
+                # implies k₁ν ≤ |i_ν| at every rate, and imposing THAT as
+                # a ceiling looks right and is not: the minimum of a few
+                # noisy |i_ν|/ν sits below the true k₁, so the ceiling
+                # binds on noise and clips k₁ downwards. Measured on the
+                # synthetic pure pseudocapacitor, where the answer is
+                # 100 % capacitive by construction, it returned 91 %.
+                # Keeping the capacitive curve inside the measured loop is
+                # the FIGURE's job — see `capacitive_inside` — because
+                # there the excess can be shown rather than absorbed.
+                solution = _lsq_linear(design, magnitude / root,
+                                       bounds=([0.0, 0.0], [np.inf, np.inf]))
+                coefficients = solution.x
+                slope, intercept = (float(coefficients[0]) * direction,
+                                    float(coefficients[1]) * direction)
+                # Kept so the warning below can use the criterion this
+                # package already calibrated: a coefficient at its bound
+                # only means something when the UNRESTRICTED fit wanted
+                # to go appreciably negative. On an ideal capacitor the
+                # diffusive term is genuinely zero and half the
+                # potentials land on the bound, which is the right
+                # answer and nothing to complain about.
+                loose, offset, _, _ = _fit_line(root, magnitude / root)
+                free[:, column] = (loose, offset)
+                predicted = (slope * rates + intercept * root) * direction
+                total_variation = float(
+                    ((magnitude - magnitude.mean()) ** 2).sum()
+                )
+                residual = float(((magnitude - predicted) ** 2).sum())
+                r2 = (1.0 - residual / total_variation
+                      if total_variation > 0 else 1.0)
+            else:
+                slope, intercept, _, _ = _fit_line(root, observed / root)
+                # R² on the CURRENT, not on i/√ν, so that the constrained
+                # and unconstrained fits are judged by the same number.
+                # The transformed variable has far less variance to
+                # explain, and its R² reads as a much worse fit than the
+                # same model has: on the user's files, 46 of 60 potentials
+                # below 0.95 against 4 of 60.
+                predicted = slope * rates + intercept * root
+                spread = float(((observed - observed.mean()) ** 2).sum())
+                residual = float(((observed - predicted) ** 2).sum())
+                r2 = 1.0 - residual / spread if spread > 0 else 1.0
             one[column], two[column], fit_quality[column] = slope, intercept, r2
             measured[:, column] = observed
-        return one, two, fit_quality, measured
+        return one, two, fit_quality, measured, free
 
     # Both branches, always. The `sweep` choice decides which one the
     # headline fractions report, but the FIGURE everybody publishes needs
     # both: it fills the surface-controlled region between the cathodic
     # and anodic capacitive curves, and the diffusive part is what is left
     # between each of those and the measured trace.
-    k1_anodic, k2_anodic, _, _ = separate("media")
-    k1_cathodic, k2_cathodic, _, _ = separate("catodica")
-    k1, k2, quality, total = separate(sweep)
+    k1_anodic, k2_anodic, _, _, _ = separate("media")
+    k1_cathodic, k2_cathodic, _, _, _ = separate("catodica")
+    k1, k2, quality, total, unrestricted = separate(sweep)
+    pinned = 0
+    if nonnegative:
+        for coefficients in unrestricted:
+            scale = (float(np.max(np.abs(coefficients)))
+                     if coefficients.size else 0.0)
+            if scale > 0:
+                pinned += int(np.count_nonzero(coefficients < -0.05 * scale))
     for index in range(len(ordered)):
         capacitive[index] = k1 * rates[index]
 
@@ -1724,20 +1889,52 @@ def dunn_analysis(
     # the noise puts it below zero at half the potentials. Only a
     # coefficient negative by an appreciable fraction of its own scale is
     # evidence that the two-term model does not fit.
-    negative = 0
-    for coefficients in (k1, k2):
-        scale = float(np.max(np.abs(coefficients))) if coefficients.size else 0.0
-        if scale > 0:
-            negative += int(np.count_nonzero(coefficients < -0.05 * scale))
-    if negative:
-        warnings.append(
-            f"{negative} coeficientes salen negativos de verdad (más de un "
-            "5 % de su propia escala) y ninguna de las dos contribuciones "
-            "puede serlo: ahí el modelo de dos términos no describe la "
-            "corriente. Suele ser un pico que se desplaza con la velocidad, "
-            "y entonces a la velocidad más alta ese potencial ya no está "
-            "sobre el pico"
-        )
+    if nonnegative:
+        # A coefficient driven onto its bound is the constrained fit's way
+        # of saying what the unconstrained one said by going negative: the
+        # two-term model does not describe the current there. The
+        # difference is that the figure stays readable — the shaded band
+        # stays inside the voltammogram — instead of a negative k₁ drawing
+        # a capacitive current on the wrong side of the loop.
+        unique_crossings = sorted(set(round(value, 3) for value in crossings))
+        if unique_crossings:
+            warnings.append(
+                f"en {len(unique_crossings)} potenciales la corriente de la "
+                f"rama CAMBIA DE SIGNO entre una velocidad y otra "
+                f"({unique_crossings[0]:+.3f} a {unique_crossings[-1]:+.3f} V). "
+                "Ahí la separación no está definida: k₁ν es una fracción de "
+                "una corriente que no tiene un signo, y la banda capacitiva "
+                "de la figura puede salirse del lazo por ese motivo y no por "
+                "el ajuste. Es la firma de un cruce por cero que se mueve "
+                "con la velocidad — en estos archivos, la rama catódica "
+                "lleva corriente anódica cerca del límite positivo"
+            )
+        if pinned:
+            warnings.append(
+                f"{pinned} de los {2 * potentials.size} coeficientes se han "
+                "quedado en CERO porque el ajuste SIN restringir los quería "
+                "negativos de verdad —más de un 5 % de su propia escala, que "
+                "es el mismo listón de siempre— y ninguna de las dos "
+                "contribuciones puede serlo: en esos potenciales el "
+                "modelo no describe la corriente. Suele ser un pico que se "
+                "desplaza con la velocidad —a la velocidad más alta ese "
+                "potencial ya no está sobre el pico— o una corriente que no "
+                "escala ni con ν ni con √ν, como una parásita constante"
+            )
+    else:
+        negative = 0
+        for coefficients in (k1, k2):
+            scale = (float(np.max(np.abs(coefficients)))
+                     if coefficients.size else 0.0)
+            if scale > 0:
+                negative += int(np.count_nonzero(coefficients < -0.05 * scale))
+        if negative:
+            warnings.append(
+                f"{negative} coeficientes salen negativos de verdad (más de "
+                "un 5 % de su propia escala) y ninguna de las dos "
+                "contribuciones puede serlo: ahí el modelo de dos términos "
+                "no describe la corriente"
+            )
     if sweep not in {key for key, _ in SWEEP_CHOICES}:
         raise CurveError(
             f"rama desconocida {sweep!r}; las que hay son: "

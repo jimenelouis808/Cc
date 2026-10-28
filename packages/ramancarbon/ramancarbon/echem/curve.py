@@ -272,6 +272,18 @@ class Voltammogram:
     electrode never swept. Keeping the measured clock removes the
     reconstruction, and with it a whole family of silent factor errors.
     """
+    preferred_cycle: Optional[int] = None
+    """Which cycle to report, 1-based, or ``None`` for the last complete
+    one.
+
+    The default is a good default and it is still a default. A record
+    whose later cycles drifted, one where the operator wants the
+    steady-state cycle they can see is steady, or a comparison that has
+    to quote the SAME cycle number across several files, all need the
+    choice made by hand — and a choice made by hand has to travel with
+    the curve, because otherwise it is lost the next time anything calls
+    :meth:`reporting_cycle`, which is every capacitance in the package.
+    """
     name: str = "CV"
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -411,10 +423,36 @@ class Voltammogram:
 
         Returns the curve itself when there is only one cycle, which is
         the ordinary case and needs no explanation.
+
+        :attr:`preferred_cycle` overrides all of it. An out-of-range
+        choice is refused rather than silently falling back, because a
+        number that came from a person is a statement and quietly
+        reporting a different cycle than the one asked for is the kind of
+        thing nobody notices.
         """
+        every = self.cycles()
+        if self.preferred_cycle is not None:
+            index = int(self.preferred_cycle)
+            if not 1 <= index <= len(every):
+                raise CurveError(
+                    f"se ha pedido el ciclo {index} y el archivo tiene "
+                    f"{len(every)}"
+                )
+            chosen = every[index - 1]
+            complete = {cycle.name for cycle in self.complete_cycles()}
+            note = f"ciclo {index} de {len(every)}, elegido a mano"
+            if chosen.name not in complete:
+                note += (
+                    ". AVISO: ese ciclo no está completo —no recorre dos "
+                    f"veces la ventana, sino {chosen.traversed:.3f} V de "
+                    f"{2 * chosen.span:.3f}— así que su carga se integra "
+                    "sobre parte del recorrido y la capacitancia sale baja "
+                    "en esa proporción"
+                )
+            return chosen, note
         complete = self.complete_cycles()
         if len(complete) <= 1:
-            total = len(self.cycles())
+            total = len(every)
             if total > 1 and not complete:
                 return self, (
                     f"ninguno de los {total} ciclos cubre el 90 % de la "
@@ -425,7 +463,7 @@ class Voltammogram:
             return self, ""
         chosen = complete[-1]
         return chosen, (
-            f"de los {len(self.cycles())} ciclos del archivo "
+            f"de los {len(every)} ciclos del archivo "
             f"({len(complete)} completos) se informa el ÚLTIMO completo, "
             f"«{chosen.name.split('[')[-1].rstrip(']')}». El primero lleva "
             "lo que solo pasa una vez —formación irreversible, SEI, "

@@ -10,7 +10,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.lines import Line2D
 from matplotlib.ticker import (AutoMinorLocator, NullFormatter,
                                NullLocator)
 
@@ -28,6 +27,24 @@ GREY = "#8a8a84"
 with open(f"{OUT}/resumen.json") as handle:
     SUMMARY = json.load(handle)
 FILES = {row["archivo"]: row for row in SUMMARY["por_archivo"]}
+
+#: E(RHE) − E(medido), from the conditions block. The window matters
+#: only once it is on this scale: 1.23 V is where oxygen evolution
+#: becomes thermodynamically possible, and the positive limit is past it.
+TO_RHE = (SUMMARY["condiciones"]["ventana_v_vs_rhe"][0]
+          - SUMMARY["condiciones"]["ventana_v_vs_referencia"][0])
+OER = 1.23 - TO_RHE   # the OER equilibrium, back on the measured scale
+
+
+def rhe_axis(axis, label=True):
+    """A second x axis in volts against RHE, with the OER line on it."""
+    axis.axvline(OER, color=MODEL, linewidth=0.9, linestyle=(0, (4, 2)),
+                 zorder=1)
+    top = axis.secondary_xaxis(
+        "top", functions=(lambda e: e + TO_RHE, lambda e: e - TO_RHE))
+    top.set_xlabel("E / V vs RHE" if label else "", fontsize=8.5)
+    top.tick_params(which="both", direction="in", labelsize=8)
+    return top
 
 
 def cycles_table():
@@ -49,12 +66,19 @@ def panel_curves(axis):
                   label=f"{rate:.0f} mV/s" + (" (antes)" if early else ""),
                   zorder=3 if not early else 2)
     axis.axhline(0.0, color=GREY, linewidth=0.6, zorder=1)
-    axis.set_xlabel("E / V vs ECS")
+    axis.set_xlabel("E / V vs Ag/AgCl")
     axis.set_ylabel("i / A g$^{-1}$")
     low, high = axis.get_ylim()
     axis.set_ylim(low, high + 0.38 * (high - low))
     axis.legend(frameon=False, fontsize=7.5, loc="upper left", ncol=2,
                 columnspacing=1.0, handlelength=1.6)
+    rhe_axis(axis)
+    axis.annotate(
+        "equilibrio\ndel O$_2$\n1.23 V vs RHE", xy=(OER, 0.0),
+        xytext=(OER - 0.30, 0.55 * axis.get_ylim()[0]), fontsize=6.8,
+        color=MODEL, ha="center",
+        arrowprops=dict(arrowstyle="-|>", color=MODEL, linewidth=0.8,
+                        shrinkA=2, shrinkB=2))
     axis.text(0.98, 0.04, "(a)", transform=axis.transAxes, ha="right",
               fontsize=9, fontweight="bold")
 
@@ -72,7 +96,7 @@ def panel_fade(axis):
                   color=plt.cm.plasma(0.08 + 0.78 * shade),
                   linewidth=0.8, zorder=2)
     axis.axhline(0.0, color=GREY, linewidth=0.6, zorder=1)
-    axis.set_xlabel("E / V vs ECS")
+    axis.set_xlabel("E / V vs Ag/AgCl")
     axis.set_ylabel("i / µA")
     rows = cycles_table()
     first = rows[(rows["archivo"] == "CV_01") & (rows["ciclo"] == 1)]
@@ -130,7 +154,7 @@ def panel_leak(axis):
               zorder=4, label=r"$\Delta Q = Q_{ox} - Q_{red}$")
     for rate, x, y in zip([50, 20, 10, 5], duration, net):
         axis.annotate(f"{rate} mV/s", (x, 1e6 * y), textcoords="offset points",
-                      xytext=(7, -10), fontsize=7, color=GREY, ha="left")
+                      xytext=(-7, 7), fontsize=7, color=GREY, ha="right")
     axis.set_xlabel("duración del ciclo / s")
     axis.set_ylabel("carga / µC")
     axis.set_xlim(0.0, 1.14 * duration.max())
@@ -216,23 +240,18 @@ def panel_laws(axis, lower):
               color=GREY, ha="right")
     axis.text(potential[-1], 0.512, "b = 0.5, difusivo", fontsize=7,
               color=GREY, ha="right")
-    axis.set_ylabel("b")
-    axis.set_ylim(0.38, 1.10)
     twin = axis.twinx()
     twin.plot(potential, leak, "s--", color=MODEL, markersize=4.5,
               linewidth=1.2, label="$i_{par}$ de $i = k_{cap}\\nu + i_{par}$")
-    twin.set_ylabel("$i_{par}$ / µA", color=MODEL, fontsize=8.5)
     twin.tick_params(axis="y", colors=MODEL, labelsize=8)
+    # No legend: the two axes are already colour-coded, and a legend here
+    # has nowhere to sit that is not on top of one of the two curves.
+    axis.set_ylabel("b   de   $i = a\\,\\nu^{b}$", color=MEASURED)
+    twin.set_ylabel("$i_{par}$ / µA   de   $i = k_{cap}\\nu + i_{par}$",
+                    color=MODEL, fontsize=8.5)
+    axis.set_ylim(0.38, 1.08)
     twin.set_ylim(0.0, 2.6)
-    handles = [Line2D([], [], color=MEASURED, marker="o", markersize=4.5,
-                      label="b de $i = a\\,\\nu^{b}$"),
-               Line2D([], [], color=MODEL, marker="s", linestyle="--",
-                      markersize=4.5,
-                      label="$i_{par}$ de $i = k_{cap}\\nu + i_{par}$")]
-    axis.legend(handles=handles, frameon=False, fontsize=7.5,
-                loc="lower center", ncol=2, columnspacing=1.4)
-    axis.set_ylim(0.30, 1.10)
-    axis.text(0.015, 0.93, "(a)", transform=axis.transAxes, ha="left",
+    axis.text(0.015, 0.90, "(a)", transform=axis.transAxes, ha="left",
               fontsize=9, fontweight="bold")
 
     keys = [("potencia", "$a\\,\\nu^{b}$", MEASURED),
@@ -241,7 +260,7 @@ def panel_laws(axis, lower):
     for key, label, colour in keys:
         lower.plot(potential, [row["r2"][key] for row in laws], "o-",
                    color=colour, markersize=4, linewidth=1.2, label=label)
-    lower.set_xlabel("E / V vs ECS")
+    lower.set_xlabel("E / V vs Ag/AgCl")
     lower.set_ylabel("R² del ajuste de i(ν)")
     lower.set_ylim(0.970, 1.0005)
     lower.legend(frameon=False, fontsize=7.5, ncol=3, loc="lower center")
@@ -250,9 +269,9 @@ def panel_laws(axis, lower):
 
 
 def panel_dunn(axis):
-    """The Dunn separation at 50 mV/s, with where its fit fails marked."""
+    """The Dunn separation at 50 mV/s, with where it does not hold marked."""
     table = np.loadtxt(f"{OUT}/dunn_50mVs.csv", delimiter=",", skiprows=1)
-    potential, _, _, r_squared, anodic, cathodic = table.T
+    potential, _, _, r_squared, anodic, cathodic, exceeded = table.T
     measured = np.loadtxt(f"{OUT}/CV_05_ciclo.csv", delimiter=",", skiprows=1)
 
     axis.plot(measured[:, 1], 1e6 * measured[:, 2], color=MEASURED,
@@ -261,13 +280,14 @@ def panel_dunn(axis):
     axis.fill_between(potential[order], 1e6 * anodic[order],
                       1e6 * cathodic[order], color=SECOND, alpha=0.22,
                       zorder=2, label="capacitivo según Dunn ($k_1\\nu$)")
-    bad = r_squared < 0.95
+    bad = exceeded > 0.5
     if bad.any():
         axis.plot(potential[bad], 1e6 * anodic[bad], "x", color=MODEL,
                   markersize=4.5, zorder=4,
-                  label=f"R² < 0.95 ({int(bad.sum())} de {bad.size})")
+                  label=f"separación no definida ({int(bad.sum())} de {bad.size})")
     axis.axhline(0.0, color=GREY, linewidth=0.6, zorder=1)
-    axis.set_xlabel("E / V vs ECS")
+    rhe_axis(axis, label=False)
+    axis.set_xlabel("E / V vs Ag/AgCl")
     axis.set_ylabel("i / µA")
     axis.legend(frameon=False, fontsize=7.5, loc="lower center", ncol=3,
                 columnspacing=1.4, handlelength=1.6)
@@ -277,9 +297,9 @@ def panel_dunn(axis):
 
 
 def figure_two():
-    figure = plt.figure(figsize=(7.2, 6.4))
+    figure = plt.figure(figsize=(7.2, 7.0))
     grid = figure.add_gridspec(3, 1, height_ratios=[1.15, 0.85, 1.4],
-                               hspace=0.32)
+                               hspace=0.55)
     upper = figure.add_subplot(grid[0])
     middle = figure.add_subplot(grid[1], sharex=upper)
     lower = figure.add_subplot(grid[2])

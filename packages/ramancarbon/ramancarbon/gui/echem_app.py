@@ -35,6 +35,13 @@ from .widgets import (
     table,
 )
 
+
+#: Label of the "no choice made" entry in the cycle selector. It is the
+#: default, and the selector is rebuilt from the loaded files, so the
+#: constant exists only so the entry can be recognised before anything
+#: is loaded.
+CYCLE_DEFAULT = "último completo"
+
 FILE_TYPES = (
     ("Medidas de potenciostato",
      "*.txt *.csv *.dat *.mpt *.mpr *.DTA *.dta *.asc"),
@@ -191,6 +198,19 @@ class EchemApp(SectionApp):
         self.current_var = tk.StringVar(value="1.0")
         labelled(lbody, "Corriente GCD (mA)", lambda p: ttk.Entry(
             p, textvariable=self.current_var, width=10))
+        self.cycle_var = tk.StringVar(value=CYCLE_DEFAULT)
+        self.cycle_box = labelled(lbody, "Ciclo a analizar", lambda p: ttk.Combobox(
+            p, textvariable=self.cycle_var, width=18, state="readonly",
+            values=[CYCLE_DEFAULT]))
+        hint(lbody,
+             "Por defecto el ÚLTIMO ciclo completo: el primero de cualquier "
+             "electrodo lleva lo que sólo pasa una vez, y un ciclo que la "
+             "adquisición cortó a medias se integra sobre parte de su "
+             "recorrido y da una capacitancia baja en esa proporción. "
+             "Elígelo a mano cuando los últimos hayan derivado, o para "
+             "comparar varios archivos en el MISMO número de ciclo. La "
+             "lista marca los incompletos.",
+             wrap=260)
 
         for text, command in (
             ("Cargar CV…", lambda: self._load("cv")),
@@ -903,6 +923,26 @@ class EchemApp(SectionApp):
         else:
             self.session.set_circuit(self.circuit_var.get())
         self.session.non_faradaic = bool(self.non_faradaic_var.get())
+        self.session.cycle_choice = self._cycle_from_widget()
+        self.session.retag_electrode()
+
+    def _cycle_from_widget(self) -> Optional[int]:
+        label = self.cycle_var.get()
+        for number, text in self.session.cycle_choices():
+            if text == label:
+                return number
+        return None
+
+    def _refresh_cycle_choices(self) -> None:
+        """Rebuild the selector after loading, keeping the choice if it
+        still exists. A selector that silently resets to the default
+        every time a file is added undoes the one thing it is for."""
+        choices = self.session.cycle_choices()
+        labels = [text for _, text in choices]
+        self.cycle_box.configure(values=labels)
+        if self.cycle_var.get() not in labels:
+            self.cycle_var.set(labels[0])
+        self.session.cycle_choice = self._cycle_from_widget()
         self.session.retag_electrode()
 
     def _load(self, kind: str) -> None:
@@ -937,7 +977,20 @@ class EchemApp(SectionApp):
             ok = self.session.load_lsv(path)
         self.flush_messages(self.session.messages)
         if ok:
-            self.set_status(f"Cargado {Path(path).name}")
+            self._refresh_cycle_choices()
+            # Say what normalisation the numbers will use. A blank mass is
+            # invisible until a capacitance comes back without its F/g,
+            # three tabs later.
+            electrode = self.session.electrode
+            basis = (f"{electrode.mass_mg:g} mg" if electrode.mass_mg
+                     else "SIN masa activa")
+            basis += (f", {electrode.area_cm2:g} cm²" if electrode.area_cm2
+                      else ", sin área")
+            note = self.session.reporting_cycle_note()
+            self.set_status(
+                f"Cargado {Path(path).name} — {basis}"
+                + (f" — {note.split('.')[0]}" if note else "")
+            )
         self._refresh_loaded()
 
     def _load_eis_pair(self) -> None:

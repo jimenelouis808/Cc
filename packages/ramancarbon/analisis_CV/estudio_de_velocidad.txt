@@ -27,10 +27,10 @@ Análisis de b (i = a·ν^b):
   E = +0.250 V:  b = 0.526 ± 0.017  (R² = 0.9979) — controlado por difusión (tipo batería)
 
 Reparto capacitivo/difusivo (Dunn, i = k₁ν + k₂√ν):
-       5.0 mV/s   capacitivo  28.3 %
-      10.0 mV/s   capacitivo  33.9 %
-      20.0 mV/s   capacitivo  43.8 %
-      50.0 mV/s   capacitivo  58.1 %
+       5.0 mV/s   capacitivo  26.6 %
+      10.0 mV/s   capacitivo  31.8 %
+      20.0 mV/s   capacitivo  41.1 %
+      50.0 mV/s   capacitivo  54.5 %
 
 Trasatti:
   capacitancia total (ν→0)  : 0.3782 mF
@@ -63,13 +63,14 @@ ECSA = 2.139 cm² (entre 1.43 y 4.28 según la Cs que se adopte)
 
 Separación de Dunn (i = k₁ν + k₂√ν) — Media: sólo la rama anódica:
 
-      5.0 mV/s   capacitivo  28.4 %   difusivo  71.6 %
-     10.0 mV/s   capacitivo  34.0 %   difusivo  66.0 %
-     20.0 mV/s   capacitivo  43.9 %   difusivo  56.1 %
-     50.0 mV/s   capacitivo  58.5 %   difusivo  41.5 %
+      5.0 mV/s   capacitivo  26.5 %   difusivo  73.5 %
+     10.0 mV/s   capacitivo  31.7 %   difusivo  68.3 %
+     20.0 mV/s   capacitivo  40.8 %   difusivo  59.2 %
+     50.0 mV/s   capacitivo  54.5 %   difusivo  45.5 %
 
-  en 46 de 60 potenciales el ajuste de dos términos no describe los datos (R² < 0.95)
+  en 5 de 60 potenciales el ajuste de dos términos no describe los datos (R² < 0.95)
 
   esta separación es capacitivo frente a DIFUSIVO, no doble capa frente a redox. Un proceso redox confinado en la superficie es superficial: su corriente escala con ν, que es lo que significa «pseudocapacitivo», así que entra en k₁ por definición. Que un voltamperograma con picos redox evidentes salga «99 % capacitivo» es el resultado correcto, no un pico que se haya perdido. Lo que separa doble capa de pseudocapacitivo es la PRESENCIA de picos redox en el CV, y eso lo decide la clasificación de mecanismo
 
-  ⚠ 7 coeficientes salen negativos de verdad (más de un 5 % de su propia escala) y ninguna de las dos contribuciones puede serlo: ahí el modelo de dos términos no describe la corriente. Suele ser un pico que se desplaza con la velocidad, y entonces a la velocidad más alta ese potencial ya no está sobre el pico
+  ⚠ en 13 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (+0.095 a +0.298 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo
+  ⚠ 6 de los 120 coeficientes se han quedado en CERO porque el ajuste SIN restringir los quería negativos de verdad —más de un 5 % de su propia escala, que es el mismo listón de siempre— y ninguna de las dos contribuciones puede serlo: en esos potenciales el modelo no describe la corriente. Suele ser un pico que se desplaza con la velocidad —a la velocidad más alta ese potencial ya no está sobre el pico— o una corriente que no escala ni con ν ni con √ν, como una parásita constante

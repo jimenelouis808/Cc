@@ -329,6 +329,11 @@ def _options_of(obj: Any) -> dict[str, Any]:
         options["monochromated"] = bool(getattr(obj, "monochromated", True))
         options["intensity_unit"] = getattr(obj, "intensity_unit", "cuentas")
         options["region"] = getattr(obj, "region", "")
+    chosen_cycle = getattr(obj, "preferred_cycle", None)
+    if chosen_cycle is not None:
+        # A choice a person made. Losing it on reopening would quietly
+        # report a different cycle than the one they picked.
+        options["ciclo_elegido"] = int(chosen_cycle)
     electrode = getattr(obj, "electrode", None)
     if electrode is not None:
         options["electrodo"] = {
@@ -374,6 +379,7 @@ def _rebuild(dataset: Dataset):
                             electrode=_electrode(options),
                             cycle=_column(dataset, "ciclo"),
                             time=_column(dataset, "tiempo"),
+                            preferred_cycle=options.get("ciclo_elegido"),
                             name=dataset.name or dataset.identifier)
     if dataset.kind == "gcd":
         from ..echem.curve import ChargeDischarge
