@@ -242,13 +242,21 @@
       "source": "coeficiente de actividad medio de KOH a 1 M (~0.76)",
       "note": "Un Ag/AgCl en KOH 1 M se degrada y deriva; la referencia adecuada en alcalino es Hg/HgO."
     },
+    "KOH_3M": {
+      "label": "KOH 3 M",
+      "ph": 14.51,
+      "acidic": false,
+      "confidence": "medium",
+      "source": "pOH = -log a(OH-) con el coeficiente de actividad medio de KOH a 3 molal (gamma = 1.08, Robinson y Stokes)",
+      "note": "Por encima de 2 M el coeficiente de actividad PASA DE UNO, asi que a(OH-) = 3.24 es mayor que la concentracion y el pH sale 14.51 y no 14.48 de -log(3). La diferencia con -log c es pequena aqui; la grande es con 13.5, que es lo que sale si se confunde 3 M con 0.5 M: un error de un orden de magnitud en la concentracion son 60 mV en la escala RHE y 60 mV en cualquier sobrepotencial."
+    },
     "KOH_6M": {
       "label": "KOH 6 M",
-      "ph": 14.95,
+      "ph": 15.11,
       "acidic": false,
       "confidence": "low",
-      "source": "extrapolacion del coeficiente de actividad medio de KOH a 6 M (~1.5)",
-      "note": "A esta concentracion el coeficiente de actividad pasa de uno y el pH deja de estar bien definido como numero. Usalo para convertir, no para citar."
+      "source": "coeficiente de actividad medio de KOH a 6 molal (gamma = 2.14, Robinson y Stokes)",
+      "note": "A esta concentracion el coeficiente de actividad vale mas del doble, asi que a(OH-) = 12.8 y el pH sale 15.11. Un pH por encima de 14 no es un error: la escala no tiene tope, lo que no tiene es mucho sentido fisico fuera de una conversion. Usalo para convertir, no para citar."
     },
     "H2SO4_0.5M": {
       "label": "H2SO4 0.5 M",

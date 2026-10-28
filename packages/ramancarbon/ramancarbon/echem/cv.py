@@ -74,6 +74,15 @@ TRANSIENT_REACH = 0.01
 #: Minimum prominence of a redox peak, relative to the mean |current|.
 PEAK_PROMINENCE = 0.08
 
+#: Share of the total current, at the potential where b is lowest and
+#: at the slowest scan rate, above which a measured parasitic current is
+#: taken to have bent the b-value. A constant pulls b below 1 with no
+#: diffusion anywhere, so past this share the b is measuring two things
+#: and cannot be read as one. A fifth is low on purpose: this is the
+#: threshold of "the number is contaminated", not of "the number is
+#: wrong".
+PARASITIC_SHARE = 0.20
+
 #: Level of the test that calls a Dunn coefficient genuinely negative,
 #: BEFORE dividing by how many coefficients are tested. A negative
 #: coefficient is the two-term model failing, and the question is whether

@@ -30,7 +30,7 @@ from typing import Optional
 import numpy as np
 
 from .curve import CurveError, Voltammogram, load_echem_database
-from .cv import CVResult, RateStudy
+from .cv import PARASITIC_SHARE, CVResult, RateStudy
 from .gcd import GCDResult
 
 #: Minimum decades of current density for a Tafel fit to be determined.
@@ -221,10 +221,45 @@ def classify_storage(
     # user to report it in mAh/g.
     caveats: list[str] = []
     leaky = False
-    if rates is not None and rates.current_laws and rates.leakage is not None:
-        # The leak law has to be at least as good as the other two — it
-        # either wins or ties — at half the potentials or more, and the
-        # leak itself has to be measured and worth something.
+    bent_by = 0.0
+    if rates is not None and rates.full_model and rates.b_values:
+        # The DIRECT test, available once the series is wide enough to
+        # fit all three terms at once: at the potential where b is
+        # lowest — the one the classification rests on — is there a
+        # determined parasitic current, and is it a real share of the
+        # current there? Counting how often the leak law "wins or ties"
+        # against the other two, which is what this used to do, is a
+        # proxy for that question and a poor one: it goes to zero as
+        # soon as the series is wide enough to tell the laws apart,
+        # exactly when the parasitic current is best measured.
+        worst = min(rates.b_values, key=lambda value: value.b)
+        nearest = min(rates.full_model,
+                      key=lambda m: abs(m.potential - worst.potential))
+        slowest = min(rates.rates) if rates.rates else 0.0
+        # Magnitudes, not the signed sum: where the fitted constant has
+        # the opposite sign to the other two the sum nearly cancels and
+        # the share blows up. On the synthetic hybrid, which has no
+        # parasitic current at all, that read 92 %.
+        total = (abs(nearest.capacitance_f * slowest)
+                 + abs(nearest.diffusive * math.sqrt(slowest))
+                 + abs(nearest.leakage_a))
+        # And the fit alone is not enough. A constant that the i(ν) fit
+        # likes must also show up where it cannot hide: in the charge
+        # balance, which measures the irreversible current without
+        # looking at how anything scales with ν. Both, or neither.
+        balance = rates.leakage
+        corroborated = (
+            balance is not None
+            and balance.r_squared > 0.9
+            and max(balance.shares.values(), default=0.0) > 0.1
+        )
+        if nearest.determined()["i_par"] and total > 0.0 and corroborated:
+            bent_by = abs(nearest.leakage_a) / total
+            leaky = bent_by > PARASITIC_SHARE
+    elif rates is not None and rates.current_laws and rates.leakage is not None:
+        # The fallback for a series too narrow to fit three terms: the
+        # leak law has to be at least as good as the other two — it
+        # either wins or ties — at half the potentials or more.
         standing = [
             law for law in rates.current_laws
             if law.best == "fuga" or not law.decisive
@@ -244,14 +279,27 @@ def classify_storage(
     if rates is not None and rates.b_values and leaky:
         sources += 1
         b = float(min(value.b for value in rates.b_values))
-        caveats.append(
-            f"el b baja a {b:.2f}, pero no cuenta como difusión: en esta "
+        if bent_by > 0.0:
+            caveats.append(
+                f"el b baja a {b:.2f} y no se toma como prueba de difusión: "
+                f"en ese mismo potencial el ajuste de los tres términos "
+                f"—k_cap·ν + k_diff·√ν + i_par— determina una corriente "
+                f"parásita que es el {100 * bent_by:.0f} % de la corriente "
+                f"total a la velocidad más lenta. Una constante dobla el b "
+                f"hacia abajo sin que haya difusión de por medio, así que "
+                f"con esa fracción el b mide las dos cosas a la vez. Lo que "
+                f"SÍ es una medida del término difusivo es k_diff, que va "
+                f"aparte y con su incertidumbre"
+            )
+        else:
+            caveats.append(
+                f"el b baja a {b:.2f}, pero no cuenta como difusión: en esta "
             f"serie las tres leyes de i(ν) ajustan igual de bien y hay "
             f"{1e6 * rates.leakage.leakage_a:.2f} µA de corriente parásita "
             f"medidos aparte, suficientes para explicar por sí solos que b "
             f"se aparte de 1. Para decidirlo hace falta quitar la fuga "
-            f"—ventana más estrecha, electrolito desoxigenado— y repetir"
-        )
+                f"—ventana más estrecha, electrolito desoxigenado— y repetir"
+            )
     elif rates is not None and rates.b_values:
         sources += 1
         # The b that matters is the one at the peak, not the median over

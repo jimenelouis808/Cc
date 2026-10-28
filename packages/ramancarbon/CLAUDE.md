@@ -2453,12 +2453,20 @@ programa de destino no podía usar. Ninguna es cosmética.
   «no se puede saber» a «los tres están».
 - **`i_par` NO puede forzarse positiva.** Una corriente parásita tiene el
   signo de su reacción, y en esta ventana cambia: el límite negativo
-  (0.40 V vs RHE) está en la región de reducción de oxígeno y el positivo
-  (1.40 V) está 169 mV por encima del equilibrio del O₂. Medida, va de
-  −1.48 µA en 0.60 V vs RHE a +1.16 en 1.30, y cruza cero en 1.03 V. Con
-  la cota en cero el ajuste devolvía 11 µF de capacitancia donde hay 50 y
-  llamaba fuga al resto. Hay una prueba con una parásita catódica
+  (0.455 V vs RHE) está en la región de reducción de oxígeno y el
+  positivo (1.455 V) está **225 mV** por encima del equilibrio del O₂.
+  Medida sobre la serie de seis velocidades, va de −1.17 µA en 0.655 V
+  vs RHE a +1.11 en 1.355, y cruza cero cerca de 1.13 V — y el único
+  potencial donde queda indeterminado es, precisamente, el del cruce.
+  Con la cota en cero el ajuste devolvía 11 µF de capacitancia donde hay
+  50 y llamaba fuga al resto. Hay una prueba con una parásita catódica
   plantada.
+- **Y con un factor 40 el ajuste se aprieta.** Seis velocidades de 5 a
+  200 mV/s dejan tres grados de libertad en vez de dos, los errores caen
+  a un tercio, y `k_cap` sale casi PLANO en toda la ventana (45–53 µF),
+  que es lo que una capacitancia de doble capa tiene que hacer. Con
+  cinco velocidades subía de 33 a 55: la rampa era el ajuste repartiendo
+  mal lo que no podía separar.
 - Y la corriente se ajusta **con signo**, con la dirección de la rama
   aplicada a los datos y los coeficientes devueltos al final. Tomar `|i|`
   parece equivalente y no lo es: donde la parásita es grande y de signo
@@ -2469,6 +2477,42 @@ programa de destino no podía usar. Ninguna es cosmética.
   el ajuste declara ±8 %. Eso es la degradación entrando en la serie.
   `k_diff` e `i_par` apenas se mueven entre las dos series: lo que el
   electrodo pierde es almacenamiento.
+
+## El b se retira contra la MEDIDA de la parásita, no contando empates
+
+- El criterio era: ¿la ley de fuga gana o empata en la mitad de los
+  potenciales? Eso es un proxy de la pregunta de verdad, y un proxy
+  malo: **se va a cero justo cuando la serie es lo bastante ancha para
+  distinguir las leyes**, que es cuando mejor medida está la parásita.
+  Con el factor 40, los empates bajan a 1 de 9 y el criterio dejaba de
+  disparar, así que un b de 0.55 volvía a clasificar el electrodo como
+  batería.
+- Ahora se pregunta directo: en el potencial donde el b es MÁS BAJO —el
+  que sostiene la clasificación—, ¿el ajuste de tres términos determina
+  una `i_par`, y qué fracción de la corriente total a la velocidad más
+  lenta es? Por encima de `PARASITIC_SHARE` el b mide dos cosas a la vez
+  y no se toma como prueba de difusión. En estos archivos es el 31 %.
+- **Y hacen falta las dos cosas: el ajuste y el balance de carga.** Un
+  `i_par` que a la ley de i(ν) le guste tiene que aparecer además donde
+  no puede esconderse. Sin esa corroboración, el híbrido sintético —que
+  no tiene corriente parásita ninguna— daba un `i_par` de signo opuesto
+  a los otros dos términos, la suma firmada casi se cancelaba, y la
+  fracción salía del 92 %. El denominador son las MAGNITUDES por eso.
+
+## El pH de un electrolito concentrado no es −log c
+
+- KOH 0.5 M es pH 13.56 y no 13.70; KOH 3 M es 14.51; H₂SO₄ 0.5 M es
+  ≈ 0.3 y no 0.0, porque el primer protón está disociado del todo y el
+  segundo sólo en parte (Ka₂ = 0.012). Por encima de 2 M el coeficiente
+  de actividad del KOH **pasa de uno**, así que la actividad es mayor
+  que la concentración.
+- Esto no es pedantería: **son 59 mV por unidad de pH en toda la escala
+  RHE y en todo sobrepotencial**. Confundir 3 M con 0.5 M en esta serie
+  movía el límite positivo de 225 a 169 mV de sobrepotencial de OER, que
+  es el número del que cuelga toda la lectura de ese extremo.
+- Por eso la tabla de `echem.json` lleva el pH, su confianza y su nota, y
+  elegir el electrolito en la ventana lo rellena. Sigue siendo NOMINAL:
+  el de una disolución recién hecha de esa concentración nominal.
 
 ## `_current_at` leía el archivo entero, no el ciclo informado
 

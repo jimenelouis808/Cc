@@ -5,9 +5,9 @@
 ────────────────────────────────────────────────────────────────────────
   LA CELDA
 ────────────────────────────────────────────────────────────────────────
-Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH 0.5 M, pH 13.56
+Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH 3 M, pH 14.51
   → SHE: E(Electrodo estándar de hidrógeno) = E(Ag/AgCl (KCl saturado)) +0.1970 V
-  → RHE: E(Electrodo reversible de hidrógeno a pH 13.56) = E(Ag/AgCl (KCl saturado)) +0.9992 V
+  → RHE: E(Electrodo reversible de hidrógeno a pH 14.51) = E(Ag/AgCl (KCl saturado)) +1.0554 V
   Di siempre el relleno de la referencia: Ag/AgCl 3 M y saturado están a 13 mV, y el SCE a 31 mV del de 3 M.
 
 ────────────────────────────────────────────────────────────────────────
@@ -15,32 +15,30 @@ Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KO
 ────────────────────────────────────────────────────────────────────────
 Esto va primero porque decide si las magnitudes de abajo son las correctas para este material.
 
-Mecanismo de almacenamiento: Tipo batería (faradaico con difusión) (confianza media)
-  Magnitud correcta para informar: capacidad (C/g o mAh/g), NUNCA F/g
+Mecanismo de almacenamiento: Pseudocapacitivo (confianza media)
+  Magnitud correcta para informar: capacitancia (F/g), con reservas
   A favor:
-    · b = 0.55, cerca de 0.5: corriente controlada por difusión
-  En contra:
     · hay picos redox, pero anchos y poco separados: la firma pseudocapacitiva
-
-  ⚠ Este electrodo NO debe informarse en F/g. Una capacitancia supone que la carga almacenada crece linealmente con el potencial, y aquí no: la carga entra a un potencial concreto, en una transformación de fase. Dividir por la ventana entera infla la cifra y describe algo que el material no hace. La magnitud es la capacidad, en C/g o mAh/g
+  En contra:
+    · el b baja a 0.59 y no se toma como prueba de difusión: en ese mismo potencial el ajuste de los tres términos —k_cap·ν + k_diff·√ν + i_par— determina una corriente parásita que es el 31 % de la corriente total a la velocidad más lenta. Una constante dobla el b hacia abajo sin que haya difusión de por medio, así que con esa fracción el b mide las dos cosas a la vez. Lo que SÍ es una medida del término difusivo es k_diff, que va aparte y con su incertidumbre
 
 ────────────────────────────────────────────────────────────────────────
   VOLTAMPEROMETRÍA CÍCLICA
 ────────────────────────────────────────────────────────────────────────
-100 mV/s [ciclo 4.0]: 1995 puntos, -0.600 a +0.400 V (ventana 1.000 V), 99.9875 mV/s, |I|max 0.0316 mA
-Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH 0.5 M, pH 13.56
+200 mV/s [ciclo 4.0]: 1995 puntos, -0.601 a +0.400 V (ventana 1.000 V), 199.988 mV/s, |I|max 0.0522 mA
+Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH 3 M, pH 14.51
 
-Carga anódica: 0.09941 mC
+Carga anódica: 0.08434 mC
 
 Capacitancia:
-  0.09705 mF (lazo cerrado ÷ 2νΔV)  4.852 F/g  1.373 mF/cm²
-  0.09705 mF (rama anódica ÷ νΔV)  4.852 F/g  1.373 mF/cm²
+  0.08313 mF (lazo cerrado ÷ 2νΔV)  4.156 F/g  1.176 mF/cm²
+  0.08305 mF (rama anódica ÷ νΔV)  4.152 F/g  1.175 mF/cm²
   Las dos son la MISMA medida en convenios distintos. El de lazo integra el ciclo cerrado y divide por 2νΔV; el de rama integra solo la anódica y divide por νΔV. Publicar sin decir cuál deja un factor 2 de ambigüedad
 
-Capacidad: 4.97 C/g = 1.381 mAh/g
+Capacidad: 4.217 C/g = 1.171 mAh/g
 
 Picos redox:
-  anódico    E = -0.4087 V   i = +0.01129 mA   FWHM 244 mV   pico/fondo 0.3
+  anódico    E = -0.4089 V   i = +0.01942 mA   FWHM 270 mV   pico/fondo 0.3
 
 SIN corrección de caída óhmica: no se ha dado la resistencia no compensada. La pendiente de Tafel sale entonces demasiado grande, y el error crece con la corriente — así que el catalizador parece peor de lo que es justo donde más importa
 
@@ -50,7 +48,7 @@ SIN corrección de caída óhmica: no se ha dado la resistencia no compensada. L
 ────────────────────────────────────────────────────────────────────────
   ESTUDIO DE VELOCIDAD
 ────────────────────────────────────────────────────────────────────────
-Estudio de velocidad de barrido (5 velocidades, 4.99952–99.9875 mV/s)
+Estudio de velocidad de barrido (6 velocidades, 4.99952–199.988 mV/s)
 
 Capacitancia frente a velocidad:
        5.0 mV/s       0.2267 mF
@@ -58,88 +56,92 @@ Capacitancia frente a velocidad:
       20.0 mV/s       0.1506 mF
       50.0 mV/s       0.1163 mF
      100.0 mV/s      0.09703 mF
-  Retención de la más lenta a la más rápida: 42.8 %
+     200.0 mV/s      0.08309 mF
+  Retención de la más lenta a la más rápida: 36.7 %
 
 ¿Qué ley describe i(ν)?  (tres modelos de dos parámetros, residuos comparables)
-  E = -0.501 V:  b = 0.827   R²(potencia) = 0.98825  R²(dunn) = 0.99618  R²(fuga) = 0.98734  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 94 µF más +0.85 µA constantes
-  E = -0.400 V:  b = 0.902   R²(potencia) = 0.97818  R²(dunn) = 0.99466  R²(fuga) = 0.98713  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 107 µF más +0.73 µA constantes
-  E = -0.300 V:  b = 0.909   R²(potencia) = 0.98309  R²(dunn) = 0.99541  R²(fuga) = 0.98927  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 103 µF más +0.62 µA constantes
-  E = -0.200 V:  b = 0.825   R²(potencia) = 0.99805  R²(dunn) = 0.99815  R²(fuga) = 0.99288  →  EMPATE: la serie no distingue las tres leyes; la de fuga pide C = 93 µF más +0.68 µA constantes
-  E = -0.100 V:  b = 0.777   R²(potencia) = 0.99995  R²(dunn) = 0.99925  R²(fuga) = 0.99468  →  gana «i = a·ν^b»; la de fuga pide C = 86 µF más +0.72 µA constantes
-  E = -0.000 V:  b = 0.722   R²(potencia) = 0.99798  R²(dunn) = 0.99981  R²(fuga) = 0.99609  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 81 µF más +0.81 µA constantes
-  E = +0.100 V:  b = 0.662   R²(potencia) = 0.99387  R²(dunn) = 0.99964  R²(fuga) = 0.99676  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 79 µF más +1.01 µA constantes
-  E = +0.200 V:  b = 0.594   R²(potencia) = 0.98895  R²(dunn) = 0.99852  R²(fuga) = 0.99688  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 81 µF más +1.38 µA constantes
-  E = +0.300 V:  b = 0.508   R²(potencia) = 0.98482  R²(dunn) = 0.99525  R²(fuga) = 0.99544  →  EMPATE: la serie no distingue las tres leyes; la de fuga pide C = 90 µF más +2.25 µA constantes
+  E = -0.501 V:  b = 0.812   R²(potencia) = 0.99593  R²(dunn) = 0.99884  R²(fuga) = 0.99228  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 83 µF más +1.16 µA constantes
+  E = -0.400 V:  b = 0.869   R²(potencia) = 0.98573  R²(dunn) = 0.99767  R²(fuga) = 0.98994  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 93 µF más +1.15 µA constantes
+  E = -0.300 V:  b = 0.877   R²(potencia) = 0.98649  R²(dunn) = 0.99749  R²(fuga) = 0.98997  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 89 µF más +1.03 µA constantes
+  E = -0.200 V:  b = 0.814   R²(potencia) = 0.99834  R²(dunn) = 0.99859  R²(fuga) = 0.99166  →  EMPATE: la serie no distingue las tres leyes; la de fuga pide C = 81 µF más +1.04 µA constantes
+  E = -0.100 V:  b = 0.778   R²(potencia) = 0.99997  R²(dunn) = 0.99928  R²(fuga) = 0.99323  →  gana «i = a·ν^b»; la de fuga pide C = 75 µF más +1.02 µA constantes
+  E = -0.000 V:  b = 0.736   R²(potencia) = 0.99766  R²(dunn) = 0.99978  R²(fuga) = 0.99467  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 72 µF más +1.08 µA constantes
+  E = +0.100 V:  b = 0.688   R²(potencia) = 0.99227  R²(dunn) = 0.99990  R²(fuga) = 0.99571  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 71 µF más +1.24 µA constantes
+  E = +0.200 V:  b = 0.629   R²(potencia) = 0.98482  R²(dunn) = 0.99936  R²(fuga) = 0.99618  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 74 µF más +1.60 µA constantes
+  E = +0.300 V:  b = 0.549   R²(potencia) = 0.97770  R²(dunn) = 0.99731  R²(fuga) = 0.99499  →  gana «i = k₁·ν + k₂·√ν»; la de fuga pide C = 81 µF más +2.53 µA constantes
 
 Análisis de b (i = a·ν^b):
-  E = -0.450 V:  b = 0.870 ± 0.060  (R² = 0.9859) — mixto, con predominio capacitivo
-  E = -0.275 V:  b = 0.891 ± 0.042  (R² = 0.9933) — mixto, con predominio capacitivo
-  E = -0.100 V:  b = 0.777 ± 0.004  (R² = 0.9999) — mixto, con predominio capacitivo
-  E = +0.075 V:  b = 0.679 ± 0.027  (R² = 0.9954) — mixto
-  E = +0.250 V:  b = 0.553 ± 0.035  (R² = 0.9881) — controlado por difusión (tipo batería)
+  E = -0.450 V:  b = 0.845 ± 0.043  (R² = 0.9899) — mixto, con predominio capacitivo
+  E = -0.275 V:  b = 0.864 ± 0.032  (R² = 0.9944) — mixto, con predominio capacitivo
+  E = -0.100 V:  b = 0.778 ± 0.003  (R² = 1.0000) — mixto, con predominio capacitivo
+  E = +0.075 V:  b = 0.703 ± 0.023  (R² = 0.9959) — mixto
+  E = +0.250 V:  b = 0.591 ± 0.033  (R² = 0.9879) — controlado por difusión (tipo batería)
 
 Reparto capacitivo/difusivo (Dunn, i = k₁ν + k₂√ν):
-       5.0 mV/s   capacitivo  23.6 %
-      10.0 mV/s   capacitivo  29.9 %
-      20.0 mV/s   capacitivo  37.4 %
-      50.0 mV/s   capacitivo  48.9 %
-     100.0 mV/s   capacitivo  59.0 %
+       5.0 mV/s   capacitivo  21.9 %
+      10.0 mV/s   capacitivo  27.7 %
+      20.0 mV/s   capacitivo  34.6 %
+      50.0 mV/s   capacitivo  45.3 %
+     100.0 mV/s   capacitivo  54.7 %
+     200.0 mV/s   capacitivo  63.8 %
 
 Trasatti:
-  capacitancia total (ν→0)  : 0.3309 mF
-  superficie externa (ν→∞)  : 0.06354 mF
-  accesible sólo despacio    : 80.8 %
+  capacitancia total (ν→0)  : 0.283 mF
+  superficie externa (ν→∞)  : 0.06034 mF
+  accesible sólo despacio    : 78.7 %
 
 Las tres contribuciones a la vez (i = k_cap·ν + k_diff·√ν + i_par):
-  E = -0.501 V  (R² = 0.99956, 2 gl):  k_cap = 33.1 ± 8.2;  k_diff = 24.2 ± 3.2;  i_par = -1.03 ± 0.26
-  E = -0.400 V  (R² = 0.99999, 2 gl):  k_cap = 36 ± 1.6;  k_diff = 28.4 ± 0.61;  i_par = -1.48 ± 0.049
-  E = -0.300 V  (R² = 0.99998, 2 gl):  k_cap = 40.5 ± 2;  k_diff = 24.8 ± 0.77;  i_par = -1.31 ± 0.062
-  E = -0.200 V  (R² = 0.99991, 2 gl):  k_cap = 47.5 ± 3.7;  k_diff = 18.2 ± 1.5;  i_par = -0.736 ± 0.12
-  E = -0.100 V  (R² = 0.99987, 2 gl):  k_cap = 49.8 ± 4.1;  k_diff = 14.4 ± 1.6;  i_par = -0.404 ± 0.13
-  E = -0.000 V  (R² = 0.99984, 2 gl):  k_cap = 52.2 ± 4.3;  k_diff = 11.6 ± 1.7;  i_par = -0.0862 ± 0.14  (no determinado)
-  E = +0.100 V  (R² = 0.99984, 2 gl):  k_cap = 53.6 ± 4.2;  k_diff = 10.2 ± 1.7;  i_par = 0.21 ± 0.13  (no determinado)
-  E = +0.200 V  (R² = 0.99991, 2 gl):  k_cap = 55.1 ± 3.2;  k_diff = 10.4 ± 1.3;  i_par = 0.57 ± 0.1
-  E = +0.300 V  (R² = 0.99989, 2 gl):  k_cap = 55.2 ± 3.9;  k_diff = 14 ± 1.5;  i_par = 1.16 ± 0.12
+  E = -0.501 V  (R² = 0.99962, 3 gl):  k_cap = 48.8 ± 4.7;  k_diff = 18.5 ± 2.4;  i_par = -0.621 ± 0.25
+  E = -0.400 V  (R² = 0.99987, 3 gl):  k_cap = 48.1 ± 3;  k_diff = 24 ± 1.6;  i_par = -1.17 ± 0.16
+  E = -0.300 V  (R² = 0.99997, 3 gl):  k_cap = 45.6 ± 1.4;  k_diff = 22.9 ± 0.73;  i_par = -1.18 ± 0.075
+  E = -0.200 V  (R² = 0.99997, 3 gl):  k_cap = 45.1 ± 1.3;  k_diff = 19.1 ± 0.69;  i_par = -0.798 ± 0.071
+  E = -0.100 V  (R² = 0.99994, 3 gl):  k_cap = 45.5 ± 1.7;  k_diff = 16 ± 0.88;  i_par = -0.515 ± 0.09
+  E = -0.000 V  (R² = 0.99992, 3 gl):  k_cap = 46.9 ± 1.9;  k_diff = 13.5 ± 0.99;  i_par = -0.224 ± 0.1
+  E = +0.100 V  (R² = 0.99992, 3 gl):  k_cap = 48.9 ± 1.8;  k_diff = 12 ± 0.92;  i_par = 0.0875 ± 0.095  (no determinado)
+  E = +0.200 V  (R² = 0.99996, 3 gl):  k_cap = 51.7 ± 1.3;  k_diff = 11.7 ± 0.69;  i_par = 0.48 ± 0.071
+  E = +0.300 V  (R² = 0.99997, 3 gl):  k_cap = 53.3 ± 1.3;  k_diff = 14.7 ± 0.69;  i_par = 1.11 ± 0.072
 
 Corriente parásita (ΔQ = Q_ox − Q_red = ⟨i_par⟩·t):
-  ⟨i_par⟩ = 0.403 µA
-  ordenada = -6.71 µC (el modelo dice cero)
-  R²      = 0.9958
-  C sin fuga = 0.1277 ± 0.0217 mF = 6.39 ± 1.1 F/g
+  ⟨i_par⟩ = 0.398 µA
+  ordenada = -5.18 µC (el modelo dice cero)
+  R²      = 0.9954
+  C sin fuga = 0.1201 ± 0.0262 mF = 6 ± 1.3 F/g
   (de ⟨Q_red⟩; la dispersión es el electrodo cambiando durante la serie, no error de ajuste)
-      5.0 mV/s   la fuga es el   53 % de Q_ox
-     10.0 mV/s   la fuga es el   37 % de Q_ox
+      5.0 mV/s   la fuga es el   52 % de Q_ox
+     10.0 mV/s   la fuga es el   36 % de Q_ox
      20.0 mV/s   la fuga es el   24 % de Q_ox
      50.0 mV/s   la fuga es el   13 % de Q_ox
     100.0 mV/s   la fuga es el    8 % de Q_ox
+    200.0 mV/s   la fuga es el    5 % de Q_ox
 
-C_dl = 75.76 µF
-ECSA = 1.894 cm² (entre 1.26 y 3.79 según la Cs que se adopte)
+C_dl = 67 µF
+ECSA = 1.675 cm² (entre 1.12 y 3.35 según la Cs que se adopte)
 
 ⚠ 10.0007 mV/s: los 4 ciclos completos del archivo dan 0.1995 → 0.1906 → 0.1875 → 0.1846 mF, +2.54 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice
 ⚠ 19.9975 mV/s: los 4 ciclos completos del archivo dan 0.1565 → 0.1531 → 0.152 → 0.1506 mF, +1.26 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice
 ⚠ 49.9938 mV/s: los 4 ciclos completos del archivo dan 0.1185 → 0.1174 → 0.1167 → 0.1163 mF, +0.62 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice
 ⚠ el C_dl y el ECSA se han calculado sin que se haya declarado que la ventana esté libre de corriente faradaica. Elige una región donde no pase nada (típicamente ±50 mV alrededor del potencial de circuito abierto) y vuelve a medir, o estos dos números incluyen reacción
 ⚠ el ECSA se ha calculado con Cs = 40 µF/cm², pero la literatura da entre 20 y 60 para el mismo tipo de material. Ese factor de tres pasa entero al área y de ahí a cualquier actividad que normalices por ella: es la magnitud peor determinada de toda la electrocatálisis. Compara ECSA entre TUS muestras, no contra las de un artículo
-⚠ en 2 de los 9 potenciales examinados las TRES leyes de i(ν) ajustan igual de bien: «i = a·ν^b», la de Dunn y «i = k_cap·ν + i_par». Con 5 velocidades sobre un factor 20 y dos parámetros no hay con qué elegir ahí, así que en esos potenciales el b no es prueba de difusión: es compatible con ella y también con una corriente constante, que aquí no es una hipótesis — está medida aparte, ⟨i_par⟩ = 0.40 µA con R² = 0.996 a partir de ΔQ, y la ley de fuga pide 2.25 µA en +0.300 V. En el resto la serie SÍ distingue, y entonces la pregunta correcta no es cuál de las tres sino las tres a la vez: el ajuste de 5 velocidades a «k_cap·ν + k_diff·√ν + i_par» determina el término difusivo en 9 de los 9 potenciales
-⚠ la eficiencia coulómbica baja a 0.48 en esta serie, y el ajuste ΔQ = Q_ox − Q_red = ⟨i_par⟩·t da ⟨i_par⟩ = 0.4 µA con R² = 0.996. Una corriente parásita constante aporta más carga cuanto más dura el ciclo, así que imita una dependencia con ν: la retención de arriba la lleva dentro. Cita la capacitancia de la carga de REDUCCIÓN (reversible_capacitance), que la fuga anódica no contamina
+⚠ en 1 de los 9 potenciales examinados las TRES leyes de i(ν) ajustan igual de bien: «i = a·ν^b», la de Dunn y «i = k_cap·ν + i_par». Con 6 velocidades sobre un factor 40 y dos parámetros no hay con qué elegir ahí, así que en esos potenciales el b no es prueba de difusión: es compatible con ella y también con una corriente constante, que aquí no es una hipótesis — está medida aparte, ⟨i_par⟩ = 0.40 µA con R² = 0.995 a partir de ΔQ, y la ley de fuga pide 1.04 µA en -0.200 V. En el resto la serie SÍ distingue, y entonces la pregunta correcta no es cuál de las tres sino las tres a la vez: el ajuste de 6 velocidades a «k_cap·ν + k_diff·√ν + i_par» determina el término difusivo en 9 de los 9 potenciales
+⚠ la eficiencia coulómbica baja a 0.48 en esta serie, y el ajuste ΔQ = Q_ox − Q_red = ⟨i_par⟩·t da ⟨i_par⟩ = 0.4 µA con R² = 0.995. Una corriente parásita constante aporta más carga cuanto más dura el ciclo, así que imita una dependencia con ν: la retención de arriba la lleva dentro. Cita la capacitancia de la carga de REDUCCIÓN (reversible_capacitance), que la fuga anódica no contamina
 
 ────────────────────────────────────────────────────────────────────────
   SEPARACIÓN CAPACITIVO / DIFUSIVO (DUNN)
 ────────────────────────────────────────────────────────────────────────
 Separación de Dunn (i = k₁ν + k₂√ν) — Media: sólo la rama anódica:
 
-      5.0 mV/s   capacitivo  23.1 %   difusivo  76.9 %
-     10.0 mV/s   capacitivo  29.5 %   difusivo  70.5 %
-     20.0 mV/s   capacitivo  36.9 %   difusivo  63.1 %
-     50.0 mV/s   capacitivo  48.3 %   difusivo  51.7 %
-    100.0 mV/s   capacitivo  58.4 %   difusivo  41.6 %
+      5.0 mV/s   capacitivo  21.5 %   difusivo  78.5 %
+     10.0 mV/s   capacitivo  27.4 %   difusivo  72.6 %
+     20.0 mV/s   capacitivo  34.3 %   difusivo  65.7 %
+     50.0 mV/s   capacitivo  44.9 %   difusivo  55.1 %
+    100.0 mV/s   capacitivo  54.3 %   difusivo  45.7 %
+    200.0 mV/s   capacitivo  63.4 %   difusivo  36.6 %
 
   en 1 de 60 potenciales el ajuste de dos términos no describe los datos (R² < 0.95)
 
   esta separación es capacitivo frente a DIFUSIVO, no doble capa frente a redox. Un proceso redox confinado en la superficie es superficial: su corriente escala con ν, que es lo que significa «pseudocapacitivo», así que entra en k₁ por definición. Que un voltamperograma con picos redox evidentes salga «99 % capacitivo» es el resultado correcto, no un pico que se haya perdido. Lo que separa doble capa de pseudocapacitivo es la PRESENCIA de picos redox en el CV, y eso lo decide la clasificación de mecanismo
 
-  ⚠ en 13 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (+0.111 a +0.315 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo
+  ⚠ en 14 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (+0.111 a +0.332 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo
 
 ────────────────────────────────────────────────────────────────────────
   AVISOS
@@ -151,7 +153,6 @@ Separación de Dunn (i = k₁ν + k₂√ν) — Media: sólo la rama anódica:
 ⚠ velocidades: 49.9938 mV/s: los 4 ciclos completos del archivo dan 0.1185 → 0.1174 → 0.1167 → 0.1163 mF, +0.62 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice
 ⚠ velocidades: el C_dl y el ECSA se han calculado sin que se haya declarado que la ventana esté libre de corriente faradaica. Elige una región donde no pase nada (típicamente ±50 mV alrededor del potencial de circuito abierto) y vuelve a medir, o estos dos números incluyen reacción
 ⚠ velocidades: el ECSA se ha calculado con Cs = 40 µF/cm², pero la literatura da entre 20 y 60 para el mismo tipo de material. Ese factor de tres pasa entero al área y de ahí a cualquier actividad que normalices por ella: es la magnitud peor determinada de toda la electrocatálisis. Compara ECSA entre TUS muestras, no contra las de un artículo
-⚠ velocidades: en 2 de los 9 potenciales examinados las TRES leyes de i(ν) ajustan igual de bien: «i = a·ν^b», la de Dunn y «i = k_cap·ν + i_par». Con 5 velocidades sobre un factor 20 y dos parámetros no hay con qué elegir ahí, así que en esos potenciales el b no es prueba de difusión: es compatible con ella y también con una corriente constante, que aquí no es una hipótesis — está medida aparte, ⟨i_par⟩ = 0.40 µA con R² = 0.996 a partir de ΔQ, y la ley de fuga pide 2.25 µA en +0.300 V. En el resto la serie SÍ distingue, y entonces la pregunta correcta no es cuál de las tres sino las tres a la vez: el ajuste de 5 velocidades a «k_cap·ν + k_diff·√ν + i_par» determina el término difusivo en 9 de los 9 potenciales
-⚠ velocidades: la eficiencia coulómbica baja a 0.48 en esta serie, y el ajuste ΔQ = Q_ox − Q_red = ⟨i_par⟩·t da ⟨i_par⟩ = 0.4 µA con R² = 0.996. Una corriente parásita constante aporta más carga cuanto más dura el ciclo, así que imita una dependencia con ν: la retención de arriba la lleva dentro. Cita la capacitancia de la carga de REDUCCIÓN (reversible_capacitance), que la fuga anódica no contamina
-⚠ Dunn: en 13 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (+0.111 a +0.315 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo
-⚠ se ha calculado una capacitancia en F/g y el mecanismo es de tipo BATERÍA. Ese número está en el informe porque el programa lo calcula siempre, no porque deba citarse: para este electrodo la magnitud correcta es la capacidad, en C/g o mAh/g, que también está
+⚠ velocidades: en 1 de los 9 potenciales examinados las TRES leyes de i(ν) ajustan igual de bien: «i = a·ν^b», la de Dunn y «i = k_cap·ν + i_par». Con 6 velocidades sobre un factor 40 y dos parámetros no hay con qué elegir ahí, así que en esos potenciales el b no es prueba de difusión: es compatible con ella y también con una corriente constante, que aquí no es una hipótesis — está medida aparte, ⟨i_par⟩ = 0.40 µA con R² = 0.995 a partir de ΔQ, y la ley de fuga pide 1.04 µA en -0.200 V. En el resto la serie SÍ distingue, y entonces la pregunta correcta no es cuál de las tres sino las tres a la vez: el ajuste de 6 velocidades a «k_cap·ν + k_diff·√ν + i_par» determina el término difusivo en 9 de los 9 potenciales
+⚠ velocidades: la eficiencia coulómbica baja a 0.48 en esta serie, y el ajuste ΔQ = Q_ox − Q_red = ⟨i_par⟩·t da ⟨i_par⟩ = 0.4 µA con R² = 0.995. Una corriente parásita constante aporta más carga cuanto más dura el ciclo, así que imita una dependencia con ν: la retención de arriba la lleva dentro. Cita la capacitancia de la carga de REDUCCIÓN (reversible_capacitance), que la fuga anódica no contamina
+⚠ Dunn: en 14 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (+0.111 a +0.332 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo

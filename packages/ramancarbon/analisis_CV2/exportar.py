@@ -6,8 +6,8 @@ that what this writes and what the window shows cannot drift apart.
     uv run python -I analisis_CV2/exportar.py <archivo .mpr> ...
 
 Conditions, all from the user: glassy carbon 3 mm, 20 µg of active
-material, KOH 0.5 M, Ag/AgCl in saturated KCl, platinum counter, sample
-S1 (FeSe/C at 900 °C). The comment block of an .mpr is not read.
+material, KOH 3 M, Ag/AgCl in saturated KCl, platinum counter, sample S1 (FeSe/C
+at 900 °C). The comment block of an .mpr is not read.
 """
 import json
 import sys
@@ -23,10 +23,18 @@ from ramancarbon.gui.echem_state import EchemSession
 OUT = "/home/user/Cc/packages/ramancarbon/analisis_CV2"
 MASS_MG = 0.020
 
+#: The electrolyte, as a key of the table in ``echem.json``. **KOH 3 M,
+#: not 0.5 M**: the first pass of this analysis used the wrong one, and
+#: the cost is 57 mV on the RHE scale and therefore 57 mV on the OER
+#: overpotential, which is the number the whole reading of the positive
+#: limit rests on.
+ELECTROLYTE = "KOH_3M"
+
 
 def build(paths):
     session = EchemSession(name="S1 900 °C")
     session.electrode.mass_mg = MASS_MG      # lo único que no es defecto
+    session.electrode.use_electrolyte(ELECTROLYTE)
     for path in paths:
         if not session.load_cv(path, into_series=True):
             raise SystemExit(session.messages[-1][1])

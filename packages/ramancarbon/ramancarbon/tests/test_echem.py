@@ -287,7 +287,10 @@ def test_a_leak_withdraws_the_b_value_as_evidence_of_diffusion():
     )
     verdict = classify_storage(rates=study)
     assert verdict.mechanism != "battery"
-    assert any("no cuenta como difusión" in text for text in verdict.against)
+    # Either wording: the direct test (the three-term fit, when the
+    # series is wide enough) or the fallback (the laws tying). Both say
+    # the same thing and both name the parasitic current.
+    assert any("parásita" in text for text in verdict.against), verdict.against
 
 
 def test_the_three_laws_for_the_current_are_compared_on_equal_terms():
@@ -455,6 +458,20 @@ def test_a_refused_conversion_still_returns_a_usable_axis():
     assert np.allclose(values, measured)
     assert "Ag/AgCl" in label, "la etiqueta tiene que decir lo que se dibujó"
     assert "no se ha podido" in why
+
+
+def test_a_fitted_constant_needs_the_charge_balance_to_agree():
+    """A constant the i(ν) fit likes must also show up where it cannot
+    hide. On the synthetic hybrid, which has no parasitic current at
+    all, the fitted one came out opposite in sign to the other two
+    terms, the signed sum nearly cancelled, and the share read 92 %."""
+    from ramancarbon.echem.cv import analyse_rate_study
+    from ramancarbon.examples.demo_data import cv_rate_series
+
+    study = analyse_rate_study(cv_rate_series("hibrido", seed=2))
+    verdict = classify_storage(rates=study)
+    assert not any("corriente parásita que es el" in text
+                   for text in verdict.against), verdict.against
 
 
 def test_a_repeated_rate_enters_a_fit_once():

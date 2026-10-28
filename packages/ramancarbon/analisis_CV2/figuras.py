@@ -9,7 +9,7 @@ from matplotlib.ticker import AutoMinorLocator, NullFormatter, NullLocator
 
 OUT = "/home/user/Cc/packages/ramancarbon/analisis_CV2"
 RATE_COLOURS = {5: "#2a78d6", 10: "#1baf7a", 20: "#eda100", 50: "#eb6834",
-                100: "#6250d6"}
+                100: "#d4213d", 200: "#6250d6"}
 MEASURED, MODEL, SECOND, GREY = "#1a1a19", "#d4213d", "#6250d6", "#8a8a84"
 
 with open(f"{OUT}/resumen.json") as handle:
@@ -65,7 +65,7 @@ def panel_capacitance(axis):
     axis.set_xticklabels([f"{r:.0f}" for r in rates])
     axis.set_xlabel(r"$\nu$ / mV s$^{-1}$")
     axis.set_ylabel("C / F g$^{-1}$")
-    axis.set_ylim(3.2, 13.0)
+    axis.set_ylim(2.8, 13.2)
     axis.legend(frameon=False, fontsize=7.5, loc="upper right")
     axis.annotate("Q$_{red}$/Q$_{ox}$", xy=(rates[1], rows[1]["eficiencia"]),
                   xycoords=("data", "axes fraction"), xytext=(8, -28),
@@ -86,24 +86,30 @@ def panel_charge(axis):
               label=(r"$\langle i_{par}\rangle t$, "
                      f"{1e6 * leak['i_par_a']:.2f} µA, R² = {leak['r2']:.3f}"))
     axis.axhline(reduction.mean(), color=GREY, linewidth=1.0,
-                 linestyle=":", zorder=1)
+                 linestyle=":", zorder=1,
+                 label=r"$\langle Q_{red}\rangle$")
     axis.plot(duration, oxidation, "o", color=MEASURED, markersize=5,
               zorder=4, label=r"$Q_{ox}$")
     axis.plot(duration, reduction, "s", color=SECOND, markersize=5,
               zorder=4, label=r"$Q_{red}$")
     axis.plot(duration, oxidation - reduction, "^", color=MODEL,
               markersize=5.5, zorder=4, label=r"$\Delta Q$")
+    # Only the ends and the middle: six labels on points that bunch up
+    # at short durations is a smudge, and the axis already says what the
+    # duration is.
     for row, x, y in zip(rows, duration, oxidation - reduction):
-        offset = (7, -4) if x < 60 else (-6, 7)
+        if row["mv_s"] not in (5, 20, 200):
+            continue
+        offset = (8, -2) if x < 60 else (-7, 8)
         axis.annotate(f"{row['mv_s']:.0f} mV/s", (x, y),
-                      textcoords="offset points", xytext=offset, fontsize=6.8,
+                      textcoords="offset points", xytext=offset, fontsize=7,
                       color=GREY, ha="left" if x < 60 else "right")
     axis.set_xlabel("duración del ciclo / s")
     axis.set_ylabel("carga / µC")
     axis.set_xlim(0.0, 1.14 * duration.max())
     axis.set_ylim(0.0, 1.30 * oxidation.max())
-    axis.legend(frameon=False, fontsize=7.0, loc="upper left", ncol=2,
-                columnspacing=1.0, handlelength=1.4)
+    axis.legend(frameon=False, fontsize=6.8, loc="upper left", ncol=2,
+                columnspacing=0.9, handlelength=1.4)
     axis.text(0.98, 0.04, "(c)", transform=axis.transAxes, ha="right",
               fontsize=9, fontweight="bold")
 
@@ -130,7 +136,7 @@ def panel_three_terms(axis):
     twin.set_ylim(-2.2, 2.2)
     axis.set_xlabel("E / V vs Ag/AgCl")
     axis.set_ylabel("k$_{cap}$, k$_{diff}$")
-    axis.set_ylim(0.0, 72.0)
+    axis.set_ylim(0.0, 66.0)
     axis.legend(frameon=False, fontsize=7.5, loc="upper left")
     rhe_axis(axis)
     axis.text(0.98, 0.04, "(d)", transform=axis.transAxes, ha="right",
@@ -151,9 +157,9 @@ def main():
         axis.set_xlabel(axis.get_xlabel(), fontsize=8.5)
         axis.set_ylabel(axis.get_ylabel(), fontsize=8.5)
     figure.tight_layout(pad=1.0)
-    figure.savefig(f"{OUT}/cv_5a100.png", dpi=600)
-    figure.savefig(f"{OUT}/cv_5a100.pdf")
-    print("escrita cv_5a100.{png,pdf}")
+    figure.savefig(f"{OUT}/cv_serie.png", dpi=600)
+    figure.savefig(f"{OUT}/cv_serie.pdf")
+    print("escrita cv_serie.{png,pdf}")
 
 
 if __name__ == "__main__":

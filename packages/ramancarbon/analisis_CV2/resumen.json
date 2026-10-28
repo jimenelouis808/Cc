@@ -4,21 +4,21 @@
     "electrodo_de_trabajo": "carbono vítreo, 3 mm (disco)",
     "masa_activa_mg": 0.02,
     "area_geometrica_cm2": 0.07068583470577036,
-    "electrolito": "KOH 0.5 M",
-    "ph": 13.56,
+    "electrolito": "KOH 3 M",
+    "ph": 14.51,
     "referencia": "Ag/AgCl, KCl saturado",
     "contraelectrodo": "alambre de Pt",
-    "conversion_a_rhe": "E(RHE) = E(Ag/AgCl (KCl saturado)) + 0.197 + 0.05916·13.56 = E + 0.9992 V",
+    "conversion_a_rhe": "E(RHE) = E(Ag/AgCl (KCl saturado)) + 0.197 + 0.05916·14.51 = E + 1.0554 V",
     "ventana_v_vs_referencia": [
-      -0.6006170511245728,
-      0.39972901344299316
+      -0.6005979180335999,
+      0.3997672498226166
     ],
     "ventana_v_vs_rhe": [
-      0.39859254887542717,
-      1.398938613442993
+      0.45481368196640015,
+      1.4551788498226166
     ],
-    "sobrepotencial_oer_v": 0.1689386134429931,
-    "abanico_de_velocidades": 19.999419164085506
+    "sobrepotencial_oer_v": 0.2251788498226166,
+    "abanico_de_velocidades": 40.001520795571764
   },
   "por_velocidad": [
     {
@@ -80,170 +80,183 @@
       "c_rama_f_g": 4.850428146712783,
       "c_red_f_g": 4.734981583131996,
       "c_red_mf_cm2": 1.3397257322747473
+    },
+    {
+      "mv_s": 199.98848944455005,
+      "ciclos": 4,
+      "duracion_ciclo_s": 10.0001997473737,
+      "q_ox_c": 8.431732291167746e-05,
+      "q_red_c": 8.19070849581413e-05,
+      "eficiencia": 0.9714146764827806,
+      "c_lazo_f_g": 4.154252040991567,
+      "c_rama_f_g": 4.151427384152919,
+      "c_red_f_g": 4.094015785281187,
+      "c_red_mf_cm2": 1.1583695099088864
     }
   ],
   "fuga": {
-    "i_par_a": 4.0339826414838845e-07,
-    "ordenada_c": -6.7121932905532e-06,
-    "r2": 0.995849188259623,
+    "i_par_a": 3.980829495692962e-07,
+    "ordenada_c": -5.182016587310124e-06,
+    "r2": 0.9953527467286947,
     "fraccion_de_q_ox": {
-      "5": 0.5280917562626862,
-      "10": 0.36840284985663824,
-      "20": 0.2432889118922019,
-      "50": 0.1321502296365272,
-      "100": 0.08118719268673684
+      "5": 0.5211334372498683,
+      "10": 0.36354864691911193,
+      "20": 0.24008325332784963,
+      "50": 0.1304089726588843,
+      "100": 0.08011744225081369,
+      "200": 0.047213418005297235
     }
   },
   "b": [
     {
       "e_v": -0.4504953891038895,
-      "b": 0.8704829362422084,
-      "error": 0.060160478207236384,
-      "r2": 0.9858731822346012,
+      "b": 0.8448071671224447,
+      "error": 0.04273201619947848,
+      "r2": 0.9898695313380665,
       "lectura": "mixto, con predominio capacitivo"
     },
     {
       "e_v": -0.2754649206995964,
-      "b": 0.8909013527202749,
-      "error": 0.04238527809041697,
-      "r2": 0.9932554489212586,
+      "b": 0.863613728339515,
+      "error": 0.032471959845245486,
+      "r2": 0.9943767308368774,
       "lectura": "mixto, con predominio capacitivo"
     },
     {
       "e_v": -0.10043445229530334,
-      "b": 0.7767425812845213,
-      "error": 0.003911789215751577,
-      "r2": 0.9999239174826994,
+      "b": 0.7779973056476803,
+      "error": 0.002700021079293053,
+      "r2": 0.9999518255025885,
       "lectura": "mixto, con predominio capacitivo"
     },
     {
       "e_v": 0.07459601610898975,
-      "b": 0.6793838026916124,
-      "error": 0.026776194148907417,
-      "r2": 0.9953615866224967,
+      "b": 0.7026407507281599,
+      "error": 0.02252226605390243,
+      "r2": 0.9959070513123359,
       "lectura": "mixto"
     },
     {
       "e_v": 0.2496264845132828,
-      "b": 0.5528234138194594,
-      "error": 0.03503950947087872,
-      "r2": 0.9880913771164265,
+      "b": 0.591495673609428,
+      "error": 0.03271955051262072,
+      "r2": 0.9879082786864172,
       "lectura": "controlado por difusión (tipo batería)"
     }
   ],
   "leyes_de_dos_terminos": [
     {
       "e_v": -0.500504094362259,
-      "b": 0.8271174697023489,
+      "b": 0.8119443720547495,
       "gana": "dunn",
       "empate": false,
       "r2": {
-        "dunn": 0.9961820410672237,
-        "fuga": 0.9873394178349404,
-        "potencia": 0.9882491044474943
+        "dunn": 0.99883567652333,
+        "fuga": 0.9922840624668842,
+        "potencia": 0.9959336318216945
       }
     },
     {
       "e_v": -0.40048668384552005,
-      "b": 0.9021267541968707,
+      "b": 0.869106732307321,
       "gana": "dunn",
       "empate": false,
       "r2": {
-        "dunn": 0.9946623526253845,
-        "fuga": 0.9871251983842481,
-        "potencia": 0.978176288786405
+        "dunn": 0.9976674421049426,
+        "fuga": 0.9899418284976472,
+        "potencia": 0.9857344924248448
       }
     },
     {
       "e_v": -0.30046927332878115,
-      "b": 0.9094766877175086,
+      "b": 0.8766625965279288,
       "gana": "dunn",
       "empate": false,
       "r2": {
-        "dunn": 0.9954091522443965,
-        "fuga": 0.9892701175071045,
-        "potencia": 0.9830861999330331
+        "dunn": 0.997485145460967,
+        "fuga": 0.9899726742837968,
+        "potencia": 0.9864865388601929
       }
     },
     {
       "e_v": -0.20045186281204225,
-      "b": 0.8254323008653957,
+      "b": 0.8138477234508964,
       "gana": "dunn",
       "empate": true,
       "r2": {
-        "dunn": 0.9981477367876576,
-        "fuga": 0.992880957345898,
-        "potencia": 0.9980544910613098
+        "dunn": 0.9985923660157788,
+        "fuga": 0.991656567515065,
+        "potencia": 0.9983438274738318
       }
     },
     {
       "e_v": -0.10043445229530334,
-      "b": 0.7767425812845213,
+      "b": 0.7779973056476803,
       "gana": "potencia",
       "empate": false,
       "r2": {
-        "dunn": 0.9992459316851764,
-        "fuga": 0.9946762573828991,
-        "potencia": 0.9999532400987761
+        "dunn": 0.9992826907578444,
+        "fuga": 0.9932293411319256,
+        "potencia": 0.9999715912485287
       }
     },
     {
       "e_v": -0.00041704177856449753,
-      "b": 0.7219057288290407,
+      "b": 0.7362283641860556,
       "gana": "dunn",
       "empate": false,
       "r2": {
-        "dunn": 0.9998073055557174,
-        "fuga": 0.9960876905312563,
-        "potencia": 0.9979791055753052
+        "dunn": 0.9997797992225367,
+        "fuga": 0.994666066537624,
+        "potencia": 0.9976636399625237
       }
     },
     {
       "e_v": 0.09960036873817446,
-      "b": 0.6623701933171231,
+      "b": 0.6882450931071793,
       "gana": "dunn",
       "empate": false,
       "r2": {
-        "dunn": 0.9996421436800504,
-        "fuga": 0.9967600851262537,
-        "potencia": 0.9938683773824978
+        "dunn": 0.999903672309737,
+        "fuga": 0.9957101873469303,
+        "potencia": 0.9922671625320149
       }
     },
     {
       "e_v": 0.19961777925491342,
-      "b": 0.5938517257535993,
+      "b": 0.6293759767214759,
       "gana": "dunn",
       "empate": false,
       "r2": {
-        "dunn": 0.9985214973399849,
-        "fuga": 0.9968766244725602,
-        "potencia": 0.9889510985539358
+        "dunn": 0.9993579141638053,
+        "fuga": 0.996180917485664,
+        "potencia": 0.9848195182139535
       }
     },
     {
       "e_v": 0.2996351897716522,
-      "b": 0.5078166348308248,
-      "gana": "fuga",
-      "empate": true,
+      "b": 0.548722335672998,
+      "gana": "dunn",
+      "empate": false,
       "r2": {
-        "dunn": 0.9952548756777407,
-        "fuga": 0.9954385755016315,
-        "potencia": 0.98481631304396
+        "dunn": 0.9973111622911041,
+        "fuga": 0.9949913788847681,
+        "potencia": 0.977701787993162
       }
     }
   ],
   "modelo_de_tres_terminos": [
     {
       "e_v": -0.500504094362259,
-      "e_rhe": 0.49870550563774096,
-      "k_cap_f": 3.3050849566135185e-05,
-      "k_cap_error": 8.223591281350085e-06,
-      "k_diff": 2.4217602010280444e-05,
-      "k_diff_error": 3.2391048507763807e-06,
-      "i_par_a": -1.0297794813507266e-06,
-      "i_par_error": 2.6189820460607233e-07,
-      "r2": 0.9995626746332336,
-      "gl": 2,
+      "e_rhe": 0.554907505637741,
+      "k_cap_f": 4.875909021128912e-05,
+      "k_cap_error": 4.652968795155288e-06,
+      "k_diff": 1.846877635299638e-05,
+      "k_diff_error": 2.4316889440590616e-06,
+      "i_par_a": -6.213684509220569e-07,
+      "i_par_error": 2.5041295258013614e-07,
+      "r2": 0.9996185556721524,
+      "gl": 3,
       "determinados": {
         "k_cap": true,
         "k_diff": true,
@@ -252,15 +265,15 @@
     },
     {
       "e_v": -0.40048668384552005,
-      "e_rhe": 0.5987229161544798,
-      "k_cap_f": 3.6031294106781864e-05,
-      "k_cap_error": 1.5542808525016172e-06,
-      "k_diff": 2.8439003495920387e-05,
-      "k_diff_error": 6.121995216644953e-07,
-      "i_par_a": -1.4795927217332836e-06,
-      "i_par_error": 4.949946450365667e-08,
-      "r2": 0.9999880786498179,
-      "gl": 2,
+      "e_rhe": 0.6549249161544799,
+      "k_cap_f": 4.807559813256085e-05,
+      "k_cap_error": 2.989262582113255e-06,
+      "k_diff": 2.403108757639388e-05,
+      "k_diff_error": 1.562219110384481e-06,
+      "i_par_a": -1.1664432908654784e-06,
+      "i_par_error": 1.608757982653352e-07,
+      "r2": 0.9998740767681081,
+      "gl": 3,
       "determinados": {
         "k_cap": true,
         "k_diff": true,
@@ -269,15 +282,15 @@
     },
     {
       "e_v": -0.30046927332878115,
-      "e_rhe": 0.6987403266712188,
-      "k_cap_f": 4.049471637532999e-05,
-      "k_cap_error": 1.9500933016518612e-06,
-      "k_diff": 2.4796670589822852e-05,
-      "k_diff_error": 7.681019711147496e-07,
-      "i_par_a": -1.3097605137367753e-06,
-      "i_par_error": 6.210497543514871e-08,
-      "r2": 0.9999794485082375,
-      "gl": 2,
+      "e_rhe": 0.7549423266712189,
+      "k_cap_f": 4.5589684161728545e-05,
+      "k_cap_error": 1.393310302424523e-06,
+      "k_diff": 2.2932039012350862e-05,
+      "k_diff_error": 7.281581732456527e-07,
+      "i_par_a": -1.1772923977555167e-06,
+      "i_par_error": 7.498501753412316e-08,
+      "r2": 0.9999697614579892,
+      "gl": 3,
       "determinados": {
         "k_cap": true,
         "k_diff": true,
@@ -286,15 +299,15 @@
     },
     {
       "e_v": -0.20045186281204225,
-      "e_rhe": 0.7987577371879577,
-      "k_cap_f": 4.7465442443210745e-05,
-      "k_cap_error": 3.7130932068311585e-06,
-      "k_diff": 1.8173647139346414e-05,
-      "k_diff_error": 1.4625116699205794e-06,
-      "i_par_a": -7.356003306862151e-07,
-      "i_par_error": 1.1825155350430235e-07,
-      "r2": 0.9999089715550172,
-      "gl": 2,
+      "e_rhe": 0.8549597371879578,
+      "k_cap_f": 4.50651196469402e-05,
+      "k_cap_error": 1.3211262210879039e-06,
+      "k_diff": 1.905210562420682e-05,
+      "k_diff_error": 6.904340361944696e-07,
+      "i_par_a": -7.980082303824059e-07,
+      "i_par_error": 7.110022274340628e-08,
+      "r2": 0.9999672571301775,
+      "gl": 3,
       "determinados": {
         "k_cap": true,
         "k_diff": true,
@@ -303,15 +316,15 @@
     },
     {
       "e_v": -0.10043445229530334,
-      "e_rhe": 0.8987751477046966,
-      "k_cap_f": 4.977381269377621e-05,
-      "k_cap_error": 4.1073481667051525e-06,
-      "k_diff": 1.4416811350308846e-05,
-      "k_diff_error": 1.6178006561165041e-06,
-      "i_par_a": -4.03842697435044e-07,
-      "i_par_error": 1.308074627920371e-07,
-      "r2": 0.9998692154640343,
-      "gl": 2,
+      "e_rhe": 0.9549771477046967,
+      "k_cap_f": 4.5503697346235865e-05,
+      "k_cap_error": 1.6750175384946845e-06,
+      "k_diff": 1.597956743636845e-05,
+      "k_diff_error": 8.753812477108202e-07,
+      "i_par_a": -5.148648194240143e-07,
+      "i_par_error": 9.014590595894318e-08,
+      "r2": 0.9999395878649979,
+      "gl": 3,
       "determinados": {
         "k_cap": true,
         "k_diff": true,
@@ -320,32 +333,32 @@
     },
     {
       "e_v": -0.00041704177856449753,
-      "e_rhe": 0.9987925582214354,
-      "k_cap_f": 5.220655523732776e-05,
-      "k_cap_error": 4.305033096196973e-06,
-      "k_diff": 1.1578971390684825e-05,
-      "k_diff_error": 1.6956647172225693e-06,
-      "i_par_a": -8.61857777594962e-08,
-      "i_par_error": 1.371031706330871e-07,
-      "r2": 0.9998390970061799,
-      "gl": 2,
+      "e_rhe": 1.0549945582214355,
+      "k_cap_f": 4.6895372608805136e-05,
+      "k_cap_error": 1.890008510822961e-06,
+      "k_diff": 1.35227322264849e-05,
+      "k_diff_error": 9.877377223614803e-07,
+      "i_par_a": -2.242754352272199e-07,
+      "i_par_error": 1.0171626598690063e-07,
+      "r2": 0.9999159714107272,
+      "gl": 3,
       "determinados": {
         "k_cap": true,
         "k_diff": true,
-        "i_par": false
+        "i_par": true
       }
     },
     {
       "e_v": 0.09960036873817446,
-      "e_rhe": 1.0988099687381743,
-      "k_cap_f": 5.3641625763742503e-05,
-      "k_cap_error": 4.1923567232098055e-06,
-      "k_diff": 1.0240554273056853e-05,
-      "k_diff_error": 1.6512837924144107e-06,
-      "i_par_a": 2.0978590437344755e-07,
-      "i_par_error": 1.3351474572512901e-07,
-      "r2": 0.9998398439976367,
-      "gl": 2,
+      "e_rhe": 1.1550119687381746,
+      "k_cap_f": 4.893738207100634e-05,
+      "k_cap_error": 1.7637279314214526e-06,
+      "k_diff": 1.196219054346007e-05,
+      "k_diff_error": 9.217422037369518e-07,
+      "i_par_a": 8.747653457583235e-08,
+      "i_par_error": 9.492011193265736e-08,
+      "r2": 0.9999249260232896,
+      "gl": 3,
       "determinados": {
         "k_cap": true,
         "k_diff": true,
@@ -354,15 +367,15 @@
     },
     {
       "e_v": 0.19961777925491342,
-      "e_rhe": 1.1988273792549133,
-      "k_cap_f": 5.5136425551749304e-05,
-      "k_cap_error": 3.1870070869723767e-06,
-      "k_diff": 1.0412355034430228e-05,
-      "k_diff_error": 1.2552970790610801e-06,
-      "i_par_a": 5.697927371625807e-07,
-      "i_par_error": 1.0149719332936791e-07,
-      "r2": 0.999911772302623,
-      "gl": 2,
+      "e_rhe": 1.2550293792549134,
+      "k_cap_f": 5.168429146257001e-05,
+      "k_cap_error": 1.3211623664577171e-06,
+      "k_diff": 1.1675750310360264e-05,
+      "k_diff_error": 6.9045292613335e-07,
+      "i_par_a": 4.800379598842774e-07,
+      "i_par_error": 7.110216801086358e-08,
+      "r2": 0.9999603497100454,
+      "gl": 3,
       "determinados": {
         "k_cap": true,
         "k_diff": true,
@@ -371,15 +384,15 @@
     },
     {
       "e_v": 0.2996351897716522,
-      "e_rhe": 1.2988447897716522,
-      "k_cap_f": 5.517819521033956e-05,
-      "k_cap_error": 3.904486623363318e-06,
-      "k_diff": 1.4041827543777695e-05,
-      "k_diff_error": 1.5378976324138667e-06,
-      "i_par_a": 1.1585273312206599e-06,
-      "i_par_error": 1.2434689438984372e-07,
-      "r2": 0.9998931333523584,
-      "gl": 2,
+      "e_rhe": 1.3550467897716523,
+      "k_cap_f": 5.327120104305514e-05,
+      "k_cap_error": 1.3289652102013574e-06,
+      "k_diff": 1.4739740011814566e-05,
+      "k_diff_error": 6.945307718484098e-07,
+      "i_par_a": 1.1089458745524e-06,
+      "i_par_error": 7.152210058002262e-08,
+      "r2": 0.9999668594564151,
+      "gl": 3,
       "determinados": {
         "k_cap": true,
         "k_diff": true,
@@ -389,25 +402,26 @@
   ],
   "dunn": {
     "fraccion_capacitiva": {
-      "5": 0.2314402080725629,
-      "10": 0.29485323423740833,
-      "20": 0.3687156937777497,
-      "50": 0.4829316610967591,
-      "100": 0.5838866641174831
+      "5": 0.21516903986950756,
+      "10": 0.2741238777895971,
+      "20": 0.34279351231011534,
+      "50": 0.448979642328168,
+      "100": 0.5428371066421556,
+      "200": 0.6344796160537404
     },
     "avisos": [
-      "en 13 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (+0.111 a +0.315 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo"
+      "en 14 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (+0.111 a +0.332 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo"
     ]
   },
   "mecanismo": {
-    "veredicto": "battery",
-    "etiqueta": "Tipo batería (faradaico con difusión)",
-    "informar_como": "capacidad (C/g o mAh/g), NUNCA F/g",
+    "veredicto": "pseudocapacitive",
+    "etiqueta": "Pseudocapacitivo",
+    "informar_como": "capacitancia (F/g), con reservas",
     "a_favor": [
-      "b = 0.55, cerca de 0.5: corriente controlada por difusión"
+      "hay picos redox, pero anchos y poco separados: la firma pseudocapacitiva"
     ],
     "en_contra": [
-      "hay picos redox, pero anchos y poco separados: la firma pseudocapacitiva"
+      "el b baja a 0.59 y no se toma como prueba de difusión: en ese mismo potencial el ajuste de los tres términos —k_cap·ν + k_diff·√ν + i_par— determina una corriente parásita que es el 31 % de la corriente total a la velocidad más lenta. Una constante dobla el b hacia abajo sin que haya difusión de por medio, así que con esa fracción el b mide las dos cosas a la vez. Lo que SÍ es una medida del término difusivo es k_diff, que va aparte y con su incertidumbre"
     ]
   },
   "avisos_de_la_serie": [
@@ -416,7 +430,7 @@
     "49.9938 mV/s: los 4 ciclos completos del archivo dan 0.1185 → 0.1174 → 0.1167 → 0.1163 mF, +0.62 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice",
     "el C_dl y el ECSA se han calculado sin que se haya declarado que la ventana esté libre de corriente faradaica. Elige una región donde no pase nada (típicamente ±50 mV alrededor del potencial de circuito abierto) y vuelve a medir, o estos dos números incluyen reacción",
     "el ECSA se ha calculado con Cs = 40 µF/cm², pero la literatura da entre 20 y 60 para el mismo tipo de material. Ese factor de tres pasa entero al área y de ahí a cualquier actividad que normalices por ella: es la magnitud peor determinada de toda la electrocatálisis. Compara ECSA entre TUS muestras, no contra las de un artículo",
-    "en 2 de los 9 potenciales examinados las TRES leyes de i(ν) ajustan igual de bien: «i = a·ν^b», la de Dunn y «i = k_cap·ν + i_par». Con 5 velocidades sobre un factor 20 y dos parámetros no hay con qué elegir ahí, así que en esos potenciales el b no es prueba de difusión: es compatible con ella y también con una corriente constante, que aquí no es una hipótesis — está medida aparte, ⟨i_par⟩ = 0.40 µA con R² = 0.996 a partir de ΔQ, y la ley de fuga pide 2.25 µA en +0.300 V. En el resto la serie SÍ distingue, y entonces la pregunta correcta no es cuál de las tres sino las tres a la vez: el ajuste de 5 velocidades a «k_cap·ν + k_diff·√ν + i_par» determina el término difusivo en 9 de los 9 potenciales",
-    "la eficiencia coulómbica baja a 0.48 en esta serie, y el ajuste ΔQ = Q_ox − Q_red = ⟨i_par⟩·t da ⟨i_par⟩ = 0.4 µA con R² = 0.996. Una corriente parásita constante aporta más carga cuanto más dura el ciclo, así que imita una dependencia con ν: la retención de arriba la lleva dentro. Cita la capacitancia de la carga de REDUCCIÓN (reversible_capacitance), que la fuga anódica no contamina"
+    "en 1 de los 9 potenciales examinados las TRES leyes de i(ν) ajustan igual de bien: «i = a·ν^b», la de Dunn y «i = k_cap·ν + i_par». Con 6 velocidades sobre un factor 40 y dos parámetros no hay con qué elegir ahí, así que en esos potenciales el b no es prueba de difusión: es compatible con ella y también con una corriente constante, que aquí no es una hipótesis — está medida aparte, ⟨i_par⟩ = 0.40 µA con R² = 0.995 a partir de ΔQ, y la ley de fuga pide 1.04 µA en -0.200 V. En el resto la serie SÍ distingue, y entonces la pregunta correcta no es cuál de las tres sino las tres a la vez: el ajuste de 6 velocidades a «k_cap·ν + k_diff·√ν + i_par» determina el término difusivo en 9 de los 9 potenciales",
+    "la eficiencia coulómbica baja a 0.48 en esta serie, y el ajuste ΔQ = Q_ox − Q_red = ⟨i_par⟩·t da ⟨i_par⟩ = 0.4 µA con R² = 0.995. Una corriente parásita constante aporta más carga cuanto más dura el ciclo, así que imita una dependencia con ν: la retención de arriba la lleva dentro. Cita la capacitancia de la carga de REDUCCIÓN (reversible_capacitance), que la fuga anódica no contamina"
   ]
 }
