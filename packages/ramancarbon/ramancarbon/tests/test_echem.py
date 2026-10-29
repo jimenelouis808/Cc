@@ -17,10 +17,17 @@ from ramancarbon.echem.cv import (_current_at, analyse_cv,
                                   analyse_rate_study, capacitance)
 from ramancarbon.echem.eis import (
     CircuitError,
+    KNEE_PHASE_DEG,
+    analyse_eis,
     cpe_to_capacitance,
     fit_circuit,
+    hsu_mansfeld_capacitance,
     kramers_kronig,
     parse_circuit,
+    read_shape,
+    recommend_circuits,
+    series_cpe_capacitance,
+    storage_element,
 )
 from ramancarbon.echem.evaluate import (
     analyse_catalysis,
@@ -2034,3 +2041,450 @@ class TestTheCircuitEditorFlow:
         session = EchemSession()
         assert not session.save_fit_curve(tmp_path / "nada.csv")
         assert any("curva ajustada" in text for _, text in session.messages)
+
+
+# -- the shape of the spectrum, read before any circuit ---------------
+
+
+def _blocking_porous(points: int = 40, seed: int = 4):
+    """A porous carbon: series R, a pore line, no closed arc.
+
+    `make_eis_demo` builds it from the same element code the fitter uses,
+    so what goes in is what has to come out.
+    """
+    return make_eis_demo(
+        "R0-T1",
+        values={"R0.R": 5.0, "T1.Ri": 60.0, "T1.Q": 2e-4, "T1.n": 0.88},
+        frequencies=(0.1, 1e5), points=points, noise_pct=0.3, seed=seed,
+    )
+
+
+def test_the_knee_is_not_the_maximum_of_minus_z_imaginary():
+    """The bug this replaced, reproduced on a blocking porous electrode.
+
+    −Z″ of anything with a capacitive tail rises monotonically to the
+    end of the sweep, so its maximum is the LAST measured point. On the
+    user's three real carbons that returned 0.0999 Hz in all three and
+    called it a time constant of 10 s.
+    """
+    spectrum = _blocking_porous()
+    imaginary = -spectrum.z.imag
+    assert int(np.argmax(imaginary)) == spectrum.n - 1, (
+        "este espectro tiene que subir monótona hasta el final, que es "
+        "lo que hacía fallar al criterio anterior"
+    )
+
+    shape = read_shape(spectrum)
+    assert shape.arc_apex_hz is None
+    assert shape.knee_hz is not None
+    lowest = float(spectrum.frequency[-1])
+    assert shape.knee_hz > 100.0 * lowest, (
+        f"el codo salió en {shape.knee_hz:.4g} Hz, demasiado cerca del "
+        f"extremo del barrido ({lowest:.4g} Hz)"
+    )
+    # And it is where the phase really crosses, bracketed by two points.
+    below = spectrum.frequency[spectrum.phase_deg <= KNEE_PHASE_DEG]
+    above = spectrum.frequency[spectrum.phase_deg > KNEE_PHASE_DEG]
+    assert float(below.max()) <= shape.knee_hz <= float(above.min())
+
+
+def test_a_spectrum_without_a_closed_arc_says_so():
+    shape = read_shape(_blocking_porous())
+    assert shape.arc_apex_hz is None
+    assert any("transferencia de carga" in note for note in shape.notes)
+    assert shape.capacitive_tail
+
+
+def test_an_arc_that_closes_is_found_and_is_not_the_last_point():
+    spectrum = make_eis_demo("R0-(R1|Q1)", seed=3)
+    shape = read_shape(spectrum)
+    assert shape.arc_apex_hz is not None
+    assert shape.arc_apex_hz > float(spectrum.frequency[-1])
+    # 1/(R C) with C from the CPE, which is where the apex of R|Q sits.
+    expected = 1.0 / (2.0 * math.pi * 40.0
+                      * hsu_mansfeld_capacitance(2e-4, 0.88, 40.0).farads)
+    assert shape.arc_apex_hz == pytest.approx(expected, rel=0.5)
+
+
+def test_the_series_resistance_carries_how_it_was_obtained():
+    result = analyse_eis(_blocking_porous(), circuit=None)
+    assert result.series_resistance is not None
+    assert result.series_resistance_how, (
+        "una corrección iR con una resistencia sin explicar es un "
+        "parámetro libre"
+    )
+
+
+def test_a_porous_shape_asks_for_the_transmission_line_not_randles():
+    spectrum = _blocking_porous()
+    suggestions, shape = recommend_circuits(spectrum)
+    names = [s.name for s in suggestions]
+    assert "poroso" in names
+    assert "randles_cpe" not in names, (
+        "randles_cpe era el circuito por defecto y es el modelo "
+        "equivocado aquí: su R1 se va a la cota"
+    )
+    assert shape.fortyfive_decades > 0.5
+    for suggestion in suggestions:
+        assert suggestion.why
+
+
+def test_the_default_circuit_no_longer_pins_a_resistance_to_its_bound():
+    """What the old default did, and that the new path does not do it."""
+    spectrum = _blocking_porous()
+    pinned = fit_circuit(spectrum, "R0-(R1|Q1)")
+    assert pinned.values()["R1.R"] > 1e8, (
+        "sin cota pegada no hay nada que demostrar; este espectro tiene "
+        "que forzar a randles_cpe a mandar su R al infinito"
+    )
+
+    result = analyse_eis(spectrum)
+    assert result.fit is not None
+    values = result.fit.values()
+    assert all(value < 1e8 for label, value in values.items()
+               if label.endswith(".R") or label.endswith(".Ri"))
+
+
+def test_the_charge_transfer_resistance_is_read_off_the_structure():
+    """Not off the order of the parameter dictionary.
+
+    ``R0-T1`` has two resistances —R0 and the pore's Ri— and neither is
+    a charge-transfer resistance. Taking "the second .R" would have
+    reported one anyway for a nested circuit.
+    """
+    assert storage_element("R0-T1") == "T1"
+    result = analyse_eis(_blocking_porous(), circuit="R0-T1")
+    assert result.charge_transfer_resistance is None
+    assert result.ionic_resistance_ohm == pytest.approx(60.0, rel=0.25)
+
+
+def test_the_stored_capacitance_comes_from_the_element_that_stores_it():
+    """And the arc's CPE is a different number, named differently.
+
+    Measured on the user's 800 °C carbon: the arc's CPE converts to
+    0.092 mF and the pore wall to 0.216 mF, where the model-free C′ at
+    the same frequency is 0.212 mF. Taking the first CPE in the circuit
+    was wrong by a factor of 2.3.
+    """
+    assert storage_element("R0-(R1|Q1)-T1") == "T1"
+    assert storage_element("R0-(R1|Q1)-Q2") == "Q2"
+    assert storage_element("R0-(R1|Q1)") is None
+
+    spectrum = _blocking_porous()
+    result = analyse_eis(spectrum, circuit="R0-T1")
+    assert result.storage_capacitance is not None
+    # Q · ω^(n−1) at the lowest measured frequency, with the planted Q.
+    omega = float(spectrum.omega[-1])
+    expected = 2e-4 * omega ** (0.88 - 1.0)
+    assert result.storage_capacitance.farads == pytest.approx(expected, rel=0.1)
+    assert "serie" in result.storage_capacitance.method
+
+
+def test_the_stored_capacitance_is_checked_against_c_prime():
+    result = analyse_eis(_blocking_porous(), circuit="R0-T1")
+    assert "C′" in result.storage_check
+    assert result.capacitance_f is not None
+    assert result.capacitance_frequency_hz is not None
+    # The deliverable number is the model-free one, by the package's own
+    # rule: C′ carries the real part of the whole chain.
+    spectrum = _blocking_porous()
+    omega = float(spectrum.omega[-1])
+    measured = float(-spectrum.z.imag[-1] / (omega * abs(spectrum.z[-1]) ** 2))
+    assert result.capacitance_f == pytest.approx(measured, rel=1e-9)
+
+
+def test_a_series_cpe_capacitance_needs_its_frequency():
+    one = series_cpe_capacitance(2e-4, 0.88, 0.1)
+    ten = series_cpe_capacitance(2e-4, 0.88, 1.0)
+    assert one.farads > ten.farads, (
+        "con n < 1 la capacitancia de un CPE en serie BAJA al subir la "
+        "frecuencia; si no, el exponente está al revés"
+    )
+    assert "0.1" in one.method
+    assert one.steps and one.caution
+    ideal = series_cpe_capacitance(3e-4, 1.0, 7.0)
+    assert ideal.farads == pytest.approx(3e-4), (
+        "con n = 1 un CPE ES un condensador y su capacitancia no puede "
+        "depender de la frecuencia"
+    )
+
+
+def test_dropping_a_real_inductance_makes_the_pore_resistance_unmeasurable():
+    """Measured on the user's 900 °C spectrum, reproduced synthetically.
+
+    Its Z″ is positive at 100 kHz — cable inductance. Fitted without an
+    L in the circuit, R0 absorbs it and T1.Ri collapsed from 0.79 Ω
+    (± 13 %) to 2·10⁻⁵ Ω (± 3.5·10⁷ %): the quantity that limits the
+    device's power stopped being measurable, and nothing about the
+    residual said so.
+    """
+    spectrum = make_eis_demo(
+        "L0-R0-T1",
+        values={"L0.L": 1e-6, "R0.R": 20.0, "T1.Ri": 0.8, "T1.Q": 3e-4,
+                "T1.n": 0.90},
+        frequencies=(0.1, 1e5), points=40, noise_pct=0.2, seed=7,
+    )
+    shape = read_shape(spectrum)
+    assert shape.inductive_top
+    assert any("inductancia" in note for note in shape.notes)
+    names = [s.name for s in recommend_circuits(spectrum, shape)[0]]
+    assert any("inductancia" in name or "completo" in name for name in names)
+
+    without = fit_circuit(spectrum, "R0-T1")
+    with_it = fit_circuit(spectrum, "L0-R0-T1")
+    bad = without.errors["T1.Ri"] / abs(without.values()["T1.Ri"])
+    good = with_it.errors["T1.Ri"] / abs(with_it.values()["T1.Ri"])
+    assert good < 0.5 <= bad, (
+        f"Ri sale al {100 * good:.0f} % con la L dentro y al "
+        f"{100 * bad:.0f} % sin ella"
+    )
+    assert with_it.values()["T1.Ri"] == pytest.approx(0.8, rel=0.25)
+    assert without.values()["T1.Ri"] < 0.01 * 0.8, (
+        "sin la L, Ri no sale solo impreciso: se desploma a cero, que es "
+        "la línea de transmisión degenerando en un CPE pelado"
+    )
+
+
+def test_the_drt_says_when_its_peaks_are_a_distributed_element():
+    """A pore has no discrete time constant, and the DRT gives it peaks.
+
+    The module said this in prose; `drt` has the spectrum, so it can say
+    it with the measured number of decades.
+    """
+    from ramancarbon.echem.eis import drt
+
+    result = drt(_blocking_porous(points=50))
+    assert result.peaks_s, "sin picos no hay nada que avisar"
+    assert any("décadas cerca de −45" in w for w in result.warnings)
+
+
+
+# -- the composite, multi-panel figure --------------------------------
+
+
+def _session_with_spectra(count: int = 3):
+    from ramancarbon.gui.echem_state import EchemSession
+
+    session = EchemSession(name="serie")
+    for index in range(count):
+        spectrum = _blocking_porous(seed=4 + index)
+        spectrum.name = f"muestra {index + 1}"
+        session.eis_series.append(spectrum)
+    session.eis = session.eis_series[0]
+    return session
+
+
+def test_only_the_panels_with_data_are_offered():
+    from ramancarbon.gui.echem_state import EchemSession
+
+    empty = EchemSession()
+    assert empty.figure_panels() == []
+
+    session = _session_with_spectra()
+    keys = [panel.key for panel in session.figure_panels()]
+    assert keys, "con espectros cargados tiene que ofrecer algo"
+    assert all(key.startswith("eis_") for key in keys), (
+        "sin voltamperogramas no se puede ofrecer ningún panel de CV: un "
+        "panel vacío en una figura de seis se lee como un fallo y no hay "
+        "forma de distinguirlo de uno cuyos datos no dijeran nada"
+    )
+    for panel in session.figure_panels():
+        assert panel.label and panel.note
+
+
+def test_the_panels_keep_the_order_they_are_offered_in():
+    """Not the order they were ticked.
+
+    A figure's letters run (a), (b), (c) down the page, and someone who
+    ticks the residual before the Nyquist does not mean the residual to
+    be panel (a).
+    """
+    session = _session_with_spectra()
+    offered = [panel.key for panel in session.figure_panels()]
+    session.set_figure_panels([offered[2], offered[0]])
+    assert session.composite.panels == [offered[0], offered[2]]
+
+
+def test_a_composite_figure_is_a_value_that_round_trips():
+    from ramancarbon.gui.figures_echem import CompositeFigure
+
+    spec = CompositeFigure(panels=["eis_nyquist", "eis_bode"], columns=1,
+                           width_in=3.3, dpi=600, letters=False,
+                           title="Figura 2")
+    again = CompositeFigure.from_dict(spec.to_dict())
+    assert again == spec
+    assert again.rows == 2
+    assert again.figsize() == (3.3, 2 * spec.panel_height_in)
+
+
+def test_the_figure_exports_the_numbers_of_every_panel():
+    """Including the ones that carry a twin axis.
+
+    Zipping the chosen panels against ``figure.axes`` of the composite
+    looks equivalent and is not: a panel with a twin adds a second entry
+    to that list, so every panel after the first Bode plot read another
+    panel's lines and two came back with nothing but their header.
+    """
+    session = _session_with_spectra(2)
+    session.set_figure_panels(["eis_nyquist", "eis_bode",
+                               "eis_capacitancia", "eis_residuo"])
+    rows = session.figure_data_rows()
+    assert set(rows) == set(session.composite.panels)
+    for key, table in rows.items():
+        assert table[0] == ("serie", "x", "y")
+        assert len(table) > 1, f"{key} salió sin datos"
+        names = {name for name, _, _ in table[1:]}
+        # The residual panel names the circuit in its legend too, so the
+        # check is that both samples are in there and nothing else.
+        for sample in ("muestra 1", "muestra 2"):
+            assert any(name.startswith(sample) for name in names), (
+                f"{key} no lleva ninguna serie de {sample}")
+
+
+def test_the_figure_is_saved_at_its_own_width(tmp_path):
+    from PIL import Image
+
+    from ramancarbon.gui.theme import PALETTES
+
+    session = _session_with_spectra(2)
+    session.set_figure_panels(["eis_nyquist", "eis_bode"])
+    session.composite.columns = 2
+    session.composite.width_in = 7.0
+    session.composite.panel_height_in = 3.0
+    session.composite.dpi = 100
+    target = tmp_path / "figura.png"
+    assert session.save_figure(target, PALETTES["claro"])
+    # bbox_inches="tight" trims, so this is a band and not an equality;
+    # what it has to catch is a figure saved at the canvas's size
+    # instead of the one that was asked for.
+    width, height = Image.open(target).size
+    assert 500 <= width <= 800, width
+    assert 200 <= height <= 400, height
+
+
+def test_a_panel_that_fails_does_not_take_the_figure_with_it():
+    import matplotlib
+    from matplotlib.figure import Figure
+
+    from ramancarbon.gui.figures_echem import (PANELS_BY_KEY, PanelSpec,
+                                               draw_composite)
+    from ramancarbon.gui.theme import PALETTES, matplotlib_style
+
+    def explode(axis, session, spec, palette):
+        raise RuntimeError("a propósito")
+
+    session = _session_with_spectra(1)
+    session.set_figure_panels(["eis_nyquist"])
+    session.composite.panels = ["eis_nyquist", "roto"]
+    PANELS_BY_KEY["roto"] = PanelSpec("roto", "Roto", "eis", explode)
+    try:
+        with matplotlib.rc_context(matplotlib_style(PALETTES["claro"])):
+            figure = Figure(figsize=(6, 6))
+            problems = draw_composite(figure, session.composite, session,
+                                      PALETTES["claro"])
+        assert len(problems) == 1 and "a propósito" in problems[0]
+        assert len(figure.axes) >= 2, (
+            "construir una figura de seis paneles y recibir una traza en "
+            "vez de los cinco que sí salieron es el cambio equivocado"
+        )
+    finally:
+        del PANELS_BY_KEY["roto"]
+
+
+# -- the impedance series ---------------------------------------------
+
+
+def test_the_section_compares_several_spectra(tmp_path):
+    from ramancarbon.gui.echem_state import (EIS_COMPARISON_COLUMNS,
+                                             EchemSession)
+
+    session = EchemSession()
+    for index in range(2):
+        path = tmp_path / f"m{index}.csv"
+        write_eis(_blocking_porous(seed=4 + index), path)
+        assert session.add_eis_to_series(path, label=f"{800 + 100 * index} °C")
+    assert session.eis_series_choices() == ["800 °C", "900 °C"]
+    assert session.eis is session.eis_series[0], (
+        "el primero tiene que quedar seleccionado o el editor de circuito "
+        "se queda sin espectro sobre el que trabajar"
+    )
+    rows = session.eis_comparison_rows()
+    assert rows[0] == EIS_COMPARISON_COLUMNS
+    assert len(rows) == 3
+    assert [row[0] for row in rows[1:]] == ["800 °C", "900 °C"]
+
+    assert session.use_eis_from_series("900 °C")
+    assert session.eis is session.eis_series[1]
+    assert not session.use_eis_from_series("1020 °C")
+
+
+def test_clearing_the_series_releases_the_chosen_spectrum(tmp_path):
+    from ramancarbon.gui.echem_state import EchemSession
+
+    session = EchemSession()
+    path = tmp_path / "m.csv"
+    write_eis(_blocking_porous(), path)
+    assert session.add_eis_to_series(path, label="una")
+    session.clear("eis_series")
+    assert session.eis_series == []
+    assert session.eis is None, (
+        "el espectro elegido era uno de la serie; dejarlo apuntando a un "
+        "objeto que ya no está en ninguna lista es la forma de que la "
+        "pestaña siga enseñando lo que se acaba de borrar"
+    )
+
+
+def test_the_per_spectrum_analyses_are_cached_and_invalidated(tmp_path):
+    from ramancarbon.gui.echem_state import EchemSession
+
+    session = EchemSession()
+    path = tmp_path / "m.csv"
+    write_eis(_blocking_porous(), path)
+    assert session.add_eis_to_series(path, label="una")
+    first = session.eis_analyses()
+    assert first is session.eis_analyses(), (
+        "cada panel de impedancia pide el mismo análisis y cada uno cuesta "
+        "una comparación de circuitos: una figura de seis paneles lo "
+        "correría seis veces por espectro"
+    )
+    assert session.add_eis_to_series(path, label="otra")
+    assert session.eis_analyses() is not first
+    assert len(session.eis_analyses()) == 2
+
+
+# -- choosing the circuit from the window ------------------------------
+
+
+def test_the_section_defaults_to_choosing_the_circuit_from_the_data():
+    from ramancarbon.echem.eis import AUTO_CIRCUIT
+    from ramancarbon.gui.echem_state import EchemSession
+
+    session = EchemSession()
+    assert session.circuit == AUTO_CIRCUIT
+    assert session.circuit_choices()[0] == AUTO_CIRCUIT
+    use, caution = session.circuit_note()
+    assert use and caution
+    assert session.circuit_parameters() == [], (
+        "antes del ajuste no hay circuito que listar: cuál se ajusta no se "
+        "sabe hasta leer el espectro"
+    )
+    assert "analiza el espectro" in session.circuit_drawing()
+
+
+def test_the_chosen_circuit_can_be_taken_over_by_hand(tmp_path):
+    from ramancarbon.gui.echem_state import EchemSession
+
+    session = EchemSession()
+    path = tmp_path / "m.csv"
+    write_eis(_blocking_porous(), path)
+    assert session.load_eis(path)
+    assert not session.adopt_chosen_circuit(), (
+        "sin análisis todavía no hay nada que adoptar"
+    )
+    assert session.analyse() is not None
+    chosen = session.result.eis.fit.circuit
+    assert session.adopt_chosen_circuit()
+    assert session.circuit == chosen
+    labels = [label for label, _, _ in session.circuit_parameters()]
+    assert labels == list(session.result.eis.fit.values())
+    assert chosen in session.circuit_drawing()

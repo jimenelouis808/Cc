@@ -74,7 +74,12 @@ class EchemApp(SectionApp):
             "ragone": self._draw_ragone,
             "tafel": self._draw_tafel,
             "polarisation": self._draw_polarisation,
+            "composite": self._draw_composite,
         }
+        # By NOTEBOOK INDEX, so it follows the order tabs are ADDED and
+        # not the order the methods sit in the file. Inserting a tab in
+        # the middle without shifting the rest does not raise: it draws
+        # the wrong figure into the wrong tab, or leaves one blank.
         self._tab_canvases = {
             0: (),
             1: ("cv", "rates"),
@@ -83,6 +88,7 @@ class EchemApp(SectionApp):
             4: ("drt",),
             5: ("capacitance", "ragone"),
             6: ("tafel", "polarisation"),
+            7: ("composite",),
         }
         self._build()
         self.set_status("Carga una medida o pulsa Demo.")
@@ -122,6 +128,7 @@ class EchemApp(SectionApp):
         self._build_tab_drt()
         self._build_tab_capacitance()
         self._build_tab_catalysis()
+        self._build_tab_figure()
         self.root.after(150, self.drain_queue)
 
     def _build_sidebar(self, parent) -> None:
@@ -239,6 +246,7 @@ class EchemApp(SectionApp):
             ("Cargar GCD…", lambda: self._load("gcd")),
             ("Añadir a la serie GCD…", lambda: self._load("gcd_series")),
             ("Cargar EIS…", lambda: self._load("eis")),
+            ("Añadir a la serie de EIS…", lambda: self._load("eis_series")),
             ("Cargar EIS de Nyquist + Bode…", self._load_eis_pair),
             ("Cargar polarización…", lambda: self._load("lsv")),
         ):
@@ -667,6 +675,186 @@ class EchemApp(SectionApp):
         info.pack(fill="both", expand=True)
         self.catalysis_text = scrolled_text(info_body, self.palette,
                                             self.fonts["mono"], height=12)
+
+    def _build_tab_figure(self) -> None:
+        """The multi-panel figure: choose the panels, lay them out, export.
+
+        It exists because the project's published figures were written by
+        hand, one matplotlib script per analysis, which puts them out of
+        reach of anyone who does not write matplotlib and lets them drift
+        from what the window shows. Every panel here draws from this same
+        session.
+        """
+        ttk, tk = self.ttk, self.tk
+        tab = ttk.Frame(self.notebook, padding=PAD["md"])
+        self.notebook.add(tab, text="  Figura  ")
+
+        # The chooser on the left in its own scrollable column: the
+        # panel list grows with the package and a fixed frame clips it.
+        chooser_column, chooser = scrollable_column(tab, width=330)
+        chooser_column.pack(side="left", fill="y", padx=(0, PAD["md"]))
+
+        panels_card, panels_body = card(
+            chooser, "Paneles",
+            "sólo se ofrecen los que tienen datos cargados")
+        panels_card.pack(fill="x")
+        self.figure_panel_vars: dict[str, object] = {}
+        self.figure_panels_frame = ttk.Frame(panels_body)
+        self.figure_panels_frame.pack(fill="x")
+
+        layout_card, layout_body = card(chooser, "Disposición")
+        layout_card.pack(fill="x", pady=(PAD["sm"], 0))
+        self.figure_columns_var = tk.StringVar(value="2")
+        labelled(layout_body, "Columnas", lambda p: ttk.Spinbox(
+            p, from_=1, to=4, width=6, textvariable=self.figure_columns_var))
+        self.figure_width_var = tk.StringVar(value="7.2")
+        labelled(layout_body, "Ancho (pulgadas)", lambda p: ttk.Entry(
+            p, textvariable=self.figure_width_var, width=8))
+        self.figure_height_var = tk.StringVar(value="3.1")
+        labelled(layout_body, "Alto por panel", lambda p: ttk.Entry(
+            p, textvariable=self.figure_height_var, width=8))
+        self.figure_dpi_var = tk.StringVar(value="220")
+        labelled(layout_body, "ppp al exportar", lambda p: ttk.Entry(
+            p, textvariable=self.figure_dpi_var, width=8))
+        self.figure_title_var = tk.StringVar(value="")
+        labelled(layout_body, "Título", lambda p: ttk.Entry(
+            p, textvariable=self.figure_title_var, width=16))
+        hint(layout_body,
+             "El ancho va emparejado con el tamaño de letra: una columna "
+             "de revista mide unas 3.3 pulgadas y dos unas 7, y una figura "
+             "dibujada a 7 y encogida a 3.3 llega con todas las etiquetas "
+             "a la mitad. Por eso se exporta a ESTE ancho y no se guarda "
+             "el lienzo de la pantalla, que mide lo que mida el panel.")
+
+        options_card, options_body = card(chooser, "Opciones")
+        options_card.pack(fill="x", pady=(PAD["sm"], 0))
+        self.figure_letters_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(options_body, text="Letras (a), (b), (c)…",
+                        variable=self.figure_letters_var).pack(anchor="w")
+        self.figure_legends_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(options_body, text="Leyendas",
+                        variable=self.figure_legends_var).pack(anchor="w")
+        self.figure_grid_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(options_body, text="Rejilla",
+                        variable=self.figure_grid_var).pack(anchor="w")
+
+        actions_card, actions_body = card(chooser, "Hacer y exportar")
+        actions_card.pack(fill="x", pady=(PAD["sm"], 0))
+        bar = flow(actions_body)
+        bar.add(ttk.Button(bar.frame, text="Redibujar",
+                           command=self._refresh_composite))
+        bar.add(ttk.Button(bar.frame, text="Guardar figura…",
+                           command=self._save_composite))
+        bar.add(ttk.Button(bar.frame, text="Guardar los datos…",
+                           command=self._save_composite_data))
+        hint(actions_body,
+             "«Guardar figura» escribe PNG o PDF al ancho y a los puntos "
+             "por pulgada de arriba. «Guardar los datos» escribe un CSV "
+             "por panel con los números DIBUJADOS, con todo lo que la "
+             "figura les haya hecho ya aplicado: una figura que sólo se "
+             "puede mirar hay que teclearla para usarla en otro sitio, y "
+             "los números tecleados son números equivocados. Un archivo "
+             "por panel porque los paneles no comparten abscisa.")
+
+        outer, body = card(tab, None)
+        outer.pack(fill="both", expand=True)
+        self.make_canvas(body, "composite", lambda f: f.add_subplot(111),
+                         figsize=(7.6, 7.2))
+        self._refresh_figure_panels()
+
+    def _refresh_figure_panels(self) -> None:
+        """Rebuild the checkbox list from what is loaded."""
+        for child in self.figure_panels_frame.winfo_children():
+            child.destroy()
+        self.figure_panel_vars = {}
+        panels = self.session.figure_panels()
+        if not panels:
+            self.ttk.Label(
+                self.figure_panels_frame,
+                text="Carga una serie de velocidades o un espectro de "
+                     "impedancia.",
+                wraplength=280, justify="left").pack(anchor="w")
+            return
+        chosen = set(self.session.composite.panels)
+        for panel in panels:
+            variable = self.tk.BooleanVar(value=panel.key in chosen)
+            self.figure_panel_vars[panel.key] = variable
+            self.ttk.Checkbutton(
+                self.figure_panels_frame, text=panel.label,
+                variable=variable).pack(anchor="w")
+            if panel.note:
+                self.ttk.Label(
+                    self.figure_panels_frame, text=panel.note,
+                    wraplength=276, justify="left",
+                    style="Hint.TLabel").pack(anchor="w", padx=(22, 0))
+
+    def _composite_from_widgets(self) -> None:
+        def number(variable, fallback):
+            try:
+                return float(variable.get())
+            except (TypeError, ValueError):
+                return fallback
+
+        composite = self.session.composite
+        self.session.set_figure_panels(
+            [key for key, var in self.figure_panel_vars.items() if var.get()])
+        composite.columns = max(1, int(number(self.figure_columns_var, 2)))
+        composite.width_in = max(2.0, number(self.figure_width_var, 7.2))
+        composite.panel_height_in = max(1.5,
+                                        number(self.figure_height_var, 3.1))
+        composite.dpi = max(72, int(number(self.figure_dpi_var, 220)))
+        composite.letters = bool(self.figure_letters_var.get())
+        composite.legends = bool(self.figure_legends_var.get())
+        composite.grid = bool(self.figure_grid_var.get())
+        composite.title = self.figure_title_var.get().strip()
+
+    def _refresh_composite(self) -> None:
+        self._composite_from_widgets()
+        self.with_style("composite", self._draw_composite)
+        self.flush_messages(self.session.messages)
+        count = len(self.session.composite.panels)
+        self.set_status(
+            f"figura de {count} panel(es), "
+            f"{self.session.composite.rows}×{self.session.composite.columns}"
+            if count else "elige al menos un panel")
+
+    def _draw_composite(self, figure) -> None:
+        self.session.draw_figure(figure, self.figure_palette)
+
+    def _save_composite(self) -> None:
+        from tkinter import filedialog
+
+        self._composite_from_widgets()
+        if not self.session.composite.panels:
+            self.warn("Figura vacía", "Elige al menos un panel.")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Guardar la figura", defaultextension=".png",
+            filetypes=(("PNG", "*.png"), ("PDF", "*.pdf"), ("SVG", "*.svg"),
+                       ("Todos", "*.*")),
+            parent=self.root)
+        if not path:
+            return
+        saved = self.session.save_figure(path, self.figure_palette)
+        self.flush_messages(self.session.messages)
+        if saved:
+            self.set_status(f"figura guardada en {Path(path).name}")
+
+    def _save_composite_data(self) -> None:
+        from tkinter import filedialog
+
+        self._composite_from_widgets()
+        if not self.session.composite.panels:
+            self.warn("Figura vacía", "Elige al menos un panel.")
+            return
+        folder = filedialog.askdirectory(
+            title="Carpeta para los datos de la figura", parent=self.root)
+        if not folder:
+            return
+        written = self.session.save_figure_data(folder)
+        self.flush_messages(self.session.messages)
+        if written:
+            self.set_status("escritos: " + ", ".join(written))
 
     # ==================================================================
     # events
@@ -1108,11 +1296,25 @@ class EchemApp(SectionApp):
             )
         elif kind == "eis":
             ok = self.session.load_eis(path)
+        elif kind == "eis_series":
+            # The legend is asked for rather than taken from the file
+            # name: what distinguishes several spectra is the sample, the
+            # temperature or the potential, and the file name is almost
+            # never that.
+            from tkinter import simpledialog
+
+            label = simpledialog.askstring(
+                "Nombre en la leyenda",
+                "¿Cómo se llama este espectro en la figura?\n"
+                "(la muestra, la temperatura, el potencial…)",
+                initialvalue=Path(path).stem, parent=self.root)
+            ok = self.session.add_eis_to_series(path, label=label or "")
         elif kind == "lsv":
             ok = self.session.load_lsv(path)
         self.flush_messages(self.session.messages)
         if ok:
             self._refresh_cycle_choices()
+            self._refresh_figure_panels()
             # Say what normalisation the numbers will use. A blank mass is
             # invisible until a capacitance comes back without its F/g,
             # three tabs later.

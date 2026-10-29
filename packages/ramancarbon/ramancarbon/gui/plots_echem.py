@@ -45,7 +45,7 @@ def plot_cv(
             scale * current,
             color=palette.component_colour(index) if len(curves) > 1 else palette.data,
             linewidth=1.1,
-            label=f"{1e3 * curve.scan_rate:g} mV/s",
+            label=f"{1e3 * curve.scan_rate:.3g} mV/s",
         )
     if peaks:
         for peak in peaks:
@@ -278,7 +278,7 @@ def plot_dunn(ax, analysis, curve, palette: Palette,
         ax.plot(np.concatenate([potentials, potentials[::-1]]),
                 factor * np.concatenate([measured_up, measured_down[::-1]]),
                 color=palette.data, linewidth=1.4,
-                label=f"{1e3 * rate:g} mV/s")
+                label=f"{1e3 * rate:.3g} mV/s")
     ax.fill_between(potentials, factor * cathodic, factor * anodic,
                     color=surface, alpha=0.85, linewidth=0,
                     label="superficial (k₁ν)")

@@ -128,7 +128,7 @@ def analyse_sample(
     eis: Optional[Impedance] = None,
     catalysis_curve: Optional[Voltammogram] = None,
     reaction: str = "OER",
-    circuit: Optional[str] = "randles_cpe",
+    circuit: Optional[str] = "auto",
     circuit_initial: Optional[dict[str, float]] = None,
     circuit_fixed: Optional[Sequence[str]] = None,
     non_faradaic: bool = False,

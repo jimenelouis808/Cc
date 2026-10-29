@@ -1,0 +1,4 @@
+muestra,R_s_ohm,R_ion_ohm,codo_hz,fase_f_min_grados,C_entregable_mF,C_elemento_mF,circuito,residuo_pct
+800 °C,11.36,6.02,62.7,-80.0,0.2117,0.2164,R0-(R1|Q1)-T1,0.540
+900 °C,20.53,0.7903,30.81,-81.5,0.3244,0.3293,L0-R0-(R1|Q1)-T1,0.188
+1020 °C,25.49,16.03,60.59,-68.4,0.1964,0.2626,R0-(R1|Q1)-T1,0.441

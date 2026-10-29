@@ -1283,6 +1283,210 @@ porque la alternación es ordenada y un `[RCLQWGT]` delante se comería la
   Nyquist, que es convenio de dibujo; exportarlo negado es como un error
   de signo viaja al guion de otro.
 
+## El codo NO es el máximo de −Z″
+
+- **`analyse_eis` llamaba «frecuencia de codo» al máximo GLOBAL de
+  −Z″**, y en cualquier electrodo con cola capacitiva −Z″ sube monótona
+  hasta el final del barrido: ese máximo es **el último punto medido**.
+  Sobre los tres carbones porosos del usuario devolvía 0.0999 Hz —la
+  frecuencia más baja del barrido— las tres veces, y la informaba como
+  τ = 10 s. El paquete ya tenía escrito el mismo error para el ápice
+  del semicírculo («tomar el global falla en todo lo que tenga cola
+  capacitiva»); el codo era el mismo fallo un campo más allá.
+- **El codo es el cruce de la fase por −45°**, interpolado en log f
+  entre dos puntos medidos, que es la definición que cita la literatura
+  de supercondensadores y la que no necesita ningún modelo. Sobre esos
+  tres archivos: 62.7, 30.8 y 60.6 Hz.
+- **Y lleva dentro la R_s de la celda, a propósito.** El codo es del
+  DISPOSITIVO, no del material: es la frecuencia por encima de la cual
+  un condensador deja de comportarse como un condensador, y la
+  resistencia en serie es parte de eso. Por eso **no ordena las muestras
+  igual que la resistencia iónica del poro** y eso no es una
+  contradicción.
+- **Un espectro que no cierra ningún arco se dice.** `read_shape` busca
+  un máximo LOCAL prominente de −Z″ y, cuando no hay ninguno, informa
+  que de esos datos no sale ninguna resistencia de transferencia de
+  carga: la que devuelva un ajuste sale del modelo. En los tres carbones
+  no hay ninguno.
+
+## Un circuito por defecto es una hipótesis que nadie declaró
+
+- **El defecto era `randles_cpe`**, y sobre un carbono poroso ese modelo
+  no tiene forma de describir una cola capacitiva salvo mandando su
+  resistencia de transferencia a la cota de 10⁹ Ω. Lo hizo en dos de los
+  tres espectros del usuario, con un residuo del 15 %, y la capacitancia
+  efectiva que el informe sacaba de su CPE se apoyaba en esa cota.
+- **`read_shape` lee la forma antes de ajustar nada**: R_s con su
+  procedencia, si el extremo alto se ha ido inductivo, si hay arco
+  cerrado, dónde está el codo, cuántas décadas pasa la fase cerca de
+  −45° y la fase al final. Todo medido, nada ajustado.
+- **`recommend_circuits` propone y `compare_circuits` zanja.** No es una
+  elección: es un cribado que sale de los DATOS en vez de salir de una
+  constante. `circuit="auto"` es ahora el defecto de `analyse_eis`, de
+  `analyse_sample` y de la sección.
+- **`analyse_eis` usa `uncompensated_resistance` y arrastra su
+  explicación.** Antes tomaba `z.real[0]` —el punto de frecuencia más
+  alta— y no decía nada: ni que es una COTA SUPERIOR cuando el espectro
+  no cruza el eje real, ni que en un espectro con inductancia arriba ese
+  punto está contaminado. La barrera ya estaba escrita y la función no
+  la cumplía.
+- **La resistencia de transferencia se lee de la ESTRUCTURA del
+  circuito**, no del orden del diccionario de parámetros. Era «la
+  segunda `.R`», que acierta en `R0-(R1|Q1)` por suerte y falla en
+  cuanto hay anidamiento o el circuito se escribe en otro orden. Y no
+  tenía forma de decir *aquí no hay ninguna*: para `R0-T1` devolvía nada
+  en silencio.
+
+## Qué CPE almacena la carga, y cuál es sólo el arco
+
+- **`analyse_eis` convertía EL PRIMER CPE del circuito con
+  Hsu-Mansfeld.** En `R0-(R1|Q1)-T1` el primero es el del arco
+  interfacial, no el del electrodo: sobre el carbón de 800 °C devolvía
+  **0.092 mF** donde la pared del poro almacena **0.216 mF** y la C′
+  medida a la misma frecuencia vale **0.212 mF**. Un factor de 2.3, con
+  la física equivocada detrás.
+- **Qué elemento almacena es una pregunta ESTRUCTURAL**, igual que de
+  qué resistencia es un arco: el que NO está dentro de una rama en
+  paralelo. `storage_element` lo lee del árbol: una línea de transmisión
+  gana, luego un `Q` en serie, luego una `C`.
+- **Y a un CPE en serie no se le aplica ni Hsu-Mansfeld ni Brug.** Las
+  dos convierten un CPE **en paralelo con una resistencia** y lo hacen
+  identificando el ápice del arco, así que necesitan un arco. Un
+  elemento bloqueante no lo tiene. Su capacitancia es
+  `C(ω) = Q·ω^(n−1)` y **depende de la frecuencia**, así que se cita con
+  ella (`series_cpe_capacitance`).
+- **La comprobación es C′, que son los datos.** La C del elemento frente
+  a C′ a la misma frecuencia: +2.2 %, +1.5 % y **+33.7 %** en los tres
+  carbones. Y ese 34 % **no es un fallo del ajuste**: el circuito
+  reproduce C′ a mejor del 1 % en los tres. Es que **C′ lleva dentro la
+  parte REAL de toda la cadena**, así que las dos magnitudes sólo son la
+  misma donde la respuesta ya es capacitiva — y la muestra de 1020 °C se
+  para en −68° de fase. Culpar al ajuste de esos 34 % fue la primera
+  versión de esta comprobación, y estaba mal.
+- **`EISResult.capacitance_f` es C′, no el valor del elemento.** La
+  regla del paquete es que lo que el dispositivo entrega es C′, y una
+  capacitancia de impedancia va con su frecuencia o no se compara con la
+  de nadie.
+
+## Dejar fuera una inductancia que está hace inmedible el poro
+
+Medido sobre el espectro de 900 °C del usuario, cuyo Z″ es **positivo**
+a 100 kHz (+0.089 Ω): inductancia del cableado, L = 0.32 µH.
+
+| | con `L0` | sin `L0` |
+|---|---|---|
+| R_ion del poro | **0.790 Ω ± 13 %** | 2.4·10⁻⁵ Ω **± 3.5·10⁷ %** |
+| R0 | 20.31 Ω ± 0.1 % | 20.46 Ω **± 13.6 %** |
+| residuo medio | 0.188 % | 0.242 % |
+
+- **R0 se come la inductancia y la línea de transmisión degenera en un
+  CPE pelado.** La resistencia que limita la potencia del electrodo deja
+  de ser medible, y el residuo pasa de 0.19 a 0.24 %: **nada en la
+  calidad del ajuste lo delata.**
+- Por eso `read_shape` informa `inductive_top` y `recommend_circuits`
+  añade los circuitos con L cuando lo encuentra. La plantilla ya decía
+  «si L0 sale mayor que 1 µH no es la muestra, es el montaje»; lo que
+  faltaba era que alguien mirase si hacía falta ponerla.
+
+## La DRT no tiene picos donde hay un elemento distribuido, y ahora lo dice con un número
+
+- El módulo ya decía en prosa que un Warburg, un Gerischer y una línea
+  de transmisión son distribuciones continuas que la DRT trocea en
+  arcos, y que «si el Bode tiene un tramo a 45°, la cadena es el modelo
+  equivocado ahí». Esa nota era genérica: `circuit_from_drt` sólo recibe
+  el resultado, no el espectro.
+- **`drt` sí tiene el espectro**, así que mide cuántas décadas pasa la
+  fase cerca de −45° y lo avisa con el número. En los tres carbones del
+  usuario salta en los tres (0.5–0.7 décadas) sobre dos o tres picos
+  «resueltos» por muestra que no son procesos.
+
+## La C′ del paquete reproduce la Cp de EC-Lab en las siete cifras
+
+El lector de `.mpr` es ingeniería inversa y el módulo pide contrastar
+una medida contra una exportación ASCII la primera vez. Aquí se pudo
+hacer mejor: **EC-Lab calcula sus propias columnas `Cp` y `Cs` dentro
+del archivo**, y lo que el paquete saca de Z sin mirarlas coincide con
+ellas exactamente, en los tres espectros:
+
+| | Cp de EC-Lab | C′ nuestra | Cs de EC-Lab | C_s nuestra |
+|---|---|---|---|---|
+| 800 °C | 211.7311 µF | 211.7311 µF | 218.2865 µF | 218.2865 µF |
+| 900 °C | 324.3567 µF | 324.3567 µF | 331.6434 µF | 331.6434 µF |
+| 1020 °C | 196.4450 µF | 196.4450 µF | 227.1514 µF | 227.1514 µF |
+
+Eso valida de una vez la columna de frecuencias, las de Re(Z) y −Im(Z),
+el convenio de signo con el que se guardan y la fórmula
+C(ω) = 1/(jωZ). Y la diferencia Cs − Cp —3 % donde la fase llega a −80°
+y **16 %** donde se queda en −68°— es exactamente el aviso que el módulo
+de capacitancia ya emitía.
+
+## Una serie de impedancias, no un espectro suelto
+
+- **La sección podía tener EXACTAMENTE un espectro.** Comparar es la
+  razón de medir más de uno, y los tres carbones del usuario había que
+  abrirlos de uno en uno y apuntar los números a mano.
+- `eis_series`, con su nombre de leyenda —la muestra, la temperatura, el
+  potencial—, que se PIDE en vez de sacarlo del nombre del archivo,
+  porque el nombre del archivo casi nunca es eso.
+- **Cada espectro se analiza con el circuito que SU forma pide**, no con
+  uno forzado para todos. Forzar uno esconde justo las diferencias que
+  interesan: de los tres carbones, sólo el de 900 °C necesita la
+  inductancia del montaje, y obligar a los otros dos a llevar una L la
+  deja indeterminada en los dos.
+- Y el caché de los análisis no es comodidad: cada panel de impedancia
+  pide el mismo resultado y cada uno cuesta una comparación de
+  circuitos, así que una figura de seis paneles lo correría seis veces
+  por espectro.
+
+## La figura de varios paneles es un VALOR, y se hace desde la ventana
+
+- **Las figuras publicables de este proyecto estaban escritas a mano**,
+  un script de matplotlib por análisis. Eso las deja fuera del alcance
+  de quien no escriba matplotlib, y además las separa de lo que enseña
+  la ventana porque nada las mantiene juntas.
+- `gui/figures_echem.py` es el catálogo de paneles —serie de CV,
+  capacitancia y eficiencia contra ν, balance de carga, las tres
+  contribuciones a i(ν), Dunn, Nyquist, el rincón cuadrado, Bode con el
+  codo, C(ω), DRT normalizada, residuo y Kramers-Kronig— y todos dibujan
+  de la MISMA `EchemSession` que dibujan las pestañas.
+- **`CompositeFigure` es la elección, no los datos**: qué paneles, en
+  cuántas columnas, a qué ancho y a cuántos puntos por pulgada. Va a
+  diccionario y vuelve, la misma regla que sigue el motor de figuras del
+  paquete, para que una figura sobreviva a un proyecto guardado.
+- **Se exporta a SU ancho, no se guarda el lienzo.** El lienzo mide lo
+  que mida el panel, y una figura dibujada a un ancho y guardada a otro
+  llega con todas las etiquetas al tamaño equivocado: es el
+  emparejamiento ancho-tamaño de letra que los preajustes de revista ya
+  documentan.
+- **Un panel que falla se informa y el resto se dibuja.** Montar una
+  figura de seis paneles y recibir una traza en vez de los cinco que sí
+  salieron es el cambio equivocado.
+- **Y los paneles que se ofrecen son los que tienen datos.** Un panel
+  vacío dentro de una figura de seis se lee como un fallo, y no hay
+  forma de distinguirlo de uno cuyos datos estaban y no dijeron nada.
+
+### Tres cosas que el dibujo cazó al llevarlo a la ventana
+
+- **`np.isin` casa VALORES, no posiciones.** Enmascarar el archivo
+  entero por qué potenciales aparecen en el ciclo elegido parece
+  equivalente y no lo es: un voltamperograma barre los mismos
+  potenciales una vez por ciclo, así que pasaban todos y el panel
+  dibujaba el archivo completo. Se dibujan los arrays del propio ciclo.
+- **`stackplot` no deja ningún `Line2D` detrás**, así que el panel de
+  las tres contribuciones salía de «guardar los datos de la figura» con
+  nada más que su cabecera. Se dibuja con `fill_between` entre
+  fronteras acumuladas más las líneas de esas fronteras: la misma pila a
+  la vista, y exportable.
+- **Y los paneles con eje gemelo roban las líneas de los demás** si se
+  empareja la lista de paneles elegidos con `figure.axes`: un gemelo
+  añade una entrada a esa lista, así que todos los paneles después del
+  primer Bode leían las líneas de otro. Cada panel se dibuja en su
+  propia figura para exportar sus números.
+- **Una velocidad MEDIDA de |dE/dt| vuelve como 4.99952 mV/s**, y una
+  leyenda con `:g` escribe todos esos dígitos: está informando la
+  precisión del reloj como si fuera un ajuste del experimento. Tres
+  cifras significativas.
+
 ## Microestructura y ajuste de patrón completo
 
 - **Un solo pico NO separa tamaño de deformación.** Scherrer sobre una

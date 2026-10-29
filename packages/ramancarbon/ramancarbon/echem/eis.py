@@ -39,6 +39,7 @@ from typing import Callable, Optional, Sequence
 import numpy as np
 from scipy.optimize import least_squares
 
+from .capacitance import CAPACITIVE_PHASE_DEG
 from .curve import Impedance
 
 #: Number of RC elements per decade in the linear Kramers–Kronig test.
@@ -359,8 +360,20 @@ def circuit_templates() -> list[CircuitTemplate]:
     return sorted(by_name.values(), key=lambda t: (t.origin != "programa", t.name))
 
 
+#: The name that means "read the spectrum and decide", handled by
+#: :func:`analyse_eis` rather than resolved to a circuit string.
+AUTO_CIRCUIT = "auto"
+
+
 def circuit_for(name: str) -> str:
-    """The circuit string for a name, or the name itself if it is one."""
+    """The circuit string for a name, or the name itself if it is one.
+
+    :data:`AUTO_CIRCUIT` passes through unchanged: it is not a circuit,
+    it is the instruction to pick one from the spectrum's shape, and
+    :func:`analyse_eis` is where that happens.
+    """
+    if name == AUTO_CIRCUIT:
+        return AUTO_CIRCUIT
     return LIBRARY.get(name, user_circuits().get(name, name))
 
 
@@ -1003,6 +1016,101 @@ def brug_capacitance(
             "literatura y no dan lo mismo"
         ),
     )
+
+
+def series_cpe_capacitance(
+    q: float, n: float, frequency_hz: float
+) -> EffectiveCapacitance:
+    """Capacitance of a CPE that is **in series**, at one frequency.
+
+    ``C(ω) = Q · ω^(n−1)``, which is what ``1/(Q (jω)^n)`` means read as
+    ``1/(jωC)``.
+
+    Neither Hsu–Mansfeld nor Brug applies here, and that is the point.
+    Both convert a CPE **in parallel with a resistance**, and they do it
+    by identifying the arc's apex — so they need an arc. A blocking
+    element has none: the pore wall of a transmission line, or a bare
+    ``Q`` behind a series resistance, stores charge and never turns over.
+    Its capacitance is genuinely frequency-dependent, so the honest
+    answer carries the frequency, exactly as a capacitance read off
+    ``C′(ω)`` does.
+
+    **Why this exists.** :func:`analyse_eis` took *the first* CPE in the
+    circuit and converted it with Hsu–Mansfeld. In ``R0-(R1|Q1)-T1`` the
+    first CPE is the interfacial arc's, not the electrode's storage, and
+    on the user's 800 °C carbon that returned 0.092 mF where the pore
+    wall holds 0.216 mF — a factor of 2.3, with the wrong physics behind
+    it. The model-free ``C′`` at the same frequency is 0.212 mF, so the
+    wall is right to 2 % and the arc is not a capacitance of this
+    electrode at all. Which CPE stores the charge is a structural
+    question, like which resistance an arc belongs to, and it is settled
+    structurally.
+    """
+    _check_cpe(q, n)
+    if frequency_hz <= 0.0:
+        raise CircuitError("hace falta una frecuencia positiva")
+    omega = 2.0 * math.pi * frequency_hz
+    farads = float(q * omega ** (n - 1.0))
+    return EffectiveCapacitance(
+        farads=farads,
+        method=f"CPE en serie a {frequency_hz:.4g} Hz",
+        t=q, p=n,
+        steps=[
+            "1/(Q (jω)^n) leído como 1/(jωC) da C(ω) = Q · ω^(n−1)",
+            f"ω = 2π × {frequency_hz:.4g} Hz = {omega:.6g} rad/s",
+            f"ω^(n−1) = {omega:.6g}^({n - 1.0:.4f}) "
+            f"= {omega ** (n - 1.0):.6g}",
+            f"C = {q:.6g} × {omega ** (n - 1.0):.6g} = {farads:.6g} F",
+        ],
+        caution=(
+            "una capacitancia de un CPE en serie DEPENDE de la frecuencia "
+            "y no se puede citar sin ella. Compárala con C′(ω) a la misma "
+            "frecuencia, que sale de los datos sin circuito: si no "
+            "coinciden, el elemento que se ha convertido no es el que "
+            "almacena la carga"
+        ),
+    )
+
+
+def storage_element(circuit: str) -> Optional[str]:
+    """Name of the element that stores the electrode's charge, or ``None``.
+
+    The one that is **not** inside a parallel branch: a transmission
+    line's pore wall (``T``), a series ``Q``, or a series ``C``. An
+    element inside a parallel branch sits across a resistance and is
+    therefore part of an arc — interfacial, not storage.
+
+    Returns the element name (``"T1"``, ``"Q2"``, …). The caller reads
+    the stored capacitance off it with :func:`series_cpe_capacitance` for
+    a CPE, or takes the value directly for a capacitor.
+    """
+    try:
+        root = parse_circuit(circuit)
+    except CircuitError:
+        return None
+
+    inside: set[str] = set()
+
+    def mark(node, parallel: bool) -> None:
+        if node.kind == "element":
+            if parallel:
+                inside.add(node.children[0].name)
+            return
+        deeper = parallel or node.kind == "parallel"
+        for child in node.children:
+            mark(child, deeper)
+
+    mark(root, False)
+    # A transmission line wins: its wall IS the porous electrode's
+    # capacitance, and it is the element the whole model exists for.
+    for element in root.elements():
+        if element.symbol == "T" and element.name not in inside:
+            return element.name
+    for symbol in ("Q", "C"):
+        for element in root.elements():
+            if element.symbol == symbol and element.name not in inside:
+                return element.name
+    return None
 
 
 def cpe_to_capacitance(q: float, n: float, resistance: float) -> float:
@@ -1843,6 +1951,333 @@ def _runs_ratio(residual: np.ndarray) -> float:
     return float(runs / expected)
 
 
+# -- what the spectrum looks like, before any circuit ------------------
+
+#: Phase angle that marks the knee. At −45° the resistive and the
+#: capacitive character of the impedance are equal, which is what "the
+#: response stops being a resistor and starts being a capacitor" means,
+#: and it is the definition the supercapacitor literature quotes.
+KNEE_PHASE_DEG = -45.0
+
+#: Phase at the lowest measured frequency below which the electrode is
+#: taken to have a capacitive tail at all. Well above −90°, because a
+#: porous carbon never gets there; the point is to separate a spectrum
+#: that is heading for the capacitive axis from one that closes an arc.
+TAIL_PHASE_DEG = -55.0
+
+#: How much of a decade of 45°-ish behaviour counts as a porous or
+#: diffusive stretch. Less than this is the shoulder of an arc, and
+#: calling it a transmission line fits a pore length to three points.
+FORTYFIVE_DECADES = 0.5
+
+#: Half-width, in degrees, of the band around 45° that counts as a 45°
+#: stretch. Wide on purpose: a De Levie line with a CPE wall of exponent
+#: n sits at −45n degrees, not at −45.
+FORTYFIVE_TOLERANCE_DEG = 12.0
+
+
+@dataclass
+class SpectrumShape:
+    """What the spectrum is, read off the data with no circuit involved.
+
+    This exists because the circuit used to be a default — ``randles_cpe``
+    — and a default is a hypothesis nobody stated. On all three of the
+    user's porous-carbon spectra that circuit's ``R1`` ran to its 1e9
+    bound, which is the model saying "there is no arc here" in the only
+    way it can, and the capacitance quoted from its CPE then rested on a
+    resistance that is not a measurement.
+
+    Every field here is model-free, so it can be read before anything is
+    fitted and used to decide what to fit.
+    """
+
+    series_resistance: float
+    """Ω, from :func:`uncompensated_resistance`."""
+    series_how: str
+    inductive_top: bool
+    """Z″ positive at the highest frequencies: stray inductance from the
+    wiring, which a circuit without an ``L`` has to absorb into ``R0``."""
+    arc_apex_hz: Optional[float] = None
+    """A genuine local maximum of −Z″, which is the apex of a
+    charge-transfer semicircle. ``None`` when −Z″ just rises to the end
+    of the sweep, and then **there is no arc in these data** and no
+    charge-transfer resistance to read off them."""
+    arc_apex_ohm: Optional[float] = None
+    knee_hz: Optional[float] = None
+    """Where the phase crosses :data:`KNEE_PHASE_DEG` on the way down in
+    frequency. Includes the cell's series resistance, which is part of
+    the quantity and not a flaw in it: the knee of the DEVICE is what
+    limits its power."""
+    knee_how: str = ""
+    low_phase_deg: float = 0.0
+    capacitive_tail: bool = False
+    fortyfive_decades: float = 0.0
+    """How many decades the phase spends near −45°, the signature of a
+    distributed RC: a pore, or semi-infinite diffusion."""
+    notes: list[str] = field(default_factory=list)
+
+    def describe(self) -> str:
+        lines = ["FORMA DEL ESPECTRO (sin circuito)", "─" * 46,
+                 f"  R en serie        {self.series_resistance:.4g} Ω",
+                 f"    {self.series_how}"]
+        if self.arc_apex_hz is not None:
+            lines.append(
+                f"  Ápice del arco    {self.arc_apex_hz:.4g} Hz"
+                f"   (−Z″ = {self.arc_apex_ohm:.4g} Ω)")
+        else:
+            lines.append(
+                "  Ápice del arco    no hay: −Z″ sube monótona hasta el "
+                "final del barrido")
+        if self.knee_hz is not None:
+            lines.append(
+                f"  Codo ({KNEE_PHASE_DEG:.0f}°)       {self.knee_hz:.4g} Hz"
+                f"   (τ = {1.0 / self.knee_hz:.4g} s)")
+        else:
+            lines.append(f"  Codo ({KNEE_PHASE_DEG:.0f}°)       {self.knee_how}")
+        lines.append(
+            f"  Fase a f mínima   {self.low_phase_deg:.1f}°"
+            + ("   (cola capacitiva)" if self.capacitive_tail else ""))
+        lines.append(f"  Tramo a 45°       {self.fortyfive_decades:.2f} décadas")
+        for note in self.notes:
+            lines.append(f"  ⚠ {note}")
+        return "\n".join(lines)
+
+
+def _knee(spectrum: Impedance) -> tuple[Optional[float], str]:
+    """Frequency where the phase crosses :data:`KNEE_PHASE_DEG`.
+
+    Interpolated in log f, walking down in frequency, so the value
+    returned is between two measured points and not one of them.
+
+    **This replaces the global maximum of −Z″**, which was what
+    :func:`analyse_eis` used to call the knee. For anything with a
+    capacitive tail −Z″ rises monotonically to the end of the sweep, so
+    that maximum is the LAST measured point — on the user's three porous
+    carbons it returned 0.0999 Hz, the lowest frequency measured, in all
+    three, and called it a time constant of 10 s. The package already had
+    this written down as a barrier for the semicircle apex; the knee is
+    the same mistake one field over.
+    """
+    phase = spectrum.phase_deg
+    frequency = spectrum.frequency
+    for index in range(spectrum.n - 1):
+        first, second = phase[index], phase[index + 1]
+        if first > KNEE_PHASE_DEG >= second:
+            weight = (first - KNEE_PHASE_DEG) / (first - second)
+            value = float(np.exp(
+                np.log(frequency[index])
+                + weight * (np.log(frequency[index + 1])
+                            - np.log(frequency[index]))))
+            return value, (
+                f"la fase cruza {KNEE_PHASE_DEG:.0f}° entre "
+                f"{frequency[index]:.4g} y {frequency[index + 1]:.4g} Hz "
+                "(interpolado en log f)")
+    if float(phase.min()) > KNEE_PHASE_DEG:
+        return None, (
+            f"la fase nunca baja de {KNEE_PHASE_DEG:.0f}° (mínimo "
+            f"{float(phase.min()):.1f}°): el barrido no llegó al régimen "
+            "capacitivo, así que no hay codo dentro de lo medido")
+    return None, (
+        f"la fase ya está por debajo de {KNEE_PHASE_DEG:.0f}° a la "
+        f"frecuencia más alta medida ({frequency[0]:.4g} Hz): el codo "
+        "está por encima del barrido")
+
+
+def _fortyfive_span(spectrum: Impedance) -> float:
+    """Decades the phase spends within :data:`FORTYFIVE_TOLERANCE_DEG`
+    of −45°, counted as the widest unbroken run.
+
+    A distributed RC — a pore wall charging through the electrolyte in
+    the pore, or semi-infinite diffusion — holds the phase near −45°
+    over a stretch of frequency. A lumped arc passes through −45° twice
+    and lingers at neither.
+    """
+    phase = spectrum.phase_deg
+    near = np.abs(phase - KNEE_PHASE_DEG) <= FORTYFIVE_TOLERANCE_DEG
+    decades = np.log10(spectrum.frequency)
+    best = 0.0
+    start = None
+    for index, inside in enumerate(near):
+        if inside and start is None:
+            start = index
+        elif not inside and start is not None:
+            best = max(best, abs(decades[index - 1] - decades[start]))
+            start = None
+    if start is not None:
+        best = max(best, abs(decades[-1] - decades[start]))
+    return float(best)
+
+
+def read_shape(spectrum: Impedance) -> SpectrumShape:
+    """Read the spectrum's shape without fitting anything.
+
+    The order matters and is the order a person reads a Nyquist plot in:
+    where it starts on the real axis, whether the top end has gone
+    inductive, whether there is a closed arc, where the response turns
+    capacitive, and how long it spends on the 45° line in between.
+    """
+    series, how = uncompensated_resistance(spectrum)
+    imaginary = -spectrum.z.imag
+    notes: list[str] = []
+
+    inductive = bool(spectrum.z.imag[0] > 0.0)
+    if inductive:
+        count = int(np.count_nonzero(spectrum.z.imag > 0.0))
+        notes.append(
+            f"Z″ es POSITIVO en {count} punto(s) del extremo alto: eso es "
+            "inductancia del cableado, no de la muestra. Un circuito sin "
+            "una L en serie tiene que absorberla en R0, y entonces R0 no "
+            "es la resistencia de la disolución")
+
+    apex_hz: Optional[float] = None
+    apex_ohm: Optional[float] = None
+    if imaginary.size > 4:
+        from scipy.signal import find_peaks as _find_peaks
+
+        indices, _ = _find_peaks(
+            imaginary, prominence=0.05 * max(float(imaginary.max()), 1e-12))
+        if indices.size:
+            apex = int(indices[0])
+            apex_hz = float(spectrum.frequency[apex])
+            apex_ohm = float(imaginary[apex])
+    if apex_hz is None:
+        notes.append(
+            "−Z″ no tiene ningún máximo local: sube hasta la frecuencia "
+            "más baja medida. No hay semicírculo cerrado en estos datos, "
+            "así que de ellos NO sale ninguna resistencia de "
+            "transferencia de carga — la que devuelva un ajuste sale del "
+            "modelo, no de la medida")
+
+    knee_hz, knee_how = _knee(spectrum)
+    low_phase = float(spectrum.phase_deg[-1])
+    tail = low_phase <= TAIL_PHASE_DEG
+    spread = _fortyfive_span(spectrum)
+
+    if tail and low_phase > CAPACITIVE_PHASE_DEG:
+        # Heading for the capacitive axis but not there yet. The
+        # distinction is not pedantry: C′ carries the real part of the
+        # whole chain, so short of −90° it is below the electrode's own
+        # capacitance, and how far below depends on the phase.
+        notes.append(
+            f"a {spectrum.frequency[-1]:.4g} Hz la fase es "
+            f"{low_phase:.0f}° y un condensador está en −90°: el barrido "
+            "no ha llegado al régimen capacitivo, así que la C′ de ese "
+            "extremo es una cota INFERIOR de lo que almacena el "
+            "electrodo. Baja más la frecuencia")
+
+    return SpectrumShape(
+        series_resistance=series, series_how=how, inductive_top=inductive,
+        arc_apex_hz=apex_hz, arc_apex_ohm=apex_ohm,
+        knee_hz=knee_hz, knee_how=knee_how, low_phase_deg=low_phase,
+        capacitive_tail=tail, fortyfive_decades=spread, notes=notes)
+
+
+@dataclass
+class CircuitSuggestion:
+    """A circuit the shape of the spectrum argues for, and why."""
+
+    name: str
+    circuit: str
+    why: str
+
+
+def recommend_circuits(spectrum: Impedance,
+                       shape: Optional[SpectrumShape] = None
+                       ) -> tuple[list[CircuitSuggestion], SpectrumShape]:
+    """Which circuits this spectrum's shape argues for, in order.
+
+    Not a choice — a shortlist, to be settled by
+    :func:`compare_circuits`, which is the function that can rank them.
+    What this adds is that the shortlist comes from the DATA instead of
+    from a default: ``randles_cpe`` was the package's default circuit and
+    it is the wrong model for a porous carbon, where it answers by
+    sending its charge-transfer resistance to the bound.
+
+    The suggestions are ordered simplest first, which is the order to
+    try them in for the reason the template table already gives: a
+    circuit with more elements always fits at least as well.
+    """
+    shape = shape or read_shape(spectrum)
+    names: list[tuple[str, str]] = []
+
+    porous = shape.fortyfive_decades >= FORTYFIVE_DECADES
+    if shape.capacitive_tail and shape.arc_apex_hz is None:
+        if porous:
+            names.append((
+                "poroso",
+                f"la cola es capacitiva ({shape.low_phase_deg:.0f}° a "
+                f"{spectrum.frequency[-1]:.3g} Hz) y antes de ella hay "
+                f"{shape.fortyfive_decades:.1f} décadas cerca de −45°: eso "
+                "es una línea de transmisión de poro, y su Ri es la "
+                "resistencia iónica que limita la potencia"))
+            names.append((
+                "poroso_con_transferencia",
+                "lo mismo más una reacción de superficie. Pruébalo: si su "
+                "R1 vuelve determinada, el arco está aunque no se cierre "
+                "dentro del barrido"))
+        else:
+            names.append((
+                "edlc_cpe",
+                "cola capacitiva sin arco y sin tramo a 45°: doble capa "
+                "con dispersión de frecuencias y nada más"))
+            names.append((
+                "poroso",
+                "por si el tramo a 45° queda por encima del barrido"))
+    elif shape.arc_apex_hz is not None and shape.capacitive_tail:
+        names.append((
+            "supercondensador",
+            f"hay un arco (ápice en {shape.arc_apex_hz:.3g} Hz) y además "
+            "cola capacitiva: interfase más almacenamiento"))
+        if porous:
+            names.append((
+                "poroso_con_transferencia",
+                f"y la cola llega por {shape.fortyfive_decades:.1f} décadas "
+                "de 45°, que es un poro y no un condensador"))
+    elif shape.arc_apex_hz is not None:
+        names.append((
+            "randles_cpe",
+            f"un arco achatado con ápice en {shape.arc_apex_hz:.3g} Hz y "
+            "sin cola capacitiva"))
+        names.append((
+            "zarc",
+            "el mismo circuito en (R, τ, γ), donde la capacitancia "
+            "efectiva es τ/R exacta"))
+        if porous:
+            names.append((
+                "randles_warburg",
+                f"con {shape.fortyfive_decades:.1f} décadas cerca de −45° "
+                "después del arco, hay transporte además de transferencia"))
+    else:
+        names.append((
+            "randles_cpe",
+            "la forma no decide: no hay arco cerrado ni cola capacitiva "
+            "dentro del barrido. Esto es un punto de partida, no una "
+            "recomendación"))
+
+    if shape.inductive_top:
+        extra = [
+            ("con_inductancia",
+             "con Z″ positivo arriba, la inductancia del montaje tiene que "
+             "estar EN el circuito o se la come R0"),
+        ]
+        if porous and shape.capacitive_tail:
+            extra.insert(0, (
+                "supercondensador_completo",
+                "las tres regiones a la vez: cables, interfase y poro, que "
+                "es lo que enseña este espectro"))
+        names.extend(extra)
+
+    library = {t.name: t for t in TEMPLATES}
+    out: list[CircuitSuggestion] = []
+    for name, why in names:
+        template = library.get(name)
+        if template is None or any(s.name == name for s in out):
+            continue
+        out.append(CircuitSuggestion(name=name, circuit=template.circuit,
+                                     why=why))
+    return out, shape
+
+
 # -- everything together -----------------------------------------------
 
 
@@ -1853,11 +2288,52 @@ class EISResult:
     spectrum: Impedance
     kk: Optional[KKResult] = None
     fit: Optional[CircuitFit] = None
+    shape: Optional[SpectrumShape] = None
+    """What the spectrum is, read before anything was fitted."""
+    comparison: Optional["CircuitComparison"] = None
+    """Set when the circuit was chosen by comparison rather than given."""
+    suggestions: list[CircuitSuggestion] = field(default_factory=list)
     series_resistance: Optional[float] = None
+    series_resistance_how: str = ""
+    """How R_s was obtained. An iR correction with an unexplained
+    resistance is a free parameter, so the explanation travels with the
+    number."""
     charge_transfer_resistance: Optional[float] = None
+    ionic_resistance_ohm: Optional[float] = None
+    """R_ion inside the pore, from a transmission-line element. This is
+    the resistance that limits the device's power, and it is the one that
+    a lumped R-(R|Q) fit buries."""
     capacitance_f: Optional[float] = None
+    """C′ at the lowest measured frequency: the capacitance the electrode
+    can actually deliver, straight from the data with no circuit. It is
+    this and not the fitted element's value on purpose — C′ carries the
+    resistive part of the whole chain, and the package's standing rule is
+    that C′ is what the device gives. ``storage_capacitance`` holds the
+    element's, and the two agree only where the response has become
+    capacitive."""
+    capacitance_frequency_hz: Optional[float] = None
+    """Where ``capacitance_f`` was read. A capacitance from impedance
+    without its frequency is not comparable with anybody else's."""
+    arc_capacitance: Optional[EffectiveCapacitance] = None
+    """The ARC's CPE turned into farads WITH its arithmetic and its
+    method named. The bare number is not reportable: Hsu–Mansfeld and
+    Brug give different answers from the same CPE and rest on different
+    physics. And this is the arc's, not the electrode's storage — see
+    ``storage_capacitance``."""
+    storage_capacitance: Optional[EffectiveCapacitance] = None
+    """The capacitance of the element that actually stores the charge:
+    a transmission line's pore wall, or a series CPE. Quoted at the
+    lowest measured frequency, and cross-checked against C′ there."""
+    storage_check: str = ""
+    """How the stored capacitance compares with the model-free C′ at the
+    same frequency. The circuit is a hypothesis and C′(ω) is data, so
+    the two agreeing is what makes the fitted number worth quoting."""
     knee_frequency: Optional[float] = None
-    """Where the response stops being a semicircle and starts being a line."""
+    """Where the phase crosses −45°: the response stops being resistive
+    and starts being capacitive. **Not** the maximum of −Z″, which for
+    anything with a capacitive tail is the last point of the sweep."""
+    arc_apex_hz: Optional[float] = None
+    """Apex of the charge-transfer arc, when the data close one."""
     warnings: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
@@ -1865,26 +2341,62 @@ class EISResult:
         if self.kk:
             lines.append(self.kk.summary())
             lines.append("")
+        if self.shape:
+            lines.append(self.shape.describe())
+            lines.append("")
         if self.series_resistance is not None:
             lines.append(
-                f"Resistencia en serie (corte a alta f): "
-                f"{self.series_resistance:.4g} Ω"
+                f"Resistencia en serie: {self.series_resistance:.4g} Ω"
+                + (f"  ({self.series_resistance_how})"
+                   if self.series_resistance_how else "")
             )
         if self.charge_transfer_resistance is not None:
             lines.append(
                 f"Resistencia de transferencia de carga: "
                 f"{self.charge_transfer_resistance:.4g} Ω"
             )
+        if self.ionic_resistance_ohm is not None:
+            lines.append(
+                f"Resistencia iónica del poro: "
+                f"{self.ionic_resistance_ohm:.4g} Ω  (desplaza la vertical "
+                f"de baja frecuencia en R_ion/3 = "
+                f"{self.ionic_resistance_ohm / 3.0:.4g} Ω)"
+            )
         if self.capacitance_f is not None:
             lines.append(
-                f"Capacitancia efectiva (Brug, desde el CPE): "
-                f"{1e3 * self.capacitance_f:.4g} mF"
+                f"Capacitancia entregable C′({self.capacitance_frequency_hz:.4g} Hz): "
+                f"{1e3 * self.capacitance_f:.4g} mF  (de los datos, sin circuito)"
+            )
+        if self.storage_capacitance is not None:
+            stored = self.storage_capacitance
+            lines.append(
+                f"Capacitancia del elemento que almacena ({stored.method}): "
+                f"{1e3 * stored.farads:.4g} mF"
+            )
+            if self.storage_check:
+                lines.append(f"  {self.storage_check}")
+        if self.arc_capacitance is not None:
+            arc = self.arc_capacitance
+            lines.append(
+                f"Capacitancia del ARCO interfacial ({arc.method}): "
+                f"{1e3 * arc.farads:.4g} mF  — es del arco, no lo que "
+                "almacena el electrodo"
             )
         if self.knee_frequency is not None:
             lines.append(
-                f"Frecuencia de codo: {self.knee_frequency:.4g} Hz "
+                f"Frecuencia de codo (fase = {KNEE_PHASE_DEG:.0f}°): "
+                f"{self.knee_frequency:.4g} Hz "
                 f"(τ = {1.0 / self.knee_frequency:.4g} s)"
             )
+        if self.suggestions:
+            lines.append("")
+            lines.append("Circuitos que la forma del espectro pide:")
+            for suggestion in self.suggestions:
+                lines.append(f"  {suggestion.name} = {suggestion.circuit}")
+                lines.append(f"    {suggestion.why}")
+        if self.comparison:
+            lines.append("")
+            lines.append(self.comparison.describe())
         if self.fit:
             lines.append("")
             lines.append(self.fit.summary())
@@ -1894,23 +2406,95 @@ class EISResult:
         return "\n".join(lines)
 
 
+def _parallel_partner(circuit: str) -> dict[str, str]:
+    """For each CPE, the name of the resistance it is in parallel with.
+
+    Read off the parse tree, not off the parameter table. The charge
+    transfer resistance used to be taken as *the second* ``.R`` in the
+    fit's value dictionary, which is insertion order — correct for
+    ``R0-(R1|Q1)`` by luck and wrong as soon as the circuit is nested or
+    written in another order. It also had no way of saying *there is no
+    such resistance*, so for ``R0-T1`` it quietly returned nothing while
+    for a circuit whose first resistance was not the series one it
+    returned the wrong number with the right units.
+
+    Which resistance a CPE is in parallel with is a structural fact, so
+    it is read structurally.
+    """
+    pairs: dict[str, str] = {}
+
+    def walk(node) -> None:
+        if node.kind == "element":
+            return
+        if node.kind == "parallel":
+            names: dict[str, list[str]] = {}
+            for child in node.children:
+                for element in child.elements():
+                    names.setdefault(element.symbol, []).append(element.name)
+            for cpe in names.get("Q", ()):
+                for resistance in names.get("R", ()):
+                    pairs[cpe] = resistance
+                    break
+        for child in node.children:
+            walk(child)
+
+    try:
+        walk(parse_circuit(circuit))
+    except CircuitError:
+        return {}
+    return pairs
+
+
 def analyse_eis(
     spectrum: Impedance,
-    circuit: Optional[str] = "randles_cpe",
+    circuit: Optional[str] = "auto",
     check_kk: bool = True,
     initial: Optional[dict[str, float]] = None,
     fixed: Optional[Sequence[str]] = None,
 ) -> EISResult:
-    """Impedance analysis: consistency first, then a circuit.
+    """Impedance analysis: the shape first, then consistency, then a circuit.
+
+    ``circuit`` names a template or gives a circuit string.
+    ``circuit="auto"``, the default, reads the shape of the spectrum with
+    :func:`read_shape`, shortlists circuits with
+    :func:`recommend_circuits` and settles the shortlist with
+    :func:`compare_circuits` — which is a different thing from having a
+    default circuit, and the reason it changed: the default used to be
+    ``randles_cpe``, and on a porous carbon that model has no way to
+    describe a capacitive tail except by sending its charge-transfer
+    resistance to its 1e9 bound. It did exactly that on all three of the
+    user's spectra, and the effective capacitance quoted from its CPE
+    then rested on that bound.
 
     ``circuit=None`` skips the fit and returns only the model-free
-    quantities, which is the right thing to do when the Kramers–Kronig test
-    fails.
+    quantities, which is the right thing to do when the Kramers–Kronig
+    test fails.
 
     ``initial`` and ``fixed`` are passed through to :func:`fit_circuit`;
     see there for why fixing a parameter is not a free action.
     """
     result = EISResult(spectrum=spectrum)
+
+    # The shape goes first because it is what decides the circuit, and
+    # because every number in it is a measurement rather than a fitted
+    # parameter.
+    suggestions, shape = recommend_circuits(spectrum)
+    result.shape = shape
+    result.suggestions = suggestions
+    result.series_resistance = shape.series_resistance
+    result.series_resistance_how = shape.series_how
+    result.knee_frequency = shape.knee_hz
+    result.arc_apex_hz = shape.arc_apex_hz
+    result.warnings.extend(shape.notes)
+
+    lowest_hz = float(spectrum.frequency[-1])
+    lowest_omega = float(spectrum.omega[-1])
+    deliverable = float(-spectrum.z.imag[-1]
+                        / (lowest_omega * abs(spectrum.z[-1]) ** 2))
+    if deliverable > 0.0:
+        result.capacitance_f = deliverable
+        result.capacitance_frequency_hz = lowest_hz
+
     if check_kk:
         result.kk = kramers_kronig(spectrum)
         if not result.kk.passes:
@@ -1920,30 +2504,151 @@ def analyse_eis(
                 "ajuste"
             )
 
-    result.series_resistance = float(spectrum.z.real[0])
-    imaginary = -spectrum.z.imag
-    if imaginary.size > 2:
-        knee = int(np.argmax(imaginary))
-        result.knee_frequency = float(spectrum.frequency[knee])
+    if circuit == "auto":
+        if not suggestions:
+            return result
+        result.comparison = compare_circuits(
+            spectrum, [s.name for s in suggestions])
+        best = result.comparison.best()
+        if best is None:
+            result.warnings.append(
+                "ninguno de los circuitos que la forma del espectro pide "
+                "llegó a ajustar; pásale uno a mano")
+            return result
+        circuit = best.circuit
+        result.fit = best.fit
+        if best.undetermined:
+            result.warnings.append(
+                f"el circuito elegido ({best.circuit}) gana por BIC con "
+                f"{best.undetermined} de sus {best.free_parameters} "
+                "parámetros sin determinar. Mira la tabla de comparación: "
+                "un circuito más simple puede tenerlos todos")
+    elif circuit:
+        result.fit = fit_circuit(spectrum, circuit, initial=initial,
+                                 fixed=fixed)
 
-    if circuit:
-        result.fit = fit_circuit(spectrum, circuit, initial=initial, fixed=fixed)
-        values = result.fit.values()
-        resistances = [
-            (label, value) for label, value in values.items() if label.endswith(".R")
-        ]
-        if len(resistances) >= 2:
-            result.charge_transfer_resistance = resistances[1][1]
-        cpes = [e for e in result.fit.elements if e.symbol == "Q"]
-        if cpes and result.charge_transfer_resistance:
-            try:
-                result.capacitance_f = cpe_to_capacitance(
-                    cpes[0].values[0], cpes[0].values[1],
-                    result.charge_transfer_resistance,
+    if result.fit is None:
+        return result
+
+    values = result.fit.values()
+
+    # The resistance a CPE is in parallel with, read off the circuit's
+    # structure. When nothing is in parallel with anything there is no
+    # charge-transfer resistance in this model, and the field stays None
+    # instead of holding whichever resistance came second.
+    partners = _parallel_partner(result.fit.circuit)
+    cpes = [e for e in result.fit.elements if e.symbol == "Q"]
+    partner_value: Optional[float] = None
+    cpe = None
+    for candidate in cpes:
+        name = partners.get(candidate.name)
+        if name is None:
+            continue
+        partner_value = values.get(f"{name}.R")
+        cpe = candidate
+        break
+    if partner_value is not None:
+        result.charge_transfer_resistance = partner_value
+
+    # R_ion of the pore, which is the quantity a lumped fit buries and
+    # the one that limits the device's power.
+    for element in result.fit.elements:
+        if element.symbol == "T":
+            result.ionic_resistance_ohm = float(element.values[0])
+            break
+
+    if cpe is not None and partner_value:
+        try:
+            # Hsu–Mansfeld, and named as such. `summary` used to print
+            # this number labelled "Brug", which is a different relation
+            # resting on different physics and giving a smaller answer
+            # from the same CPE.
+            result.arc_capacitance = hsu_mansfeld_capacitance(
+                cpe.values[0], cpe.values[1], partner_value)
+        except CircuitError:
+            pass
+
+    # And the capacitance the electrode STORES, which is a different
+    # element: the one not inside a parallel branch. Quoted at the
+    # lowest measured frequency and checked against C′ there, because a
+    # circuit is a hypothesis and C′(ω) is the data.
+    stored_name = storage_element(result.fit.circuit)
+    if stored_name is not None:
+        lowest = float(spectrum.frequency[-1])
+        element = next(e for e in result.fit.elements if e.name == stored_name)
+        try:
+            if element.symbol == "C":
+                result.storage_capacitance = EffectiveCapacitance(
+                    farads=float(element.values[0]), method="condensador ideal",
+                    t=float(element.values[0]), p=1.0,
+                    steps=[f"C = {element.values[0]:.6g} F, directamente"])
+            elif element.symbol == "T":
+                result.storage_capacitance = series_cpe_capacitance(
+                    float(element.values[1]), float(element.values[2]), lowest)
+            else:
+                result.storage_capacitance = series_cpe_capacitance(
+                    float(element.values[0]), float(element.values[1]), lowest)
+        except CircuitError:
+            pass
+    if result.storage_capacitance is not None:
+        omega = spectrum.omega[-1]
+        measured = float(-spectrum.z.imag[-1]
+                         / (omega * abs(spectrum.z[-1]) ** 2))
+        # Two different comparisons, and keeping them apart is the whole
+        # value of the check. C′ from the FIT against C′ from the DATA
+        # asks whether the circuit describes the low end at all. The
+        # element's own capacitance against C′ asks something else: C′
+        # carries the resistive part of the entire chain, so the two are
+        # only the same number where the response has actually become
+        # capacitive. Measured on the user's three carbons, the fit
+        # reproduces C′ to better than 1 % in all three, while the
+        # element and C′ agree to 2 % at −80° of phase and differ by
+        # 34 % at −68°. Blaming that 34 % on the fit would have been
+        # wrong, and the first version of this check did.
+        fitted_low = (complex(result.fit.fitted[-1])
+                      if result.fit.fitted is not None else None)
+        if measured > 0.0 and fitted_low is not None:
+            modelled = float(-fitted_low.imag
+                             / (omega * abs(fitted_low) ** 2))
+            if modelled > 0.0:
+                off = 100.0 * (modelled / measured - 1.0)
+                result.storage_check = (
+                    f"C′({lowest:.4g} Hz): {1e3 * measured:.4g} mF medida, "
+                    f"{1e3 * modelled:.4g} mF del ajuste ({off:+.1f} %); el "
+                    f"elemento {stored_name} solo vale "
+                    f"{1e3 * result.storage_capacitance.farads:.4g} mF"
                 )
-            except CircuitError:
-                pass
-        result.warnings.extend(result.fit.warnings)
+                if abs(off) > 10.0:
+                    result.warnings.append(
+                        f"el circuito no reproduce C′ en el extremo bajo: "
+                        f"{1e3 * modelled:.4g} mF frente a "
+                        f"{1e3 * measured:.4g} mF medidos ({off:+.0f} %). "
+                        "C′ sale de los datos sin circuito, así que lo que "
+                        "falla es el modelo ahí")
+            gap = 100.0 * (result.storage_capacitance.farads / measured - 1.0)
+            phase = float(spectrum.phase_deg[-1])
+            if abs(gap) > 20.0:
+                result.warnings.append(
+                    f"la capacitancia del elemento {stored_name} "
+                    f"({1e3 * result.storage_capacitance.farads:.4g} mF) y "
+                    f"C′ a la misma frecuencia "
+                    f"({1e3 * measured:.4g} mF) difieren un {gap:+.0f} %, y "
+                    f"a {lowest:.4g} Hz la fase es {phase:.0f}°. Las dos son "
+                    "la misma magnitud solo cuando la respuesta ya es "
+                    "capacitiva: C′ lleva dentro la parte REAL de toda la "
+                    "cadena, así que mientras la fase no se acerque a −90° "
+                    "sale más baja. La que el dispositivo entrega es C′"
+                )
+
+    if result.arc_apex_hz is None and result.charge_transfer_resistance:
+        result.warnings.append(
+            f"la R de transferencia de carga ({result.charge_transfer_resistance:.4g} Ω) "
+            "sale del circuito y no de los datos: −Z″ no cierra ningún arco "
+            "dentro del barrido, así que su constante de tiempo está fuera "
+            "de lo medido. La capacitancia efectiva convertida con ella "
+            "hereda esa dependencia")
+
+    result.warnings.extend(result.fit.warnings)
     return result
 
 
@@ -1968,6 +2673,12 @@ __all__ = [
     "Element",
     "KKResult",
     "analyse_eis",
+    "AUTO_CIRCUIT",
+    "KNEE_PHASE_DEG",
+    "SpectrumShape",
+    "CircuitSuggestion",
+    "read_shape",
+    "recommend_circuits",
     "CircuitCandidate",
     "CircuitComparison",
     "PARAMETER_DETERMINED",
@@ -1980,6 +2691,8 @@ __all__ = [
     "brug_capacitance",
     "cpe_to_capacitance",
     "hsu_mansfeld_capacitance",
+    "series_cpe_capacitance",
+    "storage_element",
     "delete_user_circuit",
     "fit_circuit",
     "kramers_kronig",
@@ -2378,6 +3091,21 @@ def drt(
         warnings.append(
             "hay peso apreciable en el extremo lento: falta frecuencia baja, "
             "y la difusión suele estar ahí"
+        )
+    # The module says in prose that the DRT gives no diffusion element
+    # and that a 45° stretch in the Bode plot means its peaks are a
+    # continuous distribution chopped into arcs. That note was generic,
+    # and `drt` has the spectrum, so it can say it with a number: on the
+    # user's porous carbons the DRT returns two clean peaks over a pore
+    # that has no discrete time constant at all.
+    spread = _fortyfive_span(spectrum)
+    if peaks and spread >= FORTYFIVE_DECADES:
+        warnings.append(
+            f"la fase pasa {spread:.1f} décadas cerca de −45°, que es un "
+            "elemento DISTRIBUIDO —un poro, un Warburg, un Gerischer— y no "
+            f"tiene constante de tiempo propia. Los {len(peaks)} pico(s) de "
+            "arriba son esa distribución troceada en arcos: no los cuentes "
+            "como procesos ni los traduzcas a ZARC en esa región"
         )
     return DRTResult(
         tau_s=tau, gamma=gamma, regularisation=float(regularisation),

@@ -10,7 +10,7 @@ useful thing the section produces.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -19,6 +19,7 @@ import numpy as np
 from ..echem.curve import (ChargeDischarge, CurveError, Electrode, Impedance,
                            Voltammogram)
 from ..echem.eis import (
+    AUTO_CIRCUIT,
     CircuitError,
     CircuitTemplate,
     analyse_eis,
@@ -33,6 +34,8 @@ from ..echem.eis import (
     save_user_circuit,
 )
 from ..echem.io import EchemIOError, read_cv, read_eis, read_gcd
+from .figures_echem import (CompositeFigure, available_panels,
+                            draw_composite, save_composite)
 from ..echem.report import EchemResult, analyse_sample
 
 #: The kinds of measurement a session holds, and what each one is for.
@@ -42,7 +45,18 @@ MEASUREMENT_KINDS: tuple[tuple[str, str], ...] = (
     ("gcd", "Carga-descarga"),
     ("gcd_series", "Serie de carga-descarga (Ragone)"),
     ("eis", "Impedancia"),
+    ("eis_series", "Serie de impedancias (comparar muestras)"),
     ("lsv", "Curva de polarización (HER/OER)"),
+)
+
+#: Header of :meth:`EchemSession.eis_comparison_rows`.
+#:
+#: The circuit is a column and not a caption because every spectrum in a
+#: series gets the one its own shape asks for, and which one that was
+#: decides what the rest of the row means.
+EIS_COMPARISON_COLUMNS: tuple[str, ...] = (
+    "muestra", "R_s_ohm", "R_ion_ohm", "codo_hz", "fase_f_min_grados",
+    "C_entregable_mF", "C_elemento_mF", "circuito", "residuo_pct",
 )
 
 
@@ -148,12 +162,27 @@ class EchemSession:
     whole content of the figure is how the energy falls as the power
     rises, which needs the curves at the other currents."""
     eis: Optional[Impedance] = None
+    eis_series: list[Impedance] = field(default_factory=list)
+    """Several spectra to compare — one per sample, per temperature, per
+    potential. Comparing them is the whole point of measuring more than
+    one, and the section could hold exactly one: the user's three
+    carbons pyrolysed at 800, 900 and 1020 °C had to be opened one at a
+    time and written down by hand. Each spectrum is analysed on its own
+    and the comparison table is built across them."""
     lsv: Optional[Voltammogram] = None
     reaction: str = "OER"
-    circuit: str = "randles_cpe"
-    """The circuit NAME, or a circuit string typed by hand. Both work:
-    the name is resolved against the bundled and user libraries and
-    anything unrecognised is parsed as a circuit."""
+    circuit: str = AUTO_CIRCUIT
+    """The circuit NAME, or a circuit string typed by hand, or
+    ``"auto"``. All three work: the name is resolved against the bundled
+    and user libraries, anything unrecognised is parsed as a circuit,
+    and ``"auto"`` reads the shape of the spectrum and settles a
+    shortlist by comparison.
+
+    ``"auto"`` is the default because the previous default was
+    ``randles_cpe``, and a default circuit is a hypothesis nobody
+    stated. On a porous carbon that one has no way to describe a
+    capacitive tail except by sending its charge-transfer resistance to
+    its 1e9 bound, which it did on all three of the user's spectra."""
     circuit_initial: dict[str, float] = field(default_factory=dict)
     """Starting values by label, for the ones the user has overridden.
     Empty means "read them off the spectrum", which is what should
@@ -218,8 +247,17 @@ class EchemSession:
     """Whether the rate study's window was chosen free of faradaic current.
     It is off by default because most windows are not, and claiming
     otherwise turns a C_dl that includes reaction current into an ECSA."""
+    composite: CompositeFigure = field(default_factory=CompositeFigure)
+    """Which panels the multi-panel figure holds, and how they are laid
+    out. A figure is a VALUE here, the same rule the plotting engine
+    follows, so the choice survives a saved project and comes back
+    identical."""
     result: Optional[EchemResult] = None
     messages: list[tuple[str, str]] = field(default_factory=list)
+    _eis_analyses: Optional[list] = field(default=None, repr=False)
+    """Cache for :meth:`eis_analyses`. Every impedance panel needs the
+    same per-spectrum analysis and each one costs a circuit comparison,
+    so a six-panel figure would run it six times per spectrum."""
 
     # -- messages ------------------------------------------------------
     def log(self, level: str, text: str) -> None:
@@ -283,6 +321,108 @@ class EchemSession:
             self.log("error", f"{Path(path).name}: {exc}")
             return False
         return True
+
+    def add_eis_to_series(self, path: str | Path,
+                          label: str = "") -> bool:
+        """Load one more spectrum into the comparison series.
+
+        ``label`` is what the legend says — the sample, the temperature,
+        the potential. Taken from the file name when empty, which is
+        almost never what anyone wants on a figure, so it is asked for.
+        """
+        try:
+            spectrum = read_eis(path, electrode=self.electrode)
+        except (OSError, ValueError, EchemIOError) as exc:
+            self.log("error", f"{Path(path).name}: {exc}")
+            return False
+        spectrum.name = label.strip() or Path(path).stem
+        if any(s.name == spectrum.name for s in self.eis_series):
+            self.log("warning",
+                     f"ya hay un espectro llamado «{spectrum.name}» en la "
+                     "serie; dos curvas con el mismo nombre no se "
+                     "distinguen en la leyenda")
+        self.eis_series.append(spectrum)
+        self._eis_analyses = None
+        if self.eis is None:
+            # So the circuit editor, the DRT and C(ω) have something to
+            # work on without a second load.
+            self.eis = spectrum
+        self.result = None
+        return True
+
+    def eis_analyses(self) -> list:
+        """One :class:`EISResult` per loaded spectrum, cached.
+
+        Each is analysed with ``circuit="auto"``, so each gets the
+        circuit its own shape asks for. Comparing several samples through
+        one forced circuit hides exactly the differences worth having —
+        on the user's three carbons, only the 900 °C spectrum needs the
+        wiring inductance, and forcing the other two to carry an L leaves
+        it undetermined in both.
+        """
+        if self._eis_analyses is not None:
+            return self._eis_analyses
+        spectra = (list(self.eis_series) if self.eis_series
+                   else ([self.eis] if self.eis is not None else []))
+        out = []
+        for spectrum in spectra:
+            try:
+                out.append(analyse_eis(spectrum, circuit=AUTO_CIRCUIT))
+            except (CircuitError, ValueError) as exc:
+                self.log("error", f"{spectrum.name}: {exc}")
+                out.append(None)
+        self._eis_analyses = out
+        return out
+
+    def eis_series_choices(self) -> list[str]:
+        return [s.name for s in self.eis_series]
+
+    def use_eis_from_series(self, name: str) -> bool:
+        """Make one of the series the spectrum the circuit editor acts on."""
+        for spectrum in self.eis_series:
+            if spectrum.name == name:
+                self.eis = spectrum
+                self.result = None
+                return True
+        self.log("error", f"no hay ningún espectro llamado «{name}»")
+        return False
+
+    def eis_comparison_rows(self) -> list[tuple[str, ...]]:
+        """One row per spectrum in the series, analysed the same way.
+
+        The header row comes first so the table can be written straight
+        to a file or into a tree widget. Every spectrum is analysed on
+        its own with ``circuit="auto"``, so each gets the circuit its own
+        shape asks for, and the column says which — comparing three
+        samples through one forced circuit hides exactly the differences
+        worth having.
+        """
+        rows: list[tuple[str, ...]] = [EIS_COMPARISON_COLUMNS]
+        for spectrum in self.eis_series:
+            try:
+                analysis = analyse_eis(spectrum, circuit=AUTO_CIRCUIT)
+            except (CircuitError, ValueError) as exc:
+                rows.append((spectrum.name, f"falló: {exc}", "", "", "", "",
+                             "", "", ""))
+                continue
+            shape = analysis.shape
+            capacitance = analysis.capacitance_f
+            rows.append((
+                spectrum.name,
+                f"{analysis.series_resistance:.4g}"
+                if analysis.series_resistance is not None else "—",
+                f"{analysis.ionic_resistance_ohm:.4g}"
+                if analysis.ionic_resistance_ohm is not None else "—",
+                f"{analysis.knee_frequency:.4g}"
+                if analysis.knee_frequency is not None else "—",
+                f"{shape.low_phase_deg:.1f}" if shape else "—",
+                f"{1e3 * capacitance:.4g}" if capacitance else "—",
+                f"{1e3 * analysis.storage_capacitance.farads:.4g}"
+                if analysis.storage_capacitance is not None else "—",
+                analysis.fit.circuit if analysis.fit else "—",
+                f"{analysis.fit.residual_pct:.3f}" if analysis.fit else "—",
+            ))
+        return rows
 
     def load_eis_pair(self, nyquist: str | Path, bode: str | Path) -> bool:
         """One spectrum from EC-Lab's two separate exports.
@@ -382,6 +522,8 @@ class EchemSession:
         out = [c for c in (self.cv, self.gcd, self.eis, self.lsv) if c is not None]
         out.extend(self.rate_series)
         out.extend(self.gcd_series)
+        out.extend(s for s in self.eis_series
+                   if not any(s is c for c in out))
         return out
 
     def clear(self, kind: str) -> None:
@@ -389,6 +531,14 @@ class EchemSession:
             self.rate_series = []
         elif kind == "gcd_series":
             self.gcd_series = []
+        elif kind == "eis_series":
+            # Identity, not equality: these are dataclasses with arrays
+            # inside, so `in` calls the generated __eq__ and then fails
+            # evaluating an array's truth value.
+            if any(self.eis is s for s in self.eis_series):
+                self.eis = None
+            self.eis_series = []
+            self._eis_analyses = None
         elif kind in ("cv", "gcd", "eis", "lsv"):
             setattr(self, kind, None)
         self.result = None
@@ -410,6 +560,9 @@ class EchemSession:
             out["gcd_series"] = f"{len(self.gcd_series)} curvas: {currents} mA"
         if self.eis is not None:
             out["eis"] = self.eis.describe()
+        if self.eis_series:
+            names = ", ".join(s.name for s in self.eis_series)
+            out["eis_series"] = f"{len(self.eis_series)} espectros: {names}"
         if self.lsv is not None:
             out["lsv"] = f"{self.reaction}: {self.lsv.describe()}"
         return out
@@ -740,7 +893,8 @@ class EchemSession:
         return rates[0]
 
     def circuit_choices(self) -> list[str]:
-        return [t.name for t in circuit_templates()]
+        """``"auto"`` first, then the catalogue in the order to try it in."""
+        return [AUTO_CIRCUIT] + [t.name for t in circuit_templates()]
 
     def circuit_catalogue(self) -> list[CircuitTemplate]:
         """Every circuit on offer, bundled and user, in the order to try
@@ -756,6 +910,17 @@ class EchemSession:
     def circuit_note(self) -> tuple[str, str]:
         """``(what it is for, what it gets wrong)`` for the current
         choice, or empty strings for a hand-typed one."""
+        if self.circuit == AUTO_CIRCUIT:
+            return (
+                "Lee la forma del espectro —R en serie, inductancia "
+                "arriba, arco cerrado o no, codo, décadas a 45°, cola "
+                "capacitiva— propone los circuitos que esa forma pide y "
+                "los compara por BIC y por parámetros determinados.",
+                "Es un cribado, no un veredicto: ninguna regla "
+                "estructural puede decir si el circuito es el apropiado "
+                "para el MATERIAL. Mira la tabla de comparación y la "
+                "lista de candidatos antes de citar nada.",
+            )
         for template in circuit_templates():
             if template.name == self.circuit:
                 return template.use, template.caution
@@ -773,6 +938,14 @@ class EchemSession:
         if not candidate:
             self.log("error", "el circuito no puede estar vacío")
             return False
+        if candidate == AUTO_CIRCUIT:
+            # Not a circuit, so there is nothing to parse and no
+            # per-parameter override that could survive: which circuit
+            # gets fitted is not known until the spectrum is read.
+            self.circuit_initial.clear()
+            self.circuit_fixed.clear()
+            self.circuit = candidate
+            return True
         try:
             parse_circuit(circuit_for(candidate))
         except CircuitError as exc:
@@ -792,8 +965,20 @@ class EchemSession:
         the table is there to set up the fit rather than only to look at
         afterwards.
         """
+        text = circuit_for(self.circuit)
+        if text == AUTO_CIRCUIT:
+            # Before the fit there is no circuit to list. After it there
+            # is: the one the comparison chose, with the values it found,
+            # which is what the user needs in order to take it over by
+            # hand.
+            fit = (self.result.eis.fit
+                   if self.result is not None and self.result.eis else None)
+            if fit is None:
+                return []
+            return [(label, value, label in self.circuit_fixed)
+                    for label, value in fit.values().items()]
         try:
-            elements = parse_circuit(circuit_for(self.circuit)).elements()
+            elements = parse_circuit(text).elements()
         except CircuitError:
             return []
         rows = []
@@ -862,6 +1047,33 @@ class EchemSession:
             self.log("warning", warning)
         return True
 
+    def adopt_chosen_circuit(self) -> bool:
+        """Replace ``"auto"`` with the circuit the comparison picked.
+
+        The point of automatic choice is to get to a circuit, not to stay
+        on "automatic": once there is one, the user wants to edit it, hold
+        a parameter, see it drawn. This is the handover, and it is an
+        explicit action rather than something that happens behind the
+        analysis — ``"auto"`` means "re-decide from the data", and a
+        session that silently stopped doing that would answer a different
+        question the next time the spectrum changed.
+        """
+        if self.circuit != AUTO_CIRCUIT:
+            return False
+        fit = (self.result.eis.fit
+               if self.result is not None and self.result.eis else None)
+        if fit is None:
+            self.log("error",
+                     "todavía no hay ningún circuito elegido: analiza el "
+                     "espectro primero")
+            return False
+        self.circuit = fit.circuit
+        self.circuit_initial = dict(fit.values())
+        self.circuit_fixed.clear()
+        self.log("info", f"circuito adoptado: {fit.circuit}, con los "
+                         "valores del ajuste como punto de partida")
+        return True
+
     def circuit_drawing(self) -> str:
         """The current circuit as a schematic, with fitted values if any.
 
@@ -874,8 +1086,17 @@ class EchemSession:
         eis = getattr(self.result, "eis", None) if self.result else None
         if eis is not None and eis.fit is not None:
             values = eis.fit.values()
+        text = circuit_for(self.circuit)
+        if text == AUTO_CIRCUIT:
+            # Draw what was CHOSEN. "auto" has no shape of its own, and
+            # returning a parse error here reads as the drawing being
+            # broken rather than as there being nothing to draw yet.
+            if eis is None or eis.fit is None:
+                return ("Elige automáticamente: analiza el espectro y aquí\n"
+                        "se dibuja el circuito que la comparación eligió.")
+            text = eis.fit.circuit
         try:
-            return draw_circuit(circuit_for(self.circuit), values)
+            return draw_circuit(text, values)
         except CircuitError as exc:
             return f"no se puede dibujar: {exc}"
 
@@ -1172,6 +1393,115 @@ class EchemSession:
             written.append("informe.txt")
         if not written:
             self.log("error", "no hay nada que exportar: carga una medida")
+        else:
+            self.log("info", f"escritos en {target}: " + ", ".join(written))
+        return written
+
+    # -- the multi-panel figure ----------------------------------------
+    def figure_panels(self) -> list:
+        """The panels whose data are loaded, as :class:`PanelSpec`."""
+        return available_panels(self)
+
+    def set_figure_panels(self, keys) -> None:
+        """Choose the panels, keeping the order they are offered in.
+
+        The order is not the order they were ticked: a figure's letters
+        run (a), (b), (c) down the page, and a user who ticks the
+        residual before the Nyquist does not mean the residual to be
+        panel (a)."""
+        offered = [panel.key for panel in self.figure_panels()]
+        chosen = set(keys)
+        self.composite.panels = [key for key in offered if key in chosen]
+
+    def draw_figure(self, figure, palette) -> list[str]:
+        """Draw the composite onto a matplotlib figure, reporting
+        whatever panel failed instead of raising."""
+        problems = draw_composite(figure, self.composite, self, palette)
+        for problem in problems:
+            self.log("error", problem)
+        return problems
+
+    def save_figure(self, path, palette) -> bool:
+        """Write the composite at ITS own width and resolution.
+
+        Not a screenshot of the canvas: the canvas is whatever size the
+        pane happens to be, and a figure drawn at one width and saved at
+        another arrives with its labels at the wrong size — which is the
+        single most common way a figure comes out unreadable.
+        """
+        try:
+            target, problems = save_composite(
+                self.composite, self, palette, path)
+        except (OSError, ValueError) as exc:
+            self.log("error", f"no se ha podido guardar la figura: {exc}")
+            return False
+        for problem in problems:
+            self.log("error", problem)
+        self.log("info", f"figura escrita en {target}")
+        return True
+
+    def figure_data_rows(self) -> dict[str, list[tuple]]:
+        """The numbers each chosen panel is DRAWING, panel by panel.
+
+        What goes out is what is drawn, with every transformation the
+        figure applied already in it — the same rule the canvases follow.
+        A figure that can only be looked at has to be retyped to be used
+        anywhere else, and retyped numbers are wrong numbers.
+        """
+        import matplotlib
+        from matplotlib.figure import Figure
+
+        from .theme import PALETTES, matplotlib_style
+
+        palette = PALETTES["claro"]
+        out: dict[str, list[tuple]] = {}
+        with matplotlib.rc_context(matplotlib_style(palette)):
+            for key in self.composite.panels:
+                # One panel per figure, deliberately. Zipping the chosen
+                # panels against `figure.axes` of the composite looks
+                # equivalent and is not: a panel with a twin axis adds a
+                # second entry, so every panel after the first Bode plot
+                # was reading another panel's lines and two of them came
+                # back with nothing but their header.
+                single = replace(self.composite, panels=[key], columns=1)
+                figure = Figure(figsize=(single.width_in,
+                                         single.panel_height_in))
+                draw_composite(figure, single, self, palette)
+                rows: list[tuple] = [("serie", "x", "y")]
+                for axis in figure.axes:
+                    for line in axis.get_lines():
+                        name = line.get_label()
+                        if name.startswith("_"):
+                            continue
+                        for x, y in zip(*line.get_data()):
+                            rows.append((name, float(x), float(y)))
+                out[key] = rows
+        return out
+
+    def save_figure_data(self, folder) -> list[str]:
+        """Write one CSV per panel of the composite figure.
+
+        One file per panel rather than one wide table: the panels do not
+        share an x axis — frequency, potential, scan rate and time
+        constant all appear in the same figure — and columns side by side
+        under different abscissae is a table nobody can read back.
+        """
+        target = Path(folder)
+        target.mkdir(parents=True, exist_ok=True)
+        written: list[str] = []
+        for key, rows in self.figure_data_rows().items():
+            if len(rows) <= 1:
+                continue
+            path = target / f"figura_{key}.csv"
+            with open(path, "w", encoding="utf-8") as handle:
+                for row in rows:
+                    handle.write(",".join(
+                        f"{value:.6g}" if isinstance(value, float)
+                        else str(value) for value in row) + "\n")
+            written.append(path.name)
+        if not written:
+            self.log("error",
+                     "la figura no tiene ningún panel con datos que exportar")
         else:
             self.log("info", f"escritos en {target}: " + ", ".join(written))
         return written
