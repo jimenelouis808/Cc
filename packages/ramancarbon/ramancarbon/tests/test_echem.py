@@ -2645,3 +2645,273 @@ def test_the_combined_panel_gives_the_phase_its_own_two_axes():
             f"la fase se está dibujando contra {axes.get_ylim()}, que son "
             "ohmios y no grados"
         )
+
+
+# -- Mott-Schottky ----------------------------------------------------
+
+
+def _mott_schottky_truth(density_cm3=5e17, flat_band=-0.25, epsilon=48.0,
+                         area_cm2=0.5, temperature=298.15):
+    """The slope a given carrier density has to produce, in F⁻² V⁻¹."""
+    from ramancarbon.echem.mott_schottky import (ELEMENTARY_CHARGE, EPSILON_0)
+
+    return 2.0 / (epsilon * EPSILON_0 * (area_cm2 * 1e-4) ** 2
+                  * ELEMENTARY_CHARGE * density_cm3 * 1e6)
+
+
+def _mott_schottky_series(density_cm3=5e17, flat_band=-0.25, kind="n",
+                          epsilon=48.0, area_cm2=0.5, points=25, seed=3):
+    """A synthetic ``(E, C)`` series with a KNOWN density and E_fb."""
+    from ramancarbon.echem.mott_schottky import (BOLTZMANN, ELEMENTARY_CHARGE,
+                                                 ROOM_TEMPERATURE)
+
+    thermal = BOLTZMANN * ROOM_TEMPERATURE / ELEMENTARY_CHARGE
+    slope = _mott_schottky_truth(density_cm3, flat_band, epsilon, area_cm2)
+    potential = np.linspace(0.0, 0.8, points)
+    if kind == "n":
+        inverse = slope * (potential - flat_band - thermal)
+    else:
+        # the sweep has to stop BEFORE the intercept: past
+        # ``flat_band - kT/e`` the line is negative and 1/sqrt is not real.
+        potential = np.linspace(flat_band - 0.8,
+                                flat_band - thermal - 0.02, points)
+        inverse = -slope * (potential - flat_band + thermal)
+    rng = np.random.default_rng(seed)
+    capacitance = (1.0 / np.sqrt(inverse)) * (
+        1.0 + rng.normal(0.0, 0.004, inverse.size))
+    return potential, capacitance
+
+
+def test_mott_schottky_recovers_the_density_and_the_flat_band():
+    """The closed case: a line built from a known N and E_fb."""
+    from ramancarbon.echem.mott_schottky import mott_schottky
+
+    potential, capacitance = _mott_schottky_series()
+    fit = mott_schottky(potential, capacitance, 1000.0, 48.0, 0.5)
+    assert fit.carrier_type == "n"
+    assert fit.carrier_density_cm3 == pytest.approx(5e17, rel=0.05)
+    assert fit.flat_band_v == pytest.approx(-0.25, abs=0.01)
+    assert fit.r_squared > 0.99
+
+
+def test_a_p_type_electrode_comes_back_as_p():
+    """The SIGN of the slope is the type, and kT/e changes sign with it."""
+    from ramancarbon.echem.mott_schottky import mott_schottky
+
+    potential, capacitance = _mott_schottky_series(flat_band=0.9, kind="p")
+    fit = mott_schottky(potential, capacitance, 1000.0, 48.0, 0.5)
+    assert fit.carrier_type == "p"
+    assert fit.slope < 0
+    assert fit.flat_band_v == pytest.approx(0.9, abs=0.01)
+    assert fit.carrier_density_cm3 == pytest.approx(5e17, rel=0.05)
+
+
+def test_the_thermal_term_is_taken_off_and_it_is_not_nothing():
+    """25.7 mV at room temperature, and it is part of the intercept."""
+    from ramancarbon.echem.mott_schottky import mott_schottky
+
+    potential, capacitance = _mott_schottky_series()
+    fit = mott_schottky(potential, capacitance, 1000.0, 48.0, 0.5)
+    crossing = -fit.intercept / fit.slope
+    assert fit.thermal_term_v == pytest.approx(0.0257, abs=0.0005)
+    assert fit.flat_band_v == pytest.approx(crossing - fit.thermal_term_v,
+                                            abs=1e-9)
+
+
+def test_the_density_goes_as_one_over_epsilon_and_area_squared():
+    """Both prefactors, because both are things people get wrong.
+
+    ``N ∝ 1/(ε A²)``: an ε from the wrong phase or the geometric area of
+    a rough electrode carries the carrier density away with it, and
+    neither shows up in the residual.
+    """
+    from ramancarbon.echem.mott_schottky import mott_schottky
+
+    potential, capacitance = _mott_schottky_series()
+    base = mott_schottky(potential, capacitance, 1000.0, 48.0, 0.5)
+    half_epsilon = mott_schottky(potential, capacitance, 1000.0, 24.0, 0.5)
+    double_area = mott_schottky(potential, capacitance, 1000.0, 48.0, 1.0)
+    assert half_epsilon.carrier_density_cm3 == pytest.approx(
+        2.0 * base.carrier_density_cm3, rel=1e-9)
+    assert double_area.carrier_density_cm3 == pytest.approx(
+        0.25 * base.carrier_density_cm3, rel=1e-9)
+    # And the flat band potential needs NEITHER of them.
+    assert half_epsilon.flat_band_v == pytest.approx(base.flat_band_v,
+                                                     abs=1e-9)
+    assert double_area.flat_band_v == pytest.approx(base.flat_band_v, abs=1e-9)
+
+
+def test_the_linear_region_is_found_not_assumed():
+    """A Mott-Schottky plot is straight only in depletion.
+
+    Past flat band the curve bends over; fitting the whole sweep returns
+    the slope of a line through points that are not on one.
+    """
+    from ramancarbon.echem.mott_schottky import mott_schottky
+
+    potential, capacitance = _mott_schottky_series(points=30)
+    # Bend the last third, as a real electrode does when it starts to
+    # conduct.
+    bent = capacitance.copy()
+    bent[20:] *= np.linspace(1.0, 2.2, 10)
+    fit = mott_schottky(potential, bent, 1000.0, 48.0, 0.5)
+    assert fit.points < potential.size, "se ha ajustado el barrido entero"
+    assert fit.window[1] < float(potential[-1])
+    assert fit.carrier_density_cm3 == pytest.approx(5e17, rel=0.15)
+
+
+def test_a_single_frequency_is_reported_as_not_a_measurement():
+    from ramancarbon.echem.mott_schottky import _check_the_frequencies
+    from ramancarbon.echem.mott_schottky import (MottSchottkyResult,
+                                                 mott_schottky)
+
+    potential, capacitance = _mott_schottky_series()
+    result = MottSchottkyResult(
+        fits=[mott_schottky(potential, capacitance, 1000.0, 48.0, 0.5)])
+    _check_the_frequencies(result)
+    assert any("una frecuencia" in w.lower() for w in result.warnings)
+
+
+def test_frequency_dispersion_is_the_result_not_a_detail():
+    """E_fb moving with frequency IS the finding, so it is reported."""
+    from ramancarbon.echem.mott_schottky import (MottSchottkyResult,
+                                                 _check_the_frequencies,
+                                                 mott_schottky)
+
+    fits = []
+    for index, flat_band in enumerate((-0.25, -0.38, -0.50)):
+        potential, capacitance = _mott_schottky_series(flat_band=flat_band,
+                                                       seed=3 + index)
+        fits.append(mott_schottky(potential, capacitance,
+                                  10.0 ** (3 - index), 48.0, 0.5))
+    result = MottSchottkyResult(fits=fits)
+    _check_the_frequencies(result)
+    assert result.flat_band_spread() == pytest.approx(0.25, abs=0.02)
+    assert any("se mueve" in w for w in result.warnings)
+    # And the consensus is ONE fit, never an average of the three.
+    best = result.consensus()
+    assert best in fits
+
+
+def test_a_capacitance_near_the_helmholtz_layer_is_flagged():
+    """What is measured is C_sc in SERIES with C_H.
+
+    The equation describes it only while C_sc is far below C_H, and the
+    end of the plot the intercept is read from is where that stops
+    holding.
+    """
+    from ramancarbon.echem.mott_schottky import (HELMHOLTZ_F_PER_CM2,
+                                                 mott_schottky)
+
+    area = 1.0
+    potential = np.linspace(0.0, 0.5, 20)
+    # A capacitance deliberately up at the Helmholtz scale.
+    capacitance = np.linspace(0.9, 0.4, 20) * HELMHOLTZ_F_PER_CM2 * area
+    fit = mott_schottky(potential, capacitance, 1000.0, 48.0, area)
+    assert any("Helmholtz" in w for w in fit.warnings)
+
+
+def test_the_dielectric_constant_comes_from_the_database_with_its_source():
+    from ramancarbon.echem.mott_schottky import (dielectric_constant,
+                                                 semiconductors)
+
+    table = semiconductors()
+    assert table, "la tabla de semiconductores está vacía"
+    for key, entry in table.items():
+        assert entry.get("epsilon", 0) > 0, key
+        assert entry.get("source"), key
+        assert entry.get("confidence") in {"high", "medium", "low"}, key
+    value, source = dielectric_constant("ZnO")
+    assert value == pytest.approx(8.5)
+    assert "ZnO" in source and "confianza" in source
+    missing, reason = dielectric_constant("Vibranio")
+    assert missing is None
+    assert "1/ε" in reason, (
+        "un material que no está tiene que decir POR QUÉ no se puede "
+        "suponer una ε, no sólo que no está"
+    )
+
+
+def test_the_series_capacitance_is_the_one_the_equation_uses(tmp_path):
+    """``C_s = −1/(ωZ″)``, not ``C′``.
+
+    The model is a space-charge capacitor in series with the Helmholtz
+    layer, so the ``C`` of the equation is the series combination the
+    cell presents.
+    """
+    from ramancarbon.echem.mott_schottky import series_capacitance
+
+    spectrum = make_eis_demo("R0-Q1", seed=3)
+    index = spectrum.n // 2
+    frequency = float(spectrum.frequency[index])
+    omega = 2.0 * math.pi * frequency
+    expected = -1.0 / (omega * float(spectrum.z.imag[index]))
+    assert series_capacitance(spectrum, frequency) == pytest.approx(
+        expected, rel=0.02)
+    with pytest.raises(CurveError):
+        series_capacitance(spectrum, 10.0 * float(spectrum.frequency.max()))
+
+
+def test_the_bias_of_each_spectrum_is_read_from_the_file():
+    """A folder of PEIS files at different biases IS the experiment.
+
+    The potential is in the file — EC-Lab writes it in ``<Ewe>/V`` —
+    so it is read rather than typed back in, which is how a point ends
+    up on the wrong abscissa.
+    """
+    from ramancarbon.echem.mott_schottky import series_from_spectra
+
+    spectra = []
+    for bias in (-0.2, 0.0, 0.2):
+        spectrum = make_eis_demo("R0-Q1", seed=3)
+        spectrum.metadata["potencial_cd_v"] = bias
+        spectra.append(spectrum)
+    naked = make_eis_demo("R0-Q1", seed=3)
+    naked.name = "sin potencial"
+    spectra.append(naked)
+
+    potential, capacitance, notes = series_from_spectra(
+        spectra, float(spectra[0].frequency[spectra[0].n // 2]))
+    assert list(potential) == [-0.2, 0.0, 0.2]
+    assert capacitance.size == 3
+    assert any("sin potencial" in note for note in notes)
+
+
+def test_the_section_runs_mott_schottky_end_to_end():
+    from ramancarbon.echem.curve import Electrode, Impedance
+    from ramancarbon.echem.mott_schottky import (BOLTZMANN, ELEMENTARY_CHARGE,
+                                                 ROOM_TEMPERATURE)
+    from ramancarbon.gui.echem_state import (MOTT_SCHOTTKY_COLUMNS,
+                                             EchemSession)
+
+    epsilon, area, density, flat_band = 48.0, 0.5, 5e17, -0.25
+    thermal = BOLTZMANN * ROOM_TEMPERATURE / ELEMENTARY_CHARGE
+    slope = _mott_schottky_truth(density, flat_band, epsilon, area)
+    session = EchemSession(name="semiconductor")
+    session.electrode = Electrode(area_cm2=area)
+    session.ms_material = "TiO2_anatasa"
+    frequency = np.logspace(5, 1, 40)
+    for bias in np.linspace(0.0, 0.8, 17):
+        space_charge = 1.0 / math.sqrt(slope * (bias - flat_band - thermal))
+        z = 25.0 + 1.0 / (2j * math.pi * frequency * space_charge)
+        session.ms_series.append(Impedance(
+            frequency=frequency, z=z, electrode=session.electrode,
+            name=f"{bias:+.3f} V",
+            metadata={"potencial_cd_v": float(bias)}))
+
+    result = session.mott_schottky()
+    assert result is not None and result.available
+    assert len(result.fits) == 3, "tres frecuencias por defecto, no una"
+    best = result.consensus()
+    assert best.carrier_type == "n"
+    assert best.carrier_density_cm3 == pytest.approx(density, rel=0.05)
+    assert best.flat_band_v == pytest.approx(flat_band, abs=0.01)
+
+    rows = session.mott_schottky_rows()
+    assert rows[0] == MOTT_SCHOTTKY_COLUMNS
+    assert len(rows) == 4
+    assert session.mott_schottky() is result, "el resultado no se cacheó"
+
+    # And the panel is offered now that there is a series.
+    assert "mott_schottky" in {p.key for p in session.figure_panels()}
+    assert "mott_schottky" in session.standard_figure()

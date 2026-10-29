@@ -51,6 +51,10 @@ LETTERS = "abcdefghijkl"
 LABELS: dict[str, dict[str, str]] = {
     "en": {
         "potential": "E / V vs {reference}",
+        "inverse_c2": "C$^{-2}$ / F$^{-2}$",
+        "ms_fit": "{f} Hz: E$_{fb}$ = {efb} V, N = {n} cm$^{-3}$",
+        "ms_unused": "outside the linear region",
+        "ms_flatband": "E$_{fb}$",
         "potential_plain": "E / V",
         "rhe": "E / V vs RHE",
         "current_mass": "i / A g$^{-1}$",
@@ -107,6 +111,10 @@ LABELS: dict[str, dict[str, str]] = {
     },
     "es": {
         "potential": "E / V vs {reference}",
+        "inverse_c2": "C$^{-2}$ / F$^{-2}$",
+        "ms_fit": "{f} Hz: E$_{fb}$ = {efb} V, N = {n} cm$^{-3}$",
+        "ms_unused": "fuera de la región lineal",
+        "ms_flatband": "E$_{fb}$",
         "potential_plain": "E / V",
         "rhe": "E / V vs RHE",
         "current_mass": "i / A g$^{-1}$",
@@ -403,11 +411,11 @@ def _rhe_shift(session) -> Optional[float]:
     rather than drawn on a guess.
     """
     curve = (session.cv or (session.rate_series[0]
-                            if session.rate_series else None))
+                            if session.rate_series else None)
+             or (session.ms_series[0] if session.ms_series else None))
     if curve is None:
         return None
-    probe = np.array([0.0])
-    converted, _ = curve.electrode.to_rhe(probe)
+    converted, _ = curve.electrode.to_rhe(np.zeros(1))
     if converted is None:
         return None
     return float(converted[0])
@@ -442,16 +450,23 @@ def _reference_axis(axis, session, spec: CompositeFigure) -> None:
 
 
 def _potential_axis(axis, session, spec: CompositeFigure, curve) -> str:
-    """Label the potential axis with the scale the session is drawing."""
-    _, label, _ = curve.electrode.on_scale(curve.potential[:1],
-                                           session.potential_scale_choice)
+    """Label the potential axis with the scale the session is drawing.
+
+    ``curve`` is anything carrying an electrode. It used to read
+    ``curve.potential`` as well, which made the Mott-Schottky panel —
+    whose "curve" is an impedance spectrum, and an ``Impedance`` has no
+    potential column — fail after drawing all of its data.
+    """
+    electrode = curve.electrode
+    _, label, _ = electrode.on_scale(np.zeros(1),
+                                     session.potential_scale_choice)
     if session.potential_scale_choice == "medido":
         # The DISPLAY name from the database, not the key: "Ag/AgCl_sat"
         # is how the table is indexed and "Ag/AgCl (KCl sat.)" is what
         # goes on an axis.
         from ..echem.curve import load_echem_database
 
-        key = curve.electrode.reference or ""
+        key = electrode.reference or ""
         table = load_echem_database().get("reference_electrodes", {})
         reference = table.get(key, {}).get("axis", key)
         label = (spec.text("potential", reference=reference) if reference
@@ -725,6 +740,50 @@ def _panel_cv_stack(axis, session, spec, palette) -> None:
         axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
                     loc="upper left", ncol=3, columnspacing=1.0,
                     handlelength=1.4)
+    _tidy(axis, spec)
+    _reference_axis(axis, session, spec)
+
+
+def _panel_mott_schottky(axis, session, spec, palette) -> None:
+    """``1/C²`` against the DC potential, one line per frequency.
+
+    Every point of every frequency is drawn and the fitted stretch is
+    marked, because the linear region is FOUND and a reader has to be
+    able to see what was left out. A Mott-Schottky plot shown only over
+    the window that was fitted cannot be argued with.
+    """
+    result = session.mott_schottky()
+    if result is None or not result.available:
+        return
+    for index, fit in enumerate(result.fits):
+        colour = _colour(index)
+        axis.plot(fit.potentials[~fit.used], fit.inverse_square[~fit.used],
+                  "o", color=colour, markersize=3.4, markerfacecolor="none",
+                  markeredgewidth=0.9, alpha=0.5, zorder=2)
+        axis.plot(fit.potentials[fit.used], fit.inverse_square[fit.used],
+                  "o", color=colour, markersize=4.2, zorder=3)
+        grid = np.linspace(min(fit.window[0], fit.flat_band_v),
+                           fit.window[1], 32)
+        axis.plot(grid, fit.slope * grid + fit.intercept, "-", color=colour,
+                  linewidth=1.2, zorder=2,
+                  label=spec.text("ms_fit",
+                                  f=f"{fit.frequency_hz:.4g}",
+                                  efb=f"{fit.flat_band_v:+.3f}",
+                                  n=f"{fit.carrier_density_cm3:.2g}"))
+        axis.plot([fit.flat_band_v], [0.0], "v", color=colour, markersize=6,
+                  zorder=4)
+    axis.axhline(0.0, color=GREY, linewidth=0.7, zorder=1)
+    curve = session.ms_series[0] if session.ms_series else None
+    if curve is not None:
+        _potential_axis(axis, session, spec, curve)
+    axis.set_ylabel(spec.text("inverse_c2"))
+    axis.set_ylim(0.0, None)
+    if spec.legends:
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.5,
+                    loc="upper left", handlelength=1.4)
+    axis.text(0.03, 0.05, f"▼ {spec.text('ms_flatband')}",
+              transform=axis.transAxes, ha="left",
+              fontsize=spec.font_size - 1.5, color=GREY)
     _tidy(axis, spec)
     _reference_axis(axis, session, spec)
 
@@ -1114,6 +1173,10 @@ ECHEM_PANELS: tuple[PanelSpec, ...] = (
               "velocidad más lenta"),
     PanelSpec("cv_dunn", "CV: la separación de Dunn", "cv", _panel_dunn,
               "el ciclo cerrado con la parte superficial sembrada dentro"),
+    PanelSpec("mott_schottky", "Mott-Schottky: 1/C² contra E", "ms",
+              _panel_mott_schottky,
+              "una recta por frecuencia, con la región lineal marcada y "
+              "el E_fb de cada una en el eje"),
     PanelSpec("eis_nyquist", "EIS: Nyquist cuadrado con recuadro", "eis",
               _panel_nyquist,
               "a escala uno a uno, con el rincón de alta frecuencia en un "
@@ -1157,6 +1220,7 @@ DEFAULT_PANELS: dict[str, tuple[str, ...]] = {
     "rates": ("cv_serie", "cv_capacitancia", "cv_carga", "cv_terminos"),
     "cv": ("cv_dunn",),
     "eis": ("eis_nyquist", "eis_bode", "eis_capacitancia", "eis_residuo"),
+    "ms": ("mott_schottky",),
 }
 
 
@@ -1177,6 +1241,7 @@ def _what_is_loaded(session) -> dict[str, bool]:
         "rates": len(session.rate_series) >= 2,
         "cv": session.cv is not None or bool(session.rate_series),
         "eis": session.eis is not None or bool(session.eis_series),
+        "ms": len(session.ms_series) >= 2,
     }
 
 
@@ -1191,7 +1256,7 @@ def default_panels(session) -> list[str]:
     have = _what_is_loaded(session)
     offered = {panel.key for panel in available_panels(session)}
     chosen: list[str] = []
-    for need in ("rates", "eis"):
+    for need in ("rates", "eis", "ms"):
         if not have.get(need):
             continue
         chosen.extend(key for key in DEFAULT_PANELS[need] if key in offered)

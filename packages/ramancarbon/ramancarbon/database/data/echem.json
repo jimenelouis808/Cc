@@ -298,5 +298,98 @@
       "source": "definicion del tampon",
       "note": "Tamponado, asi que el pH si es un dato y no una estimacion."
     }
+  },
+  "semiconductors": {
+    "TiO2_anatasa": {
+      "label": "TiO₂ anatasa",
+      "epsilon": 48.0,
+      "source": "valor de uso corriente en fotoelectroquímica de anatasa policristalina",
+      "confidence": "medium",
+      "note": "la permitividad del TiO2 es fuertemente anisótropa y depende de la fase: el rutilo da del orden de 100 en el eje c y 80 en el a. Usar el de la fase equivocada es un factor dos en N"
+    },
+    "TiO2_rutilo": {
+      "label": "TiO₂ rutilo",
+      "epsilon": 100.0,
+      "source": "promedio alto habitual para rutilo policristalino",
+      "confidence": "low",
+      "note": "muy anisótropo (≈170 en c, ≈86 en a); el número que se cita en la literatura va de 80 a 170 y N se mueve con él"
+    },
+    "Fe2O3_hematita": {
+      "label": "α-Fe₂O₃ (hematita)",
+      "epsilon": 80.0,
+      "source": "valor de uso corriente en fotoánodos de hematita",
+      "confidence": "medium",
+      "note": "la literatura de hematita usa de 25 a 120 según el autor"
+    },
+    "ZnO": {
+      "label": "ZnO",
+      "epsilon": 8.5,
+      "source": "permitividad estática del ZnO wurtzita",
+      "confidence": "high",
+      "note": "poco disperso entre fuentes, al contrario que los óxidos de titanio y hierro"
+    },
+    "WO3": {
+      "label": "WO₃",
+      "epsilon": 20.0,
+      "source": "valor de uso corriente en fotoánodos de WO₃",
+      "confidence": "low",
+      "note": "la literatura va de 10 a 50; es de los peor acotados"
+    },
+    "BiVO4": {
+      "label": "BiVO₄",
+      "epsilon": 68.0,
+      "source": "valor de uso corriente en fotoánodos de BiVO₄",
+      "confidence": "medium",
+      "note": ""
+    },
+    "Cu2O": {
+      "label": "Cu₂O",
+      "epsilon": 7.6,
+      "source": "permitividad estática del Cu₂O",
+      "confidence": "medium",
+      "note": "fotocátodo tipo p: la pendiente de Mott-Schottky sale NEGATIVA"
+    },
+    "CdS": {
+      "label": "CdS",
+      "epsilon": 8.9,
+      "source": "permitividad estática del CdS wurtzita",
+      "confidence": "high",
+      "note": ""
+    },
+    "SnO2": {
+      "label": "SnO₂",
+      "epsilon": 14.0,
+      "source": "permitividad estática del SnO₂ casiterita (promedio)",
+      "confidence": "medium",
+      "note": "anisótropo: ≈9 en a y ≈14 en c"
+    },
+    "NiO": {
+      "label": "NiO",
+      "epsilon": 11.9,
+      "source": "permitividad estática del NiO",
+      "confidence": "medium",
+      "note": "tipo p"
+    },
+    "g_C3N4": {
+      "label": "g-C₃N₄",
+      "epsilon": 5.0,
+      "source": "estimaciones para nitruro de carbono grafítico",
+      "confidence": "low",
+      "note": "para un material laminar y poroso la ε efectiva y el área activa son las dos discutibles, y N depende de las dos"
+    },
+    "MoS2": {
+      "label": "MoS₂",
+      "epsilon": 12.8,
+      "source": "permitividad estática del MoS₂ 2H en el plano (promedio)",
+      "confidence": "low",
+      "note": "muy anisótropo: ≈15 en el plano y ≈7 fuera de él"
+    },
+    "Si": {
+      "label": "Si",
+      "epsilon": 11.7,
+      "source": "permitividad estática del silicio",
+      "confidence": "high",
+      "note": "el caso cerrado del método; sirve para comprobar un montaje"
+    }
   }
 }

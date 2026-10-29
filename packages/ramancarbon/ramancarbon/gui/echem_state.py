@@ -48,7 +48,18 @@ MEASUREMENT_KINDS: tuple[tuple[str, str], ...] = (
     ("gcd_series", "Serie de carga-descarga (Ragone)"),
     ("eis", "Impedancia"),
     ("eis_series", "Serie de impedancias (comparar muestras)"),
+    ("ms_series", "Serie de potenciales (Mott-Schottky)"),
     ("lsv", "Curva de polarización (HER/OER)"),
+)
+
+#: Header of :meth:`EchemSession.mott_schottky_rows`.
+#:
+#: One row per FREQUENCY, because that is the axis along which a
+#: Mott-Schottky is checked: the answer depends on the frequency chosen
+#: and a single row is not a measurement.
+MOTT_SCHOTTKY_COLUMNS: tuple[str, ...] = (
+    "f_hz", "tipo", "E_fb_V", "E_fb_error_V", "N_cm3", "N_error_cm3",
+    "pendiente_F-2_V-1", "r2", "ventana_V", "puntos",
 )
 
 #: Header of :meth:`EchemSession.eis_comparison_rows`.
@@ -171,6 +182,21 @@ class EchemSession:
     carbons pyrolysed at 800, 900 and 1020 °C had to be opened one at a
     time and written down by hand. Each spectrum is analysed on its own
     and the comparison table is built across them."""
+    ms_series: list[Impedance] = field(default_factory=list)
+    """Spectra of the SAME electrode at different DC biases, for a
+    Mott-Schottky plot. Separate from :attr:`eis_series`, which holds
+    one spectrum per SAMPLE: the two are different experiments and
+    mixing them would put a sample's name on a potential axis."""
+    ms_material: str = ""
+    """Key of a semiconductor in ``echem.json``, for its ε."""
+    ms_epsilon: Optional[float] = None
+    """ε typed by hand, which wins over the material's. ``None`` reads
+    the database."""
+    ms_frequencies: tuple[float, ...] = (1000.0, 500.0, 100.0)
+    """Where to read the capacitance. THREE by default, not one: the
+    answer of a Mott-Schottky depends on the frequency, and the only way
+    to find out how much is to do it at several."""
+    ms_temperature_k: float = 298.15
     lsv: Optional[Voltammogram] = None
     reaction: str = "OER"
     circuit: str = AUTO_CIRCUIT
@@ -257,6 +283,7 @@ class EchemSession:
     result: Optional[EchemResult] = None
     messages: list[tuple[str, str]] = field(default_factory=list)
     _eis_analyses: Optional[list] = field(default=None, repr=False)
+    _ms_result: Optional[object] = field(default=None, repr=False)
     """Cache for :meth:`eis_analyses`. Every impedance panel needs the
     same per-spectrum analysis and each one costs a circuit comparison,
     so a six-panel figure would run it six times per spectrum."""
@@ -351,6 +378,107 @@ class EchemSession:
             self.eis = spectrum
         self.result = None
         return True
+
+    def add_to_mott_schottky(self, path: str | Path) -> bool:
+        """Load one more spectrum into the Mott-Schottky series.
+
+        No label is asked for: these are the SAME electrode at different
+        potentials, and the potential is in the file. The EC-Lab reader
+        puts it in the metadata from the file's own ``<Ewe>/V`` column,
+        so a folder of PEIS files measured along a sweep already is the
+        experiment.
+        """
+        try:
+            spectrum = read_eis(path, electrode=self.electrode)
+        except (OSError, ValueError, EchemIOError) as exc:
+            self.log("error", f"{Path(path).name}: {exc}")
+            return False
+        bias = spectrum.metadata.get("potencial_cd_v")
+        if bias is None:
+            self.log("error",
+                     f"{Path(path).name} no declara el potencial de "
+                     "polarización, así que no puede ser un punto de "
+                     "Mott-Schottky")
+            return False
+        spectrum.name = f"{bias:+.3f} V"
+        self.ms_series.append(spectrum)
+        self.ms_series.sort(
+            key=lambda s: s.metadata.get("potencial_cd_v", 0.0))
+        self._ms_result = None
+        return True
+
+    def mott_schottky_frequencies(self) -> list[float]:
+        """The chosen frequencies that every loaded spectrum covers.
+
+        One that only some spectra reach would build the plot out of a
+        different set of potentials at each frequency, and then the
+        spread between frequencies — which is what the method is
+        checked by — would partly be a spread between experiments.
+        """
+        if not self.ms_series:
+            return []
+        low = max(float(s.frequency.min()) for s in self.ms_series)
+        high = min(float(s.frequency.max()) for s in self.ms_series)
+        return [f for f in self.ms_frequencies if low <= f <= high]
+
+    def mott_schottky(self):
+        """The Mott-Schottky analysis of the loaded series, cached."""
+        from ..echem.mott_schottky import analyse_mott_schottky
+
+        if self._ms_result is not None:
+            return self._ms_result
+        if len(self.ms_series) < 2:
+            self.log("error",
+                     "hacen falta espectros a varios potenciales: un "
+                     "Mott-Schottky es la capacitancia CONTRA el potencial")
+            return None
+        frequencies = self.mott_schottky_frequencies()
+        if not frequencies:
+            self.log("error",
+                     "ninguna de las frecuencias elegidas cae dentro del "
+                     "barrido de todos los espectros")
+            return None
+        result = analyse_mott_schottky(
+            self.ms_series, frequencies,
+            epsilon=self.ms_epsilon, material=self.ms_material,
+            area_cm2=self.electrode.area_cm2,
+            temperature_k=self.ms_temperature_k)
+        for warning in result.warnings:
+            self.log("warning", warning)
+        self._ms_result = result
+        return result
+
+    def mott_schottky_rows(self) -> list[tuple[str, ...]]:
+        """One row per frequency, plus the header."""
+        rows: list[tuple[str, ...]] = [MOTT_SCHOTTKY_COLUMNS]
+        result = self.mott_schottky()
+        if result is None or not result.available:
+            return rows
+        for fit in result.fits:
+            rows.append((
+                f"{fit.frequency_hz:.4g}",
+                fit.carrier_type,
+                f"{fit.flat_band_v:+.4f}",
+                f"{fit.flat_band_error_v:.4f}",
+                f"{fit.carrier_density_cm3:.3g}",
+                f"{fit.carrier_density_error_cm3:.3g}",
+                f"{fit.slope:+.4g}",
+                f"{fit.r_squared:.4f}",
+                f"{fit.window[0]:+.3f} … {fit.window[1]:+.3f}",
+                str(fit.points),
+            ))
+        return rows
+
+    def mott_schottky_materials(self) -> list[str]:
+        from ..echem.mott_schottky import semiconductors
+
+        return [""] + sorted(semiconductors())
+
+    def mott_schottky_report(self) -> str:
+        result = self.mott_schottky()
+        if result is None:
+            return ""
+        return result.summary()
 
     def eis_analyses(self) -> list:
         """One :class:`EISResult` per loaded spectrum, cached.
@@ -526,6 +654,8 @@ class EchemSession:
         out.extend(self.gcd_series)
         out.extend(s for s in self.eis_series
                    if not any(s is c for c in out))
+        out.extend(s for s in self.ms_series
+                   if not any(s is c for c in out))
         return out
 
     def clear(self, kind: str) -> None:
@@ -533,6 +663,9 @@ class EchemSession:
             self.rate_series = []
         elif kind == "gcd_series":
             self.gcd_series = []
+        elif kind == "ms_series":
+            self.ms_series = []
+            self._ms_result = None
         elif kind == "eis_series":
             # Identity, not equality: these are dataclasses with arrays
             # inside, so `in` calls the generated __eq__ and then fails
@@ -565,6 +698,12 @@ class EchemSession:
         if self.eis_series:
             names = ", ".join(s.name for s in self.eis_series)
             out["eis_series"] = f"{len(self.eis_series)} espectros: {names}"
+        if self.ms_series:
+            biases = [s.metadata.get("potencial_cd_v", 0.0)
+                      for s in self.ms_series]
+            out["ms_series"] = (
+                f"{len(self.ms_series)} potenciales: "
+                f"{min(biases):+.3f} … {max(biases):+.3f} V")
         if self.lsv is not None:
             out["lsv"] = f"{self.reaction}: {self.lsv.describe()}"
         return out

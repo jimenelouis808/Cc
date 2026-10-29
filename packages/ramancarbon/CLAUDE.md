@@ -3219,3 +3219,78 @@ xvfb-run -a python -m pytest ramancarbon/tests/test_gui_wiring.py -k whole_suite
 ```
 
 Ninguna de las tres cubre si la ventana se ve bien.
+
+## Mott-Schottky no es para un carbono poroso
+
+La ecuación describe la capacitancia de una **capa de agotamiento**: un
+semiconductor con bandas que se doblan, un portador con una densidad finita
+y un espesor que crece con el potencial. Un carbono activado no tiene eso.
+Su capacitancia es la de la doble capa sobre una superficie enorme, y la
+pendiente de `1/C²` contra `E` de los tres PEIS de este repositorio no mide
+ninguna densidad de portadores: mide cómo se llena un poro.
+
+La pestaña existe porque el usuario tiene **otras** muestras,
+semiconductoras. No se aplica a las de carbono, y el módulo lo dice en su
+propio encabezado antes que cualquier otra cosa.
+
+## Lo que se mide NO es `C_sc`
+
+La celda da la serie `1/C = 1/C_sc + 1/C_H`. La ecuación de Mott-Schottky
+describe la medida sólo mientras `C_sc ≪ C_H`, y eso deja de valer
+justamente en el extremo del que se lee el corte con el eje, cerca de banda
+plana. `HELMHOLTZ_F_PER_CM2 = 20e-6` y `HELMHOLTZ_SHARE = 0.20` están para
+**avisar** de dónde se cruza esa frontera, nunca para corregir nada: a un
+20 % de la capacitancia de Helmholtz el error en `1/C²` ya es del 44 %.
+
+En la comprobación de extremo a extremo de este paquete ese sesgo se ve
+entero: con una N y una E_fb plantadas, la sesión devuelve N un 2.5 % baja
+y E_fb 16 mV corrida. No es un error del ajuste; es la serie con la capa de
+Helmholtz, y sale en la dirección que predice el párrafo de arriba.
+
+## La respuesta depende de la frecuencia, y eso ES el resultado
+
+Es el problema más conocido de la técnica. En un electrodo real la
+capacitancia dispersa, así que `E_fb` y `N` salen distintas a 1 kHz y a
+100 Hz. **Un diagrama de Mott-Schottky a una sola frecuencia no es una
+medida de nada**, y `mott_schottky` recibe una serie por frecuencia
+precisamente por eso: con una sola lo informa como lo que es. El defecto de
+la pestaña son tres, 1000, 500 y 100 Hz, y `FLAT_BAND_SPREAD_V` (50 mV) y
+`DENSITY_SPREAD_FACTOR` (2×) deciden cuándo la dispersión pasa de detalle a
+conclusión.
+
+La capacitancia que entra en el diagrama es la **de serie**,
+`C_s = −1/(ωZ″)`, interpolada en log f y nunca extrapolada: es la que usa
+la ecuación. No es la `C′` de la sección de impedancia, que es otra cosa
+(ver más arriba) y sirve para otra pregunta.
+
+## Los dos prefactores, otra vez
+
+`N ∝ 1/(ε A²)`, con las dos consecuencias de siempre:
+
+- **El área va al cuadrado.** Un área geométrica en un electrodo rugoso o
+  poroso se equivoca en ese cuadrado. La misma aritmética que
+  Randles-Ševčík, la misma consecuencia.
+- **La ε es un valor de literatura** que cambia con la fase, la
+  orientación y el dopaje — la anatasa 48 y el rutilo 100, que es más del
+  doble. Vive en `database/data/echem.json`, tabla `semiconductors`, con su
+  `source` y su `confidence`, como todo valor de literatura de este
+  paquete. Trece materiales; ninguno escrito en Python.
+
+## El signo de la pendiente es el tipo, y kT/e cambia de signo con él
+
+Pendiente positiva, tipo n; negativa, tipo p. Y el término térmico se
+retira **en el sentido del barrido**: `E_fb = cruce − kT/e` para un tipo n,
+`cruce + kT/e` para un tipo p. 25.7 mV a temperatura ambiente no es nada
+despreciable al lado de la incertidumbre que suele citarse.
+
+Un detalle que costó una prueba: un barrido de tipo p **tiene que parar
+antes del corte**. Pasado `E_fb − kT/e` la recta `1/C²` es negativa y
+`1/sqrt` de eso no es real. La prueba sintética lo respeta ahora.
+
+## La región lineal se busca, no se supone
+
+`_fit_window` reutiliza `evaluate._longest_linear`, el mismo buscador que
+el resto de la sección. Un diagrama de Mott-Schottky es lineal sólo en
+agotamiento; ajustar el barrido entero promedia eso con los tramos donde el
+modelo no vale. `MIN_LINEAR_FRACTION` (30 % de la ventana) y
+`MIN_LINEAR_POINTS` (6) deciden si el ajuste merece citarse.

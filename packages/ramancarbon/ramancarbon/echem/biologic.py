@@ -1168,6 +1168,27 @@ def to_curve(
         # drawing convention, and negating it on the way in is what keeps
         # every circuit fit downstream from silently changing sign.
         impedance = real[keep] - 1j * minus_imaginary[keep]
+        # The DC bias the spectrum was measured AT, read off the file.
+        #
+        # Worth carrying because a whole technique depends on it: a
+        # Mott-Schottky plot is the capacitance against the DC potential,
+        # so a folder of PEIS files at different biases already holds the
+        # measurement and the only thing missing was which potential each
+        # one belongs to. Typing them back in by hand is how a point ends
+        # up on the wrong abscissa.
+        bias = data.columns.get("<Ewe>/V")
+        if bias is None:
+            bias = data.columns.get("Ewe/V")
+        if bias is not None and bias.size:
+            values = np.asarray(bias, dtype=float)[keep[:bias.size]] \
+                if keep.size == bias.size else np.asarray(bias, dtype=float)
+            metadata["potencial_cd_v"] = float(np.median(values))
+            spread = float(values.max() - values.min())
+            metadata["potencial_cd_recorrido_v"] = spread
+        amplitude = data.columns.get("|Ewe|/V")
+        if amplitude is not None and amplitude.size:
+            metadata["amplitud_mv"] = 1e3 * float(
+                np.median(np.asarray(amplitude, dtype=float)))
         return Impedance(frequency=frequency[keep], z=impedance,
                          electrode=electrode, name="EIS (EC-Lab)",
                          metadata=metadata)

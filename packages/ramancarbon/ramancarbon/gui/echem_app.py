@@ -91,6 +91,7 @@ class EchemApp(SectionApp):
             "tafel": self._draw_tafel,
             "polarisation": self._draw_polarisation,
             "composite": self._draw_composite,
+            "mott_schottky": self._draw_mott_schottky,
         }
         # By NOTEBOOK INDEX, so it follows the order tabs are ADDED and
         # not the order the methods sit in the file. Inserting a tab in
@@ -104,7 +105,8 @@ class EchemApp(SectionApp):
             4: ("drt",),
             5: ("capacitance", "ragone"),
             6: ("tafel", "polarisation"),
-            7: ("composite",),
+            7: ("mott_schottky",),
+            8: ("composite",),
         }
         self._build()
         self.set_status("Carga una medida o pulsa Demo.")
@@ -144,6 +146,7 @@ class EchemApp(SectionApp):
         self._build_tab_drt()
         self._build_tab_capacitance()
         self._build_tab_catalysis()
+        self._build_tab_mott_schottky()
         self._build_tab_figure()
         self.root.after(150, self.drain_queue)
 
@@ -263,6 +266,7 @@ class EchemApp(SectionApp):
             ("Añadir a la serie GCD…", lambda: self._load("gcd_series")),
             ("Cargar EIS…", lambda: self._load("eis")),
             ("Añadir a la serie de EIS…", lambda: self._load("eis_series")),
+            ("Añadir a Mott-Schottky…", lambda: self._load("ms_series")),
             ("Cargar EIS de Nyquist + Bode…", self._load_eis_pair),
             ("Cargar polarización…", lambda: self._load("lsv")),
         ):
@@ -691,6 +695,125 @@ class EchemApp(SectionApp):
         info.pack(fill="both", expand=True)
         self.catalysis_text = scrolled_text(info_body, self.palette,
                                             self.fonts["mono"], height=12)
+
+    def _build_tab_mott_schottky(self) -> None:
+        """1/C² against E, for a semiconductor electrode.
+
+        Its own tab rather than a corner of the impedance one, because
+        it is a different EXPERIMENT: impedance there is one spectrum
+        per sample and here it is one spectrum per potential of the same
+        sample, and the two sets would be mixed by anyone who found them
+        in the same place.
+        """
+        ttk, tk = self.ttk, self.tk
+        tab = ttk.Frame(self.notebook, padding=PAD["md"])
+        self.notebook.add(tab, text="  Mott-Schottky  ")
+
+        controls = ttk.Frame(tab)
+        controls.pack(fill="x", pady=(0, PAD["sm"]))
+        ttk.Label(controls, text="Material").pack(side="left")
+        self.ms_material_var = tk.StringVar(value="")
+        ttk.Combobox(controls, textvariable=self.ms_material_var, width=16,
+                     state="readonly",
+                     values=self.session.mott_schottky_materials()).pack(
+            side="left", padx=(PAD["xs"], PAD["md"]))
+        ttk.Label(controls, text="ε a mano").pack(side="left")
+        self.ms_epsilon_var = tk.StringVar(value="")
+        ttk.Entry(controls, textvariable=self.ms_epsilon_var, width=8).pack(
+            side="left", padx=(PAD["xs"], PAD["md"]))
+        ttk.Label(controls, text="Frecuencias (Hz)").pack(side="left")
+        self.ms_frequencies_var = tk.StringVar(value="1000, 500, 100")
+        ttk.Entry(controls, textvariable=self.ms_frequencies_var,
+                  width=20).pack(side="left", padx=(PAD["xs"], PAD["md"]))
+        ttk.Label(controls, text="T (K)").pack(side="left")
+        self.ms_temperature_var = tk.StringVar(value="298.15")
+        ttk.Entry(controls, textvariable=self.ms_temperature_var,
+                  width=8).pack(side="left", padx=(PAD["xs"], PAD["md"]))
+        ttk.Button(controls, text="Calcular",
+                   command=self._refresh_mott_schottky).pack(side="left")
+
+        paned, (top, bottom) = split_column(tab, (3, 2))
+        paned.pack(fill="both", expand=True)
+        outer, body = card(top, None)
+        outer.pack(fill="both", expand=True)
+        self.make_canvas(body, "mott_schottky", lambda f: f.add_subplot(111),
+                         figsize=(7.6, 4.2))
+
+        info, info_body = card(bottom, "Una fila por frecuencia")
+        info.pack(fill="both", expand=True)
+        self.ms_table = table(
+            info_body,
+            ["f (Hz)", "tipo", "E_fb (V)", "± (V)", "N (cm⁻³)", "± (cm⁻³)",
+             "pendiente", "R²", "ventana (V)", "puntos"],
+            height=5)
+        hint(info_body,
+             "Una fila por FRECUENCIA y no una sola, porque ése es el "
+             "problema conocido del método: en un electrodo real la "
+             "capacitancia dispersa, así que E_fb y N salen distintos a "
+             "1 kHz y a 100 Hz, y un Mott-Schottky a una frecuencia no es "
+             "la medida de nada. Lo que se cita es el intervalo. Además: "
+             "lo medido es C_sc EN SERIE con la capa de Helmholtz, así que "
+             "la recta sólo describe el agotamiento —el programa avisa "
+             "dónde deja de hacerlo—; la región lineal se BUSCA y no se "
+             "supone; y N va como 1/(ε·A²), así que una ε de otra fase o "
+             "el área geométrica de un electrodo rugoso se llevan la "
+             "densidad de portadores por delante. El E_fb no necesita ni "
+             "ε ni área.",
+             wrap=900)
+
+    def _settings_from_mott_schottky(self) -> None:
+        session = self.session
+        session.ms_material = self.ms_material_var.get().strip()
+        text = self.ms_epsilon_var.get().strip()
+        try:
+            session.ms_epsilon = float(text) if text else None
+        except ValueError:
+            session.ms_epsilon = None
+        frequencies = []
+        for chunk in self.ms_frequencies_var.get().replace(";", ",").split(","):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            try:
+                frequencies.append(float(chunk))
+            except ValueError:
+                continue
+        if frequencies:
+            session.ms_frequencies = tuple(frequencies)
+        try:
+            session.ms_temperature_k = float(self.ms_temperature_var.get())
+        except ValueError:
+            pass
+        session._ms_result = None
+
+    def _refresh_mott_schottky(self) -> None:
+        self._settings_from_mott_schottky()
+        rows = self.session.mott_schottky_rows()
+        fill_table(self.ms_table, list(rows[0]), [list(r) for r in rows[1:]])
+        self.with_style("mott_schottky", self._draw_mott_schottky)
+        self.flush_messages(self.session.messages)
+        result = self.session.mott_schottky()
+        if result is not None and result.available:
+            best = result.consensus()
+            self.set_status(
+                f"Mott-Schottky: tipo {best.carrier_type}, "
+                f"E_fb = {best.flat_band_v:+.3f} V a "
+                f"{best.frequency_hz:.4g} Hz"
+                + (f"; E_fb se mueve {1e3 * result.flat_band_spread():.0f} mV "
+                   "entre frecuencias" if len(result.fits) > 1 else "")
+            )
+
+    def _draw_mott_schottky(self, figure) -> None:
+        from .figures_echem import PANELS_BY_KEY, CompositeFigure
+
+        axis = figure.add_subplot(111)
+        spec = CompositeFigure(panels=["mott_schottky"], letters=False)
+        if len(self.session.ms_series) < 2:
+            placeholder(axis, self.figure_palette,
+                        "Carga espectros de impedancia a varios potenciales")
+            return
+        PANELS_BY_KEY["mott_schottky"].draw(
+            axis, self.session, spec, self.figure_palette)
 
     def _build_tab_figure(self) -> None:
         """The multi-panel figure: choose the panels, lay them out, export.
@@ -1399,12 +1522,18 @@ class EchemApp(SectionApp):
                 "(la muestra, la temperatura, el potencial…)",
                 initialvalue=Path(path).stem, parent=self.root)
             ok = self.session.add_eis_to_series(path, label=label or "")
+        elif kind == "ms_series":
+            # No label: these are the same electrode at different
+            # potentials and the potential is in the file.
+            ok = self.session.add_to_mott_schottky(path)
         elif kind == "lsv":
             ok = self.session.load_lsv(path)
         self.flush_messages(self.session.messages)
         if ok:
             self._refresh_cycle_choices()
             self._refresh_figure_panels()
+            if kind == "ms_series":
+                self._refresh_mott_schottky()
             # Say what normalisation the numbers will use. A blank mass is
             # invisible until a capacitance comes back without its F/g,
             # three tabs later.
