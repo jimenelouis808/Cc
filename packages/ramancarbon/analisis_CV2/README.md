@@ -29,6 +29,17 @@ columnas (ciclos de 400, 200, 100, 40, 20 y 10 s sobre 1.000 V).
 La figura es `cv_serie.{png,pdf}`. Los cuatro paneles contestan cuatro
 preguntas distintas y están puestos en el orden en que hay que leerlos.
 
+> **La hace la ventana, no un script.** `figuras.py` ya no dibuja nada:
+> monta la misma `EchemSession` que usa la sección de electroquímica,
+> elige cuatro paneles del catálogo y llama a `save_figure` — que es el
+> botón «Guardar figura…» de la pestaña Figura. Cualquiera de estos
+> paneles se marca con una casilla ahí, y la figura sale con los mismos
+> números que enseñan las demás pestañas porque es la misma sesión.
+>
+> **Las etiquetas de los ejes van en inglés** y la ventana sigue en
+> español: son dos públicos distintos. Se cambia en «Etiquetas» de esa
+> misma pestaña.
+
 ---
 
 ### (a) Los seis voltamperogramas

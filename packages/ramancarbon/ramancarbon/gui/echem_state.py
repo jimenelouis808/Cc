@@ -34,8 +34,10 @@ from ..echem.eis import (
     save_user_circuit,
 )
 from ..echem.io import EchemIOError, read_cv, read_eis, read_gcd
-from .figures_echem import (CompositeFigure, available_panels,
-                            draw_composite, save_composite)
+from .figures_echem import (PRESET_LABELS, CompositeFigure,
+                            apply_preset, available_panels,
+                            default_panels, draw_composite, every_axes,
+                            save_composite)
 from ..echem.report import EchemResult, analyse_sample
 
 #: The kinds of measurement a session holds, and what each one is for.
@@ -1402,6 +1404,40 @@ class EchemSession:
         """The panels whose data are loaded, as :class:`PanelSpec`."""
         return available_panels(self)
 
+    def figure_presets(self) -> tuple[tuple[str, str], ...]:
+        """``(key, label)`` for every layout preset on offer."""
+        return PRESET_LABELS
+
+    def use_figure_preset(self, name: str) -> bool:
+        """Set width, height, columns, font size and dpi from a preset.
+
+        The panels chosen are left alone: a preset is about where the
+        figure is GOING — one journal column, two, a slide — and that is
+        independent of which panels it holds.
+        """
+        if not apply_preset(self.composite, name):
+            self.log("error", f"no hay ningún preajuste llamado «{name}»")
+            return False
+        self.log("info", f"preajuste «{name}»: "
+                         f"{self.composite.width_in:g}″ de ancho, letra "
+                         f"{self.composite.font_size:g}, "
+                         f"{self.composite.dpi} ppp")
+        return True
+
+    def standard_figure(self) -> list[str]:
+        """Choose the panels this project publishes, for what is loaded.
+
+        One action instead of a column of checkboxes. The friction of
+        picking panels by hand every time is the kind that stops a
+        figure being made at all, and the defaults are the figures the
+        field actually prints — not the first entries of the list.
+        """
+        self.composite.panels = default_panels(self)
+        if not self.composite.panels:
+            self.log("error",
+                     "no hay nada cargado con lo que hacer una figura")
+        return list(self.composite.panels)
+
     def set_figure_panels(self, keys) -> None:
         """Choose the panels, keeping the order they are offered in.
 
@@ -1468,7 +1504,7 @@ class EchemSession:
                                          single.panel_height_in))
                 draw_composite(figure, single, self, palette)
                 rows: list[tuple] = [("serie", "x", "y")]
-                for axis in figure.axes:
+                for axis in every_axes(figure):
                     for line in axis.get_lines():
                         name = line.get_label()
                         if name.startswith("_"):

@@ -18,28 +18,175 @@ already follows: :class:`CompositeFigure` is the choice of panels, the
 layout and the options, it converts to a dictionary and back, and
 :func:`draw_composite` is the only thing that touches matplotlib. So a
 figure survives a saved project and comes back identical.
+
+**The axis labels default to ENGLISH and the interface stays Spanish.**
+Those are two different audiences: the window is for the person running
+the experiment and the figure is for whoever reads the paper, and this
+group publishes in English. The language is an option, not a constant,
+because the same measurement goes into a thesis chapter and into a paper
+and they are not always in the same language.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import numpy as np
 
 from .theme import Palette
 
-#: Letters for the panels, in order. Lower case with brackets, which is
-#: what almost every journal asks for and what the eye reads as a panel
-#: label rather than as part of the data.
+#: Letters for the panels, in order. Lower case in brackets, bold, which
+#: is what almost every journal asks for and what the eye reads as a
+#: panel label rather than as part of the data.
 LETTERS = "abcdefghijkl"
 
-#: Default colours for a series of samples or of scan rates, in order.
-#: Okabe–Ito, like the rest of the package: safe for colour blindness and
-#: still separable in greyscale. NOT matplotlib's default cycle.
-SERIES_COLOURS = ("#0072B2", "#009E73", "#D55E00", "#CC79A7", "#E69F00",
-                  "#56B4E9", "#F0E442", "#000000")
+#: Axis labels and legend entries, in both languages.
+#:
+#: A table rather than inline strings because a figure that mixes "E / V"
+#: with "duración del ciclo" is the single most visible way a figure
+#: looks unfinished, and inline strings guarantee it as soon as anyone
+#: adds a panel.
+LABELS: dict[str, dict[str, str]] = {
+    "en": {
+        "potential": "E / V vs {reference}",
+        "potential_plain": "E / V",
+        "rhe": "E / V vs RHE",
+        "current_mass": "i / A g$^{-1}$",
+        "current": "i / A",
+        "rate": r"$\nu$ / mV s$^{-1}$",
+        "capacitance_mass": "C / F g$^{-1}$",
+        "capacitance": "C / F",
+        "loop": r"loop $\div\ 2\nu\Delta V$  (leak included)",
+        "reduction": r"reduction charge $\div\ \Delta V$",
+        "efficiency": "Q$_{red}$/Q$_{ox}$",
+        "duration": "cycle duration / s",
+        "charge": "charge / µC",
+        "q_ox": r"$Q_{ox}$",
+        "q_red": r"$Q_{red}$",
+        "q_red_mean": r"$\langle Q_{red}\rangle$",
+        "delta_q": r"$\Delta Q$",
+        "leak_fit": r"$\langle i_{par}\rangle t$",
+        "k_terms": "k$_{cap}$, k$_{diff}$",
+        "k_cap": r"$k_{cap}$ / µF",
+        "k_diff": r"$k_{diff}$ / µA (V/s)$^{-1/2}$",
+        "i_par": r"$i_{par}$ / µA",
+        "current_at": "|i| at {rate} mV/s  /  µA",
+        "surface": r"$k_{cap}\cdot\nu$",
+        "diffusive": r"$k_{diff}\cdot\sqrt{\nu}$",
+        "parasitic": r"$i_{par}$",
+        "z_real": "Z′ / Ω",
+        "z_imag": "−Z″ / Ω",
+        "frequency": "f / Hz",
+        "modulus": "|Z| / Ω",
+        "modulus_solid": "|Z| / Ω  (solid)",
+        "phase": "phase / degrees",
+        "phase_dashed": "phase / degrees  (dashed)",
+        "c_real": "C′ / µF",
+        "c_real_solid": "C′ / µF  (solid)",
+        "c_imag_dashed": "C″ / µF  (dashed)",
+        "tau": r"$\tau$ / s",
+        "gamma": r"$\gamma(\tau)$ / $\gamma_{max}$",
+        "gamma_max": "max",
+        "residual": "|Z − Z$_{fit}$| / |Z|  /  %",
+        "kk_residual": "KK residual / %",
+        "measured": "measured",
+        "fit": "fit",
+        "nyquist": "Nyquist",
+        "bode": "Bode",
+        "slope45": "45° slope",
+        "rs_marker": "▼ R$_s$ from the data",
+        "knee_marker": "● knee: phase = −45°",
+        "tau0_marker": "■ C″ maximum → τ₀",
+        "drt_note": "▲ a pore has no τ of its own",
+        "pick_panel": "Choose at least one panel",
+        "failed": "{label}\ncould not be drawn",
+        "oer": "O$_2$/H$_2$O",
+        "her": "H$^+$/H$_2$",
+    },
+    "es": {
+        "potential": "E / V vs {reference}",
+        "potential_plain": "E / V",
+        "rhe": "E / V vs RHE",
+        "current_mass": "i / A g$^{-1}$",
+        "current": "i / A",
+        "rate": r"$\nu$ / mV s$^{-1}$",
+        "capacitance_mass": "C / F g$^{-1}$",
+        "capacitance": "C / F",
+        "loop": r"lazo $\div\ 2\nu\Delta V$  (con la fuga)",
+        "reduction": r"carga de reducción $\div\ \Delta V$",
+        "efficiency": "Q$_{red}$/Q$_{ox}$",
+        "duration": "duración del ciclo / s",
+        "charge": "carga / µC",
+        "q_ox": r"$Q_{ox}$",
+        "q_red": r"$Q_{red}$",
+        "q_red_mean": r"$\langle Q_{red}\rangle$",
+        "delta_q": r"$\Delta Q$",
+        "leak_fit": r"$\langle i_{par}\rangle t$",
+        "k_terms": "k$_{cap}$, k$_{diff}$",
+        "k_cap": r"$k_{cap}$ / µF",
+        "k_diff": r"$k_{diff}$ / µA (V/s)$^{-1/2}$",
+        "i_par": r"$i_{par}$ / µA",
+        "current_at": "|i| a {rate} mV/s  /  µA",
+        "surface": r"$k_{cap}\cdot\nu$",
+        "diffusive": r"$k_{diff}\cdot\sqrt{\nu}$",
+        "parasitic": r"$i_{par}$",
+        "z_real": "Z′ / Ω",
+        "z_imag": "−Z″ / Ω",
+        "frequency": "f / Hz",
+        "modulus": "|Z| / Ω",
+        "modulus_solid": "|Z| / Ω  (continua)",
+        "phase": "fase / grados",
+        "phase_dashed": "fase / grados  (discontinua)",
+        "c_real": "C′ / µF",
+        "c_real_solid": "C′ / µF  (continua)",
+        "c_imag_dashed": "C″ / µF  (discontinua)",
+        "tau": r"$\tau$ / s",
+        "gamma": r"$\gamma(\tau)$ / $\gamma_{máx}$",
+        "gamma_max": "máx",
+        "residual": "|Z − Z$_{aj}$| / |Z|  /  %",
+        "kk_residual": "residuo KK / %",
+        "measured": "medido",
+        "fit": "ajuste",
+        "nyquist": "Nyquist",
+        "bode": "Bode",
+        "slope45": "pendiente 45°",
+        "rs_marker": "▼ R$_s$ de los datos",
+        "knee_marker": "● codo: fase = −45°",
+        "tau0_marker": "■ máximo de C″ → τ₀",
+        "drt_note": "▲ un poro no tiene τ propia",
+        "pick_panel": "Elige al menos un panel",
+        "failed": "{label}\nno se pudo dibujar",
+        "oer": "O$_2$/H$_2$O",
+        "her": "H$^+$/H$_2$",
+    },
+}
+
+#: The four-colour scheme of a published figure: measurement, model,
+#: second quantity, and the grey that reference lines are drawn in.
+#:
+#: Not a categorical palette. These are ROLES — what is measured, what
+#: the model says, the quantity on the twin axis — and a figure where
+#: "the fitted curve" is the same colour in every panel is a figure that
+#: is learned once.
+INK = "#1a1a19"
+MODEL = "#d4213d"
+SECOND = "#6250d6"
+GREY = "#8a8a84"
+
+#: Colours for a SERIES: scan rates, samples, temperatures. Okabe–Ito
+#: ordered so that consecutive entries stay apart, safe for colour
+#: blindness and still separable in greyscale. NOT matplotlib's default
+#: cycle.
+SERIES_COLOURS = ("#2a78d6", "#1baf7a", "#eda100", "#eb6834", "#d4213d",
+                  "#6250d6", "#0072B2", "#CC79A7")
+
+#: Equilibrium potential of the oxygen and hydrogen electrodes on the RHE
+#: scale, in volts. They do not move with pH on that scale, which is the
+#: whole reason a window is read against RHE.
+OER_V_VS_RHE = 1.23
+HER_V_VS_RHE = 0.0
 
 
 def _colour(index: int) -> str:
@@ -63,25 +210,39 @@ class CompositeFigure:
     two are about 7, and the pairing of width with font size is what
     makes a figure legible — drawing at 7 and shrinking to 3.3 halves
     every label."""
-    panel_height_in: float = 3.1
-    dpi: int = 220
+    panel_height_in: float = 3.0
+    dpi: int = 600
+    """600 for a raster going into a manuscript; the PDF is resolution
+    independent either way."""
+    language: str = "en"
+    """``"en"`` or ``"es"``. The axis labels only: the window, the report
+    and every message stay Spanish."""
     letters: bool = True
+    letters_inside: bool = True
+    """Bottom-right inside the frame, which is how the figures this
+    style came from are drawn. Off puts them above the frame, which never
+    collides with anything."""
     legends: bool = True
     grid: bool = False
+    reference_axis: bool = True
+    """Draw the RHE axis on top of a potential panel, and the O₂ line in
+    it, when the electrode declares a pH and a reference. Silently
+    skipped when it cannot be computed, because a guessed pH is 59 mV
+    per unit of error."""
+    font_size: float = 8.5
     title: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "panels": list(self.panels), "columns": self.columns,
-            "width_in": self.width_in, "panel_height_in": self.panel_height_in,
-            "dpi": self.dpi, "letters": self.letters, "legends": self.legends,
-            "grid": self.grid, "title": self.title,
-        }
+        return {name: getattr(self, name)
+                for name in self.__dataclass_fields__}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "CompositeFigure":
-        known = {f for f in cls.__dataclass_fields__}
-        return cls(**{k: v for k, v in data.items() if k in known})
+        known = set(cls.__dataclass_fields__)
+        values = {k: v for k, v in data.items() if k in known}
+        if "panels" in values:
+            values["panels"] = list(values["panels"])
+        return cls(**values)
 
     @property
     def rows(self) -> int:
@@ -89,6 +250,55 @@ class CompositeFigure:
 
     def figsize(self) -> tuple[float, float]:
         return (self.width_in, self.panel_height_in * self.rows)
+
+    def text(self, key: str, **kwargs) -> str:
+        r"""One label, in the chosen language.
+
+        Substitution is by explicit `replace`, **not** by
+        ``str.format``. Almost every label here is LaTeX and LaTeX is
+        made of braces: ``$\langle i_{par}\rangle$`` sent through
+        ``format`` raises ``KeyError: 'par'``, and the label that did it
+        was the one carrying the measured leak current.
+        """
+        table = LABELS.get(self.language, LABELS["en"])
+        value = table.get(key) or LABELS["en"].get(key, key)
+        for name, replacement in kwargs.items():
+            value = value.replace("{" + name + "}", str(replacement))
+        return value
+
+
+#: Ready-made starting points. The names say what the figure is FOR,
+#: because the width and the font size are not independent choices: a
+#: figure drawn at 7 inches and shrunk into one column arrives with every
+#: label at half size, and that is the commonest way a good figure comes
+#: out unreadable.
+PRESETS: dict[str, dict[str, Any]] = {
+    "articulo_2col": {"width_in": 7.2, "panel_height_in": 3.0, "columns": 2,
+                      "font_size": 8.5, "dpi": 600},
+    "articulo_1col": {"width_in": 3.4, "panel_height_in": 2.8, "columns": 1,
+                      "font_size": 7.5, "dpi": 600},
+    "presentacion": {"width_in": 10.0, "panel_height_in": 4.4, "columns": 2,
+                     "font_size": 12.0, "dpi": 200},
+    "tesis": {"width_in": 6.0, "panel_height_in": 3.2, "columns": 2,
+              "font_size": 9.0, "dpi": 400},
+}
+
+PRESET_LABELS: tuple[tuple[str, str], ...] = (
+    ("articulo_2col", "Artículo, dos columnas (7.2″)"),
+    ("articulo_1col", "Artículo, una columna (3.4″)"),
+    ("presentacion", "Presentación (10″, letra grande)"),
+    ("tesis", "Tesis (6″)"),
+)
+
+
+def apply_preset(spec: CompositeFigure, name: str) -> bool:
+    """Set the layout fields of a preset, keeping the panels chosen."""
+    values = PRESETS.get(name)
+    if values is None:
+        return False
+    for field_name, value in values.items():
+        setattr(spec, field_name, value)
+    return True
 
 
 @dataclass(frozen=True)
@@ -99,15 +309,15 @@ class PanelSpec:
     label: str
     """What the checkbox says."""
     needs: str
-    """What has to be loaded: ``"rates"``, ``"eis_series"``, ``"eis"``,
-    ``"cv"``. A panel whose data are missing is not offered, rather than
-    offered and then drawn empty."""
+    """What has to be loaded: ``"rates"``, ``"eis"``, ``"cv"``. A panel
+    whose data are missing is not offered, rather than offered and then
+    drawn empty."""
     draw: Callable[..., None]
     note: str = ""
     """One line on what the panel is for, shown next to the checkbox."""
 
 
-# -- what each panel needs from the session ----------------------------
+# -- shared furniture --------------------------------------------------
 
 
 def _rate_curves(session) -> list:
@@ -120,16 +330,6 @@ def _eis_list(session) -> list:
     return [session.eis] if session.eis is not None else []
 
 
-def _tidy(axis, spec: CompositeFigure) -> None:
-    axis.tick_params(which="both", direction="in", top=True, right=True,
-                     labelsize=8)
-    if spec.grid:
-        axis.grid(True, which="major", linewidth=0.4, alpha=0.35)
-
-
-# -- the voltammetry panels --------------------------------------------
-
-
 def _rate_label(curve) -> str:
     """The scan rate as a person would write it.
 
@@ -140,10 +340,134 @@ def _rate_label(curve) -> str:
     return f"{1e3 * curve.scan_rate:.3g} mV/s"
 
 
+def every_axes(figure) -> list:
+    """Every axes a figure holds, **insets included**.
+
+    ``figure.axes`` does not list them: an axes made with
+    ``Axes.inset_axes`` is a CHILD of the one it sits in, so it appears
+    in that axes' ``child_axes`` and nowhere else. Twins and secondary
+    axes do appear, which is why the omission went unnoticed — the grid
+    was switched off on five axes out of six and the inset of the
+    Nyquist panel kept drawing one.
+    """
+    out = []
+    for axes in figure.axes:
+        out.append(axes)
+        out.extend(axes.child_axes)
+    return out
+
+
+def _set_grid(axis, spec: CompositeFigure) -> None:
+    """Turn the grid on or off, and **never pass line properties with a
+    false first argument**.
+
+    ``axis.grid(False, linewidth=0.4)`` does not turn the grid off: it
+    turns it ON, with a warning, because matplotlib reads "you gave me
+    line properties, so you must want a grid". The suite's matplotlib
+    style sets ``axes.grid: True`` for the on-screen figures — right
+    there, wrong in a manuscript — so every exported figure came out
+    carrying a grid, from code that had asked three times for it to go
+    away.
+    """
+    if spec.grid:
+        axis.grid(True, which="major", linewidth=0.4, alpha=0.3)
+    else:
+        axis.grid(False)
+
+
+def _tidy(axis, spec: CompositeFigure, log_x: bool = False) -> None:
+    """Ticks inwards on all four sides, minor ticks, and the font size.
+
+    Inward ticks on all four sides is the convention of every journal
+    this work goes to, and it is applied in one place so a new panel
+    cannot forget it.
+    """
+    from matplotlib.ticker import AutoMinorLocator
+
+    axis.tick_params(which="both", direction="in", top=True, right=True,
+                     labelsize=spec.font_size - 0.5)
+    if not log_x and axis.get_xscale() == "linear":
+        axis.xaxis.set_minor_locator(AutoMinorLocator())
+    if axis.get_yscale() == "linear":
+        axis.yaxis.set_minor_locator(AutoMinorLocator())
+    axis.set_xlabel(axis.get_xlabel(), fontsize=spec.font_size)
+    axis.set_ylabel(axis.get_ylabel(), fontsize=spec.font_size)
+    _set_grid(axis, spec)
+
+
+def _rhe_shift(session) -> Optional[float]:
+    """Volts to add to the measured potential to get RHE, or ``None``.
+
+    ``None`` is a refusal and it travels: without a pH the conversion is
+    59 mV per unit of error, so the secondary axis is simply not drawn
+    rather than drawn on a guess.
+    """
+    curve = (session.cv or (session.rate_series[0]
+                            if session.rate_series else None))
+    if curve is None:
+        return None
+    probe = np.array([0.0])
+    converted, _ = curve.electrode.to_rhe(probe)
+    if converted is None:
+        return None
+    return float(converted[0])
+
+
+def _reference_axis(axis, session, spec: CompositeFigure) -> None:
+    """The RHE axis on top, with the O₂ line where it belongs.
+
+    The second axis is the reason a window means anything: a limit at
+    +0.4 V vs Ag/AgCl says nothing by itself, and the same limit at
+    +1.455 V vs RHE says it is 225 mV above the oxygen electrode.
+    """
+    if not spec.reference_axis:
+        return
+    shift = _rhe_shift(session)
+    if shift is None:
+        return
+    oxygen = OER_V_VS_RHE - shift
+    low, high = axis.get_xlim()
+    if low <= oxygen <= high:
+        axis.axvline(oxygen, color=MODEL, linewidth=0.9,
+                     linestyle=(0, (4, 2)), zorder=1)
+    hydrogen = HER_V_VS_RHE - shift
+    if low <= hydrogen <= high:
+        axis.axvline(hydrogen, color=SECOND, linewidth=0.9,
+                     linestyle=(0, (4, 2)), zorder=1)
+    top = axis.secondary_xaxis(
+        "top", functions=(lambda e: e + shift, lambda e: e - shift))
+    top.set_xlabel(spec.text("rhe"), fontsize=spec.font_size)
+    top.tick_params(which="both", direction="in",
+                    labelsize=spec.font_size - 0.5)
+
+
+def _potential_axis(axis, session, spec: CompositeFigure, curve) -> str:
+    """Label the potential axis with the scale the session is drawing."""
+    _, label, _ = curve.electrode.on_scale(curve.potential[:1],
+                                           session.potential_scale_choice)
+    if session.potential_scale_choice == "medido":
+        # The DISPLAY name from the database, not the key: "Ag/AgCl_sat"
+        # is how the table is indexed and "Ag/AgCl (KCl sat.)" is what
+        # goes on an axis.
+        from ..echem.curve import load_echem_database
+
+        key = curve.electrode.reference or ""
+        table = load_echem_database().get("reference_electrodes", {})
+        reference = table.get(key, {}).get("axis", key)
+        label = (spec.text("potential", reference=reference) if reference
+                 else spec.text("potential_plain"))
+    axis.set_xlabel(label)
+    return label
+
+
+# -- the voltammetry panels --------------------------------------------
+
+
 def _panel_cv_series(axis, session, spec, palette) -> None:
+    """The voltammogram of the reporting cycle, one per scan rate."""
     curves = _rate_curves(session)
-    label = "E / V"
-    unit = "i / A"
+    unit = spec.text("current")
+    last = None
     for index, curve in enumerate(curves):
         # The REPORTING cycle's own arrays. Masking the whole file by
         # which potentials appear in the cycle looks equivalent and is
@@ -151,38 +475,54 @@ def _panel_cv_series(axis, session, spec, palette) -> None:
         # potentials once per cycle, so every cycle in the file came
         # through and the panel drew the lot.
         cycle, _ = curve.reporting_cycle()
-        values, label, _ = cycle.electrode.on_scale(
+        values, _, _ = cycle.electrode.on_scale(
             cycle.potential, session.potential_scale_choice)
         current = cycle.electrode.specific(cycle.current, "mass")
         if current is None:
-            current, unit = cycle.current, "i / A"
+            current, unit = cycle.current, spec.text("current")
         else:
-            unit = "i / A g$^{-1}$"
+            unit = spec.text("current_mass")
         axis.plot(values, current, color=_colour(index), linewidth=1.3,
-                  label=_rate_label(curve))
+                  label=_rate_label(curve), zorder=3)
+        last = cycle
     axis.set_ylabel(unit)
-    axis.axhline(0.0, color=palette.border, linewidth=0.6)
-    axis.set_xlabel(label)
+    axis.axhline(0.0, color=GREY, linewidth=0.6, zorder=1)
+    if last is not None:
+        _potential_axis(axis, session, spec, last)
+    # Headroom so a three-column legend sits above the loops instead of
+    # on them.
+    low, high = axis.get_ylim()
+    axis.set_ylim(low, high + 0.38 * (high - low))
     if spec.legends and curves:
-        axis.legend(frameon=False, fontsize=7.5, ncol=2, handlelength=1.4,
-                    columnspacing=1.0)
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
+                    loc="upper left", ncol=3, columnspacing=1.0,
+                    handlelength=1.5)
     _tidy(axis, spec)
+    _reference_axis(axis, session, spec)
 
 
 def _panel_cv_capacitance(axis, session, spec, palette) -> None:
-    from ..echem.cv import capacitance, coulombic_efficiency
+    """Both capacitance conventions against ν, with the efficiency on top.
 
-    from ..echem.cv import reversible_capacitance
+    The efficiency belongs in this panel and not in one of its own: a
+    capacitance that falls with ν and an efficiency that rises with it
+    are the two faces of the same leak, and separating them invites the
+    reader to call the first a transport limitation.
+    """
+    from matplotlib.ticker import NullFormatter, NullLocator
+
+    from ..echem.cv import (capacitance, coulombic_efficiency,
+                            reversible_capacitance)
 
     curves = _rate_curves(session)
-    # `Capacitance` carries its own specific values, by convention and
-    # by basis; it is NOT a bare number, and dividing one by a mass is
-    # how this panel first came back with a type error instead of a
-    # figure.
-    per_gram = bool(curves and curves[0].electrode.mass_mg)
+    if not curves:
+        return
+    per_gram = bool(curves[0].electrode.mass_mg)
     rates, loop, reversible, efficiency = [], [], [], []
     for curve in curves:
         cycle, _ = curve.reporting_cycle()
+        # `Capacitance` carries its own specific values, by convention
+        # and by basis; it is NOT a bare number.
         value, _ = capacitance(cycle)
         other = reversible_capacitance(cycle)
         rates.append(1e3 * curve.scan_rate)
@@ -190,93 +530,203 @@ def _panel_cv_capacitance(axis, session, spec, palette) -> None:
         reversible.append(other.specific_f_per_g if per_gram
                           else other.farads)
         efficiency.append(coulombic_efficiency(cycle))
-    axis.plot(rates, loop, "o-", color=_colour(0), markersize=5,
-              linewidth=1.3, label="lazo ÷ 2νΔV")
-    axis.plot(rates, reversible, "s-", color=_colour(1), markersize=5,
-              linewidth=1.3, label="carga de reducción ÷ ΔV")
-    axis.set_xlabel("ν / mV s$^{-1}$")
-    axis.set_ylabel("C / F g$^{-1}$" if per_gram else "C / F")
+    axis.plot(rates, loop, "o-", color=INK, markersize=5, linewidth=1.3,
+              zorder=3, label=spec.text("loop"))
+    axis.plot(rates, reversible, "s-", color=SECOND, markersize=5,
+              linewidth=1.3, zorder=3, label=spec.text("reduction"))
     twin = axis.twinx()
-    twin.plot(rates, efficiency, "^--", color=_colour(2), markersize=5,
-              linewidth=1.1)
-    twin.set_ylabel("Q$_{red}$/Q$_{ox}$", color=_colour(2), fontsize=8.5)
-    twin.tick_params(axis="y", colors=_colour(2), labelsize=8, direction="in")
+    twin.plot(rates, efficiency, "^--", color=MODEL, markersize=5,
+              linewidth=1.1, zorder=2)
+    twin.set_ylabel(spec.text("efficiency"), color=MODEL,
+                    fontsize=spec.font_size)
+    twin.tick_params(axis="y", colors=MODEL, direction="in",
+                     labelsize=spec.font_size - 0.5)
+    twin.set_ylim(min(efficiency) - 0.08, 1.04)
+    # Logarithmic in ν with the MEASURED rates as the ticks. A rate
+    # series is geometric — 5, 10, 20, 50, 100, 200 — so on a linear
+    # axis the four slow ones pile up against the origin, which is
+    # exactly where the interesting part is.
+    axis.set_xscale("log")
+    axis.xaxis.set_minor_locator(NullLocator())
+    axis.xaxis.set_minor_formatter(NullFormatter())
+    axis.set_xticks(rates)
+    axis.set_xticklabels([f"{rate:.3g}" for rate in rates])
+    axis.set_xlabel(spec.text("rate"))
+    axis.set_ylabel(spec.text("capacitance_mass") if per_gram
+                    else spec.text("capacitance"))
+    span = max(loop + reversible) - min(loop + reversible)
+    axis.set_ylim(min(loop + reversible) - 0.15 * span,
+                  max(loop + reversible) + 0.22 * span)
     if spec.legends:
-        axis.legend(frameon=False, fontsize=7.5, handlelength=1.5)
-    axis.tick_params(which="both", direction="in", top=True, labelsize=8)
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
+                    loc="upper right", handlelength=1.6)
+        axis.annotate(spec.text("efficiency"),
+                      xy=(rates[1], efficiency[1]),
+                      xycoords=("data", "axes fraction"), xytext=(8, -28),
+                      textcoords="offset points",
+                      fontsize=spec.font_size - 1.0, color=MODEL)
+    _tidy(axis, spec, log_x=True)
 
 
-def _panel_cv_balance(axis, session, spec, palette) -> None:
-    """ΔQ against cycle duration: the parasitic current, measured.
+def _panel_cv_charge(axis, session, spec, palette) -> None:
+    """The charge balance: Q_ox, Q_red and their difference against time.
 
-    The slope IS the leak averaged over the cycle, and the intercept has
-    to be zero — that is the check on the model, and it is why this panel
-    belongs next to any capacitance quoted from a loop.
+    ΔQ against the cycle's duration is the measurement of the parasitic
+    current — the slope is ⟨i_par⟩ and the intercept has to be zero, so
+    the intercept is the check on the model rather than a result. The
+    panel shows the two charges as well because that is what makes the
+    difference readable: a Q_ox that climbs with the duration while
+    Q_red stays flat IS the leak, drawn.
     """
     from ..echem.cv import elapsed_time, integrate_charge
 
     curves = _rate_curves(session)
-    durations, deltas = [], []
-    for index, curve in enumerate(curves):
+    duration, oxidation, reduction, labels = [], [], [], []
+    for curve in curves:
         cycle, _ = curve.reporting_cycle()
         time, _ = elapsed_time(cycle)
-        oxidation, absolute, _ = integrate_charge(cycle)
-        reduction = absolute - oxidation
-        durations.append(float(time[-1]))
-        deltas.append(1e6 * (oxidation - reduction))
-        axis.plot([durations[-1]], [deltas[-1]], "o", color=_colour(index),
-                  markersize=6, zorder=3, label=_rate_label(curve))
-    leak = getattr(session.result, "rates", None)
-    leak = getattr(leak, "leakage", None) if leak else None
-    if leak is not None and durations:
-        grid = np.linspace(0.0, max(durations) * 1.05, 32)
-        axis.plot(grid, 1e6 * (leak.leakage_a * grid + leak.offset_c),
-                  "-", color=palette.fitted, linewidth=1.2, zorder=2,
-                  label=f"⟨i⟩ = {1e6 * leak.leakage_a:.2f} µA  "
-                        f"(R² = {leak.r_squared:.3f})")
-    axis.axhline(0.0, color=palette.border, linewidth=0.6)
-    axis.set_xlabel("duración del ciclo / s")
-    axis.set_ylabel("ΔQ = Q$_{ox}$ − Q$_{red}$  /  µC")
+        anodic, absolute, _ = integrate_charge(cycle)
+        duration.append(float(time[-1]))
+        oxidation.append(1e6 * anodic)
+        reduction.append(1e6 * (absolute - anodic))
+        labels.append(_rate_label(curve))
+    if not duration:
+        return
+    duration = np.asarray(duration)
+    oxidation = np.asarray(oxidation)
+    reduction = np.asarray(reduction)
+
+    study = getattr(session.result, "rates", None)
+    leak = getattr(study, "leakage", None) if study else None
+    if leak is not None:
+        grid = np.linspace(0.0, 1.1 * duration.max(), 50)
+        axis.plot(grid, 1e6 * (leak.offset_c + leak.leakage_a * grid),
+                  color=MODEL, linewidth=1.3, zorder=2,
+                  label=(f"{spec.text('leak_fit')}, "
+                         f"{1e6 * leak.leakage_a:.2f} µA, "
+                         f"R² = {leak.r_squared:.3f}"))
+    axis.axhline(float(reduction.mean()), color=GREY, linewidth=1.0,
+                 linestyle=":", zorder=1, label=spec.text("q_red_mean"))
+    axis.plot(duration, oxidation, "o", color=INK, markersize=5, zorder=4,
+              label=spec.text("q_ox"))
+    axis.plot(duration, reduction, "s", color=SECOND, markersize=5,
+              zorder=4, label=spec.text("q_red"))
+    axis.plot(duration, oxidation - reduction, "^", color=MODEL,
+              markersize=5.5, zorder=4, label=spec.text("delta_q"))
+    # Only the ends and the middle: one label per point on a series that
+    # bunches up at short durations is a smudge, and the axis already
+    # says what the duration is.
+    for index in {0, len(duration) - 1}:
+        x = float(duration[index])
+        y = float(oxidation[index] - reduction[index])
+        near = x < 0.2 * float(duration.max())
+        axis.annotate(labels[index], (x, y), textcoords="offset points",
+                      xytext=((7, 11) if near else (-6, 9)),
+                      fontsize=spec.font_size - 1.5, color=GREY,
+                      ha="left" if near else "right")
+    axis.set_xlabel(spec.text("duration"))
+    axis.set_ylabel(spec.text("charge"))
+    axis.set_xlim(0.0, 1.14 * float(duration.max()))
+    axis.set_ylim(0.0, 1.30 * float(oxidation.max()))
     if spec.legends:
-        axis.legend(frameon=False, fontsize=7, handlelength=1.3)
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.7,
+                    loc="upper left", ncol=2, columnspacing=0.9,
+                    handlelength=1.4)
     _tidy(axis, spec)
 
 
 def _panel_cv_terms(axis, session, spec, palette) -> None:
-    """The three contributions to i(ν), potential by potential."""
+    """The three coefficients of ``i = k_cap·ν + k_diff·√ν + i_par``.
+
+    With their error bars, because which coefficients the series
+    DETERMINES is as much the result as their values: a term whose
+    standard error is as large as itself is a term the series cannot
+    see.
+    """
     study = getattr(session.result, "rates", None)
     models = getattr(study, "full_model", None) if study else None
     if not models:
         return
+    potential = np.array([m.potential for m in models])
+    axis.errorbar(potential, [1e6 * m.capacitance_f for m in models],
+                  yerr=[1e6 * m.errors[0] for m in models],
+                  fmt="o-", color=INK, markersize=4.5, linewidth=1.2,
+                  capsize=2.5, zorder=3, label=spec.text("k_cap"))
+    axis.errorbar(potential, [1e6 * m.diffusive for m in models],
+                  yerr=[1e6 * m.errors[1] for m in models],
+                  fmt="s-", color=SECOND, markersize=4.5, linewidth=1.2,
+                  capsize=2.5, zorder=3, label=spec.text("k_diff"))
+    twin = axis.twinx()
+    twin.errorbar(potential, [1e6 * m.leakage_a for m in models],
+                  yerr=[1e6 * m.errors[2] for m in models],
+                  fmt="^--", color=MODEL, markersize=4.5, linewidth=1.1,
+                  capsize=2.5, zorder=2)
+    # The zero line is the point of the twin axis: i_par changes SIGN
+    # across a window that reaches the oxygen and the hydrogen regions,
+    # and where it crosses is where the parasitic reaction turns round.
+    twin.axhline(0.0, color=MODEL, linewidth=0.6, linestyle=":")
+    twin.set_ylabel(spec.text("i_par"), color=MODEL, fontsize=spec.font_size)
+    twin.tick_params(axis="y", colors=MODEL, direction="in",
+                     labelsize=spec.font_size - 0.5)
+    biggest = max(abs(1e6 * m.leakage_a) + abs(1e6 * m.errors[2])
+                  for m in models)
+    twin.set_ylim(-1.25 * biggest, 1.25 * biggest)
+    curve = session.cv or (session.rate_series[0]
+                           if session.rate_series else None)
+    if curve is not None:
+        _potential_axis(axis, session, spec, curve)
+    axis.set_ylabel(spec.text("k_terms"))
+    tallest = max(1e6 * (abs(m.capacitance_f) + m.errors[0]) for m in models)
+    axis.set_ylim(0.0, 1.30 * tallest)
+    if spec.legends:
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
+                    loc="upper left", handlelength=1.6)
+    _tidy(axis, spec)
+    _reference_axis(axis, session, spec)
+
+
+def _panel_cv_stack(axis, session, spec, palette) -> None:
+    """The three contributions as a stacked area at the slowest rate.
+
+    The coefficients panel says what the fit measured; this says what it
+    MEANS at the rate where the parasitic term matters most, which is
+    the slow end.
+    """
+    study = getattr(session.result, "rates", None)
+    models = getattr(study, "full_model", None) if study else None
+    if not models or not session.rate_series:
+        return
     slowest = min(session.rate_series, key=lambda c: c.scan_rate).scan_rate
-    potentials = [m.potential for m in models]
-    capacitive = [1e6 * abs(m.capacitance_f * slowest) for m in models]
-    diffusive = [1e6 * abs(m.diffusive * math.sqrt(slowest)) for m in models]
-    parasitic = [1e6 * abs(m.leakage_a) for m in models]
+    potential = np.array([m.potential for m in models])
+    first = np.array([1e6 * abs(m.capacitance_f * slowest) for m in models])
+    second = first + np.array([1e6 * abs(m.diffusive * math.sqrt(slowest))
+                               for m in models])
+    third = second + np.array([1e6 * abs(m.leakage_a) for m in models])
     # Cumulative boundaries drawn as LINES with the bands filled between
     # them, rather than `stackplot`. Visually the same stack; the
     # difference is that a stackplot leaves no Line2D behind, so the
     # panel came out of "save the figure's numbers" with nothing but its
     # header — a figure whose numbers cannot be exported has to be
     # retyped to be used anywhere else.
-    first = np.asarray(capacitive)
-    second = first + np.asarray(diffusive)
-    third = second + np.asarray(parasitic)
-    base = np.zeros_like(first)
-    for upper, lower, colour, label in (
-        (first, base, _colour(0), "k$_{cap}$·ν"),
-        (second, first, _colour(1), "k$_{dif}$·√ν"),
-        (third, second, _colour(2), "i$_{par}$"),
+    for upper, lower, colour, key in (
+        (first, np.zeros_like(first), INK, "surface"),
+        (second, first, SECOND, "diffusive"),
+        (third, second, MODEL, "parasitic"),
     ):
-        axis.fill_between(potentials, lower, upper, color=colour, alpha=0.8,
+        axis.fill_between(potential, lower, upper, color=colour, alpha=0.75,
                           linewidth=0.0)
-        axis.plot(potentials, upper, "-", color=colour, linewidth=1.1,
-                  label=label)
-    axis.set_xlabel("E / V")
-    axis.set_ylabel(f"|i| a {1e3 * slowest:.3g} mV/s  /  µA")
+        axis.plot(potential, upper, "-", color=colour, linewidth=1.1,
+                  label=spec.text(key))
+    curve = session.cv or session.rate_series[0]
+    _potential_axis(axis, session, spec, curve)
+    axis.set_ylabel(spec.text("current_at", rate=f"{1e3 * slowest:.3g}"))
+    axis.set_ylim(0.0, 1.30 * float(third.max()))
     if spec.legends:
-        axis.legend(frameon=False, fontsize=7.5, loc="upper left")
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
+                    loc="upper left", ncol=3, columnspacing=1.0,
+                    handlelength=1.4)
     _tidy(axis, spec)
+    _reference_axis(axis, session, spec)
 
 
 def _panel_dunn(axis, session, spec, palette) -> None:
@@ -295,16 +745,35 @@ def _panel_dunn(axis, session, spec, palette) -> None:
 # -- the impedance panels ----------------------------------------------
 
 
-def _panel_nyquist(axis, session, spec, palette) -> None:
-    """The whole spectrum, log–log, with the fit.
+def _nyquist_limit(spectra) -> float:
+    """Where to cut the high-frequency corner of a Nyquist plot.
 
-    Logarithmic on both axes because a porous electrode spans four
-    decades of |Z|: on linear axes the four lowest-frequency points fill
-    the figure and everything else is a dot at the origin.
+    Six times the largest series resistance. Bounded by the RESISTANCES
+    and not by the data: one decade of frequency more puts the capacitive
+    tail on the axis and flattens the corner, which is the part the
+    figure is for.
     """
+    return 6.0 * max(float(s.z.real.min()) for s in spectra)
+
+
+def _panel_nyquist(axis, session, spec, palette) -> None:
+    """Nyquist at EQUAL aspect, with the high-frequency corner inset.
+
+    The aspect is not cosmetic and it is the reason this panel is drawn
+    this way rather than with free limits: a Nyquist plot is read by its
+    shape, so a box whose axes run 0–1400 against 0–8000 draws the 45°
+    region of a porous electrode almost vertical, and anyone reading a
+    depression angle or a transport regime off it is reading the axes.
+    The inset is how the field shows the corner without giving up the
+    aspect: it is the commonest supercapacitor figure there is.
+    """
+    spectra = _eis_list(session)
     analyses = session.eis_analyses()
-    for index, (spectrum, analysis) in enumerate(zip(_eis_list(session),
-                                                     analyses)):
+    if not spectra:
+        return
+    high = max(float(max(s.z.real.max(), (-s.z.imag).max()))
+               for s in spectra) * 1.05
+    for index, (spectrum, analysis) in enumerate(zip(spectra, analyses)):
         axis.plot(spectrum.z.real, -spectrum.z.imag, "o",
                   color=_colour(index), markersize=3.2,
                   markerfacecolor="none", markeredgewidth=0.9, zorder=3,
@@ -313,27 +782,48 @@ def _panel_nyquist(axis, session, spec, palette) -> None:
         if fit is not None and fit.fitted is not None:
             axis.plot(fit.fitted.real, -fit.fitted.imag, "-",
                       color=_colour(index), linewidth=1.2, zorder=2)
-    axis.set_xscale("log")
-    axis.set_yscale("log")
-    axis.set_xlabel("Z′ / Ω")
-    axis.set_ylabel("−Z″ / Ω")
+    axis.set_xlim(0.0, high)
+    axis.set_ylim(0.0, high)
+    axis.set_aspect("equal", adjustable="box")
+    axis.set_xlabel(spec.text("z_real"))
+    axis.set_ylabel(spec.text("z_imag"))
     if spec.legends:
-        axis.legend(frameon=False, fontsize=7.5, handlelength=1.2)
-    axis.tick_params(which="both", direction="in", top=True, right=True,
-                     labelsize=8)
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
+                    loc="upper left", handlelength=1.2, borderpad=0.2)
+    _tidy(axis, spec)
+
+    limit = _nyquist_limit(spectra)
+    if limit <= 0.0 or limit >= high:
+        return
+    inset = axis.inset_axes((0.54, 0.17, 0.42, 0.42))
+    for index, (spectrum, analysis) in enumerate(zip(spectra, analyses)):
+        keep = -spectrum.z.imag <= limit
+        inset.plot(spectrum.z.real[keep], -spectrum.z.imag[keep], "o",
+                   color=_colour(index), markersize=2.4,
+                   markerfacecolor="none", markeredgewidth=0.7, zorder=3)
+        fit = analysis.fit if analysis else None
+        if fit is not None and fit.fitted is not None:
+            inset.plot(fit.fitted.real[keep], -fit.fitted.imag[keep], "-",
+                       color=_colour(index), linewidth=1.0, zorder=2)
+        if analysis is not None and analysis.series_resistance is not None:
+            inset.plot([analysis.series_resistance], [0.0], "v",
+                       color=_colour(index), markersize=4, zorder=4)
+    inset.plot([0.0, limit], [0.0, limit], linestyle=(0, (3, 2)),
+               color=GREY, linewidth=0.8, zorder=1)
+    inset.set_xlim(0.0, limit)
+    inset.set_ylim(0.0, limit)
+    inset.set_aspect("equal", adjustable="box")
+    inset.tick_params(which="both", direction="in", top=True, right=True,
+                      labelsize=spec.font_size - 2.5)
 
 
 def _panel_nyquist_corner(axis, session, spec, palette) -> None:
-    """The high-frequency corner, linear and SQUARE.
-
-    A Nyquist plot is read by its shape, so an aspect ratio other than
-    one turns a 45° line into whatever angle the box happens to give.
-    """
+    """The high-frequency corner on its own, linear and square."""
     spectra = _eis_list(session)
     analyses = session.eis_analyses()
     if not spectra:
         return
-    limit = 6.0 * max(float(s.z.real.min()) for s in spectra)
+    limit = _nyquist_limit(spectra)
     for index, (spectrum, analysis) in enumerate(zip(spectra, analyses)):
         keep = -spectrum.z.imag <= limit
         axis.plot(spectrum.z.real[keep], -spectrum.z.imag[keep], "o",
@@ -347,17 +837,91 @@ def _panel_nyquist_corner(axis, session, spec, palette) -> None:
         if analysis is not None and analysis.series_resistance is not None:
             axis.plot([analysis.series_resistance], [0.0], "v",
                       color=_colour(index), markersize=5, zorder=4)
-    axis.plot([0.0, limit], [0.0, limit], linestyle=(0, (4, 2)),
-              color=palette.border, linewidth=0.9, zorder=1)
+    axis.plot([0.0, limit], [0.0, limit], linestyle=(0, (4, 2)), color=GREY,
+              linewidth=0.9, zorder=1)
+    axis.text(0.80 * limit, 0.86 * limit, spec.text("slope45"), color=GREY,
+              fontsize=spec.font_size - 1.5, rotation=45, ha="center",
+              va="center")
     axis.set_xlim(0.0, limit)
     axis.set_ylim(0.0, limit)
     axis.set_aspect("equal", adjustable="box")
-    axis.set_xlabel("Z′ / Ω")
-    axis.set_ylabel("−Z″ / Ω")
+    axis.set_xlabel(spec.text("z_real"))
+    axis.set_ylabel(spec.text("z_imag"))
     if spec.legends:
-        axis.legend(frameon=False, fontsize=7, handlelength=1.2)
-    axis.tick_params(which="both", direction="in", top=True, right=True,
-                     labelsize=8)
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.5,
+                    loc="upper left", handlelength=1.2, borderpad=0.2)
+    axis.text(0.03, 0.05, spec.text("rs_marker"), transform=axis.transAxes,
+              ha="left", fontsize=spec.font_size - 1.5, color=GREY)
+    _tidy(axis, spec)
+
+
+def _panel_nyquist_bode(axis, session, spec, palette) -> None:
+    """Nyquist and Bode phase in ONE box: frequency on top, phase right.
+
+    The compact presentation several groups use, offered because people
+    use it — and with the caveat that goes with it. The two curves share
+    a frame and nothing else: the Nyquist runs against Z′ on the bottom
+    axis and the phase against f on the top one, so a point of one has
+    no counterpart in the other and the eye will try to find one anyway.
+    The Nyquist here also cannot be at equal aspect, since the box is
+    shared, so the 45° region is drawn at whatever angle the limits give.
+    :func:`_panel_nyquist` keeps the aspect and insets the corner, which
+    is what this one trades away.
+    """
+    spectra = _eis_list(session)
+    analyses = session.eis_analyses()
+    if not spectra:
+        return
+    # Three axes, not two, and that is the catch of this format.
+    # `axis.twiny()` keeps the LEFT y, which here is −Z″ in ohms, so the
+    # phase (−90 to 0) drew as a flat line on the floor of the Nyquist.
+    # The phase needs its own y AND its own x: a twinx for the y, then a
+    # twiny OF THAT for the x.
+    phase = axis.twinx()
+    top = phase.twiny()
+    top.set_xscale("log")
+    # High frequency on the LEFT, which is how a Bode plot is read and
+    # how the sample figures this follows are drawn.
+    top.set_xlim(max(float(s.frequency.max()) for s in spectra),
+                 min(float(s.frequency.min()) for s in spectra))
+    for index, (spectrum, analysis) in enumerate(zip(spectra, analyses)):
+        colour = _colour(index)
+        name = spectrum.name if len(spectra) > 1 else ""
+        axis.plot(spectrum.z.real, -spectrum.z.imag, "s-", color=colour,
+                  markersize=3.0, linewidth=0.9, zorder=3,
+                  label=f"{spec.text('nyquist')}{f' — {name}' if name else ''}")
+        top.plot(spectrum.frequency, spectrum.phase_deg, "o", color=colour,
+                 markersize=3.4, markerfacecolor=colour, alpha=0.75,
+                 zorder=2,
+                 label=f"{spec.text('bode')}{f' — {name}' if name else ''}")
+    axis.set_xlabel(spec.text("z_real"))
+    axis.set_ylabel(spec.text("z_imag"))
+    top.set_xlabel(spec.text("frequency"), fontsize=spec.font_size)
+    top.tick_params(which="both", direction="in",
+                    labelsize=spec.font_size - 0.5)
+    phase.set_ylabel(spec.text("phase"), fontsize=spec.font_size)
+    # Phase increasing DOWNWARDS, so −90° is at the top: that is how the
+    # reference figures for this format are drawn, and it puts the
+    # capacitive end of the sweep next to the capacitive end of the
+    # Nyquist instead of mirrored against it.
+    phase.set_ylim(5.0, -95.0)
+    phase.tick_params(which="both", direction="in",
+                      labelsize=spec.font_size - 0.5)
+    top.set_ylim(*phase.get_ylim())
+    axis.set_xlim(0.0, None)
+    axis.set_ylim(0.0, None)
+    if spec.legends:
+        handles, labels = axis.get_legend_handles_labels()
+        extra = top.get_legend_handles_labels()
+        # Anchored just above the floor so it clears the panel letter,
+        # which sits in that corner.
+        axis.legend(handles + extra[0], labels + extra[1], frameon=False,
+                    fontsize=spec.font_size - 1.5, loc="lower right",
+                    bbox_to_anchor=(1.0, 0.10), handlelength=1.4)
+    axis.tick_params(which="both", direction="in",
+                     labelsize=spec.font_size - 0.5)
+    axis.set_xlabel(axis.get_xlabel(), fontsize=spec.font_size)
+    axis.set_ylabel(axis.get_ylabel(), fontsize=spec.font_size)
 
 
 def _panel_bode(axis, session, spec, palette) -> None:
@@ -379,19 +943,23 @@ def _panel_bode(axis, session, spec, palette) -> None:
             phase.plot([knee], [KNEE_PHASE_DEG], "o", color=_colour(index),
                        markersize=5, markeredgecolor=palette.surface,
                        markeredgewidth=0.8, zorder=5)
-    phase.axhline(KNEE_PHASE_DEG, color=palette.border, linewidth=0.7,
+    phase.axhline(KNEE_PHASE_DEG, color=GREY, linewidth=0.7,
                   linestyle=(0, (1, 2)), zorder=1)
     axis.set_xscale("log")
     axis.set_yscale("log")
-    axis.set_xlabel("f / Hz")
-    axis.set_ylabel("|Z| / Ω  (continua)")
-    phase.set_ylabel("fase / grados  (discontinua)", fontsize=8.5)
+    axis.set_xlabel(spec.text("frequency"))
+    axis.set_ylabel(spec.text("modulus_solid"))
+    phase.set_ylabel(spec.text("phase_dashed"), fontsize=spec.font_size)
     phase.set_ylim(-95.0, 5.0)
-    phase.tick_params(which="both", direction="in", labelsize=8)
-    axis.tick_params(which="both", direction="in", top=True, labelsize=8)
+    phase.tick_params(which="both", direction="in",
+                      labelsize=spec.font_size - 0.5)
+    phase.text(0.97, 0.30, spec.text("knee_marker"),
+               transform=phase.transAxes, ha="right", va="bottom",
+               fontsize=spec.font_size - 1.5, color=GREY)
     if spec.legends:
-        axis.legend(frameon=False, fontsize=7.5, handlelength=1.2,
-                    loc="lower left")
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
+                    loc="lower left", handlelength=1.2)
+    _tidy(axis, spec, log_x=True)
 
 
 def _panel_complex_capacitance(axis, session, spec, palette) -> None:
@@ -416,13 +984,18 @@ def _panel_complex_capacitance(axis, session, spec, palette) -> None:
                         markeredgecolor=palette.surface, markeredgewidth=0.8,
                         zorder=5)
     axis.set_xscale("log")
-    axis.set_xlabel("f / Hz")
-    axis.set_ylabel("C′ / µF  (continua)")
-    second.set_ylabel("C″ / µF  (discontinua)", fontsize=8.5)
-    second.tick_params(which="both", direction="in", labelsize=8)
-    axis.tick_params(which="both", direction="in", top=True, labelsize=8)
+    axis.set_xlabel(spec.text("frequency"))
+    axis.set_ylabel(spec.text("c_real_solid"))
+    second.set_ylabel(spec.text("c_imag_dashed"), fontsize=spec.font_size)
+    second.tick_params(which="both", direction="in",
+                       labelsize=spec.font_size - 0.5)
+    second.text(0.97, 0.62, spec.text("tau0_marker"),
+                transform=second.transAxes, ha="right",
+                fontsize=spec.font_size - 1.5, color=GREY, va="top")
     if spec.legends:
-        axis.legend(frameon=False, fontsize=7.5, handlelength=1.2)
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
+                    handlelength=1.2)
+    _tidy(axis, spec, log_x=True)
 
 
 def _panel_drt_series(axis, session, spec, palette) -> None:
@@ -446,17 +1019,21 @@ def _panel_drt_series(axis, session, spec, palette) -> None:
             continue
         axis.plot(result.tau_s[inside], gamma / peak, "-",
                   color=_colour(index), linewidth=1.3, zorder=3,
-                  label=f"{spectrum.name}  (γ$_{{máx}}$ = {peak:.0f} Ω)")
+                  label=f"{spectrum.name}  "
+                        f"({spec.text('gamma_max')} {peak:.0f} Ω)")
         for tau in result.peaks_s:
             axis.plot([tau], [0.0], "^", color=_colour(index), markersize=5,
                       clip_on=False, zorder=5)
     axis.set_xscale("log")
     axis.set_ylim(0.0, 1.18)
-    axis.set_xlabel("τ / s")
-    axis.set_ylabel("γ(τ) / γ$_{máx}$")
+    axis.set_xlabel(spec.text("tau"))
+    axis.set_ylabel(spec.text("gamma"))
+    axis.text(0.03, 0.46, spec.text("drt_note"), transform=axis.transAxes,
+              ha="left", va="top", fontsize=spec.font_size - 1.5, color=GREY)
     if spec.legends:
-        axis.legend(frameon=False, fontsize=7, handlelength=1.2)
-    _tidy(axis, spec)
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.5,
+                    loc="upper left", handlelength=1.2)
+    _tidy(axis, spec, log_x=True)
 
 
 def _panel_eis_residual(axis, session, spec, palette) -> None:
@@ -476,21 +1053,39 @@ def _panel_eis_residual(axis, session, spec, palette) -> None:
                   markersize=2.8, linewidth=1.0, zorder=3,
                   label=f"{spectrum.name}: {fit.circuit} "
                         f"({fit.residual_pct:.2f} %)")
-    axis.axhline(0.0, color=palette.border, linewidth=0.6)
+    axis.axhline(0.0, color=GREY, linewidth=0.6, zorder=1)
     axis.set_xscale("log")
-    axis.set_xlabel("f / Hz")
-    axis.set_ylabel("|Z − Z$_{aj}$| / |Z|  /  %")
+    axis.set_xlabel(spec.text("frequency"))
+    axis.set_ylabel(spec.text("residual"))
+    low, high = axis.get_ylim()
+    axis.set_ylim(low, high + 0.35 * (high - low))
     if spec.legends:
-        axis.legend(frameon=False, fontsize=7, handlelength=1.3)
-    _tidy(axis, spec)
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.5,
+                    loc="upper right", handlelength=1.3)
+    _tidy(axis, spec, log_x=True)
 
 
 def _panel_kk(axis, session, spec, palette) -> None:
-    from .plots_echem import plot_kk_residuals
-
-    result = getattr(session.result, "eis", None) if session.result else None
-    if result is not None:
-        plot_kk_residuals(axis, result, palette)
+    for index, (spectrum, analysis) in enumerate(
+            zip(_eis_list(session), session.eis_analyses())):
+        kk = analysis.kk if analysis else None
+        if kk is None:
+            continue
+        axis.semilogx(spectrum.frequency, 100.0 * kk.residual_real, "o-",
+                      color=_colour(index), markersize=2.5, linewidth=0.7,
+                      zorder=3,
+                      label=f"{spectrum.name} (Z′, "
+                            f"{'ok' if kk.passes else '✗'})")
+        axis.semilogx(spectrum.frequency, 100.0 * kk.residual_imag,
+                      linestyle=(0, (3, 2)), marker="s", markersize=2.5,
+                      linewidth=0.7, color=_colour(index), zorder=2)
+    axis.axhline(0.0, color=GREY, linewidth=0.6, zorder=1)
+    axis.set_xlabel(spec.text("frequency"))
+    axis.set_ylabel(spec.text("kk_residual"))
+    if spec.legends:
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.5,
+                    loc="upper right", handlelength=1.3)
+    _tidy(axis, spec, log_x=True)
 
 
 #: Every panel the composite figure can hold, in the order they are
@@ -499,28 +1094,37 @@ def _panel_kk(axis, session, spec, palette) -> None:
 ECHEM_PANELS: tuple[PanelSpec, ...] = (
     PanelSpec("cv_serie", "CV: la serie de velocidades", "rates",
               _panel_cv_series,
-              "los voltamperogramas del ciclo elegido, uno por velocidad"),
+              "los voltamperogramas del ciclo elegido, con el eje RHE y la "
+              "línea del O₂ arriba"),
     PanelSpec("cv_capacitancia", "CV: capacitancia y eficiencia contra ν",
               "rates", _panel_cv_capacitance,
-              "los dos convenios de capacitancia y Q_red/Q_ox encima"),
-    PanelSpec("cv_balance", "CV: balance de carga contra la duración",
-              "rates", _panel_cv_balance,
-              "ΔQ contra t: la pendiente es la corriente parásita y la "
-              "ordenada tiene que ser cero"),
-    PanelSpec("cv_terminos", "CV: las tres contribuciones a i(ν)", "rates",
-              _panel_cv_terms,
-              "k_cap·ν, k_dif·√ν e i_par potencial a potencial; necesita "
-              "cuatro velocidades o más"),
+              "los dos convenios de capacitancia en ν logarítmica, con "
+              "Q_red/Q_ox encima: las dos caras de la misma fuga"),
+    PanelSpec("cv_carga", "CV: el balance de carga", "rates",
+              _panel_cv_charge,
+              "Q_ox, Q_red y ΔQ contra la duración; la pendiente es la "
+              "corriente parásita y la ordenada tiene que ser cero"),
+    PanelSpec("cv_terminos", "CV: k_cap, k_diff e i_par con sus errores",
+              "rates", _panel_cv_terms,
+              "los tres coeficientes potencial a potencial; cuáles están "
+              "DETERMINADOS es tanto resultado como sus valores"),
+    PanelSpec("cv_pila", "CV: las tres contribuciones apiladas", "rates",
+              _panel_cv_stack,
+              "qué fracción de la corriente se lleva cada término a la "
+              "velocidad más lenta"),
     PanelSpec("cv_dunn", "CV: la separación de Dunn", "cv", _panel_dunn,
               "el ciclo cerrado con la parte superficial sembrada dentro"),
-    PanelSpec("eis_nyquist", "EIS: Nyquist completo (log-log)", "eis",
+    PanelSpec("eis_nyquist", "EIS: Nyquist cuadrado con recuadro", "eis",
               _panel_nyquist,
-              "todo el barrido; en lineal las cuatro frecuencias más bajas "
-              "se comen la figura"),
-    PanelSpec("eis_rincon", "EIS: el rincón de alta frecuencia (cuadrado)",
-              "eis", _panel_nyquist_corner,
-              "lineal y a escala uno a uno, que es como se lee la forma; "
-              "con la R_s medida marcada"),
+              "a escala uno a uno, con el rincón de alta frecuencia en un "
+              "recuadro. La figura más usada del campo"),
+    PanelSpec("eis_rincon", "EIS: sólo el rincón de alta frecuencia", "eis",
+              _panel_nyquist_corner,
+              "el mismo recuadro en un panel entero, con la R_s medida"),
+    PanelSpec("eis_nyquist_bode", "EIS: Nyquist y Bode en la misma caja",
+              "eis", _panel_nyquist_bode,
+              "el formato compacto: frecuencia arriba y fase a la derecha. "
+              "Ojo, el Nyquist ahí NO puede ir a escala uno a uno"),
     PanelSpec("eis_bode", "EIS: Bode con el codo marcado", "eis",
               _panel_bode,
               "|Z| y la fase, con el cruce de −45° de cada espectro"),
@@ -530,7 +1134,7 @@ ECHEM_PANELS: tuple[PanelSpec, ...] = (
               "máximo de C″"),
     PanelSpec("eis_drt", "EIS: la DRT normalizada", "eis",
               _panel_drt_series,
-              "γ(τ) de cada espectro sobre su propio máximo, solo en el "
+              "γ(τ) de cada espectro sobre su propio máximo, sólo en el "
               "intervalo medido"),
     PanelSpec("eis_residuo", "EIS: el residuo del ajuste", "eis",
               _panel_eis_residual,
@@ -543,6 +1147,18 @@ ECHEM_PANELS: tuple[PanelSpec, ...] = (
 
 PANELS_BY_KEY: dict[str, PanelSpec] = {p.key: p for p in ECHEM_PANELS}
 
+#: The panels a figure starts with, by what is loaded. These are the
+#: defaults because they are the figures the field publishes, not
+#: because they are the first in the list: four CV panels that between
+#: them say what was measured, what it gives, what leaks and what the
+#: rate study resolves; and for impedance the Nyquist-with-inset and the
+#: Bode, which is the pair every supercapacitor paper carries.
+DEFAULT_PANELS: dict[str, tuple[str, ...]] = {
+    "rates": ("cv_serie", "cv_capacitancia", "cv_carga", "cv_terminos"),
+    "cv": ("cv_dunn",),
+    "eis": ("eis_nyquist", "eis_bode", "eis_capacitancia", "eis_residuo"),
+}
+
 
 def available_panels(session) -> list[PanelSpec]:
     """The panels whose data are loaded.
@@ -552,12 +1168,36 @@ def available_panels(session) -> list[PanelSpec]:
     bug, and there is no way to tell it from one whose data were there
     and said nothing.
     """
-    have = {
+    have = _what_is_loaded(session)
+    return [panel for panel in ECHEM_PANELS if have.get(panel.needs, False)]
+
+
+def _what_is_loaded(session) -> dict[str, bool]:
+    return {
         "rates": len(session.rate_series) >= 2,
         "cv": session.cv is not None or bool(session.rate_series),
         "eis": session.eis is not None or bool(session.eis_series),
     }
-    return [panel for panel in ECHEM_PANELS if have.get(panel.needs, False)]
+
+
+def default_panels(session) -> list[str]:
+    """A figure's worth of panels for whatever is loaded.
+
+    So that the common case is one click rather than a list of
+    checkboxes: the person who just loaded a rate series wants the four
+    panels that series makes, and choosing them by hand every time is
+    the kind of friction that stops a figure being made at all.
+    """
+    have = _what_is_loaded(session)
+    offered = {panel.key for panel in available_panels(session)}
+    chosen: list[str] = []
+    for need in ("rates", "eis"):
+        if not have.get(need):
+            continue
+        chosen.extend(key for key in DEFAULT_PANELS[need] if key in offered)
+    if not chosen and have.get("cv"):
+        chosen.extend(key for key in DEFAULT_PANELS["cv"] if key in offered)
+    return chosen
 
 
 def draw_composite(figure, spec: CompositeFigure, session,
@@ -573,8 +1213,7 @@ def draw_composite(figure, spec: CompositeFigure, session,
     if not keys:
         from .base import placeholder
 
-        placeholder(figure.add_subplot(111), palette,
-                    "Elige al menos un panel")
+        placeholder(figure.add_subplot(111), palette, spec.text("pick_panel"))
         return []
     columns = max(1, min(spec.columns, len(keys)))
     rows = math.ceil(len(keys) / columns)
@@ -587,27 +1226,35 @@ def draw_composite(figure, spec: CompositeFigure, session,
         except Exception as error:          # noqa: BLE001 - reported, not raised
             problems.append(f"{panel.label}: {error}")
             axis.set_axis_off()
-            axis.text(0.5, 0.5, f"{panel.label}\nno se pudo dibujar",
+            axis.text(0.5, 0.5, spec.text("failed", label=panel.label),
                       transform=axis.transAxes, ha="center", va="center",
-                      fontsize=8, color=palette.danger)
+                      fontsize=spec.font_size, color=palette.danger)
             continue
         if spec.letters:
-            # ABOVE the frame, not inside it. Inside, the letter lands on
-            # whatever corner the data or the legend happen to want, and
-            # there is no corner that is free in every panel; outside, it
-            # never collides and it is what most journals ask for anyway.
-            axis.text(-0.02, 1.03, f"({LETTERS[index % len(LETTERS)]})",
-                      transform=axis.transAxes, ha="left", va="bottom",
-                      fontsize=9, fontweight="bold")
+            letter = f"({LETTERS[index % len(LETTERS)]})"
+            if spec.letters_inside:
+                axis.text(0.98, 0.04, letter, transform=axis.transAxes,
+                          ha="right", va="bottom",
+                          fontsize=spec.font_size + 0.5, fontweight="bold")
+            else:
+                axis.text(-0.02, 1.03, letter, transform=axis.transAxes,
+                          ha="left", va="bottom",
+                          fontsize=spec.font_size + 0.5, fontweight="bold")
+    # The grid, settled once over every axis the figure ended up with.
+    # Each panel sets it on the axis it was handed, and that leaves the
+    # twin of a two-scale panel carrying the on-screen style's grid into
+    # the exported figure, where nobody asked for one.
+    for axes in every_axes(figure):
+        _set_grid(axes, spec)
     if spec.title:
-        figure.suptitle(spec.title, fontsize=10)
-    figure.tight_layout(h_pad=1.6, w_pad=2.2,
+        figure.suptitle(spec.title, fontsize=spec.font_size + 1.5)
+    figure.tight_layout(pad=1.0,
                         rect=(0, 0, 1, 0.96 if spec.title else 1))
     return problems
 
 
 def save_composite(spec: CompositeFigure, session, palette: Palette,
-                   path) -> "Any":
+                   path) -> tuple[Any, list[str]]:
     """Render ``spec`` to a file at its own width and resolution.
 
     Drawn into a figure of its own rather than saved from the one on
@@ -632,12 +1279,21 @@ def save_composite(spec: CompositeFigure, session, palette: Palette,
 
 __all__ = [
     "CompositeFigure",
+    "every_axes",
+    "DEFAULT_PANELS",
     "ECHEM_PANELS",
+    "HER_V_VS_RHE",
+    "LABELS",
     "LETTERS",
+    "OER_V_VS_RHE",
     "PANELS_BY_KEY",
+    "PRESETS",
+    "PRESET_LABELS",
     "PanelSpec",
     "SERIES_COLOURS",
+    "apply_preset",
     "available_panels",
+    "default_panels",
     "draw_composite",
     "save_composite",
 ]

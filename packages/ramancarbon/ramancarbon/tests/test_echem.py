@@ -2488,3 +2488,160 @@ def test_the_chosen_circuit_can_be_taken_over_by_hand(tmp_path):
     labels = [label for label, _, _ in session.circuit_parameters()]
     assert labels == list(session.result.eis.fit.values())
     assert chosen in session.circuit_drawing()
+
+
+# -- the figure's style, and the language of its labels ----------------
+
+
+def test_the_axis_labels_default_to_english_and_can_be_spanish():
+    """Two audiences, not one.
+
+    The window, the report and every message stay Spanish — they are for
+    the person running the experiment. The figure is for whoever reads
+    the paper, and this group publishes in English.
+    """
+    from ramancarbon.gui.figures_echem import LABELS, CompositeFigure
+
+    spec = CompositeFigure()
+    assert spec.language == "en"
+    assert spec.text("duration") == "cycle duration / s"
+    assert CompositeFigure(language="es").text("duration") == \
+        "duración del ciclo / s"
+    # Every key has to exist in both tables, or a figure comes out
+    # half-translated, which is the most visible way one looks unfinished.
+    assert set(LABELS["en"]) == set(LABELS["es"])
+
+
+def test_a_label_full_of_latex_braces_still_substitutes():
+    """`str.format` cannot be used here and the leak label proved it.
+
+    Almost every label is LaTeX and LaTeX is made of braces:
+    `$\\langle i_{par}\\rangle$` through `format` raises
+    `KeyError: 'par'`.
+    """
+    from ramancarbon.gui.figures_echem import CompositeFigure
+
+    spec = CompositeFigure()
+    # The braces SURVIVE — they are the LaTeX — and nothing raises.
+    assert r"i_{par}" in spec.text("leak_fit")
+    assert spec.text("potential", reference="Ag/AgCl") == "E / V vs Ag/AgCl"
+    assert spec.text("current_at", rate="5") == "|i| at 5 mV/s  /  µA"
+
+
+def test_the_grid_goes_off_when_it_is_asked_to():
+    """`grid(False, linewidth=…)` turns the grid ON, with a warning.
+
+    matplotlib reads "you gave me line properties, so you must want a
+    grid". The suite's style sets ``axes.grid: True`` for the on-screen
+    figures, so every exported figure came out carrying one from code
+    that had asked for it to go away.
+    """
+    import matplotlib
+    from matplotlib.figure import Figure
+
+    from ramancarbon.gui.figures_echem import draw_composite, every_axes
+    from ramancarbon.gui.theme import PALETTES, matplotlib_style
+
+    palette = PALETTES["claro"]
+    assert matplotlib_style(palette)["axes.grid"] is True, (
+        "si el estilo ya no enciende la rejilla, esta prueba no prueba nada"
+    )
+    session = _session_with_spectra(1)
+    session.set_figure_panels(["eis_nyquist", "eis_bode"])
+    for wanted in (False, True):
+        session.composite.grid = wanted
+        with matplotlib.rc_context(matplotlib_style(palette)):
+            figure = Figure(figsize=(6, 6))
+            draw_composite(figure, session.composite, session, palette)
+            drawn = any(line.get_visible()
+                        for axes in every_axes(figure)
+                        for line in axes.get_xgridlines() + axes.get_ygridlines())
+        assert drawn is wanted, f"grid={wanted} salió dibujada={drawn}"
+
+
+def test_a_preset_moves_the_layout_and_leaves_the_panels_alone():
+    from ramancarbon.gui.figures_echem import PRESET_LABELS
+
+    session = _session_with_spectra(1)
+    session.set_figure_panels(["eis_nyquist", "eis_bode"])
+    before = list(session.composite.panels)
+    assert session.use_figure_preset("articulo_1col")
+    assert session.composite.width_in == pytest.approx(3.4)
+    assert session.composite.columns == 1
+    assert session.composite.panels == before, (
+        "un preajuste dice a dónde va la figura, no qué lleva dentro"
+    )
+    assert not session.use_figure_preset("no_existe")
+    assert {key for key, _ in PRESET_LABELS} <= set(
+        __import__("ramancarbon.gui.figures_echem", fromlist=["PRESETS"]).PRESETS)
+
+
+def test_the_standard_figure_is_one_action():
+    """And it picks what the field publishes, not the first of the list."""
+    session = _session_with_spectra(2)
+    chosen = session.standard_figure()
+    assert chosen, "con espectros cargados tiene que elegir algo"
+    assert chosen[0] == "eis_nyquist"
+    assert "eis_bode" in chosen
+    assert chosen == session.composite.panels
+
+
+def test_the_nyquist_panel_keeps_its_aspect_and_insets_the_corner():
+    """The aspect is the panel.
+
+    A box whose axes run 0–1400 against 0–8000 draws the 45° region of a
+    porous electrode almost vertical, and anyone reading a transport
+    regime off it is reading the axes. The inset is how the corner gets
+    shown without giving that up.
+    """
+    import matplotlib
+    from matplotlib.figure import Figure
+
+    from ramancarbon.gui.figures_echem import draw_composite
+    from ramancarbon.gui.theme import PALETTES, matplotlib_style
+
+    palette = PALETTES["claro"]
+    session = _session_with_spectra(2)
+    session.set_figure_panels(["eis_nyquist"])
+    with matplotlib.rc_context(matplotlib_style(palette)):
+        figure = Figure(figsize=(4, 4))
+        draw_composite(figure, session.composite, session, palette)
+    main = figure.axes[0]
+    assert main.get_xlim() == main.get_ylim()
+    assert main.get_aspect() == 1.0
+    # An inset is a CHILD of the axes it sits in, not an entry of
+    # `figure.axes`.
+    assert main.child_axes, "falta el recuadro del rincón"
+    inset = main.child_axes[0]
+    assert inset.get_xlim()[1] < main.get_xlim()[1]
+    assert inset.get_aspect() == 1.0
+
+
+def test_the_combined_panel_gives_the_phase_its_own_two_axes():
+    """`twiny` keeps the LEFT y, which here is −Z″ in ohms.
+
+    So the phase, which runs −90 to 0, drew as a flat line on the floor
+    of the Nyquist. It needs a twinx for the y and a twiny OF THAT for
+    the frequency.
+    """
+    import matplotlib
+    from matplotlib.figure import Figure
+
+    from ramancarbon.gui.figures_echem import draw_composite
+    from ramancarbon.gui.theme import PALETTES, matplotlib_style
+
+    palette = PALETTES["claro"]
+    session = _session_with_spectra(1)
+    session.set_figure_panels(["eis_nyquist_bode"])
+    with matplotlib.rc_context(matplotlib_style(palette)):
+        figure = Figure(figsize=(4, 4))
+        draw_composite(figure, session.composite, session, palette)
+    phase_axes = [a for a in figure.axes
+                  if a.get_ylim()[0] > a.get_ylim()[1] < 0.0]
+    assert phase_axes, "ningún eje lleva la fase invertida de +5 a −95"
+    for axes in phase_axes:
+        low, high = sorted(axes.get_ylim())
+        assert low >= -100.0 and high <= 10.0, (
+            f"la fase se está dibujando contra {axes.get_ylim()}, que son "
+            "ohmios y no grados"
+        )

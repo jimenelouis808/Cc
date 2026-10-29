@@ -22,6 +22,7 @@ import numpy as np
 
 from ..echem.curve import POTENTIAL_SCALES, Electrode
 from ..echem.cv import SWEEP_CHOICES
+from .figures_echem import PRESET_LABELS
 from .base import SectionApp, placeholder
 from .echem_state import (CURRENT_UNITS, DEFAULT_DISC_MM,
                           DEFAULT_REFERENCE, POTENTIAL_UNITS,
@@ -54,6 +55,21 @@ FILE_TYPES = (
     ("Texto", "*.txt *.csv *.dat *.asc"),
     ("Todos", "*.*"),
 )
+
+
+#: Which language the FIGURE labels come out in, as ``(key, label)``.
+#:
+#: English first and English by default: the window, the report and
+#: every message stay Spanish, because those are for the person running
+#: the experiment, and the figure is for whoever reads the paper.
+LANGUAGE_LABELS: tuple[tuple[str, str], ...] = (
+    ("en", "Inglés (para publicar)"),
+    ("es", "Español"),
+)
+
+
+def _language_key(label: str) -> str:
+    return next((key for key, text in LANGUAGE_LABELS if text == label), "en")
 
 
 class EchemApp(SectionApp):
@@ -694,10 +710,35 @@ class EchemApp(SectionApp):
         chooser_column, chooser = scrollable_column(tab, width=330)
         chooser_column.pack(side="left", fill="y", padx=(0, PAD["md"]))
 
+        quick_card, quick_body = card(chooser, "Empezar")
+        quick_card.pack(fill="x")
+        ttk.Button(quick_body, text="Figura estándar",
+                   command=self._standard_figure).pack(fill="x")
+        self.figure_preset_var = tk.StringVar(value=PRESET_LABELS[0][1])
+        labelled(quick_body, "Para", lambda p: ttk.Combobox(
+            p, textvariable=self.figure_preset_var, width=22,
+            state="readonly",
+            values=[label for _, label in PRESET_LABELS]))
+        self.figure_preset_var.trace_add("write",
+                                         lambda *_: self._apply_preset())
+        self.figure_language_var = tk.StringVar(value=LANGUAGE_LABELS[0][1])
+        labelled(quick_body, "Etiquetas", lambda p: ttk.Combobox(
+            p, textvariable=self.figure_language_var, width=22,
+            state="readonly",
+            values=[label for _, label in LANGUAGE_LABELS]))
+        self.figure_language_var.trace_add("write",
+                                           lambda *_: self._refresh_composite())
+        hint(quick_body,
+             "«Figura estándar» elige los paneles que este campo publica "
+             "para lo que tengas cargado, que es una acción en vez de una "
+             "columna de casillas. Las etiquetas de los EJES salen en "
+             "inglés por defecto; la ventana, el informe y los avisos "
+             "siguen en español — son dos públicos distintos.")
+
         panels_card, panels_body = card(
             chooser, "Paneles",
             "sólo se ofrecen los que tienen datos cargados")
-        panels_card.pack(fill="x")
+        panels_card.pack(fill="x", pady=(PAD["sm"], 0))
         self.figure_panel_vars: dict[str, object] = {}
         self.figure_panels_frame = ttk.Frame(panels_body)
         self.figure_panels_frame.pack(fill="x")
@@ -710,10 +751,13 @@ class EchemApp(SectionApp):
         self.figure_width_var = tk.StringVar(value="7.2")
         labelled(layout_body, "Ancho (pulgadas)", lambda p: ttk.Entry(
             p, textvariable=self.figure_width_var, width=8))
-        self.figure_height_var = tk.StringVar(value="3.1")
+        self.figure_height_var = tk.StringVar(value="3.0")
         labelled(layout_body, "Alto por panel", lambda p: ttk.Entry(
             p, textvariable=self.figure_height_var, width=8))
-        self.figure_dpi_var = tk.StringVar(value="220")
+        self.figure_font_var = tk.StringVar(value="8.5")
+        labelled(layout_body, "Tamaño de letra", lambda p: ttk.Entry(
+            p, textvariable=self.figure_font_var, width=8))
+        self.figure_dpi_var = tk.StringVar(value="600")
         labelled(layout_body, "ppp al exportar", lambda p: ttk.Entry(
             p, textvariable=self.figure_dpi_var, width=8))
         self.figure_title_var = tk.StringVar(value="")
@@ -730,15 +774,27 @@ class EchemApp(SectionApp):
         options_card.pack(fill="x", pady=(PAD["sm"], 0))
         self.figure_letters_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(options_body, text="Letras (a), (b), (c)…",
-                        variable=self.figure_letters_var).pack(anchor="w")
+                        variable=self.figure_letters_var,
+                        command=self._refresh_composite).pack(anchor="w")
+        self.figure_inside_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(options_body, text="…dentro del marco",
+                        variable=self.figure_inside_var,
+                        command=self._refresh_composite).pack(anchor="w",
+                                                              padx=(18, 0))
         self.figure_legends_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(options_body, text="Leyendas",
-                        variable=self.figure_legends_var).pack(anchor="w")
+                        variable=self.figure_legends_var,
+                        command=self._refresh_composite).pack(anchor="w")
+        self.figure_reference_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(options_body, text="Eje RHE y línea del O₂",
+                        variable=self.figure_reference_var,
+                        command=self._refresh_composite).pack(anchor="w")
         self.figure_grid_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(options_body, text="Rejilla",
-                        variable=self.figure_grid_var).pack(anchor="w")
+                        variable=self.figure_grid_var,
+                        command=self._refresh_composite).pack(anchor="w")
 
-        actions_card, actions_body = card(chooser, "Hacer y exportar")
+        actions_card, actions_body = card(chooser, "Exportar")
         actions_card.pack(fill="x", pady=(PAD["sm"], 0))
         bar = flow(actions_body)
         bar.add(ttk.Button(bar.frame, text="Redibujar",
@@ -779,9 +835,13 @@ class EchemApp(SectionApp):
         for panel in panels:
             variable = self.tk.BooleanVar(value=panel.key in chosen)
             self.figure_panel_vars[panel.key] = variable
+            # Ticking a box redraws. Having to find a button afterwards
+            # turns choosing panels — which is a loop, tick one, look,
+            # tick another — into a chore nobody finishes.
             self.ttk.Checkbutton(
                 self.figure_panels_frame, text=panel.label,
-                variable=variable).pack(anchor="w")
+                variable=variable,
+                command=self._refresh_composite).pack(anchor="w")
             if panel.note:
                 self.ttk.Label(
                     self.figure_panels_frame, text=panel.note,
@@ -801,12 +861,42 @@ class EchemApp(SectionApp):
         composite.columns = max(1, int(number(self.figure_columns_var, 2)))
         composite.width_in = max(2.0, number(self.figure_width_var, 7.2))
         composite.panel_height_in = max(1.5,
-                                        number(self.figure_height_var, 3.1))
-        composite.dpi = max(72, int(number(self.figure_dpi_var, 220)))
+                                        number(self.figure_height_var, 3.0))
+        composite.font_size = max(4.0, number(self.figure_font_var, 8.5))
+        composite.dpi = max(72, int(number(self.figure_dpi_var, 600)))
+        composite.language = _language_key(self.figure_language_var.get())
         composite.letters = bool(self.figure_letters_var.get())
+        composite.letters_inside = bool(self.figure_inside_var.get())
         composite.legends = bool(self.figure_legends_var.get())
+        composite.reference_axis = bool(self.figure_reference_var.get())
         composite.grid = bool(self.figure_grid_var.get())
         composite.title = self.figure_title_var.get().strip()
+
+    def _composite_to_widgets(self) -> None:
+        """Put the layout fields back on screen after a preset moved them."""
+        composite = self.session.composite
+        self.figure_columns_var.set(str(composite.columns))
+        self.figure_width_var.set(f"{composite.width_in:g}")
+        self.figure_height_var.set(f"{composite.panel_height_in:g}")
+        self.figure_font_var.set(f"{composite.font_size:g}")
+        self.figure_dpi_var.set(str(composite.dpi))
+
+    def _apply_preset(self) -> None:
+        label = self.figure_preset_var.get()
+        key = next((k for k, text in PRESET_LABELS if text == label), "")
+        if not key or not self.session.use_figure_preset(key):
+            return
+        self._composite_to_widgets()
+        self._refresh_composite()
+
+    def _standard_figure(self) -> None:
+        """Choose the panels this field publishes for what is loaded."""
+        chosen = set(self.session.standard_figure())
+        for key, variable in self.figure_panel_vars.items():
+            variable.set(key in chosen)
+        self.flush_messages(self.session.messages)
+        if chosen:
+            self._refresh_composite()
 
     def _refresh_composite(self) -> None:
         self._composite_from_widgets()

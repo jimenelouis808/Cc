@@ -1465,6 +1465,50 @@ de capacitancia ya emitía.
   vacío dentro de una figura de seis se lee como un fallo, y no hay
   forma de distinguirlo de uno cuyos datos estaban y no dijeron nada.
 
+### El estilo: en inglés, sin rejilla, y con la escala del Nyquist intacta
+
+- **Las etiquetas de los EJES van en inglés y la ventana sigue en
+  español.** No es una incoherencia: son dos públicos. La ventana, el
+  informe y los avisos son para quien hace la medida; la figura es para
+  quien lee el artículo, y este grupo publica en inglés. `LABELS` es una
+  tabla con las dos y hay una prueba de que ninguna clave falta en una
+  de ellas — una figura medio traducida es la forma más visible de que
+  parezca sin terminar.
+- **`str.format` no se puede usar para componer una etiqueta.** Casi
+  todas son LaTeX y LaTeX está hecho de llaves:
+  `$\langle i_{par}\rangle$` por `format` levanta
+  `KeyError: 'par'`, y la etiqueta que lo hizo era justo la que lleva la
+  corriente parásita medida. La sustitución es por `replace` de claves
+  nombradas, que no toca ninguna llave de LaTeX.
+- **`axis.grid(False, linewidth=…)` ENCIENDE la rejilla.** matplotlib lo
+  lee como «me has dado propiedades de línea, luego querrás una», con un
+  aviso que nadie mira. El estilo de la suite pone `axes.grid: True`
+  para las figuras de pantalla —correcto ahí, equivocado en un
+  manuscrito— así que toda figura exportada salía con rejilla desde un
+  código que había pedido tres veces que no la hubiera.
+- **`figure.axes` NO lista los recuadros.** Un eje hecho con
+  `Axes.inset_axes` es HIJO del que lo contiene, así que aparece en su
+  `child_axes` y en ningún otro sitio. Los gemelos y los ejes
+  secundarios sí aparecen, que es por lo que la omisión no se veía: la
+  rejilla se apagaba en cinco ejes de seis y el recuadro del Nyquist
+  seguía dibujando una. `every_axes` los recorre todos, y la exportación
+  de números también.
+- **El Nyquist va a escala uno a uno y el rincón va en un recuadro.** La
+  barrera ya estaba escrita para la pestaña y vale igual aquí: una caja
+  de 0–1400 Ω contra 0–8000 Ω dibuja el tramo a 45° de un electrodo
+  poroso casi vertical, y la forma ES el contenido del diagrama. El
+  recuadro es como el campo enseña el rincón sin renunciar a eso.
+- **Y el formato compacto —Nyquist y Bode en la misma caja— está, con
+  su advertencia.** Se usa, así que se ofrece; pero ahí el Nyquist no
+  puede ir a escala uno a uno porque la caja es compartida, y las dos
+  curvas comparten marco y nada más: una va contra Z′ abajo y la otra
+  contra f arriba, así que un punto de una no tiene contrapartida en la
+  otra y el ojo la busca igualmente.
+- **Ese panel necesita TRES ejes, no dos.** `axis.twiny()` conserva la y
+  IZQUIERDA, que aquí son ohmios, así que la fase —de −90 a 0— se
+  dibujaba como una recta plana en el suelo del Nyquist. Hace falta un
+  `twinx` para la y y un `twiny` DE ÉSE para la frecuencia.
+
 ### Tres cosas que el dibujo cazó al llevarlo a la ventana
 
 - **`np.isin` casa VALORES, no posiciones.** Enmascarar el archivo
@@ -1486,6 +1530,28 @@ de capacitancia ya emitía.
   leyenda con `:g` escribe todos esos dígitos: está informando la
   precisión del reloj como si fuera un ajuste del experimento. Tres
   cifras significativas.
+
+### Y el flujo, que es lo que decide si la figura llega a hacerse
+
+- **«Figura estándar» es una acción, no una columna de casillas.** Los
+  paneles por defecto son los que el campo imprime —para una serie de
+  velocidades: los voltamperogramas, lo que dan, lo que se fuga y lo que
+  el estudio resuelve; para impedancia: el Nyquist con recuadro y el
+  Bode— y no los primeros de la lista. Tener que elegirlos a mano cada
+  vez es la fricción que hace que una figura no se haga.
+- **Los preajustes emparejan el ancho con el tamaño de letra**, que es
+  la regla que el motor de figuras del paquete ya tenía: artículo a una
+  columna (3.4″, letra 7.5), a dos (7.2″, letra 8.5), presentación
+  (10″, letra 12), tesis (6″). Un preajuste dice a dónde VA la figura y
+  no toca los paneles que lleva.
+- **Tocar una casilla redibuja.** Elegir paneles es un bucle —marca uno,
+  mira, marca otro— y tener que buscar un botón después lo convierte en
+  una tarea que nadie termina.
+- **Y los scripts de los análisis ya no dibujan.** `analisis_CV2` y
+  `analisis_PEIS` montan la sesión, eligen paneles del catálogo y llaman
+  a `save_figure`. Lo que queda en cada uno es la ELECCIÓN —qué paneles,
+  en qué orden, a qué ancho— y no doscientas líneas de matplotlib que se
+  separan de la ventana en cuanto uno de los dos cambia.
 
 ## Microestructura y ajuste de patrón completo
 

@@ -32,6 +32,17 @@ electroquímica y todas las tablas se rehacen.
 
 # `peis_serie.png` — los seis paneles
 
+> **La hace la ventana, no un script.** `figuras.py` ya no dibuja nada:
+> monta la misma `EchemSession` que usa la sección de electroquímica,
+> elige seis paneles del catálogo y llama a `save_figure` — que es el
+> botón «Guardar figura…» de la pestaña Figura. Las etiquetas de los
+> ejes van en inglés y la ventana sigue en español: son dos públicos
+> distintos.
+>
+> **Y el formato compacto que usabas también está ahí**, como panel
+> «Nyquist y Bode en la misma caja». No es el que se usa aquí, y la
+> razón está al final de este archivo.
+
 ## (a) Los tres Nyquist completos, en log-log
 
 **Qué hay.** Z′ contra −Z″ de los tres espectros (círculos, los datos) con
@@ -262,6 +273,37 @@ la microporosidad.
 - **Y falta frecuencia baja.** Los tres lo avisan. Bajar a 10 mHz cerraría
   la cola capacitiva, pondría el máximo de C″ de la de 1020 °C dentro del
   barrido y daría τ₀ para las tres.
+
+# Qué formato usar para presentar: el combinado o el Nyquist cuadrado
+
+Las dos presentaciones están en el catálogo de paneles y las dos se
+usan en la literatura. Lo que las separa:
+
+**El combinado** —Nyquist y Bode en una caja, frecuencia arriba y fase a
+la derecha— es compacto: dos representaciones por muestra en un panel.
+Tiene dos costes, y los dos son reales:
+
+1. **El Nyquist no puede ir a escala uno a uno** porque la caja es
+   compartida. Con los ejes a 0–1400 Ω contra 0–8000 Ω, el tramo a 45°
+   de un electrodo poroso se dibuja casi vertical: quien lea de ahí un
+   ángulo de depresión o un régimen de transporte está leyendo los ejes,
+   no los datos. La forma ES el contenido de un diagrama de Nyquist.
+2. **Las dos curvas comparten marco y nada más.** El Nyquist va contra
+   Z′ en el eje de abajo y la fase contra f en el de arriba, así que un
+   punto de una no tiene contrapartida en la otra — y el ojo la busca
+   igualmente.
+
+Y como es un panel por muestra, tres muestras son tres paneles entre
+los que hay que ir y venir para compararlas.
+
+**Lo que se usa aquí por defecto** es el Nyquist a escala uno a uno con
+el rincón de alta frecuencia en un recuadro, más el Bode aparte. Es la
+figura más impresa del campo de los supercondensadores, y por las dos
+razones que el combinado pierde: conserva la forma y superpone las tres
+muestras, que es para lo que se midieron tres.
+
+**Elige el que quieras**: las dos están a una casilla de distancia en la
+pestaña Figura, y lo que se exporta son los mismos números.
 
 # Los archivos
 
