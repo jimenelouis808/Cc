@@ -50,6 +50,8 @@ LETTERS = "abcdefghijkl"
 #: adds a panel.
 LABELS: dict[str, dict[str, str]] = {
     "en": {
+        'benchmark_value': '$\\eta_{{j}}$ = {eta} mV',
+        'against': 'in brackets: {label}',
         'time_s': 't / s',
         'gcd_potential': 'E / V vs {reference}',
         'current_density_ma': 'i / mA',
@@ -139,6 +141,8 @@ LABELS: dict[str, dict[str, str]] = {
         "her": "H$^+$/H$_2$",
     },
     "es": {
+        'benchmark_value': '$\\eta_{{j}}$ = {eta} mV',
+        'against': 'entre paréntesis: {label}',
         'hold_time': 't / h',
         'reference_band': '{label}',
         'drift': '{rate} mV h$^{-1}$',
@@ -1724,10 +1728,17 @@ def _panel_her_polarisation(axis, session, spec, palette) -> None:
             continue
         axis.plot([density], [overpotential], "o", color=MODEL,
                   markersize=5, zorder=4)
-        axis.annotate(spec.text("benchmark", j=f"{density:g}"),
-                      xy=(density, overpotential), xytext=(5, -9),
-                      textcoords="offset points",
-                      fontsize=spec.font_size - 2.0, color=MODEL)
+        # The VALUE on the marker, not only which benchmark it is. The
+        # three numbers are what the panel exists to report, and a
+        # reader who has to go back to a table to find them is reading
+        # the table rather than the figure.
+        axis.annotate(
+            spec.text("benchmark_value", j=f"{density:g}",
+                      eta=f"{1e3 * overpotential:.0f}"),
+            xy=(density, overpotential), xytext=(7, -10),
+            textcoords="offset points",
+            fontsize=spec.font_size - 2.0, color=MODEL)
+    _benchmark_table(axis, session, spec, catalysis)
     axis.set_xlabel(spec.text("j_ma_cm2"))
     axis.set_ylabel(spec.text("overpotential"))
     _reference_bands(axis, session, spec,
@@ -1737,6 +1748,57 @@ def _panel_her_polarisation(axis, session, spec, palette) -> None:
         axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
                     loc="upper left", handlelength=1.4)
     _tidy(axis, spec)
+
+
+def _benchmark_table(axis, session, spec, catalysis) -> None:
+    """The three overpotentials beside the benchmark's, as text.
+
+    Side by side and in the same units, because that comparison is the
+    one the panel is for and reading it off a shaded band by eye is not
+    reading it. The reference is still shown as the RANGE it is.
+    """
+    from ..echem.evaluate import reference_band, reference_catalysts
+    from ..echem.curve import load_echem_database
+
+    rows = []
+    for density, overpotential in sorted(
+            (catalysis.overpotentials or {}).items()):
+        if overpotential is None:
+            continue
+        rows.append((density, 1e3 * float(overpotential)))
+    if not rows:
+        return
+
+    electrode = getattr(session, "electrode", None)
+    reference = None
+    if electrode is not None:
+        table = load_echem_database().get("electrolytes", {})
+        label = electrode.electrolyte or ""
+        key = next((k for k, entry in table.items()
+                    if k == label or entry.get("label") == label), "")
+        entries = reference_catalysts(getattr(session, "reaction", ""), key)
+        reference = next(iter(entries.values()), None)
+
+    if reference is None:
+        return
+    lines = []
+    for density, _ in rows:
+        band = reference_band(reference, density)
+        if band is None:
+            continue
+        lines.append(spec.text("benchmark_value", j=f"{density:g}",
+                               eta=f"{1e3 * band[0]:.0f}–"
+                                   f"{1e3 * band[1]:.0f}"))
+    if not lines:
+        return
+    # The measured values are already on their own markers, so this
+    # block carries the REFERENCE and nothing else: repeating the
+    # measurement beside it is noise, and the comparison is the point.
+    lines.insert(0, reference.get("label", ""))
+    # Clear of the panel letter, which sits in the bottom right corner.
+    axis.text(0.97, 0.13, "\n".join(lines), transform=axis.transAxes,
+              ha="right", va="bottom", linespacing=1.5,
+              fontsize=spec.font_size - 2.0, color=SECOND)
 
 
 def _reference_bands(axis, session, spec, density=None,
@@ -1856,13 +1918,46 @@ def _panel_her_rates(axis, session, spec, palette) -> None:
     axis.axhline(0.0, color=GREY, linewidth=0.8, zorder=1)
     axis.set_xscale("log")
     _reference_bands(axis, session, spec, density=10.0)
-    _frame_the_active_branch(axis, session)
+    _frame_above_the_equilibrium(axis, session)
     axis.set_xlabel(spec.text("j_ma_cm2"))
     axis.set_ylabel(spec.text("overpotential"))
     if spec.legends:
         axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
                     loc="upper left", handlelength=1.4)
     _tidy(axis, spec, log_x=True)
+
+
+def _frame_above_the_equilibrium(axis, session, log_x: bool = True) -> None:
+    """Keep the view on the branch, for a panel of SEVERAL curves.
+
+    Same argument as :func:`_frame_the_tafel` and the same restraint:
+    the data stay whole, only the view moves. Below the reaction's own
+    potential nothing is reacting, so a panel that spends two thirds of
+    its height there is spending it on the background.
+
+    The panel of η against j is deliberately NOT framed this way: there
+    the crossing of zero is the diagnostic — a negative onset
+    overpotential is impossible — and hiding it would hide the one thing
+    that panel is for.
+    """
+    tops, lows, highs = [], [], []
+    for analysis in getattr(session, "lsv_analyses", list)():
+        if analysis is None or analysis.curve_j is None:
+            continue
+        density = np.abs(np.asarray(analysis.curve_j, dtype=float))
+        eta = np.asarray(analysis.curve_eta, dtype=float)
+        active = (eta > 0.0) & (density > 0.0)
+        if not np.any(active):
+            continue
+        tops.append(float(np.max(eta[active])))
+        lows.append(float(np.min(density[active])))
+        highs.append(float(np.max(density[active])))
+    if not tops:
+        return
+    top = max(tops)
+    axis.set_ylim(-0.03 * top, top + 0.08 * top)
+    if log_x and lows and highs:
+        axis.set_xlim(min(lows) / 2.0, max(highs) * 2.0)
 
 
 def _frame_the_tafel(axis, catalysis) -> None:
@@ -1991,11 +2086,17 @@ def _panel_her_tafel(axis, session, spec, palette) -> None:
                   fontsize=spec.font_size - 0.5, color=MODEL)
     _frame_the_tafel(axis, catalysis)
     _reference_bands(axis, session, spec, tafel=True)
+    # Room above the curve for the two slope labels: a Tafel curve ends
+    # at the top right, so without this they sit on it.
+    low, high = axis.get_ylim()
+    axis.set_ylim(low, high + 0.22 * (high - low))
     axis.set_xlabel(spec.text("log_j"))
     axis.set_ylabel(spec.text("overpotential"))
     if spec.legends:
+        # Lifted off the bottom right corner, where the panel letter is.
         axis.legend(frameon=False, fontsize=spec.font_size - 1.5,
-                    loc="lower left", handlelength=1.6)
+                    loc="lower right", bbox_to_anchor=(1.0, 0.09),
+                    handlelength=1.6)
     _tidy(axis, spec)
 
 

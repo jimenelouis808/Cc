@@ -4074,3 +4074,57 @@ def test_the_six_panel_her_figure_draws_whole():
     assert draw_composite(figure, spec, session, PALETTES["claro"]) == []
     assert spec.rows == 2 and spec.columns == 2
     plt.close(figure)
+
+
+def test_the_benchmark_panel_labels_each_marker_with_its_value():
+    """The three overpotentials are what the panel exists to report. A
+    reader who has to go back to a table to find them is reading the
+    table rather than the figure."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from ramancarbon.echem.curve import Electrode
+    from ramancarbon.gui.figures_echem import (CompositeFigure,
+                                               draw_composite)
+    from ramancarbon.gui.theme import PALETTES
+
+    session = _her_session()
+    session.electrode = Electrode(mass_mg=0.02, area_cm2=0.0707,
+                                  electrolyte="H2SO4_0.5M", reference="RHE")
+    spec = CompositeFigure(panels=["her_polarizacion"], columns=1)
+    figure = plt.figure(figsize=(5.0, 3.5))
+    assert draw_composite(figure, spec, session, PALETTES["claro"]) == []
+    axis = figure.axes[0]
+    written = " ".join(text.get_text() for text in axis.texts)
+    # A value in millivolts on each marker...
+    assert written.count("mV") >= 3
+    assert "\\eta_{10}" in written
+    # ...and the benchmark's own RANGE beside them, as a range.
+    assert "–" in written
+    assert "Pt/C" in written
+    plt.close(figure)
+
+
+def test_panel_b_is_framed_above_the_equilibrium_and_panel_c_is_not():
+    """The rate panel drops the approach, where nothing is reacting. The
+    η-against-j panel keeps it, because there the crossing of zero is
+    the diagnostic: a negative onset overpotential is impossible."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from ramancarbon.gui.figures_echem import (CompositeFigure,
+                                               draw_composite)
+    from ramancarbon.gui.theme import PALETTES
+
+    session = _her_session()
+    limits = {}
+    for key in ("her_velocidades", "her_polarizacion"):
+        spec = CompositeFigure(panels=[key], columns=1)
+        figure = plt.figure(figsize=(5.0, 3.5))
+        assert draw_composite(figure, spec, session, PALETTES["claro"]) == []
+        limits[key] = figure.axes[0].get_ylim()
+        plt.close(figure)
+    assert limits["her_velocidades"][0] >= -0.01
+    assert limits["her_polarizacion"][0] < -0.01

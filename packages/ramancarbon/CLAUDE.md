@@ -3727,3 +3727,49 @@ bloqueante y llega a 6·10⁴ Ω, y a −0.35 V se queda en 8. **Cuatro décadas
 en el mismo diagrama**, así que un Nyquist a escala uno a uno enseña el
 espectro grande y convierte el interesante en un punto. El Bode es
 logarítmico por construcción y los tres se leen a la vez.
+
+## El panel de velocidades se enmarca, y aun así se ve el cero
+
+`_frame_above_the_equilibrium` hace con el panel de varias curvas lo que
+`_frame_the_tafel` hace con una: mueve la VISTA a donde η es positivo,
+sin tocar los datos. Pero el techo inferior no es cero, es `-0.03·η_max`,
+y ese tres por ciento no es decoración.
+
+- La línea horizontal en cero **sigue dentro del marco**. Es una línea
+  real: un sobrepotencial por debajo de ella es imposible, así que donde
+  una curva la cruza es donde el eje de potencial está mal. Enmarcar
+  exactamente en cero la pondría en el borde del panel y el cruce
+  quedaría medio fuera.
+- En el eje de corriente el marco va de la densidad mínima de la rama
+  partida por dos a la máxima por dos, no de cero: el eje es logarítmico
+  y en un eje logarítmico cero no existe.
+- **No es lo mismo que recortar.** La prueba comprueba que la línea
+  dibujada sigue llevando todos los puntos, incluidos los que el marco ya
+  no enseña, y que el panel de η contra j (que no se enmarca así) conserva
+  su cruce por cero a la vista.
+
+## El valor va en el marcador; el intervalo, en el bloque
+
+El panel de η contra j marca con un punto cada densidad de referencia que
+la curva alcanza. Desde esta fase cada punto **lleva su número encima**
+—η₁₀ = 29 mV y los otros dos—, en el color del material.
+
+- El bloque de texto de la esquina lleva **sólo la referencia**: la
+  etiqueta del catalizador y sus tres intervalos, en el color de la
+  referencia. Repetir ahí la medida sería escribir dos veces lo mismo y
+  perder la comparación, que es para lo que está el panel.
+- Los intervalos salen de `reference_band`, es decir de
+  `database/data/echem.json`, filtrados por reacción y medio como todo lo
+  demás. **Ningún número de literatura en Python**, tampoco cuando sólo
+  es una etiqueta.
+- El bloque va a `y = 0.13` en coordenadas de ejes, no a `0.03`: la letra
+  del panel ocupa la esquina inferior derecha y chocaban.
+
+## La leyenda de Tafel se aparta con margen, no con recorte
+
+Con la vista del panel de Tafel limitada a la rama, las curvas pasan cerca
+de abajo y la leyenda les caía encima. La solución es **subir el techo**
+—un 22 % del alto sobre el máximo— y bajar la leyenda a
+`bbox_to_anchor=(1.0, 0.09)`, no apretar el marco: el ajuste y la fracción
+de curva que cubre tienen que seguir viéndose enteros, que es el resultado
+del panel.
