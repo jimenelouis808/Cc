@@ -38,6 +38,14 @@ import numpy as np
 from ..database.loader import DATA_DIR
 
 
+#: Fewest points a loaded curve needs. A charge-discharge branch shorter
+#: than this cannot be represented as a curve, which is why
+#: :meth:`ChargeDischarge.segments` uses the same number and
+#: :func:`ramancarbon.echem.gcd.half_cycles` exists for the branches that
+#: are shorter.
+MIN_CURVE_POINTS = 10
+
+
 class CurveError(ValueError):
     """Raised when a measured curve is malformed."""
 
@@ -618,8 +626,9 @@ class ChargeDischarge:
         sizes = {self.time.size, self.potential.size, self.current.size}
         if len(sizes) != 1:
             raise CurveError("tiempo, potencial y corriente no tienen igual longitud")
-        if self.time.size < 10:
-            raise CurveError("una curva de menos de 10 puntos no sirve")
+        if self.time.size < MIN_CURVE_POINTS:
+            raise CurveError(
+                f"una curva de menos de {MIN_CURVE_POINTS} puntos no sirve")
         if np.any(np.diff(self.time) < 0):
             raise CurveError("el tiempo no es monótono creciente")
         if self.cycle is not None:
@@ -632,9 +641,19 @@ class ChargeDischarge:
     def segments(self) -> list[tuple[str, "ChargeDischarge"]]:
         """Split into charge and discharge branches by the sign of the current.
 
-        Segments shorter than five points are dropped: they are the
-        switching transients, and a "discharge" three points long produces
-        a capacitance of whatever you like.
+        Each branch comes back as a ``ChargeDischarge``, so each has to be
+        a valid one: the floor here is this class's own minimum and not a
+        smaller number, because a shorter run cannot be constructed. It
+        used to be five, which is below that minimum, so a file whose half
+        cycles are three points long — the normal output of a GCPL saving
+        on a potential condition — raised ``CurveError`` from inside the
+        splitter.
+
+        For the galvanostatic analysis itself use
+        :func:`ramancarbon.echem.gcd.half_cycles`, which does not build
+        curves and therefore keeps the short branches: their charge and
+        their window are perfectly measurable, and it is only the
+        shape-based numbers that are not.
         """
         sign = np.sign(self.current)
         sign[sign == 0] = 1
@@ -643,7 +662,7 @@ class ChargeDischarge:
         out: list[tuple[str, ChargeDischarge]] = []
         for index in range(len(bounds) - 1):
             start, stop = bounds[index], bounds[index + 1]
-            if stop - start < 5:
+            if stop - start < MIN_CURVE_POINTS:
                 continue
             label = "carga" if sign[start] > 0 else "descarga"
             out.append((label, self._subset(slice(start, stop), f"{label} {index + 1}")))
