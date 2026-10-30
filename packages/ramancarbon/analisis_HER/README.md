@@ -41,6 +41,48 @@ nanogramos, y después ninguna medida electroquímica lo ve, porque lo que
 se mide es platino de verdad. Si el contraelectrodo era de Pt, hay que
 descartarlo antes de citar nada.
 
+## Los dos barridos no empiezan en el mismo potencial
+
+No es un error de lectura, y los dos archivos dicen cosas distintas:
+
+| archivo | `control/V` abre en | `Ewe/V` abre en | puntos |
+|---|---|---|---|
+| LSV_1mV | **+0.0001 V** | +0.4577 V | 352 → 350 |
+| LSV_5mV | **+0.4812 V** | +0.4808 V | 833 |
+
+En el de **1 mV/s** la consigna empieza en cero, como se programó. Los dos
+primeros puntos marcan +0.4577 V porque son **anteriores a que el lazo de
+control tirase de la celda**: lo que registran es el potencial de reposo.
+El lector los descarta con su aviso, y la curva arranca en −0.0017 V.
+
+En el de **5 mV/s** la consigna empieza ella misma en **+0.4812 V** y el
+potencial medido la sigue con 0.4 mV de diferencia. Eso **no** es
+asentamiento: el potenciostato recibió esa orden. Es lo que hace un método
+con `E begin = Eoc` —arrancar en el potencial de circuito abierto—, y el
+OCP de este electrodo estaba ahí.
+
+**Esos 480 mV extra son información, no sobra.** En ellos no puede haber
+HER y sin embargo circula corriente **catódica**, y creciendo al bajar el
+potencial:
+
+| ventana | j |
+|---|---|
+| +0.30…+0.48 V | −0.00 … −0.12 mA/cm² |
+| +0.10…+0.30 V | −0.12 … −0.26 mA/cm² |
+| +0.00…+0.10 V | −0.24 … −0.31 mA/cm² |
+
+Es la reducción del oxígeno disuelto, **medida directamente y sola**,
+sin reacción encima: coincide con las 0.31 y 0.24 mA/cm² de fondo que el
+análisis estima por otro camino. El barrido de 1 mV/s no puede enseñar
+esto porque empieza donde el fondo ya está mezclado con la reacción.
+
+**El coste es que la dispersión entre los dos no es sólo velocidad.** El de
+5 mV/s llega a la zona de las densidades de referencia tras haber sido
+polarizado por toda esa ventana; el de 1 mV/s, no. Y el de 5 mV/s se corrió
+ANTES (`_02_` contra `_03_`), así que el de 1 mV/s hereda además el estado
+en que lo dejó. `lsv_series_notes()` lo dice con el número, y el panel (a)
+lleva el potencial de salida en la leyenda y marcado con un círculo.
+
 ## Léelos en este orden
 
 **1. El sobrepotencial de inicio sale NEGATIVO** en las dos curvas: −11 mV

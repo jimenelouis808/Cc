@@ -3773,3 +3773,38 @@ de abajo y la leyenda les caía encima. La solución es **subir el techo**
 `bbox_to_anchor=(1.0, 0.09)`, no apretar el marco: el ajuste y la fracción
 de curva que cubre tienen que seguir viéndose enteros, que es el resultado
 del panel.
+
+## Dos barridos de una serie pueden no empezar en el mismo potencial
+
+El usuario miró el panel (a) y preguntó por qué su barrido, que programó
+de 0 a −0.35 V, seguía saliendo desde +0.45. No era un error de lectura:
+**son dos archivos distintos y uno de ellos sí arranca ahí.**
+
+- En el de 1 mV/s la consigna (`control/V`) abre en +0.0001 V y el medido
+  en +0.4577: eso ES asentamiento, los dos primeros puntos son anteriores
+  al lazo de control, y `_settling_points` los descarta con su aviso. La
+  memoria del usuario era exacta.
+- En el de 5 mV/s **la consigna abre ella misma en +0.4812 V** y el medido
+  la sigue a 0.4 mV. El potenciostato recibió esa orden: es `E begin = Eoc`
+  en el método, que arranca en el potencial de circuito abierto. Un
+  asentamiento se reconoce porque el MEDIDO se separa del COMANDADO; aquí
+  los dos van juntos, así que no hay nada que descartar y descartarlo
+  sería tirar medida.
+- **La comparación entre velocidades supone que la velocidad es lo único
+  que cambia, y eso había que comprobarlo.** `SERIES_START_SPREAD_V` y
+  `lsv_series_notes()` miden el reparto de potenciales de salida y lo
+  dicen con el número; aquí son 483 mV. El que abre más lejos llega a las
+  densidades de referencia tras haber sido polarizado por toda esa
+  ventana, así que la fila «dispersión» de la tabla de velocidades no es
+  sólo velocidad de barrido.
+- **Y el panel (a) es el ÚNICO que puede enseñarlo**, porque es el único
+  cuya abscisa es el potencial: en todos los demás es un sobrepotencial o
+  una corriente, y un sobrepotencial ya tiró esa información. Por eso cada
+  curva lleva su potencial de salida en la leyenda y un círculo en el
+  punto de salida — y por eso ese panel sigue sin enmarcarse.
+- **Los 480 mV de más son el fondo medido solo.** Ahí no puede haber HER y
+  circula corriente catódica creciente, de 0.00 a 0.31 mA/cm², que es la
+  reducción del oxígeno disuelto sin reacción encima y coincide con el
+  fondo que el análisis estima por otro camino. Recortar ese tramo —la
+  tentación al ver el panel— habría borrado la medida más limpia del
+  artefacto que invalida el sobrepotencial de inicio.

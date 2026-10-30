@@ -148,6 +148,18 @@ DEFAULT_ELECTROLYTE = "KOH_0.5M"
 #: the bench.
 DEFAULT_REFERENCE = "Ag/AgCl_sat"
 
+#: How far apart, in volts, two sweeps of a series may start before the
+#: comparison between them stops being a comparison of SCAN RATE.
+#:
+#: A series exists to vary one thing. A method set to begin at the
+#: open-circuit potential starts wherever the electrode happened to be
+#: sitting, so two runs of the same protocol can open hundreds of
+#: millivolts apart without anything in the file looking wrong — and the
+#: one that starts further away has been polarised through all of that
+#: before it reaches the benchmark region. That is not a scan rate, and
+#: it is invisible in every panel that plots an overpotential.
+SERIES_START_SPREAD_V = 0.050
+
 
 #: Columns of the tables :meth:`save_tables` writes, in order. Kept
 #: here rather than built inline so the CSV header and the values
@@ -672,7 +684,39 @@ class EchemSession:
             # is the one the single-curve tab reports.
             self.lsv = self.lsv_series[0]
         self.result = None
+        for note in self.lsv_series_notes():
+            self.log("warning", note)
         return True
+
+    def lsv_series_notes(self) -> list[str]:
+        """What makes the sweeps of the series not comparable.
+
+        The table of overpotentials against scan rate reads as a
+        measurement of how far from the steady state the sweeps are, and
+        that reading only holds if the scan rate is the ONLY thing that
+        differs between them. Where it is not, the number in that table
+        is partly something else, and there is nowhere else this shows
+        up: every other panel plots an overpotential, which has already
+        thrown the starting potential away.
+        """
+        curves = self.lsv_curves()
+        if len(curves) < 2:
+            return []
+        starts = [(float(np.asarray(c.potential, dtype=float)[0]),
+                   float(c.scan_rate)) for c in curves]
+        low = min(starts)
+        high = max(starts)
+        if high[0] - low[0] <= SERIES_START_SPREAD_V:
+            return []
+        return [
+            f"los barridos de la serie NO empiezan en el mismo potencial: "
+            f"el de {1e3 * high[1]:g} mV/s abre en {high[0]:+.3f} V y el de "
+            f"{1e3 * low[1]:g} mV/s en {low[0]:+.3f} V, "
+            f"{1e3 * (high[0] - low[0]):.0f} mV de diferencia. El que abre "
+            f"más lejos llega a la zona de las densidades de referencia "
+            f"después de haber sido polarizado por toda esa ventana, así "
+            f"que la dispersión entre los dos no es sólo velocidad de "
+            f"barrido"]
 
     def lsv_curves(self) -> list[Voltammogram]:
         """Every polarisation curve loaded, slowest first."""

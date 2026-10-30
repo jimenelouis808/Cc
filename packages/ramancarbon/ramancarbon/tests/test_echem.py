@@ -4128,3 +4128,49 @@ def test_panel_b_is_framed_above_the_equilibrium_and_panel_c_is_not():
         plt.close(figure)
     assert limits["her_velocidades"][0] >= -0.01
     assert limits["her_polarizacion"][0] < -0.01
+
+
+def test_the_measured_panel_says_where_each_sweep_started():
+    """The user's own pair opens 480 mV apart — one method begins at the
+    open-circuit potential — and this is the only panel whose abscissa
+    can show it: everywhere else it is an overpotential."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from ramancarbon.gui.figures_echem import (CompositeFigure,
+                                               draw_composite)
+    from ramancarbon.gui.theme import PALETTES
+
+    session = _her_session()
+    spec = CompositeFigure(panels=["her_medida"], columns=1)
+    figure = plt.figure(figsize=(5.0, 3.5))
+    assert draw_composite(figure, spec, session, PALETTES["claro"]) == []
+    axis = figure.axes[0]
+    labels = [line.get_label() for line in axis.lines]
+    starts = [text for text in labels if "desde" in text or "from" in text]
+    assert len(starts) == 2
+    # And the start of each sweep is marked, not only written.
+    assert any(line.get_marker() == "o" for line in axis.lines)
+    plt.close(figure)
+
+
+def test_sweeps_that_do_not_start_together_are_not_a_rate_comparison():
+    """A method set to begin at the open-circuit potential starts
+    wherever the electrode was sitting, so the sweep that opens further
+    away has been polarised through all of it before it reaches the
+    benchmark region. Nothing in the overpotential panels can show it."""
+    session = _her_session()
+    assert session.lsv_series_notes() == []
+
+    # The slow sweep now opens half a volt anodic of the fast one, which
+    # is what the user's 5 mV/s file does.
+    slow = session.lsv_series[0]
+    slow.potential = np.asarray(slow.potential, dtype=float) + 0.48
+    session._lsv_analyses = None
+    session._lsv_key = ()
+    notes = session.lsv_series_notes()
+    assert len(notes) == 1
+    # 480 mV of shift less the 4 mV the fixture already puts between them.
+    assert "476 mV" in notes[0]
+    assert "no empiezan en el mismo potencial" in notes[0].lower()

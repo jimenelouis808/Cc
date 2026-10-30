@@ -100,6 +100,12 @@ def main(folder: Path) -> None:
     if not curves:
         raise SystemExit("no se cargó ninguna curva")
     print(f"{len(curves)} curvas, pH {session.electrode.ph}")
+    # What makes the two sweeps not a comparison of scan rate alone.
+    # Here it is one thing and it is large: the 5 mV/s method began at
+    # the open-circuit potential, so it opens 483 mV anodic of the
+    # 1 mV/s one, which began at 0 V as asked.
+    for note in session.lsv_series_notes():
+        print(f"  aviso: {note}")
 
     # The rate the file NAME claims against the rate the sweep actually
     # ran at, read from the clock in the file. A `Voltammogram` carries

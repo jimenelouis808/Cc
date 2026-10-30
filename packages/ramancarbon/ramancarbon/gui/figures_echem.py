@@ -52,6 +52,7 @@ LABELS: dict[str, dict[str, str]] = {
     "en": {
         'benchmark_value': '$\\eta_{{j}}$ = {eta} mV',
         'against': 'in brackets: {label}',
+        'rate_from': '{rate} mV/s (from {start} V)',
         'time_s': 't / s',
         'gcd_potential': 'E / V vs {reference}',
         'current_density_ma': 'i / mA',
@@ -143,6 +144,7 @@ LABELS: dict[str, dict[str, str]] = {
     "es": {
         'benchmark_value': '$\\eta_{{j}}$ = {eta} mV',
         'against': 'entre paréntesis: {label}',
+        'rate_from': '{rate} mV/s (desde {start} V)',
         'hold_time': 't / h',
         'reference_band': '{label}',
         'drift': '{rate} mV h$^{-1}$',
@@ -1871,9 +1873,20 @@ def _panel_her_measured(axis, session, spec, palette) -> None:
     for index, curve in enumerate(curves):
         current = np.asarray(curve.current, dtype=float)
         density = 1e3 * current / area if area else 1e3 * current
-        axis.plot(np.asarray(curve.potential, dtype=float), density, "-",
+        potential = np.asarray(curve.potential, dtype=float)
+        axis.plot(potential, density, "-",
                   color=_colour(index), linewidth=1.4, zorder=3,
-                  label=f"{1e3 * curve.scan_rate:.3g} mV/s")
+                  label=spec.text("rate_from",
+                                  rate=f"{1e3 * curve.scan_rate:.3g}",
+                                  start=f"{potential[0]:+.3f}"))
+        # Where the sweep STARTED, marked. The two sweeps of a series
+        # need not begin at the same potential — a method set to start
+        # at the open-circuit potential begins wherever the electrode
+        # was sitting — and on this axis that is the one thing the panel
+        # can show and no other panel can: everywhere else the abscissa
+        # is an overpotential or a current.
+        axis.plot([potential[0]], [density[0]], "o", color=_colour(index),
+                  markersize=4, markerfacecolor="none", zorder=4)
     axis.axhline(0.0, color=GREY, linewidth=0.7, zorder=1)
     axis.set_ylabel(spec.text("j_signed") if area
                     else spec.text("current"))
