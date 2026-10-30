@@ -123,6 +123,29 @@ class Electrode:
     2.0 V is water splitting."""
     label: str = ""
 
+    def __post_init__(self) -> None:
+        """Fill the pH from the electrolyte when the table knows it.
+
+        Constructing ``Electrode(electrolyte="H2SO4_0.5M")`` used to
+        store the key as free text and leave the pH empty, so every
+        conversion to RHE was refused — on information the package was
+        holding. The refusal is right when nobody knows the pH and wrong
+        when the database does, and the only way to tell was to call
+        :meth:`use_electrolyte` instead, which is not what anybody
+        building an electrode in a script writes.
+
+        An explicitly given pH always wins, and an electrolyte that is
+        not a key in the table is left exactly as typed: free text is a
+        supported way to describe an electrolyte nobody tabulated.
+        """
+        if not self.electrolyte or self.ph is not None:
+            return
+        entry = self.electrolytes().get(self.electrolyte)
+        if entry is None:
+            return
+        self.ph = float(entry["ph"])
+        self.electrolyte = entry["label"]
+
     @staticmethod
     def electrolytes() -> dict[str, dict]:
         """The table of common electrolytes, from ``echem.json``."""

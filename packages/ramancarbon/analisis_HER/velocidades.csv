@@ -1,0 +1,4 @@
+v_mV_s,eta_10_mA_cm2_mV,eta_50_mA_cm2_mV,eta_100_mA_cm2_mV,tafel_mV_dec,eta_inicio_mV
+1,30,59,83,42.4,-11
+5,26,55,75,—,-18
+dispersión,5,5,8,,

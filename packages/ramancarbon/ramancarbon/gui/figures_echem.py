@@ -1646,8 +1646,34 @@ def _panel_ragone(axis, session, spec, palette) -> None:
 
 
 def _catalysis(session):
+    """The catalysis analysis to draw, from wherever it is available.
+
+    The full-sample analysis if one has been run, and otherwise the
+    SLOWEST curve of the polarisation series — which is the one closest
+    to a steady state. Reading only ``session.result`` meant the
+    catalysis panels drew blank for anyone who had loaded curves but not
+    pressed the analyse button, which from the figure tab is most
+    people.
+    """
     result = session.result
-    return getattr(result, "catalysis", None) if result is not None else None
+    analysis = getattr(result, "catalysis", None) if result is not None else None
+    if analysis is not None:
+        return analysis
+    for candidate in getattr(session, "lsv_analyses", list)():
+        if candidate is not None:
+            return candidate
+    return None
+
+
+#: How far ANODIC of the reaction's own potential a polarisation panel
+#: still draws, in volts.
+#:
+#: A sweep that starts at +0.48 V against a reference 0.2 V from RHE
+#: spends most of its length seven hundred millivolts away from the
+#: reaction, where nothing happens; drawn in full it compresses the
+#: hundred millivolts that carry the result into a few pixels. The data
+#: are not touched, only the view.
+PANEL_ANODIC_MARGIN = 0.06
 
 
 def _panel_her_polarisation(axis, session, spec, palette) -> None:
@@ -1677,10 +1703,65 @@ def _panel_her_polarisation(axis, session, spec, palette) -> None:
                       fontsize=spec.font_size - 2.0, color=MODEL)
     axis.set_xlabel(spec.text("j_ma_cm2"))
     axis.set_ylabel(spec.text("overpotential"))
+    _frame_the_active_branch(axis, session)
     if spec.legends:
         axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
-                    loc="lower right", handlelength=1.4)
+                    loc="upper left", handlelength=1.4)
     _tidy(axis, spec)
+
+
+def _panel_her_rates(axis, session, spec, palette) -> None:
+    """The polarisation curves at every scan rate, on one axis.
+
+    A polarisation curve is supposed to BE the steady state, so two
+    scan rates have to lie on top of each other. When they do not, the
+    gap between them is a systematic that no single curve reports, and
+    this panel is the only place it is visible. The benchmark lines are
+    drawn so the gap can be read where it is quoted.
+    """
+    from ..echem.evaluate import BENCHMARK_DENSITIES
+
+    curves = session.lsv_curves()
+    analyses = session.lsv_analyses()
+    drawn = False
+    for index, (curve, analysis) in enumerate(zip(curves, analyses)):
+        if analysis is None or analysis.curve_j is None:
+            continue
+        axis.plot(np.abs(analysis.curve_j), analysis.curve_eta, "-",
+                  color=_colour(index), linewidth=1.4, zorder=3,
+                  label=f"{1e3 * curve.scan_rate:.3g} mV/s")
+        drawn = True
+    if not drawn:
+        return
+    for level in BENCHMARK_DENSITIES:
+        axis.axvline(level, color=GREY, linewidth=0.6,
+                     linestyle=(0, (1, 2)), zorder=1)
+    # Zero is a real line here: an overpotential below it is impossible,
+    # so where the curves cross it is where the potential axis is off.
+    axis.axhline(0.0, color=GREY, linewidth=0.8, zorder=1)
+    axis.set_xscale("log")
+    _frame_the_active_branch(axis, session)
+    axis.set_xlabel(spec.text("j_ma_cm2"))
+    axis.set_ylabel(spec.text("overpotential"))
+    if spec.legends:
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
+                    loc="upper left", handlelength=1.4)
+    _tidy(axis, spec, log_x=True)
+
+
+def _frame_the_active_branch(axis, session) -> None:
+    """Limit the view to where the reaction is, keeping the data whole."""
+    tops = []
+    for analysis in getattr(session, "lsv_analyses", list)():
+        if analysis is not None and analysis.curve_eta is not None:
+            tops.append(float(np.max(analysis.curve_eta)))
+    only = _catalysis(session)
+    if not tops and only is not None and only.curve_eta is not None:
+        tops.append(float(np.max(only.curve_eta)))
+    if not tops:
+        return
+    top = max(tops)
+    axis.set_ylim(-PANEL_ANODIC_MARGIN, top + 0.1 * abs(top) + 0.01)
 
 
 def _panel_her_tafel(axis, session, spec, palette) -> None:
@@ -1719,7 +1800,7 @@ def _panel_her_tafel(axis, session, spec, palette) -> None:
     axis.set_ylabel(spec.text("overpotential"))
     if spec.legends:
         axis.legend(frameon=False, fontsize=spec.font_size - 1.5,
-                    loc="lower right", handlelength=1.6)
+                    loc="lower left", handlelength=1.6)
     _tidy(axis, spec)
 
 
@@ -1837,6 +1918,11 @@ ECHEM_PANELS: tuple[PanelSpec, ...] = (
               "η contra |j| sin logaritmo, que es donde se ve una "
               "limitación por transporte o un problema de burbujas",
               technique="catalysis"),
+    PanelSpec("her_velocidades", "HER/OER: las curvas a cada velocidad",
+              "catalysis_series", _panel_her_rates,
+              "tienen que caer una sobre otra; la separación entre ellas "
+              "es un sistemático que ninguna curva suelta informa",
+              technique="catalysis"),
     PanelSpec("her_tafel", "HER/OER: el gráfico de Tafel", "catalysis",
               _panel_her_tafel,
               "con la REGIÓN sobre la que se ajustó la pendiente "
@@ -1859,6 +1945,7 @@ DEFAULT_PANELS: dict[str, tuple[str, ...]] = {
     "eis": ("eis_nyquist", "eis_bode", "eis_capacitancia", "eis_residuo"),
     "ms": ("mott_schottky",),
     "catalysis": ("her_polarizacion", "her_tafel"),
+    "catalysis_series": ("her_velocidades",),
 }
 
 #: The techniques the panel list can be filtered by, with ``"todo"``
@@ -1912,6 +1999,7 @@ def _what_is_loaded(session) -> dict[str, bool]:
         "eis": session.eis is not None or bool(session.eis_series),
         "ms": len(session.ms_series) >= 2,
         "catalysis": getattr(session, "lsv", None) is not None,
+        "catalysis_series": len(getattr(session, "lsv_series", []) or []) >= 2,
     }
 
 
@@ -1926,7 +2014,8 @@ def default_panels(session, technique: str = "todo") -> list[str]:
     have = _what_is_loaded(session)
     offered = {panel.key for panel in available_panels(session, technique)}
     chosen: list[str] = []
-    for need in ("rates", "gcd", "eis", "catalysis", "ms"):
+    for need in ("rates", "gcd", "eis", "catalysis", "catalysis_series",
+                 "ms"):
         if not have.get(need):
             continue
         chosen.extend(key for key in DEFAULT_PANELS[need] if key in offered)

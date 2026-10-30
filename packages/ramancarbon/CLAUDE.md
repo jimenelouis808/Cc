@@ -3440,3 +3440,80 @@ tiempo y difieren sólo en la corriente.
 - **Un preajuste reinicia lo que NO menciona.** Sólo el borrador pide
   rejilla, y salir de él tiene que apagarla; un preajuste que deja en pie
   las decisiones del anterior no es un preajuste.
+
+## Un sobrepotencial de inicio NEGATIVO es imposible
+
+Y las dos curvas HER del usuario lo dan: −11 y −18 mV. Un sobrepotencial
+se mide **desde el potencial termodinámico de la reacción**, así que uno
+negativo dice que el hidrógeno se desprende antes de que la termodinámica
+lo permita.
+
+- **Lo que informa de verdad es un DESPLAZAMIENTO del eje de potencial**,
+  y lo heredan todos los números de después: el η del punto de
+  comparación, la pendiente de Tafel y la corriente de intercambio. Por
+  eso el aviso va con sus tres causas en orden de probabilidad —el
+  electrodo de referencia no está donde dice la tabla, el pH no es el
+  nominal, o lo que se mide cerca del inicio es un fondo y no la
+  reacción— y con la calibración que lo zanja: el potencial de equilibrio
+  del hidrógeno en un hilo de platino en ese mismo electrolito.
+- **`ONSET_SIGN_TOLERANCE` son 5 mV**, porque el eje se lee al milivoltio
+  y un par de milivoltios es resolución, no una afirmación.
+
+## «Sin corrección óhmica» no se puede accionar; un número sí
+
+El aviso genérico ya estaba y no sirve para decidir nada. Lo que sirve es
+**la resistencia que explicaría ENTERO el sobrepotencial que se informa**:
+a 10 mA/cm² sobre 0.0707 cm² circulan 0.707 mA, así que bastan **43 Ω**
+para dar los 30 mV de la curva del usuario — y una celda de laboratorio
+con el capilar de Luggin cerca anda justo por ahí. Dicho así, el número
+dice qué hacer: medir la impedancia de esa misma celda y dar su corte de
+alta frecuencia.
+
+Y cuando la resistencia SÍ se da, lo que se informa es su peso:
+`IR_SHARE_LIMIT` en un tercio, porque a partir de ahí el η corregido es
+la diferencia de dos números parecidos y la corrección es el término
+dominante de cualquier comparación con la literatura.
+
+## Dos velocidades de barrido tienen que caer una sobre otra
+
+- Una curva de polarización **se supone que ES el estado estacionario**,
+  así que la separación entre dos velocidades es un sistemático que
+  ninguna curva suelta informa. La sección tenía exactamente un LSV;
+  ahora hay `lsv_series`, con su tabla y la fila de **dispersión**, que
+  es el resultado y no un detalle.
+- **Y la dirección dice qué es.** Un barrido rápido lleva más corriente
+  capacitiva, llega antes a una densidad dada y lee MENOS sobrepotencial;
+  un barrido lento pasa más tiempo desprendiendo gas, así que si el
+  electrodo se degrada lee MÁS. En las curvas del usuario la lenta sale
+  siempre peor y la separación **crece** con la corriente (5, 8 y 15 mV a
+  10, 100 y 200 mA/cm²) — un desplazamiento capacitivo haría lo
+  contrario, así que lo que hay es degradación durante la medida. Es la
+  misma barrera del lado de CV y de GCD, por tercera vez: sin volver a la
+  condición inicial, una limitación cinética y una degradación dan la
+  misma curva.
+
+## El electrodo no rellenaba su propio pH
+
+`Electrode(electrolyte="H2SO4_0.5M")` guardaba la clave como texto libre
+y dejaba el pH vacío, así que **toda conversión a RHE se rechazaba — con
+la información delante**: la tabla de electrolitos tiene ese pH. La única
+forma de obtenerlo era llamar a `use_electrolyte`, que no es lo que
+escribe nadie construyendo un electrodo en un guion, y me pasó a mí
+escribiendo el análisis del usuario. Ahora se rellena en `__post_init__`,
+con las dos asimetrías que importan: un pH dado explícitamente gana
+siempre, y un electrolito que no es clave de la tabla se deja exactamente
+como se escribió, porque texto libre es una forma legítima de describir
+uno que nadie tabuló.
+
+## Los paneles de catálisis dibujaban en blanco
+
+Leían sólo `session.result`, que existe después de pulsar «Analizar», así
+que para quien hubiera cargado curvas y fuese directo a la pestaña de
+figura —que desde la pestaña de figura es todo el mundo— salían vacíos.
+Ahora caen a la curva **más lenta** de la serie, que es la más cercana al
+estado estacionario.
+
+Y el panel enmarca la **rama activa**: un barrido que empieza en +0.48 V
+contra una referencia a 0.2 V de RHE pasa setecientos milivoltios donde
+no ocurre nada, y dibujado entero comprime en unos píxeles los cien
+milivoltios que llevan el resultado. Se limita la VISTA, no los datos.

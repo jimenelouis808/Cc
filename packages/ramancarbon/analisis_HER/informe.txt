@@ -1,0 +1,46 @@
+========================================================================
+1 mV/s  (1 mV/s)
+Reacción: HER
+  E(RHE) = E(Ag/AgCl (KCl saturado)) + 0.197 + 0.05916·0.3 = E + 0.2147 V
+  SIN corrección de caída óhmica: no se ha dado la resistencia no compensada. La pendiente de Tafel sale entonces demasiado grande, y el error crece con la corriente — así que el catalizador parece peor de lo que es justo donde más importa
+
+  η a 50 mA/cm²  : 59 mV
+  η a 100 mA/cm²  : 83 mV
+η a 10 mA/cm² : 30 mV
+η de inicio (1 mA/cm²) : -11 mV
+
+Pendiente de Tafel: 42.4 mV/dec (1.85 décadas, R² = 0.9810), j₀ = 1.79 mA/cm²
+
+Actividad másica a η del punto de referencia: 35.34 A/g
+
+⚠ sin corrección de caída óhmica todo lo de abajo está sesgado, y el sesgo crece con la corriente: el sobrepotencial a 10 mA/cm² sale demasiado grande y la pendiente de Tafel también
+⚠ el sobrepotencial de inicio sale NEGATIVO (-11 mV), y eso es imposible: un sobrepotencial se mide desde el potencial termodinámico de la reacción, así que uno negativo dice que la reacción corre antes de que la termodinámica la permita. Lo que informa de verdad es un DESPLAZAMIENTO del eje de potencial, y lo heredan todos los números de abajo — el η del punto de comparación, la pendiente de Tafel y la corriente de intercambio. Tres causas, en este orden de probabilidad: el electrodo de referencia no está donde dice la tabla (se contrasta contra uno nuevo, o contra el potencial de equilibrio del hidrógeno en un hilo de platino en este mismo electrolito), el pH no es el nominal, o lo que se está midiendo cerca del inicio no es la reacción sino una corriente de fondo
+⚠ a 10 mA/cm² circulan 0.707 mA, así que bastarían 42.9 Ω de resistencia no compensada para explicar ENTERO el sobrepotencial de 30 mV que se informa. Una celda de laboratorio con un capilar de Luggin cerca anda por ahí, así que sin medir la resistencia este número no distingue un catalizador bueno de una celda con poca caída: mide la impedancia de esta misma celda y da su corte de alta frecuencia
+⚠ los 10 mA/cm² del punto de comparación son un CONVENIO (vienen del rendimiento de una celda solar del 10 % bajo 1 sol), no una constante física, y se refieren al área geométrica. Comparar con la literatura exige que el otro haya usado el mismo área y la misma corrección óhmica
+⚠ un sobrepotencial y una pendiente de Tafel describen la actividad en el instante de la medida. Sin una prueba de estabilidad (cronopotenciometría de horas, o mil ciclos) no dicen nada sobre si el catalizador aguanta, que es lo que decide si sirve
+
+========================================================================
+5 mV/s  (5 mV/s)
+Reacción: HER
+  E(RHE) = E(Ag/AgCl (KCl saturado)) + 0.197 + 0.05916·0.3 = E + 0.2147 V
+  SIN corrección de caída óhmica: no se ha dado la resistencia no compensada. La pendiente de Tafel sale entonces demasiado grande, y el error crece con la corriente — así que el catalizador parece peor de lo que es justo donde más importa
+
+  η a 50 mA/cm²  : 55 mV
+  η a 100 mA/cm²  : 75 mV
+η a 10 mA/cm² : 26 mV
+η de inicio (1 mA/cm²) : -18 mV
+
+Tafel: no determinable — el tramo lineal sólo abarca 0.98 décadas
+
+Actividad másica a η del punto de referencia: 35.34 A/g
+
+⚠ sin corrección de caída óhmica todo lo de abajo está sesgado, y el sesgo crece con la corriente: el sobrepotencial a 10 mA/cm² sale demasiado grande y la pendiente de Tafel también
+⚠ el sobrepotencial de inicio sale NEGATIVO (-18 mV), y eso es imposible: un sobrepotencial se mide desde el potencial termodinámico de la reacción, así que uno negativo dice que la reacción corre antes de que la termodinámica la permita. Lo que informa de verdad es un DESPLAZAMIENTO del eje de potencial, y lo heredan todos los números de abajo — el η del punto de comparación, la pendiente de Tafel y la corriente de intercambio. Tres causas, en este orden de probabilidad: el electrodo de referencia no está donde dice la tabla (se contrasta contra uno nuevo, o contra el potencial de equilibrio del hidrógeno en un hilo de platino en este mismo electrolito), el pH no es el nominal, o lo que se está midiendo cerca del inicio no es la reacción sino una corriente de fondo
+⚠ a 10 mA/cm² circulan 0.707 mA, así que bastarían 36.2 Ω de resistencia no compensada para explicar ENTERO el sobrepotencial de 26 mV que se informa. Una celda de laboratorio con un capilar de Luggin cerca anda por ahí, así que sin medir la resistencia este número no distingue un catalizador bueno de una celda con poca caída: mide la impedancia de esta misma celda y da su corte de alta frecuencia
+⚠ los 10 mA/cm² del punto de comparación son un CONVENIO (vienen del rendimiento de una celda solar del 10 % bajo 1 sol), no una constante física, y se refieren al área geométrica. Comparar con la literatura exige que el otro haya usado el mismo área y la misma corrección óhmica
+⚠ un sobrepotencial y una pendiente de Tafel describen la actividad en el instante de la medida. Sin una prueba de estabilidad (cronopotenciometría de horas, o mil ciclos) no dicen nada sobre si el catalizador aguanta, que es lo que decide si sirve
+
+========================================================================
+Velocidad declarada contra la medida en el reloj:
+  LSV_1mV.mpr: 1 mV/s declarados, -1.003 mV/s medidos
+  LSV_5mV.mpr: 5 mV/s declarados, -4.994 mV/s medidos

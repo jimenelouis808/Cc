@@ -3605,3 +3605,190 @@ def test_a_sudden_step_in_the_cycling_is_not_called_degradation():
         electrode=smooth[0].electrode, name="sin escalón")
     assert not any("Un salto NO" in w
                    for w in cycling_from_curve(gentle).warnings)
+
+
+# -- HER/OER: the barriers a single polarisation curve cannot raise -----
+
+
+def _her_curve(onset_v=0.05, tafel_mv=42.0, exchange=1e-3, points=400,
+               scan_rate=0.001, offset_v=0.0, resistance=0.0,
+               background_ma_cm2=0.0, area_cm2=0.0707):
+    """A synthetic HER curve with a KNOWN Tafel slope and onset.
+
+    ``offset_v`` shifts the whole potential axis, which is what a
+    reference electrode sitting somewhere other than the table says
+    does, and the thing the onset-sign check has to catch.
+    """
+    from ramancarbon.echem.curve import Electrode, Voltammogram
+
+    # eta measured from RHE, cathodic branch, as a Tafel law.
+    eta = np.linspace(-0.25, 0.20, points)
+    j = exchange * 10.0 ** (np.clip(eta, 0.0, None) / (tafel_mv * 1e-3))
+    j = j - background_ma_cm2
+    current = -j * 1e-3 * area_cm2             # amps, cathodic
+    # A POSITIVE offset puts the measured potential above where it
+    # belongs, which is what a reference electrode sitting somewhere
+    # other than the table says does, and it makes the apparent onset
+    # overpotential negative.
+    potential = -eta + offset_v + resistance * current
+    electrode = Electrode(mass_mg=0.02, area_cm2=area_cm2,
+                          electrolyte="H2SO4_0.5M", reference="RHE")
+    order = np.argsort(-potential)
+    return Voltammogram(
+        potential=potential[order], current=current[order],
+        scan_rate=scan_rate, electrode=electrode, name="HER sintetico")
+
+
+def test_the_electrode_fills_its_pH_from_its_own_electrolyte():
+    """``Electrode(electrolyte="H2SO4_0.5M")`` used to store the key as
+    free text and leave the pH empty, so every conversion to RHE was
+    refused — on information the package was holding."""
+    from ramancarbon.echem.curve import Electrode
+
+    filled = Electrode(electrolyte="H2SO4_0.5M")
+    assert filled.ph == pytest.approx(0.3)
+    assert filled.electrolyte == "H2SO4 0.5 M"      # the display label
+
+    # An explicitly given pH always wins.
+    assert Electrode(electrolyte="H2SO4_0.5M", ph=1.5).ph == 1.5
+    # And free text is left exactly as typed.
+    odd = Electrode(electrolyte="algo que nadie tabuló")
+    assert odd.ph is None
+    assert odd.electrolyte == "algo que nadie tabuló"
+    assert Electrode().ph is None
+
+
+def test_a_negative_onset_overpotential_is_called_impossible():
+    """An overpotential is measured FROM the thermodynamic potential, so
+    a negative one says the reaction runs before thermodynamics allows
+    it. Both of the user's curves report one (−11 and −18 mV), which is
+    an offset in the potential axis that every number inherits."""
+    from ramancarbon.echem.evaluate import analyse_catalysis
+
+    shifted = analyse_catalysis(_her_curve(offset_v=0.16), reaction="HER")
+    assert shifted.onset_overpotential is not None
+    assert shifted.onset_overpotential < 0
+    assert any("NEGATIVO" in w and "imposible" in w
+               for w in shifted.warnings)
+
+    clean = analyse_catalysis(_her_curve(offset_v=0.0), reaction="HER")
+    assert not any("NEGATIVO" in w for w in clean.warnings)
+
+
+def test_a_few_millivolts_of_negative_onset_is_not_an_accusation():
+    """The potential axis is read to the millivolt, so a couple of
+    millivolts either way is resolution rather than a claim."""
+    from ramancarbon.echem.evaluate import (ONSET_SIGN_TOLERANCE,
+                                            analyse_catalysis)
+
+    assert ONSET_SIGN_TOLERANCE == pytest.approx(0.005)
+    # 126 mV is this curve's own onset, so 128 leaves 2 mV of apparent
+    # negative overpotential: resolution, not a claim.
+    small = analyse_catalysis(_her_curve(offset_v=0.128), reaction="HER")
+    assert not any("NEGATIVO" in w for w in small.warnings)
+
+
+def test_without_a_resistance_the_report_says_what_would_erase_it():
+    """A generic "no iR correction" warning cannot be acted on. The
+    resistance that would account for the WHOLE reported overpotential
+    can: on the user's curve it is 43 Ω, which an ordinary cell reaches,
+    so that overpotential does not yet distinguish a good catalyst from
+    a low-resistance cell."""
+    from ramancarbon.echem.evaluate import analyse_catalysis
+
+    result = analyse_catalysis(_her_curve(), reaction="HER")
+    assert result.overpotential_at_benchmark is not None
+    assert any("bastarían" in w and "Ω" in w for w in result.warnings)
+
+
+def test_a_resistance_that_dominates_the_overpotential_is_named():
+    from ramancarbon.echem.curve import Electrode
+    from ramancarbon.echem.evaluate import analyse_catalysis
+
+    curve = _her_curve()
+    curve.electrode = Electrode(
+        mass_mg=0.02, area_cm2=0.0707, electrolyte="H2SO4_0.5M",
+        reference="RHE", resistance_ohm=60.0)
+    result = analyse_catalysis(curve, reaction="HER")
+    assert any("término dominante" in w for w in result.warnings)
+
+    curve.electrode.resistance_ohm = 0.05       # negligible
+    quiet = analyse_catalysis(curve, reaction="HER")
+    assert not any("término dominante" in w for w in quiet.warnings)
+
+
+def _her_session(rates=(0.001, 0.005)):
+    from ramancarbon.echem.curve import Electrode
+    from ramancarbon.gui.echem_state import EchemSession
+
+    session = EchemSession(name="HER")
+    session.electrode = Electrode(mass_mg=0.02, area_cm2=0.0707,
+                                  electrolyte="H2SO4_0.5M", reference="RHE")
+    session.reaction = "HER"
+    for index, rate in enumerate(rates):
+        curve = _her_curve(scan_rate=rate, offset_v=0.004 * index)
+        curve.electrode = session.electrode
+        curve.name = f"{1e3 * rate:g} mV/s"
+        session.lsv_series.append(curve)
+    session.lsv_series.sort(key=lambda c: c.scan_rate)
+    session.lsv = session.lsv_series[0]
+    session._lsv_analyses = None
+    session._lsv_key = ()
+    return session
+
+
+def test_two_scan_rates_are_compared_and_their_spread_reported():
+    """A polarisation curve is supposed to BE the steady state, so two
+    scan rates have to lie on top of each other. The gap between them is
+    a systematic that no single curve reports — on the user's pair it is
+    5 mV at 10 mA/cm² and 8 mV at 100."""
+    session = _her_session()
+    rows = session.lsv_rate_rows()
+    assert len(rows) == 3                      # two rates and the spread
+    assert rows[-1][0] == "dispersión"
+    assert rows[0][0] == "1" and rows[1][0] == "5"
+    # The spread column is a number, not a dash.
+    assert rows[-1][1] not in ("—", "")
+
+
+def test_one_curve_alone_gets_no_spread_row():
+    session = _her_session(rates=(0.001,))
+    rows = session.lsv_rate_rows()
+    assert len(rows) == 1
+    assert rows[0][0] == "1"
+
+
+def test_the_catalysis_panels_draw_without_a_full_analysis():
+    """They used to read only ``session.result``, so they came back
+    blank for anyone who had loaded curves and not pressed analyse —
+    which from the figure tab is everybody."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from ramancarbon.gui.figures_echem import (CompositeFigure,
+                                               available_panels,
+                                               draw_composite, every_axes)
+    from ramancarbon.gui.theme import PALETTES
+
+    session = _her_session()
+    assert session.result is None
+    panels = available_panels(session, "catalysis")
+    assert {p.key for p in panels} == {"her_polarizacion", "her_tafel",
+                                       "her_velocidades"}
+    for panel in panels:
+        spec = CompositeFigure(panels=[panel.key], columns=1)
+        figure = plt.figure(figsize=(5.0, 3.5))
+        assert draw_composite(figure, spec, session,
+                              PALETTES["claro"]) == [], panel.key
+        drawn = sum(len(a.get_lines()) for a in every_axes(figure))
+        assert drawn > 0, panel.key
+        plt.close(figure)
+
+
+def test_the_rate_panel_needs_two_curves_to_mean_anything():
+    from ramancarbon.gui.figures_echem import available_panels
+
+    one = _her_session(rates=(0.001,))
+    assert "her_velocidades" not in {p.key
+                                     for p in available_panels(one, "catalysis")}

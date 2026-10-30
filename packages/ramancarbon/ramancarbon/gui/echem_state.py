@@ -242,6 +242,19 @@ class EchemSession:
     for the last. A GCPL holds a thousand cycles and the first ones are
     formation, not performance."""
     lsv: Optional[Voltammogram] = None
+    lsv_series: list[Voltammogram] = field(default_factory=list)
+    """Polarisation curves of the SAME electrode at several scan rates.
+
+    One curve cannot say whether its overpotential is the catalyst's or
+    the measurement's. A polarisation curve is supposed to be the
+    steady state, so two scan rates have to lie on top of each other;
+    when they do not, the gap between them is the systematic, and which
+    way it leans says what it is. A faster sweep carries more capacitive
+    current, so it reaches a given current density EARLIER and reads a
+    smaller overpotential; a slower sweep spends longer evolving gas, so
+    if the electrode is degrading it reads a larger one. The two effects
+    are separated by their size against current density, not by one
+    curve."""
     reaction: str = "OER"
     circuit: str = AUTO_CIRCUIT
     """The circuit NAME, or a circuit string typed by hand, or
@@ -328,6 +341,8 @@ class EchemSession:
     messages: list[tuple[str, str]] = field(default_factory=list)
     _eis_analyses: Optional[list] = field(default=None, repr=False)
     _ms_result: Optional[object] = field(default=None, repr=False)
+    _lsv_analyses: Optional[list] = field(default=None, repr=False)
+    _lsv_key: tuple = field(default=(), repr=False)
     _gcd_analyses: Optional[list] = field(default=None, repr=False)
     _gcd_key: tuple = field(default=(), repr=False)
     _cyclings: Optional[list] = field(default=None, repr=False)
@@ -630,6 +645,97 @@ class EchemSession:
                      f"de {agreement:.3f}°")
         return True
 
+    def add_lsv_to_series(self, path: str | Path, scan_rate: float = 0.005,
+                          label: str = "") -> bool:
+        """Load one more polarisation curve into the comparison."""
+        try:
+            curve = read_cv(path, scan_rate=scan_rate,
+                            electrode=self.electrode,
+                            potential_scale=self.potential_scale,
+                            current_scale=self.current_scale)
+        except (OSError, ValueError, EchemIOError) as exc:
+            self.log("error", f"{Path(path).name}: {exc}")
+            return False
+        curve.name = label.strip() or f"{1e3 * scan_rate:g} mV/s"
+        self.lsv_series.append(curve)
+        self.lsv_series.sort(key=lambda c: c.scan_rate)
+        self._lsv_analyses = None
+        if self.lsv is None:
+            # The slowest curve is the closest to a steady state, so it
+            # is the one the single-curve tab reports.
+            self.lsv = self.lsv_series[0]
+        self.result = None
+        return True
+
+    def lsv_curves(self) -> list[Voltammogram]:
+        """Every polarisation curve loaded, slowest first."""
+        curves = list(self.lsv_series)
+        if self.lsv is not None and not any(c is self.lsv for c in curves):
+            curves.insert(0, self.lsv)
+        return sorted(curves, key=lambda c: c.scan_rate)
+
+    def lsv_analyses(self) -> list:
+        """One :class:`CatalysisResult` per curve, cached."""
+        from ..echem.evaluate import analyse_catalysis
+
+        curves = self.lsv_curves()
+        key = tuple(id(c) for c in curves) + (self.reaction,)
+        if self._lsv_key == key and self._lsv_analyses is not None:
+            return self._lsv_analyses
+        out = []
+        for curve in curves:
+            try:
+                out.append(analyse_catalysis(curve, reaction=self.reaction))
+            except (ValueError, ZeroDivisionError) as exc:
+                self.log("warning", f"{curve.name}: {exc}")
+                out.append(None)
+        self._lsv_analyses = out
+        self._lsv_key = key
+        return out
+
+    def lsv_rate_rows(self) -> list[tuple[str, ...]]:
+        """η at each benchmark, one row per scan rate, plus the spread.
+
+        The spread is the point of the table. A polarisation curve is
+        meant to be the steady state, so curves at two scan rates have
+        to agree; the row that says how far apart they are is the only
+        measurement of that here, and it is a systematic that no single
+        curve reports.
+        """
+        from ..echem.evaluate import BENCHMARK_DENSITIES
+
+        curves = self.lsv_curves()
+        analyses = self.lsv_analyses()
+        rows: list[tuple[str, ...]] = []
+        collected: dict[float, list[float]] = {
+            level: [] for level in BENCHMARK_DENSITIES}
+        for curve, analysis in zip(curves, analyses):
+            if analysis is None:
+                continue
+            cells = [f"{1e3 * curve.scan_rate:g}"]
+            for level in BENCHMARK_DENSITIES:
+                value = (analysis.overpotentials or {}).get(level)
+                if value is None:
+                    cells.append("no alcanzado")
+                else:
+                    cells.append(f"{1e3 * value:.0f}")
+                    collected[level].append(float(value))
+            tafel = analysis.tafel
+            cells.append(f"{tafel.slope_mv_per_decade:.1f}"
+                         if tafel and tafel.valid else "—")
+            cells.append(f"{1e3 * analysis.onset_overpotential:.0f}"
+                         if analysis.onset_overpotential is not None else "—")
+            rows.append(tuple(cells))
+        if len(rows) >= 2:
+            spread = ["dispersión"]
+            for level in BENCHMARK_DENSITIES:
+                values = collected[level]
+                spread.append(f"{1e3 * (max(values) - min(values)):.0f}"
+                              if len(values) >= 2 else "—")
+            spread.extend(["", ""])
+            rows.append(tuple(spread))
+        return rows
+
     def load_lsv(self, path: str | Path, scan_rate: float = 0.005) -> bool:
         try:
             self.lsv = read_cv(path, scan_rate=scan_rate,
@@ -728,10 +834,19 @@ class EchemSession:
                 self.eis = None
             self.eis_series = []
             self._eis_analyses = None
+        elif kind == "lsv_series":
+            if any(self.lsv is c for c in self.lsv_series):
+                self.lsv = None
+            self.lsv_series = []
+            self._lsv_analyses = None
+            self._lsv_key = ()
         elif kind in ("cv", "gcd", "eis", "lsv"):
             setattr(self, kind, None)
             if kind == "gcd":
                 self._forget_gcd()
+            if kind == "lsv":
+                self._lsv_analyses = None
+                self._lsv_key = ()
         self.result = None
 
     def _forget_gcd(self) -> None:

@@ -419,6 +419,28 @@ BENCHMARK_DENSITIES: tuple[float, ...] = (10.0, 50.0, 100.0)
 #: 400 V, from a measurement whose real maximum was 240 mA/cm².
 ABSURD_CURRENT_DENSITY = 1.0e4
 
+#: Overpotential, in volts, below which a NEGATIVE onset is reported as
+#: an impossibility rather than as a number.
+#:
+#: An overpotential is defined against the thermodynamic potential of the
+#: reaction, so a negative one says the reaction is running before
+#: thermodynamics allows it. That cannot happen, and the small negative
+#: values a real measurement produces are the resolution of the
+#: potential axis rather than a claim: a couple of millivolts is the
+#: reference electrode being read to the millivolt. Beyond that it is an
+#: OFFSET, and the offset travels into the benchmark overpotential, the
+#: Tafel slope and the exchange current alike.
+ONSET_SIGN_TOLERANCE = 0.005
+
+#: Fraction of the measured overpotential that an ohmic drop may reach
+#: before the overpotential stops being a measurement of the catalyst.
+#:
+#: The iR drop is subtracted from the measured overpotential, so one
+#: comparable to it leaves a difference of two large numbers. At a third
+#: the correction is already the dominant term in any comparison with
+#: the literature.
+IR_SHARE_LIMIT = 0.33
+
 
 @dataclass
 class CatalysisResult:
@@ -781,6 +803,61 @@ def analyse_catalysis(
             "densidad no está medido. Extrapolarlo hacia abajo sería dibujar: "
             "mide más despacio o desde un potencial menos activo"
         )
+    # An overpotential is measured FROM the thermodynamic potential, so a
+    # negative one says the reaction runs before thermodynamics allows
+    # it. It cannot, and what it actually reports is an offset in the
+    # potential axis -- which every number below inherits.
+    onset = result.onset_overpotential
+    if onset is not None and onset < -ONSET_SIGN_TOLERANCE:
+        result.warnings.append(
+            f"el sobrepotencial de inicio sale NEGATIVO ({1e3 * onset:.0f} "
+            "mV), y eso es imposible: un sobrepotencial se mide desde el "
+            "potencial termodinámico de la reacción, así que uno negativo "
+            "dice que la reacción corre antes de que la termodinámica la "
+            "permita. Lo que informa de verdad es un DESPLAZAMIENTO del eje "
+            "de potencial, y lo heredan todos los números de abajo — el η "
+            "del punto de comparación, la pendiente de Tafel y la corriente "
+            "de intercambio. Tres causas, en este orden de probabilidad: el "
+            "electrodo de referencia no está donde dice la tabla (se "
+            "contrasta contra uno nuevo, o contra el potencial de equilibrio "
+            "del hidrógeno en un hilo de platino en este mismo electrolito), "
+            "el pH no es el nominal, o lo que se está midiendo cerca del "
+            "inicio no es la reacción sino una corriente de fondo"
+        )
+
+    # What the ohmic drop would be at the benchmark, in millivolts, next
+    # to the overpotential it is subtracted from. Without a resistance
+    # the useful number is the one that would eat the whole measurement.
+    benchmark_eta = result.overpotential_at_benchmark
+    if benchmark_eta is not None and electrode.area_cm2:
+        current_a = benchmark * 1e-3 * float(electrode.area_cm2)
+        resistance = electrode.resistance_ohm
+        if resistance:
+            share = (current_a * float(resistance)) / abs(benchmark_eta)
+            if share > IR_SHARE_LIMIT:
+                result.warnings.append(
+                    f"a {benchmark:g} mA/cm² circulan {1e3 * current_a:.3g} mA, "
+                    f"así que la caída óhmica vale "
+                    f"{1e3 * current_a * float(resistance):.0f} mV sobre un "
+                    f"sobrepotencial medido de {1e3 * benchmark_eta:.0f} mV: "
+                    f"el {100 * share:.0f} %. La corrección no es un detalle "
+                    "aquí, es el término dominante, y el η corregido es la "
+                    "diferencia de dos números parecidos"
+                )
+        elif current_a > 0:
+            fatal = abs(benchmark_eta) / current_a
+            result.warnings.append(
+                f"a {benchmark:g} mA/cm² circulan {1e3 * current_a:.3g} mA, "
+                f"así que bastarían {fatal:.1f} Ω de resistencia no "
+                f"compensada para explicar ENTERO el sobrepotencial de "
+                f"{1e3 * benchmark_eta:.0f} mV que se informa. Una celda de "
+                "laboratorio con un capilar de Luggin cerca anda por ahí, "
+                "así que sin medir la resistencia este número no distingue "
+                "un catalizador bueno de una celda con poca caída: mide la "
+                "impedancia de esta misma celda y da su corte de alta "
+                "frecuencia"
+            )
+
     if j.max() > ABSURD_CURRENT_DENSITY:
         result.warnings.append(
             f"la densidad de corriente llega a {j.max():.3g} mA/cm², que son "
