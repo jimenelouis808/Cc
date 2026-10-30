@@ -825,3 +825,98 @@ def test_two_unnamed_columns_still_refuse_the_file():
         path.write_bytes(blob)
         with pytest.raises(BioLogicError, match="identificador desconocido"):
             read_mpr(path)
+
+
+# -- holds: a sweep whose rate is zero -----------------------------------
+
+
+def _hold_columns(n=200, galvanostatic=True, setpoint=-0.707):
+    """A constant-current or constant-potential hold."""
+    time = np.linspace(0.5, 100.0, n)
+    potential = np.linspace(-0.227, -0.287, n)
+    current = np.full(n, setpoint)
+    if galvanostatic:
+        # control/mA (20) holds the set point; the potential is measured.
+        return {4: time, 20: current.astype("f4"),
+                174: potential.astype("f4"), 8: current.astype("f4")}
+    # control/V (19) holds the set point; the current is measured.
+    return {4: time, 19: np.full(n, -0.35, dtype="f4"),
+            6: np.full(n, -0.35, dtype="f4"),
+            8: np.linspace(-0.7, -0.4, n).astype("f4")}
+
+
+def test_a_constant_current_hold_is_not_a_cycling_measurement(tmp_path):
+    """A chronopotentiometry is a sweep whose rate is zero, and nothing
+    in the record separates it from the technique it came from except
+    that the set point does not move. Without that it reads as a
+    charge-discharge measurement and comes back as one long branch whose
+    capacitance means nothing."""
+    from ramancarbon.echem.biologic import technique_from_data, to_curve
+
+    columns = _hold_columns()
+    path = tmp_path / "cp.mpr"
+    path.write_bytes(_mpr(columns, settings=b"\x00",
+                          flags={1: np.full(len(columns[4]), 1,
+                                            dtype=np.uint8)}))
+    data = read_mpr(path)
+    kind, why = technique_from_data(data)
+    assert kind == "cp"
+    assert "no cambia nunca" in why
+
+    curve = to_curve(data, kind=kind)
+    assert curve.metadata["retencion"] == "corriente constante"
+    assert curve.metadata["consigna"] == pytest.approx(-0.707e-3, rel=1e-3)
+
+
+def test_a_constant_potential_hold_is_read_as_chronoamperometry(tmp_path):
+    """The same rule the other way round: a potentiostatic record whose
+    set point never moves is a chronoamperometry, and read as a sweep it
+    is refused for having no scan rate."""
+    from ramancarbon.echem.biologic import technique_from_data, to_curve
+
+    columns = _hold_columns(galvanostatic=False)
+    path = tmp_path / "ca.mpr"
+    path.write_bytes(_mpr(columns, settings=b"\x00",
+                          flags={1: np.full(len(columns[4]), 2,
+                                            dtype=np.uint8)}))
+    data = read_mpr(path)
+    kind, why = technique_from_data(data)
+    assert kind == "ca"
+    assert "no cambia nunca" in why
+    curve = to_curve(data, kind=kind)
+    assert curve.metadata["retencion"] == "potencial constante"
+
+
+def test_a_sweep_is_still_a_sweep(tmp_path):
+    """The hold test must not swallow the techniques it sits beside."""
+    from ramancarbon.echem.biologic import technique_from_data
+
+    path = tmp_path / "cv.mpr"
+    columns = _cv_columns(200)
+    columns[19] = np.asarray(columns[6], dtype="f4")   # control/V sweeps
+    path.write_bytes(_mpr(columns, settings=b"\x00",
+                          flags={1: np.full(200, 2, dtype=np.uint8)}))
+    kind, _ = technique_from_data(read_mpr(path))
+    assert kind in ("cv", "lsv")
+
+
+def test_the_averaged_potential_is_read_under_both_of_its_names(tmp_path):
+    """``<Ewe>/V`` and ``<Ewe/V>`` are the same quantity spelled
+    differently by the two halves of EC-Lab: the binary column map uses
+    the first and the text export writes the second. A reader that knows
+    only one works on one export of a measurement and refuses the
+    other."""
+    from ramancarbon.echem.biologic import _potential
+
+    class Fake:
+        def __init__(self, name):
+            self.columns = {name: np.linspace(-0.2, -0.3, 20)}
+
+        def first(self, *names):
+            for name in names:
+                if name in self.columns:
+                    return self.columns[name]
+            return None
+
+    for name in ("Ewe/V", "<Ewe>/V", "<Ewe/V>"):
+        assert _potential(Fake(name)) is not None, name

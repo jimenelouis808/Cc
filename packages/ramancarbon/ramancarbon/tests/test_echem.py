@@ -3953,3 +3953,72 @@ def test_stability_refuses_what_it_cannot_measure():
         stability([0.0, 1.0], [0.05, 0.06], -10.0)
     with pytest.raises(ValueError, match="no avanza"):
         stability(np.zeros(20), np.linspace(0.05, 0.06, 20), -10.0)
+
+
+# -- the benchmark catalyst is a BAND, and only where it belongs --------
+
+
+def test_the_reference_catalysts_carry_a_range_and_a_source():
+    """A reference is a band, not a line. A commercial Pt/C spans a
+    range depending on loading, support, ohmic correction and whether
+    the electrolyte was purged, and one value drawn across a figure
+    invites a comparison nobody can defend."""
+    from ramancarbon.echem.evaluate import (reference_band,
+                                            reference_catalysts)
+
+    every = reference_catalysts()
+    assert every, "la tabla de catalizadores de referencia está vacía"
+    for key, entry in every.items():
+        assert entry.get("source"), key
+        assert entry.get("confidence") in ("high", "medium", "low"), key
+        assert entry.get("reaction") in ("HER", "OER"), key
+        slope = entry.get("tafel_mv_per_decade")
+        assert slope and len(slope) == 2 and slope[0] < slope[1], key
+        for level, span in (entry.get("overpotential_mv") or {}).items():
+            assert len(span) == 2 and span[0] < span[1], (key, level)
+
+    platinum = reference_catalysts("HER", "H2SO4_0.5M")["Pt_C_20_HER_acido"]
+    low, high = reference_band(platinum, 10.0)
+    assert 0.015 < low < high < 0.050
+    # A density nobody tabulated comes back as nothing, not as a guess.
+    assert reference_band(platinum, 7.0) is None
+
+
+def test_the_reference_band_is_only_drawn_for_its_own_medium():
+    """A Pt/C band from acid drawn over a measurement in base would be
+    worse than no band at all."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from ramancarbon.echem.curve import Electrode
+    from ramancarbon.gui.figures_echem import (CompositeFigure,
+                                               draw_composite, every_axes)
+    from ramancarbon.gui.theme import PALETTES
+
+    session = _her_session()
+    session.electrode = Electrode(mass_mg=0.02, area_cm2=0.0707,
+                                  electrolyte="H2SO4_0.5M",
+                                  reference="RHE")
+    spec = CompositeFigure(panels=["her_polarizacion"], columns=1)
+    figure = plt.figure(figsize=(5.0, 3.5))
+    assert draw_composite(figure, spec, session, PALETTES["claro"]) == []
+    acid = sum(len(a.patches) for a in every_axes(figure))
+    plt.close(figure)
+    assert acid >= 1
+
+    session.electrode = Electrode(mass_mg=0.02, area_cm2=0.0707,
+                                  electrolyte="KOH_1M", reference="RHE")
+    figure = plt.figure(figsize=(5.0, 3.5))
+    assert draw_composite(figure, spec, session, PALETTES["claro"]) == []
+    base = sum(len(a.patches) for a in every_axes(figure))
+    plt.close(figure)
+    assert base == 0
+
+
+def test_an_OER_session_gets_no_HER_band():
+    from ramancarbon.echem.evaluate import reference_catalysts
+
+    assert "Pt_C_20_HER_acido" not in reference_catalysts("OER",
+                                                          "H2SO4_0.5M")
+    assert "Pt_C_20_HER_acido" in reference_catalysts("HER", "H2SO4_0.5M")

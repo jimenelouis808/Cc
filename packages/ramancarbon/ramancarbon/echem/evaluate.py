@@ -488,6 +488,45 @@ STABILITY_DRIFT_V_PER_H = 0.010
 STABILITY_FAILING_V_PER_H = 0.050
 
 
+def reference_catalysts(reaction: str = "",
+                       electrolyte: str = "") -> dict[str, dict]:
+    """The benchmark catalysts, optionally for one reaction and medium.
+
+    A reference is a BAND and not a line: a commercial Pt/C gives a
+    range depending on its loading, its support, whether the ohmic drop
+    was corrected and whether the electrolyte was purged, and drawing it
+    as one value invites a comparison nobody can defend. Every entry
+    carries its interval, its source and its confidence, like every
+    other literature value in this package.
+    """
+    from .curve import load_echem_database
+
+    table = load_echem_database().get("reference_catalysts", {})
+    out: dict[str, dict] = {}
+    for key, entry in table.items():
+        if key.startswith("_") or not isinstance(entry, dict):
+            continue
+        if reaction and entry.get("reaction") != reaction:
+            continue
+        if electrolyte and entry.get("electrolyte") != electrolyte:
+            continue
+        out[key] = entry
+    return out
+
+
+def reference_band(entry: dict, density: float) -> Optional[tuple[float, float]]:
+    """``(low, high)`` overpotential in VOLTS at one current density."""
+    table = entry.get("overpotential_mv") or {}
+    for key, span in table.items():
+        try:
+            level = float(key)
+        except (TypeError, ValueError):
+            continue
+        if abs(level - density) < 1e-9 and len(span) == 2:
+            return (float(span[0]) * 1e-3, float(span[1]) * 1e-3)
+    return None
+
+
 @dataclass
 class StabilityResult:
     """What a constant-current hold did to the overpotential."""

@@ -1,46 +1,49 @@
 ========================================================================
 1 mV/s  (1 mV/s)
+  ventana COMANDADA: -0.3500 a -0.0013 V vs la referencia
+  ⚠ los 2 primero(s) punto(s) se descartan: el potencial MEDIDO (+0.4577 V) está a más de 20 mV del COMANDADO (+0.0001 V), así que son anteriores a que el lazo de control tirase de la celda y lo que marcan es el potencial de reposo, no el barrido. Conservarlos hace que la ventana del experimento parezca más ancha de lo que fue
+  ⚠ la disposición binaria del .mpr es ingeniería inversa de la comunidad, no una especificación publicada. La aritmética cuadra, que descarta que una columna tenga la ANCHURA equivocada, pero no que tenga el NOMBRE equivocado. Comprueba una medida contra la exportación ASCII (.mpt) de EC-Lab la primera vez; para lo que se publica, exporta .mpt
+  ⚠ no hay un .mps junto al .mpr, así que los ajustes del experimento (velocidad, corriente, ventana) no se han podido leer. Cópialos juntos: EC-Lab los escribe en pareja
 Reacción: HER
   E(RHE) = E(Ag/AgCl (KCl saturado)) + 0.197 + 0.05916·0.3 = E + 0.2147 V
-  SIN corrección de caída óhmica: no se ha dado la resistencia no compensada. La pendiente de Tafel sale entonces demasiado grande, y el error crece con la corriente — así que el catalizador parece peor de lo que es justo donde más importa
+  corregido el 100 % restante de la caída óhmica con R_u = 1.9 Ω
 
-  η a 50 mA/cm²  : 59 mV
-  η a 100 mA/cm²  : 83 mV
-η a 10 mA/cm² : 30 mV
+  η a 50 mA/cm²  : 53 mV
+  η a 100 mA/cm²  : 70 mV
+η a 10 mA/cm² : 29 mV
 η de inicio (1 mA/cm²) : -11 mV
 
-Pendiente de Tafel: 39.5 mV/dec (1.66 décadas, R² = 0.9921), j₀ = 1.67 mA/cm²
+Pendiente de Tafel: 36.7 mV/dec (1.90 décadas, R² = 0.9898), j₀ = 1.64 mA/cm²
 
 Actividad másica a η del punto de referencia: 35.34 A/g
 
-⚠ sin corrección de caída óhmica todo lo de abajo está sesgado, y el sesgo crece con la corriente: el sobrepotencial a 10 mA/cm² sale demasiado grande y la pendiente de Tafel también
 ⚠ el sobrepotencial de inicio sale NEGATIVO (-11 mV), y eso es imposible: un sobrepotencial se mide desde el potencial termodinámico de la reacción, así que uno negativo dice que la reacción corre antes de que la termodinámica la permita. Lo que informa de verdad es un DESPLAZAMIENTO del eje de potencial, y lo heredan todos los números de abajo — el η del punto de comparación, la pendiente de Tafel y la corriente de intercambio. Tres causas, en este orden de probabilidad: el electrodo de referencia no está donde dice la tabla (se contrasta contra uno nuevo, o contra el potencial de equilibrio del hidrógeno en un hilo de platino en este mismo electrolito), el pH no es el nominal, o lo que se está midiendo cerca del inicio no es la reacción sino una corriente de fondo
-⚠ a 10 mA/cm² circulan 0.707 mA, así que bastarían 42.9 Ω de resistencia no compensada para explicar ENTERO el sobrepotencial de 30 mV que se informa. Una celda de laboratorio con un capilar de Luggin cerca anda por ahí, así que sin medir la resistencia este número no distingue un catalizador bueno de una celda con poca caída: mide la impedancia de esta misma celda y da su corte de alta frecuencia
 ⚠ por encima del potencial de equilibrio circula una corriente catódica sostenida de 0.307 mA/cm², y ahí no debería circular ninguna: la reacción no puede correr antes de su propio potencial. Lo más común en una celda acuosa sin desairear es la reducción del OXÍGENO disuelto, cuya corriente límite en un disco de milímetros en ácido al aire son unas décimas de mA/cm². Esa corriente se SUMA al barrido, así que la curva llega a cualquier densidad antes de lo que llegaría la reacción sola y todos los sobrepotenciales salen pequeños de más. Se quita burbujeando N₂ o Ar veinte minutos y manteniendo la manta de gas durante la medida
-⚠ η a 10 mA/cm² sale 30 mV, que es el intervalo del PLATINO (20-35 mV). Para un catalizador no noble ese número se explica casi siempre por platino disuelto del CONTRAELECTRODO y redepositado en el de trabajo: hacen falta nanogramos, no se ve en ninguna medida electroquímica —porque lo que se mide después es platino de verdad— y es el artefacto mejor documentado de la literatura de HER. La pendiente de Tafel (39 mV/dec) es el otro indicio: el platino está cerca de 30. Se descarta repitiendo con un contraelectrodo de GRAFITO en celda limpia, o buscando Pt 4f por XPS en el electrodo medido
+⚠ η a 10 mA/cm² sale 29 mV, que es el intervalo del PLATINO (20-35 mV). Para un catalizador no noble ese número se explica casi siempre por platino disuelto del CONTRAELECTRODO y redepositado en el de trabajo: hacen falta nanogramos, no se ve en ninguna medida electroquímica —porque lo que se mide después es platino de verdad— y es el artefacto mejor documentado de la literatura de HER. La pendiente de Tafel (37 mV/dec) es el otro indicio: el platino está cerca de 30. Se descarta repitiendo con un contraelectrodo de GRAFITO en celda limpia, o buscando Pt 4f por XPS en el electrodo medido
 ⚠ los 10 mA/cm² del punto de comparación son un CONVENIO (vienen del rendimiento de una celda solar del 10 % bajo 1 sol), no una constante física, y se refieren al área geométrica. Comparar con la literatura exige que el otro haya usado el mismo área y la misma corrección óhmica
 ⚠ un sobrepotencial y una pendiente de Tafel describen la actividad en el instante de la medida. Sin una prueba de estabilidad (cronopotenciometría de horas, o mil ciclos) no dicen nada sobre si el catalizador aguanta, que es lo que decide si sirve
 
 ========================================================================
 5 mV/s  (5 mV/s)
+  ventana COMANDADA: -0.3500 a +0.4812 V vs la referencia
+  ⚠ la disposición binaria del .mpr es ingeniería inversa de la comunidad, no una especificación publicada. La aritmética cuadra, que descarta que una columna tenga la ANCHURA equivocada, pero no que tenga el NOMBRE equivocado. Comprueba una medida contra la exportación ASCII (.mpt) de EC-Lab la primera vez; para lo que se publica, exporta .mpt
+  ⚠ no hay un .mps junto al .mpr, así que los ajustes del experimento (velocidad, corriente, ventana) no se han podido leer. Cópialos juntos: EC-Lab los escribe en pareja
 Reacción: HER
   E(RHE) = E(Ag/AgCl (KCl saturado)) + 0.197 + 0.05916·0.3 = E + 0.2147 V
-  SIN corrección de caída óhmica: no se ha dado la resistencia no compensada. La pendiente de Tafel sale entonces demasiado grande, y el error crece con la corriente — así que el catalizador parece peor de lo que es justo donde más importa
+  corregido el 100 % restante de la caída óhmica con R_u = 1.9 Ω
 
-  η a 50 mA/cm²  : 55 mV
-  η a 100 mA/cm²  : 75 mV
-η a 10 mA/cm² : 26 mV
+  η a 50 mA/cm²  : 48 mV
+  η a 100 mA/cm²  : 62 mV
+η a 10 mA/cm² : 24 mV
 η de inicio (1 mA/cm²) : -18 mV
 
-Tafel: no determinable — el tramo lineal sólo abarca 0.98 décadas
+Tafel: no determinable — el tramo lineal sólo abarca 0.87 décadas
 
 Actividad másica a η del punto de referencia: 35.34 A/g
 
-⚠ sin corrección de caída óhmica todo lo de abajo está sesgado, y el sesgo crece con la corriente: el sobrepotencial a 10 mA/cm² sale demasiado grande y la pendiente de Tafel también
 ⚠ el sobrepotencial de inicio sale NEGATIVO (-18 mV), y eso es imposible: un sobrepotencial se mide desde el potencial termodinámico de la reacción, así que uno negativo dice que la reacción corre antes de que la termodinámica la permita. Lo que informa de verdad es un DESPLAZAMIENTO del eje de potencial, y lo heredan todos los números de abajo — el η del punto de comparación, la pendiente de Tafel y la corriente de intercambio. Tres causas, en este orden de probabilidad: el electrodo de referencia no está donde dice la tabla (se contrasta contra uno nuevo, o contra el potencial de equilibrio del hidrógeno en un hilo de platino en este mismo electrolito), el pH no es el nominal, o lo que se está midiendo cerca del inicio no es la reacción sino una corriente de fondo
-⚠ a 10 mA/cm² circulan 0.707 mA, así que bastarían 36.2 Ω de resistencia no compensada para explicar ENTERO el sobrepotencial de 26 mV que se informa. Una celda de laboratorio con un capilar de Luggin cerca anda por ahí, así que sin medir la resistencia este número no distingue un catalizador bueno de una celda con poca caída: mide la impedancia de esta misma celda y da su corte de alta frecuencia
 ⚠ por encima del potencial de equilibrio circula una corriente catódica sostenida de 0.24 mA/cm², y ahí no debería circular ninguna: la reacción no puede correr antes de su propio potencial. Lo más común en una celda acuosa sin desairear es la reducción del OXÍGENO disuelto, cuya corriente límite en un disco de milímetros en ácido al aire son unas décimas de mA/cm². Esa corriente se SUMA al barrido, así que la curva llega a cualquier densidad antes de lo que llegaría la reacción sola y todos los sobrepotenciales salen pequeños de más. Se quita burbujeando N₂ o Ar veinte minutos y manteniendo la manta de gas durante la medida
-⚠ η a 10 mA/cm² sale 26 mV, que es el intervalo del PLATINO (20-35 mV). Para un catalizador no noble ese número se explica casi siempre por platino disuelto del CONTRAELECTRODO y redepositado en el de trabajo: hacen falta nanogramos, no se ve en ninguna medida electroquímica —porque lo que se mide después es platino de verdad— y es el artefacto mejor documentado de la literatura de HER. Se descarta repitiendo con un contraelectrodo de GRAFITO en celda limpia, o buscando Pt 4f por XPS en el electrodo medido
+⚠ η a 10 mA/cm² sale 24 mV, que es el intervalo del PLATINO (20-35 mV). Para un catalizador no noble ese número se explica casi siempre por platino disuelto del CONTRAELECTRODO y redepositado en el de trabajo: hacen falta nanogramos, no se ve en ninguna medida electroquímica —porque lo que se mide después es platino de verdad— y es el artefacto mejor documentado de la literatura de HER. Se descarta repitiendo con un contraelectrodo de GRAFITO en celda limpia, o buscando Pt 4f por XPS en el electrodo medido
 ⚠ los 10 mA/cm² del punto de comparación son un CONVENIO (vienen del rendimiento de una celda solar del 10 % bajo 1 sol), no una constante física, y se refieren al área geométrica. Comparar con la literatura exige que el otro haya usado el mismo área y la misma corrección óhmica
 ⚠ un sobrepotencial y una pendiente de Tafel describen la actividad en el instante de la medida. Sin una prueba de estabilidad (cronopotenciometría de horas, o mil ciclos) no dicen nada sobre si el catalizador aguanta, que es lo que decide si sirve
 

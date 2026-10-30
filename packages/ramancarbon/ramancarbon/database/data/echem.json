@@ -391,5 +391,82 @@
       "confidence": "high",
       "note": "el caso cerrado del método; sirve para comprobar un montaje"
     }
+  },
+  "reference_catalysts": {
+    "_comment": "Catalizadores de referencia para HER y OER, con los que el campo compara. NO son constantes: un Pt/C comercial da un intervalo según la carga, el soporte, la corrección óhmica y si el electrolito se purgó, y por eso cada entrada lleva su INTERVALO y no un número. Se dibujan como banda, nunca como una línea fina, y la comparación sólo vale si el otro usó la misma área y la misma corrección.",
+    "Pt_C_20_HER_acido": {
+      "label": "Pt/C 20 % (HER, ácido)",
+      "reaction": "HER",
+      "electrolyte": "H2SO4_0.5M",
+      "overpotential_mv": {
+        "10": [
+          20.0,
+          40.0
+        ],
+        "50": [
+          45.0,
+          80.0
+        ],
+        "100": [
+          60.0,
+          110.0
+        ]
+      },
+      "tafel_mv_per_decade": [
+        28.0,
+        35.0
+      ],
+      "loading_ug_cm2": [
+        20.0,
+        100.0
+      ],
+      "source": "intervalo de uso corriente para Pt/C comercial al 20 % sobre carbón vítreo en H2SO4 0.5 M, con corrección óhmica y electrolito purgado",
+      "confidence": "medium",
+      "note": "el valor de 30 mV que se cita tanto es de una carga alta y con iR corregida; sin corregir y con menos carga sube. Y la pendiente de Tafel cerca de 30 mV/dec es el mecanismo Volmer-Tafel con Tafel lenta, que es lo que distingue al platino: un material que da el sobrepotencial del platino con una pendiente muy distinta no se está pareciendo al platino"
+    },
+    "RuO2_OER_acido": {
+      "label": "RuO₂ (OER, ácido)",
+      "reaction": "OER",
+      "electrolyte": "H2SO4_0.5M",
+      "overpotential_mv": {
+        "10": [
+          250.0,
+          320.0
+        ]
+      },
+      "tafel_mv_per_decade": [
+        45.0,
+        70.0
+      ],
+      "loading_ug_cm2": [
+        100.0,
+        300.0
+      ],
+      "source": "intervalo de uso corriente para RuO2 sobre carbón vítreo en ácido",
+      "confidence": "low",
+      "note": "el RuO2 se disuelve en ácido durante la propia medida, así que su sobrepotencial depende de cuándo se lea. Como referencia de ACTIVIDAD vale; como referencia de estabilidad, no"
+    },
+    "IrO2_OER_alcalino": {
+      "label": "IrO₂ (OER, alcalino)",
+      "reaction": "OER",
+      "electrolyte": "KOH_1M",
+      "overpotential_mv": {
+        "10": [
+          300.0,
+          380.0
+        ]
+      },
+      "tafel_mv_per_decade": [
+        40.0,
+        80.0
+      ],
+      "loading_ug_cm2": [
+        100.0,
+        300.0
+      ],
+      "source": "intervalo de uso corriente para IrO2 en KOH 1 M",
+      "confidence": "low",
+      "note": "muy dependiente de la carga y del soporte"
+    }
   }
 }

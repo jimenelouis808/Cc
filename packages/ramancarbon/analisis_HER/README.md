@@ -7,6 +7,23 @@ disco de carbón vítreo de 3 mm contra Ag/AgCl (KCl sat.).
 uv run python analisis_HER/exportar.py <carpeta con los .mpr>
 ```
 
+## Lo que la impedancia y las retenciones zanjaron
+
+**R_s = 1.88–1.93 Ω** en los tres espectros, así que la corrección óhmica
+a 10 mA/cm² vale **1.3 mV**. El aviso de los «43 Ω» queda contestado por
+la medida. Con la corrección puesta: **η₁₀ = 29 mV**, η₅₀ = 53, η₁₀₀ = 70,
+Tafel **36.7 mV/dec**.
+
+**Y las retenciones matan la hipótesis del platino**: a 10 mA/cm² el
+electrodo deriva **+57 y +92 mV/h**, con la segunda más rápida que la
+primera. El platino en ácido a esa corriente aguanta cientos de horas sin
+moverse. Lo que queda es un material muy activo al principio y poco
+estable, que es el patrón conocido de los calcogenuros de hierro en
+ácido.
+
+**No termina una prueba de diez horas**: a 92 mV/h gana otros 100 mV en
+1.1 h.
+
 ## Dos artefactos, medidos
 
 **Hay una corriente catódica sostenida por encima del equilibrio del

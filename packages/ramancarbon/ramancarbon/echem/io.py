@@ -168,6 +168,40 @@ def _eclab(path: Path, kind: str, electrode, **options):
         raise EchemIOError(str(error)) from None
 
 
+def read_hold(
+    path: str | Path,
+    electrode: Optional[Electrode] = None,
+) -> ChargeDischarge:
+    """Read a constant-current or constant-potential hold.
+
+    Chronopotentiometry and chronoamperometry: a sweep whose rate is
+    zero. Which of the two it is comes from the file rather than from
+    the caller, because the file says — the ``mode`` flag names the
+    controlled variable and the set-point column does not move.
+
+    Comes back as a :class:`ChargeDischarge`, which is time, potential
+    and current, reused deliberately: a hold carries exactly those three
+    and nothing else. It is NOT a cycling measurement, and
+    :func:`ramancarbon.echem.evaluate.stability` is what reads it.
+    """
+    location = Path(path)
+    if not _is_eclab(location):
+        raise EchemIOError(
+            f"{location.name} no es un archivo de EC-Lab. Una retención "
+            "necesita tiempo, potencial y corriente; si los tienes en texto, "
+            "léela con read_gcd y pásala a `stability`"
+        )
+    curve, notes = _eclab(location, "", electrode)
+    curve.metadata.setdefault("avisos", []).extend(notes)
+    if not curve.metadata.get("retencion"):
+        raise EchemIOError(
+            f"{location.name} no es una retención: su consigna cambia "
+            "durante el registro, así que es un barrido o un ciclado. "
+            "Léelo con read_cv o read_gcd"
+        )
+    return curve
+
+
 def read_cv(
     path: str | Path,
     scan_rate: Optional[float] = None,

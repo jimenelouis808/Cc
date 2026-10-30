@@ -38,6 +38,12 @@ DISC_MM = 3.0
 ELECTROLYTE = "H2SO4_0.5M"
 REFERENCE = "Ag/AgCl_sat"
 
+#: Uncompensated resistance, in ohm, from the impedance of THIS cell.
+#: The three spectra give 1.877, 1.917 and 1.928; the correction at
+#: 10 mA/cm² is 1.3 mV, so it changes little and that is itself the
+#: result: the overpotential is the electrode's.
+RESISTANCE_OHM = 1.9
+
 #: Scan rate in V/s by what the file name says. Not guessed from the
 #: data: a rate typed wrong is a rate wrong in everything downstream,
 #: and these files do carry it in their own sweep, so the two are
@@ -59,12 +65,19 @@ def build(folder: Path) -> EchemSession:
         area_cm2=float(np.pi * (0.1 * DISC_MM / 2.0) ** 2),
         electrolyte=ELECTROLYTE,
         reference=REFERENCE,
+        # From the three impedance spectra of this same cell: 1.88, 1.88
+        # and 1.93 ohm. Measured, not assumed, which is the whole point
+        # of having run them.
+        resistance_ohm=RESISTANCE_OHM,
     )
     session.reaction = "HER"
-    for path in sorted(folder.glob("*.mpr")):
+    for path in sorted(folder.glob("LSV*.mpr")):
         rate = rate_for(path)
         if not session.add_lsv_to_series(path, scan_rate=rate):
             print(f"  no se pudo leer {path.name}")
+    # The holds, when they are in the same folder.
+    for path in sorted(folder.glob("CP_*.mpr")):
+        session.add_hold(path, label=path.stem)
     return session
 
 
@@ -83,7 +96,7 @@ def main(folder: Path) -> None:
     from ramancarbon.echem.biologic import read_mpr
 
     checks = []
-    for path, curve in zip(sorted(folder.glob("*.mpr")), curves):
+    for path, curve in zip(sorted(folder.glob("LSV*.mpr")), curves):
         columns = read_mpr(path).columns
         time = np.asarray(columns["time/s"], dtype=float)
         potential = np.asarray(columns["Ewe/V"], dtype=float)
@@ -184,8 +197,8 @@ def main(folder: Path) -> None:
     session.figure_technique = "catalysis"
     spec = CompositeFigure(
         panels=["her_medida", "her_velocidades", "her_polarizacion",
-                "her_tafel"],
-        columns=2, width_in=7.2, panel_height_in=3.1, dpi=600)
+                "her_tafel", "her_retencion"],
+        columns=2, width_in=7.2, panel_height_in=3.0, dpi=600)
     session.composite = spec
     figure = plt.figure(figsize=spec.figsize())
     for problem in session.draw_figure(figure, PALETTES["claro"]):

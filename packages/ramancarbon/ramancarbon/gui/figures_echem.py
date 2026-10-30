@@ -68,6 +68,9 @@ LABELS: dict[str, dict[str, str]] = {
         'log_j': 'log(|j| / mA cm$^{-2}$)',
         'j_ma_cm2': '|j| / mA cm$^{-2}$',
         'j_signed': 'j / mA cm$^{-2}$',
+        'hold_time': 't / h',
+        'reference_band': '{label}',
+        'drift': '{rate} mV h$^{-1}$',
         'tafel_fit': '{slope} mV dec$^{-1}$',
         'tafel_region': 'fitted region',
         'asymmetric_note': 'charge and discharge at different currents',
@@ -136,6 +139,9 @@ LABELS: dict[str, dict[str, str]] = {
         "her": "H$^+$/H$_2$",
     },
     "es": {
+        'hold_time': 't / h',
+        'reference_band': '{label}',
+        'drift': '{rate} mV h$^{-1}$',
         'time_s': 't / s',
         'gcd_potential': 'E / V vs {reference}',
         'current_density_ma': 'i / mA',
@@ -1724,11 +1730,64 @@ def _panel_her_polarisation(axis, session, spec, palette) -> None:
                       fontsize=spec.font_size - 2.0, color=MODEL)
     axis.set_xlabel(spec.text("j_ma_cm2"))
     axis.set_ylabel(spec.text("overpotential"))
+    _reference_bands(axis, session, spec,
+                     density=catalysis.benchmark_ma_cm2)
     _frame_the_active_branch(axis, session)
     if spec.legends:
         axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
                     loc="upper left", handlelength=1.4)
     _tidy(axis, spec)
+
+
+def _reference_bands(axis, session, spec, density=None,
+                     tafel: bool = False) -> None:
+    """Shade where the benchmark catalyst of this reaction sits.
+
+    A BAND and never a line. A commercial Pt/C spans a range depending
+    on its loading, its support, whether the ohmic drop was corrected
+    and whether the electrolyte was purged, and one value drawn across a
+    figure invites a comparison nobody can defend — including the one
+    that says a non-noble material matched it.
+
+    Only for the reaction and the medium actually loaded: a Pt/C band
+    from acid drawn over a measurement in base would be worse than no
+    band at all.
+    """
+    from ..echem.curve import load_echem_database
+    from ..echem.evaluate import reference_band, reference_catalysts
+
+    electrode = getattr(session, "electrode", None)
+    if electrode is None:
+        return
+    table = load_echem_database().get("electrolytes", {})
+    label = electrode.electrolyte or ""
+    electrolyte = next(
+        (key for key, entry in table.items()
+         if key == label or entry.get("label") == label), "")
+    if not electrolyte:
+        return
+    entries = reference_catalysts(getattr(session, "reaction", ""),
+                                  electrolyte)
+    for entry in entries.values():
+        if tafel:
+            span = entry.get("tafel_mv_per_decade")
+            if not span or len(span) != 2:
+                continue
+            # Just under the measured slope, which sits at the top
+            # left: the bottom of a Tafel panel is where its legend goes.
+            axis.text(0.04, 0.84,
+                      f"{entry.get('label', '')}: "
+                      f"{float(span[0]):.0f}–{float(span[1]):.0f} "
+                      "mV dec$^{-1}$",
+                      transform=axis.transAxes, ha="left", va="top",
+                      fontsize=spec.font_size - 1.5, color=SECOND)
+            continue
+        band = reference_band(entry, 10.0 if density is None else density)
+        if band is None:
+            continue
+        axis.axhspan(band[0], band[1], color=SECOND, alpha=0.18, zorder=0,
+                     label=spec.text("reference_band",
+                                     label=entry.get("label", "")))
 
 
 def _panel_her_measured(axis, session, spec, palette) -> None:
@@ -1796,6 +1855,7 @@ def _panel_her_rates(axis, session, spec, palette) -> None:
     # so where the curves cross it is where the potential axis is off.
     axis.axhline(0.0, color=GREY, linewidth=0.8, zorder=1)
     axis.set_xscale("log")
+    _reference_bands(axis, session, spec, density=10.0)
     _frame_the_active_branch(axis, session)
     axis.set_xlabel(spec.text("j_ma_cm2"))
     axis.set_ylabel(spec.text("overpotential"))
@@ -1818,6 +1878,59 @@ def _frame_the_active_branch(axis, session) -> None:
         return
     top = max(tops)
     axis.set_ylim(-PANEL_ANODIC_MARGIN, top + 0.1 * abs(top) + 0.01)
+
+
+def _panel_her_hold(axis, session, spec, palette) -> None:
+    """The constant-current holds: η against time, with the drift.
+
+    The panel everything else in this section is a snapshot of. An
+    overpotential and a Tafel slope describe the instant of a sweep;
+    this is the only measurement here that answers whether the electrode
+    survives, and the number on it is a RATE rather than a value — which
+    is why the fitted line is drawn over the curve rather than instead
+    of it.
+    """
+    holds = getattr(session, "holds", [])
+    results = session.hold_results() if holds else []
+    drawn = False
+    for index, (curve, result) in enumerate(zip(holds, results)):
+        if result is None:
+            continue
+        try:
+            eta = session.hold_overpotential(curve)
+        except ValueError:
+            continue
+        hours = (np.asarray(curve.time, dtype=float)
+                 - float(curve.time[0])) / 3600.0
+        axis.plot(hours, 1e3 * np.asarray(eta, dtype=float), "-",
+                  color=_colour(index), linewidth=1.2, zorder=3,
+                  label=f"{curve.name} ({result.current_ma_cm2:.3g} "
+                        "mA cm$^{-2}$)")
+        # The drift, drawn where it was fitted.
+        settled = hours >= hours[-1] * 0.10
+        if np.any(settled):
+            fitted = (1e3 * result.overpotential_start
+                      + 1e3 * result.drift_v_per_h
+                      * (hours[settled] - hours[settled][0]))
+            axis.plot(hours[settled], fitted, linestyle=(0, (4, 2)),
+                      color=MODEL, linewidth=1.0, zorder=4,
+                      label=spec.text(
+                          "drift",
+                          rate=f"{1e3 * result.drift_v_per_h:+.0f}"))
+        drawn = True
+    if not drawn:
+        return
+    axis.set_xlabel(spec.text("hold_time"))
+    axis.set_ylabel("$\\eta$ / mV")
+    if spec.legends:
+        handles, labels = axis.get_legend_handles_labels()
+        seen: dict[str, Any] = {}
+        for handle, label in zip(handles, labels):
+            seen.setdefault(label, handle)
+        axis.legend(seen.values(), seen.keys(), frameon=False,
+                    fontsize=spec.font_size - 1.5, loc="upper left",
+                    handlelength=1.6)
+    _tidy(axis, spec)
 
 
 def _panel_her_tafel(axis, session, spec, palette) -> None:
@@ -1852,6 +1965,7 @@ def _panel_her_tafel(axis, session, spec, palette) -> None:
                             slope=f"{tafel.slope_mv_per_decade:.0f}"),
                   transform=axis.transAxes, ha="left", va="top",
                   fontsize=spec.font_size - 0.5, color=MODEL)
+    _reference_bands(axis, session, spec, tafel=True)
     axis.set_xlabel(spec.text("log_j"))
     axis.set_ylabel(spec.text("overpotential"))
     if spec.legends:
@@ -1985,6 +2099,11 @@ ECHEM_PANELS: tuple[PanelSpec, ...] = (
               "tienen que caer una sobre otra; la separación entre ellas "
               "es un sistemático que ninguna curva suelta informa",
               technique="catalysis"),
+    PanelSpec("her_retencion", "HER/OER: la retención a corriente constante",
+              "holds", _panel_her_hold,
+              "η contra el tiempo, con la DERIVA ajustada encima: lo único "
+              "aquí que dice si el electrodo aguanta",
+              technique="catalysis"),
     PanelSpec("her_tafel", "HER/OER: el gráfico de Tafel", "catalysis",
               _panel_her_tafel,
               "con la REGIÓN sobre la que se ajustó la pendiente "
@@ -2008,6 +2127,7 @@ DEFAULT_PANELS: dict[str, tuple[str, ...]] = {
     "ms": ("mott_schottky",),
     "catalysis": ("her_medida", "her_polarizacion", "her_tafel"),
     "catalysis_series": ("her_velocidades",),
+    "holds": ("her_retencion",),
 }
 
 #: The techniques the panel list can be filtered by, with ``"todo"``
@@ -2062,6 +2182,7 @@ def _what_is_loaded(session) -> dict[str, bool]:
         "ms": len(session.ms_series) >= 2,
         "catalysis": getattr(session, "lsv", None) is not None,
         "catalysis_series": len(getattr(session, "lsv_series", []) or []) >= 2,
+        "holds": bool(getattr(session, "holds", None)),
     }
 
 
@@ -2077,7 +2198,7 @@ def default_panels(session, technique: str = "todo") -> list[str]:
     offered = {panel.key for panel in available_panels(session, technique)}
     chosen: list[str] = []
     for need in ("rates", "gcd", "eis", "catalysis", "catalysis_series",
-                 "ms"):
+                 "holds", "ms"):
         if not have.get(need):
             continue
         chosen.extend(key for key in DEFAULT_PANELS[need] if key in offered)

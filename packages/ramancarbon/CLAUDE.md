@@ -3642,3 +3642,61 @@ invita a informar como de diez horas una retención que corrió una.
   lo que tiene que pasar con un electrodo que la cronopotenciometría
   mide derivando a 90 mV/h: el sistema no es estacionario, y KK lo
   detecta sin saber nada de la otra medida.
+
+## El identificador 174 es `<Ewe>/V`, y se estableció como manda el módulo
+
+Contra la exportación de texto del MISMO experimento, que es el flujo que
+este módulo prescribe desde el principio. En `CP_30min_0_C01.mpt` la lista
+de columnas va `mode, ox/red, error, control changes, Ns changes, counter
+inc., Ns, time/s, control/mA, <Ewe/V>, I/mA, …` y los identificadores
+binarios de ese archivo son `1, 2, 3, 21, 31, 65, 131, 4, 20, **174**, 8,
+…`: el décimo de los dos. El primer valor coincide con todas las cifras
+que el texto imprime, −2.2719671E-001 contra −0.2272.
+
+- **No es una inferencia.** El rescate del lector dejaba pasar la columna
+  sin nombre porque su ANCHURA estaba determinada; nombrarla hacía falta
+  el `.mpt`, y por eso se pidió.
+- Y leídos los dos archivos del mismo experimento, el binario y el texto
+  coinciden a **5·10⁻⁹ V**, 4.7·10⁻¹² A y 4.6·10⁻¹³ s — la precisión de
+  un float32. Eso valida de una vez la columna 174, la 20 y la 8.
+- **`<Ewe>/V` y `<Ewe/V>` son la misma magnitud** con dos grafías: el mapa
+  binario usa la primera y la exportación de texto escribe la segunda. Un
+  lector que sepa una sola funciona sobre una exportación de la medida y
+  rechaza la otra, que es exactamente lo que hacía.
+
+## Una retención es un barrido cuya velocidad es CERO
+
+Y nada en el registro la separa de la técnica de la que viene salvo eso:
+**la consigna no se mueve**. Sin esa comprobación una retención a
+corriente constante se lee como un ciclado y vuelve como una sola rama
+larga cuya capacitancia no significa nada, y una a potencial constante se
+lee como un barrido y se rechaza por no tener velocidad.
+
+- `_is_a_hold` mira el recorrido relativo de la columna de consigna
+  (`HOLD_SETPOINT_SPREAD`, una diezmilésima): el equipo imprime su
+  consigna a la resolución de su propio DAC, así que ese resto es la
+  impresión y no un programa.
+- Con `mode` galvanostático sale `cp`; con potenciostático, `ca`.
+- **El contenedor es `ChargeDischarge` a propósito**: una retención es
+  tiempo, potencial y corriente, exactamente lo que esa clase lleva. Lo
+  que NO es es una medida de ciclado, y `stability` es lo que la lee. El
+  `metadata` lo dice por si algo aguas abajo le pregunta al contenedor
+  qué es.
+
+## El catalizador de referencia es una BANDA
+
+- Un Pt/C comercial da un INTERVALO según la carga, el soporte, si se
+  corrigió la caída óhmica y si se purgó el electrolito. Dibujarlo como
+  una línea fina invita a una comparación que nadie puede defender —
+  incluida la que diría que un material no noble lo igualó.
+- Va en `database/data/echem.json`, tabla `reference_catalysts`, con su
+  intervalo por densidad de corriente, su intervalo de pendiente de
+  Tafel, su carga, su `source` y su `confidence`, como todo valor de
+  literatura de este paquete. Ningún número en Python.
+- **Y sólo se dibuja para SU reacción y SU medio.** Una banda de Pt/C en
+  ácido pintada encima de una medida en base es peor que no pintar nada.
+- La pendiente de Tafel del platino está cerca de 30 mV/dec porque su
+  mecanismo es Volmer-Tafel con la etapa de Tafel lenta. Un material que
+  dé el sobrepotencial del platino con una pendiente muy distinta **no se
+  está pareciendo al platino**, y tener las dos cosas en la misma figura
+  es lo que permite verlo.

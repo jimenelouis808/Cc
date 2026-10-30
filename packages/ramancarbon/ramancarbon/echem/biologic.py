@@ -157,6 +157,15 @@ MPR_COLUMNS: dict[int, tuple[str, str]] = {
     13: ("(Q-Qo)/mA.h", "<f8"),
     16: ("Analog IN 1/V", "<f4"),
     19: ("control/V", "<f4"),
+    # Established against the user's own EC-Lab text export of the SAME
+    # experiment, which is the flow this module prescribes: in
+    # `CP_30min_0_C01.mpt` the column list runs mode, ox/red, error,
+    # control changes, Ns changes, counter inc., Ns, time/s, control/mA,
+    # <Ewe/V>, I/mA, ... and the binary identifiers of that file are
+    # 1, 2, 3, 21, 31, 65, 131, 4, 20, 174, 8, ... -- so 174 is the tenth
+    # of both. The first value agrees to every digit the text export
+    # prints: -2.2719671E-001 against -0.2272. Not an inference.
+    174: ("<Ewe>/V", "<f4"),
     20: ("control/mA", "<f4"),
     23: ("dQ/mA.h", "<f8"),
     24: ("cycle number", "<f8"),
@@ -1088,7 +1097,17 @@ def settings_beside(path: str | Path) -> Optional[ECLabSettings]:
 # Turning the columns into the package's own curves
 # ----------------------------------------------------------------------
 def _potential(data: ECLabData) -> Optional[np.ndarray]:
-    return data.first("Ewe/V", "<Ewe>/V", "|Ewe|/V", "control/V")
+    """The measured working-electrode potential, under any of its names.
+
+    ``<Ewe>/V`` and ``<Ewe/V>`` are the same quantity — the averaged
+    potential — spelled differently by the two halves of EC-Lab: the
+    binary column map uses the first and the text export writes the
+    second. Both are listed because this is exactly the kind of
+    difference that makes a reader work on one export of a measurement
+    and refuse the other, which is what it did on the user's
+    chronopotentiometry.
+    """
+    return data.first("Ewe/V", "<Ewe>/V", "<Ewe/V>", "|Ewe|/V", "control/V")
 
 
 #: What the ``mode`` flag means. Read off the user's own pair of files:
@@ -1144,6 +1163,37 @@ def _current_a(data: ECLabData) -> Optional[np.ndarray]:
 REVERSAL_FRACTION = 0.05
 
 
+#: Relative spread a set point may have and still be one set point.
+#:
+#: A hold is written with one value repeated; the instrument prints it
+#: back to the resolution of its own DAC, so a thousandth of a per cent
+#: of scatter is the printing and not a programme.
+HOLD_SETPOINT_SPREAD = 1e-4
+
+
+def _is_a_hold(setpoint) -> bool:
+    """Whether a control column never leaves one value.
+
+    A chronopotentiometry and a chronoamperometry are a sweep whose rate
+    is zero, and nothing in the record separates them from the technique
+    they came from except this: the set point does not move. Without it
+    a constant-current hold reads as a charge-discharge measurement and
+    comes back as one long branch whose capacitance is meaningless, and
+    a constant-potential hold reads as a sweep at 0 mV/s and is refused
+    for having no scan rate.
+    """
+    if setpoint is None:
+        return False
+    values = np.asarray(setpoint, dtype=float)
+    values = values[np.isfinite(values)]
+    if values.size < 10:
+        return False
+    scale = float(np.max(np.abs(values)))
+    if scale <= 0.0:
+        return False
+    return float(np.ptp(values)) / scale <= HOLD_SETPOINT_SPREAD
+
+
 def technique_from_data(data: ECLabData) -> tuple[str, str]:
     """Which technique an ``.mpr`` holds, read off the file itself.
 
@@ -1178,6 +1228,12 @@ def technique_from_data(data: ECLabData) -> tuple[str, str]:
     if mode is not None and mode.size:
         values = np.unique(np.asarray(mode, dtype=int))
         if values.size == 1 and values[0] == MPR_MODE_POTENTIOSTATIC:
+            if _is_a_hold(data.columns.get("control/V")):
+                return "ca", (
+                    "la bandera «mode» vale 2 (potenciostático) en todo el "
+                    "registro y el potencial de consigna no cambia nunca: es "
+                    "una retención a potencial constante, no un barrido"
+                )
             kind = "cv" if cyclic else "lsv"
             return kind, (
                 f"la bandera «mode» vale {MPR_MODE_POTENTIOSTATIC} "
@@ -1187,6 +1243,12 @@ def technique_from_data(data: ECLabData) -> tuple[str, str]:
                 + ("cíclico" if cyclic else "lineal")
             )
         if values.size == 1 and values[0] == MPR_MODE_GALVANOSTATIC:
+            if _is_a_hold(data.columns.get("control/mA")):
+                return "cp", (
+                    "la bandera «mode» vale 1 (galvanostático) en todo el "
+                    "registro y la corriente de consigna no cambia nunca: es "
+                    "una retención a corriente constante, no un ciclado"
+                )
             return "gcd", (
                 "la bandera «mode» vale 1 (galvanostático) en todo el "
                 "registro: lo controlado es la corriente"
@@ -1494,6 +1556,22 @@ def to_curve(
             "una curva de carga-descarga necesita el eje de tiempo y no hay "
             "columna time/s"
         )
+    if kind in ("cp", "ca"):
+        # A hold is time, potential and current, which is exactly what
+        # `ChargeDischarge` carries — so it is the container, reused
+        # deliberately rather than duplicated. What a hold is NOT is a
+        # cycling measurement: it has one branch, its "capacitance" means
+        # nothing, and `stability` is what reads it. The metadata says so
+        # in case anything downstream asks the container what it is.
+        metadata["retencion"] = (
+            "corriente constante" if kind == "cp" else "potencial constante")
+        held = current if kind == "cp" else potential
+        metadata["consigna"] = float(np.median(np.asarray(held, dtype=float)))
+        return ChargeDischarge(
+            time=time, potential=potential, current=current,
+            electrode=electrode,
+            name=("CP (EC-Lab)" if kind == "cp" else "CA (EC-Lab)"),
+            metadata=metadata)
     return ChargeDischarge(time=time, potential=potential, current=current,
                            electrode=electrode, name="GCD (EC-Lab)",
                            metadata=metadata)

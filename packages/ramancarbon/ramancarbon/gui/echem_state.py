@@ -241,6 +241,11 @@ class EchemSession:
     """Which charge/discharge pair of the reported curve to analyse, −1
     for the last. A GCPL holds a thousand cycles and the first ones are
     formation, not performance."""
+    holds: list[ChargeDischarge] = field(default_factory=list)
+    """Constant-current or constant-potential holds — chronopotentiometry
+    and chronoamperometry. A sweep whose rate is zero, and the only
+    measurement here that answers whether the electrode survives rather
+    than how good it looks in the instant of a sweep."""
     lsv: Optional[Voltammogram] = None
     lsv_series: list[Voltammogram] = field(default_factory=list)
     """Polarisation curves of the SAME electrode at several scan rates.
@@ -341,6 +346,8 @@ class EchemSession:
     messages: list[tuple[str, str]] = field(default_factory=list)
     _eis_analyses: Optional[list] = field(default=None, repr=False)
     _ms_result: Optional[object] = field(default=None, repr=False)
+    _hold_results: Optional[list] = field(default=None, repr=False)
+    _hold_key: tuple = field(default=(), repr=False)
     _lsv_analyses: Optional[list] = field(default=None, repr=False)
     _lsv_key: tuple = field(default=(), repr=False)
     _gcd_analyses: Optional[list] = field(default=None, repr=False)
@@ -736,6 +743,92 @@ class EchemSession:
             rows.append(tuple(spread))
         return rows
 
+    def add_hold(self, path: str | Path, label: str = "") -> bool:
+        """Load one constant-current or constant-potential hold."""
+        from ..echem.io import read_hold
+
+        try:
+            curve = read_hold(path, electrode=self.electrode)
+        except (OSError, ValueError, EchemIOError) as exc:
+            self.log("error", f"{Path(path).name}: {exc}")
+            return False
+        curve.name = label.strip() or Path(path).stem
+        self.holds.append(curve)
+        self.holds.sort(key=lambda c: float(c.time[-1] - c.time[0]))
+        self._hold_results = None
+        for note in curve.metadata.get("avisos", []):
+            self.log("warning", f"{curve.name}: {note}")
+        return True
+
+    def hold_results(self) -> list:
+        """One :class:`StabilityResult` per hold, cached."""
+        from ..echem.evaluate import stability
+
+        key = tuple(id(c) for c in self.holds)
+        if self._hold_key == key and self._hold_results is not None:
+            return self._hold_results
+        out = []
+        for curve in self.holds:
+            try:
+                out.append(stability(curve.time,
+                                     self.hold_overpotential(curve),
+                                     self.hold_density(curve)))
+            except (ValueError, ZeroDivisionError) as exc:
+                self.log("warning", f"{curve.name}: {exc}")
+                out.append(None)
+        self._hold_results = out
+        self._hold_key = key
+        return out
+
+    def hold_density(self, curve: ChargeDischarge) -> float:
+        """The current density a hold ran at, in mA/cm²."""
+        import numpy as np
+
+        area = self.electrode.area_cm2 or 1.0
+        return 1e3 * float(np.median(np.asarray(curve.current,
+                                                dtype=float))) / area
+
+    def hold_overpotential(self, curve: ChargeDischarge):
+        """η against the reaction, positive meaning driving force.
+
+        Refuses rather than guesses when the potential cannot be put on
+        the RHE scale, which is the same refusal the catalysis analysis
+        makes: without a pH the conversion is 59 mV per unit of error.
+        """
+        import numpy as np
+
+        from ..echem.curve import load_echem_database
+
+        converted, note = curve.electrode.to_rhe(
+            np.asarray(curve.potential, dtype=float))
+        if converted is None:
+            raise ValueError(note)
+        table = load_echem_database()["equilibrium_potentials_vs_rhe"]
+        equilibrium = float(table.get(self.reaction, 0.0))
+        # η positive is driving force, both ways: a HER electrode sits
+        # below its equilibrium and an OER one above it.
+        sign = -1.0 if self.reaction == "HER" else 1.0
+        return sign * (converted - equilibrium)
+
+    def stability_rows(self) -> list[tuple[str, ...]]:
+        """One row per hold: what it did, not how it started."""
+        rows: list[tuple[str, ...]] = []
+        for curve, result in zip(self.holds, self.hold_results()):
+            if result is None:
+                rows.append((curve.name, "—", "—", "—", "—", "—", "—"))
+                continue
+            rows.append((
+                curve.name,
+                f"{result.current_ma_cm2:.3g}",
+                f"{60 * result.duration_h:.0f}",
+                f"{1e3 * result.overpotential_start:.1f}",
+                f"{1e3 * result.overpotential_end:.1f}",
+                f"{1e3 * result.drift_v_per_h:+.0f}",
+                (f"{result.hours_to_lose_100mv:.1f}"
+                 if result.hours_to_lose_100mv else "—"),
+            ))
+        return rows
+
     def load_lsv(self, path: str | Path, scan_rate: float = 0.005) -> bool:
         try:
             self.lsv = read_cv(path, scan_rate=scan_rate,
@@ -834,6 +927,10 @@ class EchemSession:
                 self.eis = None
             self.eis_series = []
             self._eis_analyses = None
+        elif kind == "holds":
+            self.holds = []
+            self._hold_results = None
+            self._hold_key = ()
         elif kind == "lsv_series":
             if any(self.lsv is c for c in self.lsv_series):
                 self.lsv = None
