@@ -606,6 +606,7 @@ def _rhe_shift(session) -> Optional[float]:
         getattr(session, "gcd", None),
         (session.gcd_series[0]
          if getattr(session, "gcd_series", None) else None),
+        (session.holds[0] if getattr(session, "holds", None) else None),
         session.ms_series[0] if session.ms_series else None,
     ]
     electrode = next(
@@ -646,6 +647,44 @@ def _reference_axis(axis, session, spec: CompositeFigure) -> None:
     top.set_xlabel(spec.text("rhe"), fontsize=spec.font_size)
     top.tick_params(which="both", direction="in",
                     labelsize=spec.font_size - 0.5)
+
+
+def _measured_axis_for_eta(axis, session, spec, curve) -> None:
+    """The MEASURED potential on the right, beside η on the left.
+
+    η for a cathodic reaction is ``-(E - E_eq)``, so the overpotential
+    rises exactly as the potential falls. The two are one measurement
+    with opposite signs, and a reader who has the instrument's own plot
+    in front of them — where the trace goes DOWN — has no way to see
+    that from a panel that only draws η. This is the same device panel
+    (a) uses for RHE: the conversion drawn rather than applied, so the
+    two readings sit on the same picture and neither has to be trusted.
+    """
+    if not spec.reference_axis:
+        return
+    from ..echem.curve import load_echem_database
+
+    shift = _rhe_shift(session)
+    if shift is None:
+        return
+    table = load_echem_database()["equilibrium_potentials_vs_rhe"]
+    equilibrium = float(table.get(getattr(session, "reaction", ""), 0.0))
+    sign = -1.0 if getattr(session, "reaction", "") == "HER" else 1.0
+    # η is plotted in millivolts; the measured potential is in volts.
+    offset = equilibrium - shift
+
+    def to_measured(eta_mv):
+        return sign * eta_mv * 1e-3 + offset
+
+    def to_eta(measured):
+        return sign * (measured - offset) * 1e3
+
+    right = axis.secondary_yaxis("right",
+                                 functions=(to_measured, to_eta))
+    right.set_ylabel(_potential_label(session, spec, curve),
+                     fontsize=spec.font_size)
+    right.tick_params(which="both", direction="in",
+                      labelsize=spec.font_size - 0.5)
 
 
 def _potential_axis(axis, session, spec: CompositeFigure, curve) -> str:
@@ -2054,6 +2093,9 @@ def _panel_her_hold(axis, session, spec, palette) -> None:
         return
     axis.set_xlabel(spec.text("hold_time"))
     axis.set_ylabel("$\\eta$ / mV")
+    # η rises as the measured potential falls, by definition. Both
+    # readings on the same panel, so neither has to be taken on trust.
+    _measured_axis_for_eta(axis, session, spec, holds[0])
     if spec.legends:
         handles, labels = axis.get_legend_handles_labels()
         seen: dict[str, Any] = {}

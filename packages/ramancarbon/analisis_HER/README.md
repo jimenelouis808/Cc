@@ -83,6 +83,34 @@ ANTES (`_02_` contra `_03_`), así que el de 1 mV/s hereda además el estado
 en que lo dejó. `lsv_series_notes()` lo dice con el número, y el panel (a)
 lleva el potencial de salida en la leyenda y marcado con un círculo.
 
+## η sube porque el potencial baja
+
+En la pantalla de EC-Lab `<Ewe>/V` **cae**, de −0.255 a −0.287 V en los
+1604 s de la retención de 30 min. Aquí la deriva sale **+57 mV/h**. Es la
+misma medida: para una reacción catódica η = −(E − E_eq), así que un
+electrodo que empeora pide un potencial más negativo, y eso es un
+sobrepotencial MAYOR.
+
+El lector coincide con la pantalla punto a punto: primer punto suelto en
+−0.2272 V, el grueso arrancando en −0.2550, final en −0.2870. Desde esta
+versión el panel de retención lleva el potencial medido en el eje
+derecho, así que las dos lecturas están en la misma figura.
+
+**La deriva es la pendiente ajustada sobre la parte asentada**, no de
+extremo a extremo:
+
+| archivo | ajustada (90 % final) | extremo a extremo |
+|---|---|---|
+| CP_30min | **−57.3 mV/h** | −71.9 mV/h |
+| CP_10h | **−92.1 mV/h** | −110.4 mV/h |
+
+La curva es cóncava y lo más rápido pasa en los primeros minutos, que es
+el mojado del electrodo y no su rendimiento.
+
+**Y en la de 41 min el ritmo se acelera**: −92 mV/h sobre el 90 % final,
+−103 sobre el 75 % y −122 sobre la última mitad, con R² = 0.955. Una sola
+pendiente la promedia hacia abajo, así que ese −92 es el caso optimista.
+
 ## Léelos en este orden
 
 **1. El sobrepotencial de inicio sale NEGATIVO** en las dos curvas: −11 mV

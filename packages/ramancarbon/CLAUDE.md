@@ -3808,3 +3808,37 @@ de 0 a −0.35 V, seguía saliendo desde +0.45. No era un error de lectura:
   fondo que el análisis estima por otro camino. Recortar ese tramo —la
   tentación al ver el panel— habría borrado la medida más limpia del
   artefacto que invalida el sobrepotencial de inicio.
+
+## η sube exactamente cuando el potencial medido baja
+
+El usuario comparó el panel de retención con la gráfica del propio
+EC-Lab y preguntó si no debería ser al revés: allí `<Ewe>/V` **cae** de
+−0.255 a −0.287 V, y aquí la deriva se informa como **+57 mV/h**.
+
+- **Las dos cosas son la misma medida.** Para una reacción catódica
+  η = −(E − E_eq), así que un electrodo que empeora pide un potencial más
+  negativo y eso ES un sobrepotencial mayor. El signo está en la
+  definición, no en los datos, y `hold_overpotential` lo dice en una
+  línea: «η positiva es fuerza motriz, en los dos sentidos».
+- **Contrastado punto a punto contra la gráfica del equipo**: el lector da
+  el primer punto suelto en −0.2272 V, el grueso arrancando en −0.2550 y
+  el final en −0.2870, que es lo que se ve en la pantalla de EC-Lab.
+- **Pero que sea correcto no es excusa para que se lea mal**, y la
+  respuesta es la que este paquete ya usa en el panel (a) para el eje
+  RHE: la conversión DIBUJADA en vez de aplicada.
+  `_measured_axis_for_eta` pone el potencial medido en el eje derecho,
+  así que la lectura del instrumento y la del análisis están en la misma
+  figura y ninguna hay que creérsela. El eje derecho sale invertido por
+  construcción —arriba −0.24, abajo −0.34— y esa inversión es justo la
+  afirmación.
+- **Y el eje secundario es HIJO del panel, no una entrada de
+  `figure.axes`**, igual que el recuadro del Nyquist. Se alcanza con
+  `every_axes`, que es por lo que existe.
+- **La deriva es la pendiente AJUSTADA sobre la parte asentada, no
+  extremo a extremo.** En la retención de 30 min las dos difieren:
+  −57.3 mV/h ajustada contra −71.9 extremo a extremo sin el punto suelto,
+  porque la curva es cóncava y lo más rápido pasa al principio. La
+  ajustada es la honrada; la otra mide sobre todo el mojado del
+  electrodo. Y `_rhe_shift` no miraba las retenciones, así que una sesión
+  que sólo las tuviera se quedaba sin eje de referencia: la misma
+  negativa en silencio sobre información que la sesión ya tenía.

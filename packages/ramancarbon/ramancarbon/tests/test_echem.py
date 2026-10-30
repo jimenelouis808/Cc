@@ -4174,3 +4174,58 @@ def test_sweeps_that_do_not_start_together_are_not_a_rate_comparison():
     # 480 mV of shift less the 4 mV the fixture already puts between them.
     assert "476 mV" in notes[0]
     assert "no empiezan en el mismo potencial" in notes[0].lower()
+
+
+def test_the_hold_panel_carries_the_measured_potential_too():
+    """η rises exactly as the measured potential falls, because η is
+    ``-(E - E_eq)``. The instrument plots the second and the panel plots
+    the first, so both go on the same axis pair rather than asking a
+    reader to take the sign on trust."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from ramancarbon.echem.curve import ChargeDischarge, Electrode
+    from ramancarbon.gui.echem_state import EchemSession
+    from ramancarbon.gui.figures_echem import (CompositeFigure,
+                                               draw_composite)
+    from ramancarbon.gui.theme import PALETTES
+
+    electrode = Electrode(mass_mg=0.02, area_cm2=0.0707,
+                          electrolyte="H2SO4_0.5M",
+                          reference="Ag/AgCl_sat")
+    time = np.linspace(0.0, 1800.0, 400)
+    # The measured potential FALLS, as the user's own file does.
+    potential = -0.255 - 0.032 * time / 1800.0
+    current = np.full_like(time, -10.0e-3 * 0.0707)
+    session = EchemSession(name="HER")
+    session.electrode = electrode
+    session.reaction = "HER"
+    session.holds.append(ChargeDischarge(
+        time=time, potential=potential, current=current,
+        electrode=electrode, name="CP 30 min"))
+
+    # η rises while the potential falls: same measurement, opposite sign.
+    eta = np.asarray(session.hold_overpotential(session.holds[0]))
+    assert potential[-1] < potential[0]
+    assert eta[-1] > eta[0]
+    result = session.hold_results()[0]
+    assert result.drift_v_per_h > 0
+
+    spec = CompositeFigure(panels=["her_retencion"], columns=1)
+    figure = plt.figure(figsize=(5.0, 3.5))
+    assert draw_composite(figure, spec, session, PALETTES["claro"]) == []
+    # A second y axis, and it reads in volts against the reference.
+    # It is a CHILD of the panel, not an entry in ``figure.axes`` --
+    # the same quirk the inset of the Nyquist already documents, which
+    # is why ``every_axes`` exists.
+    from ramancarbon.gui.figures_echem import every_axes
+
+    secondary = [ax for ax in every_axes(figure)
+                 if ax is not figure.axes[0]]
+    assert secondary
+    assert "V" in secondary[0].get_ylabel()
+    # And it converts the way the definition does: η up is E down.
+    forward = secondary[0]._functions[0]
+    assert forward(1e3 * eta[-1]) == pytest.approx(potential[-1], abs=1e-6)
+    plt.close(figure)
