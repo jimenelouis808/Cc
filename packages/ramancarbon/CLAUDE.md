@@ -3517,3 +3517,65 @@ Y el panel enmarca la **rama activa**: un barrido que empieza en +0.48 V
 contra una referencia a 0.2 V de RHE pasa setecientos milivoltios donde
 no ocurre nada, y dibujado entero comprime en unos píxeles los cien
 milivoltios que llevan el resultado. Se limita la VISTA, no los datos.
+
+## Lo COMANDADO va al lado de lo MEDIDO, y hay que mirarlo
+
+Un archivo potenciostático lleva `control/V` —lo que se le pidió al
+equipo— junto a `Ewe/V` —lo que midió—, y las dos columnas se siguen a
+décimas de milivoltio en cuanto el lazo tiene el control: en los archivos
+del usuario, de 0.2 a 0.4 mV desde el primer punto asentado hasta el
+último, a cualquier corriente.
+
+**No se siguen en la primera muestra.** La celda está todavía en su
+potencial de reposo, así que ese punto marca el circuito abierto y no
+tiene nada que ver con el barrido.
+
+- **Es un punto y cuesta la lectura del experimento entero.** En el LSV
+  de 1 mV/s del usuario el potencial COMANDADO va de 0 a −0.35 V —que es
+  lo que corrió— y la columna medida abre en **+0.458 V**, su OCP. El
+  archivo *parece* un barrido desde +0.46 V, medio voltio más ancho, y
+  contra esa ventana se colocaron todos los sobrepotenciales. Lo dijo el
+  usuario: «según yo las corrí desde 0 a −0.35».
+- **Medido lo que cambia**: los η del punto de comparación NO se mueven,
+  porque se interpolan contra j y ese punto lleva I = 0; la pendiente de
+  Tafel pasa de **42.4 a 39.5 mV/dec**, porque el punto entraba en la
+  ventana de ajuste. Un 7 %.
+- **Sólo se recortan los puntos de CABEZA.** Un desajuste a mitad del
+  registro no es asentamiento: es el potenciostato sin poder mantener lo
+  que se le pidió —tensión de cumplimiento, referencia rota, un
+  contacto— y eso se avisa, no se recorta. Es el peor de los dos y
+  recortarlo escondería lo único que vale la pena saber.
+- Y **la ventana que se informa es la comandada**, no la medida.
+- `CONTROL_MISMATCH_V` son 20 mV: dos órdenes por encima de lo que se
+  siguen las columnas asentadas y dos por debajo de la excursión de medio
+  voltio de una primera muestra.
+- La comparación sólo vale **en modo potenciostático**. En galvanostático
+  lo controlado es la corriente y el potencial medido está donde esté.
+
+Y un efecto colateral que una prueba cazó: `to_curve` empezó a colgar su
+propia lista de avisos del `metadata`, y los lectores de `io.py` la
+rellenaban con `setdefault` — que encuentra la clave ya puesta y **tira
+la nota de procedencia del decodificador**. Se extiende, no se pone por
+defecto.
+
+## Dos cosas que no deberían estar ahí
+
+- **Una corriente catódica sostenida POR ENCIMA del potencial de
+  equilibrio.** Ahí no puede circular ninguna: la reacción no corre antes
+  de su propio potencial. Lo que circula es otra cosa reduciéndose, y en
+  una celda acuosa sin desairear es el oxígeno disuelto, cuya corriente
+  límite en un disco de milímetros en ácido al aire son unas décimas de
+  mA/cm² — exactamente las 0.31 y 0.24 que dan los archivos del usuario.
+  Se SUMA al barrido, así que la curva llega a cualquier densidad antes
+  de lo que llegaría la reacción sola y **todos los sobrepotenciales
+  salen pequeños de más**. Explica entero el sobrepotencial de inicio
+  negativo, sin tener que mover la referencia.
+- **Un η del punto de comparación en el intervalo del PLATINO sobre un
+  catalizador no noble.** El platino en ácido está en 20-35 mV y estos
+  archivos dan 30 y 26. La forma más común de que un electrodo no noble
+  informe los números del platino no es la síntesis: es platino disuelto
+  del CONTRAELECTRODO y redepositado en el de trabajo. Bastan nanogramos,
+  y después **ninguna medida electroquímica puede verlo**, porque lo que
+  se mide es platino de verdad. El aviso lleva la pendiente de Tafel como
+  segundo indicio y los dos experimentos que lo zanjan: contraelectrodo
+  de grafito en celda limpia, o Pt 4f por XPS en el electrodo medido.

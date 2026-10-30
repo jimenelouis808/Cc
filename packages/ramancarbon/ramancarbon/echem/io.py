@@ -191,7 +191,10 @@ def read_cv(
     location = Path(path)
     if _is_eclab(location):
         curve, notes = _eclab(location, "cv", electrode, scan_rate=scan_rate)
-        curve.metadata.setdefault("avisos", notes)
+        # Extend, not setdefault: `to_curve` attaches its own list of
+        # notes, so a setdefault finds "avisos" already present and the
+        # decoder's provenance note is silently dropped.
+        curve.metadata.setdefault("avisos", []).extend(notes)
         return curve
     header, table, metadata = _read_table(location)
     columns = _identify(header) if header else {}
@@ -270,7 +273,10 @@ def read_gcd(
     location = Path(path)
     if _is_eclab(location):
         curve, notes = _eclab(location, "gcd", electrode)
-        curve.metadata.setdefault("avisos", notes)
+        # Extend, not setdefault: `to_curve` attaches its own list of
+        # notes, so a setdefault finds "avisos" already present and the
+        # decoder's provenance note is silently dropped.
+        curve.metadata.setdefault("avisos", []).extend(notes)
         return curve
     header, table, metadata = _read_table(location)
     columns = _identify(header) if header else {}
@@ -429,7 +435,7 @@ def read_eis(
     location = Path(path)
     if _is_eclab(location):
         spectrum, notes = _eclab(location, "eis", electrode)
-        spectrum.metadata.setdefault("avisos", notes)
+        spectrum.metadata.setdefault("avisos", []).extend(notes)
         return spectrum
     header, table, metadata = _read_table(location)
     columns = _identify(header) if header else {}

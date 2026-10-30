@@ -190,7 +190,6 @@ measured,-0.280674,-0.0260282
 measured,-0.266437,-0.0249659
 measured,-0.248057,-0.024053
 measured,-0.237089,-0.0230308
-measured,-0.2284,-0.239462
 measured,-0.222441,-0.0219704
 measured,-0.20859,-0.0210099
 measured,-0.198533,-0.0199994
@@ -350,6 +349,7 @@ measured,2.35995,0.132982
 measured,2.36537,0.133974
 measured,2.36996,0.135001
 measured,2.37265,0.135466
+fitted region,0.31465,0.00304976
 fitted region,0.344371,0.00401994
 fitted region,0.375788,0.00501769
 fitted region,0.389423,0.00605469
@@ -415,17 +415,3 @@ fitted region,1.78403,0.064972
 fitted region,1.79004,0.0660345
 fitted region,1.80194,0.0670703
 fitted region,1.81572,0.0680161
-fitted region,1.82939,0.0689735
-fitted region,1.84306,0.0699905
-fitted region,1.85625,0.0709574
-fitted region,1.86917,0.0719499
-fitted region,1.88171,0.0730952
-fitted region,1.894,0.0740196
-fitted region,1.90591,0.0750323
-fitted region,1.91753,0.0759844
-fitted region,1.92898,0.0770055
-fitted region,1.9406,0.0780148
-fitted region,1.95205,0.0789786
-fitted region,1.96324,0.0799955
-fitted region,1.97434,0.0809455
-fitted region,1.98558,0.0819666

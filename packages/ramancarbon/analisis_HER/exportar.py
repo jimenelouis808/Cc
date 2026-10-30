@@ -113,6 +113,25 @@ def main(folder: Path) -> None:
                  "estacionario, así que dos velocidades tienen que caer una "
                  "sobre otra.")
     lines.append("")
+    lines.append("## Las ventanas que se barrieron de verdad")
+    lines.append("")
+    lines.append("Leídas de la columna de potencial COMANDADO, no de la "
+                 "medida: la medida abre en el potencial de reposo hasta que "
+                 "el lazo de control tira de la celda.")
+    lines.append("")
+    lines.append("v (mV/s) | ventana comandada (V vs ref.) | puntos "
+                 "descartados | potencial de reposo (V)")
+    lines.append(" | ".join(["---"] * 4))
+    for curve in curves:
+        window = curve.metadata.get("ventana_comandada_v")
+        skip = curve.metadata.get("puntos_de_asentamiento")
+        rest = curve.metadata.get("potencial_de_reposo_v")
+        lines.append(
+            f"{1e3 * curve.scan_rate:g} | "
+            + (f"{window[0]:+.4f} a {window[1]:+.4f}" if window else "—")
+            + f" | {skip or 0} | "
+            + (f"{rest:+.4f}" if rest is not None else "—"))
+    lines.append("")
     (OUT / "tablas.md").write_text("\n".join(lines), encoding="utf-8")
 
     with (OUT / "velocidades.csv").open("w", newline="",
@@ -130,6 +149,12 @@ def main(folder: Path) -> None:
             continue
         report.append("=" * 72)
         report.append(f"{curve.name}  ({1e3 * curve.scan_rate:g} mV/s)")
+        window = curve.metadata.get("ventana_comandada_v")
+        if window:
+            report.append(f"  ventana COMANDADA: {window[0]:+.4f} a "
+                          f"{window[1]:+.4f} V vs la referencia")
+        for note in curve.metadata.get("avisos", []):
+            report.append(f"  ⚠ {note}")
         report.append(analysis.summary())
         report.append("")
     report.append("=" * 72)

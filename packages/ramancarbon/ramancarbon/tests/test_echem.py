@@ -3888,3 +3888,4 @@ def test_a_cathodic_current_before_the_reaction_is_named_as_background():
     clean = analyse_catalysis(_her_curve(), reaction="HER")
     assert clean.background_ma_cm2 is None
     assert not any("OXÍGENO" in w for w in clean.warnings)
+

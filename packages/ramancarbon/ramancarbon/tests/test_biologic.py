@@ -616,3 +616,117 @@ def test_the_control_column_is_not_taken_as_current_when_the_mode_says_volts(
     ))
     with pytest.raises(BioLogicError, match="corriente"):
         read_eclab(path)
+
+
+# -- what was ASKED for, beside what was measured ------------------------
+
+
+def _potentiostatic(rest_v=0.46, start_v=0.0, end_v=-0.35, points=351,
+                    break_at=None, break_v=0.2):
+    """A potentiostatic sweep whose FIRST sample predates the control loop.
+
+    ``control/V`` carries what the instrument was told to do and
+    ``Ewe/V`` what it measured. They track once the loop has hold; at
+    the very first sample the cell is still at its rest potential.
+    """
+    commanded = np.linspace(start_v, end_v, points)
+    measured = commanded + 3e-4
+    measured[0] = rest_v                    # the first sample: open circuit
+    if break_at is not None:
+        measured[break_at] = commanded[break_at] + break_v
+    time = np.linspace(0.0, abs(end_v - start_v) / 1e-3, points)
+    current = np.where(commanded < -0.2, -5.0, -0.02)
+    return {
+        4: time,
+        6: measured.astype("f4"),
+        8: current.astype("f4"),
+        19: commanded.astype("f4"),
+    }
+
+
+def _potentiostatic_file(tmp_path, **kwargs):
+    columns = _potentiostatic(**kwargs)
+    points = len(columns[4])
+    path = tmp_path / "lsv.mpr"
+    path.write_bytes(_mpr(columns, settings=b"Linear Sweep Voltammetry\x00",
+                          flags={1: np.full(points, 2, dtype=np.uint8)}))
+    return path
+
+
+def test_points_recorded_before_the_control_loop_settled_are_dropped(tmp_path):
+    """A potentiostatic file carries what was ASKED for beside what was
+    measured, and the two track to a fraction of a millivolt once the
+    loop has hold. They do not at the first sample: the cell is still at
+    its rest potential.
+
+    It is one point and it costs a reading of the whole experiment. In
+    the user's 1 mV/s sweep the commanded potential ran 0 to −0.35 V —
+    what they actually ran — while the measured column opened at
+    +0.458 V, their OCP, so the file looked like a sweep from +0.46 V
+    and every overpotential was placed against a window half a volt too
+    wide.
+    """
+    from ramancarbon.echem.biologic import CONTROL_MISMATCH_V, to_curve
+
+    path = _potentiostatic_file(tmp_path, rest_v=0.46)
+    curve = to_curve(read_mpr(path), kind="lsv", scan_rate=1e-3)
+    potential = np.asarray(curve.potential, dtype=float)
+    assert potential[0] == pytest.approx(0.0, abs=5e-3)
+    assert potential.min() == pytest.approx(-0.35, abs=5e-3)
+    assert curve.metadata["puntos_de_asentamiento"] == 1
+    assert curve.metadata["potencial_de_reposo_v"] == pytest.approx(0.46,
+                                                                    abs=1e-3)
+    assert any("se descartan" in note for note in curve.metadata["avisos"])
+    assert CONTROL_MISMATCH_V == pytest.approx(0.020)
+
+
+def test_a_settled_file_loses_nothing(tmp_path):
+    """The trim has to be invisible on a file that never needed it."""
+    from ramancarbon.echem.biologic import to_curve
+
+    path = _potentiostatic_file(tmp_path, rest_v=0.0)
+    curve = to_curve(read_mpr(path), kind="lsv", scan_rate=1e-3)
+    assert len(curve.potential) == 351
+    assert curve.metadata.get("puntos_de_asentamiento") is None
+
+
+def test_a_mismatch_in_the_MIDDLE_is_reported_and_not_trimmed(tmp_path):
+    """A measured potential that leaves the commanded one part way
+    through is not settling: it is the potentiostat failing to hold what
+    it was asked for, and trimming it would hide the one thing worth
+    knowing."""
+    from ramancarbon.echem.biologic import to_curve
+
+    path = _potentiostatic_file(tmp_path, rest_v=0.0, break_at=150,
+                                break_v=0.2)
+    curve = to_curve(read_mpr(path), kind="lsv", scan_rate=1e-3)
+    assert curve.metadata.get("puntos_de_asentamiento") is None
+    assert len(curve.potential) == 351
+    assert any("cumplimiento" in note for note in curve.metadata["avisos"])
+
+
+def test_the_commanded_window_is_what_gets_reported(tmp_path):
+    """A window read from the measured column is wider than the
+    experiment was, by however far the cell was resting."""
+    from ramancarbon.echem.biologic import to_curve
+
+    path = _potentiostatic_file(tmp_path, rest_v=0.46)
+    curve = to_curve(read_mpr(path), kind="lsv", scan_rate=1e-3)
+    low, high = curve.metadata["ventana_comandada_v"]
+    assert low == pytest.approx(-0.35, abs=5e-3)
+    assert high == pytest.approx(0.0, abs=5e-3)
+
+
+def test_a_galvanostatic_file_is_left_alone(tmp_path):
+    """The comparison only means anything where the POTENTIAL is what is
+    being controlled. In galvanostatic mode `control/V/mA` is a current
+    and the measured potential is free to be anywhere."""
+    from ramancarbon.echem.biologic import _settling_points, read_mpr
+
+    columns = _potentiostatic(rest_v=0.46)
+    points = len(columns[4])
+    path = tmp_path / "gal.mpr"
+    path.write_bytes(_mpr(columns, settings=b"GCPL\x00",
+                          flags={1: np.full(points, 1, dtype=np.uint8)}))
+    data = read_mpr(path)
+    assert _settling_points(data, np.asarray(data.columns["Ewe/V"])) == 0

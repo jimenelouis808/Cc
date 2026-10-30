@@ -1109,6 +1109,55 @@ def _count_reversals(potential: Optional[np.ndarray]) -> int:
     return turns
 
 
+#: Volts by which the MEASURED potential may differ from the COMMANDED
+#: one before the point is not part of the sweep.
+#:
+#: In a settled potentiostatic record the two track to a few tenths of a
+#: millivolt -- the user's files hold 0.2 to 0.4 mV from the first
+#: settled point to the last, at every current. Twenty millivolts is two
+#: orders of magnitude above that and two orders below the half-volt
+#: excursion of a first sample taken before the control loop has pulled
+#: the cell off its rest potential.
+CONTROL_MISMATCH_V = 0.020
+
+
+def _settling_points(data: "ECLabData", potential: np.ndarray) -> int:
+    """How many LEADING points were recorded before the loop settled.
+
+    A potentiostatic file carries what was asked for in ``control/V``
+    beside what was measured in ``Ewe/V``, and the two track to a
+    fraction of a millivolt once the loop has control. They do not at
+    the very first sample: the cell is still at its rest potential, so
+    that point sits wherever the open circuit was and has nothing to do
+    with the sweep.
+
+    It is one point and it costs a reading of the whole experiment. In
+    the user's 1 mV/s sweep the commanded potential runs 0 to −0.35 V,
+    which is the experiment they ran; the measured column opens at
+    +0.458 V, their OCP, so the file *looks* like a sweep from +0.46 V
+    and the analysis placed every overpotential against a window half a
+    volt too wide.
+
+    Only LEADING points are counted. A mismatch in the middle of a
+    record is not settling, it is the potentiostat failing to hold --
+    compliance voltage, a broken reference, a disconnected lead -- and
+    that is reported rather than trimmed.
+    """
+    commanded = data.columns.get("control/V")
+    if commanded is None or commanded.size != potential.size:
+        return 0
+    mode = data.columns.get("mode")
+    if mode is not None and not np.all(np.asarray(mode) == 2):
+        return 0
+    off = np.abs(np.asarray(potential, dtype=float)
+                 - np.asarray(commanded, dtype=float))
+    bad = off > CONTROL_MISMATCH_V
+    if not bad.any() or bad.all():
+        return 0
+    leading = int(np.argmin(bad))        # first index where it tracks
+    return leading
+
+
 def to_curve(
     data: ECLabData,
     kind: str = "",
@@ -1138,6 +1187,10 @@ def to_curve(
             kind, deduced = technique_from_data(data)
 
     metadata = {"origen": "EC-Lab .mpr", "modulos": list(data.modules)}
+    # The SAME list object goes into the metadata, so anything appended
+    # to it below travels with the curve whichever branch returns.
+    notes: list[str] = []
+    metadata["avisos"] = notes
     if settings.technique_name:
         metadata["tecnica"] = settings.technique_name
     if deduced:
@@ -1201,6 +1254,54 @@ def to_curve(
             "faltan columnas de potencial o de corriente: hay "
             + ", ".join(sorted(data.columns))
         )
+
+    # Points recorded before the control loop took hold. See
+    # `_settling_points`: one of them makes a sweep look half a volt
+    # wider than it was.
+    skip = _settling_points(data, potential)
+    commanded = data.columns.get("control/V")
+    if skip:
+        rest = float(potential[0])
+        metadata["puntos_de_asentamiento"] = skip
+        metadata["potencial_de_reposo_v"] = rest
+        notes.append(
+            f"los {skip} primero(s) punto(s) se descartan: el potencial "
+            f"MEDIDO ({rest:+.4f} V) está a más de "
+            f"{1e3 * CONTROL_MISMATCH_V:.0f} mV del COMANDADO "
+            f"({float(commanded[0]):+.4f} V), así que son anteriores a que "
+            "el lazo de control tirase de la celda y lo que marcan es el "
+            "potencial de reposo, no el barrido. Conservarlos hace que la "
+            "ventana del experimento parezca más ancha de lo que fue"
+        )
+        keep = slice(skip, None)
+        potential = potential[keep]
+        current = current[keep]
+        if time is not None:
+            time = time[keep]
+        if commanded is not None:
+            commanded = commanded[keep]
+        for name, column in list(data.columns.items()):
+            if getattr(column, "size", 0) == skip + potential.size:
+                data.columns[name] = column[keep]
+    # A mismatch that is NOT at the start is the potentiostat failing to
+    # hold what it was asked for, which is a different problem and a
+    # worse one.
+    if commanded is not None and commanded.size == potential.size:
+        off = np.abs(np.asarray(potential, dtype=float)
+                     - np.asarray(commanded, dtype=float))
+        stray = int(np.count_nonzero(off > CONTROL_MISMATCH_V))
+        if stray:
+            notes.append(
+                f"en {stray} punto(s) el potencial medido se aparta más de "
+                f"{1e3 * CONTROL_MISMATCH_V:.0f} mV del comandado, y no son "
+                "del arranque. Eso no es asentamiento: es el potenciostato "
+                "sin poder mantener lo que se le pidió — tensión de "
+                "cumplimiento, referencia rota o un contacto — y ahí el eje "
+                "de potencial no es el que se cree"
+            )
+        else:
+            metadata["ventana_comandada_v"] = (
+                float(np.min(commanded)), float(np.max(commanded)))
 
     if kind in ("cv", "lsv"):
         rate = scan_rate or settings.scan_rate_v_per_s
