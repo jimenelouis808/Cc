@@ -3843,3 +3843,48 @@ def test_the_as_measured_panel_keeps_the_potential_on_its_own_scale():
                          if len(line.get_xdata()) > 5])
     assert xs.min() > -2.0 and xs.max() < 2.0
     plt.close(figure)
+
+
+def test_a_platinum_like_overpotential_on_a_non_noble_catalyst_is_flagged():
+    """The commonest way a non-noble electrode reports platinum's numbers
+    is not synthesis: it is platinum dissolved from the COUNTER electrode
+    and re-deposited on the working one. Nanograms do it, and no
+    electrochemical measurement can see it afterwards, because what is
+    being measured really is platinum."""
+    from ramancarbon.echem.evaluate import (PLATINUM_SUSPICION_V,
+                                            analyse_catalysis)
+
+    # A curve whose benchmark lands in platinum's range.
+    noble = analyse_catalysis(_her_curve(exchange=3.0, tafel_mv=32.0),
+                              reaction="HER")
+    assert noble.overpotential_at_benchmark is not None
+    assert 0 < noble.overpotential_at_benchmark < PLATINUM_SUSPICION_V
+    assert any("PLATINO" in w and "CONTRAELECTRODO" in w
+               for w in noble.warnings)
+
+    # An ordinary non-noble catalyst is not accused.
+    # 50 mV/dec from 0.01 mA/cm² puts the benchmark at 150 mV, which is
+    # where the good non-noble catalysts of this class report.
+    ordinary = analyse_catalysis(_her_curve(exchange=1e-2, tafel_mv=50.0),
+                                 reaction="HER")
+    assert ordinary.overpotential_at_benchmark > PLATINUM_SUSPICION_V
+    assert not any("PLATINO" in w for w in ordinary.warnings)
+
+
+def test_a_cathodic_current_before_the_reaction_is_named_as_background():
+    """Positive of the equilibrium the reaction cannot run, so a steady
+    cathodic current there is something ELSE being reduced — in an
+    unpurged aqueous cell, dissolved oxygen. It adds to the sweep, so
+    every overpotential read from the curve comes out too small."""
+    from ramancarbon.echem.evaluate import analyse_catalysis
+
+    # A background of 0.3 mA/cm², which is what the user's cell shows.
+    dirty = analyse_catalysis(_her_curve(background_ma_cm2=-0.3),
+                              reaction="HER")
+    assert dirty.background_ma_cm2 is not None
+    assert dirty.background_ma_cm2 == pytest.approx(0.3, rel=0.2)
+    assert any("OXÍGENO" in w for w in dirty.warnings)
+
+    clean = analyse_catalysis(_her_curve(), reaction="HER")
+    assert clean.background_ma_cm2 is None
+    assert not any("OXÍGENO" in w for w in clean.warnings)

@@ -1,4 +1,4 @@
-# HER: FeSe a 900 °C en H₂SO₄ 0.5 M
+# HER: FeSe@C (carbón dopado con N y Se) a 900 °C, en H₂SO₄ 0.5 M
 
 Dos barridos lineales del mismo electrodo, a 1 y 5 mV/s, 20 µg sobre un
 disco de carbón vítreo de 3 mm contra Ag/AgCl (KCl sat.).
@@ -6,6 +6,23 @@ disco de carbón vítreo de 3 mm contra Ag/AgCl (KCl sat.).
 ```bash
 uv run python analisis_HER/exportar.py <carpeta con los .mpr>
 ```
+
+## Dos artefactos, medidos
+
+**Hay una corriente catódica sostenida por encima del equilibrio del
+hidrógeno**, donde no puede circular ninguna: 0.31 mA/cm² a 1 mV/s y 0.24
+a 5. En una celda acuosa sin desairear eso es **reducción del oxígeno
+disuelto**, cuya corriente límite en un disco de milímetros en ácido al
+aire son justo unas décimas de mA/cm². Se suma al barrido, así que la
+curva llega a cualquier densidad antes de lo que llegaría la reacción
+sola. Explica entero el sobrepotencial de inicio negativo.
+
+**Y el η a 10 mA/cm² cae en el intervalo del platino** (20–35 mV). Para
+un catalizador no noble eso se explica casi siempre por **platino
+disuelto del contraelectrodo** y redepositado en el de trabajo: bastan
+nanogramos, y después ninguna medida electroquímica lo ve, porque lo que
+se mide es platino de verdad. Si el contraelectrodo era de Pt, hay que
+descartarlo antes de citar nada.
 
 ## Léelos en este orden
 

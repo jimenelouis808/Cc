@@ -1,4 +1,4 @@
-# HER: FeSe 900 °C en H2SO4 0.5 M
+# HER: FeSe@C dopado con N y Se, 900 °C, en H2SO4 0.5 M
 
 20 µg sobre carbón vítreo de 3 mm (0.070686 cm²), referencia Ag/AgCl_sat, pH 0.3.
 

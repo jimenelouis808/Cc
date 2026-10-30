@@ -441,6 +441,32 @@ ONSET_SIGN_TOLERANCE = 0.005
 #: the literature.
 IR_SHARE_LIMIT = 0.33
 
+#: Overpotential at the benchmark, in volts, below which a NON-NOBLE
+#: catalyst is reported as suspect rather than as excellent.
+#:
+#: Platinum in acid sits at 20-35 mV with a Tafel slope near 30 mV/dec,
+#: and the commonest way a non-noble electrode reaches that number is
+#: not synthesis: it is platinum DISSOLVED from the counter electrode
+#: and re-deposited on the working one. It is the best documented
+#: artefact in the whole HER literature, it takes nanograms to show, and
+#: it is invisible in every electrochemical measurement because what is
+#: being measured afterwards really is platinum. Fifty millivolts sits
+#: above the published range for platinum and below where the good
+#: non-noble catalysts of this class report.
+PLATINUM_SUSPICION_V = 0.050
+
+#: Cathodic current density, in mA/cm², that counts as a sustained
+#: background when it flows POSITIVE of the reaction's own potential.
+#:
+#: Nothing should: positive of the equilibrium the reaction cannot run.
+#: A steady cathodic current there is something else being reduced, and
+#: in an aqueous cell that was not purged it is dissolved oxygen, whose
+#: diffusion-limited current on a millimetre disc in air-saturated acid
+#: is a few tenths of a mA/cm². That current adds to the sweep, so the
+#: curve reaches any chosen density earlier than the reaction alone
+#: would and every overpotential read from it comes out too small.
+BACKGROUND_CURRENT_LIMIT = 0.05
+
 
 @dataclass
 class CatalysisResult:
@@ -473,6 +499,10 @@ class CatalysisResult:
     ecsa_normalised: Optional[float] = None
     conversion_note: str = ""
     ir_note: str = ""
+    background_ma_cm2: Optional[float] = None
+    """Sustained cathodic current density flowing POSITIVE of the
+    reaction's own potential, where nothing should flow. Usually
+    dissolved oxygen in a cell that was not purged."""
     warnings: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
@@ -858,6 +888,30 @@ def analyse_catalysis(
                 "frecuencia"
             )
 
+    # A sustained cathodic current POSITIVE of the reaction's own
+    # potential. Nothing should flow there, so what does is something
+    # else being reduced -- and it adds to the sweep, so every
+    # overpotential read from the curve comes out too small.
+    before = eta < 0.0
+    if np.any(before) and np.count_nonzero(before) >= 5:
+        background = float(np.median(j[before]))
+        if background > BACKGROUND_CURRENT_LIMIT:
+            result.background_ma_cm2 = background
+            result.warnings.append(
+                f"por encima del potencial de equilibrio circula una "
+                f"corriente catódica sostenida de {background:.3g} mA/cm², y "
+                "ahí no debería circular ninguna: la reacción no puede correr "
+                "antes de su propio potencial. Lo más común en una celda "
+                "acuosa sin desairear es la reducción del OXÍGENO disuelto, "
+                "cuya corriente límite en un disco de milímetros en ácido al "
+                "aire son unas décimas de mA/cm². Esa corriente se SUMA al "
+                "barrido, así que la curva llega a cualquier densidad antes "
+                "de lo que llegaría la reacción sola y todos los "
+                "sobrepotenciales salen pequeños de más. Se quita burbujeando "
+                "N₂ o Ar veinte minutos y manteniendo la manta de gas durante "
+                "la medida"
+            )
+
     if j.max() > ABSURD_CURRENT_DENSITY:
         result.warnings.append(
             f"la densidad de corriente llega a {j.max():.3g} mA/cm², que son "
@@ -870,6 +924,29 @@ def analyse_catalysis(
         )
 
     result.tafel = tafel_analysis(eta, j)
+
+    # Platinum from the counter electrode. The commonest way a
+    # non-noble electrode reports platinum's numbers is not synthesis.
+    if (reaction == "HER" and benchmark_eta is not None
+            and 0.0 < benchmark_eta < PLATINUM_SUSPICION_V):
+        slope = (result.tafel.slope_mv_per_decade
+                 if result.tafel and result.tafel.valid else None)
+        text = (
+            f"η a {benchmark:g} mA/cm² sale {1e3 * benchmark_eta:.0f} mV, que "
+            "es el intervalo del PLATINO (20-35 mV). Para un catalizador no "
+            "noble ese número se explica casi siempre por platino disuelto "
+            "del CONTRAELECTRODO y redepositado en el de trabajo: hacen falta "
+            "nanogramos, no se ve en ninguna medida electroquímica —porque lo "
+            "que se mide después es platino de verdad— y es el artefacto "
+            "mejor documentado de la literatura de HER"
+        )
+        if slope is not None:
+            text += (f". La pendiente de Tafel ({slope:.0f} mV/dec) es el "
+                     "otro indicio: el platino está cerca de 30")
+        text += (". Se descarta repitiendo con un contraelectrodo de GRAFITO "
+                 "en celda limpia, o buscando Pt 4f por XPS en el electrodo "
+                 "medido")
+        result.warnings.append(text)
 
     if result.overpotential_at_benchmark is not None and electrode.mass_mg:
         current_a = benchmark * 1e-3 * electrode.area_cm2

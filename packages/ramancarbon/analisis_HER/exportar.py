@@ -1,4 +1,5 @@
-"""HER on FeSe pyrolysed at 900 °C, in 0.5 M H2SO4.
+"""HER on FeSe@C (N- and Se-doped carbon) pyrolysed at 900 °C, in
+0.5 M H2SO4.
 
 Usage::
 
@@ -52,7 +53,7 @@ def rate_for(path: Path) -> float:
 
 
 def build(folder: Path) -> EchemSession:
-    session = EchemSession(name="FeSe 900 °C")
+    session = EchemSession(name="FeSe@C (N,Se) 900 °C")
     session.electrode = Electrode(
         mass_mg=MASS_MG,
         area_cm2=float(np.pi * (0.1 * DISC_MM / 2.0) ** 2),
@@ -92,7 +93,8 @@ def main(folder: Path) -> None:
         checks.append((path.name, 1e3 * curve.scan_rate, measured))
 
     rows = session.lsv_rate_rows()
-    lines = ["# HER: FeSe 900 °C en H2SO4 0.5 M", ""]
+    lines = ["# HER: FeSe@C dopado con N y Se, 900 °C, en H2SO4 0.5 M",
+             ""]
     lines.append(f"{MASS_MG * 1e3:.0f} µg sobre carbón vítreo de {DISC_MM:g} mm "
                  f"({session.electrode.area_cm2:.5g} cm²), referencia "
                  f"{REFERENCE}, pH {session.electrode.ph:g}.")
