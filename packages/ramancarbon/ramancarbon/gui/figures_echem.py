@@ -1865,6 +1865,30 @@ def _panel_her_rates(axis, session, spec, palette) -> None:
     _tidy(axis, spec, log_x=True)
 
 
+def _frame_the_tafel(axis, catalysis) -> None:
+    """Show the branch the slope was fitted on, not the approach to it.
+
+    Below the reaction's own potential there is no reaction, so what the
+    curve does there is the background and the noise of dividing a tiny
+    current by itself — a vertical smear two hundred millivolts tall
+    that takes most of the panel and says nothing. The data are not
+    touched, only the view: the point of a Tafel plot is still to show
+    how much of the curve the fitted line covers, and that part is all
+    above zero.
+    """
+    density = np.abs(np.asarray(catalysis.curve_j, dtype=float))
+    eta = np.asarray(catalysis.curve_eta, dtype=float)
+    active = (eta > 0.0) & (density > 0.0)
+    if not np.any(active):
+        return
+    top = float(np.max(eta[active]))
+    axis.set_ylim(-0.02 * top, top + 0.08 * top)
+    logs = np.log10(density[active])
+    low, high = float(np.min(logs)), float(np.max(logs))
+    margin = 0.05 * max(high - low, 0.1)
+    axis.set_xlim(low - margin, high + margin)
+
+
 def _frame_the_active_branch(axis, session) -> None:
     """Limit the view to where the reaction is, keeping the data whole."""
     tops = []
@@ -1965,6 +1989,7 @@ def _panel_her_tafel(axis, session, spec, palette) -> None:
                             slope=f"{tafel.slope_mv_per_decade:.0f}"),
                   transform=axis.transAxes, ha="left", va="top",
                   fontsize=spec.font_size - 0.5, color=MODEL)
+    _frame_the_tafel(axis, catalysis)
     _reference_bands(axis, session, spec, tafel=True)
     axis.set_xlabel(spec.text("log_j"))
     axis.set_ylabel(spec.text("overpotential"))

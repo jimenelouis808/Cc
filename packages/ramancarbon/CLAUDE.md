@@ -3700,3 +3700,30 @@ lee como un barrido y se rechaza por no tener velocidad.
   dé el sobrepotencial del platino con una pendiente muy distinta **no se
   está pareciendo al platino**, y tener las dos cosas en la misma figura
   es lo que permite verlo.
+
+## El gráfico de Tafel enmarca la RAMA, no la aproximación
+
+Por debajo del potencial propio de la reacción no hay reacción, así que
+lo que la curva hace ahí es el fondo y el ruido de dividir una corriente
+diminuta entre sí misma: una mancha vertical de doscientos milivoltios
+que se lleva la mayor parte del panel y no dice nada. Los sobrepotenciales
+negativos que salían no eran un resultado, eran eso.
+
+- `_frame_the_tafel` limita la VISTA a donde η es positivo. Los datos no
+  se tocan, y la prueba lo comprueba: la línea sigue llevando los puntos
+  que el marco ya no enseña. El propósito del panel —ver qué fracción de
+  la curva cubre la recta ajustada— se conserva entero, porque esa
+  fracción está toda por encima de cero.
+- **El panel de η contra j NO se enmarca así**, y eso no es una
+  incoherencia: ahí el cruce por cero es el diagnóstico. Un
+  sobrepotencial de inicio negativo es imposible, y verlo cruzar la línea
+  es lo que lo dice.
+
+## Tres espectros que no caben en un Nyquist
+
+La figura de HER cierra con el Bode de los tres y no con su Nyquist, por
+una razón que es el resultado: a circuito abierto el electrodo está
+bloqueante y llega a 6·10⁴ Ω, y a −0.35 V se queda en 8. **Cuatro décadas
+en el mismo diagrama**, así que un Nyquist a escala uno a uno enseña el
+espectro grande y convierte el interesante en un punto. El Bode es
+logarítmico por construcción y los tres se leen a la vez.

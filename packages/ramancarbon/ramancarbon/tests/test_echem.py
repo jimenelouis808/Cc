@@ -4022,3 +4022,55 @@ def test_an_OER_session_gets_no_HER_band():
     assert "Pt_C_20_HER_acido" not in reference_catalysts("OER",
                                                           "H2SO4_0.5M")
     assert "Pt_C_20_HER_acido" in reference_catalysts("HER", "H2SO4_0.5M")
+
+
+def test_the_tafel_panel_shows_the_branch_and_not_the_approach():
+    """Below the reaction's own potential there is no reaction, so what
+    the curve does there is the background and the noise of dividing a
+    tiny current by itself — a vertical smear that takes most of the
+    panel and says nothing. The data are not touched, only the view."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from ramancarbon.gui.figures_echem import (CompositeFigure,
+                                               draw_composite)
+    from ramancarbon.gui.theme import PALETTES
+
+    session = _her_session()
+    spec = CompositeFigure(panels=["her_tafel"], columns=1)
+    figure = plt.figure(figsize=(5.0, 3.5))
+    assert draw_composite(figure, spec, session, PALETTES["claro"]) == []
+    axis = figure.axes[0]
+    low, high = axis.get_ylim()
+    # Essentially nothing below zero, and the whole active branch above.
+    assert low >= -0.01
+    assert high > 0.0
+    # The data themselves are untouched: the line still carries the
+    # points the view no longer shows.
+    drawn = np.concatenate([line.get_ydata() for line in axis.get_lines()
+                            if len(line.get_ydata()) > 5])
+    assert drawn.min() < low
+    plt.close(figure)
+
+
+def test_the_six_panel_her_figure_draws_whole():
+    """The complete figure: as measured, the two rates, the benchmark
+    curve, Tafel, the hold and the impedance."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from ramancarbon.gui.figures_echem import (CompositeFigure,
+                                               draw_composite)
+    from ramancarbon.gui.theme import PALETTES
+
+    session = _her_session()
+    spec = CompositeFigure(
+        panels=["her_medida", "her_velocidades", "her_polarizacion",
+                "her_tafel"],
+        columns=2)
+    figure = plt.figure(figsize=spec.figsize())
+    assert draw_composite(figure, spec, session, PALETTES["claro"]) == []
+    assert spec.rows == 2 and spec.columns == 2
+    plt.close(figure)

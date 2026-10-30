@@ -44,6 +44,13 @@ REFERENCE = "Ag/AgCl_sat"
 #: result: the overpotential is the electrode's.
 RESISTANCE_OHM = 1.9
 
+#: Legends for the three spectra, which the file names do not give.
+PEIS_LABELS = {
+    "PEIS_1_inicial": "inicial (OCV)",
+    "PEIS_2_despues_OCV": "tras LSV (OCV)",
+    "PEIS_3_despues_m0.35V": "tras LSV (−0.35 V)",
+}
+
 #: Scan rate in V/s by what the file name says. Not guessed from the
 #: data: a rate typed wrong is a rate wrong in everything downstream,
 #: and these files do carry it in their own sweep, so the two are
@@ -78,6 +85,12 @@ def build(folder: Path) -> EchemSession:
     # The holds, when they are in the same folder.
     for path in sorted(folder.glob("CP_*.mpr")):
         session.add_hold(path, label=path.stem)
+    # And the impedance of the same cell, which is where the resistance
+    # above came from and what says the electrode changed rather than
+    # the cell.
+    for path in sorted(folder.glob("PEIS*.mpr")):
+        session.add_eis_to_series(path, label=PEIS_LABELS.get(
+            path.stem, path.stem))
     return session
 
 
@@ -197,8 +210,8 @@ def main(folder: Path) -> None:
     session.figure_technique = "catalysis"
     spec = CompositeFigure(
         panels=["her_medida", "her_velocidades", "her_polarizacion",
-                "her_tafel", "her_retencion"],
-        columns=2, width_in=7.2, panel_height_in=3.0, dpi=600)
+                "her_tafel", "her_retencion", "eis_bode"],
+        columns=2, width_in=7.2, panel_height_in=2.9, dpi=600)
     session.composite = spec
     figure = plt.figure(figsize=spec.figsize())
     for problem in session.draw_figure(figure, PALETTES["claro"]):
