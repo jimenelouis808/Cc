@@ -16,6 +16,7 @@ means what the community table says it means.
 
 from __future__ import annotations
 
+import pathlib
 import struct
 
 import numpy as np
@@ -164,9 +165,19 @@ def test_a_layout_that_does_not_close_is_refused(tmp_path):
         read_mpr(path)
 
 
-def test_an_unknown_column_identifier_is_refused_by_name(tmp_path):
-    """Skipping it would shift every column behind it and the result
-    would still look like data."""
+def test_an_unknown_column_identifier_is_never_NAMED(tmp_path):
+    """Skipping a column would shift every column behind it and the
+    result would still look like data — which is why the file used to be
+    refused whole.
+
+    What changed is narrower than that rule: when exactly ONE identifier
+    is unknown and the record closes to the byte, its width is settled
+    by the file rather than assumed, so nothing behind it moves. The
+    column then comes through under a name nothing can mistake for a
+    measurement, and it is still never given a quantity.
+    """
+    from ramancarbon.echem.biologic import UNNAMED_PREFIX
+
     columns = _cv_columns(60)
     raw = bytearray(_mpr(columns))
     index = raw.find(b"MODULE", 52)
@@ -176,8 +187,17 @@ def test_an_unknown_column_identifier_is_refused_by_name(tmp_path):
 
     path = tmp_path / "raro.mpr"
     path.write_bytes(bytes(raw))
-    with pytest.raises(BioLogicError, match="60000"):
-        read_mpr(path)
+    data = read_mpr(path)
+    # The one whose identifier was broken comes back unnamed, so nothing
+    # downstream can read it as a quantity...
+    assert f"{UNNAMED_PREFIX}60000" in data.columns
+    assert "time/s" not in data.columns
+    # ...and the two BEHIND it keep their names and their values, which
+    # is the whole question: an assumed width would have shifted them.
+    assert np.allclose(data.columns["Ewe/V"], columns[6], atol=1e-6)
+    assert np.allclose(data.columns["I/mA"], columns[8], atol=1e-5)
+    assert np.allclose(data.columns[f"{UNNAMED_PREFIX}60000"], columns[4],
+                       atol=1e-6)
 
 
 def test_something_that_is_not_an_mpr_says_so(tmp_path):
@@ -730,3 +750,78 @@ def test_a_galvanostatic_file_is_left_alone(tmp_path):
                           flags={1: np.full(points, 1, dtype=np.uint8)}))
     data = read_mpr(path)
     assert _settling_points(data, np.asarray(data.columns["Ewe/V"])) == 0
+
+
+def test_one_unnamed_column_no_longer_refuses_the_whole_file():
+    """An identifier this reader cannot NAME is not the same as one
+    whose WIDTH it cannot work out. The barrier refusing the file exists
+    because an ASSUMED width displaces every column behind it — and a
+    width the file's own arithmetic settles is not assumed.
+
+    It mattered: a ten-hour chronopotentiometry was refused whole over
+    one column, in a file whose record closes exactly at 45 bytes with
+    the other fifteen taking 41.
+    """
+    import tempfile
+
+    from ramancarbon.echem.biologic import (UNNAMED_PREFIX,
+                                            _rescue_one_unknown, read_mpr)
+
+    # time/s (4), I/mA (8) and one identifier nothing knows, 4 bytes.
+    n = 50
+    known = {4: np.linspace(0.0, 100.0, n), 8: np.full(n, -0.707)}
+    mystery = np.linspace(-0.25, -0.35, n).astype("f4")
+
+    ids = [4, 8, 9999]
+    record = np.dtype({"names": ["time/s", "I/mA", "x"],
+                       "formats": ["<f8", "<f4", "<f4"]})
+    table = np.zeros(n, dtype=record)
+    table["time/s"] = known[4]
+    table["I/mA"] = known[8]
+    table["x"] = mystery
+    head = struct.pack("<I", n) + bytes([len(ids)]) + b"\x00"
+    head += b"".join(struct.pack("<H", i) for i in ids)
+    payload = head.ljust(0x195, b"\x00") + table.tobytes()
+    blob = (b"BIO-LOGIC MODULAR FILE\x1a".ljust(52, b"\x00")
+            + _module("VMP Set", "VMP settings", b"CP\x00")
+            + _module("VMP data", "VMP data", payload))
+
+    with tempfile.TemporaryDirectory() as folder:
+        path = pathlib.Path(folder) / "cp.mpr"
+        path.write_bytes(blob)
+        data = read_mpr(path)
+
+    assert f"{UNNAMED_PREFIX}9999" in data.columns
+    assert "time/s" in data.columns and "I/mA" in data.columns
+    # The columns BEHIND the unnamed one are still right, which is the
+    # whole question.
+    assert np.allclose(data.columns["I/mA"], -0.707)
+    assert np.allclose(data.columns[f"{UNNAMED_PREFIX}9999"], mystery,
+                       atol=1e-6)
+    assert _rescue_one_unknown(payload, n, len(ids)) is not None
+
+
+def test_two_unnamed_columns_still_refuse_the_file():
+    """The arithmetic gives their SUM, so two cannot be separated and the
+    barrier stands."""
+    import tempfile
+
+    from ramancarbon.echem.biologic import BioLogicError, read_mpr
+
+    n = 50
+    ids = [4, 9998, 9999]
+    record = np.dtype({"names": ["t", "a", "b"],
+                       "formats": ["<f8", "<f4", "<f4"]})
+    table = np.zeros(n, dtype=record)
+    table["t"] = np.linspace(0.0, 10.0, n)
+    head = struct.pack("<I", n) + bytes([len(ids)]) + b"\x00"
+    head += b"".join(struct.pack("<H", i) for i in ids)
+    payload = head.ljust(0x195, b"\x00") + table.tobytes()
+    blob = (b"BIO-LOGIC MODULAR FILE\x1a".ljust(52, b"\x00")
+            + _module("VMP Set", "VMP settings", b"CP\x00")
+            + _module("VMP data", "VMP data", payload))
+    with tempfile.TemporaryDirectory() as folder:
+        path = pathlib.Path(folder) / "cp.mpr"
+        path.write_bytes(blob)
+        with pytest.raises(BioLogicError, match="identificador desconocido"):
+            read_mpr(path)

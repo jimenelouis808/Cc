@@ -3889,3 +3889,67 @@ def test_a_cathodic_current_before_the_reaction_is_named_as_background():
     assert clean.background_ma_cm2 is None
     assert not any("OXÍGENO" in w for w in clean.warnings)
 
+
+
+# -- stability: a hold is a RATE, not a number ---------------------------
+
+
+def test_a_hold_comes_back_as_a_drift_rate():
+    """An overpotential describes the instant of the measurement. What
+    decides whether a catalyst is usable is whether it holds, and the
+    field quotes that as a single number after ten hours — which hides
+    the shape and invites a one-hour hold to be reported as a ten-hour
+    one."""
+    from ramancarbon.echem.evaluate import stability
+
+    time = np.linspace(0.0, 3600.0, 400)
+    eta = 0.050 + 0.030 * (time / 3600.0)        # 30 mV/h, planted
+    result = stability(time, eta, -10.0)
+    assert result.drift_v_per_h == pytest.approx(0.030, rel=0.02)
+    assert result.duration_h == pytest.approx(1.0, rel=0.01)
+    assert result.r_squared > 0.999
+    assert result.hours_to_lose_100mv == pytest.approx(100 / 30, rel=0.05)
+    # The settling fraction is skipped, so the start is not the first point.
+    assert result.overpotential_start > 0.050
+
+
+def test_a_failing_electrode_is_named_as_failing():
+    """The user's hold loses 92 mV/h at 10 mA/cm². It does not finish the
+    ten-hour test everybody quotes, and saying that is more useful than
+    a retention computed over whatever fraction of it ran."""
+    from ramancarbon.echem.evaluate import (STABILITY_FAILING_V_PER_H,
+                                            stability)
+
+    time = np.linspace(0.0, 2449.0, 500)
+    eta = 0.043 + 0.0925 * (time / 2449.0)
+    result = stability(time, eta, -10.0)
+    assert result.drift_v_per_h > STABILITY_FAILING_V_PER_H
+    assert any("no termina" in w for w in result.warnings)
+    assert any("minutos" in w for w in result.warnings)
+
+    steady = stability(np.linspace(0.0, 36000.0, 500),
+                       np.full(500, 0.050), -10.0)
+    assert abs(steady.drift_v_per_h) < 1e-9
+    assert not any("no termina" in w for w in steady.warnings)
+    assert not any("minutos" in w for w in steady.warnings)
+
+
+def test_a_drift_that_is_not_a_line_says_so():
+    """A loss rate that changes during the hold is averaged by a single
+    slope, and the extrapolation is then worth even less."""
+    from ramancarbon.echem.evaluate import stability
+
+    time = np.linspace(0.0, 7200.0, 400)
+    eta = 0.050 + 0.08 * (time / 7200.0) ** 3    # accelerating
+    result = stability(time, eta, -10.0)
+    assert result.r_squared < 0.9
+    assert any("no es una recta" in w for w in result.warnings)
+
+
+def test_stability_refuses_what_it_cannot_measure():
+    from ramancarbon.echem.evaluate import stability
+
+    with pytest.raises(ValueError, match="diez puntos"):
+        stability([0.0, 1.0], [0.05, 0.06], -10.0)
+    with pytest.raises(ValueError, match="no avanza"):
+        stability(np.zeros(20), np.linspace(0.05, 0.06, 20), -10.0)

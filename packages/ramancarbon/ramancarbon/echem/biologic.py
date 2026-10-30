@@ -100,6 +100,13 @@ ID_OFFSETS = (5, 6)
 #: is said out loud.
 MPR_DATA_OFFSETS: tuple[int, ...] = (0x195, 0x196, 0x3EF)
 
+#: Prefix for a column whose identifier this reader cannot name.
+#:
+#: Deliberately not a plausible quantity name: a column called
+#: ``desconocida_174`` cannot be mistaken for a measurement by anything
+#: downstream, and that is the whole point of letting it through at all.
+UNNAMED_PREFIX = "desconocida_"
+
 #: Identifiers that are BIT FIELDS of one shared byte, as
 #: ``(name, mask, shift)``.
 #:
@@ -310,7 +317,9 @@ def _known_id(identifier: int) -> bool:
     return identifier in MPR_COLUMNS or identifier in MPR_FLAG_COLUMNS
 
 
-def _record_fields(ids: Sequence[int]) -> tuple[list[str], list[str], list[int]]:
+def _record_fields(ids: Sequence[int],
+                   unnamed: Optional[dict[int, str]] = None
+                   ) -> tuple[list[str], list[str], list[int]]:
     """``(names, formats, flag ids)`` for one record.
 
     The flag identifiers share ONE byte, so the first of them to appear
@@ -325,12 +334,21 @@ def _record_fields(ids: Sequence[int]) -> tuple[list[str], list[str], list[int]]
     formats: list[str] = []
     flags: list[int] = []
     used: dict[str, int] = {}
+    unnamed = unnamed or {}
     for identifier in (int(i) for i in ids):
         if identifier in MPR_FLAG_COLUMNS:
             if not flags:
                 names.append(_FLAG_FIELD)
                 formats.append("u1")
             flags.append(identifier)
+            continue
+        if identifier in unnamed:
+            # An identifier this reader cannot NAME, whose WIDTH the
+            # file's own arithmetic settled. It keeps its place in the
+            # record so everything behind it stays aligned, and it
+            # carries a name that cannot be mistaken for a measurement.
+            names.append(f"{UNNAMED_PREFIX}{identifier}")
+            formats.append(unnamed[identifier])
             continue
         name, dtype = MPR_COLUMNS[identifier]
         if name in used:
@@ -347,6 +365,65 @@ def _record_width(ids: Sequence[int]) -> int:
     """Bytes per point, with the flag byte counted once."""
     _, formats, _ = _record_fields([i for i in ids if _known_id(int(i))])
     return sum(np.dtype(fmt).itemsize for fmt in formats)
+
+
+#: Widths, in bytes, an unnamed column is allowed to come back as.
+#:
+#: The formats this table uses are 1, 2, 4 and 8 bytes. A width the
+#: arithmetic settles on that is none of those is not a column, it is the
+#: arithmetic closing by coincidence, and the file goes back to being
+#: refused.
+UNNAMED_WIDTHS: dict[int, str] = {1: "u1", 2: "<u2", 4: "<f4", 8: "<f8"}
+
+
+def _columns_from(table, names: Sequence[str],
+                  flag_ids: Sequence[int]) -> dict[str, np.ndarray]:
+    """Named float columns out of a decoded record array."""
+    columns = {name: np.asarray(table[name], dtype=float)
+               for name in names if name != _FLAG_FIELD}
+    if flag_ids:
+        packed = np.asarray(table[_FLAG_FIELD], dtype=np.uint8)
+        for identifier in flag_ids:
+            name, mask, shift = MPR_FLAG_COLUMNS[identifier]
+            columns[name] = np.asarray((packed & mask) >> shift, dtype=float)
+    return columns
+
+
+def _rescue_one_unknown(payload: bytes, n_points: int, n_columns: int):
+    """``(id_offset, ids, {id: format}, data_offset)`` or ``None``.
+
+    For the one case where an unknown identifier does NOT make the file
+    unreadable: exactly one of them, the table starting where this
+    format is known to put it, and a record that closes to the byte. The
+    unknown column's width is then settled by the file rather than
+    assumed, so the columns behind it keep their offsets and everything
+    else can be read.
+
+    Anything less than that and the file is refused as before. Two
+    unknown columns cannot be separated — the arithmetic gives their
+    SUM — and a width that is not one of this format's is the arithmetic
+    closing by chance.
+    """
+    for id_offset in ID_OFFSETS:
+        if id_offset + 2 * n_columns > len(payload):
+            continue
+        ids = np.frombuffer(payload, "<u2", n_columns, id_offset).tolist()
+        unknown = [int(i) for i in ids if not _known_id(int(i))]
+        if len(unknown) != 1:
+            continue
+        known_width = _record_width(ids)
+        for data_offset in MPR_DATA_OFFSETS:
+            if data_offset < id_offset + 2 * n_columns:
+                continue
+            body = len(payload) - data_offset
+            if body <= 0 or body % n_points:
+                continue
+            width = body // n_points - known_width
+            fmt = UNNAMED_WIDTHS.get(width)
+            if fmt is None:
+                continue
+            return id_offset, ids, {unknown[0]: fmt}, data_offset
+    return None
 
 
 def _decode_data(module: MPRModule) -> tuple[dict[str, np.ndarray], int, list[str]]:
@@ -385,6 +462,51 @@ def _decode_data(module: MPRModule) -> tuple[dict[str, np.ndarray], int, list[st
             readable.append((id_offset, candidate))
 
     if not readable:
+        # Before giving up: an identifier this reader cannot NAME is not
+        # the same thing as one whose WIDTH it cannot work out. The
+        # barrier that refuses the file exists because an ASSUMED width
+        # displaces every column behind it — but a width the file's own
+        # arithmetic settles is not assumed, and the columns behind it
+        # stay exactly where they are.
+        #
+        # So: exactly one unknown identifier, the table starting at one
+        # of the offsets this format is known to use, and a record that
+        # closes to the byte. Then the unknown column is carried through
+        # at its measured width under a name nothing can mistake for a
+        # measurement, and everything else in the file is readable.
+        #
+        # It mattered: a ten-hour chronopotentiometry was being refused
+        # whole over one column, in a file whose record closes exactly
+        # at 45 bytes with the other fifteen taking 41.
+        rescued = _rescue_one_unknown(payload, n_points, n_columns)
+        if rescued is not None:
+            id_offset, candidate, unnamed, data_offset = rescued
+            names, formats, flag_ids = _record_fields(candidate, unnamed)
+            record = np.dtype({"names": names, "formats": formats})
+            table = np.frombuffer(payload, record, n_points, data_offset)
+            columns = _columns_from(table, names, flag_ids)
+            width = record.itemsize
+            unknown_id = next(iter(unnamed))
+            notes = [
+                f"la columna con identificador {unknown_id} no está en la "
+                "tabla de este lector, así que no se sabe QUÉ magnitud es. "
+                f"Lo que sí está determinado es cuánto MIDE: el registro "
+                f"cierra exacto en {width} bytes por punto y las otras "
+                f"{n_columns - 1} columnas ocupan {width - np.dtype(unnamed[unknown_id]).itemsize}, "
+                "así que su anchura la fija el archivo y no una suposición "
+                "— y por eso las columnas de detrás siguen alineadas. Sale "
+                f"como «{UNNAMED_PREFIX}{unknown_id}», con ese nombre "
+                "precisamente para que nada aguas abajo la confunda con una "
+                "medida. Si exportas el mismo experimento como .mpt desde "
+                "EC-Lab, su cabecera dice qué es y se puede nombrar"
+            ]
+            if data_offset not in MPR_DATA_OFFSETS:
+                notes.append(
+                    f"la tabla empieza en el byte {data_offset}, que no es "
+                    "ninguno de los desplazamientos conocidos de este formato"
+                )
+            return columns, n_points, notes
+
         # Report the reading that got FURTHEST, not the first one tried:
         # at the wrong offset every identifier comes back multiplied by
         # 256, and a list of those blames the file for a misalignment

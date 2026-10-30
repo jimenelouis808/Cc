@@ -1,0 +1,3 @@
+archivo,j_mA_cm2,duracion_h,eta_ini_mV,eta_fin_mV,deriva_mV_h,r2,h_para_100mV
+CP_10h.mpr,-10,0.68035,73.93,135.5,92.06,0.95520,1.086
+CP_30min.mpr,-10,0.44559,48.42,72.27,57.25,0.98843,1.747

@@ -1,0 +1,244 @@
+========================================================================
+CP_10h.mpr
+Estabilidad a -10 mA/cm² durante 0.68 h
+  η: 73.9 → 135.5 mV (+61.6 mV)
+  deriva: +92.1 mV/h (R² = 0.9552)
+  a ese ritmo, 100 mV más en 1.1 h
+  ⚠ la retención duró 41 minutos. Lo que el campo cita es «η tras 10 h», y una deriva medida sobre menos de una hora extrapolada a diez no es una medida: los mecanismos de pérdida cambian de pendiente. Lo que se informa aquí es el RITMO sobre lo que de verdad corrió
+  ⚠ la deriva es de 92 mV/h, así que el electrodo gana otros 100 mV en 1.1 h: **no termina** una prueba de diez horas a esta corriente. Un sobrepotencial inicial, por bueno que sea, no describe un electrodo así
+
+========================================================================
+CP_30min.mpr
+Estabilidad a -10 mA/cm² durante 0.45 h
+  η: 48.4 → 72.3 mV (+23.8 mV)
+  deriva: +57.3 mV/h (R² = 0.9884)
+  a ese ritmo, 100 mV más en 1.7 h
+  ⚠ la retención duró 27 minutos. Lo que el campo cita es «η tras 10 h», y una deriva medida sobre menos de una hora extrapolada a diez no es una medida: los mecanismos de pérdida cambian de pendiente. Lo que se informa aquí es el RITMO sobre lo que de verdad corrió
+  ⚠ la deriva es de 57 mV/h, así que el electrodo gana otros 100 mV en 1.7 h: **no termina** una prueba de diez horas a esta corriente. Un sobrepotencial inicial, por bueno que sea, no describe un electrodo así
+
+========================================================================
+inicial (OCV)
+inicial (OCV): 39 frecuencias, 0.0999–2e+05 Hz, |Z| 1.91–6.19e+04 Ω
+
+Kramers-Kronig (44 elementos RC): NO CONSISTENTE
+  residuo RMS 0.40 %, máximo 1.53 %, rachas de signo 0.58× lo esperado por azar
+  los datos NO satisfacen Kramers-Kronig. La causa habitual es que la celda cambió MIENTRAS medías: un barrido de impedancia lento a un potencial donde algo se corroe, se disuelve o se intercala tarda minutos, y la muestra del final no es la del principio. Ajustar un circuito a esto da parámetros sin significado, y el χ² no lo delata porque un circuito flexible ajusta bien datos que han derivado. Repite midiendo de alta a baja frecuencia y otra vez al revés: si las dos no coinciden, ahí está
+
+FORMA DEL ESPECTRO (sin circuito)
+──────────────────────────────────────────────
+  R en serie        1.917 Ω
+    cruce con el eje real interpolado entre 9.319e+04 y 6.361e+04 Hz
+  Ápice del arco    no hay: −Z″ sube monótona hasta el final del barrido
+  Codo (-45°)       7861 Hz   (τ = 0.0001272 s)
+  Fase a f mínima   -66.4°   (cola capacitiva)
+  Tramo a 45°       0.17 décadas
+  ⚠ Z″ es POSITIVO en 3 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución
+  ⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida
+  ⚠ a 0.0999 Hz la fase es -66° y un condensador está en −90°: el barrido no ha llegado al régimen capacitivo, así que la C′ de ese extremo es una cota INFERIOR de lo que almacena el electrodo. Baja más la frecuencia
+
+Resistencia en serie: 1.917 Ω  (cruce con el eje real interpolado entre 9.319e+04 y 6.361e+04 Hz)
+Resistencia de transferencia de carga: 1.567e+05 Ω
+Capacitancia entregable C′(0.0999 Hz): 0.02358 mF  (de los datos, sin circuito)
+Capacitancia del ARCO interfacial (Hsu-Mansfeld): 0.02096 mF  — es del arco, no lo que almacena el electrodo
+Frecuencia de codo (fase = -45°): 7861 Hz (τ = 0.0001272 s)
+
+Circuitos que la forma del espectro pide:
+  edlc_cpe = R0-Q1
+    cola capacitiva sin arco y sin tramo a 45°: doble capa con dispersión de frecuencias y nada más
+  poroso = R0-T1
+    por si el tramo a 45° queda por encima del barrido
+  con_inductancia = L0-R0-(R1|Q1)
+    con Z″ positivo arriba, la inductancia del montaje tiene que estar EN el circuito o se la come R0
+
+COMPARACIÓN DE CIRCUITOS
+──────────────────────────────────────────────
+
+  circuito                    χ²        libres  determinados      BIC
+  L0-R0-(R1|Q1)                0.1676       5            5     -457.4
+  R0-Q1                        0.8149       3            3     -342.7
+  R0-T1                        0.8149       4            2     -338.4
+
+  El BIC penaliza parámetros, y hace falta porque un circuito con más
+  elementos ajusta SIEMPRE al menos igual de bien: que baje el χ² al
+  añadir uno no prueba nada por sí solo.
+  Pero el BIC tampoco decide solo. La columna que decide es «determinados»:
+  un parámetro que vuelve con una incertidumbre por encima del 50 %
+  no es una medida, y un circuito que gana por BIC con la mitad de sus
+  parámetros indeterminados ha ajustado la forma sin medir nada.
+
+  Mejor por BIC: L0-R0-(R1|Q1)
+  ⚠ R0-Q1: no tiene ninguna rama en PARALELO ni ningún elemento que sea un arco por sí mismo, así que no puede producir un semicírculo: una cadena de R, C, L y Q en serie sólo da rectas. Si el Nyquist tiene un arco, este circuito no es el que lo hace
+
+  Y nada de esto dice si el circuito es el APROPIADO para el material.
+  Ninguna regla estructural puede: un CPE donde va un condensador sigue
+  ajustando, y entonces su Q no son faradios.
+
+Circuito: L0-R0-(R1|Q1)
+  convergido: `ftol` termination condition is satisfied.
+  χ² = 0.1676   residuo medio 5.853 %
+
+  L0.L       =  5.61293e-07 H  (± 9.8 %)
+  R0.R       =      1.86122 Ω  (± 1.7 %)
+  R1.R       =       156714 Ω  (± 7.1 %)
+  Q1.Q       =  1.92589e-05 S·sⁿ  (± 1.6 %)
+  Q1.n       =     0.928836   (± 0.3 %)
+
+  ⚠ Q1: Q = 1.926e-05 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+  ⚠ el residuo medio es 5.9 %. El circuito no describe estos datos: mira el diagrama de Nyquist y compara la forma, no el número
+  ⚠ a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias
+
+⚠ Z″ es POSITIVO en 3 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución
+⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida
+⚠ a 0.0999 Hz la fase es -66° y un condensador está en −90°: el barrido no ha llegado al régimen capacitivo, así que la C′ de ese extremo es una cota INFERIOR de lo que almacena el electrodo. Baja más la frecuencia
+⚠ el espectro no pasa Kramers-Kronig. Los parámetros del circuito que salgan abajo NO son fiables, por muy bien que ajuste
+⚠ la R de transferencia de carga (1.567e+05 Ω) sale del circuito y no de los datos: −Z″ no cierra ningún arco dentro del barrido, así que su constante de tiempo está fuera de lo medido. La capacitancia efectiva convertida con ella hereda esa dependencia
+⚠ Q1: Q = 1.926e-05 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+⚠ el residuo medio es 5.9 %. El circuito no describe estos datos: mira el diagrama de Nyquist y compara la forma, no el número
+⚠ a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias
+
+========================================================================
+tras LSV (OCV)
+tras LSV (OCV): 39 frecuencias, 0.0999–2e+05 Hz, |Z| 1.86–5.45e+04 Ω
+
+Kramers-Kronig (44 elementos RC): consistente
+  residuo RMS 0.60 %, máximo 2.15 %, rachas de signo 0.74× lo esperado por azar
+  los datos son compatibles con un sistema lineal, causal y estable; cualquier circuito equivalente que ajustes tiene sentido
+
+FORMA DEL ESPECTRO (sin circuito)
+──────────────────────────────────────────────
+  R en serie        1.876 Ω
+    cruce con el eje real interpolado entre 1.365e+05 y 9.319e+04 Hz
+  Ápice del arco    no hay: −Z″ sube monótona hasta el final del barrido
+  Codo (-45°)       9289 Hz   (τ = 0.0001077 s)
+  Fase a f mínima   -60.3°   (cola capacitiva)
+  Tramo a 45°       0.33 décadas
+  ⚠ Z″ es POSITIVO en 2 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución
+  ⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida
+  ⚠ a 0.0999 Hz la fase es -60° y un condensador está en −90°: el barrido no ha llegado al régimen capacitivo, así que la C′ de ese extremo es una cota INFERIOR de lo que almacena el electrodo. Baja más la frecuencia
+
+Resistencia en serie: 1.876 Ω  (cruce con el eje real interpolado entre 1.365e+05 y 9.319e+04 Hz)
+Resistencia de transferencia de carga: 1.236e+05 Ω
+Capacitancia entregable C′(0.0999 Hz): 0.02537 mF  (de los datos, sin circuito)
+Capacitancia del ARCO interfacial (Hsu-Mansfeld): 0.02338 mF  — es del arco, no lo que almacena el electrodo
+Frecuencia de codo (fase = -45°): 9289 Hz (τ = 0.0001077 s)
+
+Circuitos que la forma del espectro pide:
+  edlc_cpe = R0-Q1
+    cola capacitiva sin arco y sin tramo a 45°: doble capa con dispersión de frecuencias y nada más
+  poroso = R0-T1
+    por si el tramo a 45° queda por encima del barrido
+  con_inductancia = L0-R0-(R1|Q1)
+    con Z″ positivo arriba, la inductancia del montaje tiene que estar EN el circuito o se la come R0
+
+COMPARACIÓN DE CIRCUITOS
+──────────────────────────────────────────────
+
+  circuito                    χ²        libres  determinados      BIC
+  L0-R0-(R1|Q1)               0.08221       5            5     -512.9
+  R0-Q1                        0.8757       3            3     -337.1
+  R0-T1                        0.8757       4            2     -332.8
+
+  El BIC penaliza parámetros, y hace falta porque un circuito con más
+  elementos ajusta SIEMPRE al menos igual de bien: que baje el χ² al
+  añadir uno no prueba nada por sí solo.
+  Pero el BIC tampoco decide solo. La columna que decide es «determinados»:
+  un parámetro que vuelve con una incertidumbre por encima del 50 %
+  no es una medida, y un circuito que gana por BIC con la mitad de sus
+  parámetros indeterminados ha ajustado la forma sin medir nada.
+
+  Mejor por BIC: L0-R0-(R1|Q1)
+  ⚠ R0-Q1: no tiene ninguna rama en PARALELO ni ningún elemento que sea un arco por sí mismo, así que no puede producir un semicírculo: una cadena de R, C, L y Q en serie sólo da rectas. Si el Nyquist tiene un arco, este circuito no es el que lo hace
+
+  Y nada de esto dice si el circuito es el APROPIADO para el material.
+  Ninguna regla estructural puede: un CPE donde va un condensador sigue
+  ajustando, y entonces su Q no son faradios.
+
+Circuito: L0-R0-(R1|Q1)
+  convergido: `ftol` termination condition is satisfied.
+  χ² = 0.08221   residuo medio 3.579 %
+
+  L0.L       =   5.7922e-07 H  (± 6.5 %)
+  R0.R       =      1.81893 Ω  (± 1.3 %)
+  R1.R       =       123619 Ω  (± 4.5 %)
+  Q1.Q       =  2.11447e-05 S·sⁿ  (± 1.1 %)
+  Q1.n       =     0.905445   (± 0.2 %)
+
+  ⚠ Q1: Q = 2.114e-05 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+  ⚠ a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias
+
+⚠ Z″ es POSITIVO en 2 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución
+⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida
+⚠ a 0.0999 Hz la fase es -60° y un condensador está en −90°: el barrido no ha llegado al régimen capacitivo, así que la C′ de ese extremo es una cota INFERIOR de lo que almacena el electrodo. Baja más la frecuencia
+⚠ la R de transferencia de carga (1.236e+05 Ω) sale del circuito y no de los datos: −Z″ no cierra ningún arco dentro del barrido, así que su constante de tiempo está fuera de lo medido. La capacitancia efectiva convertida con ella hereda esa dependencia
+⚠ Q1: Q = 2.114e-05 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+⚠ a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias
+
+========================================================================
+tras LSV (−0.35 V)
+tras LSV (−0.35 V): 39 frecuencias, 0.0999–2e+05 Hz, |Z| 1.9–8.01 Ω
+
+Kramers-Kronig (44 elementos RC): NO CONSISTENTE
+  residuo RMS 0.33 %, máximo 1.18 %, rachas de signo 0.58× lo esperado por azar
+  los datos NO satisfacen Kramers-Kronig. La causa habitual es que la celda cambió MIENTRAS medías: un barrido de impedancia lento a un potencial donde algo se corroe, se disuelve o se intercala tarda minutos, y la muestra del final no es la del principio. Ajustar un circuito a esto da parámetros sin significado, y el χ² no lo delata porque un circuito flexible ajusta bien datos que han derivado. Repite midiendo de alta a baja frecuencia y otra vez al revés: si las dos no coinciden, ahí está
+
+FORMA DEL ESPECTRO (sin circuito)
+──────────────────────────────────────────────
+  R en serie        1.928 Ω
+    cruce con el eje real interpolado entre 9.319e+04 y 6.361e+04 Hz
+  Ápice del arco    2048 Hz   (−Z″ = 1.756 Ω)
+  Codo (-45°)       la fase nunca baja de -45° (mínimo -24.3°): el barrido no llegó al régimen capacitivo, así que no hay codo dentro de lo medido
+  Fase a f mínima   3.1°
+  Tramo a 45°       0.00 décadas
+  ⚠ Z″ es POSITIVO en 10 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución
+
+Resistencia en serie: 1.928 Ω  (cruce con el eje real interpolado entre 9.319e+04 y 6.361e+04 Hz)
+Resistencia de transferencia de carga: 5.732 Ω
+Capacitancia del ARCO interfacial (Hsu-Mansfeld): 0.01554 mF  — es del arco, no lo que almacena el electrodo
+
+Circuitos que la forma del espectro pide:
+  randles_cpe = R0-(R1|Q1)
+    un arco achatado con ápice en 2.05e+03 Hz y sin cola capacitiva
+  zarc = R0-Za1
+    el mismo circuito en (R, τ, γ), donde la capacitancia efectiva es τ/R exacta
+  con_inductancia = L0-R0-(R1|Q1)
+    con Z″ positivo arriba, la inductancia del montaje tiene que estar EN el circuito o se la come R0
+
+COMPARACIÓN DE CIRCUITOS
+──────────────────────────────────────────────
+
+  circuito                    χ²        libres  determinados      BIC
+  L0-R0-(R1|Q1)               0.01685       5            5     -636.5
+  R0-Za1                       0.2732       4            4     -423.6
+  R0-(R1|Q1)                   0.2732       4            4     -423.6
+
+  El BIC penaliza parámetros, y hace falta porque un circuito con más
+  elementos ajusta SIEMPRE al menos igual de bien: que baje el χ² al
+  añadir uno no prueba nada por sí solo.
+  Pero el BIC tampoco decide solo. La columna que decide es «determinados»:
+  un parámetro que vuelve con una incertidumbre por encima del 50 %
+  no es una medida, y un circuito que gana por BIC con la mitad de sus
+  parámetros indeterminados ha ajustado la forma sin medir nada.
+
+  Mejor por BIC: L0-R0-(R1|Q1)
+
+  Y nada de esto dice si el circuito es el APROPIADO para el material.
+  Ninguna regla estructural puede: un CPE donde va un condensador sigue
+  ajustando, y entonces su Q no son faradios.
+
+Circuito: L0-R0-(R1|Q1)
+  convergido: `gtol` termination condition is satisfied.
+  χ² = 0.01685   residuo medio 1.525 %
+
+  L0.L       =  6.27467e-07 H  (± 3.1 %)
+  R0.R       =       1.7334 Ω  (± 1.0 %)
+  R1.R       =      5.73229 Ω  (± 0.6 %)
+  Q1.Q       =  0.000235215 S·sⁿ  (± 7.1 %)
+  Q1.n       =     0.708662   (± 1.1 %)
+
+  ⚠ Q1: Q = 0.0002352 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+  ⚠ a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias
+
+⚠ Z″ es POSITIVO en 10 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución
+⚠ el espectro no pasa Kramers-Kronig. Los parámetros del circuito que salgan abajo NO son fiables, por muy bien que ajuste
+⚠ Q1: Q = 0.0002352 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+⚠ a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias

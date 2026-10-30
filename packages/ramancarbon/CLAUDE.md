@@ -3579,3 +3579,66 @@ defecto.
   se mide es platino de verdad. El aviso lleva la pendiente de Tafel como
   segundo indicio y los dos experimentos que lo zanjan: contraelectrodo
   de grafito en celda limpia, o Pt 4f por XPS en el electrodo medido.
+
+## Un identificador sin NOMBRE no es uno sin ANCHURA
+
+La barrera decía que un identificador de columna desconocido rechaza el
+archivo entero, y el motivo era correcto: saltárselo desplaza todas las
+columnas de detrás y el resultado sigue pareciendo datos. Pero eso vale
+cuando la anchura **se supone**, y hay un caso en que no se supone:
+
+- **exactamente UN identificador desconocido**, la tabla empezando en uno
+  de los desplazamientos que este formato usa, y un registro que cierra
+  **al byte**. Entonces la anchura de esa columna la fija la aritmética
+  del propio archivo, las de detrás no se mueven, y el resto se lee.
+- Costaba una cronopotenciometría de horas entera, en un archivo cuyo
+  registro cierra exacto en **45 bytes** con las otras quince ocupando
+  41, así que la desconocida mide 4.
+- **Dos desconocidas siguen rechazando el archivo**: la aritmética da su
+  SUMA y no se pueden separar. Y una anchura que no sea una de las que
+  este formato usa (1, 2, 4, 8) es la aritmética cerrando por
+  casualidad.
+- La columna sale como **`desconocida_<id>`**, un nombre que nada aguas
+  abajo puede confundir con una medida — que es lo único que permite
+  dejarla pasar. **Se sigue sin NOMBRARLA jamás**: la aritmética caza una
+  anchura mal, no un nombre mal, y eso no ha cambiado.
+
+## Una retención es un RITMO, no un número
+
+Un sobrepotencial y una pendiente de Tafel describen el instante de la
+medida. Lo que decide si un catalizador sirve es si aguanta, y el campo
+lo cita como «η tras 10 h» — un solo número que esconde la forma y que
+invita a informar como de diez horas una retención que corrió una.
+
+- `stability` devuelve una **deriva en mV/h**, ajustada sobre la parte
+  asentada de lo que de verdad corrió, más cuánto tarda ese ritmo en
+  costar otros cien milivoltios. Extrapolar a un tiempo que nadie midió
+  se dice como la extrapolación que es.
+- **El primer décimo se salta** (`STABILITY_SETTLING`): un electrodo
+  recién mojado se mueve los primeros minutos haga lo que haga después,
+  y una pendiente ajustada por ahí mide el mojado.
+- Por encima de `STABILITY_FAILING_V_PER_H` (50 mV/h) el electrodo **no
+  termina** la prueba de diez horas, y decirlo es más útil que una
+  retención calculada sobre la fracción que corrió. Las dos retenciones
+  del usuario a 10 mA/cm² dan **+57 y +92 mV/h**.
+- Y si la deriva **no es una recta** se dice: el ritmo de pérdida cambia
+  durante la propia retención, así que una sola pendiente lo promedia y
+  la extrapolación vale aún menos.
+
+## Lo que las tres impedancias zanjaron
+
+- **R_s = 1.88, 1.88 y 1.93 Ω** en los tres espectros —antes del LSV, y
+  después en circuito abierto y a −0.35 V— así que la corrección óhmica a
+  10 mA/cm² vale **1.3 mV**. El aviso que decía «bastarían 43 Ω para
+  explicar entero el η» queda contestado por la medida: no es eso.
+- **Y que la R_s no cambie es el resultado**: lo que se degrada es el
+  electrodo, no la celda ni el contacto.
+- En circuito abierto el electrodo está **bloqueante** (R_ct de 1.6·10⁵ a
+  1.2·10⁵ Ω) y a −0.35 V la transferencia de carga baja a **5.7 Ω**: la
+  reacción corriendo.
+- La C′ de la doble capa apenas se mueve (23.6 → 25.4 µF), así que la
+  pérdida de actividad **no es pérdida de área**.
+- Y el espectro a −0.35 V **no pasa Kramers-Kronig**, que es exactamente
+  lo que tiene que pasar con un electrodo que la cronopotenciometría
+  mide derivando a 90 mV/h: el sistema no es estacionario, y KK lo
+  detecta sin saber nada de la otra medida.

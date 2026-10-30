@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Sequence
 
 import numpy as np
 
@@ -466,6 +466,139 @@ PLATINUM_SUSPICION_V = 0.050
 #: curve reaches any chosen density earlier than the reaction alone
 #: would and every overpotential read from it comes out too small.
 BACKGROUND_CURRENT_LIMIT = 0.05
+
+
+#: Fraction of a hold's own length that counts as settling rather than
+#: as performance.
+#:
+#: A freshly wetted electrode moves for the first minutes whatever it is
+#: going to do afterwards, and a drift rate fitted through that start
+#: measures the wetting. A tenth is short enough to keep a short hold
+#: usable and long enough to clear the initial transient.
+STABILITY_SETTLING = 0.10
+
+#: Overpotential gained per hour, in volts, above which a hold is a
+#: FAILING electrode rather than a drifting one.
+#:
+#: Ten millivolts an hour is already a hundred over a ten-hour test,
+#: which is the length everybody quotes. Above fifty the electrode will
+#: not finish that test at all, and saying so is more useful than a
+#: retention percentage computed over whatever fraction of it ran.
+STABILITY_DRIFT_V_PER_H = 0.010
+STABILITY_FAILING_V_PER_H = 0.050
+
+
+@dataclass
+class StabilityResult:
+    """What a constant-current hold did to the overpotential."""
+
+    current_ma_cm2: float
+    duration_h: float
+    overpotential_start: Optional[float] = None
+    """η once the first :data:`STABILITY_SETTLING` of the hold is past,
+    in volts. Not the very first point, which is the cell wetting."""
+    overpotential_end: Optional[float] = None
+    drift_v_per_h: Optional[float] = None
+    """Slope over the settled part. The number that decides whether the
+    electrode survives the test everybody quotes."""
+    r_squared: float = 0.0
+    hours_to_lose_100mv: Optional[float] = None
+    warnings: list[str] = field(default_factory=list)
+
+    def summary(self) -> str:
+        lines = [f"Estabilidad a {self.current_ma_cm2:.3g} mA/cm² durante "
+                 f"{self.duration_h:.2f} h"]
+        if self.overpotential_start is not None:
+            lines.append(
+                f"  η: {1e3 * self.overpotential_start:.1f} → "
+                f"{1e3 * self.overpotential_end:.1f} mV "
+                f"({1e3 * (self.overpotential_end - self.overpotential_start):+.1f} mV)")
+        if self.drift_v_per_h is not None:
+            lines.append(f"  deriva: {1e3 * self.drift_v_per_h:+.1f} mV/h "
+                         f"(R² = {self.r_squared:.4f})")
+        if self.hours_to_lose_100mv is not None:
+            lines.append(f"  a ese ritmo, 100 mV más en "
+                         f"{self.hours_to_lose_100mv:.1f} h")
+        for warning in self.warnings:
+            lines.append(f"  ⚠ {warning}")
+        return "\n".join(lines)
+
+
+def stability(
+    time_s: Sequence[float],
+    overpotential_v: Sequence[float],
+    current_ma_cm2: float,
+) -> StabilityResult:
+    """A constant-current hold, read as a drift rate rather than a number.
+
+    An overpotential and a Tafel slope describe the instant of the
+    measurement. What decides whether a catalyst is usable is whether it
+    holds, and the field quotes that as "η after 10 h" — which is a
+    single number that hides the shape and, worse, invites a hold that
+    ran for one hour to be reported as if it had run for ten.
+
+    So what comes back is a **rate**, fitted over the settled part of
+    whatever actually ran, plus how long that rate needs to cost another
+    hundred millivolts. Extrapolating a measured rate to a time nobody
+    measured is stated as the extrapolation it is; it is not quoted as a
+    result.
+    """
+    time = np.asarray(time_s, dtype=float)
+    eta = np.asarray(overpotential_v, dtype=float)
+    if time.size != eta.size or time.size < 10:
+        raise ValueError("hacen falta al menos diez puntos de la retención")
+    span = float(time[-1] - time[0])
+    if span <= 0:
+        raise ValueError("el eje de tiempo no avanza")
+
+    result = StabilityResult(current_ma_cm2=float(current_ma_cm2),
+                             duration_h=span / 3600.0)
+    settled = time >= time[0] + STABILITY_SETTLING * span
+    if np.count_nonzero(settled) < 5:
+        settled = np.ones_like(time, dtype=bool)
+    result.overpotential_start = float(eta[settled][0])
+    result.overpotential_end = float(eta[-1])
+
+    slope, intercept = np.polyfit(time[settled], eta[settled], 1)
+    predicted = intercept + slope * time[settled]
+    total = float(np.sum((eta[settled] - np.mean(eta[settled])) ** 2))
+    residual = float(np.sum((eta[settled] - predicted) ** 2))
+    result.r_squared = 1.0 - residual / total if total > 0 else 0.0
+    result.drift_v_per_h = float(slope) * 3600.0
+
+    if result.drift_v_per_h > 0:
+        result.hours_to_lose_100mv = 0.100 / result.drift_v_per_h
+
+    if result.duration_h < 1.0:
+        result.warnings.append(
+            f"la retención duró {60 * result.duration_h:.0f} minutos. Lo que "
+            "el campo cita es «η tras 10 h», y una deriva medida sobre menos "
+            "de una hora extrapolada a diez no es una medida: los "
+            "mecanismos de pérdida cambian de pendiente. Lo que se informa "
+            "aquí es el RITMO sobre lo que de verdad corrió"
+        )
+    if result.drift_v_per_h > STABILITY_FAILING_V_PER_H:
+        result.warnings.append(
+            f"la deriva es de {1e3 * result.drift_v_per_h:.0f} mV/h, así que "
+            f"el electrodo gana otros 100 mV en "
+            f"{result.hours_to_lose_100mv:.1f} h: **no termina** una prueba "
+            "de diez horas a esta corriente. Un sobrepotencial inicial, por "
+            "bueno que sea, no describe un electrodo así"
+        )
+    elif result.drift_v_per_h > STABILITY_DRIFT_V_PER_H:
+        result.warnings.append(
+            f"la deriva es de {1e3 * result.drift_v_per_h:.0f} mV/h, que son "
+            f"{1e3 * 10 * result.drift_v_per_h:.0f} mV sobre una prueba de "
+            "diez horas. Hay que informarla junto al sobrepotencial inicial"
+        )
+    if result.r_squared < 0.9:
+        result.warnings.append(
+            f"la deriva no es una recta (R² = {result.r_squared:.3f}): el "
+            "ritmo de pérdida cambia durante la propia retención, así que "
+            "una sola pendiente lo promedia y la extrapolación vale aún "
+            "menos. Mira la curva"
+        )
+    return result
 
 
 @dataclass

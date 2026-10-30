@@ -1,0 +1,55 @@
+{
+  "retenciones": [
+    {
+      "archivo": "CP_10h.mpr",
+      "j_ma_cm2": -10.001668615222618,
+      "duracion_h": 0.6803532605906083,
+      "eta_inicial_v": 0.07393320908737183,
+      "eta_final_v": 0.13549321403694153,
+      "deriva_v_h": 0.09205883526615759,
+      "r2": 0.9551992145124419,
+      "horas_para_100mv": 1.0862618423411852,
+      "avisos": [
+        "la retención duró 41 minutos. Lo que el campo cita es «η tras 10 h», y una deriva medida sobre menos de una hora extrapolada a diez no es una medida: los mecanismos de pérdida cambian de pendiente. Lo que se informa aquí es el RITMO sobre lo que de verdad corrió",
+        "la deriva es de 92 mV/h, así que el electrodo gana otros 100 mV en 1.1 h: **no termina** una prueba de diez horas a esta corriente. Un sobrepotencial inicial, por bueno que sea, no describe un electrodo así"
+      ]
+    },
+    {
+      "archivo": "CP_30min.mpr",
+      "j_ma_cm2": -10.001668615222618,
+      "duracion_h": 0.445594099854457,
+      "eta_inicial_v": 0.048424596693038946,
+      "eta_final_v": 0.07227301111412049,
+      "deriva_v_h": 0.05725364835489442,
+      "r2": 0.9884340482919716,
+      "horas_para_100mv": 1.7466135848695021,
+      "avisos": [
+        "la retención duró 27 minutos. Lo que el campo cita es «η tras 10 h», y una deriva medida sobre menos de una hora extrapolada a diez no es una medida: los mecanismos de pérdida cambian de pendiente. Lo que se informa aquí es el RITMO sobre lo que de verdad corrió",
+        "la deriva es de 57 mV/h, así que el electrodo gana otros 100 mV en 1.7 h: **no termina** una prueba de diez horas a esta corriente. Un sobrepotencial inicial, por bueno que sea, no describe un electrodo así"
+      ]
+    }
+  ],
+  "espectros": [
+    {
+      "nombre": "inicial (OCV)",
+      "polarizacion_v": 0.4910801649093628,
+      "r_s_ohm": 1.9171163520443761,
+      "r_ct_ohm": 156714.330069038,
+      "c_prima_f": 2.358077786372297e-05
+    },
+    {
+      "nombre": "tras LSV (OCV)",
+      "polarizacion_v": 0.42626893520355225,
+      "r_s_ohm": 1.8762769224125584,
+      "r_ct_ohm": 123618.52970936209,
+      "c_prima_f": 2.5374015823300272e-05
+    },
+    {
+      "nombre": "tras LSV (−0.35 V)",
+      "polarizacion_v": -0.3503139615058899,
+      "r_s_ohm": 1.9282080403709838,
+      "r_ct_ohm": 5.732286675952787,
+      "c_prima_f": null
+    }
+  ]
+}
