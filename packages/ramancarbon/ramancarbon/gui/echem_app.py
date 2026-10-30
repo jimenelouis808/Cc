@@ -22,8 +22,8 @@ import numpy as np
 
 from ..echem.curve import POTENTIAL_SCALES, Electrode
 from ..echem.cv import SWEEP_CHOICES
-from .figures_echem import PRESET_LABELS
 from .base import SectionApp, placeholder
+from .figures_echem import PRESET_LABELS, SCALE_LABELS
 from .echem_state import (CURRENT_UNITS, DEFAULT_DISC_MM,
                           DEFAULT_REFERENCE, POTENTIAL_UNITS,
                           EchemSession, _default_electrode)
@@ -39,6 +39,29 @@ from .widgets import (
     set_text,
     split_column,
     table,
+)
+
+
+#: What to do with a charge-discharge pair whose two currents differ.
+#: The labels say what HAPPENS, not what the option is called: the point
+#: of the choice is that such a point has no single current density.
+ASYMMETRY_LABELS: tuple[tuple[str, str], ...] = (
+    ("aparte", "Analizar, pero fuera de las curvas"),
+    ("excluir", "Descartar ese archivo"),
+    ("interpolar", "Interpolar de los simétricos"),
+    ("incluir", "Incluir tal cual"),
+)
+
+#: One row per charge-discharge curve.
+GCD_SERIES_COLUMNS: tuple[str, ...] = (
+    "corriente", "C (µF)", "C (F/g)", "C (µF/cm²)", "R (Ω)",
+    "eficiencia (%)", "fuga (µA)", "asimétrica",
+)
+
+#: One row per curve, for what a thousand cycles did to it.
+GCD_CYCLING_COLUMNS: tuple[str, ...] = (
+    "corriente", "ciclos", "C inicial (µF)", "C final (µF)",
+    "retención (%)", "pérdida (%/ciclo)", "eficiencia media (%)", "forma",
 )
 
 
@@ -448,6 +471,33 @@ class EchemApp(SectionApp):
 
         rate_card, rate_body = card(middle, "Capacitancia y capacidad de velocidad")
         rate_card.pack(fill="both", expand=True)
+        # The controls that decide what the whole tab reports, packed
+        # BEFORE the frame that expands: a fixed row after an expanding
+        # one gets whatever height is left, which is usually none.
+        setup = ttk.Frame(rate_body)
+        setup.pack(fill="x", pady=(0, PAD["sm"]))
+        self.gcd_asymmetry_var = self.tk.StringVar(
+            value=ASYMMETRY_LABELS[0][1])
+        labelled(setup, "Si carga ≠ descarga", lambda p: ttk.Combobox(
+            p, textvariable=self.gcd_asymmetry_var, width=30,
+            state="readonly",
+            values=[label for _, label in ASYMMETRY_LABELS]))
+        self.gcd_asymmetry_var.trace_add("write",
+                                         lambda *_: self._refresh_gcd_series())
+        self.gcd_cycle_var = self.tk.StringVar(value="-1")
+        labelled(setup, "Ciclo que se informa", lambda p: ttk.Spinbox(
+            p, from_=-1, to=100000, width=8,
+            textvariable=self.gcd_cycle_var,
+            command=self._refresh_gcd_series))
+        hint(setup,
+             "Un par cuya carga y descarga van a corrientes distintas NO "
+             "tiene una densidad de corriente, así que no puede ser un "
+             "punto de una curva contra corriente ni de un Ragone sin "
+             "decir cuál de las dos se usa. Por defecto se analiza, sale "
+             "en las tablas con su marca, y se queda fuera de esas dos "
+             "curvas.   El ciclo −1 es el último: los primeros de un GCPL "
+             "son formación, no rendimiento.",
+             wrap=420)
         inner = ttk.Frame(rate_body)
         inner.pack(fill="both", expand=True)
         left = ttk.Frame(inner)
@@ -467,10 +517,27 @@ class EchemApp(SectionApp):
         self.make_canvas(right, "rate_capacitance",
                          lambda f: f.add_subplot(111), figsize=(4.4, 2.8))
 
-        info, info_body = card(bottom, "Ramas")
+        info, info_body = card(bottom, "La serie y lo que mil ciclos le hacen")
         info.pack(fill="both", expand=True)
+        series_row = ttk.Frame(info_body)
+        series_row.pack(fill="both", expand=True)
+        self.gcd_series_table = table(
+            series_row, GCD_SERIES_COLUMNS, height=6)
+        self.gcd_cycling_table = table(
+            series_row, GCD_CYCLING_COLUMNS, height=6)
+        hint(info_body,
+             "La fuga es el exceso culómbico dividido por el ciclo ENTERO, "
+             "que es lo único comparable entre corrientes: la misma fuga "
+             "sale como un exceso grande a corriente pequeña y pequeño a "
+             "corriente grande. Si esa columna es constante, es una fuga; "
+             "si no, no lo es.   La retención es de un SOLO archivo: un "
+             "GCPL guarda sus ciclos dentro de uno.",
+             wrap=560)
+
+        branches, branch_body = card(bottom, "Ramas del ciclo informado")
+        branches.pack(fill="both", expand=True, pady=(PAD["sm"], 0))
         self.branch_table = table(
-            info_body,
+            branch_body,
             ["rama", "duración (s)", "V inicio", "V fin", "I (mA)", "IR (mV)",
              "q (mC)", "R² lineal"],
             height=8,
@@ -862,7 +929,22 @@ class EchemApp(SectionApp):
             chooser, "Paneles",
             "sólo se ofrecen los que tienen datos cargados")
         panels_card.pack(fill="x", pady=(PAD["sm"], 0))
+        self.figure_technique_var = tk.StringVar(value="Todo")
+        self.figure_technique_combo = labelled(
+            panels_body, "Técnica", lambda p: ttk.Combobox(
+                p, textvariable=self.figure_technique_var, width=22,
+                state="readonly", values=["Todo"]))
+        self.figure_technique_var.trace_add(
+            "write", lambda *_: self._technique_changed())
+        hint(panels_body,
+             "Filtra la LISTA, no la figura: una figura compuesta puede "
+             "llevar paneles de varias técnicas a la vez, y a menudo debe. "
+             "La escala de cada panel se puede forzar: «los dos ejes "
+             "logarítmicos» sirve para un Bode, para un Nyquist de un "
+             "electrodo poroso y para cualquier otro panel, sin tener que "
+             "añadir un panel por combinación.")
         self.figure_panel_vars: dict[str, object] = {}
+        self.figure_scale_vars: dict[str, object] = {}
         self.figure_panels_frame = ttk.Frame(panels_body)
         self.figure_panels_frame.pack(fill="x")
 
@@ -946,6 +1028,13 @@ class EchemApp(SectionApp):
         for child in self.figure_panels_frame.winfo_children():
             child.destroy()
         self.figure_panel_vars = {}
+        self.figure_scale_vars = {}
+        # The selector only offers techniques that have data, so it
+        # cannot lead to an empty list.
+        choices = self.session.figure_techniques()
+        combo = getattr(self, "figure_technique_combo", None)
+        if combo is not None:
+            combo.configure(values=[text for _, text in choices])
         panels = self.session.figure_panels()
         if not panels:
             self.ttk.Label(
@@ -970,6 +1059,24 @@ class EchemApp(SectionApp):
                     self.figure_panels_frame, text=panel.note,
                     wraplength=276, justify="left",
                     style="Hint.TLabel").pack(anchor="w", padx=(22, 0))
+            # The scale override, per panel. A panel picks the scale its
+            # data want and that is the right default; this is where it
+            # gets overruled, for every panel rather than for the few
+            # somebody thought of.
+            current = self.session.figure_scale(panel.key)
+            label = next((text for key, text in SCALE_LABELS
+                          if key == current), SCALE_LABELS[0][1])
+            scale_var = self.tk.StringVar(value=label)
+            self.figure_scale_vars[panel.key] = scale_var
+            row = self.ttk.Frame(self.figure_panels_frame)
+            row.pack(anchor="w", fill="x", padx=(22, 0))
+            self.ttk.Label(row, text="Escala", style="Hint.TLabel").pack(
+                side="left", padx=(0, PAD["xs"]))
+            self.ttk.Combobox(
+                row, textvariable=scale_var, width=20, state="readonly",
+                values=[text for _, text in SCALE_LABELS]).pack(side="left")
+            scale_var.trace_add("write",
+                                lambda *_: self._refresh_composite())
 
     def _composite_from_widgets(self) -> None:
         def number(variable, fallback):
@@ -994,6 +1101,11 @@ class EchemApp(SectionApp):
         composite.reference_axis = bool(self.figure_reference_var.get())
         composite.grid = bool(self.figure_grid_var.get())
         composite.title = self.figure_title_var.get().strip()
+        for key, variable in self.figure_scale_vars.items():
+            label = variable.get()
+            choice = next((k for k, text in SCALE_LABELS if text == label),
+                          "auto")
+            self.session.set_figure_scale(key, choice)
 
     def _composite_to_widgets(self) -> None:
         """Put the layout fields back on screen after a preset moved them."""
@@ -1010,6 +1122,43 @@ class EchemApp(SectionApp):
         if not key or not self.session.use_figure_preset(key):
             return
         self._composite_to_widgets()
+        self._refresh_composite()
+
+    def _fill_gcd_series(self) -> None:
+        """The per-curve table and the per-file cycling table."""
+        fill_table(self.gcd_series_table, GCD_SERIES_COLUMNS,
+                   self.session.gcd_rows())
+        fill_table(self.gcd_cycling_table, GCD_CYCLING_COLUMNS,
+                   self.session.gcd_cycling_rows())
+
+    def _refresh_gcd_series(self) -> None:
+        """Re-read the asymmetry policy and the cycle, and redraw."""
+        label = self.gcd_asymmetry_var.get()
+        self.session.gcd_asymmetry = next(
+            (key for key, text in ASYMMETRY_LABELS if text == label),
+            "aparte")
+        try:
+            self.session.gcd_cycle = int(self.gcd_cycle_var.get())
+        except (TypeError, ValueError):
+            self.session.gcd_cycle = -1
+        self.session._forget_gcd()
+        self._fill_gcd_series()
+        self.with_style("rate_capacitance", self._draw_rate_capacitance)
+        self.flush_messages(self.session.messages)
+
+    def _technique_changed(self) -> None:
+        """Filter the panel list, keeping whatever is already chosen.
+
+        The filter is on the list and not on the figure: panels already
+        ticked stay in the composite even when the filter hides them,
+        because a figure that silently dropped panels when the list was
+        narrowed would be the opposite of a filter.
+        """
+        label = self.figure_technique_var.get()
+        key = next((k for k, text in self.session.figure_techniques()
+                    if text == label), "todo")
+        self.session.figure_technique = key
+        self._refresh_figure_panels()
         self._refresh_composite()
 
     def _standard_figure(self) -> None:
@@ -1216,6 +1365,7 @@ class EchemApp(SectionApp):
         fill_table(self.gcd_capacitance_table,
                    ["convenio", "C (mF)", "C (F/g)"],
                    self.session.gcd_capacitance_rows())
+        self._fill_gcd_series()
         fill_table(self.drt_table,
                    ["τ (s)", "R (Ω)", "C = τ/R (mF)", "fracción de R"],
                    self.session.drt_rows())

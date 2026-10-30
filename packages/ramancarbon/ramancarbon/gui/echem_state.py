@@ -37,7 +37,7 @@ from ..echem.io import EchemIOError, read_cv, read_eis, read_gcd
 from .figures_echem import (PRESET_LABELS, CompositeFigure,
                             apply_preset, available_panels,
                             default_panels, draw_composite, every_axes,
-                            save_composite)
+                            save_composite, techniques_with_data)
 from ..echem.report import EchemResult, analyse_sample
 
 #: The kinds of measurement a session holds, and what each one is for.
@@ -233,6 +233,10 @@ class EchemSession:
     ``"interpolar"`` places it at its DISCHARGE current and also reports
     what the symmetric points interpolate to there, and ``"incluir"``
     takes it at face value."""
+    figure_technique: str = "todo"
+    """Which technique's panels the figure tab offers. A filter on the
+    LIST and not on the figure: a composite can hold panels from several
+    techniques at once, and often should."""
     gcd_cycle: int = -1
     """Which charge/discharge pair of the reported curve to analyse, −1
     for the last. A GCPL holds a thousand cycles and the first ones are
@@ -1778,8 +1782,32 @@ class EchemSession:
 
     # -- the multi-panel figure ----------------------------------------
     def figure_panels(self) -> list:
-        """The panels whose data are loaded, as :class:`PanelSpec`."""
-        return available_panels(self)
+        """The panels whose data are loaded, as :class:`PanelSpec`.
+
+        Filtered by :attr:`figure_technique`, which is a different
+        question from whether the data are there: twenty-four panels
+        across five techniques in one column make the column itself the
+        obstacle.
+        """
+        return available_panels(self, self.figure_technique)
+
+    def figure_techniques(self) -> list[tuple[str, str]]:
+        """``(key, label)`` for «todo» plus every technique with data."""
+        return techniques_with_data(self)
+
+    def set_figure_scale(self, key: str, choice: str) -> None:
+        """Force one panel's axis scales, or hand them back to it.
+
+        ``"auto"`` is stored as an absence rather than as a value, so a
+        saved figure carries only the overrides somebody actually chose.
+        """
+        if choice in ("", "auto"):
+            self.composite.scales.pop(key, None)
+        else:
+            self.composite.scales[key] = choice
+
+    def figure_scale(self, key: str) -> str:
+        return self.composite.scale_for(key)
 
     def figure_presets(self) -> tuple[tuple[str, str], ...]:
         """``(key, label)`` for every layout preset on offer."""
@@ -1809,7 +1837,7 @@ class EchemSession:
         figure being made at all, and the defaults are the figures the
         field actually prints — not the first entries of the list.
         """
-        self.composite.panels = default_panels(self)
+        self.composite.panels = default_panels(self, self.figure_technique)
         if not self.composite.panels:
             self.log("error",
                      "no hay nada cargado con lo que hacer una figura")

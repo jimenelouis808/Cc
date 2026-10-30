@@ -3373,3 +3373,175 @@ def test_the_gcd_caches_forget_when_the_series_changes():
     assert len(session.gcd_analyses()) == 3
     session.clear("gcd_series")
     assert session.gcd_analyses() == []
+
+
+# -- the figure tab: techniques, scales, the new panels ------------------
+
+
+def test_every_panel_declares_a_technique_that_the_selector_offers():
+    from ramancarbon.gui.figures_echem import ECHEM_PANELS, TECHNIQUES
+
+    known = {key for key, _ in TECHNIQUES}
+    for panel in ECHEM_PANELS:
+        assert panel.technique in known, panel.key
+    # And every technique other than "todo" has at least one panel.
+    used = {panel.technique for panel in ECHEM_PANELS}
+    assert known - {"todo"} == used
+
+
+def test_the_catalogue_covers_gcd_and_catalysis():
+    """The figure tab had no galvanostatic panel and no HER/OER panel at
+    all, so a charge-discharge series could be analysed and not drawn."""
+    from ramancarbon.gui.figures_echem import ECHEM_PANELS
+
+    by_technique: dict[str, int] = {}
+    for panel in ECHEM_PANELS:
+        by_technique[panel.technique] = by_technique.get(panel.technique, 0) + 1
+    assert by_technique.get("gcd", 0) >= 6
+    assert by_technique.get("catalysis", 0) >= 2
+    assert by_technique.get("eis", 0) >= 6
+    assert by_technique.get("cv", 0) >= 5
+
+
+def test_the_technique_filter_narrows_the_list_not_the_figure():
+    session = _gcd_session()
+    from ramancarbon.gui.figures_echem import available_panels
+
+    everything = available_panels(session, "todo")
+    only_gcd = available_panels(session, "gcd")
+    assert {p.key for p in only_gcd} <= {p.key for p in everything}
+    assert all(p.technique == "gcd" for p in only_gcd)
+    assert len(only_gcd) >= 6
+
+    # Panels already chosen survive a filter that hides them.
+    session.composite.panels = ["gcd_series", "gcd_ragone"]
+    session.figure_technique = "eis"
+    assert session.composite.panels == ["gcd_series", "gcd_ragone"]
+
+
+def test_the_technique_selector_only_offers_what_has_data():
+    session = _gcd_session()
+    offered = dict(session.figure_techniques())
+    assert "todo" in offered and "gcd" in offered
+    assert "eis" not in offered and "catalysis" not in offered
+
+
+def test_a_panel_scale_can_be_forced_and_round_trips():
+    """«Both axes logarithmic» has to be reachable for every panel, not
+    only for the ones somebody thought to write that way."""
+    from ramancarbon.gui.figures_echem import CompositeFigure
+
+    spec = CompositeFigure(panels=["eis_bode"])
+    assert spec.scale_for("eis_bode") == "auto"
+    spec.scales["eis_bode"] = "loglog"
+    assert spec.scale_for("eis_bode") == "loglog"
+    assert spec.scale_for("no_existe") == "auto"
+    # An unknown choice degrades to auto rather than reaching matplotlib.
+    spec.scales["eis_bode"] = "cuadratico"
+    assert spec.scale_for("eis_bode") == "auto"
+    spec.scales["eis_bode"] = "loglog"
+    assert CompositeFigure.from_dict(spec.to_dict()).scales == spec.scales
+
+
+def test_a_log_scale_is_refused_where_it_would_empty_the_axis():
+    """A phase axis runs −90 to 0. Forced logarithmic it draws nothing,
+    so that one is refused and left linear."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from ramancarbon.gui.figures_echem import apply_scale
+
+    figure, axis = plt.subplots()
+    axis.plot([1.0, 10.0, 100.0], [1.0, 10.0, 100.0])
+    apply_scale(axis, "loglog")
+    assert axis.get_xscale() == "log" and axis.get_yscale() == "log"
+    plt.close(figure)
+
+    figure, axis = plt.subplots()
+    axis.plot([1.0, 10.0], [-90.0, 0.0])
+    apply_scale(axis, "loglog")
+    assert axis.get_xscale() == "log"
+    assert axis.get_yscale() == "linear"
+    plt.close(figure)
+
+
+def test_the_scale_test_is_on_the_data_limits_not_the_view():
+    """The view carries matplotlib's autoscale margin, so an axis holding
+    1 to 100 reports a lower limit near −4 and a check on that refuses
+    every panel there is."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    figure, axis = plt.subplots()
+    axis.plot([1.0, 10.0, 100.0], [1.0, 10.0, 100.0])
+    assert axis.get_xlim()[0] < 0.0          # the margin, which is the trap
+    assert axis.dataLim.intervalx[0] == pytest.approx(1.0)
+    plt.close(figure)
+
+
+def test_every_gcd_panel_draws_from_a_real_series():
+    """Each panel in its own figure, because a twin axis steals the lines
+    of the panels after it when they share one."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from ramancarbon.gui.figures_echem import (CompositeFigure,
+                                               available_panels,
+                                               draw_composite, every_axes)
+    from ramancarbon.gui.theme import PALETTES
+
+    session = _gcd_session(asymmetric=(60e-6, 20e-6))
+    panels = available_panels(session, "gcd")
+    assert len(panels) >= 6
+    for panel in panels:
+        spec = CompositeFigure(panels=[panel.key], columns=1)
+        figure = plt.figure(figsize=(5.0, 3.5))
+        problems = draw_composite(figure, spec, session, PALETTES["claro"])
+        assert problems == [], f"{panel.key}: {problems}"
+        drawn = sum(len(axes.get_lines()) for axes in every_axes(figure))
+        assert drawn > 0, panel.key
+        plt.close(figure)
+
+
+def test_the_standard_gcd_figure_draws_whole():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from ramancarbon.gui.figures_echem import draw_composite
+    from ramancarbon.gui.theme import PALETTES
+
+    session = _gcd_session(asymmetric=(60e-6, 20e-6))
+    session.figure_technique = "gcd"
+    chosen = session.standard_figure()
+    assert "gcd_series" in chosen and "gcd_ragone" in chosen
+    figure = plt.figure(figsize=session.composite.figsize())
+    assert draw_composite(figure, session.composite, session,
+                          PALETTES["claro"]) == []
+    plt.close(figure)
+
+
+def test_a_preset_resets_what_it_does_not_mention():
+    """Only the draft preset asks for a grid, so moving off it has to put
+    the grid back. A preset that leaves the previous one's decisions in
+    place is not a preset."""
+    from ramancarbon.gui.figures_echem import (PRESETS, CompositeFigure,
+                                               apply_preset)
+
+    assert len(PRESETS) >= 10
+    spec = CompositeFigure(panels=["cv_dunn"])
+    assert apply_preset(spec, "borrador")
+    assert spec.grid is True
+    assert apply_preset(spec, "articulo_2col")
+    assert spec.grid is False
+    assert spec.panels == ["cv_dunn"]      # panels are never touched
+
+
+def test_every_preset_has_a_label_and_the_other_way_round():
+    from ramancarbon.gui.figures_echem import PRESETS, PRESET_LABELS
+
+    assert {key for key, _ in PRESET_LABELS} == set(PRESETS)
+    assert len({label for _, label in PRESET_LABELS}) == len(PRESET_LABELS)
