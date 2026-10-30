@@ -1,0 +1,136 @@
+{
+  "condiciones": {
+    "electrolito": "KOH_3M",
+    "referencia": "Ag/AgCl_sat",
+    "masa_mg": 0.02,
+    "area_cm2": 0.07068583470577036,
+    "ventana_v": [
+      -0.6,
+      0.4
+    ],
+    "politica_asimetria": "aparte"
+  },
+  "curvas": [
+    {
+      "etiqueta": "5 µA",
+      "corriente_descarga_a": 5.000000353902578e-06,
+      "corriente_carga_a": 5.000000353902578e-06,
+      "asimetrica": false,
+      "capacitancia_f": 7.721770884908571e-05,
+      "especifica_f_g": 3.8608854424542853,
+      "especifica_uf_cm2": 1092.4071162278024,
+      "resistencia_ohm": 76.1628097031512,
+      "resistencia_como": "caída IR 0.762 mV entre un escalón de corriente de 10.000 µA (|5.000| + |5.000| µA)",
+      "eficiencia_culombica": 1.1068450287746683,
+      "fuga_a": 2.5356643435553286e-07,
+      "energia_wh_kg": 0.4025961197496073,
+      "potencia_w_kg": 93.9730291383636,
+      "potencia_maxima_w_kg": 163685.80630474145,
+      "avisos": [
+        "la descarga no es lineal (R² = 0.000): hay meseta de potencial. Una meseta es comportamiento de BATERÍA, y una capacitancia en faradios describe mal a un material así. La magnitud correcta es la capacidad, en C/g o mAh/g, y está calculada arriba",
+        "la eficiencia culómbica sale 110.7 %, por encima del 100 %. Físicamente imposible en un ciclo aislado: o hay una reacción parásita que aporta carga en la descarga, o el corte de la carga llegó antes de completarse. El exceso equivale a +0.254 µA de corriente parásita, que es la forma de comparar este número entre corrientes distintas: una fuga es una corriente, así que la MISMA fuga sale como un exceso grande a corriente pequeña y pequeño a corriente grande",
+        "½CV² da 133 % de la energía integrada. La diferencia mide cuánto se aleja este electrodo de un condensador: ½CV² sólo vale si V baja linealmente con la carga. La energía que se informa es la integral, que vale en los dos casos"
+      ],
+      "ciclos": 1001,
+      "retencion": 0.47288348903945193,
+      "forma_desvanecimiento": "raiz"
+    },
+    {
+      "etiqueta": "10 µA",
+      "corriente_descarga_a": 1.0000000707805157e-05,
+      "corriente_carga_a": 1.0000000707805157e-05,
+      "asimetrica": false,
+      "capacitancia_f": 5.5994702715811084e-05,
+      "especifica_f_g": 2.799735135790554,
+      "especifica_uf_cm2": 792.1629977051119,
+      "resistencia_ohm": 80.68978215342067,
+      "resistencia_como": "caída IR 1.614 mV entre un escalón de corriente de 20.000 µA (|10.000| + |10.000| µA)",
+      "eficiencia_culombica": 1.0447638296363067,
+      "fuga_a": 2.1891933022248142e-07,
+      "energia_wh_kg": 0.38710022385373594,
+      "potencia_w_kg": 249.61682368360147,
+      "potencia_maxima_w_kg": 153993.28599573165,
+      "avisos": [
+        "la descarga no es lineal (R² = 0.000): hay meseta de potencial. Una meseta es comportamiento de BATERÍA, y una capacitancia en faradios describe mal a un material así. La magnitud correcta es la capacidad, en C/g o mAh/g, y está calculada arriba"
+      ],
+      "ciclos": 1001,
+      "retencion": 0.9474899019299053,
+      "forma_desvanecimiento": "exponencial"
+    },
+    {
+      "etiqueta": "20 µA",
+      "corriente_descarga_a": 2.0000001415610313e-05,
+      "corriente_carga_a": 2.0000001415610313e-05,
+      "asimetrica": false,
+      "capacitancia_f": 4.540763074525293e-05,
+      "especifica_f_g": 2.2703815372626464,
+      "especifica_uf_cm2": 642.38656775098,
+      "resistencia_ohm": 72.34811270753242,
+      "resistencia_como": "caída IR 2.894 mV entre un escalón de corriente de 40.000 µA (|20.000| + |20.000| µA)",
+      "eficiencia_culombica": 1.0195033860007798,
+      "fuga_a": 1.9315033108077194e-07,
+      "energia_wh_kg": 0.31284207082998383,
+      "potencia_w_kg": 498.7297196340998,
+      "potencia_maxima_w_kg": 170926.72947278642,
+      "avisos": [
+        "la descarga no es lineal (R² = 0.000): hay meseta de potencial. Una meseta es comportamiento de BATERÍA, y una capacitancia en faradios describe mal a un material así. La magnitud correcta es la capacidad, en C/g o mAh/g, y está calculada arriba"
+      ],
+      "ciclos": 1001,
+      "retencion": 0.987320741524785,
+      "forma_desvanecimiento": "exponencial"
+    },
+    {
+      "etiqueta": "60/−20 µA",
+      "corriente_descarga_a": 2.0000001415610313e-05,
+      "corriente_carga_a": 6.000000238418579e-05,
+      "asimetrica": true,
+      "capacitancia_f": 3.954002728455669e-05,
+      "especifica_f_g": 1.9770013642278343,
+      "especifica_uf_cm2": 559.3769593178317,
+      "resistencia_ohm": 75.38944124722713,
+      "resistencia_como": "caída IR 6.031 mV entre un escalón de corriente de 80.000 µA (|60.000| + |20.000| µA)",
+      "eficiencia_culombica": 1.0152505762344484,
+      "fuga_a": 2.2617172114649193e-07,
+      "energia_wh_kg": 0.27075370430049395,
+      "potencia_w_kg": 498.01417005497547,
+      "potencia_maxima_w_kg": 162500.99622055388,
+      "avisos": [
+        "la carga va a 60 µA y la descarga a 20 µA. **No es un ciclo simétrico**: la eficiencia culómbica compara dos corrientes distintas y no mide reversibilidad, y este punto no tiene UNA densidad de corriente, así que no se puede poner en una curva de capacidad frente a corriente ni en un Ragone sin decir cuál de las dos se usa. La resistencia sí sale bien, porque su escalón es la SUMA de las dos",
+        "la descarga no es lineal (R² = 0.000): hay meseta de potencial. Una meseta es comportamiento de BATERÍA, y una capacitancia en faradios describe mal a un material así. La magnitud correcta es la capacidad, en C/g o mAh/g, y está calculada arriba"
+      ],
+      "ciclos": 1001,
+      "retencion": 0.9648984421488017,
+      "forma_desvanecimiento": "raiz"
+    },
+    {
+      "etiqueta": "40 µA",
+      "corriente_descarga_a": 4.0000002831220626e-05,
+      "corriente_carga_a": 4.0000002831220626e-05,
+      "asimetrica": false,
+      "capacitancia_f": 3.845927537471498e-05,
+      "especifica_f_g": 1.9229637687357488,
+      "especifica_uf_cm2": 544.0874474327372,
+      "resistencia_ohm": 85.51626792248678,
+      "resistencia_como": "caída IR 6.841 mV entre un escalón de corriente de 80.000 µA (|40.000| + |40.000| µA)",
+      "eficiencia_culombica": 1.0095642933392428,
+      "fuga_a": 1.9037547687147113e-07,
+      "energia_wh_kg": 0.262522969372479,
+      "potencia_w_kg": 994.823882036048,
+      "potencia_maxima_w_kg": 142700.77625547093,
+      "avisos": [
+        "la descarga no es lineal (R² = 0.000): hay meseta de potencial. Una meseta es comportamiento de BATERÍA, y una capacitancia en faradios describe mal a un material así. La magnitud correcta es la capacidad, en C/g o mAh/g, y está calculada arriba"
+      ],
+      "ciclos": 1001,
+      "retencion": 0.9978991597513404,
+      "forma_desvanecimiento": "exponencial"
+    }
+  ],
+  "interpolacion": [
+    {
+      "etiqueta": "60/−20 µA",
+      "mA": 0.020000001415610313,
+      "medido_f_g": 1.9770013642278343,
+      "interpolado_f_g": 2.2703815372626464
+    }
+  ]
+}

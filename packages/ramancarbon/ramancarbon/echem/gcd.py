@@ -453,6 +453,17 @@ def _energy_capacitance(branch, current: float,
     return 2.0 * energy / (effective ** 2)
 
 
+#: Relative drop between two consecutive cycles that is an EVENT rather
+#: than degradation.
+#:
+#: Degradation is gradual by definition: a mechanism that removes a
+#: third of the capacity between one cycle and the next is not wear, it
+#: is something coming loose. Twenty per cent is far above the
+#: cycle-to-cycle scatter of any of the user's files and far below the
+#: 66 % step their 5 uA file takes at cycle 319.
+CYCLE_STEP_LIMIT = 0.20
+
+
 #: Spread between the three capacitance conventions that counts as
 #: disagreement rather than rounding.
 #:
@@ -906,6 +917,33 @@ def _finish_cycling(result: CyclingResult) -> None:
                 "µA), así que esta curva mezcla degradación con cambio de "
                 "velocidad y su retención no es una retención"
             )
+    # A sudden step is not a fade, and a fade model fitted across one
+    # describes the step rather than a mechanism. Measured on the user's
+    # 5 uA file: 1001 cycles with exactly two drops over 20 % -- the
+    # first cycle, which is formation, and cycle 319, which loses 66 %
+    # in one cycle (298.7 to 99.9 uF) while the coulombic efficiency
+    # barely moves. That is material coming off the disc or a contact
+    # changing, not degradation, and `fade_model` happily returns a
+    # square-root law for it.
+    if len(result.capacitance_f) > 2:
+        values = np.asarray(result.capacitance_f, dtype=float)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            change = np.diff(values) / values[:-1]
+        change = np.where(np.isfinite(change), change, 0.0)
+        # The first cycle is formation and is expected to move.
+        steps = np.flatnonzero(change[1:] < -CYCLE_STEP_LIMIT) + 1
+        for position in steps[:3]:
+            result.warnings.append(
+                f"entre el ciclo {result.cycles[position]} y el siguiente la "
+                f"capacitancia cae un {100 * abs(change[position]):.0f} % "
+                f"({1e6 * values[position]:.4g} a "
+                f"{1e6 * values[position + 1]:.4g} µF). Un salto NO es una "
+                "degradación: la degradación es gradual por definición, y "
+                "esto es material que se desprende, un contacto que cambia o "
+                "una burbuja. La retención medida de punta a punta lo "
+                "incluye, y un modelo de desvanecimiento ajustado a través "
+                "de él describe el salto, no un mecanismo"
+            )
     if result.efficiency:
         mean = float(np.mean(result.efficiency))
         if mean > EFFICIENCY_LIMITS[1]:
@@ -947,6 +985,7 @@ def analyse_cycling(curves: Sequence[ChargeDischarge]) -> CyclingResult:
 
 __all__ = [
     "ASYMMETRY_POLICIES",
+    "CYCLE_STEP_LIMIT",
     "ASYMMETRY_TOLERANCE",
     "EFFICIENCY_LIMITS",
     "IR_POINTS",

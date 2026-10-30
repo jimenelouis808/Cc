@@ -3294,3 +3294,149 @@ el resto de la sección. Un diagrama de Mott-Schottky es lineal sólo en
 agotamiento; ajustar el barrido entero promedia eso con los tramos donde el
 modelo no vale. `MIN_LINEAR_FRACTION` (30 % de la ventana) y
 `MIN_LINEAR_POINTS` (6) deciden si el ajuste merece citarse.
+
+## El galvanostático no corría sobre datos galvanostáticos
+
+Cinco archivos GCPL reales y ninguno se podía analizar. El splitter se
+rompía contra sí mismo: `ChargeDischarge.segments()` devuelve curvas, que
+rechazan menos de diez puntos, y descartaba por debajo de CINCO — así que
+un GCPL que guarda con condición de potencial, y escribe **tres** puntos
+por semiciclo, levantaba `CurveError` desde dentro del propio splitter.
+
+- **`half_cycles` no construye curvas**, así que conserva las ramas
+  cortas. Su carga `I·Δt` y su ventana `ΔV` son perfectamente medibles
+  porque sólo necesitan los dos extremos; lo que depende de la FORMA
+  —pendiente, linealidad, capacitancia por energía— se niega por debajo
+  de `MIN_SHAPE_POINTS` **con su motivo**, en vez de calcularse de dos
+  puntos o de tirar la medida entera para proteger un número que nadie
+  pidió.
+- Y `segments()` usa ahora el mínimo de la clase que devuelve. Un suelo
+  por debajo del mínimo del tipo que construyes no es un suelo.
+
+## `∫V dq` contra el eje absoluto no es una energía
+
+- **La ventana del usuario va de −0.6 a +0.4 V**, así que la media del
+  potencial sale −0.1 en vez de +0.5 y los cinco archivos informaban
+  entre **4.8 y 5.0 veces** menos energía de la que hay. En un eje de tres
+  electrodos el cero está donde esté el electrodo de referencia: una
+  energía integrada desde ahí no es una energía que nadie pueda recuperar,
+  y sobre una ventana que cruza el cero ni siquiera es positiva.
+- Se referencia al **extremo inferior de la propia rama**, que es lo que
+  `_energy_capacitance` ya hacía y `energy_j` no: las dos mitades del
+  mismo módulo usaban convenios distintos.
+- **El demo tiene ventana (0.0, 0.6)**, donde las dos cuentas coinciden
+  exactamente. Por eso ninguna prueba lo veía, y por eso la prueba nueva
+  construye su condensador sobre una ventana que cruza el cero y comprueba
+  además que la MISMA celda en dos ejes distintos almacena lo mismo.
+
+## El salto de la caída IR abarca el CAMBIO de corriente
+
+- Era `caída/(2·|I_descarga|)`, que acierta sólo si las dos corrientes son
+  iguales. El quinto archivo del usuario carga a 60 µA y descarga a 20:
+  ahí devolvía **158 Ω** para una celda cuyos otros cuatro archivos
+  coinciden en 80.
+- Con `|I_carga| + |I_descarga|` los cinco dan 76.7, 80.0, 80.1, 79.8 y
+  **79.3 Ω**. Que el asimétrico coincida con los otros cuatro es la
+  comprobación, y es una medida, no un argumento.
+- **La pareja culómbica es la rama inmediatamente anterior**, no la
+  entrada de la misma posición en una lista aparte de cargas. Eso acierta
+  sólo si el archivo empieza por una carga.
+
+## Un par asimétrico no tiene UNA densidad de corriente
+
+- Así que no puede ser un punto de una curva contra corriente ni de un
+  Ragone sin decir cuál de las dos se usa. `gcd_asymmetry` es la elección,
+  con las cuatro salidas: `aparte` (defecto: se analiza, sale en las
+  tablas marcado, y fuera de esas dos curvas), `excluir`, `interpolar` e
+  `incluir`.
+- **`interpolar` informa el medido JUNTO al interpolado**, nunca en su
+  lugar: sustituir en silencio esconde justo lo que hay que saber, que es
+  si el horario roto cambió la respuesta. Aquí la cambió: 1.977 F/g
+  medidos contra 2.270 interpolados a la misma corriente de descarga, un
+  **−12.9 %**.
+- Y se niega a interpolar fuera del intervalo que cubren los puntos
+  simétricos, porque `np.interp` recorta y recortar en silencio es
+  inventar — la misma barrera que ya tenía el lado de catálisis.
+- **Lo que etiqueta un punto de velocidad es la corriente de DESCARGA.**
+  La mediana de |i| sobre todo el registro devuelve **40 µA** para ese
+  archivo, con el mismo número de puntos en cada rama: una corriente que
+  ninguna de las dos usó, exactamente entre las dos.
+
+## La fuga se divide por el ciclo ENTERO
+
+Una eficiencia culómbica por encima del 100 % es carga que sale sin haber
+entrado, y como porcentaje **no se puede comparar entre corrientes**: la
+misma fuga sale grande a corriente pequeña y pequeña a corriente grande.
+Dividida por el tiempo es una corriente, y entonces sí.
+
+El denominador es la carga **más** la descarga, porque una reacción
+parásita corre todo el tiempo y no sólo mientras se carga. En un ciclo
+simétrico los dos denominadores parecen equivalentes —las dos mitades
+duran lo mismo— y en uno asimétrico no, que es como se zanjó:
+
+| denominador | 5 µA | 10 µA | 20 µA | 40 µA | 60/−20 µA |
+|---|---|---|---|---|---|
+| sólo la carga | 0.534 | 0.448 | 0.390 | 0.383 | **0.915** |
+| ciclo entero | 0.254 | 0.219 | 0.193 | 0.190 | **0.226** |
+
+Con la carga sola el asimétrico se va 2.4 veces por encima; con el ciclo
+entero cae en medio de los otros cuatro. **Que los cinco coincidan es la
+comprobación.**
+
+## Un GCPL lleva sus ciclos DENTRO de un archivo
+
+- `analyse_cycling` toma una LISTA y da un punto por archivo, que es la
+  forma correcta cuando cada ciclo se guardó aparte y la equivocada para
+  un GCPL. Los cinco archivos del usuario llevan **1001 ciclos cada uno**,
+  y todo eso llegaba como un número por archivo.
+- `cycling_from_curve` da capacidad, capacitancia y eficiencia ciclo a
+  ciclo. Con eso el archivo de 5 µA enseña que pierde el 80 % de su
+  capacitancia, que es lo que no se veía.
+- **Y un salto no es una degradación.** La degradación es gradual por
+  definición. En esos 1001 ciclos hay exactamente dos caídas de más del
+  20 %: el ciclo 1, que es formación, y el **ciclo 319**, que se lleva el
+  **67 %** de una vez (298.7 → 99.9 µF) mientras la eficiencia culómbica
+  apenas se mueve. Eso es material que se desprende, un contacto que
+  cambia o una burbuja. `fade_model` devuelve «raíz de ciclos» para esa
+  curva tan contento, y lo que describe es el escalón: por eso
+  `CYCLE_STEP_LIMIT` lo informa antes de que nadie lea la forma.
+
+## Una serie de velocidades corrida de una vez confunde velocidad con degradación
+
+Los cinco archivos son consecutivos en el reloj del potenciostato, de 0 a
+57 386 s, y la corriente sube con el tiempo acumulado. Así que la
+capacitancia que baja de 77 a 38 µF baja por las dos razones a la vez y
+**una sola serie no las separa** — es la misma barrera que el lado de CV
+ya tenía escrita («sin el ciclo de vuelta a la velocidad inicial, una
+limitación cinética y una degradación dan la MISMA curva»), llegando por
+el galvanostático. Lo que sí las separa aquí son los ciclos de frontera:
+el último de un archivo y el primero del siguiente son adyacentes en el
+tiempo y difieren sólo en la corriente.
+
+## La pestaña Figura no sabía de GCD ni de catálisis
+
+- Quince paneles y ninguno de carga-descarga ni de HER/OER, así que una
+  serie galvanostática se podía analizar y no se podía dibujar. Son
+  veinticuatro, en cinco técnicas, y el selector de **técnica filtra la
+  LISTA y no la figura**: una compuesta puede llevar paneles de varias a
+  la vez, y a menudo debe.
+- **La escala de cada panel se puede forzar** (`scales`, por clave). Un
+  panel elige la escala que piden sus datos y ése es el defecto correcto;
+  esto es el usuario pasándole por encima, para todos los paneles en vez
+  de para los pocos que a alguien se le ocurrieron. Así «los dos ejes en
+  log» vale para el Bode, para el Nyquist de un electrodo poroso y para
+  cualquier otro sin añadir un panel por combinación.
+- **La comprobación va contra `dataLim`, no contra `get_xlim`.** El límite
+  de vista lleva dentro el margen de autoescala, así que un eje con datos
+  de 1 a 100 informa un mínimo de −4 y una guarda sobre eso rechaza todos
+  los paneles que hay.
+- **Y un eje cuyos datos son todos ≤ 0 se deja lineal.** Una fase de −90 a
+  0 forzada a logarítmica sale vacía, que es peor que no obedecer.
+- **Una línea sin `label` es `_child0`**, y la exportación de números se
+  salta ésas: el Ragone y el panel de resistencia dibujaban números que
+  nadie podía sacar. Es el mismo fallo que el `stackplot` tuvo por otro
+  camino, así que ahora hay una prueba que exige que **todo** panel
+  exporte más que su cabecera.
+- **Un preajuste reinicia lo que NO menciona.** Sólo el borrador pide
+  rejilla, y salir de él tiene que apagarla; un preajuste que deja en pie
+  las decisiones del anterior no es un preajuste.

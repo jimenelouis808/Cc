@@ -1,0 +1,7 @@
+serie,x,y
+measured,5,3.86089
+measured,10,2.79974
+measured,20,2.27038
+measured,40,1.92296
+charge and discharge at different currents,20,1.977
+interpolated from the symmetric points,20,2.27038

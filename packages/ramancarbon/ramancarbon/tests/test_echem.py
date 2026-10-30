@@ -3545,3 +3545,63 @@ def test_every_preset_has_a_label_and_the_other_way_round():
 
     assert {key for key, _ in PRESET_LABELS} == set(PRESETS)
     assert len({label for _, label in PRESET_LABELS}) == len(PRESET_LABELS)
+
+
+def test_every_gcd_panel_can_export_its_numbers():
+    """A line with no label is ``_child0`` to matplotlib and the data
+    export skips it, so a panel can draw numbers nobody can get out —
+    which is the same failure the stackplot panel had, by another route.
+    """
+    session = _gcd_session(asymmetric=(60e-6, 20e-6))
+    from ramancarbon.gui.figures_echem import available_panels
+
+    session.composite.panels = [p.key for p in available_panels(session, "gcd")]
+    rows = session.figure_data_rows()
+    for key, table in rows.items():
+        assert len(table) > 1, f"{key} exportó sólo su cabecera"
+
+
+def test_a_sudden_step_in_the_cycling_is_not_called_degradation():
+    """Degradation is gradual by definition. The user's 5 µA file has
+    exactly two drops over 20 % in 1001 cycles — the first cycle, which
+    is formation, and cycle 319, which loses 66 % in ONE cycle while the
+    coulombic efficiency barely moves. A fade model fitted across that
+    describes the step, not a mechanism."""
+    from ramancarbon.echem.curve import ChargeDischarge
+    from ramancarbon.echem.gcd import cycling_from_curve
+
+    before = [_gcd_curve(capacitance=45e-6, cycles=1, points_per_branch=20,
+                         resistance=0.0) for _ in range(8)]
+    after = [_gcd_curve(capacitance=15e-6, cycles=1, points_per_branch=20,
+                        resistance=0.0) for _ in range(8)]
+    clock, times = 0.0, []
+    pieces = before + after
+    for piece in pieces:
+        times.append(piece.time - piece.time[0] + clock)
+        clock = times[-1][-1] + 1.0
+    joined = ChargeDischarge(
+        time=np.concatenate(times),
+        potential=np.concatenate([p.potential for p in pieces]),
+        current=np.concatenate([p.current for p in pieces]),
+        electrode=pieces[0].electrode, name="con un escalón")
+    result = cycling_from_curve(joined)
+    assert any("Un salto NO es una degradación" in w
+               for w in result.warnings)
+
+    # A smooth fade of the same total size is not flagged.
+    smooth = []
+    for cycle in range(16):
+        smooth.append(_gcd_curve(capacitance=45e-6 * (1 - 0.04 * cycle),
+                                 cycles=1, points_per_branch=20,
+                                 resistance=0.0))
+    clock, times = 0.0, []
+    for piece in smooth:
+        times.append(piece.time - piece.time[0] + clock)
+        clock = times[-1][-1] + 1.0
+    gentle = ChargeDischarge(
+        time=np.concatenate(times),
+        potential=np.concatenate([p.potential for p in smooth]),
+        current=np.concatenate([p.current for p in smooth]),
+        electrode=smooth[0].electrode, name="sin escalón")
+    assert not any("Un salto NO" in w
+                   for w in cycling_from_curve(gentle).warnings)

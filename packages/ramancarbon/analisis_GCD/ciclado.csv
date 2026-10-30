@@ -1,0 +1,6 @@
+corriente,ciclos,C_inicial_uF,C_final_uF,retencion_pct,perdida_pct_ciclo,eficiencia_media_pct,forma
+5 µA,1001,391.4,77.22,19.7,0.0527,109.65,raiz
+10 µA,1001,59.08,55.99,94.8,0.0053,105.13,exponencial
+20 µA,1001,46.03,45.41,98.6,0.0013,102.06,exponencial
+60/−20 µA,1001,40.99,39.54,96.5,0.0035,101.57,raiz
+40 µA,1001,38.54,38.46,99.8,0.0002,100.98,exponencial

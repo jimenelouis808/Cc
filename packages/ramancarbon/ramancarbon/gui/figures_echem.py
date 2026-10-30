@@ -1561,13 +1561,15 @@ def _panel_gcd_resistance(axis, session, spec, palette) -> None:
     order = np.argsort(currents)
     current_array = np.asarray(currents)[order]
     axis.plot(current_array, np.asarray(drops)[order], "o-", color=INK,
-              markersize=5, linewidth=1.3, zorder=3)
+              markersize=5, linewidth=1.3, zorder=3,
+              label=spec.text("ir_drop_mv"))
     axis.set_xscale("log")
     axis.set_xlabel("i / µA")
     axis.set_ylabel(spec.text("ir_drop_mv"), color=INK)
     twin = axis.twinx()
     twin.plot(current_array, np.asarray(resistances)[order], "s--",
-              color=MODEL, markersize=5, linewidth=1.1, zorder=2)
+              color=MODEL, markersize=5, linewidth=1.1, zorder=2,
+              label=spec.text("esr_ohm"))
     twin.set_ylabel(spec.text("esr_ohm"), color=MODEL,
                     fontsize=spec.font_size)
     twin.tick_params(axis="y", colors=MODEL, direction="in",
@@ -1594,8 +1596,12 @@ def _panel_ragone(axis, session, spec, palette) -> None:
         energies = [e for e, _, _ in points]
         powers = [p for _, p, _ in points]
         order = np.argsort(powers)
+        # Labelled even though this panel draws no legend: an unlabelled
+        # line is `_child0` to matplotlib, and the figure's data export
+        # skips those, so the panel drew numbers nobody could get out.
         axis.plot(np.asarray(powers)[order], np.asarray(energies)[order],
-                  "o-", color=INK, markersize=6, linewidth=1.3, zorder=3)
+                  "o-", color=INK, markersize=6, linewidth=1.3, zorder=3,
+                  label=spec.text("measured_point"))
         for energy, power, label in points:
             axis.annotate(label, xy=(power, energy), xytext=(4, 5),
                           textcoords="offset points",
