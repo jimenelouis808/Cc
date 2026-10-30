@@ -67,6 +67,7 @@ LABELS: dict[str, dict[str, str]] = {
         'overpotential': '$\\eta$ / V',
         'log_j': 'log(|j| / mA cm$^{-2}$)',
         'j_ma_cm2': '|j| / mA cm$^{-2}$',
+        'j_signed': 'j / mA cm$^{-2}$',
         'tafel_fit': '{slope} mV dec$^{-1}$',
         'tafel_region': 'fitted region',
         'asymmetric_note': 'charge and discharge at different currents',
@@ -152,6 +153,7 @@ LABELS: dict[str, dict[str, str]] = {
         'overpotential': '$\\eta$ / V',
         'log_j': 'log(|j| / mA cm$^{-2}$)',
         'j_ma_cm2': '|j| / mA cm$^{-2}$',
+        'j_signed': 'j / mA cm$^{-2}$',
         'tafel_fit': '{slope} mV dec$^{-1}$',
         'tafel_region': 'región ajustada',
         'asymmetric_note': 'carga y descarga a corrientes distintas',
@@ -576,12 +578,31 @@ def _rhe_shift(session) -> Optional[float]:
     59 mV per unit of error, so the secondary axis is simply not drawn
     rather than drawn on a guess.
     """
-    curve = (session.cv or (session.rate_series[0]
-                            if session.rate_series else None)
-             or (session.ms_series[0] if session.ms_series else None))
-    if curve is None:
+    # Any loaded measurement will do, and failing that the session's own
+    # electrode. The first version looked only at the voltammetry and the
+    # Mott-Schottky series, so a session holding nothing but polarisation
+    # curves got no RHE axis at all -- refused, in silence, on
+    # information the session was holding. That is the same failure as an
+    # electrode that would not fill its pH from its own electrolyte, one
+    # level up.
+    candidates = [
+        session.cv,
+        session.rate_series[0] if session.rate_series else None,
+        getattr(session, "lsv", None),
+        (session.lsv_series[0]
+         if getattr(session, "lsv_series", None) else None),
+        getattr(session, "gcd", None),
+        (session.gcd_series[0]
+         if getattr(session, "gcd_series", None) else None),
+        session.ms_series[0] if session.ms_series else None,
+    ]
+    electrode = next(
+        (c.electrode for c in candidates if c is not None), None)
+    if electrode is None:
+        electrode = getattr(session, "electrode", None)
+    if electrode is None:
         return None
-    converted, _ = curve.electrode.to_rhe(np.zeros(1))
+    converted, _ = electrode.to_rhe(np.zeros(1))
     if converted is None:
         return None
     return float(converted[0])
@@ -1710,6 +1731,41 @@ def _panel_her_polarisation(axis, session, spec, palette) -> None:
     _tidy(axis, spec)
 
 
+def _panel_her_measured(axis, session, spec, palette) -> None:
+    """The sweep AS MEASURED: j against the potential on its own scale,
+    with the RHE axis on top and the hydrogen line where it belongs.
+
+    Every other catalysis panel plots an overpotential, which is already
+    a conversion: it needs the reference electrode's potential and the
+    pH, and it hides where the measurement actually sat. This one is the
+    curve the instrument wrote, and the second axis is the conversion
+    drawn rather than applied — so a potential axis that is off by a
+    hundred millivolts shows up as the curve crossing the hydrogen line
+    on the wrong side.
+    """
+    curves = session.lsv_curves()
+    if not curves:
+        return
+    area = curves[0].electrode.area_cm2
+    for index, curve in enumerate(curves):
+        current = np.asarray(curve.current, dtype=float)
+        density = 1e3 * current / area if area else 1e3 * current
+        axis.plot(np.asarray(curve.potential, dtype=float), density, "-",
+                  color=_colour(index), linewidth=1.4, zorder=3,
+                  label=f"{1e3 * curve.scan_rate:.3g} mV/s")
+    axis.axhline(0.0, color=GREY, linewidth=0.7, zorder=1)
+    axis.set_ylabel(spec.text("j_signed") if area
+                    else spec.text("current"))
+    _potential_axis(axis, session, spec, curves[0])
+    if spec.legends:
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
+                    loc="lower left", handlelength=1.4)
+    _tidy(axis, spec)
+    # The RHE axis on top, and the hydrogen line. Drawn last so the
+    # limits it reads are the ones the data settled.
+    _reference_axis(axis, session, spec)
+
+
 def _panel_her_rates(axis, session, spec, palette) -> None:
     """The polarisation curves at every scan rate, on one axis.
 
@@ -1913,6 +1969,12 @@ ECHEM_PANELS: tuple[PanelSpec, ...] = (
               "energía contra potencia en log-log, con el techo "
               "ΔV²/4R que ninguna descarga medida alcanza",
               technique="gcd"),
+    PanelSpec("her_medida", "HER/OER: la curva TAL COMO SE MIDIÓ",
+              "catalysis", _panel_her_measured,
+              "j contra el potencial en su propia escala, con el eje RHE "
+              "arriba y la línea del hidrógeno: la conversión dibujada en "
+              "vez de aplicada",
+              technique="catalysis"),
     PanelSpec("her_polarizacion", "HER/OER: la curva de polarización",
               "catalysis", _panel_her_polarisation,
               "η contra |j| sin logaritmo, que es donde se ve una "
@@ -1944,7 +2006,7 @@ DEFAULT_PANELS: dict[str, tuple[str, ...]] = {
     "gcd": ("gcd_series", "gcd_velocidad", "gcd_ciclado", "gcd_ragone"),
     "eis": ("eis_nyquist", "eis_bode", "eis_capacitancia", "eis_residuo"),
     "ms": ("mott_schottky",),
-    "catalysis": ("her_polarizacion", "her_tafel"),
+    "catalysis": ("her_medida", "her_polarizacion", "her_tafel"),
     "catalysis_series": ("her_velocidades",),
 }
 

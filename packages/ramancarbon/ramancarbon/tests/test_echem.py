@@ -3774,8 +3774,8 @@ def test_the_catalysis_panels_draw_without_a_full_analysis():
     session = _her_session()
     assert session.result is None
     panels = available_panels(session, "catalysis")
-    assert {p.key for p in panels} == {"her_polarizacion", "her_tafel",
-                                       "her_velocidades"}
+    assert {p.key for p in panels} == {"her_medida", "her_polarizacion",
+                                       "her_tafel", "her_velocidades"}
     for panel in panels:
         spec = CompositeFigure(panels=[panel.key], columns=1)
         figure = plt.figure(figsize=(5.0, 3.5))
@@ -3792,3 +3792,54 @@ def test_the_rate_panel_needs_two_curves_to_mean_anything():
     one = _her_session(rates=(0.001,))
     assert "her_velocidades" not in {p.key
                                      for p in available_panels(one, "catalysis")}
+
+
+def test_the_rhe_axis_is_drawn_for_a_session_holding_only_lsv():
+    """``_rhe_shift`` looked only at the voltammetry and the
+    Mott-Schottky series, so a session holding nothing but polarisation
+    curves got no RHE axis — refused in silence on information it was
+    holding, the same failure as the electrode that would not fill its
+    own pH."""
+    from ramancarbon.gui.figures_echem import _rhe_shift
+
+    session = _her_session()
+    assert session.cv is None and not session.rate_series
+    shift = _rhe_shift(session)
+    assert shift is not None
+    # reference="RHE" in the helper, so the shift is zero but PRESENT.
+    assert shift == pytest.approx(0.0, abs=1e-9)
+
+    from ramancarbon.echem.curve import Electrode
+    for curve in session.lsv_series:
+        curve.electrode = Electrode(mass_mg=0.02, area_cm2=0.0707,
+                                    electrolyte="H2SO4_0.5M",
+                                    reference="Ag/AgCl_sat")
+    assert _rhe_shift(session) == pytest.approx(0.197 + 0.05916 * 0.3,
+                                                abs=2e-3)
+
+
+def test_the_as_measured_panel_keeps_the_potential_on_its_own_scale():
+    """Every other catalysis panel plots an overpotential, which is
+    already a conversion. This one is the curve the instrument wrote,
+    with the conversion drawn on a second axis rather than applied."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from ramancarbon.gui.figures_echem import (CompositeFigure,
+                                               draw_composite, every_axes)
+    from ramancarbon.gui.theme import PALETTES
+
+    session = _her_session()
+    spec = CompositeFigure(panels=["her_medida"], columns=1)
+    figure = plt.figure(figsize=(5.0, 3.5))
+    assert draw_composite(figure, spec, session, PALETTES["claro"]) == []
+    axes = every_axes(figure)
+    lines = [line for a in axes for line in a.get_lines()]
+    assert len(lines) >= 2
+    # The x data are potentials, not current densities: they stay inside
+    # the window the sweep covered.
+    xs = np.concatenate([line.get_xdata() for line in lines
+                         if len(line.get_xdata()) > 5])
+    assert xs.min() > -2.0 and xs.max() < 2.0
+    plt.close(figure)

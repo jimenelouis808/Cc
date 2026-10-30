@@ -156,8 +156,9 @@ def main(folder: Path) -> None:
 
     session.figure_technique = "catalysis"
     spec = CompositeFigure(
-        panels=["her_velocidades", "her_polarizacion", "her_tafel"],
-        columns=3, width_in=10.5, panel_height_in=3.0, dpi=600)
+        panels=["her_medida", "her_velocidades", "her_polarizacion",
+                "her_tafel"],
+        columns=2, width_in=7.2, panel_height_in=3.1, dpi=600)
     session.composite = spec
     figure = plt.figure(figsize=spec.figsize())
     for problem in session.draw_figure(figure, PALETTES["claro"]):
