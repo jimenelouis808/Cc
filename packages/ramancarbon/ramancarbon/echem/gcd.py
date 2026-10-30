@@ -678,13 +678,29 @@ def analyse_gcd(
     # dividing the excess by the time turns an impossible percentage into
     # a current that can be compared across the series: a leak is a
     # current, so the SAME leak shows up as a big excess at a small
-    # current and a small one at a large current. Measured over the
-    # user's five files: 9.65 % at 5 uA, 5.13 at 10, 2.06 at 20 and
-    # 0.98 at 40, which is 0.48, 0.51, 0.41 and 0.39 uA of leak across a
-    # factor of eight in current.
-    if partner is not None and partner.charge_c > 0 and partner.duration_s > 0:
-        excess = chosen.charge_c - partner.charge_c
-        result.leakage_a = excess / partner.duration_s
+    # current and a small one at a large current. The user's four
+    # symmetric files run 9.65, 5.13, 2.06 and 0.98 % at 5, 10, 20 and
+    # 40 uA, a factor of eight in current, and come back as one current.
+    #
+    # The denominator is the WHOLE cycle, charge plus discharge, because
+    # a parasitic reaction runs the whole time and not only while the
+    # cell is being charged. The charge alone looks equivalent on a
+    # symmetric cycle -- the two halves are the same length -- and is
+    # decisively wrong on an asymmetric one, which is how the choice got
+    # settled. Over the five files:
+    #
+    #   denominator      5 uA   10 uA   20 uA   40 uA   60/-20 uA
+    #   charge only     0.534   0.448   0.390   0.383     0.915
+    #   whole cycle     0.254   0.219   0.193   0.190     0.226
+    #
+    # With the charge alone the asymmetric file sits 2.4x above the rest;
+    # with the whole cycle it lands in the middle of them. All five
+    # agreeing is the check.
+    if partner is not None and partner.charge_c > 0:
+        period = partner.duration_s + chosen.duration_s
+        if period > 0:
+            excess = chosen.charge_c - partner.charge_c
+            result.leakage_a = excess / period
 
     if chosen.capacitance_f is not None:
         per_area = electrode.specific(chosen.capacitance_f, "area")

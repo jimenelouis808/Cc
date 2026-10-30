@@ -3094,24 +3094,86 @@ def test_the_coulombic_partner_is_the_charge_BEFORE_the_discharge():
     assert result.coulombic_efficiency == pytest.approx(1.0, abs=0.05)
 
 
+def _leaky_curve(current=20e-6, leak=0.2e-6, capacitance=45e-6,
+                 window=(-0.6, 0.4), cycles=3):
+    """A cell with a known parasitic current.
+
+    The leak supplies extra charge on the way out, so the discharge runs
+    longer than the charge by exactly ``leak·T/I`` with ``T`` the whole
+    cycle. That is the identity the analysis has to invert.
+    """
+    from ramancarbon.echem.curve import ChargeDischarge, Electrode
+
+    low, high = window
+    span = high - low
+    t_charge = capacitance * span / current
+    # Solve t_dis from  I*t_dis - I*t_ch = leak*(t_ch + t_dis).
+    t_discharge = (current + leak) * t_charge / (current - leak)
+    times, potentials, currents = [], [], []
+    clock = 0.0
+    for _ in range(cycles):
+        for signed, duration in ((current, t_charge),
+                                 (-current, t_discharge)):
+            t = np.linspace(0.0, duration, 200)
+            ramp = (t / duration) * span
+            potentials.append(low + ramp if signed > 0 else high - ramp)
+            times.append(clock + t)
+            currents.append(np.full(t.size, signed))
+            clock += duration
+    return ChargeDischarge(
+        time=np.concatenate(times), potential=np.concatenate(potentials),
+        current=np.concatenate(currents),
+        electrode=Electrode(mass_mg=0.02, area_cm2=0.0707,
+                            electrolyte="KOH_3M"),
+        name="con fuga")
+
+
 def test_the_coulombic_excess_is_reported_as_a_leakage_CURRENT():
-    """A leak is a current, so the same leak is a big percentage at a
-    small current and a small one at a large current. Over the user's
-    four symmetric files the excess runs 9.65, 5.13, 2.06 and 0.98 % at
-    5, 10, 20 and 40 µA — which is 0.48, 0.51, 0.41 and 0.39 µA of leak.
-    A percentage cannot be compared across currents; a current can."""
+    """A leak is a current, so the SAME leak is a big percentage at a
+    small current and a small one at a large current. A percentage cannot
+    be compared across currents; a current can.
+
+    Closed case: a planted 0.2 µA leak has to come back as 0.2 µA at
+    every applied current.
+    """
     from ramancarbon.echem.gcd import analyse_gcd
 
-    leak = 0.5e-6
-    for current in (5e-6, 40e-6):
-        # Lengthen the discharge so the extra charge is exactly leak*t.
-        curve = _gcd_curve(charge_a=current, discharge_a=-current,
-                           resistance=0.0)
-        result = analyse_gcd(curve)
-        assert result.leakage_a is not None
-        # An ideal symmetric cycle leaks nothing.
-        assert abs(result.leakage_a) < 0.05 * current
-    assert leak > 0        # the number above is documentation, not a fit
+    for current in (5e-6, 20e-6, 40e-6):
+        result = analyse_gcd(_leaky_curve(current=current, leak=0.2e-6))
+        assert result.leakage_a == pytest.approx(0.2e-6, rel=0.02), current
+        # And the percentage it shows up as does depend on the current,
+        # which is the whole reason the current is the thing reported.
+        assert result.coulombic_efficiency > 1.0
+    slow = analyse_gcd(_leaky_curve(current=5e-6, leak=0.2e-6))
+    fast = analyse_gcd(_leaky_curve(current=40e-6, leak=0.2e-6))
+    assert (slow.coulombic_efficiency - 1.0) > 4 * (
+        fast.coulombic_efficiency - 1.0)
+
+    # An ideal symmetric cycle leaks nothing.
+    assert abs(analyse_gcd(_gcd_curve(resistance=0.0)).leakage_a) < 1e-9
+
+
+def test_the_leak_is_divided_by_the_WHOLE_cycle_not_by_the_charge():
+    """A parasitic reaction runs the whole time, not only while the cell
+    is being charged. On a symmetric cycle the two denominators look
+    equivalent because the halves are the same length; on an asymmetric
+    one they are not, and that is what settled it.
+
+    Over the user's five files the charge-only denominator gives 0.534,
+    0.448, 0.390, 0.383 and **0.915** µA, with the asymmetric file 2.4×
+    above the rest; the whole cycle gives 0.254, 0.219, 0.193, 0.190 and
+    0.226, which lands it in the middle. All five agreeing is the check.
+    """
+    from ramancarbon.echem.gcd import analyse_gcd
+
+    result = analyse_gcd(_leaky_curve(current=20e-6, leak=0.2e-6))
+    branch = result.discharges[-1]
+    charge = [b for b in result.branches if b.kind == "carga"][-1]
+    excess = branch.charge_c - charge.charge_c
+    whole = excess / (charge.duration_s + branch.duration_s)
+    charge_only = excess / charge.duration_s
+    assert result.leakage_a == pytest.approx(whole, rel=1e-9)
+    assert result.leakage_a != pytest.approx(charge_only, rel=0.1)
 
 
 def test_cycling_from_one_file_gives_a_point_per_cycle():
@@ -3192,3 +3254,122 @@ def test_the_power_ceiling_comes_from_the_resistance_not_the_discharge():
     assert result.max_power_w_per_kg is not None
     assert result.power_w_per_kg is not None
     assert result.max_power_w_per_kg > result.power_w_per_kg
+
+
+def _gcd_session(currents=(5e-6, 10e-6, 20e-6, 40e-6), asymmetric=None):
+    """A session holding a rate series, optionally with a broken one."""
+    from ramancarbon.echem.curve import Electrode
+    from ramancarbon.gui.echem_state import EchemSession
+
+    session = EchemSession(name="serie")
+    session.electrode = Electrode(mass_mg=0.02, area_cm2=0.0707,
+                                  electrolyte="KOH_3M")
+    for current in currents:
+        curve = _gcd_curve(charge_a=current, discharge_a=-current,
+                           cycles=3, points_per_branch=60)
+        curve.electrode = session.electrode
+        session.gcd_series.append(curve)
+    if asymmetric is not None:
+        charge, discharge = asymmetric
+        curve = _gcd_curve(charge_a=charge, discharge_a=-discharge,
+                           cycles=3, points_per_branch=60)
+        curve.electrode = session.electrode
+        session.gcd_series.append(curve)
+    session._forget_gcd()
+    from ramancarbon.gui.echem_state import _discharge_current
+    session.gcd_series.sort(key=_discharge_current)
+    return session
+
+
+def test_a_rate_point_is_labelled_by_its_DISCHARGE_current():
+    """The median over the whole record returns a current neither branch
+    used. The user's fifth file charges at 60 µA and discharges at 20
+    with the same number of points in each, so the median is **40** —
+    exactly between the two, and wrong for a rate point, which is at the
+    discharge current because that is where a device is measured."""
+    from ramancarbon.gui.echem_state import (_discharge_current,
+                                             _typical_current)
+
+    curve = _gcd_curve(charge_a=60e-6, discharge_a=-20e-6,
+                       points_per_branch=60)
+    assert _discharge_current(curve) == pytest.approx(20e-6, rel=0.01)
+    assert _typical_current(curve) != pytest.approx(20e-6, rel=0.1)
+
+
+def test_an_asymmetric_curve_stays_out_of_the_rate_curve_by_default():
+    """It has no single current density, so it cannot be a point on a
+    plot whose x axis is current. The default keeps it in the tables and
+    out of the curves."""
+    session = _gcd_session(asymmetric=(60e-6, 20e-6))
+    assert session.gcd_asymmetry == "aparte"
+    assert len(session.gcd_asymmetric()) == 1
+    # Five curves loaded, four on the rate plot and four on the Ragone.
+    assert len(session.gcd_curves()) == 5
+    assert len(session.capacitance_vs_current()) == 4
+    assert len(session.ragone_points()) == 4
+    # But it IS in the table, flagged.
+    rows = session.gcd_rows()
+    assert len(rows) == 5
+    assert sum(1 for row in rows if row[-1] == "sí") == 1
+    assert any("/−" in row[0] for row in rows)
+
+
+def test_the_asymmetry_policy_is_a_choice_and_all_four_work():
+    session = _gcd_session(asymmetric=(60e-6, 20e-6))
+    from ramancarbon.echem.gcd import ASYMMETRY_POLICIES
+
+    counts = {}
+    for policy in ASYMMETRY_POLICIES:
+        session.gcd_asymmetry = policy
+        counts[policy] = len(session.capacitance_vs_current())
+    assert counts["aparte"] == 4
+    assert counts["excluir"] == 4
+    assert counts["incluir"] == 5
+    assert counts["interpolar"] == 5
+
+
+def test_interpolating_reports_the_measured_value_NEXT_TO_the_estimate():
+    """Quietly substituting an interpolated number for a measured one
+    hides whether the broken schedule changed the answer. On the user's
+    file it changed it by 13 %."""
+    session = _gcd_session(asymmetric=(60e-6, 20e-6))
+    rows = session.gcd_interpolated()
+    assert len(rows) == 1
+    label, milliamps, measured, interpolated = rows[0]
+    assert "/−" in label
+    assert milliamps == pytest.approx(0.02, rel=0.01)
+    assert measured > 0 and interpolated > 0
+
+
+def test_interpolating_refuses_outside_the_measured_currents():
+    """``np.interp`` clips, and clipping in silence is inventing."""
+    session = _gcd_session(currents=(10e-6, 20e-6),
+                           asymmetric=(200e-6, 100e-6))
+    assert session.gcd_interpolated() == []
+
+
+def test_the_session_reaches_the_cycling_of_each_file():
+    """A GCPL holds its cycles inside one file, and the section had no
+    way to see them."""
+    session = _gcd_session(currents=(10e-6,))
+    rows = session.gcd_cycling_rows()
+    assert len(rows) == 1
+    assert rows[0][1] == "3"          # three cycles in the synthetic curve
+    cyclings = session.gcd_cyclings()
+    assert cyclings[0] is not None
+    assert len(cyclings[0].cycles) == 3
+
+
+def test_the_gcd_caches_forget_when_the_series_changes():
+    """A cache keyed on the identity of the curves has to be dropped when
+    the list changes: answering for the wrong curve is worse than no
+    cache."""
+    session = _gcd_session(currents=(10e-6, 20e-6))
+    assert len(session.gcd_analyses()) == 2
+    session.gcd_series.append(_gcd_curve(charge_a=40e-6, discharge_a=-40e-6,
+                                         points_per_branch=60))
+    session.gcd_series[-1].electrode = session.electrode
+    session._forget_gcd()
+    assert len(session.gcd_analyses()) == 3
+    session.clear("gcd_series")
+    assert session.gcd_analyses() == []

@@ -94,6 +94,28 @@ CURRENT_UNITS: tuple[tuple[str, float], ...] = (
 )
 
 
+def _discharge_current(curve: ChargeDischarge) -> float:
+    """The magnitude of the DISCHARGE current, in amps.
+
+    This and not :func:`_typical_current` is what labels a rate point:
+    what a device delivers is measured on its discharge, so a point on a
+    capacitance-against-current curve or on a Ragone plot is at the
+    discharge current whatever the charge did.
+
+    It matters as soon as the two differ. The user's fifth file charges
+    at 60 µA and discharges at 20, with the same number of points in each
+    branch, so the median over the whole record is **40 µA** — a current
+    that neither branch ever used, sitting exactly between the two.
+    """
+    import numpy as np
+
+    current = np.asarray(curve.current, dtype=float)
+    negative = current[current < 0.0]
+    if negative.size == 0:
+        return _typical_current(curve)
+    return float(np.median(np.abs(negative)))
+
+
 def _typical_current(curve: ChargeDischarge) -> float:
     """The magnitude of the current a charge-discharge curve was run at.
 
@@ -197,6 +219,24 @@ class EchemSession:
     answer of a Mott-Schottky depends on the frequency, and the only way
     to find out how much is to do it at several."""
     ms_temperature_k: float = 298.15
+    gcd_asymmetry: str = "aparte"
+    """What to do with a charge-discharge pair whose two currents differ.
+
+    One of :data:`~ramancarbon.echem.gcd.ASYMMETRY_POLICIES`. The user's
+    fifth file charges at 60 µA and discharges at 20, which was a mistake
+    in the schedule, and such a point has no single current density: it
+    cannot go on a capacitance-against-current curve or a Ragone plot
+    without saying which of the two currents is meant.
+
+    ``"aparte"`` is the default: analyse it, report it, and keep it out of
+    the curves that have one current per point. ``"excluir"`` drops it,
+    ``"interpolar"`` places it at its DISCHARGE current and also reports
+    what the symmetric points interpolate to there, and ``"incluir"``
+    takes it at face value."""
+    gcd_cycle: int = -1
+    """Which charge/discharge pair of the reported curve to analyse, −1
+    for the last. A GCPL holds a thousand cycles and the first ones are
+    formation, not performance."""
     lsv: Optional[Voltammogram] = None
     reaction: str = "OER"
     circuit: str = AUTO_CIRCUIT
@@ -284,6 +324,10 @@ class EchemSession:
     messages: list[tuple[str, str]] = field(default_factory=list)
     _eis_analyses: Optional[list] = field(default=None, repr=False)
     _ms_result: Optional[object] = field(default=None, repr=False)
+    _gcd_analyses: Optional[list] = field(default=None, repr=False)
+    _gcd_key: tuple = field(default=(), repr=False)
+    _cyclings: Optional[list] = field(default=None, repr=False)
+    _cycling_key: tuple = field(default=(), repr=False)
     """Cache for :meth:`eis_analyses`. Every impedance panel needs the
     same per-spectrum analysis and each one costs a circuit comparison,
     so a six-panel figure would run it six times per spectrum."""
@@ -320,6 +364,7 @@ class EchemSession:
         self, path: str | Path, current: Optional[float] = None
     ) -> bool:
         try:
+            self._forget_gcd()
             self.gcd = read_gcd(path, electrode=self.electrode, current=current,
                                 potential_scale=self.potential_scale,
                                 current_scale=self.current_scale)
@@ -340,7 +385,11 @@ class EchemSession:
             self.log("error", f"{Path(path).name}: {exc}")
             return False
         self.gcd_series.append(curve)
-        self.gcd_series.sort(key=_typical_current)
+        # By the DISCHARGE current: that is the current a rate point is
+        # at, and the median over the whole record returns 40 uA for a
+        # curve that charges at 60 and discharges at 20.
+        self.gcd_series.sort(key=_discharge_current)
+        self._forget_gcd()
         return True
 
     def load_eis(self, path: str | Path) -> bool:
@@ -663,6 +712,7 @@ class EchemSession:
             self.rate_series = []
         elif kind == "gcd_series":
             self.gcd_series = []
+            self._forget_gcd()
         elif kind == "ms_series":
             self.ms_series = []
             self._ms_result = None
@@ -676,7 +726,21 @@ class EchemSession:
             self._eis_analyses = None
         elif kind in ("cv", "gcd", "eis", "lsv"):
             setattr(self, kind, None)
+            if kind == "gcd":
+                self._forget_gcd()
         self.result = None
+
+    def _forget_gcd(self) -> None:
+        """Drop the cached galvanostatic analyses.
+
+        They are keyed by the identity of the curves, so a list that
+        changes length or contents has to clear them: a cache that
+        answers for the wrong curve is worse than no cache.
+        """
+        self._gcd_analyses = None
+        self._gcd_key = ()
+        self._cyclings = None
+        self._cycling_key = ()
 
     @property
     def loaded(self) -> dict[str, str]:
@@ -905,6 +969,151 @@ class EchemSession:
             ))
         return rows
 
+    # -- galvanostatic: the series, cycle by cycle ---------------------
+
+    def gcd_curves(self) -> list[ChargeDischarge]:
+        """Every charge-discharge measurement loaded, ordered by its
+        DISCHARGE current, which is the current a rate point is at."""
+        curves = list(self.gcd_series)
+        # Identity, not equality: these dataclasses hold arrays.
+        if self.gcd is not None and not any(c is self.gcd for c in curves):
+            curves.insert(0, self.gcd)
+        return sorted(curves, key=_discharge_current)
+
+    def gcd_analyses(self) -> list:
+        """One :class:`GCDResult` per curve, cached.
+
+        Cached because every panel of a galvanostatic figure asks for the
+        same analyses and each walks a thousand half cycles: a six-panel
+        figure would run them six times per curve.
+        """
+        from ..echem.gcd import analyse_gcd
+
+        curves = self.gcd_curves()
+        key = tuple(id(c) for c in curves) + (self.gcd_cycle,)
+        if self._gcd_key == key and self._gcd_analyses:
+            return self._gcd_analyses
+        out = []
+        for curve in curves:
+            try:
+                out.append(analyse_gcd(curve, use_cycle=self.gcd_cycle))
+            except (ValueError, ZeroDivisionError, IndexError) as exc:
+                self.log("warning", f"GCD {curve.name}: {exc}")
+                out.append(None)
+        self._gcd_analyses = out
+        self._gcd_key = key
+        return out
+
+    def gcd_cyclings(self) -> list:
+        """One :class:`CyclingResult` per curve, cycle by cycle, cached.
+
+        This is the analysis the section did not have. A GCPL keeps its
+        cycles INSIDE one file — the user's five hold 1001 each — so the
+        list-of-files route collapsed each file to a single number and
+        the whole of the cycling was unreachable from the window.
+        """
+        from ..echem.gcd import cycling_from_curve
+
+        curves = self.gcd_curves()
+        key = tuple(id(c) for c in curves)
+        if self._cycling_key == key and self._cyclings:
+            return self._cyclings
+        out = []
+        for curve in curves:
+            try:
+                out.append(cycling_from_curve(curve))
+            except (ValueError, ZeroDivisionError) as exc:
+                self.log("warning", f"ciclado {curve.name}: {exc}")
+                out.append(None)
+        self._cyclings = out
+        self._cycling_key = key
+        return out
+
+    def gcd_label(self, curve: ChargeDischarge) -> str:
+        """A legend entry naming the current, and both when they differ."""
+        from ..echem.gcd import ASYMMETRY_TOLERANCE
+
+        discharge = _discharge_current(curve)
+        import numpy as np
+        positive = np.asarray(curve.current, dtype=float)
+        positive = positive[positive > 0.0]
+        if positive.size:
+            charge = float(np.median(positive))
+            if abs(charge - discharge) / max(charge, discharge) > ASYMMETRY_TOLERANCE:
+                return (f"{1e6 * charge:.3g}/−{1e6 * discharge:.3g} µA")
+        return f"{1e6 * discharge:.3g} µA"
+
+    def gcd_asymmetric(self) -> list[ChargeDischarge]:
+        """The curves whose charge and discharge currents differ."""
+        return [curve for curve, analysis
+                in zip(self.gcd_curves(), self.gcd_analyses())
+                if analysis is not None and analysis.asymmetric]
+
+    def _keep_for_rate(self, curve, analysis) -> bool:
+        """Whether a curve belongs on a one-current-per-point plot.
+
+        The policy lives here and not in each plot, so the rate curve,
+        the Ragone plot and the tables cannot disagree about which points
+        they are built from.
+        """
+        if analysis is None:
+            return False
+        if not analysis.asymmetric:
+            return True
+        return self.gcd_asymmetry in ("incluir", "interpolar")
+
+    def gcd_rows(self) -> list[tuple[str, ...]]:
+        """One row per charge-discharge curve: the whole table at once."""
+        rows: list[tuple[str, ...]] = []
+        for curve, analysis in zip(self.gcd_curves(), self.gcd_analyses()):
+            if analysis is None:
+                rows.append((curve.name, "—", "—", "—", "—", "—", "—", "—"))
+                continue
+            branch = analysis.discharges[-1] if analysis.discharges else None
+            def number(value, scale=1.0, digits=4):
+                return f"{scale * value:.{digits}g}" if value else "—"
+            rows.append((
+                self.gcd_label(curve),
+                number(branch.capacitance_f if branch else None, 1e6),
+                number(analysis.specific_f_per_g),
+                number(analysis.specific_uf_per_cm2),
+                number(analysis.resistance_ohm),
+                (f"{100 * analysis.coulombic_efficiency:.2f}"
+                 if analysis.coulombic_efficiency else "—"),
+                number(analysis.leakage_a, 1e6, 3),
+                "sí" if analysis.asymmetric else "",
+            ))
+        return rows
+
+    def gcd_cycling_rows(self) -> list[tuple[str, ...]]:
+        """One row per curve: what a thousand cycles did to it."""
+        rows: list[tuple[str, ...]] = []
+        for curve, cycling in zip(self.gcd_curves(), self.gcd_cyclings()):
+            if cycling is None or not cycling.cycles:
+                continue
+            shape = ""
+            try:
+                from ..echem.kinetics import fade_model
+                shape = fade_model(cycling.cycles, cycling.capacity_c).model
+            except (ValueError, ZeroDivisionError):
+                shape = "—"
+            first = cycling.capacitance_f[0] if cycling.capacitance_f else None
+            last = cycling.capacitance_f[-1] if cycling.capacitance_f else None
+            import numpy as np
+            rows.append((
+                self.gcd_label(curve),
+                str(len(cycling.cycles)),
+                f"{1e6 * first:.4g}" if first else "—",
+                f"{1e6 * last:.4g}" if last else "—",
+                (f"{100 * last / first:.1f}" if first and last else "—"),
+                (f"{100 * cycling.fade_per_cycle:.4f}"
+                 if cycling.fade_per_cycle is not None else "—"),
+                (f"{100 * float(np.mean(cycling.efficiency)):.2f}"
+                 if cycling.efficiency else "—"),
+                shape,
+            ))
+        return rows
+
     def gcd_capacitance_rows(self) -> list[tuple[str, str, str]]:
         """``(convenio, mF, F/g)`` for the chosen discharge.
 
@@ -942,28 +1151,69 @@ class EchemSession:
         points are each over-reported by a different amount is worse than
         no plot.
         """
-        from ..echem.gcd import analyse_gcd
-
-        curves = list(self.gcd_series)
-        if self.gcd is not None and not any(c is self.gcd for c in curves):
-            curves.insert(0, self.gcd)
         points: list[tuple[float, float, str]] = []
-        for curve in curves:
-            try:
-                analysis = analyse_gcd(curve)
-            except (ValueError, ZeroDivisionError):
+        for curve, analysis in zip(self.gcd_curves(), self.gcd_analyses()):
+            if not self._keep_for_rate(curve, analysis):
                 continue
             if not analysis.discharges:
                 continue
-            branch = analysis.discharges[-1]
             value = (analysis.specific_by_method.get("energía (2E/ΔV²)")
                      or analysis.specific_by_method.get("ΔV (I·Δt/ΔV)"))
             if not value:
                 continue
-            points.append((1e3 * _typical_current(curve), float(value),
-                           f"{1e3 * abs(branch.current_a):g} mA"))
+            # At the DISCHARGE current. What a device delivers is measured
+            # on its discharge, so that is where a rate point sits.
+            points.append((1e3 * _discharge_current(curve), float(value),
+                           self.gcd_label(curve)))
         points.sort(key=lambda item: item[0])
         return points
+
+    def gcd_interpolated(self) -> list[tuple[str, float, float, float]]:
+        """``(label, mA, measured F/g, interpolated F/g)`` for the
+        asymmetric curves.
+
+        What the symmetric points of the series interpolate to at the
+        same discharge current, next to what the asymmetric one actually
+        gave. That comparison is the only thing that says whether the
+        broken schedule changed the answer, and it is why
+        ``"interpolar"`` reports both rather than quietly substituting
+        one for the other.
+        """
+        import numpy as np
+
+        clean = [(current, value) for curve, analysis
+                 in zip(self.gcd_curves(), self.gcd_analyses())
+                 if analysis is not None and not analysis.asymmetric
+                 for current, value in [(
+                     1e3 * _discharge_current(curve),
+                     analysis.specific_by_method.get("energía (2E/ΔV²)")
+                     or analysis.specific_by_method.get("ΔV (I·Δt/ΔV)"))]
+                 if value]
+        if len(clean) < 2:
+            return []
+        clean.sort()
+        grid = np.asarray([c for c, _ in clean], dtype=float)
+        values = np.asarray([v for _, v in clean], dtype=float)
+        out: list[tuple[str, float, float, float]] = []
+        for curve, analysis in zip(self.gcd_curves(), self.gcd_analyses()):
+            if analysis is None or not analysis.asymmetric:
+                continue
+            measured = (analysis.specific_by_method.get("energía (2E/ΔV²)")
+                        or analysis.specific_by_method.get("ΔV (I·Δt/ΔV)"))
+            if not measured:
+                continue
+            current = 1e3 * _discharge_current(curve)
+            if not (grid[0] <= current <= grid[-1]):
+                # np.interp CLIPS, and clipping in silence is inventing.
+                self.log("warning",
+                         f"{self.gcd_label(curve)}: {current:g} mA queda "
+                         f"fuera del intervalo medido por los puntos "
+                         f"simétricos ({grid[0]:g} a {grid[-1]:g} mA), así "
+                         "que no se puede interpolar ahí")
+                continue
+            out.append((self.gcd_label(curve), current, float(measured),
+                        float(np.interp(current, grid, values))))
+        return out
 
     def ragone_points(self) -> list[tuple[float, float, str]]:
         """``(Wh/kg, W/kg, label)``, one per charge-discharge curve.
@@ -973,27 +1223,15 @@ class EchemSession:
         whose power axis is three decades out still looks like a Ragone
         plot.
         """
-        from ..echem.gcd import analyse_gcd
-
         points: list[tuple[float, float, str]] = []
-        curves = list(self.gcd_series)
-        # Identity, not equality: these dataclasses hold arrays, so `in`
-        # calls the generated __eq__, which compares arrays element-wise
-        # and raises on the truth value of the result.
-        if self.gcd is not None and not any(c is self.gcd for c in curves):
-            curves.insert(0, self.gcd)
-        for curve in curves:
-            try:
-                analysis = analyse_gcd(curve)
-            except (ValueError, ZeroDivisionError) as exc:
-                self.log("warning", f"Ragone: {exc}")
+        for curve, analysis in zip(self.gcd_curves(), self.gcd_analyses()):
+            if not self._keep_for_rate(curve, analysis):
                 continue
             energy = analysis.energy_wh_per_kg
             power = analysis.power_w_per_kg
             if not energy or not power:
                 continue
-            points.append((energy, power,
-                           f"{1e3 * _typical_current(curve):g} mA"))
+            points.append((energy, power, self.gcd_label(curve)))
         return points
 
     def capacitance_rows(self) -> list[tuple[str, str, str, str]]:
