@@ -58,3 +58,45 @@ def block(model: TBModel, table: dict, el_a: str, orbs_a: tuple[str, ...], el_b:
                 out[i, j] = ca * cb * v("pps", el_a, el_b) + (delta - ca * cb) * v(
                     "ppp", el_a, el_b)
     return out
+
+
+def blocks(model: TBModel, table: dict, el_a: str, orbs_a: tuple[str, ...], el_b: str,
+           orbs_b: tuple[str, ...], vectors: np.ndarray) -> np.ndarray:
+    """:func:`block` for many bonds of one element pair at once: ``(n_bonds, n_a, n_b)``.
+
+    The same formulas with the direction cosines and the distance laws as arrays; the band
+    forces call it instead of looping :func:`block` bond by bond (tested to agree).
+    """
+    vectors = np.asarray(vectors, dtype=float)
+    d = np.linalg.norm(vectors, axis=1)
+    c = vectors / d[:, None]
+    values: dict[tuple, np.ndarray] = {}
+
+    def v(bond: str, first: str, second: str) -> np.ndarray:
+        key = (bond, first, second)
+        if key not in values:
+            law = model.law(table, first, second, bond)
+            values[key] = np.asarray(law(d), dtype=float) if law is not None else np.zeros_like(d)
+        return values[key]
+
+    out = np.zeros((len(d), len(orbs_a), len(orbs_b)))
+    for i, oa in enumerate(orbs_a):
+        la = angular(oa)
+        for j, ob in enumerate(orbs_b):
+            lb = angular(ob)
+            if oa == "pi" or ob == "pi":
+                if oa != ob:
+                    raise ValueError("Un orbital 'pi' solo se acopla con otro 'pi' (modelo π).")
+                out[:, i, j] = v("ppp", el_a, el_b)
+            elif la == "s" and lb == "s":
+                out[:, i, j] = v("sss", el_a, el_b)
+            elif la == "s" and lb == "p":
+                out[:, i, j] = c[:, _AXIS[ob]] * v("sps", el_a, el_b)
+            elif la == "p" and lb == "s":
+                out[:, i, j] = -c[:, _AXIS[oa]] * v("sps", el_b, el_a)
+            else:
+                ca, cb = c[:, _AXIS[oa]], c[:, _AXIS[ob]]
+                delta = 1.0 if oa == ob else 0.0
+                out[:, i, j] = ca * cb * v("pps", el_a, el_b) + (delta - ca * cb) * v(
+                    "ppp", el_a, el_b)
+    return out

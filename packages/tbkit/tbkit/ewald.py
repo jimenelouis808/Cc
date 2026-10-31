@@ -46,6 +46,32 @@ def _lattice_vectors(cell: np.ndarray, radius: float) -> np.ndarray:
     return n @ cell
 
 
+def _reciprocal_vectors(reciprocal: np.ndarray, g_cut: float) -> tuple[np.ndarray, np.ndarray]:
+    """The nonzero reciprocal vectors with |G| <= ``g_cut`` and their |G|²."""
+    g = _lattice_vectors(reciprocal, g_cut)
+    g2 = np.einsum("gi,gi->g", g, g)
+    keep = (g2 > 1e-20) & (g2 <= g_cut ** 2)
+    return g[keep], g2[keep]
+
+
+def _add_reciprocal(positions: np.ndarray, g: np.ndarray, factor: np.ndarray,
+                    phi: np.ndarray, grad: np.ndarray, chunk: int = 4096) -> None:
+    """Add Σ_G f_G cos(G·(R_B − R_A)) to ``phi`` and Σ_G f_G sin(G·(R_B − R_A)) G to ``grad``.
+
+    cos(G·R_B − G·R_A) = c_A c_B + s_A s_B and sin(G·R_B − G·R_A) = s_B c_A − c_B s_A, so
+    every G-sum is a product of (atoms × G) matrices: the same sum as one G at a time over
+    all pairs, done as matrix products (on a 480-atom tube in a box, 100 s -> a few s).
+    """
+    for start in range(0, len(g), chunk):
+        gc, fc = g[start: start + chunk], factor[start: start + chunk]
+        phase = positions @ gc.T                                   # (atoms, G)
+        c, s = np.cos(phase), np.sin(phase)
+        phi += (c * fc) @ c.T + (s * fc) @ s.T
+        for axis in range(3):
+            fx = fc * gc[:, axis]
+            grad[..., axis] += (c * fx) @ s.T - (s * fx) @ c.T
+
+
 def ewald_coulomb(positions: np.ndarray, cell: np.ndarray, tolerance: float = 1e-10
                   ) -> tuple[np.ndarray, np.ndarray]:
     """Φ_AB = Σ'_L 1/|R_B + L - R_A| (1/Å; the prime drops L = 0 when A = B), with a
@@ -79,14 +105,9 @@ def ewald_coulomb(positions: np.ndarray, cell: np.ndarray, tolerance: float = 1e
                     + 2 * alpha / np.sqrt(np.pi) * np.exp(-(alpha * rm) ** 2) / rm)
         grad[mask] -= (dphi_dr / rm)[:, None] * r_vec[mask]      # ∂/∂R_A = -∂/∂r
     # Reciprocal space.
-    for g in _lattice_vectors(reciprocal, g_cut):
-        g2 = float(g @ g)
-        if g2 < 1e-20 or g2 > g_cut ** 2:
-            continue
-        factor = 4 * np.pi / volume * np.exp(-g2 / (4 * alpha ** 2)) / g2
-        phase = d @ g
-        phi += factor * np.cos(phase)
-        grad += factor * np.sin(phase)[..., None] * g           # -∂cos/∂r · (-1)
+    g, g2 = _reciprocal_vectors(reciprocal, g_cut)
+    _add_reciprocal(positions, g, 4 * np.pi / volume * np.exp(-g2 / (4 * alpha ** 2)) / g2,
+                    phi, grad)
     # Self term and background.
     phi -= np.pi / (alpha ** 2 * volume)
     phi[np.diag_indices(n)] -= 2 * alpha / np.sqrt(np.pi)
@@ -124,14 +145,8 @@ def ewald_inverse_cube(positions: np.ndarray, cell: np.ndarray, tolerance: float
         dnum = -4 * alpha ** 3 * rm ** 2 / np.sqrt(np.pi) * np.exp(-x ** 2)
         dphi_dr = dnum / rm ** 3 - 3 * numerator / rm ** 4
         grad[mask] -= (dphi_dr / rm)[:, None] * r_vec[mask]
-    for g in _lattice_vectors(reciprocal, g_cut):
-        g2 = float(g @ g)
-        if g2 < 1e-20 or g2 > g_cut ** 2:
-            continue
-        factor = 2 * np.pi / volume * exp1(g2 / (4 * alpha ** 2))
-        phase = d @ g
-        phi += factor * np.cos(phase)
-        grad += factor * np.sin(phase)[..., None] * g
+    g, g2 = _reciprocal_vectors(reciprocal, g_cut)
+    _add_reciprocal(positions, g, 2 * np.pi / volume * exp1(g2 / (4 * alpha ** 2)), phi, grad)
     phi[np.diag_indices(n)] -= 4 * alpha ** 3 / (3 * np.sqrt(np.pi))
     return phi, grad
 

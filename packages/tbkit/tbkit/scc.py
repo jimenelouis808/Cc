@@ -63,6 +63,12 @@ def _u_atom(system: System, U=None) -> np.ndarray:
     return u_atom
 
 
+#: The last periodic γ and its gradient, keyed by positions, cell and U: the SCC loop and
+#: the forces of the same geometry both need it, and it is the costliest piece of a periodic
+#: SCC step. One entry, so it never grows.
+_GAMMA_CACHE: dict = {}
+
+
 def _periodic_gamma(system: System, U=None):
     from .ewald import periodic_gamma
 
@@ -71,7 +77,13 @@ def _periodic_gamma(system: System, U=None):
         raise ValueError("SCC periódico necesita una celda con volumen (las direcciones no "
                          "periódicas, con vacío suficiente).")
     positions = system.atoms.get_positions()[system.basis.atoms]
-    return periodic_gamma(positions, cell, _u_atom(system, U))
+    u_atom = _u_atom(system, U)
+    key = (positions.tobytes(), cell.tobytes(), u_atom.tobytes())
+    if _GAMMA_CACHE.get("key") != key:
+        _GAMMA_CACHE.clear()
+        _GAMMA_CACHE.update(key=key, value=periodic_gamma(positions, cell, u_atom))
+    gamma, grad = _GAMMA_CACHE["value"]
+    return gamma.copy(), grad
 
 
 def gamma_matrix(system: System, U=None) -> np.ndarray:
@@ -220,15 +232,15 @@ def energy_and_forces(result: SCCResult, need_forces: bool = True):
     energy = result.energy - ts + e_rep
     if not need_forces:
         return energy, None, {"scc": result.energy, "entropy_TS": ts, "repulsive": e_rep}
-    weighted = []
-    for k in range(len(solution.kpts)):
-        c = solution.vectors[0, k]
-        f = solution.occupations[0, k]
-        rho = (c * f) @ c.conj().T
-        w = (c * (f * solution.energies[0, k])) @ c.conj().T
-        if not system.model.orthogonal:
-            w = w - 0.5 * rho * (result.shift[:, None] + result.shift[None, :])
-        weighted.append(w)
+    weighted = None                      # W enters only through ∂S: none in an orthogonal model
+    if not system.model.orthogonal:
+        weighted = []
+        for k in range(len(solution.kpts)):
+            c = solution.vectors[0, k]
+            f = solution.occupations[0, k]
+            rho = (c * f) @ c.conj().T
+            w = (c * (f * solution.energies[0, k])) @ c.conj().T
+            weighted.append(w - 0.5 * rho * (result.shift[:, None] + result.shift[None, :]))
     forces = band_forces(solution, energy_weighted=weighted) + f_rep
     # Second-order term: γ depends on the distances between model atoms.
     atoms = system.basis.atoms
