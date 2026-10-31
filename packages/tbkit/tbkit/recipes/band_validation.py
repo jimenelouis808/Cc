@@ -46,7 +46,7 @@ SYSTEMS = ("graphene", "8,0", "10,0", "9,0", "5,5", "6,6")
 MODELS = ("pi", "sp3", "tang", "chn")
 GRAPHENE_A = 2.467
 VACUUM = 7.0
-NK_TUBE, NK_GRAPHENE = 21, 90
+NK_TUBE, NK_GRAPHENE = 31, 90   # 31: the path contains kz = 1/3, where armchair tubes cross
 KMESH_TUBE, KMESH_GRAPHENE = 12, 24
 PW_CUTOFF = 400.0
 KT = 0.05
