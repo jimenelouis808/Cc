@@ -12,7 +12,7 @@ in the π model, a small curvature gap in DFT), armchair (5,5) and (6,6) (metall
 method sees the same geometry: graphene at a = 2.467 Å (PBE), tubes rolled from it with
 ASE's builder (C-C 1.424 Å), nothing relaxed, so the bands differ only by the Hamiltonian.
 
-* Reference: GPAW PBE with plane waves (``pw``, 500 eV), Fermi-Dirac 0.05 eV, SCF on a
+* Reference: GPAW PBE with plane waves (``pw``, 400 eV), Fermi-Dirac 0.05 eV, SCF on a
   k mesh, bands non-self-consistent on the path. ``dzp`` runs the LCAO dzp basis used
   everywhere else in this package, with the same settings: it measures that basis's own
   error against plane waves, which is the error bar of every other GPAW comparison here.
@@ -46,9 +46,9 @@ SYSTEMS = ("graphene", "8,0", "10,0", "9,0", "5,5", "6,6")
 MODELS = ("pi", "sp3", "tang", "chn")
 GRAPHENE_A = 2.467
 VACUUM = 7.0
-NK_TUBE, NK_GRAPHENE = 41, 90
-KMESH_TUBE, KMESH_GRAPHENE = 24, 24
-PW_CUTOFF = 500.0
+NK_TUBE, NK_GRAPHENE = 21, 90
+KMESH_TUBE, KMESH_GRAPHENE = 12, 24
+PW_CUTOFF = 400.0
 KT = 0.05
 BANDS_EACH_SIDE = 4
 WINDOW = (-12.0, 8.0)                     # eV around the Fermi level kept in the files
@@ -108,7 +108,10 @@ def run_gpaw(name: str, code: str = "pw") -> Path:
     settings = ({"mode": PW(PW_CUTOFF)} if code == "pw"
                 else {"mode": "lcao", "basis": "dzp", "h": 0.2})
     out.parent.mkdir(parents=True, exist_ok=True)
-    atoms.calc = GPAW(**settings, xc="PBE", kpts=scf_mesh(name), symmetry="off",
+    # time reversal only: no point group (an unrelaxed tube's symmetry is not needed and the
+    # k points of the band path stay as given)
+    atoms.calc = GPAW(**settings, xc="PBE", kpts=scf_mesh(name),
+                      symmetry={"point_group": False, "time_reversal": True},
                       occupations=FermiDirac(KT), txt=str(out.with_suffix(".txt")))
     atoms.get_potential_energy()
     fermi = float(atoms.calc.get_fermi_level())
