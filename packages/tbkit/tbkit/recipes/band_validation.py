@@ -177,6 +177,38 @@ def _distinct(values, tol=0.005):
     return out
 
 
+def band_crossing(eps: np.ndarray, n: int, x: np.ndarray, tolerance: float = 0.3):
+    """A crossing of the highest valence and lowest conduction band between two k points.
+
+    Bands are sorted by energy at each k, so where two bands cross between path points the
+    sorted bands show a narrow V and a gap that is only the sampling: the curvature of a
+    real tube moves the Fermi point of an armchair tube off kz = 1/3. Between points i and
+    i+1, the bands continue as the swapped lines (E_{n-1}(i) -> E_n(i+1)) and
+    (E_n(i) -> E_{n-1}(i+1)); it is a crossing when those two lines have opposite slopes and
+    each matches, within ``tolerance``, the slope of its band on the neighbouring interval.
+    Returns the two slopes (eV per unit of ``x``) or None."""
+    for i in range(len(x) - 1):
+        h = x[i + 1] - x[i]
+        if h <= 0:
+            continue
+        s1 = (eps[i + 1, n] - eps[i, n - 1]) / h
+        s2 = (eps[i + 1, n - 1] - eps[i, n]) / h
+        if s1 * s2 >= 0:
+            continue
+        checks = []
+        if i > 0 and x[i] > x[i - 1]:
+            hl = x[i] - x[i - 1]
+            checks += [((eps[i, n - 1] - eps[i - 1, n - 1]) / hl, s1),
+                       ((eps[i, n] - eps[i - 1, n]) / hl, s2)]
+        if i + 2 < len(x) and x[i + 2] > x[i + 1]:
+            hr = x[i + 2] - x[i + 1]
+            checks += [((eps[i + 2, n] - eps[i + 1, n]) / hr, s1),
+                       ((eps[i + 2, n - 1] - eps[i + 1, n - 1]) / hr, s2)]
+        if checks and all(abs(a - b) <= tolerance * abs(b) for a, b in checks):
+            return abs(s1), abs(s2)
+    return None
+
+
 def metrics(name: str, data: dict) -> dict:
     eps = np.asarray(data["bands"], dtype=float)
     n = int(data["n_occ"])
@@ -184,14 +216,24 @@ def metrics(name: str, data: dict) -> dict:
     eps = eps - zero
     vbm, cbm = eps[:, n - 1].max(), eps[:, n].min()
     gap = float(max(0.0, cbm - vbm))
+    x = _xaxis(name, data)
+    crossing = band_crossing(eps, n, x) if gap > 0 else None
+    if crossing is not None:
+        gap = 0.0
     k_gap = float(np.asarray(data["kpts"])[int(np.argmax(eps[:, n - 1]))][2]) if name != "graphene" else None
     valence = _distinct(sorted((eps[:, j].max() for j in range(max(0, n - 12), n)), reverse=True))
     conduction = _distinct(sorted(eps[:, j].min() for j in range(n, min(eps.shape[1], n + 12))))
-    transitions = [float(c - v) for c, v in zip(conduction, valence)][:3]
+    transitions = [float(c - v) for c, v in zip(conduction, valence)]
+    if gap == 0.0:
+        # A metal: the crossing bands give 0 (and, sampled, a spurious small value); M11 is
+        # the first pair of extrema further out.
+        transitions = [0.0] + [t for t in transitions if t > 0.25]
+    transitions = transitions[:3] if name != "graphene" else []
     out = {"gap_eV": gap, "gap_at_kz": k_gap, "transitions_eV": transitions}
     # Fermi velocity: steepest slope of the two bands at the Fermi level where they meet it
-    if gap < 0.02:
-        x = _xaxis(name, data)
+    if crossing is not None:
+        out["fermi_velocity_eV_A"] = float(max(crossing))
+    elif gap < 0.02:
         slopes = []
         for j in (n - 1, n):
             e = eps[:, j]
