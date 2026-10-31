@@ -219,17 +219,22 @@ def _pi_bottom(eps: np.ndarray, n: int) -> float:
 
 
 def compare(ref: dict, other: dict) -> dict:
-    """Band by band from the HOMO down and from the LUMO up, as many as both have."""
-    diffs, near = [], []
+    """Band by band from the HOMO down and from the LUMO up, as many as both have; the RMS
+    only where the reference band lies within 1 or 2 eV of the reference level. Further out
+    the empty bands of a plane-wave calculation include σ* and nearly-free-electron states
+    that no minimal basis has, so a whole-band RMS measures the basis, not the model."""
+    diffs, refs = [], []
     for side in ("valence_rel", "conduction_rel"):
         a, b = np.asarray(ref[side]), np.asarray(other[side])
         m = min(a.shape[1], b.shape[1])
         diffs.append((b[:, :m] - a[:, :m]).ravel())
-        near.append((np.abs(a[:, :m]) <= 1.0).ravel())
-    d, near = np.concatenate(diffs), np.concatenate(near)
-    out = {"band_rms_eV": float(np.sqrt((d ** 2).mean())),
-           "band_rms_1eV": float(np.sqrt((d[near] ** 2).mean())) if near.any() else None,
-           "gap_error_eV": other["gap_eV"] - ref["gap_eV"]}
+        refs.append(a[:, :m].ravel())
+    d, e = np.concatenate(diffs), np.abs(np.concatenate(refs))
+    out = {}
+    for window in (1.0, 2.0):
+        inside = e <= window
+        out[f"band_rms_{window:.0f}eV"] = float(np.sqrt((d[inside] ** 2).mean())) if inside.any() else None
+    out["gap_error_eV"] = other["gap_eV"] - ref["gap_eV"]
     if "fermi_velocity_eV_A" in ref and "fermi_velocity_eV_A" in other:
         out["fermi_velocity_ratio"] = other["fermi_velocity_eV_A"] / ref["fermi_velocity_eV_A"]
     out["transition_errors_eV"] = [o - r for o, r in zip(other["transitions_eV"],
@@ -259,7 +264,7 @@ def report() -> dict:
                           "(graphene a = 2.467 Å, tubes rolled from it, unrelaxed), every method "
                           "relative to its own Fermi level or mid-gap. Reference: GPAW PBE plane "
                           "waves. RMS over the 4 highest valence and 4 lowest conduction bands "
-                          "(index from the HOMO), all k of the path.",
+                          "(index from the HOMO), at the k points where the reference band is within 1 or 2 eV.",
            "systems": systems}
     _write(OUT, out)
     return out
@@ -294,7 +299,7 @@ def main(argv=None) -> None:
             for model in MODELS:
                 print(run_tb(name, model), flush=True)
     else:
-        print(json.dumps({n: {c: {k: v for k, v in r.items() if k in ("gap_eV", "band_rms_eV",
+        print(json.dumps({n: {c: {k: v for k, v in r.items() if k in ("gap_eV", "band_rms_1eV",
                                                                           "gap_error_eV")}
                               for c, r in e["methods"].items()}
                           for n, e in report()["systems"].items()}, indent=1))
