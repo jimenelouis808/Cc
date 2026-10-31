@@ -30,25 +30,27 @@ de 900 °C, eso lo cierra en una tarde; el SEM solo lo sugiere.
 
 ## Los modelos
 
-| modelo | átomos | fórmula | núcleo | capas C |
-|---|---|---|---|---|
-| `placa_H_nucleo_desnudo` | 772 | Fe388Se384 | Fe388Se384 | 0 |
-| `placa_H_C` | 2398 | C1626Fe388Se384 | Fe388Se384 | 1 |
-| `placa_H_NSe` | 2398 | C1488Fe388N97Se425 | Fe388Se384 | 1 |
-| `placa_H_NSeO` | 2413 | C1489H6Fe388N98O5Se427 | Fe388Se384 | 1 |
-| `barra_T_nucleo_desnudo` | 192 | Fe96Se96 | Fe96Se96 | 0 |
-| `barra_T_C` | 996 | C804Fe96Se96 | Fe96Se96 | 1 |
-| `barra_T_NSe` | 996 | C736Fe96N48Se116 | Fe96Se96 | 1 |
-| `barra_T_NSeO` | 1006 | C737H4Fe96N49O4Se116 | Fe96Se96 | 1 |
-| `particula_Fe3C_nucleo_desnudo` | 1100 | C292Fe808 | C292Fe808 | 0 |
-| `particula_Fe3C_C` | 4306 | C3498Fe808 | C292Fe808 | 2 |
-| `particula_Fe3C_NSe` | 4306 | C3226Fe808N192Se80 | C292Fe808 | 2 |
-| `particula_Fe3C_NSeO` | 4336 | C3228H12Fe808N194O10Se84 | C292Fe808 | 2 |
-| `nanotubo_C` | 2240 | C2240 | — | 0 |
-| `nanotubo_NSe` | 2240 | C2050N134Se56 | — | 0 |
-| `nanotubo_NSeO` | 2265 | C2052H10N136O9Se58 | — | 0 |
-| `escena_punta` | 6546 | C5738Fe808 | Fe3C | 0 |
-| `escena_anemona` | 32730 | C28690Fe4040 | Fe3C | 0 |
+| modelo | átomos | fórmula |
+|---|---|---|
+| `placa_H_nucleo_desnudo` | 1626 | Fe813Se813 |
+| `placa_H_C` | 4976 | C3350Fe813Se813 |
+| `placa_H_NSe` | 4976 | C3065Fe813N201Se897 |
+| `placa_H_NSeO` | 5014 | C3068H15Fe813N204O13Se901 |
+| `placa_H_delgada_desnuda` | 1086 | Fe546Se540 |
+| `barra_T_nucleo_desnudo` | 192 | Fe96Se96 |
+| `barra_T_C` | 982 | C790Fe96Se96 |
+| `barra_T_NSe` | 982 | C723Fe96N47Se116 |
+| `barra_T_NSeO` | 992 | C724H4Fe96N48O4Se116 |
+| `particula_Fe3C_nucleo_desnudo` | 1100 | C292Fe808 |
+| `particula_Fe3C_C` | 4250 | C3442Fe808 |
+| `particula_Fe3C_NSe` | 4250 | C3174Fe808N189Se79 |
+| `particula_Fe3C_NSeO` | 4280 | C3176H12Fe808N191O10Se83 |
+| `particula_Fe3C_interior` | 126 | C36Fe90 |
+| `nanotubo_C` | 2160 | C2160 |
+| `nanotubo_NSe` | 2160 | C1976N130Se54 |
+| `nanotubo_NSeO` | 2185 | C1978H10N132O9Se56 |
+| `brazo_particula_dentro` | 2286 | C2196Fe90 |
+| `escena_anemona` | **22 860** | C21960Fe900 |
 
 ### Las tres versiones
 
@@ -130,34 +132,111 @@ dejar que la pared se desplome.
 composiciones concretas ordena como Fe₇Se₈ o Fe₃Se₄ con superestructura).
 Estos modelos lo cortan 1:1, que es la celda ideal.
 
-## Las dos escenas NO son estructuras
+## La anémona, y lo que cambió en la segunda versión
 
-`escena_punta` y `escena_anemona` salen de `scene.compose`, que coloca
-estructuras terminadas una al lado de otra y **no las enlaza**. El propio
-programa lo dice en cada una:
+| | v1 | v2 |
+|---|---|---|
+| átomos | 32 730 | **22 860** |
+| brazos | 5 | **10** |
+| brazos | rectos | **curvados** |
+| partícula | fuera, pegada a la punta | **dentro de la punta** |
+| radio del tubo | 7.85 Å | **11.76 Å** |
+
+**La partícula dentro obligó a ensanchar el tubo, no a encoger la
+partícula**, y esa dirección es un resultado: por debajo de unos 126
+átomos una partícula de cementita deja de ser cementita — 70 átomos
+vuelve `broken` y 36 también — así que la pieza pequeña es la que no se
+puede encoger. Un tubo de 7.85 Å de radio deja 4.5 Å de hueco y la
+partícula más pequeña que sigue siendo cementita llega a 6.57 Å del eje.
+Con `freq = 6` el tubo tiene 11.76 Å de radio y 8.41 Å de hueco, y la
+holgura medida es **1.84 Å**. El ensamblaje la mide y se niega si no
+cabe, en vez de meterla igual.
+
+**Los brazos se curvan con `shape="arc"`, no con `bend_angle`.** El
+segundo impone el arco después de relajar y lo paga en tensión
+(1.372–1.529 Å de enlace a 0.6 rad); el primero pasa por el presupuesto
+de deformación de `centerline.py`, que recorta la amplitud hasta que la
+pared aguanta, y vuelve en **1.393–1.447 Å**. La curva es gratis si se
+pide por el camino correcto.
+
+**Y arrancan a cuatro radios del centro.** A uno, cuatro pares de brazos
+quedaban a 2.4–3.1 Å, que en un render se lee como fundidos. Van
+repartidos sobre la esfera por el método de Fibonacci y no en un plano:
+una anémona no es una flor.
+
+Sigue siendo una **ilustración**, y el programa lo dice en cada una:
 
 > esto es una ILUSTRACIÓN, no una estructura: los objetos se colocaron a
 > mano, no hay ninguna interfase relajada entre dos de ellos, y nada en
 > los huecos es física. No lo cuantifiques, no lo relajes y no se lo des
 > a un código DFT.
 
-Sirven para la figura y para enseñar la morfología. En `escena_punta` el
-tubo y la partícula quedan a 3.38 Å, que es el contacto grafítico, y hay
-que dejarlo explícito porque `compose` coloca y no separa. En la anémona
-los tubos arrancan a un radio de tubo del origen: cinco convergiendo en
-un punto quedaban a 0.05 Å, que son cinco tubos ocupando el mismo sitio.
+## La placa: 8.9 Å, y el techo lo pone la coraza
+
+| grosor | ancho | relación | qué pasa |
+|---|---|---|---|
+| 3.0 Å (media celda) | 45 Å | 15:1 | **no es FeSe**: termina Se–Se, sale Fe110Se200 |
+| 6.0 Å (una celda) | 58 Å | 9.8:1 | el núcleo está bien; **la coraza se rompe** |
+| **8.9 Å** | **58 Å** | **6.5:1** | **lo que se entrega** |
+| 11.9 Å (dos celdas) | 58 Å | 4.9:1 | la primera versión |
+
+**Lo que impide bajar de 8.9 Å no es el cristal, es el recubrimiento.**
+A 6.0 Å la coraza grafítica vuelve rota con todos los huecos y rigideces
+probados —enlaces hasta 1.73–1.76 Å contra el techo sp² de 1.55— y el
+mensaje del propio constructor dice por qué: *«la superficie tiene
+detalles más finos que un anillo de carbono»*. Un canto de 6 Å es más
+fino que la pared que tendría que envolverlo. En una muestra real ese
+borde es donde el recubrimiento está defectuoso o simplemente abierto.
+
+Por eso va también `placa_H_delgada_desnuda`: 6.0 Å de grosor y 58 Å de
+ancho, **9.8:1**, sin cubrir. Es la más delgada que el cristal permite y
+la que hay que comparar con la micrografía.
+
+## El render de portada
+
+`modelos_SEM/renderizar.sh` produce las imágenes de `render/`. Tres
+banderas hacen el aspecto que pediste:
+
+```
+--model auto            metales en relleno de van der Waals,
+                        carbono en bolas y palos
+--spacefill-element Se  ...y el calcógeno también
+--atom-scale 0.55 --bond-scale 0.5    bolas y palos finos
+```
+
+**`--spacefill-element` es nuevo en el paquete y hacía falta.** El modelo
+`auto` pregunta por el elemento y su tabla son **metales**, porque un
+metal no tiene enlaces direccionales que dibujar. Un núcleo de FeSe
+también es un sólido y el selenio no es un metal, así que salía abierto y
+con palos hacia el hierro. Ahora se puede declarar por render.
+
+**No se declara en las versiones dopadas**, y esa asimetría es el punto:
+ahí el selenio está en dos sitios a la vez —en el núcleo de FeSe y
+sustituido dentro del carbono— y **ninguna regla por elemento puede
+distinguirlos**. En `placa_H_NSeO` se queda abierto, que es lo correcto
+para el selenio del grafito y lo incorrecto para el del núcleo. Si hace
+falta la portada con el núcleo sólido *y* el dopaje visible, el camino es
+colorear por estructura y no por elemento.
+
+El grafito sale más liso que en la primera versión porque la coraza se
+malla y se relaja mucho más fino: `grid_resolution` 80 → **128**,
+`remesh_iterations` 25 → **60**, `relax_iterations` 3000 → **8000**, y
+`roughness` explícitamente a 0. Cuesta tiempo, no fidelidad.
+
+**Blender no está en este contenedor como aplicación**; el render corre
+con la rueda `bpy` en un entorno aparte, porque `bpy` fija numpy 1.26 y
+el workspace necesita numpy 2 —el `pyproject.toml` raíz declara ese
+conflicto justo por esto—. El script lo explica arriba del todo y vale
+igual con un Blender instalado.
 
 ## Lo que falta y es fácil de añadir cuando decidas
 
-- **La partícula DENTRO de la punta.** Está a una línea: en
-  `compositions()`, mover la partícula a `-half_tube` y encoger su radio
-  por debajo del radio del tubo (7.85 Å aquí). Lo dejé fuera porque es la
-  otra lectura de tu micrografía y no sé cuál es.
-- **Tubos de pared múltiple**, con `builders/assemblies.py`, si lo que se
-  ve recubierto de grafito es el tubo entero y no solo la punta.
-- **Tubo curvado o en bambú**, con `shape=` y los preajustes de
-  `centerline.py`, si la anémona tiene los brazos doblados.
+- **Tubos de pared múltiple**, con `builders/assemblies.py`, si lo
+  recubierto de grafito es el tubo entero y no sólo la punta.
 - **N piridínico y pirrólico de verdad.** El dopaje sustitucional de aquí
   da el N **grafítico**; los otros dos motivos son N en el borde de una
   vacante y hay que pasar por `defects/`. Si tu XPS dice que el
   piridínico domina, este modelo todavía no lo representa.
+- **La partícula fuera de la punta**, que era la v1 y sigue siendo la
+  otra lectura de tu micrografía: cambiar el signo del desplazamiento en
+  `arm_with_particle_inside`.

@@ -4717,3 +4717,27 @@ xvfb-run -a pytest nanocarbon_lab/tests/test_gui.py -q
 - Do **not** export structures that fail validation without explicit `force=True`.
 - Do **not** introduce non-deterministic random state without a `seed` argument.
 - Do **not** add dependencies outside the ones declared in `pyproject.toml` without justification.
+
+## A chalcogenide core is a solid, and its chalcogen is not a metal
+
+`--model auto` draws space-filling spheres for the elements in
+`SPACEFILL_ELEMENTS` and ball-and-stick for everything else, and that
+table is **metals**, for the reason the constant records: a metal has no
+directional bonds to draw. An FeSe or an MoS2 core is a solid too, and
+its chalcogen is not a metal, so it came out open with sticks to the
+iron -- which is not what the particle is.
+
+* **`--spacefill-element Se` is a per-render declaration, not a table
+  entry, and the asymmetry is the whole point.** The same selenium can
+  be in two places at once: in the FeSe core, where it is solid, and
+  substituted INTO the carbon shell around it, where ball-and-stick is
+  right. **No per-element rule can tell those two populations apart**,
+  so a structure carrying both cannot be rendered correctly this way at
+  all, and one carrying only the first is free to say so. Adding Se to
+  the table would silently inflate every Se-doped sheet in the package.
+* It threads through `is_spacefill_element`, `model_radius` and
+  `bond_is_drawn` as an `extra` argument with an empty default, so every
+  existing call keeps its behaviour exactly; `atom_radii` and
+  `build_ball_and_stick` pass it on. The tests pin both halves: a
+  declared element grows and stops drawing sticks, and carbon beside it
+  does not move.

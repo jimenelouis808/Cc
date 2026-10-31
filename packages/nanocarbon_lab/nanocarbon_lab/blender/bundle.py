@@ -321,13 +321,17 @@ def colour_keys(bundle: dict, colour_by: str,
 
 
 def atom_radii(bundle: dict, colour_by: str, scale: float = 1.0,
-               model: str = "ballstick") -> list[float]:
+               model: str = "ballstick",
+               spacefill_extra: tuple[str, ...] = ()) -> list[float]:
     """One drawn radius per atom, in Angstrom.
 
     The **model** decides first: a space-filling atom is drawn at its van
     der Waals radius whatever the colour mode, because that is what a
     space-filling model *is*. ``auto`` asks per atom, so a gold core
-    comes out solid inside an open carbon shell.
+    comes out solid inside an open carbon shell, and
+    ``spacefill_extra`` adds elements to the set it asks about -- the
+    chalcogen of a chalcogenide core, which is solid and is not a
+    metal.
 
     Within ball-and-stick the colour mode still matters: element radii
     when colouring by element -- a hydrogen and a gold atom drawn the
@@ -338,7 +342,8 @@ def atom_radii(bundle: dict, colour_by: str, scale: float = 1.0,
     """
     symbols = bundle["symbols"]
     if model != "ballstick":
-        return [style_defs.model_radius(symbol, model, scale)
+        return [style_defs.model_radius(symbol, model, scale,
+                                        spacefill_extra)
                 for symbol in symbols]
     if colour_by == "element":
         return [style_defs.element_radius(symbol) * scale

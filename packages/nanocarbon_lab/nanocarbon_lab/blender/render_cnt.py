@@ -118,6 +118,18 @@ def _parse_args() -> argparse.Namespace:
              "this is left out.",
     )
     p.add_argument(
+        "--spacefill-element", dest="spacefill_extra", action="append",
+        default=[], metavar="SYMBOL",
+        help="Draw this element space-filling under --model auto, on "
+             "top of the metals that already are. Repeatable. A "
+             "chalcogenide core is a solid and its chalcogen is not a "
+             "metal, so FeSe or MoS2 needs --spacefill-element Se (or "
+             "S) to come out solid inside an open carbon shell. Do not "
+             "pass it when the same element is also substituted INTO "
+             "the carbon: a per-element rule cannot tell the two apart "
+             "and both would be drawn as spheres.",
+    )
+    p.add_argument(
         "--finish", default="style", choices=list(style_defs.FINISHES),
         help="Replace every material's character, keeping its colour: "
              "glass, glow, metal, brushed, wax... 'style' leaves the "
@@ -933,6 +945,7 @@ def main() -> int:
             finish=args.finish, bond_finish=args.bond_finish,
             bond_colour=args.bond_colour, model=model,
             detail=args.detail, depth_axis=depth_axis,
+            spacefill_extra=tuple(args.spacefill_extra),
         )
     if mode in ("surface", "both"):
         objects.append(mesh_builder.build_smooth_surface(

@@ -261,3 +261,60 @@ class TestRendersForReal:
         # And inside the frame: the point of the camera fix.
         assert not subject[0, :].any() and not subject[-1, :].any()
         assert not subject[:, 0].any() and not subject[:, -1].any()
+
+
+class TestSpacefillExtra:
+    """A chalcogenide core is a solid, and its chalcogen is not a metal.
+
+    ``--model auto`` asks the element, and the element table is metals,
+    because a metal has no directional bonds to draw. On an FeSe or a
+    Fe3C@C particle that leaves the selenium drawn open with sticks to
+    the iron, which is not what the particle is -- so the caller can
+    name further elements for one render.
+
+    It is a per-render declaration and not a table entry on purpose:
+    the same selenium may be substituted INTO the carbon shell, where
+    ball-and-stick is right, and no per-element rule can tell the two
+    populations apart.
+    """
+
+    def test_selenium_is_not_spacefill_by_default(self):
+        styles = _load("styles")
+        assert not styles.is_spacefill_element("Se")
+        assert styles.is_spacefill_element("Fe")
+
+    def test_declaring_it_makes_it_spacefill(self):
+        styles = _load("styles")
+        assert styles.is_spacefill_element("Se", ("Se",))
+        assert not styles.is_spacefill_element("C", ("Se",))
+
+    def test_the_radius_follows_the_declaration(self):
+        styles = _load("styles")
+        open_radius = styles.model_radius("Se", "auto")
+        solid = styles.model_radius("Se", "auto", spacefill_extra=("Se",))
+        assert solid > open_radius
+        assert solid == pytest.approx(
+            styles.VDW_RADII["Se"] * styles.SPACEFILL_SCALE)
+
+    def test_a_declared_element_stops_drawing_sticks(self):
+        styles = _load("styles")
+        # Inside the core, no stick: both ends are solid now.
+        assert not styles.bond_is_drawn("auto", "Fe", "Se", ("Se",))
+        # In the shell around it, still a stick.
+        assert styles.bond_is_drawn("auto", "C", "C", ("Se",))
+
+    def test_carbon_is_untouched_so_the_shell_stays_open(self):
+        styles = _load("styles")
+        assert styles.model_radius("C", "auto") == pytest.approx(
+            styles.model_radius("C", "auto", spacefill_extra=("Se",)))
+
+    def test_the_bundle_passes_it_through(self):
+        bundle_mod = _load("bundle")
+        bundle = {"symbols": ["Fe", "Se", "C"],
+                  "positions": [[0, 0, 0], [2, 0, 0], [5, 0, 0]]}
+        plain = bundle_mod.atom_radii(bundle, "element", 1.0, "auto")
+        declared = bundle_mod.atom_radii(bundle, "element", 1.0, "auto",
+                                         ("Se",))
+        assert declared[0] == pytest.approx(plain[0])   # Fe: already solid
+        assert declared[1] > plain[1]                   # Se: now solid
+        assert declared[2] == pytest.approx(plain[2])   # C: untouched

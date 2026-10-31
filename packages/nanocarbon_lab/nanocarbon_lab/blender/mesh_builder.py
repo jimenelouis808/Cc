@@ -66,6 +66,7 @@ def build_ball_and_stick(
     bond_colour: str = "auto",
     model: str = "ballstick",
     depth_axis=None,
+    spacefill_extra: tuple[str, ...] = (),
 ) -> list[bpy.types.Object]:
     """Merged sphere + cylinder meshes, coloured by ``colour_by``.
 
@@ -79,7 +80,8 @@ def build_ball_and_stick(
     specs = style_defs.materials_for(style, colour_by, keys, finish)
     materials = [material_from_spec(f"mat_{colour_by}_{key}", spec)
                  for key, spec in zip(keys, specs, strict=True)]
-    radii = atom_radii(bundle, colour_by, atom_scale, model)
+    radii = atom_radii(bundle, colour_by, atom_scale, model,
+                       spacefill_extra)
     symbols = bundle["symbols"]
     # Resolution follows the atom count unless the caller insists. An
     # icosphere at subdivision 2 -- the old fixed value -- is 80
@@ -129,7 +131,8 @@ def build_ball_and_stick(
             # raise: an index error here aborts a render that is minutes
             # in, and the structure is still worth seeing.
             continue
-        if not style_defs.bond_is_drawn(model, symbols[i], symbols[j]):
+        if not style_defs.bond_is_drawn(model, symbols[i], symbols[j],
+                                        spacefill_extra):
             # Under `auto`, a bond with a space-filling atom at either
             # end would start inside a sphere of its own radius and come
             # out the far side -- and between two metals it is an
@@ -157,7 +160,7 @@ def build_ball_and_stick(
         if index >= len(positions) or not draw_any:
             continue
         if not style_defs.bond_is_drawn(model, symbols[index],
-                                        symbols[index]):
+                                        symbols[index], spacefill_extra):
             continue
         start = Vector(positions[index])
         end = start + Vector(tuple(stub[1:4]))

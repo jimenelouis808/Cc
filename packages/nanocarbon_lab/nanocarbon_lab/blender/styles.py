@@ -42,6 +42,7 @@ from pathlib import Path
 # ``render_cnt`` put it there, and outside it nothing has.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 
 from effects import EffectSpec
@@ -587,17 +588,29 @@ def vdw_radius(symbol: str) -> float:
     return VDW_RADII.get(str(symbol), DEFAULT_VDW_RADIUS)
 
 
-def is_spacefill_element(symbol: str) -> bool:
-    """Would ``--model auto`` draw this element space-filling?"""
-    return str(symbol) in SPACEFILL_ELEMENTS
+def is_spacefill_element(symbol: str,
+                         extra: Iterable[str] = ()) -> bool:
+    """Would ``--model auto`` draw this element space-filling?
+
+    ``extra`` names further elements for this render only. The table is
+    metals, because a metal has no directional bonds to draw -- but a
+    CHALCOGENIDE core is a solid too, and its chalcogen is not a metal.
+    A per-element rule cannot know that a selenium is in an FeSe
+    particle rather than substituted into the carbon around it, so on a
+    structure carrying both the caller has to say, and on one carrying
+    only the first it is free to.
+    """
+    return str(symbol) in SPACEFILL_ELEMENTS or str(symbol) in set(extra)
 
 
-def model_radius(symbol: str, model: str, scale: float = 1.0) -> float:
+def model_radius(symbol: str, model: str, scale: float = 1.0,
+                 spacefill_extra: Iterable[str] = ()) -> float:
     """The drawn radius of one atom under a representation.
 
     ``auto`` is the interesting one and the reason this is per atom
     rather than per render: it asks the element, so a metal core comes
     out solid and the carbon shell around it stays open, in one picture.
+    ``spacefill_extra`` adds elements to that set for this render.
     """
     if model not in MODELS:
         raise ValueError(
@@ -605,7 +618,8 @@ def model_radius(symbol: str, model: str, scale: float = 1.0) -> float:
     if model in ("licorice", "wireframe", "surface"):
         return 0.0
     if model == "spacefill" or (model == "auto"
-                                and is_spacefill_element(symbol)):
+                                and is_spacefill_element(symbol,
+                                                         spacefill_extra)):
         return vdw_radius(symbol) * SPACEFILL_SCALE * scale
     return element_radius(symbol) * scale
 
@@ -615,7 +629,8 @@ def draws_bonds(model: str) -> bool:
     return model not in ("spacefill", "surface")
 
 
-def bond_is_drawn(model: str, symbol_a: str, symbol_b: str) -> bool:
+def bond_is_drawn(model: str, symbol_a: str, symbol_b: str,
+                  spacefill_extra: Iterable[str] = ()) -> bool:
     """Is the bond between these two atoms drawn?
 
     Under ``auto`` a bond with a space-filling atom at either end is
@@ -628,8 +643,8 @@ def bond_is_drawn(model: str, symbol_a: str, symbol_b: str) -> bool:
         return False
     if model != "auto":
         return True
-    return not (is_spacefill_element(symbol_a)
-                or is_spacefill_element(symbol_b))
+    return not (is_spacefill_element(symbol_a, spacefill_extra)
+                or is_spacefill_element(symbol_b, spacefill_extra))
 
 #: Whether a colour mode wants the bonds split in half, each half taking
 #: its own atom's colour.
