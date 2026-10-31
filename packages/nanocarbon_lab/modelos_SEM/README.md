@@ -37,10 +37,10 @@ de 900 °C, eso lo cierra en una tarde; el SEM solo lo sugiere.
 | `placa_H_NSe` | 4976 | C3065Fe813N201Se897 |
 | `placa_H_NSeO` | 5014 | C3068H15Fe813N204O13Se901 |
 | `placa_H_delgada_desnuda` | 1086 | Fe546Se540 |
-| `barra_T_nucleo_desnudo` | 192 | Fe96Se96 |
-| `barra_T_C` | 982 | C790Fe96Se96 |
-| `barra_T_NSe` | 982 | C723Fe96N47Se116 |
-| `barra_T_NSeO` | 992 | C724H4Fe96N48O4Se116 |
+| `barra_T_nucleo_desnudo` | 504 | Fe252Se252 |
+| `barra_T_C` | 2322 | C1818Fe252Se252 |
+| `barra_T_NSe` | 2322 | C1663Fe252N109Se298 |
+| `barra_T_NSeO` | 2337 | C1664H6Fe252N110O5Se300 |
 | `particula_Fe3C_nucleo_desnudo` | 1100 | C292Fe808 |
 | `particula_Fe3C_C` | 4250 | C3442Fe808 |
 | `particula_Fe3C_NSe` | 4250 | C3174Fe808N189Se79 |
@@ -191,6 +191,17 @@ borde es donde el recubrimiento está defectuoso o simplemente abierto.
 Por eso va también `placa_H_delgada_desnuda`: 6.0 Å de grosor y 58 Å de
 ancho, **9.8:1**, sin cubrir. Es la más delgada que el cristal permite y
 la que hay que comparar con la micrografía.
+
+## La barra: 85 Å y 9 : 1
+
+Era 30.6 × 9.4 Å, **3.2 : 1** — rechoncha, no una aguja. Ahora 85.0 ×
+9.4 Å, **9 : 1**, con 504 átomos de núcleo contra 192.
+
+**El grosor se queda en 9.4 Å por lo mismo que el de la placa**: por
+debajo de unos 9 Å la coraza grafítica no tiene qué envolver. Una
+`rod` (cápsula) y no un `cylinder`: el canto vivo de un cilindro deja al
+sobre nada por donde pasar y el recubrimiento lo rechaza, que es
+además lo que hace un canto real — se reconstruye.
 
 ## El render de portada
 

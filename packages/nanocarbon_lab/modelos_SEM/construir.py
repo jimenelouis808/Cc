@@ -472,8 +472,13 @@ def main() -> None:
         "veredicto_nucleo": f"{verdict}: {why}", "veredicto_coraza": "—",
     }))
 
+    # 85 x 9.4 A, 9 : 1 -- a needle rather than the first version's
+    # stubby 3.2 : 1. The thickness stays at 9.4 A for the same reason
+    # the plate's does: below about 9 A the graphitic shell has nothing
+    # to wrap. A capsule and not a cylinder, because a cylinder's sharp
+    # rim leaves the envelope nowhere to go and the coating refuses it.
     coated_particle("barra_T", CIF / "FeSe_tetragonal.cif", "rod",
-                    {"radius": 6.0, "half_length": 13.0},
+                    {"radius": 6.0, "half_length": 40.0},
                     shells=1, gap=3.45, rows=rows)
 
     coated_particle("particula_Fe3C", CIF / "Fe3C_cementita.cif",
