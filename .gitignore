@@ -26,3 +26,10 @@ figuras_demo/
 # Result bundles are handed out as zips, not versioned
 packages/tbkit/resultados/
 *_resultados.zip
+
+# Blender scenes built from the models, for adjusting by hand. They are
+# derived: `bash packages/nanocarbon_lab/modelos_SEM/escenas_blend.sh`
+# rebuilds any of them from the .xyz and its sidecar, which ARE tracked.
+# One is 19 MB and the five together are over 200, which is not what a
+# repository is for.
+packages/nanocarbon_lab/modelos_SEM/blend/
