@@ -749,8 +749,6 @@ def decorate(arm: Atoms, bead: Atoms, count: int, seed: int) -> Atoms:
             pick = int(draw[int(np.argmax(far))])
         seats.append(pick)
 
-    bead_reach = 0.5 * float(max(np.ptp(bead.positions[:, k])
-                                 for k in range(3)))
     local = np.asarray(bead.positions, dtype=float)
     local = local - local.mean(axis=0)
     tree = cKDTree(positions[wall])
@@ -766,9 +764,16 @@ def decorate(arm: Atoms, bead: Atoms, count: int, seed: int) -> Atoms:
         outward = positions[index] - segment.mean(axis=0)
         if float(np.dot(normal, outward)) < 0.0:
             normal = -normal
+        # How far out to push it: enough that the bead's LOWEST atom
+        # along this normal is at a graphitic contact, not enough that
+        # the bead's centre is. Half the bead's longest extent was the
+        # first version and it leaves a bead whose nearest atom is a
+        # corner floating up to 3 Å off the wall -- which is exactly
+        # what the first render showed, with the beads near the
+        # silhouette reading as detached.
         placed = bead.copy()
-        placed.positions = (local + positions[index]
-                            + normal * (bead_reach + GRAPHITIC_GAP))
+        placed.positions = (local + positions[index] + normal
+                            * (GRAPHITIC_GAP - float((local @ normal).min())))
         out += placed
     out.info = dict(arm.info)
     out.info["solid_indices"] = (list(arm.info.get("solid_indices", []))
