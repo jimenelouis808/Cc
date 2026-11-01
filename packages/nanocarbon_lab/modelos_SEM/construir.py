@@ -764,16 +764,9 @@ def decorate(arm: Atoms, bead: Atoms, count: int, seed: int) -> Atoms:
         outward = positions[index] - segment.mean(axis=0)
         if float(np.dot(normal, outward)) < 0.0:
             normal = -normal
-        # How far out to push it: enough that the bead's LOWEST atom
-        # along this normal is at a graphitic contact, not enough that
-        # the bead's centre is. Half the bead's longest extent was the
-        # first version and it leaves a bead whose nearest atom is a
-        # corner floating up to 3 Å off the wall -- which is exactly
-        # what the first render showed, with the beads near the
-        # silhouette reading as detached.
         placed = bead.copy()
-        placed.positions = (local + positions[index] + normal
-                            * (GRAPHITIC_GAP - float((local @ normal).min())))
+        placed.positions = local + positions[index] + normal * _seating(
+            local, positions[index], normal, tree)
         out += placed
     out.info = dict(arm.info)
     out.info["solid_indices"] = (list(arm.info.get("solid_indices", []))
@@ -783,6 +776,40 @@ def decorate(arm: Atoms, bead: Atoms, count: int, seed: int) -> Atoms:
           f"centros {_closest_seat(positions[np.asarray(seats)]):.1f} Å, "
           f"la más hundida a {tree.query(beads)[0].min():.2f} Å de la pared")
     return out
+
+
+def _seating(local: np.ndarray, seat: np.ndarray, normal: np.ndarray,
+             wall: cKDTree, ceiling: float = 12.0) -> float:
+    """How far along the normal a bead has to go to rest on the wall.
+
+    The smallest push for which NO atom of the bead comes closer to the
+    wall than :data:`GRAPHITIC_GAP`, found by bisection against the
+    wall's own tree. Bisection is valid because the distance from the
+    bead to the wall rises monotonically once the bead is outside.
+
+    Two cheaper rules were tried first and both leave beads floating,
+    which the render showed before any number did:
+
+    * **Half the bead's longest extent, plus the gap.** A bead whose
+      nearest-to-wall atom is a corner ends up to 3 Å too far out.
+    * **The lowest atom ALONG THE NORMAL, plus the gap.** Better, and
+      still wrong by the sideways part: that atom is at ``gap`` along
+      the normal, so its real distance is ``hypot(gap, sideways)`` --
+      measured, up to 5.65 Å against a 3.4 Å target.
+
+    Measuring against the wall rather than against the seat atom also
+    takes the curvature in: on the inside of the bend the wall comes up
+    to meet the bead, and a push computed from one atom does not know.
+    """
+    low, high = 0.0, ceiling
+    for _ in range(40):
+        middle = 0.5 * (low + high)
+        here = local + seat + normal * middle
+        if float(wall.query(here)[0].min()) < GRAPHITIC_GAP:
+            low = middle
+        else:
+            high = middle
+    return high
 
 
 def _closest_seat(seats: np.ndarray) -> float:

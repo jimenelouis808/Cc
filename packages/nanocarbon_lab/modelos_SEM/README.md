@@ -426,7 +426,12 @@ BPY=... RES="700 875" SAMPLES=24 bash modelos_SEM/pruebas_estilo.sh
 ```
 
 **El coste está en el número de átomos, casi no en las muestras ni en
-la resolución.** La malla se construye una icoesfera y un cilindro a la
+la resolución.** Medido en este contenedor, los siete presetes sobre el
+brazo de 3565 átomos a 700×875 y 24 muestras tardaron **entre 10 y 11
+minutos cada uno**, con una dispersión de un minuto entre el más barato
+y el más caro. La escena de 10 353 átomos **no cabe en la media hora**
+que el ejecutor en segundo plano permite por defecto y hay que lanzarla
+con el tope ampliado. La malla se construye una icoesfera y un cilindro a la
 vez desde Python, así que una escena de 10 353 átomos tarda lo mismo
 pida lo que pida, y una de 55 000 es horas. Por eso las pruebas de
 estilo van sobre `brazo_decorado` —3565 átomos— que lleva exactamente
@@ -457,6 +462,51 @@ ella tiene que conservar.
 
 El estilo entra en el catálogo como uno más, así que llega solo a la
 ventana, al CLI y a `render_cnt --style core_shell_cover`.
+
+### Lo que el barrido contestó
+
+Siete presetes sobre el mismo brazo, la misma cámara y las mismas
+banderas: lo único que cambia es el estilo.
+
+| preset | fondo | qué pasa |
+|---|---|---|
+| `core_shell_cover` | casi negro | el rim separa cada silueta; el glare enciende sólo el metal |
+| `electron_micrograph` | casi negro | el más parecido al SEM: la coraza se lee como tejido |
+| `nature_nano` | negro, sin suelo | limpio, una luz dura, nada compite con el sujeto |
+| `clusters_on_sheet` | azul con suelo | el reflejo del suelo añade una segunda copia del sujeto |
+| `advanced_materials` | azul medio | **el peor**: coraza y fondo con el mismo valor, el borde se pierde |
+| `science_cover` | pálido, alto clave | sobre claro el carbono gris desaparece y quedan las partículas solas |
+| `acs_nano_vivid` | magenta | el color del fondo se come el del metal |
+
+La conclusión no es de gusto: **esta muestra necesita fondo oscuro**,
+porque lo que hay que ver es una coraza gris oscuro, y sobre un fondo
+claro o de valor medio esa coraza es justo lo que se pierde. Entre los
+oscuros gana el que más borde ponga en cada silueta, que es para lo que
+está escrito `core_shell_cover`.
+
+### Y el render enseñó un defecto que ningún número había dicho
+
+En el primer render las partículas de la decoración salieron
+**flotando**. El empuje era media extensión máxima de la partícula más
+el contacto grafítico, y el programa reportaba un mínimo de 3.37 Å que
+era el de la mejor asentada y no decía nada de las demás. Medido
+después por partícula: mediana 3.47 Å y **máximo 5.65**.
+
+Dos reglas más baratas se probaron y las dos dejan partículas en el
+aire:
+
+- **El átomo más bajo a lo largo de la normal, más el hueco.** Mejor, y
+  todavía mal por la parte lateral: ese átomo queda a `hueco` medido a
+  lo largo de la normal, así que su distancia real es
+  `hypot(hueco, lateral)`.
+- **Contra el átomo de asiento y no contra la pared.** En el interior
+  del codo la pared sube a buscar a la partícula, y un empuje calculado
+  desde un solo átomo no se entera.
+
+Lo que se entrega resuelve el empuje por **bisección contra el árbol de
+la pared**: el menor empuje con el que ningún átomo de la partícula
+baja del contacto grafítico. Medido: mediana **3.35 Å**, que es el
+contacto exacto, con el máximo en 4.37.
 
 ## El render de portada
 
