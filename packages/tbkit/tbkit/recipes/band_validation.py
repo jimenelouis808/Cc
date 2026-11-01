@@ -55,10 +55,13 @@ WINDOW = (-12.0, 8.0)                     # eV around the Fermi level kept in th
 
 
 def geometry(name: str) -> Atoms:
-    if name == "graphene":
+    """``graphene``, ``graphene@A`` (lattice constant A Å: strained, for the fit of
+    distance laws in ``recipes/band_fit``) or a tube ``n,m``."""
+    if name.startswith("graphene"):
         from ase.build import graphene
 
-        atoms = graphene(a=GRAPHENE_A, vacuum=VACUUM)
+        a = float(name.split("@")[1]) if "@" in name else GRAPHENE_A
+        atoms = graphene(a=a, vacuum=VACUUM)
         atoms.pbc = (True, True, False)
         return atoms
     from ase.build import nanotube
@@ -72,7 +75,7 @@ def geometry(name: str) -> Atoms:
 
 def kpath(name: str, atoms: Atoms):
     """Fractional k points, the x axis of the plot (1/Å) and its labels."""
-    if name == "graphene":
+    if name.startswith("graphene"):
         bp = atoms.cell.bandpath("GMKG", npoints=NK_GRAPHENE, pbc=atoms.pbc)
         x, sx, labels = bp.get_linear_kpoint_axis()
         return bp.kpts, x, list(zip(sx.tolist(), labels))
@@ -83,7 +86,8 @@ def kpath(name: str, atoms: Atoms):
 
 
 def scf_mesh(name: str) -> tuple[int, int, int]:
-    return (KMESH_GRAPHENE, KMESH_GRAPHENE, 1) if name == "graphene" else (1, 1, KMESH_TUBE)
+    return (KMESH_GRAPHENE, KMESH_GRAPHENE, 1) if name.startswith("graphene") \
+        else (1, 1, KMESH_TUBE)
 
 
 def _write(path: Path, data) -> None:
@@ -94,7 +98,7 @@ def _write(path: Path, data) -> None:
 
 
 def _slug(name: str) -> str:
-    return name.replace(",", "_")
+    return name.replace(",", "_").replace("@", "_a")
 
 
 # ---------------------------------------------------------------- GPAW
@@ -141,7 +145,7 @@ def run_tb(name: str, model_name: str) -> Path:
     atoms = geometry(name)
     model = load_model(model_name)
     system = System.build(atoms, model)
-    k0, w0 = mesh(system, KMESH_GRAPHENE if name == "graphene" else KMESH_TUBE)
+    k0, w0 = mesh(system, KMESH_GRAPHENE if name.startswith("graphene") else KMESH_TUBE)
     k, _, _ = kpath(name, atoms)
     if getattr(model, "scc", False):
         from ..scc import _solve_shifted_k, self_consistent
@@ -158,7 +162,7 @@ def run_tb(name: str, model_name: str) -> Path:
     _write(out, {"system": name, "code": f"tb_{model_name}", "fermi_eV": fermi, "n_occ": n_occ,
                  "kpts": k.tolist(), "bands": np.asarray(eps).tolist(),
                  "settings": f"tbkit {model.name}, kT {KT} eV, SCF/Fermi k mesh "
-                             f"{KMESH_GRAPHENE if name == 'graphene' else KMESH_TUBE}"})
+                             f"{KMESH_GRAPHENE if name.startswith('graphene') else KMESH_TUBE}"})
     return out
 
 
@@ -220,7 +224,7 @@ def metrics(name: str, data: dict) -> dict:
     crossing = band_crossing(eps, n, x) if gap > 0 else None
     if crossing is not None:
         gap = 0.0
-    k_gap = float(np.asarray(data["kpts"])[int(np.argmax(eps[:, n - 1]))][2]) if name != "graphene" else None
+    k_gap = float(np.asarray(data["kpts"])[int(np.argmax(eps[:, n - 1]))][2]) if not name.startswith("graphene") else None
     valence = _distinct(sorted((eps[:, j].max() for j in range(max(0, n - 12), n)), reverse=True))
     conduction = _distinct(sorted(eps[:, j].min() for j in range(n, min(eps.shape[1], n + 12))))
     transitions = [float(c - v) for c, v in zip(conduction, valence)]
@@ -228,7 +232,7 @@ def metrics(name: str, data: dict) -> dict:
         # A metal: the crossing bands give 0 (and, sampled, a spurious small value); M11 is
         # the first pair of extrema further out.
         transitions = [0.0] + [t for t in transitions if t > 0.25]
-    transitions = transitions[:3] if name != "graphene" else []
+    transitions = transitions[:3] if not name.startswith("graphene") else []
     out = {"gap_eV": gap, "gap_at_kz": k_gap, "transitions_eV": transitions}
     # Fermi velocity: steepest slope of the two bands at the Fermi level where they meet it
     if crossing is not None:
@@ -242,7 +246,7 @@ def metrics(name: str, data: dict) -> dict:
                     slopes.append(abs(e[i + 1] - e[i]) / (x[i + 1] - x[i]))
         if slopes:
             out["fermi_velocity_eV_A"] = float(np.max(slopes))
-    if name == "graphene":
+    if name.startswith("graphene"):
         out["pi_bottom_gamma_eV"] = float(_pi_bottom(eps, n))
     out["valence_rel"] = eps[:, max(0, n - BANDS_EACH_SIDE): n][:, ::-1].tolist()   # HOMO first
     out["conduction_rel"] = eps[:, n: n + BANDS_EACH_SIDE].tolist()                 # LUMO first
@@ -329,7 +333,7 @@ PARAMS = [
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("gpaw", "tb", "report"))
-    parser.add_argument("system", nargs="?", choices=SYSTEMS,
+    parser.add_argument("system", nargs="?",
                         help="sistema del paso gpaw (vacío en tb y report: todos)")
     parser.add_argument("--code", default="pw", choices=("pw", "dzp"),
                         help="GPAW con ondas planas (referencia) o LCAO dzp")
