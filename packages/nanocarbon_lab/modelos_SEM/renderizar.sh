@@ -12,7 +12,13 @@
 # venv of its own and never in the project's -- the root pyproject.toml
 # declares the conflict for exactly this reason.
 set -euo pipefail
-BPY="${BPY:-python}"
+# BPY may be a whole command, not just a binary:
+#   BPY="blender -b -P"   (a Blender application)
+#   BPY=bpyenv/bin/python (the bpy wheel)
+# so it is split into an array. Quoting it as one word made
+# the first form look for a program literally called
+# "blender -b -P", which is not an obvious error message.
+read -r -a BPY <<< "${BPY:-python}"
 R="nanocarbon_lab/blender/render_cnt.py"
 IN="modelos_SEM/bundle"
 OUT="modelos_SEM/render"
@@ -34,7 +40,7 @@ COMMON=(--style "$ESTILO" --model auto --colour-by element
 render () {        # render <name> <resolution> <samples> [extra flags...]
   local name="$1" res="$2" samples="$3"; shift 3
   echo "=== $name (${res}px, ${samples} muestras)"
-  "$BPY" "$R" -- --xyz "$IN/$name.xyz" --json "$IN/$name.json" \
+  "${BPY[@]}" "$R" -- --xyz "$IN/$name.xyz" --json "$IN/$name.json" \
     "${COMMON[@]}" "$@" --resolution "$res" "$res" --samples "$samples" \
     --out "$OUT/$name.png"
 }
@@ -56,7 +62,7 @@ render brazo_particula_dentro 1400 64
 scene () {         # scene <name> <samples> <fill> [view]
   local name="$1" samples="$2" fill="$3" view="${4:-auto}"
   echo "=== $name (1600x2000, ${samples} muestras, relleno $fill, vista $view)"
-  "$BPY" "$R" -- --xyz "$IN/$name.xyz" --json "$IN/$name.json" \
+  "${BPY[@]}" "$R" -- --xyz "$IN/$name.xyz" --json "$IN/$name.json" \
     "${COMMON[@]}" --resolution 1600 2000 --samples "$samples" \
     --camera-fill "$fill" --view "$view" --out "$OUT/$name.png"
 }

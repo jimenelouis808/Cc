@@ -14,7 +14,13 @@
 # same fill, same view name. Move it; the rest of the scene does not
 # depend on it.
 set -euo pipefail
-BPY="${BPY:-python}"
+# BPY may be a whole command, not just a binary:
+#   BPY="blender -b -P"   (a Blender application)
+#   BPY=bpyenv/bin/python (the bpy wheel)
+# so it is split into an array. Quoting it as one word made
+# the first form look for a program literally called
+# "blender -b -P", which is not an obvious error message.
+read -r -a BPY <<< "${BPY:-python}"
 R="nanocarbon_lab/blender/render_cnt.py"
 IN="modelos_SEM/bundle"
 OUT="modelos_SEM/blend"
@@ -24,7 +30,7 @@ mkdir -p "$OUT"
 escena () {        # escena <nombre> <relleno> [vista]
   local name="$1" fill="$2" view="${3:-auto}"
   echo "=== $name (relleno $fill, vista $view)"
-  "$BPY" "$R" -- --xyz "$IN/$name.xyz" --json "$IN/$name.json" \
+  "${BPY[@]}" "$R" -- --xyz "$IN/$name.xyz" --json "$IN/$name.json" \
     --style "$ESTILO" --model auto --colour-by element \
     --atom-scale 0.55 --bond-scale 0.5 --engine cycles \
     --spacefill-element Se --resolution 1600 2000 \
