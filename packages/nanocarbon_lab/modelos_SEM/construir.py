@@ -79,10 +79,13 @@ DEFAULTS: dict[str, Any] = {
     "barra_radio": 6.0,        # Å
     "barra_semilargo": 40.0,   # Å
     # -- the big carbide particle (1020 C) --
-    "fe3c_a": 8.0, "fe3c_c": 22.0,    # Å, ellipsoid semi-axes
+    "fe3c_radio": 12.0,        # Å, SPHERE now, not an ellipsoid
     "fe3c_capas": 2,
     # -- the one that goes in the tube --
-    "fe3c_interior_a": 5.5, "fe3c_interior_c": 18.0,
+    "fe3c_interior_radio": 6.0,
+    # -- the iron that decorates an arm --
+    "fe_radio": 5.0, "fe_por_brazo": 6,
+    "barras": 12,              # how many rods in the field
     # -- the arm --
     "tubo_freq": 5,            # radius = 1.96 * freq Å, quantised
     "tubo_anillos": 12,
@@ -420,8 +423,8 @@ def arm_with_particle_inside(tube: Atoms, particle: Atoms,
     if reach > clearance:
         raise ValueError(
             f"la partícula llega a {reach:.2f} Å del eje y el tubo sólo "
-            f"deja {clearance:.2f} Å: no cabe dentro. Sube `TUBE_FREQ` o "
-            f"encoge `CARBIDE_INSIDE`.")
+            f"deja {clearance:.2f} Å: no cabe dentro. Sube "
+            f"`--tubo-freq` o baja `--fe3c-interior-radio`.")
     centre = cap - direction * (half_length + GRAPHITIC_GAP)
     placed = particle.copy()
     placed.positions = local + centre
@@ -435,59 +438,180 @@ def arm_with_particle_inside(tube: Atoms, particle: Atoms,
     return arm
 
 
-def compositions(tube: Atoms, particle: Atoms, rows: list) -> None:
-    """The arm and the anemone, as ILLUSTRATIONS.
+def compositions(tube: Atoms, particle: Atoms, pieces: dict,
+                 rows: list) -> None:
+    """The cover scenes. ILLUSTRATIONS, every one of them.
 
-    `scene.compose` places finished structures next to each other and
-    does not bond them, so these are a tube and some particles in one
-    coordinate system: right for a figure, and NOT something to relax or
-    hand to a plane-wave code. The arm above is assembled directly
-    rather than through `compose`, because its placement is measured.
+    `scene.compose` places finished structures beside each other and
+    does not bond them, so each of these is several objects in one
+    coordinate system: right for a figure, and not something to relax
+    or hand to a plane-wave code. The arm below is the exception only
+    in that its placement is MEASURED rather than done by eye.
     """
     print("\ncomposiciones (ilustraciones, no estructuras)")
+    rng = np.random.default_rng(OPT["semilla"])
     arm = arm_with_particle_inside(tube, particle)
+    radius = float(tube.info.get("radius", 8.0))
     rows.append(record(arm, "brazo_particula_dentro", {
         "familia": "escena", "version": "ilustración", "nucleo": "Fe3C",
         "capas_grafiticas": 0, "veredicto_nucleo": "—",
         "veredicto_coraza": "ensamblaje: la partícula está colocada, no "
-                            "enlazada; holgura medida",
-    }))
+                            "enlazada; holgura medida"}))
 
-    # The anemone: the same arm, rotated out of a common centre. The
-    # arms start a tube radius out so their inner caps do not occupy the
-    # same space -- five converging on one point came out 0.05 A apart,
-    # which is five tubes inside each other and not an anemone.
+    def finish(items, label, note):
+        composed, report = scene.compose(items, vacuum=VACUUM, seams="drop")
+        rows.append(record(composed, label, {
+            "familia": "escena", "version": "ilustración",
+            "nucleo": "—", "capas_grafiticas": 0,
+            "veredicto_nucleo": "—", "veredicto_coraza": note}))
+        for warning in report.warnings:
+            if "ILLUSTRATION" not in warning:
+                print(f"    aviso: {warning}")
+
+    # 1. One anemone.
+    finish(anemone_items(arm, OPT["brazos"], radius), "escena_anemona",
+           f"composición: {OPT['brazos']} brazos")
+
+    # 2. A FIELD OF RODS, which is what the 900 C micrograph mostly is:
+    # needles lying every which way. Orientations are uniform on the
+    # sphere and positions jittered on a grid, so they read as a heap
+    # rather than as a pattern -- the grid alone looks like a crystal
+    # of rods, and pure random placement makes them pile up.
+    rod = pieces.get("barra_T")
+    if rod is not None:
+        span = 1.15 * float(max(np.ptp(rod.positions[:, k])
+                                for k in range(3)))
+        items = []
+        side = int(np.ceil(np.sqrt(OPT["barras"])))
+        for index in range(OPT["barras"]):
+            row, column = divmod(index, side)
+            jitter = rng.uniform(-0.28, 0.28, size=3) * span
+            items.append(scene.Item(
+                rod, label=f"barra{index}",
+                rotation=tuple(rng.uniform(0.0, 360.0, size=3)),
+                translation=(float((column - 0.5 * (side - 1)) * span
+                                   + jitter[0]),
+                             float((row - 0.5 * (side - 1)) * span
+                                   + jitter[1]),
+                             float(0.35 * jitter[2]))))
+        finish(items, "escena_barras", f"composición: {OPT['barras']} barras")
+
+    # 3. Depth: the plate in front, a rod behind it, the tube with its
+    # particle furthest back. Placed along the viewing axis rather than
+    # across it, because what this one is for is reading as three
+    # distances and not as three objects in a row.
+    plate = pieces.get("placa_H")
+    if plate is not None and rod is not None:
+        reach = 0.5 * float(max(np.ptp(plate.positions[:, k])
+                                for k in range(3)))
+        finish([
+            scene.Item(plate, label="placa", rotation=(72.0, 0.0, 18.0),
+                       translation=(-0.35 * reach, -1.5 * reach, 0.0)),
+            scene.Item(rod, label="barra", rotation=(80.0, 0.0, -35.0),
+                       translation=(0.9 * reach, 0.2 * reach, 1.1 * reach)),
+            scene.Item(arm, label="tubo", rotation=(70.0, 0.0, 25.0),
+                       translation=(-0.6 * reach, 2.1 * reach,
+                                    2.2 * reach)),
+        ], "escena_profundidad", "composición: placa, barra y tubo en "
+           "tres planos")
+
+    # 4. Several anemones.
+    items = []
+    arms_each = max(4, OPT["brazos"] - 2)
+    cluster = 3.1 * float(max(np.ptp(arm.positions[:, k]) for k in range(3)))
+    for which, centre in enumerate(((0.0, 0.0, 0.0),
+                                    (cluster, 0.25 * cluster, 0.4 * cluster),
+                                    (0.45 * cluster, -cluster,
+                                     -0.3 * cluster))):
+        items += anemone_items(arm, arms_each, radius, centre=centre,
+                               label=f"a{which}_")
+    finish(items, "escena_anemonas", f"composición: 3 anémonas de "
+           f"{arms_each} brazos")
+
+    # 5. One anemone with iron beads on its arms -- the bright specks
+    # along the tubes in the micrograph.
+    bead = pieces.get("fe_decoracion")
+    if bead is not None:
+        dressed = decorate(arm, bead, OPT["fe_por_brazo"], rng)
+        rows.append(record(dressed, "brazo_decorado", {
+            "familia": "escena", "version": "ilustración", "nucleo": "Fe",
+            "capas_grafiticas": 0, "veredicto_nucleo": "—",
+            "veredicto_coraza": f"{OPT['fe_por_brazo']} partículas de Fe "
+                                "colocadas sobre la pared"}))
+        finish(anemone_items(dressed, OPT["brazos"], radius),
+               "escena_anemona_decorada",
+               f"composición: {OPT['brazos']} brazos con Fe encima")
+
+
+def anemone_items(arm: Atoms, arms: int, radius: float,
+                  centre=(0.0, 0.0, 0.0), label: str = "brazo",
+                  spread: float = 1.0) -> list:
+    """One anemone's worth of placed arms, as scene items.
+
+    Split out of :func:`compositions` so a scene can hold several. The
+    directions are Fibonacci points on the sphere, which spreads them
+    evenly without the clumping a random draw gives at this count -- an
+    anemone is not a flower and should not be flat.
+    """
     reach = 0.5 * float(max(np.ptp(arm.positions[:, axis])
                             for axis in range(3)))
-    # Two tube diameters out, not one radius. The arms are ARCS, so
-    # they bow toward each other along their length and the nearest
-    # approach is mid-arm rather than at the inner caps: at one radius
-    # four pairs came within 2.4-3.1 A, which on a render reads as
-    # fused.
-    start = (OPT["brazos_separacion"] * float(tube.info.get("radius", 8.0))
-             + GRAPHITIC_GAP)
-    placed = []
-    for index in range(OPT["brazos"]):
-        # Fibonacci directions, so the arms spread over the whole sphere
-        # instead of lying in one plane: an anemone is not a flower.
-        height = 1.0 - 2.0 * (index + 0.5) / OPT["brazos"]
+    start = OPT["brazos_separacion"] * radius + GRAPHITIC_GAP
+    items = []
+    for index in range(arms):
+        height = 1.0 - 2.0 * (index + 0.5) / arms
         radial = float(np.sqrt(max(0.0, 1.0 - height * height)))
         angle = index * np.pi * (3.0 - np.sqrt(5.0))
         direction = np.array([radial * np.cos(angle),
                               radial * np.sin(angle), height])
         tilt = float(np.degrees(np.arccos(np.clip(direction[2], -1.0, 1.0))))
         azimuth = float(np.degrees(np.arctan2(direction[1], direction[0])))
-        placed.append(scene.Item(
-            arm, label=f"brazo{index}", rotation=(0.0, tilt, azimuth),
-            translation=tuple(direction * (start + reach))))
-    anemone, report = scene.compose(placed, vacuum=VACUUM, seams="drop")
-    rows.append(record(anemone, "escena_anemona", {
-        "familia": "escena", "version": "ilustración", "nucleo": "Fe3C",
-        "capas_grafiticas": 0, "veredicto_nucleo": "—",
-        "veredicto_coraza": f"composición: {OPT['brazos']} brazos, sin enlazar",
-    }))
-    for warning in report.warnings:
-        print(f"    aviso: {warning}")
+        items.append(scene.Item(
+            arm, label=f"{label}{index}", rotation=(0.0, tilt, azimuth),
+            translation=tuple(np.asarray(centre, dtype=float)
+                              + direction * (start + reach) * spread)))
+    return items
+
+
+def decorate(arm: Atoms, bead: Atoms, count: int, rng) -> Atoms:
+    """Scatter metal beads over an arm's outer wall.
+
+    The bright specks along the tubes in the micrograph. They are
+    PLACED, not grown: each one sits on the wall at a van der Waals
+    contact along the local outward normal, and nothing here computes
+    whether iron would wet graphite that way.
+
+    The normal is taken from the tube's own axis rather than from a
+    neighbour fit, because the wall is a cylinder and its outward
+    direction at an atom is that atom minus its projection on the axis
+    -- cheap, and exact for the shape this actually is.
+    """
+    positions = np.asarray(arm.positions, dtype=float)
+    centred = positions - positions.mean(axis=0)
+    axis = np.linalg.svd(centred, full_matrices=False)[2][0]
+    radial = centred - np.outer(centred @ axis, axis)
+    distance = np.linalg.norm(radial, axis=1)
+    # Only atoms on the barrel, not on the caps: a bead on a cap looks
+    # like the tip particle and the two should not be confused.
+    outer = np.flatnonzero(distance > 0.9 * distance.max())
+    if len(outer) < count:
+        return arm
+    bead_reach = 0.5 * float(max(np.ptp(bead.positions[:, k])
+                                 for k in range(3)))
+    chosen = rng.choice(outer, size=count, replace=False)
+    out = arm.copy()
+    local = np.asarray(bead.positions, dtype=float)
+    local = local - local.mean(axis=0)
+    for index in chosen:
+        normal = radial[index] / max(np.linalg.norm(radial[index]), 1e-9)
+        seat = positions[index] + normal * (bead_reach + GRAPHITIC_GAP)
+        placed = bead.copy()
+        placed.positions = local + seat
+        out += placed
+    out.info = dict(arm.info)
+    # The beads are solid; the arm's own split is already recorded.
+    out.info["solid_indices"] = (list(arm.info.get("solid_indices", []))
+                                 + list(range(len(arm), len(out))))
+    return out
 
 
 #: Shells whose carbon-carbon bonds left the sp2 range, collected so
@@ -513,6 +637,9 @@ def wanted(name: str) -> bool:
 
 def main() -> None:
     rows: list = []
+    # The finished objects the scenes are built from, kept as they are
+    # made so a scene does not rebuild them.
+    pieces: dict[str, Atoms] = {}
 
     if wanted("placa_H"):
         # The THICKNESS is set by the coating, not by the crystal: at
@@ -521,11 +648,12 @@ def main() -> None:
         # anchor tried, because a 6 A rim is finer than the wall that
         # would wrap it. In a real sample that edge is where the
         # coating is defective or simply open.
-        coated_particle("placa_H", CIF / "FeSe_hexagonal.cif", "prism",
+        pieces["placa_H"] = coated_particle(
+            "placa_H", CIF / "FeSe_hexagonal.cif", "prism",
                         {"radius": OPT["placa_radio"],
                          "half_height": OPT["placa_semigrosor"],
-                         "sides": 6},
-                        shells=1, gap=OPT["hueco"], rows=rows)
+             "sides": 6},
+            shells=1, gap=OPT["hueco"], rows=rows)["C"]
 
         # And the thinnest plate the CRYSTAL allows, bare. Half a cell
         # terminates Se-Se and comes out Fe110Se200, which is not FeSe
@@ -549,24 +677,23 @@ def main() -> None:
         # A capsule and not a cylinder: a cylinder's sharp rim leaves
         # the envelope nowhere to go and the coating refuses it, which
         # is also what a real sharp edge does -- it reconstructs.
-        coated_particle("barra_T", CIF / "FeSe_tetragonal.cif", "rod",
-                        {"radius": OPT["barra_radio"],
-                         "half_length": OPT["barra_semilargo"]},
-                        shells=1, gap=OPT["hueco"], rows=rows)
+        pieces["barra_T"] = coated_particle(
+            "barra_T", CIF / "FeSe_tetragonal.cif", "rod",
+            {"radius": OPT["barra_radio"],
+             "half_length": OPT["barra_semilargo"]},
+            shells=1, gap=OPT["hueco"], rows=rows)["C"]
 
     if wanted("particula_Fe3C"):
         coated_particle("particula_Fe3C", CIF / "Fe3C_cementita.cif",
-                        "ellipsoid", {"a": OPT["fe3c_a"], "b": OPT["fe3c_a"],
-                                      "c": OPT["fe3c_c"]},
+                        "sphere", {"radius": OPT["fe3c_radio"]},
                         shells=OPT["fe3c_capas"], gap=OPT["hueco"], rows=rows)
 
     # The small one, bare, for putting inside a tube. No graphitic shell
     # on it: inside the tube the TUBE is the graphite, and a shell would
     # be a second wall 3.35 A from the first with nothing between them.
     inside, _, _, (verdict, why) = core_from(
-        CIF / "Fe3C_cementita.cif", "ellipsoid",
-        {"a": OPT["fe3c_interior_a"], "b": OPT["fe3c_interior_a"],
-         "c": OPT["fe3c_interior_c"]})
+        CIF / "Fe3C_cementita.cif", "sphere",
+        {"radius": OPT["fe3c_interior_radio"]})
     inside.info["solid_indices"] = list(range(len(inside)))
     if wanted("particula_Fe3C"):
         print(f"\npartícula interior: {inside.get_chemical_formula()} "
@@ -579,9 +706,18 @@ def main() -> None:
             "veredicto_nucleo": f"{verdict}: {why}",
             "veredicto_coraza": "—"}))
 
+    # The iron that decorates an arm. alpha-Fe, carved as a bead; it is
+    # PLACED on the wall, not grown there, and the scene says so.
+    bead, _, _, (bead_verdict, _) = core_from(
+        CIF / "Fe_alfa.cif", "sphere", {"radius": OPT["fe_radio"]})
+    bead.info["solid_indices"] = list(range(len(bead)))
+    pieces["fe_decoracion"] = bead
+    print(f"\npartícula de Fe decorativa: {len(bead)} átomos "
+          f"({np.ptp(bead.positions, axis=0).max():.1f} Å) -> {bead_verdict}")
+
     tubes = coated_tube("nanotubo", rows, record_rows=wanted("nanotubo"))
     if wanted("escena"):
-        compositions(tubes["C"], inside, rows)
+        compositions(tubes["C"], inside, pieces, rows)
 
     out = HERE / "modelos.json"
     if OPT["solo"] and out.exists():
