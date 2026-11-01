@@ -81,7 +81,7 @@ DEFAULTS: dict[str, Any] = {
     "barra_semilargo": 40.0,   # Å
     # -- the big carbide particle (1020 C) --
     "fe3c_radio": 12.0,        # Å, SPHERE now, not an ellipsoid
-    "fe3c_capas": 2, "capas": 2,
+    "fe3c_capas": 2, "capas": 1,
     # -- the one that goes in the tube --
     "fe3c_interior_radio": 6.0,
     # -- the iron that decorates an arm --
@@ -907,6 +907,16 @@ def main() -> None:
         # anchor tried, because a 6 A rim is finer than the wall that
         # would wrap it. In a real sample that edge is where the
         # coating is defective or simply open.
+        # --capas stays 1 here, and that is measured rather than
+        # chosen. Two shells is what makes the Fe3C sphere read as
+        # coated -- 0 % of its core atoms poke through against 1-2 %
+        # for these two -- so it was the obvious thing to try. On the
+        # rod it TEARS: both shells came back broken, with 1.66 and
+        # 1.69 Å bonds against the 1.55 ceiling, because a second
+        # shell sits 3.4 Å further out over a rim that is already the
+        # tightest curvature in the model. A compact sphere takes a
+        # second shell; an 85 x 9.4 Å capsule does not. Widening the
+        # rod would allow it and is a different model.
         pieces["placa_H"] = coated_particle(
             "placa_H", CIF / "FeSe_hexagonal.cif", "prism",
                         {"radius": OPT["placa_radio"],
