@@ -88,7 +88,7 @@ DEFAULTS: dict[str, Any] = {
     # The decoration: rings of beads along each arm, so many per ring.
     # A count alone gave a random scatter; a lattice is what reads as
     # decoration.
-    "fe_radio": 4.0, "fe_particulas": 34,
+    "fe_radio": 4.0, "fe_particulas": 34, "fe_contacto": 2.8,
     "barras": 16,              # how many rods in the field
     "barras_separacion": 0.72, # x the rod's own length between them
     "barras_holgura": 2.6,     # A a rod must clear its neighbours by
@@ -597,7 +597,7 @@ def compositions(tube: Atoms, particle: Atoms, pieces: dict,
     bead = pieces.get("fe_decoracion")
     if bead is not None:
         dressed = decorate(arm, bead, OPT["fe_particulas"],
-                           OPT["semilla"])
+                           OPT["semilla"], OPT["fe_contacto"])
         rows.append(record(dressed, "brazo_decorado", {
             "familia": "escena", "version": "ilustración", "nucleo": "Fe",
             "capas_grafiticas": 0, "veredicto_nucleo": "—",
@@ -673,7 +673,8 @@ def anemone_items(arm: Atoms, arms: int, radius: float,
     return items
 
 
-def decorate(arm: Atoms, bead: Atoms, count: int, seed: int) -> Atoms:
+def decorate(arm: Atoms, bead: Atoms, count: int, seed: int,
+             contact: float) -> Atoms:
     """Seat metal beads over an arm's wall, spread EVENLY but not in rows.
 
     The bright specks along the tubes in the micrograph. They are
@@ -715,6 +716,23 @@ def decorate(arm: Atoms, bead: Atoms, count: int, seed: int) -> Atoms:
     from the middle of a short length of tube, which points outward
     whatever the tube is doing globally.
 
+    **Each bead is turned at random**, because a crystal carved out of
+    a lattice has flat faces and an orientation, and thirty-four copies
+    of one orientation read as a repeated stamp rather than as a
+    scatter of particles. The turn is a uniform random rotation
+    (Shoemake's quaternion, not three Euler angles, which bunch toward
+    the poles), from the same seeded generator the seats come from.
+
+    ``contact`` is how close a bead's nearest atom may come to the
+    wall. The graphitic van der Waals contact is 3.4 A and this
+    defaults to **2.8**, which is closer than that: a particle resting
+    at the true contact, drawn with the metal at van der Waals radius
+    and the carbon as thin ball-and-stick, reads as floating -- its
+    centre ends about 6 A above a wall whose drawn surface is a thin
+    mesh. This is an ILLUSTRATION and the number is a drawing decision,
+    so it is a parameter with its default stated rather than a constant
+    quietly below the physics.
+
     Beads go on the barrel only: one on a cap reads as the tip particle
     and the two should not be confused. Anything the arm already
     declared solid -- the particle in the tip -- is not wall.
@@ -749,11 +767,12 @@ def decorate(arm: Atoms, bead: Atoms, count: int, seed: int) -> Atoms:
             pick = int(draw[int(np.argmax(far))])
         seats.append(pick)
 
-    local = np.asarray(bead.positions, dtype=float)
-    local = local - local.mean(axis=0)
+    shape = np.asarray(bead.positions, dtype=float)
+    shape = shape - shape.mean(axis=0)
     tree = cKDTree(positions[wall])
     out = arm.copy()
     for index in seats:
+        local = shape @ _random_rotation(rng).T
         # The patch that gives the normal, and the longer one that
         # gives its sign. Both are counts rather than radii, so neither
         # needs the tube's diameter to be known or constant.
@@ -766,25 +785,27 @@ def decorate(arm: Atoms, bead: Atoms, count: int, seed: int) -> Atoms:
             normal = -normal
         placed = bead.copy()
         placed.positions = local + positions[index] + normal * _seating(
-            local, positions[index], normal, tree)
+            local, positions[index], normal, tree, contact)
         out += placed
     out.info = dict(arm.info)
     out.info["solid_indices"] = (list(arm.info.get("solid_indices", []))
                                  + list(range(len(arm), len(out))))
     beads = np.asarray(out.positions[len(arm):], dtype=float)
-    print(f"    decoración: {count} partículas, separación mínima entre "
-          f"centros {_closest_seat(positions[np.asarray(seats)]):.1f} Å, "
-          f"la más hundida a {tree.query(beads)[0].min():.2f} Å de la pared")
+    print(f"    decoración: {count} partículas giradas al azar, separación "
+          f"mínima entre centros "
+          f"{_closest_seat(positions[np.asarray(seats)]):.1f} Å, "
+          f"la más hundida a {tree.query(beads)[0].min():.2f} Å de la pared "
+          f"(contacto pedido {contact:.1f} Å)")
     return out
 
 
 def _seating(local: np.ndarray, seat: np.ndarray, normal: np.ndarray,
-             wall: cKDTree, ceiling: float = 12.0) -> float:
+             wall: cKDTree, contact: float, ceiling: float = 12.0) -> float:
     """How far along the normal a bead has to go to rest on the wall.
 
     The smallest push for which NO atom of the bead comes closer to the
-    wall than :data:`GRAPHITIC_GAP`, found by bisection against the
-    wall's own tree. Bisection is valid because the distance from the
+    wall than ``contact``, found by bisection against the wall's own
+    tree. Bisection is valid because the distance from the
     bead to the wall rises monotonically once the bead is outside.
 
     Two cheaper rules were tried first and both leave beads floating,
@@ -805,11 +826,32 @@ def _seating(local: np.ndarray, seat: np.ndarray, normal: np.ndarray,
     for _ in range(40):
         middle = 0.5 * (low + high)
         here = local + seat + normal * middle
-        if float(wall.query(here)[0].min()) < GRAPHITIC_GAP:
+        if float(wall.query(here)[0].min()) < contact:
             low = middle
         else:
             high = middle
     return high
+
+
+def _random_rotation(rng: np.random.Generator) -> np.ndarray:
+    """A uniform random rotation matrix.
+
+    Shoemake's quaternion method, which samples SO(3) EVENLY. Three
+    random Euler angles do not: they bunch toward the poles, so a field
+    of particles turned that way still shares a preferred axis, which
+    is the artefact the random turn exists to remove.
+    """
+    u1, u2, u3 = rng.random(3)
+    root, other = np.sqrt(1.0 - u1), np.sqrt(u1)
+    x = root * np.sin(2.0 * np.pi * u2)
+    y = root * np.cos(2.0 * np.pi * u2)
+    z = other * np.sin(2.0 * np.pi * u3)
+    w = other * np.cos(2.0 * np.pi * u3)
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ], dtype=float)
 
 
 def _closest_seat(seats: np.ndarray) -> float:

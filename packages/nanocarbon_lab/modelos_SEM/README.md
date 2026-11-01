@@ -218,7 +218,7 @@ De las escenas: `--barras` (cuántas), `--barras-separacion` (en unidades
 del largo de la propia barra), `--barras-holgura` (los Å que cada barra
 debe dejar libres) y `--barras-intentos` (cuántas tiradas antes de
 quedarse con la mejor); `--anemonas-separacion`; y de la decoración
-`--fe-radio` y `--fe-particulas`.
+`--fe-radio`, `--fe-particulas` y `--fe-contacto`.
 
 ## Qué átomo es sólido y cuál no
 
@@ -505,8 +505,29 @@ aire:
 
 Lo que se entrega resuelve el empuje por **bisección contra el árbol de
 la pared**: el menor empuje con el que ningún átomo de la partícula
-baja del contacto grafítico. Medido: mediana **3.35 Å**, que es el
-contacto exacto, con el máximo en 4.37.
+baja de `--fe-contacto`. Medido: mínimo y mediana **2.80 Å**, que es el
+contacto pedido, en las 34.
+
+**Y el contacto pedido es 2.8 Å, por debajo de los 3.4 de van der
+Waals.** Eso es una decisión de dibujo y no de química, así que es un
+parámetro con su valor dicho y no una constante callada por debajo de
+la física. La razón es medible: con el metal a radio de van der Waals y
+el carbono en bolas y palos finos, una partícula apoyada en el contacto
+real tiene el centro a unos 6 Å sobre una pared cuya superficie dibujada
+es una malla delgada; sobre un tubo de 9.8 Å de radio, una partícula en
+el limbo proyecta a 15.8 Å contra los 9.8 del tubo —un 60 % más
+afuera— y se lee como despegada aunque esté tocando.
+
+**Cada partícula va girada al azar.** Un cristal cortado de una red
+tiene caras planas y orientación, y treinta y cuatro copias de la misma
+orientación se leen como un sello repetido y no como partículas
+sueltas. El giro es una rotación uniforme de SO(3) por el método del
+cuaternión de Shoemake, **no tres ángulos de Euler al azar**, que se
+agolpan hacia los polos y dejarían a todo el campo compartiendo un eje
+preferido —que es justo el artefacto que el giro existe para quitar—.
+Verificado: determinante exactamente +1, ortogonalidad a 1.3e-15, y el
+eje de rotación repartido uniformemente sobre la esfera (8 cajas en z,
+447 a 529 contra las 500 que tocan).
 
 ## El render de portada
 
