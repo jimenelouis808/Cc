@@ -81,7 +81,7 @@ DEFAULTS: dict[str, Any] = {
     "barra_semilargo": 40.0,   # Å
     # -- the big carbide particle (1020 C) --
     "fe3c_radio": 12.0,        # Å, SPHERE now, not an ellipsoid
-    "fe3c_capas": 2,
+    "fe3c_capas": 2, "capas": 2,
     # -- the one that goes in the tube --
     "fe3c_interior_radio": 6.0,
     # -- the iron that decorates an arm --
@@ -912,7 +912,7 @@ def main() -> None:
                         {"radius": OPT["placa_radio"],
                          "half_height": OPT["placa_semigrosor"],
              "sides": 6},
-            shells=1, gap=OPT["hueco"], rows=rows)["C"]
+            shells=OPT["capas"], gap=OPT["hueco"], rows=rows)["C"]
 
         # And the thinnest plate the CRYSTAL allows, bare. Half a cell
         # terminates Se-Se and comes out Fe110Se200, which is not FeSe
@@ -940,7 +940,7 @@ def main() -> None:
             "barra_T", CIF / "FeSe_tetragonal.cif", "rod",
             {"radius": OPT["barra_radio"],
              "half_length": OPT["barra_semilargo"]},
-            shells=1, gap=OPT["hueco"], rows=rows)["C"]
+            shells=OPT["capas"], gap=OPT["hueco"], rows=rows)["C"]
 
     if wanted("particula_Fe3C"):
         coated_particle("particula_Fe3C", CIF / "Fe3C_cementita.cif",
