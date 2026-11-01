@@ -18,9 +18,9 @@ one calculator and the response from another.
 Form: s and p on carbon, non-orthogonal. Each of V_ssσ, V_spσ, V_ppσ, V_ppπ and the four
 overlaps is ``v0 exp(-β (d/d0 - 1))`` with d0 = 1.42 Å (one β per hopping, one shared by the
 overlaps), out to third neighbours of graphene (2.84 Å) and switched off by a cubic tail
-between 3.0 and 3.3 Å. Free: the s-p on-site splitting, 4 hopping amplitudes, 4 hopping β,
-4 overlap amplitudes and the overlap β (14 numbers), each bounded to its physical sign
-and range (``LOWER``, ``UPPER``). The p on-site energy is fixed at 0
+between 3.0 and 3.3 Å. Free: 4 hopping amplitudes, 4 hopping β, 4 overlap amplitudes and the overlap β
+(13 numbers), each bounded to its physical sign and range (``LOWER``, ``UPPER``). The
+s-p splitting is the free atom's (``ES_ATOM``), computed, not fitted. The p on-site energy is fixed at 0
 (bands are compared relative to the Fermi level or mid-gap, so only the splitting matters).
 
 Targets: GPAW PBE plane-wave bands, each method relative to its own Fermi level (mid-gap with
@@ -54,7 +54,7 @@ TUBE_WINDOW = (-2.5, 2.5)
 D0, TAIL = 1.42, (3.0, 3.3)
 BONDS = ("sss", "sps", "pps", "ppp")
 #: Starting point: Xu's amplitudes at 1.42 Å and a β of strained graphene (Pereira 2009).
-START = {"es": -6.5, "v": (-5.4, 5.9, 6.4, -2.7), "beta": (3.0, 3.0, 3.0, 3.4),
+START = {"v": (-5.4, 5.9, 6.4, -2.7), "beta": (3.0, 3.0, 3.0, 3.4),
          "s": (0.13, -0.15, -0.15, 0.12), "beta_s": 3.0}
 SOURCE = "ajuste a bandas GPAW PBE de ondas planas (tbkit.recipes.band_fit)"
 
@@ -63,18 +63,22 @@ SOURCE = "ajuste a bandas GPAW PBE de ondas planas (tbkit.recipes.band_fit)"
 #: overlap signs (bands within the windows fitted well, the set would not transfer). The
 #: signs are those of the two-centre integrals: V_ssσ, V_ppπ < 0 < V_spσ, V_ppσ, and the
 #: overlaps opposite to their hoppings (S ≈ −V/K, K > 0).
-LOWER = {"es": -14.0, "v": (-12.0, 0.0, 0.0, -6.0), "beta": (1.0, 1.0, 1.0, 1.0),
+LOWER = {"v": (-12.0, 0.0, 0.0, -6.0), "beta": (1.0, 1.0, 1.0, 1.0),
          "s": (0.0, -0.6, -0.6, 0.0), "beta_s": 1.0}
-UPPER = {"es": -4.0, "v": (0.0, 12.0, 12.0, 0.0), "beta": (6.0, 6.0, 6.0, 6.0),
+UPPER = {"v": (0.0, 12.0, 12.0, 0.0), "beta": (6.0, 6.0, 6.0, 6.0),
          "s": (0.6, 0.0, 0.0, 0.6), "beta_s": 6.0}
+#: ε(2s) − ε(2p) of the free carbon atom, GPAW PBE all-electron (aeatom, spherical, not
+#: spin-polarised): −13.738 − (−5.289) eV. Computed, not fitted: with it free, the bounded
+#: fit drove it to its upper bound (−4 eV) and two overlaps to zero.
+ES_ATOM = -8.449
 
 
 def unpack(p: np.ndarray) -> dict:
-    return {"es": p[0], "v": p[1:5], "beta": p[5:9], "s": p[9:13], "beta_s": p[13]}
+    return {"es": ES_ATOM, "v": p[0:4], "beta": p[4:8], "s": p[8:12], "beta_s": p[12]}
 
 
 def pack(d: dict) -> np.ndarray:
-    return np.r_[d["es"], d["v"], d["beta"], d["s"], d["beta_s"]]
+    return np.r_[d["v"], d["beta"], d["s"], d["beta_s"]]
 
 
 def parameter_dict(p: np.ndarray, fit_info: dict | None = None) -> dict:
@@ -102,8 +106,10 @@ def parameter_dict(p: np.ndarray, fit_info: dict | None = None) -> dict:
         "orbitals": {"C": ["s", "px", "py", "pz"]},
         "valence": {"C": 4},
         "onsite": {"C": {
-            "s": {"value": float(q["es"]), "unit": "eV", "description": "energía on-site 2s",
-                  "source": SOURCE},
+            "s": {"value": float(q["es"]), "unit": "eV",
+                  "description": "energía on-site 2s respecto a la 2p",
+                  "source": "ε(2s) − ε(2p) del átomo de C libre, GPAW PBE (aeatom); calculada, "
+                            "no ajustada"},
             "p": {"value": 0.0, "unit": "eV",
                   "description": "energía on-site 2p (fija: solo importa la diferencia s-p)",
                   "source": "convención de este ajuste"}}},
