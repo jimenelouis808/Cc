@@ -837,3 +837,91 @@ class TestTheJobIntegration:
         severity, text = estimate_cost(job)
         assert severity in ("slow", "very slow")
         assert "meshed and relaxed" in text
+
+
+class TestCoreRepulsion:
+    """The shell must not relax into the core it is wrapping.
+
+    The force field had no term that knew the core was there. A wall
+    free to equalise its bonds therefore did so with part of itself
+    inside the metal -- measured on the user's FeSe and Fe3C particles,
+    0.15-0.28 Å from core atoms while reporting perfect 1.50-1.53 Å
+    bonds, which no gate caught because both of those read as healthy.
+    Holding the wall on its envelope instead (``wall_anchor``) keeps it
+    out and costs the bonds: the same structures came back at
+    1.59-1.72 Å, outside the sp2 range, and that is what shipped.
+
+    ``obstacles`` is the missing term: fixed points that push and take
+    no gradient, so the two can be right at once.
+    """
+
+    @staticmethod
+    def _square_sheet(n=6, bond=1.42):
+        """A flat patch of atoms on a grid, with its bonds."""
+        import numpy as np
+
+        xs, ys = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+        positions = np.stack(
+            [xs.ravel() * bond, ys.ravel() * bond,
+             np.zeros(n * n)], axis=1).astype(float)
+        bonds = set()
+        for i in range(n):
+            for j in range(n):
+                here = i * n + j
+                if i + 1 < n:
+                    bonds.add((here, (i + 1) * n + j))
+                if j + 1 < n:
+                    bonds.add((here, i * n + j + 1))
+        return positions, bonds
+
+    def test_an_obstacle_pushes_the_sheet_off_itself(self):
+        import numpy as np
+
+        from nanocarbon_lab.builders import fullerene_mesh as fm
+
+        positions, bonds = self._square_sheet()
+        # One obstacle sitting exactly ON one of the atoms, which is
+        # what a collapsed wall looks like. The midpoint of the grid is
+        # not: it falls between atoms, 1.00 Å from the nearest, and the
+        # test then measures the lattice spacing rather than the term.
+        middle = positions[len(positions) // 2].copy()
+        obstacles = middle[None, :]
+
+        free = fm.relax_shell(positions.copy(), bonds, max_iterations=400)
+        pushed = fm.relax_shell(positions.copy(), bonds,
+                                max_iterations=400, obstacles=obstacles,
+                                k_obstacle=25.0, obstacle_cutoff=2.6)
+
+        closest_free = np.linalg.norm(free - middle, axis=1).min()
+        closest_pushed = np.linalg.norm(pushed - middle, axis=1).min()
+        # The free sheet leaves an atom sitting on the obstacle; the
+        # pushed one does not.
+        assert closest_free < 0.5
+        assert closest_pushed > closest_free
+        assert closest_pushed > 1.5
+
+    def test_no_obstacles_changes_nothing(self):
+        """The default must leave every existing structure identical."""
+        import numpy as np
+
+        from nanocarbon_lab.builders import fullerene_mesh as fm
+
+        positions, bonds = self._square_sheet()
+        plain = fm.relax_shell(positions.copy(), bonds, max_iterations=300)
+        empty = fm.relax_shell(positions.copy(), bonds, max_iterations=300,
+                               obstacles=None)
+        assert np.allclose(plain, empty)
+
+    def test_an_obstacle_out_of_range_costs_nothing(self):
+        """The term is short-ranged, so a distant core is inert."""
+        import numpy as np
+
+        from nanocarbon_lab.builders import fullerene_mesh as fm
+
+        positions, bonds = self._square_sheet()
+        plain = fm.relax_shell(positions.copy(), bonds, max_iterations=300)
+        far = fm.relax_shell(
+            positions.copy(), bonds, max_iterations=300,
+            obstacles=np.array([[0.0, 0.0, 50.0]]),
+            k_obstacle=25.0, obstacle_cutoff=2.6)
+        assert np.allclose(plain, far, atol=1e-6)

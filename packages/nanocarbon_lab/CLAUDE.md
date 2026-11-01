@@ -4741,3 +4741,63 @@ iron -- which is not what the particle is.
   `build_ball_and_stick` pass it on. The tests pin both halves: a
   declared element grows and stops drawing sticks, and carbon beside it
   does not move.
+
+## A shell relaxing against nothing sinks into the core it wraps
+
+`graphitic_coat` wraps a core in a graphitic wall and then relaxes that
+wall against the sp2 valence force field. **Nothing in that force field
+knew the core was there.** The bond, angle and non-bonded terms all run
+over the shell's own atoms, so equalising bond lengths is satisfied just
+as well by a wall with half of itself inside the metal.
+
+Measured on the FeSe and Fe3C particles, with the wall left free:
+**0.15-0.28 Å** from core atoms, while reporting **1.50-1.53 Å** bonds.
+Neither number trips a gate -- the bonds are perfect and the contact
+check runs over the shell, not across the interface -- so it shipped.
+
+* **`wall_anchor` was the only thing holding the wall out, and it pays
+  for that in bonds.** Holding the wall on its own envelope along the
+  normal keeps it clear of the core and stretches it: the same five
+  structures came back at **1.59-1.72 Å**, outside the sp2 range, and
+  the builder correctly called every one of them broken. Swept over gap
+  x anchor x seed x geometry, **no combination satisfied both** -- which
+  is the signature of a missing term rather than a tuning problem.
+* **`obstacles` is that term**: fixed points the relaxing atoms are
+  pushed off, which do not bond, do not move and take no gradient. The
+  core goes in as obstacles and the anchor can then be zero. The five
+  structures go to **1.504-1.526 Å**, four of five inside the sp2 range.
+* **The obstacles must be rescaled into the relaxation's own frame**,
+  and this is the part that looked like the term merely being weak.
+  `_finish` rescales the dual onto the target bond length before
+  relaxing (`positions * scale`), so obstacles handed over in the
+  field's Ångström land where the core is *not*. `scale` is near 1 and
+  not 1 -- the dual can arrive over 10 % off -- so the push was landing
+  slightly beside its target and the effect read as a weak constant.
+* **Only the core, not the finished shells.** Adding each shell to the
+  obstacle list for the next one looks like the obvious completion and
+  makes things worse: the shells are meshed independently, so
+  layer-to-layer registry is accidental, and pushing every too-close
+  pair apart fights the bonds. The two-shell carbide came back at
+  1.27-1.96 Å and the builder refused it. The interlayer spacing already
+  keeps shells apart; nothing keeps the first one out of the core.
+* **The default is unchanged.** `wall_anchor` still defaults to 0.7, so
+  no existing structure moves; a caller that passes the core as
+  obstacles is the one that should also pass `wall_anchor=0`.
+
+### And a second fault, localised but NOT fixed
+
+With the bonds clean the core-shell distance is still wrong, and for a
+different reason: **the shell is undersized against the envelope it was
+meshed on.** Measured, the 86 Å rod's wall reaches 44.7 Å where its
+envelope is at 47.0, and about **10 % of its atoms** then sit inside the
+1.8 Å floor (171 of 1818; 168 of 1296 on the carbide).
+
+That is the same `scale` step seen from the other side. The dual's mean
+bond arrives off target, the whole wall is scaled to fix it, and a wall
+with a fixed number of atoms has a fixed area -- so it can have the
+right bond length or sit on its envelope, not both. The cure is to mesh
+the envelope at the right density to begin with, so `scale` is already
+1, rather than to rescale afterwards. `remesh` takes
+`target_edge=sqrt(3)*bond` for exactly this and is evidently not
+reaching it. **Do not "fix" this by undoing the scale**: that restores
+the envelope and gives the bonds back their error.

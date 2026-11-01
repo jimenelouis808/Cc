@@ -657,13 +657,19 @@ def _vff_energy_gradient(
     k_anchor: float,
     anchor_normals: np.ndarray | None,
     box: float | None = None,
+    obstacle_pairs: np.ndarray | None = None,
+    obstacles: np.ndarray | None = None,
+    k_obstacle: float = 0.0,
+    obstacle_cutoff: float = 0.0,
 ) -> tuple[float, np.ndarray]:
     """Energy and analytic gradient of the sp2 valence force field.
 
     ``E = 1/2 k_bond (r - r0)^2 + 1/2 k_angle (theta - theta0)^2
          + 1/2 k_repel (d - d_cut)^2 [d < d_cut, non-bonded only]
          + 1/2 k_anchor |x - x_target|^2 [anchored atoms only,
-           or the normal component alone when `anchor_normals` is given]``
+           or the normal component alone when `anchor_normals` is given]
+         + 1/2 k_obstacle (d - d_obs)^2 [atom-to-OBSTACLE pairs closer
+           than d_obs; the obstacles are fixed and take no gradient]``
 
     Gradients are exact (verified against central finite differences to
     ~1e-9 relative error), which is what lets L-BFGS converge to genuine
@@ -719,6 +725,29 @@ def _vff_energy_gradient(
             np.add.at(grad, p[mask], -gvv)
             np.add.at(grad, q[mask], gvv)
 
+    # --- repulsion from FIXED obstacles (the core a shell wraps)
+    #
+    # Separate from the pair term above because the obstacles are not
+    # part of `pos`: they do not move, do not bond, and take no
+    # gradient. Without it nothing in this force field knows the core is
+    # there, so equalising bond lengths is satisfied just as well by a
+    # wall that has sunk INTO the core -- measured, a free wall reached
+    # 0.15-0.28 A of the core atoms while reporting perfect 1.50-1.53 A
+    # bonds. Holding the wall on its envelope instead (`anchor_normals`)
+    # keeps it out and costs the bonds: the same structures came back at
+    # 1.59-1.72 A. The two were the only options and neither is right.
+    if obstacle_pairs is not None and len(obstacle_pairs):
+        shell_i, obs_j = obstacle_pairs[:, 0], obstacle_pairs[:, 1]
+        dd = minimum_image(pos[shell_i] - obstacles[obs_j], box)
+        rr = np.linalg.norm(dd, axis=1)
+        rr = np.where(rr < 1e-9, 1e-9, rr)
+        mask = rr < obstacle_cutoff
+        if np.any(mask):
+            drr = rr[mask] - obstacle_cutoff
+            energy += 0.5 * k_obstacle * float(np.sum(drr**2))
+            gvv = (k_obstacle * drr / rr[mask])[:, None] * dd[mask]
+            np.add.at(grad, shell_i[mask], gvv)
+
     # --- positional restraints (used to hold an imposed bend in place,
     #     and -- with normals -- to hold a wall on its own surface)
     if anchors is not None and len(anchors):
@@ -762,6 +791,9 @@ def relax_shell(
     max_iterations: int = 3000,
     steps: int | None = None,
     exclude_13: bool = True,
+    obstacles: np.ndarray | None = None,
+    k_obstacle: float = 25.0,
+    obstacle_cutoff: float = 2.6,
 ) -> np.ndarray:
     """Relax a closed sp2 shell to realistic bond lengths and bond angles.
 
@@ -844,6 +876,19 @@ def relax_shell(
         Optional harmonic restraints pinning ``positions[anchors]`` near
         ``anchor_targets`` -- used to hold an imposed bend while the rest
         of the lattice relaxes around it.
+    obstacles
+        ``(m, 3)`` FIXED points the relaxing atoms are pushed off --
+        the core of a coated particle. They are not part of the
+        structure: they do not bond, do not move and take no gradient.
+        Without them nothing in this force field knows the core is
+        there, and a wall free to equalise its bonds will do so with
+        half of itself inside the metal.
+    k_obstacle, obstacle_cutoff
+        Strength and range of that push. The cutoff is the closest a
+        shell atom may come to a core atom before it costs energy; 2.6 A
+        is under the graphitic contact of 3.35 and above the 2.1 A a
+        chemisorbed carbon sits at, so it refuses the collapse without
+        asserting which of the two interfaces the system prefers.
     exclude_13
         Whether 1-3 pairs are kept out of the non-bonded repulsion. True
         (the default, and correct for sp2 carbon) leaves them to the
@@ -893,6 +938,12 @@ def relax_shell(
         np.asarray(anchor_normals, dtype=float)
         if anchor_normals is not None else None
     )
+    obstacles = (
+        np.asarray(obstacles, dtype=float) if obstacles is not None else None
+    )
+    obstacle_tree = None
+    if obstacles is not None and len(obstacles) and k_obstacle > 0.0:
+        obstacle_tree = cKDTree(obstacles)
 
     x = positions.ravel().astype(float).copy()
     skin = max(0.0, repel_skin)
@@ -936,6 +987,18 @@ def relax_shell(
         else:
             repel_arr = np.empty((0, 2), dtype=int)
 
+        # The obstacle list is rebuilt on the same schedule and with the
+        # same skin, for the same reason: a pair outside the cutoff now
+        # can close it before the list is rebuilt.
+        if obstacle_tree is None:
+            obstacle_pairs = None
+        else:
+            near = obstacle_tree.query_ball_point(
+                reference, r=obstacle_cutoff + skin)
+            obstacle_pairs = np.array(
+                [(i, j) for i, js in enumerate(near) for j in js],
+                dtype=int).reshape(-1, 2)
+
         def _rebuild_when_stale(xk, _ref=reference):
             # Conservative Verlet criterion: a pair excluded from the list
             # can only reach the repulsion cutoff once its two atoms have
@@ -962,6 +1025,7 @@ def relax_shell(
                 bond_arr, angle_arr, repel_arr, n_atoms, equilibrium, theta0,
                 k_bond, k_angle, k_repel, repel_cutoff,
                 anchors, anchor_targets, k_anchor, anchor_normals, box,
+                obstacle_pairs, obstacles, k_obstacle, obstacle_cutoff,
             ),
             jac=True,
             method="L-BFGS-B",

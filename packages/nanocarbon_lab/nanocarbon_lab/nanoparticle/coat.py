@@ -309,6 +309,7 @@ def graphitic_coat(
     relax_iterations: int = 3000,
     wall_anchor: float = 0.7,
     roughness: float = 0.0,
+    core_floor: float = CORE_SHELL_FLOOR,
     vacuum: float = DEFAULT_VACUUM_1D,
     seed: int | None = 0,
 ) -> tuple[list[Atoms], CoatReport]:
@@ -376,6 +377,13 @@ def graphitic_coat(
         side: annealing optimises the *census*, and the census is not
         what a wall is judged by. Curvature placement optimises the
         placement, which is.
+    core_floor
+        How close a shell atom may come to a core atom before the
+        relaxation pushes it away, Å. The core is passed to the relaxer
+        as fixed obstacles; this is the range of that push. Under the
+        graphitic contact of 3.35 Å and above the ~2.1 Å a chemisorbed
+        carbon sits at, so it refuses the collapse without asserting
+        which of the two interfaces the system prefers.
     wall_anchor
         Stiffness of a harmonic anchor holding the wall on its envelope,
         along the normal only. **On here and off for the junction**, for
@@ -458,6 +466,17 @@ def graphitic_coat(
 
     rng = make_rng(seed)
     built: list[Atoms] = []
+    # The CORE is the obstacle, and only the core.
+    #
+    # Adding each finished shell to the list as well looks like the
+    # obvious completion and is not: the shells are meshed
+    # independently, so layer-to-layer registry is accidental, and
+    # pushing every too-close pair apart fights the bonds instead of
+    # the collapse. Measured on the two-shell carbide, the outer shell
+    # came back at 1.27-1.96 A and the builder refused it outright.
+    # The interlayer spacing already keeps the shells apart; nothing
+    # keeps the first one out of the core but this.
+    obstacles = np.asarray(core.positions, dtype=float)
     for index in range(shells):
         distance = gap + index * interlayer
         field, extent = vdw_envelope(core, distance, element_gaps)
@@ -475,6 +494,15 @@ def graphitic_coat(
             mesh,
             field=field,
             wall_anchor=wall_anchor,
+            # The core itself, as fixed obstacles. This is what keeps the
+            # wall outside it: the force field otherwise has no term that
+            # knows the core is there, and a wall free to equalise its
+            # bonds reaches 0.15-0.28 A of the core atoms while reporting
+            # perfect 1.50-1.53 A bonds. Holding it on its envelope
+            # instead keeps it out and costs the bonds (1.59-1.72 A). The
+            # obstacles let both be right at once.
+            obstacles=obstacles,
+            obstacle_cutoff=core_floor,
             bond=bond,
             relax_iterations=relax_iterations,
             vacuum=vacuum,

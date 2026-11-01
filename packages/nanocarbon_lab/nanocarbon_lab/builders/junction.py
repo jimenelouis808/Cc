@@ -572,6 +572,8 @@ def _finish(
     k_pin: float = 5.0,
     field=None,
     wall_anchor: float = 0.0,
+    obstacles: np.ndarray | None = None,
+    obstacle_cutoff: float = 2.6,
 ) -> Atoms:
     """Shared tail: validate the mesh, take its dual, relax, package.
 
@@ -581,6 +583,11 @@ def _finish(
     ``pin_near`` gives points (in mesh coordinates) whose surrounding
     atoms are harmonically restrained during relaxation, with ``pin_radius``
     setting how far that reaches and ``k_pin`` how stiffly.
+
+    ``obstacles`` are fixed points the relaxing wall is pushed off -- the
+    core of a coated particle. They are what stops a wall free to
+    equalise its bonds from doing so inside the metal; see
+    :func:`~nanocarbon_lab.builders.fullerene_mesh.relax_shell`.
 
     That option exists for one specific asymmetry. A closed shell's ring
     topology encodes its **curvature**, so a coiled tube relaxes back to
@@ -628,6 +635,14 @@ def _finish(
     # come out right while the lattice no longer matches them.
     positions = positions * scale
     scaled_box = None if box is None else box * scale
+    # The obstacles arrive in the field's own Ångström and the dual has
+    # just been rescaled onto the target bond length, so they have to
+    # come along or the push lands where the core is NOT. `scale` is
+    # near 1 and not 1 -- the dual can arrive over 10 % off -- so the
+    # mismatch is small enough to look like the term merely being weak,
+    # which is how it read before this line existed.
+    scaled_obstacles = (None if obstacles is None
+                        else np.asarray(obstacles, dtype=float) * scale)
 
     if scaled_box is None:
         anchors = anchor_targets = None
@@ -656,6 +671,8 @@ def _finish(
                 anchors=anchors, anchor_targets=anchor_targets,
                 anchor_normals=rm.field_normals(field, positions / scale),
                 k_anchor=float(wall_anchor),
+                obstacles=scaled_obstacles,
+                obstacle_cutoff=obstacle_cutoff * scale,
             )
         else:
             positions = fm.relax_shell(
@@ -663,6 +680,8 @@ def _finish(
                 max_iterations=relax_iterations,
                 anchors=anchors, anchor_targets=anchor_targets,
                 k_anchor=k_pin,
+                obstacles=scaled_obstacles,
+                obstacle_cutoff=obstacle_cutoff * scale,
             )
     else:
         # Variable-cell relaxation. With the cell held fixed the network
