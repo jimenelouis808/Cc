@@ -55,50 +55,6 @@
     "veredicto_coraza": "—"
   },
   {
-    "modelo": "barra_T_nucleo_desnudo",
-    "atomos": 504,
-    "formula": "Fe252Se252",
-    "familia": "barra_T",
-    "version": "núcleo sin recubrir",
-    "nucleo": "Fe252Se252",
-    "capas_grafiticas": 0,
-    "veredicto_nucleo": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): 504 atoms, stoichiometric, 57 % surface, shortest contact 2.396 A",
-    "veredicto_coraza": "—"
-  },
-  {
-    "modelo": "barra_T_C",
-    "atomos": 2322,
-    "formula": "C1818Fe252Se252",
-    "familia": "barra_T",
-    "version": "C",
-    "nucleo": "Fe252Se252",
-    "capas_grafiticas": 1,
-    "veredicto_nucleo": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): 504 atoms, stoichiometric, 57 % surface, shortest contact 2.396 A",
-    "veredicto_coraza": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
-  },
-  {
-    "modelo": "barra_T_NSe",
-    "atomos": 2322,
-    "formula": "C1663Fe252N109Se298",
-    "familia": "barra_T",
-    "version": "NSe",
-    "nucleo": "Fe252Se252",
-    "capas_grafiticas": 1,
-    "veredicto_nucleo": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): 504 atoms, stoichiometric, 57 % surface, shortest contact 2.396 A",
-    "veredicto_coraza": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
-  },
-  {
-    "modelo": "barra_T_NSeO",
-    "atomos": 2337,
-    "formula": "C1664H6Fe252N110O5Se300",
-    "familia": "barra_T",
-    "version": "NSeO",
-    "nucleo": "Fe252Se252",
-    "capas_grafiticas": 1,
-    "veredicto_nucleo": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): 504 atoms, stoichiometric, 57 % surface, shortest contact 2.396 A",
-    "veredicto_coraza": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
-  },
-  {
     "modelo": "particula_Fe3C_nucleo_desnudo",
     "atomos": 460,
     "formula": "C127Fe333",
@@ -262,5 +218,49 @@
     "capas_grafiticas": 0,
     "veredicto_nucleo": "—",
     "veredicto_coraza": "composición: 8 brazos con Fe encima"
+  },
+  {
+    "modelo": "barra_T_nucleo_desnudo",
+    "atomos": 504,
+    "formula": "Fe252Se252",
+    "familia": "barra_T",
+    "version": "núcleo sin recubrir",
+    "nucleo": "Fe252Se252",
+    "capas_grafiticas": 0,
+    "veredicto_nucleo": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): 504 atoms, stoichiometric, 57 % surface, shortest contact 2.396 A",
+    "veredicto_coraza": "—"
+  },
+  {
+    "modelo": "barra_T_C",
+    "atomos": 2322,
+    "formula": "C1818Fe252Se252",
+    "familia": "barra_T",
+    "version": "C",
+    "nucleo": "Fe252Se252",
+    "capas_grafiticas": 1,
+    "veredicto_nucleo": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): 504 atoms, stoichiometric, 57 % surface, shortest contact 2.396 A",
+    "veredicto_coraza": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
+  },
+  {
+    "modelo": "barra_T_NSe",
+    "atomos": 2322,
+    "formula": "C1663Fe252N109Se298",
+    "familia": "barra_T",
+    "version": "NSe",
+    "nucleo": "Fe252Se252",
+    "capas_grafiticas": 1,
+    "veredicto_nucleo": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): 504 atoms, stoichiometric, 57 % surface, shortest contact 2.396 A",
+    "veredicto_coraza": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
+  },
+  {
+    "modelo": "barra_T_NSeO",
+    "atomos": 2337,
+    "formula": "C1664H6Fe252N110O5Se300",
+    "familia": "barra_T",
+    "version": "NSeO",
+    "nucleo": "Fe252Se252",
+    "capas_grafiticas": 1,
+    "veredicto_nucleo": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): 504 atoms, stoichiometric, 57 % surface, shortest contact 2.396 A",
+    "veredicto_coraza": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
   }
 ]
