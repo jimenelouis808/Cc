@@ -539,6 +539,35 @@ Verificado: determinante exactamente +1, ortogonalidad a 1.3e-15, y el
 eje de rotación repartido uniformemente sobre la esfera (8 cajas en z,
 447 a 529 contra las 500 que tocan).
 
+## Las escenas como .blend, para ajustarlas a mano
+
+```bash
+BPY=<python con bpy> bash modelos_SEM/escenas_blend.sh
+BPY=... bash modelos_SEM/escenas_blend.sh escena_barras
+```
+
+Deja los cinco `.blend` en `modelos_SEM/blend/`. Llevan dentro la
+geometría, los materiales, las luces y la cámara —la misma que la
+vista previa reporta: misma lente, mismo relleno, mismo nombre de
+vista—, y **nada renderizado**: `--no-render` construye la escena y
+para.
+
+Eso ahorra el muestreo entero y **no ahorra lo caro**, que es construir
+la malla: una icoesfera y un cilindro a la vez desde Python. Por orden
+de coste, que es el orden en que el script los escribe:
+
+| escena | átomos |
+|---|---|
+| `escena_profundidad` | 10 353 |
+| `escena_anemona` | 24 440 |
+| `escena_anemona_decorada` | 28 520 |
+| `escena_barras` | 37 152 |
+| `escena_anemonas` | 54 990 |
+
+Dentro de Blender, mover la cámara no toca nada más: la escena no
+depende de dónde esté. El estilo sí está horneado en los materiales,
+así que cambiar de preset es volver a correr el script con `ESTILO=`.
+
 ## El render de portada
 
 `modelos_SEM/renderizar.sh` produce las imágenes de `render/`, y lleva
