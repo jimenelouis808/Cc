@@ -88,7 +88,7 @@ DEFAULTS: dict[str, Any] = {
     # The decoration: rings of beads along each arm, so many per ring.
     # A count alone gave a random scatter; a lattice is what reads as
     # decoration.
-    "fe_radio": 4.0, "fe_anillos": 7, "fe_por_anillo": 4,
+    "fe_radio": 4.0, "fe_particulas": 34,
     "barras": 16,              # how many rods in the field
     "barras_separacion": 0.72, # x the rod's own length between them
     "barras_holgura": 2.6,     # A a rod must clear its neighbours by
@@ -551,28 +551,32 @@ def compositions(tube: Atoms, particle: Atoms, pieces: dict,
             placed.append(best[1].placed().positions)
         finish(items, "escena_barras", f"composición: {OPT['barras']} barras")
 
-    # 3. Depth: the plate in front, a rod behind it, the tube with its
-    # particle furthest back. Placed along the viewing axis rather than
-    # across it, because what this one is for is reading as three
-    # distances and not as three objects in a row.
+    # 3. A POSTER LINE-UP: each piece standing, seen side on, one
+    # behind the other down the viewing axis. The first version turned
+    # each one to a different three-quarter angle, which reads as three
+    # objects scattered in space; a line-up reads as three *characters*,
+    # which is what a cover wants, and it is also the view in which a
+    # plate, a rod and a tube are told apart at a glance.
     plate = pieces.get("placa_H")
     if plate is not None and rod is not None:
         reach = 0.5 * float(max(np.ptp(plate.positions[:, k])
                                 for k in range(3)))
-        # Strung along ONE line, with only a small sideways stagger so
-        # each stays visible past the one in front. The first version
-        # spread them across the frame as well and read as three
-        # objects in a row rather than as three depths.
-        step = 1.78 * reach
+        # Depth between neighbours. They stand thin side on, so this is
+        # about the silhouette overlapping by the right amount rather
+        # than about clearance: the composition measures every pair and
+        # the build refuses to ship one that interpenetrates.
+        step = 1.90 * reach
+        # The sideways stagger grows with depth, so each one appears
+        # past the shoulder of the one in front instead of behind it.
         finish([
-            scene.Item(plate, label="placa", rotation=(72.0, 0.0, 18.0),
-                       translation=(0.18 * reach, -step, 0.0)),
-            scene.Item(rod, label="barra", rotation=(80.0, 0.0, -28.0),
-                       translation=(0.95 * reach, 0.0, 0.70 * reach)),
-            scene.Item(arm, label="tubo", rotation=(72.0, 0.0, 22.0),
-                       translation=(-0.85 * reach, step, 0.90 * reach)),
-        ], "escena_profundidad", "composición: placa, barra y tubo en "
-           "una línea, uno detrás de otro")
+            scene.Item(plate, label="placa", rotation=standing_angles(plate),
+                       translation=(0.0, -step, 0.0)),
+            scene.Item(rod, label="barra", rotation=standing_angles(rod),
+                       translation=(0.46 * reach, 0.0, 0.10 * reach)),
+            scene.Item(arm, label="tubo", rotation=standing_angles(arm),
+                       translation=(0.80 * reach, step, 0.02 * reach)),
+        ], "escena_profundidad", "composición: placa, barra y tubo de pie, "
+           "de perfil, uno detrás de otro")
 
     # 4. Several anemones.
     items = []
@@ -592,16 +596,52 @@ def compositions(tube: Atoms, particle: Atoms, pieces: dict,
     # along the tubes in the micrograph.
     bead = pieces.get("fe_decoracion")
     if bead is not None:
-        dressed = decorate(arm, bead, OPT["fe_anillos"],
-                           OPT["fe_por_anillo"])
+        dressed = decorate(arm, bead, OPT["fe_particulas"],
+                           OPT["semilla"])
         rows.append(record(dressed, "brazo_decorado", {
             "familia": "escena", "version": "ilustración", "nucleo": "Fe",
             "capas_grafiticas": 0, "veredicto_nucleo": "—",
-            "veredicto_coraza": f"{OPT['fe_anillos']}x{OPT['fe_por_anillo']} "
-                                "partículas de Fe colocadas sobre la pared"}))
+            "veredicto_coraza": f"{OPT['fe_particulas']} partículas "
+                                "de Fe repartidas sobre la pared"}))
         finish(anemone_items(dressed, OPT["brazos"], radius),
                "escena_anemona_decorada",
                f"composición: {OPT['brazos']} brazos con Fe encima")
+
+
+def standing_angles(atoms: Atoms) -> tuple[float, float, float]:
+    """Euler angles that stand a piece up and turn it face on.
+
+    The item's own principal axes are measured and mapped onto the
+    scene's: the LONGEST onto +z, so it stands, and the SHORTEST onto
+    -y, so its broad side faces a camera placed on the -y side. For a
+    plate that shows the hexagon; for a rod or a tube it shows the
+    length. Both are the silhouette the piece is recognised by.
+
+    Measured rather than typed in, because each piece leaves its
+    builder in whatever frame that builder uses, and three hand-tuned
+    triples drift the moment one of them is rebuilt.
+
+    The decomposition matches :func:`scene.euler_matrix`'s stated
+    convention, ``R = Rz @ Ry @ Rx``, and nothing else here may assume
+    a different one.
+    """
+    centred = (np.asarray(atoms.positions, dtype=float)
+               - np.asarray(atoms.positions, dtype=float).mean(axis=0))
+    axes = np.linalg.svd(centred, full_matrices=False)[2]
+    long_axis, thin = axes[0], axes[2]
+    thin = thin - np.dot(thin, long_axis) * long_axis
+    thin /= np.linalg.norm(thin)
+    source = np.column_stack([long_axis, np.cross(thin, long_axis), thin])
+    if np.linalg.det(source) < 0:
+        source[:, 1] *= -1.0
+    target = np.column_stack([[0.0, 0.0, 1.0],      # length stands up
+                              [-1.0, 0.0, 0.0],
+                              [0.0, -1.0, 0.0]])    # broad side to camera
+    turn = target @ source.T
+    beta = np.arcsin(float(np.clip(-turn[2, 0], -1.0, 1.0)))
+    alpha = np.arctan2(turn[2, 1], turn[2, 2])
+    gamma = np.arctan2(turn[1, 0], turn[0, 0])
+    return tuple(float(np.degrees(a)) for a in (alpha, beta, gamma))
 
 
 def anemone_items(arm: Atoms, arms: int, radius: float,
@@ -633,73 +673,131 @@ def anemone_items(arm: Atoms, arms: int, radius: float,
     return items
 
 
-def decorate(arm: Atoms, bead: Atoms, rings: int, per_ring: int) -> Atoms:
-    """Seat metal beads over an arm's wall on a REGULAR lattice.
+def decorate(arm: Atoms, bead: Atoms, count: int, seed: int) -> Atoms:
+    """Seat metal beads over an arm's wall, spread EVENLY but not in rows.
 
     The bright specks along the tubes in the micrograph. They are
     PLACED, not grown: each sits on the wall at a van der Waals contact
     along the local outward normal, and nothing here computes whether
     iron would wet graphite that way.
 
-    Laid out as ``rings`` hoops along the tube with ``per_ring`` beads
-    round each, with consecutive hoops staggered by half a step. A
-    random draw was the first version and it reads as dirt rather than
-    as decoration -- at this count the gaps clump and the eye finds the
-    clumps. Deterministic, so the same arm decorates the same way every
-    run without a seed to carry.
+    Three layouts were tried and the first two are visible AS layouts,
+    which is the fault:
 
-    The outward normal comes from the tube's own axis -- an atom minus
-    its projection on it -- which is cheap and exact for a cylinder.
+    * **A uniform random draw** clumps. At this count the gaps are as
+      big as the particles and the eye finds the clumps first, so it
+      reads as dirt rather than as decoration.
+    * **Hoops along the barrel**, staggered half a step, fixes the
+      clumping and introduces a worse artefact: the beads line up into
+      visible *rings* round the tube, which the micrograph does not
+      show. A lattice is even, and even is not the same as uniform.
+
+    What the micrograph shows is **blue noise**: no clumps, no rows, no
+    preferred angle. So the seats are chosen by best-candidate
+    sampling -- for each new seat, ``DECORATION_CANDIDATES`` wall atoms
+    are drawn at random and the one furthest from every seat already
+    taken is kept.
+
+    **The seats are atoms of the wall, not points on an analytic
+    cylinder**, and that is the part that was wrong first. An arm is
+    BENT: parameterising it by height and angle about its own principal
+    axis is a cylinder's parameterisation, and on a curved tube it
+    stretches on the outside of the bend and folds on the inside. The
+    measured gaps were honest and the picture still showed clumps,
+    because the gaps were being measured in the wrong space. Distances
+    between atoms do not care how the tube is shaped.
+
+    Random, so it takes a ``seed``; deterministic given one.
+
+    The outward normal is measured per seat, for the same reason: the
+    local surface normal is the smallest-variance direction of the
+    atom's own neighbourhood, and its sign is fixed against the vector
+    from the middle of a short length of tube, which points outward
+    whatever the tube is doing globally.
+
     Beads go on the barrel only: one on a cap reads as the tip particle
-    and the two should not be confused.
+    and the two should not be confused. Anything the arm already
+    declared solid -- the particle in the tip -- is not wall.
     """
     positions = np.asarray(arm.positions, dtype=float)
-    centre = positions.mean(axis=0)
-    centred = positions - centre
-    axis = np.linalg.svd(centred, full_matrices=False)[2][0]
-    along = centred @ axis
-    radial = centred - np.outer(along, axis)
-    distance = np.linalg.norm(radial, axis=1)
-    barrel = np.flatnonzero(distance > 0.9 * distance.max())
-    if len(barrel) < rings * per_ring:
+    solid = set(int(i) for i in arm.info.get("solid_indices", []))
+    wall = np.array([i for i in range(len(arm)) if i not in solid], dtype=int)
+    if len(wall) < 8 * count:
         return arm
 
-    # A frame across the tube, to turn an angle into a direction.
-    first = radial[barrel[int(np.argmax(distance[barrel]))]]
-    first = first / np.linalg.norm(first)
-    second = np.cross(axis, first)
+    # Caps off. The principal axis is a poor parameterisation of a bent
+    # tube and a perfectly good way to find its two ends.
+    centred = positions - positions[wall].mean(axis=0)
+    axis = np.linalg.svd(centred[wall], full_matrices=False)[2][0]
+    along = centred @ axis
+    low, high = along[wall].min(), along[wall].max()
+    margin = 0.10 * (high - low)
+    free = wall[(along[wall] > low + margin) & (along[wall] < high - margin)]
+    if len(free) < 8 * count:
+        free = wall
 
-    # Hoops spread over the middle of the barrel, clear of both caps.
-    low, high = along[barrel].min(), along[barrel].max()
-    margin = 0.12 * (high - low)
-    heights = np.linspace(low + margin, high - margin, rings)
+    rng = np.random.default_rng(seed)
+    seats: list[int] = []
+    for _ in range(count):
+        draw = rng.choice(free, size=DECORATION_CANDIDATES, replace=False)
+        if not seats:
+            pick = int(draw[0])
+        else:
+            taken = positions[np.asarray(seats)]
+            far = np.linalg.norm(positions[draw][:, None, :] - taken[None],
+                                 axis=2).min(axis=1)
+            pick = int(draw[int(np.argmax(far))])
+        seats.append(pick)
 
     bead_reach = 0.5 * float(max(np.ptp(bead.positions[:, k])
                                  for k in range(3)))
     local = np.asarray(bead.positions, dtype=float)
     local = local - local.mean(axis=0)
+    tree = cKDTree(positions[wall])
     out = arm.copy()
-    step = 2.0 * np.pi / per_ring
-    for ring_index, height in enumerate(heights):
-        for seat in range(per_ring):
-            angle = step * (seat + 0.5 * (ring_index % 2))
-            want = (centre + axis * height
-                    + (first * np.cos(angle) + second * np.sin(angle))
-                    * distance[barrel].max())
-            # The nearest wall atom to where the lattice asks for one,
-            # so a bead always lands ON the wall rather than beside it.
-            index = barrel[int(np.argmin(
-                np.linalg.norm(positions[barrel] - want, axis=1)))]
-            normal = radial[index] / max(np.linalg.norm(radial[index]), 1e-9)
-            placed = bead.copy()
-            placed.positions = (local + positions[index]
-                                + normal * (bead_reach + GRAPHITIC_GAP))
-            out += placed
+    for index in seats:
+        # The patch that gives the normal, and the longer one that
+        # gives its sign. Both are counts rather than radii, so neither
+        # needs the tube's diameter to be known or constant.
+        patch = positions[wall][tree.query(positions[index], k=30)[1]]
+        normal = np.linalg.svd(patch - patch.mean(axis=0),
+                               full_matrices=False)[2][2]
+        segment = positions[wall][tree.query(positions[index], k=400)[1]]
+        outward = positions[index] - segment.mean(axis=0)
+        if float(np.dot(normal, outward)) < 0.0:
+            normal = -normal
+        placed = bead.copy()
+        placed.positions = (local + positions[index]
+                            + normal * (bead_reach + GRAPHITIC_GAP))
+        out += placed
     out.info = dict(arm.info)
     out.info["solid_indices"] = (list(arm.info.get("solid_indices", []))
                                  + list(range(len(arm), len(out))))
+    beads = np.asarray(out.positions[len(arm):], dtype=float)
+    print(f"    decoración: {count} partículas, separación mínima entre "
+          f"centros {_closest_seat(positions[np.asarray(seats)]):.1f} Å, "
+          f"la más hundida a {tree.query(beads)[0].min():.2f} Å de la pared")
     return out
 
+
+def _closest_seat(seats: np.ndarray) -> float:
+    """The smallest distance between two seats, in Å.
+
+    Reported rather than assumed: blue noise is a claim about this
+    number, and a sampler that quietly degenerates to a random draw
+    would look fine in the log without it.
+    """
+    if len(seats) < 2:
+        return float("inf")
+    gap = np.linalg.norm(seats[:, None, :] - seats[None, :, :], axis=2)
+    np.fill_diagonal(gap, np.inf)
+    return float(gap.min())
+
+
+#: Draws per seat in the decoration's best-candidate sampler. More is
+#: more even and the return falls off fast; 24 is where the measured
+#: minimum gap stops improving by more than a few per cent.
+DECORATION_CANDIDATES = 24
 
 #: Shells whose carbon-carbon bonds left the sp2 range, collected so
 #: the run ENDS by saying so.

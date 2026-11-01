@@ -228,7 +228,7 @@
     "nucleo": "—",
     "capas_grafiticas": 0,
     "veredicto_nucleo": "—",
-    "veredicto_coraza": "composición: placa, barra y tubo en una línea, uno detrás de otro"
+    "veredicto_coraza": "composición: placa, barra y tubo de pie, de perfil, uno detrás de otro"
   },
   {
     "modelo": "escena_anemonas",
@@ -243,19 +243,19 @@
   },
   {
     "modelo": "brazo_decorado",
-    "atomos": 3475,
-    "formula": "C3017Fe458",
+    "atomos": 3565,
+    "formula": "C3017Fe548",
     "familia": "escena",
     "version": "ilustración",
     "nucleo": "Fe",
     "capas_grafiticas": 0,
     "veredicto_nucleo": "—",
-    "veredicto_coraza": "7x4 partículas de Fe colocadas sobre la pared"
+    "veredicto_coraza": "34 partículas de Fe repartidas sobre la pared"
   },
   {
     "modelo": "escena_anemona_decorada",
-    "atomos": 27800,
-    "formula": "C24136Fe3664",
+    "atomos": 28520,
+    "formula": "C24136Fe4384",
     "familia": "escena",
     "version": "ilustración",
     "nucleo": "—",

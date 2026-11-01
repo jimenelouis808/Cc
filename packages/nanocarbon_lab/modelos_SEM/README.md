@@ -54,8 +54,8 @@ de 900 °C, eso lo cierra en una tarde; el SEM solo lo sugiere.
 | `escena_barras` | 37152 | C29088Fe4032Se4032 |
 | `escena_profundidad` | 10353 | C8185Fe1103Se1065 |
 | `escena_anemonas` | 54990 | C54306Fe684 |
-| `brazo_decorado` | 3475 | C3017Fe458 |
-| `escena_anemona_decorada` | 27800 | C24136Fe3664 |
+| `brazo_decorado` | 3565 | C3017Fe548 |
+| `escena_anemona_decorada` | 28520 | C24136Fe4384 |
 
 ### Las tres versiones
 
@@ -218,7 +218,7 @@ De las escenas: `--barras` (cuántas), `--barras-separacion` (en unidades
 del largo de la propia barra), `--barras-holgura` (los Å que cada barra
 debe dejar libres) y `--barras-intentos` (cuántas tiradas antes de
 quedarse con la mejor); `--anemonas-separacion`; y de la decoración
-`--fe-radio`, `--fe-anillos` y `--fe-por-anillo`.
+`--fe-radio` y `--fe-particulas`.
 
 ## Qué átomo es sólido y cuál no
 
@@ -315,10 +315,10 @@ uv run python modelos_SEM/camara.py                    # lo que encuadraría
 | escena | átomos | fórmula | qué es |
 |---|---|---|---|
 | `escena_barras` | **37 152** | C29088Fe4032Se4032 | 16 barras recubiertas, como el montón del SEM a 900 °C |
-| `escena_profundidad` | 10 353 | C8185Fe1103Se1065 | placa delante, barra detrás, tubo con partícula al fondo |
+| `escena_profundidad` | 10 353 | C8185Fe1103Se1065 | placa, barra y tubo de pie y de perfil, en fila hacia el fondo |
 | `escena_anemona` | 24 440 | C24136Fe304 | una anémona de 8 brazos |
 | `escena_anemonas` | **54 990** | C54306Fe684 | tres anémonas juntas |
-| `escena_anemona_decorada` | 27 800 | C24136Fe3664 | una anémona con partículas de Fe sobre los brazos |
+| `escena_anemona_decorada` | **28 520** | C24136Fe4384 | una anémona con 34 partículas de Fe por brazo, en ruido azul |
 
 **Son ilustraciones, no estructuras.** `scene.compose` coloca piezas ya
 terminadas: no hay interfase relajada entre dos de ellas y nada de los
@@ -354,13 +354,23 @@ inclinada lo justo para ver los de atrás por un lado del de delante en
 vez de eclipsados. Es un nombre y no una búsqueda porque ninguna medida
 de área la devolvería nunca. Llega sola a `render_cnt --view depth`.
 
+Y la escena que la usa es ahora una **fila de póster**: cada pieza de
+pie, de perfil, una detrás de otra. Las tres rotaciones no se escriben
+a mano sino que se **miden** (`standing_angles`): se toman los ejes
+principales de cada pieza y se mandan el más largo a +z, para que se
+ponga de pie, y el más corto a −y, para que su cara ancha mire a la
+cámara. Para la placa eso enseña el hexágono y para la barra y el tubo
+su longitud — en los tres casos la silueta por la que se reconocen. Lo
+contrario de tres ángulos de tres cuartos distintos, que es lo que se
+leía como tres objetos sueltos en el espacio.
+
 | escena | vista | cámara a | relleno | en cuadro |
 |---|---|---|---|---|
 | `escena_barras` | auto | 585 Å | 1.18 | 99.7 % |
-| `escena_profundidad` | **depth** | 296 Å | 1.10 | 98.6 % |
+| `escena_profundidad` | **depth** | 267 Å | 1.10 | 100 % |
 | `escena_anemona` | auto | 679 Å | 0.95 | 100 % |
 | `escena_anemonas` | auto | 986 Å | 1.12 | 97.9 % |
-| `escena_anemona_decorada` | auto | 653 Å | 1.00 | 100 % |
+| `escena_anemona_decorada` | auto | 655 Å | 1.00 | 100 % |
 
 **Un relleno por encima de 1 recorta a propósito**: el sujeto se encuadra
 más grande que el cuadro y sus bordes se salen, que es lo que «más zoom»
@@ -375,20 +385,84 @@ mismo relleno, así que contesta «¿está el sujeto en cuadro, del tamaño
 correcto, desde un ángulo que lo enseñe?» y nada más. Un render de
 25 000 átomos cuesta minutos; esta pregunta no cuesta ninguno.
 
-### Las partículas de la anémona decorada van en red, no al azar
+### Las partículas de la anémona decorada: tres repartos, dos malos
 
-Seis partículas puestas al azar por brazo se leían como suciedad. Ahora
-son `--fe-anillos` aros a lo largo del cilindro por `--fe-por-anillo`
-cuentas cada uno, con los aros consecutivos desfasados medio paso —28
-por brazo, determinista, sin semilla—. Cada cuenta se apoya sobre el
-átomo de pared más cercano a su punto de red, desplazada a lo largo de
-la normal hacia fuera hasta el contacto grafítico, de modo que la
-decoración sigue la superficie en lugar de flotar.
+Lo que la micrografía enseña no es ni azar ni red. Es **ruido azul**:
+ni grumos, ni filas, ni ángulo preferido.
+
+1. **Azar uniforme.** Se agrupa. A esta cantidad los huecos son tan
+   grandes como las partículas, el ojo encuentra los grumos primero y
+   se lee como suciedad.
+2. **Aros a lo largo del cañón**, desfasados medio paso. Arregla los
+   grumos y mete un artefacto peor: las partículas se alinean en
+   **anillos** visibles alrededor del tubo, que la micrografía no
+   tiene. Una red es *pareja*, y pareja no es lo mismo que uniforme.
+3. **Ruido azul sobre los átomos de la pared**, que es lo que hay
+   ahora: para cada asiento se sortean `DECORATION_CANDIDATES` átomos
+   de pared y se queda el más lejano de todos los asientos ya tomados.
+   Aleatorio, así que lleva `--semilla`; determinista dada una.
+
+**Los asientos son átomos de la pared y no puntos de un cilindro**, y
+ésa es la parte que estaba mal primero. El brazo está **doblado**:
+parametrizarlo por altura y ángulo alrededor de su propio eje
+principal es la parametrización de un cilindro, y sobre un tubo curvo
+estira por fuera del codo y pliega por dentro. Las separaciones
+medidas eran honestas y el dibujo seguía saliendo con grumos, porque
+se estaban midiendo en el espacio equivocado. La distancia entre dos
+átomos no depende de cómo esté doblado el tubo.
+
+La normal de cada asiento se mide igual de local: es la dirección de
+menor varianza del vecindario del átomo, con el signo fijado contra el
+vector que sale del centro de un tramo corto de tubo. Medido en la
+versión que se entrega: 34 partículas, **9.2 Å** entre las dos más
+cercanas y la más hundida a **3.37 Å** de la pared, que es el contacto
+grafítico.
+
+## Elegir el estilo sale barato; renderizar la escena no
+
+```bash
+BPY=<python con bpy> bash modelos_SEM/pruebas_estilo.sh            # el brazo
+BPY=... RES="700 875" SAMPLES=24 bash modelos_SEM/pruebas_estilo.sh
+```
+
+**El coste está en el número de átomos, casi no en las muestras ni en
+la resolución.** La malla se construye una icoesfera y un cilindro a la
+vez desde Python, así que una escena de 10 353 átomos tarda lo mismo
+pida lo que pida, y una de 55 000 es horas. Por eso las pruebas de
+estilo van sobre `brazo_decorado` —3565 átomos— que lleva exactamente
+los tres materiales en discusión: la coraza grafítica, las partículas
+de Fe encima y la partícula de la punta. Se elige el estilo ahí y se
+gastan las horas una sola vez.
+
+### `core_shell_cover`, el preset escrito para esta muestra
+
+Los 37 presets del catálogo están pensados para otras cosas —una jaula,
+una red periódica, un cristal transparente—. Éste parte de lo que la
+muestra es: **una coraza oscura de carbono con metal brillante dentro o
+encima**, que es lo que enseña la micrografía y lo que una portada de
+ella tiene que conservar.
+
+- **Fondo casi negro, pero no negro.** Un fondo muerto se traga el lado
+  oscuro de un sujeto oscuro, y el rim por sí solo no sostiene un borde
+  que no tiene nada detrás.
+- **El rim es la pieza que carga con todo.** Ocho brazos del mismo gris
+  oscuro se superponen; sin un borde en cada silueta se funden en una
+  sola mancha. El rim no es una lámpara: es emisión por Fresnel, así
+  que dibuja borde en *todas* las siluetas visibles y no en un lado.
+- **Glare por encima de la imagen terminada, con el umbral entre el
+  grafito y el metal.** Sólo florece el metal. Es justo el aspecto de
+  la micrografía, y no cuesta ni una muestra porque corre sobre el PNG.
+- La separación metal/carbono la llevan **el color por elemento y el
+  modelo `auto`** (sólido el metal, abierto el carbono), no la luz.
+
+El estilo entra en el catálogo como uno más, así que llega solo a la
+ventana, al CLI y a `render_cnt --style core_shell_cover`.
 
 ## El render de portada
 
-`modelos_SEM/renderizar.sh` produce las imágenes de `render/`. Tres
-banderas hacen el aspecto que pediste:
+`modelos_SEM/renderizar.sh` produce las imágenes de `render/`, y lleva
+el estilo en una sola variable: `ESTILO=core_shell_cover bash
+modelos_SEM/renderizar.sh`. Tres banderas hacen el aspecto que pediste:
 
 ```
 --model auto            metales en relleno de van der Waals,

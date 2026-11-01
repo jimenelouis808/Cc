@@ -57,8 +57,10 @@ NAMED_VIEWS: dict[str, tuple[float, float, float]] = {
     # which is exactly the view that spreads three objects side by side
     # and destroys the depth they were placed for. Shallow rather than
     # dead-on, so the ones behind are seen past the one in front rather
-    # than eclipsed by it.
-    "depth": (0.35, -1.0, 0.30),
+    # than eclipsed by it, and only slightly above the subject: a
+    # line-up of standing pieces reads along the horizon, and looking
+    # down on it foreshortens exactly the height that makes it one.
+    "depth": (0.30, -1.0, 0.14),
 }
 
 

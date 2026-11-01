@@ -1974,6 +1974,68 @@ STYLES: dict[str, Style] = {
         effects=(EffectSpec("glare", {"strength": 0.3}),),
     ),
 
+    "core_shell_cover": Style(
+        name="core_shell_cover",
+        description=(
+            "Written for a core-shell sample: a dark graphitic shell "
+            "with bright metal inside it or sitting on it, which is "
+            "what the micrograph shows and what a cover of one has to "
+            "keep. Near-black field, the carbon matte graphite with a "
+            "cold rim so overlapping tubes separate at their "
+            "silhouettes, one warm key, and glare over the finished "
+            "image so the metal blooms and the carbon does not. It "
+            "wants the AUTO model and element colour: the separation "
+            "is carried by the element colours and by the solid/open "
+            "split, not by the lighting."
+        ),
+        # Not pure black. A dead background makes the dark side of a
+        # dark subject vanish into it, and the rim alone cannot hold an
+        # edge that has nothing behind it.
+        background=Background(
+            kind="gradient", top=(0.030, 0.038, 0.055),
+            bottom=(0.008, 0.010, 0.016), strength=1.0,
+            floor=True, floor_color=(0.012, 0.015, 0.022),
+            floor_roughness=0.14, floor_metallic=0.6,
+        ),
+        # Graphite: dark, slightly metallic, a touch of coat so it has
+        # a sheen rather than reading as felt. The rim is the load-
+        # bearing part -- eight arms of the same dark grey overlap, and
+        # without an edge on every silhouette they merge into one blob.
+        hexagon=MaterialSpec(base_color=(0.085, 0.095, 0.115, 1.0),
+                             metallic=0.45, roughness=0.34, clearcoat=0.25,
+                             sheen=0.25,
+                             rim=1.7, rim_color=(0.55, 0.78, 1.00),
+                             rim_power=3.6),
+        pentagon=_accent((0.95, 0.62, 0.25, 1.0), (1.00, 0.58, 0.18), 1.6),
+        heptagon=_accent((0.35, 0.78, 1.00, 1.0), (0.28, 0.72, 1.00), 1.6),
+        octagon=_accent((1.00, 0.40, 0.22, 1.0), (1.00, 0.36, 0.16), 1.8),
+        bond=MaterialSpec(base_color=(0.070, 0.078, 0.095, 1.0),
+                          metallic=0.5, roughness=0.32,
+                          rim=1.0, rim_color=(0.45, 0.70, 0.95)),
+        lights=[
+            # One warm key high on the right, the way a micrograph's
+            # detector sits off to one side.
+            LightSpec("AREA", 3000.0, (1.00, 0.86, 0.62), (8.0, -6.0, 9.0),
+                      size=8.0),
+            # A cold wide fill, low, so the underside is not black.
+            LightSpec("AREA", 900.0, (0.42, 0.62, 1.00), (-9.0, -2.0, 2.0),
+                      size=14.0),
+            # Behind, to lift the far silhouettes off the background.
+            LightSpec("AREA", 1200.0, (0.70, 0.84, 1.00), (-2.0, 9.0, 5.0),
+                      size=10.0),
+        ],
+        camera_lens_mm=55.0,
+        camera_dof_fstop=2.8,
+        samples=384,
+        default_colour_by="element",
+        default_model="auto",
+        # Threshold above the graphite and below the metal, so only the
+        # bright specks bloom. That is the whole trick, and it costs no
+        # samples because it runs over the finished image.
+        effects=(EffectSpec("glare", {"strength": 0.40, "threshold": 0.62,
+                                      "size": 0.45}),),
+    ),
+
     "clear_glass": Style(
         name="clear_glass",
         description=(

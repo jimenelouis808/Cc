@@ -177,7 +177,9 @@ class TestBestView:
         # Shallow, not dead-on: the ones behind must be seen past the
         # one in front rather than eclipsed by it.
         assert 0.1 < abs(float(depth[0])) < 0.5
-        assert 0.1 < abs(float(depth[2])) < 0.5
+        # Above the subject, but only just: a line-up of standing
+        # pieces is read along the horizon.
+        assert 0.05 < float(depth[2]) < 0.3
 
 
 class TestFraming:

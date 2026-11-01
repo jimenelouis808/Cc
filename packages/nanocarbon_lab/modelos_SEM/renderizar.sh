@@ -23,7 +23,12 @@ mkdir -p "$OUT"
 #   --spacefill-element Se    ...and the chalcogen too, because an FeSe
 #                             core is a solid and Se is not a metal
 #   --atom-scale/--bond-scale thin balls and thin sticks for the cage
-COMMON=(--style clusters_on_sheet --model auto --colour-by element
+# One variable, because the preset is the thing most likely to
+# change: `bash modelos_SEM/renderizar.sh` after
+# `ESTILO=core_shell_cover`. See modelos_SEM/pruebas_estilo.sh for
+# the cheap way to choose one.
+ESTILO="${ESTILO:-core_shell_cover}"
+COMMON=(--style "$ESTILO" --model auto --colour-by element
         --atom-scale 0.55 --bond-scale 0.5 --engine cycles)
 
 render () {        # render <name> <resolution> <samples> [extra flags...]

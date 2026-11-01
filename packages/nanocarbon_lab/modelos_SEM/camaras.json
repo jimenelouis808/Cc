@@ -14,7 +14,7 @@
   {
     "modelo": "escena_anemona_decorada",
     "vista": "auto",
-    "distancia": 652.9626038272581,
+    "distancia": 655.0344899266895,
     "relleno": 1.0,
     "en_cuadro": 1.0,
     "direccion": [
@@ -50,13 +50,13 @@
   {
     "modelo": "escena_profundidad",
     "vista": "depth",
-    "distancia": 295.63247147613333,
+    "distancia": 266.85287234064657,
     "relleno": 1.1,
-    "en_cuadro": 0.9859943977591037,
+    "en_cuadro": 1.0,
     "direccion": [
-      0.3178536264305498,
-      -0.9081532183729996,
-      0.27244596551189987
+      0.28479871843396587,
+      -0.949329061446553,
+      0.13290606860251744
     ]
   }
 ]
