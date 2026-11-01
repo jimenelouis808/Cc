@@ -192,6 +192,36 @@ Por eso va también `placa_H_delgada_desnuda`: 6.0 Å de grosor y 58 Å de
 ancho, **9.8:1**, sin cubrir. Es la más delgada que el cristal permite y
 la que hay que comparar con la micrografía.
 
+## Todo es un parámetro
+
+```bash
+uv run python modelos_SEM/construir.py --help
+uv run python modelos_SEM/construir.py --barra-semilargo 60 --brazos 14
+```
+
+Cada entrada de `DEFAULTS` es una opción con el mismo nombre, así que
+añadir una perilla es añadir una línea a esa tabla. Lo que se puede
+barrer sin tocar el código: radio y grosor de la placa, radio y largo de
+la barra, los semiejes y el número de capas de la partícula de
+cementita, la partícula que va dentro del tubo, la frecuencia (= el
+radio, cuantizado por la red) y los anillos y la curvatura del tubo, el
+número de brazos y su separación, las fracciones de N y de Se, y del
+recubrimiento el hueco, el ancla, la rejilla, el remallado, la
+relajación y la semilla.
+
+## Qué átomo es sólido y cuál no
+
+Cada modelo escribe en su `bundle/<nombre>.json` una lista `solid` con
+los índices del núcleo. La hoja de contacto y el render la leen, y por
+eso el Se del FeSe sale en relleno de van der Waals mientras el Se
+sustituido en la coraza sale en bolas y palos como sus vecinos.
+
+**Es una REGIÓN y no un elemento, y tenía que serlo**: es el mismo
+selenio en dos sitios —parte de un sólido en el núcleo, un átomo en una
+red en la coraza— y ninguna regla por elemento los separa. Lo mismo vale
+para el azufre y el oxígeno de los grupos funcionales. `--spacefill-element`
+sigue existiendo para una estructura que no lleve la lista.
+
 ## Para comparar: las hojas de contacto
 
 ```bash

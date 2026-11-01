@@ -82,6 +82,7 @@ def build_ball_and_stick(
                  for key, spec in zip(keys, specs, strict=True)]
     radii = atom_radii(bundle, colour_by, atom_scale, model,
                        spacefill_extra)
+    solid = set(int(i) for i in bundle.get("solid", []))
     symbols = bundle["symbols"]
     # Resolution follows the atom count unless the caller insists. An
     # icosphere at subdivision 2 -- the old fixed value -- is 80
@@ -131,6 +132,10 @@ def build_ball_and_stick(
             # raise: an index error here aborts a render that is minutes
             # in, and the structure is still worth seeing.
             continue
+        if model == "auto" and (i in solid or j in solid):
+            # A stick into a space-filling atom starts inside a sphere
+            # of its own radius and comes out the far side.
+            continue
         if not style_defs.bond_is_drawn(model, symbols[i], symbols[j],
                                         spacefill_extra):
             # Under `auto`, a bond with a space-filling atom at either
@@ -158,6 +163,8 @@ def build_ball_and_stick(
     for stub in bundle.get("seam_stubs", []):
         index = int(stub[0])
         if index >= len(positions) or not draw_any:
+            continue
+        if model == "auto" and index in solid:
             continue
         if not style_defs.bond_is_drawn(model, symbols[index],
                                         symbols[index], spacefill_extra):

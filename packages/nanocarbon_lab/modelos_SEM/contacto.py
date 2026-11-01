@@ -59,6 +59,7 @@ MARKER_SCALE = 7.0
 #: Elements drawn at their van der Waals radius; everything else at the
 #: smaller display radius.
 #:
+#: Only used when the model has no ``solid`` list in its sidecar.
 #: **Iron only.** Selenium was in here too, which is right for the Se of
 #: an FeSe core -- it is part of a solid -- and wrong for the Se
 #: substituted into the carbon shell, which is one atom in a lattice and
@@ -73,6 +74,7 @@ MARKER_SCALE = 7.0
 #: and every coated model comes out as one black blob -- which is
 #: exactly the comparison these sheets exist to make possible.
 SOLID = frozenset({"Fe"})
+
 
 #: How far the shell's carbon is faded, so the core reads through it.
 SHELL_ALPHA = 0.55
@@ -98,14 +100,26 @@ def draw(axis, path: Path, span: float,
          view: tuple[int, int] = (0, 1)) -> tuple[int, float, float]:
     """One panel. Returns the atom count and the two measured extents."""
     atoms = read(path)
+    # Which atoms are the solid, read from the model's own sidecar.
+    # A REGION, not an element: the same selenium is in the FeSe core
+    # and substituted into the shell around it, and only the build
+    # knows which is which.
+    sidecar = path.parent.parent / "bundle" / f"{path.stem}.json"
+    solid_idx: set[int] = set()
+    if sidecar.exists():
+        solid_idx = {int(i) for i in
+                     json.loads(sidecar.read_text()).get("solid", [])}
     principal = projected(atoms)
     flat = principal[:, view]
     depth = principal[:, 3 - sum(view)]
     symbols = atoms.get_chemical_symbols()
-    radii = np.array([style_defs.vdw_radius(s) if s in SOLID
-                      else style_defs.element_radius(s) for s in symbols])
+    is_solid = np.array([(i in solid_idx) if solid_idx else (s in SOLID)
+                         for i, s in enumerate(symbols)])
+    radii = np.array([style_defs.vdw_radius(s) if hard
+                      else style_defs.element_radius(s)
+                      for s, hard in zip(symbols, is_solid, strict=True)])
     colours = [ELEMENT_COLOURS.get(s, "#888888") for s in symbols]
-    alphas = np.array([1.0 if s in SOLID else SHELL_ALPHA for s in symbols])
+    alphas = np.where(is_solid, 1.0, SHELL_ALPHA)
     # Far atoms first, so the near ones are drawn on top. Without this
     # the core shows through its own shell wherever the shell happened
     # to be written first, which on a core-shell particle is most of it.

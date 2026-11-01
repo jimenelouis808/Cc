@@ -318,3 +318,62 @@ class TestSpacefillExtra:
         assert declared[0] == pytest.approx(plain[0])   # Fe: already solid
         assert declared[1] > plain[1]                   # Se: now solid
         assert declared[2] == pytest.approx(plain[2])   # C: untouched
+
+
+class TestSolidRegion:
+    """Which atoms are a solid is a REGION, not an element.
+
+    The same selenium can be in an FeSe core, where it is part of a
+    solid and belongs in space-filling, and substituted into the carbon
+    shell wrapping that core, where it is one atom in a lattice and
+    belongs in ball-and-stick. ``--spacefill-element`` cannot separate
+    those two, because it asks the element. The builder knows, so it
+    writes the core's indices into the sidecar and the renderer reads
+    them.
+    """
+
+    @staticmethod
+    def _bundle():
+        return {"symbols": ["Fe", "Se", "C", "Se"],
+                "positions": [[0, 0, 0], [2, 0, 0], [6, 0, 0], [8, 0, 0]],
+                # The core is the first two; the last Se is a dopant.
+                "solid": [0, 1]}
+
+    def test_the_cores_selenium_is_solid_and_the_dopant_is_not(self):
+        bundle_mod = _load("bundle")
+        styles = _load("styles")
+        radii = bundle_mod.atom_radii(self._bundle(), "element", 1.0, "auto")
+        core_se, shell_se = radii[1], radii[3]
+        assert core_se == pytest.approx(
+            styles.VDW_RADII["Se"] * styles.SPACEFILL_SCALE)
+        assert shell_se == pytest.approx(styles.ELEMENT_RADII["Se"])
+        assert core_se > shell_se
+
+    def test_carbon_is_untouched(self):
+        bundle_mod = _load("bundle")
+        styles = _load("styles")
+        radii = bundle_mod.atom_radii(self._bundle(), "element", 1.0, "auto")
+        assert radii[2] == pytest.approx(styles.ELEMENT_RADII["C"])
+
+    def test_without_the_list_it_falls_back_to_the_element_rule(self):
+        bundle_mod = _load("bundle")
+        plain = dict(self._bundle())
+        plain.pop("solid")
+        radii = bundle_mod.atom_radii(plain, "element", 1.0, "auto")
+        # Both seleniums now read the same, which is the ambiguity the
+        # list exists to remove.
+        assert radii[1] == pytest.approx(radii[3])
+
+    def test_the_exporter_carries_it(self, tmp_path):
+        import json
+
+        import numpy as np
+        from ase import Atoms
+
+        from nanocarbon_lab.exports.xyz import write_render_bundle
+
+        atoms = Atoms("FeSeC", positions=np.array(
+            [[0.0, 0, 0], [2.0, 0, 0], [6.0, 0, 0]]))
+        atoms.info["solid_indices"] = [0, 1]
+        _, sidecar = write_render_bundle(atoms, tmp_path / "x", cif=False)
+        assert json.loads(sidecar.read_text())["solid"] == [0, 1]

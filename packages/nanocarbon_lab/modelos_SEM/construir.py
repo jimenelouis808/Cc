@@ -39,9 +39,11 @@ user asked for:
 
 from __future__ import annotations
 
+import argparse
 import json
 import time
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from ase import Atoms
@@ -65,12 +67,42 @@ XYZ = HERE / "xyz"
 IMG = HERE / "img"
 BUNDLE = HERE / "bundle"
 
+#: Everything the build can be told, with the defaults these models
+#: settled on. Exposed as command-line options rather than constants
+#: because the whole point of this folder is sweeping them: a diameter,
+#: a length or a dopant fraction should not need the source edited.
+DEFAULTS: dict[str, Any] = {
+    # -- the hexagonal plate (900 C) --
+    "placa_radio": 30.0,       # Å, circumradius of the hexagon
+    "placa_semigrosor": 4.5,   # Å; 3.0 is the crystal's floor, see README
+    # -- the tetragonal rod (900 C) --
+    "barra_radio": 6.0,        # Å
+    "barra_semilargo": 40.0,   # Å
+    # -- the big carbide particle (1020 C) --
+    "fe3c_a": 13.0, "fe3c_c": 18.0,   # Å, ellipsoid semi-axes
+    "fe3c_capas": 2,
+    # -- the one that goes in the tube --
+    "fe3c_interior_a": 7.0, "fe3c_interior_c": 9.0,
+    # -- the arm --
+    "tubo_freq": 6,            # radius = 1.96 * freq Å, quantised
+    "tubo_anillos": 10,
+    "tubo_curva": 0.75,        # `waviness` of the arc centreline
+    # -- the anemone --
+    "brazos": 10,
+    "brazos_separacion": 2.0,  # tube radii out from the centre
+    # -- chemistry --
+    "n_frac": 0.06, "se_frac": 0.025,
+    # -- the coating --
+    "hueco": 3.45,             # Å
+    "ancla": 0.0,              # 0 now that the core is an obstacle
+    "rejilla": 128, "remallado": 60, "relajacion": 8000,
+    "semilla": 20251031,
+}
+
 #: Substitutional co-doping of the carbon, as the user's material is:
-#: N and Se together. The fractions are each against the ORIGINAL carbon
-#: count, and each sits under its own ceiling in `dopants.chemistry`
-#: (N 0.20, Se 0.03) -- Se is the binding one and 3 % is its limit, past
-#: which the placement stops describing a doped sheet.
-CODOPE = [("N", 0.06), ("Se", 0.025)]
+#: N and Se together, each fraction against the ORIGINAL carbon count
+#: and each under its own ceiling in `dopants.chemistry` (N 0.20,
+#: Se 0.03 -- Se is the binding one).
 
 #: "avoid", so no two heteroatoms end up bonded. N and Se are not a
 #: donor-acceptor pair like B-N: there is no reason for them to sit
@@ -80,8 +112,8 @@ AFFINITY = "avoid"
 
 #: Surface groups for the third version, in the order they are grafted.
 #: Coverage is deliberately low and falls along the list: each pass sees
-#: the sites the previous ones left, and a real oxidised carbon carries a
-#: few per cent of groups, not a monolayer.
+#: the sites the previous ones left, and a real oxidised carbon carries
+#: a few per cent of groups, not a monolayer.
 GRAFTS = [
     ("hydroxyl", 0.05),
     ("carboxyl", 0.03),
@@ -100,53 +132,10 @@ EXTRA_GROUPS = {
     "selenona": ("thiocarbonyl", {"S": "Se"}),
 }
 
-#: Stiffness of the harmonic anchor that holds the shell on its
-#: envelope. The default 0.7 let a handful of carbons fall to 1.55 A of
-#: the core on the plate's sharp hexagonal rim -- a real rim reconstructs
-#: there and this model does not, so the honest move is to keep the wall
-#: on its envelope rather than to let it collapse somewhere arbitrary.
-WALL_ANCHOR = 1.0
-
-#: The coating is meshed on a voxel grid and then remeshed and
-#: relaxed. The defaults (80 / 25 / 3000) leave a visibly lumpy wall at
-#: this size, and a lumpy wall is a modelling artefact rather than a
-#: feature of the sample: a graphitic shell is smooth over most of its
-#: area. These are the knobs the module names for it, raised until the
-#: wall stops reading as rough. The cost is time, not fidelity.
-#: The arm. `freq` fixes the radius by the lattice (R = 1.96 * freq A),
-#: and it is not free here: the particle has to fit INSIDE the tube at a
-#: graphitic contact, so the interior clearance (R - 3.35) sets the
-#: largest carbide that can go in. freq 6 gives R = 11.76 and 8.41 A of
-#: clearance, against the 6.52 A the smallest SOUND cementite particle
-#: needs -- see `CARBIDE_INSIDE`.
-TUBE_FREQ = 6
-TUBE_RINGS = 6
-
-#: Arc, not a bend angle. `bend_angle` imposes the arc after the
-#: relaxation and pays for it in strain (1.372-1.529 A bonds at 0.6 rad);
-#: `shape="arc"` goes through `centerline.fit_to_strain_budget`, which
-#: trims the amplitude until the wall fits, and comes back at
-#: 1.393-1.447 A. The arms are curved because the sample's are, not
-#: because a curve is prettier -- but there is no reason to pay strain
-#: for it.
-TUBE_WAVINESS = 0.45
-
-#: The particle that goes INSIDE the tip. Below about this size a
-#: cementite cluster stops being cementite: 70 atoms comes back
-#: `broken`, 126 is `strained`, and the gate is right both times. So the
-#: particle is as small as it can be and the TUBE was widened to hold
-#: it, rather than the other way round.
-CARBIDE_INSIDE = {"a": 7.0, "b": 7.0, "c": 9.0}
-
-#: How many arms the anemone has.
-ANEMONE_ARMS = 10
-
-GRID_RESOLUTION = 128
-REMESH_ITERATIONS = 60
-RELAX_ITERATIONS = 8000
-
 VACUUM = 10.0
-SEED = 20251031
+
+#: Filled by :func:`main` from the command line.
+OPT: dict[str, Any] = dict(DEFAULTS)
 
 
 def group_for(name: str):
@@ -194,13 +183,14 @@ def dress(carbon: Atoms, version: str) -> Atoms:
     """
     if version == "C":
         return carbon
-    out = codope(carbon, CODOPE, affinity=AFFINITY, seed=SEED)
+    out = codope(carbon, [("N", OPT["n_frac"]), ("Se", OPT["se_frac"])],
+                 affinity=AFFINITY, seed=OPT["semilla"])
     if version == "NSe":
         return out
     for index, (name, coverage) in enumerate(GRAFTS):
         try:
             out = functionalize(out, group_for(name), coverage=coverage,
-                                face="outer", seed=SEED + index)
+                                face="outer", seed=OPT["semilla"] + index)
         except ValueError as exc:
             print(f"      {name}: no se injertó ({exc})")
     return out
@@ -255,11 +245,11 @@ def coated_particle(label: str, cif: Path, shape: str, params: dict,
         print(f"    aviso: {warning}")
 
     shell_list, coat_report = graphitic_coat(
-        core, gap=gap, shells=shells, vacuum=VACUUM, seed=SEED,
-        wall_anchor=WALL_ANCHOR, roughness=0.0,
-        grid_resolution=GRID_RESOLUTION,
-        remesh_iterations=REMESH_ITERATIONS,
-        relax_iterations=RELAX_ITERATIONS)
+        core, gap=gap, shells=shells, vacuum=VACUUM,
+        seed=OPT["semilla"], wall_anchor=OPT["ancla"], roughness=0.0,
+        grid_resolution=OPT["rejilla"],
+        remesh_iterations=OPT["remallado"],
+        relax_iterations=OPT["relajacion"])
     print(f"  coraza: {sum(len(s) for s in shell_list)} C en {shells} capa(s), "
           f"{time.time() - t0:.1f} s")
     for warning in coat_report.warnings:
@@ -273,6 +263,7 @@ def coated_particle(label: str, cif: Path, shape: str, params: dict,
     # model is a hypothesis about is invisible -- the coating's envelope
     # is an offset of the solid and rounds every corner by the gap -- so
     # the picture that can be compared with the micrograph is this one.
+    core.info["solid_indices"] = list(range(len(core)))
     rows.append(record(core, f"{label}_nucleo_desnudo", {
         "familia": label, "version": "núcleo sin recubrir",
         "nucleo": core.get_chemical_formula(), "capas_grafiticas": 0,
@@ -288,6 +279,12 @@ def coated_particle(label: str, cif: Path, shape: str, params: dict,
             whole += shell
         whole.set_cell(core.get_cell())
         whole.set_pbc(False)
+        # Which atoms are the SOLID. A region and not an element: the
+        # same selenium is in the FeSe core, where it is part of a
+        # solid, and substituted into the shell, where it is one atom
+        # in a lattice. The core is written first, so it is the first
+        # `len(core)` indices.
+        whole.info["solid_indices"] = list(range(len(core)))
         rows.append(record(whole, f"{label}_{version}", {
             "familia": label, "version": version,
             "nucleo": core.get_chemical_formula(),
@@ -308,9 +305,10 @@ def coated_tube(label: str, rows: list) -> dict:
     """
     print(f"\n{label}")
     t0 = time.time()
-    tube = build_capped_cnt(n_body_rings=TUBE_RINGS, freq=TUBE_FREQ,
-                            shape="arc", waviness=TUBE_WAVINESS,
-                            vacuum=VACUUM, seed=SEED)
+    tube = build_capped_cnt(n_body_rings=OPT["tubo_anillos"],
+                            freq=OPT["tubo_freq"], shape="arc",
+                            waviness=OPT["tubo_curva"],
+                            vacuum=VACUUM, seed=OPT["semilla"])
     geometry = tube.info.get("geometry", {})
     print(f"  tubo: {len(tube)} C, radio {tube.info.get('radius', 0):.2f} Å, "
           f"{time.time() - t0:.1f} s")
@@ -329,7 +327,8 @@ def coated_tube(label: str, rows: list) -> dict:
     return out
 
 
-def _tip_frame(tube: Atoms) -> tuple[np.ndarray, np.ndarray]:
+def _tip_frame(tube: Atoms,
+               outward: bool = True) -> tuple[np.ndarray, np.ndarray]:
     """Where the tube's far cap is, and which way it points there.
 
     Measured from the atoms rather than assumed to be +z, because the
@@ -345,6 +344,11 @@ def _tip_frame(tube: Atoms) -> tuple[np.ndarray, np.ndarray]:
     along = centred @ axis
     if along.max() < -along.min():      # point it at the longer end
         axis, along = -axis, -along
+    # The arm is placed radially outward from the anemone's centre
+    # along +z of its own frame, so its OUTWARD tip is the one at
+    # positive z. The principal axis alone does not know which that is.
+    if outward and (axis @ np.array([0.0, 0.0, 1.0])) < 0.0:
+        axis, along = -axis, -along
     cap = positions[along >= np.percentile(along, 95)].mean(axis=0)
     behind = positions[(along >= np.percentile(along, 70))
                        & (along < np.percentile(along, 90))].mean(axis=0)
@@ -352,7 +356,8 @@ def _tip_frame(tube: Atoms) -> tuple[np.ndarray, np.ndarray]:
     return cap, direction / np.linalg.norm(direction)
 
 
-def arm_with_particle_inside(tube: Atoms, particle: Atoms) -> Atoms:
+def arm_with_particle_inside(tube: Atoms, particle: Atoms,
+                             outward: bool = True) -> Atoms:
     """One arm: the carbide sitting INSIDE the tube's tip.
 
     This is the other reading of the micrograph, and it is the one the
@@ -363,7 +368,7 @@ def arm_with_particle_inside(tube: Atoms, particle: Atoms) -> Atoms:
     clears the cap by the graphitic gap, and the build refuses outright
     if it does not fit across the tube.
     """
-    cap, direction = _tip_frame(tube)
+    cap, direction = _tip_frame(tube, outward=outward)
     local = np.asarray(particle.positions, dtype=float)
     local = local - local.mean(axis=0)
     half_length = float(np.abs(local @ direction).max())
@@ -384,6 +389,7 @@ def arm_with_particle_inside(tube: Atoms, particle: Atoms) -> Atoms:
     arm += placed
     arm.info = dict(tube.info)
     arm.info["particle_clearance"] = clearance - reach
+    arm.info["solid_indices"] = list(range(len(tube), len(arm)))
     print(f"    partícula dentro: llega a {reach:.2f} Å del eje, el tubo "
           f"deja {clearance:.2f} Å ({clearance - reach:.2f} Å de holgura)")
     return arm
@@ -418,12 +424,13 @@ def compositions(tube: Atoms, particle: Atoms, rows: list) -> None:
     # approach is mid-arm rather than at the inner caps: at one radius
     # four pairs came within 2.4-3.1 A, which on a render reads as
     # fused.
-    start = 4.0 * float(tube.info.get("radius", 8.0)) + GRAPHITIC_GAP
+    start = (OPT["brazos_separacion"] * float(tube.info.get("radius", 8.0))
+             + GRAPHITIC_GAP)
     placed = []
-    for index in range(ANEMONE_ARMS):
+    for index in range(OPT["brazos"]):
         # Fibonacci directions, so the arms spread over the whole sphere
         # instead of lying in one plane: an anemone is not a flower.
-        height = 1.0 - 2.0 * (index + 0.5) / ANEMONE_ARMS
+        height = 1.0 - 2.0 * (index + 0.5) / OPT["brazos"]
         radial = float(np.sqrt(max(0.0, 1.0 - height * height)))
         angle = index * np.pi * (3.0 - np.sqrt(5.0))
         direction = np.array([radial * np.cos(angle),
@@ -437,7 +444,7 @@ def compositions(tube: Atoms, particle: Atoms, rows: list) -> None:
     rows.append(record(anemone, "escena_anemona", {
         "familia": "escena", "version": "ilustración", "nucleo": "Fe3C",
         "capas_grafiticas": 0, "veredicto_nucleo": "—",
-        "veredicto_coraza": f"composición: {ANEMONE_ARMS} brazos, sin enlazar",
+        "veredicto_coraza": f"composición: {OPT['brazos']} brazos, sin enlazar",
     }))
     for warning in report.warnings:
         print(f"    aviso: {warning}")
@@ -468,8 +475,9 @@ def main() -> None:
     # would have to wrap it. In a real sample that edge is where the
     # coating is defective or simply open.
     coated_particle("placa_H", CIF / "FeSe_hexagonal.cif", "prism",
-                    {"radius": 30.0, "half_height": 4.5, "sides": 6},
-                    shells=1, gap=3.45, rows=rows)
+                    {"radius": OPT["placa_radio"],
+                     "half_height": OPT["placa_semigrosor"], "sides": 6},
+                    shells=1, gap=OPT["hueco"], rows=rows)
 
     # And the thinnest plate the CRYSTAL allows, bare: one cell thick,
     # 58 A across, 9.8 : 1. Half a cell terminates Se-Se and comes out
@@ -477,7 +485,8 @@ def main() -> None:
     # This is the one to compare against the micrograph.
     thin, _, _, (verdict, why) = core_from(
         CIF / "FeSe_hexagonal.cif", "prism",
-        {"radius": 30.0, "half_height": 3.0, "sides": 6})
+        {"radius": OPT["placa_radio"], "half_height": 3.0, "sides": 6})
+    thin.info["solid_indices"] = list(range(len(thin)))
     print(f"\nplaca delgada desnuda: {thin.get_chemical_formula()} "
           f"({len(thin)} átomos, {np.ptp(thin.positions[:, 2]):.1f} Å de "
           f"grosor) -> {verdict}")
@@ -493,18 +502,22 @@ def main() -> None:
     # to wrap. A capsule and not a cylinder, because a cylinder's sharp
     # rim leaves the envelope nowhere to go and the coating refuses it.
     coated_particle("barra_T", CIF / "FeSe_tetragonal.cif", "rod",
-                    {"radius": 6.0, "half_length": 40.0},
-                    shells=1, gap=3.45, rows=rows)
+                    {"radius": OPT["barra_radio"],
+                     "half_length": OPT["barra_semilargo"]},
+                    shells=1, gap=OPT["hueco"], rows=rows)
 
     coated_particle("particula_Fe3C", CIF / "Fe3C_cementita.cif",
-                    "ellipsoid", {"a": 13.0, "b": 13.0, "c": 18.0},
-                    shells=2, gap=3.45, rows=rows)
+                    "ellipsoid", {"a": OPT["fe3c_a"], "b": OPT["fe3c_a"],
+                                  "c": OPT["fe3c_c"]},
+                    shells=OPT["fe3c_capas"], gap=OPT["hueco"], rows=rows)
 
     # The small one, bare, for putting inside a tube. No graphitic shell
     # on it: inside the tube the TUBE is the graphite, and a shell would
     # be a second wall 3.35 A from the first with nothing between them.
     inside, _, _, (verdict, why) = core_from(
-        CIF / "Fe3C_cementita.cif", "ellipsoid", CARBIDE_INSIDE)
+        CIF / "Fe3C_cementita.cif", "ellipsoid", {"a": OPT["fe3c_interior_a"],
+         "b": OPT["fe3c_interior_a"], "c": OPT["fe3c_interior_c"]})
+    inside.info["solid_indices"] = list(range(len(inside)))
     print(f"\npartícula interior: {inside.get_chemical_formula()} "
           f"({len(inside)} átomos) -> {verdict}")
     print(f"    {why}")
@@ -531,5 +544,28 @@ def main() -> None:
         print("=" * 68)
 
 
+def parse_args(argv: list[str] | None = None) -> dict:
+    """Read the build's settings off the command line.
+
+    Every entry of :data:`DEFAULTS` becomes an option of the same name
+    with dashes, so adding a knob to that table is all it takes. The
+    help text prints the default beside each one, because a sweep is
+    only readable if the baseline is visible.
+    """
+    parser = argparse.ArgumentParser(
+        description="Construye los modelos de FeSe@C para las "
+                    "morfologías del SEM.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    for name, value in DEFAULTS.items():
+        parser.add_argument(f"--{name.replace('_', '-')}",
+                            dest=name, type=type(value), default=value)
+    parser.add_argument("--solo", default="", metavar="NOMBRE",
+                        help="construir sólo la familia cuyo nombre "
+                             "empiece así (placa_H, barra_T, "
+                             "particula_Fe3C, nanotubo, escena)")
+    return vars(parser.parse_args(argv))
+
+
 if __name__ == "__main__":
+    OPT.update(parse_args())
     main()

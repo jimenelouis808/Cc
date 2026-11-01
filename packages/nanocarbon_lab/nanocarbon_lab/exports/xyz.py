@@ -101,7 +101,10 @@ def write_render_bundle(
     Parameters
     ----------
     atoms
-        Structure to export. Ring/bond metadata is read from
+        Structure to export. ``info["solid_indices"]`` is carried into
+        the sidecar as ``solid``, so a renderer can draw a core
+        space-filling and the network around it ball-and-stick without
+        guessing from the elements. Ring/bond metadata is read from
         ``atoms.info["rings"]`` / ``atoms.info["bonds"]`` when present
         (as populated by :func:`nanocarbon_lab.builders.capped_cnt.build_capped_cnt`).
     path
@@ -141,6 +144,13 @@ def write_render_bundle(
         "ring_counts": atoms.info.get("ring_counts", {}),
         "defect_log": atoms.info.get("defect_log", []),
         "structure_type": atoms.info.get("structure_type", ""),
+        # Which atoms belong to a SOLID -- a metal particle, a
+        # chalcogenide core -- rather than to the open network around
+        # it. A region, not an element: the same selenium can be in an
+        # FeSe core and substituted into the carbon shell wrapping it,
+        # and no per-element rule can tell those two apart. Written as
+        # indices because that is what survives a file.
+        "solid": [int(i) for i in atoms.info.get("solid_indices", [])],
     }
     json_path = path.with_suffix(".json")
     json_path.parent.mkdir(parents=True, exist_ok=True)

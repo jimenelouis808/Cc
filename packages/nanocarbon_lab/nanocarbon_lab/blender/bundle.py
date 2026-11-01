@@ -341,10 +341,18 @@ def atom_radii(bundle: dict, colour_by: str, scale: float = 1.0,
     than as a chemistry diagram.
     """
     symbols = bundle["symbols"]
+    # A per-atom declaration beats the per-element one, and has to:
+    # the same element can be in the solid core and substituted into
+    # the open network around it, which no element rule separates.
+    solid = set(int(i) for i in bundle.get("solid", []))
     if model != "ballstick":
-        return [style_defs.model_radius(symbol, model, scale,
-                                        spacefill_extra)
-                for symbol in symbols]
+        return [
+            (style_defs.vdw_radius(symbol) * style_defs.SPACEFILL_SCALE
+             * scale)
+            if (model == "auto" and index in solid)
+            else style_defs.model_radius(symbol, model, scale,
+                                         spacefill_extra)
+            for index, symbol in enumerate(symbols)]
     if colour_by == "element":
         return [style_defs.element_radius(symbol) * scale
                 for symbol in symbols]

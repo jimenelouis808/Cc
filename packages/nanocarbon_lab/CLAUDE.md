@@ -4801,3 +4801,27 @@ the envelope at the right density to begin with, so `scale` is already
 `target_edge=sqrt(3)*bond` for exactly this and is evidently not
 reaching it. **Do not "fix" this by undoing the scale**: that restores
 the envelope and gives the bonds back their error.
+
+## Which atoms are a solid is a region, not an element
+
+`--model auto` draws space-filling spheres for the elements in
+`SPACEFILL_ELEMENTS`, and `--spacefill-element` adds more for one
+render. Neither can describe a **carbon-coated chalcogenide**, and the
+reason is not a gap in the table: the same selenium is in the FeSe core,
+where it is part of a solid, *and* substituted into the carbon shell
+wrapping it, where it is one atom in a lattice. Asked by element, both
+come out the same, and drawn as spheres the shell's dopant reads as a
+crust of blobs on the graphite.
+
+* `write_render_bundle` carries `info["solid_indices"]` into the sidecar
+  as `solid`, and `atom_radii` and the bond loop read it. **A per-atom
+  declaration beats the per-element one** where both are present, which
+  is the right precedence: the builder knows which atoms it carved and
+  which it meshed, and the element never will.
+* It travels as **indices**, because that is what survives a file. The
+  core is written first, so it is `range(len(core))` -- and the
+  composition's arm, where the particle goes in last, is
+  `range(len(tube), len(arm))`.
+* The element rule stays as the fallback for a structure that carries no
+  list, and a test pins that both seleniums then read alike -- which is
+  the ambiguity, stated rather than hidden.
