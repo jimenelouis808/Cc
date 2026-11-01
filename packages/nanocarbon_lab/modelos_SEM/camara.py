@@ -55,9 +55,14 @@ RESOLUTION = (1600, 2000)
 #: The same fraction of the frame the renderer fills.
 FRAME_FILL = 0.86
 
-#: Marker area per Ångström² of drawn radius, at the panel size below.
-MARKER_SCALE = 115.0
+#: Inches across the preview panel. The marker size is DERIVED from it
+#: rather than tuned: a scatter's `s` is an area in points², and an
+#: atom of radius r at depth d subtends r/d in the tangent units this
+#: plots, which is (r/d)/(2*limit) of the panel width. Guessing a
+#: constant instead gave markers of three thousandths of a point and a
+#: preview that was an empty rectangle reporting "100 % in frame".
 PANEL_INCHES = 5.0
+POINTS_PER_INCH = 72.0
 
 
 def solid_indices(label: str) -> set[int]:
@@ -108,7 +113,9 @@ def preview(label: str) -> dict:
         figsize=(PANEL_INCHES, PANEL_INCHES * aspect))
     order = np.argsort(-depth)                 # far first
     # Perspective shrinks a distant atom, exactly as the render will.
-    sizes = MARKER_SCALE * (radii[order] / depth[order] / limit_h) ** 2
+    width_pts = PANEL_INCHES * POINTS_PER_INCH
+    diameter = width_pts * (radii[order] / depth[order]) / limit_h
+    sizes = np.maximum(diameter, 0.6) ** 2
     axis.scatter(screen[order, 0], screen[order, 1], s=sizes,
                  c=[ELEMENT_COLOURS.get(symbols[i], "#888888")
                     for i in order],
@@ -123,7 +130,7 @@ def preview(label: str) -> dict:
 
     inside = (np.abs(screen[:, 0]) <= limit_h) & (np.abs(screen[:, 1]) <= limit_v)
     covered = (np.ptp(screen[inside, 0]) / (2 * limit_h)) if inside.any() else 0.0
-    axis.set_title(f"{label}\\n{len(atoms)} átomos · lente "
+    axis.set_title(f"{label}\n{len(atoms)} átomos · lente "
                    f"{style.camera_lens_mm:.0f} mm · cámara a "
                    f"{distance:.0f} Å · {100 * inside.mean():.1f} % en cuadro",
                    fontsize=8, color="#222222", pad=5)

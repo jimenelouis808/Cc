@@ -153,6 +153,19 @@ EXTRA_GROUPS = {
 
 VACUUM = 10.0
 
+#: Above this many atoms `record` writes no matplotlib view.
+#:
+#: The 3D viewer costs seconds per thousand atoms and it is the SCATTER
+#: that costs them, not the bonds -- a 3055-atom arm takes ~18 s even
+#: with every bond in one collection, and a 55 000-atom composition did
+#: not finish in fifteen minutes. It is a convenience for looking at
+#: one small structure, and for anything this size the contact sheets
+#: (`contacto.py`, a flat orthographic projection, seconds for all
+#: nineteen) and the camera previews (`camara.py`) are both faster and
+#: more useful. So the big ones simply do not get one, and the run says
+#: so rather than appearing to hang.
+MAX_VIEW_ATOMS = 4000
+
 #: Filled by :func:`main` from the command line.
 OPT: dict[str, Any] = dict(DEFAULTS)
 
@@ -234,9 +247,13 @@ def record(atoms: Atoms, label: str, notes: dict) -> dict:
     # how a particle is usually drawn; the one down the c axis is where
     # a hexagonal plate looks hexagonal and a rod looks round, which is
     # the whole question these models were built to put side by side.
-    for suffix, view in (("", (22.0, -60.0)), ("_eje", (90.0, -90.0))):
-        save_structure_png(atoms, IMG / f"{label}{suffix}.png",
-                           figsize=(5.5, 5.5), dpi=130, view=view)
+    if len(atoms) <= MAX_VIEW_ATOMS:
+        for suffix, view in (("", (22.0, -60.0)), ("_eje", (90.0, -90.0))):
+            save_structure_png(atoms, IMG / f"{label}{suffix}.png",
+                               figsize=(5.5, 5.5), dpi=130, view=view)
+    else:
+        print(f"    (sin vista 3D: {len(atoms)} átomos pasan de "
+              f"{MAX_VIEW_ATOMS}; mira contacto.py y camara.py)")
     row = {"modelo": label, "atomos": len(atoms),
            "formula": atoms.get_chemical_formula(), **notes}
     print(f"  {label:26s} n={len(atoms):5d}  {atoms.get_chemical_formula()}")
@@ -717,6 +734,28 @@ def main() -> None:
 
     tubes = coated_tube("nanotubo", rows, record_rows=wanted("nanotubo"))
     if wanted("escena"):
+        # A scene needs pieces this run may not have built. Read them
+        # back from disk rather than rebuilding: `--solo escena` is for
+        # iterating on a composition, and a minute per coated particle
+        # is the whole reason that flag exists. The `solid` list comes
+        # back from the sidecar, so the recovered piece still knows
+        # which of its atoms are the core.
+        for name in ("placa_H", "barra_T"):
+            if name in pieces:
+                continue
+            path = XYZ / f"{name}_C.xyz"
+            if not path.exists():
+                print(f"    {name}: sin construir y sin archivo, "
+                      "las escenas que lo usan se saltan")
+                continue
+            from ase.io import read as ase_read
+            piece = ase_read(path)
+            sidecar = BUNDLE / f"{name}_C.json"
+            if sidecar.exists():
+                piece.info["solid_indices"] = json.loads(
+                    sidecar.read_text()).get("solid", [])
+            pieces[name] = piece
+            print(f"    {name}: releído de {path.name} ({len(piece)} átomos)")
         compositions(tubes["C"], inside, pieces, rows)
 
     out = HERE / "modelos.json"

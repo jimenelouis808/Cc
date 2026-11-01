@@ -68,15 +68,23 @@ def _setup_figure(atoms: Atoms, figsize: tuple[float, float]):
         depthshade=True,
     )
 
+    # Every bond in ONE collection, not one `plot` call each.
+    #
+    # Matplotlib carries a transform, a style and a draw pass per
+    # artist, so a few thousand of them cost far more than the segments
+    # in them: measured, a 3055-atom arm took **20.8 s** to draw this
+    # way and a 55 000-atom composition did not finish in fifteen
+    # minutes. Bond DETECTION was never the problem -- `guess_bonds`
+    # has used a neighbour list since the quadratic one was removed --
+    # so the slowness looked like the structure's size when it was the
+    # artist count. A `Line3DCollection` is one artist.
+    from mpl_toolkits.mplot3d.art3d import Line3DCollection  # noqa: WPS433
+
     g = build_bond_graph(atoms)
-    for i, j in g.edges:
-        ax.plot(
-            [positions[i, 0], positions[j, 0]],
-            [positions[i, 1], positions[j, 1]],
-            [positions[i, 2], positions[j, 2]],
-            color="#555555",
-            linewidth=0.6,
-        )
+    segments = [(positions[i], positions[j]) for i, j in g.edges]
+    if segments:
+        ax.add_collection3d(Line3DCollection(
+            segments, colors="#555555", linewidths=0.6))
 
     ax.set_xlabel("x (Å)")
     ax.set_ylabel("y (Å)")

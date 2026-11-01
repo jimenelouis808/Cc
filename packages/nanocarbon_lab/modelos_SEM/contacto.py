@@ -190,7 +190,20 @@ def main() -> None:
     sheet(normal, PANEL_ANGSTROM, 25.0, IMG / "_contacto_perfil.png",
           "Modelos FeSe@C — de perfil", view=(0, 2))
     if wide:
-        sheet(wide + ["brazo_particula_dentro"], WIDE_ANGSTROM, 100.0,
+        # The scenes span anything from 130 to 1600 Å, so a constant
+        # would either crop the cluster or shrink the single arm to a
+        # speck. Measured from the widest one, which keeps them
+        # comparable with each other -- which is the point -- without
+        # pretending they are comparable with the single models.
+        extents = []
+        for name in wide:
+            path = XYZ / f"{name}.xyz"
+            if path.exists():
+                flat = projected(read(path))[:, :2]
+                extents.append(float(np.ptp(flat, axis=0).max()))
+        span = 1.12 * max(extents + [WIDE_ANGSTROM])
+        sheet(wide + ["brazo_particula_dentro"], span,
+              round(span / 8, -1) or 50.0,
               IMG / "_contacto_escenas.png", "Escenas")
 
 

@@ -188,8 +188,8 @@
   },
   {
     "modelo": "brazo_particula_dentro",
-    "atomos": 3147,
-    "formula": "C3043Fe104",
+    "atomos": 3055,
+    "formula": "C3017Fe38",
     "familia": "escena",
     "version": "ilustración",
     "nucleo": "Fe3C",
@@ -199,13 +199,68 @@
   },
   {
     "modelo": "escena_anemona",
-    "atomos": 25176,
-    "formula": "C24344Fe832",
+    "atomos": 24440,
+    "formula": "C24136Fe304",
     "familia": "escena",
     "version": "ilustración",
-    "nucleo": "Fe3C",
+    "nucleo": "—",
     "capas_grafiticas": 0,
     "veredicto_nucleo": "—",
-    "veredicto_coraza": "composición: 8 brazos, sin enlazar"
+    "veredicto_coraza": "composición: 8 brazos"
+  },
+  {
+    "modelo": "escena_barras",
+    "atomos": 27864,
+    "formula": "C21816Fe3024Se3024",
+    "familia": "escena",
+    "version": "ilustración",
+    "nucleo": "—",
+    "capas_grafiticas": 0,
+    "veredicto_nucleo": "—",
+    "veredicto_coraza": "composición: 12 barras"
+  },
+  {
+    "modelo": "escena_profundidad",
+    "atomos": 10353,
+    "formula": "C8185Fe1103Se1065",
+    "familia": "escena",
+    "version": "ilustración",
+    "nucleo": "—",
+    "capas_grafiticas": 0,
+    "veredicto_nucleo": "—",
+    "veredicto_coraza": "composición: placa, barra y tubo en tres planos"
+  },
+  {
+    "modelo": "escena_anemonas",
+    "atomos": 54990,
+    "formula": "C54306Fe684",
+    "familia": "escena",
+    "version": "ilustración",
+    "nucleo": "—",
+    "capas_grafiticas": 0,
+    "veredicto_nucleo": "—",
+    "veredicto_coraza": "composición: 3 anémonas de 6 brazos"
+  },
+  {
+    "modelo": "brazo_decorado",
+    "atomos": 3409,
+    "formula": "C3017Fe392",
+    "familia": "escena",
+    "version": "ilustración",
+    "nucleo": "Fe",
+    "capas_grafiticas": 0,
+    "veredicto_nucleo": "—",
+    "veredicto_coraza": "6 partículas de Fe colocadas sobre la pared"
+  },
+  {
+    "modelo": "escena_anemona_decorada",
+    "atomos": 27272,
+    "formula": "C24136Fe3136",
+    "familia": "escena",
+    "version": "ilustración",
+    "nucleo": "—",
+    "capas_grafiticas": 0,
+    "veredicto_nucleo": "—",
+    "veredicto_coraza": "composición: 8 brazos con Fe encima"
   }
 ]
