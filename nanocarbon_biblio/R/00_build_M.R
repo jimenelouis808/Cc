@@ -18,9 +18,26 @@
 # desde Python rompería co-citación, acoplamiento bibliográfico y RPYS.
 # =============================================================================
 
+if (!requireNamespace("bibliometrix", quietly = TRUE)) {
+  stop("bibliometrix no está instalado.\n",
+       "  Ejecuta:  Rscript R/install_deps.R\n",
+       "  Y después: Rscript R/99_check_r_setup.R", call. = FALSE)
+}
 suppressPackageStartupMessages({
   library(bibliometrix)
 })
+
+# La API de bibliometrix cambia entre versiones menores. Comprobar aquí lo que
+# este script necesita convierte un fallo a mitad de la importación —después de
+# haber esperado a convert2df sobre decenas de miles de registros— en un error
+# inmediato y explícito.
+required_fns <- c("convert2df", "mergeDbSources")
+missing_fns <- setdiff(required_fns, ls(getNamespace("bibliometrix")))
+if (length(missing_fns)) {
+  stop("Tu versión de bibliometrix (", utils::packageVersion("bibliometrix"),
+       ") no exporta: ", paste(missing_fns, collapse = ", "), "\n",
+       "  Actualiza con: update.packages(ask = FALSE)", call. = FALSE)
+}
 
 PROCESSED <- file.path("data", "processed")
 stopifnot(dir.exists(PROCESSED))
@@ -33,17 +50,33 @@ labels_file <- file.path(PROCESSED, "labels.csv")
 Ms <- NULL
 Mw <- NULL
 
-if (file.exists(scopus_file) && file.size(scopus_file) > 0) {
-  message("convert2df: Scopus …")
-  Ms <- convert2df(scopus_file, dbsource = "scopus", format = "csv")
-  message(sprintf("  %d registros, %d campos", nrow(Ms), ncol(Ms)))
+# Un fichero corrupto de una base no debe costarte la otra: se importa cada una
+# por separado y, si una falla, el script sigue con la que sí entró y lo dice.
+import_one <- function(path, dbsource, format, label) {
+  if (!file.exists(path) || file.size(path) == 0) return(NULL)
+  message("convert2df: ", label, " …")
+  out <- tryCatch(
+    convert2df(path, dbsource = dbsource, format = format),
+    error = function(e) {
+      warning("convert2df falló con ", basename(path), ": ", conditionMessage(e),
+              "\n  Comprueba que el fichero es una exportación de ", label,
+              " sin modificar. Para aislar el problema:\n",
+              "    Rscript R/99_check_r_setup.R", call. = FALSE)
+      NULL
+    }
+  )
+  if (!is.null(out)) {
+    message(sprintf("  %d registros, %d campos", nrow(out), ncol(out)))
+    if (nrow(out) == 0) {
+      warning(basename(path), " se parseó pero no produjo registros.", call. = FALSE)
+      return(NULL)
+    }
+  }
+  out
 }
 
-if (file.exists(wos_file) && file.size(wos_file) > 0) {
-  message("convert2df: Web of Science …")
-  Mw <- convert2df(wos_file, dbsource = "wos", format = "plaintext")
-  message(sprintf("  %d registros, %d campos", nrow(Mw), ncol(Mw)))
-}
+Ms <- import_one(scopus_file, "scopus", "csv", "Scopus")
+Mw <- import_one(wos_file, "wos", "plaintext", "Web of Science")
 
 if (is.null(Ms) && is.null(Mw)) {
   stop("No hay ficheros de entrada en ", PROCESSED,
@@ -57,7 +90,15 @@ if (is.null(Ms) && is.null(Mw)) {
 # elimina: si elimina mucho, tu umbral de similitud en Python es demasiado alto.
 if (!is.null(Ms) && !is.null(Mw)) {
   n_before <- nrow(Ms) + nrow(Mw)
-  M <- mergeDbSources(Ms, Mw, remove.duplicated = TRUE)
+  M <- tryCatch(
+    mergeDbSources(Ms, Mw, remove.duplicated = TRUE),
+    error = function(e) {
+      warning("mergeDbSources falló (", conditionMessage(e), ").\n",
+              "  Se continúa solo con Scopus para no perder la corrida; ",
+              "los registros exclusivos de WoS quedan fuera.", call. = FALSE)
+      Ms
+    }
+  )
   message(sprintf("mergeDbSources: %d -> %d (R eliminó %d duplicados extra)",
                   n_before, nrow(M), n_before - nrow(M)))
   if ((n_before - nrow(M)) > 0.02 * n_before) {
@@ -65,6 +106,11 @@ if (!is.null(Ms) && !is.null(Mw)) {
   }
 } else {
   M <- if (is.null(Ms)) Mw else Ms
+  if (is.null(M)) {
+    stop("Ninguna de las dos bases se pudo importar. Revisa los avisos de arriba\n",
+         "  y ejecuta: Rscript R/99_check_r_setup.R", call. = FALSE)
+  }
+  message("Solo entró una de las dos bases; el corpus no es la unión completa.")
 }
 
 # ------------------------------------- 3. comprobaciones que importan de verdad

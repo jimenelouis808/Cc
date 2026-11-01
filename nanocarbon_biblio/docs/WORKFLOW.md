@@ -108,6 +108,18 @@ Con dos codificadores, calcula **kappa de Cohen** y repórtalo.
 
 ## Paso 6 — Construir M para bibliometrix
 
+Primero comprueba que el lado de R funciona. Treinta segundos, y te ahorra
+descubrir a mitad del análisis que falta un paquete:
+
+```bash
+Rscript R/99_check_r_setup.R
+```
+
+Verifica la versión de R, que bibliometrix está instalado, que existen las
+funciones que usan los scripts, y que `convert2df` parsea de verdad los dos
+formatos — sobre un fixture de 25 obras incluido en el repo. Si falla, dice qué
+hacer. Después:
+
 ```bash
 Rscript R/00_build_M.R
 ```

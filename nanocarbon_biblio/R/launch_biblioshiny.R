@@ -4,6 +4,11 @@
 # las columnas de etiquetas que añadió el pipeline de Python (dopant, defect,
 # study_type, morphology, application), que son las que permiten segmentar
 # cualquier análisis por faceta.
+if (!requireNamespace("bibliometrix", quietly = TRUE)) {
+  stop("bibliometrix no está instalado.\n",
+       "  Ejecuta:  Rscript R/install_deps.R\n",
+       "  Y después: Rscript R/99_check_r_setup.R", call. = FALSE)
+}
 suppressPackageStartupMessages(library(bibliometrix))
 
 if (!file.exists(file.path("data", "processed", "M.rds"))) {

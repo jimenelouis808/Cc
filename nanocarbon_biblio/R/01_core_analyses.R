@@ -9,6 +9,11 @@
 # Salida:   results/*.csv, results/*.png, results/session_info.txt
 # =============================================================================
 
+if (!requireNamespace("bibliometrix", quietly = TRUE)) {
+  stop("bibliometrix no está instalado.\n",
+       "  Ejecuta:  Rscript R/install_deps.R\n",
+       "  Y después: Rscript R/99_check_r_setup.R", call. = FALSE)
+}
 suppressPackageStartupMessages({
   library(bibliometrix)
 })
@@ -17,7 +22,15 @@ PROCESSED <- file.path("data", "processed")
 RESULTS   <- "results"
 dir.create(RESULTS, showWarnings = FALSE, recursive = TRUE)
 
-M <- readRDS(file.path(PROCESSED, "M.rds"))
+M_file <- file.path(PROCESSED, "M.rds")
+if (!file.exists(M_file)) {
+  stop("Falta ", M_file, ".\n",
+       "  Antes hay que construirlo:\n",
+       "    python -m nanocarbon_biblio.cli run --raw data/raw --out data/processed\n",
+       "    Rscript R/00_build_M.R", call. = FALSE)
+}
+M <- readRDS(M_file)
+if (!nrow(M)) stop(M_file, " está vacío. Revisa la salida de 00_build_M.R.", call. = FALSE)
 message(sprintf("Corpus: %d documentos, %d-%d",
                 nrow(M), min(M$PY, na.rm = TRUE), max(M$PY, na.rm = TRUE)))
 

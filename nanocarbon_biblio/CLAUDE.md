@@ -71,6 +71,9 @@ manuscrito. **Un cambio silencioso en una regla cambia una figura publicada.**
 
 ## Comandos
 ```bash
+python3 start.py                # arranca todo (instala lo que falte)
+python3 start.py --check        # diagnostica el entorno de Python
+Rscript R/99_check_r_setup.R    # diagnostica el entorno de R
 pip install -r requirements.txt
 pytest nanocarbon_biblio/tests -q
 streamlit run nanocarbon_biblio/app.py
@@ -84,6 +87,17 @@ Rscript R/00_build_M.R && Rscript R/01_core_analyses.R
   `load_<db>()` que preserve el crudo, más una rama en `exporters.py` y el
   `dbsource` correspondiente en `R/00_build_M.R`.
 - Nuevo análisis de R → `R/01_core_analyses.R`, envuelto en `step()`.
+
+## Arranque
+- **`start.py` solo puede importar la biblioteca estándar.** Tiene que poder
+  ejecutarse antes de que exista el entorno virtual: si importara pandas, no
+  podría decirle al usuario que falta pandas. `test_start.py` lo verifica.
+- **Todo script de R empieza comprobando que bibliometrix está.** Un
+  `library(bibliometrix)` pelado suelta el error crudo de R; el preflight dice
+  qué comando ejecutar. No lo quites al añadir scripts nuevos.
+- **`R/fixtures/` es un corpus sintético de 25 obras** para que
+  `99_check_r_setup.R` sea autónomo. Es la única excepción a «nada de datos en
+  el repo», y son inventados.
 
 ## Qué no hacer
 - No usar el corpus de demostración para nada que acabe en el manuscrito: son

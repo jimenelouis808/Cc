@@ -1,0 +1,491 @@
+FN Clarivate Analytics Web of Science
+VR 1.0
+PT J
+AU Liu, P
+   Ruoff, K
+   Dubois, C
+   Ferrari, L
+   Sato, H
+TI Nitrogen and sulfur co doped carbon nanofibers with Stone Wales
+   defects for thermal management (series 1)
+SO APPLIED PHYSICS LETTERS
+DE Nitrogen; sulfur; co-doped; carbon
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Nitrogen and sulfur co-doped carbon nanofibers were investigated. Classical molecular dynamics with the AIREBO potential in LAMMPS were used to study mechanical failure. Stone-Wales defects and pentagon-heptagon pairs were identified. We evaluate the thermal conductivity and phonon transport.
+C1 Tsinghua Univ, Beijing, Peoples R China
+CR IIJIMA S, 1991, NATURE, V354, P56
+   STONE AJ, 1986, CHEM PHYS LETT, V128, P501
+   LEE R, 1986, CARBON, V50, P374
+   AJAYAN K, 1998, CARBON, V36, P643
+   PARK E, 2002, CARBON, V40, P895
+   ADEYEMI R, 1987, CARBON, V55, P767
+NR 6
+TC 6
+PY 2004
+DI 10.1002/demo.2004.00001
+UT WOS:900000000000001
+ER
+
+PT J
+AU Garcia, A
+   Nguyen, T
+   Laurent, B
+TI Undoped carbon nanotube yarns under ion irradiation for
+   lithium-ion batteries (series 2)
+SO JOURNAL OF MATERIALS CHEMISTRY A
+DE Undoped; carbon; nanotube; yarns
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Undoped carbon nanotube yarns were investigated. Scanning tunneling microscopy and XANES were used to resolve the local electronic structure. Ion irradiation was used to introduce point defects in a controlled way. We evaluate the lithium-ion battery anode capacity.
+C1 Politecn Torino, Turin, Italy
+CR KROTO HW, 1985, NATURE, V318, P162
+   NOVOSELOV KS, 2004, SCIENCE, V306, P666
+   TERRONES M, 1999, NATURE, V388, P52
+   PETROV K, 2022, CARBON, V106, P207
+   SILVA T, 2003, CARBON, V148, P903
+NR 5
+TC 9
+PY 2023
+UT WOS:900000000000002
+ER
+
+PT J
+AU Petrov, F
+TI Nitrogen-doped vapor grown carbon fibers with grain boundaries
+   for thermal management (series 3)
+SO CHEMISTRY OF MATERIALS
+DE Nitrogen-doped; vapor; grown; carbon
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Nitrogen-doped vapor grown carbon fibers were investigated. The ID/IG ratio from Raman spectroscopy tracks the defect density across the annealing series. Grain boundaries in the graphitic walls were resolved. We evaluate the thermal conductivity and phonon transport.
+C1 KAIST, Daejeon, South Korea
+CR STONE AJ, 1986, CHEM PHYS LETT, V128, P501
+   TERRONES M, 1999, NATURE, V388, P52
+   GARCIA G, 2018, CARBON, V113, P63
+   DAI R, 1997, CARBON, V41, P377
+   MARTINEZ F, 2015, CARBON, V156, P817
+   LIU J, 1994, CARBON, V74, P400
+   TRAN D, 2015, CARBON, V192, P803
+   HASSAN G, 2008, CARBON, V80, P809
+   IVANOV L, 2020, CARBON, V186, P20
+   SILVA L, 1994, CARBON, V166, P461
+   TANAKA M, 1999, CARBON, V39, P632
+NR 11
+TC 0
+PY 2025
+DI 10.1029/demo.2025.00003
+UT WOS:900000000000003
+ER
+
+PT J
+AU Laurent, S
+   Novak, H
+   Silva, J
+   Rossi, A
+TI Undoped carbon nanotube sponges containing monovacancies for
+   thermal management (series 4)
+SO NANOTECHNOLOGY
+DE Undoped; carbon; nanotube; sponges
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Undoped carbon nanotube sponges were investigated. Tight-binding and non-equilibrium Green function calculations give the transport coefficients. Cyclic voltammetry and rotating ring-disk electrode measurements were performed in 0.1 M KOH. Monovacancies and divacancies were quantified. We evaluate the thermal conductivity and phonon transport.
+C1 Univ Alicante, Alicante, Spain
+CR STONE AJ, 1986, CHEM PHYS LETT, V128, P501
+   PATEL G, 2007, CARBON, V115, P959
+   AJAYAN K, 2017, CARBON, V89, P215
+   SCHMIDT T, 2001, CARBON, V81, P941
+   PATEL C, 2004, CARBON, V127, P865
+   SILVA R, 2016, CARBON, V98, P61
+   DUBOIS C, 1986, CARBON, V175, P943
+   NGUYEN F, 1996, CARBON, V174, P304
+   DUBOIS K, 1990, CARBON, V106, P464
+   LAURENT D, 2006, CARBON, V47, P780
+   RUOFF A, 1990, CARBON, V103, P872
+   DUBOIS J, 2009, CARBON, V39, P650
+NR 12
+TC 9
+PY 2018
+UT WOS:900000000000004
+ER
+
+PT J
+AU Li, F
+   Petrov, S
+   Patel, J
+   Dai, G
+TI Nitrogen and sulfur co doped carbon nanotube fibers with dangling
+   bonds for supercapacitors (series 5)
+SO JOURNAL OF PHYSICAL CHEMISTRY C
+DE Nitrogen; sulfur; co-doped; carbon
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Nitrogen and sulfur co-doped carbon nanotube fibers were investigated. Cyclic voltammetry and rotating ring-disk electrode measurements were performed in 0.1 M KOH. Dangling bonds and sp3 carbon sites were detected. We evaluate the supercapacitor specific capacitance.
+C1 Shinshu Univ, Nagano, Japan
+CR GONG KP, 2009, SCIENCE, V323, P760
+   STONE AJ, 1986, CHEM PHYS LETT, V128, P501
+   SHARMA R, 1985, CARBON, V42, P185
+   FERRARI H, 2012, CARBON, V171, P33
+   KIM P, 1989, CARBON, V116, P919
+   DUBOIS P, 2013, CARBON, V155, P570
+   ZHANG T, 2015, CARBON, V51, P757
+NR 7
+TC 5
+PY 2019
+DI 10.1036/demo.2019.00005
+UT WOS:900000000000005
+ER
+
+PT J
+AU Li, H
+TI Silicon doped single walled carbon nanotubes under ion
+   irradiation for hydrogen storage (series 7)
+SO APPLIED PHYSICS LETTERS
+DE Silicon-doped; single-walled; carbon; nanotubes
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Silicon-doped single-walled carbon nanotubes were investigated. Carbon nanofibers were prepared by electrospinning followed by carbonization; the N 1s XPS region was deconvoluted. Ion irradiation was used to introduce point defects in a controlled way. We evaluate the hydrogen storage capacity.
+C1 Univ Cambridge, Cambridge, United Kingdom
+CR KROTO HW, 1985, NATURE, V318, P162
+   LIU K, 2007, CARBON, V64, P35
+   LEE E, 1994, CARBON, V154, P198
+   ZHANG M, 1986, CARBON, V62, P920
+   CHEN P, 1993, CARBON, V67, P69
+   NOVAK K, 1999, CARBON, V53, P900
+   MULLER E, 1996, CARBON, V67, P628
+   TERRONES P, 1999, CARBON, V46, P687
+NR 8
+TC 23
+PY 2007
+DI 10.1019/demo.2007.00007
+UT WOS:900000000000007
+ER
+
+PT J
+AU Hassan, S
+   Chen, T
+   Laurent, P
+TI Fluorine-doped carbon nanocoils with dangling bonds (series 9)
+SO APPLIED SURFACE SCIENCE
+DE Fluorine-doped; carbon; nanocoils; dangling
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Fluorine-doped carbon nanocoils were investigated. Samples were grown by chemical vapor deposition and characterised by XPS and Raman spectroscopy. Single-atom catalyst sites of the Fe-N4 type were identified. Dangling bonds and sp3 carbon sites were detected.
+C1 KAIST, Daejeon, South Korea
+CR TERRONES M, 1999, NATURE, V388, P52
+   KROTO HW, 1985, NATURE, V318, P162
+   ADEYEMI E, 1992, CARBON, V41, P627
+   CHEN G, 1996, CARBON, V53, P792
+   LAURENT T, 2005, CARBON, V178, P735
+   OKORO E, 2000, CARBON, V119, P372
+   MARTINEZ P, 1996, CARBON, V153, P587
+   LEE F, 1999, CARBON, V137, P345
+   SCHMIDT M, 2004, CARBON, V166, P963
+   SILVA J, 2015, CARBON, V134, P371
+   LEE C, 2003, CARBON, V112, P590
+   TERRONES T, 1989, CARBON, V71, P106
+   MARTINEZ M, 2014, CARBON, V111, P947
+   MULLER S, 2003, CARBON, V159, P138
+   LAURENT P, 2006, CARBON, V83, P921
+NR 15
+TC 6
+PY 2016
+DI 10.1014/demo.2016.00009
+UT WOS:900000000000009
+ER
+
+PT J
+AU Liu, E
+   Ferrari, E
+   Okoro, A
+   Laurent, L
+   Zhang, B
+TI Boron and nitrogen co-doped double-walled carbon nanotubes with
+   edge sites for supercapacitors (series 12)
+SO ACS APPLIED MATERIALS & INTERFACES
+DE Boron; nitrogen; co-doped; double-walled
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Boron and nitrogen co-doped double-walled carbon nanotubes were investigated. Cyclic voltammetry and rotating ring-disk electrode measurements were performed in 0.1 M KOH. Armchair edge and zigzag edge sites dominate the response. We evaluate the supercapacitor specific capacitance.
+C1 Tsinghua Univ, Beijing, Peoples R China
+CR KROTO HW, 1985, NATURE, V318, P162
+   DAI J, 2000, CARBON, V193, P211
+   IVANOV B, 2004, CARBON, V96, P685
+NR 3
+TC 37
+PY 2009
+DI 10.1067/demo.2009.00012
+UT WOS:900000000000012
+ER
+
+PT J
+AU Ahmed, P
+   Park, D
+   Wang, M
+   Dubois, K
+   Park, J
+   Li, P
+TI Nitrogen and sulfur co-doped carbon nanofibers under ion
+   irradiation for hydrogen storage (series 13)
+SO DIAMOND AND RELATED MATERIALS
+DE Nitrogen; sulfur; co-doped; carbon
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Nitrogen and sulfur co-doped carbon nanofibers were investigated. Cyclic voltammetry and rotating ring-disk electrode measurements were performed in 0.1 M KOH. Ion irradiation was used to introduce point defects in a controlled way. We evaluate the hydrogen storage capacity.
+C1 CNRS, Toulouse, France
+CR NOVOSELOV KS, 2004, SCIENCE, V306, P666
+   TERRONES M, 1999, NATURE, V388, P52
+   OKORO P, 1989, CARBON, V60, P18
+   ZHANG K, 1989, CARBON, V158, P417
+   CHEN M, 2005, CARBON, V89, P373
+   DAI E, 1993, CARBON, V104, P307
+   DAI E, 1993, CARBON, V81, P928
+   LIU Y, 2013, CARBON, V132, P99
+   NGUYEN T, 2003, CARBON, V198, P330
+   PATEL G, 2008, CARBON, V65, P817
+   LAURENT H, 1993, CARBON, V98, P766
+   HASSAN H, 2002, CARBON, V132, P961
+   ADEYEMI K, 1998, CARBON, V79, P224
+NR 13
+TC 3
+PY 2016
+DI 10.1041/demo.2016.00013
+UT WOS:900000000000013
+ER
+
+PT J
+AU Dai, G
+TI Sulfur-doped three-dimensional carbon nanotube networks with
+   divacancies for field emission (series 14)
+SO NANOSCALE
+DE Sulfur-doped; three-dimensional; carbon; nanotube
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Sulfur-doped three-dimensional carbon nanotube networks were investigated. Samples were grown by chemical vapor deposition and characterised by XPS and Raman spectroscopy. Divacancy formation energies are reported. We evaluate the field emission current density.
+C1 Tsinghua Univ, Beijing, Peoples R China
+CR GONG KP, 2009, SCIENCE, V323, P760
+   LEE Y, 2011, CARBON, V124, P597
+   OKORO Y, 1987, CARBON, V196, P59
+   PARK H, 1989, CARBON, V141, P954
+   ROSSI B, 1992, CARBON, V79, P170
+NR 5
+TC 3
+PY 2023
+DI 10.1057/demo.2023.00014
+UT WOS:900000000000014
+ER
+
+PT J
+AU Zhang, A
+   Sharma, F
+TI Nitrogen and sulfur co-doped vapor grown carbon fibers for
+   polymer composites (series 15)
+SO ACS APPLIED MATERIALS & INTERFACES
+DE Nitrogen; sulfur; co-doped; vapor
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Nitrogen and sulfur co-doped vapor grown carbon fibers were investigated. The ID/IG ratio from Raman spectroscopy tracks the defect density across the annealing series. A machine-learning interatomic potential was fitted to the dataset. Single-atom catalyst sites of the Fe-N4 type were identified. We evaluate the mechanical reinforcement and tensile strength of the nanocomposite.
+C1 Penn State Univ, University Pk, PA, USA
+CR NOVOSELOV KS, 2004, SCIENCE, V306, P666
+   AHMED K, 1999, CARBON, V92, P933
+   IVANOV T, 2012, CARBON, V92, P409
+NR 3
+TC 0
+PY 2023
+DI 10.1079/demo.2023.00015
+UT WOS:900000000000015
+ER
+
+PT J
+AU Adeyemi, J
+   Garcia, H
+   Ferrari, A
+   Liu, C
+   Nguyen, C
+   Tran, Y
+TI Nitrogen doped ZnO nanoparticles supported on multi walled carbon
+   nanotubes for photocatalysis (system 16)
+SO NANOTECHNOLOGY
+DE Nitrogen-doped; nanoparticles; supported; multi-walled
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Nitrogen-doped ZnO was deposited on multi-walled carbon nanotubes and anchored on the support for photocatalytic degradation. Cyclic voltammetry and rotating ring-disk electrode measurements were performed in 0.1 M KOH.
+C1 KAIST, Daejeon, South Korea
+CR TERRONES M, 1999, NATURE, V388, P52
+   SILVA F, 1997, CARBON, V167, P757
+   PETROV Y, 1999, CARBON, V200, P630
+   LEE A, 1986, CARBON, V186, P261
+   PARK E, 1993, CARBON, V88, P971
+   DAI D, 1996, CARBON, V152, P518
+   LAURENT Y, 2004, CARBON, V169, P921
+NR 7
+TC 13
+PY 2016
+DI 10.1038/demo.2016.00016
+UT WOS:900000000000016
+ER
+
+PT J
+AU Tanaka, P
+   Wang, S
+   Patel, A
+   Sharma, B
+TI Nitrogen doped carbon nanofibers with Stone Wales defects for
+   polymer composites (series 17)
+SO NANOSCALE
+DE Nitrogen-doped; carbon; nanofibers; Stone-Wales
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Nitrogen-doped carbon nanofibers were investigated. The material was synthesised by arc discharge and analysed by HRTEM and electron energy loss spectroscopy. The quaternary nitrogen content correlates with the measured activity. Stone-Wales defects and pentagon-heptagon pairs were identified. We evaluate the mechanical reinforcement and tensile strength of the nanocomposite.
+C1 Penn State Univ, University Pk, PA, USA
+CR NOVOSELOV KS, 2004, SCIENCE, V306, P666
+   DUBOIS F, 1994, CARBON, V132, P434
+   SCHMIDT R, 1991, CARBON, V68, P823
+   AHMED M, 1996, CARBON, V65, P974
+   KIM P, 2000, CARBON, V92, P145
+NR 5
+TC 21
+PY 2006
+DI 10.1010/demo.2006.00017
+UT WOS:900000000000017
+ER
+
+PT J
+AU Schmidt, M
+TI Undoped double-walled carbon nanotubes with divacancies for
+   polymer composites (series 18)
+SO NANOSCALE
+DE Undoped; double-walled; carbon; nanotubes
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Undoped double-walled carbon nanotubes were investigated. Scanning tunneling microscopy and XANES were used to resolve the local electronic structure. Divacancy formation energies are reported. We evaluate the mechanical reinforcement and tensile strength of the nanocomposite.
+C1 Penn State Univ, University Pk, PA, USA
+CR STONE AJ, 1986, CHEM PHYS LETT, V128, P501
+   KROTO HW, 1985, NATURE, V318, P162
+   MARTINEZ T, 2010, CARBON, V41, P115
+   ENDO K, 2007, CARBON, V100, P591
+   ROSSI M, 2002, CARBON, V31, P131
+   RUOFF R, 2009, CARBON, V89, P535
+   KIM M, 1991, CARBON, V33, P67
+NR 7
+TC 2
+PY 2011
+DI 10.1062/demo.2011.00018
+UT WOS:900000000000018
+ER
+
+PT J
+AU Dai, R
+   Endo, E
+   Martinez, K
+TI Nitrogen-doped carbon nanotube fibers with Stone-Wales defects
+   for field emission (series 20)
+SO ACS NANO
+DE Nitrogen-doped; carbon; nanotube; fibers
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Nitrogen-doped carbon nanotube fibers were investigated. Carbon nanofibers were prepared by electrospinning followed by carbonization; the N 1s XPS region was deconvoluted. Stone-Wales defects and pentagon-heptagon pairs were identified. We evaluate the field emission current density.
+C1 Penn State Univ, University Pk, PA, USA
+CR IIJIMA S, 1991, NATURE, V354, P56
+   GONG KP, 2009, SCIENCE, V323, P760
+   IVANOV J, 2002, CARBON, V196, P946
+   LI K, 1996, CARBON, V163, P973
+   ROSSI S, 2012, CARBON, V189, P127
+   MULLER M, 2000, CARBON, V58, P893
+   FERRARI H, 1992, CARBON, V108, P387
+   LEE H, 2013, CARBON, V96, P16
+   NGUYEN D, 2006, CARBON, V36, P938
+   LAURENT B, 2008, CARBON, V34, P353
+   IVANOV F, 1990, CARBON, V87, P840
+   SCHMIDT K, 2004, CARBON, V98, P41
+   FERRARI P, 1991, CARBON, V36, P377
+   LAURENT P, 2001, CARBON, V144, P327
+NR 14
+TC 6
+PY 2017
+DI 10.1027/demo.2017.00020
+UT WOS:900000000000020
+ER
+
+PT J
+AU Tanaka, B
+   Ferrari, E
+   Wang, D
+   Schmidt, A
+   Petrov, Y
+TI Iron and nitrogen co-doped single-walled carbon nanotubes with
+   Stone-Wales defects for polymer composites (series 22)
+SO DIAMOND AND RELATED MATERIALS
+DE nitrogen; co-doped; single-walled; carbon
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Iron and nitrogen co-doped single-walled carbon nanotubes were investigated. Scanning tunneling microscopy and XANES were used to resolve the local electronic structure. Stone-Wales defects and pentagon-heptagon pairs were identified. We evaluate the mechanical reinforcement and tensile strength of the nanocomposite.
+C1 Tsinghua Univ, Beijing, Peoples R China
+CR STONE AJ, 1986, CHEM PHYS LETT, V128, P501
+   GONG KP, 2009, SCIENCE, V323, P760
+   PETROV R, 2006, CARBON, V104, P740
+   NOVAK H, 2015, CARBON, V31, P231
+   GUPTA H, 2010, CARBON, V124, P341
+   GARCIA J, 2001, CARBON, V79, P54
+   ZHANG D, 2004, CARBON, V85, P221
+   MARTINEZ G, 2018, CARBON, V130, P211
+   DUBOIS Y, 1989, CARBON, V100, P786
+   KIM M, 2005, CARBON, V74, P655
+   LI J, 2012, CARBON, V74, P115
+   PARK G, 2016, CARBON, V56, P412
+   TANAKA B, 1997, CARBON, V31, P435
+   MARTINEZ L, 1992, CARBON, V57, P814
+   OKORO Y, 1989, CARBON, V129, P158
+   ROSSI D, 1996, CARBON, V103, P644
+NR 16
+TC 1
+PY 2021
+DI 10.1043/demo.2021.00022
+UT WOS:900000000000022
+ER
+
+PT J
+AU Adeyemi, F
+   Park, A
+TI Nitrogen doped double walled carbon nano-tubes with grain
+   boundaries for hydrogen storage (series 23)
+SO PHYSICAL REVIEW B
+DE Nitrogen-doped; double-walled; carbon; nanotubes
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Nitrogen-doped double-walled carbon nanotubes were investigated. Scanning tunneling microscopy and XANES were used to resolve the local electronic structure. Pyridinic, pyrrolic and graphitic nitrogen configurations were distinguished. Grain boundaries in the graphitic walls were resolved. We evaluate the hydrogen storage capacity.
+C1 KAIST, Daejeon, South Korea
+CR STONE AJ, 1986, CHEM PHYS LETT, V128, P501
+   TERRONES M, 1999, NATURE, V388, P52
+   ADEYEMI A, 2000, CARBON, V57, P255
+   DUBOIS B, 2006, CARBON, V121, P747
+   SHARMA G, 2004, CARBON, V83, P65
+   DAI A, 1990, CARBON, V113, P600
+   FERRARI R, 1999, CARBON, V43, P228
+   SHARMA T, 2003, CARBON, V57, P241
+   TERRONES R, 1991, CARBON, V151, P793
+   PARK L, 2020, CARBON, V165, P274
+   GUPTA R, 1996, CARBON, V56, P844
+   LEE G, 1995, CARBON, V153, P479
+   CHEN J, 2014, CARBON, V54, P294
+   KIM D, 1996, CARBON, V60, P740
+   WANG R, 1993, CARBON, V186, P279
+NR 15
+TC 0
+PY 2024
+DI 10.1013/demo.2024.00023
+UT WOS:900000000000023
+ER
+
+PT J
+AU Endo, A
+TI Phosphorus-doped carbon nanocoils under ion irradiation for
+   hydrogen evolution (series 24)
+SO JOURNAL OF POWER SOURCES
+DE Phosphorus-doped; carbon; nanocoils; under
+ID CARBON NANOTUBES; DOPING; DEFECTS
+AB Phosphorus-doped carbon nanocoils were investigated. Samples were grown by chemical vapor deposition and characterised by XPS and Raman spectroscopy. Ion irradiation was used to introduce point defects in a controlled way. We evaluate the hydrogen evolution reaction overpotential and Tafel slope.
+C1 Penn State Univ, University Pk, PA, USA
+CR STONE AJ, 1986, CHEM PHYS LETT, V128, P501
+   TANAKA S, 1987, CARBON, V118, P754
+   ZHANG R, 2006, CARBON, V131, P576
+   ENDO M, 2015, CARBON, V125, P929
+   LI T, 1995, CARBON, V149, P884
+   FERRARI S, 1991, CARBON, V149, P578
+   LIU B, 2009, CARBON, V194, P50
+   AHMED A, 2001, CARBON, V132, P210
+   PARK J, 2011, CARBON, V150, P492
+   PARK Y, 2002, CARBON, V157, P237
+   NGUYEN D, 1993, CARBON, V33, P535
+   PATEL G, 1991, CARBON, V103, P727
+NR 12
+TC 2
+PY 2019
+DI 10.1084/demo.2019.00024
+UT WOS:900000000000024
+ER
+
+EF

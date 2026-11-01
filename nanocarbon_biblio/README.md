@@ -13,6 +13,26 @@ desde la literatura en lugar de desde la estructura atómica.
 
 ---
 
+## Empezar
+
+```bash
+cd nanocarbon_biblio
+python3 start.py
+```
+
+Un solo comando: comprueba tu Python, crea el entorno virtual, instala las
+dependencias y abre la interfaz. Windows: doble clic en `run_gui.bat`.
+macOS/Linux: `./run_gui.sh`.
+
+¿Nunca lo has arrancado, o vuelves después de meses? → **[`ARRANQUE.md`](ARRANQUE.md)**,
+con el recorrido literal y una tabla de «si ves este error, haz esto».
+
+Para verlo funcionando sin haber exportado nada todavía: `python3 start.py --demo`.
+
+---
+
+---
+
 ## Qué hay aquí
 
 | Ruta | Contenido |
@@ -23,18 +43,23 @@ desde la literatura en lugar de desde la estructura atómica.
 | `docs/PROTOCOL.md` | Preguntas de investigación, decisiones de alcance, criterios, sesgos, reporte |
 | `docs/WORKFLOW.md` | El recorrido completo paso a paso, y las herramientas complementarias |
 | `nanocarbon_biblio/` | El paquete de Python |
-| `R/` | `00_build_M.R`, `01_core_analyses.R`, `launch_biblioshiny.R` |
+| `ARRANQUE.md` | Guía literal para arrancar, y qué hacer cuando algo falla |
+| `start.py` | Arrancador de dependencias cero: diagnostica, instala y lanza |
+| `R/` | `99_check_r_setup.R` (diagnóstico), `00_build_M.R`, `01_core_analyses.R`, `launch_biblioshiny.R` |
 | `data/` | `raw/` (exportaciones crudas), `processed/` (bundle para R) |
 
-## Instalación
+## Instalación manual
+
+`start.py` hace todo esto solo; estos son los pasos si prefieres controlarlos:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 Rscript R/install_deps.R
+Rscript R/99_check_r_setup.R      # comprueba que el lado de R funciona
 ```
 
-Python ≥ 3.10, R ≥ 4.2.
+Python ≥ 3.10, R ≥ 4.1.
 
 ## La GUI
 
@@ -216,18 +241,18 @@ clasificador opaco:
 pytest nanocarbon_biblio/tests -q
 ```
 
-68 tests. Cubren el parseo de ambos formatos, la conservación literal de `CR` en
+72 tests. Cubren el parseo de ambos formatos, la conservación literal de `CR` en
 el viaje de ida y vuelta, la deduplicación entre bases puntuada **contra la
 verdad conocida** del corpus sintético, los guardas de desambiguación, la
 protección contra re-ingerir la propia salida, y el arranque de la GUI.
 
 ## Estado de verificación
 
-- **Python**: probado y ejecutado en este entorno; los 68 tests pasan.
+- **Python**: probado y ejecutado en este entorno; los 72 tests pasan.
 - **GUI**: recorrida de principio a fin (cargar → deduplicar → clasificar →
   cribar → exportar) contra el corpus de demostración, y capturada en imágenes.
   Los botones de R se activan solos cuando `Rscript` está en el PATH.
-- **R**: los cuatro scripts están **comprobados sintácticamente** con `parse()`,
+- **R**: los cinco scripts están **comprobados sintácticamente** con `parse()`,
   pero **no ejecutados**, porque CRAN no es alcanzable desde el entorno donde se
   escribieron y `bibliometrix` no se pudo instalar. Los pasos frágiles van
   envueltos en `step()` y registran el fallo en `results/failed_steps.txt` en
