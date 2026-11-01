@@ -19,7 +19,8 @@ Form: s and p on carbon, non-orthogonal. Each of V_ssσ, V_spσ, V_ppσ, V_ppπ 
 overlaps is ``v0 exp(-β (d/d0 - 1))`` with d0 = 1.42 Å (one β per hopping, one shared by the
 overlaps), out to third neighbours of graphene (2.84 Å) and switched off by a cubic tail
 between 3.0 and 3.3 Å. Free: the s-p on-site splitting, 4 hopping amplitudes, 4 hopping β,
-4 overlap amplitudes and the overlap β (14 numbers). The p on-site energy is fixed at 0
+4 overlap amplitudes and the overlap β (14 numbers), each bounded to its physical sign
+and range (``LOWER``, ``UPPER``). The p on-site energy is fixed at 0
 (bands are compared relative to the Fermi level or mid-gap, so only the splitting matters).
 
 Targets: GPAW PBE plane-wave bands, each method relative to its own Fermi level (mid-gap with
@@ -56,6 +57,16 @@ BONDS = ("sss", "sps", "pps", "ppp")
 START = {"es": -6.5, "v": (-5.4, 5.9, 6.4, -2.7), "beta": (3.0, 3.0, 3.0, 3.4),
          "s": (0.13, -0.15, -0.15, 0.12), "beta_s": 3.0}
 SOURCE = "ajuste a bandas GPAW PBE de ondas planas (tbkit.recipes.band_fit)"
+
+
+#: Physical bounds. Unbounded, a first fit put the 2s level above the 2p and flipped two
+#: overlap signs (bands within the windows fitted well, the set would not transfer). The
+#: signs are those of the two-centre integrals: V_ssσ, V_ppπ < 0 < V_spσ, V_ppσ, and the
+#: overlaps opposite to their hoppings (S ≈ −V/K, K > 0).
+LOWER = {"es": -14.0, "v": (-12.0, 0.0, 0.0, -6.0), "beta": (1.0, 1.0, 1.0, 1.0),
+         "s": (0.0, -0.6, -0.6, 0.0), "beta_s": 1.0}
+UPPER = {"es": -4.0, "v": (0.0, 12.0, 12.0, 0.0), "beta": (6.0, 6.0, 6.0, 6.0),
+         "s": (0.6, 0.0, 0.0, 0.6), "beta_s": 6.0}
 
 
 def unpack(p: np.ndarray) -> dict:
@@ -183,8 +194,11 @@ def fit() -> dict:
         return np.concatenate([r / np.sqrt(len(r)) for r in parts])
 
     p0 = pack(START)
-    result = least_squares(residuals, p0, x_scale="jac", max_nfev=400)
-    info = {"cost_start": float(np.sum(residuals(p0) ** 2)),
+    result = least_squares(residuals, p0, x_scale="jac", max_nfev=400,
+                           bounds=(pack(LOWER), pack(UPPER)))
+    info = {"bounds": {"lower": pack(LOWER).tolist(), "upper": pack(UPPER).tolist()},
+            "at_bound": [int(i) for i in np.flatnonzero(result.active_mask)],
+            "cost_start": float(np.sum(residuals(p0) ** 2)),
             "cost_end": float(np.sum(result.fun ** 2)), "nfev": int(result.nfev),
             "status": int(result.status), "fit_systems": list(FIT_SYSTEMS),
             "held_out": list(HELD_OUT)}
