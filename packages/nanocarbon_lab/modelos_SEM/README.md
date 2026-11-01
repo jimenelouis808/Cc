@@ -568,6 +568,30 @@ Dentro de Blender, mover la cámara no toca nada más: la escena no
 depende de dónde esté. El estilo sí está horneado en los materiales,
 así que cambiar de preset es volver a correr el script con `ESTILO=`.
 
+**Y aquí sólo cabe la primera.** Medido en este contenedor,
+`escena_profundidad` tardó **88 minutos de CPU** en construir su
+malla, que son **8.5 min por cada 1000 átomos**. De ahí:
+
+| escena | átomos | CPU estimada |
+|---|---|---|
+| `escena_profundidad` | 10 353 | **88 min (medido)** |
+| `escena_anemona` | 24 440 | ~3.5 h |
+| `escena_anemona_decorada` | 28 520 | ~4 h |
+| `escena_barras` | 37 152 | ~5 h |
+| `escena_anemonas` | 54 990 | ~8 h |
+
+El ejecutor en segundo plano corta a las 2 horas, así que las cuatro
+grandes **no se pueden construir aquí**: la cola murió a mitad de la
+anémona. Se construyen en una máquina con Blender instalado, que es
+para lo que el script toma `BPY`:
+
+```bash
+BPY="blender -b -P" bash modelos_SEM/escenas_blend.sh
+```
+
+Los `.xyz` y sus sidecars están versionados, así que no hace falta
+nada más del contenedor.
+
 ## El render de portada
 
 `modelos_SEM/renderizar.sh` produce las imágenes de `render/`, y lleva
