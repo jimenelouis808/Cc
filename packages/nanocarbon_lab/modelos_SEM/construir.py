@@ -264,6 +264,10 @@ def coated_particle(label: str, cif: Path, shape: str, params: dict,
           f"{time.time() - t0:.1f} s")
     for warning in coat_report.warnings:
         print(f"    aviso: {warning}")
+    for verdict in coat_report.verdict:
+        if "broken" in verdict:
+            BROKEN.append((label, verdict))
+            print(f"    *** CORAZA ROTA: {verdict}")
 
     # The bare core as well. Once the shell is on, the habit the whole
     # model is a hypothesis about is invisible -- the coating's envelope
@@ -439,6 +443,17 @@ def compositions(tube: Atoms, particle: Atoms, rows: list) -> None:
         print(f"    aviso: {warning}")
 
 
+#: Shells whose carbon-carbon bonds left the sp2 range, collected so
+#: the run ENDS by saying so.
+#:
+#: This exists because it already went wrong once and silently: the
+#: per-model lines scroll past, the verdict was only in the JSON, and
+#: nine models were written and handed over with walls carrying bonds
+#: of 1.59-1.72 A against the ceiling of 1.55. A quality gate that
+#: nobody reads is not a gate.
+BROKEN: list[tuple[str, str]] = []
+
+
 def main() -> None:
     rows: list = []
 
@@ -506,6 +521,14 @@ def main() -> None:
     (HERE / "modelos.json").write_text(
         json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\n{len(rows)} modelos escritos en {XYZ} y {IMG}")
+    if BROKEN:
+        print("\n" + "=" * 68)
+        print(f"ATENCIÓN: {len(BROKEN)} coraza(s) fuera del rango sp². "
+              "Estos modelos NO son estructuras válidas:")
+        for label, verdict in BROKEN:
+            print(f"  - {label}: {verdict}")
+        print("Sirven como ilustración y no para relajar ni para DFT.")
+        print("=" * 68)
 
 
 if __name__ == "__main__":

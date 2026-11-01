@@ -57,15 +57,22 @@ COLUMNS = 4
 MARKER_SCALE = 7.0
 
 #: Elements drawn at their van der Waals radius; everything else at the
-#: smaller display radius. The SAME convention as the Blender render
-#: (`--model auto --spacefill-element Se`): a metal or a chalcogenide
-#: core is a solid, and the carbon around it is open.
+#: smaller display radius.
 #:
-#: It is not cosmetic here either. Drawn at vdW the shell's carbon
-#: occludes the core completely and every coated model came out as one
-#: black blob -- which is exactly the comparison these sheets exist to
-#: make possible.
-SOLID = frozenset({"Fe", "Se"})
+#: **Iron only.** Selenium was in here too, which is right for the Se of
+#: an FeSe core -- it is part of a solid -- and wrong for the Se
+#: substituted into the carbon shell, which is one atom in a lattice and
+#: belongs in ball-and-stick like its neighbours. The same element in
+#: two places, and a per-element rule cannot tell them apart: drawn as
+#: spheres the shell's selenium reads as a crust of blobs on the
+#: graphite. Iron appears only in the cores here, so keying on it alone
+#: is unambiguous, and the FeSe core still reads as a solid because its
+#: iron does.
+#:
+#: Drawing the carbon at vdW instead would occlude the core completely
+#: and every coated model comes out as one black blob -- which is
+#: exactly the comparison these sheets exist to make possible.
+SOLID = frozenset({"Fe"})
 
 #: How far the shell's carbon is faded, so the core reads through it.
 SHELL_ALPHA = 0.55
