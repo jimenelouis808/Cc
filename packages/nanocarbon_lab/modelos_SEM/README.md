@@ -192,6 +192,37 @@ Por eso va también `placa_H_delgada_desnuda`: 6.0 Å de grosor y 58 Å de
 ancho, **9.8:1**, sin cubrir. Es la más delgada que el cristal permite y
 la que hay que comparar con la micrografía.
 
+## Para comparar: las hojas de contacto
+
+```bash
+uv run python modelos_SEM/contacto.py
+```
+
+Tres hojas en `img/`, y lo que las hace útiles es que **todos los
+paneles están a la misma escala**:
+
+| hoja | qué enseña |
+|---|---|
+| `_contacto.png` | todos los modelos de frente, 130 Å de lado |
+| `_contacto_perfil.png` | los mismos de perfil — el grosor |
+| `_contacto_escenas.png` | la anémona y el brazo, 380 Å de lado |
+
+Las imágenes sueltas de `img/<modelo>.png` autoescalan cada una a su
+propio sujeto, así que una partícula de 30 Å y una anémona de 300 llenan
+el mismo cuadro y parecen del mismo tamaño. Eso está bien para mirar una
+estructura y **mal para decidir si la barra es bastante larga**, que es
+para lo que sirven éstas.
+
+Dos decisiones de dibujo que no son cosméticas:
+
+- **El carbono va pequeño y el metal a radio de van der Waals**, el
+  mismo convenio que el render de Blender. Dibujado todo a vdW, la
+  coraza tapa el núcleo entero y **todos los modelos recubiertos salían
+  como una mancha negra** — justo la comparación que estas hojas existen
+  para permitir.
+- **De frente y de perfil son dos hojas.** Una placa de frente enseña su
+  hábito y esconde su grosor, que es el número en discusión.
+
 ## La barra: 85 Å y 9 : 1
 
 Era 30.6 × 9.4 Å, **3.2 : 1** — rechoncha, no una aguja. Ahora 85.0 ×
