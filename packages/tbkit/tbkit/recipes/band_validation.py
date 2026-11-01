@@ -16,8 +16,9 @@ ASE's builder (C-C 1.424 Å), nothing relaxed, so the bands differ only by the H
   k mesh, bands non-self-consistent on the path. ``dzp`` runs the LCAO dzp basis used
   everywhere else in this package, with the same settings: it measures that basis's own
   error against plane waves, which is the error bar of every other GPAW comparison here.
-* TB: ``pi`` (Hückel, t = −2.7 eV), ``sp3`` (Xu), ``tang`` (tang_carbon) and ``chn``
-  (xu_chn with its self-consistent charges; on pure carbon its C-C is Xu's).
+* TB: ``pi`` (Hückel, t = −2.7 eV), ``sp3`` (Xu), ``tang`` (tang_carbon), ``chn``
+  (xu_chn with its self-consistent charges; on pure carbon its C-C is Xu's) and ``c_bandas``
+  (the electronic set fitted to these bands by ``band_fit``; its held-out tubes are the test).
 
 Compared, each method relative to its own Fermi level (mid-gap when there is a gap):
 the gap and where it is; the optical transitions E11, E22 (M11 for metals) from the band
@@ -43,7 +44,7 @@ from ..settings import Param, add_arguments, apply
 WORK = Path("out/bands")
 OUT = Path("validation/bands_tb_vs_gpaw.json")
 SYSTEMS = ("graphene", "8,0", "10,0", "9,0", "5,5", "6,6")
-MODELS = ("pi", "sp3", "tang", "chn")
+MODELS = ("pi", "sp3", "tang", "chn", "c_bandas")
 GRAPHENE_A = 2.467
 VACUUM = 7.0
 NK_TUBE, NK_GRAPHENE = 31, 90   # 31: the path contains kz = 1/3, where armchair tubes cross

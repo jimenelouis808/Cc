@@ -23,7 +23,7 @@ PARAMETERS = ROOT / "tbkit" / "parameters"
 TARGET = ROOT / "docs" / "VALIDACION.md"
 
 SETS = ("pi_huckel", "xu_carbon", "tang_carbon", "xu_chn", "xu_chno", "xu_chnob", "xu_chnos",
-        "xu_chnop", "xu_chnose")
+        "xu_chnop", "xu_chnose", "c_bandas")
 
 
 def _load(path: Path):
@@ -62,6 +62,40 @@ def _sets() -> list[str]:
     for name in SETS:
         data = _load(PARAMETERS / f"{name}.json")
         out += [f"- **`{name}`** ({data.get('system', '')}): {data.get('validity', '')}"]
+    return out + [""]
+
+
+def _bands() -> list[str]:
+    data = _load(VALIDATION / "bands_tb_vs_gpaw.json")
+    fit = _load(VALIDATION / "c_bandas_fit.json")
+    held = _load(PARAMETERS / "c_bandas.json")["fit"]["held_out"]
+    labels = {"gpaw_dzp": "GPAW dzp", "tb_pi": "π", "tb_sp3": "Xu", "tb_tang": "Tang",
+              "tb_chn": "xu_chn", "tb_c_bandas": "c_bandas"}
+    out = ["## Bandas de grafeno y nanotubos frente a GPAW (ondas planas)", "",
+           "Fuente: `validation/bands_tb_vs_gpaw.json` (receta `band_validation`). "
+           + data["description"], "",
+           "Cada celda: RMS de bandas a ±1 eV (eV) / error del gap (eV) / v_F TB/GPAW "
+           "(solo sin gap). `c_bandas` se ajustó a grafeno (tres parámetros de red), "
+           f"(8,0) y (5,5); {', '.join(held)} quedaron fuera del ajuste.", ""]
+    rows = []
+    for name, entry in data["systems"].items():
+        m = entry["methods"]
+        cells = []
+        for key in labels:
+            x = m[key]
+            vf = x.get("fermi_velocity_ratio")
+            cells.append(f"{_f(x['band_rms_1eV'], 3)} / {_f(x['gap_error_eV'])}"
+                         + (f" / {_f(vf)}" if vf is not None else ""))
+        rows.append([name + (" (fuera)" if name in held else ""), _f(m["gpaw_pw"]["gap_eV"], 3)]
+                    + cells)
+    out += _table(["sistema", "gap PW (eV)"] + list(labels.values()), rows)
+    out += ["", "Ajuste de `c_bandas` en sus propias ventanas. " + fit["description"], ""]
+    rows = [(n, "ajuste" if v["role"] == "ajuste" else "fuera",
+             _f(v["xu_carbon"]["band_rms_eV"], 3), _f(v["c_bandas"]["band_rms_eV"], 3),
+             _f(v["c_bandas"]["gap_gpaw_eV"], 3), _f(v["c_bandas"]["gap_eV"], 3))
+            for n, v in fit["systems"].items()]
+    out += _table(("sistema", "", "RMS Xu (eV)", "RMS c_bandas (eV)", "gap GPAW", "gap c_bandas"),
+                  rows)
     return out + [""]
 
 
@@ -234,7 +268,7 @@ def render() -> str:
              "Generado por `python -m tbkit.recipes.validation_report` a partir de los "
              "archivos de `validation/` y `tbkit/parameters/`. No editar a mano: un test "
              "comprueba que coincide con los datos.", ""]
-    for part in (_sets, _infrared, _crystals, _tang, _nanotubes, _graphene, _nanocoil, _ml):
+    for part in (_sets, _infrared, _crystals, _tang, _bands, _nanotubes, _graphene, _nanocoil, _ml):
         lines += part()
     return "\n".join(lines).rstrip() + "\n"
 

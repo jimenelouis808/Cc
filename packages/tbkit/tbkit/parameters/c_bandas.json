@@ -1,0 +1,261 @@
+{
+ "name": "carbono s+p ajustado a bandas (c_bandas)",
+ "reference": "este trabajo: tbkit.recipes.band_fit, bandas GPAW PBE de ondas planas de grafeno (tres constantes de red) y de los tubos (8,0) y (5,5)",
+ "system": "carbono sp2: grafeno, nanotubos, coils; estructura electrónica a geometría dada",
+ "validity": "solo bandas, DOS y respuesta óptica a una geometría dada (de Xu o de DFT): sin repulsión, sin energías ni fuerzas; C-C de 1.37 a 1.48 Å; electrones a ±3 eV del nivel de Fermi (más lejos, las bandas vacías de GPAW tienen estados σ* y casi libres que una base mínima no describe)",
+ "units": {
+  "energy": "eV",
+  "length": "Å"
+ },
+ "orbitals": {
+  "C": [
+   "s",
+   "px",
+   "py",
+   "pz"
+  ]
+ },
+ "valence": {
+  "C": 4
+ },
+ "onsite": {
+  "C": {
+   "s": {
+    "value": -8.449,
+    "unit": "eV",
+    "description": "energía on-site 2s respecto a la 2p",
+    "source": "ε(2s) − ε(2p) del átomo de C libre, GPAW PBE (aeatom); calculada, no ajustada"
+   },
+   "p": {
+    "value": 0.0,
+    "unit": "eV",
+    "description": "energía on-site 2p (fija: solo importa la diferencia s-p)",
+    "source": "convención de este ajuste"
+   }
+  }
+ },
+ "hopping": [
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Exponential",
+    "v0": -7.2967251299145,
+    "d0": 1.42,
+    "beta": 1.5777569450138396,
+    "cutoff": 3.3
+   },
+   "tail": [
+    3.0,
+    3.3
+   ],
+   "unit": "eV",
+   "description": "V ssσ en d0 = 1.42 Å",
+   "source": "ajuste a bandas GPAW PBE de ondas planas (tbkit.recipes.band_fit)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Exponential",
+    "v0": 5.078859143526954,
+    "d0": 1.42,
+    "beta": 2.012511424369441,
+    "cutoff": 3.3
+   },
+   "tail": [
+    3.0,
+    3.3
+   ],
+   "unit": "eV",
+   "description": "V spσ en d0 = 1.42 Å",
+   "source": "ajuste a bandas GPAW PBE de ondas planas (tbkit.recipes.band_fit)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Exponential",
+    "v0": 4.706418392997248,
+    "d0": 1.42,
+    "beta": 1.9245647571480058,
+    "cutoff": 3.3
+   },
+   "tail": [
+    3.0,
+    3.3
+   ],
+   "unit": "eV",
+   "description": "V ppσ en d0 = 1.42 Å",
+   "source": "ajuste a bandas GPAW PBE de ondas planas (tbkit.recipes.band_fit)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Exponential",
+    "v0": -2.5265179403198186,
+    "d0": 1.42,
+    "beta": 2.650042767326735,
+    "cutoff": 3.3
+   },
+   "tail": [
+    3.0,
+    3.3
+   ],
+   "unit": "eV",
+   "description": "V ppπ en d0 = 1.42 Å",
+   "source": "ajuste a bandas GPAW PBE de ondas planas (tbkit.recipes.band_fit)"
+  }
+ ],
+ "overlap": [
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Exponential",
+    "v0": 0.4469450362223192,
+    "d0": 1.42,
+    "beta": 2.279805712146268,
+    "cutoff": 3.3
+   },
+   "tail": [
+    3.0,
+    3.3
+   ],
+   "unit": "1",
+   "description": "S ssσ en d0 = 1.42 Å",
+   "source": "ajuste a bandas GPAW PBE de ondas planas (tbkit.recipes.band_fit)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Exponential",
+    "v0": -0.11407241844022285,
+    "d0": 1.42,
+    "beta": 2.279805712146268,
+    "cutoff": 3.3
+   },
+   "tail": [
+    3.0,
+    3.3
+   ],
+   "unit": "1",
+   "description": "S spσ en d0 = 1.42 Å",
+   "source": "ajuste a bandas GPAW PBE de ondas planas (tbkit.recipes.band_fit)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Exponential",
+    "v0": -1.8127296679680807e-05,
+    "d0": 1.42,
+    "beta": 2.279805712146268,
+    "cutoff": 3.3
+   },
+   "tail": [
+    3.0,
+    3.3
+   ],
+   "unit": "1",
+   "description": "S ppσ en d0 = 1.42 Å",
+   "source": "ajuste a bandas GPAW PBE de ondas planas (tbkit.recipes.band_fit)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Exponential",
+    "v0": 0.13281861907850442,
+    "d0": 1.42,
+    "beta": 2.279805712146268,
+    "cutoff": 3.3
+   },
+   "tail": [
+    3.0,
+    3.3
+   ],
+   "unit": "1",
+   "description": "S ppπ en d0 = 1.42 Å",
+   "source": "ajuste a bandas GPAW PBE de ondas planas (tbkit.recipes.band_fit)"
+  }
+ ],
+ "notes": "Juego electrónico: úsese para bandas y respuesta con la geometría de otro modelo (tbkit.hybrid). Las colas entre 3.0 y 3.3 Å son cúbicas de valor y pendiente continuos.",
+ "fit": {
+  "bounds": {
+   "lower": [
+    -12.0,
+    0.0,
+    0.0,
+    -6.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    0.0,
+    -0.6,
+    -0.6,
+    0.0,
+    1.0
+   ],
+   "upper": [
+    0.0,
+    12.0,
+    12.0,
+    0.0,
+    6.0,
+    6.0,
+    6.0,
+    6.0,
+    0.6,
+    0.0,
+    0.0,
+    0.6,
+    6.0
+   ]
+  },
+  "at_bound": [],
+  "cost_start": 3.9994245661416215,
+  "cost_end": 0.07870296803977037,
+  "nfev": 43,
+  "status": 2,
+  "fit_systems": [
+   "graphene@2.42",
+   "graphene",
+   "graphene@2.52",
+   "8,0",
+   "5,5"
+  ],
+  "held_out": [
+   "10,0",
+   "9,0",
+   "6,6"
+  ]
+ }
+}

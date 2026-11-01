@@ -1,0 +1,141 @@
+{
+ "description": "Error de bandas frente a GPAW PBE (ondas planas) en las ventanas del ajuste: grafeno −9…+3 eV, tubos ±2.5 eV del nivel de referencia.",
+ "systems": {
+  "graphene@2.42": {
+   "role": "ajuste",
+   "c_bandas": {
+    "band_rms_eV": 0.11114423215467217,
+    "gap_eV": 0.0,
+    "gap_gpaw_eV": 0.0,
+    "fermi_velocity_eV_A": 5.325188958822487,
+    "fermi_velocity_gpaw_eV_A": 5.476606644957297
+   },
+   "xu_carbon": {
+    "band_rms_eV": 2.853776590182846,
+    "gap_eV": 0.0,
+    "gap_gpaw_eV": 0.0,
+    "fermi_velocity_eV_A": 4.245986177647759,
+    "fermi_velocity_gpaw_eV_A": 5.476606644957297
+   }
+  },
+  "graphene": {
+   "role": "ajuste",
+   "c_bandas": {
+    "band_rms_eV": 0.07456920807922866,
+    "gap_eV": 0.0,
+    "gap_gpaw_eV": 0.0,
+    "fermi_velocity_eV_A": 5.148577440418696,
+    "fermi_velocity_gpaw_eV_A": 5.316296162167376
+   },
+   "xu_carbon": {
+    "band_rms_eV": 2.60366346979712,
+    "gap_eV": 0.0,
+    "gap_gpaw_eV": 0.0,
+    "fermi_velocity_eV_A": 4.102797795165393,
+    "fermi_velocity_gpaw_eV_A": 5.316296162167376
+   }
+  },
+  "graphene@2.52": {
+   "role": "ajuste",
+   "c_bandas": {
+    "band_rms_eV": 0.10401839865597791,
+    "gap_eV": 0.0,
+    "gap_gpaw_eV": 0.0,
+    "fermi_velocity_eV_A": 4.956521461247562,
+    "fermi_velocity_gpaw_eV_A": 5.144957694643466
+   },
+   "xu_carbon": {
+    "band_rms_eV": 2.3283081825329917,
+    "gap_eV": 0.0,
+    "gap_gpaw_eV": 0.0,
+    "fermi_velocity_eV_A": 3.9413754477789733,
+    "fermi_velocity_gpaw_eV_A": 5.144957694643466
+   }
+  },
+  "8,0": {
+   "role": "ajuste",
+   "c_bandas": {
+    "band_rms_eV": 0.18475898712447078,
+    "gap_eV": 0.8325134360397795,
+    "gap_gpaw_eV": 0.5531365153698387,
+    "fermi_velocity_eV_A": null,
+    "fermi_velocity_gpaw_eV_A": null
+   },
+   "xu_carbon": {
+    "band_rms_eV": 0.3137214131264338,
+    "gap_eV": 0.9763705112309666,
+    "gap_gpaw_eV": 0.5531365153698387,
+    "fermi_velocity_eV_A": null,
+    "fermi_velocity_gpaw_eV_A": null
+   }
+  },
+  "5,5": {
+   "role": "ajuste",
+   "c_bandas": {
+    "band_rms_eV": 0.1258318335030534,
+    "gap_eV": 0.0,
+    "gap_gpaw_eV": 0.0,
+    "fermi_velocity_eV_A": 4.803924892629462,
+    "fermi_velocity_gpaw_eV_A": 5.165390735014912
+   },
+   "xu_carbon": {
+    "band_rms_eV": 0.3592709275779507,
+    "gap_eV": 0.0,
+    "gap_gpaw_eV": 0.0,
+    "fermi_velocity_eV_A": 3.9940878639377546,
+    "fermi_velocity_gpaw_eV_A": 5.165390735014912
+   }
+  },
+  "10,0": {
+   "role": "apartado",
+   "c_bandas": {
+    "band_rms_eV": 0.10085015867639854,
+    "gap_eV": 0.9394110016702442,
+    "gap_gpaw_eV": 0.9089701140795743,
+    "fermi_velocity_eV_A": null,
+    "fermi_velocity_gpaw_eV_A": null
+   },
+   "xu_carbon": {
+    "band_rms_eV": 0.34902876116915404,
+    "gap_eV": 0.5821545325165829,
+    "gap_gpaw_eV": 0.9089701140795743,
+    "fermi_velocity_eV_A": null,
+    "fermi_velocity_gpaw_eV_A": null
+   }
+  },
+  "9,0": {
+   "role": "apartado",
+   "c_bandas": {
+    "band_rms_eV": 0.13396292524089856,
+    "gap_eV": 0.19736328838279715,
+    "gap_gpaw_eV": 0.09351718518275431,
+    "fermi_velocity_eV_A": null,
+    "fermi_velocity_gpaw_eV_A": null
+   },
+   "xu_carbon": {
+    "band_rms_eV": 0.3342473037452715,
+    "gap_eV": 0.08725835521149161,
+    "gap_gpaw_eV": 0.09351718518275431,
+    "fermi_velocity_eV_A": null,
+    "fermi_velocity_gpaw_eV_A": null
+   }
+  },
+  "6,6": {
+   "role": "apartado",
+   "c_bandas": {
+    "band_rms_eV": 0.11540113057464328,
+    "gap_eV": 0.0,
+    "gap_gpaw_eV": 0.0,
+    "fermi_velocity_eV_A": 5.403686186237529,
+    "fermi_velocity_gpaw_eV_A": 5.466965750514002
+   },
+   "xu_carbon": {
+    "band_rms_eV": 0.36065332171109876,
+    "gap_eV": 0.0,
+    "gap_gpaw_eV": 0.0,
+    "fermi_velocity_eV_A": 4.0282694131673145,
+    "fermi_velocity_gpaw_eV_A": 5.466965750514002
+   }
+  }
+ }
+}

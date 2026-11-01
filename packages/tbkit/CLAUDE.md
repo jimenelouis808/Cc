@@ -45,6 +45,8 @@ tbkit/
 │                     #   site_screening: substitutional dopant sites, TB ranking, top-N for DFT
 │                     #   delta_fit: fit and cross-validate a Δ correction (writes to a workdir only)
 │                     #   validation_report: writes docs/VALIDACION.md from validation/ and parameters/
+│                     #   band_validation: graphene and 5 tubes, every model vs GPAW PW bands (+ dzp)
+│                     #   band_fit: electronic-only C set (c_bandas) fitted to those bands
 │                     #   pipeline: a recipe of one's own (structure + model + tasks), from «Nueva receta…»
 │                     #   study: any set of systems (0D-3D), changes embedded in their host: modes,
 │                     #     resonant Raman, IR, report, DFT request of the modes that matter
@@ -274,6 +276,13 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   with the stored data (worse on unseen molecules). Never make either a default, and never
   judge a Δ fit by its training error: report the cross-validated one. MACE and dscribe
   stay optional (not in the lockfile; tests skip without them).
+- `c_bandas` (`recipes/band_fit.py`) is electronic only: fitted to GPAW PBE plane-wave
+  bands of graphene at three lattice constants, (8,0) and (5,5); (10,0), (9,0) and (6,6)
+  are held out and must stay out. Es is the GPAW atom's 2s − 2p (computed, not fitted).
+  Use it for bands/DOS/optics at a geometry from Xu or DFT, never for energies or forces.
+  Band RMS is taken in windows near E_F: whole-band RMS measures σ*/NFE states no minimal
+  basis has. Armchair tubes cross off kz = 1/3: the path needs ≥ 31 points and
+  `band_crossing`.
 - Tests compare with closed-form results (graphene, Hückel, Lieb). A new
   feature needs such a check, not only a regression number.
 

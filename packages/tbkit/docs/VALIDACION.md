@@ -17,6 +17,7 @@ Lo que cada archivo declara (`system`, `validity`) y su factor de escala de frec
 | `xu_chnos` | sí | 1,0305 | 91,2 → 75,4 | 184 / 13 |
 | `xu_chnop` | sí | 1,0247 | 82,0 → 70,8 | 218 / 10 |
 | `xu_chnose` | sí | 1,0337 | 83,0 → 60,0 | 150 / 12 |
+| `c_bandas` | no | — | — | — |
 
 Validez declarada por cada archivo:
 
@@ -29,6 +30,7 @@ Validez declarada por cada archivo:
 - **`xu_chnos`** (xu_chno más azufre: tioles, sulfuros, disulfuros, tiofeno, sulfóxidos, sulfonas, ácidos sulfónicos, sulfonamidas): ajustado en moléculas de capa cerrada; cristales (SCC periódico): extrapolación comprobada contra GPAW (validation/crystals_tb_vs_gpaw.json): S en grafeno: fuerzas 0,5-0,6 veces el error molecular, S-C +0,03 Å, S 0,06 Å más alto sobre la hoja; enlaces dentro de lo muestreado (C-S 1.40-1.94 Å, H-S 1.24-1.45 Å, N-S 1.62-1.79 Å, O-S 1.34-1.75 Å, S-S 1.96-2.17 Å; el resto, como xu_chno); energías relativas solo entre estructuras de la misma composición y los mismos tipos de enlace (no se ajustaron energías de atomización; isómeros con enlaces distintos fallan: dimetil éter frente a etanol -1,44 eV con xu_chno, GPAW +0,38); C-C como en xu_carbon; S junto con B o P en la misma estructura no está cubierto; los C-S simples con carbono sp3 se desvían 0.06-0.09 Å (S=O, S-S, S-H, S-N y C-S aromático a menos de 0.04 Å)
 - **`xu_chnop`** (xu_chno más fósforo: fosfinas, óxidos de fosfina, ácidos fosfórico y fosfónicos, fosfatos, fosfinina): ajustado en moléculas de capa cerrada; cristales (SCC periódico): extrapolación comprobada contra GPAW (validation/crystals_tb_vs_gpaw.json): P en grafeno: fuerzas 0,3-0,6 veces el error molecular, P-C exacto (0,001 Å) pero P 0,12 Å más bajo sobre la hoja: ángulos C-P-C demasiado abiertos; enlaces dentro de lo muestreado (C-P 1.67-2.15 Å, H-P 1.30-1.57 Å, N-P 1.66-1.84 Å, O-P 1.39-1.74 Å, P-P 2.13-2.36 Å; el resto, como xu_chno); energías relativas solo entre estructuras de la misma composición y los mismos tipos de enlace (no se ajustaron energías de atomización; isómeros con enlaces distintos fallan: dimetil éter frente a etanol -1,44 eV con xu_chno, GPAW +0,38); C-C como en xu_carbon; P junto con B o S en la misma estructura no está cubierto; el C-P de P(V) (ácidos fosfónicos, óxidos de fosfina) sale 0.05-0.10 Å largo, el de P(III) 0.04-0.06 Å; P-O, P=O, P-P, P-N, P-H y C-P aromático a menos de 0.025 Å; ésteres P(OCH3)n corregidos con active learning (antes colapsaban); ácidos con P-OH (fosfórico, fosfónicos): el OH gira hacia el otro O al relajar, 0,4-0,9 Å; causa: la base mínima (GPAW con base sz también hunde el giro del OH: -0,35 eV a 180° frente a -0,23 con dzp; en TB es todo electrónico); en MePO3H2 los d del P también importan en DFT; úsense sus frecuencias O-H con cautela
 - **`xu_chnose`** (xu_chno más selenio: selenoles, selenuros, diselenuros, selenofeno, selenóxidos, ácidos selenínicos, Se-N): ajustado en moléculas de capa cerrada; cristales (SCC periódico): extrapolación comprobada contra GPAW (validation/crystals_tb_vs_gpaw.json): Se en grafeno: fuerzas ~1 vez el error molecular, Se-C +0,06 Å, Se 0,07 Å más alto sobre la hoja; enlaces dentro de lo muestreado (C-Se 1.61-2.09 Å, H-Se 1.36-1.57 Å, N-Se 1.81-2.00 Å, O-Se 1.57-2.01 Å, Se-Se 2.23-2.47 Å; el resto, como xu_chno); energías relativas solo entre estructuras de la misma composición y los mismos tipos de enlace (no se ajustaron energías de atomización; isómeros con enlaces distintos fallan: dimetil éter frente a etanol -1,44 eV con xu_chno, GPAW +0,38); C-C como en xu_carbon; Se junto con B, S o P en la misma estructura no está cubierto; enlaces de Se a menos de 0.08 Å; ácidos seleníninicos (Se(=O)OH): el OH gira hacia el otro O al relajar, 0,4-0,9 Å; causa: la base mínima (en el giro rígido la repulsión no aporta y la parte electrónica pone 240-300° 0,1 eV bajo el mínimo; GPAW con base mínima sz hace lo mismo, -0,06 eV, y con dzp +0,03); no son los d del Se (GPAW sin ellos no gira); úsense sus frecuencias O-H con cautela
+- **`c_bandas`** (carbono sp2: grafeno, nanotubos, coils; estructura electrónica a geometría dada): solo bandas, DOS y respuesta óptica a una geometría dada (de Xu o de DFT): sin repulsión, sin energías ni fuerzas; C-C de 1.37 a 1.48 Å; electrones a ±3 eV del nivel de Fermi (más lejos, las bandas vacías de GPAW tienen estados σ* y casi libres que una base mínima no describe)
 
 ## Infrarrojo frente a GPAW (8 moléculas C/H/N, modos de GPAW)
 
@@ -86,6 +88,34 @@ Fuente: `tbkit/parameters/tang_carbon.json` (`fit`). Fuera del ajuste: amorphous
 | amorphous_2.0 | 0,87 | 5,49 | 0,235 | ajuste |
 | amorphous_2.6 | 0,94 | 3,37 | 0,190 | ajuste |
 | amorphous_3.2 | 0,98 | 3,39 | 0,021 | fuera |
+
+## Bandas de grafeno y nanotubos frente a GPAW (ondas planas)
+
+Fuente: `validation/bands_tb_vs_gpaw.json` (receta `band_validation`). Bands of graphene and nanotubes at one geometry per system (graphene a = 2.467 Å, tubes rolled from it, unrelaxed), every method relative to its own Fermi level or mid-gap. Reference: GPAW PBE plane waves. RMS over the 4 highest valence and 4 lowest conduction bands (index from the HOMO), at the k points where the reference band is within 1 or 2 eV.
+
+Cada celda: RMS de bandas a ±1 eV (eV) / error del gap (eV) / v_F TB/GPAW (solo sin gap). `c_bandas` se ajustó a grafeno (tres parámetros de red), (8,0) y (5,5); 10,0, 9,0, 6,6 quedaron fuera del ajuste.
+
+| sistema | gap PW (eV) | GPAW dzp | π | Xu | Tang | xu_chn | c_bandas |
+|---|---|---|---|---|---|---|---|
+| graphene | 0,000 | 0,005 / 0,00 / 1,01 | 0,052 / 0,00 / 1,07 | 0,123 / 0,00 / 0,77 | 0,065 / 0,00 / 0,88 | 0,123 / 0,00 / 0,77 | 0,018 / 0,00 / 0,97 |
+| 8,0 | 0,553 | 0,015 / 0,01 | 0,357 / 0,71 | 0,166 / 0,42 | 0,188 / 0,42 | 0,166 / 0,42 | 0,170 / 0,28 |
+| 10,0 (fuera) | 0,909 | 0,017 / 0,01 | 0,164 / 0,04 | 0,167 / -0,33 | 0,116 / -0,18 | 0,167 / -0,33 | 0,089 / 0,03 |
+| 9,0 (fuera) | 0,094 | 0,016 / 0,02 | 0,503 / -0,09 | 0,203 / -0,01 | 0,175 / -0,09 | 0,203 / -0,01 | 0,211 / 0,10 |
+| 5,5 | 0,000 | 0,012 / 0,00 / 1,02 | 0,359 / 0,00 / 1,10 | 0,164 / 0,00 / 0,77 | 0,122 / 0,00 / 0,91 | 0,164 / 0,00 / 0,77 | 0,058 / 0,00 / 0,93 |
+| 6,6 (fuera) | 0,000 | 0,008 / 0,00 / 1,01 | 0,258 / 0,00 / 1,04 | 0,161 / 0,00 / 0,74 | 0,109 / 0,00 / 0,86 | 0,161 / 0,00 / 0,74 | 0,043 / 0,00 / 0,99 |
+
+Ajuste de `c_bandas` en sus propias ventanas. Error de bandas frente a GPAW PBE (ondas planas) en las ventanas del ajuste: grafeno −9…+3 eV, tubos ±2.5 eV del nivel de referencia.
+
+| sistema |  | RMS Xu (eV) | RMS c_bandas (eV) | gap GPAW | gap c_bandas |
+|---|---|---|---|---|---|
+| graphene@2.42 | ajuste | 2,854 | 0,111 | 0,000 | 0,000 |
+| graphene | ajuste | 2,604 | 0,075 | 0,000 | 0,000 |
+| graphene@2.52 | ajuste | 2,328 | 0,104 | 0,000 | 0,000 |
+| 8,0 | ajuste | 0,314 | 0,185 | 0,553 | 0,833 |
+| 5,5 | ajuste | 0,359 | 0,126 | 0,000 | 0,000 |
+| 10,0 | fuera | 0,349 | 0,101 | 0,909 | 0,939 |
+| 9,0 | fuera | 0,334 | 0,134 | 0,094 | 0,197 |
+| 6,6 | fuera | 0,361 | 0,115 | 0,000 | 0,000 |
 
 ## Nanotubos prístinos con Xu
 
