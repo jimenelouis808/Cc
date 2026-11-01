@@ -222,6 +222,36 @@ red en la coraza— y ninguna regla por elemento los separa. Lo mismo vale
 para el azufre y el oxígeno de los grupos funcionales. `--spacefill-element`
 sigue existiendo para una estructura que no lleve la lista.
 
+## La coraza lisa cuesta enlaces, y es una elección
+
+La pared sale de mallar un sobre y relajarla. Dejada libre llega a la
+longitud de enlace correcta **y se arruga**, porque el campo de fuerzas
+no tiene término de flexión: ondular no le cuesta casi nada. El ancla la
+sujeta sobre su propio sobre, que es lo que la hace parecer grafeno.
+
+Medido sobre la barra, la rugosidad RMS contra el sobre y el peor enlace:
+
+| ancla | rugosidad RMS | máx | enlace máx | |
+|---|---|---|---|---|
+| 0.0 | 0.580 Å | 3.01 | 1.523 | sp² OK |
+| 1.0 | 0.381 | 2.37 | 1.592 | roto |
+| **3.0** | **0.335** | **2.10** | **1.656** | roto |
+| 8.0 | — | — | — | el constructor la rechaza |
+
+**Va en 3.0.** Una pared 42 % más lisa a cambio de enlaces fuera del
+rango sp². Es la elección que pediste para la portada, y el programa la
+dice en voz alta al terminar cada vez: esos modelos sirven como
+ilustración y no para relajar ni para DFT.
+
+**El recocido se queda apagado**, y ahora con número: 40 pasadas mueven
+la rugosidad de 0.335 a 0.327 y los no-hexágonos del 8.2 % al 8.6 %.
+Compra un dos por ciento.
+
+**Y si una rigidez no construye, se baja sola.** El constructor *levanta
+una excepción* en vez de devolver una pared mala, así que una llamada
+sin guardia pierde la corrida entera por una familia. Se prueba 3, luego
+1, luego 0, y la que se usó se dice.
+
 ## Para comparar: las hojas de contacto
 
 ```bash

@@ -79,14 +79,14 @@ DEFAULTS: dict[str, Any] = {
     "barra_radio": 6.0,        # Å
     "barra_semilargo": 40.0,   # Å
     # -- the big carbide particle (1020 C) --
-    "fe3c_a": 13.0, "fe3c_c": 18.0,   # Å, ellipsoid semi-axes
+    "fe3c_a": 8.0, "fe3c_c": 22.0,    # Å, ellipsoid semi-axes
     "fe3c_capas": 2,
     # -- the one that goes in the tube --
-    "fe3c_interior_a": 7.0, "fe3c_interior_c": 9.0,
+    "fe3c_interior_a": 5.5, "fe3c_interior_c": 18.0,
     # -- the arm --
-    "tubo_freq": 6,            # radius = 1.96 * freq Å, quantised
-    "tubo_anillos": 10,
-    "tubo_curva": 0.75,        # `waviness` of the arc centreline
+    "tubo_freq": 5,            # radius = 1.96 * freq Å, quantised
+    "tubo_anillos": 12,
+    "tubo_curva": 0.5,         # `waviness` of the arc centreline
     # -- the anemone --
     "brazos": 8,          # 8 x 3726 = 29 808 atomos, bajo el techo de 32 k
     "brazos_separacion": 2.0,  # tube radii out from the centre
@@ -94,7 +94,23 @@ DEFAULTS: dict[str, Any] = {
     "n_frac": 0.06, "se_frac": 0.025,
     # -- the coating --
     "hueco": 3.45,             # Å
-    "ancla": 0.0,              # 0 now that the core is an obstacle
+    # 3.0, and the trade is deliberate. The anchor holds the wall on
+    # its own envelope, which is what makes it look like graphene
+    # rather than a lumpy sack; it costs bond length. Measured on the
+    # rod, roughness RMS against the envelope and the worst bond:
+    #     anchor 0.0 -> RMS 0.580, bond 1.523 (sp2 OK)
+    #     anchor 1.0 -> RMS 0.381, bond 1.592
+    #     anchor 3.0 -> RMS 0.335, bond 1.656
+    #     anchor 8.0 -> the builder refuses it outright
+    # A 42 % smoother wall for bonds outside the sp2 range. These are
+    # pictures, and that is the choice the pictures asked for -- the
+    # run says so at the end, every time.
+    "ancla": 3.0,
+    # Annealing is OFF and stays off: measured on the rod at anchor 3,
+    # 40 sweeps move the roughness from 0.335 to 0.327 and the
+    # non-hexagon share from 8.2 % to 8.6 %. It buys two per cent and
+    # costs a pass.
+    "recocido": 0,
     "rejilla": 128, "remallado": 60, "relajacion": 8000,
     "semilla": 20251031,
 }
@@ -244,12 +260,33 @@ def coated_particle(label: str, cif: Path, shape: str, params: dict,
     for warning in carve_report.warnings:
         print(f"    aviso: {warning}")
 
-    shell_list, coat_report = graphitic_coat(
-        core, gap=gap, shells=shells, vacuum=VACUUM,
-        seed=OPT["semilla"], wall_anchor=OPT["ancla"], roughness=0.0,
-        grid_resolution=OPT["rejilla"],
-        remesh_iterations=OPT["remallado"],
-        relax_iterations=OPT["relajacion"])
+    # A stiff anchor is what makes the wall flat, and past some
+    # stiffness the builder refuses the result outright -- it raises
+    # rather than returning, so an unguarded call loses the whole run
+    # over one family. Step down until one holds, and say which.
+    shell_list = coat_report = None
+    for anchor in sorted({OPT["ancla"], 1.0, 0.0}, reverse=True):
+        if anchor > OPT["ancla"]:
+            continue
+        try:
+            shell_list, coat_report = graphitic_coat(
+                core, gap=gap, shells=shells, vacuum=VACUUM,
+                seed=OPT["semilla"], wall_anchor=anchor, roughness=0.0,
+                grid_resolution=OPT["rejilla"],
+                remesh_iterations=OPT["remallado"],
+                relax_iterations=OPT["relajacion"],
+                anneal_sweeps=OPT["recocido"])
+        except RuntimeError as exc:
+            print(f"    ancla {anchor} rechazada ({str(exc)[:60]}…)")
+            continue
+        if anchor != OPT["ancla"]:
+            print(f"    *** ancla bajada a {anchor}: la pedida "
+                  f"({OPT['ancla']}) no daba una pared construible, "
+                  "así que esta coraza es más rugosa que las demás")
+        break
+    if shell_list is None:
+        raise RuntimeError(f"{label}: ninguna rigidez de ancla construye "
+                           "una pared aquí")
     print(f"  coraza: {sum(len(s) for s in shell_list)} C en {shells} capa(s), "
           f"{time.time() - t0:.1f} s")
     for warning in coat_report.warnings:
