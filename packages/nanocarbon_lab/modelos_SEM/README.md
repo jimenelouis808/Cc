@@ -258,6 +258,16 @@ ilustración y no para relajar ni para DFT.
 la rugosidad de 0.335 a 0.327 y los no-hexágonos del 8.2 % al 8.6 %.
 Compra un dos por ciento.
 
+**La rejilla no entra en esto, y vale la pena saberlo** porque es lo
+primero que uno toca cuando una malla sale mal. Barridas las doce
+combinaciones de hueco (3.4 / 3.0) x ancla (3 / 1 / 0) x rejilla
+(128 / 160) sobre la barra, **el veredicto no depende de la rejilla en
+ninguna**: 128 y 160 dan el mismo enlace máximo hasta la centésima. El
+hueco mueve poco (1.69 -> 1.63 Å al cerrarlo de 3.4 a 3.0) y **el ancla
+lo mueve todo**: las cuatro combinaciones limpias de las doce son
+exactamente las cuatro con ancla 0. Afinar la malla no arregla una
+pared que está tensa porque se la está sujetando.
+
 **Y si una rigidez no construye, se baja sola.** El constructor *levanta
 una excepción* en vez de devolver una pared mala, así que una llamada
 sin guardia pierde la corrida entera por una familia. Se prueba 3, luego
