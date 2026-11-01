@@ -199,13 +199,13 @@
   },
   {
     "modelo": "escena_anemona",
-    "atomos": 37260,
-    "formula": "C36360Fe900",
+    "atomos": 29808,
+    "formula": "C29088Fe720",
     "familia": "escena",
     "version": "ilustración",
     "nucleo": "Fe3C",
     "capas_grafiticas": 0,
     "veredicto_nucleo": "—",
-    "veredicto_coraza": "composición: 10 brazos, sin enlazar"
+    "veredicto_coraza": "composición: 8 brazos, sin enlazar"
   }
 ]

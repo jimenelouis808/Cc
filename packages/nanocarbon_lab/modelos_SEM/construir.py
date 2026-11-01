@@ -88,7 +88,7 @@ DEFAULTS: dict[str, Any] = {
     "tubo_anillos": 10,
     "tubo_curva": 0.75,        # `waviness` of the arc centreline
     # -- the anemone --
-    "brazos": 10,
+    "brazos": 8,          # 8 x 3726 = 29 808 atomos, bajo el techo de 32 k
     "brazos_separacion": 2.0,  # tube radii out from the centre
     # -- chemistry --
     "n_frac": 0.06, "se_frac": 0.025,
@@ -296,7 +296,8 @@ def coated_particle(label: str, cif: Path, shape: str, params: dict,
     return out
 
 
-def coated_tube(label: str, rows: list) -> dict:
+def coated_tube(label: str, rows: list,
+                record_rows: bool = True) -> dict:
     """A capped nanotube, in the three versions.
 
     No core: this is the tube itself. The particle it grows from is a
@@ -317,13 +318,15 @@ def coated_tube(label: str, rows: list) -> dict:
     out: dict = {}
     for version in ("C", "NSe", "NSeO"):
         whole = dress(tube, version)
+        out[version] = whole
+        if not record_rows:
+            continue
         rows.append(record(whole, f"{label}_{version}", {
             "familia": label, "version": version, "nucleo": "—",
             "capas_grafiticas": 0,
             "veredicto_nucleo": "—",
             "veredicto_coraza": tube.info.get("quality_verdict", "—"),
         }))
-        out[version] = whole
     return out
 
 
@@ -461,79 +464,97 @@ def compositions(tube: Atoms, particle: Atoms, rows: list) -> None:
 BROKEN: list[tuple[str, str]] = []
 
 
+def wanted(name: str) -> bool:
+    """Is this family in the run? ``--solo`` narrows it to one.
+
+    Worth having because the families cost very different amounts: the
+    coated particles are a minute each and the tube and the scenes are
+    seconds, so iterating on the anemone should not rebuild the plate.
+    """
+    return not OPT["solo"] or name.startswith(OPT["solo"])
+
+
 def main() -> None:
     rows: list = []
 
-    # 8.9 A thick and 58 A across: 6.5 : 1, against the first version's
-    # 3 : 1. What sets that floor is the COATING and not the crystal,
-    # which is worth knowing before anyone asks for thinner: at 6.0 A
-    # -- one P6_3/mmc cell, the thinnest stoichiometric slab there is --
-    # the graphitic shell comes back BROKEN at every gap and anchor
-    # tried (bonds to 1.73-1.76 A against the sp2 ceiling of 1.55), and
-    # the builder's own message says why: "the surface has features
-    # finer than a carbon ring". A 6 A rim is finer than the wall that
-    # would have to wrap it. In a real sample that edge is where the
-    # coating is defective or simply open.
-    coated_particle("placa_H", CIF / "FeSe_hexagonal.cif", "prism",
-                    {"radius": OPT["placa_radio"],
-                     "half_height": OPT["placa_semigrosor"], "sides": 6},
-                    shells=1, gap=OPT["hueco"], rows=rows)
+    if wanted("placa_H"):
+        # The THICKNESS is set by the coating, not by the crystal: at
+        # 6.0 A -- one P6_3/mmc cell, the thinnest stoichiometric slab
+        # there is -- the shell comes back broken at every gap and
+        # anchor tried, because a 6 A rim is finer than the wall that
+        # would wrap it. In a real sample that edge is where the
+        # coating is defective or simply open.
+        coated_particle("placa_H", CIF / "FeSe_hexagonal.cif", "prism",
+                        {"radius": OPT["placa_radio"],
+                         "half_height": OPT["placa_semigrosor"],
+                         "sides": 6},
+                        shells=1, gap=OPT["hueco"], rows=rows)
 
-    # And the thinnest plate the CRYSTAL allows, bare: one cell thick,
-    # 58 A across, 9.8 : 1. Half a cell terminates Se-Se and comes out
-    # Fe110Se200, which is not FeSe any more, so 6.0 A is the floor.
-    # This is the one to compare against the micrograph.
-    thin, _, _, (verdict, why) = core_from(
-        CIF / "FeSe_hexagonal.cif", "prism",
-        {"radius": OPT["placa_radio"], "half_height": 3.0, "sides": 6})
-    thin.info["solid_indices"] = list(range(len(thin)))
-    print(f"\nplaca delgada desnuda: {thin.get_chemical_formula()} "
-          f"({len(thin)} átomos, {np.ptp(thin.positions[:, 2]):.1f} Å de "
-          f"grosor) -> {verdict}")
-    rows.append(record(thin, "placa_H_delgada_desnuda", {
-        "familia": "placa_H", "version": "la más delgada posible, sin cubrir",
-        "nucleo": thin.get_chemical_formula(), "capas_grafiticas": 0,
-        "veredicto_nucleo": f"{verdict}: {why}", "veredicto_coraza": "—",
-    }))
+        # And the thinnest plate the CRYSTAL allows, bare. Half a cell
+        # terminates Se-Se and comes out Fe110Se200, which is not FeSe
+        # any more, so 6.0 A is the floor. This is the one to compare
+        # against the micrograph.
+        thin, _, _, (verdict, why) = core_from(
+            CIF / "FeSe_hexagonal.cif", "prism",
+            {"radius": OPT["placa_radio"], "half_height": 3.0, "sides": 6})
+        thin.info["solid_indices"] = list(range(len(thin)))
+        print(f"\nplaca delgada desnuda: {thin.get_chemical_formula()} "
+              f"({len(thin)} átomos, "
+              f"{np.ptp(thin.positions[:, 2]):.1f} Å de grosor) -> {verdict}")
+        rows.append(record(thin, "placa_H_delgada_desnuda", {
+            "familia": "placa_H",
+            "version": "la más delgada posible, sin cubrir",
+            "nucleo": thin.get_chemical_formula(), "capas_grafiticas": 0,
+            "veredicto_nucleo": f"{verdict}: {why}",
+            "veredicto_coraza": "—"}))
 
-    # 85 x 9.4 A, 9 : 1 -- a needle rather than the first version's
-    # stubby 3.2 : 1. The thickness stays at 9.4 A for the same reason
-    # the plate's does: below about 9 A the graphitic shell has nothing
-    # to wrap. A capsule and not a cylinder, because a cylinder's sharp
-    # rim leaves the envelope nowhere to go and the coating refuses it.
-    coated_particle("barra_T", CIF / "FeSe_tetragonal.cif", "rod",
-                    {"radius": OPT["barra_radio"],
-                     "half_length": OPT["barra_semilargo"]},
-                    shells=1, gap=OPT["hueco"], rows=rows)
+    if wanted("barra_T"):
+        # A capsule and not a cylinder: a cylinder's sharp rim leaves
+        # the envelope nowhere to go and the coating refuses it, which
+        # is also what a real sharp edge does -- it reconstructs.
+        coated_particle("barra_T", CIF / "FeSe_tetragonal.cif", "rod",
+                        {"radius": OPT["barra_radio"],
+                         "half_length": OPT["barra_semilargo"]},
+                        shells=1, gap=OPT["hueco"], rows=rows)
 
-    coated_particle("particula_Fe3C", CIF / "Fe3C_cementita.cif",
-                    "ellipsoid", {"a": OPT["fe3c_a"], "b": OPT["fe3c_a"],
-                                  "c": OPT["fe3c_c"]},
-                    shells=OPT["fe3c_capas"], gap=OPT["hueco"], rows=rows)
+    if wanted("particula_Fe3C"):
+        coated_particle("particula_Fe3C", CIF / "Fe3C_cementita.cif",
+                        "ellipsoid", {"a": OPT["fe3c_a"], "b": OPT["fe3c_a"],
+                                      "c": OPT["fe3c_c"]},
+                        shells=OPT["fe3c_capas"], gap=OPT["hueco"], rows=rows)
 
     # The small one, bare, for putting inside a tube. No graphitic shell
     # on it: inside the tube the TUBE is the graphite, and a shell would
     # be a second wall 3.35 A from the first with nothing between them.
     inside, _, _, (verdict, why) = core_from(
-        CIF / "Fe3C_cementita.cif", "ellipsoid", {"a": OPT["fe3c_interior_a"],
-         "b": OPT["fe3c_interior_a"], "c": OPT["fe3c_interior_c"]})
+        CIF / "Fe3C_cementita.cif", "ellipsoid",
+        {"a": OPT["fe3c_interior_a"], "b": OPT["fe3c_interior_a"],
+         "c": OPT["fe3c_interior_c"]})
     inside.info["solid_indices"] = list(range(len(inside)))
-    print(f"\npartícula interior: {inside.get_chemical_formula()} "
-          f"({len(inside)} átomos) -> {verdict}")
-    print(f"    {why}")
-    rows.append(record(inside, "particula_Fe3C_interior", {
-        "familia": "particula_Fe3C", "version": "para ir dentro del tubo",
-        "nucleo": inside.get_chemical_formula(), "capas_grafiticas": 0,
-        "veredicto_nucleo": f"{verdict}: {why}", "veredicto_coraza": "—",
-    }))
+    if wanted("particula_Fe3C"):
+        print(f"\npartícula interior: {inside.get_chemical_formula()} "
+              f"({len(inside)} átomos) -> {verdict}")
+        rows.append(record(inside, "particula_Fe3C_interior", {
+            "familia": "particula_Fe3C",
+            "version": "para ir dentro del tubo",
+            "nucleo": inside.get_chemical_formula(),
+            "capas_grafiticas": 0,
+            "veredicto_nucleo": f"{verdict}: {why}",
+            "veredicto_coraza": "—"}))
 
-    tubes = coated_tube("nanotubo", rows)
+    tubes = coated_tube("nanotubo", rows, record_rows=wanted("nanotubo"))
+    if wanted("escena"):
+        compositions(tubes["C"], inside, rows)
 
-    compositions(tubes["C"], inside, rows)
-
-    (HERE / "modelos.json").write_text(
-        json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"\n{len(rows)} modelos escritos en {XYZ} y {IMG}")
+    out = HERE / "modelos.json"
+    if OPT["solo"] and out.exists():
+        # A partial run must not wipe the families it did not build.
+        keep = [row for row in json.loads(out.read_text(encoding="utf-8"))
+                if not any(row["modelo"] == new["modelo"] for new in rows)]
+        rows = keep + rows
+    out.write_text(json.dumps(rows, indent=2, ensure_ascii=False),
+                   encoding="utf-8")
+    print(f"\n{len(rows)} modelos en {XYZ} y {IMG}")
     if BROKEN:
         print("\n" + "=" * 68)
         print(f"ATENCIÓN: {len(BROKEN)} coraza(s) fuera del rango sp². "
