@@ -52,8 +52,30 @@ SENSOR_MM = 36.0
 #: which axis crops first depends on the aspect.
 RESOLUTION = (1600, 2000)
 
-#: The same fraction of the frame the renderer fills.
+#: The same fraction of the frame the renderer fills, by default.
 FRAME_FILL = 0.86
+
+#: Per-scene override. A fill above 1 crops: the subject is framed
+#: larger than the frame and its edges leave it, which is what "more
+#: zoom" means for a cover -- the composition is supposed to run off
+#: the page. The preview reports the share of atoms left inside, so
+#: how much is being cut is a number rather than a surprise.
+FILL_BY_SCENE: dict[str, float] = {
+    "escena_barras": 1.18,
+    "escena_profundidad": 1.10,
+    "escena_anemonas": 1.12,
+    "escena_anemona_decorada": 1.00,
+    "escena_anemona": 0.95,
+}
+
+#: Per-scene camera direction, by the name `render_cnt --view` takes.
+#: `auto` measures the largest silhouette, which is right for a subject
+#: whose shape is the point and WRONG for a depth composition: the
+#: largest silhouette of three objects on a line is the view that puts
+#: them side by side, which is the one thing that scene is not for.
+VIEW_BY_SCENE: dict[str, str] = {
+    "escena_profundidad": "depth",
+}
 
 #: Inches across the preview panel. The marker size is DERIVED from it
 #: rather than tuned: a scatter's `s` is an area in points², and an
@@ -73,6 +95,11 @@ def solid_indices(label: str) -> set[int]:
     return {int(i) for i in json.loads(sidecar.read_text()).get("solid", [])}
 
 
+def fill_for(label: str) -> float:
+    """The frame fill this scene asks for."""
+    return float(FILL_BY_SCENE.get(label, FRAME_FILL))
+
+
 def preview(label: str) -> dict:
     """Draw one scene as its camera will see it, and report the numbers."""
     atoms = read(XYZ / f"{label}.xyz")
@@ -85,10 +112,13 @@ def preview(label: str) -> dict:
         for index, s in enumerate(symbols)])
 
     style = style_defs.get_style(STYLE)
-    direction = cam.best_view(points)
+    view = VIEW_BY_SCENE.get(label, "auto")
+    direction = (cam.best_view(points) if view == "auto"
+                 else cam.named_direction(view))
+    fill = fill_for(label)
     location, target, distance = cam.frame_camera(
         points, direction, style.camera_lens_mm, SENSOR_MM, RESOLUTION,
-        fill=FRAME_FILL, radii=radii)
+        fill=fill, radii=radii)
     right, up, back = cam.basis_for(direction)
 
     # True perspective, the same projection the camera performs: the
@@ -132,16 +162,18 @@ def preview(label: str) -> dict:
     covered = (np.ptp(screen[inside, 0]) / (2 * limit_h)) if inside.any() else 0.0
     axis.set_title(f"{label}\n{len(atoms)} átomos · lente "
                    f"{style.camera_lens_mm:.0f} mm · cámara a "
-                   f"{distance:.0f} Å · {100 * inside.mean():.1f} % en cuadro",
+                   f"{distance:.0f} Å · relleno {fill:.2f} · "
+                   f"{100 * inside.mean():.1f} % en cuadro",
                    fontsize=8, color="#222222", pad=5)
     figure.tight_layout()
     out = IMG / f"_camara_{label}.png"
     figure.savefig(out, dpi=150, facecolor="white")
     plt.close(figure)
-    print(f"  {label:26s} cámara a {distance:7.1f} Å  "
+    print(f"  {label:26s} vista {view:9s} relleno {fill:4.2f}  "
+          f"cámara a {distance:7.1f} Å  "
           f"{100 * inside.mean():5.1f} % en cuadro  ancho {100*covered:4.0f} %")
-    return {"modelo": label, "distancia": distance,
-            "en_cuadro": float(inside.mean()),
+    return {"modelo": label, "vista": view, "distancia": distance,
+            "relleno": fill, "en_cuadro": float(inside.mean()),
             "direccion": [float(v) for v in direction]}
 
 
@@ -149,8 +181,9 @@ def main(argv: list[str]) -> None:
     names = argv or sorted(p.stem for p in XYZ.glob("escena_*.xyz"))
     style = style_defs.get_style(STYLE)
     print(f"estilo {STYLE}, lente {style.camera_lens_mm:.0f} mm, "
-          f"sensor {SENSOR_MM:.0f} mm, {RESOLUTION[0]}x{RESOLUTION[1]}, "
-          f"relleno {FRAME_FILL:.0%}")
+          f"sensor {SENSOR_MM:.0f} mm, "
+          f"{RESOLUTION[0]}x{RESOLUTION[1]}, relleno {FRAME_FILL:.0%} "
+          "salvo donde la escena pide otro")
     rows = [preview(name) for name in names]
     (HERE / "camaras.json").write_text(
         json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")

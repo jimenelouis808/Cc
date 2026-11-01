@@ -40,7 +40,27 @@ render placa_H_C              1400 64 --spacefill-element Se
 render barra_T_C              1400 64 --spacefill-element Se
 render particula_Fe3C_C       1400 64
 render brazo_particula_dentro 1400 64
-render escena_anemona         1600 48
+
+# The cover scenes, PORTRAIT and with the same framing the preview
+# (`modelos_SEM/camara.py`) reports -- same lens, same fill, same view
+# name -- so what was approved on screen is what gets rendered. A fill
+# above 1 crops on purpose: the composition is supposed to run off the
+# page. `escena_profundidad` is the one that must NOT use `auto`: the
+# largest silhouette of three items on a line puts them side by side,
+# which is the one thing a depth composition is not for.
+scene () {         # scene <name> <samples> <fill> [view]
+  local name="$1" samples="$2" fill="$3" view="${4:-auto}"
+  echo "=== $name (1600x2000, ${samples} muestras, relleno $fill, vista $view)"
+  "$BPY" "$R" -- --xyz "$IN/$name.xyz" --json "$IN/$name.json" \
+    "${COMMON[@]}" --resolution 1600 2000 --samples "$samples" \
+    --camera-fill "$fill" --view "$view" --out "$OUT/$name.png"
+}
+
+scene escena_barras           48 1.18
+scene escena_profundidad      48 1.10 depth
+scene escena_anemona          48 0.95
+scene escena_anemonas         40 1.12
+scene escena_anemona_decorada 48 1.00
 
 # The doped one WITHOUT the flag: its selenium is in two places at once
 # -- in the FeSe core and substituted into the carbon around it -- and a

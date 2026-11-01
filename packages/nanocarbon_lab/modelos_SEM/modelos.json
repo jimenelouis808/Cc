@@ -210,14 +210,14 @@
   },
   {
     "modelo": "escena_barras",
-    "atomos": 27864,
-    "formula": "C21816Fe3024Se3024",
+    "atomos": 37152,
+    "formula": "C29088Fe4032Se4032",
     "familia": "escena",
     "version": "ilustración",
     "nucleo": "—",
     "capas_grafiticas": 0,
     "veredicto_nucleo": "—",
-    "veredicto_coraza": "composición: 12 barras"
+    "veredicto_coraza": "composición: 16 barras"
   },
   {
     "modelo": "escena_profundidad",
@@ -228,7 +228,7 @@
     "nucleo": "—",
     "capas_grafiticas": 0,
     "veredicto_nucleo": "—",
-    "veredicto_coraza": "composición: placa, barra y tubo en tres planos"
+    "veredicto_coraza": "composición: placa, barra y tubo en una línea, uno detrás de otro"
   },
   {
     "modelo": "escena_anemonas",
@@ -243,19 +243,19 @@
   },
   {
     "modelo": "brazo_decorado",
-    "atomos": 3409,
-    "formula": "C3017Fe392",
+    "atomos": 3475,
+    "formula": "C3017Fe458",
     "familia": "escena",
     "version": "ilustración",
     "nucleo": "Fe",
     "capas_grafiticas": 0,
     "veredicto_nucleo": "—",
-    "veredicto_coraza": "6 partículas de Fe colocadas sobre la pared"
+    "veredicto_coraza": "7x4 partículas de Fe colocadas sobre la pared"
   },
   {
     "modelo": "escena_anemona_decorada",
-    "atomos": 27272,
-    "formula": "C24136Fe3136",
+    "atomos": 27800,
+    "formula": "C24136Fe3664",
     "familia": "escena",
     "version": "ilustración",
     "nucleo": "—",

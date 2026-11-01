@@ -47,6 +47,7 @@ from typing import Any
 
 import numpy as np
 from ase import Atoms
+from scipy.spatial import cKDTree
 
 from nanocarbon_lab import scene
 from nanocarbon_lab.builders.capped_cnt import build_capped_cnt
@@ -84,8 +85,15 @@ DEFAULTS: dict[str, Any] = {
     # -- the one that goes in the tube --
     "fe3c_interior_radio": 6.0,
     # -- the iron that decorates an arm --
-    "fe_radio": 5.0, "fe_por_brazo": 6,
-    "barras": 12,              # how many rods in the field
+    # The decoration: rings of beads along each arm, so many per ring.
+    # A count alone gave a random scatter; a lattice is what reads as
+    # decoration.
+    "fe_radio": 4.0, "fe_anillos": 7, "fe_por_anillo": 4,
+    "barras": 16,              # how many rods in the field
+    "barras_separacion": 0.72, # x the rod's own length between them
+    "barras_holgura": 2.6,     # A a rod must clear its neighbours by
+    "barras_intentos": 60,     # draws per rod before the best is kept
+    "anemonas_separacion": 1.9,  # x the arm's span between centres
     # -- the arm --
     "tubo_freq": 5,            # radius = 1.96 * freq Å, quantised
     "tubo_anillos": 12,
@@ -496,21 +504,51 @@ def compositions(tube: Atoms, particle: Atoms, pieces: dict,
     # of rods, and pure random placement makes them pile up.
     rod = pieces.get("barra_T")
     if rod is not None:
-        span = 1.15 * float(max(np.ptp(rod.positions[:, k])
-                                for k in range(3)))
+        # Below one rod length the rods interleave rather than sit in
+        # cells, which is what the micrograph's heap looks like. The
+        # composition measures every pair and reports anything that
+        # touches, so this can be tightened by eye and checked.
+        span = OPT["barras_separacion"] * float(
+            max(np.ptp(rod.positions[:, k]) for k in range(3)))
         items = []
         side = int(np.ceil(np.sqrt(OPT["barras"])))
+        # Each rod is DRAWN AND MEASURED before it is kept. Tuning the
+        # span and the jitter by hand against the composition's pair
+        # report got the field from two interpenetrating pairs (0.26 and
+        # 0.98 A) down to one (0.38 A) and no further: with random
+        # orientations at this density some draw always lands on a
+        # neighbour, and widening the field is the one thing asked
+        # against. So the draw is rejected instead, which keeps the
+        # spacing and removes the collisions outright.
+        placed: list[np.ndarray] = []
         for index in range(OPT["barras"]):
             row, column = divmod(index, side)
-            jitter = rng.uniform(-0.28, 0.28, size=3) * span
-            items.append(scene.Item(
-                rod, label=f"barra{index}",
-                rotation=tuple(rng.uniform(0.0, 360.0, size=3)),
-                translation=(float((column - 0.5 * (side - 1)) * span
-                                   + jitter[0]),
-                             float((row - 0.5 * (side - 1)) * span
-                                   + jitter[1]),
-                             float(0.35 * jitter[2]))))
+            best: tuple[float, scene.Item] | None = None
+            for _ in range(OPT["barras_intentos"]):
+                jitter = rng.uniform(-0.12, 0.12, size=3) * span
+                candidate = scene.Item(
+                    rod, label=f"barra{index}",
+                    rotation=tuple(rng.uniform(0.0, 360.0, size=3)),
+                    translation=(float((column - 0.5 * (side - 1)) * span
+                                       + jitter[0]),
+                                 float((row - 0.5 * (side - 1)) * span
+                                       + jitter[1]),
+                                 float(0.35 * jitter[2])))
+                here = candidate.placed().positions
+                gap = (float("inf") if not placed else
+                       min(float(cKDTree(other).query(here)[0].min())
+                           for other in placed))
+                if best is None or gap > best[0]:
+                    best = (gap, candidate)
+                if gap >= OPT["barras_holgura"]:
+                    break
+            assert best is not None
+            if best[0] < OPT["barras_holgura"]:
+                print(f"    barra{index}: la mejor de "
+                      f"{OPT['barras_intentos']} tiradas deja "
+                      f"{best[0]:.2f} Å")
+            items.append(best[1])
+            placed.append(best[1].placed().positions)
         finish(items, "escena_barras", f"composición: {OPT['barras']} barras")
 
     # 3. Depth: the plate in front, a rod behind it, the tube with its
@@ -521,21 +559,26 @@ def compositions(tube: Atoms, particle: Atoms, pieces: dict,
     if plate is not None and rod is not None:
         reach = 0.5 * float(max(np.ptp(plate.positions[:, k])
                                 for k in range(3)))
+        # Strung along ONE line, with only a small sideways stagger so
+        # each stays visible past the one in front. The first version
+        # spread them across the frame as well and read as three
+        # objects in a row rather than as three depths.
+        step = 1.78 * reach
         finish([
             scene.Item(plate, label="placa", rotation=(72.0, 0.0, 18.0),
-                       translation=(-0.35 * reach, -1.5 * reach, 0.0)),
-            scene.Item(rod, label="barra", rotation=(80.0, 0.0, -35.0),
-                       translation=(0.9 * reach, 0.2 * reach, 1.1 * reach)),
-            scene.Item(arm, label="tubo", rotation=(70.0, 0.0, 25.0),
-                       translation=(-0.6 * reach, 2.1 * reach,
-                                    2.2 * reach)),
+                       translation=(0.18 * reach, -step, 0.0)),
+            scene.Item(rod, label="barra", rotation=(80.0, 0.0, -28.0),
+                       translation=(0.95 * reach, 0.0, 0.70 * reach)),
+            scene.Item(arm, label="tubo", rotation=(72.0, 0.0, 22.0),
+                       translation=(-0.85 * reach, step, 0.90 * reach)),
         ], "escena_profundidad", "composición: placa, barra y tubo en "
-           "tres planos")
+           "una línea, uno detrás de otro")
 
     # 4. Several anemones.
     items = []
     arms_each = max(4, OPT["brazos"] - 2)
-    cluster = 3.1 * float(max(np.ptp(arm.positions[:, k]) for k in range(3)))
+    cluster = OPT["anemonas_separacion"] * float(
+        max(np.ptp(arm.positions[:, k]) for k in range(3)))
     for which, centre in enumerate(((0.0, 0.0, 0.0),
                                     (cluster, 0.25 * cluster, 0.4 * cluster),
                                     (0.45 * cluster, -cluster,
@@ -549,12 +592,13 @@ def compositions(tube: Atoms, particle: Atoms, pieces: dict,
     # along the tubes in the micrograph.
     bead = pieces.get("fe_decoracion")
     if bead is not None:
-        dressed = decorate(arm, bead, OPT["fe_por_brazo"], rng)
+        dressed = decorate(arm, bead, OPT["fe_anillos"],
+                           OPT["fe_por_anillo"])
         rows.append(record(dressed, "brazo_decorado", {
             "familia": "escena", "version": "ilustración", "nucleo": "Fe",
             "capas_grafiticas": 0, "veredicto_nucleo": "—",
-            "veredicto_coraza": f"{OPT['fe_por_brazo']} partículas de Fe "
-                                "colocadas sobre la pared"}))
+            "veredicto_coraza": f"{OPT['fe_anillos']}x{OPT['fe_por_anillo']} "
+                                "partículas de Fe colocadas sobre la pared"}))
         finish(anemone_items(dressed, OPT["brazos"], radius),
                "escena_anemona_decorada",
                f"composición: {OPT['brazos']} brazos con Fe encima")
@@ -589,43 +633,69 @@ def anemone_items(arm: Atoms, arms: int, radius: float,
     return items
 
 
-def decorate(arm: Atoms, bead: Atoms, count: int, rng) -> Atoms:
-    """Scatter metal beads over an arm's outer wall.
+def decorate(arm: Atoms, bead: Atoms, rings: int, per_ring: int) -> Atoms:
+    """Seat metal beads over an arm's wall on a REGULAR lattice.
 
     The bright specks along the tubes in the micrograph. They are
-    PLACED, not grown: each one sits on the wall at a van der Waals
-    contact along the local outward normal, and nothing here computes
-    whether iron would wet graphite that way.
+    PLACED, not grown: each sits on the wall at a van der Waals contact
+    along the local outward normal, and nothing here computes whether
+    iron would wet graphite that way.
 
-    The normal is taken from the tube's own axis rather than from a
-    neighbour fit, because the wall is a cylinder and its outward
-    direction at an atom is that atom minus its projection on the axis
-    -- cheap, and exact for the shape this actually is.
+    Laid out as ``rings`` hoops along the tube with ``per_ring`` beads
+    round each, with consecutive hoops staggered by half a step. A
+    random draw was the first version and it reads as dirt rather than
+    as decoration -- at this count the gaps clump and the eye finds the
+    clumps. Deterministic, so the same arm decorates the same way every
+    run without a seed to carry.
+
+    The outward normal comes from the tube's own axis -- an atom minus
+    its projection on it -- which is cheap and exact for a cylinder.
+    Beads go on the barrel only: one on a cap reads as the tip particle
+    and the two should not be confused.
     """
     positions = np.asarray(arm.positions, dtype=float)
-    centred = positions - positions.mean(axis=0)
+    centre = positions.mean(axis=0)
+    centred = positions - centre
     axis = np.linalg.svd(centred, full_matrices=False)[2][0]
-    radial = centred - np.outer(centred @ axis, axis)
+    along = centred @ axis
+    radial = centred - np.outer(along, axis)
     distance = np.linalg.norm(radial, axis=1)
-    # Only atoms on the barrel, not on the caps: a bead on a cap looks
-    # like the tip particle and the two should not be confused.
-    outer = np.flatnonzero(distance > 0.9 * distance.max())
-    if len(outer) < count:
+    barrel = np.flatnonzero(distance > 0.9 * distance.max())
+    if len(barrel) < rings * per_ring:
         return arm
+
+    # A frame across the tube, to turn an angle into a direction.
+    first = radial[barrel[int(np.argmax(distance[barrel]))]]
+    first = first / np.linalg.norm(first)
+    second = np.cross(axis, first)
+
+    # Hoops spread over the middle of the barrel, clear of both caps.
+    low, high = along[barrel].min(), along[barrel].max()
+    margin = 0.12 * (high - low)
+    heights = np.linspace(low + margin, high - margin, rings)
+
     bead_reach = 0.5 * float(max(np.ptp(bead.positions[:, k])
                                  for k in range(3)))
-    chosen = rng.choice(outer, size=count, replace=False)
-    out = arm.copy()
     local = np.asarray(bead.positions, dtype=float)
     local = local - local.mean(axis=0)
-    for index in chosen:
-        normal = radial[index] / max(np.linalg.norm(radial[index]), 1e-9)
-        seat = positions[index] + normal * (bead_reach + GRAPHITIC_GAP)
-        placed = bead.copy()
-        placed.positions = local + seat
-        out += placed
+    out = arm.copy()
+    step = 2.0 * np.pi / per_ring
+    for ring_index, height in enumerate(heights):
+        for seat in range(per_ring):
+            angle = step * (seat + 0.5 * (ring_index % 2))
+            want = (centre + axis * height
+                    + (first * np.cos(angle) + second * np.sin(angle))
+                    * distance[barrel].max())
+            # The nearest wall atom to where the lattice asks for one,
+            # so a bead always lands ON the wall rather than beside it.
+            index = barrel[int(np.argmin(
+                np.linalg.norm(positions[barrel] - want, axis=1)))]
+            normal = radial[index] / max(np.linalg.norm(radial[index]), 1e-9)
+            placed = bead.copy()
+            placed.positions = (local + positions[index]
+                                + normal * (bead_reach + GRAPHITIC_GAP))
+            out += placed
     out.info = dict(arm.info)
-    # The beads are solid; the arm's own split is already recorded.
     out.info["solid_indices"] = (list(arm.info.get("solid_indices", []))
                                  + list(range(len(arm), len(out))))
     return out

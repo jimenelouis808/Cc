@@ -41,16 +41,21 @@ de 900 °C, eso lo cierra en una tarde; el SEM solo lo sugiere.
 | `barra_T_C` | 2322 | C1818Fe252Se252 |
 | `barra_T_NSe` | 2322 | C1663Fe252N109Se298 |
 | `barra_T_NSeO` | 2337 | C1664H6Fe252N110O5Se300 |
-| `particula_Fe3C_nucleo_desnudo` | 1100 | C292Fe808 |
-| `particula_Fe3C_C` | 4250 | C3442Fe808 |
-| `particula_Fe3C_NSe` | 4250 | C3174Fe808N189Se79 |
-| `particula_Fe3C_NSeO` | 4280 | C3176H12Fe808N191O10Se83 |
-| `particula_Fe3C_interior` | 126 | C36Fe90 |
-| `nanotubo_C` | 2160 | C2160 |
-| `nanotubo_NSe` | 2160 | C1976N130Se54 |
-| `nanotubo_NSeO` | 2185 | C1978H10N132O9Se56 |
-| `brazo_particula_dentro` | 2286 | C2196Fe90 |
-| `escena_anemona` | **22 860** | C21960Fe900 |
+| `particula_Fe3C_nucleo_desnudo` | 460 | C127Fe333 |
+| `particula_Fe3C_C` | 2770 | C2437Fe333 |
+| `particula_Fe3C_NSe` | 2770 | C2241Fe333N139Se57 |
+| `particula_Fe3C_NSeO` | 2795 | C2243H10Fe333N141O9Se59 |
+| `particula_Fe3C_interior` | 147 | C43Fe104 |
+| `nanotubo_C` | 3000 | C3000 |
+| `nanotubo_NSe` | 3000 | C2745N180Se75 |
+| `nanotubo_NSeO` | 3030 | C2747H12N182O10Se79 |
+| `brazo_particula_dentro` | 3055 | C3017Fe38 |
+| `escena_anemona` | 24440 | C24136Fe304 |
+| `escena_barras` | 37152 | C29088Fe4032Se4032 |
+| `escena_profundidad` | 10353 | C8185Fe1103Se1065 |
+| `escena_anemonas` | 54990 | C54306Fe684 |
+| `brazo_decorado` | 3475 | C3017Fe458 |
+| `escena_anemona_decorada` | 27800 | C24136Fe3664 |
 
 ### Las tres versiones
 
@@ -209,6 +214,12 @@ número de brazos y su separación, las fracciones de N y de Se, y del
 recubrimiento el hueco, el ancla, la rejilla, el remallado, la
 relajación y la semilla.
 
+De las escenas: `--barras` (cuántas), `--barras-separacion` (en unidades
+del largo de la propia barra), `--barras-holgura` (los Å que cada barra
+debe dejar libres) y `--barras-intentos` (cuántas tiradas antes de
+quedarse con la mejor); `--anemonas-separacion`; y de la decoración
+`--fe-radio`, `--fe-anillos` y `--fe-por-anillo`.
+
 ## Qué átomo es sólido y cuál no
 
 Cada modelo escribe en su `bundle/<nombre>.json` una lista `solid` con
@@ -293,6 +304,86 @@ debajo de unos 9 Å la coraza grafítica no tiene qué envolver. Una
 `rod` (cápsula) y no un `cylinder`: el canto vivo de un cilindro deja al
 sobre nada por donde pasar y el recubrimiento lo rechaza, que es
 además lo que hace un canto real — se reconstruye.
+
+## Las cinco escenas de portada, y la cámara
+
+```bash
+uv run python modelos_SEM/construir.py --solo escena   # las escenas
+uv run python modelos_SEM/camara.py                    # lo que encuadraría
+```
+
+| escena | átomos | fórmula | qué es |
+|---|---|---|---|
+| `escena_barras` | **37 152** | C29088Fe4032Se4032 | 16 barras recubiertas, como el montón del SEM a 900 °C |
+| `escena_profundidad` | 10 353 | C8185Fe1103Se1065 | placa delante, barra detrás, tubo con partícula al fondo |
+| `escena_anemona` | 24 440 | C24136Fe304 | una anémona de 8 brazos |
+| `escena_anemonas` | **54 990** | C54306Fe684 | tres anémonas juntas |
+| `escena_anemona_decorada` | 27 800 | C24136Fe3664 | una anémona con partículas de Fe sobre los brazos |
+
+**Son ilustraciones, no estructuras.** `scene.compose` coloca piezas ya
+terminadas: no hay interfase relajada entre dos de ellas y nada de los
+huecos es física. El propio módulo lo avisa en cada escena y hay que
+dejarlo dicho en el pie de figura.
+
+### Las barras se sortean y se miden, no se colocan
+
+Ajustar a mano el paso de la rejilla y el temblor contra el informe de
+pares de la composición llevó el campo de dos pares interpenetrados
+(0.26 y 0.98 Å) a uno (0.38 Å) **y de ahí no pasó**: con orientaciones
+al azar a esta densidad siempre hay una tirada que cae encima de un
+vecino, y separar más el campo es justo lo contrario de lo pedido.
+
+Así que cada barra se **dibuja y se mide antes de quedarse**: hasta
+`--barras-intentos` tiradas de rotación y temblor, y se acepta la
+primera que deje `--barras-holgura` (2.6 Å) contra todas las anteriores;
+si ninguna lo logra, se queda la mejor y el programa lo dice. Resultado
+medido: **ningún par por debajo de 2.0 Å** —el umbral con el que
+`scene.py` llama interpenetración— y el más cercano a 3.37 Å, que es un
+contacto grafítico y es exactamente lo que un montón denso debe
+aparentar.
+
+### `auto` encuadra mal una escena de profundidad, y es por diseño
+
+`camera.best_view` elige la dirección cuya silueta tiene **más área**,
+que es la que enseña más estructura — correcto cuando el sujeto es la
+forma, y al revés cuando la composición es una fila: la silueta más
+grande de tres objetos en línea es la que los pone uno al lado del otro,
+que es lo único que esa escena no quiere. Por eso hay una vista nueva,
+`depth` = (0.35, −1.0, 0.30), que mira **casi a lo largo de la línea**,
+inclinada lo justo para ver los de atrás por un lado del de delante en
+vez de eclipsados. Es un nombre y no una búsqueda porque ninguna medida
+de área la devolvería nunca. Llega sola a `render_cnt --view depth`.
+
+| escena | vista | cámara a | relleno | en cuadro |
+|---|---|---|---|---|
+| `escena_barras` | auto | 585 Å | 1.18 | 99.7 % |
+| `escena_profundidad` | **depth** | 296 Å | 1.10 | 98.6 % |
+| `escena_anemona` | auto | 679 Å | 0.95 | 100 % |
+| `escena_anemonas` | auto | 986 Å | 1.12 | 97.9 % |
+| `escena_anemona_decorada` | auto | 653 Å | 1.00 | 100 % |
+
+**Un relleno por encima de 1 recorta a propósito**: el sujeto se encuadra
+más grande que el cuadro y sus bordes se salen, que es lo que «más zoom»
+significa en una portada — la composición se sale de la página. La vista
+previa dice qué porcentaje de átomos queda dentro, así que lo que se
+corta es un número y no una sorpresa.
+
+**Y la vista previa no es un render**: sin luces, sin materiales, sin
+profundidad de campo. Usa las mismas llamadas que el render (`best_view`
+o `named_direction`, `frame_camera`, `basis_for`) con la misma lente y el
+mismo relleno, así que contesta «¿está el sujeto en cuadro, del tamaño
+correcto, desde un ángulo que lo enseñe?» y nada más. Un render de
+25 000 átomos cuesta minutos; esta pregunta no cuesta ninguno.
+
+### Las partículas de la anémona decorada van en red, no al azar
+
+Seis partículas puestas al azar por brazo se leían como suciedad. Ahora
+son `--fe-anillos` aros a lo largo del cilindro por `--fe-por-anillo`
+cuentas cada uno, con los aros consecutivos desfasados medio paso —28
+por brazo, determinista, sin semilla—. Cada cuenta se apoya sobre el
+átomo de pared más cercano a su punto de red, desplazada a lo largo de
+la normal hacia fuera hasta el contacto grafítico, de modo que la
+decoración sigue la superficie en lugar de flotar.
 
 ## El render de portada
 

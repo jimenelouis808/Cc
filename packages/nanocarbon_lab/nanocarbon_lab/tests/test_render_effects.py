@@ -160,6 +160,25 @@ class TestBestView:
         with pytest.raises(ValueError):
             camera.named_direction("sideways")
 
+    def test_depth_looks_along_the_line_that_best_view_looks_across(
+            self, camera, row):
+        """A depth composition is the one case `auto` gets backwards.
+
+        `best_view` maximises the silhouette, so on items strung along a
+        line it photographs them side by side -- which is the view that
+        destroys the depth they were placed for. `depth` is the opposite
+        choice, and it is a name rather than a search because no measure
+        of silhouette area will ever return it.
+        """
+        along = row.std(axis=0).argmax()      # the line the row runs on
+        assert abs(float(camera.best_view(row)[along])) < 0.5
+        depth = camera.named_direction("depth")
+        assert abs(float(depth[1])) > 0.85    # written for a row in y
+        # Shallow, not dead-on: the ones behind must be seen past the
+        # one in front rather than eclipsed by it.
+        assert 0.1 < abs(float(depth[0])) < 0.5
+        assert 0.1 < abs(float(depth[2])) < 0.5
+
 
 class TestFraming:
     @staticmethod

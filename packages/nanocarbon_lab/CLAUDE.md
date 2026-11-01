@@ -3804,6 +3804,34 @@ Composing replaces the window's preview, so Export and Render then apply
 to the composition with no further wiring, and the sidecar carries
 `item_per_atom`.
 
+### `best_view` is wrong for a composition placed in depth
+
+`camera.best_view` keeps the direction whose silhouette has the largest
+area, which is the one that shows the most structure -- right when the
+subject's shape is the point, and **backwards for items strung along a
+line**: the largest silhouette of three objects on a line is the view
+that puts them side by side, which is exactly the depth the composition
+was placed for, destroyed. No tie-break fixes it, because the view that
+reads as depth scores *worst* by the measure.
+
+So `NAMED_VIEWS` carries `depth` = (0.35, -1.0, 0.30), nearly down the
+line and shallow rather than dead-on, so the ones behind are seen past
+the one in front rather than eclipsed by it. It is a name and not a
+search for the same reason `top` and `front` are: an exact answer no
+measure of area will return. It reaches `render_cnt --view depth` by
+being in the table, and nothing else had to change.
+
+The placement itself is not the camera's problem and must not be solved
+there: a field of items at any real density will interpenetrate under
+random orientations, and `compose` measures every pair and names the
+ones under `TOUCHING` (2.0 A) and under `CLOSE` (4.0 A). Tune against
+that report, not by eye. Where the density is the point -- a heap of
+needles -- tuning a grid pitch and a jitter by hand reaches a floor
+(measured: two interpenetrating pairs, then one, then no further);
+**draw, measure and reject** instead, keeping the first draw that clears
+a stated gap against the items already placed. That keeps the density
+and removes the collisions, which widening the field cannot do.
+
 ## Doping: the host is carbon, and the elements are not interchangeable
 
 `dopants/chemistry.py` is the authority on which heteroatoms may replace

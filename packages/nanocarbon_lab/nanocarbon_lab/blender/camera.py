@@ -52,6 +52,13 @@ NAMED_VIEWS: dict[str, tuple[float, float, float]] = {
     # everything before it could measure.
     "iso": (1.0, -1.4, 0.6),
     "hero": (1.0, -1.2, 0.35),
+    # Nearly down the line a depth composition is strung on. `best_view`
+    # cannot be used for one of those: it maximises silhouette area,
+    # which is exactly the view that spreads three objects side by side
+    # and destroys the depth they were placed for. Shallow rather than
+    # dead-on, so the ones behind are seen past the one in front rather
+    # than eclipsed by it.
+    "depth": (0.35, -1.0, 0.30),
 }
 
 
