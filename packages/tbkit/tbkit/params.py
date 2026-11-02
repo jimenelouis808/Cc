@@ -342,8 +342,11 @@ class TBModel:
     #: (:class:`tbkit.environment.TangSpec`); None for two-centre models.
     environment: Optional[object] = None
     #: Laws between atoms more than ``far_bonds`` bonds apart (a bond: closer than
-    #: ``far_bond_cut``), added to ``hopping``: the π coupling between layers, walls and
-    #: turns (``recipes/interlayer_fit``) that must not touch the bonds a set was fitted with.
+    #: ``far_bond_cut``), used for those pairs instead of ``hopping``: the π coupling between
+    #: layers, walls and turns (``recipes/interlayer_fit``). Pairs within ``far_bonds`` keep
+    #: ``hopping``, so the bonds a set was fitted with are untouched, and a layer inside the
+    #: range of the in-plane laws (a compressed bilayer) gets only the far law. Empty: every
+    #: pair uses ``hopping``.
     far_hopping: dict[tuple[str, str, str], DistanceLaw] = field(default_factory=dict)
     far_bonds: int = 3
     far_bond_cut: float = 1.85

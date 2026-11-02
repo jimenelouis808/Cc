@@ -122,10 +122,8 @@ def band_forces(solution: Solution, energy_weighted: Optional[list] = None) -> n
         bonds = [system.bonds[b] for b in members]
         vectors = np.array([b.vector for b in bonds])
         oa, ob = system.model.orbitals[el_a], system.model.orbitals[el_b]
-        dh = _group_derivatives(system, system.model.hopping, el_a, oa, el_b, ob, vectors)
-        if far:
-            dh = dh + _group_derivatives(system, system.model.far_hopping, el_a, oa, el_b, ob,
-                                         vectors)
+        table = system.model.far_hopping if far else system.model.hopping
+        dh = _group_derivatives(system, table, el_a, oa, el_b, ob, vectors)
         ds = (_group_derivatives(system, system.model.overlap, el_a, oa, el_b, ob, vectors)
               if not system.model.orthogonal else None)
         first_i = np.array([system.basis.first[b.i] for b in bonds])

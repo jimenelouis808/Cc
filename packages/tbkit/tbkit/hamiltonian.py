@@ -35,7 +35,7 @@ class Bond:
     j: int
     vector: np.ndarray       # r_j + R - r_i, Å
     shift: np.ndarray        # R in cell coordinates (integers)
-    far: bool = False        # more than model.far_bonds bonds apart: far_hopping added
+    far: bool = False        # more than model.far_bonds bonds apart: far_hopping
 
 
 @dataclass
@@ -110,10 +110,8 @@ class System:
                 if i not in basis.first or j not in basis.first:
                     continue
                 oa, ob = model.orbitals[symbols[i]], model.orbitals[symbols[j]]
-                hb = block(model, model.hopping, symbols[i], oa, symbols[j], ob, vec)
-                if is_far:
-                    hb = hb + block(model, model.far_hopping, symbols[i], oa, symbols[j], ob,
-                                    vec)
+                table = model.far_hopping if is_far else model.hopping
+                hb = block(model, table, symbols[i], oa, symbols[j], ob, vec)
                 sb = (block(model, model.overlap, symbols[i], oa, symbols[j], ob, vec)
                       if not model.orthogonal else None)
                 if not hb.any() and (sb is None or not sb.any()):
