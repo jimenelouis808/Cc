@@ -185,6 +185,41 @@ def load_bundle(xyz_path: str, json_path: str | None = None,
     }
 
 
+def slice_bundle(bundle: dict, item: int) -> dict:
+    """The part of a loaded bundle belonging to one scene item.
+
+    A composition is drawn as two merged meshes -- every atom in one,
+    every bond in another -- which is what makes it fast and what makes
+    it **one object**: nothing in Blender can then move a single plate
+    or a single rod. Slicing the bundle and building each item
+    separately gives one pair of objects per item, named after it, at
+    the cost of a few more draw calls.
+
+    Everything atom-indexed is carried across and **re-indexed**:
+    positions, symbols, rings, the solid set and the seam stubs. Bonds
+    are kept only when both ends are in this item -- which is all of
+    them, because `scene.compose` never bonds two items together, and
+    the filter is the check of that rather than a precaution.
+    """
+    per_atom = list(bundle.get("item_per_atom", []))
+    keep = [i for i, tag in enumerate(per_atom) if int(tag) == int(item)]
+    index = {old: new for new, old in enumerate(keep)}
+    rings = bundle.get("ring_sizes_per_atom") or []
+    solid = {int(i) for i in bundle.get("solid", [])}
+    out = dict(bundle)
+    out["positions"] = [bundle["positions"][i] for i in keep]
+    out["symbols"] = [bundle["symbols"][i] for i in keep]
+    out["bonds"] = [(index[i], index[j]) for i, j in bundle.get("bonds", [])
+                    if i in index and j in index]
+    out["ring_sizes_per_atom"] = ([rings[i] for i in keep] if rings else [])
+    out["solid"] = [index[i] for i in sorted(solid) if i in index]
+    out["item_per_atom"] = [int(item)] * len(keep)
+    out["seam_stubs"] = [[float(index[int(stub[0])]), *stub[1:]]
+                         for stub in bundle.get("seam_stubs", [])
+                         if int(stub[0]) in index]
+    return out
+
+
 def _bonds_from_distance(positions, cutoff: float = 1.8):
     """Fallback bond guesser for a bare ``.xyz`` with no sidecar.
 

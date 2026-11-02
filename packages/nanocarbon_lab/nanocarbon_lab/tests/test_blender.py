@@ -320,6 +320,59 @@ class TestSpacefillExtra:
         assert declared[2] == pytest.approx(plain[2])   # C: untouched
 
 
+class TestSliceBundle:
+    """One object per item, so a composition can be taken apart."""
+
+    @staticmethod
+    def _scene():
+        return {
+            "positions": [(0.0, 0, 0), (1.0, 0, 0), (9.0, 0, 0),
+                          (10.0, 0, 0), (11.0, 0, 0)],
+            "symbols": ["C", "C", "Fe", "Fe", "Fe"],
+            "bonds": [(0, 1), (2, 3), (3, 4)],
+            "ring_sizes_per_atom": [[6], [6], [], [], []],
+            "item_per_atom": [0, 0, 1, 1, 1],
+            "solid": [2, 3, 4],
+            "labels": ["placa", "barra"],
+            "seam_stubs": [[1.0, 0.5, 0.0, 0.0], [4.0, 0.2, 0.0, 0.0]],
+        }
+
+    def test_each_item_keeps_its_own_atoms(self):
+        bundle = _load("bundle")
+        whole = self._scene()
+        first = bundle.slice_bundle(whole, 0)
+        second = bundle.slice_bundle(whole, 1)
+        assert first["symbols"] == ["C", "C"]
+        assert second["symbols"] == ["Fe", "Fe", "Fe"]
+        assert len(first["positions"]) + len(second["positions"]) == 5
+
+    def test_bonds_are_reindexed_and_never_cross(self):
+        """`scene.compose` bonds no two items, so every bond must land
+        inside one piece and none may be lost between them."""
+        bundle = _load("bundle")
+        whole = self._scene()
+        first = bundle.slice_bundle(whole, 0)
+        second = bundle.slice_bundle(whole, 1)
+        assert first["bonds"] == [(0, 1)]
+        assert second["bonds"] == [(0, 1), (1, 2)]
+        assert len(first["bonds"]) + len(second["bonds"]) == 3
+        for piece in (first, second):
+            for i, j in piece["bonds"]:
+                assert 0 <= i < len(piece["positions"])
+                assert 0 <= j < len(piece["positions"])
+
+    def test_the_solid_set_and_the_stubs_follow_their_atoms(self):
+        bundle = _load("bundle")
+        whole = self._scene()
+        first = bundle.slice_bundle(whole, 0)
+        second = bundle.slice_bundle(whole, 1)
+        assert first["solid"] == []
+        assert second["solid"] == [0, 1, 2]
+        # Atom 1 is the plate's second atom; atom 4 is the rod's third.
+        assert first["seam_stubs"] == [[1.0, 0.5, 0.0, 0.0]]
+        assert second["seam_stubs"] == [[2.0, 0.2, 0.0, 0.0]]
+
+
 class TestSolidRegion:
     """Which atoms are a solid is a REGION, not an element.
 

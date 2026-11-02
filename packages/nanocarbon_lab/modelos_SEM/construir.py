@@ -489,6 +489,16 @@ def compositions(tube: Atoms, particle: Atoms, pieces: dict,
             "familia": "escena", "version": "ilustración",
             "nucleo": "—", "capas_grafiticas": 0,
             "veredicto_nucleo": "—", "veredicto_coraza": note}))
+        # Which item each atom belongs to, into the sidecar. Without
+        # it the whole composition is one object in Blender and no
+        # plate, rod or arm can be moved on its own -- which is what
+        # `render_cnt --split-items` reads to take them apart.
+        sidecar = BUNDLE / f"{label}.json"
+        carried = json.loads(sidecar.read_text())
+        carried["scene"] = composed.info.get("scene", {})
+        carried["item_per_atom"] = [int(t) for t in composed.get_tags()]
+        carried["is_illustration"] = True
+        sidecar.write_text(json.dumps(carried, indent=2))
         for warning in report.warnings:
             if "ILLUSTRATION" not in warning:
                 print(f"    aviso: {warning}")

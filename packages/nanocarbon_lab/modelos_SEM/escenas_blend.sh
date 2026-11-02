@@ -25,6 +25,13 @@ R="nanocarbon_lab/blender/render_cnt.py"
 IN="modelos_SEM/bundle"
 OUT="modelos_SEM/blend"
 ESTILO="${ESTILO:-core_shell_cover}"
+# One Blender object per piece of the composition, named after it, so
+# each plate, rod or arm can be moved and turned by hand. PARTIR=0 goes
+# back to the two merged meshes, which draw faster and cannot be taken
+# apart.
+PARTIR="${PARTIR:-1}"
+SPLIT=()
+[ "$PARTIR" = "1" ] && SPLIT=(--split-items)
 mkdir -p "$OUT"
 
 escena () {        # escena <nombre> <relleno> [vista]
@@ -34,7 +41,7 @@ escena () {        # escena <nombre> <relleno> [vista]
     --style "$ESTILO" --model auto --colour-by element \
     --atom-scale 0.55 --bond-scale 0.5 --engine cycles \
     --spacefill-element Se --resolution 1600 2000 \
-    --camera-fill "$fill" --view "$view" \
+    --camera-fill "$fill" --view "$view" "${SPLIT[@]}" \
     --no-render --save-blend "$OUT/$name.blend"
 }
 

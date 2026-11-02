@@ -199,6 +199,13 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--resolution", type=int, nargs=2, default=[1920, 1920])
     p.add_argument("--samples", type=int, default=None, help="Overrides the style's default.")
     p.add_argument("--transparent-background", action="store_true")
+    p.add_argument(
+        "--split-items", action="store_true",
+        help="One object per scene item instead of two merged meshes, "
+             "named after the item, so each piece can be moved and "
+             "turned by hand in Blender. Needs a sidecar carrying "
+             "item_per_atom, which a composition written by "
+             "scene.write_scene has.")
     p.add_argument("--save-blend", default=None,
                    help="Write the assembled scene to this .blend file.")
     p.add_argument("--no-render", dest="render", action="store_false",
@@ -941,22 +948,45 @@ def main() -> int:
     # request; the model is the control that holds every other
     # representation, so it wins and the mode follows it.
     mode = "surface" if model == "surface" else args.mode
-    if mode in ("ballstick", "both"):
-        objects += mesh_builder.build_ball_and_stick(
-            bundle, style, colour_by=colour_by,
-            # The style's own scales multiply the command line's, so a
-            # kit stays fat and a dense lattice stays fine without the
-            # caller having to know which is which.
-            atom_scale=args.atom_scale * style.atom_scale,
-            bond_radius=0.12 * args.bond_scale * style.bond_scale,
-            finish=args.finish, bond_finish=args.bond_finish,
-            bond_colour=args.bond_colour, model=model,
-            detail=args.detail, depth_axis=depth_axis,
-            spacefill_extra=tuple(args.spacefill_extra),
-        )
-    if mode in ("surface", "both"):
-        objects.append(mesh_builder.build_smooth_surface(
-            bundle, style, finish=args.finish))
+    # One object per scene item, so each plate, rod or arm can be moved
+    # and turned by hand in Blender. Off by default: a composition is
+    # drawn as two merged meshes, which is what makes it fast, and the
+    # split costs a pair of objects per item.
+    pieces = [(bundle, "")]
+    if args.split_items:
+        tags = sorted({int(t) for t in bundle.get("item_per_atom", [])})
+        names = list(bundle.get("labels", []))
+        if len(tags) > 1:
+            pieces = [(bundle_defs.slice_bundle(bundle, tag),
+                       names[tag] if tag < len(names) else f"item{tag}")
+                      for tag in tags]
+            print(f"[render_cnt] --split-items: {len(pieces)} piezas "
+                  f"({', '.join(name for _, name in pieces)})")
+        else:
+            print("[render_cnt] --split-items: el sidecar no trae "
+                  "item_per_atom con más de una pieza; se deja entero")
+    for piece, name in pieces:
+        made = []
+        if mode in ("ballstick", "both"):
+            made += mesh_builder.build_ball_and_stick(
+                piece, style, colour_by=colour_by,
+                # The style's own scales multiply the command line's,
+                # so a kit stays fat and a dense lattice stays fine
+                # without the caller having to know which is which.
+                atom_scale=args.atom_scale * style.atom_scale,
+                bond_radius=0.12 * args.bond_scale * style.bond_scale,
+                finish=args.finish, bond_finish=args.bond_finish,
+                bond_colour=args.bond_colour, model=model,
+                detail=args.detail, depth_axis=depth_axis,
+                spacefill_extra=tuple(args.spacefill_extra),
+            )
+        if mode in ("surface", "both"):
+            made.append(mesh_builder.build_smooth_surface(
+                piece, style, finish=args.finish))
+        for obj in made:
+            if name:
+                obj.name = f"{name}_{obj.name}"
+        objects += made
 
     # The light rig and the camera both need the subject's size, so it is
     # measured once here rather than twice with a risk of disagreeing --
