@@ -25,11 +25,13 @@ R="nanocarbon_lab/blender/render_cnt.py"
 IN="modelos_SEM/bundle"
 OUT="modelos_SEM/blend"
 ESTILO="${ESTILO:-core_shell_cover}"
-# One Blender object per piece of the composition, named after it, so
-# each plate, rod or arm can be moved and turned by hand. PARTIR=0 goes
-# back to the two merged meshes, which draw faster and cannot be taken
-# apart.
-PARTIR="${PARTIR:-1}"
+# Two merged meshes by default -- every atom in one object and every
+# bond in another -- which is what makes a 55 000-atom scene draw at
+# all. PARTIR=1 gives one object per piece instead, named after it, so
+# each plate, rod or arm can be moved and turned by hand; that is the
+# slower file and the one to ask for when the point is to rearrange
+# the composition rather than to look at it.
+PARTIR="${PARTIR:-0}"
 SPLIT=()
 [ "$PARTIR" = "1" ] && SPLIT=(--split-items)
 mkdir -p "$OUT"
