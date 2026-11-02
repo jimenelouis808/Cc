@@ -210,6 +210,15 @@ def _linear(atoms: Atoms) -> bool:
     return np.linalg.svd(x, compute_uv=False)[1] < 1e-3
 
 
+def _frequency_scale(set_name: str) -> float:
+    """The set's own scale factor against GPAW (``frequency_scale``, recipe
+    ``frequency_scaling``), reported beside the raw numbers, never in their place."""
+    from ..params import read_parameter_file
+
+    entry = read_parameter_file(set_name).get("frequency_scale")
+    return float(entry["value"]) if entry else 1.0
+
+
 def frequencies() -> dict:
     from ..references import load_references
 
@@ -236,16 +245,21 @@ def frequencies() -> dict:
                 f, drift, _ = _frequencies(atoms, calc)
                 mine = _internal(f, atoms)
                 row[code] = {"rms_cm1": _rms(mine - ref_int), "drift_A": drift,
-                             "mean_signed_cm1": float(np.mean(mine - ref_int))}
+                             "mean_signed_cm1": float(np.mean(mine - ref_int)),
+                             "frequencies": mine.tolist()}
+                if code == "tb":
+                    scale = _frequency_scale(set_name)
+                    row["tb_scaled"] = {"rms_cm1": _rms(scale * mine - ref_int), "scale": scale,
+                                        "mean_signed_cm1": float(np.mean(scale * mine - ref_int))}
             except Exception as error:          # a method that cannot treat the molecule
                 row[code] = {"error": str(error)[:200]}
         out.setdefault(filename, {})[name] = row
         print(filename, name, {c: round(row[c].get("rms_cm1", -1), 1) for c in ("tb",) + METHODS},
               flush=True)
     summary = {}
-    for code in ("tb",) + METHODS:
+    for code in ("tb", "tb_scaled") + METHODS:
         values = [r[code]["rms_cm1"] for f in out.values() for r in f.values()
-                  if "rms_cm1" in r[code]]
+                  if code in r and "rms_cm1" in r[code]]
         summary[code] = {"median_rms_cm1": float(np.median(values)), "molecules": len(values),
                          "mean_rms_cm1": float(np.mean(values))}
     result = {"molecules": out, "summary": summary}
@@ -450,7 +464,8 @@ def report() -> dict:
                     for f, v in data.items()}
         elif stage == "frequencies":
             data = {"summary": data["summary"],
-                    "per_file": {f: {m: {c: r[c].get("rms_cm1") for c in ("tb",) + METHODS}
+                    "per_file": {f: {m: {c: r[c].get("rms_cm1")
+                                         for c in ("tb", "tb_scaled") + METHODS if c in r}
                                      for m, r in mols.items()}
                                  for f, mols in data["molecules"].items()}}
         elif stage == "crystals":
