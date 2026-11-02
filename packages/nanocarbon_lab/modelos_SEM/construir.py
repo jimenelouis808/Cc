@@ -57,7 +57,11 @@ from nanocarbon_lab.functionalize.attach import functionalize
 from nanocarbon_lab.functionalize.groups import GROUPS, substitute
 from nanocarbon_lab.nanoparticle import shapes as shape_module
 from nanocarbon_lab.nanoparticle.carve import carve_nanoparticle
-from nanocarbon_lab.nanoparticle.coat import GRAPHITIC_GAP, graphitic_coat
+from nanocarbon_lab.nanoparticle.coat import (
+    GRAPHITIC_GAP,
+    graphitic_coat,
+    stacked_bonds,
+)
 from nanocarbon_lab.nanoparticle.crystal import read_crystal
 from nanocarbon_lab.nanoparticle.quality import particle_quality
 from nanocarbon_lab.viz.plot import save_structure_png
@@ -344,6 +348,12 @@ def coated_particle(label: str, cif: Path, shape: str, params: dict,
             whole += shell
         whole.set_cell(core.get_cell())
         whole.set_pbc(False)
+        # The shells' own bonds, shifted to where each shell starts.
+        # Without this the combined particle carries no bond list and
+        # the renderer draws it as a cloud of atoms with no graphitic
+        # mesh -- which is exactly how the plate and the rod came out
+        # beside a nanotube that drew correctly.
+        whole.info["bonds"] = stacked_bonds(dressed, len(core))
         # Which atoms are the SOLID. A region and not an element: the
         # same selenium is in the FeSe core, where it is part of a
         # solid, and substituted into the shell, where it is one atom

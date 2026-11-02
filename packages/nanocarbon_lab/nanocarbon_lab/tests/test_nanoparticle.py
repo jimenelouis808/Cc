@@ -839,6 +839,56 @@ class TestTheJobIntegration:
         assert "meshed and relaxed" in text
 
 
+class TestStackedBonds:
+    """A coated particle that carries no bond list draws as a cloud."""
+
+    @staticmethod
+    def _shell(n: int, bonds):
+        from ase import Atoms as _Atoms
+        shell = _Atoms("C" * n, positions=[(i, 0.0, 0.0) for i in range(n)])
+        shell.info["bonds"] = bonds
+        return shell
+
+    def test_every_index_moves_by_where_its_shell_starts(self):
+        from nanocarbon_lab.nanoparticle.coat import stacked_bonds
+
+        first = self._shell(3, [[0, 1], [1, 2]])
+        second = self._shell(2, [[0, 1]])
+        out = stacked_bonds([first, second], start=10)
+        assert out == [[10, 11], [11, 12], [13, 14]]
+
+    def test_a_shell_without_bonds_contributes_none_and_still_shifts(self):
+        """The offset is the atom count, not the bond count, or a later
+        shell's bonds land on the wrong atoms."""
+        from nanocarbon_lab.nanoparticle.coat import stacked_bonds
+
+        bare = self._shell(4, [])
+        after = self._shell(2, [[0, 1]])
+        assert stacked_bonds([bare, after], start=0) == [[4, 5]]
+
+    def test_a_real_coating_lands_inside_the_shell(self, gold):
+        """End to end: every bond is inside the shell's index range and
+        none joins core to shell, which no graphitic coating has."""
+        from nanocarbon_lab.nanoparticle import shapes as sh
+        from nanocarbon_lab.nanoparticle.carve import carve_nanoparticle
+        from nanocarbon_lab.nanoparticle.coat import (
+            graphitic_coat,
+            stacked_bonds,
+        )
+
+        core, _ = carve_nanoparticle(gold, sh.ball(6.0))
+        shells, _ = graphitic_coat(core, shells=1, vacuum=10.0, seed=0,
+                                   grid_resolution=48,
+                                   remesh_iterations=8,
+                                   relax_iterations=200)
+        total = len(core) + sum(len(s) for s in shells)
+        bonds = stacked_bonds(shells, len(core))
+        assert bonds, "the shell recorded no bonds at all"
+        for i, j in bonds:
+            assert len(core) <= i < total
+            assert len(core) <= j < total
+
+
 class TestCoreRepulsion:
     """The shell must not relax into the core it is wrapping.
 

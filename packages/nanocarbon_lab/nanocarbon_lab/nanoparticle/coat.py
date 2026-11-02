@@ -295,6 +295,35 @@ def vdw_envelope(core: Atoms, gap: float,
     return field, reach + float(radii.max()) + spread + 1.0
 
 
+def stacked_bonds(shells: Sequence[Atoms],
+                  start: int) -> list[list[int]]:
+    """The shells' own bonds, re-indexed for a combined structure.
+
+    Each shell records ``info["bonds"]`` against its own atoms; placing
+    them after a core of ``start`` atoms means every index shifts by
+    where that shell begins. Without this the combined particle has **no
+    bond list at all**, and every consumer that reads one falls back to
+    guessing by distance -- which the renderer will do over a whole
+    scene, inventing bonds between structures that merely sit close
+    together.
+
+    That was the measured symptom: a coated plate and a coated rod drew
+    as clouds of atoms with no graphitic mesh, while the nanotube beside
+    them -- built by a builder that does record its bonds -- drew
+    correctly.
+
+    Grafted groups are included, because ``functionalize`` extends the
+    shell's own list when it adds them.
+    """
+    out: list[list[int]] = []
+    offset = int(start)
+    for shell in shells:
+        for pair in shell.info.get("bonds", []):
+            out.append([int(pair[0]) + offset, int(pair[1]) + offset])
+        offset += len(shell)
+    return out
+
+
 def graphitic_coat(
     core: Atoms,
     gap: float = GRAPHITIC_GAP,
@@ -753,6 +782,7 @@ def encapsulate(
 
     info: dict[str, Any] = dict(core.info)
     info.update({
+        "bonds": stacked_bonds(shell_list, core_count),
         "structure_type": "encapsulated nanoparticle",
         "quality_family": None,
         "core_indices": [0, core_count],

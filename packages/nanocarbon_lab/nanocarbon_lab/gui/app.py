@@ -4788,10 +4788,42 @@ class NanocarbonGUI:
                     resolution=0.05, hard_lo=2.0, hard_hi=10.0,
                     command=self._update_np_hint)
 
+        # The coating's QUALITY knobs. They were reachable only from
+        # Python, and the first of them is the one that decides what a
+        # coated particle comes out as: the anchor holds the wall on
+        # its own envelope, which is what makes it look like graphene
+        # and what pushes its bonds out of the sp2 range. Measured on
+        # an 85 x 9.4 Å rod: anchor 0 gives 1.523 Å bonds and a 0.580 Å
+        # rough wall, anchor 3 gives 0.335 Å roughness and 1.656 Å
+        # bonds, which the quality gate calls broken. A figure may well
+        # want the second; a structure for DFT never does. The grid, by
+        # contrast, changes nothing -- 128 and 160 give the same worst
+        # bond to the hundredth -- so it is here to be left alone.
+        self.var_np_anchor = self._var("np_anchor", tk.DoubleVar(value=0.0))
+        self._param(self.frame_np, "Wall anchor", self.var_np_anchor,
+                    0.0, 4.0, base + 10, resolution=0.5, hard_lo=0.0,
+                    hard_hi=10.0, command=self._update_np_hint)
+        self.var_np_grid = self._var("np_grid", tk.IntVar(value=96))
+        self._param(self.frame_np, "Mesh grid", self.var_np_grid,
+                    48, 160, base + 12, integer=True, hard_lo=24,
+                    hard_hi=256, command=self._update_np_hint)
+        self.var_np_remesh = self._var("np_remesh", tk.IntVar(value=25))
+        self._param(self.frame_np, "Remesh rounds", self.var_np_remesh,
+                    5, 100, base + 14, integer=True, hard_lo=0,
+                    hard_hi=400)
+        self.var_np_relax = self._var("np_relax", tk.IntVar(value=3000))
+        self._param(self.frame_np, "Relax steps", self.var_np_relax,
+                    500, 12000, base + 16, integer=True, hard_lo=0,
+                    hard_hi=100000)
+        self.var_np_anneal = self._var("np_anneal", tk.IntVar(value=0))
+        self._param(self.frame_np, "Anneal sweeps", self.var_np_anneal,
+                    0, 80, base + 18, integer=True, hard_lo=0,
+                    hard_hi=400, command=self._update_np_hint)
+
         self.lbl_np = ttk.Label(self.frame_np, text="", foreground=MUTED,
                                 font=("TkDefaultFont", 8), wraplength=230,
                                 justify="left")
-        self.lbl_np.grid(row=base + 10, column=0, columnspan=2, sticky="w",
+        self.lbl_np.grid(row=base + 20, column=0, columnspan=2, sticky="w",
                          pady=(4, 0))
         self._np_shape_catalogue = SHAPES
         self._apply_np_shape_defaults()
@@ -4891,6 +4923,12 @@ class NanocarbonGUI:
             shells=int(self.var_np_shells.get()),
             gap=float(self.var_np_gap.get()),
             interlayer=float(self.var_np_interlayer.get()),
+            # Forwarded into graphitic_coat through **coat_options.
+            wall_anchor=float(self.var_np_anchor.get()),
+            grid_resolution=int(self.var_np_grid.get()),
+            remesh_iterations=int(self.var_np_remesh.get()),
+            relax_iterations=int(self.var_np_relax.get()),
+            anneal_sweeps=int(self.var_np_anneal.get()),
         )
 
     def _update_np_hint(self) -> None:
@@ -4925,6 +4963,25 @@ class NanocarbonGUI:
                 "which is a different interface.")
             lines.append("The dopant and the groups go on the SHELL. The "
                          "core is never substituted.")
+            anchor = float(self.var_np_anchor.get())
+            if anchor > 0:
+                lines.append(
+                    f"Wall anchor {anchor:g}: the wall is held on its own "
+                    "envelope, so it looks like graphene and its bonds "
+                    "leave the sp2 range. Measured on a rod, anchor 3 "
+                    "gives a 42% smoother wall and a worst bond of "
+                    "1.66 Å against a 1.55 ceiling — an ILLUSTRATION, "
+                    "not a structure to relax or hand to DFT.")
+            else:
+                lines.append(
+                    "Wall anchor 0: free relaxation, so the bonds stay "
+                    "sp2 and the wall ripples (0.58 Å RMS on a rod). "
+                    "This is the one that is still a structure.")
+            if int(self.var_np_anneal.get()):
+                lines.append(
+                    "Annealing flips rings toward hexagons and roughens "
+                    "the wall; 40 sweeps bought 2% on a rod. Judge it by "
+                    "the wall, not by the ring census.")
         else:
             lines.append("No shells: the bare core. The dopant and graft "
                          "controls have nothing to act on.")
