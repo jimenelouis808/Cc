@@ -1,0 +1,14 @@
+{
+ "name": "escala de las constantes de espín (λ)",
+ "reference": "este trabajo: tbkit.recipes.spin_validation fit",
+ "system": "conjuntos s/p de tbkit con tbkit.spin, W='scaled'",
+ "validity": "una sola cifra ajustada a GPAW PBE (E_NM − E_AFM de la cinta zgnr6 H-saturada); el resto de validation/spin_tb_vs_gpaw.json queda fuera del ajuste. Las W del átomo libre (spin_constants.json) no cambian.",
+ "units": {
+  "scale": "1"
+ },
+ "scale": {
+  "value": 1.658,
+  "unit": "1",
+  "source": "bisección sobre E_NM − E_AFM de zgnr6: GPAW 73.6 meV por celda, modelo xu_chn, kT 0.01 eV, 48 puntos k"
+ }
+}

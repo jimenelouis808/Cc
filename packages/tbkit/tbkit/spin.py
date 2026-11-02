@@ -91,9 +91,26 @@ def spin_table(model) -> dict:
             for el, t in data.items()}
 
 
+def spin_scale() -> float:
+    """λ of ``parameters/spin_scale.json``: the one number fitted to GPAW (the NM − AFM
+    energy of a zigzag ribbon, ``recipes/spin_validation fit``)."""
+    return float(read_parameter_file("spin_scale")["scale"]["value"])
+
+
+def scaled_table(model, scale: Optional[float] = None) -> dict:
+    """The atomic W times λ (default :func:`spin_scale`)."""
+    lam = spin_scale() if scale is None else float(scale)
+    return {el: {k: lam * x for k, x in t.items()} for el, t in spin_table(model).items()}
+
+
 def shells_of(system: System, W=None) -> Shells:
-    """``W``: None (the table), a per-element table, or a number (every pair of shells of
-    every atom: the single-orbital limit, W = -U/2 for a Hubbard U)."""
+    """``W``: None (the atomic table), ``"scaled"`` (the atomic table × λ, fitted to GPAW:
+    :func:`spin_scale`), a per-element table, or a number (every pair of shells of every
+    atom: the single-orbital limit, W = -U/2 for a Hubbard U)."""
+    if isinstance(W, str):
+        if W != "scaled":
+            raise ValueError(f"W desconocido: {W!r} (None, 'scaled', tabla o número).")
+        W = scaled_table(system.model)
     table = None if np.isscalar(W) else (spin_table(system.model) if W is None else W)
     atoms = system.basis.atoms
     owner, kinds = [], []
@@ -237,7 +254,8 @@ def spin_polarised(system: System, W=None, U=None, charges: Optional[bool] = Non
     Parameters
     ----------
     W
-        Spin constants: None (the table), ``{element: {"ss", "sp", "pp"}}`` or a number.
+        Spin constants: None (the atomic table), ``"scaled"`` (× λ fitted to GPAW),
+        ``{element: {"ss", "sp", "pp"}}`` or a number.
     U, charges
         Charge SCC with the model's (or these) Hubbard U: on by default when the set was
         made with it (``model.scc``).

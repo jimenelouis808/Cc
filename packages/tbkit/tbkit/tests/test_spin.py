@@ -138,3 +138,12 @@ def test_periodic_forces_match_finite_differences():
         minus.positions[atom, axis] -= h
         fd = -(energy(plus)[0] - energy(minus)[0]) / (2 * h)
         assert forces[atom, axis] == pytest.approx(fd, abs=5e-6)
+
+
+def test_scaled_constants_are_the_atomic_ones_times_lambda():
+    from tbkit.spin import spin_scale
+
+    lam = spin_scale()
+    assert 1.0 < lam < 2.5                                   # one fitted number, stated
+    system = System.build(Atoms("C2", positions=[[0, 0, 0], [0, 0, 1.3]]), xu_carbon())
+    assert shells_of(system, "scaled").w == pytest.approx(lam * shells_of(system).w)

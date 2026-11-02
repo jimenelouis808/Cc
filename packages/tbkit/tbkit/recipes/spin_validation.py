@@ -3,6 +3,7 @@
 Run from packages/tbkit::
 
     python -m tbkit.recipes.spin_validation gpaw [SYSTEM]   # resumable, one file per state
+    python -m tbkit.recipes.spin_validation fit             # parameters/spin_scale.json (λ)
     python -m tbkit.recipes.spin_validation report          # validation/spin_tb_vs_gpaw.json
 
 Systems (fixed, unrelaxed geometries, the same for both codes; a_CC 1.42 Å, C-H 1.09 Å):
@@ -222,7 +223,7 @@ def model_for(name: str) -> str:
     return "xu_chno" if name == "O2" else "xu_chn"
 
 
-def run_tb(name: str, state: str, model_name: str | None = None) -> dict:
+def run_tb(name: str, state: str, model_name: str | None = None, W=None) -> dict:
     from ..hamiltonian import System
     from ..params import load_parameters
     from ..spin import spin_polarised
@@ -236,7 +237,7 @@ def run_tb(name: str, state: str, model_name: str | None = None) -> dict:
 
         kpts, weights = mesh(system, kmesh(name, tb=True))
     per_atom = pattern(atoms, kind)[system.basis.atoms] * 0.5
-    result = spin_polarised(system, magnetization=fixed, guess=per_atom, kT=KT_TB,
+    result = spin_polarised(system, W=W, magnetization=fixed, guess=per_atom, kT=KT_TB,
                             kpts=kpts, weights=weights, tol=1e-8, max_iter=3000)
     return {"energy_eV": result.energy, "magnetization": result.magnetization,
             "moments": [result.moments.get(a, 0.0) for a in range(len(atoms))],
@@ -278,6 +279,51 @@ def run_pi(name: str, state: str) -> dict | None:
             "moments": [float(moments.get(a, 0.0)) for a in range(len(atoms))]}
 
 
+# ---------------------------------------------------------------- fit of λ
+FIT_SYSTEM = "zgnr6"
+SCALE_OUT = Path("tbkit/parameters/spin_scale.json")
+
+
+def fit_scale(lo: float = 1.0, hi: float = 2.0, tol: float = 1e-3) -> dict:
+    """λ such that the NM − AFM energy of ``FIT_SYSTEM`` equals GPAW's (bisection: the
+    difference grows monotonically with λ). Everything else is held out."""
+    from ..params import load_parameters
+    from ..spin import scaled_table
+
+    target = (json.loads(_slug(FIT_SYSTEM, "NM").read_text())["energy_eV"]
+              - json.loads(_slug(FIT_SYSTEM, "AFM").read_text())["energy_eV"])
+    model = load_parameters(model_for(FIT_SYSTEM))
+
+    def gap_of(lam):
+        table = scaled_table(model, lam)
+        return (run_tb(FIT_SYSTEM, "NM", W=table)["energy_eV"]
+                - run_tb(FIT_SYSTEM, "AFM", W=table)["energy_eV"]) - target
+
+    f_lo, f_hi = gap_of(lo), gap_of(hi)
+    if f_lo * f_hi > 0:
+        raise RuntimeError(f"λ fuera de [{lo}, {hi}]: {f_lo:+.4f}, {f_hi:+.4f} eV")
+    while hi - lo > tol:
+        mid = 0.5 * (lo + hi)
+        f_mid = gap_of(mid)
+        lo, hi, f_lo = (mid, hi, f_mid) if f_lo * f_mid > 0 else (lo, mid, f_lo)
+    lam = round(0.5 * (lo + hi), 3)
+    data = {
+        "name": "escala de las constantes de espín (λ)",
+        "reference": "este trabajo: tbkit.recipes.spin_validation fit",
+        "system": "conjuntos s/p de tbkit con tbkit.spin, W='scaled'",
+        "validity": f"una sola cifra ajustada a GPAW PBE (E_NM − E_AFM de la cinta {FIT_SYSTEM} "
+                    "H-saturada); el resto de validation/spin_tb_vs_gpaw.json queda fuera "
+                    "del ajuste. Las W del átomo libre (spin_constants.json) no cambian.",
+        "units": {"scale": "1"},
+        "scale": {"value": lam, "unit": "1",
+                  "source": f"bisección sobre E_NM − E_AFM de {FIT_SYSTEM}: GPAW "
+                            f"{1000 * target:.1f} meV por celda, modelo {model_for(FIT_SYSTEM)}, "
+                            f"kT {KT_TB} eV, {K_RIBBON_TB} puntos k"},
+    }
+    SCALE_OUT.write_text(json.dumps(data, indent=1, ensure_ascii=False))
+    return data
+
+
 # ---------------------------------------------------------------- report
 def _edge_atoms(atoms: Atoms) -> list[int]:
     carbons = [i for i, s in enumerate(atoms.get_chemical_symbols()) if s == "C"]
@@ -302,7 +348,8 @@ def report() -> dict:
             entry["states"][state] = {"gpaw": {"energy_eV": g["energy_eV"],
                                                "magnetization": g["magnetization"],
                                                "gap_eV": gpaw_gap(g), "moments": g["moments"]},
-                                      "tb": run_tb(name, state)}
+                                      "tb": run_tb(name, state),
+                                      "tb_scaled": run_tb(name, state, W="scaled")}
             pi = run_pi(name, state)
             if pi is not None:
                 entry["states"][state]["pi_hubbard"] = pi
@@ -333,7 +380,7 @@ PARAMS = [
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=("gpaw", "report", "list"))
+    parser.add_argument("step", choices=("gpaw", "fit", "report", "list"))
     parser.add_argument("system", nargs="?", help="un sistema del paso gpaw (vacío: todos)")
     add_arguments(parser)
     args = parser.parse_args(argv)
@@ -342,6 +389,8 @@ def main(argv=None) -> None:
         for name in ([args.system] if args.system else STATES):
             for state in STATES[name]:
                 print(run_gpaw(name, state), flush=True)
+    elif args.step == "fit":
+        print(json.dumps(fit_scale(), indent=1, ensure_ascii=False))
     elif args.step == "list":
         for name, states in STATES.items():
             print(name, {s: _slug(name, s).exists() for s in states})
