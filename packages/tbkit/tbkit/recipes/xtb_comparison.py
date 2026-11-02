@@ -83,12 +83,17 @@ def tb_calculator(set_name: str, kpts=None):
     return TBCalculator(load_parameters(set_name), kpts=tuple(kpts) if kpts else None, kT=KT_TB)
 
 
-def xtb_singlepoint(method: str, atoms: Atoms, charge: float = 0.0, uhf: int = 0):
-    """Energy (eV), forces (eV/Å), orbital energies (eV) and occupations of a molecule."""
+def xtb_singlepoint(method: str, atoms: Atoms, charge: float = 0.0, uhf: int = 0,
+                    spin_polarization: bool = False):
+    """Energy (eV), forces (eV/Å), orbital energies (eV) and occupations of a molecule.
+    ``spin_polarization``: tblite's spin-polarised xTB (spGFN); without it GFN is
+    spin-restricted and a triplet differs from a singlet only by its occupations."""
     from tblite.interface import Calculator
 
     calc = Calculator(method, atoms.numbers, atoms.positions / BOHR, charge=charge, uhf=uhf)
     calc.set("verbosity", 0)
+    if spin_polarization:
+        calc.add("spin-polarization", 1.0)
     res = calc.singlepoint()
     return (float(res.get("energy")) * HARTREE, -np.asarray(res.get("gradient")) * HARTREE / BOHR,
             np.asarray(res.get("orbital-energies")) * HARTREE,
@@ -355,7 +360,7 @@ def layers() -> dict:
 
 
 # ---------------------------------------------------------------- spin
-SPIN_SYSTEMS = {"O2": 2, "CH2": 2, "triangulene": 2, "phenalenyl": 1}
+SPIN_SYSTEMS = {"O2": 2, "CH2": 2, "triangulene": 2}
 
 
 def spin() -> dict:
@@ -365,8 +370,7 @@ def spin() -> dict:
     gpaw = {}
     for name, unpaired in SPIN_SYSTEMS.items():
         atoms = sv.geometry(name)
-        high, low = (("T", "S") if name in ("O2", "CH2") else
-                     (("T", "NM") if name == "triangulene" else ("D", "NM")))
+        high, low = ("T", "S") if name in ("O2", "CH2") else ("T", "NM")
         try:
             e_high = json.loads(sv._slug(name, high).read_text())["energy_eV"]
             e_low = json.loads(sv._slug(name, low).read_text())["energy_eV"]
@@ -375,8 +379,8 @@ def spin() -> dict:
             gpaw[name] = None
         row = {"gpaw_meV": gpaw[name]}
         for method in METHODS:
-            high_e = xtb_singlepoint(method, atoms, uhf=unpaired)[0]
-            low_e = xtb_singlepoint(method, atoms, uhf=unpaired % 2)[0]
+            high_e = xtb_singlepoint(method, atoms, uhf=unpaired, spin_polarization=True)[0]
+            low_e = xtb_singlepoint(method, atoms, uhf=0, spin_polarization=True)[0]
             row[method] = 1000 * (low_e - high_e)
         tb = json.loads(Path("validation/spin_tb_vs_gpaw.json").read_text())["systems"].get(name) \
             if Path("validation/spin_tb_vs_gpaw.json").exists() else None
@@ -385,9 +389,11 @@ def spin() -> dict:
                 row[code] = 1000 * tb["states"][low][code]["relative_eV"]
         out[name] = row
         print(name, row, flush=True)
-    note = ("E(estado de menor espín) − E(mayor espín), meV. xTB: capas cerradas (uhf = 0 o 1) "
-            "frente a uhf = electrones desapareados, sin polarización de espín explícita "
-            "(GFN restringido de espín); tbkit: SCC con espín.")
+    note = ("E(M = 0) − E(M = 2), meV. xTB con polarización de espín (spGFN de tblite), uhf = 0 "
+            "frente a uhf = 2; tbkit: SCC con espín (W del átomo y W·λ); GPAW: PBE con espín, "
+            "M fija. Sin la polarización de espín GFN no separa triplete de singlete (≈ −70 meV "
+            "en los tres sistemas). Fenalenilo fuera: su estado sin espín de GPAW (SOMO "
+            "semiocupado) no tiene análogo directo en xTB.")
     result = {"note": note, "systems": out}
     _write("spin", result)
     return result
@@ -405,15 +411,23 @@ def timing() -> dict:
         row = {"atoms": len(atoms), "formula": atoms.get_chemical_formula()}
         for code in ("tb",) + METHODS:
             a = atoms.copy()
-            a.calc = tb_calculator("xu_chn") if code == "tb" else xtb_calculator(code)
+            if code == "tb":
+                from ..calculator import TBCalculator
+                from ..params import load_parameters
+
+                # kT 0.1 eV: the zigzag triangles have many near-zero levels and the SCC of
+                # the larger ones does not settle at 0.02 eV (what is timed is the cost)
+                a.calc = TBCalculator(load_parameters("xu_chn"), kT=0.1)
+            else:
+                a.calc = xtb_calculator(code)
             start = time.perf_counter()
             a.get_forces()
             row[code] = time.perf_counter() - start
         out.append(row)
         print(row, flush=True)
     result = {"note": "segundos de reloj por energía + fuerzas de un flake triangular "
-                      "H-saturado, un núcleo (OMP_NUM_THREADS del entorno), tbkit xu_chn con "
-                      "SCC frente a tblite", "rows": out}
+                      "H-saturado (OMP_NUM_THREADS=2), tbkit xu_chn con SCC (kT 0,1 eV) "
+                      "frente a tblite (300 K)", "rows": out}
     _write("timing", result)
     return result
 
