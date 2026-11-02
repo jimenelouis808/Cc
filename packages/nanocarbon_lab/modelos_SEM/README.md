@@ -596,18 +596,19 @@ nada más del contenedor, y **no hay que instalar este paquete**:
 `render_cnt.py` corre dentro del Python de Blender y sólo importa sus
 vecinos de `nanocarbon_lab/blender/`, más numpy, que Blender ya trae.
 
-**La única dependencia que puede faltar es scipy, y sólo para una
-escena.** Se usa en un único sitio: adivinar enlaces cuando el sidecar
-no los trae. Medido, `escena_barras` es la única con la lista vacía
-(0 enlaces), porque las barras son núcleos recubiertos y el
-recubridor no registra los enlaces de la coraza; las otras cuatro
-llevan entre 4500 y 81 000. Si esa escena falla con
-`ModuleNotFoundError: scipy`:
+**Y ya no hace falta scipy.** Se usaba en un único sitio —adivinar
+enlaces cuando el sidecar no los trae— y hacía falta porque una
+partícula recubierta salía con **cero** enlaces: cada coraza registra
+los suyos y se perdían al pegar núcleo y capas en una sola estructura.
+Arreglado (`coat.stacked_bonds`), las cinco escenas los traen:
 
-```bash
-# el Python que Blender trae dentro, no el del sistema
-/ruta/a/blender/<versión>/python/bin/python3.* -m pip install scipy
-```
+| escena | enlaces antes | ahora |
+|---|---|---|
+| `escena_barras` | **0** | 43 632 |
+| `escena_profundidad` | 4 500 (sólo el tubo) | 12 252 |
+
+Y por modelo suelto: `placa_H_C` 5025, `barra_T_C` 2727,
+`particula_Fe3C_C` 3390. Antes, los tres a cero.
 
 ## El render de portada
 

@@ -55,94 +55,6 @@
     "veredicto_coraza": "—"
   },
   {
-    "modelo": "particula_Fe3C_nucleo_desnudo",
-    "atomos": 460,
-    "formula": "C127Fe333",
-    "familia": "particula_Fe3C",
-    "version": "núcleo sin recubrir",
-    "nucleo": "C127Fe333",
-    "capas_grafiticas": 0,
-    "veredicto_nucleo": "broken (bond 1.64 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): composition 10.4 % off stoichiometry, so an ionic core is charged; 61 % of the atoms are on the surface, so nothing here will behave like the bulk",
-    "veredicto_coraza": "—"
-  },
-  {
-    "modelo": "particula_Fe3C_C",
-    "atomos": 2770,
-    "formula": "C2437Fe333",
-    "familia": "particula_Fe3C",
-    "version": "C",
-    "nucleo": "C127Fe333",
-    "capas_grafiticas": 2,
-    "veredicto_nucleo": "broken (bond 1.64 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): composition 10.4 % off stoichiometry, so an ionic core is charged; 61 % of the atoms are on the surface, so nothing here will behave like the bulk",
-    "veredicto_coraza": "broken (bond 1.64 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).); broken (bond 1.64 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
-  },
-  {
-    "modelo": "particula_Fe3C_NSe",
-    "atomos": 2770,
-    "formula": "C2241Fe333N139Se57",
-    "familia": "particula_Fe3C",
-    "version": "NSe",
-    "nucleo": "C127Fe333",
-    "capas_grafiticas": 2,
-    "veredicto_nucleo": "broken (bond 1.64 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): composition 10.4 % off stoichiometry, so an ionic core is charged; 61 % of the atoms are on the surface, so nothing here will behave like the bulk",
-    "veredicto_coraza": "broken (bond 1.64 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).); broken (bond 1.64 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
-  },
-  {
-    "modelo": "particula_Fe3C_NSeO",
-    "atomos": 2795,
-    "formula": "C2243H10Fe333N141O9Se59",
-    "familia": "particula_Fe3C",
-    "version": "NSeO",
-    "nucleo": "C127Fe333",
-    "capas_grafiticas": 2,
-    "veredicto_nucleo": "broken (bond 1.64 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): composition 10.4 % off stoichiometry, so an ionic core is charged; 61 % of the atoms are on the surface, so nothing here will behave like the bulk",
-    "veredicto_coraza": "broken (bond 1.64 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).); broken (bond 1.64 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
-  },
-  {
-    "modelo": "particula_Fe3C_interior",
-    "atomos": 147,
-    "formula": "C43Fe104",
-    "familia": "particula_Fe3C",
-    "version": "para ir dentro del tubo",
-    "nucleo": "C43Fe104",
-    "capas_grafiticas": 0,
-    "veredicto_nucleo": "broken: composition is 17 % off the crystal's ratios, which is not this compound any more",
-    "veredicto_coraza": "—"
-  },
-  {
-    "modelo": "nanotubo_C",
-    "atomos": 3000,
-    "formula": "C3000",
-    "familia": "nanotubo",
-    "version": "C",
-    "nucleo": "—",
-    "capas_grafiticas": 0,
-    "veredicto_nucleo": "—",
-    "veredicto_coraza": "—"
-  },
-  {
-    "modelo": "nanotubo_NSe",
-    "atomos": 3000,
-    "formula": "C2745N180Se75",
-    "familia": "nanotubo",
-    "version": "NSe",
-    "nucleo": "—",
-    "capas_grafiticas": 0,
-    "veredicto_nucleo": "—",
-    "veredicto_coraza": "—"
-  },
-  {
-    "modelo": "nanotubo_NSeO",
-    "atomos": 3030,
-    "formula": "C2747H12N182O10Se79",
-    "familia": "nanotubo",
-    "version": "NSeO",
-    "nucleo": "—",
-    "capas_grafiticas": 0,
-    "veredicto_nucleo": "—",
-    "veredicto_coraza": "—"
-  },
-  {
     "modelo": "barra_T_nucleo_desnudo",
     "atomos": 504,
     "formula": "Fe252Se252",
@@ -185,6 +97,94 @@
     "capas_grafiticas": 1,
     "veredicto_nucleo": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): 504 atoms, stoichiometric, 57 % surface, shortest contact 2.396 A",
     "veredicto_coraza": "broken (bond 1.66 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
+  },
+  {
+    "modelo": "particula_Fe3C_nucleo_desnudo",
+    "atomos": 578,
+    "formula": "C156Fe422",
+    "familia": "particula_Fe3C",
+    "version": "núcleo sin recubrir",
+    "nucleo": "C156Fe422",
+    "capas_grafiticas": 0,
+    "veredicto_nucleo": "broken (bond 1.75 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): composition 8.0 % off stoichiometry, so an ionic core is charged",
+    "veredicto_coraza": "—"
+  },
+  {
+    "modelo": "particula_Fe3C_C",
+    "atomos": 2838,
+    "formula": "C2416Fe422",
+    "familia": "particula_Fe3C",
+    "version": "C",
+    "nucleo": "C156Fe422",
+    "capas_grafiticas": 2,
+    "veredicto_nucleo": "broken (bond 1.75 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): composition 8.0 % off stoichiometry, so an ionic core is charged",
+    "veredicto_coraza": "broken (bond 1.60 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).); broken (bond 1.75 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
+  },
+  {
+    "modelo": "particula_Fe3C_NSe",
+    "atomos": 2838,
+    "formula": "C2224Fe422N136Se56",
+    "familia": "particula_Fe3C",
+    "version": "NSe",
+    "nucleo": "C156Fe422",
+    "capas_grafiticas": 2,
+    "veredicto_nucleo": "broken (bond 1.75 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): composition 8.0 % off stoichiometry, so an ionic core is charged",
+    "veredicto_coraza": "broken (bond 1.60 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).); broken (bond 1.75 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
+  },
+  {
+    "modelo": "particula_Fe3C_NSeO",
+    "atomos": 2863,
+    "formula": "C2226H10Fe422N138O9Se58",
+    "familia": "particula_Fe3C",
+    "version": "NSeO",
+    "nucleo": "C156Fe422",
+    "capas_grafiticas": 2,
+    "veredicto_nucleo": "broken (bond 1.75 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).): composition 8.0 % off stoichiometry, so an ionic core is charged",
+    "veredicto_coraza": "broken (bond 1.60 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).); broken (bond 1.75 Å is outside the sp2 range 1.30–1.55 Å — lower the strain (wider coil, gentler shape, or a thinner tube).)"
+  },
+  {
+    "modelo": "particula_Fe3C_interior",
+    "atomos": 55,
+    "formula": "C17Fe38",
+    "familia": "particula_Fe3C",
+    "version": "para ir dentro del tubo",
+    "nucleo": "C17Fe38",
+    "capas_grafiticas": 0,
+    "veredicto_nucleo": "broken: composition is 24 % off the crystal's ratios, which is not this compound any more",
+    "veredicto_coraza": "—"
+  },
+  {
+    "modelo": "nanotubo_C",
+    "atomos": 3000,
+    "formula": "C3000",
+    "familia": "nanotubo",
+    "version": "C",
+    "nucleo": "—",
+    "capas_grafiticas": 0,
+    "veredicto_nucleo": "—",
+    "veredicto_coraza": "—"
+  },
+  {
+    "modelo": "nanotubo_NSe",
+    "atomos": 3000,
+    "formula": "C2745N180Se75",
+    "familia": "nanotubo",
+    "version": "NSe",
+    "nucleo": "—",
+    "capas_grafiticas": 0,
+    "veredicto_nucleo": "—",
+    "veredicto_coraza": "—"
+  },
+  {
+    "modelo": "nanotubo_NSeO",
+    "atomos": 3030,
+    "formula": "C2747H12N182O10Se79",
+    "familia": "nanotubo",
+    "version": "NSeO",
+    "nucleo": "—",
+    "capas_grafiticas": 0,
+    "veredicto_nucleo": "—",
+    "veredicto_coraza": "—"
   },
   {
     "modelo": "brazo_particula_dentro",
