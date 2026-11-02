@@ -690,6 +690,13 @@ def _setup_camera(style, objects, lens_mm: float, resolution,
     look = Vector(tuple(target)) - cam_obj.location
     cam_obj.rotation_euler = look.to_track_quat("-Z", "Y").to_euler()
 
+    # Blender clips at 1000 by default and this package works in
+    # Ångström used as metres, so a composition large enough can have
+    # its far half cut off with no error anywhere. Derived from the
+    # subject; see camera.clip_range.
+    cam_data.clip_start, cam_data.clip_end = camera.clip_range(
+        points, location)
+
     if style.camera_dof_fstop is not None:
         cam_data.dof.use_dof = True
         cam_data.dof.focus_distance = distance
@@ -990,6 +997,19 @@ def main() -> int:
     _setup_render(style, args)
 
     if args.save_blend:
+        # The same clip for the viewport, or the file opens on a scene
+        # whose far half is missing and nothing says why. Every
+        # workspace, because the file remembers which one was open.
+        far = getattr(bpy.context.scene.camera.data, "clip_end", None)
+        if far:
+            for screen in bpy.data.screens:
+                for area in screen.areas:
+                    if area.type != "VIEW_3D":
+                        continue
+                    for space in area.spaces:
+                        if space.type == "VIEW_3D":
+                            space.clip_start = 0.1
+                            space.clip_end = max(far * 2.0, 1000.0)
         path = Path(args.save_blend).resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
         bpy.ops.wm.save_as_mainfile(filepath=str(path))

@@ -182,6 +182,37 @@ class TestBestView:
         assert 0.05 < float(depth[2]) < 0.3
 
 
+class TestClipRange:
+    """The default far plane is 1000, and this package counts in Å."""
+
+    def test_it_holds_the_whole_subject(self, camera, row):
+        direction = camera.best_view(row)
+        location, _, _ = camera.frame_camera(row, direction, 50.0, 36.0,
+                                             (400, 300), fill=0.86)
+        near, far = camera.clip_range(row, location)
+        span = np.linalg.norm(row - np.asarray(location), axis=1)
+        assert near < span.min()
+        assert far > span.max()
+
+    def test_a_big_composition_needs_more_than_the_default(self, camera):
+        """The case that motivated it: a 500 Å field seen from 986 Å
+        has its far side past 1200, and Blender's default cuts it."""
+        rng = np.random.default_rng(3)
+        field = rng.uniform(-250.0, 250.0, size=(500, 3))
+        direction = camera.named_direction("iso")
+        location, _, _ = camera.frame_camera(field, direction, 55.0, 36.0,
+                                             (1600, 2000), fill=1.0)
+        _, far = camera.clip_range(field, location)
+        assert far > 1000.0
+
+    def test_the_near_plane_never_goes_to_zero(self, camera):
+        """A camera inside its subject would otherwise ask for 0."""
+        points = np.zeros((4, 3))
+        near, far = camera.clip_range(points, (0.0, 0.0, 0.0))
+        assert near == 0.1
+        assert far >= 0.0
+
+
 class TestFraming:
     @staticmethod
     def _coverage(camera, points, direction, distance, lens, sensor,

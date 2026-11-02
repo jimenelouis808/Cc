@@ -35,9 +35,9 @@ from collections.abc import Sequence
 
 import numpy as np
 
-__all__ = ["NAMED_VIEWS", "basis_for", "best_view", "convex_hull_area",
-           "frame_camera", "named_direction", "projected_extent",
-           "view_candidates"]
+__all__ = ["NAMED_VIEWS", "basis_for", "best_view", "clip_range",
+           "convex_hull_area", "frame_camera", "named_direction",
+           "projected_extent", "view_candidates"]
 
 #: Directions a user can ask for by name, as (x, y, z) to look **from**.
 #: ``auto`` is not here: it is measured, not tabulated.
@@ -74,6 +74,28 @@ def named_direction(name: str) -> np.ndarray:
             "auto"
         ) from None
     return vector / np.linalg.norm(vector)
+
+
+def clip_range(points: np.ndarray, location: Sequence[float],
+               margin: float = 1.2) -> tuple[float, float]:
+    """Near and far clip for a camera at ``location``, in Å.
+
+    Blender's defaults are 0.1 and **1000**, in metres, and this
+    package works in Ångström used as metres. That is fine for a cage
+    and wrong for a composition: the camera for a field of anemones
+    stands 986 Å back from a subject 500 Å across, so its far side is
+    past 1200 and **the default clip cuts it off** -- silently, as
+    missing geometry rather than as an error.
+
+    Both ends are derived from the subject rather than set to a large
+    constant, because a far plane far beyond what is needed costs
+    depth precision in the viewport for nothing.
+    """
+    points = np.asarray(points, dtype=float)
+    here = np.asarray(location, dtype=float)
+    span = np.linalg.norm(points - here, axis=1)
+    near = max(0.1, float(span.min()) / margin)
+    return near, float(span.max()) * margin
 
 
 def view_candidates(count: int = 96) -> np.ndarray:
