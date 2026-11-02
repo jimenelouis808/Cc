@@ -11,6 +11,8 @@ finite differences of the energy on a distorted bilayer.
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 from ase import Atoms
@@ -109,3 +111,29 @@ def test_forces_match_finite_differences():
         minus.positions[atom, axis] -= h
         fd = -(energy(plus)[0] - energy(minus)[0]) / (2 * h)
         assert forces[atom, axis] == pytest.approx(fd, abs=2e-6)
+
+
+@pytest.mark.parametrize("name", ["c_capas", "xu_capas"])
+def test_shipped_sets_are_what_the_recipe_writes(name):
+    from tbkit.params import read_parameter_file
+    from tbkit.recipes import interlayer_fit as fit
+
+    data = read_parameter_file(name)
+    far = {e["bond"]: e["law"] for e in data["far_hopping"]}
+    p = [far["pps"]["v0"], far["pps"]["beta"], far["ppp"]["v0"], far["ppp"]["beta"]]
+    if name == "c_capas":
+        again = fit.bands_dict(p, data["fit"])
+    else:
+        disp = data["repulsive"]["terms"][1]
+        again = fit.energy_dict(p, [disp[k] for k in ("a", "alpha", "c6", "r0")], data["fit"])
+    assert json.loads(json.dumps(again)) == data
+
+
+@pytest.mark.parametrize("name, base", [("c_capas", "c_bandas"), ("xu_capas", "xu_carbon")])
+def test_shipped_sets_keep_their_base_in_a_monolayer(name, base):
+    from tbkit.params import load_parameters
+
+    path = np.array([[0, 0, 0], [0.5, 0, 0], [1 / 3, -1 / 3, 0], [0.2, 0.1, 0]])
+    mono = geometry("mono")
+    assert np.allclose(bands(System.build(mono, load_parameters(name)), path),
+                       bands(System.build(mono, load_parameters(base)), path), atol=1e-12)

@@ -47,6 +47,8 @@ tbkit/
 │                     #   validation_report: writes docs/VALIDACION.md from validation/ and parameters/
 │                     #   band_validation: graphene and 5 tubes, every model vs GPAW PW bands (+ dzp)
 │                     #   band_fit: electronic-only C set (c_bandas) fitted to those bands
+│                     #   interlayer: GPAW PBE (+D3 apart) bilayers, graphite, ABC, sliding (resumable)
+│                     #   interlayer_fit: c_capas (bands) and xu_capas (energies) with far hopping + dispersion
 │                     #   pipeline: a recipe of one's own (structure + model + tasks), from «Nueva receta…»
 │                     #   study: any set of systems (0D-3D), changes embedded in their host: modes,
 │                     #     resonant Raman, IR, report, DFT request of the modes that matter
@@ -283,6 +285,16 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   Band RMS is taken in windows near E_F: whole-band RMS measures σ*/NFE states no minimal
   basis has. Armchair tubes cross off kz = 1/3: the path needs ≥ 31 points and
   `band_crossing`.
+- Far hopping (`TBModel.far_hopping`) replaces `hopping` for pairs more than `far_bonds`
+  (6) bonds apart, decided by the bond graph, not by distance: no pair of a sheet or tube
+  within 5.5 Å is that far, so a set's in-plane bands are untouched (tested), while layers,
+  walls and coil turns couple, even compressed. With 3 bonds, graphene's 4.27 Å pairs
+  coupled their σ orbitals (graphene error 0.075 → 0.10 eV): do not go back. The bond
+  graph is that of the geometry evaluated; forces are exact for fixed topology.
+  `LayerDispersionTerm` uses the same exclusion. `c_capas`/`xu_capas` keep `c_bandas`/Xu
+  untouched; `xu_capas`'s far laws are fitted to levels at K only (Xu's in-plane bands
+  are 25 % slow) and its dispersion to PBE+D3(BJ) AB/AA curves; graphite, ABC and sliding
+  are held out and must stay out. GPAW's D3 needs `dftd3` (simple-dftd3, optional).
 - Tests compare with closed-form results (graphene, Hückel, Lieb). A new
   feature needs such a check, not only a regression number.
 

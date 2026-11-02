@@ -1,0 +1,321 @@
+{
+ "name": "Xu con acoplamiento y dispersión entre capas (xu_capas)",
+ "reference": "Xu et al. 1992 sin cambios + acoplamiento lejano y dispersión de tbkit.recipes.interlayer_fit (GPAW PBE y PBE+D3(BJ))",
+ "system": "carbono sp2/sp3 apilado: multicapas, grafito, tubos de varias paredes, coils",
+ "validity": "lo de Xu, más: separación entre capas 2.8 a 5.5 Å (curvas AB y AA); la corrugación AB/AA es la de un término de pares; el término de dispersión usa el grafo de enlaces de cada geometría (fijo dentro de una relajación sin rupturas)",
+ "units": {
+  "energy": "eV",
+  "length": "Å"
+ },
+ "orbitals": {
+  "C": [
+   "s",
+   "px",
+   "py",
+   "pz"
+  ]
+ },
+ "valence": {
+  "C": 4
+ },
+ "onsite": {
+  "C": {
+   "s": {
+    "value": -2.99,
+    "unit": "eV",
+    "description": "energía on-site 2s",
+    "source": "Xu 1992, tabla I"
+   },
+   "p": {
+    "value": 3.71,
+    "unit": "eV",
+    "description": "energía on-site 2p",
+    "source": "Xu 1992, tabla I"
+   }
+  }
+ },
+ "hubbard_u": {
+  "C": {
+   "value": 10.0,
+   "unit": "eV",
+   "description": "U para SCC (no forma parte del modelo de Xu; valor típico del C atómico)",
+   "source": "orden de magnitud de la U de Hubbard del C en DFTB (≈ 9.9 eV)"
+  }
+ },
+ "onsite_dipole": {
+  "C": {
+   "value": 0.4952,
+   "unit": "Å",
+   "description": "dipolo intraatómico |⟨2s|r|2p⟩| para la respuesta óptica; el signo lo fija la convención de orbitales del modelo (tbkit.dipoles)",
+   "source": "GPAW aeatom PBE, átomo libre (no forma parte del modelo de Xu)"
+  }
+ },
+ "extra_polarizability": {
+  "C": {
+   "value": 0.95312,
+   "unit": "Å^3",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos",
+   "source": "el valor del C de xu_chn (mismo C-C de Xu), ajustado a tensores α de GPAW FD con tbkit.recipes.xu_chn_alpha (no forma parte del modelo de Xu)"
+  }
+ },
+ "hopping": [
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "GSP",
+    "v0": -5.0,
+    "r0": 1.536329,
+    "n": 2.0,
+    "nc": 6.5,
+    "rc": 2.18,
+    "cutoff": 2.6
+   },
+   "tail": [
+    2.45,
+    2.6
+   ],
+   "unit": "eV",
+   "description": "V_ssσ en r0",
+   "source": "Xu 1992, tabla I"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "GSP",
+    "v0": 4.7,
+    "r0": 1.536329,
+    "n": 2.0,
+    "nc": 6.5,
+    "rc": 2.18,
+    "cutoff": 2.6
+   },
+   "tail": [
+    2.45,
+    2.6
+   ],
+   "unit": "eV",
+   "description": "V_spσ en r0",
+   "source": "Xu 1992, tabla I"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "GSP",
+    "v0": 5.5,
+    "r0": 1.536329,
+    "n": 2.0,
+    "nc": 6.5,
+    "rc": 2.18,
+    "cutoff": 2.6
+   },
+   "tail": [
+    2.45,
+    2.6
+   ],
+   "unit": "eV",
+   "description": "V_ppσ en r0",
+   "source": "Xu 1992, tabla I"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "GSP",
+    "v0": -1.55,
+    "r0": 1.536329,
+    "n": 2.0,
+    "nc": 6.5,
+    "rc": 2.18,
+    "cutoff": 2.6
+   },
+   "tail": [
+    2.45,
+    2.6
+   ],
+   "unit": "eV",
+   "description": "V_ppπ en r0",
+   "source": "Xu 1992, tabla I"
+  }
+ ],
+ "overlap": [],
+ "repulsive": {
+  "type": "sum",
+  "unit": "eV",
+  "source": "ajuste a GPAW PBE entre capas de grafeno (tbkit.recipes.interlayer_fit)",
+  "description": "repulsión de Xu + pared y dispersión entre átomos a más de 6 enlaces",
+  "terms": [
+   {
+    "type": "embedded",
+    "elements": [
+     "C"
+    ],
+    "phi": {
+     "type": "GSP",
+     "v0": 8.18555,
+     "r0": 1.64,
+     "n": 3.30304,
+     "nc": 8.6655,
+     "rc": 2.1052,
+     "cutoff": 2.6
+    },
+    "tail": [
+     2.45,
+     2.6
+    ],
+    "polynomial": [
+     -2.5909765118191,
+     0.5721151498619,
+     -0.0017896349903996,
+     2.3539221516757e-05,
+     -1.24251169551587e-07
+    ],
+    "unit": "eV",
+    "description": "E_rep = Σ_i f(Σ_j φ(r_ij)), f polinomio de grado 4 en x = Σ_j φ",
+    "source": "Xu 1992, ecs. (3)-(4) y tabla I"
+   },
+   {
+    "type": "layer_dispersion",
+    "a": 0.04253592740630496,
+    "alpha": 3.3026209486925424,
+    "c6": 16.446444011033222,
+    "r0": 3.017114900807789,
+    "tail": [
+     9.0,
+     11.0
+    ],
+    "bond_cut": 1.85,
+    "exclude": 6,
+    "units": {
+     "a": "eV",
+     "alpha": "1/Å",
+     "c6": "eV Å⁶",
+     "r0": "Å"
+    },
+    "source": "ajuste a GPAW PBE entre capas de grafeno (tbkit.recipes.interlayer_fit)"
+   }
+  ]
+ },
+ "notes": "Las colas entre 2.45 y 2.6 Å son cúbicas que igualan valor y pendiente en 2.45 Å y se anulan con pendiente cero en 2.6 Å, como en el artículo; los coeficientes se calculan aquí de esas condiciones.",
+ "far_hopping": [
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Exponential",
+    "v0": 0.14096710426394937,
+    "d0": 3.35,
+    "beta": 10.929016841128096,
+    "cutoff": 5.5
+   },
+   "tail": [
+    5.0,
+    5.5
+   ],
+   "unit": "eV",
+   "description": "V ppσ entre átomos a más de 6 enlaces, en d0 = 3.35 Å",
+   "source": "ajuste a GPAW PBE entre capas de grafeno (tbkit.recipes.interlayer_fit)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Exponential",
+    "v0": -0.6121681458365766,
+    "d0": 3.35,
+    "beta": 4.244916380629649,
+    "cutoff": 5.5
+   },
+   "tail": [
+    5.0,
+    5.5
+   ],
+   "unit": "eV",
+   "description": "V ppπ entre átomos a más de 6 enlaces, en d0 = 3.35 Å",
+   "source": "ajuste a GPAW PBE entre capas de grafeno (tbkit.recipes.interlayer_fit)"
+  }
+ ],
+ "far": {
+  "bonds": 6,
+  "bond_cut": 1.85
+ },
+ "fit": {
+  "far": {
+   "free": [
+    "V_ppσ",
+    "β_ppσ",
+    "V_ppπ",
+    "β_ppπ"
+   ],
+   "at_bound": [],
+   "rms_k_levels_eV": 0.02478135129654435,
+   "fit_systems": [
+    "AB@3.0",
+    "AB@3.35",
+    "AB@3.7",
+    "AA@3.35",
+    "graphite@3.35"
+   ],
+   "k_window_eV": 1.5
+  },
+  "dispersion": {
+   "free": [
+    "a",
+    "alpha",
+    "c6",
+    "r0"
+   ],
+   "at_bound": [],
+   "rms_meV_per_atom": 2.6200871158203376,
+   "fit_systems": [
+    "AB@2.8",
+    "AB@3.0",
+    "AB@3.2",
+    "AB@3.35",
+    "AB@3.5",
+    "AB@3.7",
+    "AB@4.0",
+    "AB@4.5",
+    "AB@5.5",
+    "AA@2.8",
+    "AA@3.0",
+    "AA@3.2",
+    "AA@3.35",
+    "AA@3.5",
+    "AA@3.7",
+    "AA@4.0",
+    "AA@4.5",
+    "AA@5.5"
+   ],
+   "target": "GPAW PBE + D3(BJ) binding per atom"
+  },
+  "held_out": [
+   "ABC@3.35",
+   "graphite@3.2",
+   "graphite@3.35",
+   "graphite@3.5",
+   "slide@0.5",
+   "slide@1.5"
+  ]
+ }
+}

@@ -18,6 +18,8 @@ Lo que cada archivo declara (`system`, `validity`) y su factor de escala de frec
 | `xu_chnop` | sí | 1,0247 | 82,0 → 70,8 | 218 / 10 |
 | `xu_chnose` | sí | 1,0337 | 83,0 → 60,0 | 150 / 12 |
 | `c_bandas` | no | — | — | — |
+| `c_capas` | no | — | — | — |
+| `xu_capas` | no | — | — | — |
 
 Validez declarada por cada archivo:
 
@@ -31,6 +33,8 @@ Validez declarada por cada archivo:
 - **`xu_chnop`** (xu_chno más fósforo: fosfinas, óxidos de fosfina, ácidos fosfórico y fosfónicos, fosfatos, fosfinina): ajustado en moléculas de capa cerrada; cristales (SCC periódico): extrapolación comprobada contra GPAW (validation/crystals_tb_vs_gpaw.json): P en grafeno: fuerzas 0,3-0,6 veces el error molecular, P-C exacto (0,001 Å) pero P 0,12 Å más bajo sobre la hoja: ángulos C-P-C demasiado abiertos; enlaces dentro de lo muestreado (C-P 1.67-2.15 Å, H-P 1.30-1.57 Å, N-P 1.66-1.84 Å, O-P 1.39-1.74 Å, P-P 2.13-2.36 Å; el resto, como xu_chno); energías relativas solo entre estructuras de la misma composición y los mismos tipos de enlace (no se ajustaron energías de atomización; isómeros con enlaces distintos fallan: dimetil éter frente a etanol -1,44 eV con xu_chno, GPAW +0,38); C-C como en xu_carbon; P junto con B o S en la misma estructura no está cubierto; el C-P de P(V) (ácidos fosfónicos, óxidos de fosfina) sale 0.05-0.10 Å largo, el de P(III) 0.04-0.06 Å; P-O, P=O, P-P, P-N, P-H y C-P aromático a menos de 0.025 Å; ésteres P(OCH3)n corregidos con active learning (antes colapsaban); ácidos con P-OH (fosfórico, fosfónicos): el OH gira hacia el otro O al relajar, 0,4-0,9 Å; causa: la base mínima (GPAW con base sz también hunde el giro del OH: -0,35 eV a 180° frente a -0,23 con dzp; en TB es todo electrónico); en MePO3H2 los d del P también importan en DFT; úsense sus frecuencias O-H con cautela
 - **`xu_chnose`** (xu_chno más selenio: selenoles, selenuros, diselenuros, selenofeno, selenóxidos, ácidos selenínicos, Se-N): ajustado en moléculas de capa cerrada; cristales (SCC periódico): extrapolación comprobada contra GPAW (validation/crystals_tb_vs_gpaw.json): Se en grafeno: fuerzas ~1 vez el error molecular, Se-C +0,06 Å, Se 0,07 Å más alto sobre la hoja; enlaces dentro de lo muestreado (C-Se 1.61-2.09 Å, H-Se 1.36-1.57 Å, N-Se 1.81-2.00 Å, O-Se 1.57-2.01 Å, Se-Se 2.23-2.47 Å; el resto, como xu_chno); energías relativas solo entre estructuras de la misma composición y los mismos tipos de enlace (no se ajustaron energías de atomización; isómeros con enlaces distintos fallan: dimetil éter frente a etanol -1,44 eV con xu_chno, GPAW +0,38); C-C como en xu_carbon; Se junto con B, S o P en la misma estructura no está cubierto; enlaces de Se a menos de 0.08 Å; ácidos seleníninicos (Se(=O)OH): el OH gira hacia el otro O al relajar, 0,4-0,9 Å; causa: la base mínima (en el giro rígido la repulsión no aporta y la parte electrónica pone 240-300° 0,1 eV bajo el mínimo; GPAW con base mínima sz hace lo mismo, -0,06 eV, y con dzp +0,03); no son los d del Se (GPAW sin ellos no gira); úsense sus frecuencias O-H con cautela
 - **`c_bandas`** (carbono sp2: grafeno, nanotubos, coils; estructura electrónica a geometría dada): solo bandas, DOS y respuesta óptica a una geometría dada (de Xu o de DFT): sin repulsión, sin energías ni fuerzas; C-C de 1.37 a 1.48 Å; electrones a ±3 eV del nivel de Fermi (más lejos, las bandas vacías de GPAW tienen estados σ* y casi libres que una base mínima no describe)
+- **`c_capas`** (carbono sp2 apilado: multicapas, grafito, tubos de varias paredes, coils; estructura electrónica a geometría dada): solo bandas, DOS y respuesta óptica a una geometría dada (de Xu o de DFT): sin repulsión, sin energías ni fuerzas; C-C de 1.37 a 1.48 Å; electrones a ±3 eV del nivel de Fermi (más lejos, las bandas vacías de GPAW tienen estados σ* y casi libres que una base mínima no describe); entre capas: 3.0 a 3.7 Å ajustado, más allá extrapolado; el acoplamiento lejano no lleva solapamiento
+- **`xu_capas`** (carbono sp2/sp3 apilado: multicapas, grafito, tubos de varias paredes, coils): lo de Xu, más: separación entre capas 2.8 a 5.5 Å (curvas AB y AA); la corrugación AB/AA es la de un término de pares; el término de dispersión usa el grafo de enlaces de cada geometría (fijo dentro de una relajación sin rupturas)
 
 ## Infrarrojo frente a GPAW (8 moléculas C/H/N, modos de GPAW)
 
@@ -116,6 +120,58 @@ Ajuste de `c_bandas` en sus propias ventanas. Error de bandas frente a GPAW PBE 
 | 10,0 | fuera | 0,349 | 0,101 | 0,909 | 0,939 |
 | 9,0 | fuera | 0,334 | 0,134 | 0,094 | 0,197 |
 | 6,6 | fuera | 0,361 | 0,115 | 0,000 | 0,000 |
+
+## Capas de grafeno: acoplamiento y enlace frente a GPAW
+
+Fuente: `validation/interlayer_tb_vs_gpaw.json` (recetas `interlayer` e `interlayer_fit`). Bandas y enlace entre capas de grafeno frente a GPAW PBE (ondas planas; energías PBE+D3(BJ)). RMS de bandas en ±3 eV de E_F; niveles en K a ±1.5 eV de E_F.
+
+Cada celda: RMS de bandas (eV) / RMS de los niveles en K (eV). `c_capas` y `xu_capas` añaden a `c_bandas` y a Xu (sin cambiarlos) V_ppσ y V_ppπ entre átomos a más de 6 enlaces; el RMS de bandas de Xu está dominado por su error en el plano (v_F 25 % baja), por eso `xu_capas` se ajustó solo a los niveles en K.
+
+| sistema | niveles en K, GPAW (eV) | c_bandas | c_capas | xu_carbon | xu_capas |
+|---|---|---|---|---|---|
+| AB@3.0 | -0,63, -0,04, -0,04, 0,61 | 0,179 / 0,033 | 0,128 / 0,110 | 0,448 / 0,440 | 0,379 / 0,028 |
+| AB@3.35 | -0,35, -0,02, -0,02, 0,33 | 0,227 / 0,242 | 0,133 / 0,027 | 0,388 / 0,242 | 0,356 / 0,018 |
+| AB@3.7 | -0,19, -0,01, -0,01, 0,17 | 0,167 / 0,130 | 0,136 / 0,037 | 0,366 / 0,130 | 0,357 / 0,011 |
+| AA@3.35 | -0,34, -0,34, 0,34, 0,34 | 0,385 / 0,342 | 0,149 / 0,031 | 0,480 / 0,342 | 0,370 / 0,028 |
+| graphite@3.35 | -0,67, -0,05, -0,05, 0,69 | 0,404 / 0,484 | 0,151 / 0,052 | 0,472 / 0,484 | 0,377 / 0,033 |
+| ABC@3.35 (fuera) | -0,35, -0,35, -0,01, 0,01, 0,33, 0,33 | 0,252 / 0,278 | 0,133 / 0,024 | 0,389 / 0,278 | 0,354 / 0,004 |
+| graphene | — | 0,075 | 0,075 | 2,604 | 2,604 |
+
+Enlace por átomo frente a capas separadas (meV/átomo), `xu_capas` frente a GPAW PBE+D3(BJ); PBE solo no une las capas:
+
+| sistema | PBE | PBE+D3 | xu_capas |
+|---|---|---|---|
+| AB@2.8 | 53,3 | 7,8 | -0,4 |
+| AB@3.0 | 27,0 | -13,3 | -10,7 |
+| AB@3.2 | 12,9 | -22,1 | -20,4 |
+| AB@3.35 | 7,2 | -24,1 | -23,8 |
+| AB@3.5 | 3,6 | -24,0 | -24,3 |
+| AB@3.7 | 1,2 | -22,1 | -22,6 |
+| AB@4.0 | -0,3 | -18,3 | -18,6 |
+| AB@4.5 | -0,7 | -12,3 | -11,4 |
+| AB@5.5 | -0,2 | -5,4 | -4,7 |
+| AA@2.8 | 92,3 | 47,0 | 52,0 |
+| AA@3.0 | 48,5 | 8,3 | 11,5 |
+| AA@3.2 | 24,9 | -10,0 | -10,7 |
+| AA@3.35 | 14,5 | -16,7 | -18,6 |
+| AA@3.5 | 8,0 | -19,7 | -21,3 |
+| AA@3.7 | 3,4 | -20,0 | -21,0 |
+| AA@4.0 | 0,4 | -17,5 | -17,9 |
+| AA@4.5 | -0,5 | -12,1 | -11,5 |
+| AA@5.5 | -0,2 | -5,4 | -4,7 |
+| graphite@3.2 (fuera) | 26,2 | -50,5 | -47,0 |
+| graphite@3.35 (fuera) | 14,4 | -53,5 | -51,4 |
+| graphite@3.5 (fuera) | 7,6 | -52,4 | -51,6 |
+| slide@0.5 (fuera) | 10,5 | -20,8 | -21,4 |
+| slide@1.5 (fuera) | 7,8 | -23,4 | -23,2 |
+| ABC@3.35 (fuera) | 9,6 | -33,5 | -33,1 |
+
+Equilibrio (mínimo de un spline por las curvas):
+
+| apilamiento | d PBE+D3 (Å) | d xu_capas (Å) | E PBE+D3 | E xu_capas |
+|---|---|---|---|---|
+| AB | 3,42 | 3,45 | -24,3 | -24,4 |
+| AA | 3,61 | 3,57 | -20,2 | -21,5 |
 
 ## Nanotubos prístinos con Xu
 

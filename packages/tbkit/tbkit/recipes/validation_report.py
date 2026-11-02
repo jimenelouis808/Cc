@@ -23,7 +23,7 @@ PARAMETERS = ROOT / "tbkit" / "parameters"
 TARGET = ROOT / "docs" / "VALIDACION.md"
 
 SETS = ("pi_huckel", "xu_carbon", "tang_carbon", "xu_chn", "xu_chno", "xu_chnob", "xu_chnos",
-        "xu_chnop", "xu_chnose", "c_bandas")
+        "xu_chnop", "xu_chnose", "c_bandas", "c_capas", "xu_capas")
 
 
 def _load(path: Path):
@@ -95,6 +95,39 @@ def _bands() -> list[str]:
              _f(v["c_bandas"]["gap_gpaw_eV"], 3), _f(v["c_bandas"]["gap_eV"], 3))
             for n, v in fit["systems"].items()]
     out += _table(("sistema", "", "RMS Xu (eV)", "RMS c_bandas (eV)", "gap GPAW", "gap c_bandas"),
+                  rows)
+    return out + [""]
+
+
+def _layers() -> list[str]:
+    data = _load(VALIDATION / "interlayer_tb_vs_gpaw.json")
+    labels = ("c_bandas", "c_capas", "xu_carbon", "xu_capas")
+    out = ["## Capas de grafeno: acoplamiento y enlace frente a GPAW", "",
+           "Fuente: `validation/interlayer_tb_vs_gpaw.json` (recetas `interlayer` e "
+           "`interlayer_fit`). " + data["description"], "",
+           "Cada celda: RMS de bandas (eV) / RMS de los niveles en K (eV). `c_capas` y "
+           "`xu_capas` añaden a `c_bandas` y a Xu (sin cambiarlos) V_ppσ y V_ppπ entre átomos "
+           "a más de 6 enlaces; el RMS de bandas de Xu está dominado por su error en el plano "
+           "(v_F 25 % baja), por eso `xu_capas` se ajustó solo a los niveles en K.", ""]
+    rows = []
+    for name, v in data["bands"].items():
+        cells = [f"{_f(v[m]['band_rms_eV'], 3)}"
+                 + (f" / {_f(v[m]['k_levels_rms_eV'], 3)}" if "k_levels_rms_eV" in v[m] else "")
+                 for m in labels]
+        rows.append([name + (" (fuera)" if v["role"] == "fuera" else ""),
+                     ", ".join(_f(x, 2) for x in v.get("k_levels_gpaw_eV", [])) or "—"] + cells)
+    out += _table(["sistema", "niveles en K, GPAW (eV)", *labels], rows)
+    out += ["", "Enlace por átomo frente a capas separadas (meV/átomo), `xu_capas` frente a "
+                "GPAW PBE+D3(BJ); PBE solo no une las capas:", ""]
+    rows = [(n + (" (fuera)" if v["role"] == "fuera" else ""), _f(v["pbe_meV"], 1),
+             _f(v["pbe_d3_meV"], 1), _f(v["xu_capas_meV"], 1))
+            for n, v in data["binding"].items()]
+    out += _table(("sistema", "PBE", "PBE+D3", "xu_capas"), rows)
+    out += ["", "Equilibrio (mínimo de un spline por las curvas):", ""]
+    rows = [(s, _f(e["pbe_d3"]["d_eq_A"]), _f(e["xu_capas"]["d_eq_A"]),
+             _f(e["pbe_d3"]["binding_meV"], 1), _f(e["xu_capas"]["binding_meV"], 1))
+            for s, e in data["equilibrium"].items()]
+    out += _table(("apilamiento", "d PBE+D3 (Å)", "d xu_capas (Å)", "E PBE+D3", "E xu_capas"),
                   rows)
     return out + [""]
 
@@ -268,7 +301,7 @@ def render() -> str:
              "Generado por `python -m tbkit.recipes.validation_report` a partir de los "
              "archivos de `validation/` y `tbkit/parameters/`. No editar a mano: un test "
              "comprueba que coincide con los datos.", ""]
-    for part in (_sets, _infrared, _crystals, _tang, _bands, _nanotubes, _graphene, _nanocoil, _ml):
+    for part in (_sets, _infrared, _crystals, _tang, _bands, _layers, _nanotubes, _graphene, _nanocoil, _ml):
         lines += part()
     return "\n".join(lines).rstrip() + "\n"
 
