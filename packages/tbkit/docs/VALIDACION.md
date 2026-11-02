@@ -173,6 +173,35 @@ Equilibrio (mínimo de un spline por las curvas):
 | AB | 3,42 | 3,45 | -24,3 | -24,4 |
 | AA | 3,61 | 3,57 | -20,2 | -21,5 |
 
+## Espín: SCC con espín frente a GPAW PBE con espín
+
+Fuente: `validation/spin_tb_vs_gpaw.json` (receta `spin_validation`). SCC con espín de tbkit (xu_chn; π con Hubbard U = 2,7 eV) frente a GPAW PBE con espín, misma geometría. Energías relativas al primer estado de cada sistema; momentos: Mulliken (TB) e integrados por átomo (GPAW).
+
+W del carbono (átomo libre, GPAW): W_ss = -0,833 eV, W_sp = -0,682 eV, W_pp = -0,616 eV. λ = 1,658 (bisección sobre E_NM − E_AFM de zgnr6: GPAW 73.6 meV por celda, modelo xu_chn, kT 0.01 eV, 48 puntos k); todo lo demás queda fuera del ajuste. Cada celda: E − E(primer estado) en meV / M (μB) / gap (eV).
+
+| sistema | estado | GPAW | TB, W del átomo | TB, W·λ | π, U = 2,7 |
+|---|---|---|---|---|---|
+| zgnr4 | AFM | 0 / -0,00 / 0,60 | 0 / -0,00 / 0,26 | 0 / -0,00 / 0,65 | 0 / 0,00 / 0,58 |
+| zgnr4 | FM | 12 / 0,50 / 0,29 | 6 / 0,30 / 0,00 | 20 / 0,40 / 0,00 | 14 / 0,37 / 0,13 |
+| zgnr4 | NM | 59 / 0,00 / 0,00 | 18 / 0,00 / 0,00 | 59 / 0,00 / 0,00 | 44 / 0,00 / 0,00 |
+| zgnr6 | AFM | 0 / -0,00 / 0,56 | 0 / -0,00 / 0,25 | 0 / 0,00 / 0,55 | 0 / 0,00 / 0,51 |
+| zgnr6 | FM | 5 / 0,50 / 0,48 | 5 / 0,44 / 0,00 | 13 / 0,51 / 0,00 | 9 / 0,46 / 0,17 |
+| zgnr6 | NM | 74 / 0,00 / 0,00 | 26 / 0,00 / 0,00 | 74 / 0,00 / 0,00 | 60 / 0,00 / 0,00 |
+| zgnr8 | AFM | 0 / -0,00 / 0,56 | 0 / 0,00 / 0,23 | 0 / 0,00 / 0,46 | 0 / 0,00 / 0,45 |
+| zgnr8 | FM | 4 / 0,50 / 0,48 | 4 / 0,46 / 0,00 | 7 / 0,54 / 0,15 | 7 / 0,54 / 0,00 |
+| zgnr8 | NM | 75 / 0,00 / 0,00 | 31 / 0,00 / 0,00 | 81 / 0,00 / 0,00 | 69 / 0,00 / 0,00 |
+| triangulene | T | 0 / 2,00 / 0,71 | 0 / 2,00 / 0,31 | 0 / 2,00 / 0,70 | 0 / 2,00 / 0,64 |
+| triangulene | BS | 338 / 0,00 / 0,00 | 154 / 0,00 / 0,00 | 352 / -0,00 / 0,00 | 319 / 0,00 / 0,00 |
+| triangulene | NM | 338 / 0,00 / 0,00 | 154 / 0,00 / 0,00 | 352 / 0,00 / 0,00 | 319 / 0,00 / 0,00 |
+| phenalenyl | D | 0 / 1,00 / 0,63 | 0 / 1,00 / 0,27 | 0 / 1,00 / 0,62 | 0 / 1,00 / 0,55 |
+| phenalenyl | NM | 149 / 0,00 / 0,00 | 67 / 0,00 / 0,00 | 155 / 0,00 / 0,00 | 139 / 0,00 / 0,00 |
+| h_graphene | M | 0 / 1,00 / 0,26 | 0 / 1,00 / 0,10 | 0 / 1,00 / 0,24 | — |
+| h_graphene | NM | 72 / 0,00 / 0,00 | 36 / 0,00 / 0,00 | 84 / 0,00 / 0,00 | — |
+| O2 | T | 0 / 2,00 / 2,26 | 0 / 2,00 / 1,52 | 0 / 2,00 / 2,51 | — |
+| O2 | S | 1112 / 0,00 / 0,00 | 758 / 0,00 / 0,00 | 1257 / 0,00 / 0,00 | — |
+| CH2 | T | 0 / 2,00 / 2,37 | 0 / 2,00 / 1,17 | 0 / 2,00 / 3,15 | — |
+| CH2 | S | 1129 / 0,00 / 0,00 | -38 / 0,00 / 1,26 | 966 / 0,00 / 1,26 | — |
+
 ## Nanotubos prístinos con Xu
 
 Fuente: `validation/cnt_xu_carbon.json`. RBM frente a las relaciones empíricas de Araujo y de Jorio; G⁺/G⁻ y su desdoblamiento frente a la referencia guardada. Malla k: la de la receta (`cnt_validation --kmesh`, 16 por defecto, kT 0,03 eV); el archivo no la guarda. Los tubos sin gap no se han comprobado en k después del hallazgo del paso 8 (`modes.GAPLESS_WARNING`): sus G pueden estar ablandadas por la malla, además de faltarles la anomalía de Kohn física.

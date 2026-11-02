@@ -213,6 +213,8 @@ def gpaw_gap(data: dict) -> float:
     below, above = [], []
     for eps, ef in zip(data["eigenvalues"], data["fermi_eV"], strict=True):
         eps = np.asarray(eps)
+        if np.abs(eps - ef).min() < 5 * KT_GPAW:     # a level at E_F, partly filled
+            return 0.0
         below.append(eps[eps <= ef].max())
         above.append(eps[eps > ef].min())
     return float(max(0.0, min(above) - max(below)))

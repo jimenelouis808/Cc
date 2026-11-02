@@ -18,6 +18,7 @@ tbkit/
 ├── scc.py            # self-consistent charges (finite, or periodic through ewald.py)
 ├── ewald.py          # periodic γ: Ewald for 1/r and 1/r³, short-range rest
 ├── hubbard.py        # mean-field Hubbard, magnetisation vs energy/field/doping
+├── spin.py           # spin-polarised SCC (spin-DFTB): shell moments, W, fixed or free M, forces
 ├── skf.py            # DFTB .skf reader (simple format)
 ├── fit.py            # least-squares fitting (with a before/after report), GPAW log reader
 ├── repulsive.py      # pair / embedded repulsion, .skf spline
@@ -49,6 +50,8 @@ tbkit/
 │                     #   band_fit: electronic-only C set (c_bandas) fitted to those bands
 │                     #   interlayer: GPAW PBE (+D3 apart) bilayers, graphite, ABC, sliding (resumable)
 │                     #   interlayer_fit: c_capas (bands) and xu_capas (energies) with far hopping + dispersion
+│                     #   spin_constants: W of each element from GPAW's atom (never fitted)
+│                     #   spin_validation: spin SCC vs spin GPAW (ribbons, flakes, H/graphene, O2, CH2); fit of λ
 │                     #   pipeline: a recipe of one's own (structure + model + tasks), from «Nueva receta…»
 │                     #   study: any set of systems (0D-3D), changes embedded in their host: modes,
 │                     #     resonant Raman, IR, report, DFT request of the modes that matter
@@ -295,6 +298,15 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   untouched; `xu_capas`'s far laws are fitted to levels at K only (Xu's in-plane bands
   are 25 % slow) and its dispersion to PBE+D3(BJ) AB/AA curves; graphite, ABC and sliding
   are held out and must stay out. GPAW's D3 needs `dftd3` (simple-dftd3, optional).
+- Spin SCC (`spin.py`, spin-DFTB): W are the free atom's (`recipes/spin_constants`,
+  GPAW aeatom PBE; carbon = published -0.031/-0.025/-0.023 Ha); never fit them. With them,
+  magnetic energies and AFM gaps of carbon come out 2-2.5× too small against spin GPAW;
+  `W="scaled"` multiplies them by one λ (`parameters/spin_scale.json`) fitted only to the
+  NM − AFM energy of zgnr6 (`spin_validation fit`): every other system is held out and
+  must stay out. Its π limit (W = -U/2, no charge SCC) must equal `hubbard.mean_field`
+  (tested, Lieb). GPAW fixes M at the sum of the initial moments: a broken-symmetry start
+  must sum to the fixed M. CH2's singlet-triplet with atomic W has the wrong sign: the set's
+  carbene levels (xu_chn HOMO-LUMO 1.26 eV), not the spin term.
 - Tests compare with closed-form results (graphene, Hückel, Lieb). A new
   feature needs such a check, not only a regression number.
 

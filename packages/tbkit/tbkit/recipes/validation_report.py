@@ -132,6 +132,33 @@ def _layers() -> list[str]:
     return out + [""]
 
 
+def _spin() -> list[str]:
+    data = _load(VALIDATION / "spin_tb_vs_gpaw.json")
+    scale = _load(PARAMETERS / "spin_scale.json")["scale"]
+    w = _load(PARAMETERS / "spin_constants.json")["spin_constants"]["C"]
+    codes = (("gpaw", "GPAW"), ("tb", "TB, W del átomo"), ("tb_scaled", "TB, W·λ"),
+             ("pi_hubbard", "π, U = 2,7"))
+    out = ["## Espín: SCC con espín frente a GPAW PBE con espín", "",
+           "Fuente: `validation/spin_tb_vs_gpaw.json` (receta `spin_validation`). "
+           + data["description"], "",
+           "W del carbono (átomo libre, GPAW): "
+           + ", ".join(f"W_{k} = {_f(v['value'], 3)} eV" for k, v in w.items())
+           + f". λ = {_f(scale['value'], 3)} ({scale['source']}); todo lo demás queda fuera "
+             "del ajuste. Cada celda: E − E(primer estado) en meV / M (μB) / gap (eV).", ""]
+    rows = []
+    for name, entry in data["systems"].items():
+        for state, row in entry["states"].items():
+            cells = []
+            for key, _ in codes:
+                d = row.get(key)
+                cells.append("—" if d is None else
+                             f"{_f(1000 * d['relative_eV'], 0)} / {_f(d['magnetization'], 2)} / "
+                             f"{_f(d['gap_eV'], 2)}")
+            rows.append([name, state] + cells)
+    out += _table(["sistema", "estado"] + [label for _, label in codes], rows)
+    return out + [""]
+
+
 def _infrared() -> list[str]:
     data = _load(VALIDATION / "ir_tb_vs_gpaw.json")
     out = ["## Infrarrojo frente a GPAW (8 moléculas C/H/N, modos de GPAW)", "",
@@ -301,7 +328,7 @@ def render() -> str:
              "Generado por `python -m tbkit.recipes.validation_report` a partir de los "
              "archivos de `validation/` y `tbkit/parameters/`. No editar a mano: un test "
              "comprueba que coincide con los datos.", ""]
-    for part in (_sets, _infrared, _crystals, _tang, _bands, _layers, _nanotubes, _graphene, _nanocoil, _ml):
+    for part in (_sets, _infrared, _crystals, _tang, _bands, _layers, _spin, _nanotubes, _graphene, _nanocoil, _ml):
         lines += part()
     return "\n".join(lines).rstrip() + "\n"
 
