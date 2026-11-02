@@ -176,6 +176,9 @@ def run_gpaw(name: str, state: str) -> Path:
         start = start / start.sum() * fixed
     elif kind == "antiferro":
         start = 0.5 * start
+        if fixed is not None:          # GPAW fixes M at the sum of the initial moments
+            carbon = start != 0
+            start[carbon] -= (start.sum() - fixed) / carbon.sum()
     occupations = {"name": "fermi-dirac", "width": KT_GPAW}
     if spinpol and fixed is not None:
         occupations["fixmagmom"] = True
