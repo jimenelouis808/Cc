@@ -15,7 +15,7 @@ import numpy as np
 from ase import Atoms
 
 from .basis import Basis
-from .neighbors import neighbor_list
+from .neighbors import far_mask, neighbor_list
 from .params import TBModel
 from .slater_koster import block
 
@@ -35,6 +35,7 @@ class Bond:
     j: int
     vector: np.ndarray       # r_j + R - r_i, Å
     shift: np.ndarray        # R in cell coordinates (integers)
+    far: bool = False        # more than model.far_bonds bonds apart: far_hopping added
 
 
 @dataclass
@@ -103,16 +104,22 @@ class System:
         bonds, h_blocks, s_blocks = [], [], []
         if cutoff > 0:
             ii, jj, dd, ss = neighbor_list("ijDS", atoms, cutoff, self_interaction=False)
-            for i, j, vec, shift in zip(ii, jj, dd, ss, strict=True):
+            far = (far_mask(atoms, ii, jj, ss, model.far_bond_cut, model.far_bonds)
+                   if model.far_hopping else np.zeros(len(ii), dtype=bool))
+            for i, j, vec, shift, is_far in zip(ii, jj, dd, ss, far, strict=True):
                 if i not in basis.first or j not in basis.first:
                     continue
                 oa, ob = model.orbitals[symbols[i]], model.orbitals[symbols[j]]
                 hb = block(model, model.hopping, symbols[i], oa, symbols[j], ob, vec)
+                if is_far:
+                    hb = hb + block(model, model.far_hopping, symbols[i], oa, symbols[j], ob,
+                                    vec)
                 sb = (block(model, model.overlap, symbols[i], oa, symbols[j], ob, vec)
                       if not model.orthogonal else None)
                 if not hb.any() and (sb is None or not sb.any()):
                     continue
-                bonds.append(Bond(int(i), int(j), np.asarray(vec), np.asarray(shift)))
+                bonds.append(Bond(int(i), int(j), np.asarray(vec), np.asarray(shift),
+                                  bool(is_far)))
                 h_blocks.append(hb)
                 s_blocks.append(sb)
         onsite = np.array([model.onsite[o.element][o.name[0]] for o in basis.orbitals])

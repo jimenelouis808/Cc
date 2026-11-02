@@ -114,15 +114,18 @@ def band_forces(solution: Solution, energy_weighted: Optional[list] = None) -> n
             rho.append(r)
         return _environment_band_forces(solution, rho)
     symbols = system.atoms.get_chemical_symbols()
-    groups: dict[tuple[str, str], list[int]] = {}
+    groups: dict[tuple[str, str, bool], list[int]] = {}
     for index, bond in enumerate(system.bonds):
-        groups.setdefault((symbols[bond.i], symbols[bond.j]), []).append(index)
+        groups.setdefault((symbols[bond.i], symbols[bond.j], bond.far), []).append(index)
     kpts = np.asarray(solution.kpts, dtype=float)
-    for (el_a, el_b), members in groups.items():
+    for (el_a, el_b, far), members in groups.items():
         bonds = [system.bonds[b] for b in members]
         vectors = np.array([b.vector for b in bonds])
         oa, ob = system.model.orbitals[el_a], system.model.orbitals[el_b]
         dh = _group_derivatives(system, system.model.hopping, el_a, oa, el_b, ob, vectors)
+        if far:
+            dh = dh + _group_derivatives(system, system.model.far_hopping, el_a, oa, el_b, ob,
+                                         vectors)
         ds = (_group_derivatives(system, system.model.overlap, el_a, oa, el_b, ob, vectors)
               if not system.model.orthogonal else None)
         first_i = np.array([system.basis.first[b.i] for b in bonds])

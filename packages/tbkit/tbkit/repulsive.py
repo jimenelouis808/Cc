@@ -26,7 +26,7 @@ import numpy as np
 from ase import Atoms
 from ase.units import Bohr, Hartree
 
-from .neighbors import neighbor_list
+from .neighbors import far_mask, neighbor_list
 from .params import derivative, law_from_dict, law_to_dict
 
 
@@ -295,6 +295,65 @@ class HHContactTerm:
                 "bonds": {k: list(v) for k, v in self.bonds.items()}}
 
 
+@dataclass
+class LayerDispersionTerm:
+    """Wall and dispersion between atoms more than ``exclude`` bonds apart.
+
+    ``E = ½ Σ_ij [a exp(-α (r - 3.35)) - c6 / (r⁶ + r0⁶)] s(r)``, ``s`` a quintic cutoff
+    between ``tail``. Pairs joined by a path of at most ``exclude`` bonds (a bond: closer
+    than ``bond_cut``) are left out: their interaction is the set's own repulsion. With
+    ``exclude = 3`` graphene keeps nothing closer than its fifth shell (4.27 Å), so the
+    term acts between layers, walls, turns of a coil and molecules, at any distance,
+    including a compressed bilayer (a distance switch could not tell a layer 2.5 Å away
+    from a second neighbour).
+
+    The bond graph is fixed by the geometry it is evaluated on: forces are exact for a
+    fixed topology; a bond crossing ``bond_cut`` during a relaxation changes the set of
+    pairs (a jump, stated in ``validity``). Parameters are fitted
+    (``recipes/interlayer_fit.py``) to GPAW PBE+D3(BJ) binding curves.
+    """
+
+    a: float                     # eV, wall at 3.35 Å
+    alpha: float                 # 1/Å
+    c6: float                    # eV Å⁶
+    r0: float                    # Å, damping radius of the dispersion
+    tail: tuple = (9.0, 11.0)    # Å, quintic cutoff
+    bond_cut: float = 1.85       # Å
+    exclude: int = 3             # bonds
+
+    def pair(self, r):
+        """V(r) and dV/dr (arrays)."""
+        r = np.asarray(r, dtype=float)
+        wall = self.a * np.exp(-self.alpha * (r - 3.35))
+        den = r ** 6 + self.r0 ** 6
+        v = wall - self.c6 / den
+        dv = -self.alpha * wall + self.c6 * 6 * r ** 5 / den ** 2
+        r1, rm = self.tail
+        x = np.clip((r - r1) / (rm - r1), 0.0, 1.0)
+        sw = 1 - 10 * x ** 3 + 15 * x ** 4 - 6 * x ** 5
+        dsw = (-30 * x ** 2 + 60 * x ** 3 - 30 * x ** 4) / (rm - r1)
+        return v * sw, dv * sw + v * dsw
+
+    def cutoff(self) -> float:
+        return self.tail[1]
+
+    def energy_and_forces(self, atoms: Atoms) -> tuple[float, np.ndarray]:
+        forces = np.zeros((len(atoms), 3))
+        ii, jj, dd, vv, ss = neighbor_list("ijdDS", atoms, self.tail[1])
+        if len(ii) == 0:
+            return 0.0, forces
+        keep = far_mask(atoms, ii, jj, ss, self.bond_cut, self.exclude)
+        ii, dd, vv = ii[keep], dd[keep], vv[keep]
+        v, dv = self.pair(dd)
+        np.add.at(forces, ii, (dv / dd)[:, None] * vv)
+        return 0.5 * float(v.sum()), forces
+
+    def to_dict(self) -> dict:
+        return {"type": "layer_dispersion", "a": self.a, "alpha": self.alpha, "c6": self.c6,
+                "r0": self.r0, "tail": list(self.tail), "bond_cut": self.bond_cut,
+                "exclude": self.exclude}
+
+
 def repulsive_from_dict(data: dict):
     """A repulsive term from a parameter file's ``repulsive`` entry."""
     from .params import Tail
@@ -313,6 +372,10 @@ def repulsive_from_dict(data: dict):
                              tuple(float(v) for v in data.get("tail", (2.0, 2.4))),
                              {k: (float(v[0]), float(v[1])) for k, v in data["bonds"].items()},
                              tuple(float(v) for v in data.get("h2", (0.9, 1.1))))
+    if kind == "layer_dispersion":
+        return LayerDispersionTerm(float(data["a"]), float(data["alpha"]), float(data["c6"]),
+                                   float(data["r0"]), tuple(float(v) for v in data["tail"]),
+                                   float(data["bond_cut"]), int(data["exclude"]))
     if kind == "acute_angle":
         return AcuteAngleTerm(tuple(float(c) for c in data["coefficients"]),
                               float(data.get("theta0_degrees", 80.0)), float(data.get("r1", 1.7)),

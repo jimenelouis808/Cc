@@ -340,7 +340,9 @@ class Coupling:
             groups.setdefault((len(ri), len(rj)), []).append(b)
         self.groups = []
         for (ni, nj), bonds in groups.items():
-            dh = np.array([_block_derivatives(system, b, model.hopping) for b in bonds])
+            dh = np.array([_block_derivatives(system, b, model.hopping)
+                           + (_block_derivatives(system, b, model.far_hopping) if b.far else 0)
+                           for b in bonds])
             ds = (None if model.orthogonal else
                   np.array([_block_derivatives(system, b, model.overlap) for b in bonds]))
             i = np.array([b.i for b in bonds])

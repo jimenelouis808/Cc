@@ -167,6 +167,43 @@ class Tail:
 
 
 @dataclass(frozen=True)
+class Onset:
+    """``inner`` switched on between ``r0`` and ``r1``: zero below ``r0``, ``inner`` above
+    ``r1``, a quintic step between (value, slope and curvature continuous).
+
+    For a coupling that must not touch the bonds a set was fitted with: the interlayer
+    π hopping of ``recipes/interlayer`` added to Xu's laws, which end at 2.6 Å.
+    """
+
+    inner: DistanceLaw
+    r0: float
+    r1: float
+
+    @property
+    def cutoff(self) -> float:
+        return self.inner.cutoff
+
+    def __call__(self, d):
+        d = np.asarray(d, dtype=float)
+        x = np.clip((d - self.r0) / (self.r1 - self.r0), 0.0, 1.0)
+        return self.inner(np.maximum(d, self.r0)) * x ** 3 * (10 - 15 * x + 6 * x ** 2)
+
+
+@dataclass(frozen=True)
+class Sum:
+    """The sum of several laws (a short-range bond law plus a long-range one)."""
+
+    terms: tuple
+
+    @property
+    def cutoff(self) -> float:
+        return max(t.cutoff for t in self.terms)
+
+    def __call__(self, d):
+        return sum(t(d) for t in self.terms)
+
+
+@dataclass(frozen=True)
 class CutoffPolynomial:
     """``Σ_k c_k (rc - d)^k`` for ``d < rc`` (k = ``first_power``, ``first_power`` + 1...), else 0.
 
@@ -206,6 +243,10 @@ def law_to_dict(law) -> dict:
 
     if isinstance(law, Tail):
         return {"type": "Tail", "inner": law_to_dict(law.inner), "r1": law.r1, "rm": law.rm}
+    if isinstance(law, Onset):
+        return {"type": "Onset", "inner": law_to_dict(law.inner), "r0": law.r0, "r1": law.r1}
+    if isinstance(law, Sum):
+        return {"type": "Sum", "terms": [law_to_dict(t) for t in law.terms]}
     if hasattr(law, "to_dict"):
         return law.to_dict()
     data = asdict(law)
@@ -218,6 +259,10 @@ def law_from_dict(data: dict):
     kind = data.pop("type")
     if kind == "Tail":
         return Tail(law_from_dict(data["inner"]), float(data["r1"]), float(data["rm"]))
+    if kind == "Onset":
+        return Onset(law_from_dict(data["inner"]), float(data["r0"]), float(data["r1"]))
+    if kind == "Sum":
+        return Sum(tuple(law_from_dict(t) for t in data["terms"]))
     if kind == "SkfSpline":
         from .repulsive import SkfSpline
 
@@ -296,6 +341,12 @@ class TBModel:
     #: Environment-dependent hoppings, on-site energies and repulsion
     #: (:class:`tbkit.environment.TangSpec`); None for two-centre models.
     environment: Optional[object] = None
+    #: Laws between atoms more than ``far_bonds`` bonds apart (a bond: closer than
+    #: ``far_bond_cut``), added to ``hopping``: the π coupling between layers, walls and
+    #: turns (``recipes/interlayer_fit``) that must not touch the bonds a set was fitted with.
+    far_hopping: dict[tuple[str, str, str], DistanceLaw] = field(default_factory=dict)
+    far_bonds: int = 3
+    far_bond_cut: float = 1.85
 
     @property
     def orthogonal(self) -> bool:
@@ -318,7 +369,8 @@ class TBModel:
     def cutoff(self) -> float:
         if self.environment is not None:
             return self.environment.cutoff()
-        laws = list(self.hopping.values()) + list(self.overlap.values())
+        laws = (list(self.hopping.values()) + list(self.overlap.values())
+                 + list(self.far_hopping.values()))
         return max((law.cutoff for law in laws), default=0.0)
 
     def electrons_of(self, element: str, coordination: int) -> float:
@@ -422,6 +474,9 @@ def model_from_dict(data: dict) -> TBModel:
         extra_polarizability={el: float(_value(v))
                               for el, v in data.get("extra_polarizability", {}).items()},
         environment=environment,
+        far_hopping=laws(data.get("far_hopping", [])),
+        far_bonds=int(data.get("far", {}).get("bonds", 3)),
+        far_bond_cut=float(data.get("far", {}).get("bond_cut", 1.85)),
     )
 
 
@@ -456,6 +511,9 @@ def model_to_dict(model: TBModel) -> dict:
         data["extra_polarizability"] = dict(model.extra_polarizability)
     if model.repulsive is not None:
         data["repulsive"] = model.repulsive.to_dict()
+    if model.far_hopping:
+        data["far_hopping"] = entries(model.far_hopping)
+        data["far"] = {"bonds": model.far_bonds, "bond_cut": model.far_bond_cut}
     for key in ("reference", "system", "validity", "notes"):
         if key in model.metadata:
             data[key] = model.metadata[key]

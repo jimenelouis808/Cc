@@ -38,3 +38,35 @@ def neighbor_list(quantities: str, atoms: Atoms, cutoff, self_interaction: bool 
     keep = ~np.any(shifts[:, ~pbc] != 0, axis=1)
     result = tuple(np.asarray(a)[keep] for a in out[:len(quantities)])
     return result[0] if len(quantities) == 1 else result
+
+
+def within_bonds(atoms: Atoms, bond_cut: float, steps: int) -> set:
+    """``(i, j, shift)`` for every pair joined by a path of at most ``steps`` bonds (a bond:
+    closer than ``bond_cut``), ``i`` itself included with shift 0. Lattice shifts follow
+    the path, so an image of ``i`` reached through the bonds counts as joined."""
+    ii, jj, ss = neighbor_list("ijS", atoms, bond_cut)
+    graph = [[] for _ in range(len(atoms))]
+    for i, j, sh in zip(ii, jj, ss, strict=True):
+        graph[i].append((int(j), (int(sh[0]), int(sh[1]), int(sh[2]))))
+    out = set()
+    for i in range(len(atoms)):
+        front = {(i, (0, 0, 0))}
+        seen = set(front)
+        for _ in range(steps):
+            nxt = set()
+            for a, sa in front:
+                for b, sb in graph[a]:
+                    key = (b, (sa[0] + sb[0], sa[1] + sb[1], sa[2] + sb[2]))
+                    if key not in seen:
+                        seen.add(key)
+                        nxt.add(key)
+            front = nxt
+        out.update((i, b, sb) for b, sb in seen)
+    return out
+
+
+def far_mask(atoms: Atoms, ii, jj, shifts, bond_cut: float, steps: int) -> np.ndarray:
+    """True for the pairs of a neighbour list that are more than ``steps`` bonds apart."""
+    near = within_bonds(atoms, bond_cut, steps)
+    return np.array([(int(i), int(j), (int(s[0]), int(s[1]), int(s[2]))) not in near
+                     for i, j, s in zip(ii, jj, shifts, strict=True)], dtype=bool)
