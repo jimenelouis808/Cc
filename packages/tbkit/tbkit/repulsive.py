@@ -302,8 +302,8 @@ class LayerDispersionTerm:
     ``E = ½ Σ_ij [a exp(-α (r - 3.35)) - c6 / (r⁶ + r0⁶)] s(r)``, ``s`` a quintic cutoff
     between ``tail``. Pairs joined by a path of at most ``exclude`` bonds (a bond: closer
     than ``bond_cut``) are left out: their interaction is the set's own repulsion. With
-    ``exclude = 3`` graphene keeps nothing closer than its fifth shell (4.27 Å), so the
-    term acts between layers, walls, turns of a coil and molecules, at any distance,
+    ``exclude = 6`` graphene keeps nothing closer than 5.5 Å, so the term acts mostly
+    between layers, walls, turns of a coil and molecules, at any distance,
     including a compressed bilayer (a distance switch could not tell a layer 2.5 Å away
     from a second neighbour).
 
@@ -319,7 +319,7 @@ class LayerDispersionTerm:
     r0: float                    # Å, damping radius of the dispersion
     tail: tuple = (9.0, 11.0)    # Å, quintic cutoff
     bond_cut: float = 1.85       # Å
-    exclude: int = 3             # bonds
+    exclude: int = 6             # bonds
 
     def pair(self, r):
         """V(r) and dV/dr (arrays)."""

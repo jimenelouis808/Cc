@@ -4,8 +4,8 @@ term (``repulsive.LayerDispersionTerm``).
 Closed forms: a π model whose far law reaches only the dimer pair of AB bilayer graphene
 gives, at K, the levels {-V, 0, 0, +V} with V the law at d (the in-plane terms vanish at K);
 two isolated atoms give the pair law itself. Invariances: a far law leaves a monolayer's
-bands untouched while it is shorter than graphene's first pair four bonds apart (4.27 Å),
-and the dispersion term is exactly zero there. Forces of Xu + far law + dispersion match
+bands untouched (no pair of graphene within 5.5 Å is more than six bonds apart), and the
+dispersion term is exactly zero there. Forces of Xu + far law + dispersion match
 finite differences of the energy on a distorted bilayer.
 """
 
@@ -56,14 +56,14 @@ def test_far_law_leaves_monolayer_untouched():
     path = np.array([[0, 0, 0], [0.5, 0, 0], [1 / 3, 1 / 3, 0], [0.2, 0.1, 0]])
     mono = geometry("mono")
     plain = bands(System.build(mono, xu_carbon()), path)
-    far = Tail(Exponential(0.4, 3.35, 7.0, 4.2), 4.0, 4.2)          # shorter than 4.27 Å
+    far = Tail(Exponential(0.4, 3.35, 7.0, 5.5), 5.0, 5.5)
     coupled = _far(xu_carbon(), far, ("pps", "ppp"))
     assert np.allclose(bands(System.build(mono, coupled), path), plain, atol=1e-12)
 
 
 def test_far_bonds_count_by_topology():
     """A compressed bilayer still couples (distance alone could not tell it from a
-    second neighbour), and nothing within three bonds of the same layer does."""
+    second neighbour), and nothing within six bonds of the same layer does."""
     law = Tail(Exponential(0.4, 3.35, 7.0, 3.0), 2.8, 3.0)
     system = System.build(geometry("AA@2.5"), _far(xu_carbon(), law, ("pps",)))
     far = [b for b in system.bonds if b.far]
@@ -77,7 +77,7 @@ def test_dispersion_pair_closed_form_and_zero_in_a_layer():
     v, dv = term.pair(3.6)
     assert energy == pytest.approx(float(v))
     assert forces[1, 2] == pytest.approx(-float(dv))
-    small = LayerDispersionTerm(0.02, 3.0, 15.0, 3.0, tail=(3.5, 4.2))
+    small = LayerDispersionTerm(0.02, 3.0, 15.0, 3.0, tail=(5.0, 5.5))
     e_mono, f_mono = small.energy_and_forces(geometry("mono"))
     assert e_mono == 0.0 and not f_mono.any()
 

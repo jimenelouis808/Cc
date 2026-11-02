@@ -342,13 +342,14 @@ class TBModel:
     #: (:class:`tbkit.environment.TangSpec`); None for two-centre models.
     environment: Optional[object] = None
     #: Laws between atoms more than ``far_bonds`` bonds apart (a bond: closer than
-    #: ``far_bond_cut``), used for those pairs instead of ``hopping``: the π coupling between
+    #: ``far_bond_cut``; 6: no pair of graphene or of a (5,5)/(8,0) tube within 5.5 Å is
+    #: that far, so a sheet never couples to itself), used for those pairs instead of ``hopping``: the π coupling between
     #: layers, walls and turns (``recipes/interlayer_fit``). Pairs within ``far_bonds`` keep
     #: ``hopping``, so the bonds a set was fitted with are untouched, and a layer inside the
     #: range of the in-plane laws (a compressed bilayer) gets only the far law. Empty: every
     #: pair uses ``hopping``.
     far_hopping: dict[tuple[str, str, str], DistanceLaw] = field(default_factory=dict)
-    far_bonds: int = 3
+    far_bonds: int = 6
     far_bond_cut: float = 1.85
 
     @property
@@ -478,7 +479,7 @@ def model_from_dict(data: dict) -> TBModel:
                               for el, v in data.get("extra_polarizability", {}).items()},
         environment=environment,
         far_hopping=laws(data.get("far_hopping", [])),
-        far_bonds=int(data.get("far", {}).get("bonds", 3)),
+        far_bonds=int(data.get("far", {}).get("bonds", 6)),
         far_bond_cut=float(data.get("far", {}).get("bond_cut", 1.85)),
     )
 

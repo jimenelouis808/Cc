@@ -7,14 +7,14 @@ graphene)::
     python -m tbkit.recipes.interlayer_fit energy     # parameters/xu_capas.json
     python -m tbkit.recipes.interlayer_fit report     # validation/interlayer_tb_vs_gpaw.json
 
-Both sets add ``far_hopping`` (``TBModel``): V_ppσ and V_ppπ between atoms more than three
+Both sets add ``far_hopping`` (``TBModel``): V_ppσ and V_ppπ between atoms more than six
 bonds apart, used for those pairs instead of the base set's laws (V_ssσ and V_spσ are zero
 there), ``v0 exp(-β (d/3.35 - 1))`` cut between 5.0 and 5.5 Å. The bonds the base set was
 fitted with are untouched and a compressed bilayer still couples.
 
 * ``c_capas`` = ``c_bandas`` (held fixed) + far hopping fitted to GPAW PBE bands of AB
   bilayers at 3.0, 3.35 and 3.7 Å, the AA bilayer and AB graphite, with monolayer graphene
-  in the fit so the far law cannot spoil it (its first far pairs are in-plane, 4.27 Å).
+  in the fit as a check (no pair of a sheet within 5.5 Å is six bonds apart).
   Electronic only, like ``c_bandas``.
 * ``xu_capas`` = Xu (held fixed) + far hopping fitted to the levels at K of the same systems
   (Xu's in-plane bands are 25 % slow, so whole bands would make the far law compensate them;
@@ -52,6 +52,7 @@ LAYER_WINDOW = (-3.0, 3.0)        # eV around E_F, bands of the layered systems
 K_WINDOW = 1.5                    # eV, levels at K used for xu_capas
 TAIL = (5.0, 5.5)                 # Å
 D_FAR = 3.35                      # Å, d0 of the far laws
+FAR_BONDS = 6                     # more bonds apart than this: "far" (no in-plane pair < 5.5 Å)
 KMESH_TB = 24
 KT = 0.05
 SOURCE = "ajuste a GPAW PBE entre capas de grafeno (tbkit.recipes.interlayer_fit)"
@@ -70,7 +71,7 @@ def far_entries(p) -> list[dict]:
              "law": {"type": "Exponential", "v0": float(v), "d0": D_FAR, "beta": float(b),
                      "cutoff": TAIL[1]},
              "tail": list(TAIL), "unit": "eV",
-             "description": f"V {names[bond]} entre átomos a más de 3 enlaces, en d0 = {D_FAR} Å",
+             "description": f"V {names[bond]} entre átomos a más de {FAR_BONDS} enlaces, en d0 = {D_FAR} Å",
              "source": SOURCE}
             for bond, v, b in (("pps", p[0], p[1]), ("ppp", p[2], p[3]))]
 
@@ -94,7 +95,7 @@ def bands_dict(p, info=None) -> dict:
         "validity": data["validity"] + "; entre capas: 3.0 a 3.7 Å ajustado, más allá "
                     "extrapolado; el acoplamiento lejano no lleva solapamiento",
         "far_hopping": far_entries(p),
-        "far": {"bonds": 3, "bond_cut": 1.85},
+        "far": {"bonds": FAR_BONDS, "bond_cut": 1.85},
     })
     if info:
         data["fit"] = info
@@ -113,16 +114,16 @@ def energy_dict(p_far, p_disp=None, info=None) -> dict:
                     "usa el grafo de enlaces de cada geometría (fijo dentro de una relajación "
                     "sin rupturas)",
         "far_hopping": far_entries(p_far),
-        "far": {"bonds": 3, "bond_cut": 1.85},
+        "far": {"bonds": FAR_BONDS, "bond_cut": 1.85},
     })
     if p_disp is not None:
         a, alpha, c6, r0 = (float(x) for x in p_disp)
         data["repulsive"] = {
             "type": "sum", "unit": "eV", "source": SOURCE,
-            "description": "repulsión de Xu + pared y dispersión entre átomos a más de 3 enlaces",
+            "description": "repulsión de Xu + pared y dispersión entre átomos a más de 6 enlaces",
             "terms": [data["repulsive"],
                       {"type": "layer_dispersion", "a": a, "alpha": alpha, "c6": c6, "r0": r0,
-                       "tail": [9.0, 11.0], "bond_cut": 1.85, "exclude": 3,
+                       "tail": [9.0, 11.0], "bond_cut": 1.85, "exclude": FAR_BONDS,
                        "units": {"a": "eV", "alpha": "1/Å", "c6": "eV Å⁶", "r0": "Å"},
                        "source": SOURCE}]}
     if info:
@@ -223,13 +224,13 @@ def far_pairs(name: str) -> np.ndarray:
 
     atoms = il.geometry(name)
     ii, jj, dd, ss = neighbor_list("ijdS", atoms, 11.0)
-    return dd[far_mask(atoms, ii, jj, ss, 1.85, 3)]
+    return dd[far_mask(atoms, ii, jj, ss, 1.85, FAR_BONDS)]
 
 
 def dispersion_energy(p, distances) -> float:
     from ..repulsive import LayerDispersionTerm
 
-    return 0.5 * float(LayerDispersionTerm(*p).pair(distances)[0].sum())
+    return 0.5 * float(LayerDispersionTerm(*p, exclude=FAR_BONDS).pair(distances)[0].sum())
 
 
 def target(name: str, mono: dict) -> float:
@@ -307,7 +308,7 @@ def fit_energy() -> dict:
                            "rms_meV_per_atom": float(np.sqrt(np.mean(disp.fun ** 2))),
                            "fit_systems": list(ENERGY_FIT),
                            "target": "GPAW PBE + D3(BJ) binding per atom"},
-            "held_out": list(BAND_HELD + ENERGY_HELD)}
+            "held_out": list(dict.fromkeys(BAND_HELD + ENERGY_HELD))}
     OUT_ENERGY.write_text(json.dumps(energy_dict(far.x, disp.x, info), indent=1,
                                      ensure_ascii=False))
     return info
