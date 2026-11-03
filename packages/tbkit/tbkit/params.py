@@ -38,11 +38,18 @@ from typing import Callable, Optional, Protocol
 import numpy as np
 
 BONDS = ("sss", "sps", "pps", "ppp")
-_L = {"s": "s", "px": "p", "py": "p", "pz": "p", "pi": "p"}
+#: Slater-Koster integrals with d orbitals (``slater_koster``).
+D_BONDS = ("sds", "pds", "pdp", "dds", "ddp", "ddd")
+#: Integrals whose two orbitals differ in angular momentum: ordered (lower l on the first
+#: element of the key); the others are symmetric in the elements.
+ORDERED_BONDS = ("sps", "sds", "pds", "pdp")
+D_ORBITALS = ("dxy", "dyz", "dzx", "dx2-y2", "dz2")
+_L = {"s": "s", "px": "p", "py": "p", "pz": "p", "pi": "p",
+      **{name: "d" for name in D_ORBITALS}}
 
 
 def angular(orbital: str) -> str:
-    """``"s"`` or ``"p"`` for an orbital name."""
+    """``"s"``, ``"p"`` or ``"d"`` for an orbital name."""
     return _L[orbital]
 
 
@@ -362,11 +369,12 @@ class TBModel:
     def law(self, table: dict, el1: str, el2: str, bond: str) -> Optional[DistanceLaw]:
         """The law for ``bond`` between ``el1`` and ``el2``.
 
-        ``sss``, ``pps`` and ``ppp`` are symmetric in the elements; ``sps`` is
-        ordered (s on ``el1``), and its mirror is ``(el2, el1, "sps")``.
+        ``sss``, ``pps``, ``ppp``, ``dds``, ``ddp`` and ``ddd`` are symmetric in the
+        elements; ``sps``, ``sds``, ``pds`` and ``pdp`` are ordered (the lower angular
+        momentum on ``el1``), and their mirror is the key with the elements exchanged.
         """
         found = table.get((el1, el2, bond))
-        if found is None and bond != "sps":
+        if found is None and bond not in ORDERED_BONDS:
             found = table.get((el2, el1, bond))
         return found
 
