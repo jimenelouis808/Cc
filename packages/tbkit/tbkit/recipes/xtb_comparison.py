@@ -307,8 +307,8 @@ def crystals() -> dict:
             atoms.calc = tb_calculator(set_name, kpts)
             e = float(atoms.get_potential_energy())
             row["tb"] = {"force_rmse": _rms(atoms.get_forces() - ref.forces), "energy": e}
-            reps = _repeats(ref.atoms)
-            big = ref.atoms.repeat(reps)
+            reps = _repeats(base.atoms)        # the relaxed cell's: a strained point that
+            big = ref.atoms.repeat(reps)       # dips under the length must not grow (x27 once)
             for method in METHODS:
                 try:
                     big.calc = xtb_calculator(method)
