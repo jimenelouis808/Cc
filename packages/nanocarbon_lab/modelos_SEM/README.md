@@ -41,11 +41,11 @@ de 900 °C, eso lo cierra en una tarde; el SEM solo lo sugiere.
 | `barra_T_C` | 2322 | C1818Fe252Se252 |
 | `barra_T_NSe` | 2322 | C1663Fe252N109Se298 |
 | `barra_T_NSeO` | 2337 | C1664H6Fe252N110O5Se300 |
-| `particula_Fe3C_nucleo_desnudo` | 460 | C127Fe333 |
-| `particula_Fe3C_C` | 2770 | C2437Fe333 |
-| `particula_Fe3C_NSe` | 2770 | C2241Fe333N139Se57 |
-| `particula_Fe3C_NSeO` | 2795 | C2243H10Fe333N141O9Se59 |
-| `particula_Fe3C_interior` | 147 | C43Fe104 |
+| `particula_Fe3C_nucleo_desnudo` | 578 | C156Fe422 |
+| `particula_Fe3C_C` | 2838 | C2416Fe422 |
+| `particula_Fe3C_NSe` | 2838 | C2224Fe422N136Se56 |
+| `particula_Fe3C_NSeO` | 2863 | C2226H10Fe422N138O9Se58 |
+| `particula_Fe3C_interior` | 55 | C17Fe38 |
 | `nanotubo_C` | 3000 | C3000 |
 | `nanotubo_NSe` | 3000 | C2745N180Se75 |
 | `nanotubo_NSeO` | 3030 | C2747H12N182O10Se79 |
@@ -272,6 +272,24 @@ pared que está tensa porque se la está sujetando.
 una excepción* en vez de devolver una pared mala, así que una llamada
 sin guardia pierde la corrida entera por una familia. Se prueba 3, luego
 1, luego 0, y la que se usó se dice.
+
+## La tabla puede mentir, y mintió
+
+`modelos.json` se escribe entero en cada corrida, pero una corrida
+parcial (`--solo`) **conserva las filas de las familias que no
+construyó**, o perdería la mitad del catálogo. Eso tiene un modo de
+fallo propio y pasó: los modelos de la familia Fe3C se reconstruyeron a
+2838 átomos y su fila siguió diciendo 2770, porque ninguna corrida
+posterior tocó esa familia. **Las estructuras estuvieron bien todo el
+tiempo y la tabla fue la que mintió**, que es peor que equivocarse
+cualquiera de los dos por separado: un `.xyz` malo se ve en el dibujo,
+una tabla mala se cita en un artículo.
+
+Ahora cada fila conservada se comprueba contra la primera línea de su
+`.xyz` —que es el número de átomos— y se corrige diciéndolo en voz
+alta. Verificado adrede: metiendo un 1234 a mano en la fila de
+`particula_Fe3C_C`, la siguiente corrida parcial avisa y la devuelve a
+2838.
 
 ## Para comparar: las hojas de contacto
 

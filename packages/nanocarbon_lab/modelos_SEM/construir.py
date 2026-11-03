@@ -1035,6 +1035,22 @@ def main() -> None:
         # A partial run must not wipe the families it did not build.
         keep = [row for row in json.loads(out.read_text(encoding="utf-8"))
                 if not any(row["modelo"] == new["modelo"] for new in rows)]
+        # ...and a row it keeps has to still describe the file on disk.
+        # It happened: the Fe3C family's models were rebuilt to 2838
+        # atoms while its row went on saying 2770, because a run that
+        # did not build that family carried the old row forward. The
+        # structures were right the whole time and the TABLE lied,
+        # which is worse than either being wrong on its own.
+        for row in keep:
+            path = XYZ / f"{row['modelo']}.xyz"
+            if not path.exists():
+                continue
+            on_disk = int(path.read_text(encoding="utf-8").split("\n", 1)[0])
+            if on_disk != int(row["atomos"]):
+                print(f"    *** {row['modelo']}: la tabla decía "
+                      f"{row['atomos']} átomos y el archivo tiene "
+                      f"{on_disk}; se corrige la tabla")
+                row["atomos"] = on_disk
         rows = keep + rows
     out.write_text(json.dumps(rows, indent=2, ensure_ascii=False),
                    encoding="utf-8")
