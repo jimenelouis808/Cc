@@ -45,7 +45,7 @@ from .params import angular, read_parameter_file
 from .scc import anderson
 from .solver import Solution, _fermi_dirac, fermi_level
 
-SHELLS = ("s", "p")
+SHELLS = ("s", "p", "d")
 
 
 @dataclass

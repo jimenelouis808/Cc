@@ -31,20 +31,20 @@ _LORDER = {"s": 0, "p": 1, "d": 2}
 _R3 = np.sqrt(3.0)
 
 
-def _sd(ob, l, m, n, sds):
+def _sd(ob, x, y, z, sds):
     if ob == "dxy":
-        return _R3 * l * m * sds
+        return _R3 * x * y * sds
     if ob == "dyz":
-        return _R3 * m * n * sds
+        return _R3 * y * z * sds
     if ob == "dzx":
-        return _R3 * n * l * sds
+        return _R3 * z * x * sds
     if ob == "dx2-y2":
-        return 0.5 * _R3 * (l * l - m * m) * sds
-    return (n * n - 0.5 * (l * l + m * m)) * sds                     # dz2
+        return 0.5 * _R3 * (x * x - y * y) * sds
+    return (z * z - 0.5 * (x * x + y * y)) * sds                     # dz2
 
 
-def _pd(oa, ob, l, m, n, pds, pdp):
-    c = {"px": l, "py": m, "pz": n}
+def _pd(oa, ob, x, y, z, pds, pdp):
+    c = {"px": x, "py": y, "pz": z}
     if ob in ("dxy", "dyz", "dzx"):
         # d_{ab}: x-y, y-z or z-x; the p axis is one of the two, or the third
         first, second = {"dxy": ("px", "py"), "dyz": ("py", "pz"), "dzx": ("pz", "px")}[ob]
@@ -54,84 +54,84 @@ def _pd(oa, ob, l, m, n, pds, pdp):
         if oa == second:
             ca, cb = c[second], c[first]
             return _R3 * ca * ca * cb * pds + cb * (1 - 2 * ca * ca) * pdp
-        return (_R3 * pds - 2 * pdp) * l * m * n
+        return (_R3 * pds - 2 * pdp) * x * y * z
     if ob == "dx2-y2":
-        lm = l * l - m * m
+        lm = x * x - y * y
         if oa == "px":
-            return 0.5 * _R3 * l * lm * pds + l * (1 - lm) * pdp
+            return 0.5 * _R3 * x * lm * pds + x * (1 - lm) * pdp
         if oa == "py":
-            return 0.5 * _R3 * m * lm * pds - m * (1 + lm) * pdp
-        return 0.5 * _R3 * n * lm * pds - n * lm * pdp
-    q = n * n - 0.5 * (l * l + m * m)                                 # dz2
+            return 0.5 * _R3 * y * lm * pds - y * (1 + lm) * pdp
+        return 0.5 * _R3 * z * lm * pds - z * lm * pdp
+    q = z * z - 0.5 * (x * x + y * y)                                 # dz2
     if oa == "px":
-        return l * q * pds - _R3 * l * n * n * pdp
+        return x * q * pds - _R3 * x * z * z * pdp
     if oa == "py":
-        return m * q * pds - _R3 * m * n * n * pdp
-    return n * q * pds + _R3 * n * (l * l + m * m) * pdp
+        return y * q * pds - _R3 * y * z * z * pdp
+    return z * q * pds + _R3 * z * (x * x + y * y) * pdp
 
 
 _DD = ("dxy", "dyz", "dzx", "dx2-y2", "dz2")
 
 
-def _dd(oa, ob, l, m, n, s, p, d):
+def _dd(oa, ob, x, y, z, s, p, d):
     i, j = _DD.index(oa), _DD.index(ob)
     if i > j:                                    # d-d is symmetric in the pair
         oa, ob = ob, oa
-    l2, m2, n2 = l * l, m * m, n * n
+    x2, y2, z2 = x * x, y * y, z * z
     key = (oa, ob)
     if key == ("dxy", "dxy"):
-        return 3 * l2 * m2 * s + (l2 + m2 - 4 * l2 * m2) * p + (n2 + l2 * m2) * d
+        return 3 * x2 * y2 * s + (x2 + y2 - 4 * x2 * y2) * p + (z2 + x2 * y2) * d
     if key == ("dyz", "dyz"):
-        return 3 * m2 * n2 * s + (m2 + n2 - 4 * m2 * n2) * p + (l2 + m2 * n2) * d
+        return 3 * y2 * z2 * s + (y2 + z2 - 4 * y2 * z2) * p + (x2 + y2 * z2) * d
     if key == ("dzx", "dzx"):
-        return 3 * n2 * l2 * s + (n2 + l2 - 4 * n2 * l2) * p + (m2 + n2 * l2) * d
+        return 3 * z2 * x2 * s + (z2 + x2 - 4 * z2 * x2) * p + (y2 + z2 * x2) * d
     if key == ("dxy", "dyz"):
-        return 3 * l * m2 * n * s + l * n * (1 - 4 * m2) * p + l * n * (m2 - 1) * d
+        return 3 * x * y2 * z * s + x * z * (1 - 4 * y2) * p + x * z * (y2 - 1) * d
     if key == ("dxy", "dzx"):
-        return 3 * l2 * m * n * s + m * n * (1 - 4 * l2) * p + m * n * (l2 - 1) * d
+        return 3 * x2 * y * z * s + y * z * (1 - 4 * x2) * p + y * z * (x2 - 1) * d
     if key == ("dyz", "dzx"):
-        return 3 * l * m * n2 * s + l * m * (1 - 4 * n2) * p + l * m * (n2 - 1) * d
-    lm = l2 - m2
-    q = n2 - 0.5 * (l2 + m2)
+        return 3 * x * y * z2 * s + x * y * (1 - 4 * z2) * p + x * y * (z2 - 1) * d
+    lm = x2 - y2
+    q = z2 - 0.5 * (x2 + y2)
     if key == ("dxy", "dx2-y2"):
-        return 1.5 * l * m * lm * s - 2 * l * m * lm * p + 0.5 * l * m * lm * d
+        return 1.5 * x * y * lm * s - 2 * x * y * lm * p + 0.5 * x * y * lm * d
     if key == ("dyz", "dx2-y2"):
-        return 1.5 * m * n * lm * s - m * n * (1 + 2 * lm) * p + m * n * (1 + 0.5 * lm) * d
+        return 1.5 * y * z * lm * s - y * z * (1 + 2 * lm) * p + y * z * (1 + 0.5 * lm) * d
     if key == ("dzx", "dx2-y2"):
-        return 1.5 * n * l * lm * s + n * l * (1 - 2 * lm) * p - n * l * (1 - 0.5 * lm) * d
+        return 1.5 * z * x * lm * s + z * x * (1 - 2 * lm) * p - z * x * (1 - 0.5 * lm) * d
     if key == ("dxy", "dz2"):
-        return (_R3 * l * m * q * s - 2 * _R3 * l * m * n2 * p
-                + 0.5 * _R3 * l * m * (1 + n2) * d)
+        return (_R3 * x * y * q * s - 2 * _R3 * x * y * z2 * p
+                + 0.5 * _R3 * x * y * (1 + z2) * d)
     if key == ("dyz", "dz2"):
-        return (_R3 * m * n * q * s + _R3 * m * n * (l2 + m2 - n2) * p
-                - 0.5 * _R3 * m * n * (l2 + m2) * d)
+        return (_R3 * y * z * q * s + _R3 * y * z * (x2 + y2 - z2) * p
+                - 0.5 * _R3 * y * z * (x2 + y2) * d)
     if key == ("dzx", "dz2"):
-        return (_R3 * l * n * q * s + _R3 * l * n * (l2 + m2 - n2) * p
-                - 0.5 * _R3 * l * n * (l2 + m2) * d)
+        return (_R3 * x * z * q * s + _R3 * x * z * (x2 + y2 - z2) * p
+                - 0.5 * _R3 * x * z * (x2 + y2) * d)
     if key == ("dx2-y2", "dx2-y2"):
-        return 0.75 * lm * lm * s + (l2 + m2 - lm * lm) * p + (n2 + 0.25 * lm * lm) * d
+        return 0.75 * lm * lm * s + (x2 + y2 - lm * lm) * p + (z2 + 0.25 * lm * lm) * d
     if key == ("dx2-y2", "dz2"):
-        return (0.5 * _R3 * lm * q * s - _R3 * n2 * lm * p
-                + 0.25 * _R3 * (1 + n2) * lm * d)
-    return q * q * s + 3 * n2 * (l2 + m2) * p + 0.75 * (l2 + m2) ** 2 * d   # dz2, dz2
+        return (0.5 * _R3 * lm * q * s - _R3 * z2 * lm * p
+                + 0.25 * _R3 * (1 + z2) * lm * d)
+    return q * q * s + 3 * z2 * (x2 + y2) * p + 0.75 * (x2 + y2) ** 2 * d   # dz2, dz2
 
 
 def _element(oa, ob, la, lb, c, v, el_a, el_b):
     """One matrix element (scalar or array over bonds) for ``la <= lb``."""
-    l, m, n = c[..., 0], c[..., 1], c[..., 2]
+    x, y, z = c[..., 0], c[..., 1], c[..., 2]
     if la == "s" and lb == "s":
         return v("sss", el_a, el_b)
     if la == "s" and lb == "p":
         return c[..., _AXIS[ob]] * v("sps", el_a, el_b)
     if la == "s" and lb == "d":
-        return _sd(ob, l, m, n, v("sds", el_a, el_b))
+        return _sd(ob, x, y, z, v("sds", el_a, el_b))
     if la == "p" and lb == "p":
         ca, cb = c[..., _AXIS[oa]], c[..., _AXIS[ob]]
         delta = 1.0 if oa == ob else 0.0
         return ca * cb * v("pps", el_a, el_b) + (delta - ca * cb) * v("ppp", el_a, el_b)
     if la == "p" and lb == "d":
-        return _pd(oa, ob, l, m, n, v("pds", el_a, el_b), v("pdp", el_a, el_b))
-    return _dd(oa, ob, l, m, n, v("dds", el_a, el_b), v("ddp", el_a, el_b),
+        return _pd(oa, ob, x, y, z, v("pds", el_a, el_b), v("pdp", el_a, el_b))
+    return _dd(oa, ob, x, y, z, v("dds", el_a, el_b), v("ddp", el_a, el_b),
                v("ddd", el_a, el_b))
 
 

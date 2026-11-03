@@ -30,10 +30,12 @@ import numpy as np
 from ..settings import Param, add_arguments, apply
 
 OUT = Path("tbkit/parameters/spin_constants.json")
-ELEMENTS = ("H", "B", "C", "N", "O", "P", "S", "Se")
+#: Transition metals: s, p and d valence shells (the p one empty in the free atom).
+D_ELEMENTS = ("Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Mo", "Pd", "Ag")
+ELEMENTS = ("H", "B", "C", "N", "O", "P", "S", "Se") + D_ELEMENTS
 DELTA = 0.05          # electrons
 XC = "PBE"
-NAMES = "sp"
+NAMES = "spd"
 
 
 def _atom(symbol: str, f_lsn=None):
@@ -51,12 +53,22 @@ def _paramagnetic(symbol: str) -> dict:
         for i in range(len(f[ang][0])):
             total = f[ang][0][i] + f[ang][1][i]
             f[ang][0][i] = f[ang][1][i] = total / 2
+    if 2 in valence_shells(symbol):
+        # the valence p of a transition metal (4p of Fe, 5p of Mo) is empty in the free atom
+        # and absent from GPAW's configuration: add it, at the principal number of the s
+        n_s = len(f[0][0])
+        while len(f[1][0]) + 1 < n_s:
+            f[1][0].append(0.0)
+            f[1][1].append(0.0)
     return f
 
 
 def valence_shells(symbol: str) -> tuple[int, ...]:
-    """Angular momenta of the model's valence shells: s for H, s and p otherwise."""
-    return (0,) if symbol == "H" else (0, 1)
+    """Angular momenta of the model's valence shells: s for H, s, p and d for the
+    transition metals of ``D_ELEMENTS``, s and p otherwise."""
+    if symbol == "H":
+        return (0,)
+    return (0, 1, 2) if symbol in D_ELEMENTS else (0, 1)
 
 
 def _levels(symbol: str, f_lsn: dict, shells) -> dict:
@@ -76,11 +88,20 @@ def spin_constants(symbol: str) -> np.ndarray:
     for j, lp in enumerate(shells):
         slope = {}
         for spin in (0, 1):
-            plus, minus = copy.deepcopy(f0), copy.deepcopy(f0)
-            plus[lp][spin][-1] += DELTA
-            minus[lp][spin][-1] -= DELTA
-            e_plus, e_minus = _levels(symbol, plus, shells), _levels(symbol, minus, shells)
-            slope[spin] = {ang: (e_plus[ang] - e_minus[ang]) / (2 * DELTA) for ang in shells}
+            if f0[lp][spin][-1] >= DELTA:            # central differences
+                plus, minus = copy.deepcopy(f0), copy.deepcopy(f0)
+                plus[lp][spin][-1] += DELTA
+                minus[lp][spin][-1] -= DELTA
+                e_plus, e_minus = _levels(symbol, plus, shells), _levels(symbol, minus, shells)
+                slope[spin] = {ang: (e_plus[ang] - e_minus[ang]) / (2 * DELTA)
+                               for ang in shells}
+            else:                                    # an empty shell: one-sided, 2nd order
+                one, two = copy.deepcopy(f0), copy.deepcopy(f0)
+                one[lp][spin][-1] += DELTA
+                two[lp][spin][-1] += 2 * DELTA
+                e0, e1, e2 = (_levels(symbol, f, shells) for f in (f0, one, two))
+                slope[spin] = {ang: (-3 * e0[ang] + 4 * e1[ang] - e2[ang]) / (2 * DELTA)
+                               for ang in shells}
         for i, ang in enumerate(shells):
             out[i, j] = 0.5 * (slope[0][ang] - slope[1][ang])
     return 0.5 * (out + out.T)          # symmetric up to the finite-difference error

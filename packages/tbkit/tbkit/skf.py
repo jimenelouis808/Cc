@@ -24,8 +24,12 @@ B> comes from ``B-A.skf``. Checked against DFTB+'s reader
 (``src/dftbp/dftbplus/parser.F90``): ``A-B.skf`` fills ``skData12`` for the
 pair (A, B), and ``getFullTable`` takes an (l1 on A, l2 on B) integral from
 ``skData12`` when l1 <= l2 and from ``skData21`` (``B-A.skf``) otherwise; the
-column is ``Hsp0`` in both cases. The d columns are read and ignored (s/p
-basis only).
+column is ``Hsp0`` in both cases. The d integrals follow the same rule: in ``A-B.skf``
+``Hsd0``, ``Hpd0`` and ``Hpd1`` are <s or p on A | d on B> (tbkit's ``(A, B, "sds")``,
+``"pds"``, ``"pdp"``), ``Hdd0..2`` are dd σ, π, δ. They are read when the basis asked for
+has d orbitals (``"dxy", "dyz", "dzx", "dx2-y2", "dz2"``); the rotation of every block is
+tbkit's Slater-Koster table, tested for rotational covariance. That a published d set gives
+DFTB+'s numbers is still to be checked against DFTB+ on one of its own sets.
 
 A set read from ``.skf`` files is flagged ``scc=True``: DFTB parameters are
 made for a self-consistent-charge ground state, so calculators and
@@ -46,10 +50,17 @@ from typing import Optional
 import numpy as np
 from ase.units import Bohr, Hartree
 
-from .params import Table, TBModel
+from .params import ORDERED_BONDS, Table, TBModel, angular
 
 _COLUMNS = ("Hdd0", "Hdd1", "Hdd2", "Hpd0", "Hpd1", "Hpp0", "Hpp1", "Hsd0", "Hsp0", "Hss0",
             "Sdd0", "Sdd1", "Sdd2", "Spd0", "Spd1", "Spp0", "Spp1", "Ssd0", "Ssp0", "Sss0")
+
+
+#: tbkit's integral -> (Hamiltonian column, overlap column) of an ``A-B.skf``.
+COLUMN_OF_BOND = (("sss", "Hss0", "Sss0"), ("sps", "Hsp0", "Ssp0"), ("pps", "Hpp0", "Spp0"),
+                  ("ppp", "Hpp1", "Spp1"), ("sds", "Hsd0", "Ssd0"), ("pds", "Hpd0", "Spd0"),
+                  ("pdp", "Hpd1", "Spd1"), ("dds", "Hdd0", "Sdd0"), ("ddp", "Hdd1", "Sdd1"),
+                  ("ddd", "Hdd2", "Sdd2"))
 
 
 @dataclass
@@ -152,13 +163,13 @@ def load_skf_set(directory: str | Path, orbitals: dict[str, tuple[str, ...]],
             if sk.repulsive is not None and (b, a) not in splines:
                 splines[(a, b)] = sk.repulsive
             if a == b:
-                onsite[a] = {"s": sk.onsite["s"], "p": sk.onsite["p"]}
-                has_p = any(o != "s" for o in orbitals[a])
-                hubbard[a] = sk.hubbard["p" if has_p else "s"]
-                valence[a] = sk.occupations["s"] + (sk.occupations["p"] if has_p else 0.0)
-            for bond, h_col, s_col in (("sss", "Hss0", "Sss0"), ("sps", "Hsp0", "Ssp0"),
-                                       ("pps", "Hpp0", "Spp0"), ("ppp", "Hpp1", "Spp1")):
-                if bond != "sps" and (b, a, bond) in hopping:
+                shells = {angular(o) for o in orbitals[a]}
+                onsite[a] = {k: sk.onsite[k] for k in ("s", "p", "d") if k in shells or k != "d"}
+                top = "d" if "d" in shells else "p" if "p" in shells else "s"
+                hubbard[a] = sk.hubbard[top]        # one U per atom (DFTB2): the top shell's
+                valence[a] = sum(sk.occupations[k] for k in ("s", "p", "d") if k in shells)
+            for bond, h_col, s_col in COLUMN_OF_BOND:
+                if bond not in ORDERED_BONDS and (b, a, bond) in hopping:
                     continue
                 for store, column in ((hopping, h_col), (overlap, s_col)):
                     law = _law(sk.r, sk.table[column])
