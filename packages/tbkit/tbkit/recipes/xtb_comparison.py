@@ -10,7 +10,8 @@ Run from packages/tbkit (needs ``tblite``, optional: ``uv pip install tblite``):
     python -m tbkit.recipes.xtb_comparison timing        # wall time on growing flakes
     python -m tbkit.recipes.xtb_comparison report        # validation/xtb_vs_tbkit.json
 
-Every stage caches its result in ``out/xtb/<stage>.json``; ``report`` gathers them.
+Every stage caches its result in ``out/xtb/<stage>.json`` (crystals and layers also one file
+per crystal or point, so a restart resumes); ``report`` gathers them.
 
 What is compared, and what it means. The references are GPAW PBE (LCAO dzp for molecules
 and crystals, plane waves for layers and spin). tbkit's sets were fitted to PBE; GFN1 and
@@ -293,6 +294,10 @@ def crystals() -> dict:
         group = [r for r in refs if r.group == name]
         if not group:
             continue
+        cached = WORK / "crystals" / f"{name}.json"          # resumable: one file per crystal
+        if cached.exists():
+            out[name] = json.loads(cached.read_text())
+            continue
         base = next(r for r in group if r.label.endswith("/relaxed"))
         rows = []
         energies = {}
@@ -329,6 +334,7 @@ def crystals() -> dict:
                                                            - (energies[r["label"]] - base.energy))
                                                        for r in dist])) if b and dist else None}
         out[name] = {"set": set_name, "atoms": len(base.atoms), "rows": rows, "summary": summary}
+        _write(f"crystals/{name}", out[name])
     _write("crystals", out)
     return out
 
@@ -344,6 +350,10 @@ def layers() -> dict:
             ref = il.load(name)
         except FileNotFoundError:
             continue
+        cached = WORK / "layers" / f"{il._slug(name)}.json"   # resumable: one file per point
+        if cached.exists():
+            energies[name] = json.loads(cached.read_text())
+            continue
         atoms = il.geometry(name)
         atoms.pbc = True          # slabs: the same 25 Å cell as GPAW
         reps = (6, 6, 1)
@@ -353,6 +363,7 @@ def layers() -> dict:
             big.calc = xtb_calculator(method)
             row[method] = float(big.get_potential_energy()) / np.prod(reps)
         energies[name] = row
+        _write(f"layers/{il._slug(name)}", row)
         print(name, row, flush=True)
     out = {}
     mono = energies["mono"]
