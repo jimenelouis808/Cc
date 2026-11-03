@@ -202,6 +202,87 @@ W del carbono (átomo libre, GPAW): W_ss = -0,833 eV, W_sp = -0,682 eV, W_pp = -
 | CH2 | T | 0 / 2,00 / 2,37 | 0 / 2,00 / 1,17 | 0 / 2,00 / 3,15 | — |
 | CH2 | S | 1129 / 0,00 / 0,00 | -38 / 0,00 / 1,26 | 966 / 0,00 / 1,26 | — |
 
+## tbkit frente a GFN1-xTB y GFN2-xTB (tblite)
+
+Fuente: `validation/xtb_vs_tbkit.json` (receta `xtb_comparison`). tbkit (sus conjuntos ajustados a PBE) frente a GFN1-xTB y GFN2-xTB (tblite) sobre las mismas referencias GPAW PBE. xTB no se ajustó a PBE: parte de su diferencia es el error del propio PBE.
+
+Moléculas, en las geometrías de GPAW: mediana por estructura del RMSE de fuerzas (eV/Å, equilibrio / distorsionadas), MAE de la energía relativa a la de equilibrio de cada molécula (eV) y MAE del gap HOMO-LUMO frente al de Kohn-Sham (eV). Celda: tbkit · GFN1 · GFN2.
+
+| referencias | fuerzas | energía relativa | gap |
+|---|---|---|---|
+| `gpaw_chn.json` (xu_chn, 118) | 0,36/0,39 · 0,48/0,58 · 0,50/0,64 | 0,08 · 0,18 · 0,21 | 0,73 · 0,74 · 2,26 |
+| `gpaw_chno.json` (xu_chno, 127) | 0,54/0,57 · 0,76/0,76 · 0,74/0,77 | 0,24 · 0,20 · 0,20 | 0,49 · 0,74 · 1,38 |
+| `gpaw_b.json` (xu_chnob, 66) | 0,26/0,31 · 0,46/0,57 · 0,53/0,63 | 0,09 · 0,20 · 0,23 | 0,50 · 0,60 · 0,77 |
+| `gpaw_p.json` (xu_chnop, 73) | 0,41/0,36 · 0,48/0,56 · 0,48/0,61 | 0,10 · 0,22 · 0,25 | 0,45 · 0,86 · 1,23 |
+| `gpaw_s.json` (xu_chnos, 95) | 0,41/0,41 · 0,59/0,65 · 0,54/0,70 | 0,08 · 0,21 · 0,23 | 0,82 · 0,42 · 0,59 |
+| `gpaw_se.json` (xu_chnose, 87) | 0,30/0,29 · 0,44/0,57 · 0,46/0,56 | 0,06 · 0,18 · 0,18 | 0,51 · 0,39 · 0,57 |
+
+Frecuencias armónicas tras relajar con cada método (63 moléculas): mediana del RMS de los modos internos frente a GPAW: tbkit 92 cm⁻¹ (80 con el factor de escala de cada conjunto), GFN1 67, GFN2 56.
+
+Cristales y láminas (xTB en superceldas, solo Γ): mediana del RMSE de fuerzas (eV/Å) / MAE de la energía de las distorsiones (eV por celda de GPAW). Celda: tbkit · GFN1 · GFN2.
+
+| cristal | conjunto | fuerzas / energía |
+|---|---|---|
+| graphene | xu_chno | 0,09/0,21 · 0,14/0,43 · 0,15/0,46 |
+| graphene_N | xu_chn | 0,21/0,12 · 0,20/0,44 · 0,23/0,47 |
+| graphene_N3V | xu_chn | 0,44/0,38 · 0,25/0,47 · 0,36/0,58 |
+| graphene_B | xu_chnob | 0,42/0,23 · 0,19/0,40 · 0,21/0,42 |
+| graphene_S | xu_chnos | 0,22/0,12 · 0,20/0,41 · 0,20/0,44 |
+| graphene_P | xu_chnop | 0,17/0,17 · 0,18/0,43 · 0,20/0,45 |
+| graphene_Se | xu_chnose | 0,29/0,15 · 0,21/0,45 · 0,21/0,50 |
+| graphene_epoxide | xu_chno | 0,60/0,33 · 0,38/0,29 · 0,34/0,35 |
+| graphene_OH | xu_chno | 0,22/0,13 · 0,29/0,43 · 0,28/0,47 |
+| graphane | xu_chn | 0,18/0,03 · 0,55/0,10 · 0,47/0,07 |
+| hBN | xu_chnob | 0,23/0,23 · 0,22/0,29 · 0,24/0,30 |
+| cnt80_N | xu_chn | 0,31/0,25 · 0,27/0,74 · 0,30/0,76 |
+| diamond_N | xu_chn | 0,62/0,40 · 0,21/0,71 · 0,21/0,37 |
+
+Enlace entre capas (meV/átomo) frente a PBE+D3(BJ):
+
+| sistema | PBE+D3 | GFN1 | GFN2 | xu_capas |
+|---|---|---|---|---|
+| AB@3.35 | -24,1 | -25,9 | -26,4 | -23,8 |
+| AB@3.0 | -13,3 | -25,8 | -32,3 | -10,7 |
+| AB@3.7 | -22,1 | -21,3 | -17,8 | -22,6 |
+| AA@3.35 | -16,7 | -27,7 | -28,6 | -18,6 |
+| graphite@3.35 | -53,5 | -47,3 | -39,4 | -51,4 |
+| ABC@3.35 | -33,5 | -34,9 | -31,8 | -33,1 |
+| AB@2.8 | 7,8 | -17,6 | -28,9 | -0,4 |
+| AB@3.2 | -22,1 | -27,0 | -29,8 | -20,4 |
+| AB@3.5 | -24,0 | -24,1 | -22,7 | -24,3 |
+| AB@4.0 | -18,3 | -17,2 | -11,6 | -18,6 |
+| AB@4.5 | -12,3 | -11,5 | -4,3 | -11,4 |
+| AB@5.5 | -5,4 | -4,3 | 2,5 | -4,7 |
+| AA@2.8 | 47,0 | -16,3 | -27,5 | 52,0 |
+| AA@3.0 | 8,3 | -27,9 | -34,9 | 11,5 |
+| AA@3.2 | -10,0 | -29,3 | -32,6 | -10,7 |
+| AA@3.5 | -19,7 | -25,2 | -24,1 | -21,3 |
+| AA@3.7 | -20,0 | -21,8 | -18,5 | -21,0 |
+| AA@4.0 | -17,5 | -17,4 | -11,7 | -17,9 |
+| AA@4.5 | -12,1 | -11,5 | -4,2 | -11,5 |
+| AA@5.5 | -5,4 | -4,3 | 2,5 | -4,7 |
+| graphite@3.2 | -50,5 | -49,1 | -41,7 | -47,0 |
+| graphite@3.5 | -52,4 | -43,9 | -34,8 | -51,6 |
+| slide@0.5 | -20,8 | -26,9 | -27,7 | -21,4 |
+| slide@1.5 | -23,4 | -26,2 | -26,8 | -23,2 |
+
+E(M = 0) − E(M = 2), meV. xTB con polarización de espín (spGFN de tblite), uhf = 0 frente a uhf = 2; tbkit: SCC con espín (W del átomo y W·λ); GPAW: PBE con espín, M fija. Sin la polarización de espín GFN no separa triplete de singlete (≈ −70 meV en los tres sistemas). Fenalenilo fuera: su estado sin espín de GPAW (SOMO semiocupado) no tiene análogo directo en xTB.
+
+| sistema | GPAW | spGFN1 | spGFN2 | tbkit W | tbkit W·λ |
+|---|---|---|---|---|---|
+| O2 | 1112 | 686 | 686 | 758 | 1257 |
+| CH2 | 1129 | 717 | 859 | -38 | 966 |
+| triangulene | 338 | 95 | 95 | 154 | 352 |
+
+segundos de reloj por energía + fuerzas de un flake triangular H-saturado (OMP_NUM_THREADS=2), tbkit xu_chn con SCC (kT 0,1 eV) frente a tblite (300 K):
+
+| átomos | tbkit (s) | GFN1 (s) | GFN2 (s) |
+|---|---|---|---|
+| 34 | 0,13 | 0,07 | 0,05 |
+| 64 | 0,42 | 0,55 | 0,46 |
+| 124 | 2,40 | 6,64 | 5,24 |
+| 202 | 10,71 | 40,83 | 35,17 |
+
 ## Nanotubos prístinos con Xu
 
 Fuente: `validation/cnt_xu_carbon.json`. RBM frente a las relaciones empíricas de Araujo y de Jorio; G⁺/G⁻ y su desdoblamiento frente a la referencia guardada. Malla k: la de la receta (`cnt_validation --kmesh`, 16 por defecto, kT 0,03 eV); el archivo no la guarda. Los tubos sin gap no se han comprobado en k después del hallazgo del paso 8 (`modes.GAPLESS_WARNING`): sus G pueden estar ablandadas por la malla, además de faltarles la anomalía de Kohn física.

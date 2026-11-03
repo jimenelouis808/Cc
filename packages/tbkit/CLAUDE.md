@@ -52,6 +52,7 @@ tbkit/
 │                     #   interlayer_fit: c_capas (bands) and xu_capas (energies) with far hopping + dispersion
 │                     #   spin_constants: W of each element from GPAW's atom (never fitted)
 │                     #   spin_validation: spin SCC vs spin GPAW (ribbons, flakes, H/graphene, O2, CH2); fit of λ
+│                     #   xtb_comparison: the sets vs GFN1/GFN2-xTB (tblite, optional) on the same GPAW data
 │                     #   pipeline: a recipe of one's own (structure + model + tasks), from «Nueva receta…»
 │                     #   study: any set of systems (0D-3D), changes embedded in their host: modes,
 │                     #     resonant Raman, IR, report, DFT request of the modes that matter
@@ -307,6 +308,15 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   (tested, Lieb). GPAW fixes M at the sum of the initial moments: a broken-symmetry start
   must sum to the fixed M. CH2's singlet-triplet with atomic W has the wrong sign: the set's
   carbene levels (xu_chn HOMO-LUMO 1.26 eV), not the spin term.
+- The xTB comparison (`recipes/xtb_comparison`, `validation/xtb_vs_tbkit.json`) is against
+  PBE, which GFN was not fitted to: report it as distance to the reference, not as accuracy.
+  tblite samples only Γ: periodic points use their relaxed cell's repeats (a strained cell
+  that dipped under the length once grew to 1728 atoms); GFN needs `spin-polarization` to
+  separate a triplet from a singlet. Stages cache per crystal/point: rerun, never restart.
+  Measured: tbkit closer to PBE in molecular forces (all six files) and relative energies
+  (five of six) and 2-4x faster from ~100 atoms; GFN closer in frequencies after
+  relaxation (56-67 against 92 cm⁻¹) and in most doped-sheet forces; GFN binds compressed
+  bilayers (no wall below 3.2 Å).
 - Tests compare with closed-form results (graphene, Hückel, Lieb). A new
   feature needs such a check, not only a regression number.
 

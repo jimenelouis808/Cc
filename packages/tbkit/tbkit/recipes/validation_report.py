@@ -159,6 +159,69 @@ def _spin() -> list[str]:
     return out + [""]
 
 
+def _xtb() -> list[str]:
+    path = VALIDATION / "xtb_vs_tbkit.json"
+    if not path.exists():
+        return []
+    data = _load(path)
+    codes = (("tb", "tbkit"), ("GFN1-xTB", "GFN1"), ("GFN2-xTB", "GFN2"))
+    out = ["## tbkit frente a GFN1-xTB y GFN2-xTB (tblite)", "",
+           "Fuente: `validation/xtb_vs_tbkit.json` (receta `xtb_comparison`). "
+           + data["description"], ""]
+    if "molecules" in data:
+        out += ["Moléculas, en las geometrías de GPAW: mediana por estructura del RMSE de fuerzas "
+                "(eV/Å, equilibrio / distorsionadas), MAE de la energía relativa a la de "
+                "equilibrio de cada molécula (eV) y MAE del gap HOMO-LUMO frente al de Kohn-Sham "
+                "(eV). Celda: tbkit · GFN1 · GFN2.", ""]
+        rows = []
+        for f, v in data["molecules"].items():
+            def cell(key):
+                return " · ".join(_f(v[c][key], 2) if v[c][key] is not None else "—"
+                                  for c, _ in codes)
+            forces = " · ".join(f"{_f(v[c]['force_rmse_eq_median'], 2)}/"
+                                f"{_f(v[c]['force_rmse_rnd_median'], 2)}" for c, _ in codes)
+            rows.append((f"`{f}` ({v['set']}, {v['structures']})", forces,
+                         cell("relative_energy_mae"), cell("gap_mae")))
+        out += _table(("referencias", "fuerzas", "energía relativa", "gap"), rows) + [""]
+    if "frequencies" in data:
+        s = data["frequencies"]["summary"]
+        out += [f"Frecuencias armónicas tras relajar con cada método ({s['tb']['molecules']} "
+                "moléculas): mediana del RMS de los modos internos frente a GPAW: tbkit "
+                f"{_f(s['tb']['median_rms_cm1'], 0)} cm⁻¹ ({_f(s['tb_scaled']['median_rms_cm1'], 0)} "
+                "con el factor de escala de cada conjunto), GFN1 "
+                f"{_f(s['GFN1-xTB']['median_rms_cm1'], 0)}, GFN2 "
+                f"{_f(s['GFN2-xTB']['median_rms_cm1'], 0)}.", ""]
+    if "crystals" in data:
+        out += ["Cristales y láminas (xTB en superceldas, solo Γ): mediana del RMSE de fuerzas "
+                "(eV/Å) / MAE de la energía de las distorsiones (eV por celda de GPAW). "
+                "Celda: tbkit · GFN1 · GFN2.", ""]
+        rows = []
+        for c, v in data["crystals"].items():
+            rows.append((c, v["set"], " · ".join(
+                f"{_f(v[k]['force_rmse_median'], 2)}/{_f(v[k]['energy_mae_distorted'], 2)}"
+                for k, _ in codes)))
+        out += _table(("cristal", "conjunto", "fuerzas / energía"), rows) + [""]
+    if "layers" in data:
+        out += ["Enlace entre capas (meV/átomo) frente a PBE+D3(BJ):", ""]
+        rows = [(n, _f(v["pbe_d3"], 1), _f(v["GFN1-xTB"], 1), _f(v["GFN2-xTB"], 1),
+                 _f(v.get("xu_capas"), 1)) for n, v in data["layers"].items()]
+        out += _table(("sistema", "PBE+D3", "GFN1", "GFN2", "xu_capas"), rows) + [""]
+    if "spin" in data:
+        sp = data["spin"]
+        out += [sp["note"], ""]
+        rows = [(n, _f(v["gpaw_meV"], 0), _f(v["GFN1-xTB"], 0), _f(v["GFN2-xTB"], 0),
+                 _f(v.get("tb"), 0), _f(v.get("tb_scaled"), 0)) for n, v in sp["systems"].items()]
+        out += _table(("sistema", "GPAW", "spGFN1", "spGFN2", "tbkit W", "tbkit W·λ"), rows)
+        out += [""]
+    if "timing" in data:
+        t = data["timing"]
+        out += [t["note"] + ":", ""]
+        out += _table(("átomos", "tbkit (s)", "GFN1 (s)", "GFN2 (s)"),
+                      [(r["atoms"], _f(r["tb"], 2), _f(r["GFN1-xTB"], 2), _f(r["GFN2-xTB"], 2))
+                       for r in t["rows"]]) + [""]
+    return out
+
+
 def _infrared() -> list[str]:
     data = _load(VALIDATION / "ir_tb_vs_gpaw.json")
     out = ["## Infrarrojo frente a GPAW (8 moléculas C/H/N, modos de GPAW)", "",
@@ -328,7 +391,7 @@ def render() -> str:
              "Generado por `python -m tbkit.recipes.validation_report` a partir de los "
              "archivos de `validation/` y `tbkit/parameters/`. No editar a mano: un test "
              "comprueba que coincide con los datos.", ""]
-    for part in (_sets, _infrared, _crystals, _tang, _bands, _layers, _spin, _nanotubes, _graphene, _nanocoil, _ml):
+    for part in (_sets, _infrared, _crystals, _tang, _bands, _layers, _spin, _xtb, _nanotubes, _graphene, _nanocoil, _ml):
         lines += part()
     return "\n".join(lines).rstrip() + "\n"
 
