@@ -1,0 +1,96 @@
+{
+ "description": "Reajuste de xu_chno para las frecuencias, medido y no adoptado. Primero, con la parte electrónica fija: más peso a las hessianas GPAW (0.1-3) o un término angular en O o en C no bajan el error de la hessiana de 1,3 eV/Å² ni las frecuencias de las moléculas apartadas (mediana 122-153 cm⁻¹). Después, el ajuste conjunto completo (receta xu_chno --hessian-weight 1.0 --hessian-split: curvatura ajustada con la mitad de las moléculas de gpaw_chno_hessians.json, una sí y una no): baja la hessiana pero empeora las frecuencias apartadas. Causa: las flexiones salen blandas por la base mínima (parte electrónica), no por la repulsión. Se sigue usando xu_chno con su frequency_scale.",
+ "repulsion_only_scan": {
+  "held_out_median_cm1": {
+   "w0.1": 122,
+   "w0.3": 127,
+   "w1": 129,
+   "w3": 129,
+   "angle_O_w1": 153,
+   "angle_C_w1": 139
+  },
+  "hessian_rms_eV_A2": {
+   "w0.1": 1.61,
+   "w3": 1.31
+  }
+ },
+ "joint_refit": {
+  "hessian_weight": 1.0,
+  "force_rms": 0.829,
+  "energy_rms": 0.228,
+  "hessian_rms": 1.162,
+  "xu_chno": {
+   "force_rms": 0.789,
+   "energy_rms": 0.227,
+   "hessian_rms": 1.501
+  },
+  "fit_half": {
+   "molecules": {
+    "H2O": {
+     "refit_rms_cm1": 99.8,
+     "xu_chno_rms_cm1": 38.0
+    },
+    "H2CO": {
+     "refit_rms_cm1": 171.4,
+     "xu_chno_rms_cm1": 180.2
+    },
+    "HCOOH": {
+     "refit_rms_cm1": 118.5,
+     "xu_chno_rms_cm1": 111.2
+    },
+    "CO": {
+     "refit_rms_cm1": 63.9,
+     "xu_chno_rms_cm1": 146.6
+    },
+    "CH3OCH3": {
+     "refit_rms_cm1": 120.6,
+     "xu_chno_rms_cm1": 136.6
+    },
+    "C4H4O": {
+     "refit_rms_cm1": 101.3,
+     "xu_chno_rms_cm1": 97.5
+    },
+    "CH3NO2": {
+     "refit_rms_cm1": 222.6,
+     "xu_chno_rms_cm1": 140.8
+    }
+   },
+   "median_refit_cm1": 118.5,
+   "median_xu_chno_cm1": 136.6
+  },
+  "held_out_half": {
+   "molecules": {
+    "CH3OH": {
+     "refit_rms_cm1": 106.3,
+     "xu_chno_rms_cm1": 119.6
+    },
+    "CH3CHO": {
+     "refit_rms_cm1": 123.9,
+     "xu_chno_rms_cm1": 121.8
+    },
+    "CH3COOH": {
+     "refit_rms_cm1": 147.4,
+     "xu_chno_rms_cm1": 140.9
+    },
+    "CO2": {
+     "refit_rms_cm1": 145.2,
+     "xu_chno_rms_cm1": 175.5
+    },
+    "CH2OCH2": {
+     "refit_rms_cm1": 155.4,
+     "xu_chno_rms_cm1": 163.6
+    },
+    "H2O2": {
+     "refit_rms_cm1": 133.9,
+     "xu_chno_rms_cm1": 98.7
+    },
+    "CH3CONH2": {
+     "refit_rms_cm1": 81.2,
+     "xu_chno_rms_cm1": 92.0
+    }
+   },
+   "median_refit_cm1": 133.9,
+   "median_xu_chno_cm1": 121.8
+  }
+ }
+}

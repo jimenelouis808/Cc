@@ -317,6 +317,13 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   (five of six) and 2-4x faster from ~100 atoms; GFN closer in frequencies after
   relaxation (56-67 against 92 cm⁻¹) and in most doped-sheet forces; GFN binds compressed
   bilayers (no wall below 3.2 Å).
+- Frequencies of the xu_ch* sets are soft in bends (H2CO 870-1150 against GPAW 1090-1450
+  cm⁻¹): measured not to be fixable by refitting (`validation/vib_refit_xu_chno.json`).
+  With the electronic part fixed, more Hessian weight or an angle term at O or C leaves
+  the Hessian error at 1.3 eV/Å² and the held-out frequencies no better; a joint refit
+  with weight 1.0 (`--hessian-split`) lowers the Hessian error (1.50 → 1.16) and makes
+  the held-out molecules worse (median 122 → 134 cm⁻¹). It is the minimal basis. Do not
+  ship a frequency refit without a held-out improvement; keep `frequency_scale`.
 - Tests compare with closed-form results (graphene, Hückel, Lieb). A new
   feature needs such a check, not only a regression number.
 
