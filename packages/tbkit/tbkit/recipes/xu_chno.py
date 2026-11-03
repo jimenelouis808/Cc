@@ -98,6 +98,9 @@ def main(argv=None) -> None:
                         help="peso de las Hessianas GPAW frente a energías y fuerzas en el ajuste")
     parser.add_argument("--heavy-tail", type=float, nargs=2, default=None, metavar=("DR1", "DRM"),
                         help="cola de los pares pesados (no C-C) en r0 + (DR1, DRM) Å")
+    parser.add_argument("--hessian-split", action="store_true",
+                        help="ajusta la curvatura con la mitad de las hessianas (una sí, una no) "
+                             "y valida las frecuencias con la otra mitad")
     xu_family.add_fit_arguments(parser)
     args = parser.parse_args(argv)
     family = CHNO
@@ -108,7 +111,7 @@ def main(argv=None) -> None:
                                      heavy_tail=tuple(args.heavy_tail))
     xu_family.run(family, args.references, args.out, workers=args.workers, x0=warm_start(),
                   hessians=args.hessians, hessian_weight=args.hessian_weight,
-                  fit=xu_family.fit_options(args))
+                  fit=xu_family.fit_options(args), hessian_split=args.hessian_split)
 
 
 if __name__ == "__main__":

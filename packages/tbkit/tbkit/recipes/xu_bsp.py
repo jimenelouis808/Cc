@@ -152,6 +152,9 @@ def main(argv=None) -> None:
                              "ligandos (p. ej. O: ángulos O-X-O de centros hipervalentes)")
     parser.add_argument("--angular-powers", type=int, default=3,
                         help="potencias del término angular de --angular-ligands")
+    parser.add_argument("--hessian-split", action="store_true",
+                        help="ajusta la curvatura con la mitad de las hessianas (una sí, una no) "
+                             "y valida las frecuencias con la otra mitad")
     xu_family.add_fit_arguments(parser)
     args = parser.parse_args(argv)
     family = FAMILIES[args.element]
@@ -160,7 +163,7 @@ def main(argv=None) -> None:
                                  args.angular_powers)
     xu_family.run(family, args.references, args.out, workers=args.workers,
                   hessians=args.hessians, hessian_weight=args.hessian_weight,
-                  fit=xu_family.fit_options(args))
+                  fit=xu_family.fit_options(args), hessian_split=args.hessian_split)
 
 
 if __name__ == "__main__":

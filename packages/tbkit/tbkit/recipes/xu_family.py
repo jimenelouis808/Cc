@@ -996,7 +996,7 @@ def fit_options(args) -> dict:
 def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool = True,
         workers: int = 4, x0: Optional[np.ndarray] = None, hessians: Optional[Path] = None,
         hessian_weight: float = 0.1, checkpoint: Optional[Path] = None,
-        fit: dict | None = None) -> dict:
+        fit: dict | None = None, hessian_split: bool = False) -> dict:
     """Fit ``family`` to the references (one or several files) and write the set.
 
     ``hessians``: a file of :mod:`tbkit.recipes.frequency_references`; its
@@ -1008,11 +1008,17 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     so a run killed by a restart resumes where it was; removed on success. The
     evaluations are counted in ``OUT.progreso.json`` (``tbkit estado``).
 
-    ``fit``: weights, ridge and ``max_nfev`` of the joint fit (``FIT_DEFAULTS``)."""
+    ``fit``: weights, ridge and ``max_nfev`` of the joint fit (``FIT_DEFAULTS``).
+
+    ``hessian_split``: fit the curvature to every other molecule of the Hessian file only
+    and report the frequencies of the rest as held out (``frequencies_held_out``)."""
     fit = {**FIT_DEFAULTS, **(fit or {})}
     status = Path(out).with_suffix(".progreso.json")
     checkpoint = Path(checkpoint) if checkpoint else Path(out).with_suffix(".checkpoint.json")
     targets = load_hessians(hessians) if hessians else []
+    held_targets = []
+    if hessian_split:
+        targets, held_targets = targets[0::2], targets[1::2]
     structures, settings = [], {}
     for path in references:
         items, settings = load_references(path)
@@ -1059,6 +1065,8 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     if targets:
         report["frequencies"] = frequency_validation(model, targets)
         report["hessian_weight"] = hessian_weight
+        if held_targets:
+            report["frequencies_held_out"] = frequency_validation(model, held_targets)
         if verbose:
             for name, entry in report["frequencies"].items():
                 hits = f"  ⚠ en cola: {'; '.join(entry['tail_hits'])}" if entry["tail_hits"] \
