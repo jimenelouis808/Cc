@@ -152,12 +152,18 @@ def main(argv=None) -> None:
                              "ligandos (p. ej. O: ángulos O-X-O de centros hipervalentes)")
     parser.add_argument("--angular-powers", type=int, default=3,
                         help="potencias del término angular de --angular-ligands")
+    parser.add_argument("--d-orbitals", action="store_true",
+                        help="da al heteroátomo orbitales d (polarización para Se, S, P): se "
+                             "ajustan su energía d y las integrales sd, pd, dd de sus pares")
     parser.add_argument("--hessian-split", action="store_true",
                         help="ajusta la curvatura con la mitad de las hessianas (una sí, una no) "
                              "y valida las frecuencias con la otra mitad")
     xu_family.add_fit_arguments(parser)
     args = parser.parse_args(argv)
     family = FAMILIES[args.element]
+    if args.d_orbitals:
+        family = dataclasses.replace(family, d_elements=(args.element,),
+                                     name=family.name + ", con orbitales d")
     if args.angular_ligands:
         family = angular_variant(family, args.element, args.angular_ligands,
                                  args.angular_powers)

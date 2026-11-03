@@ -46,27 +46,47 @@ POWERS = (3, 4, 5, 6, 7)
 
 #: Harrison's universal η (Harrison, Electronic Structure, 1980) for the
 #: starting guesses, V = η ħ²/(m d²) with ħ²/m = 7.62 eV Å².
-_ETA = {"sss": -1.40, "sps": 1.84, "pps": 3.24, "ppp": -0.81}
+_ETA = {"sss": -1.40, "sps": 1.84, "pps": 3.24, "ppp": -0.81,
+        # starting values for d (dimensionless, times 7.62 eV Å² / r0²): Harrison's signs, small
+        "sds": -0.40, "pds": -0.50, "pdp": 0.25, "dds": -0.60, "ddp": 0.30, "ddd": -0.05}
 
 #: Free-atom valence levels (eV), GPAW all-electron atom, PBE, spin-paired:
 #: starting guesses only, shifted so that C 2p lands on Xu's E_p.
 FREE_ATOM_LEVELS = {"H": {"s": -6.492}, "C": {"s": -13.738, "p": -5.289},
                     "N": {"s": -18.4, "p": -7.095}, "O": {"s": -23.912, "p": -9.038},
                     "B": {"s": -9.438, "p": -3.609}, "P": {"s": -13.894, "p": -5.518},
-                    "S": {"s": -17.142, "p": -7.021}, "Se": {"s": -16.718, "p": -6.548}}
-VALENCE = {"H": 1.0, "C": 4.0, "N": 5.0, "O": 6.0, "B": 3.0, "P": 5.0, "S": 6.0, "Se": 6.0}
+                    "S": {"s": -17.142, "p": -7.021},
+                    # Se 4d: unbound in the free atom (+0.49 eV), a polarisation function here
+                    "Se": {"s": -16.718, "p": -6.548, "d": 0.49},
+                    # transition metals: valence s, the empty p above it, d (GPAW aeatom PBE)
+                    "Mo": {"s": -3.794, "p": -1.031, "d": -3.991},
+                    "Fe": {"s": -5.201, "p": -1.352, "d": -7.777}}
+VALENCE = {"H": 1.0, "C": 4.0, "N": 5.0, "O": 6.0, "B": 3.0, "P": 5.0, "S": 6.0, "Se": 6.0,
+           "Mo": 6.0, "Fe": 8.0}
 SP = ("s", "px", "py", "pz")
+SPD = SP + ("dxy", "dyz", "dzx", "dx2-y2", "dz2")
 
 
-def pair_bonds(a: str, b: str) -> tuple:
-    """The Slater-Koster integrals a pair has (H carries only s)."""
+def pair_bonds(a: str, b: str, d_elements: tuple = ()) -> tuple:
+    """The Slater-Koster integrals a pair has (H carries only s; ``d_elements`` carry d).
+    Mixed integrals are keyed with the lower angular momentum on the first element."""
     if b == "H" and a != "H":
         a, b = b, a
+    da, db = a in d_elements, b in d_elements
     if a == "H":
-        return ((a, b, "sss"), (a, b, "sps"))
+        return ((a, b, "sss"), (a, b, "sps")) + (((a, b, "sds"),) if db else ())
     if a == b:
-        return ((a, a, "sss"), (a, a, "sps"), (a, a, "pps"), (a, a, "ppp"))
-    return ((a, b, "sss"), (a, b, "sps"), (b, a, "sps"), (a, b, "pps"), (a, b, "ppp"))
+        out = ((a, a, "sss"), (a, a, "sps"), (a, a, "pps"), (a, a, "ppp"))
+        if da:
+            out += tuple((a, a, bond) for bond in ("sds", "pds", "pdp", "dds", "ddp", "ddd"))
+        return out
+    out = ((a, b, "sss"), (a, b, "sps"), (b, a, "sps"), (a, b, "pps"), (a, b, "ppp"))
+    for x, y, dy in ((a, b, db), (b, a, da)):       # s and p of x with the d of y
+        if dy:
+            out += ((x, y, "sds"), (x, y, "pds"), (x, y, "pdp"))
+    if da and db:
+        out += ((a, b, "dds"), (a, b, "ddp"), (a, b, "ddd"))
+    return out
 
 
 @dataclass
@@ -115,6 +135,17 @@ class XuFamily:
     #: their scaled tails (2.2-2.5 Å) overlap second-neighbour distances (O...O
     #: in CO2 or a carboxyl, C...O across a ring). None keeps the scaled tail.
     heavy_tail: Optional[tuple] = None
+    #: Heteroatoms that carry d orbitals (``dxy`` ... ``dz2``): transition metals, or Se with
+    #: a polarisation shell. Their on-site d energy is fitted and their pairs get the sd, pd
+    #: and dd integrals.
+    d_elements: tuple[str, ...] = ()
+
+    def d_set(self) -> tuple[str, ...]:
+        """Every element with d, the base set's included."""
+        base = self.base_model()
+        own = tuple(el for el, orbs in base.orbitals.items()
+                    if any(o.startswith("d") for o in orbs))
+        return own + tuple(self.d_elements)
 
     def acute_term(self, coefficients=None):
         from ..repulsive import AcuteAngleTerm
@@ -142,7 +173,7 @@ class XuFamily:
 
     def __post_init__(self):
         for (a, b), spec in self.pairs.items():
-            spec.setdefault("bonds", pair_bonds(a, b))
+            spec.setdefault("bonds", pair_bonds(a, b, self.d_set()))
             offsets = self.h_tail if "H" in (a, b) else \
                 self.heavy_tail if (a, b) != ("C", "C") else None
             if offsets is not None:
@@ -180,6 +211,8 @@ class XuFamily:
         out = []
         for element in self.heteroatoms:
             out += [(element, "s")] if element == "H" else [(element, "s"), (element, "p")]
+            if element in self.d_elements:
+                out.append((element, "d"))
         return out
 
     def parameter_names(self) -> list[str]:
@@ -233,7 +266,8 @@ class XuFamily:
             repulsive = SumRepulsive(self.base_terms())
         elements = self.elements()
         return TBModel(name=self.name,
-                       orbitals={el: ("s",) if el == "H" else SP for el in elements},
+                       orbitals={el: ("s",) if el == "H" else SPD if el in self.d_set()
+                                 else SP for el in elements},
                        onsite=onsite, hopping=hopping,
                        valence={el: VALENCE[el] for el in elements},
                        hubbard_u={**base.hubbard_u, **self.hubbard_u}, repulsive=repulsive,
