@@ -6,8 +6,11 @@ Run from packages/tbkit::
     python -m tbkit.recipes.xps_validation gpaw [S]   # ΔSCF, one file per site (resumable)
     python -m tbkit.recipes.xps_validation report     # validation/xps_tb_vs_gpaw.json
 
-GPAW reference: E[full 1s core hole on the site, charge +1] − E[ground state], PBE, plane
-waves, the molecule in a box; the core-hole setup is generated here (``gpaw dataset
+GPAW reference: E[full 1s core hole on the site (the setup carries the +1)] − E[ground], PBE, real-
+space grid (FD) with zero boundary conditions: an isolated ion. Plane waves were tried first
+and are wrong here: the +1 ion in a periodic box carries a spurious electrostatic energy
+that depends on the box, which varies with the molecule (benzene came out -11 eV and
+coronene -16 eV from CH4, against experiment's tenths of an eV); the core-hole setup is generated here (``gpaw dataset
 --core-hole 1s,1``). The absolute value carries the setup's frozen-core constant, so,
 as in tbkit, only shifts against a reference site of the same element are compared:
 CH4 for C 1s, NH3 for N 1s. Geometries are ASE's g2 set (and an N-doped coronene built
@@ -33,7 +36,7 @@ from ..settings import Param, add_arguments, apply
 WORK = Path("out/xps")
 SETUPS = WORK / "setups"
 OUT = Path("validation/xps_tb_vs_gpaw.json")
-PW_CUTOFF = 400.0
+GRID_H = 0.18
 VACUUM = 6.0
 KT = 0.01
 REFERENCE = {"C": ("CH4", 0), "N": ("NH3", 0)}
@@ -129,7 +132,7 @@ def _write(path: Path, data) -> None:
 def run_gpaw(name: str, site: int | None) -> Path:
     """One energy: the ground state (``site`` None) or a core hole on ``site``."""
     import gpaw
-    from gpaw import GPAW, PW
+    from gpaw import GPAW
 
     out = WORK / name / ("ground.json" if site is None else f"hole_{site}.json")
     if out.exists():
@@ -137,14 +140,19 @@ def run_gpaw(name: str, site: int | None) -> Path:
     if str(SETUPS.resolve()) not in gpaw.setup_paths:
         gpaw.setup_paths.insert(0, str(SETUPS.resolve()))
     atoms = geometry(name)
-    kwargs = {} if site is None else {"setups": {site: "1s1ch"}, "charge": 1.0}
+    # the core-hole setup already carries the +1 (GPAW prints "Charge: 1.0" for it): adding
+    # charge=1 on top removed a valence electron as well (a double ion, shifts of -6 to
+    # -16 eV that were the valence ionisation potentials of the molecules)
+    kwargs = {} if site is None else {"setups": {site: "1s1ch"}}
     out.parent.mkdir(parents=True, exist_ok=True)
-    atoms.calc = GPAW(mode=PW(PW_CUTOFF), xc="PBE", occupations={"name": "fermi-dirac",
-                                                                   "width": KT},
+    atoms.pbc = False                    # an isolated ion: zero boundary, no image charges
+    atoms.calc = GPAW(mode="fd", h=GRID_H, xc="PBE",
+                      occupations={"name": "fermi-dirac", "width": KT},
                       txt=str(out.with_suffix(".txt")), **kwargs)
     _write(out, {"system": name, "site": site, "energy_eV": float(atoms.get_potential_energy()),
-                 "settings": f"GPAW PBE PW {PW_CUTOFF} eV, FD {KT} eV, caja {VACUUM} Å, "
-                             "hueco 1s completo y carga +1 (ΔSCF)"})
+                 "settings": f"GPAW PBE FD h {GRID_H} Å, contorno cero (no periódico), "
+                             f"Fermi-Dirac {KT} eV, vacío {VACUUM} Å, "
+                             "hueco 1s completo (el setup lleva la carga +1; ΔSCF)"})
     return out
 
 
@@ -213,7 +221,7 @@ def report() -> dict:
 
 
 PARAMS = [
-    Param("PW_CUTOFF", "energía de corte de las ondas planas de GPAW", "eV", "", "convergencia"),
+    Param("GRID_H", "espaciado de la malla real de GPAW (modo FD)", "Å", "", "convergencia"),
     Param("VACUUM", "vacío alrededor de cada molécula", "Å", "", "convergencia"),
     Param("KT", "ensanchamiento de Fermi-Dirac", "eV", "", "cálculo"),
 ]
