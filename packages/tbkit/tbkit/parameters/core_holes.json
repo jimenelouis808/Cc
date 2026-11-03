@@ -1,0 +1,67 @@
+{
+ "name": "constantes de Coulomb núcleo-valencia (huecos de núcleo, XPS)",
+ "reference": "definición de este trabajo (tbkit.xps, método 'hole'); valores del átomo libre con GPAW",
+ "system": "tbkit.xps con cualquier conjunto SCC que tenga el elemento",
+ "validity": "átomo libre: la interacción del hueco con la valencia propia; con otros átomos, la γ de Klopman-Ohno del SCC",
+ "units": {
+  "J": "eV"
+ },
+ "core_holes": {
+  "B": {
+   "level": "1s",
+   "J": {
+    "value": 10.2219,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE (sin espín): J = ∂ε_p/∂n_núcleo por diferencias centrales de ±0.05 e (tbkit.recipes.core_constants)"
+   }
+  },
+  "C": {
+   "level": "1s",
+   "J": {
+    "value": 12.1673,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE (sin espín): J = ∂ε_p/∂n_núcleo por diferencias centrales de ±0.05 e (tbkit.recipes.core_constants)"
+   }
+  },
+  "N": {
+   "level": "1s",
+   "J": {
+    "value": 14.0807,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE (sin espín): J = ∂ε_p/∂n_núcleo por diferencias centrales de ±0.05 e (tbkit.recipes.core_constants)"
+   }
+  },
+  "O": {
+   "level": "1s",
+   "J": {
+    "value": 15.96,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE (sin espín): J = ∂ε_p/∂n_núcleo por diferencias centrales de ±0.05 e (tbkit.recipes.core_constants)"
+   }
+  },
+  "P": {
+   "level": "2p",
+   "J": {
+    "value": 9.3426,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE (sin espín): J = ∂ε_p/∂n_núcleo por diferencias centrales de ±0.05 e (tbkit.recipes.core_constants)"
+   }
+  },
+  "S": {
+   "level": "2p",
+   "J": {
+    "value": 10.477,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE (sin espín): J = ∂ε_p/∂n_núcleo por diferencias centrales de ±0.05 e (tbkit.recipes.core_constants)"
+   }
+  },
+  "Se": {
+   "level": "3d",
+   "J": {
+    "value": 9.4511,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE (sin espín): J = ∂ε_p/∂n_núcleo por diferencias centrales de ±0.05 e (tbkit.recipes.core_constants)"
+   }
+  }
+ }
+}

@@ -123,7 +123,8 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
                     history_length: int = 6, field: Optional[np.ndarray] = None,
                     initial_dq: Optional[np.ndarray] = None, kpts=None,
                     weights=None, on_iteration=None,
-                    onsite_matrix: Optional[np.ndarray] = None) -> SCCResult:
+                    onsite_matrix: Optional[np.ndarray] = None,
+                    external_potential: Optional[np.ndarray] = None) -> SCCResult:
     """Solve with self-consistent Mulliken charges.
 
     Parameters
@@ -150,6 +151,10 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
     onsite_matrix
         A k-independent matrix added to H (orbitals × orbitals): the intra-atomic part of
         a field's coupling, ``e E·⟨μ|r - R_A|ν⟩`` (:func:`tbkit.infrared.born_by_field`).
+    external_potential
+        A fixed potential energy per electron on each model atom (eV, in the order of
+        ``system.basis.atoms``), added to the SCC shift like ``field``'s and kept in the
+        energy as ``Σ V_A q_A`` (a core hole in :mod:`tbkit.xps`).
 
     A periodic system takes a ``field`` only across its periodic axes (a wire's or a
     slab's open directions): along a lattice vector ``E·r`` is not periodic.
@@ -178,6 +183,8 @@ def self_consistent(system: System, U=None, charge: float = 0.0, kT: float = 0.0
     if field is not None:
         positions = system.atoms.get_positions()[atoms]
         external = (positions - positions.mean(axis=0)) @ np.asarray(field, dtype=float)
+    if external_potential is not None:
+        external = external + np.asarray(external_potential, dtype=float)
     dq_in = np.zeros(len(atoms)) if initial_dq is None else np.array(initial_dq, dtype=float)
     inputs: list[np.ndarray] = []
     residuals: list[np.ndarray] = []

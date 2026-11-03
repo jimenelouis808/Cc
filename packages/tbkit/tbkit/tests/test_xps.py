@@ -47,7 +47,7 @@ def test_refusals():
     with pytest.raises(ValueError, match="SCC|autoconsistentes"):
         ionisation_energy(molecule("CH4"), xu_carbon(), 0)
     with pytest.raises(ValueError, match="equivalente"):
-        ionisation_energy(molecule("H2O"), load_parameters("xu_chno"), 0)   # O -> F
+        ionisation_energy(molecule("H2O"), load_parameters("xu_chno"), 0, method="z+1")
 
 
 def test_spectrum_peaks_at_the_shifts(chno):
@@ -57,16 +57,22 @@ def test_spectrum_peaks_at_the_shifts(chno):
     assert min(abs(top - lv.shift_eV) for lv in levels) < 0.05
 
 
-def test_calibrated_scale_is_shipped_only_where_it_holds():
-    from tbkit.params import read_parameter_file
-    from tbkit.xps import xps_scale
+def test_hole_parts_add_up_and_translation_invariant(chno):
+    from tbkit.xps import ionisation_parts
 
-    lam = xps_scale("xu_chno", "C")
-    assert 0.3 < lam < 1.0
-    scales = read_parameter_file("xps_scale")["scales"]
-    assert "N" not in scales.get("xu_chno", {})            # N 1s: no scale fixes it
-    ref = (molecule("CH4"), 0)
-    raw = core_levels(molecule("CO2"), load_parameters("xu_chno"), [0], reference=ref)[0]
-    scaled = core_levels(molecule("CO2"), load_parameters("xu_chno"), [0], reference=ref,
-                         scale=lam)[0]
-    assert scaled.shift_eV == pytest.approx(lam * raw.shift_eV)
+    a = molecule("H2CO")
+    b = a.copy()
+    b.translate([1.0, 2.0, -3.0])
+    initial, relaxation = ionisation_parts(a, chno, 1)
+    assert initial + relaxation == pytest.approx(ionisation_energy(a, chno, 1), abs=1e-7)
+    assert ionisation_energy(b, chno, 1) == pytest.approx(initial + relaxation, abs=1e-6)
+    assert relaxation < 0                    # screening lowers the cost of the hole
+
+
+def test_hole_needs_no_z_plus_one_element(chno):
+    """O 1s with the hole works on a set without F (z+1 refuses)."""
+    ref = (molecule("H2O"), 0)
+    co2 = core_levels(molecule("CO2"), chno, [1], reference=ref)[0]
+    assert co2.shift_eV is not None
+    with pytest.raises(ValueError, match="equivalente"):
+        core_levels(molecule("CO2"), chno, [1], reference=ref, method="z+1")
