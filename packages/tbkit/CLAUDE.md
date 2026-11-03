@@ -19,6 +19,7 @@ tbkit/
 ├── ewald.py          # periodic γ: Ewald for 1/r and 1/r³, short-range rest
 ├── hubbard.py        # mean-field Hubbard, magnetisation vs energy/field/doping
 ├── spin.py           # spin-polarised SCC (spin-DFTB): shell moments, W, fixed or free M, forces
+├── xps.py            # XPS core-level shifts by the equivalent core (Z+1, SCC), calibrated scale
 ├── skf.py            # DFTB .skf reader (simple format)
 ├── fit.py            # least-squares fitting (with a before/after report), GPAW log reader
 ├── repulsive.py      # pair / embedded repulsion, .skf spline
@@ -53,6 +54,7 @@ tbkit/
 │                     #   spin_constants: W of each element from GPAW's atom (never fitted)
 │                     #   spin_validation: spin SCC vs spin GPAW (ribbons, flakes, H/graphene, O2, CH2); fit of λ
 │                     #   xtb_comparison: the sets vs GFN1/GFN2-xTB (tblite, optional) on the same GPAW data
+│                     #   xps_validation: Z+1 shifts vs GPAW ΔSCF (core-hole setups it generates); fit of λ
 │                     #   pipeline: a recipe of one's own (structure + model + tasks), from «Nueva receta…»
 │                     #   study: any set of systems (0D-3D), changes embedded in their host: modes,
 │                     #     resonant Raman, IR, report, DFT request of the modes that matter
@@ -324,6 +326,20 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   with weight 1.0 (`--hessian-split`) lowers the Hessian error (1.50 → 1.16) and makes
   the held-out molecules worse (median 122 → 134 cm⁻¹). It is the minimal basis. Do not
   ship a frequency refit without a held-out improvement; keep `frequency_scale`.
+- XPS (`xps.py`): shifts are differences of Z+1 ionisation energies (site → Z+1, charge
+  +1, SCC), never absolute. GPAW's reference (`recipes/xps_validation`): the 1s1ch setup
+  already carries the +1, so no `charge=1` on top (that made a double ion, shifts of -6 to
+  -16 eV); isolated ion on a real-space grid with zero boundary (a charged plane-wave box
+  adds a box-dependent energy). Measured: C 1s with xu_chno correlates (r 0.96) and is
+  1.5× too large, `xps_scale` (λ 0.657, fitted on half the sites) gives 0.26 eV on the
+  other half; xu_chn C 1s (r 0.91) and N 1s (r 0.63, graphitic/pyrrolic inverted) get no
+  scale and must not be used to assign N species. A scale is shipped only at r ≥ 0.95.
+- d orbitals (`slater_koster.py`): the full Slater-Koster table, s/p/d, with the reverse
+  order by parity; mixed integrals (`sps`, `sds`, `pds`, `pdp`) are ordered by l. Any
+  change to the table must keep the rotational-covariance test (every shell pair, real p
+  and d representations) green: it is what catches a sign. `.skf` d columns are read;
+  matching DFTB+ on a published d set is still to be checked. Spin constants exist for
+  Ti-Zn, Mo, Pd, Ag (no relativity: the 4d ones are approximate); no fitted d set yet.
 - Tests compare with closed-form results (graphene, Hückel, Lieb). A new
   feature needs such a check, not only a regression number.
 

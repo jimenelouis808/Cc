@@ -4,7 +4,8 @@ Run from packages/tbkit::
 
     python -m tbkit.recipes.xps_validation setups     # C and N 1s core-hole PAW setups
     python -m tbkit.recipes.xps_validation gpaw [S]   # ΔSCF, one file per site (resumable)
-    python -m tbkit.recipes.xps_validation report     # validation/xps_tb_vs_gpaw.json
+    python -m tbkit.recipes.xps_validation report     # validation/xps_tb_vs_gpaw.json and
+                                                      # parameters/xps_scale.json (λ per element)
 
 GPAW reference: E[full 1s core hole on the site (the setup carries the +1)] − E[ground], PBE, real-
 space grid (FD) with zero boundary conditions: an isolated ion. Plane waves were tried first
@@ -196,6 +197,68 @@ def report() -> dict:
                     row[model_name] = None
                     row[f"{model_name}_error"] = str(error)[:160]
             rows.append(row)
+    summary = _summary(rows)
+    scale = _fit_scale(rows)
+    out = {"description": "Desplazamientos de energía de ligadura de núcleo (eV) frente a CH4 "
+                          "(C 1s) y NH3 (N 1s): tbkit con núcleo equivalente (Z+1, SCC) frente "
+                          "a GPAW ΔSCF (PBE, hueco 1s completo, ion aislado), misma geometría.",
+           "rows": rows, "summary": summary, "scale": scale}
+    OUT.write_text(json.dumps(out, indent=1, ensure_ascii=False))
+    return out
+
+
+SCALE_OUT = Path("tbkit/parameters/xps_scale.json")
+#: Below this correlation with GPAW a scale is not written: the model's ordering is wrong.
+MIN_CORRELATION = 0.95
+
+
+def _fit_scale(rows: list[dict]) -> dict:
+    """One factor per element and set, ``shift_GPAW ≈ λ shift_TB`` through the origin,
+    fitted on every other site (in the order of ``systems()``) and tested on the rest;
+    written to ``parameters/xps_scale.json``."""
+    import gpaw
+
+    out, table = {}, {}
+    for element, models in TB_MODELS.items():
+        for model_name in models:
+            pairs = [(r["gpaw"], r[model_name]) for r in rows if r["element"] == element
+                     and r["gpaw"] is not None and r.get(model_name) is not None
+                     and (r["system"], r["site"]) != REFERENCE[element]]
+            if len(pairs) < 4:
+                continue
+            g, t = np.array(pairs).T
+            fit, test = slice(0, None, 2), slice(1, None, 2)
+            lam = float(np.sum(g[fit] * t[fit]) / np.sum(t[fit] ** 2))
+            entry = {"scale": lam, "sites_fit": int(len(g[fit])), "sites_test": int(len(g[test])),
+                     "mae_test_raw_eV": float(np.mean(np.abs(t[test] - g[test]))),
+                     "mae_test_scaled_eV": float(np.mean(np.abs(lam * t[test] - g[test]))),
+                     "pearson_r_all": float(np.corrcoef(g, t)[0, 1])}
+            out[f"{element}1s/{model_name}"] = entry
+            if lam <= 0 or entry["pearson_r_all"] < MIN_CORRELATION:
+                entry["shipped"] = False      # a scale cannot fix a shift that does not
+                continue                      # follow GPAW's (N 1s: λ < 0, r = 0.63)
+            entry["shipped"] = True
+            table.setdefault(model_name, {})[element] = {
+                "value": round(lam, 4), "unit": "1",
+                "source": f"mínimos cuadrados por el origen, desplazamientos GPAW ΔSCF frente a "
+                          f"Z+1 de {model_name}, {entry['sites_fit']} sitios (uno sí, uno no); "
+                          f"prueba en los otros {entry['sites_test']}: MAE "
+                          f"{entry['mae_test_raw_eV']:.2f} → {entry['mae_test_scaled_eV']:.2f} eV "
+                          f"(GPAW {gpaw.__version__}, tbkit.recipes.xps_validation)"}
+    SCALE_OUT.write_text(json.dumps({
+        "name": "escala de los desplazamientos XPS por núcleo equivalente",
+        "reference": "este trabajo: tbkit.recipes.xps_validation",
+        "system": "tbkit.xps con los conjuntos listados",
+        "validity": "una cifra por elemento y conjunto, ajustada a GPAW ΔSCF (PBE) en la mitad "
+                    "de los sitios de moléculas C/H/N/O y coronenos dopados con N, solo donde el "
+                    f"modelo correlaciona con GPAW (r ≥ {MIN_CORRELATION}); N 1s no la tiene "
+                    "(r = 0,63, orden grafítico/pirrólico invertido): no usar el N 1s de tbkit "
+                    "para asignar especies de N",
+        "units": {"scale": "1"}, "scales": table}, indent=1, ensure_ascii=False))
+    return out
+
+
+def _summary(rows: list[dict]) -> dict:
     summary = {}
     for element, models in TB_MODELS.items():
         for model_name in models:
@@ -212,12 +275,7 @@ def report() -> dict:
                 "pearson_r": float(np.corrcoef(g, t)[0, 1]),
                 "scale_tb_to_gpaw": slope,
                 "mae_scaled_eV": float(np.mean(np.abs(slope * t - g)))}
-    out = {"description": "Desplazamientos de energía de ligadura de núcleo (eV) frente a CH4 "
-                          "(C 1s) y NH3 (N 1s): tbkit con núcleo equivalente (Z+1, SCC) frente "
-                          "a GPAW ΔSCF (PBE, hueco 1s completo, carga +1), misma geometría.",
-           "rows": rows, "summary": summary}
-    OUT.write_text(json.dumps(out, indent=1, ensure_ascii=False))
-    return out
+    return summary
 
 
 PARAMS = [
@@ -249,7 +307,9 @@ def main(argv=None) -> None:
         for name, indices in systems().items():
             print(name, indices)
     else:
-        print(json.dumps(report()["summary"], indent=1, ensure_ascii=False))
+        result = report()
+        print(json.dumps({"summary": result["summary"], "scale": result["scale"]}, indent=1,
+                         ensure_ascii=False))
 
 
 if __name__ == "__main__":

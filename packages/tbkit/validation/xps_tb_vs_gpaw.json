@@ -1,0 +1,526 @@
+{
+ "description": "Desplazamientos de energía de ligadura de núcleo (eV) frente a CH4 (C 1s) y NH3 (N 1s): tbkit con núcleo equivalente (Z+1, SCC) frente a GPAW ΔSCF (PBE, hueco 1s completo, ion aislado), misma geometría.",
+ "rows": [
+  {
+   "system": "CH4",
+   "site": 0,
+   "element": "C",
+   "neighbours": [
+    "H",
+    "H",
+    "H",
+    "H"
+   ],
+   "gpaw": 0.0,
+   "xu_chno": 0.0,
+   "xu_chn": 0.0
+  },
+  {
+   "system": "C2H6",
+   "site": 0,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "H",
+    "H",
+    "H"
+   ],
+   "gpaw": -0.0869295902569931,
+   "xu_chno": -1.0758315052899334,
+   "xu_chn": -3.1203342100086644
+  },
+  {
+   "system": "C2H4",
+   "site": 0,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "H",
+    "H"
+   ],
+   "gpaw": -0.030423779173677445,
+   "xu_chno": -1.4379193028368675,
+   "xu_chn": -3.069738586769276
+  },
+  {
+   "system": "C2H2",
+   "site": 0,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "H"
+   ],
+   "gpaw": 0.5262368037341112,
+   "xu_chno": -0.7027352484405966,
+   "xu_chn": -1.9638348192780342
+  },
+  {
+   "system": "C6H6",
+   "site": 0,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "H"
+   ],
+   "gpaw": -0.6451198788919896,
+   "xu_chno": -1.3023452228531838,
+   "xu_chn": -4.983875310624541
+  },
+  {
+   "system": "CH3OH",
+   "site": 0,
+   "element": "C",
+   "neighbours": [
+    "H",
+    "H",
+    "H",
+    "O"
+   ],
+   "gpaw": 1.474010039313189,
+   "xu_chno": 2.6215506741109635,
+   "xu_chn": -0.02506203438621668
+  },
+  {
+   "system": "H2CO",
+   "site": 1,
+   "element": "C",
+   "neighbours": [
+    "H",
+    "H",
+    "O"
+   ],
+   "gpaw": 3.568162497327375,
+   "xu_chno": 4.95097959907779,
+   "xu_chn": 5.841697939830475
+  },
+  {
+   "system": "HCOOH",
+   "site": 1,
+   "element": "C",
+   "neighbours": [
+    "H",
+    "O",
+    "O"
+   ],
+   "gpaw": 4.576975363320457,
+   "xu_chno": 6.480596781686991,
+   "xu_chn": 5.6395701636925395
+  },
+  {
+   "system": "CO",
+   "site": 1,
+   "element": "C",
+   "neighbours": [
+    "O"
+   ],
+   "gpaw": 5.530512021105425,
+   "xu_chno": 8.577769607567191,
+   "xu_chn": 11.986588523955287
+  },
+  {
+   "system": "CO2",
+   "site": 0,
+   "element": "C",
+   "neighbours": [
+    "O",
+    "O"
+   ],
+   "gpaw": 6.304450799636104,
+   "xu_chno": 8.55826403035244,
+   "xu_chn": 11.986588523955287
+  },
+  {
+   "system": "HCN",
+   "site": 0,
+   "element": "C",
+   "neighbours": [
+    "H",
+    "N"
+   ],
+   "gpaw": 2.7098196655593796,
+   "xu_chno": 3.9036622852151766,
+   "xu_chn": 6.91976103779033
+  },
+  {
+   "system": "HCN",
+   "site": 1,
+   "element": "N",
+   "neighbours": [
+    "C"
+   ],
+   "gpaw": 1.3228406695098975,
+   "xu_chno": -2.9259199388139763
+  },
+  {
+   "system": "CH3CN",
+   "site": 0,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "H",
+    "H",
+    "H"
+   ],
+   "gpaw": 1.79810043629287,
+   "xu_chno": 0.2245374155211337,
+   "xu_chn": -1.8573947731941374
+  },
+  {
+   "system": "CH3CN",
+   "site": 1,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "N"
+   ],
+   "gpaw": 1.962586651343834,
+   "xu_chno": 2.9306728777176048,
+   "xu_chn": 3.8784720459377056
+  },
+  {
+   "system": "CH3CN",
+   "site": 2,
+   "element": "N",
+   "neighbours": [
+    "C"
+   ],
+   "gpaw": 0.15356759410090604,
+   "xu_chno": -3.4089504059309945
+  },
+  {
+   "system": "NH3",
+   "site": 0,
+   "element": "N",
+   "neighbours": [
+    "H",
+    "H",
+    "H"
+   ],
+   "gpaw": 0.0,
+   "xu_chno": 0.0
+  },
+  {
+   "system": "C5H5N",
+   "site": 0,
+   "element": "N",
+   "neighbours": [
+    "C",
+    "C"
+   ],
+   "gpaw": -0.9332356874965271,
+   "xu_chno": -3.2832946475672316
+  },
+  {
+   "system": "C5H5N",
+   "site": 1,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "H"
+   ],
+   "gpaw": 0.09770993114271675,
+   "xu_chno": -0.8516121424864949,
+   "xu_chn": -4.5286756747386505
+  },
+  {
+   "system": "C5H5N",
+   "site": 2,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "H",
+    "N"
+   ],
+   "gpaw": 0.3867723314303504,
+   "xu_chno": 1.3269134669860065,
+   "xu_chn": 2.105830811356924
+  },
+  {
+   "system": "C5H5N",
+   "site": 4,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "H"
+   ],
+   "gpaw": -0.19827441218016872,
+   "xu_chno": -1.7178659137260794,
+   "xu_chn": -5.395097449621531
+  },
+  {
+   "system": "C4H4NH",
+   "site": 1,
+   "element": "N",
+   "neighbours": [
+    "C",
+    "C",
+    "H"
+   ],
+   "gpaw": 0.6009178782556361,
+   "xu_chno": -0.5908595940928478
+  },
+  {
+   "system": "C4H4NH",
+   "site": 2,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "H",
+    "N"
+   ],
+   "gpaw": -0.14427105132335782,
+   "xu_chno": 0.6790495168052146,
+   "xu_chn": 1.4574838928249392
+  },
+  {
+   "system": "C4H4NH",
+   "site": 4,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "H"
+   ],
+   "gpaw": -1.0395628744109615,
+   "xu_chno": -2.6909736595233014,
+   "xu_chn": -6.35782422758308
+  },
+  {
+   "system": "coronene",
+   "site": 0,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "C"
+   ],
+   "gpaw": -1.071880783797397,
+   "xu_chno": -1.3128129090402538,
+   "xu_chn": -6.972363223079213
+  },
+  {
+   "system": "coronene",
+   "site": 6,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "H"
+   ],
+   "gpaw": -1.3542955314888587,
+   "xu_chno": -1.8964801264410838,
+   "xu_chn": -5.5552679083909595
+  },
+  {
+   "system": "coronene",
+   "site": 7,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "C"
+   ],
+   "gpaw": -1.0904282912383252,
+   "xu_chno": -1.556278727459535,
+   "xu_chn": -7.2303731039470165
+  },
+  {
+   "system": "coronene_N_graphitic",
+   "site": 0,
+   "element": "N",
+   "neighbours": [
+    "C",
+    "C",
+    "C"
+   ],
+   "gpaw": 0.3956601711305652,
+   "xu_chno": -1.3120292264920437
+  },
+  {
+   "system": "coronene_N_graphitic",
+   "site": 1,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "N"
+   ],
+   "gpaw": -0.34380421448936715,
+   "xu_chno": 1.1188457604017046,
+   "xu_chn": -0.07419338925942043
+  },
+  {
+   "system": "coronene_N_graphitic",
+   "site": 6,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "H"
+   ],
+   "gpaw": -1.4321110683693092,
+   "xu_chno": -2.1839618019268485,
+   "xu_chn": -5.86058323818466
+  },
+  {
+   "system": "coronene_N_graphitic",
+   "site": 7,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "N"
+   ],
+   "gpaw": -0.3410949172088209,
+   "xu_chno": 0.7461243210454356,
+   "xu_chn": -0.4592200036122165
+  },
+  {
+   "system": "coronene_N_pyridinic",
+   "site": 6,
+   "element": "N",
+   "neighbours": [
+    "C",
+    "C"
+   ],
+   "gpaw": -2.0749437849388315,
+   "xu_chno": -4.3446333879359855
+  },
+  {
+   "system": "coronene_N_pyridinic",
+   "site": 0,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "C"
+   ],
+   "gpaw": -0.9209519998752995,
+   "xu_chno": -1.5325950131145945,
+   "xu_chn": -7.190099558698051
+  },
+  {
+   "system": "coronene_N_pyridinic",
+   "site": 7,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "N"
+   ],
+   "gpaw": -0.38873548848222583,
+   "xu_chno": 0.4424813672515526,
+   "xu_chn": -0.7485267523090613
+  },
+  {
+   "system": "coronene_N_pyridinic",
+   "site": 8,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "C"
+   ],
+   "gpaw": -0.8936361740232002,
+   "xu_chno": -2.042206973321136,
+   "xu_chn": -7.71823781411203
+  },
+  {
+   "system": "coronene_N_pyridinic",
+   "site": 9,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "H",
+    "N"
+   ],
+   "gpaw": -0.49586120856118043,
+   "xu_chno": 0.358734542255597,
+   "xu_chn": 1.1610657369994044
+  },
+  {
+   "system": "coronene_N_pyridinic",
+   "site": 14,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "H"
+   ],
+   "gpaw": -1.299859500899359,
+   "xu_chno": -2.1080161372543174,
+   "xu_chn": -5.775878187221139
+  },
+  {
+   "system": "coronene_N_pyridinic",
+   "site": 12,
+   "element": "C",
+   "neighbours": [
+    "C",
+    "C",
+    "H"
+   ],
+   "gpaw": -1.1770611779632674,
+   "xu_chno": -1.7535270586603886,
+   "xu_chn": -5.41070801333197
+  }
+ ],
+ "summary": {
+  "C1s/xu_chno": {
+   "sites": 29,
+   "mae_eV": 1.1385606474812717,
+   "max_error_eV": 3.0472575864617664,
+   "pearson_r": 0.9562488660134553,
+   "scale_tb_to_gpaw": 0.6496271966565752,
+   "mae_scaled_eV": 0.4830120102092565
+  },
+  "C1s/xu_chn": {
+   "sites": 29,
+   "mae_eV": 3.5515968642430322,
+   "max_error_eV": 6.824601640088829,
+   "pearson_r": 0.9058080147912048,
+   "scale_tb_to_gpaw": 0.309472642436037,
+   "mae_scaled_eV": 1.0716346684832068
+  },
+  "N1s/xu_chno": {
+   "sites": 6,
+   "mae_eV": 2.5550823402324543,
+   "max_error_eV": 4.248760608323874,
+   "pearson_r": 0.6277996863141795,
+   "scale_tb_to_gpaw": 0.13120725072729622,
+   "mae_scaled_eV": 0.926863341897473
+  }
+ },
+ "scale": {
+  "C1s/xu_chno": {
+   "scale": 0.6570126995643795,
+   "sites_fit": 15,
+   "sites_test": 14,
+   "mae_test_raw_eV": 1.0319421321045827,
+   "mae_test_scaled_eV": 0.26444576493504973,
+   "pearson_r_all": 0.9562488660134553,
+   "shipped": true
+  },
+  "C1s/xu_chn": {
+   "scale": 0.3429794667884935,
+   "sites_fit": 15,
+   "sites_test": 14,
+   "mae_test_raw_eV": 4.256642120187144,
+   "mae_test_scaled_eV": 1.0204139654452264,
+   "pearson_r_all": 0.9058080147912048,
+   "shipped": false
+  },
+  "N1s/xu_chno": {
+   "scale": -0.06293454657090773,
+   "sites_fit": 3,
+   "sites_test": 3,
+   "mae_test_raw_eV": 2.3413283584591795,
+   "mae_test_scaled_eV": 0.9910256229396048,
+   "pearson_r_all": 0.6277996863141795,
+   "shipped": false
+  }
+ }
+}

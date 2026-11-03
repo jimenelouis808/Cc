@@ -73,10 +73,20 @@ def ionisation_energy(atoms: Atoms, model, index: int, kT: float = 0.01, kpts=No
     return _energy(ion, model, 1.0, kT, kpts) - ground
 
 
+def xps_scale(set_name: str, element: str) -> float:
+    """λ of ``parameters/xps_scale.json`` for a set and element (fitted to GPAW ΔSCF on half
+    the sites of ``recipes/xps_validation``, tested on the rest)."""
+    from .params import read_parameter_file
+
+    return float(read_parameter_file("xps_scale")["scales"][set_name][element]["value"])
+
+
 def core_levels(atoms: Atoms, model, indices: Sequence[int], kT: float = 0.01, kpts=None,
-                reference: Optional[tuple[Atoms, int]] = None) -> list[CoreLevel]:
+                reference: Optional[tuple[Atoms, int]] = None,
+                scale: float = 1.0) -> list[CoreLevel]:
     """Z+1 ionisation energies of ``indices`` and, with ``reference`` (structure, index),
-    their shifts against it (same element only)."""
+    their shifts against it (same element only), times ``scale`` (1: the raw model shift;
+    :func:`xps_scale` for the one calibrated against GPAW)."""
     ground = _energy(atoms, model, 0.0, kT, kpts)
     ref_energy = ref_element = None
     if reference is not None:
@@ -86,8 +96,8 @@ def core_levels(atoms: Atoms, model, indices: Sequence[int], kT: float = 0.01, k
     out = []
     for i in indices:
         e = ionisation_energy(atoms, model, i, kT, kpts, ground)
-        shift = e - ref_energy if ref_energy is not None and atoms[i].symbol == ref_element \
-            else None
+        shift = scale * (e - ref_energy) if ref_energy is not None and \
+            atoms[i].symbol == ref_element else None
         out.append(CoreLevel(int(i), atoms[i].symbol, float(e), shift))
     return out
 

@@ -222,6 +222,30 @@ def _xtb() -> list[str]:
     return out
 
 
+def _xps() -> list[str]:
+    path = VALIDATION / "xps_tb_vs_gpaw.json"
+    if not path.exists():
+        return []
+    data = _load(path)
+    out = ["## XPS: desplazamientos de núcleo por núcleo equivalente frente a GPAW ΔSCF", "",
+           "Fuente: `validation/xps_tb_vs_gpaw.json` (receta `xps_validation`). "
+           + data["description"], "",
+           "Celda: desplazamiento en eV (GPAW · tbkit xu_chno · tbkit xu_chn).", ""]
+    rows = []
+    for r in data["rows"]:
+        rows.append((r["system"], f"{r['element']} {r['site']} ({''.join(r['neighbours'])})",
+                     " · ".join(_f(r.get(k)) for k in ("gpaw", "xu_chno", "xu_chn"))))
+    out += _table(("sistema", "sitio (vecinos)", "GPAW · xu_chno · xu_chn"), rows)
+    out += ["", "Escala λ (desplazamiento GPAW ≈ λ · tbkit), ajustada en la mitad de los "
+                "sitios y probada en la otra; solo se publica con r ≥ 0,95:", ""]
+    rows = [(k, _f(v["scale"], 3), _f(v["pearson_r_all"], 2), _f(v["mae_test_raw_eV"]),
+             _f(v["mae_test_scaled_eV"]), "sí" if v.get("shipped") else "no")
+            for k, v in data["scale"].items()]
+    out += _table(("núcleo/conjunto", "λ", "r", "MAE prueba sin λ", "MAE prueba con λ",
+                   "publicada"), rows)
+    return out + [""]
+
+
 def _infrared() -> list[str]:
     data = _load(VALIDATION / "ir_tb_vs_gpaw.json")
     out = ["## Infrarrojo frente a GPAW (8 moléculas C/H/N, modos de GPAW)", "",
@@ -391,7 +415,7 @@ def render() -> str:
              "Generado por `python -m tbkit.recipes.validation_report` a partir de los "
              "archivos de `validation/` y `tbkit/parameters/`. No editar a mano: un test "
              "comprueba que coincide con los datos.", ""]
-    for part in (_sets, _infrared, _crystals, _tang, _bands, _layers, _spin, _xtb, _nanotubes, _graphene, _nanocoil, _ml):
+    for part in (_sets, _infrared, _crystals, _tang, _bands, _layers, _spin, _xtb, _xps, _nanotubes, _graphene, _nanocoil, _ml):
         lines += part()
     return "\n".join(lines).rstrip() + "\n"
 

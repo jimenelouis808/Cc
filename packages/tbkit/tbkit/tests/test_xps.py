@@ -55,3 +55,18 @@ def test_spectrum_peaks_at_the_shifts(chno):
     grid, intensity = spectrum(levels, fwhm=0.2)
     top = grid[intensity.argmax()]
     assert min(abs(top - lv.shift_eV) for lv in levels) < 0.05
+
+
+def test_calibrated_scale_is_shipped_only_where_it_holds():
+    from tbkit.params import read_parameter_file
+    from tbkit.xps import xps_scale
+
+    lam = xps_scale("xu_chno", "C")
+    assert 0.3 < lam < 1.0
+    scales = read_parameter_file("xps_scale")["scales"]
+    assert "N" not in scales.get("xu_chno", {})            # N 1s: no scale fixes it
+    ref = (molecule("CH4"), 0)
+    raw = core_levels(molecule("CO2"), load_parameters("xu_chno"), [0], reference=ref)[0]
+    scaled = core_levels(molecule("CO2"), load_parameters("xu_chno"), [0], reference=ref,
+                         scale=lam)[0]
+    assert scaled.shift_eV == pytest.approx(lam * raw.shift_eV)

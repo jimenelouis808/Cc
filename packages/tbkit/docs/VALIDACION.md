@@ -283,6 +283,60 @@ segundos de reloj por energía + fuerzas de un flake triangular H-saturado (OMP_
 | 124 | 2,40 | 6,64 | 5,24 |
 | 202 | 10,71 | 40,83 | 35,17 |
 
+## XPS: desplazamientos de núcleo por núcleo equivalente frente a GPAW ΔSCF
+
+Fuente: `validation/xps_tb_vs_gpaw.json` (receta `xps_validation`). Desplazamientos de energía de ligadura de núcleo (eV) frente a CH4 (C 1s) y NH3 (N 1s): tbkit con núcleo equivalente (Z+1, SCC) frente a GPAW ΔSCF (PBE, hueco 1s completo, ion aislado), misma geometría.
+
+Celda: desplazamiento en eV (GPAW · tbkit xu_chno · tbkit xu_chn).
+
+| sistema | sitio (vecinos) | GPAW · xu_chno · xu_chn |
+|---|---|---|
+| CH4 | C 0 (HHHH) | 0,00 · 0,00 · 0,00 |
+| C2H6 | C 0 (CHHH) | -0,09 · -1,08 · -3,12 |
+| C2H4 | C 0 (CHH) | -0,03 · -1,44 · -3,07 |
+| C2H2 | C 0 (CH) | 0,53 · -0,70 · -1,96 |
+| C6H6 | C 0 (CCH) | -0,65 · -1,30 · -4,98 |
+| CH3OH | C 0 (HHHO) | 1,47 · 2,62 · -0,03 |
+| H2CO | C 1 (HHO) | 3,57 · 4,95 · 5,84 |
+| HCOOH | C 1 (HOO) | 4,58 · 6,48 · 5,64 |
+| CO | C 1 (O) | 5,53 · 8,58 · 11,99 |
+| CO2 | C 0 (OO) | 6,30 · 8,56 · 11,99 |
+| HCN | C 0 (HN) | 2,71 · 3,90 · 6,92 |
+| HCN | N 1 (C) | 1,32 · -2,93 · — |
+| CH3CN | C 0 (CHHH) | 1,80 · 0,22 · -1,86 |
+| CH3CN | C 1 (CN) | 1,96 · 2,93 · 3,88 |
+| CH3CN | N 2 (C) | 0,15 · -3,41 · — |
+| NH3 | N 0 (HHH) | 0,00 · 0,00 · — |
+| C5H5N | N 0 (CC) | -0,93 · -3,28 · — |
+| C5H5N | C 1 (CCH) | 0,10 · -0,85 · -4,53 |
+| C5H5N | C 2 (CHN) | 0,39 · 1,33 · 2,11 |
+| C5H5N | C 4 (CCH) | -0,20 · -1,72 · -5,40 |
+| C4H4NH | N 1 (CCH) | 0,60 · -0,59 · — |
+| C4H4NH | C 2 (CHN) | -0,14 · 0,68 · 1,46 |
+| C4H4NH | C 4 (CCH) | -1,04 · -2,69 · -6,36 |
+| coronene | C 0 (CCC) | -1,07 · -1,31 · -6,97 |
+| coronene | C 6 (CCH) | -1,35 · -1,90 · -5,56 |
+| coronene | C 7 (CCC) | -1,09 · -1,56 · -7,23 |
+| coronene_N_graphitic | N 0 (CCC) | 0,40 · -1,31 · — |
+| coronene_N_graphitic | C 1 (CCN) | -0,34 · 1,12 · -0,07 |
+| coronene_N_graphitic | C 6 (CCH) | -1,43 · -2,18 · -5,86 |
+| coronene_N_graphitic | C 7 (CCN) | -0,34 · 0,75 · -0,46 |
+| coronene_N_pyridinic | N 6 (CC) | -2,07 · -4,34 · — |
+| coronene_N_pyridinic | C 0 (CCC) | -0,92 · -1,53 · -7,19 |
+| coronene_N_pyridinic | C 7 (CCN) | -0,39 · 0,44 · -0,75 |
+| coronene_N_pyridinic | C 8 (CCC) | -0,89 · -2,04 · -7,72 |
+| coronene_N_pyridinic | C 9 (CHN) | -0,50 · 0,36 · 1,16 |
+| coronene_N_pyridinic | C 14 (CCH) | -1,30 · -2,11 · -5,78 |
+| coronene_N_pyridinic | C 12 (CCH) | -1,18 · -1,75 · -5,41 |
+
+Escala λ (desplazamiento GPAW ≈ λ · tbkit), ajustada en la mitad de los sitios y probada en la otra; solo se publica con r ≥ 0,95:
+
+| núcleo/conjunto | λ | r | MAE prueba sin λ | MAE prueba con λ | publicada |
+|---|---|---|---|---|---|
+| C1s/xu_chno | 0,657 | 0,96 | 1,03 | 0,26 | sí |
+| C1s/xu_chn | 0,343 | 0,91 | 4,26 | 1,02 | no |
+| N1s/xu_chno | -0,063 | 0,63 | 2,34 | 0,99 | no |
+
 ## Nanotubos prístinos con Xu
 
 Fuente: `validation/cnt_xu_carbon.json`. RBM frente a las relaciones empíricas de Araujo y de Jorio; G⁺/G⁻ y su desdoblamiento frente a la referencia guardada. Malla k: la de la receta (`cnt_validation --kmesh`, 16 por defecto, kT 0,03 eV); el archivo no la guarda. Los tubos sin gap no se han comprobado en k después del hallazgo del paso 8 (`modes.GAPLESS_WARNING`): sus G pueden estar ablandadas por la malla, además de faltarles la anomalía de Kohn física.

@@ -1,0 +1,18 @@
+{
+ "name": "escala de los desplazamientos XPS por núcleo equivalente",
+ "reference": "este trabajo: tbkit.recipes.xps_validation",
+ "system": "tbkit.xps con los conjuntos listados",
+ "validity": "una cifra por elemento y conjunto, ajustada a GPAW ΔSCF (PBE) en la mitad de los sitios de moléculas C/H/N/O y coronenos dopados con N, solo donde el modelo correlaciona con GPAW (r ≥ 0.95); N 1s no la tiene (r = 0,63, orden grafítico/pirrólico invertido): no usar el N 1s de tbkit para asignar especies de N",
+ "units": {
+  "scale": "1"
+ },
+ "scales": {
+  "xu_chno": {
+   "C": {
+    "value": 0.657,
+    "unit": "1",
+    "source": "mínimos cuadrados por el origen, desplazamientos GPAW ΔSCF frente a Z+1 de xu_chno, 15 sitios (uno sí, uno no); prueba en los otros 14: MAE 1.03 → 0.26 eV (GPAW 26.7.0, tbkit.recipes.xps_validation)"
+   }
+  }
+ }
+}
