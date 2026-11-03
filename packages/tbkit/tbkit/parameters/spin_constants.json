@@ -132,6 +132,390 @@
     "unit": "eV",
     "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
    }
+  },
+  "Ti": {
+   "ss": {
+    "value": -0.36882,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sp": {
+    "value": -0.3046,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sd": {
+    "value": -0.1182,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pp": {
+    "value": -0.39916,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pd": {
+    "value": -0.05337,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "dd": {
+    "value": -0.37758,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   }
+  },
+  "V": {
+   "ss": {
+    "value": -0.38353,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sp": {
+    "value": -0.31044,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sd": {
+    "value": -0.10903,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pp": {
+    "value": -0.42094,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pd": {
+    "value": -0.0453,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "dd": {
+    "value": -0.40537,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   }
+  },
+  "Cr": {
+   "ss": {
+    "value": -0.41391,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sp": {
+    "value": -0.32575,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sd": {
+    "value": -0.11307,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pp": {
+    "value": -0.58539,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pd": {
+    "value": -0.0419,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "dd": {
+    "value": -0.37765,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   }
+  },
+  "Mn": {
+   "ss": {
+    "value": -0.40802,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sp": {
+    "value": -0.31859,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sd": {
+    "value": -0.09557,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pp": {
+    "value": -0.47242,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pd": {
+    "value": -0.03447,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "dd": {
+    "value": -0.44834,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   }
+  },
+  "Fe": {
+   "ss": {
+    "value": -0.41886,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sp": {
+    "value": -0.32139,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sd": {
+    "value": -0.09035,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pp": {
+    "value": -0.50284,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pd": {
+    "value": -0.03045,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "dd": {
+    "value": -0.46618,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   }
+  },
+  "Co": {
+   "ss": {
+    "value": -0.42909,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sp": {
+    "value": -0.32348,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sd": {
+    "value": -0.08584,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pp": {
+    "value": -0.53711,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pd": {
+    "value": -0.02701,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "dd": {
+    "value": -0.48239,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   }
+  },
+  "Ni": {
+   "ss": {
+    "value": -0.43884,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sp": {
+    "value": -0.32492,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sd": {
+    "value": -0.08187,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pp": {
+    "value": -0.57548,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pd": {
+    "value": -0.02402,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "dd": {
+    "value": -0.49726,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   }
+  },
+  "Cu": {
+   "ss": {
+    "value": -0.46331,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sp": {
+    "value": -0.32788,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sd": {
+    "value": -0.07643,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pp": {
+    "value": -1.038,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pd": {
+    "value": -0.01422,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "dd": {
+    "value": -0.47297,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   }
+  },
+  "Zn": {
+   "ss": {
+    "value": -0.45723,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sp": {
+    "value": -0.32595,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sd": {
+    "value": -0.07522,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pp": {
+    "value": -0.66738,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pd": {
+    "value": -0.01902,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "dd": {
+    "value": -0.52386,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   }
+  },
+  "Mo": {
+   "ss": {
+    "value": -0.34599,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sp": {
+    "value": -0.28319,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sd": {
+    "value": -0.13257,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pp": {
+    "value": -0.52885,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pd": {
+    "value": -0.05741,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "dd": {
+    "value": -0.29559,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   }
+  },
+  "Pd": {
+   "ss": {
+    "value": -0.64275,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sp": {
+    "value": -0.58195,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sd": {
+    "value": -0.32759,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pp": {
+    "value": -0.54295,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pd": {
+    "value": -0.33419,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "dd": {
+    "value": -0.30238,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   }
+  },
+  "Ag": {
+   "ss": {
+    "value": -0.36731,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sp": {
+    "value": -0.28888,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "sd": {
+    "value": -0.08902,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pp": {
+    "value": -0.83839,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "pd": {
+    "value": -0.02509,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   },
+   "dd": {
+    "value": -0.32838,
+    "unit": "eV",
+    "source": "GPAW 26.7.0 aeatom PBE, átomo neutro sin polarizar, W_ll' = ½(∂ε_l↑/∂n_l'↑ − ∂ε_l↑/∂n_l'↓) por diferencias centrales de ±0.05 e (tbkit.recipes.spin_constants)"
+   }
   }
  }
 }

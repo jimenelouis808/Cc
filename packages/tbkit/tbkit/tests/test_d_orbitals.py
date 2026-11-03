@@ -188,3 +188,21 @@ def test_forces_with_d_orbitals_match_finite_differences():
         minus.positions[atom, axis] -= h
         fd = -(energy(plus)[0] - energy(minus)[0]) / (2 * h)
         assert forces[atom, axis] == pytest.approx(fd, abs=2e-6)
+
+
+def test_spin_polarised_d_shell_hund_closed_form():
+    """Four electrons in a free atom's degenerate d shell (s and p far above): they all
+    align, M = 4, and gain exactly ½ W_dd M² = 8 W_dd."""
+    from ase import Atoms
+
+    from tbkit.hamiltonian import System
+    from tbkit.spin import spin_polarised
+
+    model = _smooth_spd_model()
+    model.onsite["Ti"] = {"s": 5.0, "p": 9.0, "d": -4.0}
+    w = {"Ti": {"ss": -0.4, "sp": -0.3, "pp": -0.5, "sd": -0.1, "pd": -0.03, "dd": -0.6}}
+    system = System.build(Atoms("Ti"), model)
+    polarised = spin_polarised(system, W=w, charges=False, guess="ferro", kT=0.001)
+    flat = spin_polarised(system, W=w, charges=False, guess="none", kT=0.001)
+    assert polarised.magnetization == pytest.approx(4.0, abs=1e-6)
+    assert polarised.energy - flat.energy == pytest.approx(8 * w["Ti"]["dd"], abs=1e-6)
